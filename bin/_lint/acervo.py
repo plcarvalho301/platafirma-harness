@@ -10,6 +10,10 @@ codigo); bloqueante que nao rodou torna a medida indeterminavel (exit 5).
 Leitura so: um SELECT por chamada, pelo transporte de bin/_acervo/listar (psql no
 conteiner do acervo, uma linha, JSON). PF_LINT_ACERVO_PSQL troca o transporte por um
 executavel que recebe o SQL no stdin e devolve o JSON — os testes apontam fixture aqui.
+
+O D11 (#3318) e a unica excecao ao SELECT: o universo dele e a saida do HermiT, que o gerador da
+projecao formal (platafirma-conhecimento, na release) devolve em JSON. PF_LINT_ACERVO_HERMIT
+troca o gerador por fixture.
 """
 from __future__ import annotations
 
@@ -45,6 +49,7 @@ DETECTORES = {
     "D6": "`mais_amplo_id` nulo",
     "D7": "slug com mais de três partes fora das palavras funcionais (Contrapontos)",
     "D8": "slug contém `-vs-`, `-versus-`, `-antes-de-` ou `-depois-de-`",
+    "D11": "o HermiT sobre a projeção formal acusa a classe `ref:<slug>` equivalente a `owl:Nothing`; o plano de `acervo definir` e `acervo relacionar` mostra a contagem e os nomes que saem",
 }
 
 # detector mecanico na lista que este lint ainda nao roda, e por que
@@ -54,6 +59,7 @@ SEM_PREDICADO = {
 }
 
 CAMPOS_INCIDENCIA = ("emitido_por", "publicacao", "id_canonico")
+TEMPO_HERMIT = 600  # s; o curar roda o gerador duas vezes por plano, aqui e uma
 
 SQL_ESQUEMA = """
 select json_build_object(
@@ -141,6 +147,38 @@ def _psql_json(sql: str) -> Any:
         return json.loads(proc.stdout.strip())
     except ValueError:
         raise ErroAcervo(3, f"acervo nao devolveu JSON: {proc.stdout.strip()[:200]}")
+
+
+def ler_projecao() -> dict:
+    """D11: roda o gerador da projecao formal (platafirma-conhecimento, na release) e devolve o JSON
+    dele. Nunca levanta: HermiT fora do ar vira `{"erro": ...}` e so o D11 sai em `nao_rodou`, o
+    resto da medida segue. PF_LINT_ACERVO_HERMIT troca o gerador por um executavel que imprime o
+    JSON (os testes apontam fixture aqui)."""
+    sob = os.environ.get("PF_LINT_ACERVO_HERMIT")
+    if sob:
+        cmd = [sob]
+    else:
+        from lib.raizes import release
+        raiz = release()
+        script = raiz / "conhecimento" / "ontologia" / "projecao" / "gerar-e-raciocinar.py"
+        py = os.environ.get("PF_PROJECAO_PYTHON") or str(raiz / "venv" / "acervo" / "bin" / "python")
+        if not script.is_file() or not os.path.isfile(py):
+            return {"erro": f"sem o gerador ({script}) ou o venv acervo ({py}) na release"}
+        cmd = [py, str(script), "--json"]
+    env = dict(os.environ)
+    env.setdefault("DOCKER_HOST", "unix:///run/user/1001/docker.sock")  # o gerador le o banco por docker exec
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=TEMPO_HERMIT, env=env, check=False)
+    except FileNotFoundError:
+        return {"erro": f"'{cmd[0]}' nao encontrado"}
+    except subprocess.TimeoutExpired:
+        return {"erro": f"projecao formal passou de {TEMPO_HERMIT} s"}
+    if proc.returncode != 0:
+        return {"erro": f"gerador falhou (rc={proc.returncode}): {(proc.stderr or proc.stdout).strip()[-300:]}"}
+    try:
+        return json.loads(proc.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return {"erro": f"gerador nao devolveu JSON: {proc.stdout.strip()[-200:]}"}
 
 
 def ler_acervo() -> Tuple[Dict[str, bool], List[dict], List[dict], List[dict]]:
@@ -253,6 +291,35 @@ def d8(c):
     return any(x in s for x in ("-vs-", "-versus-", "-antes-de-", "-depois-de-"))
 
 
+def d11_sem_medida(projecao: Optional[dict], conceitos: List[dict]) -> Optional[str]:
+    """Por que o D11 nao se mediu, ou None se a projecao serve de medida. Bloqueante sem medida
+    torna a chamada indeterminavel (exit 5): HermiT fora do ar nunca vira «0 insatisfaziveis»."""
+    if projecao is None:
+        return "a projecao formal nao foi pedida a esta chamada"
+    if projecao.get("erro"):
+        return f"HermiT indisponivel: {projecao['erro']}"
+    if "consistente" not in projecao:
+        return "o gerador da projecao no ar nao diz se a ontologia e consistente (promover platafirma-conhecimento)"
+    if projecao["consistente"] is None:
+        return f"o HermiT nao rodou: {projecao.get('levantou') or 'sem causa no retorno'}"
+    lidos = (projecao.get("resumo") or {}).get("conceitos")
+    if lidos != len(conceitos):
+        return (f"a projecao leu {lidos} conceitos e o banco tem {len(conceitos)}: "
+                "o gerador caiu no export versionado, nao leu o banco")
+    return None
+
+
+def d11(projecao: dict, conceitos: List[dict]) -> List[Tuple[str, str]]:
+    """(alvo, descricao) de cada apontamento do D11. Ontologia inconsistente (ABox) derruba toda
+    classe `ref:`: sai um apontamento so, `ontologia`, porque nenhuma classe isolada e a causa."""
+    if projecao["consistente"] is False:
+        return [("ontologia", "ontologia inconsistente: o HermiT derruba todo referente "
+                              f"({projecao.get('levantou') or 'sem causa no retorno'})")]
+    slug_de = {c["slug"].replace(".", "_"): c["slug"] for c in conceitos}  # o IRI troca `.` por `_`
+    return [(slug_de.get(n, n), f"conceito {slug_de.get(n, n)}: referente insatisfazivel")
+            for n in projecao.get("insatisfaziveis") or []]
+
+
 # ---------- medida ----------
 
 def _rotulo_obra(o: dict, extra: str = "") -> str:
@@ -262,9 +329,10 @@ def _rotulo_obra(o: dict, extra: str = "") -> str:
 
 
 def medir(lista: dict, esquema: Dict[str, bool], obras: List[dict], conceitos: List[dict],
-          retiradas: Optional[List[dict]] = None) -> dict:
+          retiradas: Optional[List[dict]] = None, projecao: Optional[dict] = None) -> dict:
     """Roda os detectores mecanicos da lista. Devolve {criterios, nao_rodou, apontamentos}.
-    `retiradas` e o universo de G6: toda obra retirada, de qualquer colecao."""
+    `retiradas` e o universo de G6: toda obra retirada, de qualquer colecao. `projecao` e o
+    JSON do gerador da projecao formal (D11); sem ele, o D11 sai em `nao_rodou`."""
     corpo = lista.get("corpo", "")
     itens = {i["id"]: i for i in lista.get("itens", []) if i.get("id")}
     orgs = organismos(corpo)
@@ -330,6 +398,17 @@ def medir(lista: dict, esquema: Dict[str, bool], obras: List[dict], conceitos: L
             base["nota"] = ("espera a coluna retirada_motivo (migracao 078); acusa 0 ate ela existir"
                             if cid == "G6" else "espera o schema da ont:0092; acusa 0 ate ele existir")
             criterios[cid] = base
+            continue
+        if cid == "D11":  # o universo e a saida do HermiT, nao uma consulta
+            falta = d11_sem_medida(projecao, conceitos)
+            if falta:
+                nao_rodou.append({"id": cid, "severidade": base["severidade"], "motivo": falta})
+                continue
+            criterios[cid] = base
+            for alvo, descricao in d11(projecao, conceitos):
+                base["n"] += 1
+                apontamentos.append({"id": cid, "severidade": base["severidade"], "tipo": "conceito",
+                                     "alvo": alvo, "descricao": descricao, "cura": base["cura"]})
             continue
         if cid in por_obra:
             f, universo, rot = por_obra[cid], obras, "obra"
@@ -421,5 +500,9 @@ def verificar_acervo(como_json: bool = False, resumo: bool = False,
     if not lista:
         raise ErroAcervo(5, f"indeterminavel — lista de verificacao '{CHAVE_LISTA}' nao encontrada no acervo")
     esquema, obras, conceitos, retiradas = ler_acervo()
-    medida = filtrar(medir(lista, esquema, obras, conceitos, retiradas), criterios, so_bloqueantes)
+    # o HermiT sobe um Java: so roda se o D11 esta na lista e esta chamada nao o recortou para fora
+    quer_d11 = (any(i.get("id") == "D11" for i in lista.get("itens", []))
+                and (not criterios or "D11" in {c.strip().upper() for c in criterios}))
+    projecao = ler_projecao() if quer_d11 else None
+    medida = filtrar(medir(lista, esquema, obras, conceitos, retiradas, projecao), criterios, so_bloqueantes)
     return relatorio(medida, lista.get("rev"), como_json, resumo)
