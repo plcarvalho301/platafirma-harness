@@ -42,7 +42,7 @@ from .envelope import (
     linha_disjuntor_aberto,
 )
 from .fontes import Fonte
-from .pep import PEP, recusa_por_concessao
+from .pep import ACAO_ACERVO, PEP, recusa_por_concessao
 
 
 def _objeto_id(objeto: str | None) -> str:
@@ -73,7 +73,9 @@ def situacao(
     # 2. PEP por fonte
     sujeito_resolvido = sujeito or os.environ.get("PF_CADEIRA") or os.environ.get("USER") or "claudinho"
     _pep = pep or PEP()
-    negativas = _pep.autoriza(sujeito=sujeito_resolvido, pedidos=[Fonte.ACERVO], acao="rag_buscar")
+    # situação é leitura do acervo, não busca pelo sentido (arq:0119 §4, #3312)
+    negativas = _pep.autoriza(sujeito=sujeito_resolvido, pedidos=[Fonte.ACERVO],
+                              acao=ACAO_ACERVO["leitura"])
     if negativas:
         return recusa_por_concessao([Fonte.ACERVO], negativas)
 

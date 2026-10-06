@@ -54,7 +54,7 @@ saber é o disjuntor) e `busca_declarada()` a transforma em linha (o consumidor 
 | `fila.py` | `XRANGE` + `XINFO STREAM` (leitura fria) | `caixa:<slug>/<stream-id>` | o próprio stream-id | — |
 | `mesa.py` | Postgres `sessao.mesa_item` + Valkey `mem:*` | `mem:<sufixo>:<slot>[#<id>]` | `seq` (item) · `digest` (prosa velha) | `i:<max(id)>/<contagem> p:<digest>` |
 | `wiki.py` | `api.php`: `prop=revisions`, `action=cargoquery`, `list=search` | `wiki:<page_id>[#seção]` | `rev_id` | `rc:<rc_id>` |
-| `acervo.py` | `POST /search` e `GET /facets` do rag | `acervo:<objeto>#<âncora>` | `digest` do índice | `acervo:<acervo_sha>` |
+| `acervo.py` | busca `POST /acervo/trechos/consulta` (`texto=nenhum`), leitura `POST /acervo/secoes/consulta`, carimbo `GET /acervo/facetas` | `acervo:<objeto>#<âncora>` | `digest` do índice | `acervo:<acervo_sha>` |
 | `board.py` | `GET /api/itens?campos=`, `/api/itens/<id>`, `/api/itens/<id>/eventos`, `/api/carimbo` | `item:<id>` | `max(evento.id)` do item | `<max(evento.id)>/<contagem>` |
 
 Nenhuma fonte serve `coberta` enquanto `tem_gold=False`: servem `nao-calibrada`. O rótulo `boa` do
@@ -70,8 +70,14 @@ chave usa `page_id` porque título muda em renomeação e id não. A busca usa o
 
 **Acervo, a única que gradua.** É a única fonte semântica, e por isso a única com `sinal`: sem
 `rerank`, `medida: "sim"` com piso `MIN_SIM`; com `rerank`, `medida: "rerank"` com piso `MIN_CE`.
-`texto="secao"` parte a fita de `contexto` casando `[n]` com `fontes[n-1]`, e só quando a contagem
-bate; bloco a menos cai para `ref`.
+
+**Acervo, busca e leitura.** A busca é do motor (ia) e devolve só endereço: o adaptador pede
+sempre `texto=nenhum` e recebe obra, `secao_id`, escore e cobertura. Quando o chamador quer texto,
+o adaptador lê as seções na rota de leitura do acervo (dados), com a partição de `filtro.particao`
+e os `secao_id` da busca, em lotes de 50; é a mesma rota do verbo `acervo ler <particao> secao`, e
+por isso o texto servido é o mesmo do verbo no mesmo endereço. O texto casa com a fonte pelo
+`secao_id`, nunca pela ordem. Seção em `nao_achadas` sai por `ref`; leitura fora do ar declara a
+fonte. Papéis, donos e contratos estão em `acervo.ferramental_fonte_papel` (migração 079).
 
 **Acervo, chave fail-closed.** `/search` devolve `section_id` em `curto-v1`, projeção de exibição que
 nenhuma chave gravada pode carregar, e a API não expõe a forma completa por requisição. Sem ela, o
@@ -118,7 +124,8 @@ fonte real quando ela responde (pulado com motivo quando não). A conformidade d
 3. **Fail-closed em falha de mecanismo**: política ilegível, sujeito fora da projeção ou atributo
    ausente nega, e a `regra` da negativa (`politica`, `projecao`, `identidade`) diz que foi mecanismo.
 4. **A ação é o verbo humano da matéria** (`rag_buscar`, `wiki_ler`, `msg_ler`; `recuperar` nas
-   três fontes sem verbo de leitura). O recuperador herda a concessão que existe; ampliar é merge no PAP.
+   três fontes sem verbo de leitura). O acervo tem uma ação por papel (`ACAO_ACERVO`): o
+   `recuperar` é a busca, `rag_buscar`; catálogo e situação são leitura, `acervo_ler`. O recuperador herda a concessão que existe; ampliar é merge no PAP.
 5. **Alvo ausente vira `<prefixo>*`, nunca `*`**, para o pedido genérico bater na concessão nominal.
 
 A identidade não mora aqui: o PEP recebe o sujeito já resolvido, e `auditor` é injetado pelo host.

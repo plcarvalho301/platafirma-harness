@@ -264,28 +264,71 @@ def test_alvo_vazio_nao_vira_busca():
     assert r.itens == [] and r.linha.cobertura is Cobertura.VAZIA
 
 
-FITA = ("[1] (a.pdf · 706e2556#abstract) — A › ABSTRACT\ntexto um\n"
-        "[2] (b.pdf · 999#x) — B\ntexto dois")
-BUSCA_SECAO = {**BUSCA_COMPLETA, "contexto": FITA,
-               "fontes": [{**BUSCA_COMPLETA["fontes"][0], "n": 1},
-                          {"n": 2, "obra": "B", "section_id": "9" * 64 + "#x",
-                           "breadcrumb": [], "codigo_exato": False, "texto": None}]}
+# ---- busca por endereço, texto pela leitura do acervo (#3312, arq:0119 §1.2) ----------
+
+SID_A = "cab9648f-3798-5b37-9250-e972382fb4a5"
+SID_B = "f87660b0-c8bd-5ea2-bb2c-d2fa36d383a5"
+BUSCA_ENDERECO = {**BUSCA_COMPLETA, "contexto": None, "filtro": {"particao": "casa"},
+                  "fontes": [{**BUSCA_COMPLETA["fontes"][0], "n": 1, "secao_id": SID_A},
+                             {"n": 2, "obra": "B", "section_id": "9" * 64 + "#x",
+                              "secao_id": SID_B.upper(), "breadcrumb": [],
+                              "codigo_exato": False, "texto": None}]}
 
 
-def test_texto_secao_desmembra_a_fita_de_contexto_por_fonte():
-    """`fontes[].texto` é nulo em `texto=secao`: a seção recolada mora em `contexto`."""
-    itens = acervo_falso(BUSCA_SECAO).busca("p", k=2, texto="secao").itens
-    assert itens[0].conteudo.startswith("[1] (a.pdf")
-    assert "texto dois" in itens[1].conteudo
-    assert "texto dois" not in itens[0].conteudo, "bloco de um não vaza no do outro"
+def acervo_em_dois_passos(busca: dict, leitura: dict):
+    """Cliente falso que separa as duas rotas e guarda os corpos pedidos."""
+    pedidos: dict[str, list] = {}
+
+    def http(rota, corpo=None):
+        pedidos.setdefault(rota, []).append(corpo)
+        if rota == "/acervo/trechos/consulta":
+            return busca
+        if rota == "/acervo/secoes/consulta":
+            return leitura
+        return FACETS
+    return AdaptadorAcervo(http=http), pedidos
 
 
-def test_fita_com_contagem_diferente_cai_para_ref_em_vez_de_emparelhar_errado():
-    torta = {**BUSCA_SECAO, "contexto": "[1] (a.pdf · x#y) — A\nso um bloco"}
-    itens = acervo_falso(torta).busca("p", k=2, texto="secao").itens
-    assert all(i.ref and i.conteudo is None for i in itens), (
-        "texto casado com a procedência errada é o pior defeito possível numa citação"
-    )
+def test_busca_pede_so_o_endereco_mesmo_quando_o_chamador_quer_texto():
+    a, pedidos = acervo_em_dois_passos(BUSCA_ENDERECO, {"secoes": [], "nao_achadas": []})
+    a.busca("p", k=2, texto="secao")
+    assert pedidos["/acervo/trechos/consulta"][0]["texto"] == "nenhum"
+
+
+def test_texto_vem_da_leitura_do_acervo_pelo_secao_id_casado_por_fonte():
+    leitura = {"secoes": [{"secao_id": SID_B, "texto": "texto dois", "particao": "casa"},
+                          {"secao_id": SID_A, "texto": "texto um", "particao": "casa"}],
+               "nao_achadas": []}
+    a, pedidos = acervo_em_dois_passos(BUSCA_ENDERECO, leitura)
+    itens = a.busca("p", k=2, texto="secao").itens
+    assert [i.conteudo for i in itens] == ["texto um", "texto dois"], (
+        "casa pelo secao_id, não pela ordem da resposta")
+    assert pedidos["/acervo/secoes/consulta"] == [
+        {"particao": "casa", "secao_ids": [SID_A, SID_B.lower()]}]
+
+
+def test_secao_nao_achada_sai_por_ref_e_nao_herda_texto_de_outra():
+    leitura = {"secoes": [{"secao_id": SID_A, "texto": "texto um"}], "nao_achadas": [SID_B]}
+    a, _ = acervo_em_dois_passos(BUSCA_ENDERECO, leitura)
+    itens = a.busca("p", k=2, texto="secao").itens
+    assert itens[0].conteudo == "texto um"
+    assert itens[1].conteudo is None and itens[1].ref, (
+        "texto casado com a procedência errada é o pior defeito possível numa citação")
+
+
+def test_texto_nenhum_nao_chama_a_leitura():
+    a, pedidos = acervo_em_dois_passos(BUSCA_ENDERECO, {"secoes": []})
+    a.busca("p", k=2, texto="nenhum")
+    assert "/acervo/secoes/consulta" not in pedidos
+
+
+def test_leitura_fora_do_ar_declara_a_fonte_em_vez_de_servir_meio_envelope():
+    def http(rota, corpo=None):
+        if rota == "/acervo/secoes/consulta":
+            raise FonteIndisponivel(Causa.FORA_DO_AR, "leitura caiu")
+        return BUSCA_ENDERECO if rota == "/acervo/trechos/consulta" else FACETS
+    r = AdaptadorAcervo(http=http).busca_declarada("p", k=2, texto="secao")
+    assert r.itens == [] and r.linha.causa is Causa.FORA_DO_AR
 
 
 # A conformidade contra a wiki e o rag vivos saiu daqui em 27/09/2026: compara a produção

@@ -32,7 +32,7 @@ Cinco decisões, e o porquê de cada uma:
    trilha registra qual dos dois foi.
 
 4. **A ação é o verbo humano que já rege a matéria**, não um verbo novo: `rag_buscar`
-   no acervo, `wiki_ler` na wiki, `msg_ler` na fila. O recuperador não amplia o alcance
+   na busca do acervo e `acervo_ler` na leitura dele (`ACAO_ACERVO`, #3312), `wiki_ler` na wiki, `msg_ler` na fila. O recuperador não amplia o alcance
    de ninguém — ele herda a concessão que já existe. Board, mesa e registro não têm
    verbo de leitura no PAP e ficam em `recuperar`: quem tem regra ampla (`operador`,
    `reino`) passa; quem tem concessão nominal não passa sem regra nova, que é merge no
@@ -60,9 +60,19 @@ from typing import Callable, Iterable, Mapping
 from .envelope import Causa, Cobertura, Envelope, LinhaFonte
 from .fontes import DOMINIO, PREFIXO_SOBRE, TIPO, Fonte
 
-# §6 — a ação por fonte. Verbo humano onde ele existe no PAP; `recuperar` onde não há.
+# O acervo tem dois papéis com donos distintos (arq:0119 §1.2 e §4; migração 079,
+# `ferramental_fonte_papel`), e cada papel tem a sua ação no PAP: a busca pelo sentido é
+# `rag_buscar` (capacidade motor); a leitura — catálogo e situação da obra — é `acervo_ler`
+# (capacidade conhecimento; nome do dono, 06/10/2026, #3312).
+ACAO_ACERVO: dict[str, str] = {
+    "busca": "rag_buscar",
+    "leitura": "acervo_ler",
+}
+
+# §6 — a ação por fonte no `recuperar`. Verbo humano onde ele existe no PAP; `recuperar`
+# onde não há. No acervo, o `recuperar` é a busca pelo sentido.
 ACAO: dict[str, str] = {
-    "acervo": "rag_buscar",
+    "acervo": ACAO_ACERVO["busca"],
     "wiki": "wiki_ler",
     "fila": "msg_ler",
     "board": "recuperar",
@@ -252,4 +262,4 @@ def recusa_por_concessao(fontes: Iterable[Fonte],
     return Envelope(linhas=linhas, itens=[], falta=falta, proximo=proximo)
 
 
-__all__ = ["ACAO", "Negativa", "PEP", "recusa_por_concessao"]
+__all__ = ["ACAO", "ACAO_ACERVO", "Negativa", "PEP", "recusa_por_concessao"]
