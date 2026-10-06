@@ -111,6 +111,9 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo listar   casa topologia <stack> --rotas|--acessos    ingress/gate da stack
                   (sucessora de \`deploy <stack> rotas|acessos\`; segredos: \`seg segredo exigidos\`)
   acervo ingerir  casa platafirma-casa[@<rev>] [--apply]      o suporte, pelo sha (arq:0115 §8.1)
+  acervo ingerir  biblioteca ficha <obra> | --sem-ficha [--apply] [--paralelo <n>] [--limite <n>] [--autor <slug>]
+                  le o arquivo nos bytes e grava a ficha (cliente de POST /acervo/obras/{id}/ficha/releitura, #3305);
+                  plano sem --apply; --sem-ficha pega as obras nao retiradas com arquivo e sem ficha
   acervo lote     <id>
   acervo curar    casa alias <classe> <chave> <alias>
   acervo curar    casa revisao <revid>... --motivo <m> [--apply]   tira texto antigo do historico da wiki
@@ -119,6 +122,9 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   o texto da obra pelo espelho de leitura, do comeco e em ordem
   acervo ler      biblioteca objeto <uuid|prefixo|titulo> [--destino <pasta>]
                   o arquivo original da obra; --destino so na bancada ou var/tmp/<ordem_id> (exit 4 fora); diz caminho e sha256
+  acervo ler      biblioteca ficha <obra> [--json]
+                  a ficha do arquivo da obra: o que o objeto e, lido nos bytes (formato com PRONOM, tamanho, sha256,
+                  encoding, lingua, camada de texto, inibidor); <obra> = uuid, prefixo de uuid (6+ hex) ou titulo
   Classificar (arq:0119 §2, §7) — plano seco sem --apply:
   acervo catalogar     biblioteca obra [<obra>] [--obras …|--de-dominio …|--de-conceito …|--sem-dominio]
                        [--especie|--subtipo|--dominio|--subdominio|--trata-de|--remover-trata-de|--titulo|--vinculacao … ] [--apply]
@@ -267,6 +273,8 @@ conforme() {
     # o texto da obra pelo espelho de leitura, por pagina ou capitulo (spec espelho-de-leitura
     # §5.4; #3180): cliente fino da rota de leitura do motor, nunca converte nem renderiza
     ler:biblioteca:impressao)     exec python3 "$ATOS/impressao" "$@" ;;
+    # a ficha do arquivo da obra, lida do catalogo (acervo.ficha_arquivo; spec acervo-obra §7; #3305)
+    ler:biblioteca:ficha)         exec python3 "$ATOS/ficha" ler "$@" ;;
     # o estado da obra e onde ela se lê (arq:0119 §8.3: `curar --situacao` passa a `ler obra --situacao`;
     # #3294): servida inteira aponta o arquivo, com impressão servindo aponta também o trecho.
     # `--situacao` é aceito e não muda nada: a leitura da obra é a situação dela.
@@ -289,6 +297,10 @@ conforme() {
     curar:casa:revisao)     avisa "acervo curar casa revisao" "acervo retirar casa revisao <revid>" "arq:0119 §9.1"
                             exec "$ATOS/wiki" ocultar-revisao "$@" ;;
     bancada:biblioteca:lote) exec "$ATOS/bancada" "$@" ;;
+    # a ficha do arquivo das obras que ja estao no acervo: le o arquivo nos bytes e grava (cliente de
+    # POST /acervo/obras/{id}/ficha/releitura; #3305). Antes do ramo generico, que trataria `ficha` como
+    # raiz de pasta de ingestao
+    ingerir:biblioteca:ficha) exec python3 "$ATOS/ficha" ingerir "$@" ;;
     # --- ingerir por particao ---
     # Biblioteca e registro seguem no cliente de obra (objeto-por-sha, MinIO, OCR, bancada).
     # Casa NAO: doc de casa e texto de git — identidade (repo,path), corpo no payload, sem

@@ -1,0 +1,477 @@
+#!/usr/bin/env python3
+"""_acervo/ficha — cliente fino da ficha do arquivo da obra (spec acervo-obra §7; arq:0089 §2; #3190, #3305).
+
+O verbo não abre o banco nem o balde: toda regra mora no `motor_acervo` (spec apis-escrita-acervo §D). Dois atos
+de `acervo` chegam aqui, pelo despachante (bin/acervo), por `python3`:
+
+  acervo ler biblioteca ficha <obra> [--json]
+      GET /acervo/obras/{id}/ficha: a ficha do arquivo da obra, o que o objeto é lido nos bytes (formato com o
+      registro PRONOM, tamanho e sha256, encoding, língua, camada de texto, inibidor de leitura, programa que o
+      gerou). <obra> é uuid, prefixo de uuid (6+ hex) ou trecho do título.
+  acervo ingerir biblioteca ficha <obra> | --sem-ficha [--apply] [--paralelo <n>] [--limite <n>] [--autor <slug>]
+      lê o arquivo nos bytes (o leitor do conversor, o mesmo da ingestão, #3306) e grava a ficha:
+      POST /acervo/obras/{id}/ficha/releitura. Sem --apply é plano: de uma obra, a ficha que a leitura daria; de
+      --sem-ficha, as obras não retiradas que têm arquivo e não têm ficha (GET /acervo/fichas/cobertura), sem ler
+      nada. Com --apply o laço é de uma obra por chamada, no máximo `--paralelo` ao mesmo tempo (padrão 2, teto
+      4): a leitura de um PDF grande leva até uns 90 s e cada réplica do conversor faz uma operação por vez, então
+      a resposta 409 («todas ocupadas») se espera pelo Retry-After e se repete. Idempotente: quem já tem ficha sai
+      da lista, e repetir o comando retoma onde parou.
+
+exit (arq:0110 §4): 0 leu/gravou · 1 obra inexistente ou sem ficha (ler), ou alguma obra falhou (ingerir) · 2 uso
+ou termo ambíguo · 3 rota fora · 5 indeterminável (5xx, tempo esgotado, conversor fora)
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import secrets
+import sys
+import threading
+import time
+import unicodedata
+import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
+from http import HTTPStatus
+from pathlib import Path
+
+HARNESS_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(HARNESS_DIR))
+sys.path.insert(0, str(HARNESS_DIR / "lib"))
+
+try:
+    from recuperacao.adaptadores.motor_acervo_rest import BASE as _BASE_DO_ADAPTADOR
+    from recuperacao.adaptadores.motor_acervo_rest import TOKEN as _TOKEN_DO_ADAPTADOR
+except ImportError:
+    _BASE_DO_ADAPTADOR, _TOKEN_DO_ADAPTADOR = "http://127.0.0.1:8100", ""
+
+SPEC = "spec acervo-obra §7 (acervo ler casa spec acervo-obra)"
+
+MIN_PREFIXO = 6                 # abaixo disso um termo hex-e-hifen é título, não prefixo de uuid
+TAM_UUID = 36
+TETO_CANDIDATOS = 20
+LISTA_MAX = 40                  # linhas por lista no plano; o resto vem contado
+LACUNAS_MOSTRADAS = 5
+KIB = 1024
+PARALELO_PADRAO = 2
+PARALELO_MAX = 4
+TENTATIVAS_OCUPADO = 12         # esperas do 409 «todas as réplicas ocupadas» por obra, antes de a deixar para depois
+ESPERA_PADRAO_S = 30
+ESPERA_MAX_S = 60
+TIMEOUT_LEITURA_S = 60
+TIMEOUT_RELEITURA_S = 200       # a rota tem 180 s
+CAIDAS_PARA_ABORTAR = 3         # obras seguidas com o conversor ou o catálogo fora: o laço para
+UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+_dormir = time.sleep            # o teste o troca
+
+
+class Falha(Exception):
+    def __init__(self, codigo: int, msg: str, classe: str | None = None):
+        super().__init__(msg)
+        self.codigo = codigo
+        self.classe = classe          # o `title` do problem+json, quando veio de lá
+
+
+# --- a rota ----------------------------------------------------------------------------------------
+
+def _base() -> str:
+    """O motor do acervo; o ambiente vale mais que o adaptador (`impressao` e `balde` leem nesta ordem)."""
+    return (os.environ.get("MOTOR_ACERVO_URL") or os.environ.get("RAG_API_URL")
+            or os.environ.get("RAG_API_BASE") or _BASE_DO_ADAPTADOR).rstrip("/")
+
+
+def _cabecalhos() -> dict:
+    h = {"accept": "application/json", "traceparent": f"00-{secrets.token_hex(16)}-{secrets.token_hex(8)}-01"}
+    token = os.environ.get("RAG_API_TOKEN") or _TOKEN_DO_ADAPTADOR
+    if token:
+        h["authorization"] = f"Bearer {token}"
+    return h
+
+
+def _chamar(metodo: str, caminho: str, *, params: dict | None = None, corpo: dict | None = None,
+            timeout: int = TIMEOUT_LEITURA_S) -> tuple:
+    """(status, corpo JSON, cabeçalhos). Falha de rede é Falha: 3 se a rota está fora, 5 se não se sabe."""
+    try:
+        import requests
+    except ImportError as e:
+        raise Falha(3, "a biblioteca `requests` não está neste python: o verbo é cliente da rota do motor") from e
+    base = _base()
+    try:
+        r = requests.request(metodo, f"{base}{caminho}", params=params, json=corpo, headers=_cabecalhos(),
+                             timeout=timeout)
+    except requests.exceptions.ConnectionError as e:
+        raise Falha(3, f"rota fora: o motor do acervo não respondeu em {base} ({e.__class__.__name__})") from e
+    except requests.exceptions.RequestException as e:
+        raise Falha(5, f"indeterminável: {e.__class__.__name__}: {e}") from e
+    try:
+        dados = r.json() if r.content else {}
+    except ValueError:
+        dados = {"title": f"HTTP {r.status_code}", "detail": r.text[:300]}
+    return r.status_code, dados if isinstance(dados, dict) else {}, r.headers
+
+
+def _falha(status: int, dados: dict) -> Falha:
+    """O erro da rota como Falha, com o exit da arq:0110 §4: 404 e 409 de mérito saem 1, 400 e 422 saem 2, o resto 5."""
+    classe = dados.get("title") or f"HTTP {status}"
+    detalhe = dados.get("detail") or ""
+    codigo = (1 if status in (HTTPStatus.NOT_FOUND, HTTPStatus.CONFLICT)
+              else 2 if status in (HTTPStatus.BAD_REQUEST, HTTPStatus.UNPROCESSABLE_ENTITY) else 5)
+    return Falha(codigo, f"{classe}: {detalhe}".rstrip(": "), classe)
+
+
+# --- a obra ----------------------------------------------------------------------------------------
+
+def _normal(texto: str) -> str:
+    sem = "".join(c for c in unicodedata.normalize("NFKD", texto or "") if not unicodedata.combining(c))
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", sem.casefold()).split())
+
+
+def classificar_termo(termo: str) -> tuple:
+    s = (termo or "").strip().lower()
+    if UUID.fullmatch(s):
+        return "uuid", s
+    if re.fullmatch(r"[0-9a-f]+(?:-[0-9a-f]+)*", s) and len(s.replace("-", "")) >= MIN_PREFIXO and len(s) <= TAM_UUID:
+        return "prefixo", s
+    return "titulo", termo
+
+
+def _candidatas(itens: list, tipo: str, termo: str) -> list:
+    if tipo == "prefixo":
+        return [o for o in itens if str(o.get("obra_id", "")).startswith(termo)]
+    alvo = _normal(termo)
+    exatas = [o for o in itens if _normal(o.get("titulo")) == alvo]
+    return exatas or [o for o in itens if alvo and alvo in _normal(o.get("titulo"))]
+
+
+def resolver_obra(termo: str) -> dict:
+    """{obra_id, titulo?}. Uuid inteiro vale como está (a rota diz se existe); prefixo e título se resolvem pela
+    coleção de obras (`GET /acervo/obras?campos=…`), primeiro entre as vivas e, se nenhuma casa, entre as retiradas."""
+    tipo, termo_limpo = classificar_termo(termo)
+    if tipo == "uuid":
+        return {"obra_id": termo_limpo}
+    achadas = []
+    for retiradas in (False, True):
+        params = {"campos": "obra_id,titulo"}
+        if retiradas:
+            params["retiradas"] = "true"
+        status, dados, _ = _chamar("GET", "/acervo/obras", params=params)
+        if status != HTTPStatus.OK:
+            raise _falha(status, dados)
+        achadas = _candidatas(dados.get("itens") or [], tipo, termo_limpo)
+        if achadas:
+            break
+    if not achadas:
+        raise Falha(1, f"obra não encontrada: {termo}\nvarrido:   GET /acervo/obras (as vivas e as retiradas)\n"
+                       f"vizinho:   acervo listar biblioteca obra --sobre {termo}")
+    if len(achadas) > 1:
+        mais = "+" if len(achadas) > TETO_CANDIDATOS else ""
+        linhas = [f"  {o['obra_id']}  {_titulo(o, 70)}" for o in achadas[:TETO_CANDIDATOS]]
+        raise Falha(2, f"{termo}: ambíguo, {len(achadas)}{mais} obra(s):\n" + "\n".join(linhas))
+    return achadas[0]
+
+
+def _titulo(o: dict, n: int = 60) -> str:
+    return " ".join((o.get("titulo") or o.get("arquivo") or "").split())[:n]
+
+
+def _id8(obra_id: str) -> str:
+    return str(obra_id)[:8]
+
+
+# --- ler -------------------------------------------------------------------------------------------
+
+def _humano(n: float) -> str:
+    n = float(n)
+    for un in ("B", "KB", "MB", "GB"):
+        if n < KIB or un == "GB":
+            return f"{int(n)} B" if un == "B" else f"{n:.1f} {un}"
+        n /= KIB
+    return ""
+
+
+def _linha_de_formato(x: dict) -> str:
+    reg = f" · {x['registro']} {x['chave']}" if x.get("chave") else ""
+    versao = f" {x['versao']}" if x.get("versao") else ""
+    base = f" · {x['base']}" if x.get("base") else ""
+    aviso = f" · aviso: {x['aviso']}" if x.get("aviso") else ""
+    return f"formato[{x['ordem']}]: {x['nome']}{versao}{reg}{base}{aviso}"
+
+
+def _linhas_da_camada_de_texto(f: dict, pag: dict) -> list:
+    out = []
+    if f.get("paginas") is not None:
+        lidas = (f"{pag['analisadas']} lida(s), {pag['pedem_ocr']} pede(m) OCR" if pag.get("analisadas")
+                 else "ainda não carregada (a releitura do PDF a traz)")
+        out.append(f"páginas: {f['paginas']} · camada de texto por página: {lidas}")
+    if f.get("encoding") or f.get("encoding_declarado"):
+        decl = f" (declarado: {f['encoding_declarado']})" if f.get("encoding_declarado") else ""
+        out.append(f"encoding: {f.get('encoding') or '—'}{decl}")
+    if f.get("lingua_declarada") or f.get("lingua_detectada"):
+        conf = f" ({f['lingua_confianca']})" if f.get("lingua_confianca") is not None else ""
+        out.append(f"língua: declarada {f.get('lingua_declarada') or '—'} · detectada {f.get('lingua_detectada') or '—'}{conf}")
+    t = f.get("texto")
+    if t:
+        prefixo = f" · prefixo sha1 {f['texto_prefixo_sha1'][:12]}…" if f.get("texto_prefixo_sha1") else ""
+        out.append(f"texto: {t.get('caracteres')} caracteres · NFC {'sim' if t.get('nfc') else 'não'} · "
+                   f"U+FFFD {t.get('substituicao')} · uso privado {t.get('uso_privado')} · ligaduras {t.get('ligaduras')}{prefixo}")
+    return out
+
+
+def _nome_da_aplicacao(a: dict) -> str:
+    nome = " ".join(str(x) for x in (a.get("nome"), a.get("versao")) if x)
+    return nome + (f" ({a['data']})" if a.get("data") else "")
+
+
+def renderizar(d: dict) -> str:
+    obra, f, formatos, pag = d["obra"], d["ficha"], d.get("formatos") or [], d.get("paginas") or {}
+    tipo = f.get("tipo") or ("tipo fora do vocabulário" if f.get("identificacao") != "desconhecido" else "formato não reconhecido")
+    por = f.get("caracterizado_por") or {}
+    ident = por.get("identificador") or {}
+    cabeca = (f"ficha do arquivo · {tipo} · {_humano(f['tamanho'])} · {f['identificacao']} · "
+              f"lida em {str(f['caracterizado_em'])[:19]} · obra {_id8(obra['id'])} «{_titulo(obra, 70)}»")
+    out = [cabeca,
+           f"obra: {obra['id']} · arquivo: {obra['arquivo']}" + (" · RETIRADA" if obra.get("retirada") else ""),
+           f"objeto: {obra['objeto']} · sha256 {f['sha256']} · {f['tamanho']} bytes"]
+    out += [_linha_de_formato(x) for x in formatos]
+    out += _linhas_da_camada_de_texto(f, pag)
+    if f.get("estrutura_declarada"):
+        out.append("estrutura declarada: " + " · ".join(
+            f"{e.get('fonte')} {e.get('entradas')} entradas (prof. {e.get('profundidade')})" for e in f["estrutura_declarada"]))
+    if f.get("aplicacoes_criadoras"):
+        out.append("criado por: " + " · ".join(_nome_da_aplicacao(a) for a in f["aplicacoes_criadoras"][:4]))
+    out.append("inibidores: " + (" · ".join(f"{i.get('tipo')}: {i.get('alvo')}" for i in f.get("inibidores") or []) or "nenhum"))
+    if f.get("erro_leitura"):
+        out.append(f"erro de leitura: {f['erro_leitura']} (um leitor que falha não prova que o arquivo não abre)")
+    if f.get("lacunas"):
+        itens = [f"{k} — {str(v)[:90]}" for k, v in sorted(f["lacunas"].items())]
+        resto = f" | +{len(itens) - LACUNAS_MOSTRADAS}" if len(itens) > LACUNAS_MOSTRADAS else ""
+        out.append(f"lacunas ({len(itens)}, o que não se mediu): " + " | ".join(itens[:LACUNAS_MOSTRADAS]) + resto)
+    quem = "; ".join(x for x in (
+        f"{ident.get('nome')} {ident.get('versao')}" if ident.get("nome") else "",
+        ", ".join(f"{k} {v}" for k, v in (por.get("bibliotecas") or {}).items())) if x)
+    out.append("lida por: " + (quem or "—"))
+    return "\n".join(out)
+
+
+def cmd_ler(argv: list) -> int:
+    como_json = "--json" in argv
+    resto = [a for a in argv if a != "--json"]
+    if len(resto) != 1 or resto[0].startswith("--"):
+        return uso(2)
+    obra = resolver_obra(resto[0])
+    status, dados, _ = _chamar("GET", f"/acervo/obras/{urllib.parse.quote(obra['obra_id'], safe='')}/ficha")
+    if status == HTTPStatus.NOT_FOUND and dados.get("title") == "FichaNaoEncontrada":
+        print(f"sem ficha: {dados.get('detail')}", file=sys.stderr)
+        print(f"vizinho:   acervo ler biblioteca obra {obra['obra_id']}", file=sys.stderr)
+        print(f"cura:      acervo ingerir biblioteca ficha {obra['obra_id']} --apply (lê o arquivo e grava a ficha)",
+              file=sys.stderr)
+        return 1
+    if status != HTTPStatus.OK:
+        raise _falha(status, dados)
+    print(json.dumps(dados, ensure_ascii=False, indent=2) if como_json else renderizar(dados))
+    return 0
+
+
+# --- ingerir ---------------------------------------------------------------------------------------
+
+def _autor_da_sessao() -> str:
+    cadeira = (os.environ.get("PF_CADEIRA") or os.environ.get("PF_CONTA") or "").strip().lower()
+    return cadeira.removeprefix("claudinho-").removeprefix("claudinha-") if cadeira else "dados"
+
+
+def _reler(obra_id: str, autor: str, *, aplicar: bool) -> dict:
+    """POST …/ficha/releitura. «Todas as réplicas do conversor ocupadas» (409 ConversaoOcupada) se espera pelo
+    Retry-After e se repete; qualquer outro erro sobe como Falha."""
+    for _ in range(TENTATIVAS_OCUPADO):
+        status, dados, cab = _chamar("POST", f"/acervo/obras/{urllib.parse.quote(obra_id, safe='')}/ficha/releitura",
+                                     corpo={"autor": autor, "aplicar": aplicar}, timeout=TIMEOUT_RELEITURA_S)
+        if status == HTTPStatus.OK:
+            return dados
+        if status == HTTPStatus.CONFLICT and dados.get("title") == "ConversaoOcupada":
+            try:
+                espera = int(cab.get("Retry-After") or ESPERA_PADRAO_S)
+            except (TypeError, ValueError):
+                espera = ESPERA_PADRAO_S
+            _dormir(min(max(espera, 1), ESPERA_MAX_S))
+            continue
+        raise _falha(status, dados)
+    raise Falha(5, f"todas as réplicas do conversor seguiram ocupadas depois de {TENTATIVAS_OCUPADO} esperas; "
+                   "repita o comando", "ConversaoOcupada")
+
+
+def _resumo(f: dict) -> str:
+    tipo = f.get("tipo") or ("formato não reconhecido" if f.get("identificacao") == "desconhecido" else "tipo fora do vocabulário")
+    paginas = ""
+    if f.get("paginas") is not None:
+        ocr = f.get("paginas_ocr")
+        paginas = f" · {f['paginas']} págs" + (f" ({ocr} pedem OCR)" if ocr else "")
+    erro = f" · erro de leitura: {str(f['erro_leitura'])[:70]}" if f.get("erro_leitura") else ""
+    return f"{tipo} · {_humano(f['tamanho'])} · {f['identificacao']}{paginas}{erro}"
+
+
+def _cobertura() -> dict:
+    status, dados, _ = _chamar("GET", "/acervo/fichas/cobertura")
+    if status != HTTPStatus.OK:
+        raise _falha(status, dados)
+    return dados
+
+
+def _plano_da_cobertura(c: dict, itens: list) -> str:
+    cabeca = (f"plano: {c['sem_ficha']} obra(s) não retirada(s) sem ficha, de {c['nao_retiradas']} "
+              f"({c['com_arquivo']} com arquivo, {c['sem_arquivo']} sem arquivo) · {c['com_ficha']} já com ficha")
+    out = [cabeca,
+           f"{len(itens)} a ler agora" + (f" · {c['pdf_sem_paginas']} PDF com ficha e sem a camada de texto por página"
+                                          if c.get("pdf_sem_paginas") else "")]
+    linhas = [f"{_id8(o['id'])} «{_titulo(o)}» ({o.get('arquivo')})" for o in itens]
+    if linhas:
+        out.append("sem ficha:")
+        out += ["  " + x for x in linhas[:LISTA_MAX]]
+        if len(linhas) > LISTA_MAX:
+            out.append(f"  … +{len(linhas) - LISTA_MAX}")
+    out.append("plano seco: nada lido nem gravado; `--apply` lê o arquivo de cada uma (uma por vez por réplica do "
+               "conversor, segundos por obra) e grava a ficha.")
+    return "\n".join(out)
+
+
+def _ingerir_uma(obra: dict, autor: str, *, apply: bool) -> int:
+    d = _reler(obra["obra_id"], autor, aplicar=apply)
+    f = d["ficha"]
+    antes = "já tinha ficha, que a releitura substitui" if d.get("tinha_ficha") else "não tinha ficha"
+    if apply:
+        print(f"gravada: obra {_id8(d['obra_id'])} · {_resumo(f)} · {antes}")
+    else:
+        print(f"plano: a leitura de {_id8(d['obra_id'])} dá {_resumo(f)} · {antes}\n"
+              "plano seco: nada gravado; `--apply` grava.")
+    return 0
+
+
+class _Laco:
+    """O estado do laço, que os trabalhadores consultam e atualizam: a decisão de parar é deles, não de quem
+    imprime, porque eles correm à frente. `CAIDAS_PARA_ABORTAR` obras seguidas com o conversor ou o catálogo fora
+    (exit 3 ou 5) mandam parar; obra feita ou falha de mérito zera a conta."""
+
+    def __init__(self) -> None:
+        self.parar = threading.Event()
+        self._seguidas = 0
+        self._trava = threading.Lock()
+
+    def resultado(self, *, fora: bool) -> None:
+        with self._trava:
+            self._seguidas = self._seguidas + 1 if fora else 0
+            if self._seguidas >= CAIDAS_PARA_ABORTAR:
+                self.parar.set()
+
+
+def _ler_e_gravar(item: dict, autor: str, laco: _Laco) -> tuple:
+    """Uma obra do laço: ('feita', resumo), ('falhou', Falha) ou ('pulada', None) se o laço já mandou parar."""
+    if laco.parar.is_set():
+        return "pulada", None
+    try:
+        resumo = _reler(item["id"], autor, aplicar=True)["ficha"]
+    except Falha as e:
+        laco.resultado(fora=e.codigo in (3, 5))
+        return "falhou", e
+    laco.resultado(fora=False)
+    return "feita", resumo
+
+
+def _ingerir_sem_ficha(*, apply: bool, paralelo: int, limite: int | None, autor: str) -> int:
+    c = _cobertura()
+    itens = c.get("itens") or []
+    if limite is not None:
+        itens = itens[:limite]
+    if not apply:
+        print(_plano_da_cobertura(c, itens))
+        return 0
+    if not itens:
+        print(f"carga: nada a ler · {c['com_ficha']} de {c['com_arquivo']} obras com arquivo já têm ficha")
+        return 0
+    feitas, falhas, laco = 0, [], _Laco()
+    with ThreadPoolExecutor(max_workers=paralelo) as pool:
+        resultados = pool.map(lambda i: _ler_e_gravar(i, autor, laco), itens)
+        for item, (estado, resultado) in zip(itens, resultados, strict=True):
+            if estado == "pulada":
+                continue
+            if estado == "feita":
+                feitas += 1
+                print(f"feita   {_id8(item['id'])} {_resumo(resultado)} «{_titulo(item, 50)}»", flush=True)
+                continue
+            falhas.append((item, resultado))
+            print(f"falhou  {_id8(item['id'])} {resultado} «{_titulo(item, 50)}»", flush=True)
+    if laco.parar.is_set():       # as que não tinham começado saíram como puladas; as em voo terminaram
+        print(f"parei: {CAIDAS_PARA_ABORTAR} obras seguidas com o conversor ou o catálogo fora; repita depois",
+              file=sys.stderr)
+    depois = _cobertura()
+    print(f"carga: {feitas} obra(s) lida(s) e gravada(s) · {len(falhas)} falharam · "
+          f"restam {depois['sem_ficha']} sem ficha de {depois['com_arquivo']} com arquivo")
+    return 0 if not falhas else 1
+
+
+def cmd_ingerir(argv: list) -> int:
+    apply = "--apply" in argv
+    sem_ficha = "--sem-ficha" in argv
+    resto, opcoes, i = [], {}, 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("--apply", "--sem-ficha"):
+            i += 1
+        elif a in ("--paralelo", "--limite", "--autor") and i + 1 < len(argv):
+            opcoes[a[2:]] = argv[i + 1]
+            i += 2
+        elif a.startswith("--"):
+            return uso(2)
+        else:
+            resto.append(a)
+            i += 1
+    if sem_ficha == bool(resto) or len(resto) > 1:      # uma obra, ou --sem-ficha: nunca as duas nem nenhuma
+        return uso(2)
+    try:
+        paralelo = int(opcoes.get("paralelo", PARALELO_PADRAO))
+        limite = int(opcoes["limite"]) if "limite" in opcoes else None
+    except ValueError:
+        return uso(2)
+    if not 1 <= paralelo <= PARALELO_MAX or (limite is not None and limite < 1):
+        return uso(2)
+    autor = opcoes.get("autor") or _autor_da_sessao()
+    if sem_ficha:
+        return _ingerir_sem_ficha(apply=apply, paralelo=paralelo, limite=limite, autor=autor)
+    return _ingerir_uma(resolver_obra(resto[0]), autor, apply=apply)
+
+
+USO = """uso:
+  acervo ler biblioteca ficha <obra> [--json]
+      a ficha do arquivo da obra (uuid, prefixo de uuid com 6+ hex ou trecho do título)
+  acervo ingerir biblioteca ficha <obra> | --sem-ficha [--apply] [--paralelo <n>] [--limite <n>] [--autor <slug>]
+      lê o arquivo nos bytes e grava a ficha. Plano sem --apply: de uma obra, a ficha que a leitura daria; de
+      --sem-ficha, as obras não retiradas com arquivo e sem ficha. --paralelo (1 a 4, padrão 2): obras lidas ao
+      mesmo tempo, cada uma numa réplica do conversor; --limite <n>: só as n primeiras da lista
+exit: 0 leu/gravou · 1 obra inexistente, sem ficha, ou alguma falhou · 2 uso ou ambíguo · 3 rota fora · 5 indeterminável
+  {spec}
+""".replace("{spec}", SPEC)
+
+
+def uso(codigo: int) -> int:
+    print(USO, file=sys.stderr)
+    return codigo
+
+
+def main(argv: list) -> int:
+    if not argv or argv[0] in ("-h", "--help", "--ajuda", "ajuda"):
+        return uso(2)
+    ato, resto = argv[0], argv[1:]
+    try:
+        if ato == "ler":
+            return cmd_ler(resto)
+        if ato == "ingerir":
+            return cmd_ingerir(resto)
+    except Falha as e:
+        print(f"acervo ficha: {e}", file=sys.stderr)
+        return e.codigo
+    return uso(2)
+
+
+if __name__ == "__main__":
+    import signal
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    sys.exit(main(sys.argv[1:]))

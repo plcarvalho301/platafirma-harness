@@ -92,3 +92,7 @@ tests/test_guarda_sigpipe.py
 # Medido em 05/10/2026 (card #3253): `sinal` abre incidente após 10 min de serviço fora (8 passam;
 # idempotente, limpa ao recuperar e ignora degradado/sem-sinal).
 tests/test_contrato_sinal.py
+# Medido em 06/10/2026 (card #3305): `acervo ler|ingerir biblioteca ficha`, cliente fino das rotas da ficha (48 passam; com o
+# plano gravando sempre, ou o laço sem parar quando o conversor cai, 2 ficam vermelhos). Guarda da arq:0089: o verbo não usa
+# docker, psql nem boto3.
+tests/test_acervo_ficha.py
