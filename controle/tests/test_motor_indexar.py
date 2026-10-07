@@ -128,12 +128,12 @@ def test_uso_errado_sai_2_sem_chamar_a_api(api):
     assert pedidos == []
 
 
-def test_biblioteca_e_obra_sao_a_mesma_particao_e_a_api_recebe_obra(api):
+def test_biblioteca_e_obra_sao_a_mesma_particao_e_a_api_recebe_biblioteca(api):
     roda, pedidos = api
     for nome in ("biblioteca", "obra"):
         r = roda("buscar", nome, "pergunta")
         assert r.returncode == 0, r.stderr
-        assert pedidos[-1][1] == "/search" and pedidos[-1][3]["particao"] == "obra"
+        assert pedidos[-1][1] == "/search" and pedidos[-1][3]["particao"] == "biblioteca"
         assert pedidos[-1][3]["pergunta"] == "pergunta"
 
 

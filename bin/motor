@@ -33,10 +33,10 @@ DOCKER = {"DOCKER_HOST": "unix:///run/user/1001/docker.sock"}
 
 SPEC = "spec motor (acervo ler casa spec motor)"
 # arq:0106 §3: as particoes sao biblioteca, casa e registro. `obra` e o nome anterior da
-# biblioteca e segue aceito; a API do rag ainda chama a biblioteca de `obra` (_PARA_A_API).
+# biblioteca e segue aceito como sinonimo; a API do rag aceita biblioteca diretamente.
 PARTICOES = ("biblioteca", "casa", "registro")
 _SINONIMOS = {"obra": "biblioteca"}
-_PARA_A_API = {"biblioteca": "obra"}
+_PARA_A_API = {}
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
 
 def resolve_particao(argv, ato):
