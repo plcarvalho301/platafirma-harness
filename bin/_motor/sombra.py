@@ -70,15 +70,18 @@ CANDIDATOS = {
         "dims": [1024], "dtype": "float16", "trust": True},
 }
 SERVIDO = "servido"
-_API = {"biblioteca": "obra", "casa": "casa", "obra": "obra"}
+_API = {"biblioteca": "biblioteca", "casa": "casa", "obra": "biblioteca"}
 
-SQL_TXT = {
-    "obra": """SELECT t.id::text, t.texto, o.id::text, s.ancora, o.arquivo
+_SQL_TRECHO = """SELECT t.id::text, t.texto, o.id::text, s.ancora, o.arquivo
                  FROM acervo.trecho t
                  JOIN acervo.impressao i ON i.id = t.impressao_id
                  JOIN acervo.obra o ON o.id = i.obra_id
                  JOIN acervo.secao s ON s.id = t.secao_id
-                WHERE t.id = ANY(%s::uuid[])""",
+                WHERE t.id = ANY(%s::uuid[])"""
+
+SQL_TXT = {
+    "biblioteca": _SQL_TRECHO,
+    "obra": _SQL_TRECHO,
     "casa": """SELECT t.id::text, t.texto, c.id::text, s.ancora, coalesce(c.chave, c.path)
                  FROM acervo.casa_trecho t
                  JOIN acervo.casa_impressao i ON i.id = t.casa_impressao_id
