@@ -191,7 +191,71 @@ select coalesce(json_agg(json_build_object('impressao', x.imp, 'vetores', x.veto
 """
 
 
+# I13 (#3323, bloqueante; a cura é a #3332): nenhum derivado anterior existe depois da promoção.
+# Três faces: impressão aposentada de obra ou casa viva (a de obra/casa retirada é a volta da
+# retirada e fica); índice no motor cuja impressão não existe mais; espelho no balde sem
+# impressão que o reclame. O motor e o acervo não se juntam no SQL: cada um devolve a sua lista.
+SQL_I13_RAG = """
+select json_build_object(
+  'obra', (select coalesce(json_agg(i.id::text), '[]'::json) from acervo.impressao i
+            join acervo.obra o on o.id = i.obra_id
+           where i.estado = 'aposentada' and o.retirada_em is null),
+  'casa', (select coalesce(json_agg(ci.id::text), '[]'::json) from acervo.casa_impressao ci
+            join acervo.casa c on c.id = ci.casa_id
+           where ci.estado = 'aposentada' and c.retirada_em is null),
+  'existentes', (select coalesce(json_agg(x.id), '[]'::json) from (
+                   select id::text from acervo.impressao
+                   union all select id::text from acervo.casa_impressao) x(id)))
+"""
+SQL_I13_MOTOR = """
+select coalesce(json_agg(distinct coalesce(i.impressao_id, i.alvo_impressao_id)::text), '[]'::json)
+  from motor.indice i
+"""
+NOME_I13 = "I13: nenhum derivado anterior depois da promoção (impressão, índice, espelho)"
+ACERVO_BIN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "acervo")
+
+
+def espelhos_orfaos(bin_acervo=ACERVO_BIN):
+    """Quantos espelhos o balde tem sem impressão que os reclame: o plano seco de `acervo apagar
+    biblioteca espelho --json` (o mesmo critério que apaga). Falha é Indeterminavel."""
+    try:
+        p = subprocess.run([bin_acervo, "apagar", "biblioteca", "espelho", "--json"],
+                           capture_output=True, text=True, timeout=300)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise Indeterminavel(f"balde: {e}") from None
+    try:
+        data = json.loads(p.stdout) if p.returncode == 0 else None
+    except ValueError:
+        data = None
+    if not isinstance(data, dict) or "n" not in data:
+        msg = (p.stderr or p.stdout or f"saiu {p.returncode}").strip().splitlines()
+        raise Indeterminavel(f"balde: {msg[0] if msg else p.returncode}")
+    return int(data["n"])
+
+
 # --- predicados (puros) --------------------------------------------------------------------
+
+def predicado_13(rag, indexadas_no_motor, espelhos_sem_dono):
+    """Veredito do I13: `rag` = {obra, casa, existentes} de SQL_I13_RAG; `indexadas_no_motor` = as
+    impressões que algum índice do motor aponta; `espelhos_sem_dono` = contagem do balde."""
+    existentes = set(rag.get("existentes") or [])
+    obra, casa = rag.get("obra") or [], rag.get("casa") or []
+    orfaos = sorted(i for i in (indexadas_no_motor or []) if i and i not in existentes)
+    partes = []
+    if obra:
+        partes.append(f"{len(obra)} impressão(ões) aposentada(s) de obra viva ({_lista(obra)})")
+    if casa:
+        partes.append(f"{len(casa)} impressão(ões) aposentada(s) de casa viva ({_lista(casa)})")
+    if orfaos:
+        partes.append(f"{len(orfaos)} índice(s) do motor de impressão que não existe ({_lista(orfaos)})")
+    if espelhos_sem_dono:
+        partes.append(f"{espelhos_sem_dono} espelho(s) no balde sem impressão que o reclame")
+    if partes:
+        return resultado.divergente(" · ".join(partes) + " — cura: a promoção apaga no ato (#3332); "
+                                    "o espelho, `acervo apagar biblioteca espelho --apply`")
+    return resultado.conforme()
+
+
 
 def _classe(linha, classe_a):
     fid = linha.get("fidelidade") if isinstance(linha.get("fidelidade"), dict) else {}
@@ -285,9 +349,9 @@ def pendencia_motor(seladas, indices):
 
 # --- a classe ------------------------------------------------------------------------------
 
-def medir(regua_raiz=None, ler=psql_json):
+def medir(regua_raiz=None, ler=psql_json, orfaos_do_balde=espelhos_orfaos):
     """(itens, avisos, pendencias): o que `conferir_acervo` imprime. `ler(banco, sql)` é a porta
-    para o banco, trocável no teste."""
+    para o banco e `orfaos_do_balde()` a do balde, trocáveis no teste."""
     itens, avisos, pendencias = [], [FORA_DA_CLASSE], []
     nome7 = "§11 predicado 7: fidelidade medida, sem bloqueante de classe A em papel de corpo"
     nome9 = "§11 predicado 9: veredito da régua vigente"
@@ -339,6 +403,12 @@ def medir(regua_raiz=None, ler=psql_json):
         avisos.append(f"pendência do motor: não consegui olhar ({e})")
         pendencias.append({"para": "ia", "indeterminavel": str(e)})
     # a pendência não é item: não pesa no exit (§4.2 item 6: «não é divergência»)
+
+    try:
+        itens.append((NOME_I13, predicado_13(ler("rag", SQL_I13_RAG) or {}, ler("motor", SQL_I13_MOTOR) or [],
+                                             orfaos_do_balde())))
+    except Indeterminavel as e:
+        itens.append((NOME_I13, resultado.indeterminavel(str(e))))
     return itens, avisos, pendencias
 
 
