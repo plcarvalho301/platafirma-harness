@@ -41,7 +41,12 @@ class _API(BaseHTTPRequestHandler):
         corpo = json.loads(self.rfile.read(int(self.headers["Content-Length"])) or b"{}")
         self.pedidos.append(("POST", self.path, self.headers.get("Authorization"), corpo))
         if self.path == "/search":
-            return self._responde(200, {"fontes": []})
+            pergunta = corpo.get("pergunta", "")
+            if "negativa" in pergunta:
+                return self._responde(200, {"fontes": [], "cobertura": "fraca", "tempos_ms": {"total": 5.0}})
+            return self._responde(200, {"fontes": [{"obra": "Obra", "section_id": "sec-1",
+                                                     "secao_id": "00000000-0000-0000-0000-000000000001"}],
+                                        "cobertura": "boa", "tempos_ms": {"total": 5.0}})
         if corpo.get("aplicar"):
             return self._responde(200, {"modo": "aplicado", "lote": LOTE, "n": 1, "a_indexar": 1,
                                         "trechos_a_embedar": 3, "prontas": 0, "fora_transcritas": 0,
@@ -55,6 +60,9 @@ class _API(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.pedidos.append(("GET", self.path, self.headers.get("Authorization"), None))
+        if self.path == "/facets":
+            return self._responde(200, {"indice": {"acervo_sha": "abc123456789", "embed_model": "model",
+                                                   "embed_backend": "torch"}})
         if self.path.endswith(LOTE):
             return self._responde(200, {"lote": LOTE, "estado": "concluido", "por_estado": {"indexada": 1},
                                         "embedados": 3, "ms": 2000, "itens": [
@@ -76,6 +84,7 @@ def api(tmp_path):
     registro.write_text(json.dumps({"rag": {
         "estado": "ativa", "container": None, "stack": "rag", "endpoint": f"{base}/search",
         "indexacao": f"{base}/motor/indexacoes/lote", "token_em": "rag/RAG_API_TOKEN",
+        "facets": f"{base}/facets", "medicoes_em": "var/medicoes/rag",
         "ajustes": [], "nao_e_ajuste": {}}}))
     _API.pedidos = []
 
@@ -145,3 +154,32 @@ def test_lote_pela_tool_com_instancia_e_ato_repetidos_busca_na_particao_pedida(a
     assert r.returncode == 0, r.stderr
     assert "sem particao" not in r.stderr
     assert pedidos[-1][3]["particao"] == "casa" and pedidos[-1][3]["pergunta"] == "pergunta"
+
+
+def test_medir_calcula_abstencao_hit_k_e_t2_com_delta(api, tmp_path):
+    roda, pedidos = api
+    gab = tmp_path / "gabarito.jsonl"
+    itens = [
+        {"pergunta": "onde esta a obra?", "estrato": "T2-cadeiras", "alvo_obras": ["Obra"],
+         "relevancia": "positiva", "pontuavel": True},
+        {"pergunta": "pergunta negativa sem resposta", "estrato": "T2-cadeiras", "alvo_section_id": None,
+         "alvo_obra_ids": [], "relevancia": "negativa", "pontuavel": True},
+        {"pergunta": "pergunta multi-step", "estrato": "T3", "alvo_section_id": None,
+         "alvo_obra_ids": [], "relevancia": "indeterminada", "pontuavel": True},
+    ]
+    gab.write_text("\n".join(json.dumps(x) for x in itens) + "\n", encoding="utf-8")
+
+    # 1a rodada
+    r = roda("medir", "biblioteca", "--gabarito", str(gab), "--k", "8", "--rotulo", "r1")
+    assert r.returncode == 0, r.stderr
+    assert "abstenção 1/1" in r.stdout
+    assert "t2" in r.stdout
+    assert "hit@8" in r.stdout
+    assert "primeira medicao" in r.stdout
+
+    # 2a rodada (avalia delta)
+    r2 = roda("medir", "biblioteca", "--gabarito", str(gab), "--k", "8", "--rotulo", "r2")
+    assert r2.returncode == 0, r2.stderr
+    assert "abstenção 1/1" in r2.stdout
+    assert "contra" in r2.stdout
+    assert "t2" in r2.stdout

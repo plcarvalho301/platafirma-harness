@@ -701,7 +701,8 @@ def monta_gold(inst, gabarito=None):
     - `codigo`  : o gabarito declara a secao exata (`alvo_section_id`). Acerto = a secao.
     - `sentido` : o gabarito declara a obra (`alvo_obra_ids`). Acerto = qualquer trecho dela.
 
-    Fica de fora, contado e nunca escondido: negativa e multi-step (sem alvo), e alvo cuja
+    Negativas do gabarito passam a ser medidas na familia `abstencao` (#2925).
+    Fica de fora, contado e nunca escondido: multi-step (sem alvo), e alvo cuja
     obra nao esta indexada — gold que encolhe em silencio e baseline que mente.
     """
     caminho = gabarito or na_release(inst.get("gabarito", ""))
@@ -714,13 +715,18 @@ def monta_gold(inst, gabarito=None):
     for e in itens:
         if not e.get("pontuavel", True):
             continue
+        if e.get("relevancia") == "negativa":
+            gold.append({"q": e["pergunta"], "familia": "abstencao", "estrato": e.get("estrato"),
+                         "obras": set(), "anchor": None})
+            continue
         alvo = e.get("alvo_section_id")
         if alvo:
             titulo = por_slug.get(_base(alvo).split("#", 1)[0])
             if not titulo:
                 fora_do_indice += 1
                 continue
-            gold.append({"q": e["pergunta"], "familia": "codigo", "obras": {titulo},
+            gold.append({"q": e["pergunta"], "familia": "codigo", "estrato": e.get("estrato"),
+                         "obras": {titulo},
                          "anchor": _base(alvo).split("#", 1)[1] if "#" in alvo else None})
             continue
         # `alvo_obras` (titulos) e a forma do estrato gerado; `alvo_obra_ids` (uuid) e a do
@@ -728,7 +734,8 @@ def monta_gold(inst, gabarito=None):
         obras = ({t for t in (e.get("alvo_obras") or [])}
                  | {t for o in (e.get("alvo_obra_ids") or []) for t in por_obra.get(o, ())})
         if obras:
-            gold.append({"q": e["pergunta"], "familia": "sentido", "obras": obras, "anchor": None})
+            gold.append({"q": e["pergunta"], "familia": "sentido", "estrato": e.get("estrato"),
+                         "obras": obras, "anchor": None})
         elif e.get("alvo_obra_ids") or e.get("alvo_obras"):
             fora_do_indice += 1
         else:
@@ -748,13 +755,16 @@ def _rank(fontes, item):
     return None
 
 
-def _agrega(ranks):
+def _agrega(ranks, k=5):
     n = len(ranks) or 1
-    return {"n": len(ranks),
-            "hit@1": round(sum(1 for r in ranks if r == 1) / n, 3),
-            "hit@3": round(sum(1 for r in ranks if r and r <= 3) / n, 3),
-            "hit@5": round(sum(1 for r in ranks if r and r <= 5) / n, 3),
-            "mrr": round(sum((1.0 / r) if r else 0.0 for r in ranks) / n, 3)}
+    res = {"n": len(ranks),
+           "hit@1": round(sum(1 for r in ranks if r == 1) / n, 3),
+           "hit@3": round(sum(1 for r in ranks if r and r <= 3) / n, 3),
+           "hit@5": round(sum(1 for r in ranks if r and r <= 5) / n, 3)}
+    if k not in (1, 3, 5):
+        res[f"hit@{k}"] = round(sum(1 for r in ranks if r and r <= k) / n, 3)
+    res["mrr"] = round(sum((1.0 / r) if r else 0.0 for r in ranks) / n, 3)
+    return res
 
 
 def _p(vals, q):
@@ -819,10 +829,13 @@ def cmd_medir(nome, inst, argv):
     if not gold:
         print("gold vazio — nada a medir", file=sys.stderr)
         sys.exit(1)
+    n_cod = sum(1 for g in gold if g['familia'] == 'codigo')
+    n_sen = sum(1 for g in gold if g['familia'] == 'sentido')
+    n_abs = sum(1 for g in gold if g['familia'] == 'abstencao')
     print(f"gabarito: {conta['itens']} itens | {len(gold)} pontuaveis "
-          f"({sum(1 for g in gold if g['familia']=='codigo')} por codigo, "
-          f"{sum(1 for g in gold if g['familia']=='sentido')} por sentido) | "
-          f"{conta['sem_alvo']} sem alvo (negativas e multi-step) | "
+          f"({n_cod} por codigo, {n_sen} por sentido"
+          + (f", {n_abs} negativas" if n_abs else "") + ") | "
+          f"{conta['sem_alvo']} sem alvo (multi-step) | "
           f"{conta['fora_do_indice']} com alvo fora do indice")
     print(f"indice: acervo_sha={carimbo.get('acervo_sha','?')[:12]} "
           f"{carimbo.get('embed_model')} ({carimbo.get('embed_backend')}) | "
@@ -830,7 +843,8 @@ def cmd_medir(nome, inst, argv):
           f"expansao {'LIGADA nesta rodada' if expansao else 'desligada'}"
           + (f" (peso {peso})" if expansao and peso else "") + f" | k={k}\n")
 
-    ranks = {"codigo": [], "sentido": []}
+    ranks = {"codigo": [], "sentido": [], "t2": []}
+    abst_ok, abst_total = 0, 0
     lat, t0 = [], time.time()
     for i, g in enumerate(gold, 1):
         corpo = {"pergunta": g["q"], "k": k, "texto": "nenhum"}
@@ -842,23 +856,43 @@ def cmd_medir(nome, inst, argv):
                 corpo["peso_conceito"] = float(peso)
         r = http(inst["endpoint"], tok, corpo)
         lat.append((r.get("tempos_ms") or {}).get("total", 0.0))
-        ranks[g["familia"]].append(_rank(r.get("fontes") or [], g))
+        if g["familia"] == "abstencao":
+            abst_total += 1
+            cob = (r.get("cobertura") or "").lower()
+            if cob in ("fraca", "vazia", "ausente", "nenhuma"):
+                abst_ok += 1
+        else:
+            rnk = _rank(r.get("fontes") or [], g)
+            ranks[g["familia"]].append(rnk)
+            if (g.get("estrato") or "").startswith("T2"):
+                ranks["t2"].append(rnk)
         if i % 25 == 0:
             print(f"  ... {i}/{len(gold)}")
 
-    m = {"geral": _agrega(ranks["codigo"] + ranks["sentido"]),
-         "codigo": _agrega(ranks["codigo"]), "sentido": _agrega(ranks["sentido"])}
+    m = {"geral": _agrega(ranks["codigo"] + ranks["sentido"], k),
+         "codigo": _agrega(ranks["codigo"], k),
+         "sentido": _agrega(ranks["sentido"], k),
+         "t2": _agrega(ranks["t2"], k)}
+    if abst_total:
+        m["abstencao"] = {"n": abst_total, "ok": abst_ok,
+                          "abstencao": f"{abst_ok}/{abst_total}",
+                          "taxa": round(abst_ok / abst_total, 3)}
     med = {"em": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "rotulo": rotulo, "k": k,
            "rerank": rerank, "expansao": expansao, "peso_conceito": peso,
            "gabarito": chave_gab,
            "indice": carimbo, "gold": conta, "metricas": m,
+           "abstencao": f"{abst_ok}/{abst_total}" if abst_total else None,
            "latencia_ms": {"mediana": round(_p(lat, 0.5), 1), "p90": round(_p(lat, 0.9), 1)},
            "elapsed_s": round(time.time() - t0, 1)}
 
-    print(f"\n  {'familia':<9} {'n':>4} {'hit@1':>7} {'hit@3':>7} {'hit@5':>7} {'mrr':>7}")
-    for fam in ("codigo", "sentido", "geral"):
+    col_k = f" {'hit@' + str(k):>7}" if k not in (1, 3, 5) else ""
+    print(f"\n  {'familia':<9} {'n':>4} {'hit@1':>7} {'hit@3':>7} {'hit@5':>7}{col_k} {'mrr':>7}")
+    for fam in ("codigo", "sentido", "t2", "geral"):
         a = m[fam]
-        print(f"  {fam:<9} {a['n']:>4} {a['hit@1']:>7} {a['hit@3']:>7} {a['hit@5']:>7} {a['mrr']:>7}")
+        extra_v = f" {a[f'hit@{k}']:>7}" if k not in (1, 3, 5) else ""
+        print(f"  {fam:<9} {a['n']:>4} {a['hit@1']:>7} {a['hit@3']:>7} {a['hit@5']:>7}{extra_v} {a['mrr']:>7}")
+    if abst_total:
+        print(f"  abstenção {abst_ok}/{abst_total}")
     print(f"\n  latencia servida: mediana {med['latencia_ms']['mediana']} ms | "
           f"p90 {med['latencia_ms']['p90']} ms | rodada {med['elapsed_s']}s")
 
@@ -873,10 +907,30 @@ def cmd_medir(nome, inst, argv):
         # rodadas: numero que subiu com o corpus outro nao e melhora, e ninguem percebe.
         print(f"\n  contra {anterior['em']}"
               + (f" [{anterior['rotulo']}]" if anterior.get("rotulo") else ""))
-        for fam in ("codigo", "sentido", "geral"):
-            d1 = m[fam]["hit@1"] - anterior["metricas"][fam]["hit@1"]
-            dm = m[fam]["mrr"] - anterior["metricas"][fam]["mrr"]
-            print(f"  {fam:<9} hit@1 {d1:+.3f}   mrr {dm:+.3f}")
+        ant_m = anterior.get("metricas", {})
+        for fam in ("codigo", "sentido", "t2", "geral"):
+            if fam in m and fam in ant_m:
+                d1 = m[fam]["hit@1"] - ant_m[fam]["hit@1"]
+                dm = m[fam]["mrr"] - ant_m[fam]["mrr"]
+                dk_str = ""
+                if k not in (1, 3, 5) and f"hit@{k}" in m[fam] and f"hit@{k}" in ant_m[fam]:
+                    dk = m[fam][f"hit@{k}"] - ant_m[fam][f"hit@{k}"]
+                    dk_str = f"   hit@{k} {dk:+.3f}"
+                print(f"  {fam:<9} hit@1 {d1:+.3f}{dk_str}   mrr {dm:+.3f}")
+        if abst_total:
+            ant_abs = ant_m.get("abstencao") or anterior.get("abstencao")
+            if isinstance(ant_abs, dict) and "ok" in ant_abs:
+                d_ok = abst_ok - ant_abs["ok"]
+                print(f"  abstenção {abst_ok}/{abst_total} ({d_ok:+d} contra {ant_abs['ok']}/{ant_abs.get('n', abst_total)})")
+            elif isinstance(ant_abs, str) and "/" in ant_abs:
+                try:
+                    ant_ok = int(ant_abs.split("/")[0])
+                    d_ok = abst_ok - ant_ok
+                    print(f"  abstenção {abst_ok}/{abst_total} ({d_ok:+d} contra {ant_abs})")
+                except ValueError:
+                    print(f"  abstenção {abst_ok}/{abst_total}")
+            else:
+                print(f"  abstenção {abst_ok}/{abst_total}")
         mudou = [c for c in set(carimbo) | set(anterior.get("indice", {}))
                  if carimbo.get(c) != anterior.get("indice", {}).get(c)
                  and c != "sha_calculado_em"]
