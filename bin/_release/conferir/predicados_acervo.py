@@ -39,6 +39,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 
 import resultado
 
@@ -376,6 +377,10 @@ INVARIANTES = {
 EXPOSICAO = {"inteira": "arquivo", "transcrita": "texto", "transcrita e indexada": "trecho"}
 BIBLIOTECA = "biblioteca"
 POR_ARQUIVO = "balde: não medido (listagem do balde fora do ar); I6 e I7 só pelo catálogo"
+HARNESS = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_HEX = "0123456789abcdef"
+TETO_LISTAGEM = 1000    # curadoria/lotes.py `listar_objetos_bucket(limite=1000)`, sem aviso de corte
+FAIXAS_BALDE = [f"espelho/{c}" for c in _HEX] + [a + b for a in _HEX for b in _HEX]
 _ESPELHO_NO_BALDE = re.compile(r"espelho/([0-9a-f]{64})/([0-9a-f]{64})/espelho\.md$")
 _OBJETO_NO_BALDE = re.compile(r"^(?:acervo|pessoal)/[0-9a-f]{64}$")
 
@@ -452,24 +457,43 @@ select (select json_build_object('id', r.id::text, 'total', r.total,
 """
 
 
-def listar_balde(bin_acervo=ACERVO_BIN):
-    """O que o balde guarda, pela listagem de `acervo balde listar` nas duas coleções: os espelhos
-    (objeto_id, digest) com espelho.md e as chaves dos objetos originais. Listagem que não terminou
-    (cursor) ou verbo fora é Indeterminavel: balde pela metade acusaria falta que não há."""
+def listagem_do_balde(colecao, prefixo):
+    """Os itens que `GET /acervo/baldes/<coleção>/objetos?prefixo=` devolve, pelo adaptador REST do motor."""
+    if HARNESS not in sys.path:
+        sys.path.insert(0, HARNESS)
+    from recuperacao.adaptadores import motor_acervo_rest
+    from recuperacao.adaptadores.base import FonteIndisponivel
+    try:
+        return motor_acervo_rest.baldes_objetos(colecao, prefixo).get("itens") or []
+    except FonteIndisponivel as e:
+        raise Indeterminavel(f"balde {colecao}: {e}") from None
+
+
+def _itens_da_colecao(listagem, colecao):
+    """Todos os itens da coleção. A rota corta em 1000 e responde `proximo: null` mesmo cortada: a listagem
+    inteira só vale abaixo do teto; no teto ou acima, lista-se por faixa de prefixo (os espelhos por
+    `espelho/<hex>`, os objetos pelos dois primeiros dígitos do sha), e faixa que chega ao teto é
+    Indeterminavel: balde cortado acusaria falta que não há."""
+    inteiro = listagem(colecao, None)
+    if len(inteiro) < TETO_LISTAGEM:
+        return inteiro
+    itens = []
+    for faixa in FAIXAS_BALDE:
+        parte = listagem(colecao, faixa)
+        if len(parte) >= TETO_LISTAGEM:
+            raise Indeterminavel(f"balde {colecao}: a faixa {faixa!r} chegou a {len(parte)} itens, o teto da "
+                                 f"rota ({TETO_LISTAGEM}); a listagem pode estar cortada")
+        itens += parte
+    return itens
+
+
+def listar_balde(listagem=None):
+    """O que o balde guarda nas duas coleções: os espelhos (objeto_id, digest) com espelho.md e as chaves
+    dos objetos originais. `listagem(coleção, prefixo)` é a porta, trocável no teste."""
+    listagem = listagem or listagem_do_balde
     espelhos, objetos = set(), set()
     for colecao in ("firma", "pessoal"):
-        try:
-            p = subprocess.run([bin_acervo, "balde", "listar", colecao, "--json"],
-                               capture_output=True, text=True, timeout=300)
-            data = json.loads(p.stdout) if p.returncode == 0 else None
-        except (OSError, subprocess.TimeoutExpired, ValueError) as e:
-            raise Indeterminavel(f"balde {colecao}: {e}") from None
-        if not isinstance(data, dict) or not isinstance(data.get("itens"), list):
-            msg = (p.stderr or p.stdout or f"saiu {p.returncode}").strip().splitlines()
-            raise Indeterminavel(f"balde {colecao}: {msg[0] if msg else p.returncode}")
-        if data.get("proximo"):
-            raise Indeterminavel(f"balde {colecao}: a listagem não terminou (cursor {data['proximo']!r})")
-        for item in data["itens"]:
+        for item in _itens_da_colecao(listagem, colecao):
             chave = item.get("objeto") or ""
             m = _ESPELHO_NO_BALDE.search(chave)
             if m:

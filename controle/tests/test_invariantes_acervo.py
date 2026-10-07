@@ -243,6 +243,68 @@ def test_chave_sem_obra_fica_sem_obra():
     assert pa.obra_da_chave("espelho-orfao:3", _base()) is None
 
 
+# o balde: a rota corta a listagem em 1000 itens, sem avisar ----------------------------------------------
+
+SHA = "a1" * 32
+DIG = "b2" * 32
+CHAVE_ESPELHO = f"acervo/espelho/{SHA}/{DIG}/espelho.md"
+
+
+def _item(chave):
+    return {"objeto": chave, "bytes": 1, "modificado_em": "2026-10-07T00:00:00+00:00"}
+
+
+def _listagem(por_colecao, vistos=None):
+    """A rota falsa: lista `por_colecao[coleção]` filtrada pelo prefixo e cortada em 1000, como a de verdade."""
+    def listagem(colecao, prefixo):
+        if vistos is not None:
+            vistos.append((colecao, prefixo))
+        chaves = [c for c in por_colecao.get(colecao, []) if not prefixo or c.split("/", 1)[1].startswith(prefixo)]
+        return [_item(c) for c in chaves[:pa.TETO_LISTAGEM]]
+    return listagem
+
+
+def test_balde_pequeno_lista_uma_vez_por_colecao_e_separa_espelho_de_objeto():
+    vistos = []
+    balde = pa.listar_balde(_listagem({"firma": [CHAVE_ESPELHO, f"acervo/espelho/{SHA}/{DIG}/indice.json",
+                                                 f"acervo/{SHA}"]}, vistos))
+    assert balde == {"espelhos": {(SHA, DIG)}, "objetos": {f"acervo/{SHA}"}}
+    assert vistos == [("firma", None), ("pessoal", None)]
+
+
+def test_balde_no_teto_lista_por_faixa_e_nao_perde_o_que_a_rota_cortaria():
+    objetos = [f"acervo/{i:02x}{'0' * 62}" for i in range(256)]
+    espelhos = [f"acervo/espelho/{i % 16:x}{i:063x}/{DIG}/espelho.md" for i in range(1200)]
+    vistos = []
+    balde = pa.listar_balde(_listagem({"firma": objetos + espelhos}, vistos))
+    assert len(balde["espelhos"]) == 1200 and len(balde["objetos"]) == 256       # a rota cortaria em 1000
+    assert ("firma", "espelho/0") in vistos and ("firma", "ff") in vistos
+
+
+def test_balde_com_faixa_no_teto_e_indeterminavel_e_nao_cortado_em_silencio():
+    espelhos = [f"acervo/espelho/0{i:063x}/{DIG}/espelho.md" for i in range(1200)]      # tudo na faixa espelho/0
+    with pytest.raises(pa.Indeterminavel, match="espelho/0.*teto"):
+        pa.listar_balde(_listagem({"firma": espelhos}))
+
+
+def test_balde_fora_do_ar_e_indeterminavel():
+    def fora(colecao, prefixo):
+        raise pa.Indeterminavel("balde firma: HTTP 503")
+
+    with pytest.raises(pa.Indeterminavel, match="503"):
+        pa.listar_balde(fora)
+
+
+def test_i6_e_i7_leem_o_balde_listado_por_faixa():
+    d = _base()
+    d["balde"] = pa.listar_balde(_listagem({"firma": ["acervo/espelho/sha-o1/dig-i1/espelho.md", "acervo/sha-o1"]}))
+    assert d["balde"]["espelhos"] == set() and pa.i6(d) == ["impressao:i1"]   # chave que não é sha de 64 hex não conta
+    d["balde"] = pa.listar_balde(_listagem({"firma": [f"acervo/espelho/{SHA}/{DIG}/espelho.md", f"acervo/{SHA}"]}))
+    d["obras"][0].update(objeto_id=SHA, objeto=f"acervo/{SHA}")
+    d["impressoes"][0]["digest"] = DIG
+    assert pa.i6(d) == [] and pa.i7(d) == []
+
+
 # o gate --------------------------------------------------------------------------------------------
 
 def _retrato(**chaves):
