@@ -241,11 +241,13 @@ def test_curar_declara_e_despacha_os_atos_do_espelho():
     fonte = CURAR.read_text(encoding="utf-8")
     uso = fonte.split('USO = """', 1)[1].split('"""', 1)[0]
     for ato in ("--recortar <obra>", "--reextrair <obra>", "--expurgar --espelhos",
-                "--restaurar --espelhos", "--reextrair --lote", "--rejulgar --lote", "--relatorio <lote>"):
+                "--restaurar --espelhos", "--apagar --espelhos", "--reextrair --lote", "--rejulgar --lote",
+                "--relatorio <lote>"):
         assert ato in uso, ato
-    for chamada in ("acao_recortar(", "acao_reextrair(", "acao_espelhos(", "acao_rejulgar(",
-                    "acao_reextrair_lote(", "acao_relatorio_lote(",
+    for chamada in ("acao_recortar(", "acao_reextrair(", "acao_espelhos(", "acao_espelhos_orfaos(",
+                    "acao_rejulgar(", "acao_reextrair_lote(", "acao_relatorio_lote(",
                     "/acervo/obras/{obra_id}/recortes", "/acervo/obras/{obra_id}/reextracoes",
-                    "/acervo/espelhos/{rota}", "/acervo/espelhos/rejulgamento", "/acervo/reextracoes/lote",
-                    "--espelhos acompanha --expurgar ou --restaurar"):
+                    "/acervo/espelhos/{rota}", "/acervo/espelhos/orfaos", "/acervo/espelhos/rejulgamento",
+                    "/acervo/reextracoes/lote",
+                    "--espelhos acompanha --expurgar, --restaurar ou --apagar"):
         assert chamada in fonte, chamada
