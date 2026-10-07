@@ -50,10 +50,17 @@ def _imp(i, tipo="text/html", espelho=True, fid=None, tem=True, regua="2"):
             "fidelidade": fid if tem else None, "tem_fidelidade": tem and espelho, "regua": regua}
 
 
-def _ler(servindo, seladas=(), indices=(), tem_coluna=False, fora=()):
+I13_LIMPO = {"obra": [], "casa": [], "existentes": []}
+
+
+def _ler(servindo, seladas=(), indices=(), tem_coluna=False, fora=(), i13=None, i13_motor=()):
     def ler(banco, sql):
         if banco in fora:
             raise pa.Indeterminavel(f"{banco} fora")
+        if sql is pa.SQL_I13_RAG:
+            return i13 if i13 is not None else I13_LIMPO
+        if sql is pa.SQL_I13_MOTOR:
+            return list(i13_motor)
         if banco == "motor":
             return list(indices)
         if "information_schema" in sql:
@@ -66,6 +73,15 @@ def _ler(servindo, seladas=(), indices=(), tem_coluna=False, fora=()):
 
 def _estado(itens, prefixo):
     return next(v for n, v in itens if n.startswith(prefixo))
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _balde_limpo(monkeypatch):
+    """O balde real não se alcança no teste: sem órfão, salvo o teste que diz outra coisa."""
+    monkeypatch.setattr(pa, "espelhos_orfaos", lambda: 0)
 
 
 def test_tudo_conforme(tmp_path):
@@ -127,7 +143,8 @@ def test_catalogo_fora_sai_5(tmp_path):
 
 def test_regua_ilegivel_sai_5(tmp_path):
     itens, _, _ = pa.medir(_regua(tmp_path, regua="X = 1\n"), _ler([_imp(1, fid=_fid("A"))]))
-    assert all(v.estado == "indeterminavel" for _, v in itens)
+    # os predicados da régua não se medem; o I13 não depende dela e segue medido
+    assert all(v.estado == "indeterminavel" for n, v in itens if n.startswith("§11"))
     assert resultado.agrega(itens)[0] == 5
 
 
@@ -150,4 +167,41 @@ def test_json_traz_avisos_e_pendencias(tmp_path):
                                  extra={"avisos": avisos, "pendencias": pend})
     d = json.loads(out.getvalue())
     assert rc == 0 and d["classe"] == "acervo" and d["avisos"] and d["pendencias"] == []
-    assert d["ancora"].startswith("release conferir acervo: 2 conforme")
+    assert d["ancora"].startswith("release conferir acervo: 3 conforme")
+
+
+# --- I13 (#3323, #3332): nenhum derivado anterior depois da promoção -----------------------------
+
+def test_i13_limpo_e_conforme():
+    assert pa.predicado_13({"obra": [], "casa": [], "existentes": ["imp-1"]}, ["imp-1"], 0).estado == "conforme"
+
+
+def test_i13_aposentada_de_obra_ou_casa_viva_diverge():
+    v = pa.predicado_13({"obra": ["imp-velha"], "casa": ["ci-velha"], "existentes": []}, [], 0)
+    assert v.estado == "divergente" and "obra viva" in v.motivo and "casa viva" in v.motivo
+
+
+def test_i13_indice_de_impressao_que_nao_existe_diverge():
+    """07/10/2026: dois índices da casa sobraram no motor depois de a 084 apagar a impressão no rag."""
+    v = pa.predicado_13({"obra": [], "casa": [], "existentes": ["imp-1"]}, ["imp-1", "13ac7f68-orfa"], 0)
+    assert v.estado == "divergente" and "1 índice(s) do motor" in v.motivo and "13ac7f68" in v.motivo
+
+
+def test_i13_espelho_sem_dono_diverge():
+    v = pa.predicado_13({"obra": [], "casa": [], "existentes": []}, [], 3)
+    assert v.estado == "divergente" and "3 espelho(s)" in v.motivo
+
+
+def test_i13_entra_no_exit(tmp_path):
+    itens, _, _ = pa.medir(_regua(tmp_path), _ler([_imp(1, fid=_fid("A"))], i13_motor=["orfa"]))
+    assert _estado(itens, "I13").estado == "divergente"
+    assert resultado.agrega(itens)[0] == 1
+
+
+def test_i13_balde_fora_e_indeterminavel(tmp_path):
+    def balde():
+        raise pa.Indeterminavel("balde: HTTP 401")
+
+    itens, _, _ = pa.medir(_regua(tmp_path), _ler([_imp(1, fid=_fid("A"))]), orfaos_do_balde=balde)
+    v = _estado(itens, "I13")
+    assert v.estado == "indeterminavel" and "401" in v.motivo

@@ -349,7 +349,7 @@ def pendencia_motor(seladas, indices):
 
 # --- a classe ------------------------------------------------------------------------------
 
-def medir(regua_raiz=None, ler=psql_json, orfaos_do_balde=espelhos_orfaos):
+def medir(regua_raiz=None, ler=psql_json, orfaos_do_balde=None):
     """(itens, avisos, pendencias): o que `conferir_acervo` imprime. `ler(banco, sql)` é a porta
     para o banco e `orfaos_do_balde()` a do balde, trocáveis no teste."""
     itens, avisos, pendencias = [], [FORA_DA_CLASSE], []
@@ -406,7 +406,7 @@ def medir(regua_raiz=None, ler=psql_json, orfaos_do_balde=espelhos_orfaos):
 
     try:
         itens.append((NOME_I13, predicado_13(ler("rag", SQL_I13_RAG) or {}, ler("motor", SQL_I13_MOTOR) or [],
-                                             orfaos_do_balde())))
+                                             (orfaos_do_balde or espelhos_orfaos)())))
     except Indeterminavel as e:
         itens.append((NOME_I13, resultado.indeterminavel(str(e))))
     return itens, avisos, pendencias
