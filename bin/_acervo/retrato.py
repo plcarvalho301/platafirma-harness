@@ -285,8 +285,16 @@ def _projecao():
 
 
 def _quem():
-    cadeira, sessao = os.environ.get("PF_CADEIRA", "").strip(), os.environ.get("PF_SESSAO_ID", "").strip()
-    return f"{cadeira}@{sessao[:8]}" if cadeira and sessao else None
+    """Quem tirou o retrato: `<cadeira>/<sujeito>@<sessão>`, do que a porta injeta. O sujeito (PF_SUJEITO, o `sub`
+    do token) é o que autentica: sem ele não há quem assine, e a cadeira e a sessão só completam a trilha."""
+    sujeito = os.environ.get("PF_SUJEITO", "").strip()
+    if not sujeito:
+        return None
+    cadeira = (os.environ.get("PF_CADEIRA") or os.environ.get("PF_CONTA") or "").strip().lower()
+    for prefixo in ("claudinho-", "claudinha-"):
+        cadeira = cadeira.removeprefix(prefixo)
+    sessao = (os.environ.get("PF_SESSAO") or os.environ.get("PF_SESSAO_ID") or "").strip()
+    return f"{cadeira or '-'}/{sujeito[:8]}@{sessao[:8] or '-'}"
 
 
 def executar(quero_json=False, guardar=False, ler=None, balde=None, orfaos=None, projecao=None,
@@ -296,8 +304,8 @@ def executar(quero_json=False, guardar=False, ler=None, balde=None, orfaos=None,
     ler = ler or pa.psql_json
     quem = quem if quem is not None else _quem()
     if guardar and not quem:
-        sys.stderr.write("acervo listar --retrato --guardar: sem PF_CADEIRA e PF_SESSAO_ID não há quem tirou "
-                         "o retrato (recusa; a sessão abre pela porta).\n")
+        sys.stderr.write("acervo listar --retrato --guardar: sem PF_SUJEITO não há quem tirou o retrato "
+                         "(recusa; o sujeito vem do token, pela porta).\n")
         return 4
     agora = agora or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:

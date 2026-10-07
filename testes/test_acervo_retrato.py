@@ -207,7 +207,18 @@ def test_guardar_grava_as_duas_tabelas_numa_transacao(capsys):
 def test_guardar_sem_identidade_recusa_e_nao_escreve(capsys):
     guardados = []
     rc = retrato.executar(guardar=True, quem="", **_portas(_dados(), guardados=guardados))
-    assert rc == 4 and guardados == [] and "PF_CADEIRA" in capsys.readouterr().err
+    assert rc == 4 and guardados == [] and "PF_SUJEITO" in capsys.readouterr().err
+
+
+def test_quem_vem_do_que_a_porta_injeta(monkeypatch):
+    for var in ("PF_SUJEITO", "PF_CADEIRA", "PF_CONTA", "PF_SESSAO", "PF_SESSAO_ID"):
+        monkeypatch.delenv(var, raising=False)
+    assert retrato._quem() is None                                   # sem sujeito não há quem assine
+    monkeypatch.setenv("PF_SUJEITO", "b6986be0-c5b6-4693-839f-73c90b79b25a")
+    assert retrato._quem() == "-/b6986be0@-"                         # cadeira e sessão só completam a trilha
+    monkeypatch.setenv("PF_CADEIRA", "claudinho-dados")
+    monkeypatch.setenv("PF_SESSAO", "2b7d43b6-c829-4cd6-a395-7c788c7e232d")
+    assert retrato._quem() == "dados/b6986be0@2b7d43b6"
 
 
 def test_guardar_nao_guarda_o_que_diverge_do_situacao(capsys):

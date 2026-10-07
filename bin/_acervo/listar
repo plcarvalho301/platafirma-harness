@@ -179,8 +179,9 @@ USO = """uso:
                                                 count(*) de acervo.obra; a linha que nao fecha sai
                                                 escrita. --guardar grava em acervo.retrato e
                                                 acervo.retrato_obra (banco rag, que tem copia; nunca em
-                                                arquivo) e exige PF_CADEIRA e PF_SESSAO_ID (exit 4 sem
-                                                eles); nao guarda se o retrato divergir do --situacao.
+                                                arquivo) e exige PF_SUJEITO, que a porta injeta (exit 4
+                                                sem ele); cadeira e sessao completam a trilha; nao guarda
+                                                se o retrato divergir do --situacao.
                                                 Exit 0 fecha, 1 nao fecha ou diverge, 5 fonte fora do ar.
                                                 --sobre, --eixo, --qualidade, bancada e metodos recusam.
   acervo listar biblioteca bancada <pasta> [--json] [--estratos <arquivo>]  perfil x docling por obra
