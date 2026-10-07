@@ -580,7 +580,7 @@ def dispara_acervo(cadeira, sujeito, pergunta):
     hit, cobertura, carimbo, disjuntor = False, "ausente", "-", "fechado"
     # PORTA CANONICA: o verbo `motor rag buscar`, nao HTTP cru. Uma porta so pro indice.
     argv = [os.path.join(BIN, "motor"), "rag", "buscar", pergunta.strip(),
-            "--k", "6", "--texto", "secao"]
+            "--k", "6", "--texto", "secao", "--origem", "abertura"]
     if ordem_id:
         argv += ["--ordem-id", ordem_id]
     try:

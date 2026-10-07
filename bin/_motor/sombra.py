@@ -91,6 +91,13 @@ SQL_TXT = {
 }
 
 
+# O balde da view acervo.bateria_recuperacao para o evento anterior a 085 (sem particao declarada).
+BALDE_ANTIGO = "sem partição (anterior a 085)"
+
+def _normaliza(texto):
+    """A mesma normalizacao da view: espacos colapsados, bordas e caixa."""
+    return re.sub(r"\s+", " ", texto or "").strip().lower()
+
 def _base(sid):
     return re.sub(r"~\d+$", "", sid or "")
 
@@ -289,16 +296,29 @@ def main():
 
     gold = [json.loads(l) for l in open(ARGS["gabarito"], encoding="utf-8") if l.strip()]
     gold = [g for g in gold if g.get("pergunta")]
-    linhas = conn.execute("SELECT pergunta FROM acervo.evento_recuperacao "
-                          "WHERE disparou GROUP BY pergunta").fetchall()
-    gold_txt = {g["pergunta"].strip() for g in gold}
-    replay = sorted({(r[0] or "").strip() for r in linhas} - gold_txt)
-    replay = [q for q in replay if len(q) >= 8]
+    # O replay le a bateria do log (acervo.bateria_recuperacao, #3314) pela particao pedida, mais o
+    # balde dos eventos anteriores a 085, que nao declaram particao. A view ja tira o canario e so
+    # traz as origens busca e abertura; o gabarito, que e arquivo daqui, sai neste ponto, pelo
+    # texto normalizado como a view o normaliza.
+    parts_log = sorted({_API[p] for p in ARGS["particoes"]} | {BALDE_ANTIGO})
+    linhas = conn.execute("SELECT particao, pergunta_normalizada, pergunta_exemplo "
+                          "FROM acervo.bateria_recuperacao WHERE particao = ANY(%s)",
+                          (parts_log,)).fetchall()
+    gold_txt = {_normaliza(g["pergunta"]) for g in gold}
+    por_particao, vistas = {}, {}
+    for part, norm, exemplo in linhas:
+        if norm in gold_txt or len((norm or "").strip()) < 8:
+            continue
+        por_particao[part] = por_particao.get(part, 0) + 1
+        vistas.setdefault(norm, (exemplo or norm).strip())
+    replay = sorted(vistas.values())
     total_log = len(replay)
     random.Random(42).shuffle(replay)
     replay = replay[:MAX_PERGUNTAS]
-    res["perguntas"] = {"gabarito": len(gold), "log_unicas": total_log, "replay": len(replay)}
-    log(f"perguntas: gabarito {len(gold)}, log {total_log} unicas, replay {len(replay)}")
+    res["perguntas"] = {"gabarito": len(gold), "log_unicas": total_log, "replay": len(replay),
+                        "por_particao": por_particao}
+    log(f"perguntas: gabarito {len(gold)}, log {total_log} unicas, replay {len(replay)}; "
+        f"por particao da bateria (a mesma pergunta pode contar em mais de uma): {por_particao}")
     perguntas = [g["pergunta"] for g in gold] + replay
     n_gold = len(gold)
 
