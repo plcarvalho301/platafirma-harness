@@ -242,6 +242,20 @@ def test_o_sql_nao_quebra_com_aspas_e_cifrao_no_titulo():
     assert "$r1$" in sql                              # a etiqueta escolhida não colide com o título
 
 
+def test_o_adaptador_do_balde_monta_a_rota_com_e_sem_prefixo():
+    sys.path.insert(0, str(RAIZ))
+    from recuperacao.adaptadores import motor_acervo_rest
+    vistos = []
+
+    def http(rota, **_):
+        vistos.append(rota)
+        return {"itens": []}
+
+    motor_acervo_rest.baldes_objetos("firma", "espelho/a", http=http)
+    motor_acervo_rest.baldes_objetos("pessoal", http=http)
+    assert vistos == ["/acervo/baldes/firma/objetos?prefixo=espelho%2Fa", "/acervo/baldes/pessoal/objetos"]
+
+
 # o ato: sem verbo novo -----------------------------------------------------------------------------
 
 def _listar():

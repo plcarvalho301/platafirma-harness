@@ -68,6 +68,16 @@ def obras(campos: list[str], *, http=None) -> dict:
     return chamador(f"/acervo/obras?{urllib.parse.urlencode({'campos': ','.join(campos)})}")
 
 
+def baldes_objetos(colecao: str, prefixo: str | None = None, *, http=None) -> dict:
+    """`GET /acervo/baldes/{colecao}/objetos?prefixo=` — `{itens: [{objeto, bytes, modificado_em}], proximo}`.
+    A rota corta a listagem em 1000 itens (`lotes.listar_objetos_bucket`, `limite=1000`) e devolve
+    `proximo: null` mesmo cortada: quem precisa do balde inteiro lista por faixa de prefixo e recusa a
+    faixa que chegou a 1000."""
+    chamador = http or _chama_real
+    qs = f"?{urllib.parse.urlencode({'prefixo': prefixo})}" if prefixo else ""
+    return chamador(f"/acervo/baldes/{urllib.parse.quote(colecao, safe='')}/objetos{qs}")
+
+
 def descoberta(assunto: str, eixos: list[str], k: int, *, http=None) -> dict:
     """`GET /acervo/descoberta?assunto=&eixo=...&k=...`."""
     chamador = http or _chama_real
