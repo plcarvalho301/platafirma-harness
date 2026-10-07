@@ -19,7 +19,7 @@
 #   persona            abertura                 valor  estavel  persona ler {cadeira}                          gestao-estrategica
 #   alias-cadeiras     abertura                 valor  morna    persona foto                                   gestao-estrategica
 #   mesa               abertura                 valor  volatil  mesa ver                                       gestao-estrategica
-#   acervo-consultado  abertura, com pergunta   valor  volatil  motor rag buscar casa "{pergunta}" --k 6 --texto secao   dados (a partição)
+#   acervo-consultado  abertura, com pergunta   valor  volatil  motor rag buscar casa "{pergunta}" --k 6 --texto secao --origem abertura   dados (a partição)
 #   chapeu             chapeu                   valor  estavel  persona ler {cadeira} --chapeu {chapeu}        gestao-estrategica
 #   cadernos           abertura; com chapeu, o corpo dele  valor  volatil  mesa caderno --chapeu {chapeu}   gestao-estrategica
 #   rotinas            abertura                 valor  estavel  acervo listar casa guia --mapa                 gestao-estrategica
@@ -81,7 +81,7 @@ CATALOGO = [
         "gatilho": "abertura, com pergunta",
         "regime": "valor",
         "volatilidade": "volatil",
-        "chamada": 'motor rag buscar casa "{pergunta}" --k 6 --texto secao',
+        "chamada": 'motor rag buscar casa "{pergunta}" --k 6 --texto secao --origem abertura',
         "dono": "dados",
     },
     {
@@ -460,7 +460,8 @@ CATALOGO_CADEIRINHA = [
     {"peca": "regua", "gatilho": "perfil cadeirinha, com --regua", "regime": "valor",
      "volatilidade": "estavel", "chamada": "acervo ler casa {regua}", "dono": "gestao-estrategica"},
     {"peca": "acervo-consultado", "gatilho": "perfil cadeirinha, com mensagem", "regime": "valor",
-     "volatilidade": "volatil", "chamada": 'motor rag buscar casa "{pergunta}" --k 6 --texto secao',
+     "volatilidade": "volatil",
+     "chamada": 'motor rag buscar casa "{pergunta}" --k 6 --texto secao --origem abertura',
      "dono": "dados"},
     {"peca": "cadernos", "gatilho": "perfil cadeirinha", "regime": "valor", "volatilidade": "volatil",
      "chamada": "mesa caderno {chapeu} --categoria licao,premissa", "dono": "gestao-estrategica"},
@@ -773,8 +774,9 @@ def ato_montar(cadeira_arg: str | None = None, chapeu_forcado: str | None = None
                 ref = "verbo:mesa ver"
         elif peca_id == "acervo-consultado":
             # argv pronto: a pergunta e texto livre e nao passa por shlex
-            cmd = ["motor", "rag", "buscar", "casa", pergunta, "--k", "6", "--texto", "secao"]
-            ref = f'verbo:motor rag buscar casa "{pergunta[:40]}" --k 6 --texto secao'
+            cmd = ["motor", "rag", "buscar", "casa", pergunta, "--k", "6", "--texto", "secao",
+                   "--origem", "abertura"]
+            ref = f'verbo:motor rag buscar casa "{pergunta[:40]}" --k 6 --texto secao --origem abertura'
         elif peca_id == "cadernos":
             if chapeu_slug:
                 cmd = f"mesa caderno --chapeu {chapeu_slug}"

@@ -471,4 +471,32 @@ def test_rotinas_logo_apos_chapeu(raiz_hermetica):
     pecas = json.loads(proc.stdout)["pecas"]
     assert [p["peca"] for p in pecas[:4]] == ["persona", "chapeu", "conduta", "rotinas"]
 
+# ------------------------------------------------------------------------------
+# #3314: a consulta da abertura declara a origem, para a bateria do log separar da busca dirigida
+# ------------------------------------------------------------------------------
+
+def test_a_consulta_da_abertura_manda_origem_abertura_ao_motor(raiz_hermetica):
+    log_motor = raiz_hermetica / "motor.log"
+    proc = _run_expediente(
+        ["montar", "--json"], raiz_hermetica, stdin_data="pergunta com busca",
+        env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin"),
+                   "STUB_MOTOR_LOG": str(log_motor)},
+    )
+    assert proc.returncode == 0
+    assert "--origem abertura" in log_motor.read_text()
+    peca = next(p for p in json.loads(proc.stdout)["pecas"] if p["peca"] == "acervo-consultado")
+    assert peca["ref"].endswith("--k 6 --texto secao --origem abertura")
+
+def test_a_consulta_da_abertura_do_perfil_cadeirinha_tambem_declara_a_origem():
+    from importlib.machinery import SourceFileLoader
+    from importlib.util import module_from_spec, spec_from_loader
+
+    spec = spec_from_loader("expediente_sob_teste", SourceFileLoader("expediente_sob_teste", str(SCRIPT)))
+    mod = module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    linha = next(l for l in mod.CATALOGO_CADEIRINHA if l["peca"] == "acervo-consultado")
+    assert linha["chamada"].endswith("--origem abertura")
+    assert next(l for l in mod.CATALOGO if l["peca"] == "acervo-consultado")["chamada"].endswith(
+        "--origem abertura")
+
 

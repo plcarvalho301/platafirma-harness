@@ -130,6 +130,7 @@ def uso(cod=2):
   motor <inst> ajuste <slug>             o que esse ajuste troca por que
   motor <inst> ajuste <slug> <valor>     mexe, promove e confere o servido
   motor <inst> buscar <particao> "<pergunta>" [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>] [--ordem-id <id>]
+                     [--origem abertura|busca|bench|sombra|autoteste]
   motor <inst> medir  <particao> [--k N] [--rerank] [--rotulo <nome>] [--gabarito <arq>]
                      [--expansao [--peso-conceito X]]
                                         bateria no gold da particao, pela porta servida:
@@ -511,6 +512,8 @@ def _emite_consulta(nome, inst, corpo, resp, dur_ms):
             "motor": nome,
             "cadeira": os.environ.get("PF_CADEIRA", "-"),
             "chapeu": os.environ.get("PF_CHAPEU", "-"),
+            "particao": corpo.get("particao"),
+            "origem": corpo.get("origem"),
             "query": (corpo.get("pergunta") or "")[:2000],
             "k": corpo.get("k"),
             "conceito": corpo.get("conceitos"),
@@ -545,9 +548,13 @@ def _trata_erro_http(e, contexto="motor"):
     sys.exit(3)
 
 
+# Quem chamou a busca (#3314); a mesma lista do CHECK de acervo.evento_recuperacao. A abertura e a
+# medida mandam a sua; chamada sem a flag grava busca.
+ORIGENS = ("abertura", "busca", "bench", "sombra", "autoteste")
+
 def cmd_buscar(nome_inst, inst, argv):
     uso = ('motor <inst> buscar <particao> "<pergunta>" [--k N] [--texto secao|trecho|nenhum] '
-           '[--conceito <slug>] [--ordem-id <id>]\n  ' + SPEC)
+           '[--conceito <slug>] [--ordem-id <id>] [--origem ' + "|".join(ORIGENS) + ']\n  ' + SPEC)
     if not argv and sys.stdin.isatty():
         print(uso, file=sys.stderr)
         sys.exit(2)
@@ -561,9 +568,10 @@ def cmd_buscar(nome_inst, inst, argv):
         a = resto[i]
         if a.startswith("--"):
             nome = a[2:]
-            if nome not in ("k", "texto", "conceito", "ordem-id"):
+            if nome not in ("k", "texto", "conceito", "ordem-id", "origem"):
                 print("buscar: flag desconhecida " + repr(a)
-                      + ". conhecidas: --k, --texto, --conceito, --ordem-id.\n  " + uso, file=sys.stderr)
+                      + ". conhecidas: --k, --texto, --conceito, --ordem-id, --origem.\n  " + uso,
+                      file=sys.stderr)
                 sys.exit(2)
             if i + 1 >= len(resto) or resto[i + 1].startswith("--"):
                 print("buscar: a flag " + repr(a) + " exige um valor.\n  " + uso, file=sys.stderr)
@@ -575,6 +583,12 @@ def cmd_buscar(nome_inst, inst, argv):
                 corpo["ordem_id"] = v         # que sabe que abertura e buscas sao a mesma fita:
                                               # no claude.ai cada tool call e sessao MCP distinta,
                                               # entao nao ha id compartilhado no servidor (#2902).
+            elif nome == "origem":           # quem chamou (#3314): vai ao evento do log
+                if v not in ORIGENS:
+                    print("buscar: --origem aceita " + "|".join(ORIGENS) + ", recebi " + repr(v) + ".",
+                          file=sys.stderr)
+                    sys.exit(2)
+                corpo["origem"] = v
             elif nome == "k":
                 try:
                     corpo["k"] = int(v)
@@ -604,6 +618,15 @@ def cmd_buscar(nome_inst, inst, argv):
         sys.exit(2)
 
     corpo["pergunta"] = pergunta
+    corpo.setdefault("origem", "busca")
+    # Sessao e fita vao no corpo (#3314): o rag-api le PF_SESSAO do proprio conteiner, que nao
+    # e o do cliente, e o evento saia sem sessao_id.
+    sessao = os.environ.get("PF_SESSAO", "").strip()
+    if sessao and sessao != "-":
+        corpo.setdefault("sessao_id", sessao)
+    ordem = os.environ.get("PF_ORDEM_ID", "").strip()
+    if ordem and ordem != "-":
+        corpo.setdefault("ordem_id", ordem)
     if conceitos:
         corpo["conceitos"] = conceitos
     tok = token_da(inst)
@@ -847,7 +870,7 @@ def cmd_medir(nome, inst, argv):
     abst_ok, abst_total = 0, 0
     lat, t0 = [], time.time()
     for i, g in enumerate(gold, 1):
-        corpo = {"pergunta": g["q"], "k": k, "texto": "nenhum"}
+        corpo = {"pergunta": g["q"], "k": k, "texto": "nenhum", "origem": "bench"}
         if rerank:
             corpo["rerank"] = True
         if expansao:

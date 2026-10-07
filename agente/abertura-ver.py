@@ -190,7 +190,7 @@ CATALOGO = {  # peça -> (dono, volatilidade, ref, leitor)
     "alias-cadeiras": ("gestao-estrategica", "morna", "persona foto", peca_alias),
     "mesa": ("gestao-estrategica", "volatil", "mesa ver{flag_mesa}", None),
     "acervo-consultado": ("dados", "volatil",
-                          'motor rag buscar casa "{perg}" --k 6 --texto secao', None),
+                          'motor rag buscar casa "{perg}" --k 6 --texto secao --origem abertura', None),
     "cadernos": ("gestao-estrategica", "volatil", "mesa caderno{flag}", None),
 }
 

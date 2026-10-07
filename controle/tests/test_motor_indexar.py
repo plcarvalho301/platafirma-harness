@@ -88,9 +88,9 @@ def api(tmp_path):
         "ajustes": [], "nao_e_ajuste": {}}}))
     _API.pedidos = []
 
-    def roda(*args, sem_instancia=False):
+    def roda(*args, sem_instancia=False, ambiente=None):
         env = {**os.environ, "PF_MOTOR_REG": str(registro), "PLATAFIRMA_INSTANCIA": str(instancia),
-               "OPS_LOG_DIR": str(tmp_path / "ops"), "PF_CADEIRA": "ia"}
+               "OPS_LOG_DIR": str(tmp_path / "ops"), "PF_CADEIRA": "ia", **(ambiente or {})}
         inicio = [] if sem_instancia else ["rag"]
         return subprocess.run([sys.executable, str(MOTOR), *inicio, *args], capture_output=True, text=True,
                               env=env, timeout=60, check=False)
@@ -145,6 +145,52 @@ def test_biblioteca_e_obra_sao_a_mesma_particao_e_a_api_recebe_biblioteca(api):
         assert pedidos[-1][1] == "/search" and pedidos[-1][3]["particao"] == "biblioteca"
         assert pedidos[-1][3]["pergunta"] == "pergunta"
 
+
+# --- #3314: origem, sessao e fita no corpo da busca; particao e origem no evento do ops -------
+
+SESSAO = "5a32558c-8b05-493a-a70c-7e752944cdb4"
+
+def test_buscar_sem_flag_grava_origem_busca_e_leva_sessao_e_fita_do_ambiente(api):
+    roda, pedidos = api
+    r = roda("buscar", "biblioteca", "pergunta",
+             ambiente={"PF_SESSAO": SESSAO, "PF_ORDEM_ID": "o20261007T200203-3049c8"})
+    assert r.returncode == 0, r.stderr
+    corpo = pedidos[-1][3]
+    assert corpo["origem"] == "busca"
+    assert corpo["particao"] == "biblioteca"
+    assert corpo["sessao_id"] == SESSAO
+    assert corpo["ordem_id"] == "o20261007T200203-3049c8"
+
+def test_buscar_sem_sessao_no_ambiente_nao_manda_sessao_nem_fita(api):
+    roda, pedidos = api
+    r = roda("buscar", "biblioteca", "pergunta", ambiente={"PF_SESSAO": "-", "PF_ORDEM_ID": ""})
+    assert r.returncode == 0, r.stderr
+    assert "sessao_id" not in pedidos[-1][3] and "ordem_id" not in pedidos[-1][3]
+
+def test_buscar_com_origem_declarada_manda_a_origem_e_a_ordem_do_argumento_vence(api):
+    roda, pedidos = api
+    r = roda("buscar", "casa", "pergunta", "--origem", "abertura", "--ordem-id", "o-do-argumento",
+             ambiente={"PF_ORDEM_ID": "o-do-ambiente"})
+    assert r.returncode == 0, r.stderr
+    corpo = pedidos[-1][3]
+    assert corpo["origem"] == "abertura" and corpo["particao"] == "casa"
+    assert corpo["ordem_id"] == "o-do-argumento"
+
+def test_buscar_com_origem_fora_da_lista_sai_2_sem_chamar_a_api(api):
+    roda, pedidos = api
+    r = roda("buscar", "biblioteca", "pergunta", "--origem", "manual")
+    assert r.returncode == 2 and "--origem aceita" in r.stderr
+    assert roda("buscar", "biblioteca", "pergunta", "--origem").returncode == 2
+    assert pedidos == []
+
+def test_o_evento_consulta_do_ops_grava_particao_e_origem(api, tmp_path):
+    roda, _ = api
+    r = roda("buscar", "casa", "pergunta", "--origem", "abertura")
+    assert r.returncode == 0, r.stderr
+    linhas = [json.loads(l) for f in (tmp_path / "ops").glob("ops-*.jsonl")
+              for l in f.read_text().splitlines()]
+    evento = [l for l in linhas if l.get("evento") == "consulta"][-1]
+    assert evento["particao"] == "casa" and evento["origem"] == "abertura"
 
 def test_lote_pela_tool_com_instancia_e_ato_repetidos_busca_na_particao_pedida(api):
     # #2856 linha 23: `ato: buscar` com args [rag, buscar, casa, ...] chegava como
