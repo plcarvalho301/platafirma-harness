@@ -287,6 +287,22 @@ def test_balde_com_faixa_no_teto_e_indeterminavel_e_nao_cortado_em_silencio():
         pa.listar_balde(_listagem({"firma": espelhos}))
 
 
+def test_a_raiz_do_harness_acha_o_adaptador_do_motor():
+    """Em produção a `HARNESS` subiu três níveis em vez de quatro e o import do adaptador falhou, derrubando o
+    `release conferir acervo` (#3324): o caminho tem de existir de verdade."""
+    assert (Path(pa.HARNESS) / "recuperacao" / "adaptadores" / "motor_acervo_rest.py").is_file()
+    assert (Path(pa.HARNESS) / "bin" / "_release" / "conferir" / "predicados_acervo.py").is_file()
+
+
+def test_a_listagem_real_do_balde_usa_o_adaptador_e_a_rota_certa(monkeypatch):
+    sys.path.insert(0, pa.HARNESS)
+    from recuperacao.adaptadores import motor_acervo_rest
+    vistos = []
+    monkeypatch.setattr(motor_acervo_rest, "baldes_objetos",
+                        lambda colecao, prefixo=None: vistos.append((colecao, prefixo)) or {"itens": [_item("x")]})
+    assert pa.listagem_do_balde("firma", "espelho/a") == [_item("x")] and vistos == [("firma", "espelho/a")]
+
+
 def test_balde_fora_do_ar_e_indeterminavel():
     def fora(colecao, prefixo):
         raise pa.Indeterminavel("balde firma: HTTP 503")

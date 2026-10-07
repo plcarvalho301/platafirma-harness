@@ -377,7 +377,8 @@ INVARIANTES = {
 EXPOSICAO = {"inteira": "arquivo", "transcrita": "texto", "transcrita e indexada": "trecho"}
 BIBLIOTECA = "biblioteca"
 POR_ARQUIVO = "balde: não medido (listagem do balde fora do ar); I6 e I7 só pelo catálogo"
-HARNESS = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# a raiz do harness: bin/_release/conferir/<este arquivo> sobe quatro níveis (a do retrato, em bin/_acervo, sobe três)
+HARNESS = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 _HEX = "0123456789abcdef"
 TETO_LISTAGEM = 1000    # curadoria/lotes.py `listar_objetos_bucket(limite=1000)`, sem aviso de corte
 FAIXAS_BALDE = [f"espelho/{c}" for c in _HEX] + [a + b for a in _HEX for b in _HEX]
@@ -461,8 +462,11 @@ def listagem_do_balde(colecao, prefixo):
     """Os itens que `GET /acervo/baldes/<coleção>/objetos?prefixo=` devolve, pelo adaptador REST do motor."""
     if HARNESS not in sys.path:
         sys.path.insert(0, HARNESS)
-    from recuperacao.adaptadores import motor_acervo_rest
-    from recuperacao.adaptadores.base import FonteIndisponivel
+    try:
+        from recuperacao.adaptadores import motor_acervo_rest
+        from recuperacao.adaptadores.base import FonteIndisponivel
+    except ImportError as e:
+        raise Indeterminavel(f"balde {colecao}: não carreguei o adaptador do motor ({e})") from None
     try:
         return motor_acervo_rest.baldes_objetos(colecao, prefixo).get("itens") or []
     except FonteIndisponivel as e:
