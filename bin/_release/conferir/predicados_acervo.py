@@ -212,6 +212,7 @@ select coalesce(json_agg(distinct coalesce(i.impressao_id, i.alvo_impressao_id):
   from motor.indice i
 """
 NOME_I13 = "I13: nenhum derivado anterior depois da promoção (impressão, índice, espelho)"
+NOME_INVARIANTES = "I1 a I13: invariantes do ciclo de vida do dado (guia ciclo-de-vida-do-dado-do-acervo §6)"
 ACERVO_BIN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "acervo")
 
 
@@ -347,6 +348,435 @@ def pendencia_motor(seladas, indices):
     return [s for s in seladas if s.get("indexada") and not pronta(s)]
 
 
+# --- invariantes I1 a I13 (#3323, #3324) --------------------------------------------------------
+#
+# Uma função por invariante (`i1` … `i13`), para o relato citar «I2». Cada uma recebe os dados
+# coletados (`coletar`) e devolve a lista das CHAVES que violam, no formato `<tipo>:<id>`
+# (obra, impressao, indice, geracao, casa_impressao, espelho-orfao…), ou None quando o lado que a
+# mede não respondeu (nunca zero: não conseguir olhar não é conforme). A chave é o que o retrato
+# guarda e o gate compara: violação NOVA é chave que o retrato anterior não tinha.
+# A classe (bloqueante ou aviso) é a do guia ciclo-de-vida-do-dado-do-acervo §6 e da arq:0121 §5.2.
+
+INVARIANTES = {
+    "I1": ("uma servindo", "bloqueante"),
+    "I2": ("cobertura no índice", "bloqueante"),
+    "I3": ("retirada não serve", "bloqueante"),
+    "I4": ("vetor com alvo", "bloqueante"),
+    "I5": ("índice da servindo", "bloqueante"),
+    "I6": ("espelho presente", "aviso"),
+    "I7": ("ficha confere", "aviso"),
+    "I8": ("uma geração", "bloqueante"),
+    "I9": ("régua vigente", "aviso"),
+    "I10": ("retirada com autoria", "aviso"),
+    "I11": ("sobra", "bloqueante"),
+    "I12": ("sombra reclamada", "aviso"),
+    "I13": ("nenhum anterior", "bloqueante"),
+}
+# a exposição da arq:0119 §6 pelos valores que o banco ainda guarda em acervo.obra.marcacao
+EXPOSICAO = {"inteira": "arquivo", "transcrita": "texto", "transcrita e indexada": "trecho"}
+BIBLIOTECA = "biblioteca"
+POR_ARQUIVO = "balde: não medido (listagem do balde fora do ar); I6 e I7 só pelo catálogo"
+_ESPELHO_NO_BALDE = re.compile(r"espelho/([0-9a-f]{64})/([0-9a-f]{64})/espelho\.md$")
+_OBJETO_NO_BALDE = re.compile(r"^(?:acervo|pessoal)/[0-9a-f]{64}$")
+
+# rag: as obras com o que os invariantes leem delas; as impressões servindo e em construção com o
+# espelho (digest, veredito) e se um lote aberto as reclama; as aposentadas de obra viva (I13), com
+# a obra, para o retrato atribuir. Agregado no Postgres: um json, nunca uma linha por vez no verbo.
+SQL_COLETA_RAG = """
+select json_build_object(
+  'obras', (select coalesce(json_agg(json_build_object(
+        'id', o.id::text, 'titulo', o.titulo, 'retirada', o.retirada_em is not null,
+        'tem_autoria', (o.retirada_motivo is not null and o.retirada_por is not null),
+        'marcacao', o.marcacao, 'objeto', o.objeto, 'objeto_id', o.objeto_id,
+        'ficha_ok', (o.objeto_id is not null and exists (select 1 from acervo.ficha_arquivo f
+                      where f.sha256 = o.objeto_id and f.erro_leitura is null))) order by o.titulo),
+        '[]'::json) from acervo.obra o),
+  'impressoes', (select coalesce(json_agg(json_build_object(
+        'id', i.id::text, 'obra', i.obra_id::text, 'estado', i.estado, 'metodo', i.metodo_digest,
+        'espelho', i.espelho is not null, 'digest', i.espelho ->> 'digest',
+        'regua', i.espelho -> 'veredito' ->> 'regua',
+        'servivel', (i.espelho -> 'veredito' ->> 'servivel')::boolean,
+        'imperfeita', (i.espelho -> 'veredito' ->> 'imperfeita')::boolean,
+        'reclamada', exists (select 1 from acervo.lote_reextracao_obra l
+                               join acervo.lote_reextracao r on r.id = l.lote_id
+                              where l.impressao_id = i.id and r.estado = 'aplicando'))), '[]'::json)
+        from acervo.impressao i where i.estado in ('servindo', 'em_construcao')),
+  'aposentadas', (select coalesce(json_agg(json_build_object('id', i.id::text, 'obra', i.obra_id::text)),
+        '[]'::json) from acervo.impressao i join acervo.obra o on o.id = i.obra_id
+        where i.estado = 'aposentada' and o.retirada_em is null),
+  'total', (select count(*) from acervo.obra))
+"""
+
+# rag: por impressão servindo, os trechos elegíveis e o resumo dos ids (a mesma conta do motor, lado a
+# lado, para o I4 ver o alvo que não existe). Agregado: cada impressão devolve uma linha.
+SQL_COLETA_TRECHOS = """
+select coalesce(json_agg(json_build_object('imp', x.imp, 'n', x.n, 'h', x.h)), '[]'::json)
+  from (select i.id::text as imp, count(t.id) filter (where t.elegivel) as n,
+               md5(coalesce(string_agg(t.id::text, ',' order by t.id::text) filter (where t.elegivel), '')) as h
+          from acervo.impressao i left join acervo.trecho t on t.impressao_id = i.id
+         where i.estado = 'servindo' group by i.id) x
+"""
+
+# motor: as gerações vivas; os índices em construção e servindo com a contagem e o resumo dos alvos
+# (agregado por índice, arq:0045 Morada: nunca vetor a vetor); as facetas cujo vetor aponta para
+# outra impressão que a do índice (I4).
+SQL_COLETA_MOTOR = """
+select json_build_object(
+  'geracoes', (select coalesce(json_agg(json_build_object('id', g.id::text, 'particao', g.particao::text,
+        'estado', g.estado::text, 'numero', g.numero, 'embedder', g.parametros ->> 'embedder',
+        'dimensao_trecho', g.parametros ->> 'dimensao_trecho', 'dimensao_faceta', g.parametros ->> 'dimensao_faceta')),
+        '[]'::json) from motor.geracao g where g.estado::text <> 'expurgada'),
+  'indices', (select coalesce(json_agg(json_build_object('id', x.id, 'imp', x.imp, 'obra', x.obra,
+        'estado', x.estado, 'gran', x.gran, 'part', x.part, 'geracao_servindo', x.gserv, 'n', x.n, 'h', x.h)),
+        '[]'::json)
+        from (select i.id::text as id, coalesce(i.impressao_id, i.alvo_impressao_id)::text as imp,
+                     i.obra_id::text as obra, i.estado, i.granularidade as gran, i.particao::text as part,
+                     (g.estado::text = 'servindo') as gserv, count(v.alvo_id) as n,
+                     md5(coalesce(string_agg(v.alvo_id::text, ',' order by v.alvo_id::text), '')) as h
+                from motor.indice i join motor.geracao g on g.id = i.geracao_id
+                left join motor.vetor v on v.indice_id = i.id and v.geracao_id = i.geracao_id
+               where i.estado in ('em_construcao', 'servindo')
+               group by i.id, g.estado) x),
+  'faceta_alvo_errado', (select coalesce(json_agg(i.id::text), '[]'::json) from motor.indice i
+        where i.granularidade = 'impressao' and exists (select 1 from motor.vetor v
+              where v.indice_id = i.id and v.geracao_id = i.geracao_id
+                and v.alvo_id <> coalesce(i.impressao_id, i.alvo_impressao_id))))
+"""
+
+# rag: o último retrato guardado da base, com as chaves violadas de cada invariante (o gate compara)
+SQL_ULTIMO_RETRATO = """
+select (select json_build_object('id', r.id::text, 'total', r.total,
+               'tirado_em', to_char(r.tirado_em at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+               'invariantes', r.rodape -> 'invariantes')
+          from acervo.retrato r where r.base = 'biblioteca' order by r.tirado_em desc limit 1)
+"""
+
+
+def listar_balde(bin_acervo=ACERVO_BIN):
+    """O que o balde guarda, pela listagem de `acervo balde listar` nas duas coleções: os espelhos
+    (objeto_id, digest) com espelho.md e as chaves dos objetos originais. Listagem que não terminou
+    (cursor) ou verbo fora é Indeterminavel: balde pela metade acusaria falta que não há."""
+    espelhos, objetos = set(), set()
+    for colecao in ("firma", "pessoal"):
+        try:
+            p = subprocess.run([bin_acervo, "balde", "listar", colecao, "--json"],
+                               capture_output=True, text=True, timeout=300)
+            data = json.loads(p.stdout) if p.returncode == 0 else None
+        except (OSError, subprocess.TimeoutExpired, ValueError) as e:
+            raise Indeterminavel(f"balde {colecao}: {e}") from None
+        if not isinstance(data, dict) or not isinstance(data.get("itens"), list):
+            msg = (p.stderr or p.stdout or f"saiu {p.returncode}").strip().splitlines()
+            raise Indeterminavel(f"balde {colecao}: {msg[0] if msg else p.returncode}")
+        if data.get("proximo"):
+            raise Indeterminavel(f"balde {colecao}: a listagem não terminou (cursor {data['proximo']!r})")
+        for item in data["itens"]:
+            chave = item.get("objeto") or ""
+            m = _ESPELHO_NO_BALDE.search(chave)
+            if m:
+                espelhos.add((m.group(1), m.group(2)))
+            elif _OBJETO_NO_BALDE.match(chave):
+                objetos.add(chave)
+    return {"espelhos": espelhos, "objetos": objetos}
+
+
+def coletar(ler=psql_json, balde=None, orfaos=None, regua_raiz=None):
+    """Os dados que os invariantes leem, dos dois bancos e do balde. Banco fora levanta
+    Indeterminavel; o balde e a régua que não respondem entram como None (I6, I7, I9 e a face dos
+    espelhos do I13 saem «não medido», sem derrubar os outros)."""
+    rag = ler("rag", SQL_COLETA_RAG) or {}
+    motor = ler("motor", SQL_COLETA_MOTOR) or {}
+    trechos = {x["imp"]: x for x in (ler("rag", SQL_COLETA_TRECHOS) or [])}
+    try:
+        versao = regua_servida(regua_raiz)[0]
+    except Indeterminavel:
+        versao = None
+    try:
+        bal = (balde or listar_balde)()
+    except Indeterminavel:
+        bal = None
+    try:
+        n_espelhos = (orfaos or espelhos_orfaos)()
+    except Indeterminavel:
+        n_espelhos = None
+    d = {
+        "obras": rag.get("obras") or [], "impressoes": rag.get("impressoes") or [],
+        "aposentadas": rag.get("aposentadas") or [], "total": rag.get("total"),
+        "trechos": trechos, "motor": motor,
+        "i13": ler("rag", SQL_I13_RAG) or {}, "i13_motor": ler("motor", SQL_I13_MOTOR) or [],
+        "versao": versao, "balde": bal, "espelhos_orfaos": n_espelhos,
+    }
+    return completar(d)
+
+
+def completar(d):
+    """Acrescenta a `d` os mapas que atribuem uma chave a uma obra (impressão → obra, índice → obra)."""
+    d["imp_obra"] = {i["id"]: i["obra"] for i in d["impressoes"] + d["aposentadas"]}
+    d["indice_obra"] = {x["id"]: x.get("obra") for x in (d["motor"].get("indices") or [])}
+    return d
+
+
+def _vivas(d):
+    return [o for o in d["obras"] if not o["retirada"]]
+
+
+def _servindo_por_obra(d):
+    por = {}
+    for i in d["impressoes"]:
+        if i["estado"] == "servindo":
+            por.setdefault(i["obra"], []).append(i)
+    return por
+
+
+def _indices(d, estado="servindo", gran=None):
+    """Os índices da biblioteca no estado dado (a casa e o log têm a máquina deles)."""
+    return [x for x in (d["motor"].get("indices") or [])
+            if x["part"] == BIBLIOTECA and x["estado"] == estado and (gran is None or x["gran"] == gran)]
+
+
+def i1(d):
+    """Obra viva exposta em texto ou trecho ⇒ exatamente uma impressão servindo."""
+    por = _servindo_por_obra(d)
+    return [f"obra:{o['id']}" for o in _vivas(d)
+            if EXPOSICAO.get(o["marcacao"]) in ("texto", "trecho") and len(por.get(o["id"], [])) != 1]
+
+
+def i2(d):
+    """Impressão servindo de obra exposta em trecho ⇒ todo trecho elegível tem vetor no índice de trecho
+    servindo da geração servindo."""
+    por = _servindo_por_obra(d)
+    indice = {x["imp"]: x for x in _indices(d, gran="trecho")}
+    out = []
+    for o in _vivas(d):
+        if EXPOSICAO.get(o["marcacao"]) != "trecho":
+            continue
+        for imp in por.get(o["id"], []):
+            ix, elegiveis = indice.get(imp["id"]), (d["trechos"].get(imp["id"]) or {}).get("n", 0)
+            if ix is None or not ix["geracao_servindo"] or ix["n"] != elegiveis:
+                out.append(f"obra:{o['id']}")
+                break
+    return out
+
+
+def i3(d):
+    """Obra retirada ⇒ nenhuma impressão e nenhum índice servindo."""
+    retiradas = {o["id"] for o in d["obras"] if o["retirada"]}
+    por = _servindo_por_obra(d)
+    chaves = {f"obra:{o}" for o in retiradas if por.get(o)}
+    chaves |= {f"obra:{x['obra']}" for x in _indices(d) if x["obra"] in retiradas}
+    return sorted(chaves)
+
+
+def i4(d):
+    """Vetor ⇒ índice existente (a chave estrangeira garante) e alvo existente: o índice de trecho
+    que tem a contagem certa mas os alvos errados, e a faceta cujo vetor aponta para outra impressão."""
+    out = set()
+    for ix in _indices(d, gran="trecho"):
+        tr = d["trechos"].get(ix["imp"])
+        if tr and ix["n"] == tr["n"] and ix["h"] != tr["h"]:
+            out.add(f"indice:{ix['id']}")
+    out |= {f"indice:{i}" for i in d["motor"].get("faceta_alvo_errado") or []}
+    return sorted(out)
+
+
+def i5(d):
+    """Índice servindo ⇒ a impressão dele está servindo."""
+    servindo = {i["id"] for i in d["impressoes"] if i["estado"] == "servindo"}
+    return sorted(f"indice:{x['id']}" for x in _indices(d) if x["imp"] not in servindo)
+
+
+def i6(d):
+    """Impressão servindo ⇒ espelho declarado e presente no balde. Sem a listagem do balde, só o
+    lado do catálogo."""
+    bal = d["balde"]
+    objeto = {o["id"]: o.get("objeto_id") for o in d["obras"]}
+    out = []
+    for i in d["impressoes"]:
+        if i["estado"] != "servindo":
+            continue
+        if not i["espelho"] or (bal is not None and (objeto.get(i["obra"]), i["digest"]) not in bal["espelhos"]):
+            out.append(f"impressao:{i['id']}")
+    return sorted(out)
+
+
+def i7(d):
+    """Obra com objeto ⇒ ficha com o sha do objeto, sem erro de leitura, e o objeto no balde."""
+    bal = d["balde"]
+    return [f"obra:{o['id']}" for o in d["obras"]
+            if o["objeto"] and (not o["ficha_ok"] or (bal is not None and o["objeto"] not in bal["objetos"]))]
+
+
+def i8(d):
+    """A partição tem exatamente uma geração servindo e nenhum índice servindo fora dela."""
+    geracoes = d["motor"].get("geracoes") or []
+    servindo = {}
+    for g in geracoes:
+        servindo.setdefault(g["particao"], 0)
+        servindo[g["particao"]] += g["estado"] == "servindo"
+    out = [f"geracao:{p}" for p, n in sorted(servindo.items()) if n != 1]
+    out += [f"indice:{x['id']}" for x in (d["motor"].get("indices") or [])
+            if x["estado"] == "servindo" and not x["geracao_servindo"]]
+    return out
+
+
+def i9(d):
+    """Impressão servindo com espelho ⇒ veredito da régua vigente (o predicado 9 da spec espelho-de-leitura)."""
+    if d["versao"] is None:
+        return None
+    out = []
+    for i in d["impressoes"]:
+        if i["estado"] != "servindo" or not i["espelho"]:
+            continue
+        try:
+            velha = i["regua"] in (None, "") or int(i["regua"]) < d["versao"]
+        except (TypeError, ValueError):
+            velha = True
+        if velha:
+            out.append(f"impressao:{i['id']}")
+    return sorted(out)
+
+
+def i10(d):
+    """Obra retirada ⇒ motivo, autor e data."""
+    return [f"obra:{o['id']}" for o in d["obras"] if o["retirada"] and not o["tem_autoria"]]
+
+
+def i11(d):
+    """Sobra: exposição arquivo ⇒ nenhuma impressão servindo; exposição texto ⇒ nenhum índice servindo."""
+    por = _servindo_por_obra(d)
+    texto = {o["id"] for o in _vivas(d) if EXPOSICAO.get(o["marcacao"]) == "texto"}
+    chaves = {f"obra:{o['id']}" for o in _vivas(d)
+              if EXPOSICAO.get(o["marcacao"]) == "arquivo" and por.get(o["id"])}
+    chaves |= {f"obra:{x['obra']}" for x in _indices(d) if x["obra"] in texto}
+    return sorted(chaves)
+
+
+def i12(d):
+    """Impressão, índice ou geração em construção ⇒ lote aberto que a reclame. O lote de indexação vive
+    na memória da rag-api e não se consulta daqui: todo índice em construção entra como não reclamado."""
+    out = [f"impressao:{i['id']}" for i in d["impressoes"]
+           if i["estado"] == "em_construcao" and not i["reclamada"]]
+    out += [f"indice:{x['id']}" for x in _indices(d, estado="em_construcao")]
+    out += [f"geracao:{g['id']}" for g in d["motor"].get("geracoes") or [] if g["estado"] == "em_construcao"]
+    return sorted(out)
+
+
+def i13(d):
+    """Nenhum derivado anterior depois da promoção: aposentada em obra ou casa viva, índice de impressão
+    que não existe mais e espelho no balde sem impressão que o reclame. Mede-se depois do lote."""
+    if d["espelhos_orfaos"] is None:
+        return None
+    existentes = set(d["i13"].get("existentes") or [])
+    out = [f"impressao:{a['id']}" for a in d["aposentadas"]]
+    out += [f"casa_impressao:{x}" for x in d["i13"].get("casa") or []]
+    out += [f"indice-orfao:{x}" for x in sorted(set(d["i13_motor"] or [])) if x and x not in existentes]
+    out += [f"espelho-orfao:{n}" for n in range(d["espelhos_orfaos"])]
+    return out
+
+
+FUNCOES = {"I1": i1, "I2": i2, "I3": i3, "I4": i4, "I5": i5, "I6": i6, "I7": i7, "I8": i8, "I9": i9,
+           "I10": i10, "I11": i11, "I12": i12, "I13": i13}
+
+
+def avaliar_invariantes(d):
+    """{código: [chaves que violam] | None (não medido)} dos treze, nesta ordem."""
+    return {codigo: FUNCOES[codigo](d) for codigo in INVARIANTES}
+
+
+def obra_da_chave(chave, d):
+    """A obra a que a chave pertence, ou None (geração, espelho órfão, índice sem obra)."""
+    tipo, _, ident = chave.partition(":")
+    if tipo == "obra":
+        return ident
+    if tipo == "impressao":
+        return d["imp_obra"].get(ident)
+    if tipo in ("indice", "indice-orfao"):
+        return d["indice_obra"].get(ident)
+    return None
+
+
+def resumo(atual, d):
+    """{código: {nome, classe, n, obras, chaves}} — a contagem e as obras de cada invariante (n None =
+    não medido)."""
+    saida = {}
+    for codigo, (nome, classe) in INVARIANTES.items():
+        chaves = atual.get(codigo)
+        obras = None if chaves is None else sorted({o for o in (obra_da_chave(c, d) for c in chaves) if o})
+        saida[codigo] = {"nome": nome, "classe": classe, "n": None if chaves is None else len(chaves),
+                         "obras": obras, "chaves": chaves}
+    return saida
+
+
+def contra_o_retrato(atual, anterior):
+    """(novas, herdadas) por código bloqueante, contra as chaves que o último retrato guardou: nova é
+    a chave que ele não tinha; herdada é a que já tinha e segue. Invariante que o retrato não mediu
+    (n nulo) não herda nada: o que a medida de agora acusa é novo."""
+    novas, herdadas = {}, {}
+    for codigo, (_, classe) in INVARIANTES.items():
+        chaves = atual.get(codigo)
+        if classe != "bloqueante" or chaves is None:
+            continue
+        antes = set(((anterior.get("invariantes") or {}).get(codigo) or {}).get("chaves") or [])
+        novas[codigo] = sorted(set(chaves) - antes)
+        herdadas[codigo] = sorted(set(chaves) & antes)
+    return novas, herdadas
+
+
+def _linha_invariante(codigo, r):
+    cabeca = f"{codigo} {r['nome']} [{r['classe']}]"
+    if r["n"] is None:
+        return f"{cabeca}: não medido"
+    if not r["n"]:
+        return f"{cabeca}: 0"
+    obras = r["obras"] or []
+    return f"{cabeca}: {r['n']}" + (f" — obras {_lista(obras)}" if obras else "")
+
+
+def _do_retrato(nome):
+    """Os itens de hoje que o retrato guardado passa a governar: o 9 e o I13 são invariantes, e o 7
+    (fidelidade) deixa de pesar no exit com retrato, porque o gate só barra violação bloqueante nova."""
+    return nome.startswith(("§11 predicado 7", "§11 predicado 9", "I13"))
+
+
+def aplicar_gate(itens, avisos, atual, anterior, d):
+    """(itens, avisos, resumo): os itens de `medir` com os invariantes por cima.
+
+    Sem retrato guardado, o exit segue nos predicados de hoje (arq:0121, Consequências) e os
+    invariantes só informam, em avisos. Com retrato, o exit é o do gate: um item por invariante
+    bloqueante, divergente só com violação nova (e a lista das obras que pioraram), e as herdadas
+    vão ao relato sem travar; os de classe aviso informam."""
+    res = resumo(atual, d)
+    avisos = list(avisos)
+    if anterior is None:
+        avisos.append("sem retrato guardado: o exit segue nos predicados de hoje (arq:0121, Consequências); "
+                      "`acervo listar biblioteca obra --situacao --retrato --guardar` guarda a linha de base")
+        avisos += [_linha_invariante(c, res[c]) for c in INVARIANTES]
+        return list(itens), avisos, res
+    ficam = [(n, v) for n, v in itens if not _do_retrato(n)]
+    avisos += [f"herdado — {n}: {v.motivo}" for n, v in itens if _do_retrato(n) and v.estado == "divergente"]
+    novas, herdadas = contra_o_retrato(atual, anterior)
+    avisos.append(f"gate contra o retrato de {anterior['tirado_em']} ({anterior['id'][:8]}): "
+                  "só violação bloqueante nova barra")
+    for codigo, (nome, classe) in INVARIANTES.items():
+        r, rotulo = res[codigo], f"{codigo}: {nome}"
+        if classe != "bloqueante":
+            avisos.append(_linha_invariante(codigo, r))
+            continue
+        if r["n"] is None:
+            ficam.append((rotulo, resultado.indeterminavel("não consegui medir (o balde ou o banco não respondeu)")))
+            continue
+        if novas[codigo]:
+            obras = sorted({o for o in (obra_da_chave(c, d) for c in novas[codigo]) if o})
+            onde = f"obras {_lista(obras)}" if obras else f"chaves {_lista(novas[codigo])}"
+            ficam.append((rotulo, resultado.divergente(
+                f"{len(novas[codigo])} violação(ões) nova(s) desde o retrato de {anterior['tirado_em']}: {onde}"
+                + (f"; {len(herdadas[codigo])} herdada(s)" if herdadas[codigo] else ""))))
+        else:
+            ficam.append((rotulo, resultado.conforme()))
+            if herdadas[codigo]:
+                avisos.append(f"{codigo} herdada do retrato: {len(herdadas[codigo])} (não trava)")
+    return ficam, avisos, res
+
+
 # --- a classe ------------------------------------------------------------------------------
 
 def medir(regua_raiz=None, ler=psql_json, orfaos_do_balde=None):
@@ -412,7 +842,29 @@ def medir(regua_raiz=None, ler=psql_json, orfaos_do_balde=None):
     return itens, avisos, pendencias
 
 
-def conferir_acervo(alvo, sha_release, como_json=False):
+def ultimo_retrato(ler=psql_json):
+    """O último retrato guardado da biblioteca ({id, tirado_em, total, invariantes}) ou None, se não há."""
+    return ler("rag", SQL_ULTIMO_RETRATO)
+
+
+def conferir_invariantes(itens, avisos, ler=psql_json, balde=None, orfaos=None, regua_raiz=None):
+    """(itens, avisos, resumo) com os treze invariantes avaliados e o gate contra o último retrato.
+    Banco fora: o item sai indeterminável e o exit 5 (não conseguir olhar não é conforme)."""
+    try:
+        d = coletar(ler, balde=balde, orfaos=orfaos, regua_raiz=regua_raiz)
+        anterior = ultimo_retrato(ler)
+    except Indeterminavel as e:
+        return (list(itens) + [(NOME_INVARIANTES, resultado.indeterminavel(str(e)))], list(avisos), None)
+    itens, avisos, res = aplicar_gate(itens, avisos, avaliar_invariantes(d), anterior, d)
+    if d["balde"] is None:
+        avisos.append(POR_ARQUIVO)
+    return itens, avisos, res
+
+
+def conferir_acervo(alvo, sha_release, como_json=False, ler=psql_json, balde=None, orfaos=None):
     itens, avisos, pendencias = medir()
-    return resultado.relatorio("acervo", alvo, itens, sha_release, como_json=como_json,
-                               extra={"avisos": avisos, "pendencias": pendencias})
+    itens, avisos, res = conferir_invariantes(itens, avisos, ler, balde=balde, orfaos=orfaos)
+    extra = {"avisos": avisos, "pendencias": pendencias}
+    if res is not None:
+        extra["invariantes"] = {c: {k: v for k, v in r.items() if k != "chaves"} for c, r in res.items()}
+    return resultado.relatorio("acervo", alvo, itens, sha_release, como_json=como_json, extra=extra)

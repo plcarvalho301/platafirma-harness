@@ -101,10 +101,17 @@
                    timer que um instalador promete e nao esta agendado (card #3147).
 
   acervo           predicados de §11 da spec espelho-de-leitura sobre o catalogo e o motor
-                   servidos (bin/_release/conferir/predicados_acervo.py): hoje o 7
+                   servidos (bin/_release/conferir/predicados_acervo.py): o 7
                    (fidelidade, sem bloqueante de classe A em papel de corpo) e o 9
-                   (veredito da regua vigente), e a pendencia do motor de §4.2 item 6,
-                   dirigida a ia, que nao pesa no exit. Catalogo ou motor fora: sai 5.
+                   (veredito da regua vigente), a pendencia do motor de §4.2 item 6,
+                   dirigida a ia, que nao pesa no exit, e os invariantes I1 a I13 do guia
+                   ciclo-de-vida-do-dado-do-acervo §6 (uma funcao cada; contagem e obras
+                   de cada um no relato, `--json` traz `invariantes`). Sem retrato
+                   guardado o exit segue nos predicados de hoje; com retrato
+                   (`acervo listar biblioteca obra --situacao --retrato --guardar`) o
+                   gate compara o de agora com o ultimo guardado: sai 1 so com violacao
+                   bloqueante NOVA (e lista as obras que pioraram), a herdada vai ao
+                   relato e nao trava (arq:0121 §5.3). Catalogo ou motor fora: sai 5.
 
    vocabulario [alvo]
                     varre `<verbo> <ato>` entre crases em dono.md, oficio.md,

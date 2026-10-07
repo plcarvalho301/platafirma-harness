@@ -169,6 +169,20 @@ USO = """uso:
                                                 com a classe. Le o veredito da regua em
                                                 acervo.impressao.espelho (so leitura). --sobre,
                                                 --eixo e --situacao recusam (exit 2).
+  acervo listar biblioteca obra --situacao --retrato [--json] [--guardar]  o retrato da biblioteca, com data
+                                                (arq:0121 §9, card #3324): cabecalho (base, data, geracao
+                                                servindo, papeis), uma linha por obra do catalogo
+                                                (situacao, exposicao, impressao servindo com metodo e
+                                                qualidade do espelho, geracao e indice servindo com
+                                                trechos com vetor sobre elegiveis, invariantes violados)
+                                                e rodape que soma cada entidade por estado e fecha com
+                                                count(*) de acervo.obra; a linha que nao fecha sai
+                                                escrita. --guardar grava em acervo.retrato e
+                                                acervo.retrato_obra (banco rag, que tem copia; nunca em
+                                                arquivo) e exige PF_CADEIRA e PF_SESSAO_ID (exit 4 sem
+                                                eles); nao guarda se o retrato divergir do --situacao.
+                                                Exit 0 fecha, 1 nao fecha ou diverge, 5 fonte fora do ar.
+                                                --sobre, --eixo, --qualidade, bancada e metodos recusam.
   acervo listar biblioteca bancada <pasta> [--json] [--estratos <arquivo>]  perfil x docling por obra
                                                 (card #3187): le <pasta>/{perfil,docling}/*/
                                                 relatorio.json (o que `curar --reextrair --bancada`
@@ -1155,6 +1169,8 @@ def main(argv):
     completo = False
     so_tools = False
     situacao = False
+    quero_retrato = False
+    guardar = False
     quero_qualidade = False
     por_obra = False
     quero_rotas = False
@@ -1178,6 +1194,12 @@ def main(argv):
             i += 1
         elif a == "--qualidade" and alvo == "obra":
             quero_qualidade = True
+            i += 1
+        elif a == "--retrato" and alvo == "obra":
+            quero_retrato = True
+            i += 1
+        elif a == "--guardar" and alvo == "obra":
+            guardar = True
             i += 1
         elif a == "--por-obra" and alvo == "obra":
             por_obra = True
@@ -1228,6 +1250,15 @@ def main(argv):
         # nao ignorar em silencio: o agregador nao filtra por assunto, eixo nem situacao
         morre("acervo listar biblioteca bancada: aceita so <pasta>, --json e --estratos <arquivo>; "
               "--sobre, --eixo e --situacao nao valem aqui.\n\n%s" % USO)
+    if guardar and not quero_retrato:
+        morre("acervo listar biblioteca obra: --guardar so vale com --retrato.\n\n%s" % USO)
+    if quero_retrato and not situacao:
+        morre("acervo listar biblioteca obra: --retrato vai com --situacao (o retrato reusa o ato).\n\n%s" % USO)
+    if quero_retrato and (termo is not None or eixo is not None or quero_qualidade or quero_bancada
+                          or quero_metodos):
+        # nao ignorar em silencio: o retrato e o catalogo inteiro, sem filtro
+        morre("acervo listar biblioteca obra --retrato: aceita so --situacao, --json e --guardar; --sobre, "
+              "--eixo, --qualidade, bancada e metodos nao valem aqui.\n\n%s" % USO)
     if por_obra and not quero_qualidade:
         morre("acervo listar biblioteca obra: --por-obra so vale com --qualidade.\n\n%s" % USO)
     if quero_qualidade and (situacao or termo is not None or eixo is not None
@@ -1256,6 +1287,11 @@ def main(argv):
         else:
             listar_topologia(quero_json, completo, stack_alvo)
     elif alvo == "obra":
+        if quero_retrato:
+            # banco rag + motor + balde, num modulo ao lado (retrato.py): o retrato nao e o --situacao
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import retrato
+            sys.exit(retrato.executar(quero_json, guardar))
         if quero_qualidade:
             sys.exit(listar_obra_qualidade(por_obra, quero_json))
         if quero_bancada:
