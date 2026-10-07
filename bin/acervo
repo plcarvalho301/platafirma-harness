@@ -159,6 +159,8 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                        (--motivo e obrigatorio nos dois: fica com a obra, com o autor e a data; sem ele sai 2)
   acervo apagar        biblioteca obra <obra> [--apply]    SEM VOLTA, so a obra ja retirada (catalogo, motor, balde);
                        vai ao dono antes do --apply
+  acervo apagar        biblioteca espelho [<hex>/<digest>] [--apply]   SEM VOLTA, o espelho que nenhuma impressao
+                       reclama (sombra e obra retirada reclamam o seu); prefixo reclamado recusa
   acervo retirar       casa revisao <revid>... --motivo <m> [--apply]   tira texto antigo do historico da wiki
   acervo restaurar     casa revisao <revid>... --motivo <m> [--apply]   devolve ao historico
   acervo extrato  --todas [dest]
@@ -470,11 +472,12 @@ retirada() {
   case "$ato:$particao:$entidade" in
     retirar:biblioteca:obra|restaurar:biblioteca:obra|apagar:biblioteca:obra) ;;
     retirar:casa:revisao|restaurar:casa:revisao) ;;
-    recolher:biblioteca:espelho|repor:biblioteca:espelho) ;;
+    recolher:biblioteca:espelho|repor:biblioteca:espelho|apagar:biblioteca:espelho) ;;
     *)
       local forma="biblioteca obra <obra>"
       case "$ato" in
         retirar|restaurar) forma="biblioteca obra <obra>\` ou \`acervo $ato casa revisao <revid>" ;;
+        apagar)            forma="biblioteca obra <obra>\` ou \`acervo apagar biblioteca espelho [<hex>/<digest>]" ;;
         recolher|repor)    forma="biblioteca espelho [<obra>]" ;;
       esac
       echo "acervo $ato: a forma e \`acervo $ato $forma\`; veio \`acervo $ato $*\`." >&2
@@ -491,6 +494,8 @@ retirada() {
     # --espelhos antes: a obra opcional cai no --expurgar|--restaurar, que a lê como valor
     recolher:espelho) exec "$ATOS/curar" obra --espelhos --expurgar "$@" ;;
     repor:espelho)    exec "$ATOS/curar" obra --espelhos --restaurar "$@" ;;
+    # o espelho que nenhuma impressao reclama sai do balde, sem volta (#3332, I13)
+    apagar:espelho)   exec "$ATOS/curar" obra --espelhos --apagar "$@" ;;
   esac
 }
 

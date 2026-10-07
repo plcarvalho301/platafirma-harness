@@ -61,6 +61,8 @@ USO = """uso:
                                                               converte em <pasta>/<metodo>/<obra_id>/, não escreve no acervo
   curar --expurgar --espelhos [--apply]                       espelho de impressão aposentada há +90 dias
   curar --restaurar --espelhos [<obra>] [--apply]             desfaz o expurgo de espelhos
+  curar --apagar --espelhos [<hex>/<digest>] [--apply]        apaga, SEM VOLTA, o espelho que nenhuma impressão reclama
+                                                              (#3332); prefixo de espelho reclamado recusa
   curar --conceito <slug> [--rotulo … --definicao … --natureza … --estatuto … --alt "rótulo@pt,…"] --pai <slug> --tipo <t> --garantia <g> --motivo "…" [--lastro …] [--apply]
   curar --conceito <slug> --renomear <slug-novo> --motivo "…" [--sem-hermit] [--apply]
                                 troca o slug (cura K15): o velho vira termo de entrada; o plano traz a varredura de quem
@@ -1906,6 +1908,31 @@ def acao_espelhos(ato: str, obra: str | None, autor: str, aplicar: bool, como_js
     return 0
 
 
+def acao_espelhos_orfaos(prefixo: str | None, autor: str, aplicar: bool, como_json: bool, headers: dict) -> int:
+    """`--apagar --espelhos [<hex>/<digest>]` (#3332): o espelho no balde que nenhuma impressão reclama.
+    SEM VOLTA (o espelho é derivado do arquivo, que fica); plano seco sem --apply. O prefixo de espelho
+    que uma impressão reclama recusa, com exit 1."""
+    payload = {"autor": autor, "aplicar": aplicar}
+    if prefixo:
+        payload["prefixo"] = prefixo
+    data = _chamar("POST", f"{BASE}/acervo/espelhos/orfaos", headers, payload)
+    if como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 1 if data.get("falhas") else 0
+    aplicado = data.get("modo") == "aplicado"
+    n, objetos = data.get("n", 0), data.get("objetos", 0)
+    print(f"{n} espelho(s) órfão(s) apagado(s), {objetos} objeto(s)" if aplicado else
+          f"Plano: {n} espelho(s) órfão(s) a apagar, {objetos} objeto(s) (sem impressão que os reclame)")
+    for it in data.get("itens", []):
+        print(f"  {it.get('bucket')}/{it.get('hex')}/{it.get('digest')}  {len(it.get('objetos') or [])} objeto(s)"
+              f"  mais novo {it.get('mais_novo') or '-'}")
+    for falha in data.get("falhas", []):
+        print(f"  falhou: {falha}")
+    if not aplicado:
+        print("  (plano seco — repita com --apply para apagar; não tem volta)")
+    return 1 if data.get("falhas") else 0
+
+
 # --- régua nova e lote de reextração (spec espelho-de-leitura §4.2, §9 caso 8; card #3193) ------
 
 
@@ -2548,7 +2575,8 @@ def main(argv=None):
     parser.add_argument("--expurgar", nargs="?", const="", default=None)
     parser.add_argument("--restaurar", nargs="?", const="", default=None)
     parser.add_argument("--espelhos", action="store_true", default=False)
-    parser.add_argument("--apagar", default=None)
+    # nargs="?": `--apagar --espelhos` não leva obra; o prefixo é opcional (#3332)
+    parser.add_argument("--apagar", nargs="?", const="", default=None)
     parser.add_argument("--recortar", default=None)
     # nargs="?": `--reextrair --lote` não leva obra (#3193)
     parser.add_argument("--reextrair", nargs="?", const="", default=None)
@@ -2680,8 +2708,13 @@ def main(argv=None):
         ato = "expurgar" if args.expurgar is not None else "restaurar"
         obra = (args.expurgar if ato == "expurgar" else args.restaurar) or args.obra
         return acao_espelhos(ato, obra, autor, args.apply, args.como_json, headers)
+    if args.espelhos and args.apagar is not None:
+        return acao_espelhos_orfaos(args.apagar or None, autor, args.apply, args.como_json, headers)
     if args.espelhos:
-        sys.stderr.write("curar: erro: --espelhos acompanha --expurgar ou --restaurar\n")
+        sys.stderr.write("curar: erro: --espelhos acompanha --expurgar, --restaurar ou --apagar\n")
+        return 2
+    if args.apagar == "":
+        sys.stderr.write("curar: erro: --apagar leva a obra (ou vai com --espelhos)\n")
         return 2
     if args.lote or args.rejulgar or args.ordem is not None or args.relatorio is not None:
         # spec espelho-de-leitura §4.2 e §9 caso 8 (#3193): os atos de lote sobre o estoque
