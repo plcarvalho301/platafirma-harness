@@ -33,7 +33,7 @@
 # le: psql=acervo.*
 # le: balde=acervo.*,minio
 # escreve: ler=nada
-# escreve: listar=nada
+# escreve: listar=acervo.obra
 # escreve: escrever=acervo.casa
 # escreve: ingerir=acervo.casa,acervo.obra,acervo.registro,motor,repo
 # escreve: curar=acervo.obra,acervo.casa,arquivo-local
@@ -96,6 +96,8 @@ uso() {
 uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo ler      <particao> <entidade> <seletor> [--situacao]
   acervo listar   <particao> <entidade> [--sobre <termo>] [--eixo <eixo>] [--situacao] [--dono <cadeira>] [--json]
+  acervo listar   biblioteca obra --situacao --retrato [--json] [--guardar]   o retrato da biblioteca, com data (#3324);
+                  --guardar grava em acervo.retrato e acervo.retrato_obra (banco rag), a linha de base do gate
   acervo escrever <particao> <entidade> <seletor>
   acervo ingerir  <particao> <raiz> [--apply]
   acervo ler      casa <especie> <chave> [--offset <bytes>]   pela chave (arq:0115 §3): acervo ler casa adr arq:0075

@@ -16,6 +16,7 @@ test_acervo_exportar_pythonpath.py
 test_acervo_impressao.py
 test_acervo_ler_secao.py
 test_acervo_listar_marcacao.py
+test_acervo_retrato.py
 test_acervo_listar_qualidade.py
 test_acervo_listar_retirada.py
 test_acervo_mapa.py

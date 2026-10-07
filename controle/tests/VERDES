@@ -26,6 +26,7 @@ tests/test_conferir_diagrama_kroki.py
 tests/test_contrato_diagrama.py
 tests/test_conferir_jobs.py
 tests/test_conferir_acervo.py
+tests/test_invariantes_acervo.py
 tests/test_conferir_servico_release.py
 tests/test_contrato_repo_bancada.py
 tests/test_contrato_repo_lock.py
