@@ -2706,7 +2706,7 @@ if not SLUGS_SERVIDOS:
 class RedigeToken(logging.Filter):
     """Tira `?token=` do access log do uvicorn. O access log vai para o journal, o
     journal persiste e é legível por qualquer processo do usuário — sem isto, o token
-    que autoriza shell fica gravado em claro numa linha por request."""
+    que autoriza a porta fica gravado em claro numa linha por request."""
     _RE = re.compile(r"token=[^&\s\"']+")
 
     def filter(self, record: logging.LogRecord) -> bool:
