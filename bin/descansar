@@ -963,7 +963,7 @@ def ato_fita(args):
           "   `descansar fita --encerra-sessao`\n"
           "   (contrato de morte, arq:0101 §1: DEL sessao/ledger/giro + derrame).\n"
           "   Diga por que a fita parou: sem flag, `concluiu`; senao\n"
-          "   `--parada teto_de_giros|orcamento_de_erro|interrompida`. O fecho vai ao log da\n"
+          "   `--parada teto_giros|orcamento_erro|interrompida`. O fecho vai ao log da\n"
           "   porta com o motivo e, no Code, os tokens somados do transcript.\n"
 
           "   E o ultimo ato da fita porque matar `sessao:{id}` tira a cadeira de\n"
@@ -1015,7 +1015,7 @@ def main():
                         "seguintes; rode depois da mesa e do delta de caderno")
     f.add_argument("--parada", choices=oplog.MOTIVOS_PARADA, default="concluiu",
                    help="por que a fita parou, gravado no fecho (so com --encerra-sessao): "
-                        "concluiu (padrao) | teto_de_giros | orcamento_de_erro | interrompida")
+                        "concluiu (padrao) | teto_giros | orcamento_erro | interrompida")
     f.set_defaults(func=ato_fita)
 
     v = sub.add_parser("varredura", help="passada por todas as cadeiras; so o que esta fora do lugar")
