@@ -799,7 +799,8 @@ def _atributos_do_agente(sessao_id) -> dict:
 # de um restart, e se escreve (sem mexer no TTL) so quando o valor muda. Falha do msg-mem nunca
 # derruba a auditoria: o carimbo fica na memoria.
 _CARIMBOS: dict[str, dict] = {}
-_CARIMBO_CHAVE = {"escopo": "escopo_atual", "turno_valor": "turno_valor", "turno_id": "turno_id"}
+_CARIMBO_CHAVE = {"escopo": "escopo_atual", "turno_valor": "turno_valor", "turno_id": "turno_id",
+                 "turno_fonte": "turno_fonte"}
 
 
 def _carimbos_de(sessao_id) -> dict:
@@ -844,25 +845,35 @@ def _carimbos_do_giro(reg: dict) -> dict:
     if reg.get("origem_sessao"):
         out.update(turno_id=sid, turno_fonte="runner")
     elif c.get("turno_id"):
-        out.update(turno_id=c["turno_id"], turno_fonte="declarado")
+        out.update(turno_id=c["turno_id"], turno_fonte=c.get("turno_fonte") or "declarado")
     else:
         out.update(turno_id="-", turno_fonte="gap")
     return out
 
 
-def _carimba_turno(ident: dict, turno) -> None:
-    """Toda tool da porta aceita `turno` (opcional, padrao vazio). Quando o valor muda, a porta
-    abre o turno (linha `turno`, fonte `declarado`) e carimba `turno_id` nos giros seguintes. O
-    turno e contador, nao conteudo: o texto do dono nao entra aqui (arq:0061 §5)."""
+def _carimba_turno(ident: dict, turno, turno_texto="", turno_fonte="") -> None:
+    """Toda tool da porta aceita `turno`, `turno_texto` e `turno_fonte` (opcionais, padrao vazio).
+    Quando o valor de `turno` muda, a porta abre o turno (linha `turno`) e carimba `turno_id` e a
+    fonte nos giros seguintes. `turno_texto` e a mensagem do dono, so ela (spec log-de-negocio
+    §0/§3): vai ao bruto como `texto`, com `texto_bytes` do tamanho original, e a linha so a
+    leva na abertura do turno. `turno_fonte` vale `hook` ou `transcript`; vazio com texto e `hook`
+    (so o hook do Code passa o texto sem fonte); valor fora do vocabulario e ignorado e o turno
+    sai `declarado`."""
     valor = str(turno).strip()[:32] if turno else ""
     sid = (ident or {}).get("sessao_id")
     if not valor or not sid or sid == "-":
         return
     if _carimbos_de(sid).get("turno_valor") == valor:
         return
-    _guarda_carimbo(sid, turno_valor=valor, turno_id=valor)
+    texto = turno_texto if isinstance(turno_texto, str) and turno_texto.strip() else None
+    fonte = str(turno_fonte or "").strip().lower()
+    if fonte not in oplog.FONTES_ENTREGUES:
+        fonte = "hook" if (texto and not fonte) else "declarado"
+    _guarda_carimbo(sid, turno_valor=valor, turno_id=valor, turno_fonte=fonte)
     _audit(tool="sessao", evento="turno", sessao_id=sid, cadeira=ident.get("cadeira") or None,
-           ordem_id=ident.get("ordem_id"), turno_id=valor, turno_fonte="declarado", texto_bytes=None)
+           ordem_id=ident.get("ordem_id"), turno_id=valor, turno_fonte=fonte,
+           texto_bytes=len(texto.encode("utf-8")) if texto else None,
+           **({"texto": texto} if texto else {}))
 
 
 def _escopo_do_giro(slug: str, ato, args, r, ident: dict) -> None:
@@ -1245,7 +1256,8 @@ def _item_de_lote(x):
 async def malote(command: str = "", cwd: str = "", timeout: int = 120,
                  sessao_id: str | None = None,
                  commands: list | None = None,
-                 encadeado: bool = False, turno: str = "") -> dict:
+                 encadeado: bool = False, turno: str = "", turno_texto: str = "",
+                 turno_fonte: str = "") -> dict:
     """Lote entre verbos DISTINTOS numa chamada so — sem shell, sem fallback (spec_porta-so-verbo).
 
     `commands`: lista de itens, cada um `{verbo, ato, args, stdin}` ou a string
@@ -1264,34 +1276,39 @@ async def malote(command: str = "", cwd: str = "", timeout: int = 120,
     `nao_rodou`; o bloco `cadeia` diz exit e primeira linha de cada item, `parou_em` e o
     exit do topo. Retomar = rerodar a cadeia: o que ja fez devolve "ja feito".
     """
-    return await _malote("malote", command, cwd, timeout, sessao_id, commands, encadeado, turno)
+    return await _malote("malote", command, cwd, timeout, sessao_id, commands, encadeado, turno,
+                         turno_texto, turno_fonte)
 
 
 async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
                       sessao_id: str | None = None,
                       commands: list | None = None,
-                      encadeado: bool = False, turno: str = "") -> dict:
+                      encadeado: bool = False, turno: str = "", turno_texto: str = "",
+                      turno_fonte: str = "") -> dict:
     """Apelido de `malote`: mesma assinatura e mesmo retorno. Sai pela regra da spec
     porta-so-verbo §3.7 (zero chamadas por sete dias seguidos).
     """
-    return await _malote("run_command", command, cwd, timeout, sessao_id, commands, encadeado, turno)
+    return await _malote("run_command", command, cwd, timeout, sessao_id, commands, encadeado, turno,
+                         turno_texto, turno_fonte)
 
 
 async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: str | None,
-                  commands: list | None, encadeado: bool, turno: str = "") -> dict:
+                  commands: list | None, encadeado: bool, turno: str = "",
+                  turno_texto: str = "", turno_fonte: str = "") -> dict:
     """O lote das duas tools (#3270). `nome` e o nome chamado: a auditoria o grava em `tool`
     na recusa e no lote encadeado, e em `via` no item despachado, e a regra de saida do
     apelido conta os dois (spec porta-so-verbo §3.7). A acao do PDP segue `run_command`."""
     if not PF_RUN_SO_VERBO:
         return await _run_command_legado(command, cwd, timeout, sessao_id, commands, nome=nome,
-                                         turno=turno)
+                                         turno=turno, turno_texto=turno_texto,
+                                         turno_fonte=turno_fonte)
     itens = list(commands) if commands else ([command] if command else [])
     if not itens:
         return {"recusado": True, "motivo": "sem item", "verbos_servidos": sorted(SLUGS_SERVIDOS)}
     timeout = max(1, min(timeout, 600))
     fim = _prazo_da_chamada()          # #3249: o prazo e da chamada, nao do item
     ident = _sessao_resolve(sessao_id)
-    _carimba_turno(ident, turno)
+    _carimba_turno(ident, turno, turno_texto, turno_fonte)
     lote_id = uuid.uuid4().hex[:8]
     brutos: list = []
     _estado = {"ident": ident}
@@ -1406,7 +1423,8 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
 async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 120,
                        sessao_id: str | None = None,
                        commands: list[str] | None = None,
-                       nome: str = "run_command", turno: str = "") -> dict:
+                       nome: str = "run_command", turno: str = "", turno_texto: str = "",
+                       turno_fonte: str = "") -> dict:
     """FALLBACK: executa um comando shell (`bash -c`) como o usuário @USER@, para o que
     não tem verbo — git, docker (rootless), systemctl --user, rg, fluxo de dado entre
     verbos. Verbo do núcleo tem tool própria (nome = slug); usá-lo por aqui é medido.
@@ -1433,7 +1451,7 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
     if commands and PF_TOOLS_LOTE:
         timeout = max(1, min(timeout, 600))
         ident = _sessao_resolve(sessao_id)
-        _carimba_turno(ident, turno)
+        _carimba_turno(ident, turno, turno_texto, turno_fonte)
         lote_id = uuid.uuid4().hex[:8]
         resultados = []
         acumulado = 0
@@ -1473,7 +1491,7 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
         return negado
     timeout = max(1, min(timeout, 600))
     ident = _sessao_resolve(sessao_id)
-    _carimba_turno(ident, turno)
+    _carimba_turno(ident, turno, turno_texto, turno_fonte)
     if PF_GATE:
         segs = [s.strip() for s in command.split(";") if s.strip()]
         elegivel = bool(segs)
@@ -1719,7 +1737,8 @@ def ler_arquivo(caminho: str = "", linhas: str = "", modo: str = "texto",
                 max_bytes: int = 40000, versao: str = "", offset: int | None = None,
                 encoding: str = "", inteiro: bool = False, sessao_id: str | None = None,
                 caminhos: list[str | dict] | None = None, paginas: str = "",
-                dpi: int = 150, turno: str = "") -> dict:
+                dpi: int = 150, turno: str = "", turno_texto: str = "",
+                turno_fonte: str = "") -> dict:
     """Lê arquivo de texto por linhas. `caminho` absoluto, ou relativo à bancada declarada.
 
     `linhas`: "a-b", "a-" ou "-n" (as últimas n), base 1; sem ela, do começo. A página
@@ -1745,7 +1764,7 @@ def ler_arquivo(caminho: str = "", linhas: str = "", modo: str = "texto",
     volta `omitido_por_teto`.
     """
     ident = _sessao_resolve(sessao_id)
-    _carimba_turno(ident, turno)
+    _carimba_turno(ident, turno, turno_texto, turno_fonte)
     comuns = {"linhas": linhas, "modo": modo, "max_bytes": max_bytes, "versao": versao,
               "offset": offset, "encoding": encoding, "inteiro": inteiro, "paginas": paginas,
               "dpi": dpi}
@@ -1802,13 +1821,13 @@ def _separa_membro(caminho: str) -> tuple[str, str | None]:
 
 def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
               sessao_id: str | None = None, paths: list[str] | None = None,
-              turno: str = "") -> dict:
+              turno: str = "", turno_texto: str = "", turno_fonte: str = "") -> dict:
     """Apelido de `ler_arquivo` (spec ler-arquivo §12): a mesma leitura, com `path`,
     `paths` e `offset`. Sem `offset`, lê por linhas; o retorno traz `content`, `truncated`
     e `next_offset` (byte) além dos campos novos. Sai quando ninguém mais a chamar.
     """
     ident = _sessao_resolve(sessao_id)
-    _carimba_turno(ident, turno)
+    _carimba_turno(ident, turno, turno_texto, turno_fonte)
     args = {"max_bytes": max_bytes, "offset": offset or None}
     if paths and PF_TOOLS_LOTE:
         lote_id = uuid.uuid4().hex[:8]
@@ -2010,7 +2029,8 @@ def _escreve_atomico(real_alvo: Path, data: bytes, modo: int) -> None:
         os.close(dfd)
 
 def write_file(path: str, content: str = "", sessao_id: str | None = None,
-               trecho: dict | None = None, turno: str = "") -> dict:
+               trecho: dict | None = None, turno: str = "", turno_texto: str = "",
+               turno_fonte: str = "") -> dict:
     """Escreve arquivo de TIPO declarado em MORADA declarada, atomico (spec_porta-so-verbo §4).
 
     `path` absoluto, ou relativo à bancada declarada (sem ela, recusa). Moradas: na
@@ -2029,7 +2049,7 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
     if negado:
         return negado
     ident = _sessao_resolve(sessao_id)
-    _carimba_turno(ident, turno)
+    _carimba_turno(ident, turno, turno_texto, turno_fonte)
 
     def _rec(motivo):
         _audit(tool="write_file", evento="escrita_recusada", path=path, motivo=motivo,
@@ -2376,7 +2396,7 @@ def _primeiro_giro(pergunta: str) -> bool:
 async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = "",
                         pergunta: str = "", sessao_id: str | None = None, perfil: str = "",
                         modo: str = "", regua: str = "", origem: str = "", agente: str = "",
-                        turno: str = "") -> dict:
+                        turno: str = "", turno_texto: str = "", turno_fonte: str = "") -> dict:
     """Abre a sessão de uma cadeira numa chamada (projeção do lote sessao abrir -> expediente montar).
 
     Devolve o pacote de expediente com o bloco `sessao` no topo.
@@ -2424,7 +2444,8 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
                ordem_id=_oid, sessao_id=_sessao_id,
                via="tool", cunhada=_cunhou)
         _delta = _delta_pecas(r, _sessao_id)   # R2: peça repetida na mesma sessão sai como aviso
-        _carimba_turno({"sessao_id": _sessao_id, "cadeira": r.get("cadeira"), "ordem_id": _oid}, turno)
+        _carimba_turno({"sessao_id": _sessao_id, "cadeira": r.get("cadeira"), "ordem_id": _oid},
+                       turno, turno_texto, turno_fonte)
 
     # `pergunta` e a mensagem do dono, so ela (spec log-de-negocio §0/§3, ordem do dono de 08/10):
     # fica no bruto, 35 dias, e nunca atravessa para o evento. O pacote montado NAO se grava: a
@@ -2711,7 +2732,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                     stdin: str | dict | list | None = None,
                     sessao_id: str | None = None, timeout: int = 120,
                     lote: list[dict] | None = None, encadeado: bool = False,
-                    turno: str = "") -> dict:
+                    turno: str = "", turno_texto: str = "", turno_fonte: str = "") -> dict:
         # #3124: o cliente MCP desserializa stdin JSON valido antes de chegar aqui; a
         # anotacao velha (str | None) fazia o pydantic recusar sem rodar nada.
         stdin = _stdin_texto(stdin)
@@ -2719,7 +2740,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
         if lote and PF_TOOLS_LOTE:
             timeout = max(1, min(timeout, 600))
             ident = _sessao_resolve(sessao_id)
-            _carimba_turno(ident, turno)
+            _carimba_turno(ident, turno, turno_texto, turno_fonte)
             lote_id = uuid.uuid4().hex[:8]
 
             # card:3149 passo 7: mesmo iterador de run_command; `encadeado` para a cadeia
@@ -2775,7 +2796,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
             return negado
         timeout = max(1, min(timeout, 600))
         ident = _sessao_resolve(sessao_id)  # aqui: dentro da task da tool (#2911)
-        _carimba_turno(ident, turno)
+        _carimba_turno(ident, turno, turno_texto, turno_fonte)
         argv = _argv_verbo(binario, ato, args)
         t0 = time.monotonic()
         r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident,

@@ -217,6 +217,9 @@ MOTIVOS_NEGACAO = ("sem_token", "nao_jwt", "assinatura", "audience", "emissor", 
 # Os do CHECK de `acervo.log_fecho.motivo_parada` (spec apis-escrita-acervo §D1).
 MOTIVOS_PARADA = ("concluiu", "teto_giros", "orcamento_erro", "interrompida")
 FONTES_TURNO = ("declarado", "gap", "runner", "hook", "transcript")
+# As duas que o chamador autenticado pode entregar com `turno_texto` (card #3357); as demais a
+# porta deduz.
+FONTES_ENTREGUES = ("hook", "transcript")
 FONTES_TOKENS = ("provedor", "estimado")
 ORIGENS = ("cadeira", "agente", "sonda")
 IDENTIDADE = ("sujeito", "sub", "username", "azp", "sid", "jti")
@@ -248,6 +251,8 @@ NULAVEL = frozenset({"capacidade", "ferramenta", "mapa_v", "cadeira", "ordem_id"
 # abertura) se grava no bruto e so nele (spec log-de-negocio §0/§3); a resposta da cadeira, o
 # pacote montado e o token nunca (arq:0061 §5).
 PROIBIDOS = {"abertura": ("resposta", "pacote", "pecas", "conteudo"),
+             "turno": ("resposta", "pacote", "pecas", "conteudo", "token", "access_token",
+                       "refresh_token", "authorization"),         # `texto` e a mensagem do dono (#3357)
              "giro": ("token", "access_token", "refresh_token", "authorization", "resposta")}
 
 
