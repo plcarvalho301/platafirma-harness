@@ -4,7 +4,7 @@
 # dono: ia
 # componente: platafirma-motor
 # classe: B
-# use para: achar pelo sentido o trecho que responde a X (buscar <particao>; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), ler/mexer um ajuste (ajuste)
+# use para: achar pelo sentido o trecho que responde a X (buscar <particao>, e `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), ler/mexer um ajuste (ajuste)
 # atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao) — buscar/medir/indexar/trocar exigem particao: motor <inst> <ato> <particao> ...
 # forma: json
 # cauda: nao
@@ -534,9 +534,13 @@ def _chama_troca(inst, tok, caminho="", corpo=None):
         _trata_erro_http(e, "motor trocar")
 
 def _valor_do_ajuste(texto):
-    """`0.61` -> 0.61, `true` -> True, o resto fica texto (nome de modelo)."""
+    """`0.61` -> 0.61, `0,61` -> 0.61 (virgula decimal), `true` -> True, o resto fica texto (nome de
+    modelo). O rag-api confere o tipo de cada ajuste antes de gravar (#3264): texto num campo numero e
+    recusado la, mas a virgula e erro de digitacao de quem escreve em portugues, e se corrige aqui."""
     if texto.lower() in ("true", "false"):
         return texto.lower() == "true"
+    if re.fullmatch(r"-?\d+,\d+", texto):
+        texto = texto.replace(",", ".")
     try:
         return float(texto) if "." in texto else int(texto)
     except ValueError:
@@ -818,7 +822,7 @@ ORIGENS = ("abertura", "busca", "bench", "sombra", "autoteste")
 
 def cmd_buscar(nome_inst, inst, argv):
     uso = ('motor <inst> buscar <particao> "<pergunta>" [--k N] [--texto secao|trecho|nenhum] '
-           '[--conceito <slug>] [--ordem-id <id>] [--origem ' + "|".join(ORIGENS) + ']\n  ' + SPEC)
+           '[--conceito <slug>] [--ordem-id <id>] [--geracao <id|gN>] [--origem ' + "|".join(ORIGENS) + ']\n  ' + SPEC)
     if not argv and sys.stdin.isatty():
         print(uso, file=sys.stderr)
         sys.exit(2)
@@ -832,9 +836,9 @@ def cmd_buscar(nome_inst, inst, argv):
         a = resto[i]
         if a.startswith("--"):
             nome = a[2:]
-            if nome not in ("k", "texto", "conceito", "ordem-id", "origem"):
+            if nome not in ("k", "texto", "conceito", "ordem-id", "origem", "geracao"):
                 print("buscar: flag desconhecida " + repr(a)
-                      + ". conhecidas: --k, --texto, --conceito, --ordem-id, --origem.\n  " + uso,
+                      + ". conhecidas: --k, --texto, --conceito, --ordem-id, --origem, --geracao.\n  " + uso,
                       file=sys.stderr)
                 sys.exit(2)
             if i + 1 >= len(resto) or resto[i + 1].startswith("--"):
@@ -847,6 +851,8 @@ def cmd_buscar(nome_inst, inst, argv):
                 corpo["ordem_id"] = v         # que sabe que abertura e buscas sao a mesma fita:
                                               # no claude.ai cada tool call e sessao MCP distinta,
                                               # entao nao ha id compartilhado no servidor (#2902).
+            elif nome == "geracao":          # busca numa geracao fora de servico (#3264): a sombra
+                corpo["geracao"] = v
             elif nome == "origem":           # quem chamou (#3314): vai ao evento do log
                 if v not in ORIGENS:
                     print("buscar: --origem aceita " + "|".join(ORIGENS) + ", recebi " + repr(v) + ".",
@@ -1282,13 +1288,25 @@ def _medida_da_rodada(linhas):
     return max(set(medidas), key=medidas.count) if medidas else None
 
 
-def _ajuste_do_vencedor(med, piso):
-    """O que passar a `trocar --virar` para a geracao nascer com o sinal que venceu."""
+# O revisor que o rag-api liga quando a chamada pede `rerank` sem modelo declarado (RECOMMENDED_RERANKER,
+# platafirma-conhecimento@rag/motor_acervo/config/settings.py). Um revisor vencedor so vale na busca se a
+# geracao o liga por padrao: o ajuste `revisor` dela leva o nome do modelo.
+MODELO_DO_REVISOR = "BAAI/bge-reranker-v2-m3"
+
+
+def _ajuste_do_vencedor(med, piso, piso_sim=None):
+    """O que passar a `trocar --virar` para a geracao nascer com o sinal que venceu.
+
+    `aviso_de_cobertura_fraca` e sempre exigido pela virada (a decisao do dono fica gravada): o veredito
+    e a similaridade abstem pelo piso dela; o revisor vence com a nota dele (`aviso_com_revisor`) e leva
+    junto o `revisor` que o liga por padrao e o piso da similaridade da mesma geracao (`piso_sim`), que
+    segue valendo onde o revisor nao chega (busca sem fonte)."""
     if med.get("veredito"):
-        # veredito por conceito abstém pelo rótulo do conceito E pela similaridade; os dois ajustes juntos
+        # veredito por conceito abstem pelo rotulo do conceito E pela similaridade; os dois ajustes juntos
         return [f"aviso_de_cobertura_fraca={piso}", "veredito_por_conceito=true"]
     if _medida_da_rodada(med.get("perguntas") or []) == "rerank":
-        return [f"aviso_com_revisor={piso}"]
+        extra = [f"aviso_de_cobertura_fraca={piso_sim}"] if piso_sim is not None else []
+        return [f"aviso_com_revisor={piso}", *extra, f"revisor={MODELO_DO_REVISOR}"]
     return [f"aviso_de_cobertura_fraca={piso}"]
 
 
@@ -1362,7 +1380,7 @@ def cmd_calibrar(inst, particao, argv):
              "gabarito": None, "calibracao_do": next(iter(gabaritos)), "resultado": res, "ajuste": None}
     if res["atinge_o_minimo"]:
         v = res["vencedora"]
-        ajuste = _ajuste_do_vencedor(achadas[v], res["rodadas"][v]["piso"])
+        ajuste = _ajuste_do_vencedor(achadas[v], res["rodadas"][v]["piso"], ctrl["piso"])
         saida["ajuste"] = ajuste
         print(f"\n  VENCE: {v} com {res['rodadas'][v]['neg_sem_obra']}/{res['rodadas'][v]['de_neg_sem_obra']} "
               f"(minimo {res['minimo']}) sem perder positiva T2 alem do controle.\n"

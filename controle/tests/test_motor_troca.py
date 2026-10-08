@@ -234,6 +234,26 @@ def test_a_virada_leva_confirma_sim_e_ajustes_tipados_e_o_sim_do_dono_vai_inteir
                               "ajustes": {"aviso_de_cobertura_fraca": 0.583, "veredito_por_conceito": True}}
 
 
+def test_virgula_decimal_no_ajuste_vira_numero_e_nao_texto(api):
+    # `0,61` entrava como texto, a virada o gravava e a busca da biblioteca estourava (revisao de 08/10/2026)
+    roda, pedidos, _ = api
+    r = roda("trocar", "biblioteca", "--virar", "g7", "--ajuste", "aviso_de_cobertura_fraca=0,61",
+             "--ajuste", "aviso_com_revisor=0.7", "--ajuste", "revisor=BAAI/bge-reranker-v2-m3")
+    assert r.returncode == 0, r.stderr
+    assert pedidos[-1][3]["ajustes"] == {"aviso_de_cobertura_fraca": 0.61, "aviso_com_revisor": 0.7,
+                                         "revisor": "BAAI/bge-reranker-v2-m3"}
+
+
+def test_buscar_na_geracao_fora_de_servico_leva_geracao_no_corpo(api):
+    roda, pedidos, _ = api
+    r = roda("buscar", "biblioteca", "positiva espaco vetorial", "--geracao", GERACAO)
+    assert r.returncode == 0, r.stderr
+    corpo = pedidos[-1][3]
+    assert pedidos[-1][1] == "/search" and corpo["geracao"] == GERACAO and corpo["particao"] == "biblioteca"
+    sem = roda("buscar", "biblioteca", "positiva pergunta")
+    assert sem.returncode == 0 and "geracao" not in pedidos[-1][3]
+
+
 def test_descartar_leva_so_a_confirmacao_e_nunca_o_sim_nem_ajustes(api):
     roda, pedidos, _ = api
     plano = roda("trocar", "biblioteca", "--descartar", "g7")
@@ -368,10 +388,15 @@ def test_calibrar_escolhe_o_revisor_quando_ele_separa_as_22_e_a_similaridade_so_
     assert r.returncode == 0, r.stdout + r.stderr
     assert len([p for p in _API.pedidos if p[1] == "/search"]) == n_busca      # calibrar não chama a busca
     assert "VENCE: nova-revisor com 22/22 (minimo 16)" in r.stdout
-    assert "--ajuste aviso_com_revisor=0.95" in r.stdout and "aviso_de_cobertura_fraca" not in r.stdout.split("VENCE")[1]
+    # o revisor so vale na busca se a geracao o liga por padrao (`revisor`), e a virada exige o piso da
+    # similaridade da mesma geracao: o comando impresso roda como esta
+    assert ("--ajuste aviso_com_revisor=0.95 --ajuste aviso_de_cobertura_fraca=0.6 "
+            "--ajuste revisor=BAAI/bge-reranker-v2-m3") in r.stdout
     assert "as negativas com obra (abster nelas e erro) saem a parte: 2 no gabarito" in r.stdout
     salvo = json.loads(next((instancia / "var" / "medicoes" / "rag").glob("*-calibracao.json")).read_text())
-    assert salvo["ajuste"] == ["aviso_com_revisor=0.95"] and salvo["resultado"]["vencedora"] == "nova-revisor"
+    assert salvo["ajuste"] == ["aviso_com_revisor=0.95", "aviso_de_cobertura_fraca=0.6",
+                                "revisor=BAAI/bge-reranker-v2-m3"]
+    assert salvo["resultado"]["vencedora"] == "nova-revisor"
 
 
 def test_calibrar_com_veredito_leva_os_dois_ajustes_e_a_similaridade_sozinha_nao_chega_a_16(api, tmp_path):
