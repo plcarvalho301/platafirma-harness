@@ -25,6 +25,7 @@ from pathlib import Path
 _ARVORE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ARVORE / "lib"))
 import raizes  # noqa: E402
+import oplog  # noqa: E402  (card #3344: o unico que escreve o bruto da porta)
 sys.path.insert(0, str(_ARVORE / "bin" / "_motor"))
 import calibra  # noqa: E402  (a calibracao do sinal de abstencao sobre medicoes salvas, #3264)
 
@@ -755,13 +756,12 @@ def _texto_do_lote_da_troca(r):
 # do server, so o env herdado. Enquanto o server nao injetar PF_SESSAO/PF_ORDEM_ID no
 # _env_subprocesso do run_command, os campos saem '-' — declarado, nao inferido. O JOIN
 # de D (card #2908) se ancora em 'sessao'; a propagacao e o proximo elo (anotado no card).
-LOG_OPS = os.environ.get("OPS_LOG_DIR") or str(raizes.instancia() / "var" / "log" / "ops")
-
+# Onde mora o bruto, a chave, o aparo e a classe da linha sao do lib/oplog (arq:0123 §3).
 def _emite_consulta(nome, inst, corpo, resp, dur_ms):
     """Grava uma linha JSONL {evento:'consulta', ...} em $PLATAFIRMA_INSTANCIA/var/log/ops. Best-effort:
     falha de log NUNCA derruba a busca — o resultado ja saiu para o cliente."""
     try:
-        from datetime import datetime, date
+        from datetime import datetime
         n_hits = None
         if isinstance(resp, dict):
             for chave in ("fontes", "hits", "resultados", "itens"):
@@ -788,10 +788,7 @@ def _emite_consulta(nome, inst, corpo, resp, dur_ms):
             "n_hits": n_hits,
             "dur_ms": dur_ms,
         }
-        os.makedirs(LOG_OPS, exist_ok=True)
-        alvo = os.path.join(LOG_OPS, f"ops-{date.today().isoformat()}.jsonl")
-        with open(alvo, "a") as f:
-            f.write(json.dumps(linha, ensure_ascii=False) + "\n")
+        oplog.emitir(linha)
     except Exception:
         pass  # log e instrumento, nunca barreira: a busca ja respondeu.
 

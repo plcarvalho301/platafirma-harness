@@ -41,7 +41,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
-from raizes import instancia  # noqa: E402
+import oplog  # noqa: E402  (card #3344: o unico que le o bruto da porta)
 
 # `abertura` mora em bin/_metrica/ (card #3145; ex bin/_conta/conta-abertura.py,
 # movido preservando historico): modulo importavel, nao verbo proprio. bin/ ja e o
@@ -52,10 +52,9 @@ if _BIN_DIR not in sys.path:
     sys.path.insert(0, _BIN_DIR)
 from _metrica.abertura import main as _abertura_main  # noqa: E402
 
-# O ops log mora na instancia. OPS_LOG_DIR e o nome unico do diretorio (o mesmo da porta,
-# de repo, motor e descansar); PF_LOG_OPS segue lido so como alias antigo.
-LOG_OPS = (os.environ.get("OPS_LOG_DIR") or os.environ.get("PF_LOG_OPS")
-           or str(instancia() / "var" / "log" / "ops"))
+# Onde o ops log mora e como se le e do lib/oplog (arq:0123 §3); aqui so se guarda o
+# diretorio para o teste apontar a leitura para uma pasta em tmp.
+LOG_OPS = str(oplog.diretorio())
 
 VERBO = "metrica"
 ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos", "verbos", "comportamento", "abertura")
@@ -146,7 +145,8 @@ def e_veredito(reg):
 
 # O que o ops log grava por chamada de verbo (ops-server/server.py, `_audit`).
 CAMPOS_GIRO = ("ts", "cadeira", "ordem_id", "sessao_id", "tool", "ato",
-               "exit_code", "dur_ms", "lote_id", "lote_n")
+               "exit_code", "dur_ms", "lote_id", "lote_n",
+               "evento_id", "schema_v", "classe")
 
 
 # --- fronteira de LEITURA: a unica parte que sabe do .jsonl -----------------------
@@ -168,28 +168,20 @@ class FonteJsonl:
 
     def __init__(self, diretorio=LOG_OPS):
         self.diretorio = diretorio
-        self.ilegiveis = 0    # linha cortada por LINHA_CAP existe; contar e mais honesto
-                              # que ignorar em silencio ou que derrubar a leitura.
+        self.ilegiveis = 0    # linha ilegivel (disco, escrita interrompida) existe; contar e
+                              # mais honesto que ignorar em silencio ou derrubar a leitura.
 
     def caminho(self, dia):
-        return os.path.join(self.diretorio, f"ops-{dia}.jsonl")
+        return str(oplog.caminho_do_dia(dia, self.diretorio))
 
     def linhas(self, dia):
-        alvo = self.caminho(dia)
-        if not os.path.isfile(alvo):
-            raise FonteAusente(alvo, dia)
-        with open(alvo, encoding="utf-8", errors="replace") as f:
-            for bruta in f:
-                bruta = bruta.strip()
-                if not bruta:
-                    continue
-                try:
-                    reg = json.loads(bruta)
-                except ValueError:
-                    self.ilegiveis += 1
-                    continue
-                if isinstance(reg, dict):
-                    yield reg
+        leitura = oplog.ler(dia, diretorio_=self.diretorio)
+        if leitura.dias[dia].estado == "ausente":
+            raise FonteAusente(self.caminho(dia), dia)
+        try:
+            yield from leitura
+        finally:
+            self.ilegiveis += leitura.ilegiveis
 
 
 # --- camada 1: EVENTOS (source-aligned) ------------------------------------------
@@ -1078,7 +1070,7 @@ def uso(codigo=2):
   metrica verbos [<dia>] [--desde AAAA-MM-DD] [--ate AAAA-MM-DD] [--cadeira <slug>] [--csv]
   metrica comportamento [<dia> | --desde AAAA-MM-DD [--ate AAAA-MM-DD]] [--resumo]
 
-Agrega o ops log ($PLATAFIRMA_INSTANCIA/var/log/ops/ops-AAAA-MM-DD.jsonl, ou OPS_LOG_DIR) em eventos de uso do harness.
+Agrega o ops log (o bruto da porta, que o lib/oplog le dia a dia) em eventos de uso do harness.
 <dia> e AAAA-MM-DD; sem ele, hoje. Saida JSON; --resumo imprime o sumario legivel.
 
 eventos     stream cru, um objeto por evento (giro, erro, help, acerto, cadeia, lote);
@@ -1188,7 +1180,7 @@ def texto(ato, r):
         for k in TIPOS:
             linhas.append(f"  {conta[k]:6d}  {k}")
     if r.get("linhas_ilegiveis"):
-        linhas.append(f"({r['linhas_ilegiveis']} linhas ilegiveis, cortadas por LINHA_CAP)")
+        linhas.append(f"({r['linhas_ilegiveis']} linhas ilegiveis: disco ou escrita interrompida)")
     return linhas
 
 
@@ -1231,8 +1223,8 @@ def main(argv):
     if args.ajuda:
         return uso(0)
 
-    # Data LOCAL, e nao UTC: o nome do arquivo do dia e escrito pela porta com a data
-    # local do host (`ops-server/server.py`, `LOG_DIR / f"ops-{date.today()}.jsonl"`).
+    # Data LOCAL, e nao UTC: o nome do arquivo do dia e escrito pelo lib/oplog com a data
+    # local do host (`oplog.emitir`, `caminho_do_dia`).
     # Ler em UTC erraria o arquivo nas tres primeiras horas de cada dia.
     dia = args.dia_flag or args.dia or datetime.now().astimezone().date().isoformat()
     try:
@@ -1388,7 +1380,7 @@ def main(argv):
     if args.azp:
         r["azp"] = args.azp
     if fonte.ilegiveis:
-        r["linhas_ilegiveis"] = fonte.ilegiveis   # cortadas por LINHA_CAP, nao contadas
+        r["linhas_ilegiveis"] = fonte.ilegiveis   # ilegiveis, contadas pelo lib/oplog
 
     if args.resumo:
         for linha in texto(ato, r):

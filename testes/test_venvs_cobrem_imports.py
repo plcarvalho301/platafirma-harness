@@ -21,6 +21,7 @@ DISTRIBUICAO = {"yaml": "pyyaml"}
 TRANSITIVOS = {"anyio": "mcp", "starlette": "mcp"}
 # modulos da propria arvore que a porta poe no sys.path
 LOCAIS_FORA_DO_DIRETORIO = {"hash_servido", "streams", "identidade", "pdp", "pep", "raizes",
+                            "oplog",       # lib/oplog.py (card #3344), so biblioteca padrao
                             "reidratar"}  # bin/_sessao/reidratar.py (card #3145, Onda 1 Frente E)
 
 

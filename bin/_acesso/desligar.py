@@ -13,7 +13,7 @@ import os
 import re
 import subprocess
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import yaml
@@ -29,7 +29,8 @@ HARNESS = Path(__file__).resolve().parents[2]
 PERSONAS = HARNESS / "personas"
 # Raizes de producao e bancada declarada (card #3010).
 sys.path.insert(0, str(HARNESS / "lib"))
-from raizes import BancadaNaoDeclarada, bancada, instancia, release, release_raiz  # noqa: E402
+from raizes import BancadaNaoDeclarada, bancada, release, release_raiz  # noqa: E402
+import oplog  # noqa: E402  (card #3344: o unico que le o bruto da porta)
 # LE do servido (RAIZ), ESCREVE so na bancada DECLARADA: o servido e arvore imutavel da
 # release (/opt e r-x); a edicao de sujeitos.yaml/PAP vai ao worktree da cadeira e vira
 # historico por commit + merge + `release promover` (spec_acesso §2). Editar o servido a
@@ -37,8 +38,8 @@ from raizes import BancadaNaoDeclarada, bancada, instancia, release, release_rai
 SEG = Path(os.environ.get("PF_BIN", HARNESS / "bin")) / "seg"
 if not SEG.exists():
     SEG = release() / "harness" / "bin" / "seg"
-# Trilha de auditoria da porta: estado da instancia.
-LOG_OPS = Path(os.environ.get("OPS_LOG_DIR") or instancia() / "var" / "log" / "ops")
+# Trilha de auditoria da porta: onde mora e como se le e do lib/oplog; aqui so para o teste apontar.
+LOG_OPS = oplog.diretorio()
 VENCE = re.compile(r"vence\s+(\d{4}-\d{2}-\d{2})")
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
@@ -166,27 +167,26 @@ def cmd_orfaos(argv: list[str]) -> int:
     # 6. Auditoria contra projecao: quem ATUOU nos ultimos dias e nao esta declarado,
     #    e credencial declarada que nao atuou nenhuma vez. Os dois sao superficie sem
     #    funcao — um por baixo do PAP, outro sobrando no realm.
-    import json as _json
-    logs = sorted(LOG_OPS.glob("ops-*.jsonl"))[-int(os.environ.get("ACESSO_DIAS", 7)):]
+    # A janela e de dias corridos, hoje incluso (antes: os N ultimos arquivos); a leitura e do
+    # lib/oplog, que diz qual dia faltou (arq:0123 §3).
+    janela = max(1, int(os.environ.get("ACESSO_DIAS", 7)))
+    hoje = date.today()
+    leitura = oplog.ler(hoje - timedelta(days=janela - 1), hoje, diretorio_=LOG_OPS)
     # Cada achado leva o rastro (quando, quantas vezes, por onde): achado sem evidencia
     # obriga quem o recebe a garimpar o log de novo para saber o que fazer.
     vistos, vistos_azp = {}, set()
-    for arq in logs:
-        for linha in arq.read_text(errors="replace").splitlines():
-            try:
-                d = _json.loads(linha)
-            except ValueError:
-                continue
-            if d.get("sujeito"):
-                ts = str(d.get("ts") or "?")
-                v = vistos.setdefault(str(d["sujeito"]).lower(), [ts, ts, 0, None])
-                v[1] = ts
-                v[2] += 1
-                if v[3] is None:
-                    v[3] = ", ".join(f"{c}={d[c]}" for c in ("via", "azp", "username", "usuario", "tool", "path")
-                                     if d.get(c) not in (None, "-", ""))
-            if d.get("azp"):
-                vistos_azp.add(str(d["azp"]))
+    for d in leitura:
+        if d.get("sujeito"):
+            ts = str(d.get("ts") or "?")
+            v = vistos.setdefault(str(d["sujeito"]).lower(), [ts, ts, 0, None])
+            v[1] = ts
+            v[2] += 1
+            if v[3] is None:
+                v[3] = ", ".join(f"{c}={d[c]}" for c in ("via", "azp", "username", "usuario", "tool", "path")
+                                 if d.get(c) not in (None, "-", ""))
+        if d.get("azp"):
+            vistos_azp.add(str(d["azp"]))
+    n_dias = sum(1 for dia in leitura.dias.values() if dia.estado == "presente")
     declarados = {n.lower() for n in suj}
     notas: list[tuple[str, str]] = []
     for quem in sorted(set(vistos) - declarados - {"-", "desconhecido"}):
@@ -202,12 +202,12 @@ def cmd_orfaos(argv: list[str]) -> int:
                               f"{quem} nao existe mais no realm; so rastro no log ({rastro})"))
                 continue
         achados.append(("sujeito sem projecao",
-                        f"{quem} atuou nos ultimos {len(logs)} dia(s) e nao esta em sujeitos.yaml ({rastro})"))
+                        f"{quem} atuou nos ultimos {n_dias} dia(s) e nao esta em sujeitos.yaml ({rastro})"))
     for nome, a in suj.items():
         cid = (a or {}).get("client")
         if cid and cid not in vistos_azp:
             achados.append(("credencial dormente",
-                            f"client {cid} ({nome}) nao atuou nos ultimos {len(logs)} dia(s)"))
+                            f"client {cid} ({nome}) nao atuou nos ultimos {n_dias} dia(s)"))
 
     if achados:
         largura = max(len(c) for c, _ in achados)
