@@ -641,10 +641,10 @@ def test_erro_inesperado_de_um_dia_retem_o_dia_registra_e_segue(tmp_path, monkey
     pasta, dias = _dois_velhos(tmp_path)
     real = cw.portao
 
-    def quebra_no_primeiro(api, dia, dados):
+    def quebra_no_primeiro(api, dia, dados, **k):
         if dia == dias[0]:
             raise RuntimeError("disco")
-        return real(api, dia, dados)
+        return real(api, dia, dados, **k)
     monkeypatch.setattr(cw, "portao", quebra_no_primeiro)
     codigo, _, poda = _corta(pasta, ParticaoFalsa(pasta, dias=(*dias, RECENTE)))
     log = poda.read_text(encoding="utf-8")
@@ -1013,21 +1013,45 @@ def test_o_veredito_do_portao_fica_gravado_mesmo_quando_o_passo_do_incidente_que
     assert f"corte-bruto {VELHO}: retido — erro_inesperado [RuntimeError]" in log
 
 
-def test_erro_depois_da_remocao_nao_reescreve_o_veredito_do_dia(bruto, monkeypatch):
-    """A saída quebra depois do `unlink`: o dia saiu, e a linha não pode dizer que ficou."""
-    chamadas = []
-
+def test_saida_quebrada_depois_da_remocao_nao_reescreve_o_veredito_do_dia(bruto, capsys):
+    """A saída quebra depois do `unlink`: o dia saiu, o poda.log tem a linha, e nada diz que ficou."""
     def saida_que_quebra_no_resultado(linha):
-        chamadas.append(linha)
         if ": cortado " in linha:
             raise RuntimeError("stdout quebrou")
     poda = bruto.parent / "poda.log"
     codigo = cw.main([], api=ParticaoFalsa(bruto), hoje=HOJE, tarefas=TarefasFalsa(),
                      saida=saida_que_quebra_no_resultado, diretorio_=bruto, poda_log=poda)
     log = poda.read_text(encoding="utf-8")
-    assert VELHO not in _no_disco(bruto) and codigo == 5
-    assert f"corte-bruto {VELHO}: cortado — conferido" in log
-    assert "retido — erro_inesperado" not in log
+    assert VELHO not in _no_disco(bruto) and codigo == 0
+    assert f"corte-bruto {VELHO}: cortado — conferido" in log and "retido — erro_inesperado" not in log
+    assert "a saída falhou (RuntimeError)" in capsys.readouterr().err
+
+
+def test_saida_quebrada_no_veredito_nao_pula_o_incidente(bruto):
+    tarefas = TarefasFalsa()
+
+    def saida_que_quebra_no_reprovado(linha):
+        if ": reprovado " in linha:
+            raise RuntimeError("stdout quebrou")
+    poda = bruto.parent / "poda.log"
+    codigo = cw.main([], api=ParticaoFalsa(bruto, **{VELHO: {"sha256": "0" * 64}}), hoje=HOJE, tarefas=tarefas,
+                     saida=saida_que_quebra_no_reprovado, diretorio_=bruto, poda_log=poda)
+    assert codigo == 1 and len(tarefas.criados) == 1 and "incidente aberto" in poda.read_text(encoding="utf-8")
+
+
+def test_resultado_que_o_poda_log_nao_gravou_sobe_o_exit_para_5(bruto, monkeypatch):
+    """A intenção gravou, o dia saiu, e o poda.log deixou de gravar: ficaria só «cortando», que o rastro lê como
+    «morreu no meio». O exit não pode ser 0."""
+    real = cw._grava_poda
+    chamadas = []
+
+    def grava_so_a_primeira(caminho, linhas):
+        chamadas.append(linhas)
+        return real(caminho, linhas) if len(chamadas) == 1 else False
+    monkeypatch.setattr(cw, "_grava_poda", grava_so_a_primeira)
+    codigo, _, poda = _corta(bruto, ParticaoFalsa(bruto))
+    assert codigo == 5 and VELHO not in _no_disco(bruto)
+    assert ": cortando " in poda.read_text(encoding="utf-8") and ": cortado " not in poda.read_text(encoding="utf-8")
 
 
 def test_motivo_da_particao_nao_forja_linha_de_rastro(bruto):
@@ -1036,3 +1060,120 @@ def test_motivo_da_particao_nao_forja_linha_de_rastro(bruto):
     linhas = poda.read_text(encoding="utf-8").splitlines()
     assert len(linhas) == 2 and all(l.count(" corte-bruto ") == 1 for l in linhas), linhas
     assert "sem_linhagem:x_2099-01-01T00:00:00_00:00_corte-bruto_2026-01-01:" in linhas[0]
+
+
+# --- a terceira passada: hardlink, janelas de corrida, ambiente ------------------------------------------------
+
+def test_diretorio_sem_hardlink_diz_e_nao_comeca_o_portao(bruto, monkeypatch):
+    def link_negado(*a, **k):
+        raise PermissionError(1, "Operation not permitted")
+    monkeypatch.setattr(os, "link", link_negado)
+    api = ParticaoFalsa(bruto)
+    codigo, saida, poda = _corta(bruto, api)
+    assert codigo == 5 and _no_disco(bruto) == [VELHO, NOVO, RECENTE] and api.chamadas == []
+    assert any("sem hardlink no diretório do bruto (PermissionError: Operation not permitted)" in l for l in saida)
+    assert not [p.name for p in bruto.iterdir() if p.name.startswith(".sonda")], "a sonda não deixa rastro"
+    # e o ensaio `--seco` acusa o mesmo, que é para isso que ele serve no ar
+    codigo, saida, _ = _corta(bruto, ParticaoFalsa(bruto), argv=["--seco"])
+    assert codigo == 5 and any("sem hardlink" in l for l in saida)
+
+
+def test_sonda_de_hardlink_funciona_e_limpa(bruto):
+    assert oplog.sondar_hardlink(bruto) is None
+    assert sorted(p.name for p in bruto.iterdir()) == sorted(oplog.nome_do_dia(d) for d in (VELHO, NOVO, RECENTE))
+    assert "FileNotFoundError" in oplog.sondar_hardlink(bruto / "nao-existe")
+
+
+@pytest.mark.parametrize("max_dias, orcamento", [("-1", "10"), ("3", "-5"), ("3", "nan"), ("3", "inf")])
+def test_ambiente_fora_do_possivel_sai_2(bruto, monkeypatch, max_dias, orcamento):
+    monkeypatch.setenv("CORTE_MAX_DIAS", max_dias)
+    monkeypatch.setenv("CORTE_ORCAMENTO_S", orcamento)
+    assert _corta(bruto, ParticaoFalsa(bruto))[0] == 2 and VELHO in _no_disco(bruto)
+
+
+def test_nome_do_dia_que_some_entre_o_link_e_o_unlink_deixa_o_corte_visivel(bruto, monkeypatch):
+    """Outro processo levou o nome do dia: o `.corte` é o único nome dos bytes e não pode ser apagado sem hash."""
+    sha = cw.contas_do_arquivo((bruto / oplog.nome_do_dia(VELHO)).read_bytes())["sha256"]
+    real = Path.unlink
+
+    def leva_e_diz_que_nao_achou(self, *a, **k):
+        if not self.name.endswith(".corte"):
+            real(self)
+            raise FileNotFoundError(2, "sumiu")
+        return real(self, *a, **k)
+    monkeypatch.setattr(Path, "unlink", leva_e_diz_que_nao_achou)
+    assert oplog.remover_dia_conferido(VELHO, sha, bruto) is False
+    monkeypatch.undo()
+    assert (bruto / (oplog.nome_do_dia(VELHO) + ".corte")).exists() and VELHO not in _no_disco(bruto)
+    assert oplog.devolver_sobras_do_corte(bruto) == ([VELHO], []), "a rodada seguinte o devolve"
+
+
+def test_interrupcao_depois_do_unlink_nao_tira_o_unico_nome(bruto, monkeypatch):
+    sha = cw.contas_do_arquivo((bruto / oplog.nome_do_dia(VELHO)).read_bytes())["sha256"]
+    real = Path.unlink
+
+    def apaga_e_interrompe(self, *a, **k):
+        if not self.name.endswith(".corte"):
+            real(self)
+            raise KeyboardInterrupt
+        return real(self, *a, **k)
+    monkeypatch.setattr(Path, "unlink", apaga_e_interrompe)
+    with pytest.raises(KeyboardInterrupt):
+        oplog.remover_dia_conferido(VELHO, sha, bruto)
+    monkeypatch.undo()
+    assert (bruto / (oplog.nome_do_dia(VELHO) + ".corte")).exists(), "os bytes seguem num nome só, visível"
+
+
+def test_devolver_sobra_com_nome_do_dia_pendurado_vira_presa_e_nao_traceback(tmp_path):
+    (tmp_path / (oplog.nome_do_dia(VELHO) + ".corte")).write_bytes(b"x")
+    (tmp_path / oplog.nome_do_dia(VELHO)).symlink_to(tmp_path / "nao-existe")
+    voltaram, presas = oplog.devolver_sobras_do_corte(tmp_path)
+    assert voltaram == [] and [d for d, _ in presas] == [VELHO] and "FileNotFoundError" in presas[0][1]
+
+
+def test_diretorio_que_nao_lista_vira_presa_e_o_main_nao_sai_com_traceback(bruto, monkeypatch):
+    def nega(self):
+        raise PermissionError(13, "negado")
+    monkeypatch.setattr(Path, "iterdir", nega)
+    voltaram, presas = oplog.devolver_sobras_do_corte(bruto)
+    assert voltaram == [] and presas[0][0] == "(diretorio)"
+    codigo, saida, _ = _corta(bruto, ParticaoFalsa(bruto))
+    assert codigo == 5, "PermissionError fora do laco do dia sai 5 e nao 1 (que quer dizer reprovado)"
+
+
+def test_orcamento_que_acaba_no_meio_do_dia_retem_o_dia(tmp_path, monkeypatch):
+    import itertools
+    pasta = tmp_path / "ops"
+    pasta.mkdir()
+    _escreve(pasta, VELHO, [json.dumps({"tool": "acervo", "n": i}) for i in range(2500)])
+    _escreve(pasta, RECENTE)
+    # inicio da rodada, checagem do dia e primeira página a 0 s; na segunda página o relógio já passou do orçamento
+    tempos = itertools.chain([0.0, 0.0, 0.0], itertools.repeat(2000.0))
+    monkeypatch.setattr(cw.time, "monotonic", lambda: next(tempos))
+    api = ParticaoFalsa(pasta, dias=(VELHO, RECENTE))
+    codigo, _, poda = _corta(pasta, api)
+    assert codigo == 5 and VELHO in _no_disco(pasta)
+    assert len([c for c in api.chamadas if c[1].endswith("/eventos")]) == 1
+    assert f"corte-bruto {VELHO}: retido — linhagem_indisponivel [5]" in poda.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("status, codigo_esperado", [(401, 4), (403, 4), (503, 3), (500, 5), (409, 1)])
+def test_corpo_de_erro_cortado_segue_a_tabela_de_exit_pelo_status(monkeypatch, status, codigo_esperado):
+    import http.client
+    import urllib.error
+    import urllib.request
+
+    class Corpo:
+        def read(self, *a):
+            raise http.client.IncompleteRead(b"meio")
+
+        def close(self):
+            pass
+
+    def responde(*a, **k):
+        raise urllib.error.HTTPError("http://x/", status, "erro", {}, Corpo())
+    monkeypatch.setattr(urllib.request, "urlopen", responde)
+    from oplog_extracao import Api
+    with pytest.raises(Falha) as e:
+        Api(base="http://127.0.0.1:1", token="").chamar("GET", "/acervo/log/dias")
+    assert e.value.codigo == codigo_esperado

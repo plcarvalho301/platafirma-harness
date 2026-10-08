@@ -569,11 +569,11 @@ def remover_dia_conferido(dia, sha256: str, diretorio_=None) -> bool:
     try:
         caminho.unlink()
     except FileNotFoundError:
-        pendente.unlink(missing_ok=True)
-        return False
+        return False        # o nome do dia sumiu: o `.corte` e o unico nome dos bytes; fica visivel, e a proxima rodada o devolve
     except BaseException:
-        with contextlib.suppress(OSError):
-            pendente.unlink()                          # nada mudou: tira o segundo nome
+        if caminho.exists():                           # o unlink nao chegou a valer: tira o segundo nome
+            with contextlib.suppress(OSError):
+                pendente.unlink()
         raise
     try:
         conferido = hashlib.sha256(pendente.read_bytes()).hexdigest() == sha256
@@ -600,6 +600,23 @@ def _devolver(pendente: Path, caminho: Path) -> None:
         pendente.unlink()           # se nao sair, e o mesmo arquivo com dois nomes: a proxima rodada limpa
 
 
+def sondar_hardlink(diretorio_=None) -> str | None:
+    """None se o diretorio do bruto aceita hardlink (o que `remover_dia_conferido` usa para fechar a janela entre
+    conferir e apagar); senao o motivo, numa linha. Cria e apaga dois nomes ocultos que nao casam com o nome do dia."""
+    pasta = Path(diretorio_ or diretorio())
+    a, b = pasta / f".sonda-corte-{os.getpid()}", pasta / f".sonda-corte-{os.getpid()}.b"
+    try:
+        a.write_bytes(b"")
+        os.link(a, b)
+    except OSError as e:
+        return f"{type(e).__name__}: {e.strerror}"
+    finally:
+        for p in (a, b):
+            with contextlib.suppress(OSError):
+                p.unlink()
+    return None
+
+
 def devolver_sobras_do_corte(diretorio_=None) -> tuple[list[str], list[tuple[str, str]]]:
     """Um corte que morreu entre tirar o arquivo do nome do dia e apagar (kill, falta de luz) deixa
     `ops-AAAA-MM-DD.jsonl.corte`: o dia some da vista, mas os bytes seguem la. Devolve cada sobra ao nome do
@@ -612,6 +629,8 @@ def devolver_sobras_do_corte(diretorio_=None) -> tuple[list[str], list[tuple[str
         entradas = sorted(pasta.iterdir())
     except (FileNotFoundError, NotADirectoryError):
         return [], []
+    except OSError as e:
+        return [], [("(diretorio)", f"{type(e).__name__} ao listar o diretorio do bruto")]
     voltaram: list[str] = []
     presas: list[tuple[str, str]] = []
     for p in entradas:
@@ -627,7 +646,12 @@ def devolver_sobras_do_corte(diretorio_=None) -> tuple[list[str], list[tuple[str
         try:
             os.link(p, destino)
         except FileExistsError:
-            if not os.path.samefile(p, destino):
+            try:
+                mesmo = os.path.samefile(p, destino)
+            except OSError as e:                        # o nome do dia sumiu agora, ou e um link pendurado
+                presas.append((dia, f"{type(e).__name__} ao comparar com o nome do dia"))
+                continue
+            if not mesmo:
                 presas.append((dia, "o nome do dia ja existe com outros bytes; a sobra fica ao lado, sem ser apagada"))
                 continue
         except OSError as e:

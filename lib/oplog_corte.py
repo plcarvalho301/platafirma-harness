@@ -34,6 +34,7 @@ Só biblioteca padrão: o timer roda no python da release, sem modelo.
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 import re
 import subprocess
@@ -111,12 +112,14 @@ def _linhagem(api: Api, dia: str) -> dict:
     raise Falha(5, f"GET /acervo/log/dias: a linha de {dia} não veio (D5.5 devolve todos os dias, sem buraco)")
 
 
-def _eventos_na_particao(api: Api, dia: str, esperados: int) -> int:
+def _eventos_na_particao(api: Api, dia: str, esperados: int, expira: float | None = None) -> int:
     """Conta os eventos do dia lendo D5.6 página a página, com o cursor que a própria resposta devolve. O laço
     para na página que não traz `proximo`. Volta -1, que nunca bate com uma contagem de linhas (o portão reprova),
     quando o teto de páginas se esgota: cursor que não anda."""
     n, cursor = 0, None
     for _ in range(esperados // PAGINA + 3):
+        if expira is not None and time.monotonic() > expira:
+            raise Falha(5, f"GET /acervo/log/dias/{dia}/eventos: o orçamento de tempo da rodada acabou no meio do dia")
         params = {"limite": PAGINA}
         if cursor:
             params["cursor"] = cursor
@@ -138,15 +141,16 @@ def _limpo(texto: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.:-]", "_", texto)[:60]
 
 
-def portao(api: Api, dia: str, dados: bytes) -> Veredito:
-    """As três conferências. `Falha` (3, 4, 5) sobe: sem poder conferir, o dia fica."""
+def portao(api: Api, dia: str, dados: bytes, *, expira: float | None = None) -> Veredito:
+    """As três conferências. `Falha` (3, 4, 5) sobe: sem poder conferir, o dia fica. `expira` é o instante
+    (`time.monotonic`) em que o orçamento da rodada acaba: confere-se entre as páginas de D5.6."""
     linha = _linhagem(api, dia)
     passada = linha.get("passada")
     if not isinstance(passada, dict):
         porque = linha.get("motivo")             # nao_extraido · extracao_falhou · sem_arquivo · dia_aberto (D5.5)
         return Veredito(dia, RETIDO, "sem_linhagem" + (f":{_limpo(porque)}" if isinstance(porque, str) and porque else ""))
     c = contas_do_arquivo(dados)
-    eventos = _eventos_na_particao(api, dia, c["legiveis"])
+    eventos = _eventos_na_particao(api, dia, c["legiveis"], expira)
     da_linhagem = {"lidas": passada.get("linhas_lidas"), "legiveis": passada.get("linhas_legiveis"),
                    "ilegiveis": passada.get("linhas_ilegiveis"), "bytes": linha.get("bytes"),
                    "sha256": linha.get("sha256")}
@@ -233,6 +237,8 @@ def _grava_poda(caminho: Path, linhas: list[str]) -> bool:
         marca = datetime.now().astimezone().isoformat(timespec="seconds")
         with open(caminho, "a", encoding="utf-8") as f:
             f.writelines(f"{marca} {linha}\n" for linha in linhas)
+            f.flush()
+            os.fsync(f.fileno())                       # duravel contra falta de luz, nao so contra kill
     except OSError as e:
         print(f"corte-bruto: poda.log não gravou ({e.strerror})", file=sys.stderr)
         return False
@@ -296,7 +302,10 @@ class Rodada:
         gravou = True
         if not self.seco and self.poda_log is not None:
             gravou = _grava_poda(self.poda_log, [linha])
-        self.saida(linha)
+        try:
+            self.saida(linha)
+        except Exception as e:    # noqa: BLE001 — saída quebrada não pode pular o passo seguinte do dia (o incidente)
+            print(f"corte-bruto: a saída falhou ({type(e).__name__}); o poda.log tem a linha", file=sys.stderr)
         return gravou
 
     def processa(self, dia: str, idade: int) -> bool:
@@ -326,7 +335,7 @@ class Rodada:
         if dados is None:
             return True                                 # sumiu entre a listagem e a leitura: nada a cortar
         try:
-            v = portao(self.api, dia, dados)
+            v = portao(self.api, dia, dados, expira=self._inicio + self.orcamento_s)
         except Falha as f:
             self.retidos += 1
             self.falhas_seguidas += 1
@@ -342,7 +351,8 @@ class Rodada:
             v = self._aprovado(v, idade)
         else:
             self.retidos += 1
-        self.emite(_linha(v, idade, v.contas.get("arquivo")))
+        if not self.emite(_linha(v, idade, v.contas.get("arquivo"))):
+            self.pior = _pior(self.pior, 5)             # o resultado não ficou no poda.log: a intenção sozinha engana
         return True
 
     def _aprovado(self, v: Veredito, idade: int) -> Veredito:
@@ -401,9 +411,22 @@ def main(argv: list[str], api: Api | None = None, hoje: date | None = None, tare
     except (IndexError, ValueError) as e:
         print(f"corte-bruto: {e}\n{USO}" if str(e) else USO, file=sys.stderr)
         return 2
+    if not (math.isfinite(orcamento) and orcamento >= 0 and maximo >= 0):
+        print(f"corte-bruto: CORTE_MAX_DIAS e CORTE_ORCAMENTO_S pedem número finito, não negativo "
+              f"(vieram {maximo} e {orcamento:g})", file=sys.stderr)
+        return 2
     hoje = hoje or oplog.hoje_local()
     rodada = Rodada(api, tarefas, seco=seco, maximo=maximo, diretorio_=diretorio_, saida=saida,
                     poda_log=poda_log or raizes.instancia() / "var" / "log" / "poda.log", orcamento_s=orcamento)
+    try:
+        return _rodar(rodada, hoje, idade_de_ensaio, maximo, orcamento)
+    except Exception as e:    # noqa: BLE001 — traceback sairia 1, que aqui quer dizer «dia reprovado»
+        print(f"corte-bruto: {type(e).__name__}: {e}", file=sys.stderr)
+        return _pior(rodada.pior, 5)
+
+
+def _rodar(rodada: Rodada, hoje: date, idade_de_ensaio: int | None, maximo: int, orcamento: float) -> int:
+    seco, diretorio_ = rodada.seco, rodada.diretorio
     if not seco:
         voltaram, presas = oplog.devolver_sobras_do_corte(diretorio_)
         for dia in voltaram:
@@ -415,10 +438,17 @@ def main(argv: list[str], api: Api | None = None, hoje: date | None = None, tare
     parado = _relogio_fora_do_bruto(no_disco, hoje)
     if parado:
         print(f"corte-bruto: {parado}", file=sys.stderr)
-        return 5
+        return _pior(rodada.pior, 5)
     limite = oplog.CORTE_DIAS if idade_de_ensaio is None else idade_de_ensaio
     candidatos = oplog.dias_mais_velhos_que(limite, hoje, diretorio_)
-    for dia in candidatos:
+    sem_link = oplog.sondar_hardlink(diretorio_) if candidatos else None
+    if sem_link:       # o corte fecha a janela entre conferir e apagar com hardlink: sem ele, nem começa o portão
+        rodada.pior = _pior(rodada.pior, 5)
+        rodada.emite(f"corte-bruto: sem hardlink no diretório do bruto ({sem_link}); nenhum dia foi conferido")
+        candidatos_a_conferir: list[str] = []
+    else:
+        candidatos_a_conferir = candidatos
+    for dia in candidatos_a_conferir:
         if not rodada.processa(dia, oplog.idade_em_dias(dia, hoje)):
             break                                       # API ou token fora, ou falha seguida: a próxima rodada tenta
     if rodada.adiados:

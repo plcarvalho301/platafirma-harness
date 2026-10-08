@@ -575,8 +575,7 @@ class Api:
             try:
                 status, bruto = e.code, e.read()
             except (OSError, ValueError, http.client.HTTPException):
-                raise Falha(5, f"{metodo} {caminho}: HTTP {e.code} e o corpo da resposta não veio inteiro; "
-                               "não se sabe se valeu") from None
+                status, bruto = e.code, b""             # o corpo não veio inteiro: o exit sai pelo status, como sempre
         except urllib.error.URLError as e:
             if isinstance(e.reason, (TimeoutError, socket.timeout)):
                 raise Falha(5, f"{metodo} {caminho}: passou de {self.timeout:g}s sem resposta; não se sabe se valeu") from None
