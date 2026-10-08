@@ -421,6 +421,20 @@ def test_calibrar_empate_vence_o_primeiro_da_lista(api, tmp_path):
     assert "VENCE: nova-revisor com 22/22" in caro.stdout
 
 
+def test_calibrar_com_curva_mostra_o_custo_de_cada_piso_e_grava_as_curvas(api, tmp_path):
+    roda, _, instancia = api
+    _rodadas(roda, _gabarito(tmp_path))
+    r = roda("medir", "biblioteca", "--calibrar", "nova-sim,nova-revisor", "--curva")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "o custo de cada piso" in r.stdout
+    assert "nova-sim: no piso que a geracao usou, sem obra 11/22 e T2 achadas caladas 0/24" in r.stdout
+    assert ">= 22/22  piso 0.851" in r.stdout.split("nova-sim:")[1].split("nova-revisor:")[0]
+    salvo = json.loads(next((instancia / "var" / "medicoes" / "rag").glob("*-calibracao.json")).read_text())
+    assert salvo["curvas"]["nova-sim"]["no_piso_da_geracao"]["neg_sem_obra"] == 11
+    sem_flag = roda("medir", "biblioteca", "--calibrar", "nova-sim,nova-revisor")
+    assert "o custo de cada piso" not in sem_flag.stdout
+
+
 def test_calibrar_recusa_rodada_que_falta_e_rodadas_de_geracoes_diferentes(api, tmp_path):
     roda, _, _ = api
     gab = _gabarito(tmp_path, positivas=1, sem_obra=2, com_obra=0)
@@ -449,6 +463,18 @@ def test_abstem_por_nota_abaixo_do_piso_por_busca_vazia_e_por_conceito_sem_obra_
     assert calibra.abstem({"grupo": "t2", "cobertura": "vazia", "valor": None}, 0.0) is True
     assert calibra.abstem({"grupo": "t2", "cobertura": "boa", "valor": 0.9, "veredito": "sem_obra"}, 0.0) is True
     assert calibra.abstem({"grupo": "t2", "cobertura": "boa", "medida": "codigo_exato", "valor": None}, 0.9) is False
+
+
+def test_a_curva_mostra_o_custo_de_cada_piso_e_o_que_a_geracao_abstem_no_piso_que_usou():
+    linhas = ([_linha("t2", 0.9, rank=1) for _ in range(5)] + [_linha("t2", 0.35, rank=1)]
+              + [_linha("t2", 0.1, rank=None)]                      # T2 que a busca errou: nao conta
+              + [_linha("neg_sem_obra", v) for v in (0.2, 0.3, 0.4, 0.95)])
+    assert calibra.curva(linhas) == [
+        {"abstem": 2, "de_neg_sem_obra": 4, "piso": 0.35, "t2_abstidas": 0, "de_t2": 6},
+        {"abstem": 4, "de_neg_sem_obra": 4, "piso": 0.951, "t2_abstidas": 6, "de_t2": 6}]
+    # no piso que a API usou (0,5 nestas linhas): 3 das 4 negativas caladas, e 1 das 6 T2 achadas
+    assert calibra.no_piso_da_geracao(linhas) == {"neg_sem_obra": 3, "de_neg_sem_obra": 4,
+                                                  "t2_abstidas": 1, "de_t2": 6}
 
 
 def test_o_piso_sai_arredondado_para_baixo_sem_perder_um_ulp():

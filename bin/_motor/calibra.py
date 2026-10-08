@@ -101,6 +101,39 @@ def calibrar_rodada(linhas: list[dict], orcamento_t2: int) -> dict:
     return melhor
 
 
+COBERTURA_FRACA = ("fraca", "vazia", "ausente", "nenhuma", "sem-indice")
+
+
+def no_piso_da_geracao(linhas: list[dict]) -> dict:
+    """O que a rodada abstem com o piso que a API USOU (o rótulo `cobertura` da resposta), sem varrer piso:
+    o ponto de partida da geração, com os pisos que ela herdou. Quanto abstem das negativas sem obra e
+    quantas T2 achadas cala junto."""
+    def cala(x: dict) -> bool:
+        return x.get("cobertura") in COBERTURA_FRACA
+
+    neg = [x for x in linhas if x.get("grupo") == "neg_sem_obra"]
+    t2 = [x for x in linhas if x.get("grupo") == "t2" and x.get("rank", 0) is not None]
+    return {"neg_sem_obra": sum(cala(x) for x in neg), "de_neg_sem_obra": len(neg),
+            "t2_abstidas": sum(cala(x) for x in t2), "de_t2": len(t2)}
+
+
+def curva(linhas: list[dict], passo: int = 2) -> list[dict]:
+    """O custo de cada piso: para abster ao menos 2, 4, 6… das negativas sem obra, o MENOR piso que chega
+    lá e quantas T2 achadas ele cala. É a troca que a régua do dono pesa: um sinal que só abstem muito
+    calando T2 não separa negativa de positiva."""
+    pontos: list[dict] = []
+    faltam = passo
+    for t in _candidatos(linhas):
+        neg, n_neg = _conta(linhas, "neg_sem_obra", t)
+        if neg < faltam:
+            continue
+        t2, n_t2 = _conta(linhas, "t2", t)
+        pontos.append({"abstem": neg, "de_neg_sem_obra": n_neg, "piso": _arredonda_para_baixo(t),
+                       "t2_abstidas": t2, "de_t2": n_t2})
+        faltam = (neg // passo + 1) * passo
+    return pontos
+
+
 def _arredonda_para_baixo(valor: float, casas: int = 3) -> float:
     # `int(0.583 * 1000)` e 582: o produto em ponto flutuante cai um ulp abaixo. Arredondar o produto a 6
     # casas antes de cortar mantem o piso no valor que a API devolveu (ela arredonda a 3 casas).
