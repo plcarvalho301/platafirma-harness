@@ -4,8 +4,8 @@
 # dono: ia
 # componente: platafirma-motor
 # classe: B
-# use para: achar pelo sentido o trecho que responde a X (buscar <particao> --necessidade "<uma frase, na lingua do pedido: o que voce precisa saber>"; o verbo monta a consulta com o pedido do dono e os rotulos do chapeu e recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou |, vem em saco de palavras ou em lingua diferente da do pedido; --origem abertura|bench|sombra|autoteste manda o texto literal, sem lint e sem montagem; `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste)
-# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), escrever (escrita, lote) — buscar/medir/indexar/trocar/sortear/escrever exigem particao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar), eventos, juiz
+# use para: achar pelo sentido o trecho que responde a X (buscar <particao> --necessidade "<uma frase, na lingua do pedido: o que voce precisa saber>"; o verbo monta a consulta com o pedido do dono e os rotulos do chapeu e recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou |, vem em saco de palavras ou em lingua diferente da do pedido; --origem abertura|bench|sombra|autoteste manda o texto literal, sem lint e sem montagem; `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), medir sem gravar quanto do log o lint da consulta montada recusaria (lintar), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste)
+# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), lintar (leitura, medida), escrever (escrita, lote) — buscar/medir/indexar/trocar/sortear/escrever exigem particao (lintar le o log inteiro e nao): motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar), eventos, juiz
 # forma: json
 # cauda: nao
 # poda: cosmetica@rag,casa,buscar
@@ -181,6 +181,10 @@ def uso(cod=2):
                                         o estrato sentido da escada, sorteado do log de perguntas (padrao
                                         protocolo-medicao-rag, «Fonte e filtros»): o plano diz o que entrou, o que
                                         saiu por motivo e as 20 do piloto; --apply grava a lista e a gabarito_versao
+  motor <inst> lintar [--json]
+                                        so leitura: o lint da consulta montada (spec motor §2b) sobre o log de
+                                        perguntas, por origem e por causa, e as 20 do piloto da escada uma a uma;
+                                        diz quanto o piso de palavras funcionais pegaria, sem recusar nada
   motor <inst> escrever biblioteca --versao <gabarito_versao_id> --criterio-versao <v> --saida <envelope.json> [--lote-id <id>]
                      [--lista <arquivo.jsonl>] [--recusar <id>,<id>] [--perguntas N] [--tempo S] [--ativar]
                      [--terceiro-braco auto|revisor|expansao] [--plano]
@@ -2033,6 +2037,77 @@ def cmd_escrever(d, inst, argv):
     print(f"gravar: motor marcacao lote gravar {op['--saida']}{' --ativar' if not op.get('--ativar') else ''}")
 
 
+def _causa_curta(causa):
+    return "assuntos" if consulta.CAUSA_ASSUNTOS in causa else "frase" if causa == consulta.CAUSA_FRASE else "lingua"
+
+
+def cmd_lintar(inst, argv):
+    """`lintar`: o lint da consulta montada sobre o log de perguntas, so leitura (card #3360, passo 7).
+
+    Diz, por origem, quantos eventos o lint recusaria e por qual causa, e as 20 do piloto da escada uma a
+    uma. A causa (c) nao se mede: o log anterior a 087 nao tem o pedido do dono. Nao grava nada, nao
+    recusa nada: e a regua do piso de palavras funcionais (consulta.PISO_FUNCIONAIS) contra o que as
+    cadeiras de fato perguntaram."""
+    if any(x != "--json" for x in argv):
+        print("motor lintar: aceita so --json\n  motor <inst> lintar [--json]", file=sys.stderr)
+        sys.exit(2)
+    b = inst.get("banco") or {}
+    if not b:
+        print("motor lintar: a instancia nao declara banco em motor-instancias.json", file=sys.stderr)
+        sys.exit(1)
+    eventos = _psql_json(b, (
+        "SELECT coalesce(json_agg(t ORDER BY t.criado_em, t.id), '[]'::json) FROM ("
+        "SELECT e.id::text AS id, e.pergunta, e.origem, e.criado_em::text AS criado_em "
+        "FROM acervo.evento_recuperacao e WHERE e.disparou) t"))
+    por_origem, distintas = {}, {}
+    for e in eventos:
+        o = e.get("origem") or "nao declarada"
+        d = por_origem.setdefault(o, {"eventos": 0, "passam": 0, "recusadas": Counter(), "exemplos_recusados": []})
+        d["eventos"] += 1
+        v = consulta.lint(e["pergunta"])
+        if v is None:
+            d["passam"] += 1
+        else:
+            d["recusadas"][_causa_curta(v[0])] += 1
+            if o == "abertura" and len(d["exemplos_recusados"]) < 10:
+                d["exemplos_recusados"].append(e["pergunta"][:90])
+        distintas.setdefault(o, set()).add(" ".join(e["pergunta"].lower().split()))
+    piloto = []
+    with open(_ARVORE / "avaliacao" / "escada-sentido-v1.jsonl", encoding="utf-8") as f:
+        for linha in f:
+            c = json.loads(linha)
+            if c.get("papel") == "piloto":
+                v = consulta.lint(c["pergunta"])
+                piloto.append({"posicao": c["posicao"], "pergunta": c["pergunta"],
+                               "palavras": len(consulta.palavras(c["pergunta"])),
+                               "funcionais": round(consulta.proporcao_funcionais(c["pergunta"]), 3),
+                               "veredito": "passa" if v is None else _causa_curta(v[0])})
+    rel = {"piso": consulta.PISO_FUNCIONAIS, "min_palavras": consulta.MIN_PALAVRAS, "eventos": len(eventos),
+           "por_origem": {o: {"eventos": d["eventos"], "distintas": len(distintas[o]), "passam": d["passam"],
+                              "recusadas": dict(d["recusadas"]), "exemplos_recusados": d["exemplos_recusados"]}
+                          for o, d in sorted(por_origem.items())},
+           "piloto": piloto}
+    if argv:
+        print(json.dumps(rel, ensure_ascii=False, indent=1))
+        return
+    print(f"lint da consulta sobre {rel['eventos']} eventos do log (piso {consulta.PISO_FUNCIONAIS} de palavras funcionais, "
+          f"{consulta.MIN_PALAVRAS} palavras ou mais; a causa de lingua nao se mede: o log nao tem pedido)")
+    print(f"  {'origem':<14} {'eventos':>7} {'distintas':>9} {'passam':>7} {'assuntos':>9} {'frase':>6}")
+    for o, d in rel["por_origem"].items():
+        r = d["recusadas"]
+        print(f"  {o:<14} {d['eventos']:>7} {d['distintas']:>9} {d['passam']:>7} {r.get('assuntos', 0):>9} {r.get('frase', 0):>6}")
+    for o, d in rel["por_origem"].items():
+        if o == "abertura" and d["exemplos_recusados"]:
+            print("abertura recusada (prompt do dono: o piso nao pode pegar):")
+            for x in d["exemplos_recusados"]:
+                print(f"    {x}")
+    print("piloto da escada, uma a uma:")
+    for p in piloto:
+        print(f"  {p['posicao']:>2}. {p['veredito']:<8} {p['palavras']:>2} palavras · funcionais {p['funcionais']:<5} · {p['pergunta'][:100]}")
+    print(f"piloto: {sum(1 for p in piloto if p['veredito'] != 'passa')} recusadas, "
+          f"{sum(1 for p in piloto if p['veredito'] == 'passa')} passam")
+
+
 def main():
     d = reg()
     a = sys.argv[1:]
@@ -2080,11 +2155,13 @@ def main():
         return cmd_trocar(inst, a[2:])
     if a[1] == "sortear":
         return cmd_sortear(inst, a[2:])
+    if a[1] == "lintar":
+        return cmd_lintar(inst, a[2:])
     if a[1] == "escrever":
         return cmd_escrever(d, inst, a[2:])
     if a[1] == "medir":
         return cmd_medir(a[0], inst, a[2:])
-    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, escrever, indexar, medir, sortear, trocar", file=sys.stderr)
+    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, escrever, indexar, lintar, medir, sortear, trocar", file=sys.stderr)
     sys.exit(1)
 
 
