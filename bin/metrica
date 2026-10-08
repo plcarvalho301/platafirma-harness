@@ -25,6 +25,13 @@
 # Trocar o arquivo por stream da malha de mensageria e trocar essa classe: as tres
 # camadas consomem dicionarios, nunca linhas.
 #
+# Read-only sobre o log: nao escreve, nao rotaciona, nao toca campo.
+#
+# Saida JSON por default — rota de maquina, nao `--json` opcional. `--resumo` e a rota
+# humana, e so ela.
+#
+# exit: 0 ok · 2 uso invalido · 3 a particao nao respondeu · 4 fonte do dia inexistente (so no bruto; gracioso, nunca stack) · 5 a particao respondeu fora do contrato
+#
 # FONTE (card #3353; arq:0123 regras 8 a 15). O bruto de var/log/ops e cortado em 35 dias; o evento de cada
 # giro, sem conteudo, mora por um ano na particao `log` do acervo. `dia` e `verbos` leem a PARTICAO para todo dia
 # fechado (D5.7 a contagem, D5.5 a cobertura) e dizem `fonte: particao`, a versao do extrator e a cobertura por
@@ -34,13 +41,7 @@
 # leem argumento, erro e a ordem das chamadas, que a particao nao leva (D5.9): seguem no bruto, pelo modulo, com
 # `fonte: bruto`. `--fonte bruto` da a `dia` e a `verbos` a leitura de antes, e a mesma conta de giros por tool e
 # classe da particao, para a conferencia ser a diferenca de dois JSON.
-#
-# Read-only sobre o log: nao escreve, nao rotaciona, nao toca campo.
-#
-# Saida JSON por default — rota de maquina, nao `--json` opcional. `--resumo` e a rota
-# humana, e so ela.
-#
-# exit: 0 ok · 2 uso invalido · 4 fonte do dia inexistente (gracioso, nunca stack)
+# O cabecalho de verbo (as 40 primeiras linhas) tem de guardar a linha `# exit:`: a porta a le para dar a classe.
 import argparse
 import json
 import os

@@ -10,6 +10,7 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -563,6 +564,13 @@ def test_os_sinais_que_faltam_nao_estao_no_bloco_giro_e_o_bruto_ainda_os_le():
         assert nome in texto, nome
     assert '"via"' in texto
     assert set(particao.SINAIS_QUE_FALTAM) == {"classe_erro", "evento", "verbo recusado", "ajuda", "veredito", "via", "poda_modo"}
+
+
+def test_o_cabecalho_do_verbo_guarda_a_linha_exit_nas_40_primeiras_linhas():
+    """A porta lê o cabeçalho (40 linhas, `ops-server/server.py::_declara_exit`) para dar `classe_fonte=verbo` ao giro de
+    `metrica`; um parágrafo a mais antes da linha `# exit:` a perde, e o pre-push barra (`test_oplog_porta`)."""
+    cabecalho = "".join(METRICA.read_text(encoding="utf-8").splitlines(keepends=True)[:40])
+    assert re.search(r"^#\s*exit\s*:", cabecalho, re.MULTILINE)
 
 
 def test_a_particao_nao_abre_o_bruto_por_conta_propria():
