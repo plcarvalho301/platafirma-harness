@@ -1374,10 +1374,21 @@ def cmd_calibrar(inst, particao, argv):
         marca = "  (fora do orcamento)" if x.get("fora_do_orcamento") else ""
         print(f"  {r:<22} {sinal:<8} {x['piso']:>6} {x['neg_sem_obra']:>4}/{x['de_neg_sem_obra']:<4} "
               f"{x['t2_abstidas']:>5}/{x['de_t2']:<6} {x['neg_com_obra_abstidas']:>4}/{x['de_neg_com_obra']:<4}{marca}")
+    curvas = {r: {"no_piso_da_geracao": calibra.no_piso_da_geracao(achadas[r]["perguntas"]),
+                  "pontos": calibra.curva(achadas[r]["perguntas"])} for r in rotulos}
+    if "--curva" in argv:
+        print("\n  o custo de cada piso: o menor que abstem ao menos N das negativas sem obra, e as T2 achadas que ele cala")
+        for r in rotulos:
+            base = curvas[r]["no_piso_da_geracao"]
+            print(f"  {r}: no piso que a geracao usou, sem obra {base['neg_sem_obra']}/{base['de_neg_sem_obra']} "
+                  f"e T2 achadas caladas {base['t2_abstidas']}/{base['de_t2']}")
+            for p in curvas[r]["pontos"]:
+                print(f"      >= {p['abstem']:>2}/{p['de_neg_sem_obra']}  piso {p['piso']:<6}  cala T2 "
+                      f"{p['t2_abstidas']}/{p['de_t2']}")
     print(f"\n  as negativas com obra (abster nelas e erro) saem a parte: {ctrl['de_neg_com_obra']} no gabarito, "
           f"a conta nao as soma as {ctrl['de_neg_sem_obra']}")
     saida = {"em": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "geracao": next(iter(geracoes)),
-             "gabarito": None, "calibracao_do": next(iter(gabaritos)), "resultado": res, "ajuste": None}
+             "gabarito": None, "calibracao_do": next(iter(gabaritos)), "resultado": res, "curvas": curvas, "ajuste": None}
     if res["atinge_o_minimo"]:
         v = res["vencedora"]
         ajuste = _ajuste_do_vencedor(achadas[v], res["rodadas"][v]["piso"], ctrl["piso"])
