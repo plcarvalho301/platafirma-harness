@@ -61,17 +61,21 @@ def test_verbo_que_cabe_no_prazo_volta_como_sempre(resultado_dir):
 
 def test_passou_do_prazo_devolve_em_andamento_e_grava_o_final(resultado_dir):
     pasta, audit = resultado_dir
-    t0 = time.monotonic()
-    r = s._run_verbo_blocking(["sh", "-c", "sleep 1; echo fim"], None, 10, IDENT, 0.2)
-    assert time.monotonic() - t0 < 0.9          # devolveu antes do verbo acabar
-    assert r["em_andamento"] is True and r["id"]
+    # O verbo espera um portao que so o teste abre, depois que a chamada voltou: a ordem
+    # (devolveu antes de o verbo acabar) se prova pelo estado, nao por uma janela de tempo,
+    # que falhava com a CPU do host ocupada.
+    portao = pasta / "liberar"
+    espera = 'while [ ! -e "$1" ]; do sleep 0.02; done; echo fim'
+    r = s._run_verbo_blocking(["sh", "-c", espera, "sh", str(portao)], None, 10, IDENT, 0.2)
+    assert r.get("em_andamento") is True and r["id"], r   # portao fechado: o verbo nao acabou
     caminho = Path(r["resultado"])
     assert caminho.parent == pasta
     assert json.loads(caminho.read_text())["em_andamento"] is True
+    portao.touch()
     final = _espera_fim(caminho)
     assert final["exit_code"] == 0
     assert final["stdout"]["texto"] == "fim\n"
-    assert final["id"] == r["id"] and final["dur_ms"] >= 1000
+    assert final["id"] == r["id"] and final["dur_ms"] >= 200     # viveu alem do prazo de 0,2 s
     eventos = [c.kwargs.get("evento") for c in audit.call_args_list]
     assert "verbo_concluido_apos_prazo" in eventos
 
