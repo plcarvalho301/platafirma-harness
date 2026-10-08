@@ -4,13 +4,13 @@
 # dono: ia
 # componente: platafirma-motor
 # classe: B
-# use para: achar pelo sentido o trecho que responde a X (buscar <particao>, e `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste)
+# use para: achar pelo sentido o trecho que responde a X (buscar <particao> --necessidade "<uma frase, na lingua do pedido: o que voce precisa saber>"; o verbo monta a consulta com o pedido do dono e os rotulos do chapeu e recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou |, vem em saco de palavras ou em lingua diferente da do pedido; --origem abertura|bench|sombra|autoteste manda o texto literal, sem lint e sem montagem; `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste)
 # atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), escrever (escrita, lote) — buscar/medir/indexar/trocar/sortear/escrever exigem particao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar), eventos, juiz
 # forma: json
 # cauda: nao
 # poda: cosmetica@rag,casa,buscar
 # consome: rag-extractor-api@platafirma-conhecimento/rag/openapi.yaml >=1.0 (buscar, medir, indexar; endpoints por instancia em motor-instancias.json)
-# ambiente: PLATAFIRMA_RELEASE origem-shell [=/opt/platafirma/current] (gabarito); PLATAFIRMA_INSTANCIA origem-shell [=/srv/platafirma/casa] (segredos, log, medicoes, sobreposicao do compose); OPS_LOG_DIR origem-shell [=$PLATAFIRMA_INSTANCIA/var/log/ops]; PF_BIN origem-shell (teste; ausente e o bin/ da propria arvore); PF_SESSAO porta; PF_ORDEM_ID porta; PF_CADEIRA porta; PF_CHAPEU porta; OPS_NAME porta; USER shell
+# ambiente: PLATAFIRMA_RELEASE origem-shell [=/opt/platafirma/current] (gabarito); PLATAFIRMA_INSTANCIA origem-shell [=/srv/platafirma/casa] (segredos, log, medicoes, sobreposicao do compose); OPS_LOG_DIR origem-shell [=$PLATAFIRMA_INSTANCIA/var/log/ops]; PF_BIN origem-shell (teste; ausente e o bin/ da propria arvore); PF_SESSAO porta; PF_ORDEM_ID porta; PF_CADEIRA porta; PF_CHAPEU porta; PF_ABERTURA_DIR origem-shell [=$PLATAFIRMA_INSTANCIA/var/abertura-publicada] (rotas-chapeu.json, os rotulos da consulta montada); OPS_NAME porta; USER shell
 # escreve: $PLATAFIRMA_INSTANCIA/var/log/ops/*.jsonl (evento consulta, best-effort); env da ingestao na instancia, arquivo NOME=valor ou $PLATAFIRMA_INSTANCIA/segredos/<stack>/<VAR> (ajuste de corte, via motor-instancias.json); $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml (ajuste de container); $PLATAFIRMA_INSTANCIA/var/medicoes/*.json (medir)
 # depende: docker (ajuste servido, medir banco); ajudante bin/_release/stack (ajuste que promove); rede (consome a API do rag)
 # substitui: docker exec rag-* ; curl ao endpoint de busca
@@ -32,6 +32,7 @@ import calibra  # noqa: E402  (a calibracao do sinal de abstencao sobre medicoes
 import marcacao  # noqa: E402  (cliente da marcacao-api, rotas /interno/, #3349)
 import sorteio  # noqa: E402  (o sorteio do estrato sentido da escada, #3349)
 import escritor  # noqa: E402  (as respostas do piloto da escada, um escritor e tres bracos, #3349)
+import consulta  # noqa: E402  (a consulta montada pelo verbo: lint, pedido do dono, rotulos do chapeu, #3360)
 
 REG = os.environ.get("PF_MOTOR_REG") or str(_ARVORE / "registro" / "motor-instancias.json")
 BIN = os.environ.get("PF_BIN") or str(_ARVORE / "bin")
@@ -810,9 +811,17 @@ def _emite_consulta(nome, inst, corpo, resp, dur_ms):
         }
         # Na consulta que a abertura dispara a query e a mensagem do dono: grava-se, so no bruto
         # (spec log-de-negocio §0/§3); o pacote que volta da busca nao entra na linha.
-        pergunta = corpo.get("pergunta") or ""
+        # Na consulta montada (#3360) `pergunta` e a lista enviada; o que a cadeira disse e a necessidade.
+        # O pedido do dono nao e copiado para esta linha: ele ja esta nas linhas de turno e de abertura.
+        bloco = corpo.get("consulta") if isinstance(corpo.get("consulta"), dict) else None
+        pergunta = (bloco["necessidade"] if bloco else corpo.get("pergunta")) or ""
         linha["query"] = pergunta[:2000]
         linha["query_bytes"] = len(pergunta.encode("utf-8"))
+        if bloco:
+            linha["montagem"] = {"fonte_pedido": bloco["fonte_pedido"],
+                                 "pedido_bytes": len((bloco["pedido"] or "").encode("utf-8")),
+                                 "n_rotulos": len(bloco["rotulos"]), "n_perguntas": len(bloco["perguntas"]),
+                                 "lint": bloco.get("lint")}
         oplog.emitir(linha)
     except Exception:
         pass  # log e instrumento, nunca barreira: a busca ja respondeu.
@@ -841,10 +850,34 @@ def _trata_erro_http(e, contexto="motor"):
 # Quem chamou a busca (#3314); a mesma lista do CHECK de acervo.evento_recuperacao. A abertura e a
 # medida mandam a sua; chamada sem a flag grava busca.
 ORIGENS = ("abertura", "busca", "bench", "sombra", "autoteste")
+# A consulta montada (#3360, spec motor §2b) e so da origem `busca`: a abertura manda o prompt do dono
+# literal e a medida manda o gabarito literal, e os dois precisam chegar intactos ao motor.
+ORIGENS_LITERAIS = ("abertura", "bench", "sombra", "autoteste")
+
+def _monta_consulta(texto, pedido_flag, sem_lint):
+    """A consulta montada da origem `busca` (#3360): pedido do dono, lint, chapeu e rotulos.
+
+    Recusa com exit 2 e a causa na primeira linha, o jeito certo na seguinte. Nunca reescreve a
+    necessidade e nunca chama modelo: quem corrige e a cadeira, na chamada seguinte."""
+    if pedido_flag and pedido_flag.strip():
+        fonte, pedido = "flag", pedido_flag.strip()
+    else:
+        fonte, pedido = "porta", consulta.pedido_da_porta(os.environ.get("PF_SESSAO"))
+    if not sem_lint:
+        recusa = consulta.lint(texto, pedido)
+        if recusa:
+            print(consulta.mensagem_de_recusa(*recusa), file=sys.stderr)
+            sys.exit(2)
+    chapeu = consulta.chapeu_vestido()
+    rotulos = consulta.rotulos_do_chapeu(os.environ.get("PF_CADEIRA"), chapeu)
+    return consulta.consulta(texto, pedido, fonte, chapeu, rotulos, lint_desligado=sem_lint)
 
 def cmd_buscar(nome_inst, inst, argv):
-    uso = ('motor <inst> buscar <particao> "<pergunta>" [--k N] [--texto secao|trecho|nenhum] '
-           '[--conceito <slug>] [--ordem-id <id>] [--geracao <id|gN>] [--origem ' + "|".join(ORIGENS) + ']\n  ' + SPEC)
+    uso = ('motor <inst> buscar <particao> --necessidade "<uma frase: o que voce precisa saber para o proximo ato>" '
+           '[--pedido "<texto>"] [--sem-lint] [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>] '
+           '[--ordem-id <id>] [--geracao <id|gN>] [--origem ' + "|".join(ORIGENS) + ']\n'
+           '  posicional: motor <inst> buscar <particao> "<frase>" passa pelo mesmo lint; '
+           '--origem ' + "|".join(ORIGENS_LITERAIS) + ' manda o texto literal, sem lint nem montagem\n  ' + SPEC)
     if not argv and sys.stdin.isatty():
         print(uso, file=sys.stderr)
         sys.exit(2)
@@ -853,14 +886,21 @@ def cmd_buscar(nome_inst, inst, argv):
     corpo = {"particao": _PARA_A_API.get(particao, particao)}
     conceitos = []
     palavras = []
+    necessidade = pedido_flag = None
+    sem_lint = False
     i = 0
     while i < len(resto):
         a = resto[i]
+        if a == "--sem-lint":                 # para a bancada: grava `lint: desligado` no evento
+            sem_lint = True
+            i += 1
+            continue
         if a.startswith("--"):
             nome = a[2:]
-            if nome not in ("k", "texto", "conceito", "ordem-id", "origem", "geracao"):
+            if nome not in ("k", "texto", "conceito", "ordem-id", "origem", "geracao", "necessidade", "pedido"):
                 print("buscar: flag desconhecida " + repr(a)
-                      + ". conhecidas: --k, --texto, --conceito, --ordem-id, --origem, --geracao.\n  " + uso,
+                      + ". conhecidas: --necessidade, --pedido, --sem-lint, --k, --texto, --conceito, --ordem-id,"
+                        " --origem, --geracao.\n  " + uso,
                       file=sys.stderr)
                 sys.exit(2)
             if i + 1 >= len(resto) or resto[i + 1].startswith("--"):
@@ -875,6 +915,10 @@ def cmd_buscar(nome_inst, inst, argv):
                                               # entao nao ha id compartilhado no servidor (#2902).
             elif nome == "geracao":          # busca numa geracao fora de servico (#3264): a sombra
                 corpo["geracao"] = v
+            elif nome == "necessidade":      # o que a cadeira precisa saber, em uma frase (#3360)
+                necessidade = v
+            elif nome == "pedido":           # sobrepoe o pedido que o verbo leria do log da porta
+                pedido_flag = v
             elif nome == "origem":           # quem chamou (#3314): vai ao evento do log
                 if v not in ORIGENS:
                     print("buscar: --origem aceita " + "|".join(ORIGENS) + ", recebi " + repr(v) + ".",
@@ -897,8 +941,13 @@ def cmd_buscar(nome_inst, inst, argv):
             palavras.append(a)
             i += 1
 
+    if necessidade is not None and palavras:
+        print("buscar: texto posicional e --necessidade juntos; use um so.\n  " + uso, file=sys.stderr)
+        sys.exit(2)
     pergunta = ""
-    if palavras == ["-"]:
+    if necessidade is not None:
+        pergunta = necessidade.strip()
+    elif palavras == ["-"]:
         pergunta = sys.stdin.read().strip()
     elif palavras:
         pergunta = " ".join(palavras)
@@ -909,8 +958,18 @@ def cmd_buscar(nome_inst, inst, argv):
         print("buscar: nenhuma pergunta informada via argumento ou stdin.\n  " + uso, file=sys.stderr)
         sys.exit(2)
 
-    corpo["pergunta"] = pergunta
     corpo.setdefault("origem", "busca")
+    if corpo["origem"] in ORIGENS_LITERAIS:
+        # A abertura e a medida mandam o texto como esta: sem lint e sem montagem (spec motor §2b).
+        if necessidade is not None or pedido_flag is not None or sem_lint:
+            print("buscar: --origem " + corpo["origem"] + " manda o texto literal; --necessidade, --pedido e "
+                  "--sem-lint so valem na origem busca.\n  " + uso, file=sys.stderr)
+            sys.exit(2)
+        corpo["pergunta"] = pergunta
+    else:
+        bloco = _monta_consulta(pergunta, pedido_flag, sem_lint)
+        corpo["pergunta"] = bloco["perguntas"][0] if len(bloco["perguntas"]) == 1 else bloco["perguntas"]
+        corpo["consulta"] = bloco
     # Sessao e fita vao no corpo (#3314): o rag-api le PF_SESSAO do proprio conteiner, que nao
     # e o do cliente, e o evento saia sem sessao_id.
     sessao = os.environ.get("PF_SESSAO", "").strip()

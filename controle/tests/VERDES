@@ -71,6 +71,9 @@ tests/test_motor_marcacao.py
 tests/test_motor_sorteio.py
 # Card #3349: `motor rag escrever biblioteca` (prompt, mapa, rodape, piloto, terceiro braco, envelope e aceite; fiacao com rag, ollama e docker falsos).
 tests/test_motor_escritor.py
+# Card #3360: bin/_motor/consulta.py (lint, montagem, rotulos do chapeu, pedido do dono lido do log da porta pelo oplog) e a fiacao em `motor rag buscar`.
+tests/test_motor_consulta.py
+tests/test_motor_buscar_consulta.py
 tests/test_stack_mascara_segredos.py
 tests/test_pesquisar_consultar_palavras.py
 tests/test_acervo_psql_c.py
