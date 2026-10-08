@@ -75,6 +75,28 @@ def test_resumo_e_o_texto_da_carta(tmp_path):
     assert "PIOROU: " in r.stdout and "documento_nao_achado" in r.stdout
 
 
+def test_eventos_mostra_chave_classe_origem_escopo_e_turno_do_giro(tmp_path):
+    # Aceite do #3345: `metrica eventos` traz os campos que a porta passou a gravar; a linha
+    # antiga, sem eles, sai com `classe` e `origem` deduzidas na leitura e o resto nulo.
+    ts = f"{JANELA.isoformat()}T10:00:00"
+    nova = {"ts": ts, "cadeira": "ia", "ordem_id": "o1", "sessao_id": "s1", "tool": "repo",
+            "ato": "abrir", "exit_code": 0, "dur_ms": 300, "evento_id": "01a11bd5-18d9-77e1-b818-bf36232140f2",
+            "schema_v": 1, "classe": "ok", "origem": "cadeira", "escopo": "#3345",
+            "turno_id": "T2", "turno_fonte": "declarado"}
+    _dia(tmp_path, JANELA, [json.dumps(nova), _linha(ts, "ia", "o1", "tarefas", "ler", 1)])
+    env = dict(os.environ, OPS_LOG_DIR=str(tmp_path))
+    r = subprocess.run([sys.executable, str(METRICA), "eventos", JANELA.isoformat()],
+                       capture_output=True, text=True, env=env, timeout=120)
+    assert r.returncode == 0, r.stderr
+    giros = [e for e in json.loads(r.stdout)["eventos"] if e["tipo"] == "giro"]
+    novo, antigo = giros
+    assert (novo["classe"], novo["origem"], novo["escopo"], novo["turno_id"], novo["turno_fonte"]) == (
+        "ok", "cadeira", "#3345", "T2", "declarado")
+    assert novo["evento_id"] and novo["schema_v"] == 1
+    assert (antigo["classe"], antigo["origem"]) == ("negativa", "cadeira")
+    assert antigo["escopo"] is None and antigo["turno_fonte"] is None and antigo["evento_id"] is None
+
+
 def test_sem_log_nenhum_sai_4(tmp_path):
     r = _roda(tmp_path, JANELA.isoformat())
     assert r.returncode == 4
