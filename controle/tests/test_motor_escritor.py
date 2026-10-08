@@ -93,6 +93,19 @@ def test_afirmacao_sem_secao_valida_sai_do_mapa_e_fica_contada():
     assert any("5 afirmação(ões) do mapa sem seção válida" in a for a in avisos)
 
 
+def test_tirar_a_marca_nao_deixa_pontuacao_solta_e_citar_secao_sem_dizer_qual_avisa():
+    texto, _, avisos, _ = escritor.interpretar(saida("A regra vale [1], [2], e basta [3] ."), SECOES)
+    assert texto == "A regra vale, e basta." and ",," not in texto
+    _, _, avisos, _ = escritor.interpretar(saida("As seções [2], [3] e [4] tratam de outro assunto."), SECOES)
+    assert any("cita seção sem dizer qual" in a for a in avisos)
+    _, _, avisos, _ = escritor.interpretar(saida("A regra de retenção vale para todos."), SECOES)
+    assert not any("cita seção" in a for a in avisos)
+
+
+def test_prompt_manda_nao_citar_secao_por_numero_e_a_versao_mudou():
+    assert "pelo número nem pela posição" in escritor.SISTEMA and escritor.PROMPT_VERSAO == "escritor-v2"
+
+
 def test_resposta_acima_do_teto_de_palavras_avisa_sem_cortar():
     _, _, avisos, palavras = escritor.interpretar(saida("palavra " * 500), SECOES)
     assert palavras == 500 and any("acima do teto" in a for a in avisos)
@@ -160,7 +173,7 @@ CARIMBO = {"acervo": {"acervo_sha": "a"}, "motor": {"k": 8}, "vocabulario": {"ve
 
 
 def _lote(**kw):
-    return escritor.montar_lote("lote-1", "gv", "v1", _piloto(), _resultados(**kw), "revisor", CARIMBO, "42", False)
+    return escritor.montar_lote("lote-1", "gv", "v1", _piloto(), _resultados(**kw), "revisor", dict(CARIMBO), "42", False)
 
 
 def test_o_lote_publico_tem_so_os_campos_que_a_tela_le_e_o_braco_e_o_mapa_ficam_nas_internas():
@@ -197,6 +210,17 @@ def test_o_aceite_passa_no_lote_bom_e_acusa_cada_defeito():
     ps = escritor.conferir_aceite(e, 20)
     assert any("sem seção no mapa" in p for p in ps) and any("marca [n]" in p for p in ps) and any("«vocabulario»" in p for p in ps)
     assert any("esperava 21" in p for p in escritor.conferir_aceite(_lote(), 21))
+    igual = _lote()
+    a, b = igual["corpo"]["perguntas"][0]["respostas"][:2]
+    b["texto"] = a["texto"]
+    assert any("1 pergunta(s) com duas respostas de texto idêntico" in p for p in escritor.conferir_aceite(igual, 20))
+
+
+def test_lote_de_dois_bracos_nao_tem_o_terceiro_e_passa_no_aceite_de_duas_por_pergunta():
+    e = escritor.montar_lote("l", "gv", "v1", _piloto(), _resultados(), "nenhum", dict(CARIMBO), "42", False)
+    assert len(e["respostas"]) == 40 and {r["braco"] for r in e["respostas"]} == {"servido", "lexico"}
+    assert all(len(p["respostas"]) == 2 for p in e["corpo"]["perguntas"])
+    assert escritor.conferir_aceite(e, 20, 2) == [] and escritor.conferir_aceite(e, 20) != []
 
 
 # --- o verbo, de ponta a ponta com rag, ollama e docker falsos ---------------------------------------------
@@ -244,7 +268,7 @@ class _Ollama(BaseHTTPRequestHandler):
     def do_POST(self):
         corpo = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         self.chamadas.append(corpo)
-        resposta = {"resposta": "A regra vale [1] e a exceção também [2].",
+        resposta = {"resposta": f"A regra vale [1] e a exceção também [2]. Chamada {len(self.chamadas)}.",
                     "mapa": [{"afirmacao": "A regra vale", "secoes": [1]}, {"afirmacao": "a exceção", "secoes": [2, 3]}]}
         dado = json.dumps({"message": {"content": json.dumps(resposta)}, "prompt_eval_count": 900, "eval_count": 120}).encode()
         self.send_response(200)
@@ -350,6 +374,19 @@ def test_escreve_o_piloto_com_a_recusada_reposta_e_monta_o_envelope_que_passa_no
     assert len({c["messages"][0]["content"] for c in _Ollama.chamadas}) == 1
     lex = [r_ for r_ in e["respostas"] if r_["braco"] == "lexico"][0]
     assert lex["secoes"][0]["chave"].startswith("lex#") and [m["secoes"] for m in lex["mapa"]] == [["lex#1"], ["lex#2", "lex#3"]]
+
+
+def test_dois_bracos_nao_buscam_nem_escrevem_o_terceiro(verbo):
+    roda, tmp, _ = verbo
+    saida_ = tmp / "dois.json"
+    r = roda("--versao", "gv-1", "--criterio-versao", "v1", "--lote-id", "d2", "--saida", str(saida_), "--terceiro-braco", "nenhum")
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert "aceite: 4 perguntas e 8 respostas" in r.stdout
+    e = json.loads(saida_.read_text())
+    assert len(e["respostas"]) == 8 and {r_["braco"] for r_ in e["respostas"]} == {"servido", "lexico"}
+    assert len(_Ollama.chamadas) == 8 and all(p.get("bracos") is None for p in _Rag.pedidos)
+    assert e["carimbo"]["motor"]["terceiro_braco"] == "nenhum" and set(e["carimbo"]["custo"]) == {"servido", "lexico"}
+    assert e["carimbo"]["escritor"]["prompt_versao"] == "escritor-v2"
 
 
 def test_a_redacao_retoma_do_estado_sem_reescrever_o_que_ja_estava(verbo):

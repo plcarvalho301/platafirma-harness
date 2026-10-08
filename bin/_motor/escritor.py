@@ -19,7 +19,7 @@ import secrets
 import time
 
 MODELO = "qwen3.5:9b"
-PROMPT_VERSAO = "escritor-v1"
+PROMPT_VERSAO = "escritor-v2"
 SEMENTE_GERACAO = 42
 TEMPERATURA = 0
 PALAVRAS = 350
@@ -32,7 +32,7 @@ SEM_SECOES = "O acervo não devolveu nenhuma seção para esta pergunta."
 SISTEMA = """Você responde a uma pergunta de trabalho usando SOMENTE as seções numeradas que vêm abaixo.
 
 Regras:
-1. Escreva em português do Brasil, em prosa corrida, em até 350 palavras. Não ponha marca de referência no texto: nada de [1], (3), notas ou links.
+1. Escreva em português do Brasil, em prosa corrida, em até 350 palavras. Não ponha marca de referência no texto: nada de [1], (3), notas ou links. Não cite as seções pelo número nem pela posição (nada de «a seção 2» ou «as seções 1 e 3»): fale do assunto de cada uma.
 2. Cada afirmação material da resposta tem de estar sustentada por pelo menos uma das seções. Se as seções não respondem à pergunta, ou respondem só em parte, diga isso com clareza e diga o que falta. Não complete com conhecimento próprio.
 3. Devolva apenas um objeto JSON, sem texto fora dele: {"resposta": "<o texto>", "mapa": [{"afirmacao": "<a afirmação material, numa frase>", "secoes": [<números das seções que a sustentam>]}]}
 4. Toda afirmação material do texto aparece uma vez no mapa, com ao menos um número de seção da lista. Se a resposta só diz que as seções não cobrem a pergunta, o mapa é uma lista vazia."""
@@ -118,8 +118,13 @@ def interpretar(saida: str, secoes: list):
     texto = obj["resposta"].strip()
     limpo = re.sub(r"\s*\[\d+(?:\s*[,;]\s*\d+)*\]", "", texto)
     if limpo != texto:
+        # tira a marca e a pontuacao que ela deixa solta ("seccoes,, e" -> "seccoes, e")
+        limpo = re.sub(r"\s+([,.;:])", r"\1", limpo)
+        limpo = re.sub(r"([,;])(?:\s*[,;])+", r"\1", limpo)
         avisos.append("marcas [n] removidas do texto")
         texto = limpo
+    if re.search(r"\bseç(?:ão|ões)\s*(?:,|e\b|ou\b|\.)", texto):
+        avisos.append("cita seção sem dizer qual: frase pode ter ficado quebrada, revisar")
     palavras = len(texto.split())
     if palavras > int(PALAVRAS * 1.15):
         avisos.append(f"{palavras} palavras, acima do teto de {PALAVRAS}")
@@ -201,8 +206,9 @@ def montar_lote(lote_id: str, versao_id: str, criterio_versao: str, perguntas: l
     corpo_p, internas = [], []
     for p in perguntas:
         pid = p["id"]
-        rodando = [("servido", resultados[pid]["servido"]), ("lexico", resultados[pid]["lexico"]),
-                   (terceiro, resultados[pid]["terceiro"])]
+        rodando = [("servido", resultados[pid]["servido"]), ("lexico", resultados[pid]["lexico"])]
+        if terceiro != "nenhum":
+            rodando.append((terceiro, resultados[pid]["terceiro"]))
         random.Random(f"{semente}/{pid}").shuffle(rodando)
         respostas = []
         for braco, r in rodando:
@@ -220,14 +226,17 @@ def montar_lote(lote_id: str, versao_id: str, criterio_versao: str, perguntas: l
             "ativo": ativo, "corpo": corpo, "carimbo": carimbo, "respostas": internas}
 
 
-def conferir_aceite(envelope: dict, n_perguntas: int) -> list:
+def conferir_aceite(envelope: dict, n_perguntas: int, por_pergunta: int = 3) -> list:
     """Os problemas do lote contra o aceite do card: [] = conforme."""
     p = []
     internas = envelope["respostas"]
     if len(envelope["corpo"]["perguntas"]) != n_perguntas:
         p.append(f"{len(envelope['corpo']['perguntas'])} perguntas, esperava {n_perguntas}")
-    if len(internas) != 3 * n_perguntas:
-        p.append(f"{len(internas)} respostas, esperava {3 * n_perguntas}")
+    if len(internas) != por_pergunta * n_perguntas:
+        p.append(f"{len(internas)} respostas, esperava {por_pergunta * n_perguntas}")
+    iguais = sum(1 for q in envelope["corpo"]["perguntas"] if len({r["texto"] for r in q["respostas"]}) < len(q["respostas"]))
+    if iguais:
+        p.append(f"{iguais} pergunta(s) com duas respostas de texto idêntico")
     sem_rodape = [r["resposta_id"] for q in envelope["corpo"]["perguntas"] for r in q["respostas"] if not r["secoes"]]
     if sem_rodape:
         p.append(f"{len(sem_rodape)} resposta(s) sem seção no rodapé")

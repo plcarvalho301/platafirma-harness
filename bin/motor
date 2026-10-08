@@ -1856,7 +1856,7 @@ def cmd_escrever(d, inst, argv):
     # --- terceiro braco -------------------------------------------------------------------------------------
     if not est["terceiro_braco"]:
         pedido = op.get("--terceiro-braco", "auto")
-        if pedido in ("revisor", "expansao"):
+        if pedido in ("revisor", "expansao", "nenhum"):
             est["terceiro_braco"], est["terceiro_motivo"] = pedido, "pedido na chamada"
         elif pedido == "auto":
             amostras = []
@@ -1869,7 +1869,7 @@ def cmd_escrever(d, inst, argv):
                 est["recuperado"][p["id"]]["revisor"] = amostras[-1][1]
             est["terceiro_braco"], est["terceiro_motivo"] = escritor.decidir_terceiro_braco(amostras)
         else:
-            print("motor escrever: --terceiro-braco aceita auto|revisor|expansao", file=sys.stderr)
+            print("motor escrever: --terceiro-braco aceita auto|revisor|expansao|nenhum", file=sys.stderr)
             sys.exit(2)
         _salva_estado(arq_estado, est)
     terceiro = est["terceiro_braco"]
@@ -1881,7 +1881,7 @@ def cmd_escrever(d, inst, argv):
         rec = est["recuperado"].setdefault(p["id"], {})
         if "servido" not in rec:
             rec["servido"] = escritor.secoes_do_servido(_recupera_servido(inst, tok, p["pergunta"]))
-        if "terceiro" not in rec:
+        if terceiro != "nenhum" and "terceiro" not in rec:
             rec["terceiro"] = rec.pop("revisor", None) if terceiro == "revisor" and "revisor" in rec else \
                 escritor.secoes_do_servido(_recupera_servido(inst, tok, p["pergunta"], bracos_busca))
         if "lexico" not in rec:
@@ -1893,10 +1893,13 @@ def cmd_escrever(d, inst, argv):
             est.setdefault("lexico_modo", {})[pid] = r["modo"]
     _salva_estado(arq_estado, est)
     modos = dict(sorted(Counter(est.get("lexico_modo", {}).values()).items()))
-    sem = {b: sum(1 for p in piloto if not est["recuperado"][p["id"]][b]) for b in ("servido", "lexico", "terceiro")}
+    bracos_do_lote = ("servido", "lexico") + (() if terceiro == "nenhum" else ("terceiro",))
+    sem = {b: sum(1 for p in piloto if not est["recuperado"][p["id"]][b]) for b in bracos_do_lote}
     rec_ = est["recuperado"]
-    iguais = sum(1 for p in piloto if escritor.jaccard(rec_[p["id"]]["servido"], rec_[p["id"]]["terceiro"]) == 1.0)
-    mesma_ordem = sum(1 for p in piloto if [s["chave"] for s in rec_[p["id"]]["servido"]] == [s["chave"] for s in rec_[p["id"]]["terceiro"]])
+    iguais = mesma_ordem = 0
+    if terceiro != "nenhum":
+        iguais = sum(1 for p in piloto if escritor.jaccard(rec_[p["id"]]["servido"], rec_[p["id"]]["terceiro"]) == 1.0)
+        mesma_ordem = sum(1 for p in piloto if [s["chave"] for s in rec_[p["id"]]["servido"]] == [s["chave"] for s in rec_[p["id"]]["terceiro"]])
     print(f"lote {lote_id} · {len(piloto)} perguntas · terceiro braco: {terceiro} ({est['terceiro_motivo']}) · "
           f"top-8 do terceiro com o mesmo conjunto do servido em {iguais}/{len(piloto)} e na mesma ordem em {mesma_ordem}/{len(piloto)} · "
           f"sem nenhuma secao: {sem} · "
@@ -1907,7 +1910,7 @@ def cmd_escrever(d, inst, argv):
 
     # --- redacao (depois da recuperacao: o ollama e o Nemotron dividem a placa) ------------------------------
     limite = time.monotonic() + float(op.get("--tempo", 480))
-    pendentes = [(p, b) for p in piloto for b in ("servido", "lexico", "terceiro")
+    pendentes = [(p, b) for p in piloto for b in bracos_do_lote
                  if b not in est["geradas"].get(p["id"], {})]
     for p, b in pendentes:
         if time.monotonic() > limite:
@@ -1916,7 +1919,7 @@ def cmd_escrever(d, inst, argv):
             p["pergunta"], est["recuperado"][p["id"]][b], _gerar_ollama)
         _salva_estado(arq_estado, est)
     feitas = sum(len(v) for v in est["geradas"].values())
-    total = 3 * len(piloto)
+    total = len(bracos_do_lote) * len(piloto)
     if feitas < total:
         print(f"INCOMPLETO: {feitas}/{total} respostas escritas; repita o mesmo comando com --lote-id {lote_id}")
         sys.exit(1)
@@ -1927,7 +1930,8 @@ def cmd_escrever(d, inst, argv):
     env = env or {}
     chaves = ("EMBED_MODEL", "EMBED_BACKEND", "EMBED_QUERY_INSTRUCTION", "RETRIEVAL_MODE", "HYBRID_LEXICAL", "RRF_K",
               "RERANK_MODEL", "RERANK_POOL", "RERANK_BLEND", "CHUNK_TOKEN_CEILING", "EXPANSAO_POR_CONCEITO")
-    custo = {b: {"segundos": 0.0, "tokens_prompt": 0, "tokens_saida": 0, "respostas": 0} for b in ("servido", "lexico", terceiro)}
+    custo = {b: {"segundos": 0.0, "tokens_prompt": 0, "tokens_saida": 0, "respostas": 0}
+             for b in ("servido", "lexico") + (() if terceiro == "nenhum" else (terceiro,))}
     for pid, por_braco in est["geradas"].items():
         for b, r in por_braco.items():
             c = custo[terceiro if b == "terceiro" else b]
@@ -1950,10 +1954,10 @@ def cmd_escrever(d, inst, argv):
                      "juiz": "a definir na fita 2 (modelo de outra familia que o escritor)"},
         "custo": custo,
     }
-    resultados = {pid: {"servido": g["servido"], "lexico": g["lexico"], "terceiro": g["terceiro"]} for pid, g in est["geradas"].items()}
+    resultados = {pid: {"servido": g["servido"], "lexico": g["lexico"], "terceiro": g.get("terceiro")} for pid, g in est["geradas"].items()}
     envelope = escritor.montar_lote(lote_id, op["--versao"], op["--criterio-versao"], piloto, resultados, terceiro, carimbo,
                                     str(escritor.SEMENTE_GERACAO), bool(op.get("--ativar")))
-    problemas = escritor.conferir_aceite(envelope, len(piloto))
+    problemas = escritor.conferir_aceite(envelope, len(piloto), len(bracos_do_lote))
     _grava_atomico(op["--saida"], json.dumps(envelope, ensure_ascii=False))
     print(f"envelope em {op['--saida']}: {len(envelope['corpo']['perguntas'])} perguntas, {len(envelope['respostas'])} respostas")
     for b, c in custo.items():
@@ -1965,7 +1969,7 @@ def cmd_escrever(d, inst, argv):
         for pr in problemas:
             print(f"  - {pr}")
         sys.exit(1)
-    print(f"aceite: {len(piloto)} perguntas e {3 * len(piloto)} respostas, toda resposta com secao no rodape, "
+    print(f"aceite: {len(piloto)} perguntas e {len(bracos_do_lote) * len(piloto)} respostas, toda resposta com secao no rodape, "
           "toda afirmacao com secao no mapa, carimbo com as cinco versoes")
     print(f"gravar: motor marcacao lote gravar {op['--saida']}{' --ativar' if not op.get('--ativar') else ''}")
 
