@@ -4,8 +4,8 @@
 # dono: ia
 # componente: platafirma-motor
 # classe: B
-# use para: achar pelo sentido o trecho que responde a X (buscar <particao> --necessidade "<uma frase, na lingua do pedido: o que voce precisa saber>"; o verbo monta a consulta com o pedido do dono e os rotulos do chapeu e recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou |, vem em saco de palavras ou em lingua diferente da do pedido; --origem abertura|bench|sombra|autoteste manda o texto literal, sem lint e sem montagem; `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), medir sem gravar quanto do log o lint da consulta montada recusaria (lintar), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste)
-# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), lintar (leitura, medida), escrever (escrita, lote) — buscar/medir/indexar/trocar/sortear/escrever exigem particao (lintar le o log inteiro e nao): motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar), eventos, juiz
+# use para: achar pelo sentido o trecho que responde a X (buscar <particao> --necessidade "<uma frase, na lingua do pedido: o que voce precisa saber>"; o verbo monta a consulta com o pedido do dono e os rotulos do chapeu e recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou |, vem em saco de palavras ou em lingua diferente da do pedido; --origem abertura|bench|sombra|autoteste manda o texto literal, sem lint e sem montagem; `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), medir sem gravar quanto do log o lint da consulta montada recusaria (lintar), comparar a chamada de hoje, a frase do dono e a lista montada nas perguntas do piloto (parear biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste)
+# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote) — buscar/medir/indexar/trocar/sortear/escrever/parear exigem particao (lintar le o log inteiro e nao): motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar), eventos, juiz
 # forma: json
 # cauda: nao
 # poda: cosmetica@rag,casa,buscar
@@ -16,7 +16,7 @@
 # substitui: docker exec rag-* ; curl ao endpoint de busca
 # O verbo e `motor`; a instancia e argumento (arq:0037; veto do verbo `rag`).
 # atos: a capacidade e do (verbo, ato) (arq:0110 §6). Transicao vigente->conforme em spec_motor §5.
-import json, os, re, shlex, subprocess, sys, time, urllib.error, urllib.request
+import hashlib, json, os, re, shlex, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
 from collections import Counter
 from pathlib import Path
 
@@ -33,6 +33,7 @@ import marcacao  # noqa: E402  (cliente da marcacao-api, rotas /interno/, #3349)
 import sorteio  # noqa: E402  (o sorteio do estrato sentido da escada, #3349)
 import escritor  # noqa: E402  (as respostas do piloto da escada, um escritor e tres bracos, #3349)
 import consulta  # noqa: E402  (a consulta montada pelo verbo: lint, pedido do dono, rotulos do chapeu, #3360)
+import par_consulta  # noqa: E402  (o par minimo: a chamada de hoje, a frase do dono e a lista montada, #3360)
 
 REG = os.environ.get("PF_MOTOR_REG") or str(_ARVORE / "registro" / "motor-instancias.json")
 BIN = os.environ.get("PF_BIN") or str(_ARVORE / "bin")
@@ -181,6 +182,13 @@ def uso(cod=2):
                                         o estrato sentido da escada, sorteado do log de perguntas (padrao
                                         protocolo-medicao-rag, «Fonte e filtros»): o plano diz o que entrou, o que
                                         saiu por motivo e as 20 do piloto; --apply grava a lista e a gabarito_versao
+  motor <inst> parear biblioteca --frases <arquivo.json> [--antes <lote>] [--plano]
+                     [--saida <envelope.json> --versao <gabarito_versao_id> --criterio-versao <v> [--lote-id <id>] [--tempo S] [--ativar]]
+                                        o par minimo da consulta montada (spec motor §2b): para cada pergunta do piloto com
+                                        frase do dono, o top-8 da chamada de hoje (A), da frase (C) e da lista montada (D),
+                                        na mesma geracao; sem --plano escreve uma resposta por braco (a frase como pergunta
+                                        nos tres) e monta o lote que o dono julga na tela. --antes poe ao lado o que ele ja
+                                        julgou nesse lote. Arquivo de frases: {"esc-xxxxxxxx": "frase" | {"frase", "cadeira", "chapeu"}}
   motor <inst> lintar [--json]
                                         so leitura: o lint da consulta montada (spec motor §2b) sobre o log de
                                         perguntas, por origem e por causa, e as 20 do piloto da escada uma a uma;
@@ -2045,6 +2053,178 @@ def cmd_escrever(d, inst, argv):
     print(f"gravar: motor marcacao lote gravar {op['--saida']}{' --ativar' if not op.get('--ativar') else ''}")
 
 
+PAREAR_OPCOES = {"--frases": 1, "--versao": 1, "--criterio-versao": 1, "--saida": 1, "--lote-id": 1, "--antes": 1,
+                "--lista": 1, "--tempo": 1, "--ativar": 0, "--plano": 0}
+
+
+def _julgamentos_do_lote(d, antes):
+    """O que o dono ja julgou no lote `antes`, por pergunta (so leitura da marcacao-api). Falha vira aviso."""
+    mk = d.get("marcacao")
+    if not mk or not antes:
+        return {}
+    try:
+        base, tk = mk["endpoint"], token_da(mk)
+        lote = marcacao.chamar(base, tk, "GET", "/interno/lote/" + urllib.parse.quote(antes) + "?com_braco=1")
+        evs = marcacao.chamar(base, tk, "GET", "/interno/eventos?lote_id=" + urllib.parse.quote(antes))["eventos"]
+    except marcacao.Falha as f:
+        print(f"motor parear: o julgamento anterior ({antes}) nao foi lido: {f.msg}", file=sys.stderr)
+        return {}
+    return par_consulta.julgamentos_anteriores(lote, evs)
+
+
+def cmd_parear(d, inst, argv):
+    """`parear biblioteca`: o par minimo da consulta montada (card #3360; spec motor §2b). Para cada pergunta com frase do
+    dono, recupera o top-8 da chamada de hoje (A), da frase (C) e da lista montada (D), na mesma geracao; escreve uma
+    resposta por braco com o escritor da escada, a FRASE como pergunta nos tres; monta o lote que o dono julga na tela
+    e a tabela com a sobreposicao e o que ele ja julgou. Estado em arquivo, retomavel (`--lote-id`)."""
+    particao, resto = resolve_particao(argv, "parear")
+    if particao != "biblioteca":
+        print("motor parear: so a biblioteca tem o piloto da escada", file=sys.stderr)
+        sys.exit(2)
+    op, i = {}, 0
+    while i < len(resto):
+        n = PAREAR_OPCOES.get(resto[i])
+        if n is None or (n and i + 1 >= len(resto)):
+            print(f"motor parear: argumento invalido {resto[i]!r}. Aceita: {' '.join(PAREAR_OPCOES)}", file=sys.stderr)
+            sys.exit(2)
+        op[resto[i]] = resto[i + 1] if n else True
+        i += 1 + n
+    if not op.get("--frases") or not (op.get("--plano") or (op.get("--saida") and op.get("--versao") and op.get("--criterio-versao"))):
+        print("motor parear: pede --frases <arquivo.json> e, para escrever, --saida <envelope.json> --versao <gabarito_versao_id> "
+              "--criterio-versao <v> (ou --plano, so a recuperacao e a tabela)", file=sys.stderr)
+        sys.exit(2)
+    lista = op.get("--lista") or str(_ARVORE / "avaliacao" / "escada-sentido-v1.jsonl")
+    try:
+        with open(lista, "rb") as f:
+            bruto = f.read()
+        piloto = {c["id"]: c for c in (json.loads(l) for l in bruto.decode().splitlines() if l.strip()) if c["papel"] == "piloto"}
+        with open(op["--frases"], encoding="utf-8") as f:
+            frases_bruto = f.read()
+        frases = par_consulta.ler_frases(frases_bruto, piloto)
+    except (OSError, ValueError) as e:
+        print(f"motor parear: {e}", file=sys.stderr)
+        sys.exit(2)
+    ids = [pid for pid in piloto if pid in frases]
+    tok = token_da(inst)
+    lote_id = op.get("--lote-id") or time.strftime("par-consulta-%Y%m%dT%H%M", time.gmtime())
+    arq_estado = os.path.join(dir_medicoes(inst), f"par-{lote_id}.json")
+    os.makedirs(os.path.dirname(arq_estado), exist_ok=True)
+    if os.path.isfile(arq_estado):
+        with open(arq_estado) as f:
+            est = json.load(f)
+        if est["perguntas"] != ids:
+            print(f"motor parear: o estado {arq_estado} e de outro conjunto de perguntas; use outro --lote-id", file=sys.stderr)
+            sys.exit(2)
+    else:
+        est = {"lote_id": lote_id, "perguntas": ids, "recuperado": {}, "consultas": {}, "geradas": {},
+               "iniciado_em": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+
+    # --- recuperacao: A, C e D na mesma geracao e no mesmo instante ---------------------------------------
+    for pid in ids:
+        f = frases[pid]
+        rotulos = consulta.rotulos_do_chapeu(f["cadeira"], f["chapeu"])
+        cs = par_consulta.consultas(piloto[pid]["pergunta"], f["frase"], rotulos)
+        est["consultas"][pid] = cs
+        rec = est["recuperado"].setdefault(pid, {})
+        for braco, c in cs.items():
+            if braco not in rec:
+                rec[braco] = escritor.secoes_do_servido(_recupera_servido(inst, tok, c))
+        for braco in [b for b in rec if b not in cs]:      # estado de um arquivo de frases antigo
+            del rec[braco]
+    _salva_estado(arq_estado, est)
+
+    julgados = _julgamentos_do_lote(d, op.get("--antes"))
+    itens, linhas, avisos = [], [], []
+    for n, pid in enumerate(ids, 1):
+        rec = est["recuperado"][pid]
+        jacc = par_consulta.jaccard_dos_bracos(rec)
+        itens.append({"id": pid, "pergunta_do_log": piloto[pid]["pergunta"], "frase": frases[pid]["frase"], "chapeu": frases[pid]["chapeu"],
+                      "consultas": est["consultas"][pid], "recuperado": rec, "jaccard": jacc, "julgamento": julgados.get(pid),
+                      "sem_secao": [b for b in rec if not rec[b]]})
+        linhas.append(par_consulta.linha_da_tabela(n, pid, frases[pid]["frase"], jacc, "montada" in rec, julgados.get(pid)))
+        recusa = consulta.lint(frases[pid]["frase"])
+        if recusa:
+            avisos.append(f"{n}. a sua frase seria recusada pelo lint ({recusa[0]}): {frases[pid]['frase'][:70]}")
+        vazios = itens[-1]["sem_secao"]
+        if vazios:
+            avisos.append(f"{n}. braco(s) sem nenhuma secao: {', '.join(par_consulta.LETRA[b] for b in vazios)}")
+    dia = time.strftime("%Y-%m-%d", time.gmtime())
+    arq_json = os.path.join(dir_medicoes(inst), f"{dia}-par-consulta.json")
+    arq_md = os.path.join(dir_medicoes(inst), f"{dia}-par-consulta.md")
+    _grava_atomico(arq_json, json.dumps({"lote_id": lote_id, "gerado_em": est["iniciado_em"], "antes": op.get("--antes"),
+                                         "perguntas": itens, "avisos": avisos}, ensure_ascii=False))
+    _grava_atomico(arq_md, par_consulta.tabela(linhas) + "\n\n" + par_consulta.blocos_markdown(itens))
+    sem_d = sum(1 for it in itens if "montada" not in it["recuperado"])
+    print(f"par {lote_id} · {len(ids)} perguntas · D = C (sem chapeu, nao entra) em {sem_d}")
+    print(par_consulta.tabela(linhas))
+    for a in avisos:
+        print(f"AVISO {a}")
+    print(f"tabela e top-8 por braco: {arq_md}\njson: {arq_json}")
+    if op.get("--plano"):
+        print(f"estado em {arq_estado}; recuperacao feita, nada escrito")
+        return
+
+    # --- redacao: a frase e a pergunta nos tres bracos -------------------------------------------------------
+    limite = time.monotonic() + float(op.get("--tempo", 480))
+    for pid in ids:
+        for braco in est["recuperado"][pid]:
+            if braco in est["geradas"].get(pid, {}):
+                continue
+            if time.monotonic() > limite:
+                break
+            est["geradas"].setdefault(pid, {})[braco] = escritor.escrever_resposta(
+                frases[pid]["frase"], est["recuperado"][pid][braco], _gerar_ollama)
+            _salva_estado(arq_estado, est)
+    total = sum(len(est["recuperado"][pid]) for pid in ids)
+    feitas = sum(len(est["geradas"].get(pid, {})) for pid in ids)
+    if feitas < total:
+        print(f"INCOMPLETO: {feitas}/{total} respostas escritas; repita o mesmo comando com --lote-id {lote_id}")
+        sys.exit(1)
+
+    # --- envelope ----------------------------------------------------------------------------------------------
+    facets = http(inst["facets"], tok, timeout=30) or {}
+    env, _ = servido(inst)
+    env = env or {}
+    chaves = ("EMBED_MODEL", "EMBED_BACKEND", "EMBED_QUERY_INSTRUCTION", "RETRIEVAL_MODE", "HYBRID_LEXICAL", "RRF_K",
+              "RERANK_MODEL", "RERANK_POOL", "RERANK_BLEND", "CHUNK_TOKEN_CEILING", "EXPANSAO_POR_CONCEITO")
+    custo = {b: {"segundos": 0.0, "tokens_prompt": 0, "tokens_saida": 0, "respostas": 0} for b in par_consulta.BRACOS_DO_PAR}
+    for por_braco in est["geradas"].values():
+        for b, r in por_braco.items():
+            c = custo[b]
+            c["segundos"] = round(c["segundos"] + r["carimbo"]["segundos"], 2)
+            c["tokens_prompt"] += r["carimbo"]["tokens_prompt"]
+            c["tokens_saida"] += r["carimbo"]["tokens_saida"]
+            c["respostas"] += 1
+    carimbo = {
+        "acervo": {"acervo_sha": (facets.get("indice") or {}).get("acervo_sha"), "indice": facets.get("indice")},
+        "motor": {"servido": {k: env.get(k) for k in chaves}, "k": escritor.K, "texto": "secao",
+                  "bracos": {"servido": "a chamada do log, como foi feita", "frase": "a frase do dono",
+                             "montada": "consulta.montar(frase, sem pedido, rotulos do chapeu informado)"}},
+        "vocabulario": {"versao": (facets.get("indice") or {}).get("vocabulario_versao") or "nao declarada em /facets", "fonte": "/facets"},
+        "gabarito": {"versao_id": op["--versao"], "sha_git": sorteio.sha_blob_git(bruto), "lista": "avaliacao/escada-sentido-v1.jsonl",
+                     "perguntas": ids},
+        "escritor": {"modelo": escritor.MODELO, "prompt_versao": escritor.PROMPT_VERSAO, "prompt_sha256": escritor.prompt_sha256(),
+                     "semente": escritor.SEMENTE_GERACAO, "temperatura": escritor.TEMPERATURA, "palavras": escritor.PALAVRAS,
+                     "pergunta_do_escritor": "a frase do dono, nos tres bracos"},
+        "par": {"frases_sha256": hashlib.sha256(frases_bruto.encode()).hexdigest(), "antes": op.get("--antes"), "regra":
+                "D nao perde para A em nenhum dos cinco pares que o dono ler", "sem_pedido": "as chamadas do piloto sao anteriores ao #3345"},
+        "custo": custo,
+    }
+    resultados = {pid: dict(est["geradas"][pid]) for pid in ids}
+    perguntas = [{"id": pid, "frase": frases[pid]["frase"], "cadeira": piloto[pid]["cadeira"], "data": piloto[pid]["data"]} for pid in ids]
+    envelope = par_consulta.montar_lote_par(lote_id, op["--versao"], op["--criterio-versao"], perguntas, resultados, carimbo,
+                                            str(escritor.SEMENTE_GERACAO), bool(op.get("--ativar")))
+    problemas = par_consulta.conferir_aceite_par(envelope, len(ids))
+    _grava_atomico(op["--saida"], json.dumps(envelope, ensure_ascii=False))
+    print(f"envelope em {op['--saida']}: {len(envelope['corpo']['perguntas'])} perguntas, {len(envelope['respostas'])} respostas")
+    if problemas:
+        print("FORA DO ACEITE:")
+        for pr in problemas:
+            print(f"  - {pr}")
+        sys.exit(1)
+    print(f"gravar: motor marcacao lote gravar {op['--saida']}{' --ativar' if not op.get('--ativar') else ''}")
+
+
 def _causa_curta(causa):
     return "assuntos" if consulta.CAUSA_ASSUNTOS in causa else "frase" if causa == consulta.CAUSA_FRASE else "lingua"
 
@@ -2191,11 +2371,13 @@ def main():
         return cmd_sortear(inst, a[2:])
     if a[1] == "lintar":
         return cmd_lintar(inst, a[2:])
+    if a[1] == "parear":
+        return cmd_parear(d, inst, a[2:])
     if a[1] == "escrever":
         return cmd_escrever(d, inst, a[2:])
     if a[1] == "medir":
         return cmd_medir(a[0], inst, a[2:])
-    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, escrever, indexar, lintar, medir, sortear, trocar", file=sys.stderr)
+    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, escrever, indexar, lintar, medir, parear, sortear, trocar", file=sys.stderr)
     sys.exit(1)
 
 
