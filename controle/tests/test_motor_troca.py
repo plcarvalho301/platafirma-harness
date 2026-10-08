@@ -39,6 +39,7 @@ _NOTA = {
 class _API(BaseHTTPRequestHandler):
     pedidos: ClassVar[list] = []
     falha: ClassVar[dict] = {}
+    carimbo_extra: ClassVar[dict] = {}     # o que o /facets soma ao bloco `indice` (a geracao servindo)
 
     def log_message(self, *a):
         pass
@@ -123,7 +124,7 @@ class _API(BaseHTTPRequestHandler):
         self.pedidos.append(("GET", self.path, self.headers.get("Authorization"), None))
         if self.path == "/facets":
             return self._responde(200, {"indice": {"acervo_sha": "abc123456789", "embed_model": "model",
-                                                   "embed_backend": "torch"}})
+                                                   "embed_backend": "torch", **self.carimbo_extra}})
         if self.path == "/motor/trocas/biblioteca":
             return self._responde(200, {
                 "particao": "biblioteca", "servindo": {"geracao": 6, "embedder": "Qwen"},
@@ -141,7 +142,7 @@ class _API(BaseHTTPRequestHandler):
 
 @pytest.fixture
 def api(tmp_path):
-    _API.pedidos, _API.falha = [], {}
+    _API.pedidos, _API.falha, _API.carimbo_extra = [], {}, {}
     servidor = HTTPServer(("127.0.0.1", 0), _API)
     threading.Thread(target=servidor.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{servidor.server_port}"
@@ -360,6 +361,19 @@ def test_medir_separa_as_negativas_sem_obra_das_que_ganharam_obra(api, tmp_path)
     assert grupos == {"t2", "neg_sem_obra", "neg_com_obra"}
     linha = next(l for l in salvo["perguntas"] if l["id"] == "N0")
     assert (linha["medida"], linha["valor"], linha["piso"], linha["cobertura"]) == ("sim", 0.3, 0.5, "fraca")
+
+
+def test_o_cabecalho_da_medida_mostra_a_geracao_servindo_e_o_piso_que_ela_leva(api, tmp_path):
+    roda, _, _ = api
+    gab = _gabarito(tmp_path, positivas=1, sem_obra=1, com_obra=0)
+    sem = _mede(roda, gab, "antes")
+    assert "geracao servindo:" not in sem.stdout          # carimbo sem geracao: o cabecalho de sempre
+    _API.carimbo_extra = {"geracao": {"numero": 3, "parametros": {"embedder": "nvidia/Nemotron-3-Embed-1B-BF16"},
+                                      "ajustes": {"aviso_de_cobertura_fraca": 0.342, "aviso_com_revisor": 0.79,
+                                                  "veredito_por_conceito": False}}}
+    com = _mede(roda, gab, "depois")
+    assert ("geracao servindo: g3 (nvidia/Nemotron-3-Embed-1B-BF16) | aviso_de_cobertura_fraca 0.342 | "
+            "aviso_com_revisor 0.79 | veredito_por_conceito False") in com.stdout
 
 
 def test_o_delta_so_compara_rodadas_da_mesma_geracao(api, tmp_path):

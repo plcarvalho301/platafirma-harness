@@ -1145,7 +1145,17 @@ def cmd_medir(nome, inst, argv):
           f"expansao {'LIGADA nesta rodada' if expansao else 'desligada'}"
           + (f" (peso {peso})" if expansao and peso else "")
           + f" | veredito por conceito {'LIGADO nesta rodada' if veredito else 'como a geracao declara'}"
-          + (f" | GERACAO MEDIDA: {geracao} (embedder e ajustes dela)" if geracao else "") + f" | k={k}\n")
+          + (f" | GERACAO MEDIDA: {geracao} (embedder e ajustes dela)" if geracao else "") + f" | k={k}")
+    # a geracao que serve a biblioteca e o sinal e o piso que ela leva (aceite do #3264): sem isto o carimbo
+    # dizia so o embedder, e o piso escolhido na virada ficava em `motor.geracao.ajustes`, fora da medida
+    ger = carimbo.get("geracao") or {}
+    if ger:
+        aj = ger.get("ajustes") or {}
+        print(f"geracao servindo: g{ger.get('numero')} ({(ger.get('parametros') or {}).get('embedder')}) | "
+              f"aviso_de_cobertura_fraca {aj.get('aviso_de_cobertura_fraca')} | "
+              f"aviso_com_revisor {aj.get('aviso_com_revisor')} | "
+              f"veredito_por_conceito {aj.get('veredito_por_conceito')}")
+    print()
 
     ranks = {"codigo": [], "sentido": [], "t2": []}
     abst_ok, abst_total = 0, 0
