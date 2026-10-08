@@ -62,5 +62,10 @@
     "familia": "platafirma-conhecimento",
     "lock": "conversor/uv.lock",
     "teste": "conversor"
+  },
+  "marcacao": {
+    "familia": "platafirma-motor",
+    "lock": "deploy/marcacao/requirements-teste.txt",
+    "teste": "deploy/marcacao"
   }
 }
