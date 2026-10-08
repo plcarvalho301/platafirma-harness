@@ -781,13 +781,19 @@ def _emite_consulta(nome, inst, corpo, resp, dur_ms):
             "cadeira": os.environ.get("PF_CADEIRA", "-"),
             "chapeu": os.environ.get("PF_CHAPEU", "-"),
             "particao": corpo.get("particao"),
-            "origem": corpo.get("origem"),
-            "query": (corpo.get("pergunta") or "")[:2000],
+            "origem_consulta": corpo.get("origem"),   # abertura|busca|bench|sombra|autoteste; `origem` e de quem chamou
             "k": corpo.get("k"),
             "conceito": corpo.get("conceitos"),
             "n_hits": n_hits,
             "dur_ms": dur_ms,
         }
+        # Na consulta que a abertura dispara a query e o texto do dono: nao se grava, so o tamanho
+        # (arq:0061 §5; card #3345). Consulta de cadeira segue com a query.
+        pergunta = corpo.get("pergunta") or ""
+        if corpo.get("origem") == "abertura":
+            linha["query_bytes"] = len(pergunta.encode("utf-8"))
+        else:
+            linha["query"] = pergunta[:2000]
         oplog.emitir(linha)
     except Exception:
         pass  # log e instrumento, nunca barreira: a busca ja respondeu.
