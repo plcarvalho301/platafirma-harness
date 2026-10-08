@@ -1,0 +1,10 @@
+[Unit]
+Description=Linhagem do bruto da porta, depois da meia-noite (D5.1 recusa dia aberto; o SLO de atualidade e 00:20 de D+1)
+
+[Timer]
+OnCalendar=*-*-* 00:20:00
+# Pega a execucao perdida quando a maquina estava desligada na hora marcada: o dia sem linhagem trava o corte.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

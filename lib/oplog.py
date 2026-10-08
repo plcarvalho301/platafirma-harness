@@ -415,6 +415,50 @@ def ler(desde, ate=None, *, diretorio_=None, sessao: str | None = None,
     return Leitura(dias, diretorio_, sessao, tool)
 
 
+# --- extração: os bytes do dia e as linhas numeradas (card #3353) -----------------------------
+
+# Namespace fixo do uuid v5 da linha sem chave (arq:0123 regra 4; spec apis-escrita-acervo §D: a linha
+# anterior à chave recebe uuid v5 de (dia, número da linha), e a mesma linha relida dá o mesmo evento).
+# Mudar este valor muda o evento_id de toda linha antiga: não se muda.
+NAMESPACE_LINHA = uuid.uuid5(uuid.NAMESPACE_URL, "https://platafirma.org/log-da-porta/linha-sem-chave")
+
+
+def evento_id_da_linha(dia, linha_n: int) -> str:
+    """O evento_id de uma linha sem chave: uuid v5 de `AAAA-MM-DD:<número físico da linha>`."""
+    return str(uuid.uuid5(NAMESPACE_LINHA, f"{_dia(dia)}:{linha_n}"))
+
+
+def nome_do_dia(dia) -> str:
+    """O nome do arquivo do dia, sem a pasta: o que o extrator declara em D5.1 e o corte confere."""
+    return caminho_do_dia(dia, ".").name
+
+
+def conteudo_do_dia(dia, diretorio_=None) -> bytes | None:
+    """Os bytes do arquivo do dia, ou None quando o dia não tem arquivo («ausente», nunca zero). O
+    extrator tira o sha256 e as linhas DESTES bytes, de uma vez: o arquivo não muda entre uma coisa e a
+    outra, e o corte (#3354) confere contra o mesmo cálculo."""
+    try:
+        return caminho_do_dia(dia, diretorio_).read_bytes()
+    except FileNotFoundError:
+        return None
+
+
+def linhas_do_dia(dados: bytes):
+    """(n, bruta, reg) de cada linha não vazia: `n` é o número físico da linha no arquivo (base 1, a
+    mesma que `sed -n Np` mostra), `bruta` os bytes dela sem o `\\n`, e `reg` o dicionário — ou None na
+    linha ilegível. Mesma regra de `Leitura`: linha em branco não conta; legível é JSON de objeto,
+    lido com `errors=replace`; o resto é ilegível. O teste confere que as duas contagens batem."""
+    for n, bruta in enumerate(dados.split(b"\n"), 1):
+        texto = bruta.decode("utf-8", errors="replace").strip()
+        if not texto:
+            continue
+        try:
+            reg = json.loads(texto)
+        except ValueError:
+            reg = None
+        yield n, bruta, (reg if isinstance(reg, dict) else None)
+
+
 # --- CLI ------------------------------------------------------------------------------
 
 def _uso() -> int:

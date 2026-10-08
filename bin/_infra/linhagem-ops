@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+# linhagem-ops — extrai o dia fechado do bruto da porta para a partição `log` (card #3353; arq:0123 regras 8, 11, 12 e 13).
+#
+# Fora do PATH e do golden record, como bin/_infra/limpeza-logs (arq:0110 §14): roda pelo timer
+# `linhagem-ops.timer` às 00:20, depois da meia-noite, e nunca pela porta. Para todo dia FECHADO desde
+# 15/09/2026 sem passada concluída: o sha256 do arquivo inteiro (D5.1), a passada (D5.2), os eventos sem
+# conteúdo em lotes de 1.000 (D5.3) e o fecho com a conferência de contagem e de amostra (D5.4). Um dia por
+# vez, em ordem. Sem modelo (arq:0123 regra 11). A lógica mora em lib/oplog_extracao.py.
+#
+# Rodar à mão pela porta, sem argumento de linha de comando: `infra unit-env linhagem-ops
+# LINHAGEM_ARGS=--seco,2026-09-23` (ou `--dia,2026-09-23`), `infra restart linhagem-ops`, ler a saída com
+# `infra logs linhagem-ops 200`, e LIMPAR com `infra unit-env linhagem-ops LINHAGEM_ARGS=` — drop-in esquecido
+# faria o timer repetir o mesmo pedido todas as noites. Vírgula, e não espaço, porque o drop-in não aspa.
+#
+# ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] ·
+#   MOTOR_ACERVO_URL | RAG_API_URL | RAG_API_BASE[=http://127.0.0.1:8100] · RAG_API_TOKEN (Bearer, do
+#   EnvironmentFile da conta; nunca impresso) · LINHAGEM_TIMEOUT_S[=180] · LINHAGEM_ARGS · PF_CADEIRA[=ti]
+#
+# exit: 0 ok · 1 passada reprovada (a conferência de D5.4, ou linha sem tradução) · 2 uso · 3 API ou banco fora ·
+#   4 alarme de integridade (sha256 divergente) ou token recusado · 5 indeterminável
+import os
+import sys
+
+_RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+sys.path.insert(0, os.path.join(_RAIZ, "lib"))
+
+import oplog_extracao  # noqa: E402
+
+
+def _argv() -> list[str]:
+    extra = os.environ.get("LINHAGEM_ARGS", "").strip()
+    return sys.argv[1:] + [a for a in extra.split(",") if a]
+
+
+if __name__ == "__main__":
+    sys.exit(oplog_extracao.main(_argv()))
