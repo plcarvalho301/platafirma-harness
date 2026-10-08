@@ -160,6 +160,8 @@ UNITS=(
   "deploy-harness/comportamento.timer|habilita"
   "deploy-harness/repo-sanear.service|alvo-de-timer"
   "deploy-harness/repo-sanear.timer|habilita"
+  "deploy-harness/linhagem-ops.service|alvo-de-timer"
+  "deploy-harness/linhagem-ops.timer|habilita"
 )
 if [ "$TEM_RELEASE" = 0 ]; then
   medido impossivel "(unit)" "release ausente — nenhuma unit do harness tem fonte"

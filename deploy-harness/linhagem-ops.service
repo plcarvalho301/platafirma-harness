@@ -1,0 +1,23 @@
+[Unit]
+Description=Linhagem do bruto da porta: o dia fechado vai a particao log do acervo, com o sha256 do arquivo (#3353)
+Documentation=https://wiki.platafirma.org/index.php/Spec:log-de-negocio
+
+[Service]
+Type=oneshot
+# Da release, nunca de clone (card #3010): a unit sobrevive a bancada apagada.
+WorkingDirectory=/opt/platafirma/current/harness
+Environment=PATH=/opt/platafirma/current/harness/bin:/usr/local/bin:/usr/bin:/bin
+# Mesmo ambiente do ops-mcp (card #3147): a URL do acervo e, onde houver, o token.
+EnvironmentFile=/home/claudinho/.config/ops/env
+# Quem assina a passada (o `autor` de D5.1 a D5.4): a cadeira da esteira.
+Environment=PF_CADEIRA=ti
+# Python da release, nunca o do sistema (testes/test_fechamento_3010_harness.sh). Sem modelo: so a biblioteca
+# padrao, o bruto por lib/oplog e a API do acervo. Sem argumento, todo dia fechado desde 15/09/2026 sem passada
+# concluida; um drop-in com LINHAGEM_ARGS (por `infra unit-env`) roda um dia, ou o ensaio `--seco`.
+ExecStart=/opt/platafirma/current/venv/harness/bin/python /opt/platafirma/current/harness/bin/_infra/linhagem-ops
+# 0 e tudo feito. 1 (passada reprovada), 3 (API ou banco fora), 4 (alarme de integridade ou token) e 5
+# (indeterminavel) FALHAM a unit de proposito: o dia fica sem linhagem, o corte do bruto (#3354) nao corta, e
+# `release conferir jobs` mostra a ultima execucao.
+SuccessExitStatus=0
+# A primeira rodada cobre 23 dias, um por vez; depois e um dia por noite.
+TimeoutStartSec=3600

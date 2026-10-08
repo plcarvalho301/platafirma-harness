@@ -454,7 +454,8 @@ def test_casos_de_ler_arquivo_devolve_a_classe_do_erro():
 # --- borda: uso, erro gracioso, saida ---------------------------------------------
 
 def test_saida_e_json_por_default(capsys):
-    assert m.main(["metrica", "dia", "1999-01-02"]) == 4    # sem log: so a borda
+    # sem log: so a borda. `--fonte bruto` porque o default de um dia fechado e a particao (#3353).
+    assert m.main(["metrica", "dia", "1999-01-02", "--fonte", "bruto"]) == 4
     linhas = capsys.readouterr()
     assert linhas.out == ""
 

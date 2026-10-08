@@ -3,7 +3,7 @@
 # capacidade: metrica
 # dono: claudinho-ia
 # use para: giros por fita, erros por verbo, giros-ate-acerto, profundidade de cadeia de erro
-# atos: eventos, dia, ate-acerto, tateio, casos, verbos, comportamento, abertura (leitura, abertura)
+# atos: eventos, dia, ate-acerto, tateio, casos, verbos, comportamento, turnos, abertura (leitura, abertura)
 # forma: relatorio
 # cauda: nao
 #
@@ -30,7 +30,18 @@
 # Saida JSON por default — rota de maquina, nao `--json` opcional. `--resumo` e a rota
 # humana, e so ela.
 #
-# exit: 0 ok · 2 uso invalido · 4 fonte do dia inexistente (gracioso, nunca stack)
+# exit: 0 ok · 2 uso invalido · 3 a particao nao respondeu · 4 fonte do dia inexistente (so no bruto; gracioso, nunca stack) · 5 a particao respondeu fora do contrato
+#
+# FONTE (card #3353; arq:0123 regras 8 a 15). O bruto de var/log/ops e cortado em 35 dias; o evento de cada
+# giro, sem conteudo, mora por um ano na particao `log` do acervo. `dia` e `verbos` leem a PARTICAO para todo dia
+# fechado (D5.7 a contagem, D5.5 a cobertura) e dizem `fonte: particao`, a versao do extrator e a cobertura por
+# dia; `turnos` le D5.8, sempre com `turno_fonte` na chave. Dia sem passada concluida sai `ausente` com o motivo
+# (sem_arquivo, nao_extraido, extracao_falhou, dia_aberto), nunca zero. O dia ABERTO (hoje) e o que a particao ainda
+# nao tem: sem `--fonte`, e o bruto que responde. `eventos`, `ate-acerto`, `tateio`, `casos` e `comportamento`
+# leem argumento, erro e a ordem das chamadas, que a particao nao leva (D5.9): seguem no bruto, pelo modulo, com
+# `fonte: bruto`. `--fonte bruto` da a `dia` e a `verbos` a leitura de antes, e a mesma conta de giros por tool e
+# classe da particao, para a conferencia ser a diferenca de dois JSON.
+# O cabecalho de verbo (as 40 primeiras linhas) tem de guardar a linha `# exit:`: a porta a le para dar a classe.
 import argparse
 import json
 import os
@@ -42,6 +53,7 @@ from datetime import date, datetime, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
 import oplog  # noqa: E402  (card #3344: o unico que le o bruto da porta)
+import oplog_extracao as extracao  # noqa: E402  (card #3353: o cliente da particao e a regra de classe e origem)
 
 # `abertura` mora em bin/_metrica/ (card #3145; ex bin/_conta/conta-abertura.py,
 # movido preservando historico): modulo importavel, nao verbo proprio. bin/ ja e o
@@ -51,13 +63,16 @@ _BIN_DIR = os.path.dirname(os.path.realpath(__file__))
 if _BIN_DIR not in sys.path:
     sys.path.insert(0, _BIN_DIR)
 from _metrica.abertura import main as _abertura_main  # noqa: E402
+from _metrica import particao  # noqa: E402
 
 # Onde o ops log mora e como se le e do lib/oplog (arq:0123 §3); aqui so se guarda o
 # diretorio para o teste apontar a leitura para uma pasta em tmp.
 LOG_OPS = str(oplog.diretorio())
 
 VERBO = "metrica"
-ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos", "verbos", "comportamento", "abertura")
+ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos", "verbos", "comportamento", "turnos", "abertura")
+# Os atos que leem o que a particao nao leva (argumento, erro, a ordem das chamadas): ficam no bruto (D5.9).
+ATOS_DO_BRUTO = ("eventos", "ate-acerto", "tateio", "casos", "comportamento")
 TIPOS = ("giro", "erro", "ajuda", "help", "acerto", "cadeia", "lote", "veredito")
 
 # PEDIDO DE AJUDA NAO E ERRO (dono, 12/09/2026): verbo chamado sem ato lista os atos por
@@ -147,6 +162,27 @@ def e_veredito(reg):
 CAMPOS_GIRO = ("ts", "cadeira", "ordem_id", "sessao_id", "tool", "ato",
                "exit_code", "dur_ms", "lote_id", "lote_n",
                "evento_id", "schema_v", "classe", "origem", "escopo", "turno_id", "turno_fonte")
+
+
+# --- a FONTE: particao ou bruto (card #3353) --------------------------------------
+
+def _hoje():
+    """O dia local da porta (America/Sao_Paulo): o dia de hoje esta aberto e a particao ainda nao o tem."""
+    return extracao.hoje_local()
+
+
+def _api():
+    return extracao.Api()
+
+
+def _bruto_ausente(dia):
+    """O arquivo do bruto desse dia nao existe? So a existencia, pelo modulo: separa `sem_arquivo` de `nao_extraido`."""
+    return oplog.ler(dia, diretorio_=LOG_OPS).dias[dia].estado == "ausente"
+
+
+def _normaliza_fonte(valor):
+    """None (sem --fonte), "particao" ou "bruto"; False se o valor nao e nenhum deles."""
+    return {"": None, "particao": "particao", "partição": "particao", "bruto": "bruto"}.get((valor or "").strip().lower(), False)
 
 
 # --- fronteira de LEITURA: a unica parte que sabe do .jsonl -----------------------
@@ -725,7 +761,7 @@ def casos(giros, tool=None):
             "chaves_presentes": dict(sorted(chaves.items(), key=lambda kv: -kv[1]))}
 
 def casos_texto(r, agregado=False):
-    linhas = [f"== metrica casos — {r['dia']} == {r['erros']} erros · "
+    linhas = [f"== metrica casos — {r['dia']} · fonte: bruto == {r['erros']} erros · "
               f"{r['erros_distintos']} distintos (dedup por lote)"]
     linhas.append("por classe: " + " · ".join(f"{k}={v}" for k, v in r["por_classe"].items()))
     aj = r["ajuda_fora_do_erro"]
@@ -877,7 +913,7 @@ def verbos_csv(r):
 
 def verbos_texto(r):
     t = r["total"]
-    linhas = [f"== metrica verbos — {r['dia']} == {t['giros']} giros · {t['erros']} erros · "
+    linhas = [f"== metrica verbos — {r['dia']} · fonte: bruto == {t['giros']} giros · {t['erros']} erros · "
               f"taxa {t['taxa']:.1%} · {t['verbos']} verbos"]
     if r.get("dias_sem_log"):
         linhas.append("sem log: " + ", ".join(r["dias_sem_log"]))
@@ -1020,7 +1056,7 @@ def comportamento(janela, base, dia_janela, dias_base, sem_log):
             elif est == "melhorou":
                 melhorou.append((cad, s))
         por_cad[cad] = linha
-    return {"janela": dia_janela, "base": f"{dias_base[0]}..{dias_base[-1]}",
+    return {"fonte": particao.BRUTO, "janela": dia_janela, "base": f"{dias_base[0]}..{dias_base[-1]}",
             "dias_sem_log": sem_log,
             "regra": {"fator": FATOR, "piso": PISO, "base_dias": BASE_DIAS},
             "release": os.path.realpath(__file__).split("/harness/")[0],
@@ -1031,7 +1067,8 @@ def comportamento(janela, base, dia_janela, dias_base, sem_log):
 def comportamento_texto(r):
     L = [f"Coleta de comportamento (#3090) — janela {r['janela']} contra base {r['base']}.",
          f"Regra: piorou = taxa por fita >= {r['regra']['fator']}x a base, com {r['regra']['piso']}+ "
-         f"ocorrencias. Release: {r['release']}."]
+         f"ocorrencias. Release: {r['release']}.",
+         "Fonte: bruto (os sinais leem argumento e a ordem das chamadas, que a particao nao leva)."]
     if r["dias_sem_log"]:
         L.append("Dias sem log: " + ", ".join(r["dias_sem_log"]) + ".")
     L.append("")
@@ -1063,12 +1100,13 @@ def uso(codigo=2):
     saida.write("""uso:
   metrica eventos [<dia>] [--tipo giro|erro|help|acerto|cadeia|lote] [--cadeira <slug>]
                   [--sessao <prefixo-ou-id>] [--azp <valor>] [--limite N]
-  metrica dia [<dia>] [--cadeira <slug>]
+  metrica dia [<dia>] [--cadeira <slug>] [--fonte particao|bruto] [--resumo]
   metrica ate-acerto [<dia>] [--cadeira <slug>]
   metrica tateio [<dia>] [--cadeira <slug>]
   metrica casos [<dia>] [--tool <verbo>] [--cadeira <slug>]
-  metrica verbos [<dia>] [--desde AAAA-MM-DD] [--ate AAAA-MM-DD] [--cadeira <slug>] [--csv]
+  metrica verbos [<dia>] [--desde AAAA-MM-DD] [--ate AAAA-MM-DD] [--cadeira <slug>] [--fonte particao|bruto] [--csv]
   metrica comportamento [<dia> | --desde AAAA-MM-DD [--ate AAAA-MM-DD]] [--resumo]
+  metrica turnos [<dia>] [--desde AAAA-MM-DD] [--ate AAAA-MM-DD] [--por dia,superficie,cadeira,origem] [--resumo]
 
 Agrega o ops log (o bruto da porta, que o lib/oplog le dia a dia) em eventos de uso do harness.
 <dia> e AAAA-MM-DD; sem ele, hoje. Saida JSON; --resumo imprime o sumario legivel.
@@ -1090,7 +1128,21 @@ comportamento  sinais de ato por cadeira, taxa por fita: <dia> (default ontem) c
             nos 7 dias antes de --desde; marca o que piorou e melhorou (#3090). --resumo e o
             texto que o timer manda a ia pela fila
 
-exit: 0 ok · 2 uso invalido · 4 nao ha log desse dia
+turnos      sessao > turno > giro, da particao (D5.8), sempre com `turno_fonte` na chave de cada serie: series
+            de fontes diferentes nao se somam. Sem <dia>, ontem (o dia aberto nao esta na particao)
+
+FONTE (#3353). `dia` e `verbos` leem a particao `log` do acervo para todo dia fechado, e dizem `fonte`,
+a versao do extrator e a `cobertura` de cada dia: completo, parcial ou ausente com o motivo (sem_arquivo,
+nao_extraido, extracao_falhou, dia_aberto). Dia ausente nao sai zero: sai `resultado: ausente`, exit 0.
+O dia aberto (hoje) so existe no bruto: sem --fonte, o bruto responde. `eventos`, `ate-acerto`, `tateio`, `casos`
+e `comportamento` leem argumento, erro e a ordem das chamadas, que a particao nao leva: seguem no bruto,
+com `fonte: bruto`.
+--fonte     particao ou bruto, em `dia` e `verbos`. `--fonte bruto` da a leitura de antes (fita, cadeia de erro,
+            deduplicacao por lote, ajuda); `dia` traz nas duas fontes as mesmas chaves `giros_por_tool_e_classe`,
+            `giros_por_classe`, `giros_por_tool` e `giros_por_origem`, para conferir uma contra a outra
+--por       so em `turnos`: dia, superficie (default), cadeira, origem
+
+exit: 0 ok · 2 uso invalido · 3 a particao nao respondeu · 4 nao ha log desse dia (so no bruto)
 """)
     return codigo
 
@@ -1105,7 +1157,7 @@ def erro_gracioso(oque, correcoes, codigo):
 def texto(ato, r):
     """Sumario legivel. Deriva do MESMO dicionario que sai em JSON — nao existe numero
     aqui que a rota de maquina nao sirva."""
-    linhas = [f"== metrica {ato} — {r['dia']} =="]
+    linhas = [f"== metrica {ato} — {r['dia']} · fonte: bruto =="]
     if ato == "dia":
         t = r["total"]
         linhas.append(f"{t['giros']} giros · {t['erros']} erros · {t['ajuda']} ajuda (fora do erro) · "
@@ -1184,6 +1236,43 @@ def texto(ato, r):
     return linhas
 
 
+def _da_particao(ato, args, dias, rotulo, dia, hoje):
+    """`dia`, `verbos` e `turnos` pela particao. Dia sem passada sai `ausente` com o motivo e exit 0: e uma resposta
+    inteira (a cobertura diz por que), nao uma falha. A particao fora do ar e exit 3, com o caminho do bruto."""
+    por = [x.strip() for x in args.por.split(",") if x.strip()] or ["superficie"]
+    if ato == "turnos":
+        fora = [x for x in por if x not in particao.POR_TURNOS]
+        if fora:
+            return erro_gracioso(f"{VERBO} turnos: --por {','.join(fora)} desconhecido",
+                                 [f"as chaves: {', '.join(particao.POR_TURNOS)}"], 2)
+    try:
+        api = _api()
+        if ato == "dia":
+            r = particao.dia_da_particao(api, dia, hoje, _bruto_ausente, args.cadeira or None)
+            texto_ = particao.dia_texto
+        elif ato == "verbos":
+            r = particao.verbos_da_particao(api, dias, rotulo, hoje, _bruto_ausente, TRANSPORTE,
+                                            args.cadeira or None)
+            texto_ = particao.verbos_texto
+        else:
+            r = particao.turnos_da_particao(api, dias, rotulo, hoje, _bruto_ausente, por)
+            texto_ = particao.turnos_texto
+    except extracao.Falha as f:
+        caminho = ([f"o bruto responde enquanto o dia estiver no disco: {VERBO} {ato} ... --fonte bruto"]
+                   if ato != "turnos" else ["a medida de turnos so existe na particao (D5.8)"])
+        return erro_gracioso(f"{VERBO} {ato}: a particao nao respondeu: {f}",
+                             [*caminho, "o acervo e o banco: infra saude"], f.codigo if f.codigo in (1, 2, 3, 4, 5) else 3)
+    if ato == "verbos" and args.csv:
+        for linha in particao.verbos_csv(r):
+            print(linha)
+    elif args.resumo:
+        for linha in texto_(r):
+            print(linha)
+    else:
+        print(json.dumps(r, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv):
     if len(argv) < 2:
         return uso()
@@ -1217,6 +1306,8 @@ def main(argv):
     p.add_argument("--desde", default="")
     p.add_argument("--ate", default="")
     p.add_argument("--csv", action="store_true")
+    p.add_argument("--fonte", default="")
+    p.add_argument("--por", default="")
     p.add_argument("--resumo", action="store_true")
     p.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true")
     args, _sobra = p.parse_known_args(argv[2:])
@@ -1226,7 +1317,9 @@ def main(argv):
     # Data LOCAL, e nao UTC: o nome do arquivo do dia e escrito pelo lib/oplog com a data
     # local do host (`oplog.emitir`, `caminho_do_dia`).
     # Ler em UTC erraria o arquivo nas tres primeiras horas de cada dia.
-    dia = args.dia_flag or args.dia or datetime.now().astimezone().date().isoformat()
+    # `turnos` sem dia le ONTEM: o dia de hoje esta aberto e a particao so o recebe depois da meia-noite.
+    padrao = ((_hoje() - timedelta(1)) if ato == "turnos" else datetime.now().astimezone().date()).isoformat()
+    dia = args.dia_flag or args.dia or padrao
     try:
         date.fromisoformat(dia)
     except ValueError:
@@ -1236,6 +1329,27 @@ def main(argv):
     if args.tipo and args.tipo not in TIPOS:
         return erro_gracioso(f"{VERBO}: tipo desconhecido '{args.tipo}'",
                              [f"os tipos: {', '.join(TIPOS)}"], 2)
+    fonte_pedida = _normaliza_fonte(args.fonte)
+    if fonte_pedida is False:
+        return erro_gracioso(f"{VERBO}: fonte desconhecida '{args.fonte}'",
+                             ["as fontes: particao, bruto", f"sem --fonte, {VERBO} escolhe pelo dia"], 2)
+    if fonte_pedida == "particao" and ato in ATOS_DO_BRUTO:
+        return erro_gracioso(
+            f"{VERBO} {ato}: --fonte particao nao vale em `{ato}`",
+            [f"`{ato}` le argumento, erro ou a ordem das chamadas, que a particao nao leva (D5.9, arq:0123)",
+             f"ele segue no bruto: {VERBO} {ato} (a saida diz `fonte: bruto`)"], 2)
+    if ato == "turnos" and fonte_pedida == "bruto":
+        return erro_gracioso(
+            f"{VERBO} turnos: --fonte bruto nao vale em `turnos`",
+            ["a medida de turnos so existe na particao (D5.8)",
+             f"para o dia de hoje, ainda aberto: {VERBO} eventos --sessao <prefixo>"], 2)
+    if args.por and ato != "turnos":
+        return erro_gracioso(f"{VERBO} {ato}: --por so vale em `turnos`",
+                             [f"{VERBO} turnos [<dia>] --por dia,superficie,cadeira,origem"], 2)
+    if ato == "turnos" and (args.cadeira or args.sessao or args.azp or args.tipo):
+        return erro_gracioso(
+            f"{VERBO} turnos: --cadeira, --sessao, --azp e --tipo nao filtram `turnos`",
+            [f"para ver por cadeira: {VERBO} turnos --por cadeira"], 2)
     if (args.sessao or args.azp) and ato == "comportamento":
         return erro_gracioso(f"{VERBO} {ato}: --sessao/--azp nao valem em `{ato}`",
                              ["comportamento mede a cadeira em varios dias, nao uma sessao",
@@ -1313,8 +1427,8 @@ def main(argv):
     # intra-dia por construcao: o par (ordem_id, tool) nao atravessa a meia-noite).
     dias = [dia]
     if args.desde or args.ate:
-        if ato != "verbos":
-            return erro_gracioso(f"{VERBO} {ato}: --desde/--ate so valem em `verbos`",
+        if ato not in ("verbos", "turnos"):
+            return erro_gracioso(f"{VERBO} {ato}: --desde/--ate so valem em `verbos` e `turnos`",
                                  [f"um dia: {VERBO} {ato} AAAA-MM-DD"], 2)
         try:
             d0 = date.fromisoformat(args.desde or args.ate)
@@ -1326,6 +1440,25 @@ def main(argv):
             d0, d1 = d1, d0
         dias = [(d0 + timedelta(n)).isoformat() for n in range((d1 - d0).days + 1)]
     rotulo = dia if len(dias) == 1 else f"{dias[0]}..{dias[-1]}"
+
+    # A FONTE (#3353). `turnos` e sempre da particao. `dia` e `verbos` vao a particao quando ha dia fechado na
+    # janela; o dia aberto (hoje) so o bruto tem, e --sessao/--azp existem so nele (a identidade nao atravessa).
+    # --fonte bruto/particao decide por conta propria.
+    if ato in ("dia", "verbos", "turnos"):
+        hoje = _hoje()
+        so_aberto = all(date.fromisoformat(d) >= hoje for d in dias)
+        pede_identidade = bool(args.sessao or args.azp)
+        if ato == "turnos" or fonte_pedida == "particao":
+            na_particao = True
+        else:
+            na_particao = fonte_pedida is None and not so_aberto and not pede_identidade
+        if na_particao and pede_identidade:
+            return erro_gracioso(
+                f"{VERBO} {ato}: --sessao/--azp nao existem na particao",
+                ["a identidade do token e o sessao_id inteiro nao atravessam (arq:0123 regra 8)",
+                 f"no bruto: {VERBO} {ato} ... --fonte bruto"], 2)
+        if na_particao:
+            return _da_particao(ato, args, dias, rotulo, dia, hoje)
 
     fonte = FonteJsonl()
     giros, cadeias, sem_log = [], [], []
@@ -1373,6 +1506,11 @@ def main(argv):
             return 0
     else:
         r = {"dia": dia, **ate_acerto(giros, par)}
+    # Todo ato que chega aqui leu o bruto, e diz: o numero do bruto e o da particao tem o mesmo nome de chave e
+    # regra de giro (particao.contas_do_bruto), para a conferencia de um dia ser a diferenca de dois JSON.
+    r = {"dia": r["dia"], "fonte": particao.BRUTO, **{k: v for k, v in r.items() if k != "dia"}}
+    if ato == "dia":
+        r.update(particao.contas_do_bruto(giros))
     if args.cadeira:
         r["cadeira"] = args.cadeira
     if args.sessao:
