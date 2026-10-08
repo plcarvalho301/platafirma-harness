@@ -69,6 +69,8 @@ tests/test_motor_troca.py
 tests/test_motor_marcacao.py
 # Card #3349: `motor rag sortear biblioteca` (filtros do padrao contados por motivo, cota por cadeira, ordem sorteada, sha do arquivo).
 tests/test_motor_sorteio.py
+# Card #3349: `motor rag escrever biblioteca` (prompt, mapa, rodape, piloto, terceiro braco, envelope e aceite; fiacao com rag, ollama e docker falsos).
+tests/test_motor_escritor.py
 tests/test_stack_mascara_segredos.py
 tests/test_pesquisar_consultar_palavras.py
 tests/test_acervo_psql_c.py
