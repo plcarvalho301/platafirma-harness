@@ -10,6 +10,8 @@ as quatro coisas que a ADR poe num lugar so:
               E a mesma funcao que relê linha antiga sem classe.
   ler         dias, nunca «os N ultimos arquivos»: devolve os eventos e a contagem de
               legiveis e ilegiveis por dia; dia sem arquivo e «ausente», nunca zero.
+  corte       o prazo de 35 dias, o que ha no disco, o teto e a unica remocao (card #3354): o
+              timer `corte-bruto` apaga o dia que passou no portao; nada mais apaga o bruto.
   CLI         `python3 -m oplog ler <dia> | --desde <d> [--ate <d>] [--sessao <id>] [--tool <t>]`,
               uma linha JSON por evento, para quem e bash (bin/repo). Sai 3 quando nenhum dia da
               janela tem arquivo; dia que falta no meio sai no stderr e a leitura segue (exit 0).
@@ -19,12 +21,15 @@ Fora daqui ninguem abre o diretorio do bruto (controle/tests/test_oplog_unico_le
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
+import statistics
 import sys
 import time
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 SCHEMA_V = 1
@@ -459,15 +464,159 @@ def linhas_do_dia(dados: bytes):
         yield n, bruta, (reg if isinstance(reg, dict) else None)
 
 
+# --- o corte: o prazo, o que ha no disco, o teto (card #3354; arq:0123 regras 10 e 12) -----------
+
+CORTE_DIAS = 35                      # o bruto fica 35 dias no disco; depois so a particao guarda
+INICIO_DO_BRUTO = date(2026, 9, 15)  # o primeiro dia que o bruto cobre (arq:0123, Contexto)
+TETO_SEMANAS = 4                     # a base do teto: as quatro semanas anteriores a hoje
+TETO_FOLGA = 1.5
+TETO_MIN_DIAS = 7                    # menos que isso nao da base: o teto diz «sem_base», nao chuta
+FUSO = timezone(timedelta(hours=-3))  # o dia do arquivo e o dia local da porta (America/Sao_Paulo)
+# Como cards e incidentes chamam o bruto. E so o rotulo de um titulo: quem le o arquivo e este modulo.
+ROTULO_BRUTO = "var/log/ops"
+
+_NOME_DO_DIA = re.compile(r"ops-(\d{4}-\d{2}-\d{2})\.jsonl")
+
+
+def hoje_local() -> date:
+    """O dia de hoje no fuso da porta; o arquivo do dia e o que esse fuso diz."""
+    return datetime.now(timezone.utc).astimezone(FUSO).date()
+
+
+def dia_local(instante: str) -> str:
+    """O dia (AAAA-MM-DD) no fuso da porta de um instante ISO 8601 com fuso (`2026-10-08T20:56:48+00:00`).
+    ValueError para o que nao e instante; instante sem fuso e lido como ja local."""
+    texto = str(instante).strip()
+    if texto.endswith("Z"):
+        texto = texto[:-1] + "+00:00"
+    momento = datetime.fromisoformat(texto)
+    if momento.tzinfo is not None:
+        momento = momento.astimezone(FUSO)
+    return momento.date().isoformat()
+
+
+def dias_no_disco(diretorio_=None) -> dict[str, int]:
+    """{dia: bytes} de cada arquivo do dia que esta no disco, do mais velho ao mais novo. Nome fora do
+    padrao, data impossivel, link e pasta nao contam. Diretorio que nao existe e {}."""
+    pasta = Path(diretorio_ or diretorio())
+    try:
+        entradas = list(pasta.iterdir())
+    except (FileNotFoundError, NotADirectoryError):
+        return {}
+    achados: dict[str, int] = {}
+    for p in entradas:
+        m = _NOME_DO_DIA.fullmatch(p.name)
+        if m is None or p.is_symlink() or not p.is_file():
+            continue
+        try:
+            date.fromisoformat(m.group(1))
+            achados[m.group(1)] = p.stat().st_size
+        except (ValueError, OSError):
+            continue
+    return dict(sorted(achados.items()))
+
+
+def idade_em_dias(dia, hoje) -> int:
+    """Dias entre o dia do arquivo (pelo nome, nunca pelo mtime) e hoje."""
+    return (date.fromisoformat(_dia(hoje)) - date.fromisoformat(_dia(dia))).days
+
+
+def dias_mais_velhos_que(idade: int, hoje, diretorio_=None) -> list[str]:
+    """Os dias no disco com mais de `idade` dias, do mais velho ao mais novo. O corte usa `CORTE_DIAS`."""
+    return [d for d in dias_no_disco(diretorio_) if idade_em_dias(d, hoje) > idade]
+
+
+def cortes_desde(desde, hoje=None, diretorio_=None) -> list[str]:
+    """Os dias de `desde` em diante que ja passaram do prazo e nao tem arquivo no disco: ou o corte os
+    levou, ou nunca houve giro neles. Quem le o bruto por data (repo commitar) nao pode seguir com um
+    conjunto parcial, e na duvida o dia conta como cortado. O bruto so existe desde `INICIO_DO_BRUTO`."""
+    h = date.fromisoformat(_dia(hoje if hoje is not None else hoje_local()))
+    primeiro = max(date.fromisoformat(_dia(desde)), INICIO_DO_BRUTO)
+    ultimo = h - timedelta(days=CORTE_DIAS + 1)         # idade > CORTE_DIAS
+    no_disco = dias_no_disco(diretorio_)
+    saida = []
+    dia = primeiro
+    while dia <= ultimo:
+        if dia.isoformat() not in no_disco:
+            saida.append(dia.isoformat())
+        dia += timedelta(days=1)
+    return saida
+
+
+def remover_dia_conferido(dia, sha256: str, diretorio_=None) -> bool:
+    """A unica remocao do bruto (arq:0123 regra 12): apaga o arquivo do dia SE os bytes que estao la agora
+    tem o `sha256` que o corte conferiu, e so entao. Devolve False, sem apagar, quando o arquivo sumiu ou
+    mudou entre a conferencia e a remocao. Quem a chama e o timer `corte-bruto`; verbo servido nao."""
+    caminho = caminho_do_dia(dia, diretorio_)
+    try:
+        dados = caminho.read_bytes()
+    except FileNotFoundError:
+        return False
+    if hashlib.sha256(dados).hexdigest() != sha256:
+        return False
+    caminho.unlink()
+    return True
+
+
+def teto_do_bruto(hoje=None, diretorio_=None) -> dict:
+    """O bruto no disco contra o teto: mediana de bytes por dia dos dias com arquivo nas quatro semanas
+    anteriores a `hoje` (hoje fica de fora, esta incompleto) x 35 x 1,5. `estado`: «dentro», «acima» ou
+    «sem_base» (menos de `TETO_MIN_DIAS` dias de base: nao ha o que medir, e nao se inventa teto)."""
+    h = date.fromisoformat(_dia(hoje if hoje is not None else hoje_local()))
+    no_disco = dias_no_disco(diretorio_)
+    inicio = h - timedelta(days=7 * TETO_SEMANAS)
+    base = [n for d, n in no_disco.items() if inicio <= date.fromisoformat(d) < h]
+    r = {"hoje": h.isoformat(), "dias_no_disco": len(no_disco), "bytes": sum(no_disco.values()),
+         "dias_na_base": len(base), "mediana_bytes_dia": None, "teto_bytes": None, "estado": "sem_base"}
+    if len(base) >= TETO_MIN_DIAS:
+        mediana = int(statistics.median(base))
+        r["mediana_bytes_dia"] = mediana
+        r["teto_bytes"] = int(mediana * CORTE_DIAS * TETO_FOLGA)
+        r["estado"] = "acima" if r["bytes"] > r["teto_bytes"] else "dentro"
+    return r
+
+
 # --- CLI ------------------------------------------------------------------------------
 
 def _uso() -> int:
     print("uso: python3 -m oplog ler <AAAA-MM-DD> | --desde <AAAA-MM-DD> [--ate <AAAA-MM-DD>]"
-          " [--sessao <id>] [--tool <t>]", file=sys.stderr)
+          " [--sessao <id>] [--tool <t>]\n"
+          "     python3 -m oplog dia-local <instante ISO 8601>\n"
+          "     python3 -m oplog cortes-desde <AAAA-MM-DD> [--hoje <AAAA-MM-DD>]\n"
+          "     python3 -m oplog teto [--hoje <AAAA-MM-DD>]", file=sys.stderr)
     return 2
 
 
+def _main_corte(argv: list[str]) -> int:
+    """`dia-local <instante>` · `cortes-desde <dia> [--hoje <dia>]` · `teto [--hoje <dia>]`: o que o `repo` e o
+    `infra` (bash) perguntam ao corte. Exit 0 ok, 1 ha dia cortado (`cortes-desde`), 2 uso."""
+    ato, args = argv[0], argv[1:]
+    hoje = None
+    try:
+        if "--hoje" in args:
+            i = args.index("--hoje")
+            hoje = args[i + 1]
+            args = args[:i] + args[i + 2:]
+        if ato == "dia-local" and len(args) == 1:
+            print(dia_local(args[0]))
+            return 0
+        if ato == "cortes-desde" and len(args) == 1:
+            cortados = cortes_desde(args[0], hoje)
+            for dia in cortados:
+                print(dia)
+            return 1 if cortados else 0
+        if ato == "teto" and not args:
+            print(json.dumps(teto_do_bruto(hoje), ensure_ascii=False, sort_keys=True))
+            return 0
+    except (IndexError, ValueError) as e:
+        print(f"oplog: {e}", file=sys.stderr)
+        return 2
+    return _uso()
+
+
 def main(argv: list[str]) -> int:
+    if argv and argv[0] in ("dia-local", "cortes-desde", "teto"):
+        return _main_corte(argv)
     if not argv or argv[0] != "ler":
         return _uso()
     desde = ate = sessao = tool = None

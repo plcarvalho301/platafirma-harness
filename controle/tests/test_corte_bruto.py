@@ -1,0 +1,593 @@
+"""lib/oplog_corte, bin/_infra/corte-bruto e os pedaços do corte em lib/oplog (card #3354; arq:0123 regras 10 e 12).
+
+O corte apaga arquivo e não volta: aqui ele roda só contra uma pasta em tmp_path, uma partição falsa (a leitura
+D5.5/D5.6 do acervo) e um rastreador falso. Nada toca o bruto de verdade. O que não se prova aqui é a API de
+verdade (a mesma que a #3353 provou), que `corte-bruto --seco --mais-velhos-que 0` confere no ar antes do timer.
+"""
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from datetime import date, timedelta
+from pathlib import Path
+
+import pytest
+
+import oplog
+import oplog_corte as cw
+from oplog_extracao import Falha
+
+RAIZ = Path(__file__).resolve().parents[2]
+CORTE = RAIZ / "bin" / "_infra" / "corte-bruto"
+HOJE = date(2026, 11, 10)
+VELHO, NOVO, RECENTE = "2026-10-01", "2026-10-11", "2026-11-09"       # 40 dias, 30 dias, ontem
+SEGREDOS = ("SEGREDO-ARGS", "SEGREDO-PERGUNTA", "SEGREDO-SUJEITO")
+
+
+def _linhas(dia, n=4):
+    corpo = [json.dumps({"ts": f"{dia}T10:00:0{i}-03:00", "tool": "acervo", "ato": "ler", "exit_code": 0,
+                         "args": "casa SEGREDO-ARGS", "sujeito": "SEGREDO-SUJEITO", "pergunta": "SEGREDO-PERGUNTA"})
+             for i in range(n)]
+    return corpo + ["isto nao e json", ""]
+
+
+def _escreve(pasta, dia, linhas=None):
+    (pasta / oplog.nome_do_dia(dia)).write_text("\n".join(linhas or _linhas(dia)) + "\n", encoding="utf-8")
+
+
+@pytest.fixture
+def bruto(tmp_path):
+    pasta = tmp_path / "ops"
+    pasta.mkdir()
+    for dia in (VELHO, NOVO, RECENTE):
+        _escreve(pasta, dia)
+    return pasta
+
+
+def _linhagem_de(pasta, dia, passada=True, **mud):
+    """A linhagem que a #3353 grava para o dia, contada AQUI por outro caminho que o do corte."""
+    dados = (pasta / oplog.nome_do_dia(dia)).read_bytes()
+    texto = [l for l in dados.decode("utf-8").splitlines() if l.strip()]
+    legiveis = 0
+    for l in texto:
+        try:
+            legiveis += isinstance(json.loads(l), dict)
+        except ValueError:
+            pass
+    linha = {"dia": dia, "arquivo": oplog.nome_do_dia(dia), "bytes": len(dados),
+             "sha256": hashlib.sha256(dados).hexdigest(),
+             "passada": {"id": f"p-{dia}", "linhas_lidas": len(texto), "linhas_legiveis": legiveis,
+                         "linhas_ilegiveis": len(texto) - legiveis} if passada else None}
+    linha.update(mud)
+    return linha, legiveis
+
+
+class ParticaoFalsa:
+    """D5.5 e D5.6 em memória: a linhagem por dia e os eventos do dia, em páginas com cursor."""
+
+    def __init__(self, pasta, dias=(VELHO, NOVO, RECENTE), eventos=None, falha=None, **desvios):
+        self.linhas, self.eventos, self.falha, self.chamadas = {}, {}, falha, []
+        for dia in dias:
+            linha, legiveis = _linhagem_de(pasta, dia, **desvios.get(dia, {}))
+            self.linhas[dia] = linha
+            self.eventos[dia] = legiveis
+        self.eventos.update(eventos or {})
+
+    def chamar(self, metodo, caminho, corpo=None, params=None, aceita=(200,)):
+        self.chamadas.append((metodo, caminho, dict(params or {})))
+        if self.falha:
+            raise self.falha
+        assert metodo == "GET", f"o corte só lê: {metodo} {caminho}"
+        if caminho == "/acervo/log/dias":
+            dia = params["desde"]
+            assert params["ate"] == dia
+            return 200, {"itens": [self.linhas.get(dia, {"dia": dia, "passada": None})], "proximo": None}
+        achado = re.fullmatch(r"/acervo/log/dias/(\d{4}-\d{2}-\d{2})/eventos", caminho)
+        assert achado, f"rota que a partição falsa não conhece: {caminho}"
+        n = self.eventos[achado.group(1)]
+        inicio, limite = int((params or {}).get("cursor") or 0), int((params or {}).get("limite", 100))
+        fim = min(inicio + limite, n)
+        return 200, {"itens": [{"evento_id": str(i)} for i in range(inicio, fim)],
+                     "proximo": str(fim) if fim < n else None}
+
+
+class TarefasFalsa:
+    def __init__(self, abertos=()):
+        self.abertos, self.criados, self.listagens = set(abertos), [], 0
+
+    def titulos_abertos(self):
+        self.listagens += 1
+        return set(self.abertos)
+
+    def abrir_incidente(self, titulo, corpo):
+        self.criados.append((titulo, corpo))
+        return "item 1 criado"
+
+
+def _corta(bruto, api, tarefas=None, argv=(), hoje=HOJE):
+    saida = []
+    poda = bruto.parent / "poda.log"
+    codigo = cw.main(list(argv), api=api, hoje=hoje, tarefas=tarefas or TarefasFalsa(), saida=saida.append,
+                     diretorio_=bruto, poda_log=poda)
+    return codigo, saida, poda
+
+
+def _no_disco(bruto):
+    return sorted(oplog.dias_no_disco(bruto))
+
+
+# --- o portão: os quatro casos do card ------------------------------------------------------------------
+
+def test_dia_de_40_dias_com_linhagem_conferida_sai(bruto):
+    codigo, saida, poda = _corta(bruto, ParticaoFalsa(bruto))
+    assert codigo == 0
+    assert _no_disco(bruto) == [NOVO, RECENTE], "só o dia velho sai; o de 30 dias e o de ontem ficam"
+    assert any(l.startswith(f"corte-bruto {VELHO}: cortado — conferido") for l in saida)
+    assert f"corte-bruto {VELHO}: cortado — conferido (idade=40d" in poda.read_text(encoding="utf-8")
+
+
+def test_dia_sem_linhagem_fica_em_silencio(bruto):
+    tarefas = TarefasFalsa()
+    codigo, saida, poda = _corta(bruto, ParticaoFalsa(bruto, **{VELHO: {"passada": False}}), tarefas)
+    assert codigo == 0, "retido por falta de linhagem não é falha: a extração ainda não passou"
+    assert VELHO in _no_disco(bruto)
+    assert tarefas.criados == [] and tarefas.listagens == 0, "em silêncio: nem lista incidente, nem abre"
+    assert f"corte-bruto {VELHO}: retido — sem_linhagem" in poda.read_text(encoding="utf-8")
+
+
+def test_dia_sem_nenhuma_linha_na_particao_tambem_fica(bruto):
+    api = ParticaoFalsa(bruto, dias=(NOVO, RECENTE))
+    codigo, _, _ = _corta(bruto, api)
+    assert codigo == 0 and VELHO in _no_disco(bruto)
+
+
+def test_sha_divergente_fica_e_abre_incidente_para_a_seguranca(bruto):
+    tarefas = TarefasFalsa()
+    codigo, saida, poda = _corta(bruto, ParticaoFalsa(bruto, **{VELHO: {"sha256": "0" * 64}}), tarefas)
+    assert codigo == 1
+    assert VELHO in _no_disco(bruto), "o arquivo fica no disco"
+    assert [t for t, _ in tarefas.criados] == [f"{oplog.ROTULO_BRUTO} {VELHO}: bruto reprovado no portão"]
+    assert cw.CADEIRA_DO_INCIDENTE == "seguranca"
+    corpo = tarefas.criados[0][1]
+    assert "sha256" in corpo and not any(s in corpo for s in SEGREDOS), "o incidente leva contagem, nunca conteúdo"
+    assert f"corte-bruto {VELHO}: reprovado — sha256; incidente aberto" in poda.read_text(encoding="utf-8")
+
+
+def test_dia_de_30_dias_fica(bruto):
+    codigo, _, _ = _corta(bruto, ParticaoFalsa(bruto))
+    assert codigo == 0 and NOVO in _no_disco(bruto)
+
+
+@pytest.mark.parametrize("idade, sai", [(35, False), (36, True)])
+def test_o_prazo_e_mais_de_35_dias_pelo_nome_do_arquivo(tmp_path, idade, sai):
+    pasta = tmp_path / "ops"
+    pasta.mkdir()
+    dia = (HOJE - timedelta(days=idade)).isoformat()
+    for d in (dia, RECENTE):
+        _escreve(pasta, d)
+    codigo, _, _ = _corta(pasta, ParticaoFalsa(pasta, dias=(dia, RECENTE)))
+    assert codigo == 0 and (dia not in _no_disco(pasta)) is sai
+
+
+def test_a_idade_vem_do_nome_e_nao_do_mtime(bruto):
+    agora = 1_900_000_000
+    os.utime(bruto / oplog.nome_do_dia(VELHO), (agora, agora))                  # velho de nome, novo de mtime
+    antigo = agora - 200 * 86400
+    os.utime(bruto / oplog.nome_do_dia(NOVO), (antigo, antigo))                 # novo de nome, velho de mtime
+    codigo, _, _ = _corta(bruto, ParticaoFalsa(bruto))
+    assert codigo == 0 and _no_disco(bruto) == [NOVO, RECENTE]
+
+
+# --- cada conferência sozinha reprova --------------------------------------------------------------------
+
+def test_linhagem_com_contagem_de_linhas_diferente_reprova(bruto):
+    api = ParticaoFalsa(bruto)
+    api.linhas[VELHO]["passada"]["linhas_legiveis"] += 1
+    tarefas = TarefasFalsa()
+    codigo, _, poda = _corta(bruto, api, tarefas)
+    assert codigo == 1 and VELHO in _no_disco(bruto) and len(tarefas.criados) == 1
+    assert "reprovado — linhas;" in poda.read_text(encoding="utf-8")
+
+
+def test_evento_a_menos_na_particao_reprova(bruto):
+    api = ParticaoFalsa(bruto, eventos={VELHO: 3})
+    tarefas = TarefasFalsa()
+    codigo, _, poda = _corta(bruto, api, tarefas)
+    assert codigo == 1 and VELHO in _no_disco(bruto)
+    assert "reprovado — eventos;" in poda.read_text(encoding="utf-8")
+
+
+def test_evento_a_mais_na_particao_tambem_reprova(bruto):
+    codigo, _, _ = _corta(bruto, ParticaoFalsa(bruto, eventos={VELHO: 5}))
+    assert codigo == 1 and VELHO in _no_disco(bruto)
+
+
+def test_arquivo_com_tamanho_diferente_da_linhagem_reprova(bruto):
+    codigo, _, poda = _corta(bruto, ParticaoFalsa(bruto, **{VELHO: {"bytes": 1}}))
+    assert codigo == 1 and "sha256" in poda.read_text(encoding="utf-8")
+
+
+def test_varias_conferencias_reprovadas_aparecem_juntas(bruto):
+    api = ParticaoFalsa(bruto, eventos={VELHO: 1}, **{VELHO: {"sha256": "f" * 64}})
+    _, _, poda = _corta(bruto, api)
+    assert "reprovado — eventos,sha256;" in poda.read_text(encoding="utf-8")
+
+
+def test_a_contagem_de_eventos_atravessa_as_paginas_de_mil(tmp_path):
+    pasta = tmp_path / "ops"
+    pasta.mkdir()
+    _escreve(pasta, VELHO, [json.dumps({"tool": "acervo", "n": i}) for i in range(2500)])
+    _escreve(pasta, RECENTE)
+    api = ParticaoFalsa(pasta, dias=(VELHO, RECENTE))
+    codigo, _, _ = _corta(pasta, api)
+    paginas = [c for c in api.chamadas if c[1].endswith("/eventos")]
+    assert codigo == 0 and VELHO not in _no_disco(pasta)
+    assert len(paginas) == 3 and all(p[2]["limite"] == 1000 for p in paginas)
+    assert [p[2].get("cursor") for p in paginas] == [None, "1000", "2000"]
+
+
+def test_cursor_que_nao_anda_nao_gira_para_sempre(tmp_path):
+    pasta = tmp_path / "ops"
+    pasta.mkdir()
+    _escreve(pasta, VELHO)
+    _escreve(pasta, RECENTE)
+
+    class Presa(ParticaoFalsa):
+        def chamar(self, metodo, caminho, corpo=None, params=None, aceita=(200,)):
+            if caminho.endswith("/eventos"):
+                return 200, {"itens": [{"evento_id": "a"}], "proximo": "a"}
+            return super().chamar(metodo, caminho, corpo, params, aceita)
+    codigo, _, _ = _corta(pasta, Presa(pasta, dias=(VELHO, RECENTE)))
+    assert codigo == 1 and VELHO in _no_disco(pasta)
+
+
+# --- incidente sem duplicar; API fora --------------------------------------------------------------------
+
+def test_incidente_ja_aberto_nao_se_repete(bruto):
+    titulo = f"{oplog.ROTULO_BRUTO} {VELHO}: bruto reprovado no portão"
+    tarefas = TarefasFalsa(abertos={titulo, "outro incidente"})
+    codigo, saida, poda = _corta(bruto, ParticaoFalsa(bruto, **{VELHO: {"sha256": "0" * 64}}), tarefas)
+    assert codigo == 1 and tarefas.criados == [] and VELHO in _no_disco(bruto)
+    assert "incidente já aberto" in poda.read_text(encoding="utf-8")
+
+
+def test_incidente_que_nao_abre_e_dito_e_o_dia_fica(bruto, capsys):
+    class Quebra(TarefasFalsa):
+        def abrir_incidente(self, titulo, corpo):
+            raise Falha(5, "tarefas criar saiu 1: fora")
+    codigo, _, poda = _corta(bruto, ParticaoFalsa(bruto, **{VELHO: {"sha256": "0" * 64}}), Quebra())
+    assert codigo == 5 and VELHO in _no_disco(bruto)
+    assert "incidente NÃO aberto" in poda.read_text(encoding="utf-8")
+    assert "incidente não aberto" in capsys.readouterr().err
+
+
+def test_api_fora_retem_tudo_e_sai_3(bruto):
+    api = ParticaoFalsa(bruto, falha=Falha(3, "o acervo não respondeu"))
+    codigo, saida, poda = _corta(bruto, api)
+    assert codigo == 3 and _no_disco(bruto) == [VELHO, NOVO, RECENTE]
+    assert len(api.chamadas) == 1, "API fora para um é fora para todos: para na primeira"
+    assert f"corte-bruto {VELHO}: retido — linhagem_indisponivel [3]" in poda.read_text(encoding="utf-8")
+
+
+def test_token_recusado_sai_4_e_nada_sai(bruto):
+    codigo, _, _ = _corta(bruto, ParticaoFalsa(bruto, falha=Falha(4, "token")))
+    assert codigo == 4 and VELHO in _no_disco(bruto)
+
+
+# --- travas além do portão -------------------------------------------------------------------------------
+
+def test_no_maximo_tres_cortes_por_rodada_do_mais_velho_ao_mais_novo(tmp_path):
+    pasta = tmp_path / "ops"
+    pasta.mkdir()
+    dias = [(HOJE - timedelta(days=n)).isoformat() for n in (45, 44, 43, 42, 41)] + [RECENTE]
+    for d in dias:
+        _escreve(pasta, d)
+    codigo, saida, _ = _corta(pasta, ParticaoFalsa(pasta, dias=dias))
+    assert codigo == 0 and _no_disco(pasta) == sorted(dias[3:])
+    assert any("2 dia(s) ficam para a próxima rodada (máximo 3 cortes por rodada)" in l for l in saida)
+
+
+def test_o_teto_por_rodada_vem_do_ambiente(tmp_path, monkeypatch):
+    monkeypatch.setenv("CORTE_MAX_DIAS", "1")
+    pasta = tmp_path / "ops"
+    pasta.mkdir()
+    dias = [(HOJE - timedelta(days=n)).isoformat() for n in (45, 44)] + [RECENTE]
+    for d in dias:
+        _escreve(pasta, d)
+    _corta(pasta, ParticaoFalsa(pasta, dias=dias))
+    assert _no_disco(pasta) == sorted(dias[1:])
+
+
+def test_relogio_a_frente_do_bruto_nao_corta(bruto, capsys):
+    codigo, _, poda = _corta(bruto, ParticaoFalsa(bruto), hoje=date(2027, 3, 1))
+    assert codigo == 5 and _no_disco(bruto) == [VELHO, NOVO, RECENTE] and not poda.exists()
+    assert "relógio ou porta" in capsys.readouterr().err
+
+
+def test_arquivo_do_futuro_nao_corta(bruto):
+    codigo, _, _ = _corta(bruto, ParticaoFalsa(bruto), hoje=date(2026, 10, 20))
+    assert codigo == 5 and VELHO in _no_disco(bruto)
+
+
+def test_arquivo_que_sumiu_entre_a_listagem_e_a_leitura_nao_quebra(bruto, monkeypatch):
+    monkeypatch.setattr(oplog, "conteudo_do_dia", lambda dia, d=None: None)
+    codigo, _, _ = _corta(bruto, ParticaoFalsa(bruto))
+    assert codigo == 0 and VELHO in _no_disco(bruto)
+
+
+def test_arquivo_que_muda_depois_da_conferencia_nao_e_apagado(bruto, monkeypatch):
+    original = oplog.remover_dia_conferido
+
+    def muda_e_tenta(dia, sha256, diretorio_=None):
+        with open(bruto / oplog.nome_do_dia(dia), "a", encoding="utf-8") as f:
+            f.write('{"tool":"acervo","chegou":"depois"}\n')
+        return original(dia, sha256, diretorio_)
+    monkeypatch.setattr(oplog, "remover_dia_conferido", muda_e_tenta)
+    codigo, _, poda = _corta(bruto, ParticaoFalsa(bruto))
+    assert codigo == 0 and VELHO in _no_disco(bruto)
+    assert "retido — mudou_durante_a_conferencia" in poda.read_text(encoding="utf-8")
+
+
+def test_remover_dia_conferido_so_apaga_com_o_sha_certo(bruto):
+    sha = cw.contas_do_arquivo((bruto / oplog.nome_do_dia(VELHO)).read_bytes())["sha256"]
+    assert oplog.remover_dia_conferido(VELHO, "0" * 64, bruto) is False and VELHO in _no_disco(bruto)
+    assert oplog.remover_dia_conferido("2026-01-01", sha, bruto) is False, "dia que não existe"
+    assert oplog.remover_dia_conferido(VELHO, sha, bruto) is True and VELHO not in _no_disco(bruto)
+
+
+# --- o ensaio --seco ------------------------------------------------------------------------------------
+
+def test_seco_confere_e_diz_mas_nao_apaga_nao_grava_e_nao_abre_incidente(bruto):
+    tarefas = TarefasFalsa()
+    api = ParticaoFalsa(bruto, dias=(VELHO, NOVO, RECENTE), **{NOVO: {"sha256": "0" * 64}})
+    codigo, saida, poda = _corta(bruto, api, tarefas, argv=["--seco", "--mais-velhos-que", "20"])
+    assert _no_disco(bruto) == [VELHO, NOVO, RECENTE], "o ensaio não apaga nada"
+    assert not poda.exists() and tarefas.criados == [] and tarefas.listagens == 0
+    assert any(l.startswith(f"corte-bruto {VELHO}: cortaria — conferido") for l in saida)
+    assert any(l.startswith(f"corte-bruto {NOVO}: reprovaria — sha256") for l in saida)
+    assert saida[-1].startswith("corte-bruto ensaio — candidatos=2 cortados=0") and codigo == 1
+
+
+def test_mais_velhos_que_sem_seco_e_recusado(bruto, capsys):
+    codigo, _, _ = _corta(bruto, ParticaoFalsa(bruto), argv=["--mais-velhos-que", "0"])
+    assert codigo == 2 and VELHO in _no_disco(bruto)
+    assert "só vale com --seco" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("argv", [["--dia", "2026-10-01"], ["--seco", "--mais-velhos-que"], ["--seco", "--mais-velhos-que", "x"]])
+def test_o_corte_nao_aceita_dia_a_mao_nem_uso_errado(bruto, argv):
+    codigo, _, _ = _corta(bruto, ParticaoFalsa(bruto), argv=argv)
+    assert codigo == 2 and _no_disco(bruto) == [VELHO, NOVO, RECENTE]
+
+
+# --- poda.log: uma linha por dia e a linha de vida ----------------------------------------------------------
+
+def test_poda_log_leva_uma_linha_por_dia_e_a_linha_de_vida(bruto):
+    _, _, poda = _corta(bruto, ParticaoFalsa(bruto))
+    linhas = poda.read_text(encoding="utf-8").splitlines()
+    assert len(linhas) == 2 and re.match(r"^\d{4}-\d{2}-\d{2}T[\d:]+[+-]\d{2}:\d{2} corte-bruto ", linhas[0])
+    assert linhas[1].endswith("corte-bruto ok — candidatos=1 cortados=1 retidos=0 reprovados=0 · prazo=35d · no disco=3 dias")
+
+
+def test_poda_log_grava_a_linha_de_vida_mesmo_sem_candidato(tmp_path):
+    pasta = tmp_path / "ops"
+    pasta.mkdir()
+    _escreve(pasta, RECENTE)
+    _, _, poda = _corta(pasta, ParticaoFalsa(pasta, dias=(RECENTE,)))
+    assert "corte-bruto ok — candidatos=0 cortados=0" in poda.read_text(encoding="utf-8")
+
+
+def test_nada_do_bruto_vai_para_a_saida_nem_para_o_poda_log(bruto):
+    _, saida, poda = _corta(bruto, ParticaoFalsa(bruto, **{VELHO: {"sha256": "0" * 64}}))
+    tudo = "\n".join(saida) + poda.read_text(encoding="utf-8")
+    assert not any(s in tudo for s in SEGREDOS)
+
+
+# --- o rastreador de verdade (um binário falso no lugar do `tarefas`) --------------------------------------
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="sem bash")
+def test_tarefas_lista_os_tres_estados_abertos_e_cria_o_incidente_para_a_seguranca(tmp_path, monkeypatch):
+    falso = tmp_path / "tarefas"
+    falso.write_text(
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$FAKE_LOG"\n'
+        'case "$1" in\n'
+        '  listar) case "$3" in detectado) printf "7\\tdetectado\\tvar/log/ops 2026-10-01: bruto reprovado no portão\\n";;\n'
+        '                       mitigado) printf "8\\tmitigado\\toutro incidente\\n";; esac ;;\n'
+        '  criar) cat > "$FAKE_LOG.stdin"; echo "item 9 criado: $2" ;;\n'
+        'esac\n', encoding="utf-8")
+    falso.chmod(0o755)
+    monkeypatch.setenv("FAKE_LOG", str(tmp_path / "chamadas"))
+    t = cw.Tarefas(falso)
+    assert t.titulos_abertos() == {"var/log/ops 2026-10-01: bruto reprovado no portão", "outro incidente"}
+    chamadas = (tmp_path / "chamadas").read_text(encoding="utf-8").splitlines()
+    assert chamadas == ["listar --estado detectado", "listar --estado em-mitigacao", "listar --estado mitigado"]
+    assert t.abrir_incidente("titulo X", "corpo Y") == "item 9 criado: titulo X"
+    assert (tmp_path / "chamadas").read_text(encoding="utf-8").splitlines()[-1] == \
+        "criar titulo X --incidente --cadeira seguranca --desc-stdin"
+    assert (tmp_path / "chamadas.stdin").read_text(encoding="utf-8") == "corpo Y"
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="sem bash")
+def test_tarefas_que_falha_vira_falha_5_e_binario_ausente_vira_3(tmp_path):
+    ruim = tmp_path / "tarefas"
+    ruim.write_text('#!/usr/bin/env bash\necho "sem rede" >&2\nexit 7\n', encoding="utf-8")
+    ruim.chmod(0o755)
+    with pytest.raises(Falha) as e:
+        cw.Tarefas(ruim).titulos_abertos()
+    assert e.value.codigo == 5 and "sem rede" in str(e.value)
+    with pytest.raises(Falha) as e:
+        cw.Tarefas(tmp_path / "nao-existe").abrir_incidente("t", "c")
+    assert e.value.codigo == 3
+
+
+def test_o_binario_do_rastreador_padrao_e_o_tarefas_da_mesma_release(monkeypatch):
+    monkeypatch.delenv("PF_TAREFAS_BIN", raising=False)
+    assert Path(cw.Tarefas().binario) == RAIZ / "bin" / "tarefas"
+    monkeypatch.setenv("PF_TAREFAS_BIN", "/bin/true")
+    assert cw.Tarefas().binario == "/bin/true"
+
+
+# --- lib/oplog: o prazo, o disco, o teto ------------------------------------------------------------------
+
+def test_dias_no_disco_ignora_o_que_nao_e_arquivo_do_dia(tmp_path):
+    _escreve(tmp_path, "2026-10-02")
+    (tmp_path / "ops-2026-13-45.jsonl").write_text("x")
+    (tmp_path / "ops-2026-10-03.jsonl.tmp").write_text("x")
+    (tmp_path / "outro.jsonl").write_text("x")
+    (tmp_path / "ops-2026-10-04.jsonl").mkdir()
+    (tmp_path / "ops-2026-10-05.jsonl").symlink_to(tmp_path / "ops-2026-10-02.jsonl")
+    assert list(oplog.dias_no_disco(tmp_path)) == ["2026-10-02"]
+    assert oplog.dias_no_disco(tmp_path / "nao-existe") == {}
+
+
+def test_idade_e_mais_velhos_que(tmp_path):
+    for d in ("2026-10-01", "2026-10-06", "2026-10-07"):
+        _escreve(tmp_path, d)
+    assert oplog.idade_em_dias("2026-10-01", HOJE) == 40
+    assert oplog.dias_mais_velhos_que(35, HOJE, tmp_path) == ["2026-10-01"], "35 dias exatos ainda ficam"
+    assert oplog.dias_mais_velhos_que(34, HOJE, tmp_path) == ["2026-10-01", "2026-10-06"]
+
+
+@pytest.mark.parametrize("instante, dia", [
+    ("2026-10-08T20:56:48.446580+00:00", "2026-10-08"),
+    ("2026-10-09T02:59:59+00:00", "2026-10-08"),        # 23:59:59 do dia 8 em Sao_Paulo
+    ("2026-10-09T03:00:00+00:00", "2026-10-09"),
+    ("2026-10-09T03:00:00Z", "2026-10-09"),
+    ("2026-10-08T23:30:00-03:00", "2026-10-08"),
+    ("2026-10-08T10:00:00", "2026-10-08"),              # sem fuso: já é local
+])
+def test_dia_local_e_o_dia_da_porta(instante, dia):
+    assert oplog.dia_local(instante) == dia
+
+
+def test_dia_local_recusa_o_que_nao_e_instante():
+    with pytest.raises(ValueError):
+        oplog.dia_local("ontem")
+
+
+def test_cortes_desde_lista_o_dia_velho_sem_arquivo(tmp_path):
+    for d in ("2026-10-01", "2026-10-03", RECENTE):
+        _escreve(tmp_path, d)
+    # janela: de max(desde, 15/09) a hoje - 36 dias (05/10): 01/10, 02/10, 03/10, 04/10, 05/10 menos o que existe
+    assert oplog.cortes_desde("2026-10-01", HOJE, tmp_path) == ["2026-10-02", "2026-10-04", "2026-10-05"]
+    assert oplog.cortes_desde("2026-10-03", HOJE, tmp_path) == ["2026-10-04", "2026-10-05"]
+    assert oplog.cortes_desde("2026-10-06", HOJE, tmp_path) == [], "dia dentro do prazo ausente nunca foi cortado"
+
+
+def test_cortes_desde_nao_olha_antes_do_inicio_do_bruto(tmp_path):
+    _escreve(tmp_path, RECENTE)
+    achados = oplog.cortes_desde("2026-01-01", HOJE, tmp_path)
+    assert achados[0] == "2026-09-15" and "2026-09-14" not in achados
+
+
+def test_teto_dentro_acima_e_sem_base(tmp_path):
+    for n in range(1, 29):
+        (tmp_path / oplog.nome_do_dia(HOJE - timedelta(days=n))).write_bytes(b"x" * 1000)
+    t = oplog.teto_do_bruto(HOJE, tmp_path)
+    assert t["estado"] == "dentro" and t["mediana_bytes_dia"] == 1000 and t["teto_bytes"] == 52500
+    assert t["bytes"] == 28000 and t["dias_na_base"] == 28 and t["dias_no_disco"] == 28
+    (tmp_path / oplog.nome_do_dia(HOJE - timedelta(days=60))).write_bytes(b"x" * 60000)
+    assert oplog.teto_do_bruto(HOJE, tmp_path)["estado"] == "acima", "o velho fora da base pesa no total"
+    (tmp_path / oplog.nome_do_dia(HOJE)).write_bytes(b"x" * 10 ** 6)
+    assert oplog.teto_do_bruto(HOJE, tmp_path)["mediana_bytes_dia"] == 1000, "hoje, incompleto, não entra na base"
+
+
+def test_teto_sem_base_nao_inventa_teto(tmp_path):
+    for n in range(1, 4):
+        (tmp_path / oplog.nome_do_dia(HOJE - timedelta(days=n))).write_bytes(b"x" * 1000)
+    t = oplog.teto_do_bruto(HOJE, tmp_path)
+    assert (t["estado"], t["teto_bytes"], t["mediana_bytes_dia"]) == ("sem_base", None, None)
+    assert oplog.teto_do_bruto(HOJE, tmp_path / "nada")["estado"] == "sem_base"
+
+
+def test_teto_usa_a_mediana_e_nao_a_media(tmp_path):
+    tamanhos = [100] * 13 + [100_000] + [100] * 14
+    for n, t in enumerate(tamanhos, 1):
+        (tmp_path / oplog.nome_do_dia(HOJE - timedelta(days=n))).write_bytes(b"x" * t)
+    assert oplog.teto_do_bruto(HOJE, tmp_path)["mediana_bytes_dia"] == 100
+
+
+def _oplog_cli(*args, ops_dir):
+    env = {**os.environ, "OPS_LOG_DIR": str(ops_dir), "PYTHONPATH": str(RAIZ / "lib")}
+    return subprocess.run([sys.executable, "-m", "oplog", *args], capture_output=True, text=True, env=env, check=False)
+
+
+def test_cli_do_oplog_responde_dia_local_cortes_e_teto(tmp_path):
+    _escreve(tmp_path, RECENTE)
+    r = _oplog_cli("dia-local", "2026-10-09T02:00:00+00:00", ops_dir=tmp_path)
+    assert (r.returncode, r.stdout.strip()) == (0, "2026-10-08")
+    r = _oplog_cli("cortes-desde", "2026-10-01", "--hoje", "2026-11-10", ops_dir=tmp_path)
+    assert r.returncode == 1 and r.stdout.splitlines()[0] == "2026-10-01"
+    r = _oplog_cli("cortes-desde", "2026-10-30", "--hoje", "2026-11-10", ops_dir=tmp_path)
+    assert (r.returncode, r.stdout) == (0, "")
+    r = _oplog_cli("teto", "--hoje", "2026-11-10", ops_dir=tmp_path)
+    assert r.returncode == 0 and json.loads(r.stdout)["estado"] == "sem_base"
+    assert _oplog_cli("dia-local", "ontem", ops_dir=tmp_path).returncode == 2
+    assert _oplog_cli("cortes-desde", ops_dir=tmp_path).returncode == 2
+    assert _oplog_cli("teto", "--hoje", ops_dir=tmp_path).returncode == 2
+
+
+# --- a unit, o timer e o binário ---------------------------------------------------------------------------
+
+def test_o_binario_e_fino_declara_o_exit_nas_40_primeiras_linhas_e_roda(tmp_path):
+    linhas = CORTE.read_text(encoding="utf-8").splitlines()
+    assert linhas[0] == "#!/usr/bin/env python3" and any(l.startswith("# exit:") for l in linhas[:40])
+    env = {**os.environ, "OPS_LOG_DIR": str(tmp_path / "ops"), "PLATAFIRMA_INSTANCIA": str(tmp_path)}
+    (tmp_path / "ops").mkdir()
+    r = subprocess.run([sys.executable, str(CORTE)], capture_output=True, text=True, env=env, check=False)
+    assert r.returncode == 0 and "corte-bruto ok — candidatos=0" in r.stdout
+    assert "corte-bruto ok" in (tmp_path / "var" / "log" / "poda.log").read_text(encoding="utf-8")
+    r = subprocess.run([sys.executable, str(CORTE), "--ajuda"], capture_output=True, text=True, env=env, check=False)
+    assert r.returncode == 0 and r.stdout.startswith("uso: corte-bruto")
+    r = subprocess.run([sys.executable, str(CORTE), "--hoje", "x"], capture_output=True, text=True, env=env, check=False)
+    assert r.returncode == 2
+
+
+def test_corte_args_do_dropin_vira_argumento(tmp_path):
+    (tmp_path / "ops").mkdir()
+    env = {**os.environ, "OPS_LOG_DIR": str(tmp_path / "ops"), "PLATAFIRMA_INSTANCIA": str(tmp_path),
+           "CORTE_ARGS": "--seco,--mais-velhos-que,20"}
+    r = subprocess.run([sys.executable, str(CORTE)], capture_output=True, text=True, env=env, check=False)
+    assert r.returncode == 0 and "corte-bruto ensaio — candidatos=0" in r.stdout
+    assert not (tmp_path / "var" / "log" / "poda.log").exists(), "o ensaio não grava poda.log"
+
+
+def test_service_e_timer_do_corte():
+    servico = (RAIZ / "deploy-harness" / "corte-bruto.service").read_text(encoding="utf-8")
+    timer = (RAIZ / "deploy-harness" / "corte-bruto.timer").read_text(encoding="utf-8")
+    assert "After=linhagem-ops.service" in servico and "Type=oneshot" in servico
+    assert "ExecStart=/opt/platafirma/current/venv/harness/bin/python /opt/platafirma/current/harness/bin/_infra/corte-bruto" in servico
+    assert "EnvironmentFile=/home/claudinho/.config/ops/env" in servico and "Environment=PF_CADEIRA=ti" in servico
+    assert "SuccessExitStatus=0" in servico and "/usr/bin/python3" not in servico
+    assert "OnCalendar=*-*-* 01:20:00" in timer and "Persistent=true" in timer and "WantedBy=timers.target" in timer
+
+
+def test_o_timer_do_corte_entra_na_lista_de_units_de_instalar_depois_da_linhagem():
+    instalar = (RAIZ / "deploy-harness" / "instalar").read_text(encoding="utf-8")
+    lista = re.findall(r'"deploy-harness/([a-z-]+\.(?:service|timer))\|', instalar)
+    assert lista.index("corte-bruto.service") > lista.index("linhagem-ops.timer")
+    assert '"deploy-harness/corte-bruto.service|alvo-de-timer"' in instalar
+    assert '"deploy-harness/corte-bruto.timer|habilita"' in instalar
+
+
+def test_so_o_corte_apaga_o_bruto():
+    """arq:0123 §12: só o timer corta. `remover_dia_conferido` e `oplog_corte` não aparecem em código de nenhum verbo
+    servido nem do ops-server: só em lib/oplog.py (a definição), lib/oplog_corte.py e bin/_infra/corte-bruto."""
+    donos = {"lib/oplog.py", "lib/oplog_corte.py", "bin/_infra/corte-bruto"}
+    achados = []
+    for pasta in ("bin", "lib", "ops-server"):
+        for arq in sorted((RAIZ / pasta).rglob("*")):
+            rel = arq.relative_to(RAIZ).as_posix()
+            if not arq.is_file() or arq.is_symlink() or "__pycache__" in arq.parts or rel in donos:
+                continue
+            try:
+                texto = arq.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
+            codigo = "\n".join(l for l in texto.splitlines() if not l.lstrip().startswith("#"))
+            if "remover_dia_conferido" in codigo or "oplog_corte" in codigo:
+                achados.append(rel)
+    assert achados == [], f"quem mais chama o corte: {achados}"

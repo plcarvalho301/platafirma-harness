@@ -16,7 +16,7 @@
 # classe: B
 # consome: nenhum
 # ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · PF_SUJEITO[obrigatória em up|down|pull|build] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
-# depende: docker · systemctl --user · curl · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · python3 · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs e bin/_infra/limpeza-quarentena (ajudantes de limpeza) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda)
+# depende: docker · systemctl --user · curl · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs e bin/_infra/limpeza-quarentena (ajudantes de limpeza) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda)
 # escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados · agenda=crontab do sistema (aplicar) · estado/saude/logs/ps/config/backup/hardware/gpu=nada
 # substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build (deploy apagado — decisão do dono, 27/09) · crontab -e a mão · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra por arq:0110 §14 emenda 26/09/2026)
 # Encapsula as três pegadinhas conhecidas: DOCKER_HOST rootless, restart que
@@ -51,7 +51,7 @@ uso_texto() {
   cat >&2 <<'FIM'
 uso:
   infra estado   [alvo] [--json]                contêineres, units de usuário e timers, uma tela
-  infra saude    [alvo] [--json]                 /health do ops, contêiner não-saudável, disco, RAM
+  infra saude    [alvo] [--json]                 /health do ops, contêiner não-saudável, disco, RAM, o bruto contra o teto
   infra logs     <alvo> [n]                      alvo = contêiner OU unit --user (default 50)
   infra restart  <alvo> [--nao-esperar]          contêiner ou unit --user; confere antes de dizer ok
   infra unit-env <unit> [--ver | CHAVE=VALOR...] drop-in de ambiente da unit --user (daemon-reload)
@@ -304,6 +304,46 @@ print(json.dumps(dict(zip(chaves, partes))))
 '
 }
 
+# O bruto da porta contra o teto (card #3354, arq:0123 regra 10): a mediana de bytes por dia das quatro semanas
+# anteriores x 35 x 1,5. Quem le o bruto e o lib/oplog (`python3 -m oplog teto`); aqui so se pergunta. Estado:
+# dentro, acima, sem_base (poucos dias para medir) ou indeterminavel. Sondagem que falha nao derruba a saude: vira
+# estado, dado e nao erro de execucao, como o /health do ops. Acima do teto vira CARD, nao incidente.
+_bruto_json() {
+  local saida rc=0
+  saida=$(PYTHONPATH="$AQUI/../lib${PYTHONPATH:+:$PYTHONPATH}" python3 -m oplog teto 2>/dev/null) || rc=$?
+  if [ "$rc" -eq 0 ] && [ -n "$saida" ]; then
+    printf '%s\n' "$saida"
+  else
+    python3 -c 'import json, sys; print(json.dumps({"estado": "indeterminavel", "motivo": "oplog teto saiu " + sys.argv[1]}))' "$rc"
+  fi
+}
+
+_bruto_texto() {
+  _bruto_json | python3 -c '
+import json, sys
+
+d = json.load(sys.stdin)
+
+
+def mb(n):
+    return "-" if n is None else "%.1f MB" % (n / 1048576)
+
+
+if d.get("estado") == "indeterminavel":
+    print("bruto: não medido (%s)" % d.get("motivo", "?"))
+elif d["estado"] == "sem_base":
+    print("bruto: %s em %d dia(s); sem base para o teto (%d dia(s) nas quatro semanas anteriores)"
+          % (mb(d["bytes"]), d["dias_no_disco"], d["dias_na_base"]))
+else:
+    base = "bruto: %s em %d dia(s) · teto %s (mediana %s/dia x 35 x 1,5)" % (
+        mb(d["bytes"]), d["dias_no_disco"], mb(d["teto_bytes"]), mb(d["mediana_bytes_dia"]))
+    if d["estado"] == "acima":
+        print("ACIMA DO TETO — " + base + " — o corte está atrasado ou não corta: abra card (não é incidente) e leia `infra logs corte-bruto`")
+    else:
+        print(base + " — dentro")
+'
+}
+
 # --- verbos -----------------------------------------------------------------
 
 _estado_texto() {
@@ -373,24 +413,27 @@ _saude_texto() {
   echo; echo "== disco e memória"
   df -h / | tail -1
   free -h | sed -n 2p
+  echo; echo "== bruto da porta (teto do corte)"
+  _bruto_texto
 }
 
 # {"ops_health":{"ok","motivo"}, "doentes":[...], "falhadas":[...],
 #  "disco":{...}, "memoria":{...}} — mesmas cinco seções do texto. `|| return
 # $?` em cada passo pelo mesmo motivo do comentário em _estado_json_corpo.
 _saude_json_corpo() {
-  local oh do_ fa di me
+  local oh do_ fa di me br
   oh=$(_ops_health_json) || return $?
   do_=$(_doentes_json) || return $?
   fa=$(_falhadas_json) || return $?
   di=$(_disco_json) || return $?
   me=$(_memoria_json) || return $?
+  br=$(_bruto_json) || return $?
   python3 -c '
 import json, sys
 
-oh, do_, fa, di, me = (json.loads(a) for a in sys.argv[1:6])
-print(json.dumps({"ops_health": oh, "doentes": do_, "falhadas": fa, "disco": di, "memoria": me}))
-' "$oh" "$do_" "$fa" "$di" "$me" || return $?
+oh, do_, fa, di, me, br = (json.loads(a) for a in sys.argv[1:7])
+print(json.dumps({"ops_health": oh, "doentes": do_, "falhadas": fa, "disco": di, "memoria": me, "bruto": br}))
+' "$oh" "$do_" "$fa" "$di" "$me" "$br" || return $?
 }
 
 _saude_json() { _json_ou_erro _saude_json_corpo; }

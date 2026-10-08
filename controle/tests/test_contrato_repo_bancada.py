@@ -14,6 +14,7 @@ na reabertura, e destacado sem card). Nao prova: o forge de verdade (PR mesclado
 gh -- aqui so o ramo apagado do origin), nem `pr-*` de verdade (o "proximo:" de pr-abrir
 e so leitura de codigo), nem o pre-push (os clones de teste nao tem hooksPath).
 """
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -44,7 +45,7 @@ def _montar(tmp_path):
     return bancada
 
 
-def _repo(tmp_path, bancada, sessao, *args):
+def _repo(tmp_path, bancada, sessao, *args, env_extra=None):
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": str(tmp_path),
@@ -55,6 +56,7 @@ def _repo(tmp_path, bancada, sessao, *args):
         "PF_SESSAO": sessao,
         "PF_TAREFAS_BIN": "/bin/true",
         **IDENT,
+        **(env_extra or {}),
     }
     return subprocess.run([str(REPO_BIN), *args], env=env, capture_output=True, text=True, check=False)
 
@@ -518,3 +520,70 @@ def test_procurar_aceita_o_termo_posicional_e_o_prefixo_depois(tmp_path):
     assert _repo(tmp_path, bancada, "s1", "procurar", "demo", "x", "LEIA.md", "sobra").returncode == 2
     sem_termo = _repo(tmp_path, bancada, "s1", "procurar", "demo")
     assert sem_termo.returncode == 2 and "termo obrigat" in sem_termo.stderr
+
+
+# --- commitar sem caminho: o bruto da abertura da sessao em diante (card #3354, arq:0123 regra 10) -----------
+
+def _sessao_aberta_em(tmp_path, linha):
+    """Um `sessao` falso: `ver` devolve a linha como o verbo de verdade (aberto_em: <instante> ou `-`)."""
+    falso = tmp_path / "sessao-falsa"
+    falso.write_text(f'#!/usr/bin/env bash\necho "sessao_id: s1"\necho "ordem_id: o1   superficie: claude.ai   {linha}"\n')
+    falso.chmod(0o755)
+    return falso
+
+
+def _bruto_do_dia(tmp_path, dia, eventos):
+    pasta = tmp_path / "instancia" / "var" / "log" / "ops"
+    pasta.mkdir(parents=True, exist_ok=True)
+    (pasta / f"ops-{dia}.jsonl").write_text("".join(json.dumps(e) + "\n" for e in eventos), encoding="utf-8")
+
+
+def _commitar_sem_caminho(tmp_path, bancada, sessao_bin, hoje="2026-11-10"):
+    return _repo(tmp_path, bancada, "s1", "commitar", "demo", "-m", "sem caminho",
+                 env_extra={"PF_SESSAO_BIN": str(sessao_bin), "PF_HOJE": hoje})
+
+
+def test_commitar_sem_caminho_com_o_dia_da_abertura_ja_cortado_sai_3_com_o_nome_do_dia(tmp_path):
+    bancada = _montar(tmp_path)
+    wt = _abrir_42(tmp_path, bancada)
+    (wt / "DEPOIS.md").write_text("d\n")
+    _bruto_do_dia(tmp_path, "2026-11-09", [{"tool": "write_file", "sessao_id": "s1", "path": str(wt / "DEPOIS.md")}])
+    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, "aberto_em: 2026-10-02T15:00:00+00:00"))
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert "2026-10-02" in r.stderr and "já foi cortado" in r.stderr and "nomeie os caminhos" in r.stderr
+    assert _git("status", "--porcelain", cwd=wt) == "?? DEPOIS.md", "nada commitado: conjunto parcial é pior que nenhum"
+
+
+def test_commitar_sem_caminho_le_da_abertura_em_diante_e_nao_antes(tmp_path):
+    bancada = _montar(tmp_path)
+    wt = _abrir_42(tmp_path, bancada)
+    for nome in ("ANTES.md", "DEPOIS.md"):
+        (wt / nome).write_text("x\n")
+    _bruto_do_dia(tmp_path, "2026-10-29", [{"tool": "write_file", "sessao_id": "s1", "path": str(wt / "ANTES.md")}])
+    _bruto_do_dia(tmp_path, "2026-10-31", [{"tool": "write_file", "sessao_id": "s1", "path": str(wt / "DEPOIS.md")}])
+    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, "aberto_em: 2026-10-30T15:00:00.123456+00:00"))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert _git("show", "--name-only", "--format=", "HEAD", cwd=wt) == "DEPOIS.md"
+    assert _git("status", "--porcelain", cwd=wt) == "?? ANTES.md"
+
+
+def test_commitar_sem_caminho_usa_o_dia_da_porta_e_nao_o_do_utc(tmp_path):
+    """02:30 UTC de 31/10 é 23:30 de 30/10 em Sao_Paulo: o dia da abertura é 30/10, e o evento desse dia entra."""
+    bancada = _montar(tmp_path)
+    wt = _abrir_42(tmp_path, bancada)
+    (wt / "DO_DIA.md").write_text("x\n")
+    _bruto_do_dia(tmp_path, "2026-10-30", [{"tool": "write_file", "sessao_id": "s1", "path": str(wt / "DO_DIA.md")}])
+    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, "aberto_em: 2026-10-31T02:30:00+00:00"))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert _git("show", "--name-only", "--format=", "HEAD", cwd=wt) == "DO_DIA.md"
+
+
+def test_commitar_sem_caminho_sem_a_data_da_abertura_sai_3(tmp_path):
+    bancada = _montar(tmp_path)
+    _abrir_42(tmp_path, bancada)
+    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, "aberto_em: -"))
+    assert r.returncode == 3 and "data da abertura" in r.stderr and "nomeie os caminhos" in r.stderr
+    r = _commitar_sem_caminho(tmp_path, bancada, tmp_path / "nao-existe")
+    assert r.returncode == 3 and "data da abertura" in r.stderr
+    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, "aberto_em: ontem"))
+    assert r.returncode == 3 and "ilegível" in r.stderr

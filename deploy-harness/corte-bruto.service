@@ -1,0 +1,25 @@
+[Unit]
+Description=Corte do bruto da porta: o dia com mais de 35 dias sai do disco so se passa no portao (#3354)
+Documentation=https://wiki.platafirma.org/index.php/Spec:log-de-negocio
+# Uma hora depois do linhagem-ops: o corte so apaga o dia que a linhagem ja conferiu.
+After=linhagem-ops.service
+
+[Service]
+Type=oneshot
+# Da release, nunca de clone (card #3010): a unit sobrevive a bancada apagada.
+WorkingDirectory=/opt/platafirma/current/harness
+Environment=PATH=/opt/platafirma/current/harness/bin:/usr/local/bin:/usr/bin:/bin
+# Mesmo ambiente do ops-mcp (card #3147): a URL do acervo e, onde houver, o token; o `tarefas criar` do incidente
+# usa a mesma conta.
+EnvironmentFile=/home/claudinho/.config/ops/env
+# Quem assina o incidente aberto pelo portao: a cadeira da esteira.
+Environment=PF_CADEIRA=ti
+# Python da release, nunca o do sistema (testes/test_fechamento_3010_harness.sh). Sem modelo: so a biblioteca
+# padrao, o bruto por lib/oplog e a API do acervo. Sem argumento, corta o dia que passou de 35 dias e passou no
+# portao; um drop-in com CORTE_ARGS (por `infra unit-env`) roda o ensaio `--seco`, que nao apaga nada.
+ExecStart=/opt/platafirma/current/venv/harness/bin/python /opt/platafirma/current/harness/bin/_infra/corte-bruto
+# 0 e tudo certo (inclui o dia retido por falta de linhagem, que e silencioso de proposito). 1 (dia reprovado no
+# portao), 3 (API ou banco fora), 4 (token recusado) e 5 (indeterminavel) FALHAM a unit: `release conferir jobs`
+# mostra a ultima execucao.
+SuccessExitStatus=0
+TimeoutStartSec=1800

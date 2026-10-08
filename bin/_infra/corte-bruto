@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+# corte-bruto — apaga do disco o dia do bruto da porta que passou de 35 dias E passou no portão (card #3354; arq:0123
+# regras 10 e 12).
+#
+# Fora do PATH e do golden record, como bin/_infra/limpeza-logs (arq:0110 §14): roda pelo timer `corte-bruto.timer`
+# às 01:20, uma hora depois do `linhagem-ops`, e nunca pela porta. Nenhum verbo servido apaga o bruto (arq:0123 §12),
+# nem para ensaiar em produção: o ensaio é `--seco`, que confere e diz o que faria sem apagar, sem gravar poda.log e
+# sem abrir incidente. O portão e a rodada moram em lib/oplog_corte.py; a remoção, em lib/oplog.py.
+#
+# Rodar o ensaio à mão pela porta, sem argumento de linha de comando: `infra unit-env corte-bruto
+# CORTE_ARGS=--seco,--mais-velhos-que,20`, `infra restart corte-bruto`, ler a saída com `infra logs corte-bruto 200`, e
+# LIMPAR com `infra unit-env corte-bruto CORTE_ARGS=` — drop-in esquecido repetiria o ensaio todas as noites. Vírgula,
+# e não espaço, porque o drop-in não aspa.
+#
+# ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] ·
+#   MOTOR_ACERVO_URL | RAG_API_URL | RAG_API_BASE[=http://127.0.0.1:8100] · RAG_API_TOKEN (Bearer, do EnvironmentFile da
+#   conta; nunca impresso) · LINHAGEM_TIMEOUT_S[=180] · CORTE_MAX_DIAS[=3] · CORTE_ARGS · PF_TAREFAS_BIN[=<dir>/../tarefas] ·
+#   PF_CADEIRA[=ti]
+#
+# exit: 0 ok · 1 dia reprovado no portão (retido; incidente aberto) · 2 uso · 3 API ou banco fora (o dia fica) ·
+#   4 token recusado · 5 indeterminável (relógio fora do bruto; incidente que não abriu)
+import os
+import sys
+
+_RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+sys.path.insert(0, os.path.join(_RAIZ, "lib"))
+
+import oplog_corte  # noqa: E402
+
+
+def _argv() -> list[str]:
+    extra = os.environ.get("CORTE_ARGS", "").strip()
+    return sys.argv[1:] + [a for a in extra.split(",") if a]
+
+
+if __name__ == "__main__":
+    sys.exit(oplog_corte.main(_argv()))

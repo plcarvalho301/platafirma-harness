@@ -26,6 +26,7 @@ nesta MESMA bancada (onda 1, frente C): por isso estes casos copiam bin/infra pa
 uma árvore isolada (fixture `arvore`), com ajudantes FAKE ao lado — o mesmo
 contrato de vizinhança, sem a corrida.
 """
+import datetime
 import json
 import os
 import shutil
@@ -315,6 +316,63 @@ def test_saude_texto_sem_flag_nao_muda(path_ok):
     assert "== disco e memória" in r.stdout
     with pytest.raises(json.JSONDecodeError):
         json.loads(r.stdout)
+
+
+# --- infra saude: o bruto da porta contra o teto do corte (card #3354) -------------------------------
+#
+# O teto e a mediana de bytes por dia das quatro semanas anteriores x 35 x 1,5; quem mede e `python3 -m oplog teto`
+# (lib/oplog), e estes casos apontam OPS_LOG_DIR para uma pasta de tmp_path: nunca leem o bruto de verdade.
+
+def _bruto_no_disco(pasta, dias_atras, tamanho):
+    pasta.mkdir(exist_ok=True)
+    hoje = datetime.date.today()
+    for n in dias_atras:
+        (pasta / f"ops-{hoje - datetime.timedelta(days=n)}.jsonl").write_bytes(b"x" * tamanho)
+
+
+def test_saude_acusa_o_bruto_acima_do_teto_como_card_e_nao_como_incidente(path_ok, tmp_path):
+    pasta = tmp_path / "ops"
+    _bruto_no_disco(pasta, range(1, 29), 1000)
+    _bruto_no_disco(pasta, [60], 60000)
+    env = {"OPS_LOG_DIR": str(pasta)}
+    bruto = json.loads(_roda("saude", "--json", path_dir=path_ok, checa_exit=0, env_extra=env).stdout)["bruto"]
+    assert bruto["estado"] == "acima" and bruto["teto_bytes"] == 52500 and bruto["bytes"] == 88000
+    assert bruto["mediana_bytes_dia"] == 1000
+    texto = _roda("saude", path_dir=path_ok, checa_exit=0, env_extra=env).stdout
+    assert "== bruto da porta (teto do corte)" in texto
+    assert "ACIMA DO TETO" in texto and "abra card (não é incidente)" in texto
+
+
+def test_saude_com_o_bruto_dentro_do_teto_diz_dentro(path_ok, tmp_path):
+    pasta = tmp_path / "ops"
+    _bruto_no_disco(pasta, range(1, 29), 1000)
+    env = {"OPS_LOG_DIR": str(pasta)}
+    assert json.loads(_roda("saude", "--json", path_dir=path_ok, env_extra=env).stdout)["bruto"]["estado"] == "dentro"
+    texto = _roda("saude", path_dir=path_ok, checa_exit=0, env_extra=env).stdout
+    assert "— dentro" in texto and "ACIMA" not in texto
+
+
+def test_saude_sem_base_para_o_teto_nao_inventa_teto(path_ok, tmp_path):
+    pasta = tmp_path / "ops"
+    _bruto_no_disco(pasta, [1, 2, 3], 1000)
+    env = {"OPS_LOG_DIR": str(pasta)}
+    bruto = json.loads(_roda("saude", "--json", path_dir=path_ok, checa_exit=0, env_extra=env).stdout)["bruto"]
+    assert bruto["estado"] == "sem_base" and bruto["teto_bytes"] is None
+    assert "sem base para o teto" in _roda("saude", path_dir=path_ok, checa_exit=0, env_extra=env).stdout
+
+
+def test_saude_com_a_sondagem_do_bruto_quebrada_nao_derruba_a_saude(path_ok):
+    _stub(path_ok, "python3", f'case "$*" in *"-m oplog"*) echo boom >&2; exit 9;; esac\nexec "{PYTHON3_REAL}" "$@"\n')
+    dado = json.loads(_roda("saude", "--json", path_dir=path_ok, checa_exit=0).stdout)
+    assert dado["bruto"] == {"estado": "indeterminavel", "motivo": "oplog teto saiu 9"}
+    assert dado["disco"]["montado_em"] == "/", "o resto da saude segue inteiro"
+    assert "bruto: não medido (oplog teto saiu 9)" in _roda("saude", path_dir=path_ok, checa_exit=0).stdout
+
+
+def test_o_corte_do_bruto_nao_e_ato_de_infra(path_ok):
+    """arq:0123 §12: só o timer corta. `infra limpeza` só despacha logs e quarentena."""
+    r = _roda("limpeza", "corte-bruto", path_dir=path_ok)
+    assert r.returncode == 2 and "limpeza desconhecida: corte-bruto" in r.stderr
 
 
 # --- Q9: cabeçalho / dispatch (card #3145) --------------------------------
