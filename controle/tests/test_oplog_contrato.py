@@ -20,7 +20,7 @@ GIRO = {**TODA, **IDENT, "tool": "tarefas", "ato": "ler", "args": "3345", "sessa
         "bytes_produzidos": 120, "bytes_servidos": 100, "lavado": ["branco"], "capacidade": None,
         "ferramenta": None, "escopo": "#3345", "turno_id": "T1", "turno_fonte": "declarado"}
 ABERTURA = {**TODA, **IDENT, "tool": "monta_sessao", "sessao_id": "sid", "chapeu": "engenharia-de-harness",
-            "roteador_via": "comando", "superficie": "claude.ai", "pergunta_bytes": 42,
+            "roteador_via": "comando", "superficie": "claude.ai", "pergunta": "oi", "pergunta_bytes": 2,
             "tokens_pecas": {"persona": 0, "chapeu": 1291}, "metodo_tokens": "tokenizador qwen2.5",
             "prefixo_sha": "abc123", "montador_sha": "76e618a"}
 FECHO = {**TODA, "tool": "descansar", "evento": "fecho", "sessao_id": "sid", "cadeira": "ia",
@@ -32,7 +32,7 @@ ESCOPO = {**TODA, **IDENT, "tool": "sessao", "evento": "escopo", "sessao_id": "s
 TURNO = {**TODA, **IDENT, "tool": "sessao", "evento": "turno", "sessao_id": "sid", "turno_id": "T1",
          "turno_fonte": "declarado"}
 CONSULTA = {**TODA, "tool": "motor", "evento": "consulta", "origem_consulta": "abertura",
-            "particao": "casa", "query_bytes": 30}
+            "particao": "casa", "query": "oi", "query_bytes": 2}
 
 LINHAS = {"giro": GIRO, "abertura": ABERTURA, "fecho": FECHO, "auth_negada": AUTH, "http_req": HTTP,
           "escopo": ESCOPO, "turno": TURNO, "consulta": CONSULTA}
@@ -69,18 +69,22 @@ def test_so_capacidade_ferramenta_e_mapa_v_saem_nulos_por_falta_da_projecao():
         assert f"{campo} nulo" in oplog.validar({**GIRO, campo: None}), campo
 
 
-def test_o_texto_do_dono_e_o_token_nao_se_gravam():
-    assert "nao se grava pergunta" in oplog.validar({**ABERTURA, "pergunta": "oi"})
-    assert "nao se grava texto" in oplog.validar({**TURNO, "texto": "oi"})
+def test_a_mensagem_do_dono_se_grava_mas_o_pacote_a_resposta_e_o_token_nao():
+    # Ordem do dono (08/10): grava o prompt dele, so o prompt, no bruto.
+    assert oplog.validar({**ABERTURA, "pergunta": "oi, tudo bem?"}) == []
+    assert oplog.validar({**ABERTURA, "pergunta": None, "pergunta_bytes": 0}) == []   # reabertura
+    for campo in ("pacote", "pecas", "conteudo", "resposta"):
+        assert f"nao se grava {campo}" in oplog.validar({**ABERTURA, campo: "x"}), campo
+    assert "nao se grava resposta" in oplog.validar({**GIRO, "resposta": "x"})
     assert "nao se grava token" in oplog.validar({**GIRO, "token": "eyJ..."})
     assert "nao se grava authorization" in oplog.validar({**GIRO, "authorization": "Bearer x"})
 
 
-def test_a_consulta_da_abertura_nao_grava_a_query_mas_a_de_cadeira_grava():
-    assert "nao se grava query na consulta da abertura" in oplog.validar({**CONSULTA, "query": "oi"})
-    de_cadeira = {k: v for k, v in CONSULTA.items() if k != "query_bytes"}
-    assert oplog.validar({**de_cadeira, "origem_consulta": "busca", "query": "o que e caderno"}) == []
-    assert "falta query ou query_bytes" in oplog.validar(de_cadeira)
+def test_a_consulta_do_motor_grava_a_query_da_abertura_e_a_de_cadeira():
+    assert oplog.validar(CONSULTA) == []                                      # origem_consulta abertura
+    assert oplog.validar({**CONSULTA, "origem_consulta": "busca", "query": "o que e caderno"}) == []
+    sem_query = {k: v for k, v in CONSULTA.items() if k != "query"}
+    assert "falta query" in oplog.validar(sem_query)
 
 
 @pytest.mark.parametrize("motivo", oplog.MOTIVOS_NEGACAO)

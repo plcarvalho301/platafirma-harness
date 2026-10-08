@@ -2426,11 +2426,14 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
         _delta = _delta_pecas(r, _sessao_id)   # R2: peça repetida na mesma sessão sai como aviso
         _carimba_turno({"sessao_id": _sessao_id, "cadeira": r.get("cadeira"), "ordem_id": _oid}, turno)
 
-    # O texto do dono nao se grava (arq:0061 §5; card #3345): so o tamanho. A abertura leva o que
-    # o pacote custou, em tokens por peça com o método, o sha do prefixo cacheável e o montador.
+    # `pergunta` e a mensagem do dono, so ela (spec log-de-negocio §0/§3, ordem do dono de 08/10):
+    # fica no bruto, 35 dias, e nunca atravessa para o evento. O pacote montado NAO se grava: a
+    # abertura leva so o que ele custou, em tokens por peça com o método, o sha do prefixo
+    # cacheável e o montador.
     _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar,
            resolvida=r.get("cadeira"), erro=r.get("erro"),
            chapeu=(r.get("chapeu") or None),
+           pergunta=(pergunta or None),
            pergunta_bytes=len((pergunta or "").encode("utf-8")),
            roteador_via=_rot.get("via"), roteador_slug=_rot.get("slug"),
            superficie=_superficie(), **_custo_da_abertura(r),
