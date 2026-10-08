@@ -113,6 +113,8 @@ tests/test_oplog.py
 # Card #3345: o contrato de campo por tipo de linha (o que falta reprova) e o que o log nao grava.
 tests/test_oplog_contrato.py
 tests/test_oplog_unico_leitor.py
+# Card #3356: o hook do Code guarda o turno e a mensagem do dono (0600 em pasta 0700) e os leva a porta; sem eles nada muda.
+tests/test_hook_turno.py
 # Medido em 06/10/2026 (card #3326): testes/ da raiz fora do acervo, que nenhum gate rodava. No venv
 # harness (o único com redis, que test_descansar_puxado.py exige), 305 passam depois de consertar 6
 # defasados; os .sh entram pelos wrappers test_deploy_seg_suites.py, test_release_suites.py e
