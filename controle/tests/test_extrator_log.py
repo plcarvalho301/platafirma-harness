@@ -115,6 +115,7 @@ def test_nome_do_dia_e_so_o_nome():
     ({"tool": "motor", "evento": "consulta", "query": "x"}, "consulta_motor"),
     ({"tool": "run_command", "evento": "fallback"}, "fallback"),
     ({"tool": "repo", "evento": "verbo_contornado"}, "contorno"),
+    ({"tool": "metrica", "ato": "investigar", "evento": "leitura_bruto", "incidente": 3400}, "leitura"),
 ])
 def test_tipo_particao(reg, tipo):
     assert ex.tipo_particao(reg) == tipo

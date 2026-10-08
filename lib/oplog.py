@@ -12,6 +12,10 @@ as quatro coisas que a ADR poe num lugar so:
               legiveis e ilegiveis por dia; dia sem arquivo e «ausente», nunca zero.
   corte       o prazo de 35 dias, o que ha no disco, o teto e a unica remocao (card #3354): o
               timer `corte-bruto` apaga o dia que passou no portao; nada mais apaga o bruto.
+  investigar  a unica porta que devolve a linha INTEIRA do bruto (card #3355; arq:0123 regra 15): exige o
+              numero do incidente e grava o evento `leitura_bruto` antes de entregar; quem confere que o
+              incidente esta aberto e o verbo `metrica investigar`. Leitura que nao devolve conteudo a quem
+              chamou (extrator, corte, repo commitar) segue sem incidente.
   CLI         `python3 -m oplog ler <dia> | --desde <d> [--ate <d>] [--sessao <id>] [--tool <t>]`,
               uma linha JSON por evento, para quem e bash (bin/repo). Sai 3 quando nenhum dia da
               janela tem arquivo; dia que falta no meio sai no stderr e a leitura segue (exit 0).
@@ -228,6 +232,8 @@ FONTES_TURNO = ("declarado", "gap", "runner", "hook", "transcript")
 FONTES_ENTREGUES = ("hook", "transcript")
 FONTES_TOKENS = ("provedor", "estimado")
 ORIGENS = ("cadeira", "agente", "sonda")
+# De onde a linha inteira saiu na `leitura_bruto`: do arquivo do dia, ou da amostra e da citada que a particao guarda.
+ORIGENS_LEITURA = ("bruto", "particao")
 IDENTIDADE = ("sujeito", "sub", "username", "azp", "sid", "jti")
 
 # Campo obrigatorio por tipo de linha. A chave tem de existir; o valor so pode ser nulo onde
@@ -248,18 +254,26 @@ CONTRATO = {
     "escopo": ("tool", "evento", "sessao_id", "escopo") + IDENTIDADE,
     "turno": ("tool", "evento", "sessao_id", "turno_id", "turno_fonte") + IDENTIDADE,
     "consulta": ("tool", "evento", "origem_consulta", "particao"),
+    # A leitura da linha inteira (card #3355): quem leu, de que incidente, de onde e quanto saiu. O CONTEUDO nao
+    # entra aqui: o evento e o rastro, a linha citada e que vai a particao (D5.10).
+    "leitura": ("tool", "ato", "evento", "sessao_id", "incidente", "dia", "origem_leitura", "linhas_devolvidas",
+                "linhas_omitidas", "filtro_sessao", "filtro_tool", "filtro_classe"),
 }
 NULAVEL = frozenset({"capacidade", "ferramenta", "mapa_v", "cadeira", "ordem_id", "exit_code",
                      "roteador_via", "particao", "origem_consulta", "chapeu",
                      "bytes_produzidos", "bytes_servidos",         # escrita e recusa nao devolvem corpo
-                     "pergunta"})                                   # reabertura sem mensagem nova
+                     "pergunta",                                    # reabertura sem mensagem nova
+                     "linhas_omitidas",                             # a particao nao conta o que ficou de fora
+                     "filtro_sessao", "filtro_tool", "filtro_classe"})   # filtro nao pedido
 # Campo que, presente, e erro. A mensagem do dono (`pergunta` na abertura, `query` na consulta da
 # abertura) se grava no bruto e so nele (spec log-de-negocio §0/§3); a resposta da cadeira, o
 # pacote montado e o token nunca (arq:0061 §5).
 PROIBIDOS = {"abertura": ("resposta", "pacote", "pecas", "conteudo"),
              "turno": ("resposta", "pacote", "pecas", "conteudo", "token", "access_token",
                        "refresh_token", "authorization"),         # `texto` e a mensagem do dono (#3357)
-             "giro": ("token", "access_token", "refresh_token", "authorization", "resposta")}
+             "giro": ("token", "access_token", "refresh_token", "authorization", "resposta"),
+             "leitura": ("linha", "linhas", "args", "texto", "erro", "conteudo", "resposta", "pergunta", "query",
+                         "token", "access_token", "refresh_token", "authorization")}
 
 
 def tipo_da_linha(reg: dict) -> str:
@@ -269,6 +283,8 @@ def tipo_da_linha(reg: dict) -> str:
         return evento
     if evento == "turno":
         return "turno"
+    if evento == "leitura_bruto":
+        return "leitura"
     if reg.get("tool") == "monta_sessao" and evento in (None, ""):
         return "abertura" if not reg.get("erro") else "outro"      # abertura recusada nao tem pacote
     return "giro" if _e_giro(reg) and evento in EVENTOS_DE_GIRO else "outro"
@@ -306,6 +322,12 @@ def validar(reg: dict) -> list[str]:
         problemas.append(f"turno_fonte fora do vocabulario: {reg.get('turno_fonte')!r}")
     if tipo == "consulta" and "query" not in reg:
         problemas.append("falta query")
+    if tipo == "leitura":
+        if reg.get("origem_leitura") not in ORIGENS_LEITURA:
+            problemas.append(f"origem_leitura fora do vocabulario: {reg.get('origem_leitura')!r}")
+        incidente = reg.get("incidente")
+        if not isinstance(incidente, int) or isinstance(incidente, bool) or incidente < 1:
+            problemas.append(f"incidente nao e numero de card: {incidente!r}")
     return problemas
 
 
@@ -463,6 +485,87 @@ def linhas_do_dia(dados: bytes):
         except ValueError:
             reg = None
         yield n, bruta, (reg if isinstance(reg, dict) else None)
+
+
+# --- investigar: a linha inteira, com o rastro (card #3355; arq:0123 regra 15) -------------------------------
+
+# O que cada linha devolvida custa na saida alem dos bytes dela (numero da linha, evento_id, moldura): o teto de bytes
+# conta isto tambem, para a saida do verbo caber nos 50 KB que a porta aceita sem cortar calada.
+SOBRA_POR_LINHA = 200
+
+
+def _incidente(numero) -> int:
+    if isinstance(numero, bool) or not isinstance(numero, int) or numero < 1:
+        raise ValueError(f"incidente tem de ser o numero do card (inteiro >= 1): {numero!r}")
+    return numero
+
+
+def registrar_leitura(dia, *, incidente, origem: str, filtros: dict | None = None, devolvidas: int,
+                      omitidas: int | None = None, ambiente=None, diretorio_=None, agora=None) -> bool:
+    """Grava o evento `leitura_bruto`: quem leu (sessao, cadeira, fita), por qual incidente, que dia, de onde
+    (`origem`: o arquivo do dia ou a particao), com que filtro e quantas linhas sairam. Nao leva a linha, o argumento
+    nem o texto do turno: o evento e o rastro, e a linha citada e que atravessa para a particao (D5.10). Devolve
+    False, dito no stderr, quando nao gravou: quem devolveu conteudo sem deixar rastro nao pode seguir."""
+    if origem not in ORIGENS_LEITURA:
+        raise ValueError(f"origem da leitura fora de {ORIGENS_LEITURA}: {origem!r}")
+    env = os.environ if ambiente is None else ambiente
+    f = filtros or {}
+    evento = {
+        "tool": "metrica", "ato": "investigar", "evento": "leitura_bruto",
+        "sessao_id": env.get("PF_SESSAO") or None, "cadeira": env.get("PF_CADEIRA") or None,
+        "ordem_id": env.get("PF_ORDEM_ID") or None,
+        "incidente": _incidente(incidente), "dia": _dia(dia), "origem_leitura": origem,
+        "filtro_sessao": f.get("sessao"), "filtro_tool": f.get("tool"), "filtro_classe": f.get("classe"),
+        "linhas_devolvidas": int(devolvidas), "linhas_omitidas": None if omitidas is None else int(omitidas),
+    }
+    return emitir(evento, diretorio_=diretorio_, agora=agora)
+
+
+class Inteiras:
+    """O que `ler_inteiras` achou: as linhas que casam (numero fisico, bytes, dicionario), quantas ficaram fora do
+    teto, quantas linhas do dia eram ilegiveis e se o rastro da leitura gravou. `ausente`: o dia nao tem arquivo."""
+    __slots__ = ("dia", "ausente", "linhas", "omitidas", "ilegiveis", "registrada")
+
+    def __init__(self, dia: str, ausente: bool):
+        self.dia, self.ausente = dia, ausente
+        self.linhas: list[tuple[int, bytes, dict]] = []
+        self.omitidas = self.ilegiveis = 0
+        self.registrada = False
+
+
+def ler_inteiras(dia, *, incidente, casa=None, filtros: dict | None = None, limite: int = 50, max_bytes: int = 36000,
+                 ambiente=None, diretorio_=None) -> Inteiras:
+    """A unica leitura do bruto que devolve a LINHA INTEIRA (argumento, erro, identidade, texto do turno) a quem
+    chamou (arq:0123 regra 15). Exige o numero do incidente e grava o `leitura_bruto` antes de entregar: sem rastro
+    gravado, `registrada` volta False e quem chamou nao devolve nada. Quem confere que o incidente esta ABERTO e o
+    verbo (`metrica investigar`); o modulo so nao deixa ler sem dizer por quem.
+
+    `casa(reg)` escolhe as linhas; `limite` e `max_bytes` (a linha e a sobra de `SOBRA_POR_LINHA` por linha) cortam
+    o que sai, e o que casou e ficou de fora conta em `omitidas`. Dia sem arquivo volta `ausente`, sem rastro: nada
+    foi lido."""
+    numero = _incidente(incidente)
+    nome = _dia(dia)
+    dados = conteudo_do_dia(nome, diretorio_)
+    achado = Inteiras(nome, dados is None)
+    if dados is None:
+        return achado
+    usados = 0
+    for n, bruta, reg in linhas_do_dia(dados):
+        if reg is None:
+            achado.ilegiveis += 1
+            continue
+        if casa is not None and not casa(reg):
+            continue
+        custo = len(bruta) + SOBRA_POR_LINHA
+        if len(achado.linhas) >= limite or (achado.linhas and usados + custo > max_bytes):
+            achado.omitidas += 1
+            continue
+        achado.linhas.append((n, bruta, reg))
+        usados += custo
+    achado.registrada = registrar_leitura(nome, incidente=numero, origem="bruto", filtros=filtros,
+                                          devolvidas=len(achado.linhas), omitidas=achado.omitidas,
+                                          ambiente=ambiente, diretorio_=diretorio_)
+    return achado
 
 
 # --- o corte: o prazo, o que ha no disco, o teto (card #3354; arq:0123 regras 10 e 12) -----------

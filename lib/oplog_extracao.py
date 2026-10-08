@@ -207,6 +207,8 @@ def tipo_particao(reg: dict) -> str:
         return "auth_negada"
     if evento in ("escopo", "turno", "fecho", "fallback"):
         return evento
+    if evento == "leitura_bruto":       # a leitura da linha inteira (#3355): tem `tool`, e nao e giro
+        return "leitura"
     if evento == "consulta":
         return "consulta_motor"
     if evento == "verbo_contornado":
@@ -409,6 +411,16 @@ def para_item(reg: dict, dia: str, n: int, inv: Invalidos) -> dict:
     return item
 
 
+# --- a linha citada (card #3355; D5.10) -----------------------------------------------------------------
+
+def item_de_citacao(reg: dict, bruta: bytes, dia: str, n: int) -> dict:
+    """O item de D5.10 para uma linha inteira do bruto: o MESMO `evento_id` que o extrator deu a ela (a chave da linha,
+    ou o uuid v5 de (dia, numero)) e o MESMO sha256 dos bytes dela, para a citacao cair no evento que a passada do dia
+    gravou e a linha guardada da amostra bater com a citada. A linha leva o NUL trocado, como na amostra."""
+    evento_id = _uuid_ou_nulo(reg.get("evento_id"), "evento_id", Invalidos()) or oplog.evento_id_da_linha(dia, n)
+    return {"evento_id": evento_id, "linha": _sem_nul(reg), "linha_sha256": hashlib.sha256(bruta).hexdigest()}
+
+
 # --- a amostra (arq:0123 regra 8; D1) ----------------------------------------------------------
 
 def amostra_esperada(giros) -> set[str]:
@@ -558,7 +570,7 @@ class Api:
         self.timeout = timeout if timeout is not None else float(os.environ.get("LINHAGEM_TIMEOUT_S", "180"))
 
     def chamar(self, metodo: str, caminho: str, corpo: dict | None = None, params: dict | None = None,
-               aceita: tuple = (200,)) -> tuple[int, dict | None]:
+               aceita: tuple = (200,), contrato: str = "1.5.0") -> tuple[int, dict | None]:
         url = self.base + caminho + ("?" + urllib.parse.urlencode(params) if params else "")
         cab = {"Accept": "application/json"}
         dados = None
@@ -592,7 +604,7 @@ class Api:
         detalhe = obj.get("detail") if isinstance(obj, dict) else None
         if status in (404, 405) and titulo not in self.NEGOCIO_404:
             raise Falha(3, f"{metodo} {caminho}: rota ausente em {self.base} (HTTP {status}); "
-                           "o contrato acervo-escrita >= 1.5.0 (tag log) não está no ar", titulo, obj)
+                           f"o contrato acervo-escrita >= {contrato} (tag log) não está no ar", titulo, obj)
         if status in aceita:
             return status, obj
         msg = f"{metodo} {caminho}: HTTP {status}" + (f" {titulo}" if titulo else "") + (f": {detalhe}" if detalhe else "")

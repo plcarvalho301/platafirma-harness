@@ -3,7 +3,7 @@
 # capacidade: metrica
 # dono: claudinho-ia
 # use para: giros por fita, erros por verbo, giros-ate-acerto, profundidade de cadeia de erro
-# atos: eventos, dia, ate-acerto, tateio, casos, verbos, comportamento, turnos, abertura (leitura, abertura)
+# atos: eventos, dia, ate-acerto, tateio, casos, verbos, comportamento, turnos, abertura (leitura, abertura), investigar (escrita, investigacao)
 # forma: relatorio
 # cauda: nao
 #
@@ -30,7 +30,7 @@
 # Saida JSON por default — rota de maquina, nao `--json` opcional. `--resumo` e a rota
 # humana, e so ela.
 #
-# exit: 0 ok · 2 uso invalido · 3 a particao nao respondeu · 4 fonte do dia inexistente (so no bruto; gracioso, nunca stack) · 5 a particao respondeu fora do contrato
+# exit: 0 ok · 1 so em investigar: nenhuma linha casa · 2 uso invalido · 3 a particao ou o rastreador nao respondeu · 4 fonte do dia inexistente (so no bruto; gracioso, nunca stack) ou, em investigar, incidente nao aberto · 5 a particao respondeu fora do contrato ou, em investigar, o rastro da leitura nao gravou
 #
 # FONTE (card #3353; arq:0123 regras 8 a 15). O bruto de var/log/ops e cortado em 35 dias; o evento de cada
 # giro, sem conteudo, mora por um ano na particao `log` do acervo. `dia` e `verbos` leem a PARTICAO para todo dia
@@ -41,6 +41,10 @@
 # leem argumento, erro e a ordem das chamadas, que a particao nao leva (D5.9): seguem no bruto, pelo modulo, com
 # `fonte: bruto`. `--fonte bruto` da a `dia` e a `verbos` a leitura de antes, e a mesma conta de giros por tool e
 # classe da particao, para a conferencia ser a diferenca de dois JSON.
+# CONTEUDO (card #3355; arq:0123 regra 15). O argumento, o texto de erro, a identidade e o texto do turno ficam no bruto, e
+# so `investigar` os devolve, com incidente ABERTO (bin/_metrica/investigar.py; lib/oplog.ler_inteiras grava o rastro
+# `leitura_bruto`, e as linhas devolvidas ficam citadas na particao). `casos` e `eventos` dao o giro e o turno SEM
+# conteudo, com a linha «argumentos: metrica investigar <dia> --incidente <n>».
 # O cabecalho de verbo (as 40 primeiras linhas) tem de guardar a linha `# exit:`: a porta a le para dar a classe.
 import argparse
 import json
@@ -64,16 +68,19 @@ if _BIN_DIR not in sys.path:
     sys.path.insert(0, _BIN_DIR)
 from _metrica.abertura import main as _abertura_main  # noqa: E402
 from _metrica import particao  # noqa: E402
+from _metrica import investigar as _investigar  # noqa: E402  (card #3355: a linha inteira, so com incidente aberto)
 
 # Onde o ops log mora e como se le e do lib/oplog (arq:0123 §3); aqui so se guarda o
 # diretorio para o teste apontar a leitura para uma pasta em tmp.
 LOG_OPS = str(oplog.diretorio())
 
 VERBO = "metrica"
-ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos", "verbos", "comportamento", "turnos", "abertura")
+ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos", "verbos", "comportamento", "turnos", "abertura",
+        "investigar")
 # Os atos que leem o que a particao nao leva (argumento, erro, a ordem das chamadas): ficam no bruto (D5.9).
 ATOS_DO_BRUTO = ("eventos", "ate-acerto", "tateio", "casos", "comportamento")
-TIPOS = ("giro", "erro", "ajuda", "help", "acerto", "cadeia", "lote", "veredito")
+# `turno` so sai com `--tipo turno` (a linha de turno ja conta como giro no stream sem tipo), sem o texto do dono.
+TIPOS = ("giro", "erro", "ajuda", "help", "acerto", "cadeia", "lote", "veredito", "turno")
 
 # PEDIDO DE AJUDA NAO E ERRO (dono, 12/09/2026): verbo chamado sem ato lista os atos por
 # contrato (oficio.md), e `--help`/`--ajuda` devolvem o uso. Que o uso saia por stderr com
@@ -417,6 +424,11 @@ def stream_eventos(giros, cadeias, tipo=None):
             saida.append({"tipo": "acerto", "ate_acerto": g["ate_acerto"], **base})
         if g["lote"] and tipo in (None, "lote"):
             saida.append({"tipo": "lote", **base})
+        if tipo == "turno" and g.get("evento") == "turno":
+            # O turno sem o texto do dono (card #3355): so o tamanho, que e numero. A mensagem sai por `investigar`.
+            tam = g["bruto"].get("texto_bytes")
+            saida.append({"tipo": "turno", "texto_bytes": tam if isinstance(tam, int) and not isinstance(tam, bool)
+                          else None, **base})
     if tipo in (None, "cadeia"):
         saida.extend(cadeias)
     return saida
@@ -671,6 +683,16 @@ _RUIDO = set(CAMPOS_GIRO) | {
     "bytes_servidos", "bytes_produzidos", "ledger", "giro", "sha", "lavado", "evento",
 }
 CASOS_TAM = 220     # chars por campo — o bastante para ler o comando, nao o retorno
+# CONTEUDO FORA (card #3355; arq:0123 regra 15). `casos` dizia o que a cadeira tentava: `args`, `erro`, `motivo`, `path`,
+# `item`, `query`... Isso e conteudo, e so sai por `metrica investigar <dia> --incidente <n>`, com incidente aberto.
+# Ficam so os campos que a porta ou o verbo DECLARAM (nome de verbo recusado, classe do erro de leitura), e ainda assim
+# na forma de nome: o que nao cabe vira «(forma invalida)». O NOME das chaves que ficaram de fora sai em
+# `chaves_omitidas`, para quem investiga saber o que o giro gravou sem ler o valor.
+CASOS_CAMPOS = ("classe_erro", "verbo", "causa", "classe_fonte")
+_FORMA_DE_NOME = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,39}")
+
+def _declarado(v):
+    return v if isinstance(v, str) and _FORMA_DE_NOME.fullmatch(v) else "(forma invalida)"
 
 def _corta(v, n=CASOS_TAM):
     s = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
@@ -696,14 +718,20 @@ def _classe(g, texto_livre):
     return "execucao"
 
 def casos(giros, tool=None):
-    saida, chaves = [], defaultdict(int)
+    saida, chaves, omitidas = [], defaultdict(int), defaultdict(int)
     for g in giros:
         if not g["falhou"]:
             continue
         if tool and g["tool"] != tool:
             continue
-        extra = {k: _corta(v) for k, v in g["bruto"].items()
-                 if k not in _RUIDO and not _nulo(v)}
+        extra = {}
+        for k, v in g["bruto"].items():
+            if k in _RUIDO or _nulo(v):
+                continue
+            if k in CASOS_CAMPOS:
+                extra[k] = _declarado(v)
+            else:
+                omitidas[k] += 1
         for k in extra:
             chaves[k] += 1
         livre = " ".join(extra.values())
@@ -758,12 +786,15 @@ def casos(giros, tool=None):
             "erros": len(saida),
             "erros_distintos": len({(c["lote_id"] or c["ts"], c["tool"], c["ato"],
                                     c["exit_code"]) for c in saida}),
-            "chaves_presentes": dict(sorted(chaves.items(), key=lambda kv: -kv[1]))}
+            "chaves_presentes": dict(sorted(chaves.items(), key=lambda kv: -kv[1])),
+            "chaves_omitidas": dict(sorted(omitidas.items(), key=lambda kv: (-kv[1], kv[0])))}
 
 def casos_texto(r, agregado=False):
     linhas = [f"== metrica casos — {r['dia']} · fonte: bruto == {r['erros']} erros · "
               f"{r['erros_distintos']} distintos (dedup por lote)"]
     linhas.append("por classe: " + " · ".join(f"{k}={v}" for k, v in r["por_classe"].items()))
+    if r.get("argumentos"):
+        linhas.append(f"argumentos: {r['argumentos']}")
     aj = r["ajuda_fora_do_erro"]
     linhas.append(f"ajuda (fora do erro): {aj['total']} — " +
                   " ".join(f"{k}={v}" for k, v in aj["por_verbo"].items()))
@@ -786,6 +817,9 @@ def casos_texto(r, agregado=False):
             linhas.append(f"  {t:14s} " + " ".join(f"{k}={v}" for k, v in d.items()))
         return linhas
     linhas.append("chaves: " + " ".join(f"{k}={v}" for k, v in r["chaves_presentes"].items()))
+    if r.get("chaves_omitidas"):
+        linhas.append("conteudo fora (so o nome da chave): " +
+                      " ".join(f"{k}={v}" for k, v in r["chaves_omitidas"].items()))
     for c in r["casos"]:
         rep = f" x{c['repeticoes_no_lote']}" if c["repeticoes_no_lote"] > 1 else ""
         cab = (f"{c['ts'][11:19]} {(c['cadeira'] or '-'):18s} {c['tool']} {c['ato'] or '∅'} "
@@ -1098,7 +1132,7 @@ def comportamento_texto(r):
 def uso(codigo=2):
     saida = sys.stdout if codigo == 0 else sys.stderr
     saida.write("""uso:
-  metrica eventos [<dia>] [--tipo giro|erro|help|acerto|cadeia|lote] [--cadeira <slug>]
+  metrica eventos [<dia>] [--tipo giro|erro|help|acerto|cadeia|lote|turno] [--cadeira <slug>]
                   [--sessao <prefixo-ou-id>] [--azp <valor>] [--limite N]
   metrica dia [<dia>] [--cadeira <slug>] [--fonte particao|bruto] [--resumo]
   metrica ate-acerto [<dia>] [--cadeira <slug>]
@@ -1107,6 +1141,7 @@ def uso(codigo=2):
   metrica verbos [<dia>] [--desde AAAA-MM-DD] [--ate AAAA-MM-DD] [--cadeira <slug>] [--fonte particao|bruto] [--csv]
   metrica comportamento [<dia> | --desde AAAA-MM-DD [--ate AAAA-MM-DD]] [--resumo]
   metrica turnos [<dia>] [--desde AAAA-MM-DD] [--ate AAAA-MM-DD] [--por dia,superficie,cadeira,origem] [--resumo]
+  metrica investigar <dia> --incidente <n> [--sessao <prefixo-ou-id>] [--tool <verbo>] [--classe <c>] [--limite N] [--resumo]
 
 Agrega o ops log (o bruto da porta, que o lib/oplog le dia a dia) em eventos de uso do harness.
 <dia> e AAAA-MM-DD; sem ele, hoje. Saida JSON; --resumo imprime o sumario legivel.
@@ -1121,7 +1156,8 @@ dia         resumo: giros por fita, erros por verbo, profundidade de cadeia, hel
 ate-acerto  a metrica-mae: giros-ate-acerto por (ordem_id, tool)
 tateio      separa tateio de GRAMATICA (exit 2, verbo nu, recusa da porta) de tateio de
             LEITURA (sessao tecnica sem motor/acervo), e do erro de execucao
-casos       o giro falhado com o que o log gravou (args, motivo); --agregado resume
+casos       o giro falhado, SEM conteudo (nem args nem texto de erro: so o nome das chaves que o log gravou);
+            --agregado resume. O conteudo sai por `investigar`
 verbos      taxa de erro POR VERBO (erros/giros) numa janela de dias; --csv para planilha
 comportamento  sinais de ato por cadeira, taxa por fita: <dia> (default ontem) contra os
             7 dias anteriores; --desde/--ate abre a janela em varios dias, com a base
@@ -1130,6 +1166,11 @@ comportamento  sinais de ato por cadeira, taxa por fita: <dia> (default ontem) c
 
 turnos      sessao > turno > giro, da particao (D5.8), sempre com `turno_fonte` na chave de cada serie: series
             de fontes diferentes nao se somam. Sem <dia>, ontem (o dia aberto nao esta na particao)
+investigar  a linha INTEIRA do bruto (argumento, erro, identidade, texto do turno), so com incidente ABERTO
+            (--incidente <n>: detectado, em-mitigacao ou mitigado; o verbo nao abre incidente). Casa por
+            --sessao (pega o turno), --tool e --classe. Grava o rastro (`leitura_bruto`) e cita as linhas
+            devolvidas na particao por um ano (D5.10). O dia que ja saiu do bruto devolve so a amostra e a linha
+            ja citada (D5.11). `casos` e `eventos` dao o giro e o turno sem conteudo e apontam para ele
 
 FONTE (#3353). `dia` e `verbos` leem a particao `log` do acervo para todo dia fechado, e dizem `fonte`,
 a versao do extrator e a `cobertura` de cada dia: completo, parcial ou ausente com o motivo (sem_arquivo,
@@ -1142,7 +1183,9 @@ com `fonte: bruto`.
             `giros_por_classe`, `giros_por_tool` e `giros_por_origem`, para conferir uma contra a outra
 --por       so em `turnos`: dia, superficie (default), cadeira, origem
 
-exit: 0 ok · 2 uso invalido · 3 a particao nao respondeu · 4 nao ha log desse dia (so no bruto)
+exit: 0 ok · 1 so em investigar: nenhuma linha casa · 2 uso invalido · 3 a particao ou o rastreador nao respondeu ·
+      4 nao ha log desse dia (so no bruto) ou, em investigar, o incidente nao esta aberto · 5 fora do contrato ou, em
+      investigar, o rastro da leitura nao gravou
 """)
     return codigo
 
@@ -1231,6 +1274,8 @@ def texto(ato, r):
             conta[e["tipo"]] += 1
         for k in TIPOS:
             linhas.append(f"  {conta[k]:6d}  {k}")
+        if r.get("argumentos"):
+            linhas.append(f"argumentos: {r['argumentos']}")
     if r.get("linhas_ilegiveis"):
         linhas.append(f"({r['linhas_ilegiveis']} linhas ilegiveis: disco ou escrita interrompida)")
     return linhas
@@ -1292,6 +1337,9 @@ def main(argv):
     # metrica), por isso nao passa por `texto()` nem pelo bloco `r`/`--resumo` abaixo.
     if ato == "abertura":
         return _abertura_main(argv[2:])
+    # `investigar` tambem tem args proprios (`<dia> --incidente <n> --classe ...`) e sai com a tabela de exit dele.
+    if ato == "investigar":
+        return _investigar.investigar(argv[2:])
 
     p = argparse.ArgumentParser(prog=f"{VERBO} {ato}", add_help=False)
     p.add_argument("dia", nargs="?", default="")
@@ -1487,7 +1535,8 @@ def main(argv):
         # `casaram` conta depois de tipo/cadeira/sessao/azp e ANTES do teto; `omitidos`
         # e o que o teto cortou: quem le sabe se a lista esta inteira.
         r = {"dia": dia, "eventos": evs[:limite] if limite else evs,
-             "casaram": len(evs), "omitidos": max(0, len(evs) - limite) if limite else 0}
+             "casaram": len(evs), "omitidos": max(0, len(evs) - limite) if limite else 0,
+             "argumentos": _investigar.dica_de_argumentos(dia)}
     elif ato == "dia":
         r = {"dia": dia, **resumo_do_dia(giros, cadeias)}
     elif ato == "tateio":
@@ -1499,7 +1548,7 @@ def main(argv):
                 print(linha)
             return 0
     elif ato == "casos":
-        r = {"dia": dia, **casos(giros, args.tool or None)}
+        r = {"dia": dia, **casos(giros, args.tool or None), "argumentos": _investigar.dica_de_argumentos(dia)}
         if args.resumo or args.agregado:
             for linha in casos_texto(r, agregado=args.agregado):
                 print(linha)

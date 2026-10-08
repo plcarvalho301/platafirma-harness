@@ -34,8 +34,13 @@ TURNO = {**TODA, **IDENT, "tool": "sessao", "evento": "turno", "sessao_id": "sid
 CONSULTA = {**TODA, "tool": "motor", "evento": "consulta", "origem_consulta": "abertura",
             "particao": "casa", "query": "oi", "query_bytes": 2}
 
+LEITURA = {**TODA, "tool": "metrica", "ato": "investigar", "evento": "leitura_bruto", "sessao_id": "sid",
+           "cadeira": "ti", "ordem_id": "o1", "incidente": 3400, "dia": "2026-10-08", "origem_leitura": "bruto",
+           "filtro_sessao": None, "filtro_tool": "acervo", "filtro_classe": None, "linhas_devolvidas": 3,
+           "linhas_omitidas": 0}
+
 LINHAS = {"giro": GIRO, "abertura": ABERTURA, "fecho": FECHO, "auth_negada": AUTH, "http_req": HTTP,
-          "escopo": ESCOPO, "turno": TURNO, "consulta": CONSULTA}
+          "escopo": ESCOPO, "turno": TURNO, "consulta": CONSULTA, "leitura": LEITURA}
 
 
 @pytest.mark.parametrize("tipo", sorted(LINHAS))
@@ -85,6 +90,19 @@ def test_a_consulta_do_motor_grava_a_query_da_abertura_e_a_de_cadeira():
     assert oplog.validar({**CONSULTA, "origem_consulta": "busca", "query": "o que e caderno"}) == []
     sem_query = {k: v for k, v in CONSULTA.items() if k != "query"}
     assert "falta query" in oplog.validar(sem_query)
+
+
+def test_a_leitura_da_linha_inteira_e_rastro_e_nao_leva_o_conteudo():
+    """#3355: o evento diz quem leu, por qual incidente e quanto saiu; a linha, o argumento e o texto do turno nao."""
+    for campo in ("linha", "linhas", "args", "texto", "erro", "conteudo", "resposta", "pergunta", "query", "token"):
+        assert f"nao se grava {campo}" in oplog.validar({**LEITURA, campo: "x"}), campo
+    assert any("origem_leitura" in e for e in oplog.validar({**LEITURA, "origem_leitura": "disco"}))
+    for ruim in (0, -1, "3400", True, None):
+        assert any("incidente" in e for e in oplog.validar({**LEITURA, "incidente": ruim})), ruim
+    # a particao nao conta o que ficou de fora, e filtro que ninguem pediu e nulo
+    assert oplog.validar({**LEITURA, "origem_leitura": "particao", "linhas_omitidas": None}) == []
+    assert oplog.validar({**LEITURA, "filtro_tool": None}) == []
+    assert oplog.tipo_da_linha({"tool": "metrica", "evento": "leitura_bruto"}) == "leitura"
 
 
 @pytest.mark.parametrize("motivo", oplog.MOTIVOS_NEGACAO)

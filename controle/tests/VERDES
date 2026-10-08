@@ -127,6 +127,8 @@ tests/test_extrator_log.py
 tests/test_metrica_fonte.py
 # Card #3354: o corte do bruto em 35 dias com portao (linhas, eventos na particao, sha256), so pelo timer; incidente sem duplicar; `--seco`; o teto do bruto.
 tests/test_corte_bruto.py
+# Card #3355: `metrica investigar` (a linha inteira so com incidente aberto: rastro leitura_bruto, citacao na particao, dia fora do bruto) e `casos`/`eventos` sem conteudo.
+tests/test_metrica_investigar.py
 # Medido em 06/10/2026 (card #3326): testes/ da raiz fora do acervo, que nenhum gate rodava. No venv
 # harness (o único com redis, que test_descansar_puxado.py exige), 305 passam depois de consertar 6
 # defasados; os .sh entram pelos wrappers test_deploy_seg_suites.py, test_release_suites.py e
