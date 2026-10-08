@@ -14,8 +14,10 @@ set -uo pipefail
 . "$(dirname "$(readlink -f "$0")")/../../lib/raizes.sh"
 
 RETENCAO_DIAS="${OPS_LOG_RETENCAO_DIAS:-90}"
+# O bruto da porta (var/log/ops) não está aqui: nenhum dia sai por idade antes da extração.
+# Quem o corta é o timer com portão (#3354); nenhum verbo servido o apaga (arq:0123 §12).
+OPS_DIR="${OPS_LOG_DIR:-$PLATAFIRMA_INSTANCIA/var/log/ops}"
 ALVOS=(
-  "${OPS_LOG_DIR:-$PLATAFIRMA_INSTANCIA/var/log/ops}:*.jsonl"
   "${LONGJOB_LOGDIR:-$PLATAFIRMA_INSTANCIA/var/log/jobs}:*.log"
 )
 MARCA="$PLATAFIRMA_INSTANCIA/var/log/poda.log"
@@ -36,7 +38,12 @@ done
 
 # Linha de vida: grava mesmo quando não podou nada, para "o podador rodou" ser um
 # fato observável e não uma suposição.
-echo "$(ts) poda ok — retencao=${RETENCAO_DIAS}d removidos=${total}" >> "$MARCA"
+# O bruto só se conta, nunca se toca: ops-*.jsonl acima da retenção ficam no disco.
+retido=0
+if [ -d "$OPS_DIR" ]; then
+  retido=$(find "$OPS_DIR" -maxdepth 1 -type f -name 'ops-*.jsonl' -mtime "+$RETENCAO_DIAS" -print | wc -l)
+fi
+echo "$(ts) poda ok — retencao=${RETENCAO_DIAS}d removidos=${total} · ops retido: ${retido} dias (corte do bruto é do timer, arq:0123 §12)" >> "$MARCA"
 
 # O próprio log de poda não pode crescer para sempre: mantém as últimas 2000 linhas.
 if [ "$(wc -l < "$MARCA")" -gt 2000 ]; then
