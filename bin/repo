@@ -52,8 +52,8 @@
 # escreve: git=repo
 # (recursos pelo enum de ferramental_recurso; o forge - origin, PR - pende id proprio, e ate la sai como repo; commitar le o log da porta em arquivo-local)
 # consome: porta@ops-log
-# ambiente: PLATAFIRMA_BANCADA[sem default; senao a linha de $HOME/.config/platafirma/bancada; ausente = exit 3] porta · PLATAFIRMA_ARQUIVO_BANCADA[=$HOME/.config/platafirma/bancada] porta · PF_RELEASE_RAIZ[=/opt/platafirma] porta (abrir --da-producao: sha de <raiz>/<repo>/current) · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] porta (registro de familias: URL do forge em abrir/clonar) · PF_CADEIRA porta (lida) · PF_SESSAO porta (lida) · PF_TAREFAS_BIN[=<dir deste verbo>/tarefas] porta (abrir move o card) · PF_SESSAO_BIN[=<dir deste verbo>/sessao] porta (commitar sem caminho le a data da abertura da sessao) · PF_HOJE teste (o dia de hoje, AAAA-MM-DD) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (PF_OPS_LOG_DIR lido so como alias) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] porta · PF_GH_BIN[=gh do sistema] teste · HOME
-# depende: git · gh (pr-*, empurrar, atualizar, clonar) · rede ao forge · uv e python de sistema pelo lib/venv.sh (lock; PLATAFIRMA_UV e PLATAFIRMA_PYTHON lidos lá) e rede ao índice de pacotes (lock)
+# ambiente: PLATAFIRMA_BANCADA[sem default; senao a linha de $HOME/.config/platafirma/bancada; ausente = exit 3] porta · PLATAFIRMA_ARQUIVO_BANCADA[=$HOME/.config/platafirma/bancada] porta · PF_RELEASE_RAIZ[=/opt/platafirma] porta (abrir --da-producao: sha de <raiz>/<repo>/current) · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] porta (registro de familias: URL do forge em abrir/clonar) · PF_CADEIRA porta (lida) · PF_SESSAO porta (lida) · PF_TAREFAS_BIN[=<dir deste verbo>/tarefas] porta (abrir move o card) · PF_SESSAO_BIN[=<dir deste verbo>/sessao] porta (commitar sem caminho le a data da abertura da sessao por `ver --json`) · PF_HOJE teste (o dia de hoje, AAAA-MM-DD) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (PF_OPS_LOG_DIR lido so como alias) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] porta · PF_GH_BIN[=gh do sistema] teste · HOME
+# depende: git · gh (pr-*, empurrar, atualizar, clonar) · rede ao forge · bin/sessao (commitar sem caminho: `ver --json`, a data da abertura da sessao) · python3 e lib/oplog (commitar sem caminho: `python3 -m oplog`, o bruto da porta por data) · uv e python de sistema pelo lib/venv.sh (lock; PLATAFIRMA_UV e PLATAFIRMA_PYTHON lidos lá) e rede ao índice de pacotes (lock)
 # substitui: git -C … ls-files|grep|log|diff|show|status|checkout -b|commit|push|fetch · gh pr create|list|view|diff|merge|close
 # conforme: sim
 set -uo pipefail
@@ -1766,17 +1766,19 @@ ato_commitar() {
     local lib_pf eventos rc_ol sessao_bin aberto_em dia_aberto hoje_pf cortados rc_ct
     lib_pf="$(dirname "$(readlink -f "$0")")/../lib"
     sessao_bin="${PF_SESSAO_BIN:-$(dirname "$(readlink -f "$0")")/sessao}"
-    aberto_em="$("$sessao_bin" ver "$PF_SESSAO" 2>/dev/null | sed -n 's/.*aberto_em: *\([^ ]*\).*/\1/p' | head -n 1)"
+    aberto_em="$("$sessao_bin" ver "$PF_SESSAO" --json 2>/dev/null \
+      | python3 -c 'import json, sys; print(json.load(sys.stdin).get("aberto_em") or "")' 2>/dev/null)"
     case "$aberto_em" in
       ""|"-") morre "dependência ausente: a data da abertura da sessão $PF_SESSAO (sessao ver) — nomeie os caminhos" 3 ;;
     esac
     dia_aberto="$(PYTHONPATH="$lib_pf${PYTHONPATH:+:$PYTHONPATH}" python3 -m oplog dia-local "$aberto_em" 2>/dev/null)" \
       || morre "dependência ausente: instante de abertura ilegível ('$aberto_em') — nomeie os caminhos" 3
     hoje_pf="${PF_HOJE:-$(date +%F)}"
+    # `cortes-desde` sai 1 quando ha dia cortado E o escreve no stdout; exit 1 sem dia e traceback, nao corte.
     cortados="$(PYTHONPATH="$lib_pf${PYTHONPATH:+:$PYTHONPATH}" python3 -m oplog cortes-desde "$dia_aberto" \
-      --hoje "$hoje_pf" 2>/dev/null)"
+      ${PF_HOJE:+--hoje "$PF_HOJE"} 2>/dev/null)"
     rc_ct=$?
-    if [ "$rc_ct" -eq 1 ]; then
+    if [ "$rc_ct" -eq 1 ] && [ -n "$cortados" ]; then
       morre "dependência ausente: o log da porta de $(printf '%s\n' "$cortados" | head -n 1) já foi cortado (a sessão abriu em $dia_aberto): o conjunto de arquivos tocados ficaria parcial — nomeie os caminhos" 3
     elif [ "$rc_ct" -ne 0 ]; then
       morre "dependência ausente: log da porta ilegível (oplog cortes-desde saiu $rc_ct) — nomeie os caminhos" 3

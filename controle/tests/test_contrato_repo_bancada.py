@@ -524,10 +524,12 @@ def test_procurar_aceita_o_termo_posicional_e_o_prefixo_depois(tmp_path):
 
 # --- commitar sem caminho: o bruto da abertura da sessao em diante (card #3354, arq:0123 regra 10) -----------
 
-def _sessao_aberta_em(tmp_path, linha):
-    """Um `sessao` falso: `ver` devolve a linha como o verbo de verdade (aberto_em: <instante> ou `-`)."""
+def _sessao_aberta_em(tmp_path, instante, texto=None):
+    """Um `sessao` falso: `ver <id> --json` devolve o objeto como o verbo de verdade (`aberto_em` ou nulo); `texto`
+    troca a resposta por qualquer outra coisa. Grava os argumentos que recebeu em `sessao-falsa.args`."""
     falso = tmp_path / "sessao-falsa"
-    falso.write_text(f'#!/usr/bin/env bash\necho "sessao_id: s1"\necho "ordem_id: o1   superficie: claude.ai   {linha}"\n')
+    resposta = texto if texto is not None else json.dumps({"sessao_id": "s1", "cadeira": "ti", "aberto_em": instante})
+    falso.write_text(f"#!/usr/bin/env bash\necho \"$*\" > \"$0.args\"\necho '{resposta}'\n")
     falso.chmod(0o755)
     return falso
 
@@ -548,8 +550,9 @@ def test_commitar_sem_caminho_com_o_dia_da_abertura_ja_cortado_sai_3_com_o_nome_
     wt = _abrir_42(tmp_path, bancada)
     (wt / "DEPOIS.md").write_text("d\n")
     _bruto_do_dia(tmp_path, "2026-11-09", [{"tool": "write_file", "sessao_id": "s1", "path": str(wt / "DEPOIS.md")}])
-    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, "aberto_em: 2026-10-02T15:00:00+00:00"))
+    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, "2026-10-02T15:00:00+00:00"))
     assert r.returncode == 3, r.stdout + r.stderr
+    assert (tmp_path / "sessao-falsa.args").read_text(encoding="utf-8").strip() == "ver s1 --json"
     assert "2026-10-02" in r.stderr and "já foi cortado" in r.stderr and "nomeie os caminhos" in r.stderr
     assert _git("status", "--porcelain", cwd=wt) == "?? DEPOIS.md", "nada commitado: conjunto parcial é pior que nenhum"
 
@@ -561,7 +564,7 @@ def test_commitar_sem_caminho_le_da_abertura_em_diante_e_nao_antes(tmp_path):
         (wt / nome).write_text("x\n")
     _bruto_do_dia(tmp_path, "2026-10-29", [{"tool": "write_file", "sessao_id": "s1", "path": str(wt / "ANTES.md")}])
     _bruto_do_dia(tmp_path, "2026-10-31", [{"tool": "write_file", "sessao_id": "s1", "path": str(wt / "DEPOIS.md")}])
-    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, "aberto_em: 2026-10-30T15:00:00.123456+00:00"))
+    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, "2026-10-30T15:00:00.123456+00:00"))
     assert r.returncode == 0, r.stdout + r.stderr
     assert _git("show", "--name-only", "--format=", "HEAD", cwd=wt) == "DEPOIS.md"
     assert _git("status", "--porcelain", cwd=wt) == "?? ANTES.md"
@@ -573,7 +576,7 @@ def test_commitar_sem_caminho_usa_o_dia_da_porta_e_nao_o_do_utc(tmp_path):
     wt = _abrir_42(tmp_path, bancada)
     (wt / "DO_DIA.md").write_text("x\n")
     _bruto_do_dia(tmp_path, "2026-10-30", [{"tool": "write_file", "sessao_id": "s1", "path": str(wt / "DO_DIA.md")}])
-    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, "aberto_em: 2026-10-31T02:30:00+00:00"))
+    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, "2026-10-31T02:30:00+00:00"))
     assert r.returncode == 0, r.stdout + r.stderr
     assert _git("show", "--name-only", "--format=", "HEAD", cwd=wt) == "DO_DIA.md"
 
@@ -581,9 +584,11 @@ def test_commitar_sem_caminho_usa_o_dia_da_porta_e_nao_o_do_utc(tmp_path):
 def test_commitar_sem_caminho_sem_a_data_da_abertura_sai_3(tmp_path):
     bancada = _montar(tmp_path)
     _abrir_42(tmp_path, bancada)
-    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, "aberto_em: -"))
+    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, None))
     assert r.returncode == 3 and "data da abertura" in r.stderr and "nomeie os caminhos" in r.stderr
     r = _commitar_sem_caminho(tmp_path, bancada, tmp_path / "nao-existe")
     assert r.returncode == 3 and "data da abertura" in r.stderr
-    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, "aberto_em: ontem"))
+    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, None, texto="sessao s1 nao existe ou expirou"))
+    assert r.returncode == 3 and "data da abertura" in r.stderr, "o texto que não é JSON não vira data"
+    r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, "ontem"))
     assert r.returncode == 3 and "ilegível" in r.stderr

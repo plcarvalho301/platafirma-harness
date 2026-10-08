@@ -574,20 +574,263 @@ def test_o_timer_do_corte_entra_na_lista_de_units_de_instalar_depois_da_linhagem
 
 
 def test_so_o_corte_apaga_o_bruto():
-    """arq:0123 §12: só o timer corta. `remover_dia_conferido` e `oplog_corte` não aparecem em código de nenhum verbo
-    servido nem do ops-server: só em lib/oplog.py (a definição), lib/oplog_corte.py e bin/_infra/corte-bruto."""
+    """arq:0123 §12: só o timer corta. `remover_dia_conferido` e `oplog_corte` não aparecem em código de nenhum arquivo
+    da árvore (verbo, ops-server, mcp, hooks, agente...) fora de teste: só em lib/oplog.py (a definição),
+    lib/oplog_corte.py e bin/_infra/corte-bruto."""
     donos = {"lib/oplog.py", "lib/oplog_corte.py", "bin/_infra/corte-bruto"}
     achados = []
-    for pasta in ("bin", "lib", "ops-server"):
-        for arq in sorted((RAIZ / pasta).rglob("*")):
-            rel = arq.relative_to(RAIZ).as_posix()
-            if not arq.is_file() or arq.is_symlink() or "__pycache__" in arq.parts or rel in donos:
+    for arq in sorted(RAIZ.rglob("*")):
+        rel = arq.relative_to(RAIZ).as_posix()
+        if (not arq.is_file() or arq.is_symlink() or rel in donos or ".git" in arq.parts
+                or "__pycache__" in arq.parts or ".pytest_cache" in arq.parts
+                or rel.startswith(("controle/tests/", "testes/"))):
+            continue
+        try:
+            if arq.stat().st_size > 2_000_000:
                 continue
-            try:
-                texto = arq.read_text(encoding="utf-8")
-            except (UnicodeDecodeError, OSError):
-                continue
-            codigo = "\n".join(l for l in texto.splitlines() if not l.lstrip().startswith("#"))
-            if "remover_dia_conferido" in codigo or "oplog_corte" in codigo:
-                achados.append(rel)
+            texto = arq.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        codigo = "\n".join(l for l in texto.splitlines() if not l.lstrip().startswith("#"))
+        if "remover_dia_conferido" in codigo or "oplog_corte" in codigo:
+            achados.append(rel)
     assert achados == [], f"quem mais chama o corte: {achados}"
+
+
+# --- o que a revisão independente achou (card #3354) -------------------------------------------------------
+
+def _dois_velhos(tmp_path):
+    pasta = tmp_path / "ops"
+    pasta.mkdir()
+    dias = [(HOJE - timedelta(days=n)).isoformat() for n in (45, 44)]
+    for d in (*dias, RECENTE):
+        _escreve(pasta, d)
+    return pasta, dias
+
+
+class _Morte(BaseException):
+    pass
+
+
+def test_cada_corte_e_gravado_antes_de_olhar_o_dia_seguinte(tmp_path):
+    """O processo que morre no meio (kill, timeout) não deixa dia apagado sem rastro: o poda.log vem primeiro."""
+    pasta, dias = _dois_velhos(tmp_path)
+    poda, vistas = tmp_path / "poda.log", []
+
+    def saida_que_morre(linha):
+        vistas.append(linha)
+        raise _Morte
+    with pytest.raises(_Morte):
+        cw.main([], api=ParticaoFalsa(pasta, dias=(*dias, RECENTE)), hoje=HOJE, tarefas=TarefasFalsa(),
+                 saida=saida_que_morre, diretorio_=pasta, poda_log=poda)
+    assert _no_disco(pasta) == [dias[1], RECENTE], "o primeiro saiu e o segundo nem foi olhado"
+    assert f"corte-bruto {dias[0]}: cortado — conferido" in poda.read_text(encoding="utf-8")
+    assert len(vistas) == 1
+
+
+def test_erro_inesperado_de_um_dia_retem_o_dia_registra_e_segue(tmp_path, monkeypatch):
+    pasta, dias = _dois_velhos(tmp_path)
+    real = cw.portao
+
+    def quebra_no_primeiro(api, dia, dados):
+        if dia == dias[0]:
+            raise RuntimeError("disco")
+        return real(api, dia, dados)
+    monkeypatch.setattr(cw, "portao", quebra_no_primeiro)
+    codigo, _, poda = _corta(pasta, ParticaoFalsa(pasta, dias=(*dias, RECENTE)))
+    log = poda.read_text(encoding="utf-8")
+    assert codigo == 5 and _no_disco(pasta) == [dias[0], RECENTE]
+    assert f"corte-bruto {dias[0]}: retido — erro_inesperado [RuntimeError]" in log
+    assert f"corte-bruto {dias[1]}: cortado" in log
+
+
+@pytest.mark.parametrize("quebra, esperado_na_linha", [
+    (PermissionError(13, "negado"), "erro_inesperado [PermissionError]"),
+    (IsADirectoryError(21, "pasta"), "erro_inesperado [IsADirectoryError]"),
+])
+def test_erro_de_disco_na_remocao_retem_e_nao_derruba_a_rodada(bruto, monkeypatch, quebra, esperado_na_linha):
+    def remove_e_quebra(dia, sha256, diretorio_=None):
+        raise quebra
+    monkeypatch.setattr(oplog, "remover_dia_conferido", remove_e_quebra)
+    codigo, _, poda = _corta(bruto, ParticaoFalsa(bruto))
+    assert codigo == 5 and VELHO in _no_disco(bruto)
+    assert esperado_na_linha in poda.read_text(encoding="utf-8")
+
+
+def test_falha_da_api_num_dia_so_nao_para_a_rodada(tmp_path):
+    pasta, dias = _dois_velhos(tmp_path)
+
+    class FalhaSoNoPrimeiro(ParticaoFalsa):
+        def chamar(self, metodo, caminho, corpo=None, params=None, aceita=(200,)):
+            if (params or {}).get("desde") == dias[0] or dias[0] in caminho:
+                raise Falha(5, "passou de 180s")
+            return super().chamar(metodo, caminho, corpo, params, aceita)
+    codigo, _, poda = _corta(pasta, FalhaSoNoPrimeiro(pasta, dias=(*dias, RECENTE)))
+    assert codigo == 5 and _no_disco(pasta) == [dias[0], RECENTE]
+    assert f"corte-bruto {dias[0]}: retido — linhagem_indisponivel [5]" in poda.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("codigo_da_falha, exit_", [(1, 5), (2, 5), (5, 5)])
+def test_falha_de_dia_1_2_ou_5_sai_5_e_nao_se_confunde_com_reprovado(tmp_path, codigo_da_falha, exit_):
+    pasta, dias = _dois_velhos(tmp_path)
+    codigo, _, _ = _corta(pasta, ParticaoFalsa(pasta, dias=(*dias, RECENTE), falha=Falha(codigo_da_falha, "x")))
+    assert codigo == exit_ and _no_disco(pasta) == [*dias, RECENTE]
+
+
+def test_sobra_de_corte_interrompido_volta_ao_nome_do_dia_e_o_dia_e_decidido_de_novo(bruto):
+    nome = bruto / oplog.nome_do_dia(VELHO)
+    os.replace(nome, bruto / (nome.name + ".corte"))              # o que um corte que morreu deixa
+    assert VELHO not in _no_disco(bruto)
+    codigo, saida, poda = _corta(bruto, ParticaoFalsa(bruto, dias=(NOVO, RECENTE), **{}), argv=[])
+    assert any(f"corte-bruto {VELHO}: devolvido" in l for l in saida), "a sobra voltou ao nome"
+    # sem linhagem do dia na partição falsa: fica, mas fica visível e no lugar certo
+    assert VELHO in _no_disco(bruto) and not (bruto / (nome.name + ".corte")).exists()
+    assert codigo == 0 and f"corte-bruto {VELHO}: retido — sem_linhagem" in poda.read_text(encoding="utf-8")
+
+
+def test_devolver_sobras_nao_pisa_em_dia_que_ja_existe(tmp_path):
+    _escreve(tmp_path, VELHO)
+    (tmp_path / (oplog.nome_do_dia(VELHO) + ".corte")).write_bytes(b"outra")
+    assert oplog.devolver_sobras_do_corte(tmp_path) == []
+    assert (tmp_path / (oplog.nome_do_dia(VELHO) + ".corte")).read_bytes() == b"outra"
+    assert oplog.devolver_sobras_do_corte(tmp_path / "nao-existe") == []
+
+
+def test_remocao_fecha_a_janela_e_nao_deixa_sobra(bruto):
+    sha = cw.contas_do_arquivo((bruto / oplog.nome_do_dia(VELHO)).read_bytes())["sha256"]
+    assert oplog.remover_dia_conferido(VELHO, sha, bruto) is True
+    assert sorted(p.name for p in bruto.iterdir()) == [oplog.nome_do_dia(NOVO), oplog.nome_do_dia(RECENTE)]
+    assert oplog.remover_dia_conferido(VELHO, "0" * 64, bruto) is False
+    assert oplog.remover_dia_conferido(NOVO, "0" * 64, bruto) is False
+    assert sorted(p.name for p in bruto.iterdir()) == [oplog.nome_do_dia(NOVO), oplog.nome_do_dia(RECENTE)], \
+        "sha errado devolve o arquivo ao nome, sem sobra"
+
+
+def test_remocao_que_falha_devolve_o_arquivo_ao_nome_e_levanta(bruto, monkeypatch):
+    sha = cw.contas_do_arquivo((bruto / oplog.nome_do_dia(VELHO)).read_bytes())["sha256"]
+    antes = (bruto / oplog.nome_do_dia(VELHO)).read_bytes()
+
+    def unlink_que_nega(self, *a, **k):
+        raise PermissionError(13, "negado")
+    monkeypatch.setattr(Path, "unlink", unlink_que_nega)
+    with pytest.raises(PermissionError):
+        oplog.remover_dia_conferido(VELHO, sha, bruto)
+    assert (bruto / oplog.nome_do_dia(VELHO)).read_bytes() == antes
+    assert not (bruto / (oplog.nome_do_dia(VELHO) + ".corte")).exists()
+
+
+def test_ambiente_ilegivel_e_uso_errado_sai_2_sem_tocar_o_bruto(bruto, monkeypatch):
+    monkeypatch.setenv("CORTE_MAX_DIAS", "muitos")
+    assert _corta(bruto, ParticaoFalsa(bruto))[0] == 2
+    monkeypatch.delenv("CORTE_MAX_DIAS")
+    monkeypatch.setenv("LINHAGEM_TIMEOUT_S", "logo")
+    assert cw.main([], hoje=HOJE, diretorio_=bruto, poda_log=bruto.parent / "poda.log") == 2
+    assert _no_disco(bruto) == [VELHO, NOVO, RECENTE]
+
+
+def test_a_particao_responde_fora_do_contrato_e_o_dia_fica(bruto):
+    class Torta(ParticaoFalsa):
+        def chamar(self, metodo, caminho, corpo=None, params=None, aceita=(200,)):
+            return 200, [{"dia": VELHO}]
+    codigo, _, poda = _corta(bruto, Torta(bruto))
+    assert codigo == 5 and VELHO in _no_disco(bruto)
+    assert "linhagem_indisponivel [5]" in poda.read_text(encoding="utf-8")
+
+
+def test_eventos_com_corpo_que_nao_e_objeto_ou_sem_lista_reprovam(bruto):
+    for resposta in ([1, 2, 3], {"proximo": None}, {"itens": "nada"}):
+        class Eventos(ParticaoFalsa):
+            def chamar(self, metodo, caminho, corpo=None, params=None, aceita=(200,), _r=resposta):
+                if caminho.endswith("/eventos"):
+                    return 200, _r
+                return super().chamar(metodo, caminho, corpo, params, aceita)
+        codigo, _, _ = _corta(bruto, Eventos(bruto))
+        assert codigo != 0 and VELHO in _no_disco(bruto), resposta
+
+
+def test_dia_com_zero_legiveis_nao_passa_se_a_particao_diz_ausente(tmp_path):
+    pasta = tmp_path / "ops"
+    pasta.mkdir()
+    _escreve(pasta, VELHO, ["isto nao e json", "nem isto"])
+    _escreve(pasta, RECENTE)
+
+    class Ausente(ParticaoFalsa):
+        def chamar(self, metodo, caminho, corpo=None, params=None, aceita=(200,)):
+            if caminho.endswith("/eventos"):
+                return 200, {"itens": [], "cobertura": "ausente", "proximo": None}
+            return super().chamar(metodo, caminho, corpo, params, aceita)
+    api = Ausente(pasta, dias=(VELHO, RECENTE))
+    assert api.linhas[VELHO]["passada"]["linhas_legiveis"] == 0
+    codigo, _, _ = _corta(pasta, api)
+    assert codigo == 1 and VELHO in _no_disco(pasta)
+    # e o mesmo dia, com a partição dizendo a verdade (parcial, nenhum evento), passa
+    codigo, _, _ = _corta(pasta, ParticaoFalsa(pasta, dias=(VELHO, RECENTE)))
+    assert codigo == 0 and VELHO not in _no_disco(pasta)
+
+
+def test_linhagem_de_outro_dia_nao_vale(bruto):
+    class OutroDia(ParticaoFalsa):
+        def chamar(self, metodo, caminho, corpo=None, params=None, aceita=(200,)):
+            if caminho == "/acervo/log/dias":
+                return 200, {"itens": [self.linhas[NOVO], self.linhas[RECENTE]], "proximo": None}
+            return super().chamar(metodo, caminho, corpo, params, aceita)
+    codigo, _, poda = _corta(bruto, OutroDia(bruto))
+    assert codigo == 0 and VELHO in _no_disco(bruto)
+    assert f"corte-bruto {VELHO}: retido — sem_linhagem" in poda.read_text(encoding="utf-8")
+
+
+def test_o_motivo_da_particao_aparece_no_poda_log_quando_nao_ha_linhagem(bruto):
+    api = ParticaoFalsa(bruto, **{VELHO: {"passada": False, "motivo": "extracao_falhou", "cobertura": "ausente"}})
+    codigo, _, poda = _corta(bruto, api)
+    assert codigo == 0 and VELHO in _no_disco(bruto)
+    assert f"corte-bruto {VELHO}: retido — sem_linhagem:extracao_falhou" in poda.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("parado_ha, sai_5", [(3, False), (4, True)])
+def test_o_bruto_parado_ha_mais_de_3_dias_nao_corta(tmp_path, parado_ha, sai_5):
+    pasta = tmp_path / "ops"
+    pasta.mkdir()
+    recente = (HOJE - timedelta(days=parado_ha)).isoformat()
+    for d in (VELHO, recente):
+        _escreve(pasta, d)
+    codigo, _, _ = _corta(pasta, ParticaoFalsa(pasta, dias=(VELHO, recente)))
+    assert (codigo == 5) is sai_5 and ((VELHO in _no_disco(pasta)) is sai_5)
+
+
+def test_hoje_local_e_o_dia_da_porta_nao_o_do_utc(monkeypatch):
+    from datetime import datetime as real, timezone
+
+    class Falso(real):
+        @classmethod
+        def now(cls, tz=None):
+            return real(2026, 11, 10, 2, 30, tzinfo=timezone.utc).astimezone(tz)
+    monkeypatch.setattr(oplog, "datetime", Falso)
+    assert oplog.hoje_local() == date(2026, 11, 9), "02:30 UTC é 23:30 do dia 9 em America/Sao_Paulo"
+
+
+def test_a_contagem_do_portao_e_a_do_extrator_nos_casos_de_borda(tmp_path):
+    """O portao confere o que o extrator gravou: mesma regra de linha legivel, inclusive CR solto, CRLF, UTF-8
+    invalido, linha em branco e ultima linha sem quebra."""
+    import oplog_extracao as ex
+    dados = (b'{"tool":"acervo","ts":"2026-10-01T10:00:00-03:00"}\n\n   \nnao e json\n[1,2]\n'
+             b'{"tool":"acervo","x":"\xff\xfe"}\n{"tool":"acervo"}\r\n'
+             b'{"tool":"acervo","a":1}\r{"tool":"acervo","b":2}\n{"tool":"acervo"')
+    (tmp_path / oplog.nome_do_dia(VELHO)).write_bytes(dados)
+    c = cw.contas_do_arquivo(dados)
+    fecho = ex.extrair(VELHO, tmp_path).fecho("ti")
+    assert (c["lidas"], c["legiveis"], c["ilegiveis"]) == (
+        fecho["linhas_lidas"], fecho["linhas_legiveis"], fecho["linhas_ilegiveis"])
+    assert c["lidas"] == c["legiveis"] + c["ilegiveis"]
+
+
+def test_conexao_cortada_no_meio_da_resposta_e_falha_5_e_nao_excecao_solta(monkeypatch):
+    import http.client
+    import urllib.request
+
+    def corta(*a, **k):
+        raise http.client.IncompleteRead(b"meio")
+    monkeypatch.setattr(urllib.request, "urlopen", corta)
+    from oplog_extracao import Api
+    with pytest.raises(Falha) as e:
+        Api(base="http://127.0.0.1:1", token="").chamar("GET", "/acervo/log/dias")
+    assert e.value.codigo == 5

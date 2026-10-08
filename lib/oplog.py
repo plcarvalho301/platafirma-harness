@@ -543,19 +543,56 @@ def cortes_desde(desde, hoje=None, diretorio_=None) -> list[str]:
     return saida
 
 
+_SUFIXO_DO_CORTE = ".corte"
+_NOME_DA_SOBRA = re.compile(r"ops-(\d{4}-\d{2}-\d{2})\.jsonl" + re.escape(_SUFIXO_DO_CORTE))
+
+
 def remover_dia_conferido(dia, sha256: str, diretorio_=None) -> bool:
     """A unica remocao do bruto (arq:0123 regra 12): apaga o arquivo do dia SE os bytes que estao la agora
     tem o `sha256` que o corte conferiu, e so entao. Devolve False, sem apagar, quando o arquivo sumiu ou
-    mudou entre a conferencia e a remocao. Quem a chama e o timer `corte-bruto`; verbo servido nao."""
+    mudou entre a conferencia e a remocao. Quem a chama e o timer `corte-bruto`; verbo servido nao.
+
+    A janela entre conferir e apagar e fechada tirando o arquivo do nome do dia (rename atomico, mesmo
+    diretorio) ANTES de refazer o hash: o que se confere e o que se apaga, e quem anexar ao nome do dia
+    dali em diante abre arquivo novo. Erro no meio (leitura, remocao) devolve o arquivo ao nome e levanta.
+    """
     caminho = caminho_do_dia(dia, diretorio_)
+    pendente = caminho.with_name(caminho.name + _SUFIXO_DO_CORTE)
     try:
-        dados = caminho.read_bytes()
+        os.replace(caminho, pendente)
     except FileNotFoundError:
         return False
-    if hashlib.sha256(dados).hexdigest() != sha256:
-        return False
-    caminho.unlink()
-    return True
+    try:
+        if hashlib.sha256(pendente.read_bytes()).hexdigest() == sha256:
+            pendente.unlink()
+            return True
+    except BaseException:
+        os.replace(pendente, caminho)
+        raise
+    os.replace(pendente, caminho)
+    return False
+
+
+def devolver_sobras_do_corte(diretorio_=None) -> list[str]:
+    """Um corte que morreu entre tirar o arquivo do nome do dia e apagar (kill, falta de luz) deixa
+    `ops-AAAA-MM-DD.jsonl.corte`: o dia some da vista, mas os bytes seguem la. Devolve cada sobra ao nome do
+    dia, se o nome estiver livre, e diz quais voltaram; a proxima conferencia decide de novo."""
+    pasta = Path(diretorio_ or diretorio())
+    try:
+        entradas = sorted(pasta.iterdir())
+    except (FileNotFoundError, NotADirectoryError):
+        return []
+    voltaram = []
+    for p in entradas:
+        m = _NOME_DA_SOBRA.fullmatch(p.name)
+        if m is None or p.is_symlink() or not p.is_file():
+            continue
+        destino = caminho_do_dia(m.group(1), pasta)
+        if destino.exists():
+            continue
+        os.replace(p, destino)
+        voltaram.append(m.group(1))
+    return voltaram
 
 
 def teto_do_bruto(hoje=None, diretorio_=None) -> dict:

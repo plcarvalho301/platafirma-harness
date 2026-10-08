@@ -4,16 +4,26 @@
 porta: nenhum verbo servido apaga o bruto. Candidato é o dia que passou de 35 dias PELO NOME do arquivo (nunca pelo
 mtime). Para cada um, o portão faz três conferências sobre os MESMOS bytes que vai apagar:
 
-    1. as linhas do arquivo: lidas = legíveis + ilegíveis, e a linhagem do dia (D5.5) diz os mesmos números;
+    1. as linhas: a linhagem do dia (D5.5) diz as mesmas lidas, legíveis e ilegíveis que os bytes (e lidas =
+       legíveis + ilegíveis, que vale por construção e fica como autoteste da contagem);
     2. os eventos do dia na partição (D5.6, página a página) são tantos quanto as linhas legíveis;
     3. o sha256 e o tamanho recalculados dos bytes são os da linhagem.
 
-Passou nas três: corta. Sem linhagem (a passada ainda não concluiu): retém, em silêncio, com uma linha em poda.log.
-Linhagem que reprova: retém, abre o incidente «<bruto> <dia>: bruto reprovado no portão» para a cadeira `seguranca`
-(sem repetir o que já está aberto) e sai 1. API ou banco fora: retém e sai 3; o dia fica, e o teto de `infra saude`
-acusa se o atraso crescer. Só `oplog.remover_dia_conferido` apaga, e só se o arquivo ainda tem os bytes conferidos.
+A regra de «linha legível» é a do extrator (`oplog.linhas_do_dia`), a mesma que gravou a linhagem; `oplog.ler`, que
+lê em modo texto, discorda dela só em `\\r` solto no meio da linha, e o portão confere o que o extrator gravou.
 
-Travas do corte, além do portão: no máximo `CORTE_MAX_DIAS` (3) dias por rodada, e nada se corta com o relógio fora
+Passou nas três: corta. Sem linhagem (a passada ainda não concluiu, ou falhou): retém, em silêncio, com uma linha em
+poda.log que diz o motivo da partição. Linhagem que reprova: retém, abre o incidente «<bruto> <dia>: bruto reprovado
+no portão» para a cadeira `seguranca` (sem repetir o que já está aberto) e sai 1. API ou banco fora (3) e token
+recusado (4): retém e para a rodada, porque valem para todo dia. Erro de um dia só (resposta fora do contrato, disco,
+exceção): retém aquele dia, segue para o próximo e sai 5. Só `oplog.remover_dia_conferido` apaga, e só se o arquivo
+ainda tem os bytes conferidos.
+
+Cada decisão vai para a saída e para o poda.log NO MOMENTO em que acontece, antes de olhar o dia seguinte: um corte
+que morre no meio (kill, timeout) não deixa dia apagado sem rastro. O dia que um corte interrompido deixou fora do
+nome (`.corte`) volta ao nome na rodada seguinte.
+
+Travas do corte, além do portão: no máximo `CORTE_MAX_DIAS` (3) cortes por rodada, e nada se corta com o relógio fora
 do bruto (arquivo do futuro, ou o dia mais novo parado há mais de 3 dias). `--seco` confere e diz o que faria, sem
 apagar, sem gravar poda.log e sem abrir incidente; `--mais-velhos-que N` (só com `--seco`) escolhe os dias de ensaio.
 Só biblioteca padrão: o timer roda no python da release, sem modelo.
@@ -40,6 +50,7 @@ PAGINA = 1000                  # o teto de D5.6
 MAX_DIAS_POR_RODADA = 3
 BRUTO_PARADO_DIAS = 3          # o dia mais novo no disco mais velho que isso: relógio ou porta; não se corta
 TABS_DA_LISTAGEM = 2           # `tarefas listar`: id TAB estado TAB título
+FALHAS_GLOBAIS = (3, 4)        # API/banco fora e token recusado valem para todo dia; o resto é do dia
 
 
 @dataclass
@@ -53,8 +64,8 @@ class Veredito:
 # --- a conferência de um dia ------------------------------------------------------------------
 
 def contas_do_arquivo(dados: bytes) -> dict:
-    """O que os bytes dizem de si: linhas não vazias, legíveis, ilegíveis, tamanho e sha256. Mesma regra de
-    `oplog.ler` e do extrator (o teste de #3353 confere as duas)."""
+    """O que os bytes dizem de si: linhas não vazias, legíveis, ilegíveis, tamanho e sha256, pela regra do extrator
+    (`oplog.linhas_do_dia`)."""
     fisicas = sum(1 for linha in dados.split(b"\n") if linha.decode("utf-8", errors="replace").strip())
     legiveis = ilegiveis = 0
     for _, _, reg in oplog.linhas_do_dia(dados):
@@ -66,26 +77,37 @@ def contas_do_arquivo(dados: bytes) -> dict:
             "sha256": hashlib.sha256(dados).hexdigest()}
 
 
+def _corpo(api: Api, caminho: str, params: dict) -> dict:
+    """GET que tem de voltar um objeto JSON: outra forma é a partição fora do contrato (5), nunca zero."""
+    _, corpo = api.chamar("GET", caminho, params=params)
+    if not isinstance(corpo, dict):
+        raise Falha(5, f"GET {caminho}: a partição respondeu fora do contrato (não é um objeto JSON)")
+    return corpo
+
+
 def _linhagem(api: Api, dia: str) -> dict | None:
-    _, corpo = api.chamar("GET", "/acervo/log/dias", params={"desde": dia, "ate": dia})
-    for linha in (corpo or {}).get("itens") or []:
-        if linha.get("dia") == dia:
+    itens = _corpo(api, "/acervo/log/dias", {"desde": dia, "ate": dia}).get("itens")
+    for linha in itens if isinstance(itens, list) else []:
+        if isinstance(linha, dict) and linha.get("dia") == dia:       # a linhagem é a DESTE dia, não a que vier
             return linha
     return None
 
 
 def _eventos_na_particao(api: Api, dia: str, esperados: int) -> int:
     """Conta os eventos do dia lendo D5.6 página a página, com o cursor que a própria resposta devolve. O laço
-    para na página que não traz `proximo`; o teto de páginas só impede que um cursor que não anda gire para sempre,
-    e nesse caso a conta volta -1, que nunca bate com uma contagem de linhas (o portão reprova)."""
+    para na página que não traz `proximo`. Volta -1, que nunca bate com uma contagem de linhas (o portão reprova),
+    quando o teto de páginas se esgota (cursor que não anda) ou quando a partição diz que o dia está `ausente`."""
     n, cursor = 0, None
     for _ in range(esperados // PAGINA + 3):
         params = {"limite": PAGINA}
         if cursor:
             params["cursor"] = cursor
-        _, corpo = api.chamar("GET", f"/acervo/log/dias/{dia}/eventos", params=params)
-        n += len((corpo or {}).get("itens") or [])
-        cursor = (corpo or {}).get("proximo")
+        corpo = _corpo(api, f"/acervo/log/dias/{dia}/eventos", params)
+        itens = corpo.get("itens")
+        if not isinstance(itens, list) or corpo.get("cobertura") == "ausente":
+            return -1
+        n += len(itens)
+        cursor = corpo.get("proximo")
         if not cursor:
             return n
     return -1
@@ -95,8 +117,9 @@ def portao(api: Api, dia: str, dados: bytes) -> Veredito:
     """As três conferências. `Falha` (3, 4, 5) sobe: sem poder conferir, o dia fica."""
     linha = _linhagem(api, dia)
     passada = (linha or {}).get("passada")
-    if passada is None:
-        return Veredito(dia, RETIDO, "sem_linhagem")
+    if not isinstance(passada, dict):
+        porque = (linha or {}).get("motivo")      # nao_extraido · extracao_falhou · sem_arquivo · dia_aberto (D5.5)
+        return Veredito(dia, RETIDO, "sem_linhagem" + (f":{porque}" if isinstance(porque, str) and porque else ""))
     c = contas_do_arquivo(dados)
     eventos = _eventos_na_particao(api, dia, c["legiveis"])
     da_linhagem = {"lidas": passada.get("linhas_lidas"), "legiveis": passada.get("linhas_legiveis"),
@@ -194,7 +217,7 @@ sem argumento: corta todo dia com mais de 35 dias (pelo nome do arquivo) que pas
   --seco              confere e diz o que faria; não apaga, não grava poda.log e não abre incidente
   --mais-velhos-que N só com --seco: ensaio com os dias de mais de N dias (padrão 35)
 exit: 0 ok · 1 dia reprovado no portão (retido, incidente aberto) · 2 uso · 3 API ou banco fora · 4 token recusado ·
-      5 indeterminável (relógio fora do bruto, incidente que não abriu)"""
+      5 indeterminável (relógio fora do bruto, erro de um dia, incidente que não abriu)"""
 
 
 def _argumentos(argv: list[str]) -> tuple[bool, int | None]:
@@ -226,20 +249,37 @@ def _relogio_fora_do_bruto(no_disco: dict, hoje: date) -> str | None:
 
 
 class Rodada:
-    """O placar de uma passada do corte e o que fazer com cada veredito do portão."""
+    """O placar de uma passada do corte e o que fazer com cada veredito do portão. Cada linha vai para a saída e
+    para o poda.log assim que o dia é decidido (`emite`), não no fim da rodada."""
 
     def __init__(self, api: Api, tarefas: Tarefas | None, *, seco: bool, maximo: int,
-                 diretorio_: str | os.PathLike | None = None):
+                 diretorio_: str | os.PathLike | None = None, saida: Callable[[str], object] = print,
+                 poda_log: Path | None = None):
         self.api, self.tarefas, self.seco, self.maximo, self.diretorio = api, tarefas, seco, maximo, diretorio_
+        self.saida, self.poda_log = saida, poda_log
         self.cortados = self.retidos = self.reprovados = self.adiados = self.pior = 0
-        self.linhas: list[str] = []
         self._abertos: set[str] | None = None
 
+    def emite(self, linha: str) -> None:
+        if not self.seco and self.poda_log is not None:
+            _grava_poda(self.poda_log, [linha])           # o rastro durável primeiro; a saída pode morrer
+        self.saida(linha)
+
     def processa(self, dia: str, idade: int) -> bool:
-        """Confere e decide um dia. False quando a rodada deve parar (a API está fora para todos)."""
+        """Confere e decide um dia. False quando a rodada deve parar (API ou token fora: vale para todo dia)."""
         if self.cortados >= self.maximo:
             self.adiados += 1
             return True
+        try:
+            return self._processa(dia, idade)
+        except Exception as e:    # noqa: BLE001 — o erro de um dia não apaga o rastro do que já saiu nem trava o resto
+            self.retidos += 1
+            self.pior = max(self.pior, 5)
+            self.emite(_linha(Veredito(dia, RETIDO, f"erro_inesperado [{type(e).__name__}]"), idade, None))
+            print(f"corte-bruto {dia}: {type(e).__name__}: {e}", file=sys.stderr)
+            return True
+
+    def _processa(self, dia: str, idade: int) -> bool:
         dados = oplog.conteudo_do_dia(dia, self.diretorio)
         if dados is None:
             return True                                 # sumiu entre a listagem e a leitura: nada a cortar
@@ -247,17 +287,17 @@ class Rodada:
             v = portao(self.api, dia, dados)
         except Falha as f:
             self.retidos += 1
-            self.pior = max(self.pior, f.codigo)
-            self.linhas.append(_linha(Veredito(dia, RETIDO, f"linhagem_indisponivel [{f.codigo}]"), idade, None))
+            self.pior = max(self.pior, f.codigo if f.codigo in (3, 4, 5) else 5)
+            self.emite(_linha(Veredito(dia, RETIDO, f"linhagem_indisponivel [{f.codigo}]"), idade, None))
             print(f"corte-bruto {dia}: {f}", file=sys.stderr)
-            return False
+            return f.codigo not in FALHAS_GLOBAIS
         if v.acao == APROVADO:
             v = self._aprovado(v)
         elif v.acao == RETIDO:
             self.retidos += 1
         else:
             v = self._reprovado(v)
-        self.linhas.append(_linha(v, idade, v.contas.get("arquivo")))
+        self.emite(_linha(v, idade, v.contas.get("arquivo")))
         return True
 
     def _aprovado(self, v: Veredito) -> Veredito:
@@ -298,10 +338,17 @@ def main(argv: list[str], api: Api | None = None, hoje: date | None = None, tare
         return 0
     try:
         seco, idade_de_ensaio = _argumentos(argv)
+        maximo = int(os.environ.get("CORTE_MAX_DIAS") or MAX_DIAS_POR_RODADA)
+        api = api or Api()                              # LINHAGEM_TIMEOUT_S ilegível levanta ValueError aqui
     except (IndexError, ValueError) as e:
         print(f"corte-bruto: {e}\n{USO}" if str(e) else USO, file=sys.stderr)
         return 2
     hoje = hoje or oplog.hoje_local()
+    rodada = Rodada(api, tarefas, seco=seco, maximo=maximo, diretorio_=diretorio_, saida=saida,
+                    poda_log=poda_log or raizes.instancia() / "var" / "log" / "poda.log")
+    if not seco:
+        for dia in oplog.devolver_sobras_do_corte(diretorio_):
+            rodada.emite(f"corte-bruto {dia}: devolvido — sobra de corte interrompido, o arquivo voltou ao nome do dia")
     no_disco = oplog.dias_no_disco(diretorio_)
     parado = _relogio_fora_do_bruto(no_disco, hoje)
     if parado:
@@ -309,23 +356,16 @@ def main(argv: list[str], api: Api | None = None, hoje: date | None = None, tare
         return 5
     limite = oplog.CORTE_DIAS if idade_de_ensaio is None else idade_de_ensaio
     candidatos = oplog.dias_mais_velhos_que(limite, hoje, diretorio_)
-    maximo = int(os.environ.get("CORTE_MAX_DIAS") or MAX_DIAS_POR_RODADA)
-    rodada = Rodada(api or Api(), tarefas, seco=seco, maximo=maximo, diretorio_=diretorio_)
     for dia in candidatos:
         if not rodada.processa(dia, oplog.idade_em_dias(dia, hoje)):
-            break                                       # API fora para um é fora para todos: a próxima rodada tenta
-    linhas = list(rodada.linhas)
+            break                                       # API ou token fora vale para todo dia: a próxima rodada tenta
     if rodada.adiados:
-        linhas.append(f"corte-bruto: {rodada.adiados} dia(s) ficam para a próxima rodada "
-                      f"(máximo {maximo} cortes por rodada)")
+        rodada.emite(f"corte-bruto: {rodada.adiados} dia(s) ficam para a próxima rodada "
+                     f"(máximo {maximo} cortes por rodada)")
     # Linha de vida: grava mesmo sem candidato, para «o corte rodou» ser um fato observável, não uma suposição.
-    linhas.append(f"corte-bruto {'ensaio' if seco else 'ok'} — candidatos={len(candidatos)} "
-                  f"cortados={rodada.cortados} retidos={rodada.retidos} reprovados={rodada.reprovados} · "
-                  f"prazo={limite}d · no disco={len(no_disco)} dias")
-    for linha in linhas:
-        saida(linha)
-    if not seco:
-        _grava_poda(poda_log or raizes.instancia() / "var" / "log" / "poda.log", linhas)
+    rodada.emite(f"corte-bruto {'ensaio' if seco else 'ok'} — candidatos={len(candidatos)} "
+                 f"cortados={rodada.cortados} retidos={rodada.retidos} reprovados={rodada.reprovados} · "
+                 f"prazo={limite}d · no disco={len(no_disco)} dias")
     return rodada.pior
 
 

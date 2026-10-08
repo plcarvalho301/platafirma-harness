@@ -14,8 +14,8 @@
 # forma: log
 # cauda: sim
 # classe: B
-# consome: nenhum
-# ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · PF_SUJEITO[obrigatória em up|down|pull|build] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
+# consome: porta@ops-log
+# ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (saude: lido por lib/oplog, o bruto contra o teto) · PF_SUJEITO[obrigatória em up|down|pull|build] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
 # depende: docker · systemctl --user · curl · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs e bin/_infra/limpeza-quarentena (ajudantes de limpeza) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda)
 # escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados · agenda=crontab do sistema (aplicar) · estado/saude/logs/ps/config/backup/hardware/gpu=nada
 # substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build (deploy apagado — decisão do dono, 27/09) · crontab -e a mão · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra por arq:0110 §14 emenda 26/09/2026)
@@ -309,38 +309,48 @@ print(json.dumps(dict(zip(chaves, partes))))
 # dentro, acima, sem_base (poucos dias para medir) ou indeterminavel. Sondagem que falha nao derruba a saude: vira
 # estado, dado e nao erro de execucao, como o /health do ops. Acima do teto vira CARD, nao incidente.
 _bruto_json() {
-  local saida rc=0
+  local saida rc=0 motivo
   saida=$(PYTHONPATH="$AQUI/../lib${PYTHONPATH:+:$PYTHONPATH}" python3 -m oplog teto 2>/dev/null) || rc=$?
-  if [ "$rc" -eq 0 ] && [ -n "$saida" ]; then
-    printf '%s\n' "$saida"
+  if [ "$rc" -eq 0 ]; then
+    if saida=$(python3 -c 'import json, sys; print(json.dumps(json.loads(sys.argv[1])))' "$saida" 2>/dev/null); then
+      printf '%s\n' "$saida"
+      return 0
+    fi
+    motivo="oplog teto devolveu resposta ilegível"
   else
-    python3 -c 'import json, sys; print(json.dumps({"estado": "indeterminavel", "motivo": "oplog teto saiu " + sys.argv[1]}))' "$rc"
+    motivo="oplog teto saiu $rc"
   fi
+  python3 -c 'import json, sys; print(json.dumps({"estado": "indeterminavel", "motivo": sys.argv[1]}))' "$motivo"
 }
 
 _bruto_texto() {
   _bruto_json | python3 -c '
 import json, sys
 
-d = json.load(sys.stdin)
-
 
 def mb(n):
     return "-" if n is None else "%.1f MB" % (n / 1048576)
 
 
-if d.get("estado") == "indeterminavel":
-    print("bruto: não medido (%s)" % d.get("motivo", "?"))
-elif d["estado"] == "sem_base":
-    print("bruto: %s em %d dia(s); sem base para o teto (%d dia(s) nas quatro semanas anteriores)"
-          % (mb(d["bytes"]), d["dias_no_disco"], d["dias_na_base"]))
-else:
+def texto(d):
+    if d.get("estado") == "indeterminavel":
+        return "bruto: não medido (%s)" % d.get("motivo", "?")
+    if d["estado"] == "sem_base":
+        return ("bruto: %s em %d dia(s); sem base para o teto (%d dia(s) nas quatro semanas anteriores)"
+                % (mb(d["bytes"]), d["dias_no_disco"], d["dias_na_base"]))
     base = "bruto: %s em %d dia(s) · teto %s (mediana %s/dia x 35 x 1,5)" % (
         mb(d["bytes"]), d["dias_no_disco"], mb(d["teto_bytes"]), mb(d["mediana_bytes_dia"]))
     if d["estado"] == "acima":
-        print("ACIMA DO TETO — " + base + " — o corte está atrasado ou não corta: abra card (não é incidente) e leia `infra logs corte-bruto`")
-    else:
-        print(base + " — dentro")
+        return ("ACIMA DO TETO — " + base + " — o corte está atrasado ou não corta: abra card (não é incidente) "
+                "e leia `infra logs corte-bruto`")
+    return base + " — dentro"
+
+
+# resposta torta da sondagem e dado, nao erro: a saude segue inteira (card #3354)
+try:
+    print(texto(json.load(sys.stdin)))
+except (AttributeError, KeyError, TypeError, ValueError):
+    print("bruto: não medido (resposta fora do formato)")
 '
 }
 
