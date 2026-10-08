@@ -4,8 +4,8 @@
 # dono: ia
 # componente: platafirma-motor
 # classe: B
-# use para: achar pelo sentido o trecho que responde a X (buscar <particao>, e `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), ler/mexer um ajuste (ajuste)
-# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao) — buscar/medir/indexar/trocar exigem particao: motor <inst> <ato> <particao> ...
+# use para: achar pelo sentido o trecho que responde a X (buscar <particao>, e `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste)
+# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito) — buscar/medir/indexar/trocar/sortear exigem particao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar), eventos, juiz
 # forma: json
 # cauda: nao
 # poda: cosmetica@rag,casa,buscar
@@ -28,6 +28,8 @@ import raizes  # noqa: E402
 import oplog  # noqa: E402  (card #3344: o unico que escreve o bruto da porta)
 sys.path.insert(0, str(_ARVORE / "bin" / "_motor"))
 import calibra  # noqa: E402  (a calibracao do sinal de abstencao sobre medicoes salvas, #3264)
+import marcacao  # noqa: E402  (cliente da marcacao-api, rotas /interno/, #3349)
+import sorteio  # noqa: E402  (o sorteio do estrato sentido da escada, #3349)
 
 REG = os.environ.get("PF_MOTOR_REG") or str(_ARVORE / "registro" / "motor-instancias.json")
 BIN = os.environ.get("PF_BIN") or str(_ARVORE / "bin")
@@ -170,6 +172,15 @@ def uso(cod=2):
                                         ou a virada, num ato so, que apaga a geracao anterior
   motor <inst> trocar biblioteca --descartar <id|gN> [--confirma gN] [--apply] [--json]
                                         desfaz a sombra (folhas e indices saem)
+
+  motor <inst> sortear biblioteca [--semente S] [--ate <instante>] [--aceitar-sem-ordem] [--aceitar-sem-cadeira]
+                     [--apply --saida <arquivo.jsonl>] [--json]
+                                        o estrato sentido da escada, sorteado do log de perguntas (padrao
+                                        protocolo-medicao-rag, «Fonte e filtros»): o plano diz o que entrou, o que
+                                        saiu por motivo e as 20 do piloto; --apply grava a lista e a gabarito_versao
+  motor marcacao lote gravar|ler|ativar … · motor marcacao eventos --lote <id> · motor marcacao juiz gravar
+                                        o lote da tela de marcacao do gold set e o que ela grava (marcacao-api;
+                                        `motor marcacao --ajuda` traz as formas)
 
 gramatica (arq:0106): motor <inst> <ato> <particao> [seletor]. instancia = quem
 busca (ortogonal a particao); particao = onde (biblioteca, casa, registro; obra = biblioteca).
@@ -1552,6 +1563,131 @@ def _resumo_sombra(res):
         print(f"  juiz x gabarito ({v}): {cc['concordam']}/{cc['comparaveis']} = {cc['taxa']}")
 
 
+def _psql_json(banco, sql):
+    """Roda `sql` (uma consulta que devolve um JSON numa linha) no banco declarado do registro."""
+    r = sh(f"docker exec -i {banco['container']} psql -U {banco['user']} -d {banco['db']} -At -v ON_ERROR_STOP=1",
+           input=sql)
+    if r.returncode != 0:
+        print(f"motor: banco {banco['container']} nao respondeu: {r.stderr.strip()[-300:]}", file=sys.stderr)
+        sys.exit(3)
+    return json.loads(r.stdout.strip() or "null")
+
+
+def _lit(v):
+    return "'" + str(v).replace("'", "''") + "'"
+
+
+SORTEAR_OPCOES = {"--semente": 1, "--ate": 1, "--saida": 1, "--aceitar-sem-ordem": 0,
+                  "--aceitar-sem-cadeira": 0, "--apply": 0, "--json": 0}
+
+
+def cmd_sortear(inst, argv):
+    """`sortear biblioteca`: o estrato sentido da escada, sorteado do log de perguntas (card #3349;
+    padrao protocolo-medicao-rag, «Fonte e filtros»). Sem --apply e so o plano: o que entrou, o que
+    saiu por motivo e as 20 do piloto. Com --apply --saida grava a lista e a gabarito_versao."""
+    particao, resto = resolve_particao(argv, "sortear")
+    if particao != "biblioteca":
+        print("motor sortear: so a biblioteca tem estrato sentido (a casa tem ate 30 perguntas, sem sorteio estratificado)",
+              file=sys.stderr)
+        sys.exit(2)
+    op, i = {}, 0
+    while i < len(resto):
+        n = SORTEAR_OPCOES.get(resto[i])
+        if n is None:
+            print(f"motor sortear: argumento desconhecido {resto[i]!r}. Aceita: {' '.join(SORTEAR_OPCOES)}", file=sys.stderr)
+            sys.exit(2)
+        op[resto[i]] = resto[i + 1] if n and i + 1 < len(resto) else True
+        if n and i + 1 >= len(resto):
+            print(f"motor sortear: {resto[i]} pede um valor", file=sys.stderr)
+            sys.exit(2)
+        i += 1 + n
+    if op.get("--apply") and not op.get("--saida"):
+        print("motor sortear: --apply pede --saida <arquivo.jsonl> (o arquivo que vai ao git)", file=sys.stderr)
+        sys.exit(2)
+    semente = op.get("--semente", "escada-sentido-v1")
+    b, bancos = inst.get("banco") or {}, inst.get("bancos") or {}
+    if not b or "sessao" not in bancos or "motor" not in bancos:
+        print("motor sortear: a instancia nao declara banco e bancos.sessao/motor em motor-instancias.json", file=sys.stderr)
+        sys.exit(1)
+    eventos = _psql_json(b, (
+        "SELECT coalesce(json_agg(t ORDER BY t.criado_em, t.id), '[]'::json) FROM ("
+        "SELECT e.id::text AS id, e.ordem_id, e.pergunta, e.particao, e.origem, e.sessao_id, "
+        "e.criado_em::text AS criado_em, EXISTS (SELECT 1 FROM acervo.evento_secao s "
+        "JOIN acervo.impressao i ON i.id = s.impressao_id WHERE s.evento_id = e.id) AS secao_em_impressao "
+        "FROM acervo.evento_recuperacao e WHERE e.disparou) t"))
+    ate = op.get("--ate") or max((e["criado_em"] for e in eventos), default="")
+    eventos = [e for e in eventos if e["criado_em"] <= ate]
+    ids = sorted({e["sessao_id"] for e in eventos if sorteio.e_uuid(e.get("sessao_id"))})
+    cadeiras = {}
+    if ids:
+        linhas = _psql_json(bancos["sessao"], (
+            "SELECT coalesce(json_agg(json_build_object('sessao_id', sessao_id::text, 'cadeira', cadeira)), '[]'::json) "
+            "FROM sessao.sessao WHERE sessao_id::text IN (" + ",".join(_lit(x) for x in ids) + ")"))
+        cadeiras = {x["sessao_id"]: x["cadeira"] for x in linhas}
+    fora = {sorteio.normalizar(e["pergunta"]) for e in eventos if e.get("origem") in sorteio.ORIGENS_FORA}
+    gab = na_release(inst.get("gabarito", ""))
+    if gab and os.path.isfile(gab):
+        with open(gab, encoding="utf-8") as f:
+            fora |= {sorteio.normalizar(json.loads(l).get("pergunta", "")) for l in f if l.strip()}
+    cand, excluidas = sorteio.filtrar(
+        eventos, cadeiras, fora, aceitar_sem_ordem=bool(op.get("--aceitar-sem-ordem")),
+        aceitar_sem_cadeira=bool(op.get("--aceitar-sem-cadeira")))
+    sentido, pequenas = sorteio.separar_estratos(cand, excluidas)
+    lista = sorteio.sortear(sentido, semente)
+    flags = {"aceitar_sem_ordem": bool(op.get("--aceitar-sem-ordem")),
+             "aceitar_sem_cadeira": bool(op.get("--aceitar-sem-cadeira")), "ate": ate}
+    rel = sorteio.relatorio(len(eventos), cand, excluidas, sentido, pequenas, lista, semente, flags)
+    conteudo = sorteio.linhas_jsonl(lista)
+    rel["sha_git"] = sorteio.sha_blob_git(conteudo)
+    if op.get("--json"):
+        print(json.dumps({**rel, "lista": [{k: c[k] for k in ("posicao", "papel", "id", "cadeira", "estrato", "pergunta")}
+                                           for c in lista]}, ensure_ascii=False, indent=1))
+    else:
+        print(f"sorteio {semente} · {rel['eventos_lidos']} eventos do log ate {ate[:19]} · {rel['candidatos']} candidatos · "
+              f"{rel['sentido']} no estrato sentido · {rel['sorteadas']} sorteadas "
+              f"({rel['principal']} principais, {rel['reserva']} de reserva; piloto {rel['piloto']})")
+        if rel["sorteadas"] < sorteio.PRINCIPAL + sorteio.RESERVA:
+            print(f"POOL ABAIXO DE {sorteio.PRINCIPAL + sorteio.RESERVA}: {rel['sentido']} perguntas no estrato sentido")
+        print("excluidas por motivo:")
+        for motivo, n in rel["excluidas"].items():
+            print(f"  {n:>5}  {motivo}")
+        print("cadeiras no estrato sentido: " + (", ".join(f"{k} {v}" for k, v in rel["por_cadeira_no_pool"].items()) or "-"))
+        if pequenas:
+            print("cadeiras fora por ter menos de cinco: " + ", ".join(pequenas))
+        print(f"piloto (as {rel['piloto']} primeiras da ordem; o estrato e proposta da maquina, quem confirma e o dono):")
+        for c in lista[: sorteio.PILOTO]:
+            print(f"  {c['posicao']:>2}. [{c['cadeira']}] ({c['estrato']}) {c['pergunta']}")
+    if not op.get("--apply"):
+        if not op.get("--json"):
+            print("plano: nada gravado. Para valer: o mesmo comando com --apply --saida <arquivo.jsonl>")
+        return
+    if not lista:
+        print("motor sortear: nada sorteado; nao ha o que gravar", file=sys.stderr)
+        sys.exit(1)
+    with open(op["--saida"], "wb") as f:
+        f.write(conteudo)
+    facets = http(inst["facets"], token_da(inst), timeout=30)
+    sha_acervo = ((facets or {}).get("indice") or {}).get("acervo_sha")
+    if not sha_acervo:
+        print("motor sortear: /facets nao trouxe indice.acervo_sha; sem ele a versao nao se data", file=sys.stderr)
+        sys.exit(3)
+    nota = json.dumps({"fita": "#3349", "semente": semente, "flags": flags, "sorteadas": rel["sorteadas"],
+                       "excluidas": rel["excluidas"]}, ensure_ascii=False, sort_keys=True)
+    existente = _psql_json(bancos["motor"], (
+        "SELECT coalesce((SELECT json_build_object('id', id::text) FROM avaliacao.gabarito_versao "
+        f"WHERE sha_git = {_lit(rel['sha_git'])} AND sha_acervo = {_lit(sha_acervo)}), 'null'::json)"))
+    if existente:
+        print(f"ja existe: gabarito_versao {existente['id']} (sha_git {rel['sha_git'][:12]}, sha_acervo {sha_acervo[:12]}); "
+              f"{op['--saida']} regravado com o mesmo conteudo")
+        return
+    novo = _psql_json(bancos["motor"], (
+        "WITH ins AS (INSERT INTO avaliacao.gabarito_versao (sha_git, sha_acervo, nota) VALUES "
+        f"({_lit(rel['sha_git'])}, {_lit(sha_acervo)}, {_lit(nota)}) RETURNING id) "
+        "SELECT json_build_object('id', id::text) FROM ins"))
+    print(f"gabarito_versao {novo['id']} gravada (sha_git {rel['sha_git'][:12]}, sha_acervo {sha_acervo[:12]}); "
+          f"lista em {op['--saida']}: {len(lista)} perguntas. Comite o arquivo como avaliacao/escada-sentido-v1.jsonl.")
+
+
 def main():
     d = reg()
     a = sys.argv[1:]
@@ -1584,6 +1720,9 @@ def main():
     if inst["estado"] != "ativa":
         print(f"instancia '{a[0]}' esta {inst['estado']} — nenhum ato aceito", file=sys.stderr)
         sys.exit(1)
+    if inst.get("tipo") == "marcacao-api":
+        # a marcacao-api nao e motor de busca: sem ajuste, buscar, medir. Os atos sao os do cliente dela.
+        sys.exit(marcacao.executar(inst["endpoint"], token_da(inst), a[1:]))
     if len(a) < 2:
         uso()
     if a[1] == "ajuste":
@@ -1594,9 +1733,11 @@ def main():
         return cmd_indexar(inst, a[2:])
     if a[1] == "trocar":
         return cmd_trocar(inst, a[2:])
+    if a[1] == "sortear":
+        return cmd_sortear(inst, a[2:])
     if a[1] == "medir":
         return cmd_medir(a[0], inst, a[2:])
-    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, indexar, medir, trocar", file=sys.stderr)
+    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, indexar, medir, sortear, trocar", file=sys.stderr)
     sys.exit(1)
 
 

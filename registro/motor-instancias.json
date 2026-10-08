@@ -17,6 +17,10 @@
    "db": "rag_extractor",
    "user": "rag"
   },
+  "bancos": {
+   "motor": {"container": "motor-pg", "db": "motor", "user": "motor"},
+   "sessao": {"container": "harness-sessao-db", "db": "sessao", "user": "sessao"}
+  },
   "ajustes": [
    {
     "slug": "char-por-token",
@@ -359,6 +363,15 @@
    "JUDGE_MODEL": "bancada de avaliacao (fase 11), nao motor servido: ajustar e medir sao coisas diferentes"
   },
   "env_da_ingestao": "/srv/platafirma/casa/deploy/rag/ingestao.env"
+ },
+ "marcacao": {
+  "estado": "ativa",
+  "tipo": "marcacao-api",
+  "container": "marcacao-api",
+  "stack": "marcacao-api",
+  "endpoint": "http://127.0.0.1:8130",
+  "token_em": "/srv/platafirma/casa/segredos/marcacao-api/MARCACAO_TOKEN",
+  "ajustes": []
  },
  "reasoner": {
   "estado": "planejada",
