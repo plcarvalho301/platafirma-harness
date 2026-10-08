@@ -60,10 +60,10 @@ def _transcript(tmp_path, cadeira="ia", usos=()):
 
 
 def test_o_fecho_diz_por_que_a_fita_parou(ambiente):
-    gravou, tokens = descansar.grava_fecho("ia", "teto_de_giros")
+    gravou, tokens = descansar.grava_fecho("ia", "teto_giros")
     assert gravou is True and tokens is None
     linha = _fecho(ambiente)
-    assert linha["evento"] == "fecho" and linha["motivo_parada"] == "teto_de_giros"
+    assert linha["evento"] == "fecho" and linha["motivo_parada"] == "teto_giros"
     assert linha["sessao_id"] == SID and linha["cadeira"] == "ia"
     assert "tokens" not in linha, "sem transcript de Code a falta se diz, nunca se estima"
     assert oplog.validar(linha) == []
@@ -90,7 +90,8 @@ def test_transcript_de_outra_cadeira_nao_conta(ambiente):
 
 
 def test_parada_so_aceita_o_vocabulario_fechado():
-    assert set(oplog.MOTIVOS_PARADA) == {"concluiu", "teto_de_giros", "orcamento_de_erro", "interrompida"}
+    # o CHECK de acervo.log_fecho.motivo_parada (spec apis-escrita-acervo §D1)
+    assert set(oplog.MOTIVOS_PARADA) == {"concluiu", "teto_giros", "orcamento_erro", "interrompida"}
     erros = oplog.validar({"ts": "t", "evento_id": "e", "schema_v": 1, "origem": "cadeira",
                            "mapa_v": None, "tool": "descansar", "evento": "fecho",
                            "sessao_id": SID, "cadeira": "ia", "motivo_parada": "cansei"})
@@ -99,4 +100,4 @@ def test_parada_so_aceita_o_vocabulario_fechado():
 
 def test_o_ritual_manda_dizer_por_que_a_fita_parou():
     texto = (REPO_ROOT / "bin" / "descansar").read_text(encoding="utf-8")
-    assert "--parada teto_de_giros|orcamento_de_erro|interrompida" in texto
+    assert "--parada teto_giros|orcamento_erro|interrompida" in texto

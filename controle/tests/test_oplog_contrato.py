@@ -146,7 +146,26 @@ def test_emitir_carimba_origem_e_mapa_v_e_ler_da_origem_a_linha_antiga(tmp_path)
     ("caminho", "negativa"), ("binario", "negativa")])
 def test_classe_do_erro_das_tools_de_leitura(classe_erro, classe):
     r = oplog.classificar({"tool": "ler_arquivo", "erro": "x", "classe_erro": classe_erro})
-    assert r["classe"] == classe and r["causa"] == classe_erro
+    # `causa` so existe na execucao: CHECK (classe = 'execucao' OR causa IS NULL) de acervo.log_giro.
+    assert r["classe"] == classe and "causa" not in r
+
+
+def test_o_vocabulario_cumpre_os_check_do_schema_fisico_da_particao_log():
+    # spec apis-escrita-acervo §D1: acervo.log_giro.classe/causa e acervo.log_fecho.motivo_parada.
+    import re
+    desfechos = [{"exit_code": c} for c in (0, 1, 2, 3, 4, 5, 9, 137)] + [
+        {"erro": "timeout (30s)"}, {"erro": "falha ao abrir"}, {"erro": "x"}, {"cancelado": True},
+        {"evento": "sem_verbo"}, {"evento": "pep_negou"}, {"evento": "pep_indisponivel"},
+        {"evento": "escrita_recusada"}] + [{"erro": "x", "classe_erro": c} for c in
+                                          ("gramatica", "faixa", "recusado", "caminho", "binario")]
+    for d in desfechos:
+        r = oplog.classificar(d)
+        assert r["classe"] in oplog.CLASSES and r["classe_fonte"] in ("verbo", "tabela"), d
+        assert r["classe"] == "execucao" or "causa" not in r, f"causa fora da execucao: {d} -> {r}"
+        assert re.fullmatch(r"[a-z][a-z0-9_]*", r.get("causa", "x")), d
+    assert set(oplog.MOTIVOS_PARADA) == {"concluiu", "teto_giros", "orcamento_erro", "interrompida"}
+    assert set(oplog.FONTES_TURNO) == {"hook", "transcript", "runner", "declarado", "gap"}
+    assert set(oplog.FONTES_TOKENS) == {"provedor", "estimado"}
 
 
 def test_escrita_recusada_e_gramatica_e_erro_sem_classe_segue_execucao():

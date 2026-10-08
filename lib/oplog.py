@@ -179,7 +179,7 @@ def classificar(desfecho: dict, *, declara_exit: bool | None = None) -> dict:
     # resposta negativa. Execucao e so o que a porta nao soube explicar (conta contra o SLO).
     por_classe_erro = _POR_CLASSE_ERRO.get(str(desfecho.get("classe_erro") or ""))
     if por_classe_erro:
-        return r(por_classe_erro, str(desfecho["classe_erro"]))
+        return r(por_classe_erro)          # `causa` so existe na execucao (CHECK de acervo.log_giro)
     if erro:
         texto = str(erro).lower()
         if texto.startswith("timeout"):
@@ -214,7 +214,8 @@ def origem_da_linha(reg: dict) -> str:
 # --- contrato -------------------------------------------------------------------------
 
 MOTIVOS_NEGACAO = ("sem_token", "nao_jwt", "assinatura", "audience", "emissor", "expirado", "outro")
-MOTIVOS_PARADA = ("concluiu", "teto_de_giros", "orcamento_de_erro", "interrompida")
+# Os do CHECK de `acervo.log_fecho.motivo_parada` (spec apis-escrita-acervo §D1).
+MOTIVOS_PARADA = ("concluiu", "teto_giros", "orcamento_erro", "interrompida")
 FONTES_TURNO = ("declarado", "gap", "runner", "hook", "transcript")
 FONTES_TOKENS = ("provedor", "estimado")
 ORIGENS = ("cadeira", "agente", "sonda")
