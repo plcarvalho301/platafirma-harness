@@ -14,7 +14,8 @@ echo "=== release lote 3: conferir absorvido ==="
 echo "--- 1: implementacao e sub-ato fora do PATH; bin/conferir e despachante"
 [ -f "$IMPL" ] || falha "sub-ato $IMPL ausente"
 head -1 "$CONFERIR" | grep -q bash || falha "bin/conferir devia ser o despachante em bash"
-python3 -m py_compile "$IMPL" || falha "conferir.py nao compila"
+# compile() em memoria: py_compile grava __pycache__ ao lado do arquivo, e a arvore do gate e so leitura
+python3 -c 'import sys; compile(open(sys.argv[1], encoding="utf-8").read(), sys.argv[1], "exec")' "$IMPL" || falha "conferir.py nao compila"
 bash -n "$CONFERIR" || falha "bin/conferir com erro de sintaxe"
 echo OK
 
