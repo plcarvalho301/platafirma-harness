@@ -84,6 +84,9 @@ def _lingua(texto: str) -> str | None:
     return "pt" if pt > en else "en"
 
 
+lingua = _lingua
+
+
 def lint(texto: str, pedido: str | None = None) -> tuple[str, str] | None:
     """None se a necessidade passa; senão `(causa, jeito_certo)`. Nunca reescreve.
 
@@ -192,9 +195,15 @@ def rotulos_do_chapeu(cadeira: str | None, chapeu: str | None, raiz=None) -> tup
 
 # --- pedido do dono -----------------------------------------------------------------------------
 
-def pedido_da_porta(sessao: str | None, raiz_log=None, hoje: date | None = None,
-                    dias: int = JANELA_DIAS) -> str | None:
-    """A última mensagem do dono que a porta recebeu nesta sessão, ou None.
+def da_porta(sessao: str | None, raiz_log=None, hoje: date | None = None,
+             dias: int = JANELA_DIAS) -> dict:
+    """O que o log da porta sabe desta sessão: `pedido` (a última mensagem do dono que a porta recebeu),
+    `chapeu` (o da última abertura) e `cadeira` (a da última linha que a leva). Cada um, ou None.
+
+    No claude.ai a porta não põe PF_CHAPEU no ambiente do verbo (medido em 08/10/2026: `chapeu: null` na
+    primeira consulta no ar); a abertura grava o chapéu no log da porta, e é de lá que ele vem quando o
+    ambiente não o traz. O chapéu trocado no meio da conversa (`persona ler --chapeu`) não abre linha: vale o
+    da última abertura.
 
     Duas linhas do log da porta carregam a mensagem (spec log-de-negocio §3): a de `turno`, com
     `texto`, onde a superfície a entrega; e a abertura (`monta_sessao`), com `pergunta`, a primeira
@@ -203,27 +212,44 @@ def pedido_da_porta(sessao: str | None, raiz_log=None, hoje: date | None = None,
     recente que a porta tem, e não o da fala de agora.
 
     Lê pelo `lib/oplog`, o único que abre o bruto da porta, do dia mais novo para o mais velho,
-    e para no primeiro dia que tem mensagem. Nunca lê o pacote montado nem a resposta (#3345)."""
+    e para no primeiro dia que dá pedido e chapéu. Nunca lê o pacote montado nem a resposta (#3345)."""
+    achado = {"pedido": None, "chapeu": None, "cadeira": None}
     if not sessao or sessao.strip() in ("", "-"):
-        return None
+        return achado
     import oplog  # lib/ já está no sys.path de bin/motor
     hoje = hoje or date.today()
     for atras in range(dias):
         dia = hoje - timedelta(days=atras)
-        ultimo = None
+        do_dia = {"pedido": None, "chapeu": None, "cadeira": None}
         try:
             for reg in oplog.ler(dia, dia, diretorio_=raiz_log, sessao=sessao.strip()):
+                abertura = reg.get("tool") == "monta_sessao" and reg.get("evento") in (None, "")
                 if reg.get("evento") == "turno":
                     texto = reg.get("texto")
-                elif reg.get("tool") == "monta_sessao" and reg.get("evento") in (None, ""):
+                elif abertura:
                     texto = reg.get("pergunta")
+                    chapeu = reg.get("chapeu")
+                    if isinstance(chapeu, str) and chapeu.strip() not in ("", "-"):
+                        do_dia["chapeu"] = chapeu.strip()
                 else:
-                    continue
+                    texto = None
                 if isinstance(texto, str) and texto.strip():
-                    ultimo = texto.strip()
-        except (OSError, ValueError) as e:       # log ilegível não derruba a busca: segue sem pedido
-            print(f"motor: pedido do dono não lido do log da porta ({e})", file=sys.stderr)
-            return None
-        if ultimo:
-            return ultimo
-    return None
+                    do_dia["pedido"] = texto.strip()
+                cadeira = reg.get("cadeira")
+                if isinstance(cadeira, str) and cadeira.strip() not in ("", "-"):
+                    do_dia["cadeira"] = cadeira.strip()
+        except (OSError, ValueError) as e:       # log ilegível não derruba a busca: segue sem o que ele daria
+            print(f"motor: log da porta não lido ({e})", file=sys.stderr)
+            return achado
+        for campo, valor in do_dia.items():       # o dia mais novo vence; o mais velho só completa o que falta
+            if achado[campo] is None:
+                achado[campo] = valor
+        if achado["pedido"] and achado["chapeu"]:   # o resto vem do ambiente; nao varre mais dia por isso
+            break
+    return achado
+
+
+def pedido_da_porta(sessao: str | None, raiz_log=None, hoje: date | None = None,
+                    dias: int = JANELA_DIAS) -> str | None:
+    """Só o pedido de `da_porta`."""
+    return da_porta(sessao, raiz_log, hoje, dias)["pedido"]

@@ -291,6 +291,43 @@ def test_linha_ilegivel_no_log_nao_derruba(tmp_path):
     assert consulta.pedido_da_porta(SID, tmp_path, HOJE) == "Card 3360"
 
 
+def test_da_porta_traz_pedido_chapeu_e_cadeira_do_log(tmp_path):
+    """No claude.ai a porta nao poe PF_CHAPEU no ambiente do verbo: o chapeu vem da abertura no log."""
+    _abertura(tmp_path, SID, "Card 3360", hora=9)
+    oplog.emitir({"tool": "repo", "ato": "ler", "sessao_id": SID, "cadeira": "ia", "exit_code": 0},
+                 diretorio_=tmp_path, agora=_agora(HOJE, 10))
+    assert consulta.da_porta(SID, tmp_path, HOJE) == {"pedido": "Card 3360", "chapeu": "engenharia-de-harness",
+                                                      "cadeira": "ia"}
+
+
+def test_da_porta_chapeu_da_ultima_abertura_e_traco_nao_conta(tmp_path):
+    oplog.emitir({"tool": "monta_sessao", "sessao_id": SID, "chapeu": "agente", "pergunta": "a"},
+                 diretorio_=tmp_path, agora=_agora(HOJE, 9))
+    oplog.emitir({"tool": "monta_sessao", "sessao_id": SID, "chapeu": "-", "pergunta": "b"},
+                 diretorio_=tmp_path, agora=_agora(HOJE, 10))
+    achado = consulta.da_porta(SID, tmp_path, HOJE)
+    assert achado["chapeu"] == "agente" and achado["pedido"] == "b"
+
+
+def test_da_porta_completa_o_chapeu_com_o_dia_anterior_sem_trocar_o_pedido(tmp_path):
+    _abertura(tmp_path, SID, "primeira", dia=HOJE - timedelta(days=1))
+    _turno(tmp_path, SID, "a de hoje", dia=HOJE)
+    achado = consulta.da_porta(SID, tmp_path, HOJE)
+    assert achado["pedido"] == "a de hoje" and achado["chapeu"] == "engenharia-de-harness"
+
+
+def test_da_porta_sem_sessao_ou_sem_log_devolve_tudo_nulo(tmp_path):
+    nulo = {"pedido": None, "chapeu": None, "cadeira": None}
+    assert consulta.da_porta(None, tmp_path, HOJE) == nulo
+    assert consulta.da_porta(SID, tmp_path / "nao-existe", HOJE) == nulo
+
+
+def test_lingua_decide_so_pelas_funcionais_exclusivas():
+    assert consulta.lingua(NEC) == "pt"
+    assert consulta.lingua("what is the abstention floor of the Nemotron generation?") == "en"
+    assert consulta.lingua("OpenID Connect Core copyright notice") is None
+
+
 def test_so_a_mensagem_do_dono_vira_pedido_nunca_a_resposta_ou_o_pacote(tmp_path):
     """c198 (#3345): o pedido vem de `texto`/`pergunta`, nenhum outro campo da linha."""
     oplog.emitir({"tool": "sessao", "evento": "turno", "sessao_id": SID, "turno_id": "T1",
