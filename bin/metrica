@@ -146,7 +146,7 @@ def e_veredito(reg):
 # O que o ops log grava por chamada de verbo (ops-server/server.py, `_audit`).
 CAMPOS_GIRO = ("ts", "cadeira", "ordem_id", "sessao_id", "tool", "ato",
                "exit_code", "dur_ms", "lote_id", "lote_n",
-               "evento_id", "schema_v", "classe")
+               "evento_id", "schema_v", "classe", "origem", "escopo", "turno_id", "turno_fonte")
 
 
 # --- fronteira de LEITURA: a unica parte que sabe do .jsonl -----------------------
