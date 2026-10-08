@@ -26,6 +26,7 @@ descartada (`oplog.origem_da_linha`). A linha anterior à chave ganha o uuid v5 
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -571,12 +572,15 @@ class Api:
             with urllib.request.urlopen(req, timeout=self.timeout) as r:  # noqa: S310 — loopback
                 status, bruto = r.status, r.read()
         except urllib.error.HTTPError as e:
-            status, bruto = e.code, e.read()
+            try:
+                status, bruto = e.code, e.read()
+            except (OSError, ValueError, http.client.HTTPException):
+                status, bruto = e.code, b""             # o corpo não veio inteiro: o exit sai pelo status, como sempre
         except urllib.error.URLError as e:
             if isinstance(e.reason, (TimeoutError, socket.timeout)):
                 raise Falha(5, f"{metodo} {caminho}: passou de {self.timeout:g}s sem resposta; não se sabe se valeu") from None
             raise Falha(3, f"{metodo} {caminho}: {self.base} não respondeu ({e.reason})") from None
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError, http.client.HTTPException) as e:     # IncompleteRead etc. não são OSError
             raise Falha(5, f"{metodo} {caminho}: a conexão caiu ({type(e).__name__}); não se sabe se valeu") from None
         obj = None
         if bruto:
