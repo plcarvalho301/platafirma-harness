@@ -256,16 +256,20 @@ def _resposta(**extra):
             "pecas": PECAS, "pacote": PACOTE, **extra}
 
 
-def test_a_abertura_grava_o_custo_do_pacote_e_nao_o_texto_do_dono(tmp_path):
-    linha = _abre(tmp_path, _resposta(), pergunta="oi, tudo bem?")
-    assert "pergunta" not in linha and linha["pergunta_bytes"] == len("oi, tudo bem?".encode())
+def test_a_abertura_grava_o_prompt_do_dono_e_o_custo_do_pacote_mas_nao_o_pacote(tmp_path):
+    # Ordem do dono (08/10): grava so o prompt dele, nao o pacote todo.
+    pecas = [{**p, "conteudo": f"CONTEUDO-DA-PECA-{p['peca']}"} for p in PECAS]
+    linha = _abre(tmp_path, _resposta(pecas=pecas), pergunta="oi, tudo bem?")
+    assert linha["pergunta"] == "oi, tudo bem?" and linha["pergunta_bytes"] == len("oi, tudo bem?".encode())
+    bruto = json.dumps(_linhas(tmp_path))
+    assert "CONTEUDO-DA-PECA" not in bruto, "o conteudo das pecas do pacote nao entra em linha nenhuma"
+    assert not {"pecas", "pacote", "conteudo", "resposta"} & set(linha)
     assert linha["tokens_pecas"] == {"persona": 0, "chapeu": 1291, "mesa": 80}
     assert linha["metodo_tokens"] == "tokenizador qwen2.5" and linha["montador_sha"] == "76e618a"
     assert linha["prefixo_sha"] == hashlib.sha256(b"persona:aaa|chapeu:bbb").hexdigest()[:12]
     assert linha["chapeu"] == "engenharia-de-harness" and linha["roteador_via"] == "comando"
     assert linha["superficie"] == "claude.ai"
     assert oplog.validar(linha) == []
-    assert "oi, tudo bem?" not in json.dumps(_linhas(tmp_path)), "o texto do dono nao aparece em linha nenhuma"
 
 
 def test_o_prefixo_cacheavel_muda_quando_uma_peca_do_prefixo_muda(tmp_path):
@@ -277,11 +281,16 @@ def test_o_prefixo_cacheavel_muda_quando_uma_peca_do_prefixo_muda(tmp_path):
     assert a != b and a == c, "peca fora do prefixo nao mexe no sha do prefixo"
 
 
-def test_abertura_recusada_nao_tem_pacote_e_tambem_nao_grava_o_texto(tmp_path):
-    linha = _abre(tmp_path, {"erro": "persona nao achada", "cadeira": "x"}, pergunta="segredo do dono")
+def test_abertura_recusada_nao_tem_pacote_mas_grava_o_prompt(tmp_path):
+    linha = _abre(tmp_path, {"erro": "persona nao achada", "cadeira": "x"}, pergunta="o que o dono pediu")
     assert linha["tokens_pecas"] is None and linha["prefixo_sha"] is None
-    assert "pergunta" not in linha and linha["pergunta_bytes"] == len("segredo do dono")
-    assert "segredo do dono" not in json.dumps(_linhas(tmp_path))
+    assert linha["pergunta"] == "o que o dono pediu" and linha["pergunta_bytes"] == len("o que o dono pediu")
+
+
+def test_reabertura_sem_mensagem_nova_grava_pergunta_nula_e_cumpre_o_contrato(tmp_path):
+    linha = _abre(tmp_path, _resposta(), pergunta="", sessao_id=SID)
+    assert linha["pergunta"] is None and linha["pergunta_bytes"] == 0
+    assert oplog.validar(linha) == []
 
 
 def test_a_abertura_com_turno_abre_o_t0(tmp_path):

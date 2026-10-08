@@ -232,7 +232,7 @@ CONTRATO = {
              "bytes_produzidos", "bytes_servidos", "lavado", "capacidade", "ferramenta", "escopo",
              "turno_id", "turno_fonte") + IDENTIDADE,
     "abertura": ("tool", "sessao_id", "chapeu", "roteador_via", "superficie", "tokens_pecas",
-                 "metodo_tokens", "prefixo_sha", "montador_sha", "pergunta_bytes") + IDENTIDADE,
+                 "metodo_tokens", "prefixo_sha", "montador_sha", "pergunta", "pergunta_bytes") + IDENTIDADE,
     "fecho": ("tool", "evento", "sessao_id", "cadeira", "motivo_parada"),
     "auth_negada": ("evento", "path", "origem_requisicao", "motivo"),
     "http_req": ("evento", "path", "via") + IDENTIDADE,
@@ -242,10 +242,13 @@ CONTRATO = {
 }
 NULAVEL = frozenset({"capacidade", "ferramenta", "mapa_v", "cadeira", "ordem_id", "exit_code",
                      "roteador_via", "particao", "origem_consulta", "chapeu",
-                     "bytes_produzidos", "bytes_servidos"})      # escrita e recusa nao devolvem corpo
-# Campo que, presente, e erro: o texto do dono e o da resposta nao se gravam (arq:0061 §5).
-PROIBIDOS = {"abertura": ("pergunta",), "turno": ("texto", "turno_texto"),
-             "giro": ("token", "access_token", "refresh_token", "authorization")}
+                     "bytes_produzidos", "bytes_servidos",         # escrita e recusa nao devolvem corpo
+                     "pergunta"})                                   # reabertura sem mensagem nova
+# Campo que, presente, e erro. A mensagem do dono (`pergunta` na abertura, `query` na consulta da
+# abertura) se grava no bruto e so nele (spec log-de-negocio §0/§3); a resposta da cadeira, o
+# pacote montado e o token nunca (arq:0061 §5).
+PROIBIDOS = {"abertura": ("resposta", "pacote", "pecas", "conteudo"),
+             "giro": ("token", "access_token", "refresh_token", "authorization", "resposta")}
 
 
 def tipo_da_linha(reg: dict) -> str:
@@ -290,10 +293,8 @@ def validar(reg: dict) -> list[str]:
             problemas.append("tokens sem fonte_tokens")
     if tipo in ("giro", "turno") and reg.get("turno_fonte") not in FONTES_TURNO:
         problemas.append(f"turno_fonte fora do vocabulario: {reg.get('turno_fonte')!r}")
-    if tipo == "consulta" and "query" not in reg and "query_bytes" not in reg:
-        problemas.append("falta query ou query_bytes")
-    if tipo == "consulta" and reg.get("origem_consulta") == "abertura" and "query" in reg:
-        problemas.append("nao se grava query na consulta da abertura")
+    if tipo == "consulta" and "query" not in reg:
+        problemas.append("falta query")
     return problemas
 
 
