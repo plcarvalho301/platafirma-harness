@@ -9,6 +9,7 @@
   "token_em": "/srv/platafirma/casa/segredos/rag/RAG_API_TOKEN",
   "facets": "http://127.0.0.1:8100/facets",
   "indexacao": "http://127.0.0.1:8100/motor/indexacoes/lote",
+  "troca": "http://127.0.0.1:8100/motor/trocas",
   "gabarito": "/opt/platafirma/current/harness/avaliacao/gabarito.jsonl",
   "medicoes_em": "/srv/platafirma/casa/var/medicoes/rag",
   "banco": {
@@ -179,7 +180,7 @@
     "faixa": "nome do modelo; vazio desliga",
     "codigo": "",
     "sobe": "um cross-encoder le pergunta e trecho juntos e reordena o funil",
-    "custa": "~325 ms por chamada e ~1,1 GiB de VRAM residente. E nao pagou aqui: medido 08/08 no gold de 82 (card #357), acerto na 1a posicao 0,780 COM revisor contra 0,817 SEM. Fica desligado por medicao, nao por esquecimento. Desde o card #360 tambem liga por chamada, pela flag `rerank` do /search",
+    "custa": "~325 ms por chamada e ~1,1 GiB de VRAM residente. E nao pagou aqui: medido 08/08 no gold de 82 (card #357), acerto na 1a posicao 0,780 COM revisor contra 0,817 SEM. Fica desligado por medicao, nao por esquecimento. Liga por chamada em `bracos` do /search (`bracos: [\"rerank\"]`; a flag `rerank` solta, que a bateria mandava ate o #3264, a API nao le: a rodada «com revisor» media o mesmo numero que a sem revisor). Com o provedor `off` do compose, o braco liga o `ce` junto",
     "medir": "acerto na 1a posicao contra tempo, os dois na mesma tabela"
    },
    {

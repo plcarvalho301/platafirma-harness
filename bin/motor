@@ -4,8 +4,8 @@
 # dono: ia
 # componente: platafirma-motor
 # classe: B
-# use para: achar pelo sentido o trecho que responde a X (buscar <particao>; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), ler/mexer um ajuste (ajuste)
-# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice) — buscar/medir/indexar exigem particao: motor <inst> <ato> <particao> ...
+# use para: achar pelo sentido o trecho que responde a X (buscar <particao>; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), ler/mexer um ajuste (ajuste)
+# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao) — buscar/medir/indexar/trocar exigem particao: motor <inst> <ato> <particao> ...
 # forma: json
 # cauda: nao
 # poda: cosmetica@rag,casa,buscar
@@ -25,6 +25,8 @@ from pathlib import Path
 _ARVORE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ARVORE / "lib"))
 import raizes  # noqa: E402
+sys.path.insert(0, str(_ARVORE / "bin" / "_motor"))
+import calibra  # noqa: E402  (a calibracao do sinal de abstencao sobre medicoes salvas, #3264)
 
 REG = os.environ.get("PF_MOTOR_REG") or str(_ARVORE / "registro" / "motor-instancias.json")
 BIN = os.environ.get("PF_BIN") or str(_ARVORE / "bin")
@@ -131,10 +133,16 @@ def uso(cod=2):
   motor <inst> ajuste <slug> <valor>     mexe, promove e confere o servido
   motor <inst> buscar <particao> "<pergunta>" [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>] [--ordem-id <id>]
                      [--origem abertura|busca|bench|sombra|autoteste]
-  motor <inst> medir  <particao> [--k N] [--rerank] [--rotulo <nome>] [--gabarito <arq>]
-                     [--expansao [--peso-conceito X]]
+  motor <inst> medir  <particao> [--k N] [--rerank] [--veredito] [--rotulo <nome>] [--gabarito <arq>]
+                     [--expansao [--peso-conceito X]] [--geracao <id|gN>]
                                         bateria no gold da particao, pela porta servida:
-                                        as duas familias separadas + delta contra a ultima
+                                        as duas familias separadas + delta contra a ultima;
+                                        --geracao mede a geracao em sombra pela mesma porta, com a
+                                        pergunta embedada pelo embedder dela e com os ajustes dela;
+                                        --rerank e --veredito ligam o braco por chamada (bracos=)
+  motor <inst> medir  <particao> --calibrar <controle>[,<rodada>…]
+                                        o piso e o que ele custa, por sinal, sobre as medicoes salvas
+                                        com esses rotulos (a primeira e a similaridade, o controle)
   motor <inst> medir  <particao> --sombra <modelo>[,<modelo>] [--particoes biblioteca,casa]
                      [--k N] [--perguntas N]
                                         braco-sombra do embedder (guia escolha-de-llm §11):
@@ -148,6 +156,19 @@ def uso(cod=2):
                                         --promover poe impressao e indice no ar depois do gate
   motor <inst> indexar biblioteca --relatorio <lote> [--json]
                                         o lote aberto, impressao a impressao
+  motor <inst> trocar biblioteca --embedder <modelo> --dimensao <N> [--autor <slug>] [--apply] [--json]
+                                        troca de embedder: o plano (parametros da geracao nova, o que
+                                        entra, disco/tempo/VRAM estimados); com --apply abre a geracao
+                                        em sombra e monta o indice de trecho e de faceta de toda
+                                        impressao servindo, em segundo plano e retomavel
+  motor <inst> trocar biblioteca [--estado] [--relatorio <lote>] [--json]
+                                        a particao de relance (cobertura da sombra) ou o lote
+  motor <inst> trocar biblioteca --virar <id|gN> [--ajuste <nome>=<valor>…] [--sim "<o sim do dono>"]
+                     [--confirma gN] [--apply] [--json]
+                                        o plano da virada (cobertura exata, o que vira, o que se apaga)
+                                        ou a virada, num ato so, que apaga a geracao anterior
+  motor <inst> trocar biblioteca --descartar <id|gN> [--confirma gN] [--apply] [--json]
+                                        desfaz a sombra (folhas e indices saem)
 
 gramatica (arq:0106): motor <inst> <ato> <particao> [seletor]. instancia = quem
 busca (ortogonal a particao); particao = onde (biblioteca, casa, registro; obra = biblioteca).
@@ -473,6 +494,249 @@ def cmd_indexar(inst, argv):
     print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_do_plano(r))
 
 
+# ---------------------------------------------------------------- trocar (troca de embedder, #3264)
+# O ato roda no rag-api (e o motor e o banco ficam do outro lado da porta): plano, montagem da geracao
+# nova em sombra, relatorio, virada e descarte. A virada apaga a geracao anterior no mesmo ato e nao tem
+# verbo de volta, entao so aplica com a confirmacao nomeada e o «sim» do dono, que o rag-api grava na
+# geracao (arq:0121 §7.4). Erro do rag-api vira exit da tabela da casa.
+_EXIT_DA_TROCA = {400: 2, 404: 1, 409: 4, 422: 1}
+USO_TROCAR = (
+    "motor <inst> trocar biblioteca --embedder <modelo> --dimensao <N> [--autor <slug>] [--memoria 1GB] "
+    "[--apply] [--json]\n"
+    "  motor <inst> trocar biblioteca [--estado] [--relatorio <lote>] [--json]\n"
+    "  motor <inst> trocar biblioteca --virar <id|gN> [--ajuste <nome>=<valor>…] [--sim \"<o sim do dono>\"] "
+    "[--confirma gN] [--apply] [--json]\n"
+    "  motor <inst> trocar biblioteca --descartar <id|gN> [--confirma gN] [--apply] [--json]")
+
+def _chama_troca(inst, tok, caminho="", corpo=None):
+    """POST (com corpo) ou GET na rota `troca` do registro."""
+    base = inst.get("troca") or ""
+    if not base:
+        print("motor trocar: a instancia nao declara `troca` em motor-instancias.json", file=sys.stderr)
+        sys.exit(1)
+    req = urllib.request.Request(
+        base.rstrip("/") + caminho, data=json.dumps(corpo).encode() if corpo is not None else None,
+        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=900) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        if e.code not in _EXIT_DA_TROCA:
+            _trata_erro_http(e, "motor trocar")
+        try:
+            pj = json.loads(e.read().decode("utf-8", "replace"))
+            motivo = f"{pj.get('title')}: {pj.get('detail')}"
+        except Exception:
+            motivo = f"HTTP {e.code}"
+        print(f"motor trocar: {motivo}", file=sys.stderr)
+        sys.exit(_EXIT_DA_TROCA[e.code])
+    except urllib.error.URLError as e:
+        _trata_erro_http(e, "motor trocar")
+
+def _valor_do_ajuste(texto):
+    """`0.61` -> 0.61, `true` -> True, o resto fica texto (nome de modelo)."""
+    if texto.lower() in ("true", "false"):
+        return texto.lower() == "true"
+    try:
+        return float(texto) if "." in texto else int(texto)
+    except ValueError:
+        return texto
+
+def _o_que_apaga(a):
+    folhas = ", ".join(a.get("folhas") or []) or "-"
+    meta = ", ".join(a.get("chaves_index_meta") or []) or "-"
+    return (f"{a.get('vetores', 0)} vetores, {a.get('indices', 0)} indices "
+            f"({a.get('indices_em_construcao', 0)} em construcao), folhas {folhas}, chaves da index_meta {meta}")
+
+def _cobertura_txt(c):
+    return (f"cobertura {c.get('aprovadas', 0)}/{c.get('total', 0)} impressoes com indice aprovado "
+            f"({c.get('percentual', 0)}%)")
+
+def _texto_da_troca(p):
+    """Primeira linha: o que o ato diz; o resto, o que o dono precisa para decidir ou acompanhar."""
+    modo = p.get("modo")
+    if modo == "plano" and p.get("ato") == "virar":
+        c = p["cobertura"]
+        g = p["geracao"]
+        linhas = [f"virada da g{g['numero']} ({g['embedder']}): {_cobertura_txt(c)} · "
+                  f"HNSW {'pronto' if p.get('hnsw') else 'AUSENTE'} · {p.get('indices_a_servir', 0)} indices a servir"]
+        for r in (p.get("reprovadas") or [])[:20]:
+            linhas.append(f"  reprovada  {r['obra_id']}  {(r.get('titulo') or '')[:40]:<40}  {r.get('motivo')}")
+        if len(p.get("reprovadas") or []) > 20:
+            linhas.append(f"  … +{len(p['reprovadas']) - 20}")
+        linhas.append(f"  apaga a g{p['apaga']['geracao']} ({p['apaga'].get('embedder')}): {_o_que_apaga(p['apaga'])}")
+        ret = p.get("retrato_mais_recente")
+        linhas.append("  retrato mais recente: " + (f"{ret['tirado_em']} ({ret['total']} obras)" if ret else "nenhum"))
+        linhas.append(f"  ajustes que a geracao leva: {json.dumps(p.get('ajustes'), ensure_ascii=False)}")
+        linhas.append(f"  volta: {p.get('volta')}")
+        linhas.append("para virar: --apply --confirma g" + str(g["numero"]) +
+                      " --sim \"<o sim do dono>\" --ajuste aviso_de_cobertura_fraca=<piso> […]")
+        return "\n".join(linhas)
+    if modo == "virada":
+        r = p.get("resultado") or {}
+        return (f"virada feita: a g{p['geracao']['numero']} serve a {p['particao']} e a g"
+                f"{r.get('anterior_numero')} foi expurgada ({r.get('indices_da_anterior_apagados', 0)} indices apagados, "
+                f"{r.get('indices_da_nova_servindo', 0)} servindo na nova)\n"
+                f"  index_meta: {p.get('index_meta', {}).get('apagadas', 0)} chave(s) embed_* apagada(s)\n"
+                f"  agora: prior de secao sobre a geracao nova, retrato depois e `release conferir acervo`")
+    if modo == "ja_servindo":
+        return f"a g{p['geracao']} ja serve; nada a virar (index_meta: {p.get('index_meta', {}).get('apagadas', 0)} chave(s) apagada(s))"
+    if modo == "plano" and p.get("ato") == "descartar":
+        return (f"descartar a g{p['geracao']['geracao']} ({p['geracao']['embedder']}): "
+                f"apaga {_o_que_apaga(p['apaga'])}\npara valer: --apply --confirma g{p['geracao']['geracao']}")
+    if modo == "descartada":
+        return f"geracao descartada: {json.dumps(p.get('resultado'), ensure_ascii=False)}"
+    if modo == "aplicado":
+        return (f"lote {p['lote']} aberto no rag-api, em segundo plano: g{p['geracao']} · {p['a_montar']} a montar "
+                f"de {p['impressoes_servindo']} impressoes ({p['prontas']} prontas) · "
+                f"{p['trechos_elegiveis']} trechos no universo\nacompanhar: {p['acompanhar']}")
+    if modo is None and "ambiente" in p:   # estado
+        sombra = p.get("sombra")
+        sv = p.get("servindo") or {"geracao": "-", "embedder": "nenhuma geracao servindo"}
+        if sombra and sombra.get("cobertura"):
+            linhas = [f"{_cobertura_txt(sombra['cobertura'])} na g{sombra['geracao']} ({sombra['embedder']}) · "
+                      f"servindo g{sv['geracao']} ({sv['embedder']})"]
+            for f in (sombra.get("faltam_amostra") or [])[:10]:
+                linhas.append(f"  falta  {f['impressao_id']}  {(f.get('titulo') or '')[:40]:<40}  "
+                              f"{f.get('vetores')}/{f.get('elegiveis')} vetores · faceta {'ok' if f.get('faceta') else 'nao'}")
+        else:
+            linhas = [f"sem geracao em construcao na {p['particao']} · servindo g{sv['geracao']} ({sv['embedder']})"]
+        amb = p.get("ambiente") or {}
+        linhas.append(f"  ambiente: {amb.get('lotes_de_ingestao_abertos', 0)} lote(s) de ingestao aberto(s) · "
+                      f"lote de indexacao/troca {'ABERTO' if amb.get('lote_de_indexacao_aberto') else 'fechado'} · "
+                      f"VRAM livre {(amb.get('vram') or {}).get('livre_gb', 'nao medida')} GB")
+        if p.get("lote"):
+            linhas.append(f"  ultimo lote: {p['lote'].get('lote')}")
+        return "\n".join(linhas)
+    # plano da montagem
+    s, par, est, amb = p["servindo"], p["parametros"], p["estimativa"], p.get("ambiente") or {}
+    vram = (amb.get("vram") or {}).get("livre_gb")
+    linhas = [f"plano: trocar a {p['particao']} de g{s['geracao']} ({s['embedder']}) para {par['embedder']} em "
+              f"{par['dimensao_trecho']} dimensoes · {p['impressoes_servindo']} impressoes servindo · "
+              f"{p['trechos_elegiveis']} trechos elegiveis",
+              f"  estimativa (hipotese, confirma na primeira impressao): disco ~{est['disco_gb']} GB · "
+              f"tempo ~{est['tempo_h']} h a {est['vazao_trechos_por_s']:.0f} trechos/s · modelo ~{est['vram_do_modelo_gb']} GB "
+              f"de VRAM; VRAM livre agora {vram if vram is not None else 'nao medida'} GB",
+              f"  ambiente: {amb.get('lotes_de_ingestao_abertos', 0)} lote(s) de ingestao aberto(s) · lote de "
+              f"indexacao/troca {'ABERTO' if amb.get('lote_de_indexacao_aberto') else 'fechado'} "
+              f"(nada deve rodar da montagem a virada)",
+              f"  parametros: prefixo da pergunta {par.get('prefixo_da_pergunta')!r}, do trecho "
+              f"{par.get('prefixo_do_trecho')!r}, fatia MRL {'sim' if par.get('fatia_mrl_trecho') else 'nao'}, "
+              f"faceta {par.get('dimensao_faceta')}d, dtype {par.get('dtype')}"]
+    if p.get("sombra"):
+        sb = p["sombra"]
+        linhas.append(f"  ja ha a g{sb['geracao']} em construcao com estes parametros: {_cobertura_txt(sb['cobertura'])}")
+    linhas.append("para valer: o mesmo comando com --apply")
+    return "\n".join(linhas)
+
+def cmd_trocar(inst, argv):
+    """Troca de embedder por particao (#3264; arq:0121 §7). Ver o docstring de `ingestao/troca.py`, no rag-api."""
+    particao, argv = resolve_particao(argv, "trocar")
+    if particao != "biblioteca":
+        print(f"motor trocar {particao}: so a biblioteca troca de embedder; a casa segue na geracao dela "
+              f"(arq:0121 §7.3).\n  {USO_TROCAR}", file=sys.stderr)
+        sys.exit(2)
+    opcoes = {"--embedder": "embedder", "--dimensao": "dimensao", "--autor": "autor", "--memoria": "memoria",
+              "--virar": "virar", "--descartar": "descartar", "--confirma": "confirma", "--sim": "sim",
+              "--relatorio": "relatorio"}
+    v: dict = {"autor": os.environ.get("PF_CADEIRA") or "ia"}
+    ajustes: dict = {}
+    apply_ = como_json = False
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in opcoes or a == "--ajuste":
+            if i + 1 >= len(argv) or (argv[i + 1].startswith("--") and a != "--sim"):
+                print(f"trocar: {a} exige um valor.\n  {USO_TROCAR}", file=sys.stderr)
+                sys.exit(2)
+            if a == "--ajuste":
+                nome, sep, valor = argv[i + 1].partition("=")
+                if not sep or not nome:
+                    print(f"trocar: --ajuste e <nome>=<valor>, veio {argv[i + 1]!r}.\n  {USO_TROCAR}", file=sys.stderr)
+                    sys.exit(2)
+                ajustes[nome.strip().replace("-", "_")] = _valor_do_ajuste(valor.strip())
+            else:
+                v[opcoes[a]] = argv[i + 1]
+            i += 2
+            continue
+        if a == "--apply":
+            apply_ = True
+        elif a == "--json":
+            como_json = True
+        elif a == "--estado":
+            v["estado"] = True
+        else:
+            print(f"trocar: argumento desconhecido {a!r}.\n  {USO_TROCAR}", file=sys.stderr)
+            sys.exit(2)
+        i += 1
+    if v.get("relatorio") and not _UUID.match(v["relatorio"]):
+        print(f"trocar: {v['relatorio']!r} nao e uuid de lote.\n  {USO_TROCAR}", file=sys.stderr)
+        sys.exit(2)
+    if sum(1 for k in ("virar", "descartar", "embedder", "relatorio", "estado") if v.get(k)) > 1:
+        print(f"trocar: --embedder, --virar, --descartar, --relatorio e --estado sao atos distintos; "
+              f"um por chamada.\n  {USO_TROCAR}", file=sys.stderr)
+        sys.exit(2)
+    tok = token_da(inst)
+    if v.get("relatorio"):
+        r = _chama_troca(inst, tok, f"/lote/{v['relatorio']}")
+        print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_do_lote_da_troca(r))
+        return
+    if v.get("virar") or v.get("descartar"):
+        corpo = {"particao": particao, "geracao": v.get("virar") or v.get("descartar"), "aplicar": apply_,
+                 "autor": v["autor"]}
+        if v.get("confirma"):
+            corpo["confirma"] = v["confirma"]
+        if v.get("virar"):
+            if v.get("sim"):
+                corpo["sim"] = v["sim"]
+            if ajustes:
+                corpo["ajustes"] = ajustes
+        r = _chama_troca(inst, tok, "/virar" if v.get("virar") else "/descartar", corpo)
+        print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_da_troca(r))
+        return
+    if v.get("embedder"):
+        if not v.get("dimensao"):
+            print(f"trocar: --embedder pede --dimensao.\n  {USO_TROCAR}", file=sys.stderr)
+            sys.exit(2)
+        try:
+            dimensao = int(v["dimensao"])
+        except ValueError:
+            print(f"trocar: --dimensao exige inteiro, veio {v['dimensao']!r}.\n  {USO_TROCAR}", file=sys.stderr)
+            sys.exit(2)
+        corpo = {"particao": particao, "embedder": v["embedder"], "dimensao": dimensao, "aplicar": apply_,
+                 "autor": v["autor"]}
+        if v.get("memoria"):
+            corpo["memoria"] = v["memoria"]
+        r = _chama_troca(inst, tok, "", corpo)
+        print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_da_troca(r))
+        return
+    r = _chama_troca(inst, tok, f"/{particao}")
+    print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_da_troca(r))
+
+def _texto_do_lote_da_troca(r):
+    """Primeira linha: a cobertura (impressoes com indice aprovado sobre as que servem), como o card manda."""
+    cob = r.get("cobertura")
+    plano = r.get("plano") or {}
+    if cob:
+        primeira = f"{_cobertura_txt(cob)} · "
+    else:
+        feitas = sum(1 for i in r.get("itens") or [] if i.get("estado") == "montada")
+        primeira = (f"cobertura inicial {plano.get('prontas', 0)}/{plano.get('impressoes_servindo', 0)} e "
+                    f"{feitas} montada(s) neste lote · ")
+    estados = ", ".join(f"{k} {v}" for k, v in sorted((r.get("por_estado") or {}).items()))
+    linhas = [primeira + f"lote {r['lote']}: {r.get('estado')} · {estados or 'nada a fazer'} · "
+              f"{r.get('embedados', 0)} vetores de trecho · {round((r.get('ms') or 0) / 1000)} s"]
+    if r.get("hnsw"):
+        linhas.append(f"  HNSW construido em {r['hnsw']['folhas']} folha(s), {round(r['hnsw']['ms'] / 1000)} s")
+    if r.get("problema"):
+        linhas.append(f"  PAROU: {r['problema']}")
+    for it in (r.get("problemas") or [])[:20]:
+        linhas.append(f"  {it.get('estado'):<10} {it['obra_id']}  {(it.get('titulo') or '')[:40]:<40}  {it.get('problema')}")
+    if len(r.get("problemas") or []) > 20:
+        linhas.append(f"  … +{len(r['problemas']) - 20} (--json traz todos)")
+    return "\n".join(linhas)
+
+
 # ---------------------------------------------------------------- evento 'consulta'
 # Emitido no choke point de `motor <inst> buscar`, DENTRO do motor Python (card #2911,
 # contrato B1). Todo caminho de busca — claude.ai, fita e Code — passa por cmd_buscar
@@ -739,8 +1003,12 @@ def monta_gold(inst, gabarito=None):
         if not e.get("pontuavel", True):
             continue
         if e.get("relevancia") == "negativa":
-            gold.append({"q": e["pergunta"], "familia": "abstencao", "estrato": e.get("estrato"),
-                         "obras": set(), "anchor": None})
+            # A negativa que ganhou obra no acervo reformado fica no estrato negativo para a calibracao
+            # da #3264 (protocolo G0), mas abster nela e erro: a `nota` do gabarito a marca, e a conta
+            # a mostra a parte das 22 sem obra.
+            gold.append({"q": e["pergunta"], "id": e.get("id"), "familia": "abstencao",
+                         "estrato": e.get("estrato"), "obras": set(), "anchor": None,
+                         "com_obra": str(e.get("nota") or "").startswith("ganhou obra")})
             continue
         alvo = e.get("alvo_section_id")
         if alvo:
@@ -748,8 +1016,8 @@ def monta_gold(inst, gabarito=None):
             if not titulo:
                 fora_do_indice += 1
                 continue
-            gold.append({"q": e["pergunta"], "familia": "codigo", "estrato": e.get("estrato"),
-                         "obras": {titulo},
+            gold.append({"q": e["pergunta"], "id": e.get("id"), "familia": "codigo",
+                         "estrato": e.get("estrato"), "obras": {titulo},
                          "anchor": _base(alvo).split("#", 1)[1] if "#" in alvo else None})
             continue
         # `alvo_obras` (titulos) e a forma do estrato gerado; `alvo_obra_ids` (uuid) e a do
@@ -757,8 +1025,8 @@ def monta_gold(inst, gabarito=None):
         obras = ({t for t in (e.get("alvo_obras") or [])}
                  | {t for o in (e.get("alvo_obra_ids") or []) for t in por_obra.get(o, ())})
         if obras:
-            gold.append({"q": e["pergunta"], "familia": "sentido", "estrato": e.get("estrato"),
-                         "obras": obras, "anchor": None})
+            gold.append({"q": e["pergunta"], "id": e.get("id"), "familia": "sentido",
+                         "estrato": e.get("estrato"), "obras": obras, "anchor": None})
         elif e.get("alvo_obra_ids") or e.get("alvo_obras"):
             fora_do_indice += 1
         else:
@@ -807,20 +1075,23 @@ def dir_medicoes(inst):
     return d
 
 
-def ultima_medicao(inst, gabarito):
-    """A ultima rodada DO MESMO gabarito. Comparar estratos diferentes seria comparar
-    populacoes diferentes e chamar a diferenca de delta."""
+def ultima_medicao(inst, gabarito, geracao=None):
+    """A ultima rodada DO MESMO gabarito (e da mesma geracao: a sombra se compara com a sombra, o servido
+    com o servido). Comparar estratos diferentes seria comparar populacoes diferentes e chamar a
+    diferenca de delta."""
     d = dir_medicoes(inst)
     for nome in sorted((f for f in os.listdir(d) if f.endswith(".json")), reverse=True):
         with open(os.path.join(d, nome)) as f:
             m = json.load(f)
-        if m.get("gabarito") == gabarito:
+        if m.get("gabarito") == gabarito and m.get("geracao") == geracao:
             return m
     return None
 
 
 def cmd_medir(nome, inst, argv):
     particao, argv = resolve_particao(argv, "medir")
+    if "--calibrar" in argv:
+        return cmd_calibrar(inst, particao, argv)
     if "--sombra-ver" in argv:
         return cmd_sombra_ver(inst, _valor(argv, "--sombra-ver", "medir"))
     if "--sombra-parar" in argv:
@@ -838,6 +1109,8 @@ def cmd_medir(nome, inst, argv):
         k = int(argv[argv.index("--k") + 1])
     rotulo = argv[argv.index("--rotulo") + 1] if "--rotulo" in argv else ""
     expansao = "--expansao" in argv
+    veredito = "--veredito" in argv
+    geracao = _valor(argv, "--geracao", "medir") if "--geracao" in argv else None
     peso = argv[argv.index("--peso-conceito") + 1] if "--peso-conceito" in argv else None
     gab = argv[argv.index("--gabarito") + 1] if "--gabarito" in argv else None
     if gab:
@@ -864,31 +1137,52 @@ def cmd_medir(nome, inst, argv):
           f"{carimbo.get('embed_model')} ({carimbo.get('embed_backend')}) | "
           f"revisor {'LIGADO nesta rodada' if rerank else 'desligado'} | "
           f"expansao {'LIGADA nesta rodada' if expansao else 'desligada'}"
-          + (f" (peso {peso})" if expansao and peso else "") + f" | k={k}\n")
+          + (f" (peso {peso})" if expansao and peso else "")
+          + f" | veredito por conceito {'LIGADO nesta rodada' if veredito else 'como a geracao declara'}"
+          + (f" | GERACAO MEDIDA: {geracao} (embedder e ajustes dela)" if geracao else "") + f" | k={k}\n")
 
     ranks = {"codigo": [], "sentido": [], "t2": []}
     abst_ok, abst_total = 0, 0
+    abst_sem, total_sem, abst_com, total_com = 0, 0, 0, 0
+    perguntas = []
     lat, t0 = [], time.time()
+    # Os bracos ligam por chamada em `bracos` (a lista que a API le desde o #2895). Os booleanos
+    # `rerank` e `expansao` no corpo, que esta bateria mandava, a API nao le: a rodada dita «revisor
+    # LIGADO» media o mesmo numero que a sem revisor (medido em 07/10/2026, #3264).
+    bracos = [b for b, ligado in (("rerank", rerank), ("expansao", expansao), ("veredito", veredito)) if ligado]
     for i, g in enumerate(gold, 1):
         corpo = {"pergunta": g["q"], "k": k, "texto": "nenhum", "origem": "bench"}
-        if rerank:
-            corpo["rerank"] = True
-        if expansao:
-            corpo["expansao"] = True
-            if peso is not None:
-                corpo["peso_conceito"] = float(peso)
+        if bracos:
+            corpo["bracos"] = bracos
+        if expansao and peso is not None:
+            corpo["peso_conceito"] = float(peso)
+        if geracao:
+            corpo["geracao"] = geracao
         r = http(inst["endpoint"], tok, corpo)
         lat.append((r.get("tempos_ms") or {}).get("total", 0.0))
+        cob = (r.get("cobertura") or "").lower()
+        sinal = r.get("sinal") or {}
+        linha = {"id": g.get("id"), "q": g["q"], "familia": g["familia"], "estrato": g.get("estrato"),
+                 "cobertura": cob, "medida": sinal.get("medida"), "valor": sinal.get("valor"),
+                 "piso": sinal.get("piso"),
+                 "veredito": ((r.get("ontologia") or {}).get("veredito") or {}).get("estado")}
         if g["familia"] == "abstencao":
             abst_total += 1
-            cob = (r.get("cobertura") or "").lower()
-            if cob in ("fraca", "vazia", "ausente", "nenhuma"):
-                abst_ok += 1
+            abstem = cob in ("fraca", "vazia", "ausente", "nenhuma")
+            abst_ok += abstem
+            if g.get("com_obra"):
+                total_com, abst_com = total_com + 1, abst_com + abstem
+            else:
+                total_sem, abst_sem = total_sem + 1, abst_sem + abstem
+            linha["grupo"] = "neg_com_obra" if g.get("com_obra") else "neg_sem_obra"
         else:
             rnk = _rank(r.get("fontes") or [], g)
             ranks[g["familia"]].append(rnk)
-            if (g.get("estrato") or "").startswith("T2"):
+            t2 = (g.get("estrato") or "").startswith("T2")
+            if t2:
                 ranks["t2"].append(rnk)
+            linha.update(grupo="t2" if t2 else "pos", rank=rnk)
+        perguntas.append(linha)
         if i % 25 == 0:
             print(f"  ... {i}/{len(gold)}")
 
@@ -902,9 +1196,12 @@ def cmd_medir(nome, inst, argv):
                           "taxa": round(abst_ok / abst_total, 3)}
     med = {"em": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "rotulo": rotulo, "k": k,
            "rerank": rerank, "expansao": expansao, "peso_conceito": peso,
+           "veredito": veredito, "geracao": geracao, "bracos": bracos,
            "gabarito": chave_gab,
            "indice": carimbo, "gold": conta, "metricas": m,
            "abstencao": f"{abst_ok}/{abst_total}" if abst_total else None,
+           "abstencao_por_grupo": {"sem_obra": f"{abst_sem}/{total_sem}", "com_obra": f"{abst_com}/{total_com}"},
+           "perguntas": perguntas,
            "latencia_ms": {"mediana": round(_p(lat, 0.5), 1), "p90": round(_p(lat, 0.9), 1)},
            "elapsed_s": round(time.time() - t0, 1)}
 
@@ -916,10 +1213,13 @@ def cmd_medir(nome, inst, argv):
         print(f"  {fam:<9} {a['n']:>4} {a['hit@1']:>7} {a['hit@3']:>7} {a['hit@5']:>7}{extra_v} {a['mrr']:>7}")
     if abst_total:
         print(f"  abstenção {abst_ok}/{abst_total}")
+        if total_com:
+            # o recorte do card: as 22 negativas sem obra, e a parte as que ganharam obra (abster nelas e erro)
+            print(f"    sem obra {abst_sem}/{total_sem} · com obra {abst_com}/{total_com} (abster nelas e erro)")
     print(f"\n  latencia servida: mediana {med['latencia_ms']['mediana']} ms | "
           f"p90 {med['latencia_ms']['p90']} ms | rodada {med['elapsed_s']}s")
 
-    anterior = ultima_medicao(inst, chave_gab)
+    anterior = ultima_medicao(inst, chave_gab, geracao)
     arq = os.path.join(dir_medicoes(inst),
                        time.strftime("%Y%m%dT%H%M%S") + (f"-{rotulo}" if rotulo else "") + ".json")
     with open(arq, "w") as f:
@@ -964,12 +1264,120 @@ def cmd_medir(nome, inst, argv):
         else:
             print("  indice identico — o delta e do que voce mexeu, nao do corpus")
         for campo, agora_v in (("rerank", rerank), ("k", k), ("expansao", expansao),
-                               ("peso_conceito", peso)):
+                               ("peso_conceito", peso), ("veredito", veredito)):
+            if campo == "veredito":   # medicao anterior ao #3264 nao tem o campo: ausente e desligado
+                if bool(anterior.get(campo)) != agora_v:
+                    print(f"  mudou na rodada: {campo} {bool(anterior.get(campo))} -> {agora_v}")
+                continue
             if anterior.get(campo) != agora_v:
                 print(f"  mudou na rodada: {campo} {anterior.get(campo)} -> {agora_v}")
     else:
         print("\n  primeira medicao: nao ha baseline. Meca de novo depois de mexer.")
     print(f"\n  salvo em {arq}")
+
+
+def _medida_da_rodada(linhas):
+    """A nota crua que a rodada usou: `rerank` ou `sim` (a que a API devolveu em `sinal.medida`)."""
+    medidas = [x.get("medida") for x in linhas if x.get("medida") in ("rerank", "sim")]
+    return max(set(medidas), key=medidas.count) if medidas else None
+
+
+def _ajuste_do_vencedor(med, piso):
+    """O que passar a `trocar --virar` para a geracao nascer com o sinal que venceu."""
+    if med.get("veredito"):
+        # veredito por conceito abstém pelo rótulo do conceito E pela similaridade; os dois ajustes juntos
+        return [f"aviso_de_cobertura_fraca={piso}", "veredito_por_conceito=true"]
+    if _medida_da_rodada(med.get("perguntas") or []) == "rerank":
+        return [f"aviso_com_revisor={piso}"]
+    return [f"aviso_de_cobertura_fraca={piso}"]
+
+
+def cmd_calibrar(inst, particao, argv):
+    """`medir <particao> --calibrar <controle>[,<rodada>…] [--geracao <id>]`: escolhe o sinal de abstenção
+    sobre as medições que a bateria já salvou (card #3264, 6c). Não chama a API.
+
+    Os argumentos são os rótulos (`--rotulo`) das rodadas de UMA geração; o primeiro é o controle, a
+    similaridade. A conta e a régua do dono estão em `bin/_motor/calibra.py`."""
+    rotulos = [r for r in _valor(argv, "--calibrar", "medir").split(",") if r]
+    if not rotulos:
+        print("medir --calibrar: informe os rotulos das rodadas, a de controle (similaridade) primeiro:\n"
+              "  motor rag medir biblioteca --calibrar nova-sim,nova-revisor,nova-veredito", file=sys.stderr)
+        sys.exit(2)
+    if len(set(rotulos)) != len(rotulos):
+        print(f"medir --calibrar: rotulo repetido em {','.join(rotulos)}", file=sys.stderr)
+        sys.exit(2)
+    geracao = _valor(argv, "--geracao", "medir") if "--geracao" in argv else None
+    d = dir_medicoes(inst)
+    achadas = {}
+    for nome in sorted((f for f in os.listdir(d) if f.endswith(".json")), reverse=True):
+        if len(achadas) == len(rotulos):
+            break
+        try:
+            with open(os.path.join(d, nome)) as f:
+                m = json.load(f)
+        except (OSError, ValueError):
+            continue
+        r = m.get("rotulo")
+        if r not in rotulos or r in achadas or not m.get("perguntas"):
+            continue
+        if geracao is not None and m.get("geracao") != geracao:
+            continue
+        achadas[r] = m
+    faltam = [r for r in rotulos if r not in achadas]
+    if faltam:
+        print(f"medir --calibrar: sem medicao salva (com `perguntas`) para: {', '.join(faltam)}\n"
+              f"  em {d}. Rode a bateria antes: motor rag medir {particao} --k 8 --geracao <id> --rotulo <r>",
+              file=sys.stderr)
+        sys.exit(1)
+    geracoes = {m.get("geracao") for m in achadas.values()}
+    gabaritos = {m.get("gabarito") for m in achadas.values()}
+    if len(geracoes) > 1 or len(gabaritos) > 1:
+        print(f"medir --calibrar: as rodadas nao sao da mesma geracao e do mesmo gabarito "
+              f"(geracoes {sorted(map(str, geracoes))}, gabaritos {sorted(map(str, gabaritos))}); "
+              f"comparar populacoes diferentes e chamar a diferenca de sinal", file=sys.stderr)
+        sys.exit(1)
+    controle = rotulos[0]
+    # na ordem em que o dono listou: no empate vence o primeiro (liste do mais barato ao mais caro)
+    res = calibra.calibrar({r: achadas[r]["perguntas"] for r in rotulos}, controle)
+    n_t2 = res["rodadas"][controle]["de_t2"]
+    ctrl = res["rodadas"][controle]
+    print(f"calibracao do sinal de abstencao | geracao {next(iter(geracoes)) or 'servindo'} | "
+          f"controle {controle} | gabarito {next(iter(gabaritos))}")
+    print(f"  orcamento de perda de T2 = {res['orcamento_t2']}/{n_t2} "
+          f"(o que a similaridade paga no piso {res['piso_do_controle']}; T2 achadas na rodada)")
+    if n_t2 and res["orcamento_t2"] * 5 > n_t2:
+        print("  ATENCAO: o orcamento passa de 1/5 das T2 achadas. Com poucas T2 o minimo da similaridade degenera\n"
+              "  em calar tudo e o vencedor abstem a vontade; confira a tabela antes de levar o numero ao dono.")
+    print()
+    print(f"  {'rodada':<22} {'sinal':<8} {'piso':>6} {'sem obra':>9} {'T2 perdidas':>12} {'com obra':>9}")
+    for r in rotulos:
+        x = res["rodadas"][r]
+        sinal = ("veredito+" if achadas[r].get("veredito") else "") + (_medida_da_rodada(achadas[r]["perguntas"]) or "?")
+        marca = "  (fora do orcamento)" if x.get("fora_do_orcamento") else ""
+        print(f"  {r:<22} {sinal:<8} {x['piso']:>6} {x['neg_sem_obra']:>4}/{x['de_neg_sem_obra']:<4} "
+              f"{x['t2_abstidas']:>5}/{x['de_t2']:<6} {x['neg_com_obra_abstidas']:>4}/{x['de_neg_com_obra']:<4}{marca}")
+    print(f"\n  as negativas com obra (abster nelas e erro) saem a parte: {ctrl['de_neg_com_obra']} no gabarito, "
+          f"a conta nao as soma as {ctrl['de_neg_sem_obra']}")
+    saida = {"em": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "geracao": next(iter(geracoes)),
+             "gabarito": None, "calibracao_do": next(iter(gabaritos)), "resultado": res, "ajuste": None}
+    if res["atinge_o_minimo"]:
+        v = res["vencedora"]
+        ajuste = _ajuste_do_vencedor(achadas[v], res["rodadas"][v]["piso"])
+        saida["ajuste"] = ajuste
+        print(f"\n  VENCE: {v} com {res['rodadas'][v]['neg_sem_obra']}/{res['rodadas'][v]['de_neg_sem_obra']} "
+              f"(minimo {res['minimo']}) sem perder positiva T2 alem do controle.\n"
+              f"  para virar: trocar --virar <id> --apply --confirma g<N> --sim \"<texto do dono>\" "
+              + " ".join(f"--ajuste {a}" for a in ajuste))
+    else:
+        melhor = res["vencedora"]
+        n = res["rodadas"][melhor]["neg_sem_obra"] if melhor else 0
+        print(f"\n  NENHUM SINAL ATINGE {res['minimo']}/{ctrl['de_neg_sem_obra']} (melhor: {melhor or '-'} com {n}): "
+              f"a particao NAO vira (arq:0121 §7.3) e o numero vai ao dono.")
+    arq = os.path.join(d, time.strftime("%Y%m%dT%H%M%S") + "-calibracao.json")
+    with open(arq, "w") as f:
+        json.dump(saida, f, ensure_ascii=False, indent=1)
+    print(f"\n  salvo em {arq}")
+    sys.exit(0 if res["atinge_o_minimo"] else 4)
 
 
 # ---------------------------------------------------------------- braco-sombra do embedder
@@ -1142,9 +1550,11 @@ def main():
         return cmd_buscar(a[0], inst, a[2:])
     if a[1] == "indexar":
         return cmd_indexar(inst, a[2:])
+    if a[1] == "trocar":
+        return cmd_trocar(inst, a[2:])
     if a[1] == "medir":
         return cmd_medir(a[0], inst, a[2:])
-    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, indexar, medir", file=sys.stderr)
+    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, indexar, medir, trocar", file=sys.stderr)
     sys.exit(1)
 
 
