@@ -21,6 +21,7 @@ Fora daqui ninguem abre o diretorio do bruto (controle/tests/test_oplog_unico_le
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -552,47 +553,93 @@ def remover_dia_conferido(dia, sha256: str, diretorio_=None) -> bool:
     tem o `sha256` que o corte conferiu, e so entao. Devolve False, sem apagar, quando o arquivo sumiu ou
     mudou entre a conferencia e a remocao. Quem a chama e o timer `corte-bruto`; verbo servido nao.
 
-    A janela entre conferir e apagar e fechada tirando o arquivo do nome do dia (rename atomico, mesmo
-    diretorio) ANTES de refazer o hash: o que se confere e o que se apaga, e quem anexar ao nome do dia
-    dali em diante abre arquivo novo. Erro no meio (leitura, remocao) devolve o arquivo ao nome e levanta.
+    A janela entre conferir e apagar e fechada tirando o arquivo do nome do dia (um link para `.corte` e a
+    remocao do nome, sem nunca pisar em arquivo que ja exista) ANTES de refazer o hash: o que se confere e o
+    que se apaga, e quem anexar ao nome do dia dali em diante abre arquivo novo. Erro no meio devolve o
+    arquivo ao nome SE o nome estiver livre; se alguem o ocupou, o `.corte` fica ao lado, visivel, e a
+    excecao sobe. Um `.corte` que ja existia (de um corte interrompido) nunca e sobrescrito: levanta
+    FileExistsError, e `devolver_sobras_do_corte` cuida dele na rodada seguinte.
     """
     caminho = caminho_do_dia(dia, diretorio_)
     pendente = caminho.with_name(caminho.name + _SUFIXO_DO_CORTE)
     try:
-        os.replace(caminho, pendente)
+        os.link(caminho, pendente)
     except FileNotFoundError:
         return False
     try:
-        if hashlib.sha256(pendente.read_bytes()).hexdigest() == sha256:
-            pendente.unlink()
-            return True
+        caminho.unlink()
+    except FileNotFoundError:
+        pendente.unlink(missing_ok=True)
+        return False
     except BaseException:
-        os.replace(pendente, caminho)
+        with contextlib.suppress(OSError):
+            pendente.unlink()                          # nada mudou: tira o segundo nome
         raise
-    os.replace(pendente, caminho)
-    return False
+    try:
+        conferido = hashlib.sha256(pendente.read_bytes()).hexdigest() == sha256
+    except BaseException:
+        _devolver(pendente, caminho)
+        raise
+    if not conferido:
+        _devolver(pendente, caminho)
+        return False
+    try:
+        pendente.unlink()
+    except BaseException:
+        if pendente.exists():
+            _devolver(pendente, caminho)
+        raise
+    return True
 
 
-def devolver_sobras_do_corte(diretorio_=None) -> list[str]:
+def _devolver(pendente: Path, caminho: Path) -> None:
+    """Volta o `.corte` ao nome do dia sem pisar em nada: o link falha se o nome foi ocupado, e entao o
+    `.corte` fica ao lado, visivel, e FileExistsError sobe."""
+    os.link(pendente, caminho)
+    with contextlib.suppress(OSError):
+        pendente.unlink()           # se nao sair, e o mesmo arquivo com dois nomes: a proxima rodada limpa
+
+
+def devolver_sobras_do_corte(diretorio_=None) -> tuple[list[str], list[tuple[str, str]]]:
     """Um corte que morreu entre tirar o arquivo do nome do dia e apagar (kill, falta de luz) deixa
     `ops-AAAA-MM-DD.jsonl.corte`: o dia some da vista, mas os bytes seguem la. Devolve cada sobra ao nome do
-    dia, se o nome estiver livre, e diz quais voltaram; a proxima conferencia decide de novo."""
+    dia, sem nunca pisar em arquivo que ja exista, e diz `(voltaram, presas)`: as presas sao as que nao
+    puderam voltar (o nome do dia ocupado por outros bytes, ou erro de disco), com o motivo; ficam ao lado,
+    intactas. Sobra que e o MESMO arquivo do nome do dia (devolucao pela metade) so perde o segundo nome.
+    A proxima conferencia decide de novo sobre o que voltou."""
     pasta = Path(diretorio_ or diretorio())
     try:
         entradas = sorted(pasta.iterdir())
     except (FileNotFoundError, NotADirectoryError):
-        return []
-    voltaram = []
+        return [], []
+    voltaram: list[str] = []
+    presas: list[tuple[str, str]] = []
     for p in entradas:
         m = _NOME_DA_SOBRA.fullmatch(p.name)
         if m is None or p.is_symlink() or not p.is_file():
             continue
-        destino = caminho_do_dia(m.group(1), pasta)
-        if destino.exists():
+        dia = m.group(1)
+        try:
+            date.fromisoformat(dia)
+        except ValueError:
+            continue                                    # data impossivel: nao e nome de dia, como em dias_no_disco
+        destino = caminho_do_dia(dia, pasta)
+        try:
+            os.link(p, destino)
+        except FileExistsError:
+            if not os.path.samefile(p, destino):
+                presas.append((dia, "o nome do dia ja existe com outros bytes; a sobra fica ao lado, sem ser apagada"))
+                continue
+        except OSError as e:
+            presas.append((dia, f"{type(e).__name__} ao devolver"))
             continue
-        os.replace(p, destino)
-        voltaram.append(m.group(1))
-    return voltaram
+        try:
+            p.unlink()
+        except OSError as e:
+            presas.append((dia, f"{type(e).__name__} ao tirar o segundo nome"))
+            continue
+        voltaram.append(dia)
+    return voltaram, presas
 
 
 def teto_do_bruto(hoje=None, diretorio_=None) -> dict:

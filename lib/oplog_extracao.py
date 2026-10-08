@@ -572,7 +572,11 @@ class Api:
             with urllib.request.urlopen(req, timeout=self.timeout) as r:  # noqa: S310 — loopback
                 status, bruto = r.status, r.read()
         except urllib.error.HTTPError as e:
-            status, bruto = e.code, e.read()
+            try:
+                status, bruto = e.code, e.read()
+            except (OSError, ValueError, http.client.HTTPException):
+                raise Falha(5, f"{metodo} {caminho}: HTTP {e.code} e o corpo da resposta não veio inteiro; "
+                               "não se sabe se valeu") from None
         except urllib.error.URLError as e:
             if isinstance(e.reason, (TimeoutError, socket.timeout)):
                 raise Falha(5, f"{metodo} {caminho}: passou de {self.timeout:g}s sem resposta; não se sabe se valeu") from None

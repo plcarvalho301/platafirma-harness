@@ -153,7 +153,9 @@ def test_sha_divergente_fica_e_abre_incidente_para_a_seguranca(bruto):
     assert cw.CADEIRA_DO_INCIDENTE == "seguranca"
     corpo = tarefas.criados[0][1]
     assert "sha256" in corpo and not any(s in corpo for s in SEGREDOS), "o incidente leva contagem, nunca conteúdo"
-    assert f"corte-bruto {VELHO}: reprovado — sha256; incidente aberto" in poda.read_text(encoding="utf-8")
+    log = poda.read_text(encoding="utf-8")
+    assert f"corte-bruto {VELHO}: reprovado — sha256 (idade=40d" in log, "o veredito do portao vem primeiro"
+    assert f"corte-bruto {VELHO}: incidente aberto" in log
 
 
 def test_dia_de_30_dias_fica(bruto):
@@ -189,7 +191,7 @@ def test_linhagem_com_contagem_de_linhas_diferente_reprova(bruto):
     tarefas = TarefasFalsa()
     codigo, _, poda = _corta(bruto, api, tarefas)
     assert codigo == 1 and VELHO in _no_disco(bruto) and len(tarefas.criados) == 1
-    assert "reprovado — linhas;" in poda.read_text(encoding="utf-8")
+    assert "reprovado — linhas (" in poda.read_text(encoding="utf-8")
 
 
 def test_evento_a_menos_na_particao_reprova(bruto):
@@ -197,7 +199,7 @@ def test_evento_a_menos_na_particao_reprova(bruto):
     tarefas = TarefasFalsa()
     codigo, _, poda = _corta(bruto, api, tarefas)
     assert codigo == 1 and VELHO in _no_disco(bruto)
-    assert "reprovado — eventos;" in poda.read_text(encoding="utf-8")
+    assert "reprovado — eventos (" in poda.read_text(encoding="utf-8")
 
 
 def test_evento_a_mais_na_particao_tambem_reprova(bruto):
@@ -213,7 +215,7 @@ def test_arquivo_com_tamanho_diferente_da_linhagem_reprova(bruto):
 def test_varias_conferencias_reprovadas_aparecem_juntas(bruto):
     api = ParticaoFalsa(bruto, eventos={VELHO: 1}, **{VELHO: {"sha256": "f" * 64}})
     _, _, poda = _corta(bruto, api)
-    assert "reprovado — eventos,sha256;" in poda.read_text(encoding="utf-8")
+    assert "reprovado — eventos,sha256 (" in poda.read_text(encoding="utf-8")
 
 
 def test_a_contagem_de_eventos_atravessa_as_paginas_de_mil(tmp_path):
@@ -259,7 +261,8 @@ def test_incidente_que_nao_abre_e_dito_e_o_dia_fica(bruto, capsys):
         def abrir_incidente(self, titulo, corpo):
             raise Falha(5, "tarefas criar saiu 1: fora")
     codigo, _, poda = _corta(bruto, ParticaoFalsa(bruto, **{VELHO: {"sha256": "0" * 64}}), Quebra())
-    assert codigo == 5 and VELHO in _no_disco(bruto)
+    assert codigo == 1, "segue reprovado (o de maior gravidade); a unit falha e a noite seguinte tenta o incidente de novo"
+    assert VELHO in _no_disco(bruto)
     assert "incidente NÃO aberto" in poda.read_text(encoding="utf-8")
     assert "incidente não aberto" in capsys.readouterr().err
 
@@ -287,7 +290,7 @@ def test_no_maximo_tres_cortes_por_rodada_do_mais_velho_ao_mais_novo(tmp_path):
         _escreve(pasta, d)
     codigo, saida, _ = _corta(pasta, ParticaoFalsa(pasta, dias=dias))
     assert codigo == 0 and _no_disco(pasta) == sorted(dias[3:])
-    assert any("2 dia(s) ficam para a próxima rodada (máximo 3 cortes por rodada)" in l for l in saida)
+    assert any("2 dia(s) ficam para a próxima rodada (máximo 3 cortes e 1500s por rodada)" in l for l in saida)
 
 
 def test_o_teto_por_rodada_vem_do_ambiente(tmp_path, monkeypatch):
@@ -368,8 +371,9 @@ def test_o_corte_nao_aceita_dia_a_mao_nem_uso_errado(bruto, argv):
 def test_poda_log_leva_uma_linha_por_dia_e_a_linha_de_vida(bruto):
     _, _, poda = _corta(bruto, ParticaoFalsa(bruto))
     linhas = poda.read_text(encoding="utf-8").splitlines()
-    assert len(linhas) == 2 and re.match(r"^\d{4}-\d{2}-\d{2}T[\d:]+[+-]\d{2}:\d{2} corte-bruto ", linhas[0])
-    assert linhas[1].endswith("corte-bruto ok — candidatos=1 cortados=1 retidos=0 reprovados=0 · prazo=35d · no disco=3 dias")
+    assert len(linhas) == 3 and re.match(r"^\d{4}-\d{2}-\d{2}T[\d:]+[+-]\d{2}:\d{2} corte-bruto ", linhas[0])
+    assert ": cortando — conferido" in linhas[0] and ": cortado — conferido" in linhas[1], "a intenção e o resultado"
+    assert linhas[2].endswith("corte-bruto ok — candidatos=1 cortados=1 retidos=0 reprovados=0 · prazo=35d · no disco=3 dias")
 
 
 def test_poda_log_grava_a_linha_de_vida_mesmo_sem_candidato(tmp_path):
@@ -612,20 +616,25 @@ class _Morte(BaseException):
     pass
 
 
-def test_cada_corte_e_gravado_antes_de_olhar_o_dia_seguinte(tmp_path):
-    """O processo que morre no meio (kill, timeout) não deixa dia apagado sem rastro: o poda.log vem primeiro."""
+@pytest.mark.parametrize("morre_na_linha, sai_o_primeiro", [(1, False), (2, True)])
+def test_o_processo_que_morre_no_meio_deixa_rastro_de_cada_passo(tmp_path, morre_na_linha, sai_o_primeiro):
+    """Kill ou timeout: a intenção («cortando») vai ao poda.log ANTES da remoção, o resultado («cortado») logo
+    depois e antes do dia seguinte, e o poda.log vem antes da saída (que é quem morre aqui)."""
     pasta, dias = _dois_velhos(tmp_path)
     poda, vistas = tmp_path / "poda.log", []
 
     def saida_que_morre(linha):
         vistas.append(linha)
-        raise _Morte
+        if len(vistas) == morre_na_linha:
+            raise _Morte
     with pytest.raises(_Morte):
         cw.main([], api=ParticaoFalsa(pasta, dias=(*dias, RECENTE)), hoje=HOJE, tarefas=TarefasFalsa(),
                  saida=saida_que_morre, diretorio_=pasta, poda_log=poda)
-    assert _no_disco(pasta) == [dias[1], RECENTE], "o primeiro saiu e o segundo nem foi olhado"
-    assert f"corte-bruto {dias[0]}: cortado — conferido" in poda.read_text(encoding="utf-8")
-    assert len(vistas) == 1
+    log = poda.read_text(encoding="utf-8")
+    assert f"corte-bruto {dias[0]}: cortando — conferido" in log, "a intenção está gravada"
+    assert (f"corte-bruto {dias[0]}: cortado — conferido" in log) is sai_o_primeiro
+    assert (dias[0] not in _no_disco(pasta)) is sai_o_primeiro
+    assert dias[1] in _no_disco(pasta) and f"corte-bruto {dias[1]}" not in log, "o segundo nem foi olhado"
 
 
 def test_erro_inesperado_de_um_dia_retem_o_dia_registra_e_segue(tmp_path, monkeypatch):
@@ -691,9 +700,55 @@ def test_sobra_de_corte_interrompido_volta_ao_nome_do_dia_e_o_dia_e_decidido_de_
 def test_devolver_sobras_nao_pisa_em_dia_que_ja_existe(tmp_path):
     _escreve(tmp_path, VELHO)
     (tmp_path / (oplog.nome_do_dia(VELHO) + ".corte")).write_bytes(b"outra")
-    assert oplog.devolver_sobras_do_corte(tmp_path) == []
+    voltaram, presas = oplog.devolver_sobras_do_corte(tmp_path)
+    assert voltaram == [] and [d for d, _ in presas] == [VELHO], "a sobra que não pôde voltar é dita"
     assert (tmp_path / (oplog.nome_do_dia(VELHO) + ".corte")).read_bytes() == b"outra"
-    assert oplog.devolver_sobras_do_corte(tmp_path / "nao-existe") == []
+    assert (tmp_path / oplog.nome_do_dia(VELHO)).read_bytes() != b"outra"
+    assert oplog.devolver_sobras_do_corte(tmp_path / "nao-existe") == ([], [])
+
+
+def test_devolver_sobras_ignora_nome_impossivel_e_limpa_o_segundo_nome_do_mesmo_arquivo(tmp_path):
+    (tmp_path / "ops-2026-13-45.jsonl.corte").write_bytes(b"x")
+    _escreve(tmp_path, VELHO)
+    os.link(tmp_path / oplog.nome_do_dia(VELHO), tmp_path / (oplog.nome_do_dia(VELHO) + ".corte"))
+    assert oplog.devolver_sobras_do_corte(tmp_path) == ([VELHO], [])
+    assert sorted(p.name for p in tmp_path.iterdir()) == sorted(["ops-2026-13-45.jsonl.corte", oplog.nome_do_dia(VELHO)])
+
+
+def test_main_diz_a_sobra_presa_e_sai_5_sem_apagar_nada(bruto):
+    (bruto / (oplog.nome_do_dia(NOVO) + ".corte")).write_bytes(b"outros bytes")
+    codigo, saida, poda = _corta(bruto, ParticaoFalsa(bruto))
+    assert codigo == 5 and any(f"corte-bruto {NOVO}: sobra presa" in l for l in saida)
+    assert (bruto / (oplog.nome_do_dia(NOVO) + ".corte")).read_bytes() == b"outros bytes"
+    assert VELHO not in _no_disco(bruto), "o resto da rodada segue: o dia velho conferido sai"
+
+
+def test_remover_nao_pisa_em_corte_que_ja_existe(bruto):
+    sha = cw.contas_do_arquivo((bruto / oplog.nome_do_dia(VELHO)).read_bytes())["sha256"]
+    (bruto / (oplog.nome_do_dia(VELHO) + ".corte")).write_bytes(b"sobra de outro corte")
+    with pytest.raises(FileExistsError):
+        oplog.remover_dia_conferido(VELHO, sha, bruto)
+    assert (bruto / (oplog.nome_do_dia(VELHO) + ".corte")).read_bytes() == b"sobra de outro corte"
+    assert VELHO in _no_disco(bruto)
+
+
+def test_devolver_nao_pisa_no_arquivo_novo_que_ocupou_o_nome(bruto, monkeypatch):
+    """Alguém cria o arquivo do dia entre o rename e o hash: a devolução não o sobrescreve, o `.corte` fica ao lado."""
+    nome = bruto / oplog.nome_do_dia(VELHO)
+    antes = nome.read_bytes()
+    real = Path.read_bytes
+
+    def le_e_ocupa_o_nome(self):
+        if self.name.endswith(".corte"):
+            nome.write_bytes(b"arquivo novo")
+            return b"bytes que nao batem"
+        return real(self)
+    monkeypatch.setattr(Path, "read_bytes", le_e_ocupa_o_nome)
+    with pytest.raises(FileExistsError):
+        oplog.remover_dia_conferido(VELHO, "0" * 64, bruto)
+    monkeypatch.undo()
+    assert nome.read_bytes() == b"arquivo novo"
+    assert (bruto / (nome.name + ".corte")).read_bytes() == antes, "o original segue inteiro, ao lado e visível"
 
 
 def test_remocao_fecha_a_janela_e_nao_deixa_sobra(bruto):
@@ -706,17 +761,38 @@ def test_remocao_fecha_a_janela_e_nao_deixa_sobra(bruto):
         "sha errado devolve o arquivo ao nome, sem sobra"
 
 
-def test_remocao_que_falha_devolve_o_arquivo_ao_nome_e_levanta(bruto, monkeypatch):
+def test_remocao_que_falha_ao_tirar_o_nome_do_dia_nao_muda_nada(bruto, monkeypatch):
     sha = cw.contas_do_arquivo((bruto / oplog.nome_do_dia(VELHO)).read_bytes())["sha256"]
     antes = (bruto / oplog.nome_do_dia(VELHO)).read_bytes()
+    real = Path.unlink
 
-    def unlink_que_nega(self, *a, **k):
-        raise PermissionError(13, "negado")
-    monkeypatch.setattr(Path, "unlink", unlink_que_nega)
+    def nega_o_nome_do_dia(self, *a, **k):
+        if not self.name.endswith(".corte"):
+            raise PermissionError(13, "negado")
+        return real(self, *a, **k)
+    monkeypatch.setattr(Path, "unlink", nega_o_nome_do_dia)
     with pytest.raises(PermissionError):
         oplog.remover_dia_conferido(VELHO, sha, bruto)
     assert (bruto / oplog.nome_do_dia(VELHO)).read_bytes() == antes
-    assert not (bruto / (oplog.nome_do_dia(VELHO) + ".corte")).exists()
+    assert not (bruto / (oplog.nome_do_dia(VELHO) + ".corte")).exists(), "o segundo nome saiu"
+
+
+def test_remocao_que_falha_no_ultimo_passo_devolve_o_arquivo_ao_nome_e_levanta(bruto, monkeypatch):
+    sha = cw.contas_do_arquivo((bruto / oplog.nome_do_dia(VELHO)).read_bytes())["sha256"]
+    antes = (bruto / oplog.nome_do_dia(VELHO)).read_bytes()
+    real = Path.unlink
+
+    def nega_o_corte(self, *a, **k):
+        if self.name.endswith(".corte"):
+            raise PermissionError(13, "negado")
+        return real(self, *a, **k)
+    monkeypatch.setattr(Path, "unlink", nega_o_corte)
+    with pytest.raises(PermissionError):
+        oplog.remover_dia_conferido(VELHO, sha, bruto)
+    assert (bruto / oplog.nome_do_dia(VELHO)).read_bytes() == antes, "o dia voltou ao nome"
+    monkeypatch.undo()
+    assert oplog.devolver_sobras_do_corte(bruto) == ([VELHO], []), "o segundo nome do mesmo arquivo sai na rodada seguinte"
+    assert sorted(p.name for p in bruto.iterdir()) == sorted(oplog.nome_do_dia(d) for d in (VELHO, NOVO, RECENTE))
 
 
 def test_ambiente_ilegivel_e_uso_errado_sai_2_sem_tocar_o_bruto(bruto, monkeypatch):
@@ -737,15 +813,27 @@ def test_a_particao_responde_fora_do_contrato_e_o_dia_fica(bruto):
     assert "linhagem_indisponivel [5]" in poda.read_text(encoding="utf-8")
 
 
-def test_eventos_com_corpo_que_nao_e_objeto_ou_sem_lista_reprovam(bruto):
+def test_resposta_fora_do_contrato_tem_um_destino_so_falha_5_e_o_dia_fica(bruto):
+    """D5.6 com corpo que não é objeto, sem lista, ou D5.5 sem a linha do dia: a partição está torta, não o bruto — nada
+    de incidente para a segurança, nada de silêncio com exit 0."""
+    tarefas = TarefasFalsa()
     for resposta in ([1, 2, 3], {"proximo": None}, {"itens": "nada"}):
         class Eventos(ParticaoFalsa):
             def chamar(self, metodo, caminho, corpo=None, params=None, aceita=(200,), _r=resposta):
                 if caminho.endswith("/eventos"):
                     return 200, _r
                 return super().chamar(metodo, caminho, corpo, params, aceita)
-        codigo, _, _ = _corta(bruto, Eventos(bruto))
-        assert codigo != 0 and VELHO in _no_disco(bruto), resposta
+        codigo, _, _ = _corta(bruto, Eventos(bruto), tarefas)
+        assert codigo == 5 and VELHO in _no_disco(bruto), resposta
+    for dias_resposta in ({"itens": "nada"}, {"itens": []}, {"proximo": None}):
+        class Dias(ParticaoFalsa):
+            def chamar(self, metodo, caminho, corpo=None, params=None, aceita=(200,), _r=dias_resposta):
+                if caminho == "/acervo/log/dias":
+                    return 200, _r
+                return super().chamar(metodo, caminho, corpo, params, aceita)
+        codigo, _, _ = _corta(bruto, Dias(bruto), tarefas)
+        assert codigo == 5 and VELHO in _no_disco(bruto), dias_resposta
+    assert tarefas.criados == [] and tarefas.listagens == 0
 
 
 def test_dia_com_zero_legiveis_nao_passa_se_a_particao_diz_ausente(tmp_path):
@@ -762,7 +850,7 @@ def test_dia_com_zero_legiveis_nao_passa_se_a_particao_diz_ausente(tmp_path):
     api = Ausente(pasta, dias=(VELHO, RECENTE))
     assert api.linhas[VELHO]["passada"]["linhas_legiveis"] == 0
     codigo, _, _ = _corta(pasta, api)
-    assert codigo == 1 and VELHO in _no_disco(pasta)
+    assert codigo == 5 and VELHO in _no_disco(pasta), "D5.6 dizer ausente depois de D5.5 dizer que há passada é resposta torta"
     # e o mesmo dia, com a partição dizendo a verdade (parcial, nenhum evento), passa
     codigo, _, _ = _corta(pasta, ParticaoFalsa(pasta, dias=(VELHO, RECENTE)))
     assert codigo == 0 and VELHO not in _no_disco(pasta)
@@ -775,8 +863,8 @@ def test_linhagem_de_outro_dia_nao_vale(bruto):
                 return 200, {"itens": [self.linhas[NOVO], self.linhas[RECENTE]], "proximo": None}
             return super().chamar(metodo, caminho, corpo, params, aceita)
     codigo, _, poda = _corta(bruto, OutroDia(bruto))
-    assert codigo == 0 and VELHO in _no_disco(bruto)
-    assert f"corte-bruto {VELHO}: retido — sem_linhagem" in poda.read_text(encoding="utf-8")
+    assert codigo == 5 and VELHO in _no_disco(bruto), "a linha do dia não veio: fora do contrato, não silêncio"
+    assert f"corte-bruto {VELHO}: retido — linhagem_indisponivel [5]" in poda.read_text(encoding="utf-8")
 
 
 def test_o_motivo_da_particao_aparece_no_poda_log_quando_nao_ha_linhagem(bruto):
@@ -834,3 +922,117 @@ def test_conexao_cortada_no_meio_da_resposta_e_falha_5_e_nao_excecao_solta(monke
     with pytest.raises(Falha) as e:
         Api(base="http://127.0.0.1:1", token="").chamar("GET", "/acervo/log/dias")
     assert e.value.codigo == 5
+
+
+def test_corpo_de_erro_cortado_no_meio_tambem_e_falha_5(monkeypatch):
+    import http.client
+    import urllib.error
+    import urllib.request
+
+    class Corpo:
+        def read(self, *a):
+            raise http.client.IncompleteRead(b"meio")
+
+        def close(self):
+            pass
+
+    def responde_500(*a, **k):
+        raise urllib.error.HTTPError("http://x/", 500, "erro", {}, Corpo())
+    monkeypatch.setattr(urllib.request, "urlopen", responde_500)
+    from oplog_extracao import Api
+    with pytest.raises(Falha) as e:
+        Api(base="http://127.0.0.1:1", token="").chamar("GET", "/acervo/log/dias")
+    assert e.value.codigo == 5 and "HTTP 500" in str(e.value)
+
+
+# --- a segunda revisão: o que a rodada faz quando tudo pende ---------------------------------------------
+
+def _quatro_velhos(tmp_path):
+    pasta = tmp_path / "ops"
+    pasta.mkdir()
+    dias = [(HOJE - timedelta(days=n)).isoformat() for n in (47, 46, 45, 44)]
+    for d in (*dias, RECENTE):
+        _escreve(pasta, d)
+    return pasta, dias
+
+
+def test_a_segunda_falha_de_api_seguida_para_a_rodada(tmp_path):
+    """Timeout e 5xx não são do dia: N x 180 s estouraria o TimeoutStartSec da unit e mataria a rodada sem linha de vida."""
+    pasta, dias = _quatro_velhos(tmp_path)
+    api = ParticaoFalsa(pasta, dias=(*dias, RECENTE), falha=Falha(5, "passou de 180s sem resposta"))
+    codigo, saida, poda = _corta(pasta, api)
+    assert codigo == 5 and _no_disco(pasta) == [*dias, RECENTE]
+    assert len(api.chamadas) == 2, "duas tentativas e para"
+    log = poda.read_text(encoding="utf-8")
+    assert f"corte-bruto {dias[0]}: retido" in log and f"corte-bruto {dias[1]}: retido" in log
+    assert f"corte-bruto {dias[2]}" not in log and "corte-bruto ok — candidatos=4" in log, "a linha de vida fecha a rodada"
+
+
+def test_orcamento_de_tempo_acaba_a_rodada_sem_cortar_nem_morrer(tmp_path, monkeypatch):
+    pasta, dias = _quatro_velhos(tmp_path)
+    monkeypatch.setenv("CORTE_ORCAMENTO_S", "0")
+    codigo, saida, poda = _corta(pasta, ParticaoFalsa(pasta, dias=(*dias, RECENTE)))
+    assert codigo == 0 and _no_disco(pasta) == [*dias, RECENTE]
+    assert any("4 dia(s) ficam para a próxima rodada (máximo 3 cortes e 0s por rodada)" in l for l in saida)
+    assert "corte-bruto ok — candidatos=4 cortados=0" in poda.read_text(encoding="utf-8")
+
+
+def test_poda_log_que_nao_grava_nao_deixa_cortar(bruto):
+    """Sem rastro de intenção gravado, o dia não sai."""
+    poda = bruto.parent / "poda.log"
+    poda.mkdir()                                        # abrir uma pasta para acrescentar falha com OSError
+    saida = []
+    codigo = cw.main([], api=ParticaoFalsa(bruto), hoje=HOJE, tarefas=TarefasFalsa(), saida=saida.append,
+                     diretorio_=bruto, poda_log=poda)
+    assert codigo == 5 and VELHO in _no_disco(bruto)
+    assert any(f"corte-bruto {VELHO}: retido — poda_log_nao_gravou" in l for l in saida)
+
+
+def test_o_exit_e_o_de_maior_gravidade_e_nao_o_de_maior_numero(tmp_path):
+    pasta, dias = _dois_velhos(tmp_path)
+
+    class SegundoFalha(ParticaoFalsa):
+        def chamar(self, metodo, caminho, corpo=None, params=None, aceita=(200,)):
+            if dias[1] in caminho or (params or {}).get("desde") == dias[1]:
+                raise Falha(5, "passou de 180s")
+            return super().chamar(metodo, caminho, corpo, params, aceita)
+    api = SegundoFalha(pasta, dias=(*dias, RECENTE), **{dias[0]: {"sha256": "0" * 64}})
+    codigo, _, _ = _corta(pasta, api)
+    assert codigo == 1, "reprovado (pede gente) vale mais que o erro de um dia"
+    assert [cw._pior(a, b) for a, b in ((0, 5), (5, 3), (3, 4), (4, 1), (1, 5), (5, 1))] == [5, 3, 4, 1, 1, 1]
+
+
+def test_o_veredito_do_portao_fica_gravado_mesmo_quando_o_passo_do_incidente_quebra(bruto):
+    class Quebra(TarefasFalsa):
+        def titulos_abertos(self):
+            raise RuntimeError("tarefas caiu de um jeito que ninguem previu")
+    codigo, _, poda = _corta(bruto, ParticaoFalsa(bruto, **{VELHO: {"sha256": "0" * 64}}), Quebra())
+    log = poda.read_text(encoding="utf-8")
+    assert codigo == 1 and VELHO in _no_disco(bruto)
+    assert f"corte-bruto {VELHO}: reprovado — sha256 (idade=40d" in log, "o motivo do portao não some"
+    assert f"corte-bruto {VELHO}: retido — erro_inesperado [RuntimeError]" in log
+
+
+def test_erro_depois_da_remocao_nao_reescreve_o_veredito_do_dia(bruto, monkeypatch):
+    """A saída quebra depois do `unlink`: o dia saiu, e a linha não pode dizer que ficou."""
+    chamadas = []
+
+    def saida_que_quebra_no_resultado(linha):
+        chamadas.append(linha)
+        if ": cortado " in linha:
+            raise RuntimeError("stdout quebrou")
+    poda = bruto.parent / "poda.log"
+    codigo = cw.main([], api=ParticaoFalsa(bruto), hoje=HOJE, tarefas=TarefasFalsa(),
+                     saida=saida_que_quebra_no_resultado, diretorio_=bruto, poda_log=poda)
+    log = poda.read_text(encoding="utf-8")
+    assert VELHO not in _no_disco(bruto) and codigo == 5
+    assert f"corte-bruto {VELHO}: cortado — conferido" in log
+    assert "retido — erro_inesperado" not in log
+
+
+def test_motivo_da_particao_nao_forja_linha_de_rastro(bruto):
+    api = ParticaoFalsa(bruto, **{VELHO: {"passada": False, "motivo": "x\n2099-01-01T00:00:00+00:00 corte-bruto 2026-01-01: cortado"}})
+    _, _, poda = _corta(bruto, api)
+    linhas = poda.read_text(encoding="utf-8").splitlines()
+    assert len(linhas) == 2 and all(l.count(" corte-bruto ") == 1 for l in linhas), linhas
+    assert "sem_linhagem:x_2099-01-01T00:00:00_00:00_corte-bruto_2026-01-01:" in linhas[0]
