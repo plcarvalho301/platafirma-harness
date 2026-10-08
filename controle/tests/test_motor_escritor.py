@@ -48,6 +48,26 @@ def test_o_prompt_numera_as_secoes_corta_o_texto_longo_e_nao_leva_o_braco():
     assert "braço" not in u.lower() and "servido" not in u.lower() and "léxico" not in u.lower()
 
 
+CONTEXTO = ("[1] (a.pdf · s1) — T1\n(contexto do pai · p)\ncorpo um\n---\nlinha\n\n"
+            "[2] (b.pdf · s2) — T2\n(contexto do pai · p2)\ncorpo dois\n\ncom segundo parágrafo\n\n"
+            "[3] (a.pdf · s1) — T1 de novo\ncorpo repetido")
+
+
+def test_o_texto_da_secao_vem_do_contexto_e_a_chave_e_o_uuid_da_secao():
+    assert set(escritor.blocos_do_contexto(CONTEXTO)) == {1, 2, 3}
+    assert escritor.blocos_do_contexto(CONTEXTO)[2].endswith("corpo dois\n\ncom segundo parágrafo")
+    fontes = [{"n": 1, "obra": "Obra A", "arquivo": "a.pdf", "section_id": "s1", "secao_id": "uuid-1", "breadcrumb": ["Cap", "Seção"], "texto": None},
+              {"n": 2, "obra": "Obra B", "arquivo": "b.pdf", "section_id": "s2", "secao_id": "uuid-2", "breadcrumb": [], "texto": None},
+              {"n": 3, "obra": "Obra A", "arquivo": "a.pdf", "section_id": "s1", "secao_id": "uuid-1", "breadcrumb": ["Cap"], "texto": None},
+              {"n": 4, "obra": "Sem bloco", "secao_id": "uuid-4", "breadcrumb": [], "texto": None}]
+    out = escritor.secoes_do_servido({"fontes": fontes, "contexto": CONTEXTO})
+    assert [s["chave"] for s in out] == ["uuid-1", "uuid-2"]  # repetida e sem texto saem
+    assert out[0]["titulo"] == "Obra A › Cap › Seção" and out[1]["titulo"] == "Obra B"
+    assert out[0]["texto"].startswith("(contexto do pai · p)\ncorpo um") and out[0]["section_id"] == "s1" and out[0]["arquivo"] == "a.pdf"
+    assert len(escritor.secoes_do_servido({"fontes": fontes, "contexto": CONTEXTO}, k=1)) == 1
+    assert escritor.secoes_do_servido({"fontes": fontes}) == [] and escritor.secoes_do_servido({}) == []
+
+
 def test_interpretar_le_json_puro_embrulhado_e_com_raciocinio():
     for bruto in (saida(), "texto antes " + saida() + " depois", "<think>penso</think>" + saida()):
         texto, mapa, avisos, palavras = escritor.interpretar(bruto, SECOES)
@@ -207,8 +227,11 @@ class _Rag(BaseHTTPRequestHandler):
         rerank_ms = 0.0
         if corpo.get("bracos") == ["rerank"] and self.revisor_muda:
             ordem, rerank_ms = [8, 7, 1, 2, 3, 4, 5, 6], 310.0
-        self._json({"fontes": [{"obra": "Obra", "breadcrumb": ["Obra", f"Seção {i}"], "section_id": f"obra#s{i}",
-                                "secao_id": f"id-{i}", "texto": f"texto da seção {i}"} for i in ordem],
+        # como o /search real: fontes[].texto vem nulo e o texto das secoes mora no `contexto`, em blocos [n]
+        self._json({"fontes": [{"n": n, "obra": "Obra", "arquivo": "obra.pdf", "breadcrumb": [f"Seção {i}"], "section_id": f"s{i}",
+                                "secao_id": f"id-{i}", "texto": None} for n, i in enumerate(ordem, 1)],
+                    "contexto": "\n\n".join(f"[{n}] (obra.pdf · s{i}) — Seção {i}\n(contexto do pai · pai)\ntexto da seção {i}"
+                                           for n, i in enumerate(ordem, 1)),
                     "tempos_ms": {"rerank": rerank_ms, "total": 20.0}})
 
 
@@ -240,8 +263,8 @@ else:
     env = [x for x in a if x.startswith("LEX_ARGS=")][0][len("LEX_ARGS="):]
     itens = json.loads(env)["itens"]
     print("linha de log antes")
-    print(json.dumps({{pid: [{{"chave": f"lex#{{i}}", "secao_id": f"lex-{{i}}", "titulo": f"Lexica › {{i}}", "texto": f"trecho lexico {{i}}"}}
-                            for i in range(1, 9)] for pid, q in itens}}))
+    print(json.dumps({{pid: {{"modo": "and", "secoes": [{{"chave": f"lex#{{i}}", "secao_id": f"lex-{{i}}", "titulo": f"Lexica › {{i}}", "texto": f"trecho lexico {{i}}"}}
+                            for i in range(1, 9)]}} for pid, q in itens}}))
 """
 
 
@@ -291,6 +314,7 @@ def test_plano_decide_o_terceiro_braco_pelo_revisor_e_nao_escreve_nada(verbo):
     assert r.returncode == 0, r.stderr
     assert "lote t1 · 4 perguntas" in r.stdout
     assert "terceiro braco: revisor (o revisor mudou o top-8" in r.stdout and "nada escrito" in r.stdout
+    assert "sem nenhuma secao: {'servido': 0, 'lexico': 0, 'terceiro': 0}" in r.stdout and "lexico por modo: {'and': 4}" in r.stdout
     assert _Ollama.chamadas == []
     assert (inst / "var" / "medicoes" / "rag" / "escritor-t1.json").is_file()
 
