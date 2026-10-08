@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+from datetime import date, timedelta
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
@@ -66,7 +67,8 @@ ACERVO = {
 def log_ops(tmp_path: Path) -> Path:
     d = tmp_path / "ops"
     d.mkdir()
-    (d / "ops-2026-10-01.jsonl").write_text(
+    # O leitor pede dias (lib/oplog, card #3344): o log da fita e o de hoje, nao «o ultimo arquivo».
+    (d / f"ops-{date.today().isoformat()}.jsonl").write_text(
         "\n".join(json.dumps(r, ensure_ascii=False) for r in GIROS) + "\nlinha cortada {\n",
         encoding="utf-8")
     return d
@@ -80,6 +82,15 @@ def test_giros_da_fita_so_os_desta_fita_que_deram_certo(log_ops):
     assert all(r.get("tool") != "-" for r in regs), "http_req e transporte, nao giro"
     assert len(regs) == 10
     assert len(descansar.giros_da_fita("", OID, log_ops)) == 10, "a ordem tambem e chave da fita"
+
+
+def test_a_janela_e_de_tres_dias_corridos_e_nao_dos_tres_ultimos_arquivos(log_ops):
+    hoje = log_ops / f"ops-{date.today().isoformat()}.jsonl"
+    velho = log_ops / f"ops-{(date.today() - timedelta(days=3)).isoformat()}.jsonl"
+    ontem = log_ops / f"ops-{(date.today() - timedelta(days=1)).isoformat()}.jsonl"
+    velho.write_text(hoje.read_text(encoding="utf-8"), encoding="utf-8")   # 4 dias atras: fora
+    ontem.write_text(hoje.read_text(encoding="utf-8"), encoding="utf-8")   # ontem: dentro
+    assert len(descansar.giros_da_fita(SID, "", log_ops)) == 20
 
 
 def test_sem_chave_da_fita_nao_le_o_log(log_ops):

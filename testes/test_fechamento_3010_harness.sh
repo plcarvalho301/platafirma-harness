@@ -151,8 +151,12 @@ PY
 [ "$(OPS_LOG_DIR="$TMP_DIR/a" PF_LOG_OPS="$TMP_DIR/b" ler_log)" = "$TMP_DIR/a" ] || falha "metrica: OPS_LOG_DIR devia vencer o alias"
 [ "$(PF_LOG_OPS="$TMP_DIR/b" ler_log)" = "$TMP_DIR/b" ] || falha "metrica: alias PF_LOG_OPS devia seguir lido"
 [ "$(ler_log)" = "$INSTANCIA/var/log/ops" ] || falha "metrica: default devia ser \$PLATAFIRMA_INSTANCIA/var/log/ops"
-grep -q 'log_dir="${OPS_LOG_DIR:-${PF_OPS_LOG_DIR:-$PLATAFIRMA_INSTANCIA/var/log/ops}}"' "$REPO_ROOT/bin/repo" \
-  || falha "repo: OPS_LOG_DIR devia vir primeiro, PF_OPS_LOG_DIR so como alias"
+[ "$(PF_OPS_LOG_DIR="$TMP_DIR/c" ler_log)" = "$TMP_DIR/c" ] || falha "metrica: alias PF_OPS_LOG_DIR devia seguir lido"
+# Desde o #3344 quem resolve o diretorio e le o bruto e o lib/oplog (arq:0123 §3); o repo so o chama.
+grep -q 'python3 -m oplog ler' "$REPO_ROOT/bin/repo" \
+  || falha "repo: devia ler o log da porta pelo lib/oplog"
+! grep -q 'OPS_LOG_DIR' <(grep -v '^ *#' "$REPO_ROOT/bin/repo") \
+  || falha "repo: nao devia mais resolver OPS_LOG_DIR (e do lib/oplog)"
 echo "OK"
 
 # ---------------------------------------------------------------- 6. units

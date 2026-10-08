@@ -67,12 +67,20 @@ except ImportError:
 HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.insert(0, os.path.join(HARNESS_DIR, "lib"))
 from raizes import instancia  # noqa: E402
+import oplog  # noqa: E402  (card #3344: o unico que le o bruto da porta)
 
 ABERTURA = os.path.join(
     os.environ.get("PF_ABERTURA_DIR") or str(instancia() / "var" / "abertura-publicada"),
     "current", "abertura")
 LEDGER = os.path.join(HARNESS_DIR, "registro", "eventos-org.jsonl")
-LOG_OPS = os.environ.get("OPS_LOG_DIR") or str(instancia() / "var" / "log" / "ops")
+LOG_OPS = str(oplog.diretorio())   # onde o bruto mora e do lib/oplog; aqui so para o teste apontar
+
+
+def _janela_do_bruto(dias, diretorio=None):
+    """Os ultimos `dias` dias corridos do bruto, hoje incluso (antes: os N ultimos arquivos)."""
+    import datetime as _dt
+    hoje = _dt.date.today()
+    return oplog.ler(hoje - _dt.timedelta(days=dias - 1), hoje, diretorio_=diretorio or LOG_OPS)
 
 
 def _ledger_map():
@@ -322,30 +330,21 @@ def giros_da_fita(sessao_id, ordem_id, diretorio=None):
     (PF_SESSAO, a mesma chave da aresta onde a porta nao injeta PF_FITA) ou a ordem
     (PF_ORDEM_ID). A substring filtra antes do json.loads: o log passa de 7 MB por dia e a
     fita e uma fracao dele. None: sem chave, nao ha fita a ler."""
-    import glob
     chaves = [c for c in (sessao_id, ordem_id) if c and c != "-"]
     if not chaves:
         return None
     regs = []
-    for arq in sorted(glob.glob(os.path.join(diretorio or LOG_OPS, "ops-*.jsonl")))[-3:]:
-        try:
-            with open(arq, encoding="utf-8", errors="replace") as fh:
-                for linha in fh:
-                    if not any(c in linha for c in chaves):
-                        continue
-                    try:
-                        d = json.loads(linha)
-                    except ValueError:
-                        continue
-                    if d.get("sessao_id") not in chaves and d.get("ordem_id") not in chaves:
-                        continue
-                    if d.get("evento") in ("http_req", "sem_verbo") or d.get("erro"):
-                        continue
-                    if d.get("exit_code") not in (0, None):
-                        continue
-                    regs.append(d)
-        except OSError:
-            continue
+    try:
+        for d in _janela_do_bruto(3, diretorio):
+            if d.get("sessao_id") not in chaves and d.get("ordem_id") not in chaves:
+                continue
+            if d.get("evento") in ("http_req", "sem_verbo") or d.get("erro"):
+                continue
+            if d.get("exit_code") not in (0, None):
+                continue
+            regs.append(d)
+    except OSError:
+        pass
     return regs
 
 
@@ -550,7 +549,6 @@ def economia_de_giro(ordem_id):
     giro em lote rende varios registros — o marcador de lote (server.py, passo 2,
     exige restart do TI) fecha essa conta. O que sai limpo aqui — volume e classe
     de fallback — independe de lote. Fonte e o proprio log; medicao, nao suposicao."""
-    import glob
     from collections import Counter
     if not ordem_id or ordem_id == "-":
         return ["  sem ordem_id — sessao de mao nao tem fita a medir"]
@@ -559,39 +557,33 @@ def economia_de_giro(ordem_id):
               "sinal", "lint", "teste", "minuta", "descansar", "encerrar", "metrica"}
     por_tool, classe_fb = Counter(), Counter()
     tss, lote_ids, giros_avulsos = [], set(), 0
-    for arq in sorted(glob.glob(os.path.join(LOG_OPS, "ops-*.jsonl")))[-3:]:
-        try:
-            with open(arq, encoding="utf-8", errors="replace") as fh:
-                for linha in fh:
-                    try:
-                        d = json.loads(linha)
-                    except ValueError:
-                        continue
-                    if d.get("ordem_id") != ordem_id:
-                        continue
-                    tool = d.get("tool") or "-"
-                    if tool == "-":
-                        continue
-                    por_tool[tool] += 1
-                    _ts = d.get("ts")
-                    if _ts:
-                        tss.append(_ts)
-                    _lid = d.get("lote_id")
-                    if _lid:
-                        lote_ids.add(_lid)
-                    else:
-                        giros_avulsos += 1
-                    if tool in ("malote", "run_command") and d.get("evento") == "fallback":
-                        cmd = (d.get("comando") or "").strip()
-                        prim = cmd.split()[0] if cmd else ""
-                        if "PF_CADEIRA" in cmd[:80]:
-                            classe_fb["export PF_CADEIRA (era parametro sessao_id)"] += 1
-                        elif prim in VERBOS:
-                            classe_fb[f"verbo '{prim}' (ja tem tool)"] += 1
-                        else:
-                            classe_fb["exploracao/fluxo (git, rg, sed... legitimo)"] += 1
-        except OSError:
-            continue
+    try:
+        for d in _janela_do_bruto(3):
+            if d.get("ordem_id") != ordem_id:
+                continue
+            tool = d.get("tool") or "-"
+            if tool == "-":
+                continue
+            por_tool[tool] += 1
+            _ts = d.get("ts")
+            if _ts:
+                tss.append(_ts)
+            _lid = d.get("lote_id")
+            if _lid:
+                lote_ids.add(_lid)
+            else:
+                giros_avulsos += 1
+            if tool in ("malote", "run_command") and d.get("evento") == "fallback":
+                cmd = (d.get("comando") or "").strip()
+                prim = cmd.split()[0] if cmd else ""
+                if "PF_CADEIRA" in cmd[:80]:
+                    classe_fb["export PF_CADEIRA (era parametro sessao_id)"] += 1
+                elif prim in VERBOS:
+                    classe_fb[f"verbo '{prim}' (ja tem tool)"] += 1
+                else:
+                    classe_fb["exploracao/fluxo (git, rg, sed... legitimo)"] += 1
+    except OSError:
+        pass
     total = sum(por_tool.values())
     if not total:
         return [f"  nenhum registro de tool nesta fita (ordem {ordem_id})"]
@@ -628,36 +620,29 @@ def fabrica_pela_porta():
     connector e viram linha no ops log. Le-se VOLUME de chamada e classe de
     desperdicio (run_command em fallback, verbo contornado), o alvo direto da
     economia-de-giro; nao giros/turno (turno nao carimba na porta). Fonte:
-    $PLATAFIRMA_INSTANCIA/var/log/ops/ops-*.jsonl, filtro cadeira=fabrica."""
-    import glob
+    o bruto da porta, lido pelo lib/oplog, filtro cadeira=fabrica."""
     from collections import Counter
     total = 0
     por_tool, desperdicio = Counter(), Counter()
     ult_ts = None
-    for arq in sorted(glob.glob(os.path.join(LOG_OPS, "ops-*.jsonl")))[-5:]:
-        try:
-            with open(arq, encoding="utf-8", errors="replace") as fh:
-                for linha in fh:
-                    try:
-                        d = json.loads(linha)
-                    except ValueError:
-                        continue
-                    if d.get("cadeira") != "fabrica":
-                        continue
-                    tool = d.get("tool") or "-"
-                    if tool == "-":
-                        continue
-                    total += 1
-                    por_tool[tool] += 1
-                    ev = d.get("evento")
-                    if ev == "fallback" and tool in ("malote", "run_command"):
-                        desperdicio[f"{tool} em fallback (encadeado sem verbo?)"] += 1
-                    elif ev == "verbo_contornado":
-                        desperdicio[f"verbo contornado ({tool})"] += 1
-                    if d.get("ts"):
-                        ult_ts = d["ts"]
-        except OSError:
-            continue
+    try:
+        for d in _janela_do_bruto(5):
+            if d.get("cadeira") != "fabrica":
+                continue
+            tool = d.get("tool") or "-"
+            if tool == "-":
+                continue
+            total += 1
+            por_tool[tool] += 1
+            ev = d.get("evento")
+            if ev == "fallback" and tool in ("malote", "run_command"):
+                desperdicio[f"{tool} em fallback (encadeado sem verbo?)"] += 1
+            elif ev == "verbo_contornado":
+                desperdicio[f"verbo contornado ({tool})"] += 1
+            if d.get("ts"):
+                ult_ts = d["ts"]
+    except OSError:
+        pass
     if not total:
         return ["  persona fabrica sem chamada na porta nos ultimos 5 dias"]
     linhas = [f"  {total} chamada(s) da persona fabrica na porta (cadeira=fabrica, 5 dias)",

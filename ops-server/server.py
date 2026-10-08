@@ -84,6 +84,7 @@ _LIB = Path(__file__).resolve().parents[1] / "lib"
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 import raizes                                                 # noqa: E402
+import oplog                                                  # noqa: E402  (card #3344: o unico que escreve o bruto)
 
 INSTANCIA = raizes.instancia()
 # Cwd de quem não nomeia um: a casa da conta do processo. Não é raiz de produção — é o
@@ -115,9 +116,8 @@ OPS_RESOURCE = os.environ.get("OPS_RESOURCE", "https://ops.platafirma.org")
 OPS_TOKEN_ESTATICO_ATE = os.environ.get("OPS_TOKEN_ESTATICO_ATE", "2026-09-30")
 CAP = 50_000   # teto de bytes de stdout/stderr devolvidos (truncagem sempre declarada)
 
-LOG_DIR = Path(os.environ.get("OPS_LOG_DIR", INSTANCIA / "var/log/ops"))
+LOG_DIR = oplog.diretorio()    # onde mora o bruto e do lib/oplog; o teto da linha tambem (arq:0123 §3)
 CMD_CAP = 2_000        # teto do comando gravado na auditoria
-LINHA_CAP = 8_000      # teto da linha JSONL
 
 # Segredos da instância não descem para o subprocesso.
 ENV_OCULTO = ("OPS_AUTH_TOKEN", "TUNNEL_TOKEN")
@@ -793,7 +793,6 @@ def _audit(**campos) -> None:
     auditoria vai para o stderr (journal), porque auditoria que falha em silêncio é
     pior que auditoria ausente: a ausência pelo menos é visível."""
     try:
-        LOG_DIR.mkdir(parents=True, exist_ok=True)
         global _em_audit
         if campos.get("tool", "-") != "-" and not _em_audit:
             _em_audit = True
@@ -814,15 +813,32 @@ def _audit(**campos) -> None:
         if origem:
             reg["origem_sessao"] = origem
             reg.update(_atributos_do_agente(reg["sessao_id"]))
-        linha = (json.dumps(reg, ensure_ascii=False)[:LINHA_CAP] + "\n").encode()
-        alvo = LOG_DIR / f"ops-{date.today().isoformat()}.jsonl"
-        fd = os.open(alvo, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
-        try:
-            os.write(fd, linha)
-        finally:
-            os.close(fd)
+        # Chave, versao, aparo, classe e a escrita O_APPEND sao do lib/oplog (arq:0123 §3-§5);
+        # a guarda `_em_audit` fica aqui, na porta, antes de chamar o modulo.
+        declara = (_declara_exit(reg.get("tool"))
+                   if reg.get("evento") in ("verbo", "verbo_contornado") else None)
+        oplog.emitir(reg, diretorio_=LOG_DIR, declara_exit=declara)
     except Exception as e:                                  # noqa: BLE001
         print(f"[audit] FALHOU: {e!r}", file=sys.stderr, flush=True)
+
+
+# `classe_fonte=verbo` quando o cabecalho do verbo declara a tabela de exit (linha `# exit:`,
+# arq:0110 §4); senao a porta deduz pela tabela. Mesmo parser por cabecalho do `_perfil_verbo`.
+_RE_EXIT = re.compile(r"^#\s*exit\s*:", re.MULTILINE)
+_DECLARA_EXIT: dict[str, bool] = {}
+
+
+def _declara_exit(slug) -> bool:
+    if not isinstance(slug, str) or not slug or slug == "-":
+        return False
+    if slug not in _DECLARA_EXIT:
+        try:
+            with open(BIN_VERBOS / slug, encoding="utf-8", errors="replace") as fh:
+                cab = "".join(next(fh, "") for _ in range(40))
+            _DECLARA_EXIT[slug] = bool(_RE_EXIT.search(cab))
+        except OSError:
+            _DECLARA_EXIT[slug] = False
+    return _DECLARA_EXIT[slug]
 
 
 def _estatico_vigente() -> bool:
