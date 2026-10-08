@@ -1894,10 +1894,12 @@ def cmd_escrever(d, inst, argv):
     _salva_estado(arq_estado, est)
     modos = dict(sorted(Counter(est.get("lexico_modo", {}).values()).items()))
     sem = {b: sum(1 for p in piloto if not est["recuperado"][p["id"]][b]) for b in ("servido", "lexico", "terceiro")}
-    iguais = sum(1 for p in piloto if escritor.jaccard(est["recuperado"][p["id"]]["servido"],
-                                                       est["recuperado"][p["id"]]["terceiro"]) == 1.0)
+    rec_ = est["recuperado"]
+    iguais = sum(1 for p in piloto if escritor.jaccard(rec_[p["id"]]["servido"], rec_[p["id"]]["terceiro"]) == 1.0)
+    mesma_ordem = sum(1 for p in piloto if [s["chave"] for s in rec_[p["id"]]["servido"]] == [s["chave"] for s in rec_[p["id"]]["terceiro"]])
     print(f"lote {lote_id} · {len(piloto)} perguntas · terceiro braco: {terceiro} ({est['terceiro_motivo']}) · "
-          f"top-8 do terceiro igual ao do servido em {iguais}/{len(piloto)} · sem nenhuma secao: {sem} · "
+          f"top-8 do terceiro com o mesmo conjunto do servido em {iguais}/{len(piloto)} e na mesma ordem em {mesma_ordem}/{len(piloto)} · "
+          f"sem nenhuma secao: {sem} · "
           f"lexico por modo: {modos}")
     if op.get("--plano"):
         print(f"estado em {arq_estado}; recuperacao feita, nada escrito")

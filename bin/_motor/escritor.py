@@ -191,7 +191,7 @@ def decidir_terceiro_braco(amostras: list) -> tuple:
     em nenhuma das perguntas testadas (Jaccard 1 e rerank 0 ms), o terceiro braço passa a ser a expansão."""
     if amostras and all(jaccard(a, b) == 1.0 and ms == 0 for a, b, ms in amostras):
         return "expansao", f"o revisor não mudou o top-8 em {len(amostras)} pergunta(s) (Jaccard 1, rerank 0 ms)"
-    return "revisor", "o revisor mudou o top-8 em ao menos uma pergunta testada"
+    return "revisor", "o revisor rodou (rerank acima de 0 ms) ou mudou o top-8 em ao menos uma pergunta testada"
 
 
 def montar_lote(lote_id: str, versao_id: str, criterio_versao: str, perguntas: list, resultados: dict,

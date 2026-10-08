@@ -313,7 +313,8 @@ def test_plano_decide_o_terceiro_braco_pelo_revisor_e_nao_escreve_nada(verbo):
     r = roda("--plano", "--lote-id", "t1")
     assert r.returncode == 0, r.stderr
     assert "lote t1 · 4 perguntas" in r.stdout
-    assert "terceiro braco: revisor (o revisor mudou o top-8" in r.stdout and "nada escrito" in r.stdout
+    assert "terceiro braco: revisor (o revisor rodou (rerank acima de 0 ms) ou mudou o top-8" in r.stdout and "nada escrito" in r.stdout
+    assert "mesmo conjunto do servido em 4/4 e na mesma ordem em 0/4" in r.stdout  # o falso so reordena, como o revisor real
     assert "sem nenhuma secao: {'servido': 0, 'lexico': 0, 'terceiro': 0}" in r.stdout and "lexico por modo: {'and': 4}" in r.stdout
     assert _Ollama.chamadas == []
     assert (inst / "var" / "medicoes" / "rag" / "escritor-t1.json").is_file()
