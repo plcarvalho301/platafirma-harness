@@ -37,7 +37,9 @@ PROTEGIDOS = frozenset({"ts", "evento_id", "schema_v", "tool", "evento", "classe
 
 CLASSES = ("ok", "negativa", "gramatica", "negada", "execucao", "interrompida")
 _POR_EXIT = {0: "ok", 1: "negativa", 2: "gramatica", 4: "negada"}
-_EVENTO_GRAMATICA = frozenset({"sem_verbo", "cwd_recusado"})
+_EVENTO_GRAMATICA = frozenset({"sem_verbo", "cwd_recusado", "escrita_recusada"})
+_POR_CLASSE_ERRO = {"gramatica": "gramatica", "faixa": "gramatica", "recusado": "negada",
+                    "caminho": "negativa", "binario": "negativa"}
 _ABRIR_PROCESSO = ("falha ao abrir", "nao abriu", "não abriu")
 
 
@@ -172,6 +174,12 @@ def classificar(desfecho: dict, *, declara_exit: bool | None = None) -> dict:
         if exit_code in _POR_EXIT:
             return r(_POR_EXIT[exit_code])
         return r("execucao", f"exit_{exit_code}" if exit_code in (3, 5) else "exit_fora_da_tabela")
+    # As tools de leitura gravam `classe_erro` no erro (caminho, faixa, binario, gramatica,
+    # recusado): argumento torto e gramatica, recusa de morada e negada, o que nao existe e
+    # resposta negativa. Execucao e so o que a porta nao soube explicar (conta contra o SLO).
+    por_classe_erro = _POR_CLASSE_ERRO.get(str(desfecho.get("classe_erro") or ""))
+    if por_classe_erro:
+        return r(por_classe_erro, str(desfecho["classe_erro"]))
     if erro:
         texto = str(erro).lower()
         if texto.startswith("timeout"):
@@ -185,6 +193,107 @@ def classificar(desfecho: dict, *, declara_exit: bool | None = None) -> dict:
 def _e_giro(reg: dict) -> bool:
     tool = reg.get("tool")
     return reg.get("evento") != "http_req" and tool not in (None, "", "-")
+
+
+# --- origem ---------------------------------------------------------------------------
+
+def origem_da_linha(reg: dict) -> str:
+    """Quem chamou (spec log-de-negocio §3): `agente` quando a linha tem `origem_sessao`,
+    `sonda` quando e a linha da sonda, `cadeira` no resto. A sonda (22 a 26/09/2026, um giro
+    por minuto) nao tem token proprio: reconhece-se pelo giro da tool `sessao` sem ato, sem
+    cadeira e sem sessao (`metrica eventos 2026-09-23 --sessao -`). A mesma funcao rele a
+    linha antiga, que nao tem `origem`."""
+    if reg.get("origem_sessao"):
+        return "agente"
+    if (reg.get("tool") == "sessao" and not reg.get("ato") and not reg.get("cadeira")
+            and reg.get("sessao_id") in (None, "", "-")):
+        return "sonda"
+    return "cadeira"
+
+
+# --- contrato -------------------------------------------------------------------------
+
+MOTIVOS_NEGACAO = ("sem_token", "nao_jwt", "assinatura", "audience", "emissor", "expirado", "outro")
+MOTIVOS_PARADA = ("concluiu", "teto_de_giros", "orcamento_de_erro", "interrompida")
+FONTES_TURNO = ("declarado", "gap", "runner", "hook", "transcript")
+FONTES_TOKENS = ("provedor", "estimado")
+ORIGENS = ("cadeira", "agente", "sonda")
+IDENTIDADE = ("sujeito", "sub", "username", "azp", "sid", "jti")
+
+# Campo obrigatorio por tipo de linha. A chave tem de existir; o valor so pode ser nulo onde
+# `NULAVEL` diz. `capacidade`, `ferramenta` e `mapa_v` saem nulos enquanto a projecao do
+# golden record nao existe na release (arq:0123 §7); as demais excecoes sao campos que a
+# situacao deixa vazios (giro sem sessao nao tem cadeira nem ordem; so ha exit quando o
+# verbo roda).
+CONTRATO = {
+    "toda": ("ts", "evento_id", "schema_v", "origem", "mapa_v"),
+    "giro": ("tool", "sessao_id", "cadeira", "ordem_id", "exit_code", "classe", "classe_fonte",
+             "bytes_produzidos", "bytes_servidos", "lavado", "capacidade", "ferramenta", "escopo",
+             "turno_id", "turno_fonte") + IDENTIDADE,
+    "abertura": ("tool", "sessao_id", "chapeu", "roteador_via", "superficie", "tokens_pecas",
+                 "metodo_tokens", "prefixo_sha", "montador_sha", "pergunta_bytes") + IDENTIDADE,
+    "fecho": ("tool", "evento", "sessao_id", "cadeira", "motivo_parada"),
+    "auth_negada": ("evento", "path", "origem_requisicao", "motivo"),
+    "http_req": ("evento", "path", "via") + IDENTIDADE,
+    "escopo": ("tool", "evento", "sessao_id", "escopo") + IDENTIDADE,
+    "turno": ("tool", "evento", "sessao_id", "turno_id", "turno_fonte") + IDENTIDADE,
+    "consulta": ("tool", "evento", "origem_consulta", "particao"),
+}
+NULAVEL = frozenset({"capacidade", "ferramenta", "mapa_v", "cadeira", "ordem_id", "exit_code",
+                     "roteador_via", "particao", "origem_consulta", "chapeu",
+                     "bytes_produzidos", "bytes_servidos"})      # escrita e recusa nao devolvem corpo
+# Campo que, presente, e erro: o texto do dono e o da resposta nao se gravam (arq:0061 §5).
+PROIBIDOS = {"abertura": ("pergunta",), "turno": ("texto", "turno_texto"),
+             "giro": ("token", "access_token", "refresh_token", "authorization")}
+
+
+def tipo_da_linha(reg: dict) -> str:
+    """Que linha do contrato e esta. `outro` nao tem campo obrigatorio alem de `toda`."""
+    evento = reg.get("evento")
+    if evento in ("auth_negada", "http_req", "escopo", "consulta", "fecho"):
+        return evento
+    if evento == "turno":
+        return "turno"
+    if reg.get("tool") == "monta_sessao" and evento in (None, ""):
+        return "abertura" if not reg.get("erro") else "outro"      # abertura recusada nao tem pacote
+    return "giro" if _e_giro(reg) and evento in EVENTOS_DE_GIRO else "outro"
+
+
+# O que e chamada de verbo, de arquivo ou de fallback: leva os campos do giro. As demais linhas com
+# `tool` (recusa, negacao do PEP, sessao aberta, fita encerrada, lote encadeado) tem forma propria.
+EVENTOS_DE_GIRO = frozenset({None, "", "verbo", "fallback", "verbo_contornado",
+                             "escrita", "escrita_recusada"})
+
+
+def validar(reg: dict) -> list[str]:
+    """O que falta (ou sobra) na linha, pelo contrato do tipo dela. Vazio = cumpre."""
+    tipo = tipo_da_linha(reg)
+    obrigatorios = CONTRATO["toda"] + CONTRATO.get(tipo, ())
+    problemas = []
+    for campo in obrigatorios:
+        if campo not in reg:
+            problemas.append(f"falta {campo}")
+        elif reg[campo] in (None, "") and campo not in NULAVEL:
+            problemas.append(f"{campo} nulo")
+    for campo in PROIBIDOS.get(tipo, ()):
+        if campo in reg:
+            problemas.append(f"nao se grava {campo}")
+    if reg.get("origem") not in (None,) + ORIGENS:
+        problemas.append(f"origem fora do vocabulario: {reg.get('origem')!r}")
+    if tipo == "auth_negada" and reg.get("motivo") not in MOTIVOS_NEGACAO:
+        problemas.append(f"motivo fora do vocabulario: {reg.get('motivo')!r}")
+    if tipo == "fecho":
+        if reg.get("motivo_parada") not in MOTIVOS_PARADA:
+            problemas.append(f"motivo_parada fora do vocabulario: {reg.get('motivo_parada')!r}")
+        if reg.get("tokens") is not None and reg.get("fonte_tokens") not in FONTES_TOKENS:
+            problemas.append("tokens sem fonte_tokens")
+    if tipo in ("giro", "turno") and reg.get("turno_fonte") not in FONTES_TURNO:
+        problemas.append(f"turno_fonte fora do vocabulario: {reg.get('turno_fonte')!r}")
+    if tipo == "consulta" and "query" not in reg and "query_bytes" not in reg:
+        problemas.append("falta query ou query_bytes")
+    if tipo == "consulta" and reg.get("origem_consulta") == "abertura" and "query" in reg:
+        problemas.append("nao se grava query na consulta da abertura")
+    return problemas
 
 
 # --- escrever -------------------------------------------------------------------------
@@ -203,6 +312,8 @@ def emitir(evento: dict, *, diretorio_=None, declara_exit: bool | None = None,
                    "evento_id": uuid7(int(agora.timestamp() * 1000)), "schema_v": SCHEMA_V}
         if _e_giro(reg) and "classe" not in reg:
             reg.update(classificar(reg, declara_exit=declara_exit))
+        reg.setdefault("origem", origem_da_linha(reg))
+        reg.setdefault("mapa_v", None)      # a projecao do golden record nao existe na release (arq:0123 §7)
         linha = (_serializa(aparar({**carimbo, **reg})) + "\n").encode("utf-8")
         alvo = caminho_do_dia(agora.date(), diretorio_)
         alvo.parent.mkdir(parents=True, exist_ok=True)
@@ -281,6 +392,7 @@ class Leitura:
                         continue
                     if "classe" not in reg and _e_giro(reg):
                         reg.update(classificar(reg))
+                    reg.setdefault("origem", origem_da_linha(reg))
                     yield reg
 
 

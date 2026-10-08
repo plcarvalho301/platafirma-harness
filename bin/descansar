@@ -751,6 +751,64 @@ def estado_sessao(sessao_id):
             "    `descansar fita --encerra-sessao`"]
 
 
+def tokens_do_transcript(cadeira):
+    """Tokens da fita de Code desta cadeira, somados do `usage` do transcript que o Claude Code ja
+    grava em ~/.claude/projects/*fitas-<cadeira>/ (spec log-de-negocio §3, Fecho). Cada
+    `requestId` conta uma vez, pelo ultimo `usage` que ele trouxe (o transcript repete a linha da
+    resposta a cada bloco). Devolve `{entrada, saida, cache_criacao, cache_leitura}` ou None:
+    sem transcript achado (cwd da fita != $PLATAFIRMA_INSTANCIA/var/fitas/<cadeira>, ou a fita
+    nao e de Code) o fecho sai sem tokens, e a falta se diz, nunca se estima."""
+    import glob
+    base = os.path.expanduser("~/.claude/projects")
+    alvo = (cadeira or "").lower()
+    dirs = [d for d in glob.glob(os.path.join(base, "*fitas-*"))
+            if d.lower().endswith("fitas-" + alvo)]
+    arqs = [a for d in dirs for a in glob.glob(os.path.join(d, "*.jsonl"))]
+    if not alvo or not arqs:
+        return None
+    por_pedido = {}
+    try:
+        with open(max(arqs, key=os.path.getmtime), encoding="utf-8", errors="replace") as fh:
+            for linha in fh:
+                try:
+                    d = json.loads(linha)
+                except ValueError:
+                    continue
+                uso = (d.get("message") or {}).get("usage") if isinstance(d, dict) else None
+                if isinstance(uso, dict) and d.get("requestId"):
+                    por_pedido[d["requestId"]] = uso
+    except OSError:
+        return None
+    if not por_pedido:
+        return None
+    soma = {"entrada": 0, "saida": 0, "cache_criacao": 0, "cache_leitura": 0}
+    for uso in por_pedido.values():
+        for chave, campo in (("entrada", "input_tokens"), ("saida", "output_tokens"),
+                             ("cache_criacao", "cache_creation_input_tokens"),
+                             ("cache_leitura", "cache_read_input_tokens")):
+            valor = uso.get(campo)
+            if isinstance(valor, int):
+                soma[chave] += valor
+    return soma
+
+
+def grava_fecho(cadeira, parada):
+    """A linha de fecho da fita no bruto da porta: por que parou e, no Code, quanto gastou. Quem
+    escreve e o lib/oplog; o verbo roda como neto da porta, sem o token, e leva so o que a porta
+    injeta no ambiente (PF_SESSAO, PF_ORDEM_ID, PF_CADEIRA, PF_SUJEITO, PF_SUPERFICIE)."""
+    reg = {"tool": "descansar", "evento": "fecho", "ato": "fita", "exit_code": 0,
+           "sessao_id": os.environ.get("PF_SESSAO", "").strip() or "-",
+           "ordem_id": os.environ.get("PF_ORDEM_ID", "").strip() or "-",
+           "cadeira": cadeira or os.environ.get("PF_CADEIRA", "").strip() or None,
+           "sujeito": os.environ.get("PF_SUJEITO", "").strip() or None,
+           "superficie": os.environ.get("PF_SUPERFICIE", "").strip() or None,
+           "motivo_parada": parada}
+    tokens = tokens_do_transcript(cadeira)
+    if tokens:
+        reg.update(tokens=sum(tokens.values()), tokens_por_tipo=tokens, fonte_tokens="provedor")
+    return oplog.emitir(reg), tokens
+
+
 def ato_fita(args):
     # O contrato de morte e o ULTIMO ato da fita, e por isso tem flag propria. Medido
     # em 06/09, na fita que implantou o arq:0101: matando `sessao:{id}` no meio do
@@ -763,6 +821,11 @@ def ato_fita(args):
         print(f"== contrato de morte da sessao (arq:0101 §1) — {curto} ==")
         for _l in encerra_sessao(conn(), os.environ.get("PF_SESSAO", "")):
             print(_l)
+        gravou, tokens = grava_fecho(curto, getattr(args, "parada", "concluiu"))
+        print(f"fecho da fita no log da porta: parada={getattr(args, 'parada', 'concluiu')}"
+              + (f", tokens={sum(tokens.values())} (provedor, transcript do Code)" if tokens
+                 else ", sem tokens (sem transcript de Code achado)")
+              + ("" if gravou else " — NAO GRAVOU"))
         return 0
     curto, canon = resolve()
     alvo = curto
@@ -899,6 +962,10 @@ def ato_fita(args):
           "4. POR ULTIMO, depois dos tres acima e so com o passo 3 fechado:\n"
           "   `descansar fita --encerra-sessao`\n"
           "   (contrato de morte, arq:0101 §1: DEL sessao/ledger/giro + derrame).\n"
+          "   Diga por que a fita parou: sem flag, `concluiu`; senao\n"
+          "   `--parada teto_de_giros|orcamento_de_erro|interrompida`. O fecho vai ao log da\n"
+          "   porta com o motivo e, no Code, os tokens somados do transcript.\n"
+
           "   E o ultimo ato da fita porque matar `sessao:{id}` tira a cadeira de\n"
           "   toda tool seguinte — `mesa escrever` e `mesa aresta` do passo 2 morrem com\n"
           "   `PF_CADEIRA nao definida`. Esquecer nao vaza nada: o TTL de 48 h e o\n"
@@ -946,6 +1013,9 @@ def main():
                    help="ULTIMO ato da fita: DEL sessao/ledger/giro + derrame (arq:0101 "
                         "§1). Separado porque matar a sessao tira a cadeira das tools "
                         "seguintes; rode depois da mesa e do delta de caderno")
+    f.add_argument("--parada", choices=oplog.MOTIVOS_PARADA, default="concluiu",
+                   help="por que a fita parou, gravado no fecho (so com --encerra-sessao): "
+                        "concluiu (padrao) | teto_de_giros | orcamento_de_erro | interrompida")
     f.set_defaults(func=ato_fita)
 
     v = sub.add_parser("varredura", help="passada por todas as cadeiras; so o que esta fora do lugar")

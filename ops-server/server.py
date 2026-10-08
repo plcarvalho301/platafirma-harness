@@ -43,6 +43,7 @@ da instância: um comando qualquer não deve conseguir ecoar o token que o autor
 """
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import os
@@ -543,14 +544,18 @@ def _campos_poda(r: dict) -> dict:
     """
     p = (r or {}).get("poda") or {}
     if p:
-        return {"bytes_servidos": p.get("bytes_servidos"), "sha": p.get("sha"),
+        # `bytes_produzidos` e `lavado` (o que a poda lavou antes de servir) vem no mesmo dicionario
+        # da poda e faltava na linha (card #3345, spec log-de-negocio §3).
+        return {"bytes_produzidos": p.get("bytes_produzidos"), "bytes_servidos": p.get("bytes_servidos"),
+                "lavado": list(p.get("lavado") or []), "sha": p.get("sha"),
                 "poda_modo": p.get("modo"), "ledger": p.get("ledger")}
     # Retorno que a poda nao tocou — erro e exit != 0 saem inteiros (invariante iii) —
     # tambem OCUPA contexto, e ficava com `bytes_servidos: null`. Efeito medido em
     # 11/09: todo dia do log fecha com "0 KB em giro que falhou", como se tateio fosse
     # de graca. A invariante continua: nao se corta o diagnostico; passa-se a CONTA-LO,
     # com `poda_modo: intocavel` dizendo que nao houve corte.
-    return {"bytes_servidos": _bytes_crus(r), "sha": None,
+    crus = _bytes_crus(r)
+    return {"bytes_produzidos": crus, "bytes_servidos": crus, "lavado": [], "sha": None,
             "poda_modo": "intocavel", "ledger": None}
 
 
@@ -788,6 +793,103 @@ def _atributos_do_agente(sessao_id) -> dict:
     return attrs
 
 
+# Escopo e turno correntes (card #3345, spec log-de-negocio §3). Moram na chave viva `sessao:{id}`
+# (campos `escopo_atual`, `turno_valor`, `turno_id`), ao lado da origem, e em memoria, que e quem
+# responde: a porta e um processo so. A chave so se le na primeira vez que a sessao aparece depois
+# de um restart, e se escreve (sem mexer no TTL) so quando o valor muda. Falha do msg-mem nunca
+# derruba a auditoria: o carimbo fica na memoria.
+_CARIMBOS: dict[str, dict] = {}
+_CARIMBO_CHAVE = {"escopo": "escopo_atual", "turno_valor": "turno_valor", "turno_id": "turno_id"}
+
+
+def _carimbos_de(sessao_id) -> dict:
+    if not sessao_id or sessao_id == "-":
+        return {}
+    c = _CARIMBOS.get(sessao_id)
+    if c is None:
+        c = {}
+        try:
+            raw = _rc().get(f"sessao:{sessao_id}")
+            d = json.loads(raw) if raw else {}
+            if isinstance(d, dict):
+                c = {k: d[v] for k, v in _CARIMBO_CHAVE.items() if isinstance(d.get(v), str) and d[v]}
+        except Exception:                                   # noqa: BLE001
+            c = {}
+        if len(_CARIMBOS) >= _ORIGENS_TETO:
+            _CARIMBOS.clear()
+        _CARIMBOS[sessao_id] = c
+    return c
+
+
+def _guarda_carimbo(sessao_id, **campos) -> None:
+    _carimbos_de(sessao_id).update(campos)
+    try:
+        chave = f"sessao:{sessao_id}"
+        raw = _rc().get(chave)
+        d = json.loads(raw) if raw else None
+        if isinstance(d, dict):
+            d.update({_CARIMBO_CHAVE[k]: v for k, v in campos.items()})
+            _rc().set(chave, json.dumps(d, ensure_ascii=False), keepttl=True)
+    except Exception:                                       # noqa: BLE001
+        pass
+
+
+def _carimbos_do_giro(reg: dict) -> dict:
+    """`escopo`, `turno_id` e `turno_fonte` do giro. Sem card declarado o escopo e
+    `atendimento`. O turno e o contador que a cadeira declarou (`declarado`); sem ele, `gap`;
+    agente delegado e `runner`: a delegacao e o turno e a sessao filha o identifica."""
+    sid = reg.get("sessao_id")
+    c = _carimbos_de(sid)
+    out = {"escopo": c.get("escopo") or "atendimento"}
+    if reg.get("origem_sessao"):
+        out.update(turno_id=sid, turno_fonte="runner")
+    elif c.get("turno_id"):
+        out.update(turno_id=c["turno_id"], turno_fonte="declarado")
+    else:
+        out.update(turno_id="-", turno_fonte="gap")
+    return out
+
+
+def _carimba_turno(ident: dict, turno) -> None:
+    """Toda tool da porta aceita `turno` (opcional, padrao vazio). Quando o valor muda, a porta
+    abre o turno (linha `turno`, fonte `declarado`) e carimba `turno_id` nos giros seguintes. O
+    turno e contador, nao conteudo: o texto do dono nao entra aqui (arq:0061 §5)."""
+    valor = str(turno).strip()[:32] if turno else ""
+    sid = (ident or {}).get("sessao_id")
+    if not valor or not sid or sid == "-":
+        return
+    if _carimbos_de(sid).get("turno_valor") == valor:
+        return
+    _guarda_carimbo(sid, turno_valor=valor, turno_id=valor)
+    _audit(tool="sessao", evento="turno", sessao_id=sid, cadeira=ident.get("cadeira") or None,
+           ordem_id=ident.get("ordem_id"), turno_id=valor, turno_fonte="declarado", texto_bytes=None)
+
+
+def _escopo_do_giro(slug: str, ato, args, r, ident: dict) -> None:
+    """Giro de `repo abrir <repo> <card>` ou de `tarefas mover <card> em-execucao` que saiu 0: a
+    porta emite a linha `escopo`, guarda o card como escopo corrente da sessao e o carimba nos
+    giros seguintes. Fita com dois cards: vale o ultimo. Um escritor so: a porta, sobre o giro
+    que acabou de gravar (arq:0123 regra 4)."""
+    if not isinstance(r, dict) or r.get("exit_code") != 0:
+        return
+    toks = ([ato] if ato else []) + [str(a) for a in (args or [])]
+    card = None
+    if slug == "repo" and len(toks) >= 3 and toks[0] == "abrir":
+        card = toks[2]
+    elif slug == "tarefas" and len(toks) >= 3 and toks[0] == "mover" and toks[2].lower() == "em-execucao":
+        card = toks[1]
+    card = (card or "").lstrip("#")
+    sid = (ident or {}).get("sessao_id")
+    if not card.isdigit() or not sid or sid == "-":
+        return
+    escopo = f"#{card}"
+    if _carimbos_de(sid).get("escopo") == escopo:
+        return
+    _guarda_carimbo(sid, escopo=escopo)
+    _audit(tool="sessao", evento="escopo", sessao_id=sid, cadeira=ident.get("cadeira") or None,
+           ordem_id=ident.get("ordem_id"), escopo=escopo, card=int(card))
+
+
 def _audit(**campos) -> None:
     """Grava uma linha JSONL de auditoria. Nunca derruba a operação — mas falha de
     auditoria vai para o stderr (journal), porque auditoria que falha em silêncio é
@@ -813,6 +915,17 @@ def _audit(**campos) -> None:
         if origem:
             reg["origem_sessao"] = origem
             reg.update(_atributos_do_agente(reg["sessao_id"]))
+        # O giro leva os campos da spec log-de-negocio §3: poda, escopo, turno e a cadeia
+        # capacidade : ferramenta, que sai nula (e `mapa_v`, no oplog) enquanto a projecao do golden
+        # record nao existe na release (arq:0123 §7).
+        if (reg.get("tool", "-") != "-" and reg.get("tool") != "monta_sessao"
+                and reg.get("evento") in oplog.EVENTOS_DE_GIRO):
+            for _c in ("cadeira", "ordem_id", "exit_code", "bytes_produzidos", "bytes_servidos"):
+                reg.setdefault(_c, None)
+            reg.setdefault("lavado", [])
+            reg.setdefault("capacidade", None)
+            reg.setdefault("ferramenta", None)
+            reg.update(_carimbos_do_giro(reg))
         # Chave, versao, aparo, classe e a escrita O_APPEND sao do lib/oplog (arq:0123 §3-§5);
         # a guarda `_em_audit` fica aqui, na porta, antes de chamar o modulo.
         declara = (_declara_exit(reg.get("tool"))
@@ -1132,7 +1245,7 @@ def _item_de_lote(x):
 async def malote(command: str = "", cwd: str = "", timeout: int = 120,
                  sessao_id: str | None = None,
                  commands: list | None = None,
-                 encadeado: bool = False) -> dict:
+                 encadeado: bool = False, turno: str = "") -> dict:
     """Lote entre verbos DISTINTOS numa chamada so — sem shell, sem fallback (spec_porta-so-verbo).
 
     `commands`: lista de itens, cada um `{verbo, ato, args, stdin}` ou a string
@@ -1151,32 +1264,34 @@ async def malote(command: str = "", cwd: str = "", timeout: int = 120,
     `nao_rodou`; o bloco `cadeia` diz exit e primeira linha de cada item, `parou_em` e o
     exit do topo. Retomar = rerodar a cadeia: o que ja fez devolve "ja feito".
     """
-    return await _malote("malote", command, cwd, timeout, sessao_id, commands, encadeado)
+    return await _malote("malote", command, cwd, timeout, sessao_id, commands, encadeado, turno)
 
 
 async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
                       sessao_id: str | None = None,
                       commands: list | None = None,
-                      encadeado: bool = False) -> dict:
+                      encadeado: bool = False, turno: str = "") -> dict:
     """Apelido de `malote`: mesma assinatura e mesmo retorno. Sai pela regra da spec
     porta-so-verbo §3.7 (zero chamadas por sete dias seguidos).
     """
-    return await _malote("run_command", command, cwd, timeout, sessao_id, commands, encadeado)
+    return await _malote("run_command", command, cwd, timeout, sessao_id, commands, encadeado, turno)
 
 
 async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: str | None,
-                  commands: list | None, encadeado: bool) -> dict:
+                  commands: list | None, encadeado: bool, turno: str = "") -> dict:
     """O lote das duas tools (#3270). `nome` e o nome chamado: a auditoria o grava em `tool`
     na recusa e no lote encadeado, e em `via` no item despachado, e a regra de saida do
     apelido conta os dois (spec porta-so-verbo §3.7). A acao do PDP segue `run_command`."""
     if not PF_RUN_SO_VERBO:
-        return await _run_command_legado(command, cwd, timeout, sessao_id, commands, nome=nome)
+        return await _run_command_legado(command, cwd, timeout, sessao_id, commands, nome=nome,
+                                         turno=turno)
     itens = list(commands) if commands else ([command] if command else [])
     if not itens:
         return {"recusado": True, "motivo": "sem item", "verbos_servidos": sorted(SLUGS_SERVIDOS)}
     timeout = max(1, min(timeout, 600))
     fim = _prazo_da_chamada()          # #3249: o prazo e da chamada, nao do item
     ident = _sessao_resolve(sessao_id)
+    _carimba_turno(ident, turno)
     lote_id = uuid.uuid4().hex[:8]
     brutos: list = []
     _estado = {"ident": ident}
@@ -1282,6 +1397,7 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
                dur_ms=round((time.monotonic() - t0) * 1000),
                lote_id=lote_id, lote_n=_i, encadeado=encadeado or None, **_campo_prazo(r),
                **_campos_poda(r))
+        _escopo_do_giro(slug, argv[1] if len(argv) > 1 else "", argv[2:], r, ident)
     ato = argv[1] if len(argv) > 1 else ""
     if slug == "sessao" and ato == "abrir" and r.get("exit_code") == 0:
         r["_sessao_abriu"] = True     # quem itera troca o ident antes do item n+1
@@ -1290,7 +1406,7 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
 async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 120,
                        sessao_id: str | None = None,
                        commands: list[str] | None = None,
-                       nome: str = "run_command") -> dict:
+                       nome: str = "run_command", turno: str = "") -> dict:
     """FALLBACK: executa um comando shell (`bash -c`) como o usuário @USER@, para o que
     não tem verbo — git, docker (rootless), systemctl --user, rg, fluxo de dado entre
     verbos. Verbo do núcleo tem tool própria (nome = slug); usá-lo por aqui é medido.
@@ -1317,6 +1433,7 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
     if commands and PF_TOOLS_LOTE:
         timeout = max(1, min(timeout, 600))
         ident = _sessao_resolve(sessao_id)
+        _carimba_turno(ident, turno)
         lote_id = uuid.uuid4().hex[:8]
         resultados = []
         acumulado = 0
@@ -1356,6 +1473,7 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
         return negado
     timeout = max(1, min(timeout, 600))
     ident = _sessao_resolve(sessao_id)
+    _carimba_turno(ident, turno)
     if PF_GATE:
         segs = [s.strip() for s in command.split(";") if s.strip()]
         elegivel = bool(segs)
@@ -1601,7 +1719,7 @@ def ler_arquivo(caminho: str = "", linhas: str = "", modo: str = "texto",
                 max_bytes: int = 40000, versao: str = "", offset: int | None = None,
                 encoding: str = "", inteiro: bool = False, sessao_id: str | None = None,
                 caminhos: list[str | dict] | None = None, paginas: str = "",
-                dpi: int = 150) -> dict:
+                dpi: int = 150, turno: str = "") -> dict:
     """Lê arquivo de texto por linhas. `caminho` absoluto, ou relativo à bancada declarada.
 
     `linhas`: "a-b", "a-" ou "-n" (as últimas n), base 1; sem ela, do começo. A página
@@ -1627,6 +1745,7 @@ def ler_arquivo(caminho: str = "", linhas: str = "", modo: str = "texto",
     volta `omitido_por_teto`.
     """
     ident = _sessao_resolve(sessao_id)
+    _carimba_turno(ident, turno)
     comuns = {"linhas": linhas, "modo": modo, "max_bytes": max_bytes, "versao": versao,
               "offset": offset, "encoding": encoding, "inteiro": inteiro, "paginas": paginas,
               "dpi": dpi}
@@ -1682,12 +1801,14 @@ def _separa_membro(caminho: str) -> tuple[str, str | None]:
 
 
 def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
-              sessao_id: str | None = None, paths: list[str] | None = None) -> dict:
+              sessao_id: str | None = None, paths: list[str] | None = None,
+              turno: str = "") -> dict:
     """Apelido de `ler_arquivo` (spec ler-arquivo §12): a mesma leitura, com `path`,
     `paths` e `offset`. Sem `offset`, lê por linhas; o retorno traz `content`, `truncated`
     e `next_offset` (byte) além dos campos novos. Sai quando ninguém mais a chamar.
     """
     ident = _sessao_resolve(sessao_id)
+    _carimba_turno(ident, turno)
     args = {"max_bytes": max_bytes, "offset": offset or None}
     if paths and PF_TOOLS_LOTE:
         lote_id = uuid.uuid4().hex[:8]
@@ -1889,7 +2010,7 @@ def _escreve_atomico(real_alvo: Path, data: bytes, modo: int) -> None:
         os.close(dfd)
 
 def write_file(path: str, content: str = "", sessao_id: str | None = None,
-               trecho: dict | None = None) -> dict:
+               trecho: dict | None = None, turno: str = "") -> dict:
     """Escreve arquivo de TIPO declarado em MORADA declarada, atomico (spec_porta-so-verbo §4).
 
     `path` absoluto, ou relativo à bancada declarada (sem ela, recusa). Moradas: na
@@ -1908,6 +2029,7 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
     if negado:
         return negado
     ident = _sessao_resolve(sessao_id)
+    _carimba_turno(ident, turno)
 
     def _rec(motivo):
         _audit(tool="write_file", evento="escrita_recusada", path=path, motivo=motivo,
@@ -2228,6 +2350,24 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
     return resposta
 
 
+def _custo_da_abertura(r: dict) -> dict:
+    """O que o pacote custou (spec log-de-negocio §3, Abertura): tokens por peça e o método de
+    contagem, o sha do prefixo cacheável (das peças que o compoem, na ordem em que o pacote as
+    declara) e o `montador_sha`. Abertura recusada nao tem pacote: os campos saem nulos."""
+    pacote = r.get("pacote") or {}
+    pecas = [p for p in (r.get("pecas") or []) if isinstance(p, dict) and p.get("peca")]
+    if r.get("erro") or not pacote:
+        return {"tokens_pecas": None, "metodo_tokens": None, "prefixo_sha": None,
+                "montador_sha": None}
+    por_nome = {p["peca"]: p for p in pecas}
+    prefixo = [n for n in (pacote.get("prefixo_cacheavel") or []) if n in por_nome]
+    base = "|".join(f"{n}:{por_nome[n].get('sha') or '-'}" for n in prefixo)
+    return {"tokens_pecas": {p["peca"]: p.get("tokens") for p in pecas},
+            "metodo_tokens": pacote.get("metodo_tokens"),
+            "prefixo_sha": hashlib.sha256(base.encode("utf-8")).hexdigest()[:12] if prefixo else None,
+            "montador_sha": pacote.get("montador_sha")}
+
+
 def _primeiro_giro(pergunta: str) -> bool:
     """Predicado auxiliar mantido para compatibilidade."""
     return bool((pergunta or "").strip())
@@ -2235,7 +2375,8 @@ def _primeiro_giro(pergunta: str) -> bool:
 
 async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = "",
                         pergunta: str = "", sessao_id: str | None = None, perfil: str = "",
-                        modo: str = "", regua: str = "", origem: str = "", agente: str = "") -> dict:
+                        modo: str = "", regua: str = "", origem: str = "", agente: str = "",
+                        turno: str = "") -> dict:
     """Abre a sessão de uma cadeira numa chamada (projeção do lote sessao abrir -> expediente montar).
 
     Devolve o pacote de expediente com o bloco `sessao` no topo.
@@ -2283,12 +2424,16 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
                ordem_id=_oid, sessao_id=_sessao_id,
                via="tool", cunhada=_cunhou)
         _delta = _delta_pecas(r, _sessao_id)   # R2: peça repetida na mesma sessão sai como aviso
+        _carimba_turno({"sessao_id": _sessao_id, "cadeira": r.get("cadeira"), "ordem_id": _oid}, turno)
 
+    # O texto do dono nao se grava (arq:0061 §5; card #3345): so o tamanho. A abertura leva o que
+    # o pacote custou, em tokens por peça com o método, o sha do prefixo cacheável e o montador.
     _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar,
            resolvida=r.get("cadeira"), erro=r.get("erro"),
            chapeu=(r.get("chapeu") or None),
-           pergunta=(pergunta or None),
+           pergunta_bytes=len((pergunta or "").encode("utf-8")),
            roteador_via=_rot.get("via"), roteador_slug=_rot.get("slug"),
+           superficie=_superficie(), **_custo_da_abertura(r),
            dur_ms=round((time.monotonic() - t0) * 1000),
            sessao_id=_sessao_id or "-", **(_delta or {}))
     return r
@@ -2562,7 +2707,8 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
     async def _tool(ato: str = "", args: list[str] | None = None,
                     stdin: str | dict | list | None = None,
                     sessao_id: str | None = None, timeout: int = 120,
-                    lote: list[dict] | None = None, encadeado: bool = False) -> dict:
+                    lote: list[dict] | None = None, encadeado: bool = False,
+                    turno: str = "") -> dict:
         # #3124: o cliente MCP desserializa stdin JSON valido antes de chegar aqui; a
         # anotacao velha (str | None) fazia o pydantic recusar sem rodar nada.
         stdin = _stdin_texto(stdin)
@@ -2570,6 +2716,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
         if lote and PF_TOOLS_LOTE:
             timeout = max(1, min(timeout, 600))
             ident = _sessao_resolve(sessao_id)
+            _carimba_turno(ident, turno)
             lote_id = uuid.uuid4().hex[:8]
 
             # card:3149 passo 7: mesmo iterador de run_command; `encadeado` para a cadeia
@@ -2604,6 +2751,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                        dur_ms=round((time.monotonic() - t0) * 1000),
                        lote_id=lote_id, lote_n=_i, encadeado=encadeado or None,
                        **_campo_prazo(r), **_campos_poda(r))
+                _escopo_do_giro(slug, _ato, _args, r, ident)
                 return r
 
             out = await _lote.itera(list(lote), _roda, encadeado=encadeado, cap=CAP,
@@ -2624,6 +2772,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
             return negado
         timeout = max(1, min(timeout, 600))
         ident = _sessao_resolve(sessao_id)  # aqui: dentro da task da tool (#2911)
+        _carimba_turno(ident, turno)
         argv = _argv_verbo(binario, ato, args)
         t0 = time.monotonic()
         r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident,
@@ -2639,6 +2788,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                bytes_stdout=r.get("stdout", {}).get("bytes_total"),
                dur_ms=round((time.monotonic() - t0) * 1000), **_campo_prazo(r),
                **_campos_poda(r))
+        _escopo_do_giro(slug, ato, args, r, ident)
         return r
     _tool.__name__ = slug.replace("-", "_")
     _tool.__doc__ = descricao
@@ -2743,6 +2893,50 @@ for _nome in ("uvicorn.access", "uvicorn.error", "uvicorn"):
 ABERTAS = ("/health", "/authorize", "/token")
 
 
+# Motivo da negacao de autenticacao, no vocabulario fechado de `oplog.MOTIVOS_NEGACAO`. O JWT recusado
+# chega pelo nome da excecao do PyJWT (politica-acesso/identidade.py grava `type(e).__name__`).
+_MOTIVO_POR_EXCECAO = {
+    "ExpiredSignatureError": "expirado",
+    "InvalidAudienceError": "audience",
+    "InvalidIssuerError": "emissor",
+    "InvalidSignatureError": "assinatura",
+    "InvalidKeyError": "assinatura",
+    "PyJWKClientError": "assinatura",
+    "PyJWKClientConnectionError": "assinatura",
+    "DecodeError": "nao_jwt",
+}
+
+
+def _motivo_da_negacao(header: str, recusas: list) -> str:
+    corpo = header[len("Bearer "):].strip() if header.startswith("Bearer ") else ""
+    if not corpo:
+        return "sem_token"
+    if recusas:
+        return _MOTIVO_POR_EXCECAO.get(str(recusas[-1]), "outro")
+    return "nao_jwt" if corpo.count(".") != 2 else "outro"
+
+
+# De onde veio a requisicao: o cabecalho que o conector do tunel injeta (padrao do cloudflared,
+# `cf-connecting-ip`) so vale quando a conexao chega do endereco do conector (padrao: loopback);
+# fora dele qualquer um poderia forja-lo, e grava-se o IP da conexao. Hipotese a confirmar em
+# platafirma-core: nome do cabecalho e endereco do conector (PF_CONECTOR_CABECALHO,
+# PF_CONECTOR_ENDERECOS).
+CONECTOR_CABECALHO = os.environ.get("PF_CONECTOR_CABECALHO", "cf-connecting-ip").lower()
+CONECTOR_ENDERECOS = frozenset(
+    e.strip() for e in os.environ.get("PF_CONECTOR_ENDERECOS", "127.0.0.1,::1").split(",") if e.strip())
+
+
+def _origem_da_requisicao(request) -> str:
+    cliente = request.client.host if request.client else "-"
+    if cliente in CONECTOR_ENDERECOS:
+        valor = (request.headers.get(CONECTOR_CABECALHO) or "").strip()
+        try:
+            return str(ipaddress.ip_address(valor))     # so IP de verdade: nada de texto livre na linha
+        except ValueError:
+            pass
+    return cliente
+
+
 class BearerAuth(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         caminho = request.url.path.rstrip("/")
@@ -2750,14 +2944,26 @@ class BearerAuth(BaseHTTPMiddleware):
             return await call_next(request)
 
         header = request.headers.get("authorization", "")
-        ident, via = _sujeito_do_jwt(header, auditor=_audit, jwks_url=OIDC_JWKS_URL,
+        # A recusa do JWT chega como `jwt_recusado` no auditor; a negacao e UM evento so
+        # (`auth_negada`), com o motivo no vocabulario fechado: o motivo e guardado aqui e o
+        # auditor nao grava a linha avulsa (card #3345; arq:0123 regra 8).
+        recusas: list = []
+
+        def _capta(**campos):
+            if campos.get("evento") == "jwt_recusado":
+                recusas.append(campos.get("motivo"))
+            else:
+                _audit(**campos)
+        ident, via = _sujeito_do_jwt(header, auditor=_capta, jwks_url=OIDC_JWKS_URL,
                                     audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER), "oidc"
         if not ident and _estatico_vigente() and _token_ok(header, OPS_AUTH_TOKEN):
             ident, via = {"sujeito": OPS_USER, "sub": "-", "username": OPS_USER,
                           "azp": "token-estatico", "sid": "-", "jti": "-"}, "estatico"
         if not ident:
             _audit(tool="-", evento="auth_negada", path=request.url.path,
-                   cliente=request.client.host if request.client else "-")
+                   cliente=request.client.host if request.client else "-",
+                   origem_requisicao=_origem_da_requisicao(request),
+                   motivo=_motivo_da_negacao(header, recusas))
             # Sem este header o cliente MCP não descobre o authorization server e o
             # fluxo morre antes da tela de login (RFC 9728).
             return JSONResponse(
