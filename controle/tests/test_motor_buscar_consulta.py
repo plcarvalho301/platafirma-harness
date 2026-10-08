@@ -81,9 +81,12 @@ def api(tmp_path):
         return subprocess.run([sys.executable, str(MOTOR), "rag", *args], capture_output=True, text=True,
                               env=env, timeout=60, check=False, stdin=subprocess.DEVNULL)
 
-    def abertura_do_dono(pergunta=PEDIDO):
-        oplog.emitir({"tool": "monta_sessao", "sessao_id": SESSAO, "pergunta": pergunta}, diretorio_=ops,
-                     agora=datetime.now().astimezone())
+    def abertura_do_dono(pergunta=PEDIDO, chapeu="engenharia-de-harness", cadeira=None):
+        oplog.emitir({"tool": "monta_sessao", "sessao_id": SESSAO, "pergunta": pergunta, "chapeu": chapeu},
+                     diretorio_=ops, agora=datetime.now().astimezone())
+        if cadeira:      # um giro da sessao, que e a linha do log que leva a cadeira
+            oplog.emitir({"tool": "repo", "ato": "ler", "sessao_id": SESSAO, "cadeira": cadeira, "exit_code": 0},
+                         diretorio_=ops, agora=datetime.now().astimezone())
 
     def linhas_do_ops():
         return [json.loads(l) for f in ops.glob("ops-*.jsonl") for l in f.read_text().splitlines()]
@@ -108,6 +111,43 @@ def test_necessidade_monta_a_lista_de_tres_com_pedido_da_porta_e_rotulos(api):
     assert envelope["tempos_ms"]["n_perguntas"] == 3 and envelope["consulta"]["fonte_pedido"] == "porta"
 
 
+def test_sem_pf_chapeu_no_ambiente_o_chapeu_vem_da_abertura_no_log(api):
+    """Medido no ar em 08/10: no claude.ai a porta nao poe PF_CHAPEU no verbo e a lista saia com 2 itens."""
+    roda, pedidos, abertura, _ = api
+    abertura()
+    r = roda("buscar", "biblioteca", "--necessidade", NEC, ambiente={"PF_CHAPEU": ""})
+    assert r.returncode == 0, r.stderr
+    c = pedidos[-1]["consulta"]
+    assert c["chapeu"] == "engenharia-de-harness" and c["rotulos"] == ROTULOS[:8]
+    assert len(c["perguntas"]) == 3 and pedidos[-1]["pergunta"] == c["perguntas"]
+
+
+def test_sem_pf_chapeu_nem_pf_cadeira_a_cadeira_vem_de_uma_linha_do_log(api):
+    roda, pedidos, abertura, _ = api
+    abertura(cadeira="ia")
+    r = roda("buscar", "biblioteca", "--necessidade", NEC, ambiente={"PF_CHAPEU": "", "PF_CADEIRA": ""})
+    assert r.returncode == 0, r.stderr
+    c = pedidos[-1]["consulta"]
+    assert c["chapeu"] == "engenharia-de-harness" and c["rotulos"] == ROTULOS[:8] and len(c["perguntas"]) == 3
+
+
+def test_sem_cadeira_em_lugar_nenhum_o_chapeu_sai_mas_os_rotulos_nao(api):
+    roda, pedidos, abertura, _ = api
+    abertura()
+    r = roda("buscar", "biblioteca", "--necessidade", NEC, ambiente={"PF_CHAPEU": "", "PF_CADEIRA": ""})
+    assert r.returncode == 0, r.stderr
+    c = pedidos[-1]["consulta"]
+    assert c["chapeu"] == "engenharia-de-harness" and c["rotulos"] == [] and len(c["perguntas"]) == 2
+
+
+def test_pf_chapeu_do_ambiente_vence_o_do_log(api):
+    roda, pedidos, abertura, _ = api
+    abertura(chapeu="agente")
+    r = roda("buscar", "biblioteca", "--necessidade", NEC, ambiente={"PF_CHAPEU": "engenharia-de-harness"})
+    assert r.returncode == 0, r.stderr
+    assert pedidos[-1]["consulta"]["chapeu"] == "engenharia-de-harness"
+
+
 def test_sem_pedido_alcancavel_declara_ausente_e_segue_com_necessidade_e_chapeu(api):
     roda, pedidos, _, _ = api
     r = roda("buscar", "biblioteca", "--necessidade", NEC)
@@ -118,7 +158,7 @@ def test_sem_pedido_alcancavel_declara_ausente_e_segue_com_necessidade_e_chapeu(
 
 def test_sem_chapeu_sai_o_terceiro_item(api):
     roda, pedidos, abertura, _ = api
-    abertura()
+    abertura(chapeu="-")        # o roteador caiu em fallback: nem o ambiente nem a abertura tem chapeu
     r = roda("buscar", "biblioteca", "--necessidade", NEC, ambiente={"PF_CHAPEU": "-"})
     assert r.returncode == 0, r.stderr
     c = pedidos[-1]["consulta"]

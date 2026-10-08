@@ -863,17 +863,25 @@ def _monta_consulta(texto, pedido_flag, sem_lint):
 
     Recusa com exit 2 e a causa na primeira linha, o jeito certo na seguinte. Nunca reescreve a
     necessidade e nunca chama modelo: quem corrige e a cadeira, na chamada seguinte."""
-    if pedido_flag and pedido_flag.strip():
+    chapeu = consulta.chapeu_vestido()
+    cadeira = (os.environ.get("PF_CADEIRA") or "").strip()
+    com_flag = bool(pedido_flag and pedido_flag.strip())
+    # No claude.ai a porta nao poe PF_CHAPEU no ambiente do verbo: o chapeu (e a cadeira, se faltar)
+    # vem da abertura no log da porta, na mesma leitura que da o pedido.
+    porta = {}
+    if not com_flag or not chapeu or cadeira in ("", "-"):
+        porta = consulta.da_porta(os.environ.get("PF_SESSAO"))
+    if com_flag:
         fonte, pedido = "flag", pedido_flag.strip()
     else:
-        fonte, pedido = "porta", consulta.pedido_da_porta(os.environ.get("PF_SESSAO"))
+        fonte, pedido = "porta", porta.get("pedido")
     if not sem_lint:
         recusa = consulta.lint(texto, pedido)
         if recusa:
             print(consulta.mensagem_de_recusa(*recusa), file=sys.stderr)
             sys.exit(2)
-    chapeu = consulta.chapeu_vestido()
-    rotulos = consulta.rotulos_do_chapeu(os.environ.get("PF_CADEIRA"), chapeu)
+    chapeu = chapeu or porta.get("chapeu")
+    rotulos = consulta.rotulos_do_chapeu(cadeira if cadeira not in ("", "-") else porta.get("cadeira"), chapeu)
     return consulta.consulta(texto, pedido, fonte, chapeu, rotulos, lint_desligado=sem_lint)
 
 def cmd_buscar(nome_inst, inst, argv):
@@ -2057,45 +2065,62 @@ def cmd_lintar(inst, argv):
         sys.exit(1)
     eventos = _psql_json(b, (
         "SELECT coalesce(json_agg(t ORDER BY t.criado_em, t.id), '[]'::json) FROM ("
-        "SELECT e.id::text AS id, e.pergunta, e.origem, e.criado_em::text AS criado_em "
+        "SELECT e.id::text AS id, e.pergunta, e.origem, e.criado_em::text AS criado_em, "
+        "e.pedido, e.necessidade, e.chapeu, e.perguntas, e.lint "
         "FROM acervo.evento_recuperacao e WHERE e.disparou) t"))
     por_origem, distintas = {}, {}
     for e in eventos:
         o = e.get("origem") or "nao declarada"
-        d = por_origem.setdefault(o, {"eventos": 0, "passam": 0, "recusadas": Counter(), "exemplos_recusados": []})
+        d = por_origem.setdefault(o, {"eventos": 0, "passam": 0, "ingles": 0, "recusadas": Counter(),
+                                      "exemplos_recusados": []})
         d["eventos"] += 1
         v = consulta.lint(e["pergunta"])
         if v is None:
             d["passam"] += 1
+            d["ingles"] += consulta.lingua(e["pergunta"]) == "en"     # (c) com pedido em portugues
         else:
             d["recusadas"][_causa_curta(v[0])] += 1
             if o == "abertura" and len(d["exemplos_recusados"]) < 10:
                 d["exemplos_recusados"].append(e["pergunta"][:90])
         distintas.setdefault(o, set()).add(" ".join(e["pergunta"].lower().split()))
+    montadas = [e for e in eventos if e.get("necessidade")]      # o que a 087 passou a gravar
     piloto = []
     with open(_ARVORE / "avaliacao" / "escada-sentido-v1.jsonl", encoding="utf-8") as f:
         for linha in f:
             c = json.loads(linha)
             if c.get("papel") == "piloto":
                 v = consulta.lint(c["pergunta"])
+                veredito = "passa" if v is None else _causa_curta(v[0])
                 piloto.append({"posicao": c["posicao"], "pergunta": c["pergunta"],
                                "palavras": len(consulta.palavras(c["pergunta"])),
                                "funcionais": round(consulta.proporcao_funcionais(c["pergunta"]), 3),
-                               "veredito": "passa" if v is None else _causa_curta(v[0])})
+                               "veredito": veredito,
+                               # (c) so dispara com o pedido a vista; o piloto e anterior ao #3345 e nao o tem.
+                               # Aqui se supoe o pedido em portugues, que e a lingua do dono.
+                               "veredito_com_pedido_pt": ("lingua" if veredito == "passa"
+                                                          and consulta.lingua(c["pergunta"]) == "en" else veredito)})
     rel = {"piso": consulta.PISO_FUNCIONAIS, "min_palavras": consulta.MIN_PALAVRAS, "eventos": len(eventos),
            "por_origem": {o: {"eventos": d["eventos"], "distintas": len(distintas[o]), "passam": d["passam"],
-                              "recusadas": dict(d["recusadas"]), "exemplos_recusados": d["exemplos_recusados"]}
+                              "ingles": d["ingles"], "recusadas": dict(d["recusadas"]),
+                              "exemplos_recusados": d["exemplos_recusados"]}
                           for o, d in sorted(por_origem.items())},
-           "piloto": piloto}
+           "piloto": piloto,
+           "montadas": {"eventos": len(montadas), "ultimos": [
+               {"criado_em": e["criado_em"][:19], "pergunta": e["pergunta"][:70], "necessidade": e["necessidade"][:70],
+                "chapeu": e["chapeu"], "n_perguntas": len(e["perguntas"] or []), "lint": e["lint"],
+                "pedido": (e["pedido"] or "")[:40]} for e in montadas[-4:]]}}
     if argv:
         print(json.dumps(rel, ensure_ascii=False, indent=1))
         return
     print(f"lint da consulta sobre {rel['eventos']} eventos do log (piso {consulta.PISO_FUNCIONAIS} de palavras funcionais, "
-          f"{consulta.MIN_PALAVRAS} palavras ou mais; a causa de lingua nao se mede: o log nao tem pedido)")
-    print(f"  {'origem':<14} {'eventos':>7} {'distintas':>9} {'passam':>7} {'assuntos':>9} {'frase':>6}")
+          f"{consulta.MIN_PALAVRAS} palavras ou mais; a causa de lingua nao se mede: o log nao tem pedido, "
+          "e a coluna ingles supoe um pedido em portugues)")
+    print(f"  {'origem':<14} {'eventos':>7} {'distintas':>9} {'passam':>7} {'assuntos':>9} {'frase':>6} {'ingles*':>8}")
     for o, d in rel["por_origem"].items():
         r = d["recusadas"]
-        print(f"  {o:<14} {d['eventos']:>7} {d['distintas']:>9} {d['passam']:>7} {r.get('assuntos', 0):>9} {r.get('frase', 0):>6}")
+        print(f"  {o:<14} {d['eventos']:>7} {d['distintas']:>9} {d['passam']:>7} {r.get('assuntos', 0):>9} "
+              f"{r.get('frase', 0):>6} {d['ingles']:>8}")
+    print("  * dos que passam, os que a causa de lingua recusaria com pedido em portugues")
     for o, d in rel["por_origem"].items():
         if o == "abertura" and d["exemplos_recusados"]:
             print("abertura recusada (prompt do dono: o piso nao pode pegar):")
@@ -2106,6 +2131,15 @@ def cmd_lintar(inst, argv):
         print(f"  {p['posicao']:>2}. {p['veredito']:<8} {p['palavras']:>2} palavras · funcionais {p['funcionais']:<5} · {p['pergunta'][:100]}")
     print(f"piloto: {sum(1 for p in piloto if p['veredito'] != 'passa')} recusadas, "
           f"{sum(1 for p in piloto if p['veredito'] == 'passa')} passam")
+    print(f"piloto com pedido em portugues (causa de lingua somada): "
+          f"{sum(1 for p in piloto if p['veredito_com_pedido_pt'] != 'passa')} recusadas, "
+          f"{sum(1 for p in piloto if p['veredito_com_pedido_pt'] == 'passa')} passam: "
+          + ", ".join(str(p['posicao']) for p in piloto if p['veredito_com_pedido_pt'] == 'passa'))
+    m = rel["montadas"]
+    print(f"eventos com consulta montada (087): {m['eventos']}")
+    for e in m["ultimos"]:
+        print(f"  {e['criado_em']} chapeu={e['chapeu']} perguntas={e['n_perguntas']} lint={e['lint']} "
+              f"necessidade={e['necessidade']!r} pedido={e['pedido']!r}")
 
 
 def main():

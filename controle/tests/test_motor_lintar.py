@@ -80,6 +80,10 @@ EVENTOS = [
     _ev(5, "Respondi o gold set todo", "abertura"),
     _ev(6, "OpenID Connect Core copyright notice OpenID Foundation", "abertura"),
     _ev(7, "o que é um espaço vetorial para recuperação", None),
+    _ev(8, "what is the abstention floor of the Nemotron generation?"),
+    {**_ev(9, "qual piso de abstenção a geração Nemotron usa?"), "necessidade": "qual piso de abstenção a geração Nemotron usa?",
+     "pedido": "Card 3360", "chapeu": "engenharia-de-harness", "lint": None,
+     "perguntas": ["qual piso de abstenção a geração Nemotron usa?", "Card 3360"]},
 ]
 
 
@@ -114,21 +118,32 @@ def test_lintar_conta_por_origem_e_por_causa(lintar):
     r = lintar("--json")
     assert r.returncode == 0, r.stderr
     rel = json.loads(r.stdout)
-    assert rel["eventos"] == 7 and rel["piso"] == consulta.PISO_FUNCIONAIS
+    assert rel["eventos"] == 9 and rel["piso"] == consulta.PISO_FUNCIONAIS
     busca = rel["por_origem"]["busca"]
-    assert (busca["eventos"], busca["distintas"], busca["passam"]) == (4, 3, 2)
+    assert (busca["eventos"], busca["distintas"], busca["passam"]) == (6, 5, 4)
     assert busca["recusadas"] == {"frase": 1, "assuntos": 1}
+    assert busca["ingles"] == 1, "a pergunta em ingles passa por (a) e (b); (c) a pegaria com pedido em portugues"
+    assert rel["por_origem"]["abertura"]["ingles"] == 0
+    assert rel["montadas"]["eventos"] == 1
+    assert rel["montadas"]["ultimos"][0]["chapeu"] == "engenharia-de-harness"
+    assert rel["montadas"]["ultimos"][0]["n_perguntas"] == 2 and rel["montadas"]["ultimos"][0]["pedido"] == "Card 3360"
     assert rel["por_origem"]["nao declarada"]["passam"] == 1
     assert rel["por_origem"]["abertura"]["recusadas"] == {"frase": 1}
     assert rel["por_origem"]["abertura"]["exemplos_recusados"] == ["OpenID Connect Core copyright notice OpenID Foundation"]
     assert [p["veredito"] for p in rel["piloto"]] == [VEREDITO_NO_PISO_0_15[i] for i in range(1, 21)]
+    # Com o pedido em portugues a causa de lingua pega as duas em ingles que passavam: 17 recusadas, 3 passam,
+    # que e o que o card esperava das 20 (e so se fecha com (c), que o piloto, anterior ao #3345, nao tem como medir).
+    assert [p["posicao"] for p in rel["piloto"] if p["veredito_com_pedido_pt"] == "passa"] == [5, 8, 11]
+    assert {p["posicao"] for p in rel["piloto"] if p["veredito_com_pedido_pt"] == "lingua"} == {6, 12}
 
 
 def test_lintar_em_texto_traz_a_tabela_e_o_piloto_uma_a_uma(lintar):
     r = lintar()
     assert r.returncode == 0, r.stderr
     linhas = r.stdout.splitlines()
-    assert linhas[0].startswith("lint da consulta sobre 7 eventos do log")
+    assert linhas[0].startswith("lint da consulta sobre 9 eventos do log")
+    assert "piloto com pedido em portugues (causa de lingua somada): 17 recusadas, 3 passam: 5, 8, 11" in r.stdout
+    assert "eventos com consulta montada (087): 1" in r.stdout and "chapeu=engenharia-de-harness perguntas=2" in r.stdout
     assert any(l.strip().startswith("busca") for l in linhas)
     assert "abertura recusada (prompt do dono: o piso nao pode pegar):" in r.stdout
     assert "piloto: 15 recusadas, 5 passam" in r.stdout
