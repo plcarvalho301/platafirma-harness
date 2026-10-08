@@ -43,21 +43,37 @@ def prompt_sha256() -> str:
 
 
 def titulo_da_fonte(f: dict) -> str:
+    """Obra › trilha da seção. A trilha do /search já começa no primeiro título da obra, não no nome dela."""
     obra = (f.get("obra") or "").strip()
-    trilha = [x for x in (f.get("breadcrumb") or [])[1:] if x]
+    trilha = [x for x in (f.get("breadcrumb") or []) if x]
     return f"{obra} › {' › '.join(trilha)}" if trilha else obra
 
 
+def blocos_do_contexto(contexto: str) -> dict:
+    """n -> texto da seção, do campo `contexto` do /search: blocos `[n] (arquivo · section_id) — trilha` separados
+    por linha em branco. `fontes[].texto` vem nulo mesmo com texto='secao': o texto mora aqui. O cabeçalho do
+    bloco sai (a trilha já está no título); fica o contexto do pai e o corpo da seção."""
+    out = {}
+    for parte in re.split(r"\n\n(?=\[\d+\] \()", contexto or ""):
+        m = re.match(r"\[(\d+)\] \(", parte)
+        if m:
+            out[int(m.group(1))] = parte.split("\n", 1)[1].strip() if "\n" in parte else ""
+    return out
+
+
 def secoes_do_servido(resposta: dict, k: int = K) -> list:
-    """As seções que o /search devolveu (texto='secao'), na ordem do braço."""
+    """As seções que o /search devolveu (texto='secao'), na ordem do braço. A chave é o uuid da seção
+    (o `section_id` curto repete entre obras); o `section_id` e o arquivo ficam para quem resolver o alvo."""
+    blocos = blocos_do_contexto(resposta.get("contexto"))
     out, vistas = [], set()
     for f in resposta.get("fontes") or []:
-        chave = f.get("section_id") or f.get("secao_id")
-        if not chave or chave in vistas or not (f.get("texto") or "").strip():
+        chave = f.get("secao_id")
+        texto = (f.get("texto") or blocos.get(f.get("n")) or "").strip()
+        if not chave or chave in vistas or not texto:
             continue
         vistas.add(chave)
-        out.append({"chave": chave, "titulo": titulo_da_fonte(f), "texto": f["texto"].strip(),
-                    "secao_id": f.get("secao_id")})
+        out.append({"chave": chave, "titulo": titulo_da_fonte(f), "texto": texto, "secao_id": chave,
+                    "section_id": f.get("section_id"), "arquivo": f.get("arquivo")})
         if len(out) == k:
             break
     return out

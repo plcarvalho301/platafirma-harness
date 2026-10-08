@@ -17,6 +17,7 @@
 # O verbo e `motor`; a instancia e argumento (arq:0037; veto do verbo `rag`).
 # atos: a capacidade e do (verbo, ato) (arq:0110 §6). Transicao vigente->conforme em spec_motor §5.
 import json, os, re, shlex, subprocess, sys, time, urllib.error, urllib.request
+from collections import Counter
 from pathlib import Path
 
 # Raizes da casa (card #3010). Codigo, registro e verbos irmaos vem da PROPRIA arvore
@@ -1698,7 +1699,7 @@ def cmd_sortear(inst, argv):
 # O braco lexical puro roda DENTRO do conteiner do rag (molde da sombra): `candidatos_lexicais` so existe la.
 # O script entra por stdin; a pergunta e a seccao saem em JSON na ultima linha. Nao escreve em banco nenhum.
 ESCRITOR_LEXICO = '''
-import json, os
+import json, os, re
 from types import SimpleNamespace
 from motor_acervo.config.settings import load_settings
 from motor_acervo.store.db import get_conn
@@ -1708,29 +1709,55 @@ st = load_settings()
 conn = get_conn(st)
 conn.autocommit = True
 esc = SimpleNamespace(particao="obra", dominios=[], subdominios=[], serve_a=[], colecoes=[])
+imp = [str(r[0]) for r in conn.execute("SELECT i.id FROM acervo.impressao i JOIN acervo.obra o ON o.id = i.obra_id "
+                                       "WHERE i.estado = 'servindo' AND o.retirada_em IS NULL").fetchall()]
+PARADAS = set("a o as os um uma de da do das dos em no na nos nas por para com que se e ou ao aos the and of to in for with is are on at by an or as it be this that from".split())
+SQL_SECAO = ("SELECT t.id::text, s.id::text, s.ancora, s.titulo, s.hierarquia, o.titulo "
+             "FROM acervo.trecho t JOIN acervo.secao s ON s.id = t.secao_id "
+             "JOIN acervo.impressao i ON i.id = t.impressao_id JOIN acervo.obra o ON o.id = i.obra_id "
+             "WHERE t.id = ANY(%s::uuid[])")
+SQL_OU = ("SELECT t.id::text FROM acervo.trecho t WHERE t.elegivel AND t.impressao_id = ANY(%(imp)s::uuid[]) "
+          "AND t.texto_tsv @@ to_tsquery('simple', %(q)s) "
+          "ORDER BY ts_rank(t.texto_tsv, to_tsquery('simple', %(q)s)) DESC LIMIT %(n)s")
+
+
+def secoes_de(ids, secs, vistas):
+    if not ids:
+        return
+    por_trecho = {r[0]: r for r in conn.execute(SQL_SECAO, (ids,)).fetchall()}
+    for tid in ids:
+        r = por_trecho.get(str(tid))
+        if not r or r[1] in vistas:
+            continue
+        vistas.add(r[1])
+        textos = [x[0] for x in conn.execute(
+            "SELECT texto FROM acervo.trecho WHERE secao_id = %s::uuid AND elegivel ORDER BY ordem_leitura", (r[1],)).fetchall()]
+        hier = [h for h in (r[4] or []) if h] or ([r[3]] if r[3] else [])
+        secs.append({"chave": r[1], "secao_id": r[1], "section_id": r[2],
+                     "titulo": r[5] + (" › " + " › ".join(hier) if hier else ""),
+                     "texto": "\\n\\n".join(textos)[:A["max_chars"]]})
+        if len(secs) == A["k"]:
+            return
+
+
 out = {}
 for pid, q in A["itens"]:
-    ids = acs.candidatos_lexicais(conn, esc, q[:500], A["pool"])
-    secs, vistas = [], set()
-    if ids:
-        rows = conn.execute("SELECT t.id::text, s.id::text, s.ancora, s.titulo, s.hierarquia, o.titulo "
-                            "FROM acervo.trecho t JOIN acervo.secao s ON s.id = t.secao_id "
-                            "JOIN acervo.impressao i ON i.id = t.impressao_id JOIN acervo.obra o ON o.id = i.obra_id "
-                            "WHERE t.id = ANY(%s::uuid[])", (ids,)).fetchall()
-        por_trecho = {r[0]: r for r in rows}
-        for tid in ids:
-            r = por_trecho.get(str(tid))
-            if not r or r[1] in vistas:
-                continue
-            vistas.add(r[1])
-            textos = [x[0] for x in conn.execute(
-                "SELECT texto FROM acervo.trecho WHERE secao_id = %s::uuid AND elegivel ORDER BY ordem_leitura", (r[1],)).fetchall()]
-            hier = [h for h in (r[4] or []) if h] or ([r[3]] if r[3] else [])
-            secs.append({"chave": r[2], "secao_id": r[1], "titulo": r[5] + (" › " + " › ".join(hier) if hier else ""),
-                         "texto": "\\n\\n".join(textos)[:A["max_chars"]]})
-            if len(secs) == A["k"]:
-                break
-    out[pid] = secs
+    secs, vistas, modo = [], set(), "and"
+    # o braco lexical do servido: AND de todos os termos (plainto_tsquery), so impressao servindo
+    secoes_de(acs.candidatos_lexicais(conn, esc, q[:500], A["pool"], impressoes=imp), secs, vistas)
+    if len(secs) < A["k"]:
+        # pergunta de palavras-chave raramente casa por AND: completa com OR ranqueado (ts_rank), declarado no carimbo
+        termos = list(dict.fromkeys(t for t in re.findall(r"\\w{3,}", q.lower()[:500]) if t not in PARADAS))
+        if termos:
+            antes = len(secs)
+            ou = [r[0] for r in conn.execute(SQL_OU, {"imp": imp, "q": " | ".join(termos), "n": A["pool"] * 2}).fetchall()]
+            secoes_de(ou, secs, vistas)
+            modo = "or" if antes == 0 else "and+or" if len(secs) > antes else "and"
+        elif not secs:
+            modo = "vazio"
+    if not secs:
+        modo = "vazio"
+    out[pid] = {"secoes": secs, "modo": modo}
 print(json.dumps(out, ensure_ascii=False))
 '''
 
@@ -1861,14 +1888,17 @@ def cmd_escrever(d, inst, argv):
             faltam_lex.append([p["id"], p["pergunta"]])
     if faltam_lex:
         lex = _recupera_lexico(inst, faltam_lex)
-        for pid, secs in lex.items():
-            est["recuperado"][pid]["lexico"] = secs
+        for pid, r in lex.items():
+            est["recuperado"][pid]["lexico"] = r["secoes"]
+            est.setdefault("lexico_modo", {})[pid] = r["modo"]
     _salva_estado(arq_estado, est)
+    modos = dict(sorted(Counter(est.get("lexico_modo", {}).values()).items()))
     sem = {b: sum(1 for p in piloto if not est["recuperado"][p["id"]][b]) for b in ("servido", "lexico", "terceiro")}
     iguais = sum(1 for p in piloto if escritor.jaccard(est["recuperado"][p["id"]]["servido"],
                                                        est["recuperado"][p["id"]]["terceiro"]) == 1.0)
     print(f"lote {lote_id} · {len(piloto)} perguntas · terceiro braco: {terceiro} ({est['terceiro_motivo']}) · "
-          f"top-8 do terceiro igual ao do servido em {iguais}/{len(piloto)} · sem nenhuma secao: {sem}")
+          f"top-8 do terceiro igual ao do servido em {iguais}/{len(piloto)} · sem nenhuma secao: {sem} · "
+          f"lexico por modo: {modos}")
     if op.get("--plano"):
         print(f"estado em {arq_estado}; recuperacao feita, nada escrito")
         return
@@ -1908,7 +1938,8 @@ def cmd_escrever(d, inst, argv):
     carimbo = {
         "acervo": {"acervo_sha": (facets.get("indice") or {}).get("acervo_sha"), "indice": facets.get("indice")},
         "motor": {"servido": {k: env.get(k) for k in chaves}, "k": escritor.K, "texto": "secao",
-                  "terceiro_braco": terceiro, "terceiro_motivo": est["terceiro_motivo"], "lexico": "candidatos_lexicais (full-text), pool 50"},
+                  "terceiro_braco": terceiro, "terceiro_motivo": est["terceiro_motivo"], "lexico": "candidatos_lexicais (full-text, AND dos termos) e, se der menos de 8 secoes, OR ranqueado por ts_rank; "
+                            "so impressao servindo", "lexico_modo_por_pergunta": modos},
         "vocabulario": {"versao": vocab or "nao declarada em /facets", "fonte": "/facets"},
         "gabarito": {"versao_id": op["--versao"], "sha_git": sorteio.sha_blob_git(bruto), "lista": "avaliacao/escada-sentido-v1.jsonl",
                      "recusadas": sorted(recusadas)},
