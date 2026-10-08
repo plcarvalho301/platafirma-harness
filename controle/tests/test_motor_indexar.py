@@ -191,12 +191,14 @@ def test_o_evento_consulta_do_ops_grava_particao_e_origem(api, tmp_path):
               for l in f.read_text().splitlines()]
     evento = [l for l in linhas if l.get("evento") == "consulta"][-1]
     assert evento["particao"] == "casa" and evento["origem_consulta"] == "abertura"
-    # A consulta da abertura nao grava o texto do dono, so o tamanho (card #3345); `origem` e de quem chamou.
-    assert "query" not in evento and evento["query_bytes"] == len("pergunta")
+    # A consulta da abertura grava a mensagem do dono (ordem de 08/10) e so ela: o que a busca
+    # devolveu (fontes, contexto) nao entra na linha. `origem` e de quem chamou.
+    assert evento["query"] == "pergunta" and evento["query_bytes"] == len("pergunta")
+    assert not {"fontes", "contexto", "resposta", "texto"} & set(evento)
     assert evento["origem"] == "cadeira" and evento["schema_v"] == 1 and evento["evento_id"]
 
 
-def test_a_consulta_de_cadeira_segue_com_a_query(api, tmp_path):
+def test_a_consulta_de_cadeira_tambem_grava_a_query(api, tmp_path):
     roda, _ = api
     r = roda("buscar", "casa", "o que e caderno", "--origem", "busca")
     assert r.returncode == 0, r.stderr
@@ -204,7 +206,7 @@ def test_a_consulta_de_cadeira_segue_com_a_query(api, tmp_path):
               for l in f.read_text().splitlines()]
     evento = [l for l in linhas if l.get("evento") == "consulta"][-1]
     assert evento["origem_consulta"] == "busca" and evento["query"] == "o que e caderno"
-    assert "query_bytes" not in evento
+    assert evento["query_bytes"] == len("o que e caderno")
 
 def test_lote_pela_tool_com_instancia_e_ato_repetidos_busca_na_particao_pedida(api):
     # #2856 linha 23: `ato: buscar` com args [rag, buscar, casa, ...] chegava como
