@@ -5,7 +5,7 @@
 # componente: platafirma-motor
 # classe: B
 # use para: achar pelo sentido o trecho que responde a X (buscar <particao>, e `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste)
-# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito) — buscar/medir/indexar/trocar/sortear exigem particao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar), eventos, juiz
+# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), escrever (escrita, lote) — buscar/medir/indexar/trocar/sortear/escrever exigem particao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar), eventos, juiz
 # forma: json
 # cauda: nao
 # poda: cosmetica@rag,casa,buscar
@@ -30,6 +30,7 @@ sys.path.insert(0, str(_ARVORE / "bin" / "_motor"))
 import calibra  # noqa: E402  (a calibracao do sinal de abstencao sobre medicoes salvas, #3264)
 import marcacao  # noqa: E402  (cliente da marcacao-api, rotas /interno/, #3349)
 import sorteio  # noqa: E402  (o sorteio do estrato sentido da escada, #3349)
+import escritor  # noqa: E402  (as respostas do piloto da escada, um escritor e tres bracos, #3349)
 
 REG = os.environ.get("PF_MOTOR_REG") or str(_ARVORE / "registro" / "motor-instancias.json")
 BIN = os.environ.get("PF_BIN") or str(_ARVORE / "bin")
@@ -178,6 +179,14 @@ def uso(cod=2):
                                         o estrato sentido da escada, sorteado do log de perguntas (padrao
                                         protocolo-medicao-rag, «Fonte e filtros»): o plano diz o que entrou, o que
                                         saiu por motivo e as 20 do piloto; --apply grava a lista e a gabarito_versao
+  motor <inst> escrever biblioteca --versao <gabarito_versao_id> --criterio-versao <v> --saida <envelope.json> [--lote-id <id>]
+                     [--lista <arquivo.jsonl>] [--recusar <id>,<id>] [--perguntas N] [--tempo S] [--ativar]
+                     [--terceiro-braco auto|revisor|expansao] [--plano]
+                                        as respostas do piloto da escada: o top-8 de tres bracos (servido, lexico puro e o
+                                        terceiro) vira uma resposta por braco, do mesmo modelo, prompt e semente, com
+                                        rodape e mapa afirmacao->secao; grava o envelope do lote. O estado e retomavel
+                                        (repita com --lote-id); --plano so recupera. A saida vai para a instancia, nunca
+                                        para repositorio: o lote leva texto do acervo
   motor marcacao lote gravar|ler|ativar … · motor marcacao eventos --lote <id> · motor marcacao juiz gravar
                                         o lote da tela de marcacao do gold set e o que ela grava (marcacao-api;
                                         `motor marcacao --ajuda` traz as formas)
@@ -1688,6 +1697,248 @@ def cmd_sortear(inst, argv):
           f"lista em {op['--saida']}: {len(lista)} perguntas. Comite o arquivo como avaliacao/escada-sentido-v1.jsonl.")
 
 
+# O braco lexical puro roda DENTRO do conteiner do rag (molde da sombra): `candidatos_lexicais` so existe la.
+# O script entra por stdin; a pergunta e a seccao saem em JSON na ultima linha. Nao escreve em banco nenhum.
+ESCRITOR_LEXICO = '''
+import json, os
+from types import SimpleNamespace
+from motor_acervo.config.settings import load_settings
+from motor_acervo.store.db import get_conn
+from motor_acervo.store import acervo_store as acs
+A = json.loads(os.environ["LEX_ARGS"])
+st = load_settings()
+conn = get_conn(st)
+conn.autocommit = True
+esc = SimpleNamespace(particao="obra", dominios=[], subdominios=[], serve_a=[], colecoes=[])
+out = {}
+for pid, q in A["itens"]:
+    ids = acs.candidatos_lexicais(conn, esc, q[:500], A["pool"])
+    secs, vistas = [], set()
+    if ids:
+        rows = conn.execute("SELECT t.id::text, s.id::text, s.ancora, s.titulo, s.hierarquia, o.titulo "
+                            "FROM acervo.trecho t JOIN acervo.secao s ON s.id = t.secao_id "
+                            "JOIN acervo.impressao i ON i.id = t.impressao_id JOIN acervo.obra o ON o.id = i.obra_id "
+                            "WHERE t.id = ANY(%s::uuid[])", (ids,)).fetchall()
+        por_trecho = {r[0]: r for r in rows}
+        for tid in ids:
+            r = por_trecho.get(str(tid))
+            if not r or r[1] in vistas:
+                continue
+            vistas.add(r[1])
+            textos = [x[0] for x in conn.execute(
+                "SELECT texto FROM acervo.trecho WHERE secao_id = %s::uuid AND elegivel ORDER BY ordem_leitura", (r[1],)).fetchall()]
+            hier = [h for h in (r[4] or []) if h] or ([r[3]] if r[3] else [])
+            secs.append({"chave": r[2], "secao_id": r[1], "titulo": r[5] + (" › " + " › ".join(hier) if hier else ""),
+                         "texto": "\\n\\n".join(textos)[:A["max_chars"]]})
+            if len(secs) == A["k"]:
+                break
+    out[pid] = secs
+print(json.dumps(out, ensure_ascii=False))
+'''
+
+ESCREVER_OPCOES = {"--lista": 1, "--versao": 1, "--criterio-versao": 1, "--recusar": 1, "--perguntas": 1,
+                   "--terceiro-braco": 1, "--lote-id": 1, "--saida": 1, "--tempo": 1, "--ativar": 0, "--plano": 0}
+
+
+def _salva_estado(arq, estado):
+    _grava_atomico(arq, json.dumps(estado, ensure_ascii=False))
+
+
+def _gerar_ollama(mensagens, tentativa):
+    base = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+    corpo = {"model": escritor.MODELO, "messages": mensagens, "stream": False, "think": False, "format": "json",
+             "options": {"temperature": escritor.TEMPERATURA, "seed": escritor.SEMENTE_GERACAO + tentativa,
+                         "num_predict": 1500, "num_ctx": 16384}}
+    req = urllib.request.Request(base + "/api/chat", data=json.dumps(corpo).encode(),
+                                 headers={"Content-Type": "application/json"})
+    t0 = time.monotonic()
+    try:
+        with urllib.request.urlopen(req, timeout=900) as r:
+            j = json.loads(r.read().decode())
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as e:
+        print(f"motor escrever: o ollama nao respondeu em {base} ({type(e).__name__}); infra cache vram", file=sys.stderr)
+        sys.exit(3)
+    return {"texto": (j.get("message") or {}).get("content", ""), "tokens_prompt": j.get("prompt_eval_count", 0),
+            "tokens_saida": j.get("eval_count", 0), "segundos": time.monotonic() - t0}
+
+
+def _recupera_servido(inst, tok, pergunta, bracos=None):
+    corpo = {"particao": "biblioteca", "pergunta": pergunta, "k": escritor.K, "texto": "secao", "origem": "bench"}
+    if bracos:
+        corpo["bracos"] = bracos
+    return http(inst["endpoint"], tok, corpo, timeout=120)
+
+
+def _recupera_lexico(inst, itens):
+    c = inst.get("container")
+    args = json.dumps({"itens": itens, "k": escritor.K, "pool": 50, "max_chars": 6000}, ensure_ascii=False)
+    r = sh(f"docker exec -i -e PYTHONPATH=/app -e LEX_ARGS={shlex.quote(args)} {c} python -", input=ESCRITOR_LEXICO)
+    if r.returncode != 0:
+        print(f"motor escrever: o braco lexical falhou no conteiner {c}: {r.stderr.strip()[-400:]}", file=sys.stderr)
+        sys.exit(3)
+    return json.loads(r.stdout.strip().splitlines()[-1])
+
+
+def cmd_escrever(d, inst, argv):
+    """`escrever biblioteca`: as respostas do piloto da escada (card #3349; padrao protocolo-medicao-rag, «Unidade da
+    marca»). Recupera o top-8 nos tres bracos, escreve cada resposta com o mesmo modelo, prompt e semente, e monta o
+    envelope do lote (`--saida`) que `motor marcacao lote gravar` manda. O estado fica em arquivo: a redacao passa do
+    prazo de uma chamada e a mesma chamada retoma de onde parou."""
+    particao, resto = resolve_particao(argv, "escrever")
+    if particao != "biblioteca":
+        print("motor escrever: so a biblioteca tem estrato sentido", file=sys.stderr)
+        sys.exit(2)
+    op, i = {}, 0
+    while i < len(resto):
+        n = ESCREVER_OPCOES.get(resto[i])
+        if n is None or (n and i + 1 >= len(resto)):
+            print(f"motor escrever: argumento invalido {resto[i]!r}. Aceita: {' '.join(ESCREVER_OPCOES)}", file=sys.stderr)
+            sys.exit(2)
+        op[resto[i]] = resto[i + 1] if n else True
+        i += 1 + n
+    if not op.get("--plano") and not (op.get("--saida") and op.get("--versao") and op.get("--criterio-versao")):
+        print("motor escrever: pede --saida <envelope.json> --versao <gabarito_versao_id> --criterio-versao <v> "
+              "(ou --plano, so a recuperacao)", file=sys.stderr)
+        sys.exit(2)
+    lista = op.get("--lista") or na_release("platafirma-harness/avaliacao/escada-sentido-v1.jsonl")
+    if not lista or not os.path.isfile(lista):
+        print(f"motor escrever: lista do sorteio nao encontrada ({lista}); passe --lista <arquivo.jsonl>", file=sys.stderr)
+        sys.exit(1)
+    with open(lista, "rb") as f:
+        bruto = f.read()
+    linhas = [json.loads(l) for l in bruto.decode().splitlines() if l.strip()]
+    recusadas = {x for x in (op.get("--recusar") or "").split(",") if x}
+    piloto = escritor.escolher_piloto(linhas, recusadas, sum(1 for l in linhas if l["papel"] == "piloto"))
+    if op.get("--perguntas"):
+        piloto = piloto[: int(op["--perguntas"])]
+    if not piloto:
+        print("motor escrever: nenhuma pergunta no piloto", file=sys.stderr)
+        sys.exit(1)
+    tok = token_da(inst)
+    lote_id = op.get("--lote-id") or time.strftime("piloto-fita1-%Y%m%dT%H%M", time.gmtime())
+    arq_estado = os.path.join(dir_medicoes(inst), f"escritor-{lote_id}.json")
+    os.makedirs(os.path.dirname(arq_estado), exist_ok=True)
+    if os.path.isfile(arq_estado):
+        with open(arq_estado) as f:
+            est = json.load(f)
+        if est["perguntas"] != [p["id"] for p in piloto]:
+            print(f"motor escrever: o estado {arq_estado} e de outro conjunto de perguntas; use outro --lote-id", file=sys.stderr)
+            sys.exit(2)
+    else:
+        est = escritor.novo_estado(lote_id, [p["id"] for p in piloto], "", "")
+    por_id = {p["id"]: p for p in piloto}
+
+    # --- terceiro braco -------------------------------------------------------------------------------------
+    if not est["terceiro_braco"]:
+        pedido = op.get("--terceiro-braco", "auto")
+        if pedido in ("revisor", "expansao"):
+            est["terceiro_braco"], est["terceiro_motivo"] = pedido, "pedido na chamada"
+        elif pedido == "auto":
+            amostras = []
+            for p in piloto[:5]:
+                serv = _recupera_servido(inst, tok, p["pergunta"])
+                rev = _recupera_servido(inst, tok, p["pergunta"], ["rerank"])
+                amostras.append((escritor.secoes_do_servido(serv), escritor.secoes_do_servido(rev),
+                                 (rev.get("tempos_ms") or {}).get("rerank", 0)))
+                est["recuperado"].setdefault(p["id"], {})["servido"] = amostras[-1][0]
+                est["recuperado"][p["id"]]["revisor"] = amostras[-1][1]
+            est["terceiro_braco"], est["terceiro_motivo"] = escritor.decidir_terceiro_braco(amostras)
+        else:
+            print("motor escrever: --terceiro-braco aceita auto|revisor|expansao", file=sys.stderr)
+            sys.exit(2)
+        _salva_estado(arq_estado, est)
+    terceiro = est["terceiro_braco"]
+    bracos_busca = ["rerank"] if terceiro == "revisor" else ["expansao"]
+
+    # --- recuperacao ----------------------------------------------------------------------------------------
+    faltam_lex = []
+    for p in piloto:
+        rec = est["recuperado"].setdefault(p["id"], {})
+        if "servido" not in rec:
+            rec["servido"] = escritor.secoes_do_servido(_recupera_servido(inst, tok, p["pergunta"]))
+        if "terceiro" not in rec:
+            rec["terceiro"] = rec.pop("revisor", None) if terceiro == "revisor" and "revisor" in rec else \
+                escritor.secoes_do_servido(_recupera_servido(inst, tok, p["pergunta"], bracos_busca))
+        if "lexico" not in rec:
+            faltam_lex.append([p["id"], p["pergunta"]])
+    if faltam_lex:
+        lex = _recupera_lexico(inst, faltam_lex)
+        for pid, secs in lex.items():
+            est["recuperado"][pid]["lexico"] = secs
+    _salva_estado(arq_estado, est)
+    sem = {b: sum(1 for p in piloto if not est["recuperado"][p["id"]][b]) for b in ("servido", "lexico", "terceiro")}
+    iguais = sum(1 for p in piloto if escritor.jaccard(est["recuperado"][p["id"]]["servido"],
+                                                       est["recuperado"][p["id"]]["terceiro"]) == 1.0)
+    print(f"lote {lote_id} · {len(piloto)} perguntas · terceiro braco: {terceiro} ({est['terceiro_motivo']}) · "
+          f"top-8 do terceiro igual ao do servido em {iguais}/{len(piloto)} · sem nenhuma secao: {sem}")
+    if op.get("--plano"):
+        print(f"estado em {arq_estado}; recuperacao feita, nada escrito")
+        return
+
+    # --- redacao (depois da recuperacao: o ollama e o Nemotron dividem a placa) ------------------------------
+    limite = time.monotonic() + float(op.get("--tempo", 480))
+    pendentes = [(p, b) for p in piloto for b in ("servido", "lexico", "terceiro")
+                 if b not in est["geradas"].get(p["id"], {})]
+    for p, b in pendentes:
+        if time.monotonic() > limite:
+            break
+        est["geradas"].setdefault(p["id"], {})[b] = escritor.escrever_resposta(
+            p["pergunta"], est["recuperado"][p["id"]][b], _gerar_ollama)
+        _salva_estado(arq_estado, est)
+    feitas = sum(len(v) for v in est["geradas"].values())
+    total = 3 * len(piloto)
+    if feitas < total:
+        print(f"INCOMPLETO: {feitas}/{total} respostas escritas; repita o mesmo comando com --lote-id {lote_id}")
+        sys.exit(1)
+
+    # --- envelope --------------------------------------------------------------------------------------------
+    facets = http(inst["facets"], tok, timeout=30) or {}
+    env, _ = servido(inst)
+    env = env or {}
+    chaves = ("EMBED_MODEL", "EMBED_BACKEND", "EMBED_QUERY_INSTRUCTION", "RETRIEVAL_MODE", "HYBRID_LEXICAL", "RRF_K",
+              "RERANK_MODEL", "RERANK_POOL", "RERANK_BLEND", "CHUNK_TOKEN_CEILING", "EXPANSAO_POR_CONCEITO")
+    custo = {b: {"segundos": 0.0, "tokens_prompt": 0, "tokens_saida": 0, "respostas": 0} for b in ("servido", "lexico", terceiro)}
+    for pid, por_braco in est["geradas"].items():
+        for b, r in por_braco.items():
+            c = custo[terceiro if b == "terceiro" else b]
+            c["segundos"] = round(c["segundos"] + r["carimbo"]["segundos"], 2)
+            c["tokens_prompt"] += r["carimbo"]["tokens_prompt"]
+            c["tokens_saida"] += r["carimbo"]["tokens_saida"]
+            c["respostas"] += 1
+    vocab = next((v for k, v in sorted(facets.items()) if "vocab" in k.lower()), None) \
+        or ((facets.get("indice") or {}).get("vocabulario_versao"))
+    carimbo = {
+        "acervo": {"acervo_sha": (facets.get("indice") or {}).get("acervo_sha"), "indice": facets.get("indice")},
+        "motor": {"servido": {k: env.get(k) for k in chaves}, "k": escritor.K, "texto": "secao",
+                  "terceiro_braco": terceiro, "terceiro_motivo": est["terceiro_motivo"], "lexico": "candidatos_lexicais (full-text), pool 50"},
+        "vocabulario": {"versao": vocab or "nao declarada em /facets", "fonte": "/facets"},
+        "gabarito": {"versao_id": op["--versao"], "sha_git": sorteio.sha_blob_git(bruto), "lista": "avaliacao/escada-sentido-v1.jsonl",
+                     "recusadas": sorted(recusadas)},
+        "escritor": {"modelo": escritor.MODELO, "prompt_versao": escritor.PROMPT_VERSAO, "prompt_sha256": escritor.prompt_sha256(),
+                     "semente": escritor.SEMENTE_GERACAO, "temperatura": escritor.TEMPERATURA, "palavras": escritor.PALAVRAS,
+                     "juiz": "a definir na fita 2 (modelo de outra familia que o escritor)"},
+        "custo": custo,
+    }
+    resultados = {pid: {"servido": g["servido"], "lexico": g["lexico"], "terceiro": g["terceiro"]} for pid, g in est["geradas"].items()}
+    envelope = escritor.montar_lote(lote_id, op["--versao"], op["--criterio-versao"], piloto, resultados, terceiro, carimbo,
+                                    str(escritor.SEMENTE_GERACAO), bool(op.get("--ativar")))
+    problemas = escritor.conferir_aceite(envelope, len(piloto))
+    _grava_atomico(op["--saida"], json.dumps(envelope, ensure_ascii=False))
+    print(f"envelope em {op['--saida']}: {len(envelope['corpo']['perguntas'])} perguntas, {len(envelope['respostas'])} respostas")
+    for b, c in custo.items():
+        m = max(c["respostas"], 1)
+        print(f"  {b:<9} {c['respostas']} respostas · {c['segundos'] / m:.1f} s e {c['tokens_saida'] / m:.0f} tokens de saida por resposta "
+              f"(prompt {c['tokens_prompt'] / m:.0f})")
+    if problemas:
+        print("FORA DO ACEITE:")
+        for pr in problemas:
+            print(f"  - {pr}")
+        sys.exit(1)
+    print(f"aceite: {len(piloto)} perguntas e {3 * len(piloto)} respostas, toda resposta com secao no rodape, "
+          "toda afirmacao com secao no mapa, carimbo com as cinco versoes")
+    print(f"gravar: motor marcacao lote gravar {op['--saida']}{' --ativar' if not op.get('--ativar') else ''}")
+
+
 def main():
     d = reg()
     a = sys.argv[1:]
@@ -1735,9 +1986,11 @@ def main():
         return cmd_trocar(inst, a[2:])
     if a[1] == "sortear":
         return cmd_sortear(inst, a[2:])
+    if a[1] == "escrever":
+        return cmd_escrever(d, inst, a[2:])
     if a[1] == "medir":
         return cmd_medir(a[0], inst, a[2:])
-    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, indexar, medir, sortear, trocar", file=sys.stderr)
+    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, escrever, indexar, medir, sortear, trocar", file=sys.stderr)
     sys.exit(1)
 
 
