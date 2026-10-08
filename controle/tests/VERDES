@@ -64,6 +64,7 @@ tests/test_portao_familia.py
 tests/test_release_stack_imagem.py
 tests/test_bot.py
 tests/test_motor_indexar.py
+tests/test_motor_troca.py
 tests/test_stack_mascara_segredos.py
 tests/test_pesquisar_consultar_palavras.py
 tests/test_acervo_psql_c.py
