@@ -3,11 +3,11 @@
 # capacidade: porte-de-sessao-no-cliente
 # dono: claudinho-TI
 #
-# FONTE: platafirma-harness/agente/hooks/porta-sessao.py. Ha UMA copia distribuida, byte a
-# byte, em platafirma-posto/.claude/hooks/porta-sessao.py — o posto e a porta de entrada
-# humana (qualquer maquina, so `git pull`) e nao enxerga /opt/platafirma. Mudou aqui, copia
-# la no mesmo ato; `cmp` entre os dois e o aceite. Por isso este arquivo nao depende de
-# nada do host: so stdlib, e todo caminho do host e opcional.
+# FONTE: platafirma-harness/agente/hooks/porta-sessao.py. O posto NAO carrega copia: a mudanca
+# que o faria porta de entrada humana, com o hook no proprio repo, foi revertida em e2ddecb
+# (platafirma-posto, 20/09/2026), e o settings do posto nao registra este script. Se uma copia
+# voltar ao posto, ela e byte a byte desta e `cmp` entre as duas e o aceite. Por isso este
+# arquivo nao depende de nada do host: so stdlib, e todo caminho do host e opcional.
 #
 # O problema medido (card 3007, 06/09): a cadeira em Code recebe o `sessao_id` no
 # retorno do `monta_sessao` e NAO o repassa nas chamadas seguintes (0/190). A porta
@@ -15,7 +15,10 @@
 # porte ser MECANICO, no cliente, independe do agente lembrar — que e a spec:
 # `monta_sessao` cunha -> Valkey -> a fita porta o id.
 #
-# Tres eventos, um script:
+# Quatro eventos, um script:
+#  - UserPromptSubmit (card #3356): guarda o contador do turno (T0, T1, ...) e a mensagem do dono,
+#    e marca o turno pendente. NAO imprime nada: o que este evento imprime entra no contexto do
+#    modelo. O PreToolUse seguinte leva `turno` e, na primeira chamada, `turno_texto` a porta.
 #  - PostToolUse em monta_sessao: extrai sessao_id e cadeira do RETORNO e grava por fita do Code.
 #  - PreToolUse nas tools da porta: se a chamada nao traz sessao_id, injeta o
 #    gravado via `updatedInput` (nunca sobrescreve um id que o agente ja pos).
@@ -37,6 +40,7 @@ CADEIRA = re.compile(r'\\?"cadeira\\?"\s*:\s*\\?"([a-z0-9][a-z0-9-]{0,40})\\?"')
 MORADA = Path(os.environ.get("PF_ABERTURA_DIR", "/srv/platafirma/casa/var/abertura-publicada"))
 TETO_CONTEXTO = 9_500          # o Code corta cada string de hook em 10.000 caracteres
 JANELA_DEDUP_S = 30            # conta + projeto podem declarar o mesmo hook: fala um so
+TETO_TURNO_TEXTO = 16_000      # caracteres da mensagem do dono que o hook entrega a porta (#3356)
 
 def arquivo(sid_code: str, sufixo: str = "sid") -> Path:
     seguro = re.sub(r"[^0-9a-zA-Z_-]", "_", sid_code or "sem")
@@ -44,16 +48,50 @@ def arquivo(sid_code: str, sufixo: str = "sid") -> Path:
 
 def le(sid_code, sufixo="sid"):
     try:
-        return arquivo(sid_code, sufixo).read_text().strip() or None
+        return arquivo(sid_code, sufixo).read_text(encoding="utf-8", errors="replace").strip() or None
     except Exception:
         return None
 
 def grava(sid_code, valor, sufixo="sid"):
+    """Arquivo 0600 numa pasta 0700: a mensagem do dono fica em disco ate a proxima (card #3356)."""
     try:
-        DIR.mkdir(parents=True, exist_ok=True)
-        arquivo(sid_code, sufixo).write_text(valor)
+        DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:
+            os.chmod(DIR, 0o700)
+        except OSError:
+            pass                           # pasta de outro dono: segue com o que ha
+        alvo = arquivo(sid_code, sufixo)
+        fd = os.open(str(alvo), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(valor)
+        os.chmod(alvo, 0o600)              # arquivo que ja existia com outro modo
     except Exception as e:
         print(f"[porta-sessao] grava falhou: {e!r}", file=sys.stderr)
+
+def apaga(sid_code, sufixo):
+    try:
+        arquivo(sid_code, sufixo).unlink()
+    except Exception:
+        pass
+
+def proximo_turno(sid_code: str) -> str:
+    """O contador do turno: T0 na primeira mensagem do dono da fita, T1 na segunda, e assim por diante."""
+    m = re.fullmatch(r"T(\d+)", le(sid_code, "turno") or "")
+    return f"T{int(m.group(1)) + 1}" if m else "T0"
+
+def com_turno(sid_code: str, ti: dict) -> dict:
+    """Poe `turno` na chamada da porta e, na primeira depois da mensagem do dono, `turno_texto` e
+    limpa o pendente. Chamada que ja traz `turno` segue como veio. Sem mensagem guardada, nada."""
+    turno = le(sid_code, "turno")
+    if not turno or ti.get("turno"):
+        return ti
+    novo = dict(ti, turno=turno)
+    if le(sid_code, "pendente"):
+        texto = le(sid_code, "texto")
+        if texto:
+            novo["turno_texto"] = texto[:TETO_TURNO_TEXTO]
+        apaga(sid_code, "pendente")
+    return novo
 
 def _publicado(*partes: str) -> str | None:
     try:
@@ -187,6 +225,16 @@ def main():
                 "hookEventName": "SessionStart", "additionalContext": ctx}}, ensure_ascii=False))
         sys.exit(0)
 
+    if evento == "UserPromptSubmit":
+        # Nada no stdout: o que este evento imprime entra no contexto do modelo. Sub-agente nao
+        # tem mensagem do dono; sem `prompt`, o turno cai no transcript (spec log-de-negocio §3).
+        prompt = ev.get("prompt")
+        if not agente and isinstance(prompt, str) and prompt.strip():
+            grava(sid_code, proximo_turno(sid_code), "turno")
+            grava(sid_code, prompt, "texto")
+            grava(sid_code, "1", "pendente")
+        sys.exit(0)
+
     if not (tool.endswith("malote") or tool.endswith("run_command") or tool.endswith("read_file") or tool.endswith("ler_arquivo") or
             tool.endswith("write_file") or tool.endswith("mesa") or tool.endswith("fila") or
             tool.endswith("tarefas") or tool.endswith("motor") or tool.endswith("descansar") or
@@ -218,6 +266,8 @@ def main():
             sid = (le(chave) if agente else None) or le(sid_code)
             if sid:                        # nada gravado ainda — roda sem sessao (contado)
                 novo["sessao_id"] = sid
+        if not agente:                     # sub-agente nao recebe o turno do orquestrador (#3356)
+            novo = com_turno(sid_code, novo)
         if novo == ti:
             sys.exit(0)                    # o agente ja portou — respeita
         print(json.dumps({"hookSpecificOutput": {

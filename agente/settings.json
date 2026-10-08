@@ -89,6 +89,16 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'f=/opt/platafirma/current/harness/agente/hooks/porta-sessao.py; [ -f \"$f\" ] || exit 0; exec python3 \"$f\"'"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "mcp__claudinho-mcp__.*|mcp__claude_ai_claudinho-mcp__.*",
