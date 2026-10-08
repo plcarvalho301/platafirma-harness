@@ -65,6 +65,10 @@ tests/test_release_stack_imagem.py
 tests/test_bot.py
 tests/test_motor_indexar.py
 tests/test_motor_troca.py
+# Card #3349: `motor marcacao`, cliente da marcacao-api (rotas /interno/), contra uma API falsa no loopback.
+tests/test_motor_marcacao.py
+# Card #3349: `motor rag sortear biblioteca` (filtros do padrao contados por motivo, cota por cadeira, ordem sorteada, sha do arquivo).
+tests/test_motor_sorteio.py
 tests/test_stack_mascara_segredos.py
 tests/test_pesquisar_consultar_palavras.py
 tests/test_acervo_psql_c.py
