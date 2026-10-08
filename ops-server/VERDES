@@ -18,3 +18,4 @@ test_piso_timeout.py
 test_prazo_porta.py
 test_sessao_reidratar_porta.py
 test_stdin_json_porta.py
+test_turno_texto_porta.py
