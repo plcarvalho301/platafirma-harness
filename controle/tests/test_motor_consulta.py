@@ -78,9 +78,9 @@ ROTULOS = ("Complexidade assintotica", "asymptotic complexity", "big-o", "Pipeli
            "retrieval-augmented generation", "Ranqueamento multiestágio", "reranking")
 
 
-def test_montar_dois_itens_com_rotulos():
+def test_montar_com_rotulos_devolve_so_necessidade():
     ps = consulta.montar(NEC, ROTULOS)
-    assert ps == [NEC, NEC + ". Buscar também: " + ", ".join(ROTULOS)]
+    assert ps == [NEC]
 
 
 def test_montar_sem_chapeu_so_necessidade():
@@ -88,24 +88,30 @@ def test_montar_sem_chapeu_so_necessidade():
     assert consulta.montar(NEC, None) == [NEC]
 
 
-def test_montar_corta_os_rotulos_em_8():
-    ps = consulta.montar(NEC, [f"r{i}" for i in range(12)])
+def test_montar_com_rotulos_mantem_funcao_legada():
+    ps = consulta.montar_com_rotulos(NEC, ROTULOS)
+    assert ps == [NEC, NEC + ". Buscar também: " + ", ".join(ROTULOS)]
+
+
+def test_montar_com_rotulos_corta_em_8():
+    ps = consulta.montar_com_rotulos(NEC, [f"r{i}" for i in range(12)])
     assert ps[1] == NEC + ". Buscar também: r0, r1, r2, r3, r4, r5, r6, r7"
 
 
-def test_montar_nunca_passa_do_teto_da_api():
-    assert len(consulta.montar(NEC, ROTULOS)) <= 2
+def test_montar_devolve_lista_de_um_item():
+    assert len(consulta.montar(NEC, ROTULOS)) == 1
 
 
 def test_montar_compativel_com_tres_argumentos():
-    assert consulta.montar(NEC, None, ROTULOS) == [NEC, NEC + ". Buscar também: " + ", ".join(ROTULOS)]
+    assert consulta.montar(NEC, None, ROTULOS) == [NEC]
 
 
 def test_bloco_consulta_declara_o_que_foi_enviado():
     c = consulta.consulta(NEC, "engenharia-de-harness", ROTULOS)
     assert "pedido" not in c and "fonte_pedido" not in c
     assert c["necessidade"] == NEC and c["chapeu"] == "engenharia-de-harness"
-    assert c["rotulos"] == list(ROTULOS) and len(c["perguntas"]) == 2
+    assert c["rotulos"] == list(ROTULOS) and len(c["perguntas"]) == 1
+    assert c["perguntas"] == [NEC]
     assert "lint" not in c
 
 

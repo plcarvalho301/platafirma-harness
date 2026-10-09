@@ -104,22 +104,24 @@ def api(tmp_path):
     servidor.shutdown()
 
 
-def test_necessidade_monta_a_lista_de_dois_com_rotulos_sem_eco_no_envelope(api):
+def test_necessidade_manda_pergunta_com_chapeu_sem_eco_no_envelope(api):
     roda, pedidos, abertura, _ = api
     abertura()
     r = roda("buscar", "biblioteca", "--necessidade", NEC)
     assert r.returncode == 0, r.stderr
     corpo = pedidos[-1]
-    assert corpo["pergunta"] == [NEC, NEC + ". Buscar também: " + ", ".join(ROTULOS[:8])]
+    assert corpo["pergunta"] == NEC
+    assert corpo["perguntas"] == [NEC]
+    assert corpo["chapeu"] == {"cadeira": "ia", "chapeu": "engenharia-de-harness", "rotulos": ROTULOS[:8]}
     c = corpo["consulta"]
     assert "pedido" not in c and "fonte_pedido" not in c
     assert c["necessidade"] == NEC and c["chapeu"] == "engenharia-de-harness" and c["rotulos"] == ROTULOS[:8]
-    assert c["perguntas"] == corpo["pergunta"] and "lint" not in c
+    assert c["perguntas"] == [NEC] and "lint" not in c
     assert corpo["origem"] == "busca" and corpo["sessao_id"] == SESSAO
     envelope = json.loads(r.stdout)
-    assert envelope["tempos_ms"]["n_perguntas"] == 2
+    assert envelope["tempos_ms"]["n_perguntas"] == 1
     assert envelope["perguntas"] == [NEC]
-    assert envelope["consulta"] == {"necessidade": NEC, "n_perguntas": 2}
+    assert envelope["consulta"] == {"necessidade": NEC, "n_perguntas": 1}
     # Teste de regressão (#3364): rótulos e pedido NUNCA voltam no envelope
     assert PEDIDO not in r.stdout
     assert "rotulos" not in envelope["consulta"]
@@ -134,6 +136,7 @@ def test_sem_chapeu_sai_apenas_necessidade(api):
     c = pedidos[-1]["consulta"]
     assert c["chapeu"] is None and c["rotulos"] == [] and c["perguntas"] == [NEC]
     assert pedidos[-1]["pergunta"] == NEC
+    assert "chapeu" not in pedidos[-1]
 
 
 def test_flag_pedido_sai_2(api):
@@ -229,7 +232,7 @@ def test_o_evento_consulta_do_ops_grava_a_necessidade_com_a_lista_enviada(api):
     evento = [l for l in linhas() if l.get("evento") == "consulta"][-1]
     assert evento["query"] == NEC and evento["query_bytes"] == len(NEC.encode())
     assert evento["origem_consulta"] == "busca" and evento["particao"] == "biblioteca"
-    assert evento["montagem"] == {"n_rotulos": 8, "n_perguntas": 2, "lint": None}
+    assert evento["montagem"] == {"n_rotulos": 8, "n_perguntas": 1, "lint": None}
     assert PEDIDO not in json.dumps(evento, ensure_ascii=False), "o pedido não é copiado para a linha da consulta"
 
 
