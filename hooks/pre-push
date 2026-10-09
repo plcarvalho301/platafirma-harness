@@ -152,6 +152,8 @@ medir_rev() {  # $1=rev $2=base (vazio: lista inteira)
       else
         printf 'pre-push: baseline de contrato verde em %s (%s, rodou)\n' "${rev:0:7}" "$chaves_id"
       fi
+      # card #3370: o push diz o que mediu (raio total ou quantos arquivos da lista rodaram)
+      grep -hE '^(raio total|seleção):' "$saida" | sort -u | sed 's/^/pre-push: /' >&2 || true
       return 0 ;;
     1)
       if grep -q "veredito reaproveitado" "$saida" && ! grep -qE '^[[:space:]]*reprovado:' "$saida"; then

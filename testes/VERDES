@@ -8,25 +8,31 @@
 # lista nenhuma.
 #
 # Medido em 06/10/2026 (card #3326): 389 passam no venv acervo (`teste rodar acervo`).
-test_acervo_atos_classificar.py
-test_acervo_atos_retirar.py
-test_acervo_atos_transcrever.py
-test_acervo_bancada_conversao.py
-test_acervo_exportar_pythonpath.py
-test_acervo_impressao.py
-test_acervo_ler_secao.py
-test_acervo_listar_marcacao.py
-test_acervo_retrato.py
-test_acervo_listar_qualidade.py
-test_acervo_listar_retirada.py
-test_acervo_mapa.py
-test_acervo_objeto.py
-test_acervo_particao_biblioteca.py
-test_balde_apagar_3302.py
-test_curar_apagar.py
-test_curar_bancada.py
-test_curar_bancada_conversor.py
-test_curar_expurgar_restaurar.py
-test_curar_flag_desconhecida.py
-test_curar_lote.py
-test_curar_vinculacao.py
+#
+# Raio (card #3370): `<arquivo> | <glob> <glob>...`, globs relativos à raiz do repositório. O
+# push e a promoção rodam a linha quando o diff alcança algum glob (ou o próprio arquivo); linha
+# sem `|` roda sempre. Mudança em lib/, hooks/, bin/teste, bin/_release/, registro/, venvs/, em
+# conftest, uv.lock, pyproject ou em lista de portão roda a lista inteira (bin/teste, RAIO_TOTAL).
+# A rodada inteira diária no `bot` pega o raio que faltou aqui.
+test_acervo_atos_classificar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_atos_retirar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_atos_transcrever.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_bancada_conversao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_exportar_pythonpath.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_impressao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_ler_secao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_listar_marcacao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_retrato.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_listar_qualidade.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_listar_retirada.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_mapa.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_objeto.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_particao_biblioteca.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_balde_apagar_3302.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_curar_apagar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_curar_bancada.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_curar_bancada_conversor.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_curar_expurgar_restaurar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_curar_flag_desconhecida.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_curar_lote.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_curar_vinculacao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir

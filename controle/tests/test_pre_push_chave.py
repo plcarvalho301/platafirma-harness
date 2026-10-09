@@ -174,10 +174,12 @@ def test_push_mede_so_o_que_o_diff_da_base_alcanca(amb):
     amb.commit("controle/tests/VERDES", "tests/test_fixture.py\ntests/test_dado.py | src/**\n")
     r = amb.push()
     assert r.returncode == 0, r.stdout + r.stderr
+    assert "raio total: controle/tests/VERDES" in r.stderr, r.stderr
 
     amb.commit("dados/valor.txt", "ruim\n")   # o teste quebraria, mas o diff nao alcanca o raio dele
     r = amb.push()
     assert r.returncode == 0, r.stdout + r.stderr
+    assert "seleção: 1 de 2 arquivos (pulados: tests/test_dado.py)" in r.stderr, r.stderr
 
     amb.commit("src/x.txt", "x\n")             # agora o diff alcanca: o teste roda e reprova
     r = amb.push()
