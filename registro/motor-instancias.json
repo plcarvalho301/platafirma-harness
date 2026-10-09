@@ -359,8 +359,8 @@
     "onde": "compose",
     "faixa": "true ou false",
     "codigo": "false",
-    "sobe": "a consulta que traz chapeu passa a usar o conceito que a ontologia elege dentro do chapeu da cadeira, alem da frase. Vale para as duas particoes (biblioteca e casa): o ajuste do compose e do processo, nao de uma geracao",
-    "custa": "muda o ranking de toda chamada que traz chapeu, entao qualquer baseline anterior deixa de comparar. Chamada sem chapeu, ou cujo chapeu nao casa com a frase, volta como antes. Ajuste so da biblioteca seria o da geracao, que e outra coisa. A requisicao pode forcar o valor por chamada com `eleicao_chapeu` no corpo (#3366): e assim que o `parear --do-log` mede sem ligar",
+    "sobe": "a consulta montada passa a declarar os conceitos que a frase nomeia e, havendo chapeu, o conceito que a ontologia elege dentro do chapeu da cadeira. Vale para as duas particoes (biblioteca e casa): o ajuste do compose e do processo, nao de uma geracao",
+    "custa": "muda o ranking de toda chamada montada pelo verbo (a que traz necessidade), com ou sem chapeu: os conceitos que a frase nomeia entram nos declarados, e o eleito do chapeu tambem, quando ha, entao qualquer baseline anterior deixa de comparar. Sem chapeu, ou com chapeu que nao casa com a frase, so o eleito falta e a frase entra igual. Chamada de texto literal (abertura, bench, sombra, autoteste) nao tem consulta: nao elege nem declara a frase, mas o bloco de ontologia aparece com o ajuste ligado (#3381). Ajuste so da biblioteca seria o da geracao, que e outra coisa. A requisicao pode forcar o valor por chamada com `eleicao_chapeu` no corpo (#3366): e assim que o `parear --do-log` mede sem ligar",
     "medir": "motor rag parear biblioteca --do-log: o Jaccard do top-8 do eleito contra a busca de hoje e os pares que o dono le, sobre as chamadas do log com eleito. Ligar vem depois dos cinco pares, pela regra escrita no #3359 antes da rodada"
    }
   ],
