@@ -1907,7 +1907,10 @@ def _moradas_escrita():
 
 
 def _em_bin_do_harness(real_pai: Path) -> bool:
-    """bin/ de um clone ou worktree do harness na bancada: morada de verbo (sem extensao)."""
+    """bin/ e hooks/ de um clone ou worktree do harness na bancada: morada de verbo e de hook
+    (sem extensao, com shebang). hooks/ entrou em 09/10/2026 (#3376): hooks/pre-push nao tem
+    extensao e ficava sem porta. O core.hooksPath das contas aponta para a release, entao a
+    copia da bancada so vale depois de `release promover`, como o bin/."""
     b = _bancada()
     if b is None:
         return False
@@ -1921,7 +1924,7 @@ def _em_bin_do_harness(real_pai: Path) -> bool:
             partes = real_pai.relative_to(raiz_clone).parts
         except ValueError:
             continue
-        if any(len(partes) > p and partes[p] == "bin" for p in profs):
+        if any(len(partes) > p and partes[p] in ("bin", "hooks") for p in profs):
             return True
     return False
 
@@ -2035,8 +2038,8 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
 
     `path` absoluto, ou relativo à bancada declarada (sem ela, recusa). Moradas: na
     bancada, clones platafirma-* e seus worktrees em wt/<repo>/<cadeira>
-    (working tree, fora de .git), com bin/ do harness aceitando verbo (sem extensao +
-    shebang); na instancia, @TMP@/<ordem_id>/ (rascunho da fita). Tipos: .py .md .mmd .d2 .sh
+    (working tree, fora de .git), com bin/ e hooks/ do harness aceitando verbo e hook (sem
+    extensao + shebang); na instancia, @TMP@/<ordem_id>/ (rascunho da fita). Tipos: .py .md .mmd .d2 .sh
     .sql .yaml .yml .json .toml .css .html .js .mjs .php .txt .conf .service .timer .path
     .socket, e os nomes Dockerfile, Dockerfile.<sufixo>, .dockerignore, VERDES. Fora disso volta
     `{recusado, motivo}` nomeando o porque (release, fila, abertura publicada, log, segredos, .git, symlink,
