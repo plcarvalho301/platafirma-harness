@@ -5,17 +5,41 @@
 # componente: platafirma-motor
 # classe: B
 # use para: achar pelo sentido o trecho que responde a X (buscar <particao> --necessidade "<uma frase: o que voce precisa saber>"; o verbo monta a consulta com a necessidade e os rotulos do chapeu e recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou | ou vem em saco de palavras; --origem abertura|bench|sombra|autoteste manda o texto literal, sem lint e sem montagem; `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), medir sem gravar quanto do log o lint da consulta montada recusaria (lintar), comparar a chamada de hoje, a frase do dono e a lista montada nas perguntas do piloto (parear biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste)
-# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote) — buscar/medir/indexar/trocar/sortear/escrever/parear exigem particao (lintar le o log inteiro e nao): motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar), eventos, juiz
+# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote)
+# (buscar/medir/indexar/trocar/sortear/escrever/parear exigem particao; lintar le o log inteiro e nao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar), eventos, juiz)
 # forma: json
 # cauda: nao
 # poda: cosmetica@rag,casa,buscar
 # consome: rag-extractor-api@platafirma-conhecimento/rag/openapi.yaml >=1.0 (buscar, medir, indexar; endpoints por instancia em motor-instancias.json)
 # ambiente: PLATAFIRMA_RELEASE origem-shell [=/opt/platafirma/current] (gabarito); PLATAFIRMA_INSTANCIA origem-shell [=/srv/platafirma/casa] (segredos, log, medicoes, sobreposicao do compose); OPS_LOG_DIR origem-shell [=$PLATAFIRMA_INSTANCIA/var/log/ops]; PF_BIN origem-shell (teste; ausente e o bin/ da propria arvore); PF_SESSAO porta; PF_ORDEM_ID porta; PF_CADEIRA porta; PF_CHAPEU porta; PF_ABERTURA_DIR origem-shell [=$PLATAFIRMA_INSTANCIA/var/abertura-publicada] (rotas-chapeu.json, os rotulos da consulta montada); OPS_NAME porta; USER shell
-# escreve: $PLATAFIRMA_INSTANCIA/var/log/ops/*.jsonl (evento consulta, best-effort); env da ingestao na instancia, arquivo NOME=valor ou $PLATAFIRMA_INSTANCIA/segredos/<stack>/<VAR> (ajuste de corte, via motor-instancias.json); $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml (ajuste de container); $PLATAFIRMA_INSTANCIA/var/medicoes/*.json (medir)
+# le: listar=arquivo-local
+# le: ajuste=arquivo-local,release
+# le: buscar=motor,arquivo-local
+# le: medir=motor,release,arquivo-local
+# le: indexar=motor,acervo.obra
+# le: trocar=motor
+# le: sortear=motor,arquivo-local
+# le: lintar=motor
+# le: parear=motor,arquivo-local
+# le: escrever=motor,arquivo-local
+# escreve: listar=nada
+# escreve: ajuste=arquivo-local
+# escreve: buscar=arquivo-local
+# escreve: medir=arquivo-local
+# escreve: indexar=motor
+# escreve: trocar=motor
+# escreve: sortear=motor,arquivo-local
+# escreve: lintar=nada
+# escreve: parear=motor,arquivo-local
+# escreve: escrever=motor,arquivo-local
+# (recursos pelo enum de ferramental_recurso. Onde: o evento consulta em $PLATAFIRMA_INSTANCIA/var/log/ops/*.jsonl, best-effort;
+#  o env da ingestao na instancia, arquivo NOME-valor ou $PLATAFIRMA_INSTANCIA/segredos/<stack>/<VAR> (ajuste de corte, via
+#  motor-instancias.json); $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml (ajuste de container);
+#  $PLATAFIRMA_INSTANCIA/var/medicoes/*.json (medir, parear, escrever); o lote e o gabarito pela marcacao-api e pelo rag-api)
 # depende: docker (ajuste servido, medir banco); ajudante bin/_release/stack (ajuste que promove); rede (consome a API do rag)
 # substitui: docker exec rag-* ; curl ao endpoint de busca
 # O verbo e `motor`; a instancia e argumento (arq:0037; veto do verbo `rag`).
-# atos: a capacidade e do (verbo, ato) (arq:0110 §6). Transicao vigente->conforme em spec_motor §5.
+# A capacidade e do (verbo, ato) (arq:0110 §6). Transicao vigente->conforme em spec_motor §5.
 import hashlib, json, os, re, shlex, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
 from collections import Counter
 from pathlib import Path
@@ -138,8 +162,14 @@ def uso(cod=2):
   motor <inst> ajuste                    todos os ajustes, com o valor de hoje
   motor <inst> ajuste <slug>             o que esse ajuste troca por que
   motor <inst> ajuste <slug> <valor>     mexe, promove e confere o servido
-  motor <inst> buscar <particao> "<pergunta>" [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>] [--ordem-id <id>]
-                     [--origem abertura|busca|bench|sombra|autoteste]
+  motor <inst> buscar <particao> --necessidade "<uma frase: o que voce precisa saber para o proximo ato>"
+                     [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>] [--ordem-id <id>] [--geracao <id|gN>]
+                                        a necessidade e UMA frase legivel, um assunto por chamada (pt ou en); o verbo
+                                        monta a consulta com ela e os rotulos do chapeu, e recusa com exit 2, causa e
+                                        jeito certo o que junta assuntos com ; ou | ou vem em saco de palavras-chave.
+                                        Dois assuntos = duas chamadas no mesmo lote. O texto posicional passa pelo mesmo lint.
+                     [--origem abertura|bench|sombra|autoteste]   so a abertura e os atos de medida: texto literal,
+                                        sem lint nem montagem (spec motor-do-conhecimento §2b)
   motor <inst> medir  <particao> [--k N] [--rerank] [--veredito] [--rotulo <nome>] [--gabarito <arq>]
                      [--expansao [--peso-conceito X]] [--geracao <id|gN>]
                                         bateria no gold da particao, pela porta servida:
