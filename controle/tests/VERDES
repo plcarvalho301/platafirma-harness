@@ -63,39 +63,34 @@ tests/test_longjob_identidade.py
 tests/test_portao_familia.py
 tests/test_release_stack_imagem.py
 tests/test_bot.py
-# Raio (card #3370): `<arquivo> | <glob> <glob>...`, globs relativos a raiz do repositorio. O push e a
-# promocao rodam a linha quando o diff alcanca algum glob (ou o proprio arquivo); linha sem `|` roda
-# sempre. Mudanca em lib/, hooks/, bin/teste, bin/_release/, registro/, venvs/, em conftest, uv.lock,
-# pyproject ou em lista de portao roda a lista inteira (bin/teste, RAIO_TOTAL). A rodada inteira
-# diaria no `bot` pega o raio que faltou.
-tests/test_motor_indexar.py | bin/motor bin/_motor/**
-tests/test_motor_troca.py | bin/motor bin/_motor/**
+tests/test_motor_indexar.py
+tests/test_motor_troca.py
 # Card #3349: `motor marcacao`, cliente da marcacao-api (rotas /interno/), contra uma API falsa no loopback.
-tests/test_motor_marcacao.py | bin/motor bin/_motor/**
+tests/test_motor_marcacao.py
 # Card #3349: `motor rag sortear biblioteca` (filtros do padrao contados por motivo, cota por cadeira, ordem sorteada, sha do arquivo).
-tests/test_motor_sorteio.py | bin/motor bin/_motor/**
+tests/test_motor_sorteio.py
 # Card #3349: `motor rag escrever biblioteca` (prompt, mapa, rodape, piloto, terceiro braco, envelope e aceite; fiacao com rag, ollama e docker falsos).
-tests/test_motor_escritor.py | bin/motor bin/_motor/**
+tests/test_motor_escritor.py
 # Card #3360: bin/_motor/consulta.py (lint, montagem, rotulos do chapeu, pedido do dono lido do log da porta pelo oplog) e a fiacao em `motor rag buscar`.
-tests/test_motor_consulta.py | bin/motor bin/_motor/**
-tests/test_motor_buscar_consulta.py | bin/motor bin/_motor/**
-tests/test_motor_lintar.py | bin/motor bin/_motor/**
+tests/test_motor_consulta.py
+tests/test_motor_buscar_consulta.py
+tests/test_motor_lintar.py
 # Card #3360, passo 9: `motor rag parear biblioteca` (frases do dono, as tres consultas, o que o dono ja julgou, o lote do par; rag, ollama e marcacao-api falsos).
-tests/test_par_consulta.py | bin/motor bin/_motor/**
+tests/test_par_consulta.py
 # Incidente #3364: o cabecalho de bin/motor se registra no golden record e a descricao servida e a ajuda ensinam a necessidade em frase.
 tests/test_motor_registro.py
 tests/test_stack_mascara_segredos.py
 tests/test_pesquisar_consultar_palavras.py
-tests/test_acervo_psql_c.py | bin/acervo bin/_acervo/**
+tests/test_acervo_psql_c.py
 tests/test_fila_msgid.py
 tests/test_fila_ack.py
 tests/test_contrato_minuta_ler.py
 tests/test_contrato_casa_por_caminho.py
 # Medido em 03/10/2026 (card #3239): `curar --conceito --renomear`, contra um servidor HTTP falso do contrato
 # (24 passam; com a forma do slug ou o HermiT quebrados de propósito, a suite fica vermelha).
-tests/test_curar_renomear.py | bin/curar bin/_acervo/**
+tests/test_curar_renomear.py
 # Medido em 05/10/2026 (card #3163): `curar --conceito --natureza` (reclassificar, K19), mesmo servidor falso.
-tests/test_curar_natureza.py | bin/curar bin/_acervo/**
+tests/test_curar_natureza.py
 # Medido em 04/10/2026 (incidente #3222): `infra backup` com `piso_bytes` (7 passam; com a condicao do piso
 # desligada, 3 ficam vermelhos — o dump de 320 bytes volta a sair ok).
 tests/test_contrato_infra_backup_piso.py
@@ -118,7 +113,7 @@ tests/test_contrato_sinal.py
 # reduzido a 1, os testes de cada um ficam vermelhos). Revisão do cliente, 8 achados: queda só de dependência,
 # 409 como espera que o laço interrompe, relato que sobrevive a Ctrl-C, exits 3/4/5 e as quatro linhas do exit 1.
 # Guarda da arq:0089: o verbo não importa subprocess, psycopg, boto3, minio nem docker.
-tests/test_acervo_ficha.py | bin/acervo bin/_acervo/**
+tests/test_acervo_ficha.py
 # Card #3343: `infra limpeza logs` não corta var/log/ops por idade; jobs segue cortado e a linha de vida conta o retido.
 tests/test_limpeza_logs_portao.py
 # Card #3344: lib/oplog escreve e le o bruto da porta (chave, versao, aparo, classe) e ninguem mais o abre.
@@ -149,9 +144,9 @@ testes/test_deploy_seg_suites.py
 testes/test_descansar_fecho.py
 testes/test_descansar_puxado.py
 testes/test_descansar_ritual.py
-testes/test_expediente.py | bin/expediente bin/_expediente/**
-testes/test_expediente_cadeirinha.py | bin/expediente bin/_expediente/** testes/test_expediente.py
-testes/test_expediente_chapeu.py | bin/expediente bin/_expediente/** testes/test_expediente.py testes/test_expediente_cadeirinha.py
+testes/test_expediente.py
+testes/test_expediente_cadeirinha.py
+testes/test_expediente_chapeu.py
 testes/test_gerar_rotas_chapeu.py
 testes/test_ingerir_casamento_3307.py
 testes/test_ingerir_ficha_3306.py
