@@ -77,6 +77,8 @@ tests/test_motor_buscar_consulta.py
 tests/test_motor_lintar.py
 # Card #3360, passo 9: `motor rag parear biblioteca` (frases do dono, as tres consultas, o que o dono ja julgou, o lote do par; rag, ollama e marcacao-api falsos).
 tests/test_par_consulta.py
+# Incidente #3364: o cabecalho de bin/motor se registra no golden record e a descricao servida e a ajuda ensinam a necessidade em frase.
+tests/test_motor_registro.py
 tests/test_stack_mascara_segredos.py
 tests/test_pesquisar_consultar_palavras.py
 tests/test_acervo_psql_c.py
