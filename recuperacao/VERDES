@@ -1,19 +1,22 @@
 # Lista de portão da chave recuperacao (arq:0116 §5): caminhos relativos a recuperacao/.
 # Arquivo consertado entra no mesmo commit que o conserta; a lista só cresce.
-test_contrato_adaptadores.py
-test_contrato_board.py
-test_contrato_cache.py
-test_contrato_catalogo.py
-test_contrato_disjuntor.py
-test_contrato_disparo.py
-test_contrato_envelope.py
-test_contrato_gate.py
-test_contrato_gold.py
-test_contrato_pep.py
-test_contrato_resolvedor.py
-test_contrato_roteador_chapeu.py
-test_contrato_situacao.py
-test_contrato_veredito.py
-test_contrato_wiki_acervo.py
-test_gerador_fontes.py
-test_ordem_id.py
+#
+# Raio (card #3370): `<arquivo> | <glob> <glob>...`, globs relativos à raiz do repositório; ver
+# controle/tests/VERDES. Todo teste desta chave lê o próprio recuperacao/.
+test_contrato_adaptadores.py | bin/acervo bin/_acervo/** bin/fila bin/_fila/** bin/infra bin/_infra/** bin/minuta bin/_minuta/** bin/repo bin/seg bin/_release/** recuperacao/** registro/**
+test_contrato_board.py | recuperacao/**
+test_contrato_cache.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/fila bin/_fila/** bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste recuperacao/**
+test_contrato_catalogo.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/fila bin/_fila/** bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste recuperacao/**
+test_contrato_disjuntor.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste recuperacao/**
+test_contrato_disparo.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste recuperacao/**
+test_contrato_envelope.py | bin/acervo bin/_acervo/** bin/bot bin/chat bin/conferir bin/curar bin/fila bin/_fila/** bin/ingerir bin/mesa bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste recuperacao/** registro/**
+test_contrato_gate.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste recuperacao/**
+test_contrato_gold.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste recuperacao/**
+test_contrato_pep.py | bin/acervo bin/_acervo/** bin/bot bin/chat bin/conferir bin/curar bin/fila bin/_fila/** bin/ingerir bin/mesa bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste politica-acesso/** recuperacao/** registro/**
+test_contrato_resolvedor.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste recuperacao/**
+test_contrato_roteador_chapeu.py | bin/acervo bin/_acervo/** bin/agente bin/encerrar bin/expediente bin/_expediente/** bin/pesquisar bin/seg bin/sessao bin/_sessao/** abertura/** agente/** recuperacao/**
+test_contrato_situacao.py | bin/situacao recuperacao/**
+test_contrato_veredito.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/bot bin/chat bin/conferir bin/curar bin/encerrar bin/ingerir bin/mesa bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/situacao bin/tarefas bin/teste recuperacao/** sessao/**
+test_contrato_wiki_acervo.py | bin/sinal bin/tarefas recuperacao/**
+test_gerador_fontes.py | bin/acervo bin/_acervo/** bin/bot bin/chat bin/conferir bin/curar bin/fila bin/_fila/** bin/ingerir bin/mesa bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste recuperacao/** registro/**
+test_ordem_id.py | recuperacao/**

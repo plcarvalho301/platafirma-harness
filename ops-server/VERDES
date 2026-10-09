@@ -3,19 +3,23 @@
 # Fora, medido em 28/09: test_raizes_porta.py passa de 300 s com o isolamento de
 # lib/teste_isolado.py; test_run_command_lote_injecao.py passa sozinho e reprova 2 casos
 # rodado junto dos outros (id de sessão vazado de outro módulo). Débitos no balde #2856.
-test_cadeia_linha_real.py
-test_exec_conta.py
-test_formatos.py
-test_ledger_distancia.py
-test_ler_arquivo_morada.py
-test_leitura.py
-test_malote_apelido.py
-test_monta_sessao_agente.py
-test_monta_sessao_lote.py
-test_campos_giro_porta.py
-test_oplog_porta.py
-test_piso_timeout.py
-test_prazo_porta.py
-test_sessao_reidratar_porta.py
-test_stdin_json_porta.py
-test_turno_texto_porta.py
+#
+# Raio (card #3370): `<arquivo> | <glob> <glob>...`, globs relativos à raiz do repositório; ver
+# controle/tests/VERDES. Aqui `politica-acesso/*.py` é o código do PDP que o servidor importa; o
+# `politica.yaml` e os dados de identidade não são lidos por estes testes (a rodada diária pega).
+test_cadeia_linha_real.py | bin/repo bin/sessao bin/_sessao/** bin/_minuta/** ops-server/** politica-acesso/*.py
+test_exec_conta.py | ops-server/**
+test_formatos.py | ops-server/**
+test_ledger_distancia.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** ops-server/**
+test_ler_arquivo_morada.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/fila bin/_fila/** bin/infra bin/_infra/** bin/mesa bin/minuta bin/_minuta/** bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** ops-server/** politica-acesso/*.py
+test_leitura.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir bin/motor bin/_motor/** bin/repo bin/situacao bin/_lint/** ops-server/**
+test_malote_apelido.py | bin/repo bin/sessao bin/_sessao/** bin/_minuta/** ops-server/** politica-acesso/*.py
+test_monta_sessao_agente.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/conferir bin/encerrar bin/expediente bin/_expediente/** bin/infra bin/_infra/** bin/mesa bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/pesquisar bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/tarefas bin/teste bin/_lint/** ops-server/** politica-acesso/*.py sessao/**
+test_monta_sessao_lote.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/expediente bin/_expediente/** bin/mesa bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/pesquisar bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal chat/** ops-server/** politica-acesso/*.py sessao/**
+test_campos_giro_porta.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/conferir bin/encerrar bin/expediente bin/_expediente/** bin/infra bin/_infra/** bin/mesa bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/pesquisar bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** bin/_minuta/** agente/** mcp/** ops-server/** politica-acesso/*.py sessao/**
+test_oplog_porta.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/bot bin/chat bin/conferir bin/curar bin/infra bin/_infra/** bin/ingerir bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/situacao bin/tarefas bin/teste ops-server/** politica-acesso/*.py
+test_piso_timeout.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** bin/_minuta/** ops-server/** politica-acesso/*.py
+test_prazo_porta.py | bin/repo bin/sessao bin/_sessao/** bin/_minuta/** ops-server/** politica-acesso/*.py
+test_sessao_reidratar_porta.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/conferir bin/encerrar bin/infra bin/_infra/** bin/mesa bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** ops-server/** politica-acesso/*.py
+test_stdin_json_porta.py | bin/repo bin/sessao bin/_sessao/** bin/_minuta/** ops-server/** politica-acesso/*.py
+test_turno_texto_porta.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/conferir bin/encerrar bin/infra bin/_infra/** bin/mesa bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** ops-server/** politica-acesso/*.py sessao/**
