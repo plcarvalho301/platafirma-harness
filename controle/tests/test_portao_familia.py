@@ -344,6 +344,28 @@ def test_raio_declarado_nas_listas_reais_casa_arquivo_que_existe():
                        if not any(casa(f, g) for f in arquivos)]
     assert not mortos, f"raio declarado que nao casa arquivo nenhum: {mortos}"
 
+def test_origin_main_mede_a_main_do_clone_base_e_a_arvore_some(tmp_path):
+    """A rodada diaria do bot (#3370): a lista inteira sobre origin/main do clone base da
+    bancada, numa arvore descartavel; main vermelha sai 1; a arvore nao fica."""
+    env, arv = _arvore(tmp_path, {"a": {"test_a.py": VERDE}}, {"a": "test_a.py\n"})
+    banc = tmp_path / "bancada"
+    banc.mkdir()
+    subprocess.run(["git", "clone", "-q", str(arv), str(banc / "demo")], check=True,
+                   capture_output=True)
+    com_banc = dict(env, PLATAFIRMA_BANCADA=str(banc))
+    r = _run(com_banc, "rodar", "demo", "--portao", "--origin-main")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "origem:    origin/main de demo" in r.stderr, r.stderr
+    assert "portao demo: VERDE" in r.stdout, r.stdout
+    arvores = tmp_path / "instancia" / "var" / "pre-push" / "arvores"
+    assert not list(arvores.glob("diaria.*"))
+    _commita(arv, {"a/test_a.py": VERMELHO})   # a main andou e ficou vermelha
+    r = _run(com_banc, "rodar", "demo", "--portao", "--origin-main")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert not list(arvores.glob("diaria.*"))
+    r = _run(com_banc, "rodar", "demo", "--origin-main")   # sem --portao
+    assert r.returncode == 2, r.stdout + r.stderr
+
 def test_veredito_da_rodada_inteira_verde_responde_pela_parcial(tmp_path):
     marcas = tmp_path / "marcas.txt"
     env, arv, base = _tres(tmp_path, marcas, RAIOS)

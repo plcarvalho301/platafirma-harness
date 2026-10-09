@@ -38,6 +38,7 @@ uso() {
   cat >&2 <<EOF
 uso:
   $VERBO rodar <nome> [<alvo>...] [--portao] [--arvore <caminho>] [--base <rev>] [--chave <nome>]
+  $VERBO rodar <repositorio> --portao --origin-main
   $VERBO detectar <nome> [--chave <nome>]
   $VERBO inventario [<nome>|--all] [--json]
 
@@ -54,6 +55,9 @@ uso:
                 algum glob (relativo à raiz do repositório) casa um arquivo do diff, ou o
                 próprio arquivo mudou; caminho de raio total roda a lista inteira. Sem --base,
                 ou base ilegível, a lista inteira
+  --origin-main: só com --portao, sem <alvo> e sem --arvore: busca origin/main no clone base da
+                 bancada, mede a lista inteira numa árvore descartável dele e a remove (a
+                 rodada diária do bot, card #3370; não grava veredito de seleção)
   --chave <nome>: (deprecado) usa o ambiente de registro/venvs.json (arq:0110 §11)
 
 bancada: PLATAFIRMA_BANCADA, senão \$PLATAFIRMA_ARQUIVO_BANCADA (sem declaração: exit 3)
@@ -755,13 +759,14 @@ ato_inventario() {
 }
 
 ato_rodar() {
-  local nome="" alvo="" chave="" arvore="" base="" portao=0 EM_ARVORE=0 c rc extras=() extras_resolvidos=()
+  local nome="" alvo="" chave="" arvore="" base="" portao=0 origem_main=0 EM_ARVORE=0 c rc extras=() extras_resolvidos=()
   local SELECAO_HASH=""  # visto por pytest_em_bloco (chave do memo parcial)
   while [ $# -gt 0 ]; do
     case "$1" in
       --chave) shift; [ $# -gt 0 ] || morre "--chave exige um valor" 2; chave="$1"; shift ;;
       --base) shift; [ $# -gt 0 ] || morre "--base exige uma rev" 2; base="$1"; shift ;;
       --portao) portao=1; shift ;;
+      --origin-main) origem_main=1; shift ;;
       --arvore) shift; [ $# -gt 0 ] || morre "--arvore exige um caminho" 2; arvore="$1"; shift ;;
       *)
         if [ -z "$nome" ]; then nome="$1"
@@ -780,6 +785,28 @@ ato_rodar() {
   local alvo_resolver="${chave:-$nome}"
   resolver_registro "$alvo_resolver"
   case "$nome" in *@*) REG_BANCADA="${nome#*@}" ;; esac  # --chave nao apaga a bancada escolhida
+
+  # Rodada diária (card #3370): a lista inteira sobre origin/main, numa árvore descartável do
+  # clone base da bancada (<bancada>/<repo>), que o job do bot não tem por cadeira. A árvore
+  # nasce sob a raiz que --arvore aceita e some na saída.
+  if [ "$origem_main" -eq 1 ]; then
+    { [ "$portao" -eq 1 ] && [ -z "$alvo" ] && [ -z "$arvore" ] && [ -z "$base" ]; } \
+      || morre "--origin-main só com --portao, sem <alvo>, sem --arvore e sem --base" 2
+    declara_bancada
+    local inst_main="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}"
+    MAIN_CLONE="$BANCADA/$REG_FAMILIA"
+    [ -e "$MAIN_CLONE/.git" ] || morre "sem clone base de $REG_FAMILIA em $BANCADA" 3
+    git -C "$MAIN_CLONE" fetch -q origin main 2>/dev/null \
+      || morre "não consegui buscar origin/main de $REG_FAMILIA" 3
+    mkdir -p "$inst_main/var/pre-push/arvores" 2>/dev/null
+    MAIN_ARVORE="$(mktemp -d "$inst_main/var/pre-push/arvores/diaria.XXXXXX")" \
+      || morre "não criei a árvore da rodada diária sob $inst_main/var/pre-push/arvores" 3
+    trap 'git -C "$MAIN_CLONE" worktree remove --force "$MAIN_ARVORE" >/dev/null 2>&1; git -C "$MAIN_CLONE" worktree prune >/dev/null 2>&1; rm -rf "$MAIN_ARVORE"' EXIT
+    git -C "$MAIN_CLONE" worktree add -q --detach "$MAIN_ARVORE" origin/main >/dev/null 2>&1 \
+      || morre "não materializei origin/main de $REG_FAMILIA em $MAIN_ARVORE" 3
+    arvore="$MAIN_ARVORE"
+    printf 'origem:    origin/main de %s @ %s\n' "$REG_FAMILIA" "$(git -C "$MAIN_ARVORE" rev-parse --short HEAD)" >&2
+  fi
 
   if [ -n "$arvore" ]; then
     c="$(validar_arvore "$arvore")" || exit $?
