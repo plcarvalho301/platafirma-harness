@@ -1580,8 +1580,11 @@ gate_conferir_verbo() {  # $1=repo $2=sha_candidato $3=sha_atual(ou vazio)
 GATE_SUITE_STATUS=""; GATE_SUITE_DETALHE=""; GATE_SUITE_LOG=""
 GATE_AMBIENTE_STATUS=""; GATE_AMBIENTE_SEGUNDOS=0; GATE_AMBIENTE_CHAVE=""
 
-gate_suite_verdes() {  # $1=repo $2=sha ; 0 verde ou n/a; 4 vermelho medido; 5 nao medido (detalhe nomeia)
-  local repo="$1" sha="$2"
+gate_suite_verdes() {  # $1=repo $2=sha [$3=base: sha no ar] ; 0 verde ou n/a; 4 vermelho medido; 5 nao medido (detalhe nomeia)
+  local repo="$1" sha="$2" base="${3:-}" base_args=()
+  # card #3370: com a base (o sha que esta no ar), o portao roda o que o diff base..sha alcanca;
+  # sem ela (familia nova), a lista inteira.
+  [ -z "$base" ] || base_args=(--base "$base")
   local arvore="$PROD_RAIZ/$repo/$sha"  # "local a=$1 b=...$a" nao ve o $a recem-declarado: outro local
   GATE_SUITE_STATUS="indisponivel"; GATE_SUITE_DETALHE=""; GATE_SUITE_LOG=""
   GATE_AMBIENTE_STATUS="indisponivel"; GATE_AMBIENTE_SEGUNDOS=0; GATE_AMBIENTE_CHAVE=""
@@ -1607,7 +1610,7 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 verde ou n/a; 4 vermelho medido; 5 n
   # chave) ou 6 ("ainda não medida"). Rev que o pre-push já mediu não roda de novo.
   local rc_memo=0
   PF_TESTE_SO_MEMO=1 PLATAFIRMA_VENVS="$venvs" "$AQUI/teste" rodar "$repo" --portao --arvore "$arvore" \
-    >"$saida" 2>&1 || rc_memo=$?
+    ${base_args[@]+"${base_args[@]}"} >"$saida" 2>&1 || rc_memo=$?
   case "$rc_memo" in
     0) GATE_SUITE_STATUS="verde"; GATE_SUITE_DETALHE="reaproveitado"; GATE_AMBIENTE_STATUS="reaproveitado"; return 0 ;;
     1) GATE_SUITE_STATUS="vermelho"
@@ -1632,7 +1635,7 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 verde ou n/a; 4 vermelho medido; 5 n
     if [ -n "$sessao_bin" ]; then
       local marca="$GATE_MARCA" out_job unit log_job teto="${PF_GATE_TETO_S:-90}" t=0 rc_poll
       rm -f "$marca"
-      out_job="$(PF_GATE_SINCRONO=1 "$sessao_bin" longjob run "gate-${sha:0:7}" "$AQUI/release" _medir-suite "$repo" "$sha" 2>&1 8>&-)" || out_job=""
+      out_job="$(PF_GATE_SINCRONO=1 "$sessao_bin" longjob run "gate-${sha:0:7}" "$AQUI/release" _medir-suite "$repo" "$sha" ${base:+"$base"} 2>&1 8>&-)" || out_job=""
       unit="$(printf '%s\n' "$out_job" | grep -oE 'platafirma-job-[A-Za-z0-9_.@-]+' | head -n 1)"
       log_job="$(printf '%s\n' "$out_job" | grep -oE '/[^ ]+\.log' | head -n 1)"
       if [ -n "$unit" ]; then
@@ -1642,7 +1645,7 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 verde ou n/a; 4 vermelho medido; 5 n
           [ -f "$marca" ] && break
           rc_poll=0
           PF_TESTE_SO_MEMO=1 PLATAFIRMA_VENVS="$venvs" "$AQUI/teste" rodar "$repo" --portao --arvore "$arvore" \
-            >/dev/null 2>&1 || rc_poll=$?
+            ${base_args[@]+"${base_args[@]}"} >/dev/null 2>&1 || rc_poll=$?
           [ "$rc_poll" -eq 6 ] || break
           sleep 2; t=$((t + 2))
         done
@@ -1664,7 +1667,7 @@ gate_suite_verdes() {  # $1=repo $2=sha ; 0 verde ou n/a; 4 vermelho medido; 5 n
 
   local rc_teste=0 t0 t1
   t0=$(date +%s 2>/dev/null || echo 0)
-  PLATAFIRMA_VENVS="$venvs" "$AQUI/teste" rodar "$repo" --portao --arvore "$arvore" >"$saida" 2>&1 || rc_teste=$?
+  PLATAFIRMA_VENVS="$venvs" "$AQUI/teste" rodar "$repo" --portao --arvore "$arvore" ${base_args[@]+"${base_args[@]}"} >"$saida" 2>&1 || rc_teste=$?
   t1=$(date +%s 2>/dev/null || echo 0)
   GATE_AMBIENTE_SEGUNDOS=$((t1 - t0))
   grep -q ' construido (' "$saida" && GATE_AMBIENTE_STATUS="construido"
@@ -2013,7 +2016,7 @@ cmd_promover() {
   materializar "$repo" "$sha" || { rc=$?; exit "$rc"; }
   materializar_terceiros "$repo" "$sha" || { rc=$?; exit "$rc"; }
   local rc_suite=0
-  gate_suite_verdes "$repo" "$sha" || rc_suite=$?
+  gate_suite_verdes "$repo" "$sha" "$atual" || rc_suite=$?
   if [ "$rc_suite" -eq 5 ] && [ "$aceitar_suite" -eq 1 ]; then
     GATE_SUITE_STATUS="nao-medida"
     GATE_SUITE_DETALHE="subiu por --aceitar-suite-indisponivel: $GATE_SUITE_DETALHE"
@@ -2343,9 +2346,9 @@ case "$cmd" in
   _medir-suite)
     # interno: o job que `release promover` dispara para medir a suite acima do teto.
     # Mede sincrono, grava o veredito (verde|vermelho) ou a marca de nao medido.
-    [ $# -eq 2 ] || { printf 'release: _medir-suite <repo> <sha>\n' >&2; exit 2; }
+    [ $# -eq 2 ] || [ $# -eq 3 ] || { printf 'release: _medir-suite <repo> <sha> [<base>]\n' >&2; exit 2; }
     GATE_MARCA=""; rc_m=0
-    PF_GATE_SINCRONO=1 gate_suite_verdes "$1" "$2" || rc_m=$?
+    PF_GATE_SINCRONO=1 gate_suite_verdes "$1" "$2" "${3:-}" || rc_m=$?
     gravar_ultimo_gate "$1" "$2"
     if [ "$rc_m" -eq 5 ] && [ -n "$GATE_MARCA" ]; then
       printf '%s\n' "$GATE_SUITE_DETALHE" > "$GATE_MARCA" 2>/dev/null || true

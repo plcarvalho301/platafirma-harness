@@ -23,7 +23,8 @@ LISTA_HARNESS = RAIZ / "controle" / "tests" / "VERDES"
 
 
 def _entradas(lista: Path) -> list[str]:
-    return [linha.strip() for linha in lista.read_text(encoding="utf-8").splitlines()
+    # a linha pode trazer o raio depois de `|` (card #3370): aqui so o arquivo
+    return [linha.split("|")[0].strip() for linha in lista.read_text(encoding="utf-8").splitlines()
             if linha.strip() and not linha.lstrip().startswith("#")]
 
 
