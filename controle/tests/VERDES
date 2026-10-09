@@ -32,24 +32,24 @@ tests/test_contrato_repo_bancada.py
 tests/test_contrato_repo_lock.py
 tests/test_contrato_repo_pr_fechar.py
 tests/test_contrato_repo_sanear_remotos.py
-tests/test_contrato_teste_bloco.py
+tests/test_contrato_teste_bloco.py | bin/teste
 tests/test_lote_encadeado.py
 tests/test_mesa.py
-tests/test_registro_chave.py
-tests/test_release_construir_venv_registro.py
-tests/test_release_estagio_card.py
-tests/test_release_ensaio_fetch.py
-tests/test_release_fila_e_cofre.py
-tests/test_pre_push_chave.py
-tests/test_release_gate_suite_verdes.py
-tests/test_contrato_teste.py
+tests/test_registro_chave.py | bin/teste bin/_release/** registro/venvs.json
+tests/test_release_construir_venv_registro.py | bin/release bin/_release/** lib/venv.sh
+tests/test_release_estagio_card.py | bin/release bin/_release/**
+tests/test_release_ensaio_fetch.py | bin/release bin/_release/**
+tests/test_release_fila_e_cofre.py | bin/release bin/_release/**
+tests/test_pre_push_chave.py | bin/teste hooks/pre-push lib/venv.sh
+tests/test_release_gate_suite_verdes.py | bin/release bin/teste bin/_release/**
+tests/test_contrato_teste.py | bin/teste
 tests/test_contrato_lint.py
 tests/test_casa_arvore.py
 tests/test_isolamento.py
 tests/test_contrato_acesso.py
 tests/test_contrato_acervo.py
 tests/test_contrato_organizacao.py
-tests/test_contrato_release_migrar.py
+tests/test_contrato_release_migrar.py | bin/release bin/_release/**
 tests/test_contrato_metrica_abertura.py
 tests/test_sessao_reidratar.py
 tests/test_contrato_acervo_topologia.py
@@ -60,8 +60,8 @@ tests/test_contrato_lint_acervo.py
 tests/test_contrato_casa_direto_em_main.py
 tests/test_contrato_canonico.py
 tests/test_longjob_identidade.py
-tests/test_portao_familia.py
-tests/test_release_stack_imagem.py
+tests/test_portao_familia.py | bin/teste lib/venv.sh
+tests/test_release_stack_imagem.py | bin/release bin/_release/**
 tests/test_bot.py
 # Raio (card #3370): `<arquivo> | <glob> <glob>...`, globs relativos a raiz do repositorio. O push e a
 # promocao rodam a linha quando o diff alcanca algum glob (ou o proprio arquivo); linha sem `|` roda
@@ -143,7 +143,7 @@ tests/test_metrica_investigar.py
 # defasados; os .sh entram pelos wrappers test_deploy_seg_suites.py, test_release_suites.py e
 # test_release_uv_porta_suite.py. Caminho a partir da raiz do repositório. O acervo tem lista própria
 # em testes/VERDES; tests/test_portao_cobre_testes.py reprova arquivo de testes/ sem lista.
-tests/test_portao_cobre_testes.py
+tests/test_portao_cobre_testes.py | testes/**
 testes/test_agente.py
 testes/test_agente_registro.py
 testes/test_bot_registro.py
