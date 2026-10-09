@@ -25,7 +25,7 @@ registrar = importlib.util.module_from_spec(spec)
 loader.exec_module(registrar)
 
 MOTOR = REPO_ROOT / "bin" / "motor"
-ATOS = ["listar", "ajuste", "buscar", "medir", "indexar", "trocar", "sortear", "lintar", "parear", "escrever"]
+ATOS = ["listar", "ajuste", "buscar", "medir", "indexar", "trocar", "sortear", "lintar", "parear", "escrever", "eleger"]
 # os 11 ids de acervo.ferramental_recurso (047): a FK reprova qualquer outro
 RECURSOS = {"acervo.obra", "acervo.casa", "acervo.registro", "acervo.*", "release", "repo", "rastreador", "malha",
             "motor", "arquivo-local", "nada"}
