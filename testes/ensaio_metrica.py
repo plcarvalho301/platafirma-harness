@@ -283,19 +283,45 @@ def test_cadeira_filtra_antes_de_classificar():
     assert len(giros) == 1 and giros[0]["cadeira"] == "fabrica"
 
 
-def test_casos_preserva_path_e_item():
-    """Card #3045 Passo 7: _RUIDO nao descarta path nem item em metrica casos."""
+def test_casos_nao_devolve_conteudo_e_diz_so_o_nome_das_chaves_que_ficaram_de_fora():
+    """Card #3355 (arq:0123 regra 15), no lugar do #3045 passo 7 (que preservava path e item): o contrato mudou de
+    proposito. Argumento, texto de erro, motivo, caminho, item e o resto do que a cadeira digitou saem so por
+    `metrica investigar <dia> --incidente <n>`. O giro falhado e a classe ficam; do que o log gravou ficam so os
+    campos que a porta declara (classe do erro de leitura, nome do verbo recusado), e o NOME das chaves omitidas."""
     linhas = [
-        reg("10:00:00.000", "read_file", erro="nao existe", path="/srv/platafirma/doc.md"),
-        reg("10:00:01.000", "run_command", evento="sem_verbo", motivo="sem verbo", item="run_command git status"),
+        reg("10:00:00.000", "read_file", erro="SEGREDO-ERRO", path="/srv/platafirma/SEGREDO.md", args="SEGREDO-ARGS",
+            classe_erro="caminho"),
+        reg("10:00:01.000", "run_command", evento="sem_verbo", motivo="SEGREDO-MOTIVO",
+            item="run_command SEGREDO-ITEM", verbo="grep"),
+        reg("10:00:02.000", "run_command", evento="sem_verbo", motivo="m", verbo="grep -r SEGREDO /etc"),
     ]
     giros, _, _ = classifica(linhas)
     c = m.casos(giros)
-    assert len(c["casos"]) == 2
+    assert len(c["casos"]) == 3
+    assert "SEGREDO" not in json.dumps(c, ensure_ascii=False)
     r_rf = next(x for x in c["casos"] if x["tool"] == "read_file")
-    assert r_rf.get("path") == "/srv/platafirma/doc.md"
-    r_rc = next(x for x in c["casos"] if x["tool"] == "run_command")
-    assert r_rc.get("item") == "run_command git status"
+    assert r_rf["classe_erro"] == "caminho" and not {"path", "erro", "args"} & set(r_rf)
+    r_rc = [x for x in c["casos"] if x["tool"] == "run_command"]
+    assert [x["verbo"] for x in r_rc] == ["grep", "(forma invalida)"], "o verbo recusado so sai na forma de nome"
+    assert not {"motivo", "item"} & set(r_rc[0])
+    assert c["chaves_omitidas"] == {"motivo": 2, "erro": 1, "path": 1, "args": 1, "item": 1}
+    assert c["agregado"]["recusados"] == {"grep": 1, "(forma invalida)": 1}
+
+
+def test_eventos_tipo_turno_sai_sem_o_texto_do_dono_e_so_com_o_tamanho():
+    """Card #3355: o turno aparece no stream, o texto fica no bruto."""
+    linhas = [
+        reg("10:00:00.000", "sessao", evento="turno", turno_id="T1", turno_fonte="hook",
+            texto="SEGREDO-TEXTO", texto_bytes=13),
+        reg("10:00:01.000", "acervo", "ler"),
+    ]
+    giros, _, cadeias = classifica(linhas)
+    turnos = m.stream_eventos(giros, cadeias, "turno")
+    assert [t["tipo"] for t in turnos] == ["turno"] and turnos[0]["texto_bytes"] == 13
+    assert turnos[0]["turno_id"] == "T1" and "texto" not in turnos[0]
+    assert "SEGREDO" not in json.dumps(turnos)
+    # sem --tipo, o stream de sempre: a linha de turno segue contando como giro e nao ganha entrada nova
+    assert [e["tipo"] for e in m.stream_eventos(giros, cadeias)] == ["giro", "giro"]
 
 
 # --- SINTETICO: filtro por sessao e azp, antes de truncar (#2856 linha 159) -------
