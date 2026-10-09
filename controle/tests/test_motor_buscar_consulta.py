@@ -1,10 +1,10 @@
-"""`motor rag buscar` monta a consulta (card #3360; spec motor-do-conhecimento §2b): a fiação do verbo.
+"""`motor rag buscar` monta a consulta (card #3360, #3364; spec motor-do-conhecimento §2b): a fiação do verbo.
 
 O verbo roda de verdade, como subprocesso, contra um rag-api falso em 127.0.0.1 (como test_motor_indexar.py).
 O log da porta (OPS_LOG_DIR) é escrito pelo `oplog.emitir` real; rotas-chapeu.json tem a forma do arquivo da
-abertura publicada. A lógica (lint, montagem, rótulos, pedido) está medida em test_motor_consulta.py; aqui se
+abertura publicada. A lógica (lint, montagem, rótulos) está medida em test_motor_consulta.py; aqui se
 prova o que o verbo manda à API, o que recusa antes de chamar e o que grava na linha de log da porta.
-O rag-api de verdade (validação, eco do envelope, os campos do evento) está em rag/tests/test_api_consulta.py.
+O envelope retornado à fita é protegido (#3364): devolve apenas necessidade e n_perguntas, sem eco de rótulos nem pedido.
 """
 from __future__ import annotations
 
@@ -44,8 +44,17 @@ class _API(BaseHTTPRequestHandler):
         self.pedidos.append(corpo)
         p = corpo["pergunta"]
         n = len(p) if isinstance(p, list) else 1
-        dado = json.dumps({"fontes": [], "cobertura": "fraca", "tempos_ms": {"total": 5.0, "n_perguntas": n},
-                           **({"consulta": corpo["consulta"]} if "consulta" in corpo else {})}).encode()
+        dado = json.dumps({
+            "fontes": [],
+            "cobertura": "fraca",
+            "tempos_ms": {"total": 5.0, "n_perguntas": n},
+            "perguntas": [corpo["consulta"]["necessidade"]] if "consulta" in corpo else (p if isinstance(p, list) else [p]),
+            **({"consulta": {
+                "necessidade": corpo["consulta"]["necessidade"],
+                "n_perguntas": n,
+                **({"lint": corpo["consulta"]["lint"]} if "lint" in corpo["consulta"] else {}),
+            }} if "consulta" in corpo else {}),
+        }).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(dado)))
@@ -95,98 +104,44 @@ def api(tmp_path):
     servidor.shutdown()
 
 
-def test_necessidade_monta_a_lista_de_tres_com_pedido_da_porta_e_rotulos(api):
+def test_necessidade_monta_a_lista_de_dois_com_rotulos_sem_eco_no_envelope(api):
     roda, pedidos, abertura, _ = api
     abertura()
     r = roda("buscar", "biblioteca", "--necessidade", NEC)
     assert r.returncode == 0, r.stderr
     corpo = pedidos[-1]
-    assert corpo["pergunta"] == [NEC, PEDIDO, NEC + " — " + ", ".join(ROTULOS[:8])]
+    assert corpo["pergunta"] == [NEC, NEC + ". Buscar também: " + ", ".join(ROTULOS[:8])]
     c = corpo["consulta"]
-    assert c["fonte_pedido"] == "porta" and c["pedido"] == PEDIDO and c["necessidade"] == NEC
-    assert c["chapeu"] == "engenharia-de-harness" and c["rotulos"] == ROTULOS[:8]
+    assert "pedido" not in c and "fonte_pedido" not in c
+    assert c["necessidade"] == NEC and c["chapeu"] == "engenharia-de-harness" and c["rotulos"] == ROTULOS[:8]
     assert c["perguntas"] == corpo["pergunta"] and "lint" not in c
     assert corpo["origem"] == "busca" and corpo["sessao_id"] == SESSAO
     envelope = json.loads(r.stdout)
-    assert envelope["tempos_ms"]["n_perguntas"] == 3 and envelope["consulta"]["fonte_pedido"] == "porta"
+    assert envelope["tempos_ms"]["n_perguntas"] == 2
+    assert envelope["perguntas"] == [NEC]
+    assert envelope["consulta"] == {"necessidade": NEC, "n_perguntas": 2}
+    # Teste de regressão (#3364): rótulos e pedido NUNCA voltam no envelope
+    assert PEDIDO not in r.stdout
+    assert "rotulos" not in envelope["consulta"]
+    assert "perguntas" not in envelope["consulta"]
 
 
-def test_sem_pf_chapeu_no_ambiente_o_chapeu_vem_da_abertura_no_log(api):
-    """Medido no ar em 08/10: no claude.ai a porta nao poe PF_CHAPEU no verbo e a lista saia com 2 itens."""
+def test_sem_chapeu_sai_apenas_necessidade(api):
     roda, pedidos, abertura, _ = api
-    abertura()
-    r = roda("buscar", "biblioteca", "--necessidade", NEC, ambiente={"PF_CHAPEU": ""})
-    assert r.returncode == 0, r.stderr
-    c = pedidos[-1]["consulta"]
-    assert c["chapeu"] == "engenharia-de-harness" and c["rotulos"] == ROTULOS[:8]
-    assert len(c["perguntas"]) == 3 and pedidos[-1]["pergunta"] == c["perguntas"]
-
-
-def test_sem_pf_chapeu_nem_pf_cadeira_a_cadeira_vem_de_uma_linha_do_log(api):
-    roda, pedidos, abertura, _ = api
-    abertura(cadeira="ia")
-    r = roda("buscar", "biblioteca", "--necessidade", NEC, ambiente={"PF_CHAPEU": "", "PF_CADEIRA": ""})
-    assert r.returncode == 0, r.stderr
-    c = pedidos[-1]["consulta"]
-    assert c["chapeu"] == "engenharia-de-harness" and c["rotulos"] == ROTULOS[:8] and len(c["perguntas"]) == 3
-
-
-def test_sem_cadeira_em_lugar_nenhum_o_chapeu_sai_mas_os_rotulos_nao(api):
-    roda, pedidos, abertura, _ = api
-    abertura()
-    r = roda("buscar", "biblioteca", "--necessidade", NEC, ambiente={"PF_CHAPEU": "", "PF_CADEIRA": ""})
-    assert r.returncode == 0, r.stderr
-    c = pedidos[-1]["consulta"]
-    assert c["chapeu"] == "engenharia-de-harness" and c["rotulos"] == [] and len(c["perguntas"]) == 2
-
-
-def test_pf_chapeu_do_ambiente_vence_o_do_log(api):
-    roda, pedidos, abertura, _ = api
-    abertura(chapeu="agente")
-    r = roda("buscar", "biblioteca", "--necessidade", NEC, ambiente={"PF_CHAPEU": "engenharia-de-harness"})
-    assert r.returncode == 0, r.stderr
-    assert pedidos[-1]["consulta"]["chapeu"] == "engenharia-de-harness"
-
-
-def test_sem_pedido_alcancavel_declara_ausente_e_segue_com_necessidade_e_chapeu(api):
-    roda, pedidos, _, _ = api
-    r = roda("buscar", "biblioteca", "--necessidade", NEC)
-    assert r.returncode == 0, r.stderr
-    c = pedidos[-1]["consulta"]
-    assert c["fonte_pedido"] == "ausente" and c["pedido"] is None and len(c["perguntas"]) == 2
-
-
-def test_sem_chapeu_sai_o_terceiro_item(api):
-    roda, pedidos, abertura, _ = api
-    abertura(chapeu="-")        # o roteador caiu em fallback: nem o ambiente nem a abertura tem chapeu
+    abertura(chapeu="-")        # o roteador caiu em fallback
     r = roda("buscar", "biblioteca", "--necessidade", NEC, ambiente={"PF_CHAPEU": "-"})
     assert r.returncode == 0, r.stderr
     c = pedidos[-1]["consulta"]
-    assert c["chapeu"] is None and c["rotulos"] == [] and c["perguntas"] == [NEC, PEDIDO]
+    assert c["chapeu"] is None and c["rotulos"] == [] and c["perguntas"] == [NEC]
+    assert pedidos[-1]["pergunta"] == NEC
 
 
-def test_so_a_necessidade_vai_como_string_como_antes(api):
+def test_flag_pedido_sai_2(api):
     roda, pedidos, _, _ = api
-    r = roda("buscar", "biblioteca", "--necessidade", NEC, ambiente={"PF_CHAPEU": "-"})
-    assert r.returncode == 0, r.stderr
-    assert pedidos[-1]["pergunta"] == NEC and pedidos[-1]["consulta"]["perguntas"] == [NEC]
-
-
-def test_pedido_da_flag_sobrepoe_o_da_porta(api):
-    roda, pedidos, abertura, _ = api
-    abertura("o pedido da porta")
-    r = roda("buscar", "biblioteca", "--necessidade", NEC, "--pedido", "o pedido da flag")
-    assert r.returncode == 0, r.stderr
-    c = pedidos[-1]["consulta"]
-    assert c["fonte_pedido"] == "flag" and c["pedido"] == "o pedido da flag"
-
-
-def test_pedido_e_cortado_em_600_caracteres(api):
-    roda, pedidos, abertura, _ = api
-    abertura("palavra " * 200)
-    r = roda("buscar", "biblioteca", "--necessidade", NEC)
-    assert r.returncode == 0, r.stderr
-    assert len(pedidos[-1]["consulta"]["pedido"]) <= 600
+    r = roda("buscar", "biblioteca", "--necessidade", NEC, "--pedido", "algo")
+    assert r.returncode == 2
+    assert "flag desconhecida '--pedido'" in r.stderr
+    assert pedidos == []
 
 
 def test_posicional_em_frase_passa_pelo_lint_e_vira_necessidade(api):
@@ -216,13 +171,12 @@ def test_saco_de_palavras_sai_2_sem_chamar_a_api(api):
     assert pedidos == []
 
 
-def test_necessidade_em_ingles_com_pedido_em_portugues_sai_2(api):
+def test_necessidade_em_ingles_passa_pelo_lint(api):
     roda, pedidos, abertura, _ = api
     abertura()
     r = roda("buscar", "biblioteca", "--necessidade", "what is the abstention floor of the Nemotron generation?")
-    assert r.returncode == 2
-    assert r.stderr.splitlines()[0] == "consulta recusada: língua diferente da do pedido"
-    assert pedidos == []
+    assert r.returncode == 0, r.stderr
+    assert pedidos[-1]["consulta"]["necessidade"] == "what is the abstention floor of the Nemotron generation?"
 
 
 def test_sem_lint_deixa_passar_e_grava_desligado(api):
@@ -250,7 +204,6 @@ def test_origem_literal_com_flag_de_montagem_sai_2(api):
     roda, pedidos, _, _ = api
     assert roda("buscar", "casa", "--origem", "abertura", "--necessidade", NEC).returncode == 2
     assert roda("buscar", "casa", "texto qualquer da abertura", "--origem", "bench", "--sem-lint").returncode == 2
-    assert roda("buscar", "casa", "texto qualquer da abertura", "--origem", "sombra", "--pedido", "x").returncode == 2
     assert pedidos == []
 
 
@@ -276,8 +229,7 @@ def test_o_evento_consulta_do_ops_grava_a_necessidade_com_a_lista_enviada(api):
     evento = [l for l in linhas() if l.get("evento") == "consulta"][-1]
     assert evento["query"] == NEC and evento["query_bytes"] == len(NEC.encode())
     assert evento["origem_consulta"] == "busca" and evento["particao"] == "biblioteca"
-    assert evento["montagem"] == {"fonte_pedido": "porta", "pedido_bytes": len(PEDIDO.encode()),
-                                  "n_rotulos": 8, "n_perguntas": 3, "lint": None}
+    assert evento["montagem"] == {"n_rotulos": 8, "n_perguntas": 2, "lint": None}
     assert PEDIDO not in json.dumps(evento, ensure_ascii=False), "o pedido não é copiado para a linha da consulta"
 
 

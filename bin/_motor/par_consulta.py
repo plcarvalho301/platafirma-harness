@@ -67,7 +67,7 @@ def consultas(pergunta_do_log: str, frase: str, rotulos) -> dict:
     """{braco: consulta enviada à API}. A lista de D só entra quando difere da frase sozinha: sem chapéu (sem
     rótulos) a lista montada é a própria frase, e D seria C com outro nome."""
     out = {"servido": pergunta_do_log, "frase": frase}
-    lista = consulta.montar(frase, None, rotulos)
+    lista = consulta.montar(frase, rotulos)
     if lista != [frase]:
         out["montada"] = lista
     return out
