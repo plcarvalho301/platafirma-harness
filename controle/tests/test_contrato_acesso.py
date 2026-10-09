@@ -358,3 +358,79 @@ def test_listar_registro_fora_do_ar_exit_3(tmp_path):
     r = run_acesso("listar", env=env)
     assert r.returncode == 3
     assert "registro fora do ar" in r.stderr
+
+
+# ==============================================================================
+# Card #3266: o sub do realm resolve como autor pela correlacao keycloak; o dono ja
+# nasce autorizado pela projecao do PAP, sem concessao gravada no banco
+# ==============================================================================
+SUB_DONO = "b6986be0-c5b6-4693-839f-73c90b79b25a"
+ID_DONO = "0b1e5c2a-7d3f-4a96-8c11-2f4d6a9e3b70"
+ID_OUTRO = "7c9d1e44-3a2b-4f58-9b60-1d8e5f2a6c03"
+ATO_ALVO = "2121d9e3-6fed-4890-ac39-e9638f1a4a90"
+FUNDAMENTO = "credencial fossil de teste, card #3266"
+
+
+def _docker_do_registro(tmp_path, resolve_devolve):
+    """Dobre do registro. A resolucao de identidade (a consulta que cita a correlacao
+    externa) devolve `resolve_devolve`, de 0 a N linhas; o resto responde o minimo que
+    `revogar` pede. Cada chamada vai a `chamadas.log` (argumentos e SQL), para o teste
+    provar QUEM foi gravado como autor, e que nada foi gravado quando nao devia."""
+    log = tmp_path / "chamadas.log"
+    corpo = (
+        'sql="$(cat)"\n'
+        f'printf \'%s\\n%s\\n---\\n\' "$*" "$sql" >> "{log}"\n'
+        'case "$sql" in\n'
+        f"  *correlacao_externa*) printf '%s' '{resolve_devolve}' ;;\n"
+        '  *"select count(*) from concessao.ato"*) echo 1 ;;\n'
+        '  *"insert into concessao.ato"*) echo "ato-novo | revogacao" ;;\n'
+        'esac\n'
+    )
+    env = _docker_de_fixture(tmp_path, corpo)
+    env["PF_SUJEITO"] = SUB_DONO
+    return env, log
+
+
+def test_revogar_autor_pelo_sub_do_realm_grava_a_identidade_da_pessoa(tmp_path):
+    env, log = _docker_do_registro(tmp_path, ID_DONO)
+    r = run_acesso("revogar", ATO_ALVO, "--fundamento", FUNDAMENTO, env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    chamadas = log.read_text()
+    assert f"k={SUB_DONO}" in chamadas
+    assert f"p={ID_DONO}" in chamadas          # registrado_por e a identidade da pessoa
+    assert f"p={SUB_DONO}" not in chamadas     # nunca o sub cru
+
+
+def test_resolucao_pelo_sub_so_aceita_correlacao_keycloak_vigente_de_pessoa(tmp_path):
+    env, log = _docker_do_registro(tmp_path, ID_DONO)
+    run_acesso("revogar", ATO_ALVO, "--fundamento", FUNDAMENTO, env=env)
+    sql = log.read_text()
+    for restricao in ("c.fonte = 'keycloak'", "c.grao_externo = 'conta'",
+                      "i.natureza = 'pessoa'", "c.vigencia_fim is null"):
+        assert restricao in sql, restricao
+
+
+def test_revogar_sub_sem_correlacao_exit_5_nomeia_a_cura_e_nao_grava(tmp_path):
+    env, log = _docker_do_registro(tmp_path, "")
+    r = run_acesso("revogar", ATO_ALVO, "--fundamento", FUNDAMENTO, env=env)
+    assert r.returncode == 5
+    assert "correlação keycloak" in r.stderr
+    assert "insert into concessao.ato" not in log.read_text()
+
+
+def test_revogar_chave_ambigua_exit_5_e_nao_grava(tmp_path):
+    env, log = _docker_do_registro(tmp_path, f"{ID_DONO}\n{ID_OUTRO}")
+    r = run_acesso("revogar", ATO_ALVO, "--fundamento", FUNDAMENTO, env=env)
+    assert r.returncode == 5
+    assert "ambígua" in r.stderr
+    assert "insert into concessao.ato" not in log.read_text()
+
+
+def test_decidir_dono_pelo_sub_do_realm_permitido_sem_concessao_no_banco():
+    """O dono e autorizado pela projecao do PAP (chave `sub`), nao por linha em
+    `concessao.*`: `decidir` nao toca banco. E o estado que o card #3266 fecha: tirar as
+    concessoes fosseis nao muda a decisao do dono."""
+    r = run_acesso("decidir", "sessao_abrir", "sessao:seguranca", "--sujeito", SUB_DONO)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "PERMITIDO" in r.stdout
+    assert "regra=operador-plataforma" in r.stdout
