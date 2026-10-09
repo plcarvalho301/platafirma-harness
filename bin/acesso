@@ -47,17 +47,30 @@ psql_() {
   printf '%s\n' "$out"
 }
 
-# Resolve contracao (G48UFN) ou uuid para o uuid interno. Chave entra por -v.
+# Resolve contracao (G48UFN), uuid ou o sub do realm (pela correlacao keycloak vigente de uma
+# pessoa, seg:0006) para o uuid interno. Chave entra por -v.
 resolve() {
   local chave="$1" papel="$2" id
   id="$(psql_ -tAq -v k="$chave" <<'SQL'
-select id from identidade.identidade where id::text = :'k' or contracao = upper(:'k');
+select id from identidade.identidade where id::text = :'k' or contracao = upper(:'k')
+union
+select i.id from identidade.correlacao_externa c
+  join identidade.identidade i on i.id = c.identidade_id
+ where c.fonte = 'keycloak' and c.grao_externo = 'conta'
+   and c.id_externo = :'k' and i.natureza = 'pessoa'
+   and (c.vigencia_fim is null or c.vigencia_fim > now());
 SQL
 )" || exit 3
+  # Mais de uma identidade para a mesma chave nao se resolve por palpite: o resultado
+  # vira autor ou alvo de ato de estado.
+  if [ "$(printf '%s\n' "$id" | sed '/^[[:space:]]*$/d' | wc -l)" -gt 1 ]; then
+    printf 'acesso: chave ambígua: %s casa mais de uma identidade\n' "$chave" >&2
+    exit 5
+  fi
   id="$(printf '%s' "$id" | tr -d '[:space:]')"
   if [ -z "$id" ]; then
     if [ "$papel" = "autor" ]; then
-      printf "acesso: faltou: autor (chave de sujeito: PF_SUJEITO '%s' não casa identidade — Aberto da spec_acesso: alinhamento sub do realm x identidade.identidade)\n" "$chave" >&2
+      printf "acesso: faltou: autor (chave de sujeito: PF_SUJEITO '%s' não casa identidade nem correlação keycloak vigente de pessoa; a cura é a correlação do sub em identidade.correlacao_externa, seg:0006)\n" "$chave" >&2
       exit 5
     else
       printf "acesso: sujeito não encontrado: %s\n" "$chave" >&2
@@ -83,7 +96,7 @@ uso:
   acesso orfaos      [--json]
 
 nota sobre --sujeito: aceita sub (UUID) ou username, exatamente como chaveado em sujeitos.yaml — a mesma chave que o PEP da porta usa
-nota sobre autor: em conceder/revogar, o autor é PF_SUJEITO do ambiente (--por é deprecado)
+nota sobre autor: em conceder/revogar, o autor é PF_SUJEITO do ambiente (--por é deprecado); o sub do realm resolve pela correlação keycloak vigente de pessoa em identidade.correlacao_externa
 
 exemplos:
   acesso decidir sessao_abrir sessao:fabrica
