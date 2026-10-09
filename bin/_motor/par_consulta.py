@@ -14,6 +14,12 @@ vê a FRASE como pergunta nos três: assim o que difere entre as respostas é s�
 julga as respostas na mesma tela, com o mesmo critério (v1). Ao lado, o que ele já julgou do piloto, para não
 depender da memória.
 
+Com `--do-log` (card #3378) a população não é o piloto: são as chamadas do log com eleito, e os braços são dois, na mesma
+geração e com o mesmo escritor:
+
+  C  `frase`   a busca de hoje: a necessidade do evento, sem chapéu
+  E  `eleito`  a mesma necessidade com o chapéu do evento e `eleicao_chapeu: true` no corpo, só na requisição
+
 Só a lógica mora aqui; a busca, o ollama e o contêiner entram por `bin/motor`.
 """
 from __future__ import annotations
@@ -27,8 +33,14 @@ import consulta
 import escritor
 
 BRACOS_DO_PAR = ("servido", "frase", "montada")
-LETRA = {"servido": "A", "frase": "C", "montada": "D"}
+LETRA = {"servido": "A", "frase": "C", "montada": "D", "eleito": "E"}
 NOME = {"servido": "a chamada de hoje", "frase": "a sua frase", "montada": "a lista montada"}
+
+# `parear --do-log` (card #3378): a população são as chamadas do log com eleito; dois braços, mesma geração, mesmo k e
+# mesmo escritor. C é a busca de hoje (a necessidade, sem chapéu); E é a mesma necessidade com o chapéu e
+# `eleicao_chapeu: true` no corpo, só na requisição.
+BRACOS_DO_LOG = ("frase", "eleito")
+NOME_LOG = {"frase": "a busca de hoje (a necessidade, sem chapéu)", "eleito": "a busca com o eleito do chapéu"}
 
 
 # --- entrada: as frases do dono ------------------------------------------------------------------------
@@ -78,6 +90,23 @@ def jaccard_dos_bracos(recuperado: dict) -> dict:
     a = recuperado.get("servido") or []
     return {LETRA[b] + "xA": round(escritor.jaccard(recuperado[b], a), 3)
             for b in ("frase", "montada") if b in recuperado}
+
+
+def consultas_do_log(necessidade: str, cadeira: str, chapeu: str, rotulos) -> dict:
+    """{braco: {"pergunta", "corpo"}} do `parear --do-log` (card #3378). `pergunta` é a necessidade do evento nos dois
+    braços; `corpo` é o que se soma ao corpo da requisição. O braço `frase` não manda `chapeu` nem `eleicao_chapeu` (a busca
+    de hoje); o `eleito` manda o chapéu {cadeira, chapeu, rotulos} e `eleicao_chapeu: true`, só nesta requisição."""
+    return {"frase": {"pergunta": necessidade, "corpo": {}},
+            "eleito": {"pergunta": necessidade,
+                       "corpo": {"chapeu": {"cadeira": cadeira, "chapeu": chapeu, "rotulos": list(rotulos)},
+                                 "eleicao_chapeu": True}}}
+
+
+def jaccard_eleito(recuperado: dict) -> dict:
+    """Jaccard do top-8 do eleito (E) contra a busca de hoje (C); {} se falta um dos dois braços."""
+    if "eleito" in recuperado and "frase" in recuperado:
+        return {"ExC": round(escritor.jaccard(recuperado["eleito"], recuperado["frase"]), 3)}
+    return {}
 
 
 # --- o que o dono já julgou ----------------------------------------------------------------------------
@@ -200,6 +229,31 @@ def blocos_markdown(itens: list) -> str:
         for b in BRACOS_DO_PAR:
             if b in it["recuperado"]:
                 out.append(f"**{LETRA[b]} — {NOME[b]}**")
+                out += [f"{n}. {s['titulo'][:110]}" for n, s in enumerate(it["recuperado"][b], 1)] or ["(nenhuma seção)"]
+                out.append("")
+    return "\n".join(out)
+
+
+# --- o que o dono lê, sobre as chamadas do log (card #3378) ---------------------------------------------------
+
+def linha_da_tabela_log(i: int, pid: str, necessidade: str, cadeira: str, chapeu: str, jacc: dict) -> str:
+    return f"| {i} | {pid} | {necessidade[:60]} | {cadeira}/{chapeu} | {jacc.get('ExC', '-')} |"
+
+
+def tabela_log(linhas: list) -> str:
+    return "\n".join(["| # | evento | necessidade | cadeira/chapéu | Jaccard E×C |", "|---|---|---|---|---|", *linhas])
+
+
+def blocos_markdown_log(itens: list) -> str:
+    """Um bloco por chamada do log: a necessidade, o evento, o Jaccard do top-8 E×C e os títulos de cada braço.
+    `itens`: [{id, frase, cadeira, chapeu, recuperado, jaccard}]."""
+    out = []
+    for i, it in enumerate(itens, 1):
+        out += [f"### {i}. {it['frase']}", "", f"- evento do log: `{it['id']}` · {it['cadeira']}/{it['chapeu']}",
+                "- Jaccard do top-8, E contra C: " + (", ".join(f"{k} {v}" for k, v in it["jaccard"].items()) or "-"), ""]
+        for b in BRACOS_DO_LOG:
+            if b in it["recuperado"]:
+                out.append(f"**{LETRA[b]} — {NOME_LOG[b]}**")
                 out += [f"{n}. {s['titulo'][:110]}" for n, s in enumerate(it["recuperado"][b], 1)] or ["(nenhuma seção)"]
                 out.append("")
     return "\n".join(out)

@@ -351,6 +351,17 @@
     "sobe": "a resposta leva um bloco lateral com os conceitos vizinhos e o motivo lavrado de cada aresta (com o que se faz, o que precisa vir antes, o que costuma dar errado, como se mede, quanto custa)",
     "custa": "uma consulta indexada por conceito e mais campo no corpo da resposta. NAO entra no ranking, nao desloca candidato e nao paga revisor — o risco e de ruido na leitura, nao de recuperacao",
     "medir": "nao se mede por hit@k: nao toca no ranking. Mede-se por uso — quantas vezes o vizinho oferecido virou a pergunta seguinte"
+   },
+   {
+    "slug": "eleicao-chapeu",
+    "var": "ELEICAO_CHAPEU",
+    "fase": "7 recuperacao",
+    "onde": "compose",
+    "faixa": "true ou false",
+    "codigo": "false",
+    "sobe": "a consulta que traz chapeu passa a usar o conceito que a ontologia elege dentro do chapeu da cadeira, alem da frase. Vale para as duas particoes (biblioteca e casa): o ajuste do compose e do processo, nao de uma geracao",
+    "custa": "muda o ranking de toda chamada que traz chapeu, entao qualquer baseline anterior deixa de comparar. Chamada sem chapeu, ou cujo chapeu nao casa com a frase, volta como antes. Ajuste so da biblioteca seria o da geracao, que e outra coisa. A requisicao pode forcar o valor por chamada com `eleicao_chapeu` no corpo (#3366): e assim que o `parear --do-log` mede sem ligar",
+    "medir": "motor rag parear biblioteca --do-log: o Jaccard do top-8 do eleito contra a busca de hoje e os pares que o dono le, sobre as chamadas do log com eleito. Ligar vem depois dos cinco pares, pela regra escrita no #3359 antes da rodada"
    }
   ],
   "nao_e_ajuste": {
