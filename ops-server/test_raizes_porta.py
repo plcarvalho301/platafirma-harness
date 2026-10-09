@@ -175,6 +175,26 @@ def test_write_file_na_bancada_worktree_e_bin(bancada, sem_pep):
     assert fora.get("recusado") and "fora de morada" in fora["motivo"]
 
 
+def test_write_file_hook_no_hooks_do_harness_sem_extensao_com_shebang(bancada, sem_pep):
+    """#3376: hooks/<nome> do harness e morada de hook como bin/ e de verbo: sem extensao,
+    com shebang, executavel. Fora do harness, ou fora de bin/ e hooks/, segue recusado."""
+    sem = s.write_file(path="platafirma-harness/hooks/pre-push", content="echo\n")
+    assert sem.get("recusado") and "shebang" in sem["motivo"]
+    ok = s.write_file(path="platafirma-harness/hooks/pre-push", content="#!/usr/bin/env bash\nexit 0\n")
+    assert ok.get("ok"), ok
+    assert os.access(bancada / "platafirma-harness/hooks/pre-push", os.X_OK)
+    # reescrever mantem o modo
+    de_novo = s.write_file(path="platafirma-harness/hooks/pre-push", content="#!/usr/bin/env bash\nexit 1\n")
+    assert de_novo.get("ok"), de_novo
+    assert os.access(bancada / "platafirma-harness/hooks/pre-push", os.X_OK)
+    # hooks/ de outro repositorio nao e morada de hook
+    outro = s.write_file(path="platafirma-core/hooks/pre-push", content="#!/bin/sh\nexit 0\n")
+    assert outro.get("recusado") and "tipo" in outro["motivo"], outro
+    # outro diretorio do harness segue recusado
+    scripts = s.write_file(path="platafirma-harness/scripts/x", content="#!/bin/sh\nexit 0\n")
+    assert scripts.get("recusado") and "tipo" in scripts["motivo"], scripts
+
+
 def test_write_file_verbo_no_bin_da_bancada_por_cadeira_e_card(bancada, sem_pep):
     """card:3149 passo 3: a bancada e wt/platafirma-harness/<cadeira>/<card>/; o bin/ dela e
     morada de verbo como o do worktree plano (medido em 26/09: a porta recusava)."""
