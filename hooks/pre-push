@@ -86,16 +86,23 @@ fi
 # A REV A JULGAR vem do stdin do hook: "<local_ref> <local_oid> <remote_ref> <remote_oid>".
 # TODA linha e uma ref empurrada (A4). local_oid todo-zero e delecao de ref: nao ha
 # arvore a medir. stdin vazio (invocacao a mao) cai no HEAD.
-REFS=()
-while read -r _ local_oid _ _; do
+# card #3370: a BASE de cada ref e o remote_oid (o que o servidor ja tem); ref nova (remote_oid
+# todo-zero) mede contra origin/main. O teste roda so o que o diff da base alcanca; base que
+# nao resolve, ou chamada a mao sem stdin, roda a lista inteira.
+REFS=(); BASES=()
+while read -r _ local_oid _ remote_oid; do
   case "$local_oid" in
     ''|*[!0-9a-f]*) continue ;;
     0000000000000000000000000000000000000000) continue ;;
   esac
-  REFS+=("$local_oid")
+  case "$remote_oid" in
+    0000000000000000000000000000000000000000) remote_oid="origin/main" ;;
+    *[!0-9a-f]*) remote_oid="" ;;
+  esac
+  REFS+=("$local_oid"); BASES+=("${remote_oid:-}")
 done
 if [ "${#REFS[@]}" -eq 0 ]; then
-  h="$(git rev-parse --verify HEAD 2>/dev/null)" && [ -n "$h" ] && REFS+=("$h")
+  h="$(git rev-parse --verify HEAD 2>/dev/null)" && [ -n "$h" ] && { REFS+=("$h"); BASES+=(""); }
 fi
 [ "${#REFS[@]}" -gt 0 ] || exit 0
 
@@ -113,8 +120,8 @@ trap limpa EXIT
 
 # Mede UMA rev: 0 verde (ou reaproveitado verde), 1 vermelho real (barra o push),
 # 3 não medido (ambiente/coleta/timeout/lista — avisa e deixa passar, nunca barra).
-medir_rev() {  # $1=rev
-  local rev="$1"
+medir_rev() {  # $1=rev $2=base (vazio: lista inteira)
+  local rev="$1" base="${2:-}"
   local arvore="$TMP/arvore-${rev:0:12}" log="$TMP/git-${rev:0:12}.txt"
 
   if ! git worktree add --detach --no-checkout "$arvore" "$rev" >"$log" 2>&1; then
@@ -131,7 +138,7 @@ medir_rev() {  # $1=rev
   local venvs; venvs="$(venvs_de "$arvore")"
   local teste_bin="$AQUI/../bin/teste"
   local saida="$TMP/teste-${rev:0:12}.txt" rc_teste=0
-  PLATAFIRMA_VENVS="$venvs" "$teste_bin" rodar "$REPO" --portao --arvore "$arvore" >"$saida" 2>&1 || rc_teste=$?
+  PLATAFIRMA_VENVS="$venvs" "$teste_bin" rodar "$REPO" --portao --arvore "$arvore" ${base:+--base "$base"} >"$saida" 2>&1 || rc_teste=$?
 
   local chaves_id
   chaves_id="$(grep -oE 'chave [A-Za-z0-9._-]+-[0-9a-f]{12}' "$saida" | sed 's/^chave //' | sort -u | tr '\n' ' ')"
@@ -171,9 +178,10 @@ medir_rev() {  # $1=rev
 }
 
 FALHOU=0
-for rev in "${REFS[@]}"; do
+for i in "${!REFS[@]}"; do
+  rev="${REFS[$i]}"
   rc=0
-  medir_rev "$rev" || rc=$?
+  medir_rev "$rev" "${BASES[$i]}" || rc=$?
   [ "$rc" -eq 1 ] && FALHOU=1
 done
 

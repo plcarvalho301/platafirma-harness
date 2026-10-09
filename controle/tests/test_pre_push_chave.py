@@ -160,6 +160,31 @@ def test_push_vermelho_reaproveita_o_bloqueio(amb):
     assert "veredito reaproveitado" in r2.stderr
 
 
+TESTE_LE_DADO = ("from pathlib import Path\n"
+                "def test_dado():\n"
+                "    ruim = Path(__file__).resolve().parents[2] / 'dados' / 'valor.txt'\n"
+                "    assert ruim.read_text().strip() == 'ok'\n")
+
+def test_push_mede_so_o_que_o_diff_da_base_alcanca(amb):
+    """Card #3370: o hook passa a base (o remote_oid) ao teste. Teste com raio declarado fora
+    do diff fica de fora; o mesmo teste entra quando o diff o alcanca. Mudar a lista e raio
+    total: o primeiro push roda tudo."""
+    amb.commit("dados/valor.txt", "ok\n")
+    amb.commit("controle/tests/test_dado.py", TESTE_LE_DADO)
+    amb.commit("controle/tests/VERDES", "tests/test_fixture.py\ntests/test_dado.py | src/**\n")
+    r = amb.push()
+    assert r.returncode == 0, r.stdout + r.stderr
+
+    amb.commit("dados/valor.txt", "ruim\n")   # o teste quebraria, mas o diff nao alcanca o raio dele
+    r = amb.push()
+    assert r.returncode == 0, r.stdout + r.stderr
+
+    amb.commit("src/x.txt", "x\n")             # agora o diff alcanca: o teste roda e reprova
+    r = amb.push()
+    assert r.returncode != 0, r.stdout + r.stderr
+    assert "BASELINE VERDE QUEBROU" in r.stderr
+    assert "test_dado::test_dado" in r.stderr
+
 def test_chave_ausente_nao_medido_deixa_passar(amb):
     (amb.wt / "venvs.json").write_text("{}", encoding="utf-8")
     amb.commit("venvs.json", "{}")
