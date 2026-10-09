@@ -4,9 +4,9 @@
 # dono: ia
 # componente: platafirma-motor
 # classe: B
-# use para: achar pelo sentido o trecho que responde a X (buscar <particao> --necessidade "<uma frase: o que voce precisa saber>"; o verbo monta a consulta com a necessidade e os rotulos do chapeu e recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou | ou vem em saco de palavras; --origem abertura|bench|sombra|autoteste manda o texto literal, sem lint e sem montagem; `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), medir sem gravar quanto do log o lint da consulta montada recusaria (lintar), comparar a chamada de hoje, a frase do dono e a lista montada nas perguntas do piloto (parear biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste)
-# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote)
-# (buscar/medir/indexar/trocar/sortear/escrever/parear exigem particao; lintar le o log inteiro e nao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar), eventos, juiz)
+# use para: achar pelo sentido o trecho que responde a X (buscar <particao> --necessidade "<uma frase que nomeia o assunto pelo termo do acervo>"; o verbo manda a pergunta com a necessidade e, com PF_CHAPEU, o chapeu com cadeira, chapeu e rotulos dele; recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou | ou vem em saco de palavras; --origem abertura|bench|sombra|autoteste manda o texto literal, sem lint e sem montagem; `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), medir sem gravar a eleicao de chapeu sobre o log de perguntas (eleger), medir sem gravar quanto do log o lint da consulta montada recusaria (lintar), comparar a chamada de hoje, a frase do dono e a lista montada nas perguntas do piloto (parear biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste)
+# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote), eleger (leitura, medida)
+# (buscar/medir/indexar/trocar/sortear/escrever/parear exigem particao; eleger e lintar leem o log inteiro e nao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar), eventos, juiz)
 # forma: json
 # cauda: nao
 # poda: cosmetica@rag,casa,buscar
@@ -22,6 +22,7 @@
 # le: lintar=motor
 # le: parear=motor,arquivo-local
 # le: escrever=motor,arquivo-local
+# le: eleger=motor
 # escreve: listar=nada
 # escreve: ajuste=arquivo-local
 # escreve: buscar=arquivo-local
@@ -32,6 +33,7 @@
 # escreve: lintar=nada
 # escreve: parear=motor,arquivo-local
 # escreve: escrever=motor,arquivo-local
+# escreve: eleger=nada
 # (recursos pelo enum de ferramental_recurso. Onde: o evento consulta em $PLATAFIRMA_INSTANCIA/var/log/ops/*.jsonl, best-effort;
 #  o env da ingestao na instancia, arquivo NOME-valor ou $PLATAFIRMA_INSTANCIA/segredos/<stack>/<VAR> (ajuste de corte, via
 #  motor-instancias.json); $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml (ajuste de container);
@@ -162,12 +164,14 @@ def uso(cod=2):
   motor <inst> ajuste                    todos os ajustes, com o valor de hoje
   motor <inst> ajuste <slug>             o que esse ajuste troca por que
   motor <inst> ajuste <slug> <valor>     mexe, promove e confere o servido
-  motor <inst> buscar <particao> --necessidade "<uma frase: o que voce precisa saber para o proximo ato>"
+  motor <inst> buscar <particao> --necessidade "<uma frase que nomeia o assunto pelo termo do acervo>"
                      [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>] [--ordem-id <id>] [--geracao <id|gN>]
-                                        a necessidade e UMA frase legivel, um assunto por chamada (pt ou en); o verbo
-                                        monta a consulta com ela e os rotulos do chapeu, e recusa com exit 2, causa e
-                                        jeito certo o que junta assuntos com ; ou | ou vem em saco de palavras-chave.
-                                        Dois assuntos = duas chamadas no mesmo lote. O texto posicional passa pelo mesmo lint.
+                                        a necessidade e UMA frase legivel que nomeia o assunto pelo termo do
+                                        acervo, um assunto por chamada (pt ou en); o verbo manda a pergunta com
+                                        ela e, com PF_CHAPEU, o chapeu com cadeira, chapeu e rotulos dele;
+                                        recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou |
+                                        ou vem em saco de palavras-chave. Dois assuntos = duas chamadas no mesmo
+                                        lote. O texto posicional passa pelo mesmo lint.
                      [--origem abertura|bench|sombra|autoteste]   so a abertura e os atos de medida: texto literal,
                                         sem lint nem montagem (spec motor-do-conhecimento §2b)
   motor <inst> medir  <particao> [--k N] [--rerank] [--veredito] [--rotulo <nome>] [--gabarito <arq>]
@@ -223,6 +227,10 @@ def uso(cod=2):
                                         so leitura: o lint da consulta montada (spec motor §2b) sobre o log de
                                         perguntas, por origem e por causa, e as 20 do piloto da escada uma a uma;
                                         diz quanto o piso de palavras funcionais pegaria, sem recusar nada
+  motor <inst> eleger [--desde <data>] [--json]
+                                        so leitura: le acervo.evento_recuperacao (necessidade e chapeu nao nulos),
+                                        manda em lote a rota /eleger e imprime, por cadeira e chapeu: total,
+                                        frase_sem_conceito, chapeu_sem_casamento
   motor <inst> escrever biblioteca --versao <gabarito_versao_id> --criterio-versao <v> --saida <envelope.json> [--lote-id <id>]
                      [--lista <arquivo.jsonl>] [--recusar <id>,<id>] [--perguntas N] [--tempo S] [--ativar]
                      [--terceiro-braco auto|revisor|expansao] [--plano]
@@ -911,7 +919,7 @@ def _monta_consulta(texto, sem_lint):
     return consulta.consulta(texto, chapeu, rotulos, lint_desligado=sem_lint)
 
 def cmd_buscar(nome_inst, inst, argv):
-    uso = ('motor <inst> buscar <particao> --necessidade "<uma frase: o que voce precisa saber para o proximo ato>" '
+    uso = ('motor <inst> buscar <particao> --necessidade "<uma frase que nomeia o assunto pelo termo do acervo>" '
            '[--sem-lint] [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>] '
            '[--ordem-id <id>] [--geracao <id|gN>] [--origem ' + "|".join(ORIGENS) + ']\n'
            '  posicional: motor <inst> buscar <particao> "<frase>" passa pelo mesmo lint; '
@@ -1005,7 +1013,13 @@ def cmd_buscar(nome_inst, inst, argv):
     else:
         bloco = _monta_consulta(pergunta, sem_lint)
         corpo["pergunta"] = bloco["perguntas"][0] if len(bloco["perguntas"]) == 1 else bloco["perguntas"]
+        corpo["perguntas"] = bloco["perguntas"]
         corpo["consulta"] = bloco
+        chapeu = consulta.chapeu_vestido()
+        if chapeu:
+            cadeira = (os.environ.get("PF_CADEIRA") or "").strip()
+            rotulos = list(consulta.rotulos_do_chapeu(cadeira, chapeu))
+            corpo["chapeu"] = {"cadeira": cadeira, "chapeu": chapeu, "rotulos": rotulos}
     # Sessao e fita vao no corpo (#3314): o rag-api le PF_SESSAO do proprio conteiner, que nao
     # e o do cliente, e o evento saia sem sessao_id.
     sessao = os.environ.get("PF_SESSAO", "").strip()
@@ -2338,6 +2352,142 @@ def cmd_lintar(inst, argv):
               f"necessidade={e['necessidade']!r} pedido={e['pedido']!r}")
 
 
+def _chama_eleger(inst, tok, corpo):
+    """POST na rota /eleger do rag-api (#3362, #3368)."""
+    base = inst.get("eleger") or urllib.parse.urljoin(inst["endpoint"], "/eleger")
+    req = urllib.request.Request(
+        base, data=json.dumps(corpo).encode("utf-8"),
+        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except (urllib.error.HTTPError, urllib.error.URLError) as e:
+        _trata_erro_http(e, "motor eleger")
+
+
+def cmd_eleger(nome_inst, inst, argv):
+    """`eleger`: medicao so leitura da eleicao de chapeu sobre o log de perguntas (card #3368).
+
+    Le acervo.evento_recuperacao (necessidade e chapeu nao nulos), manda em lote a rota /eleger
+    do rag-api e imprime por cadeira e chapeu: total, frase_sem_conceito, chapeu_sem_casamento.
+    Nao grava nada, nao altera a busca."""
+    desde = ""
+    como_json = False
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--json":
+            como_json = True
+            i += 1
+            continue
+        if a == "--desde":
+            if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+                print("eleger: --desde exige um valor.\n  motor <inst> eleger [--desde <data>] [--json]", file=sys.stderr)
+                sys.exit(2)
+            desde = argv[i + 1]
+            i += 2
+            continue
+        print(f"eleger: argumento desconhecido {a!r}.\n  motor <inst> eleger [--desde <data>] [--json]", file=sys.stderr)
+        sys.exit(2)
+
+    b, bancos = inst.get("banco") or {}, inst.get("bancos") or {}
+    if not b or "sessao" not in bancos:
+        print("motor eleger: a instancia nao declara banco e bancos.sessao em motor-instancias.json", file=sys.stderr)
+        sys.exit(1)
+
+    eventos = _psql_json(b, (
+        "SELECT coalesce(json_agg(t ORDER BY t.criado_em, t.id), '[]'::json) FROM ("
+        "SELECT e.id::text AS id, e.sessao_id::text AS sessao_id, e.criado_em::text AS criado_em, "
+        "e.necessidade, e.chapeu "
+        "FROM acervo.evento_recuperacao e "
+        "WHERE e.disparou AND e.necessidade IS NOT NULL AND e.necessidade != '' "
+        "AND e.chapeu IS NOT NULL AND e.chapeu != '' AND e.chapeu != '-') t"))
+
+    if desde:
+        eventos = [e for e in eventos if (e.get("criado_em") or "") >= desde]
+
+    ids = sorted({e["sessao_id"] for e in eventos if e.get("sessao_id") and _UUID.match(e["sessao_id"])})
+    cadeiras = {}
+    if ids:
+        linhas = _psql_json(bancos["sessao"], (
+            "SELECT coalesce(json_agg(json_build_object('sessao_id', sessao_id::text, 'cadeira', cadeira)), '[]'::json) "
+            "FROM sessao.sessao WHERE sessao_id::text IN (" + ",".join(_lit(x) for x in ids) + ")"))
+        cadeiras = {x["sessao_id"]: x["cadeira"] for x in (linhas or [])}
+
+    pares = []
+    itens = []
+    for e in eventos:
+        cad = cadeiras.get(e.get("sessao_id")) or "-"
+        chap = e.get("chapeu") or "-"
+        rotulos = list(consulta.rotulos_do_chapeu(cad, chap))
+        pares.append((cad, chap))
+        itens.append({"necessidade": e["necessidade"], "rotulos": rotulos})
+
+    resultados = []
+    if itens:
+        tok = token_da(inst)
+        chunk_size = 100
+        for idx in range(0, len(itens), chunk_size):
+            resp = _chama_eleger(inst, tok, {"itens": itens[idx:idx + chunk_size]})
+            resultados.extend((resp or {}).get("itens") or [])
+
+    contagem = {}
+    for (cad, chap), res in zip(pares, resultados):
+        chave = (cad, chap)
+        if chave not in contagem:
+            contagem[chave] = {
+                "cadeira": cad,
+                "chapeu": chap,
+                "total": 0,
+                "frase_sem_conceito": 0,
+                "chapeu_sem_casamento": 0,
+                "eleito": 0,
+            }
+        d = contagem[chave]
+        d["total"] += 1
+        sinais = res.get("sinais") or []
+        if "frase_sem_conceito" in sinais:
+            d["frase_sem_conceito"] += 1
+        if "chapeu_sem_casamento" in sinais:
+            d["chapeu_sem_casamento"] += 1
+        if res.get("eleito_do_chapeu"):
+            d["eleito"] += 1
+
+    linhas = [contagem[k] for k in sorted(contagem.keys())]
+    total_eventos = len(eventos)
+    total_sem_conceito = sum(l["frase_sem_conceito"] for l in linhas)
+    total_sem_casamento = sum(l["chapeu_sem_casamento"] for l in linhas)
+    total_eleito = sum(l["eleito"] for l in linhas)
+
+    if como_json:
+        saida = {
+            "desde": desde or None,
+            "eventos": total_eventos,
+            "tabela": linhas,
+            "por_cadeira_chapeu": {f"{l['cadeira']}/{l['chapeu']}": l for l in linhas},
+            "totais": {
+                "total": total_eventos,
+                "frase_sem_conceito": total_sem_conceito,
+                "chapeu_sem_casamento": total_sem_casamento,
+                "eleito": total_eleito,
+            },
+        }
+        print(json.dumps(saida, ensure_ascii=False, indent=1))
+        return
+
+    info_desde = f" desde {desde}" if desde else ""
+    print(f"eleicao de chapeu sobre {total_eventos} eventos do log{info_desde} (necessidade e chapeu nao nulos)")
+    if not linhas:
+        print("  nenhum evento encontrado")
+        return
+    larg_cad = max(max(len(l["cadeira"]) for l in linhas), len("cadeira"))
+    larg_chap = max(max(len(l["chapeu"]) for l in linhas), len("chapeu"))
+    print(f"  {'cadeira':<{larg_cad}}  {'chapeu':<{larg_chap}}  {'total':>7}  {'frase_sem_conceito':>19}  {'chapeu_sem_casamento':>21}")
+    for l in linhas:
+        print(f"  {l['cadeira']:<{larg_cad}}  {l['chapeu']:<{larg_chap}}  {l['total']:>7}  {l['frase_sem_conceito']:>19}  {l['chapeu_sem_casamento']:>21}")
+    print(f"  {'total':<{larg_cad}}  {'':<{larg_chap}}  {total_eventos:>7}  {total_sem_conceito:>19}  {total_sem_casamento:>21}")
+
+
 def main():
     d = reg()
     a = sys.argv[1:]
@@ -2391,9 +2541,11 @@ def main():
         return cmd_parear(d, inst, a[2:])
     if a[1] == "escrever":
         return cmd_escrever(d, inst, a[2:])
+    if a[1] == "eleger":
+        return cmd_eleger(a[0], inst, a[2:])
     if a[1] == "medir":
         return cmd_medir(a[0], inst, a[2:])
-    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, escrever, indexar, lintar, medir, parear, sortear, trocar", file=sys.stderr)
+    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, eleger, escrever, indexar, lintar, medir, parear, sortear, trocar", file=sys.stderr)
     sys.exit(1)
 
 

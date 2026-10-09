@@ -79,6 +79,8 @@ tests/test_motor_lintar.py
 tests/test_par_consulta.py
 # Incidente #3364: o cabecalho de bin/motor se registra no golden record e a descricao servida e a ajuda ensinam a necessidade em frase.
 tests/test_motor_registro.py
+# Card #3368: `motor rag eleger` conta sobre o log de perguntas e mede a eleicao de chapeu via rota /eleger.
+tests/test_motor_eleger.py
 tests/test_stack_mascara_segredos.py
 tests/test_pesquisar_consultar_palavras.py
 tests/test_acervo_psql_c.py

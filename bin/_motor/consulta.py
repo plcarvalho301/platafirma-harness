@@ -1,12 +1,10 @@
-"""A consulta ao motor montada pelo verbo, não redigida pela cadeira (#3360, #3364; spec motor-do-conhecimento §2b).
+"""A consulta ao motor montada pelo verbo, não redigida pela cadeira (#3360, #3364, #3368; spec motor-do-conhecimento §2b).
 
-A cadeira diz em uma frase o que precisa saber (a *necessidade*). O verbo `motor <inst> buscar`
-monta com ela a lista de perguntas que a API funde por RRF:
+A cadeira diz em uma frase que nomeia o assunto pelo termo do acervo o que precisa saber (a *necessidade*).
+O verbo `motor <inst> buscar` monta a pergunta com a necessidade literal (`[necessidade]`) e, havendo
+chapéu vestido (PF_CHAPEU), envia o chapéu com cadeira, chapéu e rótulos para eleição na API (#3368).
 
-    1. a necessidade, literal;
-    2. a necessidade seguida dos rótulos do chapéu vestido («necessidade. Buscar também: rótulos»), se houver rótulos.
-
-Se o chapéu estiver em fallback ou sem rótulos, a lista tem apenas a necessidade (1 item).
+Se o chapéu estiver em fallback ou sem rótulos, a busca segue sem envio do bloco de chapéu.
 O verbo recusa com causa e jeito certo (`lint`) e nunca reescreve: não chama modelo, não traduz,
 não corrige. Quem corrige é a cadeira, na chamada seguinte.
 
@@ -107,10 +105,17 @@ def mensagem_de_recusa(causa: str, jeito: str) -> str:
 # --- montagem -----------------------------------------------------------------------------------
 
 def montar(necessidade: str, rotulos=None, *args) -> list[str]:
-    """A lista de perguntas, na ordem do contrato (#3364):
-    [necessidade, necessidade + ". Buscar também: " + rótulos do chapéu].
-    Se chapéu em fallback ou sem rótulos → lista de 1 item ([necessidade]).
+    """A lista de perguntas (#3364, #3368): apenas a necessidade ([necessidade]).
+
+    Sai a colagem dos oito primeiros rótulos (#3368): o chapéu agora vai como candidato à
+    eleição na ontologia, e a lista tem apenas a necessidade literal.
     """
+    nec = (necessidade or "").strip()
+    return [nec] if nec else []
+
+
+def montar_com_rotulos(necessidade: str, rotulos=None, *args) -> list[str]:
+    """Montagem legada com colagem de rótulos (#3364), mantida para `par_consulta`."""
     if args:
         rotulos = args[0]
     nec = (necessidade or "").strip()
