@@ -37,7 +37,8 @@ CHAVE_PY=""; CHAVE_HASH=""
 uso() {
   cat >&2 <<EOF
 uso:
-  $VERBO rodar <nome> [<alvo>...] [--portao] [--arvore <caminho>] [--chave <nome>]
+  $VERBO rodar <nome> [<alvo>...] [--portao] [--arvore <caminho>] [--base <rev>] [--chave <nome>]
+  $VERBO rodar <repositorio> --portao --origin-main
   $VERBO detectar <nome> [--chave <nome>]
   $VERBO inventario [<nome>|--all] [--json]
 
@@ -49,6 +50,14 @@ uso:
             com <nome> = repositório e sem <alvo>, toda chave dele que declara
             subárvore de teste, e passa quando todas passam (arq:0116 §6)
   --arvore <caminho>: roda a árvore materializada (exigida sob a raiz de release)
+  --base <rev>: só com --portao: roda o que o diff de <rev> até a árvore alcança (card #3370).
+                Linha da lista sem barra vertical roda sempre; a forma "arquivo | glob glob" roda quando
+                algum glob (relativo à raiz do repositório) casa um arquivo do diff, ou o
+                próprio arquivo mudou; caminho de raio total roda a lista inteira. Sem --base,
+                ou base ilegível, a lista inteira
+  --origin-main: só com --portao, sem <alvo> e sem --arvore: busca origin/main no clone base da
+                 bancada, mede a lista inteira numa árvore descartável dele e a remove (a
+                 rodada diária do bot, card #3370; não grava veredito de seleção)
   --chave <nome>: (deprecado) usa o ambiente de registro/venvs.json (arq:0110 §11)
 
 bancada: PLATAFIRMA_BANCADA, senão \$PLATAFIRMA_ARQUIVO_BANCADA (sem declaração: exit 3)
@@ -347,8 +356,17 @@ pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isola
   # quem rodasse um teste isolado antes do push. Rodada parcial vai ao memo próprio,
   # com o alvo na chave.
   if [ -n "$arvore" ] && [ -n "${CHAVE_HASH:-}" ] && [ "${portao:-0}" -eq 1 ]; then
-    memo="$(caminho_veredito "$vereditos_dir" "$arvore" "$REG_STACK" "$CHAVE_HASH")"
+    memo="$(memo_do_portao "$vereditos_dir" "$arvore")"
     mkdir -p "$(dirname "$memo")" 2>/dev/null || memo=""
+    # rodada parcial: a inteira verde da mesma árvore já responde por ela (o contrário nunca)
+    if [ -n "${SELECAO_HASH:-}" ] && [ "${PF_TESTE_SEM_MEMO:-0}" != 1 ]; then
+      local memo_inteiro; memo_inteiro="$(SELECAO_HASH="" memo_do_portao "$vereditos_dir" "$arvore")"
+      if [ "$(ler_veredito "$memo_inteiro")" = verde ]; then
+        printf 'suite VERDE: %s — veredito reaproveitado (rodada inteira da mesma arvore %s, chave %s-%s)\n' \
+          "$rotulo" "${arvore:0:12}" "$REG_STACK" "$CHAVE_HASH"
+        return 0
+      fi
+    fi
   elif [ -n "$arvore" ]; then
     chave="$(printf '%s|%s|%s' "$arvore" "${alvos[*]}" "$modo" | sha256sum | cut -c1-16)"
     memo="$inst/var/teste/vereditos/$chave.txt"
@@ -439,7 +457,7 @@ pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isola
     if [ -n "$depois" ] && [ "$depois" != "$arvore" ]; then
       local memo_depois
       if [ "${portao:-0}" -eq 1 ] && [ -n "${CHAVE_HASH:-}" ]; then
-        memo_depois="$(caminho_veredito "$vereditos_dir" "$depois" "$REG_STACK" "$CHAVE_HASH")"
+        memo_depois="$(memo_do_portao "$vereditos_dir" "$depois")"
       else
         memo_depois="$(dirname "$memo")/$(printf '%s|%s|%s' "$depois" "${alvos[*]}" "$modo" | sha256sum | cut -c1-16).txt"
       fi
@@ -475,12 +493,104 @@ lista_portao_de() {  # $1=clone $2=subarvore
   return 0
 }
 
+# card #3370 (emenda da arq:0116 §6): o portão roda o que a mudança alcança. O raio total
+# mora aqui, no código, e não em arquivo que o diff possa editar: mudança na ferramenta de
+# teste, no construtor do ambiente, no registro, nas listas ou em conftest roda a lista
+# inteira. `*` e `**` casam `/` (erra para mais, nunca para menos).
+RAIO_TOTAL=('lib/**' 'hooks/**' 'bin/teste' 'bin/_release/**' 'registro/venvs.json'
+  'registro/terceiros.json' 'venvs/**' '**/conftest.py' '**/uv.lock' '**/requirements*.txt'
+  '**/pyproject.toml' '**/VERDES')
+
+casa_glob() {  # $1=arquivo $2=glob (relativo à raiz do repositório)
+  local f="$1" g="$2"
+  # shellcheck disable=SC2254
+  case "$f" in $g) return 0 ;; esac
+  case "$g" in
+    '**/'*)
+      g="${g#'**/'}"
+      # shellcheck disable=SC2254
+      case "$f" in $g) return 0 ;; esac ;;
+  esac
+  return 1
+}
+
+# Arquivos do diff de <base> até a árvore, um por linha. Árvore materializada (pre-push,
+# gate): base..HEAD. Bancada: base..working tree, com o que ainda não está no git.
+# Sai 1 quando a base não resolve na árvore (o chamador roda a lista inteira).
+diff_da_base() {  # $1=arvore $2=base $3=em_arvore(0|1)
+  local out
+  git -C "$1" rev-parse --verify --quiet "$2^{commit}" >/dev/null 2>&1 || return 1
+  if [ "${3:-0}" -eq 1 ]; then
+    out="$(git -C "$1" diff --name-only "$2" HEAD 2>/dev/null)" || return 1
+  else
+    out="$({ git -C "$1" diff --name-only "$2"; git -C "$1" ls-files -o --exclude-standard; } 2>/dev/null)" || return 1
+  fi
+  printf '%s\n' "$out"
+}
+
+raio_total_de() {  # stdin: arquivos do diff ; imprime o primeiro de raio total ; 1 = nenhum
+  local f g
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    for g in "${RAIO_TOTAL[@]}"; do
+      if casa_glob "$f" "$g"; then printf '%s' "$f"; return 0; fi
+    done
+  done
+  return 1
+}
+
+# Linha da lista de portão: `<arquivo> | <glob> <glob>...`; sem `|`, sem raio declarado.
+linha_arquivo() {
+  local l="${1%%|*}"
+  l="${l#"${l%%[![:space:]]*}"}"; l="${l%"${l##*[![:space:]]}"}"
+  printf '%s' "$l"
+}
+linha_globs() {
+  case "$1" in *'|'*) printf '%s' "${1#*|}" ;; esac
+}
+
+alcanca() {  # $1=arquivo da lista (relativo à raiz do repo) $2=globs $3=diff ; 0 = o diff o alcança
+  local f g gs=()
+  read -r -a gs <<<"$2"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    [ "$f" = "$1" ] && return 0   # o próprio teste mudou
+    for g in "${gs[@]}"; do
+      casa_glob "$f" "$g" && return 0
+    done
+  done <<<"$3"
+  return 1
+}
+
+# Chave do memo do portão: (árvore, chave) na rodada inteira; (árvore, chave, hash da
+# seleção) na parcial. Veredito parcial nunca responde pela rodada inteira.
+memo_do_portao() {  # $1=vereditos_dir $2=arvore
+  local m
+  m="$(caminho_veredito "$1" "$2" "$REG_STACK" "$CHAVE_HASH")"
+  [ -z "${SELECAO_HASH:-}" ] || m="${m%.json}-sel${SELECAO_HASH}.json"
+  printf '%s' "$m"
+}
+
 # arq:0116 §6: `teste rodar <repositório> --portao` roda a lista de portão de toda chave do
 # repositório que declara subárvore de teste, cada uma no seu ambiente, e passa quando
 # todas passam. O registro das chaves vem da árvore medida (a que o push ou a promoção
 # leva), não do verbo no ar. Cada chave é um processo próprio (memo por árvore e chave).
-portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvore(ou vazio)
-  local c="$1" familia="$2" bancada="$3" arv="$4" venvs linhas chave lock sub
+portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvore(ou vazio) $5=base(ou vazio)
+  local c="$1" familia="$2" bancada="$3" arv="$4" base="${5:-}" venvs linhas chave lock sub
+  # card #3370: caminho de raio total no diff roda a lista inteira de toda chave; o aviso sai
+  # uma vez, aqui, e as chaves rodam sem --base. Base ilegível: lista inteira, com aviso.
+  local base_args=() dif_fam tot_fam
+  if [ -n "$base" ]; then
+    if dif_fam="$(diff_da_base "$c" "$base" "$([ -n "$arv" ] && echo 1 || echo 0)")"; then
+      if tot_fam="$(printf '%s\n' "$dif_fam" | raio_total_de)"; then
+        printf 'raio total: %s\n' "$tot_fam"
+      else
+        base_args=(--base "$base")
+      fi
+    else
+      printf '%s: aviso: base %s ilegível em %s — lista inteira\n' "$VERBO" "$base" "$c" >&2
+    fi
+  fi
   venvs="${PLATAFIRMA_VENVS:-$c/registro/venvs.json}"
   [ -r "$venvs" ] || venvs="$(dirname "$(readlink -f "$0")")/../registro/venvs.json"
   linhas="$(PLATAFIRMA_VENVS="$venvs" python3 "$REGISTRO" --familia "$familia")" || exit $?
@@ -503,9 +613,9 @@ portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvor
   for i in "${!chaves[@]}"; do
     chave="${chaves[$i]}"
     if [ -n "$arv" ]; then
-      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave" --portao --arvore "$arv" >"$tmpd/$i.out" 2>"$tmpd/$i.err" &
+      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave" --portao --arvore "$arv" ${base_args[@]+"${base_args[@]}"} >"$tmpd/$i.out" 2>"$tmpd/$i.err" &
     else
-      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave${bancada:+@$bancada}" --portao >"$tmpd/$i.out" 2>"$tmpd/$i.err" &
+      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave${bancada:+@$bancada}" --portao ${base_args[@]+"${base_args[@]}"} >"$tmpd/$i.out" 2>"$tmpd/$i.err" &
     fi
     pids+=("$!")
   done
@@ -649,11 +759,14 @@ ato_inventario() {
 }
 
 ato_rodar() {
-  local nome="" alvo="" chave="" arvore="" portao=0 EM_ARVORE=0 c rc extras=() extras_resolvidos=()
+  local nome="" alvo="" chave="" arvore="" base="" portao=0 origem_main=0 EM_ARVORE=0 c rc extras=() extras_resolvidos=()
+  local SELECAO_HASH=""  # visto por pytest_em_bloco (chave do memo parcial)
   while [ $# -gt 0 ]; do
     case "$1" in
       --chave) shift; [ $# -gt 0 ] || morre "--chave exige um valor" 2; chave="$1"; shift ;;
+      --base) shift; [ $# -gt 0 ] || morre "--base exige uma rev" 2; base="$1"; shift ;;
       --portao) portao=1; shift ;;
+      --origin-main) origem_main=1; shift ;;
       --arvore) shift; [ $# -gt 0 ] || morre "--arvore exige um caminho" 2; arvore="$1"; shift ;;
       *)
         if [ -z "$nome" ]; then nome="$1"
@@ -672,6 +785,28 @@ ato_rodar() {
   local alvo_resolver="${chave:-$nome}"
   resolver_registro "$alvo_resolver"
   case "$nome" in *@*) REG_BANCADA="${nome#*@}" ;; esac  # --chave nao apaga a bancada escolhida
+
+  # Rodada diária (card #3370): a lista inteira sobre origin/main, numa árvore descartável do
+  # clone base da bancada (<bancada>/<repo>), que o job do bot não tem por cadeira. A árvore
+  # nasce sob a raiz que --arvore aceita e some na saída.
+  if [ "$origem_main" -eq 1 ]; then
+    { [ "$portao" -eq 1 ] && [ -z "$alvo" ] && [ -z "$arvore" ] && [ -z "$base" ]; } \
+      || morre "--origin-main só com --portao, sem <alvo>, sem --arvore e sem --base" 2
+    declara_bancada
+    local inst_main="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}"
+    MAIN_CLONE="$BANCADA/$REG_FAMILIA"
+    [ -e "$MAIN_CLONE/.git" ] || morre "sem clone base de $REG_FAMILIA em $BANCADA" 3
+    git -C "$MAIN_CLONE" fetch -q origin main 2>/dev/null \
+      || morre "não consegui buscar origin/main de $REG_FAMILIA" 3
+    mkdir -p "$inst_main/var/pre-push/arvores" 2>/dev/null
+    MAIN_ARVORE="$(mktemp -d "$inst_main/var/pre-push/arvores/diaria.XXXXXX")" \
+      || morre "não criei a árvore da rodada diária sob $inst_main/var/pre-push/arvores" 3
+    trap 'git -C "$MAIN_CLONE" worktree remove --force "$MAIN_ARVORE" >/dev/null 2>&1; git -C "$MAIN_CLONE" worktree prune >/dev/null 2>&1; rm -rf "$MAIN_ARVORE"' EXIT
+    git -C "$MAIN_CLONE" worktree add -q --detach "$MAIN_ARVORE" origin/main >/dev/null 2>&1 \
+      || morre "não materializei origin/main de $REG_FAMILIA em $MAIN_ARVORE" 3
+    arvore="$MAIN_ARVORE"
+    printf 'origem:    origin/main de %s @ %s\n' "$REG_FAMILIA" "$(git -C "$MAIN_ARVORE" rev-parse --short HEAD)" >&2
+  fi
 
   if [ -n "$arvore" ]; then
     c="$(validar_arvore "$arvore")" || exit $?
@@ -694,7 +829,7 @@ ato_rodar() {
   if [ "$portao" -eq 1 ] && [ -z "$alvo" ] && [ -z "$chave" ] && [ "${nome%%@*}" = "$REG_FAMILIA" ]; then
     local arv_fam=""
     [ "$EM_ARVORE" -eq 1 ] && arv_fam="$c"
-    portao_da_familia "$c" "$REG_FAMILIA" "$REG_BANCADA" "$arv_fam"
+    portao_da_familia "$c" "$REG_FAMILIA" "$REG_BANCADA" "$arv_fam" "$base"
     return $?
   fi
 
@@ -716,20 +851,58 @@ ato_rodar() {
         "$nome" "${REG_SUBARVORE:-.}"
       exit 5
     fi
-    while IFS= read -r linha; do
-      case "$linha" in ''|'#'*) continue ;; esac
-      if [ -f "$raiz/$linha" ]; then
-        alvos+=("$linha")
-      elif [ -f "$c/$linha" ]; then
-        alvos+=("$c/$linha")
+    # card #3370: com --base, roda o que o diff alcança. Raio total (lista fixa no código)
+    # ou base ilegível: a lista inteira, como antes.
+    local seleciona=0 dif="" tot="" pulados=() sel_rels=() n_lista=0 linha_crua globs dest rel_repo
+    if [ -n "$base" ] && [ -z "$alvo" ]; then
+      if dif="$(diff_da_base "$c" "$base" "$EM_ARVORE")"; then
+        if tot="$(printf '%s\n' "$dif" | raio_total_de)"; then
+          printf 'raio total: %s\n' "$tot"
+        else
+          seleciona=1
+        fi
       else
-        ausentes+=("$linha")
+        printf '%s: aviso: base %s ilegível em %s — lista inteira\n' "$VERBO" "$base" "$c" >&2
       fi
+    fi
+    while IFS= read -r linha_crua; do
+      case "$linha_crua" in ''|'#'*) continue ;; esac
+      linha="$(linha_arquivo "$linha_crua")"; globs="$(linha_globs "$linha_crua")"
+      [ -n "$linha" ] || continue
+      if [ -f "$raiz/$linha" ]; then
+        dest="$linha"; rel_repo="${REG_SUBARVORE:+$REG_SUBARVORE/}$linha"
+      elif [ -f "$c/$linha" ]; then
+        dest="$c/$linha"; rel_repo="$linha"
+      else
+        ausentes+=("$linha"); continue
+      fi
+      n_lista=$((n_lista + 1))
+      if [ "$seleciona" -eq 1 ] && [ -n "$globs" ] && ! alcanca "$rel_repo" "$globs" "$dif"; then
+        pulados+=("$linha"); continue
+      fi
+      alvos+=("$dest"); sel_rels+=("$rel_repo")
     done < "$lista_portao"
     if [ "${#ausentes[@]}" -gt 0 ]; then
       printf 'suite INDISPONIVEL: %s — %s lista arquivo que não existe na árvore: %s\n' \
         "$nome" "${lista_portao#"$c"/}" "${ausentes[*]}"
       exit 5
+    fi
+    if [ "$seleciona" -eq 1 ]; then
+      local resumo_pulados="nenhum" k
+      if [ "${#pulados[@]}" -gt 0 ]; then
+        resumo_pulados="${pulados[*]:0:6}"
+        [ "${#pulados[@]}" -le 6 ] || resumo_pulados+=" +$(( ${#pulados[@]} - 6 ))"
+      fi
+      printf 'seleção: %s de %s arquivos (pulados: %s)\n' "${#alvos[@]}" "$n_lista" "$resumo_pulados"
+      # rodada parcial tem chave de memo própria; seleção igual à lista inteira é rodada inteira
+      if [ "${#pulados[@]}" -gt 0 ] && [ "${#sel_rels[@]}" -gt 0 ]; then
+        SELECAO_HASH="$(printf '%s\n' "${sel_rels[@]}" | LC_ALL=C sort | sha256sum | cut -c1-16)"
+      fi
+      if [ "${#alvos[@]}" -eq 0 ] && [ "$n_lista" -gt 0 ]; then
+        printf 'suite VERDE: %s — nenhum arquivo da lista alcançado pela mudança (%s de %s pulados)\n' \
+          "$nome" "${#pulados[@]}" "$n_lista"
+        return 0
+      fi
     fi
     if [ "${#alvos[@]}" -eq 0 ]; then
       printf 'suite VERDE: %s — lista de portão vazia, declarada em %s\n' "$nome" "${lista_portao#"$c"/}"

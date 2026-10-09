@@ -217,3 +217,164 @@ def test_artefato_fora_do_cache_e_sem_url_e_dependencia_ausente(tmp_path):
     r = _run(env, "rodar", "k-a", "--portao", "--arvore", str(arv))
     assert r.returncode == 3, r.stdout + r.stderr
     assert "fora do cache" in r.stderr
+
+
+# --- card #3370: o portao roda so o que o diff da base alcanca -------------------------
+
+def _commita(arv: Path, arquivos: dict[str, str]) -> str:
+    for rel, texto in arquivos.items():
+        p = arv / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(texto)
+    _git("add", "-A", cwd=arv)
+    _git("commit", "-q", "-m", "mudanca", cwd=arv)
+    return _rev(arv)
+
+def _rev(arv: Path) -> str:
+    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(arv), check=True,
+                          capture_output=True, text=True).stdout.strip()
+
+def _tres(tmp_path, marcas: Path, lista: str):
+    env, arv = _arvore(tmp_path, {"a": {"test_a1.py": _marca(marcas, "a1"),
+                                        "test_a2.py": _marca(marcas, "a2"),
+                                        "test_a3.py": _marca(marcas, "a3")}},
+                       {"a": lista})
+    return env, arv, _rev(arv)
+
+RAIOS = "test_a1.py | a/src/um/**\ntest_a2.py | a/src/dois/**\ntest_a3.py\n"
+
+def _rodou(marcas: Path) -> set[str]:
+    return set(_marcas(marcas)) if marcas.exists() else set()
+
+def test_selecao_roda_o_que_o_diff_alcanca_e_a_linha_sem_raio(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, arv, base = _tres(tmp_path, marcas, RAIOS)
+    _commita(arv, {"a/src/um/x.txt": "x\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv), "--base", base)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "seleção: 2 de 3 arquivos (pulados: test_a2.py)" in r.stdout, r.stdout
+    assert _rodou(marcas) == {"a1", "a3"}
+
+def test_o_proprio_teste_mudado_roda_mesmo_com_raio_declarado(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, arv, base = _tres(tmp_path, marcas, RAIOS)
+    _commita(arv, {"a/test_a2.py": _marca(marcas, "a2") + "# editado\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv), "--base", base)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "seleção: 2 de 3 arquivos (pulados: test_a1.py)" in r.stdout, r.stdout
+    assert _rodou(marcas) == {"a2", "a3"}
+
+def test_raio_total_roda_a_lista_inteira_e_diz_o_arquivo(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, arv, base = _tres(tmp_path, marcas, RAIOS)
+    _commita(arv, {"lib/venv.sh": "# x\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv), "--base", base)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.stdout.count("raio total: lib/venv.sh") == 1, r.stdout
+    assert "seleção:" not in r.stdout
+    assert _rodou(marcas) == {"a1", "a2", "a3"}
+
+def test_mudar_a_lista_ou_conftest_e_raio_total(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, arv, base = _tres(tmp_path, marcas, RAIOS)
+    _commita(arv, {"a/conftest.py": "# x\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv), "--base", base)
+    assert "raio total: a/conftest.py" in r.stdout, r.stdout + r.stderr
+    assert _rodou(marcas) == {"a1", "a2", "a3"}
+
+def test_sem_base_ou_base_ilegivel_roda_a_lista_inteira(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, arv, base = _tres(tmp_path, marcas, RAIOS)
+    _commita(arv, {"a/src/um/x.txt": "x\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "seleção:" not in r.stdout
+    assert _rodou(marcas) == {"a1", "a2", "a3"}
+    marcas.unlink()
+    r = _run(dict(env, PF_TESTE_SEM_MEMO="1"), "rodar", "demo", "--portao", "--arvore", str(arv),
+             "--base", "f" * 40)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "ilegível" in r.stderr, r.stderr
+    assert _rodou(marcas) == {"a1", "a2", "a3"}
+
+def test_selecao_vazia_nao_roda_nada_e_passa(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, arv, base = _tres(tmp_path, marcas, "test_a1.py | a/src/um/**\ntest_a2.py | a/src/dois/**\n")
+    _commita(arv, {"docs/x.md": "x\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv), "--base", base)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "seleção: 0 de 2 arquivos" in r.stdout, r.stdout
+    assert "nenhum arquivo da lista alcançado" in r.stdout, r.stdout
+    assert _rodou(marcas) == set()
+
+def test_veredito_parcial_nao_responde_pela_rodada_inteira(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, arv, base = _tres(tmp_path, marcas, RAIOS)
+    _commita(arv, {"a/src/um/x.txt": "x\n"})
+    so_memo = dict(env, PF_TESTE_SO_MEMO="1")
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv), "--base", base)
+    assert r.returncode == 0, r.stdout + r.stderr
+    # a mesma selecao acha o veredito parcial; a rodada inteira, nao
+    r = _run(so_memo, "rodar", "demo", "--portao", "--arvore", str(arv), "--base", base)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "veredito reaproveitado" in r.stdout + r.stderr
+    r = _run(so_memo, "rodar", "demo", "--portao", "--arvore", str(arv))
+    assert r.returncode == 6, r.stdout + r.stderr
+    assert "AINDA NAO MEDIDO" in r.stdout
+
+def test_raio_declarado_nas_listas_reais_casa_arquivo_que_existe():
+    """Glob que nao casa nada e raio morto: o teste nunca roda pela mudanca que devia alcanca-lo.
+    Le so a arvore da rev: as quatro listas de portao e os arquivos do checkout."""
+    import fnmatch
+    listas = [REPO_ROOT / p for p in ("controle/tests/VERDES", "testes/VERDES",
+                                      "recuperacao/VERDES", "ops-server/VERDES")]
+    arquivos = []
+    for raiz, dirs, nomes in os.walk(REPO_ROOT):
+        dirs[:] = [d for d in dirs if d != ".git"]
+        arquivos += [Path(raiz, n).relative_to(REPO_ROOT).as_posix() for n in nomes]
+    def casa(f: str, g: str) -> bool:
+        return fnmatch.fnmatchcase(f, g) or (g.startswith("**/") and fnmatch.fnmatchcase(f, g[3:]))
+    mortos = []
+    for lista in listas:
+        for linha in lista.read_text().splitlines():
+            if not linha.strip() or linha.lstrip().startswith("#"):
+                continue
+            _, _, globs = linha.partition("|")
+            mortos += [f"{lista.relative_to(REPO_ROOT)}: {g}" for g in globs.split()
+                       if not any(casa(f, g) for f in arquivos)]
+    assert not mortos, f"raio declarado que nao casa arquivo nenhum: {mortos}"
+
+def test_origin_main_mede_a_main_do_clone_base_e_a_arvore_some(tmp_path):
+    """A rodada diaria do bot (#3370): a lista inteira sobre origin/main do clone base da
+    bancada, numa arvore descartavel; main vermelha sai 1; a arvore nao fica."""
+    env, arv = _arvore(tmp_path, {"a": {"test_a.py": VERDE}}, {"a": "test_a.py\n"})
+    banc = tmp_path / "bancada"
+    banc.mkdir()
+    subprocess.run(["git", "clone", "-q", str(arv), str(banc / "demo")], check=True,
+                   capture_output=True)
+    com_banc = dict(env, PLATAFIRMA_BANCADA=str(banc))
+    r = _run(com_banc, "rodar", "demo", "--portao", "--origin-main")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "origem:    origin/main de demo" in r.stderr, r.stderr
+    assert "portao demo: VERDE" in r.stdout, r.stdout
+    arvores = tmp_path / "instancia" / "var" / "pre-push" / "arvores"
+    assert not list(arvores.glob("diaria.*"))
+    _commita(arv, {"a/test_a.py": VERMELHO})   # a main andou e ficou vermelha
+    r = _run(com_banc, "rodar", "demo", "--portao", "--origin-main")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert not list(arvores.glob("diaria.*"))
+    r = _run(com_banc, "rodar", "demo", "--origin-main")   # sem --portao
+    assert r.returncode == 2, r.stdout + r.stderr
+
+def test_veredito_da_rodada_inteira_verde_responde_pela_parcial(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, arv, base = _tres(tmp_path, marcas, RAIOS)
+    _commita(arv, {"a/src/um/x.txt": "x\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv))
+    assert r.returncode == 0, r.stdout + r.stderr
+    marcas.unlink()
+    r = _run(dict(env, PF_TESTE_SO_MEMO="1"), "rodar", "demo", "--portao", "--arvore", str(arv),
+             "--base", base)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "rodada inteira da mesma arvore" in r.stdout + r.stderr
+    assert _rodou(marcas) == set()

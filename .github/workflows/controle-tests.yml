@@ -38,6 +38,7 @@ jobs:
       # promocao, pelo `teste rodar platafirma-harness --portao`.
       - name: suite de controle (baseline verde; modelo em controle/tests/MODELO-SUITE.md)
         run: |
-          arquivos=$(grep -v '^\s*#' tests/VERDES | grep -v '^\s*$' | grep -v '^testes/' | tr '\n' ' ')
+          # a linha pode trazer o raio depois de `|` (card #3370): aqui so o arquivo, a lista inteira roda
+          arquivos=$(grep -v '^\s*#' tests/VERDES | grep -v '^\s*$' | sed 's/[[:space:]]*|.*$//' | grep -v '^testes/' | tr '\n' ' ')
           echo "baseline: $arquivos"
           uv run pytest $arquivos -q

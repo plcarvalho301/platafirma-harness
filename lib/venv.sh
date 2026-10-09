@@ -125,6 +125,7 @@ listar_verdes() {  # $1=raiz
   [ -r "$lista" ] || return 0
   while IFS= read -r linha; do
     case "$linha" in ''|'#'*) continue ;; esac
+    linha="${linha%%|*}"; linha="${linha%"${linha##*[![:space:]]}"}"   # raio depois de `|` (card #3370)
     [ -f "$raiz/controle/$linha" ] && printf '%s\n' "$linha"
   done < "$lista"
 }
@@ -136,6 +137,7 @@ verdes_ausentes() {  # $1=raiz
   [ -r "$lista" ] || return 0
   while IFS= read -r linha; do
     case "$linha" in ''|'#'*) continue ;; esac
+    linha="${linha%%|*}"; linha="${linha%"${linha##*[![:space:]]}"}"   # raio depois de `|` (card #3370)
     [ -f "$raiz/controle/$linha" ] || printf '%s\n' "$linha"
   done < "$lista"
 }
