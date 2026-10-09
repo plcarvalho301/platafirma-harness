@@ -410,3 +410,201 @@ def test_frase_de_pergunta_fora_do_piloto_sai_2(verbo):
     f.write_text(json.dumps({"esc-dddd4444": "a reserva não é do piloto"}), encoding="utf-8")
     r = roda("--frases", str(f), "--plano")
     assert r.returncode == 2 and "não são do piloto" in r.stderr and _Rag.buscas == []
+
+
+def test_sem_do_log_o_par_e_o_de_hoje_e_nao_manda_chapeu_nem_eleicao(verbo):
+    roda, _, frases, _ = verbo
+    r = roda("--frases", str(frases), "--plano", "--lote-id", "t7")
+    assert r.returncode == 0, r.stderr
+    assert "par t7 · 2 perguntas · D = C (sem chapeu, nao entra) em 1" in r.stdout and len(_Rag.buscas) == 5
+    assert all("chapeu" not in b and "eleicao_chapeu" not in b for b in _Rag.buscas)
+
+
+# --- `--do-log` (card #3378): a população são as chamadas do log com eleito -------------------------------------------
+
+
+def test_consultas_do_log_so_o_eleito_leva_chapeu_e_eleicao():
+    c = pc.consultas_do_log("a necessidade", "ia", "engenharia-de-harness", ROTULOS)
+    assert list(c) == list(pc.BRACOS_DO_LOG) == ["frase", "eleito"]
+    assert c["frase"] == {"pergunta": "a necessidade", "corpo": {}}
+    assert c["eleito"]["pergunta"] == "a necessidade"
+    assert c["eleito"]["corpo"] == {"chapeu": {"cadeira": "ia", "chapeu": "engenharia-de-harness", "rotulos": ROTULOS},
+                                    "eleicao_chapeu": True}
+
+
+def test_jaccard_do_eleito_contra_a_busca_de_hoje():
+    rec = {"frase": [_sec(i) for i in range(1, 5)], "eleito": [_sec(i) for i in range(3, 7)]}
+    assert pc.jaccard_eleito(rec) == {"ExC": round(2 / 6, 3)}
+    assert pc.jaccard_eleito({"frase": rec["frase"]}) == {}
+
+
+def test_a_tabela_do_log_tem_uma_linha_por_chamada():
+    l1 = pc.linha_da_tabela_log(1, "ev-1", "qual a necessidade", "ia", "engenharia-de-harness", {"ExC": 0.25})
+    t = pc.tabela_log([l1])
+    assert "Jaccard E×C" in t.splitlines()[0] and "| 0.25 |" in l1 and len(t.splitlines()) == 3
+
+
+S_IA, S_DADOS = "00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"
+EV1, EV2 = "10000000-0000-4000-8000-000000000001", "10000000-0000-4000-8000-000000000002"
+NEC_ELEITA = "como usar a capacidade absortiva do órgão?"
+# quatro chamadas do log: duas com eleito (a segunda repete a necessidade, com outra caixa e espaço a mais) e duas sem
+EVENTOS_LOG = [
+    {"id": EV1, "sessao_id": S_IA, "criado_em": "2026-10-08 12:00:00+00", "necessidade": NEC_ELEITA, "chapeu": "engenharia-de-harness"},
+    {"id": EV2, "sessao_id": S_IA, "criado_em": "2026-10-09 09:00:00+00",
+     "necessidade": "Como  usar a capacidade absortiva do órgão?", "chapeu": "engenharia-de-harness"},
+    {"id": "10000000-0000-4000-8000-000000000003", "sessao_id": S_IA, "criado_em": "2026-10-09 10:00:00+00",
+     "necessidade": "qual o protocolo de medição do rag?", "chapeu": "engenharia-de-harness"},
+    {"id": "10000000-0000-4000-8000-000000000004", "sessao_id": S_DADOS, "criado_em": "2026-10-09 11:00:00+00",
+     "necessidade": "qual o catálogo de metadados da governança?", "chapeu": "governanca"},
+]
+
+DOCKER_FALSO = """#!{python}
+import json, os, sys
+a = sys.argv[1:]
+container = a[2]
+estado = json.load(open(os.environ["FAKE_ESTADO"]))
+if container == "rag-extractor-pg":
+    print(json.dumps(estado["eventos"]))
+elif container == "harness-sessao-db":
+    print(json.dumps(estado["cadeiras"]))
+else:
+    print("[]")
+"""
+
+
+class _RagLog(_Rag):
+    """/search e /eleger. A busca com `eleicao_chapeu` devolve outro top-8 que a sem, para o Jaccard não ser 1."""
+    buscas: list = []
+    eleger: list = []
+
+    def do_POST(self):
+        corpo = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if self.path == "/eleger":
+            self.eleger.append(corpo)
+            self._json({"itens": [{"eleito_do_chapeu": "capacidade-absortiva" if "capacidade absortiva" in i["necessidade"].lower() else None,
+                                   "sinais": []} for i in corpo["itens"]]})
+            return
+        self.buscas.append(corpo)
+        ns = _secoes_da({"p": corpo["pergunta"], "eleicao": bool(corpo.get("eleicao_chapeu"))})
+        fontes = [{"n": k, "obra": f"Obra {n}", "arquivo": f"o{n}.pdf", "section_id": f"s{n}", "secao_id": f"uuid-{n}",
+                   "breadcrumb": [f"Seção {n}"], "texto": None} for k, n in enumerate(ns, 1)]
+        contexto = "\n\n".join(f"[{k}] (o{n}.pdf · s{n}) — Seção {n}\ncorpo da seção {n}" for k, n in enumerate(ns, 1))
+        self._json({"fontes": fontes, "contexto": contexto, "cobertura": "boa", "tempos_ms": {"total": 5.0}})
+
+
+@pytest.fixture
+def verbo_log(tmp_path):
+    rag, olm = _sobe(_RagLog), _sobe(_Ollama)
+    _RagLog.buscas, _RagLog.eleger, _Ollama.pedidos = [], [], []
+    instancia = tmp_path / "inst"
+    (instancia / "segredos" / "rag").mkdir(parents=True)
+    (instancia / "segredos" / "rag" / "RAG_API_TOKEN").write_text("tok\n")
+    (tmp_path / "bin").mkdir()
+    docker = tmp_path / "bin" / "docker"
+    docker.write_text(DOCKER_FALSO.format(python=sys.executable))
+    docker.chmod(0o755)
+    estado = tmp_path / "estado.json"
+    estado.write_text(json.dumps({"eventos": EVENTOS_LOG, "cadeiras": [{"sessao_id": S_IA, "cadeira": "ia"},
+                                                                    {"sessao_id": S_DADOS, "cadeira": "dados"}]}))
+    abertura = tmp_path / "abertura" / "current" / "abertura"
+    abertura.mkdir(parents=True)
+    (abertura / "rotas-chapeu.json").write_text(json.dumps({"ia": {"engenharia-de-harness": ROTULOS},
+                                                           "dados": {"governanca": ["Governança de dados"]}}, ensure_ascii=False),
+                                                encoding="utf-8")
+    registro = tmp_path / "motor-instancias.json"
+    registro.write_text(json.dumps({"rag": {
+        "estado": "ativa", "container": None, "stack": "rag", "endpoint": f"http://127.0.0.1:{rag.server_port}/search",
+        "facets": f"http://127.0.0.1:{rag.server_port}/facets", "token_em": "rag/RAG_API_TOKEN", "medicoes_em": "var/medicoes/rag",
+        "banco": {"container": "rag-extractor-pg", "db": "rag_extractor", "user": "rag"},
+        "bancos": {"motor": {"container": "motor-pg", "db": "motor", "user": "motor"},
+                   "sessao": {"container": "harness-sessao-db", "db": "sessao", "user": "sessao"}},
+        "ajustes": [], "nao_e_ajuste": {}}}))
+
+    def roda(*args, eventos=None):
+        if eventos is not None:
+            e = json.loads(estado.read_text())
+            e["eventos"] = eventos
+            estado.write_text(json.dumps(e))
+        env = {**os.environ, "PF_MOTOR_REG": str(registro), "PLATAFIRMA_INSTANCIA": str(instancia), "OPS_LOG_DIR": str(tmp_path / "ops"),
+               "PF_ABERTURA_DIR": str(tmp_path / "abertura"), "OLLAMA_BASE_URL": f"http://127.0.0.1:{olm.server_port}", "PF_CADEIRA": "ia",
+               "FAKE_ESTADO": str(estado), "PATH": f"{tmp_path / 'bin'}:{os.environ['PATH']}"}
+        return subprocess.run([sys.executable, str(MOTOR), "rag", "parear", "biblioteca", *args],
+                              capture_output=True, text=True, env=env, timeout=90, check=False, stdin=subprocess.DEVNULL)
+
+    yield roda, tmp_path, instancia
+    for s in (rag, olm):
+        s.shutdown()
+
+
+def test_do_log_a_populacao_e_so_a_chamada_com_eleito_e_deduplica_por_necessidade(verbo_log):
+    roda, _, instancia = verbo_log
+    r = roda("--do-log", "--plano", "--lote-id", "l1")
+    assert r.returncode == 0, r.stderr
+    assert "chamadas do log com eleito 2 de 4" in r.stdout and "1 necessidades distintas" in r.stdout
+    assert len(_RagLog.eleger) == 1 and len(_RagLog.eleger[0]["itens"]) == 4
+    assert len(_RagLog.buscas) == 2, "uma necessidade com eleito (a repetida sai): a busca de hoje e a do eleito"
+    assert _Ollama.pedidos == []
+    assert "Jaccard E×C" in r.stdout and f"| 1 | ev-{EV1} |" in r.stdout
+    medicoes = instancia / "var" / "medicoes" / "rag"
+    md, js = list(medicoes.glob("*-par-eleito.md")), list(medicoes.glob("*-par-eleito.json"))
+    assert len(md) == 1 and len(js) == 1 and "**E — a busca com o eleito do chapéu**" in md[0].read_text()
+    assert json.loads(js[0].read_text())["chamadas"] == {"lidas": 4, "com_eleito": 2, "distintas": 1}
+
+
+def test_do_log_o_braco_eleito_manda_chapeu_e_eleicao_e_o_da_frase_nao_manda_nenhum(verbo_log):
+    roda, _, _ = verbo_log
+    assert roda("--do-log", "--plano", "--lote-id", "l2").returncode == 0
+    por_eleicao = {bool(b.get("eleicao_chapeu")): b for b in _RagLog.buscas}
+    assert set(por_eleicao) == {True, False}
+    frase, eleito = por_eleicao[False], por_eleicao[True]
+    assert "chapeu" not in frase and "eleicao_chapeu" not in frase
+    assert eleito["eleicao_chapeu"] is True
+    assert eleito["chapeu"]["cadeira"] == "ia" and eleito["chapeu"]["chapeu"] == "engenharia-de-harness"
+    assert eleito["chapeu"]["rotulos"] and set(eleito["chapeu"]["rotulos"]) <= set(ROTULOS)
+    assert frase["pergunta"] == eleito["pergunta"] == NEC_ELEITA
+    for b in (frase, eleito):
+        assert b["origem"] == "bench" and b["particao"] == "biblioteca" and b["k"] == 8 and b["texto"] == "secao"
+
+
+def test_do_log_desde_corta_as_chamadas_anteriores(verbo_log):
+    roda, _, _ = verbo_log
+    r = roda("--do-log", "--plano", "--desde", "2026-10-09", "--lote-id", "l3")
+    assert r.returncode == 0, r.stderr
+    assert "parear --do-log desde 2026-10-09: chamadas do log com eleito 1 de 3" in r.stdout
+    assert f"ev-{EV2}" in r.stdout and f"ev-{EV1}" not in r.stdout
+
+
+def test_do_log_sem_chamada_com_eleito_sai_0_dizendo_que_nao_ha_par_e_sem_lote(verbo_log):
+    roda, tmp, instancia = verbo_log
+    saida = tmp / "env.json"
+    r = roda("--do-log", "--saida", str(saida), "--versao", "v", "--criterio-versao", "v1", eventos=EVENTOS_LOG[2:])
+    assert r.returncode == 0, r.stderr
+    assert "chamadas do log com eleito 0 de 2" in r.stdout and "nao ha par a medir" in r.stdout
+    assert not saida.exists() and _RagLog.buscas == [] and _Ollama.pedidos == []
+    assert list((instancia / "var" / "medicoes" / "rag").glob("*par-*")) == []
+
+
+def test_do_log_escreve_uma_resposta_por_braco_e_monta_o_lote(verbo_log):
+    roda, tmp, _ = verbo_log
+    saida = tmp / "env.json"
+    r = roda("--do-log", "--saida", str(saida), "--versao", "versao-1", "--criterio-versao", "v1", "--lote-id", "l5")
+    assert r.returncode == 0, r.stderr
+    assert "gravar: motor marcacao lote gravar" in r.stdout
+    env = json.loads(saida.read_text())
+    assert [p["texto"] for p in env["corpo"]["perguntas"]] == [NEC_ELEITA]
+    assert len(env["respostas"]) == 2 and {x["braco"] for x in env["respostas"]} == {"frase", "eleito"}
+    assert len(_Ollama.pedidos) == 2 and all(p.startswith("Pergunta: " + NEC_ELEITA) for p in _Ollama.pedidos)
+    assert env["carimbo"]["gabarito"]["perguntas"] == [f"ev-{EV1}"]
+    assert env["carimbo"]["par"]["chamadas"] == {"lidas": 4, "com_eleito": 2, "distintas": 1}
+    assert env["gabarito_versao_id"] == "versao-1" and env["ativo"] is False
+
+
+@pytest.mark.parametrize("args,trecho", [
+    (("--do-log",), "--do-log pede --plano"),
+    (("--do-log", "--frases", "x.json", "--plano"), "nao combina com --frases"),
+    (("--desde", "2026-10-09", "--plano"), "--desde so vale com --do-log"),
+])
+def test_do_log_uso_errado_sai_2(verbo_log, args, trecho):
+    roda, _, _ = verbo_log
+    r = roda(*args)
+    assert r.returncode == 2 and trecho in r.stderr and _RagLog.buscas == []
