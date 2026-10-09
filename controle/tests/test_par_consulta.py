@@ -70,7 +70,7 @@ def test_frases_invalidas_dizem_o_que_esta_errado(texto, trecho):
 def test_tres_consultas_com_chapeu():
     c = pc.consultas("chamada do log", FRASE1, ROTULOS)
     assert c["servido"] == "chamada do log" and c["frase"] == FRASE1
-    assert c["montada"] == [FRASE1, FRASE1 + " — " + ", ".join(ROTULOS[:8])]
+    assert c["montada"] == [FRASE1, FRASE1 + ". Buscar também: " + ", ".join(ROTULOS[:8])]
 
 
 def test_sem_chapeu_a_montada_seria_a_frase_e_nao_entra():
@@ -80,7 +80,7 @@ def test_sem_chapeu_a_montada_seria_a_frase_e_nao_entra():
 def test_a_montada_do_par_nao_leva_o_pedido():
     """As chamadas do piloto sao anteriores ao #3345: nao ha pedido gravado, entao a lista tem a frase e a frase com os rotulos."""
     montada = pc.consultas("x", FRASE1, ROTULOS)["montada"]
-    assert len(montada) == 2 and montada[0] == FRASE1 and montada[1].startswith(FRASE1 + " — ")
+    assert len(montada) == 2 and montada[0] == FRASE1 and montada[1].startswith(FRASE1 + ". Buscar também: ")
 
 
 def _sec(i):
@@ -331,7 +331,7 @@ def test_plano_recupera_os_tres_bracos_na_mesma_hora_e_nao_escreve_nada(verbo):
     consultas = [b["pergunta"] for b in _Rag.buscas]
     assert LISTA[0]["pergunta"] in consultas and FRASE1 in consultas and FRASE2 in consultas and LISTA[1]["pergunta"] in consultas
     montada = next(c for c in consultas if isinstance(c, list))
-    assert montada == [FRASE1, FRASE1 + " — " + ", ".join(ROTULOS[:8])]
+    assert montada == [FRASE1, FRASE1 + ". Buscar também: " + ", ".join(ROTULOS[:8])]
     assert sum(isinstance(c, list) for c in consultas) == 1, "a pergunta 2 não tem chapéu: D seria C, não vai"
     assert _Ollama.pedidos == []
     linhas = [l for l in r.stdout.splitlines() if l.startswith("| 1 ") or l.startswith("| 2 ")]
