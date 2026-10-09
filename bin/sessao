@@ -48,7 +48,10 @@ ATOS = ("abrir", "ver", "listar", "encerrar", "limpar", "longjob")
 # O que `--agente`/`--em-nome-de`/`--conta` gravam na chave viva (card #3156, spec agente §11.1).
 ATRIBUTOS_AGENTE = ("agente", "em_nome_de", "conta_agente")
 PREFIXOS_CADEIRA = ("claudinho-", "claudinha-")
-SUPERFICIES = ("claude.ai", "chat", "code", "desconhecida")
+SUPERFICIES = (
+    "claude.ai", "chat", "code", "desconhecida",
+    "agy", "cursor", "codex", "fabrica", "fita",
+)
 
 # Ajudante de reidratacao (arq:0110 §1: mora em bin/_<verbo>/, card #3145 decisao 1).
 # Import protegido: sem ele, `ver` mantem o comportamento de hoje ("nao existe") —
