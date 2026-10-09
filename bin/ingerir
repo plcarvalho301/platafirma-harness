@@ -60,7 +60,8 @@ opções de fonte (uma das opções):
   --origem <o>           pasta do Drive a espelhar para $PLATAFIRMA_INSTANCIA/var/entrada antes de ingerir;
                          aceita 'gdrive:<caminho>' ou URL drive/.../folders/<ID>
   --drive [<pasta>]      espelha pasta do Drive para staging local (~/AI/entrada/drive-<AAAAMMDD>-<rotulo>)
-                         antes de ingerir (default: PlataFirma/entrada)
+                         antes de ingerir (default: PlataFirma/entrada); o espelho é fiel (rclone sync):
+                         arquivo que saiu do Drive sai do staging
 
 opções adicionais:
   --apply                aplica o lote (default: falso, dry-run do plano)
@@ -249,20 +250,24 @@ def aterrissar_drive(pasta: str | None) -> str:
     remote = _resolver_gdrive(alvo)
     rotulo = _slug_origem(alvo)
     data = time.strftime("%Y%m%d")
-    staging_raiz = os.path.expanduser("~/AI/entrada")
+    # PF_ENTRADA_RAIZ só existe para o teste não escrever no staging real; sem ela, ~/AI/entrada.
+    staging_raiz = os.environ.get("PF_ENTRADA_RAIZ") or os.path.expanduser("~/AI/entrada")
     staging = os.path.join(staging_raiz, f"drive-{data}-{rotulo}")
     os.makedirs(staging, exist_ok=True)
     sys.stderr.write(f"ingerir: espelhando {remote} -> {staging}\n")
     try:
+        # sync, não copy: o staging é espelho fiel da pasta do Drive. O que saiu do Drive
+        # sai da cópia de trabalho, senão o PORTÃO 1 (contagem lsf = staging) recusa o lote
+        # pelo resto do dia e o arquivo tirado entra na ingestão. Só o staging é tocado.
         r_copy = subprocess.run(
-            ["rclone", "copy", remote, staging, "--drive-acknowledge-abuse", "-P"],
+            ["rclone", "sync", remote, staging, "--drive-acknowledge-abuse", "-P"],
             capture_output=True, text=True, timeout=1800, check=False,
         )
     except (OSError, subprocess.SubprocessError) as e:
-        sys.stderr.write(f"ingerir: erro: rclone copy falhou: {e}\n")
+        sys.stderr.write(f"ingerir: erro: rclone sync falhou: {e}\n")
         sys.exit(1)
     if r_copy.returncode != 0:
-        sys.stderr.write(f"ingerir: erro: rclone copy falhou ({r_copy.returncode}): {r_copy.stderr.strip()}\n")
+        sys.stderr.write(f"ingerir: erro: rclone sync falhou ({r_copy.returncode}): {r_copy.stderr.strip()}\n")
         sys.exit(1)
 
     # 4. PORTÃO 1 antes de ingerir: contagem de `rclone lsf` bate com o `ls` do
