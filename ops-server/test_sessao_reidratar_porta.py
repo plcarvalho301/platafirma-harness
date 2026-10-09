@@ -233,3 +233,97 @@ def test_run_verbo_blocking_sem_chave_sujeito_no_ident_nao_quebra():
 
     assert r["exit_code"] == 0
     assert "PF_SUJEITO" not in capturado["env"]
+
+
+# ---------------------------------------------------------------- PF_CHAPEU no execve (card #3367)
+
+def test_sessao_resolve_traz_chapeu_da_chave_viva():
+    """`sessao:{id}` presente no msg-mem, com `chapeu` gravado: `_sessao_resolve` devolve o valor (#3367)."""
+    sid = "11111111-2222-3333-4444-555555555555"
+    mock_rc = MagicMock()
+    mock_rc.get.return_value = '{"cadeira": "ia", "ordem_id": "o1", "chapeu": "engenharia-de-harness"}'
+
+    with patch.object(s, "_rc", return_value=mock_rc):
+        out = s._sessao_resolve(sid)
+
+    assert out["chapeu"] == "engenharia-de-harness"
+
+
+def test_sessao_resolve_sem_chapeu_no_registro_devolve_vazio():
+    """Registro sem a chave `chapeu`: string vazia (#3367)."""
+    sid = "11111111-2222-3333-4444-555555555555"
+    mock_rc = MagicMock()
+    mock_rc.get.return_value = '{"cadeira": "ia", "ordem_id": "o1"}'
+
+    with patch.object(s, "_rc", return_value=mock_rc):
+        out = s._sessao_resolve(sid)
+
+    assert out["chapeu"] == ""
+
+
+def test_sessao_resolve_reidratada_traz_chapeu():
+    """`sessao:{id}` ausente -> reidrata via `_reidratar_porta`; quando o registro durável
+    tem `chapeu`, a reidratação o devolve (#3367)."""
+    sid = "11111111-2222-3333-4444-555555555555"
+    mock_rc = MagicMock()
+    mock_rc.get.return_value = None
+
+    fake_mod = MagicMock()
+    fake_mod.reidratar_via_verbo.return_value = {
+        "cadeira": "ia", "ordem_id": "o-reidratado", "chapeu": "contexto"}
+
+    with patch.object(s, "_rc", return_value=mock_rc), \
+         patch.object(s, "_reidratar_mod", fake_mod):
+        out = s._sessao_resolve(sid)
+
+    assert out["chapeu"] == "contexto"
+
+
+def test_run_verbo_blocking_injeta_pf_chapeu_da_sessao():
+    """O env do execve do verbo despachado traz PF_CHAPEU igual ao da sessao (#3367)."""
+    ident = {"sessao_id": "sid-1", "ordem_id": "o-1", "cadeira": "ia", "chapeu": "engenharia-de-harness"}
+    capturado = {}
+
+    def fake_popen(argv, **kw):
+        capturado["env"] = kw.get("env")
+        return _ProcessoFake()
+
+    with patch.object(s.subprocess, "Popen", side_effect=fake_popen):
+        r = s._run_verbo_blocking(["/bin/infra", "up"], None, 5, ident)
+
+    assert r["exit_code"] == 0
+    assert capturado["env"]["PF_CHAPEU"] == "engenharia-de-harness"
+    assert capturado["env"]["PF_CADEIRA"] == "ia"
+
+
+def test_run_verbo_blocking_sem_chapeu_nao_injeta_variavel():
+    """Sessão sem chapéu no registro: PF_CHAPEU simplesmente não entra no ambiente do verbo (#3367)."""
+    ident = {"sessao_id": "sid-1", "ordem_id": "o-1", "cadeira": "ia", "chapeu": ""}
+    capturado = {}
+
+    def fake_popen(argv, **kw):
+        capturado["env"] = kw.get("env")
+        return _ProcessoFake()
+
+    with patch.object(s.subprocess, "Popen", side_effect=fake_popen):
+        r = s._run_verbo_blocking(["/bin/infra", "up"], None, 5, ident)
+
+    assert r["exit_code"] == 0
+    assert "PF_CHAPEU" not in capturado["env"]
+    assert capturado["env"]["PF_CADEIRA"] == "ia"
+
+
+def test_run_verbo_blocking_sem_chave_chapeu_no_ident_nao_quebra():
+    """`ident` sem a chave `chapeu`: .get("chapeu") nunca estoura KeyError (#3367)."""
+    ident = {"sessao_id": "sid-1", "ordem_id": "o-1", "cadeira": "ia"}
+    capturado = {}
+
+    def fake_popen(argv, **kw):
+        capturado["env"] = kw.get("env")
+        return _ProcessoFake()
+
+    with patch.object(s.subprocess, "Popen", side_effect=fake_popen):
+        r = s._run_verbo_blocking(["/bin/infra", "up"], None, 5, ident)
+
+    assert r["exit_code"] == 0
+    assert "PF_CHAPEU" not in capturado["env"]

@@ -2347,6 +2347,19 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
     resposta = {"sessao": abrir_json}
     resposta.update(exp_json)
 
+    # Se a sessão não guarda hoje o chapéu, a abertura passa a gravá-lo na identidade da sessão (#3367)
+    chapeu_resolvido = exp_json.get("chapeu")
+    if sid and chapeu_resolvido:
+        try:
+            chave = f"sessao:{sid}"
+            raw = _rc().get(chave)
+            dados = json.loads(raw) if raw else None
+            if isinstance(dados, dict):
+                dados["chapeu"] = chapeu_resolvido
+                _rc().set(chave, json.dumps(dados, ensure_ascii=False), keepttl=True)
+        except Exception as e:
+            print(f"[valkey] gravacao chapeu sessao:{sid} falhou: {e!r}", file=sys.stderr, flush=True)
+
     # Porta marca o prefixo estável com cache_control (spec_contexto-na-porta, #3067).
     # O prefixo e DERIVADO da ordem servida, nao lista fixa: a corrida contigua, desde
     # a primeira peca, das pecas nomeadas estaveis pela spec expediente rev 1.2
@@ -2521,7 +2534,7 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
     if sessao_id:
         sessao_id = _uuid_valido(sessao_id) or sessao_id   # legado 32-hex normaliza
     out = {"sessao_id": sessao_id or "-", "ordem_id": "-", "cadeira": "", "sujeito": "",
-           "origem_sessao": ""}
+           "origem_sessao": "", "chapeu": ""}
     if not sessao_id or sessao_id == "-":
         return out
     try:
@@ -2531,6 +2544,7 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
             out["cadeira"] = d.get("cadeira") or ""
             out["ordem_id"] = d.get("ordem_id") or out["ordem_id"]
             out["sujeito"] = d.get("sujeito") or ""
+            out["chapeu"] = d.get("chapeu") or ""
             out["origem_sessao"] = _uuid_valido(d.get("origem_sessao")) or ""
             _guarda_origem(sessao_id, out["origem_sessao"])
     except Exception as e:  # noqa: BLE001
@@ -2696,6 +2710,8 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
         env["PF_CADEIRA"] = ident["cadeira"]
     if ident.get("sujeito"):
         env["PF_SUJEITO"] = ident["sujeito"]
+    if ident.get("chapeu"):
+        env["PF_CHAPEU"] = ident["chapeu"]
     d_cwd = CASA if CASA.is_dir() else Path.cwd()
     try:
         p = subprocess.Popen(argv, cwd=d_cwd, env=env, preexec_fn=_rlimits_filho,
