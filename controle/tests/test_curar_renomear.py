@@ -505,9 +505,11 @@ def test_grep_que_sai_2_fica_como_nao_varrido_e_nao_como_nenhuma_ocorrencia(ambi
 
 
 def test_varredura_que_passa_do_tempo_fica_como_nao_varrida(ambiente):
-    p = _curar(ambiente, *BASE_ARGS, "--sem-hermit", patches="m._VARREDURA_TIMEOUT_S = 0.0001")
+    # timeout 0 estoura sempre; 0.0001 s era uma janela de 100 us em que o grep, com o host carregado
+    # pelo xdist do portao, terminava antes do primeiro teste de prazo e a varredura passava (#3370)
+    p = _curar(ambiente, *BASE_ARGS, "--sem-hermit", patches="m._VARREDURA_TIMEOUT_S = 0")
     assert p.returncode == 0, p.stdout + p.stderr
-    assert "não varrido: harness (passou de 0.0001 s)" in p.stdout
+    assert "não varrido: harness (passou de 0 s)" in p.stdout
     assert "nenhuma ocorrência" not in p.stdout
 
 
