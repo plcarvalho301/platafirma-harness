@@ -740,7 +740,7 @@ def test_claude_ai_sem_sha_publicado_serve_inteiras_e_sem_aviso_de_ponteiro():
     assert conta["pecas_espelhadas"] is None
 
 
-@pytest.mark.parametrize("superficie", ["code", "chat", "cli", "desconhecida"])
+@pytest.mark.parametrize("superficie", ["code", "chat", "cli", "desconhecida", "agy", "cursor", "codex", "fabrica", "fita"])
 def test_fora_do_claude_ai_persona_e_conduta_seguem_inteiras(superficie):
     """Trava do #3265 (spec contexto-na-porta §3): so o claude.ai tem a excecao."""
     r, conta = _delta_3265(superficie, "abc123def456")
