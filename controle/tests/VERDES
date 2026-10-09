@@ -79,6 +79,10 @@ tests/test_motor_marcacao.py | bin/motor bin/_motor/**
 tests/test_motor_sorteio.py | bin/motor bin/_motor/**
 # Card #3349: `motor rag escrever biblioteca` (prompt, mapa, rodape, piloto, terceiro braco, envelope e aceite; fiacao com rag, ollama e docker falsos).
 tests/test_motor_escritor.py | bin/motor bin/_motor/**
+# Card #3350: `motor rag julgar biblioteca` — o juiz (prompt com o criterio da tela, leitura da saida, tentativas, corpo do
+# banco) e o kappa contra a primeira passada (tabela conhecida, intervalo por pergunta, enganosa, divergencia, tempo, conferencia).
+tests/test_motor_juiz.py | bin/motor bin/_motor/**
+tests/test_motor_kappa.py | bin/motor bin/_motor/**
 # Card #3360: bin/_motor/consulta.py (lint, montagem, rotulos do chapeu, pedido do dono lido do log da porta pelo oplog) e a fiacao em `motor rag buscar`.
 tests/test_motor_consulta.py | bin/motor bin/_motor/**
 tests/test_motor_buscar_consulta.py | bin/motor bin/_motor/**

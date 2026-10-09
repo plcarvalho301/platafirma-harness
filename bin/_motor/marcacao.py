@@ -27,6 +27,8 @@ USO = """motor marcacao — o lote da tela de marcação e o que ela grava (marc
                                         as marcas, preferências e exclusões gravadas pela tela
   motor marcacao juiz gravar <arquivo|-> [--json]
                                         grava as marcas do juiz ({lote_id, marcas:[…]})
+  motor marcacao juiz ler --lote <lote_id> [--json]
+                                        as marcas do juiz do lote, com a hora de cada gravação
 """
 
 
@@ -154,6 +156,15 @@ def executar(base: str, token: str, argv: list, stdin=None, saida=None, erro=Non
                 raise Falha(2, "juiz gravar pede <arquivo|->")
             r = chamada(base, token, "POST", "/interno/juiz", _le_json(pos[0], stdin))
             imprime(r, op.get("--json"), f"{r['gravadas']} marca(s) do juiz gravada(s)")
+            return 0
+        if argv[:2] == ["juiz", "ler"]:
+            pos, op = _flags(argv[2:], ("--lote",), ("--json",))
+            if pos or not op.get("--lote"):
+                raise Falha(2, "juiz ler pede --lote <lote_id>")
+            r = chamada(base, token, "GET", "/interno/juiz?lote_id=" + urllib.parse.quote(op["--lote"]))
+            ultima = max((m["criado_em"] for m in r["marcas"]), default=None)
+            imprime(r, op.get("--json"), f"lote {r['lote_id']} · {len(r['marcas'])} marca(s) do juiz"
+                    + (f" · última gravada em {ultima}" if ultima else ""))
             return 0
         raise Falha(2, f"ato desconhecido: {' '.join(argv[:2])}")
     except Falha as f:
