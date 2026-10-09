@@ -4,9 +4,9 @@
 # dono: ia
 # componente: platafirma-motor
 # classe: B
-# use para: achar pelo sentido o trecho que responde a X (buscar <particao> --necessidade "<uma frase que nomeia o assunto pelo termo do acervo>"; o verbo manda a pergunta com a necessidade e, com PF_CHAPEU, o chapeu com cadeira, chapeu e rotulos dele; recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou | ou vem em saco de palavras; --origem abertura|bench|sombra|autoteste manda o texto literal, sem lint e sem montagem; `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), medir sem gravar a eleicao de chapeu sobre o log de perguntas (eleger), medir sem gravar quanto do log o lint da consulta montada recusaria (lintar), comparar a chamada de hoje, a frase do dono e a lista montada nas perguntas do piloto, ou, com --do-log, a busca de hoje e a busca com o eleito do chapeu nas chamadas do log (parear biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste)
-# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote), eleger (leitura, medida)
-# (buscar/medir/indexar/trocar/sortear/escrever/parear exigem particao; eleger e lintar leem o log inteiro e nao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar), eventos, juiz)
+# use para: achar pelo sentido o trecho que responde a X (buscar <particao> --necessidade "<uma frase que nomeia o assunto pelo termo do acervo>"; o verbo manda a pergunta com a necessidade e, com PF_CHAPEU, o chapeu com cadeira, chapeu e rotulos dele; recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou | ou vem em saco de palavras; --origem abertura|bench|sombra|autoteste manda o texto literal, sem lint e sem montagem; `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), medir sem gravar a eleicao de chapeu sobre o log de perguntas (eleger), medir sem gravar quanto do log o lint da consulta montada recusaria (lintar), comparar a chamada de hoje, a frase do dono e a lista montada nas perguntas do piloto, ou, com --do-log, a busca de hoje e a busca com o eleito do chapeu nas chamadas do log (parear biblioteca), julgar com o juiz (Claude) as respostas do piloto da escada e medir o juiz contra a primeira passada do dono: kappa, divergencias, tempo e lote de conferencia (julgar biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste)
+# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote), julgar (escrita, lote), eleger (leitura, medida)
+# (buscar/medir/indexar/trocar/sortear/escrever/parear/julgar exigem particao; eleger e lintar leem o log inteiro e nao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar), eventos, juiz)
 # forma: json
 # cauda: nao
 # poda: cosmetica@rag,casa,buscar
@@ -22,6 +22,7 @@
 # le: lintar=motor
 # le: parear=motor,arquivo-local
 # le: escrever=motor,arquivo-local
+# le: julgar=motor,arquivo-local,release
 # le: eleger=motor
 # escreve: listar=nada
 # escreve: ajuste=arquivo-local
@@ -33,6 +34,7 @@
 # escreve: lintar=nada
 # escreve: parear=motor,arquivo-local
 # escreve: escrever=motor,arquivo-local
+# escreve: julgar=motor,arquivo-local
 # escreve: eleger=nada
 # (recursos pelo enum de ferramental_recurso. Onde: o evento consulta em $PLATAFIRMA_INSTANCIA/var/log/ops/*.jsonl, best-effort;
 #  o env da ingestao na instancia, arquivo NOME-valor ou $PLATAFIRMA_INSTANCIA/segredos/<stack>/<VAR> (ajuste de corte, via
@@ -60,6 +62,8 @@ import sorteio  # noqa: E402  (o sorteio do estrato sentido da escada, #3349)
 import escritor  # noqa: E402  (as respostas do piloto da escada, um escritor e tres bracos, #3349)
 import consulta  # noqa: E402  (a consulta montada pelo verbo: lint, pedido do dono, rotulos do chapeu, #3360)
 import par_consulta  # noqa: E402  (o par minimo: a chamada de hoje, a frase do dono e a lista montada, #3360)
+import juiz  # noqa: E402  (o juiz do piloto da escada: Claude pelo gerador do rag, criterio da tela, #3350)
+import kappa  # noqa: E402  (o juiz contra a primeira passada do dono, divergencias e lote de conferencia, #3350)
 
 REG = os.environ.get("PF_MOTOR_REG") or str(_ARVORE / "registro" / "motor-instancias.json")
 BIN = os.environ.get("PF_BIN") or str(_ARVORE / "bin")
@@ -247,6 +251,14 @@ def uso(cod=2):
                                         rodape e mapa afirmacao->secao; grava o envelope do lote. O estado e retomavel
                                         (repita com --lote-id); --plano so recupera. A saida vai para a instancia, nunca
                                         para repositorio: o lote leva texto do acervo
+  motor <inst> julgar biblioteca --lote <lote_id> [--tempo S] [--criterio <criterio.json>]
+                                        o juiz (o gerador do rag, Claude) julga cada resposta do lote pelo criterio que a
+                                        tela mostrou ao dono: grau, embasamento por afirmacao e grau por trecho; grava em
+                                        avaliacao.juiz_marca quando todas tiverem nota. Retomavel; nunca le os eventos do dono
+  motor <inst> julgar biblioteca --lote <lote_id> --kappa | --divergencias | --tempo-ativo | --conferencia [--ativar] [--json]
+                                        so com o juiz completo no banco: o kappa e o acerto em enganosa contra a primeira
+                                        passada do dono (intervalo por pergunta), as divergencias sem braco, o tempo ativo,
+                                        ou o lote de conferencia so com as divergentes (ids novos, sem a nota do juiz)
   motor marcacao lote gravar|ler|ativar … · motor marcacao eventos --lote <id> · motor marcacao juiz gravar
                                         o lote da tela de marcacao do gold set e o que ela grava (marcacao-api;
                                         `motor marcacao --ajuda` traz as formas)
@@ -2093,6 +2105,239 @@ def cmd_escrever(d, inst, argv):
     print(f"gravar: motor marcacao lote gravar {op['--saida']}{' --ativar' if not op.get('--ativar') else ''}")
 
 
+# O juiz roda DENTRO do conteiner do rag (molde do braco lexico): o gerador do motor (Claude pelo `claude` CLI da
+# maquina, ou pela API se houver chave) so existe la. Um script le o texto das secoes; o outro faz UMA geracao.
+# Nenhum dos dois escreve em banco.
+JUIZ_TEXTOS = '''
+import json, os
+from motor_acervo.config.settings import load_settings
+from motor_acervo.store.db import get_conn
+A = json.loads(os.environ["JUIZ_ARGS"])
+conn = get_conn(load_settings())
+out = {}
+for sid in A["ids"]:
+    textos = [r[0] for r in conn.execute(
+        "SELECT texto FROM acervo.trecho WHERE secao_id = %s::uuid AND elegivel ORDER BY ordem_leitura", (sid,)).fetchall()]
+    out[sid] = "\\n\\n".join(textos)[:A["max_chars"]]
+print(json.dumps(out, ensure_ascii=False))
+'''
+
+JUIZ_GERAR = '''
+import json, os, time
+from motor_acervo.config.settings import load_settings
+from motor_acervo.recuperacao import runtime as rt
+A = json.loads(os.environ["JUIZ_ARGS"])
+st = load_settings()
+t0 = time.monotonic()
+texto = rt.generate(st, A["sistema"], A["usuario"], thinking=True, json_mode=True)
+print(json.dumps({"texto": texto, "modelo": st.gen_model, "provider": rt._provider_for(st),
+                  "segundos": round(time.monotonic() - t0, 2)}, ensure_ascii=False))
+'''
+
+JULGAR_OPCOES = {"--lote": 1, "--criterio": 1, "--tempo": 1, "--kappa": 0, "--divergencias": 0, "--tempo-ativo": 0,
+                 "--conferencia": 0, "--ativar": 0, "--json": 0}
+
+
+def _no_conteiner_rag(inst, script, args, timeout=900):
+    c = inst.get("container")
+    r = sh(f"docker exec -i -e PYTHONPATH=/app -e JUIZ_ARGS={shlex.quote(json.dumps(args, ensure_ascii=False))} {c} python -",
+           input=script, timeout=timeout)
+    if r.returncode != 0:
+        print(f"motor julgar: falhou no conteiner {c}: {r.stderr.strip()[-600:]}", file=sys.stderr)
+        sys.exit(3)
+    return json.loads(r.stdout.strip().splitlines()[-1])
+
+
+def _marcacao_da(d):
+    mk = d.get("marcacao")
+    if not mk:
+        print("motor julgar: a instancia marcacao nao esta no registro", file=sys.stderr)
+        sys.exit(3)
+    return mk["endpoint"], token_da(mk)
+
+
+def _chama_marcacao(base, tk, metodo, caminho, corpo=None):
+    try:
+        return marcacao.chamar(base, tk, metodo, caminho, corpo)
+    except marcacao.Falha as f:
+        print(f"motor julgar: marcacao-api: {f.msg}", file=sys.stderr)
+        sys.exit(f.codigo)
+
+
+def cmd_julgar(d, inst, argv):
+    """`julgar biblioteca --lote <id>`: o juiz do piloto da escada (card #3350; padrao protocolo-medicao-rag, «O juiz»).
+    Sem flag de leitura, julga cada resposta do lote pelo criterio que a tela mostrou ao dono e grava em
+    avaliacao.juiz_marca; NUNCA le os eventos do dono. `--kappa`, `--divergencias`, `--tempo-ativo` e `--conferencia`
+    so rodam com o juiz completo no banco, e so entao leem os eventos (a hora da primeira leitura fica no estado)."""
+    particao, resto = resolve_particao(argv, "julgar")
+    if particao != "biblioteca":
+        print("motor julgar: so a biblioteca tem o piloto da escada", file=sys.stderr)
+        sys.exit(2)
+    op, i = {}, 0
+    while i < len(resto):
+        n = JULGAR_OPCOES.get(resto[i])
+        if n is None or (n and i + 1 >= len(resto)):
+            print(f"motor julgar: argumento invalido {resto[i]!r}. Aceita: {' '.join(JULGAR_OPCOES)}", file=sys.stderr)
+            sys.exit(2)
+        op[resto[i]] = resto[i + 1] if n else True
+        i += 1 + n
+    leituras = [f for f in ("--kappa", "--divergencias", "--tempo-ativo", "--conferencia") if op.get(f)]
+    if not op.get("--lote") or len(leituras) > 1 or (op.get("--ativar") and not op.get("--conferencia")):
+        print("motor julgar: pede --lote <id> e no maximo um de --kappa, --divergencias, --tempo-ativo, --conferencia "
+              "(--ativar so com --conferencia)", file=sys.stderr)
+        sys.exit(2)
+    lote_id = op["--lote"]
+    base, tk = _marcacao_da(d)
+    lote = _chama_marcacao(base, tk, "GET", "/interno/lote/" + urllib.parse.quote(lote_id) + "?com_braco=1")
+    if lote["passada"] != "primeira":
+        print(f"motor julgar: o lote {lote_id} e de {lote['passada']}; o juiz marca a primeira passada", file=sys.stderr)
+        sys.exit(2)
+    arq_estado = os.path.join(dir_medicoes(inst), f"juiz-{lote_id}.json")
+    os.makedirs(os.path.dirname(arq_estado), exist_ok=True)
+    est = json.load(open(arq_estado)) if os.path.isfile(arq_estado) else {"lote_id": lote_id, "julgados": {}, "textos": {}}
+    if not leituras:
+        return _julgar(inst, op, lote, est, arq_estado, base, tk)
+
+    # --- leituras: so com o juiz completo no banco ---------------------------------------------------------
+    marcas_j = _chama_marcacao(base, tk, "GET", "/interno/juiz?lote_id=" + urllib.parse.quote(lote_id))["marcas"]
+    if est.get("prompt_hash"):
+        marcas_j = [m for m in marcas_j if m["prompt_hash"] == est["prompt_hash"]]
+    juiz_por = {m["resposta_id"]: m for m in marcas_j}
+    faltam = [r["resposta_id"] for r in lote["respostas"] if r["resposta_id"] not in juiz_por]
+    if faltam:
+        print(f"motor julgar: o juiz ainda nao marcou {len(faltam)} de {len(lote['respostas'])} respostas do lote; "
+              f"rode `motor rag julgar biblioteca --lote {lote_id}` ate completar. Nada dos eventos do dono foi lido.",
+              file=sys.stderr)
+        sys.exit(1)
+    ultima_juiz = max(marcas_j, key=lambda m: m["id"])["criado_em"]
+    if not est.get("eventos_lidos_em"):
+        est["eventos_lidos_em"] = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
+        _salva_estado(arq_estado, est)
+    eventos = _chama_marcacao(base, tk, "GET", "/interno/eventos?lote_id=" + urllib.parse.quote(lote_id))["eventos"]
+    dono = kappa.marcas_do_dono(eventos)
+    fora = kappa.excluidas(eventos)
+    jz = {rid: {"qualidade": m["qualidade"], "embasamento": m["embasamento"]} for rid, m in juiz_por.items()}
+    from datetime import datetime
+    ordem = {"ultima_marca_do_juiz": ultima_juiz, "primeira_leitura_dos_eventos": est["eventos_lidos_em"],
+             "juiz_antes": datetime.fromisoformat(ultima_juiz) < datetime.fromisoformat(est["eventos_lidos_em"])}
+    if op.get("--kappa"):
+        c = kappa.concordancia(lote, dono, jz, fora)
+        c["ordem"] = ordem
+        c["repeticoes"] = sum(1 for m in dono.values() if m.get("marcas", 1) > 1)
+        c["juiz"] = {"modelo": est.get("modelo"), "provider": est.get("provider"), "prompt_hash": est.get("prompt_hash"),
+                     "prompt_versao": juiz.PROMPT_VERSAO, "criterio_versao": lote["criterio_versao"]}
+        _grava_atomico(os.path.join(dir_medicoes(inst), f"kappa-{lote_id}.json"), json.dumps(c, ensure_ascii=False))
+        if op.get("--json"):
+            print(json.dumps(c, ensure_ascii=False, indent=1))
+            return
+        iv, e = c["intervalo"], c["enganosa"]
+        k = "indefinido" if c["kappa"] is None else f"{c['kappa']:.2f}"
+        faixa = "indefinido" if iv["baixo"] is None else f"{iv['baixo']:.2f} a {iv['alto']:.2f}"
+        print(f"lote {lote_id} · {c['n_respostas']} respostas de {c['n_perguntas']} perguntas · juiz {c['juiz']['modelo']}")
+        print(f"  kappa {k} · intervalo 95% {faixa} ({iv['reamostras']} reamostras por pergunta, {iv['indefinidas']} indefinidas)")
+        print(f"  enganosa: o dono marcou {e['dono_marcou']}, o juiz acompanhou {e['juiz_acompanhou']} · "
+              f"o juiz marcou {e['juiz_marcou']}, o dono confirmou {e['dono_confirmou']}")
+        print("  por grau (dono / juiz / os dois): " + " · ".join(
+            f"{g} {v['dono']}/{v['juiz']}/{v['os_dois']}" for g, v in c["por_grau"].items()))
+        print(f"  fora: perguntas excluidas {c['perguntas_excluidas'] or 'nenhuma'} · sem marca do dono "
+              f"{len(c['sem_marca_do_dono'])} · respostas marcadas mais de uma vez {c['repeticoes']} (vale a mais recente)")
+        print(f"  ordem: ultima marca do juiz {ultima_juiz} · primeira leitura dos eventos {est['eventos_lidos_em']} · "
+              f"{'juiz antes' if ordem['juiz_antes'] else 'FORA DA ORDEM'}")
+        return
+    divs = kappa.divergencias(lote, dono, jz, fora)
+    if op.get("--divergencias"):
+        if op.get("--json"):
+            print(json.dumps(divs, ensure_ascii=False, indent=1))
+            return
+        print(f"lote {lote_id} · {len(divs)} divergencia(s) (qualidade ou embasamento), sem braco")
+        for n, x in enumerate(divs, 1):
+            dq, jq = x["dono"], x["juiz"]
+            print(f"{n:>3}. {x['resposta_id']} · dono {dq['qualidade']}/{'emb' if dq['embasamento'] else 'sem emb'} · "
+                  f"juiz {jq['qualidade']}/{'emb' if jq['embasamento'] else 'sem emb'} · {x['pergunta'][:70]}")
+        return
+    if op.get("--tempo-ativo"):
+        t = kappa.tempo(lote, dono, kappa.preferencias(eventos), fora)
+        if op.get("--json"):
+            print(json.dumps(t, ensure_ascii=False, indent=1))
+            return
+        for nome, v in (("por resposta", t["por_resposta"]), ("por pergunta", t["por_pergunta"])):
+            print(f"{nome}: n {v['n']} · mediana {v['mediana']:.1f} s · p90 {v['p90']:.1f} s · total {v['total'] / 60:.1f} min")
+        return
+    # --conferencia
+    conf_id = f"{lote_id}-conf"
+    if not divs:
+        print(f"motor julgar: nenhuma divergencia no lote {lote_id}; sem lote de conferencia")
+        return
+    env = kappa.lote_de_conferencia(lote, divs, conf_id, lambda: "re-" + os.urandom(6).hex(), f"{conf_id}/{len(divs)}")
+    env["ativo"] = bool(op.get("--ativar"))
+    r = _chama_marcacao(base, tk, "PUT", "/interno/lote", env)
+    print(f"lote {r['lote_id']} gravado · passada conferencia · {r['perguntas']} perguntas · {r['respostas']} respostas "
+          f"(= {len(divs)} divergencias) · {'ativo: a tela ja o serve' if r['ativo'] else 'inativo'}")
+
+
+def _julgar(inst, op, lote, est, arq_estado, base, tk):
+    crit_arq = op.get("--criterio") or na_release("platafirma-ui/app/marcacao/criterio.json")
+    try:
+        with open(crit_arq, encoding="utf-8") as f:
+            criterio = json.load(f)
+    except (OSError, ValueError) as e:
+        print(f"motor julgar: criterio da tela nao lido ({crit_arq}): {e}", file=sys.stderr)
+        sys.exit(3)
+    if criterio.get("criterio_versao") != lote["criterio_versao"]:
+        print(f"motor julgar: o criterio servido e {criterio.get('criterio_versao')}, o lote foi marcado em "
+              f"{lote['criterio_versao']}; o juiz julga pelo criterio que o dono viu", file=sys.stderr)
+        sys.exit(2)
+    graus = juiz.graus_do_criterio(criterio)
+    sistema = juiz.sistema(criterio)
+    h = juiz.prompt_hash(sistema)
+    if est.get("prompt_hash") and est["prompt_hash"] != h:
+        print(f"motor julgar: o estado {arq_estado} e de outro prompt; o prompt do juiz nao muda no meio do lote", file=sys.stderr)
+        sys.exit(2)
+    est["prompt_hash"] = h
+    perg = {p["pergunta_id"]: p for p in lote["corpo"]["perguntas"]}
+    texto_resp = {r["resposta_id"]: r["texto"] for p in lote["corpo"]["perguntas"] for r in p["respostas"]}
+    ids = sorted({s.get("secao_id") or s["chave"] for r in lote["respostas"] for s in r["secoes"]} - set(est["textos"]))
+    if ids:
+        est["textos"].update(_no_conteiner_rag(inst, JUIZ_TEXTOS, {"ids": ids, "max_chars": juiz.CHARS_POR_SECAO + 500}))
+        _salva_estado(arq_estado, est)
+
+    def gerar(sist, usuario, tentativa):
+        g = _no_conteiner_rag(inst, JUIZ_GERAR, {"sistema": sist, "usuario": usuario})
+        if est.get("modelo") and est["modelo"] != g["modelo"]:
+            print(f"motor julgar: o gerador do rag trocou de modelo no meio do lote ({est['modelo']} -> {g['modelo']})",
+                  file=sys.stderr)
+            sys.exit(4)
+        est["modelo"], est["provider"] = g["modelo"], g["provider"]
+        return g
+
+    limite = time.monotonic() + float(op.get("--tempo", 480))
+    pendentes = [r for r in lote["respostas"] if r["resposta_id"] not in est["julgados"]]
+    falhas = []
+    for r in pendentes:
+        if time.monotonic() > limite:
+            break
+        secoes = [{"chave": s["chave"], "titulo": s["titulo"], "texto": est["textos"].get(s.get("secao_id") or s["chave"], "")}
+                  for s in r["secoes"]]
+        try:
+            est["julgados"][r["resposta_id"]] = juiz.julgar_resposta(
+                sistema, graus, perg[r["pergunta_id"]]["texto"], texto_resp[r["resposta_id"]], secoes, r["mapa"], gerar)
+        except RuntimeError as e:
+            falhas.append(f"{r['resposta_id']}: {e}")
+        _salva_estado(arq_estado, est)
+    feitos, total = len(est["julgados"]), len(lote["respostas"])
+    contagem = dict(sorted(Counter(j["qualidade"] for j in est["julgados"].values()).items()))
+    print(f"lote {lote['lote_id']} · juiz {est.get('modelo')} ({est.get('provider')}) · prompt {h[:12]} · "
+          f"{feitos}/{total} julgadas · graus do juiz {contagem}")
+    for f in falhas:
+        print(f"  sem julgamento: {f}")
+    if feitos < total:
+        print(f"INCOMPLETO: repita `motor rag julgar biblioteca --lote {lote['lote_id']}`; nada foi gravado no banco ainda")
+        sys.exit(1)
+    r = _chama_marcacao(base, tk, "POST", "/interno/juiz", juiz.marcas_para_gravar(lote["lote_id"], est["julgados"], est["modelo"], h))
+    print(f"{r['gravadas']} marca(s) do juiz gravada(s) (as ja gravadas com o mesmo modelo e prompt nao se repetem); "
+          f"os eventos do dono nao foram lidos. Proximo: motor rag julgar biblioteca --lote {lote['lote_id']} --kappa")
+
+
 PAREAR_OPCOES = {"--frases": 1, "--versao": 1, "--criterio-versao": 1, "--saida": 1, "--lote-id": 1, "--antes": 1,
                 "--lista": 1, "--tempo": 1, "--ativar": 0, "--plano": 0, "--do-log": 0, "--desde": 1}
 
@@ -2740,11 +2985,13 @@ def main():
         return cmd_parear(d, inst, a[2:])
     if a[1] == "escrever":
         return cmd_escrever(d, inst, a[2:])
+    if a[1] == "julgar":
+        return cmd_julgar(d, inst, a[2:])
     if a[1] == "eleger":
         return cmd_eleger(a[0], inst, a[2:])
     if a[1] == "medir":
         return cmd_medir(a[0], inst, a[2:])
-    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, eleger, escrever, indexar, lintar, medir, parear, sortear, trocar", file=sys.stderr)
+    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, eleger, escrever, indexar, julgar, lintar, medir, parear, sortear, trocar", file=sys.stderr)
     sys.exit(1)
 
 
