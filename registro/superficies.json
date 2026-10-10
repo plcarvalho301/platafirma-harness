@@ -30,7 +30,8 @@
     "claudinho-mcp": "claude.ai",
     "agy-cli": "agy",
     "cursor-cli": "cursor",
-    "codex-cli": "codex"
+    "codex-cli": "codex",
+    "code-cli": "code"
   },
   "superficies": {
     "claude.ai": {
@@ -69,6 +70,15 @@
       "onde_declara": ".codex/config.toml do platafirma-posto, lido da pasta do projeto quando o projeto e confiavel (sem sincroniza.sh)",
       "verificavel_do_host": false,
       "porque": "o arquivo vive no clone de outra conta; o host ve o azp codex-cli em cada linha do log da porta"
+    },
+    "code": {
+      "papel": "Claude Code no platafirma-posto, conta megafone; cliente OAuth publico code-cli no Keycloak, PKCE S256, callback fixo em localhost:8789 (#3396)",
+      "conectores": [
+        "claudinho-mcp"
+      ],
+      "onde_declara": ".mcp.json do platafirma-posto, campo oauth do claudinho-mcp (clientId code-cli, callbackPort 8789)",
+      "verificavel_do_host": false,
+      "porque": "o arquivo vive no clone de outra conta; o host ve o azp code-cli em cada linha do log da porta"
     },
     "fita": {
       "papel": "giro headless do chat, disparado pelo worker; sala do Matrix",
