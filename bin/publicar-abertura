@@ -76,7 +76,11 @@ SUBARVORE="abertura"   # o subdir versionado que o montador serve
 # git por caminho absoluto, imune ao shim `git` do PATH da porta (mesma cura de c5d2321 no
 # `repo`): sob a porta o shim recusa, e a publicacao morria em "origin/main nao resolve"
 # (medido 11/09/2026, fita de gestao-estrategica).
-GIT="$(command -v /usr/bin/git /bin/git 2>/dev/null | head -1)"
+# sem `| head -1` sob pipefail (SIGPIPE intermitente, exit 141): ver bin/release
+GIT=""
+for _g in /usr/bin/git /bin/git; do
+  if [ -x "$_g" ]; then GIT="$_g"; break; fi
+done
 [ -x "$GIT" ] || GIT=/usr/bin/git
 g() { "$GIT" -C "$HARNESS" "$@"; }
 

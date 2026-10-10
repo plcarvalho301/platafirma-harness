@@ -53,7 +53,12 @@ FAMILIA_BIN="platafirma-harness"   # a única família que serve verbos no PATH 
 ESPELHO=".repo.git"                 # espelho bare por família; fora do glob de famílias
 
 # Resolução de binário real: evitar shims no PATH da porta
-GIT="$(command -v /usr/bin/git /bin/git 2>/dev/null | head -1)"
+# sem `| head -1` sob pipefail: com /bin -> /usr/bin o `command -v` imprime duas linhas, o head fecha o pipe e o
+# builtin leva SIGPIPE em corrida (exit 141 intermitente, medido em 10/10 no gate de promocao)
+GIT=""
+for _g in /usr/bin/git /bin/git; do
+  if [ -x "$_g" ]; then GIT="$_g"; break; fi
+done
 [ -x "$GIT" ] || GIT=/usr/bin/git
 
 if [ ! -x "$GIT" ]; then
