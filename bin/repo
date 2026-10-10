@@ -136,8 +136,10 @@ uso:
   repo pr-diff   <repo> <numero>
   repo pr-merge  <repo> <numero> [--squash|--merge|--rebase] [--forcar]
   repo pr-fechar <repo> <numero> --motivo <texto>   (descarta sem merge; apaga ramo e bancadas)
-  repo lock      <repo> <projeto> [--conferir]      (uv.lock do <projeto>/pyproject.toml, ou package-lock.json do
-                                                     <projeto>/package.json sem script de pacote; nao commita)
+  repo lock      <repo> <projeto> [--conferir | --atualizar <pacote>[@<versao>]…]
+                                                    (uv.lock do <projeto>/pyproject.toml, ou package-lock.json do
+                                                     <projeto>/package.json sem script de pacote; nao commita;
+                                                     --atualizar sobe so o pacote pedido, relata antes -> depois)
   repo git       <repo> <args…>
 
 bancada: PLATAFIRMA_BANCADA[sem default] (exit 3)
@@ -2662,6 +2664,100 @@ npm_isolado() {  # $1=pasta ; resto = argumentos do npm
   return "$rc"
 }
 
+# --atualizar <pacote>[@<versão>] (feature #3388): sobe um pacote só pelo lock. Nome e versão se
+# validam antes de virar argumento do uv ou do npm: sem hífen na frente, sem espaço, sem caminho.
+# npm aceita pacote@versão (escopo começa com @); uv aceita pacote@versão ou pacote==versão.
+spec_nome() {  # $1=pacote[@versão] ; imprime o nome
+  local s="$1" p=""
+  case "$s" in @*) p="@"; s="${s#@}" ;; esac
+  case "$s" in *==*) s="${s%%==*}" ;; *@*) s="${s%%@*}" ;; esac
+  printf '%s%s' "$p" "$s"
+}
+spec_versao() {  # $1=pacote[@versão] ; imprime a versão pedida (vazio se nenhuma)
+  local s="$1"
+  case "$s" in @*) s="${s#@}" ;; esac
+  case "$s" in *==*) printf '%s' "${s#*==}" ;; *@*) printf '%s' "${s#*@}" ;; esac
+}
+spec_valida() {  # $1=pacote[@versão]
+  local n v
+  case "$1" in *@|*==) return 1 ;; esac
+  n="$(spec_nome "$1")"; v="$(spec_versao "$1")"
+  [[ "$n" =~ ^@?[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)?$ ]] || return 1
+  [ -z "$v" ] || [[ "$v" =~ ^[0-9A-Za-z][0-9A-Za-z.+_-]*$ ]]
+}
+# versão(ões) de um pacote no lock, separadas por espaço; vazio e exit 1 se o pacote não está nele
+versao_no_lock() {  # $1=uv|npm $2=arquivo do lock $3=nome
+  python3 - "$1" "$2" "$3" <<'PY'
+import json, re, sys, tomllib
+eco, arq, nome = sys.argv[1:4]
+try:
+    if eco == "uv":
+        norm = lambda s: re.sub(r"[-_.]+", "-", s).lower()
+        with open(arq, "rb") as f:
+            vs = [str(p.get("version", "")) for p in tomllib.load(f).get("package", [])
+                  if norm(p.get("name", "")) == norm(nome)]
+    else:
+        d = json.load(open(arq, encoding="utf-8"))
+        vs = [str(i.get("version", "")) for k, i in (d.get("packages") or {}).items()
+              if isinstance(i, dict) and (k == "node_modules/" + nome or k.endswith("/node_modules/" + nome))]
+except (OSError, ValueError, tomllib.TOMLDecodeError):
+    sys.exit(1)
+if not vs:
+    sys.exit(1)
+print(" ".join(sorted(set(vs))))
+PY
+}
+# relata o que o --atualizar pediu contra o que o lock passou a ter; exit 1 se uma versão pedida não veio
+relatar_atualizacao() {  # $1=uv|npm $2=lock anterior $3=lock novo ; resto: pacote[@versão]...
+  local eco="$1" antes="$2" depois="$3" s n v a d falta=0; shift 3
+  for s in "$@"; do
+    n="$(spec_nome "$s")"; v="$(spec_versao "$s")"
+    a="$(versao_no_lock "$eco" "$antes" "$n" 2>/dev/null)" || a=""
+    d="$(versao_no_lock "$eco" "$depois" "$n" 2>/dev/null)" || d=""
+    if [ -n "$v" ] && case " $d " in *" $v "*) false ;; *) true ;; esac; then
+      printf 'atualizar: %s pedido em %s e o lock ficou em %s\n' "$n" "$v" "${d:-(ausente)}"; falta=1
+    elif [ "$a" = "$d" ]; then
+      printf 'atualizar: %s segue em %s (já na versão mais nova que o manifesto permite)\n' "$n" "$d"
+    else
+      printf 'atualizar: %s %s -> %s\n' "$n" "${a:-(ausente)}" "$d"
+    fi
+  done
+  return "$falta"
+}
+# sobe os pacotes pedidos pelo npm, um a um, sem script de pacote: dependência direta com versão
+# pedida troca o pino no package.json (mantendo a seção e o pino exato); sem versão, ou transitiva,
+# sobe dentro da faixa que o manifesto permite (npm update --no-save). O primeiro que falha para,
+# deixa o motivo em $2 e devolve o código do npm.
+npm_atualizar_pacotes() {  # $1=dir $2=arquivo de erro ; resto: pacote[@versão]...
+  local dir="$1" err="$2" s n v info sec esp rc=0; shift 2
+  : > "$err"
+  for s in "$@"; do
+    n="$(spec_nome "$s")"; v="$(spec_versao "$s")"
+    info="$(python3 - "$dir/package.json" "$n" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+for sec in ("dependencies", "devDependencies", "optionalDependencies"):
+    if sys.argv[2] in (d.get(sec) or {}):
+        print(sec, d[sec][sys.argv[2]])
+        break
+else:
+    print("transitivo -")
+PY
+)"
+    sec="${info%% *}"; esp="${info#* }"
+    if [ "$sec" != transitivo ] && [ -n "$v" ]; then
+      local -a salvar=(--save-prod)
+      case "$sec" in devDependencies) salvar=(--save-dev) ;; optionalDependencies) salvar=(--save-optional) ;; esac
+      case "$esp" in [0-9]*) salvar+=(--save-exact) ;; esac
+      npm_isolado "$dir" install "$n@$v" "${salvar[@]}" --package-lock-only --ignore-scripts --no-audit --no-fund </dev/null >/dev/null 2>>"$err" || rc=$?
+    else
+      npm_isolado "$dir" update "$n" --no-save --package-lock-only --ignore-scripts --no-audit --no-fund </dev/null >/dev/null 2>>"$err" || rc=$?
+    fi
+    [ "$rc" -eq 0 ] || return "$rc"
+  done
+  return 0
+}
+
 # ato_lock_node -- o mesmo ato para projeto node (card #3386): package.json -> package-lock.json,
 # com o node de sistema e SEM script de pacote: `npm install --package-lock-only
 # --ignore-scripts` resolve e escreve o lock, não instala nem roda nada. --conferir só mede
@@ -2669,8 +2765,9 @@ npm_isolado() {  # $1=pasta ; resto = argumentos do npm
 # Escreve só <projeto>/package-lock.json e não commita. Relata a diferença lida dos dois locks:
 # + entrou, - saiu, ~ versão mudou. Config de usuário e global do npm não entram.
 # exit: 0 feito ou em dia · 1 lock defasado (--conferir) ou sem solução · 3 node, npm, índice ou rede
-ato_lock_node() {  # $1=repo $2=projeto $3=clone $4=dir $5=conferir(0|1)
-  local repo="$1" projeto="$2" dir="$4" conferir="$5" rel lock err rc=0 nodeinfo node npm antes=""
+ato_lock_node() {  # $1=repo $2=projeto $3=clone $4=dir $5=conferir(0|1) $6..=pacote[@versão] de --atualizar
+  local repo="$1" projeto="$2" dir="$4" conferir="$5" rel lock err rc=0 nodeinfo node npm antes="" pj_antes="" s n
+  local -a atualizar=("${@:6}")
   rel="$projeto/package-lock.json"; [ "$projeto" = "." ] && rel="package-lock.json"
   lock="$dir/package-lock.json"
   PF_VENV_PREFIXO="$VERBO lock"
@@ -2709,24 +2806,52 @@ ato_lock_node() {  # $1=repo $2=projeto $3=clone $4=dir $5=conferir(0|1)
   if [ -f "$lock" ]; then
     antes="$(mktemp)" && cp -p "$lock" "$antes" || morre "não guardei a cópia do lock anterior" 3
   fi
-  npm_isolado "$dir" install --package-lock-only --ignore-scripts --no-audit --no-fund </dev/null >/dev/null 2>"$err" || rc=$?
+  if [ "${#atualizar[@]}" -gt 0 ]; then
+    if [ -z "$antes" ]; then
+      rm -f "$err"
+      printf '%s: %s não existe; --atualizar sobe um pacote de um lock que já está no repo. Gere antes: repo lock %s %s\n' "$VERBO" "$rel" "$repo" "$projeto" >&2
+      exit 1
+    fi
+    for s in "${atualizar[@]}"; do
+      n="$(spec_nome "$s")"
+      if ! versao_no_lock npm "$lock" "$n" >/dev/null; then
+        rm -f "$err" "$antes"
+        printf '%s: %s não está em %s; nada escrito\n' "$VERBO" "$n" "$rel" >&2
+        exit 1
+      fi
+    done
+    pj_antes="$(mktemp)" && cp -p "$dir/package.json" "$pj_antes" || morre "não guardei a cópia do package.json" 3
+    npm_atualizar_pacotes "$dir" "$err" "${atualizar[@]}" || rc=$?
+  else
+    npm_isolado "$dir" install --package-lock-only --ignore-scripts --no-audit --no-fund </dev/null >/dev/null 2>"$err" || rc=$?
+  fi
   if [ "$rc" -ne 0 ]; then
     local cod=3 tipo="índice, rede ou npm"
     if grep -qiE 'ETARGET|notarget|No matching version|ERESOLVE' "$err"; then cod=1; tipo="sem solução para as dependências pedidas"; fi
-    printf '%s: npm install --package-lock-only saiu %s (%s); %s intocado:\n' "$VERBO" "$rc" "$tipo" "$rel" >&2
+    printf '%s: npm saiu %s (%s); %s intocado:\n' "$VERBO" "$rc" "$tipo" "$rel" >&2
     sed 's/^/  /' "$err" | tail -n 20 >&2
     [ -z "$antes" ] || cp -p "$antes" "$lock"
-    rm -f "$err" "$antes"
+    [ -z "$pj_antes" ] || cp -p "$pj_antes" "$dir/package.json"
+    rm -f "$err" "$antes" "$pj_antes"
     exit "$cod"
   fi
   rm -f "$err"
-  [ -f "$lock" ] || { rm -f "$antes"; morre "npm saiu 0 e não há $rel" 5; }
+  [ -f "$lock" ] || { rm -f "$antes" "$pj_antes"; morre "npm saiu 0 e não há $rel" 5; }
+  if [ "${#atualizar[@]}" -gt 0 ]; then
+    if ! relatar_atualizacao npm "$antes" "$lock" "${atualizar[@]}"; then
+      cp -p "$antes" "$lock"; cp -p "$pj_antes" "$dir/package.json"
+      rm -f "$antes" "$pj_antes"
+      printf '%s: o resolvedor não chegou à versão pedida (um pacote que depende dele a prende); %s e package.json intocados\n' "$VERBO" "$rel" >&2
+      exit 1
+    fi
+  fi
 
   local sha_d sha_a=""
   sha_d="$(sha256sum "$lock" | cut -c1-12)"
-  if [ -n "$antes" ] && cmp -s "$antes" "$lock"; then
+  if [ -n "$antes" ] && cmp -s "$antes" "$lock" \
+     && { [ -z "$pj_antes" ] || cmp -s "$pj_antes" "$dir/package.json"; }; then
     printf 'lock: %s já em dia (sha256 %s), nada mudou\n' "$rel" "$sha_d"
-    rm -f "$antes"
+    rm -f "$antes" "$pj_antes"
     return 0
   fi
   if [ -n "$antes" ]; then
@@ -2761,6 +2886,22 @@ if len(linhas) > 40:
     print(f"  ... e mais {len(linhas) - 40} mudanças")
 PY
   rm -f "$antes"
+  if [ -n "$pj_antes" ]; then
+    python3 - "$pj_antes" "$dir/package.json" <<'PY'
+import json, sys
+
+def specs(c):
+    d = json.load(open(c, encoding="utf-8"))
+    return {n: v for s in ("dependencies", "devDependencies", "optionalDependencies")
+            for n, v in (d.get(s) or {}).items()}
+
+a, b = specs(sys.argv[1]), specs(sys.argv[2])
+for n in sorted(set(a) | set(b)):
+    if a.get(n) != b.get(n):
+        print(f"package.json: ~ {n} {a.get(n, '(ausente)')} -> {b.get(n, '(ausente)')}")
+PY
+    rm -f "$pj_antes"
+  fi
   printf 'próximo: repo commitar %s -m "<o que mudou> (#<card>)" %s/package.json %s\n' "$repo" "$projeto" "$rel"
   return 0
 }
@@ -2777,9 +2918,13 @@ PY
 #       2 uso · 3 uv, python, indice ou rede · 4 caminho que escapa da bancada
 ato_lock() {
   local repo="" projeto="" conferir=0
+  local -a atualizar=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --conferir) conferir=1; shift ;;
+      --atualizar)
+        [ $# -ge 2 ] || morre "--atualizar pede um pacote (nome ou nome@versão)" 2
+        atualizar+=("$2"); shift 2 ;;
       -*) morre "opção desconhecida: '$1'" 2 ;;
       *)
         if [ -z "$repo" ]; then
@@ -2795,6 +2940,13 @@ ato_lock() {
   done
   [ -n "$repo" ] && [ -n "$projeto" ] \
     || morre "repo e projeto são obrigatórios para lock (ex.: repo lock platafirma-harness venvs/acervo)" 2
+  if [ "${#atualizar[@]}" -gt 0 ]; then
+    [ "$conferir" -eq 0 ] || morre "--atualizar e --conferir não se combinam: conferir só mede" 2
+    local _s
+    for _s in "${atualizar[@]}"; do
+      spec_valida "$_s" || morre "pacote inválido para --atualizar: '$_s' (use nome ou nome@versão)" 2
+    done
+  fi
   projeto="${projeto%/}"
   case "$projeto" in
     /*|*..*) morre "projeto fora da raiz ou símbolo que escapa: '$projeto'" 4 ;;
@@ -2812,7 +2964,7 @@ ato_lock() {
   fi
   # projeto node (card #3386): package.json sem pyproject.toml -> package-lock.json
   if [ ! -f "$dir/pyproject.toml" ] && [ -f "$dir/package.json" ]; then
-    ato_lock_node "$repo" "$projeto" "$c" "$dir" "$conferir"
+    ato_lock_node "$repo" "$projeto" "$c" "$dir" "$conferir" "${atualizar[@]+"${atualizar[@]}"}"
     return $?
   fi
   if [ ! -f "$dir/pyproject.toml" ]; then
@@ -2858,7 +3010,25 @@ ato_lock() {
   if [ -f "$lock" ]; then
     antes="$(mktemp)" && cp -p "$lock" "$antes" || morre "não guardei a cópia do lock anterior" 3
   fi
-  "${uvenv[@]}" "$uv" lock --python "$py" --project "$dir" </dev/null >/dev/null 2>"$err" || rc=$?
+  local -a upg=()
+  if [ "${#atualizar[@]}" -gt 0 ]; then
+    if [ -z "$antes" ]; then
+      rm -f "$err"
+      printf '%s: %s não existe; --atualizar sobe um pacote de um lock que já está no repo. Gere antes: repo lock %s %s\n' "$VERBO" "$rel" "$repo" "$projeto" >&2
+      exit 1
+    fi
+    local s n v
+    for s in "${atualizar[@]}"; do
+      n="$(spec_nome "$s")"; v="$(spec_versao "$s")"
+      if ! versao_no_lock uv "$lock" "$n" >/dev/null; then
+        rm -f "$err" "$antes"
+        printf '%s: %s não está em %s; nada escrito\n' "$VERBO" "$n" "$rel" >&2
+        exit 1
+      fi
+      if [ -n "$v" ]; then upg+=(--upgrade-package "$n==$v"); else upg+=(--upgrade-package "$n"); fi
+    done
+  fi
+  "${uvenv[@]}" "$uv" lock --python "$py" --project "$dir" "${upg[@]+"${upg[@]}"}" </dev/null >/dev/null 2>"$err" || rc=$?
   if [ "$rc" -ne 0 ]; then
     local cod=3 tipo="índice, rede ou uv"
     if grep -qi 'no solution found' "$err"; then cod=1; tipo="sem solução para as dependências pedidas"; fi
@@ -2869,6 +3039,11 @@ ato_lock() {
   fi
   rm -f "$err"
   [ -f "$lock" ] || { rm -f "$antes"; morre "uv lock saiu 0 e não há $rel" 5; }
+  if [ "${#atualizar[@]}" -gt 0 ] && ! relatar_atualizacao uv "$antes" "$lock" "${atualizar[@]}"; then
+    cp -p "$antes" "$lock"; rm -f "$antes"
+    printf '%s: o resolvedor não chegou à versão pedida; %s intocado\n' "$VERBO" "$rel" >&2
+    exit 1
+  fi
 
   local sha_d sha_a="" mudou=1
   sha_d="$(sha256sum "$lock" | cut -c1-12)"

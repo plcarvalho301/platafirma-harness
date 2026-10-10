@@ -14,6 +14,11 @@ Veredito por pacote (3 estados, o mesmo contrato do `conferir`):
                   pacote do lock sem integridade — o que a trava nao prende
   indeterminavel  lock ausente na arvore servida ou ilegivel: nao consegui olhar
 
+`--avisos` (opt-in, usa rede) cruza o rol com o OSV: pacote e versao do lock com aviso aberto
+vira divergente, com o id (GHSA, PYSEC...), a gravidade, o resumo e a versao em que foi corrigido.
+Nao entra no gate de promocao: aviso novo nao deve barrar mudanca que nao e dele. OSV fora do
+ar e indeterminavel (exit 5), nunca "sem aviso". Em `--json`, cada pacote ganha `avisos`.
+
 `--json` traz, alem dos itens, `pacotes`: stack, ecossistema, pacote, versao, direto
 (pedido pela propria stack) ou transitivo, fonte, integridade (hash do lock, prefixo),
 licenca (so quando o lock a carrega: o package-lock.json v3 carrega as vezes, o uv.lock
@@ -390,8 +395,111 @@ def escrever_md(destino, raiz_permitida, itens, linhas, sha_release, alvo=None, 
     return 0
 
 
+# --- avisos de seguranca (feature #3388) --------------------------------------------------
+# `--avisos` cruza o rol com o OSV (osv.dev: GHSA, PyPA, RustSec...), que responde por pacote e
+# versao exatos do lock. E opt-in porque usa rede e porque aviso novo apareceria como barreira
+# em promocao que nao tem nada a ver com ele: o gate de promocao nao o chama.
+OSV_BASE = "https://api.osv.dev"
+_ECO_OSV = {"npm": "npm", "pypi": "PyPI"}
+_ID_OSV = re.compile(r"^[A-Za-z0-9._:-]{1,80}$")
+
+def _osv_http(metodo, caminho, corpo=None):
+    """JSON de resposta do OSV; levanta OSError (rede, HTTP ou corpo que nao e JSON)."""
+    import urllib.request
+    url = (os.environ.get("PF_OSV_URL") or OSV_BASE).rstrip("/") + caminho
+    dados = json.dumps(corpo).encode("utf-8") if corpo is not None else None
+    req = urllib.request.Request(url, data=dados, method=metodo, headers={
+        "Content-Type": "application/json", "User-Agent": "platafirma-conferir-dependencias"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.load(r)
+    except (OSError, ValueError) as exc:
+        raise OSError(f"OSV {metodo} {caminho}: {exc}") from exc
+
+def _corrigido(detalhe, eco, nome):
+    """Versoes em que o aviso foi corrigido para ESTE pacote, como o OSV as publica."""
+    alvo = _norm_py(nome) if eco == "pypi" else nome
+    fixas = []
+    for a in detalhe.get("affected") or []:
+        pkg = a.get("package") or {}
+        n = pkg.get("name", "")
+        if (_norm_py(n) if eco == "pypi" else n) != alvo:
+            continue
+        for faixa in a.get("ranges") or []:
+            for ev in faixa.get("events") or []:
+                if ev.get("fixed") and ev["fixed"] not in fixas:
+                    fixas.append(ev["fixed"])
+    return ", ".join(fixas[:5]) if fixas else "sem correcao publicada"
+
+def consultar_avisos(linhas, osv=None):
+    """{(ecossistema, pacote, versao): [{id, resumo, gravidade, corrigido_em}]} dos pacotes do
+    rol com aviso aberto (retirado nao conta). `osv(metodo, caminho, corpo)` devolve o JSON da
+    resposta e levanta OSError; o padrao fala com o OSV. Nao responde por pacote sem versao
+    fixada ("?"): nao ha o que perguntar."""
+    osv = osv or _osv_http
+    chaves = sorted({(p["ecossistema"], p["pacote"], p["versao"]) for p in linhas
+                     if p["ecossistema"] in _ECO_OSV and p["versao"] not in ("", "?")})
+    ids_de = {}
+    for i in range(0, len(chaves), 500):
+        lote = chaves[i:i + 500]
+        resp = osv("POST", "/v1/querybatch", {"queries": [
+            {"package": {"name": n, "ecosystem": _ECO_OSV[e]}, "version": v} for e, n, v in lote]})
+        resultados = resp.get("results") or []
+        if len(resultados) != len(lote):
+            raise OSError(f"OSV devolveu {len(resultados)} resultados para {len(lote)} consultas")
+        for (e, n, v), r in zip(lote, resultados):
+            r = r or {}
+            ids = [x["id"] for x in r.get("vulns") or [] if x.get("id")]
+            token = r.get("next_page_token")
+            while token:  # resposta paginada: o resto do mesmo pacote e versao
+                pag = osv("POST", "/v1/query", {"package": {"name": n, "ecosystem": _ECO_OSV[e]},
+                                                "version": v, "page_token": token})
+                ids += [x["id"] for x in pag.get("vulns") or [] if x.get("id")]
+                token = pag.get("next_page_token")
+            if ids:
+                ids_de[(e, n, v)] = ids
+    detalhes, saida = {}, {}
+    for (e, n, v), ids in ids_de.items():
+        lista = []
+        for vid in sorted(set(ids)):
+            if not _ID_OSV.match(vid):
+                continue
+            if vid not in detalhes:
+                detalhes[vid] = osv("GET", "/v1/vulns/" + vid, None)
+            d = detalhes[vid]
+            if d.get("withdrawn"):
+                continue
+            lista.append({
+                "id": vid, "resumo": (d.get("summary") or "").strip(),
+                "gravidade": str((d.get("database_specific") or {}).get("severity") or ""),
+                "corrigido_em": _corrigido(d, e, n)})
+        if lista:
+            saida[(e, n, v)] = lista
+    return saida
+
+def _aplicar_avisos(itens, linhas, achados):
+    """Marca cada pacote do rol com seus avisos e vira divergente o item que tem algum."""
+    por_nome = {}
+    for p in linhas:
+        lista = achados.get((p["ecossistema"], p["pacote"], p["versao"]), [])
+        p["avisos"] = lista
+        if lista:
+            por_nome[f"{p['stack']} · {p['ecossistema']} · {p['pacote']} {p['versao']}"] = lista
+    novos = []
+    for nome, v in itens:
+        lista = por_nome.get(nome)
+        if lista:
+            texto = "; ".join(
+                f"{a['id']}{' (' + a['gravidade'] + ')' if a['gravidade'] else ''}: "
+                f"{a['resumo'] or 'sem resumo'} — corrigido em {a['corrigido_em']}" for a in lista)
+            antes = getattr(v, "motivo", "") if getattr(v, "estado", "") == "divergente" else ""
+            v = resultado.divergente(f"{antes}; {texto}" if antes else f"aviso de seguranca {texto}",
+                                     desde=getattr(v, "desde", None))
+        novos.append((nome, v))
+    return novos
+
 def conferir(alvo, como_json, sha_release, registro, prod_raiz, md_para=None, raiz_permitida=None,
-             harness=None):
+             harness=None, avisos=False, osv=None):
     if not os.path.isfile(registro):
         msg = f"registro de venvs ausente: {registro}"
         print(json.dumps({"erro": msg}) if como_json else msg, file=sys.stderr if not como_json else sys.stdout)
@@ -401,6 +509,14 @@ def conferir(alvo, como_json, sha_release, registro, prod_raiz, md_para=None, ra
         msg = f"stack {alvo!r} nao declarada em registro/venvs.json (nem trava <familia>:<pasta> na release)"
         print(json.dumps({"erro": msg}) if como_json else msg)
         return 1
+    if avisos:
+        try:
+            itens = _aplicar_avisos(itens, linhas, consultar_avisos(linhas, osv))
+        except OSError as exc:
+            msg = f"consulta de avisos falhou, nao consegui olhar: {exc}"
+            print(json.dumps({"erro": msg}) if como_json else f"dependencias: {msg}",
+                  file=sys.stdout if como_json else sys.stderr)
+            return 5
     ferr = ferramental(harness) if harness and (md_para or como_json) else None
     if md_para:
         rc_md = escrever_md(md_para, raiz_permitida or "/nao-declarada", itens, linhas, sha_release, alvo, ferr)

@@ -38,6 +38,8 @@ tests/test_mesa.py | bin/acervo bin/_acervo/** bin/bot bin/chat bin/conferir bin
 tests/test_registro_chave.py | bin/teste bin/_release/** registro/venvs.json
 tests/test_ambiente_node.py | bin/release bin/repo bin/teste bin/_release/** lib/venv.sh registro/venvs.json
 tests/test_contrato_repo_lock_node.py | bin/repo lib/venv.sh
+tests/test_contrato_repo_lock_atualizar.py | bin/repo lib/venv.sh
+tests/test_dependencias_avisos.py | bin/release bin/_release/**
 tests/test_release_construir_venv_registro.py | bin/release bin/_release/** lib/venv.sh
 tests/test_release_estagio_card.py | bin/release bin/_release/**
 tests/test_release_ensaio_fetch.py | bin/release bin/_release/**
