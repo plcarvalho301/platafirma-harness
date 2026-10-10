@@ -49,6 +49,10 @@ class _API(BaseHTTPRequestHandler):
                                         "perguntas": 2, "respostas": 6})
         if self.path.startswith("/interno/lote/") and self.path.endswith("/ativar"):
             return self._responde(200, {"lote_id": self.path.split("/")[3], "ativo": True})
+        if self.path == "/interno/lote/desativar":
+            return self._responde(200, {"lote_id": "lote-t1", "ativo": False})
+        if self.path.startswith("/interno/lote/") and self.path.endswith("/desativar"):
+            return self._responde(200, {"lote_id": self.path.split("/")[3], "ativo": False})
         if self.path.startswith("/interno/lote/"):
             if "com_braco=1" in self.path:
                 return self._responde(200, {"lote_id": "lote-t1", "ativo": True, "respostas": [
@@ -134,6 +138,10 @@ def test_ativar_eventos_e_juiz(api):
     roda, srv, _ = api
     assert roda("lote", "ativar", "lote-t2").stdout.strip() == "lote lote-t2 ativo"
     assert srv.pedidos[-1][:2] == ("POST", "/interno/lote/lote-t2/ativar")
+    assert roda("lote", "desativar", "lote-t2").stdout.strip() == "lote lote-t2 desativado"
+    assert srv.pedidos[-1][:2] == ("POST", "/interno/lote/lote-t2/desativar")
+    assert roda("lote", "desativar").stdout.strip() == "lote lote-t1 desativado"
+    assert srv.pedidos[-1][:2] == ("POST", "/interno/lote/desativar")
     r = roda("eventos", "--lote", "lote-t1")
     assert srv.pedidos[-1][:2] == ("GET", "/interno/eventos?lote_id=lote-t1")
     assert r.stdout.strip() == "lote lote-t1 · 3 eventos · marca 2 · preferencia 1"

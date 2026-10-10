@@ -6,7 +6,7 @@
 # classe: B
 # use para: achar pelo sentido o trecho que responde a X (buscar <particao> --necessidade "<uma frase que nomeia o assunto pelo termo do acervo>"; o verbo manda a pergunta com a necessidade e, com PF_CHAPEU, o chapeu com cadeira, chapeu e rotulos dele; recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou | ou vem em saco de palavras; --origem abertura|bench|sombra|autoteste manda o texto literal, sem lint e sem montagem; `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar biblioteca obra --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), medir sem gravar a eleicao de chapeu sobre o log de perguntas (eleger), medir sem gravar quanto do log o lint da consulta montada recusaria (lintar), comparar a chamada de hoje, a frase do dono e a lista montada nas perguntas do piloto, ou, com --do-log, a busca de hoje e a busca com o eleito do chapeu nas chamadas do log (parear biblioteca), julgar com o juiz (Claude) as respostas do piloto da escada e medir o juiz contra a primeira passada do dono: kappa, divergencias, tempo e lote de conferencia (julgar biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste)
 # atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote), julgar (escrita, lote), eleger (leitura, medida)
-# (buscar/medir/indexar/trocar/sortear/escrever/parear/julgar exigem particao; eleger e lintar leem o log inteiro e nao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar), eventos, juiz)
+# (buscar/medir/indexar/trocar/sortear/escrever/parear/julgar exigem particao; eleger e lintar leem o log inteiro e nao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar|desativar), eventos, juiz)
 # forma: json
 # cauda: nao
 # poda: cosmetica@rag,casa,buscar
@@ -260,7 +260,7 @@ def uso(cod=2):
                                         so com o juiz completo no banco: o kappa e o acerto em enganosa contra a primeira
                                         passada do dono (intervalo por pergunta), as divergencias sem braco, o tempo ativo,
                                         ou o lote de conferencia so com as divergentes (ids novos, sem a nota do juiz)
-  motor marcacao lote gravar|ler|ativar … · motor marcacao eventos --lote <id> · motor marcacao juiz gravar
+  motor marcacao lote gravar|ler|ativar|desativar … · motor marcacao eventos --lote <id> · motor marcacao juiz gravar
                                         o lote da tela de marcacao do gold set e o que ela grava (marcacao-api;
                                         `motor marcacao --ajuda` traz as formas)
 

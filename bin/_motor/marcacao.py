@@ -23,6 +23,8 @@ USO = """motor marcacao — o lote da tela de marcação e o que ela grava (marc
   motor marcacao lote ler (--atual | <lote_id>) [--com-braco] [--json]
                                         sem --com-braco, o que a tela recebe; com ele, braço, mapa e carimbo
   motor marcacao lote ativar <lote_id>  troca o lote ativo
+  motor marcacao lote desativar [<lote_id>] [--json]
+                                        desativa o lote ativo (ou o lote indicado)
   motor marcacao eventos --lote <lote_id> [--json]
                                         as marcas, preferências e exclusões gravadas pela tela
   motor marcacao juiz gravar <arquivo|-> [--json]
@@ -138,6 +140,14 @@ def executar(base: str, token: str, argv: list, stdin=None, saida=None, erro=Non
                 raise Falha(2, "lote ativar pede <lote_id>")
             r = chamada(base, token, "POST", f"/interno/lote/{pos[0]}/ativar")
             imprime(r, op.get("--json"), f"lote {r['lote_id']} ativo")
+            return 0
+        if argv[:2] == ["lote", "desativar"]:
+            pos, op = _flags(argv[2:], (), ("--atual", "--json"))
+            if len(pos) > 1:
+                raise Falha(2, "lote desativar aceita no máximo um <lote_id>")
+            caminho = f"/interno/lote/{pos[0]}/desativar" if pos else "/interno/lote/desativar"
+            r = chamada(base, token, "POST", caminho)
+            imprime(r, op.get("--json"), f"lote {r.get('lote_id') or 'ativo'} desativado")
             return 0
         if argv[0] == "eventos":
             pos, op = _flags(argv[1:], ("--lote",), ("--json",))
