@@ -144,7 +144,8 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   e --apagar, com aviso: sao os atos de Retirar abaixo)
   Transcrever (arq:0119 §2, §5) — opcional; o texto fiel ao arquivo, em impressao selada:
   acervo espelhar      biblioteca obra <obra> [--metodo <slug>] [--apply]   espelho novo do proprio arquivo; termina na selada
-  acervo espelhar      biblioteca lote [--ordem <lista>] [--medida --replicas <n>] [--apply]   o mesmo, em lote
+  acervo espelhar      biblioteca lote [--ordem <lista>] [--medida --replicas <n>] [--apply]   o mesmo, em lote;
+                       --ordem recorta: só as obras da lista, nessa ordem (sem ela, todo o estoque a transcrever)
   acervo ler           biblioteca lote <lote> [--json]   estado do lote de espelhar, obra a obra
   acervo recortar      biblioteca obra <obra>   corte novo sobre o mesmo espelho, em impressao nova
   acervo promover      biblioteca obra <obra> --impressao <id>   poe a impressao selada em servico, pela marcacao
