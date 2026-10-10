@@ -235,7 +235,7 @@ def uso(cod=2):
                                         necessidade, sem chapeu: a busca de hoje) e `eleito` (a mesma necessidade com `chapeu` e
                                         `eleicao_chapeu: true`, so na requisicao). A tabela traz o Jaccard do top-8 E x C. Sem
                                         chamada com eleito: sai 0 dizendo que nao ha par a medir, sem lote. Nao combina com --frases
-  motor <inst> lintar [--json]
+  motor <inst> lintar [--desde <data>] [--json]
                                         so leitura: o lint da consulta montada (spec motor §2b) sobre o log de
                                         perguntas, por origem e por causa, e as 20 do piloto da escada uma a uma;
                                         diz quanto o piso de palavras funcionais pegaria, sem recusar nada
@@ -2733,18 +2733,30 @@ def cmd_lintar(inst, argv):
     uma. A causa (c) nao se mede: o log anterior a 087 nao tem o pedido do dono. Nao grava nada, nao
     recusa nada: e a regua do piso de palavras funcionais (consulta.PISO_FUNCIONAIS) contra o que as
     cadeiras de fato perguntaram."""
-    if any(x != "--json" for x in argv):
-        print("motor lintar: aceita so --json\n  motor <inst> lintar [--json]", file=sys.stderr)
+    desde = None
+    resto = list(argv)
+    if "--desde" in resto:
+        k = resto.index("--desde")
+        if k + 1 >= len(resto) or not re.match(r"^\d{4}-\d{2}-\d{2}$", resto[k + 1]):
+            print("motor lintar: --desde pede AAAA-MM-DD", file=sys.stderr)
+            sys.exit(2)
+        desde = resto[k + 1]
+        del resto[k:k + 2]
+    if any(x != "--json" for x in resto):
+        print("motor lintar: aceita --desde AAAA-MM-DD e --json\n  motor <inst> lintar [--desde AAAA-MM-DD] [--json]", file=sys.stderr)
         sys.exit(2)
+    argv = resto
     b = inst.get("banco") or {}
     if not b:
         print("motor lintar: a instancia nao declara banco em motor-instancias.json", file=sys.stderr)
         sys.exit(1)
+    # `pedido` saiu da consulta e do evento no #3364: nao se le mais
     eventos = _psql_json(b, (
         "SELECT coalesce(json_agg(t ORDER BY t.criado_em, t.id), '[]'::json) FROM ("
         "SELECT e.id::text AS id, e.pergunta, e.origem, e.criado_em::text AS criado_em, "
-        "e.pedido, e.necessidade, e.chapeu, e.perguntas, e.lint "
-        "FROM acervo.evento_recuperacao e WHERE e.disparou) t"))
+        "e.necessidade, e.chapeu, e.perguntas, e.lint "
+        "FROM acervo.evento_recuperacao e WHERE e.disparou"
+        + (f" AND e.criado_em >= {_lit(desde)}::date" if desde else "") + ") t"))
     por_origem, distintas = {}, {}
     for e in eventos:
         o = e.get("origem") or "nao declarada"
@@ -2784,8 +2796,8 @@ def cmd_lintar(inst, argv):
            "piloto": piloto,
            "montadas": {"eventos": len(montadas), "ultimos": [
                {"criado_em": e["criado_em"][:19], "pergunta": e["pergunta"][:70], "necessidade": e["necessidade"][:70],
-                "chapeu": e["chapeu"], "n_perguntas": len(e["perguntas"] or []), "lint": e["lint"],
-                "pedido": (e["pedido"] or "")[:40]} for e in montadas[-4:]]}}
+                "chapeu": e["chapeu"], "n_perguntas": len(e["perguntas"] or []), "lint": e["lint"]}
+               for e in montadas[-10:]]}}
     if argv:
         print(json.dumps(rel, ensure_ascii=False, indent=1))
         return
@@ -2813,10 +2825,10 @@ def cmd_lintar(inst, argv):
           f"{sum(1 for p in piloto if p['veredito_com_pedido_pt'] == 'passa')} passam: "
           + ", ".join(str(p['posicao']) for p in piloto if p['veredito_com_pedido_pt'] == 'passa'))
     m = rel["montadas"]
-    print(f"eventos com consulta montada (087): {m['eventos']}")
+    print(f"eventos com consulta montada (087): {m['eventos']} de {rel['eventos']}" + (f" desde {desde}" if desde else ""))
     for e in m["ultimos"]:
         print(f"  {e['criado_em']} chapeu={e['chapeu']} perguntas={e['n_perguntas']} lint={e['lint']} "
-              f"necessidade={e['necessidade']!r} pedido={e['pedido']!r}")
+              f"necessidade={e['necessidade']!r}")
 
 
 def _chama_eleger(inst, tok, corpo):
