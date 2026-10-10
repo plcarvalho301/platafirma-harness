@@ -68,14 +68,23 @@ GH_OWNER="plcarvalho301"
 COMO_JSON=0
 
 # Resolução de binário real uma vez, evitando shims no PATH da porta
-GIT="$(command -v /usr/bin/git /bin/git 2>/dev/null | head -1)"
+# sem `| head -1` sob pipefail (SIGPIPE intermitente, exit 141): ver bin/release
+GIT=""
+for _g in /usr/bin/git /bin/git; do
+  if [ -x "$_g" ]; then GIT="$_g"; break; fi
+done
 [ -x "$GIT" ] || GIT=/usr/bin/git
 if [ ! -x "$GIT" ]; then
   printf 'repo: dependência ausente: git não encontrado\n' >&2
   exit 3
 fi
 
-GH="${PF_GH_BIN:-$(command -v /usr/bin/gh /bin/gh "$HOME/.local/bin/gh" 2>/dev/null | head -1)}"
+GH="${PF_GH_BIN:-}"
+if [ -z "$GH" ]; then
+  for _g in /usr/bin/gh /bin/gh "$HOME/.local/bin/gh"; do
+    if [ -x "$_g" ]; then GH="$_g"; break; fi
+  done
+fi
 PATH_FORGE="$PATH"
 if [ -n "$GH" ] && [ -x "$GH" ]; then
   PATH_FORGE="$(dirname "$GH"):$PATH"
