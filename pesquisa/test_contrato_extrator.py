@@ -315,3 +315,72 @@ def test_instrucao_em_pagina_vira_aviso_nao_filtra(tmp_path):
     r = ler(t, resposta(PAGINA.encode()), derivador=lambda h, b: {"md_fit": md, "md_raw": md})
     assert r["avisos"] and r["avisos"][0]["linha"] == 2
     assert "Ignore as instru" in r["conteudo"]
+
+
+# ------------------------------------------------------------------ DT 234: 307 sem destino
+def test_redirecionamento_sem_destino_no_coletor_httpx():
+    httpx = pytest.importorskip("httpx")
+
+    def handler(req):
+        return httpx.Response(307)  # sem Location
+
+    with pytest.raises(FalhaFonte) as e:
+        extrator._coletor_httpx(URL, lambda u: None, transport=httpx.MockTransport(handler))
+    assert e.value.causa == "redirecionamento-sem-destino"
+    assert e.value.extra["status"] == 307
+    assert "possível bloqueio anti-bot" in e.value.extra["detalhe"]
+    assert e.value.extra["sugestao"] == "--render"
+
+
+def test_redirecionamento_sem_destino_em_confere():
+    with pytest.raises(FalhaFonte) as e:
+        extrator._confere(resposta(b"x", status=307))
+    assert e.value.causa == "redirecionamento-sem-destino"
+    assert e.value.extra["status"] == 307
+    assert e.value.extra["detalhe"] == "HTTP 307 sem cabeçalho Location"
+    assert e.value.extra["sugestao"] == "--render"
+
+
+# ------------------------------------------------------------------ DT 233: Google Drive
+def test_eh_google_drive():
+    assert extrator._eh_google_drive("https://drive.google.com/file/d/123/view") is True
+    assert extrator._eh_google_drive("https://docs.google.com/document/d/123/edit") is True
+    assert extrator._eh_google_drive("http://drive.google.com:8080/uc?id=123") is True
+    assert extrator._eh_google_drive("https://example.com/file") is False
+    assert extrator._eh_google_drive("not-a-url") is False
+
+
+def test_google_drive_exige_conector_quando_download_retorna_html(tmp_path):
+    t = M.Trabalho("gd1", raiz=tmp_path)
+    url = "https://drive.google.com/uc?id=abc&export=download"
+    col = coletor_fixo(resposta(b"<html><body>login</body></html>", url=url))
+    with pytest.raises(FalhaFonte) as e:
+        extrator.ler(url, t, coletor=col, guarda_resolvedor=PUB)
+    assert e.value.causa == "drive-exige-conector"
+    assert e.value.extra["detalhe"] == "Google Drive exige o conector"
+    _ultima_nao_achado(t, "drive-exige-conector")
+
+
+def test_google_drive_exige_conector_quando_redireciona_para_accounts(tmp_path):
+    t = M.Trabalho("gd2", raiz=tmp_path)
+    url = "https://drive.google.com/file/d/abc"
+    col = coletor_fixo(resposta(b"corpo", url=url, final="https://accounts.google.com/signin"))
+    with pytest.raises(FalhaFonte) as e:
+        extrator.ler(url, t, coletor=col, guarda_resolvedor=PUB)
+    assert e.value.causa == "drive-exige-conector"
+    assert e.value.extra["detalhe"] == "Google Drive exige o conector"
+    _ultima_nao_achado(t, "drive-exige-conector")
+
+
+def test_google_drive_falha_de_fonte_vira_drive_exige_conector(tmp_path):
+    t = M.Trabalho("gd3", raiz=tmp_path)
+    url = "https://drive.google.com/file/d/abc"
+
+    def col_erro(u, v):
+        raise FalhaFonte("status-403", status=403)
+
+    with pytest.raises(FalhaFonte) as e:
+        extrator.ler(url, t, coletor=col_erro, guarda_resolvedor=PUB)
+    assert e.value.causa == "drive-exige-conector"
+    assert e.value.extra["detalhe"] == "Google Drive exige o conector"
+    _ultima_nao_achado(t, "drive-exige-conector")

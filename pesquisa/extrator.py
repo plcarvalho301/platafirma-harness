@@ -46,6 +46,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 from . import manifesto as M
 from .envelope import FalhaFonte
@@ -136,6 +137,14 @@ class _SemDerivado(Exception):
 
 
 # ------------------------------------------------------------------ helpers puros
+def _eh_google_drive(url: str) -> bool:
+    try:
+        host = (urlsplit(url).hostname or "").lower()
+    except Exception:
+        return False
+    return host in ("drive.google.com", "docs.google.com")
+
+
 def detecta_idioma(html: str) -> str:
     m = _RE_LANG.search(html or "")
     return m.group(1).lower() if m else "indeterminado"
@@ -288,8 +297,24 @@ def ler(
         _verifica(url)
         resp = (coletor or _coletor_httpx)(url, _verifica)
         _confere(resp)
+        if _eh_google_drive(url):
+            redirecionou_login = (
+                "accounts.google.com" in (resp.url_final or "")
+                or any("accounts.google.com" in str(s.get("para", "")) for s in resp.redirecionamentos)
+            )
+            url_l = url.lower()
+            eh_download = "export=download" in url_l or "/uc" in url_l or "uc?" in url_l
+            tipo_cand, _ = tipo_real(resp.corpo, resp.cabecalho("content-type"))
+            eh_html = tipo_cand in TIPOS_HTML or "text/html" in (resp.cabecalho("content-type") or "").lower()
+            if not resp.corpo or resp.status != 200 or redirecionou_login or (eh_download and eh_html):
+                raise FalhaFonte("drive-exige-conector", detalhe="Google Drive exige o conector")
     except FalhaFonte as f:
-        raise _nao_achado(trab, url, estrategia, f.causa, resp=resp, extra=f.extra) from f
+        causa = f.causa
+        extra = dict(f.extra)
+        if _eh_google_drive(url) and causa != "drive-exige-conector":
+            causa = "drive-exige-conector"
+            extra["detalhe"] = "Google Drive exige o conector"
+        raise _nao_achado(trab, url, estrategia, causa, resp=resp, extra=extra) from f
 
     sha = M.sha256_bytes(resp.corpo)
     tipo, tipo_por = tipo_real(resp.corpo, resp.cabecalho("content-type"))
@@ -309,7 +334,12 @@ def ler(
         else:
             d = _deriva_http(resp, tipo, derivador)
     except (FalhaFonte, _SemDerivado) as f:
-        raise _nao_achado(trab, url, estrategia, f.causa, resp=resp, extra={**base, **f.extra}) from f
+        causa = f.causa
+        extra = {**base, **getattr(f, "extra", {})}
+        if isinstance(f, FalhaFonte) and _eh_google_drive(url) and causa != "drive-exige-conector":
+            causa = "drive-exige-conector"
+            extra["detalhe"] = "Google Drive exige o conector"
+        raise _nao_achado(trab, url, estrategia, causa, resp=resp, extra=extra) from f
 
     md = d["md"]
     uteis = caracteres_uteis(md)
@@ -348,10 +378,18 @@ def ler(
 def _confere(resp: Resposta) -> None:
     if resp.status is None or int(resp.status or 0) == 0:
         raise FalhaFonte("status-ausente")
-    if not (200 <= int(resp.status) < 300):
-        raise FalhaFonte(f"status-{resp.status}", status=int(resp.status))
+    st = int(resp.status)
+    if st in (301, 302, 303, 307, 308):
+        raise FalhaFonte(
+            "redirecionamento-sem-destino",
+            status=resp.status,
+            detalhe=f"HTTP {resp.status} sem cabeçalho Location",
+            sugestao="--render",
+        )
+    if not (200 <= st < 300):
+        raise FalhaFonte(f"status-{resp.status}", status=st)
     if not resp.corpo:
-        raise FalhaFonte("corpo-vazio", status=int(resp.status))
+        raise FalhaFonte("corpo-vazio", status=st)
 
 
 def _nao_achado(trab, url, estrategia, causa, *, resp: Resposta | None, extra: dict | None = None) -> FalhaFonte:
@@ -472,6 +510,15 @@ def _coletor_httpx(url: str, verifica: Callable[[str], None], *, transport=None)
                           headers={"User-Agent": M.UA, "Accept": "*/*"}) as cli:
             for _ in range(MAX_REDIRECIONAMENTOS + 1):
                 with cli.stream("GET", atual) as r:
+                    if r.status_code in (301, 302, 303, 307, 308):
+                        loc = r.headers.get("location")
+                        if not r.is_redirect or not loc or not loc.strip():
+                            raise FalhaFonte(
+                                "redirecionamento-sem-destino",
+                                status=r.status_code,
+                                detalhe=f"HTTP {r.status_code} sem cabeçalho Location (possível bloqueio anti-bot ou desafio WAF)",
+                                sugestao="--render",
+                            )
                     if r.is_redirect:
                         destino = str(r.url.join(r.headers["location"]))
                         saltos.append({"status": r.status_code, "de": atual, "para": destino})
