@@ -2650,6 +2650,18 @@ sanear_conforme() {
   return 0
 }
 
+# roda o npm numa pasta com a config de usuário e a global vazias e DISTINTAS: o npm real recusa o
+# mesmo caminho carregado duas vezes ("double-loading config", medido em 10/10/2026 com /dev/null
+# nos dois; o stub dos testes não pegava). Usa npmenv e npm do chamador (escopo dinâmico do bash).
+npm_isolado() {  # $1=pasta ; resto = argumentos do npm
+  local dir="$1" cfg rc=0; shift
+  cfg="$(mktemp -d)" || return 3
+  : > "$cfg/user.npmrc"; : > "$cfg/global.npmrc"
+  (cd "$dir" && "${npmenv[@]}" npm_config_userconfig="$cfg/user.npmrc" npm_config_globalconfig="$cfg/global.npmrc" "$npm" "$@") || rc=$?
+  rm -rf "$cfg"
+  return "$rc"
+}
+
 # ato_lock_node -- o mesmo ato para projeto node (card #3386): package.json -> package-lock.json,
 # com o node de sistema e SEM script de pacote: `npm install --package-lock-only
 # --ignore-scripts` resolve e escreve o lock, não instala nem roda nada. --conferir só mede
@@ -2669,8 +2681,7 @@ ato_lock_node() {  # $1=repo $2=projeto $3=clone $4=dir $5=conferir(0|1)
   node="${nodeinfo%%$'\t'*}"
   npm="$(resolver_npm "$node")" || exit 3
   local -a npmenv=(env -u NODE_OPTIONS -u npm_config_registry -u NPM_CONFIG_REGISTRY
-    PATH="$(dirname "$node"):$PATH" npm_config_userconfig=/dev/null npm_config_globalconfig=/dev/null
-    npm_config_update_notifier=false)
+    PATH="$(dirname "$node"):$PATH" npm_config_update_notifier=false)
   err="$(mktemp)" || morre "mktemp falhou" 3
 
   if [ "$conferir" -eq 1 ]; then
@@ -2678,7 +2689,7 @@ ato_lock_node() {  # $1=repo $2=projeto $3=clone $4=dir $5=conferir(0|1)
       printf 'defasado: %s não existe (nada escrito)\nvizinho: repo lock %s %s\n' "$rel" "$repo" "$projeto"
       rm -f "$err"; exit 1
     fi
-    (cd "$dir" && "${npmenv[@]}" "$npm" ci --dry-run --ignore-scripts --no-audit --no-fund </dev/null >/dev/null 2>"$err") || rc=$?
+    npm_isolado "$dir" ci --dry-run --ignore-scripts --no-audit --no-fund </dev/null >/dev/null 2>"$err" || rc=$?
     if [ "$rc" -eq 0 ]; then
       rm -f "$err"
       printf 'em dia: %s bate com o package.json (nada escrito)\n' "$rel"
@@ -2698,7 +2709,7 @@ ato_lock_node() {  # $1=repo $2=projeto $3=clone $4=dir $5=conferir(0|1)
   if [ -f "$lock" ]; then
     antes="$(mktemp)" && cp -p "$lock" "$antes" || morre "não guardei a cópia do lock anterior" 3
   fi
-  (cd "$dir" && "${npmenv[@]}" "$npm" install --package-lock-only --ignore-scripts --no-audit --no-fund </dev/null >/dev/null 2>"$err") || rc=$?
+  npm_isolado "$dir" install --package-lock-only --ignore-scripts --no-audit --no-fund </dev/null >/dev/null 2>"$err" || rc=$?
   if [ "$rc" -ne 0 ]; then
     local cod=3 tipo="índice, rede ou npm"
     if grep -qiE 'ETARGET|notarget|No matching version|ERESOLVE' "$err"; then cod=1; tipo="sem solução para as dependências pedidas"; fi

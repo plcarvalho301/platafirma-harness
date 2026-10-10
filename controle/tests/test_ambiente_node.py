@@ -92,7 +92,12 @@ def falsos(tmp_path):
                  'if grep -q VERMELHO "$1" 2>/dev/null; then echo "prova reprovou" >&2; exit 1; fi\n'
                  'echo ok; exit 0\n')
     npm = _exec(d / "npm", 'printf "%s\\n" "$*" > "${FALSO_NPM_ARGS:-/dev/null}"\n'
-                'printf "ignore_scripts=%s userconfig=%s\\n" "${npm_config_ignore_scripts:-}" "${npm_config_userconfig:-}" '
+                # o npm real recusa o mesmo caminho nas duas configs ("double-loading config"): o falso tambem
+                'if [ "${npm_config_userconfig:-}" = "${npm_config_globalconfig:-}" ]; then '
+                'echo "double-loading config as global, previously loaded as user" >&2; exit 1; fi\n'
+                'printf "ignore_scripts=%s userempty=%s globalempty=%s\\n" "${npm_config_ignore_scripts:-}" '
+                '"$([ -f "${npm_config_userconfig:-}" ] && [ ! -s "$npm_config_userconfig" ] && echo sim || echo nao)" '
+                '"$([ -f "${npm_config_globalconfig:-}" ] && [ ! -s "$npm_config_globalconfig" ] && echo sim || echo nao)" '
                 '>> "${FALSO_NPM_ARGS:-/dev/null}"\n'
                 'if [ "${FALSO_NPM_FALHA:-0}" = 1 ]; then echo "npm ERR! lock fora de sincronia" >&2; exit 1; fi\n'
                 'mkdir -p node_modules/lit && echo "{}" > node_modules/lit/package.json\n')
@@ -167,7 +172,7 @@ def test_construir_node_instala_sem_script_de_pacote(falsos, tmp_path):
     assert "ci" in args.split("\n")[0].split()
     assert "--ignore-scripts" in args
     assert "ignore_scripts=true" in args          # nem por config de ambiente o script roda
-    assert "userconfig=/dev/null" in args          # .npmrc do usuario nao entra
+    assert "userempty=sim globalempty=sim" in args  # .npmrc do usuario e global nao entram: dois arquivos vazios e distintos
     assert (dest / "node_modules" / "lit").is_dir()
     assert (dest / "package-lock.json").read_bytes() == lock.read_bytes()
 
@@ -388,6 +393,50 @@ def test_inventario_acha_trava_que_a_release_nao_constroi(tmp_path):
     assert all(l.get("construido_pela_release") is False for l in linhas if l["stack"] == "fam:ui/provas")
     _, so_ela = dep.levantar("fam:ui/provas", str(registro), str(raiz))
     assert {l["stack"] for l in so_ela} == {"fam:ui/provas"}
+
+
+def test_inventario_escreve_markdown_so_sob_a_bancada(tmp_path):
+    """O retrato para o dono ler: Markdown datado, derivado das travas. E a unica escrita da
+    classe, opt-in e contida: .md absoluto sob a bancada; fora dela, recusa e nada e escrito."""
+    dep = _dependencias()
+    raiz, registro = _arvore_servida(tmp_path)
+    bancada = tmp_path / "bancada"
+    bancada.mkdir()
+    destino = bancada / "casa" / "relatorio" / "x.md"
+    rc = dep.conferir("front", False, "abc1234", str(registro), str(raiz),
+                      md_para=str(destino), raiz_permitida=str(bancada))
+    assert rc == 1                                          # o relatorio segue valendo: ha divergente
+    texto = destino.read_text(encoding="utf-8")
+    assert texto.startswith("# Dependências das travas da casa em ")
+    assert "Espécie: relatorio" in texto
+    assert "| lit | 3.3.3 | direto |" in texto
+    assert "BSD-3-Clause" in texto
+    assert "fonte fora do registro oficial do npm" in texto   # a seção "o que a trava não prende"
+    assert "declara" in texto                                 # puppeteer-core declara script de instalação
+
+    for ruim in (tmp_path / "fora" / "x.md", bancada / "x.txt"):
+        rc = dep.conferir("front", False, "abc1234", str(registro), str(raiz),
+                          md_para=str(ruim), raiz_permitida=str(bancada))
+        assert rc == 4
+        assert not ruim.exists()
+
+
+def test_inventario_pela_linha_de_comando_com_md_para(tmp_path):
+    raiz, registro = _arvore_servida(tmp_path)
+    bancada = tmp_path / "bancada"
+    bancada.mkdir()
+    destino = bancada / "rel.md"
+    env = dict(os.environ, PF_AI_DIR=str(bancada), PLATAFIRMA_VENVS=str(registro),
+               PF_RELEASE_RAIZ=str(raiz), PF_HARNESS_DIR=str(tmp_path / "sem-git"))
+    r = subprocess.run([sys.executable, str(CONFERIR_DIR / "conferir.py"), "dependencias", "front",
+                        "--md-para", str(destino)], env=env, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 1, r.stdout + r.stderr          # divergentes: de-git e sem-integridade
+    assert "release conferir dependencias front: 2 conforme · 2 divergente" in r.stdout
+    assert destino.exists()
+    sem_alvo = subprocess.run([sys.executable, str(CONFERIR_DIR / "conferir.py"), "dependencias",
+                               "--md-para", str(bancada / "todas.md")], env=env,
+                              capture_output=True, text=True, timeout=60)
+    assert (bancada / "todas.md").exists(), sem_alvo.stdout + sem_alvo.stderr
 
 
 def test_inventario_stack_desconhecida_sai_1(tmp_path, capsys):

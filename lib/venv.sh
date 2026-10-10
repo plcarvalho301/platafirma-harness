@@ -68,7 +68,7 @@ resolver_python() {
 # vez, por chave <nome>-<hash>, e fica só leitura. A instalação NUNCA roda script de pacote
 # (npm ci --ignore-scripts): é o que fecha o vetor de verme de cadeia de suprimento, e é
 # o mesmo comando que a platafirma-ui já usa no build. Config de usuário e global do npm
-# não entram (userconfig/globalconfig em /dev/null), nem registro trocado por variável:
+# não entram (userconfig/globalconfig apontam para arquivos vazios), nem registro trocado por variável:
 # o que se instala é o que o lock resolveu.
 
 # node de sistema, fora do home da conta (como o python de sistema): override, dois caminhos
@@ -173,9 +173,12 @@ construir_node() {  # $1=lock $2=destino
   mkdir -p "$dest" || return 3
   cp "$dir/package.json" "$lock" "$dest/" || return 3
   cache="$(mktemp -d "${TMPDIR:-/tmp}/npm-cache.XXXXXX")" || return 3
+  # config de usuário e global: dois arquivos vazios e DISTINTOS (o npm real recusa o mesmo
+  # caminho carregado duas vezes, "double-loading config": medido em 10/10 com /dev/null nos dois)
+  : > "$cache/user.npmrc"; : > "$cache/global.npmrc"
   ( cd "$dest" && env -u NODE_OPTIONS -u npm_config_registry -u NPM_CONFIG_REGISTRY \
       PATH="$(dirname "$node"):$PATH" \
-      npm_config_userconfig=/dev/null npm_config_globalconfig=/dev/null \
+      npm_config_userconfig="$cache/user.npmrc" npm_config_globalconfig="$cache/global.npmrc" \
       npm_config_ignore_scripts=true npm_config_audit=false npm_config_fund=false \
       npm_config_update_notifier=false npm_config_cache="$cache" \
       "$npm" ci --ignore-scripts --no-audit --no-fund </dev/null >&2 ) || rc=$?
