@@ -244,7 +244,103 @@ def _descobrir(registro, prod_raiz, declaradas):
                         yield familia, rel, os.path.join(dp, fn)
 
 
-def conferir(alvo, como_json, sha_release, registro, prod_raiz):
+def _celula(texto) -> str:
+    return str(texto).replace("|", "\\|").replace("\n", " ") or "—"
+
+
+def markdown(itens, linhas, sha_release, quando, alvo=None):
+    """O rol em Markdown, para o dono ler: um retrato datado, derivado das travas (que seguem
+    sendo a fonte). Licenca so aparece quando o lock a carrega."""
+    por_stack: dict[str, list] = {}
+    for p in linhas:
+        por_stack.setdefault(p["stack"], []).append(p)
+    divergentes = [(n, v) for n, v in itens if v.estado == "divergente"]
+    indeterminaveis = [(n, v) for n, v in itens if v.estado == "indeterminavel"]
+    npm = sum(1 for p in linhas if p["ecossistema"] == "npm")
+    pypi = len(linhas) - npm
+    com_licenca = sum(1 for p in linhas if p["licenca"])
+    scripts = [p for p in linhas if p["script_de_instalacao"]]
+    soltas = sorted(s for s, ps in por_stack.items() if not ps[0].get("construido_pela_release", True))
+    data = quando[:10]
+    saida = [
+        f"# Dependências das travas da casa em {data}: o que cada trava resolve",
+        "",
+        "Espécie: relatorio",
+        "",
+        "- **Dono:** ti (Oswaldo Aranha)",
+        f"- **Gerado por:** `release conferir dependencias{' ' + alvo if alvo else ''} --md-para <arquivo>`, "
+        f"sobre a release {sha_release}, em {quando}",
+        "- **Estado:** retrato. A fonte é cada trava no git (`uv.lock`, `package-lock.json`, "
+        "requirements); para refazer, rode o mesmo verbo e comite o arquivo novo.",
+        "",
+        "## 1. Em uma tela",
+        "",
+        "| o que | quanto |",
+        "|---|---|",
+        f"| travas lidas | {len(por_stack)} |",
+        f"| pacotes resolvidos | {len(linhas)} (npm {npm} · PyPI {pypi}) |",
+        f"| pedidos pela própria stack (diretos) | {sum(1 for p in linhas if p['direto'])} |",
+        f"| o que a trava não prende (divergente) | {len(divergentes)} |",
+        f"| travas que não consegui ler | {len(indeterminaveis)} |",
+        f"| pacotes npm que declaram script de instalação | {len(scripts)} (a casa não roda: `npm ci --ignore-scripts`) |",
+        f"| com licença no lock | {com_licenca} de {len(linhas)} (só o `package-lock.json` a carrega; "
+        "`uv.lock` e requirements não: vazio é vazio, não é livre) |",
+        f"| travas que a release não constrói | {', '.join(f'`{s}`' for s in soltas) or 'nenhuma'} |",
+        "",
+        "## 2. O que a trava não prende",
+        "",
+    ]
+    if divergentes:
+        saida += ["| item | por quê |", "|---|---|"]
+        saida += [f"| {_celula(n)} | {_celula(v.motivo)} |" for n, v in divergentes]
+    else:
+        saida.append("Nenhum: todo pacote lido tem versão fixada, fonte oficial e integridade no lock.")
+    if indeterminaveis:
+        saida += ["", "Não consegui olhar:", "", "| item | por quê |", "|---|---|"]
+        saida += [f"| {_celula(n)} | {_celula(v.motivo)} |" for n, v in indeterminaveis]
+    saida += ["", "## 3. Por trava", ""]
+    for stack in sorted(por_stack):
+        ps = sorted(por_stack[stack], key=lambda p: (not p["direto"], p["pacote"].lower(), p["versao"]))
+        construida = ps[0].get("construido_pela_release", True)
+        saida += [
+            f"### `{stack}`: {len(ps)} pacotes, {sum(1 for p in ps if p['direto'])} pedidos pela stack",
+            "",
+            "Ambiente construído pela release: " + ("sim" if construida else "não (trava no git, instalada à mão ou por Docker)"),
+            "",
+            "| pacote | versão | pedido | fonte | integridade (início do hash) | licença | script |",
+            "|---|---|---|---|---|---|---|",
+        ]
+        for p in ps:
+            saida.append(
+                f"| {_celula(p['pacote'])} | {_celula(p['versao'])} | {'direto' if p['direto'] else 'transitivo'} "
+                f"| {_celula(p['fonte'])} | {_celula(p['integridade'])} | {_celula(p['licenca'])} "
+                f"| {'declara' if p['script_de_instalacao'] else '—'} |")
+        saida.append("")
+    return "\n".join(saida)
+
+
+def escrever_md(destino, raiz_permitida, itens, linhas, sha_release, alvo=None):
+    """Grava o Markdown em `destino`, que tem de ser .md absoluto dentro de `raiz_permitida` (a
+    bancada declarada): a classe so olha, e esta e a unica escrita, opt-in e contida. 0 ok, 4 recusa."""
+    import datetime
+    real = os.path.realpath(os.path.dirname(destino) or ".")
+    raiz = os.path.realpath(raiz_permitida)
+    if not os.path.isabs(destino) or not destino.endswith(".md") \
+            or not (real == raiz or real.startswith(raiz + os.sep)):
+        print(f"dependencias: --md-para recusado: {destino!r} tem de ser um .md absoluto sob a bancada {raiz}",
+              file=sys.stderr)
+        return 4
+    quando = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    os.makedirs(real, exist_ok=True)
+    tmp = destino + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(markdown(itens, linhas, sha_release, quando, alvo))
+    os.replace(tmp, destino)
+    print(f"dependencias: Markdown escrito em {destino}", file=sys.stderr)
+    return 0
+
+
+def conferir(alvo, como_json, sha_release, registro, prod_raiz, md_para=None, raiz_permitida=None):
     if not os.path.isfile(registro):
         msg = f"registro de venvs ausente: {registro}"
         print(json.dumps({"erro": msg}) if como_json else msg, file=sys.stderr if not como_json else sys.stdout)
@@ -254,5 +350,9 @@ def conferir(alvo, como_json, sha_release, registro, prod_raiz):
         msg = f"stack {alvo!r} nao declarada em registro/venvs.json (nem trava <familia>:<pasta> na release)"
         print(json.dumps({"erro": msg}) if como_json else msg)
         return 1
+    if md_para:
+        rc_md = escrever_md(md_para, raiz_permitida or "/nao-declarada", itens, linhas, sha_release, alvo)
+        if rc_md:
+            return rc_md
     return resultado.relatorio("dependencias", alvo, itens, sha_release, como_json=como_json,
                                extra={"pacotes": linhas} if como_json else None)

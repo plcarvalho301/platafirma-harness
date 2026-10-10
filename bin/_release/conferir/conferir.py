@@ -3102,7 +3102,17 @@ def main(argv):
         # card #3386: o rol do que as travas resolvem, lido da arvore servida de cada familia
         import dependencias
         registro = os.environ.get("PLATAFIRMA_VENVS") or os.path.join(HARNESS, "registro", "venvs.json")
-        return dependencias.conferir(alvo, como_json, _sha_release(), registro, PROD_RAIZ)
+        md_para = None
+        if "--md-para" in argv:
+            i = argv.index("--md-para")
+            md_para = argv[i + 1] if len(argv) > i + 1 else None
+            if not md_para:
+                print("uso: conferir dependencias [<stack>] [--md-para <arquivo.md>] [--json]", file=sys.stderr)
+                return 2
+            if alvo == "--md-para":
+                alvo = None
+        return dependencias.conferir(alvo, como_json, _sha_release(), registro, PROD_RAIZ,
+                                     md_para=md_para, raiz_permitida=RAIZ)
     if como_json:
         print(json.dumps({"erro": f"classe desconhecida: {classe}"}))
     uso(f"classe desconhecida: {classe}")

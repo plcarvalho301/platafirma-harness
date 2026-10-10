@@ -390,6 +390,50 @@ def test_inventario_acha_trava_que_a_release_nao_constroi(tmp_path):
     assert {l["stack"] for l in so_ela} == {"fam:ui/provas"}
 
 
+def test_inventario_escreve_markdown_so_sob_a_bancada(tmp_path):
+    """O retrato para o dono ler: Markdown datado, derivado das travas. E a unica escrita da
+    classe, opt-in e contida: .md absoluto sob a bancada; fora dela, recusa e nada e escrito."""
+    dep = _dependencias()
+    raiz, registro = _arvore_servida(tmp_path)
+    bancada = tmp_path / "bancada"
+    bancada.mkdir()
+    destino = bancada / "casa" / "relatorio" / "x.md"
+    rc = dep.conferir("front", False, "abc1234", str(registro), str(raiz),
+                      md_para=str(destino), raiz_permitida=str(bancada))
+    assert rc == 1                                          # o relatorio segue valendo: ha divergente
+    texto = destino.read_text(encoding="utf-8")
+    assert texto.startswith("# Dependências das travas da casa em ")
+    assert "Espécie: relatorio" in texto
+    assert "| lit | 3.3.3 | direto |" in texto
+    assert "BSD-3-Clause" in texto
+    assert "fonte fora do registro oficial do npm" in texto   # a seção "o que a trava não prende"
+    assert "declara" in texto                                 # puppeteer-core declara script de instalação
+
+    for ruim in (tmp_path / "fora" / "x.md", bancada / "x.txt"):
+        rc = dep.conferir("front", False, "abc1234", str(registro), str(raiz),
+                          md_para=str(ruim), raiz_permitida=str(bancada))
+        assert rc == 4
+        assert not ruim.exists()
+
+
+def test_inventario_pela_linha_de_comando_com_md_para(tmp_path):
+    raiz, registro = _arvore_servida(tmp_path)
+    bancada = tmp_path / "bancada"
+    bancada.mkdir()
+    destino = bancada / "rel.md"
+    env = dict(os.environ, PF_AI_DIR=str(bancada), PLATAFIRMA_VENVS=str(registro),
+               PF_RELEASE_RAIZ=str(raiz), PF_HARNESS_DIR=str(tmp_path / "sem-git"))
+    r = subprocess.run([sys.executable, str(CONFERIR_DIR / "conferir.py"), "dependencias", "front",
+                        "--md-para", str(destino)], env=env, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 1, r.stdout + r.stderr          # divergentes: de-git e sem-integridade
+    assert "release conferir dependencias front: 2 conforme · 2 divergente" in r.stdout
+    assert destino.exists()
+    sem_alvo = subprocess.run([sys.executable, str(CONFERIR_DIR / "conferir.py"), "dependencias",
+                               "--md-para", str(bancada / "todas.md")], env=env,
+                              capture_output=True, text=True, timeout=60)
+    assert (bancada / "todas.md").exists(), sem_alvo.stdout + sem_alvo.stderr
+
+
 def test_inventario_stack_desconhecida_sai_1(tmp_path, capsys):
     dep = _dependencias()
     raiz, registro = _arvore_servida(tmp_path)
