@@ -92,7 +92,12 @@ def falsos(tmp_path):
                  'if grep -q VERMELHO "$1" 2>/dev/null; then echo "prova reprovou" >&2; exit 1; fi\n'
                  'echo ok; exit 0\n')
     npm = _exec(d / "npm", 'printf "%s\\n" "$*" > "${FALSO_NPM_ARGS:-/dev/null}"\n'
-                'printf "ignore_scripts=%s userconfig=%s\\n" "${npm_config_ignore_scripts:-}" "${npm_config_userconfig:-}" '
+                # o npm real recusa o mesmo caminho nas duas configs ("double-loading config"): o falso tambem
+                'if [ "${npm_config_userconfig:-}" = "${npm_config_globalconfig:-}" ]; then '
+                'echo "double-loading config as global, previously loaded as user" >&2; exit 1; fi\n'
+                'printf "ignore_scripts=%s userempty=%s globalempty=%s\\n" "${npm_config_ignore_scripts:-}" '
+                '"$([ -f "${npm_config_userconfig:-}" ] && [ ! -s "$npm_config_userconfig" ] && echo sim || echo nao)" '
+                '"$([ -f "${npm_config_globalconfig:-}" ] && [ ! -s "$npm_config_globalconfig" ] && echo sim || echo nao)" '
                 '>> "${FALSO_NPM_ARGS:-/dev/null}"\n'
                 'if [ "${FALSO_NPM_FALHA:-0}" = 1 ]; then echo "npm ERR! lock fora de sincronia" >&2; exit 1; fi\n'
                 'mkdir -p node_modules/lit && echo "{}" > node_modules/lit/package.json\n')
@@ -167,7 +172,7 @@ def test_construir_node_instala_sem_script_de_pacote(falsos, tmp_path):
     assert "ci" in args.split("\n")[0].split()
     assert "--ignore-scripts" in args
     assert "ignore_scripts=true" in args          # nem por config de ambiente o script roda
-    assert "userconfig=/dev/null" in args          # .npmrc do usuario nao entra
+    assert "userempty=sim globalempty=sim" in args  # .npmrc do usuario e global nao entram: dois arquivos vazios e distintos
     assert (dest / "node_modules" / "lit").is_dir()
     assert (dest / "package-lock.json").read_bytes() == lock.read_bytes()
 

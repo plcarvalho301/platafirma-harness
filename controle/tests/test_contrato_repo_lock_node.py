@@ -22,7 +22,14 @@ NODE_FIXTURE = "#!/bin/sh\necho v22.1.0\n"
 NPM_FIXTURE = """#!/bin/sh
 d="$(dirname "$0")"
 printf '%s\\n' "$*" >> "$d/chamadas"
-printf '%s|%s|%s\\n' "${npm_config_userconfig:-}" "${npm_config_globalconfig:-}" "${npm_config_registry:-}" > "$d/env"
+# o npm real recusa o mesmo caminho nas duas configs ("double-loading config", medido em 10/10): o falso tambem
+if [ "${npm_config_userconfig:-}" = "${npm_config_globalconfig:-}" ]; then
+  echo "double-loading config as global, previously loaded as user" >&2; exit 1
+fi
+u=sim; g=sim
+[ -f "${npm_config_userconfig:-}" ] && [ ! -s "$npm_config_userconfig" ] || u=nao
+[ -f "${npm_config_globalconfig:-}" ] && [ ! -s "$npm_config_globalconfig" ] || g=nao
+printf '%s|%s|%s\\n' "$u" "$g" "${npm_config_registry:-}" > "$d/env"
 case "$1" in
   ci)
     [ -f "$d/ci_err" ] && cat "$d/ci_err" >&2
@@ -114,7 +121,8 @@ def test_gera_lock_sem_script_de_pacote_e_relata_diferenca(tmp_path):
     assert (wt / "front" / "prova" / "package-lock.json").read_text() == LOCK_DEPOIS
     chamada = (ferr / "chamadas").read_text()
     assert "install --package-lock-only --ignore-scripts" in chamada
-    assert (ferr / "env").read_text().strip() == "/dev/null|/dev/null|"   # sem .npmrc, sem registro trocado
+    # configs de usuario e global vazias e distintas, e registro trocado por variavel nao chega ao npm
+    assert (ferr / "env").read_text().strip() == "sim|sim|"
 
 
 def test_nao_commita(tmp_path):
