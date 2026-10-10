@@ -20,7 +20,7 @@ GIRO = {**TODA, **IDENT, "tool": "tarefas", "ato": "ler", "args": "3345", "sessa
         "bytes_produzidos": 120, "bytes_servidos": 100, "lavado": ["branco"], "capacidade": None,
         "ferramenta": None, "escopo": "#3345", "turno_id": "T1", "turno_fonte": "declarado"}
 ABERTURA = {**TODA, **IDENT, "tool": "monta_sessao", "sessao_id": "sid", "chapeu": "engenharia-de-harness",
-            "roteador_via": "comando", "superficie": "claude.ai", "pergunta": "oi", "pergunta_bytes": 2,
+            "roteador_via": "comando", "fallback": False, "superficie": "claude.ai", "pergunta": "oi", "pergunta_bytes": 2,
             "tokens_pecas": {"persona": 0, "chapeu": 1291}, "metodo_tokens": "tokenizador qwen2.5",
             "prefixo_sha": "abc123", "montador_sha": "76e618a"}
 FECHO = {**TODA, "tool": "descansar", "evento": "fecho", "sessao_id": "sid", "cadeira": "ia",

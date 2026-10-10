@@ -901,6 +901,45 @@ def _escopo_do_giro(slug: str, ato, args, r, ident: dict) -> None:
            ordem_id=ident.get("ordem_id"), escopo=escopo, card=int(card))
 
 
+def _chapeu_do_giro(slug: str, ato, args, r, ident: dict) -> None:
+    """Giro de `persona ler <cadeira da sessão> --chapeu <slug>` que saiu 0: a porta grava
+    `chapeu = <slug>` na chave `sessao:{id}`, keepttl; `fallback` não muda (card #3385)."""
+    if not isinstance(r, dict) or r.get("exit_code") != 0:
+        return
+    if slug != "persona":
+        return
+    toks = ([ato] if ato else []) + [str(a) for a in (args or [])]
+    if len(toks) < 2 or toks[0] != "ler":
+        return
+    cadeira_sessao = (ident or {}).get("cadeira")
+    if not cadeira_sessao or toks[1] != cadeira_sessao:
+        return
+    chapeu = None
+    for i, t in enumerate(toks):
+        if t == "--chapeu" and i + 1 < len(toks):
+            chapeu = toks[i + 1]
+            break
+        elif t.startswith("--chapeu="):
+            chapeu = t.split("=", 1)[1]
+            break
+    if not chapeu or chapeu.startswith("-"):
+        return
+    sid = (ident or {}).get("sessao_id")
+    if not sid or sid == "-":
+        return
+    if isinstance(ident, dict):
+        ident["chapeu"] = chapeu
+    try:
+        chave = f"sessao:{sid}"
+        raw = _rc().get(chave)
+        dados = json.loads(raw) if raw else None
+        if isinstance(dados, dict):
+            dados["chapeu"] = chapeu
+            _rc().set(chave, json.dumps(dados, ensure_ascii=False), keepttl=True)
+    except Exception as e:
+        print(f"[valkey] gravacao chapeu giro sessao:{sid} falhou: {e!r}", file=sys.stderr, flush=True)
+
+
 def _audit(**campos) -> None:
     """Grava uma linha JSONL de auditoria. Nunca derruba a operação — mas falha de
     auditoria vai para o stderr (journal), porque auditoria que falha em silêncio é
@@ -1415,6 +1454,7 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
                lote_id=lote_id, lote_n=_i, encadeado=encadeado or None, **_campo_prazo(r),
                **_campos_poda(r))
         _escopo_do_giro(slug, argv[1] if len(argv) > 1 else "", argv[2:], r, ident)
+        _chapeu_do_giro(slug, argv[1] if len(argv) > 1 else "", argv[2:], r, ident)
     ato = argv[1] if len(argv) > 1 else ""
     if slug == "sessao" and ato == "abrir" and r.get("exit_code") == 0:
         r["_sessao_abriu"] = True     # quem itera troca o ident antes do item n+1
@@ -2351,14 +2391,21 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
     resposta.update(exp_json)
 
     # Se a sessão não guarda hoje o chapéu, a abertura passa a gravá-lo na identidade da sessão (#3367)
+    # Abertura: grava fallback (bool) e chapeu (se presente) na chave sessao:{sid} (#3385)
+    via = (exp_json.get("roteador") or {}).get("via") if isinstance(exp_json.get("roteador"), dict) else None
+    eh_fallback = (via == "fallback")
     chapeu_resolvido = exp_json.get("chapeu")
-    if sid and chapeu_resolvido:
+    if sid:
         try:
             chave = f"sessao:{sid}"
             raw = _rc().get(chave)
             dados = json.loads(raw) if raw else None
             if isinstance(dados, dict):
-                dados["chapeu"] = chapeu_resolvido
+                dados["fallback"] = eh_fallback
+                if chapeu_resolvido:
+                    dados["chapeu"] = chapeu_resolvido
+                else:
+                    dados.pop("chapeu", None)
                 _rc().set(chave, json.dumps(dados, ensure_ascii=False), keepttl=True)
         except Exception as e:
             print(f"[valkey] gravacao chapeu sessao:{sid} falhou: {e!r}", file=sys.stderr, flush=True)
@@ -2473,6 +2520,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
            pergunta=(pergunta or None),
            pergunta_bytes=len((pergunta or "").encode("utf-8")),
            roteador_via=_rot.get("via"), roteador_slug=_rot.get("slug"),
+           fallback=bool(_rot.get("via") == "fallback"),
            superficie=_superficie(), **_custo_da_abertura(r),
            dur_ms=round((time.monotonic() - t0) * 1000),
            sessao_id=_sessao_id or "-", **(_delta or {}))
@@ -2795,6 +2843,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                        lote_id=lote_id, lote_n=_i, encadeado=encadeado or None,
                        **_campo_prazo(r), **_campos_poda(r))
                 _escopo_do_giro(slug, _ato, _args, r, ident)
+                _chapeu_do_giro(slug, _ato, _args, r, ident)
                 return r
 
             out = await _lote.itera(list(lote), _roda, encadeado=encadeado, cap=CAP,
@@ -2832,6 +2881,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                dur_ms=round((time.monotonic() - t0) * 1000), **_campo_prazo(r),
                **_campos_poda(r))
         _escopo_do_giro(slug, ato, args, r, ident)
+        _chapeu_do_giro(slug, ato, args, r, ident)
         return r
     _tool.__name__ = slug.replace("-", "_")
     _tool.__doc__ = descricao

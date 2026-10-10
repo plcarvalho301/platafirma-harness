@@ -15,6 +15,7 @@ Vive em ops-server/ (não em controle/tests/) porque server.py precisa do venv c
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -327,3 +328,126 @@ def test_run_verbo_blocking_sem_chave_chapeu_no_ident_nao_quebra():
 
     assert r["exit_code"] == 0
     assert "PF_CHAPEU" not in capturado["env"]
+
+
+# ---------------------------------------------------------------- card #3385: chapéu da sessão, fallback e troca
+
+def test_abertura_em_fallback_grava_chave_com_fallback_true_e_sem_chapeu():
+    """(a) abertura em fallback → chave com `fallback: true` e sem `chapeu` (#3385)."""
+    sid = "11111111-2222-3333-4444-555555555555"
+    mock_rc = MagicMock()
+    mock_rc.get.return_value = json.dumps({"cadeira": "ia", "ordem_id": "o1", "sujeito": "s1"})
+
+    proc_abrir = MagicMock(returncode=0, stdout=json.dumps({"sessao_id": sid, "ordem_id": "o1", "cadeira": "ia"}), stderr="")
+    proc_exp = MagicMock(returncode=0, stdout=json.dumps({
+        "roteador": {"via": "fallback", "slug": None},
+        "chapeu": None,
+        "pecas": [],
+    }), stderr="")
+
+    with patch.object(s, "_rc", return_value=mock_rc), \
+         patch.object(s.subprocess, "run", side_effect=[proc_abrir, proc_exp]):
+        res = s._montar("ia", False, "", "oi", sid, "s1")
+
+    assert res.get("chapeu") is None
+    mock_rc.set.assert_called_once()
+    chave, raw = mock_rc.set.call_args[0]
+    assert chave == f"sessao:{sid}"
+    dados = json.loads(raw)
+    assert dados["fallback"] is True
+    assert "chapeu" not in dados
+    assert mock_rc.set.call_args[1].get("keepttl") is True
+
+
+def test_abertura_com_chapeu_grava_chapeu_e_fallback_false():
+    """(b) abertura com `chapeu=` → `chapeu` e `fallback: false` (#3385)."""
+    sid = "11111111-2222-3333-4444-555555555555"
+    mock_rc = MagicMock()
+    mock_rc.get.return_value = json.dumps({"cadeira": "ia", "ordem_id": "o1", "sujeito": "s1"})
+
+    proc_abrir = MagicMock(returncode=0, stdout=json.dumps({"sessao_id": sid, "ordem_id": "o1", "cadeira": "ia"}), stderr="")
+    proc_exp = MagicMock(returncode=0, stdout=json.dumps({
+        "roteador": {"via": "comando", "slug": "engenharia-de-harness"},
+        "chapeu": "engenharia-de-harness",
+        "pecas": [],
+    }), stderr="")
+
+    with patch.object(s, "_rc", return_value=mock_rc), \
+         patch.object(s.subprocess, "run", side_effect=[proc_abrir, proc_exp]):
+        res = s._montar("ia", False, "harness", "oi", sid, "s1")
+
+    assert res.get("chapeu") == "engenharia-de-harness"
+    mock_rc.set.assert_called_once()
+    chave, raw = mock_rc.set.call_args[0]
+    assert chave == f"sessao:{sid}"
+    dados = json.loads(raw)
+    assert dados["fallback"] is False
+    assert dados["chapeu"] == "engenharia-de-harness"
+    assert mock_rc.set.call_args[1].get("keepttl") is True
+
+
+def test_chapeu_do_giro_troca_grava_chapeu_e_preserva_fallback():
+    """(c) giro `persona ler <cadeira da sessão> --chapeu X` exit 0 → `chapeu: X`, `fallback` inalterado (#3385)."""
+    sid = "11111111-2222-3333-4444-555555555555"
+    mock_rc = MagicMock()
+    mock_rc.get.return_value = json.dumps({"cadeira": "ia", "ordem_id": "o1", "fallback": True})
+
+    ident = {"sessao_id": sid, "cadeira": "ia", "ordem_id": "o1"}
+    with patch.object(s, "_rc", return_value=mock_rc):
+        s._chapeu_do_giro("persona", "ler", ["ia", "--chapeu", "contexto"], {"exit_code": 0}, ident)
+
+    mock_rc.set.assert_called_once()
+    chave, raw = mock_rc.set.call_args[0]
+    assert chave == f"sessao:{sid}"
+    dados = json.loads(raw)
+    assert dados["chapeu"] == "contexto"
+    assert dados["fallback"] is True
+    assert mock_rc.set.call_args[1].get("keepttl") is True
+    assert ident["chapeu"] == "contexto"
+
+
+def test_chapeu_do_giro_outra_cadeira_ou_exit_diferente_de_zero_mantem_chave_intacta():
+    """(d) `persona ler` de outra cadeira, ou exit ≠ 0 → chave intacta (#3385)."""
+    sid = "11111111-2222-3333-4444-555555555555"
+    mock_rc = MagicMock()
+    mock_rc.get.return_value = json.dumps({"cadeira": "ia", "ordem_id": "o1", "fallback": True})
+
+    ident = {"sessao_id": sid, "cadeira": "ia", "ordem_id": "o1"}
+    with patch.object(s, "_rc", return_value=mock_rc):
+        # 1. Outra cadeira ("ti" em vez de "ia")
+        s._chapeu_do_giro("persona", "ler", ["ti", "--chapeu", "infra"], {"exit_code": 0}, ident)
+        # 2. Exit code diferente de 0
+        s._chapeu_do_giro("persona", "ler", ["ia", "--chapeu", "contexto"], {"exit_code": 1}, ident)
+        # 3. Tool diferente de "persona"
+        s._chapeu_do_giro("repo", "ler", ["ia", "--chapeu", "contexto"], {"exit_code": 0}, ident)
+        # 4. Ato diferente de "ler"
+        s._chapeu_do_giro("persona", "foto", ["ia", "--chapeu", "contexto"], {"exit_code": 0}, ident)
+        # 5. Sem --chapeu
+        s._chapeu_do_giro("persona", "ler", ["ia"], {"exit_code": 0}, ident)
+
+    mock_rc.set.assert_not_called()
+
+
+def test_verbo_seguinte_a_troca_de_chapeu_recebe_pf_chapeu():
+    """(e) o verbo seguinte ao (c) recebe PF_CHAPEU=X (#3385)."""
+    sid = "11111111-2222-3333-4444-555555555555"
+    mock_rc = MagicMock()
+    # Simula a chave viva já com "chapeu": "contexto" após o giro de troca (c)
+    mock_rc.get.return_value = json.dumps({"cadeira": "ia", "ordem_id": "o1", "chapeu": "contexto", "fallback": True})
+
+    with patch.object(s, "_rc", return_value=mock_rc):
+        ident = s._sessao_resolve(sid)
+
+    assert ident["chapeu"] == "contexto"
+
+    capturado = {}
+    def fake_popen(argv, **kw):
+        capturado["env"] = kw.get("env")
+        return _ProcessoFake()
+
+    with patch.object(s.subprocess, "Popen", side_effect=fake_popen):
+        r = s._run_verbo_blocking(["/bin/infra", "up"], None, 5, ident)
+
+    assert r["exit_code"] == 0
+    assert capturado["env"]["PF_CHAPEU"] == "contexto"
+    assert capturado["env"]["PF_CADEIRA"] == "ia"

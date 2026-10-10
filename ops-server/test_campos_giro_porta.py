@@ -268,7 +268,16 @@ def test_a_abertura_grava_o_prompt_do_dono_e_o_custo_do_pacote_mas_nao_o_pacote(
     assert linha["metodo_tokens"] == "tokenizador qwen2.5" and linha["montador_sha"] == "76e618a"
     assert linha["prefixo_sha"] == hashlib.sha256(b"persona:aaa|chapeu:bbb").hexdigest()[:12]
     assert linha["chapeu"] == "engenharia-de-harness" and linha["roteador_via"] == "comando"
+    assert linha["fallback"] is False
     assert linha["superficie"] == "claude.ai"
+    assert oplog.validar(linha) == []
+
+
+def test_abertura_em_fallback_grava_fallback_true_e_cumpre_o_contrato(tmp_path):
+    r_fb = _resposta(chapeu=None, roteador={"via": "fallback", "slug": None})
+    linha = _abre(tmp_path, r_fb, pergunta="oi")
+    assert linha["fallback"] is True and linha["chapeu"] is None
+    assert linha["roteador_via"] == "fallback"
     assert oplog.validar(linha) == []
 
 
