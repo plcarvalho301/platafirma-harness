@@ -51,7 +51,8 @@ USO = """uso:
                                                               (sem --metodo: o padrão do tipo, `acervo listar biblioteca metodos`)
   curar --reextrair --lote [--ordem <id,id,…|@arquivo>] [--metodo <slug>] [--apply]
                                                               o estoque pelo padrão do tipo (spec espelho-de-leitura §4.2):
-                                                              plano = PORTÃO 1 com a contagem por tipo; --apply abre o lote
+                                                              plano = PORTÃO 1 com a contagem por tipo; --apply abre o lote;
+                                                              --ordem recorta: só as obras da lista, nessa ordem
   curar --reextrair --lote --medida --replicas <n> --ordem <id,id,…|@arquivo> [--metodo <slug>] [--apply]
                                                               só converte e mede a lista em até <n> réplicas (#3228);
                                                               nada no acervo: o item sai `medida` com o relatório
@@ -1999,6 +2000,10 @@ def acao_reextrair_lote(args, autor: str, como_json: bool, headers: dict) -> int
         print("  fora do lote (marcação inteira, §4.3): " + ", ".join(f"{k} {v}" for k, v in fora.items()))
     print(f"  inteiras: {data.get('inteiras', 0)} · em dia: {data.get('em_dia', 0)} · "
           f"seladas à espera do --promover: {data.get('seladas_a_promover', 0)}")
+    if ordem:
+        # --ordem recorta (spec espelho-de-leitura §4.2 item 2): o lote leva só a lista
+        print(f"  só a lista do --ordem: {data.get('n', 0)} de {len(ordem)} pedida(s) no lote · "
+              f"{data.get('fora_da_ordem', 0)} obra(s) que também pedem transcrição ficam fora")
     if aplicado:
         print(f"  lote      : {data.get('lote')}")
         print(f"  acompanhar: {data.get('acompanhar')}")
