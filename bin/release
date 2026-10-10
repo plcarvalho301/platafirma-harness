@@ -1256,6 +1256,25 @@ gate_imagem() {  # $1=repo $2=sha
   return 0
 }
 
+# Biblioteca de front (card #3391, feature #3388): familia que traz Dockerfile na raiz e src/base/
+# (platafirma-ui) tem a imagem platafirma/ui:<versao> construida da arvore que sobe, ANTES de trocar
+# current; lock de src/base que mudou sem a versao subir recusa (exit 4, current intacto). As telas
+# pinam essa tag por COPY --from. O corpo mora em bin/_release/biblioteca. Familia sem biblioteca:
+# o ajudante sai 0 sem tocar docker.
+gate_biblioteca() {  # $1=repo $2=sha $3=sha no ar (ou vazio)
+  local repo="$1" sha="$2" atual="${3:-}" ajud="$AQUI/_release/biblioteca" rc=0 ant=""
+  [ -x "$ajud" ] || return 0
+  [ -z "$atual" ] || ant="$PROD_RAIZ/$repo/$atual"
+  "$ajud" garantir "$PROD_RAIZ/$repo/$sha" ${ant:+--anterior "$ant"} || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    4) printf 'release: recusa: a biblioteca de front da rev %s nao pode subir como esta — current intacto\n' "${sha:0:7}" >&2
+       return 4 ;;
+    *) printf 'release: a imagem da biblioteca de front da rev %s nao ficou pronta (exit %s) — current intacto\n' "${sha:0:7}" "$rc" >&2
+       return 3 ;;
+  esac
+}
+
 promover_stacks() {  # $1=sha ; usa STACKS_PROMOVER; devolve 0 ou o nome da stack que recusou em STACK_FALHOU
   local sha="$1" s
   STACK_FALHOU=""
@@ -2054,6 +2073,7 @@ cmd_promover() {
   gate_conferir_verbo "$repo" "$sha" "$atual" || { rc=$?; exit "$rc"; }
   construir_venvs "$repo" "$sha" || { rc=$?; exit "$rc"; }
   gate_imagem "$repo" "$sha" || { rc=$?; exit "$rc"; }
+  gate_biblioteca "$repo" "$sha" "$atual" || { rc=$?; exit "$rc"; }
   gravar_pontos "$repo" "$atual" "$sha"
   trocar_current "$repo" "$sha" "$atual"
   printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${sha:0:7}"
