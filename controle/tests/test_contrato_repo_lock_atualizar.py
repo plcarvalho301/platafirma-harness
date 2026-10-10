@@ -293,3 +293,47 @@ def test_nao_commita(tmp_path):
     _repo(tmp_path, bancada, "lock", "demo", "mod/x", "--atualizar", "a")
     assert _git("rev-parse", "HEAD", cwd=wt) == antes
     assert "uv.lock" in _git("status", "--porcelain", cwd=wt)
+
+
+# ---- --atualizar-tudo ----------------------------------------------------------------------
+
+def test_uv_tudo_leva_upgrade_sem_pacote_e_relata_todos(tmp_path):
+    bancada, fix, _ = _aberta(tmp_path, "uv")
+    (fix / "novo.lock").write_text(_uv_lock({"a": "1.1", "foo-bar": "2.0"}))
+    r = _repo(tmp_path, bancada, "lock", "demo", "mod/x", "--atualizar-tudo")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "--upgrade\n" in _chamadas(fix)
+    assert "--upgrade-package" not in _chamadas(fix)
+    assert "  ~ a 1.0 -> 1.1" in r.stdout
+    assert "  ~ foo-bar 1.0 -> 2.0" in r.stdout
+
+
+def test_node_tudo_roda_update_do_lock_e_relata_o_package_json(tmp_path):
+    bancada, fix, wt = _aberta(tmp_path, "npm")
+    (fix / "novo.lock").write_text(_npm_lock({"a": "1.0.0", "b": "1.0.1", "d": "1.4.0"}))
+    (fix / "novo.pkg").write_text(PKG_ANTES.replace("^1.0.0", "^1.4.0"))
+    r = _repo(tmp_path, bancada, "lock", "demo", "mod/x", "--atualizar-tudo")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "update --package-lock-only --ignore-scripts" in _chamadas(fix)
+    assert "install" not in _chamadas(fix)
+    assert "  ~ b 1.0.0 -> 1.0.1" in r.stdout
+    assert "  ~ d 1.0.0 -> 1.4.0" in r.stdout
+    assert "package.json: ~ d ^1.0.0 -> ^1.4.0" in r.stdout
+
+
+def test_node_tudo_falha_do_npm_devolve_lock_e_package_json(tmp_path):
+    bancada, fix, wt = _aberta(tmp_path, "npm")
+    (fix / "novo.pkg").write_text(PKG_ANTES.replace("^1.0.0", "^9.0.0"))
+    (fix / "falha_depois").write_text("npm ERR! code ECONNREFUSED\n")
+    r = _repo(tmp_path, bancada, "lock", "demo", "mod/x", "--atualizar-tudo")
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert (wt / "package.json").read_text() == PKG_ANTES
+    assert (wt / "package-lock.json").read_text() == NPM_ANTES
+
+
+def test_tudo_nao_se_combina_com_conferir_nem_com_atualizar(tmp_path):
+    bancada, fix, _ = _aberta(tmp_path, "npm")
+    for extra in (["--conferir"], ["--atualizar", "a"]):
+        r = _repo(tmp_path, bancada, "lock", "demo", "mod/x", "--atualizar-tudo", *extra)
+        assert r.returncode == 2, (extra, r.stdout + r.stderr)
+    assert _chamadas(fix) == ""

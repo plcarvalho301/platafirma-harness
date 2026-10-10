@@ -145,10 +145,11 @@ uso:
   repo pr-diff   <repo> <numero>
   repo pr-merge  <repo> <numero> [--squash|--merge|--rebase] [--forcar]
   repo pr-fechar <repo> <numero> --motivo <texto>   (descarta sem merge; apaga ramo e bancadas)
-  repo lock      <repo> <projeto> [--conferir | --atualizar <pacote>[@<versao>]…]
+  repo lock      <repo> <projeto> [--conferir | --atualizar <pacote>[@<versao>]… | --atualizar-tudo]
                                                     (uv.lock do <projeto>/pyproject.toml, ou package-lock.json do
                                                      <projeto>/package.json sem script de pacote; nao commita;
-                                                     --atualizar sobe so o pacote pedido, relata antes -> depois)
+                                                     --atualizar sobe so o pacote pedido, relata antes -> depois;
+                                                            --atualizar-tudo sobe tudo que o manifesto permite)
   repo git       <repo> <args…>
 
 bancada: PLATAFIRMA_BANCADA[sem default] (exit 3)
@@ -2831,6 +2832,11 @@ ato_lock_node() {  # $1=repo $2=projeto $3=clone $4=dir $5=conferir(0|1) $6..=pa
     done
     pj_antes="$(mktemp)" && cp -p "$dir/package.json" "$pj_antes" || morre "não guardei a cópia do package.json" 3
     npm_atualizar_pacotes "$dir" "$err" "${atualizar[@]}" || rc=$?
+  elif [ "${ATUALIZAR_TUDO:-0}" -eq 1 ]; then
+    # npm update sobe cada dependência até o teto da faixa do package.json e pode subir o piso
+    # da faixa (^1.2.0 -> ^1.5.0); a faixa major não muda. O diff do package.json sai no relato.
+    pj_antes="$(mktemp)" && cp -p "$dir/package.json" "$pj_antes" || morre "não guardei a cópia do package.json" 3
+    npm_isolado "$dir" update --package-lock-only --ignore-scripts --no-audit --no-fund </dev/null >/dev/null 2>"$err" || rc=$?
   else
     npm_isolado "$dir" install --package-lock-only --ignore-scripts --no-audit --no-fund </dev/null >/dev/null 2>"$err" || rc=$?
   fi
@@ -2928,9 +2934,11 @@ PY
 ato_lock() {
   local repo="" projeto="" conferir=0
   local -a atualizar=()
+  ATUALIZAR_TUDO=0  # --atualizar-tudo: sobe tudo que o manifesto permite (uv --upgrade, npm update)
   while [ $# -gt 0 ]; do
     case "$1" in
       --conferir) conferir=1; shift ;;
+      --atualizar-tudo) ATUALIZAR_TUDO=1; shift ;;
       --atualizar)
         [ $# -ge 2 ] || morre "--atualizar pede um pacote (nome ou nome@versão)" 2
         atualizar+=("$2"); shift 2 ;;
@@ -2949,6 +2957,10 @@ ato_lock() {
   done
   [ -n "$repo" ] && [ -n "$projeto" ] \
     || morre "repo e projeto são obrigatórios para lock (ex.: repo lock platafirma-harness venvs/acervo)" 2
+  if [ "$ATUALIZAR_TUDO" -eq 1 ]; then
+    [ "$conferir" -eq 0 ] || morre "--atualizar-tudo e --conferir não se combinam: conferir só mede" 2
+    [ "${#atualizar[@]}" -eq 0 ] || morre "--atualizar-tudo e --atualizar não se combinam: tudo já inclui o pacote" 2
+  fi
   if [ "${#atualizar[@]}" -gt 0 ]; then
     [ "$conferir" -eq 0 ] || morre "--atualizar e --conferir não se combinam: conferir só mede" 2
     local _s
@@ -3020,6 +3032,7 @@ ato_lock() {
     antes="$(mktemp)" && cp -p "$lock" "$antes" || morre "não guardei a cópia do lock anterior" 3
   fi
   local -a upg=()
+  [ "$ATUALIZAR_TUDO" -eq 0 ] || upg=(--upgrade)
   if [ "${#atualizar[@]}" -gt 0 ]; then
     if [ -z "$antes" ]; then
       rm -f "$err"
