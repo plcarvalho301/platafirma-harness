@@ -83,7 +83,7 @@ def test_teto_no_meio_da_cadeia_devolve_lote_next_sem_declarar_parada():
                           bytes_de=lote.bytes_stdout)
     assert rodados == [0, 1]
     assert out["lote_next"] == 2
-    assert out["lote"][2] == {"omitido_por_teto": True}
+    assert out["lote"][2] == {"omitido_por_teto": True, "n": 2, "item": 2}
     assert out["cadeia"]["parou_em"] is None
 
 

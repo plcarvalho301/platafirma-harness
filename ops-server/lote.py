@@ -114,11 +114,11 @@ async def itera(itens: list, roda: Callable[[int, Any, list], Awaitable[dict]], 
         if encadeado and exit_do_item(r) not in SEGUE:
             parou_em = i
             break
-    for _ in range(len(resultados), len(itens)):
+    for j in range(len(resultados), len(itens)):
         if parou_em is not None:
             resultados.append({"nao_rodou": True, "motivo": f"a cadeia parou no item {parou_em}"})
         else:
-            resultados.append({"omitido_por_teto": True})
+            resultados.append({"omitido_por_teto": True, "n": j, "item": itens[j]})
     out = {"lote": resultados, "lote_n": len(itens), "lote_next": lote_next}
     if encadeado:
         out["cadeia"] = resumo_cadeia(resultados, parou_em, brutos)
