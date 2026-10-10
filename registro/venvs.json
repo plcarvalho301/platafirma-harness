@@ -48,6 +48,11 @@
     "lock": "recuperacao/uv.lock",
     "teste": "recuperacao"
   },
+  "politica-acesso": {
+    "familia": "platafirma-harness",
+    "lock": "politica-acesso/uv.lock",
+    "teste": "politica-acesso"
+  },
   "ops": {
     "familia": "platafirma-harness",
     "lock": "ops-server/requirements.txt",
