@@ -30,15 +30,12 @@ arranque: leitura de descoberta é contexto gasto para chegar ao mesmo lugar.
 dentro do pacote (medido: 1.460 tokens). Linha mandando lê-la seria segunda fonte
 da mesma régua.
 
-**No Code ela chega também por `@import`, e isso não é segunda fonte (20/09/2026).**
-O Code apaga retorno antigo de tool quando a fita cresce, e o pacote é retorno de
-tool: em fita longa a cadeira deixava de ter a conduta (#3091). `agente/CLAUDE.md`
-importa `abertura/dono.md` do endereço publicado — o mesmo arquivo que o pacote
-serve, lido pelo Code a cada abertura e depois de compactar. É segundo CANAL da
-mesma fonte, não cópia: nada se edita ali. A persona volta pelo hook de
-`SessionStart` (`agente/hooks/porta-sessao.py`), lida da mesma morada. No claude.ai
-não há canal equivalente; lá quem segura é a porta, que nunca deduplica peça de
-constituição (#3092).
+**O `@import` da conduta saiu do `agente/CLAUDE.md` (10/10/2026).** Ele existia porque o
+Code apaga retorno antigo de tool e a conduta sumia em fita longa (#3091). Saiu porque o
+arranque passou a ser um texto só para toda superfície, e só o Code lê `@import`; na conta
+`megafone` ele nunca carregou (`Permission denied` em `/srv/platafirma/casa`, medido em
+10/10/2026). A persona volta pelo hook de `SessionStart` (`agente/hooks/porta-sessao.py`). A conduta
+fica com a porta, que nunca deduplica peça de constituição (#3092).
 
 ## De onde sai a cadeira, por superfície
 
@@ -52,11 +49,17 @@ a resposta — ela faz a sessão falar em nome de quem não é e escrever na mes
 | fita | slug chumbado no cwd da fita | `bin/chat`, que já recebe `--cadeira` |
 | fábrica | slug dito na abertura; sem slug, `fabrica` por default | o arranque de conta, `agente/CLAUDE.md` |
 | Code seco | o mesmo arranque de conta: cai no default | escopo de usuário, em qualquer diretório |
-| posto (qualquer máquina, qualquer agente) | slug dito na abertura; sem slug, `fabrica` | `platafirma-posto/AGENTS.md`, por projeto, via `git pull` |
+| posto (qualquer máquina, qualquer agente) | slug dito na abertura; sem slug, `fabrica` | `platafirma-posto/AGENTS.md`, por projeto, via `git pull`; o `CLAUDE.md` do posto só o importa |
 
 O posto é a porta de entrada humana (dono, 20/09/2026) e a única exceção à regra do
 ponteiro: as duas linhas estão ESCRITAS no `AGENTS.md` de lá, porque daquela porta este
 arquivo não se lê antes de a sessão abrir. Mudou aqui, muda lá no mesmo ato.
+
+**O arranque é um só texto (10/10/2026).** `agente/CLAUDE.md` é byte a byte o `AGENTS.md`
+do posto: as duas linhas e a tabela que manda cada provider ao seu arquivo em
+`providers/` do posto, onde moram login, config e regra da sessão. O `sincroniza.sh` do
+posto, que toda instância roda, confere a igualdade antes de instalar e para se divergirem.
+Mudou um, muda o outro no mesmo ato, senão nenhuma instância atualiza.
 
 - **Worktree não injeta nada.** Ela isola branch, que é o que git worktree faz bem;
   identidade lida de dentro dela é a cópia congelada que este arquivo elimina.
