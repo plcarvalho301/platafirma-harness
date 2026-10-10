@@ -85,6 +85,7 @@ def ler_uv_lock(stack, caminho):
     return saida
 
 
+_URL = re.compile(r"^(git\+|[a-z][a-z0-9+.-]*://)", re.IGNORECASE)
 _REQ = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)(\[[^\]]*\])?\s*(==|>=|<=|~=|!=|>|<)?\s*([^\s;#\\]+)?")
 
 
@@ -94,10 +95,11 @@ def ler_requirements(stack, caminho):
         texto = f.read().replace("\\\n", " ")
     for bruta in texto.splitlines():
         linha = bruta.split("#", 1)[0].strip()
-        if not linha or linha.startswith(("-", "git+", "http")):
-            if linha.startswith(("git+", "http")):
-                saida.append(_linha(stack, "pypi", linha, "?", True, linha, "",
-                                    problema="fonte fora do PyPI oficial (url ou git)"))
+        if not linha or linha.startswith("-"):
+            continue
+        if _URL.match(linha):          # url ou git: "httpx>=0.27" NAO e url (medido no host em 10/10)
+            saida.append(_linha(stack, "pypi", linha, "?", True, linha, "",
+                                problema="fonte fora do PyPI oficial (url ou git)"))
             continue
         m = _REQ.match(linha)
         if not m:
@@ -244,11 +246,51 @@ def _descobrir(registro, prod_raiz, declaradas):
                         yield familia, rel, os.path.join(dp, fn)
 
 
+_SCRIPT_FERRAMENTAL = r'''
+. "$1"; PF_VENV_PREFIXO=dependencias
+v() { timeout 10 "$@" 2>&1 </dev/null | head -n 1; }
+limpa() { printf '%s' "$1" | tr '\n\t' '  '; }
+if n="$(resolver_node 2>&1)"; then
+  p="${n%%$'\t'*}"; printf 'node\t%s\t%s\n' "$p" "$(v "$p" --version)"
+  if np="$(resolver_npm "$p" 2>&1)"; then
+    printf 'npm\t%s\t%s\n' "$np" "$(PATH="$(dirname "$p"):$PATH" v "$np" --version)"
+  else printf 'npm\t-\t%s\n' "$(limpa "$np")"; fi
+else printf 'node\t-\t%s\n' "$(limpa "$n")"; fi
+if u="$(resolver_uv 2>&1)"; then printf 'uv\t%s\t%s\n' "$u" "$(v "$u" --version)"
+else printf 'uv\t-\t%s\n' "$(limpa "$u")"; fi
+if py="$(resolver_python 2>&1)"; then printf 'python\t%s\t%s\n' "${py%%$'\t'*}" "${py##*$'\t'}"
+else printf 'python\t-\t%s\n' "$(limpa "$py")"; fi
+if c="$(resolver_chromium 2>&1)"; then printf 'chromium\t%s\t%s\n' "$c" "$(v "$c" --version)"
+else printf 'chromium\t-\t%s\n' "$(limpa "$c")"; fi
+'''
+
+
+def ferramental(harness):
+    """[{ferramenta, caminho, versao}] do que o host resolve para node, npm, uv, python e chromium,
+    pelas MESMAS funcoes de lib/venv.sh que constroem o ambiente. Ausente ou recusado sai com o
+    motivo no lugar da versao: nao se omite."""
+    import subprocess
+    venv = os.path.join(harness, "lib", "venv.sh")
+    if not os.path.isfile(venv):
+        return [{"ferramenta": "?", "caminho": "-", "versao": f"nao li {venv}"}]
+    try:
+        r = subprocess.run(["bash", "-c", _SCRIPT_FERRAMENTAL, "_", venv], capture_output=True,
+                           text=True, timeout=90)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return [{"ferramenta": "?", "caminho": "-", "versao": f"nao consegui olhar: {exc}"}]
+    saida = []
+    for linha in r.stdout.splitlines():
+        partes = linha.split("\t")
+        if len(partes) == 3:
+            saida.append({"ferramenta": partes[0], "caminho": partes[1], "versao": partes[2]})
+    return saida
+
+
 def _celula(texto) -> str:
     return str(texto).replace("|", "\\|").replace("\n", " ") or "—"
 
 
-def markdown(itens, linhas, sha_release, quando, alvo=None):
+def markdown(itens, linhas, sha_release, quando, alvo=None, ferr=None):
     """O rol em Markdown, para o dono ler: um retrato datado, derivado das travas (que seguem
     sendo a fonte). Licenca so aparece quando o lock a carrega."""
     por_stack: dict[str, list] = {}
@@ -298,7 +340,15 @@ def markdown(itens, linhas, sha_release, quando, alvo=None):
     if indeterminaveis:
         saida += ["", "Não consegui olhar:", "", "| item | por quê |", "|---|---|"]
         saida += [f"| {_celula(n)} | {_celula(v.motivo)} |" for n, v in indeterminaveis]
-    saida += ["", "## 3. Por trava", ""]
+    saida += ["", "## 3. O que o host resolve (fora das travas)", "",
+              "Resolvido pelas mesmas funções de `lib/venv.sh` que constroem o ambiente. Ausente ou recusado "
+              "aparece com o motivo no lugar da versão.", ""]
+    if ferr:
+        saida += ["| ferramenta | caminho | versão ou motivo |", "|---|---|---|"]
+        saida += [f"| {_celula(f['ferramenta'])} | {_celula(f['caminho'])} | {_celula(f['versao'])} |" for f in ferr]
+    else:
+        saida.append("Não consultado nesta rodada.")
+    saida += ["", "## 4. Por trava", ""]
     for stack in sorted(por_stack):
         ps = sorted(por_stack[stack], key=lambda p: (not p["direto"], p["pacote"].lower(), p["versao"]))
         construida = ps[0].get("construido_pela_release", True)
@@ -319,7 +369,7 @@ def markdown(itens, linhas, sha_release, quando, alvo=None):
     return "\n".join(saida)
 
 
-def escrever_md(destino, raiz_permitida, itens, linhas, sha_release, alvo=None):
+def escrever_md(destino, raiz_permitida, itens, linhas, sha_release, alvo=None, ferr=None):
     """Grava o Markdown em `destino`, que tem de ser .md absoluto dentro de `raiz_permitida` (a
     bancada declarada): a classe so olha, e esta e a unica escrita, opt-in e contida. 0 ok, 4 recusa."""
     import datetime
@@ -334,13 +384,14 @@ def escrever_md(destino, raiz_permitida, itens, linhas, sha_release, alvo=None):
     os.makedirs(real, exist_ok=True)
     tmp = destino + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        f.write(markdown(itens, linhas, sha_release, quando, alvo))
+        f.write(markdown(itens, linhas, sha_release, quando, alvo, ferr))
     os.replace(tmp, destino)
     print(f"dependencias: Markdown escrito em {destino}", file=sys.stderr)
     return 0
 
 
-def conferir(alvo, como_json, sha_release, registro, prod_raiz, md_para=None, raiz_permitida=None):
+def conferir(alvo, como_json, sha_release, registro, prod_raiz, md_para=None, raiz_permitida=None,
+             harness=None):
     if not os.path.isfile(registro):
         msg = f"registro de venvs ausente: {registro}"
         print(json.dumps({"erro": msg}) if como_json else msg, file=sys.stderr if not como_json else sys.stdout)
@@ -350,9 +401,10 @@ def conferir(alvo, como_json, sha_release, registro, prod_raiz, md_para=None, ra
         msg = f"stack {alvo!r} nao declarada em registro/venvs.json (nem trava <familia>:<pasta> na release)"
         print(json.dumps({"erro": msg}) if como_json else msg)
         return 1
+    ferr = ferramental(harness) if harness and (md_para or como_json) else None
     if md_para:
-        rc_md = escrever_md(md_para, raiz_permitida or "/nao-declarada", itens, linhas, sha_release, alvo)
+        rc_md = escrever_md(md_para, raiz_permitida or "/nao-declarada", itens, linhas, sha_release, alvo, ferr)
         if rc_md:
             return rc_md
-    return resultado.relatorio("dependencias", alvo, itens, sha_release, como_json=como_json,
-                               extra={"pacotes": linhas} if como_json else None)
+    extra = {"pacotes": linhas, "ferramental": ferr or []} if como_json else None
+    return resultado.relatorio("dependencias", alvo, itens, sha_release, como_json=como_json, extra=extra)

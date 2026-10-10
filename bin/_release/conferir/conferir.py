@@ -3112,7 +3112,7 @@ def main(argv):
             if alvo == "--md-para":
                 alvo = None
         return dependencias.conferir(alvo, como_json, _sha_release(), registro, PROD_RAIZ,
-                                     md_para=md_para, raiz_permitida=RAIZ)
+                                     md_para=md_para, raiz_permitida=RAIZ, harness=HARNESS)
     if como_json:
         print(json.dumps({"erro": f"classe desconhecida: {classe}"}))
     uso(f"classe desconhecida: {classe}")

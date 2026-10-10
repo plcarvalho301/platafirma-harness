@@ -91,7 +91,8 @@ def falsos(tmp_path):
                  '"NM=$(readlink -f node_modules 2>/dev/null)" "ARQ=$1" >> "$FALSO_ENV_OUT"; fi\n'
                  'if grep -q VERMELHO "$1" 2>/dev/null; then echo "prova reprovou" >&2; exit 1; fi\n'
                  'echo ok; exit 0\n')
-    npm = _exec(d / "npm", 'printf "%s\\n" "$*" > "${FALSO_NPM_ARGS:-/dev/null}"\n'
+    npm = _exec(d / "npm", 'if [ "${1:-}" = "--version" ]; then echo 10.9.0; exit 0; fi\n'
+                'printf "%s\\n" "$*" > "${FALSO_NPM_ARGS:-/dev/null}"\n'
                 # o npm real recusa o mesmo caminho nas duas configs ("double-loading config"): o falso tambem
                 'if [ "${npm_config_userconfig:-}" = "${npm_config_globalconfig:-}" ]; then '
                 'echo "double-loading config as global, previously loaded as user" >&2; exit 1; fi\n'
@@ -338,6 +339,36 @@ def test_inventario_le_as_tres_formas_de_lock(tmp_path):
 
     assert not por[("req", "starlette")]["problema"]
     assert "nao fixada" in por[("req", "solto")]["problema"]
+
+
+def test_inventario_lista_o_ferramental_do_host(falsos, monkeypatch):
+    """node, npm e chromium vem das MESMAS funcoes de lib/venv.sh que constroem o ambiente; o
+    node no home da conta sai com o motivo no lugar da versao."""
+    dep = _dependencias()
+    monkeypatch.setenv("HOME", str(falsos["home"]))
+    monkeypatch.setenv("PLATAFIRMA_NODE", str(falsos["node"]))
+    monkeypatch.setenv("PLATAFIRMA_CHROMIUM", str(falsos["chromium"]))
+    por = {f["ferramenta"]: f for f in dep.ferramental(str(REPO_ROOT))}
+    assert por["node"]["caminho"] == str(falsos["node"]) and por["node"]["versao"] == "v22.1.0"
+    assert por["npm"]["caminho"] == str(falsos["npm"]) and por["npm"]["versao"] == "10.9.0"
+    assert por["chromium"]["caminho"] == str(falsos["chromium"])
+
+    no_home = _exec(falsos["home"] / ".nvm" / "node", "echo v22.1.0\n")
+    monkeypatch.setenv("PLATAFIRMA_NODE", str(no_home))
+    recusado = {f["ferramenta"]: f for f in dep.ferramental(str(REPO_ROOT))}["node"]
+    assert recusado["caminho"] == "-" and "home da conta" in recusado["versao"]
+
+
+def test_requirements_nome_que_comeca_com_http_nao_e_url(tmp_path):
+    """Medido no host em 10/10: `httpx>=0.27` saiu como fonte fora do PyPI por comecar com "http"."""
+    dep = _dependencias()
+    req = tmp_path / "r.txt"
+    req.write_text("httpx>=0.27\nhttpx==0.28.1\nhttps://x.org/p.tar.gz\ngit+https://g.com/p.git\n", encoding="utf-8")
+    por = {(p["pacote"], p["versao"]): p for p in dep.ler_requirements("s", str(req))}
+    assert "nao fixada" in por[("httpx", "0.27")]["problema"]
+    assert not por[("httpx", "0.28.1")]["problema"]
+    urls = [p for p in por.values() if "url ou git" in p["problema"]]
+    assert len(urls) == 2
 
 
 def test_inventario_stack_ausente_na_release_e_indeterminavel(tmp_path):
