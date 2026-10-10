@@ -246,7 +246,7 @@ CONTRATO = {
     "giro": ("tool", "sessao_id", "cadeira", "ordem_id", "exit_code", "classe", "classe_fonte",
              "bytes_produzidos", "bytes_servidos", "lavado", "capacidade", "ferramenta", "escopo",
              "turno_id", "turno_fonte") + IDENTIDADE,
-    "abertura": ("tool", "sessao_id", "chapeu", "roteador_via", "superficie", "tokens_pecas",
+    "abertura": ("tool", "sessao_id", "chapeu", "roteador_via", "fallback", "superficie", "tokens_pecas",
                  "metodo_tokens", "prefixo_sha", "montador_sha", "pergunta", "pergunta_bytes") + IDENTIDADE,
     "fecho": ("tool", "evento", "sessao_id", "cadeira", "motivo_parada"),
     "auth_negada": ("evento", "path", "origem_requisicao", "motivo"),
