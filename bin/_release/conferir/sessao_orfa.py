@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from typing import Any, Callable
 
 import resultado
@@ -29,13 +30,16 @@ BANCOS = {
 
 # Linha de base do legado de sessao_id órfãos anterior à trava do card #3375.
 # Cada entrada é o teto tolerado. Qualquer acréscimo é divergência (exit 1).
+# Medida em 10/10/2026: 13:02 e 13:14 BRT, contagem igual nas duas leituras, com a
+# trava no ar (conhecimento 86efd11) e o extrator parado entre elas (incidente #3401).
+# Legado não se corrige nem se apaga: só se conta (trava do card).
 LINHA_DE_BASE: dict[str, int] = {
-    "acervo.evento_recuperacao": 0,
+    "acervo.evento_recuperacao": 2,
     "acervo.voto_humano": 0,
     "acervo.registro": 0,
-    "acervo.log(sessao_id)": 0,
+    "acervo.log(sessao_id)": 64,
     "acervo.log(origem_sessao)": 0,
-    "sessao.fita": 0,
+    "sessao.fita": 1,
 }
 
 
@@ -213,7 +217,7 @@ def conferir(
             if como_json:
                 print(json.dumps({"erro": msg}))
             else:
-                print(f"\\n{msg}", file=sys.stderr)
+                print(msg, file=sys.stderr)
             return 1
 
     # 3. Conferir cada tabela
