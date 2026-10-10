@@ -67,25 +67,5 @@
     "familia": "platafirma-motor",
     "lock": "deploy/marcacao/requirements-teste.txt",
     "teste": "deploy/marcacao"
-  },
-  "prova-0046-lit": {
-    "familia": "platafirma-ui",
-    "lock": "prova-0046/lit/package-lock.json",
-    "testes": ["prova-0046/lit/provas/*.mjs"]
-  },
-  "prova-0046-preact": {
-    "familia": "platafirma-ui",
-    "lock": "prova-0046/preact/package-lock.json",
-    "testes": ["prova-0046/preact/provas/*.mjs"]
-  },
-  "prova-0046-react": {
-    "familia": "platafirma-ui",
-    "lock": "prova-0046/react/package-lock.json",
-    "testes": ["prova-0046/react/provas/*.mjs"]
-  },
-  "prova-0046-django": {
-    "familia": "platafirma-ui",
-    "lock": "prova-0046/django/uv.lock",
-    "teste": "prova-0046/django"
   }
 }
