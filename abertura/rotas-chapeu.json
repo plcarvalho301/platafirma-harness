@@ -119,6 +119,7 @@
       "Sortal fornecedor de identidade",
       "Rigidez de tipo",
       "Mundo vs. convencao",
+      "debate-realismo-conceitualismo",
       "realismo ontologico",
       "conceitualismo",
       "pragmatismo",
@@ -473,7 +474,9 @@
       "montagem de contexto",
       "Restricao de formato",
       "Direcionamento vs. implementabilidade",
+      "lacuna-de-implementacao",
       "Transporte de estado entre sessões",
+      "continuidade-entre-sessoes",
       "Fossilizacao de memoria",
       "Gap desenho-realidade",
       "design-reality gap",
@@ -498,6 +501,7 @@
   "ia": {
     "agente": [
       "Quando cabe um agente",
+      "adequacao-de-agente",
       "Loop agêntico",
       "Orquestração multi-agente",
       "multi-agent orchestration",
@@ -526,28 +530,32 @@
       "prompt caching",
       "Restricao de formato",
       "Fossilizacao de memoria",
-      "Transporte de estado entre sessões"
+      "Transporte de estado entre sessões",
+      "continuidade-entre-sessoes"
     ],
     "engenharia-de-harness": [
       "Complexidade assintotica",
       "asymptotic complexity",
       "big-o",
-      "Pipeline RAG",
-      "rag",
-      "retrieval-augmented generation",
-      "Ranqueamento multiestágio",
-      "reranking",
       "Juiz-modelo",
       "LLM-as-a-judge",
       "Validade de construto",
       "construct validity",
-      "Abstencao calibrada",
       "Mecanismo de atencao",
       "attention",
       "self-attention",
       "attention mechanism",
       "Janela de contexto",
       "context window"
+    ],
+    "recuperacao": [
+      "Pipeline RAG",
+      "rag",
+      "retrieval-augmented generation",
+      "Embeddings",
+      "Ranqueamento multiestágio",
+      "reranking",
+      "Abstencao calibrada"
     ]
   },
   "inteligencia": {
@@ -938,6 +946,7 @@
       "Transparência de composição",
       "Dependencia exogena",
       "Procedencia do que esta no ar",
+      "procedencia-em-execucao",
       "Engenharia social",
       "social engineering"
     ],
@@ -1074,6 +1083,7 @@
       "change enablement",
       "Mudanca padrao",
       "Procedencia do que esta no ar",
+      "procedencia-em-execucao",
       "Registro autoritativo de configuracao",
       "Deriva de configuracao",
       "drift",
