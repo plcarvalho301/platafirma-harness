@@ -71,10 +71,11 @@ def test_ingerir_sem_motor_nao_recusa_por_uso(tmp_path, env_py):
     assert "obrigatório" not in r.stderr
     assert "aviso" not in r.stderr
 
-def test_ingerir_ate_vetor_avisa_transcrever_e_indexar(tmp_path, env_py):
+def test_ingerir_ate_vetor_diz_que_encadeia_ate_o_ar(tmp_path, env_py):
     r = _lote_sem_servidor(tmp_path, env_py, "--ate", "vetor")
     assert r.returncode != 2
-    assert "Transcrever" in r.stderr and "motor indexar" in r.stderr
+    assert "encadeia obra a obra até Transcrever, Indexar e pôr no ar" in r.stderr
+    assert "motor rag indexar --promover" in r.stderr
 
 def test_ingerir_motor_em_catalogar_e_ignorado(tmp_path, env_py):
     r = _lote_sem_servidor(tmp_path, env_py, "--motor", "rag")

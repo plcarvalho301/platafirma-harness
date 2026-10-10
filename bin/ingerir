@@ -48,8 +48,9 @@ USO = """uso:
   ingerir (--lote <pasta> | --origem <gdrive:pasta|url> | --drive [<pasta>]) [opções]
 
 Incorporar (arq:0119 §2): sem --ate, o lote para na obra catalogada com a cópia sob guarda.
-Texto e índice são outros estágios: Transcrever (acervo curar obra --reextrair) e Indexar
-(motor indexar, da ia).
+Com --ate chunk, o --apply encadeia Transcrever (acervo espelhar) obra a obra; com --ate embed|vetor,
+encadeia Transcrever, Indexar e põe no ar (motor <inst> indexar --promover). A obra que um portão
+barra (espelho não servível, gate do motor) para ali, com o portão dito; as outras seguem.
 
 Todo arquivo que entra ganha a ficha no mesmo ato (#3306): o formato lido nos bytes, não no nome. O plano
 mostra o que a ficha leu na coluna Formato (um `.pdf` que é JSON sai JSON, um `.pdf` que é GZIP sai GZIP);
@@ -66,10 +67,9 @@ opções de fonte (uma das opções):
 opções adicionais:
   --apply                aplica o lote (default: falso, dry-run do plano)
   --ate <degrau>         degrau alvo: catalogar | chunk | embed | vetor (default: catalogar);
-                         além de catalogar, transcreve e indexa no mesmo lote (com aviso)
-  --motor <inst>         instância do motor (ex: --motor rag); só com --ate além de catalogar
-  --ocr                  autoriza extração OCR em arquivos escaneados (default: false);
-                         só com --ate além de catalogar
+                         chunk pára na impressão selada; embed e vetor vão até o ar
+  --motor <inst>         instância do motor que indexa (default: rag); só com --ate embed|vetor
+  --ocr                  aceito e sem efeito: o espelhar faz OCR na página escaneada
   --semantico            corte semântico por Orçamento de Fronteiras na seção sem heading que
                          estoura o teto (causa A, card #3073); default: false (corte por tamanho)
   --autor <slug>         curador do lote (default: cadeira da sessão ou 'dados')
@@ -463,6 +463,123 @@ def formatar_tabela_aplicado(lote: dict) -> str:
     return "\n".join(linhas)
 
 
+# --- encadear os estágios depois de Incorporar (arq:0119 §2) -------------------------------
+# `--ate chunk` vai até Transcrever (impressão selada); `--ate embed|vetor` vai até o ar: espelha,
+# indexa e promove pelo motor (`--promover` depois do gate). Cada obra anda sozinha: a que um portão
+# barra para ali, com o portão dito, e as outras seguem. Os atos são os verbos da casa, não cópia.
+
+_ESTADOS_FIM_INDEXACAO = {"concluido", "falhou", "cancelado", "interrompido"}
+
+
+def _bin_verbo(nome: str) -> str:
+    return os.environ.get(f"PF_BIN_{nome.upper()}") or os.path.join(HARNESS_DIR, "bin", nome)
+
+
+def _roda_verbo(argv: list[str], timeout: int) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=False)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(argv, 124, "", f"passou de {timeout} s")
+    except OSError as e:
+        return subprocess.CompletedProcess(argv, 127, "", str(e))
+
+
+def _primeira_linha(texto: str) -> str:
+    for l in (texto or "").splitlines():
+        if l.strip():
+            return l.strip()
+    return ""
+
+
+def espelhar_obra(obra_id: str) -> tuple[str | None, str]:
+    """`acervo espelhar biblioteca obra <id> --apply`. Devolve (impressão selada, julgamento) ou
+    (None, o motivo de ter parado)."""
+    r = _roda_verbo([_bin_verbo("acervo"), "espelhar", "biblioteca", "obra", obra_id, "--apply"], 1800)
+    if r.returncode != 0:
+        return None, f"Transcrever: {_primeira_linha(r.stderr) or _primeira_linha(r.stdout) or f'exit {r.returncode}'}"
+    impressao, julgamento = None, ""
+    for l in r.stdout.splitlines():
+        s = l.strip()
+        m = re.match(r"impressão\s*:\s*([0-9a-f-]{36})\s+selada", s)
+        if m:
+            impressao = m.group(1)
+        if s.startswith("novo") and "·" in s:
+            julgamento = s.rsplit("·", 1)[-1].strip()
+    if not impressao:
+        return None, "Transcrever: o espelhar não devolveu impressão selada"
+    if not julgamento.startswith("servível"):
+        return None, f"Transcrever: espelho {julgamento or 'sem julgamento'} (régua 6: só espelho servível entra no ar); impressão {impressao} selada"
+    return impressao, julgamento
+
+
+def indexar_e_promover(obras: list[str], motor: str, autor: str) -> dict[str, str]:
+    """`motor <inst> indexar biblioteca --obra … --promover --apply` e o relatório até o fim. Devolve
+    {obra: motivo} das que não chegaram ao ar."""
+    if not obras:
+        return {}
+    base = [_bin_verbo("motor"), motor, "indexar", "biblioteca"]
+    r = _roda_verbo(base + ["--obra", ",".join(obras), "--promover", "--autor", autor, "--apply", "--json"], 600)
+    if r.returncode != 0:
+        motivo = f"Indexar: {_primeira_linha(r.stderr) or f'exit {r.returncode}'}"
+        return {o: motivo for o in obras}
+    try:
+        plano = json.loads(r.stdout)
+    except ValueError:
+        return {o: "Indexar: o motor não devolveu o lote" for o in obras}
+    lote = plano.get("lote")
+    if not lote:
+        return {o: "Indexar: o motor não achou impressão selada a indexar" for o in obras}
+    sys.stderr.write(f"ingerir: Indexar: lote {lote} no motor {motor}\n")
+    limite = time.time() + int(os.environ.get("PF_INGERIR_PRAZO_INDEXAR", "3600"))
+    rel = {}
+    while time.time() < limite:
+        rr = _roda_verbo(base + ["--relatorio", lote, "--json"], 300)
+        if rr.returncode == 0:
+            try:
+                rel = json.loads(rr.stdout)
+            except ValueError:
+                rel = {}
+            if rel.get("estado") in _ESTADOS_FIM_INDEXACAO:
+                break
+        time.sleep(float(os.environ.get("PF_INGERIR_PASSO", "5")))
+    else:
+        motivo = f"Indexar: lote {lote} ainda rodando; acompanhar com motor {motor} indexar biblioteca --relatorio {lote}"
+        return {o: motivo for o in obras}
+    por_obra = {it.get("obra_id"): it for it in rel.get("itens") or []}
+    barradas = {}
+    for o in obras:
+        it = por_obra.get(o)
+        if not it:
+            barradas[o] = f"Indexar: obra fora do lote {lote}"
+        elif it.get("problema") or not (it.get("gate") or {}).get("aprovado"):
+            barradas[o] = f"Indexar: {it.get('problema') or 'gate do motor reprovado'} (lote {lote})"
+    return barradas
+
+
+def encadear_estagios(lote: dict, ate: str, motor: str, autor: str) -> dict[str, str]:
+    """Depois do lote aplicado: Transcrever e, além de chunk, Indexar e pôr no ar. Imprime o
+    destino de cada obra e devolve {obra: portão} das que pararam antes do alvo."""
+    titulos = {it["obra_id"]: it.get("titulo") or it.get("arquivo") or it["obra_id"]
+               for it in lote.get("itens", []) if it.get("obra_id") and it.get("estado") == "feito"}
+    barradas, seladas = {}, []
+    for i, obra in enumerate(titulos, 1):
+        sys.stderr.write(f"ingerir: Transcrever {i}/{len(titulos)}: {titulos[obra][:60]}\n")
+        impressao, nota = espelhar_obra(obra)
+        if impressao:
+            seladas.append(obra)
+        else:
+            barradas[obra] = nota
+    if ate != "chunk":
+        barradas.update(indexar_e_promover(seladas, motor, autor))
+    alvo = "selada" if ate == "chunk" else "no ar"
+    print("")
+    print(f"Estágios depois de Incorporar: {len(titulos) - len(barradas)} de {len(titulos)} {alvo}")
+    for obra, titulo in titulos.items():
+        estado = barradas.get(obra) or alvo
+        print(f"  {obra}  {titulo[:45]:<45}  {estado}")
+    return barradas
+
+
 def main():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--lote", dest="lote", default=None)
@@ -509,10 +626,11 @@ def main():
         sys.exit(2)
 
     if args.ate != "catalogar":
+        alvo = "Transcrever" if args.ate == "chunk" else "Transcrever, Indexar e pôr no ar"
         sys.stderr.write(
-            f"ingerir: aviso: --ate {args.ate} passa de Incorporar (arq:0119 §2). O texto da obra é o "
-            "estágio Transcrever (acervo curar obra --reextrair) e o índice é o Indexar (motor indexar, "
-            "da ia); este caminho fica até os dois terem ato próprio.\n"
+            f"ingerir: --ate {args.ate}: o lote cataloga e, no --apply, encadeia obra a obra até {alvo} "
+            f"(acervo espelhar; motor {args.motor or 'rag'} indexar --promover). A obra que um portão barra "
+            "para ali, com o portão dito; as outras seguem.\n"
         )
     elif args.motor or args.ocr:
         sys.stderr.write("ingerir: aviso: --motor e --ocr só valem com --ate além de catalogar; ignorados\n")
@@ -578,16 +696,16 @@ def main():
             item["classificacao"] = classif
         itens.append(item)
 
+    # O lote do servidor só incorpora (arq:0119 §2): transcrever e indexar são atos próprios,
+    # encadeados aqui depois do aplicar (encadear_estagios).
     payload = {
         "autor": autor,
-        "ate": args.ate,
-        "ocr": args.ocr,
+        "ate": "catalogar",
+        "ocr": False,
         "semantico": args.semantico,
         "colecao": args.colecao,
         "itens": itens,
     }
-    if args.motor:
-        payload["motor"] = args.motor
 
     try:
         resp = requests.post(f"{BASE}/acervo/lotes", json=payload, headers=headers)
@@ -663,11 +781,12 @@ def main():
         print(formatar_tabela_aplicado(lote))
 
     salvar_manifesto(lote)
-    if lote.get("estado") == "concluido":
-
-        sys.exit(0)
-    else:
+    if lote.get("estado") != "concluido":
         sys.exit(1)
+    if args.ate == "catalogar":
+        sys.exit(0)
+    barradas = encadear_estagios(lote, args.ate, args.motor or "rag", autor)
+    sys.exit(1 if barradas else 0)
 
 
 if __name__ == "__main__":
