@@ -434,3 +434,32 @@ def test_decidir_dono_pelo_sub_do_realm_permitido_sem_concessao_no_banco():
     assert r.returncode == 0, r.stdout + r.stderr
     assert "PERMITIDO" in r.stdout
     assert "regra=operador-plataforma" in r.stdout
+
+# ==============================================================================
+# Card #3380: o autor de conceder e revogar é só PF_SUJEITO; `--por` saiu (spec_acesso §2, §6)
+# ==============================================================================
+# Autor digitado vencia o token (`autor="${por:-${PF_SUJEITO:-}}"`): auto-atestado. Agora a
+# chamada sai 2 na leitura dos argumentos, antes de qualquer docker, mesmo com PF_SUJEITO
+# presente — e nada chega ao registro. As duas formas, `--por x` e `--por=x`, recusam.
+LINHA_POR_SAIU = "acesso: --por saiu; o autor é PF_SUJEITO (spec_acesso §2)"
+FORMAS_DO_POR = (["--por", "G48UFN"], ["--por=G48UFN"])
+
+def _gravou(log):
+    return "insert into concessao.ato" in (log.read_text() if log.exists() else "")
+
+def test_conceder_por_saiu_exit_2_e_nao_grava(tmp_path):
+    env, log = _docker_do_registro(tmp_path, ID_DONO)
+    for por in FORMAS_DO_POR:
+        r = run_acesso("conceder", "claudinho", "papel", "operador", *por,
+                       "--fundamento", FUNDAMENTO, env=env)
+        assert r.returncode == 2, r.stdout + r.stderr
+        assert LINHA_POR_SAIU in r.stderr
+    assert not _gravou(log)
+
+def test_revogar_por_saiu_exit_2_e_nao_grava(tmp_path):
+    env, log = _docker_do_registro(tmp_path, ID_DONO)
+    for por in FORMAS_DO_POR:
+        r = run_acesso("revogar", ATO_ALVO, *por, "--fundamento", FUNDAMENTO, env=env)
+        assert r.returncode == 2, r.stdout + r.stderr
+        assert LINHA_POR_SAIU in r.stderr
+    assert not _gravou(log)
