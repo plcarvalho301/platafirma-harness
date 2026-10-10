@@ -146,10 +146,8 @@ uso:
   repo pr-merge  <repo> <numero> [--squash|--merge|--rebase] [--forcar]
   repo pr-fechar <repo> <numero> --motivo <texto>   (descarta sem merge; apaga ramo e bancadas)
   repo lock      <repo> <projeto> [--conferir | --atualizar <pacote>[@<versao>]… | --atualizar-tudo]
-                                                    (uv.lock do <projeto>/pyproject.toml, ou package-lock.json do
-                                                     <projeto>/package.json sem script de pacote; nao commita;
-                                                     --atualizar sobe so o pacote pedido, relata antes -> depois;
-                                                            --atualizar-tudo sobe tudo que o manifesto permite)
+                                                    (uv.lock ou package-lock.json do <projeto>; nao commita;
+                                                     --atualizar sobe um pacote, --atualizar-tudo todos)
   repo git       <repo> <args…>
 
 bancada: PLATAFIRMA_BANCADA[sem default] (exit 3)
