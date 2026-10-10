@@ -21,6 +21,7 @@ import pytest
 MOTOR = Path(__file__).resolve().parents[2] / "bin" / "motor"
 OBRA = "de1c6e97-0000-4000-8000-000000000001"
 LOTE = "0f0f0f0f-1111-4222-8333-444444444444"
+OBRA_OCUPADA = "de1c6e97-0000-4000-8000-0000000000ff"  # a API falsa responde 409: ha lote rodando
 
 
 class _API(BaseHTTPRequestHandler):
@@ -47,6 +48,16 @@ class _API(BaseHTTPRequestHandler):
             return self._responde(200, {"fontes": [{"obra": "Obra", "section_id": "sec-1",
                                                      "secao_id": "00000000-0000-0000-0000-000000000001"}],
                                         "cobertura": "boa", "tempos_ms": {"total": 5.0}})
+        if OBRA_OCUPADA in (corpo.get("obras") or []):
+            return self._responde(409, {"type": "about:blank", "title": "LoteEmAndamento",
+                                        "detail": "ja ha um lote de indexacao rodando"},
+                                  "application/problem+json")
+        if corpo.get("so_faceta"):  # #3393: plano so de faceta, sem selada; vazio nao abre lote
+            return self._responde(200, {"modo": "nada" if corpo.get("aplicar") else "plano", "n": 0,
+                                        "a_indexar": 0, "trechos_a_embedar": 0, "prontas": 0,
+                                        "fora_transcritas": 0, "indexadas": 0, "seladas": 0,
+                                        "promover": False, "so_faceta": True, "facetas_defasadas": 0,
+                                        "itens": []})
         if corpo.get("aplicar"):
             return self._responde(200, {"modo": "aplicado", "lote": LOTE, "n": 1, "a_indexar": 1,
                                         "trechos_a_embedar": 3, "prontas": 0, "fora_transcritas": 0,
@@ -118,6 +129,34 @@ def test_apply_com_promover_abre_o_lote_e_devolve_como_acompanhar(api):
     assert f"acompanhar: motor rag indexar biblioteca --relatorio {LOTE}" in r.stdout
     assert pedidos[-1][3] == {"autor": "dados", "aplicar": True, "obras": [], "promover": True}
 
+
+def test_so_faceta_manda_a_flag_e_o_plano_vazio_nao_abre_lote(api):
+    roda, pedidos = api
+    plano = roda("indexar", "biblioteca", "--so-faceta")
+    assert plano.returncode == 0, plano.stderr
+    assert plano.stdout.splitlines()[0].startswith("plano: 0 impressao(oes) · 0 a indexar (0 trechos a embedar)")
+    assert "0 faceta(s) a refazer no ar" in plano.stdout and "para valer" not in plano.stdout
+    assert pedidos[-1][3] == {"autor": "ia", "aplicar": False, "obras": [], "promover": False,
+                              "so_faceta": True}
+    giro = roda("indexar", "biblioteca", "--so-faceta", "--apply")
+    assert giro.returncode == 0, giro.stderr
+    assert giro.stdout.splitlines()[0].startswith("nada a fazer: 0 a indexar")
+    assert "sem lote aberto" in giro.stdout and "aberto no rag-api" not in giro.stdout
+    assert pedidos[-1][3]["aplicar"] is True and pedidos[-1][3]["so_faceta"] is True
+
+def test_so_faceta_com_lote_rodando_sai_0_e_pula_o_giro_mas_sem_a_flag_sai_4(api):
+    roda, _ = api
+    giro = roda("indexar", "biblioteca", "--so-faceta", "--apply", "--obra", OBRA_OCUPADA)
+    assert giro.returncode == 0, giro.stderr
+    assert "LoteEmAndamento" in giro.stdout and "pula este giro" in giro.stdout
+    cheio = roda("indexar", "biblioteca", "--apply", "--obra", OBRA_OCUPADA)
+    assert cheio.returncode == 4 and "LoteEmAndamento" in cheio.stderr
+
+def test_so_faceta_nao_se_combina_com_promover_nem_relatorio(api):
+    roda, pedidos = api
+    assert roda("indexar", "biblioteca", "--so-faceta", "--promover").returncode == 2
+    assert roda("indexar", "biblioteca", "--so-faceta", "--relatorio", LOTE).returncode == 2
+    assert pedidos == []
 
 def test_relatorio_le_o_lote_e_o_id_perdido_sai_1(api):
     roda, pedidos = api

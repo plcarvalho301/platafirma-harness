@@ -458,10 +458,12 @@ def cmd_ajuste(nome, inst, argv):
 # mesmo token da busca e devolve o id em segundos. Erro do lote vira exit da tabela da casa.
 _EXIT_DO_LOTE = {404: 1, 409: 4, 422: 1}
 USO_INDEXAR = ("motor <inst> indexar biblioteca [--obra <uuid>[,<uuid>…]] [--promover] [--autor <slug>] "
-               "[--apply] [--json]\n  motor <inst> indexar biblioteca --relatorio <lote> [--json]")
+               "[--apply] [--json]\n  motor <inst> indexar biblioteca --so-faceta [--obra <uuid>[,<uuid>…]] [--apply] [--json]\n"
+               "  motor <inst> indexar biblioteca --relatorio <lote> [--json]")
 
-def _lote_indexacao(inst, tok, corpo=None, lote=""):
-    """POST do plano (o lote, com `aplicar`) ou GET do relatorio, na rota `indexacao` do registro."""
+def _lote_indexacao(inst, tok, corpo=None, lote="", pula_ocupado=False):
+    """POST do plano (o lote, com `aplicar`) ou GET do relatorio, na rota `indexacao` do registro.
+    `pula_ocupado` (o ciclo `--so-faceta`, #3393): lote em andamento (409) nao e falha, o giro seguinte pega."""
     url = inst.get("indexacao") or ""
     if not url:
         print("motor indexar: a instancia nao declara `indexacao` em motor-instancias.json",
@@ -483,6 +485,9 @@ def _lote_indexacao(inst, tok, corpo=None, lote=""):
             motivo = f"{pj.get('title')}: {pj.get('detail')}"
         except Exception:
             motivo = f"HTTP {e.code}"
+        if e.code == 409 and pula_ocupado:
+            print(f"motor indexar: {motivo} — pula este giro")
+            sys.exit(0)
         print(f"motor indexar: {motivo}", file=sys.stderr)
         sys.exit(_EXIT_DO_LOTE[e.code])
     except urllib.error.URLError as e:
@@ -497,6 +502,8 @@ def _texto_do_plano(p):
              f" · {p.get('fora_nao_indexaveis', 0)} nao indexavel(is) fora (espelho nao servivel)"
              f" · {p.get('indexadas', 0)} de {p.get('seladas', 0)} seladas marcadas para indexar"
              f" · {p.get('facetas_defasadas', 0)} faceta(s) a refazer no ar")
+    if p.get("modo") == "nada":
+        return f"nada a fazer: {conta}\nsem lote aberto"
     if p.get("modo") == "aplicado":
         return (f"lote {p['lote']} aberto no rag-api, em segundo plano: {p.get('n', 0)} impressao(oes) · "
                 f"{conta}\nacompanhar: {p.get('acompanhar')}")
@@ -539,14 +546,16 @@ def cmd_indexar(inst, argv):
     arquivo e cortava no motor, saiu: o motor nao corta a partir do arquivo (arq:0119, Consequencias).
     So a selada indexavel entra (#3282: espelho servivel pela regua 6). O plano traz tambem a faceta
     no ar que falta ou veio de outro cabecalho (titulo, emissor, dominio ou conceito trocado depois
-    de indexar) e a refaz no --apply (#3309)."""
+    de indexar) e a refaz no --apply (#3309). `--so-faceta` (#3393) planeja so essas facetas, sem as
+    seladas pendentes, e e o que o `bot` roda a cada 5 min: plano vazio nao abre lote, e lote em
+    andamento sai 0 com «pula este giro» (o giro seguinte pega)."""
     particao, argv = resolve_particao(argv, "indexar")
     if particao != "biblioteca":
         print(f"motor indexar {particao}: so a biblioteca indexa por este ato; a casa indexa na "
               f"ingestao da casa.\n  {USO_INDEXAR}", file=sys.stderr)
         sys.exit(2)
     obras, lote, autor = [], "", os.environ.get("PF_CADEIRA") or "ia"
-    apply_ = promover = como_json = False
+    apply_ = promover = como_json = so_faceta = False
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -567,12 +576,18 @@ def cmd_indexar(inst, argv):
             apply_ = True
         elif a == "--promover":
             promover = True
+        elif a == "--so-faceta":
+            so_faceta = True
         elif a == "--json":
             como_json = True
         else:
             print(f"indexar: argumento desconhecido {a!r}.\n  {USO_INDEXAR}", file=sys.stderr)
             sys.exit(2)
         i += 1
+    if so_faceta and (promover or lote):
+        print(f"indexar: --so-faceta nao se combina com --promover nem com --relatorio.\n  {USO_INDEXAR}",
+              file=sys.stderr)
+        sys.exit(2)
     for valor in obras + ([lote] if lote else []):
         if not _UUID.match(valor):
             print(f"indexar: {valor!r} nao e uuid (obra e lote vao pelo uuid).\n  {USO_INDEXAR}",
@@ -583,8 +598,10 @@ def cmd_indexar(inst, argv):
         r = _lote_indexacao(inst, tok, lote=lote)
         print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_do_relatorio(r))
         return
-    r = _lote_indexacao(inst, tok, {"autor": autor, "aplicar": apply_, "obras": obras,
-                                    "promover": promover})
+    corpo = {"autor": autor, "aplicar": apply_, "obras": obras, "promover": promover}
+    if so_faceta:
+        corpo["so_faceta"] = True
+    r = _lote_indexacao(inst, tok, corpo, pula_ocupado=so_faceta)
     print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_do_plano(r))
 
 
