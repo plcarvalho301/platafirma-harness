@@ -96,7 +96,7 @@ uso:
   acesso orfaos      [--json]
 
 nota sobre --sujeito: aceita sub (UUID) ou username, exatamente como chaveado em sujeitos.yaml — a mesma chave que o PEP da porta usa
-nota sobre autor: em conceder/revogar, o autor é PF_SUJEITO do ambiente (--por é deprecado); o sub do realm resolve pela correlação keycloak vigente de pessoa em identidade.correlacao_externa
+nota sobre autor: em conceder/revogar, o autor é sempre PF_SUJEITO do ambiente; --por saiu (sai 2, nada é gravado); o sub do realm resolve pela correlação keycloak vigente de pessoa em identidade.correlacao_externa
 
 exemplos:
   acesso decidir sessao_abrir sessao:fabrica
@@ -113,7 +113,7 @@ FIM
 
 # ---------------------------------------------------------------------------
 cmd_conceder() {
-  local sujeito="" eixo="" valor="" fundamento="" por="" ate="" especie="concessao"
+  local sujeito="" eixo="" valor="" fundamento="" ate="" especie="concessao"
   if [ $# -ge 3 ] && [[ "$1" != --* ]] && [[ "$2" != --* ]] && [[ "$3" != --* ]]; then
     sujeito="$1"; eixo="$2"; valor="$3"; shift 3
   fi
@@ -123,10 +123,9 @@ cmd_conceder() {
       --eixo) eixo="$2"; shift 2;;
       --valor) valor="$2"; shift 2;;
       --fundamento) fundamento="$2"; shift 2;;
-      --por)
-        por="$2"
-        printf 'acesso: aviso: --por é deprecado; o autor virá de PF_SUJEITO (spec_acesso §2)\n' >&2
-        shift 2;;
+      --por|--por=*)
+        printf 'acesso: --por saiu; o autor é PF_SUJEITO (spec_acesso §2)\n' >&2
+        exit 2;;
       --ate) ate="$2"; shift 2;;
       --veto) especie="veto"; shift;;
       *)
@@ -143,7 +142,8 @@ cmd_conceder() {
     exit 2
   fi
 
-  local autor="${por:-${PF_SUJEITO:-}}"
+  # o autor é sempre o PF_SUJEITO da porta; autor digitado é auto-atestado (spec_acesso §2)
+  local autor="${PF_SUJEITO:-}"
   if [ -z "$autor" ]; then
     printf 'acesso: sem sujeito: PF_SUJEITO ausente do ambiente\n' >&2
     exit 3
@@ -163,17 +163,16 @@ SQL
 }
 
 cmd_revogar() {
-  local ato="" fundamento="" por=""
+  local ato="" fundamento=""
   if [ $# -ge 1 ] && [[ "$1" != --* ]]; then
     ato="$1"; shift
   fi
   while [ $# -gt 0 ]; do
     case "$1" in
       --fundamento) fundamento="$2"; shift 2;;
-      --por)
-        por="$2"
-        printf 'acesso: aviso: --por é deprecado; o autor virá de PF_SUJEITO (spec_acesso §2)\n' >&2
-        shift 2;;
+      --por|--por=*)
+        printf 'acesso: --por saiu; o autor é PF_SUJEITO (spec_acesso §2)\n' >&2
+        exit 2;;
       *)
         printf 'acesso: opcao desconhecida em revogar: %s\n' "$1" >&2
         exit 2;;
@@ -192,7 +191,8 @@ cmd_revogar() {
     exit 2
   fi
 
-  local autor="${por:-${PF_SUJEITO:-}}"
+  # o autor é sempre o PF_SUJEITO da porta; autor digitado é auto-atestado (spec_acesso §2)
+  local autor="${PF_SUJEITO:-}"
   if [ -z "$autor" ]; then
     printf 'acesso: sem sujeito: PF_SUJEITO ausente do ambiente\n' >&2
     exit 3
