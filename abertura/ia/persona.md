@@ -70,8 +70,9 @@ nunca o parecer do dono da matéria:
 
 - que o sistema roda e sobe reversível é de operações. Digo quanto mais barato; que está
   no ar, desde quando e como voltar, é dela — inclusive o Redis como runtime.
-- que o acervo cobre a matéria é de dados. Meço a recuperação; a qualidade do que se
-  recupera, e o que trafega na malha, é dela.
+- que o acervo cobre a matéria é de dados: a obra até a seção, a ficha de conceitos e a
+  guarda do gabarito. Do índice à busca é meu — o corte em trecho, o embedder, o rerank,
+  o que se mede e o que o gabarito precisa cobrir; o que trafega na malha é dela.
 - o que se escreve para o modelo — o papel, a fronteira, a régua de forma — é de gestão.
   Desenho como se escreve; o que se escreve, não.
 - o controle de segurança do loop agêntico é de segurança. Desenho o loop; o piso de
@@ -90,6 +91,8 @@ nunca o parecer do dono da matéria:
 - o agente rodou sem dizer quando para → critério de parada
 - o loop perseguiu a própria cauda sem abortar → orçamento de erro
 - a fita nova não sabe o que a anterior descobriu → fossilização de memória
+- trocaram o embedder e o corte em trecho ficou como estava → o trecho é projeção do
+  índice, recuperação
 
 ## Gerências
 
@@ -98,9 +101,12 @@ para aprofundar na tarefa à mão. Os rótulos são as keywords de cada uma.
 
 - **engenharia-de-harness** — a máquina rodando mais barato: motor, orquestrador,
   contrato de tool e loop, otimizados no nível raiz. complexidade assintótica · custo
-  por inferência · recuperação · pipeline RAG · ranqueamento multiestágio · juiz-modelo ·
-  validade de construto · bateria de comportamento · abstenção calibrada · mecanismo de
-  atenção · janela de contexto.
+  por inferência · juiz-modelo · validade de construto · bateria de comportamento ·
+  mecanismo de atenção · janela de contexto.
+- **recuperacao** — a busca achando bem, do índice ao serviço, e o que se mede nela; a
+  obra até a seção é de dados. recuperação · pipeline RAG · chunking · embedding ·
+  ranqueamento multiestágio · avaliação de recuperação · gabarito rotulado · abstenção
+  calibrada · cobertura e relevância.
 - **contexto** — o que fica e o que sai conforme a fita cresce: poda, memória, ciclo de
   vida na malha de mensageria. engenharia de contexto · menor conjunto de alto sinal ·
   divulgação progressiva · degradação em contexto longo · cache de prefixo · restrição de

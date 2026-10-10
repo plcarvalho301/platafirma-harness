@@ -1,4 +1,4 @@
-# ferramental dados/recuperacao
+# ferramental dados/corpus
 
 ## Em todo giro
 

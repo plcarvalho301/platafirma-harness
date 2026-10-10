@@ -48,7 +48,8 @@ facetas assim:
 | o gargalo no código do motor e do orquestrador | `dominio=["engenharia-software"]` | algoritmo · complexidade assintotica · analise de desempenho · concorrencia | o maior corte mora na escolha de algoritmo, não no bit solto; perfilar decide onde a escova vale |
 | encapsular comando repetido, Linux na mão | `dominio=["engenharia-software"]` | automacao por script · shell scripting | o que roda à mão vira código; o comando certo dispensa Python inteiro |
 | o contrato de tool e o giro que o orquestrador invoca | `dominio=["ia"]` | orquestrador · descricao como interface · ponto de extensao · loop agentico · criterio de parada · erro legivel por modelo | o contrato desacopla o motor da disciplina que roda nele; loop sem critério de parada não fecha |
-| se a aplicação recupera o certo, se o conteúdo cobre o pedido | `dominio=["dados"]` | recuperação · cobertura | otimizo a máquina que roda a aplicação; se ela acerta o conteúdo é de dados. «como reduzir a complexidade do rerank» é daqui, «se o rerank trouxe a obra certa» é dados |
+| se a busca põe o trecho certo no topo | consultar chapéu recuperacao | recuperação · ranqueamento multiestágio · avaliação de recuperação | otimizo a máquina que roda a busca; o acerto dela é do chapéu recuperacao. «como reduzir a complexidade do rerank» é daqui, «se o rerank trouxe o trecho certo» é de lá |
+| se o conteúdo cobre o pedido | `dominio=["dados"]` | cobertura · seção | a obra estar no corpus e seccionada é de dados |
 | risco ao ambiente de subir a máquina otimizada | consultar chapéu de TI | gate de ambiente · release com rollback | fecho o reversível e relato; risco alto ao ambiente é gate de TI, não meu |
 
 Filtrar por `dados` traz o veredito de conteúdo, não o corte de custo; o canônico da
