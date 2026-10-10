@@ -1,0 +1,11 @@
+# Lista de portão da chave politica-acesso (arq:0116 §5): caminhos relativos a politica-acesso/.
+# Arquivo consertado entra no mesmo commit que o conserta; a lista só cresce.
+#
+# Por que está no portão: a matriz quebra por merge no PAP, não por commit de biblioteca. Fora
+# de portão, concessão que vaze passava pelo pre-push e pelo gate do `release promover`.
+#
+# Raio (card #3370): `<arquivo> | <glob> <glob>...`, globs relativos à raiz do repositório; ver
+# controle/tests/VERDES. A matriz lê o PEP de recuperacao/, que importa o PDP daqui.
+test_pdp.py | politica-acesso/**
+test_matriz_sujeito_fonte.py | politica-acesso/** recuperacao/**
+test_wiki_universal_e_verbo.py | politica-acesso/**

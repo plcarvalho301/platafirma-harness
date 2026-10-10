@@ -19,9 +19,8 @@ on:
 # compartilhavam um gate e o venv de recuperacao/ rodava estes testes. Cada pasta com
 # seu gate — venv de uma nao roda teste de outra.
 #
-# DIVIDA DECLARADA: politica-acesso/ ainda nao tem pyproject.toml proprio; as deps
-# (pytest, pyyaml, tokenizers) seguem adivinhadas com `--with` abaixo, como era antes.
-# Fechar isso é card proprio, no molde do que recuperacao/ ganhou no #317.
+# O portão da casa é o pre-push e o gate do `release promover` (chave politica-acesso em
+# registro/venvs.json, lista em politica-acesso/VERDES); este workflow não barra nada.
 
 jobs:
   pytest:

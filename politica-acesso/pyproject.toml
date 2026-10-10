@@ -1,0 +1,17 @@
+[project]
+name = "harness-politica-acesso"
+version = "0.1.0"
+description = "PDP, PAP e projeção de sujeitos; a suíte prova o PDP e a matriz sujeito × fonte (chave politica-acesso, arq:0116 §4)."
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.2"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["."]
