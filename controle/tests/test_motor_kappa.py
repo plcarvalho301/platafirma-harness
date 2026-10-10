@@ -98,11 +98,20 @@ def test_concordancia_tira_a_excluida_e_diz_quem_ficou_sem_marca():
     assert c["por_grau"]["parcial"] == {"dono": 2, "juiz": 2, "os_dois": 2}
 
 
-def test_divergencia_e_qualidade_ou_embasamento_e_nao_traz_braco():
+def test_divergencia_e_so_de_grau_e_nao_traz_braco():
+    """Embasamento fora da avaliação (ordem do dono, 09/10/2026): r2 difere só no embasamento e não diverge."""
     dono = kappa.marcas_do_dono(EVENTOS)
     d = kappa.divergencias(LOTE, dono, JUIZ, kappa.excluidas(EVENTOS))
-    assert [(x["resposta_id"], x["o_que_diverge"]) for x in d] == [("r2", ["embasamento"]), ("r3", ["qualidade"])]
-    assert "braco" not in json.dumps(d) and "servido" not in json.dumps(d)
+    assert [(x["resposta_id"], x["dono"]["qualidade"], x["juiz"]["qualidade"]) for x in d] == [("r3", "enganosa", "vazia")]
+    assert "braco" not in json.dumps(d) and "servido" not in json.dumps(d) and "embasamento" not in json.dumps(d)
+
+
+def test_matriz_diz_para_onde_o_juiz_desvia():
+    dono = kappa.marcas_do_dono(EVENTOS)
+    graus = ("boa", "parcial", "vazia", "enganosa")
+    m = kappa.matriz(LOTE, dono, JUIZ, kappa.excluidas(EVENTOS), graus)
+    assert m["enganosa"]["vazia"] == 1 and m["parcial"]["parcial"] == 2 and m["boa"]["boa"] == 1
+    assert sum(sum(v.values()) for v in m.values()) == 4
 
 
 def test_tempo_por_resposta_e_por_pergunta():
@@ -120,8 +129,8 @@ def test_lote_de_conferencia_so_divergentes_ids_novos_e_sem_nota_do_juiz():
     env = kappa.lote_de_conferencia(LOTE, divs, "L-conf", lambda: f"re-novo{next(cont)}", "s")
     assert env["passada"] == env["corpo"]["passada"] == "conferencia" and env["criterio_versao"] == "v1"
     ids = [r["resposta_id"] for p in env["corpo"]["perguntas"] for r in p["respostas"]]
-    assert sorted(ids) == ["re-novo1", "re-novo2"]
-    assert {r["carimbo"]["conferencia_de"] for r in env["respostas"]} == {"r2", "r3"}
+    assert ids == ["re-novo1"]
+    assert {r["carimbo"]["conferencia_de"] for r in env["respostas"]} == {"r3"}
     publico = json.dumps(env["corpo"])
     assert "vazia" not in publico and "juiz" not in publico and "braco" not in publico
     assert env["ativo"] is False
