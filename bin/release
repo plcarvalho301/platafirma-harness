@@ -82,6 +82,7 @@ CLASSES_SERVIDO=(
   "jobs"
   "acervo"
   "dependencias"
+  "sessao-orfa"
 )
 
 uso_texto() {

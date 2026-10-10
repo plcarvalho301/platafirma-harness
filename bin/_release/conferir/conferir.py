@@ -118,6 +118,11 @@
                     skills/*/SKILL.md e docs/spec_*.md e confere contra os atos
                     listados por bin/<verbo>; ato inexistente sai como "fora".
 
+  sessao-orfa [tabela]
+                   conta, por tabela, os sessao_id gravados sem sessao correspondente
+                   no acervo e na fita contra a linha de base (card #3375). Sai 0 sem
+                   orfao novo, 1 com orfao novo, 5 se um banco nao responder.
+
 Classes conhecidas e ainda sem implementacao sao listadas como tais: ausencia se
 declara, nunca se omite.
 
@@ -217,7 +222,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs . dependencias", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs . dependencias . sessao-orfa", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -3117,6 +3122,9 @@ def main(argv):
         return dependencias.conferir(alvo, como_json, _sha_release(), registro, PROD_RAIZ,
                                      md_para=md_para, raiz_permitida=RAIZ, harness=HARNESS,
                                      avisos=avisos)
+    if classe == "sessao-orfa":
+        import sessao_orfa
+        return sessao_orfa.conferir(alvo, como_json=como_json, sha_release=_sha_release())
     if como_json:
         print(json.dumps({"erro": f"classe desconhecida: {classe}"}))
     uso(f"classe desconhecida: {classe}")
