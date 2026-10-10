@@ -3107,12 +3107,16 @@ def main(argv):
             i = argv.index("--md-para")
             md_para = argv[i + 1] if len(argv) > i + 1 else None
             if not md_para:
-                print("uso: conferir dependencias [<stack>] [--md-para <arquivo.md>] [--json]", file=sys.stderr)
+                print("uso: conferir dependencias [<stack>] [--avisos] [--md-para <arquivo.md>] [--json]", file=sys.stderr)
                 return 2
             if alvo == "--md-para":
                 alvo = None
+        avisos = "--avisos" in argv
+        if alvo == "--avisos":
+            alvo = None
         return dependencias.conferir(alvo, como_json, _sha_release(), registro, PROD_RAIZ,
-                                     md_para=md_para, raiz_permitida=RAIZ, harness=HARNESS)
+                                     md_para=md_para, raiz_permitida=RAIZ, harness=HARNESS,
+                                     avisos=avisos)
     if como_json:
         print(json.dumps({"erro": f"classe desconhecida: {classe}"}))
     uso(f"classe desconhecida: {classe}")
