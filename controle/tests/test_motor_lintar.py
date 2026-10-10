@@ -82,7 +82,7 @@ EVENTOS = [
     _ev(7, "o que é um espaço vetorial para recuperação", None),
     _ev(8, "what is the abstention floor of the Nemotron generation?"),
     {**_ev(9, "qual piso de abstenção a geração Nemotron usa?"), "necessidade": "qual piso de abstenção a geração Nemotron usa?",
-     "pedido": "Card 3360", "chapeu": "engenharia-de-harness", "lint": None,
+     "chapeu": "engenharia-de-harness", "lint": None,      # sem `pedido`: a coluna saiu no #3364
      "perguntas": ["qual piso de abstenção a geração Nemotron usa?", "Card 3360"]},
 ]
 
@@ -126,7 +126,7 @@ def test_lintar_conta_por_origem_e_por_causa(lintar):
     assert rel["por_origem"]["abertura"]["ingles"] == 0
     assert rel["montadas"]["eventos"] == 1
     assert rel["montadas"]["ultimos"][0]["chapeu"] == "engenharia-de-harness"
-    assert rel["montadas"]["ultimos"][0]["n_perguntas"] == 2 and rel["montadas"]["ultimos"][0]["pedido"] == "Card 3360"
+    assert rel["montadas"]["ultimos"][0]["n_perguntas"] == 2 and "pedido" not in rel["montadas"]["ultimos"][0]
     assert rel["por_origem"]["nao declarada"]["passam"] == 1
     assert rel["por_origem"]["abertura"]["recusadas"] == {"frase": 1}
     assert rel["por_origem"]["abertura"]["exemplos_recusados"] == ["OpenID Connect Core copyright notice OpenID Foundation"]
