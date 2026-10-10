@@ -33,8 +33,11 @@ BANCOS = {
 # Medida em 10/10/2026: 13:02 e 13:14 BRT, contagem igual nas duas leituras, com a
 # trava no ar (conhecimento 86efd11) e o extrator parado entre elas (incidente #3401).
 # Legado não se corrige nem se apaga: só se conta (trava do card).
+# evento_recuperacao 2 → 3 em 10/10/2026 13:44 BRT: a busca de aceite com sessao_id fabricado
+# (00000000-3375-4000-8000-000000000001) gravou como veio, porque o rag-api, em contêiner, não
+# alcançava o banco de sessão. Foi o que esta classe pegou e o que levou ao conserto da rede.
 LINHA_DE_BASE: dict[str, int] = {
-    "acervo.evento_recuperacao": 2,
+    "acervo.evento_recuperacao": 3,
     "acervo.voto_humano": 0,
     "acervo.registro": 0,
     "acervo.log(sessao_id)": 64,

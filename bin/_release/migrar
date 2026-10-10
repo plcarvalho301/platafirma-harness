@@ -27,9 +27,9 @@ uso:
                              (transacao unica, ON_ERROR_STOP; aborta inteira no 1o erro;
                              exige identidade: variavel PF_SUJEITO)
   $VERBO bancos              lista os bancos declarados (slug -> contêiner/base)
-  $VERBO senha <banco> <role> <stack>/<nome> [--rotacionar]
+  $VERBO senha <banco> <role> <stack>/<nome> [<stack>/<nome>...] [--rotacionar]
                              gera a senha da <role>, troca no <banco> e guarda em
-                             segredos/<stack>/<nome> (0600); o valor nunca se imprime.
+                             cada segredos/<stack>/<nome> (0600); o valor nunca se imprime.
                              Segredo que ja existe so se troca com --rotacionar.
 
 bancos declarados: ${!BANCOS[*]}
@@ -103,37 +103,53 @@ case "$ato" in
     # da instancia. O valor nao passa pelo chamador nem pela tela: nasce aqui, vai ao psql
     # por stdin e ao arquivo 0600 por rename atomico (card #3375). A ordem protege o par:
     # o banco aceita primeiro; recusou, o arquivo temporario some e nada muda.
-    banco="${1:-}"; role="${2:-}"; alvo="${3:-}"; flag="${4:-}"
-    [ -n "$banco" ] && [ -n "$role" ] && [ -n "$alvo" ] \
-      || morre "erro: uso: $VERBO senha <banco> <role> <stack>/<nome> [--rotacionar]" 2
+    # Mais de um destino: a mesma senha vai a cada <stack>/<nome> (o consumidor que roda em
+    # contêiner recebe a sua copia pelo env-file da propria stack). Uma geracao, um ALTER, N
+    # arquivos: rotacionar troca todas as copias juntas.
+    banco="${1:-}"; role="${2:-}"; shift 2 2>/dev/null || true
+    rotacionar=""; alvos=()
+    for _x in "$@"; do
+      case "$_x" in
+        --rotacionar) rotacionar=1 ;;
+        --*) morre "erro: flag desconhecida: $_x" 2 ;;
+        *) alvos+=("$_x") ;;
+      esac
+    done
+    [ -n "$banco" ] && [ -n "$role" ] && [ "${#alvos[@]}" -gt 0 ] \
+      || morre "erro: uso: $VERBO senha <banco> <role> <stack>/<nome> [<stack>/<nome>...] [--rotacionar]" 2
     [ -n "${BANCOS[$banco]:-}" ] || morre "erro: banco '$banco' fora da allowlist — validos: ${!BANCOS[*]}" 4
     [[ "$role" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || morre "erro: role '$role' invalida — so [a-z0-9_], comecando por letra ou _" 2
-    [[ "$alvo" =~ ^([A-Za-z0-9][A-Za-z0-9_.-]*)/([A-Za-z0-9][A-Za-z0-9_.-]*)$ ]] \
-      || morre "erro: segredo '$alvo' invalido — forma <stack>/<nome>, sem barra extra nem .." 2
-    stack="${BASH_REMATCH[1]}"; nome="${BASH_REMATCH[2]}"
-    case "$alvo" in *..*) morre "erro: segredo '$alvo' invalido — sem .." 2 ;; esac
-    [ -z "$flag" ] || [ "$flag" = "--rotacionar" ] || morre "erro: flag desconhecida: $flag" 2
+    raiz_seg="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/segredos"
+    destinos=()
+    for alvo in "${alvos[@]}"; do
+      [[ "$alvo" =~ ^([A-Za-z0-9][A-Za-z0-9_.-]*)/([A-Za-z0-9][A-Za-z0-9_.-]*)$ ]] \
+        || morre "erro: segredo '$alvo' invalido — forma <stack>/<nome>, sem barra extra nem .." 2
+      case "$alvo" in *..*) morre "erro: segredo '$alvo' invalido — sem .." 2 ;; esac
+      destinos+=("$raiz_seg/$alvo")
+      if [ -e "$raiz_seg/$alvo" ] && [ -z "$rotacionar" ]; then
+        morre "erro: segredo $alvo ja existe — trocar a senha em uso e explicito: --rotacionar" 4
+      fi
+    done
     exigir_sujeito "$VERBO senha"
     IFS=: read -r ctr usr base <<<"${BANCOS[$banco]}"
-
-    dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/segredos/$stack"
-    destino="$dir/$nome"
-    if [ -e "$destino" ] && [ "$flag" != "--rotacionar" ]; then
-      morre "erro: segredo $alvo ja existe — trocar a senha em uso e explicito: --rotacionar" 4
-    fi
 
     command -v docker >/dev/null 2>&1 || morre "erro: dependência docker: ausente — 'docker' nao esta no PATH desta conta" 3
     docker inspect -f '{{.State.Running}}' "$ctr" 2>/dev/null | grep -qx true \
       || morre "erro: dependência $ctr: ausente — contêiner nao esta de pe; \`infra estado\`" 3
 
     umask 077
-    mkdir -p "$dir" || morre "erro: nao consegui criar $dir" 3
-    tmp="$(mktemp "$dir/.$nome.XXXXXX")" || morre "erro: nao consegui escrever em $dir" 3
+    tmps=()
     errlog="$(mktemp)"
-    trap 'rm -f "$tmp" "$errlog"' EXIT
+    trap 'rm -f "${tmps[@]}" "$errlog"' EXIT
     senha="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
     [ "${#senha}" -eq 48 ] || morre "erro: nao consegui gerar a senha (/dev/urandom)" 3
-    printf '%s' "$senha" >"$tmp"
+    for destino in "${destinos[@]}"; do
+      dir="$(dirname "$destino")"
+      mkdir -p "$dir" || morre "erro: nao consegui criar $dir" 3
+      t="$(mktemp "$dir/.$(basename "$destino").XXXXXX")" || morre "erro: nao consegui escrever em $dir" 3
+      tmps+=("$t")
+      printf '%s' "$senha" >"$t"
+    done
 
     # -q -X: sem eco, sem psqlrc. stderr filtrado: a linha LINE de erro de sintaxe traria o valor.
     if ! printf "ALTER ROLE %s LOGIN PASSWORD '%s';\n" "$role" "$senha" \
@@ -143,11 +159,15 @@ case "$ato" in
       morre "erro: psql recusou em '$banco' — senha nao trocada, segredo nao gravado" 1
     fi
     unset senha
-    chmod 600 "$tmp" && mv -f "$tmp" "$destino" \
-      || morre "erro: senha trocada em $banco mas o segredo nao foi gravado em $destino — rode de novo com --rotacionar" 5
+    i=0
+    for destino in "${destinos[@]}"; do
+      chmod 600 "${tmps[$i]}" && mv -f "${tmps[$i]}" "$destino" \
+        || morre "erro: senha trocada em $banco mas o segredo nao foi gravado em $destino — rode de novo com --rotacionar" 5
+      i=$((i + 1))
+    done
     trap 'rm -f "$errlog"' EXIT
     printf '%s: role %s em %s com senha nova; segredo em segredos/%s (0600) — o valor nao se imprime%s\n' \
-      "$VERBO" "$role" "$banco" "$alvo" "${PF_SUJEITO:+ (sujeito=$PF_SUJEITO)}"
+      "$VERBO" "$role" "$banco" "$(IFS=,; echo "${alvos[*]}")" "${PF_SUJEITO:+ (sujeito=$PF_SUJEITO)}"
     ;;
   *)
     printf '%s: erro: ato desconhecido: %s\n' "$VERBO" "$ato" >&2

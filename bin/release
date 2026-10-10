@@ -106,7 +106,7 @@ uso:
                                                    (transacao unica, ON_ERROR_STOP; aborta inteira no 1o erro;
                                                    exige identidade: variavel PF_SUJEITO)
   release migrar     bancos                        lista os bancos declarados (slug -> contêiner/base)
-  release migrar     senha <banco> <role> <stack>/<nome> [--rotacionar]
+  release migrar     senha <banco> <role> <stack>/<nome> [<stack>/<nome>...] [--rotacionar]
                                                    gera a senha da role, troca no banco e guarda em
                                                    segredos/<stack>/<nome> (0600); o valor nao se imprime
 

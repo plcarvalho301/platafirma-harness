@@ -79,6 +79,24 @@ def test_banco_recusa_nao_grava_e_nao_vaza(tmp_path):
     assert list(d.iterdir()) == []
 
 
+def test_varios_destinos_mesma_senha(tmp_path):
+    p = _rodar(tmp_path, "sessao", "sessao_leitor", "harness-sessao/A", "rag/A")
+    assert p.returncode == 0, p.stderr
+    senha = _senha_do_alter(tmp_path)
+    seg = tmp_path / "inst" / "segredos"
+    assert (seg / "harness-sessao" / "A").read_text() == senha
+    assert (seg / "rag" / "A").read_text() == senha
+    # um destino ja existente basta para exigir --rotacionar, e nada se troca sem ele
+    p = _rodar(tmp_path, "sessao", "sessao_leitor", "harness-sessao/B", "rag/A")
+    assert p.returncode == 4
+    assert not (seg / "harness-sessao" / "B").exists()
+    p = _rodar(tmp_path, "sessao", "sessao_leitor", "--rotacionar", "harness-sessao/A", "rag/A")
+    assert p.returncode == 0, p.stderr
+    nova = _senha_do_alter(tmp_path)
+    assert nova != senha
+    assert (seg / "harness-sessao" / "A").read_text() == nova == (seg / "rag" / "A").read_text()
+
+
 def test_entradas_invalidas(tmp_path):
     assert _rodar(tmp_path, "fora", "r", "s/n").returncode == 4
     assert _rodar(tmp_path, "sessao", "Role;drop", "s/n").returncode == 2
