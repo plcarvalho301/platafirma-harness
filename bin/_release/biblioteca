@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+"""bin/_release/biblioteca — ajudante interno: a imagem da biblioteca de front sai da arvore servida.
+
+Chamado por bin/release (promover), localizado por caminho relativo a si — nunca pelo PATH: nao e
+verbo da porta, nao entra na whitelist (mesmo desenho de bin/_release/stack).
+
+Por que existe (card #3391, feature #3388): a biblioteca `pf-*` entra nas telas por
+`COPY --from=platafirma/ui:<tag>` (Dockerfile de app/*). O lock de src/base/ nao e contexto de build
+de tela nenhuma, e a imagem era montada a mao: corrigir o lock (GHSA-gwfx-7pfc-xg68, 89457fc) nao
+chegava ao conteiner. Agora a promocao da familia constroi a imagem da versao que a arvore declara e
+recusa o lock que mudou sem a versao subir.
+
+ato:
+  biblioteca garantir <arvore> [--anterior <arvore>]
+    <arvore>   arvore imutavel da rev que sobe ($PF_RELEASE_RAIZ/<familia>/<sha>)
+    --anterior arvore do sha que esta no ar; com ela, lock diferente e versao igual RECUSA
+
+Regras (deterministicas: barram ou passam, nao pedem julgamento):
+  1. arvore sem Dockerfile na raiz, sem src/base/package.json ou sem package-lock.json: familia sem
+     biblioteca, nada a fazer (exit 0, sem docker).
+  2. com --anterior: o lock de src/base mudou e a versao do package.json e a mesma: exit 4. A tag
+     platafirma/ui:<versao> e imutavel (arq:0080); lock novo pede versao nova.
+  3. imagem platafirma/ui:<versao> ja existe: nunca se reescreve. Com rotulo pf.ui.lock diferente do
+     lock da arvore: exit 4 (mesma tag, outro conteudo). Igual, ou sem rotulo (anterior a este
+     ajudante): reaproveitada.
+  4. imagem ausente: docker build -t platafirma/ui:<versao> da arvore, rotulada com o hash do lock e
+     a revisao; confere que versao.txt servido e "platafirma-ui <versao>". Divergiu: a tag recem
+     criada e removida e sai 3 (tag imutavel nao fica com conteudo errado).
+
+exit: 0 pronta ou nada a fazer · 2 uso · 3 dependencia/build (docker, versao ilegivel, build) ·
+      4 recusa (lock mudou sem versao; mesma tag com outro lock)
+
+ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock]
+"""
+
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+VERSAO_VALIDA = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$")
+CAMINHO = (
+    'caminho: subir "version" em src/base/package.json e os pinos '
+    "COPY --from=platafirma/ui:<versao> nos Dockerfile de app/*"
+)
+VERSAO_TXT = "/usr/share/nginx/html/versao.txt"
+EXIT_USO = 2
+PRAZO_CURTO = 60  # segundos: inspect, run, rm
+PRAZO_BUILD = 1800  # segundos: npm ci + build da biblioteca dentro da imagem
+PRAZO_ESGOTADO = 124
+
+
+def erro(texto: str) -> None:
+    print(texto, file=sys.stderr)
+
+
+def versao_de(package_json: Path) -> str | None:
+    try:
+        versao = json.loads(package_json.read_text(encoding="utf-8")).get("version")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return str(versao) if versao else None
+
+
+def hash_de(arquivo: Path) -> str:
+    return hashlib.sha256(arquivo.read_bytes()).hexdigest()
+
+
+def docker(*args: str, prazo: int = PRAZO_CURTO) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(["docker", *args], capture_output=True, text=True, check=False, timeout=prazo)
+    except subprocess.TimeoutExpired as exc:
+        return subprocess.CompletedProcess(exc.cmd, PRAZO_ESGOTADO, "", f"docker {args[0]}: sem resposta em {prazo}s")
+
+
+def tem_biblioteca(arvore: Path) -> bool:
+    base = arvore / "src" / "base"
+    return (arvore / "Dockerfile").is_file() and (base / "package.json").is_file() and (base / "package-lock.json").is_file()
+
+
+def regra_lock_novo_pede_versao_nova(anterior: Path, versao: str, lock_hash: str, img: str) -> int:
+    base = anterior / "src" / "base"
+    if not (base / "package.json").is_file() or not (base / "package-lock.json").is_file():
+        return 0
+    lock_ant = hash_de(base / "package-lock.json")
+    if lock_ant != lock_hash and versao_de(base / "package.json") == versao:
+        erro(
+            f"biblioteca: recusa: o lock de src/base mudou ({lock_ant[:7]} -> {lock_hash[:7]}) "
+            f"e a versao segue em {versao} — a tag {img} e imutavel (arq:0080)"
+        )
+        erro(CAMINHO)
+        return 4
+    return 0
+
+
+def tag_existente(img: str, lock_hash: str) -> int:
+    rotulo = docker("image", "inspect", "-f", '{{index .Config.Labels "pf.ui.lock"}}', img).stdout.strip()
+    if rotulo == "<no value>":
+        rotulo = ""
+    if not rotulo:
+        print(f"gate:      biblioteca {img} ja existe (sem rotulo de lock, anterior ao gate) — reaproveitada, nao reescrita")
+        return 0
+    if rotulo == lock_hash:
+        print(f"gate:      biblioteca {img} ja existe com este lock — sem build")
+        return 0
+    erro(
+        f"biblioteca: recusa: {img} ja existe com outro lock ({rotulo[:7]}, a arvore tem {lock_hash[:7]}) "
+        "— tag imutavel (arq:0080)"
+    )
+    erro(CAMINHO)
+    return 4
+
+
+def construir(arvore: Path, versao: str, lock_hash: str, img: str) -> int:
+    print(f"gate:      biblioteca {img}: construindo da arvore {arvore.name}")
+    build = docker(
+        "build", "-t", img,
+        "--label", f"pf.ui.lock={lock_hash}",
+        "--label", f"pf.ui.revisao={arvore.name}",
+        str(arvore),
+        prazo=PRAZO_BUILD,
+    )
+    if build.returncode != 0:
+        erro(f"biblioteca: build de {img} falhou; ultimas linhas:")
+        for linha in (build.stdout + build.stderr).splitlines()[-20:]:
+            erro(f"    {linha}")
+        return 3
+    servida = docker("run", "--rm", "--entrypoint", "cat", img, VERSAO_TXT).stdout.rstrip("\n")
+    if servida != f"platafirma-ui {versao}":
+        docker("image", "rm", "-f", img)
+        erro(f'biblioteca: {img} serve versao.txt "{servida}", esperado "platafirma-ui {versao}" — tag removida')
+        return 3
+    print(f"gate:      biblioteca {img} construida (lock {lock_hash[:7]})")
+    return 0
+
+
+def garantir(arvore: Path, anterior: Path | None) -> int:
+    if not tem_biblioteca(arvore):
+        return 0
+    versao = versao_de(arvore / "src" / "base" / "package.json")
+    if not versao or not VERSAO_VALIDA.match(versao):
+        erro(f'biblioteca: versao ilegivel em {arvore / "src/base/package.json"}: "{versao or ""}"')
+        return 3
+    lock_hash = hash_de(arvore / "src" / "base" / "package-lock.json")
+    img = f"platafirma/ui:{versao}"
+    if anterior is not None:
+        rc = regra_lock_novo_pede_versao_nova(anterior, versao, lock_hash, img)
+        if rc != 0:
+            return rc
+    if shutil.which("docker") is None:
+        erro(f"biblioteca: dependencia ausente: docker — a imagem {img} nao pode ser construida")
+        return 3
+    os.environ.setdefault("DOCKER_HOST", f"unix:///run/user/{os.getuid()}/docker.sock")
+    if docker("image", "inspect", img).returncode == 0:
+        return tag_existente(img, lock_hash)
+    return construir(arvore, versao, lock_hash, img)
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) < 2 or argv[0] != "garantir":  # noqa: PLR2004 (arvore e o minimo)
+        erro("uso: biblioteca garantir <arvore> [--anterior <arvore>]")
+        return EXIT_USO
+    arvore, resto, anterior = Path(argv[1]), argv[2:], None
+    if resto:
+        if len(resto) != 2 or resto[0] != "--anterior":  # noqa: PLR2004 (flag e valor)
+            erro("uso: biblioteca garantir <arvore> [--anterior <arvore>]")
+            return EXIT_USO
+        anterior = Path(resto[1])
+    return garantir(arvore, anterior)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
