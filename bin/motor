@@ -251,8 +251,8 @@ def uso(cod=2):
                                         rodape e mapa afirmacao->secao; grava o envelope do lote. O estado e retomavel
                                         (repita com --lote-id); --plano so recupera. A saida vai para a instancia, nunca
                                         para repositorio: o lote leva texto do acervo
-  motor <inst> julgar biblioteca --lote <lote_id> [--tempo S] [--criterio <criterio.json>]
-                                        o juiz (o gerador do rag, Claude) julga cada resposta do lote pelo criterio que a
+  motor <inst> julgar biblioteca --lote <lote_id> [--tempo S] [--modelo opus|sonnet|<id>] [--criterio <criterio.json>]
+                                        o juiz (Claude pelo `claude -p` do host) julga cada resposta do lote pelo criterio que a
                                         tela mostrou ao dono: grau, embasamento por afirmacao e grau por trecho; grava em
                                         avaliacao.juiz_marca quando todas tiverem nota. Retomavel; nunca le os eventos do dono
   motor <inst> julgar biblioteca --lote <lote_id> --kappa | --divergencias | --tempo-ativo | --conferencia [--ativar] [--json]
@@ -2105,9 +2105,8 @@ def cmd_escrever(d, inst, argv):
     print(f"gravar: motor marcacao lote gravar {op['--saida']}{' --ativar' if not op.get('--ativar') else ''}")
 
 
-# O juiz roda DENTRO do conteiner do rag (molde do braco lexico): o gerador do motor (Claude pelo `claude` CLI da
-# maquina, ou pela API se houver chave) so existe la. Um script le o texto das secoes; o outro faz UMA geracao.
-# Nenhum dos dois escreve em banco.
+# O texto das secoes sai de DENTRO do conteiner do rag (molde do braco lexico); a geracao do juiz roda no host
+# (`_gerar_claude_host`). O script nao escreve em banco.
 JUIZ_TEXTOS = '''
 import json, os
 from motor_acervo.config.settings import load_settings
@@ -2122,19 +2121,37 @@ for sid in A["ids"]:
 print(json.dumps(out, ensure_ascii=False))
 '''
 
-JUIZ_GERAR = '''
-import json, os, time
-from motor_acervo.config.settings import load_settings
-from motor_acervo.recuperacao import runtime as rt
-A = json.loads(os.environ["JUIZ_ARGS"])
-st = load_settings()
-t0 = time.monotonic()
-texto = rt.generate(st, A["sistema"], A["usuario"], thinking=True, json_mode=True)
-print(json.dumps({"texto": texto, "modelo": st.gen_model, "provider": rt._provider_for(st),
-                  "segundos": round(time.monotonic() - t0, 2)}, ensure_ascii=False))
-'''
+def _gerar_claude_host(sistema, usuario, modelo):
+    """Uma geração do juiz pelo `claude` do host (o contêiner do rag não tem o CLI e a casa não tem chave de API,
+    decisão do dono de 24/07). Molde: tooling/rodar-firmabot-claude.py — processo novo por chamada, sem ferramentas,
+    sem sessão salva, em diretório neutro para não carregar o CLAUDE.md de um repositório."""
+    import shutil, tempfile
+    exe = shutil.which("claude") or next((p for p in (os.path.expanduser("~/.local/bin/claude"),
+                                                       os.path.expanduser("~/.claude/local/claude")) if os.path.isfile(p)), None)
+    if not exe:
+        print("motor julgar: o `claude` nao esta no PATH do host nem em ~/.local/bin", file=sys.stderr)
+        sys.exit(3)
+    t0 = time.monotonic()
+    try:
+        r = subprocess.run([exe, "-p", "--system-prompt", sistema, "--tools", "", "--no-session-persistence",
+                            "--model", modelo, "--output-format", "json", usuario],
+                           capture_output=True, text=True, timeout=600, cwd=tempfile.gettempdir())
+    except subprocess.TimeoutExpired:
+        return {"texto": "", "modelo": modelo, "provider": "claude_cli_host", "segundos": round(time.monotonic() - t0, 2)}
+    if r.returncode != 0:
+        print(f"motor julgar: claude -p falhou (rc={r.returncode}): {(r.stderr or r.stdout).strip()[-400:]}", file=sys.stderr)
+        sys.exit(3)
+    try:
+        j = json.loads(r.stdout)
+    except ValueError:
+        j = {"result": r.stdout}
+    # o CLI pode somar um modelo auxiliar no modelUsage; o do juiz e o que casa com o pedido
+    usados = [m for m in (j.get("modelUsage") or {}) if modelo.lower() in m.lower()]
+    return {"texto": j.get("result") or "", "modelo": usados[0] if len(usados) == 1 else modelo,
+            "provider": "claude_cli_host", "segundos": round(time.monotonic() - t0, 2)}
 
-JULGAR_OPCOES = {"--lote": 1, "--criterio": 1, "--tempo": 1, "--kappa": 0, "--divergencias": 0, "--tempo-ativo": 0,
+
+JULGAR_OPCOES = {"--lote": 1, "--criterio": 1, "--tempo": 1, "--modelo": 1, "--kappa": 0, "--divergencias": 0, "--tempo-ativo": 0,
                  "--conferencia": 0, "--ativar": 0, "--json": 0}
 
 
@@ -2302,7 +2319,8 @@ def _julgar(inst, op, lote, est, arq_estado, base, tk):
         _salva_estado(arq_estado, est)
 
     def gerar(sist, usuario, tentativa):
-        g = _no_conteiner_rag(inst, JUIZ_GERAR, {"sistema": sist, "usuario": usuario})
+        g = _gerar_claude_host(sist, usuario, op.get("--modelo") or est.get("modelo_pedido") or "opus")
+        est["modelo_pedido"] = op.get("--modelo") or est.get("modelo_pedido") or "opus"
         if est.get("modelo") and est["modelo"] != g["modelo"]:
             print(f"motor julgar: o gerador do rag trocou de modelo no meio do lote ({est['modelo']} -> {g['modelo']})",
                   file=sys.stderr)
