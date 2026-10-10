@@ -76,6 +76,7 @@ CLASSES_SERVIDO=(
   "card"
   "jobs"
   "acervo"
+  "dependencias"
 )
 
 uso_texto() {
@@ -1160,7 +1161,12 @@ construir_venvs() {  # $1=repo $2=sha ; enche VENVS_PRONTOS; 0 ok, 3 falhou
       }
       IFS=$'\t' read -r py py_real py_ver <<<"$pyid"
     fi
-    hash="$({ cat "$arvore/$lock"; printf '\npython=%s %s\n' "$py_real" "$py_ver"; } | sha256sum | cut -c1-12)"
+    # chave do ambiente em lib/venv.sh (hash_do_ambiente): a de sempre para lock Python; lock
+    # node (package-lock.json, card #3386) soma a identidade do node
+    hash="$(hash_do_ambiente "$arvore/$lock" "$py_real" "$py_ver")" || {
+      printf 'release: venv %s não construído na rev %s — current intacto\n' "$nome" "${sha:0:7}" >&2
+      return 3
+    }
     dest="$PROD_RAIZ/venv/$nome-$hash"
     if [ -f "$dest/.pronto" ]; then
       printf 'venv:      %s-%s já construído (lock e python inalterados)\n' "$nome" "$hash"

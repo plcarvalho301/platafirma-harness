@@ -36,6 +36,8 @@ tests/test_contrato_teste_bloco.py | bin/teste
 tests/test_lote_encadeado.py | ops-server/**
 tests/test_mesa.py | bin/acervo bin/_acervo/** bin/bot bin/chat bin/conferir bin/curar bin/ingerir bin/mesa bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste bin/_metrica/** abertura/**
 tests/test_registro_chave.py | bin/teste bin/_release/** registro/venvs.json
+tests/test_ambiente_node.py | bin/release bin/repo bin/teste bin/_release/** lib/venv.sh registro/venvs.json
+tests/test_contrato_repo_lock_node.py | bin/repo lib/venv.sh
 tests/test_release_construir_venv_registro.py | bin/release bin/_release/** lib/venv.sh
 tests/test_release_estagio_card.py | bin/release bin/_release/**
 tests/test_release_ensaio_fetch.py | bin/release bin/_release/**

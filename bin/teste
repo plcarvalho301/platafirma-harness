@@ -32,7 +32,7 @@ REGISTRO="$(dirname "$(readlink -f "$0")")/_release/registro.py"
 
 # Preenchidos pela resolução no registro
 REG_FAMILIA=""; REG_LOCK=""; REG_SUBARVORE=""; REG_ESTEIRA=""; REG_STACK=""; REG_TESTES=""
-CHAVE_PY=""; CHAVE_HASH=""
+CHAVE_PY=""; CHAVE_HASH=""; CHAVE_DEST=""
 
 uso() {
   cat >&2 <<EOF
@@ -275,7 +275,7 @@ ambiente_do_registro() {  # $1=clone
   local pyid py py_real py_ver hash dest uv t0 t1
   pyid="$(resolver_python)" || exit 3
   IFS=$'\t' read -r py py_real py_ver <<<"$pyid"
-  hash="$({ cat "$c/$REG_LOCK"; printf '\npython=%s %s\n' "$py_real" "$py_ver"; } | sha256sum | cut -c1-12)"
+  hash="$(hash_do_ambiente "$c/$REG_LOCK" "$py_real" "$py_ver")" || exit 3
   dest="${PF_RELEASE_RAIZ}/venv/$REG_STACK-$hash"
   if [ -f "$dest/.pronto" ]; then
     printf 'ambiente:  %s-%s ja construido (lock e python inalterados) — reaproveitado\n' "$REG_STACK" "$hash" >&2
@@ -291,7 +291,70 @@ ambiente_do_registro() {  # $1=clone
     t1="$(date +%s 2>/dev/null || echo 0)"
     printf 'ambiente:  %s-%s construido (%s s)\n' "$REG_STACK" "$hash" "$((t1 - t0))" >&2
   fi
-  CHAVE_PY="$dest/bin/python"; CHAVE_HASH="$hash"
+  CHAVE_PY="$dest/bin/python"; CHAVE_HASH="$hash"; CHAVE_DEST="$dest"
+  return 0
+}
+
+# Stack node (card #3386): o lock da stack é um package-lock.json. O ambiente é o MESMO que
+# `release promover` constrói (npm ci --ignore-scripts, chave <nome>-<hash>); a suíte é uma lista
+# de arquivos .mjs/.js que saem 0, a convenção das provas da platafirma-ui (a lista vem de
+# "testes" no registro, ou de <alvo>). Roda com o node de sistema, o node_modules do ambiente
+# travado e o Chromium do host em CHROME. Ainda sem veredito memoizado e sem portão: o portão
+# de uma stack node é decisão própria (lista de portão, arq:0116 §5), e até lá a stack não
+# declara "teste" (subárvore), só "testes" (globs), para não entrar no portão da família.
+lock_e_node() { [ "$(basename "${REG_LOCK:-}")" = package-lock.json ]; }
+
+node_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rótulo [$4=alvo...]
+  local c="$1" raiz="$2" rotulo="$3"; shift 3
+  local alvos=("$@") nodeinfo node ver chrome="" f rc_f n=0 falhos=() criou=0
+  local elo="$raiz/node_modules" alvo_nm="$CHAVE_DEST/node_modules" inst log logd saida
+  local -a envx
+  [ "${EM_ARVORE:-0}" -eq 0 ] \
+    || morre "stack node não roda em --arvore (árvore só leitura não recebe o node_modules do ambiente); rode na bancada" 5
+  [ "${#alvos[@]}" -gt 0 ] \
+    || morre "stack '$REG_STACK' sem suíte: declare \"testes\" (globs de .mjs) no registro ou passe <alvo>" 5
+  nodeinfo="$(resolver_node)" || exit 3
+  node="${nodeinfo%%$'\t'*}"; ver="${nodeinfo#*$'\t'}"
+  chrome="$(resolver_chromium 2>/dev/null)" || chrome=""
+
+  # O node_modules que roda é o do ambiente travado, nunca um instalado à mão na árvore: o que
+  # se testou tem de ser o que o lock resolve. Um diretório real ali é recusado, não apagado.
+  if [ -L "$elo" ]; then
+    [ "$(readlink -f "$elo")" = "$(readlink -f "$alvo_nm")" ] || rm -f "$elo"
+  elif [ -e "$elo" ]; then
+    morre "$elo é um node_modules instalado à mão: o ambiente desta stack é o travado ($CHAVE_DEST); apague o diretório da bancada e rode de novo" 5
+  fi
+  if [ ! -L "$elo" ]; then
+    ln -s "$alvo_nm" "$elo" || morre "não liguei $elo ao ambiente travado" 3
+    criou=1
+  fi
+
+  inst="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}"
+  logd="$inst/var/log/teste"; mkdir -p "$logd" 2>/dev/null || logd="${TMPDIR:-/tmp}"
+  log="$logd/$(date -u +%Y%m%dT%H%M%SZ)-${REG_STACK}-$$.txt"
+  envx=(PATH="$(dirname "$node"):$PATH" NODE_ENV=test)
+  [ -z "$chrome" ] || envx+=(CHROME="$chrome" PUPPETEER_EXECUTABLE_PATH="$chrome" PLATAFIRMA_CHROMIUM="$chrome")
+
+  for f in "${alvos[@]}"; do
+    n=$((n + 1))
+    rc_f=0
+    saida="$(cd "$raiz" && env "${envx[@]}" timeout "${PF_TESTE_TIMEOUT:-600}" "$node" "$f" 2>&1)" || rc_f=$?
+    { printf '=== %s · exit %s\n' "$f" "$rc_f"; printf '%s\n' "$saida"; } >> "$log" 2>/dev/null || true
+    if [ "$rc_f" -ne 0 ]; then
+      falhos+=("$f (exit $rc_f)")
+      printf '%s\n' "$saida" | tail -n 15 | sed "s|^|  $f: |"
+    fi
+  done
+  [ "$criou" -eq 0 ] || rm -f "$elo"
+
+  if [ "${#falhos[@]}" -gt 0 ]; then
+    printf 'suite VERMELHA: %s — %s de %s arquivo(s) reprovado(s): %s\n' "$rotulo" "${#falhos[@]}" "$n" "${falhos[*]}"
+    printf 'log: %s\n' "$log"
+    return 1
+  fi
+  printf 'suite VERDE: %s — %s arquivo(s), node %s, ambiente %s-%s, chromium %s\n' \
+    "$rotulo" "$n" "$ver" "$REG_STACK" "$CHAVE_HASH" "${chrome:-ausente}"
+  printf 'log: %s\n' "$log"
   return 0
 }
 
@@ -681,6 +744,10 @@ ato_detectar() {
   if [ "$REG_ESTEIRA" = "documento" ]; then
     runner="documento"
   fi
+  if lock_e_node; then
+    runner="node"
+    linha_cmd="node <arquivo> (node_modules de $CHAVE_DEST)"
+  fi
 
   # Formato conforme: stack, runner, chave, caminho e a linha
   printf '%s  ·  stack %s  ·  runner %s  ·  chave %s-%s  ·  caminho %s  ·  coleta %s  ·  rodaria: %s\n' \
@@ -825,6 +892,11 @@ ato_rodar() {
     return $?
   fi
 
+  if lock_e_node && [ "$portao" -eq 1 ]; then
+    printf 'suite INDISPONIVEL: %s — stack node ainda sem portão (a lista de portão dela é decisão à parte, arq:0116 §5); rode sem --portao\n' "$nome" >&2
+    exit 5
+  fi
+
   # arq:0116 §6: o repositório inteiro no portão — toda chave com subárvore de teste
   if [ "$portao" -eq 1 ] && [ -z "$alvo" ] && [ -z "$chave" ] && [ "${nome%%@*}" = "$REG_FAMILIA" ]; then
     local arv_fam=""
@@ -923,6 +995,12 @@ ato_rodar() {
   local rotulo="$nome"
   [ -n "$chave" ] && rotulo="$nome (chave $chave)"
   [ -z "$chave" ] && [ "$nome" != "$REG_STACK" ] && rotulo="$nome (chave $REG_STACK)"
+
+  if lock_e_node; then
+    printf '# %s · chave %s-%s · node <arquivo> (raiz %s)\n' "$nome" "$REG_STACK" "$CHAVE_HASH" "$raiz" >&2
+    node_em_bloco "$c" "$raiz" "$rotulo" ${alvos:+"${alvos[@]}"}
+    return $?
+  fi
 
   printf '# %s · chave %s-%s · uv run --python %s --with pytest pytest (raiz %s)\n' \
     "$nome" "$REG_STACK" "$CHAVE_HASH" "$CHAVE_PY" "$raiz" >&2
