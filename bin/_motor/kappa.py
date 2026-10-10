@@ -117,8 +117,9 @@ def concordancia(lote: dict, dono: dict, juiz: dict, fora: set) -> dict:
 # --- divergências e tempo ------------------------------------------------------------------------------------
 
 def divergencias(lote: dict, dono: dict, juiz: dict, fora: set) -> list:
-    """Divergência é qualidade OU embasamento diferente (card #3350). Sem braço: a linha leva o resposta_id opaco,
-    a pergunta e as duas marcas."""
+    """Divergência é qualidade diferente. O embasamento saiu da avaliação por ordem do dono (09/10/2026, #3352): a tela
+    mostra só o título das seções e ele não tem como conferir sem abrir a obra. Sem braço: a linha leva o
+    resposta_id opaco, a pergunta e os dois graus."""
     perg = {p["pergunta_id"]: p["texto"] for p in lote["corpo"]["perguntas"]}
     out = []
     for r in lote["respostas"]:
@@ -126,12 +127,22 @@ def divergencias(lote: dict, dono: dict, juiz: dict, fora: set) -> list:
         if pid in fora or rid not in dono or rid not in juiz:
             continue
         d, j = dono[rid], juiz[rid]
-        if d["qualidade"] != j["qualidade"] or d["embasamento"] != j["embasamento"]:
+        if d["qualidade"] != j["qualidade"]:
             out.append({"resposta_id": rid, "pergunta_id": pid, "pergunta": perg.get(pid, ""),
-                        "dono": {"qualidade": d["qualidade"], "embasamento": d["embasamento"]},
-                        "juiz": {"qualidade": j["qualidade"], "embasamento": j["embasamento"]},
-                        "o_que_diverge": [c for c in ("qualidade", "embasamento") if d[c] != j[c]]})
+                        "dono": {"qualidade": d["qualidade"]}, "juiz": {"qualidade": j["qualidade"]}})
     return out
+
+
+def matriz(lote: dict, dono: dict, juiz: dict, fora: set, graus: tuple) -> dict:
+    """grau do dono -> grau do juiz -> quantas respostas: a tabela que mostra PARA ONDE o juiz desvia."""
+    m = {a: {b: 0 for b in graus} for a in graus}
+    for r in lote["respostas"]:
+        rid = r["resposta_id"]
+        if r["pergunta_id"] in fora or rid not in dono or rid not in juiz:
+            continue
+        m.setdefault(dono[rid]["qualidade"], {b: 0 for b in graus})
+        m[dono[rid]["qualidade"]][juiz[rid]["qualidade"]] = m[dono[rid]["qualidade"]].get(juiz[rid]["qualidade"], 0) + 1
+    return m
 
 
 def _p90(vals: list):

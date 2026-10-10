@@ -255,7 +255,8 @@ def uso(cod=2):
                                         o juiz (Claude pelo `claude -p` do host) julga cada resposta do lote pelo criterio que a
                                         tela mostrou ao dono: grau, embasamento por afirmacao e grau por trecho; grava em
                                         avaliacao.juiz_marca quando todas tiverem nota. Retomavel; nunca le os eventos do dono
-  motor <inst> julgar biblioteca --lote <lote_id> --kappa | --divergencias | --tempo-ativo | --conferencia [--ativar] [--json]
+  motor <inst> julgar biblioteca --lote <lote_id> --kappa | --divergencias | --tempo-ativo
+                     | --conferencia [--lote-conferencia <id>] [--ativar] [--json]
                                         so com o juiz completo no banco: o kappa e o acerto em enganosa contra a primeira
                                         passada do dono (intervalo por pergunta), as divergencias sem braco, o tempo ativo,
                                         ou o lote de conferencia so com as divergentes (ids novos, sem a nota do juiz)
@@ -2152,7 +2153,7 @@ def _gerar_claude_host(sistema, usuario, modelo):
 
 
 JULGAR_OPCOES = {"--lote": 1, "--criterio": 1, "--tempo": 1, "--modelo": 1, "--kappa": 0, "--divergencias": 0, "--tempo-ativo": 0,
-                 "--conferencia": 0, "--ativar": 0, "--json": 0}
+                 "--conferencia": 0, "--ativar": 0, "--json": 0, "--lote-conferencia": 1}
 
 
 def _no_conteiner_rag(inst, script, args, timeout=900):
@@ -2239,6 +2240,8 @@ def cmd_julgar(d, inst, argv):
              "juiz_antes": datetime.fromisoformat(ultima_juiz) < datetime.fromisoformat(est["eventos_lidos_em"])}
     if op.get("--kappa"):
         c = kappa.concordancia(lote, dono, jz, fora)
+        graus = tuple(c["por_grau"])
+        c["matriz"] = kappa.matriz(lote, dono, jz, fora, graus)
         c["ordem"] = ordem
         c["repeticoes"] = sum(1 for m in dono.values() if m.get("marcas", 1) > 1)
         c["juiz"] = {"modelo": est.get("modelo"), "provider": est.get("provider"), "prompt_hash": est.get("prompt_hash"),
@@ -2256,6 +2259,10 @@ def cmd_julgar(d, inst, argv):
               f"o juiz marcou {e['juiz_marcou']}, o dono confirmou {e['dono_confirmou']}")
         print("  por grau (dono / juiz / os dois): " + " · ".join(
             f"{g} {v['dono']}/{v['juiz']}/{v['os_dois']}" for g, v in c["por_grau"].items()))
+        print("  linha = o grau que o dono deu; coluna = o que o juiz deu")
+        print("  " + " " * 12 + "".join(f"{g:>12}" for g in graus))
+        for a in graus:
+            print("  " + f"{a:<12}" + "".join(f"{c['matriz'][a][b]:>12}" for b in graus))
         print(f"  fora: perguntas excluidas {c['perguntas_excluidas'] or 'nenhuma'} · sem marca do dono "
               f"{len(c['sem_marca_do_dono'])} · respostas marcadas mais de uma vez {c['repeticoes']} (vale a mais recente)")
         print(f"  ordem: ultima marca do juiz {ultima_juiz} · primeira leitura dos eventos {est['eventos_lidos_em']} · "
@@ -2266,11 +2273,9 @@ def cmd_julgar(d, inst, argv):
         if op.get("--json"):
             print(json.dumps(divs, ensure_ascii=False, indent=1))
             return
-        print(f"lote {lote_id} · {len(divs)} divergencia(s) (qualidade ou embasamento), sem braco")
+        print(f"lote {lote_id} · {len(divs)} divergencia(s) de grau, sem braco (embasamento fora, ordem do dono 09/10)")
         for n, x in enumerate(divs, 1):
-            dq, jq = x["dono"], x["juiz"]
-            print(f"{n:>3}. {x['resposta_id']} · dono {dq['qualidade']}/{'emb' if dq['embasamento'] else 'sem emb'} · "
-                  f"juiz {jq['qualidade']}/{'emb' if jq['embasamento'] else 'sem emb'} · {x['pergunta'][:70]}")
+            print(f"{n:>3}. {x['resposta_id']} · dono {x['dono']['qualidade']} · juiz {x['juiz']['qualidade']} · {x['pergunta'][:70]}")
         return
     if op.get("--tempo-ativo"):
         t = kappa.tempo(lote, dono, kappa.preferencias(eventos), fora)
@@ -2281,7 +2286,7 @@ def cmd_julgar(d, inst, argv):
             print(f"{nome}: n {v['n']} · mediana {v['mediana']:.1f} s · p90 {v['p90']:.1f} s · total {v['total'] / 60:.1f} min")
         return
     # --conferencia
-    conf_id = f"{lote_id}-conf"
+    conf_id = op.get("--lote-conferencia") or f"{lote_id}-conf"
     if not divs:
         print(f"motor julgar: nenhuma divergencia no lote {lote_id}; sem lote de conferencia")
         return
