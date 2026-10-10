@@ -106,6 +106,9 @@ uso:
                                                    (transacao unica, ON_ERROR_STOP; aborta inteira no 1o erro;
                                                    exige identidade: variavel PF_SUJEITO)
   release migrar     bancos                        lista os bancos declarados (slug -> contêiner/base)
+  release migrar     senha <banco> <role> <stack>/<nome> [--rotacionar]
+                                                   gera a senha da role, troca no banco e guarda em
+                                                   segredos/<stack>/<nome> (0600); o valor nao se imprime
 
 raiz servida: PF_RELEASE_RAIZ[=/opt/platafirma] · instancia: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
 promover: <rev> (sha ou tag) obrigatória em família com stack; sem rev, avança para origin/main
