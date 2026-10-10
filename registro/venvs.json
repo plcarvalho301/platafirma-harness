@@ -72,5 +72,25 @@
     "familia": "platafirma-motor",
     "lock": "deploy/marcacao/requirements-teste.txt",
     "teste": "deploy/marcacao"
+  },
+  "reuso-0046-lit": {
+    "familia": "platafirma-ui",
+    "lock": "prova-0046/reuso/lit/package-lock.json",
+    "testes": ["prova-0046/reuso/lit/provas/*.mjs"]
+  },
+  "reuso-0046-react": {
+    "familia": "platafirma-ui",
+    "lock": "prova-0046/reuso/react/package-lock.json",
+    "testes": ["prova-0046/reuso/react/provas/*.mjs"]
+  },
+  "reuso-0046-angular": {
+    "familia": "platafirma-ui",
+    "lock": "prova-0046/reuso/angular/package-lock.json",
+    "testes": ["prova-0046/reuso/angular/provas/*.mjs"]
+  },
+  "reuso-0046-django": {
+    "familia": "platafirma-ui",
+    "lock": "prova-0046/reuso/htmx-django/uv.lock",
+    "testes": ["prova-0046/reuso/htmx-django/tests/test_*.py"]
   }
 }
