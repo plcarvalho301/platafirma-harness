@@ -136,7 +136,8 @@ uso:
   repo pr-diff   <repo> <numero>
   repo pr-merge  <repo> <numero> [--squash|--merge|--rebase] [--forcar]
   repo pr-fechar <repo> <numero> --motivo <texto>   (descarta sem merge; apaga ramo e bancadas)
-  repo lock      <repo> <projeto> [--conferir]      (uv.lock do <projeto>/pyproject.toml; nao commita)
+  repo lock      <repo> <projeto> [--conferir]      (uv.lock do <projeto>/pyproject.toml, ou package-lock.json do
+                                                     <projeto>/package.json sem script de pacote; nao commita)
   repo git       <repo> <args…>
 
 bancada: PLATAFIRMA_BANCADA[sem default] (exit 3)
@@ -2649,6 +2650,110 @@ sanear_conforme() {
   return 0
 }
 
+# ato_lock_node -- o mesmo ato para projeto node (card #3386): package.json -> package-lock.json,
+# com o node de sistema e SEM script de pacote: `npm install --package-lock-only
+# --ignore-scripts` resolve e escreve o lock, não instala nem roda nada. --conferir só mede
+# (`npm ci --dry-run`: recusa lock fora de sincronia com o package.json), nada escrito.
+# Escreve só <projeto>/package-lock.json e não commita. Relata a diferença lida dos dois locks:
+# + entrou, - saiu, ~ versão mudou. Config de usuário e global do npm não entram.
+# exit: 0 feito ou em dia · 1 lock defasado (--conferir) ou sem solução · 3 node, npm, índice ou rede
+ato_lock_node() {  # $1=repo $2=projeto $3=clone $4=dir $5=conferir(0|1)
+  local repo="$1" projeto="$2" dir="$4" conferir="$5" rel lock err rc=0 nodeinfo node npm antes=""
+  rel="$projeto/package-lock.json"; [ "$projeto" = "." ] && rel="package-lock.json"
+  lock="$dir/package-lock.json"
+  PF_VENV_PREFIXO="$VERBO lock"
+  # shellcheck source=../lib/venv.sh
+  . "$(dirname "$(readlink -f "$0")")/../lib/venv.sh" \
+    || morre "dependência ausente: lib/venv.sh ao lado do verbo" 3
+  nodeinfo="$(resolver_node)" || exit 3
+  node="${nodeinfo%%$'\t'*}"
+  npm="$(resolver_npm "$node")" || exit 3
+  local -a npmenv=(env -u NODE_OPTIONS -u npm_config_registry -u NPM_CONFIG_REGISTRY
+    PATH="$(dirname "$node"):$PATH" npm_config_userconfig=/dev/null npm_config_globalconfig=/dev/null
+    npm_config_update_notifier=false)
+  err="$(mktemp)" || morre "mktemp falhou" 3
+
+  if [ "$conferir" -eq 1 ]; then
+    if [ ! -f "$lock" ]; then
+      printf 'defasado: %s não existe (nada escrito)\nvizinho: repo lock %s %s\n' "$rel" "$repo" "$projeto"
+      rm -f "$err"; exit 1
+    fi
+    (cd "$dir" && "${npmenv[@]}" "$npm" ci --dry-run --ignore-scripts --no-audit --no-fund </dev/null >/dev/null 2>"$err") || rc=$?
+    if [ "$rc" -eq 0 ]; then
+      rm -f "$err"
+      printf 'em dia: %s bate com o package.json (nada escrito)\n' "$rel"
+      return 0
+    fi
+    if grep -qiE 'in sync|lock file|missing:|invalid:' "$err"; then
+      printf 'defasado: %s não bate com o package.json (nada escrito)\n' "$rel"
+      sed 's/^/  /' "$err" | tail -n 5
+      printf 'vizinho: repo lock %s %s\n' "$repo" "$projeto"
+      rm -f "$err"; exit 1
+    fi
+    printf '%s: npm ci --dry-run saiu %s sem dizer se o lock está em dia (índice, rede ou npm):\n' "$VERBO" "$rc" >&2
+    sed 's/^/  /' "$err" | tail -n 20 >&2
+    rm -f "$err"; exit 3
+  fi
+
+  if [ -f "$lock" ]; then
+    antes="$(mktemp)" && cp -p "$lock" "$antes" || morre "não guardei a cópia do lock anterior" 3
+  fi
+  (cd "$dir" && "${npmenv[@]}" "$npm" install --package-lock-only --ignore-scripts --no-audit --no-fund </dev/null >/dev/null 2>"$err") || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    local cod=3 tipo="índice, rede ou npm"
+    if grep -qiE 'ETARGET|notarget|No matching version|ERESOLVE' "$err"; then cod=1; tipo="sem solução para as dependências pedidas"; fi
+    printf '%s: npm install --package-lock-only saiu %s (%s); %s intocado:\n' "$VERBO" "$rc" "$tipo" "$rel" >&2
+    sed 's/^/  /' "$err" | tail -n 20 >&2
+    [ -z "$antes" ] || cp -p "$antes" "$lock"
+    rm -f "$err" "$antes"
+    exit "$cod"
+  fi
+  rm -f "$err"
+  [ -f "$lock" ] || { rm -f "$antes"; morre "npm saiu 0 e não há $rel" 5; }
+
+  local sha_d sha_a=""
+  sha_d="$(sha256sum "$lock" | cut -c1-12)"
+  if [ -n "$antes" ] && cmp -s "$antes" "$lock"; then
+    printf 'lock: %s já em dia (sha256 %s), nada mudou\n' "$rel" "$sha_d"
+    rm -f "$antes"
+    return 0
+  fi
+  if [ -n "$antes" ]; then
+    sha_a="$(sha256sum "$antes" | cut -c1-12)"
+    printf 'lock: %s atualizado (sha256 %s -> %s)\n' "$rel" "$sha_a" "$sha_d"
+  else
+    printf 'lock: %s criado (sha256 %s)\n' "$rel" "$sha_d"
+  fi
+  python3 - "${antes:-/dev/null}" "$lock" <<'PY'
+import json, sys
+
+def pacotes(caminho):
+    try:
+        dados = json.load(open(caminho, encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    saida = {}
+    for chave, info in (dados.get("packages") or {}).items():
+        if not chave.startswith("node_modules/") or not isinstance(info, dict):
+            continue
+        saida[chave.rsplit("node_modules/", 1)[1]] = info.get("version", "?")
+    return saida
+
+antes, depois = pacotes(sys.argv[1]), pacotes(sys.argv[2])
+linhas = [f"  + {n} {v}" for n, v in sorted(depois.items()) if n not in antes]
+linhas += [f"  - {n} {v}" for n, v in sorted(antes.items()) if n not in depois]
+linhas += [f"  ~ {n} {antes[n]} -> {v}" for n, v in sorted(depois.items()) if n in antes and antes[n] != v]
+print(f"pacotes: {len(depois)} no lock ({len(antes)} antes)")
+for l in linhas[:40]:
+    print(l)
+if len(linhas) > 40:
+    print(f"  ... e mais {len(linhas) - 40} mudanças")
+PY
+  rm -f "$antes"
+  printf 'próximo: repo commitar %s -m "<o que mudou> (#<card>)" %s/package.json %s\n' "$repo" "$projeto" "$rel"
+  return 0
+}
+
 # ato_lock <repo>[@<chave>] <projeto> [--conferir] -- gera ou confere o uv.lock de um projeto
 # Python da bancada (mesa ti#3; cartas 20260928T104616-engenharia e 20260928T232833-dados:
 # nenhum verbo relockava, e o lock so saia de shell). Usa o MESMO uv e o MESMO python de
@@ -2693,6 +2798,11 @@ ato_lock() {
       "$c"/*) : ;;
       *) morre "projeto '$projeto' resolve para $real_dir, fora da bancada $c" 4 ;;
     esac
+  fi
+  # projeto node (card #3386): package.json sem pyproject.toml -> package-lock.json
+  if [ ! -f "$dir/pyproject.toml" ] && [ -f "$dir/package.json" ]; then
+    ato_lock_node "$repo" "$projeto" "$c" "$dir" "$conferir"
+    return $?
   fi
   if [ ! -f "$dir/pyproject.toml" ]; then
     info_varrido "$c" "${repo%%@*}"

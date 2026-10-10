@@ -217,7 +217,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs . dependencias", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -3098,6 +3098,11 @@ def main(argv):
     if classe == "acervo":
         import predicados_acervo
         return predicados_acervo.conferir_acervo(alvo, _sha_release(), como_json=como_json)
+    if classe == "dependencias":
+        # card #3386: o rol do que as travas resolvem, lido da arvore servida de cada familia
+        import dependencias
+        registro = os.environ.get("PLATAFIRMA_VENVS") or os.path.join(HARNESS, "registro", "venvs.json")
+        return dependencias.conferir(alvo, como_json, _sha_release(), registro, PROD_RAIZ)
     if como_json:
         print(json.dumps({"erro": f"classe desconhecida: {classe}"}))
     uso(f"classe desconhecida: {classe}")

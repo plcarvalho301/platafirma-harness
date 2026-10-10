@@ -63,6 +63,130 @@ resolver_python() {
   printf '%s\t%s\t%s' "$py" "$real" "$ver"
 }
 
+# --- ambiente node (card #3386) ----------------------------------------------------
+# Mesma regra do venv: o lock mora no git (package-lock.json), o ambiente é construído uma
+# vez, por chave <nome>-<hash>, e fica só leitura. A instalação NUNCA roda script de pacote
+# (npm ci --ignore-scripts): é o que fecha o vetor de verme de cadeia de suprimento, e é
+# o mesmo comando que a platafirma-ui já usa no build. Config de usuário e global do npm
+# não entram (userconfig/globalconfig em /dev/null), nem registro trocado por variável:
+# o que se instala é o que o lock resolveu.
+
+# node de sistema, fora do home da conta (como o python de sistema): override, dois caminhos
+# de sistema, PATH. Imprime "<node>\t<versão>"; 3 ausente.
+resolver_node() {
+  local n="" c ver real
+  if [ -n "${PLATAFIRMA_NODE:-}" ]; then
+    if [[ "$PLATAFIRMA_NODE" == /* ]] && [ -x "$PLATAFIRMA_NODE" ] && [ ! -d "$PLATAFIRMA_NODE" ]; then
+      n="$PLATAFIRMA_NODE"
+    else
+      printf '%s: dependência ausente: PLATAFIRMA_NODE=%s não é binário executável em caminho absoluto (override do node)\n' "$PF_VENV_PREFIXO" "$PLATAFIRMA_NODE" >&2
+      return 3
+    fi
+  else
+    for c in /usr/local/bin/node /usr/bin/node; do
+      if [ -x "$c" ] && [ ! -d "$c" ]; then n="$c"; break; fi
+    done
+    if [ -z "$n" ]; then
+      c="$(command -v node 2>/dev/null || true)"
+      if [ -n "$c" ] && [ -x "$c" ]; then n="$c"; fi
+    fi
+  fi
+  if [ -z "$n" ]; then
+    {
+      printf '%s: dependência ausente: node (constrói o ambiente de front do lock) — procurado em $PLATAFIRMA_NODE, /usr/local/bin/node, /usr/bin/node e no PATH\n' "$PF_VENV_PREFIXO"
+      printf '         instale node de sistema, fora do home da conta, ou aponte PLATAFIRMA_NODE\n'
+    } >&2
+    return 3
+  fi
+  real="$(readlink -f "$n")"
+  if python_gerenciado "$n" || python_gerenciado "$real"; then
+    printf '%s: dependência ausente: node %s (real %s) está no home da conta — ambiente de front só se liga a node de sistema; aponte PLATAFIRMA_NODE para um node do sistema\n' "$PF_VENV_PREFIXO" "$n" "$real" >&2
+    return 3
+  fi
+  ver="$("$n" --version 2>/dev/null </dev/null)" || ver=""
+  if ! [[ "$ver" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+    printf '%s: dependência ausente: node %s não roda (não disse a versão)\n' "$PF_VENV_PREFIXO" "$n" >&2
+    return 3
+  fi
+  printf '%s\t%s' "$n" "$ver"
+}
+
+# npm que acompanha o node $1 (mesmo diretório); senão o do PATH. Imprime o caminho; 3 ausente.
+resolver_npm() {  # $1=node
+  local d c
+  d="$(dirname "$1")"
+  if [ -x "$d/npm" ] && [ ! -d "$d/npm" ]; then printf '%s' "$d/npm"; return 0; fi
+  c="$(command -v npm 2>/dev/null || true)"
+  if [ -n "$c" ] && [ -x "$c" ]; then printf '%s' "$c"; return 0; fi
+  printf '%s: dependência ausente: npm (ao lado de %s e no PATH)\n' "$PF_VENV_PREFIXO" "$1" >&2
+  return 3
+}
+
+# Chromium para a prova de navegador: o MESMO do Playwright que o Crawl4AI do harness usa
+# (spec pesquisa-web §3.2: um navegador só, não dois). Override, depois o cache do Playwright,
+# depois um chromium de sistema. Imprime o caminho; 3 ausente.
+resolver_chromium() {
+  local c base
+  if [ -n "${PLATAFIRMA_CHROMIUM:-}" ]; then
+    if [[ "$PLATAFIRMA_CHROMIUM" == /* ]] && [ -x "$PLATAFIRMA_CHROMIUM" ] && [ ! -d "$PLATAFIRMA_CHROMIUM" ]; then
+      printf '%s' "$PLATAFIRMA_CHROMIUM"; return 0
+    fi
+    printf '%s: dependência ausente: PLATAFIRMA_CHROMIUM=%s não é binário executável em caminho absoluto\n' "$PF_VENV_PREFIXO" "$PLATAFIRMA_CHROMIUM" >&2
+    return 3
+  fi
+  for base in "${PLAYWRIGHT_BROWSERS_PATH:-}" "${HOME:-}/.cache/ms-playwright"; do
+    [ -n "$base" ] && [ -d "$base" ] || continue
+    c="$(compgen -G "$base/chromium-*/chrome-linux*/chrome" 2>/dev/null | sort -V | tail -n 1)"
+    if [ -n "$c" ] && [ -x "$c" ]; then printf '%s' "$c"; return 0; fi
+  done
+  for c in chromium chromium-browser google-chrome; do
+    c="$(command -v "$c" 2>/dev/null || true)"
+    if [ -n "$c" ] && [ -x "$c" ]; then printf '%s' "$c"; return 0; fi
+  done
+  printf '%s: dependência ausente: chromium (procurado em $PLATAFIRMA_CHROMIUM, no cache do Playwright e no PATH)\n' "$PF_VENV_PREFIXO" >&2
+  return 3
+}
+
+# Chave do ambiente: para lock Python é a fórmula de sempre (o hash dos venvs já construídos
+# não muda); lock node soma a identidade do node, porque o binário de plataforma que o npm
+# baixa depende dele. $1=lock $2=python real $3=python major.minor. Imprime 12 hex; 3 sem node.
+hash_do_ambiente() {
+  local lock="$1" node_id=""
+  if [ "$(basename "$lock")" = package-lock.json ]; then
+    node_id="$(resolver_node)" || return 3
+    node_id="${node_id#*$'\t'}"
+  fi
+  { cat "$lock"; printf '\npython=%s %s\n' "$2" "$3"; [ -z "$node_id" ] || printf 'node=%s\n' "$node_id"; } | sha256sum | cut -c1-12
+}
+
+# Constrói o ambiente node $2 do package-lock.json $1 (package.json ao lado). 0 ok, 3 falhou.
+construir_node() {  # $1=lock $2=destino
+  local lock="$1" dest="$2" dir nodeinfo node npm cache rc=0
+  dir="$(dirname "$lock")"
+  if [ ! -f "$dir/package.json" ]; then
+    printf '%s: falha alta: não há package.json ao lado de %s\n' "$PF_VENV_PREFIXO" "$lock" >&2
+    return 3
+  fi
+  nodeinfo="$(resolver_node)" || return 3
+  node="${nodeinfo%%$'\t'*}"
+  npm="$(resolver_npm "$node")" || return 3
+  mkdir -p "$dest" || return 3
+  cp "$dir/package.json" "$lock" "$dest/" || return 3
+  cache="$(mktemp -d "${TMPDIR:-/tmp}/npm-cache.XXXXXX")" || return 3
+  ( cd "$dest" && env -u NODE_OPTIONS -u npm_config_registry -u NPM_CONFIG_REGISTRY \
+      PATH="$(dirname "$node"):$PATH" \
+      npm_config_userconfig=/dev/null npm_config_globalconfig=/dev/null \
+      npm_config_ignore_scripts=true npm_config_audit=false npm_config_fund=false \
+      npm_config_update_notifier=false npm_config_cache="$cache" \
+      "$npm" ci --ignore-scripts --no-audit --no-fund </dev/null >&2 ) || rc=$?
+  rm -rf "$cache"
+  if [ "$rc" -ne 0 ] || [ ! -d "$dest/node_modules" ]; then
+    printf '%s: falha alta: npm ci --ignore-scripts saiu %s construindo do lock %s com o node de sistema %s — lock fora de sincronia com o package.json, registro ou rede\n' \
+      "$PF_VENV_PREFIXO" "$rc" "$lock" "$node" >&2
+    return 3
+  fi
+}
+
 # Constrói $2 (destino) a partir do lock $1, com o uv $3 e o python $4 (versão $5).
 # uv.lock -> uv sync --frozen (projeto em modo biblioteca, sem instalar o próprio
 # pacote); qualquer outro nome -> uv venv + pip install -r. Falha alta (3) se o uv
@@ -78,6 +202,10 @@ construir_venv() {  # $1=lock $2=destino $3=uv $4=python $5=versão do python
     uv.lock)
       "${uvenv[@]}" UV_PROJECT_ENVIRONMENT="$dest" "$uv" sync -q --frozen --no-dev --no-install-project \
         --python "$py" --project "$(dirname "$lock")" </dev/null >&2 || rc=$? ;;
+    package-lock.json)
+      # ambiente node (card #3386): npm ci --ignore-scripts; a mensagem de falha é do próprio construtor
+      construir_node "$lock" "$dest" || return 3
+      return 0 ;;
     *)
       "${uvenv[@]}" "$uv" venv -q --python "$py" "$dest" </dev/null >&2 || rc=$?
       if [ "$rc" -eq 0 ] && grep -qvE '^[[:space:]]*(#|$)' "$lock"; then
