@@ -294,6 +294,119 @@ def test_verbos_da_particao_numa_janela_com_dia_ausente(monkeypatch, capsys):
     assert api.medidas()[0][2] == {"desde": "2026-09-22", "ate": "2026-09-24", "por": "tool,ato,classe", "medida": "contagem"}
 
 
+# --- metrica verbos --latencia (card #3414) -------------------------------------------------------------
+
+def lat(tool, ato, sem_duracao=0, **baldes):
+    nomes = [str(b) for b in particao.BALDES_MS] + ["acima"]
+    return {"chave": {"tool": tool, "ato": ato},
+            "baldes": {n: baldes.get(f"b{n}", 0) for n in nomes}, "sem_duracao": sem_duracao}
+
+
+class ApiLatencia(ApiFalsa):
+    """D5.7 devolve contagem ou latência conforme `medida`, como o serviço."""
+
+    def __init__(self, *a, latencia=(), **k):
+        super().__init__(*a, **k)
+        self.latencia = list(latencia)
+
+    def chamar(self, metodo, caminho, corpo=None, params=None, aceita=(200,)):
+        if caminho == "/acervo/log/giros/medida" and (params or {}).get("medida") == "latencia":
+            self.chamadas.append((metodo, caminho, dict(params)))
+            return 200, {"fonte": "partição", "medida": "latencia", "series": self.latencia}
+        return super().chamar(metodo, caminho, corpo, params, aceita)
+
+
+def _latencia_api():
+    return ApiLatencia({"2026-09-22": linha_dia("2026-09-22"), DIA: linha_dia(DIA)},
+                       [serie("repo", "sincronizar", "ok", "cadeira", 10), serie("acervo", "ler", "ok", "cadeira", 10)],
+                       latencia=[lat("repo", "sincronizar", b10000=3, b30000=5, b120000=2),
+                                 lat("repo", "commitar", sem_duracao=1, b250=4),
+                                 lat("acervo", "ler", b500=10),
+                                 lat("malote", None, sem_duracao=7)])
+
+
+def test_verbos_latencia_pede_d57_em_latencia_e_da_a_faixa_do_p50_e_p90(monkeypatch, capsys):
+    api = _latencia_api()
+    codigo, saida, _ = roda(monkeypatch, capsys, api, "verbos", "--desde", "2026-09-22", "--ate", DIA, "--latencia")
+    r = json_de(saida)
+    assert codigo == 0 and "por_verbo" in r, "a contagem segue no mesmo retorno"
+    assert api.medidas()[-1][2] == {"desde": "2026-09-22", "ate": DIA, "por": "tool,ato", "medida": "latencia"}
+    lat_ = r["latencia"]
+    assert list(lat_["por_verbo"]) == ["repo", "acervo"]                  # tempo estimado desc
+    sinc = lat_["por_ato"]["repo:sincronizar"]
+    assert sinc["n"] == 10 and sinc["sem_duracao"] == 0
+    assert sinc["p50"] == {"de": 10000, "ate": 30000} and sinc["p90"] == {"de": 30000, "ate": 120000}
+    assert sinc["tempo_estimado_ms"] == 3 * 7500 + 5 * 20000 + 2 * 75000
+    assert lat_["por_verbo"]["repo"]["n"] == 14 and lat_["por_verbo"]["repo"]["sem_duracao"] == 1
+    assert lat_["por_ato"]["repo:commitar"]["p90"] == {"de": 0, "ate": 250}
+    assert lat_["transporte"]["malote"] == {**lat_["transporte"]["malote"], "n": 0, "sem_duracao": 7, "p50": None}
+    assert "malote" not in lat_["por_verbo"] and not any(a.startswith("malote:") for a in lat_["por_ato"])
+
+
+def test_latencia_acima_do_ultimo_balde_tem_faixa_aberta():
+    linha = particao._linha_latencia({"acima": 3, "250": 1}, 0)
+    assert linha["p50"] == {"de": 120000, "ate": None} and linha["tempo_estimado_ms"] == 3 * 120000 + 125
+
+
+def test_verbos_latencia_resumo_ordena_pelo_tempo_e_csv_da_um_ato_por_linha(monkeypatch, capsys):
+    saida = roda(monkeypatch, capsys, _latencia_api(), "verbos", "--desde", "2026-09-22", "--ate", DIA,
+                 "--latencia", "--resumo")[1]
+    assert "verbos --latencia" in saida and "10 s–30 s" in saida
+    assert saida.index("repo:sincronizar") < saida.index("acervo:ler")
+    linhas = roda(monkeypatch, capsys, _latencia_api(), "verbos", "--desde", "2026-09-22", "--ate", DIA,
+                  "--latencia", "--csv")[1].splitlines()
+    assert linhas[0] == ",".join(particao.COLS_LATENCIA)
+    assert linhas[1].split(",")[:8] == ["repo", "sincronizar", "10", "0", "10000", "30000", "30000", "120000"]
+
+
+@pytest.mark.parametrize("args, trecho", [
+    (("dia", DIA, "--latencia"), "--latencia so vale em `verbos`"),
+    (("verbos", DIA, "--latencia", "--fonte", "bruto"), "nao o bruto"),
+])
+def test_latencia_fora_de_verbos_da_particao_e_uso_invalido(monkeypatch, capsys, args, trecho):
+    codigo, _, erro = roda(monkeypatch, capsys, ApiFalsa(erro=AssertionError("não chega à API")), *args)
+    assert codigo == 2 and trecho in erro
+
+
+def test_latencia_so_com_o_dia_aberto_e_uso_invalido(monkeypatch, capsys, tmp_path):
+    _dia_misto(tmp_path)
+    bruto_em(monkeypatch, tmp_path)
+    codigo, _, erro = roda(monkeypatch, capsys, ApiFalsa(erro=AssertionError("não chega à API")),
+                           "verbos", DIA, "--latencia", hoje=date.fromisoformat(DIA))
+    assert codigo == 2 and "--latencia le a particao" in erro
+
+
+# --- via no bruto (card #3414) -------------------------------------------------------------------------
+
+def _dia_com_via(pasta):
+    linhas = [
+        {"ts": _ts(0), "cadeira": "ti", "ordem_id": "o1", "tool": "repo", "ato": "estado", "exit_code": 0,
+         "via": "malote", "lote_id": "L1", "lote_n": 0, "dur_ms": 900},
+        {"ts": _ts(1), "cadeira": "ti", "ordem_id": "o1", "tool": "tarefas", "ato": "ler", "exit_code": 0,
+         "via": "malote", "lote_id": "L1", "lote_n": 1, "dur_ms": 40},
+        {"ts": _ts(2), "cadeira": "ti", "ordem_id": "o1", "tool": "release", "ato": "estado", "exit_code": 0,
+         "via": "run_command", "dur_ms": 30},
+        {"ts": _ts(3), "cadeira": "ti", "ordem_id": "o1", "tool": "mesa", "ato": "ver", "exit_code": 0, "dur_ms": 20},
+    ]
+    (pasta / oplog.nome_do_dia(DIA)).write_text("\n".join(json.dumps(l) for l in linhas) + "\n", encoding="utf-8")
+
+
+def test_eventos_do_bruto_levam_a_via_de_cada_giro(monkeypatch, capsys, tmp_path):
+    _dia_com_via(tmp_path)
+    bruto_em(monkeypatch, tmp_path)
+    r = json_de(roda(monkeypatch, capsys, ApiFalsa(), "eventos", DIA, "--tipo", "giro", "--limite", "5")[1])
+    assert [e["via"] for e in r["eventos"]] == ["malote", "malote", "run_command", None]
+
+
+def test_dia_do_bruto_conta_giros_por_via(monkeypatch, capsys, tmp_path):
+    _dia_com_via(tmp_path)
+    bruto_em(monkeypatch, tmp_path)
+    r = json_de(roda(monkeypatch, capsys, ApiFalsa(), "dia", DIA, "--fonte", "bruto")[1])
+    assert r["fonte"] == "bruto" and r["giros_por_via"] == {"malote": 2, "ausente": 1, "run_command": 1}
+    saida = roda(monkeypatch, capsys, ApiFalsa(), "dia", DIA, "--fonte", "bruto", "--resumo")[1]
+    assert "giros por via: malote=2 · ausente=1 · run_command=1" in saida
+
+
 def test_verbos_csv_tem_as_colunas_da_particao(monkeypatch, capsys):
     codigo, saida, _ = roda(monkeypatch, capsys, _verbos_api(), "verbos", "--desde", "2026-09-22", "--ate", DIA, "--csv")
     linhas = saida.splitlines()

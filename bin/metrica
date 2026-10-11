@@ -168,7 +168,9 @@ def e_veredito(reg):
 # O que o ops log grava por chamada de verbo (ops-server/server.py, `_audit`).
 CAMPOS_GIRO = ("ts", "cadeira", "ordem_id", "sessao_id", "tool", "ato",
                "exit_code", "dur_ms", "lote_id", "lote_n",
-               "evento_id", "schema_v", "classe", "origem", "escopo", "turno_id", "turno_fonte")
+               "evento_id", "schema_v", "classe", "origem", "escopo", "turno_id", "turno_fonte",
+               # o despachante do item (malote ou run_command); giro de tool direta nao tem (#3414)
+               "via")
 
 
 # --- a FONTE: particao ou bruto (card #3353) --------------------------------------
@@ -443,8 +445,10 @@ def resumo_do_dia(giros, cadeias):
     por_verbo = defaultdict(lambda: defaultdict(int))
     por_help = defaultdict(int)
     erros_tool = defaultdict(int)
+    por_via = defaultdict(int)
     for g in giros:
         por_fita[g["ordem_id"] or "-"] += 1
+        por_via[g.get("via") or "ausente"] += 1
         if g["falhou"]:
             erros_tool[g["tool"]] += 1
             por_verbo[g["tool"]][g["ato"] or "-"] += 1
@@ -463,6 +467,8 @@ def resumo_do_dia(giros, cadeias):
             "onde": [c for c in cadeias if c["profundidade"] == maior] if maior else [],
         },
         "giros_de_help": dict(sorted(por_help.items(), key=lambda kv: (-kv[1], kv[0]))),
+        # quem despachou o giro: malote, run_command ou `ausente` (tool chamada direto, sem lote) (#3414)
+        "giros_por_via": dict(sorted(por_via.items(), key=lambda kv: (-kv[1], kv[0]))),
         "total": {
             "giros": len(giros),
             "erros": sum(erros_tool.values()),
@@ -1182,6 +1188,9 @@ com `fonte: bruto`.
             deduplicacao por lote, ajuda); `dia` traz nas duas fontes as mesmas chaves `giros_por_tool_e_classe`,
             `giros_por_classe`, `giros_por_tool` e `giros_por_origem`, para conferir uma contra a outra
 --por       so em `turnos`: dia, superficie (default), cadeira, origem
+--latencia  so em `verbos`, da particao (D5.7, medida=latencia): por verbo e por verbo:ato, os baldes de dur_ms,
+            `sem_duracao`, a faixa do p50 e do p90 e o tempo total estimado; --resumo ordena pelo tempo, --csv da
+            uma linha por verbo:ato (#3414)
 
 exit: 0 ok · 1 so em investigar: nenhuma linha casa · 2 uso invalido · 3 a particao ou o rastreador nao respondeu ·
       4 nao ha log desse dia (so no bruto) ou, em investigar, o incidente nao esta aberto · 5 fora do contrato ou, em
@@ -1224,6 +1233,8 @@ def texto(ato, r):
         linhas.append("giros de help por verbo:")
         for k, v in r["giros_de_help"].items():
             linhas.append(f"  {v:5d}  {k}")
+        linhas.append("")
+        linhas.append("giros por via: " + " · ".join(f"{k}={v}" for k, v in r["giros_por_via"].items()))
     elif ato == "tateio":
         t = r["total"]
         linhas.append(f"{t['giros']} giros · {t['erros']} erros ({t['taxa_erro']:.1%}) · "
@@ -1297,8 +1308,8 @@ def _da_particao(ato, args, dias, rotulo, dia, hoje):
             texto_ = particao.dia_texto
         elif ato == "verbos":
             r = particao.verbos_da_particao(api, dias, rotulo, hoje, _bruto_ausente, TRANSPORTE,
-                                            args.cadeira or None)
-            texto_ = particao.verbos_texto
+                                            args.cadeira or None, latencia=args.latencia)
+            texto_ = particao.latencia_texto if args.latencia else particao.verbos_texto
         else:
             r = particao.turnos_da_particao(api, dias, rotulo, hoje, _bruto_ausente, por)
             texto_ = particao.turnos_texto
@@ -1308,7 +1319,8 @@ def _da_particao(ato, args, dias, rotulo, dia, hoje):
         return erro_gracioso(f"{VERBO} {ato}: a particao nao respondeu: {f}",
                              [*caminho, "o acervo e o banco: infra saude"], f.codigo if f.codigo in (1, 2, 3, 4, 5) else 3)
     if ato == "verbos" and args.csv:
-        for linha in particao.verbos_csv(r):
+        csv_ = particao.latencia_csv if args.latencia and "latencia" in r else particao.verbos_csv
+        for linha in csv_(r):
             print(linha)
     elif args.resumo:
         for linha in texto_(r):
@@ -1357,6 +1369,7 @@ def main(argv):
     p.add_argument("--fonte", default="")
     p.add_argument("--por", default="")
     p.add_argument("--resumo", action="store_true")
+    p.add_argument("--latencia", action="store_true")
     p.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true")
     args, _sobra = p.parse_known_args(argv[2:])
     if args.ajuda:
@@ -1391,6 +1404,13 @@ def main(argv):
             f"{VERBO} turnos: --fonte bruto nao vale em `turnos`",
             ["a medida de turnos so existe na particao (D5.8)",
              f"para o dia de hoje, ainda aberto: {VERBO} eventos --sessao <prefixo>"], 2)
+    if args.latencia and ato != "verbos":
+        return erro_gracioso(f"{VERBO} {ato}: --latencia so vale em `verbos`",
+                             [f"{VERBO} verbos --desde AAAA-MM-DD --ate AAAA-MM-DD --latencia --resumo"], 2)
+    if args.latencia and fonte_pedida == "bruto":
+        return erro_gracioso(f"{VERBO} verbos: --latencia le a particao (D5.7), nao o bruto",
+                             ["tire --fonte bruto; a janela tem de ter dia fechado (o dia aberto so o bruto tem)",
+                              f"o dur_ms de cada giro de hoje: {VERBO} eventos --tipo giro"], 2)
     if args.por and ato != "turnos":
         return erro_gracioso(f"{VERBO} {ato}: --por so vale em `turnos`",
                              [f"{VERBO} turnos [<dia>] --por dia,superficie,cadeira,origem"], 2)
@@ -1507,6 +1527,11 @@ def main(argv):
                  f"no bruto: {VERBO} {ato} ... --fonte bruto"], 2)
         if na_particao:
             return _da_particao(ato, args, dias, rotulo, dia, hoje)
+        if args.latencia:
+            return erro_gracioso(f"{VERBO} verbos: --latencia le a particao (D5.7), e a janela {rotulo} so tem o "
+                                 f"dia aberto ou pede --sessao/--azp",
+                                 [f"uma janela com dia fechado: {VERBO} verbos --desde AAAA-MM-DD --ate <ontem> --latencia",
+                                  f"o dur_ms de cada giro de hoje: {VERBO} eventos --tipo giro"], 2)
 
     fonte = FonteJsonl()
     giros, cadeias, sem_log = [], [], []
