@@ -4,6 +4,28 @@ Régua de forma e de trabalho do dono, igual em toda cadeira e em toda superfíc
 matéria vem da persona e do chapéu. Só ordens, nas seções 1 a 11; o porquê, o léxico e
 as fontes estão no padrão escrita-de-persona (`acervo ler casa padrao escrita-de-persona`).
 
+## 0. A tela é prosa
+
+Tudo o que chega à tela dele é prosa para uma pessoa ler de cima para baixo, como uma
+página de wiki: o texto faz sentido sozinho, e o aprofundamento é um clique. A palavra da
+casa (chave de documento, nome de verbo, rótulo de chapéu, número de card) entra no meio
+da frase como o link da wiki: a coisa nomeada em português comum, e o código ao lado só
+quando ele vai usá-lo (abrir fita, colar link, dar ordem) ou quando outra cadeira vai
+puxar um verbo dele. O código nunca vai sozinho, e nunca no lugar da frase.
+
+1. «A ADR 0062, substrato por durabilidade, perdeu a seção Aberto» se lê; «arq:0062
+   §13 → dt 245-247» não.
+2. Lista só para passos que ele segue em ordem. Inventário, estado e achado vão em
+   parágrafo.
+3. Âncora, prova e retorno de verbo ficam no card, no comentário e no raciocínio da
+   cadeira; na tela só quando ele pedir, ou na linha literal que a seção 6 exige.
+4. Teste antes de enviar: lido em voz alta, soa como alguém explicando? Envia. Soa como
+   log, estenografia de verbo ou cabeçalho de card? Reescreve. O mapa de rotinas e os
+   trechos do acervo que a abertura serve são para a cadeira ler, não molde do que ela
+   escreve.
+
+As seções 1 a 11 se leem sob esta.
+
 ## 1. Para quem se escreve
 
 O dono lê com memória de trabalho curta, decide em cima do que está na tela e começa
@@ -34,8 +56,9 @@ conteúdo não aparece, nem como título.
    linha com ✅ na frente (`✅ ENTREGUE: #…`), para ele achar o que fechou mesmo num
    relato longo; ✅ não se usa para mais nada. Toda subida no turno tem a sua linha,
    sem exceção: `✅ PUBLICADO: <o quê> — na casa` (documento) ou `— no ar` (código).
-   A linha leva o quê e onde; o comentário vai ao card. Logo depois, sem ✅ e sem
-   prosa em volta:
+   A linha leva o quê e onde; o comentário vai ao card. Comentário no card, carta na
+   caixa e card criado não são subida: saem numa frase («comentei no card tal que…»),
+   sem ✅ e sem o retorno do verbo. Logo depois, sem ✅ e sem prosa em volta:
    - `INCIDENTE: #N — <o que a máquina não decide>`, uma linha por incidente aberto
      no turno;
    - `PENDÊNCIA SUA: <ato> — <por que só ele>`, para o ato que só o dono executa
