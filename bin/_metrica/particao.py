@@ -50,7 +50,8 @@ SINAIS_QUE_FALTAM = {
     "verbo recusado": "casos: o nome do verbo que a porta recusou (hoje texto digitado, que não atravessa)",
     "ajuda": "dia, tateio, comportamento: o pedido de ajuda se deduz do argumento (--help), que não atravessa",
     "veredito": "dia, tateio: `repo git ... grep` sem achado é veredito e se deduz do argumento",
-    "via": "verbos: o despachante do lote (malote ou run_command) que carrega o item",
+    "via": "verbos: o despachante do lote (malote ou run_command) que carrega o item; no bruto, `metrica eventos` "
+           "e `metrica dia --fonte bruto` (`giros_por_via`) já o leem (#3414)",
     "poda_modo": "verbos: o modo da poda (inteiro, igual, intocavel) dos bytes servidos pelo transporte",
 }
 
@@ -209,9 +210,10 @@ COLS_VERBOS_PARTICAO = ("verbo", "giros", "erros", "taxa", "gramatica", "execuca
 
 
 def verbos_da_particao(api, dias: list[str], rotulo: str, hoje: date, bruto_ausente, transporte: tuple,
-                       cadeira: str | None = None) -> dict:
+                       cadeira: str | None = None, latencia: bool = False) -> dict:
     """`metrica verbos` pela partição, numa janela de dias. Dia sem passada fica fora da conta e dentro de
-    `cobertura` (e de `dias_sem_log`) com o motivo: a taxa da janela é a dos dias que a partição tem."""
+    `cobertura` (e de `dias_sem_log`) com o motivo: a taxa da janela é a dos dias que a partição tem. Com
+    `latencia`, também o tempo por verbo e por verbo:ato (`latencia_da_particao`, #3414)."""
     cob = cobertura(api, dias, hoje, bruto_ausente)
     base = {"dia": rotulo, "dias": dias, "dias_sem_log": _ausentes(cob), "fonte": FONTE,
             "versoes_extrator": _versoes(cob), "cobertura": cob}
@@ -241,9 +243,142 @@ def verbos_da_particao(api, dias: list[str], rotulo: str, hoje: date, bruto_ause
          "total": {"verbos": len(verbo), "giros": tg, "erros": te, "taxa": round(te / tg, 4) if tg else 0},
          "regra_de_erro": _regra_de_erro(),
          "so_no_bruto": list(SO_NO_BRUTO_VERBOS)}
+    if latencia:
+        r["latencia"] = latencia_da_particao(api, dias[0], dias[-1], transporte, cadeira)
     if cadeira:
         r["cadeira"] = cadeira
     return r
+
+
+# --- metrica verbos --latencia (card #3414) -------------------------------------------------------------
+
+# Os baldes de D5.7 em ms, na ordem: o nome do balde é o teto dele (`250` = até 250 ms), e `acima` passa de 120000.
+BALDES_MS = (250, 500, 1000, 2500, 5000, 10000, 30000, 120000)
+REGRA_LATENCIA = ("faixa do percentil = o balde onde ele cai (de, ate] em ms; `ate` nulo = acima de 120000. "
+                  "tempo estimado = soma de n x meio do balde, com `acima` contado a 120000 (piso). "
+                  "`sem_duracao` (dur_ms nulo, como a linha de fecho do malote) fica fora do percentil e do tempo")
+
+
+def _limites() -> list[tuple[int, int | None, str]]:
+    """(de, ate, nome do balde), na ordem de D5.7."""
+    saida, de = [], 0
+    for teto in BALDES_MS:
+        saida.append((de, teto, str(teto)))
+        de = teto
+    saida.append((de, None, "acima"))
+    return saida
+
+
+def _faixa(baldes: dict, n: int, p: float) -> dict | None:
+    """O balde onde cai o percentil `p` dos `n` giros com duração: o primeiro cuja contagem acumulada chega a p·n."""
+    if not n:
+        return None
+    alvo, acum = p * n, 0
+    for de, ate, nome in _limites():
+        acum += int(baldes.get(nome) or 0)
+        if acum >= alvo:
+            return {"de": de, "ate": ate}
+    return None
+
+
+def _tempo_estimado_ms(baldes: dict) -> int:
+    total = 0.0
+    for de, ate, nome in _limites():
+        total += int(baldes.get(nome) or 0) * ((de + ate) / 2 if ate is not None else de)
+    return round(total)
+
+
+def _linha_latencia(baldes: dict, sem_duracao: int) -> dict:
+    n = sum(int(baldes.get(nome) or 0) for _, _, nome in _limites())
+    return {"n": n, "sem_duracao": sem_duracao, "p50": _faixa(baldes, n, 0.5), "p90": _faixa(baldes, n, 0.9),
+            "tempo_estimado_ms": _tempo_estimado_ms(baldes),
+            "baldes": {nome: int(baldes.get(nome) or 0) for _, _, nome in _limites()}}
+
+
+def latencia_da_particao(api, desde: str, ate: str, transporte: tuple, cadeira: str | None = None) -> dict:
+    """D5.7 com medida=latência, por verbo e por verbo:ato, cada linha com os baldes, `sem_duracao`, a faixa do p50
+    e do p90 e o tempo total estimado; ordem: tempo estimado desc. O transporte (malote, ler_arquivo...) sai à parte,
+    como na contagem."""
+    por = ["tool", "ato"] + (["cadeira"] if cadeira else [])
+    series = medir_giros(api, desde, ate, por, medida="latencia").get("series", [])
+    if cadeira:
+        series = [s for s in series if (s.get("chave") or {}).get("cadeira") == cadeira]
+    soma_tool: dict = defaultdict(Counter)
+    soma_ato: dict = defaultdict(Counter)
+    sem_tool, sem_ato = Counter(), Counter()
+    for s in series:
+        chave = s.get("chave") or {}
+        tool, ato = chave.get("tool"), chave.get("ato") or "-"
+        for nome, n in (s.get("baldes") or {}).items():
+            soma_tool[tool][nome] += int(n or 0)
+            soma_ato[(tool, ato)][nome] += int(n or 0)
+        sem_tool[tool] += int(s.get("sem_duracao") or 0)
+        sem_ato[(tool, ato)] += int(s.get("sem_duracao") or 0)
+    def ordem(d: dict) -> dict:
+        return dict(sorted(d.items(), key=lambda kv: (-kv[1]["tempo_estimado_ms"], -kv[1]["n"], kv[0])))
+    tools = {t or "-": _linha_latencia(b, sem_tool[t]) for t, b in soma_tool.items()}
+    atos = {f"{t or '-'}:{a}": _linha_latencia(b, sem_ato[(t, a)]) for (t, a), b in soma_ato.items()
+            if t not in transporte}
+    return {"medida": "latencia", "regra": REGRA_LATENCIA,
+            "por_verbo": ordem({t: d for t, d in tools.items() if t not in transporte}),
+            "por_ato": ordem(atos),
+            "transporte": ordem({t: d for t, d in tools.items() if t in transporte})}
+
+
+def _ms(v: int | None) -> str:
+    if v is None:
+        return "…"
+    return f"{v} ms" if v < 1000 else f"{v / 1000:g} s"
+
+
+def _faixa_texto(f: dict | None) -> str:
+    if not f:
+        return "-"
+    return f"> {_ms(f['de'])}" if f["ate"] is None else f"{_ms(f['de'])}–{_ms(f['ate'])}"
+
+
+COLS_LATENCIA = ("verbo", "ato", "n", "sem_duracao", "p50_de_ms", "p50_ate_ms", "p90_de_ms", "p90_ate_ms",
+                 "tempo_estimado_s")
+
+
+def latencia_csv(r: dict) -> list[str]:
+    """Uma linha por verbo:ato, na ordem do tempo estimado. `ate` vazio = acima de 120000 ms."""
+    linhas = [",".join(COLS_LATENCIA)]
+    for chave, d in r["latencia"]["por_ato"].items():
+        verbo, _, ato = chave.partition(":")
+        p50, p90 = d["p50"] or {}, d["p90"] or {}
+        celulas = [verbo, ato, d["n"], d["sem_duracao"], p50.get("de"), p50.get("ate"), p90.get("de"), p90.get("ate"),
+                   round(d["tempo_estimado_ms"] / 1000, 1)]
+        linhas.append(",".join("" if c is None else str(c) for c in celulas))
+    return linhas
+
+
+def latencia_texto(r: dict, top_atos: int = 20) -> list[str]:
+    linhas = [_cabecalho("verbos --latencia", r), *_cobertura_texto(r["cobertura"])]
+    if r.get("resultado") == "ausente":
+        linhas.append("ausente: nenhum dia da janela está na partição")
+        return linhas
+    lat = r["latencia"]
+    total = sum(d["tempo_estimado_ms"] for d in lat["por_verbo"].values()) or 1
+    linhas.append("tempo por verbo, do maior tempo total estimado ao menor:")
+    linhas.append(f"{'verbo':16s} {'giros':>6s} {'s/dur':>5s} {'p50':>14s} {'p90':>14s} {'total':>9s} {'%':>5s}")
+    for v, d in lat["por_verbo"].items():
+        linhas.append(f"{v:16s} {d['n']:6d} {d['sem_duracao']:5d} {_faixa_texto(d['p50']):>14s} "
+                      f"{_faixa_texto(d['p90']):>14s} {d['tempo_estimado_ms'] / 1000:8.0f}s "
+                      f"{d['tempo_estimado_ms'] / total:5.0%}")
+    linhas.append("")
+    linhas.append(f"atos (top {top_atos} por tempo total estimado):")
+    for a, d in list(lat["por_ato"].items())[:top_atos]:
+        linhas.append(f"  {a:28s} {d['n']:6d} giros · p50 {_faixa_texto(d['p50'])} · p90 {_faixa_texto(d['p90'])} · "
+                      f"{d['tempo_estimado_ms'] / 1000:.0f}s")
+    if lat.get("transporte"):
+        linhas.append("")
+        linhas.append("transporte (não é verbo da planilha):")
+        for v, d in lat["transporte"].items():
+            linhas.append(f"  {v:14s} {d['n']:6d} com duração · {d['sem_duracao']:5d} sem · p50 {_faixa_texto(d['p50'])}")
+    linhas.append("")
+    linhas.append("regra: " + lat["regra"])
+    return linhas
 
 
 def verbos_csv(r: dict) -> list[str]:
