@@ -340,7 +340,8 @@ def _item(linha):
 # sem data nem sha no corpo, para o prefixo da abertura ficar byte-estável.
 
 ORDEM_MAPA = ("LER", "LEVANTAR", "CONFERIR", "REGISTRAR", "PUBLICAR", "REPORTAR")
-CAB_MAPA = "ROTINAS — pergunta → chamada → o que o retorno diz"
+CAB_MAPA = ("ROTINAS da casa. Cada parágrafo diz quando a rotina serve, que verbo chamar e o que "
+            "o retorno diz, e aponta o guia com o passo a passo.")
 _RE_MAPA = re.compile(r"^## Mapa[ \t]*\n.*?^```[^\n]*\n(?P<bloco>.*?)^```", re.M | re.S)
 
 def extrai_mapa(corpos):
