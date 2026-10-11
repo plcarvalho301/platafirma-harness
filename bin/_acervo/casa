@@ -44,6 +44,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _identidade  # noqa: E402
+import _spec_montada  # noqa: E402
 import _suporte  # noqa: E402
 from _suporte import SUPORTE  # noqa: E402
 
@@ -74,8 +75,18 @@ def indeterminavel(motivo, detalhe=""):
     sys.exit(5)
 
 
-def _q(sql, alvo="acervo.casa"):
-    """SELECT que devolve UM valor json (json_agg / json_build_object). None = sem linha."""
+class _FonteFora(Exception):
+    pass
+
+
+def _q(sql, alvo="acervo.casa", falhar=True):
+    """SELECT que devolve UM valor json (json_agg / json_build_object). None = sem linha.
+    `falhar=False`: fonte fora levanta _FonteFora em vez de sair 5 (montagem da spec, que não
+    pode derrubar a leitura do corpo já impresso)."""
+    def _fora(motivo, detalhe=""):
+        if falhar:
+            indeterminavel(motivo, detalhe)
+        raise _FonteFora(motivo)
     env = dict(os.environ)
     env.setdefault("DOCKER_HOST", "unix:///run/user/1001/docker.sock")
     try:
@@ -84,17 +95,17 @@ def _q(sql, alvo="acervo.casa"):
              "-v", "ON_ERROR_STOP=1", "-c", sql],
             capture_output=True, env=env)
     except FileNotFoundError:
-        indeterminavel("docker nao encontrado no PATH: acervo.casa inalcançável")
+        _fora("docker nao encontrado no PATH: acervo.casa inalcançável")
     if r.returncode != 0:
-        indeterminavel(f"psql falhou lendo {alvo} (rc={r.returncode})",
-                       r.stderr.decode("utf-8", "replace"))
+        _fora(f"psql falhou lendo {alvo} (rc={r.returncode})",
+              r.stderr.decode("utf-8", "replace"))
     saida = r.stdout.decode("utf-8", "replace").strip()
     if not saida:
         return None
     try:
         return json.loads(saida)
     except ValueError as e:
-        indeterminavel(f"psql devolveu json ilegível lendo {alvo} ({e})", saida[:300])
+        _fora(f"psql devolveu json ilegível lendo {alvo} ({e})", saida[:300])
 
 
 def _lit(s):
@@ -653,7 +664,23 @@ def pagina(corpo, offset=0, limite=None):
             fim -= 1
     return bruto[ini:fim].decode("utf-8", "replace"), total, (fim if fim < total else None)
 
-def ler(especie, seletor, quero_json, situacao=False, offset=0):
+def montagem(linha, completo):
+    """(dados, texto) da montagem na leitura da spec (arq:0126 §11). Banco fora: (None, a linha
+    que o diz) — nunca derruba a leitura do corpo."""
+    refs = _spec_montada.referentes_do_sobre(completo)
+    dados = None
+    if refs:
+        try:
+            dados = _q(_spec_montada.sql(_lit, refs, linha["id"]), "golden record", falhar=False)
+        except _FonteFora as e:
+            sys.stderr.write(f"montagem da spec indisponível: {e}\n")
+            dados = None
+    else:
+        dados = {}
+    return dados, _spec_montada.render(dados, refs)
+
+
+def ler(especie, seletor, quero_json, situacao=False, offset=0, cru=False):
     normalizar(especie, seletor)   # forma inválida é erro de uso (exit 2) antes de tocar o banco
     info = _especie(especie)
     linha = resolver(especie, seletor, info)
@@ -674,14 +701,19 @@ def ler(especie, seletor, quero_json, situacao=False, offset=0):
             print(f"  a vigente: acervo ler casa {especie} {linha['substituida_por']}")
         return 0
 
-    corpo = (_q(f"select json_build_object('corpo', c.corpo) from acervo.casa c "
-                f"where c.id = {_lit(linha['id'])}::uuid;") or {}).get("corpo") or ""
-    corpo, total, proximo = pagina(corpo, offset)
+    completo = (_q(f"select json_build_object('corpo', c.corpo) from acervo.casa c "
+                   f"where c.id = {_lit(linha['id'])}::uuid;") or {}).get("corpo") or ""
+    corpo, total, proximo = pagina(completo, offset)
+    # arq:0126 §11: a spec lida pelo acervo traz, no fim do corpo, o que o golden record serve.
+    montar = especie == "spec" and not cru and proximo is None
     if quero_json:
         doc = _item(linha) | {"corpo": corpo, "bytes_total": total, "offset": offset,
                               "truncado": proximo is not None, "next_offset": proximo}
         if situacao:
             doc["situacao"] = sit
+        if montar:
+            dados, texto = montagem(linha, completo)
+            doc["montado"] = {"dados": dados, "texto": texto}
         print(json.dumps(doc, ensure_ascii=False, indent=2))
         return 0
     print(marca_linha(linha, especie))
@@ -692,6 +724,8 @@ def ler(especie, seletor, quero_json, situacao=False, offset=0):
     sys.stdout.write(corpo)
     if not corpo.endswith("\n"):
         sys.stdout.write("\n")
+    if montar:
+        sys.stdout.write(montagem(linha, completo)[1])
     if proximo is not None:
         sys.stdout.write(f"truncado em {proximo} de {total} bytes; continue com --offset {proximo}"
                          f" (acervo ler casa {especie} {ident(linha)} --offset {proximo})\n")
@@ -703,9 +737,11 @@ USO = """uso:
   acervo listar casa <especie> [--todas] [--dono <cadeira>] [--situacao] [--json]
   acervo listar casa [<especie>] --sobre <classe> <chave> [--todas] [--json]
   acervo listar casa guia --mapa                          as linhas de mapa das rotinas (peça `rotinas`)
-  acervo ler    casa <especie> <chave> [--situacao] [--json] [--offset <bytes>]
+  acervo ler    casa <especie> <chave> [--situacao] [--json] [--offset <bytes>] [--cru]
                                                           documento longo vem em páginas de 45000 bytes:
                                                           "truncado em N de M bytes; continue com --offset N"
+                                                          spec: no fim, "Montado na leitura" com o que o
+                                                          golden record serve (arq:0126 §11); --cru tira
 
 <chave>: adr <serie>:NNNN (arq:0075; arq:75 e 75 resolvem se não houver ambiguidade) ou o
 <slug> do arquivo NNNN-<slug>.md (se único), minuta NNNN, datado <AAAA-MM-DD>-<slug> (ou só
@@ -726,7 +762,8 @@ def main(argv):
     situacao = "--situacao" in resto
     todas = "--todas" in resto
     quero_mapa = "--mapa" in resto
-    resto = [a for a in resto if a not in ("--json", "--situacao", "--todas", "--mapa")]
+    cru = "--cru" in resto
+    resto = [a for a in resto if a not in ("--json", "--situacao", "--todas", "--mapa", "--cru")]
 
     dono = None
     offset = 0
@@ -776,7 +813,7 @@ def main(argv):
     if ato == "ler":
         if len(pos) != 2:
             morre("acervo ler casa <especie> <chave>: faltam argumentos.\n\n%s" % USO, 2)
-        return ler(pos[0], pos[1], quero_json, situacao=situacao, offset=offset)
+        return ler(pos[0], pos[1], quero_json, situacao=situacao, offset=offset, cru=cru)
     morre("acervo casa: ato desconhecido '%s' (ler, listar).\n\n%s" % (ato, USO), 2)
 
 
