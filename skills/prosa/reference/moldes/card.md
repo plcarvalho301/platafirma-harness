@@ -1,30 +1,74 @@
-# molde — corpo de card (épico e feature)
+# molde — corpo de card (épico e feature): o two-pager
 
 Forma: rótulos por nível, da ADR 0096 (padrão de card por nível, de gestão estratégica);
-o esqueleto sai de `tarefas modelo <nível>`. Voz dentro de cada rótulo: styleguide §3.3
-(fonte: `acervo ler casa padrao styleguide-da-wiki`). Divergiu, a fonte é o styleguide.
+o esqueleto sai de `tarefas modelo <nível>`. Régua fina de cada rótulo: anexo de moldes, §7
+(`acervo ler casa padrao styleguide-moldes-por-tipo`). Ciclo e momento de cada rótulo: guia
+discovery (`acervo ler casa guia discovery`). Divergiu, a fonte é o anexo.
 
-Leitor: o dono, na tela do rastreador ou no celular, decidindo sem abrir mais nada e sem
-busca à mão. Teste de pronto: quem lê só o título e a primeira linha de cada rótulo sabe
-o que muda, para quem, e como se vai saber que mudou.
+Leitor: o dono, para validar, e as cadeiras, para procurar onde quebra. Durante o discovery,
+o corpo é o único texto que vale: tem um autor, a cadeira que conduz a frente, e uma versão.
+Comentário contribui; o corpo é o que vale.
 
-1. **Título** — o que a pessoa passa a conseguir, em palavras comuns, até doze palavras.
-   Sem metáfora, slogan ou jargão da casa.
+Teste de pronto: quem lê só o Título, a Solução e o Fora sabe o que muda, como se usa e o que
+não vem.
+
+## Esqueleto
+
+```
+<Título: o que a pessoa passa a conseguir, até doze palavras>
+
+Problema:      como é hoje, como quem sofre veria, com um caso; até quatro frases, sem número
+Resultado:     quem passa a conseguir o quê; o outcome vai marcado «não fecha card»
+Medida:        escala · medidor · valor hoje · mínimo aceitável — uma linha
+Apetite:       quanto vale gastar · o que se corta primeiro — previsão de quem escreve   (opcional)
+Fora:          o que esta frente não entrega e alguém pediria; para onde vai, quando vai
+Solução:       a solução contada como uso: «Ao <momento>: quem faz o quê, e o que vê»
+Peças:         numeradas: o que vai existir (lugar, ato, regra); regra nova diz quem a cobra
+Aberto:        prosa do autor: o que está por decidir, cada item com quem responde
+Produtos documentais: um por linha: ADR, spec da peça, documento, dado, emenda   (feature)
+Sai quando:    na lapidação, a frase; na formalização, o comando que prova   (feature)
+Quebra:        escrita na formalização: <data> — filhas, uma por linha, e o aviso de enfileiramento
+```
+
+Não há rótulo de fontes nem Continuidade. Fonte entra como comentário `insumo`; o que
+sustenta a peça depois da entrega mora na spec dela.
+
+## As três famílias
+
+- **A aposta** (Título, Problema, Resultado, Medida, Apetite, Fora): para de mudar na aposta e
+  fica. O Fora ainda cresce com os cortes da entrega.
+- **A forma** (Solução, Peças, Aberto): sai do card quando o destino existe. A Solução vira
+  link para a spec da peça; as Peças, para as stories, pela Quebra. No lugar fica o link com o
+  nome do que aponta e uma linha do que muda para quem usa:
+  `Solução: a cadeira valida lendo um texto que descreve a solução · spec do comentário tipado, cenários C1 a C5`.
+  Sem spec, a Solução é a única descrição e fica.
+- **O índice** (Produtos documentais, Sai quando, Quebra): completo na formalização.
+
+## A voz, rótulo a rótulo
+
+1. **Título** — palavras comuns, sem metáfora, slogan ou jargão da casa.
 2. **Rótulos** — um por linha, linha em branco antes do seguinte. Frases curtas, uma ideia
    por frase, voz ativa.
-3. **Problema** — o que acontece hoje, como quem sofre veria, com um caso concreto; até
-   quatro frases. A prova vai numa linha `Base:` ao fim, cada item com o nome do que é,
-   nunca em parênteses no meio da frase.
-4. **Resultado** — quem passa a conseguir o quê; mais de um ganho vira lista.
-5. **Medida** — uma linha: escala · medidor · valor hoje · mínimo.
-6. **Fora** — lista, um item por linha.
-7. **Quebra** — data na primeira linha; depois uma frente por linha, numerada na ordem de
-   execução: nome em palavras comuns, estado, card.
-8. **Sai quando** e **Continuidade** (só feature) — uma frase cada; `Sai quando` traz o
-   comando ou a consulta que prova.
+3. **Problema** — caso, não tema. O número vai à Medida.
+4. **Resultado** — mais de um ganho vira lista.
+5. **Apetite** — as duas partes; sem o que se corta, é estimativa, não apetite.
+6. **Fora** — lista; não proíbe. O que a casa decide não fazer é comentário `decisão`.
+7. **Solução** — cada item abre pelo momento ou pela pessoa («Ao lapidar:», «No parecer:»).
+   Presente do indicativo. Sem nome de arquivo, campo ou função. Até sete momentos.
+8. **Peças** — `1.`, `2.`… uma linha cada. Peça sem momento sobra; momento sem peça é
+   promessa sem lugar.
+9. **Aberto** — prosa, não lista de comentários: o estado de cada comentário mora no fecho
+   dele. Na aposta, linha que sobra diz «fica aberto de propósito:» e o risco.
+10. **Produtos documentais**, **Sai quando**, **Quebra** — como no esqueleto; na formalização,
+    cada linha ganha o link do que foi servido.
 
-Story e task: só o núcleo. Quem lê é quem executa, e os passos numerados da ADR 0096 já
-são a forma.
+No épico, as Peças são as features, e a Quebra lista as mesmas features.
+
+Tamanho: perto de cinco mil caracteres. Passar muito disso indica solução concreta demais ou
+feature que é épico.
+
+Story e task: só o núcleo; quem lê é quem executa, e os rótulos da ADR 0096 já são a forma.
+A story que sai de uma formalização tem molde próprio: `story-derivada.md`.
 
 Todo número de card, código de ADR ou seção vem com o nome do que aponta. Parede de texto
 sem quebra é falta, por melhor que seja cada frase.
