@@ -164,6 +164,75 @@ def cmd_orfaos(argv: list[str]) -> int:
                     achados.append(("service account sem sujeito",
                                     f"client {cid} atua no realm e nenhum sujeito o declara"))
 
+    # 5b. Realm: conta HUMANA sem linha em sujeitos.yaml (#3419). Ela passa no login e o PDP
+    #     nega tudo por falta de papel e dominio: nao e brecha, e decisao pendente do dono
+    #     (conceder ou desligar). Sem este achado o verbo dizia "conta em dia" com as contas de
+    #     recuperacao do #3069 negadas na abertura de sessao (medido em 10/10/2026).
+    if realm_medido:
+        rc, saida = kcadm("get", "users", "-r", "platafirma", "--fields", "id,username,enabled")
+        if rc != 0:
+            realm_medido = False
+            print("realm: NAO MEDIDO — kcadm nao listou as contas nesta sessao")
+        else:
+            import json as _json
+            try:
+                contas = _json.loads(saida)
+            except ValueError:
+                contas = None
+            if not isinstance(contas, list):
+                realm_medido = False
+                print("realm: NAO MEDIDO — lista de contas ilegivel")
+            else:
+                chaves = {str(k).lower() for k in suj}
+                for c in contas:
+                    cid, uname = str(c.get("id") or ""), str(c.get("username") or "")
+                    if cid.lower() in chaves or uname.lower() in chaves:
+                        continue
+                    estado = "habilitada" if c.get("enabled", True) else "desabilitada"
+                    achados.append(("conta sem projecao",
+                                    f"conta {uname or cid} ({cid[:8]}, {estado}) entra no realm e "
+                                    f"nao tem linha em sujeitos.yaml: o PDP nega tudo; conceder ou "
+                                    f"desligar e decisao do dono"))
+
+    # 5c. Vocabulario do registro contra o PAP (#3419). O registro dizia 9 papeis e o PAP 8
+    #     (pesquisador-externo saiu do PAP em 02/09/2026 e seguiu vigente no registro), e
+    #     nada media. Registro nao alcancado e medicao incompleta, como o realm.
+    registro_medido = True
+    acesso_bin = HARNESS / "bin" / "acesso"
+    if not acesso_bin.exists():
+        acesso_bin = Path(os.environ.get("PF_BIN", release() / "harness" / "bin")) / "acesso"
+    try:
+        rv = subprocess.run([str(acesso_bin), "vocabulario", "--json"],
+                            capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        rv = None
+        print(f"registro: NAO MEDIDO — {type(e).__name__}")
+    import json as _json
+    vocab = None
+    if rv is not None and rv.returncode == 0:
+        try:
+            vocab = _json.loads(rv.stdout.strip() or "[]")
+        except ValueError:
+            vocab = None
+    if not isinstance(vocab, list):
+        registro_medido = False
+        if rv is not None:
+            print("registro: NAO MEDIDO — `acesso vocabulario` nao respondeu")
+    else:
+        eixos_pap = carrega(POLITICA).get("eixos") or {}
+        for eixo in ("dominio", "papel", "tema"):
+            no_pap = set((eixos_pap.get(eixo) or {}).keys())
+            no_reg = {v["valor"] for v in vocab
+                      if v.get("eixo") == eixo and v.get("estado") != "extinto" and v.get("valor") != "-"}
+            for v in sorted(no_reg - no_pap):
+                cura = ("ato de destino de seg:0007" if eixo == "dominio"
+                        else "`acesso politica importar` extingue")
+                achados.append(("vocabulario sem PAP",
+                                f"{eixo} {v} vigente no registro e ausente do PAP ({cura})"))
+            for v in sorted(no_pap - no_reg):
+                achados.append(("vocabulario sem registro",
+                                f"{eixo} {v} no PAP e ausente do registro (`acesso politica importar`)"))
+
     # 6. Auditoria contra projecao: quem ATUOU nos ultimos dias e nao esta declarado,
     #    e credencial declarada que nao atuou nenhuma vez. Os dois sao superficie sem
     #    funcao — um por baixo do PAP, outro sobrando no realm.
@@ -217,6 +286,10 @@ def cmd_orfaos(argv: list[str]) -> int:
     for classe, texto in notas:
         print(f"nota: {classe}  {texto}")
     # Veredito no EXIT, nao no meio do relatorio: realm nao medido reprova duro.
+    if not registro_medido:
+        print("\nREPROVADO: registro NAO medido — resultado INCOMPLETO, nao vale como "
+              "'sem orfaos'. exit 5 (medicao incompleta), distinto de 0/1.")
+        return 5
     if not realm_medido:
         print("\nREPROVADO: realm NAO medido — resultado INCOMPLETO, nao vale como "
               "'sem orfaos'. exit 5 (medicao incompleta), distinto de 0/1.")
