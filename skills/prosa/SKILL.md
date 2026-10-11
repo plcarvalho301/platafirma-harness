@@ -1,6 +1,6 @@
 ---
 name: prosa
-description: Use quando for ESCREVER ou REVISAR texto que uma pessoa vai ler em git, na wiki ou no rastreador, antes de publicar: página de wiki, corpo de card (épico e feature, antes de `tarefas criar` ou `tarefas editar` com corpo), lista de verificação, benchmark, parecer, runbook, e a voz (não a forma) de adr, spec e ato normativo. Em ato normativo e política interna, a forma é da skill redacao-normativa, que roda antes; esta faz a passada de voz nos dispositivos e escreve a nota e o material de apoio. Um motor comum a todo tipo (tira jargão de IA, faz entender, voz da casa) e um molde por tipo em reference/moldes/. Régua: acervo ler casa padrao styleguide-da-wiki. NÃO dispare para acervo cru, mural ou fila, produto de outra cadeira com régua própria (informe, apreciação, estimativa) nem resposta de chat.
+description: Use quando for ESCREVER ou REVISAR texto que uma pessoa vai ler em git, na wiki ou no rastreador, antes de publicar: página de wiki, corpo de card (épico e feature no two-pager, antes de `tarefas criar` ou `tarefas editar` com corpo), comentário tipado de discovery, story derivada de uma formalização, lista de verificação, benchmark, parecer, runbook, e a voz (não a forma) de adr, spec e ato normativo. Em ato normativo e política interna, a forma é da skill redacao-normativa, que roda antes; esta faz a passada de voz nos dispositivos e escreve a nota e o material de apoio. Um motor comum a todo tipo (tira jargão de IA, faz entender, voz da casa) e um molde por tipo em reference/moldes/. Régua: acervo ler casa padrao styleguide-da-wiki. NÃO dispare para acervo cru, mural ou fila, produto de outra cadeira com régua própria (informe, apreciação, estimativa) nem resposta de chat.
 cadeiras: todas (matéria de escrita legível por humano em git/wiki). Dona da régua é produto (spec §5 + anexo styleguide-moldes-por-tipo.md); dono da skill, como implementadora, é o arquiteto. A estrutura dos tipos é de dados (acervo.especie_tipo).
 compatibility: régua canônica na spec e no anexo de moldes; servida em Operar:styleguide (wiki viva). Motor agnóstico de superfície; molde por tipo em reference/moldes/. A conduta do dono (abertura/dono.md) é referência de voz, não isenção de regra. Catálogo de marcas por extenso em reference/marcas-pt-br.md.
 ---
@@ -136,16 +136,24 @@ fina no anexo de produto —, não de `especie_tipo`.
    Aponta para o canônico do dono do formato (arquiteto, para adr e spec; direito, pela
    skill `redacao-normativa`, para ato normativo e política interna) e aplica só
    a voz — o motor roda, a especialização por estrato não. Regra geral: onde o tipo
-   tem forma canônica própria, herda a forma e rege só a voz. Estes moram no git, não
-   na wiki; a skill topa com eles só se colados lá.
+   tem forma canônica própria, herda a forma e rege só a voz. A forma da spec é a da
+   ADR 0126 (spec é referência técnica de peça viva); a voz das seções Em uma tela e
+   Comportamento está no anexo de moldes, §5. Estes moram no git, não na wiki; a skill
+   topa com eles só se colados lá. Todo documento derivado termina com a seção Fontes,
+   de linha única (anexo de moldes, §9).
 3. **Ciclo-de-vida** (minuta, roadmap, rascunho — NÃO é `especie_tipo`) → molde de
    prosa próprio; o roteador não os resolve como espécie do acervo. A minuta é
-   deliberação em trânsito e vira adr ou spec ao formalizar.
+   deliberação em trânsito e vira adr ou spec ao formalizar. A minuta foi absorvida
+   pelo card (épico #3365) e sai depois da F3; até lá, vale só para as que já existem.
 4. **Página de wiki** (verbete-de-conceito) → `reference/moldes/verbete-de-conceito.md`.
-5. **Corpo de card** (épico e feature, antes de `tarefas criar` ou `tarefas editar`
-   com corpo) → `reference/moldes/card.md`. A forma, os rótulos por nível, vem de
-   `tarefas modelo <nível>`; a skill rege a voz dentro do rótulo. Story e task: só o
-   núcleo.
+5. **Card e comentário de discovery:**
+   - corpo de épico e feature, antes de `tarefas criar` ou `tarefas editar` com corpo
+     → `reference/moldes/card.md`, o two-pager. A forma, os rótulos por nível, vem de
+     `tarefas modelo <nível>`; a skill rege a voz dentro do rótulo;
+   - comentário de discovery, antes de `tarefas comentar` num card de épico ou feature
+     no funil → `reference/moldes/comentario-tipado.md`;
+   - story que sai de uma formalização → `reference/moldes/story-derivada.md`;
+   - story e task sem pai: só o núcleo.
 
 ## Ato normativo — a ponte com a `redacao-normativa`
 
