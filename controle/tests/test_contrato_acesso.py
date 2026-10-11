@@ -463,3 +463,66 @@ def test_revogar_por_saiu_exit_2_e_nao_grava(tmp_path):
         assert r.returncode == 2, r.stdout + r.stderr
         assert LINHA_POR_SAIU in r.stderr
     assert not _gravou(log)
+
+# ==============================================================================
+# Card #3419: recusa do registro nao e "fora do ar"; importar nao sai 0 com falha;
+# so os tres eixos do registro; papel fora do PAP extingue; orfaos mede o vocabulario
+# ==============================================================================
+
+def _docker_que_grava(tmp_path, corpo_extra=""):
+    log = tmp_path / "sql.log"
+    corpo = (
+        'sql="$(cat)"\n'
+        f'printf \'%s\\n%s\\n---\\n\' "$*" "$sql" >> "{log}"\n'
+        + corpo_extra
+    )
+    return _docker_de_fixture(tmp_path, corpo), log
+
+
+def test_recusa_do_registro_e_recusa_nao_fora_do_ar(tmp_path):
+    env, _ = _docker_que_grava(tmp_path,
+        'echo "ERROR:  new row violates check constraint eixo_valor_eixo_check"; exit 3\n')
+    r = run_acesso("politica", "importar", env=env)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "registro recusou" in r.stderr
+    assert "fora do ar" not in r.stderr
+    assert "vocabulario importado" not in r.stdout
+
+
+def test_importar_so_eixos_do_registro_e_extingue_papel_fora_do_pap(tmp_path):
+    env, log = _docker_que_grava(tmp_path)
+    r = run_acesso("politica", "importar", env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    sql = log.read_text()
+    assert "'unidade-organizacional'" not in sql
+    assert "fica fora do registro por desenho" in r.stderr
+    assert "set estado = 'extinto', destino = 'dissolucao'" in sql
+    assert "where eixo = 'papel'" in sql
+    assert "'reino'" in sql and "valor not in (" in sql
+    # dominio so se aponta: nenhum update de estado sobre dominio
+    assert "from concessao.eixo_valor where eixo = 'dominio' and estado <> 'extinto' and valor not in" in sql
+    assert "sucessor = null where eixo = 'dominio'" not in sql
+    # transacao unica: -1 nos argumentos do psql
+    assert " -1 " in f" {sql.splitlines()[0]} "
+
+
+def test_orfaos_acusa_papel_vigente_que_o_pap_nao_declara(tmp_path):
+    vocab = json.dumps([
+        {"eixo": "papel", "valor": "pesquisador-externo", "estado": "vigente", "pai": "", "rotulo": "x"},
+        {"eixo": "papel", "valor": "reino", "estado": "vigente", "pai": "", "rotulo": "x"},
+        {"eixo": "papel", "valor": "velho", "estado": "extinto", "pai": "", "rotulo": "x"},
+    ])
+    env, _ = _docker_que_grava(tmp_path, f"printf '%s\\n' '{vocab}'\n")
+    r = run_acesso("orfaos", "--sem-realm", env=env)
+    assert r.returncode == 5          # realm nao medido segue reprovando
+    assert "papel pesquisador-externo vigente no registro e ausente do PAP" in r.stdout
+    assert "papel velho" not in r.stdout   # extinto nao e divergencia
+    assert "papel fornecedor no PAP e ausente do registro" in r.stdout
+
+
+def test_orfaos_registro_fora_reprova_como_nao_medido(tmp_path):
+    env = _docker_de_fixture(tmp_path, 'echo "Error: No such container" >&2; exit 1\n')
+    r = run_acesso("orfaos", "--sem-realm", env=env)
+    assert r.returncode == 5
+    assert "registro: NAO MEDIDO" in r.stdout
+    assert "nenhum residuo" not in r.stdout

@@ -36,10 +36,20 @@ morre() {
   exit 1
 }
 
+# Duas falhas que NAO sao a mesma (#3419): o registro fora do ar (docker ou conexao: exit 3,
+# dependencia) e o registro RECUSANDO o que se mandou (erro de SQL, restricao, FK: exit 1).
+# Chamar recusa de "fora do ar" mandou investigar banco saudavel em 11/10/2026.
+# psql sai 3 em erro de script com ON_ERROR_STOP e 1 em erro de comando unico; os dois
+# trazem "ERROR:" na saida. Conexao recusada sai 2, docker sai 125-127 ou 1 sem "ERROR:".
 psql_() {
   local rc=0 out
   out="$(docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" "$@" 2>&1)" || rc=$?
   if [ "$rc" -ne 0 ]; then
+    if [ "$rc" -ne 2 ] && printf '%s\n' "$out" | grep -q '^ERROR:'; then
+      printf 'acesso: registro recusou: %s\n' "$(printf '%s\n' "$out" | grep -m1 '^ERROR:' | sed 's/^ERROR:[[:space:]]*//')" >&2
+      printf '%s\n' "$out" >&2
+      exit 1
+    fi
     printf 'acesso: registro fora do ar: contêiner %s não responde\n' "$DB_CONTAINER" >&2
     printf '%s\n' "$out" >&2
     exit 3
@@ -408,20 +418,58 @@ try:
 except Exception as e:
     print(f'acesso: política inválida: {e}', file=sys.stderr)
     sys.exit(1)
+import re
+# O registro guarda TRES eixos (CHECK em concessao.eixo_valor, platafirma-core
+# deploy/identidade/init/002_concessao.sql). `unidade-organizacional` mora no PAP e nos
+# eventos de org, nunca no registro: e desenho, nao falha, e por isso se declara e nao se manda.
+NO_REGISTRO = ('dominio', 'papel', 'tema')
+VALOR = re.compile(r'^[a-z0-9][a-z0-9-]{1,62}$')
+def q(s):
+    return "'" + str(s).replace("'", "''") + "'"
 d = yaml.safe_load(politica_path.read_text('utf-8'))
-for eixo, itens in (d.get('eixos') or {}).items():
-    for valor, corpo in (itens or {}).items():
+eixos = d.get('eixos') or {}
+for eixo in eixos:
+    if eixo not in NO_REGISTRO:
+        print(f'acesso: eixo {eixo} fica fora do registro por desenho (so dominio, papel e tema); nao importado', file=sys.stderr)
+for eixo in NO_REGISTRO:
+    itens = eixos.get(eixo) or {}
+    declarados = []
+    for valor, corpo in itens.items():
+        if not VALOR.match(str(valor)):
+            print(f'acesso: valor fora do formato do registro: {eixo} {valor}', file=sys.stderr)
+            sys.exit(1)
         corpo = corpo or {}
-        rot = (corpo.get('rotulo') or valor).replace("'", "''")
+        declarados.append(valor)
         pai = corpo.get('pai')
-        pai_sql = "'" + pai + "'" if pai else 'null'
+        pai_sql = q(pai) if pai else 'null'
+        # Papel e tema voltam a vigente se o PAP os declara de novo; dominio nao tem o estado
+        # mexido por import: o ciclo dele e o ato de destino de seg:0007.
+        revive = (", estado = 'vigente', destino = null, sucessor = null"
+                  if eixo != 'dominio' else '')
         print(f"insert into concessao.eixo_valor (eixo, valor, rotulo, pai) values "
-              f"('{eixo}', '{valor}', '{rot}', {pai_sql}) on conflict (eixo, valor) "
-              f"do update set rotulo = excluded.rotulo, pai = excluded.pai;")
+              f"({q(eixo)}, {q(valor)}, {q(corpo.get('rotulo') or valor)}, {pai_sql}) "
+              f"on conflict (eixo, valor) do update set rotulo = excluded.rotulo, "
+              f"pai = excluded.pai{revive};")
+    fora = (" and valor not in (" + ", ".join(q(v) for v in declarados) + ")") if declarados else ''
+    if eixo == 'dominio':
+        # Apontar, nao extinguir: dominio extinto derruba concessao, e o destino (heranca,
+        # subsuncao, dissolucao) e decisao com sucessor, nao efeito colateral de import.
+        print(f"select 'dominio fora do PAP: ' || valor || ' (ato de destino pendente, seg:0007)' "
+              f"from concessao.eixo_valor where eixo = 'dominio' and estado <> 'extinto'{fora};")
+    else:
+        # Papel e tema morrem por ato proprio (003_dominio_e_instrumento.sql): saiu do PAP,
+        # extingue por dissolucao. O `-` do tema e reservado da forma do token e fica.
+        print(f"update concessao.eixo_valor set estado = 'extinto', destino = 'dissolucao', "
+              f"sucessor = null where eixo = {q(eixo)} and estado <> 'extinto' "
+              f"and valor <> '-'{fora} returning 'extinto: ' || eixo || ' ' || valor;")
 PY
 )" || exit 1
-      printf '%s\n' "$sql_cmds" | psql_ -v ON_ERROR_STOP=1
+      # Sem pipe: psql_ numa subshell de pipe saia 3 e o verbo seguia, imprimia "importado" e
+      # saia 0 (medido em 11/10/2026, #3419). Transacao unica: ou o vocabulario inteiro, ou nada.
+      local saida_imp
+      saida_imp="$(psql_ -1 -tAq -v ON_ERROR_STOP=1 <<<"$sql_cmds")" || exit $?
       printf 'vocabulario importado de %s\n' "$POLITICA"
+      printf '%s\n' "$saida_imp" | grep -E '^(extinto|dominio fora do PAP):' || true
       cmd_vocabulario
       ;;
     *)
