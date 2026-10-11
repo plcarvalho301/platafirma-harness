@@ -104,6 +104,8 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   documento longo vem em paginas; o fim diz \`continue com --offset N\`
   acervo ler      casa|biblioteca secao <secao_id> [<secao_id> ...] [--json]
                   o texto da secao pelo endereco que a busca devolve (motor ... --texto nenhum)
+  acervo ler      casa citacao <especie> <chave> [--secao <§>] [--json]  ·  biblioteca citacao <obra> [--json]
+                  o referente na forma autorizada, primeira parte da linha de Fontes (#3408 comentário #2085)
   acervo listar   casa [<especie>] [--todas]          sem especie: o catalogo (projecao, regime, contagem)
   acervo listar   casa [<especie>] --sobre <classe> <chave>   a documentacao de uma entidade
   acervo listar   casa topologia [<stack>] [--completo] [--json]   golden record acervo.stack
@@ -234,6 +236,9 @@ conforme() {
     # o texto da seção pelo endereço que a busca devolve (arq:0119 §1.2, §3; #3312): o motor
     # acha o secao_id, o acervo entrega o texto. Antes do ramo generico `ler:casa:*`.
     ler:casa:secao|ler:biblioteca:secao) exec python3 "$ATOS/secao" "$particao" "$@" ;;
+    # o referente na forma autorizada, primeira parte da linha de Fontes (decisão do dono de
+    # 11/10/2026, #3408 comentário #2085). Antes do ramo generico `ler:casa:*`.
+    ler:casa:citacao|ler:biblioteca:citacao) exec python3 "$ATOS/citacao" "$particao" "$@" ;;
     listar:casa:pagina)     exec "$ATOS/wiki" listar "$@" ;;
     listar:casa:ferramental) exec "$ATOS/listar" ferramental "$@" ;;
     # topologia (golden record acervo.stack): forma conforme da porta de `deploy <stack>
