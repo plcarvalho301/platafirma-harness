@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+# acervo ler <casa|biblioteca> citacao — o referente na forma autorizada, pronto para a linha de Fontes.
+# capacidade: conhecimento
+# dono: claudinho-dados
+#
+# Decisão do dono de 11/10/2026 (F5, #3408, comentário #2085, item 4): a linha de Fontes é
+# «referente na forma autorizada — o que sustentou — grau», e a forma autorizada é por tipo:
+#   casa   espécie chave — título, §        (acervo.casa)
+#   obra   autor, título do catálogo        (acervo.obra: emitido_por, titulo)
+#   norma  id canônico                      (acervo.obra.id_canonico, família ato-normativo
+#                                            ou espécie norma-tecnica)
+# O verbo serve a primeira parte da linha (controle de autoridade: o rótulo preferido sai do
+# catálogo, não da memória de quem escreve). «O que sustentou» e o grau são de quem escreve.
+# Fora daqui, por não morarem no acervo: web (autor, título, URL, data, tipo — da procedência
+# da pesquisa), código (repo@sha:caminho — do `repo`/`release`), card (#N, comentário).
+#
+# Formas:
+#   acervo ler casa citacao <especie> <chave> [--secao <§>] [--json]
+#   acervo ler biblioteca citacao <obra> [--json]      <obra> = uuid, prefixo (6+ hex) ou título
+# Exit: 0 ok · 1 nada com essa chave · 2 uso/ambíguo · 5 indeterminável.
+import importlib.machinery
+import importlib.util
+import json
+import os
+import re
+import sys
+
+AQUI = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, AQUI)
+
+
+def _carrega_casa():
+    loader = importlib.machinery.SourceFileLoader("acervo_casa_citacao", os.path.join(AQUI, "casa"))
+    spec = importlib.util.spec_from_loader("acervo_casa_citacao", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+casa = _carrega_casa()
+
+USO = """uso:
+  acervo ler casa citacao <especie> <chave> [--secao <§>] [--json]
+  acervo ler biblioteca citacao <obra> [--json]        <obra> = uuid, prefixo (6+ hex) ou título
+
+O referente na forma autorizada (decisão do dono, 11/10/2026, #3408 comentário #2085):
+  casa   «espécie chave — título[, §]»
+  obra   «autor; autor, título do catálogo»
+  norma  «id canônico»
+É a primeira parte da linha de Fontes; «o que sustentou» e o grau são de quem escreve.
+Web, código e card não moram no acervo: web vem da procedência da pesquisa, código é
+repo@sha:caminho (repo/release), card é #N, comentário."""
+
+RE_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+RE_PREFIXO = re.compile(r"^[0-9a-f]{6,}$")
+FAMILIAS_NORMA = ("ato-normativo",)
+ESPECIES_NORMA = ("norma-tecnica",)
+
+
+def morre(msg, code=2):
+    sys.stderr.write(msg.rstrip("\n") + "\n")
+    sys.exit(code)
+
+
+# ------------------------------------------------------------------ forma autorizada (pura)
+
+def forma_casa(especie, chave, titulo, secao=None):
+    """«espécie chave — título[, §]»."""
+    base = f"{especie} {chave}"
+    titulo = (titulo or "").strip()
+    if titulo:
+        base += f" — {titulo}"
+    if secao:
+        base += f", {secao.strip()}"
+    return base
+
+
+def forma_obra(titulo, autores, id_canonico, familia, especie):
+    """(forma, regra, avisos). Norma com id canônico: o id. Senão: autores, título."""
+    avisos = []
+    e_norma = familia in FAMILIAS_NORMA or especie in ESPECIES_NORMA
+    if e_norma and (id_canonico or "").strip():
+        return id_canonico.strip(), "norma", avisos
+    if e_norma:
+        avisos.append("norma sem id canônico no catálogo: sai autor e título "
+                      "(cura: completar o id canônico no catálogo da obra, curadoria de dados)")
+    nomes = [a.strip() for a in (autores or []) if a and a.strip()]
+    titulo = (titulo or "").strip()
+    if not nomes:
+        avisos.append("obra sem autor no catálogo (emitido_por vazio): sai só o título")
+        return titulo, "obra", avisos
+    return f"{'; '.join(nomes)}, {titulo}", "obra", avisos
+
+
+# ------------------------------------------------------------------ casa
+
+def citar_casa(especie, seletor, secao, quero_json):
+    casa.normalizar(especie, seletor)
+    info = casa._especie(especie)
+    linha = casa.resolver(especie, seletor, info)
+    chave = casa.ident(linha)
+    forma = forma_casa(especie, chave, linha.get("titulo"), secao)
+    aviso = None
+    if linha.get("retirada_em"):
+        aviso = f"{chave} está fora de serviço: {casa.txt_retirada(linha)}"
+    if quero_json:
+        print(json.dumps({"tipo": "casa", "forma_autorizada": forma, "especie": especie,
+                          "chave": chave, "titulo": linha.get("titulo") or None,
+                          "secao": secao, "vigencia": casa.vigencia(linha), "aviso": aviso},
+                         ensure_ascii=False, indent=2))
+        return 0
+    print(forma)
+    if aviso:
+        sys.stderr.write(f"aviso: {aviso}\n")
+    return 0
+
+
+# ------------------------------------------------------------------ biblioteca
+
+def _obras(where):
+    return casa._q(f"""
+      select coalesce(json_agg(row_to_json(t) order by t.titulo), '[]') from (
+        select o.id::text as id, o.titulo, o.emitido_por as autores, o.id_canonico,
+               es.slug as especie, f.slug as familia,
+               to_char(o.retirada_em at time zone 'UTC', 'YYYY-MM-DD') as retirada_em
+          from acervo.obra o
+          left join acervo.especie_tipo es on es.id = o.especie_id
+          left join acervo.familia_tipo f on f.id = es.familia_id
+         where {where}
+         limit 20) t;""", "acervo.obra") or []
+
+
+def resolver_obra(seletor):
+    s = seletor.strip()
+    lit = casa._lit
+    if RE_UUID.match(s):
+        cands = _obras(f"o.id = {lit(s)}::uuid")
+    elif RE_PREFIXO.match(s):
+        cands = _obras(f"o.id::text like {lit(s + '%')}")
+    else:
+        cands = _obras(f"lower(o.titulo) = lower({lit(s)})")
+        if not cands and len(s) >= 3:
+            pat = s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            cands = _obras(f"o.titulo ilike {lit('%' + pat + '%')}")
+    if not cands:
+        morre(f"acervo ler biblioteca citacao: nenhuma obra com '{s}' (uuid, prefixo ou título).\n"
+              f"vizinho: acervo listar biblioteca obra --sobre '{s}'", 1)
+    if len(cands) > 1:
+        ops = "\n".join(f"    acervo ler biblioteca citacao {c['id'][:8]}   {c['titulo']}"
+                        for c in cands)
+        morre(f"acervo ler biblioteca citacao: '{s}' ambíguo ({len(cands)} obras):\n{ops}", 2)
+    return cands[0]
+
+
+def citar_obra(seletor, quero_json):
+    o = resolver_obra(seletor)
+    forma, regra, avisos = forma_obra(o.get("titulo"), o.get("autores"), o.get("id_canonico"),
+                                      o.get("familia"), o.get("especie"))
+    if o.get("retirada_em"):
+        avisos.append(f"obra retirada em {o['retirada_em']}")
+    if quero_json:
+        print(json.dumps({"tipo": regra, "forma_autorizada": forma, "obra": o["id"],
+                          "titulo": o.get("titulo"), "autores": o.get("autores") or [],
+                          "id_canonico": o.get("id_canonico"), "especie": o.get("especie"),
+                          "avisos": avisos}, ensure_ascii=False, indent=2))
+        return 0
+    print(forma)
+    for a in avisos:
+        sys.stderr.write(f"aviso: {a}\n")
+    return 0
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "--ajuda", "ajuda"):
+        morre(USO, 0 if argv else 2)
+    particao, resto = argv[0], argv[1:]
+    quero_json = "--json" in resto
+    resto = [a for a in resto if a != "--json"]
+    secao = None
+    if "--secao" in resto:
+        i = resto.index("--secao")
+        if i + 1 >= len(resto):
+            morre("acervo ler casa citacao: --secao pede o § (ex.: --secao '§3').\n\n" + USO, 2)
+        secao = resto[i + 1]
+        resto = resto[:i] + resto[i + 2:]
+    if particao == "casa":
+        if len(resto) != 2:
+            morre("acervo ler casa citacao <especie> <chave>: faltam argumentos.\n\n" + USO, 2)
+        return citar_casa(resto[0], resto[1], secao, quero_json)
+    if particao == "biblioteca":
+        if secao:
+            morre("acervo ler biblioteca citacao: --secao só vale para documento de casa.", 2)
+        if len(resto) != 1:
+            morre("acervo ler biblioteca citacao <obra>: uma obra só "
+                  "(título com espaço vai entre aspas).\n\n" + USO, 2)
+        return citar_obra(resto[0], quero_json)
+    morre(f"acervo ler {particao} citacao: só casa e biblioteca.\n\n" + USO, 2)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
