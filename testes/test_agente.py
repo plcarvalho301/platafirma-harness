@@ -722,3 +722,46 @@ def test_claude_acima_do_teto_de_tokens_avisa_e_nao_corta(mundo, pessoa, monkeyp
     saida = capsys.readouterr()
     assert "passaram de tokens_execucao 50 (medido, não cortado)" in saida.err
     assert saida.out.strip() == "veredito: 0 — x@y"
+
+
+# --- rodar --peca: o par mínimo troca uma peça da lente e mantém o resto --------------------------
+
+def _roda_com(monkeypatch, slug, pecas, tarefa="varra isto"):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(tarefa))
+    return agente.ato_rodar(slug, None, None, False, "consultado", pecas)
+
+
+def test_peca_troca_o_conteudo_e_o_registro_guarda_o_sha(mundo, ollama, pessoa, monkeypatch, tmp_path):
+    mundo.escreve(VARREDOR)
+    arq = tmp_path / "modo-rascunho.md"
+    arq.write_text("MODO-VARIANTE em prosa\n")
+    assert _roda_com(monkeypatch, "varredor", [f"modo={arq}"]) == 0
+    sistema = ollama.pedidos[0]["messages"][0]["content"]
+    assert "MODO-VARIANTE em prosa" in sistema and "LENTE-MODO" not in sistema
+    assert "LENTE-PERSONA" in sistema, "só a peça trocada muda"
+    (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+    assert set(log["variantes"]) == {"modo"} and len(log["variantes"]["modo"]) == 12
+
+
+def test_peca_sem_arquivo_tira_a_peca(mundo, ollama, pessoa, monkeypatch):
+    mundo.escreve(VARREDOR)
+    assert _roda_com(monkeypatch, "varredor", ["persona="]) == 0
+    sistema = ollama.pedidos[0]["messages"][0]["content"]
+    assert "LENTE-PERSONA" not in sistema and "LENTE-MODO" in sistema
+
+
+def test_peca_que_a_lente_nao_tem_sai_2_e_nao_chama_o_modelo(mundo, ollama, pessoa, monkeypatch, capsys, tmp_path):
+    mundo.escreve(VARREDOR)
+    arq = tmp_path / "x.md"
+    arq.write_text("x")
+    assert _roda_com(monkeypatch, "varredor", [f"rotinas={arq}"]) == 2
+    err = capsys.readouterr().err
+    assert "não tem essa peça" in err and "persona, modo, mesa" in err
+    assert ollama.pedidos == [] and mundo.chamadas()[-1]["argv"] == ["encerrar", FILHA]
+
+
+@pytest.mark.parametrize("spec", ["modo", "Modo=x", "modo=/nao/existe.md"])
+def test_peca_mal_formada_sai_2_antes_de_abrir_sessao(mundo, ollama, pessoa, monkeypatch, spec):
+    mundo.escreve(VARREDOR)
+    assert _roda_com(monkeypatch, "varredor", [spec]) == 2
+    assert mundo.chamadas() == [] and ollama.pedidos == []

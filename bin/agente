@@ -6,7 +6,7 @@
 # atos: listar (leitura, especialista), ler (leitura, especialista), rodar (escrita, especialista), projetar (escrita, especialista)
 # ato: listar [--modelo <familia>] [--modo <modo>] [--json] — as declarações do posto, uma por linha
 # ato: ler <slug> — a declaração inteira de um especialista
-# ato: rodar <slug> [--cadeira <slug>] [--chapeu <slug>] [--ligacao consultado|agendado] [--json] — modelo, ferramentas e teto saem da ligação (por_ligacao); abre a sessão filha, monta a lente e chama o modelo na conta dele; a tarefa vem em stdin (no modo varrer o modelo a recebe com as linhas numeradas, `N |`)
+# ato: rodar <slug> [--cadeira <slug>] [--chapeu <slug>] [--ligacao consultado|agendado] [--peca <nome>=<arquivo>]... [--json] — modelo, ferramentas e teto saem da ligação (por_ligacao); abre a sessão filha, monta a lente e chama o modelo na conta dele; a tarefa vem em stdin (no modo varrer o modelo a recebe com as linhas numeradas, `N |`); --peca troca o conteúdo de uma peça da lente pelo do arquivo (vazio depois do = tira a peça), para par mínimo: os dois braços iguais menos a peça
 # ato: projetar [--conferir] [--base <ref>] — gera as projeções do provedor a partir das declarações; --conferir só mede
 # exit: 0 ok · 1 negativo de mérito (não existe, divergente, sem pessoa resolvida) · 2 uso · 3 dependência fora · 4 recusa de política · 5 indeterminável
 # le: listar=arquivo-local
@@ -618,7 +618,38 @@ def abre_sessao(cadeira: str, origem: str, slug: str, conta: str) -> dict:
     return obj
 
 
-def monta_lente(decl: dict, cadeira: str, chapeu: str, filha: dict, origem: str, tarefa: str) -> str:
+def le_variantes(specs: list[str] | None) -> dict[str, str | None]:
+    """`--peca <nome>=<arquivo>`, uma por peça: o conteúdo do arquivo entra no lugar da peça servida; `<nome>=`
+    sem arquivo tira a peça. É o instrumento do par mínimo: os dois braços só diferem na peça trocada."""
+    variantes: dict[str, str | None] = {}
+    for spec in specs or []:
+        nome, sep, caminho = spec.partition("=")
+        nome, caminho = nome.strip(), caminho.strip()
+        if not sep or not re.fullmatch(r"[a-z][a-z0-9-]*", nome):
+            raise Falha(2, f"--peca {spec!r}: a forma é <nome>=<arquivo> (ou <nome>= para tirar a peça)")
+        if nome in variantes:
+            raise Falha(2, f"--peca {nome}: a mesma peça veio duas vezes")
+        if not caminho:
+            variantes[nome] = None
+            continue
+        try:
+            texto = Path(caminho).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            raise Falha(2, f"--peca {nome}: não li {caminho} ({type(e).__name__})")
+        if not texto.strip():
+            raise Falha(2, f"--peca {nome}: {caminho} está vazio; para tirar a peça use {nome}=")
+        variantes[nome] = texto.strip()
+    return variantes
+
+
+def marca_variantes(variantes: dict[str, str | None]) -> dict[str, str]:
+    """O que o registro guarda de cada peça trocada: o sha do conteúdo novo, ou `fora` quando ela saiu."""
+    import hashlib
+    return {n: (hashlib.sha256(t.encode()).hexdigest()[:12] if t is not None else "fora") for n, t in variantes.items()}
+
+
+def monta_lente(decl: dict, cadeira: str, chapeu: str, filha: dict, origem: str, tarefa: str,
+                variantes: dict[str, str | None] | None = None) -> str:
     argv = [str(_bin() / "expediente"), "montar", "--perfil", "cadeirinha", "--chapeu", chapeu,
             "--modo", decl["modo"], "--json"]
     if decl.get("regua"):
@@ -633,7 +664,17 @@ def monta_lente(decl: dict, cadeira: str, chapeu: str, filha: dict, origem: str,
     if p.returncode != 0:
         motivo = obj.get("erro") or (p.stderr.strip().splitlines() or ["sem retorno"])[0]
         raise Falha(3, f"a lente não montou (expediente montar saiu {p.returncode}): {motivo[:300]}")
-    pecas = [x["conteudo"] for x in obj.get("pecas", []) if isinstance(x.get("conteudo"), str) and x["conteudo"].strip()]
+    variantes = variantes or {}
+    servidas = [x for x in obj.get("pecas", []) if isinstance(x, dict)]
+    faltam = sorted(set(variantes) - {x.get("peca") for x in servidas})
+    if faltam:
+        raise Falha(2, f"--peca {', '.join(faltam)}: a lente deste agente não tem essa peça; "
+                       f"peças servidas: {', '.join(str(x.get('peca')) for x in servidas)}")
+    pecas = []
+    for x in servidas:
+        conteudo = variantes[x["peca"]] if x.get("peca") in variantes else x.get("conteudo")
+        if isinstance(conteudo, str) and conteudo.strip():
+            pecas.append(conteudo)
     if not pecas:
         raise Falha(3, "a lente voltou sem peça servida")
     return "\n\n---\n\n".join(pecas)
@@ -733,7 +774,7 @@ def registra(reg: dict) -> None:
 
 
 def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_json: bool,
-              ligacao: str = "consultado") -> int:
+              ligacao: str = "consultado", pecas: list[str] | None = None) -> int:
     posto, rc = _posto_ou_erro()
     if posto is None:
         return rc
@@ -750,6 +791,10 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
     tarefa = sys.stdin.read() if not sys.stdin.isatty() else ""
     if not tarefa.strip():
         return _erro("a tarefa vem em stdin: agente rodar <slug> < tarefa", 2)
+    try:
+        variantes = le_variantes(pecas)                    # erro de forma sai antes de abrir sessão
+    except Falha as f:
+        return _erro(f.msg, f.codigo)
     dono = decl["dono"]
     if dono["cadeira"] == "{cadeira}":
         if not cadeira_arg:
@@ -778,7 +823,7 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
         if decl["modelo"]["familia"] == "gemini":
             chama_modelo(decl, "", "")                          # sai 3 antes de gastar sessão
         filha = abre_sessao(cadeira, origem, slug, conta)
-        lente = monta_lente(decl, cadeira, chapeu, filha, origem, tarefa)
+        lente = monta_lente(decl, cadeira, chapeu, filha, origem, tarefa, variantes)
         r = chama_modelo(decl, _sistema(decl, lente), numera(tarefa) if decl["modo"] == "varrer" else tarefa)
     except Falha as f:
         if filha:
@@ -790,7 +835,8 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
     duracao = round(time.monotonic() - inicio, 1)
     registra({"ts": _agora(), "agente": slug, "sujeito": sujeito, "em_nome_de": cadeira, "origem": origem,
               "conta": conta, "sessao_id": filha["sessao_id"], "modelo": f"{decl['modelo']['familia']}:{decl['modelo']['versao']}",
-              "uso": r["uso"], "segundos": duracao, "exit": 0})
+              "uso": r["uso"], "segundos": duracao, "exit": 0,
+              **({"variantes": marca_variantes(variantes)} if variantes else {})})
     if r["aviso"]:
         print(f"aviso: {r['aviso']}", file=sys.stderr)
     print(f"agente {slug}: sessao {filha['sessao_id']} origem {origem} conta {conta} "
@@ -835,6 +881,8 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--chapeu", default=None)
     a.add_argument("--ligacao", choices=("consultado", "agendado"), default="consultado",
                    help="por onde a tarefa entra; o bot passa agendado (spec agente §4)")
+    a.add_argument("--peca", action="append", default=None, metavar="<nome>=<arquivo>",
+                   help="troca o conteúdo da peça da lente pelo do arquivo; <nome>= tira a peça (par mínimo)")
     a.add_argument("--json", action="store_true")
     a = atos.novo("projetar", "gera as projeções do provedor; --conferir só mede")
     a.add_argument("--conferir", action="store_true")
@@ -845,7 +893,7 @@ def main(argv: list[str] | None = None) -> int:
     if ns.ato == "ler":
         return ato_ler(ns.slug)
     if ns.ato == "rodar":
-        return ato_rodar(ns.slug, ns.cadeira, ns.chapeu, ns.json, ns.ligacao)
+        return ato_rodar(ns.slug, ns.cadeira, ns.chapeu, ns.json, ns.ligacao, ns.peca)
     return ato_projetar(ns.conferir, ns.base)
 
 
