@@ -10,7 +10,7 @@ o corpo é o único texto que vale: tem um autor, a cadeira que conduz a frente,
 Comentário contribui; o corpo é o que vale.
 
 Teste de pronto: quem lê só o Título, a Solução e o Fora sabe o que muda, como se usa e o que
-não vem.
+não vem. Os três cabem na primeira tela.
 
 ## Esqueleto
 
@@ -18,28 +18,31 @@ não vem.
 <Título: o que a pessoa passa a conseguir, até doze palavras>
 
 Problema:      como é hoje, como quem sofre veria, com um caso; até quatro frases, sem número
+Solução:       a solução contada como uso: «Ao <momento>: quem faz o quê, e o que vê»
+Peças:         numeradas: o que vai existir (lugar, ato, regra); regra nova diz quem a cobra
+Fora:          o que esta frente não entrega e alguém pediria; para onde vai, quando vai
 Resultado:     quem passa a conseguir o quê; o outcome vai marcado «não fecha card»
 Medida:        escala · medidor · valor hoje · mínimo aceitável — uma linha
 Apetite:       quanto vale gastar · o que se corta primeiro — previsão de quem escreve   (opcional)
-Fora:          o que esta frente não entrega e alguém pediria; para onde vai, quando vai
-Solução:       a solução contada como uso: «Ao <momento>: quem faz o quê, e o que vê»
-Peças:         numeradas: o que vai existir (lugar, ato, regra); regra nova diz quem a cobra
 Aberto:        prosa do autor: o que está por decidir, cada item com quem responde
 Produtos documentais: um por linha: ADR, spec da peça, documento, dado, emenda   (feature)
 Sai quando:    na lapidação, a frase; na formalização, o comando que prova   (feature)
 Quebra:        escrita na formalização: <data> — filhas, uma por linha, e o aviso de enfileiramento
 ```
 
+A ordem segue o que o leitor precisa primeiro: logo depois do caso vem a solução, e o Fora
+fecha a primeira tela. Resultado e Medida, que a homologação compara, vêm em seguida.
+
 Não há rótulo de fontes nem Continuidade. Fonte entra como comentário `insumo`; o que
 sustenta a peça depois da entrega mora na spec dela.
 
 ## As três famílias
 
-- **A aposta** (Título, Problema, Resultado, Medida, Apetite, Fora): para de mudar na aposta e
+- **A aposta** (Título, Problema, Fora, Resultado, Medida, Apetite): para de mudar na aposta e
   fica. O Fora ainda cresce com os cortes da entrega.
 - **A forma** (Solução, Peças, Aberto): sai do card quando o destino existe. A Solução vira
-  link para a spec da peça; as Peças, para as stories, pela Quebra. No lugar fica o link com o
-  nome do que aponta e uma linha do que muda para quem usa:
+  link para a spec da peça, no mesmo lugar; as Peças, para as stories, pela Quebra. No lugar
+  fica o link com o nome do que aponta e uma linha do que muda para quem usa:
   `Solução: a cadeira valida lendo um texto que descreve a solução · spec do comentário tipado, cenários C1 a C5`.
   Sem spec, a Solução é a única descrição e fica.
 - **O índice** (Produtos documentais, Sai quando, Quebra): completo na formalização.
@@ -50,13 +53,13 @@ sustenta a peça depois da entrega mora na spec dela.
 2. **Rótulos** — um por linha, linha em branco antes do seguinte. Frases curtas, uma ideia
    por frase, voz ativa.
 3. **Problema** — caso, não tema. O número vai à Medida.
-4. **Resultado** — mais de um ganho vira lista.
-5. **Apetite** — as duas partes; sem o que se corta, é estimativa, não apetite.
-6. **Fora** — lista; não proíbe. O que a casa decide não fazer é comentário `decisão`.
-7. **Solução** — cada item abre pelo momento ou pela pessoa («Ao lapidar:», «No parecer:»).
+4. **Solução** — cada item abre pelo momento ou pela pessoa («Ao lapidar:», «No parecer:»).
    Presente do indicativo. Sem nome de arquivo, campo ou função. Até sete momentos.
-8. **Peças** — `1.`, `2.`… uma linha cada. Peça sem momento sobra; momento sem peça é
+5. **Peças** — `1.`, `2.`… uma linha cada. Peça sem momento sobra; momento sem peça é
    promessa sem lugar.
+6. **Fora** — lista; não proíbe. O que a casa decide não fazer é comentário `decisão`.
+7. **Resultado** — mais de um ganho vira lista.
+8. **Apetite** — as duas partes; sem o que se corta, é estimativa, não apetite.
 9. **Aberto** — prosa, não lista de comentários: o estado de cada comentário mora no fecho
    dele. Na aposta, linha que sobra diz «fica aberto de propósito:» e o risco.
 10. **Produtos documentais**, **Sai quando**, **Quebra** — como no esqueleto; na formalização,
