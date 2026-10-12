@@ -1146,17 +1146,25 @@ construir_venvs() {  # $1=repo $2=sha ; enche VENVS_PRONTOS; 0 ok, 3 falhou
   local repo="$1" sha="$2" arvore linhas nome lock hash dest uv="" pyid="" py="" py_real="" py_ver=""
   arvore="$PROD_RAIZ/$repo/$sha"
   VENVS_PRONTOS=()
-  [ -r "$VENVS" ] || return 0
+  # O registro que vale e o da REV que sobe, nao o da release que executa (#2856 linha 248): venv
+  # declarado numa rev do harness era ignorado na promocao dela, porque o verbo lia o registro da
+  # arvore em current — medido em 11/10 com claude-code, que so construiria na promocao SEGUINTE.
+  # So o harness carrega o registro; override por PLATAFIRMA_VENVS (teste) segue vencendo.
+  local reg="$VENVS"
+  if [ -z "${PLATAFIRMA_VENVS:-}" ] && [ "$repo" = "$FAMILIA_BIN" ] && [ -r "$arvore/registro/venvs.json" ]; then
+    reg="$arvore/registro/venvs.json"
+  fi
+  [ -r "$reg" ] || return 0
   # leitor único (card #3150 passo 2, bin/_release/registro.py): mesma leitura que
   # teste e, depois, pre-push vão usar pela chave — nenhum relê o JSON por conta própria
-  linhas="$(PLATAFIRMA_VENVS="$VENVS" python3 "$AQUI/_release/registro.py" --familia "$repo" 2>/dev/null)" || {
-    printf 'release: dependência com outro contrato: registro de venvs não é JSON legível (%s)\n' "$VENVS" >&2
+  linhas="$(PLATAFIRMA_VENVS="$reg" python3 "$AQUI/_release/registro.py" --familia "$repo" 2>/dev/null)" || {
+    printf 'release: dependência com outro contrato: registro de venvs não é JSON legível (%s)\n' "$reg" >&2
     return 3
   }
   while IFS=$'\t' read -r nome lock _teste; do
     [ -n "$nome" ] || continue
     if ! validar_slug "$nome" || [[ "$lock" == /* ]] || [[ "$lock" == *..* ]]; then
-      printf 'release: erro: venv mal declarado em %s: %s (%s)\n' "$VENVS" "$nome" "$lock" >&2
+      printf 'release: erro: venv mal declarado em %s: %s (%s)\n' "$reg" "$nome" "$lock" >&2
       return 3
     fi
     if [ ! -f "$arvore/$lock" ]; then
