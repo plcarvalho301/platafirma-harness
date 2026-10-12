@@ -4,6 +4,55 @@
 # dono: gestao-estrategica
 # use para: card, board, carteira, épico/feature/story, mover estado, sign-off
 # atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub
+#
+# Texto do controle (arq:0124 §3; arq:0125 U33; card #3446). Todo ato cai na face Entrega.
+# O rótulo vai sem objeto enquanto o tesauro não tiver o conceito (card, comentário, estado):
+# o objeto entra pelo slug, `{slug}`, e nunca se copia. volta: diz se o efeito se desfaz.
+# face: listar=Entrega
+# face: listar-tudo=Entrega
+# face: ler=Entrega
+# face: criar=Entrega
+# face: editar=Entrega
+# face: modelo=Entrega
+# face: comentar=Entrega
+# face: comentarios=Entrega
+# face: mover=Entrega
+# face: fechar=Entrega
+# face: apagar=Entrega
+# face: assinar=Entrega
+# face: dt=Entrega
+# face: estados=Entrega
+# face: sub=Entrega
+# rotulo: listar=Listar
+# rotulo: listar-tudo=Listar tudo
+# rotulo: ler=Abrir
+# rotulo: criar=Criar
+# rotulo: editar=Editar
+# rotulo: modelo=Esboçar
+# rotulo: comentar=Comentar
+# rotulo: comentarios=Ler
+# rotulo: mover=Mover
+# rotulo: fechar=Fechar
+# rotulo: apagar=Apagar
+# rotulo: assinar=Assinar
+# rotulo: dt=Administrar
+# rotulo: estados=Consultar
+# rotulo: sub=Subordinar
+# volta: listar=sim — só lê, nada muda
+# volta: listar-tudo=sim — só lê, nada muda
+# volta: ler=sim — só lê, nada muda
+# volta: criar=sim — tarefas apagar, enquanto o item está no funil
+# volta: editar=nao
+# volta: modelo=sim — só lê, nada muda
+# volta: comentar=nao
+# volta: comentarios=sim — só lê, nada muda
+# volta: mover=sim — tarefas mover ao estado de antes, onde o fluxo deixa (a recusa diz para onde se pode ir)
+# volta: fechar=nao
+# volta: apagar=nao
+# volta: assinar=nao
+# volta: dt=nao
+# volta: estados=sim — só lê, nada muda
+# volta: sub=nao
 # Backend: `platafirma-rastreador` (API própria), desde 16/08/2026. O Vikunja saiu.
 #
 # Loopback, e não a rota pública: `tarefas.platafirma.org` serve a superfície HUMANA
