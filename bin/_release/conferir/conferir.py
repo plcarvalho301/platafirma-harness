@@ -2174,7 +2174,8 @@ def _conferencias_do_pacote(raiz=None):
             f"nao consegui olhar: {PECAS_DIR}/ ausente")))
     else:
         for fn in sorted(os.listdir(pecas_dir)):
-            if not fn.endswith(".js"):
+            # peca e `pf-*.js` (a tag e o nome do arquivo); `_composicao.js` e afins sao auxiliares
+            if not (fn.startswith("pf-") and fn.endswith(".js")):
                 continue
             tag = fn[:-3]
             nome = f"peca {tag}"

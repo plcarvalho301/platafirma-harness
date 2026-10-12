@@ -1007,6 +1007,14 @@ def test_pacote_peca_com_pagina_e_conforme_e_sem_pagina_diverge(tmp_path):
     assert "sem pagina com a peca montada" in por["peca pf-grafico"].motivo
 
 
+def test_pacote_arquivo_auxiliar_de_src_pf_nao_e_peca(tmp_path):
+    # medido no ar em 12/10/2026: src/pf/_composicao.js saiu como "peca sem pagina"
+    raiz = _arvore_ui(tmp_path, pecas=("pf-botao", "_composicao"))
+    por = _por_nome(_PACOTE_REAL(str(raiz)))
+    assert "peca _composicao" not in por
+    assert por["peca pf-botao"].estado == "conforme"
+
+
 def test_pacote_peca_citada_so_em_comentario_de_outra_tag_nao_conta(tmp_path):
     # <pf-botao-grande> nao e <pf-botao>: o casamento exige fim de nome
     raiz = _arvore_ui(tmp_path, pecas=("pf-botao",), pagina="<pf-botao-grande></pf-botao-grande>\n")
