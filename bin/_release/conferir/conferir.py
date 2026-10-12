@@ -43,8 +43,8 @@
                    efemero, e o `.mcp.json` e rastreado no repo, entao ler os
                    wt-*/ e fitas/*/ era ler N copias do mesmo arquivo. Cada
                    superficie declara `produtor` em superficies.json: `codigo`
-                   (dict no fonte, lido por AST) ou `arquivo-rastreado` (o
-                   .mcp.json da raiz; o produtor e o git). Superficie verificavel
+                   (dict no fonte, lido por AST) ou `arquivo-rastreado` (um
+                   .mcp.json rastreado no repo; o produtor e o git). Verificavel
                    SEM produtor declarado reprova (hoje nenhuma e verificavel do
                    host: fabrica e fita sairam, card #3477). Superficie sem
                    instancia viva nao e conector faltando. Julga tambem capacidade
