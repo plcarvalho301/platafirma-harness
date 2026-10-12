@@ -335,19 +335,51 @@ def test_rodar_portao_node_em_arvore_materializada(banc, tmp_path):
     assert not (arv / "front" / "provas" / "node_modules").exists()
 
 
-def test_rodar_portao_node_arvore_sem_escrita_sai_5(banc, tmp_path):
-    _com_portao(banc)
+def test_rodar_portao_node_arvore_sem_escrita_roda_numa_copia(banc, tmp_path):
+    """O gate mede /opt/<familia>/<sha>, que é só leitura (#3427): a suíte roda numa cópia gravável e
+    descartável — inclusive a prova que grava `dist/` na raiz — e a árvore original fica como estava.
+    Antes, a rodada saía 5 e a primeira promoção de platafirma-ui não media suite nenhuma."""
+    _com_portao(banc, "verde.mjs\nescreve.sh\n")
+    sub = banc.clone / "front" / "provas"
+    (sub / "escreve.sh").write_text(
+        "#!/usr/bin/env bash\nmkdir -p dist && echo x > dist/marca\n", encoding="utf-8")
     arv = tmp_path / "opt" / "alvo" / ("c" * 40)
     shutil.copytree(banc.clone, arv, ignore=shutil.ignore_patterns(".git"))
-    arv.joinpath("front", "provas").chmod(0o555)
+    protegidos = [arv / "front" / "provas", arv / "front", arv]
+    for d in protegidos:
+        d.chmod(0o555)
     try:
         if os.access(arv / "front" / "provas", os.W_OK):
             pytest.skip("rodando como dono que ignora permissão (root)")
         r = banc.rodar("ui", "--portao", "--arvore", str(arv))
     finally:
-        arv.joinpath("front", "provas").chmod(0o755)
-    assert r.returncode == 5, r.stdout + r.stderr
-    assert "não aceita escrita" in r.stderr
+        for d in reversed(protegidos):
+            d.chmod(0o755)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "suite VERDE" in r.stdout and "2 arquivo(s)" in r.stdout
+    assert not (arv / "dist").exists()                       # a prova gravou na cópia, não na original
+    assert not (arv / "front" / "provas" / "node_modules").exists()
+    assert list(tmp_path.glob("teste-arvore.*")) == []       # e a cópia some
+
+
+def test_rodar_portao_node_arvore_sem_escrita_com_suite_vermelha_sai_1(banc, tmp_path):
+    """A cópia não torna verde o que é vermelho, e a cópia some também no vermelho."""
+    _com_portao(banc, "verde.mjs\nvermelha.mjs\n")
+    arv = tmp_path / "opt" / "alvo" / ("d" * 40)
+    shutil.copytree(banc.clone, arv, ignore=shutil.ignore_patterns(".git"))
+    protegidos = [arv / "front" / "provas", arv / "front", arv]
+    for d in protegidos:
+        d.chmod(0o555)
+    try:
+        if os.access(arv / "front" / "provas", os.W_OK):
+            pytest.skip("rodando como dono que ignora permissão (root)")
+        r = banc.rodar("ui", "--portao", "--arvore", str(arv))
+    finally:
+        for d in reversed(protegidos):
+            d.chmod(0o755)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "suite VERMELHA" in r.stdout and "vermelha.mjs" in r.stdout
+    assert list(tmp_path.glob("teste-arvore.*")) == []
 
 
 def test_rodar_alvo_sh_roda_com_bash_da_raiz_do_repositorio(banc):

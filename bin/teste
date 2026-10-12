@@ -306,7 +306,35 @@ ambiente_do_registro() {  # $1=clone
 # "teste" sem lista de portão faz o portão da família recusar (5, lista ausente é não medida).
 lock_e_node() { [ "$(basename "${REG_LOCK:-}")" = package-lock.json ]; }
 
+# A árvore que o gate mede (`/opt/platafirma/<família>/<sha>`) é só leitura, e a suíte grava nela: o
+# elo de node_modules, o `dist/` que as provas constroem, o node_modules que o `construir.sh`
+# instala. Quem não aceita escrita roda numa CÓPIA gravável e descartável — o mesmo conteúdo, sem
+# `.git` nem node_modules — e a original fica como estava. O veredito segue memoizado pela árvore
+# ORIGINAL (`ARVORE_ORIGEM`), que é a que o pre-push e o gate leem. Antes (card #3426) a rodada
+# saía 5 aqui, e a primeira promoção de platafirma-ui nunca teria medido nada (#3427).
 node_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rótulo [$4=alvo...]
+  local c="$1" raiz="$2" rotulo="$3"; shift 3
+  if [ -w "$raiz" ]; then
+    _node_em_bloco "$c" "$raiz" "$rotulo" "$@"
+    return $?
+  fi
+  local copia rel rc=0
+  copia="$(mktemp -d "${TMPDIR:-/tmp}/teste-arvore.XXXXXX")" \
+    || morre "não criei a cópia gravável da árvore sem escrita ($raiz)" 5
+  rel="${raiz#"$c"}"; rel="${rel#/}"
+  if ! tar -C "$c" --exclude=.git --exclude=node_modules -cf - . | tar -C "$copia" -xf -; then
+    chmod -R u+w "$copia" 2>/dev/null; rm -rf "$copia"
+    morre "não copiei a árvore sem escrita ($c) para $copia" 5
+  fi
+  chmod -R u+w "$copia" 2>/dev/null || true
+  # subshell: um `morre` lá dentro encerra a cópia, não o script, e a limpeza abaixo roda sempre
+  ( ARVORE_ORIGEM="$c" _node_em_bloco "$copia" "$copia${rel:+/$rel}" "$rotulo" "$@" ) || rc=$?
+  chmod -R u+w "$copia" 2>/dev/null || true
+  rm -rf "$copia"
+  return "$rc"
+}
+
+_node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
   local c="$1" raiz="$2" rotulo="$3"; shift 3
   local alvos=("$@") nodeinfo node ver chrome="" f rc_f n=0 falhos=() criou=0
   local elo="$raiz/node_modules" alvo_nm="$CHAVE_DEST/node_modules" inst log logd saida
@@ -347,7 +375,7 @@ node_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rótulo [$4=alvo...]
   local arv_hash="" memo="" v="" memo_inteiro="" cmd=() f_abs
   if [ "${portao:-0}" -eq 1 ] && [ -n "${CHAVE_HASH:-}" ]; then
     if [ "${EM_ARVORE:-0}" -eq 1 ]; then
-      arv_hash="$(git -C "$c" rev-parse 'HEAD^{tree}' 2>/dev/null || echo '')"
+      arv_hash="$(git -C "${ARVORE_ORIGEM:-$c}" rev-parse 'HEAD^{tree}' 2>/dev/null || echo '')"
     else
       arv_hash="$(arvore_da_bancada "$c")" || arv_hash=""
       [ -n "$arv_hash" ] || arv_hash="$(git -C "$c" rev-parse 'HEAD^{tree}' 2>/dev/null || echo '')"
