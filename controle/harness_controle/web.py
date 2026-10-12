@@ -185,6 +185,26 @@ async def tela_css(request):
 # --- acoes (POST) — cada uma chama o verbo e nada alem dele -----------------
 
 
+# Card #3435 (R27 da spec taipa). A escrita que chega pelo navegador so passa com a ORIGEM
+# EXATA da tela, de lista fechada por instancia (`HARNESS_CONTROLE_ORIGENS`, virgula entre
+# valores, igualdade de texto: nada de sufixo, curinga ou "mesmo dominio"). Formulario de
+# outro site, chamada cruzada, `text/plain` e host irmao trazem outra Origin, e o navegador
+# sempre manda Origin no POST — ausente e recusado do mesmo jeito. Lista vazia recusa tudo:
+# configuracao esquecida fecha a escrita, nunca abre. Sem script na tela, nao ha cabecalho
+# proprio a exigir aqui; o formulario so conta com a origem.
+def _origens_da_tela() -> tuple[str, ...]:
+    bruto = os.environ.get("HARNESS_CONTROLE_ORIGENS", "")
+    return tuple(o.strip() for o in bruto.split(",") if o.strip())
+
+
+def _recusa_de_origem(request) -> PlainTextResponse | None:
+    origem = (request.headers.get("origin") or "").strip()
+    if origem and origem in _origens_da_tela():
+        return None
+    return PlainTextResponse("escrita recusada: a origem da chamada nao e a da tela",
+                              status_code=403)
+
+
 def _run_fila_enviar(destinatario: str, tipo: str, assunto: str, corpo: str):
     env = dict(os.environ)
     env["PF_CADEIRA"] = PF_CADEIRA_TELA
@@ -196,6 +216,9 @@ def _run_fila_enviar(destinatario: str, tipo: str, assunto: str, corpo: str):
 
 
 async def despachar_recado(request):
+    recusa = _recusa_de_origem(request)
+    if recusa is not None:
+        return recusa
     form = await request.form()
     destinatario = (form.get("destinatario") or "").strip()
     tipo = (form.get("tipo") or "").strip()
@@ -229,6 +252,9 @@ def _run_infra_restart(alvo: str):
 
 
 async def reiniciar(request):
+    recusa = _recusa_de_origem(request)
+    if recusa is not None:
+        return recusa
     form = await request.form()
     alvo = (form.get("alvo") or "").strip()
     if not alvo:
