@@ -299,9 +299,11 @@ ambiente_do_registro() {  # $1=clone
 # `release promover` constrói (npm ci --ignore-scripts, chave <nome>-<hash>); a suíte é uma lista
 # de arquivos .mjs/.js que saem 0, a convenção das provas da platafirma-ui (a lista vem de
 # "testes" no registro, ou de <alvo>). Roda com o node de sistema, o node_modules do ambiente
-# travado e o Chromium do host em CHROME. Ainda sem veredito memoizado e sem portão: o portão
-# de uma stack node é decisão própria (lista de portão, arq:0116 §5), e até lá a stack não
-# declara "teste" (subárvore), só "testes" (globs), para não entrar no portão da família.
+# travado e o Chromium do host em CHROME. Arquivo .sh roda com bash, o resto com node, sempre
+# da raiz do repositório. Com --portao (card #3426) a lista é a da subárvore (arq:0116 §5),
+# a rodada vale em --arvore e o veredito é memoizado por (árvore, chave), como o das stacks
+# python. Stack node sem "teste" (subárvore) não entra no portão da família; stack node com
+# "teste" sem lista de portão faz o portão da família recusar (5, lista ausente é não medida).
 lock_e_node() { [ "$(basename "${REG_LOCK:-}")" = package-lock.json ]; }
 
 node_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rótulo [$4=alvo...]
@@ -309,8 +311,10 @@ node_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rótulo [$4=alvo...]
   local alvos=("$@") nodeinfo node ver chrome="" f rc_f n=0 falhos=() criou=0
   local elo="$raiz/node_modules" alvo_nm="$CHAVE_DEST/node_modules" inst log logd saida
   local -a envx
-  [ "${EM_ARVORE:-0}" -eq 0 ] \
-    || morre "stack node não roda em --arvore (árvore só leitura não recebe o node_modules do ambiente); rode na bancada" 5
+  # O node_modules do ambiente entra por elo na raiz de teste e sai no fim; árvore sem escrita
+  # não o recebe, e a rodada fica não medida (5), nunca verde.
+  [ -w "$raiz" ] \
+    || morre "stack node precisa gravar o elo de node_modules em $raiz e a árvore não aceita escrita" 5
   [ "${#alvos[@]}" -gt 0 ] \
     || morre "stack '$REG_STACK' sem suíte: declare \"testes\" (globs de .mjs) no registro ou passe <alvo>" 5
   nodeinfo="$(resolver_node)" || exit 3
@@ -332,13 +336,69 @@ node_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rótulo [$4=alvo...]
   inst="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}"
   logd="$inst/var/log/teste"; mkdir -p "$logd" 2>/dev/null || logd="${TMPDIR:-/tmp}"
   log="$logd/$(date -u +%Y%m%dT%H%M%SZ)-${REG_STACK}-$$.txt"
-  envx=(PATH="$(dirname "$node"):$PATH" NODE_ENV=test)
+  # npm_config_ignore_scripts: a prova que chama `npm ci` (construir o dist) também não roda
+  # script de pacote, como o construtor do ambiente
+  envx=(PATH="$(dirname "$node"):$PATH" NODE_ENV=test npm_config_ignore_scripts=true)
   [ -z "$chrome" ] || envx+=(CHROME="$chrome" PUPPETEER_EXECUTABLE_PATH="$chrome" PLATAFIRMA_CHROMIUM="$chrome")
+
+  # Veredito do portão (card #3426): a mesma chave (árvore, stack, ambiente) que o pre-push e
+  # o gate leem. Só a rodada de portão grava e lê; rodada de alvo avulso roda sempre.
+  local vereditos_dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/pre-push/vereditos"
+  local arv_hash="" memo="" v="" memo_inteiro="" cmd=() f_abs
+  if [ "${portao:-0}" -eq 1 ] && [ -n "${CHAVE_HASH:-}" ]; then
+    if [ "${EM_ARVORE:-0}" -eq 1 ]; then
+      arv_hash="$(git -C "$c" rev-parse 'HEAD^{tree}' 2>/dev/null || echo '')"
+    else
+      arv_hash="$(arvore_da_bancada "$c")" || arv_hash=""
+      [ -n "$arv_hash" ] || arv_hash="$(git -C "$c" rev-parse 'HEAD^{tree}' 2>/dev/null || echo '')"
+    fi
+  fi
+  if [ -n "$arv_hash" ]; then
+    memo="$(memo_do_portao "$vereditos_dir" "$arv_hash")"
+    mkdir -p "$(dirname "$memo")" 2>/dev/null || memo=""
+    if [ -n "$memo" ] && [ "${PF_TESTE_SEM_MEMO:-0}" != 1 ]; then
+      # rodada parcial: a inteira verde da mesma árvore já responde por ela (o contrário nunca)
+      if [ -n "${SELECAO_HASH:-}" ]; then
+        memo_inteiro="$(SELECAO_HASH="" memo_do_portao "$vereditos_dir" "$arv_hash")"
+        if [ "$(ler_veredito "$memo_inteiro")" = verde ]; then
+          [ "$criou" -eq 0 ] || rm -f "$elo"
+          printf 'suite VERDE: %s — veredito reaproveitado (rodada inteira da mesma arvore %s, chave %s-%s)\n' \
+            "$rotulo" "${arv_hash:0:12}" "$REG_STACK" "$CHAVE_HASH"
+          return 0
+        fi
+      fi
+      if [ -f "$memo" ]; then
+        v="$(ler_veredito "$memo")"
+        case "$v" in
+          verde)
+            [ "$criou" -eq 0 ] || rm -f "$elo"
+            printf 'suite VERDE: %s — veredito reaproveitado (mesma arvore %s, chave %s-%s)\n' \
+              "$rotulo" "${arv_hash:0:12}" "$REG_STACK" "$CHAVE_HASH"
+            return 0 ;;
+          vermelho)
+            [ "$criou" -eq 0 ] || rm -f "$elo"
+            printf 'suite VERMELHA: %s — veredito reaproveitado (mesma arvore %s, chave %s-%s)\n' \
+              "$rotulo" "${arv_hash:0:12}" "$REG_STACK" "$CHAVE_HASH" >&2
+            return 1 ;;
+        esac
+      fi
+    fi
+    # PF_TESTE_SO_MEMO=1: só o veredito gravado, nunca roda (o gate lê assim antes de medir)
+    if [ "${PF_TESTE_SO_MEMO:-0}" = 1 ]; then
+      [ "$criou" -eq 0 ] || rm -f "$elo"
+      printf 'suite AINDA NAO MEDIDA: %s — sem veredito gravado para a arvore %s\n' "$rotulo" "${arv_hash:0:12}"
+      return 6
+    fi
+  fi
 
   for f in "${alvos[@]}"; do
     n=$((n + 1))
     rc_f=0
-    saida="$(cd "$raiz" && env "${envx[@]}" timeout "${PF_TESTE_TIMEOUT:-600}" "$node" "$f" 2>&1)" || rc_f=$?
+    # a lista do portão traz o arquivo relativo à raiz de teste; o cwd é a raiz do repositório,
+    # que é de onde as provas da platafirma-ui se rodam (dist/, src/)
+    case "$f" in /*) f_abs="$f" ;; *) f_abs="$raiz/$f" ;; esac
+    case "$f" in *.sh) cmd=(bash "$f_abs") ;; *) cmd=("$node" "$f_abs") ;; esac
+    saida="$(cd "$c" && env "${envx[@]}" timeout "${PF_TESTE_TIMEOUT:-600}" "${cmd[@]}" 2>&1)" || rc_f=$?
     { printf '=== %s · exit %s\n' "$f" "$rc_f"; printf '%s\n' "$saida"; } >> "$log" 2>/dev/null || true
     if [ "$rc_f" -ne 0 ]; then
       falhos+=("$f (exit $rc_f)")
@@ -350,11 +410,13 @@ node_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rótulo [$4=alvo...]
   if [ "${#falhos[@]}" -gt 0 ]; then
     printf 'suite VERMELHA: %s — %s de %s arquivo(s) reprovado(s): %s\n' "$rotulo" "${#falhos[@]}" "$n" "${falhos[*]}"
     printf 'log: %s\n' "$log"
+    [ -z "$memo" ] || gravar_veredito "$memo" vermelho "${arv_hash:0:12}"
     return 1
   fi
   printf 'suite VERDE: %s — %s arquivo(s), node %s, ambiente %s-%s, chromium %s\n' \
     "$rotulo" "$n" "$ver" "$REG_STACK" "$CHAVE_HASH" "${chrome:-ausente}"
   printf 'log: %s\n' "$log"
+  [ -z "$memo" ] || gravar_veredito "$memo" verde "${arv_hash:0:12}"
   return 0
 }
 
@@ -890,11 +952,6 @@ ato_rodar() {
     [ -z "$alvo" ] || morre "esteira documento mede a árvore inteira: <alvo> não se aplica" 2
     rodar_documento "$c" "$REG_FAMILIA" "$EM_ARVORE"
     return $?
-  fi
-
-  if lock_e_node && [ "$portao" -eq 1 ]; then
-    printf 'suite INDISPONIVEL: %s — stack node ainda sem portão (a lista de portão dela é decisão à parte, arq:0116 §5); rode sem --portao\n' "$nome" >&2
-    exit 5
   fi
 
   # arq:0116 §6: o repositório inteiro no portão — toda chave com subárvore de teste
