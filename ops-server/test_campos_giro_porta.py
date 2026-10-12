@@ -329,8 +329,7 @@ def _nega(tmp_path, headers=(), recusa=None, client=("203.0.113.9", 5000)):
         chamou.append(1)
 
     mw = s.BearerAuth(app=lambda *a, **k: None)
-    with patch.object(s, "LOG_DIR", tmp_path), patch.object(s, "_sujeito_do_jwt", falso), \
-            patch.object(s, "_estatico_vigente", return_value=False):
+    with patch.object(s, "LOG_DIR", tmp_path), patch.object(s, "_sujeito_do_jwt", falso):
         resp = asyncio.run(mw.dispatch(_req(headers, client), segue))
     assert not chamou, "requisicao negada nao segue"
     return resp, _linhas(tmp_path)

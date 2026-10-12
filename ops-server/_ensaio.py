@@ -18,9 +18,7 @@ for _d in (_HARNESS / "ops-server", _HARNESS / "politica-acesso"):
         _sys.path.insert(0, str(_d))
 os.environ["PF_HARNESS"] = str(_HARNESS)
 os.environ["OPS_USER"] = "ensaio"
-os.environ["OPS_AUTH_TOKEN"] = "ensaio-porta"
 os.environ["OPS_NAME"] = "ops-ensaio"
-os.environ["OPS_TOKEN_ESTATICO_ATE"] = "2026-09-30"
 
 import server as s                                          # noqa: E402
 # A árvore em teste lê pela porta: entra na morada de leitura (card #3279), que fora dela recusa.
