@@ -15,7 +15,7 @@
 # regua: alcance lista-de-verificacao checklist-alcance
 # regua: chapeu lista-de-verificacao checklist-chapeu
 # regua: organizacao lista-de-verificacao checklist-antipadroes-organizacao-documental
-# regua: card lista-de-verificacao arq-0096
+# regua: card lista-de-verificacao antipadroes-de-discovery
 # regua: prosa lista-de-verificacao styleguide-da-wiki
 # regua: testes lista-de-verificacao checklist-testes
 # regua: acervo lista-de-verificacao antipadroes-do-acervo
@@ -40,7 +40,7 @@ from _lint.acervo import ErroAcervo, verificar_acervo
 from _lint.alcance import verificar_alcance
 from _lint.arranque import verificar_arranque
 from _lint.bancada import ErroBancada, resolver_alvo, resolver_bancada
-from _lint.card import verificar_card
+from _lint.card import verificar_card_regua
 from _lint.chapeu import verificar_chapeu
 from _lint.codigo import detectar_stack, verificar_codigo
 from _lint.commit import verificar_commit
@@ -129,9 +129,9 @@ CLASSES_LINT = {
     },
     "card": {
         "tipo": "lista-de-verificacao",
-        "chave": "arq-0096",
-        "detector": "secoes obrigatorias de card (arq:0096)",
-        "descricao": "secoes obrigatorias por nivel de card",
+        "chave": "antipadroes-de-discovery",
+        "detector": "two-pager e comentario tipado (epico, feature); secoes da arq:0096 (story, task)",
+        "descricao": "corpo e comentarios do card, pela regua do nivel",
     },
     "prosa": {
         "tipo": "lista-de-verificacao",
@@ -158,7 +158,7 @@ def imprimir_uso(stream=sys.stdout):
     print("uso:", file=stream)
     print("  lint <classe> <repo>[@<chave>] [<alvo>] [--staged] [--json]", file=stream)
     print("  lint commit <arquivo>|- [--json]", file=stream)
-    print("  lint card <arquivo>|- [<repo>] [--json]", file=stream)
+    print("  lint card <arquivo>|-|<n do card> [<repo>] [--json]   com o numero, le corpo e comentarios do rastreador; epico e feature pela lista antipadroes-de-discovery, story e task pela arq:0096", file=stream)
     print("  lint acervo [--resumo] [--json] [--criterio <id>[,<id>]] [--so-bloqueantes]   antipadroes de obra (firma) e conceito; exit 1 so com bloqueante", file=stream)
     print("  lint organizacao <repo> [<alvo>] [--todas] [--resumo]   --todas inclui os bloqueantes (contagem; quem barra e o pre-commit); --resumo conta por regra", file=stream)
     print("  lint diagrama <repo>[@<chave>] <alvo>   compila .mmd/.d2 no Kroki da casa; exit 0/1/5, Kroki fora do ar nao barra o pre-commit", file=stream)
@@ -268,8 +268,17 @@ def main() -> int:
                 raiz_repo, _ = resolver_bancada(repo_card)
             except ErroBancada:
                 pass
-        apontamentos = verificar_card(alvo=alvo_card, raiz=raiz_repo)
-        return relatorio_lint(classe, alvo_card, apontamentos, chave_lista, rev=1, como_json=como_json)
+        try:
+            apontamentos, chv, rev, avisos = verificar_card_regua(alvo=alvo_card, raiz=raiz_repo)
+        except ValueError as e:
+            rc, msg = e.args
+            print(f"lint: {msg}", file=sys.stderr)
+            return rc
+        # o que a lista pede e o lint nao mede vai ao stderr: verde com parte nao medida nao e verde
+        for aviso in avisos:
+            print(f"lint card: {aviso}", file=sys.stderr)
+        alvo_ancora = f"#{alvo_card.lstrip('#')}" if alvo_card.lstrip("#").isdigit() else alvo_card
+        return relatorio_lint(classe, alvo_ancora, apontamentos, chv, rev=rev, como_json=como_json)
 
     # Classe ACERVO: le o banco do acervo, nao um repositorio
     if classe == "acervo":
