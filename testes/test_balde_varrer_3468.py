@@ -363,6 +363,21 @@ def test_abrir_que_enfileira_menos_que_a_listagem_nao_abre(capsys):
         m.FilaPg(psql).abrir("firma", "", "q", [("a" * 64, 5), ("b" * 64, 6)])
 
 
+def test_toda_consulta_que_devolve_json_pede_jsonb_porque_json_agg_quebra_linha():
+    m = _mod()
+    psql = PsqlGravador("[]\n", '{"id": "22222222-0000-4000-8000-000000000002", "itens": 1}\n', "[]\n", "",
+                        '{"varredura": "x", "colecao": "firma", "prefixo": "", "estado": "aberta", '
+                        '"contagem": {}, "problemas": []}\n')
+    fila = m.FilaPg(psql)
+    fila.abrir("firma", "", "q", [("a" * 64, 5)])
+    fila.em_voo(VID)
+    fila.reivindicar(VID, "h:1:a")
+    fila.resumo(VID)
+    sql = " ".join(psql.sqls)
+    assert "jsonb_agg" in sql and "jsonb_build_object" in sql and "jsonb_object_agg" in sql
+    assert " json_agg(" not in sql and "(json_agg(" not in sql and " json_build_object(" not in sql
+
+
 def test_tabela_ausente_diz_qual_migracao_aplicar(monkeypatch):
     m = _mod()
 

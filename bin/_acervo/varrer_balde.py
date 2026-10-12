@@ -283,6 +283,8 @@ class FilaPg:
         self._psql = psql or _psql
 
     def _json(self, sql: str) -> object:
+        """A última linha da saída, decodificada. Por isso toda consulta devolve `jsonb`: `json_agg` põe quebra
+        de linha entre os elementos, e a última linha não seria o resultado inteiro."""
         saida = self._psql("set standard_conforming_strings = on;\n" + sql)
         linhas = [x for x in saida.splitlines() if x.strip()]
         if not linhas:
@@ -305,7 +307,7 @@ class FilaPg:
             "with a as (update acervo.varredura_balde set estado = 'abandonada', concluida_em = now() "
             "where id in (select id from acervo.varredura_balde "
             f"where colecao = {_lit(colecao)} and estado = 'aberta' for update) returning id::text) "
-            "select coalesce(json_agg(id), '[]'::json) from a") or []
+            "select coalesce(jsonb_agg(id), '[]'::jsonb) from a") or []
         carga = json.dumps([{"posicao": i, "chave": c, "bytes": n} for i, (c, n) in enumerate(itens, start=1)],
                            ensure_ascii=False)
         tag = _tag(carga)
@@ -316,15 +318,15 @@ class FilaPg:
             "select v.id, x.posicao, x.chave, x.bytes "
             f"from v, json_to_recordset({tag}{carga}{tag}::json) as x(posicao int, chave text, bytes bigint) "
             "returning 1) "
-            "select json_build_object('id', (select id::text from v), 'itens', (select count(*) from i))")
+            "select jsonb_build_object('id', (select id::text from v), 'itens', (select count(*) from i))")
         if not r or r.get("itens") != len(itens):
             raise FonteFora(f"enfileirei {(r or {}).get('itens')} de {len(itens)} objetos: varredura não aberta")
         return r["id"], abandonadas
 
     def em_voo(self, vid: str) -> list:
         return self._json(
-            "select coalesce(json_agg(json_build_object('chave', chave, 'executor', executor, "
-            "'idade_s', extract(epoch from now() - iniciado_em)::int)), '[]'::json) "
+            "select coalesce(jsonb_agg(jsonb_build_object('chave', chave, 'executor', executor, "
+            "'idade_s', extract(epoch from now() - iniciado_em)::int)), '[]'::jsonb) "
             f"from acervo.varredura_balde_objeto where varredura_id = {_uuid(vid)} and estado = 'em_voo'") or []
 
     def reivindicar(self, vid: str, executor: str) -> tuple | None:
@@ -337,7 +339,7 @@ class FilaPg:
             "update acervo.varredura_balde_objeto o set estado = 'em_voo', "
             f"executor = {_lit(executor)}, iniciado_em = now() "
             "from alvo where o.varredura_id = alvo.varredura_id and o.chave = alvo.chave "
-            "returning json_build_object('chave', o.chave, 'bytes', o.bytes)")
+            "returning jsonb_build_object('chave', o.chave, 'bytes', o.bytes)")
         return (r["chave"], r["bytes"]) if r else None
 
     def fechar(self, vid: str, chave: str, executor: str, achado: Achado) -> bool:
@@ -375,13 +377,13 @@ class FilaPg:
     def resumo(self, vid: str) -> dict:
         """O estado da varredura, tirado das linhas: contagem por estado e os problemas, na ordem da listagem."""
         r = self._json(
-            "select json_build_object('varredura', v.id::text, 'colecao', v.colecao, 'prefixo', v.prefixo, "
+            "select jsonb_build_object('varredura', v.id::text, 'colecao', v.colecao, 'prefixo', v.prefixo, "
             "'estado', v.estado, "
-            "'contagem', (select coalesce(json_object_agg(estado, n), '{}'::json) from "
+            "'contagem', (select coalesce(jsonb_object_agg(estado, n), '{}'::jsonb) from "
             "(select estado, count(*) as n from acervo.varredura_balde_objeto "
             "where varredura_id = v.id group by estado) c), "
-            "'problemas', (select coalesce(json_agg(json_build_object('estado', estado, 'chave', chave, "
-            "'bytes', coalesce(bytes_lidos, bytes), 'causa', causa) order by posicao), '[]'::json) "
+            "'problemas', (select coalesce(jsonb_agg(jsonb_build_object('estado', estado, 'chave', chave, "
+            "'bytes', coalesce(bytes_lidos, bytes), 'causa', causa) order by posicao), '[]'::jsonb) "
             "from acervo.varredura_balde_objeto "
             "where varredura_id = v.id and estado in ('ilegivel', 'divergente', 'ausente'))) "
             f"from acervo.varredura_balde v where v.id = {_uuid(vid)}")
