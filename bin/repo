@@ -149,11 +149,8 @@ uso:
   repo pr-diff   <repo> <numero>
   repo pr-merge  <repo> <numero> [--squash|--merge|--rebase] [--forcar]
   repo pr-fechar <repo> <numero> --motivo <texto>   (descarta sem merge; apaga ramo e bancadas)
-  repo hooks listar <repo>… | --todos [--url <trecho>] [--json]   (webhooks do forge: id, url, eventos, ativo;
-                                                     so leitura; nunca o secret; --todos = os clones da bancada)
-  repo hooks apagar <repo> <id> --url <trecho>      (apaga UM webhook; recusa 4 se a url dele nao contem o trecho;
-                                                     id que nao existe: 1, ja feito)
-                                                    (na porta o ato e hooks-listar / hooks-apagar)
+  repo hooks listar [<repo>|--todos] [--url <t>] [--json]
+  repo hooks apagar <repo> <id> --url <t>   (porta: hooks-listar, hooks-apagar)
   repo lock      <repo> <projeto> [--conferir | --atualizar <pacote>[@<versao>]… | --atualizar-tudo]
                                                     (uv.lock ou package-lock.json do <projeto>; nao commita;
                                                      --atualizar sobe um pacote, --atualizar-tudo todos)
