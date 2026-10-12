@@ -2143,17 +2143,19 @@ def _gerar_claude_host(sistema, usuario, modelo):
     """Uma geração do juiz pelo `claude` do host (o contêiner do rag não tem o CLI e a casa não tem chave de API,
     decisão do dono de 24/07). Molde: tooling/rodar-firmabot-claude.py — processo novo por chamada, sem ferramentas,
     sem sessão salva, em diretório neutro para não carregar o CLAUDE.md de um repositório."""
-    import shutil, tempfile
-    exe = shutil.which("claude") or next((p for p in (os.path.expanduser("~/.local/bin/claude"),
-                                                       os.path.expanduser("~/.claude/local/claude")) if os.path.isfile(p)), None)
-    if not exe:
-        print("motor julgar: o `claude` nao esta no PATH do host nem em ~/.local/bin", file=sys.stderr)
+    import tempfile
+    import claude_cli  # o CLI vem da trava da release, nunca do PATH (#2856 linha 248)
+    try:
+        exe = claude_cli.resolver()
+    except claude_cli.ClaudeAusente as e:
+        print(f"motor julgar: {e}", file=sys.stderr)
         sys.exit(3)
     t0 = time.monotonic()
     try:
         r = subprocess.run([exe, "-p", "--system-prompt", sistema, "--tools", "", "--no-session-persistence",
                             "--model", modelo, "--output-format", "json", usuario],
-                           capture_output=True, text=True, timeout=600, cwd=tempfile.gettempdir())
+                           capture_output=True, text=True, timeout=600, cwd=tempfile.gettempdir(),
+                           env=claude_cli.ambiente_de_execucao())
     except subprocess.TimeoutExpired:
         return {"texto": "", "modelo": modelo, "provider": "claude_cli_host", "segundos": round(time.monotonic() - t0, 2)}
     if r.returncode != 0:

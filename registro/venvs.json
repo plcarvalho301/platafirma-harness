@@ -53,6 +53,10 @@
     "lock": "politica-acesso/uv.lock",
     "teste": "politica-acesso"
   },
+  "claude-code": {
+    "familia": "platafirma-harness",
+    "lock": "venvs/claude-code/package-lock.json"
+  },
   "ops": {
     "familia": "platafirma-harness",
     "lock": "ops-server/requirements.txt",
