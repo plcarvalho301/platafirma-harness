@@ -227,7 +227,8 @@ monta_query() { # monta_query "$@" -> ecoa a query string e devolve o resto em R
           claudinho-seguranca|seguranca|\
           claudinha-gestao-estrategica|gestao-estrategica|\
           claudinha-fabrica|fabrica|\
-          claudinho-politicas-publicas|politicas-publicas) ;;
+          claudinho-politicas-publicas|politicas-publicas|\
+          engenharia|direito|inteligencia) ;;
           *) echo "cadeira desconhecida: $cad" >&2; exit 2 ;;
         esac
         q="$q&cadeira=$cad"; shift 2 ;;
