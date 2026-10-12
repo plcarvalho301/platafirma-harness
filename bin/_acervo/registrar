@@ -30,6 +30,10 @@ ESCREVE em acervo.ferramental (capacidade + verbo + descricao). Idempotente por 
 `# regua: <ato> lista-de-verificacao <chave>` grava a lista do ato em ferramental_ato so
 se ela resolve no acervo agora; a que nao resolve sai em aviso, sem referencia pendurada.
 `# regua: <ato> repositorio` marca regua_propria (spec_lint §3, §6; migracao 062).
+`# rotulo: <ato>=<texto>`, `# volta: <ato>=sim — <como>|nao` e `# atalho: <ato>=<tecla>` gravam o texto
+do controle do ato (arq:0124 §3; migracao 094); o objeto do rotulo entra como {slug} do conceito
+no tesauro, e slug que o tesauro nao tem recusa o registro do verbo (exit 3). O retrato que a
+Taipa consome sai de `acervo listar casa ferramental --retrato`.
 Fonte = o cabecalho do script; a tabela e a projecao. Substitui a migration de seed
 na mao (migration fica so para DDL)."""
 
@@ -60,12 +64,17 @@ def _lit(v):
 
 CHAVES = (
     "capacidade", "dono", "componente", "use para", "atos", "classe",
-    "le", "escreve", "consome", "ambiente", "depende", "substitui", "regua"
+    "le", "escreve", "consome", "ambiente", "depende", "substitui", "regua",
+    "rotulo", "volta", "atalho"
 )
 # Chaves que se repetem, uma linha por ato, e acumulam em vez de sobrescrever.
-POR_ATO = ("le", "escreve", "regua")
+POR_ATO = ("le", "escreve", "regua", "rotulo", "volta", "atalho")
+# O texto do controle de cada ato (arq:0124 §3): `# <chave>: <ato>=<valor>`, uma linha por ato.
+CONTROLE = ("rotulo", "volta", "atalho")
 
 RE_SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+RE_OBJETO = re.compile(r"\{([a-z0-9]+(?:-[a-z0-9]+)*)\}")
+RE_ATALHO = re.compile(r"^\S{1,12}$")
 
 def _regua_por_ato(linhas, verbo):
     """`# regua: <ato> repositorio` | `# regua: <ato> <especie> <chave>` (spec_lint §3, §6) ->
@@ -95,6 +104,57 @@ def _listas_que_resolvem(pares):
     return {tuple(l.split("|", 1)) for l in out.splitlines() if "|" in l}
 
 
+def _controle_por_ato(campos, verbo):
+    """`# rotulo: <ato>=<texto>`, `# volta: <ato>=sim — <como>|nao`, `# atalho: <ato>=<tecla>`
+    (arq:0124 §3) -> {ato: {"rotulo": ..., "volta": ..., "atalho": ...}}, so com o que o ato
+    declara. Fora da forma, o registro do verbo recusa (exit 3): o texto do controle errado se
+    cura no cabecalho, nunca no registro. Verbo sem nenhuma das tres chaves devolve {}."""
+    por_ato = {}
+    for chave in CONTROLE:
+        for linha in campos.get(chave) or []:
+            if "=" not in linha:
+                morre("acervo registrar: bin/%s tem `# %s: %s` sem ato (forma: <ato>=<valor>)."
+                      % (verbo, chave, linha), 3)
+            ato, valor = (p.strip() for p in linha.split("=", 1))
+            if not ato or not valor:
+                morre("acervo registrar: bin/%s tem `# %s: %s` com ato ou valor vazio."
+                      % (verbo, chave, linha), 3)
+            if chave in por_ato.get(ato, {}):
+                morre("acervo registrar: bin/%s declara `# %s:` duas vezes para o ato %s."
+                      % (verbo, chave, ato), 3)
+            if chave == "volta":
+                if valor.lower() == "nao":
+                    valor = "nao"
+                else:
+                    m = re.match(r"^sim\s+[—-]\s+(\S.*)$", valor, re.I)
+                    if not m:
+                        morre("acervo registrar: bin/%s: `# volta: %s` fora da forma `sim — <como se "
+                              "desfaz>` ou `nao`." % (verbo, linha), 3)
+                    valor = "sim — " + m.group(1).strip()
+            elif chave == "atalho" and not RE_ATALHO.match(valor):
+                morre("acervo registrar: bin/%s: `# atalho: %s` nao e uma tecla (ate 12 caracteres, "
+                      "sem espaco)." % (verbo, linha), 3)
+            elif chave == "rotulo":
+                resto = RE_OBJETO.sub("", valor)
+                if "{" in resto or "}" in resto:
+                    morre("acervo registrar: bin/%s: `# rotulo: %s` tem chave solta; o objeto entra "
+                          "como {slug} do conceito no tesauro." % (verbo, linha), 3)
+            por_ato.setdefault(ato, {})[chave] = valor
+    return por_ato
+
+
+def _conceitos_que_resolvem(slugs):
+    """Dos slugs pedidos, os que existem no tesauro agora (acervo.conceito). O objeto do rotulo
+    nunca se copia: o registro nao guarda slug pendurado (arq:0125, Fechado depois do aceite, 4)."""
+    if not slugs:
+        return set()
+    valores = ", ".join("(%s)" % _lit(s) for s in sorted(slugs))
+    out = _psql(
+        "select v.s from (values %s) as v(s) "
+        "join acervo.conceito c on c.slug = v.s;" % valores)
+    return {l.strip() for l in out.splitlines() if l.strip()}
+
+
 def _le_cabecalho(path):
     """Le o cabecalho por CHAVE, nunca por posicao (spec_capsula-de-verbos §6):
     `# <verbo> — <o que>` (continua nas linhas `#` seguintes ate um `#` vazio ou uma
@@ -103,10 +163,19 @@ def _le_cabecalho(path):
     forma fixa: `<o que> · use para: <vocabulario> · atos: <lista>`; chave ausente
     so omite a parte, nunca inventa. Mesma convencao de chaves que `conferir` parseia."""
     desc, campos, lendo_desc = [], {}, False
+    linhas = []
     with open(path, errors="replace") as f:
-        # 80 e nao 45: `le:`/`escreve:` sao uma linha POR ATO, e verbo de 19 atos (repo)
-        # passa de 45 linhas de cabecalho; cortar aqui registrava ato sem acesso (morre).
-        linhas = [next(f, "") for _ in range(80)]
+        # O cabecalho e o bloco de comentario do topo, inteiro: `le:`, `escreve:`, `rotulo:`,
+        # `volta:` e `atalho:` sao uma linha POR ATO, e verbo de 26 atos (acervo) passa de 80
+        # linhas; uma janela fixa registrava ato sem acesso (morre) ou sem o texto do controle.
+        # O bloco acaba na primeira linha que nao e comentario nem vazia.
+        for l in f:
+            s = l.strip()
+            if s and not s.startswith("#"):
+                break
+            linhas.append(l)
+            if len(linhas) >= 2000:
+                break
     for l in linhas:
         s = l.strip()
         if not s.startswith("#") or s.startswith("#!"):
@@ -215,6 +284,19 @@ def registrar_um(verbo):
     if sem_ato:
         morre("acervo registrar: bin/%s declara `# regua:` para ato que `# atos:` nao lista: %s"
               % (verbo, ", ".join(sem_ato)), 3)
+    # Texto do controle por ato (arq:0124 §3): so de ato que `# atos:` lista, e o objeto do rotulo
+    # ({slug}) so de conceito que existe no tesauro agora.
+    controle_por_ato = _controle_por_ato(campos, verbo)
+    sem_ato_c = sorted(a for a in controle_por_ato if a not in nomes_atos)
+    if sem_ato_c:
+        morre("acervo registrar: bin/%s declara `# rotulo:`, `# volta:` ou `# atalho:` para ato que "
+              "`# atos:` nao lista: %s" % (verbo, ", ".join(sem_ato_c)), 3)
+    objetos = {s for c in controle_por_ato.values() for s in RE_OBJETO.findall(c.get("rotulo", ""))}
+    sem_conceito = sorted(objetos - _conceitos_que_resolvem(objetos))
+    if sem_conceito:
+        morre("acervo registrar: bin/%s: o objeto do rotulo cita conceito que o tesauro nao tem: %s "
+              "(o rotulo se cura no cabecalho; o conceito, por `acervo definir biblioteca conceito`)."
+              % (verbo, ", ".join(sem_conceito)), 3)
     pedidas = {r for r in regua_por_ato.values() if r[0] != "repositorio"}
     resolvem = _listas_que_resolvem(pedidas)
     pendentes = []
@@ -262,27 +344,24 @@ def registrar_um(verbo):
     for ato_nome, op, subcap in atos_info:
         # (verbo, ato) -> folha: mapeamento em ferramental_ato; a tabela de capacidades
         # continua sendo so o mapa de folhas (spec_acervo §7).
+        # Colunas de regua (062) so entram para verbo que declara `# regua:`, e as do texto do
+        # controle (094) so para verbo que declara `# rotulo:`, `# volta:` ou `# atalho:`: verbo
+        # sem a linha registra igual a antes, mesmo num banco que ainda nao tem as colunas.
+        colunas = ["verbo", "ato", "capacidade", "acao", "tipo"]
+        valores = [_lit(verbo), _lit(ato_nome), _lit(subcap), _lit(op), _lit(subcap)]
         if regua_por_ato:
-            # Colunas de regua (062) so entram para verbo que declara `# regua:`: verbo sem a
-            # linha registra igual a antes, mesmo num banco que ainda nao tem as colunas.
             re_esp, re_chave, re_propria = _regua_sql(ato_nome)
-            sql_parts.append(
-                "insert into acervo.ferramental_ato (verbo, ato, capacidade, acao, tipo, "
-                "regua_especie, regua_chave, regua_propria) "
-                "values (%s, %s, %s, %s, %s, %s, %s, %s) on conflict (verbo, ato) do update set "
-                "capacidade=excluded.capacidade, acao=excluded.acao, tipo=excluded.tipo, "
-                "regua_especie=excluded.regua_especie, regua_chave=excluded.regua_chave, "
-                "regua_propria=excluded.regua_propria;\n"
-                % (_lit(verbo), _lit(ato_nome), _lit(subcap), _lit(op), _lit(subcap),
-                   re_esp, re_chave, re_propria)
-            )
-        else:
-            sql_parts.append(
-                "insert into acervo.ferramental_ato (verbo, ato, capacidade, acao, tipo) "
-                "values (%s, %s, %s, %s, %s) on conflict (verbo, ato) do update set "
-                "capacidade=excluded.capacidade, acao=excluded.acao, tipo=excluded.tipo;\n"
-                % (_lit(verbo), _lit(ato_nome), _lit(subcap), _lit(op), _lit(subcap))
-            )
+            colunas += ["regua_especie", "regua_chave", "regua_propria"]
+            valores += [re_esp, re_chave, re_propria]
+        if controle_por_ato:
+            c = controle_por_ato.get(ato_nome, {})
+            colunas += list(CONTROLE)
+            valores += [_lit(c.get(k)) for k in CONTROLE]
+        sql_parts.append(
+            "insert into acervo.ferramental_ato (%s) values (%s) on conflict (verbo, ato) "
+            "do update set %s;\n"
+            % (", ".join(colunas), ", ".join(valores),
+               ", ".join("%s=excluded.%s" % (c, c) for c in colunas[2:])))
         for modo, por_ato in (("le", le_por_ato), ("escreve", escreve_por_ato)):
             if not le_por_ato and not escreve_por_ato:
                 break   # verbo ainda sem declaracao de acesso (pre-0110): registra sem acesso
@@ -312,8 +391,28 @@ def registrar_um(verbo):
             % (_lit(verbo), _lit(var_name), "true" if obrig else "false", _lit(origem))
         )
 
+    # Atalho e uma tecla por ato, unica em toda face (arq:0124 §3). O registro ainda nao guarda a
+    # face, entao o repetido sai em aviso, nunca em recusa; o retrato repete o aviso.
+    repetidos = []
+    atalhos = {a: c["atalho"] for a, c in controle_por_ato.items() if c.get("atalho")}
+    if atalhos:
+        for tecla in sorted(set(atalhos.values())):
+            donos = sorted(a for a, t in atalhos.items() if t == tecla)
+            if len(donos) > 1:
+                repetidos.append("%s repetido em %s" % (tecla, ", ".join("%s %s" % (verbo, a) for a in donos)))
+        outros = _psql(
+            "select verbo, ato, atalho from acervo.ferramental_ato where verbo <> %s "
+            "and atalho in (%s) order by 1, 2;"
+            % (_lit(verbo), ", ".join(_lit(t) for t in sorted(set(atalhos.values())))))
+        for l in outros.splitlines():
+            v, a, t = l.split("|", 2)
+            repetidos.append("%s repetido em %s %s" % (t, v, a))
+
     sql_parts.append("commit;\n")
     _psql("".join(sql_parts), escreve=True)
+    if repetidos:
+        sys.stderr.write("acervo registrar: %s: atalho que ja esta em uso (unico em toda face): %s\n"
+                         % (verbo, "; ".join(repetidos)))
     if pendentes:
         sys.stderr.write("acervo registrar: %s: regua que ainda nao resolve no acervo, gravada sem "
                          "referencia (lista antes da classe, spec_lint §3): %s\n"
