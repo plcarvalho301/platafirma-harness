@@ -231,6 +231,24 @@ def test_listar_tudo_sem_json_mantem_texto_tabulado_atual(tmp_path):
     assert proc.stdout.splitlines() == esperado
 
 
+# --- filtro --cadeira ------------------------------------------------------
+
+
+@pytest.mark.parametrize("cadeira", ["engenharia", "direito", "inteligencia", "ti", "fabrica"])
+def test_filtro_cadeira_aceita_as_cadeiras_da_abertura(tmp_path, cadeira):
+    """A lista do filtro tinha ficado atras das cadeiras da abertura (engenharia, direito e
+    inteligencia davam `cadeira desconhecida`, o que escondia o #3461 de quem listava por
+    cadeira). A validacao roda antes de qualquer chamada de rede."""
+    proc = _run(["listar", "--cadeira", cadeira], tmp_path)
+    assert "cadeira desconhecida" not in proc.stderr
+
+
+def test_filtro_cadeira_recusa_nome_que_nao_existe(tmp_path):
+    proc = _run(["listar", "--cadeira", "nao-existe"], tmp_path)
+    assert proc.returncode == 2
+    assert "cadeira desconhecida: nao-existe" in proc.stderr
+
+
 # --- falha ---------------------------------------------------------------
 
 
