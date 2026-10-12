@@ -58,6 +58,12 @@
 # escreve: exportar=repo
 # escreve: psql=acervo.*
 # escreve: balde=acervo.obra,minio
+# rotulo: retirar=Retirar
+# rotulo: restaurar=Restaurar
+# rotulo: apagar=Apagar
+# volta: retirar=sim — acervo restaurar
+# volta: restaurar=sim — acervo retirar
+# volta: apagar=nao
 # consome: motor_acervo_rest, rag_extractor_pg
 # ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (ingerir casa le o suporte platafirma-casa pelo sha no espelho bare <instancia>/var/acervo/suporte/platafirma-casa.git, com a credencial da conta; nunca release, nunca clone de bancada; ler/listar casa so leem o origin/main ja buscado dele, para o campo servido), PF_SUPORTE_ESPELHO (opcional, override do espelho), PF_SUPORTE_URL[=https://github.com/plcarvalho301/platafirma-casa.git] (opcional, forge do suporte), RAG_API_BASE (opcional, url do motor), RAG_API_TOKEN (opcional, auth do motor), MOTOR_ACERVO_URL e RAG_API_URL (opcionais, url do motor; valem mais que RAG_API_BASE; a ficha as le nesta ordem), PF_CADEIRA e PF_CONTA (opcionais, o autor de `ingerir biblioteca ficha`; --autor vale mais)
 # depende: docker, git, psql
@@ -108,6 +114,8 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   o referente na forma autorizada, primeira parte da linha de Fontes (#3408 comentário #2085)
   acervo listar   casa [<especie>] [--todas]          sem especie: o catalogo (projecao, regime, contagem)
   acervo listar   casa [<especie>] --sobre <classe> <chave>   a documentacao de uma entidade
+  acervo listar   casa ferramental --retrato [--json]   o retrato do dicionario de rotulos: rotulo, volta e
+                  atalho de cada ato e o sha do registro (JSON; arq:0124 §3, #3444)
   acervo listar   casa topologia [<stack>] [--completo] [--json]   golden record acervo.stack
   acervo listar   casa topologia <stack> --rotas|--acessos    ingress/gate da stack
                   (sucessora de \`deploy <stack> rotas|acessos\`; segredos: \`seg segredo exigidos\`)
@@ -240,7 +248,13 @@ conforme() {
     # 11/10/2026, #3408 comentário #2085). Antes do ramo generico `ler:casa:*`.
     ler:casa:citacao|ler:biblioteca:citacao) exec python3 "$ATOS/citacao" "$particao" "$@" ;;
     listar:casa:pagina)     exec "$ATOS/wiki" listar "$@" ;;
-    listar:casa:ferramental) exec "$ATOS/listar" ferramental "$@" ;;
+    # o retrato do dicionario de rotulos (arq:0124 §3, #3444): JSON com rotulo, volta e atalho de
+    # cada ato e o sha do registro; a Taipa o guarda em platafirma-ui. Antes do ramo de listar.
+    listar:casa:ferramental)
+        case " $* " in
+          *" --retrato "*) exec python3 "$ATOS/ferramental-retrato" "$@" ;;
+        esac
+        exec "$ATOS/listar" ferramental "$@" ;;
     # topologia (golden record acervo.stack): forma conforme da porta de `deploy <stack>
     # rotas|acessos|segredos` (card #3145 frente D); `_acervo/listar` trata --rotas/--acessos/
     # --completo e o [<stack>] opcional.
