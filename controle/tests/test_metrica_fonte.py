@@ -359,6 +359,12 @@ def test_verbos_latencia_resumo_ordena_pelo_tempo_e_csv_da_um_ato_por_linha(monk
     assert linhas[1].split(",")[:8] == ["repo", "sincronizar", "10", "0", "10000", "30000", "30000", "120000"]
 
 
+def test_janela_de_um_dia_so_leva_o_dia_dela_no_cabecalho_e_nao_o_dia_padrao(monkeypatch, capsys):
+    saida = roda(monkeypatch, capsys, _latencia_api(), "verbos", "--desde", "2026-09-22", "--ate", "2026-09-22",
+                 "--latencia", "--resumo")[1]
+    assert saida.splitlines()[0].startswith("== metrica verbos --latencia — 2026-09-22 ·")
+
+
 @pytest.mark.parametrize("args, trecho", [
     (("dia", DIA, "--latencia"), "--latencia so vale em `verbos`"),
     (("verbos", DIA, "--latencia", "--fonte", "bruto"), "nao o bruto"),
