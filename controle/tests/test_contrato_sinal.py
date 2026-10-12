@@ -191,3 +191,42 @@ def test_ciclo_completo_reconciliacao():
     rec6 = sinal.reconcilia_com_anterior(dados6, rec5, agora_dt=t5)
     assert "fora_desde" not in rec6["servicos"]["api"]
     assert "incidente_id" not in rec6["servicos"]["api"]
+
+
+# --- gpu-host (pos-morte do #3401): driver descasado da biblioteca acusa antes da recriacao
+
+def test_gpu_sem_nvidia_smi_e_sem_sinal(monkeypatch):
+    monkeypatch.setattr(sinal.shutil, "which", lambda nome: None)
+    e = sinal.do_gpu()
+    assert e["estado"] == "sem-sinal"
+    assert "nvidia-smi ausente" in e["motivo"]
+
+
+def test_gpu_descasada_e_fora_com_o_erro_do_nvml(monkeypatch):
+    monkeypatch.setattr(sinal.shutil, "which", lambda nome: "/usr/bin/nvidia-smi")
+    monkeypatch.setattr(sinal, "roda", lambda cmd, timeout=20: (
+        18, "", "Failed to initialize NVML: Driver/library version mismatch\nNVML library version: 595.99"))
+    e = sinal.do_gpu()
+    assert e["estado"] == "fora"
+    assert e["motivo"] == "Failed to initialize NVML: Driver/library version mismatch"
+    assert e["exercitado"] == "nvidia-smi -L"
+
+
+def test_gpu_lida_e_no_ar(monkeypatch):
+    monkeypatch.setattr(sinal.shutil, "which", lambda nome: "/usr/bin/nvidia-smi")
+    monkeypatch.setattr(sinal, "roda", lambda cmd, timeout=20: (
+        0, "GPU 0: NVIDIA GeForce RTX 5060 Ti (UUID: GPU-x)", ""))
+    assert sinal.do_gpu()["estado"] == "no-ar"
+
+
+def test_gpu_fora_mais_de_10_min_abre_incidente():
+    t0 = datetime(2026, 10, 10, 15, 0, 0, tzinfo=timezone.utc)
+    fora = {"servicos": {"gpu-host": {"estado": "fora", "motivo": "Driver/library version mismatch",
+                                     "lido_em": t0.isoformat()}}}
+    rec = sinal.reconcilia_com_anterior(fora, None, agora_dt=t0)
+    abertos = []
+    depois = {"servicos": {"gpu-host": {"estado": "fora", "motivo": "Driver/library version mismatch"}}}
+    rec2 = sinal.reconcilia_com_anterior(depois, rec, agora_dt=t0 + timedelta(minutes=11),
+                                         abre_incidente_fn=lambda n, i: abertos.append(n) or "3999")
+    assert abertos == ["gpu-host"]
+    assert rec2["servicos"]["gpu-host"]["incidente_id"] == "3999"
