@@ -465,12 +465,11 @@ def prepara_cwd(cadeira, id_fita, modelo=""):
     return base
 
 
-# O MESMO arquivo que as worktrees da fabrica ja usam. A fita nao tinha nenhum, e
-# o texto que ela carrega nomeia `run_command`, `repo_read`, `rag_search` — tools
-# que so existem por aqui. Equalizar o meio e mais barato e menos frageis que
-# reescrever o texto de sete cadeiras.
+# Conectores que o giro recebe no `.mcp.json` do cwd: nome -> (url, variavel do
+# token). O `claudinho-mcp` SAIU daqui (card #3477, 12/10/2026): a porta so
+# aceita o JWT do realm desde #3272 e o giro nao tem token estatico a apresentar.
+# O chat sera refeito; o que ele precisar de conector volta a ser declarado aqui.
 CONECTORES = {
-    "claudinho-mcp": ("https://ops.platafirma.org/mcp", "PF_OPS_TOKEN"),
     "platafirma-wiki": ("https://mcp.platafirma.org/mcp", "PF_WIKI_TOKEN"),
 }
 
