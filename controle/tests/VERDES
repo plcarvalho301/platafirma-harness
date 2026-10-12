@@ -34,6 +34,8 @@ tests/test_conferir_gate_email.py | bin/conferir bin/_release/**
 tests/test_contrato_repo_bancada.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** bin/_minuta/**
 tests/test_contrato_repo_lock.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** bin/_minuta/** venvs/**
 tests/test_contrato_repo_pr_fechar.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** bin/_minuta/**
+# Medido em 12/10/2026 (card #3473): `repo hooks listar|apagar` com gh de fixture (21 passam; sem a mudança em bin/repo, 17 ficam vermelhos).
+tests/test_contrato_repo_hooks.py | bin/repo lib/raizes.sh
 tests/test_contrato_repo_sanear_remotos.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** bin/_minuta/**
 tests/test_contrato_teste_bloco.py | bin/teste
 tests/test_lote_encadeado.py | ops-server/**
