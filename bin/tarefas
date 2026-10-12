@@ -57,12 +57,19 @@ uso:
                                           troca título e/ou corpo (substitui o corpo
                                           inteiro); não mexe no estado — mover é `mover`
   tarefas modelo <épico|feature|story|task>
-                                          esqueleto do corpo, com os rótulos que a API exige
+                                          esqueleto do corpo, com os rótulos que a API exige;
+                                          épico e feature saem no two-pager
+  tarefas modelo story derivada           a story que sai da formalização: aponta R<n>, D<n> ou Peça
+  tarefas modelo comentario <tipo>        o comentário tipado: insumo, pergunta, buraco,
+                                          requisito ou decisão
   tarefas modelo story refinada           o Plano: segunda camada da story, escrita pelo
                                           executor em em-refinamento-tecnico, depois de ler
                                           o código (arq:0096)
   tarefas comentar <id> ["<txt>"]         cria comentário (entidade própria — card #390,
                                           não altera o corpo do item); sem texto, lê stdin
+  tarefas comentar <id> --fecha <n> "<resultado> — <destino>"
+                                          escreve «fecho: …» como última linha do comentário n
+                                          (comentário tipado; insumo não leva fecho)
   tarefas comentarios <id>                lista os comentários do item, em ordem
   tarefas mover <id> <estado> [--motivo "<txt>"] [--englobado-em <id>]
                                           move o card pelo fluxo; a recusa diz para onde
@@ -155,9 +162,12 @@ envia() { # envia MÉTODO /caminho  (corpo JSON em stdin)
 # paragrafo dele, separadas por <br>. A validacao da API tira as tags e acha o rotulo no
 # comeco da linha, entao `<strong>Negocio:</strong>` segue valendo. Linha em branco ainda
 # separa paragrafo.
+# Card #3410: rotulo que NAO esta na lista cai dentro do paragrafo do rotulo anterior, e foi o
+# que se viu no corpo servido do #3408 (Solucao, Pecas, Aberto e Produtos documentais colados em
+# Medida e em Fora). A lista leva os rotulos do two-pager e as linhas fixas do comentario tipado.
 para_html() {
   python3 -c 'import html,re,sys
-R = ["Problema encontrado", "Solução proposta", "Aceite × prova", "Raio de ataque", "Raio emendado", "Comportamento esperado", "Sai quando", "Continuidade", "Estado medido", "Medido em", "Referencial", "Premissas", "Unidades", "Problema", "Resultado", "Medida", "Fora", "Quebra", "Negócio", "Ambiente", "Onde", "Passos", "Aceite", "Travas", "Entrega", "Plano", "Riscos"]
+R = ["Problema encontrado", "Solução proposta", "Aceite × prova", "Raio de ataque", "Raio emendado", "Comportamento esperado", "Sai quando", "Continuidade", "Estado medido", "Medido em", "Referencial", "Premissas", "Unidades", "Problema", "Resultado", "Medida", "Fora", "Quebra", "Negócio", "Ambiente", "Onde", "Passos", "Aceite", "Travas", "Entrega", "Plano", "Riscos", "Solução", "Peças", "Apetite", "Aberto", "Produtos documentais", "Traz", "Caso", "Remendo", "Confere", "Descartado", "Substitui", "fecho"]
 R.sort(key=len, reverse=True)
 L = re.compile("^(" + "|".join(map(re.escape, R)) + "):", re.I)
 ps, p = [], []
@@ -521,6 +531,10 @@ comentar() {
   local id="${1:-}"
   [ -z "$id" ] && { echo "uso: tarefas comentar <id> [\"<txt>\"] (ou corpo em stdin)" >&2; exit 2; }
   id=$(so_id "$id") || exit 2
+  if [ "${2:-}" = "--fecha" ]; then
+    fechar_comentario "$id" "${3:-}" "${4:-}"
+    return
+  fi
   local txt="${2:-}"
   # Opção no lugar do texto não é corpo (#2856 linhas 49 e 50): `--stdin` manda ler o stdin; outra
   # opção de uma palavra só é recusada, em vez de gravada como comentário.
@@ -541,6 +555,62 @@ comentar() {
   local html; html=$(printf '%s' "$txt" | para_html)
   jq -n --arg c "$html" '{corpo:$c}' | envia POST "/itens/$id/comentarios" \
     | jq -r '"comentário #\(.id) criado no item \(.item)"'
+}
+
+# O FECHO NO PRÓPRIO COMENTÁRIO — card #3410 (dono, comentário #2088 do #3408: o estado do
+# comentário mora nele). `tarefas comentar <card> --fecha <n> "<resultado> — <destino>"` escreve
+# `fecho: …` como ÚLTIMA linha do comentário n, pela edição de comentário da API, que guarda o
+# corpo anterior no ledger. As regras que o verbo aplica são as da forma do comentário (spec
+# comentario-tipado, R5 e R6), que o rastreador não conhece até a F3: insumo nasce fechado e não
+# leva fecho; comentário já fechado não fecha de novo; o resultado é do vocabulário do tipo e o
+# destino é obrigatório. Comentário sem etiqueta de tipo (anterior ao molde) fecha com qualquer
+# resultado, com aviso.
+fechar_comentario() {
+  local id="$1" cid="${2:-}" txt="${3:-}"
+  local uso='uso: tarefas comentar <card> --fecha <n> "<resultado> — <destino>"'
+  case "$cid" in ''|*[!0-9#]*) echo "$uso" >&2; exit 2 ;; esac
+  cid=$(so_id "$cid")
+  txt="$(printf '%s' "$txt" | sed -e 's/^[[:space:]]*[Ff]echo[[:space:]]*:[[:space:]]*//')"
+  [ -n "$(printf '%s' "$txt" | tr -d '[:space:]')" ] || { echo "$uso" >&2; exit 2; }
+  local lista; lista=$(busca GET "/itens/$id/comentarios") || exit 1
+  local fecho_html; fecho_html=$(printf 'fecho: %s' "$txt" | para_html)
+  local corpo rc=0
+  corpo=$(printf '%s' "$lista" | CID="$cid" ITEM="$id" FECHO="$txt" FECHO_HTML="$fecho_html" python3 -c '
+import html, json, os, re, sys
+d = json.load(sys.stdin)
+cid, item, fecho = int(os.environ["CID"]), os.environ["ITEM"], os.environ["FECHO"]
+alvo = next((c for c in d.get("comentarios", []) if c.get("id") == cid), None)
+if alvo is None:
+    sys.stderr.write("comentário #%d não existe no item %s; os comentários saem em `tarefas comentarios %s`\n" % (cid, item, item))
+    sys.exit(1)
+texto = re.sub(r"</p>|<br\s*/?>", "\n", alvo["corpo"])
+linhas = [l.strip() for l in html.unescape(re.sub(r"<[^>]+>", "", texto)).splitlines() if l.strip()]
+if linhas and re.match(r"(?i)^fecho\s*:", linhas[-1]):
+    sys.stderr.write("sem mudança: comentário #%d já está fechado — %s\n" % (cid, linhas[-1]))
+    sys.exit(1)
+if " — " not in fecho:
+    sys.stderr.write("o fecho é «<resultado> — <destino>»: o destino diz onde a contribuição foi parar (spec comentario-tipado, R6)\n")
+    sys.exit(2)
+VOCAB = {"pergunta": ("respondida", "retirada"),
+         "buraco": ("remendado", "cortado", "volta à lapidação"),
+         "requisito": ("aceito", "fundido", "retirado"),
+         "decisão": ("formalizada",)}
+m = re.match(r"(?i)^(insumo|pergunta|buraco|requisito|decis[aã]o)\b", linhas[0] if linhas else "")
+tipo = m.group(1).lower().replace("decisao", "decisão") if m else None
+if tipo == "insumo":
+    sys.stderr.write("recusado: insumo nasce fechado e não leva fecho (spec comentario-tipado, R5)\n")
+    sys.exit(4)
+resultado = fecho.split(" — ", 1)[0].strip().lower()
+if tipo in VOCAB and not any(resultado.startswith(v) for v in VOCAB[tipo]):
+    sys.stderr.write("recusado: o resultado de %s é um de: %s (spec comentario-tipado, R6)\n" % (tipo, ", ".join(VOCAB[tipo])))
+    sys.exit(4)
+if tipo is None:
+    sys.stderr.write("aviso: o comentário #%d não abre com tipo (insumo, pergunta, buraco, requisito, decisão); o fecho foi escrito sem conferir o vocabulário\n" % cid)
+print(json.dumps({"corpo": alvo["corpo"] + os.environ["FECHO_HTML"]}))
+') || rc=$?
+  [ "$rc" -eq 0 ] || exit "$rc"
+  printf '%s' "$corpo" | envia PATCH "/itens/$id/comentarios/$cid" >/dev/null || exit 1
+  printf 'comentário #%s do item %s fechado — fecho: %s\n' "$cid" "$id" "$txt"
 }
 
 comentarios() {
@@ -694,31 +764,126 @@ Riscos: [executor] causa → saída, uma linha cada — só se houver
 M
 }
 
+# O TWO-PAGER (card #3410; padrao styleguide-moldes-por-tipo §7; ordem dos rótulos do insumo
+# #2092 do #3410). O Título é o título do card e não entra no corpo; o aviso vai a stderr pela
+# mesma razão do aviso do Plano: quem copia o esqueleto copia stdout.
+_avisa_two_pager() {
+  echo "título: é o título do card — o que a pessoa passa a conseguir, até doze palavras. A API exige a aposta (Problema, Resultado, Medida, Fora) na saída de captada e a forma (Solução, Peças) na saída de em-lapidacao; Apetite e Aberto são livres, o índice fecha na formalização" >&2
+}
+
+# A STORY DERIVADA (levantamento 2026-10-11-moldes-do-discovery-e-da-formalizacao §7): não
+# repete o que a ADR e a spec dizem; carrega a execução e aponta o item que atende.
+modelo_story_derivada() {
+  cat <<'M'
+Negócio: #<feature> · R<a>, R<b> da spec <peça> | D<n> da arq:NNNN | Peça <n>, enquanto não há R nem D — só o ponteiro
+Referencial: [agente] a ADR e a spec de que deriva, por slug; story que escreve o próprio derivado aponta os comentários decisão e requisito do card
+Raio de ataque: [agente] lista literal dos arquivos a mexer, um por linha, repo@caminho — a fatia do documento que esta story atende; fora da lista não se toca
+Comportamento esperado: [agente] caminho feliz técnico, literal — recebe X, executa Y, sai 0
+Ambiente: repo absoluto · como instalar · o que está de pé e não se derruba · credenciais (nunca impressas)
+Onde: arquivo, função, linha aproximada · peça análoga a imitar, se existir
+Passos: numerados, um por ação, comando literal
+Aceite: o item derivado que a fatia atende (R<n> ou D<n>; a Peça enquanto não há nenhum dos dois) — o comando literal vai ao Plano, em Aceite × prova
+Travas: trava que vem de ADR vira ponteiro D<n>; trava de execução fica escrita, imperativo + motivo
+Entrega: branch fabrica/<card>-<slug> de main · quem escreveu mescla e sobe (código: release promover; documento: servido no acervo) · retorno no comentário
+M
+  echo "segunda camada: o executor escreve o Plano em em-refinamento-tecnico, e o Medido em leva a versão servida da spec que leu — tarefas modelo story refinada" >&2
+}
+
+# O COMENTÁRIO TIPADO (spec comentario-tipado; padrao styleguide-moldes-por-tipo §8): primeira
+# linha, as linhas fixas do tipo logo abaixo, uma linha em branco e o argumento, sem teto. O
+# fecho não faz parte do molde: escreve-o o autor do two-pager, com `comentar --fecha`.
+modelo_comentario() {
+  case "${1:-}" in
+    insumo) cat <<'M'
+insumo: <nome do documento ou o fato>
+Traz: <o que muda para este card, numa linha>
+
+<argumento: o que sustenta, com onde se leu ou mediu>
+M
+    ;;
+    pergunta) cat <<'M'
+pergunta (<cadeira a quem se pergunta>): <a pergunta>
+
+<argumento: por que a pergunta importa e o que já se sabe>
+M
+    ;;
+    buraco) cat <<'M'
+buraco: <onde a solução quebra, em uma frase>
+Caso: <a situação que quebra, medida no código (repo@caminho) ou na spec (espécie e seção)>
+Remendo: <um detalhe, um corte, ou «volta à lapidação»>
+
+<argumento: a evidência, o raciocínio, e o que pesa contra, inclusive o desenho recebido>
+M
+    ;;
+    requisito) cat <<'M'
+requisito: <o comportamento exigido, em uma frase>
+Confere: <o comando ou a consulta, e o resultado que prova>
+
+<argumento: por que é exigido e o que quebra sem ele>
+M
+    ;;
+    decisão|decisao) cat <<'M'
+decisão (<quem decidiu; do dono, registrada por uma cadeira: dono>): <a escolha, em uma frase>
+Descartado: <as alternativas e por quê>
+Substitui: <#N — só quando substitui outra decisão>
+
+<argumento: o que levou à escolha>
+M
+    ;;
+    *) echo "uso: tarefas modelo comentario <insumo|pergunta|buraco|requisito|decisão>" >&2; exit 2 ;;
+  esac
+  case "${1:-}" in
+    pergunta|buraco|requisito)
+      echo "nasce aberto: fecha quando o autor do two-pager escrever o fecho — tarefas comentar <card> --fecha <n> \"<resultado> — <destino>\"" >&2 ;;
+  esac
+}
+
 modelo() {
   if [ "${1:-}" = story ] && [ -n "${2:-}" ]; then
     case "$2" in
       refinada|em-refinamento-tecnico|plano) modelo_plano; return 0 ;;
-      *) echo "uso: tarefas modelo story [refinada]   (o Plano é exigido na entrada de em-execucao)" >&2; exit 2 ;;
+      derivada) modelo_story_derivada; return 0 ;;
+      *) echo "uso: tarefas modelo story [refinada|derivada]   (o Plano é exigido na entrada de em-execucao)" >&2; exit 2 ;;
     esac
   fi
   case "${1:-}" in
+    comentario|comentário) modelo_comentario "${2:-}"; return 0 ;;
+  esac
+  case "${1:-}" in
     épico|epico) cat <<'M'
-Problema: como é hoje — o fato, sem número (o número vai em Medida)
-Resultado: quem passa a conseguir o quê (público, não usuário); outcome marcado "não fecha card"
-Medida: escala · medidor · valor hoje · mínimo aceitável — UMA linha
-Fora: o que NÃO entra neste épico
-Quebra: <data> — features #a #b #c (referência datada, não contrato)
+Problema: como é hoje, como quem sofre veria, com um caso; até quatro frases, sem número (o número vai à Medida)
+Solução: a solução contada como uso, por momento, até sete; quem lê só isto simula um dia usando a coisa
+- Ao <momento>: quem faz o quê, e o que vê
+Peças: as features, numeradas, uma linha cada; regra nova diz quem a cobra (verbo, lint, gate)
+1. <feature>
+Fora: o que este épico não entrega e alguém pediria, um por linha, com para onde vai; Fora não proíbe
+- <item>: <para onde, quando>
+Resultado: quem passa a conseguir o quê; o outcome que o card não fecha sozinho vai marcado «não fecha card»
+Medida: escala · medidor · valor hoje · mínimo aceitável — uma linha
+Apetite: (opcional) quanto vale gastar · o que se corta primeiro se não couber — previsão de quem escreve
+Aberto: prosa do autor: o que está por decidir, cada item com quem responde; na aposta, o que sobra diz «fica aberto de propósito:» e o risco aceito
+Quebra: escrita na formalização — <data>, depois as features, uma por linha, na ordem de execução
 M
+    _avisa_two_pager
     ;;
     feature) cat <<'M'
-Problema: como é hoje — o fato, sem número (o número vai em Medida)
-Resultado: quem passa a conseguir o quê (público, não usuário); outcome marcado "não fecha card"
-Medida: escala · medidor · valor hoje · mínimo aceitável — UMA linha
-Fora: o que NÃO entra nesta feature
-Sai quando: predicado ponta a ponta — o comando/consulta que prova a capacidade INTEIRA, verdadeiro/falso
-Continuidade: o mecanismo que sustenta (quem passa a depender) — não fecha card
-Quebra: <data> — stories #a #b #c (referência datada, não contrato)
+Problema: como é hoje, como quem sofre veria, com um caso; até quatro frases, sem número (o número vai à Medida)
+Solução: a solução contada como uso, por momento, até sete; quem lê só isto simula um dia usando a coisa
+- Ao <momento>: quem faz o quê, e o que vê
+Peças: numeradas, uma linha cada: o que vai existir (lugar, ato ou regra); regra nova diz quem a cobra (verbo, lint, gate)
+1. <peça>
+Fora: o que esta frente não entrega e alguém pediria, um por linha, com para onde vai; Fora não proíbe
+- <item>: <para onde, quando>
+Resultado: quem passa a conseguir o quê; o outcome que o card não fecha sozinho vai marcado «não fecha card»
+Medida: escala · medidor · valor hoje · mínimo aceitável — uma linha
+Apetite: (opcional) quanto vale gastar · o que se corta primeiro se não couber — previsão de quem escreve
+Aberto: prosa do autor: o que está por decidir, cada item com quem responde; na aposta, o que sobra diz «fica aberto de propósito:» e o risco aceito
+Produtos documentais: um por linha, pelo que a feature muda (ADR, spec da peça criada ou atualizada, documento, dado, emenda); na formalização, cada linha ganha o link do servido
+- <produto> · <quem escreve>
+Sai quando: na lapidação, a frase que torna a feature entregue; na formalização, o comando ou a consulta que prova
+Quebra: escrita na formalização — <data>, depois as stories, uma por linha, na ordem de execução, e o aviso de enfileiramento
 M
+    _avisa_two_pager
     ;;
     story) cat <<'M'
 Negócio: #<feature> — só o ponteiro; nada de contexto de negócio aqui
@@ -742,7 +907,7 @@ Raio de ataque: [agente] lista literal dos arquivos a mexer, um por linha, repo@
 Comportamento esperado: [agente] caminho feliz técnico, literal — recebe X, executa Y, sai 0
 M
     ;;
-    *) echo "uso: tarefas modelo <épico|feature|story|task>" >&2; exit 2 ;;
+    *) echo "uso: tarefas modelo <épico|feature|story|task> | story refinada | story derivada | comentario <tipo>" >&2; exit 2 ;;
   esac
 }
 
