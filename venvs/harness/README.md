@@ -34,3 +34,21 @@ Sem suíte. Confere-se que o ambiente servido importa o que declara:
 
 Passou quando sai com exit 0, sem saída. Depois, um verbo que depende dele de ponta a ponta:
 `mesa ver` responde sem `ModuleNotFoundError`.
+
+## nltk fora do ambiente (#3461)
+
+`nltk` não está no lock: `[tool.uv] exclude-dependencies` o tira, com `joblib`, `cloudpickle` e
+`defusedxml`, que só ele puxava. Motivo: GHSA-8mgp-746c-j5xp (HIGH, sem versão corrigida até
+3.10.3); o crawl4ai o declara, mas o `pesquisar` só usa `DefaultMarkdownGenerator` e
+`PruningContentFilter`, que não o tocam. Ficam sem funcionar, e a casa não os chama,
+`NlpSentenceChunking`, `TopicSegmentationChunking` e `load_nltk_punkt` do crawl4ai.
+
+Confere-se no ambiente servido, depois de promover um lock novo:
+
+```
+/opt/platafirma/current/venv/harness/bin/python -c "import nltk"
+```
+
+Tem de falhar com `ModuleNotFoundError`. Depois, um `pesquisar ler <url>` de verdade sobre uma
+página pública tem de devolver markdown, e `release conferir dependencias --avisos` não pode mais
+acusar `nltk`.
