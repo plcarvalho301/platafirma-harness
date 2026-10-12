@@ -1,0 +1,8 @@
+{
+  "name": "platafirma-claude-code",
+  "private": true,
+  "description": "Trava do Claude Code do host (debito #2856 linha 248). Prende o pacote do binario nativo de linux-x64, nao o @anthropic-ai/claude-code: esse so funciona com o postinstall (node install.cjs), e a casa constroi ambiente node com npm ci --ignore-scripts (lib/venv.sh). Atualizar = subir a versao aqui, `repo lock`, promover; voltar = release reverter. Quem acha o binario: lib/claude_cli.py.",
+  "dependencies": {
+    "@anthropic-ai/claude-code-linux-x64": "2.1.296"
+  }
+}

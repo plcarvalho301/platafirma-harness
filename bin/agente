@@ -18,7 +18,7 @@
 # escreve: rodar=arquivo-local,malha
 # escreve: projetar=arquivo-local
 # consome: sessao, expediente, seg, ollama
-# ambiente: PF_SUJEITO (a pessoa em nome de quem o agente roda; obrigatoria em rodar; porta) · PF_SESSAO (a sessao de quem chamou; obrigatoria em rodar; porta) · PF_CADEIRA (porta) · PF_ORDEM_ID (porta) · PF_POSTO (opcional; padrao <bancada>/platafirma-posto, onde estao as declaracoes) · PF_BIN (opcional; padrao bin/ da propria arvore; so teste com stub) · PF_CLAUDE_BIN (opcional; padrao claude no PATH; so teste com stub) · OLLAMA_BASE_URL (opcional; o ollama local) · PLATAFIRMA_INSTANCIA (opcional; padrao /srv/platafirma/casa; var/log/agente e var/log/seg)
+# ambiente: PF_SUJEITO (a pessoa em nome de quem o agente roda; obrigatoria em rodar; porta) · PF_SESSAO (a sessao de quem chamou; obrigatoria em rodar; porta) · PF_CADEIRA (porta) · PF_ORDEM_ID (porta) · PF_POSTO (opcional; padrao <bancada>/platafirma-posto, onde estao as declaracoes) · PF_BIN (opcional; padrao bin/ da propria arvore; so teste com stub) · PF_CLAUDE_BIN (opcional; padrao o binario da trava em <release>/venv/claude-code, lib/claude_cli.py; so teste com stub) · OLLAMA_BASE_URL (opcional; o ollama local) · PLATAFIRMA_INSTANCIA (opcional; padrao /srv/platafirma/casa; var/log/agente e var/log/seg)
 # escrita: projetar grava .claude/agents/<slug>.md no posto; rodar grava a chave da sessao filha (sessao abrir) e uma linha em var/log/agente/; nada em listar|ler|projetar --conferir
 # depende: sessao, expediente, lib/raizes, lib/uso, pyyaml (venv harness)
 # conforme: parcial — Gemini pelo `agy` ainda não roda (a execução sob jaiminho é da ti, spec agente §Aberto); agendado espera o `bot --roda agente:<slug>` (#3186); `sessao longjob` ja herda os atributos da chave
@@ -41,6 +41,7 @@ from pathlib import Path
 _AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(_AQUI.parent / "lib"))
 import raizes  # noqa: E402
+import claude_cli  # noqa: E402  (o CLI vem da trava da release, #2856 linha 248)
 import uso  # noqa: E402
 import yaml  # noqa: E402
 
@@ -727,13 +728,16 @@ def chama_ollama(decl: dict, sistema: str, tarefa: str) -> dict:
 
 def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
     t = decl["teto"]
-    bin_claude = os.environ.get("PF_CLAUDE_BIN") or "claude"
+    try:
+        bin_claude = claude_cli.resolver()   # a trava da release, nunca o PATH (#2856 linha 248)
+    except claude_cli.ClaudeAusente as e:
+        raise Falha(3, str(e))
     argv = [bin_claude, "-p", "--model", decl["modelo"]["versao"], "--output-format", "json",
             "--max-turns", str(t["turnos"]), "--append-system-prompt", sistema,
             "--disallowedTools", ",".join(PROIBIDAS)]
     if decl["ferramentas"]:
         argv += ["--allowedTools", ",".join(decl["ferramentas"])]
-    p = _roda(argv, stdin=tarefa, timeout=t.get("segundos", 900))
+    p = _roda(argv, stdin=tarefa, env={"DISABLE_AUTOUPDATER": "1"}, timeout=t.get("segundos", 900))
     try:
         obj = json.loads(p.stdout or "{}")
     except ValueError:
