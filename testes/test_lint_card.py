@@ -284,6 +284,16 @@ def test_l1_l2():
     assert {"L1", "L2"} <= ids
 
 
+def test_barra_escapada_na_celula_nao_corta_a_coluna():
+    linha_c1 = ("| C1 | comentário sem tipo | padrao | primeira linha não casa "
+                "`^(insumo\\|pergunta\\|buraco)[: ]` | aviso | Etiquete a primeira linha com o tipo. |")
+    lista = parse_lista(LISTA_TXT.replace("| C1 | comentário sem tipo | padrao | regex | aviso | Etiquete. |",
+                                          linha_c1))
+    c1 = next(i for i in lista["itens"] if i["id"] == "C1")
+    assert c1["cura"] == "Etiquete a primeira linha com o tipo."
+    assert "insumo|pergunta|buraco" in c1["detector"]
+
+
 def test_secoes_param_na_lista_de_filhas():
     s = secoes_do_corpo(CARD_3408)
     assert "filhas" not in s["Quebra"].texto()
