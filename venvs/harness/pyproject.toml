@@ -27,3 +27,11 @@ dependencies = [
     "httpx>=0.27",
     "crawl4ai>=0.9",
 ]
+
+# nltk fora do lock (#3461): 3.10.3 tem GHSA-8mgp-746c-j5xp (HIGH, sem versao corrigida) e so o
+# crawl4ai o puxa; o pesquisar usa DefaultMarkdownGenerator e PruningContentFilter, que nao
+# tocam nltk (prova: a segunda verificacao do README desta pasta). O exclude tira o pacote
+# da resolucao (saem junto joblib, cloudpickle e defusedxml, que so ele puxava). Havendo versao
+# corrigida e uso real, apague este bloco e rode `repo lock`.
+[tool.uv]
+exclude-dependencies = ["nltk"]
