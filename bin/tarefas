@@ -4,6 +4,58 @@
 # dono: gestao-estrategica
 # use para: card, board, carteira, épico/feature/story, mover estado, sign-off
 # atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub
+#
+# Texto do controle (arq:0124 §3; arq:0125 U33; card #3446). Todo ato cai na face Entrega.
+# Rótulo: verbo no infinitivo e objeto sem artigo, um verbo por tipo de ato (Listar uma coleção,
+# Abrir um item; regra de produto, comentário #2216 do #3446). O objeto entra pelo slug, `{slug}`,
+# quando o conceito é do tesauro; termo da casa (card, comentário, estado, débito técnico) vai
+# escrito até o tesauro ter o braço da casa (arq:0124 §3, emenda de 12/10/2026). volta: diz se
+# o efeito se desfaz; ato que só lê declara exatamente `sim — só lê`.
+# face: listar=Entrega
+# face: listar-tudo=Entrega
+# face: ler=Entrega
+# face: criar=Entrega
+# face: editar=Entrega
+# face: modelo=Entrega
+# face: comentar=Entrega
+# face: comentarios=Entrega
+# face: mover=Entrega
+# face: fechar=Entrega
+# face: apagar=Entrega
+# face: assinar=Entrega
+# face: dt=Entrega
+# face: estados=Entrega
+# face: sub=Entrega
+# rotulo: listar=Listar card aberto
+# rotulo: listar-tudo=Listar card, fechado inclusive
+# rotulo: ler=Abrir card
+# rotulo: criar=Criar card
+# rotulo: editar=Editar card
+# rotulo: modelo=Abrir molde de card
+# rotulo: comentar=Comentar card
+# rotulo: comentarios=Listar comentário
+# rotulo: mover=Mover card
+# rotulo: fechar=Fechar card
+# rotulo: apagar=Apagar card
+# rotulo: assinar=Assinar card
+# rotulo: dt=Administrar débito técnico
+# rotulo: estados=Listar estado de card
+# rotulo: sub=Subordinar card
+# volta: listar=sim — só lê
+# volta: listar-tudo=sim — só lê
+# volta: ler=sim — só lê
+# volta: criar=sim — tarefas apagar, enquanto o item está no funil
+# volta: editar=nao
+# volta: modelo=sim — só lê
+# volta: comentar=nao
+# volta: comentarios=sim — só lê
+# volta: mover=sim — tarefas mover ao estado de antes, onde o fluxo deixa (a recusa diz para onde se pode ir)
+# volta: fechar=nao
+# volta: apagar=nao
+# volta: assinar=nao
+# volta: dt=nao
+# volta: estados=sim — só lê
+# volta: sub=nao
 # Backend: `platafirma-rastreador` (API própria), desde 16/08/2026. O Vikunja saiu.
 #
 # Loopback, e não a rota pública: `tarefas.platafirma.org` serve a superfície HUMANA

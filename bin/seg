@@ -10,6 +10,26 @@
 # escreve: $PLATAFIRMA_INSTANCIA/segredos/<stack>/<nome>
 # ambiente: SEG_SECRETS_DIR[=$PLATAFIRMA_INSTANCIA/segredos] · SEG_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/seg] · SEG_OSCAP_DIR[=$PLATAFIRMA_INSTANCIA/var/oscap] · SEG_SSG_DIR[=/opt/terceiros/ssg/current] · SEG_OQS_DIR[=/opt/terceiros/oqs/current] · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
 #
+# Texto do controle (arq:0124 §3; card #3447), por subcomando de primeiro nivel, que e o
+# grao da face. segredo nao declara face nem texto: e exclusao por decisao do dono
+# (arq:0124 §3, aba Segredos da face IAM em stub). O repasse cru (`--`) de keycloak e
+# openssl executa qualquer comando da ferramenta, e por isso nao promete volta.
+# face: oscap=Operação
+# face: ssg=Operação
+# face: isolacao=IAM
+# face: keycloak=IAM
+# face: openssl=IAM
+# rotulo: oscap=Avaliar {hardening}
+# rotulo: ssg=Derivar {linha-de-base-de-controles}
+# rotulo: isolacao=Medir {isolacao}
+# rotulo: keycloak=Administrar {iam}
+# rotulo: openssl=Operar {criptografia}
+# volta: oscap=sim — só lê
+# volta: ssg=sim — derivar de novo do datastream de origem
+# volta: isolacao=sim — só lê
+# volta: keycloak=nao
+# volta: openssl=nao
+#
 # subcomando          capacidade          origem do ato
 #   oscap avaliar     politica            era oscap-casco
 #   oscap falhas      politica            era oscap-casco-falhas
