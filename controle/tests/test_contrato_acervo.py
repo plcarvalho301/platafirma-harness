@@ -100,8 +100,9 @@ def test_camada_d_cabecalho_q1():
     assert "# dono: dados" in text
     assert "# classe: B" in text
     with open(BIN, "r", encoding="utf-8") as f:
-        # 70: o cabecalho cresceu com as linhas de acesso dos atos de Transcrever (#3297) e de Retirar (#3298)
-        text = "".join(f.readline() for _ in range(70))
+        # 80: o cabecalho cresceu com as linhas de acesso dos atos de Transcrever (#3297) e de Retirar (#3298)
+        # e com a capacidade por ato de ler e listar (#3465)
+        text = "".join(f.readline() for _ in range(80))
     # acesso e POR ATO: uma linha `# le:`/`# escreve:` para cada um destes atos
     for ato in ("ler", "listar", "escrever", "ingerir", "curar", "extrato", "psql"):
         assert f"# le: {ato}=" in text
@@ -112,6 +113,12 @@ def test_camada_d_cabecalho_q1():
     assert "psql (escrita, acervo)" in text
     assert "# escreve: ler=nada" in text
     assert "# consome: motor_acervo_rest, rag_extractor_pg" in text
+    # #3465: ler e listar declaram a capacidade da arq:0119 §4 em chave propria; o par que o ato manda
+    # ao PEP (acao, tipo) fica como estava, porque o segundo campo vai a ferramental_ato.tipo (Q1, Q12)
+    assert "ler (leitura, casa)" in text and "listar (leitura, casa)" in text
+    assert "# capacidade-ato: ler=leitura" in text
+    assert "# capacidade-ato: listar=descoberta" in text
+    assert "leitura, leitura" not in text and "leitura, descoberta" not in text
 
 
 def test_camada_d_recusa_adr_deprecado():

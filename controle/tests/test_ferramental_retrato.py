@@ -213,6 +213,64 @@ def test_atalho_ja_em_uso_e_aviso_e_nao_recusa(verbo, monkeypatch, capsys):
     assert "tarefas apagar" in capsys.readouterr().err
 
 
+# ------------------------------------------------------------------ registrar: capacidade por ato (#3465)
+#
+# O segundo campo do par de `# atos:` e o tipo que o ato manda ao PEP (arq:0110 Q1, Q12) e o registrar
+# o grava em `tipo` e, sem a chave propria, tambem em `capacidade`. A capacidade filha da arq:0119 §4
+# (leitura, descoberta) vai por `# capacidade-ato:` e so toca `capacidade`: o par fica.
+
+def test_capacidade_ato_grava_a_capacidade_e_deixa_o_tipo_do_par(verbo, monkeypatch):
+    banco = Banco()
+    _registra(verbo, monkeypatch, banco, ["# capacidade-ato: ler=leitura"])
+    # capacidade vem da chave; acao e tipo, do par
+    assert "values ('demo', 'ler', 'leitura', 'leitura', 'casa')" in banco.escrita
+    # o ato sem a chave grava capacidade = segundo campo, como sempre
+    assert "values ('demo', 'apagar', 'casa', 'escrita', 'casa')" in banco.escrita
+
+
+def test_capacidade_ato_entra_na_descricao_servida(verbo, monkeypatch):
+    _, desc = _registra(verbo, monkeypatch, Banco(),
+                        ["# capacidade-ato: ler=leitura", "# capacidade-ato: apagar=retirada"])
+    assert desc.endswith("capacidade por ato: ler=leitura, apagar=retirada")
+    assert "atos: ler (leitura, casa), apagar (escrita, casa)" in desc
+
+
+def test_verbo_sem_capacidade_ato_tem_a_mesma_descricao_de_antes(verbo, monkeypatch):
+    _, desc = _registra(verbo, monkeypatch, Banco(), [])
+    assert "capacidade por ato" not in desc
+
+
+@pytest.mark.parametrize("linha", ["sem-igual", "=leitura", "ler=", "ler=Leitura", "ler=duas palavras"])
+def test_capacidade_ato_fora_da_forma_recusa_o_registro(verbo, monkeypatch, linha):
+    banco = Banco()
+    with pytest.raises(SystemExit) as e:
+        _registra(verbo, monkeypatch, banco, ["# capacidade-ato: " + linha])
+    assert e.value.code == 3
+    assert banco.escrita is None
+
+
+def test_capacidade_ato_de_ato_que_atos_nao_lista_recusa(verbo, monkeypatch):
+    banco = Banco()
+    with pytest.raises(SystemExit) as e:
+        _registra(verbo, monkeypatch, banco, ["# capacidade-ato: voa=leitura"])
+    assert e.value.code == 3
+    assert banco.escrita is None
+
+
+def test_capacidade_ato_duas_vezes_para_o_mesmo_ato_recusa(verbo, monkeypatch):
+    with pytest.raises(SystemExit) as e:
+        _registra(verbo, monkeypatch, Banco(),
+                  ["# capacidade-ato: ler=leitura", "# capacidade-ato: ler=descoberta"])
+    assert e.value.code == 3
+
+
+def test_acervo_declara_leitura_e_descoberta_sem_mexer_no_par_do_pep():
+    campos, desc = registrar._le_cabecalho(os.path.join(BIN, "acervo"))
+    assert "ler (leitura, casa)" in campos["atos"] and "listar (leitura, casa)" in campos["atos"]
+    assert registrar._capacidade_por_ato(campos, "acervo") == {"ler": "leitura", "listar": "descoberta"}
+    assert "capacidade por ato: ler=leitura, listar=descoberta" in desc
+
+
 # ------------------------------------------------------------------ o retrato
 
 OBRA = {"documento-de-arquivo": "Documento de arquivo", "pdp": "PDP"}
