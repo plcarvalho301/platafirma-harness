@@ -21,12 +21,12 @@
 # face: openssl=IAM
 # rotulo: oscap=Avaliar {hardening}
 # rotulo: ssg=Derivar {linha-de-base-de-controles}
-# rotulo: isolacao=Medir isolação
+# rotulo: isolacao=Medir {isolacao}
 # rotulo: keycloak=Administrar {iam}
 # rotulo: openssl=Operar {criptografia}
-# volta: oscap=sim — só lê o casco; o relatório fica na instância
+# volta: oscap=sim — só lê
 # volta: ssg=sim — derivar de novo do datastream de origem
-# volta: isolacao=sim — só lê, nada a desfazer
+# volta: isolacao=sim — só lê
 # volta: keycloak=nao
 # volta: openssl=nao
 #
