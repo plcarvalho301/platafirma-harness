@@ -3,9 +3,9 @@
 # capacidade: construcao
 # dono: ti
 # classe: B
-# forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar) / texto (ler, pr-diff) / fluxo (sanear, lock)
-# use para: ler, listar ou procurar o que esta na bancada, ainda nao servido (ler, listar, procurar); historico de um caminho e diff contra origin/main (historico, diff); estado do clone; ramo por card; abrir o worktree da cadeira em origin/main ou no sha que esta em producao (abrir --da-producao); commitar so o que a sessao tocou; empurrar; PR de ponta a ponta (pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge); descartar PR sem merge, com ramo e bancadas (pr-fechar); atualizar e sanear o clone; gerar ou conferir o uv.lock de um projeto Python da bancada com o uv e o python da release (lock); git cru contido (git)
-# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge), pr-fechar (escrita, forge), sanear (escrita, forge), lock (escrita, operacao), git (escrita, operacao)
+# forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar, hooks-listar) / texto (ler, pr-diff) / fluxo (sanear, lock, hooks-apagar)
+# use para: ler, listar ou procurar o que esta na bancada, ainda nao servido (ler, listar, procurar); historico de um caminho e diff contra origin/main (historico, diff); estado do clone; ramo por card; abrir o worktree da cadeira em origin/main ou no sha que esta em producao (abrir --da-producao); commitar so o que a sessao tocou; empurrar; PR de ponta a ponta (pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge); descartar PR sem merge, com ramo e bancadas (pr-fechar); listar webhook de repositorio no forge e apagar um por id so se a url dele contem o trecho dito (hooks-listar, hooks-apagar; tambem `hooks listar|apagar`); atualizar e sanear o clone; gerar ou conferir o uv.lock de um projeto Python da bancada com o uv e o python da release (lock); git cru contido (git)
+# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge), pr-fechar (escrita, forge), hooks-listar (leitura, forge), hooks-apagar (escrita, forge), sanear (escrita, forge), lock (escrita, operacao), git (escrita, operacao)
 # le: estado=repo
 # le: listar=repo
 # le: ler=repo
@@ -25,6 +25,8 @@
 # le: pr-diff=repo
 # le: pr-merge=repo
 # le: pr-fechar=repo
+# le: hooks-listar=repo
+# le: hooks-apagar=repo
 # le: sanear=repo
 # le: lock=repo
 # le: git=repo
@@ -47,14 +49,16 @@
 # escreve: pr-diff=nada
 # escreve: pr-merge=repo
 # escreve: pr-fechar=repo
+# escreve: hooks-listar=nada
+# escreve: hooks-apagar=repo
 # escreve: sanear=repo
 # escreve: lock=repo
 # escreve: git=repo
 # (recursos pelo enum de ferramental_recurso; o forge - origin, PR - pende id proprio, e ate la sai como repo; commitar le o log da porta em arquivo-local)
 # consome: porta@ops-log
 # ambiente: PLATAFIRMA_BANCADA[sem default; senao a linha de $HOME/.config/platafirma/bancada; ausente = exit 3] porta · PLATAFIRMA_ARQUIVO_BANCADA[=$HOME/.config/platafirma/bancada] porta · PF_RELEASE_RAIZ[=/opt/platafirma] porta (abrir --da-producao: sha de <raiz>/<repo>/current) · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] porta (registro de familias: URL do forge em abrir/clonar) · PF_CADEIRA porta (lida) · PF_SESSAO porta (lida) · PF_TAREFAS_BIN[=<dir deste verbo>/tarefas] porta (abrir move o card) · PF_SESSAO_BIN[=<dir deste verbo>/sessao] porta (commitar sem caminho le a data da abertura da sessao por `ver --json`) · PF_HOJE teste (o dia de hoje, AAAA-MM-DD) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (PF_OPS_LOG_DIR lido so como alias) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] porta · PF_GH_BIN[=gh do sistema] teste · HOME
-# depende: git · gh (pr-*, empurrar, atualizar, clonar) · rede ao forge · bin/sessao (commitar sem caminho: `ver --json`, a data da abertura da sessao) · python3 e lib/oplog (commitar sem caminho: `python3 -m oplog`, o bruto da porta por data) · uv e python de sistema pelo lib/venv.sh (lock; PLATAFIRMA_UV e PLATAFIRMA_PYTHON lidos lá) e rede ao índice de pacotes (lock)
-# substitui: git -C … ls-files|grep|log|diff|show|status|checkout -b|commit|push|fetch · gh pr create|list|view|diff|merge|close
+# depende: git · gh (pr-*, hooks-*, empurrar, atualizar, clonar; hooks-*: token com admin no repositorio e escopo admin:repo_hook) · rede ao forge · bin/sessao (commitar sem caminho: `ver --json`, a data da abertura da sessao) · python3 e lib/oplog (commitar sem caminho: `python3 -m oplog`, o bruto da porta por data) · uv e python de sistema pelo lib/venv.sh (lock; PLATAFIRMA_UV e PLATAFIRMA_PYTHON lidos lá) e rede ao índice de pacotes (lock)
+# substitui: git -C … ls-files|grep|log|diff|show|status|checkout -b|commit|push|fetch · gh pr create|list|view|diff|merge|close · gh api repos/<dono>/<repo>/hooks[/<id>] (listar, apagar)
 # conforme: sim
 set -uo pipefail
 
@@ -145,6 +149,11 @@ uso:
   repo pr-diff   <repo> <numero>
   repo pr-merge  <repo> <numero> [--squash|--merge|--rebase] [--forcar]
   repo pr-fechar <repo> <numero> --motivo <texto>   (descarta sem merge; apaga ramo e bancadas)
+  repo hooks listar <repo>… | --todos [--url <trecho>] [--json]   (webhooks do forge: id, url, eventos, ativo;
+                                                     so leitura; nunca o secret; --todos = os clones da bancada)
+  repo hooks apagar <repo> <id> --url <trecho>      (apaga UM webhook; recusa 4 se a url dele nao contem o trecho;
+                                                     id que nao existe: 1, ja feito)
+                                                    (na porta o ato e hooks-listar / hooks-apagar)
   repo lock      <repo> <projeto> [--conferir | --atualizar <pacote>[@<versao>]… | --atualizar-tudo]
                                                     (uv.lock ou package-lock.json do <projeto>; nao commita;
                                                      --atualizar sobe um pacote, --atualizar-tudo todos)
@@ -2259,6 +2268,288 @@ ato_pr_fechar() {
   return 0
 }
 
+# --- hooks (webhooks) de repositorio no forge (card #3473) --------------------------------
+# `gh api repos/<dono>/<repo>/hooks` pelo verbo, porque a porta nao serve `gh api` solto.
+# listar so le; apagar tira UM hook por id e so se a url dele contem o trecho que o chamador
+# disse esperar (apagar sem dizer o que se espera apagar nao existe). O corpo do hook nunca
+# sai: o python abaixo so repassa id, ativo, eventos e a url, esta sem credencial nem query.
+# Falha do gh nao vira "zero hooks": 3 sem permissao ou sem gh, 5 resposta ilegivel.
+
+# slug_forge <repo> -- <dono>/<nome> no forge: da URL do registro de familias (url_forge),
+# nunca do remote do clone; fora da forma github.com, o dono canonico e o nome do repo.
+slug_forge() {
+  local nome="${1%%@*}" url slug=""
+  url="$(url_forge "$nome")"
+  case "$url" in
+    https://github.com/*/*|http://github.com/*/*) slug="${url#*://github.com/}" ;;
+    ssh://git@github.com/*/*) slug="${url#ssh://git@github.com/}" ;;
+    git@github.com:*/*) slug="${url#git@github.com:}" ;;
+  esac
+  slug="${slug%.git}"; slug="${slug%/}"
+  case "$slug" in ""|*/*/*|*[!A-Za-z0-9._/-]*) slug="" ;; esac
+  [ -n "$slug" ] || slug="$GH_OWNER/$nome"
+  printf '%s' "$slug"
+}
+
+# hooks_api <clone> <GET|DELETE> <endpoint> -- gh api; o corpo fica em HK_OUT e as primeiras
+# linhas do erro em HK_ERR (nunca impressos por quem chama). Devolve o exit do gh.
+HK_OUT=""; HK_ERR=""; HK_COD=0; HK_MOTIVO=""
+hooks_api() {
+  local c="$1" metodo="$2" ep="$3" errf rc
+  errf="$(mktemp)" || morre "dependência ausente: mktemp falhou" 3
+  if [ "$metodo" = GET ]; then
+    HK_OUT="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" api --paginate "$ep" 2>"$errf" </dev/null)"; rc=$?
+  else
+    HK_OUT="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" api -X "$metodo" "$ep" 2>"$errf" </dev/null)"; rc=$?
+  fi
+  HK_ERR="$(head -n 3 "$errf" | tr '\n' ' ' | cut -c1-300)"
+  rm -f "$errf"
+  return "$rc"
+}
+
+# hooks_tsv <trecho> -- lista de webhooks (JSON, no stdin; paginas concatenadas valem) para uma
+# linha por hook: id, ativo, eventos, url sem credencial nem query, casa (a url inteira contem
+# o trecho, sem distinguir caixa), separados por \x1f. Sai 5 se nao e lista de hooks.
+hooks_tsv() {
+  python3 -c '
+import json, sys
+from urllib.parse import urlsplit
+trecho = sys.argv[1].lower()
+s = sys.stdin.read()
+dec = json.JSONDecoder()
+i, n, itens = 0, len(s), []
+try:
+    while True:
+        while i < n and s[i].isspace():
+            i += 1
+        if i >= n:
+            break
+        v, i = dec.raw_decode(s, i)
+        itens.extend(v if isinstance(v, list) else [v])
+except ValueError:
+    sys.exit(5)
+for h in itens:
+    if not isinstance(h, dict) or "id" not in h:
+        sys.exit(5)
+    cfg = h.get("config") if isinstance(h.get("config"), dict) else {}
+    url = str(cfg.get("url") or "")
+    p = urlsplit(url)
+    if p.scheme and p.netloc:
+        seguro = "%s://%s%s" % (p.scheme, p.netloc.rsplit("@", 1)[-1], p.path)
+        if p.query:
+            seguro += "?(query omitida)"
+    else:
+        seguro = url.split("?", 1)[0].split("#", 1)[0] + ("?(query omitida)" if "?" in url else "")
+    seguro = " ".join(seguro.split()) or "-"
+    ev = ",".join(str(e) for e in (h.get("events") or [])) or "-"
+    casa = 1 if (not trecho or trecho in url.lower()) else 0
+    print("\x1f".join([str(h["id"]), "1" if h.get("active") else "0", ev, seguro, str(casa)]))
+' "$1"
+}
+
+# hooks_classifica <clone> <slug> -- da falha que hooks_api deixou em HK_ERR faz HK_COD e
+# HK_MOTIVO; nao sai. 403 e 404 do forge sao o mesmo sintoma (o forge responde 404 a quem nao
+# administra o repositorio), entao sonda o repositorio para dizer qual escopo falta.
+hooks_classifica() {
+  local c="$1" slug="$2" low adm cura
+  cura="cura: o dono da conta do gh dá ao token o escopo admin:repo_hook (token classic; no fine-grained, Webhooks: read and write) numa conta com permissão de admin no repositório, p.ex. gh auth refresh -s admin:repo_hook"
+  low="$(printf '%s' "$HK_ERR" | tr '[:upper:]' '[:lower:]')"
+  case "$low" in
+    *"http 401"*|*"bad credentials"*|*"gh auth login"*|*"not logged in"*|*"authentication"*)
+      HK_COD=3
+      HK_MOTIVO="dependência ausente: o gh não está autenticado ($slug); $cura" ;;
+    *"http 403"*|*"http 404"*|*"not found"*|*"admin rights"*|*"not accessible"*|*"forbidden"*)
+      if hooks_api "$c" GET "repos/$slug"; then
+        adm="$(printf '%s' "$HK_OUT" | python3 -c 'import json, sys
+try:
+    a = (json.loads(sys.stdin.read()).get("permissions") or {}).get("admin")
+    print("sim" if a is True else "nao" if a is False else "?")
+except Exception:
+    print("?")')"
+        case "$adm" in
+          nao) HK_MOTIVO="sem permissão: o token não administra $slug (permissions.admin=false) e webhook só se lê e se apaga com admin; $cura" ;;
+          sim) HK_MOTIVO="sem permissão: o token administra $slug mas o forge negou os webhooks; falta o escopo admin:repo_hook; $cura" ;;
+          *) HK_MOTIVO="sem permissão: o forge negou os webhooks de $slug e não disse se o token administra o repositório; $cura" ;;
+        esac
+      else
+        HK_MOTIVO="sem acesso: o forge responde 404 a $slug (repositório inexistente ou fora do alcance do token): confira o nome e a permissão do token; $cura"
+      fi
+      HK_COD=3 ;;
+    *)
+      HK_COD=5
+      HK_MOTIVO="indeterminável: o gh api de $slug falhou sem dizer por quê ($HK_ERR)" ;;
+  esac
+}
+
+ato_hooks() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    listar) ato_hooks_listar "$@" ;;
+    apagar) ato_hooks_apagar "$@" ;;
+    *) uso ;;
+  esac
+}
+
+ato_hooks_listar() {
+  local alvos=() todos=0 trecho="" tem_trecho=0 como_json=0 r c slug parsed l rec="" rc rc_max=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --todos) todos=1; shift ;;
+      --url) [ $# -ge 2 ] || morre "--url exige um trecho da url" 2; trecho="$2"; tem_trecho=1; shift 2 ;;
+      --json) como_json=1; COMO_JSON=1; shift ;;
+      -*) morre "argumento nao reconhecido: '$1'" 2 ;;
+      *) alvos+=("${1%%@*}"); shift ;;
+    esac
+  done
+  [ "$tem_trecho" -eq 0 ] || [ -n "$trecho" ] || morre "--url vazio: diga o trecho da url que filtra" 2
+  if [ "$todos" -eq 1 ]; then
+    [ "${#alvos[@]}" -eq 0 ] || morre "--todos e repositório nomeado juntos: escolha um dos dois" 2
+    while IFS= read -r r; do [ -n "$r" ] && alvos+=("$r"); done < <(listar_repos)
+    [ "${#alvos[@]}" -gt 0 ] || morre "nenhum clone na bancada $BANCADA: nada a ler" 3
+  fi
+  [ "${#alvos[@]}" -gt 0 ] || morre "falta o repositório (ou --todos)" 2
+  tem_gh
+  for r in "${alvos[@]}"; do
+    c="$(base_de_repo "$r")" || exit $?
+    slug="$(slug_forge "$r")"
+    hooks_api "$c" GET "repos/$slug/hooks"; rc=$?
+    if [ "$rc" -eq 0 ]; then
+      if parsed="$(hooks_tsv "$trecho" <<<"$HK_OUT")"; then
+        rec+="repo"$'\x1f'"$r"$'\n'
+        while IFS= read -r l; do
+          [ -n "$l" ] && rec+="hook"$'\x1f'"$r"$'\x1f'"$l"$'\n'
+        done <<<"$parsed"
+        continue
+      fi
+      HK_COD=5
+      HK_MOTIVO="indeterminável: a resposta do forge para $slug não é uma lista de webhooks"
+    else
+      hooks_classifica "$c" "$slug"
+    fi
+    rec+="falha"$'\x1f'"$r"$'\x1f'"$HK_COD"$'\x1f'"${HK_MOTIVO//$'\n'/ }"$'\n'
+    [ "$HK_COD" -le "$rc_max" ] || rc_max="$HK_COD"
+  done
+  printf '%s' "$rec" | python3 -c '
+import json, sys
+como_json = sys.argv[1] == "1"
+lidos, hooks, falhas = [], [], []
+for l in sys.stdin.read().splitlines():
+    p = l.split("\x1f")
+    if p[0] == "repo":
+        lidos.append(p[1])
+    elif p[0] == "hook":
+        hooks.append({"repo": p[1], "id": int(p[2]) if p[2].isdigit() else p[2], "ativo": p[3] == "1",
+                      "eventos": [e for e in p[4].split(",") if e and e != "-"], "url": p[5],
+                      "casa": p[6] == "1"})
+    elif p[0] == "falha":
+        falhas.append({"repo": p[1], "codigo": int(p[2]), "motivo": p[3]})
+casando = [h for h in hooks if h["casa"]]
+for h in hooks:
+    del h["casa"]
+if como_json:
+    print(json.dumps({"resumo": {"repositorios_lidos": len(lidos), "hooks": len(hooks),
+                                 "casando": len(casando), "nao_lidos": len(falhas)},
+                      "repositorios": lidos, "hooks": casando, "falhas": falhas},
+                     ensure_ascii=False, indent=2))
+else:
+    r = "hooks: %d %s, %d %s, %d casando" % (
+        len(lidos), "repositório lido" if len(lidos) == 1 else "repositórios lidos",
+        len(hooks), "hook" if len(hooks) == 1 else "hooks", len(casando))
+    if falhas:
+        r += ", %d não lido%s" % (len(falhas), "" if len(falhas) == 1 else "s")
+    print(r)
+    for h in casando:
+        print("  %s  #%s  %s  %s  eventos: %s" % (
+            h["repo"], h["id"], "ativo" if h["ativo"] else "inativo", h["url"],
+            ",".join(h["eventos"]) or "-"))
+    for f in falhas:
+        print("FALHOU %s (exit %d): %s" % (f["repo"], f["codigo"], f["motivo"]))
+' "$como_json" || morre "indeterminável: não consegui compor o resumo dos webhooks" 5
+  exit "$rc_max"
+}
+
+ato_hooks_apagar() {
+  local nome="${1:-}" id="${2:-}" trecho="" tem_trecho=0 c slug parsed rc cid cativo cev curl ccasa achou=0 baixo url_apagada=""
+  [ -n "$nome" ] && [ -n "$id" ] || uso
+  shift 2
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --url) [ $# -ge 2 ] || morre "--url exige um trecho da url" 2; trecho="$2"; tem_trecho=1; shift 2 ;;
+      -*) morre "argumento nao reconhecido: '$1'" 2 ;;
+      *) morre "argumento excedente: '$1'" 2 ;;
+    esac
+  done
+  case "$id" in *[!0-9]*) morre "id de webhook invalido: '$id' (so digitos)" 2 ;; esac
+  { [ "$tem_trecho" -eq 1 ] && [ -n "$trecho" ]; } \
+    || morre "falta --url <trecho>: apagar webhook exige dizer qual url se espera apagar; nada apagado" 2
+  tem_gh
+  c="$(base_de_repo "$nome")" || exit $?
+  slug="$(slug_forge "$nome")"
+
+  # 1. a lista do repositorio: prova a permissao e separa "hook que nao existe" de "sem acesso"
+  hooks_api "$c" GET "repos/$slug/hooks"; rc=$?
+  if [ "$rc" -ne 0 ]; then
+    hooks_classifica "$c" "$slug"
+    morre "$HK_MOTIVO" "$HK_COD"
+  fi
+  parsed="$(hooks_tsv "$trecho" <<<"$HK_OUT")" \
+    || morre "indeterminável: a resposta do forge para $slug não é uma lista de webhooks" 5
+  while IFS=$'\x1f' read -r cid cativo cev curl ccasa; do
+    if [ "$cid" = "$id" ]; then achou=1; break; fi
+  done <<<"$parsed"
+  if [ "$achou" -eq 0 ]; then
+    printf 'já feito: webhook #%s não existe em %s (nada a apagar)\n' "$id" "$slug"
+    exit 1
+  fi
+
+  # 2. relê o hook pelo id: a trava julga o que o forge diz agora, nao a lista de ha pouco
+  hooks_api "$c" GET "repos/$slug/hooks/$id"; rc=$?
+  if [ "$rc" -ne 0 ]; then
+    baixo="$(printf '%s' "$HK_ERR" | tr '[:upper:]' '[:lower:]')"
+    case "$baixo" in
+      *"http 404"*|*"not found"*)
+        printf 'já feito: webhook #%s sumiu de %s entre a lista e a releitura (nada a apagar)\n' "$id" "$slug"
+        exit 1 ;;
+    esac
+    hooks_classifica "$c" "$slug"
+    morre "$HK_MOTIVO" "$HK_COD"
+  fi
+  parsed="$(hooks_tsv "$trecho" <<<"$HK_OUT")" \
+    || morre "indeterminável: a resposta do forge para o webhook #$id de $slug não é um webhook" 5
+  IFS=$'\x1f' read -r cid cativo cev curl ccasa <<<"$parsed"
+  [ "$cid" = "$id" ] || morre "indeterminável: o forge devolveu o webhook #${cid:-?} ao pedir o #$id de $slug" 5
+
+  # 3. a trava: a url do hook tem de conter o trecho que o chamador disse esperar
+  if [ "$ccasa" != 1 ]; then
+    morre "recusa de trava: webhook #$id de $slug aponta para $curl, que não contém '$trecho'; nada apagado" 4
+  fi
+
+  # 4. apaga e confirma no forge (a lista sem o id), nunca pelo exit do gh
+  url_apagada="$curl"
+  hooks_api "$c" DELETE "repos/$slug/hooks/$id"; rc=$?
+  if [ "$rc" -ne 0 ]; then
+    baixo="$(printf '%s' "$HK_ERR" | tr '[:upper:]' '[:lower:]')"
+    case "$baixo" in
+      *"http 404"*|*"not found"*)
+        printf 'já feito: webhook #%s de %s já não existe (nada a apagar)\n' "$id" "$slug"
+        exit 1 ;;
+    esac
+    hooks_classifica "$c" "$slug"
+    morre "$HK_MOTIVO" "$HK_COD"
+  fi
+  hooks_api "$c" GET "repos/$slug/hooks"; rc=$?
+  [ "$rc" -eq 0 ] || morre "indeterminável: DELETE pedido, mas o forge não respondeu a lista de $slug" 5
+  parsed="$(hooks_tsv "$trecho" <<<"$HK_OUT")" \
+    || morre "indeterminável: DELETE pedido, mas a lista de $slug voltou ilegível" 5
+  achou=0
+  while IFS=$'\x1f' read -r cid cativo cev curl ccasa; do
+    if [ "$cid" = "$id" ]; then achou=1; break; fi
+  done <<<"$parsed"
+  [ "$achou" -eq 0 ] || morre "webhook #$id ainda está na lista de $slug depois do DELETE" 3
+  printf 'apagado: %s #%s %s [lido do forge: fora da lista de %s]\n' "$nome" "$id" "$url_apagada" "$slug"
+}
+
 git_sem_engolir() {
   local c="$1"; shift
   local out; out="$(env PATH="$PATH_FORGE" "$GIT" -C "$c" "$@" 2>&1 1>/dev/null)"
@@ -3124,7 +3415,7 @@ cmd="$1"
 shift
 
 case "$cmd" in
-  estado|listar|ler|procurar|historico|diff|ramo|commitar|empurrar|atualizar|sincronizar|abrir|clonar|sanear|pr-abrir|pr-listar|pr-ver|pr-diff|pr-merge|pr-fechar|lock|git)
+  estado|listar|ler|procurar|historico|diff|ramo|commitar|empurrar|atualizar|sincronizar|abrir|clonar|sanear|pr-abrir|pr-listar|pr-ver|pr-diff|pr-merge|pr-fechar|hooks|hooks-listar|hooks-apagar|lock|git)
     declara_bancada "$@" ;;
 esac
 
@@ -3149,11 +3440,14 @@ case "$cmd" in
   pr-diff)   ato_pr_diff "$@" ;;
   pr-merge)  ato_pr_merge "$@" ;;
   pr-fechar) ato_pr_fechar "$@" ;;
+  hooks)     ato_hooks "$@" ;;
+  hooks-listar) ato_hooks_listar "$@" ;;
+  hooks-apagar) ato_hooks_apagar "$@" ;;
   lock)      ato_lock "$@" ;;
   git)       ato_git "$@" ;;
   *)
     printf '%s: erro: ato desconhecido '\''%s'\''\n' "$VERBO" "$cmd" >&2
-    printf 'atos: estado · listar · ler · procurar · historico · diff · ramo · commitar · empurrar · atualizar · sincronizar · abrir · clonar · sanear · pr-abrir · pr-listar · pr-ver · pr-diff · pr-merge · pr-fechar · lock · git\n' >&2
+    printf 'atos: estado · listar · ler · procurar · historico · diff · ramo · commitar · empurrar · atualizar · sincronizar · abrir · clonar · sanear · pr-abrir · pr-listar · pr-ver · pr-diff · pr-merge · pr-fechar · hooks-listar · hooks-apagar · lock · git\n' >&2
     uso_texto
     exit 2
     ;;
