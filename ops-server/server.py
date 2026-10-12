@@ -1849,8 +1849,11 @@ def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
 # .html, e ficavam sem porta — citacao a corrigir neles nao tinha como ser escrita.
 # .service/.timer/.path/.socket entraram em 03/10/2026 (#2856 linha 160, card #3252): unit
 # systemd e texto plano de deploy; sem eles a unit nova so entrava por write .txt + git mv.
+# .tsv entrou em 12/10/2026 (#3477): o mapa de segredos do deploy (platafirma-core,
+# deploy/segredos/mapa.tsv) e tabela de texto plano, e sem a extensao a citacao a corrigir
+# nele nao tinha como ser escrita (so sai por write .txt + git mv).
 TIPOS_TEXTO = {".py", ".md", ".mmd", ".d2", ".sh", ".sql", ".yaml", ".yml", ".json", ".toml",
-               ".css", ".html", ".js", ".mjs", ".php", ".txt", ".conf",
+               ".css", ".html", ".js", ".mjs", ".php", ".txt", ".conf", ".tsv",
                ".service", ".timer", ".path", ".socket"}
 # Texto de build que se reconhece pelo nome, nao pela extensao. Entrou em 23/09/2026: sem
 # ele, stack nova com imagem propria (Dockerfile, conf do nginx) nao tinha como ser escrita
@@ -2046,7 +2049,7 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
     bancada, clones platafirma-* e seus worktrees em wt/<repo>/<cadeira>
     (working tree, fora de .git), com bin/ e hooks/ do harness aceitando verbo e hook (sem
     extensao + shebang); na instancia, @TMP@/<ordem_id>/ (rascunho da fita). Tipos: .py .md .mmd .d2 .sh
-    .sql .yaml .yml .json .toml .css .html .js .mjs .php .txt .conf .service .timer .path
+    .sql .yaml .yml .json .toml .css .html .js .mjs .php .txt .conf .tsv .service .timer .path
     .socket, e os nomes Dockerfile, Dockerfile.<sufixo>, .dockerignore, VERDES. Fora disso volta
     `{recusado, motivo}` nomeando o porque (release, fila, abertura publicada, log, segredos, .git, symlink,
     tipo, tamanho). `content` = arquivo
