@@ -32,12 +32,43 @@ RECURSOS = {"acervo.obra", "acervo.casa", "acervo.registro", "acervo.*", "releas
             "motor", "arquivo-local", "nada"}
 
 
+# o tesauro do duble: os conceitos que o objeto do rotulo cita (#3448). O real e acervo.conceito.
+# ajuste e obra entram pela carta de produto a dados (#3448, comentario #2218); ate existirem no
+# tesauro real, o registro do motor recusa com exit 3, como o teste de baixo prova.
+TESAURO = {"ajuste", "embeddings", "obra"}
+
+
+def _psql_duble(enviados):
+    def _psql(s, escreve=False):
+        enviados.append(s)
+        if "join acervo.conceito" in s:
+            return "\n".join(sorted(x for x in re.findall(r"\('([a-z0-9-]+)'\)", s) if x in TESAURO))
+        return ""
+    return _psql
+
+
 @pytest.fixture
 def sql(monkeypatch):
     enviados: list[str] = []
-    monkeypatch.setattr(registrar, "_psql", lambda s, escreve=False: enviados.append(s) or "")
+    monkeypatch.setattr(registrar, "_psql", _psql_duble(enviados))
     cap, desc = registrar.registrar_um("motor")
     return cap, desc, "".join(enviados)
+
+
+def test_os_atos_de_face_registram_rotulo_e_volta(sql):
+    """#3448: ajuste, indexar e trocar declaram rotulo e volta; trocar e `nao` (a virada apaga a geracao)."""
+    texto = sql[2]
+    for rotulo in ("Aplicar {ajuste}", "Indexar {obra} pendente", "Trocar modelo de {embeddings}"):
+        assert rotulo in texto, rotulo
+    assert "sim — motor rag ajuste <slug> <valor anterior>" in texto
+    assert "sim — sem --promover o indice fica fora do ar" in texto
+
+
+def test_slug_fora_do_tesauro_recusa_o_registro(monkeypatch):
+    monkeypatch.setattr(registrar, "_psql", lambda s, escreve=False: "")
+    with pytest.raises(SystemExit) as e:
+        registrar.registrar_um("motor")
+    assert e.value.code == 3
 
 
 def test_a_descricao_servida_ensina_a_necessidade_em_frase(sql):
@@ -50,7 +81,7 @@ def test_a_descricao_servida_ensina_a_necessidade_em_frase(sql):
 
 def test_os_atos_sao_so_os_do_verbo(sql):
     texto = sql[2]
-    registrados = re.findall(r"into acervo\.ferramental_ato \(verbo, ato, capacidade, acao, tipo\) values \('motor', '([\w-]+)'", texto)
+    registrados = re.findall(r"into acervo\.ferramental_ato \(verbo, ato, capacidade, acao, tipo[^)]*\) values \('motor', '([\w-]+)'", texto)
     assert registrados == ATOS, "linha `# atos:` em prosa vira ato inexistente (o 'a' de 08/10)"
 
 

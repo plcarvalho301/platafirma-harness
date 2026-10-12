@@ -36,6 +36,18 @@
 # escreve: escrever=motor,arquivo-local
 # escreve: julgar=motor,arquivo-local
 # escreve: eleger=nada
+# face: ajuste=motor
+# face: indexar=motor
+# face: trocar=motor
+# rotulo: ajuste=Aplicar {ajuste}
+# rotulo: indexar=Indexar {obra} pendente
+# rotulo: trocar=Trocar modelo de {embeddings}
+# volta: ajuste=sim — motor rag ajuste <slug> <valor anterior>, que o retorno do ajuste traz antes da seta
+# volta: indexar=sim — sem --promover o indice fica fora do ar; com --promover, acervo retirar biblioteca obra <obra> tira impressao e indice de servico, e acervo restaurar biblioteca obra os repoe
+# volta: trocar=nao
+# (face, rotulo e volta: arq:0124 §3, card #3448. trocar e nao porque a virada apaga a geracao anterior;
+#  antes dela a sombra se desfaz por `motor rag trocar biblioteca --descartar <id>`. A marcacao do gold set
+#  abre por link, nao por ato deste verbo, e fica sem face.)
 # (recursos pelo enum de ferramental_recurso. Onde: o evento consulta em $PLATAFIRMA_INSTANCIA/var/log/ops/*.jsonl, best-effort;
 #  o env da ingestao na instancia, arquivo NOME-valor ou $PLATAFIRMA_INSTANCIA/segredos/<stack>/<VAR> (ajuste de corte, via
 #  motor-instancias.json); $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml (ajuste de container);
