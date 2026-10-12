@@ -48,6 +48,7 @@ pesquisar
 metrica
 agente
 bot
+preferencia
 ```
 
 Os três últimos são o braço de repo/teste/lint/PR da #3004 (feature #3003, invariante
@@ -63,6 +64,11 @@ serve ninguém. Recorte de QUEM usa é do `ferramental.md` do chapéu, não dest
 `bot` (a camada acima do systemd, #3186) entra pela mesma mecânica: `bot declarar` agenda o que roda sozinho e
 `bot caidas` abre o incidente do que caiu; o verbo registrado em acervo registrar bot só aparece no `tools/list`
 quando está aqui.
+
+`preferencia` (a preferência de cada pessoa para a tela, #3449) entra pela mesma mecânica: a casca da Taipa lê
+o tema pela API da origem, que chega à porta, e o verbo registrado em `acervo registrar preferencia` só aparece
+no `tools/list` quando está aqui. Os dois atos leem só o sujeito que a porta injeta, então expor o verbo a
+toda cadeira não dá acesso à preferência de ninguém.
 
 Fora do núcleo, de propósito: `ollama` (inferência-local) e `matrix` (mensagem-externa)
 — capacidades reais no golden record, mas não são abertura de toda cadeira.
