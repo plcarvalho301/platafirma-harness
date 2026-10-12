@@ -151,11 +151,17 @@ async def test_lote_reparte_o_prazo_e_o_item_sem_prazo_nao_roda():
 
     def fake(argv, stdin, timeout, ident, prazo=None):
         prazos.append(prazo)
-        time.sleep(0.2)
         return {"exit_code": 0, "stdout": {"texto": "ok", "bytes_total": 2, "truncado": False}}
 
     a, b, c, d, e = _patches_do_lote()
+    def restante(_fim):
+        # Cada item gasta 0,2 s dos 0,3 s do prazo, contados e nao dormidos: com `sleep` real e
+        # a CPU do host ocupada (portao com quatro suites juntas) o 1o item passava de 0,1 s de
+        # sobra, o 2o ja nascia esgotado e so um rodava (assert 1 == 2).
+        return 0.3 - 0.2 * len(prazos)
+
     with a, b, c, d, e, patch("server.PRAZO_S", 0.3), \
+            patch("server._prazo_restante", side_effect=restante), \
             patch("server._run_verbo_blocking", side_effect=fake):
         res = await s.run_command(commands=["repo estado", "repo estado", "repo estado"])
 
