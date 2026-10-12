@@ -2,9 +2,14 @@
   "_": [
     "Registro das SUPERFICIES em que uma cadeira e servida, e de como cada",
     "capacidade chega em cada uma. Existe porque a cadeira nao e uma so instancia:",
-    "a mesma persona atende pelo claude.ai, pela fita do chat, pelo Code em worktree",
-    "da fabrica — e, sem conector nenhum, pelo Code seco. O COMPORTAMENTO tem de ser",
-    "o mesmo onde ha meio; onde nao ha, a sessao diz que esta fora da plataforma.",
+    "a mesma persona atende pelo claude.ai, pelo Code, agy, cursor e codex do posto",
+    "— e, sem conector nenhum, pelo Code seco. O COMPORTAMENTO tem de ser o mesmo",
+    "onde ha meio; onde nao ha, a sessao diz que esta fora da plataforma.",
+    "",
+    "SAIRAM em 12/10/2026 (card #3477, decisao do dono): a `fabrica` (Code em",
+    "worktree wt-<card> do harness) e a `fita` (o giro headless do chat do",
+    "Matrix: bin/chat, chat-worker). O chat sera refeito; superficie nova entra",
+    "aqui quando existir, com o produtor que a medir.",
     "",
     "SUPERFICIE NAO E FRONTEIRA DE SEGURANCA. O modelo da casa e conta segregada",
     "(uid claudinho), acesso por run_command via CLI, isolamento e pentest contra",
@@ -21,10 +26,11 @@
     "Quem le: `conferir superficie`, chamado tambem pelo pre-commit com --staged.",
     "",
     "PRODUTOR, NAO INSTANCIA (16/08/2026). O gate mede quem ESCREVE o .mcp.json de",
-    "cada superficie, nao uma amostra dos cwd vivos. Instancia e efemera: worktree",
-    "some, fita rotaciona, e veredito que depende disso oscila sem nada ter mudado.",
-    "Zero instancia nao e conector faltando. Deriva entre produtor e instancia viva",
-    "sai como OBSERVACAO, com nome de arquivo, e nao reprova."
+    "cada superficie verificavel do host, nao uma amostra dos cwd vivos. Instancia",
+    "e efemera: worktree some, fita rotaciona, e veredito que depende disso oscila",
+    "sem nada ter mudado. Hoje nenhuma superficie e verificavel do host (as duas",
+    "que eram, fabrica e fita, sairam): superficie que voltar a se declarar",
+    "verificavel sem `produtor` reprova."
   ],
   "azp_superficie": {
     "claudinho-mcp": "claude.ai",
@@ -80,51 +86,18 @@
       "verificavel_do_host": false,
       "porque": "o arquivo vive no clone de outra conta; o host ve o azp code-cli em cada linha do log da porta"
     },
-    "fita": {
-      "papel": "giro headless do chat, disparado pelo worker; sala do Matrix",
-      "conectores": [
-        "claudinho-mcp",
-        "platafirma-wiki"
-      ],
-      "onde_declara": "/srv/platafirma/casa/var/fitas/<cadeira>/.mcp.json, escrito por prepara_cwd",
-      "verificavel_do_host": true,
-      "porque": "roda no mesmo host: o .mcp.json e o settings sao lisiveis daqui",
-      "produtor": {
-        "tipo": "codigo",
-        "arquivo": "bin/chat",
-        "simbolo": "CONECTORES",
-        "_": "prepara_cwd/serve_conectores escreve o .mcp.json da fita a cada giro a partir deste dict. Medir o dict e medir o que TODA fita futura recebe; medir os cwd vivos e medir o passado."
-      }
-    },
-    "fabrica": {
-      "papel": "Code na conta que roda a fabrica, em maquina qualquer; worktree wt-<card> sob card de claudinho-TI",
-      "conectores": [
-        "claudinho-mcp",
-        "platafirma-wiki"
-      ],
-      "onde_declara": "wt-<card>/.mcp.json",
-      "verificavel_do_host": true,
-      "porque": "as worktrees vivem na bancada declarada pela conta (PLATAFIRMA_BANCADA); foi daqui que o padrao veio",
-      "injecao_de_cadeira": "~/.claude/CLAUDE.md (symlink de agente/CLAUDE.md): slug dito na abertura vence; sem slug, default `fabrica`. PF_CADEIRA NAO serve — Bash negado na estacao, e run_command roda no ambiente do ops-server, nao no do terminal. Medido em 16/08/2026.",
-      "produtor": {
-        "tipo": "arquivo-rastreado",
-        "caminho": ".mcp.json",
-        "_": "nao ha script que prepare a worktree: o .mcp.json e RASTREADO na raiz do repo, e a worktree o recebe do branch. O produtor e o git. Ler os wt-*/.mcp.json era ler N copias do mesmo arquivo — tautologia cujo veredito dependia de quantas worktrees existiam."
-      }
-    },
     "code-seco": {
       "papel": "Claude Code em conta SEM o arranque do posto instalado: sem .mcp.json, sem conector, sem instrucao — sessao FORA da plataforma",
       "conectores": [],
       "onde_declara": "lugar nenhum — e a ausencia de declaracao que a define",
       "verificavel_do_host": false,
-      "porque": "nao ha artefato que a identifique: e a ausencia que a define. Declarada aqui porque tres de quatro em registro fazia o gate sair 'em dia' ignorando a quarta — nao medido nao e em dia. NA CONTA claudinho ela nao existe: ~/.claude/CLAUDE.md da default `fabrica` a qualquer diretorio.",
+      "porque": "nao ha artefato que a identifique: e a ausencia que a define. Declarada aqui porque tres de quatro em registro fazia o gate sair 'em dia' ignorando a quarta — nao medido nao e em dia. NA CONTA claudinho ela nao existe: ~/.claude/CLAUDE.md da a cadeira `fabrica` por default a qualquer diretorio.",
       "arranque": "nao ha injecao de cadeira e nao ha `monta_sessao` a chamar. A sessao declara que esta fora da plataforma em vez de agir como cadeira. Regua em abertura/arranque.md."
     }
   },
   "conectores": {
     "claudinho-mcp": {
       "url": "https://ops.platafirma.org/mcp",
-      "token_no_giro": "PF_OPS_TOKEN",
       "serve": [
         "malote",
         "run_command",
@@ -136,7 +109,6 @@
     },
     "platafirma-wiki": {
       "url": "https://mcp.platafirma.org/mcp",
-      "token_no_giro": "PF_WIKI_TOKEN",
       "serve": [
         "repo_read",
         "repo_tree",

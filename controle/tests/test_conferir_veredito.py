@@ -756,15 +756,14 @@ def test_superficie_conforme_quando_tudo_servido(tmp_path, monkeypatch, capsys):
     _registro_superficie(tmp_path, {
         "conectores": {"claudinho-mcp": {"serve": ["conferir"]}},
         "superficies": {
-            "fabrica": {"verificavel_do_host": True, "produtor": "fabrica_prod",
-                        "conectores": ["claudinho-mcp"]},
+            "sup-x": {"verificavel_do_host": True, "produtor": "x_prod",
+                      "conectores": ["claudinho-mcp"]},
         },
         "capacidades": {},
         "aposentadas": {"nomes": []},
     })
     monkeypatch.setattr(conferir, "HARNESS", str(tmp_path))
     monkeypatch.setattr(conferir, "_conectores_do_produtor", lambda prod: ({"claudinho-mcp"}, None))
-    monkeypatch.setattr(conferir, "_mcp_jsons_da_superficie", lambda nome: [])
     monkeypatch.setattr(conferir, "_texto_da_fita", lambda: [])
     monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
 
@@ -779,15 +778,14 @@ def test_superficie_divergente_quando_conector_prometido_nao_servido(tmp_path, m
     _registro_superficie(tmp_path, {
         "conectores": {"claudinho-mcp": {"serve": ["conferir"]}},
         "superficies": {
-            "fabrica": {"verificavel_do_host": True, "produtor": "fabrica_prod",
-                        "conectores": ["claudinho-mcp"]},
+            "sup-x": {"verificavel_do_host": True, "produtor": "x_prod",
+                      "conectores": ["claudinho-mcp"]},
         },
         "capacidades": {},
         "aposentadas": {"nomes": []},
     })
     monkeypatch.setattr(conferir, "HARNESS", str(tmp_path))
     monkeypatch.setattr(conferir, "_conectores_do_produtor", lambda prod: (set(), None))
-    monkeypatch.setattr(conferir, "_mcp_jsons_da_superficie", lambda nome: [])
     monkeypatch.setattr(conferir, "_texto_da_fita", lambda: [])
     monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
 
@@ -795,9 +793,77 @@ def test_superficie_divergente_quando_conector_prometido_nao_servido(tmp_path, m
     dado = json.loads(capsys.readouterr().out)
 
     assert exit_code == 1
-    item = next(i for i in dado["itens"] if i["nome"] == "fabrica")
+    item = next(i for i in dado["itens"] if i["nome"] == "sup-x")
     assert item["estado"] == "divergente"
     assert "claudinho-mcp" in item["motivo"]
+
+
+def test_superficie_verificavel_sem_produtor_continua_reprovando(tmp_path, monkeypatch, capsys):
+    # #3477: a saida da fabrica e da fita do registro NAO afrouxa a regua das que
+    # ficam nem das que vierem — verificavel do host sem `produtor` reprova.
+    _registro_superficie(tmp_path, {
+        "conectores": {"claudinho-mcp": {"serve": ["conferir"]}},
+        "superficies": {
+            "sup-x": {"verificavel_do_host": True, "conectores": ["claudinho-mcp"]},
+        },
+        "capacidades": {},
+        "aposentadas": {"nomes": []},
+    })
+    monkeypatch.setattr(conferir, "HARNESS", str(tmp_path))
+    monkeypatch.setattr(conferir, "_texto_da_fita", lambda: [])
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_superficie(None, False, True)
+    dado = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    item = next(i for i in dado["itens"] if i["nome"] == "sup-x")
+    assert item["estado"] == "divergente"
+
+
+# O registro REAL (registro/superficies.json), nao um fixture: #3477 tirou dele a
+# `fabrica` (Code em worktree do harness) e a `fita` (giro headless do chat).
+HARNESS_REAL = Path(__file__).resolve().parents[2]
+SUPERFICIES_DECLARADAS = {"claude.ai", "agy", "cursor", "codex", "code", "code-seco"}
+
+
+def _registro_real():
+    return json.loads((HARNESS_REAL / "registro" / "superficies.json").read_text(encoding="utf-8"))
+
+
+def test_registro_real_declara_so_as_superficies_vivas_e_nenhum_token_estatico():
+    reg = _registro_real()
+
+    assert set(reg["superficies"]) == SUPERFICIES_DECLARADAS
+    assert "fabrica" not in reg["superficies"] and "fita" not in reg["superficies"]
+    # a porta so aceita o JWT do realm (#3272): conector nao declara variavel de token
+    for nome, conector in reg["conectores"].items():
+        assert "token_no_giro" not in conector, nome
+
+
+def test_superficie_real_mede_cada_superficie_viva_e_nao_exige_fabrica_nem_fita(monkeypatch, capsys):
+    reg = _registro_real()
+
+    def _nao_chamar(prod):
+        raise AssertionError(f"produtor medido, mas nenhuma superficie e verificavel do host: {prod}")
+
+    monkeypatch.setattr(conferir, "HARNESS", str(HARNESS_REAL))
+    monkeypatch.setattr(conferir, "_conectores_do_produtor", _nao_chamar)
+    monkeypatch.setattr(conferir, "_texto_da_fita", lambda: [])
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_superficie(None, False, True)
+    dado = json.loads(capsys.readouterr().out)
+
+    estados = {i["nome"]: i["estado"] for i in dado["itens"]}
+    # cada superficie que o registro declara continua julgada, nenhuma some do veredito
+    # (nao medida do host sai indeterminavel, nunca conforme: exit 5 sem divergencia)
+    for nome in SUPERFICIES_DECLARADAS:
+        assert estados.get(nome) == "indeterminavel", nome
+    assert "fabrica" not in estados and "fita" not in estados
+    assert estados["conectores dos produtores declarados"] == "conforme"
+    assert exit_code == 5
+    assert set(reg["superficies"]) == SUPERFICIES_DECLARADAS
 
 
 def test_superficie_registro_ilegivel_sai_indeterminavel_nao_conforme(tmp_path, monkeypatch, capsys):

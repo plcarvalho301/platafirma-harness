@@ -45,9 +45,9 @@
                    superficie declara `produtor` em superficies.json: `codigo`
                    (dict no fonte, lido por AST) ou `arquivo-rastreado` (o
                    .mcp.json da raiz; o produtor e o git). Superficie verificavel
-                   SEM produtor declarado reprova. Instancia viva sai como
-                   OBSERVACAO de deriva, com nome de arquivo, e nao muda veredito;
-                   zero instancia nao e conector faltando. Julga tambem capacidade
+                   SEM produtor declarado reprova (hoje nenhuma e verificavel do
+                   host: fabrica e fita sairam, card #3477). Superficie sem
+                   instancia viva nao e conector faltando. Julga tambem capacidade
                    sem meio e texto de cadeira citando tool fora de todo conector.
   front   [nome]   conformidade de deploy de front por arq:0057, alem do que
                    arq:0056 ja mede: (1) tela de aplicacao (index.html+Dockerfile)
@@ -1579,19 +1579,19 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
 
     # 1. o meio prometido esta mesmo servido na superficie
     #
-    # ZERO INSTANCIA NAO E DIVERGENCIA. A fabrica so existe no host enquanto ha
-    # worktree aberta; limpas as worktrees, nao ha `.mcp.json` a ler e o conjunto
-    # de conectores achados vem vazio — o que, sem esta guarda, era relatado como
-    # "falta claudinho-mcp" e reprovava o commit de QUALQUER cadeira. Foi o que
-    # travou claudinha-gestao-estrategica em 16/08/2026. Superficie sem instancia
-    # viva sai como NAO MEDIDA, com o motivo, porque nao medido nao e em dia — e
-    # tambem nao e defeito.
+    # ZERO INSTANCIA NAO E DIVERGENCIA. Superficie de worktree so existe no host
+    # enquanto ha worktree aberta; limpas as worktrees, nao ha `.mcp.json` a ler e
+    # o conjunto de conectores achados vem vazio — o que, sem esta guarda, era
+    # relatado como "falta claudinho-mcp" e reprovava o commit de QUALQUER
+    # cadeira. Foi o que travou claudinha-gestao-estrategica em 16/08/2026.
+    # Superficie sem instancia viva sai como NAO MEDIDA, com o motivo, porque nao
+    # medido nao e em dia — e tambem nao e defeito.
     # PRODUTOR, NAO INSTANCIA. Quem escreve o `.mcp.json` de cada superficie e o
     # que se mede; cwd vivo e amostra do passado. Ler os wt-*/.mcp.json era ler N
     # copias do MESMO arquivo rastreado no repo — tautologia cujo veredito
     # dependia de quantas worktrees existiam no momento. Zero worktree fazia o
     # gate acusar "falta claudinho-mcp" e reprovar o commit de toda cadeira.
-    sem_produtor, deriva = [], []
+    sem_produtor = []
     for nome, sup in reg.get("superficies", {}).items():
         if not sup.get("verificavel_do_host"):
             continue
@@ -1606,17 +1606,6 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
             continue
         for falta in sorted(exigidos - produzidos):
             nao_servidos.append((nome, falta))
-        # Instancia viva vira OBSERVACAO: deriva entre o que o produtor escreve
-        # hoje e o que um cwd de ontem carrega e informacao util, mas nao veredito.
-        for caminho in _mcp_jsons_da_superficie(nome):
-            try:
-                with open(caminho, encoding="utf-8") as f:
-                    tem = set(json.load(f).get("mcpServers", {}))
-            except (OSError, ValueError):
-                continue
-            if tem != produzidos:
-                deriva.append((os.path.relpath(caminho, os.path.expanduser("~/AI")),
-                               sorted(produzidos - tem), sorted(tem - produzidos)))
 
     # 1b. ENDPOINT de verdade — so pra superficie que declara `verificacao.modo:
     # endpoint` (hoje so `agy`, #165). As outras seguem so com a checagem
@@ -1723,7 +1712,7 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
         itens.append(("tool citada fora de todo conector", resultado.conforme()))
 
     if como_json:
-        # o detalhe rico (modo_gate, deriva_em_instancia_viva) some do --json: o
+        # o detalhe rico (modo_gate) some do --json: o
         # contrato agora e o mesmo de toda classe `conferir` (ancora + itens); o
         # motivo de cada item carrega o que antes ia em chave propria.
         return resultado.relatorio("superficie", alvo, itens, _sha_release(), como_json=True)
@@ -1751,34 +1740,11 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
         porarq.setdefault(a, []).append(t)
     for a in sorted(porarq):
         print(f"      {a}: {', '.join(sorted(set(porarq[a])))}")
-    print(f"  deriva em instancia viva (obs.)  : {len(deriva)}")
-    for a, f_, so in deriva:
-        print(f"      {a} — falta {f_ or '-'} . sobra {so or '-'}")
     print(f"  NAO MEDIDO do host               : {len(nao_medido)}")
     for x in nao_medido:
         print(f"      {x.split(' — ')[0]} — {x.split(' — ', 1)[1][:96]}")
     print()
     return resultado.relatorio("superficie", alvo, itens, _sha_release(), como_json=False)
-
-
-def _mcp_jsons_da_superficie(nome):
-    """Onde cada superficie declara os conectores. Fita: o cwd de cada cadeira.
-    Fabrica: as worktrees wt-*. Ausencia de arquivo e ausencia de conector."""
-    raiz = os.path.expanduser("~/AI")
-    if nome == "fita":
-        base = os.path.join(raiz, "fitas")
-        if not os.path.isdir(base):
-            return []
-        return [os.path.join(base, c, ".mcp.json") for c in sorted(os.listdir(base))
-                if os.path.isfile(os.path.join(base, c, ".mcp.json"))]
-    if nome == "fabrica":
-        return [os.path.join(raiz, d, ".mcp.json") for d in sorted(os.listdir(raiz))
-                if d.startswith("wt-")
-                and os.path.isfile(os.path.join(raiz, d, ".mcp.json"))]
-    return []
-
-
-
 
 
 def _obtem_descricao_servida_mcp(url=None, token=None):
