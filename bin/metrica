@@ -1507,7 +1507,7 @@ def main(argv):
         if d1 < d0:
             d0, d1 = d1, d0
         dias = [(d0 + timedelta(n)).isoformat() for n in range((d1 - d0).days + 1)]
-    rotulo = dia if len(dias) == 1 else f"{dias[0]}..{dias[-1]}"
+    rotulo = dias[0] if len(dias) == 1 else f"{dias[0]}..{dias[-1]}"
 
     # A FONTE (#3353). `turnos` e sempre da particao. `dia` e `verbos` vao a particao quando ha dia fechado na
     # janela; o dia aberto (hoje) so o bruto tem, e --sessao/--azp existem so nele (a identidade nao atravessa).
