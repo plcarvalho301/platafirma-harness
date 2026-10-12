@@ -22,6 +22,7 @@ desenha como ausência, nunca como saúde. `0` e `—` nunca colapsam.
 from __future__ import annotations
 
 import html
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -68,7 +69,15 @@ def _versao_ui() -> str:
 
 VERSAO_UI = _versao_ui()
 
-CLOUDFLARED_OAUTH2PROXY = {"cloudflared", "oauth2-proxy"}
+# A borda que sustenta a tela: o servico do compose, nao o nome curto. O contêiner real
+# se chama platafirma-core-cloudflared-1 ou platafirma-core-oauth2-proxy-casa-1; comparar
+# por igualdade com «cloudflared»/«oauth2-proxy» deixava todos passarem (#3268).
+_BORDA_DA_TELA = re.compile(r"(?:^|-)(?:cloudflared|oauth2-proxy)(?:-|$)")
+
+
+def sustenta_a_tela(nome: str) -> bool:
+    """True se `nome` (contêiner ou servico) e cloudflared ou algum oauth2-proxy."""
+    return bool(_BORDA_DA_TELA.search((nome or "").strip().lower()))
 
 
 def _esc(s: Any) -> str:
@@ -314,7 +323,7 @@ def bloco_sinal(bloco_estado: dict, bloco_saude: dict) -> str:
 
         for c in dados.get("conteineres", []):
             nome = c.get("nome") or "?"
-            excluido = nome in CLOUDFLARED_OAUTH2PROXY
+            excluido = sustenta_a_tela(nome)
             estado_final, papel_final, caminho = _estado_container(c.get("estado_docker"), c.get("saude"))
             acao = (
                 '<span class="motivo">sustenta esta tela</span>' if excluido

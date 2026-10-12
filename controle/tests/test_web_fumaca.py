@@ -10,7 +10,7 @@ import re
 import pytest
 from starlette.testclient import TestClient
 
-from harness_controle import web
+from harness_controle import render, web
 from harness_controle.agregador import bloco_de
 from harness_controle.verbos import ResultadoVerbo
 
@@ -353,6 +353,32 @@ def test_reiniciar_cloudflared_e_recusado(cliente):
 def test_reiniciar_oauth2_proxy_e_recusado(cliente):
     r = cliente.post("/acoes/reiniciar", data={"alvo": "oauth2-proxy"})
     assert r.status_code == 403
+
+
+@pytest.mark.parametrize("alvo", [
+    "platafirma-core-cloudflared-1",
+    "platafirma-core-oauth2-proxy-1",
+    "platafirma-core-oauth2-proxy-casa-1",
+    "platafirma-core-oauth2-proxy-docs-1",
+    "platafirma-core-oauth2-proxy-harness-1",
+    "platafirma-core-oauth2-proxy-rastreador-1",
+    "oauth2-proxy-harness",
+])
+def test_reiniciar_nome_real_da_borda_e_recusado(cliente, monkeypatch, alvo):
+    # #3268: a exclusao comparava por igualdade com o nome curto; o contêiner real
+    # (projeto-servico-indice) passava e o restart chegava a `infra restart`.
+    chamadas = []
+    monkeypatch.setattr("harness_controle.web.subprocess.run",
+                        lambda argv, **kw: chamadas.append(argv))
+    r = cliente.post("/acoes/reiniciar", data={"alvo": alvo})
+    assert r.status_code == 403
+    assert chamadas == []
+
+
+@pytest.mark.parametrize("alvo", ["mediawiki", "plataforma-wiki-mediawiki-1", "acervo-api",
+                                  "platafirma-core-keycloak-1", "chat-recepcao"])
+def test_sustenta_a_tela_nao_pega_o_que_nao_e_borda(alvo):
+    assert render.sustenta_a_tela(alvo) is False
 
 
 def test_reiniciar_sem_alvo_e_recusado(cliente):
