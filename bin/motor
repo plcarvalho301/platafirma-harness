@@ -39,9 +39,9 @@
 # face: ajuste=motor
 # face: indexar=motor
 # face: trocar=motor
-# rotulo: ajuste=Aplicar um ajuste
-# rotulo: indexar=Indexar as obras pendentes
-# rotulo: trocar=Trocar o modelo de {embeddings}
+# rotulo: ajuste=Aplicar {ajuste}
+# rotulo: indexar=Indexar {obra} pendente
+# rotulo: trocar=Trocar modelo de {embeddings}
 # volta: ajuste=sim — motor rag ajuste <slug> <valor anterior>, que o retorno do ajuste traz antes da seta
 # volta: indexar=sim — sem --promover o indice fica fora do ar; com --promover, acervo retirar biblioteca obra <obra> tira impressao e indice de servico, e acervo restaurar biblioteca obra os repoe
 # volta: trocar=nao

@@ -33,7 +33,9 @@ RECURSOS = {"acervo.obra", "acervo.casa", "acervo.registro", "acervo.*", "releas
 
 
 # o tesauro do duble: os conceitos que o objeto do rotulo cita (#3448). O real e acervo.conceito.
-TESAURO = {"embeddings"}
+# ajuste e obra entram pela carta de produto a dados (#3448, comentario #2218); ate existirem no
+# tesauro real, o registro do motor recusa com exit 3, como o teste de baixo prova.
+TESAURO = {"ajuste", "embeddings", "obra"}
 
 
 def _psql_duble(enviados):
@@ -56,7 +58,7 @@ def sql(monkeypatch):
 def test_os_atos_de_face_registram_rotulo_e_volta(sql):
     """#3448: ajuste, indexar e trocar declaram rotulo e volta; trocar e `nao` (a virada apaga a geracao)."""
     texto = sql[2]
-    for rotulo in ("Aplicar um ajuste", "Indexar as obras pendentes", "Trocar o modelo de {embeddings}"):
+    for rotulo in ("Aplicar {ajuste}", "Indexar {obra} pendente", "Trocar modelo de {embeddings}"):
         assert rotulo in texto, rotulo
     assert "sim — motor rag ajuste <slug> <valor anterior>" in texto
     assert "sim — sem --promover o indice fica fora do ar" in texto
