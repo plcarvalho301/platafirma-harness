@@ -1,0 +1,188 @@
+#!/opt/platafirma/current/venv/harness/bin/python
+# preferencia — a preferência de cada pessoa, lida e gravada só pelo sujeito que a porta injeta
+# capacidade: canal
+# dono: engenharia
+# classe: B
+# use para: ler ou gravar a preferência da pessoa da sessão (hoje só o tema da tela: claro, escuro ou sistema)
+# atos: ler (leitura, preferencia), escrever (escrita, preferencia)
+# forma: texto
+# le: ler=sessao.preferencia_sujeito
+# le: escrever=sessao.preferencia_sujeito
+# escreve: ler=nada
+# escreve: escrever=sessao.preferencia_sujeito
+# face: escrever=casca
+# rotulo: escrever=Escolher o tema
+# volta: escrever=sim — escrever o valor anterior
+# ambiente: PF_SUJEITO (obrigatória; origem: a porta, do token); SESSAO_PG_PORT[=5437] é endereço de serviço, constante do verbo; PF_BIN (só teste, aponta o bin/ com o `seg`); a senha do banco não é variável: entra por `seg segredo ler harness-sessao/SESSAO_PG_PASSWORD` no processo
+# depende: Postgres da sessao (harness-sessao-db), seg
+#
+# Decisão do arquiteto (#2143 do #3449): o sujeito nunca é argumento. Os dois atos leem só
+# o PF_SUJEITO que a porta injeta, então ninguém lê nem grava a preferência de outro, por
+# construção. A tabela e a migração são a 0101 (sessao/migracao/).
+#
+# O vocabulário de cada preferência mora aqui, sem CHECK no banco (dados, no #3449): o
+# contrato do valor vale enquanto este verbo for o único escritor. Por isso `ler` trata
+# valor fora do vocabulário como «sem preferência» e nunca o devolve.
+#
+#   preferencia ler tema                  o valor, ou só a linha `motivo: sem preferência gravada`
+#   preferencia escrever tema <valor>     grava e diz o valor anterior; `sistema` é o desfazer
+#
+# Saída: 0 (inclui «sem preferência»), 2 uso ou valor fora do vocabulário, 3 sem PF_SUJEITO,
+# 5 banco que não respondeu (não se confunde com «sem preferência»).
+import argparse
+import json
+import os
+import subprocess
+import sys
+
+HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+SEGREDO = "harness-sessao/SESSAO_PG_PASSWORD"
+
+VOCABULARIO = {"tema": ("claro", "escuro", "sistema")}
+SEM_PREFERENCIA = "sem preferência gravada"
+FORA_DO_VOCABULARIO = "valor gravado fora do vocabulário, tratado como vazio"
+
+EXIT_USO, EXIT_SEM_SUJEITO, EXIT_BANCO = 2, 3, 5
+
+SQL_LER = "SELECT valor FROM sessao.preferencia_sujeito WHERE sujeito = %s AND preferencia = %s"
+SQL_GRAVAR = (
+    "INSERT INTO sessao.preferencia_sujeito (sujeito, preferencia, valor) VALUES (%s, %s, %s) "
+    "ON CONFLICT (sujeito, preferencia) "
+    "DO UPDATE SET valor = EXCLUDED.valor, atualizado_em = now()"
+)
+
+
+class BancoMudo(Exception):
+    """O banco não respondeu: o verbo declara e sai 5, nunca finge «sem preferência»."""
+
+
+def _senha_pg() -> str:
+    bin_dir = os.environ.get("PF_BIN") or os.path.join(HARNESS_DIR, "bin")
+    try:
+        p = subprocess.run([os.path.join(bin_dir, "seg"), "segredo", "ler", SEGREDO],
+                           capture_output=True, text=True, timeout=10, check=False)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise BancoMudo(f"seg segredo ler {SEGREDO}: {type(e).__name__}") from e
+    if p.returncode != 0 or not p.stdout.strip():
+        raise BancoMudo(f"seg segredo ler {SEGREDO}: exit {p.returncode}")
+    return p.stdout.strip()
+
+
+def _conecta():
+    try:
+        import psycopg
+    except ImportError as e:
+        raise BancoMudo("módulo psycopg ausente neste venv") from e
+    porta = os.environ.get("SESSAO_PG_PORT", "5437")
+    dsn = f"host=127.0.0.1 port={porta} dbname=sessao user=sessao password={_senha_pg()}"
+    try:
+        return psycopg.connect(dsn, connect_timeout=3)
+    except Exception as e:  # noqa: BLE001 — qualquer falha aqui é banco mudo
+        raise BancoMudo(f"sessao-db não respondeu ({type(e).__name__})") from None
+
+
+def le_do_banco(sujeito: str, preferencia: str) -> str | None:
+    """O valor gravado, ou None quando a pessoa nunca escolheu."""
+    con = _conecta()
+    try:
+        with con.cursor() as cur:
+            cur.execute(SQL_LER, (sujeito, preferencia))
+            linha = cur.fetchone()
+    except Exception as e:  # noqa: BLE001
+        raise BancoMudo(f"leitura em sessao.preferencia_sujeito falhou ({type(e).__name__})") from None
+    finally:
+        con.close()
+    return linha[0] if linha else None
+
+
+def grava_no_banco(sujeito: str, preferencia: str, valor: str) -> str | None:
+    """Grava e devolve o valor anterior (None quando não havia linha)."""
+    con = _conecta()
+    try:
+        with con.cursor() as cur:
+            cur.execute(SQL_LER, (sujeito, preferencia))
+            linha = cur.fetchone()
+            cur.execute(SQL_GRAVAR, (sujeito, preferencia, valor))
+        con.commit()
+    except Exception as e:  # noqa: BLE001
+        raise BancoMudo(f"escrita em sessao.preferencia_sujeito falhou ({type(e).__name__})") from None
+    finally:
+        con.close()
+    return linha[0] if linha else None
+
+
+def _sujeito() -> str:
+    s = os.environ.get("PF_SUJEITO", "").strip()
+    if not s:
+        sys.stderr.write("preferencia: variável PF_SUJEITO: ausente — a porta a injeta pelo fluxo "
+                         "OAuth; sem a pessoa não há preferência a ler nem a gravar\n")
+        sys.exit(EXIT_SEM_SUJEITO)
+    return s
+
+
+def _preferencia_valida(nome: str) -> str:
+    if nome not in VOCABULARIO:
+        sys.stderr.write(f"preferencia: '{nome}' não é preferência conhecida; hoje: "
+                         f"{', '.join(sorted(VOCABULARIO))}\n")
+        sys.exit(EXIT_USO)
+    return nome
+
+
+def _banco_mudo(e: BancoMudo) -> None:
+    sys.stderr.write(f"preferencia: {e}\n")
+    sys.exit(EXIT_BANCO)
+
+
+def ato_ler(args: argparse.Namespace) -> int:
+    preferencia = _preferencia_valida(args.preferencia)
+    sujeito = _sujeito()
+    try:
+        valor = le_do_banco(sujeito, preferencia)
+    except BancoMudo as e:
+        _banco_mudo(e)
+    motivo = None
+    if valor is None:
+        motivo = SEM_PREFERENCIA
+    elif valor not in VOCABULARIO[preferencia]:
+        valor, motivo = None, FORA_DO_VOCABULARIO
+    if args.json:
+        print(json.dumps({"preferencia": preferencia, "valor": valor, "motivo": motivo},
+                         ensure_ascii=False))
+    elif valor is not None:
+        print(valor)
+    else:
+        print(f"motivo: {motivo}")
+    return 0
+
+
+def ato_escrever(args: argparse.Namespace) -> int:
+    preferencia = _preferencia_valida(args.preferencia)
+    if args.valor not in VOCABULARIO[preferencia]:
+        sys.stderr.write(f"preferencia: '{args.valor}' fora do vocabulário de {preferencia}; "
+                         f"vale: {', '.join(VOCABULARIO[preferencia])}\n")
+        sys.exit(EXIT_USO)
+    sujeito = _sujeito()
+    try:
+        anterior = grava_no_banco(sujeito, preferencia, args.valor)
+    except BancoMudo as e:
+        _banco_mudo(e)
+    print(f"{preferencia}: {anterior if anterior is not None else SEM_PREFERENCIA} → {args.valor}")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(prog="preferencia",
+                                 description="Preferência da pessoa da sessão (hoje só o tema).")
+    sub = ap.add_subparsers(dest="ato", required=True)
+    ler = sub.add_parser("ler", help="o valor gravado da preferência do sujeito da sessão")
+    ler.add_argument("preferencia")
+    ler.add_argument("--json", action="store_true")
+    escrever = sub.add_parser("escrever", help="grava a preferência do sujeito da sessão")
+    escrever.add_argument("preferencia")
+    escrever.add_argument("valor")
+    args = ap.parse_args(argv)
+    return {"ler": ato_ler, "escrever": ato_escrever}[args.ato](args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
