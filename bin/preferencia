@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # preferencia — a preferência de cada pessoa, lida e gravada só pelo sujeito que a porta injeta
-# capacidade: canal
+# capacidade: preferencia
 # dono: engenharia
 # classe: B
 # use para: ler ou gravar a preferência da pessoa da sessão (hoje só o tema da tela: claro, escuro ou sistema)
