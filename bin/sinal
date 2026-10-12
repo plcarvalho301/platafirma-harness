@@ -159,6 +159,23 @@ def do_runtime():
             "motivo": motivo or "criacao de contendor falhou"}
 
 
+def do_gpu():
+    """Driver da GPU descasado da biblioteca (pos-morte do #3401): o pacote de espaco de
+    usuario atualiza com o modulo de kernel antigo carregado, e nada quebra ate um contendor
+    com GPU ser recriado. O nvidia-smi ja falha no minuto da atualizacao ("Driver/library
+    version mismatch"), entao lido aqui, a cada coleta, o alerta chega antes da recriacao.
+    Host sem nvidia-smi (instancia sem GPU) e sem-sinal, nunca fora."""
+    onde = "nvidia-smi -L"
+    if not shutil.which("nvidia-smi"):
+        return {"estado": "sem-sinal", "exercitado": None,
+                "motivo": "nvidia-smi ausente no host (instancia sem GPU?)"}
+    rc, out, err = roda(["nvidia-smi", "-L"], timeout=20)
+    if rc == 0 and out:
+        return {"estado": "no-ar", "exercitado": onde}
+    motivo = (err or out or f"saiu {rc}").splitlines()[0][:300]
+    return {"estado": "fora", "exercitado": onde, "motivo": motivo}
+
+
 def parse_dt(iso_str: str) -> datetime:
     if iso_str.endswith("Z"):
         iso_str = iso_str[:-1] + "+00:00"
@@ -279,6 +296,9 @@ def coleta():
         e = do_systemd_result(nome, unit)
         e["lido_em"] = agora()
         servicos[nome] = e
+    e = do_gpu()
+    e["lido_em"] = agora()
+    servicos["gpu-host"] = e
     runtime = do_runtime()
     runtime["lido_em"] = agora()
     return {"gerado_em": agora(), "runtime": runtime, "servicos": servicos}
