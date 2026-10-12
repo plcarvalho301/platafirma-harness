@@ -28,6 +28,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 # Raizes de producao (card #3010): o sinal e estado da instancia, nunca da release.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
@@ -182,10 +183,127 @@ def parse_dt(iso_str: str) -> datetime:
     return datetime.fromisoformat(iso_str)
 
 
+# Log e estado do contendor no incidente (card #3469): #3382 e #3383 ficaram sem causa porque o log
+# saiu com a recriacao do contendor. Capturado ao abrir o incidente, antes de qualquer recriacao, e
+# SEMPRE por `redigir`: o corpo do item e lido por gente e indexado, segredo nao entra.
+LINHAS_DE_LOG = 80                  # `docker logs --tail`
+LIMITE_DO_LOG = 6000                # caracteres do log no corpo do item
+LIMITE_DA_SAIDA = 600               # caracteres da ultima saida da sonda
+TOKEN_LONGO = 32                    # letras e digitos seguidos que parecem chave
+MASCARA = "***"
+# So `.State` e o contador de reinicios: nunca `.Config.Env`, que guarda segredo.
+FORMATO_ESTADO = "{{json .State}}\t{{.RestartCount}}"
+
+_CHAVE_PRIVADA = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)",
+                            re.DOTALL)
+_URL_COM_CREDENCIAL = re.compile(r"\b([A-Za-z][A-Za-z0-9+.-]*://[^/\s:@]+:)[^/\s@]+@")
+_BEARER = re.compile(r"(?i)\b(bearer\s+|basic\s+(?=[A-Za-z0-9+/=]{8,}))[^\s\"',;]+")
+_JWT = re.compile(r"\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*")
+_CHAVE_SEGREDA = re.compile(
+    r"""(?i)((?:pass(?:word|wd|phrase)?|senha|secret|token|api[_-]?key|private[_-]?key|credential|cookie"""
+    r"""|authorization)[\w.-]*["']?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;&}"']+)""")
+_TOKEN_LONGO = re.compile(rf"[A-Za-z0-9_+/=]{{{TOKEN_LONGO},}}")
+
+def _mascara_token(m: re.Match) -> str:
+    t = m.group(0)
+    if t.startswith("/") or not (re.search(r"\d", t) and re.search(r"[A-Za-z]", t)):
+        return t                                 # caminho, ou palavra sem digito: nao e chave
+    return MASCARA
+
+def redigir(texto: str) -> str:
+    """Tira de `texto` o que parece segredo, por regra: bloco de chave privada, credencial em URL,
+    Bearer/Basic, JWT, valor de chave que sugere segredo (senha, token, secret, api key, cookie,
+    authorization) e sequencia longa de letras e digitos. O que nao casa fica; regra erra para o
+    lado de mascarar a mais."""
+    texto = _CHAVE_PRIVADA.sub(MASCARA, texto)
+    texto = _URL_COM_CREDENCIAL.sub(r"\1" + MASCARA + "@", texto)
+    texto = _BEARER.sub(r"\1" + MASCARA, texto)
+    texto = _JWT.sub(MASCARA, texto)
+    texto = _CHAVE_SEGREDA.sub(r"\1" + MASCARA, texto)
+    return _TOKEN_LONGO.sub(_mascara_token, texto)
+
+def _cauda(texto: str, limite: int, *, por_linha: bool = False) -> str:
+    """Os ultimos `limite` caracteres; `por_linha` descarta a linha cortada ao meio."""
+    if len(texto) <= limite:
+        return texto
+    corte = texto[-limite:]
+    if por_linha and "\n" in corte:
+        corte = corte.split("\n", 1)[1]
+    return "[...]\n" + corte
+
+def contendor_do_servico(nome: str) -> str | None:
+    """Nome do contendor do servico, ou None quando nao ha (unit systemd, gpu, runtime) ou nao se
+    resolve. A sonda externa guarda o host da rede, nao o nome do contendor do compose: acha-se por
+    `docker ps`, e so vale se for um unico (oauth2-proxy nao pode pegar oauth2-proxy-harness)."""
+    if nome in POR_HEALTHCHECK:
+        return POR_HEALTHCHECK[nome]
+    for n, _posto, url, _exige, _proibido in POR_SONDA_EXTERNA:
+        if n != nome:
+            continue
+        host = urlparse(url).hostname or ""
+        rc, out, _ = roda(["docker", "ps", "-a", "--filter", f"name={host}", "--format", "{{.Names}}"])
+        if rc != 0 or not host:
+            return None
+        nomes = out.split()
+        if host in nomes:
+            return host
+        achados = [x for x in nomes if re.search(rf"(^|-){re.escape(host)}(-\d+)?$", x)]
+        return achados[0] if len(achados) == 1 else None
+    return None
+
+def _estado_do_contendor(saida: str) -> list[str]:
+    """Linhas de estado e de saude a partir de `FORMATO_ESTADO`; ValueError ou TypeError quando a
+    saida nao e isso."""
+    bruto, _, reinicios = saida.rpartition("\t")
+    st = json.loads(bruto)                      # JSONDecodeError e um ValueError
+    if not isinstance(st, dict):
+        raise TypeError("docker inspect devolveu estado que nao e objeto")
+    oom = "sim" if st.get("OOMKilled") else "nao"
+    linhas = [(f"Estado: {st.get('Status')} · reinicios {reinicios.strip() or '?'} · saida {st.get('ExitCode')}"
+               f" · OOM {oom} · iniciado {st.get('StartedAt')} · terminou {st.get('FinishedAt')}")]
+    saude = st.get("Health")
+    if isinstance(saude, dict):
+        linhas.append(f"Saúde: {saude.get('Status')} · falhas seguidas {saude.get('FailingStreak')}")
+        registros = [r for r in (saude.get("Log") or []) if isinstance(r, dict)]
+        if registros:
+            r = registros[-1]
+            saida_sonda = redigir(_cauda(str(r.get("Output") or "").strip(), LIMITE_DA_SAIDA))
+            linhas.append(f"Última saída da sonda (saida {r.get('ExitCode')}, {r.get('End')}): {saida_sonda}")
+    else:
+        linhas.append("Saúde: contêiner sem healthcheck declarado")
+    return linhas
+
+def captura_contendor(nome: str) -> str:
+    """Bloco de texto para o corpo do incidente: contendor, hora, estado, saude com a ultima saida da
+    sonda e as ultimas linhas do log, redigido. Falha de leitura vira linha `indisponível`; nunca
+    excecao, o incidente abre de qualquer jeito."""
+    contendor = contendor_do_servico(nome)
+    if not contendor:
+        return (f"Contêiner: nenhum identificado para '{nome}' (serviço sem contêiner, ou nome não"
+                f" resolvido); sem log de contêiner a anexar\n")
+    linhas = [f"Contêiner: {contendor}",
+              f"Capturado em: {agora()} (ao abrir o incidente, antes de qualquer recriação)"]
+    rc, out, err = roda(["docker", "inspect", "-f", FORMATO_ESTADO, contendor])
+    try:
+        if rc != 0:
+            raise ValueError((err or out or f"docker inspect saiu {rc}").splitlines()[0][:200])
+        linhas += _estado_do_contendor(out)
+    except (ValueError, TypeError) as e:     # inspect falhou ou devolveu o que nao e estado
+        linhas.append(f"Estado: indisponível ({redigir(str(e)[:200])})")
+    rc, out, err = roda(["docker", "logs", "--tail", str(LINHAS_DE_LOG), "--timestamps", contendor])
+    if rc != 0:
+        motivo = (err or out or f"docker logs saiu {rc}").splitlines()[0][:200]
+        linhas.append(f"Log: indisponível ({redigir(motivo)})")
+    else:
+        corpo = "\n".join(p for p in (out, err) if p)       # stdout e stderr do contendor, nessa ordem
+        linhas.append(f"Log (últimas {LINHAS_DE_LOG} linhas, redigido):")
+        linhas.append(redigir(_cauda(corpo, LIMITE_DO_LOG, por_linha=True)) or "(vazio)")
+    return "\n".join(linhas) + "\n"
+
 def abre_incidente(nome: str, info: dict) -> str | None:
     motivo = (info.get("motivo") or "serviço com sonda fora há mais de 10 min").strip()
     sintoma = motivo.splitlines()[0][:100]
-    titulo = f"{nome}: {sintoma}"
+    titulo = redigir(f"{nome}: {sintoma}")
     desc = (
         f"Detectado por sinal: serviço '{nome}' fora há mais de 10 min.\n\n"
         f"- Serviço: {nome}\n"
@@ -202,6 +320,8 @@ def abre_incidente(nome: str, info: dict) -> str | None:
         sys.stderr.write("sinal: binario 'tarefas' nao encontrado no PATH nem na release; incidente nao aberto\n")
         return None
 
+    # log e estado agora, antes de qualquer recriacao; o corpo inteiro (motivo incluso) passa por redigir
+    desc = redigir(desc + "\n" + captura_contendor(nome))
     cmd = [tarefas_bin, "criar", titulo, "--incidente", "--cadeira", "ti", "--desc", desc]
     rc, out, err = roda(cmd, timeout=30)
     if rc != 0:
