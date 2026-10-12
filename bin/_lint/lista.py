@@ -54,7 +54,8 @@ def _celulas(linha: str) -> List[str]:
         corpo = corpo[1:]
     if corpo.endswith("|"):
         corpo = corpo[:-1]
-    return [c.strip() for c in corpo.split("|")]
+    # `\|` e barra escapada dentro da celula (regex de detector, por exemplo): nao corta
+    return [c.strip().replace("\\|", "|") for c in re.split(r"(?<!\\)\|", corpo)]
 
 
 def _separador(linha: str) -> bool:
