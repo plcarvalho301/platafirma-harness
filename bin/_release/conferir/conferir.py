@@ -749,12 +749,56 @@ def _desde_familia(familia):
     return dado.get("no_ar_desde")
 
 
+_RE_LINHA_DE_ATO = re.compile(r"^#\s*(face|rotulo|volta|atalho)\s*:\s*([A-Za-z0-9_-]+)\s*=\s*(.*?)\s*$")
+
+
+def _atos_de_face_sem_texto(caminho):
+    """[(ato, [campos que faltam])] dos atos que o cabecalho poe numa face e que nao trazem
+    `rotulo:` e `volta:` (arq:0124 §3, card #3426). Cada campo e uma linha por ato, na forma
+    de `le:` e `escreve:` (`# face: <ato>=<face>`). Le o bloco de comentario do topo, sem o
+    limite de 12 linhas de cabecalho(): os atos de um verbo grande passam disso.
+
+    Ato de exclusao nao declara face e nao entra. Valor vazio conta como falta. Nao mede o
+    texto do rotulo: quem escreve e o dono do verbo, e a prosa nao se confere por regex."""
+    faces, rotulos, voltas = {}, {}, {}
+    try:
+        with open(caminho, "r", errors="replace") as f:
+            for i, linha in enumerate(f):
+                if i >= 400:
+                    break
+                if i == 0 and linha.startswith("#!"):
+                    continue
+                s = linha.strip()
+                if not s.startswith("#"):
+                    if s == "":
+                        continue
+                    break
+                m = _RE_LINHA_DE_ATO.match(s)
+                if not m:
+                    continue
+                campo, ato, valor = m.group(1), m.group(2), m.group(3)
+                alvo_dict = {"face": faces, "rotulo": rotulos, "volta": voltas}.get(campo)
+                if alvo_dict is not None:
+                    alvo_dict[ato] = valor
+    except OSError:
+        return []
+    saida = []
+    for ato, face in faces.items():
+        if not face:
+            continue
+        faltam = [c for c, d in (("rotulo:", rotulos), ("volta:", voltas)) if not d.get(ato)]
+        if faltam:
+            saida.append((ato, faltam))
+    return saida
+
+
 def conferir_verbo(alvo, como_json=False):
     desde_familia = _desde_familia("platafirma-harness")
     cap_cache = {}
     porcapacidade = {}
     vistos = 0
     itens = []
+    avisos = []   # nao pesam no exit: o texto do controle nasce como aviso (arq:0124 R7, card #3426)
     for nome in sorted(os.listdir(BIN)):
         if nome.startswith("_"):
             continue
@@ -841,6 +885,11 @@ def conferir_verbo(alvo, como_json=False):
             else:
                 if not como_json:
                     print(f"    capacid : {cap!r} resolvida no acervo")
+        for ato_face, faltam in _atos_de_face_sem_texto(caminho):
+            aviso = f"{nome} {ato_face}: ato de face sem {' nem '.join(faltam)} (arq:0124 §3; aviso, nao reprova)"
+            avisos.append(aviso)
+            if not como_json:
+                print(f"    AVISO   : ato {ato_face} esta numa face e nao declara {' nem '.join(faltam)}")
         porcapacidade.setdefault(cap or "(nao declarada)", []).append(nome)
         motivo = "; ".join(problemas) if problemas else None
         if tem_divergencia:
@@ -882,7 +931,8 @@ def conferir_verbo(alvo, como_json=False):
             itens.append((nome_item, v))
     if not como_json:
         print()
-    return resultado.relatorio("verbo", alvo, itens, _sha_release(), como_json=como_json)
+    return resultado.relatorio("verbo", alvo, itens, _sha_release(), como_json=como_json,
+                               extra={"avisos": avisos} if avisos else None)
 
 
 # --- classe: repo -----------------------------------------------------------
@@ -2068,6 +2118,118 @@ def _viola_segredo_ou_api(dir_abs):
     return monta_segredo, serve_api, detalhe
 
 
+# --- o pacote da platafirma-ui (card #3426; R1, R13 e R45 da spec taipa) ----------------
+# Tres cobradores, lidos da arvore de platafirma-ui, que a conferencia le como le as telas:
+#   (R13) toda peca (`src/pf/<tag>.js`) tem pagina com ela montada (`exemplo/**/*.html`);
+#   (R1)  toda tela (`app/<tela>/Dockerfile`) copia a biblioteca na versao do pacote
+#         (`src/base/package.json`): `COPY --from=platafirma/ui:<versao>`;
+#   (R45) o retrato do dicionario de atos (`src/retrato/atos.json`) grava em `sha_registro` o
+#         sha do registro do ferramental de que saiu, e o servido tem de ser o mesmo.
+# Nao conseguir olhar nunca sai conforme: sem retrato, ou sem fonte do sha do registro, o item
+# e indeterminavel («nao consegui olhar»), nao verde.
+PECAS_DIR = os.path.join("src", "pf")
+PAGINAS_DIR = "exemplo"
+PACOTE_JSON = os.path.join("src", "base", "package.json")
+RETRATO_CAMINHO = os.path.join("src", "retrato", "atos.json")
+_RE_COPY_UI = re.compile(r"^\s*COPY\s+(?:--\S+\s+)*--from=platafirma/ui:(\S+)", re.M)
+
+
+def _sha_do_registro():
+    """O sha do registro do ferramental SERVIDO, ou None quando nao ha de onde le-lo.
+
+    Hoje nao ha: o registro ainda nao guarda rotulo, volta e atalho por ato nem serve o verbo de
+    leitura que emite o retrato (dependencia de dados na quebra da Taipa, comentario #2124 do
+    #3409). Quando o verbo existir, e aqui que ele entra; ate la o retrato fica `nao consegui
+    olhar`, nunca conforme por falta de comparacao."""
+    return None
+
+
+def _ler_json(caminho):
+    try:
+        with open(caminho, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def _conferencias_do_pacote(raiz=None):
+    """[(nome, Veredito)] das pecas, das telas e do retrato de platafirma-ui sob <raiz>."""
+    raiz = raiz or os.path.expanduser("~/AI")
+    base = os.path.join(raiz, UI_REPO)
+    if not os.path.isdir(base):
+        return [(f"{UI_REPO} (pacote)", resultado.indeterminavel(
+            f"nao consegui olhar: {UI_REPO} ausente em {raiz}"))]
+    itens = []
+
+    # R13 — peca sem pagina
+    pecas_dir = os.path.join(base, PECAS_DIR)
+    paginas_txt = []
+    for dirpath, dirnames, filenames in os.walk(os.path.join(base, PAGINAS_DIR)):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".") and d != "node_modules"]
+        for fn in filenames:
+            if fn.lower().endswith(".html"):
+                paginas_txt.append(_le(os.path.join(dirpath, fn)))
+    if not os.path.isdir(pecas_dir):
+        itens.append((f"{UI_REPO} pecas", resultado.indeterminavel(
+            f"nao consegui olhar: {PECAS_DIR}/ ausente")))
+    else:
+        for fn in sorted(os.listdir(pecas_dir)):
+            if not fn.endswith(".js"):
+                continue
+            tag = fn[:-3]
+            nome = f"peca {tag}"
+            monta = re.compile(r"<" + re.escape(tag) + r"[\s>/]")
+            if any(monta.search(t) for t in paginas_txt):
+                itens.append((nome, resultado.conforme()))
+            else:
+                itens.append((nome, resultado.divergente(
+                    f"sem pagina com a peca montada: nenhum .html de {PAGINAS_DIR}/ traz <{tag}>")))
+
+    # R1 — versao da tela contra a do pacote
+    pacote = _ler_json(os.path.join(base, PACOTE_JSON))
+    versao = pacote.get("version") if isinstance(pacote, dict) else None
+    app_dir = os.path.join(base, "app")
+    telas = sorted(d for d in (os.listdir(app_dir) if os.path.isdir(app_dir) else [])
+                   if os.path.isfile(os.path.join(app_dir, d, "Dockerfile")))
+    for tela in telas:
+        nome = f"versao app/{tela}"
+        if not versao:
+            itens.append((nome, resultado.indeterminavel(
+                f"nao consegui olhar: {PACOTE_JSON} sem version")))
+            continue
+        usadas = sorted(set(_RE_COPY_UI.findall(_le(os.path.join(app_dir, tela, "Dockerfile")))))
+        if not usadas:
+            itens.append((nome, resultado.indeterminavel(
+                "nao consegui olhar: o Dockerfile nao tem COPY --from=platafirma/ui:<versao>")))
+        elif usadas == [versao]:
+            itens.append((nome, resultado.conforme()))
+        else:
+            itens.append((nome, resultado.divergente(
+                f"copia a biblioteca em {', '.join(usadas)}; o pacote esta em {versao}")))
+
+    # R45 — retrato contra o registro servido
+    nome = "retrato do dicionario de atos"
+    retrato = _ler_json(os.path.join(base, RETRATO_CAMINHO))
+    if not isinstance(retrato, dict):
+        itens.append((nome, resultado.indeterminavel(
+            f"nao consegui olhar: sem retrato em {RETRATO_CAMINHO} (a Taipa o gera no build)")))
+    elif not retrato.get("sha_registro"):
+        itens.append((nome, resultado.divergente(
+            "o retrato nao grava sha_registro: sem ele nao se sabe de que registro saiu (arq:0031)")))
+    else:
+        servido = _sha_do_registro()
+        if not servido:
+            itens.append((nome, resultado.indeterminavel(
+                "nao consegui olhar: o registro do ferramental nao serve o sha para comparar")))
+        elif str(retrato["sha_registro"]).strip() == str(servido).strip():
+            itens.append((nome, resultado.conforme()))
+        else:
+            itens.append((nome, resultado.divergente(
+                f"retrato gerado do registro {str(retrato['sha_registro'])[:12]}; o servido esta em "
+                f"{str(servido)[:12]}: gerar de novo")))
+    return itens
+
+
 def conferir_front(alvo=None, como_json=False):
     """Conformidade de front do arq:0057, alem do que arq:0056 ja mede.
 
@@ -2111,9 +2273,19 @@ def conferir_front(alvo=None, como_json=False):
             conformes.append(dir_rel)
             itens.append((dir_rel, resultado.conforme()))
 
-    ok = not (fora or montam or servem)
+    # o pacote (R1, R13, R45): so entra quando nao se pede uma tela especifica ou se pede o UI
+    pacote_itens = []
+    if not alvo or alvo in (UI_REPO, "pacote"):
+        pacote_itens = _conferencias_do_pacote(raiz)
+        itens.extend(pacote_itens)
+    pacote_diverge = [n for n, v in pacote_itens if v.estado == "divergente"]
+    ok = not (fora or montam or servem or pacote_diverge)
     if not como_json:
         print(f"front — conformidade de deploy (arq:0057), alem de arq:0056")
+        if pacote_itens:
+            n_ind = sum(1 for _, v in pacote_itens if v.estado == "indeterminavel")
+            print(f"  pacote {UI_REPO} (pecas, versao das telas, retrato): {len(pacote_itens)} item(ns), "
+                  f"{len(pacote_diverge)} divergente(s), {n_ind} nao consegui olhar")
         print(f"  telas de aplicacao medidas       : {len(telas)}")
         print(f"  (1) TELA FORA de {UI_REPO:<16}: {len(fora)}")
         for x in fora:
