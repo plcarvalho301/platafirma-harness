@@ -34,6 +34,9 @@ se ela resolve no acervo agora; a que nao resolve sai em aviso, sem referencia p
 do controle do ato (arq:0124 §3; migracao 094); o objeto do rotulo entra como {slug} do conceito
 no tesauro, e slug que o tesauro nao tem recusa o registro do verbo (exit 3). O retrato que a
 Taipa consome sai de `acervo listar casa ferramental --retrato`.
+`# capacidade-ato: <ato>=<capacidade>` grava a capacidade filha do ato (arq:0119 §4) em
+ferramental_ato.capacidade sem tocar o par (acao, tipo) de `# atos:`, que e o que o ato manda ao PEP
+(arq:0110 Q1, Q12); ato sem a chave grava capacidade = segundo campo do par, como sempre.
 Fonte = o cabecalho do script; a tabela e a projecao. Substitui a migration de seed
 na mao (migration fica so para DDL)."""
 
@@ -65,10 +68,10 @@ def _lit(v):
 CHAVES = (
     "capacidade", "dono", "componente", "use para", "atos", "classe",
     "le", "escreve", "consome", "ambiente", "depende", "substitui", "regua",
-    "rotulo", "volta", "atalho"
+    "rotulo", "volta", "atalho", "capacidade-ato"
 )
 # Chaves que se repetem, uma linha por ato, e acumulam em vez de sobrescrever.
-POR_ATO = ("le", "escreve", "regua", "rotulo", "volta", "atalho")
+POR_ATO = ("le", "escreve", "regua", "rotulo", "volta", "atalho", "capacidade-ato")
 # O texto do controle de cada ato (arq:0124 §3): `# <chave>: <ato>=<valor>`, uma linha por ato.
 CONTROLE = ("rotulo", "volta", "atalho")
 
@@ -143,6 +146,29 @@ def _controle_por_ato(campos, verbo):
     return por_ato
 
 
+def _capacidade_por_ato(campos, verbo):
+    """`# capacidade-ato: <ato>=<capacidade>` (arq:0119 §2 a §4; #3465) -> {ato: capacidade}.
+
+    O par de `# atos:` e o que o ato manda ao PEP (arq:0110 Q1, Q12): o segundo campo e gravado em
+    `tipo` e, sem esta chave, tambem em `capacidade`. A capacidade filha do ato (leitura, descoberta)
+    nao pode trocar o tipo que o PEP recebera; ela vai por esta chave e so grava `capacidade`.
+    Fora da forma o registro do verbo recusa (exit 3): o cabecalho se cura na fonte."""
+    por_ato = {}
+    for linha in campos.get("capacidade-ato") or []:
+        if "=" not in linha:
+            morre("acervo registrar: bin/%s tem `# capacidade-ato: %s` sem ato (forma: <ato>=<capacidade>)."
+                  % (verbo, linha), 3)
+        ato, valor = (p.strip() for p in linha.split("=", 1))
+        if not ato or not RE_SLUG.match(valor):
+            morre("acervo registrar: bin/%s: `# capacidade-ato: %s` fora da forma <ato>=<capacidade> "
+                  "(capacidade e um slug: letras minusculas, digitos e hifen)." % (verbo, linha), 3)
+        if ato in por_ato:
+            morre("acervo registrar: bin/%s declara `# capacidade-ato:` duas vezes para o ato %s."
+                  % (verbo, ato), 3)
+        por_ato[ato] = valor
+    return por_ato
+
+
 def _conceitos_que_resolvem(slugs):
     """Dos slugs pedidos, os que existem no tesauro agora (acervo.conceito). O objeto do rotulo
     nunca se copia: o registro nao guarda slug pendurado (arq:0125, Fechado depois do aceite, 4)."""
@@ -208,6 +234,10 @@ def _le_cabecalho(path):
     for chave in ("use para", "atos"):
         if campos.get(chave):
             partes.append("%s: %s" % (chave, campos[chave]))
+    # A capacidade filha de cada ato (#3465) vai junto: e o que `acervo listar casa ferramental` mostra.
+    if campos.get("capacidade-ato"):
+        partes.append("capacidade por ato: %s"
+                      % ", ".join(par.replace(" ", "") for par in campos["capacidade-ato"]))
     return campos, (" · ".join(partes) or None)
 
 
@@ -291,6 +321,12 @@ def registrar_um(verbo):
     if sem_ato_c:
         morre("acervo registrar: bin/%s declara `# rotulo:`, `# volta:` ou `# atalho:` para ato que "
               "`# atos:` nao lista: %s" % (verbo, ", ".join(sem_ato_c)), 3)
+    # Capacidade filha por ato (#3465): chave propria, para nao trocar o tipo do par que vai ao PEP.
+    capacidade_por_ato = _capacidade_por_ato(campos, verbo)
+    sem_ato_k = sorted(a for a in capacidade_por_ato if a not in nomes_atos)
+    if sem_ato_k:
+        morre("acervo registrar: bin/%s declara `# capacidade-ato:` para ato que `# atos:` nao lista: %s"
+              % (verbo, ", ".join(sem_ato_k)), 3)
     objetos = {s for c in controle_por_ato.values() for s in RE_OBJETO.findall(c.get("rotulo", ""))}
     sem_conceito = sorted(objetos - _conceitos_que_resolvem(objetos))
     if sem_conceito:
@@ -347,8 +383,11 @@ def registrar_um(verbo):
         # Colunas de regua (062) so entram para verbo que declara `# regua:`, e as do texto do
         # controle (094) so para verbo que declara `# rotulo:`, `# volta:` ou `# atalho:`: verbo
         # sem a linha registra igual a antes, mesmo num banco que ainda nao tem as colunas.
+        # `capacidade` e a folha do ato; `tipo` e o segundo campo do par, o que o PEP recebe. Sem
+        # `# capacidade-ato:` os dois saem do mesmo campo, como sempre.
         colunas = ["verbo", "ato", "capacidade", "acao", "tipo"]
-        valores = [_lit(verbo), _lit(ato_nome), _lit(subcap), _lit(op), _lit(subcap)]
+        valores = [_lit(verbo), _lit(ato_nome), _lit(capacidade_por_ato.get(ato_nome, subcap)),
+                   _lit(op), _lit(subcap)]
         if regua_por_ato:
             re_esp, re_chave, re_propria = _regua_sql(ato_nome)
             colunas += ["regua_especie", "regua_chave", "regua_propria"]
