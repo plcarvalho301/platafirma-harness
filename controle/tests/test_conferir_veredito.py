@@ -137,6 +137,26 @@ def test_card_conforme_quando_estado_ja_avancou(monkeypatch, capsys):
     assert dado["itens"][0]["estado"] == "conforme"
 
 
+@pytest.mark.parametrize("cabecalho,exit_esperado", [
+    ("#77 · null · Detectado (incidente) · cadeira: engenharia", 1),
+    ("#77 · null · Em mitigação (incidente) · cadeira: engenharia", 0),
+    ("#77 · null · Mitigado (incidente) · cadeira: engenharia", 0),
+    ("#77 · null · Resolvido (terminal) · cadeira: engenharia", 0),
+])
+def test_card_de_incidente_conta_os_estados_proprios(monkeypatch, capsys, cabecalho, exit_esperado):
+    log_saida = "deadbeef1234 2026-10-12T10:55:00-03:00\n"
+    monkeypatch.setattr(conferir, "sh", _stub_sh([
+        (lambda a: a[:2] == ["git", "-C"] and "log" in a and "origin/main" in a,
+         (0, log_saida, "")),
+        (lambda a: a[:2] == ["git", "-C"] and "branch" in a, (0, "", "")),
+        (lambda a: len(a) >= 2 and a[-2] == "ler", (0, cabecalho + "\n", "")),
+    ]))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    assert conferir.conferir_card("77", como_json=True) == exit_esperado
+    capsys.readouterr()
+
+
 def test_card_sem_alvo_e_uso_incorreto(capsys):
     exit_code = conferir.conferir_card(None, como_json=True)
     saida = capsys.readouterr()

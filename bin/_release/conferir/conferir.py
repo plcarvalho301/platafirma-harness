@@ -2696,9 +2696,12 @@ def _card_avancou_alem_de_execucao(cabecalho):
     """card #348: o estado do card, lido do cabecalho de `tarefas ler`, ja passou de
     em-execucao? Os 6 estados do ciclo (arq citado no #348) sao em-lapidacao . em-parecer
     . em-refinamento-tecnico . em-execucao . em-homologacao . entregue — qualquer um dos
-    tres primeiros e "nao andou ainda"; dai pra frente, o commit tem onde se apoiar."""
+    tres primeiros e "nao andou ainda"; dai pra frente, o commit tem onde se apoiar.
+    Incidente tem estados proprios (arq:0039): detectado ainda nao andou; em-mitigacao,
+    mitigado e resolvido ja andaram (card #3461: o conserto citou o incidente e a conferencia
+    o acusou depois de resolvido)."""
     baixo = cabecalho.lower()
-    return any(s in baixo for s in ("execu", "homolog", "entreg", "encerr"))
+    return any(s in baixo for s in ("execu", "homolog", "entreg", "encerr", "mitig", "resolv"))
 
 
 def conferir_card(alvo, como_json=False):
