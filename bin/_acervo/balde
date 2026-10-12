@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # _acervo/balde — cliente fino do braço do curador sobre o store MinIO (card #3126)
-# atos: listar, ler, copiar, mover, apagar
+# atos: listar, ler, copiar, mover, apagar (`varrer` mora em varrer_balde.py: le bytes por boto3, que este python nao tem)
 import argparse
 import json
 import os

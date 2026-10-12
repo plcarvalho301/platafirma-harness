@@ -65,7 +65,7 @@
 # volta: restaurar=sim — acervo retirar
 # volta: apagar=nao
 # consome: motor_acervo_rest, rag_extractor_pg
-# ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (ingerir casa le o suporte platafirma-casa pelo sha no espelho bare <instancia>/var/acervo/suporte/platafirma-casa.git, com a credencial da conta; nunca release, nunca clone de bancada; ler/listar casa so leem o origin/main ja buscado dele, para o campo servido), PF_SUPORTE_ESPELHO (opcional, override do espelho), PF_SUPORTE_URL[=https://github.com/plcarvalho301/platafirma-casa.git] (opcional, forge do suporte), RAG_API_BASE (opcional, url do motor), RAG_API_TOKEN (opcional, auth do motor), MOTOR_ACERVO_URL e RAG_API_URL (opcionais, url do motor; valem mais que RAG_API_BASE; a ficha as le nesta ordem), PF_CADEIRA e PF_CONTA (opcionais, o autor de `ingerir biblioteca ficha`; --autor vale mais)
+# ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (ingerir casa le o suporte platafirma-casa pelo sha no espelho bare <instancia>/var/acervo/suporte/platafirma-casa.git, com a credencial da conta; nunca release, nunca clone de bancada; ler/listar casa so leem o origin/main ja buscado dele, para o campo servido), PF_SUPORTE_ESPELHO (opcional, override do espelho), PF_SUPORTE_URL[=https://github.com/plcarvalho301/platafirma-casa.git] (opcional, forge do suporte), RAG_API_BASE (opcional, url do motor), RAG_API_TOKEN (opcional, auth do motor), MOTOR_ACERVO_URL e RAG_API_URL (opcionais, url do motor; valem mais que RAG_API_BASE; a ficha as le nesta ordem), PF_CADEIRA e PF_CONTA (opcionais, o autor de `ingerir biblioteca ficha`; --autor vale mais), PF_SUJEITO e PF_SESSAO (opcionais, so assinam a varredura de `balde varrer`), DOCKER_HOST (opcional; o padrao e o socket do usuario, de onde `balde varrer` le a credencial do MinIO e fala com o rag-extractor-pg)
 # depende: docker, git, psql
 # substitui: situacao, escada, descobrir, bancada
 #
@@ -180,6 +180,10 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo exportar [--bancada <chave>] regera ontologia/acervo/*.jsonl e vocabulario.json na bancada
   acervo psql     [--banco rag|motor]  <SQL por stdin>
   acervo balde    listar|ler|copiar|mover|apagar <bucket|sha256> [...] [--apply]
+  acervo balde    varrer <bucket> [--limite <n>] [--retomar] [--prefixo <p>] [--teto-s <n>] [--json]
+                  SO LEITURA, um objeto por vez: le cada objeto do balde e compara o sha256 do conteudo com a chave
+                  (#3468); fila duravel no banco, retomavel; 1a linha = resumo, depois uma linha por
+                  ilegivel|divergente|ausente; exit 0 tudo ok · 1 ha problema · 5 nao olhou tudo
 
 as particoes: biblioteca, casa, registro (arq:0106 §2-3). conceito e transversal, vive na biblioteca.
 'obra' como particao saiu em 03/10/2026: recusa (exit 2) com a chamada em 'biblioteca'.
@@ -615,7 +619,14 @@ case "$ATO" in
   exportar)        exec python3 "$ATOS/exportar" "$@" ;;
   # balde: braco do curador sobre o store MinIO (#3126, pedido 20260922T180117-dados) --
   # listar/ler/copiar/mover/apagar objeto de bucket, plano seco por padrao e --apply pra gravar.
-  balde)           exec python3 "$ATOS/balde" "$@" ;;
+  # `balde varrer` (#3468): a varredura le os bytes do MinIO por boto3, que so o venv acervo da release tem
+  # (como `ler biblioteca objeto`); os demais atos do balde seguem no cliente fino da rota do motor.
+  balde)
+    if [ "${1:-}" = "varrer" ]; then
+      shift
+      exec "${PLATAFIRMA_RELEASE:-/opt/platafirma/current}/venv/acervo/bin/python" "$ATOS/varrer_balde.py" "$@"
+    fi
+    exec python3 "$ATOS/balde" "$@" ;;
   psql)
     case "${1:-}" in
       --banco|--sql) ;;

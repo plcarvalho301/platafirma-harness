@@ -29,6 +29,7 @@ test_acervo_mapa.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_objeto.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_particao_biblioteca.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_balde_apagar_3302.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_balde_varrer_3468.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_curar_apagar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_curar_bancada.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_curar_bancada_conversor.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
