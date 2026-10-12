@@ -230,3 +230,71 @@ def test_gpu_fora_mais_de_10_min_abre_incidente():
                                          abre_incidente_fn=lambda n, i: abertos.append(n) or "3999")
     assert abertos == ["gpu-host"]
     assert rec2["servicos"]["gpu-host"]["incidente_id"] == "3999"
+
+# --- raiz-host (pos-morte do #3204, card #3467): a raiz foi a somente leitura em 30/09 e so se soube
+# por escrita que falhou. A sonda le a montagem de `/`; o arquivo de montagens vai por parametro
+# (ponto de montagem falso), nunca o /proc/mounts do host.
+
+MONTAGENS_RW = (
+    "sysfs /sys sysfs rw,nosuid,nodev,noexec,relatime 0 0\n"
+    "/dev/nvme0n1p2 / ext4 rw,relatime,errors=remount-ro 0 0\n"
+    "/dev/nvme0n1p1 /boot/efi vfat rw,relatime 0 0\n"
+)
+MONTAGENS_RO = MONTAGENS_RW.replace("/ ext4 rw,relatime", "/ ext4 ro,relatime")
+
+def _montagens(tmp_path, texto):
+    arq = tmp_path / "mounts"
+    arq.write_text(texto, encoding="utf-8")
+    return str(arq)
+
+def test_raiz_rw_e_no_ar(tmp_path):
+    e = sinal.do_raiz(_montagens(tmp_path, MONTAGENS_RW))
+    assert e["estado"] == "no-ar"
+    assert "motivo" not in e
+
+def test_raiz_ro_e_fora_com_motivo(tmp_path):
+    e = sinal.do_raiz(_montagens(tmp_path, MONTAGENS_RO))
+    assert e["estado"] == "fora"
+    assert "somente leitura" in e["motivo"]
+    assert e["exercitado"]
+
+def test_raiz_so_conta_a_montagem_de_barra_nao_a_de_outro_ponto(tmp_path):
+    # /boot/efi em ro nao e a raiz; ro como substring de outra opcao (errors=remount-ro) tambem nao
+    texto = MONTAGENS_RW.replace("/boot/efi vfat rw", "/boot/efi vfat ro")
+    assert sinal.do_raiz(_montagens(tmp_path, texto))["estado"] == "no-ar"
+
+def test_raiz_a_ultima_montagem_de_barra_vence(tmp_path):
+    texto = MONTAGENS_RO + "/dev/nvme0n1p2 / ext4 rw,relatime 0 0\n"
+    assert sinal.do_raiz(_montagens(tmp_path, texto))["estado"] == "no-ar"
+    texto = MONTAGENS_RW + "/dev/nvme0n1p2 / ext4 ro,relatime 0 0\n"
+    assert sinal.do_raiz(_montagens(tmp_path, texto))["estado"] == "fora"
+
+def test_raiz_sem_arquivo_de_montagens_e_sem_sinal_nunca_fora(tmp_path):
+    e = sinal.do_raiz(str(tmp_path / "nao-existe"))
+    assert e["estado"] == "sem-sinal"
+    assert e["motivo"]
+
+def test_raiz_sem_linha_de_barra_e_sem_sinal(tmp_path):
+    e = sinal.do_raiz(_montagens(tmp_path, "sysfs /sys sysfs rw 0 0\n"))
+    assert e["estado"] == "sem-sinal"
+
+def test_raiz_ro_mais_de_10_min_abre_incidente(tmp_path):
+    t0 = datetime(2026, 10, 12, 15, 0, 0, tzinfo=timezone.utc)
+    ro = sinal.do_raiz(_montagens(tmp_path, MONTAGENS_RO))
+    ro["lido_em"] = t0.isoformat()
+    rec = sinal.reconcilia_com_anterior({"servicos": {"raiz-host": ro}}, None, agora_dt=t0)
+    abertos = []
+    depois = {"servicos": {"raiz-host": sinal.do_raiz(_montagens(tmp_path, MONTAGENS_RO))}}
+    rec2 = sinal.reconcilia_com_anterior(depois, rec, agora_dt=t0 + timedelta(minutes=11),
+                                         abre_incidente_fn=lambda n, i: abertos.append(n) or "4001")
+    assert abertos == ["raiz-host"]
+    assert rec2["servicos"]["raiz-host"]["incidente_id"] == "4001"
+
+def test_coleta_traz_raiz_host(tmp_path, monkeypatch):
+    # a sonda esta ligada a coleta: sem isto ela existiria e nunca rodaria
+    monkeypatch.setenv("SINAL_MONTAGENS", _montagens(tmp_path, MONTAGENS_RO))
+    monkeypatch.setattr(sinal, "roda", lambda cmd, timeout=20: (125, "", "docker ausente"))
+    monkeypatch.setattr(sinal.shutil, "which", lambda nome: None)
+    dados = sinal.coleta()
+    assert dados["servicos"]["raiz-host"]["estado"] == "fora"
+    assert dados["servicos"]["raiz-host"]["lido_em"]
