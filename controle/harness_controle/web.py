@@ -216,10 +216,10 @@ async def despachar_recado(request):
     return RedirectResponse("/#caixas", status_code=303)
 
 
-# Exclusao dura (spec §5): estes dois nunca sao alvo de restart pela tela,
-# mesmo que o POST chegue direto sem passar pelos botoes desabilitados —
-# reiniciar por dentro serraria o galho em que a propria tela esta pendurada.
-ALVOS_EXCLUIDOS_RESTART = {"cloudflared", "oauth2-proxy"}
+# Exclusao dura (spec §5): cloudflared e os oauth2-proxy nunca sao alvo de restart pela
+# tela, mesmo que o POST chegue direto sem passar pelos botoes desabilitados —
+# reiniciar por dentro serraria o galho em que a propria tela esta pendurada. A regra
+# mora em render.sustenta_a_tela: casa pelo nome do servico dentro do nome do contêiner.
 
 
 def _run_infra_restart(alvo: str):
@@ -233,7 +233,7 @@ async def reiniciar(request):
     alvo = (form.get("alvo") or "").strip()
     if not alvo:
         return PlainTextResponse("alvo obrigatorio", status_code=400)
-    if alvo in ALVOS_EXCLUIDOS_RESTART:
+    if render.sustenta_a_tela(alvo):
         return PlainTextResponse(f"{alvo} nao e reiniciavel por esta tela (sustenta a propria tela)",
                                   status_code=403)
 
