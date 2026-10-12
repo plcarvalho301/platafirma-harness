@@ -38,8 +38,9 @@ velho segue no ar até este restart.
 - `sujeitos.yaml` dual-keyed por `sub` para os 3 que chamam tool (commit `f2f5e3c`):
   megafone `b6986be0…`, jaiminho `cc897004…`, jaiminho-fabrica `e57eadb1…`. Sem isso o
   PEP pós-restart (chaveia por `sub`) negaria todos por atributo ausente — o lockout.
-- Rede de segurança: token estático `OPS_AUTH_TOKEN` vale até **2026-09-30** e resolve
-  para `claudinho`/operador. É a mão que volta se o OIDC travar.
+- Rede de segurança (histórico, 25/08): o token estático `OPS_AUTH_TOKEN` valia até
+  2026-09-30 e foi removido do servidor (#3272). Hoje a mão que volta se o OIDC travar
+  é o SSH do dono pelo túnel `recuperacao`.
 
 ## Passos (na sessão do claudinho, ~2 min)
 
@@ -70,10 +71,10 @@ Se preferir não abrir a sessão, os dois como one-liner de fora:
     for i in 1 2 3; do curl -s -o /dev/null -w '%{http_code}\n' -H 'Authorization: Bearer nao.eh.jwt' http://127.0.0.1:8010/mcp; done
 
 ## Rollback (se travar auth)
-1. **Imediato, sem reverter nada:** chamar o ops-mcp com o token estático —
-   `Authorization: Bearer $OPS_AUTH_TOKEN` resolve para `claudinho`/operador (vale até 30/09).
+1. **Imediato, sem reverter nada:** (histórico) chamar o ops-mcp com o token estático;
+   a rota saiu (#3272). Hoje: SSH do dono pelo túnel `recuperacao`.
 2. **Reverter código:** `sudo -u claudinho env XDG_RUNTIME_DIR=/run/user/1001 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus bash -lc 'cd <clone-harness> && git revert --no-edit <sha> && systemctl --user restart ops-mcp'` (e rebuild do jaiminho se o problema for lá). Para desfazer a unificação inteira, voltar a `fc4f28d`.
-3. **NÃO** editar `sujeitos.yaml` no susto: o dual-key já cobre username e sub. O destravador é o token estático, não o yaml.
+3. **NÃO** editar `sujeitos.yaml` no susto: o dual-key já cobre username e sub. O destravador é o SSH do dono (o token estático saiu, #3272), não o yaml.
 
 ## Se você já rodou como megafone (limpeza)
 Megafone está no grupo `docker`, então o `--build` pode ter criado um `jaiminho-server` no

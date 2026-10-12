@@ -1701,20 +1701,8 @@ def _mcp_jsons_da_superficie(nome):
 def _obtem_descricao_servida_mcp(url=None, token=None):
     """(descricao_ou_none, erro_ou_none). Consulta o servidor MCP em runtime."""
     url = url or os.environ.get("OPS_MCP_URL", "http://127.0.0.1:8010/mcp")
-    if not token:
-        token = os.environ.get("PF_OPS_TOKEN") or os.environ.get("OPS_AUTH_TOKEN")
-    if not token:
-        dir_conf = os.path.join(os.path.expanduser("~/.config"), "ops")
-        arq_conf = os.path.join(dir_conf, "env")
-        if os.path.isfile(arq_conf):
-            try:
-                with open(arq_conf, encoding="utf-8") as f:
-                    for linha in f:
-                        if linha.startswith("OPS_AUTH_TOKEN="):
-                            token = linha.split("=", 1)[1].strip().strip("'\"")
-                            break
-            except OSError:
-                pass
+    # So o JWT do realm entra na porta (#3272): sem `token` a sonda segue sem Authorization e
+    # recebe 401, que volta como erro declarado abaixo, nao como descricao vazia.
 
     headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
     if token:

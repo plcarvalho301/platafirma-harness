@@ -535,11 +535,11 @@ def ambiente_do_giro(cadeira):
 # Onde os tokens dos conectores vivem no host. Le o VERBO, nunca a cadeira: a
 # allowlist da fita nega `Read(//home/claudinho/.config/**)` de proposito, e essa
 # negativa continua valendo — quem abre o arquivo e o processo que monta o giro,
-# nao o modelo. Duas formas: `env` e arquivo CHAVE=valor (o EnvironmentFile da
-# porta); `nome` e um arquivo por variavel em $PLATAFIRMA_INSTANCIA/segredos/<stack>/ (card
-# #3010) — nenhum `.env` em arvore de repo ou de deploy.
+# nao o modelo. Duas formas: `env` e arquivo CHAVE=valor; `nome` e um arquivo por
+# variavel em $PLATAFIRMA_INSTANCIA/segredos/<stack>/ (card #3010) — nenhum `.env` em
+# arvore de repo ou de deploy. O token estatico da porta (OPS_AUTH_TOKEN) saiu (#3272):
+# o conector da porta entra so por JWT do realm, que nao e do giro.
 FONTES_DE_SEGREDO = (
-    ("env", os.path.expanduser("~/.config/ops/env"), "OPS_AUTH_TOKEN", "PF_OPS_TOKEN"),
     ("nome", str(instancia() / "segredos" / "conhecimento" / "MCP_AUTH_TOKEN"),
      "MCP_AUTH_TOKEN", "PF_WIKI_TOKEN"),
 )

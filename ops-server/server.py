@@ -9,15 +9,12 @@ Auth: token OIDC do realm `platafirma`, validado por assinatura (JWKS) na borda 
 `Authorization: Bearer <jwt>`. O servidor publica protected resource metadata (RFC 9728)
 e responde 401 com `WWW-Authenticate`, que é o que faz o cliente MCP descobrir o
 authorization server sozinho e rodar authorization_code + PKCE.
-ROTA DE EMERGÊNCIA: OPS_AUTH_TOKEN estático continua aceito até OPS_TOKEN_ESTATICO_ATE
-(prazo declarado, não indefinido) — é a mão que volta quando o realm cai, já que o dono
-não tem shell no host. Vencido o prazo, só JWT entra. O token vai SEMPRE no header:
-o aceite via `?token=` saiu em 20/08/2026, porque redigir o nosso access log não
-alcança o log do proxy, o Referer nem o histórico — e o que trafega ali é credencial
-de portador.
+SEM ROTA ESTATICA: so JWT do realm entra. A emergencia com o realm fora do ar e o SSH
+do dono pelo tunel recuperacao (decisao do dono, 03/10/2026, #3244 item 7); o token
+estatico e o aceite via `?token=` (que saiu em 20/08/2026) nao existem mais (#3272).
 
 MULTI-INSTÂNCIA: o mesmo arquivo serve mais de uma instância, uma por usuário do host.
-OPS_NAME, OPS_USER, PLATAFIRMA_INSTANCIA e OPS_AUTH_TOKEN separam as instâncias; o default é a
+OPS_NAME, OPS_USER e PLATAFIRMA_INSTANCIA separam as instâncias; o default é a
 instância histórica (claudinho-mcp sob claudinho, instância /srv/platafirma/casa).
 OPS_USER, o log e o bin servido entram nas descrições das tools em tempo de registro —
 sem isso a instância nova se descreve com o usuário e os caminhos da instância velha, e
@@ -42,7 +39,6 @@ nem .profile — sem isto, o bin da release e ~/.local/bin existem no disco e
 da instância: um comando qualquer não deve conseguir ecoar o token que o autorizou.
 """
 import hashlib
-import hmac
 import ipaddress
 import json
 import logging
@@ -58,7 +54,7 @@ import sys
 import threading
 import time
 from contextvars import ContextVar
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 import anyio
@@ -72,7 +68,6 @@ from starlette.routing import Route
 
 OPS_NAME = os.environ.get("OPS_NAME", "claudinho-mcp")
 OPS_USER = os.environ.get("OPS_USER", "claudinho")
-OPS_AUTH_TOKEN = os.environ.get("OPS_AUTH_TOKEN", "")
 MEM_REDIS_HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
 MEM_REDIS_PORT = int(os.environ.get("MEM_REDIS_PORT", "6380"))
 
@@ -113,8 +108,6 @@ OIDC_JWKS_URL = os.environ.get(
     "http://127.0.0.1:8180/realms/platafirma/protocol/openid-connect/certs")
 OIDC_AUDIENCE = os.environ.get("OIDC_AUDIENCE", "ops-mcp")
 OPS_RESOURCE = os.environ.get("OPS_RESOURCE", "https://ops.platafirma.org")
-# Prazo da rota de emergência. Vencido, o token estático deixa de ser aceito.
-OPS_TOKEN_ESTATICO_ATE = os.environ.get("OPS_TOKEN_ESTATICO_ATE", "2026-09-30")
 CAP = 50_000   # teto de bytes de stdout/stderr devolvidos (truncagem sempre declarada)
 
 LOG_DIR = oplog.diretorio()    # onde mora o bruto e do lib/oplog; o teto da linha tambem (arq:0123 §3)
@@ -215,19 +208,6 @@ def _extrai_sessao_id(texto: str) -> str | None:
 
 
 # --- helpers puros ---
-def _token_ok(header: str, expected: str) -> bool:
-    """So o header. `?token=` SAIU em 20/08/2026 (claudinho-seguranca).
-
-    O access log ja era redigido, mas redigir o NOSSO log nao alcanca o log do
-    proxy, o Referer nem o historico do navegador — e o que trafega ali e
-    credencial de portador, que vale enquanto durar. O token estatico continua,
-    com o prazo que ja tinha; o que morre e o transporte pela URL.
-    """
-    if not expected or not header.startswith("Bearer "):
-        return False
-    return hmac.compare_digest(header[len("Bearer "):].strip(), expected)
-
-
 def _cap(raw: bytes) -> dict:
     return {"texto": raw[:CAP].decode("utf-8", "replace"),
             "truncado": len(raw) > CAP, "bytes_total": len(raw)}
@@ -1004,13 +984,6 @@ def _declara_exit(slug) -> bool:
     return _DECLARA_EXIT[slug]
 
 
-def _estatico_vigente() -> bool:
-    try:
-        return date.today() <= date.fromisoformat(OPS_TOKEN_ESTATICO_ATE)
-    except ValueError:
-        return False
-
-
 def _quem() -> dict:
     """Identidade de quem chamou, do ponto de vista de DENTRO da tool.
 
@@ -1024,13 +997,6 @@ def _quem() -> dict:
             header = req.headers.get("authorization", "")
             ident = _sujeito_do_jwt(header, auditor=_audit, jwks_url=OIDC_JWKS_URL,
                                     audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER)
-            # A rota de emergencia tem de resolver AQUI tambem, e nao so no
-            # middleware: com o PEP ligado, sujeito vazio nega por atributo ausente,
-            # e a mao que volta quando o realm cai ficaria sem nenhuma tool. Medido
-            # no ensaio de 13/08/2026, antes de o realm precisar cair.
-            if not ident and _estatico_vigente() and _token_ok(header, OPS_AUTH_TOKEN):
-                ident = {"sujeito": OPS_USER, "sub": "-", "username": OPS_USER,
-                         "azp": "token-estatico", "sid": "-", "jti": "-"}
             return ident
     except Exception:                                       # noqa: BLE001
         pass
@@ -3049,9 +3015,6 @@ class BearerAuth(BaseHTTPMiddleware):
                 _audit(**campos)
         ident, via = _sujeito_do_jwt(header, auditor=_capta, jwks_url=OIDC_JWKS_URL,
                                     audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER), "oidc"
-        if not ident and _estatico_vigente() and _token_ok(header, OPS_AUTH_TOKEN):
-            ident, via = {"sujeito": OPS_USER, "sub": "-", "username": OPS_USER,
-                          "azp": "token-estatico", "sid": "-", "jti": "-"}, "estatico"
         if not ident:
             _audit(tool="-", evento="auth_negada", path=request.url.path,
                    cliente=request.client.host if request.client else "-",
@@ -3129,14 +3092,10 @@ async def _token(req):
 # mesa e o auto-relato do giro.
 
 def _ident_req(req) -> dict:
-    """Mesma cadeia do middleware: JWT do realm, ou rota de emergencia enquanto vigente."""
+    """Mesma cadeia do middleware: so o JWT do realm."""
     header = req.headers.get("authorization", "")
-    ident = _sujeito_do_jwt(header, auditor=_audit, jwks_url=OIDC_JWKS_URL,
-                            audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER)
-    if not ident and _estatico_vigente() and _token_ok(header, OPS_AUTH_TOKEN):
-        ident = {"sujeito": OPS_USER, "sub": "-", "username": OPS_USER,
-                 "azp": "token-estatico", "sid": "-", "jti": "-"}
-    return ident
+    return _sujeito_do_jwt(header, auditor=_audit, jwks_url=OIDC_JWKS_URL,
+                           audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER)
 
 
 async def _sessao_encerrar(req):
