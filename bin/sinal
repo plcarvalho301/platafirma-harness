@@ -176,6 +176,39 @@ def do_gpu():
     return {"estado": "fora", "exercitado": onde, "motivo": motivo}
 
 
+# Montagens do host (card #3467, pos-morte do #3204): a raiz foi a somente leitura em 30/09 e so se
+# soube por escrita que falhou. ambiente: SINAL_MONTAGENS[=/proc/mounts] (override so para teste)
+MONTAGENS_PADRAO = "/proc/mounts"
+CAMPOS_DE_MONTAGEM = 4                            # dispositivo, ponto, tipo, opcoes
+
+def do_raiz(montagens: str | None = None) -> dict:
+    """A raiz do host fora de rw. O kernel remonta `/` em ro quando o disco erra (errors=remount-ro)
+    e nada avisa: o processo segue vivo, cada escrita falha e o healthcheck de servico nenhum
+    nota. Le a opcao de montagem de `/` em /proc/mounts: sem privilegio, sem escrita, sem ruido.
+    Arquivo ilegivel ou sem linha de `/` e sem-sinal (nao houve leitura), nunca fora."""
+    arq = montagens or os.environ.get("SINAL_MONTAGENS", MONTAGENS_PADRAO)
+    onde = f"{arq}: opcoes da montagem de /"
+    try:
+        linhas = Path(arq).read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as e:
+        return {"estado": "sem-sinal", "exercitado": None,
+                "motivo": f"{arq} ilegivel: {type(e).__name__}"}
+    opcoes, fstype = None, "?"
+    for linha in linhas:                          # montagem por cima da anterior: a ultima vence
+        campos = linha.split()
+        if len(campos) >= CAMPOS_DE_MONTAGEM and campos[1] == "/":
+            fstype, opcoes = campos[2], campos[3].split(",")
+    if opcoes is None:
+        return {"estado": "sem-sinal", "exercitado": None,
+                "motivo": f"{arq} sem linha de montagem de /"}
+    if "ro" in opcoes:                            # item inteiro: errors=remount-ro nao conta
+        return {"estado": "fora", "exercitado": onde,
+                "motivo": f"raiz montada somente leitura (/ {fstype} ro)"}
+    if "rw" in opcoes:
+        return {"estado": "no-ar", "exercitado": onde}
+    return {"estado": "sem-sinal", "exercitado": None,
+            "motivo": f"montagem de / sem rw nem ro nas opcoes: {','.join(opcoes)[:100]}"}
+
 def parse_dt(iso_str: str) -> datetime:
     if iso_str.endswith("Z"):
         iso_str = iso_str[:-1] + "+00:00"
@@ -299,6 +332,9 @@ def coleta():
     e = do_gpu()
     e["lido_em"] = agora()
     servicos["gpu-host"] = e
+    e = do_raiz()
+    e["lido_em"] = agora()
+    servicos["raiz-host"] = e
     runtime = do_runtime()
     runtime["lido_em"] = agora()
     return {"gerado_em": agora(), "runtime": runtime, "servicos": servicos}
