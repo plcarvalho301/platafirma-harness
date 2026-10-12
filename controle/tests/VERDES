@@ -28,6 +28,9 @@ tests/test_conferir_jobs.py | bin/agente bin/bot bin/conferir bin/sinal bin/tare
 tests/test_conferir_acervo.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/lint bin/_lint/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste bin/_expediente/**
 tests/test_invariantes_acervo.py | bin/acervo bin/_acervo/** bin/conferir bin/lint bin/_lint/** bin/motor bin/_motor/** bin/sessao bin/_sessao/** bin/sinal bin/_expediente/** bin/_release/** recuperacao/**
 tests/test_conferir_servico_release.py | bin/conferir bin/_release/**
+# Medido em 12/10/2026 (card #3476): filtro de e-mail dos gates oauth2-proxy em `conferir servico` (12 passam; sem a regra, 9
+# ficam vermelhos: o par `--email-domain=*` + lista sai conforme, como o #3339 deixou passar).
+tests/test_conferir_gate_email.py | bin/conferir bin/_release/**
 tests/test_contrato_repo_bancada.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** bin/_minuta/**
 tests/test_contrato_repo_lock.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** bin/_minuta/** venvs/**
 tests/test_contrato_repo_pr_fechar.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** bin/_minuta/**

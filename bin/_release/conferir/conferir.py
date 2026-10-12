@@ -10,7 +10,9 @@
 """Classes:
 
   servico [nome]   container gerido por compose: de onde sobe, SHA e sujeira do ref,
-                   paridade entre o `environment` declarado e o ambiente do processo.
+                   paridade entre o `environment` declarado e o ambiente do processo,
+                   e o filtro de e-mail dos gates oauth2-proxy: `--email-domain=*` junto
+                   da lista, ou gate sem filtro, e divergente (#3476).
   verbo   [nome]   verbo do PATH da plataforma: origem (symlink de repo, copia, so no
                    host, divergente), cabecalho de tres linhas, e a conta de
                    arq:0037 — um verbo por capacidade.
@@ -134,6 +136,7 @@ import glob
 import json
 import re
 import os
+import shlex
 import subprocess
 import sys
 import urllib.error
@@ -272,6 +275,9 @@ def containers(filtro=None):
             "working_dir": wd,
             "config_files": lab.get("com.docker.compose.project.config_files", ""),
             "env": {l.split("=", 1)[0]: l.split("=", 1)[1] for l in d["Config"]["Env"] if "=" in l},
+            # o que o processo recebeu de argumento (#3476): o `command` do compose, servido
+            "cmd": d["Config"].get("Cmd") or [],
+            "imagem": d["Config"].get("Image") or "",
             "started_at": (d.get("State") or {}).get("StartedAt"),
         }
 
@@ -430,6 +436,7 @@ def env_declarado(c):
     svc = (cfg.get("services") or {}).get(c["servico"])
     if svc is None:
         return None, f"servico {c['servico']} ausente no config renderizado"
+    _SVC_DECLARADO[c["nome"]] = svc   # o gate de e-mail le o `command` daqui, sem renderizar de novo
     return {k: ("" if v is None else str(v)) for k, v in (svc.get("environment") or {}).items()}, None
 
 
@@ -453,9 +460,63 @@ def _inalterada_por_desenho(c, atual, sha_c):
     return ptr_atual == atual and ptr_servido == sha_c
 
 
+# --- filtro de e-mail dos gates oauth2-proxy (card #3476, nascido do #3339) ---------------
+# O oauth2-proxy autoriza o e-mail que casa o dominio OU consta da lista, e `*` casa todos: com
+# `--email-domain=*` junto da lista, a lista deixou de filtrar ninguem nos cinco gates e nada
+# acusou. A regra olha o que o gate DECLARA (`command` do compose renderizado) e o que SERVE
+# (`Cmd` do conteiner), e o mesmo por env, que o oauth2-proxy le igual a flag.
+_SVC_DECLARADO = {}   # nome do conteiner -> servico renderizado por env_declarado nesta execucao
+
+
+def _args_do_comando(cmd):
+    """O `command` do compose (lista, ou string de shell) como lista de argumentos."""
+    if isinstance(cmd, str):
+        try:
+            return shlex.split(cmd)
+        except ValueError:
+            return cmd.split()
+    return [str(a) for a in (cmd or [])]
+
+
+def _e_gate(servico, imagem):
+    return str(servico or "").startswith("oauth2-proxy") or "oauth2-proxy" in str(imagem or "")
+
+
+def divergencia_do_gate(args, env=None):
+    """None quando o gate tem filtro de e-mail que filtra; senao o motivo, em uma frase.
+
+    Divergente: curinga junto da lista (a lista nao filtra), curinga sozinho (aceita todo
+    e-mail autenticado) e nem lista nem dominio (nao filtra). Conforme: lista sem curinga, ou
+    dominio especifico sem curinga."""
+    dominios, lista = [], False
+    for i, a in enumerate(args):
+        flag, igual, valor = a.partition("=")
+        if flag not in ("--email-domain", "--authenticated-emails-file"):
+            continue
+        if not igual:
+            valor = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("--") else ""
+        if flag == "--email-domain":
+            dominios += [d.strip() for d in valor.split(",") if d.strip()]
+        elif valor.strip():
+            lista = True
+    env = env or {}
+    dominios += [d.strip() for d in str(env.get("OAUTH2_PROXY_EMAIL_DOMAINS") or "").split(",") if d.strip()]
+    lista = lista or bool(str(env.get("OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE") or "").strip())
+    curinga = "*" in dominios
+    if curinga and lista:
+        return ("--email-domain=* junto de --authenticated-emails-file: o curinga casa todo e-mail "
+                "e a lista nao filtra ninguem")
+    if curinga:
+        return "--email-domain=* sem lista de e-mails: o gate aceita qualquer e-mail autenticado"
+    if not lista and not dominios:
+        return "sem --authenticated-emails-file nem --email-domain: o gate nao filtra e-mail"
+    return None
+
+
 def conferir_servico(alvo, como_json=False):
     vistos = 0
     itens = []
+    _SVC_DECLARADO.clear()
     for c in containers(alvo):
         vistos += 1
         dentro_de_deploy = os.path.realpath(c["working_dir"]).startswith(os.path.realpath(DEPLOY))
@@ -518,6 +579,15 @@ def conferir_servico(alvo, como_json=False):
             if not como_json and g["nao_rastreado"]:
                 print(f"    lixo    : {g['nao_rastreado']} caminho(s) nao rastreado(s)")
 
+        # #3476: o filtro de e-mail do gate, lido do que o conteiner SERVE. Defeito provado no
+        # servido nao espera o compose renderizar.
+        gate = _e_gate(c["servico"], c.get("imagem"))
+        gate_servido = divergencia_do_gate(_args_do_comando(c.get("cmd")), c["env"]) if gate else None
+        if gate_servido:
+            divergencias.append(f"gate {c['nome']} (servico {c['servico']}) servido: {gate_servido}")
+            if not como_json:
+                print(f"    GATE    : servido — {gate_servido}")
+
         # card #3142: nao conseguir renderizar o compose e indeterminavel, nao
         # divergente — nao saber nao pode contar como "achei defeito".
         decl, erro = env_declarado(c)
@@ -525,8 +595,21 @@ def conferir_servico(alvo, como_json=False):
             if not como_json:
                 print(f"    ENV     : nao consegui renderizar o compose — {erro}")
             motivo = "; ".join(divergencias + [f"nao consegui renderizar o compose — {erro}"])
-            itens.append((nome_item, resultado.indeterminavel(motivo, desde=c.get("started_at"))))
+            if gate_servido:
+                # o que o conteiner serve ja prova o defeito: nao vira "nao consegui olhar"
+                itens.append((nome_item, resultado.divergente(motivo, desde=c.get("started_at"))))
+            else:
+                itens.append((nome_item, resultado.indeterminavel(motivo, desde=c.get("started_at"))))
             continue
+        svc = _SVC_DECLARADO.pop(c["nome"], None)
+        if gate and svc is not None:
+            gate_decl = divergencia_do_gate(
+                _args_do_comando(svc.get("command")),
+                {k: str(v) for k, v in (svc.get("environment") or {}).items() if v is not None})
+            if gate_decl:
+                divergencias.append(f"gate {c['nome']} (servico {c['servico']}) declarado: {gate_decl}")
+                if not como_json:
+                    print(f"    GATE    : declarado — {gate_decl}")
         servido = c["env"]
         for k in sorted(decl):
             d_m = mascarar(decl[k])
