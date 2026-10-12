@@ -84,12 +84,19 @@ ESTADO_OK = {
 }
 
 
+# Card #3435: a escrita pela tela so passa com a origem da lista da instancia. Este cliente e
+# "a tela": declara a origem na lista e a manda em toda chamada. A recusa em si e provada em
+# `test_recusa_origem.py`.
+ORIGEM_DA_TELA = "https://tela.exemplo.test"
+
+
 @pytest.fixture()
 def cliente(tmp_path, monkeypatch):
     estado_path = tmp_path / "estado.json"
     estado_path.write_text(json.dumps(ESTADO_OK), encoding="utf-8")
     monkeypatch.setattr(web, "ESTADO_PATH", estado_path)
-    return TestClient(web.app)
+    monkeypatch.setenv("HARNESS_CONTROLE_ORIGENS", ORIGEM_DA_TELA)
+    return TestClient(web.app, headers={"origin": ORIGEM_DA_TELA})
 
 
 # --- aceite 1: tres rotas respondem, recepcao tem os 4 blocos --------------

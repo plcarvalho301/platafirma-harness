@@ -186,3 +186,6 @@ testes/test_tarefas_moldes.py | bin/tarefas
 testes/test_lint_card.py | bin/lint bin/_lint/card.py bin/_lint/lista.py bin/_lint/resultado.py
 testes/test_venvs_cobrem_imports.py | bin/_sessao/** mcp/** ops-server/** registro/**
 tests/test_claude_cli.py | lib/claude_cli.py bin/agente bin/motor registro/** venvs/claude-code/**
+# Card #3435 (R27 da spec taipa): a escrita da tela do harness so passa com a origem exata da lista da instancia;
+# as seis tentativas de fora recebem 403 sem chegar ao verbo, o ato pela tela passa, lista vazia fecha.
+tests/test_recusa_origem.py | controle/harness_controle/** controle/compose.yaml
