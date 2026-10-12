@@ -9,16 +9,17 @@
 #   up, down, pull, build), convergir a agenda do cron e podar log/quarentena por
 #   retenção declarada (agenda, limpeza), liberar cache de VRAM e disco (cache), que
 #   hardware é este e quanto consome em W agora (hardware), a GPU ao vivo: uso, VRAM,
-#   temperatura, W e processos (gpu)
-# atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), hardware (leitura, operacao), gpu (leitura, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao)
+#   temperatura, W e processos (gpu), copiar o ingress versionado do túnel para a cópia da
+#   instância, que é a que o cloudflared lê, e reiniciá-lo (ingress)
+# atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), hardware (leitura, operacao), gpu (leitura, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao), ingress (escrita, operacao)
 # forma: log
 # cauda: sim
 # classe: B
 # consome: porta@ops-log
-# ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (saude: lido por lib/oplog, o bruto contra o teto) · PF_SUJEITO[obrigatória em up|down|pull|build] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
-# depende: docker · systemctl --user · curl · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs e bin/_infra/limpeza-quarentena (ajudantes de limpeza) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda)
-# escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados · agenda=crontab do sistema (aplicar) · estado/saude/logs/ps/config/backup/hardware/gpu=nada
-# substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build (deploy apagado — decisão do dono, 27/09) · crontab -e a mão · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra por arq:0110 §14 emenda 26/09/2026)
+# ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · INFRA_INGRESS_FONTE[=$PLATAFIRMA_RELEASE/core/deploy/cloudflared-config.yml] porta · INFRA_INGRESS_COPIA[=$PLATAFIRMA_INSTANCIA/deploy/core/cloudflared.yml] porta · INFRA_INGRESS_CONTEINER[=platafirma-core-cloudflared-1] porta · INFRA_INGRESS_ESPERA[=5] porta (ingress: segundos até conferir o contêiner de pé) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (saude: lido por lib/oplog, o bruto contra o teto) · PF_SUJEITO[obrigatória em up|down|pull|build] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
+# depende: docker · systemctl --user · curl · diff (ingress) · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs e bin/_infra/limpeza-quarentena (ajudantes de limpeza) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda)
+# escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados · agenda=crontab do sistema (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · estado/saude/logs/ps/config/backup/hardware/gpu=nada
+# substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build (deploy apagado — decisão do dono, 27/09) · crontab -e a mão · cp à mão do ingress versionado para deploy/core/cloudflared.yml da instância + docker restart do cloudflared · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra por arq:0110 §14 emenda 26/09/2026)
 # Encapsula as três pegadinhas conhecidas: DOCKER_HOST rootless, restart que
 # mata a própria chamada, e alvo que pode ser contêiner ou unit de usuário.
 set -euo pipefail
@@ -67,12 +68,16 @@ uso:
   infra build    <stack> [args compose…] [<serviço>…]  … build
   infra limpeza  logs|quarentena [args…]         despacha para bin/_infra/limpeza-{logs,quarentena}
   infra agenda   conferir|aplicar                convergência do crontab (instala-crontab.sh)
+  infra ingress  [--ver]                         copia o ingress versionado do túnel para a cópia da instância e reinicia o cloudflared
 
 Leitura aceita alvo opcional; sem alvo, olha tudo. Mutação exige alvo explícito.
 up, down, pull e build exigem identidade: variável PF_SUJEITO (sem fallback; a
 porta a injeta pelo fluxo OAuth). agenda conferir roda com --check (0 igual, 1
 divergente); agenda aplicar aplica de fato. Ajudante de compose localizado ao
 lado deste script (bin/_release/stack), nunca pelo PATH.
+ingress mostra a diferença entre o ingress versionado do core (release no ar) e a cópia da instância
+(deploy/core/cloudflared.yml, a que o contêiner lê) e, sem --ver, grava a cópia e reinicia o contêiner
+cloudflared. --ver só mostra: 0 igual, 1 divergente. Cópia já igual: nada gravado, nada reiniciado.
 
 exit: tabela arq:0110 §4 — 0 ok · 1 negativo de mérito (alvo/stack inexistente,
       agenda divergente) · 2 uso · 3 dependência ausente (docker, systemctl,
@@ -899,6 +904,110 @@ instalar() {
   exit 2
 }
 
+# `infra ingress [--ver]` — o ingress do túnel `wiki`. O contêiner lê a CÓPIA da instância
+# (deploy/core/cloudflared.yml, montada pelo override; card #3010), não o arquivo versionado, e nenhum
+# ato a escrevia: a rota decomissionada seguiu viva até a mão do dono copiar (#3271, #3473). O ato
+# copia o versionado da release no ar para a cópia, mostra a diferença antes e reinicia o contêiner.
+# A cópia nova entra por rename no mesmo diretório (inteira ou nada) e a anterior fica em
+# <cópia>.anterior; se o contêiner não ficar de pé, a anterior volta e ele reinicia de novo (exit 1).
+# Fonte que o cloudflared recusaria (sem túnel, sem `ingress:` ou sem a regra final http_status) não
+# se grava: o contêiner cairia em laço no restart.
+ingress() {
+  local ver=0 a
+  for a in "$@"; do
+    case "$a" in
+      --ver) ver=1 ;;
+      *) echo "erro: opção desconhecida em ingress: $a (uso: infra ingress [--ver])" >&2; exit 2 ;;
+    esac
+  done
+  local fonte="${INFRA_INGRESS_FONTE:-$PLATAFIRMA_RELEASE/core/deploy/cloudflared-config.yml}"
+  local copia="${INFRA_INGRESS_COPIA:-$PLATAFIRMA_INSTANCIA/deploy/core/cloudflared.yml}"
+  local conteiner="${INFRA_INGRESS_CONTEINER:-platafirma-core-cloudflared-1}"
+  local espera="${INFRA_INGRESS_ESPERA:-5}"
+  [ -r "$fonte" ] || {
+    printf 'infra: erro: dependência %s: ausente — o ingress versionado vem da release no ar (release promover platafirma-core)\n' "$fonte" >&2
+    exit 3
+  }
+  command -v diff >/dev/null 2>&1 || { echo "infra: erro: dependência diff: ausente" >&2; exit 3; }
+
+  local ultima
+  ultima="$(grep -Ev '^[[:space:]]*(#|$)' "$fonte" | tail -n 1 || true)"
+  if ! grep -Eq '^tunnel:[[:space:]]*[0-9a-f-]{36}[[:space:]]*$' "$fonte" \
+     || ! grep -Eq '^ingress:[[:space:]]*$' "$fonte" \
+     || ! [[ "$ultima" =~ ^[[:space:]]*-[[:space:]]+service:[[:space:]]+http_status:[0-9]+ ]]; then
+    printf 'infra: ingress versionado reprovado em %s: precisa de `tunnel:`, de `ingress:` e da regra final `- service: http_status:<n>` — nada gravado, nada reiniciado\n' "$fonte" >&2
+    exit 1
+  fi
+
+  local dif rc=0
+  if [ -e "$copia" ]; then
+    dif="$(diff -u --label "instancia:$copia" --label "versionado:$fonte" -- "$copia" "$fonte")" || rc=$?
+    if [ "$rc" -gt 1 ]; then
+      printf 'infra: erro: diff não conseguiu ler %s ou %s (exit %s) — nada gravado\n' "$copia" "$fonte" "$rc" >&2
+      exit 5
+    fi
+  else
+    rc=1
+    dif="(a cópia ainda não existe; o arquivo versionado inteiro é a diferença)"
+  fi
+
+  echo "versionado: $fonte"
+  echo "instância:  $copia"
+  if [ "$rc" -eq 0 ]; then
+    echo "igual: a cópia da instância já é o ingress versionado — nada gravado, nada reiniciado"
+    return 0
+  fi
+  echo "== diferença (instância → versionado)"
+  printf '%s\n' "$dif"
+  if [ "$ver" = 1 ]; then
+    echo "divergente: infra ingress grava a cópia e reinicia $conteiner"
+    return 1
+  fi
+
+  e_conteiner "$conteiner" || {
+    printf 'infra: erro: contêiner %s: ausente (docker ps -a) — nada gravado, nada reiniciado\n' "$conteiner" >&2
+    exit 3
+  }
+  local dir tmp
+  dir="$(dirname "$copia")"
+  if [ ! -d "$dir" ] || [ ! -w "$dir" ]; then
+    printf 'infra: erro: diretório %s: ausente ou sem escrita — nada gravado, nada reiniciado\n' "$dir" >&2
+    exit 3
+  fi
+  tmp="$(mktemp "$dir/.cloudflared.XXXXXX")" || { echo "infra: erro: mktemp em $dir falhou" >&2; exit 3; }
+  local tinha_anterior=0
+  if [ -e "$copia" ]; then
+    { cp -- "$fonte" "$tmp" && chmod --reference="$copia" "$tmp" && cp -p -- "$copia" "$copia.anterior"; } \
+      || { rm -f -- "$tmp"; echo "infra: erro: não consegui preparar a cópia nova em $dir — nada gravado, nada reiniciado" >&2; exit 3; }
+    tinha_anterior=1
+  else
+    { cp -- "$fonte" "$tmp" && chmod 0644 "$tmp"; } \
+      || { rm -f -- "$tmp"; echo "infra: erro: não consegui preparar a cópia nova em $dir — nada gravado, nada reiniciado" >&2; exit 3; }
+  fi
+  sync -- "$tmp" 2>/dev/null || true
+  mv -f -- "$tmp" "$copia"
+  echo "gravada: $copia$([ "$tinha_anterior" = 1 ] && echo " (a anterior ficou em $copia.anterior)")"
+
+  # restart sai do processo na falha; em subshell, a volta da cópia ainda roda.
+  local de_pe=""
+  if ( restart "$conteiner" ); then
+    [ "$espera" -gt 0 ] && sleep "$espera"
+    de_pe="$(docker ps --filter "name=^${conteiner}\$" --format '{{.Status}}' 2>/dev/null || true)"
+  fi
+  case "$de_pe" in
+    Up*) echo "ok: $conteiner de pé ($de_pe) com a cópia nova"; return 0 ;;
+  esac
+  printf 'infra: erro: %s não ficou de pé com a cópia nova (%s)\n' "$conteiner" "${de_pe:-sem status}" >&2
+  if [ "$tinha_anterior" = 1 ]; then
+    cp -p -- "$copia.anterior" "$copia.volta" && mv -f -- "$copia.volta" "$copia"
+    echo "voltou a cópia anterior em $copia; reiniciando $conteiner de novo" >&2
+    docker restart "$conteiner" >/dev/null || echo "infra: erro: o restart da cópia anterior também falhou — ver: infra logs $conteiner" >&2
+  else
+    echo "não havia cópia anterior para voltar — ver: infra logs $conteiner" >&2
+  fi
+  exit 1
+}
+
 # --- despacho ---------------------------------------------------------------
 
 # Sem argumento nenhum: usage, exit 2, nada executado (Q2/Q9).
@@ -934,9 +1043,10 @@ case "$cmd" in
   up|down|ps|config|pull|build) cmd_stack "$cmd" "$@" ;;
   limpeza)   cmd_limpeza "$@" ;;
   agenda)    cmd_agenda "$@" ;;
+  ingress)   ingress "$@" ;;
   *)
     printf 'infra: erro: ato desconhecido: %s\n' "$cmd" >&2
-    printf 'atos: estado, saude, logs, restart, unit-env, cache, hardware, gpu, backup, up, down, ps, config, pull, build, limpeza, agenda\n' >&2
+    printf 'atos: estado, saude, logs, restart, unit-env, cache, hardware, gpu, backup, up, down, ps, config, pull, build, limpeza, agenda, ingress\n' >&2
     uso_texto
     exit 2
     ;;

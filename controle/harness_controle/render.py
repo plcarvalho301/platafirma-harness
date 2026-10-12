@@ -467,33 +467,32 @@ def bloco_cadeiras(bloco: dict) -> str:
     # Coluna Fila SAIU (spec §bloco 2 nao a lista): a caixa e o bloco Caixas, mesma
     # fonte `fila status`. Duas leituras de fila que discordavam eram o defeito.
     # Presenca e derivada do `frescor` das pecas do pacote cru, nao de um digest
-    # inexistente: persona/ofício servidas na abertura sao `fresco`; mesa lida idem.
+    # inexistente: persona servida na abertura e `fresco`; mesa lida idem. Coluna Manifesto
+    # SAIU (#3472): media a peca `oficio`, que `expediente montar` nao serve mais (#3078 ja
+    # tirou o Oficio da /cadeira); saía «ausente» em toda cadeira, medindo o que nao existe.
     linhas = []
     for item in bloco.get("itens") or []:
         cadeira = item.get("cadeira") or "?"
         if item.get("estado") != "ok":
             linhas.append(
-                f"<tr><td>{_esc(cadeira)}</td><td colspan='3'>"
+                f"<tr><td>{_esc(cadeira)}</td><td colspan='2'>"
                 f"{chip('indisponível', 'alert')} <span class='motivo'>{_esc(item.get('motivo'))}</span>"
                 f"</td><td class='dir'><a class='acao' href='/cadeira/{_esc(cadeira)}'>Abrir</a></td></tr>"
             )
             continue
         idx = _pecas_por_id((item.get("dados") or {}).get("pecas"))
         persona_ok = _fresco(idx.get("persona"))
-        # "Manifesto" da cadeira = a peca ofício, servida na abertura.
-        oficio_ok = _fresco(_acha_peca(idx, ("oficio",)))
         mesa_ok = _fresco(idx.get("mesa"))
         linhas.append(
             "<tr>"
             f"<td>{_esc(cadeira)}</td>"
             f"<td>{chip('presente' if persona_ok else 'ausente', 'calmo' if persona_ok else 'alert')}</td>"
-            f"<td>{chip('presente' if oficio_ok else 'ausente', 'calmo' if oficio_ok else 'alert')}</td>"
             f"<td>{chip('lida' if mesa_ok else 'sem leitura', 'calmo' if mesa_ok else 'caveat')}</td>"
             f"<td class='dir'><a class='acao' href='/cadeira/{_esc(cadeira)}'>Abrir</a></td>"
             "</tr>"
         )
     corpo = (
-        "<table><thead><tr><th>Cadeira</th><th>Persona</th><th>Manifesto</th>"
+        "<table><thead><tr><th>Cadeira</th><th>Persona</th>"
         "<th>Mesa</th><th></th></tr></thead><tbody>"
         + "".join(linhas) + "</tbody></table>"
     ) if linhas else '<p class="indisponivel">Nenhuma cadeira encontrada.</p>'

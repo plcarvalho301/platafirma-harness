@@ -293,6 +293,21 @@ def test_write_file_aceita_unit_systemd(bancada, sem_pep):
     assert mount.get("recusado") and "tipo" in mount["motivo"], mount
 
 
+def test_write_file_aceita_tsv(bancada, sem_pep):
+    """#3477: tabela TSV (platafirma-core, deploy/segredos/mapa.tsv) e texto plano; sem
+    `.tsv` na lista a citacao a corrigir nela so saia por write .txt + `repo git mv`."""
+    r = s.write_file(path="wt/platafirma-core/fabrica/deploy/segredos/mapa.tsv",
+                     content="nome\tstack\n")
+    assert r.get("ok"), r
+    assert (bancada / "wt/platafirma-core/fabrica/deploy/segredos/mapa.tsv").read_text() == "nome\tstack\n"
+    # maiuscula na extensao segue a mesma regra (ext e comparada em minuscula)
+    assert s.write_file(path="wt/platafirma-core/fabrica/deploy/MAPA.TSV", content="x\n").get("ok")
+    # a lista cresceu so em .tsv: planilha e CSV seguem recusados
+    for nome in ("mapa.csv", "mapa.xlsx"):
+        r = s.write_file(path=f"wt/platafirma-core/fabrica/deploy/{nome}", content="x\n")
+        assert r.get("recusado") and "tipo" in r["motivo"], (nome, r)
+
+
 def test_write_file_aceita_dockerfile_com_sufixo(bancada, sem_pep):
     """#2856 linha 40: Dockerfile.<sufixo> (Dockerfile.gpu, Dockerfile.dev) e o mesmo texto
     de build do Dockerfile; o ponto exige sufixo, e outro nome segue recusado."""

@@ -64,6 +64,8 @@
 # volta: retirar=sim — acervo restaurar
 # volta: restaurar=sim — acervo retirar
 # volta: apagar=nao
+# capacidade-ato: ler=leitura
+# capacidade-ato: listar=descoberta
 # consome: motor_acervo_rest, rag_extractor_pg
 # ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (ingerir casa le o suporte platafirma-casa pelo sha no espelho bare <instancia>/var/acervo/suporte/platafirma-casa.git, com a credencial da conta; nunca release, nunca clone de bancada; ler/listar casa so leem o origin/main ja buscado dele, para o campo servido), PF_SUPORTE_ESPELHO (opcional, override do espelho), PF_SUPORTE_URL[=https://github.com/plcarvalho301/platafirma-casa.git] (opcional, forge do suporte), RAG_API_BASE (opcional, url do motor), RAG_API_TOKEN (opcional, auth do motor), MOTOR_ACERVO_URL e RAG_API_URL (opcionais, url do motor; valem mais que RAG_API_BASE; a ficha as le nesta ordem), PF_CADEIRA e PF_CONTA (opcionais, o autor de `ingerir biblioteca ficha`; --autor vale mais), PF_SUJEITO e PF_SESSAO (opcionais, so assinam a varredura de `balde varrer`), DOCKER_HOST (opcional; o padrao e o socket do usuario, de onde `balde varrer` le a credencial do MinIO e fala com o rag-extractor-pg)
 # depende: docker, git, psql
@@ -296,7 +298,7 @@ conforme() {
     # precisa de boto3, que so o venv acervo da release tem
     ler:biblioteca:objeto)        exec "${PLATAFIRMA_RELEASE:-/opt/platafirma/current}/venv/acervo/bin/python" "$ATOS/objeto" "$@" ;;
     # o texto da obra pelo espelho de leitura, por pagina ou capitulo (spec espelho-de-leitura
-    # §5.4; #3180): cliente fino da rota de leitura do motor, nunca converte nem renderiza
+    # §5.4; #3180): cliente fino do serviço do acervo, nunca converte nem renderiza
     ler:biblioteca:impressao)     exec python3 "$ATOS/impressao" "$@" ;;
     # a ficha do arquivo da obra, lida do catalogo (acervo.ficha_arquivo; spec acervo-obra §7; #3305)
     ler:biblioteca:ficha)         exec python3 "$ATOS/ficha" ler "$@" ;;

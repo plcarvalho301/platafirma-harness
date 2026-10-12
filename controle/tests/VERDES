@@ -114,6 +114,9 @@ tests/test_curar_natureza.py | bin/curar bin/_acervo/**
 # Medido em 04/10/2026 (incidente #3222): `infra backup` com `piso_bytes` (7 passam; com a condicao do piso
 # desligada, 3 ficam vermelhos — o dump de 320 bytes volta a sair ok).
 tests/test_contrato_infra_backup_piso.py | bin/infra bin/_infra/** bin/_release/** registro/**
+# Card #3473: `infra ingress` copia o ingress versionado do core para a copia da instancia que o cloudflared le,
+# mostra a diferenca antes (--ver), reinicia o contêiner e volta a anterior se ele nao subir (docker de mentira).
+tests/test_contrato_infra_ingress.py | bin/infra lib/raizes.sh
 # Medido em 04/10/2026 (incidente #3267): bloco Procedencia da tela contra o veredito comum (6 passam; com o
 # predicado velho, que le `resultado`/`servicos`, 4 ficam vermelhos: 10 divergentes saem «0 sem divergencia»).
 tests/test_render_procedencia.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/**
@@ -189,3 +192,6 @@ tests/test_claude_cli.py | lib/claude_cli.py bin/agente bin/motor registro/** ve
 # Card #3435 (R27 da spec taipa): a escrita da tela do harness so passa com a origem exata da lista da instancia;
 # as seis tentativas de fora recebem 403 sem chegar ao verbo, o ato pela tela passa, lista vazia fecha.
 tests/test_recusa_origem.py | controle/harness_controle/** controle/compose.yaml
+# Medido em 12/10/2026 (card #3472): bloco Cadeiras da recepcao contra o pacote de hoje do `expediente montar` (4 passam;
+# com a coluna Manifesto, que lia a peca `oficio` que a abertura nao serve, os 4 ficam vermelhos: toda cadeira sai «ausente»).
+tests/test_render_cadeiras.py | controle/harness_controle/**
