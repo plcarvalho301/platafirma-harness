@@ -189,3 +189,6 @@ tests/test_claude_cli.py | lib/claude_cli.py bin/agente bin/motor registro/** ve
 # Card #3435 (R27 da spec taipa): a escrita da tela do harness so passa com a origem exata da lista da instancia;
 # as seis tentativas de fora recebem 403 sem chegar ao verbo, o ato pela tela passa, lista vazia fecha.
 tests/test_recusa_origem.py | controle/harness_controle/** controle/compose.yaml
+# Medido em 12/10/2026 (card #3472): bloco Cadeiras da recepcao contra o pacote de hoje do `expediente montar` (4 passam;
+# com a coluna Manifesto, que lia a peca `oficio` que a abertura nao serve, os 4 ficam vermelhos: toda cadeira sai «ausente»).
+tests/test_render_cadeiras.py | controle/harness_controle/**

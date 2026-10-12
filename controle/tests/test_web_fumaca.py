@@ -39,8 +39,6 @@ ESTADO_OK = {
                 "pecas": [
                     {"peca": "persona", "ref": "platafirma-harness@abertura/ti/persona.md",
                      "sha": "p1", "frescor": "fresco", "tokens": 12, "conteudo": "Voce e Oswaldo Aranha..."},
-                    {"peca": "oficio", "ref": "platafirma-harness@abertura/ti/oficio.md",
-                     "sha": "o1", "frescor": "fresco", "tokens": 8, "conteudo": "oficio da cadeira..."},
                     {"peca": "conduta-dono", "ref": "platafirma-harness@abertura/dono.md",
                      "sha": "c1", "frescor": "fresco", "tokens": 40, "conteudo": "conduta do dono..."},
                     {"peca": "alias-cadeiras", "ref": "calc:alias-cadeiras",
@@ -524,9 +522,11 @@ def test_tipo_continua_fechado():
 def test_cadeiras_recepcao_deriva_presenca_das_pecas(cliente):
     corpo = cliente.get("/").text
     trecho = corpo.split('id="cadeiras"')[1].split("</section>")[0]
-    # persona e oficio (manifesto) servidos na abertura => presente, nao ausente
+    # persona servida na abertura => presente, nao ausente; o pacote de hoje nao traz `oficio`
+    # e a tela nao tem mais coluna Manifesto (#3472: media o que a abertura nao serve)
     assert "presente" in trecho
     assert "ausente" not in trecho
+    assert ">Manifesto<" not in trecho
     # a coluna Fila saiu (a caixa e o bloco Caixas, mesma fonte)
     assert ">Fila<" not in trecho
 
