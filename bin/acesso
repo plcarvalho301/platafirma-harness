@@ -14,6 +14,40 @@
 # conforme: parcial
 # falta: escrita em concessao.* por API da entidade concessao (aguarda API); rota estatica claudinho (aguarda extincao); politica-sync vs release promover (aguarda decisao do dono); tabela tipo->dominio em cmd_decidir (aguarda vocabulario de tipos de recurso, dados); id de recurso em duas formas (prefixado e nu) enquanto o PAP misturar as duas
 #
+# Texto do controle (arq:0124 §3; card #3447): todo ato cai na face IAM. O objeto do rotulo
+# entra pelo slug do conceito no tesauro; volta diz se o efeito se desfaz e como, e o que nao
+# volta diz nao (R13). Ato de leitura declara volta sim: nao muda estado.
+# face: decidir=IAM
+# face: listar=IAM
+# face: historico=IAM
+# face: vocabulario=IAM
+# face: politica=IAM
+# face: importar=IAM
+# face: conceder=IAM
+# face: revogar=IAM
+# face: desligar=IAM
+# face: orfaos=IAM
+# rotulo: decidir=Consultar {autorizacao}
+# rotulo: listar=Ver vigentes
+# rotulo: historico=Ver histórico
+# rotulo: vocabulario=Ver vocabulário
+# rotulo: politica=Conferir política
+# rotulo: importar=Importar vocabulário
+# rotulo: conceder=Conceder {autorizacao}
+# rotulo: revogar=Revogar {autorizacao}
+# rotulo: desligar=Desligar {identidade-digital}
+# rotulo: orfaos=Medir resíduos
+# volta: decidir=sim — só lê, nada a desfazer
+# volta: listar=sim — só lê, nada a desfazer
+# volta: historico=sim — só lê, nada a desfazer
+# volta: vocabulario=sim — só lê, nada a desfazer
+# volta: politica=sim — só lê, nada a desfazer
+# volta: importar=sim — importar de novo a política anterior (papel e tema voltam; domínio não muda por importação)
+# volta: conceder=sim — acesso revogar o ato da concessão
+# volta: revogar=sim — acesso conceder de novo, com fundamento novo
+# volta: desligar=nao
+# volta: orfaos=sim — só lê, nada a desfazer
+#
 # SEPARADO DE `seg` DE PROPOSITO (decisao do dono, 13/08/2026): `seg` e o toolkit da
 # cadeira de seguranca; `acesso` e chamado por qualquer um que precise verificar o que
 # pode. Ferramenta de verificacao aberta nao mora em toolkit de time.
