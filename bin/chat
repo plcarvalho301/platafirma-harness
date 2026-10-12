@@ -537,7 +537,7 @@ def ambiente_do_giro(cadeira):
 # negativa continua valendo — quem abre o arquivo e o processo que monta o giro,
 # nao o modelo. Duas formas: `env` e arquivo CHAVE=valor; `nome` e um arquivo por
 # variavel em $PLATAFIRMA_INSTANCIA/segredos/<stack>/ (card #3010) — nenhum `.env` em
-# arvore de repo ou de deploy. O token estatico da porta (OPS_AUTH_TOKEN) saiu (#3272):
+# arvore de repo ou de deploy. O token estatico da porta saiu (#3272):
 # o conector da porta entra so por JWT do realm, que nao e do giro.
 FONTES_DE_SEGREDO = (
     ("nome", str(instancia() / "segredos" / "conhecimento" / "MCP_AUTH_TOKEN"),
