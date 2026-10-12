@@ -237,7 +237,7 @@ def _le_cabecalho(path):
     # A capacidade filha de cada ato (#3465) vai junto: e o que `acervo listar casa ferramental` mostra.
     if campos.get("capacidade-ato"):
         partes.append("capacidade por ato: %s"
-                      % ", ".join(l.replace(" ", "") for l in campos["capacidade-ato"]))
+                      % ", ".join(par.replace(" ", "") for par in campos["capacidade-ato"]))
     return campos, (" · ".join(partes) or None)
 
 
