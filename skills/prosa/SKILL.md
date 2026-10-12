@@ -100,7 +100,10 @@ régua vale pra ela também.)
 - **Referência resolvida.** Código de ADR, número de card e seção de spec vêm com o
   nome do que apontam, no ponto de leitura; onde a forma comporta rodapé, o código
   desce ao rodapé (ADR 0098, ponteiro nu). Parênteses empilhados com códigos no meio
-  da frase são falta.
+  da frase são falta. Quando o alvo tem endereço, a referência é link, e o texto do
+  link é o nome do que aponta. Entre documentos da casa, o link é relativo ao arquivo
+  (`../guia/discovery.md`); ADR citada pela chave entre crases (`arq:0075`) o site da
+  casa já liga sozinho. Fora da casa, o endereço inteiro.
 - **Voz da casa.** Direta, começando pela coisa.
 - **Seção muda o que o leitor faz.** Senão, sai. É o teste mais barato contra a
   página de escritório que ninguém reabre.
