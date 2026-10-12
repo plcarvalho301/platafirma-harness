@@ -29,6 +29,10 @@ services:
       PYTHONPATH: ${PF_RELEASE_RAIZ:-/opt/platafirma}/current/harness/lib
       AGREGADOR_ESTADO_PATH: /estado/estado.json
       PF_CADEIRA_TELA: claudinho-TI
+      # Origens que podem escrever pela tela (card #3435, R27): lista fechada da instancia,
+      # virgula entre valores. O padrao e o endereco que o gate serve (oauth2-proxy-harness);
+      # a instancia que servir de outro endereco troca a variavel. Vazia, a tela le e nao escreve.
+      HARNESS_CONTROLE_ORIGENS: ${HARNESS_CONTROLE_ORIGENS:-https://harness.platafirma.org}
       DOCKER_HOST: unix:///run/user/1001/docker.sock
       FILA_REDIS_HOST: ${FILA_REDIS_HOST:-motor-msg}
       FILA_REDIS_PORT: ${FILA_REDIS_PORT:-6379}

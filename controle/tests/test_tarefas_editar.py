@@ -101,6 +101,29 @@ def test_rotulo_do_modelo_sai_em_negrito_e_cada_campo_abre_paragrafo(tmp_path):
         "<p>Texto livre: sem rótulo</p>")
 
 
+def test_tarefas_da_story_abre_paragrafo_proprio(tmp_path):
+    """arq:0060 §3 revista em 12/10/2026: a task mora na lista «Tarefas:» do corpo da story, e o
+    rótulo abre parágrafo próprio em vez de colar no campo anterior."""
+    corpo_in = ("Comportamento esperado: sai 0\nTarefas: na ordem\n1. lint · repo@a.py · sai 0\n"
+                "2. build · repo@b.js · sai 0\nAceite: ok\n")
+    proc, _, corpo = _run(["editar", "42", "--desc-stdin"], tmp_path, stdin=corpo_in)
+    assert proc.returncode == 0, proc.stderr
+    assert corpo["descricao"] == (
+        "<p><strong>Comportamento esperado:</strong> sai 0</p>"
+        "<p><strong>Tarefas:</strong> na ordem<br>1. lint · repo@a.py · sai 0<br>"
+        "2. build · repo@b.js · sai 0</p>"
+        "<p><strong>Aceite:</strong> ok</p>")
+
+
+def test_modelo_story_traz_tarefas(tmp_path):
+    for args in (["modelo", "story"], ["modelo", "story", "derivada"]):
+        proc = subprocess.run(["bash", str(SCRIPT), *args], capture_output=True, text=True,
+                              timeout=20, check=False)
+        assert proc.returncode == 0, proc.stderr
+        linhas = proc.stdout.splitlines()
+        assert any(l.startswith("Tarefas:") for l in linhas), args
+
+
 def test_titulo_sozinho_manda_so_titulo(tmp_path):
     proc, chamadas, corpo = _run(["editar", "42", "--titulo", "novo título"], tmp_path)
     assert proc.returncode == 0, proc.stderr

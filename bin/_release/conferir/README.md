@@ -24,12 +24,12 @@ Com `--json`, retorna objeto com `ancora`, `classe`, `alvo`, `release` e lista d
 ## Classes servidas
 
 - `servico`: contêineres e stacks em execução contra o declarado no compose e nos pontos de deploy.
-- `verbo`: verbos instalados no PATH contra o acervo e o repositório da release.
+- `verbo`: verbos instalados no PATH contra o acervo e o repositório da release. Ato que o cabeçalho põe numa face (`# face: <ato>=<face>`) sem `# rotulo:` ou sem `# volta:` sai como **aviso** (`avisos` no `--json`, linha `AVISO` no texto): não pesa no exit e não reprova o gate, porque hoje nenhum cabeçalho declara os campos (arq:0124 §3, R7). Vira divergente depois da carga dos três donos (#3446, #3447, #3448), por decisão escrita.
 - `skill`: skills servidas contra as fontes no harness.
 - `procedencia`: caminhos executáveis contra o inventário declarado.
 - `superficie`: conformidade dos arquivos de superfície e conectores MCP.
 - `ferramental`: golden record `acervo.ferramental` contra o host.
-- `front`: telas e aplicações web contra regras de fronteira.
+- `front`: telas e aplicações web contra regras de fronteira (arq:0057) e, desde o card #3426, o pacote de `platafirma-ui` lido da árvore dela, um item por peça, tela e retrato: **peça sem página** (`src/pf/<tag>.js` sem `<tag` em nenhum `.html` de `exemplo/`, R13); **tela com versão diferente do pacote** (`COPY --from=platafirma/ui:<versão>` de `app/<tela>/Dockerfile` contra `version` de `src/base/package.json`, R1: as telas de hoje que copiam em versão antiga saem divergentes); **retrato do dicionário de atos** (`src/retrato/atos.json`, campo `sha_registro`) contra o sha do registro do ferramental (R45). Sem retrato, ou enquanto o registro não serve o sha (dependência de dados no #3409), o item sai «não consegui olhar», nunca conforme.
 - `sessao`: pacote de abertura servido e frescor por peça.
 - `chapeu`: conformidade de chapéus das personas.
 - `pdp`: conformidade de políticas de acesso.
