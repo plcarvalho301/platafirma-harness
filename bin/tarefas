@@ -6,8 +6,9 @@
 # atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub
 #
 # Texto do controle (arq:0124 §3; arq:0125 U33; card #3446). Todo ato cai na face Entrega.
-# O rótulo vai sem objeto enquanto o tesauro não tiver o conceito (card, comentário, estado):
-# o objeto entra pelo slug, `{slug}`, e nunca se copia. volta: diz se o efeito se desfaz.
+# O objeto do rótulo entra pelo slug, `{slug}`, quando o conceito é do tesauro. Termo da casa
+# (card, comentário, estado, débito técnico) vai escrito até o tesauro ter o braço da casa
+# (decisão do dono, 12/10/2026, card #3446); aí passa a slug. volta: diz se o efeito se desfaz.
 # face: listar=Entrega
 # face: listar-tudo=Entrega
 # face: ler=Entrega
@@ -23,21 +24,21 @@
 # face: dt=Entrega
 # face: estados=Entrega
 # face: sub=Entrega
-# rotulo: listar=Listar
-# rotulo: listar-tudo=Listar tudo
-# rotulo: ler=Abrir
-# rotulo: criar=Criar
-# rotulo: editar=Editar
-# rotulo: modelo=Esboçar
+# rotulo: listar=Listar os cards abertos
+# rotulo: listar-tudo=Listar todos os cards
+# rotulo: ler=Abrir o card
+# rotulo: criar=Criar card
+# rotulo: editar=Editar o card
+# rotulo: modelo=Ver o modelo do card
 # rotulo: comentar=Comentar
-# rotulo: comentarios=Ler
-# rotulo: mover=Mover
-# rotulo: fechar=Fechar
-# rotulo: apagar=Apagar
+# rotulo: comentarios=Ler os comentários
+# rotulo: mover=Mudar de estado
+# rotulo: fechar=Fechar o card
+# rotulo: apagar=Apagar o card
 # rotulo: assinar=Assinar
-# rotulo: dt=Administrar
-# rotulo: estados=Consultar
-# rotulo: sub=Subordinar
+# rotulo: dt=Tratar o débito técnico
+# rotulo: estados=Ver os estados
+# rotulo: sub=Pôr sob outro card
 # volta: listar=sim — só lê, nada muda
 # volta: listar-tudo=sim — só lê, nada muda
 # volta: ler=sim — só lê, nada muda
