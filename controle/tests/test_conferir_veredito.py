@@ -962,6 +962,188 @@ def test_front_tela_aberta_fica_fora_da_lista_de_itens(monkeypatch, capsys):
 # _le()/_viola_segredo_ou_api engolir OSError como "sem violacao".
 
 
+# --- conferir_front: o pacote da platafirma-ui (card #3426; R1, R13 e R45 da spec taipa) --------
+# `_conferencias_do_pacote` le a arvore de platafirma-ui sob uma raiz; os testes montam uma
+# arvore minima em tmp_path. Os testes de tela acima nao a veem: o fixture abaixo a esvazia.
+
+_PACOTE_REAL = conferir._conferencias_do_pacote
+
+
+@pytest.fixture(autouse=True)
+def _front_sem_pacote(monkeypatch):
+    monkeypatch.setattr(conferir, "_conferencias_do_pacote", lambda raiz=None: [])
+
+
+def _arvore_ui(tmp_path, pecas=("pf-botao",), pagina=None, telas=None, versao="0.5.2", retrato=None):
+    base = tmp_path / "platafirma-ui"
+    (base / "src" / "pf").mkdir(parents=True)
+    for p in pecas:
+        (base / "src" / "pf" / f"{p}.js").write_text(f"customElements.define('{p}', class {{}});\n")
+    (base / "exemplo").mkdir()
+    (base / "exemplo" / "index.html").write_text(
+        pagina if pagina is not None else "".join(f"<{p}></{p}>\n" for p in pecas))
+    (base / "src" / "base").mkdir(parents=True)
+    (base / "src" / "base" / "package.json").write_text(json.dumps({"name": "base", "version": versao}))
+    for tela, v in (telas or {}).items():
+        d = base / "app" / tela
+        d.mkdir(parents=True)
+        copia = f"COPY --from=platafirma/ui:{v} /usr/share/nginx/html/pf-ui.js /app/\n" if v else ""
+        (d / "Dockerfile").write_text("FROM nginx:1.29-alpine\n" + copia)
+    if retrato is not None:
+        (base / "src" / "retrato").mkdir(parents=True)
+        (base / "src" / "retrato" / "atos.json").write_text(json.dumps(retrato))
+    return tmp_path
+
+
+def _por_nome(itens):
+    return {n: v for n, v in itens}
+
+
+def test_pacote_peca_com_pagina_e_conforme_e_sem_pagina_diverge(tmp_path):
+    raiz = _arvore_ui(tmp_path, pecas=("pf-botao", "pf-grafico"), pagina="<pf-botao>ok</pf-botao>\n")
+    por = _por_nome(_PACOTE_REAL(str(raiz)))
+    assert por["peca pf-botao"].estado == "conforme"
+    assert por["peca pf-grafico"].estado == "divergente"
+    assert "sem pagina com a peca montada" in por["peca pf-grafico"].motivo
+
+
+def test_pacote_peca_citada_so_em_comentario_de_outra_tag_nao_conta(tmp_path):
+    # <pf-botao-grande> nao e <pf-botao>: o casamento exige fim de nome
+    raiz = _arvore_ui(tmp_path, pecas=("pf-botao",), pagina="<pf-botao-grande></pf-botao-grande>\n")
+    assert _por_nome(_PACOTE_REAL(str(raiz)))["peca pf-botao"].estado == "divergente"
+
+
+def test_pacote_tela_na_versao_do_pacote_conforme_e_em_outra_diverge(tmp_path):
+    raiz = _arvore_ui(tmp_path, versao="0.5.2", telas={"rastreador": "0.5.2", "marcacao": "0.4.0"})
+    por = _por_nome(_PACOTE_REAL(str(raiz)))
+    assert por["versao app/rastreador"].estado == "conforme"
+    v = por["versao app/marcacao"]
+    assert v.estado == "divergente"
+    assert "0.4.0" in v.motivo and "0.5.2" in v.motivo
+
+
+def test_pacote_tela_sem_copia_da_biblioteca_e_nao_consegui_olhar(tmp_path):
+    raiz = _arvore_ui(tmp_path, telas={"solta": None})
+    v = _por_nome(_PACOTE_REAL(str(raiz)))["versao app/solta"]
+    assert v.estado == "indeterminavel"
+    assert "COPY --from=platafirma/ui" in v.motivo
+
+
+def test_pacote_sem_retrato_diz_nao_consegui_olhar(tmp_path):
+    raiz = _arvore_ui(tmp_path)
+    v = _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"]
+    assert v.estado == "indeterminavel"
+    assert "nao consegui olhar" in v.motivo
+
+
+def test_pacote_retrato_com_sha_igual_ao_do_registro_e_conforme(tmp_path, monkeypatch):
+    raiz = _arvore_ui(tmp_path, retrato={"sha_registro": "aaaabbbbccccdddd", "atos": {}})
+    monkeypatch.setattr(conferir, "_sha_do_registro", lambda: "aaaabbbbccccdddd")
+    assert _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"].estado == "conforme"
+
+
+def test_pacote_retrato_com_sha_diferente_do_registro_diverge_e_diz_a_cura(tmp_path, monkeypatch):
+    raiz = _arvore_ui(tmp_path, retrato={"sha_registro": "aaaabbbbccccdddd", "atos": {}})
+    monkeypatch.setattr(conferir, "_sha_do_registro", lambda: "111122223333444455")
+    v = _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"]
+    assert v.estado == "divergente"
+    assert "gerar de novo" in v.motivo
+
+
+def test_pacote_retrato_sem_fonte_do_sha_do_registro_nunca_sai_conforme(tmp_path, monkeypatch):
+    raiz = _arvore_ui(tmp_path, retrato={"sha_registro": "aaaabbbbccccdddd"})
+    monkeypatch.setattr(conferir, "_sha_do_registro", lambda: None)
+    assert _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"].estado == "indeterminavel"
+
+
+def test_pacote_retrato_sem_o_campo_sha_registro_diverge(tmp_path):
+    raiz = _arvore_ui(tmp_path, retrato={"atos": {}})
+    v = _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"]
+    assert v.estado == "divergente"
+    assert "sha_registro" in v.motivo
+
+
+def test_pacote_ui_ausente_e_nao_consegui_olhar(tmp_path):
+    por = _por_nome(_PACOTE_REAL(str(tmp_path)))
+    assert [v.estado for v in por.values()] == ["indeterminavel"]
+
+
+def test_front_entra_o_pacote_no_veredito_e_no_exit(tmp_path, monkeypatch, capsys):
+    raiz = _arvore_ui(tmp_path, pecas=("pf-botao", "pf-orfa"), pagina="<pf-botao></pf-botao>\n",
+                      telas={"rastreador": "0.5.2"})
+    (tmp_path / "AI").mkdir()
+    (tmp_path / "platafirma-ui").rename(tmp_path / "AI" / "platafirma-ui")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(conferir, "_conferencias_do_pacote", _PACOTE_REAL)
+    monkeypatch.setattr(conferir, "_telas_de_front", lambda: [])
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    exit_code = conferir.conferir_front(None, como_json=True)
+    dado = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    estados = {i["nome"]: i["estado"] for i in dado["itens"]}
+    assert estados["peca pf-orfa"] == "divergente"
+    assert estados["peca pf-botao"] == "conforme"
+    assert estados["versao app/rastreador"] == "conforme"
+    assert estados["retrato do dicionario de atos"] == "indeterminavel"
+
+
+# --- conferir_verbo: ato de face sem rotulo ou sem volta e aviso (card #3426) -------------------
+
+def _verbo_com_face(tmp_path, monkeypatch, linhas_de_ato):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "meuverbo").write_text(
+        "#!/usr/bin/env bash\n"
+        "# meuverbo - verbo de teste da face\n"
+        "# capacidade: verificacao-de-teste\n"
+        "# dono: claudinho-TI\n"
+        "# atos: listar, apagar, ler\n"
+        + "".join(f"# {l}\n" for l in linhas_de_ato)
+        + "echo ok\n", encoding="utf-8")
+    monkeypatch.setattr(conferir, "BIN", str(bin_dir))
+    monkeypatch.setattr(conferir, "_capacidade_veredito", lambda cap: resultado.conforme())
+    monkeypatch.setattr(conferir, "_desde_familia", lambda familia: None)
+    monkeypatch.setattr(conferir, "origem", lambda nome, caminho: ("symlink-release", str(caminho)))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+
+def test_verbo_ato_de_face_sem_rotulo_ou_volta_e_aviso_e_nao_reprova(tmp_path, monkeypatch, capsys):
+    _verbo_com_face(tmp_path, monkeypatch, [
+        "face: listar=Entrega", "rotulo: listar=Listar os cards", "volta: listar=nao",
+        "face: apagar=Entrega", "rotulo: apagar=Apagar o card",     # falta volta:
+        "face: ler=Entrega",                                         # faltam os dois
+    ])
+    exit_code = conferir.conferir_verbo(None, como_json=True)
+    dado = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0                       # aviso nao pesa no exit
+    assert {i["nome"]: i["estado"] for i in dado["itens"]}["meuverbo"] == "conforme"
+    avisos = dado["avisos"]
+    assert len(avisos) == 2
+    assert any("apagar" in a and "volta:" in a and "rotulo:" not in a for a in avisos)
+    assert any("ler" in a and "rotulo:" in a and "volta:" in a for a in avisos)
+    assert not any("listar" in a for a in avisos)
+
+
+def test_verbo_sem_face_declarada_nao_traz_aviso(tmp_path, monkeypatch, capsys):
+    # hoje nenhum cabecalho declara os campos (arq:0124 §3): o apontamento nasce quieto
+    _verbo_com_face(tmp_path, monkeypatch, [])
+    exit_code = conferir.conferir_verbo(None, como_json=True)
+    dado = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert "avisos" not in dado
+
+
+def test_verbo_aviso_de_face_sai_no_texto(tmp_path, monkeypatch, capsys):
+    _verbo_com_face(tmp_path, monkeypatch, ["face: apagar=Entrega"])
+    exit_code = conferir.conferir_verbo(None, como_json=False)
+    saida = capsys.readouterr().out
+    assert exit_code == 0
+    assert "AVISO" in saida and "apagar" in saida
+
+
 def _instalar_recuperacao_fake(monkeypatch, autoriza=None, acao="ler",
                                 fontes=("acervo", "board", "fila")):
     """Instala recuperacao.pep/recuperacao.fontes falsos em sys.modules — conferir_alcance
