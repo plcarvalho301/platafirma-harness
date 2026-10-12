@@ -283,10 +283,80 @@ def test_rodar_stack_node_sem_suite_sai_5(banc):
     assert r.returncode == 5, r.stdout + r.stderr
 
 
-def test_rodar_stack_node_sem_portao_ainda(banc):
-    r = banc.rodar("prova", "--portao")
+# --- o portão de uma stack node (card #3426) ----------------------------------------------
+
+def _com_portao(banc, lista: str | None = "verde.mjs\nconstruir.sh\n"):
+    """Registra a chave `ui` (subárvore front/provas) e, se pedido, a lista de portão dela."""
+    reg = json.loads(Path(banc.env["PLATAFIRMA_VENVS"]).read_text(encoding="utf-8"))
+    reg["ui"] = {"familia": "alvo", "lock": "front/package-lock.json", "teste": "front/provas"}
+    Path(banc.env["PLATAFIRMA_VENVS"]).write_text(json.dumps(reg), encoding="utf-8")
+    sub = banc.clone / "front" / "provas"
+    (sub / "construir.sh").write_text("#!/usr/bin/env bash\necho construiu\n", encoding="utf-8")
+    if lista is not None:
+        (sub / "VERDES").write_text(lista, encoding="utf-8")
+
+
+def test_rodar_portao_node_roda_a_lista_e_sai_0(banc):
+    _com_portao(banc)
+    r = banc.rodar("ui", "--portao")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "suite VERDE" in r.stdout and "2 arquivo(s)" in r.stdout
+
+
+def test_rodar_portao_node_nomeia_a_prova_vermelha(banc):
+    _com_portao(banc, "verde.mjs\nvermelha.mjs\n")
+    r = banc.rodar("ui", "--portao")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "suite VERMELHA" in r.stdout and "vermelha.mjs" in r.stdout
+
+
+def test_rodar_portao_node_sem_lista_sai_5(banc):
+    _com_portao(banc, None)
+    r = banc.rodar("ui", "--portao")
     assert r.returncode == 5, r.stdout + r.stderr
-    assert "ainda sem portão" in r.stderr
+    assert "sem lista de portão" in r.stdout
+
+
+def test_rodar_portao_node_lista_com_arquivo_ausente_sai_5(banc):
+    _com_portao(banc, "verde.mjs\nnao-existe.mjs\n")
+    r = banc.rodar("ui", "--portao")
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert "nao-existe.mjs" in r.stdout
+
+
+def test_rodar_portao_node_em_arvore_materializada(banc, tmp_path):
+    """O gate mede a árvore da rev, não a bancada: o elo entra na árvore e sai no fim."""
+    _com_portao(banc)
+    arv = tmp_path / "opt" / "alvo" / ("b" * 40)
+    shutil.copytree(banc.clone, arv, ignore=shutil.ignore_patterns(".git"))
+    r = banc.rodar("ui", "--portao", "--arvore", str(arv))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "suite VERDE" in r.stdout
+    assert not (arv / "front" / "provas" / "node_modules").exists()
+
+
+def test_rodar_portao_node_arvore_sem_escrita_sai_5(banc, tmp_path):
+    _com_portao(banc)
+    arv = tmp_path / "opt" / "alvo" / ("c" * 40)
+    shutil.copytree(banc.clone, arv, ignore=shutil.ignore_patterns(".git"))
+    arv.joinpath("front", "provas").chmod(0o555)
+    try:
+        if os.access(arv / "front" / "provas", os.W_OK):
+            pytest.skip("rodando como dono que ignora permissão (root)")
+        r = banc.rodar("ui", "--portao", "--arvore", str(arv))
+    finally:
+        arv.joinpath("front", "provas").chmod(0o755)
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert "não aceita escrita" in r.stderr
+
+
+def test_rodar_alvo_sh_roda_com_bash_da_raiz_do_repositorio(banc):
+    (banc.clone / "front" / "provas" / "onde.sh").write_text(
+        "#!/usr/bin/env bash\nbasename \"$PWD\" > \"$ONDE_OUT\"\n", encoding="utf-8")
+    banc.env["ONDE_OUT"] = str(banc.tmp / "onde.txt")
+    r = banc.rodar("prova", "front/provas/onde.sh")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (banc.tmp / "onde.txt").read_text(encoding="utf-8").strip() == banc.clone.name
 
 
 # --- o inventario das travas -------------------------------------------------------------
