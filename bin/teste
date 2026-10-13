@@ -351,14 +351,14 @@ _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
 
   # O node_modules que roda é o do ambiente travado, nunca um instalado à mão na árvore: o que
   # se testou tem de ser o que o lock resolve. Um diretório real ali é recusado, não apagado.
+  # O elo entra só depois da chave do memo (abaixo), e o de rodada anterior sai antes dela:
+  # `node_modules/` no .gitignore casa diretório, não elo, e o elo entrava na árvore da bancada.
+  # O hash nunca batia com o da árvore que o gate mede, e a promoção media de novo o que o
+  # portão da bancada já tinha medido (incidente #3496).
   if [ -L "$elo" ]; then
-    [ "$(readlink -f "$elo")" = "$(readlink -f "$alvo_nm")" ] || rm -f "$elo"
+    rm -f "$elo"
   elif [ -e "$elo" ]; then
     morre "$elo é um node_modules instalado à mão: o ambiente desta stack é o travado ($CHAVE_DEST); apague o diretório da bancada e rode de novo" 5
-  fi
-  if [ ! -L "$elo" ]; then
-    ln -s "$alvo_nm" "$elo" || morre "não liguei $elo ao ambiente travado" 3
-    criou=1
   fi
 
   inst="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}"
@@ -419,21 +419,65 @@ _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
     fi
   fi
 
-  for f in "${alvos[@]}"; do
-    n=$((n + 1))
-    rc_f=0
+  ln -s "$alvo_nm" "$elo" || morre "não liguei $elo ao ambiente travado" 3
+  criou=1
+
+  # Portão em paralelo (incidente #3496, o desenho do #3335 nas stacks python): os .sh rodam
+  # primeiro, em série e na ordem da lista — constroem o dist/ e instalam node_modules que as
+  # provas seguintes leem —, e depois os demais ao mesmo tempo, PF_TESTE_PARALELO trabalhadores
+  # (padrão: metade dos núcleos). 0 ou 1 roda tudo em série, na ordem da lista, como antes; rodada
+  # de alvo avulso também. Cada arquivo grava a duração no log, e a linha final cita os mais lentos.
+  local tmpr i ms s trab=1 ativos=0 seriais=() paralelos=() t_ini t_fim lentos
+  tmpr="$(mktemp -d "${TMPDIR:-/tmp}/teste-node.XXXXXX")" || morre "não criei o diretório de saída das provas" 3
+  _uma_prova() {  # $1=índice $2=arquivo ; grava <índice>.out, .rc e .ms em $tmpr
+    local f="$2" f_abs rc=0 t0 t1 cmd=()
     # a lista do portão traz o arquivo relativo à raiz de teste; o cwd é a raiz do repositório,
     # que é de onde as provas da platafirma-ui se rodam (dist/, src/)
     case "$f" in /*) f_abs="$f" ;; *) f_abs="$raiz/$f" ;; esac
     case "$f" in *.sh) cmd=(bash "$f_abs") ;; *) cmd=("$node" "$f_abs") ;; esac
-    saida="$(cd "$c" && env "${envx[@]}" timeout "${PF_TESTE_TIMEOUT:-600}" "${cmd[@]}" 2>&1)" || rc_f=$?
-    { printf '=== %s · exit %s\n' "$f" "$rc_f"; printf '%s\n' "$saida"; } >> "$log" 2>/dev/null || true
+    t0="$(date +%s%N)"
+    (cd "$c" && env "${envx[@]}" timeout "${PF_TESTE_TIMEOUT:-600}" "${cmd[@]}") >"$tmpr/$1.out" 2>&1 || rc=$?
+    t1="$(date +%s%N)"
+    printf '%s' "$rc" > "$tmpr/$1.rc"
+    printf '%s' "$(( (t1 - t0) / 1000000 ))" > "$tmpr/$1.ms"
+  }
+  if [ "${portao:-0}" -eq 1 ]; then
+    trab="${PF_TESTE_PARALELO:-$(( $(nproc 2>/dev/null || echo 2) / 2 ))}"
+    case "$trab" in ''|*[!0-9]*) trab=1 ;; esac
+  fi
+  for i in "${!alvos[@]}"; do
+    case "${alvos[$i]}" in *.sh) seriais+=("$i") ;; *) paralelos+=("$i") ;; esac
+  done
+  t_ini="$(date +%s)"
+  if [ "$trab" -le 1 ]; then
+    for i in "${!alvos[@]}"; do _uma_prova "$i" "${alvos[$i]}"; done
+  else
+    for i in ${seriais[@]+"${seriais[@]}"}; do _uma_prova "$i" "${alvos[$i]}"; done
+    for i in ${paralelos[@]+"${paralelos[@]}"}; do
+      if [ "$ativos" -ge "$trab" ]; then wait -n; ativos=$((ativos - 1)); fi
+      _uma_prova "$i" "${alvos[$i]}" &
+      ativos=$((ativos + 1))
+    done
+    wait
+  fi
+  t_fim="$(date +%s)"
+  [ "$criou" -eq 0 ] || rm -f "$elo"
+
+  for i in "${!alvos[@]}"; do
+    f="${alvos[$i]}"; n=$((n + 1))
+    rc_f="$(cat "$tmpr/$i.rc" 2>/dev/null)"; [ -n "$rc_f" ] || rc_f=5
+    ms="$(cat "$tmpr/$i.ms" 2>/dev/null)"; [ -n "$ms" ] || ms=0
+    s="$((ms / 1000)).$(( (ms % 1000) / 100 ))"
+    { printf '=== %s · exit %s · %s s\n' "$f" "$rc_f" "$s"; cat "$tmpr/$i.out" 2>/dev/null; } >> "$log" 2>/dev/null || true
+    printf '%s\t%s\n' "$ms" "${f##*/}" >> "$tmpr/tempos"
     if [ "$rc_f" -ne 0 ]; then
       falhos+=("$f (exit $rc_f)")
-      printf '%s\n' "$saida" | tail -n 15 | sed "s|^|  $f: |"
+      tail -n 15 "$tmpr/$i.out" 2>/dev/null | sed "s|^|  $f: |"
     fi
   done
-  [ "$criou" -eq 0 ] || rm -f "$elo"
+  lentos="$(sort -rn "$tmpr/tempos" | head -n 5 | awk -F'\t' '{printf "%s%s %.1f s", (NR > 1 ? ", " : ""), $2, $1 / 1000}')"
+  rm -rf "$tmpr"
+  printf 'tempo: %s s, %s trabalhador(es); mais lentos: %s\n' "$((t_fim - t_ini))" "$trab" "$lentos"
 
   if [ "${#falhos[@]}" -gt 0 ]; then
     printf 'suite VERMELHA: %s — %s de %s arquivo(s) reprovado(s): %s\n' "$rotulo" "${#falhos[@]}" "$n" "${falhos[*]}"
