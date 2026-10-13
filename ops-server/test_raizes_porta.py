@@ -319,6 +319,59 @@ def test_write_file_aceita_dockerfile_com_sufixo(bancada, sem_pep):
         assert r.get("recusado") and "tipo" in r["motivo"], (nome, r)
 
 
+def test_write_file_aceita_codigo_de_front_jsx_ts_tsx(bancada, sem_pep):
+    """#2856 linhas 237 e 240: componente JSX/TSX e TypeScript sao texto plano que o build de
+    front le; sem as extensoes a prova de front so entrava por .js e `repo git mv`."""
+    for nome in ("Tela.jsx", "api.ts", "Tela.tsx", "tipos.d.ts", "TELA.TSX"):
+        r = s.write_file(path=f"wt/platafirma-core/fabrica/front/{nome}", content="x\n")
+        assert r.get("ok"), (nome, r)
+    # a lista cresceu so nessas tres: outro formato de componente segue recusado
+    for nome in ("Tela.vue", "Tela.svelte", "api.mts"):
+        r = s.write_file(path=f"wt/platafirma-core/fabrica/front/{nome}", content="x\n")
+        assert r.get("recusado") and "tipo" in r["motivo"], (nome, r)
+
+
+def test_write_file_aceita_gitignore_e_operacao_e_recusa_segredo_por_nome(bancada, sem_pep):
+    """#2856 linhas 173 e 195: lista nominal, nunca regra de dotfile: `.env` e afins seguem fora."""
+    for nome in (".gitignore", ".operacao"):
+        r = s.write_file(path=f"wt/platafirma-core/fabrica/docs/{nome}", content="x\n")
+        assert r.get("ok"), (nome, r)
+    for nome in (".env", ".npmrc", ".netrc"):
+        r = s.write_file(path=f"wt/platafirma-core/fabrica/docs/{nome}", content="x\n")
+        assert r.get("recusado"), (nome, r)
+
+
+def test_write_file_trecho_de_varias_linhas_casa_como_texto(bancada, sem_pep):
+    """#2856 linhas 4, 193 e 217: o `antes` com parenteses, colchetes e quebra de linha casa como
+    texto; antes o fallback escapava o texto inteiro, deixava uma barra solta e levantava
+    re.error «unbalanced parenthesis» no lugar de dizer quantas vezes o trecho ocorre."""
+    caminho = "wt/platafirma-core/fabrica/docs/spec.md"
+    alvo = bancada / caminho
+    alvo.parent.mkdir(parents=True, exist_ok=True)
+    alvo.write_text("a (b)\nc [--json]\n  d (0) e\n", encoding="utf-8")
+    # casa uma vez, com parenteses e colchetes
+    ok = s.write_file(path=caminho, trecho={"antes": "a (b)\nc [--json]", "depois": "A\nC"})
+    assert ok.get("ok"), ok
+    assert alvo.read_text(encoding="utf-8") == "A\nC\n  d (0) e\n"
+    # nao casa: diz 0 vez(es), sem excecao
+    zero = s.write_file(path=caminho, trecho={"antes": "x (y)\nz [--json]", "depois": "?"})
+    assert zero.get("recusado") and "0 vez" in zero["motivo"], zero
+    # parenteses desbalanceados em uma linha so casam como texto
+    alvo.write_text("f(0\ng\n", encoding="utf-8")
+    um = s.write_file(path=caminho, trecho={"antes": "f(0", "depois": "f(1"})
+    assert um.get("ok"), um
+    assert alvo.read_text(encoding="utf-8") == "f(1\ng\n"
+    # a quebra e o recuo entre linhas sao tolerados (o que o fallback de varias linhas pedia)
+    alvo.write_text("p (1)\n    q [2]\n", encoding="utf-8")
+    t = s.write_file(path=caminho, trecho={"antes": "p (1)\nq [2]", "depois": "P\nQ"})
+    assert t.get("ok"), t
+    assert alvo.read_text(encoding="utf-8") == "P\nQ\n"
+    # duas ocorrencias recusam, com a contagem
+    alvo.write_text("k (1)\nm\nk (1)\nm\n", encoding="utf-8")
+    dois = s.write_file(path=caminho, trecho={"antes": "k (1)\nm", "depois": "x"})
+    assert dois.get("recusado") and "2 vez" in dois["motivo"], dois
+
+
 def test_write_file_nega_release_e_log(bancada, sem_pep):
     rel = s.write_file(path=str(s.BIN_VERBOS / "x.md"), content="x\n")
     assert rel.get("recusado") and "release" in rel["motivo"]

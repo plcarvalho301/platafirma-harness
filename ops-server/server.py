@@ -1853,12 +1853,12 @@ def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
 # deploy/segredos/mapa.tsv) e tabela de texto plano, e sem a extensao a citacao a corrigir
 # nele nao tinha como ser escrita (so sai por write .txt + git mv).
 TIPOS_TEXTO = {".py", ".md", ".mmd", ".d2", ".sh", ".sql", ".yaml", ".yml", ".json", ".toml",
-               ".css", ".html", ".js", ".mjs", ".php", ".txt", ".conf", ".tsv",
+               ".css", ".html", ".js", ".jsx", ".mjs", ".ts", ".tsx", ".php", ".txt", ".conf", ".tsv",
                ".service", ".timer", ".path", ".socket"}
 # Texto de build que se reconhece pelo nome, nao pela extensao. Entrou em 23/09/2026: sem
 # ele, stack nova com imagem propria (Dockerfile, conf do nginx) nao tinha como ser escrita
 # pela porta, e a saida era esconder o Dockerfile dentro do compose.
-NOMES_TEXTO = {"Dockerfile", ".dockerignore", "VERDES"}  # VERDES: baseline do pre-push (guia portoes-do-codigo)
+NOMES_TEXTO = {"Dockerfile", ".dockerignore", ".gitignore", ".operacao", "VERDES"}  # VERDES: baseline do pre-push (guia portoes-do-codigo)
 # Dockerfile.<sufixo> (Dockerfile.gpu, Dockerfile.dev): o mesmo texto de build, #2856 linha 40.
 PREFIXO_DOCKERFILE = "Dockerfile."
 # platafirma-ui entrou em 22/09/2026 (hotfix): o clone existia na bancada e o front do
@@ -2049,8 +2049,9 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
     bancada, clones platafirma-* e seus worktrees em wt/<repo>/<cadeira>
     (working tree, fora de .git), com bin/ e hooks/ do harness aceitando verbo e hook (sem
     extensao + shebang); na instancia, @TMP@/<ordem_id>/ (rascunho da fita). Tipos: .py .md .mmd .d2 .sh
-    .sql .yaml .yml .json .toml .css .html .js .mjs .php .txt .conf .tsv .service .timer .path
-    .socket, e os nomes Dockerfile, Dockerfile.<sufixo>, .dockerignore, VERDES. Fora disso volta
+    .sql .yaml .yml .json .toml .css .html .js .jsx .mjs .ts .tsx .php .txt .conf .tsv .service
+    .timer .path .socket, e os nomes Dockerfile, Dockerfile.<sufixo>, .dockerignore, .gitignore,
+    .operacao, VERDES. Fora disso volta
     `{recusado, motivo}` nomeando o porque (release, fila, abertura publicada, log, segredos, .git, symlink,
     tipo, tamanho). `content` = arquivo
     INTEIRO (teto 1 MiB). `trecho={"antes","depois"}` = edicao por trecho: `antes` tem de
@@ -2085,7 +2086,10 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
         if n == 1:
             content = atual.replace(a, d, 1)
         else:
-            pat = re.sub(r'(\r?\n[ \t]*)+', r'(?:\\r?\\n[ \\t]*)+', re.escape(a))
+            # O antes de varias linhas casa tolerando a quebra e o recuo entre elas: cada trecho entre
+            # quebras e literal (re.escape) e so a emenda e regex. Escapar o texto inteiro e trocar a
+            # quebra depois deixava uma barra solta, e o re.finditer morria com «unbalanced parenthesis».
+            pat = r'(?:\r?\n[ \t]*)+'.join(re.escape(p) for p in re.split(r'(?:\r?\n[ \t]*)+', a))
             matches = list(re.finditer(pat, atual))
             if len(matches) == 1:
                 m = matches[0]

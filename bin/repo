@@ -1033,6 +1033,9 @@ ato_sincronizar() {
   if [ -n "$st" ]; then
     printf '%s: arvore com escrita nao commitada (%s) — nao mesclo sobre ela\n' "$VERBO" "$(printf '%s\n' "$st" | wc -l) arquivo(s)" >&2
     printf 'vizinho: repo commitar %s\n' "$nome" >&2
+    if ! grep -qv '^?? ' <<<"$st"; then
+      printf 'vizinho: so ha nao rastreado; se for artefato ou cache, repo git %s clean -n -d e depois repo git %s clean -f -d <caminhos>\n' "$nome" "$nome" >&2
+    fi
     exit 4
   fi
 
@@ -1174,6 +1177,9 @@ sincronizar_direto_em_main() {
   if [ -n "$st" ]; then
     printf '%s: arvore com escrita nao commitada (%s) — nao rebaseio sobre ela\n' "$VERBO" "$(printf '%s\n' "$st" | wc -l) arquivo(s)" >&2
     printf 'vizinho: repo commitar %s -m <msg> <caminhos>\n' "$nome" >&2
+    if ! grep -qv '^?? ' <<<"$st"; then
+      printf 'vizinho: so ha nao rastreado; se for artefato ou cache, repo git %s clean -n -d e depois repo git %s clean -f -d <caminhos>\n' "$nome" "$nome" >&2
+    fi
     exit 4
   fi
   main="$("$GIT" -C "$c" rev-parse --verify -q origin/main)" || morre "indeterminavel: sem origin/main" 5

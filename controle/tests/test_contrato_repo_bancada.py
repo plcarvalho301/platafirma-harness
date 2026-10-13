@@ -351,7 +351,23 @@ def test_sincronizar_arvore_suja_sai_4_antes_de_mesclar(tmp_path):
     r = _repo(tmp_path, bancada, "s1", "sincronizar", "demo")
     assert r.returncode == 4, r.stdout
     assert "vizinho: repo commitar" in r.stderr
+    # #2856 linha 241: so ha nao rastreado (artefato, cache), e o que serve e o clean, nao o commitar
+    assert "repo git demo clean -n -d" in r.stderr
     assert not (wt / "NOVO.md").exists()
+
+
+def test_sincronizar_arvore_suja_rastreada_nao_nomeia_o_clean(tmp_path):
+    """Com arquivo rastreado alterado o clean seria o conselho errado: apagaria trabalho. Fica
+    so o commitar."""
+    bancada = _montar(tmp_path)
+    wt = _abrir_42(tmp_path, bancada)
+    _commit_em(wt, "card.md", "c\n")
+    (wt / "card.md").write_text("mudou\n")
+    _main_novo(tmp_path)
+    r = _repo(tmp_path, bancada, "s1", "sincronizar", "demo")
+    assert r.returncode == 4, r.stdout
+    assert "vizinho: repo commitar" in r.stderr
+    assert "clean -n -d" not in r.stderr
 
 
 def test_sincronizar_ramo_divergido_do_proprio_upstream_sai_4(tmp_path):

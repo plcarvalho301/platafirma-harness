@@ -1132,7 +1132,9 @@ _dt_corpo() {
 # Grava o corpo novo, que o `_dt_py` deixou em arquivo. Um PATCH só, sem estado.
 _dt_grava() {
   local html; html=$(para_html < "$1")
-  jq -n --arg d "$html" '{descricao:$d}' | envia PATCH "/itens/$DT_PAI" >/dev/null
+  # O corpo do balde passou de 128 KiB, o teto de UM argumento de exec no Linux: com --arg o jq
+  # morria com «Argument list too long» e a API recebia corpo vazio. Vai por stdin (-Rs).
+  printf '%s' "$html" | jq -Rs '{descricao:.}' | envia PATCH "/itens/$DT_PAI" >/dev/null
 }
 
 # Roda um ato de escrita: lê o corpo, deixa o `_dt_py` montar o novo, grava, relata.
