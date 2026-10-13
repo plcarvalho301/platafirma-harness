@@ -155,6 +155,31 @@ def test_sem_chapeu_tocado_nao_confere_nada(monkeypatch):
     assert "nenhum chapéu tocado" in descansar.aponta_candidatas(set())[0]
 
 
+def test_o_que_foi_ao_debito_sai_do_caderno_com_a_linha(stubs):
+    """#3501: o debito ja e a morada duravel; a poda retira, nao aponta."""
+    caderno = [
+        {"id": 7, "chapeu": "agente", "categoria": "licao", "candidata": None, "caso": "28/09",
+         "texto": "Em pesquisar consultar a consulta vai num argumento so (débito #2856 linha 104)"},
+        {"id": 8, "chapeu": "agente", "categoria": "licao", "candidata": "tombamento: par c1",
+         "caso": "02/10", "texto": "Contorno do motor: ver #2856, linha 12"},
+        {"id": 9, "chapeu": "agente", "categoria": "licao", "candidata": None, "caso": "#3155",
+         "texto": SA},
+    ]
+    retiradas = {}
+    linhas = descansar.aponta_candidatas(
+        {"agente"}, entradas=caderno, canone=lambda t: None, mortas=lambda t, c: [],
+        apontar=lambda eid, m: pytest.fail("nada a apontar"),
+        retirar=lambda eid, m: retiradas.setdefault(eid, m) is not None)
+    assert retiradas == {7: "foi ao débito técnico: #2856 linha 104",
+                         8: "foi ao débito técnico: #2856 linha 12"}, "já candidata também sai"
+    assert "2 retirada(s) por já ter morada durável" in linhas[0]
+    assert any("agente/c7: retirada, foi ao débito técnico (#2856 linha 104)" in l for l in linhas)
+
+
+def test_balde_sem_linha_nao_retira():
+    assert descansar.foi_ao_debito("o balde #2856 tem a regra") is None
+
+
 def test_caderno_mudo_sai_declarado(stubs):
     (stubs / "caderno.json").write_text("nao e json", encoding="utf-8")
     assert "NAO MEDIDO" in descansar.aponta_candidatas({"contexto"})[0]
