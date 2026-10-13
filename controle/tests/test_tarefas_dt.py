@@ -211,3 +211,17 @@ def test_corpo_sem_secoes_sai_3(tmp_path):
     proc, _, patch = _run(["dt", "listar"], tmp_path, corpo="<p>texto solto</p>")
     assert proc.returncode == 3
     assert patch is None
+
+
+def test_matar_com_corpo_acima_de_128_kib_grava_pela_entrada_padrao(tmp_path):
+    """O corpo do balde passou de 128 KiB, o teto de UM argumento de exec no Linux: o jq com
+    --arg morria com «Argument list too long» e a API recebia corpo vazio, então nenhuma linha
+    saía do balde. O corpo vai por stdin."""
+    corpo = CORPO.replace("<p>## Abertos</p>", "<p>" + "x" * 140_000 + "</p><p>## Abertos</p>")
+    assert len(corpo.encode()) > 131_072
+    proc, chamadas, patch = _run(["dt", "matar", "1", "--porta", "obsoleto",
+                                  "--ancora", "consertado"], tmp_path, corpo=corpo)
+    assert proc.returncode == 0, proc.stderr
+    assert chamadas[-1] == "PATCH http://127.0.0.1:9/api/itens/2856"
+    assert len(patch["descricao"].encode()) > 131_072
+    assert any("→ morre por obsolescência" in l for l in _texto(patch))
