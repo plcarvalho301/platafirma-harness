@@ -1130,6 +1130,65 @@ def test_pacote_retrato_sem_fonte_do_sha_do_registro_nunca_sai_conforme(tmp_path
     assert _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"].estado == "indeterminavel"
 
 
+def _ato_do_retrato(monkeypatch, rc=0, saida=""):
+    """Troca o `sh` da conferencia pelo ato do retrato dublado; devolve o que foi chamado."""
+    chamadas = []
+
+    def falso(args, cwd=None, env=None):
+        chamadas.append(list(args))
+        return rc, saida, ""
+
+    monkeypatch.setattr(conferir, "sh", falso)
+    return chamadas
+
+
+def test_sha_do_registro_le_o_sha_do_ato_do_retrato(monkeypatch):
+    corpo = json.dumps({"esquema": "retrato-ferramental/1", "sha": "e08dd37e3036", "atos": {}, "avisos": []})
+    chamadas = _ato_do_retrato(monkeypatch, 0, corpo)
+    assert conferir._sha_do_registro() == "e08dd37e3036"
+    assert chamadas[0][0].endswith("/acervo")
+    assert chamadas[0][1:] == ["listar", "casa", "ferramental", "--retrato", "--json"]
+
+
+def test_sha_do_registro_com_o_ato_fora_do_ar_e_none(monkeypatch):
+    _ato_do_retrato(monkeypatch, 3, "")
+    assert conferir._sha_do_registro() is None
+
+
+def test_sha_do_registro_com_saida_que_nao_e_json_e_none(monkeypatch):
+    _ato_do_retrato(monkeypatch, 0, "acervo: erro de banco")
+    assert conferir._sha_do_registro() is None
+
+
+def test_sha_do_registro_com_esquema_desconhecido_ou_sem_sha_e_none(monkeypatch):
+    _ato_do_retrato(monkeypatch, 0, json.dumps({"esquema": "retrato-ferramental/9", "sha": "abc"}))
+    assert conferir._sha_do_registro() is None
+    _ato_do_retrato(monkeypatch, 0, json.dumps({"esquema": "retrato-ferramental/1", "atos": {}}))
+    assert conferir._sha_do_registro() is None
+
+
+def test_pacote_retrato_conforme_quando_o_ato_serve_o_mesmo_sha(tmp_path, monkeypatch):
+    raiz = _arvore_ui(tmp_path, retrato={"sha_registro": "e08dd37e3036", "atos": {}})
+    corpo = json.dumps({"esquema": "retrato-ferramental/1", "sha": "e08dd37e3036", "atos": {}})
+    _ato_do_retrato(monkeypatch, 0, corpo)
+    assert _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"].estado == "conforme"
+
+
+def test_pacote_retrato_diverge_quando_o_ato_serve_outro_sha(tmp_path, monkeypatch):
+    raiz = _arvore_ui(tmp_path, retrato={"sha_registro": "e08dd37e3036", "atos": {}})
+    corpo = json.dumps({"esquema": "retrato-ferramental/1", "sha": "ffff00001111", "atos": {}})
+    _ato_do_retrato(monkeypatch, 0, corpo)
+    v = _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"]
+    assert v.estado == "divergente"
+    assert "gerar de novo" in v.motivo
+
+
+def test_pacote_retrato_com_o_ato_fora_do_ar_nunca_sai_conforme(tmp_path, monkeypatch):
+    raiz = _arvore_ui(tmp_path, retrato={"sha_registro": "e08dd37e3036", "atos": {}})
+    _ato_do_retrato(monkeypatch, 3, "")
+    assert _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"].estado == "indeterminavel"
+
+
 def test_pacote_retrato_sem_o_campo_sha_registro_diverge(tmp_path):
     raiz = _arvore_ui(tmp_path, retrato={"atos": {}})
     v = _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"]
