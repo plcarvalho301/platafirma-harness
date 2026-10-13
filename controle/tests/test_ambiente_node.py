@@ -89,6 +89,9 @@ def falsos(tmp_path):
     node = _exec(d / "node", 'if [ "${1:-}" = "--version" ]; then echo "${FALSO_NODE_VERSAO:-v22.1.0}"; exit 0; fi\n'
                  'if [ -n "${FALSO_ENV_OUT:-}" ]; then printf "%s\\n" "CHROME=${CHROME:-}" "PUP=${PUPPETEER_EXECUTABLE_PATH:-}" '
                  '"NM=$(readlink -f node_modules 2>/dev/null)" "ARQ=$1" >> "$FALSO_ENV_OUT"; fi\n'
+                 'if [ -n "${FALSO_MARCA:-}" ]; then [ -f "$FALSO_MARCA" ] && m=sim || m=nao; '
+                 'echo "MARCA=$m $(basename "$1")" >> "$FALSO_ENV_OUT"; fi\n'
+                 'if [ -n "${FALSO_DORME:-}" ]; then sleep "$FALSO_DORME"; fi\n'
                  'if grep -q VERMELHO "$1" 2>/dev/null; then echo "prova reprovou" >&2; exit 1; fi\n'
                  'echo ok; exit 0\n')
     npm = _exec(d / "npm", 'if [ "${1:-}" = "--version" ]; then echo 10.9.0; exit 0; fi\n'
@@ -389,6 +392,99 @@ def test_rodar_alvo_sh_roda_com_bash_da_raiz_do_repositorio(banc):
     r = banc.rodar("prova", "front/provas/onde.sh")
     assert r.returncode == 0, r.stdout + r.stderr
     assert (banc.tmp / "onde.txt").read_text(encoding="utf-8").strip() == banc.clone.name
+
+
+# --- o portão node em paralelo, com tempo por arquivo (incidente #3496) ---------------------
+
+def _provas(banc, nomes: list[str]):
+    sub = banc.clone / "front" / "provas"
+    for n in nomes:
+        (sub / n).write_text("// passa\n", encoding="utf-8")
+
+
+def test_portao_node_roda_os_sh_antes_dos_demais(banc):
+    """O .sh constrói o que as provas leem: roda antes delas, ainda que venha depois na lista."""
+    marca = banc.tmp / "construido"
+    _com_portao(banc, "a.mjs\nconstruir.sh\nb.mjs\n")
+    _provas(banc, ["a.mjs", "b.mjs"])
+    (banc.clone / "front" / "provas" / "construir.sh").write_text(
+        f"#!/usr/bin/env bash\ntouch '{marca}'\n", encoding="utf-8")
+    banc.env.update(PF_TESTE_PARALELO="4", FALSO_MARCA=str(marca))
+    r = banc.rodar("ui", "--portao")
+    assert r.returncode == 0, r.stdout + r.stderr
+    saida = (banc.tmp / "env-out.txt").read_text(encoding="utf-8")
+    assert "MARCA=sim a.mjs" in saida and "MARCA=sim b.mjs" in saida
+    assert "MARCA=nao" not in saida
+
+
+def test_portao_node_paralelo_soma_menos_que_a_serie(banc):
+    """Quatro provas de 1 s com quatro trabalhadores terminam bem antes dos 4 s da série."""
+    nomes = ["p1.mjs", "p2.mjs", "p3.mjs", "p4.mjs"]
+    _com_portao(banc, "\n".join(nomes) + "\n")
+    _provas(banc, nomes)
+    banc.env.update(PF_TESTE_PARALELO="4", FALSO_DORME="1")
+    r = banc.rodar("ui", "--portao")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "4 trabalhador(es)" in r.stdout
+    segundos = int(r.stdout.split("tempo: ")[1].split(" s")[0])
+    assert segundos <= 3, r.stdout
+
+
+def test_portao_node_paralelo_1_roda_em_serie_na_ordem(banc):
+    _com_portao(banc, "b.mjs\na.mjs\n")
+    _provas(banc, ["a.mjs", "b.mjs"])
+    banc.env.update(PF_TESTE_PARALELO="1")
+    r = banc.rodar("ui", "--portao")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "1 trabalhador(es)" in r.stdout
+    linhas = [l for l in (banc.tmp / "env-out.txt").read_text(encoding="utf-8").splitlines() if l.startswith("ARQ=")]
+    assert [Path(l[4:]).name for l in linhas] == ["b.mjs", "a.mjs"]
+
+
+def test_portao_node_grava_a_duracao_de_cada_arquivo(banc):
+    """O log diz quanto cada prova levou, e a saída cita as mais lentas: é o que mostra o que cortar."""
+    _com_portao(banc, "verde.mjs\nconstruir.sh\n")
+    banc.env.update(PF_TESTE_PARALELO="2")
+    r = banc.rodar("ui", "--portao")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "mais lentos: " in r.stdout and "verde.mjs" in r.stdout.split("mais lentos: ")[1]
+    log = Path(r.stdout.split("log: ")[1].split("\n")[0])
+    texto = log.read_text(encoding="utf-8")
+    for nome in ("verde.mjs", "construir.sh"):
+        cab = [l for l in texto.splitlines() if l.startswith("=== ") and nome in l]
+        assert cab and cab[0].endswith(" s") and " · exit 0 · " in cab[0], texto
+
+
+def test_portao_node_paralelo_ainda_nomeia_a_vermelha(banc):
+    _com_portao(banc, "verde.mjs\nvermelha.mjs\nconstruir.sh\n")
+    banc.env.update(PF_TESTE_PARALELO="4")
+    r = banc.rodar("ui", "--portao")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "1 de 3 arquivo(s) reprovado(s)" in r.stdout and "vermelha.mjs (exit 1)" in r.stdout
+    assert list(banc.tmp.glob("teste-node.*")) == []
+
+
+def test_portao_node_memo_da_bancada_e_a_arvore_do_commit(banc):
+    """`node_modules/` no .gitignore casa diretório, não elo: o elo do ambiente entrava na árvore da
+    bancada, e o veredito ficava gravado sob um hash que a árvore do commit nunca tem. O gate da
+    promoção media tudo de novo (#3496). O veredito tem de cair sob a árvore do commit."""
+    _com_portao(banc)
+    shutil.rmtree(banc.clone / ".git")
+    (banc.clone / ".gitignore").write_text("node_modules/\ndist/\n", encoding="utf-8")
+    git = ["git", "-C", str(banc.clone), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(git + ["init", "-q"], check=True)
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["commit", "-qm", "x"], check=True)
+    arvore = subprocess.run(git + ["rev-parse", "HEAD^{tree}"], capture_output=True, text=True,
+                            check=True).stdout.strip()
+    r = banc.rodar("ui", "--portao")
+    assert r.returncode == 0, r.stdout + r.stderr
+    vereditos = banc.tmp / "instancia" / "var" / "pre-push" / "vereditos"
+    assert any(p.name.startswith(arvore) for p in vereditos.iterdir()), sorted(p.name for p in vereditos.iterdir())
+    banc.env["PF_TESTE_SO_MEMO"] = "1"
+    r2 = banc.rodar("ui", "--portao")
+    assert r2.returncode == 0, r2.stdout + r2.stderr
+    assert f"veredito reaproveitado (mesma arvore {arvore[:12]}" in r2.stdout
 
 
 # --- o inventario das travas -------------------------------------------------------------
