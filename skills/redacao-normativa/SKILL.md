@@ -2,7 +2,7 @@
 name: redacao-normativa
 description: Use sempre que for MINUTAR, REVISAR ou AVALIAR ato normativo de órgão público — portaria, resolução, instrução normativa, política interna, regimento, norma complementar — e com mais razão quando o objeto é capacidade de tecnologia (governança de dados, segurança da informação, classificação, controle de acesso, sistema que executa regra). Dispara também em «quanto detalhe pôr aqui», «regra ou padrão», «isso é exequível?», «o controle vai cobrar isso?», «revisa esta minuta», ou quando uma política do Roadmap de Políticas entra em redação, mesmo que ninguém diga «skill». Dá o gate antes de redigir (competência, problema, inventário de capacidade), o quadro de densidade por dispositivo, a ordem entre os leitores da norma e os critérios de aceite da minuta. NÃO dispare para peça processual, contrato, parecer sobre caso concreto sem norma a escrever, nem para prosa de wiki (aí é `prosa`). Norma que onera terceiros usa esta skill e acrescenta a análise de impacto regulatório.
 cadeiras: direito (dona da matéria); qualquer cadeira que minute ato normativo
-compatibility: sem verbo próprio. Fonte humana e versão longa na wiki, página «Guia: redação normativa para capacidades de tecnologia». Rende mais com o acervo ao alcance (`motor rag buscar obra`) para ler D12002, LINDB e LC 95 no texto.
+compatibility: "sem verbo próprio. Fonte humana e versão longa na wiki, página «Guia: redação normativa para capacidades de tecnologia». Rende mais com o acervo ao alcance (`motor rag buscar obra`) para ler D12002, LINDB e LC 95 no texto."
 ---
 
 # Redação normativa para capacidades de tecnologia
