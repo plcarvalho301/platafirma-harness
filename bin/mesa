@@ -660,7 +660,7 @@ SECOES = (("licao", "lição"), ("preferencia", "preferência do dono"), ("premi
           ("aresta", "aresta (acumula para a curadoria; fora do teto)"))
 TETO_ENTRADA = 600          # caracteres por entrada (arq:0120 §5.3)
 TETO_CHAPEU = 1500          # tokens vigentes por chapeu, fora a aresta (arq:0120 §5.3)
-PRAZO_LICAO = 90            # dias sem confirmacao ate «a revisar» (arq:0120 §7)
+PRAZO_LICAO = 30            # dias sem confirmacao ate «a revisar» (arq:0120 §7; 30 desde 13/10/2026, #3502)
 PRAZO_PREMISSA = 60         # dias, no maximo, do «vale ate» (arq:0120 §2)
 LIMIAR_FITAS = 3            # a aresta vai a analise com 3 fitas distintas...
 LIMIAR_CADEIRAS = 2         # ...ou 2 cadeiras distintas (forma da aresta, #3218)
@@ -786,7 +786,7 @@ def _vencida(e, hoje):
 
 
 def _a_revisar(e, hoje):
-    """Licao vigente sem confirmacao ha mais de 90 dias (arq:0120 §7): servida com a marca."""
+    """Licao vigente sem confirmacao ha mais de PRAZO_LICAO dias (arq:0120 §7): servida com a marca."""
     if e["estado"] != "vigente" or e["categoria"] != "licao":
         return False
     conf = _data(e.get("confirmada_em"))
