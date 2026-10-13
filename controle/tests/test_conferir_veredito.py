@@ -1037,7 +1037,7 @@ _PACOTE_REAL = conferir._conferencias_do_pacote
 
 @pytest.fixture(autouse=True)
 def _front_sem_pacote(monkeypatch):
-    monkeypatch.setattr(conferir, "_conferencias_do_pacote", lambda raiz=None: [])
+    monkeypatch.setattr(conferir, "_conferencias_do_pacote", lambda raiz=None, base=None: [])
 
 
 def _arvore_ui(tmp_path, pecas=("pf-botao",), pagina=None, telas=None, versao="0.5.2", retrato=None):
@@ -1128,6 +1128,100 @@ def test_pacote_retrato_sem_fonte_do_sha_do_registro_nunca_sai_conforme(tmp_path
     raiz = _arvore_ui(tmp_path, retrato={"sha_registro": "aaaabbbbccccdddd"})
     monkeypatch.setattr(conferir, "_sha_do_registro", lambda: None)
     assert _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"].estado == "indeterminavel"
+
+
+def _ato_do_retrato(monkeypatch, rc=0, saida=""):
+    """Troca o `sh` da conferencia pelo ato do retrato dublado; devolve o que foi chamado."""
+    chamadas = []
+
+    def falso(args, cwd=None, env=None):
+        chamadas.append(list(args))
+        return rc, saida, ""
+
+    monkeypatch.setattr(conferir, "sh", falso)
+    return chamadas
+
+
+def test_sha_do_registro_le_o_sha_do_ato_do_retrato(monkeypatch):
+    corpo = json.dumps({"esquema": "retrato-ferramental/1", "sha": "e08dd37e3036", "atos": {}, "avisos": []})
+    chamadas = _ato_do_retrato(monkeypatch, 0, corpo)
+    assert conferir._sha_do_registro() == "e08dd37e3036"
+    assert chamadas[0][0].endswith("/acervo")
+    assert chamadas[0][1:] == ["listar", "casa", "ferramental", "--retrato", "--json"]
+
+
+def test_sha_do_registro_com_o_ato_fora_do_ar_e_none(monkeypatch):
+    _ato_do_retrato(monkeypatch, 3, "")
+    assert conferir._sha_do_registro() is None
+
+
+def test_sha_do_registro_com_saida_que_nao_e_json_e_none(monkeypatch):
+    _ato_do_retrato(monkeypatch, 0, "acervo: erro de banco")
+    assert conferir._sha_do_registro() is None
+
+
+def test_sha_do_registro_com_esquema_desconhecido_ou_sem_sha_e_none(monkeypatch):
+    _ato_do_retrato(monkeypatch, 0, json.dumps({"esquema": "retrato-ferramental/9", "sha": "abc"}))
+    assert conferir._sha_do_registro() is None
+    _ato_do_retrato(monkeypatch, 0, json.dumps({"esquema": "retrato-ferramental/1", "atos": {}}))
+    assert conferir._sha_do_registro() is None
+
+
+def test_pacote_retrato_conforme_quando_o_ato_serve_o_mesmo_sha(tmp_path, monkeypatch):
+    raiz = _arvore_ui(tmp_path, retrato={"sha_registro": "e08dd37e3036", "atos": {}})
+    corpo = json.dumps({"esquema": "retrato-ferramental/1", "sha": "e08dd37e3036", "atos": {}})
+    _ato_do_retrato(monkeypatch, 0, corpo)
+    assert _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"].estado == "conforme"
+
+
+def test_pacote_retrato_diverge_quando_o_ato_serve_outro_sha(tmp_path, monkeypatch):
+    raiz = _arvore_ui(tmp_path, retrato={"sha_registro": "e08dd37e3036", "atos": {}})
+    corpo = json.dumps({"esquema": "retrato-ferramental/1", "sha": "ffff00001111", "atos": {}})
+    _ato_do_retrato(monkeypatch, 0, corpo)
+    v = _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"]
+    assert v.estado == "divergente"
+    assert "gerar de novo" in v.motivo
+
+
+def test_pacote_retrato_com_o_ato_fora_do_ar_nunca_sai_conforme(tmp_path, monkeypatch):
+    raiz = _arvore_ui(tmp_path, retrato={"sha_registro": "e08dd37e3036", "atos": {}})
+    _ato_do_retrato(monkeypatch, 3, "")
+    assert _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"].estado == "indeterminavel"
+
+
+def test_pacote_le_da_base_da_release_e_nao_do_clone(tmp_path, monkeypatch):
+    # o clone diz 0.7.6 e nao tem retrato; a release serve 0.9.0 com o retrato (card #3484)
+    clone = _arvore_ui(tmp_path / "clone", versao="0.7.6", telas={"rastreador": "0.7.6"})
+    release = _arvore_ui(tmp_path / "release", versao="0.9.0", telas={"rastreador": "0.7.6"},
+                         retrato={"sha_registro": "aaaabbbbccccdddd", "atos": {}})
+    monkeypatch.setattr(conferir, "_sha_do_registro", lambda: "aaaabbbbccccdddd")
+    do_clone = _por_nome(_PACOTE_REAL(str(clone)))
+    da_release = _por_nome(_PACOTE_REAL(str(clone), base=str(release / "platafirma-ui")))
+    # do clone: a tela copia 0.7.6 e o pacote esta em 0.7.6, sem retrato
+    assert do_clone["versao app/rastreador"].estado == "conforme"
+    assert do_clone["retrato do dicionario de atos"].estado == "indeterminavel"
+    # da release: o pacote esta em 0.9.0 (a tela atrasada diverge) e o retrato confere
+    v = da_release["versao app/rastreador"]
+    assert v.estado == "divergente" and "0.9.0" in v.motivo
+    assert da_release["retrato do dicionario de atos"].estado == "conforme"
+
+
+def test_base_do_pacote_da_release_so_vale_quando_a_pasta_existe(tmp_path, monkeypatch):
+    monkeypatch.setenv("PLATAFIRMA_RELEASE", str(tmp_path))
+    assert conferir._base_do_pacote_da_release() is None
+    (tmp_path / "ui").mkdir()
+    assert conferir._base_do_pacote_da_release() == str(tmp_path / "ui")
+
+
+def test_front_passa_a_base_da_release_ao_pacote(tmp_path, monkeypatch):
+    # a conferencia entrega a base da release a `_conferencias_do_pacote`
+    (tmp_path / "ui").mkdir()
+    monkeypatch.setenv("PLATAFIRMA_RELEASE", str(tmp_path))
+    recebidos = []
+    monkeypatch.setattr(conferir, "_conferencias_do_pacote",
+                        lambda raiz=None, base=None: recebidos.append(base) or [])
+    conferir.conferir_front("platafirma-ui", como_json=True)
+    assert recebidos == [str(tmp_path / "ui")]
 
 
 def test_pacote_retrato_sem_o_campo_sha_registro_diverge(tmp_path):

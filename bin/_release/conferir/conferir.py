@@ -2174,11 +2174,23 @@ _RE_COPY_UI = re.compile(r"^\s*COPY\s+(?:--\S+\s+)*--from=platafirma/ui:(\S+)", 
 def _sha_do_registro():
     """O sha do registro do ferramental SERVIDO, ou None quando nao ha de onde le-lo.
 
-    Hoje nao ha: o registro ainda nao guarda rotulo, volta e atalho por ato nem serve o verbo de
-    leitura que emite o retrato (dependencia de dados na quebra da Taipa, comentario #2124 do
-    #3409). Quando o verbo existir, e aqui que ele entra; ate la o retrato fica `nao consegui
-    olhar`, nunca conforme por falta de comparacao."""
-    return None
+    O verbo e `acervo listar casa ferramental --retrato --json` (#3444): o registro guarda
+    rotulo, volta e atalho por ato e emite o retrato com o sha dele, no campo `sha`. Sai None, e
+    o item do retrato fica `nao consegui olhar`, nunca conforme, quando o verbo sai diferente de
+    0, quando a saida nao e o JSON do esquema `retrato-ferramental/1` ou quando nao traz `sha`:
+    nao ter de onde ler o sha nao e o retrato estar em dia."""
+    rc, out, _ = sh([os.path.join(BIN_IRMAOS, "acervo"), "listar", "casa", "ferramental",
+                     "--retrato", "--json"])
+    if rc != 0:
+        return None
+    try:
+        retrato = json.loads(out)
+    except ValueError:
+        return None
+    if not isinstance(retrato, dict) or retrato.get("esquema") != "retrato-ferramental/1":
+        return None
+    sha = retrato.get("sha")
+    return sha.strip() if isinstance(sha, str) and sha.strip() else None
 
 
 def _ler_json(caminho):
@@ -2189,10 +2201,20 @@ def _ler_json(caminho):
         return None
 
 
-def _conferencias_do_pacote(raiz=None):
-    """[(nome, Veredito)] das pecas, das telas e do retrato de platafirma-ui sob <raiz>."""
+def _base_do_pacote_da_release():
+    """A arvore de platafirma-ui que a release serve (`current/ui`), ou None quando ela nao esta
+    la. O pacote (pecas, versao das telas, retrato) se le dela e nao do clone compartilhado de
+    ~/AI, que nao anda com a promocao: o clone dizia 0.7.6 e `sem retrato` com o pacote no ar em
+    0.9.0 e o retrato servido (card #3484)."""
+    base = os.path.join(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"), "ui")
+    return base if os.path.isdir(base) else None
+
+
+def _conferencias_do_pacote(raiz=None, base=None):
+    """[(nome, Veredito)] das pecas, das telas e do retrato de platafirma-ui sob <raiz>, ou sob
+    <base> quando a arvore do pacote esta noutro lugar (a da release)."""
     raiz = raiz or os.path.expanduser("~/AI")
-    base = os.path.join(raiz, UI_REPO)
+    base = base or os.path.join(raiz, UI_REPO)
     if not os.path.isdir(base):
         return [(f"{UI_REPO} (pacote)", resultado.indeterminavel(
             f"nao consegui olhar: {UI_REPO} ausente em {raiz}"))]
@@ -2314,7 +2336,7 @@ def conferir_front(alvo=None, como_json=False):
     # o pacote (R1, R13, R45): so entra quando nao se pede uma tela especifica ou se pede o UI
     pacote_itens = []
     if not alvo or alvo in (UI_REPO, "pacote"):
-        pacote_itens = _conferencias_do_pacote(raiz)
+        pacote_itens = _conferencias_do_pacote(raiz, _base_do_pacote_da_release())
         itens.extend(pacote_itens)
     pacote_diverge = [n for n, v in pacote_itens if v.estado == "divergente"]
     ok = not (fora or montam or servem or pacote_diverge)
