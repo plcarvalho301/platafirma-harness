@@ -409,7 +409,7 @@ def test_portao_node_roda_os_sh_antes_dos_demais(banc):
     _provas(banc, ["a.mjs", "b.mjs"])
     (banc.clone / "front" / "provas" / "construir.sh").write_text(
         f"#!/usr/bin/env bash\ntouch '{marca}'\n", encoding="utf-8")
-    banc.env.update(PF_TESTE_PARALELO="4", FALSO_MARCA=str(marca))
+    banc.env.update(PF_TESTE_PARALELO_NODE="4", FALSO_MARCA=str(marca))
     r = banc.rodar("ui", "--portao")
     assert r.returncode == 0, r.stdout + r.stderr
     saida = (banc.tmp / "env-out.txt").read_text(encoding="utf-8")
@@ -422,7 +422,7 @@ def test_portao_node_paralelo_soma_menos_que_a_serie(banc):
     nomes = ["p1.mjs", "p2.mjs", "p3.mjs", "p4.mjs"]
     _com_portao(banc, "\n".join(nomes) + "\n")
     _provas(banc, nomes)
-    banc.env.update(PF_TESTE_PARALELO="4", FALSO_DORME="1")
+    banc.env.update(PF_TESTE_PARALELO_NODE="4", FALSO_DORME="1")
     r = banc.rodar("ui", "--portao")
     assert r.returncode == 0, r.stdout + r.stderr
     assert "4 trabalhador(es)" in r.stdout
@@ -430,10 +430,13 @@ def test_portao_node_paralelo_soma_menos_que_a_serie(banc):
     assert segundos <= 3, r.stdout
 
 
-def test_portao_node_paralelo_1_roda_em_serie_na_ordem(banc):
+def test_portao_node_padrao_roda_em_serie_na_ordem(banc):
+    """Sem opt-in, série: seis Chromium ao mesmo tempo esgotaram os processos da conta (#3496).
+    O PF_TESTE_PARALELO das stacks python não liga o paralelo node."""
     _com_portao(banc, "b.mjs\na.mjs\n")
     _provas(banc, ["a.mjs", "b.mjs"])
-    banc.env.update(PF_TESTE_PARALELO="1")
+    banc.env.pop("PF_TESTE_PARALELO_NODE", None)
+    banc.env.update(PF_TESTE_PARALELO="8")
     r = banc.rodar("ui", "--portao")
     assert r.returncode == 0, r.stdout + r.stderr
     assert "1 trabalhador(es)" in r.stdout
@@ -444,7 +447,7 @@ def test_portao_node_paralelo_1_roda_em_serie_na_ordem(banc):
 def test_portao_node_grava_a_duracao_de_cada_arquivo(banc):
     """O log diz quanto cada prova levou, e a saída cita as mais lentas: é o que mostra o que cortar."""
     _com_portao(banc, "verde.mjs\nconstruir.sh\n")
-    banc.env.update(PF_TESTE_PARALELO="2")
+    banc.env.update(PF_TESTE_PARALELO_NODE="2")
     r = banc.rodar("ui", "--portao")
     assert r.returncode == 0, r.stdout + r.stderr
     assert "mais lentos: " in r.stdout and "verde.mjs" in r.stdout.split("mais lentos: ")[1]
@@ -457,7 +460,7 @@ def test_portao_node_grava_a_duracao_de_cada_arquivo(banc):
 
 def test_portao_node_paralelo_ainda_nomeia_a_vermelha(banc):
     _com_portao(banc, "verde.mjs\nvermelha.mjs\nconstruir.sh\n")
-    banc.env.update(PF_TESTE_PARALELO="4")
+    banc.env.update(PF_TESTE_PARALELO_NODE="4")
     r = banc.rodar("ui", "--portao")
     assert r.returncode == 1, r.stdout + r.stderr
     assert "1 de 3 arquivo(s) reprovado(s)" in r.stdout and "vermelha.mjs (exit 1)" in r.stdout

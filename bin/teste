@@ -422,11 +422,14 @@ _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
   ln -s "$alvo_nm" "$elo" || morre "não liguei $elo ao ambiente travado" 3
   criou=1
 
-  # Portão em paralelo (incidente #3496, o desenho do #3335 nas stacks python): os .sh rodam
-  # primeiro, em série e na ordem da lista — constroem o dist/ e instalam node_modules que as
-  # provas seguintes leem —, e depois os demais ao mesmo tempo, PF_TESTE_PARALELO trabalhadores
-  # (padrão: metade dos núcleos). 0 ou 1 roda tudo em série, na ordem da lista, como antes; rodada
-  # de alvo avulso também. Cada arquivo grava a duração no log, e a linha final cita os mais lentos.
+  # Portão em paralelo, só por opt-in (incidente #3496): com PF_TESTE_PARALELO_NODE > 1, os .sh
+  # rodam primeiro, em série e na ordem da lista — constroem o dist/ e instalam node_modules que as
+  # provas seguintes leem —, e depois os demais ao mesmo tempo, nesse número de trabalhadores. O
+  # padrão é 1, em série e na ordem da lista: cada prova abre o próprio Chromium, e em 13/10 seis
+  # ao mesmo tempo (metade dos núcleos, o padrão das stacks python) esgotaram o limite de processos
+  # da conta — todo verbo do host passou a falhar em fork. Sobe do padrão quando a folga de
+  # processos da conta estiver medida. Rodada de alvo avulso roda sempre em série. Cada arquivo
+  # grava a duração no log, e a linha final cita os mais lentos.
   local tmpr i ms s trab=1 ativos=0 seriais=() paralelos=() t_ini t_fim lentos
   tmpr="$(mktemp -d "${TMPDIR:-/tmp}/teste-node.XXXXXX")" || morre "não criei o diretório de saída das provas" 3
   _uma_prova() {  # $1=índice $2=arquivo ; grava <índice>.out, .rc e .ms em $tmpr
@@ -442,7 +445,7 @@ _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
     printf '%s' "$(( (t1 - t0) / 1000000 ))" > "$tmpr/$1.ms"
   }
   if [ "${portao:-0}" -eq 1 ]; then
-    trab="${PF_TESTE_PARALELO:-$(( $(nproc 2>/dev/null || echo 2) / 2 ))}"
+    trab="${PF_TESTE_PARALELO_NODE:-1}"
     case "$trab" in ''|*[!0-9]*) trab=1 ;; esac
   fi
   for i in "${!alvos[@]}"; do
