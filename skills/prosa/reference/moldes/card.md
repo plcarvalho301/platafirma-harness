@@ -15,7 +15,7 @@ não vem. Os três cabem na primeira tela.
 ## Esqueleto
 
 ```
-<Título: o que a pessoa passa a conseguir, até doze palavras>
+<Título, até doze palavras: épico, o que passa a ser verdade e para quem; feature, a coisa que vai existir>
 
 Problema:      como é hoje, como quem sofre veria, com um caso; até quatro frases, sem número
 Solução:       a solução contada como uso: «Ao <momento>: quem faz o quê, e o que vê»
@@ -49,7 +49,13 @@ sustenta a peça depois da entrega mora na spec dela.
 
 ## A voz, rótulo a rótulo
 
-1. **Título** — palavras comuns, sem metáfora, slogan ou jargão da casa.
+1. **Título** — palavras comuns, sem metáfora, slogan ou jargão da casa. Desce do resultado
+   à entrega (ADR 0096, «O título desce do resultado à entrega»): o épico diz o que passa a
+   ser verdade, e para quem; a feature nomeia a coisa que vai existir, com o para quê quando
+   couber; a story diz o trabalho e o artefato; a task, o conserto. Lido sozinho na lista,
+   abaixo do épico, o título diz o que se está fazendo. «Identificador permanente para
+   conceito e coisa do mundo» serve; «apontar conceito por endereço que não muda» é estado
+   alcançado, e vai ao Resultado.
 2. **Rótulos** — um por linha, linha em branco antes do seguinte. Frases curtas, uma ideia
    por frase, voz ativa.
 3. **Problema** — caso, não tema. O número vai à Medida.
