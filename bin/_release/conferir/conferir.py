@@ -2174,11 +2174,23 @@ _RE_COPY_UI = re.compile(r"^\s*COPY\s+(?:--\S+\s+)*--from=platafirma/ui:(\S+)", 
 def _sha_do_registro():
     """O sha do registro do ferramental SERVIDO, ou None quando nao ha de onde le-lo.
 
-    Hoje nao ha: o registro ainda nao guarda rotulo, volta e atalho por ato nem serve o verbo de
-    leitura que emite o retrato (dependencia de dados na quebra da Taipa, comentario #2124 do
-    #3409). Quando o verbo existir, e aqui que ele entra; ate la o retrato fica `nao consegui
-    olhar`, nunca conforme por falta de comparacao."""
-    return None
+    O verbo e `acervo listar casa ferramental --retrato --json` (#3444): o registro guarda
+    rotulo, volta e atalho por ato e emite o retrato com o sha dele, no campo `sha`. Sai None, e
+    o item do retrato fica `nao consegui olhar`, nunca conforme, quando o verbo sai diferente de
+    0, quando a saida nao e o JSON do esquema `retrato-ferramental/1` ou quando nao traz `sha`:
+    nao ter de onde ler o sha nao e o retrato estar em dia."""
+    rc, out, _ = sh([os.path.join(BIN_IRMAOS, "acervo"), "listar", "casa", "ferramental",
+                     "--retrato", "--json"])
+    if rc != 0:
+        return None
+    try:
+        retrato = json.loads(out)
+    except ValueError:
+        return None
+    if not isinstance(retrato, dict) or retrato.get("esquema") != "retrato-ferramental/1":
+        return None
+    sha = retrato.get("sha")
+    return sha.strip() if isinstance(sha, str) and sha.strip() else None
 
 
 def _ler_json(caminho):
