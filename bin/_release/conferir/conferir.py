@@ -2090,6 +2090,8 @@ def _telas_de_front(raiz=None):
     proprio de superficie no mesmo diretorio — nao casa, e e o certo: nao e tela de aplicacao.
     """
     raiz = raiz or os.path.expanduser("~/AI")
+    if not os.path.isdir(raiz):  # runner de CI e estacao sem ~/AI: nao ha tela a varrer (#2856 linha 265)
+        return []
     achados = []
     for topo in sorted(os.listdir(raiz)):
         if topo.startswith(".") or topo in FORA_DA_REGUA:

@@ -1224,6 +1224,12 @@ def test_front_passa_a_base_da_release_ao_pacote(tmp_path, monkeypatch):
     assert recebidos == [str(tmp_path / "ui")]
 
 
+def test_telas_de_front_com_raiz_inexistente_devolve_vazio(tmp_path):
+    """#2856 linha 265: o runner de CI nao tem ~/AI, e a varredura levantava FileNotFoundError
+    e deixava vermelho todo PR que toca controle/**."""
+    assert conferir._telas_de_front(str(tmp_path / "nao-existe")) == []
+
+
 def test_pacote_retrato_sem_o_campo_sha_registro_diverge(tmp_path):
     raiz = _arvore_ui(tmp_path, retrato={"atos": {}})
     v = _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"]
