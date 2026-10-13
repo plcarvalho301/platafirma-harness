@@ -869,6 +869,43 @@ def _texto_ok(texto):
     return texto, 0
 
 
+# Residuo de episodio no texto da licao (#3500, arq:0120 §2): a licao e diretriz («quando X,
+# faca Y, porque Z»); o episodio que a ensinou mora no --caso. Aviso, nao recusa: sem medida de
+# falso positivo, recusar travaria escrita legitima (arq:0120 §5.3 so recusa categoria, campo e teto).
+_UNIDADE = (r"(?:ms|s|h|min|seg\w*|kb|mb|gb|kib|mib|gib|tk|tokens?|bytes?|linhas?|trechos?|"
+            r"secoes|seções|perguntas?|pares?|fitas?|dias|caracteres|chars)")
+RESIDUO_EPISODIO = (
+    ("card citado", re.compile(r"(?<![\w/])#\d{3,5}\b")),
+    ("data", re.compile(r"(?<![\d/])(?:\d{4}-\d{2}-\d{2}|\d{2}/\d{2}(?:/\d{4})?)(?![\d/])")),
+    ("medida", re.compile(r"(?<![\w.,])\d[\d.,]*\s?(?:%|" + _UNIDADE + r"(?![A-Za-zÀ-ÿ]))", re.I)),
+    ("sha", re.compile(r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,12}\b")),
+    ("id de rodada", re.compile(r"\bo\d{8}T\d{6}-[0-9a-f]+\b|\bwf_[a-z0-9-]{6,}\b|"
+                                r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")),
+)
+
+
+def _residuo_episodio(texto):
+    """[(tipo, trecho)] do que no texto e do episodio, na ordem em que aparece."""
+    achados = []
+    for tipo, rx in RESIDUO_EPISODIO:
+        achados += [(m.start(), tipo, m.group(0).strip()) for m in rx.finditer(texto)]
+    return [(tipo, trecho) for _, tipo, trecho in sorted(achados)]
+
+
+def _avisa_residuo(categoria, texto):
+    """So a licao e diretriz; o aviso vai a stderr e nao muda o codigo de saida."""
+    if categoria != "licao":
+        return
+    achados = _residuo_episodio(texto)
+    if not achados:
+        return
+    vistos = ", ".join(f"{tipo}: «{trecho}»" for tipo, trecho in dict.fromkeys(achados))
+    sys.stderr.write(
+        f"mesa: aviso — a lição traz resíduo de episódio ({vistos}). Grava assim mesmo. A lição é "
+        "diretriz — «quando X, faça Y, porque Z» — e o episódio vai no --caso; reescreva com "
+        "`mesa substituir <id> --texto \"<diretriz>\"` (arq:0120 §2).\n")
+
+
 def _campos(categoria, args, hoje, base=None):
     """Os campos obrigatorios da categoria (arq:0120 §2), dos argumentos ou, na
     substituicao, da entrada `base`. Devolve (campos, erro); erro e a instrucao do ato."""
@@ -1056,6 +1093,7 @@ def ato_escrever(args):
             _evento(cur, eid, "escrever", None, "vigente")
     except Exception as ex:  # noqa: BLE001 — _erro_banco devolve o que nao e do banco
         return _erro_banco(ex)
+    _avisa_residuo(categoria, texto)
     print(f"caderno {slot}: c{eid} escrita ({ROTULO[categoria]}) — {total}/{TETO_CHAPEU} tokens vigentes")
     return 0
 
@@ -1095,6 +1133,7 @@ def ato_substituir(args):
             _evento(cur, eid, "substituir", "vigente", "substituida", f"por c{nid}")
     except Exception as ex:  # noqa: BLE001
         return _erro_banco(ex)
+    _avisa_residuo(e["categoria"], texto)
     print(f"caderno {e['chapeu']}: c{eid} substituída por c{nid} — {total}/{TETO_CHAPEU} tokens vigentes")
     return 0
 
