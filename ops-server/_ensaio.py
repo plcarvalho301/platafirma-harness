@@ -815,6 +815,46 @@ def test_escopo_cosmetico_decide_pelo_argv_e_nao_pelo_parametro_ato():
     s._PERFIS.clear()
 
 
+# --- incidente #3503: confirmacao de escrita nunca vira «igual ao giro N» ----------
+def test_quem_escreve_sai_do_cabecalho_do_verbo():
+    bin_ = _Path(__file__).parent.parent / "bin"
+    s._ESCREVEM.clear()
+    for ato in ("editar", "comentar", "mover", "criar", "dt"):
+        assert s._escreve("tarefas", str(bin_ / "tarefas"), ato), ato
+    for ato in ("ler", "listar", "comentarios", "modelo", None):
+        assert not s._escreve("tarefas", str(bin_ / "tarefas"), ato), ato
+    # par (acao, tipo) do `# atos:`: buscar le e segue deduplicando; indexar escreve
+    assert s._escreve("motor", str(bin_ / "motor"), "indexar")
+    assert not s._escreve("motor", str(bin_ / "motor"), "buscar")
+    assert not s._escreve("motor", str(bin_ / "motor"), "rag")
+    with tempfile.TemporaryDirectory(prefix="poda-esc-") as d:
+        sem = _Path(d) / "semdecl"
+        sem.write_text("#!/usr/bin/env bash\n# forma: listagem\nset -e\n# volta: x=nao\n",
+                       encoding="utf-8")
+        assert not s._escreve("semdecl", str(sem), "x"), "volta depois do codigo nao e cabecalho"
+    s._ESCREVEM.clear()
+
+
+def test_escrita_repetida_serve_a_confirmacao_inteira_toda_vez():
+    """O caso do #3503: tres `tarefas editar 3497 --desc-stdin` com corpos diferentes; a
+    segunda e a terceira confirmacao voltavam como aviso, e a cadeira so sabia que a
+    escrita rodou relendo o card."""
+    conf = "item 3497 editado — descricao trocada, estado inalterado; " * 3
+    r = {"exit_code": 0, "stdout": {"texto": conf, "bytes_total": len(conf)}}
+    kw = {"tool": "tarefas", "alca": "tarefas editar 3497 --desc-stdin",
+          "ident": {"sessao_id": _UUID_A}}
+    with _derrame_tmp(), patch.object(s, "redis") as _rmod:
+        _rmod.Redis = _fake_redis_cls()
+        um = s._serve(dict(r), escrita=True, **kw)
+        dois = s._serve(dict(r), escrita=True, **kw)
+        lido = s._serve(dict(r), **{**kw, "alca": "tarefas ler 3497"})
+        relido = s._serve(dict(r), **{**kw, "alca": "tarefas ler 3497"})
+    assert um["stdout"]["texto"] == conf and dois["stdout"]["texto"] == conf
+    assert "igual ao giro" not in dois["stdout"]["texto"]
+    assert lido["stdout"]["texto"] == conf and "igual ao giro" in relido["stdout"]["texto"], \
+        "leitura segue deduplicando"
+
+
 def test_blob_abaixo_do_teto_deixa_o_cru_no_derrame_e_diz_onde():
     """Invariante (ii) da arq:0101. Medido em 18/09: linha longa janelada ABAIXO do teto
     nao derramava, e o `sha=` do marcador era alca morta — nada na porta desreferencia

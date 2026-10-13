@@ -273,6 +273,43 @@ def _cosmetica(perfil: dict, ato: str | None) -> bool:
     return not atos or (ato or "") in atos
 
 
+# Incidente #3503: a confirmação de um ato de escrita («item N editado») sai igual entre
+# chamadas, e o ledger a servia como «igual ao giro N» — a cadeira não sabia se a segunda
+# escrita tinha rodado. Escrita nunca é «a mesma leitura»; o retorno dela sai sempre.
+# Quem escreve sai do cabeçalho do verbo, sem tabela paralela: `# volta: <ato>=...`
+# diferente de «sim — só lê», ou `escrita` no par de `# atos: <ato> (<acao>, <tipo>)`.
+# Verbo que não declara nada segue deduplicando, como era.
+_ESCREVEM: dict[str, frozenset] = {}
+_RE_VOLTA = re.compile(r"^#\s*volta\s*:\s*([\w-]+)\s*=\s*(.*?)\s*$")
+_RE_ATO_PAR = re.compile(r"([\w-]+)\s*\(([^,)]*),")
+SO_LE = "sim — só lê"
+
+
+def _atos_que_escrevem(slug: str, binario: str) -> frozenset:
+    if slug in _ESCREVEM:
+        return _ESCREVEM[slug]
+    escrevem = set()
+    try:
+        with open(binario, encoding="utf-8", errors="replace") as fh:
+            for n, ln in enumerate(fh):
+                if n > 400 or (n and not ln.startswith("#")):
+                    break                     # o cabeçalho acaba na primeira linha de código
+                m = _RE_VOLTA.match(ln)
+                if m and m.group(2) != SO_LE:
+                    escrevem.add(m.group(1))
+                elif re.match(r"^#\s*atos\s*:", ln):
+                    escrevem.update(a for a, acao in _RE_ATO_PAR.findall(ln)
+                                    if "escrita" in acao)
+    except OSError:
+        pass
+    _ESCREVEM[slug] = frozenset(escrevem)
+    return _ESCREVEM[slug]
+
+
+def _escreve(slug: str, binario: str, ato: str | None) -> bool:
+    return bool(ato) and ato in _atos_que_escrevem(slug, binario)
+
+
 def _argv_verbo(binario: str, ato: str, args: list) -> list:
     """O argv que vai ao execve de uma tool de verbo: `ato` vazio some, nao vira `''`."""
     return [binario] + ([ato] if ato else []) + list(args or [])
@@ -308,7 +345,7 @@ def _eh_constitutiva(tool: str, alca: str) -> bool:
 
 
 def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
-           cosmetica: bool = False, esquece: bool = False) -> dict:
+           cosmetica: bool = False, esquece: bool = False, escrita: bool = False) -> dict:
     """R8 — o único caminho por onde retorno de tool sai desta porta.
 
     Erro e `exit != 0` passam intocados (invariante iii): o diagnóstico inteiro vale
@@ -321,6 +358,9 @@ def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
 
     `esquece` é o `inteiro=true` da leitura de arquivo: apaga a alça antes de servir, e a
     página sai inteira mesmo que o registro a tivesse por servida (spec ler-arquivo §11.4).
+
+    `escrita` é o ato que o cabeçalho do verbo declara como escrita (`_escreve`): lava e
+    corta igual, mas não passa pelo ledger — a confirmação sai sempre (#3503).
     """
     if not isinstance(r, dict) or not _poda_ligada() or _poda.intocavel(r):
         return r
@@ -344,7 +384,7 @@ def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
                        if tool in _poda.TOOLS_LEITURA else CAP)
         servido, meta = _poda.poda_texto(
             texto, cap=cap_efetivo, cauda=cauda, alca=f"{tool}:{alca}", sessao_id=sessao_id,
-            giro=giro, tool=tool, ledger=ledger, cosmetica=cosmetica,
+            giro=giro, tool=tool, ledger=None if escrita else ledger, cosmetica=cosmetica,
             constitutiva=_eh_constitutiva(tool, alca),
             nome_derrame=f"g{giro:05d}-{campo}.txt")
         if sub:
@@ -1405,7 +1445,8 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
         brutos.append(so.get("texto", "") if isinstance(so, dict) else "")
         _perf = _perfil_verbo(slug, argv[0])
         r = _serve(r, tool=slug, alca=linha, ident=ident, cauda=_perf["cauda"],
-                   cosmetica=_cosmetica(_perf, argv[1] if len(argv) > 1 else None))
+                   cosmetica=_cosmetica(_perf, argv[1] if len(argv) > 1 else None),
+                   escrita=_escreve(slug, argv[0], argv[1] if len(argv) > 1 else None))
         if aviso_dup and isinstance(r, dict):
             _aviso = f"{nome}: primeiro token '{aviso_dup}' desduplicado com aviso"
             r.setdefault("avisos", []).append(_aviso)
@@ -1525,7 +1566,9 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
                 _perf = _perfil_verbo(argv[0], str(BIN_VERBOS / argv[0]))
                 r = _serve(r, tool=argv[0], alca=" ".join(argv), ident=ident,
                            cauda=_perf["cauda"],
-                           cosmetica=_cosmetica(_perf, argv[1] if len(argv) > 1 else None))
+                           cosmetica=_cosmetica(_perf, argv[1] if len(argv) > 1 else None),
+                           escrita=_escreve(argv[0], str(BIN_VERBOS / argv[0]),
+                                            argv[1] if len(argv) > 1 else None))
                 _audit(tool=argv[0], evento="verbo_contornado", comando=" ".join(argv)[:CMD_CAP],
                        cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                        ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"),
@@ -2807,7 +2850,8 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                                                    ident, _prazo_restante(fim))
                 _perf = _perfil_verbo(slug, binario)
                 r = _serve(r, tool=slug, alca=_linha, ident=ident, cauda=_perf["cauda"],
-                           cosmetica=_cosmetica(_perf, _ato_efetivo(argv)))
+                           cosmetica=_cosmetica(_perf, _ato_efetivo(argv)),
+                           escrita=_escreve(slug, binario, _ato_efetivo(argv)))
                 _audit(tool=slug, ato=_ato or None, args=" ".join(_args)[:CMD_CAP],
                        cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                        ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
@@ -2846,7 +2890,8 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
         # nomeia a regra — batia o teto e era cortado só na cabeça, perdendo o veredito.
         _perf = _perfil_verbo(slug, binario)
         r = _serve(r, tool=slug, alca=linha, ident=ident, cauda=_perf["cauda"],
-                   cosmetica=_cosmetica(_perf, _ato_efetivo(argv)))
+                   cosmetica=_cosmetica(_perf, _ato_efetivo(argv)),
+                   escrita=_escreve(slug, binario, _ato_efetivo(argv)))
         _audit(tool=slug, ato=ato or None, args=" ".join(args)[:CMD_CAP],
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
