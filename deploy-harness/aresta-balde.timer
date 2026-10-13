@@ -1,0 +1,11 @@
+[Unit]
+Description=De hora em hora: a aresta fica no caderno no maximo uma hora (dono, 13/10/2026, #3505)
+
+[Timer]
+OnCalendar=hourly
+# Pega a execução perdida quando a máquina estava desligada na hora marcada.
+Persistent=true
+RandomizedDelaySec=2m
+
+[Install]
+WantedBy=timers.target
