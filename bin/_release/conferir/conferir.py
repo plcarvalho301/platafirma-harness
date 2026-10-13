@@ -2201,10 +2201,20 @@ def _ler_json(caminho):
         return None
 
 
-def _conferencias_do_pacote(raiz=None):
-    """[(nome, Veredito)] das pecas, das telas e do retrato de platafirma-ui sob <raiz>."""
+def _base_do_pacote_da_release():
+    """A arvore de platafirma-ui que a release serve (`current/ui`), ou None quando ela nao esta
+    la. O pacote (pecas, versao das telas, retrato) se le dela e nao do clone compartilhado de
+    ~/AI, que nao anda com a promocao: o clone dizia 0.7.6 e `sem retrato` com o pacote no ar em
+    0.9.0 e o retrato servido (card #3484)."""
+    base = os.path.join(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"), "ui")
+    return base if os.path.isdir(base) else None
+
+
+def _conferencias_do_pacote(raiz=None, base=None):
+    """[(nome, Veredito)] das pecas, das telas e do retrato de platafirma-ui sob <raiz>, ou sob
+    <base> quando a arvore do pacote esta noutro lugar (a da release)."""
     raiz = raiz or os.path.expanduser("~/AI")
-    base = os.path.join(raiz, UI_REPO)
+    base = base or os.path.join(raiz, UI_REPO)
     if not os.path.isdir(base):
         return [(f"{UI_REPO} (pacote)", resultado.indeterminavel(
             f"nao consegui olhar: {UI_REPO} ausente em {raiz}"))]
@@ -2326,7 +2336,7 @@ def conferir_front(alvo=None, como_json=False):
     # o pacote (R1, R13, R45): so entra quando nao se pede uma tela especifica ou se pede o UI
     pacote_itens = []
     if not alvo or alvo in (UI_REPO, "pacote"):
-        pacote_itens = _conferencias_do_pacote(raiz)
+        pacote_itens = _conferencias_do_pacote(raiz, _base_do_pacote_da_release())
         itens.extend(pacote_itens)
     pacote_diverge = [n for n, v in pacote_itens if v.estado == "divergente"]
     ok = not (fora or montam or servem or pacote_diverge)
