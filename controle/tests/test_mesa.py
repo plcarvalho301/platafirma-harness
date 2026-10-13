@@ -366,6 +366,79 @@ def test_escrita_dentro_do_teto_grava_entrada_e_evento(mesa_caderno, capsys):
     assert "c101 escrita (lição)" in saida and "/1500 tokens" in saida
 
 
+# --- card #3500: a lição que traz resíduo de episódio avisa, não recusa ------------------
+
+# c16, c203 e c205 do caderno ia/engenharia-de-harness, sem o sufixo «(caso: …)» que o corpo
+# acrescenta; c206 reescrita como diretriz (quando X, faça Y, porque Z), com o episódio no caso.
+LICAO_C16 = ("Trabalho em lote que precisa do encoder roda no processo que já o tem carregado "
+             "(o rag-api), tomando a trava de encode da busca por fatia pequena: não há segunda "
+             "cópia do modelo em memória e o espaço vetorial é o da pergunta por construção. "
+             "Medido: 27 trechos em 2 s em CPU.")
+LICAO_C203 = ("Antes de montar o sorteio de um gabarito a partir do log, contar o que o log tem "
+              "por campo (ordem_id, sessao_id, origem): 100 de 5.607 linhas tinham ordem_id e o "
+              "filtro estrito do padrão deu pool 0. O verbo conta cada exclusão por motivo, e "
+              "relaxar vai por flag, nunca em silêncio.")
+LICAO_C205 = ("Promover o platafirma-motor recria a stack motor (motor-pg, uns 8 s) sempre que "
+              "mexe em deploy/indice/init, que é bind do compose; a stack nova de API vai com "
+              "reversão via=up para a promoção do motor não tocá-la.")
+LICAO_C206_DIRETRIZ = ("Quando o card faz do dono a fonte de um insumo (frase, necessidade, "
+                       "julgamento), confira antes de construir a medida se ele tem como saber; "
+                       "pedir o que ele não tem é pedir invenção, e o log já guarda o contexto.")
+
+
+@pytest.mark.parametrize("texto, trecho", [
+    (LICAO_C16, "27 trechos"),
+    (LICAO_C203, "5.607 linhas"),
+    (LICAO_C205, "8 s"),
+    ("A rodada de 05/10 morreu por RAM, na fita o20261013T195717-5ec96a", "05/10"),
+    ("Conferir o caso #3349 antes de codar", "#3349"),
+    ("O sha 71ef9d4e já estava no ar", "71ef9d4e"),
+    ("A rodada o20261013T195717-5ec96a travou", "o20261013T195717-5ec96a"),
+])
+def test_licao_com_residuo_de_episodio_grava_e_avisa_o_trecho(mesa_caderno, capsys, texto, trecho):
+    mesa, estado = mesa_caderno
+    rc = mesa.ato_escrever(_args_escrever(licao=texto, caso="#3500"))
+    saida = capsys.readouterr()
+    assert rc == 0
+    assert len(estado["inseridas"]) == 1
+    assert "aviso" in saida.err and f"«{trecho}»" in saida.err
+    assert "quando X, faça Y, porque Z" in saida.err and "--caso" in saida.err
+    assert "escrita (lição)" in saida.out
+
+
+def test_licao_escrita_como_diretriz_nao_avisa(mesa_caderno, capsys):
+    mesa, estado = mesa_caderno
+    rc = mesa.ato_escrever(_args_escrever(licao=LICAO_C206_DIRETRIZ, caso="#3360"))
+    saida = capsys.readouterr()
+    assert rc == 0
+    assert len(estado["inseridas"]) == 1
+    assert saida.err == ""
+
+
+def test_preferencia_do_dono_com_data_nao_avisa(mesa_caderno, capsys):
+    # a data e o campo da palavra dele; so a licao e diretriz
+    mesa, estado = mesa_caderno
+    rc = mesa.ato_escrever(_args_escrever(preferencia="funde, quebra fina demais (08/10/2026)",
+                                          dito_em="2026-10-01", onde="chat, #3340"))
+    assert rc == 0
+    assert capsys.readouterr().err == ""
+
+
+def test_substituir_licao_com_residuo_tambem_avisa(mesa_caderno, monkeypatch, capsys):
+    mesa, estado = mesa_caderno
+    monkeypatch.setattr(mesa, "_entrada_da_cadeira", lambda cur, eid: _entrada(eid, chapeu="rh"))
+    args = _args_escrever(caso=None)
+    args.id, args.texto = "c7", LICAO_C16
+    rc = mesa.ato_substituir(args)
+    saida = capsys.readouterr()
+    assert rc == 0
+    assert "«27 trechos»" in saida.err
+    assert "c7 substituída por c101" in saida.out
+    args.texto = LICAO_C206_DIRETRIZ
+    assert mesa.ato_substituir(args) == 0
+    assert capsys.readouterr().err == ""
+
+
 def test_premissa_com_vale_ate_grava_o_prazo(mesa_caderno, capsys):
     mesa, estado = mesa_caderno
     prazo = (HOJE + timedelta(days=30)).isoformat()
