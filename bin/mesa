@@ -4,8 +4,8 @@
 # dono: gestao-estrategica (a forma: o que e mesa, o que e caderno) · ia (montador) · dados (substrato do caderno e forma da aresta, arq:0120) · ti (substrato da mesa)
 # classe: B
 # use para: pendência entre fitas, 'o que ficou na mesa', anotar, caderno do chapéu por entrada (lição, preferência do dono, premissa, aresta)
-# atos: ver, item, fez, anota, fita, limpa, caderno, legado, escrever, substituir, confirmar, retirar, restaurar, tombar, apontar, aresta, colheita, veredito
-# folhas: ver|item|fez -> trabalho/mesa (o item com ato) · caderno|escrever|substituir|confirmar|retirar|restaurar|tombar|apontar|aresta|colheita|veredito -> expediente/caderno (o duravel) ·
+# atos: ver, item, fez, anota, fita, limpa, caderno, legado, escrever, substituir, confirmar, retirar, restaurar, tombar, apontar, aresta, colheita, veredito, balde
+# folhas: ver|item|fez -> trabalho/mesa (o item com ato) · caderno|escrever|substituir|confirmar|retirar|restaurar|tombar|apontar|aresta|colheita|veredito|balde -> expediente/caderno (o duravel) ·
 #         anota|limpa|legado -> trabalho/mesa, transicao · fita -> pende (guarda de fita e de sessao)
 # ambiente: PF_CADEIRA (obrigatoria, origem porta), PF_FITA, PF_SESSAO (a fita da aresta onde a porta nao injeta PF_FITA),
 #           PF_CHAPEU, PF_SUPERFICIE[=desconhecida],
@@ -1777,7 +1777,8 @@ def _colheita_texto(lote):
     pares = lote["pares"]
     no_limiar = sum(1 for p in pares if p["limiar"])
     out = [f"colheita de arestas — {len(pares)} par(es) acumulando, {no_limiar} no limiar "
-           f"({LIMIAR_FITAS} fitas ou {LIMIAR_CADEIRAS} cadeiras) · acervo: {lote['acervo']}"]
+           f"({LIMIAR_FITAS} fitas ou {LIMIAR_CADEIRAS} cadeiras) · acervo: {lote['acervo']}"
+           f" · balde: {lote.get('balde', 'não lido')}"]
     if not pares:
         out.append("  nenhuma aresta vigente: lote vazio")
     for p in pares:
@@ -1819,6 +1820,25 @@ def _colheita_texto(lote):
     return "\n".join(out) + "\n"
 
 
+SQL_BALDE_LIDO = ("select coalesce(json_agg(json_build_array(origem_entrada_id, cadeira, chapeu, "
+                  "de_ponta, para_ponta, fita, para_que, quem, declarada, observada_em) "
+                  "order by observada_em), '[]') from acervo.observacao_aresta;")
+
+
+def _usos_do_balde(ler=None):
+    """Os usos que ja foram ao balde (#3505), na forma das linhas da colheita: a aresta saiu do
+    caderno, nao em tombamento nem com destino. None: o balde nao respondeu, e a colheita diz."""
+    bruto = (ler or _acervo_json)(SQL_BALDE_LIDO)
+    if bruto is None:
+        return None
+    linhas = []
+    for eid, cad, ch, de, para, fita, para_que, quem, declarada, em in bruto:
+        quando = datetime.fromisoformat(em) if isinstance(em, str) else em
+        linhas.append((int(eid), cad, ch, de, para, False, None, fita, para_que, quem, declarada,
+                       quando))
+    return linhas
+
+
 def ato_colheita(args):
     """O lote da curadoria (forma da aresta, #3218): por par de pontas, as fitas e cadeiras
     distintas, as linhas de para que, quem puxou, se e declarada, a coocorrencia em obra e a
@@ -1840,6 +1860,12 @@ def ato_colheita(args):
             "JOIN sessao.caderno_aresta_uso u ON u.entrada_id = e.id "
             "WHERE e.categoria = 'aresta' AND u.em >= now() - make_interval(days => %s)", (janela,))
         usados = cur.fetchall()
+    balde = _usos_do_balde()
+    if balde is not None:
+        vistos = {(l[0], l[7]) for l in linhas}
+        linhas += [l for l in balde if (l[0], l[7]) not in vistos]
+        desde = datetime.now(timezone.utc) - timedelta(days=janela)
+        usados += [(l[1], l[2], l[4]) for l in balde if l[11] >= desde]
     pares = _agrega_pares(linhas)
     sql = _sql_cruzamento(pares)
     cruzamento = _acervo_json(sql) if sql else []
@@ -1850,6 +1876,7 @@ def ato_colheita(args):
     sem_uso, casamento = _declaradas_sem_uso(_declaradas(CADERNOS), usados, _acervo_json(SQL_ROTULOS))
     lote = {"limiar": {"fitas": LIMIAR_FITAS, "cadeiras": LIMIAR_CADEIRAS},
             "acervo": "ok" if cruzamento is not None else "indisponível",
+            "balde": "ok" if balde is not None else "indisponível: só o caderno",
             "pares": pares, "janela_dias": janela, "casamento": casamento,
             "declaradas_sem_uso": sem_uso}
     if args.json:
@@ -1909,6 +1936,128 @@ def ato_veredito(args):
              else f"tombada → {tombar}" if tombar else f"retirada: {retirar}")
     quais = ", ".join(f"c{eid} ({c}/{h})" for eid, c, h in alvo)
     print(f"veredito {de} → {para}: {len(alvo)} entrada(s) {feito} — {quais}")
+    return 0
+
+
+# --- balde de arestas (#3505) ---------------------------------------------------------------
+# A aresta nao orienta a conduta do chapeu: e coleta para a curadoria (arq:0120, Emenda de
+# 13/10/2026). Fica no caderno so o bastante para a coleta e vai, de hora em hora, ao balde de
+# dados (acervo.observacao_aresta, migracao 100 de platafirma-conhecimento, #3504): um evento por
+# uso, so de insercao. A entrada sai do caderno retirada, nunca apagada (§6), e so depois de o
+# balde mostrar, pela chave (origem_entrada_id, fita), todos os usos dela.
+MOTIVO_BALDE = "foi ao balde de arestas"
+LOTE_BALDE = 200     # usos por INSERT: o comando vai pelo stdin do psql, sem teto de argumento
+COL_USO = ("eid", "cadeira", "chapeu", "de", "para", "fita", "para_que", "quem", "declarada", "em")
+SQL_USOS_VIGENTES = (
+    "SELECT e.id, e.cadeira, e.chapeu, e.de_ponta, e.para_ponta, u.fita, u.para_que, u.quem, "
+    "u.declarada, u.em FROM sessao.caderno_entrada e "
+    "JOIN sessao.caderno_aresta_uso u ON u.entrada_id = e.id "
+    "WHERE e.categoria = 'aresta' AND e.estado = 'vigente' ORDER BY e.id, u.em")
+
+
+def _lit_sql(v):
+    """Literal SQL de um valor do caderno. Texto com aspa dobrada (standard_conforming_strings, o
+    padrao do Postgres): o para que e texto livre e nunca entra cru."""
+    if v is None:
+        return "NULL"
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, datetime):
+        return _lit_sql(v.isoformat()) + "::timestamptz"
+    return "'" + str(v).replace("'", "''") + "'"
+
+
+def _sql_balde(usos):
+    """O INSERT idempotente dos usos no balde: a chave (origem_entrada_id, fita) faz a passada
+    repetida nao duplicar."""
+    valores = ",\n".join(
+        "(" + ", ".join(_lit_sql(v) for v in (
+            u["de"], u["para"], u["para_que"], u["cadeira"], u["chapeu"], u["fita"],
+            u["quem"] or "cadeira", bool(u["declarada"]), u["em"], int(u["eid"]))) + ")"
+        for u in usos)
+    return ("INSERT INTO acervo.observacao_aresta (de_ponta, para_ponta, para_que, cadeira, chapeu, "
+            "fita, quem, declarada, observada_em, origem_entrada_id) VALUES\n" + valores
+            + "\nON CONFLICT ON CONSTRAINT observacao_aresta_origem_uq DO NOTHING;\n")
+
+
+def _sql_no_balde(eids):
+    return ("select coalesce(json_agg(json_build_array(origem_entrada_id, fita)), '[]') "
+            "from acervo.observacao_aresta where origem_entrada_id in ("
+            + ", ".join(str(int(i)) for i in eids) + ");")
+
+
+def _acervo_exec(sql):
+    """Escrita no acervo pelo transporte de `_acervo_json`, com o comando no stdin. (ok, erro)."""
+    ctr, usr, base = ACERVO_PG
+    try:
+        r = subprocess.run(["docker", "exec", "-i", ctr, "psql", "-U", usr, "-d", base, "-tAq",
+                            "-v", "ON_ERROR_STOP=1", "-f", "-"],
+                           input=sql, capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError) as e:
+        return False, f"{type(e).__name__}: {e}"
+    return r.returncode == 0, (r.stderr or r.stdout or "").strip()
+
+
+def _retira_do_caderno(cur, eid, chegou):
+    """Retira a aresta `eid` se TODO uso dela ja esta no balde. A trava da linha barra o uso novo
+    que `mesa aresta` grava no meio (a FK dele pede KEY SHARE, que espera o FOR UPDATE): o que
+    chegar depois da copia deixa a entrada para a proxima passada, nunca se perde."""
+    cur.execute("SELECT id FROM sessao.caderno_entrada WHERE id = %s AND categoria = 'aresta' "
+                "AND estado = 'vigente' FOR UPDATE", (eid,))
+    if cur.fetchone() is None:
+        return False
+    cur.execute("SELECT fita FROM sessao.caderno_aresta_uso WHERE entrada_id = %s", (eid,))
+    if any((eid, f) not in chegou for (f,) in cur.fetchall()):
+        return False
+    cur.execute("UPDATE sessao.caderno_entrada SET estado = 'retirada', motivo = %s WHERE id = %s",
+                (MOTIVO_BALDE, eid))
+    cur.execute("INSERT INTO sessao.caderno_evento (entrada_id, ato, de_estado, para_estado, por, "
+                "sessao, porque) VALUES (%s, 'balde', 'vigente', 'retirada', 'ia', NULL, %s)",
+                (eid, MOTIVO_BALDE))
+    return True
+
+
+def ato_balde(args):
+    """Leva ao balde de dados as arestas vigentes de TODAS as cadeiras (o timer, de hora em hora)
+    e as retira do caderno. Sem cadeira: o job e da ia e varre a casa, como a colheita."""
+    con = pg()
+    if con is None:
+        return 3
+    with con, con.cursor() as cur:
+        cur.execute(SQL_USOS_VIGENTES)
+        usos = [dict(zip(COL_USO, l)) for l in cur.fetchall()]
+    if not usos:
+        print("balde: nenhuma aresta vigente no caderno")
+        return 0
+    eids = sorted({u["eid"] for u in usos})
+    if args.plano:
+        print(f"balde (plano): {len(usos)} uso(s) de {len(eids)} aresta(s) iriam ao balde e sairiam "
+              "do caderno")
+        for u in usos:
+            print(f"  c{u['eid']} {u['cadeira']}/{u['chapeu']} {u['de']} → {u['para']} · fita {u['fita']}")
+        return 0
+    for i in range(0, len(usos), LOTE_BALDE):
+        ok, erro = _acervo_exec(_sql_balde(usos[i:i + LOTE_BALDE]))
+        if not ok:
+            sys.stderr.write(f"balde: o acervo recusou a cópia — {erro}; nada saiu do caderno\n")
+            return 3
+    no_balde = _acervo_json(_sql_no_balde(eids))
+    if no_balde is None:
+        sys.stderr.write("balde: o acervo não respondeu à conferência; nada saiu do caderno\n")
+        return 3
+    chegou = {(int(e), f) for e, f in no_balde}
+    con = pg()
+    if con is None:
+        return 3
+    retiradas = 0
+    with con, con.cursor() as cur:
+        for eid in eids:
+            retiradas += _retira_do_caderno(cur, eid, chegou)
+    ficaram = len(eids) - retiradas
+    print(f"balde: {len(usos)} uso(s) conferido(s) no balde; {retiradas} aresta(s) saíram do caderno"
+          + (f"; {ficaram} ficou(aram) para a próxima passada (uso novo no meio)" if ficaram else ""))
     return 0
 
 
@@ -2009,6 +2158,11 @@ def main():
                     help="com --tombar: em tombamento ate a cadeira dona do conceito lavrar")
     vd.add_argument("--retirar", metavar="MOTIVO", help="a curadoria recusa, com o motivo")
     vd.set_defaults(func=ato_veredito)
+
+    bd = sub.add_parser("balde", help="leva as arestas vigentes de todas as cadeiras ao balde de dados "
+                                       "(acervo.observacao_aresta) e as retira do caderno; o timer horario")
+    bd.add_argument("--plano", action="store_true", help="so lista o que iria ao balde")
+    bd.set_defaults(func=ato_balde)
 
     f = sub.add_parser("fez", help="esvazia o item (pelo numero exibido) porque o ato foi executado")
     f.add_argument("n", type=int, help="o numero exibido em `mesa ver` (#N), nao o id interno")
