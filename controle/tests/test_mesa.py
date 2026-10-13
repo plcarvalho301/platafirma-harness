@@ -464,6 +464,14 @@ def test_aresta_fora_do_corpo_servido_e_lida_por_categoria(monkeypatch):
     assert "1 aresta(s) acumulando" in mesa._indice_texto(entradas, [], {}, HOJE, 0)
 
 
+def test_licao_vence_em_30_dias():
+    """#3502: lição de episódio é temporária; a revisão chega no ciclo."""
+    mesa = carrega_mesa()
+    d31 = _entrada(1, confirmada_em=datetime(2026, 8, 31, 15, tzinfo=timezone.utc))
+    d29 = _entrada(2, confirmada_em=datetime(2026, 9, 2, 15, tzinfo=timezone.utc))
+    assert mesa._a_revisar(d31, HOJE) and not mesa._a_revisar(d29, HOJE)
+
+
 def test_a_revisar_pergunta_se_a_licao_se_expande_ao_chapeu():
     mesa = carrega_mesa()
     velha = _entrada(1, confirmada_em=datetime(2026, 6, 1, 15, tzinfo=timezone.utc))
