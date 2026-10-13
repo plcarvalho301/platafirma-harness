@@ -205,6 +205,28 @@ def _render_caixa_doc(estado: dict, slug_l: str) -> str:
     return f'<div class="leitura caixa-lida">{"".join(blocos)}</div>'
 
 
+def _corpos_cadernos(estado: dict, slug_l: str, chapeus: list[str],
+                     chapeu_sel: str | None) -> tuple[str, str]:
+    """(texto, avisos): o corpo de `mesa caderno <chapeu>` de cada chapeu da cadeira, ou so do
+    escolhido, lido pelo agregador (bloco `cadernos_corpo`). Chapeu sem leitura ou indisponivel
+    se declara em `avisos` — nunca some, nunca vira caderno vazio."""
+    bloco = estado.get("cadernos_corpo", {})
+    por_chave = {(i.get("chapeu") or "").lower(): i for i in (bloco.get("itens") or [])}
+    textos, avisos = [], []
+    for ch in ([chapeu_sel] if chapeu_sel else chapeus):
+        item = por_chave.get(f"{slug_l}/{ch}".lower())
+        if item is None:
+            avisos.append(
+                f'<p class="indisponivel">Caderno <code>{_esc(ch)}</code> sem leitura — o '
+                'agregador ainda não serve o corpo deste chapéu.</p>')
+        elif item.get("estado") != "ok":
+            avisos.append(
+                f'<p class="indisponivel">Caderno <code>{_esc(ch)}</code> indisponível: '
+                f'{_esc(item.get("motivo") or "motivo desconhecido")}.</p>')
+        else:
+            textos.append((item.get("dados") or {}).get("texto") or "")
+    return "\n".join(textos), "".join(avisos)
+
 # Documentos que compoem a cadeira, na ordem do seletor da spec (§/cadeira):
 # persona · GERAL · org · mesa · cadernos · caixa. Cada entrada e (chave do ?doc=,
 # rotulo, ids de peca que a servem — o CLI usa o id do catalogo (`conduta-dono`,
@@ -794,7 +816,11 @@ def render_cadeira(estado: dict, slug: str | None = None, doc: str | None = None
             if doc_sel == "mesa":
                 corpo_html = render_mesa(conteudo, chapeu_sel)
             elif doc_sel == "cadernos":
-                corpo_html = render_cadernos(conteudo, chapeu_sel)
+                # A peca da abertura traz so o indice; o corpo de cada chapeu vem do bloco
+                # `cadernos_corpo` (mesa caderno <chapeu>, lido como a cadeira dona).
+                indice = re.split(r"(?m)^=====", conteudo, maxsplit=1)[0]
+                corpos, avisos = _corpos_cadernos(estado, slug_l, chapeus, chapeu_sel)
+                corpo_html = render_cadernos(f"{indice}\n{corpos}", chapeu_sel) + avisos
             else:
                 corpo_html = md_seguro(conteudo)
             carimbo = (
