@@ -81,5 +81,10 @@
     "familia": "platafirma-ui",
     "lock": "provas/package-lock.json",
     "teste": "provas"
+  },
+  "_rastreador-tela": "stack node das provas de navegador da tela do rastreador (#2856 linha 144): o lock proprio de app/rastreador/provas poe o node_modules na raiz do clone, de onde `import 'puppeteer-core'` se resolve a partir de app/rastreador/provas/*.mjs. Sem 'teste': fora do portao da familia (muitas provas pedem a stack do rastreador no ar); roda por alvo, `teste rodar rastreador-tela@<bancada> provas/construir.sh app/rastreador/provas/<prova>.mjs` (o construir.sh primeiro: as provas medem o dist/).",
+  "rastreador-tela": {
+    "familia": "platafirma-ui",
+    "lock": "app/rastreador/provas/package-lock.json"
   }
 }

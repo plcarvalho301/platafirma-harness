@@ -243,10 +243,13 @@ def test_filtro_cadeira_aceita_as_cadeiras_da_abertura(tmp_path, cadeira):
     assert "cadeira desconhecida" not in proc.stderr
 
 
-def test_filtro_cadeira_recusa_nome_que_nao_existe(tmp_path):
+def test_filtro_cadeira_nao_julga_o_nome_quem_recusa_e_a_api(tmp_path):
+    """#2856 linha 125: a lista de cadeiras mora na API; o verbo repassa o nome e nao tem copia
+    que envelhece. Sem o nome, o filtro e uso incorreto (exit 2)."""
     proc = _run(["listar", "--cadeira", "nao-existe"], tmp_path)
-    assert proc.returncode == 2
-    assert "cadeira desconhecida: nao-existe" in proc.stderr
+    assert "cadeira desconhecida" not in proc.stderr
+    sem_nome = _run(["listar", "--cadeira"], tmp_path)
+    assert sem_nome.returncode != 0
 
 
 # --- falha ---------------------------------------------------------------

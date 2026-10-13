@@ -106,8 +106,10 @@ uso:
                                           Nascer fora de `captada`, ou sair dela, exige o
                                           corpo no padrão do nível (arq:0096)
   tarefas editar <id> [--titulo "<t>"] [--desc "<txt>"|--desc-stdin]
-                                          troca título e/ou corpo (substitui o corpo
-                                          inteiro); não mexe no estado — mover é `mover`
+                [--cadeira <c>|--sem-cadeira] [--nivel épico|feature|story|task]
+                                          troca título, corpo, cadeira e/ou nível (o corpo é
+                                          substituído inteiro); não mexe no estado — mover é
+                                          `mover`. Cadeira e nível inválidos a API recusa
   tarefas modelo <épico|feature|story|task>
                                           esqueleto do corpo, com os rótulos que a API exige;
                                           épico e feature saem no two-pager
@@ -269,20 +271,10 @@ monta_query() { # monta_query "$@" -> ecoa a query string e devolve o resto em R
   while [ $# -gt 0 ]; do
     case "$1" in
       --cadeira)
-        local cad="$2"
-        case "$cad" in
-          claudinho-arquiteto|arquiteto|\
-          claudinho-dados|dados|\
-          claudinho-IA|claudinho-ia|ia|IA|\
-          claudinha-produto|produto|\
-          claudinho-TI|claudinho-ti|ti|TI|\
-          claudinho-seguranca|seguranca|\
-          claudinha-gestao-estrategica|gestao-estrategica|\
-          claudinha-fabrica|fabrica|\
-          claudinho-politicas-publicas|politicas-publicas|\
-          engenharia|direito|inteligencia) ;;
-          *) echo "cadeira desconhecida: $cad" >&2; exit 2 ;;
-        esac
+        # A LISTA DE CADEIRAS NÃO MORA AQUI (#2856 linha 125): a API a conhece e recusa o nome
+        # desconhecido com a própria mensagem. Uma cópia no verbo ficava para trás a cada
+        # cadeira nova (engenharia, direito e inteligência foram recusadas por isso).
+        local cad="${2:?--cadeira pede o nome da cadeira}"
         q="$q&cadeira=$cad"; shift 2 ;;
       --estado)
         local est="$2"
@@ -544,17 +536,30 @@ criar() {
 # corpo por nível (arq:0096) é da API, como em `criar` — este verbo não a duplica.
 editar() {
   local id; id=$(so_id "${1:?uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin]}"); shift
-  local titulo="" desc="" tem_desc=""
+  local titulo="" desc="" tem_desc="" cadeira="" tem_cadeira=0 nivel=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --titulo)     titulo="${2:?--titulo pede texto}"; shift 2 ;;
       --desc)       desc="${2:?--desc pede texto}"; tem_desc=1; shift 2 ;;
       --desc-stdin) desc="$(cat)"; tem_desc=1; shift ;;
+      # A cadeira e o nível do card mudam por aqui (#2856 linhas 112 e 113): a API aceita os dois no
+      # PATCH, e é ela quem recusa nome ou camada inválidos — este verbo não repete a lista.
+      --cadeira)    cadeira="${2:?--cadeira pede o nome da cadeira}"; tem_cadeira=1; shift 2 ;;
+      --sem-cadeira) cadeira=""; tem_cadeira=1; shift ;;
+      --nivel)
+        case "${2:?--nivel pede épico, feature, story ou task}" in
+          épico|epico|0) nivel=0 ;;
+          feature|1)     nivel=1 ;;
+          story|2)       nivel=2 ;;
+          task|3)        nivel=3 ;;
+          *) echo "nível desconhecido: $2 (épico, feature, story, task)" >&2; exit 2 ;;
+        esac
+        shift 2 ;;
       *) echo "opção desconhecida: $1" >&2; exit 2 ;;
     esac
   done
-  if [ -z "$titulo" ] && [ -z "$tem_desc" ]; then
-    echo "uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin] — nada a editar" >&2
+  if [ -z "$titulo" ] && [ -z "$tem_desc" ] && [ "$tem_cadeira" -eq 0 ] && [ -z "$nivel" ]; then
+    echo "uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin] [--cadeira <c>|--sem-cadeira] [--nivel épico|feature|story|task] — nada a editar" >&2
     exit 2
   fi
   if [ -n "$tem_desc" ] && [ -z "$(printf '%s' "$desc" | tr -d '[:space:]')" ]; then
@@ -563,11 +568,18 @@ editar() {
   fi
   local html=""
   [ -n "$tem_desc" ] && html="$(printf '%s' "$desc" | para_html)"
-  jq -n --arg t "$titulo" --arg d "$html" \
+  # `cadeira: null` tira a cadeira (a API trata o nulo explícito como pedido); ausente não mexe.
+  jq -n --arg t "$titulo" --arg d "$html" --argjson tc "$tem_cadeira" --arg c "$cadeira" --arg n "$nivel" \
      '(if $t == "" then {} else {titulo:$t} end)
-      + (if $d == "" then {} else {descricao:$d} end)' \
+      + (if $d == "" then {} else {descricao:$d} end)
+      + (if $tc == 1 then {cadeira: (if $c == "" then null else $c end)} else {} end)
+      + (if $n == "" then {} else {nivel: ($n|tonumber)} end)' \
     | envia PATCH "/itens/$id" \
-    | jq -r '"item \(.id) editado: \(.titulo) · estado \(.estado_nome) (inalterado)"'
+    | jq -r --argjson tc "$tem_cadeira" --arg n "$nivel" '
+        "item \(.id) editado: \(.titulo)"
+        + (if $tc == 1 then " · cadeira \(.cadeira // "nenhuma")" else "" end)
+        + (if $n != "" then " · nível \(.nivel_nome // .nivel)" else "" end)
+        + " · estado \(.estado_nome) (inalterado)"'
 }
 
 # COMENTÁRIO É TEXTO NO CORPO, por ordem do dono (16/08/2026). O modelo do rastreador não

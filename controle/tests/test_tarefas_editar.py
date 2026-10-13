@@ -137,6 +137,45 @@ def test_titulo_e_desc_juntos(tmp_path):
     assert corpo == {"titulo": "t", "descricao": "<p>corpo</p>"}
 
 
+def test_cadeira_sozinha_manda_so_a_cadeira(tmp_path):
+    """#2856 linha 112: reatribuir o card e um ato do verbo; quem valida o nome e a API."""
+    proc, chamadas, corpo = _run(["editar", "42", "--cadeira", "engenharia"], tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert chamadas == ["PATCH http://127.0.0.1:9/api/itens/42"]
+    assert corpo == {"cadeira": "engenharia"}
+    assert "cadeira nenhuma" in proc.stdout or "cadeira " in proc.stdout
+
+
+def test_sem_cadeira_manda_cadeira_nula(tmp_path):
+    proc, _, corpo = _run(["editar", "42", "--sem-cadeira"], tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert corpo == {"cadeira": None}
+
+
+@pytest.mark.parametrize("nome,numero", [("épico", 0), ("feature", 1), ("story", 2), ("task", 3), ("2", 2)])
+def test_nivel_manda_o_inteiro_da_camada(tmp_path, nome, numero):
+    """#2856 linha 113: a API quer o nivel como inteiro; o nome e a traducao do verbo."""
+    proc, chamadas, corpo = _run(["editar", "42", "--nivel", nome], tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert chamadas == ["PATCH http://127.0.0.1:9/api/itens/42"]
+    assert corpo == {"nivel": numero}
+
+
+def test_nivel_desconhecido_recusa_sem_chamar_api(tmp_path):
+    proc, chamadas, _ = _run(["editar", "42", "--nivel", "megafeature"], tmp_path)
+    assert proc.returncode == 2
+    assert chamadas == []
+
+
+def test_titulo_cadeira_e_nivel_juntos_num_patch_so(tmp_path):
+    proc, chamadas, corpo = _run(
+        ["editar", "42", "--titulo", "t", "--cadeira", "ti", "--nivel", "story"], tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert len(chamadas) == 1
+    assert corpo == {"titulo": "t", "cadeira": "ti", "nivel": 2}
+    assert "estado" not in corpo
+
+
 @pytest.mark.parametrize("args,stdin", [
     (["editar", "42"], None),
     (["editar", "42", "--desc-stdin"], "   \n\n"),

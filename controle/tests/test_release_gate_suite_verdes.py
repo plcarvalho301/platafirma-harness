@@ -324,6 +324,32 @@ def test_suite_acima_do_teto_devolve_em_andamento_e_a_repeticao_acha_o_veredito(
     assert "suite:     verde (reaproveitado)" in r2.stdout
 
 
+def test_promover_repetido_anexa_ao_job_que_ja_mede_a_rev(amb_verde):
+    """#2856 linha 267: a segunda chamada, com o job da mesma rev ainda ativo, nao abre
+    outra medicao; devolve «em andamento» nomeando o job que roda."""
+    amb = amb_verde
+    marca = amb.tmp / "run-chamado"
+    sha = amb.sha1
+    stub = amb.stub_bin / "sessao"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "if [ \"$1\" = longjob ] && [ \"$2\" = list ]; then\n"
+        f"  echo 'platafirma-job-gate-{sha[:7]}-20261013T000000.service loaded active running "
+        f"/x/bin/release _medir-suite {amb.FAMILIA} {sha}'\n"
+        "  exit 0\n"
+        "fi\n"
+        f"touch '{marca}'\n"
+        "echo 'unit: platafirma-job-gate-outro'\n", encoding="utf-8")
+    stub.chmod(0o755)
+    del amb.env["PF_GATE_SINCRONO"]
+    amb.env["PF_GATE_TETO_S"] = "0"
+    r = amb.run("promover", amb.FAMILIA)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "em andamento" in r.stdout
+    assert f"platafirma-job-gate-{sha[:7]}-20261013T000000" in r.stdout, r.stdout
+    assert not marca.exists(), "abriu outro job de medicao para a mesma rev"
+
+
 def test_suite_nao_medida_so_sobe_com_a_flag_declarada(tmp_path):
     amb = Ambiente(tmp_path, _python_de_sistema(), TESTE_NAO_COLETA)
     r = amb.run("promover", amb.FAMILIA, "--aceitar-suite-indisponivel")

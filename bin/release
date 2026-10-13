@@ -1677,9 +1677,20 @@ gate_suite_verdes() {  # $1=repo $2=sha [$3=base: sha no ar] ; 0 verde ou n/a; 4
     if [ -n "$sessao_bin" ]; then
       local marca="$GATE_MARCA" out_job unit log_job teto="${PF_GATE_TETO_S:-90}" t=0 rc_poll
       rm -f "$marca"
-      out_job="$(PF_GATE_SINCRONO=1 "$sessao_bin" longjob run "gate-${sha:0:7}" "$AQUI/release" _medir-suite "$repo" "$sha" ${base:+"$base"} 2>&1 8>&-)" || out_job=""
-      unit="$(printf '%s\n' "$out_job" | grep -oE 'platafirma-job-[A-Za-z0-9_.@-]+' | head -n 1)"
-      log_job="$(printf '%s\n' "$out_job" | grep -oE '/[^ ]+\.log' | head -n 1)"
+      # Promover repetido enquanto o gate mede a MESMA rev anexa ao job que roda: a segunda
+      # chamada nao abre outra medicao (#2856 linha 267 — dois jobs em paralelo distorcem as
+      # provas de tempo do celular, e quem obedece o «repita» pagava o dobro). O job ativo e a
+      # linha da `sessao longjob list` cujo comando e `_medir-suite <repo> <sha>`.
+      unit="$("$sessao_bin" longjob list 2>/dev/null \
+        | awk -v alvo="_medir-suite $repo $sha" '$3 == "active" && index($0, alvo) { sub(/\.service$/, "", $1); print $1; exit }')"
+      if [ -n "$unit" ]; then
+        log_job="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/log/jobs/${unit}.log"
+        printf 'gate:      a medicao desta rev ja roda no job %s — anexo a ele\n' "$unit" >&2
+      else
+        out_job="$(PF_GATE_SINCRONO=1 "$sessao_bin" longjob run "gate-${sha:0:7}" "$AQUI/release" _medir-suite "$repo" "$sha" ${base:+"$base"} 2>&1 8>&-)" || out_job=""
+        unit="$(printf '%s\n' "$out_job" | grep -oE 'platafirma-job-[A-Za-z0-9_.@-]+' | head -n 1)"
+        log_job="$(printf '%s\n' "$out_job" | grep -oE '/[^ ]+\.log' | head -n 1)"
+      fi
       if [ -n "$unit" ]; then
         # o job grava o memo de cada chave; aqui só se lê o memo do repositório inteiro
         rc_poll=6
