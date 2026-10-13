@@ -555,6 +555,18 @@ def referencias_mortas(texto, cache, declarados_de=slugs_declarados):
     return mortas
 
 
+# O que foi ao debito tecnico ja tem morada duravel: a linha do balde. A entrada que a cita sai
+# do caderno pela propria poda, com a linha no motivo, e volta por `mesa restaurar` se errou
+# (o dono, 13/10/2026, #3501: «Se foi pra DT tem que tirar do caderno»).
+RE_DEBITO = re.compile(r"#2856\W{0,3}linha\s+(\d+)", re.IGNORECASE)
+
+
+def foi_ao_debito(texto):
+    """'#2856 linha N' da primeira linha do balde que o texto cita, ou None."""
+    m = RE_DEBITO.search(texto or "")
+    return f"#2856 linha {m.group(1)}" if m else None
+
+
 def _servidas():
     rc, out = _verbo("mesa", "caderno", "--json")
     if rc != 0:
@@ -582,11 +594,22 @@ def _motivos(e, entradas, canone, mortas, cache):
     return motivos
 
 
+def _retira_se_debito(e, retirar):
+    """A linha do relato da entrada que foi ao debito e saiu, ou None se ela nao cita o balde."""
+    linha = foi_ao_debito(e["texto"])
+    if not linha:
+        return None
+    ok = retirar(e["id"], f"foi ao débito técnico: {linha}")
+    return (f"  {e['chapeu']}/c{e['id']}: retirada, foi ao débito técnico ({linha})"
+            + ("" if ok else "  — NAO RETIROU"))
+
+
 def aponta_candidatas(tocados, entradas=None, canone=duplicata_do_canone, mortas=referencias_mortas,
-                      apontar=None):
-    """Roda as tres conferencias nas vigentes dos chapeus tocados e aponta cada uma que cair,
-    uma marca por entrada, com os motivos juntos. Ja candidata nao se reaponta: a cadeira ainda
-    nao olhou. Devolve as linhas do relato."""
+                      apontar=None, retirar=None):
+    """Leva ao duravel o que ja tem morada (o debito sai, #3501) e roda as tres conferencias nas
+    outras vigentes dos chapeus tocados, apontando cada uma que cair, uma marca por entrada, com
+    os motivos juntos. Ja candidata nao se reaponta: a cadeira ainda nao olhou. Devolve as
+    linhas do relato."""
     if not tocados:
         return ["  nenhum chapéu tocado reconhecido nesta fita — nada a conferir"]
     entradas = _servidas() if entradas is None else entradas
@@ -594,9 +617,15 @@ def aponta_candidatas(tocados, entradas=None, canone=duplicata_do_canone, mortas
         return ["  NAO MEDIDO — `mesa caderno --json` não respondeu; não é caderno são"]
     apontar = apontar or (lambda eid, motivo: _verbo("mesa", "apontar", f"c{eid}",
                                                       "--motivo", motivo)[0] == 0)
-    cache, linhas, ja = {}, [], 0
+    retirar = retirar or (lambda eid, motivo: _verbo("mesa", "retirar", f"c{eid}",
+                                                      "--motivo", motivo)[0] == 0)
+    cache, linhas, saidas, ja = {}, [], [], 0
     for e in entradas:
         if e["chapeu"] not in tocados:
+            continue
+        saiu = _retira_se_debito(e, retirar)
+        if saiu:
+            saidas.append(saiu)
             continue
         if e.get("candidata"):
             ja += 1
@@ -611,7 +640,9 @@ def aponta_candidatas(tocados, entradas=None, canone=duplicata_do_canone, mortas
            f"  nenhuma candidata nova em {', '.join(sorted(tocados))}")
     if ja:
         cab += f"; {ja} já apontada(s) esperando a cadeira"
-    return [cab] + linhas
+    if saidas:
+        cab += f"; {len(saidas)} retirada(s) por já ter morada durável"
+    return [cab] + saidas + linhas
 
 
 def roda(rotulo, cmd, timeout=60):
@@ -1071,8 +1102,10 @@ def ato_fita(args):
           "\n"
           "   2a. conhecimento curado — o caderno do chapeu, no banco, uma entrada\n"
           "   por ato (arq:0120). ANTES de acrescentar, resolva o que o indice\n"
-          "   acima marca no chapeu tocado: a revisar (`mesa confirmar <id>` ou\n"
-          "   `mesa retirar <id> --motivo`), candidata (a lista «candidatas de\n"
+          "   acima marca no chapeu tocado: a revisar (a licao de episodio e\n"
+          "   temporaria; a pergunta e se ela se expande a toda a atividade do\n"
+          "   chapeu: sim, `mesa tombar <id> --destino chapeu` e a regua entra no\n"
+          "   chapeu; nao, `mesa retirar <id> --motivo`), candidata (a lista «candidatas de\n"
           "   poda» acima: `mesa confirmar <id>` mantém, `mesa retirar <id> --motivo`\n"
           "   ou `mesa tombar <id> --destino <chave>` resolve), premissa vencida, e o\n"
           "   legado a triar (o corpo por `mesa caderno <chapeu>`; o que vale vira\n"
