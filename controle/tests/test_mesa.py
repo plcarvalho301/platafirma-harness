@@ -464,6 +464,77 @@ def test_aresta_fora_do_corpo_servido_e_lida_por_categoria(monkeypatch):
     assert "1 aresta(s) acumulando" in mesa._indice_texto(entradas, [], {}, HOJE, 0)
 
 
+# --- card #3505: o balde de arestas -----------------------------------------------------------
+EM = datetime(2026, 10, 13, 16, 0, tzinfo=timezone.utc)
+USOS = [(1, "ia", "contexto", "termo:caderno", "casa:adr/arq:0120", "f1", "a regra 'do Sair'", "cadeira", False, EM),
+        (1, "ia", "contexto", "termo:caderno", "casa:adr/arq:0120", "f2", "de novo", None, True, EM),
+        (2, "dados", "curadoria", "conceito:x", "conceito:y", "f1", "liga x a y", "dono", False, EM)]
+
+
+def _balde(monkeypatch, no_balde, exec_ok=True):
+    mesa = carrega_mesa()
+    leitura = _Cursor([USOS])
+    escrita = _Cursor([[(1,)], [("f1",), ("f2",)], [(2,)], [("f1",)]])
+    conexoes = iter([_Conexao(leitura), _Conexao(escrita)])
+    monkeypatch.setattr(mesa, "pg", lambda *a, **k: next(conexoes))
+    enviados = []
+    monkeypatch.setattr(mesa, "_acervo_exec", lambda sql: (enviados.append(sql) or (exec_ok, "recusa")))
+    monkeypatch.setattr(mesa, "_acervo_json", lambda sql: no_balde)
+    return mesa, escrita, enviados
+
+
+def _retiradas(cursor):
+    return [p[1] for s, p in cursor.feitos if s.startswith("UPDATE sessao.caderno_entrada")]
+
+
+def test_balde_copia_confere_e_so_entao_retira(monkeypatch, capsys):
+    mesa, escrita, enviados = _balde(monkeypatch, [[1, "f1"], [1, "f2"], [2, "f1"]])
+    assert mesa.ato_balde(argparse.Namespace(plano=False)) == 0
+    sql = enviados[0]
+    assert "ON CONFLICT ON CONSTRAINT observacao_aresta_origem_uq DO NOTHING" in sql
+    assert "'a regra ''do Sair'''" in sql, "para que livre com aspa dobrada"
+    assert "'cadeira', true" in sql, "quem nulo vira cadeira"
+    assert _retiradas(escrita) == [1, 2]
+    assert all(p[0] == mesa.MOTIVO_BALDE for s, p in escrita.feitos if s.startswith("UPDATE"))
+    assert sum("caderno_evento" in s for s, _ in escrita.feitos) == 2
+    assert "3 uso(s) conferido(s) no balde; 2 aresta(s) saíram do caderno" in capsys.readouterr().out
+
+
+def test_uso_que_nao_chegou_ao_balde_segura_a_entrada(monkeypatch, capsys):
+    mesa, escrita, _ = _balde(monkeypatch, [[1, "f1"], [2, "f1"]])
+    assert mesa.ato_balde(argparse.Namespace(plano=False)) == 0
+    assert _retiradas(escrita) == [2], "c1 tem uso f2 fora do balde: fica para a próxima"
+    assert "1 ficou(aram) para a próxima passada" in capsys.readouterr().out
+
+
+def test_acervo_recusou_nada_sai_do_caderno(monkeypatch, capsys):
+    mesa, escrita, _ = _balde(monkeypatch, [], exec_ok=False)
+    assert mesa.ato_balde(argparse.Namespace(plano=False)) == 3
+    assert escrita.feitos == []
+    assert "nada saiu do caderno" in capsys.readouterr().err
+
+
+def test_plano_nao_escreve(monkeypatch, capsys):
+    mesa, escrita, enviados = _balde(monkeypatch, [])
+    assert mesa.ato_balde(argparse.Namespace(plano=True)) == 0
+    assert enviados == [] and escrita.feitos == []
+    assert "3 uso(s) de 2 aresta(s) iriam ao balde" in capsys.readouterr().out
+
+
+def test_colheita_conta_o_balde_na_forma_das_linhas():
+    mesa = carrega_mesa()
+    bruto = [[1, "ia", "contexto", "termo:caderno", "casa:adr/arq:0120", "f1", "pq", "cadeira",
+              False, "2026-10-13T16:00:00+00:00"]]
+    linhas = mesa._usos_do_balde(ler=lambda sql: bruto)
+    assert linhas == [(1, "ia", "contexto", "termo:caderno", "casa:adr/arq:0120", False, None, "f1",
+                       "pq", "cadeira", False, EM)]
+    caderno = [(5, "dados", "curadoria", "termo:caderno", "casa:adr/arq:0120", False, None, "f7",
+                "outro", "cadeira", False, EM)]
+    par = mesa._agrega_pares(linhas + caderno)[0]
+    assert par["fitas"] == 2 and par["cadeiras"] == ["dados", "ia"] and par["limiar"]
+    assert mesa._usos_do_balde(ler=lambda sql: None) is None
+
+
 def test_licao_vence_em_30_dias():
     """#3502: lição de episódio é temporária; a revisão chega no ciclo."""
     mesa = carrega_mesa()
