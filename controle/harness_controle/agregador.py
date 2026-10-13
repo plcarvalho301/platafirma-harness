@@ -196,6 +196,15 @@ SONDAS_GRUPO: list[SondaGrupo] = [
                _chapeus_disponiveis,
                lambda it: ["persona", "ler", it.split("/", 1)[0], "--chapeu", it.split("/", 1)[1]],
                chave_item="chapeu", texto=True),
+    # O corpo do caderno de cada chapeu (`mesa caderno <chapeu>`: vigentes por categoria, com as
+    # marcas a revisar, vencida e candidata), lido como a cadeira dona: o caderno e privado da
+    # cadeira (arq:0041) e o verbo resolve o slot por PF_CADEIRA. A peca `cadernos` da abertura
+    # traz so o indice; sem este bloco a aba Cadernos nunca mostrava as entradas (dt #2856 258).
+    SondaGrupo("cadernos_corpo", _intervalo("CADERNOS", 120), _timeout("CADERNOS", 15),
+               _chapeus_disponiveis,
+               lambda it: ["mesa", "caderno", it.split("/", 1)[1]],
+               fabrica_env=lambda it: {**_env_padrao(), "PF_CADEIRA": it.split("/", 1)[0]},
+               chave_item="chapeu", texto=True),
     SondaGrupo("skills", _intervalo("SKILLS", 120), _timeout("SKILLS", 15),
                _skills_disponiveis,
                lambda s: ["conferir", "skill", s, "--json"],
