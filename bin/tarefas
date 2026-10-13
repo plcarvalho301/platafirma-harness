@@ -821,7 +821,7 @@ M
 # #2092 do #3410). O Título é o título do card e não entra no corpo; o aviso vai a stderr pela
 # mesma razão do aviso do Plano: quem copia o esqueleto copia stdout.
 _avisa_two_pager() {
-  echo "título: é o título do card — o que a pessoa passa a conseguir, até doze palavras. A API exige a aposta (Problema, Resultado, Medida, Fora) na saída de captada e a forma (Solução, Peças) na saída de em-lapidacao; Apetite e Aberto são livres, o índice fecha na formalização" >&2
+  echo "título: até doze palavras, descendo do resultado à entrega (arq:0096) — épico, o que passa a ser verdade e para quem; feature, a coisa que vai existir, com o para quê quando couber. A API exige a aposta (Problema, Resultado, Medida, Fora) na saída de captada e a forma (Solução, Peças) na saída de em-lapidacao; Apetite e Aberto são livres, o índice fecha na formalização" >&2
 }
 
 # A STORY DERIVADA (levantamento 2026-10-11-moldes-do-discovery-e-da-formalizacao §7): não
