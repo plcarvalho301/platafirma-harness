@@ -449,6 +449,27 @@ def test_corpo_serve_so_o_vigente(monkeypatch):
     assert "PREMISSA-VALIDA" in so_premissa and "VIGENTE-LICAO" not in so_premissa
 
 
+def test_aresta_fora_do_corpo_servido_e_lida_por_categoria(monkeypatch):
+    """#3501: a aresta e coleta da curadoria, nao conduta do chapeu."""
+    mesa = carrega_mesa()
+    monkeypatch.setattr(mesa, "_medidor", lambda: (lambda s: len(s) // 4, "medida de teste"))
+    entradas = [_entrada(1, texto="A-LICAO"),
+                _entrada(2, categoria="aresta", texto="A-ARESTA", de_ponta="termo:x",
+                         para_ponta="casa:guia/y")]
+    corpo = mesa._corpo_texto("mesateste", "rh", entradas, [], {2: 1}, HOJE)
+    assert "A-LICAO" in corpo and "A-ARESTA" not in corpo and "## aresta" not in corpo
+    so_aresta = mesa._corpo_texto("mesateste", "rh", entradas, [], {2: 1}, HOJE,
+                                  categorias=["aresta"])
+    assert "A-ARESTA" in so_aresta
+    assert "1 aresta(s) acumulando" in mesa._indice_texto(entradas, [], {}, HOJE, 0)
+
+
+def test_a_revisar_pergunta_se_a_licao_se_expande_ao_chapeu():
+    mesa = carrega_mesa()
+    velha = _entrada(1, confirmada_em=datetime(2026, 6, 1, 15, tzinfo=timezone.utc))
+    assert "expande a toda a atividade do chapéu? tombe no chapéu; senão, retire" in mesa._linha(velha, HOJE)
+
+
 def test_json_da_poda_traz_so_a_servida_sem_aresta():
     """`mesa caderno --json` (#3498): o que o descansar confere, e so isso."""
     mesa = carrega_mesa()
