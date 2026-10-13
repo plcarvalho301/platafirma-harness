@@ -424,6 +424,196 @@ def puxado_de_fora(curto, sessao_id, ordem_id, diretorio=None, resolver=resolve_
                "--para <ponta> --para-que \"<linha>\"`"])
 
 
+# ------------------------------------------------------------------ candidatas de poda (#3498)
+# arq:0120 §8 e §10.3: a maquina APONTA, a cadeira decide no passo 2a. Tres conferencias sobre
+# as vigentes do chapeu tocado: duplicata do canone (busca por sentido na particao casa, so
+# contra especie de canone), tombamento (a mesma licao em outro chapeu desta cadeira: o caderno
+# e privado dela, arq:0041, e o par entre cadeiras e da varredura) e referencia morta (card
+# terminal sem herdeiro, verbo ou chapeu que nao existe mais). Nada se retira nem se tomba aqui.
+#
+# Limiares medidos em 13/10/2026 sobre os cadernos da ia (comentario no #3498), avisados, nunca
+# reprova: o canone tirou 0,48-0,66 nas 16 vigentes sas e 0,69-0,73 nas parafrases de ADR e guia;
+# o par lexico tirou ate 0,23 entre vigentes distintas e 0,46-0,56 nas parafrases.
+LIMIAR_CANONE = float(os.environ.get("PF_PODA_LIMIAR_CANONE", "0.68"))
+LIMIAR_PAR = float(os.environ.get("PF_PODA_LIMIAR_PAR", "0.40"))
+# A busca devolve `arquivo` como "<especie> <chave>" ou a chave de ADR (arq:, org:). Parecer,
+# levantamento e nota sao material, nao canone: repetir um deles nao faz a entrada duplicata.
+CANONE = re.compile(r"^(?:(?:arq|org):\S+|(?:adr|guia|spec|padrao|runbook|lista-de-verificacao) \S+)$")
+RE_CARD_CITADO = re.compile(r"(?<![\w/])#(\d{3,5})\b")
+RE_VERBO_CITADO = re.compile(r"`([a-z][a-z0-9-]*) [a-z][^`]*`")
+RE_CHAPEU_CITADO = re.compile(r"\bchapeu:([a-z0-9-]+)/([a-z0-9-]+)")
+RE_ESTADO_CARD = re.compile(r"· ([^·(]+?) \((\w+)\)")
+FORA_DO_PATH = {"git", "docker", "python", "python3", "bash", "sh", "psql", "uv", "pip", "curl",
+                "jq", "sudo", "systemctl", "journalctl", "grep", "sed", "awk", "ls", "cat",
+                "claude", "npm", "node", "make", "pytest", "ssh", "rg", "find"}
+STOP_PAR = set("para pela pelo como mais quando onde antes depois sobre entre cada todo toda nunca "
+               "sempre isso esta este essa esse aqui nada fica vira deve pode sem com que nao uma "
+               "umas uns dos das nos nas ate".split())
+
+
+def _verbo(nome, *args, timeout=30):
+    """(exit, stdout) de um verbo irmao; (None, "") quando nao roda: indeterminado, nao negativa."""
+    try:
+        p = subprocess.run([os.path.join(_bin(), nome), *args], capture_output=True, text=True,
+                           timeout=timeout)
+    except (OSError, subprocess.SubprocessError):
+        return None, ""
+    return p.returncode, (p.stdout or "") + (p.stderr or "")
+
+
+def chapeus_tocados(curto, regs):
+    """Os chapeus desta cadeira que a fita vestiu ou escreveu: PF_CHAPEU, `persona ler <eu>
+    --chapeu X` e `mesa <ato> X` no log de giro. No claude.ai a porta nao poe PF_CHAPEU (o log e
+    a fonte); sessao de mao fica so com o ambiente."""
+    tocados = set()
+    env = os.environ.get("PF_CHAPEU", "").strip()
+    if env and SLUG_PURO.match(env):
+        tocados.add(env)
+    for d in regs or []:
+        tool, ato, args = d.get("tool"), d.get("ato"), _args(d)
+        if tool == "persona" and ato == "ler" and "--chapeu" in args:
+            i = args.index("--chapeu")
+            if args and _sem_prefixo(args[0]) == curto and i + 1 < len(args):
+                tocados.add(args[i + 1])
+        elif tool == "mesa" and ato in ("item", "escrever", "caderno", "aresta", "ver") and args:
+            alvo = args[0] if not args[0].startswith("-") else (
+                args[args.index("--chapeu") + 1] if "--chapeu" in args[:-1] else "")
+            if alvo:
+                tocados.add(alvo)
+    return {c for c in tocados if SLUG_PURO.match(c)}
+
+
+def _palavras(texto):
+    import unicodedata
+    s = unicodedata.normalize("NFKD", (texto or "").lower())
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return {w for w in re.findall(r"[a-z0-9_]+", s) if len(w) >= 4 and w not in STOP_PAR}
+
+
+def semelhanca(a, b):
+    """Jaccard das palavras de conteudo: a mesma licao dita duas vezes, nao o mesmo assunto."""
+    pa, pb = _palavras(a), _palavras(b)
+    return len(pa & pb) / len(pa | pb) if pa and pb else 0.0
+
+
+def duplicata_do_canone(texto):
+    """'<arquivo> (sim X)' do documento de canone que ja diz o mesmo, ou None."""
+    rc, out = _verbo("motor", "rag", "buscar", "casa", texto, "--k", "3", "--texto", "nenhum",
+                     "--origem", "autoteste")
+    if rc != 0:
+        return None
+    try:
+        fontes = json.loads(out.strip().splitlines()[0]).get("fontes") or []
+    except (ValueError, IndexError, AttributeError):
+        return None
+    for f in fontes:
+        arq, sim = (f.get("arquivo") or "").strip(), f.get("sim") or 0
+        if sim >= LIMIAR_CANONE and CANONE.match(arq):
+            return f"{arq} (sim {sim:.2f})"
+    return None
+
+
+def estado_card(n, cache):
+    """('vivo'|'morto'|None, rotulo). Morto: apagado, ou terminal sem herdeiro (englobada tem)."""
+    if n in cache:
+        return cache[n]
+    rc, out = _verbo("tarefas", "ler", n)
+    if rc is None:
+        r = (None, "")
+    elif "foi apagado" in out:
+        r = ("morto", "apagado")
+    else:
+        m = RE_ESTADO_CARD.search(out)
+        if not m:
+            r = (None, "")
+        else:
+            rotulo, fase = m.group(1).strip(), m.group(2)
+            r = (("morto" if fase == "terminal" and rotulo.lower() != "englobada" else "vivo"),
+                 rotulo.lower())
+    cache[n] = r
+    return r
+
+
+def referencias_mortas(texto, cache, declarados_de=slugs_declarados):
+    """O que o texto cita e nao existe mais. So o texto: o caso e a procedencia da licao, e
+    card de procedencia fecha por natureza."""
+    mortas = []
+    for n in sorted(set(RE_CARD_CITADO.findall(texto or "")), key=int):
+        estado, rotulo = estado_card(n, cache)
+        if estado == "morto":
+            mortas.append(f"#{n} ({rotulo})")
+    for v in sorted(set(RE_VERBO_CITADO.findall(texto or "")) - FORA_DO_PATH):
+        chave = ("verbo", v)
+        if chave not in cache:
+            cache[chave] = _verbo("conferir", "existe", "verbo", v)[0]
+        if cache[chave] == 1:
+            mortas.append(f"verbo {v}")
+    for cad, ch in sorted(set(RE_CHAPEU_CITADO.findall(texto or ""))):
+        slugs, _ = declarados_de(cad)
+        if slugs is not None and ch not in slugs:
+            mortas.append(f"chapéu {cad}/{ch}")
+    return mortas
+
+
+def _servidas():
+    rc, out = _verbo("mesa", "caderno", "--json")
+    if rc != 0:
+        return None
+    try:
+        return json.loads(out.strip().splitlines()[0])
+    except (ValueError, IndexError):
+        return None
+
+
+def _motivos(e, entradas, canone, mortas, cache):
+    """As tres conferencias de uma entrada, na ordem do card; lista vazia e entrada sa."""
+    motivos = []
+    dup = canone(e["texto"])
+    if dup:
+        motivos.append(f"duplicata do cânone {dup}")
+    sim, par = max(((semelhanca(e["texto"], o["texto"]), o) for o in entradas
+                    if o["chapeu"] != e["chapeu"] and o["categoria"] == e["categoria"]),
+                   key=lambda x: x[0], default=(0.0, None))
+    if par is not None and sim >= LIMIAR_PAR:
+        motivos.append(f"tombamento: par c{par['id']} em {par['chapeu']} ({sim:.2f})")
+    morta = mortas(e["texto"], cache)
+    if morta:
+        motivos.append("referência morta " + ", ".join(morta))
+    return motivos
+
+
+def aponta_candidatas(tocados, entradas=None, canone=duplicata_do_canone, mortas=referencias_mortas,
+                      apontar=None):
+    """Roda as tres conferencias nas vigentes dos chapeus tocados e aponta cada uma que cair,
+    uma marca por entrada, com os motivos juntos. Ja candidata nao se reaponta: a cadeira ainda
+    nao olhou. Devolve as linhas do relato."""
+    if not tocados:
+        return ["  nenhum chapéu tocado reconhecido nesta fita — nada a conferir"]
+    entradas = _servidas() if entradas is None else entradas
+    if entradas is None:
+        return ["  NAO MEDIDO — `mesa caderno --json` não respondeu; não é caderno são"]
+    apontar = apontar or (lambda eid, motivo: _verbo("mesa", "apontar", f"c{eid}",
+                                                      "--motivo", motivo)[0] == 0)
+    cache, linhas, ja = {}, [], 0
+    for e in entradas:
+        if e["chapeu"] not in tocados:
+            continue
+        if e.get("candidata"):
+            ja += 1
+            continue
+        motivo = "; ".join(_motivos(e, entradas, canone, mortas, cache))
+        if not motivo:
+            continue
+        ok = apontar(e["id"], motivo)
+        linhas.append(f"  {e['chapeu']}/c{e['id']}: {motivo}" + ("" if ok else "  — NAO APONTOU"))
+    n = len(linhas)
+    cab = (f"  {n} candidata(s) nova(s) em {', '.join(sorted(tocados))}" if n else
+           f"  nenhuma candidata nova em {', '.join(sorted(tocados))}")
+    if ja:
+        cab += f"; {ja} já apontada(s) esperando a cadeira"
+    return [cab] + linhas
+
+
 def roda(rotulo, cmd, timeout=60):
     print(f"\n-- {rotulo}")
     try:
@@ -810,6 +1000,12 @@ def ato_fita(args):
     ultimo = rc.get(f"mem:{alvo.lower()}")
     print(f"ultimo descanso: {idade(time.time() - int(ultimo)) + ' atras' if ultimo else 'nunca'}")
 
+    # A poda roda ANTES do indice: o contador de candidatas que ele imprime ja as conta (#3498).
+    sid, oid = os.environ.get("PF_SESSAO", "").strip(), os.environ.get("PF_ORDEM_ID", "").strip()
+    print("\n== candidatas de poda do caderno (arq:0120 §8 e §10.3; a maquina aponta, a cadeira decide) ==")
+    for _l in aponta_candidatas(chapeus_tocados(curto, giros_da_fita(sid, oid))):
+        print(_l)
+
     print("\n== memoria retida ==")
     linhas, orfaos = estado_memoria(curto, canon, rc)
     print("\n".join(linhas))
@@ -876,7 +1072,9 @@ def ato_fita(args):
           "   2a. conhecimento curado — o caderno do chapeu, no banco, uma entrada\n"
           "   por ato (arq:0120). ANTES de acrescentar, resolva o que o indice\n"
           "   acima marca no chapeu tocado: a revisar (`mesa confirmar <id>` ou\n"
-          "   `mesa retirar <id> --motivo`), candidata, premissa vencida, e o\n"
+          "   `mesa retirar <id> --motivo`), candidata (a lista «candidatas de\n"
+          "   poda» acima: `mesa confirmar <id>` mantém, `mesa retirar <id> --motivo`\n"
+          "   ou `mesa tombar <id> --destino <chave>` resolve), premissa vencida, e o\n"
           "   legado a triar (o corpo por `mesa caderno <chapeu>`; o que vale vira\n"
           "   entrada, e `mesa legado --caderno --triado <chapeu>` fecha). Depois,\n"
           "   so o que passa no teste do guia registrar, secao Caderno:\n"

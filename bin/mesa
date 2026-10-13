@@ -1437,6 +1437,16 @@ def _corpo_texto(cad, chapeu, entradas, legados, fitas, hoje, categorias=None, t
     return "\n".join(out) + "\n"
 
 
+def _servidas_json(entradas, hoje, chapeu=None):
+    """As entradas servidas, fora a aresta, como a poda do `descansar` as le (#3498): so o que a
+    conferencia de candidata precisa, nunca o caderno inteiro de outra forma."""
+    return [{"id": e["id"], "chapeu": e["chapeu"], "categoria": e["categoria"], "texto": e["texto"],
+             "caso": e.get("caso"), "candidata": e.get("candidata")}
+            for e in entradas
+            if e["categoria"] != "aresta" and _servida(e, hoje)
+            and (chapeu is None or e["chapeu"] == chapeu)]
+
+
 def ato_caderno(args):
     """Sem chapeu: o indice (o que entra na abertura). Com chapeu: o corpo, por categoria, e o
     legado ainda nao triado. Com --chapeu: indice E corpo num giro — a chamada da peca
@@ -1465,6 +1475,9 @@ def ato_caderno(args):
         fitas = _fitas_por_aresta(cur, [e["id"] for e in entradas
                                         if e["categoria"] == "aresta" and e["estado"] == "vigente"])
         movimento = {} if args.slot else _movimento(cur, cad)
+    if getattr(args, "json", False):
+        print(json.dumps(_servidas_json(entradas, hoje, chapeu), ensure_ascii=False))
+        return 0
     if not args.slot:
         sys.stdout.write(_indice_texto(entradas, legados, movimento, hoje, agora))
     if chapeu:
@@ -2035,6 +2048,9 @@ def main():
     c.add_argument("--secao", metavar="SLUG",
                    help="do legado ainda nao triado, so a secao com este titulo em slug "
                         "(`conhecimento-curado`)")
+    c.add_argument("--json", action="store_true",
+                   help="so as entradas servidas, fora a aresta, em JSON (id, chapeu, categoria, texto, "
+                        "caso, candidata): o que a poda do `descansar` le")
     c.set_defaults(func=ato_caderno)
 
     args = p.parse_args()

@@ -449,6 +449,23 @@ def test_corpo_serve_so_o_vigente(monkeypatch):
     assert "PREMISSA-VALIDA" in so_premissa and "VIGENTE-LICAO" not in so_premissa
 
 
+def test_json_da_poda_traz_so_a_servida_sem_aresta():
+    """`mesa caderno --json` (#3498): o que o descansar confere, e so isso."""
+    mesa = carrega_mesa()
+    entradas = [
+        _entrada(1, texto="VIGENTE", candidata="duplicata do cânone guia x"),
+        _entrada(2, estado="retirada", texto="RETIRADA"),
+        _entrada(3, categoria="premissa", texto="VENCIDA", vale_ate=date(2026, 9, 1)),
+        _entrada(4, categoria="aresta", texto="ARESTA", de_ponta="termo:x", para_ponta="casa:guia/y"),
+        _entrada(5, texto="OUTRO-CHAPEU", chapeu="portfolio"),
+    ]
+    todas = mesa._servidas_json(entradas, HOJE)
+    assert [e["id"] for e in todas] == [1, 5]
+    assert todas[0] == {"id": 1, "chapeu": "rh", "categoria": "licao", "texto": "VIGENTE",
+                        "caso": "#3218", "candidata": "duplicata do cânone guia x"}
+    assert [e["id"] for e in mesa._servidas_json(entradas, HOJE, "portfolio")] == [5]
+
+
 def test_licao_sem_confirmacao_ha_90_dias_sai_a_revisar(monkeypatch):
     mesa = carrega_mesa()
     velha = _entrada(1, confirmada_em=datetime(2026, 6, 1, 15, tzinfo=timezone.utc))
