@@ -496,7 +496,10 @@ def test_balde_copia_confere_e_so_entao_retira(monkeypatch, capsys):
     assert "'cadeira', true" in sql, "quem nulo vira cadeira"
     assert _retiradas(escrita) == [1, 2]
     assert all(p[0] == mesa.MOTIVO_BALDE for s, p in escrita.feitos if s.startswith("UPDATE"))
-    assert sum("caderno_evento" in s for s, _ in escrita.feitos) == 2
+    eventos = [s for s, _ in escrita.feitos if "caderno_evento" in s]
+    assert len(eventos) == 2
+    # o CHECK da 0097 so aceita os atos do verbo: a saida ao balde e uma retirada, com o motivo
+    assert all("'retirar', 'vigente', 'retirada'" in s for s in eventos)
     assert "3 uso(s) conferido(s) no balde; 2 aresta(s) saíram do caderno" in capsys.readouterr().out
 
 

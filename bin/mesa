@@ -2014,7 +2014,7 @@ def _retira_do_caderno(cur, eid, chegou):
     cur.execute("UPDATE sessao.caderno_entrada SET estado = 'retirada', motivo = %s WHERE id = %s",
                 (MOTIVO_BALDE, eid))
     cur.execute("INSERT INTO sessao.caderno_evento (entrada_id, ato, de_estado, para_estado, por, "
-                "sessao, porque) VALUES (%s, 'balde', 'vigente', 'retirada', 'ia', NULL, %s)",
+                "sessao, porque) VALUES (%s, 'retirar', 'vigente', 'retirada', 'ia', NULL, %s)",
                 (eid, MOTIVO_BALDE))
     return True
 
