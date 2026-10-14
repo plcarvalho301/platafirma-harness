@@ -53,8 +53,10 @@ uso:
   --base <rev>: só com --portao: roda o que o diff de <rev> até a árvore alcança (card #3370).
                 Linha da lista sem barra vertical roda sempre; a forma "arquivo | glob glob" roda quando
                 algum glob (relativo à raiz do repositório) casa um arquivo do diff, ou o
-                próprio arquivo mudou; caminho de raio total roda a lista inteira. Sem --base,
-                ou base ilegível, a lista inteira
+                próprio arquivo mudou, ou a linha entrou ou mudou na lista. Raio total (lock,
+                construtor do venv, conftest: o que muda o ambiente de todo teste) roda a lista
+                inteira; o resto entra só pelo raio declarado (#3535). Sem --base, ou base
+                ilegível, a lista inteira
   --origin-main: só com --portao, sem <alvo> e sem --arvore: busca origin/main no clone base da
                  bancada, mede a lista inteira numa árvore descartável dele e a remove (a
                  rodada diária do bot, card #3370; não grava veredito de seleção)
@@ -694,12 +696,29 @@ lista_portao_de() {  # $1=clone $2=subarvore
 }
 
 # card #3370 (emenda da arq:0116 §6): o portão roda o que a mudança alcança. O raio total
-# mora aqui, no código, e não em arquivo que o diff possa editar: mudança na ferramenta de
-# teste, no construtor do ambiente, no registro, nas listas ou em conftest roda a lista
-# inteira. `*` e `**` casam `/` (erra para mais, nunca para menos).
-RAIO_TOTAL=('lib/**' 'hooks/**' 'bin/teste' 'bin/_release/**' 'registro/venvs.json'
-  'registro/terceiros.json' 'venvs/**' '**/conftest.py' '**/uv.lock' '**/requirements*.txt'
-  '**/pyproject.toml' '**/VERDES')
+# mora aqui, no código, e não em arquivo que o diff possa editar. Regra do dono (14/10/2026,
+# card #3535): roda só o raio de ataque da mudança, e mais nenhum. Raio total é só o que
+# muda o AMBIENTE de todo teste (o lock, o construtor do venv, o conftest); ferramenta,
+# registro e verbo entram pelo raio declarado de cada linha, e linha nova ou mudada numa
+# lista de portão roda por si (linhas_novas_da_lista). `*` e `**` casam `/`.
+RAIO_TOTAL=('lib/venv.sh' 'lib/terceiros.sh' 'registro/terceiros.json' 'venvs/**'
+  '**/conftest.py' '**/uv.lock' '**/requirements*.txt' '**/pyproject.toml'
+  '**/package-lock.json')
+
+# Arquivos que a mudança acrescentou ou mexeu na lista de portão, um por linha: a linha que
+# entra na lista roda no mesmo push, sem arrastar a lista inteira (#3535).
+linhas_novas_da_lista() {  # $1=clone $2=lista(caminho absoluto) $3=base $4=em_arvore(0|1)
+  local rel="${2#"$1"/}" l
+  if [ "${4:-0}" -eq 1 ]; then
+    git -C "$1" diff -U0 "$3" HEAD -- "$rel" 2>/dev/null
+  elif git -C "$1" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1; then
+    git -C "$1" diff -U0 "$3" -- "$rel" 2>/dev/null
+  else
+    sed 's/^/+/' "$2"
+  fi | while IFS= read -r l; do
+    case "$l" in '+++'*|'+#'*|'+') continue ;; '+'*) linha_arquivo "${l#+}"; printf '\n' ;; esac
+  done
+}
 
 casa_glob() {  # $1=arquivo $2=glob (relativo à raiz do repositório)
   local f="$1" g="$2"
@@ -717,6 +736,9 @@ casa_glob() {  # $1=arquivo $2=glob (relativo à raiz do repositório)
 # Arquivos do diff de <base> até a árvore, um por linha. Árvore materializada (pre-push,
 # gate): base..HEAD. Bancada: base..working tree, com o que ainda não está no git.
 # Sai 1 quando a base não resolve na árvore (o chamador roda a lista inteira).
+# Arquivo de lib/ no diff traz junto quem o usa (#3535): lib/ é biblioteca dos verbos, e o
+# raio de cada teste nomeia os verbos que ele chama, não a lib/ deles. Duas passadas: a
+# segunda pega a lib/ que usa a lib/ mudada.
 diff_da_base() {  # $1=arvore $2=base $3=em_arvore(0|1)
   local out
   git -C "$1" rev-parse --verify --quiet "$2^{commit}" >/dev/null 2>&1 || return 1
@@ -725,7 +747,21 @@ diff_da_base() {  # $1=arvore $2=base $3=em_arvore(0|1)
   else
     out="$({ git -C "$1" diff --name-only "$2"; git -C "$1" ls-files -o --exclude-standard; } 2>/dev/null)" || return 1
   fi
-  printf '%s\n' "$out"
+  printf '%s\n' "$out" | expandir_lib "$1" | expandir_lib "$1"
+}
+
+expandir_lib() {  # $1=arvore ; stdin: arquivos ; stdout: os mesmos e quem usa os de lib/
+  local c="$1" todos f n s
+  todos="$(cat)"
+  printf '%s\n' "$todos"
+  while IFS= read -r f; do
+    case "$f" in lib/*) ;; *) continue ;; esac
+    n="${f#lib/}"; s="${n%.*}"
+    git -C "$c" grep --untracked -lE -e "lib/${n}" -e "lib/${s}([^A-Za-z0-9_]|\$)" \
+      -e "^[[:space:]]*(from|import)[[:space:]]+${s}([^A-Za-z0-9_]|\$)" \
+      -e "-m[[:space:]]+${s}([^A-Za-z0-9_]|\$)" -- . 2>/dev/null
+  done <<<"$todos" | { grep -vxF -f <(printf '%s\n' "$todos") || true; } | sort -u
+  return 0
 }
 
 raio_total_de() {  # stdin: arquivos do diff ; imprime o primeiro de raio total ; 1 = nenhum
@@ -759,6 +795,21 @@ alcanca() {  # $1=arquivo da lista (relativo à raiz do repo) $2=globs $3=diff ;
       casa_glob "$f" "$g" && return 0
     done
   done <<<"$3"
+  return 1
+}
+
+# Linha sem raio declarado (#3535): alcançada por arquivo do diff que não é documentação e
+# não mora na subárvore de outra chave da família (outras_subs, do chamador).
+alcanca_sem_raio() {  # $1=diff ; 0 = alcança
+  local f s
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$f" in *.md|docs/*) continue ;; esac
+    for s in ${outras_subs[@]+"${outras_subs[@]}"}; do
+      case "$f" in "$s"/*) continue 2 ;; esac
+    done
+    return 0
+  done <<<"$1"
   return 1
 }
 
@@ -1069,6 +1120,16 @@ ato_rodar() {
         printf '%s: aviso: base %s ilegível em %s — lista inteira\n' "$VERBO" "$base" "$c" >&2
       fi
     fi
+    local novas_lista="" outras_subs=() regr pula _v _k _l _s
+    if [ "$seleciona" -eq 1 ]; then
+      novas_lista="$(linhas_novas_da_lista "$c" "$lista_portao" "$base" "$EM_ARVORE")"
+      # subárvores das outras chaves da família: mudança só nelas não alcança linha sem raio
+      _v="${PLATAFIRMA_VENVS:-$c/registro/venvs.json}"
+      [ -r "$_v" ] || _v="$(dirname "$(readlink -f "$0")")/../registro/venvs.json"
+      while IFS=$'\t' read -r _k _l _s; do
+        [ -n "$_s" ] && [ "$_k" != "$REG_STACK" ] && outras_subs+=("$_s")
+      done < <(PLATAFIRMA_VENVS="$_v" python3 "$REGISTRO" --familia "$REG_FAMILIA" 2>/dev/null)
+    fi
     while IFS= read -r linha_crua; do
       case "$linha_crua" in ''|'#'*) continue ;; esac
       linha="$(linha_arquivo "$linha_crua")"; globs="$(linha_globs "$linha_crua")"
@@ -1081,8 +1142,20 @@ ato_rodar() {
         ausentes+=("$linha"); continue
       fi
       n_lista=$((n_lista + 1))
-      if [ "$seleciona" -eq 1 ] && [ -n "$globs" ] && ! alcanca "$rel_repo" "$globs" "$dif"; then
-        pulados+=("$linha"); continue
+      # regra do dono (14/10/2026, #3535): roda o raio de ataque da mudança e os regressivos.
+      # `arquivo | regressivo #<defeito>` roda sempre; linha sem raio roda quando a mudança
+      # toca código fora das subárvores das outras chaves (documentação não conta).
+      if [ "$seleciona" -eq 1 ]; then
+        regr=0; pula=0
+        case "${globs#"${globs%%[![:space:]]*}"}" in regressivo|regressivo[[:space:]]*) regr=1 ;; esac
+        if [ "$regr" -eq 0 ] && ! printf '%s\n' "$novas_lista" | grep -qxF -- "$linha"; then
+          if [ -n "$globs" ]; then
+            alcanca "$rel_repo" "$globs" "$dif" || pula=1
+          else
+            alcanca "$rel_repo" "" "$dif" || alcanca_sem_raio "$dif" || pula=1
+          fi
+        fi
+        if [ "$pula" -eq 1 ]; then pulados+=("$linha"); continue; fi
       fi
       alvos+=("$dest"); sel_rels+=("$rel_repo")
     done < "$lista_portao"

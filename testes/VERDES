@@ -11,8 +11,9 @@
 #
 # Raio (card #3370): `<arquivo> | <glob> <glob>...`, globs relativos à raiz do repositório. O
 # push e a promoção rodam a linha quando o diff alcança algum glob (ou o próprio arquivo); linha
-# sem `|` roda sempre. Mudança em lib/, hooks/, bin/teste, bin/_release/, registro/, venvs/, em
-# conftest, uv.lock, pyproject ou em lista de portão roda a lista inteira (bin/teste, RAIO_TOTAL).
+# sem `|` roda sempre. Só o que muda o ambiente de todo teste roda a lista inteira: venvs/,
+# lib/venv.sh, conftest, uv.lock, requirements, pyproject (bin/teste, RAIO_TOTAL; #3535). Linha
+# que entra ou muda nesta lista roda no mesmo push, sozinha.
 # A rodada inteira diária no `bot` pega o raio que faltou aqui.
 test_acervo_atos_classificar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_atos_retirar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
