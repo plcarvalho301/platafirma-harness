@@ -10,6 +10,8 @@
   "facets": "http://127.0.0.1:8100/facets",
   "indexacao": "http://127.0.0.1:8100/motor/indexacoes/lote",
   "troca": "http://127.0.0.1:8100/motor/trocas",
+  "ajustes_da_geracao": "http://127.0.0.1:8100/motor/geracoes/servindo/ajustes",
+  "trabalhos": "http://127.0.0.1:8100/motor/trabalhos",
   "gabarito": "/opt/platafirma/current/harness/avaliacao/gabarito.jsonl",
   "medicoes_em": "/srv/platafirma/casa/var/medicoes/rag",
   "banco": {
@@ -234,6 +236,7 @@
    {
     "slug": "aviso-de-cobertura-fraca",
     "var": "MIN_SIM",
+    "geracao": "aviso_de_cobertura_fraca",
     "fase": "9 montagem",
     "onde": "compose",
     "faixa": "0 a 1",
@@ -245,6 +248,7 @@
    {
     "slug": "aviso-com-revisor",
     "var": "MIN_CE",
+    "geracao": "aviso_com_revisor",
     "fase": "9 montagem",
     "onde": "compose",
     "faixa": "0 a 1",
@@ -333,6 +337,7 @@
    {
     "slug": "veredito-por-conceito",
     "var": "VEREDITO_POR_CONCEITO",
+    "geracao": "veredito_por_conceito",
     "fase": "9 montagem",
     "onde": "compose",
     "faixa": "true ou false",

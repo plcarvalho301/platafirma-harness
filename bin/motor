@@ -4,8 +4,8 @@
 # dono: ia
 # componente: platafirma-motor
 # classe: B
-# use para: achar pelo sentido o trecho que responde a X (buscar <particao> --necessidade "<uma frase que nomeia o assunto pelo termo do acervo>"; o verbo manda a pergunta com a necessidade e, com PF_CHAPEU, o chapeu com cadeira, chapeu e rotulos dele; recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou | ou vem em saco de palavras; --origem abertura|bench|sombra|autoteste manda o texto literal, sem lint e sem montagem; `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar biblioteca obra --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), medir sem gravar a eleicao de chapeu sobre o log de perguntas (eleger), medir sem gravar quanto do log o lint da consulta montada recusaria (lintar), comparar a chamada de hoje, a frase do dono e a lista montada nas perguntas do piloto, ou, com --do-log, a busca de hoje e a busca com o eleito do chapeu nas chamadas do log (parear biblioteca), julgar com o juiz (Claude) as respostas do piloto da escada e medir o juiz contra a primeira passada do dono: kappa, divergencias, tempo e lote de conferencia (julgar biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste)
-# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote), julgar (escrita, lote), eleger (leitura, medida)
+# use para: achar pelo sentido o trecho que responde a X (buscar <particao> --necessidade "<uma frase que nomeia o assunto pelo termo do acervo>"; o verbo manda a pergunta com a necessidade e, com PF_CHAPEU, o chapeu com cadeira, chapeu e rotulos dele; recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou | ou vem em saco de palavras; --origem abertura|bench|sombra|autoteste manda o texto literal, sem lint e sem montagem; `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar biblioteca obra --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), medir sem gravar a eleicao de chapeu sobre o log de perguntas (eleger), medir sem gravar quanto do log o lint da consulta montada recusaria (lintar), comparar a chamada de hoje, a frase do dono e a lista montada nas perguntas do piloto, ou, com --do-log, a busca de hoje e a busca com o eleito do chapeu nas chamadas do log (parear biblioteca), julgar com o juiz (Claude) as respostas do piloto da escada e medir o juiz contra a primeira passada do dono: kappa, divergencias, tempo e lote de conferencia (julgar biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste), ler o log de recuperacao com filtro ou a serie diaria de cobertura (consultas), ver os lotes do rag e as sombras de bench com o estado de vida (trabalhos)
+# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote), julgar (escrita, lote), eleger (leitura, medida), consultas (leitura, medida), trabalhos (leitura, medida)
 # (buscar/medir/indexar/trocar/sortear/escrever/parear/julgar exigem particao; eleger e lintar leem o log inteiro e nao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar|desativar), eventos, juiz)
 # forma: json
 # cauda: nao
@@ -13,7 +13,7 @@
 # consome: rag-extractor-api@platafirma-conhecimento/rag/openapi.yaml >=1.0 (buscar, medir, indexar; endpoints por instancia em motor-instancias.json)
 # ambiente: PLATAFIRMA_RELEASE origem-shell [=/opt/platafirma/current] (gabarito); PLATAFIRMA_INSTANCIA origem-shell [=/srv/platafirma/casa] (segredos, log, medicoes, sobreposicao do compose); OPS_LOG_DIR origem-shell [=$PLATAFIRMA_INSTANCIA/var/log/ops]; PF_BIN origem-shell (teste; ausente e o bin/ da propria arvore); PF_SESSAO porta; PF_ORDEM_ID porta; PF_CADEIRA porta; PF_CHAPEU porta; PF_ABERTURA_DIR origem-shell [=$PLATAFIRMA_INSTANCIA/var/abertura-publicada] (rotas-chapeu.json, os rotulos da consulta montada); OPS_NAME porta; USER shell
 # le: listar=arquivo-local
-# le: ajuste=arquivo-local,release
+# le: ajuste=motor,arquivo-local,release
 # le: buscar=motor,arquivo-local
 # le: medir=motor,release,arquivo-local
 # le: indexar=motor,acervo.obra
@@ -24,8 +24,10 @@
 # le: escrever=motor,arquivo-local
 # le: julgar=motor,arquivo-local,release
 # le: eleger=motor
+# le: consultas=motor
+# le: trabalhos=motor
 # escreve: listar=nada
-# escreve: ajuste=arquivo-local
+# escreve: ajuste=motor,arquivo-local
 # escreve: buscar=arquivo-local
 # escreve: medir=arquivo-local
 # escreve: indexar=motor
@@ -36,6 +38,8 @@
 # escreve: escrever=motor,arquivo-local
 # escreve: julgar=motor,arquivo-local
 # escreve: eleger=nada
+# escreve: consultas=nada
+# escreve: trabalhos=nada
 # face: ajuste=motor
 # face: indexar=motor
 # face: trocar=motor
@@ -76,6 +80,12 @@ import consulta  # noqa: E402  (a consulta montada pelo verbo: lint, pedido do d
 import par_consulta  # noqa: E402  (o par minimo: a chamada de hoje, a frase do dono e a lista montada, #3360)
 import juiz  # noqa: E402  (o juiz do piloto da escada: Claude pelo gerador do rag, criterio da tela, #3350)
 import kappa  # noqa: E402  (o juiz contra a primeira passada do dono, divergencias e lote de conferencia, #3350)
+import chamada_rag  # noqa: E402  (a chamada ao rag-api que o ajuste e os trabalhos repetem, #3513)
+import ajuste as ajustemod  # noqa: E402  (o ajuste pela geracao servindo, com fundamento, historico e recusas, #3513)
+import consultas as consultasmod  # noqa: E402  (o log de recuperacao como o dono o le: lista e serie por dia, #3513)
+import trabalhos as trabalhosmod  # noqa: E402  (os lotes do rag e as sombras de bench, com o estado de vida, #3513)
+import historico as historicomod  # noqa: E402  (o historico de medida com o marco das geracoes e dos ajustes, #3513)
+import pendencias as pendenciasmod  # noqa: E402  (a decisao pendente do estado da troca, forma da R23, #3513)
 
 REG = os.environ.get("PF_MOTOR_REG") or str(_ARVORE / "registro" / "motor-instancias.json")
 BIN = os.environ.get("PF_BIN") or str(_ARVORE / "bin")
@@ -177,9 +187,14 @@ def uso(cod=2):
     print("""motor — o que cada motor serve e mede
 
   motor listar                          instancias declaradas e estado
-  motor <inst> ajuste                    todos os ajustes, com o valor de hoje
-  motor <inst> ajuste <slug>             o que esse ajuste troca por que
-  motor <inst> ajuste <slug> <valor>     mexe, promove e confere o servido
+  motor <inst> ajuste [--json]           todos os ajustes, com o valor de hoje (o da geracao servindo para os
+                                        tres que ela carrega; o do compose so como divergente)
+  motor <inst> ajuste <slug> [--json]    o que esse ajuste troca por que
+  motor <inst> ajuste <slug> <valor> --fundamento "<porque>" [--json]
+                                        mexe e confere o servido; sem fundamento sai 2, com servico fora
+                                        no sinal sai 3, com trabalho aberto sai 4; grava o historico
+  motor <inst> ajuste --historico [<slug>] [--json]
+                                        as mexidas, uma linha cada (var/motor/ajustes-historico.jsonl)
   motor <inst> buscar <particao> --necessidade "<uma frase que nomeia o assunto pelo termo do acervo>"
                      [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>] [--ordem-id <id>] [--geracao <id|gN>]
                                         a necessidade e UMA frase legivel que nomeia o assunto pelo termo do
@@ -190,6 +205,11 @@ def uso(cod=2):
                                         lote. O texto posicional passa pelo mesmo lint.
                      [--origem abertura|bench|sombra|autoteste]   so a abertura e os atos de medida: texto literal,
                                         sem lint nem montagem (spec motor-do-conhecimento §2b)
+                     [--previa [--piso 0.61] [--piso-revisor 0.7] [--instrucao "<texto>"]] [--rastro]
+                                        --previa roda com origem `previa`, fora da serie de cobertura e da
+                                        lista de consultas, e so nela valem o piso do aviso, o piso do revisor e
+                                        a instrucao da pergunta por chamada (ponto decimal; virgula e recusada
+                                        antes da busca); --rastro traz o que cada braco trouxe e o que se cortou
   motor <inst> medir  <particao> [--k N] [--rerank] [--veredito] [--rotulo <nome>] [--gabarito <arq>]
                      [--expansao [--peso-conceito X]] [--geracao <id|gN>]
                                         bateria no gold da particao, pela porta servida:
@@ -207,6 +227,18 @@ def uso(cod=2):
                                         mede contra o servido no gabarito e no replay do log
   motor <inst> medir  <particao> --sombra-ver <id>   progresso e resultado da sombra
   motor <inst> medir  <particao> --sombra-parar <id> encerra a sombra em curso
+  motor <inst> medir  <particao> --json             a bateria em JSON: o bloco de cada indicador, o delta, a hora e a fonte
+  motor <inst> medir  <particao> --historico [--desde <data>] [--rotulo <r>] [--json]
+                                        as rodadas salvas em ordem, com o marco de cada virada de geracao e de
+                                        cada ajuste aplicado
+  motor <inst> consultas <particao> [--desde <data>] [--ate <data>] [--cadeira <slug>] [--chapeu <slug>]
+                     [--origem <o>[,<o>…]] [--cobertura <c>] [--texto <trecho>] [--limite N] [--json]
+  motor <inst> consultas <particao> --por-dia [--desde <data>] [--ate <data>] [--json]
+                                        o log de recuperacao (a pergunta inteira, a cobertura, a origem, o tempo
+                                        por fase; sem a previa) ou a serie diaria de cobertura, que conta as
+                                        linhas sem cobertura gravada a parte
+  motor <inst> trabalhos [--json]       os lotes do rag e as sombras de bench, cada um vivo, parado ou nao consegui
+                                        olhar, com desde quando
   motor <inst> indexar biblioteca [--obra <uuid>,…] [--promover] [--autor <slug>] [--apply] [--json]
                                         indexa a impressao selada da obra marcada para
                                         indexar, no rag-api, sem po-la no ar (plano sem --apply);
@@ -370,7 +402,9 @@ def escreve_no_env(inst, b, v, novo):
     print("comparar os dois no mesmo gold nao mede nada ate uma reingestao completa.")
 
 
-def cmd_ajuste(nome, inst, argv):
+def _ajuste_pelo_compose(nome, inst, argv):
+    """O caminho de escrita de sempre, para o ajuste que mora no compose ou no env da ingestao; a lista e
+    o detalhe, que leem a geracao, sao do `cmd_ajuste` (#3513)."""
     env, err = servido(inst)
     ajustes = {b["slug"]: b for b in inst["ajustes"]}
 
@@ -464,6 +498,252 @@ def cmd_ajuste(nome, inst, argv):
     else:
         print(f"\nNAO CONFERE: pedi {novo}, o container serve {agora}", file=sys.stderr)
         sys.exit(1)
+
+
+USO_AJUSTE = ("motor <inst> ajuste [--json]\n"
+              "  motor <inst> ajuste <slug> [--json]\n"
+              "  motor <inst> ajuste <slug> <valor> --fundamento \"<porque>\" [--json]\n"
+              "  motor <inst> ajuste --historico [<slug>] [--json]")
+
+
+def _sai_da_falha(contexto, f):
+    print(f"{contexto}: {f.mensagem}", file=sys.stderr)
+    sys.exit(f.codigo)
+
+
+def _contexto_do_ajuste(inst):
+    """O que o ajuste olha: o compose (docker inspect), a geracao servindo (rota da #3510) e o env da
+    ingestao. Cada fonte que nao responde entra com o motivo, nunca some em silencio (arq:0110 §4)."""
+    env, err = servido(inst)
+    try:
+        tok = token_da(inst)
+        ger, ger_erro = ajustemod.ler_geracao(inst, tok)
+    except SystemExit:
+        tok, ger, ger_erro = None, None, "o segredo do token do rag-api nao abriu"
+    return {"env": env, "env_erro": err, "tok": tok, "ger": ger, "ger_erro": ger_erro,
+            "env_ing": le_env_da_ingestao(inst)}
+
+
+def _resolve_ajuste(b, ctx):
+    return ajustemod.resolve(b, ctx["ger"], ctx["ger_erro"], ctx["env"], ctx["env_ing"])
+
+
+def _ajuste_em_json(inst, b, r, ctx):
+    v = r["valor"]
+    da_geracao = r["origem"].startswith("geracao")
+    fonte = ("rag-api GET /motor/geracoes/servindo/ajustes" if da_geracao
+             else f"docker inspect {inst.get('container')}" if r["origem"] == "compose"
+             else caminho_env(inst) if r["origem"] == "env da ingestao"
+             else "default do codigo (registro)")
+    return {"slug": b["slug"], "var": b["var"], "fase": b["fase"],
+            "valor": ajustemod.tipar(v) if isinstance(v, str) else v,
+            "origem": r["origem"], "fonte": fonte,
+            "lido_em": (ctx["ger"] or {}).get("lido_em") if da_geracao else ajustemod.agora(),
+            "divergente": r["divergente"], "nao_consegui_olhar": r["nao_consegui_olhar"],
+            "faixa": b["faixa"], "direcao": {"sobe": b["sobe"], "custa": b["custa"]}, "como_sei": b["medir"]}
+
+
+def _pontos_cegos(ctx):
+    return {k: v for k, v in (("geracao", ctx["ger_erro"]), ("compose", ctx["env_erro"])) if v}
+
+
+def cmd_ajuste(nome, inst, argv):
+    """Ler e mexer um ajuste (#3513). Os tres que a geracao carrega leem e escrevem nela; os outros seguem
+    pelo compose e pelo env. Escrita pede fundamento, recusa com servico fora ou trabalho aberto e grava o
+    historico."""
+    como_json = historico = False
+    fundamento = None
+    pos = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--json":
+            como_json = True
+        elif a == "--historico":
+            historico = True
+        elif a == "--fundamento":
+            if i + 1 >= len(argv):
+                print(f"ajuste: --fundamento exige o texto.\n  {USO_AJUSTE}", file=sys.stderr)
+                sys.exit(2)
+            fundamento = argv[i + 1]
+            i += 1
+        elif a.startswith("--"):
+            print(f"ajuste: argumento desconhecido {a!r}.\n  {USO_AJUSTE}", file=sys.stderr)
+            sys.exit(2)
+        else:
+            pos.append(a)
+        i += 1
+    if len(pos) > 2 or (historico and (len(pos) > 1 or fundamento is not None)) \
+            or (fundamento is not None and len(pos) != 2):
+        print(f"ajuste: forma invalida.\n  {USO_AJUSTE}", file=sys.stderr)
+        sys.exit(2)
+    ajustes = {b["slug"]: b for b in inst["ajustes"]}
+    if pos and pos[0] not in ajustes:
+        print(f"nao existe ajuste '{pos[0]}'. Ha: {', '.join(ajustes)}", file=sys.stderr)
+        sys.exit(1)
+    instancia = raizes.instancia()
+
+    if historico:
+        linhas = ajustemod.ler_historico(instancia, pos[0] if pos else None)
+        if como_json:
+            print(json.dumps({"lido_em": ajustemod.agora(), "fonte": str(ajustemod.caminho_historico(instancia)),
+                              "itens": linhas}, ensure_ascii=False, indent=1))
+        else:
+            print(ajustemod.texto_do_historico(linhas))
+        return
+
+    if len(pos) == 2:
+        return _ajuste_escrever(nome, inst, ajustes[pos[0]], pos[1], fundamento, como_json, instancia)
+
+    ctx = _contexto_do_ajuste(inst)
+    if not pos:
+        linhas = [(b, _resolve_ajuste(b, ctx)) for b in inst["ajustes"]]
+        if como_json:
+            ger = ctx["ger"]
+            print(json.dumps({
+                "lido_em": ajustemod.agora(),
+                "geracao": ({"numero": ger["geracao"], "id": ger["geracao_id"], "lido_em": ger.get("lido_em")}
+                            if ger else None),
+                "nao_consegui_olhar": _pontos_cegos(ctx),
+                "ajustes": [_ajuste_em_json(inst, b, r, ctx) for b, r in linhas],
+                "fora_da_lista": inst["nao_e_ajuste"]}, ensure_ascii=False, indent=1))
+            return
+        if ctx["env_erro"]:
+            print(f"[{ctx['env_erro']} — valores abaixo sao o DECLARADO, nao o servido]\n")
+        if ctx["ger_erro"]:
+            print(f"[nao consegui olhar a geracao servindo ({ctx['ger_erro']}) — os tres ajustes dela "
+                  f"aparecem pelo compose]\n")
+        larg = max(len(s) for s in ajustes)
+        for b, r in linhas:
+            v = r["valor"]
+            if r["origem"].startswith("geracao"):
+                mostrado = ajustemod.br(v)
+            else:
+                mostrado = str(v) if v not in (None, "") else (b["codigo"] or "(vazio)")
+            # Valor longo (instrucao de pergunta, nome de modelo) desalinha a coluna e some
+            # com a fase, que e o que organiza a leitura. O inteiro sai no detalhe e no --json.
+            if len(mostrado) > 12:
+                mostrado = mostrado[:11] + "…"
+            onde = r["origem"]
+            if r["divergente"]:
+                onde += f"; o compose diz {ajustemod.br(ajustemod.tipar(r['divergente']['compose']))}, divergente"
+            print(f"  {b['slug']:<{larg}}  {mostrado:>12}   fase {b['fase']:<14} ({onde})")
+        print(f"\n  detalhe de um: motor {nome} ajuste <nome-do-ajuste>")
+        print(f"  fora da lista, e por que: {', '.join(inst['nao_e_ajuste'])}")
+        return
+
+    b = ajustes[pos[0]]
+    r = _resolve_ajuste(b, ctx)
+    if como_json:
+        print(json.dumps({**_ajuste_em_json(inst, b, r, ctx), "geracao": (ctx["ger"] or {}).get("geracao")},
+                         ensure_ascii=False, indent=1))
+        return
+    v = r["valor"]
+    da_geracao = r["origem"].startswith("geracao")
+    print(f"{b['slug']}   hoje: {ajustemod.br(v) if da_geracao else v}   faixa: {b['faixa']}   fase {b['fase']}")
+    if da_geracao or r["divergente"] or r["nao_consegui_olhar"]:
+        extra = (f"; o compose diz {ajustemod.br(ajustemod.tipar(r['divergente']['compose']))}, divergente"
+                 if r["divergente"] else "")
+        print(f"  origem    : {r['origem']}{extra}")
+        if r["nao_consegui_olhar"]:
+            print(f"  atencao   : {r['nao_consegui_olhar']}")
+    print(f"  subir da  : {b['sobe']}")
+    print(f"  e custa   : {b['custa']}")
+    print(f"  como sei  : {b['medir']}")
+    arquivo = (caminho_env(inst) if b.get("onde") == "env" else caminho_override(inst))
+    print(f"  (variavel {b['var']}, no {arquivo})")
+
+
+def _roda_o_compose(nome, inst, b, texto):
+    """O caminho de escrita de sempre, com a saida guardada: (saida, exit)."""
+    import contextlib
+    import io
+    buf = io.StringIO()
+    codigo = 0
+    try:
+        with contextlib.redirect_stdout(buf):
+            _ajuste_pelo_compose(nome, inst, [b["slug"], texto])
+    except SystemExit as e:
+        codigo = e.code if isinstance(e.code, int) else 1
+    return buf.getvalue(), codigo
+
+
+def _ajuste_escrever(nome, inst, b, texto, fundamento_flag, como_json, instancia):
+    """`motor <inst> ajuste <slug> <valor> --fundamento …` (#3513): fundamento, recusas, escrita, conferencia
+    contra o servido e historico. Exit 2 sem fundamento, 3 com servico fora, 4 com trabalho aberto."""
+    try:
+        fund, origem_ato = ajustemod.fundamento_e_origem(fundamento_flag)
+        if b.get("onde") == "env" and origem_ato == "face":
+            raise chamada_rag.Falha(4, f"{b['slug']} e ajuste de corte e a face so o le: "
+                                       "nao implementado — #3506")
+        ctx = _contexto_do_ajuste(inst)
+        r = _resolve_ajuste(b, ctx)
+        antes, novo = r["valor"], ajustemod.tipar(texto)
+        da_geracao = bool(b.get("geracao"))
+        n_ger = (ctx["ger"] or {}).get("geracao")
+        notas = []
+        if da_geracao and r["origem"].startswith("geracao") and ajustemod.mesmo_valor(antes, novo):
+            print(f"{b['slug']} ja esta em {ajustemod.br(novo)} na geracao g{n_ger}. Nada a fazer.")
+            return
+        if b.get("onde") != "env":
+            if not ctx["tok"]:
+                raise chamada_rag.Falha(3, "o segredo do token do rag-api nao abriu; sem ele nao ha como "
+                                           "olhar os trabalhos antes de mexer")
+            notas = ajustemod.recusar_se_nao_der(inst, ctx["tok"], instancia, reinicia=not da_geracao)
+        linha = {"em": ajustemod.agora(), "slug": b["slug"], "chave": b.get("geracao") or b["var"],
+                 "sujeito": ajustemod.sujeito(), "fundamento": fund, "origem": origem_ato}
+        if da_geracao:
+            if not ctx["ger"]:
+                raise chamada_rag.Falha(3, f"nao consegui ler a geracao servindo ({ctx['ger_erro']}); "
+                                           f"{b['slug']} mora nela")
+            res = ajustemod.mudar_geracao(inst, ctx["tok"], b["geracao"], novo, linha["sujeito"], fund)
+            antes, depois = res["anterior"], res["novo"]
+            linha.update(antes=antes, depois=depois, geracao=res["geracao"], onde="geracao")
+            caminho = ajustemod.grava_historico(instancia, linha)
+            lida, _ = ajustemod.ler_geracao(inst, ctx["tok"])
+            lido = ((lida or {}).get("ajustes") or {}).get(b["geracao"])
+            conferido = lida is not None and ajustemod.mesmo_valor(lido, depois)
+            saida = (f"{b['slug']}: {ajustemod.br(antes)} -> {ajustemod.br(depois)}  "
+                     f"(geracao g{res['geracao']}, {b['geracao']})\n"
+                     + (f"CONFERIDO no servido: {b['geracao']}={ajustemod.br(lido)}" if conferido
+                        else f"NAO CONFERE: pedi {ajustemod.br(depois)}, a geracao serve {ajustemod.br(lido)}"))
+            codigo = 0 if conferido else 1
+        else:
+            saida, codigo = _roda_o_compose(nome, inst, b, texto)
+            novo_lido = (le_env_da_ingestao(inst).get(b["var"]) if b.get("onde") == "env"
+                         else (servido(inst)[0] or {}).get(b["var"]))
+            depois = novo_lido if novo_lido is not None else antes
+            conferido = codigo == 0
+            if codigo == 0 and not ajustemod.mesmo_valor(antes, depois):
+                linha.update(antes=antes, depois=depois, geracao=None,
+                             onde="env" if b.get("onde") == "env" else "compose")
+                caminho = ajustemod.grava_historico(instancia, linha)
+            else:
+                caminho = None
+            if codigo and not como_json:
+                print(saida, end="")
+                sys.exit(codigo)
+        volta = (f"motor {nome} ajuste {b['slug']} {ajustemod.br(antes)} --fundamento \"<porque>\""
+                 if not ajustemod.mesmo_valor(antes, depois) else None)
+        if como_json:
+            print(json.dumps({"lido_em": ajustemod.agora(), "slug": b["slug"], "antes": antes, "depois": depois,
+                              "origem_do_valor": "geracao" if da_geracao else linha.get("onde", "compose"),
+                              "origem_do_ato": origem_ato, "geracao": linha.get("geracao"),
+                              "conferido": conferido, "volta": volta,
+                              "historico": str(caminho) if caminho else None, "avisos": notas,
+                              "saida": saida.strip()}, ensure_ascii=False, indent=1))
+        else:
+            print(saida, end="" if saida.endswith("\n") else "\n")
+            for n in notas:
+                print(f"  ({n})")
+            if volta:
+                print(f"volta: {volta}")
+            if caminho:
+                print(f"historico: {caminho}")
+        if codigo:
+            sys.exit(codigo)
+    except chamada_rag.Falha as f:
+        _sai_da_falha("motor ajuste", f)
 
 
 # O lote de indexacao roda no rag-api (#3203): a API ja tem o embedder carregado, autentica pelo
@@ -606,6 +886,8 @@ def cmd_indexar(inst, argv):
                   file=sys.stderr)
             sys.exit(2)
     tok = token_da(inst)
+    if lote and como_json:
+        return _relatorio_em_json(inst, tok, lote)
     if lote:
         r = _lote_indexacao(inst, tok, lote=lote)
         print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_do_relatorio(r))
@@ -837,8 +1119,10 @@ def cmd_trocar(inst, argv):
         r = _chama_troca(inst, tok, "", corpo)
         print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_da_troca(r))
         return
+    if como_json:
+        return _estado_da_troca_em_json(inst, tok, particao)
     r = _chama_troca(inst, tok, f"/{particao}")
-    print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_da_troca(r))
+    print(_texto_da_troca(r))
 
 def _texto_do_lote_da_troca(r):
     """Primeira linha: a cobertura (impressoes com indice aprovado sobre as que servem), como o card manda."""
@@ -948,7 +1232,7 @@ def _trata_erro_http(e, contexto="motor"):
 
 # Quem chamou a busca (#3314); a mesma lista do CHECK de acervo.evento_recuperacao. A abertura e a
 # medida mandam a sua; chamada sem a flag grava busca.
-ORIGENS = ("abertura", "busca", "bench", "sombra", "autoteste")
+ORIGENS = ("abertura", "busca", "bench", "sombra", "autoteste", "previa")
 # A consulta montada (#3360, spec motor §2b) e so da origem `busca`: a abertura manda o prompt do dono
 # literal e a medida manda o gabarito literal, e os dois precisam chegar intactos ao motor.
 ORIGENS_LITERAIS = ("abertura", "bench", "sombra", "autoteste")
@@ -984,6 +1268,7 @@ def cmd_buscar(nome_inst, inst, argv):
     palavras = []
     necessidade = None
     sem_lint = False
+    previa = False
     i = 0
     while i < len(resto):
         a = resto[i]
@@ -991,12 +1276,21 @@ def cmd_buscar(nome_inst, inst, argv):
             sem_lint = True
             i += 1
             continue
+        if a == "--previa":                   # a previa do dono (#3513): origem propria, fora da serie
+            previa = True
+            i += 1
+            continue
+        if a == "--rastro":                   # o que cada braco trouxe e o que se cortou (#3510)
+            corpo["rastro"] = True
+            i += 1
+            continue
         if a.startswith("--"):
             nome = a[2:]
-            if nome not in ("k", "texto", "conceito", "ordem-id", "origem", "geracao", "necessidade"):
+            if nome not in ("k", "texto", "conceito", "ordem-id", "origem", "geracao", "necessidade",
+                            "piso", "piso-revisor", "instrucao"):
                 print("buscar: flag desconhecida " + repr(a)
                       + ". conhecidas: --necessidade, --sem-lint, --k, --texto, --conceito, --ordem-id,"
-                        " --origem, --geracao.\n  " + uso,
+                        " --origem, --geracao, --previa, --rastro, --piso, --piso-revisor, --instrucao.\n  " + uso,
                       file=sys.stderr)
                 sys.exit(2)
             if i + 1 >= len(resto) or resto[i + 1].startswith("--"):
@@ -1019,6 +1313,21 @@ def cmd_buscar(nome_inst, inst, argv):
                           file=sys.stderr)
                     sys.exit(2)
                 corpo["origem"] = v
+            elif nome in ("piso", "piso-revisor"):   # so na previa; recusado antes da busca rodar
+                if "," in v:
+                    print(f"buscar: --{nome} {v!r} tem virgula decimal; a previa pede ponto (0.61).", file=sys.stderr)
+                    sys.exit(2)
+                try:
+                    piso = float(v)
+                except ValueError:
+                    print(f"buscar: --{nome} exige numero, recebi {v!r}.", file=sys.stderr)
+                    sys.exit(2)
+                if not 0 < piso <= 1:
+                    print(f"buscar: --{nome} vai de 0 (exclusivo) a 1, recebi {v!r}.", file=sys.stderr)
+                    sys.exit(2)
+                corpo["aviso_de_cobertura_fraca" if nome == "piso" else "aviso_com_revisor"] = piso
+            elif nome == "instrucao":
+                corpo["instrucao_da_pergunta"] = v
             elif nome == "k":
                 try:
                     corpo["k"] = int(v)
@@ -1035,6 +1344,16 @@ def cmd_buscar(nome_inst, inst, argv):
             palavras.append(a)
             i += 1
 
+    if previa:
+        if corpo.get("origem") not in (None, "previa"):
+            print("buscar: --previa e --origem " + corpo["origem"] + " juntos; a previa tem origem propria.\n  " + uso,
+                  file=sys.stderr)
+            sys.exit(2)
+        corpo["origem"] = "previa"
+    elif any(k in corpo for k in ("aviso_de_cobertura_fraca", "aviso_com_revisor", "instrucao_da_pergunta")):
+        print("buscar: --piso, --piso-revisor e --instrucao so valem na --previa (fora da serie de cobertura "
+              "e da lista de consultas).\n  " + uso, file=sys.stderr)
+        sys.exit(2)
     if necessidade is not None and palavras:
         print("buscar: texto posicional e --necessidade juntos; use um so.\n  " + uso, file=sys.stderr)
         sys.exit(2)
@@ -1275,7 +1594,7 @@ def ultima_medicao(inst, gabarito, geracao=None):
     return None
 
 
-def cmd_medir(nome, inst, argv):
+def _medir_bateria(nome, inst, argv):
     particao, argv = resolve_particao(argv, "medir")
     if "--calibrar" in argv:
         return cmd_calibrar(inst, particao, argv)
@@ -1342,7 +1661,7 @@ def cmd_medir(nome, inst, argv):
     abst_ok, abst_total = 0, 0
     abst_sem, total_sem, abst_com, total_com = 0, 0, 0, 0
     perguntas = []
-    lat, t0 = [], time.time()
+    lat, t0, fases = [], time.time(), {}
     # Os bracos ligam por chamada em `bracos` (a lista que a API le desde o #2895). Os booleanos
     # `rerank` e `expansao` no corpo, que esta bateria mandava, a API nao le: a rodada dita «revisor
     # LIGADO» media o mesmo numero que a sem revisor (medido em 07/10/2026, #3264).
@@ -1357,6 +1676,9 @@ def cmd_medir(nome, inst, argv):
             corpo["geracao"] = geracao
         r = http(inst["endpoint"], tok, corpo)
         lat.append((r.get("tempos_ms") or {}).get("total", 0.0))
+        for fase, ms in (r.get("tempos_ms") or {}).items():       # a latencia por fase (R1, #3513)
+            if fase != "total" and isinstance(ms, (int, float)) and not isinstance(ms, bool):
+                fases.setdefault(fase, []).append(ms)
         cob = (r.get("cobertura") or "").lower()
         sinal = r.get("sinal") or {}
         linha = {"id": g.get("id"), "q": g["q"], "familia": g["familia"], "estrato": g.get("estrato"),
@@ -1400,6 +1722,8 @@ def cmd_medir(nome, inst, argv):
            "abstencao_por_grupo": {"sem_obra": f"{abst_sem}/{total_sem}", "com_obra": f"{abst_com}/{total_com}"},
            "perguntas": perguntas,
            "latencia_ms": {"mediana": round(_p(lat, 0.5), 1), "p90": round(_p(lat, 0.9), 1)},
+           "latencia_por_fase_ms": {f: {"mediana": round(_p(v, 0.5), 1), "p90": round(_p(v, 0.9), 1)}
+                                    for f, v in sorted(fases.items())},
            "elapsed_s": round(time.time() - t0, 1)}
 
     col_k = f" {'hit@' + str(k):>7}" if k not in (1, 3, 5) else ""
@@ -1471,6 +1795,7 @@ def cmd_medir(nome, inst, argv):
     else:
         print("\n  primeira medicao: nao ha baseline. Meca de novo depois de mexer.")
     print(f"\n  salvo em {arq}")
+    return {"med": med, "arquivo": arq, "anterior": anterior}
 
 
 def _medida_da_rodada(linhas):
@@ -2998,6 +3323,256 @@ def cmd_eleger(nome_inst, inst, argv):
     print(f"  {'total':<{larg_cad}}  {'':<{larg_chap}}  {total_eventos:>7}  {total_sem_conceito:>19}  {total_sem_casamento:>21}")
 
 
+# ---------------------------------------------------------------- a face motor le (#3513)
+# Os atos abaixo sao leitura: cada um diz a hora, a fonte e, onde nao deu para olhar, "nao consegui olhar" com
+# o motivo (arq:0110 §4), nunca zero nem vazio no lugar do dado que falta.
+
+def _usa(contexto, uso, msg):
+    print(f"{contexto}: {msg}.\n  {uso}", file=sys.stderr)
+    sys.exit(2)
+
+
+USO_MEDIR_JSON = "motor <inst> medir <particao> [...] --json | motor <inst> medir <particao> --historico [--desde <data>] [--rotulo <r>] [--json]"
+
+
+def cmd_medir(nome, inst, argv):
+    """`medir`: a bateria (texto, ou JSON com `--json`) e o historico das rodadas (`--historico`, #3513)."""
+    if "--historico" in argv:
+        return _medir_historico(inst, argv)
+    if "--json" not in argv:
+        return _medir_bateria(nome, inst, argv)
+    if any(x in argv for x in ("--calibrar", "--sombra", "--sombra-ver", "--sombra-parar")):
+        _usa("medir", USO_MEDIR_JSON, "--json vale para a bateria e para --historico; calibrar e sombra seguem em texto")
+    import contextlib
+    with contextlib.redirect_stdout(sys.stderr):      # o progresso da bateria vai ao stderr; o stdout e o JSON
+        res = _medir_bateria(nome, inst, [x for x in argv if x != "--json"])
+    print(json.dumps(_medida_em_json(res), ensure_ascii=False, indent=1))
+
+
+def _indicador(med, nome, valor, mede, amostra):
+    """O bloco do indicador (spec R5, R6): o que mede, a amostra, a regra e quem configurou, com a hora e a fonte.
+    Sem limiar configurado a medida entra como aviso, sem nivel de risco."""
+    out = {"nome": nome, "valor": valor, "hora": med["em"],
+           "fonte": f"motor medir: bateria no gabarito {med.get('gabarito')}, pela porta servida",
+           "mede": mede, "amostra": amostra,
+           "regra": "sem limiar configurado: medida nova entra como aviso, sem nivel de risco (R6)",
+           "quem_configurou": "ia"}
+    if valor is None:
+        out["nao_consegui_olhar"] = "a rodada nao trouxe este dado"
+    return out
+
+
+def _medida_em_json(res):
+    med = res["med"]
+    m = med["metricas"]
+    geral = m.get("geral") or {}
+    n_perg = len(med.get("perguntas") or [])
+    amostra = (f"{geral.get('n')} pergunta(s) com alvo do gabarito, k={med['k']}, revisor "
+               f"{'ligado' if med.get('rerank') else 'desligado'}")
+    abst = m.get("abstencao")
+    lat = med.get("latencia_ms") or {}
+    a_lat = f"{n_perg} chamada(s) da bateria"
+    indicadores = [
+        _indicador(med, "acerto na primeira posicao (hit@1)", geral.get("hit@1"),
+                   "fracao das perguntas com alvo em que o trecho certo veio em primeiro", amostra),
+        _indicador(med, "acerto entre as cinco primeiras (hit@5)", geral.get("hit@5"),
+                   "fracao das perguntas com alvo em que o trecho certo veio entre os cinco primeiros", amostra),
+        _indicador(med, "abstencao nas negativas", abst.get("taxa") if isinstance(abst, dict) else None,
+                   "fracao das perguntas sem obra no acervo em que a busca declarou cobertura fraca ou nenhuma",
+                   f"{abst['n']} negativa(s) do gabarito" if isinstance(abst, dict) else "nenhuma negativa na rodada"),
+        _indicador(med, "latencia mediana (ms, total)", lat.get("mediana"), "tempo servido da busca, mediana", a_lat),
+        _indicador(med, "latencia p90 (ms, total)", lat.get("p90"), "tempo servido da busca, percentil 90", a_lat)]
+    for fase, v in (med.get("latencia_por_fase_ms") or {}).items():
+        indicadores.append(_indicador(med, f"latencia por fase: {fase} (ms)", v,
+                                      f"tempo da fase {fase} na busca servida, mediana e p90", a_lat))
+    delta, ant = None, res.get("anterior")
+    if ant:
+        antm = ant.get("metricas") or {}
+        delta = {"contra": ant.get("em"), "rotulo": ant.get("rotulo") or None,
+                 "familias": {fam: {"hit@1": round(m[fam]["hit@1"] - antm[fam]["hit@1"], 3),
+                                    "mrr": round(m[fam]["mrr"] - antm[fam]["mrr"], 3)}
+                              for fam in ("codigo", "sentido", "t2", "geral") if fam in m and fam in antm},
+                 "mudou_no_indice": sorted(c for c in set(med["indice"]) | set(ant.get("indice") or {})
+                                           if med["indice"].get(c) != (ant.get("indice") or {}).get(c)
+                                           and c != "sha_calculado_em")}
+    return {"lido_em": med["em"], "fonte": "motor medir: bateria pela porta servida", "arquivo": res["arquivo"],
+            "rotulo": med.get("rotulo") or None, "k": med["k"], "gabarito": med.get("gabarito"),
+            "geracao_medida": med.get("geracao"), "bracos": med.get("bracos") or [], "indice": med["indice"],
+            "gold": med["gold"], "indicadores": indicadores, "metricas": m,
+            "abstencao_por_grupo": med.get("abstencao_por_grupo"), "delta": delta, "nao_consegui_olhar": {}}
+
+
+def _medir_historico(inst, argv):
+    """`medir <particao> --historico`: as rodadas ja salvas, em ordem, com o marco das geracoes e dos ajustes."""
+    particao, resto = resolve_particao(argv, "medir")
+    desde = rotulo = None
+    como_json = False
+    i = 0
+    while i < len(resto):
+        a = resto[i]
+        if a == "--json":
+            como_json = True
+        elif a in ("--desde", "--rotulo"):
+            if i + 1 >= len(resto) or resto[i + 1].startswith("--"):
+                _usa("medir", USO_MEDIR_JSON, f"{a} exige um valor")
+            if a == "--desde":
+                desde = resto[i + 1]
+            else:
+                rotulo = resto[i + 1]
+            i += 1
+        elif a != "--historico":
+            _usa("medir", USO_MEDIR_JSON, f"--historico aceita --desde, --rotulo e --json, veio {a!r}")
+        i += 1
+    diretorio = dir_medicoes(inst)
+    rodadas, ilegiveis = historicomod.ler_medicoes(diretorio)
+    serie = historicomod.filtrar([historicomod.ponto(m) for m in rodadas], desde, rotulo)
+    cegos = {}
+    if ilegiveis:
+        cegos["medicoes"] = f"{len(ilegiveis)} arquivo(s) nao abriram: {', '.join(ilegiveis[:5])}"
+    ger = None
+    try:
+        ger, ger_erro = ajustemod.ler_geracao(inst, token_da(inst), particao)
+    except SystemExit:
+        ger_erro = "o segredo do token do rag-api nao abriu"
+    if ger_erro:
+        cegos["geracao servindo"] = f"{ger_erro}; a virada dela sai da primeira medicao, como inferida"
+    ajustes_h = [x for x in ajustemod.ler_historico(raizes.instancia())
+                 if not desde or historicomod.utc(x.get("em")) >= historicomod.utc(desde)]
+    r = {"lido_em": ajustemod.agora(), "fonte": diretorio, "particao": particao, "desde": desde, "rotulo": rotulo,
+         "marcos": historicomod.marcos(serie, ajustes_h, ger), "medicoes": serie, "nao_consegui_olhar": cegos}
+    print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else historicomod.texto(r))
+
+
+def _psql_sem_sair(banco, sql):
+    """Como `_psql_json`, mas devolve (valor, None) ou (None, motivo) em vez de sair: a leitura em JSON diz o
+    motivo no proprio corpo."""
+    r = sh(f"docker exec -i {banco['container']} psql -U {banco['user']} -d {banco['db']} -At -v ON_ERROR_STOP=1",
+           input=sql)
+    if r.returncode != 0:
+        return None, f"o banco {banco['container']} nao respondeu: {r.stderr.strip()[-300:]}"
+    try:
+        return json.loads(r.stdout.strip() or "null"), None
+    except ValueError:
+        return None, f"o banco {banco['container']} devolveu o que nao e JSON"
+
+
+def cmd_consultas(nome, inst, argv):
+    """`consultas <particao>`: o log de recuperacao com filtro, ou a serie diaria de cobertura (`--por-dia`)."""
+    particao, resto = resolve_particao(argv, "consultas")
+    try:
+        f = consultasmod.le_argv(resto)
+    except ValueError as e:
+        _usa("consultas", consultasmod.USO, str(e))
+    b = inst.get("banco") or {}
+    if not b:
+        print("motor consultas: a instancia nao declara `banco` em motor-instancias.json", file=sys.stderr)
+        sys.exit(1)
+    lido_em = ajustemod.agora()
+    fonte = f"acervo.evento_recuperacao (banco {b['container']})"
+
+    def le(sql):
+        valor, erro = _psql_sem_sair(b, sql)
+        if erro:
+            if f["json"]:
+                print(json.dumps({"lido_em": lido_em, "fonte": fonte, "nao_consegui_olhar": erro},
+                                 ensure_ascii=False, indent=1))
+            print(f"motor consultas: {erro}", file=sys.stderr)
+            sys.exit(3)
+        return valor
+
+    if f["por_dia"]:
+        view = le(consultasmod.sql_dia_da_view(f, particao, _lit)) or []
+        linhas = le(consultasmod.sql_dia_linhas(f, particao, _lit)) or []
+        serie = consultasmod.serie_por_dia(view, linhas)
+        indicador = consultasmod.indicador_da_taxa(serie, lido_em)
+        if f["json"]:
+            print(json.dumps({"lido_em": lido_em, "fonte": "acervo.cobertura_diaria (banco rag)", "particao": particao,
+                              "indicador": indicador, **serie}, ensure_ascii=False, indent=1))
+        else:
+            print(consultasmod.texto_por_dia(serie, indicador))
+        return
+    itens = [consultasmod.linha(r) for r in (le(consultasmod.sql_lista(f, particao, _lit)) or [])]
+    conta = le(consultasmod.sql_contagem(f, particao, _lit)) or {}
+    if f["json"]:
+        print(json.dumps({"lido_em": lido_em, "fonte": fonte, "particao": particao,
+                          "filtros": {k: v for k, v in f.items() if k not in ("json", "por_dia") and v is not None},
+                          "na_populacao": int(conta.get("populacao") or 0), "no_filtro": int(conta.get("no_filtro") or 0),
+                          "preenchimento": consultasmod.preenchimento(conta),
+                          "avisos": consultasmod.avisos_de_filtro(f, conta), "itens": itens},
+                         ensure_ascii=False, indent=1))
+    else:
+        print(consultasmod.texto_da_lista(itens, conta, f, particao, lido_em))
+
+
+def cmd_trabalhos(nome, inst, argv):
+    """`trabalhos`: os lotes do rag-api e as sombras de bench, com o estado de vida (vivo, parado, nao consegui
+    olhar) calculado aqui, uma vez, para a face, a ronda e a cadeira lerem o mesmo fato (#3513; R17)."""
+    como_json = False
+    for a in argv:
+        if a == "--json":
+            como_json = True
+        else:
+            _usa("trabalhos", "motor <inst> trabalhos [--json]", f"argumento desconhecido {a!r}")
+    cegos, rag = {}, None
+    try:
+        rag = chamada_rag.chamar(inst["trabalhos"], token_da(inst)).get("itens") or []
+    except SystemExit:
+        cegos["rag-api"] = "o segredo do token nao abriu"
+    except KeyError:
+        cegos["rag-api"] = "a instancia nao declara `trabalhos` em motor-instancias.json"
+    except chamada_rag.Falha as e:
+        cegos["rag-api"] = e.mensagem
+
+    def executa(cmd):
+        r = sh(cmd)
+        return r.returncode, r.stdout, r.stderr
+    sombras, erro = trabalhosmod.ler_sombras(inst.get("container"), executa)
+    if erro:
+        cegos["sombras de bench"] = erro
+    r = trabalhosmod.juntar(rag, None if erro else sombras, trabalhosmod.limiar_s())
+    r = {"lido_em": ajustemod.agora(), "fontes": ["rag-api GET /motor/trabalhos",
+                                               f"sombras de bench em {inst.get('container')}:/tmp/sombra-<id>"],
+         "nao_consegui_olhar": cegos, **r}
+    print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else trabalhosmod.texto(r))
+    if len(cegos) == 2:
+        sys.exit(5)
+
+
+def _estado_da_troca_em_json(inst, tok, particao):
+    """`trocar --estado --json` (#3513): o estado do rag-api com a hora, a fonte e as pendencias (forma da R23).
+    `pendencias` e [] quando nada espera o dono e null quando nao deu para olhar."""
+    lido_em = ajustemod.agora()
+    url = inst["troca"].rstrip("/") + f"/{particao}"
+    fonte = f"rag-api GET {url}"
+    try:
+        r = chamada_rag.chamar(url, tok)
+    except chamada_rag.Falha as e:
+        print(json.dumps({"lido_em": lido_em, "fonte": fonte, "pendencias": None, "nao_consegui_olhar": e.mensagem},
+                         ensure_ascii=False, indent=1))
+        print(f"motor trocar: {e.mensagem}", file=sys.stderr)
+        sys.exit(e.codigo)
+    rodadas, ilegiveis = historicomod.ler_medicoes(dir_medicoes(inst))
+    cegos = {"medicoes": f"{len(ilegiveis)} arquivo(s) nao abriram"} if ilegiveis else {}
+    print(json.dumps({**r, "lido_em": lido_em, "fonte": fonte,
+                      "pendencias": pendenciasmod.pendencias(r, rodadas), "nao_consegui_olhar": cegos},
+                     ensure_ascii=False, indent=1))
+
+
+def _relatorio_em_json(inst, tok, lote):
+    """`indexar --relatorio --json` (#3513): o lote aberto com a hora e a fonte; sem o rag-api, o motivo."""
+    lido_em = ajustemod.agora()
+    url = (inst.get("indexacao") or "").rstrip("/") + "/" + lote
+    fonte = f"rag-api GET {url}"
+    try:
+        r = chamada_rag.chamar(url, tok)
+    except chamada_rag.Falha as e:
+        print(json.dumps({"lido_em": lido_em, "fonte": fonte, "nao_consegui_olhar": e.mensagem},
+                         ensure_ascii=False, indent=1))
+        print(f"motor indexar: {e.mensagem}", file=sys.stderr)
+        sys.exit(e.codigo)
+    print(json.dumps({**r, "lido_em": lido_em, "fonte": fonte, "nao_consegui_olhar": {}}, ensure_ascii=False, indent=1))
+
+
 def main():
     d = reg()
     a = sys.argv[1:]
@@ -3057,7 +3632,11 @@ def main():
         return cmd_eleger(a[0], inst, a[2:])
     if a[1] == "medir":
         return cmd_medir(a[0], inst, a[2:])
-    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, eleger, escrever, indexar, julgar, lintar, medir, parear, sortear, trocar", file=sys.stderr)
+    if a[1] == "consultas":
+        return cmd_consultas(a[0], inst, a[2:])
+    if a[1] == "trabalhos":
+        return cmd_trabalhos(a[0], inst, a[2:])
+    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, consultas, eleger, escrever, indexar, julgar, lintar, medir, parear, sortear, trabalhos, trocar", file=sys.stderr)
     sys.exit(1)
 
 
