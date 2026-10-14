@@ -138,7 +138,10 @@ def test_squash_reaproveita_veredito_pela_arvore(amb):
     amb.squash_tree_atual_em_novo_commit()
     r2 = amb.push()
     assert r2.returncode == 0, r2.stdout + r2.stderr
-    assert "reaproveitado" in (r2.stdout + r2.stderr)
+    # mesma arvore: nao mede de novo. Desde o #3535 a linha sem raio nao roda com diff vazio,
+    # e o squash sobre a mesma arvore chega como selecao vazia; antes, como veredito reaproveitado.
+    saida = r2.stdout + r2.stderr
+    assert "reaproveitado" in saida or "seleção: 0 de 1 arquivos" in saida, saida
 
 
 def test_push_vermelho_e_barrado_e_nomeia_o_teste(amb):

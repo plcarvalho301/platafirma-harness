@@ -340,9 +340,59 @@ def test_raio_declarado_nas_listas_reais_casa_arquivo_que_existe():
             if not linha.strip() or linha.lstrip().startswith("#"):
                 continue
             _, _, globs = linha.partition("|")
+            if globs.split()[:1] == ["regressivo"]:   # #3535: marca, nao glob
+                continue
             mortos += [f"{lista.relative_to(REPO_ROOT)}: {g}" for g in globs.split()
                        if not any(casa(f, g) for f in arquivos)]
     assert not mortos, f"raio declarado que nao casa arquivo nenhum: {mortos}"
+
+# --- regra do dono de 14/10/2026 (#3535): o raio de ataque e os regressivos, e mais nenhum ----
+
+def test_regressivo_roda_em_toda_mudanca_e_o_resto_so_pelo_raio(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, arv, base = _tres(tmp_path, marcas, "test_a1.py | a/src/um/**\ntest_a2.py | regressivo #9\n"
+                                             "test_a3.py | a/src/tres/**\n")
+    _commita(arv, {"a/src/tres/x.txt": "x\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv), "--base", base)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "seleção: 2 de 3 arquivos (pulados: test_a1.py)" in r.stdout, r.stdout
+    assert _rodou(marcas) == {"a2", "a3"}
+
+def test_mudanca_em_lib_alcanca_o_teste_do_verbo_que_a_usa(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, arv, base = _tres(tmp_path, marcas, "test_a1.py | bin/verbo\ntest_a2.py | bin/outro\n"
+                                             "test_a3.py | a/src/tres/**\n")
+    base = _commita(arv, {"bin/verbo": '. "$AQUI/../lib/apoio.sh"\n', "bin/outro": "true\n",
+                          "lib/apoio.sh": "x=1\n"})
+    _commita(arv, {"lib/apoio.sh": "x=2\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv), "--base", base)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "raio total" not in r.stdout, r.stdout
+    assert _rodou(marcas) == {"a1"}
+
+def test_linha_que_entra_na_lista_roda_sozinha(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, arv, base = _tres(tmp_path, marcas, "test_a1.py | a/src/um/**\n")
+    _commita(arv, {"a/VERDES": "test_a1.py | a/src/um/**\ntest_a2.py | a/src/dois/**\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv), "--base", base)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "raio total" not in r.stdout, r.stdout
+    assert _rodou(marcas) == {"a2"}
+
+def test_linha_sem_raio_nao_roda_por_documentacao_nem_por_outra_chave(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, arv = _arvore(tmp_path, {"a": {"test_a.py": _marca(marcas, "a")}, "b": {"test_b.py": VERDE}},
+                       {"a": "test_a.py\n", "b": "test_b.py\n"})
+    base = _rev(arv)
+    _commita(arv, {"docs/x.md": "x\n", "b/src/y.txt": "y\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv), "--base", base)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert _rodou(marcas) == set()
+    base = _rev(arv)
+    _commita(arv, {"src/z.txt": "z\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv), "--base", base)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert _rodou(marcas) == {"a"}
 
 def test_origin_main_mede_a_main_do_clone_base_e_a_arvore_some(tmp_path):
     """A rodada diaria do bot (#3370): a lista inteira sobre origin/main do clone base da
