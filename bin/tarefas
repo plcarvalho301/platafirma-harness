@@ -3,7 +3,7 @@
 # capacidade: trabalho
 # dono: gestao-estrategica
 # use para: card, board, carteira, épico/feature/story, mover estado, sign-off
-# atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub
+# atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub, ordenar, bloquear, desbloquear, carteira
 #
 # Texto do controle (arq:0124 §3; arq:0125 U33; card #3446). Todo ato cai na face Entrega.
 # Rótulo: verbo no infinitivo e objeto sem artigo, um verbo por tipo de ato (Listar uma coleção,
@@ -26,6 +26,10 @@
 # face: dt=Entrega
 # face: estados=Entrega
 # face: sub=Entrega
+# face: ordenar=Entrega
+# face: bloquear=Entrega
+# face: desbloquear=Entrega
+# face: carteira=Entrega
 # rotulo: listar=Listar card aberto
 # rotulo: listar-tudo=Listar card, fechado inclusive
 # rotulo: ler=Abrir card
@@ -41,6 +45,10 @@
 # rotulo: dt=Administrar débito técnico
 # rotulo: estados=Listar estado de card
 # rotulo: sub=Subordinar card
+# rotulo: ordenar=Ordenar card
+# rotulo: bloquear=Bloquear card
+# rotulo: desbloquear=Desbloquear card
+# rotulo: carteira=Ler carteira
 # volta: listar=sim — só lê
 # volta: listar-tudo=sim — só lê
 # volta: ler=sim — só lê
@@ -56,6 +64,10 @@
 # volta: dt=nao
 # volta: estados=sim — só lê
 # volta: sub=nao
+# volta: ordenar=sim — tarefas ordenar do card ao lado do vizinho de antes (o posto antigo não volta, o lugar sim)
+# volta: bloquear=sim — tarefas desbloquear
+# volta: desbloquear=sim — tarefas bloquear
+# volta: carteira=sim — só lê
 # Backend: `platafirma-rastreador` (API própria), desde 16/08/2026. O Vikunja saiu.
 #
 # Loopback, e não a rota pública: `tarefas.platafirma.org` serve a superfície HUMANA
@@ -95,19 +107,25 @@ uso() {
   [ "$codigo" = 0 ] && fd=1
   cat >&$fd <<'FIM'
 uso:
-  tarefas listar [--cadeira <c>] [--estado <e>] [--nivel <n>] [--json]
-                                          itens abertos (fase != terminal)
+  tarefas listar [--cadeira <c>] [--estado <e>] [--nivel <n>] [--originacao <o>] [--executor <c>]
+                [--paradas] [--json]
+                                          itens abertos (fase != terminal), na ordem do posto;
+                                          as paradas (despriorizada) ficam de fora salvo --paradas
+                                          ou --estado despriorizada
   tarefas listar-tudo [mesmos filtros]    inclui os terminais
-  tarefas ler|ver <id>                    item em texto: cabeçalho, ancestrais,
-                                          corpo e filhas diretas
+  tarefas ler|ver <id>                    item em texto: cabeçalho (originação, executor,
+                                          quem bloqueia e por quem é bloqueado), ancestrais,
+                                          corpo e filhas abertas em ordem de dependência
   tarefas criar "<título>" [--desc "<txt>"|--desc-stdin]
                 [--nivel épico|feature|story] [--cadeira <c>] [--pai <id>] [--incidente]
+                [--originacao negocio|tecnico|incidente] [--executor <c>]
                                           default: story. Débito técnico não é card: `dt admitir`.
                                           Nascer fora de `captada`, ou sair dela, exige o
                                           corpo no padrão do nível (arq:0096)
   tarefas editar <id> [--titulo "<t>"] [--desc "<txt>"|--desc-stdin]
                 [--cadeira <c>|--sem-cadeira] [--nivel épico|feature|story|task]
-                                          troca título, corpo, cadeira e/ou nível (o corpo é
+                [--originacao negocio|tecnico|incidente] [--executor <c>]
+                                          troca título, corpo, cadeira, nível, originação e/ou executor (o corpo é
                                           substituído inteiro); não mexe no estado — mover é
                                           `mover`. Cadeira e nível inválidos a API recusa
   tarefas modelo <épico|feature|story|task>
@@ -140,6 +158,18 @@ uso:
                                           sign-off. Sem --decisao, inscreve o aprovador
                                           como PENDENTE. `recusado` exige --motivo.
   tarefas sub <pai> <filho>               declara <filho> filho de <pai>
+  tarefas ordenar <id> --antes-de <id> | --depois-de <id>
+                                          põe o card ao lado do vizinho na ordem única da casa;
+                                          o servidor calcula o posto (R21)
+  tarefas bloquear <a> <b>                <a> bloqueia <b>; o que fecharia ciclo a API recusa e o
+                                          caminho sai na recusa (R23)
+  tarefas desbloquear <a> <b>             retira o vínculo "<a> bloqueia <b>"
+  tarefas carteira [--desde <AAAA-MM-DD>] a fatia por originação das stories e tasks entregues
+                                          desde a data (padrão: a segunda-feira desta semana), a
+                                          linha do balde ao lado e as paradas com idade (R25)
+  tarefas mover <id> despriorizada --motivo <código>
+                                          o motivo é código da lista do registro; sem ele, ou com
+                                          código fora dela, a recusa imprime a lista (R24)
   tarefas dt <listar|admitir|matar|vencidos|indicadores>
                                           balde de débito técnico: dado do rastreador, uma linha
                                           por débito (rito §4); `dt` sem sub lista os atos
@@ -175,10 +205,17 @@ _recusa() { # lê o corpo do erro em $1 e devolve a mensagem da API
   # clientes, e mandar alguém montar query string na mão para responder uma pergunta que o
   # verbo já sabe fazer é devolver o trabalho que este verbo existe para tirar.
   erro="${erro//\`?cascata=1\`/\`--cascata\`}"
+  # CARD #3526 (R23): o vínculo que fecharia ciclo volta com `caminho` (ids), e a recusa o mostra.
+  local caminho; caminho=$(printf '%s' "$1" | jq -r '(.caminho // []) | map("#\(if type == "object" then .id else . end)") | join(" → ")' 2>/dev/null || true)
+  [ -n "$caminho" ] && erro="$erro · caminho: $caminho"
   # `-S` sai do curl porque a mensagem util e o CORPO, e a linha `curl: (22) ... 400` so
   # empurrava o texto da maquina para fora da tela. Falha SEM corpo (rede, servico fora)
   # nao fica muda: cai no ramo abaixo, com o endereco que nao respondeu.
   printf '%s\n' "${erro:-falha ao falar com o rastreador em $BASE (sem corpo de erro)}" >&2
+  # CARD #3526 (R24): despriorizar sem código da lista (ou com código fora dela) volta com
+  # `motivos`, [{codigo, nome}]. A lista é do registro; o verbo só a imprime, uma por linha.
+  local motivos; motivos=$(printf '%s' "$1" | jq -r '(.motivos // [])[] | "  \(.codigo)\t\(.nome)"' 2>/dev/null || true)
+  [ -n "$motivos" ] && printf 'motivos (um destes códigos em --motivo):\n%s\n' "$motivos" >&2
   return 1
 }
 
@@ -277,14 +314,21 @@ monta_query() { # monta_query "$@" -> ecoa a query string e devolve o resto em R
         local cad="${2:?--cadeira pede o nome da cadeira}"
         q="$q&cadeira=$cad"; shift 2 ;;
       --estado)
-        local est="$2"
-        case "$est" in
-          captada|em-lapidacao|em-parecer|priorizada|em-refinamento-tecnico|refinada|\
-          em-execucao|em-homologacao|entregue|recusada|cancelada|englobada|encerrada|\
-          descartada|detectado|em-mitigacao|mitigado|resolvido) ;;
-          *) echo "estado desconhecido: $est" >&2; exit 2 ;;
-        esac
+        # A LISTA DE ESTADOS NÃO MORA AQUI (card #3526, R10 da spec tarefas): estado novo entra no
+        # registro por INSERT (`despriorizada` entrou pela 016), e uma cópia no verbo recusaria o
+        # estado que a API já serve. A API recusa o desconhecido com a própria mensagem, que
+        # traz a lista dos válidos.
+        local est="${2:?--estado pede o nome do estado}"
         q="$q&estado=$est"; shift 2 ;;
+      # ORIGINAÇÃO É O `tipo_demanda` DO ITEM (card #3521): o verbo usa a palavra da spec e a API,
+      # a coluna. O valor fora do registro sai 422 por lá, com os válidos; a lista não está aqui.
+      --originacao)
+        local orig="${2:?--originacao pede negocio, tecnico ou incidente}"
+        q="$q&tipo_demanda=$orig"; shift 2 ;;
+      --executor)
+        local exe="${2:?--executor pede o nome da cadeira}"
+        q="$q&executor=$exe"; shift 2 ;;
+      --paradas) RESTO+=("--paradas"); shift ;;
       --nivel)
         local n
         case "$2" in
@@ -303,6 +347,7 @@ monta_query() { # monta_query "$@" -> ecoa a query string e devolve o resto em R
 }
 
 _tem_json() { local a; for a in "$@"; do [ "$a" = "--json" ] && return 0; done; return 1; }
+_tem_flag() { local f="$1" a; shift; for a in "$@"; do [ "$a" = "$f" ] && return 0; done; return 1; }
 
 linhas() { # id, marca de terminal, título
   jq -r '
@@ -314,10 +359,16 @@ linhas() { # id, marca de terminal, título
     | "\($it.id)\t\(if ($it.estado_derivado != null and ($term | index([$it.estado_derivado]) != null)) or ($it.estado_derivado == null and $it.estado_fase == "terminal") then "x" else " " end)\t\($it.titulo)"'
 }
 
-listar() { # listar [filtros] [--json]   — só os abertos
+listar() { # listar [filtros] [--paradas] [--json]   — só os abertos
   local q; q=$(monta_query "$@")
+  # AS PARADAS FICAM DE FORA (card #3526, R25): `despriorizada` é aberta (fase funil), mas é o que
+  # ninguém está fazendo, e na fila de trabalho ela atrapalha. Entra com `--paradas`, ou quando o
+  # estado é pedido pelo nome. A ordem da listagem é a do posto, que a API entrega pronta.
+  local ocultar=true
+  _tem_flag --paradas "$@" && ocultar=false
+  case "&$q&" in *"&estado=despriorizada&"*) ocultar=false ;; esac
   local corpo; corpo=$(busca GET "/itens${q:+?$q}")
-  corpo=$(printf '%s' "$corpo" | jq '
+  corpo=$(printf '%s' "$corpo" | jq --argjson ocultar "$ocultar" '
     ([.estados[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado]
      + ["entregue", "recusada", "cancelada", "englobada", "encerrada", "resolvido"]
      | unique) as $term
@@ -331,6 +382,7 @@ listar() { # listar [filtros] [--json]   — só os abertos
               else ($it.estado_fase != "terminal")
               end
             )
+          | select(($ocultar | not) or ($it.estado != "despriorizada"))
         ],
         estados,
         total
@@ -363,7 +415,11 @@ so_id() { printf '%s' "${1#\#}"; }
 # única linha sobre a qual alguém pode agir agora. Respondido é registro; pendente é dívida.
 ler() {
   local id; id=$(so_id "$1")
-  busca GET "/itens/$id" | jq -r '
+  # UMA LEITURA SERVE A TUDO (card #3526): o detalhe do item já traz o vínculo (`bloqueia`,
+  # `bloqueado_por`, #3523) e, quando o item tem filha, `filhas` em ordem de dependência. Antes as
+  # filhas vinham de uma segunda chamada que puxava o board inteiro e peneirava por pai.
+  local j; j=$(busca GET "/itens/$id") || return 1
+  printf '%s' "$j" | jq -r '
     "# \(.titulo)",
     "#\(.id) · \(.nivel_nome) · "
     + (if .estado_derivado != null
@@ -371,7 +427,13 @@ ler() {
        else "\(.estado_nome) (\(.estado_fase))"
        end)
     + " · cadeira: \(.cadeira // "—")"
-    + (if (.ancestrais|length) > 0 then "\n  em: " + ([.ancestrais[] | "#\(.id) \(.titulo)"] | join(" > ")) else "" end),
+    + (if .tipo_demanda then " · originação: \(.tipo_demanda)" else "" end)
+    + (if .executor then " · executor: \(.executor)" else "" end)
+    + (if (.ancestrais|length) > 0 then "\n  em: " + ([.ancestrais[] | "#\(.id) \(.titulo)"] | join(" > ")) else "" end)
+    + (if ((.bloqueia // []) | length) > 0
+       then "\n  bloqueia: " + ([.bloqueia[] | "#\(.id) (\(.estado))"] | join(", ")) else "" end)
+    + (if ((.bloqueado_por // []) | length) > 0
+       then "\n  bloqueado por: " + ([.bloqueado_por[] | "#\(.id) (\(.estado))"] | join(", ")) else "" end),
     "",
     (if ((.sign_offs // []) | length) > 0 then
        (["sign-off:"]
@@ -385,12 +447,11 @@ ler() {
     (.descricao // "")' | para_texto
   # FILHAS — card lido sem ver o que pende embaixo não serve para repriorizar:
   # ler um épico/feature e não enxergar a subárvore era o furo. Puxa os filhos
-  # diretos por `?pai=`, um por linha (id · estado · cadeira · título).
-  # A API não filtra por pai (eixos: cadeira, estado, nível, origem). Puxa a lista
-  # e peneira client-side por `.pai == id`. SÓ ABERTAS: terminal (entregue, englobada,
-  # etc.) fica fora — a mesma régua de fase que `listar` aplica, pela mesma razão.
-  # Filha entregue é auditoria, e auditoria é `listar-tudo`, não leitura de card.
-  local filhas; filhas=$(filhas_abertas "$id")
+  # diretos, um por linha (id · estado · cadeira · título), na ordem de dependência que a API
+  # já entrega em `.filhas` (card #3523), com a travada marcada. SÓ ABERTAS: terminal
+  # (entregue, englobada, etc.) fica fora — a mesma régua de fase que `listar` aplica, pela
+  # mesma razão. Filha entregue é auditoria, e auditoria é `listar-tudo`, não leitura de card.
+  local filhas; filhas=$(filhas_do_json "$j")
   [ -n "$filhas" ] && printf '\nfilhas (abertas):\n%s\n' "$filhas"
   # Sem filha aberta o `[ -n ]` acima devolve 1 e, sendo o ultimo comando da funcao sob
   # `set -e`, o verbo saia com exit 1 DEPOIS de imprimir o card inteiro. Medido em
@@ -398,21 +459,23 @@ ler() {
   return 0
 }
 
-# Filhas DIRETAS ainda abertas de <id>, uma por linha (id · estado · cadeira · título).
-# Compartilhada por `ler` e por `mover`: é a MESMA peneira nas duas, para que a linha
-# `PARCIAL:` do relato (arq:0095) e a leitura do card nunca discordem sobre o que pende.
-filhas_abertas() {
-  busca GET "/itens" | jq -r --argjson id "$1" '
-    ([.estados[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado]
-     + ["entregue","recusada","cancelada","englobada","encerrada","resolvido"]
-     | unique) as $term
-    | .itens[]?
-    | . as $it
-    | select($it.pai == $id)
-    | select(if $it.estado_derivado != null
-             then ($term | index([$it.estado_derivado]) == null)
-             else ($it.estado_fase != "terminal") end)
-    | "  #\($it.id)\t\($it.estado)\t\($it.cadeira // "—")\t\($it.titulo)"'
+# Filhas DIRETAS ainda abertas, uma por linha (id · estado · cadeira · título), lidas do campo
+# `filhas` do detalhe do pai (JSON em $1): a API as entrega em ordem de dependência, com o posto
+# desempatando, e `travada` quando algum bloqueador ainda não fechou (card #3523). Compartilhada
+# por `ler` e por `mover`: é a MESMA peneira nas duas, para que a linha `PARCIAL:` do relato
+# (arq:0095) e a leitura do card nunca discordem sobre o que pende. O que é terminal sai do
+# registro (um GET pequeno), e não do board inteiro, que é o que esta função puxava antes.
+filhas_do_json() {
+  local termos; termos=$(busca GET /registro | jq -c '[.estados[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado]') || return 1
+  printf '%s' "$1" | jq -r --argjson term "$termos" '
+    ($term + ["entregue","recusada","cancelada","englobada","encerrada","resolvido"] | unique) as $t
+    | .filhas[]?
+    | . as $f
+    | select($t | index([$f.estado_derivado // $f.estado]) == null)
+    | "  #\($f.id)\t\($f.estado)\t\($f.cadeira // "—")\t\($f.titulo)"
+      + (if $f.travada
+         then "  [travada por " + ([($f.bloqueada_por // [])[] | "#\(if type == "object" then .id else . end)"] | join(", ")) + "]"
+         else "" end)'
 }
 
 # ENTREGA É DERIVADA DO PAI (arq:0095, dono 02/09/2026). Item executável movido devolve, no
@@ -423,11 +486,12 @@ filhas_abertas() {
 # a story fechava, o relato dizia "entregue", e a frente restante nem lapidada estava.
 pai_e_irmas() { # pai_e_irmas <id-do-pai>
   local pai; pai=$(so_id "$1")
-  busca GET "/itens/$pai" | jq -r '
+  local jp; jp=$(busca GET "/itens/$pai") || return 0
+  printf '%s' "$jp" | jq -r '
     "  pai #\(.id) [\(.nivel_nome)]: "
     + (if .estado_derivado != null then "\(.estado_derivado) [derivado]" else .estado_nome end)
     + " — \(.titulo)"'
-  local abertas; abertas=$(filhas_abertas "$pai")
+  local abertas; abertas=$(filhas_do_json "$jp")
   if [ -n "$abertas" ]; then
     printf '  abertas no pai (entrega de negócio NÃO fechou):\n%s\n' "$abertas"
   else
@@ -481,12 +545,17 @@ criar() {
   # `tarefas dt admitir`. Medido antes da virada: 390 tasks, 156 órfãs, 13 stories com
   # filha task — o default `task` fazia da task uma "story sem nome".
   local desc="" nivel="story" cadeira="$QUEM" pai="" classe="planejado" via_dt="${TAREFAS_VIA_DT:-}"
+  local originacao="" executor=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --desc)       desc="$2"; shift 2 ;;
       --desc-stdin) desc="$(cat)"; shift ;;
       --nivel)      nivel="$2"; shift 2 ;;
       --cadeira)    cadeira="$2"; shift 2 ;;
+      # Originação e executor (card #3526, R19): sem eles a API herda — a originação do pai, ou
+      # negocio; o executor igual à cadeira. Valor fora do registro a API recusa (422).
+      --originacao) originacao="${2:?--originacao pede negocio, tecnico ou incidente}"; shift 2 ;;
+      --executor)   executor="${2:?--executor pede o nome da cadeira}"; shift 2 ;;
       --pai)        pai=$(so_id "$2"); shift 2 ;;
       --incidente)  classe="incidente"; shift ;;
       --prio)       echo "aviso: --prio não existe neste modelo; ignorado." >&2; shift 2 ;;
@@ -518,11 +587,14 @@ criar() {
   local est="${PF_ESTADO_INICIAL:-$est_default}"
   jq -n --arg t "$titulo" --arg d "$html" --argjson n "$n" --arg c "$cadeira" \
         --arg p "$pai" --arg cl "$classe" --arg e "$est" \
+        --arg o "$originacao" --arg x "$executor" \
      '{titulo:$t, classe:$cl, estado:$e}
       + (if $cl == "incidente" then {} else {nivel:$n} end)
       + (if $d == "" then {} else {descricao:$d} end)
       + (if $c == "" then {} else {cadeira:$c} end)
-      + (if $p == "" then {} else {pai:($p|tonumber)} end)' \
+      + (if $p == "" then {} else {pai:($p|tonumber)} end)
+      + (if $o == "" then {} else {tipo_demanda:$o} end)
+      + (if $x == "" then {} else {executor:$x} end)' \
     | envia POST /itens \
     | jq -r '"item \(.id) criado: \(.titulo)"'
 }
@@ -536,10 +608,14 @@ criar() {
 # corpo por nível (arq:0096) é da API, como em `criar` — este verbo não a duplica.
 editar() {
   local id; id=$(so_id "${1:?uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin]}"); shift
-  local titulo="" desc="" tem_desc="" cadeira="" tem_cadeira=0 nivel=""
+  local titulo="" desc="" tem_desc="" cadeira="" tem_cadeira=0 nivel="" originacao="" executor=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --titulo)     titulo="${2:?--titulo pede texto}"; shift 2 ;;
+      # Originação e executor (card #3526, R19; colunas do #3521). A API confere a originação contra
+      # o registro (422) e não tem lista para o executor: este verbo não repete nenhuma das duas.
+      --originacao) originacao="${2:?--originacao pede negocio, tecnico ou incidente}"; shift 2 ;;
+      --executor)   executor="${2:?--executor pede o nome da cadeira}"; shift 2 ;;
       --desc)       desc="${2:?--desc pede texto}"; tem_desc=1; shift 2 ;;
       --desc-stdin) desc="$(cat)"; tem_desc=1; shift ;;
       # A cadeira e o nível do card mudam por aqui (#2856 linhas 112 e 113): a API aceita os dois no
@@ -558,8 +634,9 @@ editar() {
       *) echo "opção desconhecida: $1" >&2; exit 2 ;;
     esac
   done
-  if [ -z "$titulo" ] && [ -z "$tem_desc" ] && [ "$tem_cadeira" -eq 0 ] && [ -z "$nivel" ]; then
-    echo "uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin] [--cadeira <c>|--sem-cadeira] [--nivel épico|feature|story|task] — nada a editar" >&2
+  if [ -z "$titulo" ] && [ -z "$tem_desc" ] && [ "$tem_cadeira" -eq 0 ] && [ -z "$nivel" ] \
+     && [ -z "$originacao" ] && [ -z "$executor" ]; then
+    echo "uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin] [--cadeira <c>|--sem-cadeira] [--nivel épico|feature|story|task] [--originacao negocio|tecnico|incidente] [--executor <c>] — nada a editar" >&2
     exit 2
   fi
   if [ -n "$tem_desc" ] && [ -z "$(printf '%s' "$desc" | tr -d '[:space:]')" ]; then
@@ -570,15 +647,20 @@ editar() {
   [ -n "$tem_desc" ] && html="$(printf '%s' "$desc" | para_html)"
   # `cadeira: null` tira a cadeira (a API trata o nulo explícito como pedido); ausente não mexe.
   jq -n --arg t "$titulo" --arg d "$html" --argjson tc "$tem_cadeira" --arg c "$cadeira" --arg n "$nivel" \
+        --arg o "$originacao" --arg x "$executor" \
      '(if $t == "" then {} else {titulo:$t} end)
       + (if $d == "" then {} else {descricao:$d} end)
       + (if $tc == 1 then {cadeira: (if $c == "" then null else $c end)} else {} end)
-      + (if $n == "" then {} else {nivel: ($n|tonumber)} end)' \
+      + (if $n == "" then {} else {nivel: ($n|tonumber)} end)
+      + (if $o == "" then {} else {tipo_demanda:$o} end)
+      + (if $x == "" then {} else {executor:$x} end)' \
     | envia PATCH "/itens/$id" \
-    | jq -r --argjson tc "$tem_cadeira" --arg n "$nivel" '
+    | jq -r --argjson tc "$tem_cadeira" --arg n "$nivel" --arg o "$originacao" --arg x "$executor" '
         "item \(.id) editado: \(.titulo)"
         + (if $tc == 1 then " · cadeira \(.cadeira // "nenhuma")" else "" end)
         + (if $n != "" then " · nível \(.nivel_nome // .nivel)" else "" end)
+        + (if $o != "" then " · originação \(.tipo_demanda // "?")" else "" end)
+        + (if $x != "" then " · executor \(.executor // "?")" else "" end)
         + " · estado \(.estado_nome) (inalterado)"'
 }
 
@@ -1300,6 +1382,122 @@ FIM
   esac
 }
 
+# --- ordem, vínculo e carteira (card #3526; R21, R23 e R25 da spec tarefas) -------------
+
+# ORDENAR põe o card ao lado de um vizinho na ordem única da casa. O cliente escolhe a vizinhança e
+# o SERVIDOR calcula o posto (card #3522): um `posto` no corpo seria o cliente calculando. Um lado
+# só: com os dois o corpo não diria qual vale, e o verbo recusa antes de chamar.
+ordenar() {
+  local id; id=$(so_id "${1:?uso: tarefas ordenar <id> --antes-de <id> | --depois-de <id>}"); shift
+  local lado="" ref=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --antes-de|--depois-de)
+        [ -z "$lado" ] || { echo "recusado: --antes-de e --depois-de juntos não dizem onde o card fica; escolha um" >&2; exit 2; }
+        lado="${1#--}"; lado="${lado//-/_}"
+        ref=$(so_id "${2:?$1 pede o id do vizinho}"); shift 2 ;;
+      *) echo "opção desconhecida: $1" >&2; exit 2 ;;
+    esac
+  done
+  case "$id" in ''|*[!0-9]*) lado="" ;; esac
+  case "$ref" in ''|*[!0-9]*) lado="" ;; esac
+  [ -n "$lado" ] || { echo "uso: tarefas ordenar <id> --antes-de <id> | --depois-de <id>" >&2; exit 2; }
+  jq -n --arg l "$lado" --argjson r "$ref" '{($l): $r}' \
+    | envia POST "/itens/$id/posto" \
+    | jq -r --arg l "$lado" --arg r "$ref" \
+        '"item \(.id) ficou \(if $l == "antes_de" then "antes" else "depois" end) de #\($r) (posto \(.posto)): \(.titulo)"'
+}
+
+# Os dois lados do vínculo de <id>, como a API os devolve ao declarar e ao retirar.
+_vinculos_texto() { # _vinculos_texto <id>   (JSON da API em stdin)
+  jq -r --arg id "$1" '
+    def lado: if ((. // []) | length) > 0 then ([.[] | "#\(.id)"] | join(", ")) else "ninguém" end;
+    "#\($id) bloqueia: \(.bloqueia | lado)",
+    "#\($id) bloqueado por: \(.bloqueado_por | lado)"'
+}
+
+# BLOQUEAR e DESBLOQUEAR (R23). O ciclo quem recusa é o banco, pela API: 409 com o caminho que o
+# fecharia, e a recusa o imprime (`_recusa`). Declarar o que já existe é no-op lá.
+bloquear() { # bloquear <bloqueador> <bloqueado>
+  local a b
+  a=$(so_id "${1:?uso: tarefas bloquear <a> <b> — <a> bloqueia <b>}")
+  b=$(so_id "${2:?uso: tarefas bloquear <a> <b> — <a> bloqueia <b>}")
+  case "$a$b" in ''|*[!0-9]*) echo "uso: tarefas bloquear <a> <b> — <a> bloqueia <b>" >&2; exit 2 ;; esac
+  jq -n --argjson b "$b" '{bloqueado:$b}' | envia POST "/itens/$a/bloqueia" | _vinculos_texto "$a"
+}
+
+desbloquear() { # desbloquear <bloqueador> <bloqueado>
+  local a b
+  a=$(so_id "${1:?uso: tarefas desbloquear <a> <b> — retira \"<a> bloqueia <b>\"}")
+  b=$(so_id "${2:?uso: tarefas desbloquear <a> <b> — retira \"<a> bloqueia <b>\"}")
+  case "$a$b" in ''|*[!0-9]*) echo "uso: tarefas desbloquear <a> <b> — retira \"<a> bloqueia <b>\"" >&2; exit 2 ;; esac
+  busca DELETE "/itens/$a/bloqueia/$b" | _vinculos_texto "$a"
+}
+
+# CARTEIRA (R25): o que a firma entregou na semana, por originação, e o que está parado.
+#
+# AGREGA NO VERBO, sobre `GET /api/itens`, sem rota nova no rastreador: a consulta direta é da F8
+# (#3482). Conta story e task ENTREGUES (`entregue`, e `resolvido` que é o fecho do incidente) cuja
+# entrada no terminal — `ultimo_movimento` — é de `--desde` em diante, fora as de origem `prova`,
+# por `tipo_demanda`. A linha do balde conta as saídas do balde (`GET /api/balde`) no mesmo período e fica AO LADO,
+# sem somar: débito que sai não é card entregue. As paradas são as despriorizadas, com a idade (hoje
+# menos `ultimo_movimento`, em dias): sob pai apostado — o estado ESCRITO do pai direto em
+# `priorizada` ou adiante, que a projeção traz em `pai_estado` —, sem pai (autônomas) e as que
+# esperam um pai ainda não apostado. A lista de estados e a ordem vêm do registro.
+carteira() { # carteira [--desde AAAA-MM-DD]
+  local desde="" hoje="${TAREFAS_HOJE:-$(date +%F)}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --desde) desde="${2:?--desde pede AAAA-MM-DD}"; shift 2 ;;
+      *) echo "opção desconhecida: $1 (uso: tarefas carteira [--desde AAAA-MM-DD])" >&2; exit 2 ;;
+    esac
+  done
+  # Sem --desde, a segunda-feira da semana de hoje.
+  [ -n "$desde" ] || desde=$(date -d "$hoje -$(( $(date -d "$hoje" +%u) - 1 )) days" +%F)
+  printf '%s' "$desde" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' \
+    || { echo "--desde pede AAAA-MM-DD: $desde" >&2; exit 2; }
+  local lista registro balde saidas
+  lista=$(busca GET "/itens?nivel=2&nivel=3") || return 1
+  registro=$(busca GET /registro) || return 1
+  # As saídas se contam na API (R26: o balde é dado, não corpo de card), pela data em que a linha
+  # saiu. Rastreador que não respondeu não derruba a fatia.
+  if saidas=$(busca GET "/balde?situacao=saidas" 2>/dev/null \
+                | jq -r --arg desde "$desde" '[.linhas[] | select((.saida_em // "")[0:10] >= $desde)] | length' 2>/dev/null) \
+     && [ -n "$saidas" ]; then
+    balde="  balde"$'\t'"$saidas saídas desde $desde (ao lado, não soma)"
+  else
+    balde="  balde"$'\t'"ilegível: o balde não se leu"
+  fi
+  printf '%s' "$lista" | jq -r --arg desde "$desde" --arg hoje "$hoje" --arg balde "$balde" \
+      --argjson reg "$registro" '
+    def entregue: .estado == "entregue" or .estado == "resolvido";
+    def idade: ((($hoje | strptime("%Y-%m-%d") | mktime)
+                 - ((.ultimo_movimento // $hoje)[0:10] | strptime("%Y-%m-%d") | mktime)) / 86400 | floor);
+    def linha: "    #\(.id)\t\(idade)d\t\(.titulo)";
+    ($reg.estados | map({key: .estado, value: .ordem}) | from_entries) as $ordem
+    | ($ordem.priorizada // 0) as $aposta
+    | .itens as $its
+    | [$its[] | select(entregue and ((.origem // "") != "prova")
+                       and ((.ultimo_movimento // "")[0:10] >= $desde))] as $ent
+    | [$its[] | select(.estado == "despriorizada")] as $par
+    | [$par[] | select(.pai != null and .pai_estado != null and (($ordem[.pai_estado] // 0) >= $aposta))] as $sob
+    | [$par[] | select(.pai == null)] as $livres
+    | [$par[] | select(.pai != null and (.pai_estado == null or (($ordem[.pai_estado] // 0) < $aposta)))] as $espera
+    | "carteira desde \($desde) — story e task entregues, fora de origem prova",
+      (["negocio", "tecnico", "incidente"][] as $t
+         | "  \($t)\t\([$ent[] | select(.tipo_demanda == $t)] | length)"),
+      (([$ent[] | select(.tipo_demanda == null)] | length) as $sem
+         | if $sem > 0 then "  sem originação gravada\t\($sem)" else empty end),
+      $balde,
+      "",
+      "paradas (despriorizada): \($par | length)",
+      "  sob pai apostado\t\($sob | length)", ($sob[] | linha),
+      "  sem pai (autônomas)\t\($livres | length)", ($livres[] | linha),
+      (if ($espera | length) > 0
+       then "  sob pai ainda não apostado\t\($espera | length)", ($espera[] | linha)
+       else empty end)'
+}
+
 # --- despacho ---------------------------------------------------------------
 
 # --ajuda UNIVERSAL, sem efeito colateral (card #2274, defeito 4). ANTES do despacho e
@@ -1328,6 +1526,10 @@ case "$cmd" in
   apagar-comentario) apagar_comentario "${1:?uso: tarefas apagar-comentario <id> <cid>}" "${2:?cid}" ;;
   assinar)     assinar "${1:?uso: tarefas assinar <id> --aprovador <cadeira> [--decisao aprovado|recusado] [--motivo \"<txt>\"]}" "${@:2}" ;;
   sub)         subtarefa "${1:?pai}" "${2:?filho}" ;;
+  ordenar)     ordenar "${1:?uso: tarefas ordenar <id> --antes-de <id> | --depois-de <id>}" "${@:2}" ;;
+  bloquear)    bloquear "${1:?uso: tarefas bloquear <a> <b>}" "${2:?uso: tarefas bloquear <a> <b>}" ;;
+  desbloquear) desbloquear "${1:?uso: tarefas desbloquear <a> <b>}" "${2:?uso: tarefas desbloquear <a> <b>}" ;;
+  carteira)    carteira "$@" ;;
   modelo)      modelo "${1:-}" "${2:-}" ;;
   estados)     estados ;;
   dt)          dt "$@" ;;

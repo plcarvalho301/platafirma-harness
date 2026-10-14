@@ -1496,6 +1496,9 @@ cmd_abrir() {
     local estado_arvore="arvore limpa"; [ "${sujo_qtd:-0}" -eq 0 ] || estado_arvore="arvore suja"
     printf 'bancada já aberta: %s (ramo %s @ %s, atras de origin/main: %s, %s)\n' \
       "$wt_dir" "$(ramo_atual "$ja")" "$("$GIT" -C "$ja" rev-parse --short HEAD)" "$atras" "$estado_arvore"
+    # Card #3526 (R20): reabrir a bancada tambem poe o card em execucao e grava o executor. Antes
+    # so a bancada nova movia, e a story de uma fita que voltava ficava onde estava.
+    [[ "${card###}" =~ ^[0-9]+$ ]] && move_card "${card###}"
     printf 'próximo: teste rodar %s <alvo>\n' "$nome"
     return 0
   fi
@@ -1547,6 +1550,8 @@ cmd_abrir() {
       printf 'bancada já aberta: %s (ramo %s @ %s, migrada da pasta plana, atras de origin/main: %s)\n' \
         "$wt_dir" "$(ramo_atual "$wt_dir")" "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)" \
         "$("$GIT" -C "$wt_dir" rev-list --count HEAD..origin/main 2>/dev/null || echo '?')"
+      # card #3526: tambem aqui, com a bancada ja aberta, move o card e grava o executor
+      [[ "$card_num" =~ ^[0-9]+$ ]] && move_card "$card_num"
       printf 'próximo: teste rodar %s <alvo>\n' "$nome"
       return 0
     fi
@@ -1584,6 +1589,34 @@ cmd_abrir() {
   fi
 }
 
+# grava_executor <n> <tarefas_bin> -- card #3526 (R20 da spec tarefas): quem abre a bancada de uma
+# story ou task passa a ser o executor dela, gravado pelo verbo tarefas (a regra e a coluna sao do
+# rastreador, #3521). So story e task: feature e epico nao executam. Falha em gravar so avisa, como
+# a do mover: a bancada ja existe. Story PARADA (despriorizada) e avisada, nao destravada: sair de
+# la e ato de quem prioriza, e o mover logo abaixo conta o que o rastreador responder. Leitura ou
+# nivel que nao se obtem (verbo ausente, rastreador fora) = nao grava e nao diz nada.
+grava_executor() {
+  local n="$1" bin="$2" item nivel estado out rc
+  item="$("$bin" api GET "/itens/$n" 2>/dev/null)" || item=""
+  nivel="$(printf '%s' "$item" | jq -r '.nivel_nome // empty' 2>/dev/null)" || nivel=""
+  estado="$(printf '%s' "$item" | jq -r '.estado // empty' 2>/dev/null)" || estado=""
+  case "$nivel" in story|task) ;; *) return 0 ;; esac
+  if [ -z "${PF_CADEIRA:-}" ]; then
+    printf 'card #%s: executor nao gravado (PF_CADEIRA ausente)\n' "$n"
+  else
+    out="$("$bin" editar "$n" --executor "$PF_CADEIRA" 2>&1)"; rc=$?
+    if [ "$rc" -eq 0 ]; then
+      printf 'card #%s: executor %s\n' "$n" "$PF_CADEIRA"
+    else
+      printf 'card #%s: executor NAO gravado (exit %s): %s\n' "$n" "$rc" "$(printf '%s' "$out" | head -1)"
+    fi
+  fi
+  if [ "$estado" = despriorizada ]; then
+    printf 'card #%s: a story esta PARADA (despriorizada); retomar e ato de quem prioriza: tarefas mover %s priorizada\n' "$n" "$n"
+  fi
+  return 0
+}
+
 # move_card <n> -- abrir com card poe o card em em-execucao no mesmo ato. Recusa do
 # rastreador (card sem corpo, estado que nao anda) se declara na saida e NAO derruba o
 # abrir: a bancada ja existe, e o card e ato do rastreador (spec_ambiente-de-desenvolvimento §2).
@@ -1593,6 +1626,7 @@ move_card() {
     printf 'card #%s: nao movido (verbo tarefas ausente em %s)\n' "$n" "$tarefas_bin"
     return 0
   fi
+  grava_executor "$n" "$tarefas_bin"
   out="$("$tarefas_bin" mover "$n" em-execucao 2>&1)"; rc=$?
   if [ "$rc" -eq 0 ]; then
     printf 'card #%s: em-execucao (%s)\n' "$n" "$(printf '%s' "$out" | head -1)"

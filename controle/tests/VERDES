@@ -200,6 +200,13 @@ testes/test_sessao_limpar.py | bin/acesso bin/_acesso/** bin/agente bin/chat bin
 testes/test_sessao_limpar_rascunho.py | bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/mesa bin/monta-sessao bin/persona bin/_persona/** bin/seg bin/sessao bin/_sessao/** sessao/**
 testes/test_sessao_origem.py | bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/mesa bin/monta-sessao bin/persona bin/_persona/** bin/seg bin/sessao bin/_sessao/** sessao/**
 testes/test_tarefas_moldes.py | bin/tarefas
+# Medido em 14/10/2026 (card #3526): originacao e executor, listar com paradas escondidas, ler com vinculo e filhas do
+# detalhe, ordenar, bloquear, desbloquear, despriorizar com a lista de motivos e carteira (34 passam; contra o
+# bin/tarefas de antes, 29 ficam vermelhos), contra um rastreador de mentira em loopback.
+testes/test_tarefas_carteira.py | bin/tarefas
+# Medido em 14/10/2026 (card #3552): admitir com raio, esperado e stack e a stack contra o catálogo, listar
+# por stack, vencidos, matar nos três jeitos e na porta antiga, e indicadores (50 passam; contra o bin/tarefas
+# de antes, 31 ficam vermelhos), contra um rastreador e um catálogo de mentira.
 testes/test_tarefas_dt.py | bin/tarefas
 testes/test_lint_card.py | bin/lint bin/_lint/card.py bin/_lint/lista.py bin/_lint/resultado.py
 testes/test_venvs_cobrem_imports.py | bin/_sessao/** mcp/** ops-server/** registro/**
