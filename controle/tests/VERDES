@@ -116,6 +116,7 @@ tests/test_pesquisar_consultar_palavras.py | bin/pesquisar pesquisa/**
 tests/test_acervo_psql_c.py | bin/acervo bin/_acervo/**
 tests/test_fila_msgid.py | bin/_fila/**
 tests/test_fila_ack.py | bin/fila bin/_fila/** bin/minuta bin/_minuta/** bin/persona bin/_persona/**
+tests/test_fila_contestacao.py | bin/fila bin/_fila/**
 tests/test_contrato_minuta_ler.py | bin/acervo bin/_acervo/** bin/bot bin/chat bin/conferir bin/curar bin/fila bin/_fila/** bin/infra bin/_infra/** bin/ingerir bin/mesa bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/situacao bin/tarefas bin/teste bin/_lint/**
 tests/test_contrato_casa_por_caminho.py | bin/repo bin/sessao bin/_sessao/** bin/_lint/** bin/_minuta/** docs/**
 # Medido em 03/10/2026 (card #3239): `curar --conceito --renomear`, contra um servidor HTTP falso do contrato

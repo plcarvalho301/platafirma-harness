@@ -76,7 +76,10 @@ ESPIA = "gestao-estrategica"
 # Pode so medir profundidade (status); qualquer outro verbo e negado em so_leitura().
 LEITOR = "sonda"
 GRUPO = "cadeira"
-TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff", "recusa"}
+TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff", "recusa", "contestacao"}
+# O contestar da R16 (arq:0124 §3, mecanismo comum; card #3532): `--ref` leva o indicador contestado e o
+# corpo leva o fundamento. Sem armazenamento novo: os dois campos ja existem em toda carta.
+TIPO_CONTESTACAO = "contestacao"
 
 # Persona de classe externa (DMZ): tem caixa na malha, mas nao tem par livre. A
 # allowlist e o que impede que estar em PERSONAS_PARTICIPANTES signifique estar
@@ -483,11 +486,14 @@ def imprime(m: dict):
     if m.get("estado"):
         print(f"estado: {m['estado']}")
     print(f"assunto: {m['assunto']}")
+    contestacao = m["tipo"] == TIPO_CONTESTACAO
     if m["ref"]:
-        print(f"ref: {m['ref']}")
+        print(f"{'indicador' if contestacao else 'ref'}: {m['ref']}")
     if m["responde"]:
         print(f"responde: {m['responde']}")
     print()
+    if contestacao:
+        print("fundamento:")
     print(m["corpo"])
     print()
 
@@ -670,6 +676,10 @@ def cmd_enviar(rc, eu: str, args):
     if not args.assunto:
         sys.stderr.write("erro: --assunto e obrigatorio\n")
         sys.exit(2)
+    contestacao = args.tipo == TIPO_CONTESTACAO
+    if contestacao and not args.ref:
+        sys.stderr.write("erro: --tipo contestacao exige --ref <indicador contestado>\n")
+        sys.exit(2)
     valida_persona(args.destinatario)
     valida_persona(de)
     # Grava sempre o nome canonico: a caixa e uma so, qualquer que seja a caixa
@@ -680,7 +690,7 @@ def cmd_enviar(rc, eu: str, args):
 
     corpo = sys.stdin.read()
     if not corpo.strip():
-        sys.stderr.write("erro: corpo vazio\n")
+        sys.stderr.write("erro: fundamento vazio (corpo em stdin)\n" if contestacao else "erro: corpo vazio\n")
         sys.exit(1)
 
     stream = stream_key(args.destinatario)
@@ -744,6 +754,7 @@ def uso():
         "  fila ler [<persona>] --desde <data> [remetente]\n"
         "  fila enviar <destinatario> --tipo <t> --assunto <a> [--ref <r>] [--responde <id>]\n"
         "              (corpo em stdin)\n"
+        "              --tipo contestacao: --ref e o indicador contestado, o corpo e o fundamento\n"
         "  fila tipos                             lista os tipos validos de --tipo\n"
     )
     sys.exit(2)

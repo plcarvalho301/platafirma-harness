@@ -40,18 +40,37 @@
 # escreve: eleger=nada
 # escreve: consultas=nada
 # escreve: trabalhos=nada
+# face: buscar=motor
+# face: medir=motor
+# face: listar=motor
 # face: ajuste=motor
 # face: indexar=motor
 # face: trocar=motor
+# face: consultas=motor
+# face: trabalhos=motor
+# rotulo: buscar=Buscar no acervo
+# rotulo: medir=Medir o acerto da busca
+# rotulo: listar=Listar instancias do motor
 # rotulo: ajuste=Aplicar {ajuste}
 # rotulo: indexar=Indexar {obra} pendente
-# rotulo: trocar=Trocar modelo de {embeddings}
+# rotulo: trocar --embedder=Montar geracao em sombra com outro modelo de {embeddings}
+# rotulo: trocar --virar=Virar a geracao em sombra
+# rotulo: consultas=Listar consultas a busca
+# rotulo: trabalhos=Listar trabalhos longos do motor
+# volta: buscar=sim — so le o indice; a busca entra no log de consultas
+# volta: medir=sim — a medicao entra no historico e nao muda o servido
+# volta: listar=sim — so le
 # volta: ajuste=sim — motor rag ajuste <slug> <valor anterior>, que o retorno do ajuste traz antes da seta
 # volta: indexar=sim — sem --promover o indice fica fora do ar; com --promover, acervo retirar biblioteca obra <obra> tira impressao e indice de servico, e acervo restaurar biblioteca obra os repoe
-# volta: trocar=nao
-# (face, rotulo e volta: arq:0124 §3, card #3448. trocar e nao porque a virada apaga a geracao anterior;
-#  antes dela a sombra se desfaz por `motor rag trocar biblioteca --descartar <id>`. A marcacao do gold set
-#  abre por link, nao por ato deste verbo, e fica sem face.)
+# volta: trocar --embedder=sim — motor rag trocar biblioteca --descartar <id> desfaz a sombra enquanto ela nao virou
+# volta: trocar --virar=nao
+# volta: consultas=sim — so le
+# volta: trabalhos=sim — so le
+# (face, rotulo e volta: arq:0124 §3, cards #3448 e #3532. A face e uma so por ato; o trocar declara o texto do
+#  controle por modo, porque os dois modos diferem na volta: montar a sombra se desfaz por --descartar; virar
+#  apaga a geracao anterior e nao volta. Ficam na exclusao "instrumento de medida da ia", sem face: sortear,
+#  parear, escrever, julgar, lintar e eleger. A marcacao do gold set abre por link, nao por ato deste verbo,
+#  e fica sem face.)
 # (recursos pelo enum de ferramental_recurso. Onde: o evento consulta em $PLATAFIRMA_INSTANCIA/var/log/ops/*.jsonl, best-effort;
 #  o env da ingestao na instancia, arquivo NOME-valor ou $PLATAFIRMA_INSTANCIA/segredos/<stack>/<VAR> (ajuste de corte, via
 #  motor-instancias.json); $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml (ajuste de container);

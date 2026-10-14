@@ -1318,6 +1318,33 @@ def test_verbo_aviso_de_face_sai_no_texto(tmp_path, monkeypatch, capsys):
     assert "AVISO" in saida and "apagar" in saida
 
 
+def test_verbo_ato_com_controle_por_modo_confere_cada_modo(tmp_path, monkeypatch, capsys):
+    # a face e uma so por ato; os modos que diferem na volta declaram o texto do controle um a um (#3532)
+    _verbo_com_face(tmp_path, monkeypatch, [
+        "face: apagar=Entrega",
+        "rotulo: apagar --tudo=Apagar tudo", "volta: apagar --tudo=nao",
+        "rotulo: apagar --um=Apagar um",                             # falta volta:
+    ])
+    exit_code = conferir.conferir_verbo(None, como_json=True)
+    dado = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    [aviso] = dado["avisos"]
+    assert "apagar --um" in aviso and "volta:" in aviso and "rotulo:" not in aviso
+
+
+def test_verbo_ato_com_modos_completos_nao_traz_aviso_nem_exige_a_chave_pura(tmp_path, monkeypatch, capsys):
+    _verbo_com_face(tmp_path, monkeypatch, [
+        "face: apagar=Entrega",
+        "rotulo: apagar --tudo=Apagar tudo", "volta: apagar --tudo=nao",
+        "rotulo: apagar --um=Apagar um", "volta: apagar --um=sim — restaurar",
+    ])
+    exit_code = conferir.conferir_verbo(None, como_json=True)
+    dado = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert "avisos" not in dado
+
+
 def _instalar_recuperacao_fake(monkeypatch, autoriza=None, acao="ler",
                                 fontes=("acervo", "board", "fila")):
     """Instala recuperacao.pep/recuperacao.fontes falsos em sys.modules — conferir_alcance

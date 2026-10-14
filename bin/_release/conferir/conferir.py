@@ -836,7 +836,9 @@ def _desde_familia(familia):
     return dado.get("no_ar_desde")
 
 
-_RE_LINHA_DE_ATO = re.compile(r"^#\s*(face|rotulo|volta|atalho)\s*:\s*([A-Za-z0-9_-]+)\s*=\s*(.*?)\s*$")
+# A chave e o ato, ou o ato e a opcao que separa o modo (`trocar --embedder`): arq:0124 §3, emenda de 14/10/2026.
+_RE_LINHA_DE_ATO = re.compile(
+    r"^#\s*(face|rotulo|volta|atalho)\s*:\s*([A-Za-z0-9_-]+(?:\s+--[A-Za-z0-9_-]+)?)\s*=\s*(.*?)\s*$")
 
 
 def _atos_de_face_sem_texto(caminho):
@@ -873,9 +875,14 @@ def _atos_de_face_sem_texto(caminho):
     for ato, face in faces.items():
         if not face:
             continue
-        faltam = [c for c, d in (("rotulo:", rotulos), ("volta:", voltas)) if not d.get(ato)]
-        if faltam:
-            saida.append((ato, faltam))
+        # Ato cujos modos diferem na volta declara o texto do controle uma vez por modo
+        # (`trocar --embedder`, `trocar --virar`); a face continua uma so por ato. Com modos,
+        # cada modo traz os dois campos e a chave do ato puro deixa de ser exigida.
+        modos = sorted({k for d in (rotulos, voltas) for k in d if k.startswith(ato + " --")})
+        for chave in modos or [ato]:
+            faltam = [c for c, d in (("rotulo:", rotulos), ("volta:", voltas)) if not d.get(chave)]
+            if faltam:
+                saida.append((chave, faltam))
     return saida
 
 

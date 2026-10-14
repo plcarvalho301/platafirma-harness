@@ -213,6 +213,45 @@ def test_atalho_ja_em_uso_e_aviso_e_nao_recusa(verbo, monkeypatch, capsys):
     assert "tarefas apagar" in capsys.readouterr().err
 
 
+# ------------------------------------------------------------------ registrar: o controle por modo (#3532)
+
+MODOS = ["# rotulo: apagar --tudo=Apagar tudo", "# volta: apagar --tudo=nao",
+         "# rotulo: apagar --um=Apagar um", "# volta: apagar --um=sim — acervo restaurar"]
+
+
+def test_chave_por_modo_vira_uma_linha_do_registro_com_a_capacidade_do_ato(verbo, monkeypatch):
+    banco = Banco()
+    _registra(verbo, monkeypatch, banco, MODOS)
+    assert ("values ('demo', 'apagar --tudo', 'casa', 'escrita', 'casa', 'Apagar tudo', 'nao', null)"
+            ) in banco.escrita
+    assert ("values ('demo', 'apagar --um', 'casa', 'escrita', 'casa', 'Apagar um', "
+            "'sim — acervo restaurar', null)") in banco.escrita
+    # o ato puro segue com as colunas nulas e o acesso fica nele, nao nos modos
+    assert "values ('demo', 'apagar', 'casa', 'escrita', 'casa', null, null, null)" in banco.escrita
+    assert not [l for l in banco.escrita.splitlines() if "ferramental_acesso" in l and "apagar --" in l]
+
+
+def test_modo_de_ato_que_atos_nao_lista_recusa(verbo, monkeypatch):
+    with pytest.raises(SystemExit) as e:
+        _registra(verbo, monkeypatch, Banco(), ["# volta: voa --alto=nao"])
+    assert e.value.code == 3
+
+
+@pytest.mark.parametrize("chave", ["apagar --", "apagar -tudo", "apagar --tudo --mais", "apagar tudo"])
+def test_chave_fora_da_forma_do_modo_recusa(verbo, monkeypatch, chave):
+    with pytest.raises(SystemExit) as e:
+        _registra(verbo, monkeypatch, Banco(), ["# volta: %s=nao" % chave])
+    assert e.value.code == 3
+
+
+def test_retrato_traz_o_modo_como_ato_proprio():
+    linhas = [{"verbo": "motor", "ato": "trocar"},
+              {"verbo": "motor", "ato": "trocar --virar", "rotulo": "Virar a geracao em sombra", "volta": "nao"}]
+    r = retrato.retrato(linhas, {})
+    assert r["atos"]["motor trocar"] == {}
+    assert r["atos"]["motor trocar --virar"] == {"rotulo": "Virar a geracao em sombra", "volta": {"desfaz": False}}
+
+
 # ------------------------------------------------------------------ registrar: capacidade por ato (#3465)
 #
 # O segundo campo do par de `# atos:` e o tipo que o ato manda ao PEP (arq:0110 Q1, Q12) e o registrar
