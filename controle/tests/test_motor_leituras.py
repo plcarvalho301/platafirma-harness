@@ -49,6 +49,10 @@ elif a and a[0] == "exec" and "python" in a:                                   #
         sys.stderr.write("Error response from daemon: container is not running")
         sys.exit(1)
     print(json.dumps(estado["conteiner"]))
+elif a and a[0] == "exec" and "sh" in a:                                       # o tail da sombra (--sombra-ver)
+    print("embeddando 3/20\\n--- pip:\\n--- fim:\\nsem arquivo fim")
+elif a and a[0] == "exec" and "cat" in a:                                      # resultado.json: ainda nao ha
+    sys.exit(1)
 else:
     sys.exit(0)
 """
@@ -376,6 +380,33 @@ def test_trabalhos_com_uma_fonte_fora_diz_nao_consegui_olhar_e_sai_0_com_as_duas
     r = roda("--json", ato="trabalhos")
     assert r.returncode == 5
     assert set(json.loads(r.stdout)["nao_consegui_olhar"]) == {"rag-api", "sombras de bench"}
+
+
+def test_sombra_ver_de_pasta_ausente_nao_diz_rodando(motor):
+    """O contrato antigo imprimia «rodando» para toda sombra sem `fim`, existisse ela ou nao (o conteiner recriado
+    em 10/10 levou /tmp junto)."""
+    roda, grava, *_ = motor
+    grava(conteiner={"agora": AGORA, "sombras": []})
+    r = roda("biblioteca", "--sombra-ver", SOMBRA_PARADA, ato="medir")
+    assert r.returncode == 1 and "nao existe no conteiner" in r.stderr
+    assert "rodando" not in r.stdout
+
+
+def test_sombra_ver_sem_processo_e_sem_fim_diz_parada_desde_quando(motor):
+    roda, grava, *_ = motor
+    grava(conteiner={"agora": AGORA, "sombras": [_sombra(SOMBRA_PARADA)]})
+    r = roda("biblioteca", "--sombra-ver", SOMBRA_PARADA, ato="medir")
+    assert r.returncode == 0, r.stderr
+    assert "estado: parado desde" in r.stdout and "nenhum processo" in r.stdout and "rodando" not in r.stdout
+    grava(conteiner={"agora": AGORA, "sombras": [_sombra(SOMBRA_PARADA, vivo=True, log_mtime=AGORA - 30)]})
+    assert "estado: vivo" in roda("biblioteca", "--sombra-ver", SOMBRA_PARADA, ato="medir").stdout
+
+
+def test_sombra_ver_com_o_conteiner_fora_diz_nao_consegui_olhar(motor):
+    roda, grava, *_ = motor
+    grava(conteiner_fora=True)
+    r = roda("biblioteca", "--sombra-ver", SOMBRA_PARADA, ato="medir")
+    assert "nao consegui olhar o estado" in r.stdout and "rodando" not in r.stdout
 
 
 # --- tarefa 6: histórico de medida --------------------------------------------------------------
