@@ -167,14 +167,15 @@ TESTE_LE_DADO = ("from pathlib import Path\n"
 
 def test_push_mede_so_o_que_o_diff_da_base_alcanca(amb):
     """Card #3370: o hook passa a base (o remote_oid) ao teste. Teste com raio declarado fora
-    do diff fica de fora; o mesmo teste entra quando o diff o alcanca. Mudar a lista e raio
-    total: o primeiro push roda tudo."""
+    do diff fica de fora; o mesmo teste entra quando o diff o alcanca. Mudar a lista nao e mais
+    raio total (#3535): roda a linha que entrou, e nao a lista inteira."""
     amb.commit("dados/valor.txt", "ok\n")
     amb.commit("controle/tests/test_dado.py", TESTE_LE_DADO)
     amb.commit("controle/tests/VERDES", "tests/test_fixture.py\ntests/test_dado.py | src/**\n")
     r = amb.push()
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "raio total: controle/tests/VERDES" in r.stderr, r.stderr
+    assert "raio total" not in r.stderr, r.stderr
+    assert "seleção: 2 de 2 arquivos" in r.stderr, r.stderr   # a linha nova roda, e a sem raio tambem
 
     amb.commit("dados/valor.txt", "ruim\n")   # o teste quebraria, mas o diff nao alcanca o raio dele
     r = amb.push()

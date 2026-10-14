@@ -53,8 +53,10 @@ uso:
   --base <rev>: só com --portao: roda o que o diff de <rev> até a árvore alcança (card #3370).
                 Linha da lista sem barra vertical roda sempre; a forma "arquivo | glob glob" roda quando
                 algum glob (relativo à raiz do repositório) casa um arquivo do diff, ou o
-                próprio arquivo mudou; caminho de raio total roda a lista inteira. Sem --base,
-                ou base ilegível, a lista inteira
+                próprio arquivo mudou, ou a linha entrou ou mudou na lista. Raio total (lock,
+                construtor do venv, conftest: o que muda o ambiente de todo teste) roda a lista
+                inteira; o resto entra só pelo raio declarado (#3535). Sem --base, ou base
+                ilegível, a lista inteira
   --origin-main: só com --portao, sem <alvo> e sem --arvore: busca origin/main no clone base da
                  bancada, mede a lista inteira numa árvore descartável dele e a remove (a
                  rodada diária do bot, card #3370; não grava veredito de seleção)
@@ -694,12 +696,29 @@ lista_portao_de() {  # $1=clone $2=subarvore
 }
 
 # card #3370 (emenda da arq:0116 §6): o portão roda o que a mudança alcança. O raio total
-# mora aqui, no código, e não em arquivo que o diff possa editar: mudança na ferramenta de
-# teste, no construtor do ambiente, no registro, nas listas ou em conftest roda a lista
-# inteira. `*` e `**` casam `/` (erra para mais, nunca para menos).
-RAIO_TOTAL=('lib/**' 'hooks/**' 'bin/teste' 'bin/_release/**' 'registro/venvs.json'
-  'registro/terceiros.json' 'venvs/**' '**/conftest.py' '**/uv.lock' '**/requirements*.txt'
-  '**/pyproject.toml' '**/VERDES')
+# mora aqui, no código, e não em arquivo que o diff possa editar. Regra do dono (14/10/2026,
+# card #3535): roda só o raio de ataque da mudança, e mais nenhum. Raio total é só o que
+# muda o AMBIENTE de todo teste (o lock, o construtor do venv, o conftest); ferramenta,
+# registro e verbo entram pelo raio declarado de cada linha, e linha nova ou mudada numa
+# lista de portão roda por si (linhas_novas_da_lista). `*` e `**` casam `/`.
+RAIO_TOTAL=('lib/venv.sh' 'lib/terceiros.sh' 'registro/terceiros.json' 'venvs/**'
+  '**/conftest.py' '**/uv.lock' '**/requirements*.txt' '**/pyproject.toml'
+  '**/package-lock.json')
+
+# Arquivos que a mudança acrescentou ou mexeu na lista de portão, um por linha: a linha que
+# entra na lista roda no mesmo push, sem arrastar a lista inteira (#3535).
+linhas_novas_da_lista() {  # $1=clone $2=lista(caminho absoluto) $3=base $4=em_arvore(0|1)
+  local rel="${2#"$1"/}" l
+  if [ "${4:-0}" -eq 1 ]; then
+    git -C "$1" diff -U0 "$3" HEAD -- "$rel" 2>/dev/null
+  elif git -C "$1" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1; then
+    git -C "$1" diff -U0 "$3" -- "$rel" 2>/dev/null
+  else
+    sed 's/^/+/' "$2"
+  fi | while IFS= read -r l; do
+    case "$l" in '+++'*|'+#'*|'+') continue ;; '+'*) linha_arquivo "${l#+}"; printf '\n' ;; esac
+  done
+}
 
 casa_glob() {  # $1=arquivo $2=glob (relativo à raiz do repositório)
   local f="$1" g="$2"
@@ -1069,6 +1088,8 @@ ato_rodar() {
         printf '%s: aviso: base %s ilegível em %s — lista inteira\n' "$VERBO" "$base" "$c" >&2
       fi
     fi
+    local novas_lista=""
+    [ "$seleciona" -eq 1 ] && novas_lista="$(linhas_novas_da_lista "$c" "$lista_portao" "$base" "$EM_ARVORE")"
     while IFS= read -r linha_crua; do
       case "$linha_crua" in ''|'#'*) continue ;; esac
       linha="$(linha_arquivo "$linha_crua")"; globs="$(linha_globs "$linha_crua")"
@@ -1081,7 +1102,8 @@ ato_rodar() {
         ausentes+=("$linha"); continue
       fi
       n_lista=$((n_lista + 1))
-      if [ "$seleciona" -eq 1 ] && [ -n "$globs" ] && ! alcanca "$rel_repo" "$globs" "$dif"; then
+      if [ "$seleciona" -eq 1 ] && [ -n "$globs" ] && ! alcanca "$rel_repo" "$globs" "$dif" \
+          && ! printf '%s\n' "$novas_lista" | grep -qxF -- "$linha"; then
         pulados+=("$linha"); continue
       fi
       alvos+=("$dest"); sel_rels+=("$rel_repo")
