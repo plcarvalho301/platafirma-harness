@@ -1887,8 +1887,11 @@ conferencia_no_ar() {  # $1=repo $2=sha ; 0 conforme ou nada a conferir · 1 ver
     case "$rc" in 0|5) return "$rc" ;; *) return 1 ;; esac
   fi
   [ "${#STACKS_PROMOVER[@]}" -gt 0 ] || return 0
+  # o conferir mora no harness: familia que nao o traz (rastreador, core, motor, ui) e
+  # conferida pelo desta release (#3535); o harness segue conferido pelo da propria rev.
   local impl="$PROD_RAIZ/$repo/$sha/bin/_release/conferir/conferir.py"
-  [ -f "$impl" ] || { CONF_AR_DETALHE="rev ${sha:0:7} sem bin/_release/conferir"; return 5; }
+  [ -f "$impl" ] || impl="$AQUI/_release/conferir/conferir.py"
+  [ -f "$impl" ] || { CONF_AR_DETALHE="rev ${sha:0:7} sem bin/_release/conferir e release sem conferir"; return 5; }
   for st in "${STACKS_PROMOVER[@]}"; do
     rc_st=1
     for tent in 1 2 3 4 5 6; do

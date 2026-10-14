@@ -356,12 +356,16 @@ def stack_do_container(c):
     pelo <rel>. Sem casamento, None — e o render segue sem cofre, como antes."""
     # caminho relativo EXATO dentro da arvore da familia: casar por sufixo confundia
     # rag/docker-compose.yml com o docker-compose.yml da raiz (stack conhecimento).
-    rels = set()
+    # E a familia junto (#3535): so o relativo tomava o docker-compose.yml da raiz do
+    # rastreador pelo do conhecimento, que vem antes na topologia, e o render saia sem cofre.
+    pares = set()
     for f in [f for f in c["config_files"].split(",") if f]:
         partes = f.split(os.sep)
         for i, p in enumerate(partes):
             if len(p) == 40 and all(ch in "0123456789abcdef" for ch in p):
-                rels.add("/".join(partes[i + 1:]))
+                familia = partes[i - 1] if i > 0 else ""
+                curta = familia[len("platafirma-"):] if familia.startswith("platafirma-") else familia
+                pares.add((curta, "/".join(partes[i + 1:])))
                 break
     for s in _topologia():
         for comp in _composes(s):
@@ -370,7 +374,7 @@ def stack_do_container(c):
             resto = comp.split("/current/", 1)[1]
             if "/" not in resto:
                 continue
-            if resto.split("/", 1)[1] in rels:
+            if tuple(resto.split("/", 1)) in pares:
                 return s.get("slug")
     return None
 
