@@ -18,6 +18,7 @@ declare -A BANCOS=(
   [rag]="rag-extractor-pg:rag:rag_extractor"
   [motor]="motor-pg:motor:motor"
   [sessao]="harness-sessao-db:sessao:sessao"
+  [rastreador]="rastreador-db:rastreador:rastreador"
 )
 
 uso_texto() {
