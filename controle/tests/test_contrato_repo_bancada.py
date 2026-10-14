@@ -95,9 +95,10 @@ def test_abrir_cria_worktree_por_cadeira_e_card_e_move_o_card(tmp_path):
     assert "card #42: em-execucao" in r.stdout
 
 
-def test_abrir_de_novo_nao_move_nada_e_diz_o_atraso(tmp_path):
+def test_abrir_de_novo_move_o_card_e_diz_o_atraso(tmp_path):
     """Reabrir e idempotente para a MESMA sessao (a marca de sessao viva do #3096 nao muda
-    isso); sessao diferente no mesmo card e outro teste, abaixo."""
+    isso); sessao diferente no mesmo card e outro teste, abaixo. Desde o #3526 (R20) a bancada
+    ja aberta tambem move o card: a story de uma fita que volta nao fica onde estava."""
     bancada = _montar(tmp_path)
     _abrir_42(tmp_path, bancada)
     _main_novo(tmp_path)
@@ -105,7 +106,7 @@ def test_abrir_de_novo_nao_move_nada_e_diz_o_atraso(tmp_path):
     assert r.returncode == 0, r.stderr
     assert "bancada já aberta" in r.stdout
     assert "atras de origin/main: 1" in r.stdout
-    assert "card #42" not in r.stdout
+    assert "card #42: em-execucao" in r.stdout
 
 
 def test_abrir_sem_card_com_slug_abre_ramo_da_cadeira(tmp_path):
@@ -239,6 +240,117 @@ def test_abrir_termina_com_proximo(tmp_path):
     r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x")
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip().splitlines()[-1] == "próximo: teste rodar demo <alvo>"
+
+
+# --- abrir move o card e grava o executor, com a bancada nova e com a ja aberta (card #3526, R20) ---
+
+def _tarefas_falsa(tmp_path, nivel="story", estado="priorizada", editar_rc=0, mover_rc=0):
+    """Um `tarefas` de mentira: `api GET /itens/N` devolve nivel e estado como o rastreador, `editar`
+    e `mover` saem com o codigo pedido, e cada chamada fica em `tarefas-falsa.log`."""
+    falso = tmp_path / "tarefas-falsa"
+    log = tmp_path / "tarefas-falsa.log"
+    item = json.dumps({"id": 42, "nivel_nome": nivel, "estado": estado})
+    falso.write_text(
+        "#!/usr/bin/env bash\n"
+        f'echo "$*" >> "{log}"\n'
+        'case "$1" in\n'
+        f"  api) echo '{item}' ;;\n"
+        f'  editar) echo "erro de mentira" >&2; [ {editar_rc} -eq 0 ] && echo "item 42 editado"; exit {editar_rc} ;;\n'
+        f'  mover) [ {mover_rc} -eq 0 ] && echo "item 42 -> Em execucao: t" || echo "recusado"; exit {mover_rc} ;;\n'
+        "esac\n")
+    falso.chmod(0o755)
+    return falso, log
+
+
+def _chamadas_de_tarefas(log):
+    return log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+
+
+def test_abrir_bancada_nova_de_story_grava_o_executor_e_move(tmp_path):
+    bancada = _montar(tmp_path)
+    falso, log = _tarefas_falsa(tmp_path)
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x", env_extra={"PF_TAREFAS_BIN": str(falso)})
+    assert r.returncode == 0, r.stderr
+    assert "card #42: executor claudinho-ti" in r.stdout
+    assert "card #42: em-execucao" in r.stdout
+    assert _chamadas_de_tarefas(log) == ["api GET /itens/42", "editar 42 --executor claudinho-ti",
+                                         "mover 42 em-execucao"]
+    assert r.stdout.strip().splitlines()[-1] == "próximo: teste rodar demo <alvo>"
+
+
+def test_abrir_com_a_bancada_ja_aberta_move_a_story_e_grava_o_executor(tmp_path):
+    """O caminho que o card nomeia: antes, so a bancada nova movia o card."""
+    bancada = _montar(tmp_path)
+    _abrir_42(tmp_path, bancada)
+    falso, log = _tarefas_falsa(tmp_path)
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x", env_extra={"PF_TAREFAS_BIN": str(falso)})
+    assert r.returncode == 0, r.stderr
+    assert "bancada já aberta" in r.stdout
+    assert _chamadas_de_tarefas(log) == ["api GET /itens/42", "editar 42 --executor claudinho-ti",
+                                         "mover 42 em-execucao"]
+    assert r.stdout.strip().splitlines()[-1] == "próximo: teste rodar demo <alvo>"
+
+
+def test_abrir_com_a_plana_migrada_do_mesmo_card_tambem_move_e_grava(tmp_path):
+    bancada = _montar(tmp_path)
+    plana = bancada / "wt" / "demo" / "ti"
+    _git("worktree", "add", "-b", "fabrica/42-x", str(plana), "origin/main", cwd=bancada / "demo")
+    falso, log = _tarefas_falsa(tmp_path)
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x", env_extra={"PF_TAREFAS_BIN": str(falso)})
+    assert r.returncode == 0, r.stderr
+    assert "migrada da pasta plana" in r.stdout
+    assert _chamadas_de_tarefas(log) == ["api GET /itens/42", "editar 42 --executor claudinho-ti",
+                                         "mover 42 em-execucao"]
+
+
+def test_abrir_task_tambem_grava_o_executor(tmp_path):
+    bancada = _montar(tmp_path)
+    falso, log = _tarefas_falsa(tmp_path, nivel="task")
+    assert _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x",
+                 env_extra={"PF_TAREFAS_BIN": str(falso)}).returncode == 0
+    assert "editar 42 --executor claudinho-ti" in _chamadas_de_tarefas(log)
+
+
+def test_abrir_feature_move_mas_nao_grava_executor(tmp_path):
+    """Feature e epico nao executam: o executor e de story e task."""
+    bancada = _montar(tmp_path)
+    falso, log = _tarefas_falsa(tmp_path, nivel="feature")
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x", env_extra={"PF_TAREFAS_BIN": str(falso)})
+    assert r.returncode == 0, r.stderr
+    assert _chamadas_de_tarefas(log) == ["api GET /itens/42", "mover 42 em-execucao"]
+    assert "executor" not in r.stdout
+
+
+def test_abrir_falha_em_gravar_o_executor_so_avisa_e_o_card_ainda_move(tmp_path):
+    """A trava do card: a falha em gravar o executor nao derruba a abertura da bancada."""
+    bancada = _montar(tmp_path)
+    falso, log = _tarefas_falsa(tmp_path, editar_rc=1)
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x", env_extra={"PF_TAREFAS_BIN": str(falso)})
+    assert r.returncode == 0, r.stderr
+    assert "executor NAO gravado (exit 1)" in r.stdout
+    assert "mover 42 em-execucao" in _chamadas_de_tarefas(log)
+    assert (bancada / "wt" / "demo" / "ti" / "42-x" / ".git").exists()
+
+
+def test_abrir_story_parada_avisa_e_diz_o_que_o_rastreador_respondeu(tmp_path):
+    bancada = _montar(tmp_path)
+    falso, log = _tarefas_falsa(tmp_path, estado="despriorizada", mover_rc=1)
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x", env_extra={"PF_TAREFAS_BIN": str(falso)})
+    assert r.returncode == 0, r.stderr
+    assert "PARADA (despriorizada)" in r.stdout and "tarefas mover 42 priorizada" in r.stdout
+    assert "rastreador recusou mover (exit 1)" in r.stdout
+    assert "executor claudinho-ti" in r.stdout, "a abertura registra quem pegou, mesmo parada"
+
+
+def test_abrir_sem_o_item_legivel_nao_grava_executor_e_nao_derruba(tmp_path):
+    """Rastreador fora (ou verbo que nao le): sem nivel conhecido o executor nao se grava, e o mover segue."""
+    bancada = _montar(tmp_path)
+    falso = tmp_path / "tarefas-sem-item"
+    falso.write_text('#!/usr/bin/env bash\n[ "$1" = api ] && exit 1\necho movido\n')
+    falso.chmod(0o755)
+    r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x", env_extra={"PF_TAREFAS_BIN": str(falso)})
+    assert r.returncode == 0, r.stderr
+    assert "executor" not in r.stdout and "card #42: em-execucao" in r.stdout
 
 
 # --- abrir --da-producao (revisao do PR #306, card #3096): a mesma trava (a) e o
