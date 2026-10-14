@@ -1,0 +1,3 @@
+# Pinado exato, como o `api/requirements.txt` do rastreador. A borda é ASGI puro e só biblioteca padrão
+# (o cliente da porta é urllib): o que sobe o processo é o uvicorn, e nada mais.
+uvicorn==0.51.0

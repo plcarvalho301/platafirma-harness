@@ -1,0 +1,39 @@
+# A borda das faces do cubo de controle (card #3516; arq:0057). Um contêiner, sem volume de dado, sem
+# segredo e sem credencial própria: o token do dono chega pelo gate do cubo e vai à porta como veio
+# (seg:0015 §5). A lista de origens, a URL da porta e as faces são configuração da instância.
+#
+# Quem sobe e quem põe o gate na frente é a ti (#3565): o gate do cubo tem de alcançar `borda:8000` pela
+# rede abaixo, passar o token do dono em Authorization e usar o client que a porta lista em
+# PF_FACE_CLIENTS. Sem essa lista a porta nega toda fonte face.
+name: harness-borda
+
+services:
+  borda:
+    build: .
+    restart: unless-stopped
+    environment:
+      # Origens que podem escrever (R31): lista fechada da instância, vírgula entre valores. Vazia, a
+      # borda lê e não escreve.
+      BORDA_ORIGENS: ${BORDA_ORIGENS:-https://controle.platafirma.org}
+      # A porta de verbos. Em docker rootless o contêiner não alcança o loopback do host (medido em
+      # controle/compose.yaml), então o caminho é o publicado pelo túnel.
+      BORDA_PORTA_URL: ${BORDA_PORTA_URL:-https://ops.platafirma.org/mcp}
+      # Onde o gate põe o token do dono.
+      BORDA_CABECALHO_TOKEN: ${BORDA_CABECALHO_TOKEN:-authorization}
+      # Cada face e o verbo dela na release; a lista de atos vem do cabeçalho do verbo (`# face:`).
+      # Texto fixo, sem interpolação: a chave `}` do JSON fecharia o `${...}` do compose. Outra face ou
+      # outro caminho entra por compose.override.yaml da instância.
+      BORDA_FACES: '{"motor": {"verbo": "/opt/platafirma/current/harness/bin/motor", "instancia": "rag", "sem_instancia": ["listar"]}}'
+    volumes:
+      # Só para ler o cabeçalho do verbo. Monta-se a raiz da release, e não só current/, porque current/
+      # é link relativo para fora dele (mesma razão do controle/compose.yaml).
+      - ${PF_RELEASE_RAIZ:-/opt/platafirma}:${PF_RELEASE_RAIZ:-/opt/platafirma}:ro
+    ports:
+      - "127.0.0.1:${BORDA_PORTA_HOST:-8092}:8000"
+    networks: [gate]
+
+networks:
+  # A rede em que o gate do cubo vive: o gate alcança "borda:8000" por nome. O nome é da ti (#3565).
+  gate:
+    external: true
+    name: ${BORDA_REDE:-plataforma-wiki_default}
