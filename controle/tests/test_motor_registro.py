@@ -56,12 +56,55 @@ def sql(monkeypatch):
 
 
 def test_os_atos_de_face_registram_rotulo_e_volta(sql):
-    """#3448: ajuste, indexar e trocar declaram rotulo e volta; trocar e `nao` (a virada apaga a geracao)."""
+    """#3448 e #3532: os atos de face declaram rotulo e volta; o trocar declara um controle por modo."""
     texto = sql[2]
-    for rotulo in ("Aplicar {ajuste}", "Indexar {obra} pendente", "Trocar modelo de {embeddings}"):
+    for rotulo in ("Aplicar {ajuste}", "Indexar {obra} pendente", "Buscar no acervo", "Medir o acerto da busca",
+                   "Listar instancias do motor", "Listar consultas a busca", "Listar trabalhos longos do motor",
+                   "Montar geracao em sombra com outro modelo de {embeddings}", "Virar a geracao em sombra"):
         assert rotulo in texto, rotulo
     assert "sim — motor rag ajuste <slug> <valor anterior>" in texto
     assert "sim — sem --promover o indice fica fora do ar" in texto
+
+
+def _linhas_do_cabecalho():
+    return [l.strip() for l in MOTOR.read_text(encoding="utf-8").splitlines() if l.startswith("# ")]
+
+
+def _chaves(campo):
+    padrao = re.compile(rf"^#\s*{campo}\s*:\s*([A-Za-z0-9_-]+(?: --[A-Za-z0-9_-]+)?)\s*=")
+    return [m.group(1) for l in _linhas_do_cabecalho() if (m := padrao.match(l))]
+
+
+def test_a_face_cobre_os_atos_da_emenda_e_deixa_a_exclusao_de_fora():
+    """#3532 (arq:0124 §3): buscar, medir, listar, ajuste, indexar, trocar, consultas e trabalhos tem face;
+    sortear, parear, escrever, julgar, lintar e eleger ficam na exclusao "instrumento de medida da ia"."""
+    faces = _chaves("face")
+    assert sorted(faces) == sorted(["buscar", "medir", "listar", "ajuste", "indexar", "trocar", "consultas", "trabalhos"])
+    for excluido in ("sortear", "parear", "escrever", "julgar", "lintar", "eleger"):
+        assert excluido not in faces
+    assert all(f in ATOS for f in faces)
+
+
+def test_todo_controle_tem_rotulo_e_volta_e_o_trocar_vem_por_modo():
+    rotulos, voltas = _chaves("rotulo"), _chaves("volta")
+    assert sorted(rotulos) == sorted(voltas)
+    assert "trocar" not in rotulos and sorted(r for r in rotulos if r.startswith("trocar ")) == [
+        "trocar --embedder", "trocar --virar"]
+    # cada ato de face tem o controle dele, ou o de cada modo
+    for ato in _chaves("face"):
+        assert any(r == ato or r.startswith(ato + " --") for r in rotulos), ato
+
+
+def test_o_registro_grava_um_controle_por_modo_do_trocar(sql):
+    texto = sql[2]
+    assert re.search(r"values \('motor', 'trocar --embedder', '[^']+', '[^']+', '[^']+', "
+                     r"'Montar geracao em sombra com outro modelo de \{embeddings\}', "
+                     r"'sim — motor rag trocar biblioteca --descartar <id> desfaz a sombra enquanto ela nao virou', null\)",
+                     texto)
+    assert re.search(r"values \('motor', 'trocar --virar', '[^']+', '[^']+', '[^']+', "
+                     r"'Virar a geracao em sombra', 'nao', null\)", texto)
+    # o ato puro segue como linha do registro, sem texto de controle inventado
+    assert re.search(r"values \('motor', 'trocar', '[^']+', '[^']+', '[^']+', null, null, null\)", texto)
 
 
 def test_slug_fora_do_tesauro_recusa_o_registro(monkeypatch):
@@ -81,8 +124,9 @@ def test_a_descricao_servida_ensina_a_necessidade_em_frase(sql):
 
 def test_os_atos_sao_so_os_do_verbo(sql):
     texto = sql[2]
-    registrados = re.findall(r"into acervo\.ferramental_ato \(verbo, ato, capacidade, acao, tipo[^)]*\) values \('motor', '([\w-]+)'", texto)
-    assert registrados == ATOS, "linha `# atos:` em prosa vira ato inexistente (o 'a' de 08/10)"
+    registrados = re.findall(r"into acervo\.ferramental_ato \(verbo, ato, capacidade, acao, tipo[^)]*\) values \('motor', '([^']+)'", texto)
+    # os atos de `# atos:` e, depois, uma linha por modo do trocar (#3532); linha em prosa vira ato inexistente (o 'a' de 08/10)
+    assert registrados == ATOS + ["trocar --embedder", "trocar --virar"]
 
 
 def test_cada_ato_declara_le_e_escreve_com_recurso_do_enum(sql):

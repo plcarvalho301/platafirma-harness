@@ -78,6 +78,13 @@ CONTROLE = ("rotulo", "volta", "atalho")
 RE_SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 RE_OBJETO = re.compile(r"\{([a-z0-9]+(?:-[a-z0-9]+)*)\}")
 RE_ATALHO = re.compile(r"^\S{1,12}$")
+# A chave do controle de um modo: o ato e a opcao que separa o modo (`trocar --embedder`), arq:0124 §3.
+RE_MODO = re.compile(r"^[A-Za-z0-9_-]+ --[A-Za-z0-9_-]+$")
+
+
+def _ato_base(chave):
+    """O ato de que a chave do controle sai: `trocar --virar` -> `trocar`; chave sem modo volta como veio."""
+    return chave.split()[0] if RE_MODO.match(chave) else chave
 
 def _regua_por_ato(linhas, verbo):
     """`# regua: <ato> repositorio` | `# regua: <ato> <especie> <chave>` (spec_lint §3, §6) ->
@@ -317,7 +324,7 @@ def registrar_um(verbo):
     # Texto do controle por ato (arq:0124 §3): so de ato que `# atos:` lista, e o objeto do rotulo
     # ({slug}) so de conceito que existe no tesauro agora.
     controle_por_ato = _controle_por_ato(campos, verbo)
-    sem_ato_c = sorted(a for a in controle_por_ato if a not in nomes_atos)
+    sem_ato_c = sorted(a for a in controle_por_ato if _ato_base(a) not in nomes_atos)
     if sem_ato_c:
         morre("acervo registrar: bin/%s declara `# rotulo:`, `# volta:` ou `# atalho:` para ato que "
               "`# atos:` nao lista: %s" % (verbo, ", ".join(sem_ato_c)), 3)
@@ -421,6 +428,22 @@ def registrar_um(verbo):
                 "do update set consumo_raw=excluded.consumo_raw;\n"
                 % (_lit(verbo), _lit(ato_nome), _lit(cons), _lit(cons))
             )
+
+    # Um controle por modo e uma linha propria do registro (`trocar --embedder`), com a capacidade, a acao e o
+    # tipo do ato de que sai; o acesso e o consumo ficam no ato (arq:0124 §3, emenda de 14/10/2026).
+    info_do_ato = {a: (op, subcap) for a, op, subcap in atos_info}
+    for chave in sorted(c for c in controle_por_ato if RE_MODO.match(c)):
+        base = _ato_base(chave)
+        op, subcap = info_do_ato[base]
+        c = controle_por_ato[chave]
+        colunas = ["verbo", "ato", "capacidade", "acao", "tipo"] + list(CONTROLE)
+        valores = [_lit(verbo), _lit(chave), _lit(capacidade_por_ato.get(base, subcap)), _lit(op), _lit(subcap)]
+        valores += [_lit(c.get(k)) for k in CONTROLE]
+        sql_parts.append(
+            "insert into acervo.ferramental_ato (%s) values (%s) on conflict (verbo, ato) "
+            "do update set %s;\n"
+            % (", ".join(colunas), ", ".join(valores),
+               ", ".join("%s=excluded.%s" % (k, k) for k in colunas[2:])))
 
     for var_name, obrig, origem in ambientes:
         sql_parts.append(
