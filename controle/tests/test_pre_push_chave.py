@@ -138,7 +138,10 @@ def test_squash_reaproveita_veredito_pela_arvore(amb):
     amb.squash_tree_atual_em_novo_commit()
     r2 = amb.push()
     assert r2.returncode == 0, r2.stdout + r2.stderr
-    assert "reaproveitado" in (r2.stdout + r2.stderr)
+    # mesma arvore: nao mede de novo. Desde o #3535 a linha sem raio nao roda com diff vazio,
+    # e o squash sobre a mesma arvore chega como selecao vazia; antes, como veredito reaproveitado.
+    saida = r2.stdout + r2.stderr
+    assert "reaproveitado" in saida or "seleção: 0 de 1 arquivos" in saida, saida
 
 
 def test_push_vermelho_e_barrado_e_nomeia_o_teste(amb):
@@ -167,14 +170,15 @@ TESTE_LE_DADO = ("from pathlib import Path\n"
 
 def test_push_mede_so_o_que_o_diff_da_base_alcanca(amb):
     """Card #3370: o hook passa a base (o remote_oid) ao teste. Teste com raio declarado fora
-    do diff fica de fora; o mesmo teste entra quando o diff o alcanca. Mudar a lista e raio
-    total: o primeiro push roda tudo."""
+    do diff fica de fora; o mesmo teste entra quando o diff o alcanca. Mudar a lista nao e mais
+    raio total (#3535): roda a linha que entrou, e nao a lista inteira."""
     amb.commit("dados/valor.txt", "ok\n")
     amb.commit("controle/tests/test_dado.py", TESTE_LE_DADO)
     amb.commit("controle/tests/VERDES", "tests/test_fixture.py\ntests/test_dado.py | src/**\n")
     r = amb.push()
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "raio total: controle/tests/VERDES" in r.stderr, r.stderr
+    assert "raio total" not in r.stderr, r.stderr
+    assert "seleção: 2 de 2 arquivos" in r.stderr, r.stderr   # a linha nova roda, e a sem raio tambem
 
     amb.commit("dados/valor.txt", "ruim\n")   # o teste quebraria, mas o diff nao alcanca o raio dele
     r = amb.push()
