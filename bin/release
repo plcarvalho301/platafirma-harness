@@ -882,13 +882,17 @@ cmd_conferir() {
 # ---- promoção: helpers -----------------------------------------------------------
 
 # stacks da família no registro (acervo.stack), só as que promovem por `bin/_release/stack promover`.
-# Sai em STACKS_PROMOVER (via promover) e STACKS_FORA (reversao declarada por outra via: fora da promocao).
+# Sai em STACKS_PROMOVER (via promover), STACKS_FORA (reversao declarada por outra via: fora da promocao)
+# e STACKS_CATALOGO (registrada sem compose, como `harness` em 14/10/2026, #3551: existe para dar stack a
+# verbo, porta e documento; nao sobe em conteiner, entao nao ha o que promover, medir nem reverter).
 STACKS_PROMOVER=()
 STACKS_FORA=()
+STACKS_CATALOGO=()
 ler_stacks_da_familia() {
   local repo="$1" json=""
   STACKS_PROMOVER=()
   STACKS_FORA=()
+  STACKS_CATALOGO=()
   local acervo_bin; acervo_bin="$(achar_verbo acervo)"
   if [ -z "$acervo_bin" ]; then
     printf 'release: dependência ausente: acervo (registro de stacks) não encontrado\n' >&2
@@ -907,6 +911,7 @@ if isinstance(d, dict): d = [d]
 for s in d:
     if s.get("repo") != repo: continue
     via = ((s.get("reversao") or {}).get("via")) or "?"
+    if "compose" in s and not s["compose"]: via = "catalogo"
     print("%s %s" % (s.get("slug"), via))
 ' "$repo" <<<"$json")" || {
     printf 'release: dependência com outro contrato: registro de stacks não é JSON legível\n' >&2
@@ -915,7 +920,11 @@ for s in d:
   local slug via
   while read -r slug via; do
     [ -n "$slug" ] || continue
-    if [ "$via" = "promover" ]; then STACKS_PROMOVER+=("$slug"); else STACKS_FORA+=("$slug"); fi
+    case "$via" in
+      promover) STACKS_PROMOVER+=("$slug") ;;
+      catalogo) STACKS_CATALOGO+=("$slug") ;;
+      *)        STACKS_FORA+=("$slug") ;;
+    esac
   done <<<"$linhas"
   return 0
 }
@@ -2077,6 +2086,7 @@ cmd_promover() {
   else printf 'checkout:  materializar %s/%s/%s\n' "$PROD_RAIZ" "$repo" "$sha"; fi
   [ "${#STACKS_PROMOVER[@]}" -eq 0 ] || printf 'stacks:    %s (bin/_release/stack promover)\n' "${STACKS_PROMOVER[*]}"
   [ "${#STACKS_FORA[@]}" -eq 0 ]     || printf 'stacks:    fora da promoção por release — reversão declarada por outra via (infra up <stack>): %s\n' "${STACKS_FORA[*]}"
+  [ "${#STACKS_CATALOGO[@]}" -eq 0 ] || printf 'stacks:    de catálogo, sem compose — nada sobe nem se mede: %s\n' "${STACKS_CATALOGO[*]}"
   if [ "$ensaio" -eq 1 ]; then
     printf 'ensaio:    nada tocado\n'
     exit 0
@@ -2290,6 +2300,7 @@ cmd_reverter() {
   printf '== release reverter %s %s → %s ==\n' "$repo" "$(curto_ou "$atual" '(sem current)')" "${alvo:0:7}"
   [ "${#STACKS_PROMOVER[@]}" -eq 0 ] || printf 'stacks:    %s (bin/_release/stack promover %s)\n' "${STACKS_PROMOVER[*]}" "${alvo:0:7}"
   [ "${#STACKS_FORA[@]}" -eq 0 ]     || printf 'stacks:    fora da reversão por release — reversão declarada por outra via (infra up <stack>): %s\n' "${STACKS_FORA[*]}"
+  [ "${#STACKS_CATALOGO[@]}" -eq 0 ] || printf 'stacks:    de catálogo, sem compose — nada a reverter: %s\n' "${STACKS_CATALOGO[*]}"
   if [ "$ensaio" -eq 1 ]; then
     printf 'ensaio:    nada tocado\n'
     exit 0
