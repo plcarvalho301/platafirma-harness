@@ -105,6 +105,20 @@ def test_stack_do_container_casa_pelo_caminho_relativo(monkeypatch, tmp_path):
     assert c.stack_do_container(cont) is None
 
 
+def test_stack_do_container_casa_pela_familia(monkeypatch, tmp_path):
+    # #3535: o docker-compose.yml da raiz do rastreador era tomado pelo do conhecimento, que
+    # vem antes na topologia; o render saia sem o cofre e a conferencia no ar nao olhava.
+    c = _conferir(monkeypatch, tmp_path)
+    c._TOPO = [
+        {"slug": "conhecimento", "compose": ["/opt/platafirma/current/conhecimento/docker-compose.yml"]},
+        {"slug": "rastreador", "compose": "/opt/platafirma/current/rastreador/docker-compose.yml"},
+    ]
+    cont = {"config_files": "/opt/platafirma/platafirma-rastreador/" + "b" * 40 + "/docker-compose.yml"}
+    assert c.stack_do_container(cont) == "rastreador"
+    cont = {"config_files": "/opt/platafirma/platafirma-conhecimento/" + "b" * 40 + "/docker-compose.yml"}
+    assert c.stack_do_container(cont) == "conhecimento"
+
+
 def test_segredos_da_stack_segue_a_regra_do_ajudante(monkeypatch, tmp_path):
     c = _conferir(monkeypatch, tmp_path)
     pasta = tmp_path / "inst" / "segredos" / "rag"
