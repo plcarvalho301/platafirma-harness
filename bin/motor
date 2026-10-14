@@ -1988,9 +1988,24 @@ def cmd_sombra_ver(inst, sid):
         sys.exit(2)
     c = inst.get("container")
     dentro = f"/tmp/sombra-{sid}"
+    # O estado vem dos fatos do conteiner, o mesmo calculo do `trabalhos` (#3513): pasta ausente nao e «rodando»
+    # (o conteiner recriado leva /tmp junto), e sombra sem `fim` e vivo ou parado pelo processo e pelo log.
+    sombras, erro = trabalhosmod.ler_sombras(
+        c, lambda cmd: (lambda r: (r.returncode, r.stdout, r.stderr))(sh(cmd)))
+    achada = next((s for s in sombras if s["id"] == sid), None)
+    if not erro and achada is None:
+        print(f"medir --sombra-ver: a sombra {sid} nao existe no conteiner {c} ({dentro} ausente): o conteiner foi "
+              "recriado ou a pasta foi apagada. Nao e rodando nem parada: nao ha o que olhar.", file=sys.stderr)
+        sys.exit(1)
+    if erro:
+        print(f"medir --sombra-ver: nao consegui olhar o estado ({erro})")
+    elif achada.get("fim") is None:
+        t = trabalhosmod.estado_da_sombra(achada, trabalhosmod.limiar_s())
+        print(f"estado: {t['estado']}" + (f" desde {t['desde']}" if t.get("desde") else "")
+              + (f" — {t['motivo']}" if t.get("motivo") else ""))
     estado = sh(f"docker exec {c} sh -c " + shlex.quote(
         f"tail -n 12 {dentro}/log.txt 2>/dev/null; echo '--- pip:'; tail -n 3 {dentro}/pip.log "
-        f"2>/dev/null; echo '--- fim:'; cat {dentro}/fim 2>/dev/null || echo rodando"))
+        f"2>/dev/null; echo '--- fim:'; cat {dentro}/fim 2>/dev/null || echo 'sem arquivo fim'"))
     if estado.returncode != 0:
         print(f"medir --sombra-ver: {estado.stderr.strip()[-300:]}", file=sys.stderr)
         sys.exit(1)
