@@ -38,8 +38,8 @@ c="$(jq -r --arg f platafirma-conhecimento "$filtro" "$REG_VENVS" | sort | tr '\
 # harness-controle e recuperacao entraram com arq:0116 (uma subarvore, uma chave); politica-acesso
 # entrou quando a matriz sujeito x fonte passou a barrar no portao (10/10/2026); claude-code entrou
 # quando o CLI do Claude Code passou a vir de trava da release (#2856 linha 248, 11/10/2026)
-[ "$h" = "acervo claude-code harness harness-controle ops politica-acesso recuperacao " ] \
-  || falha "familia harness devia construir acervo, claude-code, harness, harness-controle, ops, politica-acesso e recuperacao: '$h'"
+[ "$h" = "acervo borda claude-code harness harness-controle ops politica-acesso recuperacao " ] \
+  || falha "familia harness devia construir acervo, borda, claude-code, harness, harness-controle, ops, politica-acesso e recuperacao: '$h'"
 [ "$c" = "conversor rag " ] || falha "familia conhecimento devia construir conversor e rag: '$c'"
 for n in harness acervo; do
   lock="$(jq -r --arg n "$n" '.[$n].lock' "$REG_VENVS")"

@@ -887,6 +887,8 @@ def _carimba_turno(ident: dict, turno, turno_texto="", turno_fonte="") -> None:
         return
     texto = turno_texto if isinstance(turno_texto, str) and turno_texto.strip() else None
     fonte = str(turno_fonte or "").strip().lower()
+    if fonte == FONTE_FACE and not _client_da_face(_quem()):
+        fonte, texto = "declarado", None        # sem o client do cubo a face nao se declara (#3516)
     if fonte not in oplog.FONTES_ENTREGUES:
         fonte = "hook" if (texto and not fonte) else "declarado"
     _guarda_carimbo(sid, turno_valor=valor, turno_id=valor, turno_fonte=fonte)
@@ -905,6 +907,32 @@ def _carimba_turno(ident: dict, turno, turno_texto="", turno_fonte="") -> None:
 # dois a chamada e; quem sabe e o verbo, que sai 2 na escrita sem fundamento.
 FONTE_FACE = "face"
 FUNDAMENTO_MAX = oplog.LIMITE_CAMPO        # bytes; o que passar disto e cortado, como o campo do bruto
+
+# Card #3516 (U2): a fonte face so vale com token emitido para o client do gate do cubo de controle
+# (claim `azp` em PF_FACE_CLIENTS, configuracao da instancia, virgula entre valores). Assinatura,
+# emissor e audiencia (a porta na audiencia) ja sao conferidos em todo token pelo BearerAuth; aqui entra
+# o elo que liga a fonte da chamada ao client emissor (seg:0015 §5). Lista vazia nega: sem o client
+# declarado nao ha face. O `sub` do token e o sujeito da face, e a face nao tem fita: cada chamada abre a
+# sua sessao, sem cadeira, e nao le o `sessao_id` que a chamada trouxer (nao herda a fita de outra cadeira).
+FACE_CLIENTS = frozenset(c.strip() for c in os.environ.get("PF_FACE_CLIENTS", "").split(",") if c.strip())
+
+
+def _client_da_face(quem: dict) -> bool:
+    return bool(quem.get("sub")) and quem.get("azp") in FACE_CLIENTS
+
+
+def _ident_da_face(ident: dict, turno, turno_fonte) -> tuple[dict, str]:
+    """`(ident, turno)` da chamada. Da face, com o token do client do cubo: sessao nova por chamada, sem
+    cadeira, com o `sub` como sujeito (`PF_SUJEITO` no verbo), e o turno e a propria chamada. Fora disso
+    nada muda; quem diz ser face sem o client e recusado em `_fundamento_do_ato`."""
+    if str(turno_fonte or "").strip().lower() != FONTE_FACE:
+        return ident, turno
+    quem = _quem()
+    if not _client_da_face(quem):
+        return ident, turno
+    sid = str(uuid.uuid4())
+    return ({"sessao_id": sid, "ordem_id": "-", "cadeira": "", "sujeito": quem["sub"],
+             "origem_sessao": "", "chapeu": ""}, sid)
 _ATOS_DO_CABECALHO: dict[str, tuple[frozenset, frozenset]] = {}
 
 
@@ -953,7 +981,10 @@ def _fundamento_do_ato(slug: str, binario: str, argv: list, ident: dict,
     declarados, so_escrita = _atos_do_cabecalho(slug, binario)
     ato = _ato_do_argv(argv, declarados)
     motivo = None
-    if any(t == "--fundamento" or t.startswith("--fundamento=") for t in argv[1:]):
+    if not _client_da_face(_quem()):
+        motivo = ("a fonte face so vale com token do client do gate do cubo (azp em PF_FACE_CLIENTS); "
+                  f"o token desta chamada nao e dele ({slug})")
+    elif any(t == "--fundamento" or t.startswith("--fundamento=") for t in argv[1:]):
         motivo = ("a face entrega o fundamento em turno_texto; --fundamento junto daria dois textos "
                   "para o mesmo ato")
     elif ato in so_escrita and not fundamento:
@@ -2906,6 +2937,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
         if lote and PF_TOOLS_LOTE:
             timeout = max(1, min(timeout, 600))
             ident = _sessao_resolve(sessao_id)
+            ident, turno = _ident_da_face(ident, turno, turno_fonte)
             _carimba_turno(ident, turno, turno_texto, turno_fonte)
             lote_id = uuid.uuid4().hex[:8]
 
@@ -2969,6 +3001,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
             return negado
         timeout = max(1, min(timeout, 600))
         ident = _sessao_resolve(sessao_id)  # aqui: dentro da task da tool (#2911)
+        ident, turno = _ident_da_face(ident, turno, turno_fonte)
         _carimba_turno(ident, turno, turno_texto, turno_fonte)
         argv = _argv_verbo(binario, ato, args)
         fundamento, recusa_face = _fundamento_do_ato(slug, binario, argv, ident,

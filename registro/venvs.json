@@ -65,6 +65,11 @@
     "lock": "ops-server/requirements.txt",
     "teste": "ops-server"
   },
+  "borda": {
+    "familia": "platafirma-harness",
+    "lock": "borda/requirements.txt",
+    "teste": "borda"
+  },
   "rag": {
     "familia": "platafirma-conhecimento",
     "lock": "rag/uv.lock",

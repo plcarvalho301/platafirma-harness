@@ -45,14 +45,15 @@ import server as s  # noqa: E402
 
 SID = "44444444-4444-4444-8444-444444444444"
 IDENT_TOKEN = {"sujeito": "b6986be0", "sub": "b6986be0", "username": "megafone",
-               "azp": "agy-cli", "sid": "sid-login", "jti": "jti-1"}
+               "azp": "cubo-controle", "sid": "sid-login", "jti": "jti-1"}
+CLIENT_CUBO = "cubo-controle"      # o client do gate do cubo (#3516): PF_FACE_CLIENTS da instancia
 IDENT = {"sessao_id": SID, "ordem_id": "o1", "cadeira": "ia", "sujeito": "", "origem_sessao": ""}
 
 SCRIPT = """#!/bin/sh
 # fake — verbo de teste do card #3513
 # atos: gravar (escrita, x), ler (leitura, x), misto (leitura|escrita, x)
 echo "FUND=$PF_FUNDAMENTO"
-: > "$PF_MARCA"
+echo "SUJ=$PF_SUJEITO CAD=$PF_CADEIRA SESSAO=$PF_SESSAO" > "$PF_MARCA"
 """
 
 
@@ -63,7 +64,8 @@ def porta_isolada():
     s._DECLARA_EXIT.clear()
     s._ATOS_DO_CABECALHO.clear()
     with patch.object(s, "_rc", return_value=MagicMock(get=MagicMock(return_value=None))), \
-            patch.object(s, "_quem", return_value=IDENT_TOKEN):
+            patch.object(s, "_quem", return_value=IDENT_TOKEN), \
+            patch.object(s, "FACE_CLIENTS", frozenset({CLIENT_CUBO})):
         yield
     s._ORIGENS.clear()
     s._CARIMBOS.clear()
@@ -271,3 +273,91 @@ def test_malote_fora_da_face_nao_ganha_fundamento(verbo, tmp_path, monkeypatch):
     r = _malote(verbo, tmp_path, monkeypatch, "fake gravar", turno="T1",
                 turno_texto="texto de transcript", turno_fonte="transcript")
     assert r["exit_code"] == 0 and _saiu(r).strip() == "FUND="
+
+
+# --- o token: a fonte face so vale com o client do gate do cubo (card #3516, U2; seg:0015 §5) -------
+
+OUTRO_CLIENT = {**IDENT_TOKEN, "azp": "agy-cli"}
+
+
+def _com_token(token):
+    return patch.object(s, "_quem", return_value=token)
+
+
+@pytest.mark.parametrize("ato", ["gravar", "ler"])
+def test_face_com_token_de_outro_client_e_recusada_e_o_verbo_nao_roda(verbo, tmp_path, ato):
+    with _com_token(OUTRO_CLIENT):
+        r = _roda(_tool(verbo, tmp_path), tmp_path, ato=ato, turno="T1",
+                  turno_texto="porque sim", turno_fonte="face")
+    assert r["recusado"] is True and "azp" in r["motivo"] and "exit_code" not in r
+    assert not verbo.marca.exists()
+    (linha,) = [t for t in _linhas(tmp_path) if t.get("evento") == "escrita_recusada"]
+    assert linha["tool"] == "fake" and oplog.validar(linha) == []
+
+
+def test_face_com_a_lista_de_clients_vazia_nega_ate_o_client_do_cubo(verbo, tmp_path, monkeypatch):
+    monkeypatch.setattr(s, "FACE_CLIENTS", frozenset())
+    r = _roda(_tool(verbo, tmp_path), tmp_path, ato="gravar", turno="T1",
+              turno_texto="porque sim", turno_fonte="face")
+    assert r["recusado"] is True and not verbo.marca.exists()
+
+
+def test_face_com_token_sem_sub_e_recusada(verbo, tmp_path):
+    with _com_token({**IDENT_TOKEN, "sub": "", "sujeito": ""}):
+        r = _roda(_tool(verbo, tmp_path), tmp_path, ato="gravar", turno="T1",
+                  turno_texto="porque sim", turno_fonte="face")
+    assert r["recusado"] is True and not verbo.marca.exists()
+
+
+def test_fora_da_face_o_client_do_cubo_nao_muda_nada(verbo, tmp_path):
+    r = _roda(_tool(verbo, tmp_path), tmp_path, ato="gravar", turno="T1",
+              turno_texto="msg do dono", turno_fonte="hook")
+    assert r["exit_code"] == 0 and verbo.marca.exists()
+    assert "CAD=ia" in verbo.marca.read_text(encoding="utf-8")      # a sessao do chamador segue valendo
+
+
+def test_face_com_o_client_do_cubo_o_verbo_ve_o_sub_e_nenhuma_cadeira(verbo, tmp_path):
+    do_chamador = "55555555-5555-4555-8555-555555555555"
+    r = _roda(_tool(verbo, tmp_path), tmp_path, ato="gravar", sessao_id=do_chamador, turno="T9",
+              turno_texto="ajusta o piso", turno_fonte="face")
+    assert r["exit_code"] == 0 and "FUND=ajusta o piso" in _saiu(r)
+    marca = dict(par.split("=", 1) for par in verbo.marca.read_text(encoding="utf-8").split())
+    assert marca["SUJ"] == IDENT_TOKEN["sub"] and marca.get("CAD", "") == ""
+    # sessao propria da chamada: nem a do chamador nem a que a porta resolveria
+    assert marca["SESSAO"] not in (do_chamador, SID, "-", "")
+
+
+def test_face_com_o_client_do_cubo_o_bruto_leva_o_sub_o_turno_da_face_e_o_fundamento(verbo, tmp_path):
+    _roda(_tool(verbo, tmp_path), tmp_path, ato="gravar", turno="T9",
+          turno_texto="ajusta o piso", turno_fonte="face")
+    sessao = dict(par.split("=", 1) for par in verbo.marca.read_text(encoding="utf-8").split())["SESSAO"]
+    linhas = _linhas(tmp_path)
+    (turno,) = [t for t in linhas if t.get("evento") == "turno"]
+    assert turno["sessao_id"] == sessao and turno["turno_fonte"] == "face"
+    assert turno["texto"] == "ajusta o piso" and turno["sub"] == IDENT_TOKEN["sub"]
+    (giro,) = [g for g in linhas if g.get("tool") == "fake" and not g.get("evento")]
+    assert giro["sessao_id"] == sessao and giro["turno_fonte"] == "face" and giro["turno_id"] == sessao[:32]
+    assert giro["sub"] == IDENT_TOKEN["sub"] and giro["azp"] == CLIENT_CUBO and giro["cadeira"] is None
+    assert oplog.validar(turno) == [] and oplog.validar(giro) == []
+
+
+def test_duas_chamadas_da_face_nao_dividem_sessao_nem_turno(verbo, tmp_path):
+    for _ in range(2):
+        _roda(_tool(verbo, tmp_path), tmp_path, ato="gravar", turno="T9",
+              turno_texto="ajusta", turno_fonte="face")
+    turnos = [t for t in _linhas(tmp_path) if t.get("evento") == "turno"]
+    assert len(turnos) == 2 and turnos[0]["sessao_id"] != turnos[1]["sessao_id"]
+
+
+def test_turno_com_fonte_face_de_outro_client_sai_declarado_e_sem_o_texto(tmp_path):
+    with _com_token(OUTRO_CLIENT), patch.object(s, "LOG_DIR", tmp_path):
+        s._carimba_turno(IDENT, "T0", "texto qualquer", "face")
+    (turno,) = [t for t in _linhas(tmp_path) if t.get("evento") == "turno"]
+    assert turno["turno_fonte"] == "declarado" and "texto" not in turno
+
+
+def test_malote_face_com_token_de_outro_client_recusa_antes_de_rodar(verbo, tmp_path, monkeypatch):
+    with _com_token(OUTRO_CLIENT):
+        r = _malote(verbo, tmp_path, monkeypatch, "fake gravar", turno="T1",
+                    turno_texto="porque sim", turno_fonte="face")
+    assert r["recusado"] is True and not verbo.marca.exists()
