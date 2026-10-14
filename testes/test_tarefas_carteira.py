@@ -352,10 +352,11 @@ def test_despriorizar_com_codigo_da_lista_passa(stub):
 
 # --- carteira (R25) ------------------------------------------------------------------------
 
-BALDE = ("<p>## Abertos</p><p>1. [2026-09-01] defeito aberto</p><p>## Saídas</p>"
-         "<p>2. [2026-09-02] velho → morre por obsolescência em 2026-09-20: x</p>"
-         "<p>3. [2026-10-01] seta → no texto → vira card em 2026-10-13: #9</p>"
-         "<p>4. [2026-10-02] outro → englobado em 2026-10-14: #10</p>")
+# O balde é dado do rastreador (R26, #3551): a linha da carteira conta as saídas por `GET /balde`.
+BALDE = (200, {"situacao": "saidas", "stack": None, "total": 3, "linhas": [
+    {"numero": n, "saida_jeito": "cancelada", "saida_ancora": "x", "saida_em": quando}
+    for n, quando in [(2, "2026-09-20 00:00:00+00:00"), (3, "2026-10-13 00:00:00+00:00"),
+                      (4, "2026-10-14 00:00:00+00:00")]]})
 
 
 def _carteira_itens():
@@ -379,7 +380,7 @@ def _carteira_itens():
 
 def _rotas_da_carteira(s):
     s.rotas[("GET", "/itens")] = _carteira_itens()
-    s.rotas[("GET", "/itens/2856")] = (200, {"id": 2856, "descricao": BALDE})
+    s.rotas[("GET", "/balde")] = BALDE
 
 
 def _linhas(p):
@@ -394,8 +395,8 @@ def test_carteira_fatia_por_originacao_balde_ao_lado_e_paradas_com_idade(stub):
     assert p.stdout.splitlines()[0].startswith("carteira desde 2026-10-12")
     por_nome = {l[0].strip(): l[1] for l in _linhas(p) if len(l) > 1}
     assert por_nome["negocio"] == "1" and por_nome["tecnico"] == "2" and por_nome["incidente"] == "1"
-    assert por_nome["balde #2856"].startswith("2 saídas desde 2026-10-12"), "só as duas saídas de 13 e 14/10"
-    assert "ao lado" in por_nome["balde #2856"]
+    assert por_nome["balde"].startswith("2 saídas desde 2026-10-12"), "só as duas saídas de 13 e 14/10"
+    assert "ao lado" in por_nome["balde"]
     # a fatia são três linhas, e a do balde vem ao lado, sem somar
     fatia = [n for n in por_nome if n in ("negocio", "tecnico", "incidente")]
     assert fatia == ["negocio", "tecnico", "incidente"]
@@ -412,7 +413,7 @@ def test_carteira_desde_muda_a_janela(stub):
     _rotas_da_carteira(s)
     p = _run(["carteira", "--desde", "2026-09-01"], base, TAREFAS_HOJE="2026-10-14")
     por_nome = {l[0].strip(): l[1] for l in _linhas(p) if len(l) > 1}
-    assert por_nome["negocio"] == "2" and por_nome["balde #2856"].startswith("3 saídas desde 2026-09-01")
+    assert por_nome["negocio"] == "2" and por_nome["balde"].startswith("3 saídas desde 2026-09-01")
 
 
 @pytest.mark.parametrize("hoje,segunda", [("2026-10-12", "2026-10-12"), ("2026-10-18", "2026-10-12"), ("2026-10-19", "2026-10-19")])
@@ -435,7 +436,7 @@ def test_carteira_busca_so_story_e_task_e_nao_soma_o_balde(stub):
 def test_carteira_balde_ilegivel_nao_derruba_a_fatia(stub):
     s, base = stub
     s.rotas[("GET", "/itens")] = _carteira_itens()
-    s.rotas[("GET", "/itens/2856")] = (200, {"id": 2856, "descricao": "<p>sem as seções</p>"})
+    s.rotas[("GET", "/balde")] = (500, {"erro": "balde fora do ar"})
     p = _run(["carteira"], base, TAREFAS_HOJE="2026-10-14")
     assert p.returncode == 0, p.stderr
     assert "ilegível" in p.stdout and "negocio" in p.stdout
