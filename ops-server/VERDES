@@ -11,6 +11,7 @@
 # `politica.yaml` e os dados de identidade não são lidos por estes testes (a rodada diária pega).
 test_cadeia_linha_real.py | bin/repo bin/sessao bin/_sessao/** bin/_minuta/** ops-server/** politica-acesso/*.py
 test_exec_conta.py | ops-server/**
+test_fundamento_face.py | lib/oplog.py ops-server/** politica-acesso/*.py
 test_formatos.py | ops-server/**
 test_ledger_distancia.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** ops-server/**
 test_ler_arquivo_morada.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/fila bin/_fila/** bin/infra bin/_infra/** bin/mesa bin/minuta bin/_minuta/** bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** ops-server/** politica-acesso/*.py

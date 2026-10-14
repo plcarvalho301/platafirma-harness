@@ -896,6 +896,77 @@ def _carimba_turno(ident: dict, turno, turno_texto="", turno_fonte="") -> None:
            **({"texto": texto} if texto else {}))
 
 
+# Card #3513 (U1): o fundamento do ato que a face do dono manda. A tela entrega `turno_fonte="face"` e,
+# em `turno_texto`, o que o dono escreveu como razao do ato. A porta o entrega ao verbo em
+# `PF_FUNDAMENTO` (so a face o produz: `_run_verbo_blocking` tira o que o env da porta trouxer antes de
+# por o da chamada) e recusa, antes de executar, o ato de escrita da face sem texto. Cada chamada vale
+# por si: o carimbo do turno guarda o texto so na primeira chamada do turno, e o fundamento nao pode
+# esperar por isso. Ato misto (`leitura|escrita`, como `motor ajuste`) passa: a porta nao sabe qual dos
+# dois a chamada e; quem sabe e o verbo, que sai 2 na escrita sem fundamento.
+FONTE_FACE = "face"
+FUNDAMENTO_MAX = oplog.LIMITE_CAMPO        # bytes; o que passar disto e cortado, como o campo do bruto
+_ATOS_DO_CABECALHO: dict[str, tuple[frozenset, frozenset]] = {}
+
+
+def _atos_do_cabecalho(slug: str, binario: str) -> tuple[frozenset, frozenset]:
+    """(declarados, so_escrita) da linha `# atos: <ato> (<acao>, <tipo>), ...` do cabecalho do verbo.
+    `so_escrita` e o ato cuja acao e so `escrita`; `leitura|escrita` fica fora. Verbo sem a linha
+    devolve dois conjuntos vazios: nada a recusar."""
+    if slug in _ATOS_DO_CABECALHO:
+        return _ATOS_DO_CABECALHO[slug]
+    declarados, so_escrita = set(), set()
+    try:
+        with open(binario, encoding="utf-8", errors="replace") as fh:
+            for n, ln in enumerate(fh):
+                if n > 400 or (n and not ln.startswith("#")):
+                    break                     # o cabecalho acaba na primeira linha de codigo
+                if re.match(r"^#\s*atos\s*:", ln):
+                    for ato, acao in _RE_ATO_PAR.findall(ln):
+                        declarados.add(ato)
+                        if acao.strip() == "escrita":
+                            so_escrita.add(ato)
+    except OSError:
+        pass
+    _ATOS_DO_CABECALHO[slug] = (frozenset(declarados), frozenset(so_escrita))
+    return _ATOS_DO_CABECALHO[slug]
+
+
+def _ato_do_argv(argv: list, declarados: frozenset) -> str | None:
+    """O ato do argv: o primeiro de argv[1] e argv[2] que o cabecalho declara. O motor poe a
+    instancia antes do ato (`motor rag trocar ...`), entao argv[1] sozinho nao basta."""
+    for t in argv[1:3]:
+        if t in declarados:
+            return t
+    return None
+
+
+def _fundamento_do_ato(slug: str, binario: str, argv: list, ident: dict,
+                       turno_texto, turno_fonte) -> tuple[str | None, dict | None]:
+    """`(fundamento, recusa)` de uma chamada de verbo. Fora da face: `(None, None)`, sem mudar nada.
+    Da face: o fundamento e o `turno_texto` aparado (vazio = None); recusa, auditada como
+    `escrita_recusada`, o ato declarado so de escrita sem fundamento e qualquer `--fundamento` no
+    argv (o texto vem do envelope; os dois dariam duas razoes para o mesmo ato)."""
+    if str(turno_fonte or "").strip().lower() != FONTE_FACE:
+        return None, None
+    texto = turno_texto.strip() if isinstance(turno_texto, str) else ""
+    fundamento = texto.encode("utf-8")[:FUNDAMENTO_MAX].decode("utf-8", "ignore").strip() or None
+    declarados, so_escrita = _atos_do_cabecalho(slug, binario)
+    ato = _ato_do_argv(argv, declarados)
+    motivo = None
+    if any(t == "--fundamento" or t.startswith("--fundamento=") for t in argv[1:]):
+        motivo = ("a face entrega o fundamento em turno_texto; --fundamento junto daria dois textos "
+                  "para o mesmo ato")
+    elif ato in so_escrita and not fundamento:
+        motivo = (f"ato de escrita da face sem fundamento: mande o texto do dono em turno_texto "
+                  f"({slug} {ato})")
+    if motivo is None:
+        return fundamento, None
+    _audit(tool=slug, evento="escrita_recusada", ato=ato, motivo=motivo,
+           cadeira=ident.get("cadeira") or None, sessao_id=ident.get("sessao_id"),
+           ordem_id=ident.get("ordem_id"))
+    return None, _recusa(slug, motivo)
+
+
 def _escopo_do_giro(slug: str, ato, args, r, ident: dict) -> None:
     """Giro de `repo abrir <repo> <card>` ou de `tarefas mover <card> em-execucao` que saiu 0: a
     porta emite a linha `escopo`, guarda o card como escopo corrente da sessao e o carimba nos
@@ -1365,7 +1436,8 @@ async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: st
             brutos.append("")
             return esgotado
         r = await _roda_item_run_command(_i, x, resultados, brutos, ident, timeout,
-                                         lote_id, encadeado, fim, nome=nome)
+                                         lote_id, encadeado, fim, nome=nome,
+                                         turno_texto=turno_texto, turno_fonte=turno_fonte)
         # Injeção entre itens do lote (Aberto spec_sessao/expediente, #3053):
         # se o item executado foi sessao abrir com sucesso, extrai sessao_id e
         # chama ident = _sessao_resolve(sid_novo) antes do item seguinte (n+1)
@@ -1390,7 +1462,8 @@ async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: st
 
 
 async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote_id,
-                                 encadeado=False, fim=None, nome="run_command") -> dict:
+                                 encadeado=False, fim=None, nome="run_command",
+                                 turno_texto="", turno_fonte="") -> dict:
     """Um item de `malote commands[]` (ou do apelido `run_command`): parte, confere
     stdin.de, autoriza, roda, serve e audita. A ordem e a parada da cadeia sao de
     `lote.itera`. `nome` e a tool chamada, gravada em `tool` (recusa) e `via` (item)."""
@@ -1434,13 +1507,19 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
     slug = argv[0].rsplit("/", 1)[-1]
     linha = " ".join([slug] + argv[1:])
     negado = _autoriza(slug, "run_command", "comando", linha, DOM_RUNTIME)
+    fundamento, recusa_face = ((None, None) if negado else
+                               _fundamento_do_ato(slug, argv[0], argv, ident, turno_texto, turno_fonte))
     if negado:
         r = negado
         brutos.append("")
+    elif recusa_face:
+        r = recusa_face
+        brutos.append("")
     else:
+        _ex = (fundamento,) if fundamento else ()
         t0 = time.monotonic()
         r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident,
-                                           _prazo_restante(fim))
+                                           _prazo_restante(fim), *_ex)
         so = r.get("stdout")
         brutos.append(so.get("texto", "") if isinstance(so, dict) else "")
         _perf = _perfil_verbo(slug, argv[0])
@@ -2766,11 +2845,15 @@ def _timeout_com_piso(argv: list, timeout: int) -> int:
 
 
 def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: int, ident: dict,
-                        prazo: float | None = None) -> dict:
-    """`prazo`: segundos ate a chamada devolver em_andamento (#3249); None = sem prazo."""
+                        prazo: float | None = None, fundamento: str | None = None) -> dict:
+    """`prazo`: segundos ate a chamada devolver em_andamento (#3249); None = sem prazo.
+    `fundamento` (#3513): o texto do dono que a face mandou; vira `PF_FUNDAMENTO` no verbo."""
     timeout = _timeout_com_piso(argv, timeout)
     env = {**_env_subprocesso(), "PF_SESSAO": ident["sessao_id"], "PF_ORDEM_ID": ident["ordem_id"],
            "PF_CONTA": OPS_USER}
+    env.pop("PF_FUNDAMENTO", None)          # so a face o produz; o que o env da porta trouxer nao vale
+    if fundamento:
+        env["PF_FUNDAMENTO"] = fundamento
     if ident.get("origem_sessao"):          # card #3158: so a sessao filha tem; ausente = nao entra
         env["PF_ORIGEM_SESSAO"] = ident["origem_sessao"]
     if ident["cadeira"]:
@@ -2845,9 +2928,14 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                 if negado_item:
                     return negado_item
                 argv = _argv_verbo(binario, _ato, _args)
+                fundamento, recusa_face = _fundamento_do_ato(slug, binario, argv, ident,
+                                                              turno_texto, turno_fonte)
+                if recusa_face:
+                    return recusa_face
+                _ex = (fundamento,) if fundamento else ()
                 t0 = time.monotonic()
                 r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, _stdin, timeout,
-                                                   ident, _prazo_restante(fim))
+                                                   ident, _prazo_restante(fim), *_ex)
                 _perf = _perfil_verbo(slug, binario)
                 r = _serve(r, tool=slug, alca=_linha, ident=ident, cauda=_perf["cauda"],
                            cosmetica=_cosmetica(_perf, _ato_efetivo(argv)),
@@ -2883,9 +2971,14 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
         ident = _sessao_resolve(sessao_id)  # aqui: dentro da task da tool (#2911)
         _carimba_turno(ident, turno, turno_texto, turno_fonte)
         argv = _argv_verbo(binario, ato, args)
+        fundamento, recusa_face = _fundamento_do_ato(slug, binario, argv, ident,
+                                                      turno_texto, turno_fonte)
+        if recusa_face:
+            return recusa_face
+        _ex = (fundamento,) if fundamento else ()
         t0 = time.monotonic()
         r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident,
-                                           _prazo_restante(fim))
+                                           _prazo_restante(fim), *_ex)
         # R4: a forma e a cauda saem do cabeçalho DESTE verbo. `descansar` é o caso que
         # nomeia a regra — batia o teto e era cortado só na cabeça, perdendo o veredito.
         _perf = _perfil_verbo(slug, binario)

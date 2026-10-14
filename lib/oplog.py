@@ -226,10 +226,10 @@ def origem_da_linha(reg: dict) -> str:
 MOTIVOS_NEGACAO = ("sem_token", "nao_jwt", "assinatura", "audience", "emissor", "expirado", "outro")
 # Os do CHECK de `acervo.log_fecho.motivo_parada` (spec apis-escrita-acervo §D1).
 MOTIVOS_PARADA = ("concluiu", "teto_giros", "orcamento_erro", "interrompida")
-FONTES_TURNO = ("declarado", "gap", "runner", "hook", "transcript")
-# As duas que o chamador autenticado pode entregar com `turno_texto` (card #3357); as demais a
-# porta deduz.
-FONTES_ENTREGUES = ("hook", "transcript")
+FONTES_TURNO = ("declarado", "gap", "runner", "hook", "transcript", "face")
+# As tres que o chamador autenticado pode entregar com `turno_texto` (card #3357; `face` no #3513,
+# a tela do dono: o texto e o fundamento do ato); as demais a porta deduz.
+FONTES_ENTREGUES = ("hook", "transcript", "face")
 FONTES_TOKENS = ("provedor", "estimado")
 ORIGENS = ("cadeira", "agente", "sonda")
 # De onde a linha inteira saiu na `leitura_bruto`: do arquivo do dia, ou da amostra e da citada que a particao guarda.
