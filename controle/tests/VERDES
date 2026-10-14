@@ -200,6 +200,7 @@ testes/test_sessao_limpar.py | bin/acesso bin/_acesso/** bin/agente bin/chat bin
 testes/test_sessao_limpar_rascunho.py | bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/mesa bin/monta-sessao bin/persona bin/_persona/** bin/seg bin/sessao bin/_sessao/** sessao/**
 testes/test_sessao_origem.py | bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/mesa bin/monta-sessao bin/persona bin/_persona/** bin/seg bin/sessao bin/_sessao/** sessao/**
 testes/test_tarefas_moldes.py | bin/tarefas
+testes/test_tarefas_dt.py | bin/tarefas
 testes/test_lint_card.py | bin/lint bin/_lint/card.py bin/_lint/lista.py bin/_lint/resultado.py
 testes/test_venvs_cobrem_imports.py | bin/_sessao/** mcp/** ops-server/** registro/**
 tests/test_claude_cli.py | lib/claude_cli.py bin/agente bin/motor registro/** venvs/claude-code/**
