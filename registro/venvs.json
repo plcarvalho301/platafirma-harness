@@ -4,6 +4,7 @@
   "_teste": "campo opcional 'teste' (card #3150 passo 2): subarvore desta familia onde a suite que usa este venv mora. Lido por bin/_release/registro.py, usado por 'teste rodar <repo> <alvo> --chave <nome>' e por hooks/pre-push para reaproveitar o MESMO venv que release constroi (nunca outro construtor). Chave sem 'teste' declarado: teste rodar --chave roda da raiz do clone; nao e erro, e subarvore nao declarada. arq:0116 §4-§6: uma subarvore, uma chave (harness-controle e acervo deixaram de apontar controle); toda chave com 'teste' tem lista de portao na propria subarvore (<sub>/tests/VERDES ou <sub>/VERDES), e o portao do repositorio roda todas.",
   "_testes": "campo opcional 'testes' (card #3316): lista de globs, relativos a subarvore de teste (sem ela, a raiz do clone), que e a suite da stack em 'teste rodar <stack>' sem alvo. Stack sem 'teste' nem 'testes' numa familia de mais de uma stack sai 5 sem alvo: rodar da raiz coletaria os testes das outras stacks.",
   "_teste_fora": "todo repositorio de esteira codigo tem ao menos uma chave com 'teste' (subarvore e lista de portao), ou declara 'teste_fora' com o motivo e o debito que o fecha (card #3535). controle/tests/test_registro_repositorio_tem_teste.py reprova o que nao tem nenhum dos dois: repositorio de codigo sem teste alcancavel pelo `teste rodar` nao entra mais calado.",
+  "_conferir_no_ar": "campo opcional de repositorio (card #3535): true faz o `release promover` conferir no ar, com volta automatica no vermelho, a familia que nao traz bin/_release/conferir propria, usando o conferir da release do harness. Opt-in: so entra familia cuja `release conferir servico <stack>` sai conforme hoje.",
   "repositorios": {
     "platafirma-harness": {
       "esteira": "codigo",
@@ -28,7 +29,8 @@
     },
     "platafirma-rastreador": {
       "esteira": "codigo",
-      "stack": "rastreador"
+      "stack": "rastreador",
+      "conferir_no_ar": true
     }
   },
   "harness": {

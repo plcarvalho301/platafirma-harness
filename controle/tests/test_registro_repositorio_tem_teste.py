@@ -11,9 +11,11 @@ Nao prova: que a suite passe nem que a lista exista na arvore do outro repositor
 `teste rodar <repo> --portao`, que sai 5 com lista ausente).
 """
 import json
+import subprocess
 from pathlib import Path
 
 REGISTRO = Path(__file__).resolve().parents[2] / "registro" / "venvs.json"
+RELEASE = Path(__file__).resolve().parents[2] / "bin" / "release"
 
 
 def _registro():
@@ -59,3 +61,28 @@ def test_o_detector_pega_o_caso_do_rastreador():
     assert faltando(repos, stacks) == []
     repos["platafirma-core"] = {"esteira": "codigo", "teste_fora": "  "}
     assert faltando(repos, stacks) == ["platafirma-core"], "motivo em branco nao e motivo"
+
+
+def _declarado(tmp_path, repos, repo):
+    # a funcao de bin/release, isolada: o promover so confere no ar com o conferir da release
+    # a familia que o registro declara (#3535); core e conhecimento sairiam vermelhos e voltariam
+    venvs = tmp_path / "venvs.json"
+    venvs.write_text(json.dumps({"repositorios": repos}), encoding="utf-8")
+    script = f"source <(sed -n '/^conferir_no_ar_declarado()/,/^}}/p' '{RELEASE}'); conferir_no_ar_declarado '{repo}'"
+    return subprocess.run(["bash", "-c", script], env={"PATH": "/usr/bin:/bin", "PLATAFIRMA_VENVS": str(venvs)},
+                          capture_output=True, text=True).returncode
+
+
+def test_conferir_no_ar_so_com_true_declarado(tmp_path):
+    repos = {"platafirma-rastreador": {"esteira": "codigo", "conferir_no_ar": True},
+             "platafirma-core": {"esteira": "codigo"},
+             "platafirma-motor": {"esteira": "codigo", "conferir_no_ar": "sim"}}
+    assert _declarado(tmp_path, repos, "platafirma-rastreador") == 0
+    assert _declarado(tmp_path, repos, "platafirma-core") == 1
+    assert _declarado(tmp_path, repos, "platafirma-motor") == 1, "so o booleano true liga"
+    assert _declarado(tmp_path, repos, "nao-existe") == 1
+
+
+def test_registro_real_liga_a_conferencia_so_no_rastreador():
+    repos, _ = _registro()
+    assert sorted(n for n, d in repos.items() if (d or {}).get("conferir_no_ar") is True) == ["platafirma-rastreador"]

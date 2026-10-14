@@ -1878,6 +1878,16 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
 # PF_RELEASE_CONFERENCIA_AR=<executavel>: gancho de teste que faz as vezes da conferencia
 # (0 conforme, 1 vermelho, 5 nao olhou); a primeira linha que ele imprime vira o detalhe.
 CONF_AR_DETALHE=""
+conferir_no_ar_declarado() {  # $1=repo ; 0 se registro/venvs.json desta release declara conferir_no_ar: true
+  local venvs="${PLATAFIRMA_VENVS:-$AQUI/../registro/venvs.json}"
+  [ -r "$venvs" ] || return 1
+  python3 - "$venvs" "$1" <<'PY' 2>/dev/null
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+sys.exit(0 if ((d.get("repositorios") or {}).get(sys.argv[2]) or {}).get("conferir_no_ar") is True else 1)
+PY
+}
+
 conferencia_no_ar() {  # $1=repo $2=sha ; 0 conforme ou nada a conferir · 1 vermelho · 5 nao olhou
   local repo="$1" sha="$2" rc=0 st rc_st tent out ok=()
   CONF_AR_DETALHE=""
@@ -1887,11 +1897,15 @@ conferencia_no_ar() {  # $1=repo $2=sha ; 0 conforme ou nada a conferir · 1 ver
     case "$rc" in 0|5) return "$rc" ;; *) return 1 ;; esac
   fi
   [ "${#STACKS_PROMOVER[@]}" -gt 0 ] || return 0
-  # o conferir mora no harness: familia que nao o traz (rastreador, core, motor, ui) e
-  # conferida pelo desta release (#3535); o harness segue conferido pelo da propria rev.
+  # o conferir mora no harness: familia que nao o traz e conferida pelo desta release so
+  # quando o registro declara `conferir_no_ar` nela (#3535). Opt-in medido: em 14/10 a
+  # conferencia de core e conhecimento saia vermelha por defeito do conferir (nenhum
+  # container pelo nome da stack), e ligar para todas reverteria a promocao delas.
   local impl="$PROD_RAIZ/$repo/$sha/bin/_release/conferir/conferir.py"
-  [ -f "$impl" ] || impl="$AQUI/_release/conferir/conferir.py"
-  [ -f "$impl" ] || { CONF_AR_DETALHE="rev ${sha:0:7} sem bin/_release/conferir e release sem conferir"; return 5; }
+  if [ ! -f "$impl" ] && conferir_no_ar_declarado "$repo"; then
+    impl="$AQUI/_release/conferir/conferir.py"
+  fi
+  [ -f "$impl" ] || { CONF_AR_DETALHE="rev ${sha:0:7} sem bin/_release/conferir"; return 5; }
   for st in "${STACKS_PROMOVER[@]}"; do
     rc_st=1
     for tent in 1 2 3 4 5 6; do
