@@ -186,7 +186,7 @@ def test_o_vocabulario_cumpre_os_check_do_schema_fisico_da_particao_log():
         assert r["classe"] == "execucao" or "causa" not in r, f"causa fora da execucao: {d} -> {r}"
         assert re.fullmatch(r"[a-z][a-z0-9_]*", r.get("causa", "x")), d
     assert set(oplog.MOTIVOS_PARADA) == {"concluiu", "teto_giros", "orcamento_erro", "interrompida"}
-    assert set(oplog.FONTES_TURNO) == {"hook", "transcript", "runner", "declarado", "gap"}
+    assert set(oplog.FONTES_TURNO) == {"hook", "transcript", "runner", "declarado", "gap", "face"}
     assert set(oplog.FONTES_TOKENS) == {"provedor", "estimado"}
 
 
