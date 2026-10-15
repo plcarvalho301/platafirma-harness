@@ -26,7 +26,7 @@ loader.exec_module(registrar)
 
 MOTOR = REPO_ROOT / "bin" / "motor"
 ATOS = ["listar", "ajuste", "buscar", "medir", "indexar", "trocar", "sortear", "lintar", "parear", "escrever", "julgar",
-        "eleger", "consultas", "trabalhos"]   # julgar: #3350; consultas e trabalhos: #3513
+        "eleger", "consultas", "trabalhos", "estado", "parar"]   # julgar: #3350; consultas e trabalhos: #3513; estado e parar: #3518
 # os 11 ids de acervo.ferramental_recurso (047): a FK reprova qualquer outro
 RECURSOS = {"acervo.obra", "acervo.casa", "acervo.registro", "acervo.*", "release", "repo", "rastreador", "malha",
             "motor", "arquivo-local", "nada"}
@@ -76,10 +76,12 @@ def _chaves(campo):
 
 
 def test_a_face_cobre_os_atos_da_emenda_e_deixa_a_exclusao_de_fora():
-    """#3532 (arq:0124 §3): buscar, medir, listar, ajuste, indexar, trocar, consultas e trabalhos tem face;
-    sortear, parear, escrever, julgar, lintar e eleger ficam na exclusao "instrumento de medida da ia"."""
+    """#3532 (arq:0124 §3): buscar, medir, listar, ajuste, indexar, trocar, consultas e trabalhos tem face, e o
+    estado (leitura) e o parar (escrita) entram pelos buracos #2553 e #2554 do #3518; sortear, parear, escrever,
+    julgar, lintar e eleger ficam na exclusao "instrumento de medida da ia"."""
     faces = _chaves("face")
-    assert sorted(faces) == sorted(["buscar", "medir", "listar", "ajuste", "indexar", "trocar", "consultas", "trabalhos"])
+    assert sorted(faces) == sorted(["buscar", "medir", "listar", "ajuste", "indexar", "trocar", "consultas", "trabalhos",
+                                    "estado", "parar"])
     for excluido in ("sortear", "parear", "escrever", "julgar", "lintar", "eleger"):
         assert excluido not in faces
     assert all(f in ATOS for f in faces)
@@ -89,7 +91,7 @@ def test_todo_controle_tem_rotulo_e_volta_e_o_trocar_vem_por_modo():
     rotulos, voltas = _chaves("rotulo"), _chaves("volta")
     assert sorted(rotulos) == sorted(voltas)
     assert "trocar" not in rotulos and sorted(r for r in rotulos if r.startswith("trocar ")) == [
-        "trocar --embedder", "trocar --virar"]
+        "trocar --descartar", "trocar --embedder", "trocar --virar"]
     # cada ato de face tem o controle dele, ou o de cada modo
     for ato in _chaves("face"):
         assert any(r == ato or r.startswith(ato + " --") for r in rotulos), ato
@@ -126,7 +128,7 @@ def test_os_atos_sao_so_os_do_verbo(sql):
     texto = sql[2]
     registrados = re.findall(r"into acervo\.ferramental_ato \(verbo, ato, capacidade, acao, tipo[^)]*\) values \('motor', '([^']+)'", texto)
     # os atos de `# atos:` e, depois, uma linha por modo do trocar (#3532); linha em prosa vira ato inexistente (o 'a' de 08/10)
-    assert registrados == ATOS + ["trocar --embedder", "trocar --virar"]
+    assert registrados == ATOS + ["trocar --descartar", "trocar --embedder", "trocar --virar"]
 
 
 def test_cada_ato_declara_le_e_escreve_com_recurso_do_enum(sql):

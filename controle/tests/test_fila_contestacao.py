@@ -136,6 +136,41 @@ def test_contestacao_sem_fundamento_sai_1_e_nao_grava(monkeypatch, capsys):
     assert rc.entradas == {}
 
 
+# --- o ato `contestar` (#3518, buraco #2555): a face alcanca so ele, e o remetente e o dono --------------------
+
+def test_contestar_pela_face_grava_do_dono_com_o_fundamento_do_envelope(monkeypatch, capsys):
+    rc = CaixaRC()
+    monkeypatch.setenv("PF_SUJEITO", "b6986be0-sub-do-dono")
+    monkeypatch.setenv("PF_FUNDAMENTO", "a amostra de tres buscas nao sustenta a taxa")
+    code, cap = _rodar(monkeypatch, capsys, ["contestar", "ia", "--indicador", "taxa diaria de cobertura fraca"], rc, eu="")
+    assert code == 0, cap.err
+    [(_, campos)] = rc.entradas["caixa:ia"]
+    assert (campos["de"], campos["tipo"], campos["ref"], campos["corpo"]) == (
+        "dono", "contestacao", "taxa diaria de cobertura fraca", "a amostra de tres buscas nao sustenta a taxa")
+    assert json.loads(cap.out)["para"] == "ia"
+    _, cap = _rodar(monkeypatch, capsys, ["ler"], rc, eu="ia")
+    assert "de: dono" in cap.out and "indicador: taxa diaria de cobertura fraca" in cap.out
+
+
+def test_contestar_por_cadeira_le_o_fundamento_do_stdin(monkeypatch, capsys):
+    rc = CaixaRC()
+    monkeypatch.delenv("PF_FUNDAMENTO", raising=False)
+    code, cap = _rodar(monkeypatch, capsys, ["contestar", "ia", "--indicador", "taxa"], rc, eu="ti", stdin="pouca amostra")
+    assert code == 0, cap.err
+    [(_, campos)] = rc.entradas["caixa:ia"]
+    assert (campos["de"], campos["corpo"]) == ("ti", "pouca amostra")
+
+
+def test_contestar_sem_fundamento_sem_indicador_ou_sem_quem_sai_2_e_nao_grava(monkeypatch, capsys):
+    rc = CaixaRC()
+    monkeypatch.delenv("PF_FUNDAMENTO", raising=False)
+    monkeypatch.delenv("PF_SUJEITO", raising=False)
+    assert _rodar(monkeypatch, capsys, ["contestar", "ia", "--indicador", "taxa"], rc, eu="ti", stdin="  ")[0] == 2
+    assert _rodar(monkeypatch, capsys, ["contestar", "ia"], rc, eu="ti", stdin="razao")[0] == 2
+    assert _rodar(monkeypatch, capsys, ["contestar", "ia", "--indicador", "taxa"], rc, eu="", stdin="razao")[0] == 2
+    assert rc.entradas == {}
+
+
 def test_outro_tipo_segue_sem_exigir_ref_e_com_o_rotulo_de_sempre(monkeypatch, capsys):
     rc = CaixaRC()
     code, cap = _rodar(monkeypatch, capsys,
