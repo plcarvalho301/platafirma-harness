@@ -20,9 +20,12 @@ services:
       # controle/compose.yaml), então o caminho é o publicado pelo túnel.
       BORDA_PORTA_URL: ${BORDA_PORTA_URL:-https://ops.platafirma.org/mcp}
       # Onde o gate põe o token do dono: o oauth2-proxy-cubo entrega o access token cru em
-      # X-Forwarded-Access-Token (e não em Authorization, que ele só preencheria com o ID token).
-      # O código da borda segue com `authorization` como padrão; quem fixa o cabeçalho do cubo é este compose.
+      # X-Forwarded-Access-Token (e não em Authorization, que ele só preencheria com o ID token). É também o
+      # padrão do código (#3575); a linha fica para a instancia que trocar o gate.
       BORDA_CABECALHO_TOKEN: ${BORDA_CABECALHO_TOKEN:-x-forwarded-access-token}
+      # Idade máxima do login para escrever, em segundos (#2572): o `auth_time` do token passou disso, a borda
+      # responde 401 e a tela leva o dono a sair e entrar. 0 desliga. A leitura não tem o corte.
+      BORDA_LOGIN_MAX_S: ${BORDA_LOGIN_MAX_S:-300}
       # Cada face e os verbos dela na release; a lista de atos vem do cabeçalho de cada verbo (`# face:`).
       # A face motor chama o `motor` e, do `fila`, só o `contestar` que o cabeçalho dele declara para ela
       # (#3518, buraco #2555). Texto fixo, sem interpolação: a chave `}` do JSON fecharia o `${...}` do

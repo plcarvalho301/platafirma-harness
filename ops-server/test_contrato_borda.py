@@ -80,11 +80,14 @@ class _JwksDeTeste:
         return _ChaveDoRealm()
 
 
-def _token(azp=CLIENT_CUBO, aud=None, sub=SUB) -> str:
+def _token(azp=CLIENT_CUBO, aud=None, sub=SUB, login_ha_s=None) -> str:
+    """`login_ha_s`: segundos desde o login do dono (`auth_time`); None, o token sai sem o claim."""
     agora = int(time.time())
-    return jwt.encode({"iss": s.OIDC_ISSUER, "aud": aud or s.OIDC_AUDIENCE, "sub": sub, "azp": azp,
-                       "iat": agora, "exp": agora + 300, "preferred_username": "megafone"},
-                      CHAVE, algorithm="RS256")
+    claims = {"iss": s.OIDC_ISSUER, "aud": aud or s.OIDC_AUDIENCE, "sub": sub, "azp": azp,
+              "iat": agora, "exp": agora + 300, "preferred_username": "megafone"}
+    if login_ha_s is not None:
+        claims["auth_time"] = agora - login_ha_s
+    return jwt.encode(claims, CHAVE, algorithm="RS256")
 
 
 @pytest.fixture(scope="module")
@@ -147,7 +150,7 @@ def _borda(porta_):
 
 
 def _pede(porta_, metodo, caminho, token=None, corpo=None, consulta=b"", origem=ORIGEM):
-    cab = {"authorization": f"Bearer {token}"} if token else {}
+    cab = {borda.CABECALHO_DO_GATE: token} if token else {}      # o gate entrega o token cru (#2548, #3575)
     if metodo != "GET":
         cab.update({"origin": origem, "x-pf-tela": "1", "content-type": "application/json"})
     status, _, dado = asyncio.run(borda._chamar(
@@ -231,6 +234,18 @@ def test_chamada_a_borda_sem_token_sai_401_e_nao_deixa_linha_no_bruto_da_porta(p
     assert _pede(porta, "POST", "/api/motor/gravar", None, {"args": [], "fundamento": "x"})[0] == 401
     assert _linhas(tmp_path) == [] and _marca(tmp_path) is None
 
+
+def test_a_escrita_com_login_de_mais_de_cinco_minutos_sai_401_na_borda_e_a_leitura_passa(porta, tmp_path):
+    """#2572, #3575: o `auth_time` do token real passa pela borda; o login velho nao chega a porta."""
+    corpo = {"args": ["piso", "0.6"], "fundamento": FUNDAMENTO}
+    status, resposta = _pede(porta, "POST", "/api/motor/ajuste", _token(login_ha_s=400), corpo)
+    assert status == 401 and resposta["login"] == "antigo"
+    assert _linhas(tmp_path) == [] and _marca(tmp_path) is None, "o login velho chegou a porta"
+    status, resposta = _pede(porta, "GET", "/api/motor/ler", _token(login_ha_s=400), consulta=b"a=piso")
+    assert status == 200 and resposta["exit_code"] == 0
+    status, resposta = _pede(porta, "POST", "/api/motor/ajuste", _token(login_ha_s=30), corpo)
+    assert status == 200 and resposta["exit_code"] == 0
+    assert f"FUND={FUNDAMENTO}" in resposta["stdout"]["texto"]
 
 # --- R31 e R32: o que a borda barra não chega à porta ---------------------------------------------
 

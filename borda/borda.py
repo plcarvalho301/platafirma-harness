@@ -16,7 +16,12 @@ O QUE ESTA BORDA FAZ, e só isto:
    responde CORS.
 3. Casa o método com a capacidade do ato (R32): ato só de leitura por GET, só de escrita por POST, e o
    ato `leitura|escrita` aceita os dois. Escrita por GET e leitura por POST saem 403.
-4. Leva a chamada à porta de verbos como `tools/call` do verbo, com o token do dono como Bearer,
+4. Lê o token do dono de `X-Forwarded-Access-Token`, onde o gate do cubo o entrega cru (#2548), e recusa a
+   escrita com 401 quando o `auth_time` dele passa de cinco minutos (#2572): a tela leva o dono a sair e
+   entrar antes de repetir o ato. A leitura não tem esse corte, porque o `auth_time` não muda quando o gate
+   renova o token e o dono olhando não repete a credencial a cada cinco minutos. Token sem `auth_time` passa e
+   deixa a linha `sem-auth-time` no stdout; a conferência é o primeiro login real.
+5. Leva a chamada à porta de verbos como `tools/call` do verbo, com o token do dono como Bearer,
    `turno_fonte=face` e o fundamento em `turno_texto` (R22, R30). A porta confere o client emissor
    (`azp`) e a audiência, projeta o `sub` como sujeito, recusa a escrita sem fundamento e grava o bruto.
 
@@ -31,19 +36,21 @@ PEDIDO E RESPOSTA (o contrato que a tela consome):
     POST /api/<face>/<ato>   {"args": [...], "fundamento": "..."}     ato de escrita
 
 A resposta é o envelope da porta (exit_code, stdout, stderr, ou recusado e motivo), sem reinterpretar;
-só falha da borda ou do transporte vira status HTTP: 400 pedido fora da forma, 401 sem token ou token
-recusado pela porta, 403 recusa da borda, 404 rota ou face desconhecida, 405 método fora do contrato,
+só falha da borda ou do transporte vira status HTTP: 400 pedido fora da forma, 401 sem token, login antigo
+(`{"login": "antigo"}`) ou token recusado pela porta, 403 recusa da borda, 404 rota ou face desconhecida, 405 método fora do contrato,
 413 corpo grande, 502 porta fora do ar, 503 cabeçalho do verbo ilegível, 504 prazo. Erro da borda é
 `{"erro": "..."}`.
 """
 
 import asyncio
+import base64
 import http.client
 import io
 import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -53,6 +60,11 @@ METODOS_SEM_ESCRITA = ("GET", "HEAD", "OPTIONS")
 CABECALHO_DA_TELA = "x-pf-tela"
 TIPO_DO_CORPO = "application/json"
 FONTE_DA_FACE = "face"
+# Onde o gate do cubo (oauth2-proxy) entrega o access token do dono: cru, sem esquema (#2548, #3575).
+CABECALHO_DO_GATE = "x-forwarded-access-token"
+# Idade máxima do login para a escrita (#2572): o gate manda prompt=login, então o `auth_time` do token é
+# o momento em que o dono digitou a credencial. Passou disso, 401 e a tela leva o dono a sair e entrar.
+LOGIN_MAX_S = 300
 LIMITE_CORPO = 16 * 1024
 LIMITE_RESPOSTA = 4 * 1024 * 1024
 MAX_ARGS = 32
@@ -189,7 +201,7 @@ class Borda:
     self-check; `saida` é onde vai a linha JSON da recusa (stdout)."""
 
     def __init__(self, faces, origens=(), porta_url="", chamar_porta=None,
-                 cabecalho_token="authorization", saida=None):
+                 cabecalho_token=CABECALHO_DO_GATE, saida=None, login_max_s=LOGIN_MAX_S, agora=time.time):
         # Uma face pode chamar mais de um verbo (#3518: o `contestar` do `fila` na face motor): cada verbo declara
         # no cabeçalho os atos dele para a face, e a carga da face é a união. O mesmo ato declarado por dois verbos
         # da mesma face não se resolve por ordem: a borda falha fechada (503).
@@ -198,6 +210,8 @@ class Borda:
             self.faces.setdefault(f.nome, []).append(f)
         self.origens = tuple(o.strip() for o in origens if o and o.strip())
         self.cabecalho_token = cabecalho_token.strip().lower()
+        self.login_max_s = login_max_s
+        self._agora = agora
         self._chamar = chamar_porta or (
             lambda token, tool, argumentos: chamar_porta_http(porta_url, token, tool, argumentos))
         self.saida = saida
@@ -246,6 +260,15 @@ class Borda:
         token = self._token(cab)
         if token is None:
             return await _responder(send, 401, {"erro": "sem sessão"})
+        if metodo == "POST" and self.login_max_s:
+            idade = self._idade_do_login(token)
+            if idade is None:
+                self._linha({"evento": "sem-auth-time", "rota": caminho})
+            elif idade > self.login_max_s:
+                self._linha({"evento": "login-antigo", "rota": caminho, "idade_s": int(idade)})
+                return await _responder(send, 401, {
+                    "erro": f"login com mais de {self.login_max_s // 60} minutos: entre de novo",
+                    "login": "antigo"})
         if metodo == "GET":
             pedido = _pedido_de_leitura(scope)
         else:
@@ -286,6 +309,23 @@ class Borda:
         if not valor or len(valor) > 8192 or any(c.isspace() or not c.isprintable() for c in valor):
             return None
         return valor
+
+    def _idade_do_login(self, token):
+        """Segundos desde o login do dono (`auth_time` do payload do token), ou None se o token não é um JWT
+        legivel ou não traz o claim. A assinatura não é conferida aqui: a validade do token é da porta, e
+        token forjado sai 401 de la; esta leitura só mede a idade do login. Sem o claim a borda não inventa
+        outro sinal (#2572): deixa passar e registra `sem-auth-time` no stdout."""
+        partes = token.split(".")
+        if len(partes) != 3:
+            return None
+        try:
+            payload = partes[1] + "=" * (-len(partes[1]) % 4)
+            valor = json.loads(base64.urlsafe_b64decode(payload)).get("auth_time")
+        except (ValueError, AttributeError):
+            return None
+        if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+            return None
+        return self._agora() - valor
 
     async def _recusar(self, evento, scope, cab, motivo, send):
         """403 e UMA linha no stdout, que é o que `infra logs` lê. Sem corpo, sem cookie e sem token; a
@@ -392,8 +432,13 @@ def criar_app(env=None):
               flush=True)
         faces = []
     origens = [o for o in (env.get("BORDA_ORIGENS") or "").split(",")]
+    try:
+        login_max_s = int(env.get("BORDA_LOGIN_MAX_S") or LOGIN_MAX_S)
+    except ValueError:
+        login_max_s = LOGIN_MAX_S
     return Borda(faces, origens=origens, porta_url=env.get("BORDA_PORTA_URL", ""),
-                 cabecalho_token=env.get("BORDA_CABECALHO_TOKEN", "authorization"))
+                 cabecalho_token=env.get("BORDA_CABECALHO_TOKEN") or CABECALHO_DO_GATE,
+                 login_max_s=max(login_max_s, 0))
 
 
 app = criar_app()
@@ -451,7 +496,7 @@ def _autoteste():
     def rodar(*a, **k):
         return asyncio.run(_chamar(borda, *a, **k))
 
-    token = {"authorization": "Bearer a.b.c"}
+    token = {CABECALHO_DO_GATE: "a.b.c"}
     da_tela = {"origin": origem, "x-pf-tela": "1", "content-type": "application/json", **token}
     de_fora = "https://outro.exemplo"
 
@@ -521,7 +566,9 @@ def _autoteste():
     assert rodar("GET", "/api/motor/buscar")[0] == 401
     assert rodar("GET", "/api/motor/buscar", {"x-auth-request-user": "dono"})[0] == 401
     assert rodar("GET", "/api/motor/buscar", {"authorization": "Basic abc"})[0] == 401
-    assert rodar("POST", "/api/motor/trocar", {k: v for k, v in da_tela.items() if k != "authorization"}, b"{}")[0] == 401
+    # o padrão é o cabeçalho do gate: um Authorization posto pelo navegador não vale como token
+    assert rodar("GET", "/api/motor/buscar", {"authorization": "Bearer a.b.c"})[0] == 401
+    assert rodar("POST", "/api/motor/trocar", {k: v for k, v in da_tela.items() if k != CABECALHO_DO_GATE}, b"{}")[0] == 401
     assert len(chamadas) == antes
     print("borda: sem token (ou com cabeçalho de sujeito no lugar dele), 401 e nada chega à porta   ok")
 
@@ -578,7 +625,47 @@ def _autoteste():
     lista = criar_app({"BORDA_FACES": json.dumps({"motor": [{"verbo": "/a/motor", "instancia": "rag"}, {"verbo": "/a/fila"}]})})
     assert [(f.tool, f.instancia) for f in lista.faces["motor"]] == [("motor", "rag"), ("fila", None)]
     print("borda: face com dois verbos — cada ato ao verbo que o declara, o ato duplicado falha fechado   ok")
-    print("borda OK (#3516, #3518)")
+    # 9. o login do dono (#2572, #3575): a escrita com `auth_time` de mais de cinco minutos sai 401 sem chegar
+    #    à porta; a leitura não tem esse corte; sem o claim a borda deixa passar e deixa a linha no stdout.
+    agora = 1_000_000.0
+
+    def jwt(**claims):
+        corpo = base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=").decode()
+        return f"e30.{corpo}.assinatura"
+
+    log9 = io.StringIO()
+    com_relogio = Borda([face], origens=(origem,), chamar_porta=porta, saida=log9, agora=lambda: agora)
+
+    def rodar9(metodo, caminho, t, corpo=b"{}", consulta=b""):
+        return asyncio.run(_chamar(com_relogio, metodo, caminho, {**da_tela, CABECALHO_DO_GATE: t}, corpo, consulta))
+
+    chamadas.clear()
+    assert rodar9("POST", "/api/motor/trocar", jwt(auth_time=agora - 299))[0] == 200
+    assert rodar9("POST", "/api/motor/trocar", jwt(auth_time=agora - 300))[0] == 200, "exatos cinco minutos ainda passa"
+    feitas = len(chamadas)
+    velho = jwt(auth_time=agora - 301, sub="dono")
+    status, cab_resp, corpo = rodar9("POST", "/api/motor/trocar", velho)
+    assert status == 401 and json.loads(corpo)["login"] == "antigo", (status, corpo)
+    assert cab_resp["cache-control"] == "no-store" and len(chamadas) == feitas, "login antigo não chega à porta"
+    assert rodar9("POST", "/api/motor/ajuste", velho)[0] == 401
+    assert rodar9("GET", "/api/motor/buscar", velho, consulta=b"a=x")[0] == 200, "a leitura não tem o corte"
+    assert rodar9("GET", "/api/motor/ajuste", velho, consulta=b"a=piso")[0] == 200
+    assert chamadas[-1][0] == velho, "o token vai à porta como veio"
+    feitas = len(chamadas)
+    for sem_claim in (jwt(sub="dono"), jwt(auth_time="ontem"), jwt(auth_time=True), "a.b.c", "nao-e-jwt"):
+        assert rodar9("POST", "/api/motor/trocar", sem_claim)[0] == 200, sem_claim
+    assert len(chamadas) == feitas + 5
+    eventos = [json.loads(linha)["evento"] for linha in log9.getvalue().splitlines()]
+    assert eventos.count("login-antigo") == 2 and eventos.count("sem-auth-time") == 5, eventos
+    assert "assinatura" not in log9.getvalue() and "dono" not in log9.getvalue(), "a linha de log vazou o token"
+    sem_corte = Borda([face], origens=(origem,), chamar_porta=porta, saida=io.StringIO(), login_max_s=0,
+                      agora=lambda: agora)
+    assert asyncio.run(_chamar(sem_corte, "POST", "/api/motor/trocar", {**da_tela, CABECALHO_DO_GATE: velho}, b"{}"))[0] == 200
+    assert criar_app({"BORDA_LOGIN_MAX_S": "60"}).login_max_s == 60 and criar_app({}).login_max_s == LOGIN_MAX_S
+    assert criar_app({"BORDA_LOGIN_MAX_S": "x"}).login_max_s == LOGIN_MAX_S
+    assert criar_app({}).cabecalho_token == CABECALHO_DO_GATE
+    print("borda: escrita com login de mais de cinco minutos sai 401 na borda; leitura e sem claim passam   ok")
+    print("borda OK (#3516, #3518, #3575)")
 
 
 if __name__ == "__main__":
