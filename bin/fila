@@ -17,7 +17,22 @@
 # consome: valkey@streams (protocolo redis — sem OpenAPI)
 # ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_ABERTURA_DIR[=/srv/platafirma/casa/var/abertura-publicada] (morada publicada, arvore current/abertura/) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log)
 # depende: modulo redis no venv; arvore abertura/<cadeira>/persona.md (fonte de destinatario); rede ao loopback da malha
-# escreve: malha msg — XADD na caixa do destinatario (enviar); entrega no grupo (ler quente: move o ponteiro, carta fica pendurada); XACK (tratar); nada em status/tipos/ler frio/--penduradas
+# le: status=malha
+# le: ler=malha
+# le: tratar=malha
+# le: enviar=malha,arquivo-local
+# le: tipos=nada
+# le: contestar=malha,arquivo-local
+# escreve: status=nada
+# escreve: ler=malha
+# escreve: tratar=malha
+# escreve: enviar=malha
+# escreve: tipos=nada
+# escreve: contestar=malha
+# (acesso: malha msg. `enviar` e `contestar` fazem XADD na caixa do destinatario e leem a persona dele em
+#  abertura/<cadeira>/persona.md; `ler` quente move o ponteiro do grupo, e a carta fica pendurada; `tratar` faz
+#  XACK; `status`, `tipos`, `ler` frio e `--penduradas` nao escrevem. A linha antiga, em prosa, nao tinha
+#  `<ato>=` e o registro recusava o verbo inteiro: a fila nunca tinha entrado no registro do ferramental.)
 # substitui: redis-cli XADD/XREADGROUP/XRANGE na caixa; o "cola a mensagem aqui" que a conduta do dono proibe
 # conforme: parcial (spec_fila §6)
 # spec: spec fila
