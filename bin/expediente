@@ -442,7 +442,7 @@ def valida_chapeu(cadeira: str, slug: str) -> tuple[bool, str]:
 # era 8438 dos 18335 tokens do pacote na Medida de 30/09). As linhas de persona e rotinas servem o que
 # o verbo inteiro devolve hoje; o recorte da spec (`persona ler --recorte`, `acervo listar ... --mapa
 # --modo`) entra por troca de UMA linha quando o verbo subir.
-MODOS = ("varrer", "revisar", "avaliar", "testar", "executar", "consultar", "vigiar", "pesquisar")
+MODOS = ("varrer", "revisar", "avaliar", "testar", "executar", "consultar", "vigiar", "pesquisar", "parecer")
 MODOS_COM_REGUA = ("revisar", "avaliar")
 ESPECIES_REGUA = ("lista-de-verificacao", "padrao")
 PERFIS = ("cadeira", "cadeirinha")

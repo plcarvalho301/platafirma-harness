@@ -45,7 +45,7 @@ import claude_cli  # noqa: E402  (o CLI vem da trava da release, #2856 linha 248
 import uso  # noqa: E402
 import yaml  # noqa: E402
 
-MODOS = ("varrer", "revisar", "avaliar", "testar", "executar", "consultar", "vigiar", "pesquisar")
+MODOS = ("varrer", "revisar", "avaliar", "testar", "executar", "consultar", "vigiar", "pesquisar", "parecer")
 LIGACOES = ("consultado", "delegado", "agendado")
 FAMILIAS = ("claude", "gemini", "qwen")
 PERNAS = ("fonte_de_fora", "dado_pessoal", "muda_estado")
