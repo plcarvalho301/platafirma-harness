@@ -3,7 +3,7 @@
 # capacidade: trabalho
 # dono: gestao-estrategica
 # use para: card, board, carteira, épico/feature/story, mover estado, sign-off
-# atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub, ordenar, bloquear, desbloquear, carteira
+# atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub, ordenar, bloquear, desbloquear, carteira, espera-dono
 #
 # Texto do controle (arq:0124 §3; arq:0125 U33; card #3446). Todo ato cai na face Entrega.
 # Rótulo: verbo no infinitivo e objeto sem artigo, um verbo por tipo de ato (Listar uma coleção,
@@ -30,6 +30,7 @@
 # face: bloquear=Entrega
 # face: desbloquear=Entrega
 # face: carteira=Entrega
+# face: espera-dono=Entrega
 # rotulo: listar=Listar card aberto
 # rotulo: listar-tudo=Listar card, fechado inclusive
 # rotulo: ler=Abrir card
@@ -49,6 +50,7 @@
 # rotulo: bloquear=Bloquear card
 # rotulo: desbloquear=Desbloquear card
 # rotulo: carteira=Ler carteira
+# rotulo: espera-dono=Ler o que espera o dono
 # volta: listar=sim — só lê
 # volta: listar-tudo=sim — só lê
 # volta: ler=sim — só lê
@@ -68,6 +70,7 @@
 # volta: bloquear=sim — tarefas desbloquear
 # volta: desbloquear=sim — tarefas bloquear
 # volta: carteira=sim — só lê
+# volta: espera-dono=sim — só lê
 # Backend: `platafirma-rastreador` (API própria), desde 16/08/2026. O Vikunja saiu.
 #
 # Loopback, e não a rota pública: `tarefas.platafirma.org` serve a superfície HUMANA
@@ -179,6 +182,10 @@ uso:
                                           balde de débito técnico: dado do rastreador, uma linha
                                           por débito (rito §4); `dt` sem sub lista os atos
   tarefas estados                         os estados do registro, com fase
+  tarefas espera-dono                     o que espera o dono: pergunta dirigida a ele, card
+                                          pronto para a aposta e pai em homologação; à parte,
+                                          o que está com as cadeiras — abertos por card, com a
+                                          marca de órfão (R30)
   tarefas api <MÉTODO> <caminho>          escotilha, sem corpo
   tarefas api-corpo <MÉTODO> <caminho>    escotilha, corpo JSON em stdin
 
@@ -210,6 +217,12 @@ _recusa() { # lê o corpo do erro em $1 e devolve a mensagem da API
   # clientes, e mandar alguém montar query string na mão para responder uma pergunta que o
   # verbo já sabe fazer é devolver o trabalho que este verbo existe para tirar.
   erro="${erro//\`?cascata=1\`/\`--cascata\`}"
+  # CARD #3597 (R16, R31): `exige` é o nome do campo que falta — hoje só `registro-de-negocio`
+  # —, para quem lê agir sem reparsear a frase; a tradução é a linha de comando que resolve.
+  local exige; exige=$(printf '%s' "$1" | jq -r '.exige // empty' 2>/dev/null || true)
+  if [ "$exige" = "registro-de-negocio" ]; then
+    erro="$erro · tarefas criar \"<título>\" --estado priorizada --registro \"<porquê>\" (item existente: tarefas comentar <id> \"registro de negócio: <porquê>\" e repita o ato)"
+  fi
   # CARD #3526 (R23): o vínculo que fecharia ciclo volta com `caminho` (ids), e a recusa o mostra.
   local caminho; caminho=$(printf '%s' "$1" | jq -r '(.caminho // []) | map("#\(if type == "object" then .id else . end)") | join(" → ")' 2>/dev/null || true)
   [ -n "$caminho" ] && erro="$erro · caminho: $caminho"
@@ -550,7 +563,7 @@ criar() {
   # `tarefas dt admitir`. Medido antes da virada: 390 tasks, 156 órfãs, 13 stories com
   # filha task — o default `task` fazia da task uma "story sem nome".
   local desc="" nivel="story" cadeira="$QUEM" pai="" classe="planejado" via_dt="${TAREFAS_VIA_DT:-}"
-  local originacao="" executor=""
+  local originacao="" executor="" registro="" estado_opt=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --desc)       desc="$2"; shift 2 ;;
@@ -563,6 +576,13 @@ criar() {
       --executor)   executor="${2:?--executor pede o nome da cadeira}"; shift 2 ;;
       --pai)        pai=$(so_id "$2"); shift 2 ;;
       --incidente)  classe="incidente"; shift ;;
+      # CARD #3597 (R16, R31 da spec tarefas): story sem pai que vai a `priorizada` ou adiante
+      # exige o comentário `registro-de-negocio` já gravado — a API grava item, transição e o
+      # comentário na mesma transação quando `registro` chega no corpo (#2647 do #3417).
+      --registro)   registro="$2"; shift 2 ;;
+      # Vence o default da classe e `PF_ESTADO_INICIAL` (#259): nascer direto em `priorizada`
+      # com `--registro` não depende de variável de ambiente para isso.
+      --estado)     estado_opt="$2"; shift 2 ;;
       --prio)       echo "aviso: --prio não existe neste modelo; ignorado." >&2; shift 2 ;;
       *) echo "opção desconhecida: $1" >&2; exit 2 ;;
     esac
@@ -589,17 +609,18 @@ criar() {
   # incidente entra no funil de incidente (`detectado`), planejado na boca do funil
   # comum (`captada`). PF_ESTADO_INICIAL, se dado, vence o default da classe (#259).
   local est_default="captada"; [ "$classe" = "incidente" ] && est_default="detectado"
-  local est="${PF_ESTADO_INICIAL:-$est_default}"
+  local est="${estado_opt:-${PF_ESTADO_INICIAL:-$est_default}}"
   jq -n --arg t "$titulo" --arg d "$html" --argjson n "$n" --arg c "$cadeira" \
         --arg p "$pai" --arg cl "$classe" --arg e "$est" \
-        --arg o "$originacao" --arg x "$executor" \
+        --arg o "$originacao" --arg x "$executor" --arg r "$registro" \
      '{titulo:$t, classe:$cl, estado:$e}
       + (if $cl == "incidente" then {} else {nivel:$n} end)
       + (if $d == "" then {} else {descricao:$d} end)
       + (if $c == "" then {} else {cadeira:$c} end)
       + (if $p == "" then {} else {pai:($p|tonumber)} end)
       + (if $o == "" then {} else {tipo_demanda:$o} end)
-      + (if $x == "" then {} else {executor:$x} end)' \
+      + (if $x == "" then {} else {executor:$x} end)
+      + (if $r == "" then {} else {registro:$r} end)' \
     | envia POST /itens \
     | jq -r '"item \(.id) criado: \(.titulo)"'
 }
@@ -709,60 +730,70 @@ comentar() {
     | jq -r '"comentário #\(.id) criado no item \(.item)"'
 }
 
-# O FECHO NO PRÓPRIO COMENTÁRIO — card #3410 (dono, comentário #2088 do #3408: o estado do
-# comentário mora nele). `tarefas comentar <card> --fecha <n> "<resultado> — <destino>"` escreve
-# `fecho: …` como ÚLTIMA linha do comentário n, pela edição de comentário da API, que guarda o
-# corpo anterior no ledger. As regras que o verbo aplica são as da forma do comentário (spec
-# comentario-tipado, R5 e R6), que o rastreador não conhece até a F3: insumo nasce fechado e não
-# leva fecho; comentário já fechado não fecha de novo; o resultado é do vocabulário do tipo e o
-# destino é obrigatório. Comentário sem etiqueta de tipo (anterior ao molde) fecha com qualquer
-# resultado, com aviso.
+# O FECHO VAI DIRETO À ROTA PRÓPRIA — card #3593 (R6, R7 da spec comentario-tipado):
+# `POST /itens/{id}/comentarios/{cid}/fecho` grava resultado, destino, quem e quando com
+# `SELECT … FOR UPDATE`. Até a #3597, este verbo lia a primeira linha do comentário e
+# conferia o vocabulário à mão; a regra mora na API desde a F3 (R5 a R7), e o verbo passa a
+# só partir o argumento em resultado/destino e traduzir o status HTTP: 400 (sem tipo, ou
+# resultado fora do vocabulário) e 403 (quem fecha não pode) saem 4; 409 (já fechado) e 404
+# (não existe) saem 1, porque não há nada a repetir.
 fechar_comentario() {
   local id="$1" cid="${2:-}" txt="${3:-}"
   local uso='uso: tarefas comentar <card> --fecha <n> "<resultado> — <destino>"'
   case "$cid" in ''|*[!0-9#]*) echo "$uso" >&2; exit 2 ;; esac
   cid=$(so_id "$cid")
-  txt="$(printf '%s' "$txt" | sed -e 's/^[[:space:]]*[Ff]echo[[:space:]]*:[[:space:]]*//')"
-  [ -n "$(printf '%s' "$txt" | tr -d '[:space:]')" ] || { echo "$uso" >&2; exit 2; }
-  local lista; lista=$(busca GET "/itens/$id/comentarios") || exit 1
-  local fecho_html; fecho_html=$(printf 'fecho: %s' "$txt" | para_html)
-  local corpo rc=0
-  corpo=$(printf '%s' "$lista" | CID="$cid" ITEM="$id" FECHO="$txt" FECHO_HTML="$fecho_html" python3 -c '
-import html, json, os, re, sys
-d = json.load(sys.stdin)
-cid, item, fecho = int(os.environ["CID"]), os.environ["ITEM"], os.environ["FECHO"]
-alvo = next((c for c in d.get("comentarios", []) if c.get("id") == cid), None)
-if alvo is None:
-    sys.stderr.write("comentário #%d não existe no item %s; os comentários saem em `tarefas comentarios %s`\n" % (cid, item, item))
-    sys.exit(1)
-texto = re.sub(r"</p>|<br\s*/?>", "\n", alvo["corpo"])
-linhas = [l.strip() for l in html.unescape(re.sub(r"<[^>]+>", "", texto)).splitlines() if l.strip()]
-if linhas and re.match(r"(?i)^fecho\s*:", linhas[-1]):
-    sys.stderr.write("sem mudança: comentário #%d já está fechado — %s\n" % (cid, linhas[-1]))
-    sys.exit(1)
-if " — " not in fecho:
-    sys.stderr.write("o fecho é «<resultado> — <destino>»: o destino diz onde a contribuição foi parar (spec comentario-tipado, R6)\n")
-    sys.exit(2)
-VOCAB = {"pergunta": ("respondida", "retirada"),
-         "buraco": ("remendado", "cortado", "volta à lapidação"),
-         "requisito": ("aceito", "fundido", "retirado"),
-         "decisão": ("formalizada",)}
-m = re.match(r"(?i)^(insumo|pergunta|buraco|requisito|decis[aã]o)\b", linhas[0] if linhas else "")
-tipo = m.group(1).lower().replace("decisao", "decisão") if m else None
-if tipo == "insumo":
-    sys.stderr.write("recusado: insumo nasce fechado e não leva fecho (spec comentario-tipado, R5)\n")
-    sys.exit(4)
-resultado = fecho.split(" — ", 1)[0].strip().lower()
-if tipo in VOCAB and not any(resultado.startswith(v) for v in VOCAB[tipo]):
-    sys.stderr.write("recusado: o resultado de %s é um de: %s (spec comentario-tipado, R6)\n" % (tipo, ", ".join(VOCAB[tipo])))
-    sys.exit(4)
-if tipo is None:
-    sys.stderr.write("aviso: o comentário #%d não abre com tipo (insumo, pergunta, buraco, requisito, decisão); o fecho foi escrito sem conferir o vocabulário\n" % cid)
-print(json.dumps({"corpo": alvo["corpo"] + os.environ["FECHO_HTML"]}))
-') || rc=$?
-  [ "$rc" -eq 0 ] || exit "$rc"
-  printf '%s' "$corpo" | envia PATCH "/itens/$id/comentarios/$cid" >/dev/null || exit 1
-  printf 'comentário #%s do item %s fechado — fecho: %s\n' "$cid" "$id" "$txt"
+  txt="$(printf '%s' "$txt" | sed -e 's/^[[:space:]]*[Ff]echo[[:space:]]*:[[:space:]]*//' \
+                             -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  case "$txt" in
+    *" — "*) ;;
+    *) echo "$uso" >&2
+       echo "o fecho é «<resultado> — <destino>»: o destino diz onde a contribuição foi parar (spec comentario-tipado, R6)" >&2
+       exit 2 ;;
+  esac
+  local resultado destino
+  resultado="$(printf '%s' "${txt%% — *}" | sed -e 's/[[:space:]]*$//')"
+  destino="$(printf '%s' "${txt#* — }" | sed -e 's/^[[:space:]]*//')"
+  [ -n "$resultado" ] && [ -n "$destino" ] || { echo "$uso" >&2; exit 2; }
+  local corpo saida status body
+  corpo=$(jq -n --arg r "$resultado" --arg d "$destino" '{resultado:$r, destino:$d}')
+  # CARD #3597: só este ato pede o status HTTP (`-w`) — 400, 403, 409 e 404 são saída
+  # esperada com texto próprio, não `_recusa`, e `envia`/`busca` não servem aqui.
+  if [ -n "$QUEM" ]; then
+    saida=$(printf '%s' "$corpo" | curl -s -X POST "$BASE/itens/$id/comentarios/$cid/fecho" \
+                 -H 'Content-Type: application/json' \
+                 -H "x-auth-request-preferred-username: $QUEM" -d @- -w '\n%{http_code}')
+  else
+    saida=$(printf '%s' "$corpo" | curl -s -X POST "$BASE/itens/$id/comentarios/$cid/fecho" \
+                 -H 'Content-Type: application/json' -d @- -w '\n%{http_code}')
+  fi
+  status="${saida##*$'\n'}"
+  body="${saida%$'\n'*}"
+  case "$status" in
+    200)
+      printf '%s' "$body" | jq -r \
+        '"comentário #\(.id) do item \(.item) fechado — fecho: \(.fecho_resultado) — \(.fecho_destino)"'
+      ;;
+    400|403)
+      printf '%s' "$body" | jq -r '
+        .erro,
+        ((.aceitos // [])[] | "  resultado aceito: \(.codigo) (\(.nome))"),
+        (if (.quem_pode // []) != [] then "  quem pode fechar: " + (.quem_pode | join(", ")) else empty end)
+      ' >&2
+      exit 4 ;;
+    409)
+      printf '%s' "$body" | jq -r '
+        "sem mudança: \(.erro)",
+        (if .fecho_atual then "  já fechado: \(.fecho_atual.resultado) — \(.fecho_atual.destino) (\(.fecho_atual.por // "—"), \(.fecho_atual.em))" else empty end)
+      ' >&2
+      exit 1 ;;
+    404)
+      printf '%s' "$body" | jq -r '.erro' >&2
+      exit 1 ;;
+    *)
+      local msg; msg=$(printf '%s' "$body" | jq -r '.erro // empty' 2>/dev/null || true)
+      printf '%s\n' "${msg:-falha ao falar com o rastreador em $BASE (status ${status:-desconhecido})}" >&2
+      exit 1 ;;
+  esac
 }
 
 # Sem opção, lista tudo, no formato de sempre (o lint de card lê esta saída). A porta corta a saída
@@ -1541,6 +1572,27 @@ carteira() { # carteira [--desde AAAA-MM-DD]
        else empty end)'
 }
 
+# ESPERA-DONO (R30 da spec tarefas, cards #3595 e #3597) — a mesma consulta que a tela da F7
+# (#3481) lê, em duas partes: do dono (pergunta dirigida a ele, card pronto para a aposta,
+# pai em homologação) e, à parte, com as cadeiras (os demais abertos, por card, com a marca
+# de órfão). Lê pela rota própria `GET /espera-dono`; o verbo não calcula nada — a mesma
+# régua do R28 dos indicadores do balde.
+espera_dono() {
+  local j; j=$(busca GET /espera-dono) || return 1
+  printf '%s' "$j" | jq -r '
+    "do dono (\(.do_dono.total)):",
+    (if .do_dono.total == 0 then "  nada" else empty end),
+    (.do_dono.perguntas[] | "  pergunta #\(.id) · #\(.item) \(.titulo) [\(.cadeira // "—")] — \(.primeira_linha)"),
+    (.do_dono.prontos_para_aposta[] | "  pronto para a aposta · #\(.id) [\(.cadeira // "—")] \(.titulo)"),
+    (.do_dono.em_homologacao[] | "  em homologação · #\(.id) [\(.cadeira // "—")] \(.titulo)"),
+    "",
+    "com as cadeiras (\(.com_cadeiras.abertos) abertos, \(.com_cadeiras.orfaos) órfãos):",
+    (if (.com_cadeiras.cards | length) == 0 then "  nada" else empty end),
+    (.com_cadeiras.cards[] | "  #\(.id) [\(.cadeira // "—")] \(.titulo)",
+      (.abertos[] | "    #\(.id) \(.tipo)" + (if .orfao then " · órfão" else "" end) + " — \(.primeira_linha)"))
+  '
+}
+
 # --- despacho ---------------------------------------------------------------
 
 # --ajuda UNIVERSAL, sem efeito colateral (card #2274, defeito 4). ANTES do despacho e
@@ -1573,6 +1625,7 @@ case "$cmd" in
   bloquear)    bloquear "${1:?uso: tarefas bloquear <a> <b>}" "${2:?uso: tarefas bloquear <a> <b>}" ;;
   desbloquear) desbloquear "${1:?uso: tarefas desbloquear <a> <b>}" "${2:?uso: tarefas desbloquear <a> <b>}" ;;
   carteira)    carteira "$@" ;;
+  espera-dono) espera_dono ;;
   modelo)      modelo "${1:-}" "${2:-}" ;;
   estados)     estados ;;
   dt)          dt "$@" ;;
