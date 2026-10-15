@@ -2,9 +2,10 @@
 # segredo e sem credencial própria: o token do dono chega pelo gate do cubo e vai à porta como veio
 # (seg:0015 §5). A lista de origens, a URL da porta e as faces são configuração da instância.
 #
-# Quem sobe e quem põe o gate na frente é a ti (#3565): o gate do cubo tem de alcançar `borda:8000` pela
-# rede abaixo, passar o token do dono em Authorization e usar o client que a porta lista em
-# PF_FACE_CLIENTS. Sem essa lista a porta nega toda fonte face.
+# Quem sobe e quem põe o gate na frente é a ti (#3565). O gate do cubo (oauth2-proxy-cubo, no core)
+# alcança esta borda pelo alias `cubo-borda`, porta 8000, na rede `pf-borda-cubo`, e entrega o token do
+# dono (access token) em X-Forwarded-Access-Token. A porta lista o client do gate em PF_FACE_CLIENTS
+# (`gate-cubo`); sem a lista ela nega toda fonte face.
 name: harness-borda
 
 services:
@@ -18,8 +19,10 @@ services:
       # A porta de verbos. Em docker rootless o contêiner não alcança o loopback do host (medido em
       # controle/compose.yaml), então o caminho é o publicado pelo túnel.
       BORDA_PORTA_URL: ${BORDA_PORTA_URL:-https://ops.platafirma.org/mcp}
-      # Onde o gate põe o token do dono.
-      BORDA_CABECALHO_TOKEN: ${BORDA_CABECALHO_TOKEN:-authorization}
+      # Onde o gate põe o token do dono: o oauth2-proxy-cubo entrega o access token cru em
+      # X-Forwarded-Access-Token (e não em Authorization, que ele só preencheria com o ID token).
+      # O código da borda segue com `authorization` como padrão; quem fixa o cabeçalho do cubo é este compose.
+      BORDA_CABECALHO_TOKEN: ${BORDA_CABECALHO_TOKEN:-x-forwarded-access-token}
       # Cada face e o verbo dela na release; a lista de atos vem do cabeçalho do verbo (`# face:`).
       # Texto fixo, sem interpolação: a chave `}` do JSON fecharia o `${...}` do compose. Outra face ou
       # outro caminho entra por compose.override.yaml da instância.
@@ -30,10 +33,17 @@ services:
       - ${PF_RELEASE_RAIZ:-/opt/platafirma}:${PF_RELEASE_RAIZ:-/opt/platafirma}:ro
     ports:
       - "127.0.0.1:${BORDA_PORTA_HOST:-8092}:8000"
-    networks: [gate]
+    networks:
+      # `default` leva a saída: a borda chama a porta em ops.platafirma.org pelo túnel, e a rede do
+      # cubo é interna (sem egresso). É também por ela que sai a porta publicada em loopback.
+      default: {}
+      cubo:
+        aliases: [cubo-borda]
 
 networks:
-  # A rede em que o gate do cubo vive: o gate alcança "borda:8000" por nome. O nome é da ti (#3565).
-  gate:
-    external: true
-    name: ${BORDA_REDE:-plataforma-wiki_default}
+  # Rede de ENCONTRO com o gate do cubo (platafirma-core, card #3565): declarada aqui e lá com o MESMO
+  # `name:` e em nenhum dos dois como `external`, o desenho de pf-borda-casa e pf-borda-rastreador:
+  # nenhuma das duas stacks depende da outra para subir. `internal`: só o gate e a borda, sem egresso.
+  cubo:
+    name: pf-borda-cubo
+    internal: true
