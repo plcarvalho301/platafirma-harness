@@ -223,7 +223,16 @@ def serie_por_dia(view: list[dict], linhas: list[dict]) -> dict:
                      "nao_consegui_olhar": f"{NAO_CONSEGUI}: {extra['sem_cobertura']} linha(s) sem cobertura gravada"})
     dias.sort(key=lambda d: d["dia"])
     com_leitura = [d["dia"] for d in dias if d["total"]]
-    return {"serie_comeca_em": com_leitura[0] if com_leitura else None, "dias": dias}
+    comeco = com_leitura[0] if com_leitura else None
+    # O que vem antes do primeiro dia gravado e outro universo de coleta (o log anterior a 101, sem cobertura):
+    # sai da serie, do denominador e da amostra, e fica so contado a parte (#3578). Lacuna depois do comeco segue.
+    antes = [d for d in dias if comeco is None or d["dia"] < comeco]
+    fora = {"dias": len(antes), "linhas": sum(d["linhas_fora_do_denominador"] for d in antes),
+            "motivo": "linhas sem cobertura gravada, anteriores ao primeiro dia gravado (a 101 nao preenche o passado)"}
+    return {"serie_comeca_em": comeco, "dias": [d for d in dias if comeco is not None and d["dia"] >= comeco],
+            "historico_fora_da_serie": fora if antes else None,
+            "nao_consegui_olhar": None if comeco else
+            f"{NAO_CONSEGUI}: nenhum dia com cobertura gravada no periodo ({fora['linhas']} linha(s) sem cobertura)"}
 
 
 def indicador_da_taxa(serie: dict, lido_em: str) -> dict:
@@ -257,6 +266,12 @@ def texto_da_lista(itens: list[dict], conta: dict, f: dict, particao: str, lido_
 def texto_por_dia(serie: dict, ind: dict) -> str:
     saida = [f"cobertura por dia (UTC): a serie comeca em {serie['serie_comeca_em'] or NAO_CONSEGUI} · "
              f"{ind['amostra']}"]
+    if serie.get("nao_consegui_olhar"):
+        saida.append(f"  {serie['nao_consegui_olhar']}")
+    fora = serie.get("historico_fora_da_serie")
+    if fora:
+        saida.append(f"  (fora da serie: {fora['linhas']} linha(s) em {fora['dias']} dia(s) antes do comeco, "
+                     "sem cobertura gravada)")
     for d in serie["dias"]:
         if d["nao_consegui_olhar"]:
             saida.append(f"  {d['dia']}  {d['nao_consegui_olhar']}")

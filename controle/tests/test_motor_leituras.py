@@ -285,7 +285,7 @@ def test_consultas_flags_invalidas_saem_2(motor, args):
     assert roda("biblioteca", *args, ato="consultas").returncode == 2
 
 
-def test_por_dia_a_serie_comeca_no_dia_da_migracao_e_conta_o_que_ficou_fora_do_denominador(motor):
+def test_por_dia_a_serie_comeca_no_primeiro_dia_gravado_e_o_historico_anterior_sai_da_serie(motor):
     roda, grava, sqls, *_ = motor
     grava(psql={
         "consultas:dia-view": [
@@ -297,17 +297,18 @@ def test_por_dia_a_serie_comeca_no_dia_da_migracao_e_conta_o_que_ficou_fora_do_d
                                  {"dia": "2026-10-08", "linhas": 12, "sem_cobertura": 2}]})
     d = json.loads(roda("biblioteca", "--por-dia", "--json", ato="consultas").stdout)
     assert d["serie_comeca_em"] == "2026-10-08"
-    antes, dia = d["dias"]
-    assert antes["taxa_fraca"] is None and "nao consegui olhar" in antes["nao_consegui_olhar"]
-    assert antes["linhas_fora_do_denominador"] == 5
-    assert dia["taxa_fraca"] == 0.2 and dia["linhas_fora_do_denominador"] == 2
+    (dia,) = d["dias"]                                       # o 07/10, anterior a gravacao, saiu da serie (#3578)
+    assert dia["dia"] == "2026-10-08" and dia["taxa_fraca"] == 0.2 and dia["linhas_fora_do_denominador"] == 2
+    assert d["historico_fora_da_serie"]["dias"] == 1 and d["historico_fora_da_serie"]["linhas"] == 5
+    assert d["nao_consegui_olhar"] is None
     ind = d["indicador"]
     assert ind["quem_configurou"] == "ia" and "sem limiar configurado" in ind["regra"] and ind["hora"] and ind["fonte"]
-    assert "10 busca(s)" in ind["amostra"] and "7 linha(s)" in ind["amostra"]       # 5 de antes + 2 do dia
+    assert "10 busca(s)" in ind["amostra"] and "em 1 dia(s)" in ind["amostra"] and "2 linha(s)" in ind["amostra"]
     # a serie so conta busca e abertura: a previa, a medida, a sombra e o autoteste ficam de fora do SQL
     assert "e.origem IN ('busca', 'abertura')" in sqls()[1]
     texto = roda("biblioteca", "--por-dia", ato="consultas").stdout
     assert "a serie comeca em 2026-10-08" in texto and "taxa fraca 0.200" in texto
+    assert "fora da serie: 5 linha(s) em 1 dia(s)" in texto and "2026-10-07" not in texto
 
 
 # --- tarefa 8: trabalhos ------------------------------------------------------------------------
@@ -625,7 +626,17 @@ def test_previa_nao_combina_com_outra_origem_e_a_busca_comum_segue_igual(motor):
 
 def test_serie_por_dia_sem_nenhum_dia_com_cobertura_nao_tem_comeco():
     s = consultasmod.serie_por_dia([], [{"dia": "2026-10-01", "linhas": 3, "sem_cobertura": 3}])
-    assert s["serie_comeca_em"] is None and s["dias"][0]["nao_consegui_olhar"]
+    assert s["serie_comeca_em"] is None and s["dias"] == []
+    assert "nenhum dia com cobertura gravada" in s["nao_consegui_olhar"] and s["historico_fora_da_serie"]["linhas"] == 3
+
+
+def test_serie_por_dia_mantem_a_lacuna_depois_do_comeco():
+    dia = {"particao": "casa", "boa": 1, "fraca": 0, "nenhuma": 0, "ausente": 0, "sem_indice": 0}
+    s = consultasmod.serie_por_dia([{**dia, "dia": "2026-10-14", "total": 1}, {**dia, "dia": "2026-10-16", "total": 1}],
+                                   [{"dia": "2026-10-13", "linhas": 4, "sem_cobertura": 4},
+                                    {"dia": "2026-10-15", "linhas": 2, "sem_cobertura": 2}])
+    assert [d["dia"] for d in s["dias"]] == ["2026-10-14", "2026-10-15", "2026-10-16"]
+    assert s["dias"][1]["taxa_fraca"] is None and s["historico_fora_da_serie"]["linhas"] == 4
 
 
 def test_estado_da_sombra_sem_hora_legivel_e_indeterminavel():
