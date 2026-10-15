@@ -1114,7 +1114,6 @@ Resultado: quem passa a conseguir o quê; o outcome que o card não fecha sozinh
 Medida: escala · medidor · valor hoje · mínimo aceitável — uma linha
 Apetite: (opcional) quanto vale gastar · o que se corta primeiro se não couber — previsão de quem escreve
 Aberto: prosa do autor: o que está por decidir, cada item com quem responde; na aposta, o que sobra diz «fica aberto de propósito:» e o risco aceito
-Quebra: escrita na formalização — <data>, depois as features, uma por linha, na ordem de execução
 M
     _avisa_two_pager
     ;;
@@ -1133,7 +1132,6 @@ Aberto: prosa do autor: o que está por decidir, cada item com quem responde; na
 Produtos documentais: um por linha, pelo que a feature muda (ADR, spec da peça criada ou atualizada, documento, dado, emenda); na formalização, cada linha ganha o link do servido
 - <produto> · <quem escreve>
 Sai quando: na lapidação, a frase que torna a feature entregue; na formalização, o comando ou a consulta que prova
-Quebra: escrita na formalização — <data>, depois as stories, uma por linha, na ordem de execução; cada story é uma fita (guia discovery, «A quebra»)
 M
     _avisa_two_pager
     ;;

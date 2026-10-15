@@ -27,7 +27,6 @@ Apetite:       quanto vale gastar · o que se corta primeiro — previsão de qu
 Aberto:        prosa do autor: o que está por decidir, cada item com quem responde
 Produtos documentais: um por linha: ADR, spec da peça, documento, dado, emenda   (feature)
 Sai quando:    na lapidação, a frase; na formalização, o comando que prova   (feature)
-Quebra:        escrita na formalização: <data> — filhas, uma por linha, e o aviso de enfileiramento
 ```
 
 A ordem segue o que o leitor precisa primeiro: logo depois do caso vem a solução, e o Fora
@@ -41,11 +40,11 @@ sustenta a peça depois da entrega mora na spec dela.
 - **A aposta** (Título, Problema, Fora, Resultado, Medida, Apetite): para de mudar na aposta e
   fica. O Fora ainda cresce com os cortes da entrega.
 - **A forma** (Solução, Peças, Aberto): sai do card quando o destino existe. A Solução vira
-  link para a spec da peça, no mesmo lugar; as Peças, para as stories, pela Quebra. No lugar
+  link para a spec da peça, no mesmo lugar; as Peças, para as stories, pelo número do card. No lugar
   fica o link com o nome do que aponta e uma linha do que muda para quem usa:
   `Solução: a cadeira valida lendo um texto que descreve a solução · spec do comentário tipado, cenários C1 a C5`.
   Sem spec, a Solução é a única descrição e fica.
-- **O índice** (Produtos documentais, Sai quando, Quebra): completo na formalização.
+- **O índice** (Produtos documentais, Sai quando): completo na formalização.
 
 ## A voz, rótulo a rótulo
 
@@ -68,10 +67,10 @@ sustenta a peça depois da entrega mora na spec dela.
 8. **Apetite** — as duas partes; sem o que se corta, é estimativa, não apetite.
 9. **Aberto** — prosa, não lista de comentários: o estado de cada comentário mora no fecho
    dele. Na aposta, linha que sobra diz «fica aberto de propósito:» e o risco.
-10. **Produtos documentais**, **Sai quando**, **Quebra** — como no esqueleto; na formalização,
-    cada linha ganha o link do que foi servido.
+10. **Produtos documentais**, **Sai quando** — como no esqueleto; na formalização, cada
+    linha ganha o link do que foi servido.
 
-No épico, as Peças são as features, e a Quebra lista as mesmas features.
+No épico, as Peças são as features; a quebra entre elas se lê das filhas, no rastreador.
 
 Tamanho: perto de cinco mil caracteres. Passar muito disso indica solução concreta demais ou
 feature que é épico.
