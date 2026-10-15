@@ -100,6 +100,24 @@ RE_CODIGO = re.compile(r"#\d+|\b(?:arq|org|ont|dt):\d+")
 RE_TEM_LINK = re.compile(r"\]\(|https?://")
 RE_NUMERO_CARD = re.compile(r"#\d+")
 
+# bloco que `tarefas ler` acrescenta no fim do corpo, com uma filha por linha (emenda de
+# 15/10/2026 à arq:0096: a Quebra sai do molde, e a filha se le daqui, nao do corpo)
+RE_FILHAS_CABECALHO = re.compile(r"^\s*filhas\s*(?:\([^)]*\))?\s*:\s*$")
+
+def _tem_filha(texto: str) -> bool:
+    """True com ao menos uma filha no bloco que `tarefas ler` acrescenta no fim do corpo."""
+    dentro = False
+    for linha in texto.splitlines():
+        if RE_FILHAS_CABECALHO.match(linha):
+            dentro = True
+            continue
+        if dentro:
+            if not linha.strip():
+                break
+            if RE_NUMERO_CARD.search(linha):
+                return True
+    return False
+
 _ACENTOS = str.maketrans("áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ", "aaaaeeiooouc" "AAAAEEIOOOUC")
 
 
@@ -279,6 +297,7 @@ class Contexto:
         self.estado = _norm_estado(estado)
         self.fecha_existe = fecha_existe
         self.aposta = any(RE_APOSTA.match(c.primeira()) for c in comentarios)
+        self.tem_story_filha = _tem_filha(texto)
 
     def discovery(self) -> list[Comentario]:
         return [c for c in self.comentarios if not c.delivery()]
@@ -415,11 +434,12 @@ def _t10(ctx: Contexto) -> list[Achado]:
     spec_servida = prod and re.search(r"\bspec\b", prod.texto(), re.IGNORECASE) and RE_TEM_LINK.search(prod.texto())
     if spec_servida and sol and not RE_TEM_LINK.search(sol.texto()):
         achados.append((ctx.alvo, sol.linha, "spec servida em Produtos documentais e Solução sem link"))
-    quebra, pecas = ctx.secoes.get("Quebra"), ctx.secoes.get("Peças")
-    # na Peças, #N conta como link: o rastreador liga o numero ao card da story
-    if quebra and pecas and RE_NUMERO_CARD.search(quebra.texto()) \
-            and not (RE_TEM_LINK.search(pecas.texto()) or RE_NUMERO_CARD.search(pecas.texto())):
-        achados.append((ctx.alvo, pecas.linha, "stories na Quebra e Peças sem link"))
+    pecas = ctx.secoes.get("Peças")
+    # filha de story (emenda de 15/10/2026: a Quebra sai do molde, a filha se le do que
+    # `tarefas ler` acrescenta no fim do corpo); #N conta como link: o rastreador liga o
+    # numero ao card da story
+    if ctx.tem_story_filha and pecas and not (RE_TEM_LINK.search(pecas.texto()) or RE_NUMERO_CARD.search(pecas.texto())):
+        achados.append((ctx.alvo, pecas.linha, "feature com story filha e Peças ainda em texto, sem link nem número"))
     return achados
 
 

@@ -111,9 +111,8 @@ def test_modelo_feature_e_o_two_pager_na_ordem():
     p = _run(["modelo", "feature"])
     assert p.returncode == 0, p.stderr
     assert _rotulos(p.stdout) == ["Problema", "Solução", "Peças", "Fora", "Resultado", "Medida",
-                                  "Apetite", "Aberto", "Produtos documentais", "Sai quando",
-                                  "Quebra"]
-    assert "Continuidade" not in p.stdout and "Fontes" not in p.stdout
+                                  "Apetite", "Aberto", "Produtos documentais", "Sai quando"]
+    assert "Continuidade" not in p.stdout and "Fontes" not in p.stdout and "Quebra" not in p.stdout
     assert "título" in p.stderr
 
 
@@ -121,7 +120,8 @@ def test_modelo_epico_sem_indice_de_feature():
     p = _run(["modelo", "épico"])
     assert p.returncode == 0, p.stderr
     assert _rotulos(p.stdout) == ["Problema", "Solução", "Peças", "Fora", "Resultado", "Medida",
-                                  "Apetite", "Aberto", "Quebra"]
+                                  "Apetite", "Aberto"]
+    assert "Quebra" not in p.stdout
 
 
 @pytest.mark.parametrize("tipo,fixas", [

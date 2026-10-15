@@ -332,3 +332,21 @@ def test_cli_rastreador_fora_sai_5(tmp_path):
     proc = subprocess.run([sys.executable, str(RAIZ / "bin" / "lint"), "card", "#3408"],
                           capture_output=True, text=True, env=env, timeout=60, check=False)
     assert proc.returncode == 5
+
+# ------------------------------------------------------------------ T10 sem Quebra (emenda de 15/10/2026)
+
+def test_t10_feature_com_filha_e_pecas_ainda_numeradas():
+    base = ("#5 · feature · em-parecer\nProblema: p\nSolução:\n- Ao abrir: o dono lê.\n"
+            "Peças:\n1. a peça\nFora: f\nResultado: r\nMedida: m\n")
+    sem_filha = base + "\nfilhas (nenhuma):\n"
+    assert "T10" not in _ids(_rodar(sem_filha)[0])
+    com_filha = base + "\nfilhas (abertas):\n  #10\tem-execucao\tengenharia\ta story\n"
+    assert "T10" in _ids(_rodar(com_filha)[0])
+
+def test_t10_nao_le_mais_quebra():
+    base = ("#5 · feature · em-parecer\nProblema: p\nSolução:\n- Ao abrir: o dono lê.\n"
+            "Peças:\n1. a peça\nFora: f\nResultado: r\nMedida: m\n")
+    # Quebra com numero de card, mas sem a filha real (sem o bloco que tarefas ler acrescenta):
+    # a emenda de 15/10/2026 tira a Quebra da leitura do T10, so a filha de verdade conta.
+    com_quebra_sem_filha = base + "Quebra: 11/10/2026\n1. #10 — a story\n"
+    assert "T10" not in _ids(_rodar(com_quebra_sem_filha)[0])
