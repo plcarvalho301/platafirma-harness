@@ -59,6 +59,7 @@ MAX_ARGS = 32
 MAX_ARG = 2048
 MAX_FUNDAMENTO = 4000
 PRAZO_S = 55
+USER_AGENT = "PlataFirma-borda/1.0 (+https://platafirma.org)"
 # O que o envelope da porta traz do host e a tela não precisa: caminho de execução e contabilidade de poda.
 INTERNOS_DA_PORTA = ("cwd", "poda", "poda_aviso")
 
@@ -131,9 +132,12 @@ def chamar_porta_http(url, token, tool, argumentos, prazo=PRAZO_S):
     envelope do verbo, ou o status da borda e `{"erro": ...}`. O token só viaja no cabeçalho."""
     pedido = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                          "params": {"name": tool, "arguments": argumentos}}).encode("utf-8")
+    # `User-Agent` proprio: sem ele o urllib manda `Python-urllib/3.x`, que a borda da Cloudflare em frente
+    # da porta (ops.platafirma.org) recusa antes de o pedido chegar a ela (medido em 15/10/2026, #3565:
+    # a borda recebia um erro HTTP que nao era 401 e a porta nao registrava o pedido).
     req = urllib.request.Request(url, data=pedido, method="POST", headers={
         "Content-Type": "application/json", "Accept": "application/json, text/event-stream",
-        "Authorization": f"Bearer {token}"})
+        "Authorization": f"Bearer {token}", "User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=prazo) as resp:
             tipo = resp.headers.get("content-type", "")
