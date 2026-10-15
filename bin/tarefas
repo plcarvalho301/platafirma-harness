@@ -142,7 +142,12 @@ uso:
   tarefas comentar <id> --fecha <n> "<resultado> — <destino>"
                                           escreve «fecho: …» como última linha do comentário n
                                           (comentário tipado; insumo não leva fecho)
-  tarefas comentarios <id>                lista os comentários do item, em ordem
+  tarefas comentarios <id> [--indice] [--id <n>]... [--desde <n>] [--ultimos <k>]
+                                          lista os comentários do item, em ordem. A porta corta a
+                                          saída em ~50 KB: em card longo, --indice dá uma linha por
+                                          comentário (id, autor, data, tamanho, começo); --id lê
+                                          só aquele(s); --desde <n> os de id >= n; --ultimos <k> os
+                                          k mais novos
   tarefas mover <id> <estado> [--motivo "<txt>"] [--englobado-em <id>]
                                           move o card pelo fluxo; a recusa diz para onde
                                           se PODE ir a partir do estado atual. Item com
@@ -760,12 +765,50 @@ print(json.dumps({"corpo": alvo["corpo"] + os.environ["FECHO_HTML"]}))
   printf 'comentário #%s do item %s fechado — fecho: %s\n' "$cid" "$id" "$txt"
 }
 
+# Sem opção, lista tudo, no formato de sempre (o lint de card lê esta saída). A porta corta a saída
+# de um verbo em ~50 KB, e card com muita conversa passa disso: o corte engole os comentários do
+# fim, justamente os mais novos. Daí as fatias — a API devolve tudo de uma vez, quem recorta é este
+# verbo, e cada recorte cabe na porta.
 comentarios() {
-  local id; id=$(so_id "$1")
-  busca GET "/itens/$id/comentarios" | jq -r '
-    if (.comentarios | length) == 0 then "(sem comentários)" else
-      .comentarios[] | "--- #\(.id) · \(.autor // "anônimo") · \(.carimbo) ---\n\(.corpo)\n"
-    end' | para_texto
+  local uso='uso: tarefas comentarios <id> [--indice] [--id <n>]... [--desde <n>] [--ultimos <k>]'
+  local id; id=$(so_id "${1:?$uso}"); shift
+  local ids='[]' desde=0 ultimos=0 indice=false
+  local numero='^[0-9]+$'
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --indice) indice=true; shift ;;
+      --id|--desde|--ultimos)
+        [[ "${2:-}" =~ $numero ]] || { echo "tarefas comentarios: $1 pede um número" >&2; echo "$uso" >&2; exit 2; }
+        case "$1" in
+          --id) ids=$(jq -c --argjson n "$2" '. + [$n]' <<<"$ids") ;;
+          --desde) desde=$2 ;;
+          --ultimos) ultimos=$2 ;;
+        esac
+        shift 2 ;;
+      *) echo "tarefas comentarios: opção desconhecida: $1" >&2; echo "$uso" >&2; exit 2 ;;
+    esac
+  done
+  local saida bytes
+  saida=$(busca GET "/itens/$id/comentarios" | jq -r \
+    --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" --argjson indice "$indice" '
+    .comentarios as $todos
+    | ($todos
+       | (if ($ids | length) > 0 then map(select(.id as $i | any($ids[]; . == $i))) else . end)
+       | map(select(.id >= $desde))
+       | (if $ultimos > 0 then .[-$ultimos:] else . end)) as $sel
+    | if ($todos | length) == 0 then "(sem comentários)"
+      elif ($sel | length) == 0 then
+        "(nenhum comentário na seleção; o item tem \($todos | length), de #\($todos[0].id) a #\($todos[-1].id))"
+      elif $indice then
+        $sel[] | "#\(.id) · \(.autor // "anônimo") · \(.carimbo) · \(.corpo | length) car. · \(.corpo[0:100] | gsub("\n"; " "))"
+      else
+        $sel[] | "--- #\(.id) · \(.autor // "anônimo") · \(.carimbo) ---\n\(.corpo)\n"
+      end' | para_texto)
+  bytes=$(printf '%s' "$saida" | wc -c)
+  if [ "$bytes" -gt 45000 ]; then
+    echo "aviso: ${bytes} bytes; a porta corta a saída em 50000 e perde o fim. Leia por partes: tarefas comentarios $id --indice, depois --id <n>, --desde <n> ou --ultimos <k>"
+  fi
+  printf '%s\n' "$saida"
 }
 
 # MOVER É O ATO, E O NOME É O ATO — card #224. A capacidade sempre existiu: o PATCH aceita
@@ -1519,7 +1562,7 @@ case "$cmd" in
   criar)       criar "$@" ;;
   editar)      editar "$@" ;;
   comentar)    comentar "$@" ;;
-  comentarios) comentarios "${1:?uso: tarefas comentarios <id>}" ;;
+  comentarios) comentarios "${1:?uso: tarefas comentarios <id> [--indice] [--id <n>]... [--desde <n>] [--ultimos <k>]}" "${@:2}" ;;
   mover)       mover "$@" ;;
   fechar)      fechar "${1:?uso: tarefas fechar <id>}" "${@:2}" ;;
   apagar)      apagar "${1:?uso: tarefas apagar <id> [--cascata]}" "${@:2}" ;;
