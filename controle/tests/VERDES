@@ -87,11 +87,11 @@ tests/test_bot.py | bin/acervo bin/_acervo/** bin/agente bin/bot bin/conferir bi
 # Regressivo (#3535): `<arquivo> | regressivo #<defeito>` roda em todo push e promocao, sem raio. So
 # entra quem reproduz defeito que chegou a producao (incidente ou debito com o numero), e cumpre a
 # regra do dono: falha so por codigo deste repositorio, com dependencia no ambiente, em segundos.
-# Linha sem raio declarado roda quando a mudanca toca codigo fora das subarvores das outras chaves. A rodada inteira
-# diaria no `bot` pega o raio que faltou. O raio das linhas sem comentario proprio sai da leitura do
-# proprio teste: o que ele chama (bin/<verbo>, seu bin/_<verbo>/ e os verbos que esse codigo chama),
-# as pastas do repositorio que ele le e os testes que ele importa; linha sem referencia nenhuma fica
-# sem raio e roda sempre.
+# Linha sem raio declarado (arq:0128) so roda quando o proprio arquivo mudou ou quando ela entrou ou mudou
+# nesta lista: nenhum diff a alcanca. A rodada inteira diaria no `bot` pega o raio que faltou. O raio das
+# linhas sem comentario proprio sai da leitura do proprio teste: o que ele chama (bin/<verbo>, seu
+# bin/_<verbo>/ e os verbos que esse codigo chama), as pastas do repositorio que ele le e os testes que ele
+# importa; linha sem referencia nenhuma fica sem raio e quase nunca roda no portao.
 tests/test_motor_indexar.py | bin/motor bin/_motor/**
 tests/test_motor_troca.py | bin/motor bin/_motor/**
 # Card #3349: `motor marcacao`, cliente da marcacao-api (rotas /interno/), contra uma API falsa no loopback.
