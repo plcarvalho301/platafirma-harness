@@ -92,7 +92,7 @@ def test_abrir_cria_worktree_por_cadeira_e_card_e_move_o_card(tmp_path):
     assert (bancada / "wt" / "demo" / "ti" / "42-x" / ".git").exists()
     assert not (bancada / "wt" / "demo" / "ti" / ".git").exists()
     assert "atras de origin/main: 0" in r.stdout and "arvore limpa" in r.stdout
-    assert "card #42: em-execucao" in r.stdout
+    assert "card #42: em-refinamento-tecnico" in r.stdout
 
 
 def test_abrir_de_novo_move_o_card_e_diz_o_atraso(tmp_path):
@@ -106,7 +106,7 @@ def test_abrir_de_novo_move_o_card_e_diz_o_atraso(tmp_path):
     assert r.returncode == 0, r.stderr
     assert "bancada já aberta" in r.stdout
     assert "atras de origin/main: 1" in r.stdout
-    assert "card #42: em-execucao" in r.stdout
+    assert "card #42: em-refinamento-tecnico" in r.stdout
 
 
 def test_abrir_sem_card_com_slug_abre_ramo_da_cadeira(tmp_path):
@@ -256,7 +256,7 @@ def _tarefas_falsa(tmp_path, nivel="story", estado="priorizada", editar_rc=0, mo
         'case "$1" in\n'
         f"  api) echo '{item}' ;;\n"
         f'  editar) echo "erro de mentira" >&2; [ {editar_rc} -eq 0 ] && echo "item 42 editado"; exit {editar_rc} ;;\n'
-        f'  mover) [ {mover_rc} -eq 0 ] && echo "item 42 -> Em execucao: t" || echo "recusado"; exit {mover_rc} ;;\n'
+        f'  mover) [ {mover_rc} -eq 0 ] && echo "item 42 -> Em refinamento técnico: t" || echo "recusado"; exit {mover_rc} ;;\n'
         "esac\n")
     falso.chmod(0o755)
     return falso, log
@@ -272,9 +272,9 @@ def test_abrir_bancada_nova_de_story_grava_o_executor_e_move(tmp_path):
     r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x", env_extra={"PF_TAREFAS_BIN": str(falso)})
     assert r.returncode == 0, r.stderr
     assert "card #42: executor claudinho-ti" in r.stdout
-    assert "card #42: em-execucao" in r.stdout
+    assert "card #42: em-refinamento-tecnico" in r.stdout
     assert _chamadas_de_tarefas(log) == ["api GET /itens/42", "editar 42 --executor claudinho-ti",
-                                         "mover 42 em-execucao"]
+                                         "mover 42 em-refinamento-tecnico"]
     assert r.stdout.strip().splitlines()[-1] == "próximo: teste rodar demo <alvo>"
 
 
@@ -287,7 +287,7 @@ def test_abrir_com_a_bancada_ja_aberta_move_a_story_e_grava_o_executor(tmp_path)
     assert r.returncode == 0, r.stderr
     assert "bancada já aberta" in r.stdout
     assert _chamadas_de_tarefas(log) == ["api GET /itens/42", "editar 42 --executor claudinho-ti",
-                                         "mover 42 em-execucao"]
+                                         "mover 42 em-refinamento-tecnico"]
     assert r.stdout.strip().splitlines()[-1] == "próximo: teste rodar demo <alvo>"
 
 
@@ -300,7 +300,7 @@ def test_abrir_com_a_plana_migrada_do_mesmo_card_tambem_move_e_grava(tmp_path):
     assert r.returncode == 0, r.stderr
     assert "migrada da pasta plana" in r.stdout
     assert _chamadas_de_tarefas(log) == ["api GET /itens/42", "editar 42 --executor claudinho-ti",
-                                         "mover 42 em-execucao"]
+                                         "mover 42 em-refinamento-tecnico"]
 
 
 def test_abrir_task_tambem_grava_o_executor(tmp_path):
@@ -317,7 +317,7 @@ def test_abrir_feature_move_mas_nao_grava_executor(tmp_path):
     falso, log = _tarefas_falsa(tmp_path, nivel="feature")
     r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x", env_extra={"PF_TAREFAS_BIN": str(falso)})
     assert r.returncode == 0, r.stderr
-    assert _chamadas_de_tarefas(log) == ["api GET /itens/42", "mover 42 em-execucao"]
+    assert _chamadas_de_tarefas(log) == ["api GET /itens/42", "mover 42 em-refinamento-tecnico"]
     assert "executor" not in r.stdout
 
 
@@ -328,13 +328,13 @@ def test_abrir_falha_em_gravar_o_executor_so_avisa_e_o_card_ainda_move(tmp_path)
     r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x", env_extra={"PF_TAREFAS_BIN": str(falso)})
     assert r.returncode == 0, r.stderr
     assert "executor NAO gravado (exit 1)" in r.stdout
-    assert "mover 42 em-execucao" in _chamadas_de_tarefas(log)
+    assert "mover 42 em-refinamento-tecnico" in _chamadas_de_tarefas(log)
     assert (bancada / "wt" / "demo" / "ti" / "42-x" / ".git").exists()
 
 
 def test_abrir_story_parada_avisa_e_diz_o_que_o_rastreador_respondeu(tmp_path):
     bancada = _montar(tmp_path)
-    falso, log = _tarefas_falsa(tmp_path, estado="despriorizada", mover_rc=1)
+    falso, _ = _tarefas_falsa(tmp_path, estado="despriorizada", mover_rc=1)
     r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x", env_extra={"PF_TAREFAS_BIN": str(falso)})
     assert r.returncode == 0, r.stderr
     assert "PARADA (despriorizada)" in r.stdout and "tarefas mover 42 priorizada" in r.stdout
@@ -350,7 +350,39 @@ def test_abrir_sem_o_item_legivel_nao_grava_executor_e_nao_derruba(tmp_path):
     falso.chmod(0o755)
     r = _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x", env_extra={"PF_TAREFAS_BIN": str(falso)})
     assert r.returncode == 0, r.stderr
-    assert "executor" not in r.stdout and "card #42: em-execucao" in r.stdout
+    assert "executor" not in r.stdout and "card #42: em-refinamento-tecnico" in r.stdout
+
+
+def test_commitar_recusa_story_de_codigo_fora_de_em_execucao(tmp_path):
+    """arq:0096, Consequências (card #3599): commitar numa bancada de card de código
+    cuja story não está em em-execucao sai 4 e avisa para escrever o Plano."""
+    bancada = _montar(tmp_path)
+    falso, _ = _tarefas_falsa(tmp_path, nivel="story", estado="em-refinamento-tecnico")
+    _repo(tmp_path, bancada, "s1", "abrir", "demo", "42", "--slug", "x", env_extra={"PF_TAREFAS_BIN": str(falso)})
+    wt = bancada / "wt" / "demo" / "ti" / "42-x"
+    (wt / "novo.py").write_text("x = 1\n")
+    r = _repo(tmp_path, bancada, "s1", "commitar", "demo@42-x", "-m", "teste (#42)", "novo.py",
+              env_extra={"PF_TAREFAS_BIN": str(falso)})
+    assert r.returncode == 4, r.stderr
+    assert "story #42 em em-refinamento-tecnico: escreva o Plano e mova para em-execucao (tarefas modelo story refinada)" in r.stderr
+
+    # Depois de mover a story para em-execucao, commitar sai 0
+    falso_exec, _ = _tarefas_falsa(tmp_path, nivel="story", estado="em-execucao")
+    r2 = _repo(tmp_path, bancada, "s1", "commitar", "demo@42-x", "-m", "teste (#42)", "novo.py",
+               env_extra={"PF_TAREFAS_BIN": str(falso_exec)})
+    assert r2.returncode == 0, r2.stderr
+    assert "commit em demo@42-x" in r2.stdout
+
+
+def test_commitar_em_bancada_sem_card_nao_recusa(tmp_path):
+    bancada = _montar(tmp_path)
+    falso, _ = _tarefas_falsa(tmp_path, nivel="story", estado="em-refinamento-tecnico")
+    _repo(tmp_path, bancada, "s1", "abrir", "demo", "--slug", "faxina", env_extra={"PF_TAREFAS_BIN": str(falso)})
+    wt = bancada / "wt" / "demo" / "ti" / "faxina"
+    (wt / "novo.py").write_text("x = 1\n")
+    r = _repo(tmp_path, bancada, "s1", "commitar", "demo@faxina", "-m", "faxina", "novo.py",
+              env_extra={"PF_TAREFAS_BIN": str(falso)})
+    assert r.returncode == 0, r.stderr
 
 
 # --- abrir --da-producao (revisao do PR #306, card #3096): a mesma trava (a) e o
