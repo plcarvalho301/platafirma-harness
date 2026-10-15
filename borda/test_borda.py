@@ -14,12 +14,12 @@ sys.path.insert(0, str(AQUI))
 import borda  # noqa: E402
 
 MOTOR = AQUI.parent / "bin" / "motor"
-TOKEN = {"authorization": "Bearer a.b.c"}
+TOKEN = {borda.CABECALHO_DO_GATE: "a.b.c"}
 
 
 def test_autoteste_da_borda(capsys):
     borda._autoteste()
-    assert "borda OK (#3516, #3518)" in capsys.readouterr().out
+    assert "borda OK (#3516, #3518, #3575)" in capsys.readouterr().out
 
 
 def test_a_lista_de_atos_da_face_motor_e_a_do_cabecalho_do_verbo_real():
