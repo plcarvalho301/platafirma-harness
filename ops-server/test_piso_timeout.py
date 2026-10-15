@@ -30,6 +30,7 @@ IDENT = {"sessao_id": "-", "ordem_id": "-", "cadeira": ""}
 
 def test_piso_sobe_o_padrao_do_ato_listado():
     assert s._timeout_com_piso(["/opt/bin/repo", "sincronizar", "x"], 120) == 600
+    assert s._timeout_com_piso(["/opt/bin/repo", "empurrar", "x"], 120) == 600
 
 
 def test_piso_nao_encurta_pedido_maior_nem_toca_o_resto():

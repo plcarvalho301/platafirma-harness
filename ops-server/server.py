@@ -2799,7 +2799,7 @@ def _segue_apos_prazo(p: subprocess.Popen, argv: list, timeout: int, t0: float, 
     slug = Path(argv[0]).name
     linha = " ".join([slug] + [str(a) for a in argv[1:]])[:CMD_CAP]
     inicio = datetime.now().astimezone().isoformat(timespec="seconds")
-    base = {"id": rid, "verbo": linha, "inicio": inicio, "timeout": timeout}
+    base = {"id": rid, "verbo": linha, "inicio": inicio, "timeout": timeout, "cwd": str(d_cwd)}
     _grava_resultado(caminho, {"em_andamento": True, **base, "pid": p.pid})
 
     def _espera():
@@ -2866,13 +2866,36 @@ _fecha_orfaos_do_prazo()
 # 04/10/2026, `repo sincronizar` com o pre-push (baseline de contrato) levou 127 s e saiu
 # `timeout (120s) — grupo de processo morto`; com timeout 600 saiu 0. O piso so SOBE o
 # timeout (nunca o encurta) e o teto de 600 s das tools segue valendo.
-TIMEOUT_PISO = {("repo", "sincronizar"): 600}
+TIMEOUT_PISO = {("repo", "sincronizar"): 600, ("repo", "empurrar"): 600}
 
 
 def _timeout_com_piso(argv: list, timeout: int) -> int:
     slug = Path(str(argv[0])).name if argv else ""
     ato = str(argv[1]) if len(argv) > 1 else ""
     return max(timeout, TIMEOUT_PISO.get((slug, ato), 0))
+
+
+def _busca_em_andamento(linha: str, d_cwd: Path) -> tuple[Path, dict] | None:
+    try:
+        arquivos = list(RESULTADO_DIR.glob("*.json"))
+    except OSError:
+        return None
+    for f in arquivos:
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(d, dict) or not d.get("em_andamento"):
+            continue
+        if d.get("verbo") == linha and d.get("cwd") == str(d_cwd):
+            pid = d.get("pid")
+            if pid and isinstance(pid, int):
+                try:
+                    os.kill(pid, 0)
+                    return f, d
+                except ProcessLookupError:
+                    pass
+    return None
 
 
 def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: int, ident: dict,
@@ -2894,6 +2917,38 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
     if ident.get("chapeu"):
         env["PF_CHAPEU"] = ident["chapeu"]
     d_cwd = CASA if CASA.is_dir() else Path.cwd()
+    slug = Path(argv[0]).name
+    linha = " ".join([slug] + [str(a) for a in argv[1:]])[:CMD_CAP]
+    andamento = _busca_em_andamento(linha, d_cwd)
+    if andamento is not None:
+        caminho_andamento, d_andamento = andamento
+        rid = d_andamento.get("id") or caminho_andamento.stem
+        t0 = time.monotonic()
+        espera = timeout if prazo is None or prazo >= timeout else max(0.0, prazo)
+        fim_espera = t0 + espera
+        while time.monotonic() < fim_espera:
+            try:
+                atual = json.loads(caminho_andamento.read_text(encoding="utf-8"))
+                if not atual.get("em_andamento"):
+                    return {
+                        "exit_code": atual.get("exit_code", 0),
+                        "stdout": atual.get("stdout", {"texto": "", "truncado": False, "bytes_total": 0}),
+                        "stderr": atual.get("stderr", {"texto": "", "truncado": False, "bytes_total": 0}),
+                        "cwd": str(d_cwd),
+                    }
+            except (OSError, ValueError):
+                pass
+            time.sleep(0.05)
+        return {
+            "em_andamento": True,
+            "id": rid,
+            "resultado": str(caminho_andamento),
+            "motivo": (f"em andamento: {slug} passou do prazo da chamada e segue no host ate "
+                       f"{d_andamento.get('timeout', timeout)}s; o retorno final sera gravado em {caminho_andamento}"),
+            "como_ler": (f'ler_arquivo(caminho="{caminho_andamento}") — com em_andamento ainda roda; sem ele, '
+                         "e o retorno final (exit_code, stdout, stderr)"),
+            "cwd": str(d_cwd),
+        }
     try:
         p = subprocess.Popen(argv, cwd=d_cwd, env=env, preexec_fn=_rlimits_filho,
                              stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
