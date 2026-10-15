@@ -61,6 +61,13 @@ do posto: as duas linhas e a tabela que manda cada provider ao seu arquivo em
 posto, que toda instância roda, confere a igualdade antes de instalar e para se divergirem.
 Mudou um, muda o outro no mesmo ato, senão nenhuma instância atualiza.
 
+**O slug se diz de três jeitos (dono, 15/10/2026).** A primeira linha da mensagem, sozinha,
+como tupla — `(ia, harness)` ou `(ia)`, cadeira e depois chapéu —, «abre como ti» ou
+«monta-sessao(ia, chapeu=harness)». Quem reconhece é o modelo lendo o arranque de conta, não um
+parser: o hook do Code só roda no Code e não imprime no turno do dono, e o texto do arranque é o
+único ponto que alcança toda superfície. Aparte entre parênteses lido como tupla custa pouco: a
+abertura recusa cadeira desconhecida e devolve a lista das válidas.
+
 - **Worktree não injeta nada.** Ela isola branch, que é o que git worktree faz bem;
   identidade lida de dentro dela é a cópia congelada que este arquivo elimina.
 - **`PF_CADEIRA` não atravessa no Code, e isto foi medido (TI, 16/08):** `Bash` está
