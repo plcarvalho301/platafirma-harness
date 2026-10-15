@@ -1159,7 +1159,7 @@ abrir_direto_em_main() {
     "$rotulo" "$wt_dir" "$ramo" "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)" "$atras" "$frente" \
     "$estado_arvore" "$andou"
   local card_num="${card###}"
-  if [[ "$card_num" =~ ^[0-9]+$ ]]; then move_card "$card_num"; fi
+  if [[ "$card_num" =~ ^[0-9]+$ ]]; then move_card "$card_num" "$nome"; fi
   return 0
 }
 
@@ -1498,7 +1498,7 @@ cmd_abrir() {
       "$wt_dir" "$(ramo_atual "$ja")" "$("$GIT" -C "$ja" rev-parse --short HEAD)" "$atras" "$estado_arvore"
     # Card #3526 (R20): reabrir a bancada tambem poe o card em execucao e grava o executor. Antes
     # so a bancada nova movia, e a story de uma fita que voltava ficava onde estava.
-    [[ "${card###}" =~ ^[0-9]+$ ]] && move_card "${card###}"
+    [[ "${card###}" =~ ^[0-9]+$ ]] && move_card "${card###}" "$nome"
     printf 'próximo: teste rodar %s <alvo>\n' "$nome"
     return 0
   fi
@@ -1551,7 +1551,7 @@ cmd_abrir() {
         "$wt_dir" "$(ramo_atual "$wt_dir")" "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)" \
         "$("$GIT" -C "$wt_dir" rev-list --count HEAD..origin/main 2>/dev/null || echo '?')"
       # card #3526: tambem aqui, com a bancada ja aberta, move o card e grava o executor
-      [[ "$card_num" =~ ^[0-9]+$ ]] && move_card "$card_num"
+      [[ "$card_num" =~ ^[0-9]+$ ]] && move_card "$card_num" "$nome"
       printf 'próximo: teste rodar %s <alvo>\n' "$nome"
       return 0
     fi
@@ -1564,7 +1564,7 @@ cmd_abrir() {
     fi
     printf 'bancada aberta: %s (ramo %s @ %s, atras de origin/main: %s, arvore limpa)\n' "$wt_dir" "$ramo_alvo" \
       "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)" "$("$GIT" -C "$wt_dir" rev-list --count HEAD..origin/main 2>/dev/null || echo '?')"
-    [[ "$card_num" =~ ^[0-9]+$ ]] && move_card "$card_num"
+    [[ "$card_num" =~ ^[0-9]+$ ]] && move_card "$card_num" "$nome"
     guarda_sessao_viva "$wt_dir" "$assumir"
     printf 'próximo: teste rodar %s <alvo>\n' "$nome"
   else
@@ -1617,19 +1617,24 @@ grava_executor() {
   return 0
 }
 
-# move_card <n> -- abrir com card poe o card em em-execucao no mesmo ato. Recusa do
+# move_card <n> [repo] -- abrir com card poe o card em em-refinamento-tecnico (regime
+# ramo e PR) ou em-execucao (direto em main, arq:0096) no mesmo ato. Recusa do
 # rastreador (card sem corpo, estado que nao anda) se declara na saida e NAO derruba o
 # abrir: a bancada ja existe, e o card e ato do rastreador (spec_ambiente-de-desenvolvimento §2).
 move_card() {
-  local n="$1" tarefas_bin="${PF_TAREFAS_BIN:-$(dirname "$(readlink -f "$0")")/tarefas}" out rc
+  local n="$1" repo="${2:-${nome:-}}" tarefas_bin="${PF_TAREFAS_BIN:-$(dirname "$(readlink -f "$0")")/tarefas}" out rc
   if [ ! -x "$tarefas_bin" ]; then
     printf 'card #%s: nao movido (verbo tarefas ausente em %s)\n' "$n" "$tarefas_bin"
     return 0
   fi
   grava_executor "$n" "$tarefas_bin"
-  out="$("$tarefas_bin" mover "$n" em-execucao 2>&1)"; rc=$?
+  local destino="em-refinamento-tecnico"
+  if direto_em_main "$repo"; then
+    destino="em-execucao"
+  fi
+  out="$("$tarefas_bin" mover "$n" "$destino" 2>&1)"; rc=$?
   if [ "$rc" -eq 0 ]; then
-    printf 'card #%s: em-execucao (%s)\n' "$n" "$(printf '%s' "$out" | head -1)"
+    printf 'card #%s: %s (%s)\n' "$n" "$destino" "$(printf '%s' "$out" | head -1)"
   else
     printf 'card #%s: rastreador recusou mover (exit %s): %s\n' "$n" "$rc" "$(printf '%s' "$out" | head -1)"
   fi
@@ -1776,6 +1781,27 @@ ato_commitar() {
   ramo="$(ramo_atual "$c")"
   ramo_da_cadeira "$ramo" || morre "commit recusado: o ramo '$ramo' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, main)." 3
 
+  # arq:0096, Consequências (card #3599): story de código só comita em em-execucao
+  if ! direto_em_main "$nome"; then
+    local card_num=""
+    if [[ "$ramo" =~ ^fabrica/([0-9]+) ]]; then
+      card_num="${BASH_REMATCH[1]}"
+    elif [[ "$(basename "$c")" =~ ^([0-9]+) ]]; then
+      card_num="${BASH_REMATCH[1]}"
+    fi
+    if [ -n "$card_num" ]; then
+      local tarefas_bin="${PF_TAREFAS_BIN:-$(dirname "$(readlink -f "$0")")/tarefas}"
+      if [ -x "$tarefas_bin" ]; then
+        local item nivel estado
+        item="$("$tarefas_bin" api GET "/itens/$card_num" 2>/dev/null)" || item=""
+        nivel="$(printf '%s' "$item" | jq -r '.nivel_nome // empty' 2>/dev/null)" || nivel=""
+        estado="$(printf '%s' "$item" | jq -r '.estado // empty' 2>/dev/null)" || estado=""
+        if [ "$nivel" = "story" ] && [ -n "$estado" ] && [ "$estado" != "em-execucao" ]; then
+          morre "story #$card_num em $estado: escreva o Plano e mova para em-execucao (tarefas modelo story refinada)" 4
+        fi
+      fi
+    fi
+  fi
 
   if [ "$tudo" -eq 1 ]; then
     printf 'deprecado: --tudo faz add -A no clone compartilhado; prefira caminhos nomeados ou lista da sessão\n' >&2
