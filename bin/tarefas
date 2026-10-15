@@ -726,8 +726,37 @@ comentar() {
     exit 2
   fi
   local html; html=$(printf '%s' "$txt" | para_html)
-  jq -n --arg c "$html" '{corpo:$c}' | envia POST "/itens/$id/comentarios" \
-    | jq -r '"comentário #\(.id) criado no item \(.item)"'
+  local corpo saida status body
+  corpo=$(jq -n --arg c "$html" '{corpo:$c}')
+  # CARD #3614: a recusa de tipo (épico/feature sem tipo na primeira linha, ou tipo fora
+  # da fase aceita) traz `aceitos` — mesmo campo e mesmo estilo que `fechar_comentario`
+  # já imprime para o fecho fora do vocabulário; `_recusa`, genérico a todo verbo, não
+  # sabe rotular «tipo aceito».
+  if [ -n "$QUEM" ]; then
+    saida=$(printf '%s' "$corpo" | curl -s -X POST "$BASE/itens/$id/comentarios" \
+                 -H 'Content-Type: application/json' \
+                 -H "x-auth-request-preferred-username: $QUEM" -d @- -w '\n%{http_code}')
+  else
+    saida=$(printf '%s' "$corpo" | curl -s -X POST "$BASE/itens/$id/comentarios" \
+                 -H 'Content-Type: application/json' -d @- -w '\n%{http_code}')
+  fi
+  status="${saida##*$'\n'}"
+  body="${saida%$'\n'*}"
+  case "$status" in
+    201)
+      printf '%s' "$body" | jq -r '"comentário #\(.id) criado no item \(.item)"'
+      ;;
+    400)
+      printf '%s' "$body" | jq -r '
+        .erro,
+        ((.aceitos // [])[] | "  tipo aceito: \(.codigo) (\(.nome))")
+      ' >&2
+      exit 4 ;;
+    *)
+      local msg; msg=$(printf '%s' "$body" | jq -r '.erro // empty' 2>/dev/null || true)
+      printf '%s\n' "${msg:-falha ao falar com o rastreador em $BASE (status ${status:-desconhecido})}" >&2
+      exit 1 ;;
+  esac
 }
 
 # O FECHO VAI DIRETO À ROTA PRÓPRIA — card #3593 (R6, R7 da spec comentario-tipado):
