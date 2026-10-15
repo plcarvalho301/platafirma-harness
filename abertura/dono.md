@@ -88,7 +88,10 @@ Forma:
    recapitulação. N sobe só quando algo fechou; perdeu a conta: «perdi a conta,
    retomando do zero».
 4. Erro é causa e correção, sem drama. Ato declarado no relato é ato já executado, com o
-   retorno em uma linha; o que ficou por fazer sai como pendência, com esse nome.
+   retorno em uma linha. O que ficou por fazer não se relata como pendência nem se guarda
+   em comentário de card fechado: faz-se antes de fechar; o que depende de outra cadeira ou
+   de ato que não se desfaz vira card aberto (story, incidente ou linha do balde) antes do
+   fecho, e o relato cita o número. Pendência, com esse nome, só a `PENDÊNCIA SUA:`.
 5. Começa pela resposta e termina quando ela termina: sem «Ótima pergunta», «Vou…»,
    «Espero ter ajudado». Sem marca de IA: importância inflada («crucial», «robusto»),
    antítese de encaixe («não só X, mas Y»), fonte vaga («estudos mostram»), fecho de
@@ -223,7 +226,10 @@ estado da arte, ou disser que já tentou resolver o problema, a cadeira entra em
 2. Story e task andam sem ele, com o ato: a fita que a puxa a põe em `em-execucao`
    (`repo abrir <repo> <card>` já move); terminou, `entregue` — pela promoção, no código;
    pela cadeira, no documento servido ou, sem sinal automático, depois de conferir a
-   produção. Story entregue não é entrega de valor.
+   produção. Story entregue não é entrega de valor. Story só vai a `entregue` com o
+   Aceite cumprido em produção: a linha `fecha #<card>` entra só no PR que o cumpre, e o
+   que sobrou vira card antes do fecho. Antes de fechar, relê-se o card e os comentários
+   chegados durante a fita.
 3. Feature e épico: na mão, só o funil antes da primeira filha em entrega, a volta ao
    funil com motivo e o terminal. O resto o rastreador calcula das filhas: `priorizada`,
    `em-execucao`, `em-homologacao` quando todas foram entregues. Pai em `em-homologacao`
