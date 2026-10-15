@@ -121,7 +121,8 @@ def amb(tmp_path):
 
 
 def test_push_verde_mede_no_venv_da_chave(amb):
-    amb.commit("outro.txt", "muda algo\n")
+    # arq:0128: linha sem raio so roda quando o proprio arquivo mudou; o teste muda o dele
+    amb.commit("controle/tests/test_fixture.py", TESTE_OK + "# editado\n")
     r = amb.push()
     assert r.returncode == 0, r.stdout + r.stderr
     saida = r.stdout + r.stderr
@@ -178,12 +179,13 @@ def test_push_mede_so_o_que_o_diff_da_base_alcanca(amb):
     r = amb.push()
     assert r.returncode == 0, r.stdout + r.stderr
     assert "raio total" not in r.stderr, r.stderr
-    assert "seleção: 2 de 2 arquivos" in r.stderr, r.stderr   # a linha nova roda, e a sem raio tambem
+    # a linha nova roda; a sem raio fica de fora (arq:0128: so roda se o proprio arquivo mudou)
+    assert "seleção: 1 de 2 arquivos (pulados: tests/test_fixture.py)" in r.stderr, r.stderr
 
     amb.commit("dados/valor.txt", "ruim\n")   # o teste quebraria, mas o diff nao alcanca o raio dele
     r = amb.push()
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "seleção: 1 de 2 arquivos (pulados: tests/test_dado.py)" in r.stderr, r.stderr
+    assert "seleção: 0 de 2 arquivos" in r.stderr, r.stderr
 
     amb.commit("src/x.txt", "x\n")             # agora o diff alcanca: o teste roda e reprova
     r = amb.push()

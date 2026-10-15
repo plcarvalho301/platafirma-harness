@@ -51,12 +51,14 @@ uso:
             subárvore de teste, e passa quando todas passam (arq:0116 §6)
   --arvore <caminho>: roda a árvore materializada (exigida sob a raiz de release)
   --base <rev>: só com --portao: roda o que o diff de <rev> até a árvore alcança (card #3370).
-                Linha da lista sem barra vertical roda sempre; a forma "arquivo | glob glob" roda quando
-                algum glob (relativo à raiz do repositório) casa um arquivo do diff, ou o
-                próprio arquivo mudou, ou a linha entrou ou mudou na lista. Raio total (lock,
-                construtor do venv, conftest: o que muda o ambiente de todo teste) roda a lista
-                inteira; o resto entra só pelo raio declarado (#3535). Sem --base, ou base
-                ilegível, a lista inteira
+                Roda só: a linha "arquivo | regressivo #n"; a "arquivo | glob glob" quando algum glob
+                (relativo à raiz do repositório) casa um arquivo do diff; a cujo próprio arquivo
+                mudou; a que entrou ou mudou na lista. Linha sem raio só roda nos dois últimos casos
+                (arq:0128). Raio total (lock, construtor do venv, conftest: o que muda o ambiente de
+                todo teste) roda a lista inteira. A linha "arquivo | preparo" (o build de que as
+                provas dependem) roda antes, só quando a seleção não é vazia, e não conta nela.
+                Sem --base, a lista inteira; base que não se lê sai 5 (não medido) e nunca vira lista
+                inteira
   --origin-main: só com --portao, sem <alvo> e sem --arvore: busca origin/main no clone base da
                  bancada, mede a lista inteira numa árvore descartável dele e a remove (a
                  rodada diária do bot, card #3370; não grava veredito de seleção)
@@ -67,7 +69,8 @@ interpretador: venv construído pelo registro
 exit: 0 suíte verde / inventário lido · 1 suíte vermelha / sem bancada
       2 uso / nome desconhecido / nome duplicado / --ajuda · 3 dependência ausente
       4 alvo fora da subárvore ou --arvore fora da raiz
-      5 indeterminável (nenhuma stack detectada, stack sem lock, lista de portão ausente)
+      5 indeterminável (nenhuma stack detectada, stack sem lock, lista de portão ausente,
+        base de --base que não se lê)
       6 só com PF_TESTE_SO_MEMO=1: árvore ainda sem veredito gravado (nada rodou)
 EOF
   exit 2
@@ -798,20 +801,8 @@ alcanca() {  # $1=arquivo da lista (relativo à raiz do repo) $2=globs $3=diff ;
   return 1
 }
 
-# Linha sem raio declarado (#3535): alcançada por arquivo do diff que não é documentação e
-# não mora na subárvore de outra chave da família (outras_subs, do chamador).
-alcanca_sem_raio() {  # $1=diff ; 0 = alcança
-  local f s
-  while IFS= read -r f; do
-    [ -n "$f" ] || continue
-    case "$f" in *.md|docs/*) continue ;; esac
-    for s in ${outras_subs[@]+"${outras_subs[@]}"}; do
-      case "$f" in "$s"/*) continue 2 ;; esac
-    done
-    return 0
-  done <<<"$1"
-  return 1
-}
+# arq:0128: linha sem raio não é alcançada por diff nenhum. Só roda quando o próprio arquivo dela
+# mudou ou quando ela entrou ou mudou na lista (`alcanca` com globs vazios).
 
 # Chave do memo do portão: (árvore, chave) na rodada inteira; (árvore, chave, hash da
 # seleção) na parcial. Veredito parcial nunca responde pela rodada inteira.
@@ -839,7 +830,9 @@ portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvor
         base_args=(--base "$base")
       fi
     else
-      printf '%s: aviso: base %s ilegível em %s — lista inteira\n' "$VERBO" "$base" "$c" >&2
+      # arq:0128 §5: base que não se lê é falha de ambiente, não lista inteira
+      printf 'portao %s: NAO MEDIDO — base %s ilegível em %s\n' "$familia" "$base" "$c"
+      return 5
     fi
   fi
   venvs="${PLATAFIRMA_VENVS:-$c/registro/venvs.json}"
@@ -1106,8 +1099,9 @@ ato_rodar() {
         "$nome" "${REG_SUBARVORE:-.}"
       exit 5
     fi
-    # card #3370: com --base, roda o que o diff alcança. Raio total (lista fixa no código)
-    # ou base ilegível: a lista inteira, como antes.
+    # card #3370, arq:0128: com --base, roda o que o diff alcança pelo raio declarado e os
+    # regressivos, e mais nenhum. Raio total (lista fixa no código): a lista inteira. Base
+    # ilegível: sai 5, não medido.
     local seleciona=0 dif="" tot="" pulados=() sel_rels=() n_lista=0 linha_crua globs dest rel_repo
     if [ -n "$base" ] && [ -z "$alvo" ]; then
       if dif="$(diff_da_base "$c" "$base" "$EM_ARVORE")"; then
@@ -1117,18 +1111,14 @@ ato_rodar() {
           seleciona=1
         fi
       else
-        printf '%s: aviso: base %s ilegível em %s — lista inteira\n' "$VERBO" "$base" "$c" >&2
+        # arq:0128 §5: base que não se lê é falha de ambiente, não lista inteira
+        printf 'suite INDISPONIVEL: %s — base %s ilegível em %s\n' "$nome" "$base" "$c"
+        exit 5
       fi
     fi
-    local novas_lista="" outras_subs=() regr pula _v _k _l _s
+    local novas_lista="" regr prep pula preparos_dest=()
     if [ "$seleciona" -eq 1 ]; then
       novas_lista="$(linhas_novas_da_lista "$c" "$lista_portao" "$base" "$EM_ARVORE")"
-      # subárvores das outras chaves da família: mudança só nelas não alcança linha sem raio
-      _v="${PLATAFIRMA_VENVS:-$c/registro/venvs.json}"
-      [ -r "$_v" ] || _v="$(dirname "$(readlink -f "$0")")/../registro/venvs.json"
-      while IFS=$'\t' read -r _k _l _s; do
-        [ -n "$_s" ] && [ "$_k" != "$REG_STACK" ] && outras_subs+=("$_s")
-      done < <(PLATAFIRMA_VENVS="$_v" python3 "$REGISTRO" --familia "$REG_FAMILIA" 2>/dev/null)
     fi
     while IFS= read -r linha_crua; do
       case "$linha_crua" in ''|'#'*) continue ;; esac
@@ -1141,19 +1131,20 @@ ato_rodar() {
       else
         ausentes+=("$linha"); continue
       fi
+      # arq:0128 §6: `arquivo | preparo` (o build de que as provas dependem) não é teste: não
+      # entra na contagem nem é selecionado por si; roda antes, quando a seleção não é vazia.
+      prep=0
+      case "${globs#"${globs%%[![:space:]]*}"}" in preparo|preparo[[:space:]]*) prep=1 ;; esac
+      if [ "$prep" -eq 1 ] && [ "$seleciona" -eq 1 ]; then preparos_dest+=("$dest"); continue; fi
       n_lista=$((n_lista + 1))
-      # regra do dono (14/10/2026, #3535): roda o raio de ataque da mudança e os regressivos.
-      # `arquivo | regressivo #<defeito>` roda sempre; linha sem raio roda quando a mudança
-      # toca código fora das subárvores das outras chaves (documentação não conta).
+      # arq:0128: roda o raio de ataque da mudança e os regressivos, e mais nenhum. `arquivo |
+      # regressivo #<defeito>` roda sempre; linha com raio roda se algum glob casa o diff; linha
+      # sem raio só roda quando o próprio arquivo mudou ou quando entrou ou mudou na lista.
       if [ "$seleciona" -eq 1 ]; then
         regr=0; pula=0
         case "${globs#"${globs%%[![:space:]]*}"}" in regressivo|regressivo[[:space:]]*) regr=1 ;; esac
         if [ "$regr" -eq 0 ] && ! printf '%s\n' "$novas_lista" | grep -qxF -- "$linha"; then
-          if [ -n "$globs" ]; then
-            alcanca "$rel_repo" "$globs" "$dif" || pula=1
-          else
-            alcanca "$rel_repo" "" "$dif" || alcanca_sem_raio "$dif" || pula=1
-          fi
+          alcanca "$rel_repo" "$globs" "$dif" || pula=1
         fi
         if [ "$pula" -eq 1 ]; then pulados+=("$linha"); continue; fi
       fi
@@ -1179,6 +1170,10 @@ ato_rodar() {
         printf 'suite VERDE: %s — nenhum arquivo da lista alcançado pela mudança (%s de %s pulados)\n' \
           "$nome" "${#pulados[@]}" "$n_lista"
         return 0
+      fi
+      # o preparo vai na frente: as provas medem o que ele constrói
+      if [ "${#preparos_dest[@]}" -gt 0 ]; then
+        alvos=("${preparos_dest[@]}" "${alvos[@]}")
       fi
     fi
     if [ "${#alvos[@]}" -eq 0 ]; then
