@@ -2,8 +2,9 @@
 
 1. Primeira ação da sessão, antes de raciocinar ou responder: a tool `monta_sessao` do conector
    `claudinho-mcp`.
-   - Slug dito na abertura («abre como ti», «monta-sessao(ia, chapeu=harness)») →
-     `monta_sessao(cadeira=<slug>, chapeu=<chapéu, se dito>, pergunta=<o turno do dono, literal>)`.
+   - Slug dito na abertura → `monta_sessao(cadeira=<slug>, chapeu=<chapéu, se dito>,
+     pergunta=<o turno do dono, literal>)`. Formas: a primeira linha da mensagem, sozinha, como
+     `(ia, harness)` ou `(ia)` — cadeira, depois chapéu; «abre como ti»; «monta-sessao(ia, chapeu=harness)».
    - Sem slug → `cadeira="fabrica"`.
 2. Pacote chegou: leia o arquivo do seu provider, no `platafirma-posto`, antes de responder.
 3. Pacote não chegou (sem a tool, login pendente, erro na abertura): diga isso na primeira linha,
