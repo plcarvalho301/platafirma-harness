@@ -19,17 +19,26 @@ TOKEN = {"authorization": "Bearer a.b.c"}
 
 def test_autoteste_da_borda(capsys):
     borda._autoteste()
-    assert "borda OK (#3516)" in capsys.readouterr().out
+    assert "borda OK (#3516, #3518)" in capsys.readouterr().out
 
 
 def test_a_lista_de_atos_da_face_motor_e_a_do_cabecalho_do_verbo_real():
     atos = borda.Face("motor", verbo=str(MOTOR)).atos()
-    assert set(atos) == {"buscar", "medir", "listar", "ajuste", "indexar", "trocar", "consultas", "trabalhos"}
+    assert set(atos) == {"buscar", "medir", "listar", "ajuste", "indexar", "trocar", "consultas", "trabalhos",
+                         "estado", "parar"}
     assert atos["ajuste"] == {"leitura", "escrita"}
     assert atos["trocar"] == {"escrita"} and atos["indexar"] == {"escrita"}
     assert atos["consultas"] == {"leitura"} and atos["trabalhos"] == {"leitura"}
+    # o estado da troca e leitura (buraco #2553) e parar a sombra e escrita (buraco #2554), #3518
+    assert atos["estado"] == {"leitura"} and atos["parar"] == {"escrita"}
     # a linha de exclusao (instrumento de medida da ia) nao tem face
     assert not {"sortear", "parear", "escrever", "julgar", "lintar", "eleger"} & set(atos)
+
+
+def test_a_face_motor_alcanca_do_fila_so_o_contestar():
+    """#3518, buraco #2555: o `fila` declara para a face motor so o `contestar`, de escrita; o `enviar` geral fica fora."""
+    atos = borda.Face("motor", verbo=str(AQUI.parent / "bin" / "fila")).atos()
+    assert atos == {"contestar": {"escrita"}}
 
 
 def test_o_cabecalho_novo_do_verbo_vale_sem_reiniciar_a_borda(tmp_path):

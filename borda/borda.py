@@ -190,7 +190,12 @@ class Borda:
 
     def __init__(self, faces, origens=(), porta_url="", chamar_porta=None,
                  cabecalho_token="authorization", saida=None):
-        self.faces = {f.nome: f for f in faces}
+        # Uma face pode chamar mais de um verbo (#3518: o `contestar` do `fila` na face motor): cada verbo declara
+        # no cabeçalho os atos dele para a face, e a carga da face é a união. O mesmo ato declarado por dois verbos
+        # da mesma face não se resolve por ordem: a borda falha fechada (503).
+        self.faces = {}
+        for f in faces:
+            self.faces.setdefault(f.nome, []).append(f)
         self.origens = tuple(o.strip() for o in origens if o and o.strip())
         self.cabecalho_token = cabecalho_token.strip().lower()
         self._chamar = chamar_porta or (
@@ -215,19 +220,25 @@ class Borda:
             if motivo is not None:
                 return await self._recusar("escrita-recusada", scope, cab, motivo, send)
         achou = ROTA.match(caminho)
-        face = self.faces.get(achou.group(1)) if achou else None
-        if face is None:
+        verbos = self.faces.get(achou.group(1)) if achou else None
+        if not verbos:
             return await _responder(send, 404, {"erro": "rota fora de /api/<face>/<ato>"})
         if metodo not in ("GET", "POST"):
             return await _responder(send, 405, {"erro": "só GET e POST"},
                                     extra=[(b"allow", b"GET, POST")])
-        atos = face.atos()
-        if atos is None:
-            return await _responder(send, 503, {"erro": "o cabeçalho do verbo não carregou"})
         ato = achou.group(2)
-        capacidades = atos.get(ato)
-        if capacidades is None:
+        donos = []
+        for f in verbos:
+            atos = f.atos()
+            if atos is None:
+                return await _responder(send, 503, {"erro": "o cabeçalho do verbo não carregou"})
+            if ato in atos:
+                donos.append((f, atos[ato]))
+        if len(donos) > 1:
+            return await _responder(send, 503, {"erro": "o ato é declarado por dois verbos da face"})
+        if not donos:
             return await self._recusar("ato-recusado", scope, cab, "ato fora da carga da face", send)
+        face, capacidades = donos[0]
         if metodo == "GET" and "leitura" not in capacidades:
             return await self._recusar("ato-recusado", scope, cab, "ato de escrita por GET", send)
         if metodo == "POST" and "escrita" not in capacidades:
@@ -366,14 +377,16 @@ async def _lifespan(receive, send):
 # --- a instância ------------------------------------------------------------------------------
 def criar_app(env=None):
     """A borda da instância, da configuração dela: nada disto é código. `BORDA_FACES` é um JSON
-    `{"<face>": {"verbo": "<arquivo do verbo na release>", "instancia": "rag", "sem_instancia": ["listar"]}}`."""
+    `{"<face>": {"verbo": "<arquivo do verbo na release>", "instancia": "rag", "sem_instancia": ["listar"]}}`;
+    a face que chama mais de um verbo leva a lista deles: `{"<face>": [{"verbo": ...}, {"verbo": ...}]}`."""
     env = os.environ if env is None else env
     faces = []
     try:
         declaradas = json.loads(env.get("BORDA_FACES") or "{}")
-        for nome, d in declaradas.items():
-            faces.append(Face(nome, verbo=d["verbo"], instancia=d.get("instancia"),
-                              sem_instancia=d.get("sem_instancia", ())))
+        for nome, ds in declaradas.items():
+            for d in (ds if isinstance(ds, list) else [ds]):
+                faces.append(Face(nome, verbo=d["verbo"], instancia=d.get("instancia"),
+                                  sem_instancia=d.get("sem_instancia", ())))
     except (ValueError, KeyError, TypeError, AttributeError) as e:
         print(json.dumps({"evento": "config-ilegivel", "variavel": "BORDA_FACES", "tipo": type(e).__name__}),
               flush=True)
@@ -541,7 +554,31 @@ def _autoteste():
     assert _envelope_do_rpc("application/json", b'{"result": {"isError": true}}')[0] == 502
     assert _envelope_do_rpc("application/json", b"nao e json")[0] == 502
     print("borda: o envelope da porta se lê do corpo JSON e do fluxo de eventos                       ok")
-    print("borda OK (#3516)")
+
+    # 8. uma face com dois verbos (#3518): a carga é a união, cada ato vai ao verbo que o declara, sem a
+    #    instância do outro; o mesmo ato em dois verbos da face falha fechado.
+    fila = Face("motor", cabecalho=("#!/usr/bin/env python3\n# fila\n"
+                                   "# atos: enviar (escrita, mensagem) · contestar (escrita, mensagem)\n"
+                                   "# face: contestar=motor\nimport sys\n"), tool="fila")
+    chamadas.clear()
+    duas = Borda([face, fila], origens=(origem,), chamar_porta=porta, saida=io.StringIO())
+    corpo = json.dumps({"args": ["ia", "--indicador", "taxa"], "fundamento": "a amostra é pequena"}).encode()
+    assert asyncio.run(_chamar(duas, "POST", "/api/motor/contestar", da_tela, corpo))[0] == 200
+    assert chamadas[-1] == ("a.b.c", "fila", {"ato": "contestar", "turno_fonte": "face", "turno_texto": "a amostra é pequena",
+                                            "args": ["ia", "--indicador", "taxa"]}), chamadas[-1]
+    assert asyncio.run(_chamar(duas, "GET", "/api/motor/buscar", token, consulta=b"a=biblioteca"))[0] == 200
+    assert chamadas[-1][1] == "motor" and chamadas[-1][2]["ato"] == "rag"
+    assert asyncio.run(_chamar(duas, "POST", "/api/motor/enviar", da_tela, b"{}"))[0] == 403, "enviar não é da face"
+    assert asyncio.run(_chamar(duas, "GET", "/api/motor/contestar", token))[0] == 403, "contestar é escrita"
+    gemeo = Face("motor", cabecalho="# outro\n# atos: buscar (leitura, busca)\n# face: buscar=motor\n", tool="outro")
+    ambigua = Borda([face, gemeo], origens=(origem,), chamar_porta=porta, saida=io.StringIO())
+    antes = len(chamadas)
+    assert asyncio.run(_chamar(ambigua, "GET", "/api/motor/buscar", token))[0] == 503
+    assert len(chamadas) == antes
+    lista = criar_app({"BORDA_FACES": json.dumps({"motor": [{"verbo": "/a/motor", "instancia": "rag"}, {"verbo": "/a/fila"}]})})
+    assert [(f.tool, f.instancia) for f in lista.faces["motor"]] == [("motor", "rag"), ("fila", None)]
+    print("borda: face com dois verbos — cada ato ao verbo que o declara, o ato duplicado falha fechado   ok")
+    print("borda OK (#3516, #3518)")
 
 
 if __name__ == "__main__":

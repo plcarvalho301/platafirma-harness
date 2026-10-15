@@ -5,7 +5,7 @@
 # componente: platafirma-motor
 # classe: B
 # use para: achar pelo sentido o trecho que responde a X (buscar <particao> --necessidade "<uma frase que nomeia o assunto pelo termo do acervo>"; o verbo manda a pergunta com a necessidade e, com PF_CHAPEU, o chapeu com cadeira, chapeu e rotulos dele; recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou | ou vem em saco de palavras; --origem abertura|bench|sombra|autoteste manda o texto literal, sem lint e sem montagem; `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar biblioteca obra --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), medir sem gravar a eleicao de chapeu sobre o log de perguntas (eleger), medir sem gravar quanto do log o lint da consulta montada recusaria (lintar), comparar a chamada de hoje, a frase do dono e a lista montada nas perguntas do piloto, ou, com --do-log, a busca de hoje e a busca com o eleito do chapeu nas chamadas do log (parear biblioteca), julgar com o juiz (Claude) as respostas do piloto da escada e medir o juiz contra a primeira passada do dono: kappa, divergencias, tempo e lote de conferencia (julgar biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste), ler o log de recuperacao com filtro ou a serie diaria de cobertura (consultas), ver os lotes do rag e as sombras de bench com o estado de vida (trabalhos)
-# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote), julgar (escrita, lote), eleger (leitura, medida), consultas (leitura, medida), trabalhos (leitura, medida)
+# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, gabarito), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote), julgar (escrita, lote), eleger (leitura, medida), consultas (leitura, medida), trabalhos (leitura, medida), estado (leitura, geracao), parar (escrita, medida)
 # (buscar/medir/indexar/trocar/sortear/escrever/parear/julgar exigem particao; eleger e lintar leem o log inteiro e nao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar|desativar), eventos, juiz)
 # forma: json
 # cauda: nao
@@ -26,6 +26,8 @@
 # le: eleger=motor
 # le: consultas=motor
 # le: trabalhos=motor
+# le: estado=motor,arquivo-local
+# le: parar=motor
 # escreve: listar=nada
 # escreve: ajuste=motor,arquivo-local
 # escreve: buscar=arquivo-local
@@ -40,6 +42,8 @@
 # escreve: eleger=nada
 # escreve: consultas=nada
 # escreve: trabalhos=nada
+# escreve: estado=nada
+# escreve: parar=motor
 # face: buscar=motor
 # face: medir=motor
 # face: listar=motor
@@ -48,6 +52,8 @@
 # face: trocar=motor
 # face: consultas=motor
 # face: trabalhos=motor
+# face: estado=motor
+# face: parar=motor
 # rotulo: buscar=Buscar no acervo
 # rotulo: medir=Medir o acerto da busca
 # rotulo: listar=Listar instancias do motor
@@ -57,6 +63,9 @@
 # rotulo: trocar --virar=Virar a geracao em sombra
 # rotulo: consultas=Listar consultas a busca
 # rotulo: trabalhos=Listar trabalhos longos do motor
+# rotulo: estado=Ler o estado da troca
+# rotulo: parar=Parar a sombra de bench
+# rotulo: trocar --descartar=Descartar a geracao em sombra
 # volta: buscar=sim — so le o indice; a busca entra no log de consultas
 # volta: medir=sim — a medicao entra no historico e nao muda o servido
 # volta: listar=sim — so le
@@ -66,6 +75,12 @@
 # volta: trocar --virar=nao
 # volta: consultas=sim — so le
 # volta: trabalhos=sim — so le
+# volta: estado=sim — so le
+# volta: parar=nao
+# volta: trocar --descartar=nao
+# (parar e descartar nao voltam: a sombra de bench parada nao retoma, e `medir --sombra` abre outra do zero; a
+#  geracao em sombra descartada se apaga, e montar de novo e outra troca. #3518, buracos #2553 e #2554: o estado
+#  da troca sai por um ato de leitura proprio, `estado`, e parar a sombra por um ato de escrita proprio, `parar`.)
 # (face, rotulo e volta: arq:0124 §3, cards #3448 e #3532. A face e uma so por ato; o trocar declara o texto do
 #  controle por modo, porque os dois modos diferem na volta: montar a sombra se desfaz por --descartar; virar
 #  apaga a geracao anterior e nao volta. Ficam na exclusao "instrumento de medida da ia", sem face: sortear,
@@ -258,6 +273,12 @@ def uso(cod=2):
                                         linhas sem cobertura gravada a parte
   motor <inst> trabalhos [--json]       os lotes do rag e as sombras de bench, cada um vivo, parado ou nao consegui
                                         olhar, com desde quando
+  motor <inst> estado biblioteca [--json]
+                                        o estado da troca (geracao servindo, sombra, VRAM, pendencias), so
+                                        leitura: o mesmo de `trocar biblioteca --json`, num ato de leitura
+  motor <inst> parar biblioteca --sombra <id>
+                                        encerra a sombra de bench em curso (o `medir --sombra-parar`, num
+                                        ato de escrita); a sombra parada nao retoma
   motor <inst> indexar biblioteca [--obra <uuid>,…] [--promover] [--autor <slug>] [--apply] [--json]
                                         indexa a impressao selada da obra marcada para
                                         indexar, no rag-api, sem po-la no ar (plano sem --apply);
@@ -3607,6 +3628,36 @@ def _relatorio_em_json(inst, tok, lote):
     print(json.dumps({**r, "lido_em": lido_em, "fonte": fonte, "nao_consegui_olhar": {}}, ensure_ascii=False, indent=1))
 
 
+def cmd_estado(inst, argv):
+    """`motor <inst> estado <particao> [--json]` (#3518, buraco #2553): o estado da troca, so leitura. E o mesmo
+    que `trocar <particao> --json` devolve, num ato declarado de leitura: pela borda das faces o metodo casa com a
+    capacidade do ato (R32), e o `trocar` e so de escrita, entao a face so le o estado da troca por aqui."""
+    particao, argv = resolve_particao(argv, "estado")
+    como_json = False
+    for a in argv:
+        if a == "--json":
+            como_json = True
+        else:
+            _usa("estado", "motor <inst> estado <particao> [--json]", f"argumento desconhecido {a!r}")
+    if particao != "biblioteca":
+        print(f"motor estado {particao}: so a biblioteca troca de embedder (arq:0121 §7.3).", file=sys.stderr)
+        sys.exit(2)
+    tok = token_da(inst)
+    if como_json:
+        return _estado_da_troca_em_json(inst, tok, particao)
+    print(_texto_da_troca(_chama_troca(inst, tok, f"/{particao}")))
+
+
+def cmd_parar(inst, argv):
+    """`motor <inst> parar <particao> --sombra <id>` (#3518, buraco #2554): encerra a sombra de bench em curso.
+    E o `medir --sombra-parar`, num ato declarado de escrita: pela borda, parar por GET mudaria o servido sem
+    fundamento nem trilha. A sombra parada nao retoma."""
+    _particao, argv = resolve_particao(argv, "parar")
+    if len(argv) != 2 or argv[0] != "--sombra":
+        _usa("parar", "motor <inst> parar <particao> --sombra <id>", "diga a sombra: --sombra <AAAAMMDDTHHMMSS>")
+    return cmd_sombra_parar(inst, argv[1])
+
+
 def main():
     d = reg()
     a = sys.argv[1:]
@@ -3670,7 +3721,11 @@ def main():
         return cmd_consultas(a[0], inst, a[2:])
     if a[1] == "trabalhos":
         return cmd_trabalhos(a[0], inst, a[2:])
-    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, consultas, eleger, escrever, indexar, julgar, lintar, medir, parear, sortear, trabalhos, trocar", file=sys.stderr)
+    if a[1] == "estado":
+        return cmd_estado(inst, a[2:])
+    if a[1] == "parar":
+        return cmd_parar(inst, a[2:])
+    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, consultas, eleger, escrever, estado, indexar, julgar, lintar, medir, parar, parear, sortear, trabalhos, trocar", file=sys.stderr)
     sys.exit(1)
 
 

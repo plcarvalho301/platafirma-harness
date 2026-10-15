@@ -41,9 +41,11 @@ rota ou face desconhecida · 405 método fora de GET e POST · 413 corpo acima d
 | `BORDA_ORIGENS` | origens que podem escrever, vírgula entre valores; vazia, a borda só lê |
 | `BORDA_PORTA_URL` | a porta de verbos (`…/mcp`) |
 | `BORDA_CABECALHO_TOKEN` | cabeçalho em que o gate põe o token do dono (padrão do código `authorization`; o `compose.yaml` fixa `x-forwarded-access-token`, que é onde o gate do cubo o entrega) |
-| `BORDA_FACES` | JSON `{"<face>": {"verbo": "<arquivo>", "instancia": "rag", "sem_instancia": ["listar"]}}` |
+| `BORDA_FACES` | JSON `{"<face>": {"verbo": "<arquivo>", "instancia": "rag", "sem_instancia": ["listar"]}}`, ou uma lista desses quando a face chama mais de um verbo |
 
-Uma face chama um verbo só. A porta precisa de `PF_FACE_CLIENTS` com o client do gate do cubo: sem a lista ela
+Uma face pode chamar mais de um verbo (#3518): a face motor chama o `motor` e, do `fila`, só o `contestar`, que
+é o único ato que o cabeçalho do `fila` declara para ela. A carga da face é a união do que cada verbo declara;
+o mesmo ato declarado por dois verbos da mesma face sai 503, sem escolher um. A porta precisa de `PF_FACE_CLIENTS` com o client do gate do cubo: sem a lista ela
 nega toda fonte face.
 
 ## Teste

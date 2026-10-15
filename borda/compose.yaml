@@ -23,10 +23,11 @@ services:
       # X-Forwarded-Access-Token (e não em Authorization, que ele só preencheria com o ID token).
       # O código da borda segue com `authorization` como padrão; quem fixa o cabeçalho do cubo é este compose.
       BORDA_CABECALHO_TOKEN: ${BORDA_CABECALHO_TOKEN:-x-forwarded-access-token}
-      # Cada face e o verbo dela na release; a lista de atos vem do cabeçalho do verbo (`# face:`).
-      # Texto fixo, sem interpolação: a chave `}` do JSON fecharia o `${...}` do compose. Outra face ou
-      # outro caminho entra por compose.override.yaml da instância.
-      BORDA_FACES: '{"motor": {"verbo": "/opt/platafirma/current/harness/bin/motor", "instancia": "rag", "sem_instancia": ["listar"]}}'
+      # Cada face e os verbos dela na release; a lista de atos vem do cabeçalho de cada verbo (`# face:`).
+      # A face motor chama o `motor` e, do `fila`, só o `contestar` que o cabeçalho dele declara para ela
+      # (#3518, buraco #2555). Texto fixo, sem interpolação: a chave `}` do JSON fecharia o `${...}` do
+      # compose. Outra face ou outro caminho entra por compose.override.yaml da instância.
+      BORDA_FACES: '{"motor": [{"verbo": "/opt/platafirma/current/harness/bin/motor", "instancia": "rag", "sem_instancia": ["listar"]}, {"verbo": "/opt/platafirma/current/harness/bin/fila"}]}'
     volumes:
       # Só para ler o cabeçalho do verbo. Monta-se a raiz da release, e não só current/, porque current/
       # é link relativo para fora dele (mesma razão do controle/compose.yaml).

@@ -4,8 +4,11 @@
 # dono: ia
 # componente: harness
 # use para: caixa, carta, recado, handoff, 'o que chegou', mandar para outra cadeira
-# atos: status (leitura, mensagem) · ler (leitura, mensagem) · tratar (escrita, mensagem) · enviar (escrita, mensagem) · tipos (leitura, mensagem)
-# forma: status,tipos=lista · ler=texto · tratar=lista · enviar=objeto
+# atos: status (leitura, mensagem) · ler (leitura, mensagem) · tratar (escrita, mensagem) · enviar (escrita, mensagem) · tipos (leitura, mensagem) · contestar (escrita, mensagem)
+# forma: status,tipos=lista · ler=texto · tratar=lista · enviar=objeto · contestar=objeto
+# face: contestar=motor
+# rotulo: contestar=Contestar o indicador
+# volta: contestar=nao
 # cauda: nao
 # classe: B
 # consome: valkey@streams (protocolo redis — sem OpenAPI)
@@ -703,6 +706,45 @@ def cmd_enviar(rc, eu: str, args):
     print(msgid)
 
 
+# ---------- contestar ----------
+# Quem manda a contestacao pela face e o dono: a porta abre a chamada da face sem cadeira e com o `sub` dele em
+# PF_SUJEITO, e entrega o fundamento em PF_FUNDAMENTO (R22). Chamada por cadeira, o remetente e a cadeira e o
+# fundamento vem no stdin, como no `enviar`. O destinatario e a cadeira que configurou o indicador (R24).
+REMETENTE_DA_FACE = "dono"
+
+
+def cmd_contestar(rc, args):
+    cadeira = os.environ.get("PF_CADEIRA", "").strip()
+    if cadeira:
+        valida_persona(cadeira)
+        de = canoniza_persona(cadeira)
+    elif os.environ.get("PF_SUJEITO", "").strip():
+        de = REMETENTE_DA_FACE
+    else:
+        sys.stderr.write("erro: contestar sem cadeira nem sujeito: quem contesta e uma cadeira ou o dono pela face\n")
+        sys.exit(2)
+    indicador = (args.indicador or "").strip()
+    if not indicador:
+        sys.stderr.write("erro: contestar exige --indicador <nome do indicador contestado>\n")
+        sys.exit(2)
+    valida_persona(args.destinatario)
+    para = canoniza_persona(args.destinatario)
+    fundamento = (os.environ.get("PF_FUNDAMENTO") or "").strip()
+    if not fundamento and not sys.stdin.isatty():
+        fundamento = sys.stdin.read().strip()
+    if not fundamento:
+        sys.stderr.write("erro: contestar pede o fundamento (pela face, o texto do dono; por cadeira, no stdin)\n")
+        sys.exit(2)
+    existentes = {m["msgid"] for m in frias(rc, para)}
+    msgid = gerar_msgid(de, existentes, rc)
+    rc.xadd(stream_key(para), {
+        "id": msgid, "de": de, "tipo": TIPO_CONTESTACAO, "assunto": f"contestacao do indicador: {indicador}",
+        "ref": indicador, "responde": "", "corpo": fundamento,
+    })
+    print(json.dumps({"msgid": msgid, "de": de, "para": para, "tipo": TIPO_CONTESTACAO, "indicador": indicador},
+                     ensure_ascii=False))
+
+
 def build_parser():
     ap = argparse.ArgumentParser(prog="fila", add_help=False)
     ap.add_argument("--eu", default=None)
@@ -740,6 +782,10 @@ def build_parser():
     p_enviar.add_argument("--responde", default=None)
     p_enviar.add_argument("--eu", default=None)
 
+    p_contestar = sub.add_parser("contestar", add_help=False)
+    p_contestar.add_argument("destinatario")
+    p_contestar.add_argument("--indicador", default=None)
+
     return ap
 
 
@@ -756,6 +802,8 @@ def uso():
         "              (corpo em stdin)\n"
         "              --tipo contestacao: --ref e o indicador contestado, o corpo e o fundamento\n"
         "  fila tipos                             lista os tipos validos de --tipo\n"
+        "  fila contestar <cadeira> --indicador <nome>   contestacao a cadeira que configurou o indicador;\n"
+        "              o fundamento vem no stdin (pela face, no envelope da porta)\n"
     )
     sys.exit(2)
 
@@ -796,6 +844,16 @@ def main():
         if not args.assunto:
             sys.stderr.write("erro: --assunto e obrigatorio\n")
             sys.exit(2)
+    if args.verbo == "contestar":
+        # a face chega sem cadeira: o remetente se resolve dentro do ato, e nao por resolve_eu
+        rc = r_conn()
+        try:
+            rc.ping()
+        except redis.exceptions.RedisError as e:
+            sys.stderr.write(f"erro: nao alcancei a malha msg ({REDIS_HOST}:{REDIS_PORT}): {e}\n")
+            sys.exit(1)
+        cmd_contestar(rc, args)
+        return
     eu = resolve_eu(args)
     rc = r_conn()
     try:

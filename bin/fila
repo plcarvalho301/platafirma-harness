@@ -4,8 +4,14 @@
 # dono: ia
 # componente: harness
 # use para: caixa, carta, recado, handoff, 'o que chegou', mandar para outra cadeira
-# atos: status (leitura, mensagem) · ler (leitura, mensagem) · tratar (escrita, mensagem) · enviar (escrita, mensagem) · tipos (leitura, mensagem)
-# forma: status,tipos=lista · ler=texto · tratar=lista · enviar=objeto
+# atos: status (leitura, mensagem) · ler (leitura, mensagem) · tratar (escrita, mensagem) · enviar (escrita, mensagem) · tipos (leitura, mensagem) · contestar (escrita, mensagem)
+# forma: status,tipos=lista · ler=texto · tratar=lista · enviar=objeto · contestar=objeto
+# face: contestar=motor
+# rotulo: contestar=Contestar o indicador
+# volta: contestar=nao
+# (face: o contestar da R24 da spec plano-de-controle-face-motor, card #3518, buraco #2555. A face so alcanca o
+#  `contestar`, que manda uma carta de um tipo so (contestacao) com o indicador e o fundamento; o `enviar` geral
+#  segue fora da face.)
 # cauda: nao
 # classe: B
 # consome: valkey@streams (protocolo redis — sem OpenAPI)
