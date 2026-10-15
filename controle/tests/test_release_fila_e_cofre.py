@@ -119,6 +119,21 @@ def test_stack_do_container_casa_pela_familia(monkeypatch, tmp_path):
     assert c.stack_do_container(cont) == "conhecimento"
 
 
+def test_stack_do_container_duas_stacks_mesmo_compose_desempata_pelo_projeto(monkeypatch, tmp_path):
+    # #3584/#3586: 'borda' e 'harness-borda' registradas para o mesmo compose; a primeira da
+    # lista vencia por sorte de ordem, e quando era a sem .atual/.servido a conferencia por
+    # desenho dava falso e `release promover` revertia uma promocao correta.
+    c = _conferir(monkeypatch, tmp_path)
+    c._TOPO = [
+        {"slug": "borda", "compose": "/opt/platafirma/current/harness/borda/compose.yaml"},
+        {"slug": "harness-borda", "compose": "/opt/platafirma/current/harness/borda/compose.yaml"},
+    ]
+    cont = {"config_files": "/opt/platafirma/platafirma-harness/" + "c" * 40 + "/borda/compose.yaml",
+            "projeto": "harness-borda"}
+    assert c.stack_do_container(cont) == "harness-borda"
+    cont_sem_projeto_que_casa = dict(cont, projeto="borda-recepcao")
+    assert c.stack_do_container(cont_sem_projeto_que_casa) is None
+
 def test_segredos_da_stack_segue_a_regra_do_ajudante(monkeypatch, tmp_path):
     c = _conferir(monkeypatch, tmp_path)
     pasta = tmp_path / "inst" / "segredos" / "rag"
