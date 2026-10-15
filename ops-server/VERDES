@@ -1,7 +1,5 @@
 # Lista de portão da chave ops (arq:0116 §5): caminhos relativos a ops-server/.
 # Arquivo consertado entra no mesmo commit que o conserta; a lista só cresce.
-# Fora, medido em 28/09: test_run_command_lote_injecao.py passa sozinho e reprova 2 casos
-# rodado junto dos outros (id de sessão vazado de outro módulo). Débito no balde #2856.
 # test_raizes_porta.py estava aqui por «passa de 300 s com o isolamento»; medido em 13/10:
 # 25 passed em 1,3 s sob o isolamento de lib/teste_isolado.py (teste rodar ops@<bancada>), e
 # entrou na lista: é ele que cobre os tipos e o trecho do write_file.
@@ -29,3 +27,4 @@ test_recusa_sem_sessao_nao_lista.py | bin/descansar ops-server/**
 test_sessao_reidratar_porta.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/conferir bin/encerrar bin/infra bin/_infra/** bin/mesa bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** ops-server/** politica-acesso/*.py
 test_stdin_json_porta.py | bin/repo bin/sessao bin/_sessao/** bin/_minuta/** ops-server/** politica-acesso/*.py
 test_turno_texto_porta.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/conferir bin/encerrar bin/infra bin/_infra/** bin/mesa bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** ops-server/** politica-acesso/*.py sessao/**
+test_run_command_lote_injecao.py | bin/sessao bin/_sessao/** bin/expediente bin/_expediente/** ops-server/** politica-acesso/*.py
