@@ -227,8 +227,9 @@ estado da arte, ou disser que já tentou resolver o problema, a cadeira entra em
    (`repo abrir <repo> <card>` já move); terminou, `entregue` — pela promoção, no código;
    pela cadeira, no documento servido ou, sem sinal automático, depois de conferir a
    produção. Story entregue não é entrega de valor. Story só vai a `entregue` com o
-   Aceite cumprido em produção: a linha `fecha #<card>` entra só no PR que o cumpre, e o
-   que sobrou vira card antes do fecho. Antes de fechar, relê-se o card e os comentários
+   Aceite cumprido, e quem prova é o teste do gate na rev que sobe ou a chamada que o
+   Aceite nomeia; ninguém espera o dono abrir nada. A linha `fecha #<card>` entra só no
+   PR que cumpre o Aceite, e o que sobrou vira card antes do fecho. Antes de fechar, relê-se o card e os comentários
    chegados durante a fita.
 3. Feature e épico: na mão, só o funil antes da primeira filha em entrega, a volta ao
    funil com motivo e o terminal. O resto o rastreador calcula das filhas: `priorizada`,
