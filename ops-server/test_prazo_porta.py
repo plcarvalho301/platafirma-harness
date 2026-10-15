@@ -86,6 +86,28 @@ def test_stdin_chega_inteiro_mesmo_passando_do_prazo(resultado_dir):
     assert _espera_fim(Path(r["resultado"]))["stdout"]["texto"] == "abc"
 
 
+def test_repetir_chamada_em_andamento_anexa_em_vez_de_duplicar(resultado_dir):
+    pasta, audit = resultado_dir
+    portao = pasta / "liberar2"
+    espera = 'while [ ! -e "$1" ]; do sleep 0.02; done; echo fim_anexo'
+    cmd = ["sh", "-c", espera, "sh", str(portao)]
+    r1 = s._run_verbo_blocking(cmd, None, 10, IDENT, 0.2)
+    assert r1.get("em_andamento") is True
+    pid1 = json.loads(Path(r1["resultado"]).read_text())["pid"]
+
+    # Chamada repetida enquanto ainda em andamento: anexa, não abre novo processo
+    r2 = s._run_verbo_blocking(cmd, None, 10, IDENT, 0.2)
+    assert r2.get("em_andamento") is True
+    assert r2["id"] == r1["id"]
+    assert r2["resultado"] == r1["resultado"]
+
+    # Libera o portão: uma terceira chamada que cabe no prazo pega o resultado final
+    portao.touch()
+    r3 = s._run_verbo_blocking(cmd, None, 10, IDENT, 1.0)
+    assert r3.get("exit_code") == 0
+    assert r3["stdout"]["texto"] == "fim_anexo\n"
+
+
 def test_timeout_pedido_menor_que_o_prazo_mata_como_antes(resultado_dir):
     r = s._run_verbo_blocking(["sh", "-c", "sleep 5"], None, 1, IDENT, 5)
     assert "timeout (1s)" in r["erro"]

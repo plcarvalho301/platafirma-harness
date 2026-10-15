@@ -199,3 +199,17 @@ def test_chave_ausente_nao_medido_deixa_passar(amb):
     r = amb.push()
     assert r.returncode == 0, r.stdout + r.stderr
     assert "não medido" in r.stderr
+
+
+def test_pre_push_limpa_orfaos_na_entrada(amb):
+    arvores = Path(amb.env["PLATAFIRMA_INSTANCIA"]) / "var" / "pre-push" / "arvores"
+    arvores.mkdir(parents=True, exist_ok=True)
+    orfao = arvores / "pre-push.testeorfao"
+    orfao.mkdir()
+    (orfao / "pid").write_text("99999999\n", encoding="utf-8")
+    (orfao / "lixo.txt").write_text("orfao\n", encoding="utf-8")
+
+    amb.commit("controle/tests/test_fixture.py", TESTE_OK + "# orfao\\n")
+    r = amb.push()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not orfao.exists()

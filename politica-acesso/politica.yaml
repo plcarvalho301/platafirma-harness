@@ -356,8 +356,8 @@ regras:
     acoes: [read_file, write_file]
     # Caminhos como a porta os recebe desde o card #3010: clone base e worktree relativos a
     # bancada declarada (<repo>/..., wt/<repo>/<cadeira>/...) e rascunho da fita absoluto na
-    # instancia. Mesmo alcance de antes, no layout novo.
-    sobre: ["platafirma-*/*", "wt/platafirma-*/*", "/srv/platafirma/*/var/tmp/*"]
+    # instancia; e resultado de comando que passou do prazo em var/log/porta/ (#2856 linha 224).
+    sobre: ["platafirma-*/*", "wt/platafirma-*/*", "/srv/platafirma/*/var/tmp/*", "/srv/platafirma/*/var/log/porta/*"]
 
   # A porta da fabrica e o card no board (org:0003) — sem estes sub-atos ela recebe
   # trabalho e nao tem como responder. `apagar` e `fechar` ficam de fora: sumir com

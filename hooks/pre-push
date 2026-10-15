@@ -106,7 +106,36 @@ if [ "${#REFS[@]}" -eq 0 ]; then
 fi
 [ "${#REFS[@]}" -gt 0 ] || exit 0
 
+# varre worktrees orfaos de pre-push anteriores (balde #2856 linha 219)
+varre_orfaos() {
+  local p pid d agora mod
+  agora="$(date +%s 2>/dev/null || echo 0)"
+  for p in "$ARVORES_DIR"/pre-push.*; do
+    [ -d "$p" ] || continue
+    [ -n "${TMP:-}" ] && [ "$p" = "$TMP" ] && continue
+    if [ -f "$p/pid" ]; then
+      pid="$(cat "$p/pid" 2>/dev/null || true)"
+      if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        continue
+      fi
+    elif [ "$agora" -gt 0 ]; then
+      mod="$(stat -c %Y "$p" 2>/dev/null || echo 0)"
+      if [ "$mod" -gt 0 ] && [ $((agora - mod)) -lt 600 ]; then
+        continue
+      fi
+    fi
+    for d in "$p"/arvore-*; do
+      [ -d "$d" ] || continue
+      git worktree remove --force "$d" >/dev/null 2>&1 || true
+    done
+    rm -rf "$p" 2>/dev/null || true
+  done
+  git worktree prune >/dev/null 2>&1 || true
+}
+varre_orfaos
+
 TMP="$(mktemp -d "$ARVORES_DIR/pre-push.XXXXXX" 2>/dev/null || mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")" || exit 0
+echo $$ > "$TMP/pid" 2>/dev/null || true
 limpa() {
   local d
   for d in "$TMP"/arvore-*; do
