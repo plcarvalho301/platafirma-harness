@@ -50,6 +50,10 @@ LIGACOES = ("consultado", "delegado", "agendado")
 FAMILIAS = ("claude", "gemini", "qwen")
 PERNAS = ("fonte_de_fora", "dado_pessoal", "muda_estado")
 PROIBIDAS = ("Bash", "Write", "Edit", "NotebookEdit")      # o posto já nega (spec agente §2)
+# Fora do agente rodado: abrir sub-agente ou Workflow de dentro do `claude -p` escapa do modelo e do teto da
+# declaração (o Workflow herda o modelo da sessão, incidente #3227) e o hook do posto não alcança, porque o
+# agente não roda no clone do posto. Medido em 16/10/2026: o consultor listou Agent e Workflow no contexto.
+FORA_DO_AGENTE = ("Agent", "Workflow")
 REGUA_ESPECIES = ("lista-de-verificacao", "padrao")
 MODOS_COM_REGUA = ("revisar", "avaliar")
 CONTAS_SEGREGADAS = ("jaiminho", "quinzinho")              # as que `seg isolacao medir` mede
@@ -734,7 +738,7 @@ def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
         raise Falha(3, str(e))
     argv = [bin_claude, "-p", "--model", decl["modelo"]["versao"], "--output-format", "json",
             "--max-turns", str(t["turnos"]), "--append-system-prompt", sistema,
-            "--disallowedTools", ",".join(PROIBIDAS)]
+            "--disallowedTools", ",".join(PROIBIDAS + FORA_DO_AGENTE)]
     if decl["ferramentas"]:
         argv += ["--allowedTools", ",".join(decl["ferramentas"])]
     p = _roda(argv, stdin=tarefa, env={"DISABLE_AUTOUPDATER": "1"}, timeout=t.get("segundos", 900))
@@ -746,14 +750,21 @@ def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
         motivo = (p.stderr.strip().splitlines() or [str(obj.get("result") or "sem retorno")])[0]
         raise Falha(5, f"claude -p não concluiu (saiu {p.returncode}): {motivo[:200]}")
     u = obj.get("usage") or {}
-    # o cache conta: sem ele a entrada saía 4 tokens numa revisão de 4 mil de saída (medido em 01/10)
-    entrada = sum(u.get(k, 0) for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
+    # o cache conta: sem ele a entrada saía 4 tokens numa revisão de 4 mil de saída (medido em 01/10).
+    # `entrada` é a soma, por chamada ao modelo, da janela inteira: cada turno relê o prefixo do cache e tudo
+    # o que as tools já devolveram. As três parcelas vão ao registro para separar o lido do cache do novo
+    # (pedido da gestão estratégica de 15/10/2026: o 1,3 milhão do parecerista era quase todo leitura de cache).
+    nova = u.get("input_tokens", 0)
+    criacao = u.get("cache_creation_input_tokens", 0)
+    leitura = u.get("cache_read_input_tokens", 0)
+    entrada = nova + criacao + leitura
     saida = u.get("output_tokens", 0)
     aviso = ""
     if entrada + saida > t["tokens_execucao"]:         # o CLI só corta por turnos: aqui se mede e se avisa
         aviso = f"tokens da execução {entrada + saida} passaram de tokens_execucao {t['tokens_execucao']} (medido, não cortado)"
     return {"retorno": obj["result"], "aviso": aviso,
-            "uso": {"entrada": entrada, "saida": saida, "turnos": obj.get("num_turns")}}
+            "uso": {"entrada": entrada, "saida": saida, "turnos": obj.get("num_turns"),
+                    "entrada_nova": nova, "cache_criacao": criacao, "cache_leitura": leitura}}
 
 
 def chama_modelo(decl: dict, sistema: str, tarefa: str) -> dict:
