@@ -173,7 +173,7 @@ uso:
   tarefas assinar <id> --aprovador <c> [--decisao aprovado|recusado] [--motivo "<txt>"]
                                           sign-off. Sem --decisao, inscreve o aprovador
                                           como PENDENTE. `recusado` exige --motivo.
-  tarefas sub <pai> <filho>               declara <filho> filho de <pai>
+  tarefas sub <pai> [<filho>]             declara <filho> filho de <pai>, ou lista as filhas de <pai>
   tarefas ordenar <id> --antes-de <id> | --depois-de <id>
                                           põe o card ao lado do vizinho na ordem única da casa;
                                           o servidor calcula o posto (R21)
@@ -452,7 +452,7 @@ listar_tudo() { # listar_tudo [filtros] [--json]
 }
 
 estados() {
-  busca GET /registro | jq -r '(.estados // .)[] | "\(.estado)\t\(.fase)\t\(.nome)"'
+  busca GET /registro | jq -r '(.estados // .)[] | select(.retirado != true) | "\(.estado)\t\(.fase)\t\(.nome)"'
 }
 
 # --- item -------------------------------------------------------------------
@@ -639,6 +639,8 @@ criar() {
   esac
   local html=""
   [ -n "$desc" ] && html="$(printf '%s' "$desc" | para_html)"
+  local d_json="null"
+  [ -n "$html" ] && d_json="$(printf '%s' "$html" | jq -Rs .)"
   # `estado` é obrigatório no POST: item nasce declarando onde entra no funil, e não há
   # default do servidor. `captada` é a boca do funil para planejado; incidente entra em
   # `aberto` se o registro o tiver, e a recusa da API nomeia o estado válido quando não.
@@ -646,12 +648,12 @@ criar() {
   # comum (`captada`). PF_ESTADO_INICIAL, se dado, vence o default da classe (#259).
   local est_default="captada"; [ "$classe" = "incidente" ] && est_default="detectado"
   local est="${estado_opt:-${PF_ESTADO_INICIAL:-$est_default}}"
-  jq -n --arg t "$titulo" --arg d "$html" --argjson n "$n" --arg c "$cadeira" \
+  jq -n --arg t "$titulo" --argjson d "$d_json" --argjson n "$n" --arg c "$cadeira" \
         --arg p "$pai" --arg cl "$classe" --arg e "$est" \
         --arg o "$originacao" --arg x "$executor" --arg r "$registro" \
      '{titulo:$t, classe:$cl, estado:$e}
       + (if $cl == "incidente" then {} else {nivel:$n} end)
-      + (if $d == "" then {} else {descricao:$d} end)
+      + (if $d == null or $d == "" then {} else {descricao:$d} end)
       + (if $c == "" then {} else {cadeira:$c} end)
       + (if $p == "" then {} else {pai:($p|tonumber)} end)
       + (if $o == "" then {} else {tipo_demanda:$o} end)
@@ -707,11 +709,13 @@ editar() {
   fi
   local html=""
   [ -n "$tem_desc" ] && html="$(printf '%s' "$desc" | para_html)"
+  local d_json="null"
+  [ -n "$tem_desc" ] && d_json="$(printf '%s' "$html" | jq -Rs .)"
   # `cadeira: null` tira a cadeira (a API trata o nulo explícito como pedido); ausente não mexe.
-  jq -n --arg t "$titulo" --arg d "$html" --argjson tc "$tem_cadeira" --arg c "$cadeira" --arg n "$nivel" \
+  jq -n --arg t "$titulo" --argjson d "$d_json" --argjson tc "$tem_cadeira" --arg c "$cadeira" --arg n "$nivel" \
         --arg o "$originacao" --arg x "$executor" \
      '(if $t == "" then {} else {titulo:$t} end)
-      + (if $d == "" then {} else {descricao:$d} end)
+      + (if $d == null then {} else {descricao:$d} end)
       + (if $tc == 1 then {cadeira: (if $c == "" then null else $c end)} else {} end)
       + (if $n == "" then {} else {nivel: ($n|tonumber)} end)
       + (if $o == "" then {} else {tipo_demanda:$o} end)
@@ -1208,7 +1212,14 @@ M
 # Filho declara o pai, e o pai tem de ser de nível estritamente MENOR — a restrição é do
 # banco (`pai_nivel`, escrito por subconsulta), não deste verbo. Recusa vem nomeada da API.
 subtarefa() {
-  local pai filho; pai=$(so_id "${1:?uso: tarefas sub <pai> <filho>}"); filho=$(so_id "${2:?uso: tarefas sub <pai> <filho>}")
+  local pai; pai=$(so_id "${1:?uso: tarefas sub <pai> [<filho>]}")
+  if [ -z "${2:-}" ]; then
+    local j; j=$(busca GET "/itens/$pai") || return 1
+    printf '%s' "$j" | jq -r '
+      .filhas[]? | "#\(.id)\t\(.estado)\t\(.cadeira // "—")\t\(.titulo)"'
+    return 0
+  fi
+  local filho; filho=$(so_id "$2")
   jq -n --argjson p "$pai" '{pai:$p}' | envia PATCH "/itens/$filho" >/dev/null
   echo "item $filho agora é filho de $pai"
 }
@@ -1689,7 +1700,7 @@ case "$cmd" in
   apagar)      apagar "${1:?uso: tarefas apagar <id> [--cascata]}" "${@:2}" ;;
   apagar-comentario) apagar_comentario "${1:?uso: tarefas apagar-comentario <id> <cid>}" "${2:?cid}" ;;
   assinar)     assinar "${1:?uso: tarefas assinar <id> --aprovador <cadeira> [--decisao aprovado|recusado] [--motivo \"<txt>\"]}" "${@:2}" ;;
-  sub)         subtarefa "${1:?pai}" "${2:?filho}" ;;
+  sub)         subtarefa "${1:?uso: tarefas sub <pai> [<filho>]}" "${2:-}" ;;
   ordenar)     ordenar "${1:?uso: tarefas ordenar <id> --antes-de <id> | --depois-de <id>}" "${@:2}" ;;
   bloquear)    bloquear "${1:?uso: tarefas bloquear <a> <b>}" "${2:?uso: tarefas bloquear <a> <b>}" ;;
   desbloquear) desbloquear "${1:?uso: tarefas desbloquear <a> <b>}" "${2:?uso: tarefas desbloquear <a> <b>}" ;;

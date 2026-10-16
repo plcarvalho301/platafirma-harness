@@ -223,3 +223,4 @@ tests/test_recusa_origem.py | controle/harness_controle/** controle/compose.yaml
 # Medido em 12/10/2026 (card #3472): bloco Cadeiras da recepcao contra o pacote de hoje do `expediente montar` (4 passam;
 # com a coluna Manifesto, que lia a peca `oficio` que a abertura nao serve, os 4 ficam vermelhos: toda cadeira sai «ausente»).
 tests/test_render_cadeiras.py | controle/harness_controle/**
+testes/test_dt_cinco_harness.py | bin/tarefas bin/repo bin/release bin/_release/**
