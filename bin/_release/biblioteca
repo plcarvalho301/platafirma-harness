@@ -13,13 +13,16 @@ recusa o lock que mudou sem a versao subir.
 ato:
   biblioteca garantir <arvore> [--anterior <arvore>]
     <arvore>   arvore imutavel da rev que sobe ($PF_RELEASE_RAIZ/<familia>/<sha>)
-    --anterior arvore do sha que esta no ar; com ela, lock diferente e versao igual RECUSA
+    --anterior arvore do sha que esta no ar; com ela, lock ou fonte diferente e versao igual RECUSA
 
 Regras (deterministicas: barram ou passam, nao pedem julgamento):
   1. arvore sem Dockerfile na raiz, sem src/base/package.json ou sem package-lock.json: familia sem
      biblioteca, nada a fazer (exit 0, sem docker).
   2. com --anterior: o lock de src/base mudou e a versao do package.json e a mesma: exit 4. A tag
      platafirma/ui:<versao> e imutavel (arq:0080); lock novo pede versao nova.
+  2b. com --anterior: o fonte que a imagem leva (src/ sem retrato e README, exemplo/, nginx.conf,
+  cabecalhos.conf, Dockerfile) mudou e a versao e a mesma: exit 4, como no lock (card #3652: a casca
+  mudou, a versao nao subiu e a 0.14.1 servida seguiu com o fonte velho).
   3. imagem platafirma/ui:<versao> ja existe: nunca se reescreve. Com rotulo pf.ui.lock diferente do
      lock da arvore: exit 4 (mesma tag, outro conteudo). Igual, ou sem rotulo (anterior a este
      ajudante): reaproveitada.
@@ -52,6 +55,11 @@ EXIT_USO = 2
 PRAZO_CURTO = 60  # segundos: inspect, run, rm
 PRAZO_BUILD = 1800  # segundos: npm ci + build da biblioteca dentro da imagem
 PRAZO_ESGOTADO = 124
+# O que entra na imagem (COPY do Dockerfile da platafirma-ui) e muda o que ela serve. Fora ficam o que o
+# build nao le: o retrato dos atos (lido so pelo conferir), os README e o node_modules.
+FONTE_ENTRADAS = ("src", "exemplo", "nginx.conf", "cabecalhos.conf", "Dockerfile")
+FONTE_FORA = ("src/retrato",)
+FONTE_NOMES_FORA = ("README.md",)
 
 
 def erro(texto: str) -> None:
@@ -77,6 +85,22 @@ def docker(*args: str, prazo: int = PRAZO_CURTO) -> subprocess.CompletedProcess[
         return subprocess.CompletedProcess(exc.cmd, PRAZO_ESGOTADO, "", f"docker {args[0]}: sem resposta em {prazo}s")
 
 
+def hash_fonte(arvore: Path) -> str:
+    """Hash do fonte que a imagem leva: caminho e conteudo de cada arquivo, em ordem de caminho."""
+    arquivos: list[tuple[str, Path]] = []
+    for entrada in FONTE_ENTRADAS:
+        base = arvore / entrada
+        candidatos = [base] if base.is_file() else sorted(base.rglob("*")) if base.is_dir() else []
+        for arq in candidatos:
+            rel = arq.relative_to(arvore).as_posix()
+            fora = any(rel == f or rel.startswith(f + "/") for f in FONTE_FORA)
+            if arq.is_file() and not fora and arq.name not in FONTE_NOMES_FORA and "node_modules" not in arq.parts:
+                arquivos.append((rel, arq))
+    h = hashlib.sha256()
+    for rel, arq in sorted(arquivos):
+        h.update(rel.encode() + b"\0" + arq.read_bytes() + b"\0")
+    return h.hexdigest()
+
 def tem_biblioteca(arvore: Path) -> bool:
     base = arvore / "src" / "base"
     return (arvore / "Dockerfile").is_file() and (base / "package.json").is_file() and (base / "package-lock.json").is_file()
@@ -96,6 +120,20 @@ def regra_lock_novo_pede_versao_nova(anterior: Path, versao: str, lock_hash: str
         return 4
     return 0
 
+
+def regra_fonte_nova_pede_versao_nova(anterior: Path, versao: str, fonte_hash: str, img: str) -> int:
+    pacote = anterior / "src" / "base" / "package.json"
+    if not pacote.is_file() or versao_de(pacote) != versao:
+        return 0
+    fonte_ant = hash_fonte(anterior)
+    if fonte_ant != fonte_hash:
+        erro(
+            f"biblioteca: recusa: o fonte da biblioteca mudou ({fonte_ant[:7]} -> {fonte_hash[:7]}) "
+            f"e a versao segue em {versao} — a tag {img} e imutavel (arq:0080)"
+        )
+        erro(CAMINHO)
+        return 4
+    return 0
 
 def tag_existente(img: str, lock_hash: str) -> int:
     rotulo = docker("image", "inspect", "-f", '{{index .Config.Labels "pf.ui.lock"}}', img).stdout.strip()
@@ -149,6 +187,8 @@ def garantir(arvore: Path, anterior: Path | None) -> int:
     img = f"platafirma/ui:{versao}"
     if anterior is not None:
         rc = regra_lock_novo_pede_versao_nova(anterior, versao, lock_hash, img)
+        if rc == 0:
+            rc = regra_fonte_nova_pede_versao_nova(anterior, versao, hash_fonte(arvore), img)
         if rc != 0:
             return rc
     if shutil.which("docker") is None:

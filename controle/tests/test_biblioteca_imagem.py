@@ -74,13 +74,19 @@ def mundo(tmp_path):
     return {"estado": estado, "com": bin_com, "sem": bin_sem}
 
 
-def arvore(raiz: Path, nome: str, versao: str, lock: str, com_dockerfile: bool = True) -> Path:
+def arvore(
+    raiz: Path, nome: str, versao: str, lock: str, com_dockerfile: bool = True, fontes: dict[str, str] | None = None
+) -> Path:
     a = raiz / nome
     (a / "src" / "base").mkdir(parents=True)
     if com_dockerfile:
         (a / "Dockerfile").write_text("FROM scratch\n")
     (a / "src" / "base" / "package.json").write_text(json.dumps({"name": "x", "version": versao}))
     (a / "src" / "base" / "package-lock.json").write_text(lock)
+    for caminho, texto in (fontes or {}).items():
+        destino = a / caminho
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_text(texto)
     return a
 
 
@@ -180,6 +186,51 @@ def test_lock_igual_e_versao_igual_nao_recusa(mundo, tmp_path):
     p = rodar(mundo, "garantir", nova, "--anterior", ant)
     assert p.returncode == 0, p.stderr
 
+
+def test_fonte_mudou_e_versao_igual_recusa_antes_de_tocar_docker(mundo, tmp_path):
+    """#3652: a casca mudou sem a versao subir e a imagem servida seguiu com o fonte velho."""
+    ant = arvore(tmp_path, "no-ar", "0.5.0", '{"a": 1}', fontes={"src/pf/pf-casca.js": "/api/espera"})
+    nova = arvore(tmp_path, "sobe", "0.5.0", '{"a": 1}', fontes={"src/pf/pf-casca.js": "/api/espera-dono"})
+    p = rodar(mundo, "garantir", nova, "--anterior", ant)
+    assert p.returncode == 4
+    assert "fonte da biblioteca mudou" in p.stderr
+    assert "caminho:" in p.stderr
+    assert chamadas(mundo) == []
+
+def test_fonte_fora_de_src_que_a_imagem_leva_tambem_recusa(mundo, tmp_path):
+    ant = arvore(tmp_path, "no-ar", "0.5.0", '{"a": 1}', fontes={"exemplo/index.html": "<p>a</p>"})
+    nova = arvore(tmp_path, "sobe", "0.5.0", '{"a": 1}', fontes={"exemplo/index.html": "<p>b</p>"})
+    p = rodar(mundo, "garantir", nova, "--anterior", ant)
+    assert p.returncode == 4
+    assert "fonte da biblioteca mudou" in p.stderr
+
+def test_fonte_mudou_com_versao_nova_constroi(mundo, tmp_path):
+    ant = arvore(tmp_path, "no-ar", "0.5.0", '{"a": 1}', fontes={"src/pf/pf-casca.js": "velho"})
+    nova = arvore(tmp_path, "sobe", "0.5.1", '{"a": 1}', fontes={"src/pf/pf-casca.js": "novo"})
+    p = rodar(mundo, "garantir", nova, "--anterior", ant)
+    assert p.returncode == 0, p.stderr
+    assert [c for c in chamadas(mundo) if c.startswith("build ")]
+
+def test_fonte_igual_e_versao_igual_nao_recusa(mundo, tmp_path):
+    (mundo["estado"] / "img.platafirma_ui_0.5.0").write_text("")
+    ant = arvore(tmp_path, "no-ar", "0.5.0", '{"a": 1}', fontes={"src/pf/pf-casca.js": "igual"})
+    nova = arvore(tmp_path, "sobe", "0.5.0", '{"a": 1}', fontes={"src/pf/pf-casca.js": "igual"})
+    p = rodar(mundo, "garantir", nova, "--anterior", ant)
+    assert p.returncode == 0, p.stderr
+
+def test_retrato_e_readme_mudaram_com_versao_igual_nao_recusa(mundo, tmp_path):
+    """O build nao le src/retrato nem os README: mudar so isso nao pede versao nova."""
+    (mundo["estado"] / "img.platafirma_ui_0.5.0").write_text("")
+    ant = arvore(
+        tmp_path, "no-ar", "0.5.0", '{"a": 1}',
+        fontes={"src/pf/pf-casca.js": "x", "src/retrato/atos.json": "{\"sha_registro\": \"1\"}", "src/base/README.md": "a"},
+    )
+    nova = arvore(
+        tmp_path, "sobe", "0.5.0", '{"a": 1}',
+        fontes={"src/pf/pf-casca.js": "x", "src/retrato/atos.json": "{\"sha_registro\": \"2\"}", "src/base/README.md": "b"},
+    )
+    p = rodar(mundo, "garantir", nova, "--anterior", ant)
+    assert p.returncode == 0, p.stderr
 
 def test_build_que_falha_sai_3_com_o_fim_do_log(mundo, tmp_path):
     (mundo["estado"] / "falha_build").write_text("")
