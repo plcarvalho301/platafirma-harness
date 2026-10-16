@@ -84,6 +84,15 @@ case "$ato" in
     exigir_sujeito "$VERBO aplicar"
     IFS=: read -r ctr usr base <<<"${BANCOS[$banco]}"
 
+    # DT #2856 linha 252: recusa com exit 2 quando stdin vem vazio ou de terminal
+    if [ -t 0 ]; then
+      morre "erro: falta o SQL da migracao por STDIN — passe o corpo via stdin" 2
+    fi
+    local sql; sql="$(cat)"
+    if [ -z "$(printf '%s' "$sql" | tr -d '[:space:]')" ]; then
+      morre "erro: falta o SQL da migracao por STDIN — passe o corpo via stdin" 2
+    fi
+
     command -v docker >/dev/null 2>&1 || morre "erro: dependência docker: ausente — 'docker' nao esta no PATH desta conta" 3
     docker inspect -f '{{.State.Running}}' "$ctr" 2>/dev/null | grep -qx true \
       || morre "erro: dependência $ctr: ausente — contêiner nao esta de pe; \`infra estado\`" 3
@@ -92,7 +101,7 @@ case "$ato" in
     # -e ecoa cada comando e -P pager=off; NOTICE dos aceites vao a stderr do psql.
     # stdout do psql (linhas de SELECT/aceite) SOBE para o chamador: e a prova que o
     # card #3019 pede no comentario.
-    if docker exec -i "$ctr" psql -U "$usr" -d "$base" -v ON_ERROR_STOP=1 -1 -P pager=off -f -; then
+    if printf '%s\n' "$sql" | docker exec -i "$ctr" psql -U "$usr" -d "$base" -v ON_ERROR_STOP=1 -1 -P pager=off -f -; then
       printf '%s: migracao aplicada em %s (%s/%s)%s\n' "$VERBO" "$banco" "$ctr" "$base" \
         "${PF_SUJEITO:+ (sujeito=$PF_SUJEITO)}" >&2
     else

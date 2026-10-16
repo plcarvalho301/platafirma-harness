@@ -285,6 +285,25 @@ bancada_de() {
       printf '%s/wt/%s/%s/%s' "$BANCADA" "$nome" "$cadeira" "$chave"
       return 0
     fi
+    if [ -n "$cadeira" ] && [ -d "$BANCADA/wt/$nome/$cadeira" ]; then
+      local card_cands=() d
+      local limpo="${chave###}"
+      for d in "$BANCADA/wt/$nome/$cadeira/$limpo"-*/ "$BANCADA/wt/$nome/$cadeira/$chave"-*/; do
+        [ -d "$d" ] && [ -e "$d/.git" ] && card_cands+=("${d%/}")
+      done
+      local unicos=() u
+      for u in "${card_cands[@]}"; do
+        local ja=0 x
+        for x in "${unicos[@]}"; do [ "$x" = "$u" ] && ja=1 && break; done
+        [ "$ja" -eq 0 ] && unicos+=("$u")
+      done
+      if [ "${#unicos[@]}" -eq 1 ]; then
+        printf '%s' "${unicos[0]}"
+        return 0
+      elif [ "${#unicos[@]}" -gt 1 ]; then
+        return 2
+      fi
+    fi
     return 1
   fi
 
