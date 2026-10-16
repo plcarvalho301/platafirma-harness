@@ -58,7 +58,7 @@ uso:
   infra unit-env <unit> [--ver | CHAVE=VALOR...] drop-in de ambiente da unit --user (daemon-reload)
   infra cache    [ver|vram|disco]                o que ocupa VRAM e disco; liberar é explícito
   infra hardware [--json]                        CPU, RAM, GPU e consumo em W agora; a fonte (PSU) não se lê
-  infra limites                                  teto de processos e threads da conta (ulimit -u, pids.max/pids.current do slice) e as threads vivas agora
+  infra limites  [--amostrar <s>]                teto de processos e threads da conta e a memória, lidos juntos; --amostrar dá o pico em <s> segundos
   infra gpu      [--json]                        GPU ao vivo: uso, VRAM, temperatura, W e processos
   infra backup   [--json]                        por alvo declarado: quando rodou, gerações
   infra up       <stack> [args compose…] [<serviço>…]  bin/_release/stack compose … up
@@ -1009,26 +1009,61 @@ ingress() {
   exit 1
 }
 
-# limites: o teto de processos e threads da conta, para medir `fork: retry: Resource temporarily
-# unavailable` (#3496). Só leitura: ulimit -u, o pids.max/pids.current do slice da conta e as
-# threads vivas dela agora.
+# limites: o teto de processos e threads da conta e a memória, lidos juntos, para medir
+# `fork: retry: Resource temporarily unavailable` (#3496). Só leitura. fork(2) devolve EAGAIN
+# no teto de processos (RLIMIT_NPROC, pids do cgroup, threads-max) e ENOMEM na falta de
+# memória; ler os dois na mesma hora separa as causas. --amostrar <s> lê a cada 0,5 s por <s>
+# segundos e devolve o pico de threads e de memória do slice e o vale do MemAvailable.
+meminfo_kb() {  # $1=campo do /proc/meminfo; imprime o valor em kB, vazio se ausente
+  awk -v c="$1:" '$1 == c { print $2; exit }' "${INFRA_MEMINFO:-/proc/meminfo}" 2>/dev/null
+}
+
 limites() {
-  local uid slice v f
+  local uid slice v f amostrar=0
+  case "${1:-}" in
+    --amostrar) amostrar="${2:?uso: infra limites [--amostrar <segundos>]}" ;;
+    "") ;;
+    *) echo "uso: infra limites [--amostrar <segundos>]" >&2; exit 2 ;;
+  esac
+  case "$amostrar" in *[!0-9]*) echo "infra: erro: --amostrar pede segundos inteiros" >&2; exit 2 ;; esac
   uid="$(id -u)"
   slice="/sys/fs/cgroup/user.slice/user-${uid}.slice"
   printf 'conta: %s (uid %s)\n' "$(id -un)" "$uid"
   printf 'ulimit -u (processos+threads da conta): %s\n' "$(ulimit -u)"
-  for f in pids.max pids.current; do
+  for f in pids.max pids.current memory.max memory.high memory.current; do
     if [ -r "$slice/$f" ]; then v="$(cat "$slice/$f")"; else v="ilegivel"; fi
     printf 'slice %s %s: %s\n' "user-${uid}.slice" "$f" "$v"
   done
   if [ -r "$slice/pids.events" ]; then
-    printf 'slice pids.events (max = fork recusado pelo teto): %s\n' "$(tr '\n' ' ' < "$slice/pids.events")"
+    printf 'slice pids.events (max = fork recusado pelo teto de pids): %s\n' "$(tr '\n' ' ' < "$slice/pids.events")"
+  fi
+  if [ -r "$slice/memory.events" ]; then
+    printf 'slice memory.events (oom/oom_kill = falta de memória no slice): %s\n' "$(tr '\n' ' ' < "$slice/memory.events")"
   fi
   printf 'threads vivas da conta agora: %s\n' "$(ps -L -u "$uid" --no-headers 2>/dev/null | wc -l)"
-  for f in /proc/sys/kernel/threads-max /proc/sys/kernel/pid_max; do
+  printf 'memória (kB): MemTotal %s · MemAvailable %s · SwapFree %s de %s · Committed_AS %s · CommitLimit %s\n' \
+    "$(meminfo_kb MemTotal)" "$(meminfo_kb MemAvailable)" "$(meminfo_kb SwapFree)" "$(meminfo_kb SwapTotal)" \
+    "$(meminfo_kb Committed_AS)" "$(meminfo_kb CommitLimit)"
+  for f in /proc/sys/kernel/threads-max /proc/sys/kernel/pid_max /proc/sys/vm/overcommit_memory; do
     [ -r "$f" ] && printf 'kernel %s: %s\n' "$(basename "$f")" "$(cat "$f")"
   done
+  [ "$amostrar" -gt 0 ] || return 0
+
+  local fim t pico_t=0 m pico_m=0 a vale_a="" n=0
+  fim=$(( $(date +%s) + amostrar ))
+  while [ "$(date +%s)" -lt "$fim" ]; do
+    t="$(ps -L -u "$uid" --no-headers 2>/dev/null | wc -l)"
+    [ "$t" -gt "$pico_t" ] && pico_t="$t"
+    if [ -r "$slice/memory.current" ]; then
+      m="$(cat "$slice/memory.current")"; [ "$m" -gt "$pico_m" ] && pico_m="$m"
+    fi
+    a="$(meminfo_kb MemAvailable)"
+    if [ -n "$a" ] && { [ -z "$vale_a" ] || [ "$a" -lt "$vale_a" ]; }; then vale_a="$a"; fi
+    n=$((n + 1))
+    sleep 0.5
+  done
+  printf 'amostra (%s s, %s leituras): pico de threads da conta %s · pico de memory.current do slice %s B · vale de MemAvailable %s kB\n' \
+    "$amostrar" "$n" "$pico_t" "$pico_m" "${vale_a:-ilegivel}"
   return 0
 }
 
@@ -1057,7 +1092,7 @@ case "$cmd" in
   logs)      logs "${1:?uso: infra logs <alvo> [n]}" "${2:-50}" ;;
   cache)     cache "${1:-ver}" ;;
   hardware)  hardware "$@" ;;
-  limites)   limites ;;
+  limites)   limites "$@" ;;
   gpu)       gpu "$@" ;;
   backup)    backup "$@" ;;
   unit-env)  unit_env "$@" ;;
