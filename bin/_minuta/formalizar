@@ -4,6 +4,8 @@ esqueleto do tipo (ADR ou spec), vazio de conteúdo, apaga minuta/NNNN-slug.md
 e commita a remoção junto, com o número da minuta na mensagem de commit — um
 ato só. Não redige o canônico: quem escreve é a cadeira, no prompt.
 Nada de texto fóssil: o destino não referencia o número da minuta removida.
+O destino é a projeção da espécie (arq:0115 §4): adr/<série>/NNNN-<slug>.md, com
+NNNN = maior número da série + 1, e spec/<slug>.md.
 Protocolo: padrao protocolo-de-minuta §5. Spec: spec verbo-minuta §5.
 """
 import os
@@ -22,8 +24,14 @@ import _casa as casa  # noqa: E402
 # aberta por _casa.worktree, que tambem chama git e gh pelo caminho real (o shim de git
 # da porta sai 2). Puxa antes de numerar o ADR e de editar. MINUTA_REPO aponta outro
 # checkout (teste).
-REPO = DIR = DECISIONS = DOCS = None
+REPO = DIR = None
 PLACEHOLDER_CONV = "<a preencher pela própria cadeira>"
+
+# As séries de ADR da casa (arq:0115 §3.2). É a série que dá o número, e o número é o que as
+# cadeiras citam (`arq:0118`).
+SERIES = ("arq", "ont", "org", "seg", "infra", "integracao")
+USO = ("uso: minuta formalizar <n> --como adr --serie <série> [--destino <slug>] [--vencido]\n"
+       "     minuta formalizar <n> --como spec [--destino <slug>] [--vencido]")
 
 
 def erro(msg, code=1):
@@ -77,13 +85,24 @@ def slugify(s):
     return s.strip("-")
 
 
+def proximo_numero(pasta):
+    """Maior NNNN-*.md da pasta mais um; pasta que não existe, ou sem ADR numerado, dá 1."""
+    ultimo = 0
+    for f in glob.glob(os.path.join(pasta, "[0-9][0-9][0-9][0-9]-*.md")):
+        m = re.match(r"(\d{4})-", os.path.basename(f))
+        if m:
+            ultimo = max(ultimo, int(m.group(1)))
+    return ultimo + 1
+
+
 def main():
-    global REPO, DIR, DECISIONS, DOCS
+    global REPO, DIR
     args = sys.argv[1:]
     if not args:
-        erro("uso: minuta formalizar <n> --como adr|spec [--destino <slug>] [--vencido]", 2)
+        erro(USO, 2)
     n = args[0]
     como = None
+    serie = None
     destino_arg = None
     vencido = False
     i = 1
@@ -91,6 +110,9 @@ def main():
         a = args[i]
         if a == "--como":
             como = args[i + 1] if i + 1 < len(args) else None
+            i += 2
+        elif a == "--serie":
+            serie = args[i + 1] if i + 1 < len(args) else None
             i += 2
         elif a == "--destino":
             destino_arg = args[i + 1] if i + 1 < len(args) else None
@@ -101,7 +123,16 @@ def main():
         else:
             erro(f"opção desconhecida: {a}", 2)
     if como not in ("adr", "spec"):
-        erro("uso: minuta formalizar <n> --como adr|spec [--destino <slug>] [--vencido]", 2)
+        erro(USO, 2)
+    # a recusa de uso sai antes de tocar o git: nada é puxado, escrito nem apagado
+    if como == "adr":
+        if serie is None:
+            erro(f"--como adr exige --serie <série> ({', '.join(SERIES)}): é a série que dá "
+                 "o número do ADR (arq:0115 §3.2)", 2)
+        if serie not in SERIES:
+            erro(f"série '{serie}' desconhecida — as séries de ADR são: {', '.join(SERIES)}", 2)
+    elif serie is not None:
+        erro("--serie só vale para --como adr: spec não tem série (arq:0115 §4)", 2)
 
     try:
         REPO = casa.worktree("formalizar")
@@ -109,8 +140,6 @@ def main():
     except casa.Falha as f:
         erro(f.msg, f.code)
     DIR = os.path.join(REPO, "minuta")
-    DECISIONS = os.path.join(REPO, "macro-global", "decisions")
-    DOCS = os.path.join(REPO, "docs")
 
     num, caminho = resolve(n)
     relcaminho = os.path.relpath(caminho, REPO)
@@ -153,19 +182,17 @@ def main():
             f"- {c} não se manifestou até o fechamento (--vencido).\n" for c in faltando
         )
 
+    # Espécie: antes do primeiro ## — a ingestão recusa documento de casa sem ela (arq:0115 §7)
     if como == "adr":
-        os.makedirs(DECISIONS, exist_ok=True)
-        ultimo = 0
-        for f in glob.glob(os.path.join(DECISIONS, "[0-9][0-9][0-9][0-9]-*.md")):
-            m = re.match(r"(\d{4})-", os.path.basename(f))
-            if m:
-                ultimo = max(ultimo, int(m.group(1)))
-        adr_num = f"{ultimo + 1:04d}"
-        destino = os.path.join(DECISIONS, f"{adr_num}-{slug}.md")
+        pasta = os.path.join(REPO, "adr", serie)
+        os.makedirs(pasta, exist_ok=True)
+        adr_num = f"{proximo_numero(pasta):04d}"
+        destino = os.path.join(pasta, f"{adr_num}-{slug}.md")
         if os.path.exists(destino):
             erro(f"{destino} já existe")
         conteudo = (
             f"# {adr_num} — {titulo}\n\n"
+            f"Espécie: adr\n\n"
             f"- **Status:** aceito ({hoje})\n"
             f"- **Tipo:** <preencher>\n"
             f"- **Alcance:** <preencher>\n\n"
@@ -175,11 +202,13 @@ def main():
             f"{aberto}"
         )
     else:
-        os.makedirs(DOCS, exist_ok=True)
-        destino = os.path.join(DOCS, f"spec_{slug}.md")
+        pasta = os.path.join(REPO, "spec")
+        os.makedirs(pasta, exist_ok=True)
+        destino = os.path.join(pasta, f"{slug}.md")
         if os.path.exists(destino):
             erro(f"{destino} já existe")
-        conteudo = f"# {titulo}\n\n<preencher>\n{aberto}"
+        # Sobre: é obrigatório em spec (arq:0115 §6.1); a cadeira o preenche antes de publicar
+        conteudo = f"# {titulo}\n\nEspécie: spec\nSobre: <preencher>\n\n<preencher>\n{aberto}"
 
     with open(destino, "w", encoding="utf-8") as f:
         f.write(conteudo)

@@ -353,12 +353,79 @@ def test_minuta_circular_le_a_minuta_que_outra_mao_pos_em_main(tmp_path):
     assert "--ref minuta/0006-pauta.md produto" in fila
 
 
-def test_minuta_formalizar_fecha_em_main(tmp_path):
-    bancada = _montar(tmp_path)
+def _com_pauta(tmp_path, bancada, *antes):
+    """Worktree aberta e a minuta 0006 pronta em main; `antes` sao (caminho, texto) que outra
+    mao empurra antes dela (a arvore por especie da casa, arq:0115 §4)."""
     _abrir(tmp_path, bancada)
+    for caminho, texto in antes:
+        _main_novo(tmp_path, caminho, texto)
     _main_novo(tmp_path, "minuta/0006-pauta.md",
                _pauta(["engenharia"], {"arquiteto": "posição", "engenharia": "posição"}))
-    r = _minuta(tmp_path, bancada, "formalizar", "6", "--como", "adr")
+
+
+def test_minuta_formalizar_adr_nasce_na_serie_com_o_proximo_numero(tmp_path):
+    # arq:0115 §3.2 e §4: adr/<serie>/<numero>-<slug>.md; a serie da o numero (maior da serie + 1),
+    # e outra serie nao entra na conta. Incidente #3328: saia macro-global/decisions/0001-<slug>.md.
+    bancada = _montar(tmp_path)
+    _com_pauta(tmp_path, bancada,
+               ("adr/arq/0117-espelho.md", "# 0117 — Espelho\n"),
+               ("adr/seg/0042-outra-serie.md", "# 0042 — Outra\n"))
+    r = _minuta(tmp_path, bancada, "formalizar", "6", "--como", "adr", "--serie", "arq")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip().endswith("adr/arq/0118-pauta.md")
+    assert _no_origin(tmp_path, "minuta/0006-pauta.md") is None
+    adr = _no_origin(tmp_path, "adr/arq/0118-pauta.md")
+    assert adr is not None
+    # a ingestao recusa documento sem Especie: antes do primeiro ## (arq:0115 §7)
+    assert "\nEspécie: adr\n" in adr.split("\n## ", 1)[0]
+    assert _no_origin(tmp_path, "macro-global/decisions/0001-pauta.md") is None
+
+
+def test_minuta_formalizar_adr_em_serie_vazia_comeca_em_0001(tmp_path):
+    bancada = _montar(tmp_path)
+    _com_pauta(tmp_path, bancada, ("adr/arq/0117-espelho.md", "# 0117 — Espelho\n"))
+    r = _minuta(tmp_path, bancada, "formalizar", "6", "--como", "adr", "--serie", "org")
+    assert r.returncode == 0, r.stderr
+    assert _no_origin(tmp_path, "adr/org/0001-pauta.md") is not None
+
+
+def test_minuta_formalizar_spec_nasce_em_spec_sem_prefixo(tmp_path):
+    bancada = _montar(tmp_path)
+    _com_pauta(tmp_path, bancada)
+    r = _minuta(tmp_path, bancada, "formalizar", "6", "--como", "spec")
     assert r.returncode == 0, r.stderr
     assert _no_origin(tmp_path, "minuta/0006-pauta.md") is None
-    assert _no_origin(tmp_path, "macro-global/decisions/0001-pauta.md") is not None
+    spec = _no_origin(tmp_path, "spec/pauta.md")
+    assert spec is not None
+    cabecalho = spec.split("\n## ", 1)[0]
+    assert "\nEspécie: spec\n" in cabecalho
+    # Sobre: e obrigatorio em spec (arq:0115 §6.1); a cadeira o preenche antes de publicar
+    assert "\nSobre: " in cabecalho
+    assert _no_origin(tmp_path, "docs/spec_pauta.md") is None
+
+
+def test_minuta_formalizar_adr_sem_serie_recusa_2_e_nao_toca_a_minuta(tmp_path):
+    bancada = _montar(tmp_path)
+    _com_pauta(tmp_path, bancada)
+    r = _minuta(tmp_path, bancada, "formalizar", "6", "--como", "adr")
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "--serie" in r.stderr
+    assert _no_origin(tmp_path, "minuta/0006-pauta.md") is not None
+
+
+def test_minuta_formalizar_serie_desconhecida_recusa_2_e_diz_as_validas(tmp_path):
+    bancada = _montar(tmp_path)
+    _com_pauta(tmp_path, bancada)
+    r = _minuta(tmp_path, bancada, "formalizar", "6", "--como", "adr", "--serie", "xyz")
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "arq, ont, org, seg, infra, integracao" in r.stderr
+    assert _no_origin(tmp_path, "minuta/0006-pauta.md") is not None
+
+
+def test_minuta_formalizar_spec_com_serie_recusa_2(tmp_path):
+    bancada = _montar(tmp_path)
+    _com_pauta(tmp_path, bancada)
+    r = _minuta(tmp_path, bancada, "formalizar", "6", "--como", "spec", "--serie", "arq")
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "spec não tem série" in r.stderr
+    assert _no_origin(tmp_path, "minuta/0006-pauta.md") is not None
