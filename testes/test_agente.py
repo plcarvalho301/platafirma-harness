@@ -635,7 +635,8 @@ def test_claude_monta_a_chamada_do_cli_com_modelo_teto_e_ferramentas(mundo, pess
     argv = claude["argv"]
     assert argv[argv.index("--model") + 1] == "sonnet"
     assert argv[argv.index("--max-turns") + 1] == "40"
-    assert argv[argv.index("--disallowedTools") + 1] == "Bash,Write,Edit,NotebookEdit"
+    assert argv[argv.index("--disallowedTools") + 1] == "Bash,Write,Edit,NotebookEdit,Agent,Workflow", \
+        "sub-agente e Workflow de dentro do agente escapam do modelo e do teto (#3227)"
     assert "mcp__claudinho-mcp__ler_arquivo" in argv[argv.index("--allowedTools") + 1]
     assert "LENTE-PERSONA" in argv[argv.index("--append-system-prompt") + 1]
     assert claude["stdin"] == "o que a ia acha?"
@@ -643,7 +644,9 @@ def test_claude_monta_a_chamada_do_cli_com_modelo_teto_e_ferramentas(mundo, pess
 
 def test_claude_mede_a_entrada_com_o_cache(mundo):
     r = agente.chama_claude(CONSULTOR, "sistema", "tarefa")
-    assert r["uso"] == {"entrada": 1150, "saida": 20, "turnos": 3}
+    assert r["uso"] == {"entrada": 1150, "saida": 20, "turnos": 3,
+                        "entrada_nova": 100, "cache_criacao": 50, "cache_leitura": 1000}, \
+        "a soma segue em entrada; as parcelas separam o lido do cache do novo"
 
 
 # --- por ligação e suplanta (spec agente rev 3) --------------------------------------------------
