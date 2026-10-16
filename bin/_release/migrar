@@ -89,7 +89,7 @@ case "$ato" in
       morre "erro: falta o SQL da migracao por STDIN — passe o corpo via stdin" 2
     fi
     local sql; sql="$(cat)"
-    if [ -z "$(printf '%s' "$sql" | tr -d '[:space:]')" ]; then
+    if [ -z "${sql//[[:space:]]/}" ]; then
       morre "erro: falta o SQL da migracao por STDIN — passe o corpo via stdin" 2
     fi
 
