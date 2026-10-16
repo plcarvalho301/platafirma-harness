@@ -9,16 +9,16 @@
 #   up, down, pull, build), convergir a agenda do cron e podar log/quarentena por
 #   retenção declarada (agenda, limpeza), liberar cache de VRAM e disco (cache), que
 #   hardware é este e quanto consome em W agora (hardware), a GPU ao vivo: uso, VRAM,
-#   temperatura, W e processos (gpu), copiar o ingress versionado do túnel para a cópia da
+#   temperatura, W e processos (gpu), o teto de processos e threads da conta contra o uso agora (limites), copiar o ingress versionado do túnel para a cópia da
 #   instância, que é a que o cloudflared lê, e reiniciá-lo (ingress)
-# atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), hardware (leitura, operacao), gpu (leitura, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao), ingress (escrita, operacao)
+# atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), hardware (leitura, operacao), limites (leitura, operacao), gpu (leitura, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao), ingress (escrita, operacao)
 # forma: log
 # cauda: sim
 # classe: B
 # consome: porta@ops-log
 # ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · INFRA_INGRESS_FONTE[=$PLATAFIRMA_RELEASE/core/deploy/cloudflared-config.yml] porta · INFRA_INGRESS_COPIA[=$PLATAFIRMA_INSTANCIA/deploy/core/cloudflared.yml] porta · INFRA_INGRESS_CONTEINER[=platafirma-core-cloudflared-1] porta · INFRA_INGRESS_ESPERA[=5] porta (ingress: segundos até conferir o contêiner de pé) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (saude: lido por lib/oplog, o bruto contra o teto) · PF_SUJEITO[obrigatória em up|down|pull|build] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
-# depende: docker · systemctl --user · curl · diff (ingress) · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs e bin/_infra/limpeza-quarentena (ajudantes de limpeza) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda)
-# escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados · agenda=crontab do sistema (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · estado/saude/logs/ps/config/backup/hardware/gpu=nada
+# depende: docker · systemctl --user · curl · diff (ingress) · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · ps (limites) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs e bin/_infra/limpeza-quarentena (ajudantes de limpeza) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda)
+# escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados · agenda=crontab do sistema (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · estado/saude/logs/ps/config/backup/hardware/limites/gpu=nada
 # substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build (deploy apagado — decisão do dono, 27/09) · crontab -e a mão · cp à mão do ingress versionado para deploy/core/cloudflared.yml da instância + docker restart do cloudflared · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra por arq:0110 §14 emenda 26/09/2026)
 # Encapsula as três pegadinhas conhecidas: DOCKER_HOST rootless, restart que
 # mata a própria chamada, e alvo que pode ser contêiner ou unit de usuário.
@@ -58,6 +58,7 @@ uso:
   infra unit-env <unit> [--ver | CHAVE=VALOR...] drop-in de ambiente da unit --user (daemon-reload)
   infra cache    [ver|vram|disco]                o que ocupa VRAM e disco; liberar é explícito
   infra hardware [--json]                        CPU, RAM, GPU e consumo em W agora; a fonte (PSU) não se lê
+  infra limites                                  teto de processos e threads da conta (ulimit -u, pids.max/pids.current do slice) e as threads vivas agora
   infra gpu      [--json]                        GPU ao vivo: uso, VRAM, temperatura, W e processos
   infra backup   [--json]                        por alvo declarado: quando rodou, gerações
   infra up       <stack> [args compose…] [<serviço>…]  bin/_release/stack compose … up
@@ -1008,6 +1009,29 @@ ingress() {
   exit 1
 }
 
+# limites: o teto de processos e threads da conta, para medir `fork: retry: Resource temporarily
+# unavailable` (#3496). Só leitura: ulimit -u, o pids.max/pids.current do slice da conta e as
+# threads vivas dela agora.
+limites() {
+  local uid slice v f
+  uid="$(id -u)"
+  slice="/sys/fs/cgroup/user.slice/user-${uid}.slice"
+  printf 'conta: %s (uid %s)\n' "$(id -un)" "$uid"
+  printf 'ulimit -u (processos+threads da conta): %s\n' "$(ulimit -u)"
+  for f in pids.max pids.current; do
+    if [ -r "$slice/$f" ]; then v="$(cat "$slice/$f")"; else v="ilegivel"; fi
+    printf 'slice %s %s: %s\n' "user-${uid}.slice" "$f" "$v"
+  done
+  if [ -r "$slice/pids.events" ]; then
+    printf 'slice pids.events (max = fork recusado pelo teto): %s\n' "$(tr '\n' ' ' < "$slice/pids.events")"
+  fi
+  printf 'threads vivas da conta agora: %s\n' "$(ps -L -u "$uid" --no-headers 2>/dev/null | wc -l)"
+  for f in /proc/sys/kernel/threads-max /proc/sys/kernel/pid_max; do
+    [ -r "$f" ] && printf 'kernel %s: %s\n' "$(basename "$f")" "$(cat "$f")"
+  done
+  return 0
+}
+
 # --- despacho ---------------------------------------------------------------
 
 # Sem argumento nenhum: usage, exit 2, nada executado (Q2/Q9).
@@ -1033,6 +1057,7 @@ case "$cmd" in
   logs)      logs "${1:?uso: infra logs <alvo> [n]}" "${2:-50}" ;;
   cache)     cache "${1:-ver}" ;;
   hardware)  hardware "$@" ;;
+  limites)   limites ;;
   gpu)       gpu "$@" ;;
   backup)    backup "$@" ;;
   unit-env)  unit_env "$@" ;;
@@ -1046,7 +1071,7 @@ case "$cmd" in
   ingress)   ingress "$@" ;;
   *)
     printf 'infra: erro: ato desconhecido: %s\n' "$cmd" >&2
-    printf 'atos: estado, saude, logs, restart, unit-env, cache, hardware, gpu, backup, up, down, ps, config, pull, build, limpeza, agenda, ingress\n' >&2
+    printf 'atos: estado, saude, logs, restart, unit-env, cache, hardware, limites, gpu, backup, up, down, ps, config, pull, build, limpeza, agenda, ingress\n' >&2
     uso_texto
     exit 2
     ;;
