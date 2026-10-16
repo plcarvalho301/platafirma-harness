@@ -211,6 +211,9 @@ testes/test_tarefas_carteira.py | bin/tarefas
 # por stack, vencidos, matar nos três jeitos e na porta antiga, e indicadores (50 passam; contra o bin/tarefas
 # de antes, 31 ficam vermelhos), contra um rastreador e um catálogo de mentira.
 testes/test_tarefas_dt.py | bin/tarefas
+# Card #3619 (R35, R36 da spec tarefas): `listar --quadro discovery|delivery`, sem lista de
+# estados de quadro no verbo, e `mover --decisao` na aposta, contra um rastreador de mentira.
+testes/test_tarefas_quadros.py | bin/tarefas
 testes/test_lint_card.py | bin/lint bin/_lint/card.py bin/_lint/lista.py bin/_lint/resultado.py
 testes/test_venvs_cobrem_imports.py | bin/_sessao/** mcp/** ops-server/** registro/**
 tests/test_claude_cli.py | lib/claude_cli.py bin/agente bin/motor registro/** venvs/claude-code/**

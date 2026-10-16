@@ -115,6 +115,11 @@ uso:
                                           itens abertos (fase != terminal), na ordem do posto;
                                           as paradas (despriorizada) ficam de fora salvo --paradas
                                           ou --estado despriorizada
+  tarefas listar --quadro discovery|delivery [--paradas] [--json]
+                                          a projeção pronta do rastreador (R35): id, estado
+                                          mostrado, cadeira, executor e título, na ordem dele;
+                                          sem --paradas, a despriorizada sai do delivery e a
+                                          saída diz quantas saíram
   tarefas listar-tudo [mesmos filtros]    inclui os terminais
   tarefas ler|ver <id>                    item em texto: cabeçalho (originação, executor,
                                           quem bloqueia e por quem é bloqueado), ancestrais,
@@ -156,6 +161,9 @@ uso:
                                           se PODE ir a partir do estado atual. Item com
                                           pai devolve junto o derivado do pai e as irmãs
                                           abertas (arq:0095) — é a âncora do PARCIAL:
+  tarefas mover <pai> priorizada --decisao <n>
+                                          a aposta: <n> é o comentário de decisão do PRÓPRIO
+                                          pai; sem ele a API recusa dizendo como informar (R36)
   tarefas fechar <id> [--como <estado>] [--cascata]
                                           fecha; default: entregue. Filha aberta na
                                           subárvore? a recusa NOMEIA quem seria encerrado
@@ -377,7 +385,35 @@ linhas() { # id, marca de terminal, título
     | "\($it.id)\t\(if ($it.estado_derivado != null and ($term | index([$it.estado_derivado]) != null)) or ($it.estado_derivado == null and $it.estado_fase == "terminal") then "x" else " " end)\t\($it.titulo)"'
 }
 
-listar() { # listar [filtros] [--paradas] [--json]   — só os abertos
+# QUADRO (R35 da spec tarefas, card #3619): `--quadro` bypassa `/itens` e vai direto à
+# projeção pronta do rastreador (`GET /quadro/{tipo}`) — o verbo não guarda lista de estados
+# de quadro nenhuma (Travas do card); quem confere o `tipo` é a API, e a recusa dela chega
+# como vier. Sem --paradas, pede `?dormentes=excluir` e, se algo saiu, diz quantas.
+listar_quadro() {
+  local tipo="" paradas=0 json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --quadro)  tipo="${2:?--quadro pede discovery ou delivery}"; shift 2 ;;
+      --paradas) paradas=1; shift ;;
+      --json)    json=1; shift ;;
+      *) echo "tarefas listar --quadro: opção desconhecida: $1 (só --paradas e --json)" >&2; exit 2 ;;
+    esac
+  done
+  local q=""
+  [ "$paradas" -eq 1 ] || q="?dormentes=excluir"
+  local corpo; corpo=$(busca GET "/quadro/$tipo$q") || return 1
+  if [ "$json" -eq 1 ]; then
+    printf '%s\n' "$corpo"
+    return 0
+  fi
+  printf '%s' "$corpo" | jq -r '.itens[] | "#\(.id)\t\(.estado_mostrado)\t\(.cadeira // "—")\t\(.executor // "—")\t\(.titulo)"'
+  local escondidas; escondidas=$(printf '%s' "$corpo" | jq -r '.dormentes_excluidos // 0')
+  [ "$escondidas" != 0 ] && printf '%s dormente(s) escondida(s)\n' "$escondidas"
+  return 0
+}
+
+listar() { # listar [filtros] [--paradas] [--json] [--quadro discovery|delivery]   — só os abertos
+  _tem_flag --quadro "$@" && { listar_quadro "$@"; return; }
   local q; q=$(monta_query "$@")
   # AS PARADAS FICAM DE FORA (card #3526, R25): `despriorizada` é aberta (fase funil), mas é o que
   # ninguém está fazendo, e na fila de trabalho ela atrapalha. Entra com `--paradas`, ou quando o
@@ -885,11 +921,16 @@ comentarios() {
 mover() {
   local id; id=$(so_id "${1:?uso: tarefas mover <id> <estado> [--motivo \"...\"]}")
   local destino="${2:?uso: tarefas mover <id> <estado> [--motivo \"...\"]}"; shift 2
-  local motivo="" elo="" q=""
+  local motivo="" elo="" decisao="" q=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --motivo)       motivo="${2:?--motivo pede texto}"; shift 2 ;;
       --englobado-em) elo="${2:?--englobado-em pede o id que absorveu}"; shift 2 ;;
+      # A APOSTA (R36 da spec tarefas, card #3619): <n> é o id do comentário de decisão do
+      # PRÓPRIO pai. O verbo só leva o número — quem confere que é decisão do próprio pai, é
+      # do tipo certo e sustenta a aposta é a máquina (R19, D3 da arq:0127); sem ele a recusa
+      # diz como informar.
+      --decisao)      decisao="${2:?--decisao pede o número do comentário de decisão}"; shift 2 ;;
       # CONFIRMAÇÃO DA CASCATA (ordem do dono, 18/08/2026). O verbo não decide NADA aqui:
       # ele só carrega a declaração até a API, que é quem sabe se há filha aberta e quem
       # NOMEIA quais são na recusa. Repetir a regra do lado do CLI daria duas verdades, e a
@@ -898,10 +939,11 @@ mover() {
       *) echo "opção desconhecida: $1" >&2; exit 2 ;;
     esac
   done
-  local resp; resp=$(jq -n --arg e "$destino" --arg m "$motivo" --arg g "$elo" \
+  local resp; resp=$(jq -n --arg e "$destino" --arg m "$motivo" --arg g "$elo" --arg d "$decisao" \
      '{estado:$e}
       + (if $m == "" then {} else {motivo:$m} end)
-      + (if $g == "" then {} else {englobado_em:($g|tonumber)} end)' \
+      + (if $g == "" then {} else {englobado_em:($g|tonumber)} end)
+      + (if $d == "" then {} else {decisao:($d|tonumber)} end)' \
     | envia PATCH "/itens/$id$q") || return 1
   printf '%s' "$resp" | jq -r '"item \(.id) → "
              + (if .estado_derivado != null
