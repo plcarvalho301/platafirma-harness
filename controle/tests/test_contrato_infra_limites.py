@@ -32,6 +32,30 @@ def test_limites_imprime_teto_e_uso():
     assert int(vivas[0].rsplit(":", 1)[1]) >= 1
 
 
+def test_limites_le_memoria_junto(tmp_path):
+    mem = tmp_path / "meminfo"
+    mem.write_text("MemTotal:       32768000 kB\nMemAvailable:   12000000 kB\n"
+                   "SwapTotal:      2000000 kB\nSwapFree:       1500000 kB\n"
+                   "CommitLimit:    18000000 kB\nCommitted_AS:   25000000 kB\n")
+    r = subprocess.run([BASH, str(INFRA), "limites"], capture_output=True, text=True,
+                       env={**os.environ, "INFRA_MEMINFO": str(mem)}, timeout=30)
+    assert r.returncode == 0, r.stderr
+    assert ("memória (kB): MemTotal 32768000 · MemAvailable 12000000 · SwapFree 1500000 de 2000000"
+            " · Committed_AS 25000000 · CommitLimit 18000000") in r.stdout
+
+
+def test_limites_amostra_da_pico_e_vale():
+    r = _infra("limites", "--amostrar", "1")
+    assert r.returncode == 0, r.stderr
+    linha = [l for l in r.stdout.splitlines() if l.startswith("amostra (1 s,")]
+    assert linha and "pico de threads da conta" in linha[0] and "vale de MemAvailable" in linha[0]
+
+
+def test_limites_recusa_amostra_sem_numero():
+    assert _infra("limites", "--amostrar", "x").returncode == 2
+    assert _infra("limites", "--outra").returncode == 2
+
+
 def test_limites_consta_do_uso_e_dos_atos():
     r = _infra("--ajuda")
     assert r.returncode == 2
