@@ -954,39 +954,11 @@ def tokens_do_transcript(cadeira):
     `requestId` conta uma vez, pelo ultimo `usage` que ele trouxe (o transcript repete a linha da
     resposta a cada bloco). Devolve `{entrada, saida, cache_criacao, cache_leitura}` ou None:
     sem transcript achado (cwd da fita != $PLATAFIRMA_INSTANCIA/var/fitas/<cadeira>, ou a fita
-    nao e de Code) o fecho sai sem tokens, e a falta se diz, nunca se estima."""
-    import glob
-    base = os.path.expanduser("~/.claude/projects")
-    alvo = (cadeira or "").lower()
-    dirs = [d for d in glob.glob(os.path.join(base, "*fitas-*"))
-            if d.lower().endswith("fitas-" + alvo)]
-    arqs = [a for d in dirs for a in glob.glob(os.path.join(d, "*.jsonl"))]
-    if not alvo or not arqs:
-        return None
-    por_pedido = {}
-    try:
-        with open(max(arqs, key=os.path.getmtime), encoding="utf-8", errors="replace") as fh:
-            for linha in fh:
-                try:
-                    d = json.loads(linha)
-                except ValueError:
-                    continue
-                uso = (d.get("message") or {}).get("usage") if isinstance(d, dict) else None
-                if isinstance(uso, dict) and d.get("requestId"):
-                    por_pedido[d["requestId"]] = uso
-    except OSError:
-        return None
-    if not por_pedido:
-        return None
-    soma = {"entrada": 0, "saida": 0, "cache_criacao": 0, "cache_leitura": 0}
-    for uso in por_pedido.values():
-        for chave, campo in (("entrada", "input_tokens"), ("saida", "output_tokens"),
-                             ("cache_criacao", "cache_creation_input_tokens"),
-                             ("cache_leitura", "cache_read_input_tokens")):
-            valor = uso.get(campo)
-            if isinstance(valor, int):
-                soma[chave] += valor
-    return soma
+    nao e de Code) o fecho sai sem tokens, e a falta se diz, nunca se estima. O leitor e o
+    lib/transcript, o mesmo do `agente rodar`: uma regua para fita e agente (dono, 16/10/2026)."""
+    import transcript
+    arq = transcript.da_cadeira(cadeira)
+    return transcript.soma(arq) if arq else None
 
 
 def grava_fecho(cadeira, parada):
