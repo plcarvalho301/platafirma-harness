@@ -91,6 +91,7 @@ STUB_CLAUDE = """#!{py}
 import json, os, sys
 open(os.environ["STUB_LOG"], "a").write(json.dumps({{"verbo": "claude", "argv": sys.argv[1:], "stdin": sys.stdin.read()}}) + "\\n")
 print(json.dumps({{"type": "result", "is_error": False, "result": "veredito: 0 — x@y", "num_turns": 3,
+                   "session_id": os.environ.get("STUB_SESSAO_CODE"),
                    "usage": {{"input_tokens": 100, "cache_creation_input_tokens": 50,
                    "cache_read_input_tokens": 1000, "output_tokens": 20}}}}))
 """
@@ -642,11 +643,32 @@ def test_claude_monta_a_chamada_do_cli_com_modelo_teto_e_ferramentas(mundo, pess
     assert claude["stdin"] == "o que a ia acha?"
 
 
-def test_claude_mede_a_entrada_com_o_cache(mundo):
+def test_claude_sem_transcript_cai_no_resumo_e_diz(mundo, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     r = agente.chama_claude(CONSULTOR, "sistema", "tarefa")
     assert r["uso"] == {"entrada": 1150, "saida": 20, "turnos": 3,
-                        "entrada_nova": 100, "cache_criacao": 50, "cache_leitura": 1000}, \
-        "a soma segue em entrada; as parcelas separam o lido do cache do novo"
+                        "entrada_nova": 100, "cache_criacao": 50, "cache_leitura": 1000,
+                        "chamadas": None, "fonte": "resumo", "sessao_code": None}, \
+        "sem transcript a reserva é o resumo do claude -p, e o registro diz a fonte"
+
+
+def test_claude_mede_pelo_transcript_da_sessao_como_a_fita(mundo, tmp_path, monkeypatch):
+    sid = "11111111-2222-3333-4444-555555555555"
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("STUB_SESSAO_CODE", sid)
+    pasta = tmp_path / "home" / ".claude" / "projects" / "-home-claudinho"
+    pasta.mkdir(parents=True)
+    linhas = [{"type": "assistant", "requestId": "r1", "message": {"usage": {"input_tokens": 2, "output_tokens": 1}}},
+              {"type": "assistant", "requestId": "r1", "message": {"usage": {"input_tokens": 2, "output_tokens": 9,
+               "cache_creation_input_tokens": 30000}}},
+              {"type": "assistant", "requestId": "r2", "message": {"usage": {"input_tokens": 3, "output_tokens": 4,
+               "cache_read_input_tokens": 30000, "cache_creation_input_tokens": 500}}}]
+    (pasta / f"{sid}.jsonl").write_text("\n".join(json.dumps(l) for l in linhas) + "\n", encoding="utf-8")
+    r = agente.chama_claude(CONSULTOR, "sistema", "tarefa")
+    assert r["uso"] == {"entrada": 5 + 30500 + 30000, "saida": 13, "turnos": 3,
+                        "entrada_nova": 5, "cache_criacao": 30500, "cache_leitura": 30000,
+                        "chamadas": 2, "fonte": "transcript", "sessao_code": sid}, \
+        "o transcript vence o resumo: a mesma regua do fecho da fita, cada requestId uma vez"
 
 
 # --- por ligação e suplanta (spec agente rev 3) --------------------------------------------------

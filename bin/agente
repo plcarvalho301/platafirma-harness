@@ -20,7 +20,7 @@
 # consome: sessao, expediente, seg, ollama
 # ambiente: PF_SUJEITO (a pessoa em nome de quem o agente roda; obrigatoria em rodar; porta) · PF_SESSAO (a sessao de quem chamou; obrigatoria em rodar; porta) · PF_CADEIRA (porta) · PF_ORDEM_ID (porta) · PF_POSTO (opcional; padrao <bancada>/platafirma-posto, onde estao as declaracoes) · PF_BIN (opcional; padrao bin/ da propria arvore; so teste com stub) · PF_CLAUDE_BIN (opcional; padrao o binario da trava em <release>/venv/claude-code, lib/claude_cli.py; so teste com stub) · OLLAMA_BASE_URL (opcional; o ollama local) · PLATAFIRMA_INSTANCIA (opcional; padrao /srv/platafirma/casa; var/log/agente e var/log/seg)
 # escrita: projetar grava .claude/agents/<slug>.md no posto; rodar grava a chave da sessao filha (sessao abrir) e uma linha em var/log/agente/; nada em listar|ler|projetar --conferir
-# depende: sessao, expediente, lib/raizes, lib/uso, pyyaml (venv harness)
+# depende: sessao, expediente, lib/raizes, lib/uso, lib/transcript, pyyaml (venv harness)
 # conforme: parcial — Gemini pelo `agy` ainda não roda (a execução sob jaiminho é da ti, spec agente §Aberto); agendado espera o `bot --roda agente:<slug>` (#3186); `sessao longjob` ja herda os atributos da chave
 #
 # Spec: spec agente (§2 declaração, §3 projeções, §4 ligações, §10 o verbo, §11 piso de segurança)
@@ -42,6 +42,7 @@ _AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(_AQUI.parent / "lib"))
 import raizes  # noqa: E402
 import claude_cli  # noqa: E402  (o CLI vem da trava da release, #2856 linha 248)
+import transcript  # noqa: E402  (a régua de tokens da fita, a mesma do descansar)
 import uso  # noqa: E402
 import yaml  # noqa: E402
 
@@ -749,7 +750,18 @@ def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
     if p.returncode != 0 or obj.get("is_error") or not isinstance(obj.get("result"), str):
         motivo = (p.stderr.strip().splitlines() or [str(obj.get("result") or "sem retorno")])[0]
         raise Falha(5, f"claude -p não concluiu (saiu {p.returncode}): {motivo[:200]}")
-    u = obj.get("usage") or {}
+    # A régua é o transcript da sessão do Code, a mesma do fecho da fita (dono, 16/10/2026): uso por chamada,
+    # cada requestId uma vez. O resumo final do `claude -p` fica de reserva quando o transcript não aparece,
+    # e o registro diz qual das duas fontes valeu.
+    sessao_code = obj.get("session_id") if isinstance(obj.get("session_id"), str) else None
+    arq = transcript.da_sessao(sessao_code) if sessao_code else None
+    lido = transcript.soma(arq) if arq else None
+    if lido:
+        u = {"input_tokens": lido["entrada"], "output_tokens": lido["saida"],
+             "cache_creation_input_tokens": lido["cache_criacao"], "cache_read_input_tokens": lido["cache_leitura"]}
+        fonte, chamadas = "transcript", len(transcript.por_pedido(arq) or {})
+    else:
+        u, fonte, chamadas = obj.get("usage") or {}, "resumo", None
     # o cache conta: sem ele a entrada saía 4 tokens numa revisão de 4 mil de saída (medido em 01/10).
     # `entrada` é a soma, por chamada ao modelo, da janela inteira: cada turno relê o prefixo do cache e tudo
     # o que as tools já devolveram. As três parcelas vão ao registro para separar o lido do cache do novo
@@ -764,7 +776,8 @@ def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
         aviso = f"tokens da execução {entrada + saida} passaram de tokens_execucao {t['tokens_execucao']} (medido, não cortado)"
     return {"retorno": obj["result"], "aviso": aviso,
             "uso": {"entrada": entrada, "saida": saida, "turnos": obj.get("num_turns"),
-                    "entrada_nova": nova, "cache_criacao": criacao, "cache_leitura": leitura}}
+                    "entrada_nova": nova, "cache_criacao": criacao, "cache_leitura": leitura,
+                    "chamadas": chamadas, "fonte": fonte, "sessao_code": sessao_code}}
 
 
 def chama_modelo(decl: dict, sistema: str, tarefa: str) -> dict:
