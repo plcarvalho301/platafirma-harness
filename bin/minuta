@@ -21,7 +21,8 @@ uso:
   minuta escrever <slug> --convoca <c1>[,<c2>...] [--fecha <cadeira|pedro>] [--card <#N>]
   minuta circular <n> [<cadeira>...]
   minuta ler [<n>|<slug>]
-  minuta formalizar <n> --como adr|spec [--destino <slug>] [--vencido]
+  minuta formalizar <n> --como adr --serie <série> [--destino <slug>] [--vencido]
+  minuta formalizar <n> --como spec [--destino <slug>] [--vencido]
 
 escrever   — numera, grava e publica o esqueleto (commit+push); não circula.
 circular   — despacha o ping tipo:minuta às convocadas; recusa pauta vazia ou
