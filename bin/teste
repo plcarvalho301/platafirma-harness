@@ -40,7 +40,7 @@ uso() {
   cat >&2 <<EOF
 uso:
   $VERBO rodar <nome> [<alvo>...] [--portao] [--arvore <caminho>] [--base <rev>] [--chave <nome>]
-  $VERBO rodar <nome> --portao [--degrau pequeno|imagem|rodada|todos] [--base <rev>]
+  $VERBO rodar <nome> --portao [--degrau pequeno|imagem|rodada|demanda|todos] [--base <rev>]
   $VERBO rodar <repositorio> --portao --origin-main [--teto-pequeno <s>]
   $VERBO detectar <nome> [--chave <nome>]
   $VERBO inventario [<nome>|--all] [--json]
@@ -70,7 +70,9 @@ uso:
                 desconhecido na linha sai 5 (não medido); 'lint testes' o aponta. Com PF_TESTE_ESTAGIO
                 (o que o verbo stack testar exporta, card #3733), a prova de imagem roda dentro do estágio de teste
                 da stack, uma por contêiner, e o veredito tem chave própria. 'todos' (o da
-                rodada diária) roda os três degraus e a quarentena, cada linha no regime do seu degrau
+                rodada diária) roda os três degraus e a quarentena, cada linha no regime do seu degrau.
+                'degrau: demanda' (a prova de tela, card #3735) nunca roda no portão nem na rodada,
+                nem em 'todos': só com --degrau demanda, por ordem do dono, com o navegador do host
   --origin-main: só com --portao, sem <alvo> e sem --arvore: busca origin/main no clone base da
                  bancada, mede a lista inteira (os três degraus, e a quarentena, se não houver
                  --degrau) numa árvore descartável dele e a remove (a rodada diária do bot, card
@@ -879,8 +881,8 @@ campos_da_linha() {  # $1=linha crua da lista
       degrau:*)
         valor="${campo#degrau:}"; valor="${valor#"${valor%%[![:space:]]*}"}"; valor="${valor%"${valor##*[![:space:]]}"}"
         case "$valor" in
-          pequeno|imagem|rodada) CAMPO_DEGRAU="$valor" ;;
-          *) CAMPO_ERRO="degrau: com valor '$valor' (pequeno, imagem ou rodada)" ;;
+          pequeno|imagem|rodada|demanda) CAMPO_DEGRAU="$valor" ;;
+          *) CAMPO_ERRO="degrau: com valor '$valor' (pequeno, imagem, rodada ou demanda)" ;;
         esac ;;
       regressivo|regressivo[[:space:]]*) CAMPO_REGR=1 ;;
       quarentena|quarentena[[:space:]]*) CAMPO_QUAR="$campo" ;;
@@ -949,6 +951,10 @@ balde_do_pequeno() {  # $1=familia $2=segundos $3=teto
 # O degrau da linha entra na rodada pedida? $1=pedido (pequeno|imagem|rodada|todos), $2=degrau da
 # linha, $3=campo de quarentena (vazio = fora dela). Quarentena não é degrau: roda só na rodada.
 degrau_entra() {
+  # demanda (decisão do dono, 17/10/2026, card #3735): a prova de tela não roda no portão nem na
+  # rodada; só quando pedida pelo nome. Nem 'todos' a leva.
+  if [ "$2" = demanda ]; then [ "$1" = demanda ]; return; fi
+  [ "$1" = demanda ] && return 1
   [ "$1" = todos ] && return 0
   if [ -n "$3" ]; then [ "$1" = rodada ]; return; fi
   [ "$1" = "$2" ]
@@ -1228,8 +1234,8 @@ ato_rodar() {
   # arq:0129 D1: o degrau pedido. Sem --degrau o portão roda o pequeno; a rodada diária roda os três.
   case "$degrau" in
     '') ;;
-    pequeno|imagem|rodada|todos) [ "$portao" -eq 1 ] || morre "--degrau só com --portao: o degrau é da lista de portão" 2 ;;
-    *) morre "--degrau '$degrau': use pequeno, imagem, rodada ou todos" 2 ;;
+    pequeno|imagem|rodada|demanda|todos) [ "$portao" -eq 1 ] || morre "--degrau só com --portao: o degrau é da lista de portão" 2 ;;
+    *) morre "--degrau '$degrau': use pequeno, imagem, rodada, demanda ou todos" 2 ;;
   esac
   case "$teto_pequeno" in
     '') ;;
@@ -1330,7 +1336,7 @@ ato_rodar() {
       fi
     fi
     local novas_lista="" regr prep pula preparos_dest=() degr n_prova_sel=0 invalidas=()
-    local fora_peq=0 fora_img=0 fora_rod=0 fora_quar=0
+    local fora_peq=0 fora_img=0 fora_rod=0 fora_quar=0 fora_dem=0
     if [ "$seleciona" -eq 1 ]; then
       novas_lista="$(linhas_novas_da_lista "$c" "$lista_portao" "$base" "$EM_ARVORE")"
     fi
@@ -1360,6 +1366,7 @@ ato_rodar() {
         if [ -n "$CAMPO_QUAR" ]; then fora_quar=$((fora_quar + 1))
         elif [ "$degr" = imagem ]; then fora_img=$((fora_img + 1))
         elif [ "$degr" = rodada ]; then fora_rod=$((fora_rod + 1))
+        elif [ "$degr" = demanda ]; then fora_dem=$((fora_dem + 1))
         else fora_peq=$((fora_peq + 1)); fi
         continue
       fi
@@ -1387,11 +1394,11 @@ ato_rodar() {
         "$nome" "${lista_portao#"$c"/}" "${invalidas[*]}"
       exit 5
     fi
-    printf 'degrau: %s · %s linha(s) dele · fora: pequeno %s, imagem %s, rodada %s, quarentena %s\n' \
-      "$degrau_pedido" "$n_lista" "$fora_peq" "$fora_img" "$fora_rod" "$fora_quar"
+    printf 'degrau: %s · %s linha(s) dele · fora: pequeno %s, imagem %s, rodada %s, demanda %s, quarentena %s\n' \
+      "$degrau_pedido" "$n_lista" "$fora_peq" "$fora_img" "$fora_rod" "$fora_dem" "$fora_quar"
     # o veredito de quem não mediu a lista inteira (degrau que deixou linha de fora) tem chave própria,
     # como o da seleção por raio: pequeno verde nunca responde pela lista inteira
-    local fora_n=$((fora_peq + fora_img + fora_rod + fora_quar))
+    local fora_n=$((fora_peq + fora_img + fora_rod + fora_dem + fora_quar))
     if [ "$seleciona" -eq 0 ] && [ "$fora_n" -gt 0 ] && [ "${#sel_rels[@]}" -gt 0 ]; then
       SELECAO_HASH="$(printf 'degrau=%s\n%s\n' "$degrau_pedido" "$(printf '%s\n' "${sel_rels[@]}" | LC_ALL=C sort)" | sha256sum | cut -c1-16)"
     fi
