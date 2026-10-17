@@ -41,7 +41,7 @@ uso() {
 uso:
   $VERBO rodar <nome> [<alvo>...] [--portao] [--arvore <caminho>] [--base <rev>] [--chave <nome>]
   $VERBO rodar <nome> --portao [--degrau pequeno|imagem|rodada|todos] [--base <rev>]
-  $VERBO rodar <repositorio> --portao --origin-main
+  $VERBO rodar <repositorio> --portao --origin-main [--teto-pequeno <s>]
   $VERBO detectar <nome> [--chave <nome>]
   $VERBO inventario [<nome>|--all] [--json]
 
@@ -875,6 +875,53 @@ campos_da_linha() {  # $1=linha crua da lista
   return 0
 }
 
+# Rodada diária (arq:0129 D5 e D7): os três degraus de uma família, um de cada vez, cada um com o seu
+# tempo. O do pequeno, medido sobre a lista inteira (o limite do caminho comum), vai à saída e, acima do
+# teto, ao balde de débito técnico (#2856), uma linha por família. O pior resultado vence: vermelho
+# (1), depois não medido (5), depois o resto.
+rodada_diaria() {  # $1=clone $2=familia $3=bancada $4=arvore $5=teto(s)
+  local c="$1" familia="$2" bancada="$3" arv="$4" teto="$5" deg t0 s rc rcs=()
+  for deg in pequeno imagem rodada; do
+    t0="$(date +%s)"
+    rc=0; portao_da_familia "$c" "$familia" "$bancada" "$arv" "" "$deg" || rc=$?
+    s=$(( $(date +%s) - t0 ))
+    printf 'degrau %s de %s: %s s\n' "$deg" "$familia" "$s"
+    if [ "$deg" = pequeno ] && [ "$rc" -le 1 ] && [ "$s" -gt "$teto" ]; then
+      printf 'degrau pequeno de %s: %s s, acima do teto de %s s\n' "$familia" "$s" "$teto"
+      balde_do_pequeno "$familia" "$s" "$teto"
+    fi
+    rcs+=("$rc")
+  done
+  for rc in "${rcs[@]}"; do [ "$rc" -eq 1 ] && return 1; done
+  for rc in "${rcs[@]}"; do [ "$rc" -eq 5 ] && return 5; done
+  for rc in "${rcs[@]}"; do [ "$rc" -ne 0 ] && return "$rc"; done
+  return 0
+}
+
+# Uma linha no balde de débito técnico por família cujo pequeno passa do teto: lê o balde antes e não
+# admite de novo; falhar em admitir avisa e não derruba a rodada (o tempo já saiu na saída).
+balde_do_pequeno() {  # $1=familia $2=segundos $3=teto
+  local familia="$1" s="$2" teto="$3" tarefas hoje saida
+  tarefas="${PF_TAREFAS_BIN:-$(dirname "$(readlink -f "$0")")/tarefas}"
+  [ -x "$tarefas" ] || { printf 'balde: sem %s, linha não admitida\n' "$tarefas" >&2; return 0; }
+  if "$tarefas" dt listar 2>/dev/null | grep -qF "o degrau pequeno de $familia passa de"; then
+    printf 'balde: já há linha aberta para o degrau pequeno de %s\n' "$familia"
+    return 0
+  fi
+  hoje="$(date +%F)"
+  if saida="$("$tarefas" dt admitir "teste — o degrau pequeno de $familia passa de $teto s no caminho comum (arq:0129 D7)" \
+      --medido-em "$hoje" \
+      --evidencia "rodada diária de $hoje sobre origin/main: o degrau pequeno de $familia levou $s s, teto de $teto s" \
+      --raio "$familia@${REG_SUBARVORE:+$REG_SUBARVORE/}VERDES" \
+      --esperado "o degrau pequeno de $familia cabe em $teto s: teste rodar $familia --portao sai em até $teto s" \
+      --stack "$REG_STACK" 2>&1)"; then
+    printf 'balde: %s\n' "$saida"
+  else
+    printf 'balde: não admiti a linha (%s)\n' "$(printf '%s' "$saida" | head -n 1)" >&2
+  fi
+  return 0
+}
+
 # O degrau da linha entra na rodada pedida? $1=pedido (pequeno|imagem|rodada|todos), $2=degrau da
 # linha, $3=campo de quarentena (vazio = fora dela). Quarentena não é degrau: roda só na rodada.
 degrau_entra() {
@@ -1130,13 +1177,14 @@ ato_inventario() {
 }
 
 ato_rodar() {
-  local nome="" alvo="" chave="" arvore="" base="" degrau="" portao=0 origem_main=0 EM_ARVORE=0 c rc extras=() extras_resolvidos=()
+  local nome="" alvo="" chave="" arvore="" base="" degrau="" teto_pequeno="" portao=0 origem_main=0 EM_ARVORE=0 c rc extras=() extras_resolvidos=()
   local SELECAO_HASH=""  # visto por pytest_em_bloco (chave do memo parcial)
   while [ $# -gt 0 ]; do
     case "$1" in
       --chave) shift; [ $# -gt 0 ] || morre "--chave exige um valor" 2; chave="$1"; shift ;;
       --base) shift; [ $# -gt 0 ] || morre "--base exige uma rev" 2; base="$1"; shift ;;
       --degrau) shift; [ $# -gt 0 ] || morre "--degrau exige pequeno, imagem ou rodada" 2; degrau="$1"; shift ;;
+      --teto-pequeno) shift; [ $# -gt 0 ] || morre "--teto-pequeno exige os segundos" 2; teto_pequeno="$1"; shift ;;
       --portao) portao=1; shift ;;
       --origin-main) origem_main=1; shift ;;
       --arvore) shift; [ $# -gt 0 ] || morre "--arvore exige um caminho" 2; arvore="$1"; shift ;;
@@ -1158,6 +1206,11 @@ ato_rodar() {
     '') ;;
     pequeno|imagem|rodada|todos) [ "$portao" -eq 1 ] || morre "--degrau só com --portao: o degrau é da lista de portão" 2 ;;
     *) morre "--degrau '$degrau': use pequeno, imagem, rodada ou todos" 2 ;;
+  esac
+  case "$teto_pequeno" in
+    '') ;;
+    *[!0-9]*) morre "--teto-pequeno '$teto_pequeno': use os segundos, um inteiro" 2 ;;
+    *) [ "$origem_main" -eq 1 ] || morre "--teto-pequeno só com --origin-main: o teto é da rodada diária" 2 ;;
   esac
   local degrau_pedido="${degrau:-pequeno}"
   [ -n "$degrau" ] || [ "$origem_main" -ne 1 ] || degrau_pedido=todos
@@ -1209,6 +1262,10 @@ ato_rodar() {
   if [ "$portao" -eq 1 ] && [ -z "$alvo" ] && [ -z "$chave" ] && [ "${nome%%@*}" = "$REG_FAMILIA" ]; then
     local arv_fam=""
     [ "$EM_ARVORE" -eq 1 ] && arv_fam="$c"
+    if [ "$origem_main" -eq 1 ] && [ "$degrau_pedido" = todos ]; then
+      rodada_diaria "$c" "$REG_FAMILIA" "$REG_BANCADA" "$arv_fam" "${teto_pequeno:-${PF_TESTE_TETO_PEQUENO:-60}}"
+      return $?
+    fi
     portao_da_familia "$c" "$REG_FAMILIA" "$REG_BANCADA" "$arv_fam" "$base" "$degrau_pedido"
     return $?
   fi
