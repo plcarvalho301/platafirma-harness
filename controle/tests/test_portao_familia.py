@@ -628,3 +628,78 @@ def test_rodada_diaria_roda_os_tres_degraus(tmp_path):
              "rodar", "demo", "--portao", "--origin-main")
     assert r.returncode == 0, r.stdout + r.stderr
     assert _rodou(marcas) == {"a1", "a2", "a3", "q"}, r.stdout
+
+
+# --- #3732 (arq:0129 D5 e D7): a rodada diária mede o tempo do pequeno e abre linha no balde ------------
+
+def _rodada(tmp_path, lista: str, suites: dict[str, str], tarefas_corpo: str | None = None):
+    """Família `demo` com uma chave `a`, clonada para a bancada da rodada, e um `tarefas` de fixture
+    que grava o que recebe e mantém um balde em arquivo (`dt listar` o lê, `dt admitir` acrescenta)."""
+    env, arv = _arvore(tmp_path, {"a": suites}, {"a": lista})
+    banc = tmp_path / "bancada"
+    banc.mkdir()
+    subprocess.run(["git", "clone", "-q", str(arv), str(banc / "demo")], check=True, capture_output=True)
+    log, balde = tmp_path / "tarefas.log", tmp_path / "balde.txt"
+    stub = tmp_path / "tarefas"
+    stub.write_text(tarefas_corpo or (
+        "#!/usr/bin/env bash\n"
+        f'echo "$*" >> "{log}"\n'
+        'case "$1 $2" in\n'
+        f'  "dt listar") printf "n\\tidade\\tstack\\tdébito\\n"; cat "{balde}" 2>/dev/null; exit 0 ;;\n'
+        f'  "dt admitir") printf "1\\t0d\\tk-a\\t%s\\n" "$3" >> "{balde}"; echo "débito 1 admitido"; exit 0 ;;\n'
+        'esac\n'))
+    stub.chmod(0o755)
+    return dict(env, PLATAFIRMA_BANCADA=str(banc), PF_TESTE_SEM_MEMO="1", PF_TAREFAS_BIN=str(stub)), log, balde
+
+def test_rodada_diaria_traz_o_tempo_de_cada_degrau_por_familia(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, log, _ = _rodada(tmp_path, "test_a1.py\ntest_a2.py | degrau: imagem\n",
+                          {"test_a1.py": _marca(marcas, "a1"), "test_a2.py": _marca(marcas, "a2")})
+    r = _run(env, "rodar", "demo", "--portao", "--origin-main")
+    assert r.returncode == 0, r.stdout + r.stderr
+    for deg in ("pequeno", "imagem", "rodada"):
+        assert f"degrau {deg} de demo: " in r.stdout, r.stdout
+    assert _rodou(marcas) == {"a1", "a2"}
+    assert not log.exists(), "dentro do teto não se admite nada"
+
+def test_pequeno_acima_do_teto_abre_uma_linha_no_balde_e_so_uma(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, log, balde = _rodada(tmp_path, "test_a1.py\n", {"test_a1.py": _marca(marcas, "a1", 2)})
+    r = _run(env, "rodar", "demo", "--portao", "--origin-main", "--teto-pequeno", "0")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "degrau pequeno de demo: " in r.stdout and "acima do teto de 0 s" in r.stdout, r.stdout
+    admitidos = [l for l in log.read_text().splitlines() if l.startswith("dt admitir")]
+    assert len(admitidos) == 1, log.read_text()
+    assert "o degrau pequeno de demo passa de 0 s" in admitidos[0]
+    assert "--stack k-a" in admitidos[0] and "--raio demo@a/VERDES" in admitidos[0], admitidos[0]
+    assert "o degrau pequeno de demo passa de" in balde.read_text()
+    r = _run(env, "rodar", "demo", "--portao", "--origin-main", "--teto-pequeno", "0")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "já há linha aberta" in r.stdout, r.stdout
+    assert len([l for l in log.read_text().splitlines() if l.startswith("dt admitir")]) == 1
+
+def test_balde_que_recusa_avisa_e_nao_derruba_a_rodada(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, log, _ = _rodada(tmp_path, "test_a1.py\n", {"test_a1.py": _marca(marcas, "a1", 2)},
+                          "#!/usr/bin/env bash\n"
+                          'case "$1 $2" in "dt listar") exit 0 ;; *) echo "recusado pelo PDP" >&2; exit 4 ;; esac\n')
+    r = _run(env, "rodar", "demo", "--portao", "--origin-main", "--teto-pequeno", "0")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "balde: não admiti a linha (recusado pelo PDP)" in r.stderr, r.stderr
+
+def test_vermelho_em_qualquer_degrau_da_rodada_sai_1(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, _, _ = _rodada(tmp_path, "test_a1.py\ntest_v.py | degrau: rodada\n",
+                        {"test_a1.py": _marca(marcas, "a1"), "test_v.py": VERMELHO})
+    r = _run(env, "rodar", "demo", "--portao", "--origin-main")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "degrau rodada de demo: " in r.stdout and "VERMELHO" in r.stdout, r.stdout
+
+def test_teto_pequeno_so_com_a_rodada_diaria_e_so_inteiro(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, arv, _ = _tres(tmp_path, marcas, DEGRAUS)
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv), "--teto-pequeno", "5")
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "--teto-pequeno só com --origin-main" in r.stdout + r.stderr
+    r = _run(env, "rodar", "demo", "--portao", "--origin-main", "--teto-pequeno", "cinco")
+    assert r.returncode == 2, r.stdout + r.stderr
