@@ -44,7 +44,39 @@ services:
       cubo:
         aliases: [cubo-borda]
 
+  # A borda da casca do rastreador (card #3738; seg:0016 item 6). A MESMA imagem, outra instancia: atende so
+  # `GET|PUT /api/preferencia/tema` para o gate de tarefas.platafirma.org (platafirma-core, story #3739),
+  # com a origem dele e o verbo `preferencia` na face `casca`. Instancia propria porque a lista de origens
+  # e da borda inteira (R31): a do cubo nao deve aceitar escrita vinda da origem do rastreador, nem o
+  # contrario. Sem porta publicada: so o gate do rastreador a alcanca, pela rede de encontro abaixo.
+  # O client do gate do rastreador (`gate-rastreador`) entra em PF_FACE_CLIENTS da porta na instancia, junto
+  # com a subida do gate; sem a lista a porta nega a fonte face e a casca segue no tema do sistema.
+  borda-casca-rastreador:
+    build: .
+    restart: unless-stopped
+    environment:
+      BORDA_ORIGENS: ${BORDA_CASCA_RASTREADOR_ORIGENS:-https://tarefas.platafirma.org}
+      BORDA_PORTA_URL: ${BORDA_PORTA_URL:-https://ops.platafirma.org/mcp}
+      BORDA_CABECALHO_TOKEN: x-forwarded-access-token
+      # O corte de login recente e dos atos do cubo; a troca de tema nao o tem (e a rota nao o le).
+      BORDA_LOGIN_MAX_S: "0"
+      # A frase que a borda poe como fundamento da escrita do tema (a porta exige um para a fonte face).
+      BORDA_TEMA_FUNDAMENTO: ${BORDA_TEMA_FUNDAMENTO:-escolha do tema na casca da tela}
+      BORDA_FACES: '{"casca": {"verbo": "/opt/platafirma/current/harness/bin/preferencia"}}'
+    volumes:
+      - ${PF_RELEASE_RAIZ:-/opt/platafirma}:${PF_RELEASE_RAIZ:-/opt/platafirma}:ro
+    networks:
+      default: {}
+      casca-rastreador:
+        aliases: [casca-borda-rastreador]
+
 networks:
+  # Rede de ENCONTRO com o gate do rastreador (platafirma-core, story #3739): declarada aqui e la com o MESMO
+  # `name:` e em nenhum dos dois como `external`, como as outras. `internal`: so o gate e esta borda.
+  casca-rastreador:
+    name: pf-borda-casca-rastreador
+    internal: true
+
   # Rede de ENCONTRO com o gate do cubo (platafirma-core, card #3565): declarada aqui e lá com o MESMO
   # `name:` e em nenhum dos dois como `external`, o desenho de pf-borda-casa e pf-borda-rastreador:
   # nenhuma das duas stacks depende da outra para subir. `internal`: só o gate e a borda, sem egresso.

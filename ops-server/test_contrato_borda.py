@@ -71,6 +71,29 @@ echo "FUND=$PF_FUNDAMENTO"
 """
 
 
+# O verbo `preferencia` de brinquedo (#3738): o mesmo cabecalho de face do verbo real, o valor guardado por
+# sujeito num arquivo ao lado da marca, o vocabulario do verbo (sai 2 fora dele) e o fundamento da porta
+# anotado na marca. O banco e o SQL do verbo de verdade tem o teste proprio (controle/tests).
+PREFERENCIA = """#!/bin/sh
+# preferencia — verbo de brinquedo do contrato da rota do tema (#3738)
+# atos: ler (leitura, p), escrever (escrita, p)
+# face: ler=casca
+# face: escrever=casca
+arq="$PF_MARCA.tema.$PF_SUJEITO"
+case "$1" in
+  ler)
+    if [ -f "$arq" ]; then echo "{\\"preferencia\\": \\"tema\\", \\"valor\\": \\"$(cat "$arq")\\", \\"motivo\\": null}"
+    else echo '{"preferencia": "tema", "valor": null, "motivo": "sem preferência gravada"}'; fi ;;
+  escrever)
+    case "$3" in
+      claro|escuro|sistema) echo "$3" > "$arq"; echo "SUJ=$PF_SUJEITO FUND=$PF_FUNDAMENTO" >> "$PF_MARCA"; echo "ok" ;;
+      *) echo "fora do vocabulário" >&2; exit 2 ;;
+    esac ;;
+esac
+"""
+OUTRO_SUB = "0f6f2a1e-6d0e-4a55-9a3d-1b8c0c4e9a77"
+
+
 class _ChaveDoRealm:
     key = CHAVE.public_key()
 
@@ -99,6 +122,12 @@ def porta(tmp_path_factory):
     ferramentas = s.mcp._tool_manager._tools
     antiga = ferramentas.pop("motor", None)
     s.mcp.tool(name="motor", description="motor de brinquedo")(s._faz_tool_verbo("motor", str(verbo), "x"))
+    pref = verbo.parent / "preferencia"
+    pref.write_text(PREFERENCIA, encoding="utf-8")
+    pref.chmod(pref.stat().st_mode | stat.S_IXUSR)
+    antiga_pref = ferramentas.pop("preferencia", None)
+    s.mcp.tool(name="preferencia", description="preferencia de brinquedo")(
+        s._faz_tool_verbo("preferencia", str(pref), "p"))
     gerente = s.mcp._session_manager
     s.mcp._session_manager = None          # o lifespan do gerente roda uma vez só: este app tem o dele
     app = s.mcp.streamable_http_app()
@@ -114,12 +143,15 @@ def porta(tmp_path_factory):
             break
         time.sleep(0.02)
     assert servidor.started, "a porta de teste não subiu"
-    yield SimpleNamespace(url=f"http://127.0.0.1:{numero}/mcp", verbo=verbo)
+    yield SimpleNamespace(url=f"http://127.0.0.1:{numero}/mcp", verbo=verbo, preferencia=pref)
     servidor.should_exit = True
     fio.join(10)
     ferramentas.pop("motor", None)
+    ferramentas.pop("preferencia", None)
     if antiga is not None:
         ferramentas["motor"] = antiga
+    if antiga_pref is not None:
+        ferramentas["preferencia"] = antiga_pref
     s.mcp._session_manager = gerente
 
 
@@ -259,3 +291,52 @@ def test_as_recusas_da_borda_nao_deixam_linha_no_bruto_da_porta(porta, tmp_path)
     ]
     assert [t[0] for t in tentativas] == [403] * 5
     assert _linhas(tmp_path) == [] and _marca(tmp_path) is None
+
+
+# --- #3738: a rota do tema da casca (spec taipa R40, spec preferencia R1) -------------------------
+
+def _pede_tema(porta_, metodo, token=None, corpo=None):
+    face = borda.Face("casca", verbo=str(porta_.preferencia))
+    app = borda.Borda([face], origens=(ORIGEM,), porta_url=porta_.url, saida=io.StringIO())
+    cab = {borda.CABECALHO_DO_GATE: token} if token else {}
+    if metodo != "GET":
+        cab.update({"origin": ORIGEM, "x-pf-tela": "1", "content-type": "application/json"})
+    status, _, dado = asyncio.run(borda._chamar(
+        app, metodo, borda.ROTA_DO_TEMA, cab, json.dumps(corpo).encode() if corpo is not None else b""))
+    return status, json.loads(dado)
+
+
+def test_a_rota_do_tema_grava_e_le_pelo_sub_do_token_e_um_dono_nao_ve_o_do_outro(porta, tmp_path):
+    assert _pede_tema(porta, "GET", _token()) == (200, {"valor": None})
+    assert _pede_tema(porta, "PUT", _token(), {"valor": "escuro"}) == (200, {"valor": "escuro"})
+    assert _pede_tema(porta, "GET", _token()) == (200, {"valor": "escuro"})
+    # o fundamento da escrita e a frase fixa da instancia, posta pela borda: a porta o aceita como o da face
+    assert _marca(tmp_path) == f"SUJ={SUB} FUND={borda.FUNDAMENTO_DO_TEMA}"
+    # outra pessoa nunca escolheu, e escolher nao muda a escolha da primeira (C4 da spec preferencia)
+    assert _pede_tema(porta, "GET", _token(sub=OUTRO_SUB)) == (200, {"valor": None})
+    assert _pede_tema(porta, "PUT", _token(sub=OUTRO_SUB), {"valor": "claro"}) == (200, {"valor": "claro"})
+    assert _pede_tema(porta, "GET", _token()) == (200, {"valor": "escuro"})
+    assert _pede_tema(porta, "GET", _token(sub=OUTRO_SUB)) == (200, {"valor": "claro"})
+    # cada chamada entra no bruto da porta com a fonte face e o sub de quem chamou
+    giros = [g for g in _linhas(tmp_path) if g.get("tool") == "preferencia" and not g.get("evento")]
+    assert len(giros) == 7 and {g["turno_fonte"] for g in giros} == {"face"}
+    assert {g["sub"] for g in giros} == {SUB, OUTRO_SUB}
+
+
+def test_a_troca_de_tema_nao_exige_login_recente(porta, tmp_path):
+    """O corte de login de #2572 e dos atos do cubo; o tema volta com um clique e nao o tem."""
+    assert _pede_tema(porta, "PUT", _token(login_ha_s=7200), {"valor": "claro"}) == (200, {"valor": "claro"})
+
+
+def test_valor_fora_do_vocabulario_sai_400_pelo_verbo_e_nao_grava(porta, tmp_path):
+    assert _pede_tema(porta, "PUT", _token(), {"valor": "roxo"})[0] == 400
+    assert _pede_tema(porta, "GET", _token()) == (200, {"valor": None})
+
+
+def test_token_de_outro_client_nao_chega_ao_verbo_do_tema(porta, tmp_path):
+    status, resposta = _pede_tema(porta, "PUT", _token(azp="agy-cli"), {"valor": "claro"})
+    assert status == 403 and "azp" in resposta["erro"]
+    assert _pede_tema(porta, "GET", _token(azp="agy-cli"))[0] == 403
+    assert _marca(tmp_path) is None
+    assert _pede_tema(porta, "GET", _token(aud="outro-servico"))[0] == 401
+    assert _pede_tema(porta, "GET")[0] == 401

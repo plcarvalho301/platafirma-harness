@@ -19,7 +19,37 @@ TOKEN = {borda.CABECALHO_DO_GATE: "a.b.c"}
 
 def test_autoteste_da_borda(capsys):
     borda._autoteste()
-    assert "borda OK (#3516, #3518, #3575)" in capsys.readouterr().out
+    assert "borda OK (#3516, #3518, #3575, #3738)" in capsys.readouterr().out
+
+
+def test_a_face_casca_alcanca_do_preferencia_o_ler_e_o_escrever():
+    """#3738: a rota do tema (spec taipa R40) so vale se o cabecalho REAL do verbo poe os dois atos na face
+    `casca`, com a capacidade que a borda confere por metodo."""
+    atos = borda.Face("casca", verbo=str(AQUI.parent / "bin" / "preferencia")).atos()
+    assert atos == {"ler": {"leitura"}, "escrever": {"escrita"}}
+
+
+def test_a_rota_do_tema_contra_o_cabecalho_real_do_verbo():
+    chamadas = []
+
+    def porta(token, tool, argumentos):
+        chamadas.append((token, tool, argumentos))
+        return 200, {"exit_code": 0, "stdout": {"texto": json.dumps({"preferencia": "tema", "valor": "claro",
+                                                                  "motivo": None})}}
+
+    app = borda.Borda([borda.Face("casca", verbo=str(AQUI.parent / "bin" / "preferencia"))],
+                      origens=("https://tarefas.exemplo.org",), chamar_porta=porta)
+    status, _, corpo = asyncio.run(borda._chamar(app, "GET", borda.ROTA_DO_TEMA, TOKEN))
+    assert status == 200 and json.loads(corpo) == {"valor": "claro"}
+    assert chamadas == [("a.b.c", "preferencia", {"ato": "ler", "args": ["tema", "--json"], "turno_fonte": "face"})]
+
+
+def test_a_configuracao_da_borda_da_casca_sobe_do_ambiente_da_instancia():
+    env = {"BORDA_FACES": json.dumps({"casca": {"verbo": str(AQUI.parent / "bin" / "preferencia")}}),
+           "BORDA_ORIGENS": "https://tarefas.exemplo.org", "BORDA_LOGIN_MAX_S": "0"}
+    app = borda.criar_app(env)
+    assert list(app.faces) == ["casca"] and app.login_max_s == 0
+    assert asyncio.run(borda._chamar(app, "GET", borda.ROTA_DO_TEMA, {}))[0] == 401
 
 
 def test_a_lista_de_atos_da_face_motor_e_a_do_cabecalho_do_verbo_real():
