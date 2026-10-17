@@ -246,3 +246,32 @@ def test_para_html_separa_os_rotulos_do_two_pager(stub):
     assert p.returncode == 0, p.stderr
     for r in ("Medida", "Solução", "Peças", "Aberto", "Produtos documentais"):
         assert f"<p><strong>{r}:</strong>" in p.stdout, (r, p.stdout)
+
+
+def _para_html(texto):
+    p = subprocess.run(["bash", "-c", f'source <(sed -n "/^para_html()/,/^}}/p" {BIN}); para_html'],
+                       input=texto, capture_output=True, text=True)
+    assert p.returncode == 0, p.stderr
+    return p.stdout.rstrip("\n")
+
+
+def test_para_html_liga_url_solta_so_http_e_https():
+    """Card #3740. Mesmos textos e mesmas saídas da prova de platafirma-rastreador@api/logica.py (R34)."""
+    assert _para_html("veja https://exemplo.org/a/b.") == (
+        '<p>veja <a href="https://exemplo.org/a/b">https://exemplo.org/a/b</a>.</p>')
+    assert _para_html("Traz: http://x.org/p?a=1&b=2, e (https://y.org/z)") == (
+        '<p><strong>Traz:</strong> <a href="http://x.org/p?a=1&amp;b=2">http://x.org/p?a=1&amp;b=2</a>,'
+        ' e (<a href="https://y.org/z">https://y.org/z</a>)</p>')
+    assert _para_html("<https://x.org>") == '<p>&lt;<a href="https://x.org">https://x.org</a>&gt;</p>'
+    assert "<a " not in _para_html("javascript:alert(1) e ftp://x.org e https:// vazio")
+    assert "<script>" not in _para_html('"><script>https://x.org')
+
+
+def test_para_html_poe_em_negrito_os_rotulos_de_decisao_e_de_insumo():
+    """Card #3740 (comentário #2862): a tela só destaca o que a conversão marca."""
+    for r in ("Decidiu", "Ficha", "Golden", "Motivo", "Por que importa", "O que já se sabe",
+              "Resposta esperada", "Consequência no corpo"):
+        assert _para_html(f"antes\n{r}: z") == f"<p>antes</p><p><strong>{r}:</strong> z</p>", r
+    assert _para_html("o Motivo: x") == "<p>o Motivo: x</p>"
+    assert _para_html("Decidiu: a\nAlgo que não é rótulo: y") == (
+        "<p><strong>Decidiu:</strong> a<br>Algo que não é rótulo: y</p>")
