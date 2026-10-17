@@ -25,6 +25,8 @@ set -uo pipefail
 . "$(dirname "$(readlink -f "$0")")/../lib/venv.sh"
 . "$(dirname "$(readlink -f "$0")")/../lib/terceiros.sh"
 PF_VENV_PREFIXO="teste"
+# degrau de cada prova da rodada (arq:0129): pequeno, imagem, rodada ou preparo, pelo caminho que o runner recebe
+declare -A DEGRAU_DE_ALVO=()
 
 BANCADA=""
 VERBO="$(basename "$0")"
@@ -38,6 +40,7 @@ uso() {
   cat >&2 <<EOF
 uso:
   $VERBO rodar <nome> [<alvo>...] [--portao] [--arvore <caminho>] [--base <rev>] [--chave <nome>]
+  $VERBO rodar <nome> --portao [--degrau pequeno|imagem|rodada|todos] [--base <rev>]
   $VERBO rodar <repositorio> --portao --origin-main
   $VERBO detectar <nome> [--chave <nome>]
   $VERBO inventario [<nome>|--all] [--json]
@@ -59,9 +62,17 @@ uso:
                 provas dependem) roda antes, só quando a seleção não é vazia, e não conta nela.
                 Sem --base, a lista inteira; base que não se lê sai 5 (não medido) e nunca vira lista
                 inteira
+  --degrau <d>: só com --portao (arq:0129): o degrau da lista que roda. A linha da lista é
+                '<arquivo> | <globs do raio> | degrau: imagem|rodada | regressivo #<n> | quarentena #<débito> | preparo';
+                sem 'degrau:' é pequeno. Sem --degrau o portão roda o pequeno, sob os delatores de
+                navegador e docker e sem rede (o preparo roda antes, com rede); imagem e rodada rodam
+                com o ambiente da stack. Linha em quarentena só roda no degrau rodada. Campo
+                desconhecido na linha sai 5 (não medido); 'lint testes' o aponta. 'todos' (o da
+                rodada diária) roda os três degraus e a quarentena, cada linha no regime do seu degrau
   --origin-main: só com --portao, sem <alvo> e sem --arvore: busca origin/main no clone base da
-                 bancada, mede a lista inteira numa árvore descartável dele e a remove (a
-                 rodada diária do bot, card #3370; não grava veredito de seleção)
+                 bancada, mede a lista inteira (os três degraus, e a quarentena, se não houver
+                 --degrau) numa árvore descartável dele e a remove (a rodada diária do bot, card
+                 #3370; não grava veredito de seleção)
   --chave <nome>: (deprecado) usa o ambiente de registro/venvs.json (arq:0110 §11)
 
 bancada: PLATAFIRMA_BANCADA, senão \$PLATAFIRMA_ARQUIVO_BANCADA (sem declaração: exit 3)
@@ -317,6 +328,24 @@ lock_e_node() { [ "$(basename "${REG_LOCK:-}")" = package-lock.json ]; }
 # `.git` nem node_modules — e a original fica como estava. O veredito segue memoizado pela árvore
 # ORIGINAL (`ARVORE_ORIGEM`), que é a que o pre-push e o gate leem. Antes (card #3426) a rodada
 # saía 5 aqui, e a primeira promoção de platafirma-ui nunca teria medido nada (#3427).
+# Delatores do degrau pequeno (arq:0129 D3), como lib/teste_isolado.py já faz no python: navegador e
+# docker saem 97 dizendo a cura e deixam o nome em $PF_DELATOR_MARCA, para o runner nomear quem
+# delatou mesmo quando a prova engole o erro. O navegador de verdade não está no PATH nem em CHROME.
+delatores_do_pequeno() {  # $1=diretório
+  local d="$1" prog nome
+  mkdir -p "$d" || return 1
+  for prog in navegador docker google-chrome google-chrome-stable chromium chromium-browser chrome; do
+    nome=navegador; [ "$prog" = docker ] && nome=docker
+    {
+      printf '#!/bin/sh\n'
+      printf 'echo "delator %s: o degrau pequeno não abre navegador nem docker; a prova que usa um deles leva degrau: imagem (navegador) ou degrau: rodada (docker, rede) na lista" >&2\n' "$nome"
+      printf 'printf "%%s\\n" %s >> "${PF_DELATOR_MARCA:-/dev/null}"\n' "$nome"
+      printf 'exit 97\n'
+    } > "$d/$prog" || return 1
+    chmod 755 "$d/$prog" || return 1
+  done
+}
+
 node_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rótulo [$4=alvo...]
   local c="$1" raiz="$2" rotulo="$3"; shift 3
   if [ -w "$raiz" ]; then
@@ -341,7 +370,7 @@ node_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rótulo [$4=alvo...]
 
 _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
   local c="$1" raiz="$2" rotulo="$3"; shift 3
-  local alvos=("$@") nodeinfo node ver chrome="" f rc_f n=0 falhos=() criou=0
+  local alvos=("$@") nodeinfo node ver chrome="" f rc_f n=0 falhos=() criou=0 deleg
   local elo="$raiz/node_modules" alvo_nm="$CHAVE_DEST/node_modules" inst log logd saida
   local -a envx
   # O node_modules do ambiente entra por elo na raiz de teste e sai no fim; árvore sem escrita
@@ -371,8 +400,9 @@ _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
   log="$logd/$(date -u +%Y%m%dT%H%M%SZ)-${REG_STACK}-$$.txt"
   # npm_config_ignore_scripts: a prova que chama `npm ci` (construir o dist) também não roda
   # script de pacote, como o construtor do ambiente
-  envx=(PATH="$(dirname "$node"):$PATH" NODE_ENV=test npm_config_ignore_scripts=true)
-  [ -z "$chrome" ] || envx+=(CHROME="$chrome" PUPPETEER_EXECUTABLE_PATH="$chrome" PLATAFIRMA_CHROMIUM="$chrome")
+  # O navegador do host (CHROME) só vai à prova de imagem ou de rodada; o degrau pequeno recebe o delator
+  # no lugar dele, em `_uma_prova` (arq:0129 D3).
+  envx=(NODE_ENV=test npm_config_ignore_scripts=true)
 
   # Veredito do portão (card #3426): a mesma chave (árvore, stack, ambiente) que o pre-push e
   # o gate leem. Só a rodada de portão grava e lê; rodada de alvo avulso roda sempre.
@@ -435,16 +465,35 @@ _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
   # da conta — todo verbo do host passou a falhar em fork. Sobe do padrão quando a folga de
   # processos da conta estiver medida. Rodada de alvo avulso roda sempre em série. Cada arquivo
   # grava a duração no log, e a linha final cita os mais lentos.
-  local tmpr i ms s trab=1 ativos=0 seriais=() paralelos=() t_ini t_fim lentos
+  local tmpr i ms s trab=1 ativos=0 seriais=() paralelos=() t_ini t_fim lentos delat pequeno_n=0 x
   tmpr="$(mktemp -d "${TMPDIR:-/tmp}/teste-node.XXXXXX")" || morre "não criei o diretório de saída das provas" 3
-  _uma_prova() {  # $1=índice $2=arquivo ; grava <índice>.out, .rc e .ms em $tmpr
-    local f="$2" f_abs rc=0 t0 t1 cmd=()
+  # Degrau pequeno (arq:0129 D3): navegador e docker apontam para delatores que saem 97, e a prova roda
+  # num namespace de rede próprio, sem interface. O preparo (`| preparo`) roda antes, com rede, e as
+  # provas de imagem e de rodada rodam com o navegador do host.
+  delat="$tmpr/delatores"
+  delatores_do_pequeno "$delat" || { rm -rf "$tmpr"; morre "não criei os delatores do degrau pequeno em $delat" 3; }
+  for x in "${alvos[@]}"; do [ "${DEGRAU_DE_ALVO[$x]:-livre}" = pequeno ] && pequeno_n=$((pequeno_n + 1)); done
+  if [ "$pequeno_n" -gt 0 ] && ! unshare --user --map-root-user --net -- true 2>/dev/null; then
+    rm -rf "$tmpr"; [ "$criou" -eq 0 ] || rm -f "$elo"
+    morre "o degrau pequeno roda sem rede e este host não deixou criar o namespace de rede (unshare --user --map-root-user --net): não medido" 5
+  fi
+  _uma_prova() {  # $1=índice $2=arquivo ; grava <índice>.out, .rc, .ms e .delator em $tmpr
+    local f="$2" f_abs rc=0 t0 t1 cmd=() regime="${DEGRAU_DE_ALVO[$2]:-livre}" envp=("${envx[@]}") pre=()
+    case "$regime" in
+      pequeno)
+        envp+=(PATH="$delat:$(dirname "$node"):$PATH" CHROME="$delat/navegador" PUPPETEER_EXECUTABLE_PATH="$delat/navegador"
+               PLATAFIRMA_CHROMIUM="$delat/navegador" PF_DELATOR_MARCA="$tmpr/$1.delator")
+        pre=(unshare --user --map-root-user --net --) ;;
+      *)
+        envp+=(PATH="$(dirname "$node"):$PATH")
+        [ -z "$chrome" ] || envp+=(CHROME="$chrome" PUPPETEER_EXECUTABLE_PATH="$chrome" PLATAFIRMA_CHROMIUM="$chrome") ;;
+    esac
     # a lista do portão traz o arquivo relativo à raiz de teste; o cwd é a raiz do repositório,
     # que é de onde as provas da platafirma-ui se rodam (dist/, src/)
     case "$f" in /*) f_abs="$f" ;; *) f_abs="$raiz/$f" ;; esac
     case "$f" in *.sh) cmd=(bash "$f_abs") ;; *) cmd=("$node" "$f_abs") ;; esac
     t0="$(date +%s%N)"
-    (cd "$c" && env "${envx[@]}" timeout "${PF_TESTE_TIMEOUT:-600}" "${cmd[@]}") >"$tmpr/$1.out" 2>&1 || rc=$?
+    (cd "$c" && env "${envp[@]}" timeout "${PF_TESTE_TIMEOUT:-600}" ${pre[@]+"${pre[@]}"} "${cmd[@]}") >"$tmpr/$1.out" 2>&1 || rc=$?
     t1="$(date +%s%N)"
     printf '%s' "$rc" > "$tmpr/$1.rc"
     printf '%s' "$(( (t1 - t0) / 1000000 ))" > "$tmpr/$1.ms"
@@ -474,12 +523,18 @@ _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
   for i in "${!alvos[@]}"; do
     f="${alvos[$i]}"; n=$((n + 1))
     rc_f="$(cat "$tmpr/$i.rc" 2>/dev/null)"; [ -n "$rc_f" ] || rc_f=5
+    # delator acionado: a prova usou navegador ou docker sem a marca, mesmo que engolisse o erro
+    deleg=""
+    if [ -s "$tmpr/$i.delator" ]; then
+      deleg=", delator $(head -n 1 "$tmpr/$i.delator")"
+      [ "$rc_f" -ne 0 ] || rc_f=97
+    fi
     ms="$(cat "$tmpr/$i.ms" 2>/dev/null)"; [ -n "$ms" ] || ms=0
     s="$((ms / 1000)).$(( (ms % 1000) / 100 ))"
     { printf '=== %s · exit %s · %s s\n' "$f" "$rc_f" "$s"; cat "$tmpr/$i.out" 2>/dev/null; } >> "$log" 2>/dev/null || true
     printf '%s\t%s\n' "$ms" "${f##*/}" >> "$tmpr/tempos"
     if [ "$rc_f" -ne 0 ]; then
-      falhos+=("$f (exit $rc_f)")
+      falhos+=("$f (exit $rc_f$deleg)")
       tail -n 15 "$tmpr/$i.out" 2>/dev/null | sed "s|^|  $f: |"
     fi
   done
@@ -784,8 +839,48 @@ linha_arquivo() {
   l="${l#"${l%%[![:space:]]*}"}"; l="${l%"${l##*[![:space:]]}"}"
   printf '%s' "$l"
 }
-linha_globs() {
-  case "$1" in *'|'*) printf '%s' "${1#*|}" ;; esac
+
+# Gramática da linha (arq:0129 D1; spec teste §4): depois do arquivo, campos separados por `|`, cada
+# um nomeado ou de palavra reservada, em qualquer ordem: `degrau: imagem|rodada`, `regressivo [#n]`,
+# `quarentena [#débito]`, `preparo`; o que sobra é o raio, globs separados por espaço. Preenche
+# CAMPO_*; CAMPO_ERRO diz o campo que a gramática não lê (nomeado e desconhecido, ou degrau de valor
+# fora de pequeno/imagem/rodada).
+campos_da_linha() {  # $1=linha crua da lista
+  local resto campo valor
+  CAMPO_GLOBS=""; CAMPO_DEGRAU=""; CAMPO_REGR=0; CAMPO_QUAR=""; CAMPO_PREP=0; CAMPO_ERRO=""
+  case "$1" in *'|'*) resto="${1#*|}" ;; *) return 0 ;; esac
+  while :; do
+    campo="${resto%%|*}"
+    campo="${campo#"${campo%%[![:space:]]*}"}"; campo="${campo%"${campo##*[![:space:]]}"}"
+    case "$campo" in
+      '') ;;
+      degrau:*)
+        valor="${campo#degrau:}"; valor="${valor#"${valor%%[![:space:]]*}"}"; valor="${valor%"${valor##*[![:space:]]}"}"
+        case "$valor" in
+          pequeno|imagem|rodada) CAMPO_DEGRAU="$valor" ;;
+          *) CAMPO_ERRO="degrau: com valor '$valor' (pequeno, imagem ou rodada)" ;;
+        esac ;;
+      regressivo|regressivo[[:space:]]*) CAMPO_REGR=1 ;;
+      quarentena|quarentena[[:space:]]*) CAMPO_QUAR="$campo" ;;
+      preparo|preparo[[:space:]]*) CAMPO_PREP=1 ;;
+      [a-z]*:*)
+        case "${campo%%:*}" in
+          *[!a-z-]*) CAMPO_GLOBS="${CAMPO_GLOBS:+$CAMPO_GLOBS }$campo" ;;
+          *) CAMPO_ERRO="campo desconhecido '${campo%%:*}:'" ;;
+        esac ;;
+      *) CAMPO_GLOBS="${CAMPO_GLOBS:+$CAMPO_GLOBS }$campo" ;;
+    esac
+    case "$resto" in *'|'*) resto="${resto#*|}" ;; *) break ;; esac
+  done
+  return 0
+}
+
+# O degrau da linha entra na rodada pedida? $1=pedido (pequeno|imagem|rodada|todos), $2=degrau da
+# linha, $3=campo de quarentena (vazio = fora dela). Quarentena não é degrau: roda só na rodada.
+degrau_entra() {
+  [ "$1" = todos ] && return 0
+  if [ -n "$3" ]; then [ "$1" = rodada ]; return; fi
+  [ "$1" = "$2" ]
 }
 
 alcanca() {  # $1=arquivo da lista (relativo à raiz do repo) $2=globs $3=diff ; 0 = o diff o alcança
@@ -817,8 +912,8 @@ memo_do_portao() {  # $1=vereditos_dir $2=arvore
 # repositório que declara subárvore de teste, cada uma no seu ambiente, e passa quando
 # todas passam. O registro das chaves vem da árvore medida (a que o push ou a promoção
 # leva), não do verbo no ar. Cada chave é um processo próprio (memo por árvore e chave).
-portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvore(ou vazio) $5=base(ou vazio)
-  local c="$1" familia="$2" bancada="$3" arv="$4" base="${5:-}" venvs linhas chave lock sub
+portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvore(ou vazio) $5=base(ou vazio) $6=degrau
+  local c="$1" familia="$2" bancada="$3" arv="$4" base="${5:-}" degrau_fam="${6:-pequeno}" venvs linhas chave lock sub
   # card #3370: caminho de raio total no diff roda a lista inteira de toda chave; o aviso sai
   # uma vez, aqui, e as chaves rodam sem --base. Base ilegível: lista inteira, com aviso.
   local base_args=() dif_fam tot_fam
@@ -857,9 +952,9 @@ portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvor
   for i in "${!chaves[@]}"; do
     chave="${chaves[$i]}"
     if [ -n "$arv" ]; then
-      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave" --portao --arvore "$arv" ${base_args[@]+"${base_args[@]}"} >"$tmpd/$i.out" 2>"$tmpd/$i.err" &
+      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave" --portao --degrau "$degrau_fam" --arvore "$arv" ${base_args[@]+"${base_args[@]}"} >"$tmpd/$i.out" 2>"$tmpd/$i.err" &
     else
-      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave${bancada:+@$bancada}" --portao ${base_args[@]+"${base_args[@]}"} >"$tmpd/$i.out" 2>"$tmpd/$i.err" &
+      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave${bancada:+@$bancada}" --portao --degrau "$degrau_fam" ${base_args[@]+"${base_args[@]}"} >"$tmpd/$i.out" 2>"$tmpd/$i.err" &
     fi
     pids+=("$!")
   done
@@ -978,41 +1073,70 @@ ato_inventario() {
     done < <(find "$raiz" -type f \( -name "test_*.py" -o -name "*_test.py" \) 2>/dev/null | sort)
   fi
 
-  if [ "${#achados[@]}" -eq 0 ]; then
-    printf 'nenhum arquivo de teste encontrado em %s\n' "$raiz"
-    return 0
-  fi
-
-  local verdes_lista=() cand
+  # A lista de portão (arq:0116 §5) lida pelos dois eixos da arq:0129: o degrau (pequeno, imagem,
+  # rodada) e o tipo. O tipo ainda não tem marca na linha (padrão testes, §1): só `regressivo` se
+  # lê dela, e contrato e integração saem com zero escrito e a nota, o zero explícito da spec §4.
+  local verdes_lista=() cand arq_l d n_pequeno=0 n_imagem=0 n_rodada=0 n_quar=0 n_regr=0 n_prep=0 n_ilegivel=0 n_fora=0
+  local -A degrau_do=() vistos=()
   cand="$(lista_portao_de "$c" "$REG_SUBARVORE")"
   if [ -n "$cand" ]; then
     while IFS= read -r l; do
       case "$l" in ''|'#'*) continue ;; esac
-      verdes_lista+=("$l")
+      arq_l="$(linha_arquivo "$l")"; [ -n "$arq_l" ] || continue
+      campos_da_linha "$l"
+      verdes_lista+=("$arq_l")
+      if [ -n "$CAMPO_ERRO" ]; then n_ilegivel=$((n_ilegivel + 1)); degrau_do["$arq_l"]="ilegível"; continue; fi
+      if [ "$CAMPO_PREP" -eq 1 ]; then n_prep=$((n_prep + 1)); degrau_do["$arq_l"]=preparo; continue; fi
+      d="${CAMPO_DEGRAU:-pequeno}"
+      case "$d" in
+        pequeno) n_pequeno=$((n_pequeno + 1)) ;;
+        imagem) n_imagem=$((n_imagem + 1)) ;;
+        rodada) n_rodada=$((n_rodada + 1)) ;;
+      esac
+      [ -z "$CAMPO_QUAR" ] || n_quar=$((n_quar + 1))
+      [ "$CAMPO_REGR" -eq 0 ] || n_regr=$((n_regr + 1))
+      degrau_do["$arq_l"]="$d${CAMPO_QUAR:+ (quarentena)}"
     done < "$cand"
+    printf '# degrau: pequeno %s · imagem %s · rodada %s · em quarentena %s · preparo %s · linha ilegível %s\n' \
+      "$n_pequeno" "$n_imagem" "$n_rodada" "$n_quar" "$n_prep" "$n_ilegivel"
+    printf '# tipo: regressivo %s · contrato 0 (sem marca na linha) · integração 0 (sem marca na linha)\n' "$n_regr"
+  else
+    printf '# lista de portão: ausente (suíte não medida) · degrau: pequeno 0 · imagem 0 · rodada 0\n'
   fi
 
-  for arq in "${achados[@]}"; do
+  for arq in ${achados[@]+"${achados[@]}"}; do
     local rel="${arq#"$raiz"/}" rel_c="${arq#"$c"/}"
-    local portao="fora"
-    for v in "${verdes_lista[@]}"; do
+    local portao="fora" grau="-"
+    for v in ${verdes_lista[@]+"${verdes_lista[@]}"}; do
       if [ "$rel" = "$v" ] || [ "$rel_c" = "$v" ] || [ "$rel_c" = "controle/$v" ]; then
-        portao="portão"
+        portao="portão"; grau="${degrau_do[$v]:-pequeno}"; vistos["$v"]=1
         break
       fi
     done
-    printf '  %-50s  [%s]  fóssil: não medido\n' "$rel" "$portao"
+    [ "$portao" != fora ] || n_fora=$((n_fora + 1))
+    printf '  %-50s  [%s]  degrau %s  fóssil: não medido\n' "$rel" "$portao" "$grau"
   done
+  # a prova que a lista cita e o `find` de test_*.py não acha (as .mjs da ui, por exemplo) também entra
+  for v in ${verdes_lista[@]+"${verdes_lista[@]}"}; do
+    [ -z "${vistos[$v]:-}" ] || continue
+    printf '  %-50s  [portão]  degrau %s  fóssil: não medido\n' "$v" "${degrau_do[$v]:-pequeno}"
+  done
+  if [ "${#achados[@]}" -eq 0 ] && [ "${#verdes_lista[@]}" -eq 0 ]; then
+    printf 'nenhum arquivo de teste encontrado em %s\n' "$raiz"
+  elif [ "$n_fora" -gt 0 ]; then
+    printf '# fora do portão: %s\n' "$n_fora"
+  fi
   return 0
 }
 
 ato_rodar() {
-  local nome="" alvo="" chave="" arvore="" base="" portao=0 origem_main=0 EM_ARVORE=0 c rc extras=() extras_resolvidos=()
+  local nome="" alvo="" chave="" arvore="" base="" degrau="" portao=0 origem_main=0 EM_ARVORE=0 c rc extras=() extras_resolvidos=()
   local SELECAO_HASH=""  # visto por pytest_em_bloco (chave do memo parcial)
   while [ $# -gt 0 ]; do
     case "$1" in
       --chave) shift; [ $# -gt 0 ] || morre "--chave exige um valor" 2; chave="$1"; shift ;;
       --base) shift; [ $# -gt 0 ] || morre "--base exige uma rev" 2; base="$1"; shift ;;
+      --degrau) shift; [ $# -gt 0 ] || morre "--degrau exige pequeno, imagem ou rodada" 2; degrau="$1"; shift ;;
       --portao) portao=1; shift ;;
       --origin-main) origem_main=1; shift ;;
       --arvore) shift; [ $# -gt 0 ] || morre "--arvore exige um caminho" 2; arvore="$1"; shift ;;
@@ -1029,6 +1153,14 @@ ato_rodar() {
   if [ -n "$chave" ]; then
     avisa_deprecado "--chave está deprecado (arq:0110 §11); aponte o nome da stack ou repositório no primeiro argumento" "chave"
   fi
+  # arq:0129 D1: o degrau pedido. Sem --degrau o portão roda o pequeno; a rodada diária roda os três.
+  case "$degrau" in
+    '') ;;
+    pequeno|imagem|rodada|todos) [ "$portao" -eq 1 ] || morre "--degrau só com --portao: o degrau é da lista de portão" 2 ;;
+    *) morre "--degrau '$degrau': use pequeno, imagem, rodada ou todos" 2 ;;
+  esac
+  local degrau_pedido="${degrau:-pequeno}"
+  [ -n "$degrau" ] || [ "$origem_main" -ne 1 ] || degrau_pedido=todos
 
   local alvo_resolver="${chave:-$nome}"
   resolver_registro "$alvo_resolver"
@@ -1077,7 +1209,7 @@ ato_rodar() {
   if [ "$portao" -eq 1 ] && [ -z "$alvo" ] && [ -z "$chave" ] && [ "${nome%%@*}" = "$REG_FAMILIA" ]; then
     local arv_fam=""
     [ "$EM_ARVORE" -eq 1 ] && arv_fam="$c"
-    portao_da_familia "$c" "$REG_FAMILIA" "$REG_BANCADA" "$arv_fam" "$base"
+    portao_da_familia "$c" "$REG_FAMILIA" "$REG_BANCADA" "$arv_fam" "$base" "$degrau_pedido"
     return $?
   fi
 
@@ -1116,14 +1248,17 @@ ato_rodar() {
         exit 5
       fi
     fi
-    local novas_lista="" regr prep pula preparos_dest=()
+    local novas_lista="" regr prep pula preparos_dest=() degr n_prova_sel=0 invalidas=()
+    local fora_img=0 fora_rod=0 fora_quar=0
     if [ "$seleciona" -eq 1 ]; then
       novas_lista="$(linhas_novas_da_lista "$c" "$lista_portao" "$base" "$EM_ARVORE")"
     fi
     while IFS= read -r linha_crua; do
       case "$linha_crua" in ''|'#'*) continue ;; esac
-      linha="$(linha_arquivo "$linha_crua")"; globs="$(linha_globs "$linha_crua")"
+      linha="$(linha_arquivo "$linha_crua")"
+      campos_da_linha "$linha_crua"; globs="$CAMPO_GLOBS"
       [ -n "$linha" ] || continue
+      if [ -n "$CAMPO_ERRO" ]; then invalidas+=("$linha ($CAMPO_ERRO)"); continue; fi
       if [ -f "$raiz/$linha" ]; then
         dest="$linha"; rel_repo="${REG_SUBARVORE:+$REG_SUBARVORE/}$linha"
       elif [ -f "$c/$linha" ]; then
@@ -1133,23 +1268,49 @@ ato_rodar() {
       fi
       # arq:0128 §6: `arquivo | preparo` (o build de que as provas dependem) não é teste: não
       # entra na contagem nem é selecionado por si; roda antes, quando a seleção não é vazia.
-      prep=0
-      case "${globs#"${globs%%[![:space:]]*}"}" in preparo|preparo[[:space:]]*) prep=1 ;; esac
+      prep="$CAMPO_PREP"
       if [ "$prep" -eq 1 ] && [ "$seleciona" -eq 1 ]; then preparos_dest+=("$dest"); continue; fi
+      # arq:0129 D1: o degrau pedido decide que linhas entram; o preparo não tem degrau (roda antes,
+      # com rede, para quem for selecionado). Quarentena não é degrau: só entra na rodada.
+      degr="${CAMPO_DEGRAU:-pequeno}"
+      if [ "$prep" -eq 0 ] && ! degrau_entra "$degrau_pedido" "$degr" "$CAMPO_QUAR"; then
+        if [ -n "$CAMPO_QUAR" ]; then fora_quar=$((fora_quar + 1))
+        elif [ "$degr" = imagem ]; then fora_img=$((fora_img + 1))
+        else fora_rod=$((fora_rod + 1)); fi
+        continue
+      fi
       n_lista=$((n_lista + 1))
       # arq:0128: roda o raio de ataque da mudança e os regressivos, e mais nenhum. `arquivo |
       # regressivo #<defeito>` roda sempre; linha com raio roda se algum glob casa o diff; linha
       # sem raio só roda quando o próprio arquivo mudou ou quando entrou ou mudou na lista.
       if [ "$seleciona" -eq 1 ]; then
-        regr=0; pula=0
-        case "${globs#"${globs%%[![:space:]]*}"}" in regressivo|regressivo[[:space:]]*) regr=1 ;; esac
+        regr="$CAMPO_REGR"; pula=0
         if [ "$regr" -eq 0 ] && ! printf '%s\n' "$novas_lista" | grep -qxF -- "$linha"; then
           alcanca "$rel_repo" "$globs" "$dif" || pula=1
         fi
         if [ "$pula" -eq 1 ]; then pulados+=("$linha"); continue; fi
       fi
       alvos+=("$dest"); sel_rels+=("$rel_repo")
+      # o regime de cada linha (delatores e rede fechada só no pequeno); quarentena roda como rodada
+      if [ "$prep" -eq 1 ]; then DEGRAU_DE_ALVO["$dest"]=preparo
+      else
+        n_prova_sel=$((n_prova_sel + 1))
+        if [ -n "$CAMPO_QUAR" ]; then DEGRAU_DE_ALVO["$dest"]=rodada; else DEGRAU_DE_ALVO["$dest"]="$degr"; fi
+      fi
     done < "$lista_portao"
+    if [ "${#invalidas[@]}" -gt 0 ]; then
+      printf 'suite INDISPONIVEL: %s — %s tem linha que a gramática não lê: %s\n' \
+        "$nome" "${lista_portao#"$c"/}" "${invalidas[*]}"
+      exit 5
+    fi
+    printf 'degrau: %s · %s linha(s) dele · fora: imagem %s, rodada %s, quarentena %s\n' \
+      "$degrau_pedido" "$n_lista" "$fora_img" "$fora_rod" "$fora_quar"
+    # o veredito de quem não mediu a lista inteira (degrau que deixou linha de fora) tem chave própria,
+    # como o da seleção por raio: pequeno verde nunca responde pela lista inteira
+    local fora_n=$((fora_img + fora_rod + fora_quar))
+    if [ "$seleciona" -eq 0 ] && [ "$fora_n" -gt 0 ] && [ "${#sel_rels[@]}" -gt 0 ]; then
+      SELECAO_HASH="$(printf 'degrau=%s\n%s\n' "$degrau_pedido" "$(printf '%s\n' "${sel_rels[@]}" | LC_ALL=C sort)" | sha256sum | cut -c1-16)"
+    fi
     if [ "${#ausentes[@]}" -gt 0 ]; then
       printf 'suite INDISPONIVEL: %s — %s lista arquivo que não existe na árvore: %s\n' \
         "$nome" "${lista_portao#"$c"/}" "${ausentes[*]}"
@@ -1163,8 +1324,8 @@ ato_rodar() {
       fi
       printf 'seleção: %s de %s arquivos (pulados: %s)\n' "${#alvos[@]}" "$n_lista" "$resumo_pulados"
       # rodada parcial tem chave de memo própria; seleção igual à lista inteira é rodada inteira
-      if [ "${#pulados[@]}" -gt 0 ] && [ "${#sel_rels[@]}" -gt 0 ]; then
-        SELECAO_HASH="$(printf '%s\n' "${sel_rels[@]}" | LC_ALL=C sort | sha256sum | cut -c1-16)"
+      if [ "$((${#pulados[@]} + fora_n))" -gt 0 ] && [ "${#sel_rels[@]}" -gt 0 ]; then
+        SELECAO_HASH="$(printf '%s\n%s\n' "$([ "$fora_n" -eq 0 ] || echo "degrau=$degrau_pedido")" "$(printf '%s\n' "${sel_rels[@]}" | LC_ALL=C sort)" | sha256sum | cut -c1-16)"
       fi
       if [ "${#alvos[@]}" -eq 0 ] && [ "$n_lista" -gt 0 ]; then
         printf 'suite VERDE: %s — nenhum arquivo da lista alcançado pela mudança (%s de %s pulados)\n' \
@@ -1176,8 +1337,13 @@ ato_rodar() {
         alvos=("${preparos_dest[@]}" "${alvos[@]}")
       fi
     fi
-    if [ "${#alvos[@]}" -eq 0 ]; then
-      printf 'suite VERDE: %s — lista de portão vazia, declarada em %s\n' "$nome" "${lista_portao#"$c"/}"
+    if [ "${#alvos[@]}" -eq 0 ] || [ "$n_prova_sel" -eq 0 ]; then
+      if [ "$fora_n" -gt 0 ]; then
+        printf 'suite VERDE: %s — nenhuma linha do degrau %s na lista (fora dele: %s)\n' \
+          "$nome" "$degrau_pedido" "$fora_n"
+      else
+        printf 'suite VERDE: %s — lista de portão vazia, declarada em %s\n' "$nome" "${lista_portao#"$c"/}"
+      fi
       return 0
     fi
   elif [ -n "$alvo" ]; then

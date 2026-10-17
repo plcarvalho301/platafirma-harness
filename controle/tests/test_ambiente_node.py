@@ -92,6 +92,13 @@ def falsos(tmp_path):
                  'if [ -n "${FALSO_MARCA:-}" ]; then [ -f "$FALSO_MARCA" ] && m=sim || m=nao; '
                  'echo "MARCA=$m $(basename "$1")" >> "$FALSO_ENV_OUT"; fi\n'
                  'if [ -n "${FALSO_DORME:-}" ]; then sleep "$FALSO_DORME"; fi\n'
+                 # as provas de fixture do degrau pequeno (arq:0129): abrir navegador, engolir o erro dele, chamar
+                 # o docker e tentar uma conexao; so o que a marca da lista permite pode funcionar
+                 'if grep -q ABRE_NAVEGADOR "$1" 2>/dev/null; then "${CHROME:-/nao-existe}" --headless || exit 1; fi\n'
+                 'if grep -q ENGOLE_NAVEGADOR "$1" 2>/dev/null; then "${CHROME:-/nao-existe}" --headless; fi\n'
+                 'if grep -q ABRE_DOCKER "$1" 2>/dev/null; then docker run x || exit 1; fi\n'
+                 'if grep -q ABRE_REDE "$1" 2>/dev/null; then '
+                 'if (exec 3<>/dev/tcp/127.0.0.1/${FALSO_PORTA:-9}) 2>/dev/null; then echo "REDE ABERTA" >&2; exit 1; fi; fi\n'
                  'if grep -q VERMELHO "$1" 2>/dev/null; then echo "prova reprovou" >&2; exit 1; fi\n'
                  'echo ok; exit 0\n')
     npm = _exec(d / "npm", 'if [ "${1:-}" = "--version" ]; then echo 10.9.0; exit 0; fi\n'
@@ -488,6 +495,176 @@ def test_portao_node_memo_da_bancada_e_a_arvore_do_commit(banc):
     r2 = banc.rodar("ui", "--portao")
     assert r2.returncode == 0, r2.stdout + r2.stderr
     assert f"veredito reaproveitado (mesma arvore {arvore[:12]}" in r2.stdout
+
+
+# --- o degrau pequeno: delatores, rede fechada e preparo com rede (arq:0129 D3, card #3731) --------
+
+def _sem_userns() -> bool:
+    return subprocess.run(["unshare", "--user", "--map-root-user", "--net", "--", "true"],
+                          capture_output=True).returncode != 0
+
+
+@pytest.fixture()
+def pequeno(banc):
+    if _sem_userns():
+        pytest.skip("este host nao deixa criar namespace de rede (unshare --user --map-root-user --net)")
+    banc.env["PF_TESTE_SEM_MEMO"] = "1"
+    return banc
+
+
+def _env_out(banc) -> str:
+    p = banc.tmp / "env-out.txt"
+    return p.read_text(encoding="utf-8") if p.exists() else ""
+
+
+def test_pequeno_aponta_o_navegador_para_o_delator_e_a_imagem_para_o_do_host(pequeno):
+    banc = pequeno
+    _com_portao(banc, "construir.sh | preparo\nverde.mjs\nimagem.mjs | degrau: imagem\n")
+    _provas(banc, ["imagem.mjs"])
+    r = banc.rodar("ui", "--portao")
+    assert r.returncode == 0, r.stdout + r.stderr
+    saida = _env_out(banc)
+    assert "/delatores/navegador" in saida.split("CHROME=")[1].split("\n")[0], saida
+    assert "PUP=" in saida and "/delatores/navegador" in saida.split("PUP=")[1].split("\n")[0], saida
+    assert "imagem.mjs" not in saida                       # a prova de imagem nao roda no pequeno
+    (banc.tmp / "env-out.txt").unlink()
+    r = banc.rodar("ui", "--portao", "--degrau", "imagem")
+    assert r.returncode == 0, r.stdout + r.stderr
+    saida = _env_out(banc)
+    assert f"CHROME={banc.env['PLATAFIRMA_CHROMIUM']}" in saida, saida
+    assert "ARQ=" in saida and "imagem.mjs" in saida and "verde.mjs" not in saida
+
+
+def test_prova_de_navegador_sem_marca_sai_1_nomeando_o_delator_em_toda_repeticao(pequeno):
+    banc = pequeno
+    _com_portao(banc, "verde.mjs\nusa.mjs\n")
+    (banc.clone / "front" / "provas" / "usa.mjs").write_text("// ABRE_NAVEGADOR\n", encoding="utf-8")
+    for _ in range(2):
+        r = banc.rodar("ui", "--portao")
+        assert r.returncode == 1, r.stdout + r.stderr
+        assert "usa.mjs (exit 1, delator navegador)" in r.stdout, r.stdout
+        assert "delator navegador: o degrau pequeno não abre navegador nem docker" in r.stdout, r.stdout
+        assert "verde.mjs (exit" not in r.stdout
+
+
+def test_prova_que_engole_o_erro_do_navegador_reprova_do_mesmo_jeito(pequeno):
+    """O delator deixa a marca: a prova que ignora o exit do navegador não passa por isso."""
+    banc = pequeno
+    _com_portao(banc, "engole.mjs\n")
+    (banc.clone / "front" / "provas" / "engole.mjs").write_text("// ENGOLE_NAVEGADOR\n", encoding="utf-8")
+    r = banc.rodar("ui", "--portao")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "engole.mjs (exit 97, delator navegador)" in r.stdout, r.stdout
+
+
+def test_prova_que_chama_o_docker_sem_marca_sai_1_nomeando_o_delator(pequeno):
+    banc = pequeno
+    _com_portao(banc, "docker.mjs\n")
+    (banc.clone / "front" / "provas" / "docker.mjs").write_text("// ABRE_DOCKER\n", encoding="utf-8")
+    r = banc.rodar("ui", "--portao")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "docker.mjs (exit 1, delator docker)" in r.stdout, r.stdout
+
+
+def test_a_prova_da_imagem_com_a_marca_certa_abre_o_navegador_do_host(pequeno):
+    banc = pequeno
+    _com_portao(banc, "usa.mjs | degrau: imagem\n")
+    (banc.clone / "front" / "provas" / "usa.mjs").write_text("// ABRE_NAVEGADOR\n", encoding="utf-8")
+    r = banc.rodar("ui", "--portao", "--degrau", "imagem")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "delator" not in r.stdout
+
+
+def _servidor_local():
+    import socket
+    import threading
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    s.listen(8)
+
+    def aceitar():
+        while True:
+            try:
+                c, _ = s.accept()
+                c.close()
+            except OSError:
+                return
+    threading.Thread(target=aceitar, daemon=True).start()
+    return s, s.getsockname()[1]
+
+
+def test_pequeno_roda_sem_rede_e_o_preparo_roda_com_rede(pequeno):
+    """Um servidor no loopback do host: o preparo o alcanca, a prova pequena nao (namespace de rede
+    proprio, sem interface), e a mesma prova no degrau da imagem alcanca, o que mostra que o
+    instrumento morde."""
+    banc = pequeno
+    srv, porta = _servidor_local()
+    try:
+        marca = banc.tmp / "preparo-viu-a-rede"
+        _com_portao(banc, "construir.sh | preparo\nsem-rede.mjs\n")
+        (banc.clone / "front" / "provas" / "construir.sh").write_text(
+            "#!/usr/bin/env bash\n"
+            f"if (exec 3<>/dev/tcp/127.0.0.1/{porta}) 2>/dev/null; then touch '{marca}'; fi\n", encoding="utf-8")
+        (banc.clone / "front" / "provas" / "sem-rede.mjs").write_text("// ABRE_REDE\n", encoding="utf-8")
+        banc.env["FALSO_PORTA"] = str(porta)
+        r = banc.rodar("ui", "--portao")
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert marca.exists(), "o preparo devia ter alcancado o servidor, com rede"
+        assert "sem-rede.mjs" in _env_out(banc)
+        # o controle: a mesma prova com rede aberta reprova
+        _com_portao(banc, "construir.sh | preparo\nsem-rede.mjs | degrau: imagem\n")
+        r = banc.rodar("ui", "--portao", "--degrau", "imagem")
+        assert r.returncode == 1, r.stdout + r.stderr
+        assert "REDE ABERTA" in r.stdout, r.stdout
+    finally:
+        srv.close()
+
+
+def _inventario(banc, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run([str(TESTE), "inventario", *args], env=banc.env, capture_output=True,
+                          text=True, timeout=60)
+
+
+def test_inventario_conta_por_degrau_e_por_tipo_com_zero_explicito(banc):
+    """spec teste §4: o inventario le a lista de portao pelos dois eixos da arq:0129; o que falta
+    sai com zero escrito, e o tipo que ainda não tem marca na linha diz isso."""
+    _com_portao(banc, "construir.sh | preparo\nverde.mjs\na.mjs | degrau: imagem\n"
+                      "b.mjs | degrau: imagem | quarentena #5\nc.mjs | degrau: rodada\nd.mjs | regressivo #9\n")
+    r = _inventario(banc, "ui")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert ("# degrau: pequeno 2 · imagem 2 · rodada 1 · em quarentena 1 · preparo 1 · linha ilegível 0"
+            in r.stdout), r.stdout
+    assert "# tipo: regressivo 1 · contrato 0 (sem marca na linha) · integração 0 (sem marca na linha)" in r.stdout
+    linhas = {l.split()[0]: l for l in r.stdout.splitlines() if l.startswith("  ")}
+    assert "degrau imagem  " in linhas["a.mjs"] and "degrau imagem (quarentena)" in linhas["b.mjs"]
+    assert "degrau rodada" in linhas["c.mjs"] and "degrau pequeno" in linhas["d.mjs"]
+    assert "degrau preparo" in linhas["construir.sh"]
+
+
+def test_inventario_zero_explicito_no_degrau_que_falta_e_lista_ausente(banc):
+    _com_portao(banc, "verde.mjs\n")
+    r = _inventario(banc, "ui")
+    assert "# degrau: pequeno 1 · imagem 0 · rodada 0 · em quarentena 0 · preparo 0" in r.stdout, r.stdout
+    assert "# tipo: regressivo 0" in r.stdout
+    _com_portao(banc, None)
+    (banc.clone / "front" / "provas" / "VERDES").unlink(missing_ok=True)
+    r = _inventario(banc, "ui")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "lista de portão: ausente" in r.stdout and "imagem 0 · rodada 0" in r.stdout, r.stdout
+
+
+def test_sem_namespace_de_rede_o_pequeno_nao_mede(banc, tmp_path):
+    """Host que nao deixa isolar a rede: o degrau pequeno sai 5 (nao medido), nunca roda com rede."""
+    falso = tmp_path / "sem-unshare"
+    _exec(falso / "unshare", "exit 1\n")
+    _com_portao(banc)
+    banc.env["PATH"] = f"{falso}{os.pathsep}{banc.env.get('PATH', '')}"
+    banc.env["PF_TESTE_SEM_MEMO"] = "1"
+    r = banc.rodar("ui", "--portao")
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert "não deixou criar o namespace de rede" in r.stderr, r.stderr
+    assert not (banc.clone / "front" / "provas" / "node_modules").exists()
+    assert not (banc.clone / "node_modules").exists()
 
 
 # --- o inventario das travas -------------------------------------------------------------
