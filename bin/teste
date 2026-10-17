@@ -881,6 +881,8 @@ campos_da_linha() {  # $1=linha crua da lista
 # (1), depois não medido (5), depois o resto.
 rodada_diaria() {  # $1=clone $2=familia $3=bancada $4=arvore $5=teto(s)
   local c="$1" familia="$2" bancada="$3" arv="$4" teto="$5" deg t0 s rc rcs=()
+  # sem memo: o tempo de um veredito reaproveitado não mede nada, e a rodada existe para medir de novo
+  local -x PF_TESTE_SEM_MEMO=1
   for deg in pequeno imagem rodada; do
     t0="$(date +%s)"
     rc=0; portao_da_familia "$c" "$familia" "$bancada" "$arv" "" "$deg" || rc=$?
@@ -1306,7 +1308,7 @@ ato_rodar() {
       fi
     fi
     local novas_lista="" regr prep pula preparos_dest=() degr n_prova_sel=0 invalidas=()
-    local fora_img=0 fora_rod=0 fora_quar=0
+    local fora_peq=0 fora_img=0 fora_rod=0 fora_quar=0
     if [ "$seleciona" -eq 1 ]; then
       novas_lista="$(linhas_novas_da_lista "$c" "$lista_portao" "$base" "$EM_ARVORE")"
     fi
@@ -1333,7 +1335,8 @@ ato_rodar() {
       if [ "$prep" -eq 0 ] && ! degrau_entra "$degrau_pedido" "$degr" "$CAMPO_QUAR"; then
         if [ -n "$CAMPO_QUAR" ]; then fora_quar=$((fora_quar + 1))
         elif [ "$degr" = imagem ]; then fora_img=$((fora_img + 1))
-        else fora_rod=$((fora_rod + 1)); fi
+        elif [ "$degr" = rodada ]; then fora_rod=$((fora_rod + 1))
+        else fora_peq=$((fora_peq + 1)); fi
         continue
       fi
       n_lista=$((n_lista + 1))
@@ -1360,11 +1363,11 @@ ato_rodar() {
         "$nome" "${lista_portao#"$c"/}" "${invalidas[*]}"
       exit 5
     fi
-    printf 'degrau: %s · %s linha(s) dele · fora: imagem %s, rodada %s, quarentena %s\n' \
-      "$degrau_pedido" "$n_lista" "$fora_img" "$fora_rod" "$fora_quar"
+    printf 'degrau: %s · %s linha(s) dele · fora: pequeno %s, imagem %s, rodada %s, quarentena %s\n' \
+      "$degrau_pedido" "$n_lista" "$fora_peq" "$fora_img" "$fora_rod" "$fora_quar"
     # o veredito de quem não mediu a lista inteira (degrau que deixou linha de fora) tem chave própria,
     # como o da seleção por raio: pequeno verde nunca responde pela lista inteira
-    local fora_n=$((fora_img + fora_rod + fora_quar))
+    local fora_n=$((fora_peq + fora_img + fora_rod + fora_quar))
     if [ "$seleciona" -eq 0 ] && [ "$fora_n" -gt 0 ] && [ "${#sel_rels[@]}" -gt 0 ]; then
       SELECAO_HASH="$(printf 'degrau=%s\n%s\n' "$degrau_pedido" "$(printf '%s\n' "${sel_rels[@]}" | LC_ALL=C sort)" | sha256sum | cut -c1-16)"
     fi
