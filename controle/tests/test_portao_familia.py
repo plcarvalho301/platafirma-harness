@@ -522,7 +522,7 @@ def test_sem_campo_de_degrau_a_linha_e_pequena_e_o_padrao_roda_so_o_pequeno(tmp_
     r, rodou = _roda(env, arv, marcas)
     assert r.returncode == 0, r.stdout + r.stderr
     assert rodou == {"a1"}
-    assert "degrau: pequeno · 1 linha(s) dele · fora: imagem 1, rodada 1, quarentena 0" in r.stdout, r.stdout
+    assert "degrau: pequeno · 1 linha(s) dele · fora: pequeno 0, imagem 1, rodada 1, quarentena 0" in r.stdout, r.stdout
 
 def test_degrau_seleciona_so_as_linhas_dele(tmp_path):
     marcas = tmp_path / "marcas.txt"
@@ -661,6 +661,18 @@ def test_rodada_diaria_traz_o_tempo_de_cada_degrau_por_familia(tmp_path):
         assert f"degrau {deg} de demo: " in r.stdout, r.stdout
     assert _rodou(marcas) == {"a1", "a2"}
     assert not log.exists(), "dentro do teto não se admite nada"
+
+def test_rodada_diaria_mede_de_novo_e_nao_reaproveita_veredito(tmp_path):
+    """Veredito reaproveitado mede 0 s: a rodada existe para medir, e a segunda leva a prova a rodar."""
+    marcas = tmp_path / "marcas.txt"
+    env, _, _ = _rodada(tmp_path, "test_a1.py\n", {"test_a1.py": _marca(marcas, "a1", 1)})
+    env.pop("PF_TESTE_SEM_MEMO")
+    for _ in range(2):
+        r = _run(env, "rodar", "demo", "--portao", "--origin-main")
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert _rodou(marcas) == {"a1"}, "a rodada não rodou a prova"
+        assert "veredito reaproveitado" not in r.stdout + r.stderr, r.stdout
+        marcas.unlink()
 
 def test_pequeno_acima_do_teto_abre_uma_linha_no_balde_e_so_uma(tmp_path):
     marcas = tmp_path / "marcas.txt"
