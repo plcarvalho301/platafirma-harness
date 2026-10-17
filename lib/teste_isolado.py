@@ -32,7 +32,14 @@ PREFIXOS = (
 # tokenizador do modelo é artefato pinado (registro/terceiros.json), como o uv
 PRESERVAR = ("PLATAFIRMA_TOKENIZADOR",)
 
-DELATORES = ("docker", "gh", "systemctl", "psql", "redis-cli")
+# navegador (arq:0129 D3): no degrau pequeno o navegador não existe; o teste que precisa dele leva
+# `degrau: imagem` na lista de portão. CHROME e PUPPETEER_EXECUTABLE_PATH apontam para o delator;
+# PLATAFIRMA_CHROMIUM fica de fora, porque é a entrada do resolver_chromium de lib/venv.sh e o teste de
+# verbo que o lê (conferir dependencias) escolhe o dele.
+NAVEGADORES = ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "chrome")
+VARIAVEIS_DE_NAVEGADOR = ("CHROME", "PUPPETEER_EXECUTABLE_PATH")
+
+DELATORES = ("docker", "gh", "systemctl", "psql", "redis-cli") + NAVEGADORES
 
 SERVICO_MORTO = "http://127.0.0.1:9"
 
@@ -72,11 +79,15 @@ def isolar() -> Path:
     delatores.mkdir()
     for prog in DELATORES:
         p = delatores / prog
+        cura = (" (degrau pequeno: o teste que abre navegador leva `degrau: imagem` na lista)"
+                if prog in NAVEGADORES else "")
         p.write_text(
             "#!/bin/sh\n"
-            f'echo "teste chamou o {prog} real sem stub: $*" >&2\n'
+            f'echo "teste chamou o {prog} real sem stub: $*{cura}" >&2\n'
             "exit 97\n")
         p.chmod(0o755)
+    for var in VARIAVEIS_DE_NAVEGADOR:
+        os.environ[var] = str(delatores / "chromium")
     os.environ["PATH"] = f"{delatores}{os.pathsep}{os.environ.get('PATH', '')}"
     return raiz
 

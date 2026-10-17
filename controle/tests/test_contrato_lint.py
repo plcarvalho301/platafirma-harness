@@ -1015,3 +1015,118 @@ def test_leitura_cache_pela_evidencia(tmp_path, monkeypatch):
     leitura._ao_cache(leitura._chave(p), leitura.Julgamento(True, "ok", [2]))
     monkeypatch.setattr(leitura.urllib.request, "urlopen", lambda *a, **k: (_ for _ in ()).throw(AssertionError))
     assert leitura.perguntar(p) == leitura.Julgamento(True, "ok", [2])
+
+
+# --- lint testes: a linha da lista de portao (arq:0129, card #3731) --------------------------------
+
+LISTA_TESTES = """\
+força não declarada · vigente — lista-de-verificacao checklist-testes · Checklist de testes
+# Checklist de testes
+
+Espécie: lista-de-verificacao
+Rev: 2
+Dono: ti
+
+## Critérios
+
+| # | antipadrão | lei da casa | detector | severidade | cura |
+|---|---|---|---|---|---|
+| T1 | campo que a gramática não lê | `arq:0129` D1 | campo nomeado desconhecido | bloqueante | escreva o campo da gramática |
+| T2 | regressivo fora do pequeno | guia portoes | regressivo com degrau | aviso | tire o degrau |
+| T3 | quarentena sem débito | `arq:0129` D6 | quarentena sem número | aviso | cite o débito |
+"""
+
+
+def _bancada_de_testes(tmp_path, acervo, listas: dict[str, str]) -> dict:
+    wt, env = _wt(tmp_path)
+    for rel, texto in listas.items():
+        (wt / rel).parent.mkdir(parents=True, exist_ok=True)
+        (wt / rel).write_text(texto, encoding="utf-8")
+    return {**env, **acervo(textos={"checklist-testes": LISTA_TESTES})}
+
+
+def _lint_testes(tmp_path, acervo, listas: dict[str, str], *args: str):
+    env = _bancada_de_testes(tmp_path, acervo, listas)
+    return _rodar_lint("testes", "mono", *args, "--json", env_extra=env)
+
+
+def test_lint_testes_lista_limpa_sai_0_ancorada_na_rev(tmp_path, acervo):
+    p = _lint_testes(tmp_path, acervo, {
+        "a/tests/VERDES": ("# lista\ntest_a.py\ntest_b.py | bin/x bin/y/**\ntest_c.py | regressivo #9\n"
+                           "test_d.py | degrau: imagem | bin/z\ntest_e.py | degrau: rodada | quarentena #77\n"
+                           "construir.sh | preparo\n")})
+    assert p.returncode == 0, p.stdout + p.stderr
+    dado = json.loads(p.stdout)
+    assert dado["apontamentos"] == []
+    assert dado["ancora"] == "«lint testes mono: 0 apontamentos — checklist-testes@rev2»"
+
+
+def test_lint_testes_recusa_campo_desconhecido_e_degrau_invalido(tmp_path, acervo):
+    p = _lint_testes(tmp_path, acervo, {
+        "a/tests/VERDES": "test_a.py | foo: bar\ntest_b.py | degrau: lua\ntest_c.py | degrau: imagem\n"})
+    assert p.returncode == 1, p.stdout + p.stderr
+    aps = json.loads(p.stdout)["apontamentos"]
+    assert [(a["arquivo"], a["linha"], a["id"], a["severidade"]) for a in aps] == [
+        ("a/tests/VERDES", 1, "T1", "bloqueante"), ("a/tests/VERDES", 2, "T1", "bloqueante")]
+    assert "test_a.py: campo desconhecido 'foo:'" in aps[0]["o_que_fere"]
+    assert "test_b.py: degrau: com valor 'lua'" in aps[1]["o_que_fere"]
+    assert aps[0]["cura"] == "escreva o campo da gramática"
+
+
+def test_lint_testes_avisa_a_combinacao_proibida_sem_recusar(tmp_path, acervo):
+    p = _lint_testes(tmp_path, acervo, {
+        "a/tests/VERDES": ("test_a.py | regressivo #9 | degrau: imagem\n"
+                           "test_b.py | degrau: rodada | regressivo #4\n"
+                           "test_c.py | regressivo #5\ntest_d.py | quarentena\n")})
+    aps = json.loads(p.stdout)["apontamentos"]
+    assert [(a["linha"], a["id"], a["severidade"]) for a in aps] == [
+        (1, "T2", "aviso"), (2, "T2", "aviso"), (4, "T3", "aviso")]
+    assert "regressivo com degrau: imagem" in aps[0]["o_que_fere"]
+
+
+def test_lint_testes_le_toda_lista_do_repositorio_e_aceita_alvo(tmp_path, acervo):
+    listas = {"a/tests/VERDES": "test_a.py | foo: x\n", "b/VERDES": "test_b.py | bar: y\n",
+              "node_modules/c/VERDES": "test_c.py | baz: z\n"}
+    env = _bancada_de_testes(tmp_path, acervo, listas)
+    p = _rodar_lint("testes", "mono", "--json", env_extra=env)
+    assert {a["arquivo"] for a in json.loads(p.stdout)["apontamentos"]} == {"a/tests/VERDES", "b/VERDES"}
+    p = _rodar_lint("testes", "mono", "b/VERDES", "--json", env_extra=env)
+    assert {a["arquivo"] for a in json.loads(p.stdout)["apontamentos"]} == {"b/VERDES"}
+
+
+def test_lint_testes_sem_a_lista_exit_5(tmp_path, acervo):
+    wt, env = _wt(tmp_path)
+    p = _rodar_lint("testes", "mono", env_extra={**env, **acervo()})
+    assert p.returncode == 5, p.stdout + p.stderr
+    assert "checklist-testes" in p.stderr
+
+
+def test_lint_testes_criterio_da_lista_sem_detector_nao_fica_calado(tmp_path, acervo):
+    wt, env = _wt(tmp_path)
+    lista = LISTA_TESTES + "| T9 | critério novo | — | leitura | aviso | escreva o detector |\n"
+    p = _rodar_lint("testes", "mono", "--json", env_extra={**env, **acervo(textos={"checklist-testes": lista})})
+    aps = json.loads(p.stdout)["apontamentos"]
+    assert [a["id"] for a in aps] == ["T9"] and "sem detector" in aps[0]["o_que_fere"]
+
+
+def test_a_gramatica_do_lint_e_a_do_bin_teste(tmp_path):
+    """As duas leituras da linha (python no lint, bash no teste) dizem o mesmo de cada linha."""
+    sys.path.insert(0, str(HARNESS_ROOT / "bin"))
+    from _lint.testes import ler_linha
+    casos = ["a.py", "a.py | bin/x", "a.py | degrau: imagem", "a.py | degrau: rodada | quarentena #1",
+             "a.py | regressivo #9", "a.py | preparo", "a.py | foo: x", "a.py | degrau: lua",
+             "a.py | bin/a:b/**", "a.py | a/** | b/** | degrau: imagem"]
+    script = tmp_path / "campos.sh"
+    script.write_text(
+        "set -u\n"
+        f"source <(sed -n '/^linha_arquivo() {{/,/^}}/p;/^campos_da_linha() {{/,/^}}/p' '{HARNESS_ROOT / 'bin' / 'teste'}')\n"
+        'while IFS= read -r l; do campos_da_linha "$l"; '
+        'printf "%s|%s|%s|%s|%s|%s\\n" "$CAMPO_GLOBS" "$CAMPO_DEGRAU" "$CAMPO_REGR" "${CAMPO_QUAR:+1}" "$CAMPO_PREP" "${CAMPO_ERRO:+1}"; done\n',
+        encoding="utf-8")
+    saida = subprocess.run(["bash", str(script)], input="\n".join(casos) + "\n", capture_output=True,
+                           text=True, check=True).stdout.splitlines()
+    for caso, bash in zip(casos, saida):
+        ln = ler_linha(caso)
+        py = "|".join([" ".join(ln.globs), ln.degrau, "1" if ln.regressivo else "0",
+                       "1" if ln.quarentena else "", "1" if ln.preparo else "0", "1" if ln.erros else ""])
+        assert py == bash, (caso, py, bash)
