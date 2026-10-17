@@ -67,7 +67,9 @@ uso:
                 sem 'degrau:' é pequeno. Sem --degrau o portão roda o pequeno, sob os delatores de
                 navegador e docker e sem rede (o preparo roda antes, com rede); imagem e rodada rodam
                 com o ambiente da stack. Linha em quarentena só roda no degrau rodada. Campo
-                desconhecido na linha sai 5 (não medido); 'lint testes' o aponta. 'todos' (o da
+                desconhecido na linha sai 5 (não medido); 'lint testes' o aponta. Com PF_TESTE_ESTAGIO
+                (o que `stack testar` exporta, card #3733), a prova de imagem roda dentro do estágio de teste
+                da stack, uma por contêiner, e o veredito tem chave própria. 'todos' (o da
                 rodada diária) roda os três degraus e a quarentena, cada linha no regime do seu degrau
   --origin-main: só com --portao, sem <alvo> e sem --arvore: busca origin/main no clone base da
                  bancada, mede a lista inteira (os três degraus, e a quarentena, se não houver
@@ -421,7 +423,7 @@ _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
     mkdir -p "$(dirname "$memo")" 2>/dev/null || memo=""
     if [ -n "$memo" ] && [ "${PF_TESTE_SEM_MEMO:-0}" != 1 ]; then
       # rodada parcial: a inteira verde da mesma árvore já responde por ela (o contrário nunca)
-      if [ -n "${SELECAO_HASH:-}" ]; then
+      if [ -n "${SELECAO_HASH:-}" ] && [ -z "${PF_TESTE_ESTAGIO:-}" ]; then
         memo_inteiro="$(SELECAO_HASH="" memo_do_portao "$vereditos_dir" "$arv_hash")"
         if [ "$(ler_veredito "$memo_inteiro")" = verde ]; then
           [ "$criou" -eq 0 ] || rm -f "$elo"
@@ -465,7 +467,7 @@ _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
   # da conta — todo verbo do host passou a falhar em fork. Sobe do padrão quando a folga de
   # processos da conta estiver medida. Rodada de alvo avulso roda sempre em série. Cada arquivo
   # grava a duração no log, e a linha final cita os mais lentos.
-  local tmpr i ms s trab=1 ativos=0 seriais=() paralelos=() t_ini t_fim lentos delat pequeno_n=0 x
+  local tmpr i ms s trab=1 ativos=0 seriais=() paralelos=() t_ini t_fim lentos delat pequeno_n=0 estagio_n=0 x
   tmpr="$(mktemp -d "${TMPDIR:-/tmp}/teste-node.XXXXXX")" || morre "não criei o diretório de saída das provas" 3
   # Degrau pequeno (arq:0129 D3): navegador e docker apontam para delatores que saem 97, e a prova roda
   # num namespace de rede próprio, sem interface. O preparo (`| preparo`) roda antes, com rede, e as
@@ -486,18 +488,38 @@ _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
         pre=(unshare --user --map-root-user --net --) ;;
       *)
         envp+=(PATH="$(dirname "$node"):$PATH")
-        [ -z "$chrome" ] || envp+=(CHROME="$chrome" PUPPETEER_EXECUTABLE_PATH="$chrome" PLATAFIRMA_CHROMIUM="$chrome") ;;
+        # a prova de imagem no estágio usa o navegador DELE (CHROME no compose), nunca o do host
+        if [ -n "$chrome" ] && ! { [ "$regime" = imagem ] && [ -n "${PF_TESTE_ESTAGIO:-}" ]; }; then
+          envp+=(CHROME="$chrome" PUPPETEER_EXECUTABLE_PATH="$chrome" PLATAFIRMA_CHROMIUM="$chrome")
+        fi ;;
     esac
     # a lista do portão traz o arquivo relativo à raiz de teste; o cwd é a raiz do repositório,
     # que é de onde as provas da platafirma-ui se rodam (dist/, src/)
     case "$f" in /*) f_abs="$f" ;; *) f_abs="$raiz/$f" ;; esac
-    case "$f" in *.sh) cmd=(bash "$f_abs") ;; *) cmd=("$node" "$f_abs") ;; esac
+    if [ "$regime" = imagem ] && [ -n "${PF_TESTE_ESTAGIO:-}" ]; then
+      # arq:0129 D4 (card #3733): a prova roda dentro do estágio de teste da stack, pelo caminho relativo à
+      # raiz do repositório; quem constrói o estágio e segura a trava é o `stack testar`
+      cmd=("$PF_TESTE_ESTAGIO" estagio "$PF_TESTE_ESTAGIO_STACK" "$PF_TESTE_ESTAGIO_REV" rodar "${f_abs#"$c"/}")
+      pre=(env -u CHROME -u PUPPETEER_EXECUTABLE_PATH -u PLATAFIRMA_CHROMIUM)
+    else
+      case "$f" in *.sh) cmd=(bash "$f_abs") ;; *) cmd=("$node" "$f_abs") ;; esac
+    fi
     t0="$(date +%s%N)"
     (cd "$c" && env "${envp[@]}" timeout "${PF_TESTE_TIMEOUT:-600}" ${pre[@]+"${pre[@]}"} "${cmd[@]}") >"$tmpr/$1.out" 2>&1 || rc=$?
     t1="$(date +%s%N)"
     printf '%s' "$rc" > "$tmpr/$1.rc"
     printf '%s' "$(( (t1 - t0) / 1000000 ))" > "$tmpr/$1.ms"
   }
+  # Estágio de teste (arq:0129 D4, card #3733): com PF_TESTE_ESTAGIO a prova de imagem roda dentro da imagem
+  # da stack, não no navegador do host. O estágio se constrói uma vez, aqui, e só quando a seleção tem
+  # prova de imagem: seleção vazia nunca chega a este ponto, e não constrói nada.
+  if [ -n "${PF_TESTE_ESTAGIO:-}" ]; then
+    for x in "${alvos[@]}"; do [ "${DEGRAU_DE_ALVO[$x]:-livre}" = imagem ] && estagio_n=$((estagio_n + 1)); done
+    if [ "$estagio_n" -gt 0 ] && ! "$PF_TESTE_ESTAGIO" estagio "$PF_TESTE_ESTAGIO_STACK" "$PF_TESTE_ESTAGIO_REV" preparar >&2; then
+      rm -rf "$tmpr"; [ "$criou" -eq 0 ] || rm -f "$elo"
+      morre "o estágio de teste de $PF_TESTE_ESTAGIO_STACK não ficou pronto: não medido" 5
+    fi
+  fi
   if [ "${portao:-0}" -eq 1 ]; then
     trab="${PF_TESTE_PARALELO_NODE:-1}"
     case "$trab" in ''|*[!0-9]*) trab=1 ;; esac
@@ -1328,6 +1350,8 @@ ato_rodar() {
       # arq:0128 §6: `arquivo | preparo` (o build de que as provas dependem) não é teste: não
       # entra na contagem nem é selecionado por si; roda antes, quando a seleção não é vazia.
       prep="$CAMPO_PREP"
+      # no estágio o dist/ já vem construído da própria imagem (arq:0129 D4): o preparo do host não roda
+      if [ "$prep" -eq 1 ] && [ -n "${PF_TESTE_ESTAGIO:-}" ]; then continue; fi
       if [ "$prep" -eq 1 ] && [ "$seleciona" -eq 1 ]; then preparos_dest+=("$dest"); continue; fi
       # arq:0129 D1: o degrau pedido decide que linhas entram; o preparo não tem degrau (roda antes,
       # com rede, para quem for selecionado). Quarentena não é degrau: só entra na rodada.
@@ -1396,6 +1420,11 @@ ato_rodar() {
       if [ "${#preparos_dest[@]}" -gt 0 ]; then
         alvos=("${preparos_dest[@]}" "${alvos[@]}")
       fi
+    fi
+    # o veredito do estágio tem chave própria: o verde da lista rodada no navegador do host nunca responde
+    # pelo da imagem (arq:0129 D4)
+    if [ -n "${PF_TESTE_ESTAGIO:-}" ] && [ "${#sel_rels[@]}" -gt 0 ]; then
+      SELECAO_HASH="$(printf 'estagio=%s\n%s\n' "${PF_TESTE_ESTAGIO_STACK:-}" "$(printf '%s\n' "${sel_rels[@]}" | LC_ALL=C sort)" | sha256sum | cut -c1-16)"
     fi
     if [ "${#alvos[@]}" -eq 0 ] || [ "$n_prova_sel" -eq 0 ]; then
       if [ "$fora_n" -gt 0 ]; then

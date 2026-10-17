@@ -126,6 +126,103 @@ def test_registro_sem_a_chave_compose_segue_como_stack_de_promocao(tmp_path):
     assert "de catálogo" not in r.stdout
 
 
+# --- stack de teste (`reversao.via: teste`, card #3733, arq:0129 D4) --------------------------------
+#
+# A biblioteca de front nao tem servico no ar: a stack dela so existe para o passo de imagem. Nao sobe,
+# nao promove e nao reverte; o `gate_imagem` a mede, e o vermelho do estagio barra a promocao.
+
+TESTE_STACK = {"slug": "t", "repo": "fixture", "compose": "deploy/t/compose.yaml", "projeto": "t",
+               "reversao": {"via": "teste"}}
+
+DOCKER_FALSO = r'''#!/usr/bin/env python3
+import json, os, sys
+args = sys.argv[1:]
+if args[:2] == ["image", "inspect"]:
+    sys.exit(1)
+if args[:1] != ["compose"]:
+    sys.exit(0)
+perfis, arquivos, i, sub = [], [], 1, None
+while i < len(args):
+    a = args[i]
+    if a in ("-p", "-f", "--env-file", "--profile"):
+        if a == "--profile":
+            perfis.append(args[i + 1])
+        if a == "-f":
+            arquivos.append(args[i + 1])
+        i += 2
+        continue
+    sub = a
+    break
+if sub == "config":
+    servicos = {"t-teste": {"build": {"context": os.path.dirname(arquivos[0]), "dockerfile": "Dockerfile"},
+                            "image": "x/t-teste:" + os.environ.get("PF_RELEASE_SHA", "local"),
+                            "profiles": ["teste"], "labels": {"pf.teste": "raio"}}}
+    print(json.dumps({"services": servicos if "teste" in perfis else {}}))
+    sys.exit(0)
+if sub == "run":
+    sys.exit(int(os.environ.get("STUB_TESTE_RC", "0")))
+sys.exit(0)
+'''
+
+TESTE_FALSO = '''#!/usr/bin/env bash
+"$PF_TESTE_ESTAGIO" estagio "$PF_TESTE_ESTAGIO_STACK" "$PF_TESTE_ESTAGIO_REV" preparar || exit 5
+"$PF_TESTE_ESTAGIO" estagio "$PF_TESTE_ESTAGIO_STACK" "$PF_TESTE_ESTAGIO_REV" rodar provas/a.mjs || exit 1
+'''
+
+
+def _stack_de_teste_na_familia(amb, tmp_path):
+    """Promove uma rev sem stack (o current existe), depois traz a stack de teste e uma rev nova."""
+    assert amb.run("promover", "fixture").returncode == 0
+    primeiro = amb.sha
+    (amb.wt / "deploy" / "t").mkdir(parents=True)
+    (amb.wt / "deploy" / "t" / "compose.yaml").write_text("name: t\nservices: {}\n", encoding="utf-8")
+    (amb.wt / "deploy" / "t" / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    _git(amb.wt, "add", "-A")
+    _git(amb.wt, "commit", "-q", "-m", "traz a stack de teste")
+    _git(amb.wt, "push", "-q", "origin", "main")
+    segundo = _git(amb.wt, "rev-parse", "HEAD")
+    (tmp_path / "stacks.json").write_text(json.dumps([TESTE_STACK]), encoding="utf-8")
+    (tmp_path / "topo.json").write_text(json.dumps({"stacks": {"t": TESTE_STACK}}), encoding="utf-8")
+    stub = tmp_path / "stub-bin"
+    (stub / "docker").write_text(DOCKER_FALSO, encoding="utf-8")
+    (stub / "docker").chmod(0o755)
+    (tmp_path / "teste-falso").write_text(TESTE_FALSO, encoding="utf-8")
+    (tmp_path / "teste-falso").chmod(0o755)
+    amb.env.update(DEPLOY_TOPO_ARQUIVO=str(tmp_path / "topo.json"), DEPLOY_ENV_DIR=str(tmp_path / "envs"),
+                   DEPLOY_PONTOS=str(tmp_path / "pontos"), PF_TESTE_BIN=str(tmp_path / "teste-falso"),
+                   PF_TRAVA_IMAGEM=str(tmp_path / "srv" / "trava.lock"))
+    return primeiro, segundo
+
+
+def test_ensaio_nomeia_a_stack_de_teste_e_nao_a_promove(tmp_path):
+    amb = _amb(tmp_path, TESTE_STACK).com_espelho()
+    r = amb.run("promover", "fixture", amb.sha, "--ensaio")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "de teste, só o passo de imagem as mede — nada sobe nem reverte: t" in r.stdout
+    assert "(bin/_release/stack promover)" not in r.stdout
+
+
+def test_estagio_vermelho_barra_a_promocao_com_4_e_o_current_fica(tmp_path):
+    amb = _amb(tmp_path)
+    primeiro, segundo = _stack_de_teste_na_familia(amb, tmp_path)
+    amb.env["STUB_TESTE_RC"] = "1"
+    r = amb.run("promover", "fixture", segundo)
+    assert r.returncode == 4, r.stdout + r.stderr
+    assert "passo de teste da imagem da stack t reprovou" in r.stderr
+    atual = (tmp_path / "opt" / "fixture" / "current").resolve().name
+    assert atual == primeiro, f"current devia ficar em {primeiro[:7]} e esta em {atual[:7]}"
+
+
+def test_estagio_que_nao_constroi_ou_nao_roda_barra_com_3(tmp_path):
+    amb = _amb(tmp_path)
+    primeiro, segundo = _stack_de_teste_na_familia(amb, tmp_path)
+    (tmp_path / "teste-falso").write_text("#!/usr/bin/env bash\nexit 5\n", encoding="utf-8")
+    r = amb.run("promover", "fixture", segundo)
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert "não rodou" in r.stderr
+    assert (tmp_path / "opt" / "fixture" / "current").resolve().name == primeiro
+
+
 def test_reverter_tambem_nomeia_a_stack_de_catalogo(tmp_path):
     amb = _amb(tmp_path, CATALOGO)
     assert amb.run("promover", "fixture").returncode == 0

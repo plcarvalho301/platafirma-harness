@@ -620,6 +620,123 @@ def test_pequeno_roda_sem_rede_e_o_preparo_roda_com_rede(pequeno):
         srv.close()
 
 
+# --- o estagio de teste: a prova de imagem roda dentro da imagem (arq:0129 D4, card #3733) ----------
+
+REV_ESTAGIO = "e" * 40
+
+
+def _estagio(banc, **extra):
+    """O `stack` falso que o `stack testar` exportaria em PF_TESTE_ESTAGIO: anota cada chamada
+    (estagio <stack> <rev> preparar|rodar <prova>) e sai como o ambiente mandar."""
+    log = banc.tmp / "estagio.log"
+    est = _exec(banc.tmp / "falsos" / "stack-falso",
+                f'echo "$*" >> "{log}"\n'
+                '[ "$4" = preparar ] && exit "${FALSO_PREPARA_RC:-0}"\n'
+                '[ "$4" = rodar ] && exit "${FALSO_ESTAGIO_RC:-0}"\n'
+                'exit 2\n')
+    banc.env.update(PF_TESTE_ESTAGIO=str(est), PF_TESTE_ESTAGIO_STACK="ui", PF_TESTE_ESTAGIO_REV=REV_ESTAGIO, **extra)
+    return log
+
+
+def _commita(banc):
+    shutil.rmtree(banc.clone / ".git", ignore_errors=True)
+    (banc.clone / ".gitignore").write_text("node_modules/\ndist/\n", encoding="utf-8")
+    git = ["git", "-C", str(banc.clone), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(git + ["init", "-q"], check=True)
+    subprocess.run(git + ["add", "-A"], check=True)
+    subprocess.run(git + ["commit", "-qm", "x"], check=True)
+
+
+def test_estagio_roda_cada_prova_de_imagem_dentro_dele_e_prepara_uma_vez(banc):
+    _com_portao(banc, "construir.sh | preparo\nverde.mjs\na.mjs | degrau: imagem\nb.mjs | degrau: imagem\n")
+    _provas(banc, ["a.mjs", "b.mjs"])
+    log = _estagio(banc)
+    r = banc.rodar("ui", "--portao", "--degrau", "imagem")
+    assert r.returncode == 0, r.stdout + r.stderr
+    linhas = log.read_text(encoding="utf-8").splitlines()
+    assert linhas[0] == f"estagio ui {REV_ESTAGIO} preparar", linhas
+    assert linhas[1:] == [f"estagio ui {REV_ESTAGIO} rodar front/provas/a.mjs",
+                          f"estagio ui {REV_ESTAGIO} rodar front/provas/b.mjs"], linhas
+    saida = _env_out(banc)                                   # o node do host nao rodou prova alguma
+    assert "a.mjs" not in saida and "b.mjs" not in saida and "construir" not in saida, saida
+
+
+def test_estagio_nao_exporta_o_navegador_do_host(banc):
+    """No estagio o navegador e o dele (CHROME no compose): o do host nao vai junto."""
+    _com_portao(banc, "a.mjs | degrau: imagem\n")
+    _provas(banc, ["a.mjs"])
+    est = banc.tmp / "falsos" / "stack-env"
+    _exec(est, f'[ "$4" = rodar ] && echo "CHROME=${{CHROME:-}}" >> "{banc.tmp / "estagio-env.log"}"\nexit 0\n')
+    banc.env.update(PF_TESTE_ESTAGIO=str(est), PF_TESTE_ESTAGIO_STACK="ui", PF_TESTE_ESTAGIO_REV=REV_ESTAGIO)
+    r = banc.rodar("ui", "--portao", "--degrau", "imagem")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (banc.tmp / "estagio-env.log").read_text(encoding="utf-8").strip() == "CHROME="
+
+
+def test_estagio_prova_vermelha_nomeia_a_prova_e_sai_1(banc):
+    _com_portao(banc, "a.mjs | degrau: imagem\nb.mjs | degrau: imagem\n")
+    _provas(banc, ["a.mjs", "b.mjs"])
+    _estagio(banc, FALSO_ESTAGIO_RC="1")
+    r = banc.rodar("ui", "--portao", "--degrau", "imagem")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "suite VERMELHA" in r.stdout and "2 de 2 arquivo(s) reprovado(s)" in r.stdout
+
+
+def test_estagio_que_nao_fica_pronto_sai_5_nao_medido(banc):
+    _com_portao(banc, "a.mjs | degrau: imagem\n")
+    _provas(banc, ["a.mjs"])
+    log = _estagio(banc, FALSO_PREPARA_RC="3")
+    r = banc.rodar("ui", "--portao", "--degrau", "imagem")
+    assert r.returncode == 5, r.stdout + r.stderr
+    assert "não ficou pronto" in r.stderr
+    assert log.read_text(encoding="utf-8").count("rodar") == 0           # nada rodou sem o estagio
+    assert not (banc.clone / "front" / "provas" / "node_modules").exists()
+
+
+def test_estagio_selecao_vazia_nao_prepara_nada(banc):
+    """Diff que nao alcanca prova de imagem: o estagio nem se constroi (D4)."""
+    _com_portao(banc, "a.mjs | degrau: imagem | front/src/**\n")
+    _provas(banc, ["a.mjs"])
+    _commita(banc)
+    log = _estagio(banc)
+    (banc.clone / "front" / "LEIAME.md").write_text("so documento\n", encoding="utf-8")
+    r = banc.rodar("ui", "--portao", "--degrau", "imagem", "--base", "HEAD")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "nenhum arquivo da lista alcançado" in r.stdout
+    assert not log.exists()
+
+
+def test_estagio_so_roda_a_prova_que_o_raio_alcanca(banc):
+    _com_portao(banc, "a.mjs | degrau: imagem | front/src/**\nb.mjs | degrau: imagem | docs/**\n")
+    _provas(banc, ["a.mjs", "b.mjs"])
+    _commita(banc)
+    log = _estagio(banc)
+    (banc.clone / "front" / "src").mkdir()
+    (banc.clone / "front" / "src" / "x.js").write_text("1\n", encoding="utf-8")
+    r = banc.rodar("ui", "--portao", "--degrau", "imagem", "--base", "HEAD")
+    assert r.returncode == 0, r.stdout + r.stderr
+    linhas = log.read_text(encoding="utf-8").splitlines()
+    assert [l.split()[3] for l in linhas] == ["preparar", "rodar"], linhas
+    assert linhas[1].endswith("front/provas/a.mjs"), linhas
+
+
+def test_verde_do_navegador_do_host_nao_responde_pelo_estagio(banc):
+    """O veredito do estagio tem chave propria: a mesma arvore, medida antes no navegador do host,
+    nao libera a promocao que exige a prova dentro da imagem."""
+    _com_portao(banc, "verde.mjs\na.mjs | degrau: imagem\n")
+    _provas(banc, ["a.mjs"])
+    _commita(banc)
+    r = banc.rodar("ui", "--portao", "--degrau", "imagem")                  # no host, verde, memoizado
+    assert r.returncode == 0, r.stdout + r.stderr
+    r = banc.rodar("ui", "--portao", "--degrau", "imagem")
+    assert "veredito reaproveitado" in r.stdout, r.stdout                   # o memo do host funciona
+    log = _estagio(banc, FALSO_ESTAGIO_RC="1")
+    r = banc.rodar("ui", "--portao", "--degrau", "imagem")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "veredito reaproveitado" not in r.stdout
+    assert "rodar front/provas/a.mjs" in log.read_text(encoding="utf-8")
+
+
 def _inventario(banc, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run([str(TESTE), "inventario", *args], env=banc.env, capture_output=True,
                           text=True, timeout=60)
