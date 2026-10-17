@@ -888,11 +888,16 @@ cmd_conferir() {
 STACKS_PROMOVER=()
 STACKS_FORA=()
 STACKS_CATALOGO=()
+# STACKS_TESTE: registrada com `reversao.via: teste` (card #3733, arq:0129 D4): um compose que so tem servico
+# de perfil `teste`, o estagio onde o gate de imagem roda as provas da biblioteca de front. Nao sobe, nao
+# promove e nao reverte; so o gate_imagem a mede.
+STACKS_TESTE=()
 ler_stacks_da_familia() {
   local repo="$1" json=""
   STACKS_PROMOVER=()
   STACKS_FORA=()
   STACKS_CATALOGO=()
+  STACKS_TESTE=()
   local acervo_bin; acervo_bin="$(achar_verbo acervo)"
   if [ -z "$acervo_bin" ]; then
     printf 'release: dependência ausente: acervo (registro de stacks) não encontrado\n' >&2
@@ -923,6 +928,7 @@ for s in d:
     case "$via" in
       promover) STACKS_PROMOVER+=("$slug") ;;
       catalogo) STACKS_CATALOGO+=("$slug") ;;
+      teste)    STACKS_TESTE+=("$slug") ;;
       *)        STACKS_FORA+=("$slug") ;;
     esac
   done <<<"$linhas"
@@ -1243,9 +1249,9 @@ achar_deploy() {
 
 # dependência conferida ANTES de tocar current: família com stack exige o ajudante bin/_release/stack
 exigir_deploy_se_stack() {
-  [ "${#STACKS_PROMOVER[@]}" -gt 0 ] || return 0
+  [ $(( ${#STACKS_PROMOVER[@]} + ${#STACKS_TESTE[@]} )) -gt 0 ] || return 0
   [ -n "$(achar_deploy)" ] || {
-    printf 'release: dependência ausente: ajudante bin/_release/stack não encontrado e a família tem stacks (%s)\n' "${STACKS_PROMOVER[*]}" >&2
+    printf 'release: dependência ausente: ajudante bin/_release/stack não encontrado e a família tem stacks (%s)\n' "${STACKS_PROMOVER[*]} ${STACKS_TESTE[*]}" >&2
     return 3
   }
 }
@@ -1256,14 +1262,20 @@ exigir_deploy_se_stack() {
 # intacto. Nao construiu: exit 3, current intacto. Stack sem perfil `teste`: nada a medir. A
 # imagem medida e a que sobe depois (marcada pelo sha; bin/_release/stack promover a reusa sem
 # build). Stack inalterada desde o sha que tem no ar nao se mede de novo.
+#
+# Stack de teste (`reversao.via: teste`, card #3733, arq:0129 D4) entra aqui e so aqui: o servico de perfil
+# `teste` dela roda so as provas de `degrau: imagem` que o raio da mudanca alcanca, dentro do estagio
+# construido do mesmo build que vai ao ar (bin/_release/stack testar). Uma rodada de imagem por vez no
+# host: a trava mora no ajudante.
 gate_imagem() {  # $1=repo $2=sha
   local repo="$1" sha="$2" s rc ajudante_bin
-  [ "${#STACKS_PROMOVER[@]}" -gt 0 ] || return 0
+  local medir=(${STACKS_PROMOVER[@]+"${STACKS_PROMOVER[@]}"} ${STACKS_TESTE[@]+"${STACKS_TESTE[@]}"})
+  [ "${#medir[@]}" -gt 0 ] || return 0
   ajudante_bin="$(achar_deploy)"
   [ -n "$ajudante_bin" ] || {
-    printf 'release: dependência ausente: ajudante bin/_release/stack não encontrado e a família tem stacks (%s)\n' "${STACKS_PROMOVER[*]}" >&2
+    printf 'release: dependência ausente: ajudante bin/_release/stack não encontrado e a família tem stacks (%s)\n' "${medir[*]}" >&2
     return 3; }
-  for s in "${STACKS_PROMOVER[@]}"; do
+  for s in "${medir[@]}"; do
     rc=0
     "$ajudante_bin" testar "$s" "$sha" || rc=$?
     case "$rc" in
@@ -2087,6 +2099,7 @@ cmd_promover() {
   [ "${#STACKS_PROMOVER[@]}" -eq 0 ] || printf 'stacks:    %s (bin/_release/stack promover)\n' "${STACKS_PROMOVER[*]}"
   [ "${#STACKS_FORA[@]}" -eq 0 ]     || printf 'stacks:    fora da promoção por release — reversão declarada por outra via (infra up <stack>): %s\n' "${STACKS_FORA[*]}"
   [ "${#STACKS_CATALOGO[@]}" -eq 0 ] || printf 'stacks:    de catálogo, sem compose — nada sobe nem se mede: %s\n' "${STACKS_CATALOGO[*]}"
+  [ "${#STACKS_TESTE[@]}" -eq 0 ] || printf 'stacks:    de teste, só o passo de imagem as mede — nada sobe nem reverte: %s\n' "${STACKS_TESTE[*]}"
   if [ "$ensaio" -eq 1 ]; then
     printf 'ensaio:    nada tocado\n'
     exit 0

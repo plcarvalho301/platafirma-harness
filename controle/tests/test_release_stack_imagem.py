@@ -74,6 +74,8 @@ if sub == "ps":
     if os.environ.get("STUB_RODANDO") == "1":
         print("abc123")
     sys.exit(0)
+if sub == "build":
+    sys.exit(int(os.environ.get("STUB_BUILD_RC", "0")))
 if sub == "run":
     sys.exit(int(os.environ.get("STUB_TESTE_RC", "0")))
 sys.exit(0)
@@ -290,3 +292,111 @@ def test_testar_reprovado_sai_4(mundo):
 def test_testar_exige_rev(mundo):
     r = _roda(mundo, "testar", "x")
     assert r.returncode == 2
+
+
+# --- o estagio de teste por selecao do raio (card #3733, arq:0129 D4) --------------------------------
+#
+# Servico de perfil `teste` com o rotulo `pf.teste: raio` nao roda inteiro: o bin/teste seleciona as
+# provas de `degrau: imagem` que o raio da rev contra o sha no ar alcanca, e cada uma roda DENTRO do
+# estagio (ato `estagio`). O `teste` aqui e falso (PF_TESTE_BIN): o que se prova e o contrato do
+# ajudante com ele — base, trava, build so quando ha prova, exit.
+
+MODELO_RAIO = {
+    "services": {
+        "app-teste": {"build": {"context": "${ARVORE}/app", "dockerfile": "Dockerfile", "target": "teste"},
+                      "image": "x/app-teste:${PF_RELEASE_SHA}", "profiles": ["teste"],
+                      "labels": {"pf.teste": "raio"}},
+    }
+}
+
+TESTE_FALSO = r'''#!/usr/bin/env bash
+echo "$*" >> "$FAKE_TESTE_LOG"
+env | grep -E '^PF_TESTE_ESTAGIO' >> "$FAKE_TESTE_LOG"
+if [ -n "${FAKE_TESTE_DORME:-}" ]; then sleep "$FAKE_TESTE_DORME"; fi
+if [ "${FAKE_TESTE_PROVAS:-0}" = 1 ]; then
+  "$PF_TESTE_ESTAGIO" estagio "$PF_TESTE_ESTAGIO_STACK" "$PF_TESTE_ESTAGIO_REV" preparar || exit 5
+  "$PF_TESTE_ESTAGIO" estagio "$PF_TESTE_ESTAGIO_STACK" "$PF_TESTE_ESTAGIO_REV" rodar provas/a.mjs || exit 1
+fi
+exit 0
+'''
+
+
+@pytest.fixture
+def raio(mundo, tmp_path):
+    mundo["modelo"].write_text(json.dumps(MODELO_RAIO))
+    teste = tmp_path / "teste-falso"
+    teste.write_text(TESTE_FALSO)
+    teste.chmod(0o755)
+    mundo["teste_log"] = tmp_path / "teste.log"
+    mundo["env"].update(PF_TESTE_BIN=str(teste), FAKE_TESTE_LOG=str(mundo["teste_log"]),
+                        PF_TRAVA_IMAGEM=str(tmp_path / "srv" / "trava-imagem.lock"))
+    raiz = Path(mundo["env"]["PF_RELEASE_RAIZ"])
+    os.symlink(raiz / FAMILIA / mundo["c1"], raiz / FAMILIA / "current")      # o sha que esta no ar
+    return mundo
+
+
+def test_raio_sem_prova_alcancada_nao_constroi_nada(raio):
+    r = _roda(raio, "testar", "x", raio["c3"])
+    assert r.returncode == 0, r.stderr
+    assert "sem prova de imagem no raio — nada a medir" in r.stdout
+    assert not _chamadas(raio, "build") and not _chamadas(raio, "run")
+    chamada = raio["teste_log"].read_text().splitlines()[0]
+    assert chamada.startswith("rodar platafirma-x --portao --degrau imagem --arvore ")
+    assert chamada.endswith(f"--base {raio['c1']}"), chamada            # a base e o sha no ar
+
+
+def test_raio_com_prova_constroi_o_estagio_e_roda_a_prova_dentro_dele(raio):
+    r = _roda(raio, "testar", "x", raio["c3"], FAKE_TESTE_PROVAS="1")
+    assert r.returncode == 0, r.stderr
+    assert "verde na rev" in r.stdout
+    builds = _chamadas(raio, "build")
+    assert builds and builds[-1].endswith("build app-teste") and "--profile teste" in builds[-1]
+    runs = _chamadas(raio, "run")
+    assert runs and runs[-1].endswith("app-teste node provas/a.mjs"), runs
+    assert not _chamadas(raio, "up")
+    assert f"PF_TESTE_ESTAGIO_REV={raio['c3']}" in raio["teste_log"].read_text()
+
+
+def test_raio_prova_sh_roda_com_bash(raio, tmp_path):
+    r = _roda(raio, "estagio", "x", raio["c3"], "rodar", "provas/rede.sh")
+    assert r.returncode == 0, r.stderr
+    assert _chamadas(raio, "run")[-1].endswith("app-teste bash provas/rede.sh")
+
+
+def test_raio_prova_vermelha_no_estagio_sai_4(raio):
+    r = _roda(raio, "testar", "x", raio["c3"], FAKE_TESTE_PROVAS="1", STUB_TESTE_RC="1")
+    assert r.returncode == 4, r.stdout + r.stderr
+    assert "REPROVOU" in r.stderr
+
+
+def test_raio_estagio_que_nao_constroi_sai_3(raio):
+    r = _roda(raio, "testar", "x", raio["c3"], FAKE_TESTE_PROVAS="1", STUB_BUILD_RC="1")
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert "nao rodou" in r.stderr
+
+
+def test_estagio_recusa_prova_fora_da_raiz_do_repositorio(raio):
+    for ruim in ("/etc/passwd", "../fora.mjs", "-e"):
+        r = _roda(raio, "estagio", "x", raio["c3"], "rodar", ruim)
+        assert r.returncode == 2, (ruim, r.stderr)
+    assert not _chamadas(raio, "run")
+
+
+def test_a_segunda_rodada_de_imagem_espera_a_primeira(raio):
+    """Carga de navegador acima do limite de processos da conta (#3496): uma rodada por vez no host."""
+    import time
+    env1 = {**raio["env"], "FAKE_TESTE_DORME": "2"}
+    env2 = {**raio["env"], "FAKE_TESTE_DORME": "0"}
+    a = subprocess.Popen([BASH, str(STACK), "testar", "x", raio["c3"]], env=env1,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    time.sleep(0.7)
+    t0 = time.time()
+    b = subprocess.Popen([BASH, str(STACK), "testar", "x", raio["c3"]], env=env2,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    ob, eb = b.communicate(timeout=60)
+    espera = time.time() - t0
+    oa, ea = a.communicate(timeout=60)
+    assert a.returncode == 0 and b.returncode == 0, (ea, eb)
+    assert "espera a rodada de imagem em curso" in ob, ob
+    assert "espera a rodada de imagem em curso" not in oa
+    assert espera >= 1.0, espera                       # a segunda so rodou depois da primeira soltar a trava

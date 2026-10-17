@@ -25,6 +25,15 @@
 #                                             §13): constroi as imagens da rev e roda, dentro da
 #                                             imagem, cada servico do perfil `teste` do compose.
 #                                             0 verde ou nada a medir · 4 reprovou · 3 nao construiu
+#                                             Servico com o rotulo `pf.teste: raio` (card #3733, arq:0129
+#                                             D4) nao roda inteiro: `teste rodar <repo> --portao --degrau
+#                                             imagem --base <sha no ar>` seleciona pelo raio as provas da
+#                                             lista e cada uma roda dentro do estagio (ato `estagio`); o
+#                                             estagio so se constroi quando a selecao nao e vazia, e uma
+#                                             rodada de imagem por vez no host (trava; a segunda espera)
+#   stack estagio  <stack> <rev> preparar|rodar <prova>
+#                                             interno do bin/teste: constroi o estagio, ou roda uma prova
+#                                             (caminho relativo a raiz do repositorio) dentro dele
 #
 # Imagem pinada pelo sha (card #3192, spec conversor-pdf-combinado §2): promover, testar e
 # compose exportam PF_RELEASE_SHA (o sha da arvore que sobe). Stack cujo compose da a todo
@@ -109,8 +118,8 @@ case "${1:-}" in --ajuda|--help|-h) uso ;; esac
 ATO="$1"; STACK="$2"; shift 2 || true
 
 case "$ATO" in
-  promover|compose|testar) ;;
-  *) echo "erro: ato desconhecido: '$ATO' (promover|compose|testar)" >&2; uso ;;
+  promover|compose|testar|estagio) ;;
+  *) echo "erro: ato desconhecido: '$ATO' (promover|compose|testar|estagio)" >&2; uso ;;
 esac
 
 case "$STACK" in
@@ -129,8 +138,13 @@ OVERRIDE="$PLATAFIRMA_INSTANCIA/deploy/$STACK/compose.override.yaml"
 SEGREDOS_STACK="$PLATAFIRMA_INSTANCIA/segredos/$STACK"
 ENV_DIR="${DEPLOY_ENV_DIR:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/platafirma}"
 ENV_FILE=""; ENV_TMP=""
+# estado do passo de teste por selecao (so `testar` o cria e so ele o apaga; o `estagio`, filho, so o le)
+ESTADO_MEU=""
 
-limpar_env() { rm -f ${ENV_FILE:+"$ENV_FILE"} ${ENV_TMP:+"$ENV_TMP"}; }
+limpar_env() {
+  rm -f ${ENV_FILE:+"$ENV_FILE"} ${ENV_TMP:+"$ENV_TMP"}
+  [ -z "$ESTADO_MEU" ] || rm -rf "$ESTADO_MEU"
+}
 trap limpar_env EXIT
 
 PONTOS="${DEPLOY_PONTOS:-$PLATAFIRMA_INSTANCIA/var/deploy}"
@@ -327,6 +341,18 @@ for nome, s in sorted((d.get("services") or {}).items()):
 '
 }
 
+# servicos de teste com o rotulo `pf.teste: raio` (card #3733, arq:0129 D4): quem decide o que roda
+# dentro do estagio e o `teste rodar --degrau imagem` (bin/teste), pelo raio da mudanca, nao o servico
+servicos_de_teste_raio() {
+  config_json --profile teste | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+for nome, s in sorted((d.get("services") or {}).items()):
+    if "teste" in (s.get("profiles") or []) and (s.get("labels") or {}).get("pf.teste") == "raio":
+        print(nome)
+'
+}
+
 # 0 quando todo servico com build tem image: terminada em :$PF_RELEASE_SHA (e ha ao menos um)
 imagem_pinada() {
   local linhas nome img
@@ -421,6 +447,44 @@ resolver_arvore() {  # $1=rev ou vazio
   fi
 }
 
+# Passo de teste por selecao do raio (card #3733, arq:0129 D4): a lista de portao da familia diz quais
+# provas sao de `degrau: imagem` e o raio da mudanca (a rev contra o sha que esta no ar) diz quais rodam;
+# cada uma roda DENTRO do estagio de teste, que e construido do mesmo build que vai ao ar. Sai do
+# ajudante: 0 verde ou nada a medir · 4 reprovou · 3 nao rodou. Uma rodada de imagem por vez no host
+# (incidente #3496: carga de navegador acima do limite de processos da conta): a segunda espera.
+testar_por_raio() {  # $1=servico
+  local servico="$1" base="" cur trava rc=0 espera="${PF_TRAVA_IMAGEM_ESPERA:-3600}"
+  cur="$(arvore_de "" 2>/dev/null || true)"
+  [ -z "$cur" ] || base="$(basename "$cur")"
+  [ "$base" != "$SHA" ] || base=""   # sem sha no ar para comparar: a lista de imagem inteira
+  command -v flock >/dev/null 2>&1 || { echo "teste imagem: dependencia ausente: flock (trava da rodada de imagem)" >&2; exit 3; }
+  trava="${PF_TRAVA_IMAGEM:-$PLATAFIRMA_INSTANCIA/var/trava-imagem.lock}"
+  mkdir -p "$(dirname "$trava")" 2>/dev/null || { echo "teste imagem: sem pasta para a trava $trava" >&2; exit 3; }
+  exec 8>"$trava"
+  if ! flock -n 8; then
+    printf 'teste imagem: %s espera a rodada de imagem em curso neste host (trava %s)\n' "$STACK" "$trava"
+    flock -w "$espera" 8 || { echo "teste imagem: a trava $trava nao liberou em ${espera}s" >&2; exit 3; }
+  fi
+  ESTADO_MEU="$(mktemp -d "${TMPDIR:-/tmp}/estagio.XXXXXX")" || { echo "teste imagem: sem pasta de estado" >&2; exit 3; }
+  printf '%s' "$TOPO_JSON" > "$ESTADO_MEU/topo.json"
+  export DEPLOY_TOPO_ARQUIVO="$ESTADO_MEU/topo.json" PF_ESTAGIO_ESTADO="$ESTADO_MEU"
+  export PF_TESTE_ESTAGIO="$AQUI/stack" PF_TESTE_ESTAGIO_STACK="$STACK" PF_TESTE_ESTAGIO_REV="$SHA"
+  local base_curta="${base:0:7}"
+  [ -n "$base" ] || base_curta="nenhuma, a lista inteira"
+  printf 'teste imagem: %s → provas de imagem que o raio alcanca (%s, base %s)\n' "$STACK" "${SHA:0:7}" "$base_curta"
+  "${PF_TESTE_BIN:-$AQUI/../teste}" rodar "$REPO" --portao --degrau imagem --arvore "$ARV" ${base:+--base "$base"} </dev/null || rc=$?
+  case "$rc" in
+    0) if [ -e "$ESTADO_MEU/preparado" ]; then
+         printf 'teste imagem: %s verde na rev %s\n' "$STACK" "${SHA:0:7}"
+       else
+         printf 'teste imagem: %s sem prova de imagem no raio — nada a medir\n' "$STACK"
+       fi
+       exit 0 ;;
+    1) printf 'teste imagem: %s REPROVOU na rev %s: %s\n' "$STACK" "${SHA:0:7}" "$servico" >&2; exit 4 ;;
+    *) printf 'teste imagem: %s nao rodou na rev %s (o teste saiu %s)\n' "$STACK" "${SHA:0:7}" "$rc" >&2; exit 3 ;;
+  esac
+}
+
 PERFIL_ARGS=()
 while read -r pf; do
   [ -n "$pf" ] || continue
@@ -478,6 +542,10 @@ case "$ATO" in
       printf 'teste imagem: %s sem servico no perfil teste — nada a medir\n' "$STACK"
       exit 0
     fi
+    RAIO_SERV="$(servicos_de_teste_raio | head -n 1)" || RAIO_SERV=""
+    if [ -n "$RAIO_SERV" ]; then
+      testar_por_raio "$RAIO_SERV"   # sai do ajudante
+    fi
     ANTES=""
     if [ -r "$PONTOS/$STACK.atual" ]; then ANTES="$(cat "$PONTOS/$STACK.atual")"; fi
     if [ "${PF_STACK_RECRIAR:-0}" != 1 ] && [ -n "$ANTES" ] && inalterada_desde "$ANTES"; then
@@ -498,6 +566,38 @@ case "$ATO" in
     fi
     printf 'teste imagem: %s verde na rev %s\n' "$STACK" "${SHA:0:7}"
     exit 0
+    ;;
+  # interno do bin/teste (PF_TESTE_ESTAGIO): constroi o estagio da rev, ou roda uma prova dentro dele.
+  # Nao toma a trava: quem a segura e o `testar`, pai desta chamada.
+  estagio)
+    REV="${1:-}"; ACAO="${2:-}"
+    [ -n "$REV" ] && [ -n "$ACAO" ] || { echo "erro: stack estagio $STACK <rev> preparar|rodar <prova>" >&2; exit 2; }
+    shift 2
+    resolver_arvore "$REV"
+    montar_compose "$ARV"; fixar_projeto; exigir_segredos; materializar_env
+    export PF_RELEASE_SHA="$SHA"
+    cd "$(dirname "$COMPOSE")"
+    SERV="$(servicos_de_teste_raio | head -n 1)" || SERV=""
+    [ -n "$SERV" ] || { echo "erro: stack \"$STACK\" sem servico de teste com o rotulo pf.teste=raio" >&2; exit 3; }
+    case "$ACAO" in
+      preparar)
+        garantir_imagens --profile teste \
+          || { echo "teste imagem: build do estagio de $STACK na rev ${SHA:0:7} falhou" >&2; exit 3; }
+        [ -z "${PF_ESTAGIO_ESTADO:-}" ] || : > "$PF_ESTAGIO_ESTADO/preparado"
+        exit 0
+        ;;
+      rodar)
+        PROVA="${1:-}"
+        case "$PROVA" in
+          ''|/*|-*|*..*) echo "erro: prova \"$PROVA\" tem de ser caminho relativo a raiz do repositorio" >&2; exit 2 ;;
+        esac
+        case "$PROVA" in *.sh) CMD=(bash "$PROVA") ;; *) CMD=(node "$PROVA") ;; esac
+        rc=0
+        compose --profile teste run --rm --no-deps -T "$SERV" "${CMD[@]}" </dev/null || rc=$?
+        exit "$rc"
+        ;;
+      *) echo "erro: acao do estagio desconhecida: '$ACAO' (preparar|rodar)" >&2; exit 2 ;;
+    esac
     ;;
   compose)
     ACAO="${1:-}"
