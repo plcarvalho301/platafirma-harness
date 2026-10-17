@@ -285,17 +285,18 @@ envia() { # envia MÉTODO /caminho  (corpo JSON em stdin)
 # Card #3740: a lista ganhou os rotulos de decisao e de insumo (Decidiu, Ficha, Golden...), e URL
 # solta http/https vira <a href>. E' a MESMA conversao de platafirma-rastreador@api/logica.py
 # (R34): o algoritmo e a regex da URL sao os mesmos, sem aspa simples porque o Python mora
-# dentro de aspas simples do shell (\x22 e \x27).
+# dentro de aspas simples do shell (\x22 e \x27; a crase, \x60, tambem termina o endereco, e
+# o sublinhado e o asterisco finais saem do link, como a pontuacao).
 para_html() {
   python3 -c 'import html,re,sys
 R = ["Problema encontrado", "Solução proposta", "Aceite × prova", "Raio de ataque", "Raio emendado", "Comportamento esperado", "Tarefas", "Sai quando", "Continuidade", "Estado medido", "Medido em", "Referencial", "Premissas", "Unidades", "Problema", "Resultado", "Medida", "Fora", "Quebra", "Negócio", "Ambiente", "Onde", "Passos", "Aceite", "Travas", "Entrega", "Plano", "Riscos", "Solução", "Peças", "Apetite", "Aberto", "Produtos documentais", "Traz", "Caso", "Remendo", "Confere", "Descartado", "Substitui", "fecho", "Decidiu", "Ficha", "Golden", "Motivo", "Por que importa", "O que já se sabe", "Resposta esperada", "Consequência no corpo"]
 R.sort(key=len, reverse=True)
 L = re.compile("^(" + "|".join(map(re.escape, R)) + "):", re.I)
-U = re.compile(r"https?://(?:(?!&(?:lt|gt|quot|#x27);)[^\s<>\x22\x27])+", re.I)
+U = re.compile(r"https?://(?:(?!&(?:lt|gt|quot|#x27);)[^\s<>\x22\x27\x60])+", re.I)
 E = re.compile(r"&#?\w+;$")
 def liga(m):
     u, r = m.group(0), ""
-    while u and (u[-1] in ".,:!?" or (u[-1] == ";" and not E.search(u)) or (u[-1] == ")" and u.count(")") > u.count("("))):
+    while u and (u[-1] in ".,:!?_*" or (u[-1] == ";" and not E.search(u)) or (u[-1] == ")" and u.count(")") > u.count("("))):
         u, r = u[:-1], u[-1] + r
     if u.endswith("//"):
         return m.group(0)
