@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
+from functools import cache
 from pathlib import Path
 from typing import Callable, Iterator, Optional, Tuple
 
@@ -25,6 +27,11 @@ DEGRAUS = ("pequeno", "imagem", "rodada")
 PASTAS_FORA = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist"}
 
 NOMEADO = re.compile(r"^([a-z][a-z-]*):")
+
+# Rito do débito técnico (padrão rito-debito-tecnico §2): a linha do balde com mais de 30 dias entra na
+# pauta da revisão. A quarentena (arq:0129 D6) é estado com prazo — dura até o débito morrer —, então o
+# débito vencido é quarentena velha.
+PRAZO_DEBITO_DIAS = 30
 
 
 class Linha:
@@ -126,7 +133,71 @@ def t3(linha: Linha) -> Optional[str]:
     return None
 
 
-DETECTORES: dict[str, Callable[[Linha], Optional[str]]] = {"T1": t1, "T2": t2, "T3": t3}
+# ---- o balde de débito técnico (#2856), lido por `tarefas dt listar` ---------------------------------
+# `quarentena #<n>` cita a linha <n> do balde. O lint só aponta o que o balde confirma: a linha de número
+# que ele não conhece (número de card, por exemplo) e o balde fora do ar não geram aviso. O binário é
+# `PF_TAREFAS_BIN`, como no bin/teste; o resultado vale uma execução.
+
+COLUNAS_DA_LINHA = 2   # n e idade: o resto da linha do balde é texto
+
+
+def _linhas_do_balde(situacao: str) -> Optional[dict[int, Optional[int]]]:
+    """{linha: idade em dias} das linhas do balde na situação pedida, ou None se o balde não respondeu."""
+    tarefas = os.environ.get("PF_TAREFAS_BIN") or str(Path(__file__).resolve().parents[1] / "tarefas")
+    try:
+        r = subprocess.run([tarefas, "dt", "listar", "--curto", "--situacao", situacao],
+                           capture_output=True, text=True, timeout=60, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0:
+        return None
+    achadas: dict[int, Optional[int]] = {}
+    for bruta in r.stdout.splitlines():
+        campos = bruta.split("\t")
+        if len(campos) < COLUNAS_DA_LINHA or not campos[0].isdigit():
+            continue
+        idade = re.fullmatch(r"(\d+)d", campos[1].strip())
+        achadas[int(campos[0])] = int(idade.group(1)) if idade else None
+    return achadas
+
+
+@cache
+def balde() -> Optional[Tuple[dict[int, Optional[int]], set[int]]]:
+    """(abertas com a idade, números das que já saíram), ou None sem balde. Lido uma vez por execução."""
+    abertas, saidas = _linhas_do_balde("abertas"), _linhas_do_balde("saidas")
+    return (abertas, set(saidas)) if abertas is not None and saidas is not None else None
+
+
+def _debito_da_quarentena(linha: Linha) -> Optional[int]:
+    achado = re.search(r"#(\d+)", linha.quarentena)
+    return int(achado.group(1)) if achado else None
+
+
+def t4(linha: Linha) -> Optional[str]:
+    """quarentena que sobreviveu ao débito"""
+    n = _debito_da_quarentena(linha)
+    lido = balde() if n is not None else None
+    if lido is None:
+        return None
+    abertas, saidas = lido
+    if n in saidas and n not in abertas:
+        return f"o débito #{n} já saiu do balde e a linha segue em quarentena"
+    return None
+
+
+def t5(linha: Linha) -> Optional[str]:
+    """quarentena de débito vencido"""
+    n = _debito_da_quarentena(linha)
+    lido = balde() if n is not None else None
+    if lido is None:
+        return None
+    idade = lido[0].get(n)
+    if idade is not None and idade > PRAZO_DEBITO_DIAS:
+        return f"o débito #{n} está aberto há {idade} dias (prazo do rito: {PRAZO_DEBITO_DIAS})"
+    return None
+
+
+DETECTORES: dict[str, Callable[[Linha], Optional[str]]] = {"T1": t1, "T2": t2, "T3": t3, "T4": t4, "T5": t5}
 
 
 def verificar_testes(

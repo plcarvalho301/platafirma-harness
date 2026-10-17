@@ -1084,6 +1084,56 @@ def test_lint_testes_avisa_a_combinacao_proibida_sem_recusar(tmp_path, acervo):
     assert "regressivo com degrau: imagem" in aps[0]["o_que_fere"]
 
 
+# --- a quarentena tem prazo: dura até o débito morrer (arq:0129 D6, card #3733) -------------------------
+
+LISTA_TESTES_COM_QUARENTENA = LISTA_TESTES + (
+    "| T4 | quarentena que sobreviveu ao débito | `arq:0129` D6 | débito citado já saiu do balde | aviso | "
+    "volte a linha ao degrau dela | \n"
+    "| T5 | quarentena de débito vencido | rito do débito §2 | débito aberto há mais de 30 dias | aviso | "
+    "mate o débito ou conserte o teste |\n")
+
+# o `tarefas dt listar --curto --situacao abertas|saidas` do balde #2856: n, idade, stack, débito
+TAREFAS_FALSA = """#!/usr/bin/env bash
+if [ "${FALSO_BALDE_FORA:-0}" = 1 ]; then echo "balde fora do ar" >&2; exit 3; fi
+case "$*" in
+  *"--situacao abertas"*) printf 'n\\tidade\\tstack\\tdébito\\n288\\t45d\\tharness\\tum\\n313\\t1d\\tharness\\tdois\\n' ;;
+  *"--situacao saidas"*)  printf 'n\\tidade\\tstack\\tdébito\\n310\\t1d\\tharness\\ttres\\n' ;;
+  *) exit 2 ;;
+esac
+"""
+
+
+def _lint_testes_com_balde(tmp_path, acervo, verdes: str, **extra_env: str):
+    wt, env = _wt(tmp_path)
+    (wt / "a" / "tests").mkdir(parents=True)
+    (wt / "a" / "tests" / "VERDES").write_text(verdes, encoding="utf-8")
+    falsa = tmp_path / "tarefas-falsa"
+    falsa.write_text(TAREFAS_FALSA, encoding="utf-8")
+    falsa.chmod(0o755)
+    env = {**env, **acervo(textos={"checklist-testes": LISTA_TESTES_COM_QUARENTENA}),
+           "PF_TAREFAS_BIN": str(falsa), **extra_env}
+    return _rodar_lint("testes", "mono", "--json", env_extra=env)
+
+
+def test_lint_testes_avisa_quarentena_que_sobreviveu_ao_debito_e_a_de_debito_vencido(tmp_path, acervo):
+    p = _lint_testes_com_balde(tmp_path, acervo, (
+        "test_a.py | degrau: rodada | quarentena #310\n"          # o débito saiu: a quarentena sobrou
+        "test_b.py | degrau: imagem | quarentena #288\n"          # aberto há 45 dias: vencido
+        "test_c.py | degrau: rodada | quarentena #313\n"          # aberto há 1 dia: em dia
+        "test_d.py | degrau: rodada | quarentena #9999\n"         # não é linha do balde: não dá para julgar
+        "test_e.py | degrau: rodada\n"))                           # fora da quarentena
+    aps = json.loads(p.stdout)["apontamentos"]
+    assert [(a["linha"], a["id"], a["severidade"]) for a in aps] == [(1, "T4", "aviso"), (2, "T5", "aviso")], aps
+    assert "o débito #310 já saiu do balde" in aps[0]["o_que_fere"]
+    assert "o débito #288 está aberto há 45 dias" in aps[1]["o_que_fere"]
+
+
+def test_lint_testes_balde_fora_do_ar_nao_inventa_aviso(tmp_path, acervo):
+    p = _lint_testes_com_balde(tmp_path, acervo, "test_a.py | degrau: rodada | quarentena #310\n",
+                               FALSO_BALDE_FORA="1")
+    assert json.loads(p.stdout)["apontamentos"] == [], p.stdout + p.stderr
+
+
 def test_lint_testes_le_toda_lista_do_repositorio_e_aceita_alvo(tmp_path, acervo):
     listas = {"a/tests/VERDES": "test_a.py | foo: x\n", "b/VERDES": "test_b.py | bar: y\n",
               "node_modules/c/VERDES": "test_c.py | baz: z\n"}

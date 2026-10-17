@@ -190,8 +190,31 @@ def _stack_de_teste_na_familia(amb, tmp_path):
     (tmp_path / "teste-falso").chmod(0o755)
     amb.env.update(DEPLOY_TOPO_ARQUIVO=str(tmp_path / "topo.json"), DEPLOY_ENV_DIR=str(tmp_path / "envs"),
                    DEPLOY_PONTOS=str(tmp_path / "pontos"), PF_TESTE_BIN=str(tmp_path / "teste-falso"),
-                   PF_TRAVA_IMAGEM=str(tmp_path / "srv" / "trava.lock"))
+                   PF_TRAVA_IMAGEM=str(tmp_path / "srv" / "trava.lock"),
+                   PF_GATE_SINCRONO="1")      # mede aqui: o `sessao` real nao dispara job no teste
     return primeiro, segundo
+
+
+def _sessao_falsa(amb, tmp_path):
+    """`sessao longjob run|list`: o run roda o comando em segundo plano e diz unit e log como o verbo
+    real diz; o list mostra um job ativo da medida de imagem quando FAKE_JOB_ATIVO traz o sha."""
+    chamadas = tmp_path / "sessao-run.log"
+    saida = tmp_path / "job.log"
+    stub = tmp_path / "stub-bin" / "sessao"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "if [ \"$1\" = longjob ] && [ \"$2\" = list ]; then\n"
+        "  [ -z \"${FAKE_JOB_ATIVO:-}\" ] || echo \"platafirma-job-imagem-x.service loaded active running \""
+        "\"/x/bin/release _medir-imagem fixture $FAKE_JOB_ATIVO t\"\n"
+        "  exit 0\nfi\n"
+        "[ \"$1\" = longjob ] && [ \"$2\" = run ] || exit 2\n"
+        f"echo run >> '{chamadas}'\n"
+        "shift 3\n"
+        f"nohup \"$@\" >'{saida}' 2>&1 &\n"
+        f"echo 'unit: platafirma-job-imagem-teste'\necho 'log: {saida}'\n", encoding="utf-8")
+    stub.chmod(0o755)
+    del amb.env["PF_GATE_SINCRONO"]
+    return chamadas
 
 
 def test_ensaio_nomeia_a_stack_de_teste_e_nao_a_promove(tmp_path):
@@ -221,6 +244,54 @@ def test_estagio_que_nao_constroi_ou_nao_roda_barra_com_3(tmp_path):
     assert r.returncode == 3, r.stdout + r.stderr
     assert "não rodou" in r.stderr
     assert (tmp_path / "opt" / "fixture" / "current").resolve().name == primeiro
+
+
+def test_estagio_como_job_dentro_do_teto_barra_com_o_exit_do_job(tmp_path):
+    """A medida passa do teto da chamada da porta: roda como job, e o promover espera ate o teto."""
+    amb = _amb(tmp_path)
+    primeiro, segundo = _stack_de_teste_na_familia(amb, tmp_path)
+    chamadas = _sessao_falsa(amb, tmp_path)
+    amb.env.update(PF_GATE_TETO_S="60", STUB_TESTE_RC="1")
+    r = amb.run("promover", "fixture", segundo)
+    assert r.returncode == 4, r.stdout + r.stderr
+    assert "passo de teste da imagem da stack t reprovou" in r.stderr
+    assert chamadas.read_text().count("run") == 1
+    assert (tmp_path / "opt" / "fixture" / "current").resolve().name == primeiro
+
+
+def test_estagio_acima_do_teto_devolve_em_andamento_e_a_repeticao_acha_a_medida(tmp_path):
+    import time
+    amb = _amb(tmp_path)
+    primeiro, segundo = _stack_de_teste_na_familia(amb, tmp_path)
+    chamadas = _sessao_falsa(amb, tmp_path)
+    amb.env.update(PF_GATE_TETO_S="0", STUB_TESTE_RC="1")
+    r = amb.run("promover", "fixture", segundo)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "imagem em andamento" in r.stdout and "platafirma-job-imagem-teste" in r.stdout, r.stdout
+    assert "repita: release promover" in r.stderr
+    assert (tmp_path / "opt" / "fixture" / "current").resolve().name == primeiro      # nada subiu
+    marca = next((tmp_path / "srv" / "var" / "log" / "release-gate").glob("imagem-fixture-*-t.rc"), None)
+    for _ in range(60):
+        marca = next((tmp_path / "srv" / "var" / "log" / "release-gate").glob("imagem-fixture-*-t.rc"), None)
+        if marca is not None and marca.exists():
+            break
+        time.sleep(1)
+    assert marca is not None and marca.read_text().strip() == "4", marca
+    amb.env["PF_GATE_TETO_S"] = "30"
+    r2 = amb.run("promover", "fixture", segundo)
+    assert r2.returncode == 4, r2.stdout + r2.stderr                       # a medida pronta vale
+    assert chamadas.read_text().count("run") == 1, "abriu outro job para a mesma rev"
+
+
+def test_estagio_anexa_ao_job_que_ja_mede_a_rev(tmp_path):
+    amb = _amb(tmp_path)
+    primeiro, segundo = _stack_de_teste_na_familia(amb, tmp_path)
+    chamadas = _sessao_falsa(amb, tmp_path)
+    amb.env.update(PF_GATE_TETO_S="0", FAKE_JOB_ATIVO=segundo)
+    r = amb.run("promover", "fixture", segundo)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "ja roda no job platafirma-job-imagem-x" in r.stdout + r.stderr, r.stdout + r.stderr
+    assert not chamadas.exists(), "abriu outro job de medicao para a mesma rev"
 
 
 def test_reverter_tambem_nomeia_a_stack_de_catalogo(tmp_path):

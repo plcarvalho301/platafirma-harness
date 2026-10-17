@@ -1267,7 +1267,54 @@ exigir_deploy_se_stack() {
 # `teste` dela roda so as provas de `degrau: imagem` que o raio da mudanca alcanca, dentro do estagio
 # construido do mesmo build que vai ao ar (bin/_release/stack testar). Uma rodada de imagem por vez no
 # host: a trava mora no ajudante.
-gate_imagem() {  # $1=repo $2=sha
+#
+# A medida da stack de teste passa do teto da chamada da porta (600 s) quando ha muita prova no raio: como
+# a suite, roda como job (`sessao longjob`, fora do cgroup da porta) e o promover espera ate PF_GATE_TETO_S
+# (90). Terminou antes: segue com o exit que o job gravou. Nao terminou: devolve 6 e a mesma promocao,
+# chamada de novo, acha o job (anexa) ou a medida concluida ha menos de 30 min. Sai 6 = em andamento.
+GATE_IMAGEM_DETALHE=""
+
+imagem_marca() {  # $1=repo $2=sha $3=stack ; o exit que o job de imagem gravou
+  printf '%s/var/log/release-gate/imagem-%s-%s-%s.rc' "${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}" "$1" "$2" "$3"
+}
+
+gate_imagem_teste() {  # $1=repo $2=sha $3=stack ; 0 verde · 4 vermelho · 3 nao rodou · 6 em andamento
+  local repo="$1" sha="$2" s="$3" ajud sessao_bin marca unit="" out_job log_job="" teto="${PF_GATE_TETO_S:-90}" t=0 rc=0
+  ajud="$(achar_deploy)"
+  sessao_bin="$(achar_verbo sessao)"
+  if [ "${PF_GATE_SINCRONO:-0}" = 1 ] || [ -z "$sessao_bin" ]; then
+    "$ajud" testar "$s" "$sha" || rc=$?
+    return "$rc"
+  fi
+  marca="$(imagem_marca "$repo" "$sha" "$s")"
+  mkdir -p "$(dirname "$marca")" 2>/dev/null || true
+  unit="$("$sessao_bin" longjob list 2>/dev/null \
+    | awk -v alvo="_medir-imagem $repo $sha $s" '$3 == "active" && index($0, alvo) { sub(/\.service$/, "", $1); print $1; exit }')"
+  if [ -n "$unit" ]; then
+    log_job="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/log/jobs/${unit}.log"
+    printf 'gate:      a medicao de imagem desta rev ja roda no job %s — anexo a ele\n' "$unit" >&2
+  elif [ -z "$(find "$marca" -mmin -30 2>/dev/null)" ]; then
+    rm -f "$marca"
+    out_job="$(PF_GATE_SINCRONO=1 "$sessao_bin" longjob run "imagem-${sha:0:7}" "$AQUI/release" _medir-imagem "$repo" "$sha" "$s" 2>&1 8>&-)" || out_job=""
+    unit="$(printf '%s\n' "$out_job" | grep -oE 'platafirma-job-[A-Za-z0-9_.@-]+' | head -n 1)"
+    log_job="$(printf '%s\n' "$out_job" | grep -oE '/[^ ]+\.log' | head -n 1)"
+    if [ -z "$unit" ]; then   # sem longjob (conta sem systemd --user): mede aqui, sincrono
+      "$ajud" testar "$s" "$sha" || rc=$?
+      return "$rc"
+    fi
+  fi
+  while [ ! -f "$marca" ] && [ "$t" -lt "$teto" ]; do sleep 2; t=$((t + 2)); done
+  if [ -f "$marca" ]; then
+    rc="$(head -n 1 "$marca" 2>/dev/null)"
+    case "$rc" in ''|*[!0-9]*) rc=3 ;; esac
+    [ "$rc" -ne 0 ] || printf 'gate:      imagem %s verde%s\n' "$s" "${unit:+ (job $unit)}"
+    return "$rc"
+  fi
+  GATE_IMAGEM_DETALHE="job ${unit:-?} passou de ${teto}s; log ${log_job:-sessao longjob log ${unit:-?}}"
+  return 6
+}
+
+gate_imagem() {  # $1=repo $2=sha ; 0 verde · 3 nao rodou · 4 reprovou · 6 em andamento
   local repo="$1" sha="$2" s rc ajudante_bin
   local medir=(${STACKS_PROMOVER[@]+"${STACKS_PROMOVER[@]}"} ${STACKS_TESTE[@]+"${STACKS_TESTE[@]}"})
   [ "${#medir[@]}" -gt 0 ] || return 0
@@ -1275,13 +1322,25 @@ gate_imagem() {  # $1=repo $2=sha
   [ -n "$ajudante_bin" ] || {
     printf 'release: dependência ausente: ajudante bin/_release/stack não encontrado e a família tem stacks (%s)\n' "${medir[*]}" >&2
     return 3; }
-  for s in "${medir[@]}"; do
+  for s in ${STACKS_PROMOVER[@]+"${STACKS_PROMOVER[@]}"}; do
     rc=0
     "$ajudante_bin" testar "$s" "$sha" || rc=$?
     case "$rc" in
       0) ;;
       4) printf 'release: recusa: passo de teste da imagem da stack %s reprovou na rev %s — current intacto\n' "$s" "${sha:0:7}" >&2
          return 4 ;;
+      *) printf 'release: passo de teste da imagem da stack %s não rodou na rev %s (exit %s) — current intacto\n' "$s" "${sha:0:7}" "$rc" >&2
+         return 3 ;;
+    esac
+  done
+  for s in ${STACKS_TESTE[@]+"${STACKS_TESTE[@]}"}; do
+    rc=0
+    gate_imagem_teste "$repo" "$sha" "$s" || rc=$?
+    case "$rc" in
+      0) ;;
+      4) printf 'release: recusa: passo de teste da imagem da stack %s reprovou na rev %s — current intacto\n' "$s" "${sha:0:7}" >&2
+         return 4 ;;
+      6) return 6 ;;
       *) printf 'release: passo de teste da imagem da stack %s não rodou na rev %s (exit %s) — current intacto\n' "$s" "${sha:0:7}" "$rc" >&2
          return 3 ;;
     esac
@@ -2135,7 +2194,16 @@ cmd_promover() {
   gravar_ultimo_gate "$repo" "$sha"
   gate_conferir_verbo "$repo" "$sha" "$atual" || { rc=$?; exit "$rc"; }
   construir_venvs "$repo" "$sha" || { rc=$?; exit "$rc"; }
-  gate_imagem "$repo" "$sha" || { rc=$?; exit "$rc"; }
+  local rc_img=0
+  gate_imagem "$repo" "$sha" || rc_img=$?
+  if [ "$rc_img" -eq 6 ]; then
+    printf 'gate:      imagem em andamento — %s\n' "$GATE_IMAGEM_DETALHE"
+    printf 'release: o passo de imagem ainda esta medindo; current segue em %s — repita: release promover %s %s\n' \
+      "$(curto_ou "$atual" '(nenhum)')" "$repo" "${sha:0:7}" >&2
+    exit 1
+  elif [ "$rc_img" -ne 0 ]; then
+    exit "$rc_img"
+  fi
   gate_biblioteca "$repo" "$sha" "$atual" || { rc=$?; exit "$rc"; }
   gravar_pontos "$repo" "$atual" "$sha"
   trocar_current "$repo" "$sha" "$atual"
@@ -2450,6 +2518,16 @@ case "$cmd" in
     fi
     printf 'suite: %s %s\n' "$GATE_SUITE_STATUS" "$GATE_SUITE_DETALHE"
     exit "$rc_m" ;;
+  _medir-imagem)
+    # interno: o job que `release promover` dispara para medir o passo de imagem da stack de teste
+    # (card #3733). Roda o `stack testar` sincrono e grava o exit para o promover ler.
+    [ $# -eq 3 ] || { printf 'release: _medir-imagem <repo> <sha> <stack>\n' >&2; exit 2; }
+    rc_i=0; ajud_i="$(achar_deploy)"
+    [ -n "$ajud_i" ] || { printf 'release: dependência ausente: ajudante bin/_release/stack\n' >&2; rc_i=3; }
+    [ "$rc_i" -ne 0 ] || "$ajud_i" testar "$3" "$2" || rc_i=$?
+    mkdir -p "$(dirname "$(imagem_marca "$1" "$2" "$3")")" 2>/dev/null || true
+    printf '%s\n' "$rc_i" > "$(imagem_marca "$1" "$2" "$3")" 2>/dev/null || true
+    exit "$rc_i" ;;
   *)
     printf 'release: erro: ato desconhecido '\''%s'\''\n' "$cmd" >&2
     printf 'atos: estado · listar · ler · procurar · conferir · promover · reverter · migrar\n' >&2
