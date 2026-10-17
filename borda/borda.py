@@ -30,6 +30,12 @@ vai à porta como veio; nenhum cabeçalho de sujeito vindo do navegador é lido;
 própria. Quem decide o que o dono pode é o PDP, na porta (R25). A borda também não confere o
 fundamento: a regra «escrita da face sem fundamento» tem um dono só, a porta.
 
+6. Serve a rota fixa da casca da Taipa, `GET|PUT /api/preferencia/tema` (card #3738; seg:0016 item 6; spec
+   taipa R40), pelo verbo `preferencia` da face `casca`. Mesmas recusas dos itens 2 a 4, com duas
+   diferenças: o fundamento da escrita é a frase fixa da instância (`BORDA_TEMA_FUNDAMENTO`), e o corte
+   de login recente do item 4 não vale (o tema volta com um clique). O sujeito é o do token, tirado pela
+   porta; a borda não o lê nem o manda.
+
 PEDIDO E RESPOSTA (o contrato que a tela consome):
 
     GET  /api/<face>/<ato>?a=<arg>&a=<arg>            ato de leitura
@@ -56,6 +62,19 @@ import urllib.parse
 import urllib.request
 
 ROTA = re.compile(r"^/api/([a-z][a-z0-9-]*)/([a-z][a-z0-9-]*)$")
+# A rota fixa da casca da Taipa (spec taipa R40; seg:0016 item 6; card #3738): `GET` devolve `{"valor"}` e
+# `PUT {"valor"}` escolhe, como `platafirma-ui@src/pf/pf-casca.js` (CAMINHOS.tema) pede. Ela chama o verbo
+# `preferencia`, que a face `casca` declara no cabeçalho (`# face: ler=casca`, `# face: escrever=casca`).
+ROTA_DO_TEMA = "/api/preferencia/tema"
+FACE_DA_CASCA = "casca"
+# A escrita da face exige fundamento (a porta recusa sem ele), e trocar o tema não tem texto do dono para
+# dar: o fundamento é uma frase FIXA da instância (`BORDA_TEMA_FUNDAMENTO`), posta pela borda e nunca
+# aceita do navegador. Grava no bruto da porta o que é verdade: a escolha veio da casca.
+FUNDAMENTO_DO_TEMA = "escolha do tema na casca da tela"
+# O valor do tema que o navegador manda: só letras minúsculas e curto. O vocabulário é do verbo (que sai
+# 2 fora dele); isto só garante que nada que pareça opção ou argumento extra chega à porta.
+VALOR_DO_TEMA = re.compile(r"^[a-z]{1,16}$")
+LIMITE_CORPO_DO_TEMA = 1024
 METODOS_SEM_ESCRITA = ("GET", "HEAD", "OPTIONS")
 CABECALHO_DA_TELA = "x-pf-tela"
 TIPO_DO_CORPO = "application/json"
@@ -201,7 +220,8 @@ class Borda:
     self-check; `saida` é onde vai a linha JSON da recusa (stdout)."""
 
     def __init__(self, faces, origens=(), porta_url="", chamar_porta=None,
-                 cabecalho_token=CABECALHO_DO_GATE, saida=None, login_max_s=LOGIN_MAX_S, agora=time.time):
+                 cabecalho_token=CABECALHO_DO_GATE, saida=None, login_max_s=LOGIN_MAX_S, agora=time.time,
+                 fundamento_do_tema=FUNDAMENTO_DO_TEMA):
         # Uma face pode chamar mais de um verbo (#3518: o `contestar` do `fila` na face motor): cada verbo declara
         # no cabeçalho os atos dele para a face, e a carga da face é a união. O mesmo ato declarado por dois verbos
         # da mesma face não se resolve por ordem: a borda falha fechada (503).
@@ -212,6 +232,7 @@ class Borda:
         self.cabecalho_token = cabecalho_token.strip().lower()
         self.login_max_s = login_max_s
         self._agora = agora
+        self.fundamento_do_tema = fundamento_do_tema
         self._chamar = chamar_porta or (
             lambda token, tool, argumentos: chamar_porta_http(porta_url, token, tool, argumentos))
         self.saida = saida
@@ -233,6 +254,8 @@ class Borda:
             motivo = self._motivo_da_escrita(cab)
             if motivo is not None:
                 return await self._recusar("escrita-recusada", scope, cab, motivo, send)
+        if caminho == ROTA_DO_TEMA:
+            return await self._tema(scope, receive, send, metodo, cab)
         achou = ROTA.match(caminho)
         verbos = self.faces.get(achou.group(1)) if achou else None
         if not verbos:
@@ -283,6 +306,46 @@ class Borda:
         status, corpo = await asyncio.to_thread(self._chamar, token, face.tool, argumentos)
         if status == 200:
             corpo = {k: v for k, v in corpo.items() if k not in INTERNOS_DA_PORTA}
+        return await _responder(send, status, corpo)
+
+    async def _tema(self, scope, receive, send, metodo, cab):
+        """`GET|PUT /api/preferencia/tema`: a rota que a casca da Taipa pede (R40), pelo verbo `preferencia`.
+
+        A mesma disciplina das outras rotas: a escrita de outro site já saiu em 403 antes (R31); o ato
+        só vale se o cabeçalho do verbo o põe na face `casca` com a capacidade certa (R32); o token do gate
+        vai à porta como veio, e é ela quem tira dele o sujeito (a spec `preferencia` R1: o sujeito nunca
+        é argumento, e aqui nem o navegador nem a borda o mandam). Duas diferenças, ditas: o fundamento
+        da escrita é a frase fixa da instância, e NÃO há o corte de login recente de #2572 — o tema volta
+        com um clique (`volta: sim`), e pedir credencial nova a cada troca depois de cinco minutos seria
+        o contrário do que a casca existe para fazer."""
+        if metodo not in ("GET", "PUT"):
+            return await _responder(send, 405, {"erro": "só GET e PUT"}, extra=[(b"allow", b"GET, PUT")])
+        verbos = self.faces.get(FACE_DA_CASCA)
+        if not verbos:
+            return await _responder(send, 404, {"erro": "rota fora de /api/<face>/<ato>"})
+        face = verbos[0]
+        atos = face.atos()
+        if atos is None:
+            return await _responder(send, 503, {"erro": "o cabeçalho do verbo não carregou"})
+        ato, capacidade = ("ler", "leitura") if metodo == "GET" else ("escrever", "escrita")
+        if capacidade not in atos.get(ato, ()):
+            return await self._recusar("ato-recusado", scope, cab, "ato fora da carga da face", send)
+        token = self._token(cab)
+        if token is None:
+            return await _responder(send, 401, {"erro": "sem sessão"})
+        valor = None
+        if metodo == "GET":
+            argumentos = {"ato": "ler", "args": ["tema", "--json"], "turno_fonte": FONTE_DA_FACE}
+        else:
+            valor = await _pedido_do_tema(cab, receive)
+            if isinstance(valor, tuple):
+                return await _responder(send, valor[0], {"erro": valor[1]})
+            argumentos = {"ato": "escrever", "args": ["tema", valor], "turno_fonte": FONTE_DA_FACE,
+                          "turno_texto": self.fundamento_do_tema}
+        status, corpo = await asyncio.to_thread(self._chamar, token, face.tool, argumentos)
+        if status != 200:
+            return await _responder(send, status, corpo)
+        status, corpo = _resposta_do_tema(metodo, corpo, valor)
         return await _responder(send, status, corpo)
 
     def _motivo_da_escrita(self, cab):
@@ -372,6 +435,53 @@ async def _pedido_de_escrita(cab, receive):
     return _conferir_args(dado.get("args", []), (fundamento or "").strip() or None)
 
 
+async def _pedido_do_tema(cab, receive):
+    """O valor do `PUT {"valor": ...}` da casca, ou `(status, motivo)`. O corpo leva só a chave `valor`, e
+    o valor só letras minúsculas e curtas: o navegador não manda fundamento, args nem opção."""
+    declarado = cab.get("content-length", "")
+    if declarado.isdigit() and int(declarado) > LIMITE_CORPO_DO_TEMA:
+        return 413, f"corpo acima de {LIMITE_CORPO_DO_TEMA} bytes"
+    corpo = await _ler_com_teto(receive, LIMITE_CORPO_DO_TEMA)
+    if corpo is None:
+        return 413, f"corpo acima de {LIMITE_CORPO_DO_TEMA} bytes"
+    try:
+        dado = json.loads(corpo.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return 400, "corpo não é JSON"
+    if not isinstance(dado, dict) or set(dado) != {"valor"}:
+        return 400, "o corpo leva só valor"
+    valor = dado["valor"]
+    if not isinstance(valor, str) or not VALOR_DO_TEMA.match(valor):
+        return 400, "valor é texto de letras minúsculas"
+    return valor
+
+def _resposta_do_tema(metodo, envelope, valor):
+    """`(status, corpo)` da rota do tema, do envelope que a porta devolveu. A saída do verbo vira status:
+    0 → 200 `{"valor"}`; 2 (valor fora do vocabulário) → 400; 3 (sem sujeito) → 401; 5 (banco mudo) e
+    o resto → 502. A recusa da porta (`recusado`) → 403. O banco que não respondeu nunca vira `valor`
+    vazio: a casca lê 502 como «não consegui olhar» e segue no tema do sistema."""
+    if envelope.get("recusado"):
+        return 403, {"erro": "recusado: " + str(envelope.get("motivo", ""))[:200]}
+    codigo = envelope.get("exit_code")
+    if codigo == 0:
+        if metodo == "PUT":
+            return 200, {"valor": valor}
+        stdout = envelope.get("stdout")
+        texto = stdout.get("texto", "") if isinstance(stdout, dict) else ""
+        try:
+            lido = json.loads(texto)
+            atual = lido["valor"]
+        except (ValueError, KeyError, TypeError):
+            return 502, {"erro": "a porta devolveu uma resposta fora do contrato"}
+        if atual is not None and not isinstance(atual, str):
+            return 502, {"erro": "a porta devolveu uma resposta fora do contrato"}
+        return 200, {"valor": atual}
+    if metodo == "PUT" and codigo == 2:
+        return 400, {"erro": "valor fora do vocabulário"}
+    if codigo == 3:
+        return 401, {"erro": "sem sessão"}
+    return 502, {"erro": "as preferências não responderam"}
+
 def _conferir_args(args, fundamento):
     if (not isinstance(args, list) or len(args) > MAX_ARGS
             or any(not isinstance(a, str) or len(a) > MAX_ARG for a in args)):
@@ -438,7 +548,8 @@ def criar_app(env=None):
         login_max_s = LOGIN_MAX_S
     return Borda(faces, origens=origens, porta_url=env.get("BORDA_PORTA_URL", ""),
                  cabecalho_token=env.get("BORDA_CABECALHO_TOKEN") or CABECALHO_DO_GATE,
-                 login_max_s=max(login_max_s, 0))
+                 login_max_s=max(login_max_s, 0),
+                 fundamento_do_tema=(env.get("BORDA_TEMA_FUNDAMENTO") or "").strip() or FUNDAMENTO_DO_TEMA)
 
 
 app = criar_app()
@@ -665,7 +776,126 @@ def _autoteste():
     assert criar_app({"BORDA_LOGIN_MAX_S": "x"}).login_max_s == LOGIN_MAX_S
     assert criar_app({}).cabecalho_token == CABECALHO_DO_GATE
     print("borda: escrita com login de mais de cinco minutos sai 401 na borda; leitura e sem claim passam   ok")
-    print("borda OK (#3516, #3518, #3575)")
+
+    # 10. a rota fixa da casca (#3738, spec taipa R40): GET devolve {valor}, PUT {valor} escolhe, pelo verbo
+    #     `preferencia` da face `casca`, com o fundamento fixo da instancia e sem o corte de login recente.
+    cabecalho_pref = ("#!/usr/bin/env python3\n# preferencia — verbo de mentira do self-check\n"
+                      "# atos: ler (leitura, preferencia), escrever (escrita, preferencia)\n"
+                      "# face: ler=casca\n# face: escrever=casca\nimport sys\n")
+    pref = Face(FACE_DA_CASCA, cabecalho=cabecalho_pref, tool="preferencia")
+    lidas, grava = [], {"valor": None}
+
+    def porta10(token_, tool, argumentos):
+        lidas.append((token_, tool, argumentos))
+        if argumentos["ato"] == "ler":
+            texto = json.dumps({"preferencia": "tema", "valor": grava["valor"],
+                                "motivo": None if grava["valor"] else "sem preferência gravada"})
+            return 200, {"exit_code": 0, "stdout": {"texto": texto}, "stderr": {"texto": ""}, "cwd": "/host"}
+        if argumentos["args"][1] not in ("claro", "escuro", "sistema"):
+            return 200, {"exit_code": 2, "stdout": {"texto": ""}, "stderr": {"texto": "fora do vocabulário"}}
+        grava["valor"] = argumentos["args"][1]
+        return 200, {"exit_code": 0, "stdout": {"texto": "tema: → " + grava["valor"]}}
+
+    log10 = io.StringIO()
+    casca = Borda([pref], origens=(origem,), chamar_porta=porta10, saida=log10, agora=lambda: agora,
+                  fundamento_do_tema="escolha do tema na casca da tela")
+
+    def pedir10(metodo, cabecalhos, corpo=b"", borda_=None):
+        return asyncio.run(_chamar(borda_ or casca, metodo, ROTA_DO_TEMA, cabecalhos, corpo))
+
+    velho10 = jwt(auth_time=agora - 3600, sub="dono")
+    da_tela10 = {"origin": origem, "x-pf-tela": "1", "content-type": "application/json",
+                 CABECALHO_DO_GATE: velho10}
+
+    # 10a. sem preferencia gravada o GET devolve valor nulo (a casca cai no tema do sistema); o token vai
+    #      como veio, o ato e o `ler` com o JSON, e nada alem disso viaja.
+    status, cab_resp, corpo = pedir10("GET", {CABECALHO_DO_GATE: velho10})
+    assert status == 200 and json.loads(corpo) == {"valor": None}, (status, corpo)
+    assert cab_resp["cache-control"] == "no-store" and cab_resp["x-content-type-options"] == "nosniff"
+    assert lidas[-1] == (velho10, "preferencia", {"ato": "ler", "args": ["tema", "--json"], "turno_fonte": "face"})
+
+    # 10b. o PUT grava o valor com o fundamento fixo da instancia; um login de uma hora passa (sem o corte
+    #      de #2572); o GET seguinte devolve o que foi escolhido.
+    status, _, corpo = pedir10("PUT", da_tela10, b'{"valor": "escuro"}')
+    assert status == 200 and json.loads(corpo) == {"valor": "escuro"}, (status, corpo)
+    assert lidas[-1] == (velho10, "preferencia", {"ato": "escrever", "args": ["tema", "escuro"],
+                                                  "turno_fonte": "face",
+                                                  "turno_texto": "escolha do tema na casca da tela"}), lidas[-1]
+    assert json.loads(pedir10("GET", {CABECALHO_DO_GATE: velho10})[2]) == {"valor": "escuro"}
+
+    # 10c. o que o navegador nao pode mandar: fundamento, args, opcao, maiuscula, tipo errado, chave extra.
+    feitas = len(lidas)
+    for corpo_ruim in (b'{"valor": "escuro", "fundamento": "x"}', b'{"valor": "escuro", "args": []}',
+                       b'{"valor": "--sujeito"}', b'{"valor": "Escuro"}', b'{"valor": "escuro claro"}',
+                       b'{"valor": 1}', b'{"valor": null}', b'{}', b'["escuro"]', b"nao e json", b'{"valor": ""}',
+                       b'{"valor": "' + b"a" * 17 + b'"}'):
+        assert pedir10("PUT", da_tela10, corpo_ruim)[0] == 400, corpo_ruim
+    assert pedir10("PUT", {**da_tela10, "content-length": str(LIMITE_CORPO_DO_TEMA + 1)},
+                   b"x" * (LIMITE_CORPO_DO_TEMA + 1))[0] == 413
+    assert pedir10("PUT", da_tela10, b"x" * (LIMITE_CORPO_DO_TEMA + 1))[0] == 413
+    assert len(lidas) == feitas, "corpo fora da forma chegou à porta"
+    # o valor com a forma certa e fora do vocabulario o verbo recusa (exit 2), e a borda diz 400
+    assert pedir10("PUT", da_tela10, b'{"valor": "roxo"}')[0] == 400 and grava["valor"] == "escuro"
+
+    # 10d. as recusas da borda valem aqui: escrita de outro site (403 antes da porta), sem token (401),
+    #      sujeito do navegador no lugar do token (401), metodo fora de GET e PUT (405).
+    feitas = len(lidas)
+    assert pedir10("PUT", {**da_tela10, "origin": de_fora}, b'{"valor": "claro"}')[0] == 403
+    assert pedir10("PUT", {k: v for k, v in da_tela10.items() if k != "x-pf-tela"}, b'{"valor": "claro"}')[0] == 403
+    assert pedir10("PUT", {**da_tela10, "content-type": "text/plain"}, b'{"valor": "claro"}')[0] == 403
+    assert pedir10("GET", {})[0] == 401 and pedir10("GET", {"x-auth-request-user": "dono"})[0] == 401
+    assert pedir10("GET", {"authorization": "Bearer " + velho10})[0] == 401
+    sem_token = {k: v for k, v in da_tela10.items() if k != CABECALHO_DO_GATE}
+    assert pedir10("PUT", sem_token, b'{"valor": "claro"}')[0] == 401
+    for metodo in ("POST", "DELETE", "PATCH"):
+        status, cab_resp, _ = pedir10(metodo, da_tela10, b"{}")
+        assert status == 405 and cab_resp["allow"] == "GET, PUT", metodo
+    assert len(lidas) == feitas and grava["valor"] == "escuro", "recusa chegou à porta ou gravou"
+    assert "a.b.c" not in log10.getvalue() and velho10 not in log10.getvalue(), "a linha de log vazou o token"
+
+    # 10e. a saida do verbo vira status: 3 (sem sujeito) 401, 5 (banco mudo) 502, a recusa da porta 403,
+    #      o 401 da porta passa; o banco mudo nunca vira {valor: null}.
+    def com_envelope(envelope):
+        b = Borda([pref], origens=(origem,), chamar_porta=lambda t, tool, a: (200, envelope), saida=io.StringIO())
+        return b
+
+    for envelope, esperado in (({"exit_code": 3, "stdout": {"texto": ""}}, 401),
+                               ({"exit_code": 5, "stdout": {"texto": ""}}, 502),
+                               ({"exit_code": 1, "stdout": {"texto": ""}}, 502),
+                               ({"recusado": True, "motivo": "a fonte face só vale com token do client do gate"}, 403),
+                               ({"exit_code": 0, "stdout": {"texto": "nao e json"}}, 502),
+                               ({"exit_code": 0, "stdout": {"texto": '{"valor": 3}'}}, 502),
+                               ({"exit_code": 0, "stdout": {"texto": "{}"}}, 502)):
+        status, _, corpo = pedir10("GET", {CABECALHO_DO_GATE: velho10}, borda_=com_envelope(envelope))
+        assert status == esperado, (envelope, status)
+        assert "valor" not in json.loads(corpo) or status == 200, corpo
+    assert pedir10("PUT", da_tela10, b'{"valor": "claro"}',
+                   borda_=com_envelope({"exit_code": 2, "stdout": {"texto": ""}}))[0] == 400
+    for status_porta in (401, 502, 504):
+        fora10 = Borda([pref], origens=(origem,), saida=io.StringIO(),
+                       chamar_porta=lambda t, tool, a, s=status_porta: (s, {"erro": "x"}))
+        assert pedir10("GET", {CABECALHO_DO_GATE: velho10}, borda_=fora10)[0] == status_porta
+
+    # 10f. a carga da face: sem a face `casca` a rota e 404; verbo sem o ato `ler` ou `escrever` na face e
+    #      403 so naquele metodo; cabecalho que nao carrega, 503.
+    assert pedir10("GET", {CABECALHO_DO_GATE: velho10},
+                   borda_=Borda([face], origens=(origem,), saida=io.StringIO()))[0] == 404
+    so_escrever = Face(FACE_DA_CASCA, cabecalho="# atos: ler (leitura, p), escrever (escrita, p)\n# face: escrever=casca\n")
+    sem_ler = Borda([so_escrever], origens=(origem,), chamar_porta=porta10, saida=io.StringIO())
+    assert pedir10("GET", {CABECALHO_DO_GATE: velho10}, borda_=sem_ler)[0] == 403
+    assert pedir10("PUT", da_tela10, b'{"valor": "claro"}', borda_=sem_ler)[0] == 200
+    trocados = Face(FACE_DA_CASCA, cabecalho="# atos: ler (escrita, p), escrever (leitura, p)\n# face: ler=casca\n# face: escrever=casca\n")
+    invertido = Borda([trocados], origens=(origem,), chamar_porta=porta10, saida=io.StringIO())
+    assert pedir10("GET", {CABECALHO_DO_GATE: velho10}, borda_=invertido)[0] == 403
+    assert pedir10("PUT", da_tela10, b'{"valor": "claro"}', borda_=invertido)[0] == 403
+    ilegivel = Borda([Face(FACE_DA_CASCA, verbo="/nao/existe/preferencia")], origens=(origem,), saida=io.StringIO())
+    assert pedir10("GET", {CABECALHO_DO_GATE: velho10}, borda_=ilegivel)[0] == 503
+    # o fundamento da instancia e configuracao: o padrao esta no codigo, a troca e por variavel de ambiente
+    assert criar_app({}).fundamento_do_tema == FUNDAMENTO_DO_TEMA
+    assert criar_app({"BORDA_TEMA_FUNDAMENTO": "  outro texto "}).fundamento_do_tema == "outro texto"
+    assert criar_app({"BORDA_TEMA_FUNDAMENTO": "   "}).fundamento_do_tema == FUNDAMENTO_DO_TEMA
+    print("borda: rota do tema da casca — GET {valor}, PUT {valor} com fundamento fixo, recusas e status   ok")
+    print("borda OK (#3516, #3518, #3575, #3738)")
 
 
 if __name__ == "__main__":

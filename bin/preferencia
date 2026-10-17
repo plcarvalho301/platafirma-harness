@@ -10,8 +10,11 @@
 # le: escrever=sessao.preferencia_sujeito
 # escreve: ler=nada
 # escreve: escrever=sessao.preferencia_sujeito
+# face: ler=casca
 # face: escrever=casca
+# rotulo: ler=Ler o tema
 # rotulo: escrever=Escolher o tema
+# volta: ler=sim — só lê
 # volta: escrever=sim — escrever o valor anterior
 # ambiente: PF_SUJEITO (obrigatória; origem: a porta, do token); SESSAO_PG_PORT[=5437] é endereço de serviço, constante do verbo; PF_BIN (só teste, aponta o bin/ com o `seg`); a senha do banco não é variável: entra por `seg segredo ler harness-sessao/SESSAO_PG_PASSWORD` no processo
 # depende: Postgres da sessao (harness-sessao-db), seg

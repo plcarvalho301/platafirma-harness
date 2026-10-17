@@ -39,6 +39,29 @@ Status da borda: 400 pedido fora da forma · 401 sem token, ou token recusado pe
 rota ou face desconhecida · 405 método fora de GET e POST · 413 corpo acima de 16 KB · 502 porta fora do ar ·
 503 cabeçalho do verbo ilegível · 504 prazo.
 
+## A rota do tema da casca (#3738)
+
+A casca da Taipa (`pf-casca`, R40 da spec taipa) lê e grava o tema da pessoa em `/api/preferencia/tema`,
+e não em `/api/<face>/<ato>`. A borda serve essa rota fixa pelo verbo `preferencia` (face `casca`):
+
+```
+GET /api/preferencia/tema                         → 200 {"valor": "claro"|"escuro"|"sistema"|null}
+PUT /api/preferencia/tema   {"valor": "escuro"}   → 200 {"valor": "escuro"}
+```
+
+Mesmas recusas das outras rotas (escrita de outro site em 403, ato fora da face em 403, sem token em 401,
+POST e outros métodos em 405). Diferenças, ditas: o corpo leva só `valor` (letras minúsculas, até 16); o
+**fundamento** que a porta exige da escrita da face é uma frase fixa da instância
+(`BORDA_TEMA_FUNDAMENTO`, padrão «escolha do tema na casca da tela»), posta pela borda e nunca aceita do
+navegador; e o **corte de login recente** (#2572) não vale, porque o tema volta com um clique. O sujeito é
+o `sub` do token, que a porta tira dele: nem o navegador nem a borda o mandam (spec preferencia R1). Saída do
+verbo vira status: 2 (valor fora do vocabulário) 400, 3 (sem sujeito) 401, 5 (banco mudo) e o resto 502, e
+«recusado» pela porta 403. `valor: null` é «sem preferência gravada», e só isso: banco que não respondeu nunca vira
+`null`.
+
+A `borda-casca-rastreador` do `compose.yaml` é esta rota para o gate de `tarefas.platafirma.org`, numa instância
+própria (a lista de origens é da borda inteira). O client do gate dele entra em `PF_FACE_CLIENTS` da porta.
+
 ## Configuração da instância
 
 | variável | o que é |
