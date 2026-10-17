@@ -68,7 +68,7 @@ uso:
                 navegador e docker e sem rede (o preparo roda antes, com rede); imagem e rodada rodam
                 com o ambiente da stack. Linha em quarentena só roda no degrau rodada. Campo
                 desconhecido na linha sai 5 (não medido); 'lint testes' o aponta. Com PF_TESTE_ESTAGIO
-                (o que `stack testar` exporta, card #3733), a prova de imagem roda dentro do estágio de teste
+                (o que o verbo stack testar exporta, card #3733), a prova de imagem roda dentro do estágio de teste
                 da stack, uma por contêiner, e o veredito tem chave própria. 'todos' (o da
                 rodada diária) roda os três degraus e a quarentena, cada linha no regime do seu degrau
   --origin-main: só com --portao, sem <alvo> e sem --arvore: busca origin/main no clone base da
