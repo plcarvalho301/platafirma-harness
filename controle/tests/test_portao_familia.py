@@ -522,7 +522,7 @@ def test_sem_campo_de_degrau_a_linha_e_pequena_e_o_padrao_roda_so_o_pequeno(tmp_
     r, rodou = _roda(env, arv, marcas)
     assert r.returncode == 0, r.stdout + r.stderr
     assert rodou == {"a1"}
-    assert "degrau: pequeno · 1 linha(s) dele · fora: pequeno 0, imagem 1, rodada 1, quarentena 0" in r.stdout, r.stdout
+    assert "degrau: pequeno · 1 linha(s) dele · fora: pequeno 0, imagem 1, rodada 1, demanda 0, quarentena 0" in r.stdout, r.stdout
 
 def test_degrau_seleciona_so_as_linhas_dele(tmp_path):
     marcas = tmp_path / "marcas.txt"
@@ -585,7 +585,24 @@ def test_degrau_so_vale_com_portao_e_so_com_valor_conhecido(tmp_path):
     assert "--degrau só com --portao" in r.stdout + r.stderr
     r = _run(env, "rodar", "demo", "--portao", "--degrau", "lua", "--arvore", str(arv))
     assert r.returncode == 2, r.stdout + r.stderr
-    assert "use pequeno, imagem, rodada ou todos" in r.stdout + r.stderr
+    assert "use pequeno, imagem, rodada, demanda ou todos" in r.stdout + r.stderr
+
+def test_demanda_nao_roda_no_portao_nem_na_rodada_so_quando_pedida(tmp_path):
+    """Card #3735 (decisão do dono, 17/10/2026): a prova de tela não roda no portão nem em 'todos'."""
+    marcas = tmp_path / "marcas.txt"
+    env, arv, _ = _tres(tmp_path, marcas, "test_a1.py\ntest_a2.py | degrau: rodada\ntest_a3.py | degrau: demanda\n")
+    r, rodou = _roda(env, arv, marcas)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert rodou == {"a1"}
+    assert "demanda 1" in r.stdout, r.stdout
+    r, rodou = _roda(env, arv, marcas, "--degrau", "todos")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert rodou == {"a1", "a2"}
+    r, rodou = _roda(env, arv, marcas, "--degrau", "rodada")
+    assert rodou == {"a2"}
+    r, rodou = _roda(env, arv, marcas, "--degrau", "demanda")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert rodou == {"a3"}
 
 def test_veredito_do_pequeno_nao_responde_pela_lista_inteira(tmp_path):
     """O pre-push e o gate leem o veredito da árvore: pequeno verde não pode valer pela lista inteira."""

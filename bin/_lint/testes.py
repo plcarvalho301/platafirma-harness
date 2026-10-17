@@ -23,7 +23,8 @@ from .resultado import Apontamento
 
 CHAVE_LISTA = "checklist-testes"
 
-DEGRAUS = ("pequeno", "imagem", "rodada")
+# demanda (card #3735): a prova de tela, que não roda no portão nem na rodada, só por ordem do dono
+DEGRAUS = ("pequeno", "imagem", "rodada", "demanda")
 PASTAS_FORA = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist"}
 
 NOMEADO = re.compile(r"^([a-z][a-z-]*):")
@@ -68,7 +69,7 @@ def ler_linha(texto: str, n: int = 1) -> Optional[Linha]:
             if valor in DEGRAUS:
                 linha.degrau = valor
             else:
-                linha.erros.append(f"degrau: com valor '{valor}' (pequeno, imagem ou rodada)")
+                linha.erros.append(f"degrau: com valor '{valor}' (pequeno, imagem, rodada ou demanda)")
         elif re.fullmatch(r"regressivo(\s.*)?", campo):
             linha.regressivo = True
         elif re.fullmatch(r"quarentena(\s.*)?", campo):
@@ -121,7 +122,7 @@ def t1(linha: Linha) -> Optional[str]:
 
 def t2(linha: Linha) -> Optional[str]:
     """regressivo fora do pequeno"""
-    if linha.regressivo and linha.degrau in ("imagem", "rodada"):
+    if linha.regressivo and linha.degrau in ("imagem", "rodada", "demanda"):
         return f"regressivo com degrau: {linha.degrau}"
     return None
 
