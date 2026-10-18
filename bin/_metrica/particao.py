@@ -210,7 +210,8 @@ COLS_VERBOS_PARTICAO = ("verbo", "giros", "erros", "taxa", "gramatica", "execuca
 
 
 def verbos_da_particao(api, dias: list[str], rotulo: str, hoje: date, bruto_ausente, transporte: tuple,
-                       cadeira: str | None = None, latencia: bool = False) -> dict:
+                       cadeira: str | None = None, latencia: bool = False, bytes_: bool = False,
+                       origem: str | None = None) -> dict:
     """`metrica verbos` pela partição, numa janela de dias. Dia sem passada fica fora da conta e dentro de
     `cobertura` (e de `dias_sem_log`) com o motivo: a taxa da janela é a dos dias que a partição tem. Com
     `latencia`, também o tempo por verbo e por verbo:ato (`latencia_da_particao`, #3414)."""
@@ -245,9 +246,116 @@ def verbos_da_particao(api, dias: list[str], rotulo: str, hoje: date, bruto_ause
          "so_no_bruto": list(SO_NO_BRUTO_VERBOS)}
     if latencia:
         r["latencia"] = latencia_da_particao(api, dias[0], dias[-1], transporte, cadeira)
+    if bytes_:
+        r["bytes"] = bytes_da_particao(api, dias[0], dias[-1], transporte, cadeira, origem)
     if cadeira:
         r["cadeira"] = cadeira
     return r
+
+
+# --- metrica verbos --bytes (card #3751) ------------------------------------------------------------------
+
+REGRA_BYTES = ("servidos = o que a porta entregou (bytes_servidos); podados = produzidos menos servidos, onde os dois "
+               "existem; cortados = giros com produzidos maior que servidos; p50 e p90 = percentil discreto de "
+               "bytes_servidos, por linha, medido pela partição (não se soma); % = fração dos servidos do recorte. "
+               "Byte não é token, e o byte conta uma vez: não pesa os giros que a fita dá depois do retorno")
+SOMAS_BYTES = ("n", "com_bytes", "servidos", "produzidos", "podados", "cortados")
+
+
+def _series_bytes(api, desde: str, ate: str, por: list[str], cadeira: str | None, origem: str | None) -> list[dict]:
+    dims = por + (["origem"] if origem else []) + (["cadeira"] if cadeira else [])
+    series = medir_giros(api, desde, ate, dims, medida="bytes").get("series", [])
+    if origem:
+        series = [s for s in series if (s.get("chave") or {}).get("origem") == origem]
+    if cadeira:
+        series = [s for s in series if (s.get("chave") or {}).get("cadeira") == cadeira]
+    return series
+
+
+def _juntar_bytes(series: list[dict], chave_de) -> dict:
+    """Soma as séries pela chave; o percentil fica só quando a chave tem uma série (não se soma percentil)."""
+    soma: dict = defaultdict(Counter)
+    perc: dict = defaultdict(list)
+    for s in series:
+        k = chave_de(s.get("chave") or {})
+        for campo in SOMAS_BYTES:
+            soma[k][campo] += int(s.get(campo) or 0)
+        perc[k].append((s.get("p50"), s.get("p90")))
+    saida = {}
+    for k, c in soma.items():
+        p50, p90 = perc[k][0] if len(perc[k]) == 1 else (None, None)
+        saida[k] = {**{campo: c[campo] for campo in SOMAS_BYTES}, "p50": p50, "p90": p90}
+    return saida
+
+
+def bytes_da_particao(api, desde: str, ate: str, transporte: tuple, cadeira: str | None = None,
+                      origem: str | None = None) -> dict:
+    """D5.7 com medida=bytes, por verbo e por verbo:ato, numa ordem só (servidos desc). O transporte (ler_arquivo,
+    malote...) entra na mesma ordem, porque o custo é de quem entrega bytes, e sai marcado em `transporte`."""
+    tools = _juntar_bytes(_series_bytes(api, desde, ate, ["tool"], cadeira, origem), lambda c: c.get("tool") or "-")
+    atos = _juntar_bytes(_series_bytes(api, desde, ate, ["tool", "ato"], cadeira, origem),
+                         lambda c: f"{c.get('tool') or '-'}:{c.get('ato') or '-'}")
+    total = sum(d["servidos"] for d in tools.values())
+    def com_pct(d: dict) -> dict:
+        out = {}
+        for k, v in sorted(d.items(), key=lambda kv: (-kv[1]["servidos"], kv[0])):
+            out[k] = {**v, "pct": round(v["servidos"] / total, 4) if total else 0}
+        return out
+    r = {"medida": "bytes", "regra": REGRA_BYTES,
+         "total": {"servidos": total, "podados": sum(d["podados"] for d in tools.values()),
+                   "giros": sum(d["n"] for d in tools.values())},
+         "por_verbo": com_pct(tools), "por_ato": com_pct(atos),
+         "transporte": sorted(t for t in tools if t in transporte)}
+    if origem:
+        r["origem"] = origem
+    return r
+
+
+def _tam(v: int | None) -> str:
+    if v is None:
+        return "-"
+    if v >= 1_000_000:
+        return f"{v / 1_000_000:.2f} MB"
+    return f"{v / 1000:.1f} KB" if v >= 1000 else f"{v} B"
+
+
+COLS_BYTES = ("verbo", "ato", "giros", "com_bytes", "servidos", "pct", "p50", "p90", "podados", "cortados")
+
+
+def bytes_csv(r: dict) -> list[str]:
+    """Uma linha por verbo:ato, na ordem dos bytes servidos."""
+    linhas = [",".join(COLS_BYTES)]
+    for chave, d in r["bytes"]["por_ato"].items():
+        verbo, _, ato = chave.partition(":")
+        celulas = [verbo, ato, d["n"], d["com_bytes"], d["servidos"], d["pct"], d["p50"], d["p90"], d["podados"],
+                   d["cortados"]]
+        linhas.append(",".join("" if c is None else str(c) for c in celulas))
+    return linhas
+
+
+def bytes_texto(r: dict, top_atos: int = 20) -> list[str]:
+    linhas = [_cabecalho("verbos --bytes", r), *_cobertura_texto(r["cobertura"])]
+    if r.get("resultado") == "ausente":
+        linhas.append("ausente: nenhum dia da janela está na partição")
+        return linhas
+    b = r["bytes"]
+    recorte = f" · origem {b['origem']}" if b.get("origem") else ""
+    linhas.append(f"{_tam(b['total']['servidos'])} servidos · {_tam(b['total']['podados'])} podados · "
+                  f"{b['total']['giros']} giros{recorte}")
+    linhas.append("bytes por verbo, do maior total servido ao menor (* = transporte):")
+    linhas.append(f"{'verbo':16s} {'giros':>6s} {'servidos':>10s} {'%':>6s} {'p50':>9s} {'p90':>9s} "
+                  f"{'podados':>10s} {'cortes':>6s}")
+    for v, d in b["por_verbo"].items():
+        nome = v + ("*" if v in b["transporte"] else "")
+        linhas.append(f"{nome:16s} {d['n']:6d} {_tam(d['servidos']):>10s} {d['pct']:6.1%} {_tam(d['p50']):>9s} "
+                      f"{_tam(d['p90']):>9s} {_tam(d['podados']):>10s} {d['cortados']:6d}")
+    linhas.append("")
+    linhas.append(f"atos (top {top_atos} por bytes servidos):")
+    for a, d in list(b["por_ato"].items())[:top_atos]:
+        linhas.append(f"  {a:28s} {d['n']:6d} giros · {_tam(d['servidos'])} ({d['pct']:.1%}) · p50 {_tam(d['p50'])}")
+    linhas.append("")
+    linhas.append("regra: " + b["regra"])
+    return linhas
 
 
 # --- metrica verbos --latencia (card #3414) -------------------------------------------------------------

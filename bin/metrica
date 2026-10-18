@@ -1191,6 +1191,10 @@ com `fonte: bruto`.
 --latencia  so em `verbos`, da particao (D5.7, medida=latencia): por verbo e por verbo:ato, os baldes de dur_ms,
             `sem_duracao`, a faixa do p50 e do p90 e o tempo total estimado; --resumo ordena pelo tempo, --csv da
             uma linha por verbo:ato (#3414)
+--bytes     so em `verbos`, da particao (D5.7, medida=bytes): por verbo e por verbo:ato, numa ordem so (o
+            transporte entra marcado), giros, bytes servidos, %, p50 e p90, podados e cortados; --resumo ordena
+            pelos servidos, --csv da uma linha por verbo:ato. Byte nao e token (#3751)
+--origem    so com --bytes: cadeira ou agente (a chave origem do giro)
 
 exit: 0 ok · 1 so em investigar: nenhuma linha casa · 2 uso invalido · 3 a particao ou o rastreador nao respondeu ·
       4 nao ha log desse dia (so no bruto) ou, em investigar, o incidente nao esta aberto · 5 fora do contrato ou, em
@@ -1308,8 +1312,10 @@ def _da_particao(ato, args, dias, rotulo, dia, hoje):
             texto_ = particao.dia_texto
         elif ato == "verbos":
             r = particao.verbos_da_particao(api, dias, rotulo, hoje, _bruto_ausente, TRANSPORTE,
-                                            args.cadeira or None, latencia=args.latencia)
-            texto_ = particao.latencia_texto if args.latencia else particao.verbos_texto
+                                            args.cadeira or None, latencia=args.latencia, bytes_=args.bytes,
+                                            origem=args.origem or None)
+            texto_ = (particao.latencia_texto if args.latencia else
+                      particao.bytes_texto if args.bytes else particao.verbos_texto)
         else:
             r = particao.turnos_da_particao(api, dias, rotulo, hoje, _bruto_ausente, por)
             texto_ = particao.turnos_texto
@@ -1319,7 +1325,8 @@ def _da_particao(ato, args, dias, rotulo, dia, hoje):
         return erro_gracioso(f"{VERBO} {ato}: a particao nao respondeu: {f}",
                              [*caminho, "o acervo e o banco: infra saude"], f.codigo if f.codigo in (1, 2, 3, 4, 5) else 3)
     if ato == "verbos" and args.csv:
-        csv_ = particao.latencia_csv if args.latencia and "latencia" in r else particao.verbos_csv
+        csv_ = (particao.latencia_csv if args.latencia and "latencia" in r else
+                particao.bytes_csv if args.bytes and "bytes" in r else particao.verbos_csv)
         for linha in csv_(r):
             print(linha)
     elif args.resumo:
@@ -1370,6 +1377,8 @@ def main(argv):
     p.add_argument("--por", default="")
     p.add_argument("--resumo", action="store_true")
     p.add_argument("--latencia", action="store_true")
+    p.add_argument("--bytes", action="store_true")
+    p.add_argument("--origem", default="")
     p.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true")
     args, _sobra = p.parse_known_args(argv[2:])
     if args.ajuda:
@@ -1411,6 +1420,18 @@ def main(argv):
         return erro_gracioso(f"{VERBO} verbos: --latencia le a particao (D5.7), nao o bruto",
                              ["tire --fonte bruto; a janela tem de ter dia fechado (o dia aberto so o bruto tem)",
                               f"o dur_ms de cada giro de hoje: {VERBO} eventos --tipo giro"], 2)
+    if args.bytes and ato != "verbos":
+        return erro_gracioso(f"{VERBO} {ato}: --bytes so vale em `verbos`",
+                             [f"{VERBO} verbos --desde AAAA-MM-DD --ate AAAA-MM-DD --bytes --resumo"], 2)
+    if args.bytes and fonte_pedida == "bruto":
+        return erro_gracioso(f"{VERBO} verbos: --bytes le a particao (D5.7), nao o bruto",
+                             ["tire --fonte bruto; a janela tem de ter dia fechado (o dia aberto so o bruto tem)"], 2)
+    if args.bytes and args.latencia:
+        return erro_gracioso(f"{VERBO} verbos: --bytes e --latencia sao medidas diferentes; uma por chamada",
+                             [f"{VERBO} verbos ... --bytes  ou  {VERBO} verbos ... --latencia"], 2)
+    if args.origem and not args.bytes:
+        return erro_gracioso(f"{VERBO} {ato}: --origem so vale com --bytes",
+                             [f"{VERBO} verbos --desde AAAA-MM-DD --ate AAAA-MM-DD --bytes --origem cadeira"], 2)
     if args.por and ato != "turnos":
         return erro_gracioso(f"{VERBO} {ato}: --por so vale em `turnos`",
                              [f"{VERBO} turnos [<dia>] --por dia,superficie,cadeira,origem"], 2)
@@ -1532,6 +1553,10 @@ def main(argv):
                                  f"dia aberto ou pede --sessao/--azp",
                                  [f"uma janela com dia fechado: {VERBO} verbos --desde AAAA-MM-DD --ate <ontem> --latencia",
                                   f"o dur_ms de cada giro de hoje: {VERBO} eventos --tipo giro"], 2)
+        if args.bytes:
+            return erro_gracioso(f"{VERBO} verbos: --bytes le a particao (D5.7), e a janela {rotulo} so tem o "
+                                 f"dia aberto ou pede --sessao/--azp",
+                                 [f"uma janela com dia fechado: {VERBO} verbos --desde AAAA-MM-DD --ate <ontem> --bytes"], 2)
 
     fonte = FonteJsonl()
     giros, cadeias, sem_log = [], [], []
