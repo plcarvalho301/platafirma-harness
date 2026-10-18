@@ -365,6 +365,88 @@ def test_janela_de_um_dia_so_leva_o_dia_dela_no_cabecalho_e_nao_o_dia_padrao(mon
     assert saida.splitlines()[0].startswith("== metrica verbos --latencia — 2026-09-22 ·")
 
 
+# --- metrica verbos --bytes (card #3751) ----------------------------------------------------------------
+
+def byt(chave, n, servidos, produzidos=None, p50=None, p90=None, cortados=0):
+    produzidos = servidos if produzidos is None else produzidos
+    return {"chave": chave, "n": n, "com_bytes": n, "servidos": servidos, "produzidos": produzidos,
+            "p50": p50, "p90": p90, "podados": produzidos - servidos, "cortados": cortados}
+
+
+class ApiBytes(ApiFalsa):
+    """D5.7 em medida=bytes: a resposta depende de `por`, como no serviço."""
+
+    def __init__(self, *a, por_tool=(), por_ato=(), **k):
+        super().__init__(*a, **k)
+        self.por_tool, self.por_ato = list(por_tool), list(por_ato)
+
+    def chamar(self, metodo, caminho, corpo=None, params=None, aceita=(200,)):
+        if caminho == "/acervo/log/giros/medida" and (params or {}).get("medida") == "bytes":
+            self.chamadas.append((metodo, caminho, dict(params)))
+            series = self.por_ato if "ato" in params["por"].split(",") else self.por_tool
+            return 200, {"fonte": "partição", "medida": "bytes", "series": series}
+        return super().chamar(metodo, caminho, corpo, params, aceita)
+
+
+def _bytes_api():
+    return ApiBytes({"2026-09-22": linha_dia("2026-09-22"), DIA: linha_dia(DIA)},
+                    [serie("repo", "ler", "ok", "cadeira", 10), serie("acervo", "ler", "ok", "cadeira", 10)],
+                    por_tool=[byt({"tool": "acervo", "origem": "cadeira"}, 10, 60000, 70000, 5000, 20000, 2),
+                              byt({"tool": "acervo", "origem": "agente"}, 5, 999999),
+                              byt({"tool": "ler_arquivo", "origem": "cadeira"}, 20, 100000, p50=4000, p90=9000),
+                              byt({"tool": "repo", "origem": "cadeira"}, 30, 40000, p50=800, p90=3000)],
+                    por_ato=[byt({"tool": "acervo", "ato": "ler", "origem": "cadeira"}, 10, 60000, 70000, 5000, 20000, 2),
+                             byt({"tool": "ler_arquivo", "ato": None, "origem": "cadeira"}, 20, 100000, p50=4000),
+                             byt({"tool": "repo", "ato": "ler", "origem": "cadeira"}, 10, 30000, p50=2500),
+                             byt({"tool": "repo", "ato": "procurar", "origem": "cadeira"}, 20, 10000, p50=300)])
+
+
+def test_verbos_bytes_ordena_pelos_servidos_com_o_transporte_marcado_e_filtra_a_origem(monkeypatch, capsys):
+    api = _bytes_api()
+    codigo, saida, _ = roda(monkeypatch, capsys, api, "verbos", "--desde", "2026-09-22", "--ate", DIA,
+                            "--bytes", "--origem", "cadeira")
+    r = json_de(saida)
+    assert codigo == 0 and "por_verbo" in r, "a contagem segue no mesmo retorno"
+    pedidos = [c[2] for c in api.medidas() if c[2].get("medida") == "bytes"]
+    assert {p["por"] for p in pedidos} == {"tool,origem", "tool,ato,origem"}
+    b = r["bytes"]
+    assert list(b["por_verbo"]) == ["ler_arquivo", "acervo", "repo"]       # servidos desc; agente fora
+    assert b["total"] == {"servidos": 200000, "podados": 10000, "giros": 60} and b["origem"] == "cadeira"
+    assert b["por_verbo"]["ler_arquivo"]["pct"] == 0.5 and b["transporte"] == ["ler_arquivo"]
+    assert b["por_verbo"]["acervo"] == {"n": 10, "com_bytes": 10, "servidos": 60000, "produzidos": 70000,
+                                        "podados": 10000, "cortados": 2, "p50": 5000, "p90": 20000, "pct": 0.3}
+    assert list(b["por_ato"])[:2] == ["ler_arquivo:-", "acervo:ler"]
+
+
+def test_bytes_nao_soma_percentil_de_series_diferentes():
+    api = ApiBytes({}, [], por_tool=[byt({"tool": "acervo", "origem": "cadeira"}, 1, 10, p50=10),
+                                     byt({"tool": "acervo", "origem": "agente"}, 1, 20, p50=20)])
+    b = particao.bytes_da_particao(api, "2026-09-22", DIA, (), None, None)
+    assert b["por_verbo"]["acervo"]["servidos"] == 30 and b["por_verbo"]["acervo"]["p50"] is None
+
+
+def test_verbos_bytes_resumo_e_csv(monkeypatch, capsys):
+    saida = roda(monkeypatch, capsys, _bytes_api(), "verbos", "--desde", "2026-09-22", "--ate", DIA,
+                 "--bytes", "--origem", "cadeira", "--resumo")[1]
+    assert "verbos --bytes" in saida and "ler_arquivo*" in saida and "origem cadeira" in saida
+    assert saida.index("ler_arquivo*") < saida.index("acervo ")
+    linhas = roda(monkeypatch, capsys, _bytes_api(), "verbos", "--desde", "2026-09-22", "--ate", DIA,
+                  "--bytes", "--origem", "cadeira", "--csv")[1].splitlines()
+    assert linhas[0] == ",".join(particao.COLS_BYTES)
+    assert linhas[1].split(",")[:5] == ["ler_arquivo", "-", "20", "20", "100000"]
+
+
+@pytest.mark.parametrize("args, trecho", [
+    (("dia", DIA, "--bytes"), "--bytes so vale em `verbos`"),
+    (("verbos", DIA, "--bytes", "--fonte", "bruto"), "nao o bruto"),
+    (("verbos", DIA, "--bytes", "--latencia"), "uma por chamada"),
+    (("verbos", DIA, "--origem", "cadeira"), "--origem so vale com --bytes"),
+])
+def test_bytes_e_origem_fora_do_lugar_sao_uso_invalido(monkeypatch, capsys, args, trecho):
+    codigo, _, erro = roda(monkeypatch, capsys, ApiFalsa(erro=AssertionError("não chega à API")), *args)
+    assert codigo == 2 and trecho in erro
+
+
 @pytest.mark.parametrize("args, trecho", [
     (("dia", DIA, "--latencia"), "--latencia so vale em `verbos`"),
     (("verbos", DIA, "--latencia", "--fonte", "bruto"), "nao o bruto"),
