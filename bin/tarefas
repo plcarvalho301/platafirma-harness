@@ -470,6 +470,11 @@ estados() {
   busca GET /registro | jq -r '(.estados // .)[] | select(.retirado != true) | "\(.estado)\t\(.fase)\t\(.nome)"'
 }
 
+# Estados de fase ou natureza terminal lidos do registro (card #3750).
+_estados_terminais() {
+  busca GET /registro | jq -c '((if type == "array" then . else (.estados // []) end) | [.[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado] | unique)' 2>/dev/null || echo '[]'
+}
+
 # --- item -------------------------------------------------------------------
 
 # `#N` e `N` são o MESMO número: o rastreador tem um identificador só por item, e é essa a
@@ -488,7 +493,8 @@ ler() {
   # `bloqueado_por`, #3523) e, quando o item tem filha, `filhas` em ordem de dependência. Antes as
   # filhas vinham de uma segunda chamada que puxava o board inteiro e peneirava por pai.
   local j; j=$(busca GET "/itens/$id") || return 1
-  printf '%s' "$j" | jq -r '
+  local term; term=$(_estados_terminais) || term='[]'
+  printf '%s' "$j" | jq -r --argjson term "$term" '
     "# \(.titulo)",
     "#\(.id) · \(.nivel_nome) · "
     + (if .estado_derivado != null
@@ -502,7 +508,9 @@ ler() {
     + (if ((.bloqueia // []) | length) > 0
        then "\n  bloqueia: " + ([.bloqueia[] | "#\(.id) (\(.estado))"] | join(", ")) else "" end)
     + (if ((.bloqueado_por // []) | length) > 0
-       then "\n  bloqueado por: " + ([.bloqueado_por[] | "#\(.id) (\(.estado))"] | join(", ")) else "" end),
+       then "\n  bloqueado por: " + ([.bloqueado_por[] | "#\(.id) (\(.estado))"] | join(", ")) else "" end)
+    + (([(.bloqueado_por // [])[] | select(.estado as $e | ($term | index([$e])) == null)] | if length > 0
+       then "\n  travada por: " + ([.[] | "#\(.id) (\(.estado))"] | join(", ")) else "" end)),
     "",
     (if ((.sign_offs // []) | length) > 0 then
        (["sign-off:"]
@@ -973,6 +981,27 @@ mover() {
              + (if ((.propagacao.movidas // []) | length) > 0
                 then "\n  filhas movidas junto: " + ([.propagacao.movidas[] | "#\(.id)"] | join(", "))
                 else "" end)'
+  # Se o item estiver travado por bloqueador aberto e entrou em em-execucao (card #3750):
+  if [ "$destino" = "em-execucao" ]; then
+    local bpor
+    bpor=$(printf '%s' "$resp" | jq -c '.bloqueado_por // empty' 2>/dev/null)
+    if [ -z "$bpor" ]; then
+      local ji
+      ji=$(busca GET "/itens/$id" 2>/dev/null) || ji=""
+      [ -n "$ji" ] && bpor=$(printf '%s' "$ji" | jq -c '.bloqueado_por // empty' 2>/dev/null)
+    fi
+    if [ -n "$bpor" ] && [ "$bpor" != "[]" ]; then
+      local term; term=$(_estados_terminais) || term='[]'
+      local travada
+      travada=$(printf '%s' "$bpor" | jq -r --argjson term "$term" '
+        [.[] | select(.estado as $e | ($term | index([$e])) == null)]
+        | if length > 0
+          then "  travada por: " + ([.[] | "#\(.id) (\(.estado))"] | join(", "))
+          else empty
+          end')
+      [ -n "$travada" ] && printf '%s\n' "$travada"
+    fi
+  fi
   # Tem pai → o relato precisa do pai (arq:0095). Sai sempre, em qualquer destino: a story
   # que entra em `em-execucao` também tem de saber quantas irmãs faltam.
   local pai; pai=$(printf '%s' "$resp" | jq -r '.pai // empty')

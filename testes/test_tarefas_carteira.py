@@ -212,7 +212,36 @@ def test_ler_sem_vinculo_nao_inventa_linha(stub):
     s, base = stub
     s.rotas[("GET", "/itens/10")] = (200, _detalhe(10, bloqueia=[], bloqueado_por=[]))
     p = _run(["ler", "10"], base)
-    assert "bloqueia:" not in p.stdout and "bloqueado por:" not in p.stdout
+    assert "bloqueia:" not in p.stdout and "bloqueado por:" not in p.stdout and "travada por:" not in p.stdout
+
+
+def test_ler_mostra_travada_por_somente_com_bloqueador_aberto(stub):
+    s, base = stub
+    # com um bloqueador entregue e um em-execucao: a linha lista só o segundo
+    s.rotas[("GET", "/itens/10")] = (200, _detalhe(
+        10,
+        bloqueado_por=[
+            {"id": 12, "titulo": "fechado", "estado": "entregue"},
+            {"id": 13, "titulo": "em andamento", "estado": "em-execucao"},
+        ]))
+    p = _run(["ler", "10"], base)
+    assert p.returncode == 0, p.stderr
+    assert "bloqueado por: #12 (entregue), #13 (em-execucao)" in p.stdout
+    assert "travada por: #13 (em-execucao)" in p.stdout
+    linha_travada = next(linha for linha in p.stdout.splitlines() if "travada por:" in linha)
+    assert "#12" not in linha_travada
+
+    # com todos os bloqueadores em terminal, a linha não aparece
+    s.rotas[("GET", "/itens/11")] = (200, _detalhe(
+        11,
+        bloqueado_por=[
+            {"id": 12, "titulo": "fechado", "estado": "entregue"},
+            {"id": 14, "titulo": "cancelado", "estado": "cancelada"},
+        ]))
+    p2 = _run(["ler", "11"], base)
+    assert p2.returncode == 0, p2.stderr
+    assert "bloqueado por: #12 (entregue), #14 (cancelada)" in p2.stdout
+    assert "travada por:" not in p2.stdout
 
 
 def test_ler_imprime_as_filhas_abertas_na_ordem_da_api_e_marca_a_travada(stub):
@@ -260,6 +289,50 @@ def test_mover_traz_o_pai_e_as_irmas_do_detalhe_do_pai(stub):
     assert p.returncode == 0, p.stderr
     assert "abertas no pai" in p.stdout and "#31" in p.stdout
     assert "/itens" not in _caminhos(s, "GET")
+
+
+def test_mover_em_execucao_item_travado_sai_0_e_repete_travada_por(stub):
+    s, base = stub
+    s.rotas[("PATCH", "/itens/40")] = (200, {
+        "id": 40, "titulo": "story travada", "estado_nome": "Em execução",
+        "estado_derivado": None, "pai": None,
+        "bloqueado_por": [
+            {"id": 41, "titulo": "bloqueador feito", "estado": "entregue"},
+            {"id": 42, "titulo": "bloqueador aberto", "estado": "em-execucao"},
+        ],
+    })
+    s.rotas[("GET", "/itens/40")] = (200, _detalhe(
+        40,
+        bloqueado_por=[
+            {"id": 41, "titulo": "bloqueador feito", "estado": "entregue"},
+            {"id": 42, "titulo": "bloqueador aberto", "estado": "em-execucao"},
+        ],
+    ))
+    p = _run(["mover", "40", "em-execucao"], base)
+    assert p.returncode == 0, p.stderr
+    assert "item 40 → Em execução: story travada" in p.stdout
+    assert "travada por: #42 (em-execucao)" in p.stdout
+    linha_travada = next(linha for linha in p.stdout.splitlines() if "travada por:" in linha)
+    assert "#41" not in linha_travada
+
+    # card sem bloqueador aberto: move sem a linha travada por
+    s.rotas[("PATCH", "/itens/50")] = (200, {
+        "id": 50, "titulo": "story livre", "estado_nome": "Em execução",
+        "estado_derivado": None, "pai": None,
+        "bloqueado_por": [
+            {"id": 51, "titulo": "bloqueador feito", "estado": "entregue"},
+        ],
+    })
+    s.rotas[("GET", "/itens/50")] = (200, _detalhe(
+        50,
+        bloqueado_por=[
+            {"id": 51, "titulo": "bloqueador feito", "estado": "entregue"},
+        ],
+    ))
+    p2 = _run(["mover", "50", "em-execucao"], base)
+    assert p2.returncode == 0, p2.stderr
+    assert "item 50 → Em execução: story livre" in p2.stdout
+    assert "travada por:" not in p2.stdout
 
 
 # --- ordenar (R21) -----------------------------------------------------------------------
