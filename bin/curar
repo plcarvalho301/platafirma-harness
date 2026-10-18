@@ -742,39 +742,62 @@ def formatar_plano_relacao(p: dict, hermit: dict | None) -> str:
                    + (f"  novos: {', '.join(hermit['novos'])}" if hermit["novos"] else "")
                    + (f"  saem: {', '.join(hermit['saem'])}" if hermit["saem"] else ""))
     if p.get("modo") == "aplicado":
-        lin.append(f"  id     : {p.get('id')}   (desfazer: curar --desrelacionar {p.get('id')})")
+        if a.get("de") and a.get("para") and a.get("tipo"):
+            lin.append(f"  id     : {p.get('id')}   (desfazer: curar --desrelacionar {p.get('id')})")
+        else:
+            lin.append(f"  id     : {p.get('id')}")
     else:
         lin.append(f"  veredito: {'APROVADO — repita com --apply para gravar' if p.get('aprovado') and not (hermit or {}).get('novos') and not (hermit or {}).get('erro') else 'REPROVADO — nada gravado'}")
     return "\n".join(lin)
 
 
-def formatar_plano_conceito(p: dict) -> str:
+def formatar_plano_conceito(p: dict, hermit: dict | None = None) -> str:
     c = p.get("conceito", {})
-    lin = [f"conceito : {c.get('slug')}  «{c.get('rotulo')}»",
+    titulo = "Conceito gravado" if p.get("modo") == "aplicado" else "Plano de conceito"
+    lin = [f"{titulo}: {c.get('slug')}  «{c.get('rotulo')}»",
            f"  natureza/estatuto: {c.get('natureza')} / {c.get('estatuto')}"]
-    if c.get("mais_amplo"):
+    pai = c.get("pai") or {}
+    if isinstance(pai, dict) and pai.get("slug"):
+        lin.append(f"  pai      : {pai.get('slug')}  ({pai.get('tipo')})")
+    elif c.get("mais_amplo"):
         lin.append(f"  pai      : {c.get('mais_amplo')}  ({c.get('mais_amplo_tipo')})")
     rots = c.get("rotulos", [])
+    if not rots and c.get("rotulos_alternativos"):
+        rots = c.get("rotulos_alternativos")
     alt = [r for r in rots if r.get("papel") != "preferido"]
     if alt:
         lin.append("  rótulos  : +" + str(len(alt)) + " alt — " +
-                   ", ".join(f"{r['rotulo']}[{r['lingua']}]" for r in alt))
+                   ", ".join(f"{r['rotulo']}[{r.get('lingua', 'pt')}]" for r in alt))
     if c.get("trata_de"):
         lin.append(f"  trata_de : {len(c['trata_de'])} obra(s)")
     for nome, d in (p.get("conferencias") or {}).items():
-        marca = "OK" if not d.get("novas") else f"REPROVOU +{len(d['novas'])}"
-        lin.append(f"  conf {nome:<13}: {marca}")
+        novas = d.get("novas") or []
+        tag = "OK" if not novas else f"REPROVA +{len(d['novas'])}"
+        if "antes" in d and "depois" in d:
+            lin.append(f"  conferência {nome:<14} {d.get('antes')} -> {d.get('depois')}  {tag}")
+        else:
+            lin.append(f"  conf {nome:<13}: {tag}")
+        for r in novas[:5]:
+            lin.append(f"      + {r}")
     for nome, d in (p.get("avisos") or {}).items():
         if d.get("linhas"):
             lin.append(f"  aviso {nome:<12}: {d['linhas']} linha(s) (não bloqueia)")
+    if hermit is None:
+        lin.append("  HermiT: indisponível (árvore de conhecimento na release ou em PF_CONHECIMENTO_DIR + venv acervo da release não achados)")
+    elif hermit.get("erro"):
+        lin.append(f"  HermiT: falhou — {hermit['erro']}")
+    else:
+        tag = "OK" if not hermit["novos"] else f"REPROVA +{len(hermit['novos'])}"
+        lin.append(f"  HermiT insatisfazíveis {hermit['antes']} -> {hermit['depois']}  {tag}"
+                   + (f"  novos: {', '.join(hermit['novos'])}" if hermit["novos"] else "")
+                   + (f"  saem: {', '.join(hermit['saem'])}" if hermit["saem"] else ""))
     lin.append(f"  emitido_por: {p.get('emitido_por')}")
     if p.get("modo") == "aplicado":
-        ver = f"GRAVADO — id {p.get('id')}"
-    elif p.get("aprovado"):
-        ver = "APROVADO — repita com --apply para gravar"
+        if p.get("id"):
+            lin.append(f"  id     : {p.get('id')}")
     else:
-        ver = "REPROVADO — nada gravado"
-    lin.append(f"  veredito : {ver}")
+        ver = "APROVADO — repita com --apply para gravar" if (p.get("aprovado") and not (hermit or {}).get("novos") and not (hermit or {}).get("erro")) else "REPROVADO — nada gravado"
+        lin.append(f"  veredito: {ver}")
     return "\n".join(lin)
 
 
@@ -915,28 +938,42 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
         except ValueError:
             pj = {}
         if isinstance(pj, dict) and pj.get("plano"):
-            print(formatar_plano_relacao(pj["plano"], None))
+            pl = pj["plano"]
+            ar = pl.get("aresta") or {}
+            if ar.get("de") and ar.get("para") and ar.get("tipo"):
+                print(formatar_plano_relacao(pl, None))
+            else:
+                print(formatar_plano_conceito(pl, None))
         falha_problem(resp)
     plano = resp.json()
 
-    # 2. projeção formal com a aresta em memória
+    # 2. projeção formal com a aresta em memória (ou sem aresta, quando não há pai)
     aresta = plano.get("aresta") or {}
-    if not args.sem_hermit and aresta.get("de") and aresta.get("para") and aresta.get("tipo"):
-        hermit = _hermit(aresta["de"], aresta["para"], aresta["tipo"])
+    tem_aresta = bool(aresta.get("de") and aresta.get("para") and aresta.get("tipo"))
+    if not args.sem_hermit:
+        if tem_aresta:
+            hermit = _hermit(aresta["de"], aresta["para"], aresta["tipo"])
+        else:
+            hermit = _hermit_com([])
     else:
         hermit = None
     hermit_ok = args.sem_hermit or (hermit is not None and not hermit.get("erro") and not hermit.get("novos"))
     aprovado = bool(plano.get("aprovado")) and hermit_ok
 
+    def formatar(p, h):
+        if tem_aresta:
+            return formatar_plano_relacao(p, h)
+        return formatar_plano_conceito(p, h)
+
     if not args.apply:
         if como_json:
             print(json.dumps({"plano": plano, "hermit": hermit, "aprovado": aprovado}, indent=2, ensure_ascii=False))
         else:
-            print(formatar_plano_relacao(plano, hermit))
+            print(formatar(plano, hermit))
         return 0 if aprovado else 1
 
     if not aprovado:
-        print(formatar_plano_relacao(plano, hermit))
+        print(formatar(plano, hermit))
         if not plano.get("aprovado"):
             sys.stderr.write("curar: conferência SQL reprovou; nada gravado\n")
         elif hermit is None or hermit.get("erro"):
@@ -954,7 +991,7 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
     if como_json:
         print(json.dumps({"aplicado": feito, "hermit": hermit, "export": export}, indent=2, ensure_ascii=False))
     else:
-        print(formatar_plano_relacao(feito, hermit))
+        print(formatar(feito, hermit))
         if export is None:
             print("  export : NÃO regenerado (clone de conhecimento em main / venv não achados) — rode `exportar-acervo` e commite")
         else:

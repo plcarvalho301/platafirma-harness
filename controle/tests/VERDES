@@ -127,6 +127,8 @@ tests/test_contrato_casa_por_caminho.py | bin/repo bin/sessao bin/_sessao/** bin
 tests/test_curar_renomear.py | bin/curar bin/_acervo/**
 # Medido em 05/10/2026 (card #3163): `curar --conceito --natureza` (reclassificar, K19), mesmo servidor falso.
 tests/test_curar_natureza.py | bin/curar bin/_acervo/** controle/tests/test_curar_renomear.py
+# Medido em 17/10/2026 (DT #315): `curar --conceito` sem `--pai` (HermiT e formato próprio sem aresta), mesmo servidor falso.
+tests/test_curar_conceito.py | bin/curar bin/_acervo/** controle/tests/test_curar_renomear.py
 # Medido em 04/10/2026 (incidente #3222): `infra backup` com `piso_bytes` (7 passam; com a condicao do piso
 # desligada, 3 ficam vermelhos — o dump de 320 bytes volta a sair ok).
 tests/test_contrato_infra_backup_piso.py | bin/infra bin/_infra/** bin/_release/** registro/**
