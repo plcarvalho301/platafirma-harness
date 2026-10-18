@@ -308,6 +308,19 @@ def test_write_file_aceita_tsv(bancada, sem_pep):
         assert r.get("recusado") and "tipo" in r["motivo"], (nome, r)
 
 
+def test_write_file_aceita_turtle(bancada, sem_pep):
+    """#2856 linha 320 (card #3755): a shape SHACL e o grafo de nucleo da raiz sao Turtle,
+    texto plano; sem `.ttl` na lista a estrutura da entidade nao tinha como ser escrita."""
+    r = s.write_file(path="wt/platafirma-core/fabrica/ontologia/shapes/fichario.ttl",
+                     content="@prefix pf: <https://platafirma.org/pf/> .\n")
+    assert r.get("ok"), r
+    assert (bancada / "wt/platafirma-core/fabrica/ontologia/shapes/fichario.ttl").is_file()
+    # a lista cresceu so em .ttl: outra serializacao de RDF segue recusada
+    for nome in ("nucleo.owl", "nucleo.rdf", "nucleo.nt"):
+        r = s.write_file(path=f"wt/platafirma-core/fabrica/ontologia/{nome}", content="x\n")
+        assert r.get("recusado") and "tipo" in r["motivo"], (nome, r)
+
+
 def test_write_file_aceita_dockerfile_com_sufixo(bancada, sem_pep):
     """#2856 linha 40: Dockerfile.<sufixo> (Dockerfile.gpu, Dockerfile.dev) e o mesmo texto
     de build do Dockerfile; o ponto exige sufixo, e outro nome segue recusado."""
