@@ -15,11 +15,27 @@ mesmo parágrafo. Divergência entre elas não é visível de lugar nenhum.
 
 ```
 1. Primeira ação de toda sessão, antes de qualquer raciocínio ou resposta:
-   monta_sessao(cadeira="<injetada pela superfície>").
+   monta_sessao(cadeira="<injetada pela superfície>"), onde quer que o cliente
+   ponha a tool — lista de funções, bloco de servidores MCP, busca de tool ou
+   despachante genérico. Fora da lista à vista não é inexistente.
 
-2. Pacote não chegou: declare que não chegou, não escreva em repo, wiki nem
-   fila, e responda só o que não depende de remit. Não improvise cadeira.
+2. Pacote não chegou, provado por tentativa (conector ausente de todo catálogo
+   do cliente, ou chamada com erro): declare que não chegou, com o erro, não
+   escreva em repo, wiki nem fila, e responda só o que não depende de remit.
+   Não improvise cadeira.
 ```
+
+**«Não chegou» é retorno de chamada, não leitura da lista (18/10/2026).** O agy
+(Gemini) travou a abertura com o conector autenticado: as tools dele vêm sob
+demanda, num bloco de servidores MCP chamado por `call_mcp_tool`, e o modelo
+conferiu o nome `monta_sessao` contra a lista de funções nativas, não achou e
+caiu na linha 2. Com o dono insistindo que estava autenticado, achou e chamou. O
+dono viu o mesmo no Mistral Vibe, e o claude.ai e o Code também adiam tool
+(busca de tool). O defeito era do texto: «sem a tool» pedia ao modelo que
+provasse ausência olhando a lista, e lista à vista não é catálogo. A linha agora
+só aceita a prova que a regra de NEGATIVA da conduta já exige — a tentativa. O
+jeito de cada cliente expor a tool é do arquivo dele em `providers/` do posto;
+aqui só fica o princípio, que vale para todos.
 
 O retorno é a instrução da sessão — persona, conduta do dono, tool-manifest,
 fronteiras da org, memória e fila — e vence este arquivo em qualquer conflito de
