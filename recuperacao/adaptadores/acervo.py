@@ -48,11 +48,14 @@ import os
 import urllib.error
 import urllib.request
 
+from lib import motor_enderecos
+
 from ..envelope import Casamento, Causa, Cobertura, Item, Procedencia, Sinal, Versao, VersaoTipo
 from ..fontes import Fonte
 from .base import Adaptador, FonteIndisponivel
 
-BASE = os.environ.get("RAG_API_URL", "http://127.0.0.1:8100").rstrip("/")
+# O ambiente vale mais; o último degrau é o endereço da API do acervo no registro das instâncias (#3843, R28).
+BASE = (os.environ.get("RAG_API_URL") or motor_enderecos.api_acervo()).rstrip("/")
 TOKEN = os.environ.get("RAG_API_TOKEN", "")
 TIMEOUT_S = float(os.environ.get("RAG_TIMEOUT_S", "10"))
 CHAVE_CURTA = os.environ.get("PF_ACERVO_CHAVE_CURTA") == "1"

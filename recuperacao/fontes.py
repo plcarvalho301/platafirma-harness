@@ -31,9 +31,10 @@ def _le_fontes_do_acervo() -> list[FonteInfo] | None:
     malformada) — o chamador cai no seed embutido. Mesma convenção de variáveis de
     ambiente de `adaptadores/acervo.py` (RAG_API_URL, RAG_API_TOKEN, RAG_TIMEOUT_S).
     """
-    base = os.environ.get("RAG_API_URL", "http://127.0.0.1:8100").rstrip("/")
     token = os.environ.get("RAG_API_TOKEN", "")
     try:
+        from lib import motor_enderecos          # dentro do try: registro fora do ar também cai no seed
+        base = (os.environ.get("RAG_API_URL") or motor_enderecos.api_acervo()).rstrip("/")
         req = urllib.request.Request(
             f"{base}/acervo/fontes",
             headers={"authorization": f"Bearer {token}"} if token else {})

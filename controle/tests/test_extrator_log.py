@@ -612,7 +612,8 @@ def test_api_conexao_recusada_e_exit_3_sem_vazar_o_token():
 def test_api_usa_a_ordem_de_variaveis_do_bot_para_a_url(monkeypatch):
     for v in ("MOTOR_ACERVO_URL", "RAG_API_URL", "RAG_API_BASE"):
         monkeypatch.delenv(v, raising=False)
-    assert ex.Api().base == "http://127.0.0.1:8100"
+    import motor_enderecos
+    assert ex.Api().base == motor_enderecos.api_acervo()
     monkeypatch.setenv("RAG_API_BASE", "http://c:3")
     monkeypatch.setenv("RAG_API_URL", "http://b:2/")
     assert ex.Api().base == "http://b:2"

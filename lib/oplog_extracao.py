@@ -553,8 +553,9 @@ def relatorio_seco(ext: Extracao) -> dict:
 # --- a API --------------------------------------------------------------------------------------
 
 def _base_url() -> str:
+    import motor_enderecos          # o último degrau é a API do acervo no registro das instâncias (#3843, R28)
     return (os.environ.get("MOTOR_ACERVO_URL") or os.environ.get("RAG_API_URL")
-            or os.environ.get("RAG_API_BASE") or "http://127.0.0.1:8100").rstrip("/")
+            or os.environ.get("RAG_API_BASE") or motor_enderecos.api_acervo()).rstrip("/")
 
 
 class Api:

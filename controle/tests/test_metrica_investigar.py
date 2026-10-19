@@ -327,7 +327,7 @@ def test_parte_das_linhas_na_particao_e_citacao_parcial(tmp_path):
 
 
 @pytest.mark.parametrize("erro, codigo_esperado", [
-    (ex.Falha(3, "POST /acervo/log/citacoes: http://127.0.0.1:8100 não respondeu (Connection refused)"), 3),
+    (ex.Falha(3, "POST /acervo/log/citacoes: http://127.0.0.1:9 não respondeu (Connection refused)"), 3),
     (ex.Falha(4, "POST /acervo/log/citacoes: HTTP 403"), 4),
     (ex.Falha(5, "POST /acervo/log/citacoes: a conexão caiu"), 5),
     (ex.Falha(1, "POST /acervo/log/citacoes: HTTP 422 CorpoInvalido", "CorpoInvalido"), 5),
@@ -444,7 +444,7 @@ def test_o_limite_na_particao_pede_um_a_mais_para_saber_se_tem_mais(tmp_path):
 
 
 @pytest.mark.parametrize("erro, esperado", [
-    (ex.Falha(3, "GET .../conteudo: http://127.0.0.1:8100 não respondeu (Connection refused)"), 3),
+    (ex.Falha(3, "GET .../conteudo: http://127.0.0.1:9 não respondeu (Connection refused)"), 3),
     (ex.Falha(4, "GET .../conteudo: HTTP 401"), 4),
     (ex.Falha(5, "GET .../conteudo: a conexão caiu"), 5),
 ])

@@ -21,10 +21,14 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from lib import motor_enderecos
+
 from ..envelope import Causa
 from .base import FonteIndisponivel
 
-BASE = os.environ.get("MOTOR_ACERVO_URL", os.environ.get("RAG_API_URL", "http://127.0.0.1:8100")).rstrip("/")
+# O ambiente vale mais; o último degrau é o endereço da API do acervo no registro das instâncias (#3843, R28).
+BASE = (os.environ.get("MOTOR_ACERVO_URL") or os.environ.get("RAG_API_URL")
+        or motor_enderecos.api_acervo()).rstrip("/")
 TOKEN = os.environ.get("RAG_API_TOKEN", "")
 TIMEOUT_S = float(os.environ.get("RAG_TIMEOUT_S", "10"))
 

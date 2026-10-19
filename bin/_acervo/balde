@@ -11,7 +11,7 @@ import urllib.parse
 
 import requests
 
-HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))   # bin/_acervo/balde -> raiz do repo
 if HARNESS_DIR not in sys.path:
     sys.path.insert(0, HARNESS_DIR)
 sys.path.insert(0, os.path.join(HARNESS_DIR, "lib"))
@@ -19,8 +19,8 @@ sys.path.insert(0, os.path.join(HARNESS_DIR, "lib"))
 try:
     from recuperacao.adaptadores.motor_acervo_rest import BASE as DEFAULT_BASE, TOKEN as DEFAULT_TOKEN
 except ImportError:
-    DEFAULT_BASE = "http://127.0.0.1:8100"
-    DEFAULT_TOKEN = ""
+    from lib import motor_enderecos
+    DEFAULT_BASE, DEFAULT_TOKEN = motor_enderecos.api_acervo(), ""
 
 BASE = (os.environ.get("MOTOR_ACERVO_URL") or os.environ.get("RAG_API_URL")
         or os.environ.get("RAG_API_BASE") or DEFAULT_BASE).rstrip("/")

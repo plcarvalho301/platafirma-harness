@@ -43,8 +43,8 @@ try:
     from recuperacao.adaptadores.motor_acervo_rest import BASE as DEFAULT_BASE, TOKEN as DEFAULT_TOKEN
     ORIGEM_BASE = "recuperacao.adaptadores.motor_acervo_rest"
 except ImportError:
-    DEFAULT_BASE = "http://127.0.0.1:8100"
-    DEFAULT_TOKEN = ""
+    from lib import motor_enderecos
+    DEFAULT_BASE, DEFAULT_TOKEN = motor_enderecos.api_acervo(), ""
     ORIGEM_BASE = "default (adaptador REST ausente)"
 
 BASE = (os.environ.get("RAG_API_BASE") or DEFAULT_BASE).rstrip("/")

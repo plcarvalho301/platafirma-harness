@@ -13,7 +13,7 @@
 # e não espaço, porque o drop-in não aspa.
 #
 # ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] ·
-#   MOTOR_ACERVO_URL | RAG_API_URL | RAG_API_BASE[=http://127.0.0.1:8100] · RAG_API_TOKEN (Bearer, do EnvironmentFile da
+#   MOTOR_ACERVO_URL | RAG_API_URL | RAG_API_BASE[=enderecos.api_acervo do registro das instancias] · RAG_API_TOKEN (Bearer, do EnvironmentFile da
 #   conta; nunca impresso) · LINHAGEM_TIMEOUT_S[=180] · CORTE_MAX_DIAS[=3] · CORTE_ARGS · PF_TAREFAS_BIN[=<dir>/../tarefas] ·
 #   PF_CADEIRA[=ti]
 #

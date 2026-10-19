@@ -641,7 +641,7 @@ def test_aceita_a_grafia_com_cedilha_na_fonte(monkeypatch, capsys):
 
 @pytest.mark.parametrize("ato", ["dia", "verbos"])
 def test_particao_fora_do_ar_e_exit_3_e_aponta_o_bruto(monkeypatch, capsys, ato):
-    api = ApiFalsa(erro=ex.Falha(3, "GET /acervo/log/dias: http://127.0.0.1:8100 não respondeu (Connection refused)"))
+    api = ApiFalsa(erro=ex.Falha(3, "GET /acervo/log/dias: http://127.0.0.1:9 não respondeu (Connection refused)"))
     codigo, saida, err = roda(monkeypatch, capsys, api, ato, DIA)
     assert codigo == 3 and saida == ""
     assert "a particao nao respondeu" in err and f"metrica {ato} ... --fonte bruto" in err and "Traceback" not in err
