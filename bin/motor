@@ -370,6 +370,8 @@ def servido(inst):
 def cmd_listar(d):
     for nome, i in d.items():
         print(f"{nome:12} {i['estado']:10} {i.get('container') or '-'}")
+        for chave, url in (i.get("enderecos") or {}).items():
+            print(f"  {chave:12} {url}")
 
 
 def caminho_env(inst):

@@ -13,7 +13,7 @@
 # faria o timer repetir o mesmo pedido todas as noites. Vírgula, e não espaço, porque o drop-in não aspa.
 #
 # ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] ·
-#   MOTOR_ACERVO_URL | RAG_API_URL | RAG_API_BASE[=http://127.0.0.1:8100] · RAG_API_TOKEN (Bearer, do
+#   MOTOR_ACERVO_URL | RAG_API_URL | RAG_API_BASE[=enderecos.api_acervo do registro das instancias] · RAG_API_TOKEN (Bearer, do
 #   EnvironmentFile da conta; nunca impresso) · LINHAGEM_TIMEOUT_S[=180] · LINHAGEM_ARGS · PF_CADEIRA[=ti]
 #
 # exit: 0 ok · 1 passada reprovada (a conferência de D5.4, ou linha sem tradução) · 2 uso · 3 API ou banco fora ·

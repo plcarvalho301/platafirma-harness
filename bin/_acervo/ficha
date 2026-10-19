@@ -49,7 +49,8 @@ try:
     from recuperacao.adaptadores.motor_acervo_rest import BASE as _BASE_DO_ADAPTADOR
     from recuperacao.adaptadores.motor_acervo_rest import TOKEN as _TOKEN_DO_ADAPTADOR
 except ImportError:
-    _BASE_DO_ADAPTADOR, _TOKEN_DO_ADAPTADOR = "http://127.0.0.1:8100", ""
+    from lib import motor_enderecos
+    _BASE_DO_ADAPTADOR, _TOKEN_DO_ADAPTADOR = motor_enderecos.api_acervo(), ""
 
 SPEC = "spec acervo-obra §7 (acervo ler casa spec acervo-obra)"
 

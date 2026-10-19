@@ -23,6 +23,7 @@ import urllib.request
 
 import pytest
 
+from lib import motor_enderecos
 from recuperacao.adaptadores.acervo import AdaptadorAcervo
 from recuperacao.adaptadores.wiki import CONTENT_NS, AdaptadorWiki
 from recuperacao.envelope import Casamento, Causa, Cobertura, VersaoTipo
@@ -30,7 +31,7 @@ from recuperacao.fontes import Fonte
 from recuperacao.adaptadores.base import FonteIndisponivel
 
 MW = os.environ.get("MW_API_URL", "http://127.0.0.1:8080/api.php")
-RAG = os.environ.get("RAG_API_URL", "http://127.0.0.1:8100").rstrip("/")
+RAG = (os.environ.get("RAG_API_URL") or motor_enderecos.api_acervo()).rstrip("/")
 RAG_TOKEN = os.environ.get("RAG_API_TOKEN", "")
 
 

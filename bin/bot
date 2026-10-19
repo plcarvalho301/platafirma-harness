@@ -25,7 +25,7 @@
 # escreve: desligar=acervo.registro,arquivo-local
 # escreve: caidas=rastreador
 # consome: motor_acervo@platafirma-conhecimento/rag/motor_acervo/openapi/acervo-escrita.yaml >=1.1.0, tarefas, agente
-# ambiente: MOTOR_ACERVO_URL (opcional; endereco do motor do acervo, vale a primeira entre esta, RAG_API_URL e RAG_API_BASE; padrao http://127.0.0.1:8100; verbo) · RAG_API_URL (opcional; idem; verbo) · RAG_API_BASE (opcional; idem; verbo) · RAG_TIMEOUT_S (opcional; segundos por chamada ao acervo, padrao 10; verbo) · RAG_API_TOKEN (opcional; segredo, nunca impresso; vem do EnvironmentFile do ops) · PF_CADEIRA (opcional; autor e ator quando o autor nao vem em --autor; porta) · PF_SESSAO (opcional; vira o sessao_id do evento quando e uuid; porta) · PF_ORDEM_ID (opcional; vira o ordem_id do evento; porta) · PF_SUJEITO (opcional; repassada ao agente rodar, que a exige; porta) · PF_BIN (opcional; padrao bin/ da propria arvore; so teste com stub) · PF_UNITS_DIR (opcional; pasta das units no lugar da morada real; so teste) · XDG_DATA_HOME (opcional; onde as units caem quando ~/.config/systemd/user nao grava; padrao ~/.local/share) · PLATAFIRMA_RELEASE (opcional; padrao /opt/platafirma/current; de onde saem o sha do evento e os declarantes dos timers) · PF_RELEASE_RAIZ (opcional; raiz das releases no lugar de /opt/platafirma; lida por lib/raizes; porta) · HOME (a morada do usuario; dali saem ~/.config/systemd/user e ~/.local/share; porta) · XDG_RUNTIME_DIR (opcional; pasta do arquivo de trava de declarar, desligar e caidas; sem ela vale o tmp da conta; porta) · PF_BOT_SLUGS (lista de slugs separada por virgula que o rodar poe no ambiente do filho; recusa a recursao; verbo)
+# ambiente: MOTOR_ACERVO_URL (opcional; endereco do motor do acervo, vale a primeira entre esta, RAG_API_URL e RAG_API_BASE; sem nenhuma, vale enderecos.api_acervo do registro das instancias; verbo) · RAG_API_URL (opcional; idem; verbo) · RAG_API_BASE (opcional; idem; verbo) · RAG_TIMEOUT_S (opcional; segundos por chamada ao acervo, padrao 10; verbo) · RAG_API_TOKEN (opcional; segredo, nunca impresso; vem do EnvironmentFile do ops) · PF_CADEIRA (opcional; autor e ator quando o autor nao vem em --autor; porta) · PF_SESSAO (opcional; vira o sessao_id do evento quando e uuid; porta) · PF_ORDEM_ID (opcional; vira o ordem_id do evento; porta) · PF_SUJEITO (opcional; repassada ao agente rodar, que a exige; porta) · PF_BIN (opcional; padrao bin/ da propria arvore; so teste com stub) · PF_UNITS_DIR (opcional; pasta das units no lugar da morada real; so teste) · XDG_DATA_HOME (opcional; onde as units caem quando ~/.config/systemd/user nao grava; padrao ~/.local/share) · PLATAFIRMA_RELEASE (opcional; padrao /opt/platafirma/current; de onde saem o sha do evento e os declarantes dos timers) · PF_RELEASE_RAIZ (opcional; raiz das releases no lugar de /opt/platafirma; lida por lib/raizes; porta) · HOME (a morada do usuario; dali saem ~/.config/systemd/user e ~/.local/share; porta) · XDG_RUNTIME_DIR (opcional; pasta do arquivo de trava de declarar, desligar e caidas; sem ela vale o tmp da conta; porta) · PF_BOT_SLUGS (lista de slugs separada por virgula que o rodar poe no ambiente do filho; recusa a recursao; verbo)
 # escrita: declarar grava a ficha pela API do acervo e <slug>.service e <slug>.timer na morada das units, mais o link no timers.target.wants; desligar desfaz; rodar grava dois eventos pela API; caidas abre incidente por `tarefas criar`; nada em listar
 # depende: systemctl --user, systemd-analyze, tarefas, agente, lib/units, lib/raizes, lib/uso
 # conforme: parcial — evento:<tipo> fica recusado até a ligação na fila; timer com agente fica recusado até haver sujeito de máquina; parar e historico são de story nova; o .wants de ~/.config/systemd/user pode exigir o dono da máquina
@@ -52,6 +52,7 @@ from pathlib import Path
 
 _AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(_AQUI.parent / "lib"))
+import motor_enderecos  # noqa: E402
 import raizes  # noqa: E402
 import units  # noqa: E402
 import uso  # noqa: E402
@@ -67,7 +68,7 @@ ESTADOS_ABERTOS = ("detectado", "em-mitigacao", "mitigado")             # o inci
 LIMITE_INCIDENTES = 10                                                   # criados por rodada de caidas (cabe nos 60 s)
 ESPERA_TRAVA_S = 30.0
 ACERVO_URL = (os.environ.get("MOTOR_ACERVO_URL") or os.environ.get("RAG_API_URL")
-              or os.environ.get("RAG_API_BASE") or "http://127.0.0.1:8100").rstrip("/")
+              or os.environ.get("RAG_API_BASE") or motor_enderecos.api_acervo()).rstrip("/")
 
 
 def _segundos() -> float:
