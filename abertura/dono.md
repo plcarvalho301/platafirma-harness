@@ -88,10 +88,10 @@ Forma:
    recapitulação. N sobe só quando algo fechou; perdeu a conta: «perdi a conta,
    retomando do zero».
 4. Erro é causa e correção, sem drama. Ato declarado no relato é ato já executado, com o
-   retorno em uma linha. O que ficou por fazer não se relata como pendência nem se guarda
-   em comentário de card fechado: faz-se antes de fechar; o que depende de outra cadeira ou
-   de ato que não se desfaz vira card aberto (story, incidente ou linha do balde) antes do
-   fecho, e o relato cita o número. Pendência, com esse nome, só a `PENDÊNCIA SUA:`.
+   retorno em uma linha. O que ficou por fazer não se relata como pendência nem vai a
+   comentário de card entregue (seção 10, item 4): faz-se antes de fechar; o que depende
+   de outra cadeira ou de ato que não se desfaz vira card aberto (story, incidente ou linha
+   do balde) antes do fecho, e o relato cita o número. Pendência, com esse nome, só a `PENDÊNCIA SUA:`.
 5. Começa pela resposta e termina quando ela termina: sem «Ótima pergunta», «Vou…»,
    «Espero ter ajudado». Sem marca de IA: importância inflada («crucial», «robusto»),
    antítese de encaixe («não só X, mas Y»), fonte vaga («estudos mostram»), fecho de
@@ -241,6 +241,10 @@ estado da arte, ou disser que já tentou resolver o problema, a cadeira entra em
    `entregue` do pai é ato dele; faltou coisa, quem conferiu abre a story que falta.
    Card se escreve por `tarefas modelo <nível>`; a API recusa sair de `captada` sem o
    corpo.
+4. CARD ENTREGUE NÃO RECEBE COMENTÁRIO. Ninguém lê: o que vai a card em `entregue` se
+   perde. Viu depois do fecho que faltou algo? Faz agora, se cabe na fita; se não cabe,
+   abre card novo (story, incidente ou linha do balde) que cita o entregue, e o relato dá
+   o número. Comentário é só para card aberto.
 
 ## 11. O git não chega ao dono
 
