@@ -6,19 +6,20 @@
 # componente: docker, systemd --user, cron
 # use para: ver contêiner/unit/timer de pé e a saúde da porta, "está no ar?" (estado,
 #   saude, logs), reiniciar contêiner/unit e (re)criar a stack por compose (restart,
-#   up, down, pull, build), convergir a agenda do cron e podar log/quarentena por
+#   up, down, pull, build), tirar contêiner avulso ou unit que ficou fora do declarado
+#   (remover), convergir a agenda do cron e podar log/quarentena/job falhado por
 #   retenção declarada (agenda, limpeza), liberar cache de VRAM e disco (cache), que
 #   hardware é este e quanto consome em W agora (hardware), a GPU ao vivo: uso, VRAM,
 #   temperatura, W e processos (gpu), o teto de processos e threads da conta contra o uso agora (limites), copiar o ingress versionado do túnel para a cópia da
 #   instância, que é a que o cloudflared lê, e reiniciá-lo (ingress)
-# atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), hardware (leitura, operacao), limites (leitura, operacao), gpu (leitura, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao), ingress (escrita, operacao)
+# atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), remover (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), hardware (leitura, operacao), limites (leitura, operacao), gpu (leitura, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao), ingress (escrita, operacao)
 # forma: log
 # cauda: sim
 # classe: B
 # consome: porta@ops-log
 # ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · INFRA_INGRESS_FONTE[=$PLATAFIRMA_RELEASE/core/deploy/cloudflared-config.yml] porta · INFRA_INGRESS_COPIA[=$PLATAFIRMA_INSTANCIA/deploy/core/cloudflared.yml] porta · INFRA_INGRESS_CONTEINER[=platafirma-core-cloudflared-1] porta · INFRA_INGRESS_ESPERA[=5] porta (ingress: segundos até conferir o contêiner de pé) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (saude: lido por lib/oplog, o bruto contra o teto) · PF_SUJEITO[obrigatória em up|down|pull|build] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
-# depende: docker · systemctl --user · curl · diff (ingress) · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · ps (limites) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs e bin/_infra/limpeza-quarentena (ajudantes de limpeza) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda)
-# escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados · agenda=crontab do sistema (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · estado/saude/logs/ps/config/backup/hardware/limites/gpu=nada
+# depende: docker · systemctl --user · curl · diff (ingress) · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · ps (limites) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs, bin/_infra/limpeza-quarentena e bin/_infra/limpeza-jobs (ajudantes de limpeza) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda)
+# escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · remover=contêiner avulso removido (a inspeção dele guardada antes em var/log/infra/removidos), unit transitória tirada da lista (reset-failed) ou unit da conta parada, desabilitada e com o arquivo movido para var/quarentena · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados e jobs avulsos falhados tirados da lista de units · agenda=crontab do sistema (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · estado/saude/logs/ps/config/backup/hardware/limites/gpu=nada
 # substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build (deploy apagado — decisão do dono, 27/09) · crontab -e a mão · cp à mão do ingress versionado para deploy/core/cloudflared.yml da instância + docker restart do cloudflared · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra por arq:0110 §14 emenda 26/09/2026)
 # Encapsula as três pegadinhas conhecidas: DOCKER_HOST rootless, restart que
 # mata a própria chamada, e alvo que pode ser contêiner ou unit de usuário.
@@ -30,6 +31,7 @@ AQUI="$(dirname "$(readlink -f "$0")")"
 STACK_AJUDANTE="$AQUI/_release/stack"
 LIMPEZA_LOGS="$AQUI/_infra/limpeza-logs"
 LIMPEZA_QUARENTENA="$AQUI/_infra/limpeza-quarentena"
+LIMPEZA_JOBS="$AQUI/_infra/limpeza-jobs"
 CRONTAB_SCRIPT="${INFRA_CRONTAB_SCRIPT:-$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh}"
 
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
@@ -55,6 +57,7 @@ uso:
   infra saude    [alvo] [--json]                 /health do ops, contêiner não-saudável, disco, RAM, o bruto contra o teto
   infra logs     <alvo> [n]                      alvo = contêiner OU unit --user (default 50)
   infra restart  <alvo> [--nao-esperar]          contêiner ou unit --user; confere antes de dizer ok
+  infra remover  <alvo> [--ver]                  tira contêiner avulso ou unit --user fora do declarado; --ver só mostra
   infra unit-env <unit> [--ver | CHAVE=VALOR...] drop-in de ambiente da unit --user (daemon-reload)
   infra cache    [ver|vram|disco]                o que ocupa VRAM e disco; liberar é explícito
   infra hardware [--json]                        CPU, RAM, GPU e consumo em W agora; a fonte (PSU) não se lê
@@ -67,12 +70,15 @@ uso:
   infra config   <stack> [args compose…] [<serviço>…]  … config
   infra pull     <stack> [args compose…] [<serviço>…]  … pull
   infra build    <stack> [args compose…] [<serviço>…]  … build
-  infra limpeza  logs|quarentena [args…]         despacha para bin/_infra/limpeza-{logs,quarentena}
+  infra limpeza  logs|quarentena|jobs [args…]    despacha para bin/_infra/limpeza-{logs,quarentena,jobs}
   infra agenda   conferir|aplicar                convergência do crontab (instala-crontab.sh)
   infra ingress  [--ver]                         copia o ingress versionado do túnel para a cópia da instância e reinicia o cloudflared
 
 Leitura aceita alvo opcional; sem alvo, olha tudo. Mutação exige alvo explícito.
-up, down, pull e build exigem identidade: variável PF_SUJEITO (sem fallback; a
+remover recusa (4) contêiner de stack compose (é infra down), unit declarada no core ou
+no harness e unit fora de ~/.config/systemd/user; guarda a inspeção do contêiner antes
+de removê-lo e move o arquivo da unit para a quarentena, de onde volta com mv.
+up, down, pull, build e remover exigem identidade: variável PF_SUJEITO (sem fallback; a
 porta a injeta pelo fluxo OAuth). agenda conferir roda com --check (0 igual, 1
 divergente); agenda aplicar aplica de fato. Ajudante de compose localizado ao
 lado deste script (bin/_release/stack), nunca pelo PATH.
@@ -764,6 +770,165 @@ restart() {
   exit 2
 }
 
+# `infra remover <alvo> [--ver]` — tira o que ficou de pé fora do declarado (balde #2856 linha 17):
+# contêiner avulso (sem stack compose, subido à mão: kind_gould, 15/10/2026), unit transitória que
+# falhou e unit da conta que ninguém declara (jaiminho-server, 27/09/2026). Não havia verbo, e o
+# resíduo virava ato do dono no host. O declarado não sai por aqui: contêiner de stack é `infra
+# down`, unit declarada no core ou no harness sai por PR no repositório que a declara. Cada ramo
+# deixa a volta antes do ato: a inspeção do contêiner (imagem, montagens, portas, comando) é
+# gravada antes do rm e a imagem fica no disco; o arquivo da unit vai para uma leva da quarentena
+# e volta com mv enquanto a leva viver; a transitória só sai da lista, e o registro dela segue no
+# journal. --ver mostra o que se sabe e o que aconteceria, sem efeito e sem identidade; recusa
+# sai 4 com ou sem --ver.
+INFRA_REMOVIDOS="${INFRA_REMOVIDOS:-$PLATAFIRMA_INSTANCIA/var/log/infra/removidos}"
+INFRA_QUARENTENA="${INFRA_QUARENTENA:-$PLATAFIRMA_INSTANCIA/var/quarentena}"
+INFRA_UNITS_DIR="${INFRA_UNITS_DIR:-$HOME/.config/systemd/user}"
+INFRA_DECLARADOS="${INFRA_DECLARADOS:-$PLATAFIRMA_RELEASE/core/deploy:$PLATAFIRMA_RELEASE/harness/deploy-harness:$AQUI/../registro}"
+
+_declarado_em() {  # $1=nome sem .service; imprime o primeiro arquivo declarado que o cita
+  local d f IFS=:
+  for d in $INFRA_DECLARADOS; do
+    [ -e "$d" ] || continue
+    f=$(grep -rlwF -- "$1" "$d" 2>/dev/null | head -n 1)
+    [ -n "$f" ] && { printf '%s\n' "$f"; return 0; }
+  done
+  return 1
+}
+
+_inspecao_campo() {  # stdin=docker inspect; $1=resumo|projeto|imagem
+  python3 -c '
+import json, sys
+d = json.load(sys.stdin)[0]
+cfg, st = d.get("Config") or {}, d.get("State") or {}
+proj = (cfg.get("Labels") or {}).get("com.docker.compose.project") or ""
+if sys.argv[1] == "projeto":
+    print(proj); raise SystemExit(0)
+if sys.argv[1] == "imagem":
+    print(cfg.get("Image") or ""); raise SystemExit(0)
+mont = ["%s -> %s (%s)" % (m.get("Source"), m.get("Destination"), "rw" if m.get("RW") else "ro")
+        for m in d.get("Mounts") or []]
+portas = []
+for p, b in ((d.get("NetworkSettings") or {}).get("Ports") or {}).items():
+    if b:
+        portas += ["%s -> %s:%s" % (p, x.get("HostIp"), x.get("HostPort")) for x in b]
+    else:
+        portas.append("%s (não publicada)" % p)
+cmd = " ".join((cfg.get("Entrypoint") or []) + (cfg.get("Cmd") or []))
+print("contêiner: %s" % (d.get("Name") or "").lstrip("/"))
+print("imagem:    %s" % (cfg.get("Image") or "-"))
+print("criado:    %s" % (d.get("Created") or "-"))
+print("estado:    %s" % (st.get("Status") or "-"))
+print("comando:   %s" % (cmd or "-"))
+print("montagens: %s" % ("; ".join(mont) or "nenhuma"))
+print("portas:    %s" % ("; ".join(portas) or "nenhuma"))
+print("stack:     %s" % (proj or "nenhuma (avulso)"))
+' "$1"
+}
+
+_remover_conteiner() {  # $1=contêiner $2=ver
+  local c="$1" ver="$2" j proj img arq
+  j=$(docker inspect -- "$c" 2>/dev/null) || { echo "infra: erro: docker inspect falhou em $c — nada removido" >&2; exit 5; }
+  printf '%s' "$j" | _inspecao_campo resumo \
+    || { echo "infra: erro: inspeção de $c ilegível — nada removido" >&2; exit 5; }
+  proj=$(printf '%s' "$j" | _inspecao_campo projeto)
+  img=$(printf '%s' "$j" | _inspecao_campo imagem)
+  if [ -n "$proj" ]; then
+    echo "infra: $c é da stack compose '$proj', não avulso — derrube por: infra down <stack> <serviço>; nada removido" >&2
+    exit 4
+  fi
+  if [ "$ver" = 1 ]; then
+    echo "removível: sim — sem --ver, a inspeção vai para $INFRA_REMOVIDOS e o contêiner sai (a imagem fica)"
+    return 0
+  fi
+  mkdir -p "$INFRA_REMOVIDOS" 2>/dev/null || { echo "infra: erro: não consegui criar $INFRA_REMOVIDOS — nada removido" >&2; exit 3; }
+  arq="$INFRA_REMOVIDOS/$c-$(date +%Y%m%dT%H%M%S).json"
+  printf '%s\n' "$j" > "$arq" 2>/dev/null || { echo "infra: erro: não consegui gravar a inspeção em $arq — nada removido" >&2; exit 3; }
+  docker rm -f -- "$c" >/dev/null || { echo "infra: erro: docker rm falhou em $c — a inspeção ficou em $arq" >&2; exit 1; }
+  if e_conteiner "$c"; then
+    echo "infra: erro: $c ainda aparece em docker ps -a depois do rm" >&2
+    exit 1
+  fi
+  echo "removido: $c · inspeção guardada em $arq · a imagem ${img:-?} segue no disco"
+}
+
+_remover_unit() {  # $1=unit (.service) $2=ver
+  local u="$1" ver="$2" transit ativo frag dir dono decl leva
+  transit=$(systemctl --user show -p Transient --value -- "$u" 2>/dev/null || true)
+  ativo=$(systemctl --user show -p ActiveState --value -- "$u" 2>/dev/null || true)
+  frag=$(systemctl --user show -p FragmentPath --value -- "$u" 2>/dev/null || true)
+  printf 'unit:        %s\ntransitória: %s\nestado:      %s\narquivo:     %s\n' \
+    "$u" "${transit:-?}" "${ativo:-?}" "${frag:-nenhum}"
+
+  if [ "$transit" = yes ]; then
+    case "$ativo" in
+      failed|inactive) ;;
+      *) echo "infra: $u está ${ativo:-?} — pare antes (sessao longjob stop $u); nada removido" >&2; exit 4 ;;
+    esac
+    if [ "$ver" = 1 ]; then
+      echo "removível: sim — sem --ver, sai da lista de units (reset-failed); o registro segue no journal: infra logs $u"
+      return 0
+    fi
+    systemctl --user reset-failed -- "$u" 2>/dev/null || { echo "infra: erro: reset-failed recusado em $u" >&2; exit 1; }
+    echo "removida: $u saiu da lista de units · o registro segue no journal: infra logs $u"
+    return 0
+  fi
+
+  if [ "${u%.service}" = "${INFRA_UNIT_AUTO%.service}" ]; then
+    echo "infra: $u é a porta de operação — não sai por aqui; nada removido" >&2
+    exit 4
+  fi
+  if decl=$(_declarado_em "${u%.service}"); then
+    echo "infra: $u está declarada em $decl — tirar é PR no repositório que a declara; nada removido" >&2
+    exit 4
+  fi
+  case "$frag" in
+    "$INFRA_UNITS_DIR"/*) ;;
+    *) echo "infra: o arquivo de $u (${frag:-nenhum}) não está em $INFRA_UNITS_DIR — unit do sistema ou de pacote, não da conta; nada removido" >&2
+       exit 4 ;;
+  esac
+  dir="$(dirname "$frag")"
+  if [ ! -w "$dir" ]; then
+    dono=$(stat -c %U -- "$dir" 2>/dev/null || echo "?")
+    echo "infra: $dir é de $dono, sem escrita desta conta — a unit veio de setup com sudo; nada removido" >&2
+    exit 4
+  fi
+  if [ "$ver" = 1 ]; then
+    echo "removível: sim — sem --ver, a unit para, sai do boot (disable) e o arquivo vai para uma leva de $INFRA_QUARENTENA, de onde volta com mv"
+    return 0
+  fi
+  leva="$INFRA_QUARENTENA/$(date +%Y%m%dT%H%M%S)-infra-remover"
+  mkdir -p "$leva" 2>/dev/null || { echo "infra: erro: não consegui criar $leva — nada removido" >&2; exit 3; }
+  systemctl --user stop -- "$u" 2>/dev/null || { echo "infra: erro: systemctl --user stop falhou em $u — nada movido" >&2; exit 1; }
+  systemctl --user disable -- "$u" >/dev/null 2>&1 || true
+  mv -- "$frag" "$leva/" || { echo "infra: erro: não consegui mover $frag — a unit está parada e desabilitada, o arquivo ficou" >&2; exit 1; }
+  if [ -d "$INFRA_UNITS_DIR/$u.d" ]; then mv -- "$INFRA_UNITS_DIR/$u.d" "$leva/" || true; fi
+  systemctl --user daemon-reload 2>/dev/null || true
+  systemctl --user reset-failed -- "$u" >/dev/null 2>&1 || true
+  echo "removida: $u parada e desabilitada · arquivo em $leva (volta: mv para $dir e daemon-reload)"
+}
+
+remover() {
+  local ver=0 alvo="" a
+  for a in "$@"; do
+    case "$a" in
+      --ver) ver=1 ;;
+      -*) echo "erro: opção desconhecida em remover: $a (uso: infra remover <alvo> [--ver])" >&2; exit 2 ;;
+      *) [ -z "$alvo" ] || { echo "erro: remover aceita um alvo só — não remove em lote" >&2; exit 2; }
+         alvo="$a" ;;
+    esac
+  done
+  [ -n "$alvo" ] || { echo "erro: remover exige alvo explícito — não remove nada em lote." >&2; exit 2; }
+  [ "$ver" = 1 ] || exigir_sujeito "infra remover" || exit 3
+  if e_conteiner "$alvo"; then _remover_conteiner "$alvo" "$ver"; return; fi
+  if e_unit "${alvo%.service}.service"; then _remover_unit "${alvo%.service}.service" "$ver"; return; fi
+  if ! systemctl --user show-environment >/dev/null 2>&1; then
+    echo "erro: sem bus do systemd --user (XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR) — '$alvo' não foi achado nem removido" >&2
+    exit 3
+  fi
+  echo "infra: '$alvo' não é contêiner (docker ps -a) nem unit --user (systemctl --user cat) — nada removido" >&2
+  exit 1
+}
+
 # Ambiente de unit --user por drop-in (spec_porta-so-verbo §9: o shell saiu da porta, e
 # editar ~/.config/systemd/user/<unit>.service.d/ e operacao de unit — capacidade infra).
 # Escreve SO o drop-in 90-infra-env.conf (nunca a unit nem outros drop-ins), chave por
@@ -871,10 +1036,16 @@ cmd_limpeza() {
       [ -x "$LIMPEZA_QUARENTENA" ] || { printf 'infra: erro: dependência bin/_infra/limpeza-quarentena: ausente (%s)\n' "$LIMPEZA_QUARENTENA" >&2; exit 3; }
       exec "$LIMPEZA_QUARENTENA" "$@"
       ;;
+    jobs)
+      # #2856 linha 17: job avulso falhado fica na lista de units para sempre (o longjob não usa
+      # --collect, de propósito); este tira os que passaram da janela, sem tocar no journal.
+      [ -x "$LIMPEZA_JOBS" ] || { printf 'infra: erro: dependência bin/_infra/limpeza-jobs: ausente (%s)\n' "$LIMPEZA_JOBS" >&2; exit 3; }
+      exec "$LIMPEZA_JOBS" "$@"
+      ;;
     "")
-      printf 'infra: erro: limpeza exige logs ou quarentena\n' >&2; uso ;;
+      printf 'infra: erro: limpeza exige logs, quarentena ou jobs\n' >&2; uso ;;
     *)
-      printf 'infra: erro: limpeza desconhecida: %s — valores válidos: logs, quarentena\n' "$alvo" >&2; uso ;;
+      printf 'infra: erro: limpeza desconhecida: %s — valores válidos: logs, quarentena, jobs\n' "$alvo" >&2; uso ;;
   esac
 }
 
@@ -1100,13 +1271,14 @@ case "$cmd" in
   restart)
     [ $# -ge 1 ] || { echo "erro: restart exige alvo explícito — não reinicia tudo." >&2; exit 2; }
     restart "$@" ;;
+  remover)   remover "$@" ;;
   up|down|ps|config|pull|build) cmd_stack "$cmd" "$@" ;;
   limpeza)   cmd_limpeza "$@" ;;
   agenda)    cmd_agenda "$@" ;;
   ingress)   ingress "$@" ;;
   *)
     printf 'infra: erro: ato desconhecido: %s\n' "$cmd" >&2
-    printf 'atos: estado, saude, logs, restart, unit-env, cache, hardware, limites, gpu, backup, up, down, ps, config, pull, build, limpeza, agenda, ingress\n' >&2
+    printf 'atos: estado, saude, logs, restart, remover, unit-env, cache, hardware, limites, gpu, backup, up, down, ps, config, pull, build, limpeza, agenda, ingress\n' >&2
     uso_texto
     exit 2
     ;;
