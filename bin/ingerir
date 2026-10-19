@@ -57,7 +57,7 @@ mostra o que a ficha leu na coluna Formato (um `.pdf` que é JSON sai JSON, um `
 `?` é arquivo que o conversor não leu no plano, e o aplicar lê de novo.
 
 opções de fonte (uma das opções):
-  --lote <pasta>         pasta local com arquivos do lote a ingerir
+  --lote <pasta|arquivo> pasta local com arquivos do lote a ingerir, ou um arquivo só (lote de um item)
   --origem <o>           pasta do Drive a espelhar para $PLATAFIRMA_INSTANCIA/var/entrada antes de ingerir;
                          aceita 'gdrive:<caminho>' ou URL drive/.../folders/<ID>
   --drive [<pasta>]      espelha pasta do Drive para staging local (~/AI/entrada/drive-<AAAAMMDD>-<rotulo>)
@@ -299,6 +299,10 @@ def aterrissar_drive(pasta: str | None) -> str:
     return staging
 
 def escanear_pasta(pasta: str) -> tuple[list[tuple[str, str]], dict[str, dict]]:
+    # Arquivo único (débito 331 do balde #2856): o caminho nomeado é o lote. Quem aponta para um
+    # arquivo diz que ele é a obra, então não passa pelo filtro de fantasma nem lê sidecar vizinho.
+    if os.path.isfile(pasta):
+        return [(os.path.basename(pasta), pasta)], {}
     sidecars = {}
     arquivos_conteudo = []
 
@@ -617,8 +621,8 @@ def main():
     elif args.origem:
         args.lote = aterrissar_origem(args.origem)
 
-    if not os.path.isdir(args.lote):
-        sys.stderr.write(f"ingerir: erro: pasta de lote não encontrada: {args.lote}\n")
+    if not (os.path.isdir(args.lote) or os.path.isfile(args.lote)):
+        sys.stderr.write(f"ingerir: erro: pasta ou arquivo de lote não encontrado: {args.lote}\n")
         sys.exit(1)
 
     if args.ate not in ("catalogar", "chunk", "embed", "vetor"):

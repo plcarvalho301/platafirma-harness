@@ -147,6 +147,35 @@ def test_ate_chunk_para_na_selada_sem_chamar_o_motor(tmp_path, servidor):
     assert not (tmp_path / "motor.log").exists()
 
 
+def test_arquivo_unico_vira_lote_de_um_item_sem_levar_a_pasta(tmp_path, servidor):
+    # débito 331: `--lote <arquivo>` ingere só aquele arquivo; o irmão da pasta não entra
+    env = _ambiente(tmp_path, servidor)
+    pasta = _pasta(tmp_path)
+    r = subprocess.run([BIN_INGERIR, "--lote", str(pasta / "a.md")],
+                       env=env, capture_output=True, text=True, check=False)
+    assert r.returncode == 0, r.stderr
+    itens = _Acervo.pedidos[0]["itens"]
+    assert [i["arquivo"] for i in itens] == ["a.md"]
+    assert itens[0]["titulo"] == "Obra A"
+
+def test_arquivo_unico_aceita_pdf_e_nao_aplica_filtro_de_fantasma(tmp_path, servidor):
+    # o arquivo nomeado é a obra, mesmo com extensão que a varredura de pasta tratar como sidecar
+    env = _ambiente(tmp_path, servidor)
+    alvo = tmp_path / "artigo.pdf"
+    alvo.write_bytes(b"%PDF-1.7 teste")
+    r = subprocess.run([BIN_INGERIR, "--lote", str(alvo)],
+                       env=env, capture_output=True, text=True, check=False)
+    assert r.returncode == 0, r.stderr
+    assert [i["arquivo"] for i in _Acervo.pedidos[0]["itens"]] == ["artigo.pdf"]
+
+def test_caminho_que_nao_existe_recusa_sem_chamar_o_servidor(tmp_path, servidor):
+    env = _ambiente(tmp_path, servidor)
+    r = subprocess.run([BIN_INGERIR, "--lote", str(tmp_path / "nao-existe.pdf")],
+                       env=env, capture_output=True, text=True, check=False)
+    assert r.returncode == 1
+    assert "não encontrado" in r.stderr
+    assert not _Acervo.pedidos
+
 def test_sem_ate_nao_encadeia(tmp_path, servidor):
     env = _ambiente(tmp_path, servidor)
     r = subprocess.run([BIN_INGERIR, "--lote", str(_pasta(tmp_path)), "--apply"],
