@@ -93,7 +93,8 @@ uso:
   release ler        <repo> <caminho> [--offset <bytes>]
                                               arquivo maior que 45000 bytes vem em paginas; a ultima linha diz
                                               `truncado em N de M bytes; continue com --offset N`
-  release procurar   <repo> --termo <termo> [<prefixo>] [--json]
+  release procurar   <repo> <termo> [<prefixo>] [--json]   (a forma --termo <termo> segue valendo;
+                                              --caminho <prefixo> e apelido do prefixo)
   release conferir   <classe> [<alvo>] [--ref <rev>] [--json]
   release promover   <repo> [<rev>] [--ensaio] [--aceitar-suite-indisponivel]
   release reverter   <repo> [<rev>] [--ensaio]
@@ -705,7 +706,11 @@ cmd_procurar() {
   local repo=""
   local termo=""
   local prefixo=""
+  local posicionais=()
 
+  # Mesma forma do irmao `repo procurar` (#2856 linha 82, #3885): `<repo> <termo> [<prefixo>]`,
+  # com `--termo <termo>` ainda valendo. A forma posicional era a que as cadeiras tentavam todo
+  # dia e o release recusava com 2. `--caminho` e apelido do prefixo, a outra forma tentada.
   while [ $# -gt 0 ]; do
     case "$1" in
       --json) como_json=1; shift ;;
@@ -715,28 +720,43 @@ cmd_procurar() {
         termo="$1"
         shift
         ;;
+      --caminho)
+        shift
+        [ $# -gt 0 ] || { printf 'release: erro: --caminho exige um valor\n' >&2; uso_texto; exit 2; }
+        prefixo="$1"
+        shift
+        ;;
       -*)
         printf 'release: erro: opção desconhecida: %s\n' "$1" >&2
         uso_texto
         exit 2
         ;;
       *)
-        if [ -z "$repo" ]; then
-          repo="$1"
-        elif [ -z "$prefixo" ]; then
-          prefixo="$1"
-        else
-          printf 'release: erro: argumento extra: %s\n' "$1" >&2
-          uso_texto
-          exit 2
-        fi
+        posicionais+=("$1")
         shift
         ;;
     esac
   done
 
+  # Com --termo dado, o posicional depois do repo e o prefixo; sem ele, e o termo, e o
+  # seguinte o prefixo.
+  local p
+  for p in "${posicionais[@]+"${posicionais[@]}"}"; do
+    if [ -z "$repo" ]; then
+      repo="$p"
+    elif [ -z "$termo" ]; then
+      termo="$p"
+    elif [ -z "$prefixo" ]; then
+      prefixo="$p"
+    else
+      printf 'release: erro: argumento extra: %s\n' "$p" >&2
+      uso_texto
+      exit 2
+    fi
+  done
+
   [ -n "$repo" ] || { printf 'release: erro: repo obrigatório para procurar\n' >&2; uso_texto; exit 2; }
-  [ -n "$termo" ] || { printf 'release: erro: --termo <termo> é obrigatório para procurar\n' >&2; uso_texto; exit 2; }
+  [ -n "$termo" ] || { printf 'release: erro: termo obrigatório para procurar: release procurar %s <termo> [<prefixo>]\n' "$repo" >&2; uso_texto; exit 2; }
 
   validar_repo_ou_sair "$repo"
 
