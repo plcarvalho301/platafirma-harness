@@ -28,6 +28,7 @@ sys.path.insert(0, str(_ARVORE / "lib"))
 import raizes  # noqa: E402
 
 REPO = "platafirma-conhecimento"
+ATO = "exportar"   # o nome nas mensagens; `acervo medir` reusa este módulo e o troca
 REG = os.environ.get("PF_MOTOR_REG") or str(_ARVORE / "registro" / "motor-instancias.json")
 CANON_INSTANCIA = "/srv/platafirma/casa/"
 DOCKER_HOST = "unix:///run/user/1001/docker.sock"  # o mesmo do bin/motor
@@ -36,7 +37,7 @@ SPEC = "spec acervo (acervo ler casa spec acervo)"
 
 
 def morre(msg: str, cod: int = 3) -> None:
-    print(f"acervo exportar: {msg}", file=sys.stderr)
+    print(f"acervo {ATO}: {msg}", file=sys.stderr)
     sys.exit(cod)
 
 
@@ -89,7 +90,7 @@ def bancada_do_repo(chave: str = "") -> Path:
                   f"({', '.join(p.name for p in achadas)}); diga qual com --bancada <chave>.", 2)
     clone = raiz / REPO
     if (clone / ".git").exists():
-        print(f"acervo exportar: aviso: sem bancada da sessao; usando o clone {clone}",
+        print(f"acervo {ATO}: aviso: sem bancada da sessao; usando o clone {clone}",
               file=sys.stderr)
         return clone
     morre(f"nao ha bancada de {REPO} — `repo abrir {REPO}` abre uma")
