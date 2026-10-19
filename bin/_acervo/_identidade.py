@@ -28,7 +28,15 @@ from _suporte import SUPORTE  # noqa: E402  (suporte da particao casa, arq:0115 
 # porque a 060 tira adr de entidade_classe (§6.2).
 FORMA_ADR = r"^(?:([a-z]+):)?(\d{1,4})$"
 # Especies de documento de casa que ainda tem classe em entidade_classe ate a 060.
-DOC_CASA = ("adr", "spec", "parecer")
+DOC_CASA = ("adr", "decisao", "spec", "parecer")
+# A ficha da ADR mora na classe `decisao` do catalogo (triagem da #3764; migracao 114 da #3761); `adr` segue
+# valendo como nome de entrada (a especie do documento e o que o humano digita) e se le na classe nova.
+CLASSE_DA_RAIZ = {"adr": "decisao"}
+CLASSES_ADR = ("adr", "decisao")
+
+def da_raiz(classe):
+    """A classe como o catalogo da raiz a chama."""
+    return CLASSE_DA_RAIZ.get(classe, classe)
 
 
 def morre(msg, code=2):
@@ -97,13 +105,13 @@ def validar_forma(classe, seletor):
     §6.2). Classe de documento de casa que ja saiu de entidade_classe recusa (exit 2)
     apontando `acervo ler casa`, em vez de morrer com "classe nao existe".
     """
-    if classe == "adr" and not re.match(FORMA_ADR, seletor.strip()):
+    if classe in CLASSES_ADR and not re.match(FORMA_ADR, seletor.strip()):
         morre("acervo: seletor '%s' invalido para classe 'adr'. Forma esperada: %s"
               % (seletor.strip(), FORMA_ADR), 2)
     classes_info = psql_json(
         "select coalesce(json_agg(row_to_json(t)), '[]') from ("
         "  select slug, forma_chave from acervo.entidade_classe where slug = %s"
-        ") t;" % _lit(classe), "classe"
+        ") t;" % _lit(da_raiz(classe)), "classe"
     )
     if not classes_info and classe in DOC_CASA:
         morre("acervo identidade: '%s' e especie de documento de casa, que se le pela chave em "
@@ -117,7 +125,7 @@ def validar_forma(classe, seletor):
         morre("acervo: classe '%s' nao existe em acervo.entidade_classe.\n"
               "  classes vivas: %s" % (classe, ", ".join(vivas)), 2)
 
-    forma = FORMA_ADR if classe == "adr" else classes_info[0].get("forma_chave")
+    forma = FORMA_ADR if classe in CLASSES_ADR else classes_info[0].get("forma_chave")
     s = seletor.strip()
     if classe == "minuta" and re.match(r"^\d+$", s):
         s = f"arq:{s.zfill(4)}"
@@ -126,7 +134,7 @@ def validar_forma(classe, seletor):
         if not m:
             morre("acervo: seletor '%s' invalido para classe '%s'. Forma esperada: %s"
                   % (s, classe, forma), 2)
-        if classe in ("adr", "minuta"):
+        if classe in CLASSES_ADR + ("minuta",):
             serie = m.group(1) if m.lastindex and m.lastindex >= 1 else None
             num = m.group(2) if m.lastindex and m.lastindex >= 2 else m.group(1)
             num_pad = num.zfill(4)
@@ -143,6 +151,7 @@ def resolver_canon(classe, canon, numero_sem_serie=None):
     Busca exata em chave_humana; se zero, busca em entidade_alias.
     Retorna lista de candidatos [{'id': ..., 'chave_humana': ..., 'via': ...}].
     """
+    classe = da_raiz(classe)
     if numero_sem_serie:
         sql = """
         select coalesce(json_agg(row_to_json(t)), '[]') from (
@@ -339,7 +348,7 @@ def gerar_negativa(classe, seletor, casa=False):
           where sim > 0.2
           order by candidato, sim desc
         ) t;
-        """.format(alvo=_lit(seletor), classe=_lit(classe)), "parecidos"
+        """.format(alvo=_lit(seletor), classe=_lit(da_raiz(classe))), "parecidos"
     )
     parecidos_rows.sort(key=lambda r: r.get("sim", 0), reverse=True)
     top5 = parecidos_rows[:5]
@@ -358,7 +367,7 @@ def gerar_negativa(classe, seletor, casa=False):
 
     # 3. vizinho: a ficha de documento de casa (adr, spec, parecer) se le pela chave em
     # acervo.casa; as demais classes, pelo texto do suporte.
-    if classe in ("adr", "spec", "parecer"):
+    if classe in ("adr", "decisao", "spec", "parecer"):
         vizinho = f"acervo listar casa {classe}"
     else:
         vizinho = f"repo procurar {SUPORTE} --termo {seletor}"
