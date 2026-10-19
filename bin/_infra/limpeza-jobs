@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# limpeza-jobs — tira da lista de units os jobs avulsos (platafirma-job-*) que falharam há mais
+# de N dias. Sub-ato de `infra` (arq:0110 §14): fora do PATH, mora em bin/_infra/, chamado por
+# `infra limpeza jobs [--ver] [--dias N]`, nunca direto. Balde #2856 linha 17.
+#
+# Por que existe: `sessao longjob run` dispara o job como unit transitória SEM --collect, de
+# propósito — `sessao longjob status <unit>` lê o Result e o ExecMainStatus da unit falhada. O
+# preço é que unit falhada nunca sai: 15 delas se acumularam em `infra estado` entre 12 e 19/10
+# e a lista virou ruído que esconde a falha nova (fadiga de alerta). A janela de N dias guarda
+# o status para quem ainda vai lê-lo; depois disso, o registro de cada job segue no journal
+# (`infra logs <unit>`) e no arquivo de log do job (var/log/jobs), e só a linha da lista sai.
+#
+# A idade vem do carimbo que o longjob põe no nome (platafirma-job-<nome>-AAAAMMDDTHHMMSS):
+# determinístico e igual ao que se lê na lista. Unit sem carimbo não é do longjob e fica.
+# reset-failed não apaga arquivo nenhum: é o ato mais reversível que existe sobre unit.
+set -uo pipefail
+# ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · INFRA_JOBS_RETENCAO_DIAS[=7]
+
+. "$(dirname "$(readlink -f "$0")")/../../lib/raizes.sh"
+
+DIAS="${INFRA_JOBS_RETENCAO_DIAS:-7}"
+VER=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --ver) VER=1 ;;
+    --dias) shift; DIAS="${1:-}" ;;
+    *) echo "uso: infra limpeza jobs [--ver] [--dias <N>]" >&2; exit 2 ;;
+  esac
+  shift
+done
+case "$DIAS" in ''|*[!0-9]*) echo "infra limpeza jobs: --dias pede dias inteiros (recebi '$DIAS')" >&2; exit 2 ;; esac
+
+MARCA="$PLATAFIRMA_INSTANCIA/var/log/poda.log"
+ts() { date -Is; }
+
+lista=$(systemctl --user list-units 'platafirma-job-*' --state=failed --no-legend --plain --no-pager 2>/dev/null) \
+  || { echo "infra limpeza jobs: systemctl --user não respondeu — nada limpo" >&2; exit 5; }
+
+agora=$(date +%s)
+sairam=0; ficam=0; sem_carimbo=0; falhas=0
+while read -r u _; do
+  [ -n "${u:-}" ] || continue
+  if [[ "$u" =~ -([0-9]{8})T([0-9]{6})\.service$ ]]; then
+    d="${BASH_REMATCH[1]}"; t="${BASH_REMATCH[2]}"
+    quando=$(date -d "${d:0:4}-${d:4:2}-${d:6:2} ${t:0:2}:${t:2:2}:${t:4:2}" +%s 2>/dev/null) || quando=""
+  else
+    quando=""
+  fi
+  if [ -z "$quando" ]; then
+    sem_carimbo=$((sem_carimbo + 1))
+    echo "fica: $u (sem carimbo do longjob no nome)"
+    continue
+  fi
+  idade=$(( (agora - quando) / 86400 ))
+  if [ "$idade" -lt "$DIAS" ]; then
+    ficam=$((ficam + 1))
+    echo "fica: $u (${idade} dia(s), janela de ${DIAS})"
+    continue
+  fi
+  if [ "$VER" = 1 ]; then
+    sairam=$((sairam + 1))
+    echo "sairia: $u (${idade} dia(s))"
+  elif systemctl --user reset-failed -- "$u" 2>/dev/null; then
+    sairam=$((sairam + 1))
+    echo "saiu: $u (${idade} dia(s))"
+  else
+    falhas=$((falhas + 1))
+    echo "infra limpeza jobs: reset-failed recusado em $u" >&2
+  fi
+done <<< "$lista"
+
+verbo="saíram"; [ "$VER" = 1 ] && verbo="sairiam"
+resumo="limpeza-jobs: $sairam $verbo, $ficam ficam na janela de ${DIAS} dia(s), $sem_carimbo sem carimbo; o registro de cada job segue no journal (infra logs <unit>) e em var/log/jobs"
+echo "$resumo"
+if [ "$VER" = 0 ]; then
+  mkdir -p "$(dirname "$MARCA")" 2>/dev/null && echo "$(ts) $resumo" >> "$MARCA" 2>/dev/null || true
+fi
+[ "$falhas" -eq 0 ] || exit 1
+exit 0

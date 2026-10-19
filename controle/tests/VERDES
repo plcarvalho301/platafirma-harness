@@ -135,6 +135,10 @@ tests/test_contrato_infra_backup_piso.py | bin/infra bin/_infra/** bin/_release/
 # Card #3473: `infra ingress` copia o ingress versionado do core para a copia da instancia que o cloudflared le,
 # mostra a diferenca antes (--ver), reinicia o contêiner e volta a anterior se ele nao subir (docker de mentira).
 tests/test_contrato_infra_ingress.py | bin/infra bin/_infra/** lib/raizes.sh
+# Medido em 19/10/2026 (balde #2856 linha 17): `infra remover` tira contêiner avulso (inspeção guardada antes), unit
+# transitória parada e unit da conta não declarada (arquivo para a quarentena), recusando o declarado; `infra limpeza
+# jobs` tira da lista o job do longjob falhado há mais de N dias (17 passam; com o bin/infra anterior, 15 ficam vermelhos — os 2 de uso saem 2 nos dois).
+tests/test_contrato_infra_remover.py | bin/infra bin/_infra/** lib/raizes.sh
 # Medido em 04/10/2026 (incidente #3267): bloco Procedencia da tela contra o veredito comum (6 passam; com o
 # predicado velho, que le `resultado`/`servicos`, 4 ficam vermelhos: 10 divergentes saem «0 sem divergencia»).
 tests/test_render_procedencia.py | regressivo #3267
