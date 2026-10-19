@@ -85,6 +85,11 @@
     "lock": "deploy/marcacao/requirements-teste.txt",
     "teste": "deploy/marcacao"
   },
+  "busca": {
+    "familia": "platafirma-motor",
+    "lock": "rag/uv.lock",
+    "teste": "rag"
+  },
   "rastreador": {
     "familia": "platafirma-rastreador",
     "lock": "api/requirements-teste.txt",
