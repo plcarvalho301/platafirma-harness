@@ -638,6 +638,31 @@ def _tarefas(*args: str) -> str:
 
 # ------------------------------------------------------------------ verificacao
 
+# arq:0096, emenda de 15/10/2026: o titulo e o rotulo onde se clica, ate 60 caracteres, em todo
+# nivel. Aviso, nunca bloqueante (#3887).
+LIMITE_TITULO = 60
+CURA_TITULO = "o título é o rótulo onde se clica; a lista do que entra vai ao corpo"
+
+def ler_titulo(texto: str) -> str | None:
+    """O titulo da saida de `tarefas ler`: a linha `# <titulo>` no topo. None sem ela: o lint
+    nao adivinha titulo de arquivo ou stdin que nao a traz."""
+    for linha in texto.splitlines()[:3]:
+        if linha.startswith("# "):
+            return linha[2:].strip() or None
+    return None
+
+def _conferir_titulo(nome_alvo: str, conteudo: str) -> list[Apontamento]:
+    titulo = ler_titulo(conteudo)
+    if titulo is None or len(titulo) <= LIMITE_TITULO:
+        return []
+    return [Apontamento(
+        nome_alvo, 1,
+        f"título com {len(titulo)} caracteres, acima do teto de {LIMITE_TITULO} (arq:0096)",
+        CURA_TITULO,
+        severidade="aviso",
+        id="CARD_TITULO",
+    )]
+
 def _conferir_adr(nome_alvo: str, conteudo: str, nivel: str) -> list[Apontamento]:
     campos_esperados = CAMPOS_TASK if nivel == "task" else CAMPOS_STORY
     apontamentos: list[Apontamento] = []
@@ -723,8 +748,9 @@ def verificar_card_regua(
         conteudo, nome_alvo = carregado
 
     nivel = detectar_nivel(conteudo)
+    titulo = _conferir_titulo(nome_alvo, conteudo)
     if nivel in ("story", "task"):
-        return _conferir_adr(nome_alvo, conteudo, nivel), CHAVE_ADR, REV_ADR, []
+        return titulo + _conferir_adr(nome_alvo, conteudo, nivel), CHAVE_ADR, REV_ADR, []
 
     if lista is None:
         from .lista import resolver_lista
@@ -738,7 +764,7 @@ def verificar_card_regua(
     estado = ler_cabecalho(conteudo).get("estado", "")
     apontamentos, avisos = conferir_discovery(
         nome_alvo, conteudo, ler_comentarios(comentarios or ""), lista, estado, fecha_existe=fecha_existe)
-    return apontamentos, CHAVE_DISCOVERY, lista.get("rev"), avisos
+    return titulo + apontamentos, CHAVE_DISCOVERY, lista.get("rev"), avisos
 
 
 def verificar_card(

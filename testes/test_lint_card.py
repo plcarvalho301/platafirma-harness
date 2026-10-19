@@ -154,6 +154,41 @@ def test_feature_cita_a_lista_e_a_rev():
     assert chave == CHAVE_DISCOVERY and rev == 2
 
 
+# ------------------------------------------------------------------ titulo (#3887)
+
+def _story_com_titulo(titulo):
+    return f"# {titulo}\n#1 · story · captada\nNegócio: #2\n"
+
+
+def test_titulo_acima_de_60_avisa_em_story():
+    aps, *_ = verificar_card_regua("#1", texto=_story_com_titulo("x" * 61), lista=LISTA,
+                                   fecha_existe=False)
+    titulo = [a for a in aps if a.id == "CARD_TITULO"]
+    assert len(titulo) == 1
+    assert "61 caracteres" in titulo[0].o_que_fere
+    assert "rótulo onde se clica" in titulo[0].cura
+    assert titulo[0].severidade == "aviso"
+
+
+def test_titulo_no_teto_nao_avisa():
+    aps, *_ = verificar_card_regua("#1", texto=_story_com_titulo("é" * 60), lista=LISTA,
+                                   fecha_existe=False)
+    assert "CARD_TITULO" not in _ids(aps)
+
+
+def test_sem_linha_de_titulo_nao_avisa():
+    aps, *_ = verificar_card_regua("#1", texto="#1 · story · captada\nNegócio: #2\n",
+                                   lista=LISTA, fecha_existe=False)
+    assert "CARD_TITULO" not in _ids(aps)
+
+
+def test_titulo_acima_de_60_avisa_em_feature():
+    aps, chave, *_ = verificar_card_regua("#3408", texto=CARD_3408, comentarios="",
+                                          lista=LISTA, fecha_existe=True)
+    assert chave == CHAVE_DISCOVERY
+    assert "CARD_TITULO" in _ids(aps)
+
+
 # ------------------------------------------------------------------ prova minima
 
 def test_3408_nao_e_apontado_por_continuidade():

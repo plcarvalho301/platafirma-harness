@@ -15,7 +15,7 @@ não vem. Os três cabem na primeira tela.
 ## Esqueleto
 
 ```
-<Título, até doze palavras: épico, o que passa a ser verdade e para quem; feature, a coisa que vai existir>
+<Título, até 60 caracteres, o rótulo onde se clica: épico, o que passa a ser verdade e para quem; feature, a coisa que vai existir>
 
 Problema:      como é hoje, como quem sofre veria, com um caso; até quatro frases, sem número
 Solução:       a solução contada como uso: «Ao <momento>: quem faz o quê, e o que vê»
