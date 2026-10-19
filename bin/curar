@@ -314,7 +314,7 @@ def formatar_situacao(payload: dict) -> str:
         f"  Objeto          : {obj}",
     ]
     if payload.get("servida_inteira"):
-        linhas.append(f"  arquivo: acervo ler biblioteca objeto {oid}")
+        linhas.append(f"  arquivo: acervo ler biblioteca arquivo {oid}")
     if payload.get("impressao_id") and degrau == "ancorado":
         linhas.append(f"  trecho : acervo ler biblioteca impressao {oid}")
     return "\n".join(linhas)
