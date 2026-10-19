@@ -240,6 +240,8 @@ def test_release_aplicar_sucesso_chama_docker_exec_com_sujeito(path_ok):
               env_extra={"PF_SUJEITO": "G48UFN"}, stdin_data="select 1;\n", checa_exit=0)
     assert "migracao aplicada em rag" in r.stderr
     assert "sujeito=G48UFN" in r.stderr
+    # #3761: `local` fora de funcao imprimia este aviso do bash em toda aplicacao
+    assert "can only be used in a function" not in r.stderr
 
 
 def test_release_aplicar_psql_abortou_exit_1(path_psql_falha):
