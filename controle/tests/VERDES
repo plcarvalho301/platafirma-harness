@@ -55,6 +55,7 @@ tests/test_release_ensaio_fetch.py | bin/release bin/_release/**
 tests/test_release_fila_e_cofre.py | bin/release bin/_release/**
 tests/test_pre_push_chave.py | bin/teste hooks/pre-push lib/venv.sh bin/_release/registro.py
 tests/test_release_gate_suite_verdes.py | bin/release bin/teste bin/_release/**
+tests/test_release_procurar_forma.py | bin/release
 tests/test_contrato_teste.py | bin/teste bin/_release/registro.py
 tests/test_contrato_lint.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/lint bin/_lint/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/situacao bin/tarefas bin/teste
 tests/test_casa_arvore.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/curar bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste bin/_expediente/** bin/_minuta/**
