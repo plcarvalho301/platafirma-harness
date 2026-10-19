@@ -121,6 +121,9 @@ tests/test_acervo_psql_c.py | bin/acervo bin/_acervo/**
 # Débito 330 do balde #2856: `acervo medir` roda o instrumento da medida (python -m medida) na bancada de
 # platafirma-conhecimento e diz a primeira linha do relatório; o exportar, de quem ele reusa o módulo, segue com o nome dele.
 tests/test_acervo_medir.py | bin/acervo bin/_acervo/**
+# Débito 340 do balde #2856 (card #3761): `acervo gerar` roda o gerador de ontologia na bancada de platafirma-conhecimento e passa
+# o catalogo.sql ao banco numa transação só (plano seco por padrão); desde a migração 111 só o gerador escreve a linha de entidade.
+tests/test_acervo_gerar.py | bin/acervo bin/_acervo/**
 tests/test_fila_msgid.py | bin/_fila/**
 tests/test_fila_ack.py | bin/fila bin/_fila/** bin/minuta bin/_minuta/** bin/persona bin/_persona/**
 tests/test_fila_contestacao.py | bin/fila bin/_fila/**
