@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+"""acervo medir — roda o instrumento da medida da raiz na bancada de `platafirma-conhecimento`.
+
+O instrumento (card #3759, spec entidade-raiz-da-casa, C3) gera o modelo formal das shapes, põe o
+raciocinador à prova, lê as fichas do core no banco do acervo, valida-as contra as shapes e grava o
+relatório em `ontologia/medida/relatorio/<data>T<hora>Z.md`. Até este ato nenhum verbo rodava
+script de repositório, e a rodada passava por `teste rodar` com um arquivo de teste fora da lista do
+portão (`rag/tests/medida_rodada.py`, débito 330 do balde #2856); esse arquivo saiu do repositório.
+
+Onde roda: o CÓDIGO é o da bancada de `platafirma-conhecimento` da sessão que chamou (a mesma
+escolha de `acervo exportar`, e o mesmo `--bancada <card-slug>` quando há mais de uma aberta). O
+PYTHON é o venv do rag da release (venv de bancada nunca é runtime); o banco o instrumento lê por
+`docker exec`, como sempre leu. O ato só grava o relatório na bancada, que se lê e se desfaz no git.
+
+Saída: a do instrumento. 0 o relatório foi gravado e o instrumento se comportou como devia; 1 a
+geração reprova, a contagem das fichas não bate ou uma prova do raciocinador deu fora do esperado
+(o relatório é gravado); 5 não olhou: o banco não respondeu, o raciocinador não rodou ou o MIREOT
+que o motor serve não está na máquina. A última linha diz a primeira linha do relatório gravado.
+"""
+import importlib.machinery
+import importlib.util
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+# a spec do verbo mora no suporte da casa e se lê pela chave (arq:0115; mesmo SPEC de bin/acervo)
+SPEC = "spec acervo (acervo ler casa spec acervo)"
+TETO_S = 3000
+ARGS_BANCADA = 2   # `--bancada <card-slug>`
+GRAVADO = re.compile(r"^medida: relatório gravado em (.+)$", re.MULTILINE)
+
+
+def _exportar():
+    """O `acervo exportar` é o dono da escolha da bancada, do python do rag e do DOCKER_HOST: este ato
+    os reusa em vez de copiá-los, e só troca o nome nas mensagens de erro dele."""
+    caminho = Path(__file__).resolve().with_name("exportar")
+    loader = importlib.machinery.SourceFileLoader("acervo_exportar_do_medir", str(caminho))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    mod.ATO = "medir"
+    return mod
+
+
+def relatorio_gravado(saida: str) -> Path | None:
+    """O arquivo que a saída do instrumento diz ter gravado. Saída 1 ou 5 antes do relatório não o grava: é o
+    caso normal de \"nenhum\", e não um erro."""
+    achado = GRAVADO.search(saida)
+    return Path(achado.group(1).strip()) if achado else None
+
+
+def main(argv: list) -> int:
+    chave = ""
+    if len(argv) == ARGS_BANCADA and argv[0] == "--bancada" and argv[1]:
+        chave = argv[1]
+    elif argv:
+        print(f"uso: acervo medir [--bancada <card-slug>]\n  {SPEC}", file=sys.stderr)
+        return 2
+    ex = _exportar()
+    wt = ex.bancada_do_repo(chave)
+    py = ex.python_do_rag()
+    ontologia = wt / "ontologia"
+    if not (ontologia / "medida" / "__main__.py").is_file():
+        ex.morre(f"{ontologia / 'medida' / '__main__.py'} não existe nesta bancada: o instrumento da "
+                 "medida (#3759) ainda não chegou a ela", 3)
+    env = {**os.environ, "DOCKER_HOST": os.environ.get("DOCKER_HOST", ex.DOCKER_HOST)}
+    try:
+        r = subprocess.run([py, "-m", "medida"], cwd=ontologia, env=env, capture_output=True, text=True,
+                           timeout=TETO_S, check=False)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        ex.morre(f"o instrumento não rodou: {type(e).__name__}: {e}", 5)
+    if r.stdout.strip():
+        print(r.stdout.rstrip())
+    if r.stderr.strip():
+        print(r.stderr.rstrip(), file=sys.stderr)
+    print(f"bancada: {wt}")
+    relatorio = relatorio_gravado(r.stdout)
+    if relatorio is not None:
+        try:
+            primeira = relatorio.read_text(encoding="utf-8").splitlines()[0]
+        except (OSError, IndexError) as e:
+            ex.morre(f"o instrumento disse ter gravado {relatorio}, e o arquivo não se lê: {type(e).__name__}", 5)
+        print(f"relatório: {primeira}")
+    return r.returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
