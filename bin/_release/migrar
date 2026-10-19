@@ -88,7 +88,7 @@ case "$ato" in
     if [ -t 0 ]; then
       morre "erro: falta o SQL da migracao por STDIN — passe o corpo via stdin" 2
     fi
-    local sql; sql="$(cat)"
+    sql="$(cat)"    # sem `local`: este case roda no corpo do script, nao numa funcao
     if [ -z "${sql//[[:space:]]/}" ]; then
       morre "erro: falta o SQL da migracao por STDIN — passe o corpo via stdin" 2
     fi
