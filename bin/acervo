@@ -135,8 +135,9 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo ler      biblioteca impressao <obra> [--paginas a-b | --capitulo <ancora>] [--formato md|blocos]
                   [--papel corpo|todos] [--cursor c] [--impressao <id>] [--baixar [<pasta>]]
                   o texto da obra pelo espelho de leitura, do comeco e em ordem
-  acervo ler      biblioteca objeto <uuid|prefixo|titulo> [--destino <pasta>]
+  acervo ler      biblioteca arquivo <uuid|prefixo|titulo> [--destino <pasta>]
                   o arquivo original da obra; --destino so na bancada ou var/tmp/<ordem_id> (exit 4 fora); diz caminho e sha256
+                  (antes `biblioteca objeto`: o nome velho recusa com exit 2 e nomeia este; arq:0108 §10)
   acervo ler      biblioteca ficha <obra> [--json]
                   a ficha do arquivo da obra: o que o objeto e, lido nos bytes (formato com PRONOM, tamanho, sha256,
                   encoding, lingua, camada de texto, inibidor); <obra> = uuid, prefixo de uuid (6+ hex) ou titulo
@@ -307,7 +308,12 @@ conforme() {
     listar:biblioteca:derivacao)  exec "$ATOS/curar" obra --derivacoes "$@" ;;
     # o arquivo original da obra, por uuid (inteiro ou prefixo) ou titulo, em --destino (#2856 l.153/96):
     # precisa de boto3, que so o venv acervo da release tem
-    ler:biblioteca:objeto)        exec "${PLATAFIRMA_RELEASE:-/opt/platafirma/current}/venv/acervo/bin/python" "$ATOS/objeto" "$@" ;;
+    ler:biblioteca:arquivo)       exec "${PLATAFIRMA_RELEASE:-/opt/platafirma/current}/venv/acervo/bin/python" "$ATOS/objeto" "$@" ;;
+    # o arquivo da obra nunca se chama «objeto» (arq:0108 §10, ordem do dono em 18/10/2026, #3761): o nome
+    # velho recusa com exit 2 e nomeia o novo
+    ler:biblioteca:objeto)
+        echo "acervo ler biblioteca objeto: o arquivo da obra nunca se chama «objeto» (arq:0108 §10). O ato é: acervo ler biblioteca arquivo <uuid|prefixo|titulo> [--destino <pasta>]" >&2
+        exit 2 ;;
     # o texto da obra pelo espelho de leitura, por pagina ou capitulo (spec espelho-de-leitura
     # §5.4; #3180): cliente fino do serviço do acervo, nunca converte nem renderiza
     ler:biblioteca:impressao)     exec python3 "$ATOS/impressao" "$@" ;;
@@ -612,7 +618,7 @@ case "$ATO" in
       biblioteca|obra|casa|registro) ;;
     esac
     exec "$ATOS/escada" "$@" ;;
-  baixar)          avisa "acervo baixar \"<titulo>\"" "acervo ler biblioteca objeto \"<titulo>\""
+  baixar)          avisa "acervo baixar \"<titulo>\"" "acervo ler biblioteca arquivo \"<titulo>\""
                    exec "${PLATAFIRMA_RELEASE:-/opt/platafirma/current}/venv/acervo/bin/python" "$ATOS/objeto" "$@" ;;
   bancada)
     avisa "acervo bancada" "acervo empacotar biblioteca obra [dest]" "arq:0119 §2"
