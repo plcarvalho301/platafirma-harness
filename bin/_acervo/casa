@@ -57,9 +57,10 @@ RE_SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 RE_DATADO = re.compile(r"^\d{4}-\d{2}-\d{2}-")
 FORMA_ADR = "<serie>:NNNN ou NNNN (ex.: arq:0075, arq:75, 75)"
 # Classes que podem ser referente de Sobre: (arq:0115 §6.2; contrato de dados D7): o fichário
-# da 059 (verbo, capacidade, stack, instancia, repositorio), as cadeiras já fichadas e risco.
+# da 059 (verbo, capacidade, stack, servico, repositorio), as cadeiras já fichadas e risco. A classe instancia
+# saiu do catálogo (arq:0108 §13, #3761, migração 113): keycloak, matrix e rastreador são servico.
 # conceito, adr, spec e parecer não são referente de Sobre:.
-CLASSES_SOBRE = ("verbo", "capacidade", "stack", "instancia", "repositorio", "cadeira", "risco")
+CLASSES_SOBRE = ("verbo", "capacidade", "stack", "servico", "repositorio", "cadeira", "risco")
 
 
 def morre(msg, code=2):

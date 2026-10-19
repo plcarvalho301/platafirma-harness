@@ -565,8 +565,9 @@ def test_sobre_so_aceita_classe_de_referente(monkeypatch, capsys):
             casa._entidade(classe, "acervo")
         assert e.value.code == 2
         assert "nao e referente de Sobre:" in capsys.readouterr().err
-    assert set(casa.CLASSES_SOBRE) == {"verbo", "capacidade", "stack", "instancia",
+    assert set(casa.CLASSES_SOBRE) == {"verbo", "capacidade", "stack", "servico",
                                        "repositorio", "cadeira", "risco"}
+    assert "instancia" not in casa.CLASSES_SOBRE    # saiu do catálogo (arq:0108 §13, #3761, migração 113)
 
 
 def test_sobre_sem_classe_procura_so_fichas_ativas_das_classes_de_referente(monkeypatch):
