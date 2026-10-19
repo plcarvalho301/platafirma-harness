@@ -255,6 +255,26 @@ def test_listar_leva_raio_esperado_e_onde_e_o_curto_leva_so_o_texto(balde):
     assert curta == "x" * 199 + "…"
 
 
+def test_listar_nao_repete_o_que_o_texto_ja_traz(balde):
+    s, base = balde
+    texto = "a tela cai · Raio: platafirma-harness@bin/tarefas · Esperado: sai 0 · Onde: leitura de 18/10"
+    s.linhas = [_linha(8, texto=texto, raio=["platafirma-harness@bin/tarefas"], esperado="sai 0",
+                       onde="leitura de 18/10")]
+    p = _run(["dt", "listar"], base)
+    assert p.returncode == 0, p.stderr
+    (so,) = _linhas_da_tabela(p.stdout)
+    assert so[3] == texto, so[3]
+    assert p.stdout.count("Raio:") == 1 and p.stdout.count("Esperado:") == 1
+
+
+def test_listar_acrescenta_so_o_campo_que_o_texto_nao_traz(balde):
+    s, base = balde
+    s.linhas = [_linha(9, texto="defeito · Raio: a@b · Esperado: sai 0",
+                       raio=["a@b", "c@d"], esperado="sai 0", onde="repro")]
+    (so,) = _linhas_da_tabela(_run(["dt", "listar"], base).stdout)
+    assert so[3] == "defeito · Raio: a@b · Esperado: sai 0 · Raio: c@d · Onde: repro", so[3]
+
+
 def test_listar_desde_corta_pelo_numero(balde):
     s, base = balde
     s.linhas = [_linha(99), _linha(100), _linha(281)]

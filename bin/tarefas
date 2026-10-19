@@ -1315,7 +1315,9 @@ _dt_stacks() {
 }
 
 # A tabela das linhas: número, idade em dias pela data da medição, stack e o texto. A API devolve
-# as abertas da mais antiga para a mais nova (R27) e a tabela guarda essa ordem. `curto` tira
+# as abertas da mais antiga para a mais nova (R27) e a tabela guarda essa ordem. Raio, esperado e
+# onde só se acrescentam quando o texto da linha ainda não os traz: as linhas de antes da F6 têm os
+# três no texto, e repeti-los dobrava a linha (#2856 linha 316). `curto` tira
 # raio, esperado e onde, que são o que faz a lista inteira passar dos 50 KB que a porta serve
 # (#2856 linha 143); a saída leva o jeito e a âncora. Sem linha, não imprime nada.
 _dt_tabela() { # _dt_tabela <situacao> <stack|""> <desde> <curto 0|1> <idade-minima>
@@ -1326,12 +1328,13 @@ _dt_tabela() { # _dt_tabela <situacao> <stack|""> <desde> <curto 0|1> <idade-min
     def uma: gsub("[\\t\\r\\n]+"; " ");
     def parte($rotulo; $v): if $v == null or $v == "" then "" else " · " + $rotulo + ": " + ($v | uma) end;
     .linhas[] | select(.numero >= $desde and .idade_dias > $minima)
+    | (.texto | uma) as $t
     | "\(.numero)\t\(.idade_dias)d\t\(.stack)\t"
-      + (if $curto == 1 then (.texto | uma | if length <= 200 then . else .[0:199] + "…" end)
-         else (.texto | uma)
-              + parte("Raio"; (.raio // [] | join(", ")))
-              + parte("Esperado"; .esperado)
-              + parte("Onde"; .onde)
+      + (if $curto == 1 then ($t | if length <= 200 then . else .[0:199] + "…" end)
+         else $t
+              + parte("Raio"; (.raio // [] | map(uma) | map(select(. as $r | ($t | contains($r)) | not)) | join(", ")))
+              + parte("Esperado"; (.esperado as $e | if $e == null or $e == "" or ($t | contains($e | uma)) then null else $e end))
+              + parte("Onde"; (.onde as $o | if $o == null or $o == "" or ($t | contains($o | uma)) then null else $o end))
               + (if .saida_jeito then " · saiu " + .saida_jeito + ": " + (.saida_ancora | uma) else "" end)
          end)') || return 1
   [ -n "$rows" ] && printf 'n\tidade\tstack\tdébito\n%s\n' "$rows"
