@@ -11,6 +11,7 @@
   },
   "endpoint": "http://127.0.0.1:8100/search",
   "token_em": "/srv/platafirma/casa/segredos/rag/RAG_API_TOKEN",
+  "escrita_token_em": "/srv/platafirma/casa/segredos/rag/RAG_API_ESCRITA_TOKEN",
   "facets": "http://127.0.0.1:8100/facets",
   "indexacao": "http://127.0.0.1:8100/motor/indexacoes/lote",
   "troca": "http://127.0.0.1:8100/motor/trocas",

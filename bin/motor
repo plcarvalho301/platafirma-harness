@@ -738,7 +738,7 @@ def _ajuste_escrever(nome, inst, b, texto, fundamento_flag, como_json, instancia
             if not ctx["ger"]:
                 raise chamada_rag.Falha(3, f"nao consegui ler a geracao servindo ({ctx['ger_erro']}); "
                                            f"{b['slug']} mora nela")
-            res = ajustemod.mudar_geracao(inst, ctx["tok"], b["geracao"], novo, linha["sujeito"], fund)
+            res = ajustemod.mudar_geracao(inst, token_de_escrita(inst), b["geracao"], novo, linha["sujeito"], fund)
             antes, depois = res["anterior"], res["novo"]
             linha.update(antes=antes, depois=depois, geracao=res["geracao"], onde="geracao")
             caminho = ajustemod.grava_historico(instancia, linha)
@@ -805,6 +805,8 @@ def _lote_indexacao(inst, tok, corpo=None, lote="", pula_ocupado=False):
         sys.exit(1)
     if lote:
         url = url.rstrip("/") + "/" + lote
+    if corpo is not None:  # o POST do plano e do lote escreve: credencial de escrita (#3839)
+        tok = token_de_escrita(inst)
     req = urllib.request.Request(
         url, data=json.dumps(corpo).encode() if corpo is not None else None,
         headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
@@ -961,6 +963,8 @@ def _chama_troca(inst, tok, caminho="", corpo=None):
     if not base:
         print("motor trocar: a instancia nao declara `troca` em motor-instancias.json", file=sys.stderr)
         sys.exit(1)
+    if corpo is not None:  # o POST da troca, da virada e do descarte escreve: credencial de escrita (#3839)
+        tok = token_de_escrita(inst)
     req = urllib.request.Request(
         base.rstrip("/") + caminho, data=json.dumps(corpo).encode() if corpo is not None else None,
         headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
@@ -1486,6 +1490,16 @@ def token_da(inst):
         print(f"motor: segredo {nome} ilegivel ({type(e).__name__}) "
               f"— grave com `seg segredo gravar {nome}`", file=sys.stderr)
         sys.exit(1)
+
+
+def token_de_escrita(inst):
+    """RAG_API_ESCRITA_TOKEN: a credencial das rotas `/motor/` que mudam indice, geracao ou ajuste (R25 da
+    spec motor, #3839). Distinta do token de leitura, e so vale no cabecalho Authorization: Bearer.
+    `escrita_token_em` do registro tem a mesma forma de `token_em`. Instancia que nao o declara segue com
+    o token de leitura. Declarado e ausente e falha alta, com a cura, nunca 401 com cara de motor fora."""
+    if not inst.get("escrita_token_em"):
+        return token_da(inst)
+    return token_da({"token_em": inst["escrita_token_em"]})
 
 
 def http(url, tok, corpo=None, timeout=300):
