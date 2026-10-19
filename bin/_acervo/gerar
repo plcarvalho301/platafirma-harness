@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""acervo gerar — roda o gerador de ontologia na bancada de `platafirma-conhecimento` e grava o catálogo.
+
+O gerador (card #3758, spec entidade-raiz-da-casa) lê as shapes e gera, entre outros artefatos, o
+`catalogo.sql`: o SQL que insere ou atualiza em `acervo.entidade_classe` a linha de cada entidade
+(natureza, categoria, dona, capacidade, shape, golden) e depois preenche a classe mãe. Desde a migração
+111 (#3761) a linha de natureza entidade só muda com `pf.gerador = on` na transação, que esse SQL põe; até
+este ato nenhum verbo rodava o gerador no host, e o SQL não chegava ao banco (débito 340 do balde #2856).
+
+Onde roda: o CÓDIGO é o da bancada de `platafirma-conhecimento` da sessão que chamou (a mesma escolha de
+`acervo exportar` e `acervo medir`, e o mesmo `--bancada <card-slug>` quando há mais de uma aberta). O
+PYTHON é o venv do rag da release. O banco recebe o SQL por `docker exec psql`, numa transação só.
+
+Plano seco por padrão: sem `--apply` o SQL roda inteiro e termina em ROLLBACK, então o ensaio acusa o erro
+que a gravação daria (CHECK, chave estrangeira, slug que já é registro ou vocabulário) sem gravar nada. Com
+`--apply` termina em COMMIT. A volta é a migração de rollback que o card escrever; a linha anterior de cada
+entidade está no git (`ontologia/shapes`) e no cabeçalho da migração que a mexeu.
+
+Saída: 0 o gerador gerou e o SQL rodou (gravou, com --apply); 1 a geração reprova ou o SQL deu erro (nada foi
+gravado: a transação some); 2 uso; 3 não há bancada, python do rag ou gerador na bancada; 5 não olhou: o
+banco não respondeu ou o tempo acabou. A última linha diz quantas linhas de entidade o SQL levava.
+"""
+import importlib.machinery
+import importlib.util
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+# a spec do verbo mora no suporte da casa e se lê pela chave (arq:0115; mesmo SPEC de bin/acervo)
+SPEC = "spec acervo (acervo ler casa spec acervo)"
+TETO_S = 600
+PG, DB, USR = "rag-extractor-pg", "rag_extractor", "rag"
+LINHA_DE_ENTIDADE = "INSERT INTO acervo.entidade_classe"
+USO = f"uso: acervo gerar [--bancada <card-slug>] [--apply]\n  {SPEC}"
+
+
+def _exportar():
+    """O `acervo exportar` é o dono da escolha da bancada, do python do rag e do DOCKER_HOST: este ato os
+    reusa em vez de copiá-los, e só troca o nome nas mensagens de erro dele (como o `acervo medir`)."""
+    caminho = Path(__file__).resolve().with_name("exportar")
+    loader = importlib.machinery.SourceFileLoader("acervo_exportar_do_gerar", str(caminho))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    mod.ATO = "gerar"
+    return mod
+
+
+def argumentos(argv: list):
+    """(chave da bancada, apply) ou None se o uso está errado."""
+    chave, apply, i = "", False, 0
+    while i < len(argv):
+        if argv[i] == "--apply":
+            apply = True
+        elif argv[i] == "--bancada" and i + 1 < len(argv) and argv[i + 1]:
+            chave, i = argv[i + 1], i + 1
+        else:
+            return None
+        i += 1
+    return chave, apply
+
+
+def contagem(sql: str) -> int:
+    """Quantas linhas de entidade o SQL grava: uma INSERT por entidade, no molde do gerador."""
+    return sum(1 for l in sql.splitlines() if l.startswith(LINHA_DE_ENTIDADE))
+
+
+def aplica(sql: str, apply: bool, docker_host: str) -> tuple:
+    """Roda o SQL numa transação só; (código, saída). ROLLBACK no plano seco, COMMIT com --apply.
+
+    ON_ERROR_STOP faz o primeiro erro derrubar o psql (saída 3 dele), e o BEGIN aberto some com a conexão."""
+    fecho = "COMMIT;" if apply else "ROLLBACK;"
+    r = subprocess.run(
+        ["docker", "exec", "-i", PG, "psql", "-U", USR, "-d", DB, "-v", "ON_ERROR_STOP=1", "-q", "-t", "-A"],
+        input=f"BEGIN;\n{sql}\n{fecho}\n", capture_output=True, text=True, timeout=TETO_S,
+        env={**os.environ, "DOCKER_HOST": os.environ.get("DOCKER_HOST", docker_host)})
+    saida = (r.stdout + r.stderr).strip()
+    if r.returncode == 0:
+        return 0, saida
+    if any(m in saida for m in ("is not running", "could not connect", "Connection refused", "No such container")):
+        return 5, saida
+    return 1, saida
+
+
+def main(argv: list) -> int:
+    lido = argumentos(argv)
+    if lido is None:
+        print(USO, file=sys.stderr)
+        return 2
+    chave, apply = lido
+    ex = _exportar()
+    wt = ex.bancada_do_repo(chave)
+    py = ex.python_do_rag()
+    ontologia = wt / "ontologia"
+    if not (ontologia / "gerador" / "__main__.py").is_file():
+        ex.morre(f"{ontologia / 'gerador' / '__main__.py'} não existe nesta bancada: o gerador (#3758) ainda "
+                 "não chegou a ela", 3)
+    with tempfile.TemporaryDirectory(prefix="acervo-gerar-") as saida:
+        try:
+            r = subprocess.run([py, "-m", "gerador", "--saida", saida], cwd=ontologia, capture_output=True,
+                               text=True, timeout=TETO_S, check=False)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            ex.morre(f"o gerador não rodou: {type(e).__name__}: {e}", 5)
+        if r.stdout.strip():
+            print(r.stdout.rstrip())
+        if r.stderr.strip():
+            print(r.stderr.rstrip(), file=sys.stderr)
+        if r.returncode != 0:
+            print(f"bancada: {wt}")
+            return r.returncode
+        arquivo = Path(saida) / "catalogo.sql"
+        if not arquivo.is_file():
+            ex.morre(f"o gerador saiu 0 e não gravou {arquivo.name}: a bancada tem um gerador anterior à "
+                     "migração 111 (#3761)", 3)
+        sql = arquivo.read_text(encoding="utf-8")
+    n = contagem(sql)
+    if n == 0:
+        ex.morre("o catalogo.sql não traz linha de entidade: nada a gravar, e não é para sair 0 calado", 1)
+    try:
+        codigo, texto = aplica(sql, apply, ex.DOCKER_HOST)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        ex.morre(f"o SQL não rodou: {type(e).__name__}: {e}", 5)
+    print(f"bancada: {wt}")
+    if texto:
+        print(texto[-3000:], file=sys.stdout if codigo == 0 else sys.stderr)
+    if codigo != 0:
+        print(f"acervo gerar: o SQL deu erro e a transação sumiu; nada foi gravado ({n} linhas de entidade)",
+              file=sys.stderr)
+        return codigo
+    if apply:
+        print(f"gerar: {n} linhas de entidade gravadas em acervo.entidade_classe")
+    else:
+        print(f"gerar: plano seco, {n} linhas de entidade rodaram e a transação foi desfeita; "
+              "com --apply grava")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
