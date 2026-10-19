@@ -107,7 +107,7 @@ class Ambiente:
             "} >> \"$TAREFAS_LOG\"\n"
             "if [ \"$1\" = ler ]; then\n"
             "  if [ -n \"${TAREFAS_NIVEL:-}\" ]; then\n"
-            "    printf '# titulo de fixture\\n#%s · %s · priorizada · cadeira: engenharia\\n' \"$2\" \"$TAREFAS_NIVEL\"\n"
+            "    printf '# titulo de fixture\\n#%s · %s · %s · cadeira: engenharia\\n' \"$2\" \"$TAREFAS_NIVEL\" \"${TAREFAS_ESTADO:-priorizada}\"\n"
             "  fi\n"
             "  exit 0\n"
             "fi\n"
@@ -148,13 +148,14 @@ class Ambiente:
         self.env["PATH"] = f"{stub_bin}{os.pathsep}" + self.env.get("PATH", "")
 
     def run(self, *args: str, gh_ref: str = "", tarefas_rc: int = 0,
-            nivel: str = "story",
+            nivel: str = "story", estado: str = "priorizada",
             gh_texto: str = "titulo do PR\nfecha #4242") -> subprocess.CompletedProcess:
         env = dict(self.env)
         env["GH_STUB_REF"] = gh_ref
         env["GH_STUB_TEXTO"] = gh_texto
         env["TAREFAS_RC"] = str(tarefas_rc)
         env["TAREFAS_NIVEL"] = nivel
+        env["TAREFAS_ESTADO"] = estado
         return subprocess.run([str(SCRIPT), *args], env=env,
                                capture_output=True, text=True, timeout=90)
 
@@ -239,6 +240,39 @@ def test_card_que_recusa_nao_derruba_a_promocao(amb):
     saida = r.stdout + r.stderr
     assert "AVISO" in saida and "4242" in saida, saida
     assert r.stdout.strip().splitlines()[-1] == amb.sha1
+
+
+@pytest.mark.parametrize("nivel", ["story", "task", "feature"])
+@pytest.mark.parametrize("estado", ["entregue", "Entregue (terminal)"])
+def test_card_ja_entregue_nao_comenta_nem_move(amb, nivel, estado):
+    # #3883 (R22): o rastreador recusa comentário em card entregue; o estágio lê o estado antes,
+    # não comenta, não move e não derruba a promoção. O cabeçalho real traz `Entregue (terminal)`.
+    r = amb.run("promover", "fixture", gh_ref="fabrica/4242-teste-estagio", nivel=nivel, estado=estado)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "card:      #4242 já entregue — sem comentário (R22)" in r.stdout
+    log = amb.tarefas_log.read_text(encoding="utf-8")
+    assert "ARGS: ler 4242" in log
+    assert "ARGS: comentar" not in log and "ARGS: mover" not in log
+    assert "AVISO" not in r.stdout + r.stderr
+    assert r.stdout.strip().splitlines()[-1] == amb.sha1
+
+
+@pytest.mark.parametrize("estado", ["Em execução (delivery)", "Em homologação (delivery)", "priorizada"])
+def test_card_aberto_segue_comentando_e_movendo(amb, estado):
+    # só `entregue` muda o estágio 4: os outros estados seguem o caminho de antes
+    r = amb.run("promover", "fixture", gh_ref="fabrica/4242-teste-estagio", estado=estado)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "já entregue" not in r.stdout
+    log = amb.tarefas_log.read_text(encoding="utf-8")
+    assert "ARGS: comentar 4242" in log and "ARGS: mover 4242 entregue" in log
+
+
+def test_estado_ilegivel_segue_o_caminho_de_antes(amb):
+    # cabeçalho sem estado (ou `tarefas ler` mudo): não há o que ler, comenta como antes
+    r = amb.run("promover", "fixture", gh_ref="fabrica/4242-teste-estagio", nivel="")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "já entregue" not in r.stdout
+    assert "ARGS: comentar 4242" in amb.tarefas_log.read_text(encoding="utf-8")
 
 
 def test_estagio_card_pula_sem_pr_fabrica(amb):
