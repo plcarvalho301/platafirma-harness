@@ -1938,23 +1938,35 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
   # promover so move a entregue quando o PR declara que fecha o card, `fecha #<card>` no
   # titulo ou no corpo. Sem a linha, comenta e deixa em execucao. Regra deterministica,
   # lida do PR; quem abre o PR sabe se e a ultima subida.
-  local rc_c=0 rc_m=0 nivel fecha=0
+  # Card entregue não recebe comentário (#3883, R22 da spec maquina-de-estados-do-board): o
+  # rastreador recusa com 409, então o estágio lê o estado ANTES de comentar e, com o card já
+  # entregue (promoção de outra família do mesmo card, ou ramo que cita story fechada), não comenta,
+  # não move e não falha a promoção. O cabeçalho de `tarefas ler` é `#N · nível · Estado (fase) · ...`;
+  # o estado vem em minúsculas, sem a fase. Estado que não se lê segue o caminho de antes.
+  local rc_c=0 rc_m=0 nivel estado fecha=0 cabecalho
   if pr_fecha_card "$repo" "$para" "$card"; then fecha=1; fi
-  nivel="$("$tarefas_bin" ler "$card" 2>/dev/null | sed -n "s/^#$card · \([^ ]*\) · .*/\1/p" | head -n 1)" || nivel=""
-  "$tarefas_bin" comentar "$card" <<<"release promover $repo: $(curto_ou "$de" '(novo)') -> ${para:0:7}, gate verde, no ar." >/dev/null 2>&1 || rc_c=$?
-  case "$nivel" in
-    story|task)
-      if [ "$fecha" -eq 1 ]; then
-        "$tarefas_bin" mover "$card" entregue >/dev/null 2>&1 || rc_m=$?
-      else
-        printf 'card:      %s segue em execução — o PR não diz `fecha #%s`; mova a entregue quando o aceite fechar\n' "$card" "$card"
-        rc_m=-1
-      fi ;;
-    *)
-      printf 'card:      %s é %s — entregue de feature ou épico é do dono; estágio 4 só comentou\n' \
-        "$card" "${nivel:-nível ilegível}"
-      rc_m=-1 ;;
-  esac
+  cabecalho="$("$tarefas_bin" ler "$card" 2>/dev/null)" || true
+  nivel="$(printf '%s\n' "$cabecalho" | sed -n "s/^#$card · \([^ ]*\) · .*/\1/p" | head -n 1)" || nivel=""
+  estado="$(printf '%s\n' "$cabecalho" | sed -n "s/^#$card · [^ ]* · \([^ ]*\).*/\1/p" | head -n 1 | tr '[:upper:]' '[:lower:]')" || estado=""
+  if [ "$estado" = entregue ]; then
+    printf 'card:      #%s já entregue — sem comentário (R22)\n' "$card"
+    rc_m=-1
+  else
+    "$tarefas_bin" comentar "$card" <<<"release promover $repo: $(curto_ou "$de" '(novo)') -> ${para:0:7}, gate verde, no ar." >/dev/null 2>&1 || rc_c=$?
+    case "$nivel" in
+      story|task)
+        if [ "$fecha" -eq 1 ]; then
+          "$tarefas_bin" mover "$card" entregue >/dev/null 2>&1 || rc_m=$?
+        else
+          printf 'card:      %s segue em execução — o PR não diz `fecha #%s`; mova a entregue quando o aceite fechar\n' "$card" "$card"
+          rc_m=-1
+        fi ;;
+      *)
+        printf 'card:      %s é %s — entregue de feature ou épico é do dono; estágio 4 só comentou\n' \
+          "$card" "${nivel:-nível ilegível}"
+        rc_m=-1 ;;
+    esac
+  fi
   if [ "$rc_m" -eq 0 ]; then
     printf 'card:      %s movido para entregue (estágio 4)\n' "$card"
   elif [ "$rc_m" -gt 0 ]; then
