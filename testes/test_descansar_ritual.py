@@ -61,13 +61,15 @@ def _passo(texto: str, ini: str, fim: str) -> str:
     return texto[i:texto.index(fim, i)]
 
 
-def test_2a_escreve_por_categoria_no_banco_e_resolve_antes_de_acrescentar():
+def test_2a_escreve_por_categoria_no_banco_e_a_poda_e_do_bot():
     p = _passo(_ritual(), "2a.", "2b.")
     for categoria in ("--licao", "--preferencia", "--premissa"):
         assert f"mesa escrever <chapeu> {categoria}" in p
     assert "--caso" in p and "--dito-em" in p and "--vale-ate" in p, "o campo de cada categoria"
     assert "guia\n   registrar" in p or "guia registrar" in p
-    assert "a revisar" in p and "legado" in p, "lembra o que esta a revisar e o legado"
+    # #3884: a cadeira nao resolve nada antes de escrever; a poda e do bot, e a carta dele pede o tombamento
+    assert "A poda nao e sua" in p and "a revisar" not in p, "a marca a revisar saiu (arq:0120, 19/10)"
+    assert "mesa tombar <id> --destino" in p and "legado" in p, "lembra a carta do bot e o legado"
     assert "seis\n   heuristicas" not in p and "historico e o git" not in p, "a arq:0072 saiu"
 
 
