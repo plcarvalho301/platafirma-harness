@@ -706,6 +706,43 @@ def cmd_enviar(rc, eu: str, args):
     print(msgid)
 
 
+# ---------- carta de bot (#3884) ----------
+# O bot e ficha da raiz de classe automacao (spec automacao-gestao): nao tem sessao, nao tem
+# caixa e nao e persona. Assina como `bot:<slug>`, o mesmo ator que o `bot` grava nos eventos, e
+# so de dentro do proprio `bot rodar <slug>`, que poe o slug em PF_BOT_SLUGS no ambiente do
+# filho: o remetente segue sem se forjar, porque a porta nao deixa sessao definir PF_*. Resposta
+# a bot nao existe: quem responde e a cadeira dona, e a carta diz qual.
+PREFIXO_BOT = "bot:"
+
+
+def remetente_bot(de: str):
+    """O slug do bot que assina, se `de` e `bot:<slug>` e o processo roda dentro dele; senao sai 1."""
+    slug = de[len(PREFIXO_BOT):]
+    cadeia = [s for s in os.environ.get("PF_BOT_SLUGS", "").split(",") if s]
+    if not slug or slug not in cadeia:
+        sys.stderr.write(f'erro: --de "{de}" so vale dentro de `bot rodar {slug or "<slug>"}` '
+                         "— remetente nao se forja.\n")
+        sys.exit(1)
+    return slug
+
+
+def cmd_enviar_bot(rc, args):
+    de = PREFIXO_BOT + remetente_bot(args.de)
+    valida_persona(args.destinatario)
+    args.destinatario = canoniza_persona(args.destinatario)
+    corpo = sys.stdin.read()
+    if not corpo.strip():
+        sys.stderr.write("erro: corpo vazio\n")
+        sys.exit(1)
+    existentes = {m["msgid"] for m in frias(rc, args.destinatario)}
+    msgid = gerar_msgid(de.replace(":", "-"), existentes, rc)
+    rc.xadd(stream_key(args.destinatario), {
+        "id": msgid, "de": de, "tipo": args.tipo, "assunto": args.assunto,
+        "ref": args.ref or "", "responde": args.responde or "", "corpo": corpo,
+    })
+    print(msgid)
+
+
 # ---------- contestar ----------
 # Quem manda a contestacao pela face e o dono: a porta abre a chamada da face sem cadeira e com o `sub` dele em
 # PF_SUJEITO, e entrega o fundamento em PF_FUNDAMENTO (R22). Chamada por cadeira, o remetente e a cadeira e o
@@ -844,6 +881,20 @@ def main():
         if not args.assunto:
             sys.stderr.write("erro: --assunto e obrigatorio\n")
             sys.exit(2)
+        if args.destinatario.startswith(PREFIXO_BOT):
+            sys.stderr.write("erro: bot nao tem caixa; responda a cadeira dona dele, que a carta "
+                             "nomeia (`bot listar` diz o dono)\n")
+            sys.exit(1)
+        if (args.de or "").startswith(PREFIXO_BOT):
+            # o bot chega sem cadeira: o remetente se resolve no ato, e nao por resolve_eu
+            rc = r_conn()
+            try:
+                rc.ping()
+            except redis.exceptions.RedisError as e:
+                sys.stderr.write(f"erro: nao alcancei a malha msg ({REDIS_HOST}:{REDIS_PORT}): {e}\n")
+                sys.exit(1)
+            cmd_enviar_bot(rc, args)
+            return
     if args.verbo == "contestar":
         # a face chega sem cadeira: o remetente se resolve dentro do ato, e nao por resolve_eu
         rc = r_conn()
