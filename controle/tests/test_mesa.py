@@ -4,10 +4,13 @@
     (expira em Xh)", nunca com a palavra "caderno" no rótulo (card #3141).
 (2) `mesa anota` acrescenta, nunca apaga sem avisar, e respeita a guarda de fita (#3166).
 (3) O caderno por entrada (arq:0120, #3218): a escrita declara categoria e o campo dela e
-    recusa, com a instrução, o que falta, o que passa de 600 caracteres e o que leva o
-    chapéu acima de 1.500 tokens vigentes; o corpo serve só o vigente; a aresta pede as duas
-    pontas na forma da curadoria e conta por fita; a colheita roda vazia no primeiro dia; o
-    veredito é só da curadoria; o legado separa vazio, órfão e cabeça.
+    recusa, com a instrução, o que falta e o que passa de 600 caracteres; o corpo serve só o
+    vigente; a aresta pede as duas pontas na forma da curadoria e conta por fita; a colheita
+    roda vazia no primeiro dia; o legado separa vazio, órfão e cabeça.
+(4) A poda no código (#3884, Emenda de 19/10/2026): o teto corta o servido, não a escrita,
+    na ordem preferência, premissa, lição pela confirmação; `mesa podar` retira, marca o
+    tombamento e manda carta assinada pelo bot; a aresta sai tombada para o balde; o veredito
+    saiu do caderno.
 
 `bin/mesa` não tem sufixo .py (é despachado por shebang); carregado aqui por
 SourceFileLoader, mesmo padrão de bin/_metrica/abertura.py. Teste não lê estado real
@@ -341,17 +344,17 @@ def test_entrada_acima_de_600_caracteres_recusa_4(mesa_caderno, capsys):
     assert estado["inseridas"] == []
 
 
-def test_escrita_alem_do_teto_recusa_e_mostra_as_vigentes(mesa_caderno, capsys):
+def test_escrita_alem_do_teto_grava_e_corta_o_servido(mesa_caderno, capsys):
+    """#3884: o teto corta o servido, não a escrita; a mais antiga espera a poda."""
     mesa, estado = mesa_caderno
     # 9 lições de ~600 caracteres medem ~1.400 tokens (len/4); a décima passa de 1.500.
     estado["entradas"] = [_entrada(i, texto=f"lição {i} " + "y" * 580) for i in range(1, 10)]
     rc = mesa.ato_escrever(_args_escrever(licao="z" * 580, caso="#3218"))
-    erro = capsys.readouterr().err
-    assert rc == 4
-    assert "recuso" in erro and "1500" in erro and "medida de teste" in erro
-    assert "mesa tombar" in erro and "mesa retirar" in erro
-    assert "[c1]" in erro
-    assert estado["inseridas"] == []
+    saida = capsys.readouterr().out
+    assert rc == 0
+    assert len(estado["inseridas"]) == 1
+    assert "c101 escrita (lição)" in saida
+    assert "1 entrada(s) fora do servido até a poda" in saida
 
 
 def test_escrita_dentro_do_teto_grava_entrada_e_evento(mesa_caderno, capsys):
@@ -560,7 +563,7 @@ def _retiradas(cursor):
     return [p[1] for s, p in cursor.feitos if s.startswith("UPDATE sessao.caderno_entrada")]
 
 
-def test_balde_copia_confere_e_so_entao_retira(monkeypatch, capsys):
+def test_balde_copia_confere_e_so_entao_tomba(monkeypatch, capsys):
     mesa, escrita, enviados = _balde(monkeypatch, [[1, "f1"], [1, "f2"], [2, "f1"]])
     assert mesa.ato_balde(argparse.Namespace(plano=False)) == 0
     sql = enviados[0]
@@ -568,12 +571,14 @@ def test_balde_copia_confere_e_so_entao_retira(monkeypatch, capsys):
     assert "'a regra ''do Sair'''" in sql, "para que livre com aspa dobrada"
     assert "'cadeira', true" in sql, "quem nulo vira cadeira"
     assert _retiradas(escrita) == [1, 2]
-    assert all(p[0] == mesa.MOTIVO_BALDE for s, p in escrita.feitos if s.startswith("UPDATE"))
+    # #3884: o balde e a morada da aresta; ela sai tombada, com o balde por destino
+    assert all("estado = 'tombada'" in s and p[0] == mesa.DESTINO_BALDE
+               for s, p in escrita.feitos if s.startswith("UPDATE"))
     eventos = [s for s, _ in escrita.feitos if "caderno_evento" in s]
     assert len(eventos) == 2
-    # o CHECK da 0097 so aceita os atos do verbo: a saida ao balde e uma retirada, com o motivo
-    assert all("'retirar', 'vigente', 'retirada'" in s for s in eventos)
-    assert "3 uso(s) conferido(s) no balde; 2 aresta(s) saíram do caderno" in capsys.readouterr().out
+    assert all("'tombar', 'vigente', 'tombada'" in s for s in eventos)
+    assert ("3 uso(s) conferido(s) no balde; 2 aresta(s) tombada(s) → acervo.observacao_aresta"
+            in capsys.readouterr().out)
 
 
 def test_uso_que_nao_chegou_ao_balde_segura_a_entrada(monkeypatch, capsys):
@@ -611,18 +616,110 @@ def test_colheita_conta_o_balde_na_forma_das_linhas():
     assert mesa._usos_do_balde(ler=lambda sql: None) is None
 
 
-def test_licao_vence_em_30_dias():
-    """#3502: lição de episódio é temporária; a revisão chega no ciclo."""
+# --- card #3884: o teto no servido e a poda por relógio --------------------------------------
+
+def test_corte_serve_preferencia_primeiro_e_licao_pela_confirmacao(monkeypatch):
     mesa = carrega_mesa()
-    d31 = _entrada(1, confirmada_em=datetime(2026, 8, 31, 15, tzinfo=timezone.utc))
-    d29 = _entrada(2, confirmada_em=datetime(2026, 9, 2, 15, tzinfo=timezone.utc))
-    assert mesa._a_revisar(d31, HOJE) and not mesa._a_revisar(d29, HOJE)
+    monkeypatch.setattr(mesa, "_medidor", lambda: (lambda s: len(s) // 4, "medida de teste"))
+    # 9 preferências de ~150 tokens (len/4) e duas lições de ~146: cabe a lição mais nova.
+    prefs = [_entrada(10 + i, categoria="preferencia", texto=f"PREF{i} " + "p" * 560,
+                      dito_em=date(2026, 9, 1 + i), dito_onde="chat") for i in range(9)]
+    velha = _entrada(1, texto="VELHA " + "v" * 560,
+                     confirmada_em=datetime(2026, 9, 1, tzinfo=timezone.utc))
+    nova = _entrada(2, texto="NOVA " + "n" * 560,
+                    confirmada_em=datetime(2026, 9, 29, tzinfo=timezone.utc))
+    tombando = _entrada(3, texto="TOMBANDO", em_tombamento=True, destino="chapeu:mesateste/rh")
+    entradas = [velha, nova, tombando] + prefs
+    servidas, fora, tk = mesa._corte(entradas, HOJE)
+    assert {e["id"] for e in servidas} == {2} | {p["id"] for p in prefs}
+    assert [e["id"] for e in fora] == [1], "a lição confirmada há mais tempo espera a poda"
+    assert tk <= mesa.TETO_CHAPEU
+    corpo = mesa._corpo_texto("mesateste", "rh", entradas, [], {}, HOJE)
+    assert "NOVA" in corpo and "VELHA" not in corpo and "TOMBANDO" not in corpo
+    assert "1 fora do servido até a poda" in corpo.splitlines()[0]
+    todas = mesa._corpo_texto("mesateste", "rh", entradas, [], {}, HOJE, todas=True)
+    assert "## fora do servido pelo teto, até a poda" in todas and "VELHA" in todas
+    assert "em tombamento → chapeu:mesateste/rh" in todas
+    assert "1 fora do servido até a poda" in mesa._indice_texto(entradas, [], {}, HOJE, 0)
 
 
-def test_a_revisar_pergunta_se_a_licao_se_expande_ao_chapeu():
+def test_licao_velha_nao_traz_mais_a_marca_a_revisar():
+    """#3884: a lição vencida sai pela poda; a cadeira não resolve nada antes de escrever."""
     mesa = carrega_mesa()
     velha = _entrada(1, confirmada_em=datetime(2026, 6, 1, 15, tzinfo=timezone.utc))
-    assert "expande a toda a atividade do chapéu? tombe no chapéu; senão, retire" in mesa._linha(velha, HOJE)
+    assert "a revisar" not in mesa._linha(velha, HOJE)
+
+
+def _podar(monkeypatch, entradas, retirar, tombar, envia_ok=True):
+    """bin/mesa com a leitura, cada transação e a carta trocadas por registradores."""
+    mesa = carrega_mesa()
+    monkeypatch.setattr(mesa, "_hoje", lambda: HOJE)
+    monkeypatch.setattr(mesa, "_serviveis", lambda cur: list(entradas))
+    leitura = _Cursor([[(2, 2)]])
+    escrita = _Cursor([[(e["id"],)] for e, _ in retirar])
+    cadeiras = sorted({e["cadeira"] for e, _ in tombar})
+    por_cadeira = [_Cursor([[(e["id"],)] for e, _ in tombar if e["cadeira"] == c]) for c in cadeiras]
+    conexoes = iter([_Conexao(leitura), _Conexao(escrita)] + [_Conexao(c) for c in por_cadeira])
+    monkeypatch.setattr(mesa, "pg", lambda *a, **k: next(conexoes))
+    vistos, cartas = {}, []
+
+    def decide(es, hoje, conf):
+        vistos.update(conf=conf, hoje=hoje, n=len(es))
+        return retirar, tombar
+
+    def envia(cadeira, n, corpo):
+        cartas.append((cadeira, n, corpo))
+        return envia_ok, "20261020T061000-bot-caderno-poda" if envia_ok else "recusa da malha"
+
+    return mesa, escrita, por_cadeira, cartas, vistos, decide, envia
+
+
+def test_podar_retira_marca_o_tombamento_e_manda_carta_por_cadeira(monkeypatch, capsys):
+    vencida = _entrada(1, cadeira="ia", chapeu="contexto")
+    par_ia = _entrada(2, cadeira="ia", chapeu="contexto", texto="Fake nasce de retorno real")
+    par_dados = _entrada(3, cadeira="dados", chapeu="curadoria", texto="Fake nasce de retorno real")
+    retirar = [(vencida, "venceu sem confirmação desde 30/08/2026 (30 dias)")]
+    tombar = [(par_ia, "a mesma lição em dados/curadoria c3 (1.00)"),
+              (par_dados, "a mesma lição em ia/contexto c2 (1.00)")]
+    mesa, escrita, por_cadeira, cartas, vistos, decide, envia = _podar(
+        monkeypatch, [vencida, par_ia, par_dados], retirar, tombar)
+    rc = mesa.ato_podar(argparse.Namespace(plano=False), decide=decide, envia=envia)
+    saida = capsys.readouterr().out
+    assert rc == 0
+    assert vistos == {"conf": {2: 2}, "hoje": HOJE, "n": 3}
+    assert "'retirada'" in escrita.feitos[0][0] and escrita.feitos[0][1][1] == 1
+    eventos = [p for s, p in escrita.feitos if "caderno_evento" in s]
+    assert eventos == [(1, "retirar", "retirada", "bot:caderno-poda",
+                        "venceu sem confirmação desde 30/08/2026 (30 dias)")]
+    marca_dados, marca_ia = (c.feitos for c in por_cadeira)
+    assert marca_ia[0][1] == ("chapeu:ia/contexto", 2)
+    assert marca_dados[0][1] == ("chapeu:dados/curadoria", 3)
+    assert marca_ia[1][1][:4] == (2, "tombar", "vigente", "bot:caderno-poda")
+    assert [(c, n) for c, n, _ in cartas] == [("dados", 1), ("ia", 1)]
+    corpo_ia = cartas[1][2]
+    assert "Tito Tesourinha" in corpo_ia and "c2 (contexto)" in corpo_ia
+    assert "mesa tombar c<id> --destino" in corpo_ia and "mesa retirar" in corpo_ia
+    assert "poda: 1 retirada(s), 2 em tombamento" in saida
+
+
+def test_podar_plano_so_diz(monkeypatch, capsys):
+    vencida = _entrada(1, cadeira="ia", chapeu="contexto")
+    mesa, escrita, _, cartas, _, decide, envia = _podar(
+        monkeypatch, [vencida], [(vencida, "premissa vencida em 01/09/2026")], [])
+    assert mesa.ato_podar(argparse.Namespace(plano=True), decide=decide, envia=envia) == 0
+    saida = capsys.readouterr().out
+    assert "poda (plano): 1 entrada(s) em 1 caderno(s); 1 a retirar, 0 a tombar" in saida
+    assert "retirar ia/contexto/c1: premissa vencida em 01/09/2026" in saida
+    assert escrita.feitos == [] and cartas == []
+
+
+def test_carta_que_nao_sai_desfaz_a_marca_da_cadeira(monkeypatch, capsys):
+    par = _entrada(2, cadeira="ia", chapeu="contexto")
+    mesa, _, _, cartas, _, decide, envia = _podar(
+        monkeypatch, [par], [], [(par, "confirmada 2 vezes")], envia_ok=False)
+    assert mesa.ato_podar(argparse.Namespace(plano=False), decide=decide, envia=envia) == 3
+    assert "carta não saiu, marca desfeita: ia: recusa da malha" in capsys.readouterr().out
+    assert len(cartas) == 1
 
 
 def test_json_da_poda_traz_so_a_servida_sem_aresta():
@@ -642,14 +739,6 @@ def test_json_da_poda_traz_so_a_servida_sem_aresta():
     assert [e["id"] for e in mesa._servidas_json(entradas, HOJE, "portfolio")] == [5]
 
 
-def test_licao_sem_confirmacao_ha_90_dias_sai_a_revisar(monkeypatch):
-    mesa = carrega_mesa()
-    velha = _entrada(1, confirmada_em=datetime(2026, 6, 1, 15, tzinfo=timezone.utc))
-    nova = _entrada(2)
-    assert "a revisar: não confirmada desde 01/06/2026" in mesa._linha(velha, HOJE)
-    assert "a revisar" not in mesa._linha(nova, HOJE)
-
-
 def test_indice_conta_vigentes_marcas_e_legado(monkeypatch):
     mesa = carrega_mesa()
     monkeypatch.setattr(mesa, "_medidor", lambda: (lambda s: len(s) // 4, "medida de teste"))
@@ -665,7 +754,7 @@ def test_indice_conta_vigentes_marcas_e_legado(monkeypatch):
     agora = datetime(2026, 10, 1, 3, tzinfo=timezone.utc).timestamp()
     indice = mesa._indice_texto(entradas, legados, movimento, HOJE, agora)
     linha_rh = next(l for l in indice.splitlines() if l.strip().startswith("rh"))
-    for pedaco in ("2 vigentes", "/1500 tk", "última escrita há 3 h", "1 a revisar",
+    for pedaco in ("2 vigentes", "/1500 tk", "última escrita há 3 h",
                    "2 retirada(s) em 7 d", "1 candidata(s)", "1 aresta(s) acumulando"):
         assert pedaco in linha_rh
     assert "legado 10986 B a triar" in indice
@@ -748,12 +837,15 @@ def test_colheita_roda_vazia_no_primeiro_dia(mesa_caderno, monkeypatch, capsys):
     assert rc == 0 and lote["pares"] == [] and lote["acervo"] == "ok"
 
 
-def test_veredito_e_so_da_curadoria(mesa_caderno, capsys):
+def test_veredito_saiu_do_caderno_e_aponta_o_balde(mesa_caderno, monkeypatch, capsys):
+    """#3884: a aresta sai tombada em até uma hora; o veredito mora do lado do balde."""
     mesa, estado = mesa_caderno
+    monkeypatch.setenv("PF_CADEIRA", "dados")
     rc = mesa.ato_veredito(argparse.Namespace(de="conceito:a", para="conceito:b", tombar="x",
                                               pendente=False, retirar=None))
     assert rc == 4
-    assert "curadoria (dados)" in capsys.readouterr().err
+    erro = capsys.readouterr().err
+    assert "saiu do caderno" in erro and "acervo.observacao_aresta" in erro
     assert estado["cursor"].feitos == []
 
 

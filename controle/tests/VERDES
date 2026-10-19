@@ -39,7 +39,7 @@ tests/test_contrato_repo_hooks.py | bin/repo lib/raizes.sh
 tests/test_contrato_repo_sanear_remotos.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** bin/_minuta/**
 tests/test_contrato_teste_bloco.py | bin/teste bin/_release/registro.py
 tests/test_lote_encadeado.py | ops-server/**
-tests/test_mesa.py | bin/acervo bin/_acervo/** bin/bot bin/chat bin/conferir bin/curar bin/ingerir bin/mesa bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste bin/_metrica/** abertura/**
+tests/test_mesa.py | bin/acervo bin/_acervo/** bin/bot bin/chat bin/conferir bin/curar bin/ingerir bin/mesa bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste bin/_metrica/** abertura/** lib/caderno_poda.py
 tests/test_registro_chave.py | bin/teste bin/_release/** registro/venvs.json
 # Card #3535: o promover so liga a conferencia no ar com o conferir da release em quem declara `conferir_no_ar`.
 tests/test_registro_conferir_no_ar.py | bin/release registro/venvs.json
@@ -129,6 +129,8 @@ tests/test_acervo_arquivo_renome.py | bin/acervo bin/_acervo/** bin/curar
 tests/test_fila_msgid.py | bin/_fila/**
 tests/test_fila_ack.py | bin/fila bin/_fila/** bin/minuta bin/_minuta/** bin/persona bin/_persona/**
 tests/test_fila_contestacao.py | bin/fila bin/_fila/**
+# Card #3884: carta assinada por bot (`bot:<slug>`), so de dentro do proprio `bot rodar`; carta a bot recusa.
+tests/test_fila_bot.py | bin/fila bin/_fila/**
 tests/test_contrato_minuta_ler.py | bin/acervo bin/_acervo/** bin/bot bin/chat bin/conferir bin/curar bin/fila bin/_fila/** bin/infra bin/_infra/** bin/ingerir bin/mesa bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/situacao bin/tarefas bin/teste bin/_lint/**
 tests/test_contrato_casa_por_caminho.py | bin/repo bin/sessao bin/_sessao/** bin/_lint/** bin/_minuta/** docs/**
 # Medido em 03/10/2026 (card #3239): `curar --conceito --renomear`, contra um servidor HTTP falso do contrato
@@ -196,7 +198,7 @@ testes/test_agente_registro.py | bin/acervo bin/_acervo/** bin/agente bin/encerr
 testes/test_bot_registro.py | bin/acervo bin/_acervo/** bin/agente bin/bot bin/chat bin/conferir bin/encerrar bin/expediente bin/_expediente/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/motor bin/_motor/** bin/pesquisar bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/tarefas bin/teste bin/_minuta/** abertura/** agente/**
 testes/test_deploy_seg_suites.py | bin/_release/** bin/release bin/seg bin/teste bin/lint bin/_lint/** bin/repo bin/monta-sessao bin/metrica bin/sessao bin/expediente deploy-harness/** testes/test_*.sh
 testes/test_descansar_fecho.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/chat bin/conferir bin/descansar bin/encerrar bin/fila bin/_fila/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/motor bin/_motor/** bin/persona bin/_persona/** bin/seg bin/sinal bin/situacao bin/tarefas bin/teste
-testes/test_descansar_poda.py | bin/descansar bin/mesa
+testes/test_descansar_poda.py | bin/descansar bin/mesa lib/caderno_poda.py
 testes/test_descansar_puxado.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/bot bin/chat bin/conferir bin/curar bin/descansar bin/encerrar bin/expediente bin/_expediente/** bin/fila bin/_fila/** bin/infra bin/_infra/** bin/ingerir bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/pesquisar bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste agente/**
 testes/test_descansar_ritual.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/chat bin/conferir bin/descansar bin/encerrar bin/fila bin/_fila/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/motor bin/_motor/** bin/persona bin/_persona/** bin/seg bin/sinal bin/situacao bin/tarefas bin/teste
 testes/test_expediente.py | bin/expediente bin/_expediente/**
