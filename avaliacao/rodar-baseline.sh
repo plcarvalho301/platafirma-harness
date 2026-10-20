@@ -9,7 +9,7 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 GOLD="${1:-$DIR/gabarito.jsonl}"
 CONJ="${2:-gold-228-reancorado}"
-C=rag-extractor-api
+C=motor-busca        # a busca servida (#3844); era rag-extractor-api, que ate a virada servia a busca e o acervo
 
 docker cp "$GOLD" $C:/tmp/gabarito.jsonl >/dev/null
 docker cp "$DIR/runner_gold_baseline.py" $C:/tmp/ >/dev/null
