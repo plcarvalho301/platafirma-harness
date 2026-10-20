@@ -37,9 +37,9 @@ def _api(lado, estado):
         def log_message(self, *a):
             pass
 
-        def _json(self, corpo):
+        def _json(self, corpo, status=200):
             dado = json.dumps(corpo).encode()
-            self.send_response(200)
+            self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(dado)))
             self.end_headers()
@@ -49,6 +49,9 @@ def _api(lado, estado):
             meu["pedidos"].append(("GET", self.path, self.headers.get("Authorization"), None))
             if self.path == "/facets":
                 return self._json({"indice": meu["indice"]})
+            if self.path.startswith("/acervo/"):
+                status, corpo = meu["acervo"].get(self.path, (404, {"erro": "sem rota"}))
+                return self._json(corpo, status)
             self.send_response(404)
             self.end_headers()
 
@@ -60,6 +63,14 @@ def _api(lado, estado):
             return self._json({"fontes": [{"secao_id": s, "obra": "Obra", "section_id": "x"} for s in lista],
                                "cobertura": "boa"})
     return H
+
+
+def _acervo_padrao():
+    """As leituras do acervo que a API falsa serve; rota que não está aqui responde 404 igual nos dois lados."""
+    return {"/acervo/obras": (200, [{"id": "o1", "titulo": "T"}, {"id": "o2", "titulo": "U"}]),
+            "/acervo/obras/o1": (200, {"id": "o1", "tempos_ms": {"total": 1.0}}),
+            "/acervo/obras/o1/situacao": (200, {"estado": "servindo"}),
+            "/acervo/conceitos": (200, {"itens": ["a", "b"], "lido_em": "x"})}
 
 
 def _gabarito(tmp_path, positivas=3):
@@ -74,7 +85,8 @@ def _gabarito(tmp_path, positivas=3):
 
 @pytest.fixture
 def duas(tmp_path):
-    estado = {lado: {"pedidos": [], "indice": dict(INDICE), "ajusta": lambda p, q, l: l} for lado in ("rag", "busca")}
+    estado = {lado: {"pedidos": [], "indice": dict(INDICE), "ajusta": lambda p, q, l: l, "acervo": _acervo_padrao()}
+              for lado in ("rag", "busca")}
     servidores = {lado: HTTPServer(("127.0.0.1", 0), _api(lado, estado)) for lado in estado}
     for s in servidores.values():
         threading.Thread(target=s.serve_forever, daemon=True).start()
@@ -84,10 +96,13 @@ def duas(tmp_path):
         (instancia / "segredos" / lado).mkdir(parents=True)
         (instancia / "segredos" / lado / "RAG_API_TOKEN").write_text(tok + "\n")
     registro = tmp_path / "motor-instancias.json"
-    registro.write_text(json.dumps({lado: {
-        "estado": "ativa", "container": None, "stack": lado, "endpoint": f"{base[lado]}/search",
-        "facets": f"{base[lado]}/facets", "token_em": f"{lado}/RAG_API_TOKEN",
-        "medicoes_em": f"var/medicoes/{lado}", "ajustes": [], "nao_e_ajuste": {}} for lado in base}))
+    def instancia_de(lado):
+        # a servida declara o endereço do acervo em `enderecos`; a nova, só em `api_acervo` (como a acervo-guarda)
+        onde = {"enderecos": {"busca": base[lado], "api_acervo": base[lado]}} if lado == "rag" else {"api_acervo": base[lado]}
+        return {"estado": "ativa", "container": None, "stack": lado, "endpoint": f"{base[lado]}/search",
+                "facets": f"{base[lado]}/facets", "token_em": f"{lado}/RAG_API_TOKEN",
+                "medicoes_em": f"var/medicoes/{lado}", "ajustes": [], "nao_e_ajuste": {}, **onde}
+    registro.write_text(json.dumps({lado: instancia_de(lado) for lado in base}))
 
     def roda(*args):
         env = {**os.environ, "PF_MOTOR_REG": str(registro), "PLATAFIRMA_INSTANCIA": str(instancia),
@@ -217,3 +232,68 @@ def test_resumo_so_fecha_limpo_com_tudo_igual_sem_cruzamento_e_ao_menos_uma_perg
     assert comparar.resumo([])["limpo"] is False
     assert comparar.resumo([comparar.linha(item, ["a"], ["b"], [])])["limpo"] is False
     assert comparar.resumo([comparar.linha(item, ["a"], ["a"], ["x"])])["limpo"] is False
+
+
+# --- as leituras da API do acervo (unidade 7) -----------------------------------------------------------
+
+def _leituras(stdout):
+    m = re.search(r"leituras do acervo iguais em (\d+)/(\d+) · busca contra rag", stdout.splitlines()[0])
+    assert m, stdout.splitlines()[0]
+    return int(m[1]), int(m[2])
+
+
+def test_leituras_iguais_com_campo_volatil_diferente_saem_0(duas):
+    roda, estado, instancia, _ = duas
+    estado["busca"]["acervo"]["/acervo/obras/o1"] = (200, {"id": "o1", "tempos_ms": {"total": 99.0}})
+    estado["busca"]["acervo"]["/acervo/conceitos"] = (200, {"itens": ["a", "b"], "lido_em": "outra hora"})
+    r = roda("biblioteca", "--contra", "busca", "--acervo")
+    assert r.returncode == 0, r.stdout + r.stderr
+    iguais, total = _leituras(r.stdout)
+    assert iguais == total == len(comparar.LEITURAS_DO_ACERVO) + len(comparar.LEITURAS_DA_OBRA)
+    assert "sem diferenca aberta" in r.stdout
+    salvo = next((instancia / "var" / "medicoes" / "rag" / "contra").glob("*-acervo-busca.json"))
+    assert json.loads(salvo.read_text())["resumo"]["limpo"] is True
+    # o token de cada lado vai no seu cabeçalho, e nenhuma leitura do acervo chega à busca
+    for lado, token in (("rag", "Bearer toka"), ("busca", "Bearer tokb")):
+        gets = [p for p in estado[lado]["pedidos"] if p[1].startswith("/acervo/")]
+        assert gets and all(p[2] == token for p in gets)
+        assert not any(p[1] == "/search" for p in estado[lado]["pedidos"])
+
+
+def test_corpo_diferente_ou_status_diferente_sai_1_com_o_caminho_da_diferenca(duas):
+    roda, estado, _, _ = duas
+    estado["busca"]["acervo"]["/acervo/conceitos"] = (200, {"itens": ["a", "b", "c"]})
+    estado["busca"]["acervo"]["/acervo/obras/o1/situacao"] = (500, {"erro": "x"})
+    r = roda("biblioteca", "--contra", "busca", "--acervo")
+    assert r.returncode == 1, r.stdout
+    iguais, total = _leituras(r.stdout)
+    assert iguais == total - 2
+    assert "diferente /acervo/conceitos (200 contra 200): $.itens: 2 itens na servida, 3 na nova" in r.stdout
+    assert "diferente /acervo/obras/o1/situacao (200 contra 500): status 200 na servida, 500 na nova" in r.stdout
+    assert "diferenca aberta" in r.stdout
+
+
+def test_acervo_pede_o_endereco_do_acervo_na_outra_instancia(duas, tmp_path):
+    roda, _, _, _ = duas
+    assert roda("biblioteca", "--contra", "rag", "--acervo").returncode == 2      # contra si mesma
+    assert roda("biblioteca", "--contra", "nao-existe", "--acervo").returncode == 2
+
+
+def test_normaliza_tira_so_o_que_muda_a_cada_chamada():
+    corpo = {"a": 1, "tempos_ms": {"total": 3}, "b": [{"lido_em": "x", "c": 2}]}
+    assert comparar.normaliza(corpo) == {"a": 1, "b": [{"c": 2}]}
+
+
+def test_diferencas_aponta_chave_que_falta_tamanho_de_lista_e_valor():
+    assert comparar.diferencas({"a": 1}, {"a": 1}) == []
+    assert comparar.diferencas({"a": 1}, {"a": 1, "b": 2}) == ["$.b: so em a nova"]
+    assert comparar.diferencas({"a": [1]}, {"a": [1, 2]}) == ["$.a: 1 itens na servida, 2 na nova"]
+    assert comparar.diferencas({"a": {"b": "x"}}, {"a": {"b": "y"}}) == ["$.a.b: 'x' contra 'y'"]
+    muitas = comparar.diferencas(list(range(20)), list(range(1, 21)))
+    assert len(muitas) == comparar.LIMITE_DE_DIFERENCAS
+
+
+def test_primeiro_id_le_lista_e_objeto_com_lista():
+    assert comparar.primeiro_id([{"id": "x"}, {"id": "y"}]) == "x"
+    assert comparar.primeiro_id({"obras": [{"id": "z"}], "total": 1}) == "z"
+    assert comparar.primeiro_id([]) is None and comparar.primeiro_id(None) is None and comparar.primeiro_id("texto") is None

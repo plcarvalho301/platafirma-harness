@@ -110,3 +110,84 @@ def _carimbo_texto(c: dict) -> str:
 def veredito_limpo(res: dict, a: dict, b: dict) -> bool:
     """Exit 0 do verbo: top-8 idêntico, nenhum cruzamento e o mesmo índice nos dois lados."""
     return bool(res["limpo"]) and carimbos_iguais(a, b)
+
+
+# --- as leituras da API do acervo (card #3844, unidade 7) ------------------------------------------------
+#
+# A API do acervo passa a subir sozinha (acervo-guarda, 8102), ao lado da que o rag-extractor-api serve (8100). As
+# mesmas leituras, uma a uma, têm de dar o mesmo status e o mesmo corpo nos dois. Os campos que mudam a cada chamada
+# (hora, tempo gasto) saem antes de comparar.
+
+LEITURAS_DO_ACERVO = ("/acervo/descoberta", "/acervo/conceitos", "/acervo/ferramental", "/acervo/fontes",
+                      "/acervo/fichas/cobertura", "/acervo/conceitos/relacoes/cartilha", "/acervo/automacoes",
+                      "/acervo/lotes", "/acervo/particao", "/acervo/obras")
+# leituras de uma obra, pelo primeiro id que `/acervo/obras` devolve nos dois lados
+LEITURAS_DA_OBRA = ("/acervo/obras/{id}", "/acervo/obras/{id}/situacao", "/acervo/obras/{id}/ficha",
+                    "/acervo/obras/{id}/impressoes", "/acervo/obras/{id}/derivacoes")
+VOLATEIS = frozenset({"tempos_ms", "lido_em", "agora", "gerado_em", "uptime_s"})
+LIMITE_DE_DIFERENCAS = 5
+
+
+def normaliza(corpo):
+    """O corpo sem os campos que mudam a cada chamada, para comparar o resto."""
+    if isinstance(corpo, dict):
+        return {k: normaliza(v) for k, v in corpo.items() if k not in VOLATEIS}
+    if isinstance(corpo, list):
+        return [normaliza(v) for v in corpo]
+    return corpo
+
+
+def diferencas(a, b, caminho: str = "$") -> list:
+    """Onde dois corpos JSON diferem (no máximo `LIMITE_DE_DIFERENCAS` caminhos): chave que falta, tamanho de lista,
+    valor distinto."""
+    achados: list = []
+    if isinstance(a, dict) and isinstance(b, dict):
+        for k in sorted(set(a) | set(b)):
+            if k not in a or k not in b:
+                achados.append(f"{caminho}.{k}: so em {'a nova' if k in b else 'a servida'}")
+            else:
+                achados += diferencas(a[k], b[k], f"{caminho}.{k}")
+    elif isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            achados.append(f"{caminho}: {len(a)} itens na servida, {len(b)} na nova")
+        for i, (x, y) in enumerate(zip(a, b)):
+            achados += diferencas(x, y, f"{caminho}[{i}]")
+    elif a != b:
+        achados.append(f"{caminho}: {str(a)[:40]!r} contra {str(b)[:40]!r}")
+    return achados[:LIMITE_DE_DIFERENCAS]
+
+
+def primeiro_id(corpo) -> str | None:
+    """O id da primeira obra de `/acervo/obras`, seja a resposta uma lista ou um objeto com a lista dentro."""
+    if isinstance(corpo, dict):
+        itens = next((v for v in corpo.values() if isinstance(v, list)), [])
+    else:
+        itens = corpo if isinstance(corpo, list) else []
+    for it in itens:
+        if isinstance(it, dict) and it.get("id"):
+            return str(it["id"])
+    return None
+
+
+def leitura(rota: str, servida, nova) -> dict:
+    """A linha de uma leitura. `servida` e `nova` são (status, corpo JSON ou None). Igual é o mesmo status e o mesmo corpo
+    sem os campos voláteis; corpo que não é JSON compara o texto."""
+    (sa, ca), (sb, cb) = servida, nova
+    dif = [] if sa == sb else [f"status {sa} na servida, {sb} na nova"]
+    if not dif:
+        dif = diferencas(normaliza(ca), normaliza(cb))
+    return {"rota": rota, "status_servida": sa, "status_nova": sb, "igual": not dif, "diferencas": dif}
+
+
+def resumo_das_leituras(linhas: list) -> dict:
+    return {"leituras": len(linhas), "iguais": sum(1 for l in linhas if l["igual"]),
+            "diferentes": [l for l in linhas if not l["igual"]],
+            "limpo": bool(linhas) and all(l["igual"] for l in linhas)}
+
+
+def texto_das_leituras(res: dict, servida: str, nova: str) -> str:
+    saida = [f"leituras do acervo iguais em {res['iguais']}/{res['leituras']} · {nova} contra {servida}"]
+    for l in res["diferentes"]:
+        saida.append(f"  diferente {l['rota']} ({l['status_servida']} contra {l['status_nova']}): " + "; ".join(l["diferencas"]))
+    saida.append("sem diferenca aberta" if res["limpo"] else "diferenca aberta: o acervo-guarda nao serve ainda no lugar do 8100")
+    return "\n".join(saida)

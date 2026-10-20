@@ -269,6 +269,9 @@ def uso(cod=2):
                                         gabarito e (--log) nas ultimas perguntas do log: Jaccard por pergunta, trecho
                                         que cruza particao e indice (embedder, geracao) dos dois lados; exit 0 so sem
                                         diferenca nenhuma (a virada do #3844), 1 com qualquer uma, 3 com uma fora
+  motor <inst> medir  <particao> --contra <outra> --acervo [--json]
+                                        as leituras da API do acervo (/acervo/...) das duas, uma a uma: mesmo status e
+                                        mesmo corpo, sem os campos que mudam a cada chamada; exit 0 so sem diferenca
                                         as rodadas salvas em ordem, com o marco de cada virada de geracao e de
                                         cada ajuste aplicado
   motor <inst> consultas <particao> [--desde <data>] [--ate <data>] [--cadeira <slug>] [--chapeu <slug>]
@@ -3428,7 +3431,61 @@ def cmd_medir(nome, inst, argv):
     print(json.dumps(_medida_em_json(res), ensure_ascii=False, indent=1))
 
 
-USO_MEDIR_CONTRA = ("motor <inst> medir <particao> --contra <outra> [--k N] [--gabarito <arq>] [--log N] [--json]")
+USO_MEDIR_CONTRA = ("motor <inst> medir <particao> --contra <outra> [--k N] [--gabarito <arq>] [--log N] [--json] | "
+                    "motor <inst> medir <particao> --contra <outra> --acervo [--json]")
+
+
+def _base_acervo(i):
+    """O endereco da API do acervo de uma instancia: `enderecos.api_acervo` (a servida) ou `api_acervo` (a que so o
+    serve, como a acervo-guarda)."""
+    return ((i.get("enderecos") or {}).get("api_acervo") or i.get("api_acervo") or "").rstrip("/")
+
+
+def _get_acervo(base, tok, rota):
+    """GET de uma leitura do acervo: (status, corpo JSON ou texto). Erro de HTTP volta como status; rede fora sai 3."""
+    req = urllib.request.Request(base + rota, headers={"Authorization": f"Bearer {tok}"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            status, bruto = r.status, r.read()
+    except urllib.error.HTTPError as e:
+        status, bruto = e.code, e.read()
+    except urllib.error.URLError as e:
+        _trata_erro_http(e, "motor medir --acervo")
+    try:
+        return status, json.loads(bruto.decode("utf-8"))
+    except ValueError:
+        return status, bruto.decode("utf-8", "replace")
+
+
+def _comparar_acervo(nome, inst, outra_nome, outra, como_json):
+    """`medir --contra <outra> --acervo` (card #3844, unidade 7): as leituras da API do acervo, uma a uma, na servida e
+    na que so serve o acervo. Exit 0 so com o mesmo status e o mesmo corpo em todas; 1 com qualquer diferenca; 3 com
+    uma das duas fora do ar."""
+    base_a, base_b = _base_acervo(inst), _base_acervo(outra)
+    tok_a, tok_b = token_da(inst), token_da(outra)
+    linhas, id_obra = [], None
+    for rota in comparar.LEITURAS_DO_ACERVO:
+        a, b = _get_acervo(base_a, tok_a, rota), _get_acervo(base_b, tok_b, rota)
+        linhas.append(comparar.leitura(rota, a, b))
+        if rota == "/acervo/obras" and a[0] == 200:
+            id_obra = comparar.primeiro_id(a[1])
+    for modelo in comparar.LEITURAS_DA_OBRA if id_obra else ():
+        rota = modelo.replace("{id}", id_obra)
+        linhas.append(comparar.leitura(rota, _get_acervo(base_a, tok_a, rota), _get_acervo(base_b, tok_b, rota)))
+    res = comparar.resumo_das_leituras(linhas)
+    saida = {"lido_em": ajustemod.agora(), "servida": nome, "nova": outra_nome, "bases": {nome: base_a, outra_nome: base_b},
+             "resumo": {x: v for x, v in res.items() if x != "diferentes"}, "linhas": linhas}
+    pasta = os.path.join(dir_medicoes(inst), "contra")
+    os.makedirs(pasta, exist_ok=True)
+    arquivo = os.path.join(pasta, f"{time.strftime('%Y%m%dT%H%M%S')}-acervo-{outra_nome}.json")
+    with open(arquivo, "w") as f:
+        json.dump(saida, f, ensure_ascii=False, indent=1)
+    if como_json:
+        print(json.dumps({**saida, "arquivo": arquivo, "limpo": res["limpo"]}, ensure_ascii=False, indent=1))
+    else:
+        print(comparar.texto_das_leituras(res, nome, outra_nome))
+        print(f"salvo em {arquivo}")
+    sys.exit(0 if res["limpo"] else 1)
 
 
 def _perguntas_do_log(inst, n, particao):
@@ -3460,9 +3517,14 @@ def _medir_contra(nome, inst, argv):
     outra_nome = _valor(resto, "--contra", "medir")
     d = reg()
     outra = d.get(outra_nome)
-    if outra is None or outra_nome == nome or outra.get("estado") != "ativa" or not outra.get("endpoint"):
+    acervo = "--acervo" in resto
+    declara = _base_acervo(outra or {}) if acervo else (outra or {}).get("endpoint")
+    if outra is None or outra_nome == nome or outra.get("estado") != "ativa" or not declara:
         _usa("medir", USO_MEDIR_CONTRA,
-             f"--contra pede outra instancia ativa do registro com `endpoint` (ha: {', '.join(x for x in d if x != nome)})")
+             f"--contra pede outra instancia ativa do registro com `{'api_acervo' if acervo else 'endpoint'}` "
+             f"(ha: {', '.join(x for x in d if x != nome)})")
+    if acervo:
+        return _comparar_acervo(nome, inst, outra_nome, outra, "--json" in resto)
     try:
         k = int(_valor(resto, "--k", "medir")) if "--k" in resto else comparar.K
         n_log = int(_valor(resto, "--log", "medir")) if "--log" in resto else 0
