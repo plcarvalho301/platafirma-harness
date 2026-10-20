@@ -52,6 +52,9 @@ POR_HEALTHCHECK = {
     "landing": "platafirma-core-landing-1",
     "mediawiki": "plataforma-wiki-mediawiki-1",
     "rag-extractor-api": "rag-extractor-api",
+    # a busca (platafirma-motor) e a API do acervo que servem no lugar do rag-extractor-api (#3844)
+    "motor-busca": "motor-busca",
+    "acervo-guarda": "acervo-guarda",
     "acervo-api": "acervo-api",
 }
 

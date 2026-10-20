@@ -2,8 +2,8 @@
 
 Quem chama a BUSCA (o `/search` e as rotas `/motor/...`) e quem chama a API do ACERVO (as rotas `/acervo/...`)
 são dois grupos, e cada um lê o seu endereço de `registro/motor-instancias.json`, em `<instancia>.enderecos`:
-`busca` e `api_acervo`. Nenhum chamador do harness guarda porta literal. Até a virada da #3776 os dois apontam
-para o rag-extractor-api; a virada troca o `busca` no registro, e só ele.
+`busca` e `api_acervo`. Nenhum chamador do harness guarda porta literal. Desde a virada da #3844 a busca é o
+motor-busca (8101) e a API do acervo é a acervo-guarda (8102); antes, os dois eram o rag-extractor-api (8100).
 
 O ambiente de cada chamador (MOTOR_ACERVO_URL, RAG_API_URL, RAG_API_BASE) continua valendo mais que o registro:
 é o degrau que o teste e a bancada usam. Este módulo só responde o último degrau, o que antes era o literal.

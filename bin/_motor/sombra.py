@@ -1,6 +1,7 @@
 """Braço-sombra do embedder (guia escolha-de-llm §11; card #2925).
 
-Roda DENTRO do contêiner do rag (rag-extractor-api), lançado por
+Roda DENTRO do contêiner da busca (o `container` da instância no registro: motor-busca desde a virada da
+#3844; antes, rag-extractor-api), lançado por
 `motor rag medir <particao> --sombra <modelo>[,<modelo>]`. Nunca toca o servido: não escreve
 em banco nenhum, não muda env do serviço, carrega os candidatos num processo à parte, num venv
 que herda o torch da imagem e só sobe transformers/sentence-transformers.
