@@ -159,8 +159,10 @@ def diferencas(a, b, caminho: str = "$") -> list:
 
 def primeiro_id(corpo) -> str | None:
     """O id da primeira obra de `/acervo/obras`, seja a resposta uma lista ou um objeto com a lista dentro."""
-    itens = corpo if isinstance(corpo, list) else next((v for v in (corpo or {}).values() if isinstance(v, list)), []) \
-        if isinstance(corpo, dict) else []
+    if isinstance(corpo, dict):
+        itens = next((v for v in corpo.values() if isinstance(v, list)), [])
+    else:
+        itens = corpo if isinstance(corpo, list) else []
     for it in itens:
         if isinstance(it, dict) and it.get("id"):
             return str(it["id"])
