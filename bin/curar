@@ -58,6 +58,10 @@ USO = """uso:
                                                               nada no acervo: o item sai `medida` com o relatório
   curar --reextrair --lote --relatorio <lote> [--json]         estado do lote, obra a obra
   curar --rejulgar --lote [--apply]                           espelhos com régua antiga: o veredito de novo, sem reconverter
+  curar --marcar-secoes [--impressao <id>] [--so-sem-faixa] [--apply] [--json]
+                                                              as seções das impressões servindo como faixa de bytes do
+                                                              espelho (spec modelo-acervo-secao §2-bis, #3907): plano confere;
+                                                              --apply grava em acervo.secao_faixa
   curar --reextrair <id,id,…|@arquivo> --bancada <pasta> [--metodo <slug>] [--modo bancada|medida] [--refazer] [--timeout-s <n>] [--json]
                                                               converte em <pasta>/<metodo>/<obra_id>/, não escreve no acervo
   curar --expurgar --espelhos [--apply]                       espelho de impressão aposentada há +90 dias
@@ -1017,7 +1021,7 @@ _RENOMEAR_NAO_COMBINA = ("pai", "mais_amplo", "mais_amplo_tipo", "rotulo", "defi
                          "filhos_exclusivos")
 # opções de OUTRO ato: a escada de despacho do `main` entregaria o pedido a esse ato e calaria o --renomear
 _RENOMEAR_OUTROS_ATOS = ("reclassificar", "situacao", "expurgar", "restaurar", "espelhos", "apagar", "recortar",
-                         "reextrair", "rejulgar", "lote", "ordem", "relatorio", "medida", "replicas", "bancada",
+                         "reextrair", "rejulgar", "marcar_secoes", "so_sem_faixa", "lote", "ordem", "relatorio", "medida", "replicas", "bancada",
                          "refazer", "timeout_s", "modo", "metodo", "corte", "promover", "impressao", "relacionar",
                          "relacoes", "desrelacionar", "derivar", "derivacoes", "desderivar", "de", "registrar_obra",
                          "obra", "obras", "de_dominio", "de_subdominio", "de_conceito", "de_colecao", "sem_dominio",
@@ -2013,6 +2017,27 @@ def acao_rejulgar(autor: str, aplicar: bool, como_json: bool, headers: dict) -> 
     return 1 if data.get("falhas") else 0
 
 
+def acao_marcar_secoes(args, autor: str, headers: dict) -> int:
+    """`--marcar-secoes`: a seção como faixa de bytes do espelho (spec modelo-acervo-secao §2-bis, #3907).
+    O plano confere as impressões servindo com espelho; --apply grava as que conferem em
+    acervo.secao_faixa. Impressão que não confere sai na lista e dá exit 1; as outras seguem."""
+    payload = {"autor": autor, "aplicar": args.apply, "so_sem_faixa": args.so_sem_faixa}
+    if args.impressao:
+        payload["impressao"] = args.impressao
+    data = _chamar("POST", f"{BASE}/acervo/espelhos/secoes", headers, payload)
+    reprovadas = data.get("reprovadas") or []
+    if args.como_json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return 1 if reprovadas else 0
+    gravou = data.get("modo") == "aplicado"
+    print(f"{data.get('n', 0)} impressão(ões) servindo com espelho: {data.get('conformes', 0)} conformes, "
+          f"{len(reprovadas)} reprovadas · {'faixas gravadas' if gravou else 'plano (nada gravado)'}")
+    for it in reprovadas:
+        print(f"  REPROVADA {it.get('impressao')}  {'; '.join(it.get('problemas') or [])}")
+    if not gravou:
+        print("  (plano seco — repita com --apply para gravar)")
+    return 1 if reprovadas else 0
+
 def acao_reextrair_lote(args, autor: str, como_json: bool, headers: dict) -> int:
     """`--reextrair --lote`: o plano é o PORTÃO 1 (a contagem por tipo, §4.2 item 1); --apply abre o lote,
     que roda na API obra a obra e para na selada (§4.2 item 5). O verbo volta em segundos com o id."""
@@ -2626,6 +2651,8 @@ def main(argv=None):
     # nargs="?": `--reextrair --lote` não leva obra (#3193)
     parser.add_argument("--reextrair", nargs="?", const="", default=None)
     parser.add_argument("--rejulgar", action="store_true", default=False)
+    parser.add_argument("--marcar-secoes", dest="marcar_secoes", action="store_true", default=False)
+    parser.add_argument("--so-sem-faixa", dest="so_sem_faixa", action="store_true", default=False)
     parser.add_argument("--lote", action="store_true", default=False)
     parser.add_argument("--ordem", default=None)
     parser.add_argument("--relatorio", default=None)
@@ -2761,6 +2788,8 @@ def main(argv=None):
     if args.apagar == "":
         sys.stderr.write("curar: erro: --apagar leva a obra (ou vai com --espelhos)\n")
         return 2
+    if args.marcar_secoes:
+        return acao_marcar_secoes(args, autor, headers)
     if args.lote or args.rejulgar or args.ordem is not None or args.relatorio is not None:
         # spec espelho-de-leitura §4.2 e §9 caso 8 (#3193): os atos de lote sobre o estoque
         if not args.lote:
