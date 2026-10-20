@@ -269,6 +269,38 @@ exigir_segredos() {
   [ "$falta" -eq 0 ] || { echo "recusa: faltam $falta segredo(s) de \"$STACK\" — ver: seg segredo exigidos $STACK" >&2; exit 1; }
 }
 
+# Projeto compose de OUTRA stack do registro: o campo `projeto`, senao o `name:` do primeiro compose dela, lido da
+# release (so o que mora sob as raizes de producao). Vazio quando nao se acha: quem pergunta trata como "nao de pe".
+projeto_de() {  # $1=slug de outra stack
+  local s="$1" p c
+  p="$(campo "$s" projeto)"
+  if [ -z "$p" ]; then
+    c="$(lista "$s" compose | head -n 1)"
+    case "$c" in "$PLATAFIRMA_RELEASE/"*|"$PF_RELEASE_RAIZ/"*) ;; *) return 0 ;; esac
+    [ -r "$c" ] || return 0
+    p="$(python3 -c 'import sys, yaml; print((yaml.safe_load(open(sys.argv[1])) or {}).get("name") or "")' "$c" 2>/dev/null || true)"
+  fi
+  printf '%s' "$p"
+}
+
+# Stack que declara `reversao.exige` (lista de slugs) so sobe com essas de pe: a busca exige a rag (card #3842, R29).
+# "De pe" e ao menos um conteiner rodando no projeto compose da exigida. Recusa alto, com o nome de quem falta, em vez
+# de subir o servico e deixa-lo falhar no primeiro DNS. Sem o campo, nada muda.
+exigir_de_pe() {
+  local req proj falta=()
+  while read -r req; do
+    [ -n "$req" ] || continue
+    proj="$(projeto_de "$req")"
+    if [ -z "$proj" ] || [ -z "$(docker ps -q --filter "label=com.docker.compose.project=$proj" --filter status=running 2>/dev/null)" ]; then
+      falta+=("$req")
+    fi
+  done < <(jq -r --arg s "$STACK" '.stacks[$s].reversao.exige // empty | if type == "array" then .[] else . end' <<<"$TOPO_JSON")
+  [ "${#falta[@]}" -eq 0 ] || {
+    echo "recusa: \"$STACK\" exige de pe: ${falta[*]} (nenhum conteiner rodando no projeto compose dela)." >&2
+    echo "        suba a exigida antes (release promover <familia> ou infra up <stack>) e repita." >&2
+    exit 1; }
+}
+
 # `config` imprime o ambiente ja interpolado: o valor de variavel de segredo iria parar no transcrito
 # da sessao (#2856 linha 76). Mascara o valor quando o NOME sugere segredo; o nome e o resto ficam.
 mascara_segredos() {
@@ -498,7 +530,7 @@ case "$ATO" in
     REV=""
     if [ $# -gt 0 ] && [[ "$1" != -* ]]; then REV="$1"; shift; fi
     resolver_arvore "$REV"
-    montar_compose "$ARV"; fixar_projeto; exigir_segredos; materializar_env
+    montar_compose "$ARV"; fixar_projeto; exigir_segredos; exigir_de_pe; materializar_env
     export PF_RELEASE_SHA="$SHA"
     ANTES=""
     if [ -r "$PONTOS/$STACK.atual" ]; then ANTES="$(cat "$PONTOS/$STACK.atual")"; fi
@@ -610,7 +642,7 @@ case "$ATO" in
       echo "erro: familia $REPO sem current na release ($PF_RELEASE_RAIZ/$REPO/current) — promova: release promover $REPO <rev>" >&2
       exit 1; }
     montar_compose "$ARV"; fixar_projeto
-    [ "$ACAO" != "up" ] || exigir_segredos
+    [ "$ACAO" != "up" ] || { exigir_segredos; exigir_de_pe; }
     materializar_env
     export PF_RELEASE_SHA="$(basename "$ARVORE")"
     cd "$(dirname "$COMPOSE")"
