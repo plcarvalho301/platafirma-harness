@@ -15,7 +15,11 @@ RAIZ = Path(__file__).resolve().parents[2]
 REGISTRO = RAIZ / "registro" / "motor-instancias.json"
 MOTOR = RAIZ / "bin" / "motor"
 
-CHAVES_DA_BUSCA = ("endpoint", "facets", "indexacao", "troca", "ajustes_da_geracao", "trabalhos")
+CHAVES_DA_BUSCA = ("endpoint", "facets", "ajustes_da_geracao")
+# O registro dos lotes do motor (acervo.lote_motor) ainda mora no banco do acervo, que a role `busca` nao alcanca
+# (migracao 120): na busca nova essas tres rotas voltam 502. Ficam no rag-extractor-api (8100) ate o registro mudar
+# de banco; quando mudar, voltam para CHAVES_DA_BUSCA e este grupo some (#3844).
+CHAVES_DOS_LOTES = ("indexacao", "troca", "trabalhos")
 
 
 @pytest.fixture
@@ -68,6 +72,8 @@ def test_o_registro_servido_declara_a_busca_no_motor_busca_e_o_acervo_na_acervo_
     assert (urlparse(acervo).hostname, urlparse(acervo).port) == ("127.0.0.1", 8102)
     for chave in CHAVES_DA_BUSCA:
         assert rag[chave].startswith(busca + "/"), chave
+    for chave in CHAVES_DOS_LOTES:
+        assert rag[chave].startswith("http://127.0.0.1:8100/motor/"), chave
     assert (rag["container"], rag["servico"], rag["stack"]) == ("motor-busca", "busca", "busca")
 
 
