@@ -15,11 +15,9 @@ RAIZ = Path(__file__).resolve().parents[2]
 REGISTRO = RAIZ / "registro" / "motor-instancias.json"
 MOTOR = RAIZ / "bin" / "motor"
 
-CHAVES_DA_BUSCA = ("endpoint", "facets", "ajustes_da_geracao")
-# O registro dos lotes do motor (acervo.lote_motor) ainda mora no banco do acervo, que a role `busca` nao alcanca
-# (migracao 120): na busca nova essas tres rotas voltam 502. Ficam no rag-extractor-api (8100) ate o registro mudar
-# de banco; quando mudar, voltam para CHAVES_DA_BUSCA e este grupo some (#3844).
-CHAVES_DOS_LOTES = ("indexacao", "troca", "trabalhos")
+# O registro dos lotes do motor mora no motor-pg desde a migracao 017 (#3844): indexacao, troca e trabalhos sao da
+# busca como o resto.
+CHAVES_DA_BUSCA = ("endpoint", "facets", "ajustes_da_geracao", "indexacao", "troca", "trabalhos")
 
 
 @pytest.fixture
@@ -62,7 +60,7 @@ def test_registro_ilegivel_nao_vira_default_calado(tmp_path, monkeypatch):
 
 def test_o_registro_servido_declara_a_busca_no_motor_busca_e_o_acervo_na_acervo_guarda(monkeypatch):
     """A virada da #3844 (tarefa 4): a busca é o host:porta de `endpoint` (motor-busca, 8101) e as seis URLs
-    completas da instância começam pela base dela; a API do acervo é outro serviço (acervo-guarda, 8102), e os dois
+    completas da instância (busca, facetas, ajustes, indexação, troca e trabalhos) começam pela base dela; a API do acervo é outro serviço (acervo-guarda, 8102), e os dois
     já não dividem a porta do rag-extractor-api (8100)."""
     monkeypatch.delenv("PF_MOTOR_REG", raising=False)
     rag = json.loads(REGISTRO.read_text(encoding="utf-8"))["rag"]
@@ -72,8 +70,6 @@ def test_o_registro_servido_declara_a_busca_no_motor_busca_e_o_acervo_na_acervo_
     assert (urlparse(acervo).hostname, urlparse(acervo).port) == ("127.0.0.1", 8102)
     for chave in CHAVES_DA_BUSCA:
         assert rag[chave].startswith(busca + "/"), chave
-    for chave in CHAVES_DOS_LOTES:
-        assert rag[chave].startswith("http://127.0.0.1:8100/motor/"), chave
     assert (rag["container"], rag["servico"], rag["stack"]) == ("motor-busca", "busca", "busca")
 
 
