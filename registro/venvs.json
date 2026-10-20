@@ -80,6 +80,11 @@
     "lock": "conversor/uv.lock",
     "teste": "conversor"
   },
+  "casa-site": {
+    "familia": "platafirma-conhecimento",
+    "lock": "casa-site/requirements.txt",
+    "teste": "casa-site/tests"
+  },
   "marcacao": {
     "familia": "platafirma-motor",
     "lock": "deploy/marcacao/requirements-teste.txt",
