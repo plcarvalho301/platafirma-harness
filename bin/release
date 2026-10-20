@@ -4,13 +4,15 @@
 # dono: ti
 # classe: B
 # use para: saber que sha esta no ar e desde quando (estado), ler/listar/procurar um arquivo do que esta servido (ler, listar, procurar), medir o servido contra a regua de uma classe (conferir), por um sha ou tag no ar (promover), voltar ao anterior (reverter) e aplicar/listar migrações de banco (migrar). Atenção: release reverter não desfaz schema: migração que tira ou muda é revertida por migração própria.
-# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), conferir (leitura, operacao), promover (escrita, operacao), reverter (escrita, operacao), migrar (escrita, operacao)
+# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), conferir (leitura, operacao), telas (leitura, operacao), promover (escrita, operacao), reverter (escrita, operacao), migrar (escrita, operacao)
+# mecanismo: telas=casca
 # forma: texto
 # le: estado=release,arquivo-local
 # le: listar=release
 # le: ler=release
 # le: procurar=release
 # le: conferir=release,arquivo-local
+# le: telas=release,acervo.casa
 # le: promover=release,acervo.casa
 # le: reverter=release,arquivo-local
 # le: migrar=nada
@@ -19,6 +21,7 @@
 # escreve: ler=nada
 # escreve: procurar=nada
 # escreve: conferir=nada
+# escreve: telas=nada
 # escreve: promover=release,arquivo-local
 # escreve: reverter=release,arquivo-local
 # escreve: migrar=schema do banco-alvo, via docker exec psql (nao e arquivo local; nao e segredo)
@@ -96,6 +99,7 @@ uso:
   release procurar   <repo> <termo> [<prefixo>] [--json]   (a forma --termo <termo> segue valendo;
                                               --caminho <prefixo> e apelido do prefixo)
   release conferir   <classe> [<alvo>] [--ref <rev>] [--json]
+  release telas      [--json]                 as telas com stack promovida (declaracao registro/telas.json)
   release promover   <repo> [<rev>] [--ensaio] [--aceitar-suite-indisponivel]
   release reverter   <repo> [<rev>] [--ensaio]
   release promover   abertura [<rev>] [--ensaio]   publica a abertura do harness na rev (sem rev: origin/main)
@@ -2480,6 +2484,15 @@ cmd_reverter() {
   printf '%s\n' "$alvo"
 }
 
+cmd_telas() {
+  local impl="$AQUI/_release/telas/telas.py"
+  if [ ! -f "$impl" ]; then
+    printf 'release: dependência ausente: implementacao de telas nao encontrada em %s\n' "$impl" >&2
+    exit 3
+  fi
+  PF_PROD_RAIZ="$PROD_RAIZ" PF_ACERVO_BIN="$(achar_verbo acervo)" exec python3 "$impl" "$@"
+}
+
 cmd_migrar() {
   local impl="$AQUI/_release/migrar"
   if [ ! -f "$impl" ]; then
@@ -2547,6 +2560,7 @@ case "$cmd" in
   ler)      cmd_ler "$@" ;;
   procurar) cmd_procurar "$@" ;;
   conferir) cmd_conferir "$@" ;;
+  telas)    cmd_telas "$@" ;;
   promover) entrar_na_fila_de_promocao promover "$@"; cmd_promover "$@" ;;
   reverter) entrar_na_fila_de_promocao reverter "$@"; cmd_reverter "$@" ;;
   migrar)   cmd_migrar "$@" ;;
@@ -2574,7 +2588,7 @@ case "$cmd" in
     exit "$rc_i" ;;
   *)
     printf 'release: erro: ato desconhecido '\''%s'\''\n' "$cmd" >&2
-    printf 'atos: estado · listar · ler · procurar · conferir · promover · reverter · migrar\n' >&2
+    printf 'atos: estado · listar · ler · procurar · conferir · telas · promover · reverter · migrar\n' >&2
     uso_texto
     exit 2
     ;;

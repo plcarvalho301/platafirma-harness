@@ -236,6 +236,24 @@ def test_espera_dono_imprime_as_duas_partes_na_ordem(stub):
     assert any("órfão" in l and "buraco: y" in l for l in linhas)
 
 
+def test_espera_dono_json_devolve_o_corpo_da_api_como_veio(stub):
+    """Card #3899: a borda serve o corpo da API a casca; o verbo não reformata nem calcula."""
+    s, base = stub
+    s.espera = {"do_dono": {"total": 0, "perguntas": [], "prontos_para_aposta": [], "em_homologacao": []},
+                "com_cadeiras": {"abertos": 0, "orfaos": 0, "cards": []}, "gerado_em": "2026-10-20T00:00:00Z"}
+    p = _run(["espera-dono", "--json"], base)
+    assert p.returncode == 0, p.stderr
+    assert json.loads(p.stdout) == s.espera
+    assert _run(["espera-dono", "--nada"], base).returncode == 2
+
+
+def test_espera_dono_e_mecanismo_da_casca_e_nao_face():
+    texto = BIN.read_text(encoding="utf-8")
+    assert "# mecanismo: espera-dono=casca" in texto
+    for chave in ("face", "rotulo", "volta"):
+        assert f"# {chave}: espera-dono=" not in texto, chave
+
+
 def test_para_html_separa_os_rotulos_do_two_pager(stub):
     """O achado do #3408: Solução e Peças caíam dentro de Medida e de Fora."""
     s, base = stub

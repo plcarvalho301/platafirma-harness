@@ -8,7 +8,7 @@
 # controle/tests/VERDES. Aqui `politica-acesso/*.py` é o código do PDP que o servidor importa; o
 # `politica.yaml` e os dados de identidade não são lidos por estes testes (a rodada diária pega).
 test_cadeia_linha_real.py | bin/repo bin/sessao bin/_sessao/** bin/_minuta/** ops-server/** politica-acesso/*.py
-test_contrato_borda.py | borda/** bin/motor lib/oplog.py ops-server/** politica-acesso/*.py
+test_contrato_borda.py | borda/** bin/motor bin/preferencia bin/release bin/tarefas lib/oplog.py ops-server/** politica-acesso/*.py
 test_exec_conta.py | ops-server/**
 test_fundamento_face.py | lib/oplog.py ops-server/** politica-acesso/*.py
 test_formatos.py | ops-server/**

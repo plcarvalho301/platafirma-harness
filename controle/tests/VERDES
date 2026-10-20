@@ -227,6 +227,8 @@ testes/test_tarefas_moldes.py | bin/tarefas
 # detalhe, ordenar, bloquear, desbloquear, despriorizar com a lista de motivos e carteira (34 passam; contra o
 # bin/tarefas de antes, 29 ficam vermelhos), contra um rastreador de mentira em loopback.
 testes/test_tarefas_carteira.py | bin/tarefas
+testes/test_release_telas.py | bin/release bin/_release/** registro/**
+testes/test_conferir_mecanismo.py | bin/release bin/_release/** bin/preferencia bin/tarefas
 # Medido em 14/10/2026 (card #3552): admitir com raio, esperado e stack e a stack contra o catálogo, listar
 # por stack, vencidos, matar nos três jeitos e na porta antiga, e indicadores (50 passam; contra o bin/tarefas
 # de antes, 31 ficam vermelhos), contra um rastreador e um catálogo de mentira.

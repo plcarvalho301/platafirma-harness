@@ -1,0 +1,45 @@
+{
+  "_": [
+    "Declaracao unica das TELAS da instancia (card #3899; arq:0124 §3; comentario #3062 do #3602).",
+    "Tela e o servico que a pessoa abre no navegador; serve zero ou uma face (comentario #3061).",
+    "Duas leituras saem daqui: `release telas` (a lista do menu da casca, so das telas cuja stack",
+    "esta promovida) e a lista de origens que a borda deixa escrever (borda/borda.py, BORDA_TELAS).",
+    "Dona: ti (configuracao da instancia); o rotulo e caneta de produto. Formato PROVISORIO: o epico",
+    "do plano de controle (#3379) o confirma.",
+    "Campos: id · rotulo (texto do menu) · origem (esquema + host, sem barra) · href (endereco de entrada)",
+    "· posicao (ordem no menu) · face (a face que a tela serve, ou null) · familia e stack (o que precisa",
+    "estar no ar: stack registrada com compose, em familia com current)."
+  ],
+  "telas": [
+    {
+      "id": "rastreador",
+      "rotulo": "Rastreador",
+      "origem": "https://tarefas.platafirma.org",
+      "href": "https://tarefas.platafirma.org/",
+      "posicao": 1,
+      "face": null,
+      "familia": "platafirma-ui",
+      "stack": "rastreador-tela"
+    },
+    {
+      "id": "motor",
+      "rotulo": "motor",
+      "origem": "https://controle.platafirma.org",
+      "href": "https://controle.platafirma.org/motor/",
+      "posicao": 2,
+      "face": "motor",
+      "familia": "platafirma-ui",
+      "stack": "face-motor-tela"
+    },
+    {
+      "id": "casa",
+      "rotulo": "Casa",
+      "origem": "https://casa.platafirma.org",
+      "href": "https://casa.platafirma.org/",
+      "posicao": 3,
+      "face": null,
+      "familia": "platafirma-conhecimento",
+      "stack": "casa-site"
+    }
+  ]
+}

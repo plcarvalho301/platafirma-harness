@@ -77,8 +77,8 @@ echo "FUND=$PF_FUNDAMENTO"
 PREFERENCIA = """#!/bin/sh
 # preferencia — verbo de brinquedo do contrato da rota do tema (#3738)
 # atos: ler (leitura, p), escrever (escrita, p)
-# face: ler=casca
-# face: escrever=casca
+# mecanismo: ler=casca
+# mecanismo: escrever=casca
 arq="$PF_MARCA.tema.$PF_SUJEITO"
 case "$1" in
   ler)
@@ -90,6 +90,27 @@ case "$1" in
       *) echo "fora do vocabulário" >&2; exit 2 ;;
     esac ;;
 esac
+"""
+
+# Os verbos `release` e `tarefas` de brinquedo (#3899): o mesmo cabecalho de mecanismo dos verbos reais, e a saida
+# `--json` que a casca le. Cada um anota na marca quem os chamou (sujeito e argumentos).
+TELAS = {"telas": [{"id": "rastreador", "rotulo": "Rastreador", "href": "https://tarefas.exemplo.org/",
+                    "posicao": 1, "face": None}]}
+ESPERA = {"do_dono": {"total": 0, "perguntas": [], "prontos_para_aposta": [], "em_homologacao": []},
+          "com_cadeiras": {"abertos": 0, "orfaos": 0, "cards": []}}
+RELEASE = """#!/bin/sh
+# release — verbo de brinquedo do contrato da rota das telas (#3899)
+# atos: telas (leitura, o), promover (escrita, o)
+# mecanismo: telas=casca
+echo "SUJ=$PF_SUJEITO ARGS=$*" >> "$PF_MARCA"
+echo '""" + json.dumps(TELAS) + """'
+"""
+TAREFAS = """#!/bin/sh
+# tarefas — verbo de brinquedo do contrato da rota do que espera o dono (#3899)
+# atos: listar, espera-dono (leitura, t)
+# mecanismo: espera-dono=casca
+echo "SUJ=$PF_SUJEITO ARGS=$*" >> "$PF_MARCA"
+echo '""" + json.dumps(ESPERA) + """'
 """
 OUTRO_SUB = "0f6f2a1e-6d0e-4a55-9a3d-1b8c0c4e9a77"
 
@@ -128,6 +149,13 @@ def porta(tmp_path_factory):
     antiga_pref = ferramentas.pop("preferencia", None)
     s.mcp.tool(name="preferencia", description="preferencia de brinquedo")(
         s._faz_tool_verbo("preferencia", str(pref), "p"))
+    leituras = {}
+    for nome_, texto_, tipo_ in (("release", RELEASE, "o"), ("tarefas", TAREFAS, "t")):
+        arq_ = verbo.parent / nome_
+        arq_.write_text(texto_, encoding="utf-8")
+        arq_.chmod(arq_.stat().st_mode | stat.S_IXUSR)
+        leituras[nome_] = (arq_, ferramentas.pop(nome_, None))
+        s.mcp.tool(name=nome_, description=f"{nome_} de brinquedo")(s._faz_tool_verbo(nome_, str(arq_), tipo_))
     gerente = s.mcp._session_manager
     s.mcp._session_manager = None          # o lifespan do gerente roda uma vez só: este app tem o dele
     app = s.mcp.streamable_http_app()
@@ -143,11 +171,16 @@ def porta(tmp_path_factory):
             break
         time.sleep(0.02)
     assert servidor.started, "a porta de teste não subiu"
-    yield SimpleNamespace(url=f"http://127.0.0.1:{numero}/mcp", verbo=verbo, preferencia=pref)
+    yield SimpleNamespace(url=f"http://127.0.0.1:{numero}/mcp", verbo=verbo, preferencia=pref,
+                          release=leituras["release"][0], tarefas=leituras["tarefas"][0])
     servidor.should_exit = True
     fio.join(10)
     ferramentas.pop("motor", None)
     ferramentas.pop("preferencia", None)
+    for nome_, (_arq, antiga_) in leituras.items():
+        ferramentas.pop(nome_, None)
+        if antiga_ is not None:
+            ferramentas[nome_] = antiga_
     if antiga is not None:
         ferramentas["motor"] = antiga
     if antiga_pref is not None:
@@ -331,6 +364,52 @@ def test_a_troca_de_tema_nao_exige_login_recente(porta, tmp_path):
 def test_valor_fora_do_vocabulario_sai_400_pelo_verbo_e_nao_grava(porta, tmp_path):
     assert _pede_tema(porta, "PUT", _token(), {"valor": "roxo"})[0] == 400
     assert _pede_tema(porta, "GET", _token()) == (200, {"valor": None})
+
+
+# --- #3899: as outras duas leituras da casca (arq:0124 §3; seg:0016 item 6) -------------------------
+
+def _casca(porta_):
+    verbos = [borda.Face(borda.FACE_DA_CASCA, verbo=str(arq)) for arq in
+              (porta_.preferencia, porta_.release, porta_.tarefas)]
+    return borda.Borda(verbos, origens=(ORIGEM,), porta_url=porta_.url, saida=io.StringIO())
+
+
+def _le_casca(porta_, caminho, token=None):
+    cab = {borda.CABECALHO_DO_GATE: token} if token else {}
+    status, _, dado = asyncio.run(borda._chamar(_casca(porta_), "GET", caminho, cab))
+    return status, json.loads(dado)
+
+
+def test_a_lista_de_telas_e_o_que_espera_o_dono_chegam_pela_porta_com_o_sub_do_token(porta, tmp_path):
+    assert _le_casca(porta, borda.ROTA_DAS_TELAS, _token()) == (200, TELAS)
+    assert _le_casca(porta, borda.ROTA_DA_ESPERA, _token(login_ha_s=7200)) == (200, ESPERA)
+    marca = _marca(tmp_path).splitlines()
+    assert marca == [f"SUJ={SUB} ARGS=telas --json", f"SUJ={SUB} ARGS=espera-dono --json"]
+    giros = [g for g in _linhas(tmp_path) if g.get("tool") in ("release", "tarefas") and not g.get("evento")]
+    assert [g["tool"] for g in giros] == ["release", "tarefas"]
+    assert {g["turno_fonte"] for g in giros} == {"face"} and {g["sub"] for g in giros} == {SUB}
+    assert all(g["cadeira"] is None and g["exit_code"] == 0 for g in giros)
+
+
+def test_as_leituras_da_casca_recusam_sem_token_e_token_de_outro_client(porta, tmp_path):
+    for rota in (borda.ROTA_DAS_TELAS, borda.ROTA_DA_ESPERA):
+        assert _le_casca(porta, rota)[0] == 401
+        status, resposta = _le_casca(porta, rota, _token(azp="agy-cli"))
+        assert status == 403 and "azp" in resposta["erro"]
+        assert _le_casca(porta, rota, _token(aud="outro-servico"))[0] == 401
+    assert _marca(tmp_path) is None, "o verbo rodou"
+
+
+def test_a_casca_so_alcanca_o_ato_que_o_verbo_poe_no_mecanismo(porta, tmp_path):
+    """`promover` e de escrita e esta no `# atos:` do release, mas sem `mecanismo:` a casca nao o alcanca, e a
+    casca (componente, nao face) nao tem rota `/api/casca/<ato>`; a rota do tema segue de pe com os tres
+    verbos na mesma carga."""
+    cab = {borda.CABECALHO_DO_GATE: _token(), "origin": ORIGEM, "x-pf-tela": "1", "content-type": "application/json"}
+    for metodo, caminho in (("POST", "/api/casca/promover"), ("GET", "/api/casca/telas"), ("PUT", borda.ROTA_DAS_TELAS)):
+        status, _, _ = asyncio.run(borda._chamar(_casca(porta), metodo, caminho, cab, b"{}"))
+        assert status in (404, 405), (metodo, caminho, status)
+    assert _marca(tmp_path) is None
+    assert _le_casca(porta, borda.ROTA_DO_TEMA, _token()) == (200, {"valor": None})
 
 
 def test_token_de_outro_client_nao_chega_ao_verbo_do_tema(porta, tmp_path):
