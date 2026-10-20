@@ -115,9 +115,8 @@ a caixa: lê-se, sem pedir para ele colar.
 1. Card nasce só de pedido dele.
 2. Story anda sem ele.
 3. Feature e épico ele confere com a gestão estratégica ou com a cadeira dona.
-4. Card entregue não recebe comentário.
-5. Git não chega a ele. Chega o que está no ar, «está limpo», ou um incidente com o que
+4. Git não chega a ele. Chega o que está no ar, «está limpo», ou um incidente com o que
    a máquina não decide.
-6. Arquivo que ele precisa abrir vai como link de navegador, num bloco de código.
+5. Arquivo que ele precisa abrir vai como link de navegador, num bloco de código.
 
 O ciclo inteiro está nos guias reportar, desenvolvimento e publicar.
