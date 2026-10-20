@@ -791,6 +791,9 @@ def formatar_plano_conceito(p: dict, hermit: dict | None = None) -> str:
         lin.append(f"  HermiT insatisfazíveis {hermit['antes']} -> {hermit['depois']}  {tag}"
                    + (f"  novos: {', '.join(hermit['novos'])}" if hermit["novos"] else "")
                    + (f"  saem: {', '.join(hermit['saem'])}" if hermit["saem"] else ""))
+    f = p.get("ficha")
+    if f:
+        lin.append(f"  ficha    : {f.get('chave_humana')}  (classe {f.get('classe')}, id {f.get('id')}, {f.get('aliases')} alias)")
     lin.append(f"  emitido_por: {p.get('emitido_por')}")
     if p.get("modo") == "aplicado":
         if p.get("id"):

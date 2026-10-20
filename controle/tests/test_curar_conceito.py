@@ -141,6 +141,20 @@ def test_plano_seco_sem_pai_sem_hermit_sai_0_e_formata_conceito(ambiente, falso)
     ]
 
 
+def test_plano_seco_mostra_a_ficha_que_nasceria_com_o_id_do_conceito(ambiente, falso):
+    ficha = {"id": ID, "classe": "conceito", "chave_humana": SLUG, "estado": "ativa", "aliases": 1}
+    falso.cenario_post = lambda corpo, caminho: (200, plano_conceito(corpo, ficha=ficha))
+    p = _curar(ambiente, *BASE_ARGS, "--sem-hermit")
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert f"ficha    : {SLUG}  (classe conceito, id {ID}, 1 alias)" in p.stdout
+
+
+def test_plano_seco_sem_ficha_na_resposta_nao_inventa_a_linha(ambiente, falso):
+    p = _curar(ambiente, *BASE_ARGS, "--sem-hermit")
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert "ficha    :" not in p.stdout
+
+
 def test_plano_seco_sem_pai_com_hermit_roda_projecao_e_aprova(ambiente, tmp_path):
     env, anotados = _hermit_falso(tmp_path, ambiente)
     p = _curar(env, *BASE_ARGS)
