@@ -80,6 +80,16 @@
     "lock": "conversor/uv.lock",
     "teste": "conversor"
   },
+  "casa-site": {
+    "familia": "platafirma-conhecimento",
+    "lock": "casa-site/requirements.txt",
+    "teste": "casa-site/tests"
+  },
+  "_casa-site-tela": "stack node da prova de navegador do site da casa (card #3904): o lock proprio de casa-site/tests poe o node_modules na raiz do clone, de onde `import 'puppeteer-core'` se resolve a partir de casa-site/tests/*.mjs. Sem 'teste': a prova abre navegador e e `degrau: demanda` (decisao do dono de 17/10/2026, #3735), fora do portao; roda por alvo, `teste rodar casa-site-tela@<bancada> casa-site/tests/prova_casca.mjs`.",
+  "casa-site-tela": {
+    "familia": "platafirma-conhecimento",
+    "lock": "casa-site/tests/package-lock.json"
+  },
   "marcacao": {
     "familia": "platafirma-motor",
     "lock": "deploy/marcacao/requirements-teste.txt",
