@@ -110,6 +110,13 @@ class Falso:
                                                            "servivel": True, "imperfeita": True,
                                                            "motivo": ["perda líquida 2.31% ≤ 8%"]}]})
                     return self._resp(200, {"modo": "plano", "regua": 6, "n": 1, "itens": [item]})
+                if self.path == "/acervo/espelhos/secoes":
+                    reprovadas = ([{"impressao": "imp-9", "obra_id": OBRA,
+                                    "problemas": ["seção: buraco de 10 a 20 entre 'a' e 'b'"]}]
+                                  if corpo.get("impressao") == "imp-9" else [])
+                    return self._resp(200, {"modo": "aplicado" if corpo.get("aplicar") else "plano",
+                                            "ato": "marcar-secoes", "n": 3 + len(reprovadas),
+                                            "conformes": 3, "reprovadas": reprovadas})
                 if self.path == f"/acervo/obras/{OBRA}/reextracoes":
                     if corpo.get("metodo") == "perfil":
                         return self._resp(422, {"type": "about:blank", "title": "ReextracaoReprovada",
@@ -147,6 +154,33 @@ def _curar(falso, *argv):
 
 
 precisa_requests = pytest.mark.skipif(PY is None, reason="nenhum python com `requests` (curar precisa)")
+
+
+@precisa_requests
+def test_marcar_secoes_plano_confere_e_nao_grava(falso):
+    r = _curar(falso, "--marcar-secoes")
+    assert r.returncode == 0, r.stderr
+    assert "3 conformes" in r.stdout and "plano" in r.stdout and "--apply" in r.stdout
+    verbo, caminho, corpo = falso.chamadas[-1]
+    assert (verbo, caminho) == ("POST", "/acervo/espelhos/secoes")
+    assert corpo["aplicar"] is False and corpo["so_sem_faixa"] is False and "impressao" not in corpo
+
+
+@precisa_requests
+def test_marcar_secoes_apply_so_sem_faixa_leva_o_pedido(falso):
+    r = _curar(falso, "--marcar-secoes", "--so-sem-faixa", "--apply")
+    assert r.returncode == 0, r.stderr
+    assert "faixas gravadas" in r.stdout
+    corpo = falso.chamadas[-1][2]
+    assert corpo["aplicar"] is True and corpo["so_sem_faixa"] is True
+
+
+@precisa_requests
+def test_marcar_secoes_com_reprovada_lista_a_causa_e_sai_1(falso):
+    r = _curar(falso, "--marcar-secoes", "--impressao", "imp-9")
+    assert r.returncode == 1
+    assert "REPROVADA imp-9" in r.stdout and "buraco" in r.stdout
+    assert falso.chamadas[-1][2]["impressao"] == "imp-9"
 
 
 @precisa_requests
