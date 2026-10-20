@@ -11,6 +11,9 @@ quando a fronteira está certa.
 """
 from __future__ import annotations
 
+import json
+import re
+
 K = 8
 LIMITE_NO_TEXTO = 15      # perguntas diferentes que o texto lista; o resto está no JSON salvo
 
@@ -124,7 +127,8 @@ LEITURAS_DO_ACERVO = ("/acervo/descoberta", "/acervo/conceitos", "/acervo/ferram
 # leituras de uma obra, pelo primeiro id que `/acervo/obras` devolve nos dois lados
 LEITURAS_DA_OBRA = ("/acervo/obras/{id}", "/acervo/obras/{id}/situacao", "/acervo/obras/{id}/ficha",
                     "/acervo/obras/{id}/impressoes", "/acervo/obras/{id}/derivacoes")
-VOLATEIS = frozenset({"tempos_ms", "lido_em", "agora", "gerado_em", "uptime_s"})
+VOLATEIS = frozenset({"tempos_ms", "lido_em", "medido_em", "agora", "gerado_em", "uptime_s"})
+UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 LIMITE_DE_DIFERENCAS = 5
 
 
@@ -158,7 +162,8 @@ def diferencas(a, b, caminho: str = "$") -> list:
 
 
 def primeiro_id(corpo) -> str | None:
-    """O id da primeira obra de `/acervo/obras`, seja a resposta uma lista ou um objeto com a lista dentro."""
+    """O id da primeira obra de `/acervo/obras`: o `id` do primeiro item, seja a resposta uma lista ou um objeto com a
+    lista dentro; na projeção em outra forma, o primeiro uuid que o corpo traz."""
     if isinstance(corpo, dict):
         itens = next((v for v in corpo.values() if isinstance(v, list)), [])
     else:
@@ -166,7 +171,8 @@ def primeiro_id(corpo) -> str | None:
     for it in itens:
         if isinstance(it, dict) and it.get("id"):
             return str(it["id"])
-    return None
+    achado = UUID.search(json.dumps(corpo, ensure_ascii=False)) if isinstance(corpo, (dict, list)) else None
+    return achado.group(0) if achado else None
 
 
 def leitura(rota: str, servida, nova) -> dict:
