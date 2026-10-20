@@ -933,8 +933,20 @@ import sys, json
 repo = sys.argv[1]
 d = json.loads(sys.stdin.read())
 if isinstance(d, dict): d = [d]
-for s in d:
-    if s.get("repo") != repo: continue
+da_familia = [s for s in d if s.get("repo") == repo]
+# A ordem e a do registro (por slug), com uma excecao declarada: a stack que traz `reversao.depois` sobe depois das
+# que nomeia, quando estao na mesma familia (a busca depois do motor, card #3842). Ciclo ou nome que nao e da
+# familia nao trava: vale a ordem do registro.
+depois = {s.get("slug"): [p for p in ((s.get("reversao") or {}).get("depois") or []) if isinstance(p, str)]
+          for s in da_familia}
+por_slug = {s.get("slug"): s for s in da_familia}
+ordem, pendentes = [], list(por_slug)
+while pendentes:
+    pronta = next((n for n in pendentes if all(p not in pendentes or p == n for p in depois[n])), pendentes[0])
+    ordem.append(pronta)
+    pendentes.remove(pronta)
+for n in ordem:
+    s = por_slug[n]
     via = ((s.get("reversao") or {}).get("via")) or "?"
     if "compose" in s and not s["compose"]: via = "catalogo"
     print("%s %s" % (s.get("slug"), via))
