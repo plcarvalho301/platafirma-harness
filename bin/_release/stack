@@ -306,7 +306,8 @@ exigir_de_pe() {
 mascara_segredos() {
   sed -E \
     -e 's/^([[:space:]]*(- +)?[A-Za-z0-9_]*(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|PRIVATE_?KEY|_KEY|COOKIE)[A-Za-z0-9_]*[[:space:]]*[:=][[:space:]]*).+$/\1***/I' \
-    -e 's/^([[:space:]]*"[A-Za-z0-9_]*(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|PRIVATE_?KEY|_KEY|COOKIE)[A-Za-z0-9_]*"[[:space:]]*:[[:space:]]*)"[^"]*"/\1"***"/I'
+    -e 's/^([[:space:]]*"[A-Za-z0-9_]*(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|PRIVATE_?KEY|_KEY|COOKIE)[A-Za-z0-9_]*"[[:space:]]*:[[:space:]]*)"[^"]*"/\1"***"/I' \
+    -e 's#(://[^:/@[:space:]"]+):[^@[:space:]/"]+@#\1:***@#g'
 }
 
 compose() {
