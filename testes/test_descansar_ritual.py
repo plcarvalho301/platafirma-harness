@@ -51,7 +51,7 @@ def test_2b_nao_manda_mais_gravar_diario_no_caderno():
 def test_resto_do_ritual_intacto():
     texto = _ritual()
     assert "2a. conhecimento curado" in texto
-    assert "3. triagem da memoria do Project" in texto
+    assert "3. triagem da memoria do claude.ai" in texto
     assert "descansar fita --encerra-sessao" in texto
 
 
@@ -77,6 +77,21 @@ def test_2c_marca_a_aresta_so_do_que_entrou_na_resposta():
     p = _passo(_ritual(), "2c.", "\n3. ")
     assert "mesa aresta <chapeu>" in p and "--para <ponta>" in p and "--para-que" in p
     assert "#2947" in p and "puxado de fora da cadeira" in p
+
+
+# ---------------------------------------------------------------- #3930: a memoria do claude.ai
+def test_3_cobre_as_duas_camadas_e_a_passada_automatica():
+    p = _passo(_ritual(), "\n3. ", "\n4. ")
+    assert "camada do Project" in p and "/projects/<id>/" in p
+    assert "camada de conta" in p and "passada automatica" in p
+    assert "REPETE-CONDUTA" in p and "SUBSTRATO" in p and "FOSSIL" in p and "TRATO" in p
+
+
+def test_3_limpa_so_o_project_e_so_com_pedido_do_dono():
+    p = _passo(_ritual(), "\n3. ", "\n4. ")
+    assert "PORTAO" in p and "MENSAGEM DO DONO neste turno" in p
+    assert "nunca se edita daqui" in p, "a conta nao se escreve da sessao do Project"
+    assert "configuracao de memoria do Project" in p and "ato dele" in p, "a escolha do caminho e do dono"
 
 
 def test_a_mesa_do_passo_1_e_item_nao_prosa():

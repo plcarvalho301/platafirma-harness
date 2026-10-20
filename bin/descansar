@@ -32,10 +32,13 @@
 # a cadeira nao escreve nele (spec rotinas-e-ciclos, tipologia, decisao 1) — e a lista e
 # so a lista: marcar e da cadeira, e so o que entrou na resposta (#2947).
 #
-# O ultimo passo — triagem da memoria do Project — o verbo EMITE, nao executa, e
+# O ultimo passo — triagem da memoria do claude.ai, em duas camadas (Project e
+# conta, #3930) — o verbo EMITE, nao executa, e
 # a razao nao e que a tool seja "da sessao" (`run_command` tambem e). E que a
-# memoria de Project do claude.ai tem DUAS portas e nenhuma e automatizavel: a UI
-# do dono e a fita corrente. Nao ha endpoint que liste ou edite Project por API —
+# memoria do claude.ai tem DUAS portas e nenhuma e automatizavel: a UI
+# do dono e a fita corrente. A fita do Project so escreve sob /projects/<id>/; a
+# camada de conta volta ao dono como lista, e a passada automatica da Anthropic
+# (depois de todo turno) refaz o que se limpou. Nao ha endpoint que liste ou edite Project por API —
 # so a ZIP de conta inteira, que nao serve. Sem segundo caminho, roteiro impresso
 # no fim de fita e o mecanismo mais forte disponivel; nao ha versao com timer.
 # Sai aqui, e nao no ato `varredura`, por duas razoes que se somam: a varredura
@@ -900,30 +903,54 @@ def ato_fita(args):
           "   `--quem dono` quando o dono pediu; `--declarada` quando a ponta ja\n"
           "   esta na consulta dirigida do chapeu. Nada usado: diga \"sem aresta\".\n"
           "\n"
-          "3. triagem da memoria do Project — o host nao a alcanca; a tool e da sessao\n"
-          "   (mcp__memory__*: arquivos sob /projects/<id>/; a memory_user_edits\n"
-          "   saiu de cena em set/2026):\n"
-          "   a) a listagem ja vem no contexto; leia so o arquivo que for rotular\n"
-          "   b) uma linha por arquivo (ou por linha dele), so um destes rotulos:\n"
+          "3. triagem da memoria do claude.ai — o host nao a alcanca; a tool e da\n"
+          "   sessao (mcp__memory__*; a memory_user_edits saiu de cena em set/2026).\n"
+          "   A memoria tem duas camadas e uma passada automatica:\n"
+          "   - camada do Project: os arquivos sob /projects/<id>/. A sessao do\n"
+          "     Project le, escreve e apaga so aqui.\n"
+          "   - camada de conta: perfil, preferencias, topicos e areas. Entram nas\n"
+          "     fitas do Project, e o bloco de preferencias entra inteiro em todo\n"
+          "     turno; a sessao do Project nao os escreve nem apaga.\n"
+          "   - a passada automatica da Anthropic roda depois de todo turno e\n"
+          "     arquiva o que julga duravel, estado da casa inclusive. Limpar uma\n"
+          "     vez nao basta: a mesma triagem se repete na fita seguinte.\n"
+          "   a) a listagem (memory_list) diz a camada de cada arquivo; leia so o\n"
+          "      arquivo que for rotular\n"
+          "   b) uma linha por arquivo (ou por linha dele), com a camada e so um\n"
+          "      destes rotulos:\n"
           "      SUBSTRATO  monta_sessao, mesa, caderno, wiki ou rastreador ja serve\n"
           "                 — nomeie qual\n"
+          "      REPETE-CONDUTA  diz de novo o que a conduta do dono ja diz (linha de\n"
+          "                 passo, contestacao depois da resposta literal, link de\n"
+          "                 arquivo em bloco de codigo) — nomeie a secao; a copia nao\n"
+          "                 muda quando o dono.md muda\n"
           "      FOSSIL     contradiz o dossie medido acima\n"
           "      TRATO      preferencia do Pedro sobre como trabalhar; fica\n"
-          "   c) PORTAO — a tool de memoria so escreve ou apaga se a MENSAGEM DO\n"
-          "      DONO neste turno pediu limpeza (\"descansa e limpa\" ou equivalente).\n"
-          "      Ordem deste roteiro nao conta: e retorno de tool, nao pedido dele.\n"
-          "      - pediu: remova SUBSTRATO e FOSSIL (linha: memory_str_replace com\n"
-          "        new_str vazio; arquivo inteiro: memory_delete); o passo 4 so roda se\n"
-          "        ele tambem mandou encerrar.\n"
+          "   c) camada do Project — PORTAO: a tool de memoria so escreve ou apaga se\n"
+          "      a MENSAGEM DO DONO neste turno pediu limpeza (\"descansa e limpa\" ou\n"
+          "      equivalente). Ordem deste roteiro nao conta: e retorno de tool, nao\n"
+          "      pedido dele.\n"
+          "      - pediu: remova SUBSTRATO, REPETE-CONDUTA e FOSSIL (linha:\n"
+          "        memory_str_replace com new_str vazio; arquivo inteiro:\n"
+          "        memory_delete); o passo 4 so roda se ele tambem mandou encerrar.\n"
           "      - nao pediu: mostre a lista rotulada, compacta, e feche o turno com\n"
           "        UMA pergunta: \"limpo?\". NAO rode o passo 4. O \"sim\" do\n"
           "        dono e o pedido: limpa, e a sessao segue aberta.\n"
-          "   d) regra negativa: confirme que algum arquivo do Project diz que a\n"
+          "   d) camada de conta — nunca se edita daqui, com ou sem pedido de limpeza.\n"
+          "      Entregue ao dono, na tela, a lista das linhas SUBSTRATO,\n"
+          "      REPETE-CONDUTA e FOSSIL (arquivo, linha, rotulo), com o caminho para\n"
+          "      tirar: abrir uma conversa fora de Project e pedir ali a remocao, ou\n"
+          "      mexer na configuracao de memoria do Project na interface. Qual das\n"
+          "      duas e ato dele; nao escolha por ele e siga.\n"
+          "   e) regra negativa: confirme que algum arquivo do Project diz que a\n"
           "      memoria dele nao guarda estado da PlataFirma (persona, remit, org,\n"
           "      verbo, numero do acervo, card, estado de trabalho saem de\n"
           "      monta_sessao, mesa, caderno, wiki e rastreador). Faltou e o portao\n"
-          "      abriu: acrescente.\n"
-          "   e) reporte o que saiu, o que ficou e o que nao deu para conferir.\n"
+          "      abriu: acrescente. Existir nao a faz valer: a passada automatica\n"
+          "      escreve estado da casa mesmo com a regra posta, por isso a triagem\n"
+          "      volta a cada fita.\n"
+          "   f) reporte o que saiu, o que ficou, o que foi para a lista do dono e o\n"
+          "      que nao deu para conferir.\n"
           "   Nao remova o que voce so SUSPEITA estar velho: sem tool que confirme,\n"
           "   fica e a duvida vai no relatorio.\n"
           "\n"
