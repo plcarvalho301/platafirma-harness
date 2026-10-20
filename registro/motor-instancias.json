@@ -396,6 +396,16 @@
   "ajustes": [],
   "_leia": "A busca nova do #3844 (platafirma-motor@rag, stack busca). So existe para `motor rag medir <particao> --contra busca` comparar o top-8 com o servido; os enderecos do rag so passam para ca na tarefa 4 do card."
  },
+ "acervo-guarda": {
+  "estado": "ativa",
+  "container": "acervo-guarda",
+  "stack": "acervo-guarda",
+  "api_acervo": "http://127.0.0.1:8102",
+  "token_em": "acervo-guarda/RAG_API_TOKEN",
+  "medicoes_em": "/srv/platafirma/casa/var/medicoes/acervo-guarda",
+  "ajustes": [],
+  "_leia": "A API do acervo que sobe sozinha (#3844, unidade 7): so serve o acervo, sem busca. Existe para `motor rag medir biblioteca --contra acervo-guarda --acervo` comparar as leituras com as do 8100; `api_acervo` fica fora de `enderecos` de proposito, porque os chamadores so leem o do rag ate a tarefa 4 do card."
+ },
  "marcacao": {
   "estado": "ativa",
   "tipo": "marcacao-api",
