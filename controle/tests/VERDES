@@ -95,6 +95,7 @@ tests/test_bot.py | bin/acervo bin/_acervo/** bin/agente bin/bot bin/conferir bi
 # importa; linha sem referencia nenhuma fica sem raio e quase nunca roda no portao.
 tests/test_motor_indexar.py | bin/motor bin/_motor/**
 tests/test_motor_troca.py | bin/motor bin/_motor/**
+tests/test_motor_contra.py | bin/motor bin/_motor/** registro/motor-instancias.json
 # Card #3349: `motor marcacao`, cliente da marcacao-api (rotas /interno/), contra uma API falsa no loopback.
 tests/test_motor_marcacao.py | bin/motor bin/_motor/**
 # Card #3349: `motor rag sortear biblioteca` (filtros do padrao contados por motivo, cota por cadeira, ordem sorteada, sha do arquivo).

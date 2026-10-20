@@ -114,6 +114,7 @@ import consulta  # noqa: E402  (a consulta montada pelo verbo: lint, pedido do d
 import par_consulta  # noqa: E402  (o par minimo: a chamada de hoje, a frase do dono e a lista montada, #3360)
 import juiz  # noqa: E402  (o juiz do piloto da escada: Claude pelo gerador do rag, criterio da tela, #3350)
 import kappa  # noqa: E402  (o juiz contra a primeira passada do dono, divergencias e lote de conferencia, #3350)
+import comparar  # noqa: E402  (o top-8 de duas instancias da busca, `medir --contra`, #3844)
 import chamada_rag  # noqa: E402  (a chamada ao rag-api que o ajuste e os trabalhos repetem, #3513)
 import ajuste as ajustemod  # noqa: E402  (o ajuste pela geracao servindo, com fundamento, historico e recusas, #3513)
 import consultas as consultasmod  # noqa: E402  (o log de recuperacao como o dono o le: lista e serie por dia, #3513)
@@ -263,6 +264,11 @@ def uso(cod=2):
   motor <inst> medir  <particao> --sombra-parar <id> encerra a sombra em curso
   motor <inst> medir  <particao> --json             a bateria em JSON: o bloco de cada indicador, o delta, a hora e a fonte
   motor <inst> medir  <particao> --historico [--desde <data>] [--rotulo <r>] [--json]
+  motor <inst> medir  <particao> --contra <outra> [--k N] [--gabarito <arq>] [--log N] [--json]
+                                        o top-k de duas instancias da busca lado a lado, com origem `sombra`, no
+                                        gabarito e (--log) nas ultimas perguntas do log: Jaccard por pergunta, trecho
+                                        que cruza particao e indice (embedder, geracao) dos dois lados; exit 0 so sem
+                                        diferenca nenhuma (a virada do #3844), 1 com qualquer uma, 3 com uma fora
                                         as rodadas salvas em ordem, com o marco de cada virada de geracao e de
                                         cada ajuste aplicado
   motor <inst> consultas <particao> [--desde <data>] [--ate <data>] [--cadeira <slug>] [--chapeu <slug>]
@@ -3410,6 +3416,8 @@ def cmd_medir(nome, inst, argv):
     """`medir`: a bateria (texto, ou JSON com `--json`) e o historico das rodadas (`--historico`, #3513)."""
     if "--historico" in argv:
         return _medir_historico(inst, argv)
+    if "--contra" in argv:
+        return _medir_contra(nome, inst, argv)
     if "--json" not in argv:
         return _medir_bateria(nome, inst, argv)
     if any(x in argv for x in ("--calibrar", "--sombra", "--sombra-ver", "--sombra-parar")):
@@ -3418,6 +3426,98 @@ def cmd_medir(nome, inst, argv):
     with contextlib.redirect_stdout(sys.stderr):      # o progresso da bateria vai ao stderr; o stdout e o JSON
         res = _medir_bateria(nome, inst, [x for x in argv if x != "--json"])
     print(json.dumps(_medida_em_json(res), ensure_ascii=False, indent=1))
+
+
+USO_MEDIR_CONTRA = ("motor <inst> medir <particao> --contra <outra> [--k N] [--gabarito <arq>] [--log N] [--json]")
+
+
+def _perguntas_do_log(inst, n, particao):
+    """As `n` perguntas mais recentes distintas do log de recuperacao da partição (abertura e busca, as origens que
+    a serie diaria conta), para a comparacao rodar sobre o que as cadeiras de fato perguntam."""
+    b = inst.get("banco") or {}
+    if not b:
+        print("motor medir --log: a instancia nao declara `banco` em motor-instancias.json", file=sys.stderr)
+        sys.exit(1)
+    sql = ("/* medir:contra-log */ SELECT coalesce(json_agg(t), '[]'::json) FROM ("
+           "SELECT e.pergunta, e.particao FROM acervo.evento_recuperacao e "
+           f"WHERE e.particao = {_lit(particao)} AND e.origem IN ('abertura', 'busca') "
+           "AND e.pergunta IS NOT NULL AND e.pergunta <> '' "
+           f"GROUP BY e.pergunta, e.particao ORDER BY max(e.criado_em) DESC LIMIT {int(n)}) t")
+    valor, erro = _psql_sem_sair(b, sql)
+    if erro:
+        print(f"motor medir --log: {erro}", file=sys.stderr)
+        sys.exit(3)
+    return [{"id": None, "q": r["pergunta"], "particao": r["particao"], "fonte": "log"}
+            for r in valor or [] if isinstance(r.get("pergunta"), str)]
+
+
+def _medir_contra(nome, inst, argv):
+    """`medir <particao> --contra <outra>` (card #3844, tarefa 2; R27 da spec motor): a bateria do gabarito (e, com
+    `--log N`, as ultimas perguntas do log) nas duas instancias com origem `sombra`, o top-k de cada uma lado a lado
+    e o cruzamento de particao. Exit 0 so com top-k identico em toda pergunta, nenhum trecho cruzado e o mesmo indice
+    (embedder e geracao) nos dois lados; 1 com qualquer diferenca; 3 com uma das duas fora do ar."""
+    particao, resto = resolve_particao(argv, "medir")
+    outra_nome = _valor(resto, "--contra", "medir")
+    d = reg()
+    outra = d.get(outra_nome)
+    if outra is None or outra_nome == nome or outra.get("estado") != "ativa" or not outra.get("endpoint"):
+        _usa("medir", USO_MEDIR_CONTRA,
+             f"--contra pede outra instancia ativa do registro com `endpoint` (ha: {', '.join(x for x in d if x != nome)})")
+    try:
+        k = int(_valor(resto, "--k", "medir")) if "--k" in resto else comparar.K
+        n_log = int(_valor(resto, "--log", "medir")) if "--log" in resto else 0
+    except ValueError:
+        _usa("medir", USO_MEDIR_CONTRA, "--k e --log pedem um numero")
+    gab = os.path.abspath(_valor(resto, "--gabarito", "medir")) if "--gabarito" in resto else None
+    como_json = "--json" in resto
+    if particao != "biblioteca" and not gab and not n_log:
+        _usa("medir", USO_MEDIR_CONTRA, f"a particao {particao} nao tem gabarito: passe --gabarito <arq> ou --log N")
+    tok_a, tok_b = token_da(inst), token_da(outra)
+    itens = []
+    if particao == "biblioteca" or gab:
+        gold, conta = monta_gold(inst, gab)
+        itens += [{"id": g.get("id"), "q": g["q"], "particao": particao, "fonte": "gabarito"} for g in gold]
+        print(f"gabarito: {len(gold)} pergunta(s) pontuaveis de {conta['itens']} itens", file=sys.stderr)
+    if n_log:
+        itens += _perguntas_do_log(inst, n_log, particao)
+    if not itens:
+        print("motor medir --contra: nenhuma pergunta para comparar", file=sys.stderr)
+        sys.exit(1)
+    carimbo_a = comparar.carimbo_do_indice(http(inst["facets"], tok_a).get("indice", {}))
+    carimbo_b = comparar.carimbo_do_indice(http(outra.get("facets") or outra["endpoint"].rsplit("/", 1)[0] + "/facets",
+                                                tok_b).get("indice", {}))
+
+    def topo(i, tok, q, p):
+        r = http(i["endpoint"], tok, {"pergunta": q, "k": k, "texto": "nenhum", "origem": "sombra", "particao": p})
+        return comparar.top(r.get("fontes"), k)
+
+    linhas = []
+    for n, it in enumerate(itens, 1):
+        p = it["particao"]
+        o = "casa" if p == "biblioteca" else "biblioteca"
+        a_p, b_p = topo(inst, tok_a, it["q"], p), topo(outra, tok_b, it["q"], p)
+        a_o, b_o = topo(inst, tok_a, it["q"], o), topo(outra, tok_b, it["q"], o)
+        cruz = comparar.cruzados(a_o, b_p) + comparar.cruzados(a_p, b_o)
+        linhas.append(comparar.linha(it, a_p, b_p, cruz))
+        if n % 25 == 0:
+            print(f"  ... {n}/{len(itens)}", file=sys.stderr)
+    res = comparar.resumo(linhas)
+    saida = {"lido_em": ajustemod.agora(), "servida": nome, "nova": outra_nome, "particao": particao, "k": k,
+             "carimbos": {nome: carimbo_a, outra_nome: carimbo_b}, "resumo": {x: v for x, v in res.items()
+                                                                if x not in ("diferentes", "com_cruzamento")},
+             "linhas": linhas}
+    pasta = os.path.join(dir_medicoes(inst), "contra")
+    os.makedirs(pasta, exist_ok=True)
+    arquivo = os.path.join(pasta, f"{time.strftime('%Y%m%dT%H%M%S')}-{particao}-{outra_nome}.json")
+    with open(arquivo, "w") as f:
+        json.dump(saida, f, ensure_ascii=False, indent=1)
+    limpo = comparar.veredito_limpo(res, carimbo_a, carimbo_b)
+    if como_json:
+        print(json.dumps({**saida, "arquivo": arquivo, "limpo": limpo}, ensure_ascii=False, indent=1))
+    else:
+        print(comparar.texto(res, nome, outra_nome, k, carimbo_a, carimbo_b))
+        print(f"salvo em {arquivo}")
+    sys.exit(0 if limpo else 1)
 
 
 def _indicador(med, nome, valor, mede, amostra):

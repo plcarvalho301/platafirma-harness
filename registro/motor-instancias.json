@@ -385,6 +385,17 @@
   },
   "env_da_ingestao": "/srv/platafirma/casa/deploy/rag/ingestao.env"
  },
+ "busca": {
+  "estado": "ativa",
+  "container": "motor-busca",
+  "stack": "busca",
+  "endpoint": "http://127.0.0.1:8101/search",
+  "facets": "http://127.0.0.1:8101/facets",
+  "token_em": "busca/RAG_API_TOKEN",
+  "medicoes_em": "/srv/platafirma/casa/var/medicoes/busca",
+  "ajustes": [],
+  "_leia": "A busca nova do #3844 (platafirma-motor@rag, stack busca). So existe para `motor rag medir <particao> --contra busca` comparar o top-8 com o servido; os enderecos do rag so passam para ca na tarefa 4 do card."
+ },
  "marcacao": {
   "estado": "ativa",
   "tipo": "marcacao-api",
