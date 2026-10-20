@@ -3,7 +3,8 @@
 # capacidade: trabalho
 # dono: gestao-estrategica
 # use para: card, board, carteira, épico/feature/story, mover estado, sign-off
-# atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub, ordenar, bloquear, desbloquear, carteira, espera-dono
+# atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub, ordenar, bloquear, desbloquear, carteira, espera-dono (leitura, trabalho)
+# mecanismo: espera-dono=casca
 #
 # Texto do controle (arq:0124 §3; arq:0125 U33; card #3446). Todo ato cai na face Entrega.
 # Rótulo: verbo no infinitivo e objeto sem artigo, um verbo por tipo de ato (Listar uma coleção,
@@ -30,7 +31,6 @@
 # face: bloquear=Entrega
 # face: desbloquear=Entrega
 # face: carteira=Entrega
-# face: espera-dono=Entrega
 # rotulo: listar=Listar card aberto
 # rotulo: listar-tudo=Listar card, fechado inclusive
 # rotulo: ler=Abrir card
@@ -50,7 +50,6 @@
 # rotulo: bloquear=Bloquear card
 # rotulo: desbloquear=Desbloquear card
 # rotulo: carteira=Ler carteira
-# rotulo: espera-dono=Ler o que espera o dono
 # volta: listar=sim — só lê
 # volta: listar-tudo=sim — só lê
 # volta: ler=sim — só lê
@@ -70,7 +69,6 @@
 # volta: bloquear=sim — tarefas desbloquear
 # volta: desbloquear=sim — tarefas bloquear
 # volta: carteira=sim — só lê
-# volta: espera-dono=sim — só lê
 # Backend: `platafirma-rastreador` (API própria), desde 16/08/2026. O Vikunja saiu.
 #
 # Loopback, e não a rota pública: `tarefas.platafirma.org` serve a superfície HUMANA
@@ -1704,8 +1702,16 @@ carteira() { # carteira [--desde AAAA-MM-DD]
 # pai em homologação) e, à parte, com as cadeiras (os demais abertos, por card, com a marca
 # de órfão). Lê pela rota própria `GET /espera-dono`; o verbo não calcula nada — a mesma
 # régua do R28 dos indicadores do balde.
+#
+# `--json` devolve o corpo da API como veio, sem reformatar: a borda o serve a casca em /api/espera-dono
+# (card #3899; mecanismo comum da arq:0124 §3, `# mecanismo: espera-dono=casca`).
 espera_dono() {
   local j; j=$(busca GET /espera-dono) || return 1
+  case "${1:-}" in
+    --json) printf '%s\n' "$j"; return 0 ;;
+    "") ;;
+    *) echo "uso: tarefas espera-dono [--json]" >&2; exit 2 ;;
+  esac
   printf '%s' "$j" | jq -r '
     "do dono (\(.do_dono.total)):",
     (if .do_dono.total == 0 then "  nada" else empty end),
@@ -1752,7 +1758,7 @@ case "$cmd" in
   bloquear)    bloquear "${1:?uso: tarefas bloquear <a> <b>}" "${2:?uso: tarefas bloquear <a> <b>}" ;;
   desbloquear) desbloquear "${1:?uso: tarefas desbloquear <a> <b>}" "${2:?uso: tarefas desbloquear <a> <b>}" ;;
   carteira)    carteira "$@" ;;
-  espera-dono) espera_dono ;;
+  espera-dono) espera_dono "$@" ;;
   modelo)      modelo "${1:-}" "${2:-}" ;;
   estados)     estados ;;
   dt)          dt "$@" ;;

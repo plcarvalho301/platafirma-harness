@@ -19,7 +19,18 @@ TOKEN = {borda.CABECALHO_DO_GATE: "a.b.c"}
 
 def test_autoteste_da_borda(capsys):
     borda._autoteste()
-    assert "borda OK (#3516, #3518, #3575, #3738)" in capsys.readouterr().out
+    assert "borda OK (#3516, #3518, #3575, #3738, #3899)" in capsys.readouterr().out
+
+
+def test_a_casca_alcanca_dos_tres_verbos_reais_so_o_ato_do_mecanismo():
+    """#3899: as tres leituras da casca (arq:0124 §3) saem do cabeçalho real de cada verbo, pela chave
+    `mecanismo:`, e nenhum deles põe a casca em `face:`."""
+    bin_ = AQUI.parent / "bin"
+    assert borda.Face("casca", verbo=str(bin_ / "release")).atos() == {"telas": {"leitura"}}
+    assert borda.Face("casca", verbo=str(bin_ / "tarefas")).atos() == {"espera-dono": {"leitura"}}
+    for verbo in ("preferencia", "release", "tarefas"):
+        texto = (bin_ / verbo).read_text(encoding="utf-8")
+        assert "casca" not in borda.ler_cabecalho(texto), verbo
 
 
 def test_a_face_casca_alcanca_do_preferencia_o_ler_e_o_escrever():
@@ -50,6 +61,26 @@ def test_a_configuracao_da_borda_da_casca_sobe_do_ambiente_da_instancia():
     app = borda.criar_app(env)
     assert list(app.faces) == ["casca"] and app.login_max_s == 0
     assert asyncio.run(borda._chamar(app, "GET", borda.ROTA_DO_TEMA, {}))[0] == 401
+
+
+def test_o_compose_liga_cada_instancia_a_declaracao_das_telas_e_as_tres_leituras():
+    """#3899: as tres instancias leem as origens da declaracao (nenhuma lista a mao), atendem uma tela que a
+    declaracao tem, e a casca nelas chama os tres verbos donos das leituras."""
+    yaml = pytest.importorskip("yaml")
+    compose = yaml.safe_load((AQUI / "compose.yaml").read_text(encoding="utf-8"))
+    declaradas = {t["id"] for t in json.loads(
+        (AQUI.parent / "registro" / "telas.json").read_text(encoding="utf-8"))["telas"]}
+    atendidas = []
+    for nome, servico in compose["services"].items():
+        env = servico["environment"]
+        assert "registro/telas.json" in env["BORDA_TELAS"], nome
+        assert env["BORDA_TELAS_ATENDE"] in declaradas, nome
+        atendidas.append(env["BORDA_TELAS_ATENDE"])
+        casca = json.loads(env["BORDA_FACES"])["casca"]
+        assert [Path(v["verbo"]).name for v in casca] == ["preferencia", "release", "tarefas"], nome
+    assert sorted(atendidas) == ["casa", "motor", "rastreador"], "uma instancia por tela, sem repetir"
+    redes = {n for s in compose["services"].values() for n in s["networks"] if n != "default"}
+    assert redes <= set(compose["networks"]) and "casca-site" in redes
 
 
 def test_a_lista_de_atos_da_face_motor_e_a_do_cabecalho_do_verbo_real():

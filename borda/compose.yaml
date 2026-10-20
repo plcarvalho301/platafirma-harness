@@ -13,9 +13,14 @@ services:
     build: .
     restart: unless-stopped
     environment:
-      # Origens que podem escrever (R31): lista fechada da instância, vírgula entre valores. Vazia, a
-      # borda lê e não escreve.
-      BORDA_ORIGENS: ${BORDA_ORIGENS:-https://controle.platafirma.org}
+      # Origens que podem escrever (R31): as da declaração das telas que esta instância atende (abaixo), mais
+      # as que a instância somar aqui, vírgula entre valores. Sem nenhuma, a borda lê e não escreve.
+      BORDA_ORIGENS: ${BORDA_ORIGENS:-}
+      # A declaração única das telas (registro/telas.json, card #3899): a fonte das origens daqui e da lista
+      # de `release telas`. Relida quando o arquivo muda; ilegível, nenhuma escrita passa. Esta instância
+      # atende a tela `motor`.
+      BORDA_TELAS: ${BORDA_TELAS:-${PF_RELEASE_RAIZ:-/opt/platafirma}/current/harness/registro/telas.json}
+      BORDA_TELAS_ATENDE: motor
       # A porta de verbos. Em docker rootless o contêiner não alcança o loopback do host (medido em
       # controle/compose.yaml), então o caminho é o publicado pelo túnel.
       BORDA_PORTA_URL: ${BORDA_PORTA_URL:-https://ops.platafirma.org/mcp}
@@ -30,7 +35,10 @@ services:
       # A face motor chama o `motor` e, do `fila`, só o `contestar` que o cabeçalho dele declara para ela
       # (#3518, buraco #2555). Texto fixo, sem interpolação: a chave `}` do JSON fecharia o `${...}` do
       # compose. Outra face ou outro caminho entra por compose.override.yaml da instância.
-      BORDA_FACES: '{"motor": [{"verbo": "/opt/platafirma/current/harness/bin/motor", "instancia": "rag", "sem_instancia": ["listar"]}, {"verbo": "/opt/platafirma/current/harness/bin/fila"}]}'
+      # A `casca` não é face: é o componente que consome o mecanismo comum (arq:0124 §3), e cada verbo dono do
+      # objeto declara o ato dele por `# mecanismo: <ato>=casca`. Aqui ela serve as três leituras da casca
+      # (`/api/preferencia/tema`, `/api/faces`, `/api/espera-dono`) a toda tela atrás deste gate.
+      BORDA_FACES: '{"motor": [{"verbo": "/opt/platafirma/current/harness/bin/motor", "instancia": "rag", "sem_instancia": ["listar"]}, {"verbo": "/opt/platafirma/current/harness/bin/fila"}], "casca": [{"verbo": "/opt/platafirma/current/harness/bin/preferencia"}, {"verbo": "/opt/platafirma/current/harness/bin/release"}, {"verbo": "/opt/platafirma/current/harness/bin/tarefas"}]}'
     volumes:
       # Só para ler o cabeçalho do verbo. Monta-se a raiz da release, e não só current/, porque current/
       # é link relativo para fora dele (mesma razão do controle/compose.yaml).
@@ -55,14 +63,18 @@ services:
     build: .
     restart: unless-stopped
     environment:
-      BORDA_ORIGENS: ${BORDA_CASCA_RASTREADOR_ORIGENS:-https://tarefas.platafirma.org}
+      # A origem vem da declaração das telas (a tela `rastreador`); o que a instância soma vai aqui.
+      BORDA_ORIGENS: ${BORDA_CASCA_RASTREADOR_ORIGENS:-}
+      BORDA_TELAS: ${BORDA_TELAS:-${PF_RELEASE_RAIZ:-/opt/platafirma}/current/harness/registro/telas.json}
+      BORDA_TELAS_ATENDE: rastreador
       BORDA_PORTA_URL: ${BORDA_PORTA_URL:-https://ops.platafirma.org/mcp}
       BORDA_CABECALHO_TOKEN: x-forwarded-access-token
       # O corte de login recente e dos atos do cubo; a troca de tema nao o tem (e a rota nao o le).
       BORDA_LOGIN_MAX_S: "0"
       # A frase que a borda poe como fundamento da escrita do tema (a porta exige um para a fonte face).
       BORDA_TEMA_FUNDAMENTO: ${BORDA_TEMA_FUNDAMENTO:-escolha do tema na casca da tela}
-      BORDA_FACES: '{"casca": {"verbo": "/opt/platafirma/current/harness/bin/preferencia"}}'
+      # As tres leituras da casca (card #3899): tema (preferencia), telas (release) e o que espera o dono (tarefas).
+      BORDA_FACES: &faces_da_casca '{"casca": [{"verbo": "/opt/platafirma/current/harness/bin/preferencia"}, {"verbo": "/opt/platafirma/current/harness/bin/release"}, {"verbo": "/opt/platafirma/current/harness/bin/tarefas"}]}'
     volumes:
       - ${PF_RELEASE_RAIZ:-/opt/platafirma}:${PF_RELEASE_RAIZ:-/opt/platafirma}:ro
     networks:
@@ -70,7 +82,39 @@ services:
       casca-rastreador:
         aliases: [casca-borda-rastreador]
 
+  # A borda da casca do site da casa (card #3899; seg:0016 item 8; card #3602). A MESMA imagem, terceira instancia:
+  # atende so as tres leituras da casca, com a origem do site (a tela `casa` da declaracao) e a lista de telas.
+  # Instancia propria pela mesma razao da do rastreador: a lista de origens e da borda inteira (R31), e o site
+  # nao deve herdar a escrita de outra origem. Sem porta publicada: so o gate do site (platafirma-core, story do
+  # portao #3902) a alcanca, pela rede de encontro abaixo. Sem credencial nova: o client do gate do site entra em
+  # PF_FACE_CLIENTS da porta junto com o gate, na story do core; sem ele a porta nega a fonte face e a casca
+  # do site segue sem tema, sem menu e sem contagem.
+  borda-casca-site:
+    build: .
+    restart: unless-stopped
+    environment:
+      BORDA_ORIGENS: ${BORDA_CASCA_SITE_ORIGENS:-}
+      BORDA_TELAS: ${BORDA_TELAS:-${PF_RELEASE_RAIZ:-/opt/platafirma}/current/harness/registro/telas.json}
+      BORDA_TELAS_ATENDE: casa
+      BORDA_PORTA_URL: ${BORDA_PORTA_URL:-https://ops.platafirma.org/mcp}
+      BORDA_CABECALHO_TOKEN: x-forwarded-access-token
+      BORDA_LOGIN_MAX_S: "0"
+      BORDA_TEMA_FUNDAMENTO: ${BORDA_TEMA_FUNDAMENTO:-escolha do tema na casca da tela}
+      BORDA_FACES: *faces_da_casca
+    volumes:
+      - ${PF_RELEASE_RAIZ:-/opt/platafirma}:${PF_RELEASE_RAIZ:-/opt/platafirma}:ro
+    networks:
+      default: {}
+      casca-site:
+        aliases: [casca-borda-site]
+
 networks:
+  # Rede de ENCONTRO com o gate do site da casa (platafirma-core, story do portao #3902): declarada aqui e la com
+  # o MESMO `name:` e em nenhum dos dois como `external`, como as outras. `internal`: so o gate e esta borda.
+  casca-site:
+    name: pf-borda-casca-site
+    internal: true
+
   # Rede de ENCONTRO com o gate do rastreador (platafirma-core, story #3739): declarada aqui e la com o MESMO
   # `name:` e em nenhum dos dois como `external`, como as outras. `internal`: so o gate e esta borda.
   casca-rastreador:

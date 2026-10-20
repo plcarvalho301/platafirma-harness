@@ -898,6 +898,53 @@ def _atos_de_face_sem_texto(caminho):
     return saida
 
 
+# Mecanismo comum da casca (arq:0124 §3, emenda de 18/10/2026; card #3899): as tres leituras que a casca
+# consome, cada uma do verbo dono do objeto, declaradas por `# mecanismo: <ato>=casca`. Mecanismo novo entra
+# por emenda da ADR e por esta lista.
+MECANISMOS_DA_CASCA = {
+    ("preferencia", "ler"): "casca",
+    ("preferencia", "escrever"): "casca",
+    ("release", "telas"): "casca",
+    ("tarefas", "espera-dono"): "casca",
+}
+_RE_MECANISMO = re.compile(r"^#\s*(face|mecanismo|rotulo|atalho)\s*:\s*([A-Za-z0-9_-]+)\s*=\s*(.*?)\s*$")
+
+
+def _mecanismo_fora_da_regra(nome, caminho):
+    """[motivo] do cabecalho que declara `casca` em `face:` (a casca e componente, nao face), `mecanismo:` fora
+    dos pares da arq:0124 §3, ou valor de mecanismo que nao e o componente do par. Le o bloco de comentario do
+    topo, como `_atos_de_face_sem_texto`."""
+    motivos, mecanismos, textos = [], {}, []
+    try:
+        with open(caminho, "r", errors="replace") as f:
+            for i, linha in enumerate(f):
+                if i >= 400:
+                    break
+                if i == 0 and linha.startswith("#!"):
+                    continue
+                s = linha.strip()
+                if not s.startswith("#"):
+                    if s == "":
+                        continue
+                    break
+                m = _RE_MECANISMO.match(s)
+                if not m:
+                    continue
+                campo, ato, valor = m.groups()
+                if campo == "face" and valor.strip().lower() == "casca":
+                    motivos.append(f"face: {ato}=casca — casca e componente, nao face; o ato da casca vai em `mecanismo:`")
+                elif campo == "mecanismo":
+                    mecanismos[ato] = valor
+                elif campo in ("rotulo", "atalho"):
+                    textos.append((campo, ato))
+    except OSError:
+        return []
+    for ato, valor in mecanismos.items():
+        if MECANISMOS_DA_CASCA.get((nome, ato)) != valor:
+            motivos.append(f"mecanismo: {ato}={valor} fora dos pares da arq:0124 §3")
+    return motivos
+
+
 def conferir_verbo(alvo, como_json=False):
     desde_familia = _desde_familia("platafirma-harness")
     cap_cache = {}
@@ -991,6 +1038,11 @@ def conferir_verbo(alvo, como_json=False):
             else:
                 if not como_json:
                     print(f"    capacid : {cap!r} resolvida no acervo")
+        for motivo_mec in _mecanismo_fora_da_regra(nome, caminho):
+            tem_divergencia = True
+            problemas.append(motivo_mec)
+            if not como_json:
+                print(f"    MECANISM: {motivo_mec}")
         for ato_face, faltam in _atos_de_face_sem_texto(caminho):
             aviso = f"{nome} {ato_face}: ato de face sem {' nem '.join(faltam)} (arq:0124 §3; aviso, nao reprova)"
             avisos.append(aviso)

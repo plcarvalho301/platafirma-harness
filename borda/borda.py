@@ -66,7 +66,13 @@ ROTA = re.compile(r"^/api/([a-z][a-z0-9-]*)/([a-z][a-z0-9-]*)$")
 # `PUT {"valor"}` escolhe, como `platafirma-ui@src/pf/pf-casca.js` (CAMINHOS.tema) pede. Ela chama o verbo
 # `preferencia`, que a face `casca` declara no cabeçalho (`# face: ler=casca`, `# face: escrever=casca`).
 ROTA_DO_TEMA = "/api/preferencia/tema"
+# A `casca` não é face: é o componente que consome o mecanismo comum (arq:0124 §3, `# mecanismo: <ato>=casca`).
 FACE_DA_CASCA = "casca"
+# As outras duas leituras da casca (card #3899): a rota → o ato do verbo dono do objeto (release telas, tarefas
+# espera-dono). O nome `/api/faces` é o que a seg:0016 item 6 fixa; o corpo da lista é provisorio (#3379).
+ROTA_DAS_TELAS = "/api/faces"
+ROTA_DA_ESPERA = "/api/espera-dono"
+LEITURAS_DA_CASCA = {ROTA_DAS_TELAS: "telas", ROTA_DA_ESPERA: "espera-dono"}
 # A escrita da face exige fundamento (a porta recusa sem ele), e trocar o tema não tem texto do dono para
 # dar: o fundamento é uma frase FIXA da instância (`BORDA_TEMA_FUNDAMENTO`), posta pela borda e nunca
 # aceita do navegador. Grava no bruto da porta o que é verdade: a escolha veio da casca.
@@ -95,16 +101,15 @@ USER_AGENT = "PlataFirma-borda/1.0 (+https://platafirma.org)"
 INTERNOS_DA_PORTA = ("cwd", "poda", "poda_aviso")
 
 _RE_ATOS = re.compile(r"([a-z][a-z0-9_-]*)\s*\(\s*([a-z|]+)\s*,")
-_RE_LINHA = re.compile(r"^#\s*(atos|face)\s*:\s*(.*)$")
+_RE_LINHA = re.compile(r"^#\s*(atos|face|mecanismo)\s*:\s*(.*)$")
 
 
 # --- o cabeçalho do verbo -------------------------------------------------------------------
-def ler_cabecalho(texto: str) -> dict:
-    """`{face: {ato: capacidades}}` do cabeçalho do verbo: `# atos: <ato> (<leitura|escrita>, <tipo>), …`
-    dá a capacidade, `# face: <ato>=<face>` põe o ato na face. Ato que a face declara e `# atos:` não
-    declara fica de fora: sem capacidade não há como casar o método, e a borda falha fechada. O
-    cabeçalho acaba na primeira linha que não é comentário, como na porta (`_atos_do_cabecalho`)."""
-    capacidades, faces = {}, {}
+def _ler_declaracoes(texto: str) -> tuple:
+    """`(capacidades, faces, mecanismos)` do cabeçalho: `# atos:` dá a capacidade de cada ato, `# face:
+    <ato>=<face>` põe o ato numa face e `# mecanismo: <ato>=<componente>` o põe no mecanismo comum de um
+    componente (hoje só a `casca`; arq:0124 §3). Um ato não entra numa chave pela outra."""
+    capacidades, faces, mecanismos = {}, {}, {}
     for n, linha in enumerate(texto.splitlines()):
         if n > 400 or (n and not linha.startswith("#")):
             break
@@ -115,11 +120,32 @@ def ler_cabecalho(texto: str) -> dict:
             for ato, acao in _RE_ATOS.findall(achou.group(2)):
                 capacidades[ato] = frozenset(a for a in acao.split("|") if a)
         else:
-            ato, _, face = achou.group(2).partition("=")
-            if ato.strip() and face.strip():
-                faces.setdefault(face.strip(), []).append(ato.strip())
-    return {face: {ato: capacidades[ato] for ato in atos if ato in capacidades}
-            for face, atos in faces.items()}
+            ato, _, dono = achou.group(2).partition("=")
+            if ato.strip() and dono.strip():
+                alvo = faces if achou.group(1) == "face" else mecanismos
+                alvo.setdefault(dono.strip(), []).append(ato.strip())
+    return capacidades, faces, mecanismos
+
+
+def _com_capacidade(capacidades: dict, por_dono: dict) -> dict:
+    return {dono: {ato: capacidades[ato] for ato in atos if ato in capacidades}
+            for dono, atos in por_dono.items()}
+
+
+def ler_cabecalho(texto: str) -> dict:
+    """`{face: {ato: capacidades}}` do cabeçalho do verbo: `# atos: <ato> (<leitura|escrita>, <tipo>), …`
+    dá a capacidade, `# face: <ato>=<face>` põe o ato na face. Ato que a face declara e `# atos:` não
+    declara fica de fora: sem capacidade não há como casar o método, e a borda falha fechada. O
+    cabeçalho acaba na primeira linha que não é comentário, como na porta (`_atos_do_cabecalho`)."""
+    capacidades, faces, _ = _ler_declaracoes(texto)
+    return _com_capacidade(capacidades, faces)
+
+
+def ler_mecanismos(texto: str) -> dict:
+    """`{componente: {ato: capacidades}}` das linhas `# mecanismo: <ato>=<componente>`, com a mesma regra de
+    capacidade de `ler_cabecalho`. A chave `face:` não carrega a casca: ela é componente, não face."""
+    capacidades, _, mecanismos = _ler_declaracoes(texto)
+    return _com_capacidade(capacidades, mecanismos)
 
 
 class Face:
@@ -136,15 +162,21 @@ class Face:
         self.tool = tool or (os.path.basename(verbo) if verbo else nome)
         self._visto = None
 
+    def _carga(self, texto):
+        """A carga desta face no cabeçalho: a `casca` é componente e vem de `# mecanismo:`; toda outra face
+        vem de `# face:`."""
+        lido = ler_mecanismos(texto) if self.nome == FACE_DA_CASCA else ler_cabecalho(texto)
+        return lido.get(self.nome, {})
+
     def atos(self):
         """`{ato: capacidades}` da face, ou None se o cabeçalho não carregou."""
         if self.cabecalho is not None:
-            return ler_cabecalho(self.cabecalho).get(self.nome, {})
+            return self._carga(self.cabecalho)
         try:
             mtime = os.stat(self.verbo).st_mtime_ns
             if self._visto is None or self._visto[0] != mtime:
                 with open(self.verbo, encoding="utf-8", errors="replace") as fh:
-                    atos = ler_cabecalho(fh.read(65536)).get(self.nome, {})
+                    atos = self._carga(fh.read(65536))
                 self._visto = (mtime, atos)
         except OSError:
             return None
@@ -221,7 +253,7 @@ class Borda:
 
     def __init__(self, faces, origens=(), porta_url="", chamar_porta=None,
                  cabecalho_token=CABECALHO_DO_GATE, saida=None, login_max_s=LOGIN_MAX_S, agora=time.time,
-                 fundamento_do_tema=FUNDAMENTO_DO_TEMA):
+                 fundamento_do_tema=FUNDAMENTO_DO_TEMA, origens_da_declaracao=None):
         # Uma face pode chamar mais de um verbo (#3518: o `contestar` do `fila` na face motor): cada verbo declara
         # no cabeçalho os atos dele para a face, e a carga da face é a união. O mesmo ato declarado por dois verbos
         # da mesma face não se resolve por ordem: a borda falha fechada (503).
@@ -229,6 +261,9 @@ class Borda:
         for f in faces:
             self.faces.setdefault(f.nome, []).append(f)
         self.origens = tuple(o.strip() for o in origens if o and o.strip())
+        # As origens da declaração das telas (registro/telas.json), relidas quando o arquivo muda; somam-se às da
+        # configuração da instância. `callable() -> tuple`, vazia se a declaração não carregou (falha fechada).
+        self._origens_da_declaracao = origens_da_declaracao or (lambda: ())
         self.cabecalho_token = cabecalho_token.strip().lower()
         self.login_max_s = login_max_s
         self._agora = agora
@@ -256,8 +291,11 @@ class Borda:
                 return await self._recusar("escrita-recusada", scope, cab, motivo, send)
         if caminho == ROTA_DO_TEMA:
             return await self._tema(scope, receive, send, metodo, cab)
+        if caminho in LEITURAS_DA_CASCA:
+            return await self._leitura_da_casca(scope, send, metodo, cab, LEITURAS_DA_CASCA[caminho])
         achou = ROTA.match(caminho)
-        verbos = self.faces.get(achou.group(1)) if achou else None
+        # a casca e componente, nao face: so as tres rotas fixas a alcancam, nunca /api/casca/<ato>
+        verbos = self.faces.get(achou.group(1)) if achou and achou.group(1) != FACE_DA_CASCA else None
         if not verbos:
             return await _responder(send, 404, {"erro": "rota fora de /api/<face>/<ato>"})
         if metodo not in ("GET", "POST"):
@@ -320,16 +358,10 @@ class Borda:
         o contrário do que a casca existe para fazer."""
         if metodo not in ("GET", "PUT"):
             return await _responder(send, 405, {"erro": "só GET e PUT"}, extra=[(b"allow", b"GET, PUT")])
-        verbos = self.faces.get(FACE_DA_CASCA)
-        if not verbos:
-            return await _responder(send, 404, {"erro": "rota fora de /api/<face>/<ato>"})
-        face = verbos[0]
-        atos = face.atos()
-        if atos is None:
-            return await _responder(send, 503, {"erro": "o cabeçalho do verbo não carregou"})
         ato, capacidade = ("ler", "leitura") if metodo == "GET" else ("escrever", "escrita")
-        if capacidade not in atos.get(ato, ()):
-            return await self._recusar("ato-recusado", scope, cab, "ato fora da carga da face", send)
+        face, falha = self._dono_na_casca(ato, capacidade)
+        if falha is not None:
+            return await self._falha_da_casca(falha, scope, cab, send)
         token = self._token(cab)
         if token is None:
             return await _responder(send, 401, {"erro": "sem sessão"})
@@ -348,10 +380,58 @@ class Borda:
         status, corpo = _resposta_do_tema(metodo, corpo, valor)
         return await _responder(send, status, corpo)
 
+    def _dono_na_casca(self, ato, capacidade):
+        """`(face, None)` do verbo que declara o `ato` no mecanismo da casca com a `capacidade`, ou `(None,
+        falha)`: `sem-casca` (a instancia não atende a casca, 404), `sem-carga` (o cabeçalho não carregou ou
+        declara o ato em dois verbos, 503) ou `fora-da-carga` (nenhum verbo declara o ato com essa
+        capacidade, 403)."""
+        verbos = self.faces.get(FACE_DA_CASCA)
+        if not verbos:
+            return None, "sem-casca"
+        donos = []
+        for f in verbos:
+            atos = f.atos()
+            if atos is None:
+                return None, "sem-carga"
+            if ato in atos:
+                donos.append((f, atos[ato]))
+        if len(donos) > 1:
+            return None, "sem-carga"
+        if not donos or capacidade not in donos[0][1]:
+            return None, "fora-da-carga"
+        return donos[0][0], None
+
+    async def _falha_da_casca(self, falha, scope, cab, send):
+        if falha == "sem-casca":
+            return await _responder(send, 404, {"erro": "rota fora de /api/<face>/<ato>"})
+        if falha == "sem-carga":
+            return await _responder(send, 503, {"erro": "o cabeçalho do verbo não carregou"})
+        return await self._recusar("ato-recusado", scope, cab, "ato fora da carga da face", send)
+
+    async def _leitura_da_casca(self, scope, send, metodo, cab, ato):
+        """`GET /api/faces` (release telas) e `GET /api/espera-dono` (tarefas espera-dono): as outras duas
+        leituras da casca (arq:0124 §3; seg:0016 item 6). Mesma disciplina da rota do tema: a escrita de outro
+        site já saiu em 403; o ato só vale se o cabeçalho do verbo o põe no mecanismo da casca como leitura;
+        o token do gate vai à porta como veio. O corpo é o que o verbo imprime em `--json`, sem reler."""
+        if metodo != "GET":
+            return await _responder(send, 405, {"erro": "só GET"}, extra=[(b"allow", b"GET")])
+        face, falha = self._dono_na_casca(ato, "leitura")
+        if falha is not None:
+            return await self._falha_da_casca(falha, scope, cab, send)
+        token = self._token(cab)
+        if token is None:
+            return await _responder(send, 401, {"erro": "sem sessão"})
+        argumentos = {"ato": ato, "args": ["--json"], "turno_fonte": FONTE_DA_FACE}
+        status, corpo = await asyncio.to_thread(self._chamar, token, face.tool, argumentos)
+        if status != 200:
+            return await _responder(send, status, corpo)
+        status, corpo = _resposta_da_leitura(ato, corpo)
+        return await _responder(send, status, corpo)
+
     def _motivo_da_escrita(self, cab):
         """None quando a escrita passa; senão o motivo, em uma frase curta (R31)."""
         origem = cab.get("origin")
-        if origem is None or origem not in self.origens:
+        if origem is None or (origem not in self.origens and origem not in self._origens_da_declaracao()):
             return "origem fora da lista da instancia"
         if cab.get(CABECALHO_DA_TELA) != "1":
             return f"sem o cabecalho {CABECALHO_DA_TELA}: 1"
@@ -482,6 +562,25 @@ def _resposta_do_tema(metodo, envelope, valor):
         return 401, {"erro": "sem sessão"}
     return 502, {"erro": "as preferências não responderam"}
 
+def _resposta_da_leitura(ato, envelope):
+    """`(status, corpo)` de `GET /api/faces` e `GET /api/espera-dono`, do envelope que a porta devolveu: o corpo
+    é o JSON que o verbo imprimiu. Saída 0 com JSON de objeto → 200 (na lista de telas, com a chave `telas`
+    em lista); `recusado` → 403; qualquer outra coisa → 502, e o único texto que sobe é o da borda."""
+    if envelope.get("recusado"):
+        return 403, {"erro": "recusado: " + str(envelope.get("motivo", ""))[:200]}
+    if envelope.get("exit_code") != 0:
+        return 502, {"erro": "a leitura não respondeu"}
+    stdout = envelope.get("stdout")
+    texto = stdout.get("texto", "") if isinstance(stdout, dict) else ""
+    try:
+        corpo = json.loads(texto)
+    except (ValueError, TypeError):
+        return 502, {"erro": "a porta devolveu uma resposta fora do contrato"}
+    if not isinstance(corpo, dict) or (ato == "telas" and not isinstance(corpo.get("telas"), list)):
+        return 502, {"erro": "a porta devolveu uma resposta fora do contrato"}
+    return 200, corpo
+
+
 def _conferir_args(args, fundamento):
     if (not isinstance(args, list) or len(args) > MAX_ARGS
             or any(not isinstance(a, str) or len(a) > MAX_ARG for a in args)):
@@ -524,6 +623,33 @@ async def _lifespan(receive, send):
             return
 
 
+# --- a declaração das telas ----------------------------------------------------------------------
+def origens_das_telas(caminho, ids=()):
+    """`callable() -> tuple` das origens das telas de `registro/telas.json` que esta instância atende (`ids`;
+    vazio, todas). Lê de novo quando o arquivo muda; arquivo ausente ou ilegível dá tupla vazia, e a escrita de
+    navegador fica recusada (a borda falha fechada). A declaração é a fonte única das telas (comentário #3062
+    do #3602), e também a lista de `release telas`."""
+    visto = {}
+
+    def origens():
+        try:
+            mtime = os.stat(caminho).st_mtime_ns
+            if visto.get("mtime") != mtime:
+                with open(caminho, encoding="utf-8") as fh:
+                    dado = json.load(fh)
+                telas = dado.get("telas", []) if isinstance(dado, dict) else dado
+                visto["mtime"] = mtime
+                visto["origens"] = tuple(
+                    t["origem"].strip() for t in telas
+                    if isinstance(t, dict) and isinstance(t.get("origem"), str) and t["origem"].strip()
+                    and (not ids or t.get("id") in ids))
+        except (OSError, ValueError, TypeError, AttributeError):
+            return ()
+        return visto["origens"]
+
+    return origens
+
+
 # --- a instância ------------------------------------------------------------------------------
 def criar_app(env=None):
     """A borda da instância, da configuração dela: nada disto é código. `BORDA_FACES` é um JSON
@@ -546,7 +672,10 @@ def criar_app(env=None):
         login_max_s = int(env.get("BORDA_LOGIN_MAX_S") or LOGIN_MAX_S)
     except ValueError:
         login_max_s = LOGIN_MAX_S
+    declaracao = (env.get("BORDA_TELAS") or "").strip()
+    ids = [i.strip() for i in (env.get("BORDA_TELAS_ATENDE") or "").split(",") if i.strip()]
     return Borda(faces, origens=origens, porta_url=env.get("BORDA_PORTA_URL", ""),
+                 origens_da_declaracao=origens_das_telas(declaracao, ids) if declaracao else None,
                  cabecalho_token=env.get("BORDA_CABECALHO_TOKEN") or CABECALHO_DO_GATE,
                  login_max_s=max(login_max_s, 0),
                  fundamento_do_tema=(env.get("BORDA_TEMA_FUNDAMENTO") or "").strip() or FUNDAMENTO_DO_TEMA)
@@ -781,7 +910,7 @@ def _autoteste():
     #     `preferencia` da face `casca`, com o fundamento fixo da instancia e sem o corte de login recente.
     cabecalho_pref = ("#!/usr/bin/env python3\n# preferencia — verbo de mentira do self-check\n"
                       "# atos: ler (leitura, preferencia), escrever (escrita, preferencia)\n"
-                      "# face: ler=casca\n# face: escrever=casca\nimport sys\n")
+                      "# mecanismo: ler=casca\n# mecanismo: escrever=casca\nimport sys\n")
     pref = Face(FACE_DA_CASCA, cabecalho=cabecalho_pref, tool="preferencia")
     lidas, grava = [], {"valor": None}
 
@@ -880,11 +1009,11 @@ def _autoteste():
     #      403 so naquele metodo; cabecalho que nao carrega, 503.
     assert pedir10("GET", {CABECALHO_DO_GATE: velho10},
                    borda_=Borda([face], origens=(origem,), saida=io.StringIO()))[0] == 404
-    so_escrever = Face(FACE_DA_CASCA, cabecalho="# atos: ler (leitura, p), escrever (escrita, p)\n# face: escrever=casca\n")
+    so_escrever = Face(FACE_DA_CASCA, cabecalho="# atos: ler (leitura, p), escrever (escrita, p)\n# mecanismo: escrever=casca\n")
     sem_ler = Borda([so_escrever], origens=(origem,), chamar_porta=porta10, saida=io.StringIO())
     assert pedir10("GET", {CABECALHO_DO_GATE: velho10}, borda_=sem_ler)[0] == 403
     assert pedir10("PUT", da_tela10, b'{"valor": "claro"}', borda_=sem_ler)[0] == 200
-    trocados = Face(FACE_DA_CASCA, cabecalho="# atos: ler (escrita, p), escrever (leitura, p)\n# face: ler=casca\n# face: escrever=casca\n")
+    trocados = Face(FACE_DA_CASCA, cabecalho="# atos: ler (escrita, p), escrever (leitura, p)\n# mecanismo: ler=casca\n# mecanismo: escrever=casca\n")
     invertido = Borda([trocados], origens=(origem,), chamar_porta=porta10, saida=io.StringIO())
     assert pedir10("GET", {CABECALHO_DO_GATE: velho10}, borda_=invertido)[0] == 403
     assert pedir10("PUT", da_tela10, b'{"valor": "claro"}', borda_=invertido)[0] == 403
@@ -895,7 +1024,156 @@ def _autoteste():
     assert criar_app({"BORDA_TEMA_FUNDAMENTO": "  outro texto "}).fundamento_do_tema == "outro texto"
     assert criar_app({"BORDA_TEMA_FUNDAMENTO": "   "}).fundamento_do_tema == FUNDAMENTO_DO_TEMA
     print("borda: rota do tema da casca — GET {valor}, PUT {valor} com fundamento fixo, recusas e status   ok")
-    print("borda OK (#3516, #3518, #3575, #3738)")
+    _autoteste_das_leituras_da_casca(saida, origem, de_fora, jwt, agora)
+    print("borda OK (#3516, #3518, #3575, #3738, #3899)")
+
+
+def _autoteste_das_leituras_da_casca(saida, origem, de_fora, jwt, agora):
+    """#3899: `GET /api/faces` (release telas), `GET /api/espera-dono` (tarefas espera-dono), a carga pela
+    chave `mecanismo:` e as origens que saem da declaração das telas."""
+    import tempfile
+
+    cab_release = ("#!/usr/bin/env python3\n# release — verbo de mentira\n# atos: telas (leitura, operacao), promover (escrita, operacao)\n"
+                   "# mecanismo: telas=casca\nimport sys\n")
+    cab_tarefas = ("#!/usr/bin/env python3\n# tarefas — verbo de mentira\n# atos: listar, espera-dono (leitura, trabalho)\n"
+                   "# mecanismo: espera-dono=casca\nimport sys\n")
+    telas = {"telas": [{"id": "rastreador", "rotulo": "Rastreador", "href": "https://tarefas.exemplo.org/",
+                        "posicao": 1, "face": None},
+                       {"id": "casa", "rotulo": "Casa", "href": "https://casa.exemplo.org/", "posicao": 2,
+                        "face": None}]}
+    espera = {"do_dono": {"total": 1, "perguntas": [], "prontos_para_aposta": [], "em_homologacao": []},
+              "com_cadeiras": {"abertos": 0, "orfaos": 0, "cards": []}}
+    chamadas = []
+
+    def porta(token_, tool, argumentos):
+        chamadas.append((token_, tool, argumentos))
+        corpo = telas if argumentos["ato"] == "telas" else espera
+        return 200, {"exit_code": 0, "stdout": {"texto": json.dumps(corpo)}, "cwd": "/host"}
+
+    def casca(*cabecalhos, chamar=porta, **k):
+        verbos = [Face(FACE_DA_CASCA, cabecalho=c, tool=t) for c, t in cabecalhos]
+        return Borda(verbos, origens=(origem,), chamar_porta=chamar, saida=io.StringIO(), **k)
+
+    def pedir(borda_, metodo, caminho, cabecalhos=None, corpo=b""):
+        return asyncio.run(_chamar(borda_, metodo, caminho, cabecalhos or {}, corpo))
+
+    token = {CABECALHO_DO_GATE: jwt(auth_time=agora - 3600, sub="dono")}
+    tres = casca((cab_release, "release"), (cab_tarefas, "tarefas"))
+
+    # 11a. as duas leituras chegam à porta como `--json` do verbo dono, com o token como veio e a fonte face; o
+    #      corpo da resposta é o que o verbo imprimiu, sem o que é do host.
+    status, cab_resp, corpo = pedir(tres, "GET", ROTA_DAS_TELAS, token)
+    assert status == 200 and json.loads(corpo) == telas, (status, corpo)
+    assert cab_resp["cache-control"] == "no-store" and cab_resp["x-content-type-options"] == "nosniff"
+    assert chamadas[-1] == (token[CABECALHO_DO_GATE], "release",
+                            {"ato": "telas", "args": ["--json"], "turno_fonte": "face"}), chamadas[-1]
+    status, _, corpo = pedir(tres, "GET", ROTA_DA_ESPERA, token)
+    assert status == 200 and json.loads(corpo) == espera, (status, corpo)
+    assert chamadas[-1][1:] == ("tarefas", {"ato": "espera-dono", "args": ["--json"], "turno_fonte": "face"})
+
+    # 11b. as mesmas recusas do tema: sem token (ou com sujeito do navegador) 401, escrita de outro site 403,
+    #      método fora de GET 405, e nada disso chega à porta.
+    feitas = len(chamadas)
+    for rota in (ROTA_DAS_TELAS, ROTA_DA_ESPERA):
+        assert pedir(tres, "GET", rota)[0] == 401
+        assert pedir(tres, "GET", rota, {"x-auth-request-user": "dono"})[0] == 401
+        assert pedir(tres, "GET", rota, {"authorization": "Bearer a.b.c"})[0] == 401
+        da_tela = {"origin": origem, "x-pf-tela": "1", "content-type": "application/json", **token}
+        assert pedir(tres, "POST", rota, {**da_tela, "origin": de_fora}, b"{}")[0] == 403
+        assert pedir(tres, "PUT", rota, {k: v for k, v in da_tela.items() if k != "x-pf-tela"}, b"{}")[0] == 403
+        status, cab_resp, _ = pedir(tres, "POST", rota, da_tela, b"{}")
+        assert status == 405 and cab_resp["allow"] == "GET", rota
+    assert len(chamadas) == feitas, "recusa chegou à porta"
+
+    # 11c. a carga é do cabeçalho, pela chave `mecanismo:`: `face: telas=casca` não carrega nada (a casca é
+    #      componente, não face), o ato sem par de capacidade fica de fora, e o ato em dois verbos falha fechado.
+    assert ler_cabecalho(cab_release) == {} and ler_mecanismos(cab_release) == {
+        "casca": {"telas": frozenset({"leitura"})}}
+    por_face = casca((cab_release.replace("# mecanismo: telas=casca", "# face: telas=casca"), "release"))
+    assert pedir(por_face, "GET", ROTA_DAS_TELAS, token)[0] == 403
+    sem_par = casca((cab_release.replace("telas (leitura, operacao)", "telas"), "release"))
+    assert pedir(sem_par, "GET", ROTA_DAS_TELAS, token)[0] == 403
+    so_escrita = casca((cab_release.replace("telas (leitura", "telas (escrita"), "release"))
+    assert pedir(so_escrita, "GET", ROTA_DAS_TELAS, token)[0] == 403, "leitura de ato de escrita"
+    duas = casca((cab_release, "release"), (cab_release, "outro"))
+    assert pedir(duas, "GET", ROTA_DAS_TELAS, token)[0] == 503
+    sem_tarefas = casca((cab_release, "release"))
+    assert pedir(sem_tarefas, "GET", ROTA_DA_ESPERA, token)[0] == 403, "o ato de outro verbo não está na carga"
+    assert pedir(Borda([], origens=(origem,), saida=io.StringIO()), "GET", ROTA_DAS_TELAS, token)[0] == 404
+    ilegivel = Borda([Face(FACE_DA_CASCA, verbo="/nao/existe/release")], origens=(origem,), saida=io.StringIO())
+    assert pedir(ilegivel, "GET", ROTA_DAS_TELAS, token)[0] == 503
+    # o tema segue na mesma carga: um verbo a mais na casca não o tira do ar
+    cab_pref = ("# atos: ler (leitura, p), escrever (escrita, p)\n# mecanismo: ler=casca\n# mecanismo: escrever=casca\n")
+    com_tema = casca((cab_release, "release"), (cab_pref, "preferencia"), (cab_tarefas, "tarefas"),
+                     chamar=lambda t, tool, a: (200, {"exit_code": 0, "stdout": {"texto": json.dumps(
+                         {"valor": "escuro"} if tool == "preferencia" else telas)}}))
+    assert json.loads(pedir(com_tema, "GET", ROTA_DO_TEMA, token)[2]) == {"valor": "escuro"}
+    assert json.loads(pedir(com_tema, "GET", ROTA_DAS_TELAS, token)[2]) == telas
+
+    # 11d. a saída do verbo vira status: recusa da porta 403, saída diferente de 0 502, corpo fora da forma 502
+    #      (a lista leva `telas` em lista), e o status da porta passa.
+    def com_envelope(envelope):
+        return casca((cab_release, "release"), (cab_tarefas, "tarefas"),
+                     chamar=lambda t, tool, a: (200, envelope))
+
+    for envelope, esperado in (({"recusado": True, "motivo": "a fonte face só vale com o gate"}, 403),
+                               ({"exit_code": 3, "stdout": {"texto": ""}}, 502),
+                               ({"exit_code": 5, "stdout": {"texto": ""}}, 502),
+                               ({"exit_code": 0, "stdout": {"texto": "nao e json"}}, 502),
+                               ({"exit_code": 0, "stdout": {"texto": '{"telas": 3}'}}, 502),
+                               ({"exit_code": 0, "stdout": {"texto": "[]"}}, 502)):
+        assert pedir(com_envelope(envelope), "GET", ROTA_DAS_TELAS, token)[0] == esperado, envelope
+    assert pedir(com_envelope({"exit_code": 0, "stdout": {"texto": "[]"}}), "GET", ROTA_DA_ESPERA, token)[0] == 502
+    for status_porta in (401, 502, 504):
+        fora = casca((cab_release, "release"), chamar=lambda t, tool, a, s=status_porta: (s, {"erro": "x"}))
+        assert pedir(fora, "GET", ROTA_DAS_TELAS, token)[0] == status_porta
+
+    # 11e. as origens que podem escrever saem da declaração das telas, so as que a instância atende, e a borda
+    #      relê o arquivo quando ele muda; declaração ausente ou ilegível recusa toda escrita.
+    with tempfile.TemporaryDirectory() as pasta:
+        arquivo = os.path.join(pasta, "telas.json")
+
+        def declarar(*ids_e_origens):
+            with open(arquivo, "w", encoding="utf-8") as fh:
+                json.dump({"telas": [{"id": i, "origem": o} for i, o in ids_e_origens]}, fh)
+            agora_ns = time.time_ns() + len(declarar.vezes) * 1_000_000_000
+            declarar.vezes.append(1)
+            os.utime(arquivo, ns=(agora_ns, agora_ns))
+
+        declarar.vezes = []
+        a, b = "https://a.exemplo.org", "https://b.exemplo.org"
+        declarar(("a", a), ("b", b))
+        motor = Face("motor", cabecalho=CABECALHO_DE_MENTIRA)
+
+        def borda_da(ids):
+            return Borda([motor], origens=(), chamar_porta=porta, saida=io.StringIO(), login_max_s=0,
+                         origens_da_declaracao=origens_das_telas(arquivo, ids))
+
+        def escrever(borda_, de):
+            cab = {"origin": de, "x-pf-tela": "1", "content-type": "application/json", **token}
+            return pedir(borda_, "POST", "/api/motor/trocar", cab, b"{}")[0]
+
+        so_a = borda_da(("a",))
+        assert escrever(so_a, a) == 200 and escrever(so_a, b) == 403, "a instância só atende o que declara atender"
+        todas = borda_da(())
+        assert escrever(todas, a) == 200 and escrever(todas, b) == 200 and escrever(todas, de_fora) == 403
+        declarar(("a", a))
+        assert escrever(todas, b) == 403, "tela tirada da declaração perde a escrita sem reiniciar a borda"
+        with open(arquivo, "w", encoding="utf-8") as fh:
+            fh.write("nao e json")
+        os.utime(arquivo, ns=(time.time_ns() + 99_000_000_000,) * 2)
+        assert escrever(todas, a) == 403, "declaração ilegível falha fechada"
+        os.unlink(arquivo)
+        assert escrever(todas, a) == 403, "declaração ausente falha fechada"
+        # a configuração da instância se soma à declaração
+        declarar(("a", a))
+        env = {"BORDA_ORIGENS": b, "BORDA_TELAS": arquivo, "BORDA_TELAS_ATENDE": "a",
+               "BORDA_FACES": json.dumps({"motor": {"verbo": "/a/motor"}})}
+        app = criar_app(env)
+        app._chamar = porta
+        assert app.origens == (b,) and app._origens_da_declaracao() == (a,)
+        assert criar_app({}).origens == () and criar_app({})._origens_da_declaracao() == ()
+    print("borda: /api/faces e /api/espera-dono pelo mecanismo da casca; origens da declaração das telas   ok")
 
 
 if __name__ == "__main__":

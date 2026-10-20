@@ -1,4 +1,4 @@
 # Lista de portão da chave borda (arq:0116 §5): caminhos relativos a borda/. Arquivo consertado entra no
 # mesmo commit que o conserta; a lista só cresce. Raio (card #3370): `<arquivo> | <glob> <glob>...`, globs
 # relativos à raiz do repositório. O teste lê o cabeçalho real do verbo `motor` (bin/motor).
-test_borda.py | borda/** bin/motor bin/preferencia
+test_borda.py | borda/** bin/motor bin/preferencia bin/release bin/tarefas registro/telas.json
