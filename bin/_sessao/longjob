@@ -35,7 +35,7 @@ uso: (contrato herdado -- invoque por `sessao longjob ...`, arq:0110 §14)
   sessao longjob run <nome> <comando> [args...]   dispara; devolve nome da unit e caminho do log
   sessao longjob list                             units platafirma-job-* ativas e falhadas
   sessao longjob logs                             arquivos de log mais recentes
-  sessao longjob status <unit>                    estado da unit + últimas linhas do log
+  sessao longjob status <unit>                    estado da unit + últimas linhas do log; unit já coletada lê o evento de fim
   sessao longjob log <unit> [n]                   últimas n linhas do log (default 40)
   sessao longjob stop <unit>                      encerra a unit
 FIM
@@ -100,11 +100,36 @@ case "$cmd" in
   status)
     [ $# -ge 1 ] || uso
     unit="$1"
-    systemctl --user show "$unit" \
-      -p Id -p SubState -p Result -p ExecMainPID -p ExecMainStatus \
-      -p ActiveEnterTimestamp -p ControlGroup 2>&1 || true
+    base="${unit%.service}"
+    carga="$(systemctl --user show "$unit" -p LoadState --value 2>/dev/null || true)"
+    if [ "$carga" = "not-found" ]; then
+      # A unit já saiu: a limpeza de fóssil a tirou da lista (`infra limpeza fossil`, card #3920) ou o systemd a descarregou.
+      # `systemctl show` de unit descarregada devolve os valores padrão, e o padrão é Result=success com status 0: um
+      # job que falhou leria verde (medido no #3100). O que a unit sabia está no evento de fim, a linha `# fim=<ts>
+      # result=<Result> status=<ExecMainStatus>` que a limpeza grava no log do job antes de tirá-la (decisão do dono,
+      # #3103). Sem a linha, o resultado não se sabe e o status diz isso: nunca success.
+      fim="$(grep '^# fim=' "$LOGDIR/${base}.log" 2>/dev/null | tail -n 1 || true)"
+      echo "Id=$unit"
+      echo "LoadState=not-found (coletada)"
+      if [ -n "$fim" ]; then
+        quando="$(printf '%s\n' "$fim" | sed -n 's/^# fim=\([^ ]*\) .*/\1/p')"
+        resultado="$(printf '%s\n' "$fim" | sed -n 's/.* result=\([^ ]*\).*/\1/p')"
+        codigo="$(printf '%s\n' "$fim" | sed -n 's/.* status=\([^ ]*\).*/\1/p')"
+        echo "Result=${resultado:-desconhecido}"
+        echo "ExecMainStatus=${codigo:-desconhecido}"
+        echo "Fim=${quando:-desconhecido} (lido do evento de fim no log do job)"
+      else
+        echo "Result=desconhecido"
+        echo "ExecMainStatus=desconhecido"
+        echo "(coletada sem evento de fim: o resultado do job não se sabe)"
+      fi
+    else
+      systemctl --user show "$unit" \
+        -p Id -p SubState -p Result -p ExecMainPID -p ExecMainStatus \
+        -p ActiveEnterTimestamp -p ControlGroup 2>&1 || true
+    fi
     echo "--- log ---"
-    tail -n 20 "$LOGDIR/${unit}.log" 2>/dev/null || echo "(sem log)"
+    tail -n 20 "$LOGDIR/${base}.log" 2>/dev/null || echo "(sem log)"
     ;;
   log)
     [ $# -ge 1 ] || uso

@@ -1,0 +1,399 @@
+#!/usr/bin/env python3
+# limpeza-fossil — tira o que as rodadas deixam para trás, só pelo que um critério positivo nomeia (spec eixos-do-host
+# R12 a R14, card #3920). Sub-ato de `infra` (arq:0110 §14), no molde da limpeza de quarentena: fora do PATH e do
+# golden record, mora em bin/_infra/; chamado por `infra limpeza fossil [--ver] [--so-jobs] [--dias N]`, nunca direto.
+# `infra limpeza jobs` é este ato com --so-jobs: o cron do core o chama, e o job falhado tem um caminho só.
+#
+# O critério positivo. Contêiner: sem o label `com.docker.compose.project` e criado há mais de 24 h (rodando ou parado).
+# O nome não conta (acervo-api, conversor-2, motor-pg e searxng não seguem o molde projeto-serviço-n e têm o label), nem
+# o estado. Unit: `platafirma-job-*` transiente em failed. Nada fora disso sai: a unit do bot, a xdg-desktop-portal*, o
+# contêiner de stack, o contêiner de prova com menos de 24 h.
+#
+# O que grava antes de tirar (R13). Da unit do job: o evento de fim, a linha `# fim=<ts> result=<Result>
+# status=<ExecMainStatus>` no fim do log do job em var/log/jobs; o `sessao longjob status` lê essa linha quando a unit
+# já saiu. Sem a linha gravada, a unit não sai (reset-failed só depois do evento). Do contêiner: `docker inspect` e
+# `docker logs` em var/log/infra/removidos, como o `infra remover` já guarda a inspeção.
+#
+# Recusa (R12): com job da sessão ativo a rodada inteira recusa e diz quais, porque a prova em curso sobe contêiner
+# sem nome por segundos ou minutos e tirá-lo no meio abre incidente falso. Sai 4. Com --so-jobs nenhum contêiner está
+# em jogo e a recusa não vale. A trava é um flock em var/lock; --ver só lê e não pega a trava, não grava marca.
+#
+# --dias N: só tira o job falhado com N dias ou mais (pela data no nome da unit); sem ele não há janela de idade (dono,
+# 19/10/2026: job morto é fóssil e se expurga sempre).
+#
+# ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · LONGJOB_LOGDIR[=<instância>/var/log/jobs] ·
+#   INFRA_REMOVIDOS[=<instância>/var/log/infra/removidos] · INFRA_FOSSIL_IDADE_H[=24]
+# depende: docker · systemctl --user
+# saída: 0 limpo (inclui nada a tirar) · 1 algum alvo não saiu · 2 uso · 4 recusa por job ativo · 5 fonte muda (nada limpo)
+from __future__ import annotations
+
+import fcntl
+import json
+import os
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+PREFIXO_DO_JOB = "platafirma-job-"
+LABEL_DE_PROJETO = "com.docker.compose.project"
+IDADE_PADRAO_H = 24
+TIMEOUT_S = 60
+_RE_CARIMBO_NO_NOME = re.compile(r"-(\d{8})T(\d{6})(?:\.service)?$")
+_RE_FRACAO = re.compile(r"(\.\d{6})\d*")
+_BYTES_DO_FIM_PARA_CONFERIR = 4096
+
+SAIDA_OK, SAIDA_FALHOU, SAIDA_USO, SAIDA_RECUSA, SAIDA_MUDA = 0, 1, 2, 4, 5
+
+
+class FonteMuda(Exception):
+    """A fonte não respondeu: a rodada sai 5 e nada é limpo."""
+
+
+def _roda(*cmd: str):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT_S, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def _instancia() -> Path:
+    return Path(os.environ.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa"))
+
+
+def _agora() -> str:
+    return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+# --- o que existe ---------------------------------------------------------------------------------
+
+def listar_units(estado: str) -> list[str]:
+    """As units `platafirma-job-*` no estado dado (failed, ou as que ainda rodam)."""
+    p = _roda("systemctl", "--user", "list-units", f"{PREFIXO_DO_JOB}*", f"--state={estado}", "--no-legend",
+              "--plain", "--no-pager")
+    if p is None or p.returncode != 0:
+        raise FonteMuda("systemctl --user não respondeu")
+    return [linha.split()[0].lstrip("●") for linha in p.stdout.splitlines() if linha.strip()]
+
+
+def e_transiente(unit: str) -> bool:
+    p = _roda("systemctl", "--user", "show", "-p", "Transient", "--value", "--", unit)
+    if p is None or p.returncode != 0:
+        raise FonteMuda(f"systemctl --user show {unit} não respondeu")
+    return p.stdout.strip() == "yes"
+
+
+def idade_em_dias(unit: str) -> int | None:
+    """A idade do job pela data que o longjob põe no nome da unit; sem a data, nulo."""
+    achado = _RE_CARIMBO_NO_NOME.search(unit)
+    if not achado:
+        return None
+    d, t = achado.groups()
+    local = datetime.now(timezone.utc).astimezone()   # o longjob põe a hora local da máquina no nome
+    try:
+        quando = datetime.strptime(f"{d}{t}{local:%z}", "%Y%m%d%H%M%S%z")
+    except ValueError:
+        return None
+    return (local - quando).days
+
+
+def inspecionar_todos() -> list[dict]:
+    """O `docker inspect` de cada contêiner, parado ou não."""
+    p = _roda("docker", "ps", "-a", "--format", "{{.ID}}")
+    if p is None or p.returncode != 0:
+        raise FonteMuda("docker ps não respondeu")
+    ids = [i for i in p.stdout.split() if i]
+    if not ids:
+        return []
+    q = _roda("docker", "inspect", *ids)
+    if q is None or q.returncode != 0:
+        raise FonteMuda("docker inspect não respondeu")
+    try:
+        lista = json.loads(q.stdout)
+    except ValueError:
+        raise FonteMuda("docker inspect devolveu o que não se lê") from None
+    return lista if isinstance(lista, list) else []
+
+
+def idade_do_conteiner_em_horas(d: dict) -> float | None:
+    criado = _RE_FRACAO.sub(r"\1", str(d.get("Created") or "")).replace("Z", "+00:00")
+    try:
+        quando = datetime.fromisoformat(criado)
+    except ValueError:
+        return None
+    if quando.tzinfo is None:
+        quando = quando.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - quando).total_seconds() / 3600
+
+
+def nome_do_conteiner(d: dict) -> str:
+    return str(d.get("Name") or d.get("Id") or "").lstrip("/")
+
+
+def sem_label_de_projeto(d: dict) -> bool:
+    return not ((d.get("Config") or {}).get("Labels") or {}).get(LABEL_DE_PROJETO)
+
+
+def no_criterio_do_conteiner(d: dict, idade_h: float) -> tuple[bool, str]:
+    """(entra, porquê). O critério é positivo: sem label de projeto E com mais idade que o mínimo. O nome não conta."""
+    projeto = ((d.get("Config") or {}).get("Labels") or {}).get(LABEL_DE_PROJETO)
+    if projeto:
+        return False, f"da stack compose '{projeto}'"
+    idade = idade_do_conteiner_em_horas(d)
+    if idade is None:
+        return False, "sem data de criação legível"
+    if idade <= idade_h:
+        return False, f"criado há {idade:.0f} h, dentro das {idade_h:g} h"
+    return True, f"criado há {idade:.0f} h, sem label de projeto"
+
+
+# --- o que grava antes de tirar --------------------------------------------------------------------
+
+def resultado_do_job(unit: str) -> tuple[str, str]:
+    """(Result, ExecMainStatus) da unit. Levanta LookupError quando ela não diz: sem o resultado não há evento."""
+    p = _roda("systemctl", "--user", "show", "-p", "Result", "-p", "ExecMainStatus", "--", unit)
+    if p is None or p.returncode != 0:
+        raise LookupError(unit)
+    props = dict(linha.split("=", 1) for linha in p.stdout.splitlines() if "=" in linha)
+    resultado, status = props.get("Result", "").strip(), props.get("ExecMainStatus", "").strip()
+    if not resultado or status == "":
+        raise LookupError(unit)
+    return resultado, status
+
+
+def gravar_evento_de_fim(logdir: Path, unit: str, resultado: str, status: str) -> str:
+    """Põe a linha de fim no log do job. Devolve 'gravado' ou 'ja_gravado' (a rodada que parou no meio retoma sem
+    duplicar). Levanta OSError se não gravou: então a unit não sai."""
+    log = logdir / f"{unit.removesuffix('.service')}.log"
+    logdir.mkdir(parents=True, exist_ok=True)
+    try:
+        with log.open("rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(f.tell() - _BYTES_DO_FIM_PARA_CONFERIR, 0))
+            if any(linha.startswith(b"# fim=") for linha in f.read().splitlines()):
+                return "ja_gravado"
+    except FileNotFoundError:
+        pass
+    with log.open("a", encoding="utf-8") as f:
+        f.write(f"# fim={_agora()} result={resultado} status={status}\n")
+        f.flush()
+        os.fsync(f.fileno())
+    return "gravado"
+
+
+def guardar_do_conteiner(removidos: Path, d: dict) -> Path:
+    """O `docker inspect` e o `docker logs` do contêiner, antes do rm. Levanta OSError se não guardou."""
+    nome = re.sub(r"[^\w.-]", "_", nome_do_conteiner(d)) or "sem-nome"
+    base = removidos / f"{nome}-{datetime.now(timezone.utc).astimezone().strftime('%Y%m%dT%H%M%S')}"
+    removidos.mkdir(parents=True, exist_ok=True)
+    logs = _roda("docker", "logs", "--timestamps", nome_do_conteiner(d))
+    if logs is None or logs.returncode != 0:
+        raise OSError(f"docker logs de {nome_do_conteiner(d)} não respondeu")
+    _gravar_inteiro(Path(f"{base}.json"), json.dumps([d], ensure_ascii=False, indent=2) + "\n")
+    _gravar_inteiro(Path(f"{base}.log"), logs.stdout + logs.stderr)
+    return base
+
+
+def _gravar_inteiro(caminho: Path, texto: str) -> None:
+    """Temporário no mesmo diretório, fsync e rename: a inspeção guardada está inteira ou não existe."""
+    provisorio = caminho.with_name(caminho.name + ".tmp")
+    with provisorio.open("w", encoding="utf-8") as f:
+        f.write(texto)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(provisorio, caminho)
+
+
+# --- a rodada --------------------------------------------------------------------------------------
+
+class Rodada:
+    def __init__(self, *, ver: bool, so_jobs: bool, dias: int, idade_h: float) -> None:
+        self.ver, self.so_jobs, self.dias, self.idade_h = ver, so_jobs, dias, idade_h
+        instancia = _instancia()
+        self.marca = instancia / "var" / "log" / "poda.log"
+        self.trava = instancia / "var" / "lock" / "limpeza-fossil.lock"
+        self.logdir = Path(os.environ.get("LONGJOB_LOGDIR") or instancia / "var" / "log" / "jobs")
+        self.removidos = Path(os.environ.get("INFRA_REMOVIDOS") or instancia / "var" / "log" / "infra" / "removidos")
+        self.saiu = self.ficou = self.falhou = 0
+
+    def anotar(self, texto: str) -> None:
+        """Uma linha na marca de poda, o `diz o que tirou` do ato. --ver não deixa marca."""
+        if self.ver:
+            return
+        try:
+            self.marca.parent.mkdir(parents=True, exist_ok=True)
+            with self.marca.open("a", encoding="utf-8") as f:
+                f.write(f"{_agora()} limpeza-fossil: {texto}\n")
+        except OSError:
+            pass
+
+    def jobs(self) -> None:
+        for unit in listar_units("failed"):
+            # Cinto: o glob do systemctl já filtra, mas o critério é positivo e mora aqui. A unit do bot e a
+            # xdg-desktop-portal* em failed não são job da sessão.
+            if not unit.startswith(PREFIXO_DO_JOB):
+                self.ficou += 1
+                print(f"fica: {unit} (não é platafirma-job-*)")
+                continue
+            if not e_transiente(unit):
+                self.ficou += 1
+                print(f"fica: {unit} (unit não transiente, não é job do longjob)")
+                continue
+            idade = idade_em_dias(unit)
+            if self.dias and (idade is None or idade < self.dias):
+                self.ficou += 1
+                motivo = "sem carimbo do longjob no nome" if idade is None else f"{idade} dia(s), janela de {self.dias}"
+                print(f"fica: {unit} ({motivo})")
+                continue
+            if self.ver:
+                self.saiu += 1
+                print(f"sairia: {unit} (job falhado; o evento de fim iria para o log do job antes)")
+                continue
+            self._expurgar_job(unit)
+
+    def _expurgar_job(self, unit: str) -> None:
+        try:
+            fim = resultado_do_job(unit)
+        except LookupError:
+            self.falhou += 1
+            print(f"infra limpeza fossil: {unit} não disse o resultado — o evento não foi gravado, a unit fica", file=sys.stderr)
+            return
+        try:
+            gravou = gravar_evento_de_fim(self.logdir, unit, *fim)
+        except OSError as e:
+            self.falhou += 1
+            print(f"infra limpeza fossil: não gravei o evento de fim de {unit} ({e}) — a unit fica", file=sys.stderr)
+            return
+        p = _roda("systemctl", "--user", "reset-failed", "--", unit)
+        if p is None or p.returncode != 0:
+            self.falhou += 1
+            print(f"infra limpeza fossil: reset-failed recusado em {unit} (o evento ficou no log do job)", file=sys.stderr)
+            return
+        self.saiu += 1
+        print(f"saiu: {unit} (result={fim[0]} status={fim[1]}, evento {gravou.replace('_', ' ')} em {self.logdir})")
+        self.anotar(f"saiu unit {unit} result={fim[0]} status={fim[1]}")
+
+    def conteineres(self) -> None:
+        for d in inspecionar_todos():
+            nome = nome_do_conteiner(d)
+            entra, motivo = no_criterio_do_conteiner(d, self.idade_h)
+            if not entra:
+                self.ficou += 1
+                print(f"fica: {nome} ({motivo})")
+            elif self.ver:
+                self.saiu += 1
+                print(f"sairia: {nome} ({motivo}; inspeção e logs iriam para {self.removidos} antes do rm)")
+            else:
+                self._remover_conteiner(d, motivo)
+
+    def _remover_conteiner(self, d: dict, motivo: str) -> None:
+        nome = nome_do_conteiner(d)
+        # Cinto: relê o contêiner agora e só tira se ele ainda é do critério; nome vazio nunca sai.
+        agora = _roda("docker", "inspect", nome)
+        try:
+            ainda = json.loads(agora.stdout)[0] if agora is not None and agora.returncode == 0 else None
+        except (ValueError, IndexError):
+            ainda = None
+        if not nome or ainda is None or not no_criterio_do_conteiner(ainda, self.idade_h)[0]:
+            self.ficou += 1
+            print(f"RECUSADO fora do critério: {nome or '(sem nome)'}")
+            self.anotar(f"RECUSADO fora do critério: {nome or '(sem nome)'}")
+            return
+        try:
+            base = guardar_do_conteiner(self.removidos, ainda)
+        except OSError as e:
+            self.falhou += 1
+            print(f"infra limpeza fossil: não guardei a inspeção e os logs de {nome} ({e}) — o contêiner fica", file=sys.stderr)
+            return
+        p = _roda("docker", "rm", "-f", "--", nome)
+        if p is None or p.returncode != 0:
+            self.falhou += 1
+            print(f"infra limpeza fossil: docker rm falhou em {nome} — a inspeção ficou em {base}.json", file=sys.stderr)
+            return
+        self.saiu += 1
+        print(f"saiu: {nome} ({motivo}; inspeção e logs em {base}.json e {base}.log)")
+        self.anotar(f"saiu contêiner {nome} ({motivo}) inspeção e logs em {base}.json")
+
+    def recusar_se_ha_job_ativo(self) -> int | None:
+        ativos = [u for u in (*listar_units("active"), *listar_units("activating")) if u.startswith(PREFIXO_DO_JOB)]
+        if not ativos:
+            return None
+        quais = ", ".join(sorted(ativos))
+        if self.ver:
+            print(f"recusaria: job da sessão ativo ({quais}) — sem --ver a rodada não tiraria nada; a lista abaixo é o que sairia com o job parado")
+            return None
+        print(f"RECUSADO: job da sessão ativo ({quais}) — nenhum contêiner nem unit saiu; a prova em curso sobe contêiner "
+              f"sem nome por minutos e tirá-lo no meio abre incidente falso", file=sys.stderr)
+        self.anotar(f"RECUSADO: job da sessão ativo ({quais})")
+        return SAIDA_RECUSA
+
+    def correr(self) -> int:
+        try:
+            if not self.so_jobs:
+                recusa = self.recusar_se_ha_job_ativo()
+                if recusa is not None:
+                    return recusa
+            self.jobs()
+            if not self.so_jobs:
+                self.conteineres()
+        except FonteMuda as e:
+            print(f"infra limpeza fossil: {e} — o que já saiu está dito acima; nada mais é limpo", file=sys.stderr)
+            return SAIDA_MUDA
+        verbo = "sairiam" if self.ver else "saíram"
+        resumo = (f"limpeza-fossil: {self.saiu} {verbo}, {self.ficou} ficam"
+                  + (f", {self.falhou} não saíram" if self.falhou else ""))
+        print(resumo)
+        self.anotar(resumo)
+        return SAIDA_FALHOU if self.falhou else SAIDA_OK
+
+
+def _uso(texto: str = "") -> int:
+    if texto:
+        print(f"infra limpeza fossil: {texto}", file=sys.stderr)
+    print("uso: infra limpeza fossil [--ver] [--so-jobs] [--dias <N>]", file=sys.stderr)
+    return SAIDA_USO
+
+
+def main(argv: list[str]) -> int:
+    ver = so_jobs = False
+    dias = 0
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--ver":
+            ver = True
+        elif argv[i] == "--so-jobs":
+            so_jobs = True
+        elif argv[i] == "--dias":
+            i += 1
+            if i >= len(argv) or not argv[i].isdigit():
+                return _uso("--dias pede dias inteiros")
+            dias = int(argv[i])
+        else:
+            return _uso(f"não conhece {argv[i]}")
+        i += 1
+    try:
+        idade_h = float(os.environ.get("INFRA_FOSSIL_IDADE_H", IDADE_PADRAO_H))
+    except ValueError:
+        return _uso("INFRA_FOSSIL_IDADE_H pede horas")
+    rodada = Rodada(ver=ver, so_jobs=so_jobs, dias=dias, idade_h=idade_h)
+    if ver:
+        return rodada.correr()
+    # Trava: duas rodadas não tiram o mesmo alvo duas vezes.
+    try:
+        rodada.trava.parent.mkdir(parents=True, exist_ok=True)
+        trava = rodada.trava.open("w")
+    except OSError as e:
+        print(f"infra limpeza fossil: não consegui a trava {rodada.trava} ({e}) — nada limpo", file=sys.stderr)
+        return SAIDA_MUDA
+    try:
+        fcntl.flock(trava, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        rodada.anotar("outra execução em curso, saindo")
+        print("limpeza-fossil: outra execução em curso, saindo")
+        return SAIDA_OK
+    return rodada.correr()
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

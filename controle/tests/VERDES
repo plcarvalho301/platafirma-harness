@@ -150,8 +150,8 @@ tests/test_contrato_infra_backup_piso.py | bin/infra bin/_infra/** bin/_release/
 # mostra a diferenca antes (--ver), reinicia o contêiner e volta a anterior se ele nao subir (docker de mentira).
 tests/test_contrato_infra_ingress.py | bin/infra bin/_infra/** lib/raizes.sh
 # Medido em 19/10/2026 (balde #2856 linha 17): `infra remover` tira contêiner avulso (inspeção guardada antes), unit
-# transitória parada e unit da conta não declarada (arquivo para a quarentena), recusando o declarado; `infra limpeza
-# jobs` tira da lista o job do longjob falhado há mais de N dias (17 passam; com o bin/infra anterior, 15 ficam vermelhos — os 2 de uso saem 2 nos dois).
+# transitória parada e unit da conta não declarada (arquivo para a quarentena), recusando o declarado. O `infra limpeza
+# jobs` virou, em 21/10/2026 (card #3920), a limpeza de fóssil só de job: a suite dele é a test_infra_limpeza_fossil abaixo.
 tests/test_contrato_infra_remover.py | bin/infra bin/_infra/** lib/raizes.sh
 # Medido em 04/10/2026 (incidente #3267): bloco Procedencia da tela contra o veredito comum (6 passam; com o
 # predicado velho, que le `resultado`/`servicos`, 4 ficam vermelhos: 10 divergentes saem «0 sem divergencia»).
@@ -255,3 +255,13 @@ tests/test_infra_eixos.py | bin/infra bin/_infra/**
 tests/test_sinal_porta.py | bin/sinal lib/raizes.py
 tests/test_infra_medir_rede.py | bin/infra bin/_infra/** bin/sinal lib/raizes.py
 tests/test_infra_medir_ajuda.py | bin/infra bin/_infra/** lib/raizes.sh
+# Medido em 21/10/2026 (card #3920, R9 da spec eixos-do-host): `infra medir ram` com /proc, meminfo e PSI de mentira e docker,
+# journalctl e `acervo` falsos: uso real, cache e total em campos distintos (com o uso somando o cache, 3 dos 32 ficam vermelhos),
+# a morte por limite do docker e do journal com a chave de serviço, e fonte muda (journal sem permissão, docker events, PSI) saindo 5, nunca zero.
+tests/test_infra_medir_ram.py | bin/infra bin/_infra/**
+# Medido em 21/10/2026 (card #3920, R12 e R13): `infra limpeza fossil` nos seis alvos do comentário #3102 do #3878 (tira o contêiner
+# sem label com mais de 24 h e a unit platafirma-job-* failed, deixa os outros quatro), recusa com job ativo, evento de fim no log do job
+# antes do reset-failed e inspeção e logs guardados antes do rm (sem gravar o evento, 4 dos 28 ficam vermelhos).
+tests/test_infra_limpeza_fossil.py | bin/infra bin/_infra/** bin/_sessao/longjob lib/raizes.sh
+# Medido em 21/10/2026 (card #3920, R13): `sessao longjob status` de unit que já saiu lê o evento de fim e nunca Result=success.
+tests/test_longjob_status_fim.py | bin/_sessao/** lib/raizes.sh

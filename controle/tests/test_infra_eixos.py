@@ -34,6 +34,11 @@ def labels_do_core(servico="cloudflared", projeto="platafirma-core"):
     }
 
 
+# O que a RAM tem de próprio (R9): cache e total à parte do uso, a pressão do kernel e as mortes por limite da janela.
+RAM = {"cache_bytes": 2 << 30, "total_bytes": 30 << 30, "pressao_avg10": 0.5, "pressao_avg60": 0.3,
+       "pressao_avg300": 0.1, "mortes": []}
+
+
 def executavel(caminho: Path, corpo: str) -> Path:
     caminho.write_text("#!/usr/bin/env bash\n" + corpo, encoding="utf-8")
     caminho.chmod(caminho.stat().st_mode | stat.S_IEXEC)
@@ -48,7 +53,7 @@ def test_carimbo_em_utc_com_milissegundo():
 
 def test_montar_traz_os_campos_de_topo_comuns_aos_quatro_eixos():
     j = eixos.montar("ram", "infra-medir-ram", agora=AGORA, valor=8 << 30, unidade="bytes",
-                     teto=30 << 30, teto_fonte="/proc/meminfo:MemTotal")
+                     teto=30 << 30, teto_fonte="/proc/meminfo:MemTotal", **RAM)
     assert set(j) >= {"eixo", "carimbo", "instrumento", "estado_leitura", "causa", "fonte", "valor", "unidade",
                       "teto", "teto_fonte", "janela", "consumidores", "limiar", "limiar_por", "schema_v"}
     assert j["schema_v"] == eixos.SCHEMA_V
@@ -98,7 +103,7 @@ def test_consumidor_tem_servico_ou_desvio_nunca_os_dois_nem_nenhum():
 
 def test_valor_alto_nao_muda_o_codigo_de_saida():
     j = eixos.montar("ram", "infra-medir-ram", agora=AGORA, valor=29 << 30, unidade="bytes",
-                     teto=30 << 30, teto_fonte="/proc/meminfo:MemTotal")
+                     teto=30 << 30, teto_fonte="/proc/meminfo:MemTotal", **RAM)
     assert eixos.codigo_de_saida(j) == 0
     nao = eixos.montar("ram", "infra-medir-ram", agora=AGORA, estado="nao_consegui_olhar",
                        causa="ilegivel", fonte="/proc/meminfo")
@@ -107,17 +112,58 @@ def test_valor_alto_nao_muda_o_codigo_de_saida():
 
 # --- a frase ------------------------------------------------------------------------------------
 
-def test_frase_de_ram_diz_numero_teto_e_quem_consome():
+def test_frase_de_ram_diz_uso_cache_total_pressao_mortes_e_quem_consome():
     j = eixos.montar("ram", "infra-medir-ram", agora=AGORA, valor=8 << 30, unidade="bytes",
-                     teto=30 << 30, teto_fonte="/proc/meminfo:MemTotal",
-                     pressao_avg10=0.5, pressao_avg60=0.3, pressao_avg300=0.1, cache_bytes=2 << 30,
+                     teto=30 << 30, teto_fonte="/proc/meminfo:MemTotal", janela=3600,
                      consumidores=[{"servico": "core/keycloak"},
                                    {"desvio": "fora_de_compose_e_unit", "executavel": "claude", "pid": 4242,
-                                    "linha_de_comando": "claude -p juiz"}])
+                                    "linha_de_comando": "claude -p juiz"}],
+                     **{**RAM, "mortes": [{"servico": "core/keycloak", "ts": "2026-10-21T14:10:09.000Z",
+                                          "fonte": "docker_events"}]})
     assert eixos.frase(j) == (
-        "Memória às 15:04:05 UTC: 8 GiB de 30 GiB (/proc/meminfo:MemTotal); pressão do kernel 0,5/0,3/0,1% "
-        "em 10, 60 e 300 s; cache que o kernel devolve 2 GiB; consumidores: core/keycloak, "
+        "Memória às 15:04:05 UTC: uso real 8 GiB de 30 GiB (/proc/meminfo:MemTotal); "
+        "cache que o kernel devolve 2 GiB, à parte; pressão do kernel 0,5/0,3/0,1% em 10, 60 e 300 s; "
+        "1 morte por limite em 1 h: core/keycloak às 14:10:09 UTC; consumidores: core/keycloak, "
         "sem dono (fora_de_compose_e_unit: claude, pid 4242, claude -p juiz).")
+
+
+@pytest.mark.parametrize("segundos, dito", [(3600, "1 h"), (7200, "2 h"), (300, "5 min"), (90, "90 s")])
+def test_a_janela_das_mortes_e_dita_na_unidade_inteira_mais_grande(segundos, dito):
+    j = eixos.montar("ram", "infra-medir-ram", agora=AGORA, valor=1 << 30, unidade="bytes", janela=segundos, **RAM)
+    assert f"nenhuma morte por limite em {dito}" in eixos.frase(j)
+
+
+# --- o que a RAM exige do JSON (R9) ---------------------------------------------------------------
+
+@pytest.mark.parametrize("tira, motivo", [
+    ("cache_bytes", "cache_bytes"), ("total_bytes", "total_bytes"), ("pressao_avg60", "pressao_avg60"),
+    ("mortes", "mortes deve ser lista"),
+])
+def test_ram_lida_sem_o_que_e_dela_nao_cumpre_o_schema(tira, motivo):
+    campos = {k: v for k, v in RAM.items() if k != tira}
+    with pytest.raises(ValueError, match=motivo):
+        eixos.montar("ram", "infra-medir-ram", agora=AGORA, valor=1 << 30, unidade="bytes", **campos)
+
+
+def test_ram_mede_em_bytes():
+    with pytest.raises(ValueError, match="ram mede em bytes"):
+        eixos.montar("ram", "infra-medir-ram", agora=AGORA, valor=0.4, unidade="fracao", **RAM)
+
+
+def test_morte_tem_chave_de_servico_ou_desvio_hora_e_fonte():
+    ok = {"servico": "core/keycloak", "ts": "2026-10-21T14:10:09.000Z", "fonte": "journal"}
+    eixos.montar("ram", "infra-medir-ram", agora=AGORA, valor=1 << 30, unidade="bytes", **{**RAM, "mortes": [ok]})
+    for ruim, motivo in (({**ok, "servico": None}, "mortes\\[0\\]: servico ou desvio"),
+                         ({**ok, "ts": "ontem"}, "ts fora de"), ({**ok, "fonte": "palpite"}, "fonte fora de")):
+        with pytest.raises(ValueError, match=motivo):
+            eixos.montar("ram", "infra-medir-ram", agora=AGORA, valor=1 << 30, unidade="bytes",
+                         **{**RAM, "mortes": [ruim]})
+
+
+def test_ram_que_nao_leu_nao_carrega_nada_de_ram():
+    j = eixos.montar("ram", "infra-medir-ram", agora=AGORA, estado="nao_consegui_olhar", causa="psi_indisponivel",
+                     fonte="/proc/pressure/memory")
+    assert eixos.validar(j) == [] and "cache_bytes" not in j
 
 
 def test_frase_de_leitura_que_falhou_diz_a_fonte_e_nunca_um_numero():

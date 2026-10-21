@@ -1,0 +1,300 @@
+#!/usr/bin/env python3
+# medir-ram — o eixo de memória do host: uso real, cache, total, pressão, quem consome e quem morreu por limite
+# (spec eixos-do-host R9 e R4, card #3920). Sub-ato de `infra` (como medir-rede): fora do PATH e do golden record,
+# mora em bin/_infra/. Chamado por `infra medir ram [--json] [--janela <s>]`, nunca direto. Só lê: não grava série.
+#
+# O que lê. /proc/meminfo dá três números que nunca se somam: o uso real (MemTotal menos MemAvailable, o que o
+# kernel não devolve), o cache que ele devolve (Buffers + Cached + SReclaimable menos Shmem) e o total da máquina,
+# que também é o teto. A pressão de memória (PSI) vem de /proc/pressure/memory, médias de 10, 60 e 300 s. Os
+# consumidores saem do RSS de cada processo, juntados pelo cgroup e traduzidos para a chave de serviço
+# `<stack>/<serviço>` pelos dois caminhos (contêiner pelo compose, unit pelo registro); o que não resolve sai como
+# desvio, nunca omitido, e o que passa do décimo maior entra em `consumidores_omitidos` e `valor_omitido`.
+#
+# Mortes por limite na janela, de duas fontes: `docker events` do tipo oom (a chave sai dos labels do compose do
+# próprio evento) e o journal do usuário, linhas de unit com oom-kill (a chave sai do registro unit→stack). O OOM
+# global do kernel pede o grupo adm e não é lido; o contador oom_kill do memory.events do slice sai à parte, sem
+# culpado. Fonte que não respondeu faz o eixo sair não-consegui-olhar: zero morte só quando se leu e não houve.
+#
+# Medida não reprova: o número, por alto que seja, sai 0; só a fonte que não respondeu sai 5 (R2, R3).
+#
+# ambiente: INFRA_MEMINFO[=/proc/meminfo] · INFRA_PRESSAO_MEMORIA[=/proc/pressure/memory] · INFRA_PROC[=/proc] ·
+#   INFRA_SLICE_EVENTS[=/sys/fs/cgroup/user.slice/user-<uid>.slice/memory.events] · INFRA_ACERVO[=bin/acervo]
+# depende: docker · journalctl --user · bin/acervo (registro de stacks) · bin/_infra/eixos.py
+# saída: 0 lido · 2 uso · 5 não consegui olhar (a fonte não respondeu)
+from __future__ import annotations
+
+import functools
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from collections.abc import Callable
+from datetime import datetime, timezone
+from pathlib import Path
+
+AQUI = Path(__file__).resolve().parent
+sys.path.insert(0, str(AQUI))
+import eixos
+
+INSTRUMENTO = "infra-medir-ram"
+JANELA_PADRAO_S = 3600
+MAIORES = 10
+KIB = 1 << 10
+CAMPOS_DA_LINHA_DO_MEMINFO = 2   # "MemTotal:" e o número; a unidade (kB) vem depois, quando vem
+TIMEOUT_DO_DOCKER_S = 20
+TIMEOUT_DO_JOURNAL_S = 30
+
+_RE_VMRSS = re.compile(r"^VmRSS:\s+(\d+)\s+kB", re.MULTILINE)
+_RE_UNIT_NA_MENSAGEM = re.compile(r"^([^\s:]+\.service):")
+_RE_PRESSAO_SOME = re.compile(r"^some\s+avg10=([\d.]+)\s+avg60=([\d.]+)\s+avg300=([\d.]+)", re.MULTILINE)
+# O systemd diz da morte de duas maneiras: o processo morto pelo OOM killer e a unit que falhou por oom-kill.
+_MARCAS_DE_OOM = ("killed by the oom killer", "oom-kill")
+_SEM_PERMISSAO_NO_JOURNAL = ("insufficient permissions", "no journal files")
+_AGRUPA_MORTE_DA_UNIT_S = 5
+
+
+# --- uso, cache e total -------------------------------------------------------------------------
+
+def ler_meminfo(caminho: str) -> dict[str, int]:
+    """Os campos de /proc/meminfo, em bytes. Campo ausente fica fora: quem precisa dele diz a causa."""
+    try:
+        linhas = Path(caminho).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        raise eixos.ErroDeLeitura("ilegivel", caminho) from None
+    campos = {}
+    for linha in linhas:
+        partes = linha.split()
+        if len(partes) >= CAMPOS_DA_LINHA_DO_MEMINFO and partes[0].endswith(":") and partes[1].isdigit():
+            campos[partes[0][:-1]] = int(partes[1]) * KIB
+    return campos
+
+
+def uso_cache_e_total(caminho: str) -> tuple[int, int, int]:
+    """(uso real, cache, total) em bytes, três números que nunca se somam. O uso é o que o kernel não devolve:
+    MemTotal menos MemAvailable. O cache é o que ele devolve quando pedem, sem a memória compartilhada."""
+    campos = ler_meminfo(caminho)
+    for obrigatorio, causa in (("MemTotal", "memtotal_ausente"), ("MemAvailable", "memavailable_ausente")):
+        if obrigatorio not in campos:
+            raise eixos.ErroDeLeitura(causa, caminho)
+    total, disponivel = campos["MemTotal"], campos["MemAvailable"]
+    cache = campos.get("Buffers", 0) + campos.get("Cached", 0) + campos.get("SReclaimable", 0) - campos.get("Shmem", 0)
+    return total - disponivel, max(cache, 0), total
+
+
+def ler_pressao(caminho: str) -> tuple[float, float, float]:
+    """(avg10, avg60, avg300) da linha `some` do PSI de memória, em por cento."""
+    try:
+        texto = Path(caminho).read_text(encoding="utf-8")
+    except OSError:
+        raise eixos.ErroDeLeitura("psi_indisponivel", caminho) from None
+    achado = _RE_PRESSAO_SOME.search(texto)
+    if not achado:
+        raise eixos.ErroDeLeitura("psi_ilegivel", caminho)
+    return tuple(float(v) for v in achado.groups())
+
+
+# --- quem consome ---------------------------------------------------------------------------------
+
+def _rss_por_cgroup(proc: Path) -> dict[str, dict]:
+    """RSS somado por cgroup, com o pid de maior RSS de cada um como representante. Thread de kernel não tem
+    VmRSS e fica fora; processo que sumiu no meio da leitura também."""
+    grupos: dict[str, dict] = {}
+    try:
+        pastas = list(proc.iterdir())
+    except OSError:
+        raise eixos.ErroDeLeitura("proc_ilegivel", str(proc)) from None
+    for pasta in pastas:
+        if not pasta.name.isdigit():
+            continue
+        try:
+            achado = _RE_VMRSS.search((pasta / "status").read_text(encoding="utf-8", errors="replace"))
+            cgroup = (pasta / "cgroup").read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if not achado:
+            continue
+        rss = int(achado.group(1)) * KIB
+        grupo = grupos.setdefault(cgroup, {"bytes": 0, "pid": int(pasta.name), "maior": 0})
+        grupo["bytes"] += rss
+        if rss > grupo["maior"]:
+            grupo["pid"], grupo["maior"] = int(pasta.name), rss
+    return grupos
+
+
+def inspecionar_conteiner(id_conteiner: str) -> tuple[str, dict]:
+    """(nome, labels) do contêiner. Contêiner que sumiu entre a leitura do cgroup e agora volta sem label e vira
+    desvio; docker que não responde é fonte muda."""
+    fonte = f"docker inspect {id_conteiner[:12]}"
+    try:
+        p = subprocess.run(["docker", "inspect", "--format", "{{.Name}}\t{{json .Config.Labels}}", id_conteiner],
+                           capture_output=True, text=True, timeout=TIMEOUT_DO_DOCKER_S, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        raise eixos.ErroDeLeitura("docker_fora", fonte) from None
+    if p.returncode != 0:
+        if "no such" in p.stderr.lower():
+            return id_conteiner[:12], {}
+        raise eixos.ErroDeLeitura("docker_fora", fonte)
+    nome, _, labels = p.stdout.strip().partition("\t")
+    try:
+        rotulos = json.loads(labels) if labels else {}
+    except ValueError:
+        raise eixos.ErroDeLeitura("labels_ilegiveis", fonte) from None
+    return nome.lstrip("/"), rotulos if isinstance(rotulos, dict) else {}
+
+
+def consumidores(proc: Path, resolver_unit: Callable[[str], str | None], topologia: list[dict]) -> tuple[list[dict], int, int]:
+    """(os dez maiores, quantos ficaram de fora, bytes que eles seguravam). Cada consumidor é um serviço
+    <stack>/<serviço> (processos do mesmo serviço se somam) ou um desvio; o desvio leva pid, executável e linha
+    de comando, que a série não guarda (argumento é conteúdo)."""
+    inspecionar = functools.lru_cache(maxsize=None)(inspecionar_conteiner)
+    servicos: dict[str, dict] = {}
+    desvios: list[dict] = []
+    for grupo in _rss_por_cgroup(proc).values():
+        chave = eixos.resolver_pid(grupo["pid"], proc=proc, inspecionar=inspecionar,
+                                   resolver_unit=resolver_unit, topologia=topologia)
+        if chave.get("servico"):
+            atual = servicos.setdefault(chave["servico"], {**chave, "valor": 0, "unidade": "bytes"})
+            atual["valor"] += grupo["bytes"]
+            atual.pop("linha_de_comando", None)
+        else:
+            desvios.append({**chave, "valor": grupo["bytes"], "unidade": "bytes"})
+    todos = sorted([*servicos.values(), *desvios], key=lambda c: c["valor"], reverse=True)
+    resto = todos[MAIORES:]
+    return todos[:MAIORES], len(resto), sum(c["valor"] for c in resto)
+
+
+# --- quem morreu por limite -----------------------------------------------------------------------
+
+def _carimbo_de_epoch(segundos: float) -> str:
+    return eixos.carimbo(datetime.fromtimestamp(segundos, tz=timezone.utc))
+
+
+def mortes_do_docker(desde: int, ate: int, topologia: list[dict]) -> list[dict]:
+    """Os eventos oom do docker na janela. A chave de serviço sai dos labels que o próprio evento traz."""
+    fonte = "docker events"
+    try:
+        p = subprocess.run(["docker", "events", "--since", str(desde), "--until", str(ate), "--filter", "event=oom",
+                            "--format", "{{json .}}"], capture_output=True, text=True,
+                           timeout=TIMEOUT_DO_DOCKER_S, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        raise eixos.ErroDeLeitura("docker_events_fora", fonte) from None
+    if p.returncode != 0:
+        raise eixos.ErroDeLeitura("docker_events_fora", fonte)
+    mortes = []
+    for linha in p.stdout.splitlines():
+        if not linha.strip():
+            continue
+        try:
+            evento = json.loads(linha)
+            atributos = evento["Actor"]["Attributes"]
+            instante = float(evento.get("timeNano", 0)) / 1e9 if evento.get("timeNano") else float(evento["time"])
+        except (ValueError, KeyError, TypeError):
+            raise eixos.ErroDeLeitura("docker_events_ilegivel", fonte) from None
+        chave = eixos.chave_de_conteiner(str(atributos.get("name", "")), atributos, topologia)
+        mortes.append({**chave, "ts": _carimbo_de_epoch(instante), "fonte": "docker_events", "escopo": "cgroup",
+                       "_instante": instante})
+    return mortes
+
+
+def mortes_do_journal(desde: int, ate: int, resolver_unit: Callable[[str], str | None]) -> list[dict]:
+    """As linhas do journal do usuário em que o systemd diz de uma unit morta pelo OOM killer ou falha por
+    oom-kill. As duas linhas de uma mesma morte, a poucos segundos uma da outra, contam uma vez."""
+    fonte = "journalctl --user"
+    try:
+        p = subprocess.run(["journalctl", "--user", "--since", f"@{desde}", "--until", f"@{ate}", "-o", "json",
+                            "--no-pager", "-q"], capture_output=True, text=True, timeout=TIMEOUT_DO_JOURNAL_S,
+                           check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        raise eixos.ErroDeLeitura("journal_fora", fonte) from None
+    # Sem permissão o journalctl sai 0 com stdout vazio: ler isso como "nenhuma morte" seria o zero que não se lê.
+    if p.returncode != 0 or any(m in p.stderr.lower() for m in _SEM_PERMISSAO_NO_JOURNAL):
+        raise eixos.ErroDeLeitura("journal_sem_leitura", fonte)
+    vistas: dict[tuple, dict] = {}
+    for linha in p.stdout.splitlines():
+        try:
+            entrada = json.loads(linha)
+        except ValueError:
+            continue
+        mensagem = entrada.get("MESSAGE")
+        if not isinstance(mensagem, str) or not any(m in mensagem.lower() for m in _MARCAS_DE_OOM):
+            continue
+        achado = _RE_UNIT_NA_MENSAGEM.match(mensagem)
+        unit = entrada.get("USER_UNIT") or (achado.group(1) if achado else None)
+        try:
+            instante = int(entrada["__REALTIME_TIMESTAMP"]) / 1e6
+        except (KeyError, ValueError):
+            continue
+        chave = {**eixos.chave_de_unit(unit, resolver_unit)} if unit else {"desvio": "fora_de_compose_e_unit"}
+        id_da_morte = (unit, int(instante // _AGRUPA_MORTE_DA_UNIT_S))
+        vistas.setdefault(id_da_morte, {**chave, "ts": _carimbo_de_epoch(instante), "fonte": "journal",
+                                        "escopo": "cgroup", "_instante": instante})
+    return list(vistas.values())
+
+
+def oom_kill_do_slice(caminho: str | None = None) -> int | None:
+    """O contador oom_kill do memory.events do slice da conta, acumulado desde a partida; nulo quando não se lê.
+    Diz que houve morte, nunca de quem."""
+    caminho = caminho or f"/sys/fs/cgroup/user.slice/user-{os.getuid()}.slice/memory.events"
+    try:
+        for linha in Path(caminho).read_text(encoding="utf-8").splitlines():
+            nome, _, valor = linha.partition(" ")
+            if nome == "oom_kill" and valor.strip().isdigit():
+                return int(valor)
+    except OSError:
+        pass
+    return None
+
+
+# --- a medida -------------------------------------------------------------------------------------
+
+def medir(janela: int = JANELA_PADRAO_S) -> dict:
+    meminfo = os.environ.get("INFRA_MEMINFO", "/proc/meminfo")
+    pressao = os.environ.get("INFRA_PRESSAO_MEMORIA", "/proc/pressure/memory")
+    proc = Path(os.environ.get("INFRA_PROC", "/proc"))
+    acervo = os.environ.get("INFRA_ACERVO") or str(eixos.ACERVO)
+    try:
+        uso, cache, total = uso_cache_e_total(meminfo)
+        teto, teto_fonte = eixos.teto_ram(meminfo)
+        avg10, avg60, avg300 = ler_pressao(pressao)
+        topologia = eixos.carregar_topologia(acervo)
+        resolver_unit = functools.lru_cache(maxsize=None)(eixos.resolvedor_do_registro(acervo))
+        maiores, omitidos, valor_omitido = consumidores(proc, resolver_unit, topologia)
+        ate = int(time.time())
+        mortes = [*mortes_do_docker(ate - janela, ate, topologia),
+                  *mortes_do_journal(ate - janela, ate, resolver_unit)]
+    except eixos.ErroDeLeitura as e:
+        return eixos.montar("ram", INSTRUMENTO, estado="nao_consegui_olhar", causa=e.causa, fonte=e.fonte,
+                            janela=janela)
+    mortes.sort(key=lambda m: m.pop("_instante"))
+    return eixos.montar(
+        "ram", INSTRUMENTO, valor=uso, unidade="bytes", teto=teto, teto_fonte=teto_fonte, janela=janela,
+        consumidores=maiores, cache_bytes=cache, total_bytes=total, pressao_avg10=avg10, pressao_avg60=avg60,
+        pressao_avg300=avg300, mortes=mortes, oom_kill_slice=oom_kill_do_slice(os.environ.get("INFRA_SLICE_EVENTS")),
+        consumidores_omitidos=omitidos, valor_omitido=valor_omitido)
+
+
+def _uso_errado(texto: str) -> int:
+    print(f"infra: erro: medir ram {texto} — uso: infra medir ram [--json] [--janela <segundos>]", file=sys.stderr)
+    return 2
+
+
+def main(argv: list[str]) -> int:
+    janela, como_json, i = JANELA_PADRAO_S, False, 0
+    while i < len(argv):
+        if argv[i] == "--json":
+            como_json = True
+        elif argv[i] == "--janela":
+            i += 1
+            if i >= len(argv) or not argv[i].isdigit() or int(argv[i]) == 0:
+                return _uso_errado("--janela pede segundos inteiros maiores que zero")
+            janela = int(argv[i])
+        else:
+            return _uso_errado(f"não conhece {argv[i]}")
+        i += 1
+    return eixos.imprimir_saida(medir(janela), como_json=como_json)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
