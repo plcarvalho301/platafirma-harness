@@ -47,8 +47,9 @@
 # e o gabarito contra o qual um edit se julga fossil em vez de suspeito.
 #
 # NAO APAGA MEMORIA. Poda automatica de mesa seria robo decidindo o que a cadeira
-# esquece; o TTL de 14 dias ja e a poda, e ela e declarada. Orfao vira linha de
-# relatorio, e quem limpa e a sessao, com `mesa limpa <slot>`.
+# esquece; o TTL de 48 h do item e da prosa (MEM_MESA_TTL_HORAS) ja e a poda, e ela e
+# declarada (o `mesa ver` avisa o que expurgou). Orfao vira linha de relatorio, e quem
+# limpa e a sessao, com `mesa limpa <slot>`.
 import argparse
 import json
 import os
