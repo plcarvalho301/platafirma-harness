@@ -16,6 +16,10 @@
 # resolvem os 30 processos que mais consumiram na amostra; o consumo dos que ficaram de fora vem em
 # `fora_da_lista_threads`, sem rótulo de total. Processo que nasceu ou morreu entre as duas leituras não tem delta.
 #
+# O `valor` é o da máquina (inclui interrupção, steal e processo que nasceu e morreu dentro da amostra), então os
+# consumidores somam menos que ele, e nenhum campo rotula a soma deles como total. A linha de comando do desvio sai com
+# o valor de argumento de segredo mascarado e cortada (eixos.linha_sem_segredo).
+#
 # Medida não reprova (R2): o número, por alto que seja, sai 0; só a fonte que não respondeu sai 5.
 #
 # ambiente: INFRA_CPU_AMOSTRA[=1] · INFRA_PROC[=/proc] · INFRA_CPUINFO[=/proc/cpuinfo] · INFRA_ACERVO[=bin/acervo]
