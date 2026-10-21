@@ -4,8 +4,8 @@ Antes, nenhum verbo derrubava contêiner avulso nem tirava unit, e o resíduo vi
 host: o nginx kind_gould, subido à mão em 15/10/2026, e 15 jobs avulsos falhados acumulados em
 `infra estado` entre 12 e 19/10. `infra remover` tira contêiner avulso (guardando a inspeção antes),
 unit transitória parada (reset-failed) e unit da conta não declarada (arquivo para a quarentena);
-recusa o declarado. `infra limpeza jobs` tira da lista os jobs do longjob falhados há mais de N
-dias. Estes casos rodam o bin/infra de verdade com docker e systemctl de mentira no PATH: nada toca
+recusa o declarado. `infra limpeza jobs` virou a limpeza de fóssil só de job (#3920; suite em
+test_infra_limpeza_fossil.py). Estes casos rodam o bin/infra de verdade com docker e systemctl de mentira no PATH: nada toca
 a produção.
 """
 import json
@@ -235,42 +235,9 @@ def test_sem_alvo_e_dois_alvos_saem_2(cena):
 
 
 # --- limpeza jobs ----------------------------------------------------------------------------
-
-VELHO = "platafirma-job-gate-282131d-20200101T000000.service"
-NOVO = "platafirma-job-gate-aaaaaaa-20990101T000000.service"
-SEM = "platafirma-job-sem-carimbo.service"
-
-
-def _falhadas(cena):
-    (cena.dir / "falhadas").write_text(
-        "".join(f"{u} loaded failed failed descricao\n" for u in (VELHO, NOVO, SEM)))
-
-
-def test_limpeza_jobs_ver_lista_e_nao_toca(cena):
-    _falhadas(cena)
-    r = cena.roda("limpeza", "jobs", "--ver")
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert f"sairia: {VELHO}" in r.stdout and f"fica: {NOVO}" in r.stdout and f"fica: {SEM}" in r.stdout
-    assert cena.rastro() == []
-    assert not (cena.inst / "var" / "log" / "poda.log").exists()
-
-
-def test_limpeza_jobs_tira_so_os_velhos_e_anota(cena):
-    _falhadas(cena)
-    r = cena.roda("limpeza", "jobs")
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert cena.rastro() == [f"reset-failed {VELHO}"]
-    assert "1 saíram, 1 ficam" in r.stdout
-    assert "limpeza-jobs: 1 saíram" in (cena.inst / "var" / "log" / "poda.log").read_text()
-
-
-def test_limpeza_jobs_dias_zero_tira_todo_carimbado(cena):
-    _falhadas(cena)
-    r = cena.roda("limpeza", "jobs", "--dias", "0")
-    assert r.returncode == 0, r.stdout + r.stderr
-    # o do futuro tem idade negativa: fica mesmo com janela zero; sem carimbo nunca sai
-    assert cena.rastro() == [f"reset-failed {VELHO}"]
-
+# O job falhado sai pela limpeza de fóssil (#3920, absorveu o bin/_infra/limpeza-jobs): o evento de fim antes do
+# reset-failed, a janela de idade, a recusa e a marca têm a suite própria em test_infra_limpeza_fossil.py. Fica aqui o
+# que o `infra` promete a quem o chama pelo nome antigo (o cron do core): o uso errado continua saindo 2.
 
 def test_limpeza_jobs_dias_invalido_sai_2(cena):
     r = cena.roda("limpeza", "jobs", "--dias", "sete")

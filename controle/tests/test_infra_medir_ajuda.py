@@ -80,8 +80,21 @@ def test_o_cabecalho_declara_face_rotulo_e_volta_do_medir_na_gramatica_do_confer
         if m:
             declarado[(m.group(1), m.group(2))] = m.group(3)
     assert declarado[("face", "medir")] == "Operação"
+    # A gramática do conferidor aceita um rótulo por ato, não por eixo: a linha é a da rede e a ajuda de cada eixo diz o dele.
     assert declarado[("rotulo", "medir")] == "Medir rede"
     assert declarado[("volta", "medir")] == "sim — só lê"
+
+
+def test_o_cabecalho_declara_a_limpeza_de_fossil_com_volta_nao():
+    declarado = {}
+    for linha in INFRA.read_text(encoding="utf-8").splitlines():
+        if not linha.startswith("#"):
+            break
+        m = _LINHA_DE_ATO.match(linha.strip())
+        if m:
+            declarado[(m.group(1), m.group(2))] = m.group(3)
+    assert declarado[("face", "limpeza")] == "Operação"
+    assert declarado[("rotulo", "limpeza --fossil")] and declarado[("volta", "limpeza --fossil")] == "nao"
 
 
 def test_o_medir_esta_na_lista_de_atos_do_cabecalho_como_leitura():
@@ -101,7 +114,8 @@ def test_medir_help_mostra_face_rotulo_e_volta_e_sai_0_sem_tocar_o_substrato(arv
     assert "DELATOR:" not in r.stdout + r.stderr
 
 
-@pytest.mark.parametrize("eixo,rotulo", [("rede", "Medir rede"), ("vram", "Medir VRAM"), ("cpu", "Medir processamento")])
+@pytest.mark.parametrize("eixo,rotulo", [("rede", "Medir rede"), ("ram", "Medir RAM"), ("vram", "Medir VRAM"),
+                                         ("cpu", "Medir processamento")])
 def test_a_ajuda_de_cada_eixo_diz_o_rotulo_dele_e_so_o_dele(arvore, delatores, eixo, rotulo):
     r = roda(arvore, "medir", eixo, "--help", path_extra=delatores)
     assert r.returncode == 0, r.stderr
@@ -115,9 +129,14 @@ def test_a_ajuda_de_vram_declara_que_a_soma_dos_processos_nao_e_o_total_e_que_so
     assert "não é o total da placa" in r.stdout and "Processo gráfico não aparece" in r.stdout
 
 
-def test_a_ajuda_do_medir_sem_eixo_mostra_os_tres(arvore, delatores):
+def test_a_ajuda_de_ram_diz_a_janela_e_que_uso_cache_e_total_nao_se_somam(arvore, delatores):
+    r = roda(arvore, "medir", "ram", "--help", path_extra=delatores)
+    assert "--janela" in r.stdout and "nunca somados" in r.stdout and "Medir rede" not in r.stdout
+
+
+def test_a_ajuda_do_medir_sem_eixo_mostra_os_quatro(arvore, delatores):
     r = roda(arvore, "medir", "--help", path_extra=delatores)
-    assert r.returncode == 0 and r.stdout.count("rotulo:") == 3
+    assert r.returncode == 0 and r.stdout.count("rotulo:") == 4
 
 
 def test_a_ajuda_universal_dos_outros_atos_segue_saindo_2(arvore, delatores):
@@ -168,10 +187,50 @@ def test_medir_sem_eixo_sai_2(arvore, delatores):
 def test_eixo_desconhecido_sai_2_e_diz_os_validos(arvore, delatores):
     r = roda(arvore, "medir", "inexistente", path_extra=delatores)
     assert r.returncode == 2
-    assert "eixo desconhecido: inexistente" in r.stderr and "valores válidos: rede, vram, cpu" in r.stderr
+    assert "eixo desconhecido: inexistente" in r.stderr and "valores válidos: rede, ram, vram, cpu" in r.stderr
 
 
-@pytest.mark.parametrize("eixo", ["rede", "vram", "cpu"])
+def test_medir_ram_despacha_com_os_argumentos_e_passa_o_codigo_de_saida(arvore):
+    _stub(arvore / "bin" / "_infra", "medir-ram", FAKE_MEDIR.replace("MEDIR_REDE", "MEDIR_RAM"))
+    r = roda(arvore, "medir", "ram", "--json", "--janela", "300", env_extra={"FAKE_SAIDA": "5"})
+    assert r.returncode == 5 and "MEDIR_RAM: [--json] [--janela] [300]" in r.stdout
+
+
+# --- a limpeza de fóssil ---------------------------------------------------------------------------
+
+FAKE_FOSSIL = """
+printf 'FOSSIL:'
+for a in "$@"; do printf ' [%s]' "$a"; done
+printf '\\n'
+exit "${FAKE_SAIDA:-0}"
+"""
+
+
+def test_limpeza_fossil_despacha_com_os_argumentos(arvore):
+    _stub(arvore / "bin" / "_infra", "limpeza-fossil", FAKE_FOSSIL)
+    r = roda(arvore, "limpeza", "fossil", "--ver")
+    assert r.returncode == 0 and r.stdout.strip() == "FOSSIL: [--ver]"
+
+
+def test_limpeza_jobs_e_o_fossil_so_de_job_e_leva_os_argumentos_do_cron(arvore):
+    _stub(arvore / "bin" / "_infra", "limpeza-fossil", FAKE_FOSSIL)
+    r = roda(arvore, "limpeza", "jobs", "--dias", "1")
+    assert r.returncode == 0 and r.stdout.strip() == "FOSSIL: [--so-jobs] [--dias] [1]"
+
+
+def test_limpeza_fossil_sem_o_ajudante_e_dependencia_exit_3(arvore):
+    for alvo in ("fossil", "jobs"):
+        r = roda(arvore, "limpeza", alvo)
+        assert r.returncode == 3 and "bin/_infra/limpeza-fossil" in r.stderr
+
+
+def test_limpeza_nao_exige_identidade_e_o_codigo_de_saida_passa(arvore):
+    _stub(arvore / "bin" / "_infra", "limpeza-fossil", FAKE_FOSSIL)
+    r = roda(arvore, "limpeza", "fossil", env_extra={"FAKE_SAIDA": "4"})
+    assert r.returncode == 4 and "PF_SUJEITO" not in r.stderr
+
+
+@pytest.mark.parametrize("eixo", ["rede", "ram", "vram", "cpu"])
 def test_ajudante_ausente_e_dependencia_exit_3(arvore, eixo):
     r = roda(arvore, "medir", eixo)
     assert r.returncode == 3 and f"bin/_infra/medir-{eixo}" in r.stderr

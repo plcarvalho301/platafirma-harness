@@ -34,6 +34,7 @@ ESTADOS = ("lida", "nao_consegui_olhar")
 UNIDADES = ("bytes", "ms", "contagem", "fracao", "threads")
 DESVIOS = ("fora_de_compose_e_unit", "unit_sem_stack")
 TUNEIS = ("ops", "recuperacao", "wiki")
+FONTES_DE_MORTE = ("docker_events", "journal")
 
 SAIDA_OK = 0
 SAIDA_NAO_CONSEGUI_OLHAR = 5
@@ -133,20 +134,24 @@ def _validar_numeros(j: dict) -> list[str]:
     return erros
 
 
-def _validar_consumidores(j: dict) -> list[str]:
-    consumidores = j.get("consumidores")
-    if not isinstance(consumidores, list):
-        return ["consumidores deve ser lista"]
+def _validar_chaves(lista: object, campo: str) -> list[str]:
+    """Cada item de `campo` (consumidores, mortes) é um serviço <stack>/<serviço> ou um desvio, nunca os dois."""
+    if not isinstance(lista, list):
+        return [f"{campo} deve ser lista"]
     erros = []
-    for i, c in enumerate(consumidores):
+    for i, c in enumerate(lista):
         tem_servico, tem_desvio = c.get("servico") is not None, c.get("desvio") is not None
         if tem_servico == tem_desvio:
-            erros.append(f"consumidores[{i}]: servico ou desvio, um dos dois e nunca os dois")
+            erros.append(f"{campo}[{i}]: servico ou desvio, um dos dois e nunca os dois")
         elif tem_servico and not _RE_CHAVE.match(str(c["servico"])):
-            erros.append(f"consumidores[{i}]: servico fora da forma <stack>/<serviço>")
+            erros.append(f"{campo}[{i}]: servico fora da forma <stack>/<serviço>")
         elif tem_desvio and c["desvio"] not in DESVIOS:
-            erros.append(f"consumidores[{i}]: desvio fora de {DESVIOS}")
+            erros.append(f"{campo}[{i}]: desvio fora de {DESVIOS}")
     return erros
+
+
+def _validar_consumidores(j: dict) -> list[str]:
+    return _validar_chaves(j.get("consumidores"), "consumidores")
 
 
 def _validar_tuneis(j: dict) -> list[str]:
@@ -165,6 +170,31 @@ def _validar_tuneis(j: dict) -> list[str]:
                 erros.append(f"tuneis[{nome}]: túnel lido não leva causa")
         elif not _RE_CAUSA.match(str(t.get("causa") or "")):
             erros.append(f"tuneis[{nome}]: túnel não lido exige causa em slug")
+    return erros
+
+
+def _validar_ram(j: dict) -> list[str]:
+    """R9: uso real (`valor`), cache que o kernel devolve e total da máquina em campos distintos, a pressão do
+    kernel e as mortes por limite da janela, cada uma com a chave de serviço. Leitura que não leu não tem nada
+    disso: os campos de número não existem, nunca valem zero."""
+    if j.get("estado_leitura") != "lida":
+        return []
+    erros = []
+    if j.get("unidade") != "bytes":
+        erros.append("ram mede em bytes")
+    if not _e_numero(j.get("cache_bytes")) or j["cache_bytes"] < 0:
+        erros.append("ram exige cache_bytes, o cache que o kernel devolve, à parte do uso")
+    if not _e_numero(j.get("total_bytes")) or j["total_bytes"] <= 0:
+        erros.append("ram exige total_bytes, o total da máquina, à parte do uso")
+    for campo in ("pressao_avg10", "pressao_avg60", "pressao_avg300"):
+        if not _e_numero(j.get(campo)):
+            erros.append(f"ram exige {campo}")
+    erros += _validar_chaves(j.get("mortes"), "mortes")
+    for i, m in enumerate(j.get("mortes") if isinstance(j.get("mortes"), list) else []):
+        if not _RE_CARIMBO.match(str(m.get("ts", ""))):
+            erros.append(f"mortes[{i}]: ts fora de AAAA-MM-DDTHH:MM:SS.mmmZ")
+        if m.get("fonte") not in FONTES_DE_MORTE:
+            erros.append(f"mortes[{i}]: fonte fora de {FONTES_DE_MORTE}")
     return erros
 
 
@@ -204,6 +234,8 @@ def validar(j: dict) -> list[str]:
     erros = [*_validar_topo(j), *_validar_estado(j), *_validar_numeros(j), *_validar_consumidores(j)]
     if j.get("eixo") == "rede":
         erros += _validar_tuneis(j)
+    elif j.get("eixo") == "ram":
+        erros += _validar_ram(j)
     elif j.get("eixo") == "vram":
         erros += _validar_vram(j)
     elif j.get("eixo") == "cpu":
@@ -332,14 +364,43 @@ def _frase_do_valor(j: dict) -> str:
     if j.get("pressao_avg10") is not None:
         texto += (f"; pressão do kernel {_num(j['pressao_avg10'])}/{_num(j['pressao_avg60'])}/"
                   f"{_num(j['pressao_avg300'])}% em 10, 60 e 300 s")
-    if j.get("cache_bytes") is not None:
-        texto += f"; cache que o kernel devolve {_bytes(j['cache_bytes'])}"
     if j.get("sm_placa_fracao") is not None:
         texto += f"; SM da placa {formatar(j['sm_placa_fracao'], 'fracao')}"
     if j.get("carga_media_1") is not None:
         texto += (f"; carga média {_num(j['carga_media_1'], 2)}/{_num(j['carga_media_5'], 2)}/"
                   f"{_num(j['carga_media_15'], 2)} em 1, 5 e 15 min")
     return texto
+
+
+def _duracao(segundos: float) -> str:
+    if segundos and segundos % 3600 == 0:
+        return f"{_num(segundos / 3600, 0)} h"
+    if segundos and segundos % 60 == 0:
+        return f"{_num(segundos / 60, 0)} min"
+    return f"{_num(segundos, 0)} s"
+
+
+def _frase_das_mortes(j: dict) -> str:
+    """As mortes por limite da janela, cada uma com a chave de serviço e a hora; nenhuma é resposta, não ausência."""
+    mortes = j.get("mortes") or []
+    janela = _duracao(j.get("janela") or 0)
+    if not mortes:
+        texto = f"nenhuma morte por limite em {janela}"
+    else:
+        quem = ", ".join(f"{_quem(m)} às {str(m.get('ts', ''))[11:19]} UTC" for m in mortes)
+        texto = f"{_plural(len(mortes), 'morte', 'mortes')} por limite em {janela}: {quem}"
+    if j.get("oom_kill_slice") is not None:
+        texto += f"; o slice da conta conta {_num(j['oom_kill_slice'], 0)} oom_kill desde a partida"
+    return texto
+
+
+def _frase_da_ram(j: dict) -> str:
+    """R9: uso real, cache e total ditos à parte; o cache nunca entra na conta do uso."""
+    texto = f"uso real {formatar(j.get('valor'), 'bytes')} de {formatar(j.get('total_bytes'), 'bytes')} ({j.get('teto_fonte')})"
+    texto += f"; cache que o kernel devolve {_bytes(j['cache_bytes'])}, à parte"
+    texto += (f"; pressão do kernel {_num(j['pressao_avg10'])}/{_num(j['pressao_avg60'])}/"
+              f"{_num(j['pressao_avg300'])}% em 10, 60 e 300 s")
+    return texto + "; " + _frase_das_mortes(j)
 
 
 def frase(j: dict) -> str:
@@ -354,6 +415,8 @@ def frase(j: dict) -> str:
         return texto + "."
     if j.get("eixo") == "rede":
         texto = f"{nome} às {hora}: " + "; ".join(_frase_do_tunel(t) for t in tuneis)
+    elif j.get("eixo") == "ram":
+        texto = f"{nome} às {hora}: {_frase_da_ram(j)}"
     else:
         texto = f"{nome} às {hora}: {_frase_do_valor(j)}"
     consumidores = j.get("consumidores") or []

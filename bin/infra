@@ -11,23 +11,29 @@
 #   retenção declarada (agenda, limpeza), liberar cache de VRAM e disco (cache), que
 #   hardware é este e quanto consome em W agora (hardware), a GPU ao vivo: uso, VRAM,
 #   temperatura, W e processos (gpu), o teto de processos e threads da conta contra o uso agora (limites), copiar o ingress versionado do túnel para a cópia da
-#   instância, que é a que o cloudflared lê, e reiniciá-lo (ingress), medir a rede do host: as conexões dos três túneis com a borda e a porta pelo endereço público (medir rede), a VRAM por processo e o processamento por serviço (medir vram, medir cpu)
+#   instância, que é a que o cloudflared lê, e reiniciá-lo (ingress), medir a rede do host: as conexões dos três túneis com a borda e a porta pelo endereço público (medir rede), a VRAM por processo e o processamento por serviço (medir vram, medir cpu),
+#   medir a memória do host: uso real, cache, total, pressão, quem consome e as mortes por limite (medir ram) e tirar o fóssil que as rodadas deixam, contêiner sem label de projeto e job falhado (limpeza fossil)
 # atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), remover (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), hardware (leitura, operacao), limites (leitura, operacao), gpu (leitura, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao), units (escrita, operacao), ingress (escrita, operacao), medir (leitura, operacao)
 # forma: log
 # cauda: sim
 # classe: B
 # consome: porta@ops-log
-# ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · INFRA_UNITS_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-units.sh] porta · INFRA_INGRESS_FONTE[=$PLATAFIRMA_RELEASE/core/deploy/cloudflared-config.yml] porta · INFRA_INGRESS_COPIA[=$PLATAFIRMA_INSTANCIA/deploy/core/cloudflared.yml] porta · INFRA_INGRESS_CONTEINER[=platafirma-core-cloudflared-1] porta · INFRA_INGRESS_ESPERA[=5] porta (ingress: segundos até conferir o contêiner de pé) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (saude: lido por lib/oplog, o bruto contra o teto) · PF_SUJEITO[obrigatória em up|down|pull|build] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
-# depende: docker · systemctl --user · curl · diff (ingress) · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · ps (limites) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs, bin/_infra/limpeza-quarentena e bin/_infra/limpeza-jobs (ajudantes de limpeza) · bin/_infra/medir-rede, bin/_infra/medir-vram, bin/_infra/medir-cpu e bin/_infra/eixos.py (medir rede, vram e cpu) · bin/sinal (medir rede: a medida da porta) · nvidia-smi (medir vram) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda) · o script declarado em INFRA_UNITS_SCRIPT (units)
-# escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · remover=contêiner avulso removido (a inspeção dele guardada antes em var/log/infra/removidos), unit transitória tirada da lista (reset-failed) ou unit da conta parada, desabilitada e com o arquivo movido para var/quarentena · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados e jobs avulsos falhados tirados da lista de units · agenda=crontab do sistema (aplicar) · units=symlink das units da instância em ~/.local/share/systemd/user e daemon-reload (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · estado/saude/logs/ps/config/backup/hardware/limites/gpu/medir=nada
+# ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_PRESSAO_MEMORIA[=/proc/pressure/memory] porta (medir ram) · INFRA_SLICE_EVENTS[=memory.events do slice da conta] porta (medir ram) · INFRA_FOSSIL_IDADE_H[=24] porta (limpeza fossil: horas de vida do contêiner sem label de projeto) · LONGJOB_LOGDIR[=$PLATAFIRMA_INSTANCIA/var/log/jobs] porta (limpeza fossil: onde o evento de fim do job é gravado) · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · INFRA_UNITS_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-units.sh] porta · INFRA_INGRESS_FONTE[=$PLATAFIRMA_RELEASE/core/deploy/cloudflared-config.yml] porta · INFRA_INGRESS_COPIA[=$PLATAFIRMA_INSTANCIA/deploy/core/cloudflared.yml] porta · INFRA_INGRESS_CONTEINER[=platafirma-core-cloudflared-1] porta · INFRA_INGRESS_ESPERA[=5] porta (ingress: segundos até conferir o contêiner de pé) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (saude: lido por lib/oplog, o bruto contra o teto) · PF_SUJEITO[obrigatória em up|down|pull|build] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
+# depende: docker · systemctl --user · curl · diff (ingress) · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · ps (limites) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs, bin/_infra/limpeza-quarentena e bin/_infra/limpeza-fossil (ajudantes de limpeza) · bin/_infra/medir-rede, bin/_infra/medir-ram, bin/_infra/medir-vram, bin/_infra/medir-cpu e bin/_infra/eixos.py (medir rede, ram, vram e cpu) · journalctl --user (medir ram: a morte por limite das units) · bin/sinal (medir rede: a medida da porta) · nvidia-smi (medir vram) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda) · o script declarado em INFRA_UNITS_SCRIPT (units)
+# escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · remover=contêiner avulso removido (a inspeção dele guardada antes em var/log/infra/removidos), unit transitória tirada da lista (reset-failed) ou unit da conta parada, desabilitada e com o arquivo movido para var/quarentena · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados; fossil=contêiner sem label de projeto removido (logs e inspeção guardados antes em var/log/infra/removidos) e unit platafirma-job-* falha tirada da lista (reset-failed) depois do evento de fim gravado no log do job · agenda=crontab do sistema (aplicar) · units=symlink das units da instância em ~/.local/share/systemd/user e daemon-reload (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · estado/saude/logs/ps/config/backup/hardware/limites/gpu/medir=nada
 # substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build (deploy apagado — decisão do dono, 27/09) · crontab -e a mão · cp à mão do ingress versionado para deploy/core/cloudflared.yml da instância + docker restart do cloudflared · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra por arq:0110 §14 emenda 26/09/2026)
 # face: medir=Operação
 # rotulo: medir=Medir rede
 # volta: medir=sim — só lê
-# (face, rotulo e volta: arq:0124 §3, card #3919. Um ato único, `medir <eixo>`, com `rede`, `vram` e `cpu`; o eixo de
-#  RAM vem na story #3920. A gramática do conferidor aceita um rótulo por ato, não por eixo: a linha acima fica a da
-#  rede, e `infra medir <eixo> --help` diz o rótulo de cada eixo (Medir rede, Medir VRAM, Medir processamento).
-#  O `infra` mede e não grava a série: quem a grava é a sonda, pela `metrica`.)
+# face: limpeza=Operação
+# rotulo: limpeza --fossil=Limpar o fóssil do host
+# volta: limpeza --fossil=nao
+# (face, rotulo e volta: arq:0124 §3, cards #3919, #3921 e #3920. Um ato único, `medir <eixo>`, com `rede`, `ram`, `vram` e
+#  `cpu`. A gramática do conferidor aceita um rótulo por ato, não por eixo: a linha acima fica a da rede, e `infra medir
+#  <eixo> --help` diz o rótulo de cada eixo (Medir rede, Medir RAM, Medir VRAM, Medir processamento). O `infra` mede e não
+#  grava a série: quem a grava é a sonda, pela `metrica`. A limpeza de fóssil declara o texto de controle por modo, porque
+#  os modos diferem na volta: ela não volta (o contêiner removido não se recria, e do job tirado da lista fica o evento
+#  de fim no log do job, não a unit; decisão do dono, 19/10/2026, #3103). logs, quarentena e jobs não declaram texto.)
 # Encapsula as três pegadinhas conhecidas: DOCKER_HOST rootless, restart que
 # mata a própria chamada, e alvo que pode ser contêiner ou unit de usuário.
 set -euo pipefail
@@ -38,8 +44,9 @@ AQUI="$(dirname "$(readlink -f "$0")")"
 STACK_AJUDANTE="$AQUI/_release/stack"
 LIMPEZA_LOGS="$AQUI/_infra/limpeza-logs"
 LIMPEZA_QUARENTENA="$AQUI/_infra/limpeza-quarentena"
-LIMPEZA_JOBS="$AQUI/_infra/limpeza-jobs"
+LIMPEZA_FOSSIL="$AQUI/_infra/limpeza-fossil"
 MEDIR_REDE="$AQUI/_infra/medir-rede"
+MEDIR_RAM="$AQUI/_infra/medir-ram"
 MEDIR_VRAM="$AQUI/_infra/medir-vram"
 MEDIR_CPU="$AQUI/_infra/medir-cpu"
 CRONTAB_SCRIPT="${INFRA_CRONTAB_SCRIPT:-$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh}"
@@ -81,11 +88,13 @@ uso:
   infra config   <stack> [args compose…] [<serviço>…]  … config
   infra pull     <stack> [args compose…] [<serviço>…]  … pull
   infra build    <stack> [args compose…] [<serviço>…]  … build
-  infra limpeza  logs|quarentena|jobs [args…]    despacha para bin/_infra/limpeza-{logs,quarentena,jobs}
+  infra limpeza  logs|quarentena|jobs|fossil [args…] despacha para bin/_infra/limpeza-{logs,quarentena,fossil}; jobs é o fossil só de job
+  infra limpeza  fossil [--ver] [--so-jobs] [--dias N]  tira contêiner sem label de projeto com mais de 24 h e unit platafirma-job-* em failed; --ver só lista
   infra agenda   conferir|aplicar                convergência do crontab (instala-crontab.sh)
   infra units    conferir|aplicar                convergência das units da instância (instala-units.sh)
   infra ingress  [--ver]                         copia o ingress versionado do túnel para a cópia da instância e reinicia o cloudflared
   infra medir    rede [--json]                   a rede do host: conexões dos três túneis com a borda, reconexões e a porta por fora; só lê
+  infra medir    ram [--json] [--janela <s>]     a memória do host: uso real, cache e total à parte, pressão, quem consome e as mortes por limite; só lê
   infra medir    vram [--json]                   a VRAM: a placa e, por processo, o reservado e o SM, na chave de serviço; só lê
   infra medir    cpu  [--json]                   o processamento: a carga contra as threads, a pressão do kernel e o consumo por chave; só lê
 
@@ -115,13 +124,38 @@ uso() {
 
 # `infra medir <eixo> --help`: o ato de eixo declara no cabeçalho e repete aqui a face, o rótulo e a volta (spec
 # eixos-do-host R1). Sai 0: pedir ajuda não é erro de uso.
-ajuda_medir() {  # $1=eixo; sem eixo conhecido, a ajuda dos três
-  case "${1:-}" in
-    rede) ajuda_medir_rede ;;
-    vram) ajuda_medir_vram ;;
-    cpu)  ajuda_medir_cpu ;;
-    *)    ajuda_medir_rede; echo; ajuda_medir_vram; echo; ajuda_medir_cpu ;;
-  esac
+ajuda_medir_rede() {
+  cat <<'FIM'
+uso: infra medir rede [--json]
+
+Mede a rede do host: as conexões de cada um dos três túneis (ops, recuperacao, wiki) com a borda da Cloudflare, as
+reconexões desde a partida do processo e, no ops, a porta pelo endereço público ao lado do tempo que ela mesma registrou.
+Sai o JSON do eixo (--json) ou a frase gerada dele. Só lê: não grava série e não reinicia túnel. Medida não reprova: o
+número, por alto que seja, sai 0.
+
+face: Operação
+rotulo: Medir rede
+volta: sim — só lê
+
+exit: 0 lido · 2 uso · 3 dependência ausente · 5 não consegui olhar (a fonte não respondeu; o JSON diz qual)
+FIM
+}
+
+ajuda_medir_ram() {
+  cat <<'FIM'
+uso: infra medir ram [--json] [--janela <segundos>]
+
+Mede a memória do host: o uso real (o que o kernel não devolve), o cache que ele devolve e o total da máquina, cada um
+em campo próprio e nunca somados, a pressão de memória do kernel (10, 60 e 300 s), os maiores consumidores pela chave de
+serviço <stack>/<serviço> (o que não resolve sai como desvio) e as mortes por limite na janela (1 h por padrão). Sai o JSON
+do eixo (--json) ou a frase gerada dele. Só lê: não grava série. Medida não reprova: o número, por alto que seja, sai 0.
+
+face: Operação
+rotulo: Medir RAM
+volta: sim — só lê
+
+exit: 0 lido · 2 uso · 3 dependência ausente · 5 não consegui olhar (a fonte não respondeu; o JSON diz qual)
+FIM
 }
 
 ajuda_medir_vram() {
@@ -159,21 +193,15 @@ exit: 0 lido · 2 uso · 3 dependência ausente · 5 não consegui olhar (a font
 FIM
 }
 
-ajuda_medir_rede() {
-  cat <<'FIM'
-uso: infra medir rede [--json]
-
-Mede a rede do host: as conexões de cada um dos três túneis (ops, recuperacao, wiki) com a borda da Cloudflare, as
-reconexões desde a partida do processo e, no ops, a porta pelo endereço público ao lado do tempo que ela mesma registrou.
-Sai o JSON do eixo (--json) ou a frase gerada dele. Só lê: não grava série e não reinicia túnel. Medida não reprova: o
-número, por alto que seja, sai 0.
-
-face: Operação
-rotulo: Medir rede
-volta: sim — só lê
-
-exit: 0 lido · 2 uso · 3 dependência ausente · 5 não consegui olhar (a fonte não respondeu; o JSON diz qual)
-FIM
+# A ajuda do eixo pedido; sem eixo (`infra medir --help`), a de todos.
+ajuda_medir() {  # $1=eixo
+  case "${1:-}" in
+    rede) ajuda_medir_rede ;;
+    ram)  ajuda_medir_ram ;;
+    vram) ajuda_medir_vram ;;
+    cpu)  ajuda_medir_cpu ;;
+    *)    ajuda_medir_rede; echo; ajuda_medir_ram; echo; ajuda_medir_vram; echo; ajuda_medir_cpu ;;
+  esac
 }
 
 # Identidade (decisão 9, card #3145): só PF_SUJEITO, sem fallback para PF_CADEIRA/USER.
@@ -1101,15 +1129,19 @@ cmd_stack() {  # $1=acao ; resto: <stack> [args compose…] [<serviço>…]
   "$STACK_AJUDANTE" compose "$stack" "$acao" "$@"
 }
 
-# `infra medir <eixo> [--json]` — os eixos do host lidos por ato (spec eixos-do-host R1, card #3919). Cada eixo
-# é um sub-ato de bin/_infra/, chamado por exec, como a limpeza; hoje `rede`, `vram` e `cpu`. O ato só lê (não grava série, não
-# reinicia túnel) e não exige PF_SUJEITO. O código de saída é o do eixo: 0 lido, 5 não consegui olhar.
+# `infra medir <eixo> [--json]` — os eixos do host lidos por ato (spec eixos-do-host R1, cards #3919 e #3920). Cada
+# eixo é um sub-ato de bin/_infra/, chamado por exec, como a limpeza; hoje `rede`, `ram`, `vram` e `cpu`. O ato só lê (não grava
+# série, não reinicia túnel) e não exige PF_SUJEITO. O código de saída é o do eixo: 0 lido, 5 não consegui olhar.
 cmd_medir() {
   local eixo="${1:-}"; shift || true
   case "$eixo" in
     rede)
       [ -x "$MEDIR_REDE" ] || { printf 'infra: erro: dependência bin/_infra/medir-rede: ausente (%s)\n' "$MEDIR_REDE" >&2; exit 3; }
       exec "$MEDIR_REDE" "$@"
+      ;;
+    ram)
+      [ -x "$MEDIR_RAM" ] || { printf 'infra: erro: dependência bin/_infra/medir-ram: ausente (%s)\n' "$MEDIR_RAM" >&2; exit 3; }
+      exec "$MEDIR_RAM" "$@"
       ;;
     vram)
       [ -x "$MEDIR_VRAM" ] || { printf 'infra: erro: dependência bin/_infra/medir-vram: ausente (%s)\n' "$MEDIR_VRAM" >&2; exit 3; }
@@ -1120,9 +1152,9 @@ cmd_medir() {
       exec "$MEDIR_CPU" "$@"
       ;;
     "")
-      printf 'infra: erro: medir exige o eixo: rede, vram ou cpu\n' >&2; uso ;;
+      printf 'infra: erro: medir exige o eixo: rede, ram, vram ou cpu\n' >&2; uso ;;
     *)
-      printf 'infra: erro: eixo desconhecido: %s — valores válidos: rede, vram, cpu\n' "$eixo" >&2; uso ;;
+      printf 'infra: erro: eixo desconhecido: %s — valores válidos: rede, ram, vram, cpu\n' "$eixo" >&2; uso ;;
   esac
 }
 
@@ -1140,16 +1172,24 @@ cmd_limpeza() {
       [ -x "$LIMPEZA_QUARENTENA" ] || { printf 'infra: erro: dependência bin/_infra/limpeza-quarentena: ausente (%s)\n' "$LIMPEZA_QUARENTENA" >&2; exit 3; }
       exec "$LIMPEZA_QUARENTENA" "$@"
       ;;
+    fossil)
+      # #3920 (R12 a R14 da spec eixos-do-host): o que as rodadas deixam para trás, pelo critério positivo — contêiner
+      # sem label de projeto do compose com mais de 24 h e unit platafirma-job-* em failed. Grava o evento do job antes
+      # do reset-failed e guarda logs e inspeção do contêiner antes do rm. Também não exige PF_SUJEITO: roda no timer.
+      [ -x "$LIMPEZA_FOSSIL" ] || { printf 'infra: erro: dependência bin/_infra/limpeza-fossil: ausente (%s)\n' "$LIMPEZA_FOSSIL" >&2; exit 3; }
+      exec "$LIMPEZA_FOSSIL" "$@"
+      ;;
     jobs)
-      # #2856 linha 17: job avulso falhado fica na lista de units para sempre (o longjob não usa
-      # --collect, de propósito); este tira os que passaram da janela, sem tocar no journal.
-      [ -x "$LIMPEZA_JOBS" ] || { printf 'infra: erro: dependência bin/_infra/limpeza-jobs: ausente (%s)\n' "$LIMPEZA_JOBS" >&2; exit 3; }
-      exec "$LIMPEZA_JOBS" "$@"
+      # #2856 linha 17, absorvido pelo #3920: o job avulso falhado é fóssil e sai pela limpeza de fóssil, com o evento
+      # gravado antes. A entrada fica porque o cron do core chama `infra limpeza jobs --dias 1` (core/deploy/
+      # crontab-claudinho); um caminho só para o mesmo fóssil, dois nomes.
+      [ -x "$LIMPEZA_FOSSIL" ] || { printf 'infra: erro: dependência bin/_infra/limpeza-fossil: ausente (%s)\n' "$LIMPEZA_FOSSIL" >&2; exit 3; }
+      exec "$LIMPEZA_FOSSIL" --so-jobs "$@"
       ;;
     "")
-      printf 'infra: erro: limpeza exige logs, quarentena ou jobs\n' >&2; uso ;;
+      printf 'infra: erro: limpeza exige logs, quarentena, jobs ou fossil\n' >&2; uso ;;
     *)
-      printf 'infra: erro: limpeza desconhecida: %s — valores válidos: logs, quarentena, jobs\n' "$alvo" >&2; uso ;;
+      printf 'infra: erro: limpeza desconhecida: %s — valores válidos: logs, quarentena, jobs, fossil\n' "$alvo" >&2; uso ;;
   esac
 }
 
@@ -1369,9 +1409,11 @@ fi
 # `infra medir [<eixo>] --help` mostra a ajuda do ato de eixo (face, rótulo e volta) e sai 0, antes da ajuda
 # universal, que é o uso geral e sai 2.
 if [ "$1" = "medir" ]; then
+  _eixo_da_ajuda="${2:-}"
+  case "$_eixo_da_ajuda" in -*) _eixo_da_ajuda="" ;; esac
   for _a in "$@"; do
     case "$_a" in
-      --ajuda|--help|-h) ajuda_medir "${2:-}"; exit 0 ;;
+      --ajuda|--help|-h) ajuda_medir "$_eixo_da_ajuda"; exit 0 ;;
     esac
   done
 fi
