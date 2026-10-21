@@ -224,6 +224,28 @@ def test_so_os_dez_maiores_entram_e_o_resto_e_contado_e_somado(tmp_path):
     assert all(c["desvio"] == "fora_de_compose_e_unit" for c in maiores), "sem dono, e declarado, nunca omitido"
 
 
+def test_cada_consumidor_diz_quantos_processos_somam_o_valor_dele(mundo):
+    j = medir_ram.medir()
+    assert por_servico(j)["core/keycloak"]["processos"] == 2, "os dois processos do mesmo cgroup"
+    assert por_servico(j)["core/ops-tunnel"]["processos"] == 1
+    assert all(d["processos"] == 1 for d in desvios(j))
+
+
+def test_a_sessao_do_usuario_junta_os_processos_num_cgroup_e_a_frase_diz_quantos(tmp_path):
+    proc = tmp_path / "proc"
+    proc.mkdir()
+    scope = "0::/user.slice/user-1001.slice/session-3.scope\n"
+    _processo(proc, 10, scope, 6 * GIB_KB, comm="firefox", cmdline=b"firefox\0")
+    _processo(proc, 11, scope, 2 * GIB_KB, comm="Isolated Web Co", cmdline=b"firefox\0-contentproc\0")
+    _processo(proc, 12, scope, 1 * GIB_KB, comm="gnome-shell", cmdline=b"gnome-shell\0")
+    maiores, _, _ = medir_ram.consumidores(proc, lambda u: None, TOPOLOGIA)
+    assert len(maiores) == 1 and maiores[0]["valor"] == 9 * GIB_KB * 1024 and maiores[0]["processos"] == 3
+    assert maiores[0]["executavel"] == "firefox", "o representante é o maior processo do cgroup"
+    j = eixos.montar("ram", "infra-medir-ram", valor=1 << 30, unidade="bytes", cache_bytes=1, total_bytes=2 << 30,
+                     pressao_avg10=0.0, pressao_avg60=0.0, pressao_avg300=0.0, mortes=[], consumidores=maiores)
+    assert "pid 10, 3 processos no mesmo cgroup" in eixos.frase(j)
+
+
 def test_o_json_declara_o_que_ficou_fora_da_lista(mundo):
     j = medir_ram.medir()
     assert j["consumidores_omitidos"] == 0 and j["valor_omitido"] == 0

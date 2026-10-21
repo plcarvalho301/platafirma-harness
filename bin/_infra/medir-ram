@@ -116,8 +116,9 @@ def _rss_por_cgroup(proc: Path) -> dict[str, dict]:
         if not achado:
             continue
         rss = int(achado.group(1)) * KIB
-        grupo = grupos.setdefault(cgroup, {"bytes": 0, "pid": int(pasta.name), "maior": 0})
+        grupo = grupos.setdefault(cgroup, {"bytes": 0, "pid": int(pasta.name), "maior": 0, "processos": 0})
         grupo["bytes"] += rss
+        grupo["processos"] += 1
         if rss > grupo["maior"]:
             grupo["pid"], grupo["maior"] = int(pasta.name), rss
     return grupos
@@ -155,11 +156,14 @@ def consumidores(proc: Path, resolver_unit: Callable[[str], str | None], topolog
         chave = eixos.resolver_pid(grupo["pid"], proc=proc, inspecionar=inspecionar,
                                    resolver_unit=resolver_unit, topologia=topologia)
         if chave.get("servico"):
-            atual = servicos.setdefault(chave["servico"], {**chave, "valor": 0, "unidade": "bytes"})
+            atual = servicos.setdefault(chave["servico"], {**chave, "valor": 0, "unidade": "bytes", "processos": 0})
             atual["valor"] += grupo["bytes"]
+            atual["processos"] += grupo["processos"]
             atual.pop("linha_de_comando", None)
         else:
-            desvios.append({**chave, "valor": grupo["bytes"], "unidade": "bytes"})
+            # O valor é o do cgroup inteiro e o pid, o executavel e a linha de comando são os do maior processo dele: a
+            # sessão do usuário junta o navegador e o resto num cgroup só, e `processos` diz quantos são.
+            desvios.append({**chave, "valor": grupo["bytes"], "unidade": "bytes", "processos": grupo["processos"]})
     todos = sorted([*servicos.values(), *desvios], key=lambda c: c["valor"], reverse=True)
     resto = todos[MAIORES:]
     return todos[:MAIORES], len(resto), sum(c["valor"] for c in resto)

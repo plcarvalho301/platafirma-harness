@@ -1,0 +1,18 @@
+[Unit]
+Description=Limpeza de fossil: o conteiner sem label de projeto com mais de 24 h e o job da sessao falhado saem, com o evento de fim e a inspecao guardados antes (#3920)
+Documentation=https://wiki.platafirma.org/index.php/Spec:eixos-do-host
+
+[Service]
+Type=oneshot
+# Da release, nunca de clone (card #3010): a unit sobrevive a bancada apagada.
+WorkingDirectory=/opt/platafirma/current/harness
+Environment=PATH=/opt/platafirma/current/harness/bin:/usr/local/bin:/usr/bin:/bin
+# Sem --ver: depois da primeira passada com --ver no host (21/10/2026), a limpeza roda sozinha e nao pede aprovacao a cada
+# passada; o controle dela e a observacao (R14 da spec eixos-do-host; dono, 21/10/2026). O que sai tem o criterio positivo,
+# a marca em var/log/poda.log e, do job, o evento de fim no log dele; do conteiner, a inspecao e os logs guardados antes.
+ExecStart=/opt/platafirma/current/harness/bin/infra limpeza fossil
+# 0 e tudo certo (inclui nada a tirar). 4 e a recusa por job da sessao ativo: e a resposta da limpeza, nao falha, a marca
+# diz quais jobs seguravam a rodada e o dia seguinte tenta de novo. 1 (alvo que nao saiu) e 5 (docker ou systemd mudo)
+# FALHAM a unit: `release conferir jobs` mostra a ultima execucao.
+SuccessExitStatus=0 4
+TimeoutStartSec=900

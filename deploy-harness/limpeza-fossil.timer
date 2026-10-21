@@ -1,0 +1,11 @@
+[Unit]
+Description=Limpeza de fossil, uma vez por dia (o cron do core ainda chama `infra limpeza jobs --dias 1` as 04:25; o fossil e o mesmo e o flock da limpeza impede dois ao mesmo tempo)
+
+[Timer]
+OnCalendar=*-*-* 04:50:00
+# Pega a execucao perdida quando a maquina estava desligada na hora marcada: o fossil so ocupa a lista de units e o disco
+# por mais um dia.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
