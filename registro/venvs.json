@@ -96,6 +96,12 @@
     "lock": "registros/requirements-teste.txt",
     "teste": "registros"
   },
+  "_eventos": "suite do servico do banco de eventos de plataforma (spec banco-de-eventos-de-plataforma, #3918): rota de escrita e API de leitura em platafirma-core deploy/eventos/servico. Testa regra pura e rotas HTTP contra repositorio de memoria, sem banco nem rede; o SQL se prova por ensaio no banco, fora do portao. O lock inclui o requirements.txt de producao.",
+  "eventos": {
+    "familia": "platafirma-core",
+    "lock": "deploy/eventos/servico/requirements-teste.txt",
+    "teste": "deploy/eventos/servico"
+  },
   "marcacao": {
     "familia": "platafirma-motor",
     "lock": "deploy/marcacao/requirements-teste.txt",
