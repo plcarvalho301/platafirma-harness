@@ -295,6 +295,15 @@ def test_rodar_stack_node_sem_suite_sai_5(banc):
 
 # --- o portão de uma stack node (card #3426) ----------------------------------------------
 
+@pytest.fixture()
+def exige_userns():
+    """Os testes do portão que chegam ao degrau pequeno precisam isolar a rede: `bin/teste` sai 5
+    (não medido) onde `unshare --user --map-root-user --net` falha, como no runner do GitHub (#3935).
+    Mesma guarda da fixture `pequeno`; no host, onde o portão roda de verdade, medem normalmente."""
+    if _sem_userns():
+        pytest.skip("este host nao deixa criar namespace de rede (unshare --user --map-root-user --net)")
+
+
 def _com_portao(banc, lista: str | None = "verde.mjs\nconstruir.sh\n"):
     """Registra a chave `ui` (subárvore front/provas) e, se pedido, a lista de portão dela."""
     reg = json.loads(Path(banc.env["PLATAFIRMA_VENVS"]).read_text(encoding="utf-8"))
@@ -306,6 +315,7 @@ def _com_portao(banc, lista: str | None = "verde.mjs\nconstruir.sh\n"):
         (sub / "VERDES").write_text(lista, encoding="utf-8")
 
 
+@pytest.mark.usefixtures("exige_userns")
 def test_rodar_portao_node_roda_a_lista_e_sai_0(banc):
     _com_portao(banc)
     r = banc.rodar("ui", "--portao")
@@ -313,6 +323,7 @@ def test_rodar_portao_node_roda_a_lista_e_sai_0(banc):
     assert "suite VERDE" in r.stdout and "2 arquivo(s)" in r.stdout
 
 
+@pytest.mark.usefixtures("exige_userns")
 def test_rodar_portao_node_nomeia_a_prova_vermelha(banc):
     _com_portao(banc, "verde.mjs\nvermelha.mjs\n")
     r = banc.rodar("ui", "--portao")
@@ -334,6 +345,7 @@ def test_rodar_portao_node_lista_com_arquivo_ausente_sai_5(banc):
     assert "nao-existe.mjs" in r.stdout
 
 
+@pytest.mark.usefixtures("exige_userns")
 def test_rodar_portao_node_em_arvore_materializada(banc, tmp_path):
     """O gate mede a árvore da rev, não a bancada: o elo entra na árvore e sai no fim."""
     _com_portao(banc)
@@ -345,6 +357,7 @@ def test_rodar_portao_node_em_arvore_materializada(banc, tmp_path):
     assert not (arv / "front" / "provas" / "node_modules").exists()
 
 
+@pytest.mark.usefixtures("exige_userns")
 def test_rodar_portao_node_arvore_sem_escrita_roda_numa_copia(banc, tmp_path):
     """O gate mede /opt/<familia>/<sha>, que é só leitura (#3427): a suíte roda numa cópia gravável e
     descartável — inclusive a prova que grava `dist/` na raiz — e a árvore original fica como estava.
@@ -372,6 +385,7 @@ def test_rodar_portao_node_arvore_sem_escrita_roda_numa_copia(banc, tmp_path):
     assert list(tmp_path.glob("teste-arvore.*")) == []       # e a cópia some
 
 
+@pytest.mark.usefixtures("exige_userns")
 def test_rodar_portao_node_arvore_sem_escrita_com_suite_vermelha_sai_1(banc, tmp_path):
     """A cópia não torna verde o que é vermelho, e a cópia some também no vermelho."""
     _com_portao(banc, "verde.mjs\nvermelha.mjs\n")
@@ -409,6 +423,7 @@ def _provas(banc, nomes: list[str]):
         (sub / n).write_text("// passa\n", encoding="utf-8")
 
 
+@pytest.mark.usefixtures("exige_userns")
 def test_portao_node_roda_os_sh_antes_dos_demais(banc):
     """O .sh constrói o que as provas leem: roda antes delas, ainda que venha depois na lista."""
     marca = banc.tmp / "construido"
@@ -424,6 +439,7 @@ def test_portao_node_roda_os_sh_antes_dos_demais(banc):
     assert "MARCA=nao" not in saida
 
 
+@pytest.mark.usefixtures("exige_userns")
 def test_portao_node_paralelo_soma_menos_que_a_serie(banc):
     """Quatro provas de 1 s com quatro trabalhadores terminam bem antes dos 4 s da série."""
     nomes = ["p1.mjs", "p2.mjs", "p3.mjs", "p4.mjs"]
@@ -437,6 +453,7 @@ def test_portao_node_paralelo_soma_menos_que_a_serie(banc):
     assert segundos <= 3, r.stdout
 
 
+@pytest.mark.usefixtures("exige_userns")
 def test_portao_node_padrao_roda_em_serie_na_ordem(banc):
     """Sem opt-in, série: seis Chromium ao mesmo tempo esgotaram os processos da conta (#3496).
     O PF_TESTE_PARALELO das stacks python não liga o paralelo node."""
@@ -451,6 +468,7 @@ def test_portao_node_padrao_roda_em_serie_na_ordem(banc):
     assert [Path(l[4:]).name for l in linhas] == ["b.mjs", "a.mjs"]
 
 
+@pytest.mark.usefixtures("exige_userns")
 def test_portao_node_grava_a_duracao_de_cada_arquivo(banc):
     """O log diz quanto cada prova levou, e a saída cita as mais lentas: é o que mostra o que cortar."""
     _com_portao(banc, "verde.mjs\nconstruir.sh\n")
@@ -465,6 +483,7 @@ def test_portao_node_grava_a_duracao_de_cada_arquivo(banc):
         assert cab and cab[0].endswith(" s") and " · exit 0 · " in cab[0], texto
 
 
+@pytest.mark.usefixtures("exige_userns")
 def test_portao_node_paralelo_ainda_nomeia_a_vermelha(banc):
     _com_portao(banc, "verde.mjs\nvermelha.mjs\nconstruir.sh\n")
     banc.env.update(PF_TESTE_PARALELO_NODE="4")
@@ -474,6 +493,7 @@ def test_portao_node_paralelo_ainda_nomeia_a_vermelha(banc):
     assert list(banc.tmp.glob("teste-node.*")) == []
 
 
+@pytest.mark.usefixtures("exige_userns")
 def test_portao_node_memo_da_bancada_e_a_arvore_do_commit(banc):
     """`node_modules/` no .gitignore casa diretório, não elo: o elo do ambiente entrava na árvore da
     bancada, e o veredito ficava gravado sob um hash que a árvore do commit nunca tem. O gate da

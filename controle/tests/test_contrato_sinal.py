@@ -315,6 +315,12 @@ def test_sonda_externa_acha_o_conteiner_pelo_host_da_url(monkeypatch):
     assert sinal.contendor_do_servico("mcp") is None
     assert sinal.contendor_do_servico("gpu-host") is None
 
+def test_sonda_do_cloudflared_usa_a_porta_de_metricas_fixada_no_core():
+    # O compose do core fixa `--metrics 0.0.0.0:20243` (spec eixos-do-host R6). Sonda em 20241 acusou
+    # queda falsa com o tunel de pe (#3935).
+    urls = {n: url for n, _posto, url, _exige, _proibido in sinal.POR_SONDA_EXTERNA}
+    assert urls["cloudflared"] == "http://cloudflared:20243/ready"
+
 def test_redigir_tira_so_o_segredo():
     for segredo in SEGREDOS:
         assert segredo not in sinal.redigir(LOG_COM_SEGREDO)
