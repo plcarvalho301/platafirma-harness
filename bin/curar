@@ -2034,9 +2034,29 @@ def acao_marcar_secoes(args, autor: str, headers: dict) -> int:
           f"{len(reprovadas)} reprovadas · {'faixas gravadas' if gravou else 'plano (nada gravado)'}")
     for it in reprovadas:
         print(f"  REPROVADA {it.get('impressao')}  {'; '.join(it.get('problemas') or [])}")
+    _linhas_origem_das_secoes(data)
     if not gravou:
         print("  (plano seco — repita com --apply para gravar)")
     return 1 if reprovadas else 0
+
+def _linhas_origem_das_secoes(data: dict) -> None:
+    """O que o ato viu além da conferência (#3908): as seções por origem da marcação, o que o sumário do
+    arquivo deu, as primeiras discordâncias e as obras só com o preâmbulo (seção não marcada)."""
+    origens = data.get("origens") or {}
+    if origens:
+        print("  seções por origem: " + " · ".join(f"{k} {v}" for k, v in sorted(origens.items())))
+    sumario = data.get("sumario") or {}
+    if sumario.get("entradas"):
+        print(f"  sumário do arquivo: {sumario['entradas']} entrada(s), {sumario.get('abrem', 0)} abrem seção, "
+              f"{sumario.get('coincidem', 0)} já eram cabeçalho no texto, {sumario.get('discordancias', 0)} discordam")
+    estados = {k: v for k, v in sumario.items()
+               if k in ("sem-leitor", "indisponivel", "sem-sumario") and v}
+    if estados:
+        print("  impressões sem sumário lido: " + " · ".join(f"{k} {v}" for k, v in sorted(estados.items())))
+    for it in data.get("com_discordancia") or []:
+        print(f"  DISCORDA {it.get('impressao')}  {it.get('n')} entrada(s); " + " | ".join(it.get("primeiras") or []))
+    if data.get("n_nao_marcadas"):
+        print(f"  seção não marcada (só o preâmbulo): {data['n_nao_marcadas']} impressão(ões)")
 
 def acao_reextrair_lote(args, autor: str, como_json: bool, headers: dict) -> int:
     """`--reextrair --lote`: o plano é o PORTÃO 1 (a contagem por tipo, §4.2 item 1); --apply abre o lote,
