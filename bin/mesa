@@ -20,10 +20,10 @@
 #          fita:<cadeira> (fita)
 #
 # A ABERTURA CHAMA DOIS ATOS, e so dois (spec_expediente §7): `mesa ver` (peca `mesa`,
-# o impedimento) e `mesa caderno --chapeu <slug>` (peca `cadernos`, a ultima injetada:
-# indice da cadeira + corpo do caderno do chapeu, NUM GIRO). Sem chapeu roteado, a
-# chamada sai sem --chapeu e serve so o indice. O corpo por posicao (`mesa caderno
-# <slot>`) fica como esta — a forma de saida nao muda in-place (classe B).
+# o impedimento) e `mesa caderno` (peca `cadernos`, a ultima injetada: so o indice da
+# cadeira; a abertura nao veste chapeu, #3931). O corpo do caderno do chapeu sai de
+# `mesa caderno --chapeu <slug>`, quando o trabalho veste o chapeu. O corpo por posicao
+# (`mesa caderno <slot>`) fica como esta — a forma de saida nao muda in-place (classe B).
 #
 # Despachante (arq:0040): o binario agrupa a memoria da cadeira, o sub-ato e o
 # ato. Dois substratos duraveis, um eixo — o chapeu (slot) e o mesmo nos dois:
@@ -349,9 +349,8 @@ def ato_ver(args):
         with con, con.cursor() as cur:
             expurgados = _expurga(cur)
             if expurgados:
-                # stderr: nao polui a peca `mesa` que a abertura captura de stdout.
-                print(f"(mesa: {expurgados} item(ns) expurgado(s) por TTL de {TTL_MESA_H}h)",
-                      file=sys.stderr)
+                # stdout: a abertura captura so ele, e o aviso de item vencido tem de chegar na peca (#3931).
+                print(f"(mesa: {expurgados} item(ns) vencido(s) expurgado(s) por TTL de {TTL_MESA_H}h)")
             cur.execute(
                 "SELECT num, chapeu, ato, alvo, texto, plantado_em FROM sessao.mesa_item "
                 "WHERE cadeira = %s "
@@ -393,8 +392,7 @@ def ato_ver(args):
         print(texto.rstrip())
         print()
     if prosa_expurgada:
-        print(f"(mesa: {prosa_expurgada} slot(s) de prosa velha expurgado(s) por TTL de {TTL_MESA_H}h)",
-              file=sys.stderr)
+        print(f"(mesa: {prosa_expurgada} slot(s) de prosa vencida expurgado(s) por TTL de {TTL_MESA_H}h)")
 
     if not achou:
         print("mesa vazia" if not args.slot else f"slot {args.slot}: vazio")

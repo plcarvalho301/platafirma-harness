@@ -241,6 +241,62 @@ class _Conexao:
         return self.cursor_
 
 
+class _CursorExpurgo(_Cursor):
+    """O DELETE do expurgo devolve `rowcount`; o resto é a leitura de sempre."""
+
+    def __init__(self, expurgados):
+        super().__init__()
+        self.rowcount = expurgados
+
+
+def test_ato_ver_avisa_na_propria_peca_o_item_vencido_que_expurgou(monkeypatch, capsys):
+    """#3931: o item com mais de 48 h sai no ato de servir, e o aviso vai em stdout, na peça que a
+    abertura captura; em stderr ele se perdia."""
+    mesa = carrega_mesa()
+    monkeypatch.setenv("PF_CADEIRA", "mesateste")
+    cursor = _CursorExpurgo(2)
+    monkeypatch.setattr(mesa, "pg", lambda *a, **k: _Conexao(cursor))
+    monkeypatch.setattr(mesa, "conn", lambda: _FakeRedis({}))
+
+    rc = mesa.ato_ver(argparse.Namespace(slot=None))
+    saida = capsys.readouterr()
+
+    assert rc == 0
+    assert "2 item(ns) vencido(s) expurgado(s) por TTL de 48h" in saida.out
+    assert saida.err == ""
+    delete, params = cursor.feitos[0]
+    assert delete.startswith("DELETE FROM sessao.mesa_item") and params[1] == 48
+
+
+def test_ato_ver_sem_item_vencido_nao_escreve_aviso(monkeypatch, capsys):
+    mesa = carrega_mesa()
+    monkeypatch.setenv("PF_CADEIRA", "mesateste")
+    monkeypatch.setattr(mesa, "pg", lambda *a, **k: _Conexao(_CursorExpurgo(0)))
+    monkeypatch.setattr(mesa, "conn", lambda: _FakeRedis({}))
+
+    assert mesa.ato_ver(argparse.Namespace(slot=None)) == 0
+    saida = capsys.readouterr()
+
+    assert "vencido" not in saida.out and saida.err == ""
+    assert "mesa vazia" in saida.out
+
+
+def test_ato_ver_avisa_na_propria_peca_a_prosa_vencida_que_expurgou(monkeypatch, capsys):
+    mesa = carrega_mesa()
+    monkeypatch.setenv("PF_CADEIRA", "mesateste")
+    monkeypatch.setattr(mesa, "pg", lambda *a, **k: None)
+    agora = 2_000_000.0
+    monkeypatch.setattr(mesa.time, "time", lambda: agora)
+    fake = _FakeRedis({"mem:mesateste:slotv": json.dumps({"t": int(agora - 49 * 3600), "x": "velha"})})
+    monkeypatch.setattr(mesa, "conn", lambda: fake)
+
+    assert mesa.ato_ver(argparse.Namespace(slot=None)) == 0
+    saida = capsys.readouterr()
+
+    assert "1 slot(s) de prosa vencida expurgado(s) por TTL de 48h" in saida.out
+    assert saida.err == ""
+
+
 def _entrada(eid, categoria="licao", estado="vigente", texto="uma lição", chapeu="rh", **campos):
     e = {"id": eid, "cadeira": "mesateste", "chapeu": chapeu, "categoria": categoria,
          "estado": estado, "texto": texto, "caso": None, "dito_em": None, "dito_onde": None,

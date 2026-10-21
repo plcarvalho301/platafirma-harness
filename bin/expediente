@@ -14,14 +14,13 @@
 # substitui: monta-sessao <cadeira> na parte que monta; a lib recuperacao/roteador_chapeu importada por caminho
 # conforme: parcial — catálogo no cabeçalho até dados averbar a espécie no acervo; registro direto no Postgres até a API da entidade-sessão; rotas de rotas-chapeu.json da morada publicada até virem do golden record de conceitos
 #
-# CATÁLOGO (spec_expediente §7) — uma chamada por peça; {cadeira}, {chapeu} e {pergunta} são os únicos placeholders.
+# CATÁLOGO (spec_expediente §7) — uma chamada por peça; {cadeira} é o único placeholder. A abertura não consulta o acervo
+# nem veste chapéu (#3931): o chapéu se veste no trabalho, por `persona ler {cadeira} --chapeu <slug>`.
 #   conduta            abertura                 valor  estavel  persona conduta                                gestao-estrategica
 #   persona            abertura                 valor  estavel  persona ler {cadeira}                          gestao-estrategica
 #   alias-cadeiras     abertura                 valor  morna    persona foto                                   gestao-estrategica
 #   mesa               abertura                 valor  volatil  mesa ver                                       gestao-estrategica
-#   acervo-consultado  abertura, com pergunta   valor  volatil  motor rag buscar casa "{pergunta}" --k 6 --texto secao --origem abertura   dados (a partição)
-#   chapeu             chapeu                   valor  estavel  persona ler {cadeira} --chapeu {chapeu}        gestao-estrategica
-#   cadernos           abertura; com chapeu, o corpo dele  valor  volatil  mesa caderno --chapeu {chapeu}   gestao-estrategica
+#   cadernos           abertura                 valor  volatil  mesa caderno                                   gestao-estrategica
 #   rotinas            abertura                 valor  estavel  acervo listar casa guia --mapa                 gestao-estrategica
 #
 from __future__ import annotations
@@ -77,32 +76,16 @@ CATALOGO = [
         "dono": "gestao-estrategica",
     },
     {
-        "peca": "acervo-consultado",
-        "gatilho": "abertura, com pergunta",
-        "regime": "valor",
-        "volatilidade": "volatil",
-        "chamada": 'motor rag buscar casa "{pergunta}" --k 6 --texto secao --origem abertura',
-        "dono": "dados",
-    },
-    {
-        "peca": "chapeu",
-        "gatilho": "chapeu",
-        "regime": "valor",
-        "volatilidade": "estavel",
-        "chamada": "persona ler {cadeira} --chapeu {chapeu}",
-        "dono": "gestao-estrategica",
-    },
-    {
         "peca": "cadernos",
-        "gatilho": "abertura; com chapeu, o corpo dele",
+        "gatilho": "abertura",
         "regime": "valor",
         "volatilidade": "volatil",
-        "chamada": "mesa caderno [--chapeu {chapeu}]",
+        "chamada": "mesa caderno",
         "dono": "gestao-estrategica",
     },
     {
-        # #3084: o mapa das rotinas (pergunta -> chamada -> retorno), extraído da seção
-        # `## Mapa` dos guias de rotina. Fica no prefixo, logo depois da conduta/chapéu.
+        # #3084: o mapa das rotinas (quando cada uma serve e o guia que a descreve), extraído da
+        # seção `## Mapa` dos guias. Fica no prefixo, logo depois da conduta.
         "peca": "rotinas",
         "gatilho": "abertura",
         "regime": "valor",
@@ -689,60 +672,20 @@ def ato_montar(cadeira_arg: str | None = None, chapeu_forcado: str | None = None
             print(erro_cad, file=sys.stderr)
         return 3
 
-    aviso_chapeu = None
+    # A abertura não veste chapéu nem consulta o acervo (#3931): a pergunta do dono não monta
+    # nada, e a cadeira a atende depois do pacote. O --chapeu é aceito para a abertura que chega
+    # com ele não falhar, e só avisa o ato que veste.
+    sys.stdin.read()
+    avisos: list[str] = []
     if chapeu_forcado:
-        chapeu_forcado, aviso_chapeu, erro_res = resolve_chapeu(cadeira, chapeu_forcado)
-        if erro_res:
-            if como_json:
-                print(json.dumps({"erro": erro_res}, ensure_ascii=False))
-            else:
-                print(erro_res, file=sys.stderr)
-            return 2
-        valido, err_chapeu = valida_chapeu(cadeira, chapeu_forcado)
-        if not valido:
-            msg = f"erro: chapéu '{chapeu_forcado}' fora do vocabulário da cadeira '{cadeira}' — {err_chapeu}"
-            if como_json:
-                print(json.dumps({"erro": msg}, ensure_ascii=False))
-            else:
-                print(msg, file=sys.stderr)
-            return 2
-
-    pergunta = sys.stdin.read().strip()
-
-    # Roteador de chapéu
-    if chapeu_forcado:
-        roteador_info = {
-            "via": "comando",
-            "slug": chapeu_forcado,
-            "acertos": {},
-            "motivo": "chapéu forçado por argumento",
-        }
-        aviso_rot = None
-    else:
-        roteador_info, aviso_rot, _rc_rot = executa_roteador(pergunta, cadeira)
-
-    chapeu_slug = roteador_info.get("slug")
-    avisos: list[str] = [aviso_chapeu] if aviso_chapeu else []
-    if aviso_rot:
-        avisos.append(aviso_rot)
-    elif not chapeu_slug:
-        avisos.append(f"chapéu não roteado (fallback): {roteador_info.get('motivo')}")
+        avisos.append(f"chapéu '{chapeu_forcado}' não se veste na abertura: veste-se no trabalho, "
+                      f"por `persona ler {cadeira} --chapeu {chapeu_forcado}`")
 
     cat_por_id = {item["peca"]: item for item in CATALOGO}
 
-    # Ordem de injeção por saliência (spec expediente §2, §7; #3146):
-    # persona → [chapeu] → conduta → rotinas → alias-cadeiras → mesa → [acervo-consultado] → cadernos.
-    # Com chapéu roteado ou forçado, o chapéu vem em 2º, entre persona e conduta; sem chapéu, persona → conduta → rotinas.
-    ordem_chaves = ["persona"]
-    if chapeu_slug:
-        ordem_chaves.append("chapeu")
-    ordem_chaves.append("conduta")
-    ordem_chaves.append("rotinas")
-    ordem_chaves.append("alias-cadeiras")
-    ordem_chaves.append("mesa")
-    if pergunta and not sem_acervo:
-        ordem_chaves.append("acervo-consultado")
-    ordem_chaves.append("cadernos")
+    # Ordem de injeção por saliência (spec expediente §2, §7; #3146, #3931):
+    # persona → conduta → rotinas → alias-cadeiras → mesa → cadernos.
+    ordem_chaves = ["persona", "conduta", "rotinas", "alias-cadeiras", "mesa", "cadernos"]
 
     servidas: list[dict] = []
 
@@ -753,40 +696,8 @@ def ato_montar(cadeira_arg: str | None = None, chapeu_forcado: str | None = None
         volatilidade = meta.get("volatilidade", "volatil")
         chamada_tmpl = meta.get("chamada", "")
 
-        if peca_id == "conduta":
-            cmd = "persona conduta"
-            ref = "verbo:persona conduta"
-        elif peca_id == "persona":
-            cmd = f"persona ler {cadeira}"
-            ref = f"verbo:persona ler {cadeira}"
-        elif peca_id == "chapeu":
-            cmd = f"persona ler {cadeira} --chapeu {chapeu_slug}"
-            ref = f"verbo:persona ler {cadeira} --chapeu {chapeu_slug}"
-        elif peca_id == "alias-cadeiras":
-            cmd = "persona foto"
-            ref = "verbo:persona foto"
-        elif peca_id == "mesa":
-            if chapeu_slug:
-                cmd = f"mesa ver {chapeu_slug}"
-                ref = f"verbo:mesa ver {chapeu_slug}"
-            else:
-                cmd = "mesa ver"
-                ref = "verbo:mesa ver"
-        elif peca_id == "acervo-consultado":
-            # argv pronto: a pergunta e texto livre e nao passa por shlex
-            cmd = ["motor", "rag", "buscar", "casa", pergunta, "--k", "6", "--texto", "secao",
-                   "--origem", "abertura"]
-            ref = f'verbo:motor rag buscar casa "{pergunta[:40]}" --k 6 --texto secao --origem abertura'
-        elif peca_id == "cadernos":
-            if chapeu_slug:
-                cmd = f"mesa caderno --chapeu {chapeu_slug}"
-                ref = f"verbo:mesa caderno --chapeu {chapeu_slug}"
-            else:
-                cmd = "mesa caderno"
-                ref = "verbo:mesa caderno"
-        else:
-            cmd = chamada_tmpl.replace("{cadeira}", cadeira).replace("{chapeu}", chapeu_slug or "")
-            ref = f"verbo:{cmd}"
+        cmd = chamada_tmpl.replace("{cadeira}", cadeira)
+        ref = f"verbo:{cmd}"
 
         env = {
             "peca": peca_id,
@@ -812,21 +723,6 @@ def ato_montar(cadeira_arg: str | None = None, chapeu_forcado: str | None = None
 
         # Sucesso
         conteudo_bruto = stdout.strip()
-        if peca_id == "acervo-consultado":
-            try:
-                d_acervo = json.loads(stdout)
-                if isinstance(d_acervo, dict):
-                    if d_acervo.get("erro"):
-                        env["frescor"] = "indisponivel"
-                        motivo = str(d_acervo["erro"])[:200]
-                        env["motivo"] = motivo
-                        avisos.append(f"peça `acervo-consultado` indisponível: {motivo}")
-                        servidas.append(env)
-                        continue
-                    conteudo_bruto = _portao_cobertura(d_acervo, pergunta, env)
-            except (ValueError, TypeError):
-                conteudo_bruto = stdout.strip()
-
         env["frescor"] = "fresco"
         env["conteudo"] = conteudo_bruto
         env["tokens"] = conta_tokens(conteudo_bruto)
@@ -856,9 +752,7 @@ def ato_montar(cadeira_arg: str | None = None, chapeu_forcado: str | None = None
         "nome_canonico": cadeira,
         "sessao_id": sessao_id,
         "ordem_id": ordem_id,
-        "chapeu": chapeu_slug,
         "chapeus": chapeus_de(cadeira),
-        "roteador": roteador_info,
         "pacote": pacote_info,
         "pecas": servidas,
         "avisos": avisos,
@@ -876,16 +770,14 @@ def imprime_texto(pac: dict) -> int:
     cad = pac.get("cadeira")
     sid = pac.get("sessao_id") or "null"
     oid = pac.get("ordem_id") or "null"
-    chapeu = pac.get("chapeu") or "null"
-    rot = pac.get("roteador") or {}
-    via = rot.get("via", "fallback")
     pacote = pac.get("pacote") or {}
     n_pecas = pacote.get("pecas", 0)
     tokens = pacote.get("tokens", 0)
     metodo_tk = pacote.get("metodo_tokens", "qwen2.5")
 
     print(f"cadeira: {cad}   sessao_id: {sid}   ordem_id: {oid}")
-    print(f"chapeu: {chapeu}   roteador: {via}")
+    if "roteador" in pac:
+        print(f"chapeu: {pac.get('chapeu') or 'null'}   roteador: {pac['roteador'].get('via', 'fallback')}")
     if pac.get("perfil"):
         print(f"perfil: {pac['perfil']}   modo: {pac.get('modo')}"
               + (f"   regua: {' '.join(pac['regua'])}" if pac.get("regua") else ""))
@@ -921,10 +813,10 @@ def main() -> int:
     )
     atos = parser.atos()
 
-    p_montar = atos.novo("montar", "monta o pacote na ordem do §2; com pergunta, roteia o chapéu e consulta o acervo")
+    p_montar = atos.novo("montar", "monta o pacote na ordem do §2: persona, conduta, rotinas, alias, mesa e índice dos cadernos; o chapéu se veste no trabalho")
     p_montar.add_argument("cadeira", nargs="?", default=None, help="slug da cadeira (opcional; fallback PF_CADEIRA)")
-    p_montar.add_argument("--chapeu", metavar="<slug>", help="força o slug do chapéu (ignora roteador)")
-    p_montar.add_argument("--sem-acervo", action="store_true", help="omite a consulta ao acervo")
+    p_montar.add_argument("--chapeu", metavar="<slug>", help="cadeira: aceito e só avisa o ato que veste o chapéu (`persona ler`); cadeirinha: o chapéu da lente")
+    p_montar.add_argument("--sem-acervo", action="store_true", help="omite a consulta ao acervo (só a cadeirinha a faz)")
     p_montar.add_argument("--perfil", choices=PERFIS, default="cadeira",
                           help="cadeira (o padrão) ou cadeirinha: a lente sem a conduta, para quem trabalha por delegação")
     p_montar.add_argument("--modo", metavar="<slug>", help="o modo do agente (só com --perfil cadeirinha)")
