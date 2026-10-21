@@ -296,7 +296,8 @@ def test_da_face_o_fundamento_vem_da_porta_e_a_flag_e_recusada(motor):
 def test_da_face_o_ajuste_de_corte_segue_so_leitura(motor):
     roda, _, _ = motor
     r = roda("teto-do-trecho", "1024", env_extra={"PF_FUNDAMENTO": "texto do dono"})
-    assert r.returncode == 4 and "#3506" in r.stderr
+    assert r.returncode == 4 and "troca de geracao" in r.stderr and "--corte-teto" in r.stderr
+    assert "nao implementado" not in r.stderr
 
 
 # --- tarefa 4: as recusas -----------------------------------------------------------------------
