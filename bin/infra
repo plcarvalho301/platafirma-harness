@@ -7,19 +7,19 @@
 # use para: ver contêiner/unit/timer de pé e a saúde da porta, "está no ar?" (estado,
 #   saude, logs), reiniciar contêiner/unit e (re)criar a stack por compose (restart,
 #   up, down, pull, build), tirar contêiner avulso ou unit que ficou fora do declarado
-#   (remover), convergir a agenda do cron e podar log/quarentena/job falhado por
+#   (remover), convergir a agenda do cron e as units da instância (units) e podar log/quarentena/job falhado por
 #   retenção declarada (agenda, limpeza), liberar cache de VRAM e disco (cache), que
 #   hardware é este e quanto consome em W agora (hardware), a GPU ao vivo: uso, VRAM,
 #   temperatura, W e processos (gpu), o teto de processos e threads da conta contra o uso agora (limites), copiar o ingress versionado do túnel para a cópia da
 #   instância, que é a que o cloudflared lê, e reiniciá-lo (ingress)
-# atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), remover (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), hardware (leitura, operacao), limites (leitura, operacao), gpu (leitura, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao), ingress (escrita, operacao)
+# atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), remover (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), hardware (leitura, operacao), limites (leitura, operacao), gpu (leitura, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao), units (escrita, operacao), ingress (escrita, operacao)
 # forma: log
 # cauda: sim
 # classe: B
 # consome: porta@ops-log
-# ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · INFRA_INGRESS_FONTE[=$PLATAFIRMA_RELEASE/core/deploy/cloudflared-config.yml] porta · INFRA_INGRESS_COPIA[=$PLATAFIRMA_INSTANCIA/deploy/core/cloudflared.yml] porta · INFRA_INGRESS_CONTEINER[=platafirma-core-cloudflared-1] porta · INFRA_INGRESS_ESPERA[=5] porta (ingress: segundos até conferir o contêiner de pé) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (saude: lido por lib/oplog, o bruto contra o teto) · PF_SUJEITO[obrigatória em up|down|pull|build] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
-# depende: docker · systemctl --user · curl · diff (ingress) · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · ps (limites) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs, bin/_infra/limpeza-quarentena e bin/_infra/limpeza-jobs (ajudantes de limpeza) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda)
-# escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · remover=contêiner avulso removido (a inspeção dele guardada antes em var/log/infra/removidos), unit transitória tirada da lista (reset-failed) ou unit da conta parada, desabilitada e com o arquivo movido para var/quarentena · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados e jobs avulsos falhados tirados da lista de units · agenda=crontab do sistema (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · estado/saude/logs/ps/config/backup/hardware/limites/gpu=nada
+# ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · INFRA_UNITS_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-units.sh] porta · INFRA_INGRESS_FONTE[=$PLATAFIRMA_RELEASE/core/deploy/cloudflared-config.yml] porta · INFRA_INGRESS_COPIA[=$PLATAFIRMA_INSTANCIA/deploy/core/cloudflared.yml] porta · INFRA_INGRESS_CONTEINER[=platafirma-core-cloudflared-1] porta · INFRA_INGRESS_ESPERA[=5] porta (ingress: segundos até conferir o contêiner de pé) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (saude: lido por lib/oplog, o bruto contra o teto) · PF_SUJEITO[obrigatória em up|down|pull|build] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
+# depende: docker · systemctl --user · curl · diff (ingress) · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · ps (limites) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs, bin/_infra/limpeza-quarentena e bin/_infra/limpeza-jobs (ajudantes de limpeza) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda) · o script declarado em INFRA_UNITS_SCRIPT (units)
+# escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · remover=contêiner avulso removido (a inspeção dele guardada antes em var/log/infra/removidos), unit transitória tirada da lista (reset-failed) ou unit da conta parada, desabilitada e com o arquivo movido para var/quarentena · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados e jobs avulsos falhados tirados da lista de units · agenda=crontab do sistema (aplicar) · units=symlink das units da instância em ~/.local/share/systemd/user e daemon-reload (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · estado/saude/logs/ps/config/backup/hardware/limites/gpu=nada
 # substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build (deploy apagado — decisão do dono, 27/09) · crontab -e a mão · cp à mão do ingress versionado para deploy/core/cloudflared.yml da instância + docker restart do cloudflared · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra por arq:0110 §14 emenda 26/09/2026)
 # Encapsula as três pegadinhas conhecidas: DOCKER_HOST rootless, restart que
 # mata a própria chamada, e alvo que pode ser contêiner ou unit de usuário.
@@ -33,6 +33,7 @@ LIMPEZA_LOGS="$AQUI/_infra/limpeza-logs"
 LIMPEZA_QUARENTENA="$AQUI/_infra/limpeza-quarentena"
 LIMPEZA_JOBS="$AQUI/_infra/limpeza-jobs"
 CRONTAB_SCRIPT="${INFRA_CRONTAB_SCRIPT:-$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh}"
+UNITS_SCRIPT="${INFRA_UNITS_SCRIPT:-$PLATAFIRMA_RELEASE/core/deploy/instala-units.sh}"
 
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
 # systemctl --user e systemd-run --user falam com o bus da conta. Pelo wrapper, runuser, cron
@@ -72,6 +73,7 @@ uso:
   infra build    <stack> [args compose…] [<serviço>…]  … build
   infra limpeza  logs|quarentena|jobs [args…]    despacha para bin/_infra/limpeza-{logs,quarentena,jobs}
   infra agenda   conferir|aplicar                convergência do crontab (instala-crontab.sh)
+  infra units    conferir|aplicar                convergência das units da instância (instala-units.sh)
   infra ingress  [--ver]                         copia o ingress versionado do túnel para a cópia da instância e reinicia o cloudflared
 
 Leitura aceita alvo opcional; sem alvo, olha tudo. Mutação exige alvo explícito.
@@ -80,7 +82,8 @@ no harness e unit fora de ~/.config/systemd/user; guarda a inspeção do contêi
 de removê-lo e move o arquivo da unit para a quarentena, de onde volta com mv.
 up, down, pull, build e remover exigem identidade: variável PF_SUJEITO (sem fallback; a
 porta a injeta pelo fluxo OAuth). agenda conferir roda com --check (0 igual, 1
-divergente); agenda aplicar aplica de fato. Ajudante de compose localizado ao
+divergente); agenda aplicar aplica de fato. units conferir|aplicar, o mesmo para as units
+systemd --user declaradas em deploy/units-da-instancia.json do core (symlink e daemon-reload). Ajudante de compose localizado ao
 lado deste script (bin/_release/stack), nunca pelo PATH.
 ingress mostra a diferença entre o ingress versionado do core (release no ar) e a cópia da instância
 (deploy/core/cloudflared.yml, a que o contêiner lê) e, sem --ver, grava a cópia e reinicia o contêiner
@@ -1053,6 +1056,23 @@ cmd_limpeza() {
 # card #3145): script único em INFRA_CRONTAB_SCRIPT, --check em conferir (0 igual, 1
 # divergente — mérito, não uso), sem --check em aplicar. Não exige PF_SUJEITO: já é
 # chamado por automação/gatilho, como restart/backup/cache/limpeza.
+# `infra units conferir|aplicar` — o par de `agenda` para as units systemd --user da instância
+# (deploy/units-da-instancia.json do core, card #3917): script único em INFRA_UNITS_SCRIPT, --check
+# em conferir (0 conforme, 1 divergente), sem --check em aplicar (symlink para a release e
+# daemon-reload). Não exige PF_SUJEITO, pela mesma razão de agenda.
+cmd_units() {
+  local sub="${1:-}"; shift || true
+  [ -x "$UNITS_SCRIPT" ] || { printf 'infra: erro: dependência %s: ausente\n' "$UNITS_SCRIPT" >&2; exit 3; }
+  case "$sub" in
+    conferir) exec "$UNITS_SCRIPT" --check "$@" ;;
+    aplicar)  exec "$UNITS_SCRIPT" "$@" ;;
+    "")
+      printf 'infra: erro: units exige conferir ou aplicar\n' >&2; uso ;;
+    *)
+      printf 'infra: erro: units desconhecido: %s — valores válidos: conferir, aplicar\n' "$sub" >&2; uso ;;
+  esac
+}
+
 cmd_agenda() {
   local sub="${1:-}"; shift || true
   [ -x "$CRONTAB_SCRIPT" ] || { printf 'infra: erro: dependência %s: ausente\n' "$CRONTAB_SCRIPT" >&2; exit 3; }
@@ -1275,10 +1295,11 @@ case "$cmd" in
   up|down|ps|config|pull|build) cmd_stack "$cmd" "$@" ;;
   limpeza)   cmd_limpeza "$@" ;;
   agenda)    cmd_agenda "$@" ;;
+  units)     cmd_units "$@" ;;
   ingress)   ingress "$@" ;;
   *)
     printf 'infra: erro: ato desconhecido: %s\n' "$cmd" >&2
-    printf 'atos: estado, saude, logs, restart, remover, unit-env, cache, hardware, limites, gpu, backup, up, down, ps, config, pull, build, limpeza, agenda, ingress\n' >&2
+    printf 'atos: estado, saude, logs, restart, remover, unit-env, cache, hardware, limites, gpu, backup, up, down, ps, config, pull, build, limpeza, agenda, units, ingress\n' >&2
     uso_texto
     exit 2
     ;;

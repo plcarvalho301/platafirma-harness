@@ -421,7 +421,7 @@ def test_infra_ato_desconhecido_exit_2_com_lista(path_delator):
     r = _roda("bogus-ato", path_dir=path_delator, checa_exit=2)
     assert "infra: erro: ato desconhecido: bogus-ato" in r.stderr
     assert "atos:" in r.stderr
-    assert "up" in r.stderr and "agenda" in r.stderr
+    assert "up" in r.stderr and "agenda" in r.stderr and "units" in r.stderr
     _sem_delator(r)
 
 
@@ -582,3 +582,30 @@ def test_agenda_nao_exige_pf_sujeito(arvore):
                       env_extra={"INFRA_CRONTAB_SCRIPT": str(fake), "PF_SUJEITO": ""},
                       checa_exit=0)
     assert "CRONTAB_ARGS:" in r.stdout
+
+
+# `infra units` (card #3917): o par de agenda para deploy/instala-units.sh do core.
+def test_units_conferir_chama_script_com_check(arvore):
+    fake = _stub(arvore / "bin" / "_infra", "units-fake.sh", FAKE_CRONTAB)
+    r = _roda_arvore(arvore, "units", "conferir",
+                      env_extra={"INFRA_UNITS_SCRIPT": str(fake)}, checa_exit=0)
+    assert "CRONTAB_ARGS: [--check]" in r.stdout
+
+
+def test_units_aplicar_chama_script_sem_check(arvore):
+    fake = _stub(arvore / "bin" / "_infra", "units-fake.sh", FAKE_CRONTAB)
+    r = _roda_arvore(arvore, "units", "aplicar",
+                      env_extra={"INFRA_UNITS_SCRIPT": str(fake), "PF_SUJEITO": ""}, checa_exit=0)
+    assert r.stdout.strip() == "CRONTAB_ARGS:"
+
+
+def test_units_sem_script_dependencia_ausente_exit_3(arvore):
+    r = _roda_arvore(arvore, "units", "conferir",
+                      env_extra={"INFRA_UNITS_SCRIPT": str(arvore / "nao-existe.sh")}, checa_exit=3)
+    assert "dependência" in r.stderr
+
+
+def test_units_sem_sub_exit_2(arvore):
+    fake = _stub(arvore / "bin" / "_infra", "units-fake.sh", FAKE_CRONTAB)
+    r = _roda_arvore(arvore, "units", env_extra={"INFRA_UNITS_SCRIPT": str(fake)}, checa_exit=2)
+    assert "units exige conferir ou aplicar" in r.stderr
