@@ -111,9 +111,35 @@ def test_modelo_feature_e_o_two_pager_na_ordem():
     p = _run(["modelo", "feature"])
     assert p.returncode == 0, p.stderr
     assert _rotulos(p.stdout) == ["Problema", "Solução", "Peças", "Fora", "Resultado", "Medida",
-                                  "Apetite", "Aberto", "Produtos documentais", "Sai quando"]
+                                  "Apetite", "Aberto", "Produtos documentais", "Regras", "Sai quando"]
     assert "Continuidade" not in p.stdout and "Fontes" not in p.stdout and "Quebra" not in p.stdout
     assert "título" in p.stderr
+
+
+def test_modelo_feature_e_story_refinada_levam_as_regras_uma_vez():
+    """Card #3937 (arq:0096, emenda de 21/10/2026): Regras na feature, Regras novas no Plano."""
+    feature = _run(["modelo", "feature"])
+    assert feature.returncode == 0, feature.stderr
+    assert _rotulos(feature.stdout).count("Regras") == 1
+    assert "Regras novas" not in _rotulos(feature.stdout)
+    plano = _run(["modelo", "story", "refinada"])
+    assert plano.returncode == 0, plano.stderr
+    rotulos = _rotulos(plano.stdout)
+    assert rotulos.count("Regras novas") == 1 and "Regras" not in rotulos
+    assert rotulos.index("Premissas") < rotulos.index("Regras novas") < rotulos.index("Unidades")
+    story = _run(["modelo", "story"])
+    assert story.returncode == 0, story.stderr
+    regras = [l for l in story.stdout.splitlines() if l.startswith("Regras:")]
+    assert len(regras) == 1 and "só story sem pai" in regras[0]
+    assert "Regras:" not in _run(["modelo", "épico"]).stdout
+
+
+def test_para_html_separa_regras_e_regras_novas():
+    """Card #3937: sem os rótulos na lista, o bloco caía no parágrafo anterior."""
+    assert _para_html("Produtos documentais: d\nRegras:\n1. a → b") == (
+        "<p><strong>Produtos documentais:</strong> d</p><p><strong>Regras:</strong><br>1. a → b</p>")
+    assert _para_html("Premissas: p\nRegras novas:\n1. a → b") == (
+        "<p><strong>Premissas:</strong> p</p><p><strong>Regras novas:</strong><br>1. a → b</p>")
 
 
 def test_modelo_epico_sem_indice_de_feature():

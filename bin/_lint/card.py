@@ -62,7 +62,7 @@ ESTADOS_SO_APOSTA = {"captada"}
 # todo rotulo que abre secao no corpo, para saber onde a anterior termina
 ROTULOS_TWO_PAGER = [
     "Problema", "Solução", "Peças", "Fora", "Resultado", "Medida", "Apetite", "Aberto",
-    "Produtos documentais", "Sai quando", "Quebra",
+    "Produtos documentais", "Regras", "Sai quando", "Quebra",
     # do esqueleto velho e dos rotulos de fonte: nao sao do molde, mas fecham a secao anterior
     "Continuidade", "Base", "Fontes",
 ]
@@ -663,6 +663,22 @@ def _conferir_titulo(nome_alvo: str, conteudo: str) -> list[Apontamento]:
         id="CARD_TITULO",
     )]
 
+# arq:0096, emenda de 21/10/2026 (card #3937): cada linha do bloco Regras da feature aponta o
+# R da spec ou o D da ADR de onde sai. Aviso, como o titulo. A feature sem o bloco nao se
+# aponta: a formalizada antes da emenda nao volta, e o lint nao sabe a data da formalizacao.
+RE_ORIGEM_DA_REGRA = re.compile(r"\b[RD]\d+\b")
+RE_REGRAS_NENHUMA = re.compile(r"^\s*nenhuma\b", re.IGNORECASE)
+CURA_REGRAS = "cada regra aponta o R<n> da spec ou o D<n> da ADR de onde sai (arq:0096)"
+
+def _conferir_regras(nome_alvo: str, conteudo: str) -> list[Apontamento]:
+    secao = secoes_do_corpo(conteudo).get("Regras")
+    if secao is None:
+        return []
+    return [Apontamento(nome_alvo, n, "linha de Regras sem o R ou o D de onde sai", CURA_REGRAS,
+                        severidade="aviso", id="CARD_REGRAS")
+            for n, t in secao.nao_vazias()
+            if not RE_ORIGEM_DA_REGRA.search(_visivel(t)) and not RE_REGRAS_NENHUMA.match(t)]
+
 def _conferir_adr(nome_alvo: str, conteudo: str, nivel: str) -> list[Apontamento]:
     campos_esperados = CAMPOS_TASK if nivel == "task" else CAMPOS_STORY
     apontamentos: list[Apontamento] = []
@@ -764,6 +780,8 @@ def verificar_card_regua(
     estado = ler_cabecalho(conteudo).get("estado", "")
     apontamentos, avisos = conferir_discovery(
         nome_alvo, conteudo, ler_comentarios(comentarios or ""), lista, estado, fecha_existe=fecha_existe)
+    if nivel == "feature":
+        titulo += _conferir_regras(nome_alvo, conteudo)
     return titulo + apontamentos, CHAVE_DISCOVERY, lista.get("rev"), avisos
 
 
