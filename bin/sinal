@@ -19,6 +19,7 @@ proprio healthcheck do Docker; quem nao tem (oauth2-proxy, cloudflared)
 e sondado daqui, de fora, por um contendor-posto que esta na mesma rede.
 """
 
+import http.client
 import json
 import os
 import re
@@ -26,9 +27,12 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+import urllib.error
+import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
+from zoneinfo import ZoneInfo
 
 # Raizes de producao (card #3010): o sinal e estado da instancia, nunca da release.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
@@ -462,14 +466,230 @@ def coleta():
     return {"gerado_em": agora(), "runtime": runtime, "servicos": servicos}
 
 
+# --- a porta, medida de fora (card #3919; spec eixos-do-host R7 e R8) ------------------------------------
+#
+# A sonda mede a porta pelo endereco publico com o token do cliente da sonda, chamando um ato leve, e nunca
+# abre sessao: o ato leve e a tool `sessao` sem ato, o formato que `oplog.origem_da_linha` ja reconhece como
+# sonda e que nao monta pacote nem cunha sessao (a abertura monta ~12 mil tokens e uma sessao duravel).
+# Erro de transporte e a requisicao que nao deixou linha de giro na porta; erro de verbo e a classe do giro,
+# nunca o exit 1 (arq:0123). O tempo que a porta registrou para o mesmo giro vem do bruto do dia, ao lado do
+# tempo medido de fora: a diferenca e o custo do tunel. O token nunca se imprime, nem em erro.
+# ambiente: SINAL_PORTA_URL[=https://ops.platafirma.org/mcp] · SINAL_PORTA_TOOL[=sessao] ·
+#   SINAL_SONDA_CLIENTE[=sonda] (clientId no realm; o segredo mora em <instancia>/segredos/keycloak/<clientId>) ·
+#   SINAL_SONDA_TOKEN_URL[=https://auth.platafirma.org/realms/platafirma/protocol/openid-connect/token] ·
+#   SINAL_PORTA_TIMEOUT[=10] · OPS_LOG_DIR[=<instancia>/var/log/ops] (override so para teste)
+PORTA_URL_PADRAO = "https://ops.platafirma.org/mcp"
+PORTA_TOOL_PADRAO = "sessao"
+SONDA_CLIENTE_PADRAO = "sonda"
+REALM_URL_PADRAO = "https://auth.platafirma.org/realms/platafirma/protocol/openid-connect/token"
+HTTP_OK = 200
+HTTP_ERRO = 400                             # daqui para cima a resposta e erro
+GIRO_ATRASO_INICIAL_S = 0.05                # espera pela linha de giro: dobra a cada tentativa, ate `espera_s`
+FUSO_DA_PORTA = "America/Sao_Paulo"        # o dia do arquivo do bruto e o dia local da porta (spec log-de-negocio §3)
+SINAL_JANELA_DO_GIRO_S = 2                  # tolerancia entre o relogio da sonda e o `ts` que a porta gravou
+SINAL_CAUDA_DO_BRUTO = 512 * 1024           # o bruto do dia tem MBs; o giro da sonda esta no fim
+SINAL_ERRO_DE_TOKEN = (401, 403)
+
+
+class SemLeitura(Exception):
+    """A medida nao se fez: a fonte nao respondeu. Vira `nao_consegui_olhar` com a causa, nunca zero."""
+
+    def __init__(self, causa: str, fonte: str):
+        super().__init__(f"{fonte}: {causa}")
+        self.causa = causa
+        self.fonte = fonte
+
+
+def _pedido(url: str, corpo: bytes, cabecalhos: dict, timeout: float) -> tuple:
+    """(status, cabecalhos, texto, ms). Sem proxy de ambiente: a medida e do caminho que a sonda faz.
+    Erro de rede sobe como URLError/OSError/HTTPException; resposta HTTP de erro volta como status."""
+    req = urllib.request.Request(url, data=corpo, headers=cabecalhos)
+    abridor = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    t0 = time.monotonic()
+    try:
+        with abridor.open(req, timeout=timeout) as r:
+            texto = r.read().decode("utf-8", "replace")
+            return r.status, r.headers, texto, (time.monotonic() - t0) * 1000
+    except urllib.error.HTTPError as e:
+        texto = e.read().decode("utf-8", "replace")
+        return e.code, e.headers, texto, (time.monotonic() - t0) * 1000
+
+
+_ERROS_DE_REDE = (urllib.error.URLError, OSError, TimeoutError, http.client.HTTPException)
+
+
+def obter_token(timeout: float) -> str:
+    """Token do cliente da sonda (client_credentials). Sem o segredo de segredos/keycloak/<clientId>, a sonda
+    nao tem identidade: SemLeitura, e a medida da porta sai `nao_consegui_olhar` sem tentar com outra."""
+    cliente = os.environ.get("SINAL_SONDA_CLIENTE", SONDA_CLIENTE_PADRAO)
+    fonte_do_segredo = f"segredos/keycloak/{cliente}"
+    try:
+        segredo = (raizes.instancia() / "segredos" / "keycloak" / cliente).read_text(encoding="utf-8").strip()
+    except OSError:
+        segredo = ""
+    if not segredo or "\n" in segredo:
+        raise SemLeitura("sem_credencial_da_sonda", fonte_do_segredo)
+    url = os.environ.get("SINAL_SONDA_TOKEN_URL", REALM_URL_PADRAO)
+    fonte = f"{urlparse(url).netloc} (token do cliente {cliente})"
+    corpo = urlencode({"grant_type": "client_credentials", "client_id": cliente, "client_secret": segredo}).encode()
+    try:
+        status, _, texto, _ = _pedido(url, corpo, {"Content-Type": "application/x-www-form-urlencoded"}, timeout)
+    except _ERROS_DE_REDE:
+        raise SemLeitura("keycloak_fora", fonte) from None
+    if status != HTTP_OK:
+        raise SemLeitura("token_recusado", fonte)
+    try:
+        return json.loads(texto)["access_token"]
+    except (ValueError, KeyError, TypeError):
+        raise SemLeitura("token_ilegivel", fonte) from None
+
+
+def _corpo_jsonrpc(texto: str) -> dict:
+    """A resposta do MCP vem como JSON ou como evento SSE (`data: {...}`)."""
+    for linha in texto.splitlines():
+        if linha.startswith("data:"):
+            return json.loads(linha[5:].strip())
+    return json.loads(texto)
+
+
+def _atrasos(total_s: float) -> list[float]:
+    """As esperas antes de cada leitura do bruto: nenhuma na primeira, depois 0,05 s dobrando enquanto a soma
+    couber em `total_s`."""
+    atrasos, atraso, soma = [0.0], GIRO_ATRASO_INICIAL_S, 0.0
+    while soma + atraso <= total_s:
+        atrasos.append(atraso)
+        soma += atraso
+        atraso *= 2
+    return atrasos
+
+
+def giro_da_porta(tool: str, t0: datetime, t1: datetime, pasta: Path | None = None,
+                  espera_s: float = 1.0) -> dict | None:
+    """A linha de giro que a porta gravou no bruto do dia para a chamada da sonda (tool igual, sem ato, sem
+    sessao) entre t0 e t1, com a folga do relogio. Espera um instante pela linha, que a porta escreve ao
+    terminar o giro. Devolve {dur_ms, classe} ou None quando a porta nao deixou linha."""
+    pasta = pasta or Path(os.environ.get("OPS_LOG_DIR") or raizes.instancia() / "var" / "log" / "ops")
+    dia = t0.astimezone(ZoneInfo(FUSO_DA_PORTA)).strftime("%Y-%m-%d")
+    arq = pasta / f"ops-{dia}.jsonl"
+    folga = timedelta(seconds=SINAL_JANELA_DO_GIRO_S)
+    for atraso in _atrasos(espera_s):
+        time.sleep(atraso)
+        try:
+            with open(arq, "rb") as f:
+                f.seek(0, os.SEEK_END)
+                f.seek(max(0, f.tell() - SINAL_CAUDA_DO_BRUTO))
+                linhas = f.read().decode("utf-8", "replace").splitlines()
+        except OSError:
+            linhas = []
+        for linha in reversed(linhas):
+            try:
+                reg = json.loads(linha)
+                ts = parse_dt(reg["ts"])
+            except (ValueError, KeyError, TypeError):
+                continue
+            if (reg.get("tool") == tool and reg.get("evento") != "http_req" and not reg.get("ato")
+                    and reg.get("sessao_id") in (None, "", "-") and t0 - folga <= ts <= t1 + folga):
+                return {"dur_ms": reg.get("dur_ms"), "classe": reg.get("classe")}
+    return None
+
+
+def medir_porta(pasta_do_bruto: Path | None = None, espera_s: float = 1.0) -> dict:
+    """Uma medida da porta, de fora (R7, R8): `latencia_externa_ms` ao lado de `dur_ms_porta`, o que a porta
+    registrou para o mesmo giro; `erros_transporte` (1 quando a requisicao nao deixou linha de giro) separado
+    de `erro_verbo` (a classe do giro quando nao e ok). Sem identidade da sonda, ou com a porta recusando o
+    token, a medida e `nao_consegui_olhar`, com a causa. Chama a porta uma vez por passada (R13)."""
+    timeout = float(os.environ.get("SINAL_PORTA_TIMEOUT", "10"))
+    url = os.environ.get("SINAL_PORTA_URL", PORTA_URL_PADRAO)
+    tool = os.environ.get("SINAL_PORTA_TOOL", PORTA_TOOL_PADRAO)
+    fonte = urlparse(url).netloc
+    medida = {"estado_leitura": "lida", "causa": None, "fonte": None, "latencia_externa_ms": None,
+              "dur_ms_porta": None, "erros_transporte": 0, "erro_verbo": None}
+
+    def sem_leitura(causa: str, onde: str) -> dict:
+        return {**medida, "estado_leitura": "nao_consegui_olhar", "causa": causa, "fonte": onde}
+
+    try:
+        token = obter_token(timeout)
+    except SemLeitura as e:
+        return sem_leitura(e.causa, e.fonte)
+
+    cabecalhos = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream",
+                  "Authorization": f"Bearer {token}"}
+
+    def jsonrpc(metodo: str, ident: int | None = None, params: dict | None = None) -> bytes:
+        corpo = {"jsonrpc": "2.0", "method": metodo, "params": params or {}}
+        if ident is not None:
+            corpo["id"] = ident
+        return json.dumps(corpo).encode()
+
+    try:
+        status, resposta, _, _ = _pedido(url, jsonrpc("initialize", 1, {
+            "protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "sinal", "version": "0"}}),
+            cabecalhos, timeout)
+        if status in SINAL_ERRO_DE_TOKEN:
+            return sem_leitura("porta_recusou_o_token", fonte)
+        if status < HTTP_ERRO:
+            if resposta.get("mcp-session-id"):
+                cabecalhos["mcp-session-id"] = resposta["mcp-session-id"]
+            try:
+                _pedido(url, jsonrpc("notifications/initialized"), cabecalhos, timeout)
+            except _ERROS_DE_REDE:
+                pass
+    except _ERROS_DE_REDE:
+        status = None
+
+    t0 = datetime.now(timezone.utc)
+    ms, status_da_chamada = None, None
+    if status is not None and status < HTTP_ERRO:
+        try:
+            status_da_chamada, _, _, ms = _pedido(
+                url, jsonrpc("tools/call", 2, {"name": tool, "arguments": {}}), cabecalhos, timeout)
+        except _ERROS_DE_REDE:
+            status_da_chamada, ms = None, None
+    t1 = datetime.now(timezone.utc)
+
+    if status_da_chamada in SINAL_ERRO_DE_TOKEN:
+        return sem_leitura("porta_recusou_o_token", fonte)
+    giro = giro_da_porta(tool, t0, t1, pasta_do_bruto, espera_s) if status_da_chamada is not None else None
+    if giro is None:
+        # a requisicao nao deixou linha de giro: a borda ou o tunel responderam 5xx, ou deu timeout antes da porta ver
+        return {**medida, "erros_transporte": 1, "latencia_externa_ms": ms}
+    medida["latencia_externa_ms"] = ms
+    medida["dur_ms_porta"] = giro.get("dur_ms")
+    if giro.get("classe") not in (None, "ok"):
+        medida["erro_verbo"] = giro["classe"]
+    return medida
+
+
+def _texto_da_medida(m: dict) -> str:
+    if m["estado_leitura"] != "lida":
+        return f"porta: nao consegui olhar {m['fonte']} ({m['causa']})"
+    partes = []
+    if m["latencia_externa_ms"] is not None:
+        partes.append(f"{m['latencia_externa_ms']:.0f} ms por fora")
+    if m["dur_ms_porta"] is not None:
+        partes.append(f"{m['dur_ms_porta']:.0f} ms registrados pela porta")
+    if m["erros_transporte"]:
+        partes.append("erro de transporte")
+    if m["erro_verbo"]:
+        partes.append(f"erro de verbo ({m['erro_verbo']})")
+    return "porta: " + (", ".join(partes) or "sem numero")
+
+
 def main():
     argv = sys.argv[1:]
     if argv and argv[0] in ("-h", "--ajuda", "ajuda"):
         print(__doc__.strip())
-        print("\nuso: sinal [--ver]")
+        print("\nuso: sinal [--ver | --porta [--json]]")
         print("  sem argumento : coleta e escreve " + SAIDA)
         print("  --ver         : mostra o arquivo atual, sem coletar")
+        print("  --porta       : mede a porta de fora, uma vez, com o token do cliente da sonda (nao grava o arquivo")
+        print("                  de sinal); --json devolve a medida; sai 5 quando nao consegui olhar")
         return 0
+    if argv and argv[0] == "--porta":
+        medida = medir_porta()
+        print(json.dumps(medida, ensure_ascii=False, indent=2) if "--json" in argv else _texto_da_medida(medida))
+        return 0 if medida["estado_leitura"] == "lida" else 5
     if argv and argv[0] == "--ver":
         if not os.path.exists(SAIDA):
             print(json.dumps({"estado": "ausente",

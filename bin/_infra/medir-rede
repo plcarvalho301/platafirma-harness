@@ -1,0 +1,285 @@
+#!/usr/bin/env python3
+# medir-rede — o eixo de rede do host: os três túneis da borda e a porta (spec eixos-do-host R6 e R7, card #3919).
+# Sub-ato de `infra` (como limpeza-quarentena): fora do PATH e do golden record, mora em bin/_infra/. Chamado por
+# `infra medir rede [--json]`, nunca direto. Só lê: não grava série, não reinicia túnel (R1; spec tuneis).
+#
+# O que lê. Por túnel, a métrica do cloudflared (`/ready` e `/metrics`): as conexões mantidas com a borda da
+# Cloudflare e as reconexões. A borda (`wiki`) tem porta fixa, 127.0.0.1:20243, publicada do contêiner. Os túneis
+# `ops` e `recuperacao` rodam em units do root, que a casa não escreve, e abrem a métrica na faixa padrão por
+# ordem de chegada: um reinício troca as portas. Por isso o ato acha a porta pelo socket em escuta do processo
+# principal da unit (/proc/<pid>/fd contra /proc/<pid>/net/tcp), a cada leitura, e nunca por porta escrita no
+# código (R6). Da porta (túnel `ops`), a latência pelo endereço público e o tempo que ela registrou, pela
+# medida do `sinal --porta`, que chama a porta uma vez e nunca abre sessão (R7, R8).
+#
+# Reconexão sai acumulada desde a partida do processo: o ato só lê e não guarda cursor, e quem diferencia entre
+# passadas é a sonda que grava a série. O nome do contador é o do cloudflared; ausente, a reconexão sai nula e
+# nunca zero. Medida não reprova: o número, por alto que seja, sai 0; só a fonte que não respondeu sai 5.
+#
+# ambiente: INFRA_REDE_UNIT_OPS[=ops-tunnel.service] · INFRA_REDE_UNIT_RECUPERACAO[=recuperacao-tunnel.service] ·
+#   INFRA_REDE_BORDA_METRICA[=127.0.0.1:20243] · INFRA_INGRESS_CONTEINER[=platafirma-core-cloudflared-1] ·
+#   INFRA_REDE_TIMEOUT[=5] · INFRA_PROC[=/proc] · INFRA_SINAL[=bin/sinal] · INFRA_ACERVO[=bin/acervo]
+# depende: systemctl --user · docker · bin/acervo (registro de stacks) · bin/sinal (--porta) · bin/_infra/eixos.py
+# saída: 0 lido · 2 uso · 5 não consegui olhar (a fonte não respondeu)
+from __future__ import annotations
+
+import http.client
+import json
+import os
+import re
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+AQUI = Path(__file__).resolve().parent
+sys.path.insert(0, str(AQUI))
+import eixos
+
+INSTRUMENTO = "infra-medir-rede"
+# Contadores e medidores do cloudflared (métrica Prometheus). Nome ausente: o número sai nulo, nunca zero.
+CONEXOES_NA_BORDA = ("cloudflared_tunnel_ha_connections",)
+REGISTROS_NA_BORDA = ("cloudflared_tunnel_tunnel_register_success",)
+# Endereço local de um socket em escuta em /proc/net/tcp{,6}: loopback ou qualquer interface.
+_ENDERECOS_LOCAIS = {"0100007F", "00000000", "00000000000000000000000001000000", "00000000000000000000000000000000"}
+_ESTADO_LISTEN = "0A"
+_COLUNAS_DA_TABELA_DE_SOCKETS = 10
+_REDE_ERROS = (urllib.error.URLError, OSError, TimeoutError, http.client.HTTPException, ValueError)
+TIMEOUT_DO_SYSTEMD_S = 10
+TIMEOUT_DO_DOCKER_S = 15
+TIMEOUT_DA_SONDA_S = 40
+
+
+def _timeout() -> float:
+    return float(os.environ.get("INFRA_REDE_TIMEOUT", "5"))
+
+
+def _get(url: str) -> tuple[int, str]:
+    """(status, corpo) sem proxy de ambiente: é loopback. O `/ready` do cloudflared responde 503 com corpo
+    quando não há conexão, e o corpo é justamente o que se quer ler, então o erro HTTP volta como status."""
+    abridor = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with abridor.open(url, timeout=_timeout()) as r:
+            return r.status, r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
+
+
+def valor_da_metrica(texto: str, nomes: tuple[str, ...]) -> float | None:
+    """Soma das séries de `nomes` na exposição Prometheus; None quando nenhuma existe (nunca zero)."""
+    total, achou = 0.0, False
+    for linha in texto.splitlines():
+        if linha.startswith("#"):
+            continue
+        for nome in nomes:
+            if linha.startswith(nome) and (len(linha) == len(nome) or linha[len(nome)] in " {"):
+                try:
+                    total += float(linha.rsplit(" ", 1)[1])
+                    achou = True
+                except (ValueError, IndexError):
+                    pass
+    return total if achou else None
+
+
+def ler_cloudflared(endereco: str) -> dict:
+    """{"conexoes_borda", "reconexoes_acumuladas", "metrica"} do cloudflared em `endereco` (host:porta)."""
+    fonte = f"cloudflared {endereco}"
+    try:
+        _, corpo = _get(f"http://{endereco}/ready")
+        pronto = json.loads(corpo)
+    except _REDE_ERROS:
+        raise eixos.ErroDeLeitura("metrica_fora", fonte) from None
+    if not isinstance(pronto, dict):
+        raise eixos.ErroDeLeitura("ready_ilegivel", fonte)
+    try:
+        _, texto = _get(f"http://{endereco}/metrics")
+    except _REDE_ERROS:
+        texto = ""
+    conexoes = pronto.get("readyConnections")
+    if conexoes is None:
+        conexoes = valor_da_metrica(texto, CONEXOES_NA_BORDA)
+    if conexoes is None:
+        raise eixos.ErroDeLeitura("conexoes_ausentes", fonte)
+    registros = valor_da_metrica(texto, REGISTROS_NA_BORDA)
+    return {"conexoes_borda": int(conexoes),
+            "reconexoes_acumuladas": None if registros is None else int(registros),
+            "metrica": endereco}
+
+
+def pid_da_unit(unit: str) -> int:
+    fonte = f"systemctl --user show {unit}"
+    try:
+        p = subprocess.run(["systemctl", "--user", "show", "-p", "MainPID", unit],
+                           capture_output=True, text=True, timeout=TIMEOUT_DO_SYSTEMD_S, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        raise eixos.ErroDeLeitura("systemctl_fora", fonte) from None
+    achado = re.search(r"MainPID=(\d+)", p.stdout)
+    if p.returncode != 0 or not achado:
+        raise eixos.ErroDeLeitura("unit_desconhecida", fonte)
+    pid = int(achado.group(1))
+    if pid == 0:
+        raise eixos.ErroDeLeitura("unit_parada", fonte)
+    return pid
+
+
+def _inodes_dos_sockets(pid: int, proc: Path) -> set[str]:
+    """Os inodes dos sockets que o processo mantém abertos (/proc/<pid>/fd/*: `socket:[inode]`)."""
+    inodes = set()
+    try:
+        for fd in (proc / str(pid) / "fd").iterdir():
+            try:
+                alvo = os.readlink(fd)
+            except OSError:
+                continue
+            achado = re.fullmatch(r"socket:\[(\d+)\]", alvo)
+            if achado:
+                inodes.add(achado.group(1))
+    except OSError:
+        raise eixos.ErroDeLeitura("fd_ilegivel", f"{proc}/{pid}") from None
+    return inodes
+
+
+def _portas_em_listen(pid: int, proc: Path, inodes: set[str]) -> set[int]:
+    """As portas locais em LISTEN (loopback ou qualquer interface) cujo socket está em `inodes`."""
+    portas = set()
+    for tabela in ("net/tcp", "net/tcp6"):
+        try:
+            linhas = (proc / str(pid) / tabela).read_text(encoding="utf-8").splitlines()[1:]
+        except OSError:
+            continue
+        for linha in linhas:
+            campos = linha.split()
+            if len(campos) < _COLUNAS_DA_TABELA_DE_SOCKETS or campos[3] != _ESTADO_LISTEN or campos[9] not in inodes:
+                continue
+            endereco, _, porta_hex = campos[1].rpartition(":")
+            if endereco in _ENDERECOS_LOCAIS:
+                portas.add(int(porta_hex, 16))
+    return portas
+
+
+def portas_em_escuta(pid: int, proc: Path) -> list[int]:
+    """As portas TCP em escuta que o processo `pid` possui: o inode de cada socket aberto dele cruzado com a
+    tabela de sockets em LISTEN. Lê a cada chamada, porque a porta troca quando a unit reinicia."""
+    portas = _portas_em_listen(pid, proc, _inodes_dos_sockets(pid, proc))
+    if not portas:
+        raise eixos.ErroDeLeitura("sem_porta_em_escuta", f"{proc}/{pid}")
+    return sorted(portas)
+
+
+def ler_tunel_da_unit(unit: str, proc: Path) -> dict:
+    """O túnel que roda numa unit: acha a porta pelo socket do processo e lê o cloudflared que responde nela."""
+    pid = pid_da_unit(unit)
+    ultimo = None
+    for porta in portas_em_escuta(pid, proc):
+        try:
+            return {**ler_cloudflared(f"127.0.0.1:{porta}"), "pid": pid}
+        except eixos.ErroDeLeitura as e:
+            ultimo = e
+    raise ultimo or eixos.ErroDeLeitura("metrica_fora", f"cloudflared pid {pid}")
+
+
+def labels_do_conteiner(nome: str) -> dict:
+    fonte = f"docker inspect {nome}"
+    try:
+        p = subprocess.run(["docker", "inspect", "--format", "{{json .Config.Labels}}", nome],
+                           capture_output=True, text=True, timeout=TIMEOUT_DO_DOCKER_S, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        raise eixos.ErroDeLeitura("docker_fora", fonte) from None
+    if p.returncode != 0:
+        raise eixos.ErroDeLeitura("conteiner_fora", fonte)
+    try:
+        labels = json.loads(p.stdout)
+    except ValueError:
+        raise eixos.ErroDeLeitura("labels_ilegiveis", fonte) from None
+    return labels if isinstance(labels, dict) else {}
+
+
+def porta_pela_sonda() -> dict:
+    """A medida da porta (`sinal --porta --json`): latência de fora, o que a porta registrou, transporte e verbo."""
+    sinal = os.environ.get("INFRA_SINAL") or str(AQUI.parent / "sinal")
+    try:
+        p = subprocess.run([sinal, "--porta", "--json"], capture_output=True, text=True,
+                           timeout=TIMEOUT_DA_SONDA_S, check=False)
+        medida = json.loads(p.stdout)
+        if isinstance(medida, dict) and "estado_leitura" in medida:
+            return medida
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        pass
+    return {"estado_leitura": "nao_consegui_olhar", "causa": "sonda_indisponivel", "fonte": sinal}
+
+
+def _ler_os_tuneis(proc: Path) -> tuple[list[tuple[str, str | None, dict]], list[dict]]:
+    """(lidos, falhos): cada túnel lido como (nome, unit ou None, leitura); cada um que não leu, a linha dele."""
+    unidades = (("ops", os.environ.get("INFRA_REDE_UNIT_OPS", "ops-tunnel.service")),
+                ("recuperacao", os.environ.get("INFRA_REDE_UNIT_RECUPERACAO", "recuperacao-tunnel.service")))
+    lidos, falhos = [], []
+    for nome, unit in unidades:
+        try:
+            lidos.append((nome, unit, ler_tunel_da_unit(unit, proc)))
+        except eixos.ErroDeLeitura as e:
+            falhos.append({"tunel": nome, "estado_leitura": "nao_consegui_olhar", "causa": e.causa, "fonte": e.fonte})
+    try:
+        lidos.append(("wiki", None, ler_cloudflared(os.environ.get("INFRA_REDE_BORDA_METRICA", "127.0.0.1:20243"))))
+    except eixos.ErroDeLeitura as e:
+        falhos.append({"tunel": "wiki", "estado_leitura": "nao_consegui_olhar", "causa": e.causa, "fonte": e.fonte})
+    return lidos, falhos
+
+
+def _linhas_dos_tuneis(lidos: list[tuple[str, str | None, dict]], porta: dict | None) -> list[dict]:
+    """A linha de cada túnel lido, com a medida da porta no `ops` (a latência de fora é só dele)."""
+    linhas = []
+    for nome, _, leitura in lidos:
+        linha = {"tunel": nome, "estado_leitura": "lida", "causa": None, **leitura,
+                 "latencia_externa_ms": None, "dur_ms_porta": None, "erros_transporte": None}
+        if nome == "ops" and porta is not None:
+            if porta["estado_leitura"] == "lida":
+                linha.update(latencia_externa_ms=porta["latencia_externa_ms"], dur_ms_porta=porta["dur_ms_porta"],
+                             erros_transporte=porta["erros_transporte"], erro_verbo=porta["erro_verbo"])
+            else:
+                linha["porta_nao_lida"] = porta["causa"]
+        linhas.append(linha)
+    return linhas
+
+
+def _consumidores(lidos: list[tuple[str, str | None, dict]]) -> list[dict]:
+    """Quem consome a rede: os processos dos túneis lidos, pelas duas chaves de serviço (unit e contêiner)."""
+    acervo = os.environ.get("INFRA_ACERVO") or str(eixos.ACERVO)
+    conteiner = os.environ.get("INFRA_INGRESS_CONTEINER", "platafirma-core-cloudflared-1")
+    resolver = eixos.resolvedor_do_registro(acervo)
+    topologia = None
+    consumidores = []
+    for nome, unit, leitura in lidos:
+        if unit:
+            chave = {**eixos.chave_de_unit(unit, resolver), "pid": leitura["pid"]}
+        else:
+            topologia = topologia if topologia is not None else eixos.carregar_topologia(acervo)
+            chave = eixos.chave_de_conteiner(conteiner, labels_do_conteiner(conteiner), topologia)
+        consumidores.append({**chave, "tunel": nome, "valor": leitura["conexoes_borda"], "unidade": "contagem"})
+    return consumidores
+
+
+def medir() -> dict:
+    lidos, falhos = _ler_os_tuneis(Path(os.environ.get("INFRA_PROC", "/proc")))
+    porta = porta_pela_sonda() if any(nome == "ops" for nome, _, _ in lidos) else None
+    tuneis = sorted([*_linhas_dos_tuneis(lidos, porta), *falhos], key=lambda t: eixos.TUNEIS.index(t["tunel"]))
+    try:
+        consumidores = _consumidores(lidos)
+    except eixos.ErroDeLeitura as e:
+        return eixos.montar("rede", INSTRUMENTO, estado="nao_consegui_olhar", causa=e.causa, fonte=e.fonte, tuneis=tuneis)
+    if falhos:
+        return eixos.montar("rede", INSTRUMENTO, estado="nao_consegui_olhar", causa="tunel_sem_leitura",
+                            fonte="cloudflared: " + ", ".join(t["tunel"] for t in tuneis if t["estado_leitura"] != "lida"),
+                            tuneis=tuneis, consumidores=consumidores)
+    return eixos.montar("rede", INSTRUMENTO, tuneis=tuneis, consumidores=consumidores)
+
+
+def main(argv: list[str]) -> int:
+    desconhecidos = [a for a in argv if a != "--json"]
+    if desconhecidos:
+        print(f"infra: erro: medir rede não conhece {' '.join(desconhecidos)} — uso: infra medir rede [--json]", file=sys.stderr)
+        return 2
+    return eixos.imprimir_saida(medir(), como_json="--json" in argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
