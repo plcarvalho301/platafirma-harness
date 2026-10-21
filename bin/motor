@@ -299,6 +299,13 @@ def uso(cod=2):
                                         entra, disco/tempo/VRAM estimados); com --apply abre a geracao
                                         em sombra e monta o indice de trecho e de faceta de toda
                                         impressao servindo, em segundo plano e retomavel
+  motor <inst> trocar biblioteca --embedder <modelo> --dimensao <N> [--corte-teto N]
+                     [--corte-caracteres-por-token N] [--corte-secao-minima N]
+                     [--corte-semantico | --sem-corte-semantico] [--amostra N | --contar-tudo] [--json]
+                                        o chunking da geracao nova (#3910): o plano conta os trechos que o
+                                        corte novo da (por amostra de impressoes, ou todas com --contar-tudo)
+                                        e estima disco e tempo a partir dessa contagem; o que nao se pede
+                                        fica como o da geracao que serve
   motor <inst> trocar biblioteca [--estado] [--relatorio <lote>] [--json]
                                         a particao de relance (cobertura da sombra) ou o lote
   motor <inst> trocar biblioteca --virar <id|gN> [--ajuste <nome>=<valor>…] [--sim "<o sim do dono>"]
@@ -961,6 +968,9 @@ _EXIT_DA_TROCA = {400: 2, 404: 1, 409: 4, 422: 1}
 USO_TROCAR = (
     "motor <inst> trocar biblioteca --embedder <modelo> --dimensao <N> [--autor <slug>] [--memoria 1GB] "
     "[--apply] [--json]\n"
+    "  motor <inst> trocar biblioteca --embedder <modelo> --dimensao <N> [--corte-teto N] "
+    "[--corte-caracteres-por-token N] [--corte-secao-minima N] [--corte-semantico | --sem-corte-semantico] "
+    "[--amostra N | --contar-tudo] [--json]\n"
     "  motor <inst> trocar biblioteca [--estado] [--relatorio <lote>] [--json]\n"
     "  motor <inst> trocar biblioteca --virar <id|gN> [--ajuste <nome>=<valor>…] [--sim \"<o sim do dono>\"] "
     "[--confirma gN] [--apply] [--json]\n"
@@ -1015,6 +1025,26 @@ def _o_que_apaga(a):
 def _cobertura_txt(c):
     return (f"cobertura {c.get('aprovadas', 0)}/{c.get('total', 0)} impressoes com indice aprovado "
             f"({c.get('percentual', 0)}%)")
+
+def _linhas_do_corte(p):
+    """O corte da geracao nova no plano (#3910): o que muda, quantos trechos o corte novo da e de onde saiu a conta."""
+    corte = p.get("corte") or {}
+    linhas = []
+    if corte.get("muda"):
+        antes, depois = corte["servindo"], corte["novo"]
+        mudou = ", ".join(f"{k.removeprefix('chunk_')} {antes.get(k)} -> {depois[k]}"
+                          for k in depois if antes.get(k) != depois[k])
+        conta = corte.get("contagem") or {}
+        base = (f"amostra de {conta.get('impressoes_contadas')} impressoes, razao {conta.get('razao_sobre_servindo')}"
+                if conta.get("base") == "amostra" else "todas as impressoes")
+        linhas.append(f"  corte novo: {mudou} · {p.get('trechos_chunking_novo')} trechos contra "
+                      f"{p['trechos_elegiveis']} de hoje (estimativa sobre o texto das secoes reconstruido de "
+                      f"acervo.trecho; {base})")
+        if conta.get("semantico_contado_por_tamanho"):
+            linhas.append("  o modo semantico conta por tamanho no plano: o corte real cai onde o sentido vira")
+    for aviso in corte.get("avisos") or []:
+        linhas.append(f"  aviso do corte: {aviso}")
+    return linhas
 
 def _texto_da_troca(p):
     """Primeira linha: o que o ato diz; o resto, o que o dono precisa para decidir ou acompanhar."""
@@ -1087,11 +1117,41 @@ def _texto_da_troca(p):
               f"  parametros: prefixo da pergunta {par.get('prefixo_da_pergunta')!r}, do trecho "
               f"{par.get('prefixo_do_trecho')!r}, fatia MRL {'sim' if par.get('fatia_mrl_trecho') else 'nao'}, "
               f"faceta {par.get('dimensao_faceta')}d, dtype {par.get('dtype')}"]
+    linhas += _linhas_do_corte(p)
     if p.get("sombra"):
         sb = p["sombra"]
         linhas.append(f"  ja ha a g{sb['geracao']} em construcao com estes parametros: {_cobertura_txt(sb['cobertura'])}")
     linhas.append("para valer: o mesmo comando com --apply")
     return "\n".join(linhas)
+
+# O chunking da geracao nova (#3910, pecas 1 e 2 da #3506): cada opcao e uma chave `chunk_*` de `parametros.corte`.
+# O que o pedido nao diz fica como o da geracao que serve; quem valida o valor e o motor (400 vira exit 2).
+_OPCOES_DO_CORTE = {"--corte-teto": "corte_teto", "--corte-caracteres-por-token": "corte_cpt",
+                    "--corte-secao-minima": "corte_min"}
+_CHAVE_DO_CORTE = {"corte_teto": "chunk_token_ceiling", "corte_cpt": "chunk_chars_per_token",
+                   "corte_min": "chunk_min_section_chars"}
+
+def _inteiro_da_opcao(opcao, valor):
+    try:
+        return int(valor)
+    except ValueError:
+        print(f"trocar: {opcao} exige inteiro, veio {valor!r}.\n  {USO_TROCAR}", file=sys.stderr)
+        sys.exit(2)
+
+def _corte_do_pedido(v):
+    """Os campos de corte do corpo do plano: `corte` (so o que o pedido disse), `contagem` e `amostra`."""
+    extra: dict = {}
+    corte = {_CHAVE_DO_CORTE[k]: _inteiro_da_opcao(opcao, v[k])
+             for opcao, k in _OPCOES_DO_CORTE.items() if k in v}
+    if "corte_semantico" in v:
+        corte["chunk_semantico"] = v["corte_semantico"]
+    if corte:
+        extra["corte"] = corte
+    if v.get("contar_tudo"):
+        extra["contagem"] = "exata"
+    if v.get("amostra"):
+        extra["amostra"] = _inteiro_da_opcao("--amostra", v["amostra"])
+    return extra
 
 def cmd_trocar(inst, argv):
     """Troca de embedder por particao (#3264; arq:0121 §7). Ver o docstring de `ingestao/troca.py`, no rag-api."""
@@ -1102,7 +1162,7 @@ def cmd_trocar(inst, argv):
         sys.exit(2)
     opcoes = {"--embedder": "embedder", "--dimensao": "dimensao", "--autor": "autor", "--memoria": "memoria",
               "--virar": "virar", "--descartar": "descartar", "--confirma": "confirma", "--sim": "sim",
-              "--relatorio": "relatorio"}
+              "--relatorio": "relatorio", "--amostra": "amostra", **_OPCOES_DO_CORTE}
     v: dict = {"autor": os.environ.get("PF_CADEIRA") or "ia"}
     ajustes: dict = {}
     apply_ = como_json = False
@@ -1129,6 +1189,10 @@ def cmd_trocar(inst, argv):
             como_json = True
         elif a == "--estado":
             v["estado"] = True
+        elif a in ("--corte-semantico", "--sem-corte-semantico"):
+            v["corte_semantico"] = a == "--corte-semantico"
+        elif a == "--contar-tudo":
+            v["contar_tudo"] = True
         else:
             print(f"trocar: argumento desconhecido {a!r}.\n  {USO_TROCAR}", file=sys.stderr)
             sys.exit(2)
@@ -1139,6 +1203,10 @@ def cmd_trocar(inst, argv):
     if sum(1 for k in ("virar", "descartar", "embedder", "relatorio", "estado") if v.get(k)) > 1:
         print(f"trocar: --embedder, --virar, --descartar, --relatorio e --estado sao atos distintos; "
               f"um por chamada.\n  {USO_TROCAR}", file=sys.stderr)
+        sys.exit(2)
+    if not v.get("embedder") and any(k in v for k in (*_CHAVE_DO_CORTE, "corte_semantico", "contar_tudo", "amostra")):
+        print(f"trocar: --corte-*, --amostra e --contar-tudo valem com --embedder: sao o plano da geracao nova."
+              f"\n  {USO_TROCAR}", file=sys.stderr)
         sys.exit(2)
     tok = token_da(inst)
     if v.get("relatorio"):
@@ -1171,6 +1239,7 @@ def cmd_trocar(inst, argv):
                  "autor": v["autor"]}
         if v.get("memoria"):
             corpo["memoria"] = v["memoria"]
+        corpo.update(_corte_do_pedido(v))
         r = _chama_troca(inst, tok, "", corpo)
         print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_da_troca(r))
         return
