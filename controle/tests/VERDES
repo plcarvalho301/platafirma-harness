@@ -247,3 +247,11 @@ tests/test_recusa_origem.py | controle/harness_controle/** controle/compose.yaml
 # com a coluna Manifesto, que lia a peca `oficio` que a abertura nao serve, os 4 ficam vermelhos: toda cadeira sai «ausente»).
 tests/test_render_cadeiras.py | controle/harness_controle/**
 testes/test_dt_cinco_harness.py | bin/tarefas bin/repo bin/release bin/_release/**
+# Card #3919 (R1 a R8 da spec eixos-do-host): o módulo comum dos eixos do host (JSON, frase, chave de serviço pelos dois caminhos,
+# teto lido da máquina), a medida da porta pela sonda (`sinal --porta`: ato leve, transporte separado de verbo, token nunca
+# impresso), o ato `infra medir rede` (porta achada pelo socket do processo, fonte muda sai 5, valor alto sai 0) e o
+# cabeçalho, a ajuda e o despacho do `medir`; servidores HTTP e /proc de mentira, sem host.
+tests/test_infra_eixos.py | bin/infra bin/_infra/**
+tests/test_sinal_porta.py | bin/sinal lib/raizes.py
+tests/test_infra_medir_rede.py | bin/infra bin/_infra/** bin/sinal lib/raizes.py
+tests/test_infra_medir_ajuda.py | bin/infra bin/_infra/** lib/raizes.sh

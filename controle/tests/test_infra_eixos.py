@@ -1,0 +1,284 @@
+"""bin/_infra/eixos.py: o JSON, a frase, a chave de serviço e o teto que os quatro eixos têm em comum
+(spec eixos-do-host R2 a R5; card #3919).
+
+Sem docker, sem systemd e sem banco: o contêiner chega como labels, o registro de stacks como lista, a unit
+como função e o cgroup como árvore de /proc de mentira.
+"""
+import importlib.util
+import json
+import stat
+from datetime import datetime, timezone
+from pathlib import Path
+
+import pytest
+
+ARQ = Path(__file__).resolve().parents[2] / "bin" / "_infra" / "eixos.py"
+_spec = importlib.util.spec_from_file_location("eixos", ARQ)
+eixos = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(eixos)
+
+AGORA = datetime(2026, 10, 21, 15, 4, 5, 123456, tzinfo=timezone.utc)
+SHA = "a" * 40
+ID_CONTEINER = "b" * 64
+TOPOLOGIA = [
+    {"slug": "core", "compose": "/opt/platafirma/current/core/docker-compose.yml"},
+    {"slug": "eventos", "compose": ["/opt/platafirma/current/core/deploy/eventos/docker-compose.yml"]},
+]
+
+
+def labels_do_core(servico="cloudflared", projeto="platafirma-core"):
+    return {
+        "com.docker.compose.project": projeto,
+        "com.docker.compose.service": servico,
+        "com.docker.compose.project.config_files": f"/opt/platafirma/platafirma-core/{SHA}/docker-compose.yml",
+    }
+
+
+def executavel(caminho: Path, corpo: str) -> Path:
+    caminho.write_text("#!/usr/bin/env bash\n" + corpo, encoding="utf-8")
+    caminho.chmod(caminho.stat().st_mode | stat.S_IEXEC)
+    return caminho
+
+
+# --- o JSON -------------------------------------------------------------------------------------
+
+def test_carimbo_em_utc_com_milissegundo():
+    assert eixos.carimbo(AGORA) == "2026-10-21T15:04:05.123Z"
+
+
+def test_montar_traz_os_campos_de_topo_comuns_aos_quatro_eixos():
+    j = eixos.montar("ram", "infra-medir-ram", agora=AGORA, valor=8 << 30, unidade="bytes",
+                     teto=30 << 30, teto_fonte="/proc/meminfo:MemTotal")
+    assert set(j) >= {"eixo", "carimbo", "instrumento", "estado_leitura", "causa", "fonte", "valor", "unidade",
+                      "teto", "teto_fonte", "janela", "consumidores", "limiar", "limiar_por", "schema_v"}
+    assert j["schema_v"] == eixos.SCHEMA_V
+    assert j["limiar"] is None and j["limiar_por"] is None, "limiar vazio até a rotina de pactuar"
+    assert j["janela"] == 0
+
+
+def test_nao_consegui_olhar_nao_leva_valor_e_exige_causa_e_fonte():
+    j = eixos.montar("vram", "infra-medir-vram", agora=AGORA, estado="nao_consegui_olhar",
+                     causa="driver_fora", fonte="nvidia-smi")
+    assert j["valor"] is None and j["unidade"] is None
+    with pytest.raises(ValueError, match="nunca zero"):
+        eixos.montar("vram", "infra-medir-vram", agora=AGORA, estado="nao_consegui_olhar",
+                     causa="driver_fora", fonte="nvidia-smi", valor=0, unidade="bytes")
+    with pytest.raises(ValueError, match="causa em slug"):
+        eixos.montar("vram", "infra-medir-vram", agora=AGORA, estado="nao_consegui_olhar", fonte="nvidia-smi")
+    with pytest.raises(ValueError, match="fonte que não respondeu"):
+        eixos.montar("vram", "infra-medir-vram", agora=AGORA, estado="nao_consegui_olhar", causa="driver_fora")
+
+
+def test_leitura_lida_sem_valor_so_na_rede():
+    with pytest.raises(ValueError, match="sem valor"):
+        eixos.montar("cpu", "infra-medir-cpu", agora=AGORA)
+    j = eixos.montar("rede", "infra-medir-rede", agora=AGORA,
+                     tuneis=[{"tunel": "ops", "estado_leitura": "lida", "causa": None}])
+    assert j["valor"] is None
+
+
+@pytest.mark.parametrize("campos, motivo", [
+    ({"valor": 1}, "valor e unidade vão juntos"),
+    ({"valor": 1, "unidade": "bananas"}, "unidade fora de"),
+    ({"valor": 1, "unidade": "bytes", "teto": 5}, "teto e teto_fonte vão juntos"),
+    ({"valor": 1, "unidade": "bytes", "janela": -1}, "janela"),
+])
+def test_validar_recusa_o_que_a_ficha_recusaria(campos, motivo):
+    with pytest.raises(ValueError, match=motivo):
+        eixos.montar("ram", "infra-medir-ram", agora=AGORA, **campos)
+
+
+def test_consumidor_tem_servico_ou_desvio_nunca_os_dois_nem_nenhum():
+    ok = [{"servico": "core/cloudflared"}, {"desvio": "unit_sem_stack", "unit": "x.service"}]
+    eixos.montar("cpu", "infra-medir-cpu", agora=AGORA, valor=0.4, unidade="fracao", consumidores=ok)
+    for ruim in ({}, {"servico": "core/x", "desvio": "unit_sem_stack"}, {"desvio": "inventado"}, {"servico": "sem-barra"}):
+        with pytest.raises(ValueError, match="consumidores"):
+            eixos.montar("cpu", "infra-medir-cpu", agora=AGORA, valor=0.4, unidade="fracao", consumidores=[ruim])
+
+
+def test_valor_alto_nao_muda_o_codigo_de_saida():
+    j = eixos.montar("ram", "infra-medir-ram", agora=AGORA, valor=29 << 30, unidade="bytes",
+                     teto=30 << 30, teto_fonte="/proc/meminfo:MemTotal")
+    assert eixos.codigo_de_saida(j) == 0
+    nao = eixos.montar("ram", "infra-medir-ram", agora=AGORA, estado="nao_consegui_olhar",
+                       causa="ilegivel", fonte="/proc/meminfo")
+    assert eixos.codigo_de_saida(nao) == 5
+
+
+# --- a frase ------------------------------------------------------------------------------------
+
+def test_frase_de_ram_diz_numero_teto_e_quem_consome():
+    j = eixos.montar("ram", "infra-medir-ram", agora=AGORA, valor=8 << 30, unidade="bytes",
+                     teto=30 << 30, teto_fonte="/proc/meminfo:MemTotal",
+                     pressao_avg10=0.5, pressao_avg60=0.3, pressao_avg300=0.1, cache_bytes=2 << 30,
+                     consumidores=[{"servico": "core/keycloak"},
+                                   {"desvio": "fora_de_compose_e_unit", "executavel": "claude", "pid": 4242,
+                                    "linha_de_comando": "claude -p juiz"}])
+    assert eixos.frase(j) == (
+        "Memória às 15:04:05 UTC: 8 GiB de 30 GiB (/proc/meminfo:MemTotal); pressão do kernel 0,5/0,3/0,1% "
+        "em 10, 60 e 300 s; cache que o kernel devolve 2 GiB; consumidores: core/keycloak, "
+        "sem dono (fora_de_compose_e_unit: claude, pid 4242, claude -p juiz).")
+
+
+def test_frase_de_leitura_que_falhou_diz_a_fonte_e_nunca_um_numero():
+    j = eixos.montar("cpu", "infra-medir-cpu", agora=AGORA, estado="nao_consegui_olhar",
+                     causa="ilegivel", fonte="/proc/pressure/cpu")
+    assert eixos.frase(j) == "Processamento às 15:04:05 UTC: não consegui olhar /proc/pressure/cpu (ilegivel)."
+
+
+def test_imprimir_saida_escreve_a_frase_gerada_do_json_e_o_json(capsys):
+    j = eixos.montar("cpu", "infra-medir-cpu", agora=AGORA, valor=0.25, unidade="fracao",
+                     teto=12, teto_fonte="/proc/cpuinfo:processor")
+    assert eixos.imprimir_saida(j, como_json=False) == 0
+    assert capsys.readouterr().out.strip() == eixos.frase(j)
+    assert eixos.imprimir_saida(j, como_json=True) == 0
+    assert json.loads(capsys.readouterr().out) == j
+
+
+def test_frase_de_rede_conta_conexoes_reconexoes_e_porta():
+    tuneis = [
+        {"tunel": "ops", "estado_leitura": "lida", "causa": None, "conexoes_borda": 4, "reconexoes_acumuladas": 1,
+         "latencia_externa_ms": 183.0, "dur_ms_porta": 41.0, "erros_transporte": 0},
+        {"tunel": "recuperacao", "estado_leitura": "nao_consegui_olhar", "causa": "metrica_fora"},
+    ]
+    j = eixos.montar("rede", "infra-medir-rede", agora=AGORA, tuneis=tuneis, consumidores=[{"servico": "core/ops-tunnel"}])
+    assert eixos.frase(j) == (
+        "Rede às 15:04:05 UTC: ops com 4 conexões na borda, 1 reconexão desde a partida, "
+        "a porta leva 183 ms por fora contra 41 ms que ela mesma registrou; "
+        "recuperacao não consegui olhar (metrica_fora); consumidores: core/ops-tunnel.")
+
+
+# --- o teto lido da máquina ---------------------------------------------------------------------
+
+def test_teto_de_ram_e_de_threads_saem_da_maquina_e_dizem_a_fonte(tmp_path):
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text("MemTotal:       31457280 kB\nMemFree: 1 kB\n", encoding="utf-8")
+    assert eixos.teto_ram(str(meminfo)) == (31457280 * 1024, f"{meminfo}:MemTotal")
+    cpuinfo = tmp_path / "cpuinfo"
+    cpuinfo.write_text("processor\t: 0\nmodel\t: x\nprocessor\t: 1\n", encoding="utf-8")
+    assert eixos.teto_threads(str(cpuinfo)) == (2, f"{cpuinfo}:processor")
+
+
+def test_teto_que_nao_se_le_e_erro_de_leitura_nunca_zero(tmp_path):
+    with pytest.raises(eixos.ErroDeLeitura) as e:
+        eixos.teto_ram(str(tmp_path / "nao-existe"))
+    assert e.value.causa == "ilegivel"
+    vazio = tmp_path / "meminfo"
+    vazio.write_text("MemFree: 1 kB\n", encoding="utf-8")
+    with pytest.raises(eixos.ErroDeLeitura) as e:
+        eixos.teto_ram(str(vazio))
+    assert e.value.causa == "memtotal_ausente"
+
+
+def test_teto_de_vram_pelo_driver(tmp_path):
+    smi = executavel(tmp_path / "nvidia-smi", "echo 16311\n")
+    assert eixos.teto_vram(str(smi))[0] == 16311 * (1 << 20)
+    quebrado = executavel(tmp_path / "smi-quebrado", "echo 'Driver/library version mismatch' >&2; exit 18\n")
+    with pytest.raises(eixos.ErroDeLeitura) as e:
+        eixos.teto_vram(str(quebrado))
+    assert e.value.causa == "driver_fora"
+
+
+# --- a chave de serviço: contêiner -------------------------------------------------------------
+
+def test_conteiner_de_compose_registrado_resolve_para_stack_barra_servico():
+    r = eixos.chave_de_conteiner("platafirma-core-cloudflared-1", labels_do_core(), TOPOLOGIA)
+    assert r == {"conteiner": "platafirma-core-cloudflared-1", "servico": "core/cloudflared"}
+
+
+def test_conteiner_sem_label_de_projeto_sai_fora_de_compose_e_unit():
+    r = eixos.chave_de_conteiner("kind_gould", {}, TOPOLOGIA)
+    assert r == {"conteiner": "kind_gould", "desvio": "fora_de_compose_e_unit"}
+
+
+def test_conteiner_de_compose_que_o_registro_nao_conhece_tambem_e_desvio():
+    labels = labels_do_core()
+    labels["com.docker.compose.project.config_files"] = f"/opt/platafirma/platafirma-outro/{SHA}/docker-compose.yml"
+    r = eixos.chave_de_conteiner("outro-x-1", labels, TOPOLOGIA)
+    assert r["desvio"] == "fora_de_compose_e_unit" and "servico" not in r
+
+
+def test_duas_stacks_no_mesmo_compose_desempatam_pelo_projeto_ou_nao_resolvem():
+    duas = [{"slug": "borda", "compose": "/o/current/core/docker-compose.yml"},
+            {"slug": "platafirma-core", "compose": "/o/current/core/docker-compose.yml"}]
+    assert eixos.stack_do_conteiner(labels_do_core(), duas) == "platafirma-core"
+    duas[1]["slug"] = "harness-borda"
+    assert eixos.stack_do_conteiner(labels_do_core(), duas) is None
+
+
+# --- a chave de serviço: unit ------------------------------------------------------------------
+
+def test_unit_registrada_resolve_e_unit_fora_do_registro_sai_unit_sem_stack():
+    registro = {"ops-tunnel.service": "core/ops-tunnel"}
+    assert eixos.chave_de_unit("ops-tunnel.service", registro.get) == {"unit": "ops-tunnel.service", "servico": "core/ops-tunnel"}
+    assert eixos.chave_de_unit("dbus.service", registro.get) == {"unit": "dbus.service", "desvio": "unit_sem_stack"}
+
+
+@pytest.mark.parametrize("corpo, esperado", [
+    ("echo core/ops-tunnel\n", "core/ops-tunnel"),
+    ("echo 'unit_sem_stack: x.service' >&2; exit 1\n", None),
+])
+def test_resolvedor_do_registro_le_o_acervo_stack_resolver(tmp_path, corpo, esperado):
+    acervo = executavel(tmp_path / "acervo", corpo)
+    assert eixos.resolvedor_do_registro(acervo)("x.service") == esperado
+
+
+def test_registro_fora_do_ar_e_erro_de_leitura_e_nao_desvio(tmp_path):
+    acervo = executavel(tmp_path / "acervo", "echo 'acervo stack: psql falhou' >&2; exit 3\n")
+    with pytest.raises(eixos.ErroDeLeitura) as e:
+        eixos.resolvedor_do_registro(acervo)("x.service")
+    assert e.value.causa == "registro_de_stack_indisponivel"
+
+
+def test_carregar_topologia_le_o_json_do_acervo(tmp_path):
+    acervo = executavel(tmp_path / "acervo", f"echo '{json.dumps(TOPOLOGIA)}'\n")
+    assert eixos.carregar_topologia(acervo) == TOPOLOGIA
+    ruim = executavel(tmp_path / "acervo2", "echo 'isto nao e json'\n")
+    with pytest.raises(eixos.ErroDeLeitura) as e:
+        eixos.carregar_topologia(ruim)
+    assert e.value.causa == "registro_de_stack_ilegivel"
+
+
+# --- a chave de serviço: pelo pid ---------------------------------------------------------------
+
+def proc_de_mentira(tmp_path, pid, cgroup, comm="python3", cmdline=b"python3\0x.py\0"):
+    pasta = tmp_path / str(pid)
+    pasta.mkdir()
+    (pasta / "cgroup").write_text(cgroup, encoding="utf-8")
+    (pasta / "comm").write_text(comm + "\n", encoding="utf-8")
+    (pasta / "cmdline").write_bytes(cmdline)
+    return tmp_path
+
+
+def test_processo_em_conteiner_de_compose_resolve_pelo_cgroup(tmp_path):
+    proc = proc_de_mentira(tmp_path, 100, f"0::/user.slice/user@1001.service/user.slice/docker-{ID_CONTEINER}.scope\n")
+    r = eixos.resolver_pid(
+        100, proc=proc, topologia=TOPOLOGIA, resolver_unit=lambda u: None,
+        inspecionar=lambda i: ("platafirma-core-cloudflared-1", labels_do_core()) if i == ID_CONTEINER else pytest.fail(i))
+    assert r["servico"] == "core/cloudflared" and r["pid"] == 100 and r["conteiner"] == "platafirma-core-cloudflared-1"
+
+
+def test_processo_de_unit_registrada_resolve_pelo_registro_e_ignora_o_user_service(tmp_path):
+    proc = proc_de_mentira(tmp_path, 200, "0::/user.slice/user-1001.slice/user@1001.service/app.slice/ops-tunnel.service\n")
+    r = eixos.resolver_pid(200, proc=proc, topologia=TOPOLOGIA, inspecionar=None,
+                           resolver_unit={"ops-tunnel.service": "core/ops-tunnel"}.get)
+    assert r["servico"] == "core/ops-tunnel" and r["unit"] == "ops-tunnel.service"
+
+
+def test_processo_de_unit_fora_do_registro_sai_unit_sem_stack(tmp_path):
+    proc = proc_de_mentira(tmp_path, 300, "0::/user.slice/user@1001.service/app.slice/xdg-desktop-portal.service\n")
+    r = eixos.resolver_pid(300, proc=proc, topologia=TOPOLOGIA, inspecionar=None, resolver_unit=lambda u: None)
+    assert r["desvio"] == "unit_sem_stack" and r["unit"] == "xdg-desktop-portal.service"
+
+
+def test_processo_solto_sai_fora_de_compose_e_unit_com_pid_e_linha_de_comando(tmp_path):
+    proc = proc_de_mentira(tmp_path, 400, "0::/user.slice/user-1001.slice/session-3.scope\n",
+                           comm="claude", cmdline=b"claude\0-p\0juiz\0")
+    r = eixos.resolver_pid(400, proc=proc, topologia=TOPOLOGIA, inspecionar=None, resolver_unit=lambda u: None)
+    assert r == {"pid": 400, "executavel": "claude", "linha_de_comando": "claude -p juiz",
+                 "desvio": "fora_de_compose_e_unit"}
+
+
+def test_processo_que_sumiu_nao_some_da_lista(tmp_path):
+    r = eixos.resolver_pid(999, proc=tmp_path, topologia=TOPOLOGIA, inspecionar=None, resolver_unit=lambda u: None)
+    assert r["desvio"] == "fora_de_compose_e_unit" and r["pid"] == 999
