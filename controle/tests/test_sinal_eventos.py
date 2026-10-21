@@ -472,6 +472,7 @@ def test_eventos_ver_mostra_o_que_gravaria_sem_fila_sem_estado_e_sem_enviar(mund
     assert sinal.main() == 0
     saida = capsys.readouterr().out
     assert saida.count("eixo_host {") == 4 and "eventos: rede lida, ram lida, vram lida, cpu lida" in saida
+    assert 'morte {"ate"' in saida and '"estado_leitura": "lida"' in saida, "o que o detector respondeu, para quem confere o kernel"
     assert mundo.rota.pedidos == [] and not mundo.pasta.exists() or not (mundo.pasta / "cadencia.json").exists()
     assert not (mundo.pasta / "fila-eixo_host.jsonl").exists()
     assert TOKEN not in saida
