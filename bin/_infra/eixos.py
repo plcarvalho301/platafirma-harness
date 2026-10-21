@@ -331,6 +331,8 @@ def _nome_do_consumidor(c: dict) -> str:
         return c["servico"]
     onde = c.get("unit") or c.get("conteiner") or c.get("executavel") or "processo"
     resto = f", pid {c['pid']}" if c.get("pid") else ""
+    if c.get("processos", 1) > 1:
+        resto += f", {c['processos']} processos no mesmo cgroup"
     comando = f", {c['linha_de_comando'][:80]}" if c.get("linha_de_comando") else ""
     return f"sem dono ({c['desvio']}: {onde}{resto}{comando})"
 
