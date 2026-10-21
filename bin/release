@@ -86,6 +86,7 @@ CLASSES_SERVIDO=(
   "acervo"
   "dependencias"
   "sessao-orfa"
+  "copia"
 )
 
 uso_texto() {
