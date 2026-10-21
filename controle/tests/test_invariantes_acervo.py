@@ -103,6 +103,56 @@ def test_i2_obra_so_em_texto_nao_cobra_vetor():
     assert pa.i2(d) == []
 
 
+def _no_motor(d, n=3, secoes=2, faixas=4):
+    """A impressão cujo trecho é do motor (#3912): `acervo.trecho` não a tem, e o motor traz o resumo dos trechos."""
+    d["impressoes"][0]["faixas"] = faixas
+    d["trechos"]["i1"] = {"imp": "i1", "n": n, "h": "h", "secoes": secoes, "no_motor": True}
+    return d
+
+
+def test_i2_trecho_no_motor_com_vetor_para_todo_trecho_e_secoes_nas_faixas_nao_viola():
+    assert pa.i2(_no_motor(_base())) == []
+
+
+def test_i2_trecho_no_motor_com_vetor_a_menos_viola():
+    assert pa.i2(_no_motor(_base(), n=4)) == ["obra:o1"]       # o índice tem 3 vetores para 4 trechos
+
+
+def test_i2_trecho_no_motor_com_mais_secoes_que_faixas_viola():
+    assert pa.i2(_no_motor(_base(), secoes=5, faixas=4)) == ["obra:o1"]
+
+
+def test_i2_trecho_no_motor_em_impressao_sem_faixa_viola():
+    assert pa.i2(_no_motor(_base(), faixas=0)) == ["obra:o1"]
+
+
+def test_i2_trecho_no_acervo_segue_como_sempre_sem_olhar_faixa():
+    d = _base()
+    d["impressoes"][0]["faixas"] = 0           # o acervo guarda o trecho: a faixa não entra na conta
+    assert pa.i2(d) == []
+
+
+def test_coletar_poe_o_trecho_do_motor_no_lugar_do_trecho_do_acervo():
+    d = _base()
+    d["trechos"] = {"i1": {"imp": "i1", "n": 0, "h": "vazio"}}
+    d["motor"] = {**d["motor"], "trechos_motor": [{"imp": "i1", "n": 3, "secoes": 2, "h": "h"}]}
+    coletado = pa.coletar(ler=_ler(d), balde=lambda: d["balde"], orfaos=lambda: 0)
+    assert coletado["trechos"]["i1"] == {"imp": "i1", "n": 3, "h": "h", "secoes": 2, "no_motor": True}
+
+
+def test_coletar_sem_trecho_no_motor_deixa_o_trecho_do_acervo_como_esta():
+    d = _base()
+    coletado = pa.coletar(ler=_ler(d), balde=lambda: d["balde"], orfaos=lambda: 0)
+    assert coletado["trechos"]["i1"] == {"imp": "i1", "n": 3, "h": "h"}
+
+
+def test_a_coleta_do_motor_traz_onde_mora_o_trecho_e_o_resumo_dos_trechos_do_motor():
+    sql = " ".join(pa.SQL_COLETA_MOTOR.split())
+    assert "'trecho_morada', g.trecho_morada" in sql
+    assert "from motor.trecho t join motor.geracao g" in sql
+    assert "g.estado::text = 'servindo' and g.trecho_morada = 'motor'" in sql
+
+
 # I3 ----------------------------------------------------------------------------------------------
 
 def test_i3_retirada_com_impressao_ou_indice_servindo_viola():
