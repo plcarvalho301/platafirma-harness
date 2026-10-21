@@ -29,6 +29,15 @@
       "_nota": "mirror, nao geracao: o backup-minio.sh espelha os buckets com --remove, entao 'geracoes' aqui e o numero de buckets espelhados, nao de copias no tempo.",
       "log": "/srv/platafirma/casa/var/log/cron/backup-rag-minio.log"
     },
+    "eventos-db": {
+      "o_que": "Postgres do banco de eventos de plataforma (schema plataforma: eixos do host, morte por limite)",
+      "cobertura": "timer eventos-backup do claudinho, 03:55",
+      "diretorio": "/srv/platafirma/casa/dados/backups/eventos",
+      "padrao": "eventos-*.sql.gz",
+      "piso_bytes": 4096,
+      "alcance": "aqui",
+      "_nota": "platafirma-core:deploy/eventos/backup-db.sh (#3878, spec banco-de-eventos-de-plataforma R2). O piso repete o PISO_BYTES do script: o banco recem-nascido, so com schema e particoes vazias, ja passa dele; os dois numeros andam juntos."
+    },
     "cofre-keepass": {
       "o_que": "cofre de credenciais, em geracoes datadas",
       "cobertura": "cron da conta megafone, diario",
