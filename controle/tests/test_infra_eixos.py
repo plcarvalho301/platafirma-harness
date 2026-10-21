@@ -269,6 +269,24 @@ def test_o_processo_resolvido_traz_a_linha_de_comando_ja_mascarada(tmp_path):
     assert r["linha_de_comando"] == "servidor --db-password=*** --porta=8080" and "hunter2" not in str(r)
 
 
+def test_conteiner_que_sumiu_entre_a_amostra_e_a_inspecao_vira_desvio_e_docker_fora_continua_falha(tmp_path):
+    pasta = tmp_path / "88"
+    pasta.mkdir()
+    (pasta / "cgroup").write_text(f"0::/user.slice/app.slice/docker-{ID_CONTEINER}.scope\n", encoding="utf-8")
+
+    def sumiu(_):
+        raise eixos.ErroDeLeitura("conteiner_fora", "docker inspect")
+
+    def docker_fora(_):
+        raise eixos.ErroDeLeitura("docker_fora", "docker inspect")
+
+    r = eixos.resolver_pid(88, proc=tmp_path, inspecionar=sumiu, resolver_unit=lambda _: None, topologia=TOPOLOGIA)
+    assert (r["pid"], r["desvio"], r["detalhe"]) == (88, "fora_de_compose_e_unit", "conteiner_sumiu")
+    with pytest.raises(eixos.ErroDeLeitura) as e:
+        eixos.resolver_pid(88, proc=tmp_path, inspecionar=docker_fora, resolver_unit=lambda _: None, topologia=TOPOLOGIA)
+    assert e.value.causa == "docker_fora"
+
+
 # --- a chave de serviço: contêiner -------------------------------------------------------------
 
 def test_conteiner_de_compose_registrado_resolve_para_stack_barra_servico():
