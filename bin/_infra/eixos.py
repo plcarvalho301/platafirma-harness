@@ -41,6 +41,7 @@ SAIDA_NAO_CONSEGUI_OLHAR = 5
 PREFIXO_DA_FAMILIA = "platafirma-"
 TIMEOUT_DO_REGISTRO_S = 20
 TIMEOUT_DO_DRIVER_S = 15
+TIMEOUT_DO_DOCKER_S = 15
 SHA_DE_GIT_TAMANHO = 40
 KIB = 1 << 10
 
@@ -163,11 +164,46 @@ def _validar_tuneis(j: dict) -> list[str]:
     return erros
 
 
+def _validar_vram(j: dict) -> list[str]:
+    """R10: o total da placa é o `valor` em bytes, e o reservado e o SM de cada processo ficam em campos próprios; a
+    soma dos processos nunca vai rotulada como total."""
+    erros = [f"{k}: a soma dos processos não se rotula como total da placa (R10)"
+             for k in j if k.startswith(("soma", "total"))]
+    if j.get("estado_leitura") == "lida" and j.get("unidade") != "bytes":
+        erros.append("vram lida mede em bytes")
+    if j.get("estado_leitura") != "lida":
+        return erros
+    for i, c in enumerate(j.get("consumidores") or []):
+        if not _e_numero(c.get("reservado_bytes")) or c["reservado_bytes"] < 0:
+            erros.append(f"consumidores[{i}]: reservado_bytes deve ser número maior ou igual a zero")
+        sm = c.get("sm_fracao", "ausente")
+        if sm == "ausente" or (sm is not None and (not _e_numero(sm) or not 0 <= sm <= 1)):
+            erros.append(f"consumidores[{i}]: sm_fracao deve ser número de 0 a 1, ou nulo sem amostra (nunca zero)")
+    return erros
+
+
+def _validar_cpu(j: dict) -> list[str]:
+    """R11: a carga é em threads contra as threads da máquina, e cada consumidor traz as dele."""
+    if j.get("estado_leitura") != "lida":
+        return []
+    erros = [] if j.get("unidade") == "threads" else ["cpu lida mede em threads"]
+    if j.get("teto") is None:
+        erros.append("cpu lida declara o teto (as threads da máquina)")
+    for i, c in enumerate(j.get("consumidores") or []):
+        if not _e_numero(c.get("valor")) or c["valor"] < 0 or c.get("unidade") != "threads":
+            erros.append(f"consumidores[{i}]: valor deve ser número de threads maior ou igual a zero")
+    return erros
+
+
 def validar(j: dict) -> list[str]:
     """Os motivos pelos quais `j` não cumpre o schema da versão corrente; lista vazia quando cumpre."""
     erros = [*_validar_topo(j), *_validar_estado(j), *_validar_numeros(j), *_validar_consumidores(j)]
     if j.get("eixo") == "rede":
         erros += _validar_tuneis(j)
+    elif j.get("eixo") == "vram":
+        erros += _validar_vram(j)
+    elif j.get("eixo") == "cpu":
+        erros += _validar_cpu(j)
     return erros
 
 
@@ -224,7 +260,7 @@ def formatar(valor: float | None, unidade: str | None) -> str:
     if unidade == "fracao":
         return f"{_num(valor * 100)}%"
     if unidade == "threads":
-        return f"{_num(valor, 0)} threads"
+        return f"{_num(valor, 1)} thread{'' if valor == 1 else 's'}"
     return _num(valor)
 
 
@@ -236,8 +272,25 @@ def _plural(n: float, singular: str, plural: str) -> str:
     return f"{_num(n, 0)} {singular if n == 1 else plural}"
 
 
+def _medidas_do_consumidor(c: dict) -> str:
+    """O que a frase diz de um consumidor além do nome: o reservado e o SM da VRAM, cada um por si, ou as threads do
+    processamento. Sem soma: juntar os números é da camada analítica (R10)."""
+    partes = []
+    if c.get("reservado_bytes") is not None:
+        partes.append(f"{_bytes(c['reservado_bytes'])} reservados")
+    if "sm_fracao" in c:
+        partes.append(f"SM {formatar(c['sm_fracao'], 'fracao')}" if c["sm_fracao"] is not None else "SM sem amostra")
+    if c.get("unidade") == "threads" and c.get("valor") is not None:
+        partes.append(f"{_num(c['valor'], 2)} threads")
+    return f" ({', '.join(partes)})" if partes else ""
+
+
 def _quem(c: dict) -> str:
-    """Como a frase chama um consumidor: a chave, ou o desvio com o que o identifica."""
+    """Como a frase chama um consumidor: a chave, ou o desvio com o que o identifica, e as medidas dele."""
+    return _nome_do_consumidor(c) + _medidas_do_consumidor(c)
+
+
+def _nome_do_consumidor(c: dict) -> str:
     if c.get("servico"):
         return c["servico"]
     onde = c.get("unit") or c.get("conteiner") or c.get("executavel") or "processo"
@@ -277,6 +330,11 @@ def _frase_do_valor(j: dict) -> str:
                   f"{_num(j['pressao_avg300'])}% em 10, 60 e 300 s")
     if j.get("cache_bytes") is not None:
         texto += f"; cache que o kernel devolve {_bytes(j['cache_bytes'])}"
+    if j.get("sm_placa_fracao") is not None:
+        texto += f"; SM da placa {formatar(j['sm_placa_fracao'], 'fracao')}"
+    if j.get("carga_media_1") is not None:
+        texto += (f"; carga média {_num(j['carga_media_1'], 2)}/{_num(j['carga_media_5'], 2)}/"
+                  f"{_num(j['carga_media_15'], 2)} em 1, 5 e 15 min")
     return texto
 
 
@@ -338,6 +396,25 @@ def teto_vram(nvidia_smi: str = "nvidia-smi") -> tuple[int, str]:
         return int(float(p.stdout.splitlines()[0].strip())) * (1 << 20), fonte
     except ValueError:
         raise ErroDeLeitura("saida_ilegivel", fonte) from None
+
+
+def pressao(arquivo: str = "/proc/pressure/cpu") -> dict:
+    """A pressão do kernel (PSI) de um recurso: a linha `some`, médias de 10, 60 e 300 s, em percentual. Kernel sem
+    PSI não tem o arquivo, e isso é fonte que não respondeu, nunca pressão zero."""
+    try:
+        linhas = Path(arquivo).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        raise ErroDeLeitura("psi_ausente", arquivo) from None
+    for linha in linhas:
+        campos = linha.split()
+        if not campos or campos[0] != "some":
+            continue
+        medias = dict(c.split("=", 1) for c in campos[1:] if "=" in c)
+        try:
+            return {f"pressao_avg{s}": float(medias[f"avg{s}"]) for s in (10, 60, 300)}
+        except (KeyError, ValueError):
+            break
+    raise ErroDeLeitura("psi_ilegivel", arquivo)
 
 
 # --- a chave de serviço (R4) ---------------------------------------------------------------------
@@ -406,6 +483,24 @@ def chave_de_conteiner(nome: str, labels: dict, topologia: list[dict]) -> dict:
     return {**base, "servico": f"{stack}/{servico}"}
 
 
+def inspecionar_conteiner(identificador: str, timeout: int = TIMEOUT_DO_DOCKER_S) -> tuple[str, dict]:
+    """(nome, labels) do contêiner que o cgroup de um processo nomeou pelo id (`docker inspect`)."""
+    fonte = f"docker inspect {identificador[:12]}"
+    try:
+        p = subprocess.run(["docker", "inspect", "--format", "{{.Name}}\t{{json .Config.Labels}}", identificador],
+                           capture_output=True, text=True, timeout=timeout, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        raise ErroDeLeitura("docker_fora", fonte) from None
+    if p.returncode != 0:
+        raise ErroDeLeitura("conteiner_fora", fonte)
+    nome, _, bruto = p.stdout.strip().partition("\t")
+    try:
+        labels = json.loads(bruto or "{}")
+    except ValueError:
+        raise ErroDeLeitura("labels_ilegiveis", fonte) from None
+    return nome.lstrip("/"), labels if isinstance(labels, dict) else {}
+
+
 def resolvedor_do_registro(
     acervo: str | Path | None = None, timeout: int = TIMEOUT_DO_REGISTRO_S,
 ) -> Callable[[str], str | None]:
@@ -461,6 +556,24 @@ def resolver_pid(
     if units:
         return {**lado, **chave_de_unit(units[-1], resolver_unit)}
     return {**lado, "desvio": "fora_de_compose_e_unit"}
+
+
+def resolvedor_de_pid(proc: str | Path = "/proc", acervo: str | Path | None = None) -> Callable[[int], dict]:
+    """Função pid → chave de serviço (ou desvio) para um ato que resolve vários processos numa leitura: o registro de
+    stacks é lido uma vez e cada contêiner é inspecionado uma vez só, por mais processos que ele tenha."""
+    topologia = carregar_topologia(acervo)
+    resolver_unit = resolvedor_do_registro(acervo)
+    conteineres: dict[str, tuple[str, dict]] = {}
+
+    def inspecionar(identificador: str) -> tuple[str, dict]:
+        if identificador not in conteineres:
+            conteineres[identificador] = inspecionar_conteiner(identificador)
+        return conteineres[identificador]
+
+    def resolver(pid: int) -> dict:
+        return resolver_pid(pid, proc=proc, inspecionar=inspecionar, resolver_unit=resolver_unit, topologia=topologia)
+
+    return resolver
 
 
 def imprimir_saida(j: dict, *, como_json: bool) -> int:

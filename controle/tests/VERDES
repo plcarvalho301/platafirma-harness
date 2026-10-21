@@ -255,3 +255,8 @@ tests/test_infra_eixos.py | bin/infra bin/_infra/**
 tests/test_sinal_porta.py | bin/sinal lib/raizes.py
 tests/test_infra_medir_rede.py | bin/infra bin/_infra/** bin/sinal lib/raizes.py
 tests/test_infra_medir_ajuda.py | bin/infra bin/_infra/** lib/raizes.sh
+# Card #3921 (R4, R10 e R11 da spec eixos-do-host): `infra medir vram` (cada processo da placa na chave de serviço ou em desvio
+# com o motivo; reservado, SM e placa em campos distintos; soma dos processos nunca rotulada total) e `infra medir cpu` (carga
+# contra as threads, pressão e carga média do kernel, consumo por chave); driver, /proc, docker e acervo de mentira, sem host.
+tests/test_infra_medir_vram.py | bin/infra bin/_infra/**
+tests/test_infra_medir_cpu.py | bin/infra bin/_infra/**
