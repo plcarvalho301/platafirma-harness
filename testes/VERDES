@@ -25,6 +25,7 @@ test_acervo_ler_secao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_listar_marcacao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_retrato.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_stack_forma.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_stack_servico.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_listar_qualidade.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_listar_retirada.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_mapa.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir

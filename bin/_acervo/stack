@@ -28,6 +28,8 @@ USR = "rag"
 
 USO = """uso:
   acervo stack ver [--json]           le a topologia da tabela acervo.stack
+  acervo stack ver <stack> [--json]   os servicos da stack: ficha de servico parte-de a ela, com a unit de cada um
+  acervo stack resolver <unit>        `<stack>/<servico>` da unit, ou unit_sem_stack (exit 1)
   acervo stack import <stacks.json>   carrega o JSON pra tabela (upsert por slug) —
                                       a ponte pra matar o stacks.json
   acervo stack rm <slug>              remove a stack da tabela
@@ -157,12 +159,62 @@ def cmd_rm(slug):
     sys.stderr.write("acervo stack rm: %s removida.\n" % slug)
 
 
+# O serviço é a ficha da classe `servico` ligada por `parte-de` à ficha da stack; a unit é a declaração dele
+# na forma de processo de host (arq:0025 §1 e §2) e mora no suporte da ficha, tipo `unit`. Endereço que
+# termina em `*` vale por prefixo (units transientes, como platafirma-job-*).
+_SERVICO_DA_STACK = (
+    "from acervo.entidade e "
+    "join acervo.entidade_relacao r on r.de_id = e.id and r.tipo = 'parte-de' "
+    "and (r.vigencia_fim is null or r.vigencia_fim > now()) "
+    "join acervo.entidade st on st.id = r.para_id and st.classe = 'stack' "
+    "and st.estado = 'ativa' "
+)
+
+def cmd_servicos(slug, quero_json):
+    sql = ("select e.chave_humana, coalesce(string_agg(su.endereco, ',' order by su.endereco), '') "
+           + _SERVICO_DA_STACK
+           + "left join acervo.entidade_suporte su on su.entidade_id = e.id and su.tipo = 'unit' "
+           "where e.classe = 'servico' and e.estado = 'ativa' and st.chave_humana = %s "
+           "group by e.chave_humana order by e.chave_humana" % _lit_txt(slug))
+    linhas = [l for l in _psql(sql).splitlines() if l.strip()]
+    if not linhas:
+        morre("acervo stack ver %s: nenhum servico declarado na stack." % slug, 1)
+    servicos = []
+    for l in linhas:
+        chave, _, units = l.partition("|")
+        servicos.append({"servico": chave, "units": [u for u in units.split(",") if u]})
+    if quero_json:
+        print(json.dumps(servicos, ensure_ascii=False, indent=2))
+        return
+    for s in servicos:
+        print("%s  %s" % (s["servico"], ", ".join(s["units"]) or "-"))
+
+def cmd_resolver(unit):
+    u = _lit_txt(unit)
+    sql = ("select e.chave_humana " + _SERVICO_DA_STACK
+           + "join acervo.entidade_suporte su on su.entidade_id = e.id and su.tipo = 'unit' "
+           "where e.classe = 'servico' and e.estado = 'ativa' and "
+           "(su.endereco = %s or (su.endereco like '%%*' and starts_with(%s, rtrim(su.endereco, '*')))) "
+           "order by (su.endereco = %s) desc, length(su.endereco) desc limit 1" % (u, u, u))
+    chave = _psql(sql).strip()
+    if not chave:
+        morre("unit_sem_stack: %s" % unit, 1)
+    print(chave)
+
 def main(argv):
     if not argv or argv[0] in ("-h", "--help", "ajuda"):
         morre(USO, 0 if argv else 2)
     ato, resto = argv[0], argv[1:]
     if ato == "ver":
-        cmd_ver("--json" in resto)
+        slugs = [a for a in resto if not a.startswith("--")]
+        if slugs:
+            cmd_servicos(slugs[0], "--json" in resto)
+        else:
+            cmd_ver("--json" in resto)
+    elif ato == "resolver":
+        if not resto:
+            morre("acervo stack resolver: falta a unit\n\n%s" % USO)
+        cmd_resolver(resto[0])
     elif ato == "import":
         if not resto:
             morre("acervo stack import: falta o caminho do stacks.json\n\n%s" % USO)
