@@ -28,7 +28,7 @@ USR = "rag"
 
 USO = """uso:
   acervo stack ver [--json]           le a topologia da tabela acervo.stack
-  acervo stack ver <stack> [--json]   os servicos da stack: ficha de servico parte-de a ela, com a unit de cada um
+  acervo stack servicos <stack> [--json]  os servicos da stack: ficha de servico parte-de a ela, com a unit de cada um
   acervo stack resolver <unit>        `<stack>/<servico>` da unit, ou unit_sem_stack (exit 1)
   acervo stack import <stacks.json>   carrega o JSON pra tabela (upsert por slug) —
                                       a ponte pra matar o stacks.json
@@ -178,7 +178,7 @@ def cmd_servicos(slug, quero_json):
            "group by e.chave_humana order by e.chave_humana" % _lit_txt(slug))
     linhas = [l for l in _psql(sql).splitlines() if l.strip()]
     if not linhas:
-        morre("acervo stack ver %s: nenhum servico declarado na stack." % slug, 1)
+        morre("acervo stack servicos %s: nenhum servico declarado na stack." % slug, 1)
     servicos = []
     for l in linhas:
         chave, _, units = l.partition("|")
@@ -206,11 +206,14 @@ def main(argv):
         morre(USO, 0 if argv else 2)
     ato, resto = argv[0], argv[1:]
     if ato == "ver":
+        # `ver <stack>` segue listando o registro inteiro: `release` chama `acervo ler casa stack <repo> --json`,
+        # que cai aqui, e o argumento nunca filtrou. Os servicos de uma stack sao o ato `servicos`.
+        cmd_ver("--json" in resto)
+    elif ato == "servicos":
         slugs = [a for a in resto if not a.startswith("--")]
-        if slugs:
-            cmd_servicos(slugs[0], "--json" in resto)
-        else:
-            cmd_ver("--json" in resto)
+        if not slugs:
+            morre("acervo stack servicos: falta a stack\n\n%s" % USO)
+        cmd_servicos(slugs[0], "--json" in resto)
     elif ato == "resolver":
         if not resto:
             morre("acervo stack resolver: falta a unit\n\n%s" % USO)
