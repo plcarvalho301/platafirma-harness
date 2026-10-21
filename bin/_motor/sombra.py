@@ -62,14 +62,19 @@ from pgvector.psycopg import register_vector  # noqa: E402
 
 DEV = "cuda" if torch.cuda.is_available() else "cpu"
 
-CANDIDATOS = {
-    "nvidia/Nemotron-3-Embed-1B-BF16": {
-        "curto": "Nemotron-3-Embed-1B", "q": "query: ", "p": "passage: ",
-        "dims": [1024, 2048], "dtype": "bfloat16", "trust": False},
-    "perplexity-ai/pplx-embed-v1-0.6b": {
-        "curto": "pplx-embed-v1-0.6b", "q": "", "p": "",
-        "dims": [1024], "dtype": "float16", "trust": True},
-}
+def candidatos():
+    """Os embedders que o bench-sombra pode medir: todo embedder declarado no golden record
+    (`motor_acervo/config/embedders.toml`, #3946). Acrescentar candidato é declarar a entrada lá, não editar
+    este arquivo."""
+    from motor_acervo.config import embedders
+    return {
+        nome: {"curto": c["rotulo"], "q": c["prefixo_da_pergunta"], "p": c["prefixo_do_trecho"],
+               "dims": list(c["dimensoes"]), "dtype": c["dtype"], "trust": c["trust_remote_code"],
+               "attn": c["attn_implementation"], "max_seq": c["max_seq_length"]}
+        for nome, c in embedders.declarados().items()
+    }
+
+
 SERVIDO = "servido"
 _API = {"biblioteca": "biblioteca", "casa": "casa", "obra": "biblioteca"}
 
@@ -241,9 +246,11 @@ def carrega_candidato(nome, cfg):
     from sentence_transformers import SentenceTransformer
     dt = getattr(torch, cfg["dtype"]) if DEV == "cuda" else torch.float32
     chave = "dtype" if int(transformers.__version__.split(".")[0]) >= 5 else "torch_dtype"
-    m = SentenceTransformer(nome, device=DEV, trust_remote_code=cfg["trust"],
-                            model_kwargs={chave: dt, "attn_implementation": "sdpa"})
-    m.max_seq_length = 512
+    kw = {chave: dt}
+    if cfg["attn"]:
+        kw["attn_implementation"] = cfg["attn"]
+    m = SentenceTransformer(nome, device=DEV, trust_remote_code=cfg["trust"], model_kwargs=kw)
+    m.max_seq_length = cfg["max_seq"]
     return m
 
 
@@ -347,10 +354,12 @@ def main():
         ranking[variante][p] = tk.fim()
     log(f"{variante}: rankings prontos")
 
+    declarados = candidatos()
     for nome in ARGS["modelos"]:
-        cfg = CANDIDATOS.get(nome)
+        cfg = declarados.get(nome)
         if not cfg:
-            res["modelos"][nome] = {"erro": "candidato sem configuracao em sombra.py (prefixos, dims)"}
+            res["modelos"][nome] = {"erro": "embedder fora do golden record (motor_acervo/config/embedders.toml); "
+                                            f"declarados: {', '.join(sorted(declarados))}"}
             continue
         try:
             log(f"{nome}: carregando")
