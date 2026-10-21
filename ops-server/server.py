@@ -2594,7 +2594,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     Devolve o pacote de expediente com o bloco `sessao` no topo.
     `cadeira`: slug da cadeira.
     `pergunta`: corpo literal do turno do dono, enviado via STDIN para expediente montar.
-    `chapeu`: aceito; a abertura não veste chapéu e o retorno avisa o ato que veste (`persona ler <cadeira> --chapeu <slug>`).
+    `chapeu`: força o slug do chapéu (ignora o roteador).
     `atualizar`: aceito e sem efeito desde arq:0097.
     `sessao_id`: uuid da sessão quando portado da conversa anterior; sem ele, sessao abrir cunha um novo.
     Agente delegado (a mesma tool, #3223): `perfil`="cadeirinha", `modo`, `regua` ("<espécie> <chave>"),

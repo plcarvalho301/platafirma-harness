@@ -223,10 +223,9 @@ def test_perfil_cadeira_segue_igual_e_nao_ganha_campos(raiz):
     assert "perfil" not in d and "modo" not in d
 
 
-def test_catalogo_por_perfil_e_o_padrao_tem_6_sem_chapeu_e_sem_acervo(raiz):
+def test_catalogo_por_perfil_e_o_padrao_segue_com_8(raiz):
     cad = json.loads(_run_expediente(["catalogo", "--json"], raiz).stdout)
-    assert len(cad) == 6 and "conduta" in [p["peca"] for p in cad]
-    assert not {"acervo-consultado", "chapeu"} & {p["peca"] for p in cad}
+    assert len(cad) == 8 and "conduta" in [p["peca"] for p in cad]
     cdi = json.loads(_run_expediente(["catalogo", "--perfil", "cadeirinha", "--json"], raiz).stdout)
     assert [p["peca"] for p in cdi] == ["persona", "chapeu", "modo", "rotinas", "regua",
                                         "acervo-consultado", "cadernos"]

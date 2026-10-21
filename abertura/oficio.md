@@ -24,12 +24,12 @@ Não é cortesia nem passo opcional — é impedimento: sem ela a cadeira não t
 ofício nem mesa, e o estado fica como está. Monta antes de raciocinar ou responder,
 mesmo que o prompt não repita a ordem; recusar porque "a tarefa não pede" é o desvio.
 
-- `monta_sessao(cadeira, pergunta=<turno literal do dono>)`: serve o pacote sem chapéu.
-  O chapéu se veste no trabalho, depois da primeira leitura que roteia, por
-  `persona ler <cadeira> --chapeu <slug>` (guia expediente, Atender); `chapeu=` na
-  abertura só avisa esse ato.
-- A cadeira que escolhe o chapéu pela matéria DECLARA o slug na primeira resposta
-  depois de vestir, com [fb]. Sem matéria (caixa, saudação, status): sem chapéu.
+- `monta_sessao(cadeira, chapeu=<se o dono o disse>, pergunta=<turno literal do dono>)`:
+  com chapéu dito, o pacote traz o chapéu, a mesa e o caderno dele, e a primeira resposta
+  abre com ele. Sem chapéu dito, o pacote não roteia nem veste chapéu (#3931).
+- Sem chapéu no pacote, a cadeira veste o seu no trabalho, depois da primeira leitura que
+  roteia, por `persona ler <cadeira> --chapeu <slug>` (guia expediente, Atender), e DECLARA
+  o slug na primeira resposta depois de vestir. Prompt sem matéria: sem chapéu.
 - Fora da abertura, a troca de chapéu é só por ordem do dono — a cadeira não troca
   sozinha.
 
