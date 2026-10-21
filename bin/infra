@@ -78,6 +78,7 @@ uso:
   infra remover  <alvo> [--ver]                  tira contêiner avulso ou unit --user fora do declarado; --ver só mostra
   infra unit-env <unit> [--ver | CHAVE=VALOR...] drop-in de ambiente da unit --user (daemon-reload)
   infra cache    [ver|vram|disco]                o que ocupa VRAM e disco; liberar é explícito
+  infra cache    modelos [--json]                revisão e digest dos pesos no cache do Hugging Face; só lê
   infra hardware [--json]                        CPU, RAM, GPU e consumo em W agora; a fonte (PSU) não se lê
   infra limites  [--amostrar <s>]                teto de processos e threads da conta e a memória, lidos juntos; --amostrar dá o pico em <s> segundos
   infra gpu      [--json]                        GPU ao vivo: uso, VRAM, temperatura, W e processos
@@ -588,6 +589,62 @@ logs() {
   fi
 }
 
+# Cache de modelo (#3949): revisao e digest dos pesos no cache do Hugging Face, so leitura. O cache
+# e o volume edm_hf_models (HF_HOME=/models nos conteineres); no docker rootless ele mora na conta,
+# e o ato le o diretorio direto, sem docker. Revisao = refs/main; digest = nome do blob para onde o
+# .safetensors do snapshot aponta (o sha256 que o hub publica); arquivo que nao e link sai pelo
+# sha256sum dele. Nunca baixa, move nem apaga: rebaixar custa GiB. INFRA_HF_CACHE troca a raiz.
+# Exit: 0 todos lidos · 1 algum sem revisao, sem pesos ou sem digest · 2 uso · 3 cache que nao se le.
+cache_modelos() {
+  local json=0
+  case "${1:-}" in
+    "") ;;
+    --json) json=1 ;;
+    *) echo "uso: infra cache modelos [--json]" >&2; exit 2 ;;
+  esac
+  local raiz="${INFRA_HF_CACHE:-$HOME/.local/share/docker/volumes/edm_hf_models/_data}"
+  local hub="$raiz/hub"
+  [ -d "$hub" ] || hub="$raiz"
+  if [ ! -d "$hub" ] || [ ! -r "$hub" ] || [ ! -x "$hub" ]; then
+    echo "infra cache modelos: nao lido — $hub nao existe ou nao se le" >&2; exit 3
+  fi
+  local d nome rev snap f alvo dig rel pesos tam falta=0 achou=0 linhas=""
+  for d in "$hub"/models--*; do
+    [ -d "$d" ] || continue
+    achou=1
+    nome="${d##*/models--}"; nome="${nome/--//}"
+    rev=""; [ -r "$d/refs/main" ] && rev="$(tr -d '[:space:]' < "$d/refs/main")"
+    pesos=""; tam=0
+    if [ -n "$rev" ] && [ -d "$d/snapshots/$rev" ]; then
+      snap="$d/snapshots/$rev"
+      while IFS= read -r -d '' f; do
+        rel="${f#"$snap"/}"
+        if [ -L "$f" ]; then alvo="$(readlink "$f")"; dig="${alvo##*/}"
+        else dig="$(sha256sum "$f" | cut -c1-64)"; fi
+        [[ "$dig" =~ ^[0-9a-f]{64}$ ]] || dig="nao lido"
+        tam=$(( tam + $(stat -L -c %s "$f" 2>/dev/null || echo 0) ))
+        pesos="${pesos:+$pesos,}$rel=$dig"
+      done < <(find "$snap" -name '*.safetensors' -print0 | sort -z)
+    fi
+    [ -n "$rev" ] || { rev="sem revisao"; falta=1; }
+    [ -n "$pesos" ] || { pesos="sem pesos"; falta=1; }
+    case "$pesos" in *"nao lido"*) falta=1 ;; esac
+    linhas+="$nome"$'\t'"$rev"$'\t'"$pesos"$'\t'"$tam"$'\n'
+  done
+  [ "$achou" -eq 1 ] || { echo "infra cache modelos: nenhum modelo em $hub" >&2; exit 1; }
+  if [ "$json" -eq 1 ]; then
+    printf '%s' "$linhas" | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\t")
+      | {modelo: .[0], revisao: .[1],
+         pesos: (if .[2] == "sem pesos" then [] else (.[2] | split(",") | map(split("=") | {arquivo: .[0], digest: .[1]})) end),
+         bytes: (.[3] | tonumber)})'
+  else
+    printf '%s' "$linhas" | while IFS=$'\t' read -r nome rev pesos tam; do
+      printf '%s | %s | %s | %s\n' "$nome" "$rev" "$pesos" "$(numfmt --to=iec "$tam" 2>/dev/null || echo "$tam")"
+    done
+  fi
+  [ "$falta" -eq 0 ] || exit 1
+}
+
 # Cache: o que ocupa VRAM e o que ocupa disco. Leitura por default; liberar e explicito.
 cache() {
   local ato="${1:-ver}"
@@ -628,7 +685,8 @@ cache() {
       uv cache prune 2>/dev/null || true
       echo "cache de modelo (huggingface, ollama) nao e apagado aqui: rebaixar custa GiB de re-download."
       ;;
-    *) echo "uso: infra cache [ver|vram|disco]" >&2; exit 2 ;;
+    modelos) shift; cache_modelos "$@" ;;
+    *) echo "uso: infra cache [ver|vram|disco|modelos [--json]]" >&2; exit 2 ;;
   esac
 }
 
@@ -1434,7 +1492,7 @@ case "$cmd" in
   estado)    estado "$@" ;;
   saude)     saude "$@" ;;
   logs)      logs "${1:?uso: infra logs <alvo> [n]}" "${2:-50}" ;;
-  cache)     cache "${1:-ver}" ;;
+  cache)     if [ $# -eq 0 ]; then cache ver; else cache "$@"; fi ;;
   hardware)  hardware "$@" ;;
   limites)   limites "$@" ;;
   gpu)       gpu "$@" ;;
