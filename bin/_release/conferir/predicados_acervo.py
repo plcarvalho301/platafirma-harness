@@ -433,7 +433,8 @@ SQL_COLETA_MOTOR = """
 select json_build_object(
   'geracoes', (select coalesce(json_agg(json_build_object('id', g.id::text, 'particao', g.particao::text,
         'estado', g.estado::text, 'numero', g.numero, 'embedder', g.parametros ->> 'embedder',
-        'dimensao_trecho', g.parametros ->> 'dimensao_trecho', 'dimensao_faceta', g.parametros ->> 'dimensao_faceta')),
+        'dimensao_trecho', g.parametros ->> 'dimensao_trecho', 'dimensao_faceta', g.parametros ->> 'dimensao_faceta',
+        'trecho_morada', g.trecho_morada)),
         '[]'::json) from motor.geracao g where g.estado::text <> 'expurgada'),
   'indices', (select coalesce(json_agg(json_build_object('id', x.id, 'imp', x.imp, 'obra', x.obra,
         'estado', x.estado, 'gran', x.gran, 'part', x.part, 'geracao_servindo', x.gserv, 'n', x.n, 'h', x.h)),
@@ -446,6 +447,13 @@ select json_build_object(
                 left join motor.vetor v on v.indice_id = i.id and v.geracao_id = i.geracao_id
                where i.estado in ('em_construcao', 'servindo')
                group by i.id, g.estado) x),
+  'trechos_motor', (select coalesce(json_agg(json_build_object('imp', x.imp, 'n', x.n, 'secoes', x.secoes, 'h', x.h)),
+        '[]'::json)
+        from (select t.impressao_id::text as imp, count(*) as n, count(distinct t.secao_id) as secoes,
+                     md5(coalesce(string_agg(t.id::text, ',' order by t.id::text), '')) as h
+                from motor.trecho t join motor.geracao g on g.id = t.geracao_id
+               where g.estado::text = 'servindo' and g.trecho_morada = 'motor'
+               group by t.impressao_id) x),
   'faceta_alvo_errado', (select coalesce(json_agg(i.id::text), '[]'::json) from motor.indice i
         where i.granularidade = 'impressao' and exists (select 1 from motor.vetor v
               where v.indice_id = i.id and v.geracao_id = i.geracao_id
@@ -517,6 +525,10 @@ def coletar(ler=psql_json, balde=None, orfaos=None, regua_raiz=None):
     rag = ler("rag", SQL_COLETA_RAG) or {}
     motor = ler("motor", SQL_COLETA_MOTOR) or {}
     trechos = {x["imp"]: x for x in (ler("rag", SQL_COLETA_TRECHOS) or [])}
+    # a geração servindo que guarda o trecho no motor (#3912; arq:0121 §4.4): o trecho da impressão é o do motor, com o
+    # mesmo resumo de ids que o do índice (o `alvo_id` do vetor é o id do trecho), e `acervo.trecho` não o tem
+    for x in motor.get("trechos_motor") or []:
+        trechos[x["imp"]] = {"imp": x["imp"], "n": x["n"], "h": x["h"], "secoes": x["secoes"], "no_motor": True}
     try:
         versao = regua_servida(regua_raiz)[0]
     except Indeterminavel:
@@ -573,7 +585,12 @@ def i1(d):
 
 def i2(d):
     """Impressão servindo de obra exposta em trecho ⇒ todo trecho elegível tem vetor no índice de trecho
-    servindo da geração servindo."""
+    servindo da geração servindo.
+
+    Por geração e por seção (arq:0121 §6.4; #3912): o trecho elegível é o de `acervo.trecho`, enquanto a geração
+    servindo o guarda lá, e o de `motor.trecho` da geração servindo, quando ela o guarda no motor. Neste caso as
+    seções dos trechos têm de caber nas faixas marcadas da impressão (`acervo.secao_faixa`): trecho sem seção
+    marcada, ou mais seções de trecho que faixas, é o motor e o acervo discordando sobre a mesma impressão."""
     por = _servindo_por_obra(d)
     indice = {x["imp"]: x for x in _indices(d, gran="trecho")}
     out = []
@@ -581,8 +598,9 @@ def i2(d):
         if EXPOSICAO.get(o["marcacao"]) != "trecho":
             continue
         for imp in por.get(o["id"], []):
-            ix, elegiveis = indice.get(imp["id"]), (d["trechos"].get(imp["id"]) or {}).get("n", 0)
-            if ix is None or not ix["geracao_servindo"] or ix["n"] != elegiveis:
+            ix, tr = indice.get(imp["id"]), d["trechos"].get(imp["id"]) or {}
+            sem_secao = tr.get("no_motor") and not 0 < tr.get("secoes", 0) <= (imp.get("faixas") or 0)
+            if ix is None or not ix["geracao_servindo"] or ix["n"] != tr.get("n", 0) or sem_secao:
                 out.append(f"obra:{o['id']}")
                 break
     return out
