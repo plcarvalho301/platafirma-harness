@@ -120,7 +120,19 @@ class Falso:
                                             "origens": {"cabecalho": 4, "sumario-do-arquivo": 57},
                                             "sumario": {"lido": 1, "sem-leitor": 2, "entradas": 60, "abrem": 57,
                                                         "coincidem": 0, "discordancias": 3},
+                                            "impresso": {"lido": 2, "sem-entrada": 1, "lidas": 40, "entradas": 28,
+                                                          "abrem": 20, "coincidem": 5, "discordancias": 4,
+                                                          "por_definicao": 12, "remissivos": 3,
+                                                          "linhas_de_remissivo": 303},
+                                            "por_tipo": {"application/pdf": {"impressoes": 3, "por_definicao": 12,
+                                                                           "remissivos": 3},
+                                                         "application/epub+zip": {"impressoes": 1}},
+                                            "n_com_texto": 2,
+                                            "com_texto": [{"impressao": "imp-1", "por_definicao": 12, "remissivos": 0},
+                                                          {"impressao": "imp-2", "por_definicao": 0, "remissivos": 3}],
+                                            "motivos": {"impresso: sem sumário": 7},
                                             "com_discordancia": [{"impressao": "imp-1", "obra_id": OBRA, "n": 3,
+                                                                  "fonte": "arquivo",
                                                                   "primeiras": ["«Cover»: sem bloco"]}],
                                             "n_nao_marcadas": 1, "nao_marcadas": [{"impressao": "imp-2"}]})
                 if self.path == f"/acervo/obras/{OBRA}/reextracoes":
@@ -188,7 +200,15 @@ def test_marcar_secoes_mostra_a_origem_o_sumario_e_a_secao_nao_marcada(falso):
     assert "seções por origem: cabecalho 4 · sumario-do-arquivo 57" in r.stdout
     assert "sumário do arquivo: 60 entrada(s), 57 abrem seção, 0 já eram cabeçalho no texto, 3 discordam" in r.stdout
     assert "impressões sem sumário lido: sem-leitor 2" in r.stdout
-    assert "DISCORDA imp-1  3 entrada(s); «Cover»: sem bloco" in r.stdout
+    assert "DISCORDA imp-1 [arquivo]  3 entrada(s); «Cover»: sem bloco" in r.stdout
+    assert "sumário impresso: 40 linha(s) lida(s), 28 entrada(s), 20 abrem seção, 5 já eram cabeçalho no texto, 4 discordam" in r.stdout
+    assert "sumário de texto: 12 linha(s) reconhecida(s) pela definição" in r.stdout
+    assert "3 corrida(s) de índice remissivo recusada(s), 303 linha(s)" in r.stdout
+    assert "impressões sem sumário impresso lido: sem-entrada 1" in r.stdout
+    assert "application/pdf: 3 impressão(ões), 12 linha(s) por definição, 3 remissivo(s) recusado(s)" in r.stdout
+    assert "application/epub+zip" not in r.stdout, "tipo sem sumário de texto nem remissivo não entra"
+    assert "com sumário de texto ou remissivo: 2 impressão(ões); primeiras: imp-1 (12 por definição, 0 remissivo)" in r.stdout
+    assert "motivo 7× impresso: sem sumário" in r.stdout
     assert "seção não marcada (só o preâmbulo): 1 impressão(ões)" in r.stdout
 
 

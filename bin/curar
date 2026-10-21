@@ -2053,10 +2053,39 @@ def _linhas_origem_das_secoes(data: dict) -> None:
                if k in ("sem-leitor", "indisponivel", "sem-sumario") and v}
     if estados:
         print("  impressões sem sumário lido: " + " · ".join(f"{k} {v}" for k, v in sorted(estados.items())))
+    _linhas_do_sumario_impresso(data)
     for it in data.get("com_discordancia") or []:
-        print(f"  DISCORDA {it.get('impressao')}  {it.get('n')} entrada(s); " + " | ".join(it.get("primeiras") or []))
+        fonte = f" [{it['fonte']}]" if it.get("fonte") else ""
+        print(f"  DISCORDA {it.get('impressao')}{fonte}  {it.get('n')} entrada(s); " + " | ".join(it.get("primeiras") or []))
     if data.get("n_nao_marcadas"):
         print(f"  seção não marcada (só o preâmbulo): {data['n_nao_marcadas']} impressão(ões)")
+
+def _linhas_do_sumario_impresso(data: dict) -> None:
+    """O que o ato viu no sumário impresso no texto (#3939): as linhas lidas, as que o rótulo e a página crescente
+    reconheceram sem o papel `sumario`, as corridas de índice remissivo recusadas, por tipo de arquivo, e por que
+    não saiu entrada."""
+    impresso = data.get("impresso") or {}
+    if impresso.get("entradas"):
+        print(f"  sumário impresso: {impresso.get('lidas', 0)} linha(s) lida(s), {impresso['entradas']} entrada(s), "
+              f"{impresso.get('abrem', 0)} abrem seção, {impresso.get('coincidem', 0)} já eram cabeçalho no texto, "
+              f"{impresso.get('discordancias', 0)} discordam")
+    if impresso.get("por_definicao") or impresso.get("remissivos"):
+        print(f"  sumário de texto: {impresso.get('por_definicao', 0)} linha(s) reconhecida(s) pela definição (rótulo e "
+              f"página crescente, sem o papel sumario) · {impresso.get('remissivos', 0)} corrida(s) de índice "
+              f"remissivo recusada(s), {impresso.get('linhas_de_remissivo', 0)} linha(s)")
+    estados = {k: v for k, v in impresso.items() if k in ("sem-entrada", "nao-se-aplica", "sem-relato") and v}
+    if estados:
+        print("  impressões sem sumário impresso lido: " + " · ".join(f"{k} {v}" for k, v in sorted(estados.items())))
+    for tipo, c in sorted((data.get("por_tipo") or {}).items()):
+        if c.get("por_definicao") or c.get("remissivos"):
+            print(f"    {tipo}: {c.get('impressoes', 0)} impressão(ões), {c.get('por_definicao', 0)} linha(s) por "
+                  f"definição, {c.get('remissivos', 0)} remissivo(s) recusado(s)")
+    if data.get("n_com_texto"):
+        primeiras = ", ".join(f"{i.get('impressao')} ({i.get('por_definicao', 0)} por definição, {i.get('remissivos', 0)} remissivo)"
+                              for i in (data.get("com_texto") or [])[:5])
+        print(f"  com sumário de texto ou remissivo: {data['n_com_texto']} impressão(ões); primeiras: {primeiras}")
+    for motivo, n in sorted((data.get("motivos") or {}).items(), key=lambda kv: -kv[1])[:6]:
+        print(f"  motivo {n}× {motivo}")
 
 def acao_reextrair_lote(args, autor: str, como_json: bool, headers: dict) -> int:
     """`--reextrair --lote`: o plano é o PORTÃO 1 (a contagem por tipo, §4.2 item 1); --apply abre o lote,
