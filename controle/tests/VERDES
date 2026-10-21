@@ -273,3 +273,16 @@ tests/test_limpeza_fossil_timer.py | deploy-harness/**
 # contra as threads, pressão e carga média do kernel, consumo por chave); driver, /proc, docker e acervo de mentira, sem host.
 tests/test_infra_medir_vram.py | bin/infra bin/_infra/**
 tests/test_infra_medir_cpu.py | bin/infra bin/_infra/**
+# Card #3922 (R15 da spec eixos-do-host): a cadência da passada da sonda no registro (múltiplo de um minuto, serviço antes de stack antes de
+# eixo antes do padrão, a janela e o que vence, o estado), sobre registros de mentira em tmp.
+tests/test_metrica_cadencia.py | bin/sinal bin/_metrica/** registro/cadencia-eixos.json
+# Card #3922 (R6, R7 e R8 da spec banco-de-eventos-de-plataforma): o cliente da rota de escrita (uuid do exemplo da ficha, evento só com campo
+# da ficha, fila local que repoe com a rota fora, recusa que tira só os índices, token que nunca sai), contra uma rota de mentira em loopback.
+tests/test_metrica_eventos.py | bin/sinal bin/_metrica/** bin/_infra/eixos.py lib/raizes.py
+# Card #3922 (R4 e R9 da spec eixos-do-host; R5 e R6 do banco de eventos): o detector de morte (a mesma morte vista pelo kernel, pelo docker e
+# pelo journal é um evento; sem linha do kernel não há pid; kernel sem permissão não é zero morte), com journalctl, docker e `acervo` falsos.
+tests/test_infra_detector_morte.py | bin/sinal bin/_infra/** bin/_metrica/** lib/raizes.py
+# Card #3922 (R8 e R15): a passada da série dentro do `sinal`: quatro amostras por minuto no padrão, eixo em cinco minutos de cinco em cinco, um
+# serviço dele em um minuto liga o eixo todo minuto, cada ato uma vez por passada, banco parado dez minutos sem perder amostra, erro da
+# passada que nunca muda o exit; `infra`, detector e rota de mentira.
+tests/test_sinal_eventos.py | bin/sinal bin/_metrica/** bin/_infra/** registro/cadencia-eixos.json lib/raizes.py

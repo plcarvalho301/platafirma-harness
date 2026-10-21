@@ -17,6 +17,10 @@ conhece healthcheck nenhum. Tres regras que o formato existe para sustentar:
 Duas fontes, por necessidade: quem tem shell na imagem traz o veredito do
 proprio healthcheck do Docker; quem nao tem (oauth2-proxy, cloudflared)
 e sondado daqui, de fora, por um contendor-posto que esta na mesma rede.
+
+Depois da saude, a passada grava a SERIE dos quatro eixos do host no banco de eventos de plataforma (card #3922): le
+os eixos que a cadencia do registro diz que vencem, uma coleta so por eixo, e leva o evento pela fila local, que repoe o
+que o banco mudo nao aceitou. Erro dessa passada nunca muda o exit do sinal.
 """
 
 import http.client
@@ -24,11 +28,13 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
@@ -37,6 +43,10 @@ from urllib.parse import urlencode, urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import oplog  # noqa: E402  (so lib/oplog abre o bruto da porta: arq:0123 §3)
 import raizes  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "_metrica"))
+import cadencia  # noqa: E402  (o que vence a cada passada: spec eixos-do-host R15)
+import eventos  # noqa: E402  (o cliente da rota de escrita do banco de eventos de plataforma)
 
 # ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (grava var/sinal/servicos.json; override so para teste)
 SAIDA = str(raizes.instancia() / "var" / "sinal" / "servicos.json")
@@ -670,20 +680,266 @@ def _texto_da_medida(m: dict) -> str:
     return "porta: " + (", ".join(partes) or "sem numero")
 
 
+# --- a serie dos eixos (card #3922; spec eixos-do-host R15; spec banco-de-eventos-de-plataforma R8 e R13) ------------
+#
+# Depois da coleta de saude e do arquivo de sinal, a passada grava a serie dos quatro eixos do host. O registro de cadencia
+# (registro/cadencia-eixos.json) diz o que vence neste minuto. Cada eixo vencido e lido UMA vez, pelo ato
+# `infra medir <eixo> --json`, e o total do host e a parte de cada stack e servico saem dessa mesma leitura (dono,
+# 21/10/2026: uma coleta so por evento). O JSON vira o evento da ficha (bin/_metrica/eventos.py), entra na fila local e a
+# fila sai pela rota de escrita; com o banco mudo ela guarda, e a passada seguinte repoe (R8). A morte por limite vem do
+# detector, fora da cadencia, com cursor. A passada chama a porta uma vez, por `infra medir rede`, porque a juncao do R13
+# depende disso. Erro da passada de eventos vai a stderr e NUNCA muda o exit do sinal: a unit aceita 0 e 1.
+# ambiente: SINAL_INFRA[=bin/infra] · SINAL_DETECTOR[=bin/_infra/detector-morte] · SINAL_CADENCIA[=registro/cadencia-eixos.json] ·
+#   SINAL_EVENTOS_URL[=http://127.0.0.1:8111] · SINAL_EVENTOS_TIMEOUT[=10] · SINAL_INSTANCIA[=nome do host]
+ATO_TIMEOUT_S = 45
+DETECTOR_TIMEOUT_S = 40
+ESPERA_DO_GRUPO_MORTO_S = 5
+PASSADA_ORCAMENTO_S = 90                    # os atos em paralelo (45 s no maximo cada) e o envio cabem nele
+SAIDAS_COM_JSON = (0, 5)                    # lido e nao consegui olhar: as duas trazem o JSON
+HORA_S = 3600
+LIMITE_DA_AMOSTRA_S = 86400                 # a API serve a amostra crua ate um dia; acima, o agregado por hora
+EXIT_REGISTRO_RECUSADO = 4
+
+
+def _binario_irmao(variavel: str, *partes: str) -> str:
+    return os.environ.get(variavel) or str(Path(__file__).resolve().parent.joinpath(*partes))
+
+
+def _rodar_com_teto(comando: list[str], timeout: float) -> subprocess.CompletedProcess:
+    """Roda o comando num grupo de processos proprio e, estourado o teto, mata o grupo inteiro: o ato e um script que
+    abre journalctl, docker e outros, e matar so o pai deixaria um neto segurando o cano e a passada esperando por ele."""
+    processo = subprocess.Popen(comando, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+    try:
+        saida, erro = processo.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        os.killpg(processo.pid, signal.SIGKILL)
+        try:
+            processo.communicate(timeout=ESPERA_DO_GRUPO_MORTO_S)
+        except subprocess.TimeoutExpired:
+            pass                                 # processo que nem o SIGKILL tira do estado D: a passada segue sem ele
+        raise
+    return subprocess.CompletedProcess(comando, processo.returncode, saida, erro)
+
+
+def ler_eixo(eixo: str, janela_s: int) -> dict:
+    """O JSON do eixo, o retorno de `infra medir <eixo> --json`. Ato que nao respondeu (timeout, exit fora de 0 e 5, saida
+    que nao e o JSON do eixo) vira `nao_consegui_olhar` com a causa: nunca zero e nunca minuto calado."""
+    comando = [_binario_irmao("SINAL_INFRA", "infra"), "medir", eixo, "--json"]
+    if eixo == "ram":
+        comando += ["--janela", str(janela_s)]      # as mortes que a frase do ato conta; a serie nao as guarda
+    try:
+        p = _rodar_com_teto(comando, ATO_TIMEOUT_S)
+        j = json.loads(p.stdout)
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return eventos.leitura_sem_resposta(eixo)
+    if p.returncode not in SAIDAS_COM_JSON or not isinstance(j, dict) or j.get("eixo") != eixo:
+        return eventos.leitura_sem_resposta(eixo)
+    return j
+
+
+def ler_morte(desde: int | None, ate: int) -> dict:
+    """O retorno do detector de morte na janela, ou `nao_consegui_olhar` se ele nao respondeu."""
+    comando = [_binario_irmao("SINAL_DETECTOR", "_infra", "detector-morte"), "--json"]
+    if desde is not None:
+        comando += ["--desde", str(desde)]
+    comando += ["--ate", str(ate)]
+    sem_resposta = {"estado_leitura": "nao_consegui_olhar", "causa": "detector_nao_respondeu", "fonte": "detector-morte",
+                    "mortes": [], "vistas_sem_pid": [], "avisos": []}
+    try:
+        p = _rodar_com_teto(comando, DETECTOR_TIMEOUT_S)
+        j = json.loads(p.stdout)
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return sem_resposta
+    if p.returncode not in SAIDAS_COM_JSON or not isinstance(j, dict) or not isinstance(j.get("mortes"), list):
+        return sem_resposta
+    return {**sem_resposta, **j}
+
+
+def _enviar_filas(filas: dict, prazo: float) -> dict:
+    token = eventos.ler_token()
+    url = os.environ.get("SINAL_EVENTOS_URL", eventos.URL_PADRAO)
+    timeout = float(os.environ.get("SINAL_EVENTOS_TIMEOUT", str(eventos.TIMEOUT_PADRAO_S)))
+    saida = {}
+    for familia, fila in filas.items():
+        pendentes = len(fila.ler())
+        if not pendentes:
+            continue
+        if token is None:
+            saida[familia] = {"inseridos": 0, "existentes": 0, "recusados": [], "pendentes": pendentes,
+                              "erro": "sem token da sonda (segredos/eventos/EVENTOS_SONDA_TOKEN)"}
+        else:
+            saida[familia] = eventos.enviar_fila(familia, fila, url=url, token=token, timeout=timeout, prazo=prazo)
+    return saida
+
+
+def _amostras_da_passada(registro: dict, planos: dict, leituras: dict, estado: dict, minuto: datetime) -> list[dict]:
+    """O evento de cada eixo lido, com os consumidores que a cadencia deixou entrar e a conta dos que ficaram de fora."""
+    instancia = eventos.nome_da_instancia()
+    amostras = []
+    for eixo, j in leituras.items():
+        plano, entram, fora = planos[eixo], [], []
+        for consumidor in j.get("consumidores") or []:
+            (entram if cadencia.entra(registro, plano, consumidor) else fora).append(consumidor)
+        reconexoes = eventos.diferenciar_reconexoes(j, estado) if eixo == "rede" else {}
+        amostras.append(eventos.evento_do_eixo(j, minuto=minuto, janela_s=plano.janela_s, instancia=instancia,
+                                               escolhidos=entram, fora=fora, reconexoes=reconexoes))
+    return amostras
+
+
+def _passada_com_trava(agora: datetime, minuto: datetime, pasta: Path, registro: dict, *, ver: bool) -> dict:
+    prazo = time.monotonic() + PASSADA_ORCAMENTO_S
+    estado = cadencia.ler_estado(pasta)
+    planos = cadencia.planejar(registro, estado, minuto)
+    ate = int(agora.timestamp())
+    anterior = (estado.get("detector") or {}).get("ate")
+    desde = min(anterior, ate - 1) if isinstance(anterior, int) else None
+    with ThreadPoolExecutor(max_workers=len(planos) + 1) as pool:
+        lendo = {eixo: pool.submit(ler_eixo, eixo, plano.janela_s) for eixo, plano in planos.items() if plano.le}
+        lendo_morte = pool.submit(ler_morte, desde, ate)
+        leituras = {eixo: futuro.result() for eixo, futuro in lendo.items()}
+        morte = lendo_morte.result()
+    amostras = _amostras_da_passada(registro, planos, leituras, estado, minuto)
+    resumo = {"eixos": {eixo: (j["estado_leitura"], j.get("causa")) for eixo, j in leituras.items()},
+              "amostras": len(amostras), "mortes": len(morte["mortes"]), "morte": morte, "descartados": 0}
+    if ver:
+        return {**resumo, "ver": {"eixo_host": amostras, "morte_limite": morte["mortes"]}}
+    filas = {familia: eventos.Fila(pasta, familia) for familia in eventos.FAMILIAS}
+    # primeiro a fila (o evento nunca fica so na memoria), depois o estado, depois o envio
+    resumo["descartados"] = filas["eixo_host"].anexar(amostras) + filas["morte_limite"].anexar(morte["mortes"])
+    for eixo in leituras:
+        cadencia.registrar(estado, planos[eixo], minuto)
+    if morte["estado_leitura"] == "lida":
+        estado["detector"] = {"ate": ate}
+    cadencia.gravar_estado(pasta, estado)
+    return {**resumo, "envio": _enviar_filas(filas, prazo)}
+
+
+def passada_de_eventos(agora: datetime | None = None, *, ver: bool = False) -> dict:
+    """A passada da serie: le o que vence, grava na fila, grava o estado e envia. Com `ver`, mostra o que gravaria e nao
+    toca a fila, o estado nem a rota. Outra passada em curso (a trava da pasta) deixa esta de lado."""
+    agora = agora or datetime.now(timezone.utc)
+    pasta = eventos.pasta_de_estado()
+    registro = cadencia.carregar()
+    with eventos.trava(pasta) as livre:
+        if not livre:
+            return {"pulada": "outra passada de eventos em curso"}
+        return _passada_com_trava(agora, cadencia.minuto_de(agora), pasta, registro, ver=ver)
+
+
+def _frase_da_morte(m: dict) -> str:
+    if m["estado_leitura"] != "lida":
+        return f"morte: nao consegui olhar ({m.get('causa')})"
+    texto = f"morte: {len(m['mortes'])}"
+    if m.get("vistas_sem_pid"):
+        texto += f", {len(m['vistas_sem_pid'])} vista(s) sem pid"
+    return texto
+
+
+def _frase_do_envio(familia: str, e: dict) -> str:
+    texto = f"{familia} {e['inseridos'] + e['existentes']} gravadas"
+    if e.get("recusados"):
+        texto += f", {len(e['recusados'])} recusadas"
+    if e.get("pendentes"):
+        texto += f", {e['pendentes']} na fila"
+    if e.get("erro"):
+        texto += f", erro: {e['erro']}"
+    return texto
+
+
+def _linha_dos_eventos(r: dict) -> str:
+    """Uma linha, para o journal da unit: o que a passada leu, a morte, o envio e o que o banco mudo deixou na fila."""
+    if r.get("pulada"):
+        return f"eventos: pulada ({r['pulada']})"
+    eixos_lidos = ", ".join(f"{eixo} {'lida' if estado == 'lida' else f'nao consegui olhar ({causa})'}"
+                            for eixo, (estado, causa) in r["eixos"].items()) or "nenhum eixo venceu"
+    partes = [f"eventos: {eixos_lidos}", _frase_da_morte(r["morte"])]
+    partes += [_frase_do_envio(familia, e) for familia, e in (r.get("envio") or {}).items()]
+    if r.get("descartados"):
+        partes.append(f"fila cheia: {r['descartados']} descartada(s) das mais antigas")
+    partes += [f"aviso: {aviso}" for aviso in r["morte"].get("avisos") or []]
+    return " · ".join(partes)
+
+
+def passada_de_eventos_sem_derrubar() -> None:
+    """A passada de eventos dentro do `sinal`: o que der errado vai a stderr e nunca muda o exit."""
+    try:
+        print(_linha_dos_eventos(passada_de_eventos()))
+    except Exception as e:  # noqa: BLE001  (a passada de eventos nunca derruba a de saude)
+        sys.stderr.write(f"sinal: eventos: {type(e).__name__}: {e}\n")
+
+
+def _eventos_a_mao(*, ver: bool) -> int:
+    try:
+        r = passada_de_eventos(ver=ver)
+    except cadencia.RegistroInvalido as e:
+        sys.stderr.write(f"sinal: eventos: registro de cadencia recusado: {e}\n")
+        return EXIT_REGISTRO_RECUSADO
+    for familia, lista in (r.get("ver") or {}).items():
+        for evento in lista:
+            print(f"{familia} {json.dumps(evento, ensure_ascii=False, sort_keys=True)}")
+    print(_linha_dos_eventos(r))
+    return 0
+
+
+def serie(eixo: str, horas: int, agora: datetime | None = None) -> int:
+    """Le a serie do eixo pela API de leitura (R11) e diz quantas amostras, quantas lidas e a cobertura: a prova do Aceite
+    no host. Sai 0 com a cobertura completa, 1 com ela parcial ou ausente, 5 quando a API nao respondeu."""
+    ate = cadencia.minuto_de(agora or datetime.now(timezone.utc))
+    granularidade = "amostra" if horas * HORA_S <= LIMITE_DA_AMOSTRA_S else "hora"
+    url = os.environ.get("SINAL_EVENTOS_URL", eventos.URL_PADRAO)
+    try:
+        status, corpo = eventos.ler_serie(eixo, de=ate - timedelta(hours=horas), ate=ate, granularidade=granularidade,
+                                          url=url, timeout=float(os.environ.get("SINAL_EVENTOS_TIMEOUT", "10")))
+    except eventos.RedeFora:
+        print(f"serie: a API do banco de eventos nao respondeu ({url})")
+        return 5
+    if status != HTTP_OK or corpo is None:
+        print(f"serie: a API respondeu {status}" + (f" {corpo.get('tipo')}: {corpo.get('detalhe')}" if corpo else ""))
+        return 5
+    itens = corpo.get("amostras" if granularidade == "amostra" else "horas") or []
+    lidas = sum(1 for i in itens if i.get("estado_leitura", "lida") == "lida" and i.get("lidas", 1))
+    cobertura = corpo["cobertura"]
+    print(f"{eixo}: {len(itens)} {'amostras' if granularidade == 'amostra' else 'horas'} ({lidas} lidas) em {horas} h, "
+          f"cobertura {cobertura['estado']} ({cobertura['coberto_s']:.0f} de {cobertura['esperado_s']:.0f} s)")
+    return 0 if cobertura["estado"] == "completa" else 1
+
+
+def _serie_a_mao(args: list[str]) -> int:
+    uso = "uso: sinal --serie <rede|ram|vram|cpu> [--horas <n>]"
+    horas = 1
+    if not args or args[0] not in cadencia.EIXOS or args[1:] not in ([], ["--horas", args[-1]]):
+        print(uso, file=sys.stderr)
+        return 2
+    if args[1:]:
+        if not args[-1].isdigit() or not 0 < int(args[-1]) <= 400 * 24:
+            print(uso + " (horas: de 1 a 9600)", file=sys.stderr)
+            return 2
+        horas = int(args[-1])
+    return serie(args[0], horas)
+
+
 def main():
     argv = sys.argv[1:]
     if argv and argv[0] in ("-h", "--ajuda", "ajuda"):
         print(__doc__.strip())
-        print("\nuso: sinal [--ver | --porta [--json]]")
-        print("  sem argumento : coleta e escreve " + SAIDA)
+        print("\nuso: sinal [--ver | --porta [--json] | --eventos [--ver] | --serie <eixo> [--horas <n>]]")
+        print("  sem argumento : coleta e escreve " + SAIDA + ", e grava a serie dos eixos que vencem")
         print("  --ver         : mostra o arquivo atual, sem coletar")
         print("  --porta       : mede a porta de fora, uma vez, com o token do cliente da sonda (nao grava o arquivo")
         print("                  de sinal); --json devolve a medida; sai 5 quando nao consegui olhar")
+        print("  --eventos     : so a passada da serie dos eixos (registro/cadencia-eixos.json); com --ver mostra o que")
+        print("                  gravaria, sem fila, sem estado e sem enviar")
+        print("  --serie       : le a serie do eixo pela API do banco de eventos e diz amostras e cobertura; sai 1 com")
+        print("                  a cobertura incompleta, 5 quando a API nao respondeu")
         return 0
     if argv and argv[0] == "--porta":
         medida = medir_porta()
         print(json.dumps(medida, ensure_ascii=False, indent=2) if "--json" in argv else _texto_da_medida(medida))
         return 0 if medida["estado_leitura"] == "lida" else 5
+    if argv and argv[0] == "--eventos":
+        return _eventos_a_mao(ver="--ver" in argv[1:])
+    if argv and argv[0] == "--serie":
+        return _serie_a_mao(argv[1:])
     if argv and argv[0] == "--ver":
         if not os.path.exists(SAIDA):
             print(json.dumps({"estado": "ausente",
@@ -735,6 +991,7 @@ def main():
         extra_r.append(f"incidente #{r['incidente_id']}")
     sufixo_r = f"  — {'; '.join(extra_r)}" if extra_r else ""
     print(f"{r['estado']:10} (runtime){sufixo_r}")
+    passada_de_eventos_sem_derrubar()
     return 1 if fora else 0
 
 

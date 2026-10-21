@@ -1,0 +1,338 @@
+#!/usr/bin/env python3
+# detector-morte — as mortes por limite de memória que o kernel deu ao host, um evento por morte (spec eixos-do-host R4 e
+# R9; spec banco-de-eventos-de-plataforma R3, R5 e R6; card #3922). Ajudante da sonda (`sinal`), como medir-rede é do
+# `infra`: fora do PATH e do golden record, mora em bin/_infra/. Chamado pelo `sinal` a cada passada, fora da cadência do
+# registro, com a janela desde a última passada boa. Só lê: não grava série, não envia nada (quem envia é a fila do
+# `sinal`).
+#
+# De onde vem cada coisa. A IDENTIDADE da morte (boot, pid e instante) só vem do kernel: as linhas `oom-kill:` e `Killed
+# process` do journal do sistema (`journalctl -k`). O docker events (evento oom) e o journal do usuário (unit morta pelo
+# OOM killer) não trazem o pid do morto nem o instante do kernel; entram só para corroborar, com o contêiner e a unit, e
+# a mesma morte vista pelas três fontes é UM evento (o id é o uuid v5 de (boot, pid, instante)). Morte vista só pelo docker
+# ou pelo journal do usuário, sem linha do kernel, não ganha pid e não se grava: sai em `vistas_sem_pid`, e a passada a
+# diz. Não se inventa pid.
+#
+# O journal do kernel pede o grupo adm ou systemd-journal. Sem ele, `journalctl -k` sai sem linha nenhuma, e ler isso como
+# «nenhuma morte» seria o zero que não se lê: o ato sai `nao_consegui_olhar` com a causa `kernel_sem_permissao`, e a janela
+# volta a ser lida inteira quando a permissão chegar. Por isso não se passa `-q` ao journalctl do kernel: o aviso de falta
+# de permissão é o que o distingue de uma janela sem morte.
+#
+# O que o evento NÃO leva: a linha de comando (argumento é conteúdo, R5). `executavel` é o `comm` do kernel, saneado para a
+# forma que a rota aceita. A chave de serviço sai do cgroup do processo morto (`task_memcg`), pelos dois caminhos do
+# módulo comum: o contêiner pelo projeto do compose, a unit pelo registro unit→stack.
+#
+# ambiente: INFRA_ACERVO[=bin/acervo] · SINAL_INSTANCIA[=nome do host]
+# depende: journalctl (-k e --user) · docker · bin/acervo (registro de stacks) · bin/_infra/eixos.py · bin/_metrica/eventos.py
+# saída: 0 lido (com ou sem morte) · 2 uso · 5 não consegui olhar (a fonte não respondeu)
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import uuid
+from collections.abc import Callable
+from datetime import datetime, timezone
+from pathlib import Path
+
+AQUI = Path(__file__).resolve().parent
+sys.path.insert(0, str(AQUI))
+sys.path.insert(0, str(AQUI.parent / "_metrica"))
+import eixos
+import eventos
+
+INSTRUMENTO = "detector-morte"
+JANELA_PADRAO_S = 300
+JANELA_MAXIMA_S = 86400
+TOLERANCIA_S = 10        # distância entre o instante do kernel e o que o docker e o systemd viram da mesma morte
+TIMEOUT_DO_JOURNAL_S = 30
+TIMEOUT_DO_DOCKER_S = 20
+KIB = 1 << 10
+MICROSSEGUNDOS = 1_000_000
+CAMPOS_DA_LINHA_DO_KERNEL = 2   # `chave=valor`
+MARCAS_DE_OOM = ("killed by the oom killer", "oom-kill")
+SEM_PERMISSAO = ("insufficient permissions", "no journal files")
+ESCOPO_DO_CGROUP = "CONSTRAINT_MEMCG"
+
+_RE_OOM_KILL = re.compile(r"^oom-kill:(?P<campos>\S+)")
+_RE_KILLED = re.compile(
+    r"Killed process (?P<pid>\d+) \((?P<comm>[^)]*)\).*?anon-rss:(?P<anon>\d+)kB, file-rss:(?P<arquivo>\d+)kB, "
+    r"shmem-rss:(?P<shmem>\d+)kB")
+_RE_MEMORIA = re.compile(r"memory: usage (?P<uso>\d+)kB, limit (?P<limite>\d+)kB")
+_RE_CONTEINER_NO_CGROUP = re.compile(r"docker-([0-9a-f]{64})\.scope")
+_RE_UNIT_NO_CGROUP = re.compile(r"([^/]+\.service)")
+_RE_UNIT_NA_MENSAGEM = re.compile(r"^([^\s:]+\.(?:service|scope)):")
+
+
+def _mensagem(entrada: dict) -> str | None:
+    texto = entrada.get("MESSAGE")
+    return texto if isinstance(texto, str) else None
+
+
+def _instante_us(entrada: dict) -> int | None:
+    try:
+        return int(entrada["__REALTIME_TIMESTAMP"])
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
+def _entradas(texto: str) -> list[dict]:
+    saida = []
+    for linha in texto.splitlines():
+        try:
+            entrada = json.loads(linha)
+        except ValueError:
+            continue
+        if isinstance(entrada, dict):
+            saida.append(entrada)
+    return saida
+
+
+def _journalctl(argumentos: list[str], fonte: str) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(["journalctl", *argumentos], capture_output=True, text=True,
+                              timeout=TIMEOUT_DO_JOURNAL_S, check=False)
+    except FileNotFoundError:
+        raise eixos.ErroDeLeitura("journalctl_ausente", fonte) from None
+    except (OSError, subprocess.TimeoutExpired):
+        raise eixos.ErroDeLeitura("journal_sem_resposta", fonte) from None
+
+
+# --- o kernel: a identidade ----------------------------------------------------------------------------
+
+def _boot_id(entrada: dict) -> str | None:
+    try:
+        return str(uuid.UUID(str(entrada["_BOOT_ID"])))
+    except (KeyError, ValueError):
+        return None
+
+
+def _campos_do_kernel(texto: str) -> dict[str, str]:
+    return dict(par.partition("=")[::2] for par in texto.split(",") if "=" in par)
+
+
+def mortes_do_kernel(desde: int, ate: int) -> list[dict]:
+    """Cada morte por limite que o kernel registrou na janela: boot, pid, instante, comm, cgroup, escopo e uso. Sem
+    permissão para o journal do sistema não há leitura (`kernel_sem_permissao`), e nunca zero morte."""
+    fonte = "journalctl -k"
+    p = _journalctl(["-k", "--since", f"@{desde}", "--until", f"@{ate}", "-o", "json", "--no-pager"], fonte)
+    if any(marca in p.stderr.lower() for marca in SEM_PERMISSAO):
+        raise eixos.ErroDeLeitura("kernel_sem_permissao", fonte)
+    if p.returncode != 0:
+        raise eixos.ErroDeLeitura("kernel_sem_leitura", fonte)
+    mortes: dict[tuple[str, int], dict] = {}
+    limite_visto: tuple[int, int] | None = None   # (limite em KiB, instante em µs) da última linha de memória do cgroup
+    for entrada in _entradas(p.stdout):
+        mensagem, instante = _mensagem(entrada), _instante_us(entrada)
+        if mensagem is None or instante is None:
+            continue
+        memoria = _RE_MEMORIA.search(mensagem)
+        if memoria:
+            limite_visto = (int(memoria["limite"]), instante)
+            continue
+        kill = _RE_OOM_KILL.match(mensagem)
+        if kill:
+            campos = _campos_do_kernel(kill["campos"])
+            boot, pid = _boot_id(entrada), campos.get("pid", "")
+            if boot is None or not pid.isdigit() or int(pid) < 1:
+                continue
+            morte = mortes.setdefault((boot, int(pid)), {"boot_id": boot, "pid": int(pid)})
+            morte.update(instante_us=instante, comm=campos.get("task"), cgroup=campos.get("task_memcg", ""),
+                         escopo="cgroup" if campos.get("constraint") == ESCOPO_DO_CGROUP else "global")
+            if limite_visto and morte["escopo"] == "cgroup" and instante - limite_visto[1] <= TOLERANCIA_S * MICROSSEGUNDOS:
+                morte["limite_bytes"] = limite_visto[0] * KIB
+            continue
+        morto = _RE_KILLED.search(mensagem)
+        boot = _boot_id(entrada)
+        if morto and boot:
+            morte = mortes.setdefault((boot, int(morto["pid"])), {"boot_id": boot, "pid": int(morto["pid"])})
+            morte.setdefault("instante_us", instante)
+            morte.setdefault("comm", morto["comm"])
+            morte.setdefault("cgroup", "")
+            morte.setdefault("escopo", "cgroup" if mensagem.startswith("Memory cgroup") else "global")
+            morte["uso_bytes"] = (int(morto["anon"]) + int(morto["arquivo"]) + int(morto["shmem"])) * KIB
+    return sorted(mortes.values(), key=lambda m: m["instante_us"])
+
+
+# --- docker e journal do usuário: a corroboração --------------------------------------------------------
+
+def avistadas_pelo_docker(desde: int, ate: int) -> list[dict]:
+    """Os eventos oom do docker na janela, com o id do contêiner, o nome e os labels do compose do próprio evento."""
+    fonte = "docker events"
+    try:
+        p = subprocess.run(["docker", "events", "--since", str(desde), "--until", str(ate), "--filter", "event=oom",
+                            "--format", "{{json .}}"], capture_output=True, text=True, timeout=TIMEOUT_DO_DOCKER_S,
+                           check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        raise eixos.ErroDeLeitura("docker_events_fora", fonte) from None
+    if p.returncode != 0:
+        raise eixos.ErroDeLeitura("docker_events_fora", fonte)
+    vistas = []
+    for evento in _entradas(p.stdout):
+        try:
+            atributos = evento["Actor"]["Attributes"]
+            instante = float(evento["timeNano"]) / 1e9 if evento.get("timeNano") else float(evento["time"])
+            vistas.append({"id": str(evento["Actor"]["ID"]), "nome": str(atributos.get("name", "")),
+                           "atributos": atributos, "instante": instante})
+        except (KeyError, ValueError, TypeError):
+            continue
+    return vistas
+
+
+def avistadas_pelo_journal_do_usuario(desde: int, ate: int) -> list[dict]:
+    """As linhas do journal do usuário em que o systemd diz de uma unit (ou scope) morta pelo OOM killer."""
+    fonte = "journalctl --user"
+    p = _journalctl(["--user", "--since", f"@{desde}", "--until", f"@{ate}", "-o", "json", "--no-pager", "-q"], fonte)
+    if p.returncode != 0:
+        raise eixos.ErroDeLeitura("journal_do_usuario_fora", fonte)
+    vistas = []
+    for entrada in _entradas(p.stdout):
+        mensagem, instante = _mensagem(entrada), _instante_us(entrada)
+        if mensagem is None or instante is None or not any(m in mensagem.lower() for m in MARCAS_DE_OOM):
+            continue
+        achado = _RE_UNIT_NA_MENSAGEM.match(mensagem)
+        unit = entrada.get("USER_UNIT") or (achado.group(1) if achado else None)
+        if unit:
+            vistas.append({"unit": unit, "instante": instante / MICROSSEGUNDOS})
+    return vistas
+
+
+# --- a chave de serviço do morto -------------------------------------------------------------------------
+
+def _conteiner_do_cgroup(cgroup: str) -> str | None:
+    achado = _RE_CONTEINER_NO_CGROUP.search(cgroup)
+    return achado.group(1) if achado else None
+
+
+def _unit_do_cgroup(cgroup: str) -> str | None:
+    units = [u for u in _RE_UNIT_NO_CGROUP.findall(cgroup) if not u.startswith("user@")]
+    return units[-1] if units else None
+
+
+def chave_da_morte(morte: dict, docker: list[dict], topologia: list[dict],
+                   resolver_unit: Callable[[str], str | None]) -> dict:
+    """{"servico", "conteiner"?} ou {"desvio", ...}: o cgroup do morto, pelo contêiner de compose ou pela unit do
+    registro. O nome e os labels do contêiner vêm do evento do docker quando ele o viu, senão de `docker inspect`."""
+    cgroup = morte.get("cgroup", "")
+    id_conteiner = _conteiner_do_cgroup(cgroup)
+    if id_conteiner:
+        visto = next((d for d in docker if d["id"] == id_conteiner), None)
+        try:
+            nome, labels = (visto["nome"], visto["atributos"]) if visto else eixos.inspecionar_conteiner(id_conteiner)
+        except eixos.ErroDeLeitura as e:
+            if e.causa != "conteiner_fora":
+                raise
+            return {"desvio": eventos.DESVIO_PADRAO}
+        return eixos.chave_de_conteiner(nome, labels, topologia)
+    unit = _unit_do_cgroup(cgroup)
+    if unit:
+        return eixos.chave_de_unit(unit, resolver_unit)
+    return {"desvio": eventos.DESVIO_PADRAO}
+
+
+# --- o evento --------------------------------------------------------------------------------------------
+
+def _instante(microssegundos: int) -> datetime:
+    return datetime.fromtimestamp(microssegundos / MICROSSEGUNDOS, tz=timezone.utc)
+
+
+def evento_da_morte(morte: dict, chave: dict, *, instancia: str, detectado_em: datetime) -> dict:
+    """O evento da família `morte_limite`, só com campo da ficha: a linha de comando e o resto da chave de entrada ficam de fora."""
+    ts = _instante(morte["instante_us"])
+    evento = {"evento_id": eventos.id_da_morte(morte["boot_id"], morte["pid"], ts), "ts": eixos.carimbo(ts),
+              "instancia": instancia, "instrumento": INSTRUMENTO, "schema_v": eixos.SCHEMA_V, "estado_leitura": "lida",
+              "boot_id": morte["boot_id"], "pid": morte["pid"], "escopo": morte["escopo"],
+              "detectado_em": eixos.carimbo(detectado_em), **eventos.chave_ou_desvio(chave)}
+    conteiner = eventos.conteiner_da_rota(chave.get("conteiner"))
+    if conteiner:
+        evento["conteiner"] = conteiner
+    executavel = eventos.executavel_da_rota(morte.get("comm"))
+    if executavel:
+        evento["executavel"] = executavel
+    for campo in ("limite_bytes", "uso_bytes"):
+        if morte.get(campo) is not None:
+            evento[campo] = morte[campo]
+    return evento
+
+
+def detectar(desde: int, ate: int, *, agora: datetime | None = None) -> dict:
+    """As mortes da janela [desde, ate]. `vistas_sem_pid` lista o que o docker ou o journal do usuário viram e o kernel
+    não registrou (sem pid, não há evento). `avisos` diz a corroboração que não respondeu."""
+    agora = agora or datetime.now(timezone.utc)
+    base = {"desde": desde, "ate": ate, "mortes": [], "vistas_sem_pid": [], "avisos": []}
+    try:
+        do_kernel = mortes_do_kernel(desde, ate)
+        acervo = os.environ.get("INFRA_ACERVO") or str(eixos.ACERVO)
+        topologia = eixos.carregar_topologia(acervo)
+        resolver_unit = eixos.resolvedor_do_registro(acervo)
+    except eixos.ErroDeLeitura as e:
+        return {**base, "estado_leitura": "nao_consegui_olhar", "causa": e.causa, "fonte": e.fonte}
+    docker, journal = [], []
+    for nome, fonte in (("docker", avistadas_pelo_docker), ("journal", avistadas_pelo_journal_do_usuario)):
+        try:
+            achadas = fonte(desde, ate)
+        except eixos.ErroDeLeitura as e:
+            base["avisos"].append(f"{e.fonte}: {e.causa}")
+            continue
+        (docker if nome == "docker" else journal).extend(achadas)
+    instancia = eventos.nome_da_instancia()
+    vistas_pelo_kernel_docker: set[int] = set()
+    vistas_pelo_kernel_journal: set[int] = set()
+    try:
+        for morte in do_kernel:
+            chave = chave_da_morte(morte, docker, topologia, resolver_unit)
+            base["mortes"].append(evento_da_morte(morte, chave, instancia=instancia, detectado_em=agora))
+            id_conteiner, unit = _conteiner_do_cgroup(morte["cgroup"]), _unit_do_cgroup(morte["cgroup"])
+            vistas_pelo_kernel_docker.update(i for i, d in enumerate(docker) if d["id"] == id_conteiner)
+            vistas_pelo_kernel_journal.update(
+                i for i, j in enumerate(journal) if j["unit"] == unit or (id_conteiner and id_conteiner in j["unit"]))
+    except eixos.ErroDeLeitura as e:
+        return {**base, "mortes": [], "estado_leitura": "nao_consegui_olhar", "causa": e.causa, "fonte": e.fonte}
+    base["vistas_sem_pid"] = (
+        [{"fonte": "docker_events", "conteiner": d["nome"], "ts": eixos.carimbo(datetime.fromtimestamp(d["instante"], tz=timezone.utc))}
+         for i, d in enumerate(docker) if i not in vistas_pelo_kernel_docker]
+        + [{"fonte": "journal", "unit": j["unit"], "ts": eixos.carimbo(datetime.fromtimestamp(j["instante"], tz=timezone.utc))}
+           for i, j in enumerate(journal) if i not in vistas_pelo_kernel_journal])
+    return {**base, "estado_leitura": "lida", "causa": None, "fonte": None}
+
+
+def _uso_errado(texto: str) -> int:
+    print(f"detector-morte: erro: {texto} — uso: detector-morte [--json] [--desde <epoch>] [--ate <epoch>]", file=sys.stderr)
+    return 2
+
+
+def _inteiro(argumentos: list[str], i: int) -> int | None:
+    return int(argumentos[i]) if i < len(argumentos) and argumentos[i].isdigit() else None
+
+
+def main(argv: list[str]) -> int:
+    desde = ate = None
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--json":
+            pass
+        elif argv[i] in ("--desde", "--ate"):
+            valor = _inteiro(argv, i + 1)
+            if valor is None:
+                return _uso_errado(f"{argv[i]} pede segundos de epoch inteiros")
+            if argv[i] == "--desde":
+                desde = valor
+            else:
+                ate = valor
+            i += 1
+        else:
+            return _uso_errado(f"não conhece {argv[i]}")
+        i += 1
+    ate = int(time.time()) if ate is None else ate
+    desde = ate - JANELA_PADRAO_S if desde is None else max(desde, ate - JANELA_MAXIMA_S)
+    if desde >= ate:
+        return _uso_errado("--desde tem de ser anterior a --ate")
+    resultado = detectar(desde, ate)
+    print(json.dumps(resultado, ensure_ascii=False, indent=2))
+    return 0 if resultado["estado_leitura"] == "lida" else eixos.SAIDA_NAO_CONSEGUI_OLHAR
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

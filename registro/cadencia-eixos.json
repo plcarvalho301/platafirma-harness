@@ -1,0 +1,12 @@
+{
+  "_leia": "Cadencia da passada da sonda (`sinal`), por eixo, stack e servico — o DECLARADO (spec eixos-do-host R15, decisao do dono no #3878 comentario #3391). A cadencia nao mora no codigo: muda-se aqui, sem tocar bin/sinal. Intervalo em segundos, inteiro, multiplo de 60 e no minimo 60: o timer da sonda passa de minuto em minuto e nao alcanca menos (bin/_metrica/cadencia.py recusa o resto, e o teste recusa tambem). O intervalo de um consumidor sai do mais especifico para o mais geral: servico, stack, eixo, `padrao_s`. `eixos` vale para o total do host e para os consumidores sem entrada propria; `stacks` e `servicos` aceitam um numero (vale nos quatro eixos) ou um objeto por eixo (`{\"ram\": 60}`). O intervalo do eixo e o piso do total, nao o teto: servico lido com mais frequencia que o eixo leva o total junto, da mesma coleta. Chave de servico: `<stack>/<servico>`, a mesma do eixo (spec eixos-do-host R4).",
+  "padrao_s": 60,
+  "eixos": {
+    "rede": 60,
+    "ram": 60,
+    "vram": 60,
+    "cpu": 60
+  },
+  "stacks": {},
+  "servicos": {}
+}
