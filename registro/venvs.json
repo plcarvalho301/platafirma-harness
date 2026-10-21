@@ -90,6 +90,12 @@
     "familia": "platafirma-conhecimento",
     "lock": "casa-site/tests/package-lock.json"
   },
+  "_registros": "suite do registro de familias de evento do core (arq:0131 §5, #3878): le so a arvore da rev (as migracoes de deploy/*/init e registros/familias/), com pytest e PyYAML. Primeira suite python do platafirma-core; os testes bash de deploy/tests seguem fora do portao, como antes.",
+  "registros": {
+    "familia": "platafirma-core",
+    "lock": "registros/requirements-teste.txt",
+    "teste": "registros"
+  },
   "marcacao": {
     "familia": "platafirma-motor",
     "lock": "deploy/marcacao/requirements-teste.txt",
