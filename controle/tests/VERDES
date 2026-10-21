@@ -292,3 +292,6 @@ tests/test_conferir_copia.py | bin/conferir bin/release bin/_release/**
 # Card #3949: `infra cache modelos` (revisão em refs/main, digest pelo blob do link ou pelo sha256 do arquivo, sem revisão sai 1,
 # cache que não se lê sai 3, nada no cache muda), sobre um cache do hub de mentira em tmp.
 tests/test_infra_cache_modelos.py | bin/infra
+# Card #3958: `curar --marcar-secoes --faixas-modelo <pasta>` (a pasta vira impressão → faixas de nível 1 em diante; preâmbulo e
+# arquivo sem estrutura ficam fora; nome que não é uuid recusa).
+tests/test_curar_faixas_modelo.py | bin/curar

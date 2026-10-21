@@ -62,6 +62,10 @@ USO = """uso:
                                                               as seções das impressões servindo como faixa de bytes do
                                                               espelho (spec modelo-acervo-secao §2-bis, #3907): plano confere;
                                                               --apply grava em acervo.secao_faixa
+  curar --marcar-secoes --faixas-modelo <pasta> [--apply] [--json]
+                                                              o mesmo, só nas impressões da pasta (um <impressao>.json com
+                                                              `faixas` cada): a quarta fonte lê essas faixas no lugar do
+                                                              modelo local, com a mesma conferência (#3958)
   curar --reextrair <id,id,…|@arquivo> --bancada <pasta> [--metodo <slug>] [--modo bancada|medida] [--refazer] [--timeout-s <n>] [--json]
                                                               converte em <pasta>/<metodo>/<obra_id>/, não escreve no acervo
   curar --expurgar --espelhos [--apply]                       espelho de impressão aposentada há +90 dias
@@ -1021,7 +1025,7 @@ _RENOMEAR_NAO_COMBINA = ("pai", "mais_amplo", "mais_amplo_tipo", "rotulo", "defi
                          "filhos_exclusivos")
 # opções de OUTRO ato: a escada de despacho do `main` entregaria o pedido a esse ato e calaria o --renomear
 _RENOMEAR_OUTROS_ATOS = ("reclassificar", "situacao", "expurgar", "restaurar", "espelhos", "apagar", "recortar",
-                         "reextrair", "rejulgar", "marcar_secoes", "so_sem_faixa", "lote", "ordem", "relatorio", "medida", "replicas", "bancada",
+                         "reextrair", "rejulgar", "marcar_secoes", "so_sem_faixa", "faixas_modelo", "lote", "ordem", "relatorio", "medida", "replicas", "bancada",
                          "refazer", "timeout_s", "modo", "metodo", "corte", "promover", "impressao", "relacionar",
                          "relacoes", "desrelacionar", "derivar", "derivacoes", "desderivar", "de", "registrar_obra",
                          "obra", "obras", "de_dominio", "de_subdominio", "de_conceito", "de_colecao", "sem_dominio",
@@ -2017,6 +2021,29 @@ def acao_rejulgar(autor: str, aplicar: bool, como_json: bool, headers: dict) -> 
     return 1 if data.get("falhas") else 0
 
 
+def _faixas_modelo_da_pasta(pasta: str) -> dict:
+    """`--faixas-modelo` (#3958): impressão → faixas de nível 1 em diante, de cada <impressao>.json da pasta
+    (o seccionamento que um modelo fez fora daqui). Vai só o que a quarta fonte lê: byte de começo, título e
+    nível. Arquivo só com o preâmbulo não entra: não há o que marcar nele."""
+    if not os.path.isdir(pasta):
+        raise ValueError("não é pasta")
+    prontas: dict = {}
+    for nome in sorted(os.listdir(pasta)):
+        if not nome.endswith(".json"):
+            continue
+        with open(os.path.join(pasta, nome), encoding="utf-8") as fh:
+            dado = json.load(fh)
+        impressao = str(dado.get("impressao") or nome[:-5]).strip().lower()
+        if not _UUID_RE.match(impressao):
+            raise ValueError(f"{nome}: impressão {impressao!r} não é uuid")
+        faixas = [{"byte_ini": f["byte_ini"], "titulo": f.get("titulo"), "nivel": f["nivel"]}
+                  for f in dado.get("faixas") or []
+                  if isinstance(f.get("nivel"), int) and f["nivel"] >= 1 and isinstance(f.get("byte_ini"), int)]
+        if faixas:
+            prontas[impressao] = faixas
+    return prontas
+
+
 def acao_marcar_secoes(args, autor: str, headers: dict) -> int:
     """`--marcar-secoes`: a seção como faixa de bytes do espelho (spec modelo-acervo-secao §2-bis, #3907).
     O plano confere as impressões servindo com espelho; --apply grava as que conferem em
@@ -2024,6 +2051,19 @@ def acao_marcar_secoes(args, autor: str, headers: dict) -> int:
     payload = {"autor": autor, "aplicar": args.apply, "so_sem_faixa": args.so_sem_faixa}
     if args.impressao:
         payload["impressao"] = args.impressao
+    if getattr(args, "faixas_modelo", None):
+        if args.impressao or args.so_sem_faixa:
+            sys.stderr.write("curar: erro: --faixas-modelo já escolhe as impressões; não vai com --impressao nem --so-sem-faixa\n")
+            return 2
+        try:
+            prontas = _faixas_modelo_da_pasta(args.faixas_modelo)
+        except (OSError, ValueError) as erro:
+            sys.stderr.write(f"curar: erro: --faixas-modelo {args.faixas_modelo}: {erro}\n")
+            return 2
+        if not prontas:
+            sys.stderr.write(f"curar: nenhuma faixa de nível 1 em diante em {args.faixas_modelo}: nada a marcar\n")
+            return 1
+        payload["faixas_modelo"] = prontas
     data = _chamar("POST", f"{BASE}/acervo/espelhos/secoes", headers, payload)
     reprovadas = data.get("reprovadas") or []
     if args.como_json:
@@ -2702,6 +2742,7 @@ def main(argv=None):
     parser.add_argument("--rejulgar", action="store_true", default=False)
     parser.add_argument("--marcar-secoes", dest="marcar_secoes", action="store_true", default=False)
     parser.add_argument("--so-sem-faixa", dest="so_sem_faixa", action="store_true", default=False)
+    parser.add_argument("--faixas-modelo", dest="faixas_modelo", default=None)
     parser.add_argument("--lote", action="store_true", default=False)
     parser.add_argument("--ordem", default=None)
     parser.add_argument("--relatorio", default=None)
