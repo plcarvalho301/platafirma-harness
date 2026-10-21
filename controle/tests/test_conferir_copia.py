@@ -289,10 +289,22 @@ def test_objeto_sob_espelho_sem_a_chave_no_endereco_e_acusado():
     assert dados["substratos"]["balde"]["sem_chave"] == ["espelho/nao-e-hex/arquivo.md"]
 
 
-def test_o_mapa_ao_lado_do_espelho_nao_e_espelho_a_mais():
-    mapa = _espelho(arquivo="mapa.json")
-    rc, dados = _rodar("balde", itens_do_balde=(_espelho(), mapa))
+def test_o_que_mora_na_pasta_do_espelho_nao_e_espelho_a_mais_nem_objeto_sem_chave():
+    """Medido em produção (21/10/2026): além de espelho.md e mapa.json, a pasta traz indice.json, e 988 deles saiam como
+    objeto sem a chave no endereço."""
+    ao_lado = (_espelho(arquivo="mapa.json"), _espelho(arquivo="indice.json"))
+    rc, dados = _rodar("balde", itens_do_balde=(_espelho(), *ao_lado))
+    assert rc == 0
+    assert dados["substratos"]["balde"]["espelhos"] == 1 and dados["substratos"]["balde"]["sem_chave"] == []
+    prefixado = {"objeto": f"acervo/espelho/{HEX_A}/{DIG_1}/indice.json"}
+    rc, dados = _rodar("balde", itens_do_balde=(prefixado,))
     assert rc == 0 and dados["substratos"]["balde"]["espelhos"] == 1
+
+
+def test_arquivo_fundo_demais_na_pasta_do_espelho_nao_leva_a_chave_do_endereco():
+    fundo = {"objeto": f"espelho/{HEX_A}/{DIG_1}/sub/x.json"}
+    rc, dados = _rodar("balde", itens_do_balde=(_espelho(), fundo))
+    assert rc == 1 and dados["substratos"]["balde"]["sem_chave"] == [fundo["objeto"]]
 
 
 def test_o_objeto_original_e_fonte_e_nao_copia():

@@ -76,7 +76,8 @@ SEM_COLETOR = (
     ("projeção de card", "mora no rastreador, que o conferir não lê; falta o ato que a refaz (carta ao produto)"),
 )
 
-_ESPELHO_DIR = re.compile(r"espelho/([0-9a-f]{64})/([0-9a-f]{64})/(?:espelho\.md|mapa\.json)$")
+# o espelho é a pasta `espelho/<sha do arquivo>/<digest do método>/`; o que mora nela (espelho.md, mapa.json, indice.json) é dele
+_ESPELHO_DIR = re.compile(r"espelho/([0-9a-f]{64})/([0-9a-f]{64})/[^/]+$")
 _SOB_ESPELHO = re.compile(r"(?:^|/)espelho/")
 _NOME_NO_GOLDEN = re.compile(r"\b([a-z_]+)\.([a-z_][a-z0-9_]*)")
 
