@@ -1,8 +1,11 @@
-"""`acervo stack ver <stack>` e `acervo stack resolver <unit>` leem a ficha de serviço `parte-de` stack (arq:0025 §2).
+"""`acervo stack servicos <stack>` e `acervo stack resolver <unit>` leem a ficha de serviço `parte-de` stack (arq:0025 §2).
 
 A unit é a declaração do serviço na forma de processo de host e mora no suporte da ficha, tipo `unit`.
 Unit sem serviço ligado a uma stack sai `unit_sem_stack` (R4 da spec eixos-do-host). Sem banco: o _psql é
 trocado por um que guarda o SQL e devolve o que o teste manda.
+
+`ver <stack>` NÃO filtra: `release` chama `acervo ler casa stack <repo> --json`, que cai em `ver`, e espera o
+registro inteiro. Filtrar ali travou a promoção do core em 21/10/2026 (#3942).
 """
 
 import importlib.machinery
@@ -33,34 +36,43 @@ def banco(monkeypatch):
     monkeypatch.setattr(mod, "_psql", _psql)
     return mod, estado
 
-def test_ver_stack_lista_servico_e_unit(banco, capsys):
+def test_servicos_lista_servico_e_unit(banco, capsys):
     mod, estado = banco
     estado["saida"] = "harness/agregador|harness-agregador.service\nharness/sinal|sinal.service,sinal.timer\n"
-    mod.main(["ver", "harness"])
+    mod.main(["servicos", "harness"])
     saida = capsys.readouterr().out
     assert "harness/agregador  harness-agregador.service" in saida
     assert "harness/sinal  sinal.service, sinal.timer" in saida
     assert "st.chave_humana = 'harness'" in estado["sqls"][-1]
     assert "r.tipo = 'parte-de'" in estado["sqls"][-1]
 
-def test_ver_stack_json(banco, capsys):
+def test_servicos_json(banco, capsys):
     mod, estado = banco
     estado["saida"] = "core/cdi-gpu|cdi-gpu.service\n"
-    mod.main(["ver", "core", "--json"])
+    mod.main(["servicos", "core", "--json"])
     assert json.loads(capsys.readouterr().out) == [{"servico": "core/cdi-gpu", "units": ["cdi-gpu.service"]}]
 
-def test_ver_stack_sem_servico_sai_1(banco):
+def test_servicos_da_stack_sem_servico_sai_1(banco):
     mod, estado = banco
     with pytest.raises(SystemExit) as saida:
-        mod.main(["ver", "vazia"])
+        mod.main(["servicos", "vazia"])
     assert saida.value.code == 1
 
-def test_ver_sem_stack_segue_listando_as_stacks(banco, monkeypatch):
+def test_servicos_sem_stack_recusa(banco):
+    mod, estado = banco
+    with pytest.raises(SystemExit) as saida:
+        mod.main(["servicos"])
+    assert saida.value.code == 2
+
+@pytest.mark.parametrize("argumentos", [["ver"], ["ver", "--json"], ["ver", "platafirma-core", "--json"]])
+def test_ver_segue_listando_o_registro_inteiro(banco, monkeypatch, argumentos):
+    # `ler casa stack <repo> --json` -> `stack ver <repo> --json`: o argumento nunca filtrou
     mod, estado = banco
     chamado = []
     monkeypatch.setattr(mod, "cmd_ver", lambda quero_json: chamado.append(quero_json))
-    mod.main(["ver", "--json"])
-    assert chamado == [True]
+    monkeypatch.setattr(mod, "cmd_servicos", lambda *a: pytest.fail("ver nao pode virar servicos"))
+    mod.main(argumentos)
+    assert chamado == ["--json" in argumentos]
 
 def test_resolver_unit_registrada(banco, capsys):
     mod, estado = banco
