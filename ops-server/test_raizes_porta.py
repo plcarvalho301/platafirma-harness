@@ -321,6 +321,19 @@ def test_write_file_aceita_turtle(bancada, sem_pep):
         assert r.get("recusado") and "tipo" in r["motivo"], (nome, r)
 
 
+def test_write_file_aceita_jsonl(bancada, sem_pep):
+    """#3909 (peca 8 da #3506): o gabarito de avaliacao e JSON Lines, texto plano; sem
+    `.jsonl` na lista a reenderecacao dele pela chave da secao nao tinha como ser escrita."""
+    r = s.write_file(path="wt/platafirma-core/fabrica/avaliacao/gabarito.jsonl",
+                     content='{"id": "a"}\n')
+    assert r.get("ok"), r
+    assert (bancada / "wt/platafirma-core/fabrica/avaliacao/gabarito.jsonl").read_text() == '{"id": "a"}\n'
+    # a lista cresceu so em .jsonl: outra serializacao de linhas segue recusada
+    for nome in ("gabarito.ndjson", "gabarito.csv"):
+        r = s.write_file(path=f"wt/platafirma-core/fabrica/avaliacao/{nome}", content="x\n")
+        assert r.get("recusado") and "tipo" in r["motivo"], (nome, r)
+
+
 def test_write_file_aceita_dockerfile_com_sufixo(bancada, sem_pep):
     """#2856 linha 40: Dockerfile.<sufixo> (Dockerfile.gpu, Dockerfile.dev) e o mesmo texto
     de build do Dockerfile; o ponto exige sufixo, e outro nome segue recusado."""

@@ -2008,9 +2008,12 @@ def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
 # .ttl entrou em 18/10/2026 (#2856 linha 320, card #3755): a shape SHACL e o grafo de nucleo
 # da raiz (platafirma-conhecimento, ontologia/) sao Turtle, texto plano, e a estrutura da
 # entidade nao tinha como ser escrita.
+# .jsonl entrou em 21/10/2026 (#3909, peca 8 da #3506): o gabarito de avaliacao
+# (platafirma-harness, avaliacao/gabarito.jsonl) e texto plano, um objeto por linha, e a
+# reenderecacao dele pela chave da secao nao tinha como ser escrita.
 TIPOS_TEXTO = {".py", ".md", ".mmd", ".d2", ".sh", ".sql", ".yaml", ".yml", ".json", ".toml",
                ".css", ".html", ".js", ".jsx", ".mjs", ".ts", ".tsx", ".php", ".txt", ".conf", ".tsv",
-               ".service", ".timer", ".path", ".socket", ".ttl"}
+               ".service", ".timer", ".path", ".socket", ".ttl", ".jsonl"}
 # Texto de build que se reconhece pelo nome, nao pela extensao. Entrou em 23/09/2026: sem
 # ele, stack nova com imagem propria (Dockerfile, conf do nginx) nao tinha como ser escrita
 # pela porta, e a saida era esconder o Dockerfile dentro do compose.

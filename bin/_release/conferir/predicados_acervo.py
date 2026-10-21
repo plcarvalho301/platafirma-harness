@@ -386,7 +386,8 @@ _ESPELHO_NO_BALDE = re.compile(r"espelho/([0-9a-f]{64})/([0-9a-f]{64})/espelho\.
 _OBJETO_NO_BALDE = re.compile(r"^(?:acervo|pessoal)/[0-9a-f]{64}$")
 
 # rag: as obras com o que os invariantes leem delas; as impressões servindo e em construção com o
-# espelho (digest, veredito) e se um lote aberto as reclama; as aposentadas de obra viva (I13), com
+# espelho (digest, veredito), as faixas de seção gravadas (#3908: quantas, e se alguma abre cabeçalho
+# ou sumário) e se um lote aberto as reclama; as aposentadas de obra viva (I13), com
 # a obra, para o retrato atribuir. Agregado no Postgres: um json, nunca uma linha por vez no verbo.
 SQL_COLETA_RAG = """
 select json_build_object(
@@ -403,6 +404,8 @@ select json_build_object(
         'regua', i.espelho -> 'veredito' ->> 'regua',
         'servivel', (i.espelho -> 'veredito' ->> 'servivel')::boolean,
         'imperfeita', (i.espelho -> 'veredito' ->> 'imperfeita')::boolean,
+        'faixas', (select count(*) from acervo.secao_faixa f where f.impressao_id = i.id),
+        'marcada', exists (select 1 from acervo.secao_faixa f where f.impressao_id = i.id and f.nivel >= 1),
         'reclamada', exists (select 1 from acervo.lote_reextracao_obra l
                                join acervo.lote_reextracao r on r.id = l.lote_id
                               where l.impressao_id = i.id and r.estado = 'aplicando'))), '[]'::json)

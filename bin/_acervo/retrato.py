@@ -10,6 +10,9 @@ De onde vem cada coluna:
   - motor, pela projeção REST /acervo/obras (arq:0121 §12.2): geração, embedder e dimensão do índice
     servindo e a cobertura (trechos com vetor sobre trechos elegíveis). O harness não lê motor.vetor
     linha a linha (arq:0045, Morada): a contagem é agregada no banco pela projeção;
+  - seção marcada (#3908): a impressão servindo tem faixa em acervo.secao_faixa que abre cabeçalho do texto ou
+    entrada do sumário do arquivo; a obra viva só com o preâmbulo, ou sem faixa, entra na lista de seção
+    não marcada do rodapé (contagem e ids);
   - invariantes violados: as funções `i1`…`i13` de bin/_release/conferir/predicados_acervo.py, as mesmas
     que o `release conferir acervo` usa para o gate contra o retrato.
 
@@ -62,6 +65,23 @@ def qualidade_do_espelho(imp):
     return "servível imperfeito" if imp["imperfeita"] else "servível"
 
 
+# a seção marcada (#3908): a impressão servindo tem faixa que abre cabeçalho do texto ou entrada do
+# sumário do arquivo. «Não marcada» é a que só tem o preâmbulo (nem cabeçalho nem sumário que case);
+# «sem faixa» é a que ainda não foi marcada em acervo.secao_faixa.
+SECAO_NAO_MARCADA = ("não marcada", "sem faixa")
+
+def secao_da_impressao(imp):
+    """marcada | não marcada | sem faixa | não medida | sem espelho | sem impressão servindo."""
+    if imp is None:
+        return "sem impressão servindo"
+    if not imp["espelho"]:
+        return "sem espelho"
+    if imp.get("faixas") is None:
+        return "não medida"
+    if imp["faixas"] == 0:
+        return "sem faixa"
+    return "marcada" if imp.get("marcada") else "não marcada"
+
 def _cobertura(proj_item, imp):
     """completa | parcial | sem vetor | sem índice | sem impressão servindo."""
     if imp is None:
@@ -104,6 +124,7 @@ def linhas_do_retrato(d, atual, proj):
             "trechos_com_vetor": (item or {}).get("trechos_com_vetor") if imp is not None else None,
             "trechos_elegiveis": (item or {}).get("trechos_elegiveis") if imp is not None else None,
             "cobertura": _cobertura(item, imp),
+            "secao": secao_da_impressao(imp),
             "invariantes": sorted(codigos.get(o["id"], ()), key=ordem.index),
         })
     return linhas
@@ -147,12 +168,16 @@ def montar_rodape(linhas, total, resumo):
             f"geração {linha['geracao']['numero']}" if linha["geracao"]
             else ("sem índice" if linha["impressao_id"] else "sem impressão servindo"))),
         "cobertura": _soma(linhas, lambda linha: linha["cobertura"]),
+        "secao": _soma(linhas, lambda linha: linha["secao"]),
     }
+    sem_marcacao = [linha["obra_id"] for linha in linhas
+                    if linha["situacao"] == "viva" and linha["secao"] in SECAO_NAO_MARCADA]
     nao_fecha = [f"{entidade}: soma {sum(estados.values())} ≠ {total} (count(*) de acervo.obra)"
                  for entidade, estados in somas.items() if sum(estados.values()) != total]
     if len(linhas) != total:
         nao_fecha.append(f"linhas do retrato: {len(linhas)} ≠ {total} (count(*) de acervo.obra)")
     return {**{k: v for k, v in somas.items()},
+            "secao_nao_marcada": {"n": len(sem_marcacao), "obras": sem_marcacao},
             "invariantes": {c: {"classe": r["classe"], "n": r["n"], "chaves": r["chaves"]}
                             for c, r in resumo.items()},
             "total": total, "fecha": not nao_fecha, "nao_fecha": nao_fecha}
@@ -198,10 +223,17 @@ def texto(retrato):
                      f"{ger}{violados}  {linha['titulo']}")
     saida += ["", f"rodapé · count(*) acervo.obra = {rod['total']}"]
     for entidade in ("obra", "exposicao", "impressao_servindo", "espelho_qualidade", "indice_servindo",
-                     "cobertura"):
+                     "cobertura", "secao"):
         estados = rod[entidade]
         saida.append(f"  {entidade}: " + " · ".join(f"{k} {v}" for k, v in estados.items())
                      + f"  = {sum(estados.values())}")
+    sem = rod["secao_nao_marcada"]
+    if sem["n"]:
+        titulos = {linha["obra_id"]: linha["titulo"] for linha in retrato["linhas"]}
+        saida.append(f"  seção não marcada (só o preâmbulo, ou sem faixa): {sem['n']} obra(s) viva(s)")
+        saida += [f"    {obra[:8]}  {titulos[obra]}" for obra in sem["obras"][:MOSTRAR]]
+        if sem["n"] > MOSTRAR:
+            saida.append(f"    … +{sem['n'] - MOSTRAR} obra(s); a lista inteira está em rodape.secao_nao_marcada (--json)")
     abertas = [f"{c} {r['n']}" for c, r in rod["invariantes"].items() if r["n"]]
     nao_medidos = [c for c, r in rod["invariantes"].items() if r["n"] is None]
     saida.append("  invariantes violados: " + (" · ".join(abertas) if abertas else "nenhum")
