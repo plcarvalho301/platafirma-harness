@@ -160,8 +160,10 @@ def cmd_rm(slug):
 
 
 # O serviço é a ficha da classe `servico` ligada por `parte-de` à ficha da stack; a unit é a declaração dele
-# na forma de processo de host (arq:0025 §1 e §2) e mora no suporte da ficha, tipo `unit`. Endereço que
-# termina em `*` vale por prefixo (units transientes, como platafirma-job-*).
+# na forma de processo de host (arq:0025 §1 e §2) e entra na ficha como alias de origem `unit` (a forma de
+# entrada, nunca a chave: carta do arquiteto 20261021T113710). O suporte não serve: o CHECK dele só aceita git,
+# minio, wiki, arquivo, valkey e sql. Alias que termina em `*` vale por prefixo (units transientes, como
+# platafirma-job-*).
 _SERVICO_DA_STACK = (
     "from acervo.entidade e "
     "join acervo.entidade_relacao r on r.de_id = e.id and r.tipo = 'parte-de' "
@@ -171,9 +173,9 @@ _SERVICO_DA_STACK = (
 )
 
 def cmd_servicos(slug, quero_json):
-    sql = ("select e.chave_humana, coalesce(string_agg(su.endereco, ',' order by su.endereco), '') "
+    sql = ("select e.chave_humana, coalesce(string_agg(su.alias, ',' order by su.alias), '') "
            + _SERVICO_DA_STACK
-           + "left join acervo.entidade_suporte su on su.entidade_id = e.id and su.tipo = 'unit' "
+           + "left join acervo.entidade_alias su on su.entidade_id = e.id and su.origem = 'unit' "
            "where e.classe = 'servico' and e.estado = 'ativa' and st.chave_humana = %s "
            "group by e.chave_humana order by e.chave_humana" % _lit_txt(slug))
     linhas = [l for l in _psql(sql).splitlines() if l.strip()]
@@ -192,10 +194,10 @@ def cmd_servicos(slug, quero_json):
 def cmd_resolver(unit):
     u = _lit_txt(unit)
     sql = ("select e.chave_humana " + _SERVICO_DA_STACK
-           + "join acervo.entidade_suporte su on su.entidade_id = e.id and su.tipo = 'unit' "
+           + "join acervo.entidade_alias su on su.entidade_id = e.id and su.origem = 'unit' "
            "where e.classe = 'servico' and e.estado = 'ativa' and "
-           "(su.endereco = %s or (su.endereco like '%%*' and starts_with(%s, rtrim(su.endereco, '*')))) "
-           "order by (su.endereco = %s) desc, length(su.endereco) desc limit 1" % (u, u, u))
+           "(su.alias = %s or (su.alias like '%%*' and starts_with(%s, rtrim(su.alias, '*')))) "
+           "order by (su.alias = %s) desc, length(su.alias) desc limit 1" % (u, u, u))
     chave = _psql(sql).strip()
     if not chave:
         morre("unit_sem_stack: %s" % unit, 1)

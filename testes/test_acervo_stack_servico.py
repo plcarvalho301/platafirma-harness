@@ -1,6 +1,7 @@
 """`acervo stack servicos <stack>` e `acervo stack resolver <unit>` leem a ficha de serviço `parte-de` stack (arq:0025 §2).
 
-A unit é a declaração do serviço na forma de processo de host e mora no suporte da ficha, tipo `unit`.
+A unit é a declaração do serviço na forma de processo de host e entra na ficha como alias de origem `unit`
+(o CHECK do suporte só aceita git, minio, wiki, arquivo, valkey e sql).
 Unit sem serviço ligado a uma stack sai `unit_sem_stack` (R4 da spec eixos-do-host). Sem banco: o _psql é
 trocado por um que guarda o SQL e devolve o que o teste manda.
 
@@ -79,7 +80,9 @@ def test_resolver_unit_registrada(banco, capsys):
     estado["saida"] = "chat/worker\n"
     mod.main(["resolver", "chat-worker.service"])
     assert capsys.readouterr().out.strip() == "chat/worker"
-    assert "su.endereco = 'chat-worker.service'" in estado["sqls"][-1]
+    assert "su.alias = 'chat-worker.service'" in estado["sqls"][-1]
+    assert "su.origem = 'unit'" in estado["sqls"][-1]
+    assert "entidade_suporte" not in estado["sqls"][-1]  # o CHECK do suporte nao aceita `unit`
 
 def test_resolver_unit_fora_do_registro_e_unit_sem_stack(banco, capsys):
     mod, estado = banco
@@ -95,7 +98,7 @@ def test_resolver_prefixo_pelo_endereco_com_asterisco(banco):
     mod.main(["resolver", "platafirma-job-portao-3931-20261020T213031.service"])
     sql = estado["sqls"][-1]
     assert "like '%*'" in sql
-    assert "starts_with('platafirma-job-portao-3931-20261020T213031.service', rtrim(su.endereco, '*'))" in sql
+    assert "starts_with('platafirma-job-portao-3931-20261020T213031.service', rtrim(su.alias, '*'))" in sql
 
 def test_resolver_aspas_na_unit_nao_quebram_o_sql(banco):
     mod, estado = banco
