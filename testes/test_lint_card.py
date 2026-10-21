@@ -378,6 +378,38 @@ def test_t10_feature_com_filha_e_pecas_ainda_numeradas():
     com_filha = base + "\nfilhas (abertas):\n  #10\tem-execucao\tengenharia\ta story\n"
     assert "T10" in _ids(_rodar(com_filha)[0])
 
+# ------------------------------------------------------------------ Regras (emenda de 21/10/2026, #3937)
+
+def _feature_com_regras(regras):
+    return ("# feature de prova\n#5 · feature · em-parecer\nProblema: p\nSolução:\n- Ao abrir: o dono lê.\n"
+            "Peças:\n1. a peça\nFora: f\nResultado: r\nMedida: m\n" + regras + "Sai quando: s\n")
+
+
+def test_regras_e_secao_propria_e_nao_cai_na_anterior():
+    s = secoes_do_corpo(_feature_com_regras("Produtos documentais:\n- d\nRegras:\n1. a → b · R1\n"))
+    assert "a → b" not in s["Produtos documentais"].texto()
+    assert "a → b" in s["Regras"].texto() and "Sai quando" not in s["Regras"].texto()
+
+
+def test_regra_sem_r_nem_d_avisa_e_nenhuma_passa():
+    corpo = _feature_com_regras("Regras:\n1. obra com esboço → vale o esboço · R3 da spec x\n"
+                                "2. pergunta fechada → a story entra\n3. caso → resultado · D2 da arq:0096\n")
+    aps, *_ = verificar_card_regua("#5", texto=corpo, comentarios="", lista=LISTA, fecha_existe=True)
+    regras = [a for a in aps if a.id == "CARD_REGRAS"]
+    assert [a.linha for a in regras] == [13] and regras[0].severidade == "aviso"
+    nenhuma = _feature_com_regras("Regras: nenhuma\n")
+    assert "CARD_REGRAS" not in _ids(verificar_card_regua("#5", texto=nenhuma, comentarios="", lista=LISTA,
+                                                          fecha_existe=True)[0])
+    sem_bloco = _feature_com_regras("")
+    assert "CARD_REGRAS" not in _ids(verificar_card_regua("#5", texto=sem_bloco, comentarios="", lista=LISTA,
+                                                          fecha_existe=True)[0])
+
+
+def test_regra_com_caminho_sai_t5():
+    aps, _ = _rodar(_feature_com_regras("Regras:\n1. `logica.py` recusa → sai 400 · R1\n"))
+    assert any(a.id == "T5" and "Regras" in a.o_que_fere for a in aps)
+
+
 def test_t10_nao_le_mais_quebra():
     base = ("#5 · feature · em-parecer\nProblema: p\nSolução:\n- Ao abrir: o dono lê.\n"
             "Peças:\n1. a peça\nFora: f\nResultado: r\nMedida: m\n")

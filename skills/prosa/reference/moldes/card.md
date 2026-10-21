@@ -26,6 +26,7 @@ Medida:        escala · medidor · valor hoje · mínimo aceitável — uma lin
 Apetite:       quanto vale gastar · o que se corta primeiro — previsão de quem escreve   (opcional)
 Aberto:        prosa do autor: o que está por decidir, cada item com quem responde
 Produtos documentais: um por linha: ADR, spec da peça, documento, dado, emenda   (feature)
+Regras:        numeradas: caso → resultado, uma linha cada, apontando o R<n> ou o D<n>; o dono valida   (feature)
 Sai quando:    na lapidação, a frase; na formalização, o comando que prova   (feature)
 ```
 
@@ -44,7 +45,8 @@ sustenta a peça depois da entrega mora na spec dela.
   fica o link com o nome do que aponta e uma linha do que muda para quem usa:
   `Solução: a cadeira valida lendo um texto que descreve a solução · spec do comentário tipado, cenários C1 a C5`.
   Sem spec, a Solução é a única descrição e fica.
-- **O índice** (Produtos documentais, Sai quando): completo na formalização.
+- **O índice** (Produtos documentais, Regras, Sai quando): completo na formalização. Regras
+  ainda cresce depois, com a regra nova que o refinamento técnico de uma filha sobe ao dono.
 
 ## A voz, rótulo a rótulo
 
@@ -69,6 +71,12 @@ sustenta a peça depois da entrega mora na spec dela.
    dele. Na aposta, linha que sobra diz «fica aberto de propósito:» e o risco.
 10. **Produtos documentais**, **Sai quando** — como no esqueleto; na formalização, cada
     linha ganha o link do que foi servido.
+11. **Regras** — uma linha por regra de negócio, como caso → resultado, no vocabulário da
+    casa, sem arquivo, função ou tabela: «obra com esboço de PDF e cabeçalho do conversor em
+    nível diferente → vale o nível do esboço». Cada linha aponta o R da spec ou o D da ADR de
+    onde sai. Feature sem regra escreve «Regras: nenhuma». Ao fim da formalização, o bloco vai
+    ao dono numa `pergunta (dono):` numerada, e o fecho de formalização só se escreve depois da
+    resposta (ADR 0096, «A regra de negócio passa pelo dono»).
 
 No épico, as Peças são as features; a quebra entre elas se lê das filhas, no rastreador.
 
