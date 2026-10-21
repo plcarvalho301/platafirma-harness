@@ -116,7 +116,13 @@ class Falso:
                                   if corpo.get("impressao") == "imp-9" else [])
                     return self._resp(200, {"modo": "aplicado" if corpo.get("aplicar") else "plano",
                                             "ato": "marcar-secoes", "n": 3 + len(reprovadas),
-                                            "conformes": 3, "reprovadas": reprovadas})
+                                            "conformes": 3, "reprovadas": reprovadas,
+                                            "origens": {"cabecalho": 4, "sumario-do-arquivo": 57},
+                                            "sumario": {"lido": 1, "sem-leitor": 2, "entradas": 60, "abrem": 57,
+                                                        "coincidem": 0, "discordancias": 3},
+                                            "com_discordancia": [{"impressao": "imp-1", "obra_id": OBRA, "n": 3,
+                                                                  "primeiras": ["«Cover»: sem bloco"]}],
+                                            "n_nao_marcadas": 1, "nao_marcadas": [{"impressao": "imp-2"}]})
                 if self.path == f"/acervo/obras/{OBRA}/reextracoes":
                     if corpo.get("metodo") == "perfil":
                         return self._resp(422, {"type": "about:blank", "title": "ReextracaoReprovada",
@@ -173,6 +179,17 @@ def test_marcar_secoes_apply_so_sem_faixa_leva_o_pedido(falso):
     assert "faixas gravadas" in r.stdout
     corpo = falso.chamadas[-1][2]
     assert corpo["aplicar"] is True and corpo["so_sem_faixa"] is True
+
+
+@precisa_requests
+def test_marcar_secoes_mostra_a_origem_o_sumario_e_a_secao_nao_marcada(falso):
+    r = _curar(falso, "--marcar-secoes", "--impressao", "imp-1")
+    assert r.returncode == 0, r.stderr
+    assert "seções por origem: cabecalho 4 · sumario-do-arquivo 57" in r.stdout
+    assert "sumário do arquivo: 60 entrada(s), 57 abrem seção, 0 já eram cabeçalho no texto, 3 discordam" in r.stdout
+    assert "impressões sem sumário lido: sem-leitor 2" in r.stdout
+    assert "DISCORDA imp-1  3 entrada(s); «Cover»: sem bloco" in r.stdout
+    assert "seção não marcada (só o preâmbulo): 1 impressão(ões)" in r.stdout
 
 
 @precisa_requests

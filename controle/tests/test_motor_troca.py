@@ -79,6 +79,27 @@ class _API(BaseHTTPRequestHandler):
         if self.path == "/search":
             return self._responde(200, self._busca(corpo))
         if self.path == "/motor/trocas":
+            if corpo.get("corte") and not corpo.get("aplicar"):
+                servindo = {"chunk_token_ceiling": 512, "chunk_chars_per_token": 4,
+                            "chunk_min_section_chars": 80, "chunk_semantico": False}
+                novo = {**servindo, **corpo["corte"]}
+                return self._responde(200, {
+                    "modo": "plano", "particao": "biblioteca", "impressoes_servindo": 9,
+                    "trechos_elegiveis": 100,
+                    "servindo": {"geracao": 6, "embedder": "Qwen/Qwen3-Embedding-0.6B"},
+                    "parametros": {"embedder": corpo["embedder"], "dimensao_trecho": corpo["dimensao"],
+                                   "fatia_mrl_trecho": True, "dimensao_faceta": 256, "corte": novo},
+                    "corte": {"servindo": servindo, "novo": novo, "muda": novo != servindo,
+                              "avisos": ["janela de 'x' não declarada em JANELA_DO_EMBEDDER"],
+                              "contagem": {"base": "exata" if corpo.get("contagem") == "exata" else "amostra",
+                                           "impressoes_contadas": corpo.get("amostra", 100),
+                                           "razao_sobre_servindo": 1.8, "trechos": 180,
+                                           "semantico_contado_por_tamanho": bool(novo["chunk_semantico"])}},
+                    "trechos_chunking_novo": 180,
+                    "estimativa": {"disco_gb": 10.1, "tempo_h": 2.2, "vazao_trechos_por_s": 60.0,
+                                   "vram_do_modelo_gb": 2.4},
+                    "ambiente": {"lotes_de_ingestao_abertos": 0, "lote_de_indexacao_aberto": False,
+                                 "vram": {"livre_gb": 11.0}}})
             if corpo.get("aplicar"):
                 return self._responde(200, {
                     "modo": "aplicado", "lote": LOTE, "geracao": 7, "a_montar": 5,
@@ -179,6 +200,55 @@ def test_o_plano_da_troca_manda_embedder_e_dimensao_sem_aplicar_e_mostra_a_estim
     assert pedidos[-1] == ("POST", "/motor/trocas", "Bearer tok",
                            {"particao": "biblioteca", "embedder": "nvidia/nemotron", "dimensao": 1024,
                             "aplicar": False, "autor": "ia"})
+
+
+def test_o_plano_com_corte_manda_so_o_que_o_pedido_diz_e_mostra_a_contagem_do_chunking_novo(api):
+    roda, pedidos, _ = api
+    r = roda("trocar", "biblioteca", "--embedder", "nvidia/nemotron", "--dimensao", "1024", "--corte-teto", "384")
+    assert r.returncode == 0, r.stderr
+    assert pedidos[-1][3] == {"particao": "biblioteca", "embedder": "nvidia/nemotron", "dimensao": 1024,
+                              "aplicar": False, "autor": "ia", "corte": {"chunk_token_ceiling": 384}}
+    assert ("corte novo: token_ceiling 512 -> 384 · 180 trechos contra 100 de hoje (estimativa sobre o texto "
+            "das secoes reconstruido de acervo.trecho; amostra de 100 impressoes, razao 1.8)") in r.stdout
+    assert "aviso do corte: janela de 'x'" in r.stdout
+
+
+def test_todas_as_opcoes_de_corte_viram_as_chaves_chunk_e_a_contagem_exata_vai_no_corpo(api):
+    roda, pedidos, _ = api
+    r = roda("trocar", "biblioteca", "--embedder", "nvidia/nemotron", "--dimensao", "1024", "--corte-teto", "256",
+             "--corte-caracteres-por-token", "3", "--corte-secao-minima", "0", "--corte-semantico",
+             "--contar-tudo")
+    assert r.returncode == 0, r.stderr
+    assert pedidos[-1][3]["corte"] == {"chunk_token_ceiling": 256, "chunk_chars_per_token": 3,
+                                       "chunk_min_section_chars": 0, "chunk_semantico": True}
+    assert pedidos[-1][3]["contagem"] == "exata"
+    assert "todas as impressoes" in r.stdout
+    assert "o modo semantico conta por tamanho no plano" in r.stdout
+
+
+def test_a_amostra_e_o_modo_semantico_desligado_vao_no_corpo(api):
+    roda, pedidos, _ = api
+    r = roda("trocar", "biblioteca", "--embedder", "nvidia/nemotron", "--dimensao", "1024",
+             "--sem-corte-semantico", "--corte-teto", "300", "--amostra", "20")
+    assert r.returncode == 0, r.stderr
+    assert pedidos[-1][3]["corte"] == {"chunk_token_ceiling": 300, "chunk_semantico": False}
+    assert pedidos[-1][3]["amostra"] == 20 and "contagem" not in pedidos[-1][3]
+
+
+@pytest.mark.parametrize("opcao", ["--corte-teto", "--corte-caracteres-por-token", "--corte-secao-minima", "--amostra"])
+def test_opcao_de_corte_com_valor_que_nao_e_inteiro_sai_2_sem_chamar_a_api(api, opcao):
+    roda, pedidos, _ = api
+    r = roda("trocar", "biblioteca", "--embedder", "nvidia/nemotron", "--dimensao", "1024", opcao, "muito")
+    assert r.returncode == 2 and "exige inteiro" in r.stderr
+    assert pedidos == []
+
+
+@pytest.mark.parametrize("opcao", [["--corte-teto", "384"], ["--corte-semantico"], ["--contar-tudo"], ["--amostra", "5"]])
+def test_opcao_de_corte_sem_embedder_sai_2_porque_e_so_do_plano_da_geracao_nova(api, opcao):
+    roda, pedidos, _ = api
+    r = roda("trocar", "biblioteca", "--estado", *opcao)
+    assert r.returncode == 2 and "valem com --embedder" in r.stderr
+    assert pedidos == []
 
 
 def test_apply_abre_o_lote_e_diz_como_acompanhar_e_a_memoria_vai_no_corpo(api):

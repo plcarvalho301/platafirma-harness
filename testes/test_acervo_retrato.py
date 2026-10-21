@@ -32,9 +32,12 @@ def _obra(i, marcacao="transcrita e indexada", retirada=False):
             "objeto": f"acervo/sha-{i}", "objeto_id": f"sha-{i}", "ficha_ok": True}
 
 
-def _imp(i, obra, servivel=True):
-    return {"id": i, "obra": obra, "estado": "servindo", "metodo": "a1b2c3d4e5f6", "espelho": True,
-            "digest": f"dig-{i}", "regua": "7", "servivel": servivel, "imperfeita": False, "reclamada": False}
+def _imp(i, obra, servivel=True, faixas=None, marcada=False):
+    imp = {"id": i, "obra": obra, "estado": "servindo", "metodo": "a1b2c3d4e5f6", "espelho": True,
+           "digest": f"dig-{i}", "regua": "7", "servivel": servivel, "imperfeita": False, "reclamada": False}
+    if faixas is not None:                      # acervo.secao_faixa: quantas, e se alguma abre cabeçalho ou sumário
+        imp.update(faixas=faixas, marcada=marcada)
+    return imp
 
 
 def _ix(i, imp, obra, n=3):
@@ -46,7 +49,8 @@ def _dados():
     """Três obras: o1 viva e coberta; o2 viva, exposta só em arquivo, com impressão (viola o I11); o3 retirada."""
     d = {
         "obras": [_obra("o1"), _obra("o2", marcacao="inteira"), _obra("o3", retirada=True)],
-        "impressoes": [_imp("i1", "o1"), _imp("i2", "o2")], "aposentadas": [], "total": 3,
+        "impressoes": [_imp("i1", "o1", faixas=3, marcada=True), _imp("i2", "o2", faixas=1)],
+        "aposentadas": [], "total": 3,
         "trechos": {"i1": {"imp": "i1", "n": 3, "h": "h"}, "i2": {"imp": "i2", "n": 0, "h": "z"}},
         "motor": {"geracoes": [{"id": "g1", "particao": "biblioteca", "estado": "servindo", "numero": 1,
                                 "embedder": "Qwen/Qwen3-Embedding-0.6B", "dimensao_trecho": "1024",
@@ -82,7 +86,8 @@ def test_uma_linha_por_obra_com_as_colunas_do_contrato():
         "obra_id": "o1", "titulo": "Obra o1", "situacao": "viva", "exposicao": "trecho",
         "impressao_id": "i1", "impressao_metodo": "a1b2c3d4e5f6", "espelho_qualidade": "servível",
         "geracao": {"numero": 1, "embedder": "Qwen/Qwen3-Embedding-0.6B", "dimensao": 1024},
-        "trechos_com_vetor": 3, "trechos_elegiveis": 3, "cobertura": "completa", "invariantes": []}
+        "trechos_com_vetor": 3, "trechos_elegiveis": 3, "cobertura": "completa", "secao": "marcada",
+        "invariantes": []}
 
 
 def test_a_obra_retirada_e_a_sem_indice_entram_com_o_que_tem():
@@ -115,6 +120,40 @@ def test_o_rodape_soma_cada_entidade_e_fecha_com_o_total():
     assert rod["invariantes"]["I11"]["n"] == 1 and rod["invariantes"]["I1"]["n"] == 0
 
 
+def test_o_rodape_conta_a_secao_marcada_e_lista_as_obras_vivas_sem_marcacao():
+    rod = _retrato()["rodape"]
+    assert rod["secao"] == {"marcada": 1, "não marcada": 1, "sem impressão servindo": 1}
+    assert sum(rod["secao"].values()) == rod["total"] == 3
+    assert rod["secao_nao_marcada"] == {"n": 1, "obras": ["o2"]}
+    assert [l["secao"] for l in _retrato()["linhas"]] == ["marcada", "não marcada", "sem impressão servindo"]
+
+
+def test_obra_retirada_nao_entra_na_lista_de_secao_nao_marcada():
+    d = _dados()
+    d["impressoes"].append(_imp("i3", "o3", faixas=0))      # retirada, com impressão servindo sem faixa
+    d = pa.completar(d)
+    rod = _retrato(d)["rodape"]
+    assert rod["secao_nao_marcada"]["obras"] == ["o2"]
+    assert _retrato(d)["linhas"][2]["secao"] == "sem faixa"
+
+
+@pytest.mark.parametrize("imp, esperado", [
+    (None, "sem impressão servindo"),
+    ({"espelho": False}, "sem espelho"),
+    ({"espelho": True}, "não medida"),                                  # coleta anterior à #3908
+    ({"espelho": True, "faixas": 0, "marcada": False}, "sem faixa"),
+    ({"espelho": True, "faixas": 1, "marcada": False}, "não marcada"),   # só o preâmbulo
+    ({"espelho": True, "faixas": 4, "marcada": True}, "marcada"),
+])
+def test_a_secao_da_impressao_servindo(imp, esperado):
+    assert retrato.secao_da_impressao(imp) == esperado
+
+
+def test_a_coleta_le_as_faixas_do_banco():
+    assert "acervo.secao_faixa" in pa.SQL_COLETA_RAG
+    assert "'faixas'" in pa.SQL_COLETA_RAG and "'marcada'" in pa.SQL_COLETA_RAG and "f.nivel >= 1" in pa.SQL_COLETA_RAG
+
+
 def test_o_rodape_escreve_a_linha_que_nao_fecha():
     d = _dados()
     d["total"] = 5                                  # o catálogo tem 5; o retrato leu 3
@@ -129,9 +168,12 @@ def test_o_texto_traz_cabecalho_uma_linha_por_obra_e_rodape():
     assert texto.startswith("retrato da biblioteca · 2026-10-07T22:00:00Z")
     assert "geração servindo: 1 (Qwen/Qwen3-Embedding-0.6B, trecho 1024, faceta 256)" in texto
     assert "papéis: proprietario: dono, sem delegação" in texto
-    assert texto.count("Obra o") == 3
+    assert texto.split("rodapé ·", 1)[0].count("Obra o") == 3
     assert "violados: I11" in texto and "vet 3/3" in texto
     assert "rodapé · count(*) acervo.obra = 3" in texto and "fecha: sim" in texto
+    assert "secao: marcada 1 · não marcada 1 · sem impressão servindo 1  = 3" in texto
+    assert "seção não marcada (só o preâmbulo, ou sem faixa): 1 obra(s) viva(s)" in texto
+    assert "o2  Obra o2" in texto.split("seção não marcada", 1)[1]
 
 
 def test_o_texto_escreve_a_linha_que_nao_fecha():
