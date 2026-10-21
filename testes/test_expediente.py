@@ -7,11 +7,11 @@ Cobre um caso por ato e por etapa do §4:
 - catálogo ausente -> 3
 - peça falha -> 0 com frescor indisponivel + motivo
 - roteador ausente -> 0 com via fallback declarado e slug null
-- --chapeu na abertura da cadeira -> 0 com o aviso do ato que veste o chapéu (#3931)
+- --chapeu inválido -> 2 listando os válidos
 - registro sem senha -> 0 com registrado: false
 - ordem de injeção -> cadernos SEMPRE por último
 - --sem-acervo -> omite a peça e não chama motor
-- catalogo lista as 6 peças declaradas
+- catalogo lista as 7 peças declaradas
 - formato --json -> objeto no topo
 """
 
@@ -261,19 +261,21 @@ def test_catalogo_na_transicao_nunca_ausente(raiz_hermetica):
     assert "transição" in proc_c.stdout
 
 
-def test_catalogo_lista_as_6(raiz_hermetica):
-    """Spec §7: catalogo lista as 6 peças com campos conformes (#3931: saem acervo-consultado e chapeu)."""
+def test_catalogo_lista_as_8(raiz_hermetica):
+    """Spec §7: catalogo lista as 8 peças com campos conformes (rotinas entrou no #3084)."""
     proc = _run_expediente(["catalogo", "--json"], raiz_hermetica)
     assert proc.returncode == 0
     dados = json.loads(proc.stdout)
     assert isinstance(dados, list)
-    assert len(dados) == 6
+    assert len(dados) == 8
 
     pecas_esperadas = [
         "conduta",
         "persona",
         "alias-cadeiras",
         "mesa",
+        "acervo-consultado",
+        "chapeu",
         "cadernos",
         "rotinas",
     ]
@@ -282,6 +284,7 @@ def test_catalogo_lista_as_6(raiz_hermetica):
 
     # Confere donos
     donos = {p["peca"]: p["dono"] for p in dados}
+    assert donos["acervo-consultado"] == "dados"
     assert donos["conduta"] == "gestao-estrategica"
     assert donos["mesa"] == "gestao-estrategica"
 
@@ -380,19 +383,22 @@ def test_ordem_prefixo_estavel_persona_conduta_contiguo_sem_chapeu(raiz_hermetic
     assert pecas[1]["peca"] == "conduta"
 
 
-def test_a_pergunta_com_rotulo_de_chapeu_nao_veste_chapeu_nem_roteia(raiz_hermetica):
-    """#3931: a abertura não roteia. O roteador do stub casaria `contexto` nesta pergunta, e o pacote
-    segue o mesmo: persona, conduta, rotinas, alias-cadeiras, mesa, cadernos, sem chave de chapéu."""
+def test_ordem_persona_chapeu_conduta_com_chapeu(raiz_hermetica):
+    """Spec expediente §2, §7 (#3146): com chapéu declarado, chapéu vem em 2º (entre persona e conduta)."""
     proc = _run_expediente(
-        ["montar", "--json"],
+        ["montar", "--chapeu", "contexto", "--json"],
         raiz_hermetica,
-        stdin_data="pergunta sobre janela de contexto",
+        stdin_data="pergunta",
         env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin")},
     )
     assert proc.returncode == 0
     d = json.loads(proc.stdout)
-    assert "chapeu" not in d and "roteador" not in d
-    assert [p["peca"] for p in d["pecas"]] == ["persona", "conduta", "rotinas", "alias-cadeiras", "mesa", "cadernos"]
+    assert d["chapeu"] == "contexto"
+    pecas = d["pecas"]
+    assert len(pecas) >= 3
+    assert pecas[0]["peca"] == "persona"
+    assert pecas[1]["peca"] == "chapeu"
+    assert pecas[2]["peca"] == "conduta"
 
 
 def test_prefixo_byte_estavel_entre_aberturas(raiz_hermetica):
@@ -409,20 +415,36 @@ def test_prefixo_byte_estavel_entre_aberturas(raiz_hermetica):
 
 
 # ------------------------------------------------------------------------------
-# Passo 2 (#3931, era #3067): a abertura serve a mesa e o índice dos cadernos da cadeira inteira
+# Passo 2: Chapéu resolvido antes da mesa; sem chapéu, mesa inteira (#3067)
 # ------------------------------------------------------------------------------
 
-def test_mesa_e_cadernos_servem_a_cadeira_inteira_mesmo_com_chapeu_por_argumento(raiz_hermetica):
-    """#3931: a abertura não recorta mesa nem caderno por chapéu: `mesa ver` e o índice."""
+def test_mesa_recebe_chapeu_resolvido(raiz_hermetica):
+    """Passo 2 (#3067): chapéu resolvido antes da mesa -> mesa ver <chapeu>."""
     proc = _run_expediente(
         ["montar", "--chapeu", "contexto", "--json"],
         raiz_hermetica,
         env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin")},
     )
     assert proc.returncode == 0
-    por_peca = {p["peca"]: p for p in json.loads(proc.stdout)["pecas"]}
-    assert por_peca["mesa"]["ref"] == "verbo:mesa ver"
-    assert por_peca["cadernos"]["ref"] == "verbo:mesa caderno"
+    d = json.loads(proc.stdout)
+    assert d["chapeu"] == "contexto"
+    peca_mesa = next(p for p in d["pecas"] if p["peca"] == "mesa")
+    assert peca_mesa["ref"] == "verbo:mesa ver contexto"
+
+
+def test_mesa_sem_chapeu_fail_to_inteiro(raiz_hermetica):
+    """Passo 2 (#3067): sem chapéu resolvido -> mesa ver (mesa inteira / fail-to-inteiro)."""
+    proc = _run_expediente(
+        ["montar", "--json"],
+        raiz_hermetica,
+        stdin_data="pergunta sem rotulo",
+        env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin")},
+    )
+    assert proc.returncode == 0
+    d = json.loads(proc.stdout)
+    assert "chapeu" not in d and "roteador" not in d
+    peca_mesa = next(p for p in d["pecas"] if p["peca"] == "mesa")
+    assert peca_mesa["ref"] == "verbo:mesa ver"
 
 # ------------------------------------------------------------------------------
 # #3084: peça rotinas no prefixo, logo depois da conduta (ou do chapéu)
@@ -440,44 +462,76 @@ def test_rotinas_logo_apos_conduta_sem_chapeu(raiz_hermetica):
     assert pecas[2]["frescor"] == "fresco"
     assert pecas[2]["conteudo"].startswith("ROTINAS")
 
-@pytest.mark.parametrize("chapeu", ["contexto", "rh"])
-def test_chapeu_por_argumento_sai_0_nao_veste_e_avisa_o_ato_que_veste(raiz_hermetica, chapeu):
-    """#3931: `--chapeu` segue aceito (a abertura que chega com ele não falha), mesmo para slug que a
-    cadeira não tem. O pacote é o mesmo e o aviso nomeia o ato que veste o chapéu."""
+def test_rotinas_logo_apos_chapeu(raiz_hermetica):
     proc = _run_expediente(
-        ["montar", "--chapeu", chapeu, "--json"], raiz_hermetica,
+        ["montar", "--chapeu", "contexto", "--json"], raiz_hermetica,
         env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin")},
     )
-    assert proc.returncode == 0, proc.stdout + proc.stderr
-    d = json.loads(proc.stdout)
-    assert "chapeu" not in d and "roteador" not in d
-    assert [p["peca"] for p in d["pecas"]] == ["persona", "conduta", "rotinas", "alias-cadeiras", "mesa", "cadernos"]
-    assert any(f"persona ler ia --chapeu {chapeu}" in a for a in d["avisos"])
-
-
-def test_texto_nao_traz_a_linha_de_chapeu_e_roteador(raiz_hermetica):
-    proc = _run_expediente(["montar"], raiz_hermetica,
-                           env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin")})
     assert proc.returncode == 0
-    assert "roteador:" not in proc.stdout
-    assert "pacote: 6 peças" in proc.stdout
+    pecas = json.loads(proc.stdout)["pecas"]
+    assert [p["peca"] for p in pecas[:4]] == ["persona", "chapeu", "conduta", "rotinas"]
 
 # ------------------------------------------------------------------------------
-# #3931: a abertura não consulta o acervo (a cadeirinha, que recebe a mensagem de delegação, consulta)
+# #3314: a consulta da abertura declara a origem, para a bateria do log separar da busca dirigida
 # ------------------------------------------------------------------------------
 
-def test_a_abertura_nao_consulta_o_acervo(raiz_hermetica):
+def test_a_consulta_da_abertura_manda_origem_abertura_ao_motor(raiz_hermetica):
     log_motor = raiz_hermetica / "motor.log"
     proc = _run_expediente(
-        ["montar", "--json"], raiz_hermetica, stdin_data="pergunta com busca",
+        ["montar", "--chapeu", "contexto", "--json"], raiz_hermetica, stdin_data="pergunta com busca",
         env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin"),
                    "STUB_MOTOR_LOG": str(log_motor)},
     )
     assert proc.returncode == 0
-    assert not log_motor.exists()
-    assert "acervo-consultado" not in [p["peca"] for p in json.loads(proc.stdout)["pecas"]]
+    assert "--origem abertura" in log_motor.read_text()
+    peca = next(p for p in json.loads(proc.stdout)["pecas"] if p["peca"] == "acervo-consultado")
+    assert peca["ref"].endswith("--k 6 --texto secao --origem abertura")
 
-def test_a_consulta_do_perfil_cadeirinha_declara_a_origem():
+
+# ------------------------------------------------------------------------------
+# #3931: sem chapéu declarado a abertura não roteia nem consulta; com ele, segue como sempre foi
+# ------------------------------------------------------------------------------
+
+def test_sem_chapeu_declarado_a_abertura_nao_roteia_nem_consulta_o_acervo(raiz_hermetica):
+    """O roteador do stub casaria `contexto` nesta pergunta. Sem chapéu declarado ele não roda, o motor
+    não é chamado e o pacote tem as seis peças, sem chave de chapéu nem de roteador."""
+    log_motor = raiz_hermetica / "motor.log"
+    proc = _run_expediente(
+        ["montar", "--json"], raiz_hermetica, stdin_data="pergunta sobre janela de contexto",
+        env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin"),
+                   "STUB_MOTOR_LOG": str(log_motor)},
+    )
+    assert proc.returncode == 0
+    d = json.loads(proc.stdout)
+    assert not log_motor.exists()
+    assert "chapeu" not in d and "roteador" not in d
+    assert [p["peca"] for p in d["pecas"]] == ["persona", "conduta", "rotinas", "alias-cadeiras", "mesa", "cadernos"]
+
+
+def test_com_chapeu_declarado_a_abertura_segue_como_sempre_foi(raiz_hermetica):
+    """Ordem do dono (21/10/2026): o chapéu declarado, como em `(cadeira, chapéu)`, traz o chapéu, a mesa e
+    o caderno dele e a consulta ao acervo."""
+    proc = _run_expediente(
+        ["montar", "--chapeu", "contexto", "--json"], raiz_hermetica, stdin_data="pergunta com busca",
+        env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin")},
+    )
+    assert proc.returncode == 0
+    d = json.loads(proc.stdout)
+    assert d["chapeu"] == "contexto" and d["roteador"]["via"] == "comando"
+    assert [p["peca"] for p in d["pecas"]] == ["persona", "chapeu", "conduta", "rotinas", "alias-cadeiras", "mesa",
+                                               "acervo-consultado", "cadernos"]
+    refs = {p["peca"]: p["ref"] for p in d["pecas"]}
+    assert refs["mesa"] == "verbo:mesa ver contexto" and refs["cadernos"] == "verbo:mesa caderno --chapeu contexto"
+
+
+def test_texto_so_traz_a_linha_de_chapeu_e_roteador_com_chapeu_declarado(raiz_hermetica):
+    env = {"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin")}
+    sem = _run_expediente(["montar"], raiz_hermetica, env_extra=env)
+    com = _run_expediente(["montar", "--chapeu", "contexto"], raiz_hermetica, env_extra=env)
+    assert "roteador:" not in sem.stdout and "chapeu: contexto   roteador: comando" in com.stdout
+
+
+def test_a_consulta_da_abertura_do_perfil_cadeirinha_tambem_declara_a_origem():
     from importlib.machinery import SourceFileLoader
     from importlib.util import module_from_spec, spec_from_loader
 
@@ -486,6 +540,7 @@ def test_a_consulta_do_perfil_cadeirinha_declara_a_origem():
     spec.loader.exec_module(mod)
     linha = next(l for l in mod.CATALOGO_CADEIRINHA if l["peca"] == "acervo-consultado")
     assert linha["chamada"].endswith("--origem abertura")
-    assert not [l for l in mod.CATALOGO if l["peca"] in ("acervo-consultado", "chapeu")]
+    assert next(l for l in mod.CATALOGO if l["peca"] == "acervo-consultado")["chamada"].endswith(
+        "--origem abertura")
 
 

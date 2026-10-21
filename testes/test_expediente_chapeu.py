@@ -1,10 +1,8 @@
-"""`expediente montar --chapeu <pedaco>`.
+"""`expediente montar --chapeu <pedaco>`: o dono nao decora slug.
 
-Na cadeira (#3931) a abertura nao veste chapeu: `--chapeu` sai 0 com o aviso do ato que veste, sem
-validar nem resolver pedaco, porque quem recusa slug fora do vocabulario e `persona ler`. Na
-cadeirinha o chapeu e o da lente, e o dono nao decora slug: o nome exato passa calado; um pedaco que
-casa com um chapeu so da cadeira vira o slug inteiro, com aviso; pedaco ambiguo sai 2 com as opcoes;
-o que nao casa segue para a validacao de sempre.
+O que se trava: o nome exato passa calado; um pedaco que casa com um chapeu so da cadeira vira
+o slug inteiro, com aviso; pedaco ambiguo sai 2 com as opcoes; o que nao casa segue para a
+validacao de sempre. Vale nos dois perfis.
 """
 
 from __future__ import annotations
@@ -38,25 +36,8 @@ def _monta(raiz, env, chapeu, *extra):
     return _run_expediente(["montar", "--chapeu", chapeu, *extra, "--json"], raiz, env_extra=env)
 
 
-def _monta_cadeirinha(raiz, env, chapeu):
-    return _monta(raiz, env, chapeu, "--perfil", "cadeirinha", "--modo", "revisar")
-
-
-# ---------------------------------------------------------------- a cadeira: aviso, nao veste
-@pytest.mark.parametrize("dado", ["harness", "engenharia-de-harness", "en", "invalido"])
-def test_na_cadeira_qualquer_chapeu_sai_0_e_o_aviso_nomeia_o_ato_que_veste(raiz, env, dado):  # noqa: F811
-    proc = _monta(raiz, env, dado)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
-    d = json.loads(proc.stdout)
-    assert "chapeu" not in d and "roteador" not in d
-    assert "chapeu" not in [p["peca"] for p in d["pecas"]]
-    assert any(f"persona ler ia --chapeu {dado}" in a for a in d["avisos"])
-    assert not any("resolvido" in a for a in d["avisos"])
-
-
-# ---------------------------------------------------------------- a cadeirinha: a lente tem chapeu
 def test_pedaco_unico_vira_o_slug_inteiro_com_aviso(raiz, env):  # noqa: F811
-    proc = _monta_cadeirinha(raiz, env, "harness")
+    proc = _monta(raiz, env, "harness")
     assert proc.returncode == 0, proc.stdout + proc.stderr
     d = json.loads(proc.stdout)
     assert d["chapeu"] == "engenharia-de-harness"
@@ -67,24 +48,32 @@ def test_pedaco_unico_vira_o_slug_inteiro_com_aviso(raiz, env):  # noqa: F811
 
 
 def test_maiuscula_e_acento_nao_atrapalham(raiz, env):  # noqa: F811
-    d = json.loads(_monta_cadeirinha(raiz, env, "Contéxto").stdout)
+    d = json.loads(_monta(raiz, env, "Contéxto").stdout)
     assert d["chapeu"] == "contexto"
 
 
 def test_nome_exato_passa_calado(raiz, env):  # noqa: F811
-    d = json.loads(_monta_cadeirinha(raiz, env, "contexto").stdout)
+    d = json.loads(_monta(raiz, env, "contexto").stdout)
     assert d["chapeu"] == "contexto"
     assert not any("resolvido" in a for a in d["avisos"])
 
 
 def test_pedaco_ambiguo_sai_2_com_as_opcoes(raiz, env):  # noqa: F811
-    proc = _monta_cadeirinha(raiz, env, "en")
+    proc = _monta(raiz, env, "en")
     assert proc.returncode == 2
     erro = json.loads(proc.stdout)["erro"]
     assert "ambíguo" in erro and "agente" in erro and "engenharia-de-harness" in erro
 
 
 def test_o_que_nao_casa_segue_para_a_validacao_de_sempre(raiz, env):  # noqa: F811
-    proc = _monta_cadeirinha(raiz, env, "invalido")
+    proc = _monta(raiz, env, "invalido")
     assert proc.returncode == 2
     assert "fora do vocabulário" in json.loads(proc.stdout)["erro"]
+
+
+def test_vale_tambem_no_perfil_cadeirinha(raiz, env):  # noqa: F811
+    proc = _monta(raiz, env, "harness", "--perfil", "cadeirinha", "--modo", "revisar")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    d = json.loads(proc.stdout)
+    assert d["chapeu"] == "engenharia-de-harness"
+    assert any("resolvido para 'engenharia-de-harness'" in a for a in d["avisos"])
