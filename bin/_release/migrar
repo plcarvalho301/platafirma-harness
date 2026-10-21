@@ -19,6 +19,7 @@ declare -A BANCOS=(
   [motor]="motor-pg:motor:motor"
   [sessao]="harness-sessao-db:sessao:sessao"
   [rastreador]="rastreador-db:rastreador:rastreador"
+  [eventos]="eventos-db:eventos:eventos"
 )
 
 uso_texto() {
