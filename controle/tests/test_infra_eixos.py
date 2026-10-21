@@ -6,6 +6,7 @@ como função e o cgroup como árvore de /proc de mentira.
 """
 import importlib.util
 import json
+import os
 import stat
 from datetime import datetime, timezone
 from pathlib import Path
@@ -89,11 +90,13 @@ def test_validar_recusa_o_que_a_ficha_recusaria(campos, motivo):
 
 
 def test_consumidor_tem_servico_ou_desvio_nunca_os_dois_nem_nenhum():
-    ok = [{"servico": "core/cloudflared"}, {"desvio": "unit_sem_stack", "unit": "x.service"}]
-    eixos.montar("cpu", "infra-medir-cpu", agora=AGORA, valor=0.4, unidade="fracao", consumidores=ok)
+    medida = {"valor": 0.1, "unidade": "threads"}      # o consumidor de cpu traz as threads dele (#3921)
+    base = dict(agora=AGORA, valor=0.4, unidade="threads", teto=12, teto_fonte="/proc/cpuinfo:processor")
+    ok = [{**medida, "servico": "core/cloudflared"}, {**medida, "desvio": "unit_sem_stack", "unit": "x.service"}]
+    eixos.montar("cpu", "infra-medir-cpu", consumidores=ok, **base)
     for ruim in ({}, {"servico": "core/x", "desvio": "unit_sem_stack"}, {"desvio": "inventado"}, {"servico": "sem-barra"}):
         with pytest.raises(ValueError, match="consumidores"):
-            eixos.montar("cpu", "infra-medir-cpu", agora=AGORA, valor=0.4, unidade="fracao", consumidores=[ruim])
+            eixos.montar("cpu", "infra-medir-cpu", consumidores=[{**medida, **ruim}], **base)
 
 
 def test_valor_alto_nao_muda_o_codigo_de_saida():
@@ -127,7 +130,7 @@ def test_frase_de_leitura_que_falhou_diz_a_fonte_e_nunca_um_numero():
 
 
 def test_imprimir_saida_escreve_a_frase_gerada_do_json_e_o_json(capsys):
-    j = eixos.montar("cpu", "infra-medir-cpu", agora=AGORA, valor=0.25, unidade="fracao",
+    j = eixos.montar("cpu", "infra-medir-cpu", agora=AGORA, valor=3, unidade="threads",
                      teto=12, teto_fonte="/proc/cpuinfo:processor")
     assert eixos.imprimir_saida(j, como_json=False) == 0
     assert capsys.readouterr().out.strip() == eixos.frase(j)
@@ -177,6 +180,71 @@ def test_teto_de_vram_pelo_driver(tmp_path):
     with pytest.raises(eixos.ErroDeLeitura) as e:
         eixos.teto_vram(str(quebrado))
     assert e.value.causa == "driver_fora"
+
+
+# --- a pressão do kernel, o que a frase diz de cada consumidor e o schema da VRAM e do processamento (#3921) ---
+
+def test_pressao_le_a_linha_some_do_psi_e_arquivo_que_falta_e_erro_de_leitura_nunca_zero(tmp_path):
+    psi = tmp_path / "cpu"
+    psi.write_text("some avg10=1.50 avg60=0.80 avg300=0.40 total=9\nfull avg10=9.00 avg60=9.00 avg300=9.00 total=0\n",
+                   encoding="utf-8")
+    assert eixos.pressao(str(psi)) == {"pressao_avg10": 1.5, "pressao_avg60": 0.8, "pressao_avg300": 0.4}
+    with pytest.raises(eixos.ErroDeLeitura) as e:
+        eixos.pressao(str(tmp_path / "nao-existe"))
+    assert e.value.causa == "psi_ausente"
+    psi.write_text("full avg10=0.00 avg60=0.00 avg300=0.00 total=0\n", encoding="utf-8")
+    with pytest.raises(eixos.ErroDeLeitura) as e:
+        eixos.pressao(str(psi))
+    assert e.value.causa == "psi_ilegivel"
+
+
+def test_a_frase_diz_o_reservado_o_sm_e_as_threads_de_cada_consumidor():
+    j = eixos.montar("vram", "infra-medir-vram", agora=AGORA, valor=7 << 30, unidade="bytes", teto=16 << 30,
+                     teto_fonte="nvidia-smi", sm_placa_fracao=0.5, consumidores=[
+                         {"servico": "busca/embedder", "reservado_bytes": 4 << 30, "sm_fracao": 0.12},
+                         {"desvio": "unit_sem_stack", "unit": "bench.service", "pid": 7, "reservado_bytes": 300 << 20,
+                          "sm_fracao": None}])
+    assert eixos.frase(j) == ("VRAM às 15:04:05 UTC: 7 GiB de 16 GiB (nvidia-smi); SM da placa 50%; consumidores: "
+                              "busca/embedder (4 GiB reservados, SM 12%), sem dono (unit_sem_stack: bench.service, pid 7) "
+                              "(300 MiB reservados, SM sem amostra).")
+    c = eixos.montar("cpu", "infra-medir-cpu", agora=AGORA, valor=0.5, unidade="threads", teto=12, teto_fonte="x",
+                     consumidores=[{"servico": "core/keycloak", "valor": 0.25, "unidade": "threads"}])
+    assert eixos.frase(c) == "Processamento às 15:04:05 UTC: 0,5 threads de 12 threads (x); consumidores: core/keycloak (0,25 threads)."
+
+
+def test_o_schema_da_vram_recusa_soma_rotulada_como_total_e_consumidor_sem_reservado():
+    base = dict(agora=AGORA, valor=7 << 30, unidade="bytes", teto=16 << 30, teto_fonte="x")
+    ok = {"servico": "busca/embedder", "reservado_bytes": 4 << 30, "sm_fracao": None}
+    assert eixos.montar("vram", "i", consumidores=[ok], **base)["consumidores"] == [ok]
+    with pytest.raises(ValueError, match="não se rotula como total"):
+        eixos.montar("vram", "i", consumidores=[ok], total_dos_processos=4 << 30, **base)
+    with pytest.raises(ValueError, match="reservado_bytes"):
+        eixos.montar("vram", "i", consumidores=[{"servico": "busca/embedder", "sm_fracao": 0.1}], **base)
+    with pytest.raises(ValueError, match="sm_fracao"):
+        eixos.montar("vram", "i", consumidores=[{"servico": "busca/embedder", "reservado_bytes": 1}], **base)
+    with pytest.raises(ValueError, match="mede em bytes"):
+        eixos.montar("vram", "i", **{**base, "unidade": "contagem"})
+
+
+def test_o_schema_do_processamento_pede_threads_teto_e_consumidor_em_threads():
+    base = dict(agora=AGORA, valor=1.5, unidade="threads", teto=12, teto_fonte="x")
+    eixos.montar("cpu", "i", consumidores=[{"servico": "core/keycloak", "valor": 0.2, "unidade": "threads"}], **base)
+    with pytest.raises(ValueError, match="mede em threads"):
+        eixos.montar("cpu", "i", **{**base, "unidade": "fracao"})
+    with pytest.raises(ValueError, match="declara o teto"):
+        eixos.montar("cpu", "i", **{k: v for k, v in base.items() if k not in ("teto", "teto_fonte")})
+    with pytest.raises(ValueError, match="consumidores\\[0\\]: valor"):
+        eixos.montar("cpu", "i", consumidores=[{"servico": "core/keycloak"}], **base)
+
+
+def test_inspecionar_conteiner_devolve_nome_e_labels_e_falha_com_a_causa(tmp_path, monkeypatch):
+    executavel(tmp_path / "docker", 'case "$*" in *abc*) printf \'/meu-conteiner\\t{"a":"b"}\\n\' ;; '
+                                    '*) echo "No such object" >&2; exit 1 ;; esac\n')
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
+    assert eixos.inspecionar_conteiner("abc123") == ("meu-conteiner", {"a": "b"})
+    with pytest.raises(eixos.ErroDeLeitura) as e:
+        eixos.inspecionar_conteiner("zzz")
+    assert e.value.causa == "conteiner_fora"
 
 
 # --- a chave de serviço: contêiner -------------------------------------------------------------

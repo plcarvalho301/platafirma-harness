@@ -101,6 +101,25 @@ def test_medir_help_mostra_face_rotulo_e_volta_e_sai_0_sem_tocar_o_substrato(arv
     assert "DELATOR:" not in r.stdout + r.stderr
 
 
+@pytest.mark.parametrize("eixo,rotulo", [("rede", "Medir rede"), ("vram", "Medir VRAM"), ("cpu", "Medir processamento")])
+def test_a_ajuda_de_cada_eixo_diz_o_rotulo_dele_e_so_o_dele(arvore, delatores, eixo, rotulo):
+    r = roda(arvore, "medir", eixo, "--help", path_extra=delatores)
+    assert r.returncode == 0, r.stderr
+    assert f"uso: infra medir {eixo}" in r.stdout and f"rotulo: {rotulo}" in r.stdout
+    assert "face: Operação" in r.stdout and "volta: sim — só lê" in r.stdout
+    assert r.stdout.count("rotulo:") == 1 and "DELATOR:" not in r.stdout + r.stderr
+
+
+def test_a_ajuda_de_vram_declara_que_a_soma_dos_processos_nao_e_o_total_e_que_so_ha_computacao(arvore, delatores):
+    r = roda(arvore, "medir", "vram", "--help", path_extra=delatores)
+    assert "não é o total da placa" in r.stdout and "Processo gráfico não aparece" in r.stdout
+
+
+def test_a_ajuda_do_medir_sem_eixo_mostra_os_tres(arvore, delatores):
+    r = roda(arvore, "medir", "--help", path_extra=delatores)
+    assert r.returncode == 0 and r.stdout.count("rotulo:") == 3
+
+
 def test_a_ajuda_universal_dos_outros_atos_segue_saindo_2(arvore, delatores):
     r = roda(arvore, "estado", "--ajuda", path_extra=delatores)
     assert r.returncode == 2 and "uso:" in r.stderr and "infra medir" in r.stderr, "o uso geral lista o medir"
@@ -112,6 +131,21 @@ def test_medir_rede_despacha_com_os_argumentos(arvore):
     _stub(arvore / "bin" / "_infra", "medir-rede", FAKE_MEDIR)
     r = roda(arvore, "medir", "rede", "--json")
     assert r.returncode == 0 and "MEDIR_REDE: [--json]" in r.stdout
+
+
+@pytest.mark.parametrize("eixo", ["vram", "cpu"])
+def test_medir_vram_e_cpu_despacham_cada_um_para_o_seu_ato_com_os_argumentos(arvore, eixo):
+    for ato in ("rede", "vram", "cpu"):
+        _stub(arvore / "bin" / "_infra", f"medir-{ato}", FAKE_MEDIR.replace("MEDIR_REDE", f"MEDIR_{ato.upper()}"))
+    r = roda(arvore, "medir", eixo, "--json")
+    assert r.returncode == 0 and f"MEDIR_{eixo.upper()}: [--json]" in r.stdout
+
+
+@pytest.mark.parametrize("eixo", ["vram", "cpu"])
+@pytest.mark.parametrize("saida", [0, 5])
+def test_o_codigo_de_saida_de_vram_e_cpu_passa_inteiro(arvore, eixo, saida):
+    _stub(arvore / "bin" / "_infra", f"medir-{eixo}", FAKE_MEDIR)
+    assert roda(arvore, "medir", eixo, env_extra={"FAKE_SAIDA": str(saida)}).returncode == saida
 
 
 @pytest.mark.parametrize("saida", [0, 5])
@@ -132,14 +166,15 @@ def test_medir_sem_eixo_sai_2(arvore, delatores):
 
 
 def test_eixo_desconhecido_sai_2_e_diz_os_validos(arvore, delatores):
-    r = roda(arvore, "medir", "ram", path_extra=delatores)
+    r = roda(arvore, "medir", "inexistente", path_extra=delatores)
     assert r.returncode == 2
-    assert "eixo desconhecido: ram" in r.stderr and "valores válidos: rede" in r.stderr
+    assert "eixo desconhecido: inexistente" in r.stderr and "valores válidos: rede, vram, cpu" in r.stderr
 
 
-def test_ajudante_ausente_e_dependencia_exit_3(arvore):
-    r = roda(arvore, "medir", "rede")
-    assert r.returncode == 3 and "bin/_infra/medir-rede" in r.stderr
+@pytest.mark.parametrize("eixo", ["rede", "vram", "cpu"])
+def test_ajudante_ausente_e_dependencia_exit_3(arvore, eixo):
+    r = roda(arvore, "medir", eixo)
+    assert r.returncode == 3 and f"bin/_infra/medir-{eixo}" in r.stderr
 
 
 def test_o_ato_desconhecido_lista_o_medir(arvore):
