@@ -265,3 +265,8 @@ tests/test_infra_medir_ram.py | bin/infra bin/_infra/**
 tests/test_infra_limpeza_fossil.py | bin/infra bin/_infra/** bin/_sessao/longjob lib/raizes.sh
 # Medido em 21/10/2026 (card #3920, R13): `sessao longjob status` de unit que já saiu lê o evento de fim e nunca Result=success.
 tests/test_longjob_status_fim.py | bin/_sessao/** lib/raizes.sh
+# Card #3921 (R4, R10 e R11 da spec eixos-do-host): `infra medir vram` (cada processo da placa na chave de serviço ou em desvio
+# com o motivo; reservado, SM e placa em campos distintos; soma dos processos nunca rotulada total) e `infra medir cpu` (carga
+# contra as threads, pressão e carga média do kernel, consumo por chave); driver, /proc, docker e acervo de mentira, sem host.
+tests/test_infra_medir_vram.py | bin/infra bin/_infra/**
+tests/test_infra_medir_cpu.py | bin/infra bin/_infra/**

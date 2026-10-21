@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+# medir-vram — o eixo de VRAM do host: cada processo da placa traduzido para a chave de serviço (spec eixos-do-host
+# R4 e R10, card #3921). Sub-ato de `infra` (como medir-rede): fora do PATH e do golden record, mora em bin/_infra/.
+# Chamado por `infra medir vram [--json]`, nunca direto. Só lê: não grava série, não descarrega modelo (R1).
+#
+# O que lê, e o que grava em campos distintos (R10). A placa: a memória em uso e a memória total, e a ocupação de SM
+# dela, pelo driver. Cada processo de computação: a memória que ele reservou e a ocupação de SM dele. Os três números
+# ficam cada um no seu campo (`valor` e `teto` no topo, `reservado_bytes` e `sm_fracao` em cada consumidor), e a soma
+# dos processos não se grava nem se rotula como total: a placa segura memória que nenhum processo reclama (o contexto
+# do driver), então a soma dos reservados fica abaixo do que a placa diz usar. Juntar os números na apresentação é da
+# camada analítica.
+#
+# Quem é o processo (R4). O pid que o driver lista é resolvido pelo cgroup dele (módulo comum, `resolver_pid`): o
+# contêiner pelo projeto do compose contra o compose registrado na stack, a unit pelo registro unit→stack. O que não
+# resolve sai como desvio com o motivo (`fora_de_compose_e_unit`, `unit_sem_stack`), nunca omitido, e pid, executável e
+# linha de comando vão ao lado, só no JSON e na frase (a linha com o valor de argumento de segredo mascarado e cortada). Limite que o cgroup impõe: processo avulso lançado sem unit
+# própria roda no cgroup de quem o lançou e é lido como consumo dessa unit; a cura é lançar por `systemd-run --user`
+# com unit nomeada e declarada (R4), e quem lê o desvio é o registro, não este ato.
+#
+# O driver só lista processo de computação. Processo gráfico não aparece. SM por processo vem de `nvidia-smi pmon`, uma
+# amostra; processo sem linha de amostra tem `sm_fracao` nulo, e pmon fora do ar deixa todos nulos com `sm_causa`,
+# nunca zero. Medida não reprova (R2): o número, por alto que seja, sai 0; só a fonte que não respondeu sai 5.
+#
+# ambiente: INFRA_NVIDIA_SMI[=nvidia-smi] · INFRA_PROC[=/proc] · INFRA_ACERVO[=bin/acervo]
+# depende: nvidia-smi · docker · bin/acervo (registro de stacks) · bin/_infra/eixos.py
+# saída: 0 lido · 2 uso · 5 não consegui olhar (a fonte não respondeu)
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+AQUI = Path(__file__).resolve().parent
+sys.path.insert(0, str(AQUI))
+import eixos
+
+INSTRUMENTO = "infra-medir-vram"
+MIB = 1 << 20
+COLUNAS_DA_PLACA = 3       # memory.used, memory.total, utilization.gpu
+COLUNAS_DO_PROCESSO = 2    # pid, used_memory
+COLUNAS_DO_PMON = 4        # gpu pid type sm
+COLUNA_PID, COLUNA_SM = 1, 3
+ESCALA_DO_SM = 100.0
+
+
+def _nvidia_smi() -> str:
+    return os.environ.get("INFRA_NVIDIA_SMI", "nvidia-smi")
+
+
+def _consultar(argumentos: list[str], causa: str, timeout: int = eixos.TIMEOUT_DO_DRIVER_S) -> str:
+    """A saída do nvidia-smi com `argumentos`; driver que não responde é fonte que não respondeu (R3)."""
+    fonte = " ".join([_nvidia_smi(), *argumentos])
+    try:
+        p = subprocess.run([_nvidia_smi(), *argumentos], capture_output=True, text=True, timeout=timeout, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        raise eixos.ErroDeLeitura(causa, fonte) from None
+    if p.returncode != 0:
+        raise eixos.ErroDeLeitura(causa, fonte)
+    return p.stdout
+
+
+def _inteiro_mib(texto: str, fonte: str) -> int:
+    try:
+        return int(float(texto)) * MIB
+    except ValueError:
+        raise eixos.ErroDeLeitura("saida_ilegivel", fonte) from None
+
+
+def ler_placa() -> dict:
+    """{"usada_bytes", "total_bytes", "sm_fracao", "total_fonte"} da placa, somando as placas do host."""
+    argumentos = ["--query-gpu=memory.used,memory.total,utilization.gpu", "--format=csv,noheader,nounits"]
+    fonte = " ".join([_nvidia_smi(), *argumentos])
+    linhas = [linha for linha in _consultar(argumentos, "driver_fora").splitlines() if linha.strip()]
+    if not linhas:
+        raise eixos.ErroDeLeitura("driver_fora", fonte)
+    usada = total = 0
+    uso = []
+    for linha in linhas:
+        campos = [c.strip() for c in linha.split(",")]
+        if len(campos) < COLUNAS_DA_PLACA:
+            raise eixos.ErroDeLeitura("saida_ilegivel", fonte)
+        usada += _inteiro_mib(campos[0], fonte)
+        total += _inteiro_mib(campos[1], fonte)
+        try:
+            uso.append(float(campos[2]) / ESCALA_DO_SM)
+        except ValueError:
+            uso.append(None)
+    sm = None if None in uso else sum(uso) / len(uso)
+    return {"usada_bytes": usada, "total_bytes": total, "sm_fracao": sm,
+            "total_fonte": f"{_nvidia_smi()} --query-gpu=memory.total"}
+
+
+def ler_processos() -> list[tuple[int, int]]:
+    """(pid, reservado em bytes) de cada processo de computação que o driver lista."""
+    argumentos = ["--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"]
+    fonte = " ".join([_nvidia_smi(), *argumentos])
+    processos = []
+    for linha in _consultar(argumentos, "driver_fora").splitlines():
+        if not linha.strip():
+            continue
+        campos = [c.strip() for c in linha.split(",")]
+        try:
+            pid = int(campos[0])
+        except (ValueError, IndexError):
+            raise eixos.ErroDeLeitura("saida_ilegivel", fonte) from None
+        if len(campos) < COLUNAS_DO_PROCESSO:
+            raise eixos.ErroDeLeitura("saida_ilegivel", fonte)
+        try:
+            processos.append((pid, int(float(campos[1])) * MIB))
+        except ValueError:
+            raise eixos.ErroDeLeitura("memoria_do_processo_ilegivel", fonte) from None
+    return processos
+
+
+def ler_sm_por_processo() -> tuple[dict[int, float], str | None]:
+    """({pid: fração de SM}, causa). A amostra do pmon; pmon que não responde devolve ({}, causa), e o processo sem
+    linha ou com `-` na coluna fica fora do dicionário: SM nulo, nunca zero."""
+    try:
+        texto = _consultar(["pmon", "-c", "1", "-s", "u"], "pmon_fora")
+    except eixos.ErroDeLeitura as e:
+        return {}, e.causa
+    sm: dict[int, float] = {}
+    for linha in texto.splitlines():
+        campos = linha.split()
+        if not campos or campos[0].startswith("#") or len(campos) < COLUNAS_DO_PMON:
+            continue
+        try:
+            pid, valor = int(campos[COLUNA_PID]), float(campos[COLUNA_SM]) / ESCALA_DO_SM
+        except ValueError:
+            continue
+        sm[pid] = max(valor, sm.get(pid, 0.0))
+    return sm, None
+
+
+def _consumidores(processos: list[tuple[int, int]], sm: dict[int, float], proc: Path) -> list[dict]:
+    if not processos:
+        return []
+    resolver = eixos.resolvedor_de_pid(proc, os.environ.get("INFRA_ACERVO") or eixos.ACERVO)
+    consumidores = [{**resolver(pid), "reservado_bytes": reservado, "sm_fracao": sm.get(pid)}
+                    for pid, reservado in processos]
+    return sorted(consumidores, key=lambda c: (-c["reservado_bytes"], c["pid"]))
+
+
+def medir() -> dict:
+    proc = Path(os.environ.get("INFRA_PROC", "/proc"))
+    try:
+        placa = ler_placa()
+        processos = ler_processos()
+        sm, sm_causa = ler_sm_por_processo()
+        consumidores = _consumidores(processos, sm, proc)
+    except eixos.ErroDeLeitura as e:
+        return eixos.montar("vram", INSTRUMENTO, estado="nao_consegui_olhar", causa=e.causa, fonte=e.fonte)
+    extras = {"sm_placa_fracao": placa["sm_fracao"]}
+    if sm_causa:
+        extras["sm_causa"] = sm_causa
+    return eixos.montar("vram", INSTRUMENTO, valor=placa["usada_bytes"], unidade="bytes", teto=placa["total_bytes"],
+                        teto_fonte=placa["total_fonte"], consumidores=consumidores, **extras)
+
+
+def main(argv: list[str]) -> int:
+    desconhecidos = [a for a in argv if a != "--json"]
+    if desconhecidos:
+        print(f"infra: erro: medir vram não conhece {' '.join(desconhecidos)} — uso: infra medir vram [--json]",
+              file=sys.stderr)
+        return 2
+    return eixos.imprimir_saida(medir(), como_json="--json" in argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

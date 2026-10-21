@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+# medir-cpu — o eixo de processamento do host: a carga contra as threads da máquina, a pressão de CPU do kernel e o
+# maior consumidor por chave de serviço (spec eixos-do-host R11, card #3921). Sub-ato de `infra` (como medir-rede):
+# fora do PATH e do golden record, mora em bin/_infra/. Chamado por `infra medir cpu [--json]`, nunca direto. Só lê:
+# não grava série (R1).
+#
+# O que lê. A carga é a ocupação de CPU da máquina entre duas leituras de /proc/stat separadas por uma amostra
+# (INFRA_CPU_AMOSTRA, 1 s), em threads em uso, contra as threads que /proc/cpuinfo declara (R5: o teto sai da
+# máquina, nunca do código). A carga média de 1, 5 e 15 minutos vem de /proc/loadavg e a pressão do kernel (PSI,
+# médias de 10, 60 e 300 s) de /proc/pressure/cpu, ambas ao lado do número, nunca no lugar dele.
+#
+# Quem consome. O consumo de cada processo é o delta de utime+stime em /proc/<pid>/stat entre as duas leituras,
+# na mesma régua da máquina (threads em uso), e o pid é resolvido pelo cgroup para a chave `<stack>/<serviço>` (módulo
+# comum, R4). Consumidor é a chave, somando os processos dela; o que não resolve sai como desvio com o motivo, agrupado
+# por unit, contêiner ou executável, e traz o pid e a linha de comando do mais pesado, só no JSON e na frase. Só se
+# resolvem os 30 processos que mais consumiram na amostra; o consumo dos que ficaram de fora vem em
+# `fora_da_lista_threads`, sem rótulo de total. Processo que nasceu ou morreu entre as duas leituras não tem delta.
+#
+# O `valor` é o da máquina (inclui interrupção, steal e processo que nasceu e morreu dentro da amostra), então os
+# consumidores somam menos que ele, e nenhum campo rotula a soma deles como total. A linha de comando do desvio sai com
+# o valor de argumento de segredo mascarado e cortada (eixos.linha_sem_segredo).
+#
+# Medida não reprova (R2): o número, por alto que seja, sai 0; só a fonte que não respondeu sai 5.
+#
+# ambiente: INFRA_CPU_AMOSTRA[=1] · INFRA_PROC[=/proc] · INFRA_CPUINFO[=/proc/cpuinfo] · INFRA_ACERVO[=bin/acervo]
+# depende: docker · bin/acervo (registro de stacks) · bin/_infra/eixos.py
+# saída: 0 lido · 2 uso · 5 não consegui olhar (a fonte não respondeu)
+from __future__ import annotations
+
+import os
+import re
+import sys
+import time
+from collections.abc import Callable
+from pathlib import Path
+
+AQUI = Path(__file__).resolve().parent
+sys.path.insert(0, str(AQUI))
+import eixos
+
+INSTRUMENTO = "infra-medir-cpu"
+AMOSTRA_PADRAO_S = 1.0
+PROCESSOS_RESOLVIDOS = 30
+_RE_CPU_DA_TABELA = re.compile(r"^cpu\d+\s")
+# /proc/stat, linha `cpu`: user nice system idle iowait irq softirq steal. `guest` já está em user e nice.
+_CAMPOS_DO_TEMPO_TOTAL = 8
+_CAMPOS_OCIOSOS = (3, 4)
+_CAMPO_UTIME, _CAMPO_STIME = 11, 12      # depois do `)` do comm em /proc/<pid>/stat
+
+
+def ler_tempo_da_maquina(proc: Path) -> tuple[int, int, int]:
+    """(ticks totais, ticks ocupados, threads da tabela) de /proc/stat."""
+    arquivo = proc / "stat"
+    try:
+        linhas = arquivo.read_text(encoding="utf-8").splitlines()
+        campos = [int(c) for c in linhas[0].split()[1:1 + _CAMPOS_DO_TEMPO_TOTAL]]
+    except (OSError, ValueError, IndexError):
+        raise eixos.ErroDeLeitura("stat_ilegivel", str(arquivo)) from None
+    if len(campos) < _CAMPOS_DO_TEMPO_TOTAL:
+        raise eixos.ErroDeLeitura("stat_ilegivel", str(arquivo))
+    total = sum(campos)
+    ocioso = sum(campos[i] for i in _CAMPOS_OCIOSOS)
+    return total, total - ocioso, sum(1 for linha in linhas if _RE_CPU_DA_TABELA.match(linha))
+
+
+def ler_ticks_dos_processos(proc: Path) -> dict[int, int]:
+    """{pid: utime+stime} de todo processo que o /proc mostra; o que some no meio da leitura fica de fora."""
+    ticks = {}
+    try:
+        entradas = list(proc.iterdir())
+    except OSError:
+        raise eixos.ErroDeLeitura("proc_ilegivel", str(proc)) from None
+    for entrada in entradas:
+        if not entrada.name.isdigit():
+            continue
+        try:
+            depois_do_comm = (entrada / "stat").read_text(encoding="utf-8").rsplit(")", 1)[1].split()
+            ticks[int(entrada.name)] = int(depois_do_comm[_CAMPO_UTIME]) + int(depois_do_comm[_CAMPO_STIME])
+        except (OSError, ValueError, IndexError):
+            continue
+    return ticks
+
+
+def ler_carga_media(proc: Path) -> dict:
+    arquivo = proc / "loadavg"
+    try:
+        um, cinco, quinze = (float(c) for c in arquivo.read_text(encoding="utf-8").split()[:3])
+    except (OSError, ValueError):
+        raise eixos.ErroDeLeitura("loadavg_ilegivel", str(arquivo)) from None
+    return {"carga_media_1": um, "carga_media_5": cinco, "carga_media_15": quinze}
+
+
+def amostrar(proc: Path, espera: float, dormir: Callable[[float], None]) -> dict:
+    """Duas leituras separadas por `espera`: o delta da máquina e o de cada processo que existe nas duas."""
+    total0, ocupado0, _ = ler_tempo_da_maquina(proc)
+    antes = ler_ticks_dos_processos(proc)
+    dormir(espera)
+    total1, ocupado1, threads_da_tabela = ler_tempo_da_maquina(proc)
+    depois = ler_ticks_dos_processos(proc)
+    if total1 <= total0 or threads_da_tabela == 0:
+        raise eixos.ErroDeLeitura("amostra_vazia", str(proc / "stat"))
+    por_thread = threads_da_tabela / (total1 - total0)
+    return {
+        "em_uso": (ocupado1 - ocupado0) * por_thread,
+        "processos": {pid: (depois[pid] - antes[pid]) * por_thread for pid in depois
+                      if pid in antes and depois[pid] > antes[pid]},
+    }
+
+
+def _grupo(chave: dict) -> tuple:
+    """O que junta processos num consumidor: a chave de serviço, ou o desvio com o motivo e o que o identifica."""
+    if chave.get("servico"):
+        return ("servico", chave["servico"])
+    return ("desvio", chave["desvio"], chave.get("unit") or chave.get("conteiner") or chave.get("executavel") or "")
+
+
+def _consumidores(processos: dict[int, float], proc: Path) -> tuple[list[dict], float]:
+    """(consumidores por chave, threads dos processos que ficaram fora da resolução)."""
+    pesados = sorted(processos.items(), key=lambda p: (-p[1], p[0]))
+    resolvidos, restantes = pesados[:PROCESSOS_RESOLVIDOS], pesados[PROCESSOS_RESOLVIDOS:]
+    if not resolvidos:
+        return [], sum(v for _, v in restantes)
+    resolver = eixos.resolvedor_de_pid(proc, os.environ.get("INFRA_ACERVO") or eixos.ACERVO)
+    grupos: dict[tuple, dict] = {}
+    for pid, threads in resolvidos:
+        chave = resolver(pid)
+        grupo = grupos.setdefault(_grupo(chave), {**chave, "valor": 0.0, "unidade": "threads", "processos": 0})
+        grupo["valor"] += threads
+        grupo["processos"] += 1
+    consumidores = sorted(grupos.values(), key=lambda g: (-g["valor"], str(g.get("servico") or g.get("unit") or "")))
+    return consumidores, sum(v for _, v in restantes)
+
+
+def medir(dormir: Callable[[float], None] | None = None) -> dict:
+    dormir = dormir or time.sleep
+    proc = Path(os.environ.get("INFRA_PROC", "/proc"))
+    try:
+        threads, teto_fonte = eixos.teto_threads(os.environ.get("INFRA_CPUINFO", "/proc/cpuinfo"))
+        pressao = eixos.pressao(str(proc / "pressure" / "cpu"))
+        carga_media = ler_carga_media(proc)
+        amostra = amostrar(proc, float(os.environ.get("INFRA_CPU_AMOSTRA", AMOSTRA_PADRAO_S)), dormir)
+        consumidores, fora_da_lista = _consumidores(amostra["processos"], proc)
+    except eixos.ErroDeLeitura as e:
+        return eixos.montar("cpu", INSTRUMENTO, estado="nao_consegui_olhar", causa=e.causa, fonte=e.fonte)
+    extras = {**pressao, **carga_media}
+    if fora_da_lista:
+        extras["fora_da_lista_threads"] = fora_da_lista
+    return eixos.montar("cpu", INSTRUMENTO, valor=amostra["em_uso"], unidade="threads", teto=threads,
+                        teto_fonte=teto_fonte, janela=float(os.environ.get("INFRA_CPU_AMOSTRA", AMOSTRA_PADRAO_S)),
+                        consumidores=consumidores, **extras)
+
+
+def main(argv: list[str]) -> int:
+    desconhecidos = [a for a in argv if a != "--json"]
+    if desconhecidos:
+        print(f"infra: erro: medir cpu não conhece {' '.join(desconhecidos)} — uso: infra medir cpu [--json]",
+              file=sys.stderr)
+        return 2
+    return eixos.imprimir_saida(medir(), como_json="--json" in argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
