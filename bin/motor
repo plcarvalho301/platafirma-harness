@@ -732,8 +732,9 @@ def _ajuste_escrever(nome, inst, b, texto, fundamento_flag, como_json, instancia
     try:
         fund, origem_ato = ajustemod.fundamento_e_origem(fundamento_flag)
         if b.get("onde") == "env" and origem_ato == "face":
-            raise chamada_rag.Falha(4, f"{b['slug']} e ajuste de corte e a face so o le: "
-                                       "nao implementado — #3506")
+            raise chamada_rag.Falha(4, f"{b['slug']} e ajuste de corte: mudar o corte reindexa, e a face o leva pela "
+                                       "troca de geracao (motor rag trocar biblioteca --embedder <modelo> --dimensao <N> "
+                                       "--corte-teto|--corte-caracteres-por-token|--corte-secao-minima <N>)")
         ctx = _contexto_do_ajuste(inst)
         r = _resolve_ajuste(b, ctx)
         antes, novo = r["valor"], ajustemod.tipar(texto)
