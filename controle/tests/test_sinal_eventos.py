@@ -601,3 +601,30 @@ def test_nenhum_eixo_vencido_diz_que_nenhum_venceu(mundo, monkeypatch):
     sinal.passada_de_eventos(passar(0))
     r = sinal.passada_de_eventos(passar(1))
     assert r["eixos"] == {} and "nenhum eixo venceu" in sinal._linha_dos_eventos(r)
+
+
+# --- o minuto da amostra: o do disparo, nao o do fim da coleta ------------------------------------------
+
+def test_o_minuto_da_amostra_e_o_do_inicio_do_processo_e_nao_o_do_fim_da_coleta(sinal_de_mentira, mundo, monkeypatch):
+    """O timer dispara a :59,5 de um minuto e a coleta de saúde termina a :07,5 do seguinte (prova de 1 h no host: 58 amostras
+    em 60, minuto sem amostra e minuto com duas): a amostra é do minuto do disparo."""
+    instantes = [datetime(2026, 10, 21, 15, 0, 59, 500000, tzinfo=timezone.utc)]
+    depois = datetime(2026, 10, 21, 15, 1, 7, 500000, tzinfo=timezone.utc)
+
+    class Relogio(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return instantes.pop(0) if instantes else depois
+
+    monkeypatch.setattr(sinal, "datetime", Relogio)
+    monkeypatch.setattr(sinal, "coleta", _coleta("no-ar"))
+    assert sinal.main() == 0
+    amostras = mundo.rota.eventos()
+    assert len(amostras) == 4 and {e["ts"] for e in amostras} == {"2026-10-21T15:00:00Z"}
+
+
+def test_o_timer_do_sinal_dispara_no_segundo_zero_de_cada_minuto_e_nao_deriva():
+    texto = (RAIZ / "deploy-harness" / "sinal.timer").read_text(encoding="utf-8")
+    opcoes = dict(linha.split("=", 1) for linha in texto.splitlines() if "=" in linha and not linha.startswith("#"))
+    assert opcoes["OnCalendar"] == "minutely" and opcoes["AccuracySec"] == "1s"
+    assert "OnUnitActiveSec" not in opcoes, "relativo ao disparo anterior: a fase deriva e cruza a virada do minuto"
