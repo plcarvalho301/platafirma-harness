@@ -576,7 +576,13 @@ def resolver_pid(
         pass
     achado = _RE_CGROUP_CONTEINER.search(cgroup)
     if achado:
-        nome, labels = inspecionar(achado.group(1))
+        try:
+            nome, labels = inspecionar(achado.group(1))
+        except ErroDeLeitura as e:
+            if e.causa != "conteiner_fora":
+                raise
+            # o contêiner saiu entre o driver ou a amostra listarem o processo e a inspeção: o processo é que sumiu
+            return {**lado, "desvio": "fora_de_compose_e_unit", "detalhe": "conteiner_sumiu"}
         return {**lado, **chave_de_conteiner(nome, labels, topologia)}
     units = [u for u in _RE_CGROUP_UNIT.findall(cgroup) if not u.startswith("user@")]
     if units:
