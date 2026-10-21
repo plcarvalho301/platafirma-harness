@@ -51,6 +51,10 @@ _RE_CHAVE = re.compile(r"^[^/\s]+/[^/\s]+$")
 _RE_SHA = re.compile(rf"^[0-9a-f]{{{SHA_DE_GIT_TAMANHO}}}$")
 _RE_CGROUP_CONTEINER = re.compile(r"docker-([0-9a-f]{64})\.scope")
 _RE_CGROUP_UNIT = re.compile(r"([^/]+\.service)")
+_RE_SEGREDO_NO_NOME = re.compile(
+    r"secret|token|passw|senha|credential|api[-_]?key|private[-_]?key|authorization", re.IGNORECASE)
+LIMITE_DA_LINHA_DE_COMANDO = 240
+MASCARA = "***"
 
 ACERVO = Path(__file__).resolve().parents[1] / "acervo"
 
@@ -530,6 +534,27 @@ def chave_de_unit(unit: str, resolver: Callable[[str], str | None]) -> dict:
     return {"unit": unit, "desvio": "unit_sem_stack"}
 
 
+def linha_sem_segredo(linha: str, limite: int = LIMITE_DA_LINHA_DE_COMANDO) -> str:
+    """A linha de comando que vai ao JSON e à frase: o valor de todo argumento cujo nome diz segredo sai mascarado
+    (`--x-secret=v`, `--x-secret v`, `X_TOKEN=v`) e o texto é cortado em `limite` caracteres. É defesa de leitura, não
+    garantia: argumento é conteúdo, e por isso a linha nunca vai a evento (spec banco-de-eventos-de-plataforma R5)."""
+    saida, mascarar_o_proximo = [], False
+    for token in linha.split(" "):
+        if mascarar_o_proximo and token and not token.startswith("-"):
+            saida.append(MASCARA)
+            mascarar_o_proximo = False
+            continue
+        mascarar_o_proximo = False
+        nome, igual, _ = token.partition("=")
+        if _RE_SEGREDO_NO_NOME.search(nome) and (igual or nome.startswith("-")):
+            saida.append(f"{nome}={MASCARA}" if igual else nome)
+            mascarar_o_proximo = not igual
+        else:
+            saida.append(token)
+    texto = " ".join(saida)
+    return texto if len(texto) <= limite else texto[:limite] + "…"
+
+
 def resolver_pid(
     pid: int, *, proc: str | Path = "/proc", inspecionar: Callable[[str], tuple[str, dict]],
     resolver_unit: Callable[[str], str | None], topologia: list[dict],
@@ -545,12 +570,19 @@ def resolver_pid(
         return {**lado, "desvio": "fora_de_compose_e_unit", "detalhe": "cgroup_ilegivel"}
     try:
         lado["executavel"] = (raiz / "comm").read_text(encoding="utf-8").strip()
-        lado["linha_de_comando"] = (raiz / "cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace").strip()
+        lado["linha_de_comando"] = linha_sem_segredo(
+            (raiz / "cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace").strip())
     except OSError:
         pass
     achado = _RE_CGROUP_CONTEINER.search(cgroup)
     if achado:
-        nome, labels = inspecionar(achado.group(1))
+        try:
+            nome, labels = inspecionar(achado.group(1))
+        except ErroDeLeitura as e:
+            if e.causa != "conteiner_fora":
+                raise
+            # o contêiner saiu entre o driver ou a amostra listarem o processo e a inspeção: o processo é que sumiu
+            return {**lado, "desvio": "fora_de_compose_e_unit", "detalhe": "conteiner_sumiu"}
         return {**lado, **chave_de_conteiner(nome, labels, topologia)}
     units = [u for u in _RE_CGROUP_UNIT.findall(cgroup) if not u.startswith("user@")]
     if units:

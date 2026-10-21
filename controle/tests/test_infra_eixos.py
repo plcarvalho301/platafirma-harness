@@ -247,6 +247,46 @@ def test_inspecionar_conteiner_devolve_nome_e_labels_e_falha_com_a_causa(tmp_pat
     assert e.value.causa == "conteiner_fora"
 
 
+def test_a_linha_de_comando_sai_com_o_valor_de_segredo_mascarado_e_cortada():
+    linha = ("oauth2-proxy --provider=oidc --client-secret=abc123 --cookie-secure=true --cookie-secret xyz789 "
+             "--cookie-name=_oauth2_proxy MY_API_KEY=k1 --token-url=https://idp/token -v")
+    assert eixos.linha_sem_segredo(linha) == (
+        "oauth2-proxy --provider=oidc --client-secret=*** --cookie-secure=true --cookie-secret *** "
+        "--cookie-name=_oauth2_proxy MY_API_KEY=*** --token-url=*** -v")
+    assert eixos.linha_sem_segredo("claude -p julgar --caso 12") == "claude -p julgar --caso 12"
+    longa = eixos.linha_sem_segredo("python " + "x" * 500)
+    assert len(longa) == eixos.LIMITE_DA_LINHA_DE_COMANDO + 1 and longa.endswith("…")
+
+
+def test_o_processo_resolvido_traz_a_linha_de_comando_ja_mascarada(tmp_path):
+    pasta = tmp_path / "77"
+    pasta.mkdir()
+    (pasta / "cgroup").write_text("0::/user.slice/session-3.scope\n", encoding="utf-8")
+    (pasta / "comm").write_text("servidor\n", encoding="utf-8")
+    (pasta / "cmdline").write_bytes(b"servidor\0--db-password=hunter2\0--porta=8080\0")
+    r = eixos.resolver_pid(77, proc=tmp_path, inspecionar=lambda _: ("x", {}), resolver_unit=lambda _: None,
+                           topologia=TOPOLOGIA)
+    assert r["linha_de_comando"] == "servidor --db-password=*** --porta=8080" and "hunter2" not in str(r)
+
+
+def test_conteiner_que_sumiu_entre_a_amostra_e_a_inspecao_vira_desvio_e_docker_fora_continua_falha(tmp_path):
+    pasta = tmp_path / "88"
+    pasta.mkdir()
+    (pasta / "cgroup").write_text(f"0::/user.slice/app.slice/docker-{ID_CONTEINER}.scope\n", encoding="utf-8")
+
+    def sumiu(_):
+        raise eixos.ErroDeLeitura("conteiner_fora", "docker inspect")
+
+    def docker_fora(_):
+        raise eixos.ErroDeLeitura("docker_fora", "docker inspect")
+
+    r = eixos.resolver_pid(88, proc=tmp_path, inspecionar=sumiu, resolver_unit=lambda _: None, topologia=TOPOLOGIA)
+    assert (r["pid"], r["desvio"], r["detalhe"]) == (88, "fora_de_compose_e_unit", "conteiner_sumiu")
+    with pytest.raises(eixos.ErroDeLeitura) as e:
+        eixos.resolver_pid(88, proc=tmp_path, inspecionar=docker_fora, resolver_unit=lambda _: None, topologia=TOPOLOGIA)
+    assert e.value.causa == "docker_fora"
+
+
 # --- a chave de serviço: contêiner -------------------------------------------------------------
 
 def test_conteiner_de_compose_registrado_resolve_para_stack_barra_servico():

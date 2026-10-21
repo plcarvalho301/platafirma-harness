@@ -13,7 +13,7 @@
 # Quem é o processo (R4). O pid que o driver lista é resolvido pelo cgroup dele (módulo comum, `resolver_pid`): o
 # contêiner pelo projeto do compose contra o compose registrado na stack, a unit pelo registro unit→stack. O que não
 # resolve sai como desvio com o motivo (`fora_de_compose_e_unit`, `unit_sem_stack`), nunca omitido, e pid, executável e
-# linha de comando vão ao lado, só no JSON e na frase. Limite que o cgroup impõe: processo avulso lançado sem unit
+# linha de comando vão ao lado, só no JSON e na frase (a linha com o valor de argumento de segredo mascarado e cortada). Limite que o cgroup impõe: processo avulso lançado sem unit
 # própria roda no cgroup de quem o lançou e é lido como consumo dessa unit; a cura é lançar por `systemd-run --user`
 # com unit nomeada e declarada (R4), e quem lê o desvio é o registro, não este ato.
 #
