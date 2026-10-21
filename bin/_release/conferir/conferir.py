@@ -125,6 +125,17 @@
                    no acervo e na fita contra a linha de base (card #3375). Sai 0 sem
                    orfao novo, 1 com orfao novo, 5 se um banco nao responder.
 
+  copia [balde|banco|indice]
+                   toda materializacao viva tem declaracao de copia (arq:0022 §6.3; card
+                   #3763): fonte, chave, atributos copiados, ato que repoe, modo (materializada
+                   ou sob-demanda) e a linha de reprodutibilidade, com metodo e insumos (arq:0130
+                   D4). A declaracao mora no schema, por COMMENT `copia-de:` na tabela. Tres
+                   substratos: banco (schema acervo do rag), indice (schema motor) e balde (os
+                   espelhos de leitura; declarado e o que uma impressao reclama). A primeira
+                   linha traz o total, as declaradas, as nao declaradas e as familias sem
+                   coletor. Sai 0 com tudo declarado, 1 com materializacao sem declaracao ou
+                   declaracao com defeito, 5 se um substrato nao responder. Nao expurga nada.
+
 Classes conhecidas e ainda sem implementacao sao listadas como tais: ausencia se
 declara, nunca se omite.
 
@@ -225,7 +236,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs . dependencias . sessao-orfa", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs . dependencias . sessao-orfa . copia", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -3437,6 +3448,10 @@ def main(argv):
     if classe == "sessao-orfa":
         import sessao_orfa
         return sessao_orfa.conferir(alvo, como_json=como_json, sha_release=_sha_release())
+    if classe == "copia":
+        # card #3763: toda materializacao viva tem declaracao de copia, por substrato (balde, banco, indice)
+        import copia
+        return copia.conferir_copia(alvo, _sha_release(), como_json=como_json)
     if como_json:
         print(json.dumps({"erro": f"classe desconhecida: {classe}"}))
     uso(f"classe desconhecida: {classe}")

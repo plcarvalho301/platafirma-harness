@@ -286,3 +286,6 @@ tests/test_infra_detector_morte.py | bin/sinal bin/_infra/** bin/_metrica/** lib
 # serviço dele em um minuto liga o eixo todo minuto, cada ato uma vez por passada, banco parado dez minutos sem perder amostra, erro da
 # passada que nunca muda o exit; `infra`, detector e rota de mentira.
 tests/test_sinal_eventos.py | bin/sinal bin/_metrica/** bin/_infra/** registro/cadencia-eixos.json lib/raizes.py
+# Card #3763: a classe `release conferir copia` (leitor da declaração `copia-de:`, coletor de banco, índice e balde, o exit 0, 1, 2 e 5);
+# bancos e balde de mentira, sem estado real. Não prova os bancos de verdade: isso é a rodada em produção.
+tests/test_conferir_copia.py | bin/conferir bin/release bin/_release/**
