@@ -860,10 +860,12 @@ def _linha_dos_eventos(r: dict) -> str:
     return " · ".join(partes)
 
 
-def passada_de_eventos_sem_derrubar() -> None:
-    """A passada de eventos dentro do `sinal`: o que der errado vai a stderr e nunca muda o exit."""
+def passada_de_eventos_sem_derrubar(inicio: datetime) -> None:
+    """A passada de eventos dentro do `sinal`: o que der errado vai a stderr e nunca muda o exit. O minuto da amostra sai de
+    `inicio`, o instante em que o processo comecou, e nao de quando a coleta de saude terminou (~8 s depois): com o timer
+    a menos de dez segundos do minuto cheio, o fim da coleta cruzava a virada e deixava minuto sem amostra e minuto com duas."""
     try:
-        print(_linha_dos_eventos(passada_de_eventos()))
+        print(_linha_dos_eventos(passada_de_eventos(inicio)))
     except Exception as e:  # noqa: BLE001  (a passada de eventos nunca derruba a de saude)
         sys.stderr.write(f"sinal: eventos: {type(e).__name__}: {e}\n")
 
@@ -923,6 +925,7 @@ def _serie_a_mao(args: list[str]) -> int:
 
 
 def main():
+    inicio = datetime.now(timezone.utc)
     argv = sys.argv[1:]
     if argv and argv[0] in ("-h", "--ajuda", "ajuda"):
         print(__doc__.strip())
@@ -995,7 +998,7 @@ def main():
         extra_r.append(f"incidente #{r['incidente_id']}")
     sufixo_r = f"  — {'; '.join(extra_r)}" if extra_r else ""
     print(f"{r['estado']:10} (runtime){sufixo_r}")
-    passada_de_eventos_sem_derrubar()
+    passada_de_eventos_sem_derrubar(inicio)
     return 1 if fora else 0
 
 

@@ -4,9 +4,12 @@ Description=coleta o arquivo de sinal a cada minuto
 [Timer]
 # Um minuto: o aceite do #391 exige que a mudanca de estado apareca em menos de
 # dois minutos, e o ciclo tem que caber com folga dentro da janela.
+# No segundo zero de cada minuto, e nao a um minuto do disparo anterior: a serie dos eixos (#3922) carimba a amostra com
+# o minuto em que a passada comecou, e `OnUnitActiveSec=1min` com 10 s de folga fazia a fase derivar e cruzar a virada
+# do minuto (58 amostras em 60 na prova de 1 h no host, 21/10/2026).
 OnBootSec=2min
-OnUnitActiveSec=1min
-AccuracySec=10s
+OnCalendar=minutely
+AccuracySec=1s
 Unit=sinal.service
 
 [Install]
