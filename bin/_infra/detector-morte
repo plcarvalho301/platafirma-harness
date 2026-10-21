@@ -14,8 +14,10 @@
 #
 # O journal do kernel pede o grupo adm ou systemd-journal. Sem ele, `journalctl -k` sai sem linha nenhuma, e ler isso como
 # «nenhuma morte» seria o zero que não se lê: o ato sai `nao_consegui_olhar` com a causa `kernel_sem_permissao`, e a janela
-# volta a ser lida inteira quando a permissão chegar. Por isso não se passa `-q` ao journalctl do kernel: o aviso de falta
-# de permissão é o que o distingue de uma janela sem morte.
+# volta a ser lida inteira quando a permissão chegar. Por isso não se passa `-q` ao journalctl do kernel (o aviso de falta de
+# permissão é o que o distingue de uma janela sem morte) e, quando a janela volta sem linha nenhuma, o ato sonda a última
+# linha do kernel de qualquer hora: se nem ela vem (`kernel_sem_entrada`), o journal não respondeu, e janela vazia não é resposta.
+# Aviso e sonda cobrem as duas formas em que o journalctl cala: mensagem de permissão, ou nada.
 #
 # O que o evento NÃO leva: a linha de comando (argumento é conteúdo, R5). `executavel` é o `comm` do kernel, saneado para a
 # forma que a rota aceita. A chave de serviço sai do cgroup do processo morto (`task_memcg`), pelos dois caminhos do
@@ -53,7 +55,7 @@ KIB = 1 << 10
 MICROSSEGUNDOS = 1_000_000
 CAMPOS_DA_LINHA_DO_KERNEL = 2   # `chave=valor`
 MARCAS_DE_OOM = ("killed by the oom killer", "oom-kill")
-SEM_PERMISSAO = ("insufficient permissions", "no journal files")
+SEM_PERMISSAO = ("insufficient permissions", "no journal files", "not seeing messages")
 ESCOPO_DO_CGROUP = "CONSTRAINT_MEMCG"
 
 _RE_OOM_KILL = re.compile(r"^oom-kill:(?P<campos>\S+)")
@@ -113,18 +115,33 @@ def _campos_do_kernel(texto: str) -> dict[str, str]:
     return dict(par.partition("=")[::2] for par in texto.split(",") if "=" in par)
 
 
-def mortes_do_kernel(desde: int, ate: int) -> list[dict]:
-    """Cada morte por limite que o kernel registrou na janela: boot, pid, instante, comm, cgroup, escopo e uso. Sem
-    permissão para o journal do sistema não há leitura (`kernel_sem_permissao`), e nunca zero morte."""
-    fonte = "journalctl -k"
-    p = _journalctl(["-k", "--since", f"@{desde}", "--until", f"@{ate}", "-o", "json", "--no-pager"], fonte)
+def _recusa_do_kernel(p: subprocess.CompletedProcess, fonte: str) -> None:
     if any(marca in p.stderr.lower() for marca in SEM_PERMISSAO):
         raise eixos.ErroDeLeitura("kernel_sem_permissao", fonte)
     if p.returncode != 0:
         raise eixos.ErroDeLeitura("kernel_sem_leitura", fonte)
+
+
+def _kernel_responde(fonte: str) -> bool:
+    """O journal do kernel devolve ao menos a última linha dele, de qualquer hora? Janela sem linha nenhuma só vale como
+    «nenhuma morte» se ele responde: o journalctl sem permissão pode sair 0, sem aviso e sem linha."""
+    sonda = _journalctl(["-k", "-n", "1", "-o", "json", "--no-pager"], fonte)
+    _recusa_do_kernel(sonda, fonte)
+    return bool(_entradas(sonda.stdout))
+
+
+def mortes_do_kernel(desde: int, ate: int) -> list[dict]:
+    """Cada morte por limite que o kernel registrou na janela: boot, pid, instante, comm, cgroup, escopo e uso. Sem
+    leitura do journal do kernel (`kernel_sem_permissao`, `kernel_sem_entrada`) não há resposta, e nunca zero morte."""
+    fonte = "journalctl -k"
+    p = _journalctl(["-k", "--since", f"@{desde}", "--until", f"@{ate}", "-o", "json", "--no-pager"], fonte)
+    _recusa_do_kernel(p, fonte)
+    entradas = _entradas(p.stdout)
+    if not entradas and not _kernel_responde(fonte):
+        raise eixos.ErroDeLeitura("kernel_sem_entrada", fonte)
     mortes: dict[tuple[str, int], dict] = {}
     limite_visto: tuple[int, int] | None = None   # (limite em KiB, instante em µs) da última linha de memória do cgroup
-    for entrada in _entradas(p.stdout):
+    for entrada in entradas:
         mensagem, instante = _mensagem(entrada), _instante_us(entrada)
         if mensagem is None or instante is None:
             continue
