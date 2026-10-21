@@ -877,6 +877,10 @@ def _eventos_a_mao(*, ver: bool) -> int:
     for familia, lista in (r.get("ver") or {}).items():
         for evento in lista:
             print(f"{familia} {json.dumps(evento, ensure_ascii=False, sort_keys=True)}")
+    if r.get("ver"):                              # o que o detector respondeu, sem as mortes (elas já saíram acima)
+        resposta = {k: r["morte"].get(k) for k in ("estado_leitura", "causa", "fonte", "desde", "ate", "vistas_sem_pid",
+                                                  "avisos")}
+        print(f"morte {json.dumps(resposta, ensure_ascii=False, sort_keys=True)}")
     print(_linha_dos_eventos(r))
     return 0
 

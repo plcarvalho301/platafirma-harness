@@ -101,16 +101,26 @@ def _mundo(tmp_path, monkeypatch, *, kernel=(), docker_eventos=(), journal=(), k
     for nome, linhas in (("kernel", kernel), ("docker", docker_eventos), ("usuario", journal)):
         arquivos[nome] = tmp_path / f"{nome}.jsonl"
         arquivos[nome].write_text("".join(json.dumps(e) + "\n" for e in linhas), encoding="utf-8")
-    kernel_corpo = {
-        "ok": f'cat "{arquivos["kernel"]}"\n',
-        "sem_permissao": 'echo "No journal files were opened due to insufficient permissions." >&2\nexit 0\n',
-        "falhou": 'echo "falhou" >&2\nexit 1\n',
+    sem_permissao = 'echo "No journal files were opened due to insufficient permissions." >&2; exit 0'
+    hint = ('echo "Hint: You are currently not seeing messages from other users and the system." >&2; exit 0')
+    ruido = json.dumps({"MESSAGE": "usb 1-1: new high-speed USB device", "SYSLOG_IDENTIFIER": "kernel"})
+    # (a leitura da janela, a sonda da última linha do kernel): o journalctl sem permissão cala de três jeitos
+    kernel_corpo, sonda_corpo = {
+        "ok": (f'cat "{arquivos["kernel"]}"', f"echo '{ruido}'"),
+        "mudo": ("true", "true"),
+        "sem_permissao": (sem_permissao, sem_permissao),
+        "hint": (hint, hint),
+        "falhou": ('echo "falhou" >&2; exit 1', 'echo "falhou" >&2; exit 1'),
     }[kernel_estado]
+    sondas = tmp_path / "sondas.log"
+    sondas.write_text("", encoding="utf-8")
     usuario_corpo = f'cat "{arquivos["usuario"]}"\n' if journal_do_usuario_ok else 'echo "sem bus" >&2\nexit 1\n'
     _script(bindir / "journalctl", f'''
+sonda=0
+for a in "$@"; do [ "$a" = "-n" ] && sonda=1; done
 for a in "$@"; do
   case "$a" in
-    -k) {kernel_corpo.strip().replace(chr(10), "; ")}; exit $? ;;
+    -k) if [ $sonda = 1 ]; then echo sonda >> "{sondas}"; {sonda_corpo}; else {kernel_corpo}; fi; exit $? ;;
     --user) {usuario_corpo.strip().replace(chr(10), "; ")}; exit $? ;;
   esac
 done
@@ -137,6 +147,7 @@ esac
     monkeypatch.setenv("PATH", f"{bindir}:{os.environ['PATH']}")
     monkeypatch.setenv("INFRA_ACERVO", str(acervo))
     monkeypatch.setenv("SINAL_INSTANCIA", "host-1")
+    return sondas
 
 
 def detectar(**kw):
@@ -238,6 +249,33 @@ def test_kernel_sem_permissao_nao_vira_zero_morte(tmp_path, monkeypatch):
     r = detectar()
     assert (r["estado_leitura"], r["causa"], r["fonte"]) == ("nao_consegui_olhar", "kernel_sem_permissao", "journalctl -k")
     assert r["mortes"] == []
+
+
+def test_kernel_mudo_sem_aviso_e_sem_linha_nenhuma_nao_vira_zero_morte(tmp_path, monkeypatch):
+    """O journalctl sem permissão pode sair 0, sem aviso e sem linha: a janela vazia só vale depois da sonda da última linha."""
+    sondas = _mundo(tmp_path, monkeypatch, kernel_estado="mudo", docker_eventos=[oom_do_docker()])
+    r = detectar()
+    assert (r["estado_leitura"], r["causa"], r["fonte"]) == ("nao_consegui_olhar", "kernel_sem_entrada", "journalctl -k")
+    assert r["mortes"] == [] and sondas.read_text(encoding="utf-8").count("sonda") == 1
+
+
+def test_o_aviso_de_que_nao_se_ve_o_sistema_e_falta_de_permissao(tmp_path, monkeypatch):
+    _mundo(tmp_path, monkeypatch, kernel_estado="hint")
+    r = detectar()
+    assert (r["estado_leitura"], r["causa"]) == ("nao_consegui_olhar", "kernel_sem_permissao")
+
+
+def test_janela_sem_linha_do_kernel_so_vale_como_zero_morte_depois_da_sonda(tmp_path, monkeypatch):
+    sondas = _mundo(tmp_path, monkeypatch, kernel=[])
+    r = detectar()
+    assert r["estado_leitura"] == "lida" and r["mortes"] == []
+    assert sondas.read_text(encoding="utf-8").count("sonda") == 1, "uma sonda, só porque a janela veio vazia"
+
+
+def test_janela_com_linha_do_kernel_nao_precisa_de_sonda(tmp_path, monkeypatch):
+    sondas = _mundo(tmp_path, monkeypatch, kernel=morte_do_kernel())
+    detectar()
+    assert sondas.read_text(encoding="utf-8") == ""
 
 
 def test_o_journal_do_kernel_nao_se_le_com_o_aviso_calado(tmp_path, monkeypatch):
