@@ -32,10 +32,10 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
-from zoneinfo import ZoneInfo
 
 # Raizes de producao (card #3010): o sinal e estado da instancia, nunca da release.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+import oplog  # noqa: E402  (so lib/oplog abre o bruto da porta: arq:0123 §3)
 import raizes  # noqa: E402
 
 # ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (grava var/sinal/servicos.json; override so para teste)
@@ -477,7 +477,7 @@ def coleta():
 # ambiente: SINAL_PORTA_URL[=https://ops.platafirma.org/mcp] · SINAL_PORTA_TOOL[=sessao] ·
 #   SINAL_SONDA_CLIENTE[=sonda] (clientId no realm; o segredo mora em <instancia>/segredos/keycloak/<clientId>) ·
 #   SINAL_SONDA_TOKEN_URL[=https://auth.platafirma.org/realms/platafirma/protocol/openid-connect/token] ·
-#   SINAL_PORTA_TIMEOUT[=10] · OPS_LOG_DIR[=<instancia>/var/log/ops] (override so para teste)
+#   SINAL_PORTA_TIMEOUT[=10] (o bruto do dia e lido por `oplog.ler`, que resolve onde ele mora)
 PORTA_URL_PADRAO = "https://ops.platafirma.org/mcp"
 PORTA_TOOL_PADRAO = "sessao"
 SONDA_CLIENTE_PADRAO = "sonda"
@@ -485,9 +485,7 @@ REALM_URL_PADRAO = "https://auth.platafirma.org/realms/platafirma/protocol/openi
 HTTP_OK = 200
 HTTP_ERRO = 400                             # daqui para cima a resposta e erro
 GIRO_ATRASO_INICIAL_S = 0.05                # espera pela linha de giro: dobra a cada tentativa, ate `espera_s`
-FUSO_DA_PORTA = "America/Sao_Paulo"        # o dia do arquivo do bruto e o dia local da porta (spec log-de-negocio §3)
 SINAL_JANELA_DO_GIRO_S = 2                  # tolerancia entre o relogio da sonda e o `ts` que a porta gravou
-SINAL_CAUDA_DO_BRUTO = 512 * 1024           # o bruto do dia tem MBs; o giro da sonda esta no fim
 SINAL_ERRO_DE_TOKEN = (401, 403)
 
 
@@ -568,28 +566,21 @@ def giro_da_porta(tool: str, t0: datetime, t1: datetime, pasta: Path | None = No
     """A linha de giro que a porta gravou no bruto do dia para a chamada da sonda (tool igual, sem ato, sem
     sessao) entre t0 e t1, com a folga do relogio. Espera um instante pela linha, que a porta escreve ao
     terminar o giro. Devolve {dur_ms, classe} ou None quando a porta nao deixou linha."""
-    pasta = pasta or Path(os.environ.get("OPS_LOG_DIR") or raizes.instancia() / "var" / "log" / "ops")
-    dia = t0.astimezone(ZoneInfo(FUSO_DA_PORTA)).strftime("%Y-%m-%d")
-    arq = pasta / f"ops-{dia}.jsonl"
+    dia = oplog.dia_local(t0.isoformat())          # o dia do arquivo e o dia local da porta (spec log-de-negocio §3)
     folga = timedelta(seconds=SINAL_JANELA_DO_GIRO_S)
     for atraso in _atrasos(espera_s):
         time.sleep(atraso)
-        try:
-            with open(arq, "rb") as f:
-                f.seek(0, os.SEEK_END)
-                f.seek(max(0, f.tell() - SINAL_CAUDA_DO_BRUTO))
-                linhas = f.read().decode("utf-8", "replace").splitlines()
-        except OSError:
-            linhas = []
-        for linha in reversed(linhas):
+        achado = None
+        for reg in oplog.ler(dia, diretorio_=pasta, tool=tool):    # so `lib/oplog` abre o bruto (arq:0123 §3)
             try:
-                reg = json.loads(linha)
                 ts = parse_dt(reg["ts"])
             except (ValueError, KeyError, TypeError):
                 continue
-            if (reg.get("tool") == tool and reg.get("evento") != "http_req" and not reg.get("ato")
+            if (reg.get("evento") != "http_req" and not reg.get("ato")
                     and reg.get("sessao_id") in (None, "", "-") and t0 - folga <= ts <= t1 + folga):
-                return {"dur_ms": reg.get("dur_ms"), "classe": reg.get("classe")}
+                achado = {"dur_ms": reg.get("dur_ms"), "classe": reg.get("classe")}
+        if achado:
+            return achado
     return None
 
 
