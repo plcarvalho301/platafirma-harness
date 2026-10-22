@@ -144,7 +144,10 @@ def ambiente_da_ingestao() -> dict:
     elif caminho is not None and caminho.is_dir():
         env, fonte = _vars_do_dir(caminho), str(caminho)
     else:
-        cofre = raizes.instancia() / "segredos" / inst.get("stack", "rag")
+        # o cofre e o da stack DONA DO BANCO (banco.stack), nao o da stack que serve a busca
+        # (stack): desde que a busca passou a stack propria, as duas deixaram de coincidir e o
+        # export rodava com a senha padrao (pedido 20261022T071752-dados)
+        cofre = raizes.instancia() / "segredos" / (inst.get("banco", {}).get("stack") or inst.get("stack", "rag"))
         if not cofre.is_dir():
             morre(f"sem ambiente do banco: nem {valor or 'env_da_ingestao'} nem {cofre}")
         # so o que o banco pede: o cofre tambem guarda chave de API e do MinIO, que o export

@@ -21,6 +21,7 @@
   "medicoes_em": "/srv/platafirma/casa/var/medicoes/rag",
   "banco": {
    "container": "rag-extractor-pg",
+   "stack": "rag",
    "db": "rag_extractor",
    "user": "rag"
   },
