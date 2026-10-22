@@ -17,7 +17,7 @@
   "troca": "http://127.0.0.1:8101/motor/trocas",
   "ajustes_da_geracao": "http://127.0.0.1:8101/motor/geracoes/servindo/ajustes",
   "trabalhos": "http://127.0.0.1:8101/motor/trabalhos",
-  "gabarito": "/opt/platafirma/current/harness/avaliacao/gabarito.jsonl",
+  "bateria": "/opt/platafirma/current/harness/avaliacao/bateria.jsonl",
   "medicoes_em": "/srv/platafirma/casa/var/medicoes/rag",
   "banco": {
    "container": "rag-extractor-pg",
@@ -326,7 +326,7 @@
     "codigo": "false",
     "sobe": "pergunta por um conceito estreito passa a recuperar tambem o que foi escrito sobre o conceito que o contem: uma consulta a mais, pelo rotulo do pai, fundida no RRF",
     "custa": "e o unico ajuste desta familia que pode PIORAR o resultado — substituir o especifico pelo genérico afasta a resposta da pergunta. Custa tambem um encode por conceito expandido (teto de 2). Sobe so pelas tres familias hierarquicas da ont:0080; associativa nunca",
-    "medir": "as duas familias separadas NAO arbitram isto: das 228 perguntas do gabarito, 38 casam conceito e so 14 tem pai hierarquico, zero no T1-deterministico. Exige estrato de gabarito proprio, com perguntas que a expansao toque e alvo declarado"
+    "medir": "as duas familias separadas NAO arbitram isto: das 228 perguntas da bateria, 38 casam conceito e so 14 tem pai hierarquico, zero no T1-deterministico. Exige estrato de bateria proprio, com perguntas que a expansao toque e alvo declarado"
    },
    {
     "slug": "peso-do-braco-conceito",
@@ -349,7 +349,7 @@
     "codigo": "false",
     "sobe": "a abstencao ganha um predicado deterministico ao lado do sinal continuo: conceito declarado no acervo e sem nenhuma obra servindo passa a sair como cobertura 'ausente', em vez de devolver o vizinho mais proximo com cara de resposta",
     "custa": "casamento lexico do rotulo do conceito na pergunta: quem cita o termo sem querer o assunto recebe a ausencia. So reescreve o rotulo num sentido — nunca declara cobertura onde o sinal diz que nao ha",
-    "medir": "erro total numa bateria com os dois lados, como no aviso-de-cobertura-fraca, e a parte: quantas negativas do gabarito passam a ser nomeadas em vez de marcadas fracas"
+    "medir": "erro total numa bateria com os dois lados, como no aviso-de-cobertura-fraca, e a parte: quantas negativas da bateria passam a ser nomeadas em vez de marcadas fracas"
    },
    {
     "slug": "vizinhanca-dirigida",

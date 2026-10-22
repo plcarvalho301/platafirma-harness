@@ -71,8 +71,8 @@ nunca o parecer do dono da matéria:
 - que o sistema roda e sobe reversível é de operações. Digo quanto mais barato; que está
   no ar, desde quando e como voltar, é dela — inclusive o Redis como runtime.
 - que o acervo cobre a matéria é de dados: a obra até a seção, a ficha de conceitos e a
-  guarda do gabarito. Do índice à busca é meu — o corte em trecho, o embedder, o rerank,
-  o que se mede e o que o gabarito precisa cobrir; o que trafega na malha é dela.
+  guarda da bateria. Do índice à busca é meu — o corte em trecho, o embedder, o rerank,
+  o que se mede e o que a bateria precisa cobrir; o que trafega na malha é dela.
 - o que se escreve para o modelo — o papel, a fronteira, a régua de forma — é de gestão.
   Desenho como se escreve; o que se escreve, não.
 - o controle de segurança do loop agêntico é de segurança. Desenho o loop; o piso de
@@ -105,7 +105,7 @@ para aprofundar na tarefa à mão. Os rótulos são as keywords de cada uma.
   mecanismo de atenção · janela de contexto.
 - **recuperacao** — a busca achando bem, do índice ao serviço, e o que se mede nela; a
   obra até a seção é de dados. recuperação · pipeline RAG · chunking · embedding ·
-  ranqueamento multiestágio · avaliação de recuperação · gabarito rotulado · abstenção
+  ranqueamento multiestágio · avaliação de recuperação · bateria rotulada · abstenção
   calibrada · cobertura e relevância.
 - **contexto** — o que fica e o que sai conforme a fita cresce: poda, memória, ciclo de
   vida na malha de mensageria. engenharia de contexto · menor conjunto de alto sinal ·

@@ -177,7 +177,7 @@ def montar_lote_par(lote_id: str, versao_id: str, criterio_versao: str, pergunta
         corpo_p.append({"pergunta_id": pid, "texto": p["frase"], "cadeira": p["cadeira"], "data": p["data"],
                         "respostas": respostas})
     corpo = {"lote_id": lote_id, "criterio_versao": criterio_versao, "passada": "primeira", "perguntas": corpo_p}
-    return {"lote_id": lote_id, "gabarito_versao_id": versao_id, "criterio_versao": criterio_versao,
+    return {"lote_id": lote_id, "bateria_versao_id": versao_id, "gabarito_versao_id": versao_id, "criterio_versao": criterio_versao,
             "passada": "primeira", "ativo": ativo, "corpo": corpo, "carimbo": carimbo, "respostas": internas}
 
 
@@ -199,8 +199,8 @@ def conferir_aceite_par(envelope: dict, n_perguntas: int) -> list:
                 p.append(f"{q['pergunta_id']}: resposta sem seção no rodapé")
             if re.search(r"\[\d+\]", r["texto"]):
                 p.append(f"{q['pergunta_id']}: marca [n] no meio do texto")
-    for chave in ("acervo", "motor", "vocabulario", "gabarito", "escritor", "par"):
-        if not envelope["carimbo"].get(chave):
+    for chave in ("acervo", "motor", "vocabulario", "bateria", "escritor", "par"):
+        if not (envelope["carimbo"].get(chave) or (chave == "bateria" and envelope["carimbo"].get("gabarito"))):
             p.append(f"carimbo sem a versão «{chave}»")
     return p
 

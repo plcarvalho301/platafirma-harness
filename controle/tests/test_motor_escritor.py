@@ -169,7 +169,7 @@ def _piloto(n=20):
     return [{"id": f"esc-{i:08d}", "pergunta": f"pergunta {i}?", "cadeira": "desconhecida", "data": "2026-10-01"} for i in range(n)]
 
 
-CARIMBO = {"acervo": {"acervo_sha": "a"}, "motor": {"k": 8}, "vocabulario": {"versao": "v"}, "gabarito": {"versao_id": "g"}, "escritor": {"modelo": "m"}}
+CARIMBO = {"acervo": {"acervo_sha": "a"}, "motor": {"k": 8}, "vocabulario": {"versao": "v"}, "bateria": {"versao_id": "g"}, "gabarito": {"versao_id": "g"}, "escritor": {"modelo": "m"}}
 
 
 def _lote(**kw):
@@ -362,10 +362,10 @@ def test_escreve_o_piloto_com_a_recusada_reposta_e_monta_o_envelope_que_passa_no
     e = json.loads(saida_.read_text())
     ids = [p["pergunta_id"] for p in e["corpo"]["perguntas"]]
     assert ids == ["esc-p1", "esc-p3", "esc-p4", "esc-r1"] and len(e["respostas"]) == 12
-    assert e["gabarito_versao_id"] == "gv-1" and e["criterio_versao"] == "v1" and e["passada"] == "primeira" and e["ativo"] is False
+    assert (e.get("bateria_versao_id") == "gv-1" or e.get("gabarito_versao_id") == "gv-1") and e["criterio_versao"] == "v1" and e["passada"] == "primeira" and e["ativo"] is False
     assert {r_["braco"] for r_ in e["respostas"]} == {"servido", "lexico", "revisor"}
     assert e["carimbo"]["vocabulario"]["versao"] == "voc-1" and e["carimbo"]["acervo"]["acervo_sha"] == "abc123456789"
-    assert e["carimbo"]["gabarito"]["recusadas"] == ["esc-p2"] and e["carimbo"]["motor"]["servido"]["RRF_K"] == "60"
+    assert (e["carimbo"].get("bateria") or e["carimbo"].get("gabarito"))["recusadas"] == ["esc-p2"] and e["carimbo"]["motor"]["servido"]["RRF_K"] == "60"
     assert e["carimbo"]["escritor"]["modelo"] == "qwen3.5:9b" and e["carimbo"]["custo"]["lexico"]["tokens_saida"] == 480
     assert not re.search(r"\[\d", json.dumps(e["corpo"]))  # nenhuma marca [n] no meio do texto
     # mesmo modelo, prompt e semente nos três braços

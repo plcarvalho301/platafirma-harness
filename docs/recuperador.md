@@ -180,9 +180,9 @@ Um gerador só, parametrizado. Três classes de caso:
 
 `tem_gold` segue `False`: o gerador produz candidato, e quem calibra a fonte é revisão humana.
 `resposta_certa: ausente` não é gerável: é juízo sobre o corpus. A wiki precisa de `--semente`
-(default `PlataFirma`), que enviesa a amostra, nunca o gabarito. Fonte sem estado levanta em vez de
+(default `PlataFirma`), que enviesa a amostra, nunca a bateria. Fonte sem estado levanta em vez de
 emitir gold vazio.
 
 Rodando os casos pontuáveis contra as fontes: `board` e `registro` acertam todos; `fila`, `mesa` e
 `wiki` devolvem vazio quando recebem como alvo a chave que elas mesmas emitem. A assimetria é do
-contrato de alvo, não do gabarito, e uniformizá-la é decisão do dono do envelope.
+contrato de alvo, não da bateria, e uniformizá-la é decisão do dono do envelope.

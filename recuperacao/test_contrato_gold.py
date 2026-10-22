@@ -90,7 +90,7 @@ def test_caso_de_vazia_e_pontuavel_e_tem_esperado_vazio():
 
 
 def test_caso_de_termo_sai_despontuavel_e_declarado():
-    """Esperado derivado do mesmo mecanismo que será medido é gabarito com a prova aberta."""
+    """Esperado derivado do mesmo mecanismo que será medido é bateria com a prova aberta."""
     casos = [c for c in gold.gera("board", FonteFalsa()) if c["id"].startswith("board-termo")]
     assert casos
     for c in casos:
@@ -183,7 +183,7 @@ def test_acervo_nao_sai_daqui():
 
 
 def test_nao_gera_resposta_certa_ausente():
-    """`ausente` é juízo sobre o corpus, não sobre o estado — gabarito de autor (§13)."""
+    """`ausente` é juízo sobre o corpus, não sobre o estado — bateria de autor (§13)."""
     assert not [c for c in gold.gera("board", FonteFalsa()) if c["resposta_certa"] == "ausente"]
 
 

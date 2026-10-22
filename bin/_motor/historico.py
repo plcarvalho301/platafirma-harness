@@ -78,7 +78,8 @@ def ponto(m: dict) -> dict:
             "geracao": _geracao_do_carimbo(m), "sombra": m.get("geracao") or None,
             "embedder": ((m.get("indice") or {}).get("geracao") or {}).get("parametros", {}).get("embedder")
             or (m.get("indice") or {}).get("embed_model"),
-            "gabarito": m.get("gabarito"), "bracos": m.get("bracos") or [],
+            "bateria": m.get("bateria") or m.get("gabarito"),
+            "gabarito": m.get("gabarito") or m.get("bateria"), "bracos": m.get("bracos") or [],
             "geral": _metrica(met.get("geral")), "codigo": _metrica(met.get("codigo")),
             "sentido": _metrica(met.get("sentido")), "t2": _metrica(met.get("t2")),
             "abstencao": ({"ok": abst.get("ok"), "n": abst.get("n"), "taxa": abst.get("taxa")}

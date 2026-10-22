@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Gera o estrato de gabarito da EXPANSÃO — o instrumento que o gold canônico não alcança.
+"""Gera o estrato de bateria da EXPANSÃO — o instrumento que o gold canônico não alcança.
 
-Por que existe: medido em 13/08/2026 contra o gabarito canônico, das 228 perguntas 38 casam
+Por que existe: medido em 13/08/2026 contra a bateria canônica, das 228 perguntas 38 casam
 algum conceito declarado e só 14 têm conceito com pai hierárquico; no estrato
 T1-determinístico, zero. Um ganho de 20% nessas 14 move a métrica global cerca de 1 p.p. —
 dentro do ruído. A régua ("sem delta contra o gold, não promove") está certa e o instrumento

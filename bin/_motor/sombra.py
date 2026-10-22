@@ -12,7 +12,7 @@ Duas regras que a primeira rodada (05/10/2026) ensinou a escrever:
 - o corpus nunca se junta na memória: embeda um bloco, compara com todas as perguntas, guarda o
   top-k corrente e descarta o bloco. A matriz inteira de 261 mil trechos derrubou a máquina.
 
-Corpus da biblioteca: um SUBCORPUS, não a partição inteira — os trechos-alvo do gabarito, até 300
+Corpus da biblioteca: um SUBCORPUS, não a partição inteira — os trechos-alvo da bateria, até 300
 trechos de cada obra-alvo, o top-50 do servido (vetor) e da palavra exata para cada pergunta, e
 uma amostra aleatória como distração. Viés declarado: o pool do servido entra, o dos candidatos
 não (montá-lo exigiria embedar tudo); acerto de candidato fora do pool não conta. A casa é pequena
@@ -20,11 +20,11 @@ e entra inteira.
 
 O que mede, por partição:
 - o braço de significado ISOLADO: top-k exato de cada variante sobre o mesmo corpus;
-- no gabarito (biblioteca): hit@k e MRR por família, e o piso de abstenção que melhor separa
+- na bateria (biblioteca): hit@k e MRR por família, e o piso de abstenção que melhor separa
   positivas de negativas, por modelo — o piso é do embedder, não do motor;
 - no replay das perguntas reais do log: juiz de fora das duas famílias (cross-encoder
   BAAI/bge-reranker-v2-m3) pontua o pool unido; nDCG@k e vitória/empate/derrota contra o
-  servido; o juiz é conferido contra o gabarito na mesma rodada.
+  servido; o juiz é conferido contra a bateria na mesma rodada.
 
 Saída: <saida>/log.txt (progresso) e <saida>/resultado.json (o que o verbo resume).
 """
@@ -45,7 +45,7 @@ K = int(ARGS.get("k", 8))
 MAX_PERGUNTAS = int(ARGS.get("max_perguntas", 1000))
 POOL = 50            # candidatos por pergunta, por braço, no subcorpus
 AMOSTRA = 10000      # trechos aleatórios de distração
-POR_OBRA = 300       # teto de trechos por obra-alvo do gabarito
+POR_OBRA = 300       # teto de trechos por obra-alvo da bateria
 BLOCO = 2048         # trechos por bloco de embed: é o que vive na memória
 _LOG = open(os.path.join(SAIDA, "log.txt"), "a", buffering=1)
 
@@ -176,7 +176,7 @@ def subcorpus_biblioteca(conn, cm, ind, perguntas, Qs, gold):
     sel |= {r[0] for r in cm.execute(
         "SELECT alvo_id::text FROM motor.vetor WHERE indice_id = ANY(%s::uuid[]) "
         "AND dimensao = 1024 ORDER BY random() LIMIT %s", (ind, AMOSTRA)).fetchall()}
-    log(f"subcorpus biblioteca: {len(sel)} trechos (gabarito {n_gold}, "
+    log(f"subcorpus biblioteca: {len(sel)} trechos (bateria {n_gold}, "
         f"pool vetor {n_vet}, pool lexical {n_lex}, amostra {AMOSTRA})")
     return sel
 
@@ -302,11 +302,11 @@ def main():
            "subcorpus": {"pool_por_braco": POOL, "amostra": AMOSTRA, "por_obra_alvo": POR_OBRA}}
     log(f"versoes: {res['versoes']}")
 
-    gold = [json.loads(l) for l in open(ARGS["gabarito"], encoding="utf-8") if l.strip()]
+    gold = [json.loads(l) for l in open(ARGS.get("bateria") or ARGS.get("gabarito"), encoding="utf-8") if l.strip()]
     gold = [g for g in gold if g.get("pergunta")]
     # O replay le a bateria do log (acervo.bateria_recuperacao, #3314) pela particao pedida, mais o
     # balde dos eventos anteriores a 085, que nao declaram particao. A view ja tira o canario e so
-    # traz as origens busca e abertura; o gabarito, que e arquivo daqui, sai neste ponto, pelo
+    # traz as origens busca e abertura; a bateria, que e arquivo daqui, sai neste ponto, pelo
     # texto normalizado como a view o normaliza.
     parts_log = sorted({_API[p] for p in ARGS["particoes"]} | {BALDE_ANTIGO})
     linhas = conn.execute("SELECT particao, pergunta_normalizada, pergunta_exemplo "
@@ -323,9 +323,9 @@ def main():
     total_log = len(replay)
     random.Random(42).shuffle(replay)
     replay = replay[:MAX_PERGUNTAS]
-    res["perguntas"] = {"gabarito": len(gold), "log_unicas": total_log, "replay": len(replay),
+    res["perguntas"] = {"bateria": len(gold), "gabarito": len(gold), "log_unicas": total_log, "replay": len(replay),
                         "por_particao": por_particao}
-    log(f"perguntas: gabarito {len(gold)}, log {total_log} unicas, replay {len(replay)}; "
+    log(f"perguntas: bateria {len(gold)}, log {total_log} unicas, replay {len(replay)}; "
         f"por particao da bateria (a mesma pergunta pode contar em mais de uma): {por_particao}")
     perguntas = [g["pergunta"] for g in gold] + replay
     n_gold = len(gold)
@@ -399,7 +399,8 @@ def main():
 
     variantes = list(ranking)
 
-    res["gabarito"] = {}
+    res["bateria"] = {}
+    res["gabarito"] = res["bateria"]
     rank_gold = {}
     if "biblioteca" in particoes:
         cp = corpus["biblioteca"]
@@ -437,9 +438,9 @@ def main():
                 pos.append(top1)
                 rk.append((gi, r))
             rank_gold[v] = rk
-            res["gabarito"][v] = {"codigo": agrega(fam["codigo"]), "sentido": agrega(fam["sentido"]),
-                                  "geral": agrega(fam["codigo"] + fam["sentido"]),
-                                  "abstencao": melhor_piso(pos, neg)}
+            res["bateria"][v] = {"codigo": agrega(fam["codigo"]), "sentido": agrega(fam["sentido"]),
+                                 "geral": agrega(fam["codigo"] + fam["sentido"]),
+                                 "abstencao": melhor_piso(pos, neg)}
 
     log("juiz: carregando BAAI/bge-reranker-v2-m3")
     from sentence_transformers import CrossEncoder
@@ -553,6 +554,7 @@ def main():
                 tot += 1
                 ok += int((dm > 0) == (dj > 0))
             conc[v] = {"concordam": ok, "comparaveis": tot, "taxa": round(ok / tot, 3) if tot else None}
+    res["juiz"]["concordancia_com_bateria"] = conc
     res["juiz"]["concordancia_com_gabarito"] = conc
     res["segundos"] = round(time.time() - t_ini, 1)
     with open(os.path.join(SAIDA, "resultado.json"), "w", encoding="utf-8") as f:

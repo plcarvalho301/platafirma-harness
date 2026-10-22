@@ -9,7 +9,7 @@ Uma variavel por rodada, mesmo gold set, duas familias medidas SEPARADAS:
 O base de Settings espelha o que esta SERVIDO no container rag-extractor-api, medido em
 10/08/2026 — nao o default do codigo. Toda config e um override declarado sobre esse base.
 
-  gabarito: avaliacao/gabarito.jsonl (unico, desde o expurgo de 10/08)
+  bateria: avaliacao/bateria.jsonl (unica, desde o expurgo de 10/08)
   venv: um com torch, sentence-transformers, psycopg, pgvector (ex.: /opt/platafirma/current/venv/rag)
   uso : <venv>/bin/python bancada_ruido.py --eixo blend|pool|beta|todos
   rag : platafirma-conhecimento/rag da bancada declarada (PLATAFIRMA_BANCADA ou ~/.config/platafirma/bancada);
@@ -35,7 +35,7 @@ try:
 except BancadaNaoDeclarada as e:
     print(f"bancada_ruido: {e}", file=sys.stderr)
     sys.exit(3)
-GABARITO = ARVORE / "avaliacao" / "gabarito.jsonl"
+BATERIA = ARVORE / "avaliacao" / "bateria.jsonl"
 SAIDA = Path(__file__).resolve().parent
 COFRE_RAG = instancia() / "segredos" / "rag"
 
@@ -72,13 +72,13 @@ def _env_do_servido() -> None:
 
 
 def carregar_gold():
-    """Le o gabarito unico. `det` = quem tem section_id alvo; `t2` = quem tem obra alvo.
+    """Le a bateria unica. `det` = quem tem section_id alvo; `t2` = quem tem obra alvo.
 
     Nao pontuavel fica de fora dos dois: item marcado assim existe para nao sumir do
     registro, nao para entrar em conta de recall.
     """
     det, t2 = [], []
-    for l in GABARITO.read_text().splitlines():
+    for l in BATERIA.read_text().splitlines():
         if not l.strip():
             continue
         d = json.loads(l)

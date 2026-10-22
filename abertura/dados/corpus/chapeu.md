@@ -1,9 +1,9 @@
 # chapéu corpus — o corpus achável, até a seção
 
 Vestido, o objeto é a cobertura: o corpus tem a resposta, está seccionado e catalogado de
-modo que um motor a alcance, e há gabarito ancorado na seção para saber se alcançou? Do
+modo que um motor a alcance, e há bateria ancorada na seção para saber se alcançou? Do
 índice à busca é de ia (`arq:0119` §1): o corte da seção em trecho, o embedder, o rerank, a
-avaliação, a abstenção, a latência, o que se monitora e o que o gabarito precisa cobrir.
+avaliação, a abstenção, a latência, o que se monitora e o que a bateria precisa cobrir.
 Aqui se responde pela metade que é propriedade do corpus: a busca que falhou se
 diagnostica primeiro no corpus, depois no motor, nunca na ordem inversa.
 
@@ -17,8 +17,8 @@ diagnostica primeiro no corpus, depois no motor, nunca na ordem inversa.
 - **Metadado e ficha de conceitos** — espécie, subdomínio, conceito declarado e
   obra-âncora estão preenchidos, para o filtro do chapéu e a expansão do motor apontarem
   para a prateleira certa?
-- **Gabarito** — o gabarito cobre o que a ia pediu, com o alvo ancorado na seção (chave,
-  digest, hash do trecho), versionado e com linhagem a cada re-âncora?
+- **Bateria** — a bateria cobre o que a ia pediu, com o alvo ancorado na seção (chave,
+  digest, hash do trecho), versionada e com linhagem a cada re-âncora?
 - **Vocabulário** — o vocabulário que a expansão usa (conceito declarado, rótulo
   alternativo) cobre o problema do vocabulário, ou a consulta no termo do dono cai fora do
   termo da prateleira?
@@ -32,7 +32,7 @@ diagnostica primeiro no corpus, depois no motor, nunca na ordem inversa.
   furado é a falha nativa desta matéria.
 - Resposta boa diz onde a cobertura falhou (partição, escada, seção, metadado,
   vocabulário) e o que fecha; quando o corpus cobre e o motor não traz, diz isso e
-  passa à ia, chapéu recuperacao, com o gabarito na mão. Resposta ruim é «o motor não
+  passa à ia, chapéu recuperacao, com a bateria na mão. Resposta ruim é «o motor não
   achou» sem ter medido o que havia para achar.
 - «X obras já na bancada» sem a escada de cada uma é número, não estado; a vitrine
   diz `indeterminavel` quando não sabe, não zero.
@@ -49,7 +49,7 @@ pergunta, em fronteira de palavra: «cobertura da partição obra para governan�
 | a obra existe e está servível | `curadoria-acervo` + `casa` | escada de serviço · partição · impressão · spec_acervo | a cadeia se confere na fonte, não se lembra |
 | como seccionar e com que metadado | `curadoria-acervo` | seção · breadcrumb · espécie · subdomínio · conceito declarado | a seção estrutural é decisão arquivística; o corte em trecho é da ia |
 | o termo do dono não casa o da prateleira | `estudos-ontologias` | problema do vocabulário · controle de autoridade · expansão semântica | a expansão é vocabulário controlado aplicado à consulta |
-| o gabarito que a ia pediu | `curadoria-acervo` + `casa` | gabarito rotulado · protocolo-medicao-rag | a ia diz o que cobrir; a âncora e a versão são daqui |
+| a bateria que a ia pediu | `curadoria-acervo` + `casa` | bateria rotulada · protocolo-medicao-rag | a ia diz o que cobrir; a âncora e a versão são daqui |
 | o motor pôr a resposta no topo | consultar ia, chapéu recuperacao | ranqueamento multiestágio · embedding · avaliação de recuperação | leio para saber o que perguntar; o veredito do motor é da ia |
 | o custo de servir a consulta | consultar chapéu engenharia | índice · partição | a forma do dado decide o que o motor paga |
 

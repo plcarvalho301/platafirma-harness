@@ -28,9 +28,21 @@ def _numero(rodada: dict) -> int | None:
     return g if isinstance(g, int) else None
 
 
-def _servido_comparavel(rodadas: list[dict], servindo: dict, gabarito) -> dict | None:
+def _chave_bateria(m: dict) -> str:
+    return (m.get("bateria") or m.get("gabarito") or "") if isinstance(m, dict) else ""
+
+
+def _mesma_bateria(a: str, b: str) -> bool:
+    if not a or not b:
+        return a == b
+    def norm(x):
+        return str(x).replace("gabarito.jsonl", "bateria.jsonl").replace("gabarito", "bateria")
+    return norm(a) == norm(b)
+
+
+def _servido_comparavel(rodadas: list[dict], servindo: dict, bateria) -> dict | None:
     for m in reversed(rodadas):                      # `rodadas` vem em ordem de hora
-        if not m.get("geracao") and m.get("gabarito") == gabarito and _numero(m) == servindo.get("geracao"):
+        if not m.get("geracao") and _mesma_bateria(_chave_bateria(m), bateria) and _numero(m) == servindo.get("geracao"):
             return m
     return None
 
@@ -44,7 +56,7 @@ def _acerto(m: dict) -> tuple[float | None, int | None]:
 
 def recomenda(sombra_m: dict, servido_m: dict | None, n_servindo: int) -> tuple[str | None, str]:
     if servido_m is None:
-        return None, (f"sem medida da g{n_servindo} no mesmo gabarito para comparar: rode `motor rag medir "
+        return None, (f"sem medida da g{n_servindo} na mesma bateria para comparar: rode `motor rag medir "
                       "biblioteca` no servido antes de decidir")
     h_s, a_s = _acerto(sombra_m)
     h_v, a_v = _acerto(servido_m)
@@ -74,7 +86,7 @@ def pendencias(estado: dict, rodadas: list[dict]) -> list[dict]:
     particao = estado.get("particao") or "biblioteca"
     cob = sombra.get("cobertura") or {}
     horas = (cob.get("trechos_total") or 0) / TRECHOS_POR_S / 3600
-    recomendada, motivo = recomenda(ultima, _servido_comparavel(rodadas, servindo, ultima.get("gabarito")), n_ser)
+    recomendada, motivo = recomenda(ultima, _servido_comparavel(rodadas, servindo, _chave_bateria(ultima)), n_ser)
     completa = cob.get("total") and cob.get("aprovadas") == cob.get("total")
     return [{
         "id": f"virar-ou-descartar-g{g}",

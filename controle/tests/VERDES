@@ -207,7 +207,7 @@ testes/test_descansar_ritual.py | bin/acervo bin/_acervo/** bin/acesso bin/_aces
 testes/test_expediente.py | bin/expediente bin/_expediente/**
 testes/test_expediente_cadeirinha.py | bin/expediente bin/_expediente/** testes/test_expediente.py
 testes/test_expediente_chapeu.py | bin/expediente bin/_expediente/** testes/test_expediente.py testes/test_expediente_cadeirinha.py
-testes/test_gabarito_chave.py | avaliacao/gabarito.jsonl
+testes/test_bateria_chave.py | avaliacao/bateria.jsonl
 testes/test_gerar_rotas_chapeu.py | abertura/**
 testes/test_ingerir_casamento_3307.py | bin/ingerir bin/motor bin/_motor/**
 testes/test_ingerir_ficha_3306.py | bin/ingerir bin/motor bin/_motor/**

@@ -1,4 +1,4 @@
-Você é o juiz de um gabarito de recuperação. Uma cadeira (um agente que trabalha numa casa de
+Você é o juiz de uma bateria de recuperação. Uma cadeira (um agente que trabalha numa casa de
 documentos) fez uma pergunta ao acervo; um escritor respondeu usando SOMENTE as seções numeradas que
 vêm abaixo da resposta. Você julga a resposta como o dono da casa julgaria, pelo critério abaixo, sem
 saber de onde ela veio nem como outra resposta à mesma pergunta se saiu.
