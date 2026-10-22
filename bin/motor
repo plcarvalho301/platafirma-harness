@@ -854,9 +854,14 @@ def _texto_do_plano(p):
              + f" · {p.get('fora_transcritas', 0)} transcrita(s) fora, o promover nao pede indice"
              f" · {p.get('fora_nao_indexaveis', 0)} nao indexavel(is) fora (espelho nao servivel)"
              f" · {p.get('indexadas', 0)} de {p.get('seladas', 0)} seladas marcadas para indexar"
-             f" · {p.get('facetas_defasadas', 0)} faceta(s) a refazer no ar")
+             f" · {p.get('facetas_defasadas', 0)} faceta(s) a refazer no ar"
+             + (f" · {p['fora_sem_faixa']} selada(s) sem faixa fora (o acervo marca a seção antes)"
+                if p.get("fora_sem_faixa") else ""))
+    sem_faixa = [f"  sem faixa  {s['obra_id']}  {(s.get('titulo') or '')[:40]:<40}  "
+                 f"{'com espelho' if s.get('espelho') else 'sem espelho'}"
+                 for s in (p.get("sem_faixa") or [])[:20]]
     if p.get("modo") == "nada":
-        return f"nada a fazer: {conta}\nsem lote aberto"
+        return "\n".join([f"nada a fazer: {conta}", *sem_faixa, "sem lote aberto"])
     if p.get("modo") == "aplicado":
         return (f"lote {p['lote']} aberto no rag-api, em segundo plano: {p.get('n', 0)} impressao(oes) · "
                 f"{conta}\nacompanhar: {p.get('acompanhar')}")
@@ -870,6 +875,7 @@ def _texto_do_plano(p):
                       f"{situacao}  {it['acao']}")
     if p.get("n", 0) > 20:
         linhas.append(f"  … +{p['n'] - 20}")
+    linhas += sem_faixa
     if p.get("n", 0):
         linhas.append("para valer: o mesmo comando com --apply")
     return "\n".join(linhas)
