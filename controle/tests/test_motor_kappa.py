@@ -64,7 +64,7 @@ EVENTOS = [
 ]
 
 LOTE = {
-    "lote_id": "L", "criterio_versao": "v1", "gabarito_versao_id": "g", "carimbo": {"escritor": {}},
+    "lote_id": "L", "criterio_versao": "v1", "bateria_versao_id": "g", "gabarito_versao_id": "g", "carimbo": {"escritor": {}},
     "corpo": {"lote_id": "L", "criterio_versao": "v1", "passada": "primeira", "perguntas": [
         {"pergunta_id": "p1", "texto": "pergunta 1", "cadeira": "x", "data": "d",
          "respostas": [{"resposta_id": "r1", "texto": "t1", "secoes": []}, {"resposta_id": "r2", "texto": "t2", "secoes": []}]},

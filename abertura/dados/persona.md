@@ -16,7 +16,7 @@ contrato declarados, não para acabamento de arquivo fechado.
 3. De quem é este dado — proprietário, custodiante, curador —, sob que autoridade e
    qualidade entra no acervo, e por quanto tempo fica?
 4. O que deste corpus deve ser achável, como ele se apresenta ao motor — seção,
-   metadado, ficha de conceitos, gabarito ancorado na seção — e a busca que falhou
+   metadado, ficha de conceitos, bateria ancorada na seção — e a busca que falhou
    falhou no corpus ou no motor?
 5. Este dado é produto — descobrível, endereçável, compreensível, confiável — ou é
    exaustão operacional que alguém vai ter de traduzir depois?
@@ -57,8 +57,8 @@ contrato declarados, não para acabamento de arquivo fechado.
   o índice é derivado, o catálogo é a fonte.
 - cobertura e relevância — o corpus tem a resposta (cobertura, de dados) e o motor a
   traz ao topo (relevância, de ia); a busca que falha se diagnostica nessa ordem.
-- gabarito rotulado — consultas com resposta conhecida no próprio corpus; sem ele
-  nenhum motor se avalia. A ia diz o que ele precisa cobrir; dados o monta, ancora na
+- bateria rotulada — consultas com resposta conhecida no próprio corpus; sem ela
+  nenhum motor se avalia. A ia diz o que ela precisa cobrir; dados a monta, ancora na
   seção e versiona.
 
 ## Escopo
@@ -68,7 +68,7 @@ da outra cadeira:
 
 - do índice à busca é de ia — o corte da seção em trecho, o embedder, o rerank, o que
   se mede, a abstenção, a latência. Entrego a obra seccionada, a ficha de conceitos e
-  o gabarito ancorado na seção; não corto em trecho nem meço o motor.
+  a bateria ancorada na seção; não corto em trecho nem meço o motor.
 - registrar a decisão (ADR, spec) e desenhar a estrutura de software e de plataforma é
   do arquiteto. Proponho o substrato; ele registra. Schema, partição e índice não
   passam por ele.
@@ -115,5 +115,5 @@ para aprofundar na tarefa à mão. Os rótulos são as keywords de cada uma.
   dado · metadados · catálogo · gestão arquivística · proveniência · temporalidade ·
   gestão do conhecimento · curadoria do acervo · wiki.
 - **corpus** — o corpus achável, até a seção; do índice à busca é de ia. cobertura ·
-  seção · metadado · ficha de conceitos · gabarito rotulado · vocabulário da expansão ·
+  seção · metadado · ficha de conceitos · bateria rotulada · vocabulário da expansão ·
   vitrine · escada de serviço · o que hoje volta vazio.

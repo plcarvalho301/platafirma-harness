@@ -3,15 +3,15 @@
 # Mede no container (host nao alcanca o motor), grava avaliacao.run + resultado (motor-pg),
 # aplicando a regua N/A: sem alvo -> rank/hit/recall = NULL (nunca 0).
 # Uso: bash rodar-baseline.sh [caminho_gold.jsonl] [rotulo_conjunto]
-# Gabarito default: o da propria arvore (release ou worktree de onde o script roda).
+# Bateria default: a da propria arvore (release ou worktree de onde o script roda).
 # Senha do motor: `seg segredo ler motor/MOTOR_PG_PASSWORD` (cofre da instancia); ausente = falha.
 set -euo pipefail
 DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-GOLD="${1:-$DIR/gabarito.jsonl}"
+GOLD="${1:-$DIR/bateria.jsonl}"
 CONJ="${2:-gold-228-reancorado}"
 C=motor-busca        # a busca servida (#3844); era rag-extractor-api, que ate a virada servia a busca e o acervo
 
-docker cp "$GOLD" $C:/tmp/gabarito.jsonl >/dev/null
+docker cp "$GOLD" $C:/tmp/bateria.jsonl >/dev/null
 docker cp "$DIR/runner_gold_baseline.py" $C:/tmp/ >/dev/null
 docker exec -w /app -e PYTHONPATH=/app $C python /tmp/runner_gold_baseline.py | tee /tmp/baseline_agg.txt
 docker cp $C:/tmp/baseline_resultados.jsonl /tmp/baseline_resultados.jsonl >/dev/null
@@ -19,11 +19,11 @@ docker cp $C:/tmp/baseline_resultados.jsonl /tmp/baseline_resultados.jsonl >/dev
 MOTOR_PG_PASSWORD="$(seg segredo ler motor/MOTOR_PG_PASSWORD)" || { echo "segredo motor/MOTOR_PG_PASSWORD ausente no cofre da instancia" >&2; exit 3; }
 MDSN=$(MOTOR_PG_PASSWORD="$MOTOR_PG_PASSWORD" python3 -c "import os,urllib.parse;print('postgresql://motor:%s@127.0.0.1:5433/motor'%urllib.parse.quote(os.environ['MOTOR_PG_PASSWORD'],safe=''))")
 unset MOTOR_PG_PASSWORD
-GV=$(psql "$MDSN" -tAq -c "select id from avaliacao.gabarito_versao order by criado_em desc limit 1" | grep -Eo '[0-9a-f-]{36}')
+GV=$(psql "$MDSN" -tAq -c "select id from avaliacao.bateria_versao order by criado_em desc limit 1" | grep -Eo '[0-9a-f-]{36}')
 J=$(grep '^JSON ' /tmp/baseline_agg.txt | tail -1 | cut -c6-)
 P50=$(python3 -c "import json,sys;print(json.loads('''$J''')['p50'])")
 P95=$(python3 -c "import json,sys;print(json.loads('''$J''')['p95'])")
-RUN=$(psql "$MDSN" -tAq -c "INSERT INTO avaliacao.run (gabarito_versao_id,stack_sha,params,latencia_p50_ms,latencia_p95_ms) VALUES ('$GV','rag-servido-desconhecido','{\"conjunto\":\"$CONJ\",\"k\":8}'::jsonb,$P50,$P95) RETURNING id" | grep -Eo '[0-9a-f-]{36}' | head -1)
+RUN=$(psql "$MDSN" -tAq -c "INSERT INTO avaliacao.run (bateria_versao_id,stack_sha,params,latencia_p50_ms,latencia_p95_ms) VALUES ('$GV','rag-servido-desconhecido','{\"conjunto\":\"$CONJ\",\"k\":8}'::jsonb,$P50,$P95) RETURNING id" | grep -Eo '[0-9a-f-]{36}' | head -1)
 python3 - "$RUN" <<'PY'
 import json,sys
 run=sys.argv[1].strip()

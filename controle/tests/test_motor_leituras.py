@@ -412,8 +412,8 @@ def test_sombra_ver_com_o_conteiner_fora_diz_nao_consegui_olhar(motor):
 
 # --- tarefa 6: histórico de medida --------------------------------------------------------------
 
-def _rodada(em, gnum, hit1, abst_ok, *, rotulo="", sombra=None, gabarito="harness/avaliacao/gabarito.jsonl"):
-    return {"em": em, "rotulo": rotulo, "k": 5, "geracao": sombra, "gabarito": gabarito,
+def _rodada(em, gnum, hit1, abst_ok, *, rotulo="", sombra=None, gabarito="harness/avaliacao/bateria.jsonl"):
+    return {"em": em, "rotulo": rotulo, "k": 5, "geracao": sombra, "bateria": gabarito, "gabarito": gabarito,
             "indice": {"geracao": {"numero": gnum, "parametros": {"embedder": f"E{gnum}"}}},
             "metricas": {"geral": {"n": 50, "hit@1": hit1, "hit@3": 0.8, "hit@5": 0.9, "mrr": 0.7},
                          "abstencao": {"n": 22, "ok": abst_ok, "abstencao": f"{abst_ok}/22", "taxa": round(abst_ok / 22, 3)}},
@@ -488,10 +488,10 @@ def test_a_hora_da_bateria_e_a_do_rag_se_comparam_em_utc():
 
 def test_medir_em_json_traz_o_bloco_de_cada_indicador_o_delta_e_a_hora(motor):
     roda, grava, sqls, salva, instancia, gabarito, S = motor
-    primeira = roda("biblioteca", "--gabarito", str(gabarito), "--rotulo", "um", "--json", ato="medir")
+    primeira = roda("biblioteca", "--bateria", str(gabarito), "--rotulo", "um", "--json", ato="medir")
     assert primeira.returncode == 0, primeira.stderr
     assert primeira.stdout.lstrip().startswith("{")                        # o progresso foi ao stderr
-    segunda = roda("biblioteca", "--gabarito", str(gabarito), "--rotulo", "dois", "--json", ato="medir")
+    segunda = roda("biblioteca", "--bateria", str(gabarito), "--rotulo", "dois", "--json", ato="medir")
     d = json.loads(segunda.stdout)
     por_nome = {i["nome"]: i for i in d["indicadores"]}
     h1 = por_nome["acerto na primeira posicao (hit@1)"]
@@ -510,6 +510,28 @@ def test_medir_em_json_traz_o_bloco_de_cada_indicador_o_delta_e_a_hora(motor):
 def test_medir_json_nao_vale_para_calibrar_nem_sombra(motor):
     roda, *_ = motor
     assert roda("biblioteca", "--sombra", "x", "--json", ato="medir").returncode == 2
+
+
+def test_medir_recusa_flag_gabarito_e_aponta_bateria(motor):
+    roda, *_ = motor
+    r = roda("biblioteca", "--gabarito", "x", ato="medir")
+    assert r.returncode == 2
+    assert "--bateria" in r.stderr
+    r2 = roda("biblioteca", "--contra", "busca", "--gabarito", "x", ato="medir")
+    assert r2.returncode == 2
+    assert "--bateria" in r2.stderr
+
+
+def test_medir_delta_contra_medicao_antiga_com_chave_gabarito(motor):
+    roda, grava, sqls, salva, instancia, gabarito, S = motor
+    antiga_gab = str(gabarito).replace("bateria.jsonl", "gabarito.jsonl")
+    antiga = _rodada("2026-10-01T10:00:00-0300", 3, 0.5, 10, rotulo="antiga", gabarito=antiga_gab)
+    del antiga["bateria"]
+    salva("20261001T100000-antiga.json", antiga)
+    r = roda("biblioteca", "--bateria", str(gabarito), "--rotulo", "nova", "--json", ato="medir")
+    assert r.returncode == 0, r.stderr
+    d = json.loads(r.stdout)
+    assert d["delta"]["contra"] and d["delta"]["rotulo"] == "antiga"
 
 
 def test_indexar_relatorio_em_json_tem_hora_fonte_e_o_motivo_quando_o_rag_esta_fora(motor):

@@ -78,7 +78,7 @@ def _gabarito(tmp_path, positivas=3):
               "alvo_obras": ["Obra"], "relevancia": "positiva", "pontuavel": True} for i in range(positivas)]
     itens.append({"id": "N0", "pergunta": "negbaixa 0", "estrato": "T2-cadeiras", "relevancia": "negativa",
                   "pontuavel": True, "nota": "sem obra no acervo"})
-    gab = tmp_path / "gabarito.jsonl"
+    gab = tmp_path / "bateria.jsonl"
     gab.write_text("\n".join(json.dumps(x) for x in itens) + "\n", encoding="utf-8")
     return gab
 
@@ -126,7 +126,7 @@ def _conta(stdout):
 
 def test_busca_igual_nos_dois_lados_sai_0_e_diz_que_a_troca_pode_seguir(duas):
     roda, estado, instancia, gab = duas
-    r = roda("biblioteca", "--gabarito", str(gab), "--contra", "busca")
+    r = roda("biblioteca", "--bateria", str(gab), "--contra", "busca")
     assert r.returncode == 0, r.stdout + r.stderr
     iguais, total, jmin, cruzados = _conta(r.stdout)
     assert iguais == total >= 1 and jmin == "1.000" and cruzados == 0
@@ -139,7 +139,7 @@ def test_busca_igual_nos_dois_lados_sai_0_e_diz_que_a_troca_pode_seguir(duas):
 
 def test_as_duas_buscas_recebem_origem_sombra_k_8_e_a_particao_nas_duas_pontas(duas):
     roda, estado, _, gab = duas
-    assert roda("biblioteca", "--gabarito", str(gab), "--contra", "busca").returncode == 0
+    assert roda("biblioteca", "--bateria", str(gab), "--contra", "busca").returncode == 0
     for lado, token in (("rag", "Bearer toka"), ("busca", "Bearer tokb")):
         buscas = [p for p in estado[lado]["pedidos"] if p[1] == "/search"]
         assert buscas and all(p[2] == token for p in buscas)
@@ -153,7 +153,7 @@ def test_as_duas_buscas_recebem_origem_sombra_k_8_e_a_particao_nas_duas_pontas(d
 def test_um_trecho_diferente_no_top_8_sai_1_e_a_virada_nao_segue(duas):
     roda, estado, _, gab = duas
     estado["busca"]["ajusta"] = lambda p, q, l: l[:-1] + ["so-na-nova"] if q.startswith("positiva 1") and p == "biblioteca" else l
-    r = roda("biblioteca", "--gabarito", str(gab), "--contra", "busca")
+    r = roda("biblioteca", "--bateria", str(gab), "--contra", "busca")
     assert r.returncode == 1, r.stdout
     iguais, total, jmin, cruzados = _conta(r.stdout)
     assert iguais == total - 1 and float(jmin) < 1.0 and cruzados == 0
@@ -166,7 +166,7 @@ def test_trecho_da_casa_na_resposta_da_biblioteca_e_cruzamento_de_particao(duas)
     # a nova devolve, na biblioteca, um trecho que a servida só tem na casa
     estado["busca"]["ajusta"] = lambda p, q, l: (
         l[:-1] + [f"casa|{q}|0"] if q.startswith("positiva 0") and p == "biblioteca" else l)
-    r = roda("biblioteca", "--gabarito", str(gab), "--contra", "busca")
+    r = roda("biblioteca", "--bateria", str(gab), "--contra", "busca")
     assert r.returncode == 1, r.stdout
     assert _conta(r.stdout)[3] == 1
     assert "cruzou (1) [biblioteca] positiva 0 onde esta" in r.stdout
@@ -175,7 +175,7 @@ def test_trecho_da_casa_na_resposta_da_biblioteca_e_cruzamento_de_particao(duas)
 def test_embedder_ou_geracao_diferente_entre_os_indices_sai_1_mesmo_com_top_8_igual(duas):
     roda, estado, _, gab = duas
     estado["busca"]["indice"] = {**INDICE, "geracao": {"numero": 4, "parametros": {"embedder": "outro"}}}
-    r = roda("biblioteca", "--gabarito", str(gab), "--contra", "busca")
+    r = roda("biblioteca", "--bateria", str(gab), "--contra", "busca")
     assert r.returncode == 1, r.stdout
     iguais, total, _, cruzados = _conta(r.stdout)
     assert iguais == total and cruzados == 0
@@ -184,7 +184,7 @@ def test_embedder_ou_geracao_diferente_entre_os_indices_sai_1_mesmo_com_top_8_ig
 
 def test_json_leva_o_resumo_os_carimbos_e_o_arquivo(duas):
     roda, _, _, gab = duas
-    r = roda("biblioteca", "--gabarito", str(gab), "--contra", "busca", "--json")
+    r = roda("biblioteca", "--bateria", str(gab), "--contra", "busca", "--json")
     assert r.returncode == 0, r.stderr
     saida = json.loads(r.stdout)
     assert saida["limpo"] is True and saida["resumo"]["cruzados"] == 0 and saida["k"] == 8
@@ -194,11 +194,11 @@ def test_json_leva_o_resumo_os_carimbos_e_o_arquivo(duas):
 
 def test_uso_errado_sai_2_sem_chamar_nenhuma_busca(duas):
     roda, estado, _, gab = duas
-    assert roda("biblioteca", "--gabarito", str(gab), "--contra", "rag").returncode == 2      # contra si mesma
-    assert roda("biblioteca", "--gabarito", str(gab), "--contra", "nao-existe").returncode == 2
-    assert roda("biblioteca", "--gabarito", str(gab), "--contra").returncode == 2             # sem valor
-    assert roda("biblioteca", "--gabarito", str(gab), "--contra", "busca", "--k", "oito").returncode == 2
-    assert roda("casa", "--contra", "busca").returncode == 2                                  # casa sem gabarito nem log
+    assert roda("biblioteca", "--bateria", str(gab), "--contra", "rag").returncode == 2      # contra si mesma
+    assert roda("biblioteca", "--bateria", str(gab), "--contra", "nao-existe").returncode == 2
+    assert roda("biblioteca", "--bateria", str(gab), "--contra").returncode == 2             # sem valor
+    assert roda("biblioteca", "--bateria", str(gab), "--contra", "busca", "--k", "oito").returncode == 2
+    assert roda("casa", "--contra", "busca").returncode == 2                                  # casa sem bateria nem log
     assert not any(p[1] == "/search" for lado in estado.values() for p in lado["pedidos"])
 
 

@@ -259,7 +259,7 @@ def test_lote_pela_tool_com_instancia_e_ato_repetidos_busca_na_particao_pedida(a
 
 def test_medir_calcula_abstencao_hit_k_e_t2_com_delta(api, tmp_path):
     roda, pedidos = api
-    gab = tmp_path / "gabarito.jsonl"
+    gab = tmp_path / "bateria.jsonl"
     itens = [
         {"pergunta": "onde esta a obra?", "estrato": "T2-cadeiras", "alvo_obras": ["Obra"],
          "relevancia": "positiva", "pontuavel": True},
@@ -271,7 +271,7 @@ def test_medir_calcula_abstencao_hit_k_e_t2_com_delta(api, tmp_path):
     gab.write_text("\n".join(json.dumps(x) for x in itens) + "\n", encoding="utf-8")
 
     # 1a rodada
-    r = roda("medir", "biblioteca", "--gabarito", str(gab), "--k", "8", "--rotulo", "r1")
+    r = roda("medir", "biblioteca", "--bateria", str(gab), "--k", "8", "--rotulo", "r1")
     assert r.returncode == 0, r.stderr
     assert "abstenção 1/1" in r.stdout
     assert "t2" in r.stdout
@@ -279,7 +279,7 @@ def test_medir_calcula_abstencao_hit_k_e_t2_com_delta(api, tmp_path):
     assert "primeira medicao" in r.stdout
 
     # 2a rodada (avalia delta)
-    r2 = roda("medir", "biblioteca", "--gabarito", str(gab), "--k", "8", "--rotulo", "r2")
+    r2 = roda("medir", "biblioteca", "--bateria", str(gab), "--k", "8", "--rotulo", "r2")
     assert r2.returncode == 0, r2.stderr
     assert "abstenção 1/1" in r2.stdout
     assert "contra" in r2.stdout

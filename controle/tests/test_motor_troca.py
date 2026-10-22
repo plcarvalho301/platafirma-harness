@@ -384,13 +384,13 @@ def _gabarito(tmp_path, positivas=24, sem_obra=22, com_obra=2):
     for i in range(com_obra):
         itens.append({"id": f"C{i}", "pergunta": f"negobra {i}", "estrato": "T2-cadeiras",
                       "relevancia": "negativa", "pontuavel": True, "nota": "ganhou obra na reforma"})
-    gab = tmp_path / "gabarito.jsonl"
+    gab = tmp_path / "bateria.jsonl"
     gab.write_text("\n".join(json.dumps(x) for x in itens) + "\n", encoding="utf-8")
     return gab
 
 
 def _mede(roda, gab, rotulo, *extra):
-    r = roda("medir", "biblioteca", "--gabarito", str(gab), "--k", "8", "--rotulo", rotulo, *extra)
+    r = roda("medir", "biblioteca", "--bateria", str(gab), "--k", "8", "--rotulo", rotulo, *extra)
     assert r.returncode == 0, r.stderr
     return r
 
@@ -476,7 +476,7 @@ def test_calibrar_escolhe_o_revisor_quando_ele_separa_as_22_e_a_similaridade_so_
     # similaridade da mesma geracao: o comando impresso roda como esta
     assert ("--ajuste aviso_com_revisor=0.95 --ajuste aviso_de_cobertura_fraca=0.6 "
             "--ajuste revisor=BAAI/bge-reranker-v2-m3") in r.stdout
-    assert "as negativas com obra (abster nelas e erro) saem a parte: 2 no gabarito" in r.stdout
+    assert "as negativas com obra (abster nelas e erro) saem a parte: 2 na bateria" in r.stdout
     salvo = json.loads(next((instancia / "var" / "medicoes" / "rag").glob("*-calibracao.json")).read_text())
     assert salvo["ajuste"] == ["aviso_com_revisor=0.95", "aviso_de_cobertura_fraca=0.6",
                                 "revisor=BAAI/bge-reranker-v2-m3"]

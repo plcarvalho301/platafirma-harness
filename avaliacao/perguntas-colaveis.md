@@ -1,10 +1,10 @@
-# Perguntas do gabarito, em bloco colavel
+# Perguntas da bateria, em bloco colavel
 
-Derivado de `gabarito.jsonl` por `avaliacao/gerar_colaveis.py`.
-Nao editar aqui: pergunta se corrige no gabarito e este arquivo se regenera.
+Derivado de `bateria.jsonl` por `avaliacao/gerar_colaveis.py`.
+Nao editar aqui: pergunta se corrige na bateria e este arquivo se regenera.
 
 Cada bloco e uma pergunta inteira, pronta para colar no prompt. O alvo nao entra:
-quem responde nao pode ver o gabarito.
+quem responde nao pode ver a bateria.
 
 As 118 do estrato T1 ficam de fora de proposito — sao auto-geradas a partir do
 `section_id` e existem para a bancada casar por codigo, nao para alguem responder.

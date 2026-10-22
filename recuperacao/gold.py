@@ -27,7 +27,7 @@ de prova, e por isso não saem com o mesmo `pontuavel`:
 | `termo` | do próprio mecanismo que será medido | `false` até revisão humana |
 
 **O caso `termo` sai despontuável de propósito.** Derivar o esperado do mesmo caminho que
-o gold vai julgar é escrever o gabarito com a prova aberta: mudança no recorte por termo
+o gold vai julgar é escrever a bateria com a prova aberta: mudança no recorte por termo
 viraria linha nova nos dois lados, sem alarme. É a mesma disciplina da matriz
 sujeito × fonte, que é escrita à mão pelo mesmo motivo. Ele é emitido mesmo assim porque
 revisar candidato é barato e inventar caso do zero é caro — mas quem o torna pontuável é
@@ -35,7 +35,7 @@ uma pessoa, editando o campo.
 
 **`resposta_certa: ausente` não é gerável.** `vazia` é «a fonte respondeu e não há o que
 casar»; `ausente` é «a fonte não cobre este assunto», que é juízo sobre o corpus, não
-sobre o estado. O §13 já o atribui a gabarito de autor, claudinho-IA, e é onde ele fica.
+sobre o estado. O §13 já o atribui a bateria de autor, claudinho-IA, e é onde ele fica.
 
 **O gold congela por versão (§13):** `origem` carrega a fonte, o carimbo da fonte na hora
 da geração e a data. Valor absoluto não se interpreta; comparação só vale sobre o mesmo
@@ -87,7 +87,7 @@ ADAPTADORES: dict[str, type[Adaptador]] = {
 # A wiki é a única que precisa de SEMENTE, e o motivo está no adaptador: o caminho
 # nominal resolve um título e o caminho de prosa é `list=search`, que sem termo devolve
 # vazio — não há `list=allpages` exposto ali. A semente enviesa a AMOSTRA (quais páginas
-# entram), nunca o gabarito: o esperado de cada caso continua vindo do estado, e é por
+# entram), nunca a bateria: o esperado de cada caso continua vindo do estado, e é por
 # isso que o viés é aceitável e fica declarado aqui em vez de escondido no default.
 ALVO_LISTAGEM: dict[str, tuple[str, dict]] = {
     "board": ("", {}),

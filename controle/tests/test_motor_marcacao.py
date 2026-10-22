@@ -18,7 +18,7 @@ from typing import ClassVar
 import pytest
 
 MOTOR = Path(__file__).resolve().parents[2] / "bin" / "motor"
-LOTE = {"lote_id": "lote-t1", "gabarito_versao_id": "00000000-0000-4000-8000-000000000001", "criterio_versao": "v1",
+LOTE = {"lote_id": "lote-t1", "bateria_versao_id": "00000000-0000-4000-8000-000000000001", "gabarito_versao_id": "00000000-0000-4000-8000-000000000001", "criterio_versao": "v1",
         "passada": "primeira", "corpo": {"lote_id": "lote-t1", "criterio_versao": "v1", "passada": "primeira",
                                            "perguntas": []}, "respostas": []}
 

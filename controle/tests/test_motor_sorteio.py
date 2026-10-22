@@ -189,7 +189,7 @@ if container == "rag-extractor-pg":
 elif container == "harness-sessao-db":
     print(json.dumps(estado["cadeiras"]))
 elif container == "motor-pg":
-    if "INSERT INTO avaliacao.gabarito_versao" in sql:
+    if "INSERT INTO avaliacao.bateria_versao" in sql or "INSERT INTO avaliacao.gabarito_versao" in sql:
         estado["versoes"].append(sql)
         json.dump(estado, open(p, "w"))
         print(json.dumps({{"id": "00000000-0000-4000-8000-0000000000aa"}}))
@@ -267,12 +267,12 @@ def test_apply_grava_arquivo_e_versao_e_o_mesmo_apply_diz_ja_existe(verbo):
     saida = tmp / "escada.jsonl"
     r = roda("biblioteca", "--apply", "--saida", str(saida))
     assert r.returncode == 0, r.stderr
-    assert "gabarito_versao 00000000-0000-4000-8000-0000000000aa gravada" in r.stdout and "sha_acervo abc123456789" in r.stdout
+    assert ("bateria_versao 00000000-0000-4000-8000-0000000000aa gravada" in r.stdout or "gabarito_versao 00000000-0000-4000-8000-0000000000aa gravada" in r.stdout) and "sha_acervo abc123456789" in r.stdout
     linhas = [json.loads(l) for l in saida.read_text().splitlines()]
     assert len(linhas) == 26 and linhas[0]["papel"] == "piloto"
     assert len(json.loads(estado.read_text())["versoes"]) == 1
     r2 = roda("biblioteca", "--apply", "--saida", str(saida))
-    assert r2.returncode == 0 and "ja existe: gabarito_versao" in r2.stdout
+    assert r2.returncode == 0 and ("ja existe: bateria_versao" in r2.stdout or "ja existe: gabarito_versao" in r2.stdout)
     assert len(json.loads(estado.read_text())["versoes"]) == 1
 
 

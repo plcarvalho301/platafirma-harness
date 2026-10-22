@@ -712,7 +712,7 @@ async def _chamar(app_, metodo, caminho, cabecalhos=None, corpo=b"", consulta=b"
 
 CABECALHO_DE_MENTIRA = """#!/usr/bin/env python3
 # motor — verbo de mentira do self-check
-# atos: listar (leitura, texto), buscar (leitura, busca), ajuste (leitura|escrita, config), trocar (escrita, geracao), sortear (escrita, gabarito)
+# atos: listar (leitura, texto), buscar (leitura, busca), ajuste (leitura|escrita, config), trocar (escrita, geracao), sortear (escrita, bateria)
 # face: listar=motor
 # face: buscar=motor
 # face: ajuste=motor

@@ -14,7 +14,8 @@ def search(p, k=8):
     with urllib.request.urlopen(req, timeout=120) as r:
         return json.loads(r.read()), (time.perf_counter()-t0)*1000
 
-gold = [json.loads(l) for l in open("/tmp/gabarito.jsonl") if l.strip()]
+bateria_path = "/tmp/bateria.jsonl" if os.path.exists("/tmp/bateria.jsonl") else "/tmp/gabarito.jsonl"
+gold = [json.loads(l) for l in open(bateria_path) if l.strip()]
 ids = {a for d in gold for a in (d.get("alvo_obra_ids") or [])}
 st = load_settings(); titulo = {}
 if ids:

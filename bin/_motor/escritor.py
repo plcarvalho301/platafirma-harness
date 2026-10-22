@@ -222,7 +222,7 @@ def montar_lote(lote_id: str, versao_id: str, criterio_versao: str, perguntas: l
         corpo_p.append({"pergunta_id": pid, "texto": p["pergunta"], "cadeira": p["cadeira"], "data": p["data"],
                         "respostas": respostas})
     corpo = {"lote_id": lote_id, "criterio_versao": criterio_versao, "passada": "primeira", "perguntas": corpo_p}
-    return {"lote_id": lote_id, "gabarito_versao_id": versao_id, "criterio_versao": criterio_versao, "passada": "primeira",
+    return {"lote_id": lote_id, "bateria_versao_id": versao_id, "gabarito_versao_id": versao_id, "criterio_versao": criterio_versao, "passada": "primeira",
             "ativo": ativo, "corpo": corpo, "carimbo": carimbo, "respostas": internas}
 
 
@@ -243,8 +243,8 @@ def conferir_aceite(envelope: dict, n_perguntas: int, por_pergunta: int = 3) -> 
     sem_secao = sum(1 for r in internas for m in r["mapa"] if not m["secoes"])
     if sem_secao:
         p.append(f"{sem_secao} afirmação(ões) sem seção no mapa")
-    for chave in ("acervo", "motor", "vocabulario", "gabarito", "escritor"):
-        if not envelope["carimbo"].get(chave):
+    for chave in ("acervo", "motor", "vocabulario", "bateria", "escritor"):
+        if not (envelope["carimbo"].get(chave) or (chave == "bateria" and envelope["carimbo"].get("gabarito"))):
             p.append(f"carimbo sem a versão «{chave}»")
     marcas = [r["resposta_id"] for q in envelope["corpo"]["perguntas"] for r in q["respostas"] if re.search(r"\[\d+\]", r["texto"])]
     if marcas:

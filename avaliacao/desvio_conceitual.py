@@ -175,7 +175,7 @@ def stats(adj: dict) -> dict:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--esperada", help="sha256 ou arquivo da obra do gabarito")
+    p.add_argument("--esperada", help="sha256 ou arquivo da obra da bateria")
     p.add_argument("--recuperada", help="sha256 ou arquivo da obra que voltou")
     p.add_argument("--stats", action="store_true", help="navegabilidade da teia")
     a = p.parse_args()

@@ -150,7 +150,7 @@ def _resultado(texto, i=1):
             "palavras": len(texto.split()), "carimbo": {"tentativas": 1, "segundos": 1.0, "tokens_prompt": 10, "tokens_saida": 5, "avisos": []}}
 
 
-CARIMBO = {k: {"v": 1} for k in ("acervo", "motor", "vocabulario", "gabarito", "escritor", "par")}
+CARIMBO = {k: {"v": 1} for k in ("acervo", "motor", "vocabulario", "bateria", "gabarito", "escritor", "par")}
 
 
 def _lote(**sobre):

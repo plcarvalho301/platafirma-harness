@@ -203,6 +203,7 @@ def lote_de_conferencia(lote: dict, divs: list, lote_id: str, rid_novo, semente:
     rnd.shuffle(perguntas)
     corpo = {"lote_id": lote_id, "criterio_versao": lote["criterio_versao"], "passada": "conferencia",
              "perguntas": perguntas}
-    return {"lote_id": lote_id, "gabarito_versao_id": lote["gabarito_versao_id"], "criterio_versao": lote["criterio_versao"],
+    v_id = lote.get("bateria_versao_id") or lote.get("gabarito_versao_id")
+    return {"lote_id": lote_id, "bateria_versao_id": v_id, "gabarito_versao_id": v_id, "criterio_versao": lote["criterio_versao"],
             "passada": "conferencia", "ativo": False, "corpo": corpo,
             "carimbo": {**(lote.get("carimbo") or {}), "conferencia_de": lote["lote_id"]}, "respostas": respostas}

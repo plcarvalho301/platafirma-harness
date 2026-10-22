@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deriva avaliacao/perguntas-colaveis.md do gabarito. Regenera; nao se edita a mao.
+"""Deriva avaliacao/perguntas-colaveis.md da bateria. Regenera; nao se edita a mao.
 
     python3 avaliacao/gerar_colaveis.py
 """
@@ -7,10 +7,10 @@ import json
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[2]
-GAB = RAIZ / "avaliacao/gabarito.jsonl"
+BAT = RAIZ / "avaliacao/bateria.jsonl"
 OUT = RAIZ / "avaliacao/perguntas-colaveis.md"
 
-ORDEM = [
+ORDEM = [\
     ("T3-multistep", None, "Multistep — 30",
      "Enunciado de varios passos, com alinea. E o estrato que mais custa a responder "
      "e o que mais separa arm bom de arm ruim."),
@@ -24,15 +24,15 @@ ORDEM = [
 
 
 def main():
-    itens = [json.loads(l) for l in GAB.read_text().splitlines() if l.strip()]
+    itens = [json.loads(l) for l in BAT.read_text().splitlines() if l.strip()]
     L = [
-        "# Perguntas do gabarito, em bloco colavel",
+        "# Perguntas da bateria, em bloco colavel",
         "",
-        "Derivado de `gabarito.jsonl` por `avaliacao/gerar_colaveis.py`.",
-        "Nao editar aqui: pergunta se corrige no gabarito e este arquivo se regenera.",
+        "Derivado de `bateria.jsonl` por `avaliacao/gerar_colaveis.py`.",
+        "Nao editar aqui: pergunta se corrige na bateria e este arquivo se regenera.",
         "",
         "Cada bloco e uma pergunta inteira, pronta para colar no prompt. O alvo nao entra:",
-        "quem responde nao pode ver o gabarito.",
+        "quem responde nao pode ver a bateria.",
         "",
         "As 118 do estrato T1 ficam de fora de proposito — sao auto-geradas a partir do",
         "`section_id` e existem para a bancada casar por codigo, nao para alguem responder.",
