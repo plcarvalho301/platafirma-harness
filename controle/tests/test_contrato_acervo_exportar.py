@@ -57,6 +57,21 @@ def test_exportar_ambiente_cai_no_cofre_so_com_o_do_banco(tmp_path, monkeypatch)
     assert env == {"POSTGRES_PASSWORD": "x", "EMBED_MODEL": "m"}
 
 
+def test_exportar_cofre_e_o_da_stack_do_banco(tmp_path, monkeypatch):
+    # a busca mora na stack `busca`, o banco na stack `rag`: o cofre certo e o do banco
+    for stack, nome, valor in (("busca", "BUSCA_PG_PASSWORD", "b"), ("rag", "POSTGRES_PASSWORD", "x"),
+                               ("rag", "EMBED_MODEL", "m")):
+        (tmp_path / "segredos" / stack).mkdir(parents=True, exist_ok=True)
+        (tmp_path / "segredos" / stack / nome).write_text(valor + "\n")
+    reg = tmp_path / "reg.json"
+    reg.write_text('{"rag": {"stack": "busca", "container": "", "banco": {"stack": "rag"},'
+                   ' "env_da_ingestao": "/srv/platafirma/casa/deploy/rag/ausente.env"}}')
+    monkeypatch.setenv("PLATAFIRMA_INSTANCIA", str(tmp_path))
+    monkeypatch.setenv("PF_MOTOR_REG", str(reg))
+    env = _carrega("exportar").ambiente_da_ingestao()
+    assert env == {"POSTGRES_PASSWORD": "x", "EMBED_MODEL": "m"}
+
+
 def test_extrato_limpa_caractere_de_controle():
     mod = _carrega("extrato")
     assert mod.limpa("a\x01b\x1fc\td\ne") == "abc\td\ne"
