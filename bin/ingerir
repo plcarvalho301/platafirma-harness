@@ -49,8 +49,9 @@ USO = """uso:
 
 Incorporar (arq:0119 §2): sem --ate, o lote para na obra catalogada com a cópia sob guarda.
 Com --ate chunk, o --apply encadeia Transcrever (acervo espelhar) obra a obra; com --ate embed|vetor,
-encadeia Transcrever, Indexar e põe no ar (motor <inst> indexar --promover). A obra que um portão
-barra (espelho não servível, gate do motor) para ali, com o portão dito; as outras seguem.
+encadeia Transcrever, Seccionar (confere a faixa de seção da selada), Indexar (motor <inst> indexar,
+que para no gate) e Servir (acervo promover). A obra que um portão barra (espelho não servível,
+sem faixa, gate do motor, recusa do promover) para ali, com o portão dito; as outras seguem.
 
 Todo arquivo que entra ganha a ficha no mesmo ato (#3306): o formato lido nos bytes, não no nome. O plano
 mostra o que a ficha leu na coluna Formato (um `.pdf` que é JSON sai JSON, um `.pdf` que é GZIP sai GZIP);
@@ -468,11 +469,12 @@ def formatar_tabela_aplicado(lote: dict) -> str:
 
 
 # --- encadear os estágios depois de Incorporar (arq:0119 §2) -------------------------------
-# `--ate chunk` vai até Transcrever (impressão selada); `--ate embed|vetor` vai até o ar: espelha,
-# indexa e promove pelo motor (`--promover` depois do gate). Cada obra anda sozinha: a que um portão
-# barra para ali, com o portão dito, e as outras seguem. Os atos são os verbos da casa, não cópia.
+# `--ate chunk` vai até Transcrever (impressão selada); `--ate embed|vetor` vai até o ar: espelha
+# (`acervo espelhar`), confere a faixa de seção, indexa até o gate (`motor indexar`, que não promove) e
+# põe no ar (`acervo promover`, que refaz o gate). Cada obra anda sozinha: a que um portão barra para
+# ali, com o portão dito, e as outras seguem. Os atos são os verbos da casa, não cópia.
 
-_ESTADOS_FIM_INDEXACAO = {"concluido", "falhou", "cancelado", "interrompido"}
+_ESTADOS_FIM_INDEXACAO = {"concluido", "interrompido"}
 
 
 def _bin_verbo(nome: str) -> str:
@@ -516,48 +518,124 @@ def espelhar_obra(obra_id: str) -> tuple[str | None, str]:
     return impressao, julgamento
 
 
-def indexar_e_promover(obras: list[str], motor: str, autor: str) -> dict[str, str]:
-    """`motor <inst> indexar biblioteca --obra … --promover --apply` e o relatório até o fim. Devolve
-    {obra: motivo} das que não chegaram ao ar."""
+def _json_do_verbo(r: subprocess.CompletedProcess) -> dict | None:
+    try:
+        dado = json.loads(r.stdout)
+    except ValueError:
+        return None
+    return dado if isinstance(dado, dict) else None
+
+
+def _plano_do_motor(base: list[str], obras: list[str]) -> tuple[dict | None, str]:
+    """`motor <inst> indexar biblioteca --obra … --json`, sem --apply: o plano, que não escreve nada.
+    Devolve (plano, "") ou (None, o motivo de não ter vindo)."""
+    r = _roda_verbo(base + ["--obra", ",".join(obras), "--json"], 300)
+    if r.returncode != 0:
+        return None, _primeira_linha(r.stderr) or f"exit {r.returncode}"
+    plano = _json_do_verbo(r)
+    if plano is None:
+        return None, "o motor não devolveu o plano"
+    return plano, ""
+
+
+def conferir_faixas(seladas: dict[str, str], motor: str, titulos: dict[str, str]) -> dict[str, str]:
+    """Seccionar (etapa 5): a selada só entra no lote do motor com a faixa de seção marcada. O plano do motor
+    lista em `sem_faixa` a que ficou sem; a cadeia marca (`acervo curar biblioteca --marcar-secoes`), avisa que a
+    selagem não marcou e confere de novo, uma vez. Devolve {obra: motivo} das que seguem sem faixa."""
+    if not seladas:
+        return {}
+    base = [_bin_verbo("motor"), motor, "indexar", "biblioteca"]
+    plano, erro = _plano_do_motor(base, list(seladas))
+    if plano is None:
+        return {o: f"Seccionar: não consegui conferir a faixa ({erro})" for o in seladas}
+    sem_faixa = [s for s in plano.get("sem_faixa") or [] if s.get("obra_id") in seladas]
+    if not sem_faixa:
+        return {}
+    retornos = {}
+    for s in sem_faixa:
+        obra = s["obra_id"]
+        sys.stderr.write(f"ingerir: Seccionar: a selagem não marcou a seção de {titulos.get(obra) or obra}; marcada pela cadeia\n")
+        r = _roda_verbo([_bin_verbo("acervo"), "curar", "biblioteca", "--marcar-secoes", "--impressao",
+                         s["impressao_id"], "--apply"], 600)
+        retornos[obra] = (_primeira_linha(r.stderr) or _primeira_linha(r.stdout)) if r.returncode else _primeira_linha(r.stdout)
+    plano, erro = _plano_do_motor(base, list(retornos))
+    if plano is None:
+        return {o: f"Seccionar: não consegui conferir a faixa depois da marcação ({erro})" for o in retornos}
+    seguem = {s.get("obra_id") for s in plano.get("sem_faixa") or []}
+    return {o: f"Seccionar: sem faixa depois da marcação ({retornos[o] or 'sem retorno'})" for o in retornos if o in seguem}
+
+
+def indexar(obras: list[str], motor: str, autor: str) -> dict[str, str]:
+    """`motor <inst> indexar biblioteca --obra … --apply` (sem --promover: o motor para no gate) e o relatório
+    até o lote fechar. Devolve {obra: motivo} das que o motor não deixou com o índice aprovado."""
     if not obras:
         return {}
     base = [_bin_verbo("motor"), motor, "indexar", "biblioteca"]
-    r = _roda_verbo(base + ["--obra", ",".join(obras), "--promover", "--autor", autor, "--apply", "--json"], 600)
+    r = _roda_verbo(base + ["--obra", ",".join(obras), "--autor", autor, "--apply", "--json"], 600)
     if r.returncode != 0:
-        motivo = f"Indexar: {_primeira_linha(r.stderr) or f'exit {r.returncode}'}"
+        if "LoteEmAndamento" in (r.stderr or "") + (r.stdout or ""):
+            motivo = "Indexar: há outro lote no motor; rodar de novo quando ele fechar"
+        else:
+            motivo = f"Indexar: {_primeira_linha(r.stderr) or f'exit {r.returncode}'}"
         return {o: motivo for o in obras}
-    try:
-        plano = json.loads(r.stdout)
-    except ValueError:
+    aplicado = _json_do_verbo(r)
+    if aplicado is None:
         return {o: "Indexar: o motor não devolveu o lote" for o in obras}
-    lote = plano.get("lote")
+    lote = aplicado.get("lote")
     if not lote:
-        return {o: "Indexar: o motor não achou impressão selada a indexar" for o in obras}
+        return {}  # modo: nada — nada a embedar, o índice já está pronto; quem decide é o acervo promover
     sys.stderr.write(f"ingerir: Indexar: lote {lote} no motor {motor}\n")
-    limite = time.time() + int(os.environ.get("PF_INGERIR_PRAZO_INDEXAR", "3600"))
-    rel = {}
-    while time.time() < limite:
-        rr = _roda_verbo(base + ["--relatorio", lote, "--json"], 300)
-        if rr.returncode == 0:
-            try:
-                rel = json.loads(rr.stdout)
-            except ValueError:
-                rel = {}
-            if rel.get("estado") in _ESTADOS_FIM_INDEXACAO:
-                break
-        time.sleep(float(os.environ.get("PF_INGERIR_PASSO", "5")))
-    else:
+    rel = _acompanhar_lote(base, lote)
+    if rel is None:
         motivo = f"Indexar: lote {lote} ainda rodando; acompanhar com motor {motor} indexar biblioteca --relatorio {lote}"
         return {o: motivo for o in obras}
+    return _barradas_do_relatorio(obras, rel, lote)
+
+
+def _acompanhar_lote(base: list[str], lote: str) -> dict | None:
+    """`motor <inst> indexar biblioteca --relatorio <lote> --json` até o lote sair de `aplicando`. Devolve o
+    relatório, ou None se o prazo (PF_INGERIR_PRAZO_INDEXAR) acabou com o lote ainda rodando."""
+    limite = time.time() + int(os.environ.get("PF_INGERIR_PRAZO_INDEXAR", "3600"))
+    while time.time() < limite:
+        rr = _roda_verbo(base + ["--relatorio", lote, "--json"], 300)
+        rel = _json_do_verbo(rr) if rr.returncode == 0 else None
+        if rel and rel.get("estado") in _ESTADOS_FIM_INDEXACAO:
+            return rel
+        time.sleep(float(os.environ.get("PF_INGERIR_PASSO", "5")))
+    return None
+
+
+def _barradas_do_relatorio(obras: list[str], rel: dict, lote: str) -> dict[str, str]:
+    """Do relatório do lote: {obra: motivo} das que não ficaram `indexada` com o gate aprovado. A obra fora de
+    `itens` tinha o índice pronto; o gate dela é do `acervo promover`."""
     por_obra = {it.get("obra_id"): it for it in rel.get("itens") or []}
     barradas = {}
     for o in obras:
         it = por_obra.get(o)
-        if not it:
-            barradas[o] = f"Indexar: obra fora do lote {lote}"
-        elif it.get("problema") or not (it.get("gate") or {}).get("aprovado"):
-            barradas[o] = f"Indexar: {it.get('problema') or 'gate do motor reprovado'} (lote {lote})"
+        if not it or (it.get("estado") == "indexada" and (it.get("gate") or {}).get("aprovado")):
+            continue
+        if it.get("estado") == "pendente":
+            motivo = rel.get("problema") or f"lote {rel.get('estado')} antes desta obra"
+        else:
+            motivo = it.get("problema") or (it.get("gate") or {}).get("motivo") or "gate do motor reprovado"
+        barradas[o] = f"Indexar: {motivo} (lote {lote})"
     return barradas
+
+
+def promover(obra: str, impressao: str) -> tuple[bool, str]:
+    """Servir (etapa 9): `acervo promover biblioteca obra <obra> --impressao <id> --json`. O gate é do acervo
+    (refaz o gate no motor antes de promover). "No ar" só com a impressão pedida promovida e, na marcação
+    `transcrita e indexada`, ao menos um índice no ar. Devolve (no ar, destino ou motivo)."""
+    r = _roda_verbo([_bin_verbo("acervo"), "promover", "biblioteca", "obra", obra, "--impressao", impressao, "--json"], 600)
+    if r.returncode != 0:
+        return False, f"Servir: {_primeira_linha(r.stderr) or _primeira_linha(r.stdout) or f'exit {r.returncode}'}"
+    dado = _json_do_verbo(r) or {}
+    if (dado.get("promovida") or {}).get("id") != impressao:
+        return False, f"Servir: o acervo não devolveu a impressão {impressao} promovida"
+    marcacao = dado.get("marcacao") or ""
+    if marcacao == "transcrita e indexada" and not dado.get("indices_promovidos"):
+        return False, "Servir: impressão no ar sem índice"
+    return True, "no ar (texto, sem índice)" if marcacao == "transcrita" else "no ar"
 
 
 def encadear_estagios(lote: dict, ate: str, motor: str, autor: str) -> dict[str, str]:
@@ -565,21 +643,31 @@ def encadear_estagios(lote: dict, ate: str, motor: str, autor: str) -> dict[str,
     destino de cada obra e devolve {obra: portão} das que pararam antes do alvo."""
     titulos = {it["obra_id"]: it.get("titulo") or it.get("arquivo") or it["obra_id"]
                for it in lote.get("itens", []) if it.get("obra_id") and it.get("estado") == "feito"}
-    barradas, seladas = {}, []
+    barradas, seladas, destinos = {}, {}, {}
     for i, obra in enumerate(titulos, 1):
         sys.stderr.write(f"ingerir: Transcrever {i}/{len(titulos)}: {titulos[obra][:60]}\n")
         impressao, nota = espelhar_obra(obra)
         if impressao:
-            seladas.append(obra)
+            seladas[obra] = impressao
         else:
             barradas[obra] = nota
     if ate != "chunk":
-        barradas.update(indexar_e_promover(seladas, motor, autor))
+        barradas.update(conferir_faixas(seladas, motor, titulos))
+        barradas.update(indexar([o for o in seladas if o not in barradas], motor, autor))
+        for obra, impressao in seladas.items():
+            if obra in barradas:
+                continue
+            sys.stderr.write(f"ingerir: Servir: {titulos[obra][:60]}\n")
+            no_ar, destino = promover(obra, impressao)
+            if no_ar:
+                destinos[obra] = destino
+            else:
+                barradas[obra] = destino
     alvo = "selada" if ate == "chunk" else "no ar"
     print("")
     print(f"Estágios depois de Incorporar: {len(titulos) - len(barradas)} de {len(titulos)} {alvo}")
     for obra, titulo in titulos.items():
-        estado = barradas.get(obra) or alvo
+        estado = barradas.get(obra) or destinos.get(obra) or alvo
         print(f"  {obra}  {titulo[:45]:<45}  {estado}")
     return barradas
 
@@ -633,7 +721,7 @@ def main():
         alvo = "Transcrever" if args.ate == "chunk" else "Transcrever, Indexar e pôr no ar"
         sys.stderr.write(
             f"ingerir: --ate {args.ate}: o lote cataloga e, no --apply, encadeia obra a obra até {alvo} "
-            f"(acervo espelhar; motor {args.motor or 'rag'} indexar --promover). A obra que um portão barra "
+            f"(acervo espelhar; motor {args.motor or 'rag'} indexar; acervo promover). A obra que um portão barra "
             "para ali, com o portão dito; as outras seguem.\n"
         )
     elif args.motor or args.ocr:
