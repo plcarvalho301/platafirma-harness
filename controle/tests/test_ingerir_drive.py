@@ -75,7 +75,8 @@ def test_ingerir_ate_vetor_diz_que_encadeia_ate_o_ar(tmp_path, env_py):
     r = _lote_sem_servidor(tmp_path, env_py, "--ate", "vetor")
     assert r.returncode != 2
     assert "encadeia obra a obra até Transcrever, Indexar e pôr no ar" in r.stderr
-    assert "motor rag indexar --promover" in r.stderr
+    assert "motor rag indexar; acervo promover" in r.stderr
+    assert "--promover" not in r.stderr
 
 def test_ingerir_motor_em_catalogar_e_ignorado(tmp_path, env_py):
     r = _lote_sem_servidor(tmp_path, env_py, "--motor", "rag")
