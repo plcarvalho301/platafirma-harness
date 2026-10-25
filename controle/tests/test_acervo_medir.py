@@ -103,6 +103,24 @@ def test_argumento_desconhecido_e_uso(mundo, capsys):
     assert capsys.readouterr().err.startswith("uso: acervo medir")
 
 
+@pytest.mark.parametrize("argv", [["--planilha"], ["--planilha", ""], ["--planilha", "a", "--planilha", "b"]])
+def test_planilha_sem_valor_ou_repetida_e_uso(mundo, capsys, argv):
+    assert _modulo().main(argv) == 2
+    assert "--planilha" in capsys.readouterr().err
+
+
+def test_planilha_chega_ao_instrumento_com_o_caminho_absoluto(mundo, capsys, tmp_path):
+    """#3991: `--planilha <tsv>` vai a `python -m medida --planilha`, que só confere as shapes contra a
+    planilha v3 (R16); antes o ato o recusava como uso, e o relatório saía à mão."""
+    wt = _bancada(mundo, "3991")
+    (wt / "ontologia" / "medida" / "__main__.py").write_text(
+        "import sys\nprint('medida: argv ' + ' '.join(sys.argv[1:]))\n", encoding="utf-8")
+    tsv = tmp_path / "entidades.tsv"
+    tsv.write_text("rotulo\tslug\n", encoding="utf-8")
+    assert _modulo().main(["--planilha", str(tsv), "--bancada", "3991"]) == 0
+    assert capsys.readouterr().out.splitlines()[0] == f"medida: argv --planilha {tsv.resolve()}"
+
+
 def test_o_instrumento_nao_roda_sem_python_do_rag(mundo, monkeypatch, capsys):
     _bancada(mundo, "3759-medida")
     monkeypatch.setenv("RAG_PYTHON", str(mundo / "nao-existe"))
