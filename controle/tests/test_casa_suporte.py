@@ -336,7 +336,7 @@ def test_argv_de_listar_e_ler(monkeypatch):
                         chamadas.append(("listar", e, dono, todas)) or 0)
     monkeypatch.setattr(casa, "sobre", lambda c, k, e, j, todas=False:
                         chamadas.append(("sobre", c, k, e, todas)) or 0)
-    monkeypatch.setattr(casa, "ler", lambda e, s, j, situacao=False, offset=0:
+    monkeypatch.setattr(casa, "ler", lambda e, s, j, situacao=False, offset=0, cru=False:
                         chamadas.append(("ler", e, s, situacao)) or 0)
     casa.main(["listar"])
     casa.main(["listar", "--json"])
@@ -541,7 +541,7 @@ def test_ler_documento_curto_sai_igual_a_antes(banco_com_corpo, capsys):
 
 def test_main_ler_aceita_offset_e_recusa_o_malformado(monkeypatch):
     chamadas = []
-    monkeypatch.setattr(casa, "ler", lambda e, s, j, situacao=False, offset=0:
+    monkeypatch.setattr(casa, "ler", lambda e, s, j, situacao=False, offset=0, cru=False:
                         chamadas.append((e, s, j, offset)) or 0)
     casa.main(["ler", "levantamento", "2026-09-29-x", "--offset", "45000"])
     casa.main(["ler", "--offset", "7", "levantamento", "2026-09-29-x", "--json"])
@@ -566,8 +566,19 @@ def test_sobre_so_aceita_classe_de_referente(monkeypatch, capsys):
         assert e.value.code == 2
         assert "nao e referente de Sobre:" in capsys.readouterr().err
     assert set(casa.CLASSES_SOBRE) == {"verbo", "capacidade", "stack", "servico",
-                                       "repositorio", "cadeira", "risco"}
+                                       "repositorio", "persona", "cadeira", "risco"}
     assert "instancia" not in casa.CLASSES_SOBRE    # saiu do catálogo (arq:0108 §13, #3761, migração 113)
+
+
+@pytest.mark.parametrize("palavra", ["cadeira", "persona"])
+def test_sobre_cadeira_e_persona_procuram_a_ficha_nas_duas_classes(monkeypatch, palavra):
+    """#3991: cadeira é rótulo alternativo de persona; a 135 troca a classe das fichas, e até a retirada
+    da classe cadeira (#3997) a ficha pode estar em qualquer das duas. Devolve a classe em que achou."""
+    sqls = []
+    monkeypatch.setattr(casa, "_q", lambda sql, alvo="": sqls.append(sql) or [
+        {"id": "u", "classe": "persona", "chave_humana": "dados"}])
+    assert casa._entidade(palavra, "dados") == ("persona", "dados", "u")
+    assert "array['persona', 'cadeira']::text[]" in sqls[0] and "'verbo'" not in sqls[0]
 
 
 def test_sobre_sem_classe_procura_so_fichas_ativas_das_classes_de_referente(monkeypatch):
@@ -691,8 +702,8 @@ def test_despachante_recusas_sem_banco():
 def test_cabecalho_do_verbo_aponta_o_suporte():
     with open(BIN, encoding="utf-8") as f:
         # 80: o cabecalho cresceu com as linhas de acesso dos atos de Transcrever (#3297) e de Retirar
-        # (#3298), e SPEC= vem depois dele
-        cab = "".join(f.readline() for _ in range(80))
+        # (#3298), e SPEC= vem depois dele; 90 desde que a linha de ambiente cresceu (SPEC= na 87)
+        cab = "".join(f.readline() for _ in range(90))
     assert "# le: ingerir=repo" in cab
     assert "PLATAFIRMA_INSTANCIA" in cab and "platafirma-casa.git" in cab
     assert "PLATAFIRMA_RELEASE" not in cab

@@ -28,7 +28,6 @@ from pathlib import Path
 # a spec do verbo mora no suporte da casa e se lê pela chave (arq:0115; mesmo SPEC de bin/acervo)
 SPEC = "spec acervo (acervo ler casa spec acervo)"
 TETO_S = 3000
-ARGS_BANCADA = 2   # `--bancada <card-slug>`
 GRAVADO = re.compile(r"^medida: relatório gravado em (.+)$", re.MULTILINE)
 
 
@@ -51,13 +50,27 @@ def relatorio_gravado(saida: str) -> Path | None:
     return Path(achado.group(1).strip()) if achado else None
 
 
+def _opcoes(argv: list) -> dict | None:
+    """`--bancada <card-slug>` e `--planilha <tsv>`, cada um no máximo uma vez, com valor; o resto é uso."""
+    opcoes, i = {}, 0
+    while i < len(argv):
+        nome = argv[i]
+        if nome not in ("--bancada", "--planilha") or nome in opcoes or i + 1 >= len(argv) or not argv[i + 1]:
+            return None
+        opcoes[nome] = argv[i + 1]
+        i += 2
+    return opcoes
+
+
 def main(argv: list) -> int:
-    chave = ""
-    if len(argv) == ARGS_BANCADA and argv[0] == "--bancada" and argv[1]:
-        chave = argv[1]
-    elif argv:
-        print(f"uso: acervo medir [--bancada <card-slug>]\n  {SPEC}", file=sys.stderr)
+    opcoes = _opcoes(argv)
+    if opcoes is None:
+        print(f"uso: acervo medir [--bancada <card-slug>] [--planilha <tsv da aba Entidades>]\n  {SPEC}",
+              file=sys.stderr)
         return 2
+    chave = opcoes.get("--bancada", "")
+    # --planilha (#3991): só confere as shapes contra a planilha v3 (R16), sem banco nem raciocinador
+    extra = ["--planilha", str(Path(opcoes["--planilha"]).resolve())] if "--planilha" in opcoes else []
     ex = _exportar()
     wt = ex.bancada_do_repo(chave)
     py = ex.python_do_rag()
@@ -67,7 +80,7 @@ def main(argv: list) -> int:
                  "medida (#3759) ainda não chegou a ela", 3)
     env = {**os.environ, "DOCKER_HOST": os.environ.get("DOCKER_HOST", ex.DOCKER_HOST)}
     try:
-        r = subprocess.run([py, "-m", "medida"], cwd=ontologia, env=env, capture_output=True, text=True,
+        r = subprocess.run([py, "-m", "medida", *extra], cwd=ontologia, env=env, capture_output=True, text=True,
                            timeout=TETO_S, check=False)
     except (OSError, subprocess.TimeoutExpired) as e:
         ex.morre(f"o instrumento não rodou: {type(e).__name__}: {e}", 5)

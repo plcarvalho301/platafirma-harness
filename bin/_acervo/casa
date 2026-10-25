@@ -60,7 +60,11 @@ FORMA_ADR = "<serie>:NNNN ou NNNN (ex.: arq:0075, arq:75, 75)"
 # da 059 (verbo, capacidade, stack, servico, repositorio), as cadeiras já fichadas e risco. A classe instancia
 # saiu do catálogo (arq:0108 §13, #3761, migração 113): keycloak, matrix e rastreador são servico.
 # conceito, adr, spec e parecer não são referente de Sobre:.
-CLASSES_SOBRE = ("verbo", "capacidade", "stack", "servico", "repositorio", "cadeira", "risco")
+# Cadeira é rótulo alternativo de persona (arq:0108 §10; #3991): as duas palavras procuram a ficha nas duas
+# classes. A migração 135 de platafirma-conhecimento troca a classe das fichas; até a retirada da classe cadeira
+# (#3997) a ficha pode estar em qualquer das duas. A mesma regra vive na admissão (casa_lotes.py).
+CLASSES_SOBRE = ("verbo", "capacidade", "stack", "servico", "repositorio", "persona", "cadeira", "risco")
+CLASSES_DA_PALAVRA = {"persona": ("persona", "cadeira"), "cadeira": ("persona", "cadeira")}
 
 
 def morre(msg, code=2):
@@ -473,7 +477,7 @@ def _entidade(classe, chave):
     if classe and classe not in CLASSES_SOBRE:
         morre(f"acervo listar casa --sobre: classe '{classe}' nao e referente de Sobre: "
               f"(arq:0115 §6.2). Classes: {', '.join(CLASSES_SOBRE)}.", 2)
-    classes = [classe] if classe else list(CLASSES_SOBRE)
+    classes = list(CLASSES_DA_PALAVRA.get(classe, (classe,))) if classe else list(CLASSES_SOBRE)
     arr = "array[" + ", ".join(_lit(c) for c in classes) + "]::text[]"
     k = _lit(chave)
     cand = _q(f"""
