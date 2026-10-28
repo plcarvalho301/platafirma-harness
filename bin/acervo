@@ -86,6 +86,14 @@ set -euo pipefail
 ATOS="$(dirname "$(readlink -f "$0")")/_acervo"
 SPEC="spec acervo (acervo ler casa spec acervo)"
 
+# O conversor e sob demanda (#4026, ordem do dono de 28/10/2026): o ato que converte o liga antes de
+# trabalhar, e o timer conversor-ocioso o desliga depois de 15 min sem trabalho. Falhar em ligar nao
+# barra o ato: a obra diz «conversor fora» com o nome, como antes.
+acordar_conversor() {
+  bash "$ATOS/../_infra/conversor-sob-demanda" acordar || true
+}
+tem_apply() { local a; for a in "$@"; do [ "$a" = --apply ] && return 0; done; return 1; }
+
 # aviso de forma vigente/deprecada: uma vez por sessao (arq:0110 §11, spec_acervo §8)
 avisa() {
   local forma_velha="$1"
@@ -344,7 +352,8 @@ conforme() {
     # a ficha do arquivo das obras que ja estao no acervo: le o arquivo nos bytes e grava (cliente de
     # POST /acervo/obras/{id}/ficha/releitura; #3305). Antes do ramo generico, que trataria `ficha` como
     # raiz de pasta de ingestao
-    ingerir:biblioteca:ficha) exec python3 "$ATOS/ficha" ingerir "$@" ;;
+    ingerir:biblioteca:ficha) ! tem_apply "$@" || acordar_conversor
+                              exec python3 "$ATOS/ficha" ingerir "$@" ;;
     # --- ingerir por particao ---
     # Biblioteca e registro seguem no cliente de obra (objeto-por-sha, MinIO, OCR, bancada).
     # Casa NAO: doc de casa e texto de git — identidade (repo,path), corpo no payload, sem
@@ -470,6 +479,10 @@ transcrever() {
     exit 2
   fi
   shift 2
+  case "$ato" in
+    espelhar) ! tem_apply "$@" || acordar_conversor ;;
+    julgar)   acordar_conversor ;;
+  esac
   case "$ato:$entidade" in
     espelhar:obra)  exec "$ATOS/curar" obra --reextrair "$@" ;;
     espelhar:lote)  exec "$ATOS/curar" obra --reextrair --lote "$@" ;;
@@ -478,7 +491,9 @@ transcrever() {
     julgar:lote)    exec "$ATOS/curar" obra --rejulgar --lote "$@" ;;
     converter:obra)
       local a
-      for a in "$@"; do [ "$a" = --bancada ] && exec "$ATOS/curar" obra --reextrair "$@"; done
+      for a in "$@"; do
+        if [ "$a" = --bancada ]; then acordar_conversor; exec "$ATOS/curar" obra --reextrair "$@"; fi
+      done
       echo "acervo converter: falta --bancada <pasta>; converter nao escreve no acervo (o que escreve e \`acervo espelhar\`)." >&2
       exit 2 ;;
   esac

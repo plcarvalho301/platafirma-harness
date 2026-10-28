@@ -1,0 +1,12 @@
+[Unit]
+Description=confere a cada 5 min se o conversor esta ocioso
+
+[Timer]
+# 5 min contra os 15 de ociosidade que o ajudante exige: o conversor some entre 15 e 20 min depois da
+# ultima operacao (#4026).
+OnBootSec=5min
+OnUnitActiveSec=5min
+Unit=conversor-ocioso.service
+
+[Install]
+WantedBy=timers.target
