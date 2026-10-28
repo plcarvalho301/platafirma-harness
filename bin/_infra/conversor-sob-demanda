@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# bin/_infra/conversor-sob-demanda — liga o conversor para quem vai converter e o desliga ocioso (#4026).
+# Ordem do dono de 28/10/2026: o conversor (2 replicas x 7 GiB) so fica ligado enquanto o pipeline de
+# ingestao roda; ligado a toa ele disputa memoria com a porta. Ajudante interno, fora do PATH: quem o
+# chama e o verbo que converte (bin/acervo, bin/ingerir) e o timer conversor-ocioso.
+#
+# atos:
+#   acordar    liga a stack conversor se alguma replica nao esta de pe e saudavel, e espera todas
+#              saudaveis (PF_CONVERSOR_ESPERA_S, 600). Marca a hora em var/conversor/acordado-em.
+#              0 pronto · 3 nao subiu ou nao ficou saudavel a tempo (quem chama segue: o erro de
+#              conversor fora aparece na obra, com o nome)
+#   adormecer  para os conteineres (stop, nunca down: a rede pf-conversor-aberta fica para a rag-api)
+#              quando todas as replicas dizem no /saude que estao livres ha PF_CONVERSOR_OCIOSO_S (900)
+#              e o ultimo acordar foi ha mais que isso. Replica que nao responde, ocupada ou sem
+#              `ocioso_s` segura a stack ligada. Sai 0 sempre que decidiu; a linha diz o que decidiu.
+#
+# ambiente: PLATAFIRMA_INSTANCIA · DOCKER_HOST · PF_CONVERSOR_OCIOSO_S · PF_CONVERSOR_ESPERA_S ·
+#   PF_STACK_BIN (teste: o ajudante de stack)
+set -euo pipefail
+
+AQUI="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+. "$AQUI/../../lib/raizes.sh"
+
+export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
+STACK_BIN="${PF_STACK_BIN:-$AQUI/../_release/stack}"
+PROJETO=conversor
+ESTADO="$PLATAFIRMA_INSTANCIA/var/conversor"
+OCIOSO_S="${PF_CONVERSOR_OCIOSO_S:-900}"
+ESPERA_S="${PF_CONVERSOR_ESPERA_S:-600}"
+PASSO_S="${PF_CONVERSOR_PASSO_S:-5}"
+
+uso() { echo "uso: conversor-sob-demanda acordar|adormecer" >&2; exit 2; }
+
+# Só a release liga e desliga o conversor da instância: o verbo rodado da bancada (a suíte de teste chama
+# `acervo espelhar --apply` e `ingerir --apply` contra serviço falso) não toca a stack de verdade.
+case "$AQUI/" in
+  "$PF_RELEASE_RAIZ"/*) ;;
+  *) if [ "${PF_CONVERSOR_FORA_DA_RELEASE:-0}" != 1 ]; then
+       echo "conversor-sob-demanda: fora da release ($AQUI), nada a fazer" >&2
+       exit 0
+     fi ;;
+esac
+
+# os conteineres de servico da stack (fora o `run` do teste da imagem), um por linha: nome estado saude
+conteineres() {
+  local ids
+  ids="$(docker ps -aq --filter "label=com.docker.compose.project=$PROJETO" \
+           --filter "label=com.docker.compose.oneoff=False" 2>/dev/null)" || return 0
+  [ -n "$ids" ] || return 0
+  # shellcheck disable=SC2086
+  docker inspect -f '{{.Name}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}' $ids \
+    2>/dev/null | sed 's#^/##'
+}
+
+# 0 quando ha conteiner e todos estao rodando e saudaveis
+de_pe() {
+  local n=0 nome est saude
+  while read -r nome est saude; do
+    [ -n "$nome" ] || continue
+    n=$((n + 1))
+    [ "$est" = running ] && [ "$saude" = healthy ] || return 1
+  done < <(conteineres)
+  [ "$n" -gt 0 ]
+}
+
+travar() {  # $1 = espera em segundos (0: nao espera)
+  mkdir -p "$ESTADO"
+  exec 9>"$ESTADO/trava"
+  if [ "$1" -gt 0 ]; then flock -w "$1" 9; else flock -n 9; fi
+}
+
+acordar() {
+  travar "$ESPERA_S" || { echo "conversor-sob-demanda: outro acordar segurou a trava por $ESPERA_S s" >&2; exit 3; }
+  touch "$ESTADO/acordado-em"
+  if de_pe; then exit 0; fi
+  echo "conversor-sob-demanda: ligando o conversor para converter (some sozinho depois de $((OCIOSO_S / 60)) min sem trabalho)" >&2
+  "$STACK_BIN" compose "$PROJETO" up -d >&2 || { echo "conversor-sob-demanda: o conversor nao subiu (infra up conversor)" >&2; exit 3; }
+  local fim=$(( $(date +%s) + ESPERA_S ))
+  until de_pe; do
+    if [ "$(date +%s)" -ge "$fim" ]; then
+      echo "conversor-sob-demanda: o conversor nao ficou saudavel em $ESPERA_S s (infra ps conversor)" >&2
+      exit 3
+    fi
+    sleep "$PASSO_S"
+  done
+  touch "$ESTADO/acordado-em"
+  echo "conversor-sob-demanda: conversor pronto" >&2
+}
+
+# segundos livres que a replica diz no /saude; -1 quando ocupada, sem resposta ou sem o campo
+ocioso_de() {
+  local o
+  o="$(docker exec "$1" python -c 'import json, urllib.request
+d = json.load(urllib.request.urlopen("http://127.0.0.1:8080/saude", timeout=10))
+print(-1 if d.get("ocupado") else d.get("ocioso_s", -1))' 2>/dev/null)" || o=-1
+  [[ "$o" =~ ^[0-9]+$ ]] || o=-1
+  printf '%s' "$o"
+}
+
+adormecer() {
+  travar 0 || { echo "fica: um acordar esta em curso"; exit 0; }
+  local vivos=() nome est saude
+  while read -r nome est saude; do
+    [ "$est" = running ] && vivos+=("$nome")
+  done < <(conteineres)
+  [ "${#vivos[@]}" -gt 0 ] || { echo "parado: nada rodando"; exit 0; }
+  local agora acordado
+  agora="$(date +%s)"
+  acordado="$(stat -c %Y "$ESTADO/acordado-em" 2>/dev/null || echo 0)"
+  if [ $((agora - acordado)) -lt "$OCIOSO_S" ]; then
+    echo "fica: acordado ha $((agora - acordado)) s"; exit 0
+  fi
+  local c o
+  for c in "${vivos[@]}"; do
+    o="$(ocioso_de "$c")"
+    if [ "$o" -lt "$OCIOSO_S" ]; then
+      echo "fica: $c livre ha $o s"; exit 0
+    fi
+  done
+  "$STACK_BIN" compose "$PROJETO" stop >&2 || { echo "conversor-sob-demanda: stop falhou" >&2; exit 3; }
+  echo "parado: ocioso (${vivos[*]} livres ha $OCIOSO_S s ou mais)"
+}
+
+case "${1:-}" in
+  acordar)   acordar ;;
+  adormecer) adormecer ;;
+  *) uso ;;
+esac

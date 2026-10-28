@@ -18,7 +18,7 @@
 #   stack promover <stack> [<rev>]           sobe da arvore da release nessa rev (sem rev:
 #                                             current da familia) — mesmo comportamento do
 #                                             extinto `deploy <stack> promover [<rev>]`
-#   stack compose  <stack> <acao> [args...]  acao = up | down | ps | logs | config | pull | build
+#   stack compose  <stack> <acao> [args...]  acao = up | down | stop | ps | logs | config | pull | build
 #                                             (passthrough ao docker compose; segredo exigido
 #                                             so antes de "up")
 #   stack testar   <stack> <rev>             passo de teste da imagem (spec conversor-pdf-combinado
@@ -91,7 +91,7 @@ uso() {
   cat >&2 <<FIM
 uso:
   stack promover <stack> [<rev>]              sobe da arvore da release nessa rev (sem rev: current da familia)
-  stack compose  <stack> <acao> [args...]     acao = up | down | ps | logs | config | pull | build
+  stack compose  <stack> <acao> [args...]     acao = up | down | stop | ps | logs | config | pull | build
   stack testar   <stack> <rev>                passo de teste da imagem da rev (servicos do perfil teste)
 
 base: $PF_RELEASE_RAIZ/<familia>/<sha>/<compose> · sobreposicao: $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml
@@ -465,6 +465,15 @@ inalterada_desde() {  # $1=sha no ar
   return 0
 }
 
+# 0 quando o compose base da stack declara `x-platafirma: {sob_demanda: true}` (#4026, ordem do dono de 28/10/2026:
+# o conversor so fica ligado enquanto o pipeline de ingestao roda). Quem liga e quem converte
+# (bin/_infra/conversor-sob-demanda acordar); o promover so deixa a imagem do sha pronta. Duvida volta 1.
+sob_demanda() {
+  python3 -c 'import sys, yaml
+d = yaml.safe_load(open(sys.argv[1])) or {}
+sys.exit(0 if (d.get("x-platafirma") or {}).get("sob_demanda") is True else 1)' "$COMPOSE" 2>/dev/null
+}
+
 # ARV e SHA de uma rev (vazia: current da familia); falha com a recusa impressa
 resolver_arvore() {  # $1=rev ou vazio
   local rev="$1"
@@ -538,6 +547,18 @@ case "$ATO" in
     mkdir -p "$PONTOS"
     printf 'release: %s (projeto %s)\n  %s -> %s\n' "$ARVORE" "$PROJETO" "${ANTES:-(nenhum up gravado)}" "$SHA"
     cd "$(dirname "$COMPOSE")"
+    # Stack sob demanda e parada (#4026): a imagem do sha fica pronta e o ponto avanca, mas nada liga.
+    # Ligada (um lote em curso), segue o caminho de sempre.
+    if sob_demanda && [ -z "$(compose ps -q --status running 2>/dev/null)" ]; then
+      if [ -n "$ANTES" ] && [ "$ANTES" != "$SHA" ]; then echo "$ANTES" > "$PONTOS/$STACK.anterior"; fi
+      rc=0
+      if imagem_pinada; then garantir_imagens || rc=$?; else compose build || rc=$?; fi
+      if [ "$rc" -eq 0 ]; then
+        gravar_atual "$SHA"; printf '%s\n' "$SHA" > "$PONTOS/$STACK.servido"
+        printf 'stack %s sob demanda e parada: imagem de %s pronta, nada ligado (liga quem converte)\n' "$STACK" "${SHA:0:7}"
+      fi
+      exit "$rc"
+    fi
     if [ "${PF_STACK_RECRIAR:-0}" != 1 ] && [ -n "$ANTES" ] && inalterada_desde "$ANTES"; then
       printf 'stack %s inalterada de %s a %s (compose, build e binds) — nada recriado\n' "$STACK" "${ANTES:0:7}" "${SHA:0:7}"
       # Sem recriar, os conteineres seguem na arvore em que subiram. `.servido` guarda essa
@@ -636,8 +657,9 @@ case "$ATO" in
     ACAO="${1:-}"
     [ -n "$ACAO" ] || { echo "erro: acao obrigatoria: stack compose $STACK <acao> [args...]" >&2; uso; }
     case "$ACAO" in
-      up|down|ps|logs|config|pull|build) ;;
-      *) echo "erro: acao desconhecida: '$ACAO' (up|down|ps|logs|config|pull|build)" >&2; uso ;;
+      # stop: o desligamento por ociosidade da stack sob demanda (#4026) para sem apagar contêiner nem rede
+      up|down|stop|ps|logs|config|pull|build) ;;
+      *) echo "erro: acao desconhecida: '$ACAO' (up|down|stop|ps|logs|config|pull|build)" >&2; uso ;;
     esac
     ARV="$(arvore_de "")" || {
       echo "erro: familia $REPO sem current na release ($PF_RELEASE_RAIZ/$REPO/current) — promova: release promover $REPO <rev>" >&2

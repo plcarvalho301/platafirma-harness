@@ -236,6 +236,33 @@ def test_inalterada_mas_parada_recria(mundo):
     assert _chamadas(mundo, "up")
 
 
+def _sob_demanda(m, sha):
+    """A árvore do sha marca a stack sob demanda (#4026), como o compose do conversor."""
+    (Path(m["env"]["PF_RELEASE_RAIZ"]) / FAMILIA / sha / "deploy" / "x" / "compose.yaml").write_text(
+        "name: x\nx-platafirma:\n  sob_demanda: true\nservices: {}\n")
+
+
+@pytest.mark.skipif(subprocess.run(["python3", "-c", "import yaml"], capture_output=True).returncode != 0,
+                    reason="o ajudante lê a marca com o yaml do python3 do host")
+def test_sob_demanda_parada_prepara_a_imagem_e_nao_liga(mundo):
+    _sob_demanda(mundo, mundo["c1"])
+    r = _roda(mundo, "promover", "x", mundo["c1"], STUB_RODANDO="0")
+    assert r.returncode == 0, r.stderr
+    assert not _chamadas(mundo, "up")
+    assert _chamadas(mundo, "build")[-1].endswith("build app")
+    assert "sob demanda e parada" in r.stdout
+    assert (mundo["pontos"] / "x.atual").read_text().strip() == mundo["c1"]
+
+
+@pytest.mark.skipif(subprocess.run(["python3", "-c", "import yaml"], capture_output=True).returncode != 0,
+                    reason="o ajudante lê a marca com o yaml do python3 do host")
+def test_sob_demanda_ligada_recria_como_sempre(mundo):
+    _sob_demanda(mundo, mundo["c1"])
+    r = _roda(mundo, "promover", "x", mundo["c1"], STUB_RODANDO="1")
+    assert r.returncode == 0, r.stderr
+    assert _chamadas(mundo, "up") and "sob demanda" not in r.stdout
+
+
 def test_contexto_mudou_recria(mundo):
     mundo["pontos"].mkdir()
     (mundo["pontos"] / "x.atual").write_text(mundo["c2"] + "\n")
