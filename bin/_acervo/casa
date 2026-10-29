@@ -527,7 +527,8 @@ def sobre(classe, chave, especie, quero_json, todas=False):
     if especie:
         _especie(especie)
     classe, chave_humana, ent_id = _entidade(classe, chave)
-    conds = [f"r.ref = {_lit(ent_id)}::uuid"]
+    # o Sobre: é a ligação «sobre» que sai da ficha do documento, e a linha de acervo.casa tem o id dela (#4045)
+    conds = ["r.tipo = 'sobre'", f"r.para_id = {_lit(ent_id)}::uuid"]
     if not todas:
         conds.append("c.retirada_em is null")
     if especie:
@@ -539,10 +540,10 @@ def sobre(classe, chave, especie, quero_json, todas=False):
                      coalesce(c.titulo, '') as titulo, c.ciclo::text as ciclo,
                      to_char(c.retirada_em at time zone 'UTC', 'YYYY-MM-DD') as retirada_em,
                      c.substituida_por
-                from acervo.casa_referente r
-                join acervo.casa c on c.id = r.casa_id
+                from acervo.entidade_relacao r
+                join acervo.casa c on c.id = r.de_id
                 join acervo.casa_especie e on e.casa_id = c.id
-               where {' and '.join(conds)}) t;""", "acervo.casa_referente") or []
+               where {' and '.join(conds)}) t;""", "acervo.entidade_relacao") or []
     cab = (f"{len(linhas)} documento(s) sobre {classe} {chave_humana} · {txt_fonte(_fonte())}"
            + (f" · especie {especie}" if especie else "")
            + (" · inclui retiradas" if todas else ""))
