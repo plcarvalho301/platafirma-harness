@@ -1,7 +1,7 @@
 ---
 name: prosa
 description: "Use quando for ESCREVER ou REVISAR texto que uma pessoa vai ler em git, na wiki ou no rastreador, antes de publicar: página de wiki, corpo de card (épico e feature no two-pager, antes de `tarefas criar` ou `tarefas editar` com corpo), comentário tipado de discovery, story derivada de uma formalização, lista de verificação, benchmark, parecer, runbook, e a voz (não a forma) de adr, spec e ato normativo. Em ato normativo e política interna, a forma é da skill redacao-normativa, que roda antes; esta faz a passada de voz nos dispositivos e escreve a nota e o material de apoio. Um motor comum a todo tipo (tira jargão de IA, faz entender, voz da casa) e um molde por tipo em reference/moldes/. Régua: acervo ler casa padrao styleguide-da-wiki. NÃO dispare para acervo cru, mural ou fila, produto de outra cadeira com régua própria (informe, apreciação, estimativa) nem resposta de chat."
-cadeiras: todas (matéria de escrita legível por humano em git/wiki). Dona da régua é produto (spec §5 + anexo styleguide-moldes-por-tipo.md); dono da skill, como implementadora, é o arquiteto. A estrutura dos tipos é de dados (acervo.especie_tipo).
+cadeiras: todas (matéria de escrita legível por humano em git/wiki). Dona da régua é produto (spec §5 + anexo styleguide-moldes-por-tipo.md); dono da skill, como implementadora, é o arquiteto. A estrutura dos tipos é de dados (a shape da classe; na espécie ainda sem classe, acervo.especie_tipo).
 compatibility: régua canônica na spec e no anexo de moldes; servida em Operar:styleguide (wiki viva). Motor agnóstico de superfície; molde por tipo em reference/moldes/. A conduta do dono (abertura/dono.md) é referência de voz, não isenção de regra. Catálogo de marcas por extenso em reference/marcas-pt-br.md.
 ---
 
@@ -122,9 +122,9 @@ régua vale pra ela também.)
 ## Roteador de tipo — qual molde carregar
 
 Antes de escrever, identifica o tipo do artefato e resolve o molde por eixo. A lista
-de tipos não se hardcoda aqui: as espécies são a taxonomia de `acervo.especie_tipo`
-(id, slug, família). Os estratos de cada molde vêm de `reference/moldes/` — a régua
-fina no anexo de produto —, não de `especie_tipo`.
+de tipos não se hardcoda aqui: as espécies são as de `acervo.especie_da_casa` (a pasta do
+documento: a da shape quando a espécie tem classe, senão a de `acervo.especie_tipo`). Os estratos
+de cada molde vêm de `reference/moldes/` — a régua fina no anexo de produto —, não do banco.
 
 1. **Espécie de obra de git com molde próprio** (benchmark, parecer, runbook,
    lista-de-verificacao, e os que forem lavrados) → carrega `reference/moldes/<tipo>.md`.
@@ -182,7 +182,7 @@ erro.
 ## O molde vem do tipo — a régua fina mora no anexo
 
 Cada `reference/moldes/<tipo>.md` traz a ESTRUTURA — os estratos, na ordem (matéria
-de dados, `especie_tipo`) — e o distintivo operacional de cada estrato. A RÉGUA FINA
+de dados: a shape da classe, ou `especie_estrato` na espécie sem classe) — e o distintivo operacional de cada estrato. A RÉGUA FINA
 de escrita — o que cada estrato contém, em que voz, o que o distingue — é de produto
 e mora no anexo de moldes (`acervo ler casa padrao styleguide-moldes-por-tipo`); o
 molde da skill aponta para a seção do anexo. Divergiu, a fonte é o anexo.

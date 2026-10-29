@@ -119,39 +119,41 @@ def _lit(s):
 
 # ------------------------------------------------------------------ cobertura (§11.2)
 
+# A espécie do documento da casa é a pasta que ele declara, pelas views da migração 143 (#4044):
+# acervo.especie_da_casa dá a projeção e o regime (da shape quando a espécie tem classe no catálogo,
+# senão de acervo.especie_tipo), e acervo.casa_especie liga cada linha de acervo.casa à espécie dela.
+_DA_ESPECIE = ("acervo.casa c join acervo.casa_especie ce on ce.casa_id = c.id "
+               "where ce.especie = d.especie")
+
+
 def _especies_vivas():
-    return _q("select coalesce(json_agg(slug order by slug), '[]') from acervo.especie_tipo;",
-              "acervo.especie_tipo") or []
+    return _q("select coalesce(json_agg(especie order by especie), '[]') from acervo.especie_da_casa;",
+              "acervo.especie_da_casa") or []
 
 
 def _especie(especie):
     """Espécie com projeção, regime e contagem; fora do vocabulário (arq:0059) recusa."""
     info = _q(f"""
       select json_build_object(
-        'slug', e.slug, 'projecao', e.projecao, 'regime', e.regime,
-        'vivas', (select count(*) from acervo.casa c
-                   where c.especie_id = e.id and c.retirada_em is null),
-        'retiradas', (select count(*) from acervo.casa c
-                       where c.especie_id = e.id and c.retirada_em is not null),
-        'sem_chave', (select count(*) from acervo.casa c
-                       where c.especie_id = e.id and c.retirada_em is null and c.chave is null),
-        'fora_da_fonte', (select count(*) from acervo.casa c
-                           where c.especie_id = e.id and c.retirada_em is null
+        'slug', d.especie, 'classe', d.classe, 'projecao', d.projecao, 'regime', d.regime,
+        'vivas', (select count(*) from {_DA_ESPECIE} and c.retirada_em is null),
+        'retiradas', (select count(*) from {_DA_ESPECIE} and c.retirada_em is not null),
+        'sem_chave', (select count(*) from {_DA_ESPECIE} and c.retirada_em is null and c.chave is null),
+        'fora_da_fonte', (select count(*) from {_DA_ESPECIE} and c.retirada_em is null
                              and c.repo = {_lit(SUPORTE)}
                              and c.sha is distinct from (
                                  select f.sha from acervo.casa_fonte f
                                   where f.repo = {_lit(SUPORTE)}
                                   order by f.ingerido_em desc limit 1)),
-        'legado', (select count(*) from acervo.casa c
-                    where c.especie_id = e.id and c.retirada_em is null
+        'legado', (select count(*) from {_DA_ESPECIE} and c.retirada_em is null
                       and c.repo <> {_lit(SUPORTE)}),
         'ultimo', (select json_object_agg(coalesce(t.serie, ''), t.ult order by t.serie)
-                     from (select serie, max(numero) as ult from acervo.casa
-                            where especie_id = e.id and numero is not null
-                            group by serie) t))
-        from acervo.especie_tipo e where e.slug = {_lit(especie)};""", "acervo.especie_tipo")
+                     from (select c.serie, max(c.numero) as ult from {_DA_ESPECIE}
+                              and c.numero is not null
+                            group by c.serie) t))
+        from acervo.especie_da_casa d where d.especie = {_lit(especie)};""", "acervo.especie_da_casa")
     if not info:
-        morre("acervo casa: especie '%s' nao existe em acervo.especie_tipo.\n"
+        morre("acervo casa: especie '%s' nao existe em acervo.especie_da_casa.\n"
               "  especies vivas: %s" % (especie, ", ".join(_especies_vivas())), 2)
     return info
 
@@ -250,7 +252,7 @@ def servido(linha, fonte, esp):
 _CAMPOS = """
     c.id::text as id, c.chave, c.serie, c.numero, c.repo, c.path, c.sha, c.dono,
     c.natureza::text as natureza, c.ciclo::text as ciclo, coalesce(c.titulo, '') as titulo,
-    s.slug as subtipo, e.slug as especie, to_char(c.criado_em, 'YYYY-MM-DD') as criado_em,
+    e.subtipo as subtipo, e.especie as especie, to_char(c.criado_em, 'YYYY-MM-DD') as criado_em,
     to_char(c.retirada_em at time zone 'UTC', 'YYYY-MM-DD') as retirada_em, c.substituida_por,
     to_char(ci.criada_em, 'YYYY-MM-DD') as vetorizado_em,
     c.forca::text as forca, c.revisao, c.status_declarado"""
@@ -278,8 +280,7 @@ def _linhas(where, limite=None):
       select coalesce(json_agg(row_to_json(t) order by {_ORDEM}), '[]') from (
         select {_CAMPOS}
           from acervo.casa c
-          join acervo.especie_tipo e on e.id = c.especie_id
-          left join acervo.especie_subtipo s on s.id = c.subtipo_id
+          join acervo.casa_especie e on e.casa_id = c.id
           left join acervo.casa_impressao ci on ci.casa_id = c.id and ci.estado = 'servindo'
          where {where}
          order by c.serie nulls last, c.numero nulls last, c.chave nulls last, c.repo, c.path
@@ -372,8 +373,8 @@ def mapa(especie):
     _especie(especie)
     linhas = _q(f"""
       select coalesce(json_agg(c.corpo order by c.chave), '[]')
-        from acervo.casa c join acervo.especie_tipo e on e.id = c.especie_id
-       where e.slug = {_lit(especie)} and c.retirada_em is null
+        from acervo.casa c join acervo.casa_especie e on e.casa_id = c.id
+       where e.especie = {_lit(especie)} and c.retirada_em is null
          and c.corpo like '%## Mapa%';""") or []
     texto, faltam = extrai_mapa(linhas)
     if faltam:
@@ -390,13 +391,13 @@ def catalogo(quero_json):
     que têm linha, com projeção, regime e contagem."""
     linhas = _q("""
       select coalesce(json_agg(row_to_json(t) order by t.regime nulls last, t.slug), '[]') from (
-        select e.slug, e.regime, e.projecao,
+        select d.especie as slug, d.regime, d.projecao,
                count(c.id) filter (where c.retirada_em is null) as vivas,
                count(c.id) filter (where c.retirada_em is not null) as retiradas
-          from acervo.especie_tipo e
-          left join acervo.casa c on c.especie_id = e.id
-         where e.regime is not null or c.id is not null
-         group by e.slug, e.regime, e.projecao) t;""", "acervo.especie_tipo") or []
+          from acervo.especie_da_casa d
+          left join acervo.casa_especie ce on ce.especie = d.especie
+          left join acervo.casa c on c.id = ce.casa_id
+         group by d.especie, d.regime, d.projecao) t;""", "acervo.especie_da_casa") or []
     fonte = _fonte()
     vivas = sum(int(l["vivas"]) for l in linhas)
     cab = (f"{len(linhas)} espécie(s) de casa · {vivas} ficha(s) viva(s) · {txt_fonte(fonte)}"
@@ -407,7 +408,7 @@ def catalogo(quero_json):
         return 0
     print(cab)
     if not linhas:
-        print("motivo: nenhuma espécie com regime em acervo.especie_tipo.")
+        print("motivo: nenhuma espécie em acervo.especie_da_casa.")
         return 0
     we = max(len(l["slug"]) for l in linhas)
     wp = max(len(l["projecao"] or "-") for l in linhas)
@@ -422,7 +423,7 @@ def catalogo(quero_json):
 def listar(especie, quero_json, dono=None, situacao=False, todas=False):
     info = _especie(especie)
     fonte = _fonte()
-    conds = [f"e.slug = {_lit(especie)}"]
+    conds = [f"e.especie = {_lit(especie)}"]
     if not todas:
         conds.append("c.retirada_em is null")
     if dono:
@@ -530,17 +531,17 @@ def sobre(classe, chave, especie, quero_json, todas=False):
     if not todas:
         conds.append("c.retirada_em is null")
     if especie:
-        conds.append(f"e.slug = {_lit(especie)}")
+        conds.append(f"e.especie = {_lit(especie)}")
     linhas = _q(f"""
       select coalesce(json_agg(row_to_json(t) order by t.especie, t.serie nulls last,
                                t.numero nulls last, t.chave nulls last, t.repo, t.path), '[]')
-        from (select e.slug as especie, c.chave, c.serie, c.numero, c.repo, c.path,
+        from (select e.especie as especie, c.chave, c.serie, c.numero, c.repo, c.path,
                      coalesce(c.titulo, '') as titulo, c.ciclo::text as ciclo,
                      to_char(c.retirada_em at time zone 'UTC', 'YYYY-MM-DD') as retirada_em,
                      c.substituida_por
                 from acervo.casa_referente r
                 join acervo.casa c on c.id = r.casa_id
-                join acervo.especie_tipo e on e.id = c.especie_id
+                join acervo.casa_especie e on e.casa_id = c.id
                where {' and '.join(conds)}) t;""", "acervo.casa_referente") or []
     cab = (f"{len(linhas)} documento(s) sobre {classe} {chave_humana} · {txt_fonte(_fonte())}"
            + (f" · especie {especie}" if especie else "")
@@ -591,7 +592,7 @@ def resolver(especie, seletor, info):
     data (datado) -> slug de arquivo (adr) -> repo@path / path -> título. Nada: negativa,
     exit 1."""
     s = seletor.strip()
-    base = f"e.slug = {_lit(especie)}"
+    base = f"e.especie = {_lit(especie)}"
     if "@" in s and not s.startswith("@"):
         repo, path = s.split("@", 1)
         cands = _linhas(f"{base} and c.repo = {_lit(repo)} and c.path = {_lit(path)}")
@@ -752,7 +753,8 @@ USO = """uso:
 <chave>: adr <serie>:NNNN (arq:0075; arq:75 e 75 resolvem se não houver ambiguidade) ou o
 <slug> do arquivo NNNN-<slug>.md (se único), minuta NNNN, datado <AAAA-MM-DD>-<slug> (ou só
 o <slug>, se único), vivo <slug>.
-<especie> é validada contra acervo.especie_tipo (vocabulário fechado, arq:0059).
+<especie> é a pasta do documento, validada contra acervo.especie_da_casa (vocabulário fechado,
+arq:0059): a da shape quando a espécie tem classe no catálogo, senão a de acervo.especie_tipo (#4044).
 exit: 0 ok · 1 nada · 2 uso/forma/ambíguo · 5 indeterminável.
 Read-only; a escrita é `acervo ingerir casa platafirma-casa`."""
 
