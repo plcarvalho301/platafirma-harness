@@ -145,8 +145,8 @@ class AdaptadorRegistro(Adaptador):
             select c.chave, c.serie, c.numero, c.titulo, c.sha, c.retirada_em,
                    c.substituida_por
               from acervo.casa c
-              join acervo.especie_tipo e on e.id = c.especie_id
-             where e.slug = {_lit(ESPECIE)} and {where}) t;
+              join acervo.casa_especie e on e.casa_id = c.id
+             where e.especie = {_lit(ESPECIE)} and {where}) t;
         """) or []
 
     def _ficha(self, chave: str) -> dict | None:
@@ -156,8 +156,8 @@ class AdaptadorRegistro(Adaptador):
             select c.chave, c.serie, c.numero, c.titulo, c.sha, c.retirada_em,
                    c.substituida_por, c.corpo
               from acervo.casa c
-              join acervo.especie_tipo e on e.id = c.especie_id
-             where e.slug = {_lit(ESPECIE)} and c.chave = {_lit(chave)}
+              join acervo.casa_especie e on e.casa_id = c.id
+             where e.especie = {_lit(ESPECIE)} and c.chave = {_lit(chave)}
              limit 1) t;
         """) or []
         return linhas[0] if linhas else None

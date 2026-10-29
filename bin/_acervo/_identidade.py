@@ -219,7 +219,7 @@ def _forca_vigencia_txt(r):
         vig = f"retirada em {r['retirada_em']} sem sucessora"
     return f"{txt} · {vig}"
 
-_CAMPOS_PARECIDO = ("e.slug as especie, c.chave, c.repo, c.path, c.forca::text as forca, "
+_CAMPOS_PARECIDO = ("e.especie as especie, c.chave, c.repo, c.path, c.forca::text as forca, "
                    "c.revisao, c.retirada_em, c.substituida_por")
 
 def _parecidos_casa(especie, seletor):
@@ -242,7 +242,7 @@ def _parecidos_casa(especie, seletor):
 
     exatos = psql_json(
         "select coalesce(json_agg(row_to_json(t) order by t.especie), '[]') from ("
-        "  select {campos} from acervo.casa c join acervo.especie_tipo e on e.id = c.especie_id"
+        "  select {campos} from acervo.casa c join acervo.casa_especie e on e.casa_id = c.id"
         "   where c.chave = {sel} limit 10) t;".format(
             campos=_CAMPOS_PARECIDO, sel=_lit(sel)), "parecidos")
     acrescenta(exatos)
@@ -251,7 +251,7 @@ def _parecidos_casa(especie, seletor):
         titulo = psql_json(
             "select coalesce(json_agg(row_to_json(t) order by t.especie, t.chave nulls last), "
             "'[]') from ("
-            "  select {campos} from acervo.casa c join acervo.especie_tipo e on e.id = c.especie_id"
+            "  select {campos} from acervo.casa c join acervo.casa_especie e on e.casa_id = c.id"
             "   where c.titulo ilike {termo} limit 10) t;".format(
                 campos=_CAMPOS_PARECIDO, termo=_lit("%" + sel + "%")), "parecidos")
         acrescenta(titulo)
@@ -264,7 +264,7 @@ def _parecidos_casa(especie, seletor):
             "    select {campos}, "
             "           greatest(similarity(coalesce(c.chave, c.path), {sel}), "
             "                    similarity(coalesce(c.titulo, ''), {sel})) as sim"
-            "      from acervo.casa c join acervo.especie_tipo e on e.id = c.especie_id"
+            "      from acervo.casa c join acervo.casa_especie e on e.casa_id = c.id"
             "  ) u where u.sim > 0.2 limit 10) t;".format(
                 campos=_CAMPOS_PARECIDO, sel=_lit(sel)), "parecidos")
         acrescenta(trgm)
@@ -295,7 +295,7 @@ def _varrido_casa():
 def gerar_negativa(classe, seletor, casa=False):
     """Gera as 4 linhas fixas da spec §4 para exit 1.
 
-    casa=True: `classe` e especie de acervo.especie_tipo e o seletor e chave de documento
+    casa=True: `classe` e especie de acervo.especie_da_casa (a pasta) e o seletor e chave de documento
     de casa (arq:0115 §3); parecidos vem das chaves de acervo.casa. Senao, `classe` e classe
     da raiz e parecidos vem de chave_humana/alias."""
     # 3 e 4. vizinho e cura: documento de casa mora no suporte platafirma-casa e entra pela

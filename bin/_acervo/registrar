@@ -109,8 +109,8 @@ def _listas_que_resolvem(pares):
     valores = ", ".join("(%s, %s)" % (_lit(e), _lit(c)) for e, c in sorted(pares))
     out = _psql(
         "select v.e, v.c from (values %s) as v(e, c) "
-        "join acervo.especie_tipo t on t.slug = v.e "
-        "join acervo.casa x on x.especie_id = t.id and x.chave = v.c and x.retirada_em is null;" % valores)
+        "join acervo.casa_especie t on t.especie = v.e "
+        "join acervo.casa x on x.id = t.casa_id and x.chave = v.c and x.retirada_em is null;" % valores)
     return {tuple(l.split("|", 1)) for l in out.splitlines() if "|" in l}
 
 
