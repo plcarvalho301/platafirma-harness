@@ -168,6 +168,33 @@ def test_plano_seco_sem_pai_com_hermit_roda_projecao_e_aprova(ambiente, tmp_path
     assert len(chamadas) >= 1
 
 
+def test_conceito_novo_entra_na_projecao_com_novo(ambiente, tmp_path):
+    """Carta 20261026T102651-ia: o conceito que ainda não existe vai ao gerador por `--novo`, senão a
+    projeção não tem o referente dele e a conferência aprova sem julgá-lo."""
+    env, anotados = _hermit_falso(tmp_path, ambiente)
+    p = _curar(env, *BASE_ARGS)
+    assert p.returncode == 0, p.stdout + p.stderr
+    chamadas = anotados.read_text(encoding="utf-8").splitlines()
+    assert len(chamadas) == 2
+    assert "--novo" not in chamadas[0]                      # a base é o banco como está
+    assert chamadas[1].endswith(f"--novo {SLUG}:modelo")
+
+
+def test_conceito_novo_com_pai_leva_novo_e_a_aresta_juntos(ambiente, falso, tmp_path):
+    env, anotados = _hermit_falso(tmp_path, ambiente)
+    args_com_pai = BASE_ARGS + (
+        "--pai", "conceito-pai",
+        "--tipo", "generica",
+        "--garantia", "instituida",
+        "--motivo", "o novo conceito é especialização de conceito-pai",
+    )
+    p = _curar(env, *args_com_pai)
+    assert p.returncode == 0, p.stdout + p.stderr
+    chamadas = anotados.read_text(encoding="utf-8").splitlines()
+    assert len(chamadas) == 2
+    assert chamadas[1].endswith(f"--novo {SLUG}:modelo --mais {SLUG}:conceito-pai:generica")
+
+
 def test_apply_sem_pai_grava_sem_oferecer_desrelacionar(ambiente, falso):
     p = _curar(ambiente, *BASE_ARGS, "--sem-hermit", "--apply", patches=PATCH_EXPORT)
     assert p.returncode == 0, p.stdout + p.stderr

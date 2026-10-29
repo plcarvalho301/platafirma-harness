@@ -962,10 +962,13 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
     aresta = plano.get("aresta") or {}
     tem_aresta = bool(aresta.get("de") and aresta.get("para") and aresta.get("tipo"))
     if not args.sem_hermit:
+        # conceito que ainda não existe entra na projeção em memória (`--novo` do gerador): sem ele a aresta
+        # que parte dele cai no filtro do referente e a conferência aprova sem julgá-lo (carta 20261026T102651-ia)
+        novo = ["--novo", f"{corpo['slug']}:{corpo['natureza']}"] if metodo == "POST" else []
         if tem_aresta:
-            hermit = _hermit(aresta["de"], aresta["para"], aresta["tipo"])
+            hermit = _hermit_com([*novo, "--mais", f"{aresta['de']}:{aresta['para']}:{aresta['tipo']}"])
         else:
-            hermit = _hermit_com([])
+            hermit = _hermit_com(novo)
     else:
         hermit = None
     hermit_ok = args.sem_hermit or (hermit is not None and not hermit.get("erro") and not hermit.get("novos"))
