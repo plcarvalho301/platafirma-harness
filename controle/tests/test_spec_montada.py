@@ -70,6 +70,30 @@ def test_sql_e_uma_consulta_com_os_referentes():
     assert "e.classe = 'verbo' and e.chave_humana = 'acervo'" in q   # a peça é o 1º referente
 
 
+def test_documentos_que_declaram_a_peca_saem_da_ligacao_sobre():
+    """#4045: o Sobre: é a ligação «sobre» que sai da ficha do documento, de mesmo id da linha de acervo.casa;
+    casa_referente saiu. A espécie vem de acervo.casa_especie, que cobre a classe com shape e a espécie antiga."""
+    q = " ".join(sm.sql(casa._lit, [("verbo", "acervo")], "00000000-0000-0000-0000-000000000001").split())
+    assert "casa_referente" not in q
+    assert "from acervo.entidade_relacao r join acervo.entidade e on e.id = r.para_id" in q
+    assert "join acervo.casa c on c.id = r.de_id join acervo.casa_especie es on es.casa_id = c.id" in q
+    assert "where r.tipo = 'sobre'" in q
+
+
+def test_listar_sobre_le_a_ligacao_sobre(monkeypatch):
+    consultas = []
+    monkeypatch.setattr(casa, "_entidade", lambda classe, chave: ("verbo", "acervo", "f-1"))
+    monkeypatch.setattr(casa, "_q", lambda sql, alvo="", falhar=True: consultas.append((sql, alvo)) or [])
+    monkeypatch.setattr(casa, "_fonte", lambda: None)
+    monkeypatch.setattr(casa, "txt_fonte", lambda f: "fonte")
+    assert casa.sobre("verbo", "acervo", None, False) == 0
+    [(sql, alvo)] = consultas
+    sql = " ".join(sql.split())
+    assert alvo == "acervo.entidade_relacao" and "casa_referente" not in sql
+    assert "from acervo.entidade_relacao r join acervo.casa c on c.id = r.de_id" in sql
+    assert "r.tipo = 'sobre' and r.para_id = 'f-1'::uuid" in sql
+
+
 def test_render_monta_cada_bloco_e_segredo_so_por_referencia():
     texto = sm.render(DADOS, sm.referentes_do_sobre(CORPO))
     assert "## Montado na leitura" in texto

@@ -113,14 +113,15 @@ def sql(lit, refs, casa_id):
                            'variavel', variavel) order by verbo, variavel), '[]')
                            from acervo.ferramental_ambiente
                           where verbo = any({verbos}) and segredo),
-        'documentos', (select coalesce(json_agg(json_build_object('especie', es.slug,
+        'documentos', (select coalesce(json_agg(json_build_object('especie', es.especie,
                          'chave', coalesce(c.chave, c.repo || '@' || c.path),
-                         'titulo', c.titulo) order by es.slug, c.chave), '[]')
-                         from acervo.casa_referente r
-                         join acervo.entidade e on e.id = r.ref
-                         join acervo.casa c on c.id = r.casa_id
-                         join acervo.especie_tipo es on es.id = c.especie_id
-                        where e.classe = {lit(peca[0])} and e.chave_humana = {lit(peca[1])}
+                         'titulo', c.titulo) order by es.especie, c.chave), '[]')
+                         from acervo.entidade_relacao r
+                         join acervo.entidade e on e.id = r.para_id
+                         join acervo.casa c on c.id = r.de_id
+                         join acervo.casa_especie es on es.casa_id = c.id
+                        where r.tipo = 'sobre'
+                          and e.classe = {lit(peca[0])} and e.chave_humana = {lit(peca[1])}
                           and c.retirada_em is null and c.id <> {cid}::uuid),
         'conferida_em', (select to_char(conferida_em, 'YYYY-MM-DD') from acervo.casa
                           where id = {cid}::uuid));"""
