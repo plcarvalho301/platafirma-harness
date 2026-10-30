@@ -1,6 +1,6 @@
 ---
 name: prosa
-description: "Use quando for ESCREVER ou REVISAR texto que uma pessoa vai ler em git, na wiki ou no rastreador, antes de publicar: página de wiki, corpo de card (épico e feature no two-pager, antes de `tarefas criar` ou `tarefas editar` com corpo), comentário tipado de discovery, story derivada de uma formalização, lista de verificação, benchmark, parecer, runbook, e a voz (não a forma) de adr, spec e ato normativo. Em ato normativo e política interna, a forma é da skill redacao-normativa, que roda antes; esta faz a passada de voz nos dispositivos e escreve a nota e o material de apoio. Um motor comum a todo tipo (tira jargão de IA, faz entender, voz da casa) e a forma do tipo pela leitura acervo ler casa forma (a shape da classe), com molde em reference/moldes/ só para forma canônica e espécie ainda sem classe. Régua: acervo ler casa padrao styleguide-da-wiki. NÃO dispare para acervo cru, mural ou fila, produto de outra cadeira com régua própria (informe, apreciação, estimativa) nem resposta de chat."
+description: "Use quando for ESCREVER ou REVISAR texto que uma pessoa vai ler em git, na wiki ou no rastreador, antes de publicar: página de wiki, corpo de card e comentário tipado (antes de `tarefas criar`, `tarefas editar` com corpo ou `tarefas comentar`; a forma é a de `tarefas modelo`, e a skill só dá a voz), lista de verificação, benchmark, parecer, runbook, e a voz (não a forma) de adr, spec e ato normativo. Em ato normativo e política interna, a forma é da skill redacao-normativa, que roda antes; esta faz a passada de voz nos dispositivos e escreve a nota e o material de apoio. Um motor comum a todo tipo (tira jargão de IA, faz entender, voz da casa) e a forma do tipo pela leitura acervo ler casa forma (a shape da classe), com molde em reference/moldes/ só para forma canônica e espécie ainda sem classe. Régua: acervo ler casa padrao styleguide-da-wiki. NÃO dispare para acervo cru, mural ou fila, produto de outra cadeira com régua própria (informe, apreciação, estimativa) nem resposta de chat."
 cadeiras: todas (matéria de escrita legível por humano em git/wiki). Dona da régua é produto (spec §5 + anexo styleguide-moldes-por-tipo.md); dono da skill, como implementadora, é o arquiteto. A estrutura dos tipos é de dados (a shape da classe; na espécie ainda sem classe, acervo.especie_tipo).
 compatibility: régua canônica na spec e no anexo de moldes; servida em Operar:styleguide (wiki viva). Motor agnóstico de superfície; molde por tipo em reference/moldes/. A conduta do dono (abertura/dono.md) é referência de voz, não isenção de regra. Catálogo de marcas por extenso em reference/marcas-pt-br.md.
 ---
@@ -11,8 +11,8 @@ A régua não é apagar marca de máquina. É fazer quem chega depois ler um art
 fazer o que ele descreve sem falar com quem o escreveu.
 
 Escopo: prosa que um humano lê em git, na wiki ou no rastreador — página de wiki
-(conhecimento em geral: toda a parte conceitual do acervo), corpo de card de épico e
-feature, lista de verificação, benchmark, parecer, runbook, e a voz (não a forma) de
+(conhecimento em geral: toda a parte conceitual do acervo), corpo de card e comentário
+tipado, lista de verificação, benchmark, parecer, runbook, e a voz (não a forma) de
 adr, spec e atos normativos.
 Não é acervo cru, não é mural, não é fila, não é produto de negócio de outra cadeira
 com régua própria.
@@ -167,14 +167,13 @@ Os casos abaixo dizem o que muda em cada ponteiro canônico.
    pelo card (épico #3365) e sai depois da F3; até lá, vale só para as que já existem.
 3. **Página de wiki** (verbete de conceito) → `acervo ler casa forma conceito` (gênero
    verbete; a régua da definição vem como régua de campo).
-4. **Card e comentário de discovery** (saída 3, canônica):
-   - corpo de épico e feature, antes de `tarefas criar` ou `tarefas editar` com corpo
-     → `reference/moldes/card.md`, o two-pager. A forma, os rótulos por nível, vem de
-     `tarefas modelo <nível>`; a skill rege a voz dentro do rótulo;
-   - comentário de discovery, antes de `tarefas comentar` num card de épico ou feature
-     no funil → `reference/moldes/comentario-tipado.md`;
-   - story que sai de uma formalização → `reference/moldes/story-derivada.md`;
-   - story e task sem pai: só o núcleo.
+4. **Card e comentário tipado** (saída 3, canônica) → a skill NÃO tem molde. A forma e
+   a régua de cada rótulo moram num lugar só, o molde do rastreador, e se leem com
+   `tarefas modelo <épico|feature|story|task>`, `tarefas modelo story derivada`,
+   `tarefas modelo story refinada` ou `tarefas modelo comentario <tipo>`. Rode o modelo do
+   caso antes de escrever, siga os rótulos e a régua que ele imprime, e aplique aqui só o
+   motor e o núcleo. Documento que repita esses rótulos está velho: vale o `tarefas
+   modelo`.
 
 ## Ato normativo — a ponte com a `redacao-normativa`
 
@@ -202,8 +201,8 @@ erro.
 A ESTRUTURA — as seções, na ordem — e a RÉGUA de cada uma moram na planilha da ontologia e
 na shape da classe, e chegam pela chamada `acervo ler casa forma`. A régua da raiz e dos
 gêneros é de produto; a das seções que a classe acrescenta, da dona da classe. Os
-`reference/moldes/<tipo>.md` que ficam são de forma canônica (card, comentário, story
-derivada) ou transitórios, de espécie ainda sem classe, e saem quando a F3973 der a
+`reference/moldes/<tipo>.md` que ficam são transitórios, de espécie ainda sem classe (o
+card e o comentário tipado não têm molde aqui: vêm de `tarefas modelo`), e saem quando a F3973 der a
 classe; o anexo de moldes (`acervo ler casa padrao styleguide-moldes-por-tipo`) guarda a
 régua delas até lá. Divergiu, vale a shape.
 
