@@ -285,9 +285,17 @@ envia() { # envia MÉTODO /caminho  (corpo JSON em stdin)
 # (R34): o algoritmo e a regex da URL sao os mesmos, sem aspa simples porque o Python mora
 # dentro de aspas simples do shell (\x22 e \x27; a crase, \x60, tambem termina o endereco, e
 # o sublinhado e o asterisco finais saem do link, como a pontuacao).
+# Card #4058: a lista de rótulos não mora aqui; vem do molde da API (`GET /modelo`), a fonte
+# única. Sem a lista, a conversão não roda: gravar corpo com rótulo errado é pior que recusar.
 para_html() {
-  python3 -c 'import html,re,sys
-R = ["Problema encontrado", "Solução proposta", "Aceite × prova", "Raio de ataque", "Raio emendado", "Comportamento esperado", "Tarefas", "Regras novas", "Regras", "Sai quando", "Continuidade", "Estado medido", "Medido em", "Referencial", "Premissas", "Unidades", "Problema", "Resultado", "Medida", "Fora", "Quebra", "Negócio", "Ambiente", "Onde", "Passos", "Aceite", "Travas", "Entrega", "Plano", "Riscos", "Solução", "Peças", "Apetite", "Aberto", "Produtos documentais", "Traz", "Caso", "Remendo", "Confere", "Descartado", "Substitui", "fecho", "Decidiu", "Ficha", "Golden", "Motivo", "Por que importa", "O que já se sabe", "Resposta esperada", "Consequência no corpo"]
+  local indice rotulos
+  indice=$(busca GET /modelo) \
+    || { echo "sem a lista de rótulos do molde (GET /modelo no rastreador)" >&2; return 1; }
+  rotulos=$(printf '%s' "$indice" | jq -c '.rotulos_da_conversao // empty' 2>/dev/null)
+  [ -n "$rotulos" ] \
+    || { echo "sem a lista de rótulos do molde (GET /modelo no rastreador)" >&2; return 1; }
+  ROTULOS="$rotulos" python3 -c 'import html,json,os,re,sys
+R = json.loads(os.environ["ROTULOS"])
 R.sort(key=len, reverse=True)
 L = re.compile("^(" + "|".join(map(re.escape, R)) + "):", re.I)
 U = re.compile(r"https?://(?:(?!&(?:lt|gt|quot|#x27);)[^\s<>\x22\x27\x60])+", re.I)
@@ -1077,182 +1085,36 @@ fechar() {
   mover "$id" "$como" "$@"
 }
 
-# ESQUELETO DO CORPO POR NÍVEL — arq:0096. É o que a recusa da API manda imprimir
-# (`tarefas modelo <nível>`). Os rótulos aqui e em `logica.CAMPOS_DO_CORPO` são os
-# mesmos: a API é quem recusa; este verbo só evita que a cadeira adivinhe a grafia.
-#
-# A STORY TEM DUAS CAMADAS (arq:0096, emenda de 28/09/2026). O contrato se escreve na
-# lapidação; o Plano, o executor escreve em `em-refinamento-tecnico`, DEPOIS de ler o
-# código, e é o que a story precisa para entrar em `em-execucao` (a trava é nessa entrada, não
-# na saída do refinamento, para não quebrar a lapidação). Os dois moldes saem separados de propósito:
-# impresso junto, o Plano seria preenchido na captação com palpite, e é justamente o que
-# apodrece antes da execução (estado medido, arquivos por unidade, premissas).
-# `tarefas modelo story refinada` imprime só o Plano; o aviso do `modelo story` vai a
-# stderr para não entrar no corpo de quem copia o esqueleto.
-modelo_plano() {
-  cat <<'M'
-Plano:
-Medido em: <repo>@<sha de main> · <AAAA-MM-DD> — o estado que este plano leu; main andou, relê antes de executar
-Estado medido: [executor] fato | valor | onde (repo@caminho:símbolo), uma linha cada — inclui o que o card supôs e o código desmente, o que não abriu, e a peça existente a reaproveitar · story que mede: a classe contada na população com a mesma régua do instrumento, antes de sortear (A2)
-Premissas: [executor] o que decidi onde a story era ambígua, uma linha cada, corrigível — só se houver; o que as Travas mandam não decidir continua parando no card; premissa que é regra de negócio vai a Regras novas
-Regras novas: [executor] numeradas: regra de negócio que o código exige e o bloco Regras do pai não tem (ou linha dele que o código desmente), como caso → resultado, uma linha cada, no vocabulário da casa — só se houver; com ela, abre pergunta (dono) no pai (story sem pai: no próprio card) com as linhas numeradas, e a story só entra em em-execucao com a pergunta fechada (arq:0096, «A regra de negócio passa pelo dono»)
-Unidades: [executor] detalha as Tarefas do contrato · unidade | escreve (lista fechada repo@caminho) | depende de | fecha quando (comando + resultado esperado) — nenhum arquivo em duas unidades; unidade sem dependência corre em paralelo, e a linha é a mensagem de delegação do sub-agente · story que bloqueia outra: só as unidades que a outra chama (C2) · o que serve a dois consumidores roda uma vez, antes dos dois (C4) · C1–C5 e A2: lista antipadroes-de-quebra-de-execucao
-Aceite × prova: [executor] cada linha do Aceite | o comando que a demonstra | o resultado que tem de dar
-Raio emendado: [executor] repo@caminho | por que — o que o plano toca além do Raio de ataque; só se houver
-Riscos: [executor] causa → saída, uma linha cada — só se houver
-M
-}
-
-# O TWO-PAGER (card #3410; padrao styleguide-moldes-por-tipo §7; ordem dos rótulos do insumo
-# #2092 do #3410). O Título é o título do card e não entra no corpo; o aviso vai a stderr pela
-# mesma razão do aviso do Plano: quem copia o esqueleto copia stdout.
-_avisa_two_pager() {
-  echo "título: até 60 caracteres, o rótulo onde se clica, descendo do resultado à entrega (arq:0096) — épico, o que passa a ser verdade e para quem; feature, a coisa que vai existir, com o para quê quando couber. A API exige a aposta (Problema, Resultado, Medida, Fora) na saída de captada e a forma (Solução, Peças) na saída de em-lapidacao; Apetite e Aberto são livres, o índice fecha na formalização" >&2
-}
-
-# A STORY DERIVADA (levantamento 2026-10-11-moldes-do-discovery-e-da-formalizacao §7): não
-# repete o que a ADR e a spec dizem; carrega a execução e aponta o item que atende.
-modelo_story_derivada() {
-  cat <<'M'
-Negócio: #<feature> · R<a>, R<b> da spec <peça> | D<n> da arq:NNNN | Peça <n>, enquanto não há R nem D — só o ponteiro
-Referencial: [agente] a ADR e a spec de que deriva, por slug; story que escreve o próprio derivado aponta os comentários decisão e requisito do card
-Raio de ataque: [agente] lista literal dos arquivos a mexer, um por linha, repo@caminho — a fatia do documento que esta story atende; fora da lista não se toca
-Comportamento esperado: [agente] caminho feliz técnico, literal — recebe X, executa Y, sai 0
-Tarefas: as tasks que esta fita faz, uma por linha, na ordem de execução: o que faz · repo@caminho · como se confere — a task não tem card; a story é uma fita do executor, nem mais nem menos (arq:0060 §3; guia discovery, «A quebra»)
-1. <task>
-Ambiente: repo absoluto · como instalar · o que está de pé e não se derruba · credenciais (nunca impressas)
-Onde: arquivo, função, linha aproximada · peça análoga a imitar, se existir
-Passos: numerados, um por ação, comando literal
-Aceite: o item derivado que a fatia atende (R<n> ou D<n>; a Peça enquanto não há nenhum dos dois) — o comando literal vai ao Plano, em Aceite × prova
-Travas: trava que vem de ADR vira ponteiro D<n>; trava de execução fica escrita, imperativo + motivo
-Entrega: branch fabrica/<card>-<slug> de main · quem escreveu mescla e sobe (código: release promover; documento: servido no acervo) · retorno no comentário
-M
-  echo "segunda camada: o executor escreve o Plano em em-refinamento-tecnico, e o Medido em leva a versão servida da spec que leu — tarefas modelo story refinada" >&2
-}
-
-# O COMENTÁRIO TIPADO (spec comentario-tipado; padrao styleguide-moldes-por-tipo §8): primeira
-# linha, as linhas fixas do tipo logo abaixo, uma linha em branco e o argumento, sem teto. O
-# fecho não faz parte do molde: escreve-o o autor do two-pager, com `comentar --fecha`.
-modelo_comentario() {
-  case "${1:-}" in
-    insumo) cat <<'M'
-insumo: <nome do documento ou o fato>
-Traz: <o que muda para este card, numa linha>
-
-<argumento: o que sustenta, com onde se leu ou mediu>
-M
-    ;;
-    pergunta) cat <<'M'
-pergunta (<cadeira a quem se pergunta>): <a pergunta>
-
-<argumento: por que a pergunta importa e o que já se sabe>
-M
-    ;;
-    buraco) cat <<'M'
-buraco: <onde a solução quebra, em uma frase>
-Caso: <a situação que quebra, medida no código (repo@caminho) ou na spec (espécie e seção)>
-Remendo: <um detalhe, um corte, ou «volta à lapidação»>
-
-<argumento: a evidência, o raciocínio, e o que pesa contra, inclusive o desenho recebido>
-M
-    ;;
-    requisito) cat <<'M'
-requisito: <o comportamento exigido, em uma frase>
-Confere: <o comando ou a consulta, e o resultado que prova>
-
-<argumento: por que é exigido e o que quebra sem ele>
-M
-    ;;
-    decisão|decisao) cat <<'M'
-decisão (<quem decidiu; do dono, registrada por uma cadeira: dono>): <a escolha, em uma frase>
-Descartado: <as alternativas e por quê>
-Substitui: <#N — só quando substitui outra decisão>
-
-<argumento: o que levou à escolha>
-M
-    ;;
-    *) echo "uso: tarefas modelo comentario <insumo|pergunta|buraco|requisito|decisão>" >&2; exit 2 ;;
-  esac
-  case "${1:-}" in
-    pergunta|buraco|requisito)
-      echo "nasce aberto: fecha quando o autor do two-pager escrever o fecho — tarefas comentar <card> --fecha <n> \"<resultado> — <destino>\"" >&2 ;;
-  esac
-}
-
+# O MOLDE DE CARD MORA NA API (card #4058, incidente de 30/10/2026): `platafirma-rastreador@
+# api/molde.py` é a fonte única, servida em `GET /modelo/<variante>`. Este verbo só imprime o
+# que vem dela: o esqueleto em stdout (é o que se copia para o corpo) e o aviso em stderr.
+# Nenhuma cópia do molde mora aqui.
 modelo() {
-  if [ "${1:-}" = story ] && [ -n "${2:-}" ]; then
-    case "$2" in
-      refinada|em-refinamento-tecnico|plano) modelo_plano; return 0 ;;
-      derivada) modelo_story_derivada; return 0 ;;
-      *) echo "uso: tarefas modelo story [refinada|derivada]   (o Plano é exigido na entrada de em-execucao)" >&2; exit 2 ;;
-    esac
-  fi
+  local variante=""
   case "${1:-}" in
-    comentario|comentário) modelo_comentario "${2:-}"; return 0 ;;
-  esac
-  case "${1:-}" in
-    épico|epico) cat <<'M'
-Problema: como é hoje, como quem sofre veria, com um caso; até quatro frases, sem número (o número vai à Medida)
-Solução: a solução contada como uso, por momento, até sete; quem lê só isto simula um dia usando a coisa
-- Ao <momento>: quem faz o quê, e o que vê
-Peças: as features, numeradas, uma linha cada; regra nova diz quem a cobra (verbo, lint, gate)
-1. <feature>
-Fora: o que este épico não entrega e alguém pediria, um por linha, com para onde vai; Fora não proíbe
-- <item>: <para onde, quando>
-Resultado: quem passa a conseguir o quê; o outcome que o card não fecha sozinho vai marcado «não fecha card»
-Medida: escala · medidor · valor hoje · mínimo aceitável — uma linha
-Apetite: (opcional) quanto vale gastar · o que se corta primeiro se não couber — previsão de quem escreve
-Aberto: prosa do autor: o que está por decidir, cada item com quem responde; na aposta, o que sobra diz «fica aberto de propósito:» e o risco aceito
-M
-    _avisa_two_pager
-    ;;
-    feature) cat <<'M'
-Problema: como é hoje, como quem sofre veria, com um caso; até quatro frases, sem número (o número vai à Medida)
-Solução: a solução contada como uso, por momento, até sete; quem lê só isto simula um dia usando a coisa
-- Ao <momento>: quem faz o quê, e o que vê
-Peças: numeradas, uma linha cada: o que vai existir (lugar, ato ou regra); regra nova diz quem a cobra (verbo, lint, gate)
-1. <peça>
-Fora: o que esta frente não entrega e alguém pediria, um por linha, com para onde vai; Fora não proíbe
-- <item>: <para onde, quando>
-Resultado: quem passa a conseguir o quê; o outcome que o card não fecha sozinho vai marcado «não fecha card»
-Medida: escala · medidor · valor hoje · mínimo aceitável — uma linha
-Apetite: (opcional) quanto vale gastar · o que se corta primeiro se não couber — previsão de quem escreve
-Aberto: prosa do autor: o que está por decidir, cada item com quem responde; na aposta, o que sobra diz «fica aberto de propósito:» e o risco aceito
-Produtos documentais: um por linha, pelo que a feature muda (ADR, spec da peça criada ou atualizada, documento, dado, emenda); na formalização, cada linha ganha o link do servido
-- <produto> · <quem escreve>
-Regras: numeradas: cada regra de negócio que a entrega aplica, como caso → resultado, uma linha cada, no vocabulário da casa (sem arquivo, função ou tabela), apontando o R<n> ou o D<n> de onde sai; sem regra, «Regras: nenhuma». Ao fim da formalização vai ao dono numa pergunta (dono) com o bloco numerado, e o fecho de formalização só se escreve depois da resposta
-1. <caso> → <resultado> · R<n> da spec <peça> | D<n> da arq:NNNN
-Sai quando: na lapidação, a frase que torna a feature entregue; na formalização, o comando ou a consulta que prova
-M
-    _avisa_two_pager
-    ;;
-    story) cat <<'M'
-Negócio: #<feature> — só o ponteiro; nada de contexto de negócio aqui
-Referencial: [agente] lista fechada das decisões que o agente consulta ANTES de mexer, por slug (arq:NNNN, spec_<slug>, minuta NNNN) — não é leitura recomendada
-Raio de ataque: [agente] lista literal dos arquivos a mexer, um por linha, repo@caminho — fora da lista não se toca
-Comportamento esperado: [agente] caminho feliz técnico, literal — recebe X, executa Y, sai 0; o estado de chegada que o Aceite prova
-Tarefas: as tasks que esta fita faz, uma por linha, na ordem de execução: o que faz · repo@caminho · como se confere — a task não tem card; a story é uma fita do executor, nem mais nem menos (arq:0060 §3)
-1. <task>
-Ambiente: repo absoluto · como instalar · o que está de pé e não se derruba · credenciais (nunca impressas) · story que mede: o instrumento já no ar, ou o card dele como pré-requisito com dono e estimativa (C1)
-Onde: arquivo, função, linha aproximada · peça análoga a imitar, se existir
-Passos: numerados, um por ação, comando literal
-Aceite: a conferência que fecha a story, que é o que o dono lê: o comando que prova + o número que tem de dar · story que mede: quem mede, quem decide e com que regra (C5) · story de instrumento: a chamada exata que o card consumidor fará (C3)
-Travas: imperativo + motivo com fonte citada — o que não decidir, onde parar e comentar no card; merge e subida não são trava
-Regras: só story sem pai: numeradas, cada regra de negócio que a entrega aplica, como caso → resultado, uma linha cada; sem regra, «Regras: nenhuma»; o dono valida por pergunta (dono) no próprio card. Story com pai não leva: as regras moram no bloco Regras do pai
-Entrega: branch fabrica/<card>-<slug> de main · quem escreveu mescla e sobe (código: release promover; documento: servido no acervo) · retorno no comentário
-M
-    echo "segunda camada: o executor escreve o Plano em em-refinamento-tecnico, depois de ler o código — tarefas modelo story refinada" >&2
-    ;;
-    task) cat <<'M'
-Problema encontrado: o fato medido (verbo | arquivo:linha, data)
-Solução proposta: o que fazer — palpite serve, desde que escrito
-Referencial: [agente] lista fechada das decisões que o agente consulta ANTES de mexer, por slug (arq:NNNN, spec_<slug>, minuta NNNN)
-Raio de ataque: [agente] lista literal dos arquivos a mexer, um por linha, repo@caminho — fora da lista não se toca
-Comportamento esperado: [agente] caminho feliz técnico, literal — recebe X, executa Y, sai 0
-M
-    ;;
+    épico|epico) variante=epico ;;
+    feature)     variante=feature ;;
+    task)        variante=task ;;
+    story)
+      case "${2:-}" in
+        '')                                    variante=story ;;
+        refinada|em-refinamento-tecnico|plano) variante=story-refinada ;;
+        derivada)                              variante=story-derivada ;;
+        *) echo "uso: tarefas modelo story [refinada|derivada]   (o Plano é exigido na entrada de em-execucao)" >&2; exit 2 ;;
+      esac ;;
+    comentario|comentário)
+      case "${2:-}" in
+        insumo|pergunta|buraco|requisito) variante="comentario-$2" ;;
+        decisão|decisao)                  variante=comentario-decisao ;;
+        *) echo "uso: tarefas modelo comentario <insumo|pergunta|buraco|requisito|decisão>" >&2; exit 2 ;;
+      esac ;;
     *) echo "uso: tarefas modelo <épico|feature|story|task> | story refinada | story derivada | comentario <tipo>" >&2; exit 2 ;;
   esac
+  local j; j=$(busca GET "/modelo/$variante") || return 1
+  printf '%s' "$j" | jq -j '.texto'
+  local aviso; aviso=$(printf '%s' "$j" | jq -r '.aviso // empty')
+  [ -n "$aviso" ] && printf '%s\n' "$aviso" >&2
+  return 0
 }
 
 # Filho declara o pai, e o pai tem de ser de nível estritamente MENOR — a restrição é do

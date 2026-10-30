@@ -51,6 +51,9 @@ class _MockRastreador(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/registro":
             return self._envia_json({"estados": self.registro_estados})
+        # Card #4058: a conversão do corpo pega a lista de rótulos no molde da API.
+        if self.path == "/modelo":
+            return self._envia_json({"variantes": [], "rotulos_da_conversao": ["Problema"]})
         if self.path.startswith("/itens/"):
             return self._envia_json(self.item_resposta)
         self._envia_json({"erro": "nao encontrado"}, 404)
