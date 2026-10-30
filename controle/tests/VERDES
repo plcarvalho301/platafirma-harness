@@ -295,3 +295,6 @@ tests/test_infra_cache_modelos.py | bin/infra
 # Card #3958: `curar --marcar-secoes --faixas-modelo <pasta>` (a pasta vira impressão → faixas de nível 1 em diante; preâmbulo e
 # arquivo sem estrutura ficam fora; nome que não é uuid recusa).
 tests/test_curar_faixas_modelo.py | bin/curar
+# Card #4046: `acervo ler casa forma` (a forma da classe lida do catálogo: 0 com seções, 3 canônica, coberta por ou sem forma,
+# 2 classe ou suporte desconhecido com o vizinho; o seletor --suporte pela ficha e pela linha de casa), consulta injetada.
+tests/test_casa_forma.py | bin/acervo
