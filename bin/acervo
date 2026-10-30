@@ -126,6 +126,9 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   o texto da secao pelo endereco que a busca devolve (motor ... --texto nenhum)
   acervo ler      casa citacao <especie> <chave> [--secao <§>] [--json]  ·  biblioteca citacao <obra> [--json]
                   o referente na forma autorizada, primeira parte da linha de Fontes (#3408 comentário #2085)
+  acervo ler      casa forma <classe> | --suporte <repo>@<caminho> [--json]
+                  a forma do texto da classe, resolvida (gênero, seções, origem e régua); exit 0 com seções,
+                  3 canônica, coberta por ou sem forma, 2 classe ou suporte desconhecido (#4046)
   acervo listar   casa [<especie>] [--todas]          sem especie: o catalogo (projecao, regime, contagem)
   acervo listar   casa [<especie>] --sobre <classe> <chave>   a documentacao de uma entidade
   acervo listar   casa ferramental --retrato [--json]   o retrato do dicionario de rotulos: rotulo, volta e
@@ -273,6 +276,9 @@ conforme() {
     # o referente na forma autorizada, primeira parte da linha de Fontes (decisão do dono de
     # 11/10/2026, #3408 comentário #2085). Antes do ramo generico `ler:casa:*`.
     ler:casa:citacao|ler:biblioteca:citacao) exec python3 "$ATOS/citacao" "$particao" "$@" ;;
+    # a forma do texto de uma classe, resolvida pelo gerador e lida do catálogo (#4046): a prosa a chama no
+    # primeiro passo de toda escrita e reescrita. Antes do ramo generico `ler:casa:*`.
+    ler:casa:forma)         exec python3 "$ATOS/forma" "$@" ;;
     listar:casa:pagina)     exec "$ATOS/wiki" listar "$@" ;;
     # o retrato do dicionario de rotulos (arq:0124 §3, #3444): JSON com rotulo, volta e atalho de
     # cada ato e o sha do registro; a Taipa o guarda em platafirma-ui. Antes do ramo de listar.

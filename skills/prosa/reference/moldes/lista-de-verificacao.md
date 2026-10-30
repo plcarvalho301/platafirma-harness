@@ -1,5 +1,7 @@
 # molde — lista de verificação
 
+transitório: espera a classe que a F3973 der à lista de verificação; então a forma vem de `acervo ler casa forma` e este molde sai.
+
 Régua fina: anexo de moldes §6 (fonte: `acervo ler casa padrao styleguide-moldes-por-tipo`).
 Estrutura: `acervo.especie_estrato` (Derivação e objeto · Critérios · Contrapontos, opcional; migração 067). Exemplar no ar:
 `acervo ler casa lista-de-verificacao checklist-antipadroes-organizacao-documental`.

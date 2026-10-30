@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+# acervo ler casa forma — a forma do texto de uma classe, resolvida, numa chamada (card #4046).
+# capacidade: conhecimento
+# dono: claudinho-dados
+#
+# A forma é atributo da classe (decisão do dono de 30/10/2026): o gerador a resolve a partir da shape (a raiz prosa,
+# o andar comum, o gênero, a mãe genérica e a própria classe) e a leva a acervo.entidade_classe.forma (migração 148
+# de platafirma-conhecimento). Este sub-ato só a lê; a régua não se escreve aqui.
+#
+# Formas:
+#   acervo ler casa forma <classe> [--json]                    para documento novo
+#   acervo ler casa forma --suporte <repo>@<caminho> [--json]  para reescrita: o suporte em acervo.entidade_suporte,
+#                                                              dele a ficha e dela a classe; sem linha de suporte,
+#                                                              a classe da linha de acervo.casa com o repo e o caminho
+# Exit: 0 forma com seções (gênero) · 3 canônica, coberta por ou sem forma, com a marca e o ponteiro ou o motivo ·
+#       2 classe desconhecida, suporte sem ficha nem linha de casa, ou seletor ausente, com o vizinho · 5 indeterminável.
+import difflib
+import importlib.machinery
+import importlib.util
+import json
+import os
+import sys
+
+AQUI = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, AQUI)
+
+USO = """uso:
+  acervo ler casa forma <classe> [--json]
+  acervo ler casa forma --suporte <repo>@<caminho> [--json]
+
+A forma do texto da classe, resolvida pelos andares (raiz prosa, andar comum, gênero, mãe, classe), com a origem e a
+régua de cada seção. Exit: 0 com seções · 3 canônica, coberta por ou sem forma · 2 classe ou suporte desconhecido."""
+
+
+def _carrega_casa():
+    loader = importlib.machinery.SourceFileLoader("acervo_casa_forma", os.path.join(AQUI, "casa"))
+    spec = importlib.util.spec_from_loader("acervo_casa_forma", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+# ------------------------------------------------------------------ resolução (pura, com a consulta injetada)
+
+def _linha_da_classe(consulta, lit, classe):
+    return consulta(f"""
+      select row_to_json(t) from (
+        select c.slug as classe, c.forma, c.shape_endereco, c.shape_versao
+          from acervo.entidade_classe c
+         where c.slug = {lit(classe)} and c.natureza = 'entidade') t;""", "acervo.entidade_classe")
+
+
+def _classe_do_suporte(consulta, lit, endereco):
+    """A classe pelo suporte golden (acervo.entidade_suporte) e, sem ele, pela linha de acervo.casa."""
+    achada = consulta(f"""
+      select to_json(e.classe) from acervo.entidade_suporte s join acervo.entidade e on e.id = s.entidade_id
+       where s.endereco = {lit(endereco)} order by s.golden desc limit 1;""", "acervo.entidade_suporte")
+    if achada:
+        return achada
+    if "@" not in endereco:
+        return None
+    repo, caminho = endereco.split("@", 1)
+    return consulta(f"""
+      select to_json(c.classe) from acervo.casa c
+       where c.repo = {lit(repo)} and c.path = {lit(caminho)} and c.classe is not null limit 1;""", "acervo.casa")
+
+
+def _vizinho(consulta, classe):
+    slugs = consulta("select coalesce(json_agg(slug order by slug), '[]') from acervo.entidade_classe "
+                     "where natureza = 'entidade';", "acervo.entidade_classe") or []
+    perto = difflib.get_close_matches(classe or "", slugs, n=3, cutoff=0.5)
+    return perto or slugs[:5]
+
+
+def resolver(consulta, lit, classe=None, suporte=None):
+    """(código, carga). A carga é o dicionário da saída --json, ou {erro, vizinho} no código 2."""
+    if suporte:
+        classe = _classe_do_suporte(consulta, lit, suporte)
+        if not classe:
+            return 2, {"erro": f"suporte {suporte} sem ficha nem linha de acervo.casa com classe",
+                       "vizinho": "acervo listar casa <especie> --sobre <classe> <chave>"}
+    if not classe:
+        return 2, {"erro": "falta a classe ou o --suporte", "vizinho": "acervo ler casa forma parecer"}
+    linha = _linha_da_classe(consulta, lit, classe)
+    if not linha:
+        perto = _vizinho(consulta, classe)
+        return 2, {"erro": f"classe desconhecida: {classe}",
+                   "vizinho": " · ".join(f"acervo ler casa forma {s}" for s in perto)}
+    forma = linha.get("forma")
+    if not forma:
+        return 2, {"erro": f"a classe {classe} ainda não tem forma no catálogo (o gerador não reaplicou o catálogo "
+                           "depois da migração 148)", "vizinho": "acervo gerar --apply"}
+    carga = {"classe": linha["classe"], "marca": forma["marca"],
+             "genero": forma.get("genero"),
+             "shape": {"endereco": linha.get("shape_endereco"), "versao": linha.get("shape_versao"),
+                       "sha": linha.get("shape_versao")},
+             "raiz": forma.get("raiz"),
+             "secoes": [{"ordem": s["ordem"], "slug": s["slug"], "rotulo": s["rotulo"], "escrita": s["escrita"],
+                         "obrigatoria": s["obrigatoria"], "regua": s.get("regua"), "origem": s["origem"]}
+                        for s in forma.get("secoes") or []],
+             "reguas_de_campo": forma.get("reguas_de_campo") or [],
+             "canonica": forma.get("canonica"), "coberta_por": forma.get("coberta_por") or [],
+             "motivo": forma.get("motivo")}
+    if suporte:
+        carga["suporte"] = suporte
+    return (0 if carga["marca"] == "genero" else 3), carga
+
+
+# ------------------------------------------------------------------ saída em texto
+
+def texto(carga):
+    linhas = [f"classe: {carga['classe']} · marca: {carga['marca']}"]
+    sh = carga.get("shape") or {}
+    if sh.get("endereco"):
+        linhas.append(f"shape: {sh['endereco']} @ {sh.get('versao')}")
+    if carga["marca"] == "canonica":
+        linhas.append(f"canônica: {carga['canonica']}")
+        linhas.append("a forma mora fora da shape: siga o ponteiro e escreva só na voz da casa")
+    elif carga["marca"] == "coberta-por":
+        for c in carga["coberta_por"]:
+            cond = f" ({c['condicao']})" if c.get("condicao") else ""
+            linhas.append(f"coberta por: {c['classe']} § {c['secao']}{cond}")
+        linhas.append("a peça não tem arquivo próprio: escreva na seção do documento do todo")
+    elif carga["marca"] == "sem-forma":
+        linhas.append(f"sem forma: {carga['motivo']}")
+    else:
+        g = carga.get("genero") or {}
+        linhas.append(f"gênero: {g.get('rotulo')} ({g.get('valor')}) · raiz: {(carga.get('raiz') or {}).get('regua')}")
+        for s in carga["secoes"]:
+            ob = "obrigatória" if s["obrigatoria"] else "opcional"
+            linhas += ["", f"{s['ordem']}. {s['rotulo']} ({s['slug']}) · {s['escrita']} · {ob} · de {s['origem']}",
+                       f"   régua: {s['regua'] or '(sem régua)'}"]
+        for r in carga["reguas_de_campo"]:
+            linhas += ["", f"régua do campo {r['campo']}: {r['regua']}"]
+    return "\n".join(linhas)
+
+
+def main(argv):
+    if argv and argv[0] in ("-h", "--help", "--ajuda", "ajuda"):
+        sys.stderr.write(USO + "\n")
+        return 0
+    quero_json = "--json" in argv
+    resto = [a for a in argv if a != "--json"]
+    suporte = None
+    if "--suporte" in resto:
+        i = resto.index("--suporte")
+        if i + 1 >= len(resto):
+            sys.stderr.write("acervo ler casa forma: --suporte pede <repo>@<caminho>.\n\n" + USO + "\n")
+            return 2
+        suporte = resto[i + 1]
+        resto = resto[:i] + resto[i + 2:]
+    if len(resto) > 1 or (suporte and resto):
+        sys.stderr.write("acervo ler casa forma: uma classe ou um --suporte, não os dois.\n\n" + USO + "\n")
+        return 2
+    casa = _carrega_casa()
+    codigo, carga = resolver(casa._q, casa._lit, classe=resto[0] if resto else None, suporte=suporte)
+    if codigo == 2:
+        sys.stderr.write(f"acervo ler casa forma: {carga['erro']}\nvizinho: {carga['vizinho']}\n")
+        return 2
+    print(json.dumps(carga, ensure_ascii=False, indent=2) if quero_json else texto(carga))
+    return codigo
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

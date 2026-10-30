@@ -1,5 +1,7 @@
 # molde — benchmark
 
+transitório: espera a classe que a F3973 der ao benchmark; então a forma vem de `acervo ler casa forma` e este molde sai.
+
 Família `instrumento-de-processo`. Régua fina de escrita: `docs/styleguide-moldes-por-tipo.md` §2 (fonte; divergiu, vence o anexo).
 
 Distintivo: mede e compara alternativas nomeadas sob método declarado — não é

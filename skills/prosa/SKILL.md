@@ -1,6 +1,6 @@
 ---
 name: prosa
-description: "Use quando for ESCREVER ou REVISAR texto que uma pessoa vai ler em git, na wiki ou no rastreador, antes de publicar: página de wiki, corpo de card (épico e feature no two-pager, antes de `tarefas criar` ou `tarefas editar` com corpo), comentário tipado de discovery, story derivada de uma formalização, lista de verificação, benchmark, parecer, runbook, e a voz (não a forma) de adr, spec e ato normativo. Em ato normativo e política interna, a forma é da skill redacao-normativa, que roda antes; esta faz a passada de voz nos dispositivos e escreve a nota e o material de apoio. Um motor comum a todo tipo (tira jargão de IA, faz entender, voz da casa) e um molde por tipo em reference/moldes/. Régua: acervo ler casa padrao styleguide-da-wiki. NÃO dispare para acervo cru, mural ou fila, produto de outra cadeira com régua própria (informe, apreciação, estimativa) nem resposta de chat."
+description: "Use quando for ESCREVER ou REVISAR texto que uma pessoa vai ler em git, na wiki ou no rastreador, antes de publicar: página de wiki, corpo de card (épico e feature no two-pager, antes de `tarefas criar` ou `tarefas editar` com corpo), comentário tipado de discovery, story derivada de uma formalização, lista de verificação, benchmark, parecer, runbook, e a voz (não a forma) de adr, spec e ato normativo. Em ato normativo e política interna, a forma é da skill redacao-normativa, que roda antes; esta faz a passada de voz nos dispositivos e escreve a nota e o material de apoio. Um motor comum a todo tipo (tira jargão de IA, faz entender, voz da casa) e a forma do tipo pela leitura acervo ler casa forma (a shape da classe), com molde em reference/moldes/ só para forma canônica e espécie ainda sem classe. Régua: acervo ler casa padrao styleguide-da-wiki. NÃO dispare para acervo cru, mural ou fila, produto de outra cadeira com régua própria (informe, apreciação, estimativa) nem resposta de chat."
 cadeiras: todas (matéria de escrita legível por humano em git/wiki). Dona da régua é produto (spec §5 + anexo styleguide-moldes-por-tipo.md); dono da skill, como implementadora, é o arquiteto. A estrutura dos tipos é de dados (a shape da classe; na espécie ainda sem classe, acervo.especie_tipo).
 compatibility: régua canônica na spec e no anexo de moldes; servida em Operar:styleguide (wiki viva). Motor agnóstico de superfície; molde por tipo em reference/moldes/. A conduta do dono (abertura/dono.md) é referência de voz, não isenção de regra. Catálogo de marcas por extenso em reference/marcas-pt-br.md.
 ---
@@ -119,22 +119,39 @@ régua vale pra ela também.)
 - **Marcas de IA:** catálogo em `reference/marcas-pt-br.md`, aplicado em dois tempos
   — o que quebra entendimento sai no passo 1 do loop; o cosmético, no passo 4.
 
-## Roteador de tipo — qual molde carregar
+## Roteador de tipo — de onde vem a forma
 
-Antes de escrever, identifica o tipo do artefato e resolve o molde por eixo. A lista
-de tipos não se hardcoda aqui: as espécies são as de `acervo.especie_da_casa` (a pasta do
-documento: a da shape quando a espécie tem classe, senão a de `acervo.especie_tipo`). Os estratos
-de cada molde vêm de `reference/moldes/` — a régua fina no anexo de produto —, não do banco.
+O primeiro passo de toda escrita e reescrita é pedir a forma ao acervo, numa chamada:
 
-1. **Espécie de obra de git com molde próprio** (benchmark, parecer, runbook,
-   lista-de-verificacao, e os que forem lavrados) → carrega `reference/moldes/<tipo>.md`.
-   A lista de verificação tem contrato com a máquina (nomes de coluna que o `lint` lê):
-   o molde traz o contrato e o esqueleto, e nome de coluna não se improvisa. Tipo ainda sem molde
-   (nota-tecnica, levantamento, rito, fichamento, nota-de-pesquisa, estudo-de-caso,
-   entre outros): aplica o motor e o núcleo, e sinaliza que o molde falta — não
-   fabrica molde por analogia; pede a régua a produto e a estrutura a dados. A casa
-   lavra por tipo, sem tocar este arquivo.
-2. **Tipo de forma canônica própria** (adr, spec, ato-normativo: lei, decreto,
+- documento novo: `acervo ler casa forma <classe>`;
+- reescrita: `acervo ler casa forma --suporte <repo>@<caminho>`, que acha a classe pelo
+  documento.
+
+A forma é atributo da classe e mora na shape dela; o gerador a resolve pelos andares (a
+raiz prosa, o andar comum com Fontes, o gênero, a mãe e a própria classe) e o catálogo a
+serve. A lista de tipos e os nomes dos gêneros não se escrevem aqui: vêm da chamada.
+O que fazer com a saída:
+
+1. **Saída 0, gênero.** Escreve as seções na ordem que a chamada dá. A obrigatória
+   entra sempre; a opcional, só se muda o que o leitor faz. A seção `derivado` não se
+   escreve à mão: sai de outra fonte por ato. A régua de cada seção diz o que ela
+   contém; seção sem régua segue só o núcleo e a voz, e não se inventa régua por
+   analogia (a do gênero é de produto, a da seção da classe é da dona dela).
+2. **Saída 3, canônica.** A forma mora fora da shape, no ponteiro que a chamada dá (ADR,
+   modelo do rastreador, outra skill). Segue o ponteiro para a forma e rege só a voz.
+3. **Saída 3, coberta por.** A peça não tem arquivo próprio: escreve-se na seção do
+   documento do todo que a chamada nomeia (a de componentes do serviço, por exemplo).
+4. **Saída 3, sem forma.** Não é prosa da casa; o motivo vem na saída.
+5. **Saída 2.** A classe não existe no catálogo: é espécie ainda sem classe (spec,
+   nota-tecnica, runbook, benchmark, lista-de-verificacao e as outras da F3973). Vale o
+   molde transitório de `reference/moldes/<tipo>.md`, quando há; sem molde, só o motor e
+   o núcleo, e sinaliza que a forma falta. A lista de verificação tem contrato com a
+   máquina (nomes de coluna que o `lint` lê): o molde traz o contrato e o esqueleto, e
+   nome de coluna não se improvisa.
+
+Os casos abaixo dizem o que muda em cada ponteiro canônico.
+
+1. **Tipo de forma canônica própria** (adr, spec, ato-normativo: lei, decreto,
    portaria, resolução, instrução-normativa) → a skill NÃO tem molde de estratos.
    Aponta para o canônico do dono do formato (arquiteto, para adr e spec; direito, pela
    skill `redacao-normativa`, para ato normativo e política interna) e aplica só
@@ -144,12 +161,13 @@ de cada molde vêm de `reference/moldes/` — a régua fina no anexo de produto 
    Comportamento está no anexo de moldes, §5. Estes moram no git, não na wiki; a skill
    topa com eles só se colados lá. Todo documento derivado termina com a seção Fontes,
    de linha única (anexo de moldes, §9).
-3. **Ciclo-de-vida** (minuta, roadmap, rascunho — NÃO é `especie_tipo`) → molde de
+2. **Ciclo-de-vida** (minuta, roadmap, rascunho — NÃO é `especie_tipo`) → molde de
    prosa próprio; o roteador não os resolve como espécie do acervo. A minuta é
    deliberação em trânsito e vira adr ou spec ao formalizar. A minuta foi absorvida
    pelo card (épico #3365) e sai depois da F3; até lá, vale só para as que já existem.
-4. **Página de wiki** (verbete-de-conceito) → `reference/moldes/verbete-de-conceito.md`.
-5. **Card e comentário de discovery:**
+3. **Página de wiki** (verbete de conceito) → `acervo ler casa forma conceito` (gênero
+   verbete; a régua da definição vem como régua de campo).
+4. **Card e comentário de discovery** (saída 3, canônica):
    - corpo de épico e feature, antes de `tarefas criar` ou `tarefas editar` com corpo
      → `reference/moldes/card.md`, o two-pager. A forma, os rótulos por nível, vem de
      `tarefas modelo <nível>`; a skill rege a voz dentro do rótulo;
@@ -179,13 +197,15 @@ seguidos com o mesmo sujeito, é exigência da redação normativa. A parte da m
 catálogo que acusa abertura repetida não vale em dispositivo; variar o termo, ali, é o
 erro.
 
-## O molde vem do tipo — a régua fina mora no anexo
+## A forma vem da classe — a régua mora na shape
 
-Cada `reference/moldes/<tipo>.md` traz a ESTRUTURA — os estratos, na ordem (matéria
-de dados: a shape da classe, ou `especie_estrato` na espécie sem classe) — e o distintivo operacional de cada estrato. A RÉGUA FINA
-de escrita — o que cada estrato contém, em que voz, o que o distingue — é de produto
-e mora no anexo de moldes (`acervo ler casa padrao styleguide-moldes-por-tipo`); o
-molde da skill aponta para a seção do anexo. Divergiu, a fonte é o anexo.
+A ESTRUTURA — as seções, na ordem — e a RÉGUA de cada uma moram na planilha da ontologia e
+na shape da classe, e chegam pela chamada `acervo ler casa forma`. A régua da raiz e dos
+gêneros é de produto; a das seções que a classe acrescenta, da dona da classe. Os
+`reference/moldes/<tipo>.md` que ficam são de forma canônica (card, comentário, story
+derivada) ou transitórios, de espécie ainda sem classe, e saem quando a F3973 der a
+classe; o anexo de moldes (`acervo ler casa padrao styleguide-moldes-por-tipo`) guarda a
+régua delas até lá. Divergiu, vale a shape.
 
 Todo molde cumpre primeiro o núcleo (seção acima, spec §3.1); a régua por tipo só
 acrescenta o que o tipo exige além dele. A precedência da «ordem que decide tudo»
@@ -224,7 +244,8 @@ dúvida, procure vários padrões juntos.
   régua fina dos moldes por tipo mora no anexo (`acervo ler casa padrao
   styleguide-moldes-por-tipo`). A cópia antiga em `platafirma-arquitetura/docs/` não
   é fonte. A régua é de
-  **produto** (§5); a **estrutura** dos tipos é de **dados** (`acervo.especie_tipo`);
+  **produto** (§5); a **estrutura** dos tipos é de **dados** (a shape da classe; na espécie ainda sem
+  classe, `acervo.especie_tipo`);
   esta skill é **implementadora** (arquiteto). O par que confere o que já está escrito
   é o lint de prosa.
 - Ponto para produto: a spec põe toda «marca de máquina» por último (§1/§3.1). Esta

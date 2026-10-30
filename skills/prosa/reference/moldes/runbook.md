@@ -1,5 +1,7 @@
 # molde — runbook
 
+transitório: espera a classe que a F3973 der ao runbook; então a forma vem de `acervo ler casa forma` e este molde sai.
+
 Família `padrao-tecnico`. Régua fina: `docs/styleguide-moldes-por-tipo.md` §4 (fonte).
 
 Distintivo: executável passo a passo por quem não o escreveu, sob condição adversa.
