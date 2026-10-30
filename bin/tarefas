@@ -288,8 +288,11 @@ envia() { # envia MÉTODO /caminho  (corpo JSON em stdin)
 # Card #4058: a lista de rótulos não mora aqui; vem do molde da API (`GET /modelo`), a fonte
 # única. Sem a lista, a conversão não roda: gravar corpo com rótulo errado é pior que recusar.
 para_html() {
-  local rotulos
-  rotulos=$(busca GET /modelo | jq -c '.rotulos_da_conversao') \
+  local indice rotulos
+  indice=$(busca GET /modelo) \
+    || { echo "sem a lista de rótulos do molde (GET /modelo no rastreador)" >&2; return 1; }
+  rotulos=$(printf '%s' "$indice" | jq -c '.rotulos_da_conversao // empty' 2>/dev/null)
+  [ -n "$rotulos" ] \
     || { echo "sem a lista de rótulos do molde (GET /modelo no rastreador)" >&2; return 1; }
   ROTULOS="$rotulos" python3 -c 'import html,json,os,re,sys
 R = json.loads(os.environ["ROTULOS"])
