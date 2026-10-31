@@ -115,7 +115,8 @@ elif [ -z "$BANCADA" ]; then
 else
   # platafirma-casa entrou em 28/09/2026: e onde moram ADR e spec (arq:0083); sem o hook
   # a trava do canonico (ADR/spec nao cita minuta) nao pegava commit nenhum dali.
-  CLONES="platafirma-harness platafirma-core platafirma-conhecimento platafirma-motor platafirma-posto platafirma-casa"
+  # platafirma-casa-espelho entrou em 31/10/2026 (debito 432): a casa nova, montada ao lado da atual (F3974).
+  CLONES="platafirma-harness platafirma-core platafirma-conhecimento platafirma-motor platafirma-posto platafirma-casa platafirma-casa-espelho"
   for c in $CLONES; do
     if [ ! -e "$BANCADA/$c/.git" ]; then
       medido impossivel "$c" "clone ausente em $BANCADA — \`repo clonar\` e ato de quem prepara a maquina"
