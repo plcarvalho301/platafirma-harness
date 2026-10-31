@@ -1,10 +1,8 @@
 # molde — lista de verificação
 
-transitório: espera a classe que a F3973 der à lista de verificação; então a forma vem de `acervo ler casa forma` e este molde sai.
+transitório: vale enquanto o lint cobrar a forma de hoje da lista de verificação; quando a lista virar gabarito pelo molde gatilho, este molde sai.
 
-Régua fina: anexo de moldes §6 (fonte: `acervo ler casa padrao styleguide-moldes-por-tipo`).
-Estrutura: `acervo.especie_estrato` (Derivação e objeto · Critérios · Contrapontos, opcional; migração 067). Exemplar no ar:
-`acervo ler casa lista-de-verificacao checklist-antipadroes-organizacao-documental`.
+Estrutura: Derivação e objeto · Critérios · Contrapontos, opcional.
 
 Distintivo: cada critério passa ou falha sem julgamento de mérito, ou declara que depende
 de leitura. Dois leitores: a máquina (`lint`, teste do portão) e a pessoa que confere o
