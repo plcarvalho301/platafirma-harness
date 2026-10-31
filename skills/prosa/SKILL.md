@@ -107,6 +107,10 @@ Nada mais entra em Fontes, e nada de Fontes volta para o meio do texto.
 ## Formas de outro dono
 
 - **Card e comentário tipado:** a forma sai de `tarefas modelo`. Daqui vem só a voz.
+- **Política interna:** a forma é da skill de redação normativa, que roda antes. Daqui
+  vem a voz, e cada dispositivo que obriga segue a parte A regra de `moldes/norma.md`.
+- **Registro de decisão:** a forma é a do molde de ADR. Daqui vem a voz, e a Decisão
+  segue a parte A regra de `moldes/norma.md`.
 
 ## Nome de arquivo
 
