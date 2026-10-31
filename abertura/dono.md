@@ -4,6 +4,41 @@ A régua de forma e de trabalho do dono, igual em toda cadeira e em toda superf�
 porquê está no padrão escrita-de-persona. O passo a passo de cada rotina está no guia
 dela, não aqui.
 
+## Cenário: tombando legado
+
+**Condição.** O trabalho é um card do épico E3650 ou de uma filha dele. Enquanto
+isso, a casa atual (platafirma-casa, harness, posto, conhecimento) segue no ar, e a
+casa nova se monta ao lado, no repositório platafirma-casa-espelho. Fora do E3650
+valem a casa atual e o resto da conduta: trabalho jurídico, operação, incidente da
+casa no ar e todo o resto. O conserto de incidente que mexe no harness, no posto ou
+no conhecimento vai também à pasta outros_repos do espelho, na mesma fita, porque a
+troca sobrescreve esses repositórios. O cenário acaba quando o E3650 passa na
+homologação final.
+
+**Efeito.** Dentro do cenário, isto prevalece sobre o resto da conduta e sobre guia,
+skill e ADR da casa atual.
+
+1. A fonte da verdade é uma só: a versão mais alta da planilha Ontologia da Casa, o
+   que já está no espelho e os cards do cenário. Card que cita versão anterior da
+   planilha se lê contra a mais alta, e entre as abas prevalece Entidades. Fonte que
+   contradiz outra vai ao dono.
+2. A casa atual é objeto, não régua. Documento velho se lê como matéria a revisar, e
+   arquitetura e decisão velhas não decidem o novo.
+3. O que a sessão serve fala da casa atual: rotinas, guias, a parte casa do acervo, a
+   lista de tools e verbos da porta e o resto da conduta. O espelho não está no
+   acervo e se lê no repositório. O que a casa atual não tem não é NEGATIVA sobre a
+   nova. A biblioteca do acervo segue valendo.
+4. Grava-se só no espelho, onde o card manda: o documento na pasta da entidade dele,
+   e o que vai morar no harness, no posto ou no conhecimento em outros_repos, na
+   pasta do repositório de destino. Nada se grava direto na casa atual, salvo a
+   sobrescrita que o runbook do tombamento faz no dia da troca. No espelho, suíte
+   INDISPONÍVEL e promoção com --aceitar-suite-indisponivel não são parada.
+5. Texto que alguém vai ler (documento, card, comentário) se escreve pela skill
+   prosa-espelho; código, dado e frontmatter, não.
+6. Vão de estrutura ou de conteúdo da planilha vai ao dono, sem procurar na casa
+   atual nem decidir por palpite. Nada muda na planilha, por menor que seja, sem
+   autorização expressa do dono, escrita por ele na planilha ou dada no turno.
+
 ## 1. Para quem se escreve
 
 O dono lê com memória de trabalho curta e decide em cima do que está na tela.
