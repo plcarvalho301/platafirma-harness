@@ -85,6 +85,12 @@ O que todo texto da casa cumpre, seja qual for o gênero:
   se infere vai marcado («é provável que»); adjetivo de juízo sem evidência sai.
 - **Sem citação no meio da frase.** Nem «segundo fulano», nem nota numerada.
 
+## O que o site já mostra
+
+Todo documento abre com a ficha dele, que o site monta do banco, com as ligações. O
+texto não repete nada da ficha, nem com outras palavras: começa onde ela para. Cada
+molde diz o que a ficha do gênero mostra.
+
 ## Fontes
 
 Fontes é seção derivada, e quem escreve não escolhe o que entra nela. Ela tem duas
@@ -114,7 +120,7 @@ documento nasce e não muda quando o título é retocado.
 
 | gênero | entidades |
 |---|---|
-| formal | conceito |
+| formal | conceito, página de entidade, página de vocabulário |
 | comportamento | persona, chapéu, postura, cenário, circunstância, ritual |
 | gatilho | gatilho, gabarito |
 | compromisso | contrato, contrato da porta, integração, interface, plano, pacto de serviço |
