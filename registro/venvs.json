@@ -19,6 +19,9 @@
     "platafirma-casa": {
       "esteira": "documento"
     },
+    "platafirma-casa-espelho": {
+      "esteira": "documento"
+    },
     "platafirma-motor": {
       "esteira": "codigo"
     },

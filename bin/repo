@@ -109,7 +109,9 @@ fi
 #   pr-abrir, pr-merge -> recusam (2)
 # Bancada por card que ja existia segue resolvivel por <repo>@<chave> e se entrega pelo
 # mesmo sincronizar; nada se migra a forca. Repositorio de codigo nao muda em nada.
-REPOS_DIRETO_EM_MAIN=(platafirma-casa)
+# platafirma-casa-espelho entrou em 31/10/2026 (debito 432): a casa nova, montada ao lado da atual
+# (F3974), e repositorio de deliberacao como ela; a entrega do #4066 e direto em main.
+REPOS_DIRETO_EM_MAIN=(platafirma-casa platafirma-casa-espelho)
 PASTA_DIRETO_EM_MAIN="main"
 
 direto_em_main() {
@@ -157,7 +159,7 @@ uso:
   repo git       <repo> <args…>
 
 bancada: PLATAFIRMA_BANCADA[sem default] (exit 3)
-direto em main (arq:0083, platafirma-casa): abrir dá wt/<repo>/<cadeira>/main, sincronizar rebaseia e empurra para main, pr-abrir e pr-merge recusam (2)
+direto em main (arq:0083, platafirma-casa e platafirma-casa-espelho): abrir dá wt/<repo>/<cadeira>/main, sincronizar rebaseia e empurra para main, pr-abrir e pr-merge recusam (2)
 <repo> resolve wt/<repo>/<cadeira>/<card-ou-slug>; com mais de uma bancada aberta na
 cadeira, nomeie-a: <repo>@<card-ou-slug> (ex.: platafirma-harness@3149-bancada-por-card)
 exit: 0 achou/fez · 1 nao existe/negativo · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel

@@ -43,6 +43,8 @@ tests/test_mesa.py | bin/acervo bin/_acervo/** bin/bot bin/chat bin/conferir bin
 tests/test_registro_chave.py | bin/teste bin/_release/** registro/venvs.json
 # Card #3535: o promover so liga a conferencia no ar com o conferir da release em quem declara `conferir_no_ar`.
 tests/test_registro_conferir_no_ar.py | bin/release registro/venvs.json
+# Debito 432: platafirma-casa-espelho (a casa nova) no registro de familias e de repositorios (4 passam; sem a declaracao, o ensaio sai 2).
+tests/test_registro_casa_espelho.py | bin/release bin/teste bin/_release/** registro/familias.json registro/venvs.json
 tests/test_ambiente_node.py | bin/release bin/repo bin/teste bin/_release/** lib/venv.sh registro/venvs.json
 tests/test_contrato_repo_lock_node.py | bin/repo lib/venv.sh
 tests/test_contrato_repo_lock_atualizar.py | bin/repo lib/venv.sh

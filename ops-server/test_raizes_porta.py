@@ -252,6 +252,22 @@ def test_write_file_aceita_o_rastreador(bancada, sem_pep):
     nunca = s.write_file(path="wt/platafirma-rastreador/outra/x.md", content="x\n")
     assert nunca.get("recusado") and "repo abrir" in nunca["motivo"], nunca
 
+def test_write_file_aceita_a_casa_espelho(bancada, sem_pep):
+    """Debito 432: platafirma-casa-espelho (a casa nova) e morada de escrita, worktree e clone."""
+    assert "platafirma-casa-espelho" in s.CLONES
+    (bancada / "wt" / "platafirma-casa-espelho" / "arquiteto" / "4066-registro-estrutura").mkdir(parents=True)
+    (bancada / "platafirma-casa-espelho").mkdir()
+    wt = s.write_file(
+        path="wt/platafirma-casa-espelho/arquiteto/4066-registro-estrutura/5-norma/"
+             "registro-de-decisao/0135-estrutura-do-repositorio.md",
+        content="# 0135\n")
+    assert wt.get("ok"), wt
+    clone = s.write_file(path="platafirma-casa-espelho/catalogo/x.md", content="x\n")
+    assert clone.get("ok"), clone
+    nunca = s.write_file(path="wt/platafirma-casa-espelho/outra/x.md", content="x\n")
+    assert nunca.get("recusado") and "repo abrir" in nunca["motivo"], nunca
+
+
 def test_write_file_aceita_php_e_mjs(bancada, sem_pep):
     """#3133: skin da wiki (.php) e provas do rastreador (.mjs) sao texto plano."""
     for nome in ("SkinPlataFirma.php", "2751_hierarquia_do_cartao.mjs"):

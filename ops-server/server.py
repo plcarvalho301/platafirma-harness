@@ -2028,9 +2028,11 @@ PREFIXO_DOCKERFILE = "Dockerfile."
 # recusavam write_file ("fora de morada") e o conteudo nao tinha como ser escrito pela porta.
 # platafirma-rastreador entrou em 25/09/2026 (#3132): a API do rastreador mora nele e o
 # clone ja existia na bancada, mas ficava fora da lista — a Frente 2 do #3115 parou ai.
+# platafirma-casa-espelho entrou em 31/10/2026 (debito 432, F3974): e a casa nova montada ao lado
+# da atual; a bancada do arquiteto ja existia e write_file recusava "fora de morada".
 CLONES = ("platafirma-core", "platafirma-conhecimento",
           "platafirma-harness", "platafirma-motor", "platafirma-posto", "platafirma-ui",
-          "platafirma-casa", "platafirma-rastreador")
+          "platafirma-casa", "platafirma-rastreador", "platafirma-casa-espelho")
 ESCRITA_TETO = 1_048_576
 TMP_FITA = INSTANCIA / "var" / "tmp"
 

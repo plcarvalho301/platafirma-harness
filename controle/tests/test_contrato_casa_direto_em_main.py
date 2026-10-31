@@ -158,6 +158,31 @@ def test_abrir_da_a_worktree_de_main_da_cadeira_com_ou_sem_card(tmp_path):
     assert _git("branch", "--list", "fabrica/*", cwd=bancada / CASA) == ""
 
 
+def test_casa_espelho_segue_o_regime_da_casa(tmp_path):
+    """Debito 432: platafirma-casa-espelho (a casa nova, F3974) e repositorio de deliberacao como a
+    casa: abrir da a worktree de main da cadeira, commitar + sincronizar chegam ao main do origin,
+    pr-abrir e pr-merge recusam 2."""
+    espelho = "platafirma-casa-espelho"
+    bancada = tmp_path / "bancada"
+    bancada.mkdir()
+    _criar_origem(tmp_path, espelho, {"LEIA.md": "x\n"})
+    _git("clone", "-q", str(_bare(tmp_path, espelho)), str(bancada / espelho))
+    r = _repo(tmp_path, bancada, "abrir", espelho)
+    assert r.returncode == 0, r.stderr
+    wt = bancada / "wt" / espelho / "dados" / "main"
+    assert "direto em main" in r.stdout
+    assert _git("rev-parse", "--abbrev-ref", "HEAD", cwd=wt) == "dados/main"
+    (wt / "registro.md").write_text("# r\n")
+    r = _repo(tmp_path, bancada, "commitar", espelho, "-m", "registro", "registro.md")
+    assert r.returncode == 0, r.stderr
+    r = _repo(tmp_path, bancada, "sincronizar", espelho)
+    assert r.returncode == 0, r.stderr
+    assert _no_origin(tmp_path, "registro.md", nome=espelho) == "# r\n"
+    for ato in (["pr-abrir", espelho, "--titulo", "x"], ["pr-merge", espelho, "1"]):
+        r = _repo(tmp_path, bancada, *ato)
+        assert r.returncode == 2 and RECUSA in r.stderr, (ato, r.stderr)
+
+
 def test_abrir_de_novo_traz_main_novo_do_forge(tmp_path):
     bancada = _montar(tmp_path)
     wt = _abrir(tmp_path, bancada)
