@@ -7,7 +7,7 @@ description: Use SEMPRE que for escrever ou revisar texto da casa que uma pessoa
 
 O texto da casa existe para quem chega depois ler e fazer o que ele descreve, sem
 falar com quem o escreveu. Tudo de que você precisa para escrevê-lo está nesta pasta:
-este passo a passo, os moldes em `moldes/` e as marcas de máquina em
+este passo a passo, os moldes em `moldes/`, os gabaritos em `gabaritos/` e as marcas de máquina em
 `marcas-pt-br.md`. Nada se consulta fora dela.
 
 ## Passos
@@ -28,10 +28,12 @@ este passo a passo, os moldes em `moldes/` e as marcas de máquina em
      separado de palpite, termo da casa leva o nome comum ao lado na primeira vez;
    - ponha a voz da casa;
    - apare a marca cosmética que sobrou.
-5. Releia antes de gravar e responda duas perguntas. O texto ainda soa gerado, ou
+5. Se houver `gabaritos/<gênero>.md`, rode-o sobre o texto: o que não é do gênero sai
+   para o destino que ele dá, e o que mudou de parte se reescreve pelo molde.
+6. Releia antes de gravar e responda duas perguntas. O texto ainda soa gerado, ou
    soa explicado só para uma IA? Ele somou ou perdeu algum fato, nome, número, data
    ou juízo? Se alguma resposta for sim, corrija antes de gravar.
-6. Dê nome ao arquivo pela seção Nome de arquivo.
+7. Dê nome ao arquivo pela seção Nome de arquivo.
 
 ## Os três modos de falha
 

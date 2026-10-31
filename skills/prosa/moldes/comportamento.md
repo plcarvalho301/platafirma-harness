@@ -138,9 +138,6 @@ quem é dono da entidade; aqui vai só o nome:
 faz sozinho sai. A que mais muda vem primeiro, e um bloco tem até seis: acima disso a
 persona passa a cumprir umas e esquecer outras.
 
-**Tom normal.** Caixa alta, «crítico», «nunca» e «sempre» como ênfase fazem o texto
-disparar em excesso. A força vem do sinal certo.
-
 **Exemplo, só o que pode ser copiado.** A persona reproduz o exemplo ao pé da letra. O
 padrão é não ter exemplo; quando entra, é o que se aceitaria ver repetido tal e qual, e
 cobre o caso de borda.
