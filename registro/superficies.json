@@ -37,7 +37,8 @@
     "agy-cli": "agy",
     "cursor-cli": "cursor",
     "codex-cli": "codex",
-    "code-cli": "code"
+    "code-cli": "code",
+    "pf-cli": "terminal"
   },
   "superficies": {
     "claude.ai": {
@@ -85,6 +86,15 @@
       "onde_declara": ".mcp.json do platafirma-posto, campo oauth do claudinho-mcp (clientId code-cli, callbackPort 8789)",
       "verificavel_do_host": false,
       "porque": "o arquivo vive no clone de outra conta; o host ve o azp code-cli em cada linha do log da porta"
+    },
+    "terminal": {
+      "papel": "comando pf (bin/pf do platafirma-posto) no terminal do dono, conta megafone; leitura pela porta como o dono, sem cadeira; cliente OAuth publico pf-cli no Keycloak, PKCE S256, callback fixo em 127.0.0.1:8790 (#4078)",
+      "conectores": [
+        "claudinho-mcp"
+      ],
+      "onde_declara": "bin/pf do platafirma-posto (constantes ISSUER, MCP_URL e CLIENT_ID); nao ha arquivo de configuracao",
+      "verificavel_do_host": false,
+      "porque": "o script vive no clone de outra conta; o host ve o azp pf-cli em cada linha do log da porta"
     },
     "code-seco": {
       "papel": "Claude Code em conta SEM o arranque do posto instalado: sem .mcp.json, sem conector, sem instrucao — sessao FORA da plataforma",
