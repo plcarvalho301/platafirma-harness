@@ -824,7 +824,7 @@ def test_superficie_verificavel_sem_produtor_continua_reprovando(tmp_path, monke
 # O registro REAL (registro/superficies.json), nao um fixture: #3477 tirou dele a
 # `fabrica` (Code em worktree do harness) e a `fita` (giro headless do chat).
 HARNESS_REAL = Path(__file__).resolve().parents[2]
-SUPERFICIES_DECLARADAS = {"claude.ai", "agy", "cursor", "codex", "code", "code-seco"}
+SUPERFICIES_DECLARADAS = {"claude.ai", "agy", "cursor", "codex", "code", "terminal", "code-seco"}
 
 
 def _registro_real():
