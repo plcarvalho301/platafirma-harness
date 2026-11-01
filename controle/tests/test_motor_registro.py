@@ -26,7 +26,8 @@ loader.exec_module(registrar)
 
 MOTOR = REPO_ROOT / "bin" / "motor"
 ATOS = ["listar", "ajuste", "buscar", "medir", "indexar", "trocar", "sortear", "lintar", "parear", "escrever", "julgar",
-        "eleger", "consultas", "trabalhos", "estado", "parar"]   # julgar: #3350; consultas e trabalhos: #3513; estado e parar: #3518
+        "eleger", "consultas", "trabalhos", "estado", "parar", "raciocinar"]
+# julgar: #3350; consultas e trabalhos: #3513; estado e parar: #3518; raciocinar (instancia raciocinador, temporaria): #4077
 # os 11 ids de acervo.ferramental_recurso (047): a FK reprova qualquer outro
 RECURSOS = {"acervo.obra", "acervo.casa", "acervo.registro", "acervo.*", "release", "repo", "rastreador", "malha",
             "motor", "arquivo-local", "nada"}
