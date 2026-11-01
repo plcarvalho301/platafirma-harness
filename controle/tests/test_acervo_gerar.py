@@ -202,4 +202,4 @@ def test_pela_porta_o_ato_existe_e_o_cabecalho_o_declara():
     assert "gerar (escrita, acervo)" in cabecalho
     assert "# le: gerar=" in cabecalho and "# escreve: gerar=" in cabecalho
     desconhecido = subprocess.run([str(BIN), "nao-existe"], capture_output=True, text=True)
-    assert "medir, gerar." in desconhecido.stderr
+    assert "medir, gerar, gerador." in desconhecido.stderr

@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+"""acervo gerador — roda o gerador de ontologia da bancada do espelho, sem banco.
+
+CHAMADA TEMPORÁRIA (dono, 01/11/2026, card #4077): serve a story 3972, que escreve as shapes, o gerador e
+a DDL do schema casa em `outros_repos/conhecimento/ontologia` do `platafirma-casa-espelho`. A forma
+definitiva sai na revisão dos documentos do acervo; até lá este ato é o caminho da porta.
+
+Onde roda: o CÓDIGO é o da bancada de `platafirma-casa-espelho` da sessão que chamou (a mesma escolha de
+`acervo exportar`, `medir` e `gerar`, com `--bancada <card-slug>` quando há mais de uma aberta), na pasta
+`outros_repos/conhecimento/ontologia`. O PYTHON é o venv do rag da release. Nenhum banco se toca: o ato
+só chama `python -m gerador --saida <pasta>` e diz o que ficou na pasta.
+
+A pasta de saída é `--saida <pasta>`, dentro da bancada declarada ou de `var/tmp` da instância; sem ela,
+uma pasta nova em `var/tmp/<ordem_id>/` da instância. O raciocinador não roda aqui: é `motor raciocinador`.
+
+Saída: a do gerador (0 gerou; 1 reprova, com a linha de recusa dele; 2 uso; 5 não rodou); 2 também para o
+uso errado deste ato; 3 sem bancada, sem python do rag ou sem gerador na bancada; 5 o gerador estourou o
+tempo ou não abriu.
+"""
+import importlib.machinery
+import importlib.util
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+# a spec do verbo mora no suporte da casa e se lê pela chave (arq:0115; mesmo SPEC de bin/acervo)
+SPEC = "spec acervo (acervo ler casa spec acervo)"
+TETO_S = 600
+REPO = "platafirma-casa-espelho"
+ONTOLOGIA = Path("outros_repos") / "conhecimento" / "ontologia"
+USO = f"uso: acervo gerador [--bancada <card-slug>] [--saida <pasta>]\n  {SPEC}"
+
+
+def _exportar():
+    """O `acervo exportar` é o dono da escolha da bancada e do python do rag: este ato os reusa com o
+    repositório trocado para o espelho, e só troca o nome nas mensagens de erro dele."""
+    caminho = Path(__file__).resolve().with_name("exportar")
+    loader = importlib.machinery.SourceFileLoader("acervo_exportar_do_gerador", str(caminho))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    mod.ATO = "gerador"
+    mod.REPO = REPO
+    return mod
+
+
+def argumentos(argv: list):
+    """(chave da bancada, pasta de saída) ou None se o uso está errado. Cada opção no máximo uma vez."""
+    opcoes, i = {}, 0
+    while i < len(argv):
+        nome = argv[i]
+        if nome not in ("--bancada", "--saida") or nome in opcoes or i + 1 >= len(argv) or not argv[i + 1]:
+            return None
+        opcoes[nome] = argv[i + 1]
+        i += 2
+    return opcoes.get("--bancada", ""), opcoes.get("--saida", "")
+
+
+def _dentro(alvo: Path, raiz: Path) -> bool:
+    try:
+        alvo.relative_to(raiz)
+        return True
+    except ValueError:
+        return False
+
+
+def pasta_de_saida(pedida: str, ex) -> Path:
+    """A pasta onde o gerador grava: a pedida, se cai na bancada declarada ou em var/tmp da instância;
+    senão uma nova em var/tmp/<ordem_id>/ da instância."""
+    tmp = (ex.raizes.instancia() / "var" / "tmp").resolve()
+    if pedida:
+        alvo = Path(pedida).expanduser().resolve()
+        try:
+            bancada = ex.raizes.bancada().resolve()
+        except ex.raizes.BancadaNaoDeclarada:
+            bancada = None
+        if not (_dentro(alvo, tmp) or (bancada is not None and _dentro(alvo, bancada))):
+            ex.morre(f"--saida {pedida}: fora da bancada declarada e de {tmp}", 2)
+        alvo.mkdir(parents=True, exist_ok=True)
+        return alvo
+    base = tmp / (os.environ.get("PF_ORDEM_ID") or "gerador")
+    base.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(prefix="acervo-gerador-", dir=base))
+
+
+def main(argv: list) -> int:
+    lido = argumentos(argv)
+    if lido is None:
+        print(USO, file=sys.stderr)
+        return 2
+    chave, pedida = lido
+    ex = _exportar()
+    wt = ex.bancada_do_repo(chave)
+    py = ex.python_do_rag()
+    ontologia = wt / ONTOLOGIA
+    if not (ontologia / "gerador" / "__main__.py").is_file():
+        ex.morre(f"{ontologia / 'gerador' / '__main__.py'} não existe nesta bancada: o gerador ainda não chegou "
+                 f"a {ONTOLOGIA} do espelho", 3)
+    saida = pasta_de_saida(pedida, ex)
+    try:
+        r = subprocess.run([py, "-m", "gerador", "--saida", str(saida)], cwd=ontologia, capture_output=True,
+                           text=True, timeout=TETO_S, check=False)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        ex.morre(f"o gerador não rodou: {type(e).__name__}: {e}", 5)
+    if r.stdout.strip():
+        print(r.stdout.rstrip())
+    if r.stderr.strip():
+        print(r.stderr.rstrip(), file=sys.stderr)
+    print(f"bancada: {wt}")
+    print(f"saida: {saida}")
+    if r.returncode == 0:
+        ddl = sorted(p.relative_to(saida).as_posix() for p in (saida / "ddl").glob("*.sql")) \
+            if (saida / "ddl").is_dir() else []
+        print("ddl: " + (", ".join(ddl) if ddl else "nenhuma"))
+    return r.returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
