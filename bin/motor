@@ -5,7 +5,7 @@
 # componente: platafirma-motor
 # classe: B
 # use para: achar pelo sentido o trecho que responde a X (buscar <particao> --necessidade "<uma frase que nomeia o assunto pelo termo do acervo>"; o verbo manda a pergunta com a necessidade e, com PF_CHAPEU, o chapeu com cadeira, chapeu e rotulos dele; recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou | ou vem em saco de palavras; --origem abertura|bench|sombra|autoteste manda o texto literal, sem lint e sem montagem; `--geracao <id>` consulta a geracao em sombra antes de virar; o que o acervo tem sobre X se acha tambem pelo catalogo, `acervo listar biblioteca obra --sobre`), medir a bateria de um motor (medir), indexar a impressao selada da obra marcada para indexar (indexar biblioteca), trocar o embedder da biblioteca montando a geracao nova em sombra, medindo e virando (trocar biblioteca), sortear do log de perguntas o estrato sentido da escada (sortear biblioteca), medir sem gravar a eleicao de chapeu sobre o log de perguntas (eleger), medir sem gravar quanto do log o lint da consulta montada recusaria (lintar), comparar a chamada de hoje, a frase do dono e a lista montada nas perguntas do piloto, ou, com --do-log, a busca de hoje e a busca com o eleito do chapeu nas chamadas do log (parear biblioteca), julgar com o juiz (Claude) as respostas do piloto da escada e medir o juiz contra a primeira passada do dono: kappa, divergencias, tempo e lote de conferencia (julgar biblioteca), gravar e ler o lote da tela de marcacao do gold set (motor marcacao), ler/mexer um ajuste (ajuste), ler o log de recuperacao com filtro ou a serie diaria de cobertura (consultas), ver os lotes do rag e as sombras de bench com o estado de vida (trabalhos)
-# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, bateria), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote), julgar (escrita, lote), eleger (leitura, medida), consultas (leitura, medida), trabalhos (leitura, medida), estado (leitura, geracao), parar (escrita, medida)
+# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, bateria), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote), julgar (escrita, lote), eleger (leitura, medida), consultas (leitura, medida), trabalhos (leitura, medida), estado (leitura, geracao), parar (escrita, medida), raciocinar (leitura, medida)
 # (buscar/medir/indexar/trocar/sortear/escrever/parear/julgar exigem particao; eleger e lintar leem o log inteiro e nao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar|desativar), eventos, juiz)
 # forma: json
 # cauda: nao
@@ -28,6 +28,7 @@
 # le: trabalhos=motor
 # le: estado=motor,arquivo-local
 # le: parar=motor
+# le: raciocinar=arquivo-local,release
 # escreve: listar=nada
 # escreve: ajuste=motor,arquivo-local
 # escreve: buscar=arquivo-local
@@ -44,6 +45,7 @@
 # escreve: trabalhos=nada
 # escreve: estado=nada
 # escreve: parar=motor
+# escreve: raciocinar=nada
 # face: buscar=motor
 # face: medir=motor
 # face: listar=motor
@@ -363,6 +365,10 @@ def uso(cod=2):
   motor marcacao lote gravar|ler|ativar|desativar … · motor marcacao eventos --lote <id> · motor marcacao juiz gravar
                                         o lote da tela de marcacao do gold set e o que ela grava (marcacao-api;
                                         `motor marcacao --ajuda` traz as formas)
+  motor raciocinador raciocinar --modelo <modelo.ttl> [--somar <caso.ttl>]...
+                                        o HermiT sobre o modelo formal com o MIREOT servido e os casos somados:
+                                        0 fecha, 1 inconsistente ou insatisfazivel (as classes nomeadas), 5 nao
+                                        rodou (Java, rdflib, owlready2 ou MIREOT). Chamada temporaria (#4077)
 
 gramatica (arq:0106): motor <inst> <ato> <particao> [seletor]. instancia = quem
 busca (ortogonal a particao); particao = onde (biblioteca, casa, registro; obra = biblioteca).
@@ -3940,6 +3946,21 @@ def cmd_parar(inst, argv):
     return cmd_sombra_parar(inst, argv[1])
 
 
+def _raciocinador(argv):
+    """`motor raciocinador raciocinar --modelo <ttl> [--somar <ttl>]...` (#4077): o HermiT sobre um modelo formal,
+    pelo Python do rag da release, que tem rdflib e owlready2. Chamada temporaria por ordem do dono de 01/11/2026:
+    a instancia nao tem container nem endpoint, nao entra no registro e se refatora na revisao dos documentos do
+    acervo. Saida a do ajudante: 0 fecha, 1 reprova, 2 uso, 5 nao rodou."""
+    py = next((c for c in (os.environ.get("RAG_PYTHON", ""), str(raizes.release() / "venv" / "rag" / "bin" / "python"))
+               if c and os.access(c, os.X_OK)), "")
+    if not py:
+        print("motor raciocinador: nenhum python do rag executavel (RAG_PYTHON ou <release>/venv/rag/bin/python)",
+              file=sys.stderr)
+        sys.exit(5)
+    r = subprocess.run([py, str(_ARVORE / "bin" / "_motor" / "raciocinador.py"), *argv])
+    sys.exit(r.returncode)
+
+
 def main():
     d = reg()
     a = sys.argv[1:]
@@ -3965,6 +3986,8 @@ def main():
         uso()
     if a[0] == "listar":
         return cmd_listar(d)
+    if a[0] == "raciocinador":
+        return _raciocinador(a[1:])
     if a[0] not in d:
         print(f"nao conheco a instancia '{a[0]}'. Ha: {', '.join(d)}", file=sys.stderr)
         sys.exit(1)
