@@ -663,8 +663,10 @@ def test_claude_sobe_sem_o_arranque_da_conta_e_com_a_porta(mundo, pessoa, monkey
             assert g + fora in negadas, f"{g}{fora}: tool de porta fora da declaração sai da janela"
         for dentro in ("ler_arquivo", "monta_sessao"):
             assert g + dentro not in negadas, f"{g}{dentro}: a declaração lista, a porta fica"
+    assert argv[argv.index("--tools") + 1] == "Read,Grep,ToolSearch", \
+        "as embutidas da declaração e o ToolSearch, pelo qual a porta deferida entra"
     for proibida in ("--bare", "--strict-mcp-config", "--no-session-persistence", "--setting-sources", "--settings",
-                     "--disable-slash-commands", "--tools"):
+                     "--disable-slash-commands"):
         assert proibida not in argv, f"{proibida}: tira o login, a porta, o transcript ou o hook porta-sessao"
 
 
