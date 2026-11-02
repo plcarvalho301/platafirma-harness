@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# acervo consultar — perguntas com nome sobre o schema casa da casa nova, só leitura (#4084).
+#
+# Por que existe: a skill casa-espelho precisa saber onde cada entidade da casa nova mora,
+# a linhagem dela, os documentos carregados e a ficha de um golden de módulo, durante o
+# E3650. O `acervo psql` entra como dona do banco e grava; este ato entra como a role
+# `busca`, que só lê, e só roda as perguntas desta lista (decisão do dono, comentário
+# 4197 do card 4084). Sem visão no schema: o schema muda várias vezes por dia no épico,
+# e a pergunta mora aqui, onde se ajusta junto com a DDL.
+#
+# Contenção:
+#   1. A conexão é a role `busca` no rag-extractor-pg; o banco recusa toda escrita, e a
+#      sessão ainda abre com default_transaction_read_only.
+#   2. O SQL é fixo por pergunta. O argumento do chamador entra por variável do psql
+#      (-v) e é citado como literal (:'arg'): texto de SQL nele vira valor, nunca código.
+#   3. Pergunta fora da lista sai 2 com a lista; nenhuma flag do chamador chega ao psql.
+set -uo pipefail
+
+VERBO="acervo consultar"
+CTR="rag-extractor-pg"
+USR="busca"
+BASE="rag_extractor"
+
+perguntas() {
+  cat >&2 <<'EOF'
+uso: acervo consultar casa <pergunta> <argumentos>
+
+perguntas (schema casa da casa nova, lido pela role busca, só leitura):
+  onde-mora    <entidade>          molde do caminho, pasta, tipo do arquivo, tabela do golden,
+                                   mãe e tipo de relação, categoria, projeção e forma
+  linhagem     <entidade>          a cadeia de mães, da entidade até a raiz
+  descendentes <entidade>          todas as entidades abaixo dela, com o nível
+  documento    <entidade>          cada documento carregado da entidade: chave, papel, caminho, sha
+  golden       <módulo> <chave>    a ficha que aponta o golden; módulo é schema.tabela
+                                   (rastreador.item) ou a entidade (card)
+
+exit: 0 com linhas · 1 sem linha · 2 uso ou pergunta fora da lista · 3 falha do banco
+EOF
+  exit 2
+}
+
+morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
+
+[ $# -ge 1 ] || perguntas
+case "$1" in -h|--help|ajuda) perguntas ;; esac
+[ "$1" = casa ] || { printf '%s: partição %s fora do ato; só há casa\n' "$VERBO" "$1" >&2; perguntas; }
+shift
+[ $# -ge 1 ] || perguntas
+pergunta="$1"; shift
+
+a1="${1:-}"
+a2="${2:-}"
+
+case "$pergunta" in
+  onde-mora)
+    [ -n "$a1" ] || morre "onde-mora exige <entidade>" 2
+    sql=$(cat <<'SQL'
+SELECT slug AS entidade, natureza, categoria, estrato,
+       estrutura->>'caminho' AS caminho, estrutura->>'pasta' AS pasta,
+       estrutura->>'tipo' AS arquivo, estrutura->>'morada' AS morada,
+       substrato_golden AS golden, mae, tipo_de_relacao AS relacao,
+       array_to_string(projetada_em, ',') AS projetada_em,
+       forma->>'marca' AS forma, forma->>'motivo' AS motivo_da_forma,
+       shape_endereco AS shape
+  FROM casa.entidade
+ WHERE slug = :'a1' OR :'a1' = ANY (apelidos);
+SQL
+) ;;
+  linhagem)
+    [ -n "$a1" ] || morre "linhagem exige <entidade>" 2
+    sql=$(cat <<'SQL'
+WITH RECURSIVE sobe AS (
+  SELECT slug, mae, tipo_de_relacao, categoria, estrato, 0 AS nivel, ARRAY[slug] AS visto
+    FROM casa.entidade WHERE slug = :'a1' OR :'a1' = ANY (apelidos)
+  UNION ALL
+  SELECT e.slug, e.mae, e.tipo_de_relacao, e.categoria, e.estrato, s.nivel + 1, s.visto || e.slug
+    FROM casa.entidade e JOIN sobe s ON e.slug = s.mae
+   WHERE NOT e.slug = ANY (s.visto)
+)
+SELECT nivel, slug AS entidade, mae, tipo_de_relacao AS relacao_com_a_mae, categoria, estrato
+  FROM sobe ORDER BY nivel;
+SQL
+) ;;
+  descendentes)
+    [ -n "$a1" ] || morre "descendentes exige <entidade>" 2
+    sql=$(cat <<'SQL'
+WITH RECURSIVE desce AS (
+  SELECT slug, 0 AS nivel, ARRAY[slug] AS visto
+    FROM casa.entidade WHERE slug = :'a1' OR :'a1' = ANY (apelidos)
+  UNION ALL
+  SELECT e.slug, d.nivel + 1, d.visto || e.slug
+    FROM casa.entidade e JOIN desce d ON e.mae = d.slug
+   WHERE NOT e.slug = ANY (d.visto)
+)
+SELECT d.nivel, e.slug AS entidade, e.mae, e.tipo_de_relacao AS relacao_com_a_mae,
+       e.categoria, e.estrutura->>'caminho' AS caminho, e.substrato_golden AS golden
+  FROM desce d JOIN casa.entidade e ON e.slug = d.slug
+ WHERE d.nivel > 0
+ ORDER BY d.nivel, e.slug;
+SQL
+) ;;
+  documento)
+    [ -n "$a1" ] || morre "documento exige <entidade>" 2
+    sql=$(cat <<'SQL'
+SELECT f.entidade, f.chave_humana AS chave, a.papel, a.caminho, left(a.sha, 12) AS sha,
+       a.ciclo, a.forca, a.titulo
+  FROM casa.ficha f JOIN casa.arquivo a ON a.ficha_id = f.id
+ WHERE f.entidade = :'a1'
+    OR f.entidade = (SELECT slug FROM casa.entidade WHERE :'a1' = ANY (apelidos) LIMIT 1)
+ ORDER BY a.caminho;
+SQL
+) ;;
+  golden)
+    [ -n "$a1" ] && [ -n "$a2" ] || morre "golden exige <módulo> <chave>" 2
+    sql=$(cat <<'SQL'
+SELECT f.entidade, f.chave_humana AS chave, f.id AS ficha, f.estado, f.versao,
+       g.substrato, g.endereco, a.caminho AS referencia
+  FROM casa.golden g
+  JOIN casa.ficha f ON f.id = g.ficha_id
+  LEFT JOIN casa.arquivo a ON a.ficha_id = f.id
+ WHERE (g.substrato = :'a1' OR f.entidade = :'a1')
+   AND g.endereco = :'a2';
+SQL
+) ;;
+  *)
+    printf '%s: pergunta %s fora da lista\n' "$VERBO" "$pergunta" >&2
+    perguntas ;;
+esac
+
+command -v docker >/dev/null 2>&1 || morre "'docker' nao esta no PATH desta conta" 3
+docker inspect -f '{{.State.Running}}' "$CTR" 2>/dev/null | grep -qx true \
+  || morre "contêiner '$CTR' nao esta de pe — \`infra estado\`" 3
+
+err="$(mktemp)"
+trap 'rm -f "$err"' EXIT
+# -X sem psqlrc; ON_ERROR_STOP para sair 3 no erro; PGOPTIONS fecha a sessão em só leitura.
+out="$(docker exec -i -e PGOPTIONS='-c default_transaction_read_only=on' "$CTR" \
+        psql -X -q -U "$USR" -d "$BASE" -P pager=off -v ON_ERROR_STOP=1 \
+        -v a1="$a1" -v a2="$a2" 2>"$err" <<<"$sql")"
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  cat "$err" >&2
+  exit 3
+fi
+printf '%s\n' "$out"
+case "$out" in
+  *"(0 rows)"*) printf '%s: nenhuma linha para %s %s %s no schema casa\n' "$VERBO" "$pergunta" "$a1" "$a2" >&2
+                exit 1 ;;
+esac
+exit 0

@@ -16,6 +16,7 @@
 # que entra ou muda nesta lista roda no mesmo push, sozinha.
 # A rodada inteira diária no `bot` pega o raio que faltou aqui.
 test_acervo_atos_classificar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_consultar.py | bin/acervo bin/_acervo/**
 test_acervo_atos_retirar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_atos_transcrever.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_bancada_conversao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
