@@ -18,10 +18,10 @@
 # escreve: rodar=arquivo-local,malha
 # escreve: projetar=arquivo-local
 # consome: sessao, expediente, seg, ollama
-# ambiente: PF_SUJEITO (a pessoa em nome de quem o agente roda; obrigatoria em rodar; porta) · PF_SESSAO (a sessao de quem chamou; obrigatoria em rodar; porta) · PF_CADEIRA (porta) · PF_ORDEM_ID (porta) · PF_POSTO (opcional; padrao <bancada>/platafirma-posto, onde estao as declaracoes) · PF_BIN (opcional; padrao bin/ da propria arvore; so teste com stub) · PF_CLAUDE_BIN (opcional; padrao o binario da trava em <release>/venv/claude-code, lib/claude_cli.py; so teste com stub) · OLLAMA_BASE_URL (opcional; o ollama local) · PLATAFIRMA_INSTANCIA (opcional; padrao /srv/platafirma/casa; var/log/agente e var/log/seg)
+# ambiente: PF_SUJEITO (a pessoa em nome de quem o agente roda; obrigatoria em rodar; porta) · PF_SESSAO (a sessao de quem chamou; obrigatoria em rodar; porta) · PF_CADEIRA (porta) · PF_ORDEM_ID (porta) · PF_POSTO (opcional; padrao <bancada>/platafirma-posto, onde estao as declaracoes) · PF_BIN (opcional; padrao bin/ da propria arvore; so teste com stub) · PF_CLAUDE_BIN (opcional; padrao o binario da trava em <release>/venv/claude-code, lib/claude_cli.py; so teste com stub) · PF_AGY_BIN (opcional; padrao ~/.local/bin/agy da conta; so teste com stub) · OLLAMA_BASE_URL (opcional; o ollama local) · PLATAFIRMA_INSTANCIA (opcional; padrao /srv/platafirma/casa; var/log/agente e var/log/seg)
 # escrita: projetar grava .claude/agents/<slug>.md no posto; rodar grava a chave da sessao filha (sessao abrir) e uma linha em var/log/agente/; nada em listar|ler|projetar --conferir
 # depende: sessao, expediente, lib/raizes, lib/uso, lib/transcript, pyyaml (venv harness)
-# conforme: parcial — Gemini pelo `agy` ainda não roda (a execução sob jaiminho é da ti, spec agente §Aberto); agendado espera o `bot --roda agente:<slug>` (#3186); `sessao longjob` ja herda os atributos da chave
+# conforme: parcial — agendado espera o `bot --roda agente:<slug>` (#3186); `sessao longjob` ja herda os atributos da chave
 #
 # Spec: spec agente (§2 declaração, §3 projeções, §4 ligações, §10 o verbo, §11 piso de segurança)
 from __future__ import annotations
@@ -32,6 +32,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -87,11 +88,10 @@ OLLAMA_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 # --- a declaração ---------------------------------------------------------------------------
 
 def conta_do_modelo(modelo: dict) -> str:
-    """O modelo fixa a conta unix (spec agente §2): Claude sob claudinho, Gemini sob jaiminho,
-    Qwen local na conta do host (claudinho), Qwen de fronteira sob quinzinho."""
+    """O modelo fixa a conta unix (spec agente §2): Claude, Gemini e Qwen local sob claudinho, Qwen de
+    fronteira sob quinzinho. Gemini saiu de jaiminho por ordem do dono (02/11/2026, #4093): roda na conta de
+    produção com o login dele, como os agentes Claude, porque não escreve e o raio do agente é curto."""
     familia = modelo.get("familia")
-    if familia == "gemini":
-        return "jaiminho"
     if familia == "qwen" and not modelo.get("local"):
         return "quinzinho"
     return "claudinho"
@@ -806,12 +806,66 @@ def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
                     "chamadas": chamadas, "fonte": fonte, "sessao_code": sessao_code}}
 
 
+def _bin_agy() -> str:
+    """O `agy` da conta (~/.local/bin, onde ele se atualiza sozinho); PF_AGY_BIN só em teste com stub."""
+    alvo = os.environ.get("PF_AGY_BIN") or str(Path.home() / ".local" / "bin" / "agy")
+    if not os.access(alvo, os.X_OK):
+        raise Falha(3, f"agy não está instalado na conta ({alvo})")
+    return alvo
+
+
+def chama_agy(decl: dict, sistema: str, tarefa: str) -> dict:
+    """Gemini pelo `agy -p`, na conta de produção, com o login Google do dono e o conector claudinho-mcp dele
+    (~/.gemini/config/mcp_config.json, cliente agy-cli). Medido no ar em 02/11/2026 (#4093):
+     - o prompt vai no argv, colado à flag (`--print=<texto>`): o agy não lê stdin no modo print, e `-p` solto
+       come a flag seguinte como prompt;
+     - o agy não tem --append-system-prompt nem lista de tools permitidas: a lente entra no prompt, antes da
+       tarefa, e o recorte de tools da declaração não se aplica; vale o que o PDP decide para a pessoa;
+     - `--mode plan` e `--sandbox` tiram a edição e prendem o terminal embutido: o agente não escreve;
+     - roda numa pasta vazia, para não ler AGENTS.md nem regra de projeto do diretório de quem chamou."""
+    t = decl["teto"]
+    segundos = t.get("segundos", 900)
+    prompt = f"{sistema}\n\n---\n\nTAREFA\n\n{tarefa}"
+    argv = [_bin_agy(), "--mode", "plan", "--sandbox", "--output-format", "json",
+            "--print-timeout", f"{segundos}s", f"--print={prompt}"]
+    with tempfile.TemporaryDirectory(prefix="agente-agy-") as vazia:
+        try:
+            p = subprocess.run(argv, capture_output=True, text=True, timeout=segundos + 30, cwd=vazia,
+                               env={**os.environ, "DISABLE_AUTOUPDATER": "1"})
+        except subprocess.TimeoutExpired:
+            raise Falha(5, f"agy: passou de {segundos}s sem resposta")
+        except OSError as e:
+            raise Falha(3, f"agy: não executou ({e})")
+    try:
+        obj = json.loads(p.stdout or "{}")
+    except ValueError:
+        obj = {}
+    texto = obj.get("response") if isinstance(obj, dict) else None
+    if p.returncode != 0 or obj.get("status") != "SUCCESS" or not isinstance(texto, str) or not texto.strip():
+        motivo = ((p.stderr or p.stdout or "").strip().splitlines() or [str(obj.get("status") or "sem retorno")])[0]
+        raise Falha(5, f"agy -p não concluiu (saiu {p.returncode}): {motivo[:200]}")
+    u = obj.get("usage") or {}
+    entrada = u.get("input_tokens", 0) + u.get("cache_read_tokens", 0)
+    saida = u.get("output_tokens", 0) + u.get("thinking_tokens", 0)
+    aviso = ""
+    if entrada + saida > t["tokens_execucao"]:
+        aviso = f"tokens da execução {entrada + saida} passaram de tokens_execucao {t['tokens_execucao']} (medido, não cortado)"
+    elif (obj.get("num_turns") or 0) > t["turnos"]:
+        aviso = f"turnos {obj['num_turns']} passaram de {t['turnos']} (medido, não cortado: o agy não tem --max-turns)"
+    return {"retorno": texto, "aviso": aviso,
+            "uso": {"entrada": entrada, "saida": saida, "turnos": obj.get("num_turns"),
+                    "cache_leitura": u.get("cache_read_tokens", 0), "pensamento": u.get("thinking_tokens", 0),
+                    "fonte": "resumo", "conversa_agy": obj.get("conversation_id")}}
+
+
 def chama_modelo(decl: dict, sistema: str, tarefa: str) -> dict:
     m = decl["modelo"]
     if m["familia"] == "qwen" and m.get("local"):
         return chama_ollama(decl, sistema, tarefa)
     if m["familia"] == "claude":
         return chama_claude(decl, sistema, tarefa)
+    if m["familia"] == "gemini":
+        return chama_agy(decl, sistema, tarefa)
     raise Falha(3, f"a ligação {m['familia']} ainda não roda pelo agente rodar: a execução sob "
                    f"{conta_do_modelo(m)} é da ti (spec agente §Aberto)")
 
@@ -874,8 +928,6 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
             ok, motivo = isolacao_conforme(conta)
             if not ok:
                 raise Falha(4, f"a conta {conta} não está conforme na última seg isolacao medir ({motivo})")
-        if decl["modelo"]["familia"] == "gemini":
-            chama_modelo(decl, "", "")                          # sai 3 antes de gastar sessão
         filha = abre_sessao(cadeira, origem, slug, conta)
         lente = monta_lente(decl, cadeira, chapeu, filha, origem, tarefa, variantes)
         r = chama_modelo(decl, _sistema(decl, lente), numera(tarefa) if decl["modo"] == "varrer" else tarefa)
