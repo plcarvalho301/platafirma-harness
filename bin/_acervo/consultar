@@ -8,6 +8,9 @@
 # 4197 do card 4084). Sem visão no schema: o schema muda várias vezes por dia no épico,
 # e a pergunta mora aqui, onde se ajusta junto com a DDL.
 #
+# O schema muda no meio do épico (a S4061 o regenera da shape): onde-mora e golden leem a linha
+# por to_jsonb, e coluna que some sai vazia em vez de derrubar a pergunta.
+#
 # Contenção:
 #   1. A conexão é a role `busca` no rag-extractor-pg; o banco recusa toda escrita, e a
 #      sessão ainda abre com default_transaction_read_only.
@@ -55,15 +58,15 @@ case "$pergunta" in
   onde-mora)
     [ -n "$a1" ] || morre "onde-mora exige <entidade>" 2
     sql=$(cat <<'SQL'
-SELECT slug AS entidade, natureza, categoria, estrato,
-       estrutura->>'caminho' AS caminho, estrutura->>'pasta' AS pasta,
-       estrutura->>'tipo' AS arquivo, estrutura->>'morada' AS morada,
-       substrato_golden AS golden, mae, tipo_de_relacao AS relacao,
-       array_to_string(projetada_em, ',') AS projetada_em,
-       forma->>'marca' AS forma, forma->>'motivo' AS motivo_da_forma,
-       shape_endereco AS shape
-  FROM casa.entidade
- WHERE slug = :'a1' OR :'a1' = ANY (apelidos);
+SELECT j->>'slug' AS entidade, j->>'natureza' AS natureza, j->>'categoria' AS categoria,
+       j->>'estrato' AS estrato, j->'estrutura'->>'caminho' AS caminho,
+       j->'estrutura'->>'pasta' AS pasta, j->'estrutura'->>'tipo' AS arquivo,
+       j->>'lugar_de_leitura' AS lugar_de_leitura, j->>'instanciavel' AS instanciavel,
+       j->>'substrato_golden' AS golden, j->>'mae' AS mae, j->>'tipo_de_relacao' AS relacao,
+       j->>'projetada_em' AS projetada_em, j->'forma'->>'marca' AS forma,
+       j->'forma'->>'motivo' AS motivo_da_forma, j->>'shape_endereco' AS shape
+  FROM (SELECT to_jsonb(e) AS j FROM casa.entidade e
+         WHERE e.slug = :'a1' OR :'a1' = ANY (e.apelidos)) x;
 SQL
 ) ;;
   linhagem)
@@ -113,13 +116,20 @@ SQL
   golden)
     [ -n "$a1" ] && [ -n "$a2" ] || morre "golden exige <módulo> <chave>" 2
     sql=$(cat <<'SQL'
+WITH g AS (
+  SELECT g.ficha_id, g.endereco, to_jsonb(g) AS j FROM casa.golden g
+), gs AS (
+  SELECT g.ficha_id, g.endereco,
+         coalesce(g.j->>'substrato', s.chave_humana, nullif(split_part(g.endereco, ':', 1), g.endereco)) AS substrato
+    FROM g LEFT JOIN casa.ficha s ON s.id = (g.j->>'substrato_id')::uuid
+)
 SELECT f.entidade, f.chave_humana AS chave, f.id AS ficha, f.estado, f.versao,
-       g.substrato, g.endereco, a.caminho AS referencia
-  FROM casa.golden g
-  JOIN casa.ficha f ON f.id = g.ficha_id
+       gs.substrato, gs.endereco, a.caminho AS referencia
+  FROM gs
+  JOIN casa.ficha f ON f.id = gs.ficha_id
   LEFT JOIN casa.arquivo a ON a.ficha_id = f.id
- WHERE (g.substrato = :'a1' OR f.entidade = :'a1')
-   AND g.endereco = :'a2';
+ WHERE (gs.substrato = :'a1' OR f.entidade = :'a1')
+   AND (gs.endereco = :'a2' OR gs.endereco = gs.substrato || ':' || :'a2');
 SQL
 ) ;;
   *)
