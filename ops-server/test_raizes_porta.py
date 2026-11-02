@@ -268,6 +268,36 @@ def test_write_file_aceita_a_casa_espelho(bancada, sem_pep):
     assert nunca.get("recusado") and "repo abrir" in nunca["motivo"], nunca
 
 
+def test_write_file_verbo_e_hook_do_harness_dentro_do_espelho(bancada, sem_pep):
+    """#4087: platafirma-casa-espelho/outros_repos/harness/ e a copia do harness no espelho;
+    o bin/ e o hooks/ dela aceitam verbo e hook (sem extensao, com shebang), no clone e no
+    worktree por cadeira e card. Sem extensao fora de bin/ e hooks/ segue recusado."""
+    esp = bancada / "platafirma-casa-espelho" / "outros_repos" / "harness"
+    wt = (bancada / "wt" / "platafirma-casa-espelho" / "engenharia" / "4083-x"
+          / "outros_repos" / "harness")
+    (esp / "bin").mkdir(parents=True)
+    (wt / "bin").mkdir(parents=True)
+    for base in ("platafirma-casa-espelho/outros_repos/harness",
+                 "wt/platafirma-casa-espelho/engenharia/4083-x/outros_repos/harness"):
+        sem = s.write_file(path=f"{base}/bin/agente", content="echo\n")
+        assert sem.get("recusado") and "shebang" in sem["motivo"], (base, sem)
+        verbo = s.write_file(path=f"{base}/bin/agente", content="#!/bin/sh\necho\n")
+        assert verbo.get("ok"), (base, verbo)
+        assert os.access(bancada / base / "bin/agente", os.X_OK)
+        hook = s.write_file(path=f"{base}/hooks/pre-push", content="#!/bin/sh\nexit 0\n")
+        assert hook.get("ok"), (base, hook)
+        # sem extensao fora de bin/ e hooks/ segue recusado, no harness do espelho e no resto dele
+        for fora in (f"{base}/scripts/x", f"{base}/x"):
+            r = s.write_file(path=fora, content="#!/bin/sh\nexit 0\n")
+            assert r.get("recusado") and "tipo" in r["motivo"], (fora, r)
+    base = "platafirma-casa-espelho"
+    # bin/ do espelho fora de outros_repos/harness/ nao e morada de verbo
+    for fora in (f"{base}/bin/x", f"{base}/outros_repos/bin/x", f"{base}/outros_repos/motor/bin/x",
+                 f"{base}/harness/bin/x"):
+        r = s.write_file(path=fora, content="#!/bin/sh\nexit 0\n")
+        assert r.get("recusado"), (fora, r)
+
+
 def test_write_file_aceita_php_e_mjs(bancada, sem_pep):
     """#3133: skin da wiki (.php) e provas do rastreador (.mjs) sao texto plano."""
     for nome in ("SkinPlataFirma.php", "2751_hierarquia_do_cartao.mjs"):

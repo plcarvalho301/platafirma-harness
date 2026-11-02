@@ -2033,6 +2033,10 @@ PREFIXO_DOCKERFILE = "Dockerfile."
 CLONES = ("platafirma-core", "platafirma-conhecimento",
           "platafirma-harness", "platafirma-motor", "platafirma-posto", "platafirma-ui",
           "platafirma-casa", "platafirma-rastreador", "platafirma-casa-espelho")
+# Onde mora a copia do harness dentro do espelho (platafirma-casa-espelho/outros_repos/harness/),
+# entrou em 02/11/2026 (#4087): o bin/ e o hooks/ dela sao morada de verbo e de hook como os
+# do clone do harness.
+HARNESS_NO_ESPELHO = ("outros_repos", "harness")
 ESCRITA_TETO = 1_048_576
 TMP_FITA = INSTANCIA / "var" / "tmp"
 
@@ -2080,7 +2084,8 @@ def _em_bin_do_harness(real_pai: Path) -> bool:
     """bin/ e hooks/ de um clone ou worktree do harness na bancada: morada de verbo e de hook
     (sem extensao, com shebang). hooks/ entrou em 09/10/2026 (#3376): hooks/pre-push nao tem
     extensao e ficava sem porta. O core.hooksPath das contas aponta para a release, entao a
-    copia da bancada so vale depois de `release promover`, como o bin/."""
+    copia da bancada so vale depois de `release promover`, como o bin/. A copia do harness no
+    espelho (platafirma-casa-espelho/outros_repos/harness/) conta igual (#4087)."""
     b = _bancada()
     if b is None:
         return False
@@ -2088,13 +2093,20 @@ def _em_bin_do_harness(real_pai: Path) -> bool:
     # profundidade do bin/ sob a raiz: clone base 0; worktree plano ou por sessao
     # wt/platafirma-harness/<x>/bin 1; worktree por cadeira e card
     # wt/platafirma-harness/<cadeira>/<card-ou-slug>/bin 2 (card:3149 passo 3)
-    for raiz_clone, profs in ((b / "platafirma-harness", (0,)),
-                              (b / "wt" / "platafirma-harness", (1, 2))):
+    # A copia do harness no espelho (platafirma-casa-espelho/outros_repos/harness/) e o mesmo
+    # bin/ e hooks/ um nivel abaixo: a troca sobrescreve o harness com ela (#4087).
+    for raiz_clone, profs, miolo in (
+            (b / "platafirma-harness", (0,), ()),
+            (b / "wt" / "platafirma-harness", (1, 2), ()),
+            (b / "platafirma-casa-espelho", (0,), HARNESS_NO_ESPELHO),
+            (b / "wt" / "platafirma-casa-espelho", (1, 2), HARNESS_NO_ESPELHO)):
         try:
             partes = real_pai.relative_to(raiz_clone).parts
         except ValueError:
             continue
-        if any(len(partes) > p and partes[p] in ("bin", "hooks") for p in profs):
+        n = len(miolo)
+        if any(len(partes) > p + n and partes[p:p + n] == miolo
+               and partes[p + n] in ("bin", "hooks") for p in profs):
             return True
     return False
 
