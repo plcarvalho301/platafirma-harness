@@ -746,7 +746,8 @@ def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
         raise Falha(3, str(e))
     argv = [bin_claude, "-p", "--model", decl["modelo"]["versao"], "--output-format", "json",
             "--max-turns", str(t["turnos"]), "--append-system-prompt", sistema,
-            "--disallowedTools", ",".join(PROIBIDAS + FORA_DO_AGENTE)]
+            "--disallowedTools", ",".join(PROIBIDAS + FORA_DO_AGENTE),
+            "--disable-slash-commands"]   # as skills da conta ficam fora da janela do agente (#4083)
     if decl["ferramentas"]:
         argv += ["--allowedTools", ",".join(decl["ferramentas"])]
     p = _roda(argv, stdin=tarefa, env={"DISABLE_AUTOUPDATER": "1", **SEM_ARRANQUE}, timeout=t.get("segundos", 900))

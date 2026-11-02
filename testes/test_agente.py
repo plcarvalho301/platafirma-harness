@@ -651,6 +651,7 @@ def test_claude_sobe_sem_o_arranque_da_conta_e_com_a_porta(mundo, pessoa, monkey
     (claude,) = [c for c in mundo.chamadas() if c["verbo"] == "claude"]
     assert claude["env"]["CLAUDE_CODE_DISABLE_CLAUDE_MDS"] == "1", "o CLAUDE.md da conta manda abrir como fabrica"
     argv = claude["argv"]
+    assert "--disable-slash-commands" in argv, "as skills da conta ficam fora"
     for proibida in ("--bare", "--strict-mcp-config", "--no-session-persistence", "--setting-sources", "--settings"):
         assert proibida not in argv, f"{proibida}: tira o login, a porta, o transcript ou o hook porta-sessao"
 
