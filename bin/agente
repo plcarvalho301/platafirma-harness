@@ -826,36 +826,68 @@ def chama_agy(decl: dict, sistema: str, tarefa: str) -> dict:
     t = decl["teto"]
     segundos = t.get("segundos", 900)
     prompt = f"{sistema}\n\n---\n\nTAREFA\n\n{tarefa}"
-    argv = [_bin_agy(), "--mode", "plan", "--sandbox", "--output-format", "json",
+    # stream-json, e não json: o agy não tem --max-turns nem teto de token, e o resumo só chega no fim. Cada passo
+    # `agent_response` DONE traz o uso daquela chamada ao modelo; o verbo soma e mata o processo no teto da
+    # declaração. Medido em 02/11/2026: sem o corte, uma leitura adversarial gastou 598 mil tokens em 23 chamadas
+    # contra o teto de 100 mil.
+    argv = [_bin_agy(), "--mode", "plan", "--sandbox", "--output-format", "stream-json",
             "--print-timeout", f"{segundos}s", f"--print={prompt}"]
+    soma = {"entrada": 0, "saida": 0, "cache_leitura": 0, "pensamento": 0}
+    chamadas, ferramentas, texto, final, cortado = 0, 0, [], None, ""
+    limite = time.monotonic() + segundos + 30
     with tempfile.TemporaryDirectory(prefix="agente-agy-") as vazia:
         try:
-            p = subprocess.run(argv, capture_output=True, text=True, timeout=segundos + 30, cwd=vazia,
-                               env={**os.environ, "DISABLE_AUTOUPDATER": "1"})
-        except subprocess.TimeoutExpired:
-            raise Falha(5, f"agy: passou de {segundos}s sem resposta")
+            p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=vazia,
+                                 env={**os.environ, "DISABLE_AUTOUPDATER": "1"})
         except OSError as e:
             raise Falha(3, f"agy: não executou ({e})")
-    try:
-        obj = json.loads(p.stdout or "{}")
-    except ValueError:
-        obj = {}
-    texto = obj.get("response") if isinstance(obj, dict) else None
-    if p.returncode != 0 or obj.get("status") != "SUCCESS" or not isinstance(texto, str) or not texto.strip():
-        motivo = ((p.stderr or p.stdout or "").strip().splitlines() or [str(obj.get("status") or "sem retorno")])[0]
+        try:
+            for linha in p.stdout:
+                try:
+                    ev = json.loads(linha)
+                except ValueError:
+                    continue
+                if ev.get("event") == "result":
+                    final = ev.get("result") or {}
+                    continue
+                passo = ev.get("step_update") or {}
+                if passo.get("step_type") == "agent_response" and isinstance(passo.get("text_delta"), str):
+                    texto.append(passo["text_delta"])
+                if passo.get("state") != "DONE":
+                    continue
+                if passo.get("step_type") == "tool":
+                    ferramentas += 1
+                u = passo.get("usage")
+                if passo.get("step_type") == "agent_response" and isinstance(u, dict):
+                    chamadas += 1
+                    soma["entrada"] += u.get("input_tokens", 0) + u.get("cache_read_tokens", 0)
+                    soma["saida"] += u.get("output_tokens", 0) + u.get("thinking_tokens", 0)
+                    soma["cache_leitura"] += u.get("cache_read_tokens", 0)
+                    soma["pensamento"] += u.get("thinking_tokens", 0)
+                gasto = soma["entrada"] + soma["saida"]
+                if gasto > t["tokens_execucao"]:
+                    cortado = f"{gasto} tokens em {chamadas} chamadas passaram de tokens_execucao {t['tokens_execucao']}"
+                elif ferramentas > t["turnos"]:
+                    cortado = f"{ferramentas} chamadas de ferramenta passaram de turnos {t['turnos']}"
+                elif time.monotonic() > limite:
+                    cortado = f"passou de {segundos}s"
+                if cortado:
+                    p.kill()
+                    break
+        finally:
+            if p.poll() is None:
+                p.kill()
+            erro = p.stderr.read() if p.stderr else ""
+            p.wait()
+    uso = {**soma, "turnos": chamadas, "ferramentas": ferramentas, "fonte": "stream",
+           "conversa_agy": (final or {}).get("conversation_id")}
+    if cortado:
+        raise Falha(5, f"agy cortado no teto da declaração: {cortado}; uso {json.dumps(uso)}")
+    resposta = (final or {}).get("response") or "".join(texto)
+    if p.returncode != 0 or (final or {}).get("status") != "SUCCESS" or not resposta.strip():
+        motivo = ((erro or "").strip().splitlines() or [str((final or {}).get("status") or "sem retorno")])[0]
         raise Falha(5, f"agy -p não concluiu (saiu {p.returncode}): {motivo[:200]}")
-    u = obj.get("usage") or {}
-    entrada = u.get("input_tokens", 0) + u.get("cache_read_tokens", 0)
-    saida = u.get("output_tokens", 0) + u.get("thinking_tokens", 0)
-    aviso = ""
-    if entrada + saida > t["tokens_execucao"]:
-        aviso = f"tokens da execução {entrada + saida} passaram de tokens_execucao {t['tokens_execucao']} (medido, não cortado)"
-    elif (obj.get("num_turns") or 0) > t["turnos"]:
-        aviso = f"turnos {obj['num_turns']} passaram de {t['turnos']} (medido, não cortado: o agy não tem --max-turns)"
-    return {"retorno": texto, "aviso": aviso,
-            "uso": {"entrada": entrada, "saida": saida, "turnos": obj.get("num_turns"),
-                    "cache_leitura": u.get("cache_read_tokens", 0), "pensamento": u.get("thinking_tokens", 0),
-                    "fonte": "resumo", "conversa_agy": obj.get("conversation_id")}}
+    return {"retorno": resposta, "aviso": "", "uso": uso}
 
 
 def chama_modelo(decl: dict, sistema: str, tarefa: str) -> dict:

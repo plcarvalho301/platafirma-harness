@@ -609,8 +609,22 @@ open(os.environ["STUB_LOG"], "a").write(json.dumps({{"verbo": "agy", "argv": sys
 if os.environ.get("STUB_AGY_FALHA"):
     print("Error: You are not logged into Antigravity.", file=sys.stderr)
     sys.exit(1)
-print(json.dumps({{"conversation_id": "c-1", "status": "SUCCESS", "response": "veredito: 0 — x@y\\n", "num_turns": 4,
-                   "usage": {{"input_tokens": 900, "output_tokens": 30, "thinking_tokens": 10, "cache_read_tokens": 100}}}}))
+def passo(**k):
+    print(json.dumps({{"event": "step_update", "step_update": {{"conversation_id": "c-1", **k}}}}), flush=True)
+print(json.dumps({{"event": "init", "conversation_id": "c-1", "init": {{}}}}), flush=True)
+voltas = int(os.environ.get("STUB_AGY_VOLTAS", "1"))
+for i in range(voltas):
+    passo(state="DONE", step_type="agent_response",
+          usage={{"input_tokens": 400, "output_tokens": 10, "thinking_tokens": 10, "cache_read_tokens": 100}})
+    passo(state="DONE", step_type="tool", tool_name="call_mcp_tool")
+    __import__("time").sleep(0.2)     # o modelo leva tempo entre passos; dá ao verbo a vez de cortar
+if os.environ.get("STUB_AGY_MARCA"):
+    open(os.environ["STUB_AGY_MARCA"], "w").write("chegou ao fim")
+passo(state="ACTIVE", step_type="agent_response", text_delta="veredito: 0 — x@y")
+passo(state="DONE", step_type="agent_response", text_delta="\\n",
+      usage={{"input_tokens": 100, "output_tokens": 5, "thinking_tokens": 0, "cache_read_tokens": 0}})
+print(json.dumps({{"event": "result", "result": {{"conversation_id": "c-1", "status": "SUCCESS",
+                   "response": "veredito: 0 — x@y\\n", "num_turns": 1}}}}), flush=True)
 """
 
 
@@ -627,16 +641,33 @@ def test_gemini_roda_pelo_agy_na_conta_de_producao_so_leitura(mundo, agy, pessoa
     assert roda(monkeypatch, "avaliador", tarefa="leia o documento", como_json=True) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["conta"] == "claudinho" and out["retorno"].startswith("veredito: 0")
-    assert out["uso"]["entrada"] == 1000 and out["uso"]["saida"] == 40 and out["uso"]["conversa_agy"] == "c-1"
+    assert out["uso"]["entrada"] == 600 and out["uso"]["saida"] == 25 and out["uso"]["conversa_agy"] == "c-1"
+    assert out["uso"]["turnos"] == 2 and out["uso"]["ferramentas"] == 1 and out["uso"]["fonte"] == "stream"
     (chamada,) = [c for c in mundo.chamadas() if c["verbo"] == "agy"]
     argv = chamada["argv"]
     assert argv[argv.index("--mode") + 1] == "plan" and "--sandbox" in argv, "o agente não escreve"
-    assert argv[argv.index("--output-format") + 1] == "json"
+    assert argv[argv.index("--output-format") + 1] == "stream-json", "o uso por passo é o que deixa cortar no teto"
     (prompt,) = [a for a in argv if a.startswith("--print=")]
     assert "LENTE-PERSONA" in prompt and prompt.endswith("leia o documento"), "a lente vai antes da tarefa"
     assert "agente-agy-" in chamada["cwd"], "pasta vazia: sem AGENTS.md de quem chamou"
     abrir = [c for c in mundo.chamadas() if c["verbo"] == "sessao" and c["argv"][0] == "abrir"]
     assert abrir and abrir[0]["argv"][abrir[0]["argv"].index("--conta") + 1] == "claudinho"
+
+
+@pytest.mark.parametrize("teto,voltas,trecho", [
+    ({"turnos": 20, "tokens_execucao": 1500, "tokens_janela": 300000}, 10, "passaram de tokens_execucao 1500"),
+    ({"turnos": 3, "tokens_execucao": 100000, "tokens_janela": 300000}, 10, "passaram de turnos 3"),
+])
+def test_gemini_e_cortado_no_teto_da_declaracao(mundo, agy, pessoa, monkeypatch, capsys, tmp_path, teto, voltas, trecho):
+    """O agy não tem --max-turns: o verbo soma o uso de cada passo e mata o processo no teto (598 mil tokens, 02/11)."""
+    marca = tmp_path / "fim"
+    monkeypatch.setenv("STUB_AGY_VOLTAS", str(voltas))
+    monkeypatch.setenv("STUB_AGY_MARCA", str(marca))
+    mundo.escreve(com(REVISOR, slug="avaliador", modelo=GEMINI, ligacoes=["consultado"], teto=teto))
+    assert roda(monkeypatch, "avaliador") == 5
+    err = capsys.readouterr().err
+    assert "cortado no teto da declaração" in err and trecho in err
+    assert not marca.exists(), "o processo morre no corte, antes de chegar ao fim"
 
 
 def test_gemini_que_falha_sai_5_e_diz_o_motivo(mundo, agy, pessoa, monkeypatch, capsys):
