@@ -211,7 +211,8 @@ def test_numera_poe_o_numero_da_linha_na_frente_e_alarga_com_o_texto():
 
 def test_contas_e_provedores_seguem_o_modelo():
     assert agente.conta_do_modelo(REVISOR["modelo"]) == "claudinho"
-    assert agente.conta_do_modelo({"familia": "gemini", "versao": "agy"}) == "jaiminho"
+    assert agente.conta_do_modelo({"familia": "gemini", "versao": "agy"}) == "claudinho", \
+        "Gemini roda na conta de produção com o login do dono (ordem do dono, 02/11/2026, #4093)"
     assert agente.conta_do_modelo(VARREDOR["modelo"]) == "claudinho", "Qwen local roda na conta do host"
     assert agente.conta_do_modelo({"familia": "qwen", "versao": "x"}) == "quinzinho"
     assert agente.provedor(VARREDOR["modelo"]) == "host"
@@ -334,24 +335,32 @@ def test_sem_regua_em_revisar_e_aviso_e_nao_reprova(mundo, capsys):
 # --- o portão do PR que troca `modelo` (spec agente §11.2) ---------------------------------------
 
 GEMINI = {"familia": "gemini", "versao": "agy"}
+# A conta segregada que o portão mede: desde o #4093 o Gemini roda sob claudinho, e o Qwen de fronteira segue
+# sob quinzinho.
+SEGREGADO = {"familia": "qwen", "versao": "qwen-fronteira"}
 
 
 def test_caso_1_conta_alvo_sem_isolacao_conforme_reprova(mundo, capsys, monkeypatch):
-    mundo.isolacao("jaiminho", ["ok", "FALHA"])
-    mundo.escreve(com(REVISOR, modelo=GEMINI, ligacoes=["consultado"]))
+    mundo.isolacao("quinzinho", ["ok", "FALHA"])
+    mundo.escreve(com(REVISOR, modelo=SEGREGADO, ligacoes=["consultado"]))
     monkeypatch.setattr(agente, "declaracoes_da_base", lambda posto, ref: {"revisor": REVISOR})
     assert agente.ato_projetar(True, "origin/main") == 1
-    assert "caso 1: revisor passa a rodar sob jaiminho" in capsys.readouterr().out
+    assert "caso 1: revisor passa a rodar sob quinzinho" in capsys.readouterr().out
+
+
+def test_gemini_na_conta_de_producao_nao_passa_pelo_caso_1(mundo):
+    mundo.isolacao("jaiminho", ["FALHA"])
+    assert agente.portao_da_troca("revisor", com(REVISOR, modelo=GEMINI), REVISOR) == []
 
 
 def test_caso_1_conta_nao_medida_reprova(mundo):
-    mundo.isolacao("jaiminho", ["NAO MEDIDO"])
-    achados = agente.portao_da_troca("revisor", com(REVISOR, modelo=GEMINI), REVISOR)
+    mundo.isolacao("quinzinho", ["NAO MEDIDO"])
+    achados = agente.portao_da_troca("revisor", com(REVISOR, modelo=SEGREGADO), REVISOR)
     assert len(achados) == 1 and "caso 1" in achados[0] and "NAO MEDIDO" in achados[0]
 
 
 def test_caso_1_sem_medicao_nenhuma_reprova(mundo):
-    achados = agente.portao_da_troca("revisor", com(REVISOR, modelo=GEMINI), REVISOR)
+    achados = agente.portao_da_troca("revisor", com(REVISOR, modelo=SEGREGADO), REVISOR)
     assert len(achados) == 1 and "sem medição registrada" in achados[0]
 
 
@@ -367,19 +376,19 @@ def test_caso_2_dado_pessoal_para_provedor_novo_fora_do_host_vai_ao_dono(mundo, 
 
 
 def test_troca_entre_contas_admitidas_sem_perna_de_dado_pessoal_passa(mundo, capsys, monkeypatch):
-    mundo.isolacao("jaiminho", ["ok", "ok", "ok"])
-    mundo.escreve(com(REVISOR, modelo=GEMINI, ligacoes=["consultado"]))
+    mundo.isolacao("quinzinho", ["ok", "ok", "ok"])
+    mundo.escreve(com(REVISOR, modelo=SEGREGADO, ligacoes=["consultado"]))
     monkeypatch.setattr(agente, "declaracoes_da_base", lambda posto, ref: {"revisor": REVISOR})
     assert agente.ato_projetar(True, "origin/main") == 0
     saida = capsys.readouterr().out
     assert "divergente" not in saida and "conforme: 1 declaração(ões)" in saida
-    assert agente.portao_da_troca("revisor", com(REVISOR, modelo=GEMINI), REVISOR) == []
+    assert agente.portao_da_troca("revisor", com(REVISOR, modelo=SEGREGADO), REVISOR) == []
 
 
 def test_mesma_familia_ou_agente_novo_nao_troca_nada(mundo):
-    mundo.isolacao("jaiminho", ["FALHA"])
+    mundo.isolacao("quinzinho", ["FALHA"])
     assert agente.portao_da_troca("revisor", com(REVISOR, modelo={"familia": "claude", "versao": "opus"}), REVISOR) == []
-    assert agente.portao_da_troca("novo", com(REVISOR, modelo=GEMINI), None) == []
+    assert agente.portao_da_troca("novo", com(REVISOR, modelo=SEGREGADO), None) == []
 
 
 def _git(posto, *args):
@@ -398,25 +407,25 @@ def test_os_tres_ensaios_do_portao_com_git_de_verdade(mundo, capsys):
     agente.ato_projetar(False, None)
     capsys.readouterr()
 
-    def ensaio(slug, nova, conta_gemini=None):
-        if conta_gemini:
-            mundo.isolacao("jaiminho", conta_gemini)
+    def ensaio(slug, nova, conta_segregada=None):
+        if conta_segregada:
+            mundo.isolacao("quinzinho", conta_segregada)
         mundo.escreve(nova)
         rc = agente.ato_projetar(True, "HEAD")
         saida = capsys.readouterr().out
         _git(mundo.posto, "checkout", "--", "agentes")
         return rc, saida
 
-    # caso 1: troca para a conta jaiminho, que a última medição não deu conforme
-    rc, saida = ensaio("revisor", com(REVISOR, modelo=GEMINI, ligacoes=["consultado"]), ["ok", "FALHA"])
-    assert rc == 1 and "caso 1: revisor passa a rodar sob jaiminho" in saida
+    # caso 1: troca para a conta quinzinho, que a última medição não deu conforme
+    rc, saida = ensaio("revisor", com(REVISOR, modelo=SEGREGADO, ligacoes=["consultado"]), ["ok", "FALHA"])
+    assert rc == 1 and "caso 1: revisor passa a rodar sob quinzinho" in saida
     # caso 2: perna dado pessoal e o contexto passa do host para o provedor claude
     rc, saida = ensaio("varredor", com(base_varredor, modelo=REVISOR["modelo"], ligacoes=["consultado"],
                                        teto=REVISOR["teto"]))
     assert rc == 1 and "caso 2 — vai ao dono antes do merge" in saida
     # a troca entre contas admitidas, sem perna de dado pessoal, passa
     (mundo.posto / ".claude" / "agents" / "revisor.md").unlink()
-    rc, saida = ensaio("revisor", com(REVISOR, modelo=GEMINI, ligacoes=["consultado"]), ["ok", "ok"])
+    rc, saida = ensaio("revisor", com(REVISOR, modelo=SEGREGADO, ligacoes=["consultado"]), ["ok", "ok"])
     assert rc == 0 and "caso" not in saida and "divergente" not in saida
 
 
@@ -594,17 +603,60 @@ def test_prompt_acima_do_teto_medido_vira_aviso(mundo, ollama, pessoa, monkeypat
     assert "prompt_eval_count 14000 passou de 13000" in capsys.readouterr().err
 
 
-def test_gemini_ainda_nao_roda_e_sai_3_antes_de_abrir_sessao(mundo, pessoa, monkeypatch, capsys):
-    mundo.isolacao("jaiminho", ["ok"])
+STUB_AGY = """#!{py}
+import json, os, sys
+open(os.environ["STUB_LOG"], "a").write(json.dumps({{"verbo": "agy", "argv": sys.argv[1:], "cwd": os.getcwd()}}) + "\\n")
+if os.environ.get("STUB_AGY_FALHA"):
+    print("Error: You are not logged into Antigravity.", file=sys.stderr)
+    sys.exit(1)
+print(json.dumps({{"conversation_id": "c-1", "status": "SUCCESS", "response": "veredito: 0 — x@y\\n", "num_turns": 4,
+                   "usage": {{"input_tokens": 900, "output_tokens": 30, "thinking_tokens": 10, "cache_read_tokens": 100}}}}))
+"""
+
+
+@pytest.fixture
+def agy(tmp_path, monkeypatch):
+    _stub(tmp_path, "agy", STUB_AGY)
+    monkeypatch.setenv("PF_AGY_BIN", str(tmp_path / "agy"))
+    monkeypatch.delenv("STUB_AGY_FALHA", raising=False)
+
+
+def test_gemini_roda_pelo_agy_na_conta_de_producao_so_leitura(mundo, agy, pessoa, monkeypatch, capsys):
+    """#4093: o avaliador Gemini roda pelo `agy -p` sob claudinho, sem isolação de conta a conferir."""
+    mundo.escreve(com(REVISOR, slug="avaliador", modelo=GEMINI, ligacoes=["consultado"]))
+    assert roda(monkeypatch, "avaliador", tarefa="leia o documento", como_json=True) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["conta"] == "claudinho" and out["retorno"].startswith("veredito: 0")
+    assert out["uso"]["entrada"] == 1000 and out["uso"]["saida"] == 40 and out["uso"]["conversa_agy"] == "c-1"
+    (chamada,) = [c for c in mundo.chamadas() if c["verbo"] == "agy"]
+    argv = chamada["argv"]
+    assert argv[argv.index("--mode") + 1] == "plan" and "--sandbox" in argv, "o agente não escreve"
+    assert argv[argv.index("--output-format") + 1] == "json"
+    (prompt,) = [a for a in argv if a.startswith("--print=")]
+    assert "LENTE-PERSONA" in prompt and prompt.endswith("leia o documento"), "a lente vai antes da tarefa"
+    assert "agente-agy-" in chamada["cwd"], "pasta vazia: sem AGENTS.md de quem chamou"
+    abrir = [c for c in mundo.chamadas() if c["verbo"] == "sessao" and c["argv"][0] == "abrir"]
+    assert abrir and abrir[0]["argv"][abrir[0]["argv"].index("--conta") + 1] == "claudinho"
+
+
+def test_gemini_que_falha_sai_5_e_diz_o_motivo(mundo, agy, pessoa, monkeypatch, capsys):
+    monkeypatch.setenv("STUB_AGY_FALHA", "1")
+    mundo.escreve(com(REVISOR, slug="avaliador", modelo=GEMINI, ligacoes=["consultado"]))
+    assert roda(monkeypatch, "avaliador") == 5
+    assert "not logged into Antigravity" in capsys.readouterr().err
+
+
+def test_gemini_sem_agy_na_conta_sai_3(mundo, pessoa, monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("PF_AGY_BIN", str(tmp_path / "nao-existe"))
     mundo.escreve(com(REVISOR, slug="avaliador", modelo=GEMINI, ligacoes=["consultado"]))
     assert roda(monkeypatch, "avaliador") == 3
-    assert "é da ti" in capsys.readouterr().err and mundo.chamadas() == []
+    assert "agy não está instalado" in capsys.readouterr().err
 
 
 def test_conta_segregada_sem_isolacao_conforme_sai_4_antes_de_abrir_sessao(mundo, pessoa, monkeypatch, capsys):
-    mundo.escreve(com(REVISOR, slug="avaliador", modelo=GEMINI, ligacoes=["consultado"]))
+    mundo.escreve(com(REVISOR, slug="avaliador", modelo=SEGREGADO, ligacoes=["consultado"]))
     assert roda(monkeypatch, "avaliador") == 4
-    assert "jaiminho não está conforme" in capsys.readouterr().err and mundo.chamadas() == []
+    assert "quinzinho não está conforme" in capsys.readouterr().err and mundo.chamadas() == []
 
 
 def test_declaracao_fora_do_molde_nao_roda(mundo, pessoa, monkeypatch):
