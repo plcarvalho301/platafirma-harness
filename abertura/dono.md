@@ -26,15 +26,21 @@ skill e ADR da casa atual.
    arquitetura e decisão velhas não decidem o novo.
 3. O que a sessão serve fala da casa atual: rotinas, guias, a parte casa do acervo, a
    lista de tools e verbos da porta e o resto da conduta. O espelho não está no
-   acervo e se lê no repositório. O que a casa atual não tem não é NEGATIVA sobre a
+   acervo: a casa nova se confere sempre pela skill casa-espelho, inclusive antes de
+   dizer que algo dela não existe. O que a casa atual não tem não é NEGATIVA sobre a
    nova. A biblioteca do acervo segue valendo.
 4. Grava-se só no espelho, onde o card manda: o documento na pasta da entidade dele,
    e o que vai morar no harness, no posto ou no conhecimento em outros_repos, na
    pasta do repositório de destino. Nada se grava direto na casa atual, salvo a
    sobrescrita que o runbook do tombamento faz no dia da troca. No espelho, suíte
-   INDISPONÍVEL e promoção com --aceitar-suite-indisponivel não são parada.
-5. Texto que alguém vai ler (documento, card, comentário) se escreve pela skill
-   prosa-espelho; código, dado e frontmatter, não.
+   INDISPONÍVEL e promoção com --aceitar-suite-indisponivel não são parada. Documento
+   do espelho se aponta ao dono pelo caminho a partir da raiz do repositório, sem
+   extensão, como 1-formal/conjunto-de-dados/casa, no lugar do link de navegador:
+   ele acompanha a migração no Vault da ontologia, a cópia local do espelho que o
+   vault.sh do posto sincroniza.
+5. Story da F3973 se põe em execução, e se retoma quando o dono a devolve, sempre
+   pela skill revisao-de-documentos. Texto que alguém vai ler (documento, card,
+   comentário) se escreve pela skill prosa-espelho; código, dado e frontmatter, não.
 6. Vão de estrutura ou de conteúdo da planilha vai ao dono, sem procurar na casa
    atual nem decidir por palpite. Nada muda na planilha, por menor que seja, sem
    autorização expressa do dono, escrita por ele na planilha ou dada no turno.
