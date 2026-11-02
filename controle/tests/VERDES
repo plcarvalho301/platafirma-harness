@@ -305,3 +305,6 @@ tests/test_curar_faixas_modelo.py | bin/curar
 # Card #4046: `acervo ler casa forma` (a forma da classe lida do catálogo: 0 com seções, 3 canônica, coberta por ou sem forma,
 # 2 classe ou suporte desconhecido com o vizinho; o seletor --suporte pela ficha e pela linha de casa), consulta injetada.
 tests/test_casa_forma.py | bin/acervo
+# Pedido 20261102T091653-dados: `infra pecas | rodar` (peça não declarada sai 4; caminho da peça diferente de origin/main ou solto
+# fora do git sai 4; mudança fora dos caminhos não trava; a peça recebe o banco do cofre e o verbo não o imprime), num git de mentira.
+testes/test_infra_rodar_peca.py | bin/infra bin/_infra/** bin/_acervo/exportar registro/pecas.json
