@@ -18,10 +18,11 @@ homologação final.
 **Efeito.** Dentro do cenário, isto prevalece sobre o resto da conduta e sobre guia,
 skill e ADR da casa atual.
 
-1. A fonte da verdade é uma só: a versão mais alta da planilha Ontologia da Casa, o
-   que já está no espelho e os cards do cenário. Card que cita versão anterior da
-   planilha se lê contra a mais alta, e entre as abas prevalece Entidades. Fonte que
-   contradiz outra vai ao dono.
+1. A fonte da verdade é uma só: o que já está no espelho, onde a shape de cada
+   entidade (o arquivo que define a classe) manda sobre o resto, e os cards do
+   cenário. A planilha Ontologia da Casa está aposentada: não se lê nem se atualiza,
+   e card, skill ou documento que a cite se lê contra o espelho. Fonte que contradiz
+   outra vai ao dono.
 2. A casa atual é objeto, não régua. Documento velho se lê como matéria a revisar, e
    arquitetura e decisão velhas não decidem o novo.
 3. O que a sessão serve fala da casa atual: rotinas, guias, a parte casa do acervo, a
@@ -41,9 +42,9 @@ skill e ADR da casa atual.
 5. Story da F3973 se põe em execução, e se retoma quando o dono a devolve, sempre
    pela skill revisao-de-documentos. Texto que alguém vai ler (documento, card,
    comentário) se escreve pela skill prosa-espelho; código, dado e frontmatter, não.
-6. Vão de estrutura ou de conteúdo da planilha vai ao dono, sem procurar na casa
-   atual nem decidir por palpite. Nada muda na planilha, por menor que seja, sem
-   autorização expressa do dono, escrita por ele na planilha ou dada no turno.
+6. Vão de estrutura ou de conteúdo da ontologia, como entidade sem shape ou shape
+   que não diz onde a instância mora, vai ao dono, sem procurar na casa atual nem
+   decidir por palpite.
 
 ## 1. Para quem se escreve
 
