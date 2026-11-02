@@ -737,7 +737,8 @@ def chama_ollama(decl: dict, sistema: str, tarefa: str) -> dict:
 #  - --disallowedTools nega, pelo nome do servidor, os conectores do claude.ai que não são a porta, e a tool de porta
 #    fora da declaração, nas três grafias.
 # Fora, medido: --disable-slash-commands tira a porta junto com as skills (no ar em d38815f, revertido); --tools com
-# lista explícita, allowedMcpServers e --strict-mcp-config também (0b6c167, fa839ed, a937727); --bare não usa o
+# lista explícita também, mesmo com o ToolSearch nela (78d7d51, sobre esta combinação); allowedMcpServers e
+# --strict-mcp-config também (0b6c167, fa839ed, a937727); --bare não usa o
 # login da assinatura; --setting-sources sem `user` tira o hook porta-sessao; --no-session-persistence apaga o
 # transcript da medida.
 SEM_ARRANQUE = {"CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1"}
@@ -764,9 +765,7 @@ def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
         raise Falha(3, str(e))
     argv = [bin_claude, "-p", "--model", decl["modelo"]["versao"], "--output-format", "json",
             "--max-turns", str(t["turnos"]), "--append-system-prompt", sistema,
-            "--disallowedTools", ",".join(negadas_do_agente(decl)),
-            # as embutidas da declaração e o ToolSearch, pelo qual a porta deferida entra (#4083, janela 4)
-            "--tools", ",".join([*(f for f in decl["ferramentas"] or [] if not f.startswith("mcp__")), "ToolSearch"])]
+            "--disallowedTools", ",".join(negadas_do_agente(decl))]
     if decl["ferramentas"]:
         argv += ["--allowedTools", ",".join(g for f in decl["ferramentas"] for g in grafias(f))]
     p = _roda(argv, stdin=tarefa, env={"DISABLE_AUTOUPDATER": "1", **SEM_ARRANQUE}, timeout=t.get("segundos", 900))
