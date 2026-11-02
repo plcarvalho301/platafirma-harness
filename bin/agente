@@ -731,44 +731,6 @@ def chama_ollama(decl: dict, sistema: str, tarefa: str) -> dict:
     return {"retorno": texto, "uso": {"entrada": entrada, "saida": saida}, "aviso": aviso}
 
 
-# O ambiente da conta fica fora do agente (#4083): na janela, só a lente, a tarefa, as tools da declaração e a porta.
-# Medido em 02/11/2026 pelo verbo: sem corte, o `claude -p` levava o CLAUDE.md da conta (abre sessão como fabrica),
-# 35 skills, 21 tools embutidas e 60 tools MCP de quatro conectores do claude.ai; sem a lente, o modelo seguia o
-# arranque da conta e gastava 8 turnos e 154 mil tokens num «ok». Um corte por peça:
-#  - CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 tira o CLAUDE.md da conta e o do diretório;
-#  - --tools <embutidas da declaração + ToolSearch> tira as outras embutidas. O ToolSearch fica: no `claude -p` os
-#    conectores do claude.ai conectam depois do início e chegam deferidos; sem ele, a porta não entrou na janela
-#    (medido no ar em 0b6c167 e fa839ed, os dois revertidos);
-#  - --disable-slash-commands tira as skills;
-#  - --disallowedTools nega, pelo nome do servidor, os outros conectores do claude.ai, e a tool de porta fora da
-#    declaração, nas três grafias.
-# Fora, medido: --bare não usa o login da assinatura; --strict-mcp-config tira os conectores do claude.ai, a porta
-# junto; --setting-sources sem `user` tira o hook porta-sessao; --no-session-persistence apaga o transcript da medida.
-# Os conectores da conta claude.ai que não são a porta, pelo prefixo medido em 02/11/2026. Conector novo na conta
-# entra aqui, senão chega à janela do agente.
-CONECTORES_DE_FORA = ("mcp__claude_ai_Claude_Docs", "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Google_Sheets")
-BUSCA_DE_TOOL = "ToolSearch"
-SEM_ARRANQUE = {"CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1"}
-
-
-def corte_do_ambiente(decl: dict) -> list[str]:
-    """As flags que tiram do `claude -p` o que não é lente, tarefa, tools da declaração e porta (#4083)."""
-    ferramentas = list(decl["ferramentas"] or [])
-    porta = tools_do_conector()
-    if porta is None:
-        raise Falha(3, "as tools da porta não vieram (acervo listar ferramental --tools): sem a lista, o agente "
-                       "levaria a porta inteira, fora da declaração")
-    fora = sorted(porta - set(ferramentas))
-    negadas = [*PROIBIDAS, *FORA_DO_AGENTE, *CONECTORES_DE_FORA, *(g for t in fora for g in grafias(t))]
-    embutidas = [f for f in ferramentas if not f.startswith("mcp__")]
-    argv = ["--tools", ",".join([*embutidas, BUSCA_DE_TOOL]),
-            "--disable-slash-commands",
-            "--disallowedTools", ",".join(negadas)]
-    if ferramentas:
-        argv += ["--allowedTools", ",".join(g for f in ferramentas for g in grafias(f))]
-    return argv
-
-
 def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
     t = decl["teto"]
     try:
@@ -776,8 +738,11 @@ def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
     except claude_cli.ClaudeAusente as e:
         raise Falha(3, str(e))
     argv = [bin_claude, "-p", "--model", decl["modelo"]["versao"], "--output-format", "json",
-            "--max-turns", str(t["turnos"]), "--append-system-prompt", sistema, *corte_do_ambiente(decl)]
-    p = _roda(argv, stdin=tarefa, env={"DISABLE_AUTOUPDATER": "1", **SEM_ARRANQUE}, timeout=t.get("segundos", 900))
+            "--max-turns", str(t["turnos"]), "--append-system-prompt", sistema,
+            "--disallowedTools", ",".join(PROIBIDAS + FORA_DO_AGENTE)]
+    if decl["ferramentas"]:
+        argv += ["--allowedTools", ",".join(decl["ferramentas"])]
+    p = _roda(argv, stdin=tarefa, env={"DISABLE_AUTOUPDATER": "1"}, timeout=t.get("segundos", 900))
     try:
         obj = json.loads(p.stdout or "{}")
     except ValueError:
