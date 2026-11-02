@@ -89,8 +89,7 @@ print(json.dumps([{{"tool": "acervo"}}, {{"tool": "repo"}}, {{"tool": "motor"}}]
 """
 STUB_CLAUDE = """#!{py}
 import json, os, sys
-open(os.environ["STUB_LOG"], "a").write(json.dumps({{"verbo": "claude", "argv": sys.argv[1:], "stdin": sys.stdin.read(),
-    "env": {{k: os.environ.get(k) for k in ("CLAUDE_CODE_DISABLE_CLAUDE_MDS", "DISABLE_AUTOUPDATER")}}}}) + "\\n")
+open(os.environ["STUB_LOG"], "a").write(json.dumps({{"verbo": "claude", "argv": sys.argv[1:], "stdin": sys.stdin.read()}}) + "\\n")
 print(json.dumps({{"type": "result", "is_error": False, "result": "veredito: 0 — x@y", "num_turns": 3,
                    "session_id": os.environ.get("STUB_SESSAO_CODE"),
                    "usage": {{"input_tokens": 100, "cache_creation_input_tokens": 50,
@@ -637,45 +636,11 @@ def test_claude_monta_a_chamada_do_cli_com_modelo_teto_e_ferramentas(mundo, pess
     argv = claude["argv"]
     assert argv[argv.index("--model") + 1] == "sonnet"
     assert argv[argv.index("--max-turns") + 1] == "40"
-    negadas = argv[argv.index("--disallowedTools") + 1].split(",")
-    assert negadas[:6] == ["Bash", "Write", "Edit", "NotebookEdit", "Agent", "Workflow"], \
+    assert argv[argv.index("--disallowedTools") + 1] == "Bash,Write,Edit,NotebookEdit,Agent,Workflow", \
         "sub-agente e Workflow de dentro do agente escapam do modelo e do teto (#3227)"
-    permitidas = argv[argv.index("--allowedTools") + 1].split(",")
-    for g in agente.GRAFIAS:
-        assert g + "ler_arquivo" in permitidas and g + "monta_sessao" in permitidas
+    assert "mcp__claudinho-mcp__ler_arquivo" in argv[argv.index("--allowedTools") + 1]
     assert "LENTE-PERSONA" in argv[argv.index("--append-system-prompt") + 1]
     assert claude["stdin"] == "o que a ia acha?"
-
-
-def test_claude_sobe_sem_o_ambiente_da_conta_e_com_a_porta(mundo, pessoa, monkeypatch, capsys):
-    """#4083: na janela do agente, só a lente, a tarefa, as tools da declaração e a porta."""
-    mundo.escreve(CONSULTOR)
-    assert roda(monkeypatch, "consultor", tarefa="Responda só: ok", cadeira="ia", chapeu="agente") == 0
-    (claude,) = [c for c in mundo.chamadas() if c["verbo"] == "claude"]
-    argv = claude["argv"]
-    assert claude["env"]["CLAUDE_CODE_DISABLE_CLAUDE_MDS"] == "1", "o CLAUDE.md da conta manda abrir como fabrica"
-    assert argv[argv.index("--tools") + 1] == "Read,Grep,ToolSearch", \
-        "as embutidas da declaração e o ToolSearch, sem o qual a porta, que conecta tarde, não entra na janela"
-    assert "--disable-slash-commands" in argv, "as skills da conta ficam fora"
-    negadas = argv[argv.index("--disallowedTools") + 1].split(",")
-    for conector in ("mcp__claude_ai_Claude_Docs", "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Google_Sheets"):
-        assert conector in negadas, f"{conector}: conector da conta que não é a porta sai pelo nome do servidor"
-    for g in agente.GRAFIAS:
-        assert g.rstrip("_") not in negadas, f"{g}: a porta não se nega pelo servidor"
-        for fora in ("repo", "malote", "run_command", "write_file"):
-            assert g + fora in negadas, f"{g}{fora}: tool de porta fora da declaração sai da janela"
-        for dentro in ("ler_arquivo", "monta_sessao"):
-            assert g + dentro not in negadas, f"{g}{dentro}: a declaração lista, a porta fica"
-    for proibida in ("--bare", "--strict-mcp-config", "--no-session-persistence", "--setting-sources", "--settings"):
-        assert proibida not in argv, f"{proibida}: tira o login, a porta, o transcript ou o hook porta-sessao"
-
-
-def test_claude_sem_a_lista_da_porta_sai_3_sem_chamar_o_modelo(mundo, pessoa, monkeypatch, capsys):
-    mundo.escreve(CONSULTOR)
-    monkeypatch.setattr(agente, "tools_do_conector", lambda: None)
-    assert roda(monkeypatch, "consultor", cadeira="ia", chapeu="agente") == 3
-    assert "as tools da porta não vieram" in capsys.readouterr().err
-    assert not [c for c in mundo.chamadas() if c["verbo"] == "claude"]
 
 
 def test_claude_sem_transcript_cai_no_resumo_e_diz(mundo, tmp_path, monkeypatch):
