@@ -1,0 +1,15 @@
+{
+  "_sobre": "Peças de código que `infra rodar <peca>` executa (bin/_infra/rodar-peca). Só roda o que está aqui: declarar é PR neste arquivo. origem=espelho roda o código da bancada da sessão no repositório nomeado, e só se os caminhos da peça forem iguais a origin/main (commit e sincronizar antes); origem=release roda a árvore da release no ar. python=rag é o venv do rag da release. ambiente=banco-rag dá o banco do acervo pelo cofre, sem imprimir a credencial. A peça é `python -m <modulo> <args>` com cwd e PYTHONPATH relativos à raiz do repositório.",
+  "casa": {
+    "dono": "dados",
+    "origem": "espelho",
+    "repo": "platafirma-casa-espelho",
+    "cwd": "outros_repos/conhecimento/rag",
+    "modulo": "motor_acervo.casa",
+    "pythonpath": ["outros_repos/conhecimento/rag", "outros_repos/conhecimento/conversor"],
+    "python": "rag",
+    "ambiente": "banco-rag",
+    "teto_s": 600,
+    "motivo": "S4061: portão, carregador, resolução de chave e conferência do schema casa, contra o banco do acervo"
+  }
+}
