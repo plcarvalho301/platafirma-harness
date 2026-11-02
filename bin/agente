@@ -731,6 +731,13 @@ def chama_ollama(decl: dict, sistema: str, tarefa: str) -> dict:
     return {"retorno": texto, "uso": {"entrada": entrada, "saida": saida}, "aviso": aviso}
 
 
+# O arranque da conta fica fora do agente (#4083): o ~/.claude/CLAUDE.md da conta claudinho manda abrir sessão como
+# fabrica e compete com a lente. Medido em 02/11/2026 pelo verbo: sem a lente, o modelo seguia o arranque e gastava
+# 8 turnos e 154 mil tokens num «ok». CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 no processo tira o CLAUDE.md da conta e o do
+# diretório, e não toca nos conectores nem no hook porta-sessao.
+SEM_ARRANQUE = {"CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1"}
+
+
 def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
     t = decl["teto"]
     try:
@@ -742,7 +749,7 @@ def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
             "--disallowedTools", ",".join(PROIBIDAS + FORA_DO_AGENTE)]
     if decl["ferramentas"]:
         argv += ["--allowedTools", ",".join(decl["ferramentas"])]
-    p = _roda(argv, stdin=tarefa, env={"DISABLE_AUTOUPDATER": "1"}, timeout=t.get("segundos", 900))
+    p = _roda(argv, stdin=tarefa, env={"DISABLE_AUTOUPDATER": "1", **SEM_ARRANQUE}, timeout=t.get("segundos", 900))
     try:
         obj = json.loads(p.stdout or "{}")
     except ValueError:

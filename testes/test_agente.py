@@ -89,7 +89,8 @@ print(json.dumps([{{"tool": "acervo"}}, {{"tool": "repo"}}, {{"tool": "motor"}}]
 """
 STUB_CLAUDE = """#!{py}
 import json, os, sys
-open(os.environ["STUB_LOG"], "a").write(json.dumps({{"verbo": "claude", "argv": sys.argv[1:], "stdin": sys.stdin.read()}}) + "\\n")
+open(os.environ["STUB_LOG"], "a").write(json.dumps({{"verbo": "claude", "argv": sys.argv[1:], "stdin": sys.stdin.read(),
+    "env": {{k: os.environ.get(k) for k in ("CLAUDE_CODE_DISABLE_CLAUDE_MDS", "DISABLE_AUTOUPDATER")}}}}) + "\\n")
 print(json.dumps({{"type": "result", "is_error": False, "result": "veredito: 0 — x@y", "num_turns": 3,
                    "session_id": os.environ.get("STUB_SESSAO_CODE"),
                    "usage": {{"input_tokens": 100, "cache_creation_input_tokens": 50,
@@ -641,6 +642,17 @@ def test_claude_monta_a_chamada_do_cli_com_modelo_teto_e_ferramentas(mundo, pess
     assert "mcp__claudinho-mcp__ler_arquivo" in argv[argv.index("--allowedTools") + 1]
     assert "LENTE-PERSONA" in argv[argv.index("--append-system-prompt") + 1]
     assert claude["stdin"] == "o que a ia acha?"
+
+
+def test_claude_sobe_sem_o_arranque_da_conta_e_com_a_porta(mundo, pessoa, monkeypatch, capsys):
+    """#4083: o CLAUDE.md da conta manda abrir como fabrica e compete com a lente; sai pelo ambiente do processo."""
+    mundo.escreve(CONSULTOR)
+    assert roda(monkeypatch, "consultor", tarefa="Responda só: ok", cadeira="ia", chapeu="agente") == 0
+    (claude,) = [c for c in mundo.chamadas() if c["verbo"] == "claude"]
+    assert claude["env"]["CLAUDE_CODE_DISABLE_CLAUDE_MDS"] == "1", "o CLAUDE.md da conta manda abrir como fabrica"
+    argv = claude["argv"]
+    for proibida in ("--bare", "--strict-mcp-config", "--no-session-persistence", "--setting-sources", "--settings"):
+        assert proibida not in argv, f"{proibida}: tira o login, a porta, o transcript ou o hook porta-sessao"
 
 
 def test_claude_sem_transcript_cai_no_resumo_e_diz(mundo, tmp_path, monkeypatch):
