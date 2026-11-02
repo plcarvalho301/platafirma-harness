@@ -1184,6 +1184,27 @@ abrir_direto_em_main() {
   return 0
 }
 
+# ingere_a_casa_nova <repo> -- depois que main do repositório da casa nova anda, a ingestão abre ou atualiza as fichas
+# do schema casa, na sessão e com a identidade de quem sincronizou (card #4064): a peça casa do infra, ato ingerir. O
+# push já está feito e não se desfaz: ingestão que falha só avisa, com o comando que a roda de novo. Outro repositório
+# passa direto.
+ingere_a_casa_nova() {
+  local nome="${1%%@*}" infra rc
+  case "$nome" in platafirma-casa-espelho|platafirma-casa) ;; *) return 0 ;; esac
+  infra="$(dirname "$(readlink -f "$0")")/infra"
+  if [ ! -x "$infra" ]; then
+    printf '%s: aviso: sem %s, a ingestão da casa nova não rodou — rode infra rodar casa -- ingerir --apply\n' "$VERBO" "$infra" >&2
+    return 0
+  fi
+  printf 'ingestão da casa nova:\n'
+  "$infra" rodar casa -- ingerir --apply 2>&1 | sed 's/^/  /'
+  rc="${PIPESTATUS[0]}"
+  if [ "$rc" -ne 0 ]; then
+    printf '%s: aviso: a ingestão da casa nova saiu %s; main já está no forge — rode infra rodar casa -- ingerir --apply\n' "$VERBO" "$rc" >&2
+  fi
+  return 0
+}
+
 # sincronizar_direto_em_main <repo> <worktree> -- o sincronizar do regime direto em main:
 # busca o forge (falhou: 5) -> arvore suja: 4, vizinho commitar -> nada local: anda em
 # fast-forward, "já em dia" -> rebase sobre origin/main (conflito: aborta, bancada intacta,
@@ -1235,6 +1256,7 @@ sincronizar_direto_em_main() {
   if [ "$rc" -eq 0 ] && [ "$fsha" = "$head" ]; then
     printf 'sincronizado: main = %s (%s commit(s) de %s%s); origin/main = %s [lido do forge]\n' \
       "${head:0:7}" "$frente" "$ramo" "$([ "$novos" -gt 0 ] && printf ', rebaseado sobre origin/main %s' "${main:0:7}")" "${fsha:0:7}"
+    ingere_a_casa_nova "$nome"
     return 0
   fi
   [ "$rc" -eq 5 ] && morre "indeterminavel: empurrei? o forge nao respondeu ($fsha)" 5
