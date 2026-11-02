@@ -764,7 +764,9 @@ def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
         raise Falha(3, str(e))
     argv = [bin_claude, "-p", "--model", decl["modelo"]["versao"], "--output-format", "json",
             "--max-turns", str(t["turnos"]), "--append-system-prompt", sistema,
-            "--disallowedTools", ",".join(negadas_do_agente(decl))]
+            "--disallowedTools", ",".join(negadas_do_agente(decl)),
+            # as embutidas da declaração e o ToolSearch, pelo qual a porta deferida entra (#4083, janela 4)
+            "--tools", ",".join([*(f for f in decl["ferramentas"] or [] if not f.startswith("mcp__")), "ToolSearch"])]
     if decl["ferramentas"]:
         argv += ["--allowedTools", ",".join(g for f in decl["ferramentas"] for g in grafias(f))]
     p = _roda(argv, stdin=tarefa, env={"DISABLE_AUTOUPDATER": "1", **SEM_ARRANQUE}, timeout=t.get("segundos", 900))
