@@ -2810,8 +2810,18 @@ def _grava_resultado(caminho: Path, r: dict) -> None:
         print(f"[prazo] resultado {caminho} nao gravado: {e!r}", file=sys.stderr, flush=True)
 
 
+def _chave_da_chamada(stdin: str | None, ident: dict) -> str:
+    """O que distingue uma chamada de outra com a mesma linha de comando (#4097): a entrada
+    e a sessao. Duas chamadas so se anexam quando as tres coisas batem."""
+    h = hashlib.sha256()
+    h.update((ident.get("sessao_id") or "-").encode())
+    h.update(b"\0")
+    h.update(b"\1" if stdin is None else stdin.encode())
+    return h.hexdigest()[:32]
+
+
 def _segue_apos_prazo(p: subprocess.Popen, argv: list, timeout: int, t0: float, ident: dict,
-                      d_cwd: Path) -> dict:
+                      d_cwd: Path, chave: str = "") -> dict:
     """O verbo passou do prazo da chamada: segue rodando, e esta chamada devolve onde o
     retorno final vai estar. Quem espera e uma thread daemon, fora do limitador do anyio."""
     rid = uuid.uuid4().hex[:12]
@@ -2819,7 +2829,8 @@ def _segue_apos_prazo(p: subprocess.Popen, argv: list, timeout: int, t0: float, 
     slug = Path(argv[0]).name
     linha = " ".join([slug] + [str(a) for a in argv[1:]])[:CMD_CAP]
     inicio = datetime.now().astimezone().isoformat(timespec="seconds")
-    base = {"id": rid, "verbo": linha, "inicio": inicio, "timeout": timeout, "cwd": str(d_cwd)}
+    base = {"id": rid, "verbo": linha, "chave": chave, "inicio": inicio, "timeout": timeout,
+            "cwd": str(d_cwd)}
     _grava_resultado(caminho, {"em_andamento": True, **base, "pid": p.pid})
 
     def _espera():
@@ -2895,7 +2906,7 @@ def _timeout_com_piso(argv: list, timeout: int) -> int:
     return max(timeout, TIMEOUT_PISO.get((slug, ato), 0))
 
 
-def _busca_em_andamento(linha: str, d_cwd: Path) -> tuple[Path, dict] | None:
+def _busca_em_andamento(linha: str, d_cwd: Path, chave: str = "") -> tuple[Path, dict] | None:
     try:
         arquivos = list(RESULTADO_DIR.glob("*.json"))
     except OSError:
@@ -2907,7 +2918,8 @@ def _busca_em_andamento(linha: str, d_cwd: Path) -> tuple[Path, dict] | None:
             continue
         if not isinstance(d, dict) or not d.get("em_andamento"):
             continue
-        if d.get("verbo") == linha and d.get("cwd") == str(d_cwd):
+        if (d.get("verbo") == linha and d.get("cwd") == str(d_cwd)
+                and d.get("chave", "") == chave):
             pid = d.get("pid")
             if pid and isinstance(pid, int):
                 try:
@@ -2939,7 +2951,13 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
     d_cwd = CASA if CASA.is_dir() else Path.cwd()
     slug = Path(argv[0]).name
     linha = " ".join([slug] + [str(a) for a in argv[1:]])[:CMD_CAP]
-    andamento = _busca_em_andamento(linha, d_cwd)
+    # Defesa extra (#3124): quem chega aqui deveria vir normalizado dos pontos de
+    # entrada (_stdin_texto na tool, no lote, em _item_de_lote) — mas se nao veio, nao
+    # estoura no .encode() de um dict/list. Normaliza antes da chave (#4097).
+    if stdin is not None and not isinstance(stdin, str):
+        stdin = _stdin_texto(stdin)
+    chave = _chave_da_chamada(stdin, ident)
+    andamento = _busca_em_andamento(linha, d_cwd, chave)
     if andamento is not None:
         caminho_andamento, d_andamento = andamento
         rid = d_andamento.get("id") or caminho_andamento.stem
@@ -2950,10 +2968,16 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
             try:
                 atual = json.loads(caminho_andamento.read_text(encoding="utf-8"))
                 if not atual.get("em_andamento"):
+                    # O fim do verbo anexado volta como ele saiu: erro e interrupcao nao viram
+                    # exit 0 com saida vazia (#4097).
+                    vazio = {"texto": "", "truncado": False, "bytes_total": 0}
+                    if atual.get("erro") or atual.get("interrompido"):
+                        return {k: atual[k] for k in ("erro", "interrompido", "motivo", "id")
+                                if k in atual} | {"cwd": str(d_cwd)}
                     return {
                         "exit_code": atual.get("exit_code", 0),
-                        "stdout": atual.get("stdout", {"texto": "", "truncado": False, "bytes_total": 0}),
-                        "stderr": atual.get("stderr", {"texto": "", "truncado": False, "bytes_total": 0}),
+                        "stdout": atual.get("stdout", vazio),
+                        "stderr": atual.get("stderr", vazio),
                         "cwd": str(d_cwd),
                     }
             except (OSError, ValueError):
@@ -2976,11 +3000,6 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
                              start_new_session=True)
     except OSError as e:
         return {"erro": str(e), "cwd": str(d_cwd)}
-    # Defesa extra (#3124): quem chega aqui deveria vir normalizado dos pontos de
-    # entrada (_stdin_texto na tool, no lote, em _item_de_lote) — mas se nao veio, nao
-    # estoura no .encode() de um dict/list.
-    if stdin is not None and not isinstance(stdin, str):
-        stdin = _stdin_texto(stdin)
     t0 = time.monotonic()
     espera = timeout if prazo is None or prazo >= timeout else max(0.0, prazo)
     try:
@@ -2988,7 +3007,7 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
                                        timeout=espera)
     except subprocess.TimeoutExpired:
         if espera < timeout:
-            return _segue_apos_prazo(p, argv, timeout, t0, ident, d_cwd)
+            return _segue_apos_prazo(p, argv, timeout, t0, ident, d_cwd, chave)
         try:
             os.killpg(os.getpgid(p.pid), signal.SIGKILL)
         except ProcessLookupError:
