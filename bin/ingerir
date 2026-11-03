@@ -799,11 +799,11 @@ def main():
         "itens": itens,
     }
 
-    # O conversor é sob demanda (#4026): o lote que grava o liga antes, porque o plano e o aplicar leem
-    # a ficha de cada arquivo nele. O timer conversor-ocioso o desliga depois; falhar aqui não barra o lote.
-    if args.apply:
-        subprocess.run(["bash", os.path.join(HARNESS_DIR, "bin", "_infra", "conversor-sob-demanda"), "acordar"],
-                       check=False)
+    # O conversor é sob demanda (#4026): o lote o liga antes, com ou sem --apply, porque o plano e o
+    # aplicar leem a ficha de cada arquivo nele; com o conversor fora, o plano esperava até o prazo da
+    # porta (#4106). O timer conversor-ocioso o desliga depois; falhar aqui não barra o lote.
+    subprocess.run(["bash", os.path.join(HARNESS_DIR, "bin", "_infra", "conversor-sob-demanda"), "acordar"],
+                   check=False)
 
     try:
         resp = requests.post(f"{BASE}/acervo/lotes", json=payload, headers=headers)
