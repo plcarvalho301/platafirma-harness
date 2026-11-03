@@ -609,6 +609,10 @@ open(os.environ["STUB_LOG"], "a").write(json.dumps({{"verbo": "agy", "argv": sys
 if os.environ.get("STUB_AGY_FALHA"):
     print("Error: You are not logged into Antigravity.", file=sys.stderr)
     sys.exit(1)
+if os.environ.get("STUB_AGY_CALADO"):
+    print("Waiting for approval to continue", file=sys.stderr, flush=True)
+    __import__("time").sleep(20)
+    sys.exit(1)
 def passo(**k):
     print(json.dumps({{"event": "step_update", "step_update": {{"conversation_id": "c-1", **k}}}}), flush=True)
 print(json.dumps({{"event": "init", "conversation_id": "c-1", "init": {{}}}}), flush=True)
@@ -675,6 +679,25 @@ def test_gemini_que_falha_sai_5_e_diz_o_motivo(mundo, agy, pessoa, monkeypatch, 
     mundo.escreve(com(REVISOR, slug="avaliador", modelo=GEMINI, ligacoes=["consultado"]))
     assert roda(monkeypatch, "avaliador") == 5
     assert "not logged into Antigravity" in capsys.readouterr().err
+
+
+def test_gemini_calado_e_cortado_pelo_silencio_dentro_do_teto(mundo, agy, pessoa, monkeypatch, capsys):
+    """#4098: o agy sem saida bloqueava a leitura e nenhum corte rodava, ate a porta matar aos 600 s. O verbo
+    corta no silencio, sai 5 e diz o que o agy escreveu no stderr."""
+    import time
+    monkeypatch.setenv("STUB_AGY_CALADO", "1")
+    monkeypatch.setattr(agente, "SILENCIO_AGY_S", 1, raising=False)
+    mundo.escreve(com(REVISOR, slug="avaliador", modelo=GEMINI, ligacoes=["consultado"]))
+    inicio = time.monotonic()
+    assert roda(monkeypatch, "avaliador") == 5
+    assert time.monotonic() - inicio < 10, "o corte e do verbo, nao do fim do dublê"
+    err = capsys.readouterr().err
+    assert "sem saída do agy por 1s" in err and "Waiting for approval" in err
+
+
+def test_teto_de_tempo_padrao_do_agy_cabe_antes_do_prazo_da_chamada():
+    """#4098: o padrao era 900 s, acima dos 600 s do prazo da chamada: a porta matava o agente antes do corte."""
+    assert agente.SEGUNDOS_AGY_PADRAO + 30 < 600
 
 
 def test_gemini_sem_agy_na_conta_sai_3(mundo, pessoa, monkeypatch, tmp_path, capsys):
