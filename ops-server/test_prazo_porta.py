@@ -108,6 +108,44 @@ def test_repetir_chamada_em_andamento_anexa_em_vez_de_duplicar(resultado_dir):
     assert r3["stdout"]["texto"] == "fim_anexo\n"
 
 
+def test_mesma_linha_com_entrada_diferente_nao_anexa(resultado_dir):
+    # #4097: duas chamadas de `agente rodar` com a mesma linha e stdin diferente; a segunda
+    # recebia o retorno da primeira e o modelo nunca rodava para ela.
+    pasta, _ = resultado_dir
+    portao = pasta / "liberar3"
+    espera = 'while [ ! -e "$1" ]; do sleep 0.02; done; cat'
+    cmd = ["sh", "-c", espera, "sh", str(portao)]
+    r1 = s._run_verbo_blocking(cmd, "story A", 10, IDENT, 0.2)
+    r2 = s._run_verbo_blocking(cmd, "story B", 10, IDENT, 0.2)
+    assert r1.get("em_andamento") is True and r2.get("em_andamento") is True
+    assert r2["id"] != r1["id"]
+    portao.touch()
+    assert _espera_fim(Path(r1["resultado"]))["stdout"]["texto"] == "story A"
+    assert _espera_fim(Path(r2["resultado"]))["stdout"]["texto"] == "story B"
+
+
+def test_mesma_linha_em_outra_sessao_nao_anexa(resultado_dir):
+    pasta, _ = resultado_dir
+    portao = pasta / "liberar4"
+    cmd = ["sh", "-c", 'while [ ! -e "$1" ]; do sleep 0.02; done; echo fim', "sh", str(portao)]
+    outra = {**IDENT, "sessao_id": "01209f6a-5bb0-4b58-9bfe-01b258569353"}
+    r1 = s._run_verbo_blocking(cmd, None, 10, IDENT, 0.2)
+    r2 = s._run_verbo_blocking(cmd, None, 10, outra, 0.2)
+    assert r2["id"] != r1["id"]
+    portao.touch()
+    _espera_fim(Path(r1["resultado"]))
+    _espera_fim(Path(r2["resultado"]))
+
+
+def test_anexada_a_chamada_que_morreu_devolve_o_erro(resultado_dir):
+    # #4097: a chamada anexada a um verbo morto pelo timeout voltava exit 0 com saida vazia.
+    r1 = s._run_verbo_blocking(["sh", "-c", "sleep 5"], None, 1, IDENT, 0.2)
+    assert r1["em_andamento"] is True
+    r2 = s._run_verbo_blocking(["sh", "-c", "sleep 5"], None, 3, IDENT, 5)
+    assert "timeout (1s)" in r2.get("erro", ""), r2
+    assert "exit_code" not in r2
+
+
 def test_timeout_pedido_menor_que_o_prazo_mata_como_antes(resultado_dir):
     r = s._run_verbo_blocking(["sh", "-c", "sleep 5"], None, 1, IDENT, 5)
     assert "timeout (1s)" in r["erro"]
