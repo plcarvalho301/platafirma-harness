@@ -125,6 +125,7 @@ def test_o_plano_de_uma_pasta_de_teste_mostra_a_ficha_de_cada_arquivo(monkeypatc
     monkeypatch.setenv("HOME", str(tmp_path))  # o manifesto do lote não vai para a bancada de verdade
     visto: dict = {}
     mod = _mod(monkeypatch, visto)
+    monkeypatch.setattr(mod.subprocess, "run", lambda argv, **_: visto.setdefault("acordar", argv))
     monkeypatch.setattr(sys, "argv", ["ingerir", "--lote", str(pasta)])
     with pytest.raises(SystemExit) as saida:
         mod.main()
@@ -138,3 +139,32 @@ def test_o_plano_de_uma_pasta_de_teste_mostra_a_ficha_de_cada_arquivo(monkeypatc
     assert "PDF 1.7 · 23p · 2 OCR" in linhas["livro.pdf"]
     # o cliente não manda formato: a ficha é lida pela rag-api nos bytes, não no que o cliente diz do nome
     assert all("formato" not in item and "tipo" not in item for item in visto["lote"]["itens"])
+
+
+def test_o_plano_sem_apply_acorda_o_conversor_antes_do_lote(monkeypatch, tmp_path, capsys):
+    """#4106: o plano lê a ficha no conversor, que é sob demanda (#4026). Sem acordá-lo, o POST do lote
+    esperava o conversor parado até o prazo da porta, até com um arquivo só."""
+    pasta = tmp_path / "lote"
+    pasta.mkdir()
+    (pasta / "livro.pdf").write_bytes(b"%PDF-1.7\n" + b"0" * 100)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    ordem: list[str] = []
+    visto: dict = {}
+    mod = _mod(monkeypatch, visto)
+    post_original = mod.requests.post
+
+    def post(url, **kw):
+        ordem.append("post")
+        return post_original(url, **kw)
+
+    def run(argv, **_):
+        ordem.append(" ".join(argv[-2:]))
+
+    monkeypatch.setattr(mod.requests, "post", post)
+    monkeypatch.setattr(mod.subprocess, "run", run)
+    monkeypatch.setattr(sys, "argv", ["ingerir", "--lote", str(pasta)])
+    with pytest.raises(SystemExit) as saida:
+        mod.main()
+    assert saida.value.code == 0
+    assert ordem[0].endswith("conversor-sob-demanda acordar"), ordem
+    assert ordem[1] == "post", ordem
