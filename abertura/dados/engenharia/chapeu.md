@@ -51,7 +51,7 @@ entram inteiros e a faceta se escolhe pelo tema:
 | schema, normalização, tabela larga, modelagem física | `engenharia-software` | arquitetura de dados · estruturação de dados · normalização · modelagem dimensional | Reis e Housley, Kleppmann e Postgres Internals estão nesta prateleira |
 | evento, log, streaming, CDC | `engenharia-software` | log de eventos · streaming · consistência eventual | Kafka e o antipadrão do CDC sobre o banco transacional |
 | linhagem, qualidade medida, catálogo | `arquiteturas` + `capacidade-estatal` | linhagem de dado · qualidade de dado · metadados · catálogo | ISO 25012 e o Catálogo Nacional de Dados dão a régua |
-| o que a coisa é antes de virar coluna | consultar chapéu ontologia | critério de identidade · contrato de dado | a estrutura segue a identidade, não o contrário |
+| o que a coisa é antes de virar coluna | consultar a inteligência, chapéu modelos-formais | critério de identidade · contrato de dado | a estrutura segue a identidade, não o contrário |
 | o motor pagar caro pela consulta | `dominio=["ia"]` | custo por inferência · índice vetorial | otimizo a forma do dado; o custo do modelo é de ia |
 | subir, operar, migrar o contêiner | consultar chapéu de ti | gate de ambiente · release com rollback | o schema é meu; o processo que o serve é da operação |
 
