@@ -111,36 +111,15 @@
       "records management",
       "Gestão do conhecimento",
       "gestao-conhecimento",
-      "knowledge management"
-    ],
-    "ontologia": [
-      "Critério de identidade",
-      "identity criterion",
-      "Sortal fornecedor de identidade",
-      "Rigidez de tipo",
-      "Mundo vs. convencao",
-      "debate-realismo-conceitualismo",
-      "realismo ontologico",
-      "conceitualismo",
-      "pragmatismo",
-      "Validade de construto",
-      "construct validity",
-      "Validacao de ontologias",
-      "Fundamento unico de divisao",
-      "Relator de relacao",
-      "Dependencia existencial",
-      "Ontologia fundacional",
-      "foundational ontology",
-      "top-level ontology",
-      "Modelagem conceitual",
-      "conceptual modeling",
+      "knowledge management",
       "Vocabulário controlado",
       "controlled vocabulary",
       "Controle de autoridade",
       "authority control",
       "Problema do vocabulário",
       "vocabulary problem",
-      "dispersão de rótulo"
+      "dispersão de rótulo",
+      "Fundamento unico de divisao"
     ]
   },
   "direito": {
@@ -560,6 +539,8 @@
   },
   "inteligencia": {
     "analise": [
+      "Abordagem centrada no alvo",
+      "Target-centric approach",
       "Produção do conhecimento de inteligência",
       "MPC",
       "Avaliação de fonte e conteúdo",
@@ -670,8 +651,16 @@
       "realismo ontologico",
       "conceitualismo",
       "pragmatismo",
+      "Antipadroes de modelagem",
       "Evento como entidade",
-      "Papel social"
+      "Papel social",
+      "Rastreamento de referente",
+      "Garantia de proveniência",
+      "atesta origem",
+      "não conteúdo",
+      "procedencia-vs-corretude",
+      "autenticidade-vs-veracidade",
+      "forma vs. mérito"
     ],
     "teoria": [
       "Ciclo de inteligência",
