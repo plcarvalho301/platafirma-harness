@@ -104,6 +104,17 @@ def test_mudanca_fora_dos_caminhos_da_peca_nao_trava(monkeypatch, tmp_path, banc
     assert mod.main(["rodar", "p"]) == 7
 
 
+def test_duas_chamadas_seguidas_nao_deixam_bytecode_na_bancada(monkeypatch, tmp_path, bancada):
+    """DT 456: o Python da peça gravava __pycache__ na bancada e a chamada seguinte saía 4
+    (arquivo fora do git). A peça roda sem gravar bytecode, e a segunda chamada sai como a primeira."""
+    monkeypatch.delenv("PYTHONDONTWRITEBYTECODE", raising=False)
+    mod = _modulo()
+    _prepara(mod, monkeypatch, tmp_path, bancada)
+    assert mod.main(["rodar", "p"]) == 7
+    assert mod.main(["rodar", "p"]) == 7
+    assert not list(bancada.rglob("__pycache__"))
+
+
 def test_uso_errado_sai_2():
     mod = _modulo()
     assert mod.main([]) == 2

@@ -154,6 +154,8 @@ def rodar(argv: list) -> int:
     elif ambiente:
         morre(f"peça {nome}: ambiente {ambiente!r} não servido (só banco-rag)", 3)
     env["PYTHONPATH"] = os.pathsep.join(str(raiz / c) for c in (p.get("pythonpath") or []))
+    # DT 456: o bytecode gravado na bancada fazia o gate recusar a chamada seguinte (fora do git).
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     cwd = raiz / (p.get("cwd") or ".")
     teto = int(p.get("teto_s") or TETO_PADRAO_S)
     sujeito = os.environ.get("PF_SUJEITO", "")
