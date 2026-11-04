@@ -929,3 +929,116 @@ def test_peca_mal_formada_sai_2_antes_de_abrir_sessao(mundo, ollama, pessoa, mon
     mundo.escreve(VARREDOR)
     assert _roda_com(monkeypatch, "varredor", [spec]) == 2
     assert mundo.chamadas() == [] and ollama.pedidos == []
+
+
+# --- o juiz sem lente e a imagem em linha (card #4115) -----------------------------------------
+
+JUIZ = com(REVISOR, slug="juiz", modo="avaliar", ligacoes=["consultado"], pecas=[], ferramentas=[],
+           teto={"turnos": 1, "tokens_execucao": 40000, "tokens_janela": 40000})
+PNG = b"\x89PNG\r\n\x1a\n" + b"x" * 16
+
+
+def _roda_anexo(monkeypatch, slug, anexos, tarefa="julgue isto", pecas=None):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(tarefa))
+    return agente.ato_rodar(slug, None, None, False, "consultado", pecas, anexos)
+
+
+def _claude(mundo):
+    (c,) = [c for c in mundo.chamadas() if c["verbo"] == "claude"]
+    return c
+
+
+def test_juiz_sem_lente_nao_chama_o_montador_e_o_prompt_de_sistema_e_so_o_fecho(mundo, pessoa, monkeypatch, capsys):
+    mundo.escreve(JUIZ)
+    assert roda(monkeypatch, "juiz", tarefa="plano e fonte") == 0
+    assert not [c for c in mundo.chamadas() if c["verbo"] == "expediente"], "sem lente, o montador não roda"
+    argv = _claude(mundo)["argv"]
+    sistema = argv[argv.index("--append-system-prompt") + 1]
+    assert sistema.startswith("FECHO do agente `juiz`") and "LENTE-" not in sistema
+    assert argv[argv.index("--tools") + 1] == "", "declaração com ferramentas vazias sobe sem nenhuma"
+    assert "--allowedTools" not in argv
+    negadas = argv[argv.index("--disallowedTools") + 1].split(",")
+    for g in agente.GRAFIAS:
+        assert g.rstrip("_") in negadas, f"{g}: o juiz não leva a porta"
+    assert argv[argv.index("--output-format") + 1] == "json" and "--input-format" not in argv
+    assert _claude(mundo)["stdin"] == "plano e fonte"
+    (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+    assert log["sem_lente"] is True and "anexos" not in log
+
+
+def test_juiz_com_read_sobe_so_com_read(mundo, pessoa, monkeypatch):
+    mundo.escreve(com(JUIZ, ferramentas=["Read"]))
+    assert roda(monkeypatch, "juiz") == 0
+    argv = _claude(mundo)["argv"]
+    assert argv[argv.index("--tools") + 1] == "Read"
+
+
+def test_declaracao_com_lente_continua_sem_tools(mundo, pessoa, monkeypatch):
+    mundo.escreve(CONSULTOR)
+    assert roda(monkeypatch, "consultor", cadeira="ia", chapeu="agente") == 0
+    assert "--tools" not in _claude(mundo)["argv"], "o agente com lente segue com a porta (#4083)"
+
+
+def test_pecas_fora_do_molde_e_porta_sem_lente_reprovam():
+    assert agente.valida(JUIZ, "juiz") == []
+    assert not agente.tem_projecao(JUIZ) and agente.valida(com(JUIZ, ferramentas=["Read"]), "juiz") == [], \
+        "juiz sem lente não é sub-agente do Code: sem projeção, e sem monta_sessao a exigir"
+    assert any(p.startswith("pecas:") for p in agente.valida(com(JUIZ, pecas=["modo"]), "juiz"))
+    problemas = agente.valida(com(JUIZ, ferramentas=["mcp__claudinho-mcp__ler_arquivo"]), "juiz")
+    assert any("sem lente" in p for p in problemas), "o juiz sem lente sobe sem a porta"
+
+
+def test_peca_em_juiz_sem_lente_sai_2(mundo, pessoa, monkeypatch, tmp_path):
+    mundo.escreve(JUIZ)
+    arq = tmp_path / "x.md"
+    arq.write_text("x")
+    assert _roda_anexo(monkeypatch, "juiz", None, pecas=[f"modo={arq}"]) == 2
+    assert mundo.chamadas() == []
+
+
+def test_anexo_poe_a_imagem_em_linha_no_lugar_da_marca(mundo, pessoa, monkeypatch, tmp_path):
+    mundo.escreve(JUIZ)
+    a, b = tmp_path / "galeria.png", tmp_path / "figura.png"
+    a.write_bytes(PNG)
+    b.write_bytes(PNG + b"2")
+    tarefa = "GABARITO\n[[anexo:1]]\nPLANO\n[[anexo:2]]\n"
+    assert _roda_anexo(monkeypatch, "juiz", [str(a), str(b)], tarefa=tarefa) == 0
+    c = _claude(mundo)
+    argv = c["argv"]
+    assert argv[argv.index("--input-format") + 1] == "stream-json"
+    assert argv[argv.index("--output-format") + 1] == "stream-json" and "--verbose" in argv
+    msg = json.loads(c["stdin"])
+    blocos = msg["message"]["content"]
+    assert [x["type"] for x in blocos] == ["text", "image", "text", "image"]
+    assert blocos[0]["text"] == "GABARITO\n" and blocos[2]["text"] == "\nPLANO\n"
+    assert blocos[1]["source"]["media_type"] == "image/png"
+    import base64
+    assert base64.b64decode(blocos[1]["source"]["data"]) == PNG
+    assert base64.b64decode(blocos[3]["source"]["data"]) == PNG + b"2"
+    (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+    assert log["anexos"] == [len(PNG), len(PNG) + 1]
+
+
+def test_anexo_sem_marca_vai_antes_do_texto_na_ordem_dada(mundo, pessoa, monkeypatch, tmp_path):
+    mundo.escreve(JUIZ)
+    a, b = tmp_path / "a.png", tmp_path / "b.jpg"
+    a.write_bytes(PNG)
+    b.write_bytes(b"jpg")
+    assert _roda_anexo(monkeypatch, "juiz", [str(a), str(b)], tarefa="só texto") == 0
+    blocos = json.loads(_claude(mundo)["stdin"])["message"]["content"]
+    assert [x["type"] for x in blocos] == ["image", "image", "text"]
+    assert [x["source"]["media_type"] for x in blocos[:2]] == ["image/png", "image/jpeg"]
+
+
+def test_anexo_mal_formado_sai_2_antes_de_abrir_sessao(mundo, pessoa, monkeypatch, tmp_path, capsys):
+    mundo.escreve(JUIZ, VARREDOR)
+    texto = tmp_path / "nota.txt"
+    texto.write_text("não é imagem")
+    img = tmp_path / "a.png"
+    img.write_bytes(PNG)
+    assert _roda_anexo(monkeypatch, "juiz", [str(texto)]) == 2 and "só imagem" in capsys.readouterr().err
+    assert _roda_anexo(monkeypatch, "juiz", [str(tmp_path / "nao-existe.png")]) == 2
+    assert _roda_anexo(monkeypatch, "juiz", [str(img)], tarefa="marca [[anexo:3]] sem anexo") == 2
+    assert "[[anexo:3]]" in capsys.readouterr().err
+    assert _roda_anexo(monkeypatch, "varredor", [str(img)]) == 2, "--anexo só vale em Claude"
+    assert mundo.chamadas() == [], "nenhum desses abre sessão"

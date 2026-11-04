@@ -6,7 +6,7 @@
 # atos: listar (leitura, especialista), ler (leitura, especialista), rodar (escrita, especialista), projetar (escrita, especialista)
 # ato: listar [--modelo <familia>] [--modo <modo>] [--json] — as declarações do posto, uma por linha
 # ato: ler <slug> — a declaração inteira de um especialista
-# ato: rodar <slug> [--cadeira <slug>] [--chapeu <slug>] [--ligacao consultado|agendado] [--peca <nome>=<arquivo>]... [--json] — modelo, ferramentas e teto saem da ligação (por_ligacao); abre a sessão filha, monta a lente e chama o modelo na conta dele; a tarefa vem em stdin (no modo varrer o modelo a recebe com as linhas numeradas, `N |`); --peca troca o conteúdo de uma peça da lente pelo do arquivo (vazio depois do = tira a peça), para par mínimo: os dois braços iguais menos a peça
+# ato: rodar <slug> [--cadeira <slug>] [--chapeu <slug>] [--ligacao consultado|agendado] [--peca <nome>=<arquivo>]... [--json] — modelo, ferramentas e teto saem da ligação (por_ligacao); abre a sessão filha, monta a lente e chama o modelo na conta dele; a tarefa vem em stdin (no modo varrer o modelo a recebe com as linhas numeradas, `N |`); --peca troca o conteúdo de uma peça da lente pelo do arquivo (vazio depois do = tira a peça), para par mínimo: os dois braços iguais menos a peça; --anexo <imagem> (repetível, só em Claude) põe a imagem em linha na mensagem, no lugar de [[anexo:N]] na tarefa ou, sem marca, antes do texto; a declaração com `pecas: []` roda sem lente: o prompt de sistema leva só o fecho e o CLI sobe só com as ferramentas dela
 # ato: projetar [--conferir] [--base <ref>] — gera as projeções do provedor a partir das declarações; --conferir só mede
 # exit: 0 ok · 1 negativo de mérito (não existe, divergente, sem pessoa resolvida) · 2 uso · 3 dependência fora · 4 recusa de política · 5 indeterminável
 # le: listar=arquivo-local
@@ -26,6 +26,7 @@
 # Spec: spec agente (§2 declaração, §3 projeções, §4 ligações, §10 o verbo, §11 piso de segurança)
 from __future__ import annotations
 
+import base64
 import difflib
 import json
 import os
@@ -132,7 +133,7 @@ def tem_projecao(decl) -> bool:
     """Ganha `.claude/agents` o agente que roda em Claude na execução delegada: a base, ou o
     `por_ligacao.delegado` quando houver (spec agente §3). Consultor e curador, Claude só consultados,
     seguem projetados como antes."""
-    return isinstance(decl, dict) and familia_de(efetiva(decl, "delegado")) == "claude"
+    return isinstance(decl, dict) and not sem_lente(decl) and familia_de(efetiva(decl, "delegado")) == "claude"
 
 def delega_em_claude(decl) -> bool:
     return (tem_projecao(decl) and isinstance(decl.get("ligacoes"), list) and "delegado" in decl["ligacoes"])
@@ -186,6 +187,10 @@ def valida(decl, stem: str) -> list[str]:
     if decl.get("modo") not in MODOS:
         p.append(f"modo: um de {', '.join(MODOS)}")
     p += _valida_execucao(decl, "")
+    if "pecas" in decl and decl["pecas"] != []:
+        p.append("pecas: só `[]` (sem lente) por ora; a lente toda é a ausência do campo")
+    elif sem_lente(decl) and any(isinstance(f, str) and f.startswith("mcp__") for f in (decl.get("ferramentas") or [])):
+        p.append("ferramentas: o agente sem lente sobe sem a porta; declare só as embutidas (Read, Grep, Glob)")
     pernas = decl.get("pernas")
     if not (isinstance(pernas, dict) and all(isinstance(pernas.get(k), bool) for k in PERNAS)):
         p.append(f"pernas: {', '.join(PERNAS)}, cada uma true ou false")
@@ -700,8 +705,9 @@ def numera(texto: str) -> str:
 
 def _sistema(decl: dict, lente: str) -> str:
     f = decl["fecho"]
-    return (f"{lente}\n\n---\n\nFECHO do agente `{decl['slug']}`: a resposta começa com {f['comeca_com'].strip()} "
-            f"e termina com {f['termina_com'].strip()}. Quem recebe: {f['recebe'].strip()}.")
+    fecho = (f"FECHO do agente `{decl['slug']}`: a resposta começa com {f['comeca_com'].strip()} "
+             f"e termina com {f['termina_com'].strip()}. Quem recebe: {f['recebe'].strip()}.")
+    return f"{lente}\n\n---\n\n{fecho}" if lente.strip() else fecho      # sem lente, o prompt de sistema é só o fecho
 
 
 def chama_ollama(decl: dict, sistema: str, tarefa: str) -> dict:
@@ -748,6 +754,19 @@ SEM_ARRANQUE = {"CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1"}
 # Os conectores da conta claude.ai que não são a porta, pelo prefixo medido em 02/11/2026. Conector novo na conta
 # entra aqui, senão chega à janela do agente.
 CONECTORES_DE_FORA = ("mcp__claude_ai_Claude_Docs", "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Google_Sheets")
+# Juiz sem lente (card #4115): a declaração com `pecas: []` roda sem persona, chapéu, rotinas nem cadernos, e o CLI
+# sobe só com as ferramentas dela. `--tools` tira também a porta (medido em #4083), que o juiz não usa; o servidor
+# dela sai pelo nome nas três grafias, e assim o juiz não depende da lista de tools do conector. Medido em
+# 04/11/2026 no CLI 2.1.318: `--tools ""` sobe sem ferramenta nem conector, e a imagem em linha entra pelo
+# stream-json (a entrada em stream-json pede a saída em stream-json e --verbose).
+PORTAS_SERVIDOR = tuple(g.rstrip("_") for g in GRAFIAS)
+IMAGENS = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
+ANEXO_MAX = 5 * 1024 * 1024                                 # o teto da API por imagem
+MARCA_ANEXO = re.compile(r"\[\[anexo:(\d+)\]\]")
+
+
+def sem_lente(decl) -> bool:
+    return isinstance(decl, dict) and decl.get("pecas") == []
 
 
 def negadas_do_agente(decl: dict) -> list[str]:
@@ -760,22 +779,89 @@ def negadas_do_agente(decl: dict) -> list[str]:
     return [*PROIBIDAS, *FORA_DO_AGENTE, *CONECTORES_DE_FORA, *(g for t in fora for g in grafias(t))]
 
 
-def chama_claude(decl: dict, sistema: str, tarefa: str) -> dict:
+def le_anexos(caminhos: list[str] | None) -> list[dict]:
+    """As imagens do `--anexo`, em base64 e na ordem dada. Erro de forma sai 2, antes de abrir sessão."""
+    lidos = []
+    for c in caminhos or []:
+        arq = Path(c)
+        tipo = IMAGENS.get(arq.suffix.lower())
+        if tipo is None:
+            raise Falha(2, f"--anexo {c}: só imagem ({', '.join(IMAGENS)})")
+        try:
+            dados = arq.read_bytes()
+        except OSError as e:
+            raise Falha(2, f"--anexo {c}: não abriu ({e})")
+        if len(dados) > ANEXO_MAX:
+            raise Falha(2, f"--anexo {c}: {len(dados)} bytes passam de {ANEXO_MAX}, o teto da API por imagem")
+        lidos.append({"tipo": tipo, "dados": base64.b64encode(dados).decode("ascii"), "bytes": len(dados)})
+    return lidos
+
+
+def entrada_com_imagens(tarefa: str, anexos: list[dict]) -> str:
+    """A mensagem de usuário em stream-json: o texto da tarefa em blocos, cada imagem no lugar de `[[anexo:N]]`
+    (N conta do 1, na ordem do `--anexo`); a que não tem marca vai antes do texto, na ordem dada. A marca deixa
+    quem chama pôr o que não muda entre voltas no começo da entrada, que é o que o cache do modelo guarda."""
+    def imagem(n: int) -> dict:
+        a = anexos[n - 1]
+        return {"type": "image", "source": {"type": "base64", "media_type": a["tipo"], "data": a["dados"]}}
+    marcadas = [int(n) for n in MARCA_ANEXO.findall(tarefa)]
+    for n in marcadas:
+        if not 1 <= n <= len(anexos):
+            raise Falha(2, f"[[anexo:{n}]] sem --anexo correspondente ({len(anexos)} dado(s))")
+    blocos = [imagem(n) for n in range(1, len(anexos) + 1) if n not in marcadas]
+    pos = 0
+    for m in MARCA_ANEXO.finditer(tarefa):
+        if tarefa[pos:m.start()].strip():
+            blocos.append({"type": "text", "text": tarefa[pos:m.start()]})
+        blocos.append(imagem(int(m.group(1))))
+        pos = m.end()
+    if tarefa[pos:].strip():
+        blocos.append({"type": "text", "text": tarefa[pos:]})
+    return json.dumps({"type": "user", "message": {"role": "user", "content": blocos}}, ensure_ascii=False) + "\n"
+
+
+def resultado_do_cli(saida: str, stream: bool) -> dict:
+    """O objeto de resultado do `claude -p`: o JSON único, ou o evento `result` do stream-json."""
+    if not stream:
+        try:
+            return json.loads(saida or "{}")
+        except ValueError:
+            return {}
+    obj: dict = {}
+    for linha in (saida or "").splitlines():
+        try:
+            ev = json.loads(linha)
+        except ValueError:
+            continue
+        if isinstance(ev, dict) and ev.get("type") == "result":
+            obj = ev
+    return obj
+
+
+def chama_claude(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | None = None) -> dict:
     t = decl["teto"]
     try:
         bin_claude = claude_cli.resolver()   # a trava da release, nunca o PATH (#2856 linha 248)
     except claude_cli.ClaudeAusente as e:
         raise Falha(3, str(e))
-    argv = [bin_claude, "-p", "--model", decl["modelo"]["versao"], "--output-format", "json",
-            "--max-turns", str(t["turnos"]), "--append-system-prompt", sistema,
-            "--disallowedTools", ",".join(negadas_do_agente(decl))]
-    if decl["ferramentas"]:
-        argv += ["--allowedTools", ",".join(g for f in decl["ferramentas"] for g in grafias(f))]
-    p = _roda(argv, stdin=tarefa, env={"DISABLE_AUTOUPDATER": "1", **SEM_ARRANQUE}, timeout=t.get("segundos", 900))
-    try:
-        obj = json.loads(p.stdout or "{}")
-    except ValueError:
-        obj = {}
+    argv = [bin_claude, "-p", "--model", decl["modelo"]["versao"],
+            "--max-turns", str(t["turnos"]), "--append-system-prompt", sistema]
+    if sem_lente(decl):
+        # O juiz sobe só com as ferramentas da declaração: `--tools` e a porta nomeada fora.
+        argv += ["--disallowedTools", ",".join([*PROIBIDAS, *FORA_DO_AGENTE, *CONECTORES_DE_FORA, *PORTAS_SERVIDOR]),
+                 "--tools", ",".join(decl["ferramentas"] or [])]
+    else:
+        argv += ["--disallowedTools", ",".join(negadas_do_agente(decl))]
+        if decl["ferramentas"]:
+            argv += ["--allowedTools", ",".join(g for f in decl["ferramentas"] for g in grafias(f))]
+    if anexos:
+        argv += ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
+        entrada = entrada_com_imagens(tarefa, anexos)
+    else:
+        argv += ["--output-format", "json"]
+        entrada = tarefa
+    p = _roda(argv, stdin=entrada, env={"DISABLE_AUTOUPDATER": "1", **SEM_ARRANQUE}, timeout=t.get("segundos", 900))
+    obj = resultado_do_cli(p.stdout, bool(anexos))
     if p.returncode != 0 or obj.get("is_error") or not isinstance(obj.get("result"), str):
         motivo = (p.stderr.strip().splitlines() or [str(obj.get("result") or "sem retorno")])[0]
         raise Falha(5, f"claude -p não concluiu (saiu {p.returncode}): {motivo[:200]}")
@@ -933,12 +1019,12 @@ def chama_agy(decl: dict, sistema: str, tarefa: str) -> dict:
     return {"retorno": resposta, "aviso": "", "uso": uso}
 
 
-def chama_modelo(decl: dict, sistema: str, tarefa: str) -> dict:
+def chama_modelo(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | None = None) -> dict:
     m = decl["modelo"]
     if m["familia"] == "qwen" and m.get("local"):
         return chama_ollama(decl, sistema, tarefa)
     if m["familia"] == "claude":
-        return chama_claude(decl, sistema, tarefa)
+        return chama_claude(decl, sistema, tarefa, anexos)
     if m["familia"] == "gemini":
         return chama_agy(decl, sistema, tarefa)
     raise Falha(3, f"a ligação {m['familia']} ainda não roda pelo agente rodar: a execução sob "
@@ -957,7 +1043,7 @@ def registra(reg: dict) -> None:
 
 
 def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_json: bool,
-              ligacao: str = "consultado", pecas: list[str] | None = None) -> int:
+              ligacao: str = "consultado", pecas: list[str] | None = None, anexos: list[str] | None = None) -> int:
     posto, rc = _posto_ou_erro()
     if posto is None:
         return rc
@@ -976,6 +1062,13 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
         return _erro("a tarefa vem em stdin: agente rodar <slug> < tarefa", 2)
     try:
         variantes = le_variantes(pecas)                    # erro de forma sai antes de abrir sessão
+        imagens = le_anexos(anexos)
+        if imagens and decl["modelo"]["familia"] != "claude":
+            raise Falha(2, f"--anexo só vale em modelo Claude; o de {slug} é {decl['modelo']['familia']}")
+        if imagens:
+            entrada_com_imagens(tarefa, imagens)           # confere as marcas [[anexo:N]] antes de abrir sessão
+        if variantes and sem_lente(decl):
+            raise Falha(2, f"--peca: {slug} roda sem lente, não há peça a trocar")
     except Falha as f:
         return _erro(f.msg, f.codigo)
     dono = decl["dono"]
@@ -1004,8 +1097,8 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
             if not ok:
                 raise Falha(4, f"a conta {conta} não está conforme na última seg isolacao medir ({motivo})")
         filha = abre_sessao(cadeira, origem, slug, conta)
-        lente = monta_lente(decl, cadeira, chapeu, filha, origem, tarefa, variantes)
-        r = chama_modelo(decl, _sistema(decl, lente), numera(tarefa) if decl["modo"] == "varrer" else tarefa)
+        lente = "" if sem_lente(decl) else monta_lente(decl, cadeira, chapeu, filha, origem, tarefa, variantes)
+        r = chama_modelo(decl, _sistema(decl, lente), numera(tarefa) if decl["modo"] == "varrer" else tarefa, imagens)
     except Falha as f:
         if filha:
             _encerra(filha["sessao_id"])
@@ -1017,7 +1110,9 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
     registra({"ts": _agora(), "agente": slug, "sujeito": sujeito, "em_nome_de": cadeira, "origem": origem,
               "conta": conta, "sessao_id": filha["sessao_id"], "modelo": f"{decl['modelo']['familia']}:{decl['modelo']['versao']}",
               "uso": r["uso"], "segundos": duracao, "exit": 0,
-              **({"variantes": marca_variantes(variantes)} if variantes else {})})
+              **({"variantes": marca_variantes(variantes)} if variantes else {}),
+              **({"sem_lente": True} if sem_lente(decl) else {}),
+              **({"anexos": [a["bytes"] for a in imagens]} if imagens else {})})
     if r["aviso"]:
         print(f"aviso: {r['aviso']}", file=sys.stderr)
     print(f"agente {slug}: sessao {filha['sessao_id']} origem {origem} conta {conta} "
@@ -1064,6 +1159,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="por onde a tarefa entra; o bot passa agendado (spec agente §4)")
     a.add_argument("--peca", action="append", default=None, metavar="<nome>=<arquivo>",
                    help="troca o conteúdo da peça da lente pelo do arquivo; <nome>= tira a peça (par mínimo)")
+    a.add_argument("--anexo", action="append", default=None, metavar="<imagem>",
+                   help="põe a imagem em linha na mensagem (só Claude): no lugar de [[anexo:N]] na tarefa, ou antes do texto")
     a.add_argument("--json", action="store_true")
     a = atos.novo("projetar", "gera as projeções do provedor; --conferir só mede")
     a.add_argument("--conferir", action="store_true")
@@ -1074,7 +1171,7 @@ def main(argv: list[str] | None = None) -> int:
     if ns.ato == "ler":
         return ato_ler(ns.slug)
     if ns.ato == "rodar":
-        return ato_rodar(ns.slug, ns.cadeira, ns.chapeu, ns.json, ns.ligacao, ns.peca)
+        return ato_rodar(ns.slug, ns.cadeira, ns.chapeu, ns.json, ns.ligacao, ns.peca, ns.anexo)
     return ato_projetar(ns.conferir, ns.base)
 
 
