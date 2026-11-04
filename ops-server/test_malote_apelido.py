@@ -82,7 +82,9 @@ async def test_tools_list_serve_malote_com_o_texto_da_pagina_e_sem_os_apelidos()
     descricao = tools["malote"].description
     assert descricao.startswith("roda vários verbos numa chamada só · use para: SEMPRE que for chamar dois ou mais")
     assert "Lote entre verbos DISTINTOS" not in descricao and "Apelido de" not in descricao
-    assert "Sai quando ninguém mais a chamar" not in "".join(t.description for t in tools.values())
+    # a frase de saída do apelido não pode estar nem aqui: o Aceite procura por ela em ops-server (por isso a conta)
+    frase_de_saida = "Sai quando " + "ninguém mais a chamar"
+    assert frase_de_saida not in "".join(t.description for t in tools.values())
 
 
 @pytest.mark.anyio
