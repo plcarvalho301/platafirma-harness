@@ -4,13 +4,6 @@
 # dono: ti
 # componente: docker, systemd --user, cron
 # use para: SEMPRE que for subir, reiniciar, derrubar ou remover serviço, «reinicia a unit», «sobe a stack»; construir e baixar imagem; alterar configuração; fazer backup; limpar disco; logs do contêiner, cron, VRAM e disco, «os logs do contêiner», «quanto de VRAM está ocupado?»
-#   (remover), convergir a agenda do cron e as units da instância (units) e podar log/quarentena/job falhado por
-#   retenção declarada (agenda, limpeza), liberar cache de VRAM e disco (cache), que
-#   hardware é este e quanto consome em W agora (hardware), a GPU ao vivo: uso, VRAM,
-#   temperatura, W e processos (gpu), o teto de processos e threads da conta contra o uso agora (limites), copiar o ingress versionado do túnel para a cópia da
-#   instância, que é a que o cloudflared lê, e reiniciá-lo (ingress), medir a rede do host: as conexões dos três túneis com a borda e a porta pelo endereço público (medir rede), a VRAM por processo e o processamento por serviço (medir vram, medir cpu),
-#   medir a memória do host: uso real, cache, total, pressão, quem consome e as mortes por limite (medir ram), tirar o fóssil que as rodadas deixam, contêiner sem label de projeto e job falhado (limpeza fossil),
-#   e rodar uma peça de código declarada em registro/pecas.json, só se o código dela for o de origin/main ou o da release (pecas, rodar)
 # atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), remover (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), hardware (leitura, operacao), limites (leitura, operacao), gpu (leitura, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao), units (escrita, operacao), ingress (escrita, operacao), medir (leitura, operacao), pecas (leitura, operacao), rodar (escrita, operacao)
 # forma: log
 # cauda: sim

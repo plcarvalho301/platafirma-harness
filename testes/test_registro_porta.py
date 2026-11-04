@@ -85,9 +85,12 @@ def test_o_use_para_nao_leva_numero_de_card_nem_spec_nem_adr_e_nao_tem_nao_use_p
     pagina que ele aprovou (`abre a ADR 97`, no acervo)."""
     for slug in registro["verbos"]:
         topo = (REPO_ROOT / "bin" / slug).read_text(encoding="utf-8").splitlines()[:30]
-        use = next(l for l in topo if l.startswith("# use para: "))
+        i = next(n for n, l in enumerate(topo) if l.startswith("# use para: "))
+        use = topo[i]
         assert not re.search(r"#\d{3,}|arq:\d|spec\b|\bADR\b", use) or slug == "acervo", slug
         assert "NÃO use para" not in use and "NAO use para" not in use, slug
+        # a linha e uma so: o que vem depois dela e outra chave do cabecalho, nao resto do texto antigo
+        assert re.match(r"^# [a-z-]+:", topo[i + 1]), f"{slug}: sobrou continuacao do `use para:` antigo"
 
 
 def test_o_oficio_com_o_bloco_cercado_saiu():
