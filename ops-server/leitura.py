@@ -1524,24 +1524,3 @@ def enxuga_releitura(r: dict) -> dict:
         return r
     return {k: r[k] for k in _NA_RELEITURA if k in r}
 
-
-def como_read_file(r: dict) -> dict:
-    """O retorno da `ler_arquivo` nas chaves do apelido `read_file` (§12.2).
-
-    `content` TOMA o lugar de `conteudo`, em vez de somar-se a ele: o apelido é a tool que
-    toda fita viva ainda chama, e servir o texto duas vezes dobraria o custo de cada leitura
-    até o apelido sair. Os demais campos novos ficam.
-    """
-    if "caminho" in r:
-        r["path"] = r.pop("caminho")
-    if "conteudo" not in r:
-        return r
-    acabou = r.get("proximo_args") is None
-    r["content"] = r.pop("conteudo")
-    if "bytes" not in r:                   # página de formato do acervo (§7.4): sem byte do arquivo
-        r.update(truncated=not acabou, next_offset=None)
-        return r
-    ini, fim = r["bytes"]
-    r.update(truncated=not acabou, next_offset=None if acabou else fim,
-             bytes_lidos=fim - ini, offset=ini)
-    return r

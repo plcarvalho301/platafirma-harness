@@ -1,9 +1,10 @@
-"""`malote` e o apelido `run_command` (#3270, spec porta-so-verbo §3.7).
+"""`malote` sem o apelido `run_command` (#3270, spec porta-so-verbo §3.7; #4117).
 
-A porta serve as duas tools com a mesma assinatura e o mesmo retorno; a auditoria grava o
-nome chamado (`tool` na recusa e no lote encadeado, `via` no item despachado), porque a
-regra de saida do apelido conta os dois. A acao do PDP segue `run_command`. Falso de
-`_run_verbo_blocking`: o que se prova e o transporte, nao o verbo.
+O apelido saiu da porta no #4117 (344 chamadas em 30 dias, 321 com erro): a porta serve só `malote`. A auditoria
+grava `malote` em `tool` (na recusa e no lote encadeado) e em `via` (no item despachado). A ação do PDP segue
+`run_command`: é a política da segurança, e o nome da tool não a muda. Quem ainda cita `run_command` ou
+`read_file` volta recusado, com a sugestão que aponta `malote` e `ler_arquivo`. Falso de `_run_verbo_blocking`: o
+que se prova é o transporte, não o verbo.
 """
 from __future__ import annotations
 
@@ -71,103 +72,90 @@ class _Lote:
                 if all(c.kwargs.get(k) == v for k, v in filtro.items())]
 
 
-def _sem_volatil(r):
-    """O retorno sem o que muda de chamada para chamada: `lote_id` e o giro da poda."""
-    if isinstance(r, dict):
-        return {k: _sem_volatil(v) for k, v in r.items() if k not in ("lote_id", "giro")}
-    if isinstance(r, list):
-        return [_sem_volatil(x) for x in r]
-    return r
-
-
 # --- o catalogo -------------------------------------------------------------------
 
 @pytest.mark.anyio
-async def test_tools_list_serve_malote_e_o_apelido_com_o_mesmo_schema():
+async def test_tools_list_serve_malote_com_o_texto_da_pagina_e_sem_os_apelidos():
     tools = {t.name: t for t in await s.mcp.list_tools()}
-    assert "malote" in tools and "run_command" in tools
-    # `title` do schema e o nome da funcao (`maloteArguments`); o resto e o contrato.
-    sem_titulo = lambda t: {k: v for k, v in t.inputSchema.items() if k != "title"}  # noqa: E731
-    assert sem_titulo(tools["malote"]) == sem_titulo(tools["run_command"])
-    assert "Apelido de `malote`" in tools["run_command"].description
-    assert "Lote entre verbos DISTINTOS" in tools["malote"].description
+    assert "malote" in tools
+    assert "run_command" not in tools and "read_file" not in tools, "os apelidos saíram da porta (#4117)"
+    descricao = tools["malote"].description
+    assert descricao.startswith("roda vários verbos numa chamada só · use para: SEMPRE que for chamar dois ou mais")
+    assert "Lote entre verbos DISTINTOS" not in descricao and "Apelido de" not in descricao
+    assert "Sai quando ninguém mais a chamar" not in "".join(t.description for t in tools.values())
 
-
-# --- o retorno ----------------------------------------------------------------------
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("encadeado", [False, True])
-async def test_mesmo_lote_mesmo_retorno(encadeado):
-    itens = ["repo estado", {"verbo": "repo", "ato": "ler", "args": ["x"]}, "cat x"]
-    with _Lote():
-        a = await s.malote(commands=itens, encadeado=encadeado)
-    with _Lote():
-        b = await s.run_command(commands=itens, encadeado=encadeado)
-    assert _sem_volatil(a) == _sem_volatil(b)
+async def test_cada_tool_de_transporte_abre_pelo_texto_da_pagina():
+    tools = {t.name: t for t in await s.mcp.list_tools()}
+    abre = {"ler_arquivo": "lê arquivo pelo caminho · use para: texto por linhas, PDF, EPUB",
+            "write_file": "grava arquivo na bancada ou no rascunho da fita · use para: escrever mudança"}
+    for nome, inicio in abre.items():
+        assert tools[nome].description.startswith(inicio), nome
+    if "monta_sessao" in tools:
+        assert tools["monta_sessao"].description.startswith(
+            "abre o expediente da cadeira · use para: PRIMEIRA AÇÃO DA CONVERSA")
 
 
 # --- a auditoria grava o nome chamado ----------------------------------------------
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("nome", ["malote", "run_command"])
-async def test_item_despachado_grava_via_com_o_nome_chamado(nome):
+async def test_item_despachado_grava_via_malote():
     with _Lote() as lote:
-        await getattr(s, nome)(commands=["repo estado", "repo ler x"])
+        await s.malote(commands=["repo estado", "repo ler x"])
     itens = lote.auditados(evento="verbo", tool="repo")
-    assert len(itens) == 2 and {kw["via"] for kw in itens} == {nome}
+    assert len(itens) == 2 and {kw["via"] for kw in itens} == {"malote"}
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("nome", ["malote", "run_command"])
-async def test_recusa_e_lote_encadeado_gravam_tool_com_o_nome_chamado(nome):
+async def test_recusa_e_lote_encadeado_gravam_tool_malote():
     with _Lote() as lote:
-        await getattr(s, nome)(commands=["cat x", "repo estado"], encadeado=True)
-    assert lote.auditados(evento="sem_verbo", tool=nome)
-    assert lote.auditados(evento="lote_encadeado", tool=nome)
-    outro = "run_command" if nome == "malote" else "malote"
-    assert not lote.auditados(tool=outro)
+        await s.malote(commands=["cat x", "repo estado"], encadeado=True)
+    assert lote.auditados(evento="sem_verbo", tool="malote")
+    assert lote.auditados(evento="lote_encadeado", tool="malote")
+    assert not lote.auditados(tool="run_command")
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("nome", ["malote", "run_command"])
-async def test_acao_do_pdp_segue_run_command(nome):
+async def test_acao_do_pdp_segue_run_command():
     with _Lote() as lote:
-        await getattr(s, nome)(command="repo estado")
+        await s.malote(command="repo estado")
     assert lote.autoriza.call_args.args[1] == "run_command"
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("nome", ["malote", "run_command"])
-async def test_ramo_legado_grava_tool_com_o_nome_chamado(nome):
+async def test_ramo_legado_grava_tool_malote():
     with _Lote() as lote, patch("server.PF_RUN_SO_VERBO", False), patch("server.PF_GATE", False), \
             patch("server._run_blocking", return_value={"exit_code": 0, "stdout": {
                 "texto": "ok", "bytes_total": 2, "truncado": False}}):
-        await getattr(s, nome)(command="true")
+        await s.malote(command="true")
     fallback = lote.auditados(evento="fallback")
-    assert fallback and {kw["tool"] for kw in fallback} == {nome}
-    assert lote.autoriza.call_args.args[:2] == (nome, "run_command")
+    assert fallback and {kw["tool"] for kw in fallback} == {"malote"}
+    assert lote.autoriza.call_args.args[:2] == ("malote", "run_command")
 
 
 # --- primeiro token e recusa -------------------------------------------------------
 
-@pytest.mark.parametrize("token", ["malote", "run_command"])
-def test_primeiro_token_com_qualquer_dos_nomes_e_desduplicado(token):
+def test_primeiro_token_malote_e_desduplicado():
     with patch("server.SLUGS_SERVIDOS", {"repo"}), patch("server.BINARIOS", {"repo": "/opt/bin/repo"}):
-        argv, _, rec = s._item_de_lote(f"{token} repo estado")
+        argv, _, rec = s._item_de_lote("malote repo estado")
         assert rec is None and argv == ["/opt/bin/repo", "estado"]
-        argv, _, rec = s._item_de_lote({"verbo": token, "ato": "repo", "args": ["estado"]})
+        argv, _, rec = s._item_de_lote({"verbo": "malote", "ato": "repo", "args": ["estado"]})
         assert rec is None and argv == ["/opt/bin/repo", "estado"]
 
 
 @pytest.mark.anyio
-async def test_aviso_de_desduplicacao_cita_a_tool_e_o_token():
+async def test_item_que_cita_o_apelido_que_saiu_volta_recusado_com_a_sugestao():
     with _Lote():
         r = await s.malote(command="run_command repo estado")
-    assert r["aviso"] == "malote: primeiro token 'run_command' desduplicado com aviso"
+    assert r["recusado"] is True and r["verbo"] == "run_command"
+    assert r["sugestao"] == "saiu da porta: chame malote, a tool que você está chamando"
 
 
-def test_recusa_do_nome_sozinho_diz_que_e_a_propria_tool():
+def test_recusa_do_nome_sozinho_aponta_a_tool_que_ficou():
     _, _, rec = s._item_de_lote("malote")
     assert rec["sugestao"] == "é a própria tool que você está chamando"
     _, _, rec = s._item_de_lote("run_command")
-    assert rec["sugestao"] == "é apelido de malote, a tool que você está chamando"
+    assert rec["sugestao"] == "saiu da porta: chame malote, a tool que você está chamando"
+    _, _, rec = s._item_de_lote("read_file")
+    assert rec["sugestao"] == "saiu da porta: chame ler_arquivo(caminho=...)"

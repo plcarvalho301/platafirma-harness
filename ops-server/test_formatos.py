@@ -441,12 +441,6 @@ def test_c18_gramatica_dos_parametros_novos(fx):
     assert L.le(fx["pdf"], modo="sumario")["sumario"] is None
 
 
-def test_c18_apelido_read_file_le_o_formato(fx):
-    r = L.como_read_file(L.le(fx["pdf"]))
-    assert r["content"].startswith("<!-- p. 1 -->") and r["truncated"] is False
-    assert r["next_offset"] is None and r["path"] == str(fx["pdf"])
-
-
 def test_c18_versao_muda_avisa(fx, tmp_path):
     p = tmp_path / "muda.pdf"
     p.write_bytes(fx["pdf"].read_bytes())

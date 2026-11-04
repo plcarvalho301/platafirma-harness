@@ -200,7 +200,7 @@ def test_sem_o_campo_o_turno_e_gap_e_o_vazio_nao_abre_turno(tmp_path):
 
 def test_toda_tool_da_porta_aceita_o_campo_turno_opcional_com_padrao_vazio():
     import inspect
-    tools = [s.malote, s.run_command, s.ler_arquivo, s.read_file, s.write_file, s.monta_sessao]
+    tools = [s.malote, s.ler_arquivo, s.write_file, s.monta_sessao]
     tools += [s._faz_tool_verbo("tarefas", "/bin/true", "x")]
     for tool in tools:
         p = inspect.signature(tool).parameters.get("turno")

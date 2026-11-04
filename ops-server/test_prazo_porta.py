@@ -223,7 +223,7 @@ async def test_lote_reparte_o_prazo_e_o_item_sem_prazo_nao_roda():
     with a, b, c, d, e, patch("server.PRAZO_S", 0.3), \
             patch("server._prazo_restante", side_effect=restante), \
             patch("server._run_verbo_blocking", side_effect=fake):
-        res = await s.run_command(commands=["repo estado", "repo estado", "repo estado"])
+        res = await s.malote(commands=["repo estado", "repo estado", "repo estado"])
 
     assert len(prazos) == 2
     assert prazos[0] > prazos[1]                 # o segundo item herda o que sobrou
@@ -239,7 +239,7 @@ async def test_encadeado_para_no_item_em_andamento():
 
     a, b, c, d, e = _patches_do_lote()
     with a, b, c, d, e, patch("server._run_verbo_blocking", side_effect=fake):
-        res = await s.run_command(commands=["repo commitar", "repo empurrar"], encadeado=True)
+        res = await s.malote(commands=["repo commitar", "repo empurrar"], encadeado=True)
 
     assert res["cadeia"]["parou_em"] == 0
     assert res["cadeia"]["itens"][0]["linha"].startswith("em andamento")
@@ -253,7 +253,7 @@ async def test_pipe_de_item_em_andamento_recusa():
 
     a, b, c, d, e = _patches_do_lote()
     with a, b, c, d, e, patch("server._run_verbo_blocking", side_effect=fake):
-        res = await s.run_command(commands=[
+        res = await s.malote(commands=[
             {"verbo": "repo", "ato": "estado", "args": []},
             {"verbo": "repo", "ato": "ler", "args": [], "stdin": {"de": 0}},
         ])

@@ -304,24 +304,6 @@ def test_lote_erro_num_item_nao_derruba_os_outros(tmp_path):
     assert r["lote"][0]["erro"] == "não existe" and r["lote"][1]["conteudo"] == "ok\n"
 
 
-# --- C17 apelido -----------------------------------------------------------------------------------
-def test_c17_apelido_read_file_coerente_com_os_campos_novos(tmp_path):
-    p = _fixtures(tmp_path)["acentos.md"]
-    novo = L.le(p, max_bytes=300)
-    r = L.como_read_file(L.le(p, max_bytes=300))
-    assert r["content"] == novo["conteudo"] and "conteudo" not in r
-    assert r["truncated"] is True and r["next_offset"] == novo["bytes"][1]
-    assert r["offset"] == 0 and r["bytes_lidos"] == novo["bytes"][1] and r["path"] == str(p)
-    # quem segue o apelido por next_offset recompõe o arquivo
-    texto, off = r["content"], r["next_offset"]
-    while off is not None:
-        r = L.como_read_file(L.le(p, offset=off, max_bytes=300))
-        texto, off = texto + r["content"], r["next_offset"]
-    assert texto.encode() == p.read_bytes()
-    erro = L.como_read_file(L.le(tmp_path / "nao"))
-    assert erro["path"] == str(tmp_path / "nao")
-
-
 def test_releitura_igual_sai_so_com_aviso_e_alca(tmp_path):
     p = tmp_path / "a.txt"
     p.write_text("x\n" * 100)

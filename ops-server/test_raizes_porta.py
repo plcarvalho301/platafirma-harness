@@ -90,38 +90,38 @@ def test_path_do_subprocesso_traz_o_bin_da_release():
 
 def test_run_command_sem_cwd_roda_na_casa(sem_bancada, sem_pep):
     with patch.object(s, "PF_RUN_SO_VERBO", False), patch.object(s, "PF_GATE", False):
-        r = asyncio.run(s.run_command(command="pwd"))
+        r = asyncio.run(s.malote(command="pwd"))
     assert r["exit_code"] == 0
     assert r["stdout"]["texto"].strip() == str(Path(os.path.expanduser("~")).resolve())
 
 
 def test_run_command_cwd_relativo_sem_bancada_recusa(sem_bancada, sem_pep):
     with patch.object(s, "PF_RUN_SO_VERBO", False), patch.object(s, "PF_GATE", False):
-        r = asyncio.run(s.run_command(command="pwd", cwd="platafirma-core"))
+        r = asyncio.run(s.malote(command="pwd", cwd="platafirma-core"))
     assert r["recusado"] and "bancada" in r["motivo"]
 
 
 def test_run_command_cwd_relativo_e_na_bancada(bancada, sem_pep):
     with patch.object(s, "PF_RUN_SO_VERBO", False), patch.object(s, "PF_GATE", False):
-        r = asyncio.run(s.run_command(command="pwd", cwd="platafirma-harness"))
+        r = asyncio.run(s.malote(command="pwd", cwd="platafirma-harness"))
     assert r["stdout"]["texto"].strip() == str((bancada / "platafirma-harness").resolve())
 
 
-def test_read_file_relativo_sem_bancada_recusa_e_absoluto_le(sem_bancada, sem_pep, monkeypatch):
-    r = s.read_file(path="platafirma-harness/ops-server/requirements.txt")
+def test_ler_arquivo_relativo_sem_bancada_recusa_e_absoluto_le(sem_bancada, sem_pep, monkeypatch):
+    r = s.ler_arquivo(caminho="platafirma-harness/ops-server/requirements.txt")
     assert r.get("recusado") and "bancada" in r["motivo"]
     # a árvore em teste entra na morada de leitura (card #3279): sem isto o absoluto recusa
     monkeypatch.setattr(s, "_MORADAS_LEITURA", (*s._MORADAS_LEITURA, str(OPS_SERVER_DIR)))
-    r = s.read_file(path=str(OPS_SERVER_DIR / "requirements.txt"))
-    assert "mcp==" in r["content"]
+    r = s.ler_arquivo(caminho=str(OPS_SERVER_DIR / "requirements.txt"))
+    assert "mcp==" in r["conteudo"]
 
 
-def test_read_file_nega_segredos_de_qualquer_instancia(tmp_path, monkeypatch, sem_pep):
+def test_ler_arquivo_nega_segredos_de_qualquer_instancia(tmp_path, monkeypatch, sem_pep):
     monkeypatch.setattr(s, "_RAIZES_DE_INSTANCIA", (Path("/srv/platafirma"), tmp_path))
     seg = tmp_path / "outra" / "segredos" / "core"
     seg.mkdir(parents=True)
     (seg / "POSTGRES").write_text("nao-leia")
-    r = s.read_file(path=str(seg / "POSTGRES"))
+    r = s.ler_arquivo(caminho=str(seg / "POSTGRES"))
     assert r.get("recusado") and r["motivo"].startswith("segredo")
     assert s._sob_segredos_de_instancia(Path("/srv/platafirma/casa/segredos/x/Y"))
 

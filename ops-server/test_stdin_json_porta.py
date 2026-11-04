@@ -171,7 +171,7 @@ async def test_run_command_lote_stdin_de_continua_pipe():
          patch("server._audit"), \
          patch("server._run_verbo_blocking", side_effect=fake_run_verbo_blocking):
 
-        res = await s.run_command(commands=[
+        res = await s.malote(commands=[
             {"verbo": "repo", "ato": "estado", "args": []},
             {"verbo": "repo", "ato": "ler", "args": [], "stdin": {"de": 0}},
         ])
@@ -201,7 +201,7 @@ async def test_run_command_lote_stdin_dict_nao_pipe_vira_texto_sem_recusa():
          patch("server._audit"), \
          patch("server._run_verbo_blocking", side_effect=fake_run_verbo_blocking):
 
-        res = await s.run_command(commands=[
+        res = await s.malote(commands=[
             {"verbo": "repo", "ato": "commitar", "args": [], "stdin": payload},
         ])
 
