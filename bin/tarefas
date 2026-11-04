@@ -131,9 +131,18 @@ uso:
   tarefas editar <id> [--titulo "<t>"] [--desc "<txt>"|--desc-stdin]
                 [--cadeira <c>|--sem-cadeira] [--nivel épico|feature|story|task]
                 [--originacao negocio|tecnico|incidente] [--executor <c>]
+                [--trecho --antes "<txt>" --depois "<txt>" [--bruto]]
                                           troca título, corpo, cadeira, nível, originação e/ou executor (o corpo é
                                           substituído inteiro); não mexe no estado — mover é
-                                          `mover`. Cadeira e nível inválidos a API recusa
+                                          `mover`. Cadeira e nível inválidos a API recusa.
+                                          `--trecho` (card #4110) troca o corpo só num ponto: `--antes`
+                                          tem de ocorrer UMA vez no corpo gravado e vira `--depois`
+                                          (vazio apaga); o resto sai idêntico e o pedido leva só o
+                                          trecho. O corpo gravado é HTML: o trecho recebe o mesmo
+                                          escape do corpo, linha em branco fecha parágrafo e quebra
+                                          simples é <br>. Trecho que cruza rótulo em negrito ou link não
+                                          casa (a API recusa e diz quantas vezes ele ocorreu): `--bruto`
+                                          manda `--antes` e `--depois` como estão, em HTML
   tarefas modelo <épico|feature|story|task>
                                           esqueleto do corpo, com os rótulos que a API exige;
                                           épico e feature saem no two-pager
@@ -325,6 +334,17 @@ for l in html.escape(sys.stdin.read().strip()).split("\n"):
 if p:
     ps.append(p)
 print("".join("<p>%s</p>" % "<br>".join(x) for x in ps))'
+}
+
+# Card #4110: o trecho de `editar --trecho`. O corpo gravado é HTML (`para_html`, acima) e o
+# trecho casa contra ele byte a byte: o texto do trecho recebe o MESMO escape do corpo inteiro
+# (`html.escape`) e a mesma quebra — linha em branco fecha parágrafo, quebra simples é <br>.
+# Rótulo em negrito e URL em link NÃO se convertem aqui: trecho que cruza um deles não casa e a
+# API recusa dizendo quantas vezes ele ocorreu; `--bruto` manda o trecho como está.
+trecho_html() {
+  FRAG="$1" python3 -c 'import html,os,re
+t = html.escape(os.environ["FRAG"].replace("\r\n", "\n"))
+print(re.sub(r"\n{2,}", "</p><p>", t).replace("\n", "<br>"), end="")'
 }
 
 para_texto() {
@@ -702,6 +722,7 @@ criar() {
 editar() {
   local id; id=$(so_id "${1:?uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin]}"); shift
   local titulo="" desc="" tem_desc="" cadeira="" tem_cadeira=0 nivel="" originacao="" executor=""
+  local trecho=0 antes="" tem_antes=0 depois="" tem_depois=0 bruto=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --titulo)     titulo="${2:?--titulo pede texto}"; shift 2 ;;
@@ -711,6 +732,14 @@ editar() {
       --executor)   executor="${2:?--executor pede o nome da cadeira}"; shift 2 ;;
       --desc)       desc="${2:?--desc pede texto}"; tem_desc=1; shift 2 ;;
       --desc-stdin) desc="$(cat)"; tem_desc=1; shift ;;
+      # Card #4110: o corpo por trecho. `--depois` pode ser vazio (apaga o trecho), por isso
+      # não usa `${2:?}`, que recusaria o vazio.
+      --trecho)     trecho=1; shift ;;
+      --antes)      [ $# -ge 2 ] || { echo "--antes pede texto" >&2; exit 2; }
+                    antes="$2"; tem_antes=1; shift 2 ;;
+      --depois)     [ $# -ge 2 ] || { echo "--depois pede texto (vazio apaga o trecho)" >&2; exit 2; }
+                    depois="$2"; tem_depois=1; shift 2 ;;
+      --bruto)      bruto=1; shift ;;
       # A cadeira e o nível do card mudam por aqui (#2856 linhas 112 e 113): a API aceita os dois no
       # PATCH, e é ela quem recusa nome ou camada inválidos — este verbo não repete a lista.
       --cadeira)    cadeira="${2:?--cadeira pede o nome da cadeira}"; tem_cadeira=1; shift 2 ;;
@@ -728,9 +757,25 @@ editar() {
     esac
   done
   if [ -z "$titulo" ] && [ -z "$tem_desc" ] && [ "$tem_cadeira" -eq 0 ] && [ -z "$nivel" ] \
-     && [ -z "$originacao" ] && [ -z "$executor" ]; then
+     && [ -z "$originacao" ] && [ -z "$executor" ] && [ "$trecho" -eq 0 ]; then
     echo "uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin] [--cadeira <c>|--sem-cadeira] [--nivel épico|feature|story|task] [--originacao negocio|tecnico|incidente] [--executor <c>] — nada a editar" >&2
     exit 2
+  fi
+  # Card #4110. As recusas de forma saem aqui, sem chamar a API; a contagem do `antes` no corpo
+  # gravado só a API sabe, e é ela quem recusa zero ou mais de uma ocorrência.
+  if [ "$trecho" -eq 0 ] && [ $((tem_antes + tem_depois + bruto)) -gt 0 ]; then
+    echo "recusado: --antes, --depois e --bruto só valem com --trecho" >&2; exit 2
+  fi
+  if [ "$trecho" -eq 1 ]; then
+    if [ -n "$tem_desc" ]; then
+      echo "recusado: --trecho não combina com --desc nem --desc-stdin: ou troca o corpo inteiro, ou um trecho" >&2; exit 2
+    fi
+    if [ "$tem_antes" -eq 0 ] || [ "$tem_depois" -eq 0 ]; then
+      echo "recusado: --trecho pede --antes \"<txt>\" e --depois \"<txt>\" (depois vazio apaga o trecho)" >&2; exit 2
+    fi
+    if [ -z "$antes" ]; then
+      echo "recusado: --antes vazio casaria em todo lugar" >&2; exit 2
+    fi
   fi
   if [ -n "$tem_desc" ] && [ -z "$(printf '%s' "$desc" | tr -d '[:space:]')" ]; then
     echo "recusado: corpo vazio apagaria a descrição do item. Para ver o esqueleto: tarefas modelo <nível>" >&2
@@ -740,10 +785,20 @@ editar() {
   [ -n "$tem_desc" ] && html="$(printf '%s' "$desc" | para_html)"
   local d_json="null"
   [ -n "$tem_desc" ] && d_json="$(printf '%s' "$html" | jq -Rs .)"
+  # O trecho vai como está só com --bruto; senão, no mesmo escape do corpo (`trecho_html`).
+  local antes_h="$antes" depois_h="$depois"
+  if [ "$trecho" -eq 1 ] && [ "$bruto" -eq 0 ]; then
+    antes_h=$(trecho_html "$antes") \
+      || { echo "não consegui converter o trecho para o formato do corpo (python3)" >&2; exit 1; }
+    depois_h=$(trecho_html "$depois") \
+      || { echo "não consegui converter o trecho para o formato do corpo (python3)" >&2; exit 1; }
+  fi
   # `cadeira: null` tira a cadeira (a API trata o nulo explícito como pedido); ausente não mexe.
   jq -n --arg t "$titulo" --argjson d "$d_json" --argjson tc "$tem_cadeira" --arg c "$cadeira" --arg n "$nivel" \
         --arg o "$originacao" --arg x "$executor" \
+        --argjson tr "$trecho" --arg ta "$antes_h" --arg td "$depois_h" \
      '(if $t == "" then {} else {titulo:$t} end)
+      + (if $tr == 1 then {descricao_trecho:{antes:$ta, depois:$td}} else {} end)
       + (if $d == null then {} else {descricao:$d} end)
       + (if $tc == 1 then {cadeira: (if $c == "" then null else $c end)} else {} end)
       + (if $n == "" then {} else {nivel: ($n|tonumber)} end)
