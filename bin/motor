@@ -1347,13 +1347,32 @@ def _emite_consulta(nome, inst, corpo, resp, dur_ms):
         pass  # log e instrumento, nunca barreira: a busca ja respondeu.
 
 
+def _erro_do_filtro(bruto):
+    """A mensagem de um 400 da API que começa por «filtro:» (#4116), ou None. A API recusa o objeto `filtro` com
+    essa marca (eixo ou valor fora do vocabulário, forma torta); o corpo vem como `{"erro": ...}` na rota
+    legada e como `{"detail": ...}` na v1."""
+    try:
+        dado = json.loads(bruto.decode("utf-8", "replace"))
+    except ValueError:
+        return None
+    msg = (dado.get("erro") or dado.get("detail")) if isinstance(dado, dict) else None
+    return msg if isinstance(msg, str) and msg.startswith("filtro:") else None
+
+
 def _trata_erro_http(e, contexto="motor"):
     if isinstance(e, urllib.error.HTTPError):
         corpo = ""
+        bruto = b""
         try:
-            corpo = e.read(200).decode("utf-8", "replace").strip()
+            bruto = e.read(4000)
+            corpo = bruto[:200].decode("utf-8", "replace").strip()
         except Exception:
             pass
+        if e.code == 400 and _erro_do_filtro(bruto):
+            # A recusa do filtro é uso errado de quem chamou (exit 2), com a linha da API inteira: o valor errado e a
+            # lista válida. Nenhuma outra resposta de erro muda.
+            print(f"{contexto}: {_erro_do_filtro(bruto)}", file=sys.stderr)
+            sys.exit(2)
         motivo = f"HTTP {e.code}"
         if corpo:
             motivo += f" — {corpo}"
@@ -1365,6 +1384,88 @@ def _trata_erro_http(e, contexto="motor"):
     else:
         print(f"{contexto}: {e}", file=sys.stderr)
     sys.exit(3)
+
+
+# O filtro do pedido (#4116): `--filtro eixo=v1,v2` (repetível; o mesmo eixo soma) e `--juncao e|ou`, no `buscar` e no
+# `medir`. O verbo confere o que dá sem rede (eixo, junção, a casa) e recusa com exit 2 antes de chamar a API; o valor
+# fora do vocabulário a API recusa (400 «filtro:»), e `_trata_erro_http` o traduz em exit 2 com a linha dela. Sem
+# `--filtro` nem `--juncao` o corpo não ganha nada: sai byte a byte o de antes.
+EIXOS_FILTRO = ("dominio", "subdominio", "frente", "colecao", "conceito")
+
+
+def _recusa_filtro(contexto, msg):
+    print(f"{contexto}: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+
+def _le_filtro_flag(v, contexto):
+    """`eixo=v1,v2` -> (eixo, [v1, v2]); forma torta ou eixo fora dos cinco sai 2 com a lista dos eixos."""
+    eixo, sep, resto = v.partition("=")
+    eixo = eixo.strip()
+    validos = ", ".join(EIXOS_FILTRO)
+    if not sep:
+        _recusa_filtro(contexto, f"--filtro quer eixo=valor[,valor], recebi {v!r}. eixos validos: {validos}.")
+    if eixo not in EIXOS_FILTRO:
+        _recusa_filtro(contexto, f"--filtro: eixo {eixo!r} desconhecido. eixos validos: {validos}.")
+    valores = [x.strip() for x in resto.split(",") if x.strip()]
+    if not valores:
+        _recusa_filtro(contexto, f"--filtro {eixo}= sem valor. Passe {eixo}=valor[,valor].")
+    return eixo, valores
+
+
+def _le_juncao_flag(v, contexto):
+    if v not in ("e", "ou"):
+        _recusa_filtro(contexto, f"--juncao aceita e|ou, recebi {v!r}.")
+    return v
+
+
+def _soma_filtro(filtros, eixo, valores):
+    """Acrescenta os valores ao eixo sem repetir; o mesmo eixo em duas flags soma."""
+    atual = filtros.setdefault(eixo, [])
+    atual.extend(x for x in valores if x not in atual)
+
+
+def _confere_filtro(filtros, juncao, particao, contexto):
+    """Confere o filtro do pedido sem rede e devolve o objeto `filtro` do corpo, ou None quando o pedido não trouxe
+    filtro nem junção. A junção dita pede dois eixos (a «e» padrão não precisa ser dita); a «ou» pede o eixo conceito,
+    porque é o conceito que ela junta ao resto; e o filtro só vale na biblioteca."""
+    if not filtros and juncao is None:
+        return None
+    if particao != "biblioteca":
+        _recusa_filtro(contexto, f"o filtro não vale na {particao}: só a biblioteca tem domínio, frente, coleção e conceito.")
+    if juncao is not None:
+        if len(filtros) < 2:
+            _recusa_filtro(contexto, f"a junção pede dois eixos, e veio {len(filtros)}. Passe dois --filtro de eixos "
+                                     f"diferentes ou tire a --juncao.")
+        if juncao == "ou" and "conceito" not in filtros:
+            _recusa_filtro(contexto, "--juncao ou pede o eixo conceito, e faltou o conceito: a «ou» junta o conceito "
+                                     "ao resto. Passe --filtro conceito=<slug>.")
+    objeto = {eixo: list(v) for eixo, v in filtros.items()}
+    if juncao is not None:
+        objeto["juncao"] = juncao
+    return objeto
+
+
+def _valores_da_flag(argv, flag, contexto):
+    """Todos os valores de uma flag repetível, na ordem; flag sem valor sai 2."""
+    valores = []
+    for i, a in enumerate(argv):
+        if a == flag:
+            if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+                print(f"{contexto}: a flag {flag} exige um valor.", file=sys.stderr)
+                sys.exit(2)
+            valores.append(argv[i + 1])
+    return valores
+
+
+def _filtro_do_argv(argv, particao, contexto):
+    """O objeto `filtro` das flags `--filtro`/`--juncao` de um argv (o `medir`), ou None."""
+    filtros = {}
+    for v in _valores_da_flag(argv, "--filtro", contexto):
+        _soma_filtro(filtros, *_le_filtro_flag(v, contexto))
+    juncoes = _valores_da_flag(argv, "--juncao", contexto)
+    juncao = _le_juncao_flag(juncoes[-1], contexto) if juncoes else None
+    return _confere_filtro(filtros, juncao, _PARA_A_API.get(particao, particao), contexto)
 
 
 # Quem chamou a busca (#3314); a mesma lista do CHECK de acervo.evento_recuperacao. A abertura e a
@@ -1393,6 +1494,9 @@ def cmd_buscar(nome_inst, inst, argv):
     uso = ('motor <inst> buscar <particao> --necessidade "<uma frase que nomeia o assunto pelo termo do acervo>" '
            '[--sem-lint] [--k N] [--texto secao|trecho|nenhum] [--conceito <slug>] '
            '[--ordem-id <id>] [--geracao <id|gN>] [--origem ' + "|".join(ORIGENS) + ']\n'
+           '  filtro: [--filtro eixo=v1,v2 ...] [--juncao e|ou]; eixos: ' + ", ".join(EIXOS_FILTRO)
+           + '; dois valores no mesmo eixo valem por ou, dois eixos por e; --juncao ou junta o conceito ao resto; '
+           'so na biblioteca; [--json] e a saida de sempre, o JSON cru\n'
            '  posicional: motor <inst> buscar <particao> "<frase>" passa pelo mesmo lint; '
            '--origem ' + "|".join(ORIGENS_LITERAIS) + ' manda o texto literal, sem lint nem montagem\n  ' + SPEC)
     if not argv and sys.stdin.isatty():
@@ -1402,6 +1506,8 @@ def cmd_buscar(nome_inst, inst, argv):
     particao, resto = resolve_particao(argv, "buscar")
     corpo = {"particao": _PARA_A_API.get(particao, particao)}
     conceitos = []
+    filtros = {}
+    juncao = None
     palavras = []
     necessidade = None
     sem_lint = False
@@ -1409,6 +1515,9 @@ def cmd_buscar(nome_inst, inst, argv):
     i = 0
     while i < len(resto):
         a = resto[i]
+        if a == "--json":                     # a saida ja e o JSON cru: a flag entra sem efeito (#4116)
+            i += 1
+            continue
         if a == "--sem-lint":                 # para a bancada: grava `lint: desligado` no evento
             sem_lint = True
             i += 1
@@ -1424,10 +1533,11 @@ def cmd_buscar(nome_inst, inst, argv):
         if a.startswith("--"):
             nome = a[2:]
             if nome not in ("k", "texto", "conceito", "ordem-id", "origem", "geracao", "necessidade",
-                            "piso", "piso-revisor", "instrucao"):
+                            "piso", "piso-revisor", "instrucao", "filtro", "juncao"):
                 print("buscar: flag desconhecida " + repr(a)
                       + ". conhecidas: --necessidade, --sem-lint, --k, --texto, --conceito, --ordem-id,"
-                        " --origem, --geracao, --previa, --rastro, --piso, --piso-revisor, --instrucao.\n  " + uso,
+                        " --origem, --geracao, --previa, --rastro, --piso, --piso-revisor, --instrucao,"
+                        " --filtro, --juncao, --json.\n  " + uso,
                       file=sys.stderr)
                 sys.exit(2)
             if i + 1 >= len(resto) or resto[i + 1].startswith("--"):
@@ -1463,6 +1573,10 @@ def cmd_buscar(nome_inst, inst, argv):
                     print(f"buscar: --{nome} vai de 0 (exclusivo) a 1, recebi {v!r}.", file=sys.stderr)
                     sys.exit(2)
                 corpo["aviso_de_cobertura_fraca" if nome == "piso" else "aviso_com_revisor"] = piso
+            elif nome == "filtro":           # repetivel: o mesmo eixo em duas flags soma os valores (#4116)
+                _soma_filtro(filtros, *_le_filtro_flag(v, "buscar"))
+            elif nome == "juncao":
+                juncao = _le_juncao_flag(v, "buscar")
             elif nome == "instrucao":
                 corpo["instrucao_da_pergunta"] = v
             elif nome == "k":
@@ -1481,6 +1595,11 @@ def cmd_buscar(nome_inst, inst, argv):
             palavras.append(a)
             i += 1
 
+    # O filtro do pedido (#4116) se confere aqui, sem rede e antes do lint da necessidade: o filtro não passa pelo
+    # lint e, sem as flags, o corpo não ganha nada.
+    filtro = _confere_filtro(filtros, juncao, corpo["particao"], "buscar")
+    if filtro is not None:
+        corpo["filtro"] = filtro
     if previa:
         if corpo.get("origem") not in (None, "previa"):
             print("buscar: --previa e --origem " + corpo["origem"] + " juntos; a previa tem origem propria.\n  " + uso,
@@ -1740,17 +1859,64 @@ def _mesma_bateria(a, b):
     return norm(a) == norm(b)
 
 
-def ultima_medicao(inst, bateria, geracao=None):
+def ultima_medicao(inst, bateria, geracao=None, filtro=None):
     """A ultima rodada DA MESMA bateria (e da mesma geracao: a sombra se compara com a sombra, o servido
-    com o servido). Comparar estratos diferentes seria comparar populacoes diferentes e chamar a
-    diferenca de delta."""
+    com o servido; e do mesmo filtro, #4116: a rodada filtrada nao se compara com a de corpus inteiro).
+    Comparar estratos diferentes seria comparar populacoes diferentes e chamar a diferenca de delta.
+    A rodada de antes do filtro nao tem o campo: vale como sem filtro."""
     d = dir_medicoes(inst)
     for nome in sorted((f for f in os.listdir(d) if f.endswith(".json")), reverse=True):
         with open(os.path.join(d, nome)) as f:
             m = json.load(f)
-        if _mesma_bateria(_chave_bateria(m), bateria) and m.get("geracao") == geracao:
+        if (_mesma_bateria(_chave_bateria(m), bateria) and m.get("geracao") == geracao
+                and m.get("filtro") == filtro):
             return m
     return None
+
+
+def _rodada_do_rotulo(inst, rotulo, excluir=None):
+    """A ultima rodada gravada com esse rotulo (a mais recente primeiro), sem contar o arquivo `excluir`."""
+    d = dir_medicoes(inst)
+    for nome in sorted((f for f in os.listdir(d) if f.endswith(".json")), reverse=True):
+        caminho = os.path.join(d, nome)
+        if excluir and os.path.abspath(caminho) == os.path.abspath(excluir):
+            continue
+        with open(caminho) as f:
+            m = json.load(f)
+        if m.get("rotulo") == rotulo:
+            return m
+    return None
+
+
+def _igual_a_rodada(inst, rotulo, perguntas, k, arq):
+    """`medir --igual-a <rotulo>` (#4116): o top-k de cada pergunta contra o da ultima rodada desse rotulo, pela conta
+    do `comparar` (a mesma da virada da busca, #3844). Igual e o mesmo conjunto na mesma ordem. Devolve
+    `{igual, identicas, perguntas, texto, ...}`; rodada de referencia ausente, ou sem o top gravado, nao e igual."""
+    ref = _rodada_do_rotulo(inst, rotulo, excluir=arq)
+    if ref is None:
+        return {"igual": False, "rotulo": rotulo, "identicas": 0, "perguntas": len(perguntas),
+                "texto": f"sem rodada com o rotulo {rotulo!r} em {dir_medicoes(inst)}: nada a comparar."}
+    antes = {(p.get("id"), p["q"]): p.get("top") for p in ref.get("perguntas", [])}
+    linhas, sem_referencia = [], []
+    for p in perguntas:
+        a = antes.get((p.get("id"), p["q"]))
+        if a is None:
+            sem_referencia.append(p["q"])
+            continue
+        linhas.append(comparar.linha({"id": p.get("id"), "q": p["q"], "particao": "biblioteca"},
+                                     a, p.get("top") or [], []))
+    iguais = [l for l in linhas if l["jaccard"] == 1.0 and l["mesma_ordem"]]
+    n = len(perguntas)
+    igual = n > 0 and len(iguais) == n and not sem_referencia
+    texto = [f"top-{k} identico em {len(iguais)}/{n} perguntas contra a rodada [{rotulo}] de {ref.get('em')}"]
+    for l in [l for l in linhas if l not in iguais][:comparar.LIMITE_NO_TEXTO]:
+        texto.append(f"  diferente ({l['jaccard']}{'' if l['mesma_ordem'] else ', ordem'}) {l['q'][:90]} · "
+                     f"so antes {len(l['so_na_servida'])}, so agora {len(l['so_na_nova'])}")
+    for q in sem_referencia[:comparar.LIMITE_NO_TEXTO]:
+        texto.append(f"  sem top na rodada de referencia: {q[:90]}")
+    texto.append("sem diferenca aberta" if igual else "diferenca aberta")
+    return {"igual": igual, "rotulo": rotulo, "identicas": len(iguais), "perguntas": n,
+            "sem_referencia": len(sem_referencia), "texto": "\n".join(texto)}
 
 
 def _medir_bateria(nome, inst, argv):
@@ -1780,6 +1946,9 @@ def _medir_bateria(nome, inst, argv):
     expansao = "--expansao" in argv
     veredito = "--veredito" in argv
     geracao = _valor(argv, "--geracao", "medir") if "--geracao" in argv else None
+    # O filtro de cada pergunta da rodada (#4116) e a comparacao com uma rodada pelo rotulo: conferidos antes da rede.
+    filtro = _filtro_do_argv(argv, particao, "medir")
+    igual_a = _valor(argv, "--igual-a", "medir") if "--igual-a" in argv else None
     peso = argv[argv.index("--peso-conceito") + 1] if "--peso-conceito" in argv else None
     bat = argv[argv.index("--bateria") + 1] if "--bateria" in argv else None
     if bat:
@@ -1820,6 +1989,8 @@ def _medir_bateria(nome, inst, argv):
               f"veredito_por_conceito {aj.get('veredito_por_conceito')}")
     print()
 
+    if filtro:
+        print(f"filtro desta rodada: {json.dumps(filtro, ensure_ascii=False)} (so compara com rodada do mesmo filtro)\n")
     ranks = {"codigo": [], "sentido": [], "t2": []}
     abst_ok, abst_total = 0, 0
     abst_sem, total_sem, abst_com, total_com = 0, 0, 0, 0
@@ -1837,6 +2008,8 @@ def _medir_bateria(nome, inst, argv):
             corpo["peso_conceito"] = float(peso)
         if geracao:
             corpo["geracao"] = geracao
+        if filtro:
+            corpo["filtro"] = filtro
         r = http(inst["endpoint"], tok, corpo)
         lat.append((r.get("tempos_ms") or {}).get("total", 0.0))
         for fase, ms in (r.get("tempos_ms") or {}).items():       # a latencia por fase (R1, #3513)
@@ -1864,6 +2037,7 @@ def _medir_bateria(nome, inst, argv):
             if t2:
                 ranks["t2"].append(rnk)
             linha.update(grupo="t2" if t2 else "pos", rank=rnk)
+        linha["top"] = comparar.top(r.get("fontes") or [], k)     # o top-k da pergunta: o que `--igual-a` compara
         perguntas.append(linha)
         if i % 25 == 0:
             print(f"  ... {i}/{len(gold)}")
@@ -1878,7 +2052,7 @@ def _medir_bateria(nome, inst, argv):
                           "taxa": round(abst_ok / abst_total, 3)}
     med = {"em": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "rotulo": rotulo, "k": k,
            "rerank": rerank, "expansao": expansao, "peso_conceito": peso,
-           "veredito": veredito, "geracao": geracao, "bracos": bracos,
+           "veredito": veredito, "geracao": geracao, "bracos": bracos, "filtro": filtro,
            "bateria": chave_bat, "gabarito": chave_bat,
            "indice": carimbo, "gold": conta, "metricas": m,
            "abstencao": f"{abst_ok}/{abst_total}" if abst_total else None,
@@ -1903,7 +2077,7 @@ def _medir_bateria(nome, inst, argv):
     print(f"\n  latencia servida: mediana {med['latencia_ms']['mediana']} ms | "
           f"p90 {med['latencia_ms']['p90']} ms | rodada {med['elapsed_s']}s")
 
-    anterior = ultima_medicao(inst, chave_bat, geracao)
+    anterior = ultima_medicao(inst, chave_bat, geracao, filtro)
     arq = os.path.join(dir_medicoes(inst),
                        time.strftime("%Y%m%dT%H%M%S") + (f"-{rotulo}" if rotulo else "") + ".json")
     with open(arq, "w") as f:
@@ -1958,7 +2132,17 @@ def _medir_bateria(nome, inst, argv):
     else:
         print("\n  primeira medicao: nao ha baseline. Meca de novo depois de mexer.")
     print(f"\n  salvo em {arq}")
-    return {"med": med, "arquivo": arq, "anterior": anterior}
+    saida = {"med": med, "arquivo": arq, "anterior": anterior}
+    if igual_a:
+        saida["igual_a"] = _igual_a_rodada(inst, igual_a, perguntas, k, arq)
+        print("\n" + saida["igual_a"]["texto"])
+    return saida
+
+
+def _sai_se_diferente(res):
+    """`medir --igual-a`: qualquer diferenca no top-k sai 1 (a rodada ja foi gravada e impressa)."""
+    if isinstance(res, dict) and res.get("igual_a") and not res["igual_a"]["igual"]:
+        sys.exit(1)
 
 
 def _medida_da_rodada(linhas):
@@ -3528,13 +3712,19 @@ def cmd_medir(nome, inst, argv):
     if "--contra" in argv:
         return _medir_contra(nome, inst, argv)
     if "--json" not in argv:
-        return _medir_bateria(nome, inst, argv)
+        res = _medir_bateria(nome, inst, argv)
+        _sai_se_diferente(res)
+        return res
     if any(x in argv for x in ("--calibrar", "--sombra", "--sombra-ver", "--sombra-parar")):
         _usa("medir", USO_MEDIR_JSON, "--json vale para a bateria e para --historico; calibrar e sombra seguem em texto")
     import contextlib
     with contextlib.redirect_stdout(sys.stderr):      # o progresso da bateria vai ao stderr; o stdout e o JSON
         res = _medir_bateria(nome, inst, [x for x in argv if x != "--json"])
-    print(json.dumps(_medida_em_json(res), ensure_ascii=False, indent=1))
+    saida_json = _medida_em_json(res)
+    if isinstance(saida_json, dict) and res.get("igual_a"):
+        saida_json = {**saida_json, "igual_a": res["igual_a"]}
+    print(json.dumps(saida_json, ensure_ascii=False, indent=1))
+    _sai_se_diferente(res)
 
 
 USO_MEDIR_CONTRA = ("motor <inst> medir <particao> --contra <outra> [--k N] [--bateria <arq>] [--log N] [--json] | "
