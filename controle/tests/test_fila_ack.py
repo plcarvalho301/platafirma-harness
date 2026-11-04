@@ -111,9 +111,29 @@ def test_ler_entrega_sem_ack(monkeypatch, capsys):
     assert "===MSG 20261003T100000-ia===" in cap.out
     assert rc.acks == []
     assert rc.pel == ["100-1", "100-2"]
-    # segunda leitura quente nao reentrega
+    # segunda leitura quente nao reentrega, mas diz a pendencia (#4112): igual ao status
+    _, cap = _rodar(monkeypatch, capsys, ["ler"], rc)
+    assert cap.out.startswith("nada novo · 2 pendurada(s)")
+    assert "===MSG" not in cap.out
+    assert rc.pel == ["100-1", "100-2"]
+
+
+def test_ler_diz_em_dia_so_sem_nova_e_sem_pendurada(monkeypatch, capsys):
+    rc = _rc()
+    _rodar(monkeypatch, capsys, ["ler"], rc)
+    _rodar(monkeypatch, capsys, ["tratar", "20261003T100000-ia", "20261003T110000-ia"], rc)
     _, cap = _rodar(monkeypatch, capsys, ["ler"], rc)
     assert cap.out.strip() == "caixa em dia"
+
+
+def test_ler_e_status_dizem_o_mesmo_numero(monkeypatch, capsys):
+    rc = _rc()
+    _rodar(monkeypatch, capsys, ["ler"], rc)
+    rc.xack("caixa:ti", "cadeira", "100-1")
+    _, ler = _rodar(monkeypatch, capsys, ["ler"], rc)
+    _, status = _rodar(monkeypatch, capsys, ["status"], rc)
+    assert "1 pendurada(s)" in ler.out
+    assert "1 pendurada(s)" in status.out
 
 
 def test_status_separa_novas_de_penduradas(monkeypatch, capsys):
