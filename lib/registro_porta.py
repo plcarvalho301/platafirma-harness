@@ -26,12 +26,12 @@ class RegistroIlegivel(Exception):
     """O arquivo não existe, não é YAML ou não tem a forma do registro."""
 
 
-def caminho_do(harness) -> Path:
+def caminho_do(harness: str | Path) -> Path:
     """O registro dentro de uma raiz de harness (a release no ar, ou a bancada)."""
     return Path(harness) / "registro" / "porta.yaml"
 
 
-def carrega(arquivo) -> dict:
+def carrega(arquivo: str | Path) -> dict:
     """`{"verbos": {slug: {"modelo": bool, "retido": bool, "faces": {face: {...}}}}, "transporte": [nome, ...]}`,
     na ordem do arquivo, com os padrões preenchidos. Levanta `RegistroIlegivel` com o motivo."""
     arquivo = Path(arquivo)
@@ -66,19 +66,19 @@ def retidos(registro: dict) -> set[str]:
     return {slug for slug, v in registro["verbos"].items() if v["retido"]}
 
 
-def _mapa(valor, arquivo, onde) -> dict:
+def _mapa(valor: object, arquivo: Path, onde: str) -> dict:
     if not isinstance(valor, dict) or not valor:
         raise RegistroIlegivel(f"{arquivo}: `{onde}` tem de ser um mapa com pelo menos um item")
     return valor
 
 
-def _slug(slug, arquivo) -> str:
+def _slug(slug: object, arquivo: Path) -> str:
     if not isinstance(slug, str) or not SLUG.match(slug):
         raise RegistroIlegivel(f"{arquivo}: nome fora da forma de slug: {slug!r}")
     return slug
 
 
-def _verbo(slug, atr, arquivo) -> dict:
+def _verbo(slug: str, atr: object, arquivo: Path) -> dict:
     atr = {} if atr is None else atr
     if not isinstance(atr, dict) or set(atr) - ATRIBUTOS:
         raise RegistroIlegivel(f"{arquivo}: `verbos.{slug}` com atributo fora de {sorted(ATRIBUTOS)}")

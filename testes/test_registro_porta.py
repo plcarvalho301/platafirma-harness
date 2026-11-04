@@ -21,6 +21,8 @@ import registro_porta as rp  # noqa: E402
 
 REGISTRO = REPO_ROOT / "registro" / "porta.yaml"
 FORA_DA_LISTA = {"chat", "minuta", "persona", "preferencia", "sinal", "situacao", "sessao"}
+# o que o gatilho nao leva: numero de card, spec ou ADR (regra do card #4117)
+PROIBIDOS_NO_USE_PARA = (r"#\d{3,}", r"arq:\d", r"spec\b", r"\bADR\b")
 
 
 @pytest.fixture(scope="module")
@@ -87,7 +89,7 @@ def test_o_use_para_nao_leva_numero_de_card_nem_spec_nem_adr_e_nao_tem_nao_use_p
         topo = (REPO_ROOT / "bin" / slug).read_text(encoding="utf-8").splitlines()[:30]
         i = next(n for n, l in enumerate(topo) if l.startswith("# use para: "))
         use = topo[i]
-        assert not re.search(r"#\d{3,}|arq:\d|spec\b|\bADR\b", use) or slug == "acervo", slug
+        assert not any(re.search(p, use) for p in PROIBIDOS_NO_USE_PARA) or slug == "acervo", slug
         assert "NÃO use para" not in use and "NAO use para" not in use, slug
         # a linha e uma so: o que vem depois dela e outra chave do cabecalho, nao resto do texto antigo
         assert re.match(r"^# [a-z-]+:", topo[i + 1]), f"{slug}: sobrou continuacao do `use para:` antigo"

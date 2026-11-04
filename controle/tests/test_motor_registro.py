@@ -117,11 +117,14 @@ def test_slug_fora_do_tesauro_recusa_o_registro(monkeypatch):
     assert e.value.code == 3
 
 
-def test_a_descricao_servida_ensina_a_necessidade_em_frase(sql):
+def test_a_descricao_servida_e_o_gatilho_da_pagina_e_a_necessidade_fica_na_ajuda(sql):
+    """#4117: o gatilho do motor e o texto do dono na pagina Gatilhos da porta (acha pelo sentido, antes de responder
+    de cabeca), que tirou da descricao a forma da chamada. Quem ensina a necessidade em frase e a ajuda do verbo
+    (`test_a_ajuda_do_buscar_mostra_a_necessidade`), que a story manteve."""
     cap, desc, _ = sql
     assert cap == "motor"
-    assert desc.startswith("busca semantica sobre uma particao do acervo")
-    assert "--necessidade" in desc and "saco de palavras" in desc
+    assert desc.startswith("acha pelo sentido o trecho do acervo que responder, filtrável por domínio e/ou conceitos")
+    assert "use para: SEMPRE ANTES de responder de cabeça e ANTES de abrir o acervo" in desc
     assert '"<pergunta>"' not in desc, "a forma de antes do #3360 nao volta"
 
 
