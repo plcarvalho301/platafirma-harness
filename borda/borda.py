@@ -651,22 +651,48 @@ def origens_das_telas(caminho, ids=()):
 
 
 # --- a instância ------------------------------------------------------------------------------
+def faces_do_registro(declarado, raiz_do_harness, atende):
+    """As faces que a instância atende, do registro da porta já lido (`declarado`, o dict do registro/porta.yaml;
+    #4117). Cada verbo que declara a face vira um `Face`, na ordem do registro; o arquivo do verbo é
+    `<raiz do harness>/bin/<slug>`, o bin da release. Levanta `ValueError` se o registro não tem a forma."""
+    verbos = declarado.get("verbos") if isinstance(declarado, dict) else None
+    if not isinstance(verbos, dict):
+        raise ValueError("registro sem `verbos`")
+    faces = []
+    for slug, atributos in verbos.items():
+        declaradas = (atributos or {}).get("faces") or {}
+        if not isinstance(declaradas, dict):
+            raise ValueError(f"`faces` de {slug} não é mapa")
+        for nome, cfg in declaradas.items():
+            if nome not in atende:
+                continue
+            cfg = cfg or {}
+            faces.append(Face(nome, verbo=os.path.join(raiz_do_harness, "bin", slug),
+                              instancia=cfg.get("instancia"), sem_instancia=cfg.get("sem_instancia", ())))
+    return faces
+
+
 def criar_app(env=None):
-    """A borda da instância, da configuração dela: nada disto é código. `BORDA_FACES` é um JSON
-    `{"<face>": {"verbo": "<arquivo do verbo na release>", "instancia": "rag", "sem_instancia": ["listar"]}}`;
-    a face que chama mais de um verbo leva a lista deles: `{"<face>": [{"verbo": ...}, {"verbo": ...}]}`."""
+    """A borda da instância, da configuração dela: nada disto é código. `BORDA_REGISTRO` aponta o registro da
+    porta na release (registro/porta.yaml, #4117), como `BORDA_TELAS` aponta a declaração das telas, e
+    `BORDA_FACES_ATENDE` diz as faces desta instância (vírgula entre valores). As faces, o verbo de cada uma, a
+    instância e os atos sem instância saem do registro. Sem um dos dois, ilegível ou sem a forma: nenhuma face, e
+    nada passa (falha fechada)."""
     env = os.environ if env is None else env
     faces = []
-    try:
-        declaradas = json.loads(env.get("BORDA_FACES") or "{}")
-        for nome, ds in declaradas.items():
-            for d in (ds if isinstance(ds, list) else [ds]):
-                faces.append(Face(nome, verbo=d["verbo"], instancia=d.get("instancia"),
-                                  sem_instancia=d.get("sem_instancia", ())))
-    except (ValueError, KeyError, TypeError, AttributeError) as e:
-        print(json.dumps({"evento": "config-ilegivel", "variavel": "BORDA_FACES", "tipo": type(e).__name__}),
-              flush=True)
-        faces = []
+    registro = (env.get("BORDA_REGISTRO") or "").strip()
+    atende = [f.strip() for f in (env.get("BORDA_FACES_ATENDE") or "").split(",") if f.strip()]
+    if registro and atende:
+        try:
+            import yaml
+            with open(registro, encoding="utf-8") as fh:
+                declarado = yaml.safe_load(fh)
+            faces = faces_do_registro(declarado, os.path.dirname(os.path.dirname(os.path.abspath(registro))),
+                                      atende)
+        except Exception as e:      # noqa: BLE001  (arquivo ausente, nao e YAML, sem a forma: a mesma falha fechada)
+            print(json.dumps({"evento": "config-ilegivel", "variavel": "BORDA_REGISTRO", "tipo": type(e).__name__}),
+                  flush=True)
+            faces = []
     origens = [o for o in (env.get("BORDA_ORIGENS") or "").split(",")]
     try:
         login_max_s = int(env.get("BORDA_LOGIN_MAX_S") or LOGIN_MAX_S)
@@ -862,8 +888,12 @@ def _autoteste():
     antes = len(chamadas)
     assert asyncio.run(_chamar(ambigua, "GET", "/api/motor/buscar", token))[0] == 503
     assert len(chamadas) == antes
-    lista = criar_app({"BORDA_FACES": json.dumps({"motor": [{"verbo": "/a/motor", "instancia": "rag"}, {"verbo": "/a/fila"}]})})
+    registro = {"verbos": {"motor": {"faces": {"motor": {"instancia": "rag"}}}, "fila": {"faces": {"motor": {}}}}}
+    lista = Borda(faces_do_registro(registro, "/a", {"motor"}), origens=(origem,), chamar_porta=porta,
+                  saida=io.StringIO())
     assert [(f.tool, f.instancia) for f in lista.faces["motor"]] == [("motor", "rag"), ("fila", None)]
+    assert [f.verbo for f in lista.faces["motor"]] == ["/a/bin/motor", "/a/bin/fila"]
+    assert faces_do_registro(registro, "/a", {"casca"}) == [], "só as faces que a instância atende"
     print("borda: face com dois verbos — cada ato ao verbo que o declara, o ato duplicado falha fechado   ok")
     # 9. o login do dono (#2572, #3575): a escrita com `auth_time` de mais de cinco minutos sai 401 sem chegar
     #    à porta; a leitura não tem esse corte; sem o claim a borda deixa passar e deixa a linha no stdout.
@@ -1167,8 +1197,7 @@ def _autoteste_das_leituras_da_casca(saida, origem, de_fora, jwt, agora):
         assert escrever(todas, a) == 403, "declaração ausente falha fechada"
         # a configuração da instância se soma à declaração
         declarar(("a", a))
-        env = {"BORDA_ORIGENS": b, "BORDA_TELAS": arquivo, "BORDA_TELAS_ATENDE": "a",
-               "BORDA_FACES": json.dumps({"motor": {"verbo": "/a/motor"}})}
+        env = {"BORDA_ORIGENS": b, "BORDA_TELAS": arquivo, "BORDA_TELAS_ATENDE": "a"}
         app = criar_app(env)
         app._chamar = porta
         assert app.origens == (b,) and app._origens_da_declaracao() == (a,)
