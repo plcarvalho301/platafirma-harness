@@ -170,3 +170,44 @@ def test_os_padroes_sao_modelo_verdadeiro_retido_falso_e_sem_faces(tmp_path):
     assert r["verbos"] == {"a": {"modelo": True, "retido": False, "faces": {}},
                            "b": {"modelo": True, "retido": False, "faces": {}}}
     assert r["transporte"] == ["malote"]
+
+
+# --- `acervo registrar --so-descricao`: a descricao do cabecalho sem tocar no acesso --------------------------
+
+def _registrar():
+    loader = SourceFileLoader("registrar_porta", str(REPO_ROOT / "bin" / "_acervo" / "registrar"))
+    spec = importlib.util.spec_from_loader("registrar_porta", loader)
+    modulo = importlib.util.module_from_spec(spec)
+    loader.exec_module(modulo)
+    return modulo
+
+
+def test_so_descricao_rele_o_cabecalho_do_infra_e_escreve_so_a_coluna_descricao(monkeypatch):
+    """O `# le:`/`# escreve:` do infra esta em prosa, e o registro inteiro o recusa (exit 3). O modo novo grava so
+    a descricao, que o card #4117 manda reler do cabecalho, e nao toca em ato, acesso, consumo nem ambiente."""
+    registrar = _registrar()
+    enviados = []
+    monkeypatch.setattr(registrar, "_psql", lambda sql, escreve=False: enviados.append(sql) or "infra\nUPDATE 1\n")
+    desc = registrar.registrar_descricao("infra")
+    assert desc.startswith("OPERA o serviço e a máquina em que ele roda · use para: SEMPRE que for subir")
+    (sql,) = enviados
+    assert sql.startswith("update acervo.ferramental_verbo set descricao = ") and "where slug = 'infra'" in sql
+    assert not any(t in sql for t in ("ferramental_ato", "ferramental_acesso", "ferramental_consumo", "ferramental_ambiente"))
+
+
+def test_so_descricao_recusa_verbo_que_o_golden_nao_tem_e_o_que_nao_tem_bin(monkeypatch):
+    registrar = _registrar()
+    monkeypatch.setattr(registrar, "_psql", lambda sql, escreve=False: "UPDATE 0\n")
+    with pytest.raises(SystemExit) as saida:
+        registrar.registrar_descricao("infra")
+    assert saida.value.code == 3
+    with pytest.raises(SystemExit) as saida:
+        registrar.registrar_descricao("verbo-que-nao-existe")
+    assert saida.value.code == 3
+
+
+def test_so_descricao_funciona_nos_sete_verbos_que_o_registro_inteiro_recusa(monkeypatch):
+    registrar = _registrar()
+    monkeypatch.setattr(registrar, "_psql", lambda sql, escreve=False: re.search(r"slug = '(\w+)'", sql).group(1) + "\n")
+    for verbo in ("acesso", "expediente", "infra", "mesa", "release", "seg", "sessao"):
+        assert registrar.registrar_descricao(verbo), verbo
