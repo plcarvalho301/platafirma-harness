@@ -3150,7 +3150,6 @@ def conferir_vocabulario(alvo=None, como_json=False):
         padroes = [
             os.path.join(repo_raiz, "abertura", "dono.md"),
             os.path.join(repo_raiz, "abertura", "oficio.md"),
-            os.path.join(repo_raiz, "abertura", "oficio-ferramental.md"),
             os.path.join(repo_raiz, "docs", "spec_*.md"),
             os.path.join(repo_raiz, "skills", "*", "SKILL.md"),
         ]

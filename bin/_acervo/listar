@@ -7,9 +7,10 @@
 # `acervo listar conceitos [--json]`   — golden record acervo.conceito (rag-extractor-pg).
 # `acervo listar ferramental [--json] [--oficio] [--tools]` — golden record acervo.ferramental
 #     (3 níveis: capacidade → verbo → instância). Fatia física da minuta 0012 / ADR 0076.
-#     Com --oficio, filtra pelos verbos do NÚCLEO de abertura (whitelist em
-#     abertura/oficio-ferramental.md), pra o oficio.md não duplicar a lista à mão.
-#     Com --tools, projeta o núcleo em tools MCP (consumidor: ops-server).
+#     Com --oficio, filtra pelos verbos que o modelo vê (registro da porta, registro/porta.yaml,
+#     `modelo` verdadeiro), pra o oficio.md não duplicar a lista à mão.
+#     Com --tools, projeta esses verbos em tools MCP: a descrição é a coluna `descricao` do golden record
+#     (consumidores: ops-server, na subida, e `agente conferir`).
 # `acervo listar topologia [<stack>] [--json] [--completo]` — golden record acervo.stack (eixo
 #     irmão); com <stack>, filtra a uma só.
 # `acervo listar topologia <stack> --rotas`   — ingress do túnel que entra em cada serviço
@@ -57,13 +58,9 @@ PG = "rag-extractor-pg"
 DB = "rag_extractor"
 USR = "rag"
 
-# Whitelist do núcleo de abertura. A fonte é abertura/oficio-ferramental.md, um slug
-# de verbo por linha dentro do bloco cercado (```); comentários e texto fora do bloco
-# são ignorados. Resolvido relativo à raiz do harness (dois níveis acima de bin/).
-OFICIO_WHITELIST = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))),
-    "abertura", "oficio-ferramental.md",
-)
+# O que o modelo vê vem do registro da porta (registro/porta.yaml, #4117), lido por lib/registro_porta, o
+# único leitor. Resolvido relativo à raiz do harness (dois níveis acima de bin/).
+RAIZ_HARNESS = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
 # Cada SELECT devolve UMA linha: um array JSON de objetos, chaveados por nome de coluna.
 # json_agg preserva a ordem do ORDER BY interno. coalesce(..., '[]') porque json_agg de
@@ -208,63 +205,18 @@ def morre(msg, code=2):
 def _lit(s):
     return "'" + str(s).replace("'", "''") + "'"
 
-def _le_whitelist_oficio():
-    """Slugs de verbo do núcleo, do bloco cercado de oficio-ferramental.md.
-
-    Só as linhas dentro do primeiro par de cercas ``` contam; fora delas é prosa.
-    Linha vazia e comentário (#) são ignorados. O slug é o primeiro token da linha;
-    o resto são marcadores `chave:valor` (hoje: `leva:2`, tool retida atrás de
-    PF_TOOLS_LEVA2 — o whitelist é a ÚNICA fonte de quem é leva 2). Ausência do
-    arquivo ou bloco vazio é erro duro: --oficio sem whitelist serviria a lista
-    inteira e mentiria sobre ser 'só o núcleo'.
-
-    Devolve set de slugs; `_marcadores_oficio()` devolve {slug: {chave: valor}}.
-    """
+def _visiveis_da_porta():
+    """Slugs dos verbos que o modelo vê, do registro da porta (registro/porta.yaml): `modelo` verdadeiro; o
+    retido (`retido: true`) entra, porque quem o segura é a porta, por PF_TOOLS_LEVA2. Registro ausente ou
+    ilegível é erro duro: --oficio e --tools sem ele serviriam a lista inteira (ou nenhuma) e mentiriam
+    sobre o que a porta mostra. Devolve a lista na ordem do registro."""
+    sys.path.insert(0, os.path.join(RAIZ_HARNESS, "lib"))
+    import registro_porta
     try:
-        with open(OFICIO_WHITELIST, encoding="utf-8") as fh:
-            linhas = fh.read().splitlines()
-    except FileNotFoundError:
-        morre("acervo listar ferramental --oficio: whitelist nao encontrado em\n  %s"
-              % OFICIO_WHITELIST, 3)
-    dentro = False
-    slugs = []
-    for l in linhas:
-        s = l.strip()
-        if s.startswith("```"):
-            if dentro:
-                break            # fecha no primeiro bloco
-            dentro = True
-            continue
-        if not dentro or not s or s.startswith("#"):
-            continue
-        slugs.append(s.split()[0])
-    if not slugs:
-        morre("acervo listar ferramental --oficio: whitelist vazio em\n  %s\n"
-              "  (esperado um bloco cercado com um slug de verbo por linha)"
-              % OFICIO_WHITELIST, 3)
-    return set(slugs)
-
-def _marcadores_oficio():
-    """{slug: {chave: valor}} dos marcadores da linha do whitelist (ex.: `deploy leva:2`)."""
-    out = {}
-    try:
-        with open(OFICIO_WHITELIST, encoding="utf-8") as fh:
-            linhas = fh.read().splitlines()
-    except FileNotFoundError:
-        return out
-    dentro = False
-    for l in linhas:
-        s = l.strip()
-        if s.startswith("```"):
-            if dentro:
-                break
-            dentro = True
-            continue
-        if not dentro or not s or s.startswith("#"):
-            continue
-        tok = s.split()
-        out[tok[0]] = dict(t.split(":", 1) for t in tok[1:] if ":" in t)
-    return out
+        registro = registro_porta.carrega(registro_porta.caminho_do(RAIZ_HARNESS))
+    except registro_porta.RegistroIlegivel as e:
+        morre("acervo listar ferramental: registro da porta ilegivel — %s" % e, 3)
+    return registro_porta.visiveis(registro)
 
 def _psql_json(sql, alvo):
     """Roda o SELECT (que devolve UMA linha: um array JSON) e desserializa.
@@ -630,15 +582,14 @@ def listar_conceitos(quero_json):
     sys.stderr.write("\n%d conceito(s) no golden record (acervo.conceito).\n" % len(conceitos))
 
 def listar_ferramental_tools():
-    """Projecao do whitelist do nucleo em tools MCP (spec_capsula-de-verbos §3.2).
+    """Projecao do que o modelo ve, em tools MCP (spec_capsula-de-verbos §3.2; registro da porta, #4117).
 
     Um slug = uma tool; nome = slug, sem traducao. A identidade e vb.slug — coluna
     cravada do golden record. Slug sem binario em bin/ sai da lista com aviso em
-    stderr — a porta nunca aborta por isso. `monta-sessao` fica de fora: `monta_sessao`
-    ja e tool e e a unica excecao de nome. Sempre JSON: o consumidor e o ops-server.
+    stderr — a porta nunca aborta por isso. Sem o campo `leva`: quem retem e a porta, pelo registro
+    (`retido`). Sempre JSON: os consumidores sao o ops-server e o `agente conferir`.
     """
-    whitelist = _le_whitelist_oficio()
-    marcas = _marcadores_oficio()
+    whitelist = set(_visiveis_da_porta())
     # Binario e o que o PATH da porta resolve: a porta injeta o bin/ da release no ar
     # (<release>/harness/bin, estavel entre promocoes). Depois, o bin/ desta arvore e o
     # PATH herdado — nao ha mais diretorio de symlinks de verbos.
@@ -653,23 +604,22 @@ def listar_ferramental_tools():
     vistos = set()
     for row in _psql_json(SQL_FERRAMENTAL, "ferramental"):
         verbo = row["verbo"]
-        if verbo not in whitelist or verbo == "monta-sessao":
+        if verbo not in whitelist:
             continue
         vistos.add(verbo)
         binario = shutil.which(verbo, path=caminho)
         if not binario:
-            sys.stderr.write("aviso: whitelist cita %r sem binario executavel no PATH — tool ausente\n" % verbo)
+            sys.stderr.write("aviso: o registro cita %r sem binario executavel no PATH — tool ausente\n" % verbo)
             continue
         desc = (row.get("descricao") or "").strip()
         itens.append({
             "tool": verbo, "verbo": verbo, "capacidade": row["capacidade"],
             "descricao": desc or ("verbo %s (sem descricao no golden record)" % verbo),
             "binario": binario,
-            "leva": int(marcas.get(verbo, {}).get("leva", 1)),
         })
-    faltam = whitelist - vistos - {"monta-sessao"}
+    faltam = whitelist - vistos
     for v in sorted(faltam):
-        sys.stderr.write("aviso: whitelist cita %r ausente no golden record — tool ausente\n" % v)
+        sys.stderr.write("aviso: o registro cita %r ausente no golden record — tool ausente\n" % v)
     print(json.dumps(itens, ensure_ascii=False, indent=2))
 
 def listar_ferramental(quero_json, so_oficio=False):
@@ -682,9 +632,9 @@ def listar_ferramental(quero_json, so_oficio=False):
             "instancias": row.get("instancias") or None,
         })
     if so_oficio:
-        whitelist = _le_whitelist_oficio()
+        whitelist = set(_visiveis_da_porta())
         itens = [i for i in itens if i["verbo"] in whitelist]
-        # Whitelist aponta verbo que o golden record nao tem: nucleo mente. Denuncia.
+        # O registro aponta verbo que o golden record nao tem: nucleo mente. Denuncia.
         faltam = whitelist - {i["verbo"] for i in itens}
         if faltam:
             morre("acervo listar ferramental --oficio: whitelist cita verbo(s) "

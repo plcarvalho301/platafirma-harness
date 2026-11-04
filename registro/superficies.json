@@ -177,7 +177,7 @@
     "nomes": []
   },
   "tools_do_conector": {
-    "claudinho-mcp": "transporte (malote e o apelido run_command, ler_arquivo e o apelido read_file, write_file) + monta_sessao + tools derivadas do whitelist do nucleo (abertura/oficio-ferramental.md, projetadas por `acervo listar ferramental --tools`). Flag PF_TOOLS_VERBOS=0 no env do ops-mcp desliga a projecao. spec_capsula-de-verbos, 02/09/2026.",
+    "claudinho-mcp": "transporte (malote, ler_arquivo, write_file) + monta_sessao + tools derivadas do registro da porta (registro/porta.yaml; a descricao e a do golden record, projetada por `acervo listar casa ferramental --tools`). Flag PF_TOOLS_VERBOS=0 no env do ops-mcp desliga a projecao. spec_capsula-de-verbos, 02/09/2026; registro da porta, #4117.",
     "_": "a lista nominal de tools NAO mora aqui: e projecao do catalogo, e mudar junto com ele e o ponto (spec §5)."
   }
 }
