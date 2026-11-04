@@ -637,7 +637,14 @@ def cmd_ler(rc, eu: str, args):
         elif frio:
             print("nada no historico com esse recorte")
         else:
-            print("caixa em dia")
+            # Sem carta nova, mas com carta entregue e sem XACK: "caixa em dia" esconderia a
+            # pendencia que `status` e `descansar` mostram (#4112). Mesma conta do status.
+            penduradas_n = sum(conta_penduradas(rc, p) for p in personas)
+            if penduradas_n:
+                print(f"nada novo · {penduradas_n} pendurada(s) · `fila ler --penduradas` lista, "
+                      "`fila tratar <msgid>` confirma")
+            else:
+                print("caixa em dia")
 
 
 # ---------- tratar ----------
