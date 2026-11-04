@@ -11,5 +11,16 @@
     "ambiente": "banco-rag",
     "teto_s": 600,
     "motivo": "S4061: portão, carregador, resolução de chave e conferência do schema casa, contra o banco do acervo"
+  },
+  "diagrama": {
+    "dono": "engenharia",
+    "origem": "espelho",
+    "repo": "platafirma-casa-espelho",
+    "cwd": "outros_repos/harness/lib",
+    "modulo": "diagrama",
+    "pythonpath": ["outros_repos/harness/lib", "outros_repos/harness/skills/diagrama"],
+    "python": "rag",
+    "teto_s": 600,
+    "motivo": "S4115: lint, renderização, checagem estrutural e os dois juízes de figura de arquitetura; a pasta skills/diagrama entra no caminho para o portão comparar os esquemas com origin/main"
   }
 }
