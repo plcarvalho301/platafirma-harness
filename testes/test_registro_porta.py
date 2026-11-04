@@ -6,8 +6,11 @@ ops-server/ (test_contrato_borda.py e _ensaio.py), no venv `ops`.
 """
 from __future__ import annotations
 
+import importlib.util
+import json
 import re
 import sys
+from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
 import pytest
@@ -113,6 +116,48 @@ def test_registro_fora_da_forma_e_ilegivel(tmp_path, texto):
 def test_arquivo_que_nao_existe_e_ilegivel(tmp_path):
     with pytest.raises(rp.RegistroIlegivel):
         rp.carrega(tmp_path / "nao-existe.yaml")
+
+
+# --- `acervo listar casa ferramental --tools` e `--oficio`: o recorte do que o modelo ve ---------------------
+
+def _listar():
+    loader = SourceFileLoader("listar_porta", str(REPO_ROOT / "bin" / "_acervo" / "listar"))
+    spec = importlib.util.spec_from_loader("listar_porta", loader)
+    modulo = importlib.util.module_from_spec(spec)
+    loader.exec_module(modulo)
+    return modulo
+
+
+def _golden(registro, sem=()):
+    """O golden record dublado (ler o real e ler o banco): um verbo por linha, os do registro e os cinco que sairam."""
+    slugs = [s for s in [*registro["verbos"], "chat", "minuta", "persona", "sinal", "situacao"] if s not in sem]
+    return [{"capacidade": f"cap-{s}", "verbo": s, "sot": None, "instancias": [],
+             "descricao": f"abertura de {s} · use para: gatilho de {s}"} for s in slugs]
+
+
+def test_tools_projeta_o_que_o_modelo_ve_com_a_descricao_do_golden_e_sem_o_campo_leva(registro, monkeypatch, capsys):
+    listar = _listar()
+    monkeypatch.setattr(listar, "_psql_json", lambda sql, alvo: _golden(registro))
+    listar.listar_ferramental_tools()
+    itens = json.loads(capsys.readouterr().out)
+    assert [i["tool"] for i in itens] == rp.visiveis(registro)
+    assert not (FORA_DA_LISTA & {i["tool"] for i in itens}) and "metrica" in {i["tool"] for i in itens}
+    assert all("leva" not in i for i in itens), "quem retem e a porta, pelo registro"
+    assert {i["tool"]: i["descricao"] for i in itens}["infra"] == "abertura de infra · use para: gatilho de infra"
+    assert "repo" in {i["tool"] for i in itens}, "o retido continua na projecao: quem o segura e a porta"
+
+
+def test_oficio_serve_o_mesmo_recorte_e_sai_3_se_o_golden_nao_tem_um_verbo_do_registro(registro, monkeypatch, capsys):
+    listar = _listar()
+    monkeypatch.setattr(listar, "_psql_json", lambda sql, alvo: _golden(registro))
+    listar.listar_ferramental(True, so_oficio=True)
+    assert [i["verbo"] for i in json.loads(capsys.readouterr().out)] == [
+        s for s in [*registro["verbos"], "chat", "minuta", "persona", "sinal", "situacao"] if s in rp.visiveis(registro)]
+    monkeypatch.setattr(listar, "_psql_json", lambda sql, alvo: _golden(registro, sem=("mesa",)))
+    with pytest.raises(SystemExit) as saida:
+        listar.listar_ferramental(True, so_oficio=True)
+    assert saida.value.code == 3
+    assert "mesa" in capsys.readouterr().err
 
 
 def test_os_padroes_sao_modelo_verdadeiro_retido_falso_e_sem_faces(tmp_path):
