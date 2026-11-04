@@ -14,6 +14,7 @@ sys.path.insert(0, str(AQUI))
 import borda  # noqa: E402
 
 MOTOR = AQUI.parent / "bin" / "motor"
+REGISTRO = AQUI.parent / "registro" / "porta.yaml"      # o registro da porta (#4117): de onde saem as faces
 TOKEN = {borda.CABECALHO_DO_GATE: "a.b.c"}
 
 
@@ -56,10 +57,11 @@ def test_a_rota_do_tema_contra_o_cabecalho_real_do_verbo():
 
 
 def test_a_configuracao_da_borda_da_casca_sobe_do_ambiente_da_instancia():
-    env = {"BORDA_FACES": json.dumps({"casca": {"verbo": str(AQUI.parent / "bin" / "preferencia")}}),
+    env = {"BORDA_REGISTRO": str(REGISTRO), "BORDA_FACES_ATENDE": "casca",
            "BORDA_ORIGENS": "https://tarefas.exemplo.org", "BORDA_LOGIN_MAX_S": "0"}
     app = borda.criar_app(env)
     assert list(app.faces) == ["casca"] and app.login_max_s == 0
+    assert [Path(f.verbo).name for f in app.faces["casca"]] == ["preferencia", "release", "tarefas"]
     assert asyncio.run(borda._chamar(app, "GET", borda.ROTA_DO_TEMA, {}))[0] == 401
 
 
@@ -70,14 +72,19 @@ def test_o_compose_liga_cada_instancia_a_declaracao_das_telas_e_as_tres_leituras
     compose = yaml.safe_load((AQUI / "compose.yaml").read_text(encoding="utf-8"))
     declaradas = {t["id"] for t in json.loads(
         (AQUI.parent / "registro" / "telas.json").read_text(encoding="utf-8"))["telas"]}
-    atendidas = []
+    atendidas, faces = [], {}
     for nome, servico in compose["services"].items():
         env = servico["environment"]
         assert "registro/telas.json" in env["BORDA_TELAS"], nome
         assert env["BORDA_TELAS_ATENDE"] in declaradas, nome
         atendidas.append(env["BORDA_TELAS_ATENDE"])
-        casca = json.loads(env["BORDA_FACES"])["casca"]
-        assert [Path(v["verbo"]).name for v in casca] == ["preferencia", "release", "tarefas"], nome
+        # as faces saem do registro da porta (#4117); BORDA_FACES saiu do compose
+        assert "BORDA_FACES" not in env and "/current/harness/registro/porta.yaml" in env["BORDA_REGISTRO"], nome
+        app = borda.criar_app({"BORDA_REGISTRO": str(REGISTRO), "BORDA_FACES_ATENDE": env["BORDA_FACES_ATENDE"]})
+        assert [Path(f.verbo).name for f in app.faces["casca"]] == ["preferencia", "release", "tarefas"], nome
+        faces[nome] = sorted(app.faces)
+    assert faces == {"borda": ["casca", "motor"], "borda-casca-rastreador": ["casca"],
+                     "borda-casca-site": ["casca"]}, "o cubo atende a face motor e a casca; as outras so a casca"
     assert sorted(atendidas) == ["casa", "motor", "rastreador"], "uma instancia por tela, sem repetir"
     redes = {n for s in compose["services"].values() for n in s["networks"] if n != "default"}
     assert redes <= set(compose["networks"]) and "casca-site" in redes
@@ -117,14 +124,35 @@ def test_ato_declarado_na_face_sem_capacidade_fica_de_fora():
         "motor": {"a": frozenset({"leitura"})}}
 
 
-@pytest.mark.parametrize("env", [{}, {"BORDA_FACES": "nao e json"}, {"BORDA_FACES": '{"motor": {}}'}])
-def test_configuracao_ilegivel_sobe_a_borda_sem_face_e_nada_passa(env, capsys):
+@pytest.mark.parametrize("caso", ["sem registro", "registro que nao existe", "registro que nao e yaml",
+                                  "registro sem a forma", "sem face atendida"])
+def test_configuracao_ilegivel_sobe_a_borda_sem_face_e_nada_passa(caso, tmp_path, capsys):
+    (tmp_path / "nao.yaml").write_text("verbos: {a: {\n", encoding="utf-8")
+    (tmp_path / "sem-forma.yaml").write_text("verbos: [a, b]\n", encoding="utf-8")
+    env = {
+        "sem registro": {"BORDA_FACES_ATENDE": "motor"},
+        "registro que nao existe": {"BORDA_REGISTRO": str(tmp_path / "x.yaml"), "BORDA_FACES_ATENDE": "motor"},
+        "registro que nao e yaml": {"BORDA_REGISTRO": str(tmp_path / "nao.yaml"), "BORDA_FACES_ATENDE": "motor"},
+        "registro sem a forma": {"BORDA_REGISTRO": str(tmp_path / "sem-forma.yaml"), "BORDA_FACES_ATENDE": "motor"},
+        "sem face atendida": {"BORDA_REGISTRO": str(REGISTRO)},
+    }[caso]
     app = borda.criar_app(env)
     assert asyncio.run(borda._chamar(app, "GET", "/api/motor/buscar", TOKEN))[0] == 404
 
 
+def test_as_faces_do_cubo_saem_do_registro_da_porta():
+    """#4117: a face motor chama o `motor` (instancia rag, `listar` sem instancia) e o `fila`; a casca chama os tres
+    verbos das leituras. O verbo de cada face e o bin da raiz do harness onde mora o registro."""
+    app = borda.criar_app({"BORDA_REGISTRO": str(REGISTRO), "BORDA_FACES_ATENDE": "motor,casca"})
+    motor = sorted((Path(f.verbo).name, f.instancia, sorted(f.sem_instancia)) for f in app.faces["motor"])
+    assert motor == [("fila", None, []), ("motor", "rag", ["listar"])]
+    assert {Path(f.verbo).parent for fs in app.faces.values() for f in fs} == {AQUI.parent / "bin"}
+    assert sorted(Path(f.verbo).name for f in app.faces["casca"]) == ["preferencia", "release", "tarefas"]
+    assert borda.criar_app({"BORDA_REGISTRO": str(REGISTRO), "BORDA_FACES_ATENDE": "casca"}).faces.keys() == {"casca"}
+
+
 def test_a_lista_de_origens_e_a_configuracao_da_instancia():
-    env = {"BORDA_FACES": json.dumps({"motor": {"verbo": str(MOTOR), "instancia": "rag"}}),
+    env = {"BORDA_REGISTRO": str(REGISTRO), "BORDA_FACES_ATENDE": "motor",
            "BORDA_ORIGENS": "https://a.exemplo, https://b.exemplo"}
     app = borda.criar_app(env)
     assert app.origens == ("https://a.exemplo", "https://b.exemplo")

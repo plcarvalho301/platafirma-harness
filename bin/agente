@@ -1,8 +1,8 @@
 #!/opt/platafirma/current/venv/harness/bin/python
-# agente — a caixa de especialistas: lista, projeta e roda quem pensa, com modelo, ferramentas e teto fixos
+# agente — delega uma ação a um especialista, na hora
 # capacidade: especialista
 # dono: ia
-# use para: especialista, sub-agente, revisor, varredor, rodar um agente consultado, projeção .claude/agents, caixa de ferramentas
+# use para: delegar ação síncrona, «roda o revisor», «chama o varredor», sub-agente para segunda opinião; definir especialista, «quem são os especialistas?»
 # atos: listar (leitura, especialista), ler (leitura, especialista), rodar (escrita, especialista), projetar (escrita, especialista)
 # ato: listar [--modelo <familia>] [--modo <modo>] [--json] — as declarações do posto, uma por linha
 # ato: ler <slug> — a declaração inteira de um especialista

@@ -1,3 +1,6 @@
 # Pinado exato, como o `api/requirements.txt` do rastreador. A borda é ASGI puro e só biblioteca padrão
-# (o cliente da porta é urllib): o que sobe o processo é o uvicorn, e nada mais.
+# (o cliente da porta é urllib), com duas dependências: o uvicorn, que sobe o processo, e o pyyaml, que lê as
+# faces do registro da porta (registro/porta.yaml, card #4117). A mesma versão do pyyaml da porta
+# (ops-server/requirements.txt).
 uvicorn==0.51.0
+pyyaml==6.0.3

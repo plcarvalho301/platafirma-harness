@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-# lint — aponta desvios em relacao a listas de verificacao e padroes de codigo
+# lint — aponta desvio de padrão
 # capacidade: qualidade-do-codigo-lint
 # dono: ti
 # classe: C
-# use para: verificar codigo antes de commit/PR, checar conformidade de regras e checklists
+# use para: ANTES de entregar código, documento ou card, «passa o lint», «confere a prosa», «o card está no padrão?»
 # atos: rodar, detectar, codigo, fossil, repo, superficie, arranque, commit, vocabulario, alcance, chapeu, organizacao, card, prosa, testes, acervo
 # regua: codigo lista-de-verificacao antipadroes-de-codigo
 # regua: fossil repositorio

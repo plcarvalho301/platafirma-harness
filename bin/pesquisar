@@ -1,8 +1,8 @@
 #!/opt/platafirma/current/venv/harness/bin/python
-# pesquisar — consulta e lê a web com procedência: SearXNG (metabusca) + Crawl4AI (leitura), manifesto por trabalho
+# pesquisar — pesquisa a web aberta com procedência
 # capacidade: pesquisa-web
 # dono: claudinha-inteligencia
-# use para: consultar metabusca em fonte aberta, resolver identificador, ler página/artigo, coletar com procedência, arquivar histórico de fonte, verificar citações de relatório
+# use para: SEMPRE que a fonte estiver fora do acervo, pesquisar fora, «procura na internet», «acha a página oficial»; ler página por URL; coletar achado; resolver DOI, ISBN, ORCID ou CNPJ; conferir as citações de um relatório
 # atos: consultar, resolver, ler, coletar, historico, manifesto, verificar, saude
 # poda: cosmetica@consultar
 #

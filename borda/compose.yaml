@@ -31,14 +31,15 @@ services:
       # Idade máxima do login para escrever, em segundos (#2572): o `auth_time` do token passou disso, a borda
       # responde 401 e a tela leva o dono a sair e entrar. 0 desliga. A leitura não tem o corte.
       BORDA_LOGIN_MAX_S: ${BORDA_LOGIN_MAX_S:-300}
-      # Cada face e os verbos dela na release; a lista de atos vem do cabeçalho de cada verbo (`# face:`).
-      # A face motor chama o `motor` e, do `fila`, só o `contestar` que o cabeçalho dele declara para ela
-      # (#3518, buraco #2555). Texto fixo, sem interpolação: a chave `}` do JSON fecharia o `${...}` do
-      # compose. Outra face ou outro caminho entra por compose.override.yaml da instância.
+      # As faces e os verbos delas vêm do registro da porta na release (registro/porta.yaml, card #4117), como
+      # as telas vêm de BORDA_TELAS; a lista de atos vem do cabeçalho de cada verbo (`# face:`). Esta instância
+      # atende a face `motor` (o `motor` e, do `fila`, só o `contestar` que o cabeçalho dele declara para ela,
+      # #3518, buraco #2555) e a `casca`. Outra face entra no registro e em BORDA_FACES_ATENDE.
       # A `casca` não é face: é o componente que consome o mecanismo comum (arq:0124 §3), e cada verbo dono do
       # objeto declara o ato dele por `# mecanismo: <ato>=casca`. Aqui ela serve as três leituras da casca
       # (`/api/preferencia/tema`, `/api/faces`, `/api/espera-dono`) a toda tela atrás deste gate.
-      BORDA_FACES: '{"motor": [{"verbo": "/opt/platafirma/current/harness/bin/motor", "instancia": "rag", "sem_instancia": ["listar"]}, {"verbo": "/opt/platafirma/current/harness/bin/fila"}], "casca": [{"verbo": "/opt/platafirma/current/harness/bin/preferencia"}, {"verbo": "/opt/platafirma/current/harness/bin/release"}, {"verbo": "/opt/platafirma/current/harness/bin/tarefas"}]}'
+      BORDA_REGISTRO: ${BORDA_REGISTRO:-${PF_RELEASE_RAIZ:-/opt/platafirma}/current/harness/registro/porta.yaml}
+      BORDA_FACES_ATENDE: motor,casca
     volumes:
       # Só para ler o cabeçalho do verbo. Monta-se a raiz da release, e não só current/, porque current/
       # é link relativo para fora dele (mesma razão do controle/compose.yaml).
@@ -74,7 +75,9 @@ services:
       # A frase que a borda poe como fundamento da escrita do tema (a porta exige um para a fonte face).
       BORDA_TEMA_FUNDAMENTO: ${BORDA_TEMA_FUNDAMENTO:-escolha do tema na casca da tela}
       # As tres leituras da casca (card #3899): tema (preferencia), telas (release) e o que espera o dono (tarefas).
-      BORDA_FACES: &faces_da_casca '{"casca": [{"verbo": "/opt/platafirma/current/harness/bin/preferencia"}, {"verbo": "/opt/platafirma/current/harness/bin/release"}, {"verbo": "/opt/platafirma/current/harness/bin/tarefas"}]}'
+      # Os tres verbos saem do registro da porta (#4117): so a face `casca`.
+      BORDA_REGISTRO: &registro_da_porta ${BORDA_REGISTRO:-${PF_RELEASE_RAIZ:-/opt/platafirma}/current/harness/registro/porta.yaml}
+      BORDA_FACES_ATENDE: casca
     volumes:
       - ${PF_RELEASE_RAIZ:-/opt/platafirma}:${PF_RELEASE_RAIZ:-/opt/platafirma}:ro
     networks:
@@ -100,7 +103,8 @@ services:
       BORDA_CABECALHO_TOKEN: x-forwarded-access-token
       BORDA_LOGIN_MAX_S: "0"
       BORDA_TEMA_FUNDAMENTO: ${BORDA_TEMA_FUNDAMENTO:-escolha do tema na casca da tela}
-      BORDA_FACES: *faces_da_casca
+      BORDA_REGISTRO: *registro_da_porta
+      BORDA_FACES_ATENDE: casca
     volumes:
       - ${PF_RELEASE_RAIZ:-/opt/platafirma}:${PF_RELEASE_RAIZ:-/opt/platafirma}:ro
     networks:

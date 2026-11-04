@@ -130,58 +130,100 @@ def _ramo_legado():
 
 def test_gate_verbo_roteado_traz_aviso():
     with patch.object(s, "_autoriza", return_value=None), _ramo_legado():
-        r = asyncio.run(s.run_command(command="mesa ver"))
+        r = asyncio.run(s.malote(command="mesa ver"))
     assert "aviso" in r
 
 
 def test_gate_fallback_sem_verbo():
     with patch.object(s, "_autoriza", return_value=None), _ramo_legado():
-        r = asyncio.run(s.run_command(command="git status", cwd=str(_AQUI)))
+        r = asyncio.run(s.malote(command="git status", cwd=str(_AQUI)))
     assert "aviso" not in r and "lote" not in r
     assert r.get("exit_code") == 0
 
 
 def test_gate_lote_dois_segs_roteados():
     with patch.object(s, "_autoriza", return_value=None), _ramo_legado():
-        r = asyncio.run(s.run_command(command="mesa ver; fila status"))
+        r = asyncio.run(s.malote(command="mesa ver; fila status"))
     assert "lote" in r and len(r["lote"]) == 2
 
 
 def test_gate_pipe_cai_no_fallback():
     with patch.object(s, "_autoriza", return_value=None), _ramo_legado():
-        r = asyncio.run(s.run_command(command="rg x | wc -l"))
+        r = asyncio.run(s.malote(command="rg x | wc -l"))
     assert "aviso" not in r and "lote" not in r
     assert r.get("exit_code") == 0
 
 
-def test_renome_leva_campo_json_e_retencao():
-    """A porta le o campo `leva` da projecao `acervo listar ferramental --tools` (nao o
-    antigo `lote`) e retem a leva 2 enquanto `TOOLS_LEVA2` esta desligado. A projecao e
-    dublada: ler o catalogo real e ler o banco (docker/psql), e teste nao depende de
-    estado real (regra de 27/09, lib/teste_isolado.py). O lado do verbo (que `acervo
-    listar` emite `leva`) mora no banco e sai do portao."""
-    itens = [{"tool": "leva2", "binario": "/x/leva2", "leva": 2, "descricao": "d"},
-             {"tool": "leva1", "binario": "/x/leva1", "leva": 1, "descricao": "d"},
-             {"tool": "semleva", "binario": "/x/semleva", "descricao": "d"},
-             {"tool": "antigo", "binario": "/x/antigo", "lote": 2, "descricao": "d"}]
-    cp = subprocess.CompletedProcess([], 0, stdout=_json.dumps(itens), stderr="")
-    retidos = set()
-    with patch.object(s, "TOOLS_VERBOS", True), patch.object(s, "TOOLS_LEVA2", False), \
+def _porta_com_registro(tmp_path, texto, bins, projecao, acervo_cai=False, leva2=False):
+    """Roda `_gera_tools_verbos` sobre um registro e um bin de brinquedo. A projecao do acervo e dublada: ler o
+    catalogo real e ler o banco (docker/psql), e teste nao depende de estado real (regra de 27/09,
+    lib/teste_isolado.py). Devolve (servidas, retidos, ocultas, tools registradas {nome: descricao})."""
+    reg = tmp_path / "porta.yaml"
+    reg.write_text(texto, encoding="utf-8")
+    pasta = tmp_path / "bin"
+    pasta.mkdir(exist_ok=True)
+    for nome in bins:
+        (pasta / nome).write_text("#!/bin/sh\n", encoding="utf-8")
+        (pasta / nome).chmod(0o755)
+    cp = subprocess.CompletedProcess([], 0, stdout=_json.dumps(projecao), stderr="")
+    efeito = OSError("acervo fora") if acervo_cai else None
+    retidos, ocultas = set(), set()
+    with patch.object(s, "TOOLS_VERBOS", True), patch.object(s, "TOOLS_LEVA2", leva2), \
          patch.object(s, "PERSONAS") as _pers, patch.object(s, "SLUGS_RETIDOS", retidos), \
-         patch.object(s, "mcp"), patch.object(s, "_faz_tool_verbo", return_value=lambda: None), \
-         patch.dict(s.BINARIOS, {}), patch("server.subprocess.run", return_value=cp):
+         patch.object(s, "OCULTAS", ocultas), patch.object(s, "REGISTRO_PORTA", reg), \
+         patch.object(s, "BIN_VERBOS", pasta), patch.object(s, "mcp") as _mcp, \
+         patch.object(s, "_faz_tool_verbo", return_value=lambda: None), \
+         patch.dict(s.BINARIOS, {}), \
+         patch("server.subprocess.run", return_value=cp, side_effect=efeito):
         _pers.is_dir.return_value = True
         servidas = s._gera_tools_verbos()
-    assert servidas == ["leva1", "semleva", "antigo"], "leva 2 fica retida; sem `leva` = leva 1"
-    assert retidos == {"leva2"}
-    assert "antigo" in servidas, "o campo antigo `lote` nao retem: so `leva` conta"
+    registradas = {c.kwargs["name"]: c.kwargs["description"] for c in _mcp.tool.call_args_list}
+    return servidas, retidos, ocultas, registradas
 
 
-def test_audit_run_command_carrega_identidade():
-    with patch.object(s, "_audit") as _aud, patch.object(s, "_autoriza", return_value=None):
-        asyncio.run(s.run_command(command="git status", sessao_id="ensaio-sid-abc"))
-    achou = [c.kwargs for c in _aud.call_args_list if c.kwargs.get("tool") == "run_command"]
-    assert achou and all(("sessao_id" in kw and "ordem_id" in kw and "cadeira" in kw) for kw in achou)
+REGISTRO_DE_ENSAIO = """
+verbos:
+  visivel: {}
+  retido: {retido: true}
+  oculto: {modelo: false}
+  semdesc: {}
+  sembin: {}
+transporte:
+  malote: {}
+"""
+
+
+def test_o_registro_decide_retencao_ocultas_e_descricao(tmp_path):
+    """A porta le o registro (registro/porta.yaml), nao o campo `leva` da projecao do acervo (#4117): o retido fica
+    de fora enquanto `TOOLS_LEVA2` esta desligado, o `modelo: false` segue registrado e executavel, e a
+    descricao vem do golden record. Verbo do registro sem bin executavel sai com aviso."""
+    projecao = [{"tool": "visivel", "descricao": "d visivel"}, {"tool": "retido", "descricao": "d"}]
+    servidas, retidos, ocultas, registradas = _porta_com_registro(
+        tmp_path, REGISTRO_DE_ENSAIO, ["visivel", "retido", "oculto", "semdesc"], projecao)
+    assert servidas == ["visivel", "oculto", "semdesc"], "retido fica de fora; sem bin tambem"
+    assert retidos == {"retido"} and ocultas == {"oculto"}
+    assert registradas["visivel"] == "d visivel"
+    assert registradas["semdesc"] == s.DESCRICAO_INDISPONIVEL and "oculto" in registradas
+
+
+def test_retido_serve_com_a_leva_2_ligada(tmp_path):
+    servidas, retidos, _ocultas, _reg = _porta_com_registro(
+        tmp_path, REGISTRO_DE_ENSAIO, ["visivel", "retido", "oculto", "semdesc"], [], leva2=True)
+    assert "retido" in servidas and not retidos
+
+
+def test_acervo_fora_na_subida_nao_tira_verbo_do_ar(tmp_path):
+    servidas, _retidos, _ocultas, registradas = _porta_com_registro(
+        tmp_path, REGISTRO_DE_ENSAIO, ["visivel", "retido", "oculto", "semdesc"], [], acervo_cai=True)
+    assert servidas == ["visivel", "oculto", "semdesc"]
+    assert set(registradas.values()) == {s.DESCRICAO_INDISPONIVEL}
+
+
+def test_registro_ilegivel_deixa_a_porta_sem_verbo_e_sem_abrir_o_bin(tmp_path):
+    """Falha fechada: sem registro legivel nao ha verbo executavel, e o bin/ inteiro nao vira o fallback."""
+    servidas, retidos, ocultas, registradas = _porta_com_registro(
+        tmp_path, "verbos: [isto, nao, e, mapa]\ntransporte: {}\n", ["visivel"], [])
+    assert servidas == [] and not retidos and not ocultas and not registradas
 
 
 def test_audit_malote_carrega_identidade():
@@ -191,10 +233,10 @@ def test_audit_malote_carrega_identidade():
     assert achou and all(("sessao_id" in kw and "ordem_id" in kw and "cadeira" in kw) for kw in achou)
 
 
-def test_audit_read_file_carrega_identidade():
+def test_audit_ler_arquivo_carrega_identidade():
     with patch.object(s, "_audit") as _aud, patch.object(s, "_autoriza", return_value=None):
-        s.read_file(path=_REQ, sessao_id="ensaio-sid-abc")
-    achou = [c.kwargs for c in _aud.call_args_list if c.kwargs.get("tool") == "read_file"]
+        s.ler_arquivo(caminho=_REQ, sessao_id="ensaio-sid-abc")
+    achou = [c.kwargs for c in _aud.call_args_list if c.kwargs.get("tool") == "ler_arquivo"]
     assert achou and all(("sessao_id" in kw and "ordem_id" in kw and "cadeira" in kw) for kw in achou)
 
 

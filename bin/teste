@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# teste — roda a suite de teste do clone local, detectando a stack e o ambiente do repo
+# teste — roda a suíte do repositório
 # capacidade: qualidade-do-codigo-teste
 # dono: ti
 # classe: C
+# use para: ANTES de entregar código, «roda os testes», «a suíte passa?»
 # atos: rodar (leitura, operacao), detectar (leitura, operacao), inventario (leitura, operacao)
 # forma: predicado
 # cauda: sim

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# repo — opera o clone local de um repositorio da stack, do clone ao PR
+# repo — opera a bancada do card, do clone ao PR integrado
 # capacidade: construcao
 # dono: ti
 # classe: B
 # forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar, hooks-listar) / texto (ler, pr-diff) / fluxo (sanear, lock, hooks-apagar)
-# use para: ler, listar ou procurar o que esta na bancada, ainda nao servido (ler, listar, procurar); historico de um caminho e diff contra origin/main (historico, diff); estado do clone; ramo por card; abrir o worktree da cadeira em origin/main ou no sha que esta em producao (abrir --da-producao); commitar so o que a sessao tocou; empurrar; PR de ponta a ponta (pr-abrir, pr-listar, pr-ver, pr-diff, pr-merge); descartar PR sem merge, com ramo e bancadas (pr-fechar); listar webhook de repositorio no forge e apagar um por id so se a url dele contem o trecho dito (hooks-listar, hooks-apagar; tambem `hooks listar|apagar`); atualizar e sanear o clone; gerar ou conferir o uv.lock de um projeto Python da bancada com o uv e o python da release (lock); git cru contido (git)
+# use para: criar e atualizar bancada; ler e procurar nela, diff e histórico; commitar, empurrar ramo, abrir, revisar e integrar PR; descartar mudança; sanear bancada; procurar no que está publicado no GitHub; e sempre que um card de código for posto em execução ou a esteira reprovar a mudança
 # atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge), pr-fechar (escrita, forge), hooks-listar (leitura, forge), hooks-apagar (escrita, forge), sanear (escrita, forge), lock (escrita, operacao), git (escrita, operacao)
 # le: estado=repo
 # le: listar=repo

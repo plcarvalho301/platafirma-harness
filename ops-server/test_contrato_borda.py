@@ -22,6 +22,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -48,6 +49,7 @@ import borda  # noqa: E402
 import identidade  # noqa: E402
 import oplog  # noqa: E402
 import server as s  # noqa: E402
+from mcp import types as mcp_types  # noqa: E402
 
 SUB = "b6986be0-c5b6-4693-839f-73c90b79b25a"      # o dono em politica-acesso/sujeitos.yaml
 CLIENT_CUBO = "cubo-controle"
@@ -419,3 +421,76 @@ def test_token_de_outro_client_nao_chega_ao_verbo_do_tema(porta, tmp_path):
     assert _marca(tmp_path) is None
     assert _pede_tema(porta, "GET", _token(aud="outro-servico"))[0] == 401
     assert _pede_tema(porta, "GET")[0] == 401
+
+# --- #4117, U0: a tool que o modelo não vê segue executável ---------------------------------------
+# A porta passa a registrar toda tool do registro e a trocar o handler de `tools/list` do servidor baixo por
+# um que tira as ocultas (`modelo: false`). A borda chama a porta por `tools/call` do verbo `preferencia` (o
+# tema da casca); esconder o verbo do modelo não pode tirar o tema da tela. Estes casos medem na `mcp` do
+# venv `ops` o que o desenho da story precisa: a lista sem a oculta, a chamada dela com 200 e o mesmo corpo,
+# e o pyyaml no ambiente em que a porta roda. Se um deles falhar, o desenho volta ao card.
+
+OCULTAS_DE_TESTE = frozenset({"preferencia"})
+
+def _esconde(monkeypatch, nomes=OCULTAS_DE_TESTE):
+    """Troca o handler de `tools/list` por um que tira `nomes` da resposta. O handler de baixo roda inteiro,
+    então o cache de definições da `mcp` segue com a tool e a chamada dela passa pela validação do esquema."""
+    baixo = s.mcp._mcp_server
+    original = baixo.request_handlers[mcp_types.ListToolsRequest]
+
+    async def sem_ocultas(req):
+        lista = (await original(req)).root
+        visiveis = [t for t in lista.tools if t.name not in nomes]
+        return mcp_types.ServerResult(mcp_types.ListToolsResult(tools=visiveis, nextCursor=lista.nextCursor))
+
+    monkeypatch.setitem(baixo.request_handlers, mcp_types.ListToolsRequest, sem_ocultas)
+
+def _lista_da_porta(porta_, token) -> list[str]:
+    """Os nomes que `tools/list` devolve à sessão (MCP por HTTP, sem estado, como a borda chama a porta)."""
+    pedido = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}).encode("utf-8")
+    req = urllib.request.Request(porta_.url, data=pedido, method="POST", headers={
+        "Content-Type": "application/json", "Accept": "application/json, text/event-stream",
+        "Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        tipo, bruto = resp.headers.get("content-type", ""), resp.read().decode("utf-8")
+    if "text/event-stream" in tipo:
+        bruto = [x[5:].strip() for x in bruto.splitlines() if x.startswith("data:")][-1]
+    return [t["name"] for t in json.loads(bruto)["result"]["tools"]]
+
+def test_tools_list_sem_preferencia_quando_o_handler_tira_a_oculta(porta, monkeypatch):
+    antes = _lista_da_porta(porta, _token())
+    assert "preferencia" in antes, "sem o handler novo a tool está na lista: é ele que a tira"
+    _esconde(monkeypatch)
+    depois = _lista_da_porta(porta, _token())
+    assert "preferencia" not in depois
+    assert sorted(antes) == sorted(depois + ["preferencia"]), "só a oculta sai da lista"
+    assert {"motor", "release", "tarefas"} <= set(depois)
+
+def test_tools_call_de_preferencia_ler_responde_200_com_o_mesmo_corpo_com_a_tool_fora_da_lista(
+        porta, monkeypatch, tmp_path, caplog):
+    corpo_de_hoje = [_pede_tema(porta, "GET", _token()), _pede_tema(porta, "PUT", _token(), {"valor": "escuro"}),
+                     _pede_tema(porta, "GET", _token())]
+    assert corpo_de_hoje == [(200, {"valor": None}), (200, {"valor": "escuro"}), (200, {"valor": "escuro"})]
+    (tmp_path / f"marca.tema.{SUB}").unlink()           # o valor guardado volta ao de antes da primeira chamada
+    _esconde(monkeypatch)
+    assert "preferencia" not in _lista_da_porta(porta, _token())
+    with caplog.at_level("WARNING"):
+        com_a_tool_oculta = [_pede_tema(porta, "GET", _token()),
+                             _pede_tema(porta, "PUT", _token(), {"valor": "escuro"}),
+                             _pede_tema(porta, "GET", _token())]
+    assert com_a_tool_oculta == corpo_de_hoje
+    giros = [g for g in _linhas(tmp_path) if g.get("tool") == "preferencia" and not g.get("evento")]
+    assert len(giros) == 6 and {g["turno_fonte"] for g in giros} == {"face"}
+    assert all(g["exit_code"] == 0 and g["sub"] == SUB for g in giros)
+    # com o handler de baixo rodando inteiro, o cache guarda a tool e a mcp não grava «not listed»
+    assert not [r for r in caplog.records if "not listed" in r.getMessage()]
+
+def test_o_pyyaml_do_ambiente_da_porta_le_o_registro_na_forma_do_desenho():
+    """O ambiente da porta é o venv `ops`, o mesmo destes testes: o registro novo se lê por `yaml.safe_load` e
+    a versão é a que o requirements.txt da porta fixa."""
+    import yaml
+    fixada = [l.split("==")[1].strip() for l in (OPS_SERVER_DIR / "requirements.txt").read_text(
+        encoding="utf-8").splitlines() if l.lower().startswith("pyyaml==")]
+    assert fixada == [yaml.__version__]
+    texto = "verbos:\n  preferencia: {modelo: false, faces: {casca: {}}}\n  mesa: {}\ntransporte:\n  malote: {}\n"
+    assert yaml.safe_load(texto) == {"verbos": {"preferencia": {"modelo": False, "faces": {"casca": {}}}, "mesa": {}},
+                                     "transporte": {"malote": {}}}

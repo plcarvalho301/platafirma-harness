@@ -1,8 +1,8 @@
 #!/opt/platafirma/current/venv/harness/bin/python
-# descansar — fim de fita: confere a memoria e mede os fatos volateis contra os quais a sessao confere o que "lembra"
+# descansar — encerra o expediente conferindo a memória
 # capacidade: encerramento
 # dono: claudinho-IA
-# use para: conferir a memória no fim da fita (a sessão segue aberta); encerrar a sessão só por ordem do dono, com --encerra-sessao
+# use para: «encerra», «fecha por hoje», «paramos aqui», ANTES de encerrar o expediente
 # atos: fita, varredura
 # forma: relatorio
 # cauda: sim

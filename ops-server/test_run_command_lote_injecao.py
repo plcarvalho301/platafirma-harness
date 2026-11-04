@@ -67,7 +67,7 @@ async def test_run_command_injecao_entre_itens_lote():
 
     with patch("server.SLUGS_SERVIDOS", novos_slugs),          patch("server.BINARIOS", novos_bins),          patch("server._autoriza", return_value=None),          patch("server._rc", return_value=mock_rc),          patch("server._audit"),          patch("server._run_verbo_blocking", side_effect=fake_run_verbo_blocking):
 
-        res = await s.run_command(commands=[
+        res = await s.malote(commands=[
             "sessao abrir ia",
             "expediente montar"
         ])
@@ -105,7 +105,7 @@ async def test_run_command_legado_injecao_entre_itens_lote():
 
     with patch("server.PF_RUN_SO_VERBO", False),          patch("server.PF_TOOLS_LOTE", True),          patch("server._autoriza", return_value=None),          patch("server._rc", return_value=mock_rc),          patch("server._audit"),          patch("server._run_blocking", side_effect=fake_run_blocking):
 
-        res = await s.run_command(commands=[
+        res = await s.malote(commands=[
             "sessao abrir ia --json",
             "git status"
         ])
@@ -144,13 +144,13 @@ def test_operadores_como_token_recusam_e_regex_passa():
             assert rec["recusado"] is True
             assert "metacaractere de shell" in rec["motivo"]
 
-        # Desduplicação do primeiro token run_command (#3045 passo 5)
-        argv, stdin, rec = s._item_de_lote("run_command repo estado")
+        # Desduplicação do primeiro token malote (#3045 passo 5; o apelido run_command saiu no #4117)
+        argv, stdin, rec = s._item_de_lote("malote repo estado")
         assert rec is None
         assert argv[0] == "/opt/bin/repo"
         assert argv[1:] == ["estado"]
 
-        argv, stdin, rec = s._item_de_lote({"verbo": "run_command", "ato": "repo", "args": ["estado"]})
+        argv, stdin, rec = s._item_de_lote({"verbo": "malote", "ato": "repo", "args": ["estado"]})
         assert rec is None
         assert argv[0] == "/opt/bin/repo"
         assert argv[1:] == ["estado"]
@@ -159,7 +159,7 @@ def test_operadores_como_token_recusam_e_regex_passa():
         _, _, rec = s._item_de_lote("read_file /algo")
         assert rec is not None
         assert rec["recusado"] is True
-        assert rec["sugestao"] == "é tool, não verbo: read_file(path=...)"
+        assert rec["sugestao"] == "saiu da porta: chame ler_arquivo(caminho=...)"
 
         _, _, rec = s._item_de_lote("write_file /algo conteudo")
         assert rec is not None
@@ -175,7 +175,7 @@ def test_operadores_como_token_recusam_e_regex_passa():
 
         _, _, rec = s._item_de_lote("run_command")
         assert rec is not None
-        assert rec["sugestao"] == "é apelido de malote, a tool que você está chamando"
+        assert rec["sugestao"] == "saiu da porta: chame malote, a tool que você está chamando"
 
         _, _, rec = s._item_de_lote("malote")
         assert rec is not None
@@ -218,8 +218,8 @@ async def test_run_command_encadeado_para_no_exit_4_e_declara_o_resto():
          patch("server._autoriza", return_value=None), \
          patch("server._audit"), \
          patch("server._run_verbo_blocking", side_effect=fake):
-        res = await s.run_command(commands=["repo a", "repo b", "repo c", "repo d"],
-                                  encadeado=True)
+        res = await s.malote(commands=["repo a", "repo b", "repo c", "repo d"],
+                               encadeado=True)
 
     assert chamadas == ["a", "b", "c"]
     assert res["cadeia"]["parou_em"] == 2

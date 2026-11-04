@@ -166,7 +166,7 @@ def test_o_contrato_do_turno_recusa_resposta_pacote_e_token():
 
 
 def test_toda_tool_da_porta_aceita_turno_texto_e_turno_fonte_opcionais():
-    tools = [s.malote, s.run_command, s.ler_arquivo, s.read_file, s.write_file, s.monta_sessao,
+    tools = [s.malote, s.ler_arquivo, s.write_file, s.monta_sessao,
              s._faz_tool_verbo("tarefas", "/bin/true", "x")]
     for tool in tools:
         params = inspect.signature(tool).parameters

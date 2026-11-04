@@ -48,7 +48,9 @@ def sql(monkeypatch):
 def test_capacidade_e_descricao_saem_do_cabecalho(sql):
     cap, desc, _ = sql
     assert cap == "agendamento", "a folha existe no acervo (068); conferir verbo a resolve"
-    assert desc.startswith("a camada acima do systemd") and "use para: automação" in desc
+    # o texto da pagina Gatilhos da porta (#4117): a abertura e o `use para:` do bot, sem a lista antiga de objetos
+    assert desc.startswith("delega uma ação para depois, por agenda ou evento")
+    assert "use para: delegar ação assíncrona ou por cron, «agenda isso toda noite»" in desc
     assert "atos: declarar (escrita, agendamento), listar (leitura, agendamento)" in desc
 
 
@@ -92,9 +94,8 @@ def test_o_cabecalho_passa_o_gate_de_tres_linhas_e_a_ajuda_le_os_cinco_atos():
     assert uso.atos_do_cabecalho(BOT) == list(ATOS)
 
 
-def test_o_oficio_tem_o_bot_no_bloco_e_cada_ato_citado_na_prosa_esta_no_cabecalho():
-    texto = (REPO_ROOT / "abertura" / "oficio-ferramental.md").read_text()
-    bloco = texto.split("```")[1].split()
-    assert "bot" in bloco and bloco.index("bot") == bloco.index("agente") + 1
-    citados = set(re.findall(r"`bot (\w+)`", texto))
-    assert citados and citados <= set(ATOS), f"ato citado fora do `# atos:`: {citados - set(ATOS)}"
+def test_o_registro_da_porta_tem_o_bot_e_o_registrar_todos_o_le_de_la():
+    """O bloco cercado do oficio-ferramental.md saiu no #4117: o registro da porta (registro/porta.yaml) diz quais
+    verbos o `acervo registrar --todos` registra, e o `bot` esta entre eles, logo depois do `agente`."""
+    verbos = registrar._le_whitelist()
+    assert "bot" in verbos and verbos.index("bot") == verbos.index("agente") + 1

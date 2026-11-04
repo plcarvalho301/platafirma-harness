@@ -1,10 +1,10 @@
 #!/opt/platafirma/current/venv/harness/bin/python
-# expediente — monta o pacote de expediente da cadeira (conduta, persona, mesa, cadernos)
+# expediente — monta o pacote da cadeira e veste o chapéu
 # capacidade: expediente
 # dono: gestao-estrategica
 # classe: B
 # forma: objeto (montar, rotear) / lista (catalogo)
-# use para: o pacote de expediente antes da primeira fala do dono, rotear chapéu, catálogo de peças
+# use para: o catálogo de peças; vestir outro chapéu quando a matéria do pedido muda, «agora é recuperação»
 # atos: montar (leitura, expediente), rotear (leitura, expediente), catalogo (leitura, expediente)
 # folhas: montar -> expediente/pacote · rotear -> expediente/chapeu · catalogo -> expediente/catalogo
 # escreve: registro do pacote servido (sessao.fita/pacote/peca_servida — transição, direto); nada em rotear|catalogo

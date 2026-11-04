@@ -109,7 +109,10 @@ inteira, por isso há uma instância por tela: a do cubo (`motor`, as faces e a 
 | `BORDA_PORTA_URL` | a porta de verbos (`…/mcp`) |
 | `BORDA_CABECALHO_TOKEN` | cabeçalho em que o gate põe o token do dono (padrão `x-forwarded-access-token`, onde o gate do cubo o entrega; `authorization` só para gate que o use, com Bearer) |
 | `BORDA_LOGIN_MAX_S` | idade máxima do login para escrever, em segundos (padrão 300; 0 desliga) |
-| `BORDA_FACES` | JSON `{"<face>": {"verbo": "<arquivo>", "instancia": "rag", "sem_instancia": ["listar"]}}`, ou uma lista desses quando a face chama mais de um verbo |
+| `BORDA_REGISTRO` | caminho do registro da porta na release (`registro/porta.yaml`, #4117), de onde saem as faces, o verbo de cada uma, a `instancia` e os atos `sem_instancia`; o verbo é `<raiz do harness>/bin/<slug>`. Ausente ou ilegível, nenhuma face (falha fechada). Substitui o `BORDA_FACES` |
+| `BORDA_FACES_ATENDE` | as faces do registro que esta instância atende, vírgula entre valores: `motor,casca` na do cubo, `casca` nas outras duas; vazio, nenhuma |
+
+A imagem da borda leva o `pyyaml` (`requirements.txt`), que lê o registro.
 
 Uma face pode chamar mais de um verbo (#3518): a face motor chama o `motor` e, do `fila`, só o `contestar`, que
 é o único ato que o cabeçalho do `fila` declara para ela. A carga da face é a união do que cada verbo declara;

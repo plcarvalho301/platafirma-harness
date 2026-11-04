@@ -1,9 +1,9 @@
 #!/opt/platafirma/current/venv/harness/bin/python
-# mesa — memoria de trabalho da cadeira entre fitas, por chapeu
+# mesa — guarda na lousa o que fica de uma fita para outra
 # capacidade: trabalho
 # dono: gestao-estrategica (a forma: o que e mesa, o que e caderno) · ia (montador) · dados (substrato do caderno e forma da aresta, arq:0120) · ti (substrato da mesa)
 # classe: B
-# use para: pendência entre fitas, 'o que ficou na mesa', anotar, caderno do chapéu por entrada (lição, preferência do dono, premissa, aresta)
+# use para: ler as ordens da lousa, «o que ficou na mesa?»; anotar, «anota isso»; dar item como feito, «já fiz o item 2»; o caderno do chapéu
 # atos: ver, item, fez, anota, fita, limpa, caderno, legado, escrever, substituir, confirmar, retirar, restaurar, tombar, apontar, aresta, colheita, veredito, balde, podar
 # folhas: ver|item|fez -> trabalho/mesa (o item com ato) · caderno|escrever|substituir|confirmar|retirar|restaurar|tombar|apontar|aresta|colheita|veredito|balde|podar -> expediente/caderno (o duravel) ·
 #         anota|limpa|legado -> trabalho/mesa, transicao · fita -> pende (guarda de fita e de sessao)

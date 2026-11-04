@@ -249,21 +249,16 @@ def _le_cabecalho(path):
 
 
 def _le_whitelist():
-    p = os.path.join(os.path.dirname(BIN), "abertura", "oficio-ferramental.md")
-    if not os.path.isfile(p):
-        morre("acervo registrar --todos: whitelist nao encontrado em\n  %s" % p, 3)
-    slugs, dentro = [], False
-    with open(p, encoding="utf-8") as fh:
-        for l in fh.read().splitlines():
-            s = l.strip()
-            if s.startswith("```"):
-                dentro = not dentro
-                continue
-            if dentro and s and not s.startswith("#"):
-                slugs.append(s.split()[0])   # marcadores (`leva:2`) ficam no resto da linha
-    if not slugs:
-        morre("acervo registrar --todos: whitelist vazio.", 3)
-    return slugs
+    """Os verbos do registro da porta (registro/porta.yaml, #4117), lidos por lib/registro_porta, o unico leitor."""
+    import sys
+    raiz = os.path.dirname(BIN)
+    sys.path.insert(0, os.path.join(raiz, "lib"))
+    import registro_porta
+    try:
+        registro = registro_porta.carrega(registro_porta.caminho_do(raiz))
+    except registro_porta.RegistroIlegivel as e:
+        morre("acervo registrar --todos: registro da porta ilegivel — %s" % e, 3)
+    return list(registro["verbos"])
 
 
 def _resolve(verbo):

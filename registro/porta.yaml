@@ -1,0 +1,67 @@
+# registro/porta.yaml — o que a porta (o servidor MCP de operação) executa e o que ela mostra ao modelo.
+#
+# Estar em `verbos` quer dizer que a porta executa o verbo, pelo malote e pela borda das telas. O atributo
+# `modelo` diz se o modelo vê o verbo na lista de tools da sessão (`tools/list`): `modelo: false` deixa o verbo
+# registrado e executável por `tools/call` e pelo malote, e fora da lista. Decisão do dono no comentário 4402
+# do card 4117. As tools de transporte (as que não são verbo de bin/) entram em `transporte`.
+#
+# Quem lê este arquivo:
+#   - a porta (ops-server/server.py), uma vez na subida, da release no ar: o conjunto executável, o binário de
+#     cada verbo em bin/, as ocultas, as retidas e as tools de transporte. Do acervo vem só a descrição.
+#   - `acervo listar casa ferramental --tools` e `--oficio`: projetam o que o modelo vê, juntando este registro
+#     e a coluna descricao do golden record acervo.ferramental.
+#   - `acervo registrar --todos`: registra os verbos daqui.
+#   - a borda das telas (borda/borda.py), que lê as faces (BORDA_REGISTRO aponta este arquivo na release).
+#
+# Atributos de verbo, todos opcionais:
+#   modelo   booleano, padrão true. false = o modelo não vê a tool na lista.
+#   retido   booleano, padrão false. true = só serve com PF_TOOLS_LEVA2=1 (era o marcador `leva:2`).
+#   faces    mapa face -> {instancia, sem_instancia}. A borda chama o verbo na face. `instancia` entra antes do
+#            ato na linha do verbo (`motor rag ajuste`), menos nos atos de `sem_instancia` (`motor listar`).
+#            A lista de atos de cada face vem do cabeçalho do bin (`# face:` e `# mecanismo:`).
+#
+# Formato novo da casa: o dono pediu em 04/11/2026 que registro novo nasça em YAML. Os outros arquivos de
+# registro/ seguem em JSON até alguém os trocar.
+verbos:
+  acervo: {}
+  acesso: {}
+  agente: {}
+  bot: {}
+  conferir: {}
+  descansar: {}
+  expediente: {}
+  fila:
+    faces:
+      motor: {}
+  infra: {}
+  lint: {}
+  mesa: {}
+  metrica: {}
+  motor:
+    faces:
+      motor:
+        instancia: rag
+        sem_instancia: [listar]
+  pesquisar: {}
+  preferencia:
+    modelo: false
+    faces:
+      casca: {}
+  release:
+    faces:
+      casca: {}
+  repo:
+    retido: true
+  seg: {}
+  sessao:
+    modelo: false
+  tarefas:
+    faces:
+      casca: {}
+  teste: {}
+
+transporte:
+  malote: {}
+  ler_arquivo: {}
+  write_file: {}
+  monta_sessao: {}

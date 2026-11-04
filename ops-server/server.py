@@ -1,4 +1,4 @@
-"""MCP de operação — malote (lote de verbos, apelido run_command) + arquivo, sob um usuário do host.
+"""MCP de operação — malote (lote de verbos) + arquivo, sob um usuário do host.
 
 Roda FORA do compose (systemd user service) de propósito: é a mão que sobe o compose
 de volta — não pode morar dentro do raio de explosão. A fronteira dura é o usuário do
@@ -81,6 +81,7 @@ if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 import raizes                                                 # noqa: E402
 import oplog                                                  # noqa: E402  (card #3344: o unico que escreve o bruto)
+import registro_porta                                         # noqa: E402  (card #4117: o unico leitor de registro/porta.yaml)
 
 INSTANCIA = raizes.instancia()
 # Cwd de quem não nomeia um: a casa da conta do processo. Não é raiz de produção — é o
@@ -1300,13 +1301,13 @@ _SUGESTAO = {
     "curl": "pesquisar", "wget": "pesquisar",
     "python3": "teste", "python": "teste", "pytest": "teste", "uv": "teste", "ruff": "lint",
     "psql": "motor", "tee": "write_file", "cp": "write_file", "mv": "write_file",
-    "read_file": "é tool, não verbo: read_file(path=...)",
+    "read_file": "saiu da porta: chame ler_arquivo(caminho=...)",
     "ler_arquivo": "é tool, não verbo: ler_arquivo(caminho=...)",
     "write_file": "é tool, não verbo: write_file(path=..., content=...)",
     "monta_sessao": "é tool, não verbo: monta_sessao(cadeira=...)",
     "monta-sessao": "é tool, não verbo: monta_sessao(cadeira=...)",
     "malote": "é a própria tool que você está chamando",
-    "run_command": "é apelido de malote, a tool que você está chamando",
+    "run_command": "saiu da porta: chame malote, a tool que você está chamando",
     # Verbo retirado (arq:0110 §1) aponta o sucessor: sem a linha, a recusa sai com
     # `sugestao: null`, que se lê como "verbo que falta, vira card" e convida a recriar.
     "descobrir": "verbo retirado em 27/09/2026: acervo listar biblioteca obra --sobre <termo> "
@@ -1351,9 +1352,9 @@ def _eh_pipe_stdin(v) -> bool:
             and isinstance(v.get("de"), int) and not isinstance(v.get("de"), bool))
 
 
-# As duas tools de lote (#3270): `malote` e o apelido `run_command`. Primeiro token com
-# um dos dois nomes e desduplicado, nas duas tools.
-TOOLS_LOTE = ("malote", "run_command")
+# A tool de lote (#3270): `malote`. O primeiro token de um item com o nome dela é desduplicado. O apelido
+# `run_command` saiu da porta (#4117): um item que o cite volta recusado, com a sugestão `malote`.
+TOOLS_LOTE = ("malote",)
 
 
 def _item_de_lote(x):
@@ -1405,7 +1406,7 @@ async def malote(command: str = "", cwd: str = "", timeout: int = 120,
                  commands: list | None = None,
                  encadeado: bool = False, turno: str = "", turno_texto: str = "",
                  turno_fonte: str = "") -> dict:
-    """Lote entre verbos DISTINTOS numa chamada so — sem shell, sem fallback (spec_porta-so-verbo).
+    """roda vários verbos numa chamada só · use para: SEMPRE que for chamar dois ou mais verbos no mesmo giro, em vez de uma chamada por verbo; cadeia que para no primeiro erro; passar a saída de um verbo ao seguinte; verbo sem tool própria nesta sessão
 
     `commands`: lista de itens, cada um `{verbo, ato, args, stdin}` ou a string
     `"<verbo> <ato> <args...>"` (partida com shlex; `| & > < $ \\` * ? ( ) ;` recusam o item).
@@ -1424,18 +1425,6 @@ async def malote(command: str = "", cwd: str = "", timeout: int = 120,
     exit do topo. Retomar = rerodar a cadeia: o que ja fez devolve "ja feito".
     """
     return await _malote("malote", command, cwd, timeout, sessao_id, commands, encadeado, turno,
-                         turno_texto, turno_fonte)
-
-
-async def run_command(command: str = "", cwd: str = "", timeout: int = 120,
-                      sessao_id: str | None = None,
-                      commands: list | None = None,
-                      encadeado: bool = False, turno: str = "", turno_texto: str = "",
-                      turno_fonte: str = "") -> dict:
-    """Apelido de `malote`: mesma assinatura e mesmo retorno. Sai pela regra da spec
-    porta-so-verbo §3.7 (zero chamadas por sete dias seguidos).
-    """
-    return await _malote("run_command", command, cwd, timeout, sessao_id, commands, encadeado, turno,
                          turno_texto, turno_fonte)
 
 
@@ -1831,8 +1820,7 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
                    lote_id: str | None = None, lote_n: int | None = None) -> dict:
     """A costura da leitura (spec ler-arquivo §13.2): autoriza, resolve e nega — nessa
     ordem, a de sempre —, lê por `leitura.le`, serve pela poda e audita com a classe do
-    erro. `tool` é o nome chamado (`ler_arquivo` ou o apelido `read_file`): a auditoria o
-    grava, e é por ele que a regra de saída do apelido conta (§12.3)."""
+    erro. `tool` é o nome chamado (`ler_arquivo`): a auditoria o grava."""
     quem = {"cadeira": ident["cadeira"] or None, "sessao_id": ident["sessao_id"],
             "ordem_id": ident["ordem_id"], "lote_id": lote_id, "lote_n": lote_n}
     if not caminho:
@@ -1840,8 +1828,8 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
         return {"erro": "caminho vazio", "cura": 'ler_arquivo(caminho="/caminho/absoluto")'}
     # `caminho!membro`: autoriza e nega pelo arquivo; o membro é leitura dentro dele (§7.4).
     caminho, membro = _separa_membro(caminho)
-    # A ação do PDP segue `read_file` para as duas tools: é a capacidade de ler documento, e
-    # a política (politica-acesso, da segurança) não muda por causa do nome da tool.
+    # A ação do PDP é `read_file`, e segue sendo depois que o apelido saiu (#4117): é a capacidade de ler
+    # documento, e a política (politica-acesso, da segurança) não muda por causa do nome da tool.
     negado = _autoriza(tool, "read_file", "documento", caminho, DOM_PLATAFORMA)
     if negado:
         return negado
@@ -1887,8 +1875,6 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
            bytes_total=r.get("bytes_total"), classe_erro=classe,
            erro=(r.get("erro") or r.get("motivo")) if classe else None,
            **quem, **_campos_poda(r))
-    if tool == "read_file":
-        r = _leitura.como_read_file(r)
     return _leitura.enxuga_releitura(r)
 
 
@@ -1898,7 +1884,9 @@ def ler_arquivo(caminho: str = "", linhas: str = "", modo: str = "texto",
                 caminhos: list[str | dict] | None = None, paginas: str = "",
                 dpi: int = 150, turno: str = "", turno_texto: str = "",
                 turno_fonte: str = "") -> dict:
-    """Lê arquivo de texto por linhas. `caminho` absoluto, ou relativo à bancada declarada.
+    """lê arquivo pelo caminho · use para: texto por linhas, PDF, EPUB, DOCX, planilha ou imagem; o retorno grande que a porta guardou; o arquivo de uma obra pelo caminho
+
+    `caminho` absoluto, ou relativo à bancada declarada.
 
     `linhas`: "a-b", "a-" ou "-n" (as últimas n), base 1; sem ela, do começo. A página
     termina em fim de linha e cabe em `max_bytes` (40000, até 200000). `cabecalho` diz o
@@ -1976,24 +1964,6 @@ def _separa_membro(caminho: str) -> tuple[str, str | None]:
     if not erro and membro and p.is_file():
         return arquivo, membro
     return caminho, None
-
-
-def read_file(path: str = "", offset: int = 0, max_bytes: int = 40000,
-              sessao_id: str | None = None, paths: list[str] | None = None,
-              turno: str = "", turno_texto: str = "", turno_fonte: str = "") -> dict:
-    """Apelido de `ler_arquivo` (spec ler-arquivo §12): a mesma leitura, com `path`,
-    `paths` e `offset`. Sem `offset`, lê por linhas; o retorno traz `content`, `truncated`
-    e `next_offset` (byte) além dos campos novos. Sai quando ninguém mais a chamar.
-    """
-    ident = _sessao_resolve(sessao_id)
-    _carimba_turno(ident, turno, turno_texto, turno_fonte)
-    args = {"max_bytes": max_bytes, "offset": offset or None}
-    if paths and PF_TOOLS_LOTE:
-        lote_id = uuid.uuid4().hex[:8]
-        return _leitura.lote(paths, lambda i, c: _leitura.como_read_file(
-            _le_um_arquivo(str(c), args, ident, "read_file", lote_id, i)), CAP)
-    # Idempotente: a costura já traduziu a página; aqui pega a recusa que saiu antes dela.
-    return _leitura.como_read_file(_le_um_arquivo(path, args, ident, "read_file"))
 
 
 # --- write_file: tipo x morada, sem symlink, atomico (spec_porta-so-verbo §4) ----
@@ -2220,7 +2190,7 @@ def _escreve_atomico(real_alvo: Path, data: bytes, modo: int) -> None:
 def write_file(path: str, content: str = "", sessao_id: str | None = None,
                trecho: dict | None = None, turno: str = "", turno_texto: str = "",
                turno_fonte: str = "") -> dict:
-    """Escreve arquivo de TIPO declarado em MORADA declarada, atomico (spec_porta-so-verbo §4).
+    """grava arquivo na bancada ou no rascunho da fita · use para: escrever mudança, o arquivo inteiro ou a troca de um trecho
 
     `path` absoluto, ou relativo à bancada declarada (sem ela, recusa). Moradas: na
     bancada, clones platafirma-* e seus worktrees em wt/<repo>/<cadeira>
@@ -2610,7 +2580,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
                         pergunta: str = "", sessao_id: str | None = None, perfil: str = "",
                         modo: str = "", regua: str = "", origem: str = "", agente: str = "",
                         turno: str = "", turno_texto: str = "", turno_fonte: str = "") -> dict:
-    """Abre a sessão de uma cadeira numa chamada (projeção do lote sessao abrir -> expediente montar).
+    """abre o expediente da cadeira · use para: PRIMEIRA AÇÃO DA CONVERSA, ANTES de ler ou responder o pedido
 
     Devolve o pacote de expediente com o bloco `sessao` no topo.
     `cadeira`: slug da cadeira.
@@ -2680,7 +2650,9 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
 # Registro tardio: o __doc__ é a descrição que o cliente lê, e ela precisa nomear o
 # usuário e os caminhos DESTA instância. Substituir depois de registrar não adianta — o
 # FastMCP copia a descrição no momento do mcp.tool().
-_TOOLS = [malote, run_command, ler_arquivo, read_file, write_file]
+# As tools de transporte são as do código; o registro da porta (registro/porta.yaml, chave `transporte`) as nomeia
+# e um teste confere que as duas listas dizem o mesmo (#4117). `run_command` e `read_file` saíram da porta.
+_TOOLS = [malote, ler_arquivo, write_file]
 # monta_sessao só existe onde há personas: numa instância sem abertura publicada
 # a tool não teria o que montar, e tool inútil no catálogo é contexto desperdiçado.
 if PERSONAS.is_dir():
@@ -2694,9 +2666,9 @@ for _fn in _TOOLS:
 
 
 # --- Cápsula de verbos: tools derivadas do golden record (spec_capsula-de-verbos) ---
-# A porta não tem lista própria de verbos: projeta o whitelist do núcleo via
-# `acervo listar ferramental --tools` (§3.2). Uma tool por slug, nome = slug, descrição
-# = coluna `descricao`, execução fina de `bin/<verbo> <ato> <args>` sem shell no meio.
+# A lista de verbos da porta é o registro (registro/porta.yaml, #4117), lido uma vez na subida. Uma tool por
+# slug, nome = slug, descrição = coluna `descricao` do golden record (`acervo listar casa ferramental --tools`),
+# execução fina de `bin/<verbo> <ato> <args>` sem shell no meio.
 # O que a tool acrescenta a `run_command` é SÓ a identidade da sessão (arq:0068 §1):
 # `sessao_id` explícito -> `sessao:{id}` em Valkey -> PF_CADEIRA/PF_ORDEM_ID/PF_SESSAO.
 # Flag: PF_TOOLS_VERBOS=0 desliga a projeção inteira (rollback: env + restart, sem
@@ -2708,8 +2680,7 @@ TOOLS_VERBOS = os.environ.get("PF_TOOLS_VERBOS", "1") != "0"
 TOOLS_LEVA2 = os.environ.get("PF_TOOLS_LEVA2", "0") == "1"
 PF_GATE = os.environ.get("PF_GATE", "1") != "0"          # gate transparente (§4)
 PF_TOOLS_LOTE = os.environ.get("PF_TOOLS_LOTE", "0") == "1" # chamada em lote (§5) — Leva 2
-# Quem é leva 2 NÃO mora aqui: é o marcador `leva:2` na linha do slug em
-# abertura/oficio-ferramental.md, que `acervo listar ferramental --tools` projeta em `leva`.
+# Quem é retido (o que era leva 2) NÃO mora aqui: é o atributo `retido` do verbo em registro/porta.yaml.
 
 
 def _sessao_resolve(sessao_id: str | None) -> dict:
@@ -3133,75 +3104,105 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
 BINARIOS: dict = {}
 SLUGS_RETIDOS: set = set()
 
-def _gera_tools_verbos() -> list:
-    """Lê a projeção do catálogo. Falha = zero tools derivadas e aviso; nunca aborta."""
-    if not TOOLS_VERBOS or not PERSONAS.is_dir():
-        return []
+# O registro da porta (registro/porta.yaml, #4117), lido uma vez na subida, da release no ar (o pai de BIN_VERBOS).
+# PF_REGISTRO_PORTA aponta outro arquivo (teste, ensaio). Ilegível = a porta falha fechada: sobe só com as tools de
+# transporte e grava o motivo no journal.
+REGISTRO_PORTA = Path(os.environ.get("PF_REGISTRO_PORTA", registro_porta.caminho_do(BIN_VERBOS.parent)))
+# Verbos do registro com `modelo: false`: registrados e executáveis, fora do tools/list.
+OCULTAS: set = set()
+DESCRICAO_INDISPONIVEL = "descrição indisponível na subida"
+
+def _le_registro_da_porta() -> dict | None:
     try:
-        cp = subprocess.run(["acervo", "listar", "ferramental", "--tools"],
+        return registro_porta.carrega(REGISTRO_PORTA)
+    except registro_porta.RegistroIlegivel as e:
+        print(f"[capsula] registro da porta ilegível: {e} — a porta sobe só com as tools de transporte",
+              file=sys.stderr, flush=True)
+        return None
+
+def _descricoes_do_acervo() -> dict:
+    """slug -> descrição, da coluna `descricao` do golden record (`acervo listar casa ferramental --tools`).
+    Falha = `{}` e o motivo no journal: a porta nunca aborta por isto, e o verbo sobe com a descrição curta."""
+    try:
+        cp = subprocess.run(["acervo", "listar", "casa", "ferramental", "--tools"],
                             env=_env_subprocesso(),  # projecao nao tem sujeito: nenhuma cadeira chumbada
                             capture_output=True, text=True, timeout=30,
                             cwd=CASA if CASA.is_dir() else None)
     except Exception as e:  # noqa: BLE001
-        print(f"[capsula] gerador falhou: {e!r} — sem tools derivadas", file=sys.stderr, flush=True)
-        return []
+        print(f"[capsula] acervo fora na subida: {e!r} — verbos sem descrição", file=sys.stderr, flush=True)
+        return {}
     if cp.stderr.strip():
         print(f"[capsula] {cp.stderr.strip()}", file=sys.stderr, flush=True)
     if cp.returncode != 0:
-        print(f"[capsula] gerador exit {cp.returncode} — sem tools derivadas", file=sys.stderr, flush=True)
-        return []
+        print(f"[capsula] acervo listar exit {cp.returncode} — verbos sem descrição", file=sys.stderr, flush=True)
+        return {}
     try:
-        itens = json.loads(cp.stdout)
-    except ValueError as e:
-        print(f"[capsula] JSON do gerador invalido: {e!r}", file=sys.stderr, flush=True)
+        return {i["tool"]: (i.get("descricao") or "") for i in json.loads(cp.stdout)}
+    except (ValueError, KeyError, TypeError) as e:
+        print(f"[capsula] JSON do acervo invalido: {e!r} — verbos sem descrição", file=sys.stderr, flush=True)
+        return {}
+
+def _gera_tools_verbos(registro: dict | None = None) -> list:
+    """Os verbos que a porta executa, do registro. Cada um ganha o bin da release (BINARIOS); o que não tem
+    bin executável sai com aviso. Retido (`retido: true`) só serve com PF_TOOLS_LEVA2=1. Com a projeção ligada
+    (PF_TOOLS_VERBOS e a abertura publicada), cada verbo vira uma tool com a descrição do golden record, ou
+    `descrição indisponível na subida` se o acervo não respondeu; `modelo: false` entra em OCULTAS. Devolve os
+    slugs executáveis; nunca aborta."""
+    registro = _le_registro_da_porta() if registro is None else registro
+    if registro is None:
         return []
+    projeta = TOOLS_VERBOS and PERSONAS.is_dir()
+    descricoes = _descricoes_do_acervo() if projeta else {}
     servidas, retidas = [], []
-    for i in itens:
-        slug = i["tool"]
-        BINARIOS[slug] = i["binario"]
-        if int(i.get("leva") or 1) >= 2 and not TOOLS_LEVA2:
+    for slug, atr in registro["verbos"].items():
+        binario = BIN_VERBOS / slug
+        if not (binario.is_file() and os.access(binario, os.X_OK)):
+            print(f"[capsula] registro cita {slug!r} sem bin executável em {BIN_VERBOS} — verbo ausente",
+                  file=sys.stderr, flush=True)
+            continue
+        BINARIOS[slug] = str(binario)
+        if atr["retido"] and not TOOLS_LEVA2:
             retidas.append(slug)
             SLUGS_RETIDOS.add(slug)
             continue
-        # Descrição = coluna `descricao` do golden record, SEM edição (spec §3.1): o
-        # contrato comum (ato, args, sessao_id) está no ofício, uma vez, não 17.
-        desc = i.get("descricao") or ""
-        mcp.tool(name=slug, description=desc)(_faz_tool_verbo(slug, i["binario"], desc))
         servidas.append(slug)
-    print(f"[capsula] tools derivadas servidas ({len(servidas)}): {' '.join(servidas)}"
-          + (f" · leva 2 retido: {' '.join(retidas)}" if retidas else ""),
+        if not atr["modelo"]:
+            OCULTAS.add(slug)
+        if projeta:
+            # Descrição = coluna `descricao` do golden record, SEM edição (spec §3.1): o contrato comum (ato,
+            # args, sessao_id) está no ofício, uma vez, não 17. A oculta não aparece na lista: descrição curta.
+            desc = descricoes.get(slug) or DESCRICAO_INDISPONIVEL
+            mcp.tool(name=slug, description=desc)(_faz_tool_verbo(slug, str(binario), desc))
+    print(f"[capsula] verbos do registro servidos ({len(servidas)}): {' '.join(servidas)}"
+          + (f" · fora da lista do modelo: {' '.join(sorted(OCULTAS))}" if OCULTAS else "")
+          + (f" · retido: {' '.join(retidas)}" if retidas else ""),
           file=sys.stderr, flush=True)
     return servidas
 
 
-def _slugs_do_bin() -> set:
-    """Fallback: verbos = executaveis em PF_HARNESS/bin sem prefixo _ e sem extensao.
-    Nao depende de nenhum verbo (o gerador chama `acervo`, que pode estar quebrado —
-    foi o que derrubou a porta em 08/09: refatoracao arq:0106 mudou a gramatica do
-    acervo, `acervo listar ferramental` passou a recusar, gerador caiu em [] e a
-    porta subiu sem verbo nenhum). Aqui a fonte e o filesystem, imune a isso."""
-    binp = PF_HARNESS / "bin"
-    if not binp.is_dir():
-        return set()
-    slugs = set()
-    for p in binp.iterdir():
-        n = p.name
-        if n.startswith("_") or "." in n or not p.is_file():
-            continue
-        if os.access(p, os.X_OK):
-            slugs.add(n)
-            BINARIOS.setdefault(n, str(p))
-    return slugs
-
+# Acervo fora na subida não tira verbo do ar: os verbos do registro seguem registrados e executáveis, com a
+# descrição curta. Registro ilegível deixa só o transporte (a porta nunca abre `bin/` inteiro ao malote).
 TOOLS_DERIVADAS = _gera_tools_verbos()
 SLUGS_SERVIDOS = set(TOOLS_DERIVADAS)
-if not SLUGS_SERVIDOS:
-    # gerador veio vazio (acervo quebrado, etc): degrada, nao derruba. run_command
-    # resolve verbo pelo bin/; a projecao de tools MCP fica degradada ate o gerador
-    # voltar, mas a porta NUNCA sobe cega recusando todo verbo.
-    SLUGS_SERVIDOS = _slugs_do_bin()
-    print(f"[capsula] gerador vazio — fallback bin/ ({len(SLUGS_SERVIDOS)} verbos): "
-          f"{' '.join(sorted(SLUGS_SERVIDOS))}", file=sys.stderr, flush=True)
+
+
+def _esconde_as_ocultas() -> None:
+    """`tools/list` sem as tools de `OCULTAS`. O handler de baixo roda inteiro, então o cache de definições da
+    `mcp` segue com a tool oculta: o `tools/call` dela passa pela validação do esquema e não grava o aviso
+    «not listed» (medido em ops-server/test_contrato_borda.py, #4117)."""
+    from mcp import types as _tipos
+    baixo = mcp._mcp_server
+    original = baixo.request_handlers[_tipos.ListToolsRequest]
+
+    async def _sem_ocultas(req):
+        lista = (await original(req)).root
+        visiveis = [t for t in lista.tools if t.name not in OCULTAS]
+        return _tipos.ServerResult(_tipos.ListToolsResult(tools=visiveis, nextCursor=lista.nextCursor))
+
+    baixo.request_handlers[_tipos.ListToolsRequest] = _sem_ocultas
+
+
+_esconde_as_ocultas()
 
 
 class RedigeToken(logging.Filter):
