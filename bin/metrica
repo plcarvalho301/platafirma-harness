@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# metrica — agrega o ops log em eventos de uso do harness: giro, erro, help, acerto, cadeia, lote
+# metrica — mede o uso da porta
 # capacidade: metrica
 # dono: claudinho-ia
-# use para: giros por fita, erros por verbo, giros-ate-acerto, profundidade de cadeia de erro
+# use para: «quantas chamadas deram erro?», «quem pediu help?», giro e lote por verbo
 # atos: eventos, dia, ate-acerto, tateio, casos, verbos, comportamento, turnos, abertura (leitura, abertura), investigar (escrita, investigacao)
 # forma: relatorio
 # cauda: nao

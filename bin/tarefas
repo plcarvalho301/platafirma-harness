@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# tarefas — cliente do rastreador de trabalho da PlataFirma.
+# tarefas — conduz o card, da demanda captada à entrega
 # capacidade: trabalho
 # dono: gestao-estrategica
-# use para: card, board, carteira, épico/feature/story, mover estado, sign-off
+# use para: SEMPRE que o assunto for card, épico, feature, story, incidente ou débito técnico; captar demanda, «cria um card»; lapidar, dar parecer, apostar, formalizar, priorizar, pôr em execução, concluir, validar e entregar card, «move para refinamento», «comenta no card»; declarar, mitigar e fechar incidente; «o que está comigo?», «lê o card», «os comentários do card», sign-off; e sempre que o pacto quebrar ou uma execução cair
 # atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub, ordenar, bloquear, desbloquear, carteira, espera-dono (leitura, trabalho)
 # mecanismo: espera-dono=casca
 #

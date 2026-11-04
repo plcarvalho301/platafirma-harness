@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
-# infra — estado e operação da infraestrutura local: contêiner, unit, timer,
-# stack (compose) e a agenda do cron.
+# infra — OPERA o serviço e a máquina em que ele roda
 # capacidade: infra
 # dono: ti
 # componente: docker, systemd --user, cron
-# use para: ver contêiner/unit/timer de pé e a saúde da porta, "está no ar?" (estado,
-#   saude, logs), reiniciar contêiner/unit e (re)criar a stack por compose (restart,
-#   up, down, pull, build), tirar contêiner avulso ou unit que ficou fora do declarado
+# use para: SEMPRE que for subir, reiniciar, derrubar ou remover serviço, «reinicia a unit», «sobe a stack»; construir e baixar imagem; alterar configuração; fazer backup; limpar disco; logs do contêiner, cron, VRAM e disco, «os logs do contêiner», «quanto de VRAM está ocupado?»
 #   (remover), convergir a agenda do cron e as units da instância (units) e podar log/quarentena/job falhado por
 #   retenção declarada (agenda, limpeza), liberar cache de VRAM e disco (cache), que
 #   hardware é este e quanto consome em W agora (hardware), a GPU ao vivo: uso, VRAM,

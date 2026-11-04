@@ -1,10 +1,10 @@
 #!/opt/platafirma/current/venv/harness/bin/python
-# bot — a camada acima do systemd: declara, agenda, lista e audita automação, com unit gerada e job caído virando incidente
+# bot — delega uma ação para depois, por agenda ou evento
 # capacidade: agendamento
 # dono: ti
 # classe: B
 # forma: objeto (declarar, desligar) / lista (listar) / fluxo (rodar) / predicado (caidas)
-# use para: automação, agendar um verbo, timer, unit systemd gerada, o que roda sozinho e quem responde, SLO de execução, job caído, incidente de automação
+# use para: delegar ação assíncrona ou por cron, «agenda isso toda noite»; «o que está agendado?»; desligar delegação; e sempre que uma execução cair, «o job caiu», automação parada
 # atos: declarar (escrita, agendamento), listar (leitura, agendamento), rodar (escrita, agendamento), desligar (escrita, agendamento), caidas (escrita, agendamento)
 # ato: declarar <slug> --roda "<verbo> [args]"|agente:<slug> --trigger timer:<calendario>|manual --dono <cadeira> [--slo <duracao>] [--autor <cadeira>] — grava a ficha pelo acervo (idempotente: igual é «já declarada», diferente é 409) e, com timer, escreve <slug>.service e <slug>.timer, habilita e agenda
 #  --slo é obrigatório com timer: 1d, 6h, 30m, 90s, 1d12h ou ISO 8601 (P1D); o bot guarda só o quando (gatilho, responsável, SLO), nunca modelo nem conta de agente

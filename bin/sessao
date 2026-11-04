@@ -1,10 +1,10 @@
 #!/opt/platafirma/current/venv/harness/bin/python
-# sessao — o dia de trabalho do agente: autoriza, cunha e torna a fita resolvivel pela porta (arq:0101, arq:0110 §14)
+# sessao — autoriza e cunha a sessão
 # capacidade: sessao
 # dono: ia
 # classe: A
 # forma: objeto (abrir, ver, limpar) / lista (listar) / predicado (encerrar) / fluxo (longjob)
-# use para: abrir a fita autorizado e reconhecido pela porta (abrir), saber quem opera uma sessao e por qual regra abriu (ver), as sessoes vivas (listar), apagar a chave viva (encerrar), limpar chaves-sonda acumuladas ou, com --rascunho, apagar o rascunho que a propria fita deixou em var/tmp/<ordem_id> (limpar), execucao que atravessa a fita (longjob)
+# use para: «de quem é esta sessão?», autorizar, cunhar, achar a fita; limpar sessões órfãs
 # atos: abrir (escrita, sessao), ver (leitura, sessao), listar (leitura, sessao), encerrar (escrita, sessao), limpar (escrita, sessao), longjob (herdado do alvo)
 # folhas: abrir|encerrar|limpar -> sessao/cunhagem · ver|listar -> sessao/estado · longjob -> sessao/execucao-longa
 # escreve: sessao:{id}, ledger:{id}, giro:{id} (msg-mem; DEL em encerrar|limpar), sessao.sessao (duravel; encerrar|limpar tambem gravam encerrada_em=now(), migracao 0092); <instancia>/var/tmp/<PF_ORDEM_ID>/<subpasta> (so `limpar --rascunho --apply`: apaga, e so, o que mora ali); nada em ver|listar

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# release — o canônico produção: o que está no ar, desde quando, e como voltar
+# release — opera a release, o que está no ar
 # capacidade: infra/promocao-de-mudanca
 # dono: ti
 # classe: B
-# use para: saber que sha esta no ar e desde quando (estado), ler/listar/procurar um arquivo do que esta servido (ler, listar, procurar), medir o servido contra a regua de uma classe (conferir), por um sha ou tag no ar (promover), voltar ao anterior (reverter) e aplicar/listar migrações de banco (migrar). Atenção: release reverter não desfaz schema: migração que tira ou muda é revertida por migração própria.
+# use para: «que versão está no ar e desde quando?»; promover release, «sobe isso», «promove»; reverter release, «volta para a anterior»; ler e procurar arquivo como está servido
 # atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), conferir (leitura, operacao), telas (leitura, operacao), promover (escrita, operacao), reverter (escrita, operacao), migrar (escrita, operacao)
 # mecanismo: telas=casca
 # forma: texto
