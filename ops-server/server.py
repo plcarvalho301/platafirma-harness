@@ -2017,7 +2017,11 @@ TIPOS_TEXTO = {".py", ".md", ".mmd", ".d2", ".sh", ".sql", ".yaml", ".yml", ".js
 # Texto de build que se reconhece pelo nome, nao pela extensao. Entrou em 23/09/2026: sem
 # ele, stack nova com imagem propria (Dockerfile, conf do nginx) nao tinha como ser escrita
 # pela porta, e a saida era esconder o Dockerfile dentro do compose.
-NOMES_TEXTO = {"Dockerfile", ".dockerignore", ".gitignore", ".operacao", "VERDES"}  # VERDES: baseline do pre-push (guia portoes-do-codigo)
+# .conferir-repo entrou em 04/11/2026 (#4114): excecao declarada ao lint de repositorio (arq:0042,
+# `permite: <prefixo>  # motivo`) e texto plano na raiz do repo, e sem o nome a excecao nao tinha
+# como ser escrita pela porta.
+NOMES_TEXTO = {"Dockerfile", ".dockerignore", ".gitignore", ".operacao", "VERDES",
+               ".conferir-repo"}  # VERDES: baseline do pre-push (guia portoes-do-codigo)
 # Dockerfile.<sufixo> (Dockerfile.gpu, Dockerfile.dev): o mesmo texto de build, #2856 linha 40.
 PREFIXO_DOCKERFILE = "Dockerfile."
 # platafirma-ui entrou em 22/09/2026 (hotfix): o clone existia na bancada e o front do
@@ -2224,7 +2228,7 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
     extensao + shebang); na instancia, @TMP@/<ordem_id>/ (rascunho da fita). Tipos: .py .md .mmd .d2 .sh
     .sql .yaml .yml .json .toml .css .html .js .jsx .mjs .ts .tsx .php .txt .conf .tsv .service
     .timer .path .socket, e os nomes Dockerfile, Dockerfile.<sufixo>, .dockerignore, .gitignore,
-    .operacao, VERDES. Fora disso volta
+    .operacao, VERDES, .conferir-repo. Fora disso volta
     `{recusado, motivo}` nomeando o porque (release, fila, abertura publicada, log, segredos, .git, symlink,
     tipo, tamanho). `content` = arquivo
     INTEIRO (teto 1 MiB). `trecho={"antes","depois"}` = edicao por trecho: `antes` tem de

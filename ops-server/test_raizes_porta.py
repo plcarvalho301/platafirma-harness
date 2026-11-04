@@ -315,9 +315,9 @@ def test_write_file_aceita_fonte_de_diagrama(bancada, sem_pep):
 
 
 def test_write_file_aceita_texto_de_build_por_nome(bancada, sem_pep):
-    """Dockerfile, .dockerignore e VERDES (baseline do pre-push) pelo nome; conf do nginx
-    pela extensao .conf."""
-    for nome in ("Dockerfile", ".dockerignore", "VERDES", "nginx.conf"):
+    """Dockerfile, .dockerignore, VERDES (baseline do pre-push) e .conferir-repo (excecao do
+    lint de repositorio, #4114) pelo nome; conf do nginx pela extensao .conf."""
+    for nome in ("Dockerfile", ".dockerignore", "VERDES", ".conferir-repo", "nginx.conf"):
         r = s.write_file(path=f"wt/platafirma-core/fabrica/site/{nome}", content="x\n")
         assert r.get("ok"), (nome, r)
     # o nome casa inteiro: arquivo sem extensao qualquer segue recusado
