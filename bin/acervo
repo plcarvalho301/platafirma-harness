@@ -4,8 +4,9 @@
 # dono: dados
 # classe: B
 # use para: incorporar item, «põe essa obra no acervo», «ingere o repo de docs»; classificar item, «cataloga essa obra», «de que domínio ela é?»; definir e relacionar conceitos no tesauro, «o que é o conceito X?», «como X se liga a Y?»; selar impressão, pôr item em serviço, retirar e restaurar item; abrir obra ou documento que já se sabe qual é, ou que a busca achou, «abre a ADR 97»; publicar página de wiki
-# atos: ler (leitura, casa), listar (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), empacotar (leitura, classificacao), espelhar (escrita, transcricao), recortar (escrita, transcricao), promover (escrita, transcricao), julgar (escrita, transcricao), converter (escrita, transcricao), recolher (escrita, transcricao), repor (escrita, transcricao), retirar (escrita, retirada), restaurar (escrita, retirada), apagar (escrita, retirada), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), consultar (leitura, casa), balde (escrita, acervo), medir (escrita, acervo), gerar (escrita, acervo), gerador (escrita, acervo)
+# atos: pipeline (escrita, incorporacao), ler (leitura, casa), listar (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), empacotar (leitura, classificacao), espelhar (escrita, transcricao), recortar (escrita, transcricao), promover (escrita, transcricao), julgar (escrita, transcricao), converter (escrita, transcricao), recolher (escrita, transcricao), repor (escrita, transcricao), retirar (escrita, retirada), restaurar (escrita, retirada), apagar (escrita, retirada), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), consultar (leitura, casa), balde (escrita, acervo), medir (escrita, acervo), gerar (escrita, acervo), gerador (escrita, acervo)
 # forma: texto
+# le: pipeline=repo,acervo.obra
 # le: ler=acervo.casa,acervo.obra,acervo.registro,repo
 # le: listar=acervo.casa,acervo.obra,acervo.registro,repo,arquivo-local
 # le: escrever=nada
@@ -36,6 +37,7 @@
 # le: medir=acervo.*,repo
 # le: gerar=acervo.*,repo
 # le: gerador=repo
+# escreve: pipeline=acervo.obra,acervo.registro,motor
 # escreve: ler=nada
 # escreve: listar=acervo.obra
 # escreve: escrever=acervo.casa
@@ -148,6 +150,10 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   le o arquivo nos bytes e grava a ficha (cliente de POST /acervo/obras/{id}/ficha/releitura, #3305);
                   plano sem --apply; --sem-ficha pega as obras nao retiradas com arquivo e sem ficha
   acervo lote     <id>
+  acervo pipeline <pasta> [--apply] [--espera <s>] [--json]   o ato unico (#4120): sem --apply, o plano do lote; com ele, incorpora a
+                  pasta, cria o job no servidor e devolve o id. Retoma: `pipeline --lote <id>`; estado: `pipeline --job <id>`
+  acervo catalogar biblioteca obra --job <id> [--parte <n>] | --job <id> --resposta   a classificacao das obras do job pela sessao
+  acervo curar    conceitos --indicacoes <lote|todas> [--termos a,b] [--apply]   a curadoria em lote das indicacoes
   acervo curar    casa alias <classe> <chave> <alias>
   acervo curar    casa revisao <revid>... --motivo <m> [--apply]   tira texto antigo do historico da wiki
   acervo ler      biblioteca impressao <obra> [--paginas a-b | --capitulo <ancora>] [--formato md|blocos]
@@ -634,7 +640,16 @@ case "$ATO" in
 
   # gramatica conforme (arq:0106)
   escrever)             conforme "$ATO" "$@" ;;
-  curar)                conforme "$ATO" "$@" ;;
+  # curar conceitos: a curadoria em lote das indicacoes que o classificador deixou (#4120, item 19). Antes do
+  # conforme(), que le a primeira palavra como particao.
+  curar)
+    if [ "${1:-}" = "conceitos" ]; then
+      shift
+      exec "$ATOS/curar" conceitos "$@"
+    fi
+    conforme "$ATO" "$@" ;;
+  # pipeline: o ato unico (#4120, item 26). Cliente fino: incorpora a pasta, cria o job no servidor e devolve o id.
+  pipeline)             exec python3 "$ATOS/pipeline" "$@" ;;
   lote)                 exec "$ATOS/lote" "$@" ;;
   ingerir)
     # conforme: ingerir <particao> <raiz>; vigente: ingerir <raiz> (alias de `ingerir --lote`)
@@ -720,7 +735,7 @@ case "$ATO" in
 
   -h|--help|ajuda) uso ;;
   *)
-    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, escrever, ingerir, curar, extrato, exportar, psql, consultar, balde, catalogar, definir, relacionar, desrelacionar, derivar, desderivar, empacotar, espelhar, recortar, promover, julgar, converter, recolher, repor, retirar, restaurar, apagar, medir, gerar, gerador." >&2
+    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, escrever, ingerir, curar, extrato, exportar, psql, pipeline, consultar, balde, catalogar, definir, relacionar, desrelacionar, derivar, desderivar, empacotar, espelhar, recortar, promover, julgar, converter, recolher, repor, retirar, restaurar, apagar, medir, gerar, gerador." >&2
     echo "  $SPEC" >&2
     exit 2 ;;
 esac

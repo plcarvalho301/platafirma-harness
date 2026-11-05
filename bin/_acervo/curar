@@ -31,12 +31,122 @@ def curar_alias(classe, chave, alias):
     print(f"acervo curar: alias '{alias}' vinculado a '{classe}:{chave_humana}' ({entidade_id}).")
     return 0
 
+def _valor(argv, flag):
+    """O valor que segue `flag` em argv, ou None se a flag não está ou não tem valor."""
+    if flag not in argv:
+        return None
+    i = argv.index(flag)
+    if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+        return None
+    return argv[i + 1]
+
+
+# o que `catalogar --job` não combina: o job classifica as obras dele, e a obra avulsa é outro ato
+_FLAGS_DE_OBRA_AVULSA = ("--obra", "--obras", "--de-dominio", "--sem-dominio", "--de-conceito", "--trata-de",
+                         "--remover-trata-de", "--substituir-trata-de", "--dominio", "--subdominio",
+                         "--especie", "--subtipo", "--titulo", "--vinculacao", "--apply")
+
+
+def classificar_pelo_job(argv):
+    """`acervo catalogar biblioteca obra --job <id> [--parte <n>]` pede à sessão a classificação das obras do job;
+    com `--resposta` e o JSON no stdin, entrega a resposta ao servidor, que valida e grava (itens 16 e 17).
+
+    A classificadora é a própria sessão que roda a ingestão: o cabeçalho fixo vem uma vez, na parte 1; cada obra
+    traz a ficha e a lista fechada de candidatos, e o glossário traz cada conceito candidato uma vez só.
+    Cada parte tem até 45 KB, abaixo do corte da porta. O servidor recusa o conceito fora da lista fechada e a
+    resposta acima de 5 conceitos por obra, e devolve o que recusou (sai 1 se recusou algo).
+    """
+    import pipeline_cliente as pc
+
+    job_id = _valor(argv, "--job")
+    if not job_id:
+        morre("acervo catalogar --job: falta o id do job (`acervo pipeline --job <id>` mostra o estado)", 2)
+    avulsas = [f for f in _FLAGS_DE_OBRA_AVULSA if f in argv]
+    if avulsas:
+        morre(f"acervo catalogar --job: o job classifica as obras dele; não combina com {' '.join(avulsas)} "
+              "(a obra avulsa é `acervo catalogar biblioteca obra <obra>`)", 2)
+    try:
+        if "--resposta" in argv:
+            bruto = sys.stdin.read()
+            if not bruto.strip():
+                morre("acervo catalogar --job --resposta: a resposta vem em JSON pelo stdin "
+                      "(lista de {obra_id, conceitos, especie, nenhum_cobre, indicacao, justificativa})", 2)
+            try:
+                corpo = json.loads(bruto)
+            except ValueError as e:
+                morre(f"acervo catalogar --job --resposta: o stdin não é JSON ({e})", 2)
+            resultado = pc.enviar_respostas(job_id, corpo)
+            print(json.dumps(resultado, ensure_ascii=False))
+            recusadas = resultado.get("recusadas") or []
+            sys.stderr.write(f"aceitas {resultado.get('total_aceitas', 0)}, recusadas {len(recusadas)}\n")
+            for r in recusadas:
+                sys.stderr.write(f"  recusada {r.get('obra_id')}: {r.get('motivo')}\n")
+            return 1 if recusadas else 0
+        parte = _valor(argv, "--parte") or "1"
+        if not parte.isdigit() or int(parte) < 1:
+            morre(f"acervo catalogar --job: --parte pede um número a partir de 1, veio '{parte}'", 2)
+        pedido = pc.pedido_de_classificacao(job_id, int(parte))
+        print(json.dumps(pedido, ensure_ascii=False))
+        sys.stderr.write(f"parte {pedido.get('parte')} de {pedido.get('total_partes')}\n")
+        return 0
+    except pc.Falha as e:
+        morre(f"acervo catalogar --job: {e.mensagem}", e.codigo)
+
+
+def curar_conceitos(argv):
+    """`acervo curar conceitos --indicacoes <lote|todas> [--termos a,b] [--apply] [--json]` (item 19).
+
+    Junta as indicações que o classificador deixou e cria cada conceito uma vez. Sem `--apply` mostra o plano.
+    Quem cria conceito no tesauro é a cadeira dados: o `--apply` de outra cadeira recusa (sai 4).
+    """
+    import pipeline_cliente as pc
+
+    uso = "uso: acervo curar conceitos --indicacoes <lote|todas> [--termos a,b] [--apply] [--json]"
+    lote = _valor(argv, "--indicacoes")
+    if lote is None:
+        morre(uso, 2)
+    termos = [t.strip() for t in (_valor(argv, "--termos") or "").split(",") if t.strip()] or None
+    aplicar = "--apply" in argv
+    if aplicar:
+        cadeira = (os.environ.get("PF_CADEIRA") or os.environ.get("PF_CONTA") or "").strip().lower()
+        cadeira = cadeira.removeprefix("claudinho-").removeprefix("claudinha-")
+        if cadeira != "dados":
+            morre("acervo curar conceitos --apply: quem cria conceito no tesauro é a cadeira dados "
+                  f"(esta sessão é '{cadeira or 'sem cadeira'}'); sem --apply, o plano sai igual", 4)
+    try:
+        resultado = pc.curar_indicacoes(None if lote == "todas" else lote, aplicar, termos)
+    except pc.Falha as e:
+        morre(f"acervo curar conceitos: {e.mensagem}", e.codigo)
+    if "--json" in argv:
+        print(json.dumps(resultado, ensure_ascii=False, indent=2))
+        return 0
+    if aplicar:
+        for c in resultado.get("criados") or []:
+            print(f"{c['slug']}: {'já existia' if c.get('ja_existia') else 'criado'} ({c.get('rotulo')})")
+        print(f"indicações admitidas: {resultado.get('indicacoes_admitidas', 0)}")
+        return 0
+    itens = resultado.get("itens") or []
+    print(f"plano: {len(itens)} conceito(s) a criar a partir das indicações" if itens
+          else "nenhuma indicação pendente")
+    for g in itens:
+        print(f"  {g['termo']} -> {g['slug']} · {g['obras_contagem']} obra(s) de garantia")
+    if itens:
+        print("plano seco — a cadeira dados repete com --apply para criar")
+    return 0
+
+
 def curar_obra(argv):
     """`acervo curar biblioteca ...` — repassa para bin/curar (cliente REST completo: --situacao,
     --expurgar, --restaurar, --promover, --reclassificar, --conceito, --relacionar/--relacoes/
     --desrelacionar). Existe aqui só porque `curar` não é verbo servido pela porta (#3126) —
     a lógica inteira, incluindo HermiT e export, já é a de bin/curar; nada se duplica.
     """
+    # a classificação pela sessão e a curadoria das indicações falam com o job do servidor (#4120); não passam por
+    # bin/curar, que recusaria `--job`, `--parte` e `--resposta` como flag que o verbo não lê
+    if argv and argv[0] == "conceitos":
+        return curar_conceitos(argv[1:])
+    if "--job" in argv:
+        return classificar_pelo_job(argv)
     alvo = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "curar")
     os.execv(sys.executable, [sys.executable, alvo, *argv])
 
@@ -58,6 +168,12 @@ def main(argv):
               "     acervo curar biblioteca --reextrair <id,id...|@arquivo> --bancada <pasta> "
               "[--metodo <slug>] [--refazer]   (converte em pasta de saida; nao escreve "
               "no acervo; depois: acervo listar biblioteca bancada <pasta>)\n"
+              "     acervo catalogar biblioteca obra --job <id> [--parte <n>]   o pedido de classificacao das obras do job, "
+              "para a sessao (cabecalho fixo na parte 1; ate 45 KB por parte)\n"
+              "     acervo catalogar biblioteca obra --job <id> --resposta   a resposta da sessao em JSON no stdin; o "
+              "servidor valida contra a lista fechada e o teto de 5 conceitos\n"
+              "     acervo curar conceitos --indicacoes <lote|todas> [--termos a,b] [--apply]   junta as indicacoes e cria "
+              "cada conceito uma vez (plano sem --apply; o --apply e da cadeira dados)\n"
               "     cartilha das familias e garantias: acervo relacionar biblioteca conceito --ajuda\n"
               "     --reclassificar, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes e "
               "--desderivar respondem com aviso: os atos de Classificar sao acervo catalogar, definir, relacionar, "
@@ -73,7 +189,9 @@ def main(argv):
         return curar_alias(argv[1], argv[2], argv[3])
     if sub == "obra":
         return curar_obra(argv[1:])
-    morre(f"acervo curar: sub-ato desconhecido '{sub}' (alias, obra)", 2)
+    if sub == "conceitos":
+        return curar_conceitos(argv[1:])
+    morre(f"acervo curar: sub-ato desconhecido '{sub}' (alias, obra, conceitos)", 2)
 
 if __name__ == "__main__":
     # Sai limpo no `| head`. So na execucao direta: no import o processo do chamador nao muda (#3274).
