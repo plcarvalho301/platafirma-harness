@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# tarefas psql — SQL de manutenção contra o banco do rastreador, só leitura, por STDIN (#4119).
+#
+# Por que existe: leitura em lote do rastreador (transições de centenas de cards, por
+# exemplo) só saía card a card pela API, uma chamada por card. Este ato lê o banco direto,
+# num SELECT só. Pedido do dono, 05/11/2026, pela gestão estratégica: «tarefas psql de
+# manutenção, fora da porta mas ativo».
+#
+# FORA DA PORTA, DE PROPÓSITO: o ato não está na linha `atos:` de bin/tarefas, então a porta
+# não o oferece como gatilho a nenhum modelo. Ele roda, e se chama pelo malote:
+#   malote {"verbo": "tarefas", "ato": "psql", "stdin": "<SELECT ...>"}
+# Mesma família de `tarefas api` e `tarefas api-corpo`.
+#
+# Contenção, em camadas que não dependem umas das outras:
+#   1. A conexão é a role `leitura` do rastreador-db (migração 025 de platafirma-rastreador):
+#      só SELECT, sem CREATE, sem senha. O banco recusa toda escrita por privilégio.
+#   2. A sessão abre com default_transaction_read_only e statement_timeout de 60 s.
+#   3. O SQL vai ao psql por -c, nunca como script: meta-comando do psql não é interpretado
+#      (sem \! nem \o |, que rodariam comando dentro do contêiner). Corpo que começa por
+#      barra invertida sai 2.
+#   4. Alvo fixo, nenhuma flag do chamador chega ao psql.
+#
+# Rollback: tirar a linha `psql)` do despacho de bin/tarefas e este arquivo; a role sai pela
+# migração do Rollback de 025.
+set -uo pipefail
+
+VERBO="tarefas psql"
+CTR="rastreador-db"
+USR="leitura"
+BASE="rastreador"
+
+uso() {
+  local codigo="${1:-2}" fd=2
+  [ "$codigo" = 0 ] && fd=1
+  cat >&$fd <<'EOF'
+uso: tarefas psql            SQL por STDIN, resultado em texto do psql
+
+  banco: rastreador-db, role leitura (só SELECT, sessão em só leitura, 60 s por comando).
+  Vários comandos no mesmo corpo rodam numa transação e só o resultado do último sai.
+  Meta-comando do psql (\d, \dt…) não roda: para o schema, consulte information_schema.
+  Fora da porta: chama-se pelo malote, {"verbo": "tarefas", "ato": "psql", "stdin": "<SQL>"}.
+
+exit: 0 ok · 2 uso · 3 falha do banco ou do contêiner (escrita recusada cai aqui)
+EOF
+  exit "$codigo"
+}
+
+morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
+
+for _a in "$@"; do
+  case "$_a" in
+    -h|--help|--ajuda|ajuda) uso 0 ;;
+  esac
+done
+[ $# -eq 0 ] || morre "argumento não aceito ('$1'): o SQL vem só por STDIN" 2
+
+[ -t 0 ] && morre "nenhum SQL no STDIN" 2
+sql="$(cat)"
+corpo="${sql#"${sql%%[![:space:]]*}"}"
+[ -n "$corpo" ] || morre "SQL vazio no STDIN" 2
+case "$corpo" in
+  \\*) morre "meta-comando do psql não roda aqui; mande SQL (para o schema, information_schema)" 2 ;;
+esac
+
+command -v docker >/dev/null 2>&1 || morre "'docker' não está no PATH desta conta" 3
+docker inspect -f '{{.State.Running}}' "$CTR" 2>/dev/null | grep -qx true \
+  || morre "contêiner '$CTR' não está de pé — \`infra estado\`" 3
+
+err="$(mktemp)"
+trap 'rm -f "$err"' EXIT
+out="$(docker exec \
+        -e PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=60s' \
+        "$CTR" psql -X -q -U "$USR" -d "$BASE" -P pager=off -v ON_ERROR_STOP=1 \
+        -c "$sql" 2>"$err" </dev/null)"
+rc=$?
+[ -n "$out" ] && printf '%s\n' "$out"
+if [ "$rc" -ne 0 ]; then
+  cat "$err" >&2
+  exit 3
+fi
+[ -s "$err" ] && cat "$err" >&2
+exit 0

@@ -1686,5 +1686,7 @@ case "$cmd" in
   projetos)    echo "não há projeto neste modelo: o recorte é por eixo (cadeira, estado, nível)." >&2; exit 2 ;;
   api)         busca "${1:?método}" "$(_apipath "${2:?caminho}")" ;;
   api-corpo)   envia "${1:?método}" "$(_apipath "${2:?caminho}")" ;;
+  # fora da porta, de propósito (#4119): fora de `atos:`, chama-se pelo malote
+  psql)        exec "$(dirname "$(readlink -f "$0")")/_tarefas/psql" "$@" ;;
   *)           uso ;;
 esac
