@@ -27,7 +27,7 @@ except ImportError:
 
 TETO_ESPERA_S = 540  # o teto do servidor no GET do job; abaixo dos 600 s da chamada da porta
 # as etapas do job, na ordem em que cada obra as percorre (conhecimento@rag/motor_acervo/curadoria/job_pipeline.py)
-ETAPAS = ("triagem", "catalogacao", "duplicata", "classificar", "indexar", "promocao")
+ETAPAS = ("triagem", "espelhar", "catalogacao", "duplicata", "classificar", "indexar", "promocao")
 
 
 class Falha(Exception):

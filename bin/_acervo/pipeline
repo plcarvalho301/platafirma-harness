@@ -8,7 +8,8 @@
     acervo pipeline <pasta>|--lote <id>|--job <id> --liberar <sha256 ou obra> [...]
                                                 solta a obra estacionada que o dono liberou; o job retoma
 
-Cliente fino: nao classifica nem indexa. O job roda no servidor do acervo, obra a obra, em segundo plano,
+Cliente fino: nao espelha, nao classifica nem indexa. O job roda no servidor do acervo, em segundo plano: espelha
+as obras (liga o conversor antes), depois anda obra a obra,
 pausa cada obra em `classificar` ate a sessao responder (`acervo catalogar biblioteca obra --job <id>`) e
 estaciona a obra com duplicata provavel (par com Jaccard de 0,8 ou mais, ou o mesmo identificador canonico)
 ate o dono liberar com `--liberar`; quem nao se liberta se retira (`acervo retirar biblioteca obra`).
@@ -37,6 +38,8 @@ HARNESS_DIR = Path(__file__).resolve().parents[2]
 INGERIR = Path(os.environ.get("PF_INGERIR") or HARNESS_DIR / "bin" / "ingerir")
 # a incorporacao tem de caber na chamada da porta (600 s), com folga para criar o job e responder
 PRAZO_INGERIR_S = 500
+# ligar o conversor espera ele responder; o acordar tem o teto dele, e este é a folga da chamada
+PRAZO_CONVERSOR_S = 240
 
 USO = """uso:
   acervo pipeline <pasta> [--apply] [--espera <s>] [--json]
@@ -54,9 +57,9 @@ def morre(msg: str, codigo: int = 2):
 def _ingerir(pasta: str, apply: bool, como_json: bool) -> subprocess.CompletedProcess:
     cmd = [sys.executable, str(INGERIR), "--lote", pasta]
     if apply:
-        # até a impressão selada: o job precisa do espelho para catalogar e comparar duplicata. Indexar e pôr no ar
-        # ficam depois da classificação, e não são etapas do job (ver o card #4120).
-        cmd += ["--apply", "--ate", "chunk"]
+        # Só até catalogar: a obra nasce aqui, e o espelho, a duplicata, a classificação, a indexação e a promoção são
+        # etapas do job, no servidor. Transcrever dentro desta chamada estourava o prazo no lote grande.
+        cmd += ["--apply"]
     if como_json:
         cmd.append("--json")
     return subprocess.run(cmd, capture_output=True, text=True, timeout=PRAZO_INGERIR_S, check=False)
@@ -80,7 +83,23 @@ def _mostrar_job(job: dict, como_json: bool) -> None:
     print(json.dumps(job, ensure_ascii=False, indent=2) if como_json else pc.resumo_do_job(job))
 
 
+def _acordar_conversor() -> None:
+    """Liga o conversor antes de criar ou retomar o job: a etapa `espelhar` o usa, no servidor. Ele liga sob demanda
+    (ordem do dono de 28/10/2026) e o timer o desliga depois de 15 min sem trabalho. Falhar em ligar não barra o
+    ato: a etapa diz a causa na obra, e `acervo pipeline --lote <id>` retoma."""
+    script = os.environ.get("PF_CONVERSOR_SOB_DEMANDA") or str(HARNESS_DIR / "bin" / "_infra" / "conversor-sob-demanda")
+    try:
+        r = subprocess.run(["bash", script, "acordar"], capture_output=True, text=True, timeout=PRAZO_CONVERSOR_S, check=False)
+        saiu = r.returncode
+    except (subprocess.TimeoutExpired, OSError) as e:
+        saiu = f"{e.__class__.__name__}"
+    if saiu != 0:
+        sys.stderr.write(f"acervo pipeline: o conversor nao acordou ({saiu}); a etapa espelhar de cada obra vai falhar com "
+                         "a causa, e `acervo pipeline --lote <id>` retoma\n")
+
+
 def _job_do_lote(pasta: str, lote_id: str, espera: int, como_json: bool) -> int:
+    _acordar_conversor()
     try:
         job = pc.criar_job(pasta, lote_id)
         if espera:
