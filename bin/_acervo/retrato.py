@@ -246,6 +246,64 @@ def texto(retrato):
     return "\n".join(saida)
 
 
+# o que o retrato mede por obra e a diferença compara (#4120, item 21)
+CAMPOS_DA_DIFERENCA = ("situacao", "exposicao", "impressao_id", "espelho_qualidade", "cobertura", "secao")
+ENTIDADES_DO_RODAPE = ("obra", "exposicao", "impressao_servindo", "espelho_qualidade", "indice_servindo",
+                       "cobertura", "secao")
+
+def diferenca(antes, depois):
+    """O que mudou entre dois retratos (item 21): as obras que entraram e saíram, o que mudou em cada obra que ficou,
+    e a soma de cada entidade do rodapé antes e depois. `antes` e `depois` são retratos como `montar` os devolve
+    (ou o `--json` de um `--retrato` que se guardou em arquivo)."""
+    a = {linha["obra_id"]: linha for linha in antes["linhas"]}
+    d = {linha["obra_id"]: linha for linha in depois["linhas"]}
+    mudaram = []
+    for obra in sorted(set(a) & set(d)):
+        mudancas = {c: [a[obra].get(c), d[obra].get(c)] for c in CAMPOS_DA_DIFERENCA
+                    if a[obra].get(c) != d[obra].get(c)}
+        inv_antes, inv_depois = sorted(a[obra].get("invariantes") or ()), sorted(d[obra].get("invariantes") or ())
+        if inv_antes != inv_depois:
+            mudancas["invariantes"] = [inv_antes, inv_depois]
+        if mudancas:
+            mudaram.append({"obra_id": obra, "titulo": d[obra]["titulo"], "mudancas": mudancas})
+    rodape = {}
+    for entidade in ENTIDADES_DO_RODAPE:
+        antes_ent = (antes.get("rodape") or {}).get(entidade) or {}
+        depois_ent = (depois.get("rodape") or {}).get(entidade) or {}
+        if antes_ent != depois_ent:
+            rodape[entidade] = {"antes": antes_ent, "depois": depois_ent}
+    return {
+        "de": antes["cabecalho"]["tirado_em"], "para": depois["cabecalho"]["tirado_em"],
+        "total": {"antes": antes["total"], "depois": depois["total"]},
+        "entraram": [{"obra_id": o, "titulo": d[o]["titulo"]} for o in sorted(set(d) - set(a))],
+        "sairam": [{"obra_id": o, "titulo": a[o]["titulo"]} for o in sorted(set(a) - set(d))],
+        "mudaram": mudaram,
+        "rodape": rodape,
+    }
+
+def texto_diferenca(dif):
+    """A diferença em linhas: o total, quem entrou e saiu, o que mudou em cada obra, o rodapé que se mexeu."""
+    saida = [f"diferença entre retratos · {dif['de']} -> {dif['para']}",
+             f"  obras: {dif['total']['antes']} -> {dif['total']['depois']} "
+             f"(entraram {len(dif['entraram'])}, saíram {len(dif['sairam'])}, mudaram {len(dif['mudaram'])})"]
+    for rotulo, obras in (("entraram", dif["entraram"]), ("saíram", dif["sairam"])):
+        for obra in obras[:MOSTRAR]:
+            saida.append(f"  {rotulo}: {obra['obra_id'][:8]}  {obra['titulo']}")
+        if len(obras) > MOSTRAR:
+            saida.append(f"  … +{len(obras) - MOSTRAR} que {rotulo} (a lista inteira está em diferenca.{rotulo.replace('í', 'i')} no --json)")
+    for obra in dif["mudaram"][:MOSTRAR]:
+        partes = [f"{campo} {antes} -> {depois}" for campo, (antes, depois) in obra["mudancas"].items()]
+        saida.append(f"  mudou: {obra['obra_id'][:8]}  {obra['titulo']}: " + "; ".join(partes))
+    if len(dif["mudaram"]) > MOSTRAR:
+        saida.append(f"  … +{len(dif['mudaram']) - MOSTRAR} obra(s) que mudaram (a lista inteira está em diferenca.mudaram no --json)")
+    for entidade, par in dif["rodape"].items():
+        def _fmt(estados):
+            return " · ".join(f"{k} {v}" for k, v in estados.items()) or "-"
+        saida.append(f"  rodapé {entidade}: {_fmt(par['antes'])}  ->  {_fmt(par['depois'])}")
+    if not (dif["entraram"] or dif["sairam"] or dif["mudaram"]):
+        saida.append("  nada mudou entre os dois retratos")
+    return "\n".join(saida)
+
 def _tag(*cargas):
     """Uma etiqueta de dollar-quote que não aparece em nenhuma das cargas."""
     n = 0
@@ -330,7 +388,7 @@ def _quem():
 
 
 def executar(quero_json=False, guardar=False, ler=None, balde=None, orfaos=None, projecao=None,
-             escrever=None, agora=None, quem=None):
+             escrever=None, agora=None, quem=None, antes=None):
     """O ato: 0 retrato que fecha, 1 retrato que não fecha ou que diverge do `--situacao`, 4 `--guardar`
     sem identidade, 5 fonte que não respondeu. As portas (`ler`, `projecao`, `escrever`…) trocam-se no teste."""
     ler = ler or pa.psql_json
@@ -347,10 +405,16 @@ def executar(quero_json=False, guardar=False, ler=None, balde=None, orfaos=None,
         sys.stderr.write(f"indeterminável: {e}\n")
         return 5
     retrato = montar(d, pa.avaliar_invariantes(d), proj, agora)
+    # `antes`: um retrato de antes (o `--json` guardado em arquivo); a saída traz a diferença para o de agora (#4120)
+    dif = diferenca(antes, retrato) if antes is not None else None
     if quero_json:
-        print(json.dumps(retrato, ensure_ascii=False, indent=2))
+        print(json.dumps({**retrato, "diferenca": dif} if dif is not None else retrato,
+                         ensure_ascii=False, indent=2))
     else:
         print(texto(retrato))
+        if dif is not None:
+            print("")
+            print(texto_diferenca(dif))
     if d["balde"] is None:
         sys.stderr.write(pa.POR_ARQUIVO + "\n")
     if guardar:

@@ -166,7 +166,7 @@ USO = """uso:
                                                 com a classe. Le o veredito da regua em
                                                 acervo.impressao.espelho (so leitura). --sobre,
                                                 --eixo e --situacao recusam (exit 2).
-  acervo listar biblioteca obra --situacao --retrato [--json] [--guardar]  o retrato da biblioteca, com data
+  acervo listar biblioteca obra --situacao --retrato [--json] [--guardar] [--diferenca <retrato.json>]  o retrato da biblioteca, com data
                                                 (arq:0121 §9, card #3324): cabecalho (base, data, geracao
                                                 servindo, papeis), uma linha por obra do catalogo
                                                 (situacao, exposicao, impressao servindo com metodo e
@@ -1134,6 +1134,7 @@ def main(argv):
     situacao = False
     quero_retrato = False
     guardar = False
+    arquivo_antes = None
     quero_qualidade = False
     por_obra = False
     quero_rotas = False
@@ -1164,6 +1165,9 @@ def main(argv):
         elif a == "--guardar" and alvo == "obra":
             guardar = True
             i += 1
+        elif a == "--diferenca" and alvo == "obra" and i + 1 < len(resto):
+            arquivo_antes = resto[i + 1]
+            i += 2
         elif a == "--por-obra" and alvo == "obra":
             por_obra = True
             i += 1
@@ -1215,6 +1219,8 @@ def main(argv):
               "--sobre, --eixo e --situacao nao valem aqui.\n\n%s" % USO)
     if guardar and not quero_retrato:
         morre("acervo listar biblioteca obra: --guardar so vale com --retrato.\n\n%s" % USO)
+    if arquivo_antes is not None and not quero_retrato:
+        morre("acervo listar biblioteca obra: --diferenca so vale com --retrato.\n\n%s" % USO)
     if quero_retrato and not situacao:
         morre("acervo listar biblioteca obra: --retrato vai com --situacao (o retrato reusa o ato).\n\n%s" % USO)
     if quero_retrato and (termo is not None or eixo is not None or quero_qualidade or quero_bancada
@@ -1254,7 +1260,20 @@ def main(argv):
             # banco rag + motor + balde, num modulo ao lado (retrato.py): o retrato nao e o --situacao
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             import retrato
-            sys.exit(retrato.executar(quero_json, guardar))
+            antes = None
+            if arquivo_antes is not None:
+                # o retrato de antes: o `--retrato --json` que se guardou em arquivo (#4120, item 21)
+                try:
+                    with open(arquivo_antes, encoding="utf-8") as f:
+                        antes = json.load(f)
+                except (OSError, ValueError) as e:
+                    morre("acervo listar biblioteca obra --retrato --diferenca: nao li %s (%s)" % (arquivo_antes, e))
+                if not (isinstance(antes, dict) and "linhas" in antes and "cabecalho" in antes):
+                    morre("acervo listar biblioteca obra --retrato --diferenca: %s nao e um retrato "
+                          "(guarde a saida de `--retrato --json`)" % arquivo_antes)
+            if antes is None:
+                sys.exit(retrato.executar(quero_json, guardar))
+            sys.exit(retrato.executar(quero_json, guardar, antes=antes))
         if quero_qualidade:
             sys.exit(listar_obra_qualidade(por_obra, quero_json))
         if quero_bancada:

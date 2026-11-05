@@ -313,3 +313,4 @@ testes/test_infra_rodar_peca.py | bin/infra bin/_infra/** bin/_acervo/exportar r
 tests/test_metrica_tokens_4120.py | bin/metrica bin/_metrica/** lib/tokenizador.py
 tests/test_ingerir_carga_4120.py | bin/ingerir bin/_ingerir/**
 tests/test_ingerir_4120.py | bin/ingerir
+tests/test_pipeline_4120.py | bin/acervo bin/_acervo/** bin/ingerir
