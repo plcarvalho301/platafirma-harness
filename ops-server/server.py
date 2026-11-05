@@ -1413,6 +1413,7 @@ def _item_de_lote(x):
     else:
         return None, None, _recusa(str(x)[:40], "item nem string nem {verbo, ato, args, stdin}")
     slug = verbo.split("/")[-1]
+    slug = NOMES_EXIBIDOS.get(slug, slug)
     if slug not in SLUGS_SERVIDOS:
         if slug in SLUGS_RETIDOS:
             return None, None, _recusa(slug, "leva 2 desligada (PF_TOOLS_LEVA2)")
@@ -1667,7 +1668,11 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
                 except ValueError:
                     elegivel = False
                     break
-                if not argv or argv[0] not in SLUGS_SERVIDOS:
+                if not argv:
+                    elegivel = False
+                    break
+                argv[0] = NOMES_EXIBIDOS.get(argv[0], argv[0])
+                if argv[0] not in SLUGS_SERVIDOS:
                     elegivel = False
                     break
                 # Barreira DEPOIS do shlex: procura metacaracteres nus nos tokens
@@ -3128,6 +3133,8 @@ SLUGS_RETIDOS: set = set()
 REGISTRO_PORTA = Path(os.environ.get("PF_REGISTRO_PORTA", registro_porta.caminho_do(BIN_VERBOS.parent)))
 # Verbos do registro com `modelo: false`: registrados e executáveis, fora do tools/list.
 OCULTAS: set = set()
+# Mapa do nome exibido da tool para o slug real do verbo (card #4123).
+NOMES_EXIBIDOS: dict[str, str] = {}
 DESCRICAO_INDISPONIVEL = "descrição indisponível na subida"
 
 def _le_registro_da_porta() -> dict | None:
@@ -3155,7 +3162,7 @@ def _descricoes_do_acervo() -> dict:
         print(f"[capsula] acervo listar exit {cp.returncode} — verbos sem descrição", file=sys.stderr, flush=True)
         return {}
     try:
-        return {i["tool"]: (i.get("descricao") or "") for i in json.loads(cp.stdout)}
+        return {i.get("verbo", i.get("tool")): (i.get("descricao") or "") for i in json.loads(cp.stdout)}
     except (ValueError, KeyError, TypeError) as e:
         print(f"[capsula] JSON do acervo invalido: {e!r} — verbos sem descrição", file=sys.stderr, flush=True)
         return {}
@@ -3173,6 +3180,8 @@ def _gera_tools_verbos(registro: dict | None = None) -> list:
     descricoes = _descricoes_do_acervo() if projeta else {}
     servidas, retidas = [], []
     for slug, atr in registro["verbos"].items():
+        nome_tool = registro_porta.exibido(registro, slug)
+        NOMES_EXIBIDOS[nome_tool] = slug
         binario = BIN_VERBOS / slug
         if not (binario.is_file() and os.access(binario, os.X_OK)):
             print(f"[capsula] registro cita {slug!r} sem bin executável em {BIN_VERBOS} — verbo ausente",
@@ -3185,12 +3194,12 @@ def _gera_tools_verbos(registro: dict | None = None) -> list:
             continue
         servidas.append(slug)
         if not atr["modelo"]:
-            OCULTAS.add(slug)
+            OCULTAS.add(nome_tool)
         if projeta:
             # Descrição = coluna `descricao` do golden record, SEM edição (spec §3.1): o contrato comum (ato,
             # args, sessao_id) está no ofício, uma vez, não 17. A oculta não aparece na lista: descrição curta.
             desc = descricoes.get(slug) or DESCRICAO_INDISPONIVEL
-            mcp.tool(name=slug, description=desc)(_faz_tool_verbo(slug, str(binario), desc))
+            mcp.tool(name=nome_tool, description=desc)(_faz_tool_verbo(slug, str(binario), desc))
     print(f"[capsula] verbos do registro servidos ({len(servidas)}): {' '.join(servidas)}"
           + (f" · fora da lista do modelo: {' '.join(sorted(OCULTAS))}" if OCULTAS else "")
           + (f" · retido: {' '.join(retidas)}" if retidas else ""),

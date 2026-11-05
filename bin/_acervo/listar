@@ -140,7 +140,7 @@ USO = """uso:
   acervo listar conceitos [--json]              golden record acervo.conceito:
                                                 slug . rotulo . outros rotulos . origem . obras-ancora
   acervo listar ferramental [--json] [--oficio] [--tools] golden record acervo.ferramental:
-                                                capacidade . verbo . sot . descricao . instancias
+                                                capacidade . tool . verbo . sot . descricao . instancias
                                                 --oficio: so os verbos do nucleo de abertura
                                                 --tools: projecao do nucleo em tools MCP (JSON; spec capsula)
   acervo listar topologia [<stack>] [--json] [--completo] topologia de deploy acervo.stack
@@ -205,6 +205,14 @@ def morre(msg, code=2):
 def _lit(s):
     return "'" + str(s).replace("'", "''") + "'"
 
+def _registro_da_porta():
+    sys.path.insert(0, os.path.join(RAIZ_HARNESS, "lib"))
+    import registro_porta
+    try:
+        return registro_porta.carrega(registro_porta.caminho_do(RAIZ_HARNESS))
+    except registro_porta.RegistroIlegivel as e:
+        morre("acervo listar ferramental: registro da porta ilegivel — %s" % e, 3)
+
 def _visiveis_da_porta():
     """Slugs dos verbos que o modelo vê, do registro da porta (registro/porta.yaml): `modelo` verdadeiro; o
     retido (`retido: true`) entra, porque quem o segura é a porta, por PF_TOOLS_LEVA2. Registro ausente ou
@@ -212,11 +220,7 @@ def _visiveis_da_porta():
     sobre o que a porta mostra. Devolve a lista na ordem do registro."""
     sys.path.insert(0, os.path.join(RAIZ_HARNESS, "lib"))
     import registro_porta
-    try:
-        registro = registro_porta.carrega(registro_porta.caminho_do(RAIZ_HARNESS))
-    except registro_porta.RegistroIlegivel as e:
-        morre("acervo listar ferramental: registro da porta ilegivel — %s" % e, 3)
-    return registro_porta.visiveis(registro)
+    return registro_porta.visiveis(_registro_da_porta())
 
 def _psql_json(sql, alvo):
     """Roda o SELECT (que devolve UMA linha: um array JSON) e desserializa.
@@ -584,12 +588,15 @@ def listar_conceitos(quero_json):
 def listar_ferramental_tools():
     """Projecao do que o modelo ve, em tools MCP (spec_capsula-de-verbos §3.2; registro da porta, #4117).
 
-    Um slug = uma tool; nome = slug, sem traducao. A identidade e vb.slug — coluna
-    cravada do golden record. Slug sem binario em bin/ sai da lista com aviso em
+    Um slug = uma tool; nome = slug, sem traducao (salvo se o registro declarar `nome`). A identidade e vb.slug —
+    coluna cravada do golden record. Slug sem binario em bin/ sai da lista com aviso em
     stderr — a porta nunca aborta por isso. Sem o campo `leva`: quem retem e a porta, pelo registro
     (`retido`). Sempre JSON: os consumidores sao o ops-server e o `agente conferir`.
     """
-    whitelist = set(_visiveis_da_porta())
+    sys.path.insert(0, os.path.join(RAIZ_HARNESS, "lib"))
+    import registro_porta
+    reg = _registro_da_porta()
+    whitelist = set(registro_porta.visiveis(reg))
     # Binario e o que o PATH da porta resolve: a porta injeta o bin/ da release no ar
     # (<release>/harness/bin, estavel entre promocoes). Depois, o bin/ desta arvore e o
     # PATH herdado — nao ha mais diretorio de symlinks de verbos.
@@ -613,7 +620,7 @@ def listar_ferramental_tools():
             continue
         desc = (row.get("descricao") or "").strip()
         itens.append({
-            "tool": verbo, "verbo": verbo, "capacidade": row["capacidade"],
+            "tool": registro_porta.exibido(reg, verbo), "verbo": verbo, "capacidade": row["capacidade"],
             "descricao": desc or ("verbo %s (sem descricao no golden record)" % verbo),
             "binario": binario,
         })
@@ -623,16 +630,20 @@ def listar_ferramental_tools():
     print(json.dumps(itens, ensure_ascii=False, indent=2))
 
 def listar_ferramental(quero_json, so_oficio=False):
+    sys.path.insert(0, os.path.join(RAIZ_HARNESS, "lib"))
+    import registro_porta
+    reg = _registro_da_porta()
     itens = []
     for row in _psql_json(SQL_FERRAMENTAL, "ferramental"):
+        verbo = row["verbo"]
         itens.append({
-            "capacidade": row["capacidade"], "verbo": row["verbo"],
+            "capacidade": row["capacidade"], "tool": registro_porta.exibido(reg, verbo), "verbo": verbo,
             "sot": row.get("sot") or None,
             "descricao": row.get("descricao") or None,
             "instancias": row.get("instancias") or None,
         })
     if so_oficio:
-        whitelist = set(_visiveis_da_porta())
+        whitelist = set(registro_porta.visiveis(reg))
         itens = [i for i in itens if i["verbo"] in whitelist]
         # O registro aponta verbo que o golden record nao tem: nucleo mente. Denuncia.
         faltam = whitelist - {i["verbo"] for i in itens}
@@ -643,14 +654,15 @@ def listar_ferramental(quero_json, so_oficio=False):
         print(json.dumps(itens, ensure_ascii=False, indent=2))
         return
     wc = max((len(i["capacidade"]) for i in itens), default=10)
+    wt = max((len(i["tool"]) for i in itens), default=4)
     wv = max((len(i["verbo"]) for i in itens), default=5)
     def _ins(i):
         return ",".join(i["instancias"]) if i["instancias"] else "-"
     wi = max([len(_ins(i)) for i in itens] + [len("instancias")])
-    print("%-*s  %-*s  %-*s  %s" % (wc, "capacidade", wv, "verbo", wi, "instancias", "descricao"))
-    print("%s  %s  %s  %s" % ("-" * wc, "-" * wv, "-" * wi, "-" * 9))
+    print("%-*s  %-*s  %-*s  %-*s  %s" % (wc, "capacidade", wt, "tool", wv, "verbo", wi, "instancias", "descricao"))
+    print("%s  %s  %s  %s  %s" % ("-" * wc, "-" * wt, "-" * wv, "-" * wi, "-" * 9))
     for i in itens:
-        print("%-*s  %-*s  %-*s  %s" % (wc, i["capacidade"], wv, i["verbo"], wi, _ins(i), i["descricao"] or "-"))
+        print("%-*s  %-*s  %-*s  %-*s  %s" % (wc, i["capacidade"], wt, i["tool"], wv, i["verbo"], wi, _ins(i), i["descricao"] or "-"))
     rotulo = "acervo.ferramental, nucleo de abertura" if so_oficio else "acervo.ferramental"
     sys.stderr.write("\n%d capacidade(s) no golden record (%s).\n" % (len(itens), rotulo))
 

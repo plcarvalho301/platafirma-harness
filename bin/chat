@@ -288,7 +288,7 @@ def settings_da_fita(modelo="", cadeira=""):
                 "mcp__claudinho-mcp__fila",
                 "mcp__claudinho-mcp__mesa",
                 "mcp__claudinho-mcp__tarefas",
-                "mcp__claudinho-mcp__motor",
+                "mcp__claudinho-mcp__busca",
                 "mcp__claudinho-mcp__acervo",
                 "mcp__claudinho-mcp__situacao",
                 "mcp__claudinho-mcp__conferir",

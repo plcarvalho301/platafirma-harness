@@ -161,3 +161,13 @@ def test_recusa_do_nome_sozinho_aponta_a_tool_que_ficou():
     assert rec["sugestao"] == "saiu da porta: chame malote, a tool que você está chamando"
     _, _, rec = s._item_de_lote("read_file")
     assert rec["sugestao"] == "saiu da porta: chame ler_arquivo(caminho=...)"
+
+
+def test_item_de_malote_busca_listar_aponta_o_bin_do_motor():
+    with patch.dict(s.NOMES_EXIBIDOS, {"busca": "motor"}, clear=False), \
+            patch("server.SLUGS_SERVIDOS", set(s.SLUGS_SERVIDOS) | {"motor"}), \
+            patch("server.BINARIOS", {**s.BINARIOS, "motor": "/opt/bin/motor"}):
+        argv, _, rec = s._item_de_lote("busca listar")
+        assert rec is None and argv == ["/opt/bin/motor", "listar"]
+        argv, _, rec = s._item_de_lote({"verbo": "busca", "ato": "listar"})
+        assert rec is None and argv == ["/opt/bin/motor", "listar"]
