@@ -126,7 +126,7 @@ def test_o_plano_de_uma_pasta_de_teste_mostra_a_ficha_de_cada_arquivo(monkeypatc
     visto: dict = {}
     mod = _mod(monkeypatch, visto)
     monkeypatch.setattr(mod.subprocess, "run", lambda argv, **_: visto.setdefault("acordar", argv))
-    monkeypatch.setattr(sys, "argv", ["ingerir", "--lote", str(pasta)])
+    monkeypatch.setattr(sys, "argv", ["ingerir", "--lote", str(pasta), "--tabela"])
     with pytest.raises(SystemExit) as saida:
         mod.main()
     assert saida.value.code == 0
