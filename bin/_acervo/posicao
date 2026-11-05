@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""acervo ler biblioteca posicao <obra> [--k N] [--json] — a obra está entre as k primeiras da busca pelo título? (#4120, item 23)
+
+Faz a busca pelo título da obra, do jeito que o acervo a serve (`motor rag buscar biblioteca`, origem `medida`: texto
+literal, sem lint e fora da série de cobertura), e diz em que posição a obra aparece. É a conferência que a medida da
+4120 usa para provar que a obra que entrou pelo pipeline se acha.
+
+Saídas: 0 a obra está entre as k primeiras · 1 não está (resultado de mérito, com as k que vieram) · 2 uso errado ·
+3 o serviço ou o motor não respondeu · 5 a saída da busca não se leu.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import urllib.parse
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pipeline_cliente as pc  # noqa: E402
+
+HARNESS_DIR = Path(__file__).resolve().parents[2]
+# PF_MOTOR só existe para o teste trocar a busca de verdade por uma que devolve o JSON combinado
+MOTOR = Path(os.environ.get("PF_MOTOR") or HARNESS_DIR / "bin" / "motor")
+INSTANCIA = os.environ.get("PF_POSICAO_INSTANCIA", "rag")
+K_PADRAO, K_TETO = 10, 100
+PRAZO_S = 120
+
+
+def morre(msg: str, codigo: int = 2):
+    sys.stderr.write(msg.rstrip("\n") + "\n")
+    sys.exit(codigo)
+
+
+def obras_em_ordem(corpo) -> list[str]:
+    """As obras da resposta da busca, na ordem em que vieram e sem repetir (um trecho por vez vira uma obra só)."""
+    achadas: list[str] = []
+
+    def visita(no):
+        if isinstance(no, dict):
+            for chave in ("obra_id", "obra"):
+                valor = no.get(chave)
+                if isinstance(valor, str) and valor:
+                    if valor not in achadas:
+                        achadas.append(valor)
+                    break
+            for filho in no.values():
+                if isinstance(filho, (dict, list)):
+                    visita(filho)
+        elif isinstance(no, list):
+            for filho in no:
+                visita(filho)
+
+    visita(corpo)
+    return achadas
+
+
+def _json_da_saida(saida: str):
+    saida = saida.strip()
+    for inicio in (i for i, c in enumerate(saida) if c in "{["):
+        try:
+            return json.JSONDecoder().raw_decode(saida[inicio:])[0]
+        except ValueError:
+            continue
+    return None
+
+
+def main(argv: list[str]) -> int:
+    p = argparse.ArgumentParser(prog="acervo ler biblioteca posicao", add_help=False)
+    p.add_argument("obra", nargs="?")
+    p.add_argument("--k", type=int, default=K_PADRAO)
+    p.add_argument("--json", dest="como_json", action="store_true")
+    p.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true")
+    args, resto = p.parse_known_args(argv)
+    uso = "uso: acervo ler biblioteca posicao <obra> [--k N] [--json]"
+    if args.ajuda:
+        sys.stderr.write(uso + "\n")
+        return 2
+    if resto or not args.obra:
+        morre(f"acervo ler biblioteca posicao: {'argumento que o ato nao le: ' + ' '.join(resto) if resto else 'falta a obra'}\n{uso}")
+    if not 1 <= args.k <= K_TETO:
+        morre(f"acervo ler biblioteca posicao: --k vai de 1 a {K_TETO}")
+
+    try:
+        situacao = pc.chamar("GET", f"/acervo/obras/{urllib.parse.quote(args.obra, safe='')}/situacao")
+    except pc.Falha as e:
+        morre(f"acervo ler biblioteca posicao: {e.mensagem}", e.codigo)
+    obra_id, titulo = situacao.get("obra_id"), situacao.get("titulo")
+    if not obra_id or not titulo:
+        morre("acervo ler biblioteca posicao: o acervo nao devolveu o titulo da obra", 5)
+
+    cmd = [sys.executable, str(MOTOR), INSTANCIA, "buscar", "biblioteca", "--origem", "medida",
+           "--k", str(args.k), titulo]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=PRAZO_S, check=False)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        morre(f"acervo ler biblioteca posicao: a busca nao respondeu ({type(e).__name__})", 3)
+    if r.returncode != 0:
+        ultima = (r.stderr or r.stdout).strip().splitlines()
+        morre(f"acervo ler biblioteca posicao: a busca saiu {r.returncode}: {ultima[-1] if ultima else 'sem mensagem'}",
+              3 if r.returncode == 3 else 5)
+    corpo = _json_da_saida(r.stdout)
+    if corpo is None:
+        morre("acervo ler biblioteca posicao: a saida da busca nao e JSON; nada a medir", 5)
+
+    ordem = obras_em_ordem(corpo)[: args.k]
+    posicao = ordem.index(obra_id) + 1 if obra_id in ordem else None
+    resultado = {"obra_id": obra_id, "titulo": titulo, "k": args.k, "posicao": posicao,
+                 "entre_as_k_primeiras": posicao is not None, "vieram": len(ordem)}
+    if args.como_json:
+        print(json.dumps(resultado, ensure_ascii=False))
+    elif posicao is not None:
+        print(f"posicao: {posicao} de {args.k} · {titulo} ({obra_id})")
+    else:
+        print(f"posicao: fora das {args.k} primeiras ({len(ordem)} obra(s) vieram) · {titulo} ({obra_id})")
+    return 0 if posicao is not None else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -139,7 +139,7 @@ def test_apply_incorpora_cria_o_job_e_devolve_o_id(servidor, tmp_path):
     assert f"job: {JOB}" in r.stdout
     assert time.monotonic() - t0 < 600
     # o ingerir recebeu a pasta, o --apply e o --json que o ato lê
-    assert json.loads(gravado.read_text()) == ["--lote", str(pasta), "--apply", "--json"]
+    assert json.loads(gravado.read_text()) == ["--lote", str(pasta), "--apply", "--ate", "chunk", "--json"]
     # o job nasce sobre o lote que o ingerir aplicou
     assert servidor.criacoes() == [("POST", "/acervo/jobs", {"pasta": str(pasta), "lote_id": LOTE})]
     assert f"lote: {LOTE} · 2 obra(s)" in r.stderr
@@ -167,6 +167,32 @@ def test_ingerir_com_excecao_ou_reprovado_ainda_cria_o_job_das_obras_que_entrara
         assert r.returncode == 0, (codigo, r.stderr)
         assert f"ingerir saiu {codigo}" in r.stderr
         assert len(servidor.criacoes()) == 1
+
+
+def test_obra_barrada_num_portao_do_encadeamento_nao_impede_o_job_das_outras(servidor, tmp_path):
+    # `ingerir --ate chunk` sai 1 quando um portao barra uma obra, com o lote concluido
+    pasta = tmp_path / "entrada"
+    pasta.mkdir()
+    ingerir, _ = _ingerir_falso(tmp_path, _lote(), codigo=1)
+    r = servidor.rodar(str(pasta), "--apply", ingerir=ingerir)
+    assert r.returncode == 0, r.stderr
+    assert "ingerir saiu 1" in r.stderr and len(servidor.criacoes()) == 1
+
+
+def test_o_resumo_diz_duplicata_com_par_e_promocao_que_ficou_para_depois(servidor, tmp_path):
+    pasta = tmp_path / "entrada"
+    pasta.mkdir()
+    servidor.job = _job(estado="concluido", classificar="concluido")
+    for e in servidor.job["etapas"]:
+        if e["obra_id"] == "o1" and e["etapa"] == "duplicata":
+            e["detalhe"] = {"pares": [{"obra_id": "o2", "classificacao": "duplicata_provavel"}],
+                            "duplicata_provavel": True}
+        if e["etapa"] == "promocao":
+            e["estado"], e["detalhe"] = "concluido", {"promovida": False, "motivo": "transcrita exige trechos"}
+    ingerir, _ = _ingerir_falso(tmp_path, _lote())
+    r = servidor.rodar(str(pasta), "--apply", ingerir=ingerir)
+    assert "duplicata: 1 obra(s) com par, 1 provavel(is)" in r.stdout
+    assert "promocao: 2 obra(s) ainda sem promocao" in r.stdout
 
 
 def test_lote_sem_obra_nao_cria_job(servidor, tmp_path):

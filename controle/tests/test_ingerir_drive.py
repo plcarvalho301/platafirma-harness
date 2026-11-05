@@ -117,7 +117,7 @@ def test_portao_1_divergencia_aborta(tmp_path, env_py):
     # - 'sync': cria 2 arquivos no destino
     # - 'lsf': devolve 3 arquivos (simula que faltou 1 arquivo)
     _executavel(fake_bin / "rclone", """#!/usr/bin/env bash
-if [ "$1" = "sync" ]; then
+if [ "$1" = "copy" ]; then
     dest="$3"
     mkdir -p "$dest"
     touch "$dest/arq1.pdf" "$dest/arq2.pdf"
@@ -142,7 +142,7 @@ def test_portao_1_aprovado(tmp_path, env_py):
     fake_bin.mkdir()
 
     _executavel(fake_bin / "rclone", """#!/usr/bin/env bash
-if [ "$1" = "sync" ]; then
+if [ "$1" = "copy" ]; then
     dest="$3"
     mkdir -p "$dest"
     touch "$dest/doc1.pdf" "$dest/doc2.pdf"
@@ -160,25 +160,23 @@ exit 0
     r = _roda([BIN_INGERIR, "--drive", "--motor", "rag"], env)
     assert "PORTÃO 1 aprovado: 2 arquivo(s) conferidos no staging" in r.stderr
 
-def test_drive_espelha_com_sync_e_tira_do_staging_o_que_saiu_do_drive(tmp_path, env_py):
-    # O staging do dia já tem arquivo que saiu do Drive: o espelho é fiel (rclone sync),
-    # então o arquivo some e o PORTÃO 1 fecha. rclone copy não serve: o mock o recusa.
+def test_drive_copia_sem_apagar_e_o_portao_1_acusa_o_que_sobrou_no_staging(tmp_path, env_py):
+    # #4120, item 1: o --drive faz rclone copy (o rclone sync saiu). Copy nunca apaga: o arquivo que já estava no
+    # staging do dia e saiu do Drive continua lá, e o PORTÃO 1 recusa a contagem que não fecha, em vez de
+    # espelhar em silêncio. O mock recusa o sync.
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     _executavel(fake_bin / "rclone", """#!/usr/bin/env bash
-if [ "$1" = "sync" ]; then
+if [ "$1" = "copy" ]; then
     dest="$3"
     mkdir -p "$dest"
-    for f in "$dest"/*; do
-        case "$(basename "$f")" in doc1.pdf|doc2.pdf) ;; *) rm -f "$f" ;; esac
-    done
     touch "$dest/doc1.pdf" "$dest/doc2.pdf"
     exit 0
 elif [ "$1" = "lsf" ]; then
     echo "doc1.pdf"
     echo "doc2.pdf"
     exit 0
-elif [ "$1" = "copy" ]; then
+elif [ "$1" = "sync" ]; then
     exit 9
 fi
 exit 0
@@ -192,5 +190,6 @@ exit 0
 
     env = _env_drive(tmp_path, env_py, fake_bin)
     r = _roda([BIN_INGERIR, "--drive", "--motor", "rag"], env)
-    assert "PORTÃO 1 aprovado: 2 arquivo(s) conferidos no staging" in r.stderr
-    assert not (staging / "saiu-do-drive.pdf").exists()
+    assert r.returncode == 1
+    assert "PORTÃO 1: contagem de rclone lsf (2) diverge do staging (3) — lote incompleto" in r.stderr
+    assert (staging / "saiu-do-drive.pdf").exists()  # copy não apaga nada

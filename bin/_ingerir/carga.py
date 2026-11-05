@@ -124,6 +124,39 @@ def classificar_item_arquivo(nome: str, tamanho: int) -> tuple[str, str | None]:
     return "chegado", None
 
 
+def itens_da_chegada(
+    obras: list[dict[str, Any]],
+    excecoes: list[dict[str, Any]],
+    classificacoes: dict[str, dict] | None = None,
+) -> list[dict[str, Any]]:
+    """Os itens que a carga manda a `POST /acervo/chegada`: o que chegou e o que ficou de fora, cada um com o
+    estado da triagem. A classificação da planilha vai presa ao sha256 do arquivo que ela descreve (item 3)."""
+    classificacoes = classificacoes or {}
+    itens: list[dict[str, Any]] = []
+    for it in list(obras) + list(excecoes):
+        item = {
+            "sha256": it["sha256"], "nome": it["nome"], "pasta_origem": it.get("pasta_origem") or "",
+            "tamanho": it["tamanho"], "estado": it["estado"],
+        }
+        classif = classificacoes.get(it.get("rel", "")) or classificacoes.get(it["nome"])
+        if classif and it["estado"] == "chegado":
+            item["classificacao"] = classif
+        itens.append(item)
+    return itens
+
+
+def linhas_das_excecoes(excecoes: list[dict[str, Any]]) -> list[str]:
+    """A lista do que a carga não fez obra (itens 4 e 5): vazio, sem leitor, .json comum e auxiliar (planilha,
+    .jsonl, sidecar). Nada some em silêncio: cada um sai com o estado e a causa."""
+    if not excecoes:
+        return []
+    linhas = ["Fora da carga (não viraram obra):"]
+    for it in sorted(excecoes, key=lambda x: x.get("rel") or x["nome"]):
+        motivo = it.get("motivo") or it["estado"]
+        linhas.append(f"  [{it['estado']}] {it.get('rel') or it['nome']}: {motivo}")
+    return linhas
+
+
 def escanear_pasta_triagem(pasta: str | Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, dict]]:
     """Escaneia pasta e subpastas separando obras válidas de exceções e sidecars."""
     pasta_path = Path(pasta)

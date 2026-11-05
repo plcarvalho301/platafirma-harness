@@ -49,7 +49,9 @@ def morre(msg: str, codigo: int = 2):
 def _ingerir(pasta: str, apply: bool, como_json: bool) -> subprocess.CompletedProcess:
     cmd = [sys.executable, str(INGERIR), "--lote", pasta]
     if apply:
-        cmd.append("--apply")
+        # até a impressão selada: o job precisa do espelho para catalogar e comparar duplicata. Indexar e pôr no ar
+        # ficam depois da classificação, e não são etapas do job (ver o card #4120).
+        cmd += ["--apply", "--ate", "chunk"]
     if como_json:
         cmd.append("--json")
     return subprocess.run(cmd, capture_output=True, text=True, timeout=PRAZO_INGERIR_S, check=False)
@@ -139,13 +141,13 @@ def main(argv: list[str]) -> int:
               "rodando no servidor: ache o id em registro/lotes da bancada ou em `acervo listar biblioteca obra "
               "--situacao` e retome com `acervo pipeline --lote <id>`", 3)
     lote = _lote_do_json(r.stdout)
-    # 0 incorporou limpo, 2 com excecoes e 3 com reprovado ainda criam o job das obras que entraram;
-    # 1 e o lote que falhou
+    # 0 incorporou limpo, 2 com excecoes, 3 com reprovado e 1 com obra barrada num portao do encadeamento ainda
+    # criam o job das obras que entraram; o que barra o job e o lote que nao concluiu
     if lote is None:
         sys.stderr.write(r.stderr)
         morre("acervo pipeline: nao li o lote que `ingerir` devolveu; nenhum job criado. Se o lote foi aplicado, "
               "retome com `acervo pipeline --lote <id>`", 5)
-    if r.returncode == 1 or lote.get("estado") not in (None, "concluido"):
+    if lote.get("estado") not in (None, "concluido"):
         sys.stderr.write(r.stderr)
         morre(f"acervo pipeline: o lote {lote['id']} terminou em '{lote.get('estado')}'; nenhum job criado", 1)
     com_obra = [it for it in lote.get("itens", []) if it.get("obra_id")]

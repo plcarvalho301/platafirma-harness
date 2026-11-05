@@ -314,3 +314,6 @@ tests/test_metrica_tokens_4120.py | bin/metrica bin/_metrica/** lib/tokenizador.
 tests/test_ingerir_carga_4120.py | bin/ingerir bin/_ingerir/**
 tests/test_ingerir_4120.py | bin/ingerir
 tests/test_pipeline_4120.py | bin/acervo bin/_acervo/** bin/ingerir
+tests/test_chegada_ingerir_4120.py | bin/ingerir bin/_ingerir/**
+tests/test_posicao_4120.py | bin/acervo bin/_acervo/**
+tests/test_ingerir_drive.py | bin/ingerir bin/_ingerir/**
