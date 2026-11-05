@@ -112,6 +112,13 @@ def test_o_oficio_com_o_bloco_cercado_saiu():
     "verbos: {a: {}}\ntransporte: {malote: {nome: x}}\n",                       # transporte com atributo
     "verbos: [a, b]\ntransporte: {malote: {}}\n",                               # verbos nao e mapa
     "verbos: {a: {}\n",                                                         # nao e YAML
+    "verbos: {a: {nome: 123}}\ntransporte: {malote: {}}\n",                     # nome nao e string
+    "verbos: {a: {nome: 'Busca'}}\ntransporte: {malote: {}}\n",                 # nome fora da forma de slug
+    "verbos: {a: {nome: 'busca/x'}}\ntransporte: {malote: {}}\n",               # nome fora da forma de slug
+    "verbos: {a: {nome: ''}}\ntransporte: {malote: {}}\n",                      # nome vazio
+    "verbos: {a: {nome: malote}}\ntransporte: {malote: {}}\n",                  # nome repete transporte
+    "verbos: {a: {nome: b}, b: {}}\ntransporte: {malote: {}}\n",                # nome repete slug de outro verbo
+    "verbos: {a: {nome: x}, b: {nome: x}}\ntransporte: {malote: {}}\n",         # nome repetido entre verbos
 ])
 def test_registro_fora_da_forma_e_ilegivel(tmp_path, texto):
     with pytest.raises(rp.RegistroIlegivel):
@@ -145,7 +152,8 @@ def test_tools_projeta_o_que_o_modelo_ve_com_a_descricao_do_golden_e_sem_o_campo
     monkeypatch.setattr(listar, "_psql_json", lambda sql, alvo: _golden(registro))
     listar.listar_ferramental_tools()
     itens = json.loads(capsys.readouterr().out)
-    assert [i["tool"] for i in itens] == rp.visiveis(registro)
+    assert [i["tool"] for i in itens] == [rp.exibido(registro, s) for s in rp.visiveis(registro)]
+    assert [i["verbo"] for i in itens] == rp.visiveis(registro)
     assert not (FORA_DA_LISTA & {i["tool"] for i in itens}) and "metrica" in {i["tool"] for i in itens}
     assert all("leva" not in i for i in itens), "quem retem e a porta, pelo registro"
     assert {i["tool"]: i["descricao"] for i in itens}["infra"] == "abertura de infra · use para: gatilho de infra"
@@ -170,6 +178,39 @@ def test_os_padroes_sao_modelo_verdadeiro_retido_falso_e_sem_faces(tmp_path):
     assert r["verbos"] == {"a": {"modelo": True, "retido": False, "faces": {}},
                            "b": {"modelo": True, "retido": False, "faces": {}}}
     assert r["transporte"] == ["malote"]
+
+
+def test_nome_exibido_e_aceito_no_registro(tmp_path):
+    r = rp.carrega(_grava(tmp_path, "verbos:\n  motor:\n    nome: busca\n  mesa: {}\ntransporte:\n  malote: {}\n"))
+    assert r["verbos"]["motor"]["nome"] == "busca"
+    assert "nome" not in r["verbos"]["mesa"]
+    assert rp.exibido(r, "motor") == "busca"
+    assert rp.exibido(r, "mesa") == "mesa"
+    assert rp.exibido(r, "inexistente") == "inexistente"
+
+
+def test_tools_projeta_nome_exibido_em_tool_e_mantem_slug_em_verbo(monkeypatch, capsys, tmp_path):
+    listar = _listar()
+    reg_yaml = (
+        "verbos:\n"
+        "  motor:\n"
+        "    nome: busca\n"
+        "  infra: {}\n"
+        "transporte:\n"
+        "  malote: {}\n"
+    )
+    reg_arq = tmp_path / "porta.yaml"
+    reg_arq.write_text(reg_yaml, encoding="utf-8")
+    monkeypatch.setattr(rp, "caminho_do", lambda raiz: reg_arq)
+    reg = rp.carrega(reg_arq)
+    monkeypatch.setattr(listar, "_psql_json", lambda sql, alvo: _golden(reg))
+    listar.listar_ferramental_tools()
+    itens = json.loads(capsys.readouterr().out)
+    itens_por_verbo = {i["verbo"]: i for i in itens}
+    assert itens_por_verbo["motor"]["tool"] == "busca"
+    assert itens_por_verbo["motor"]["verbo"] == "motor"
+    assert itens_por_verbo["infra"]["tool"] == "infra"
+    assert itens_por_verbo["infra"]["verbo"] == "infra"
 
 
 # --- `acervo registrar --so-descricao`: a descricao do cabecalho sem tocar no acesso --------------------------

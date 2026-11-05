@@ -456,6 +456,73 @@ def _lista_da_porta(porta_, token) -> list[str]:
         bruto = [x[5:].strip() for x in bruto.splitlines() if x.startswith("data:")][-1]
     return [t["name"] for t in json.loads(bruto)["result"]["tools"]]
 
+
+def _tools_da_porta(porta_, token) -> dict[str, str]:
+    pedido = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}).encode("utf-8")
+    req = urllib.request.Request(porta_.url, data=pedido, method="POST", headers={
+        "Content-Type": "application/json", "Accept": "application/json, text/event-stream",
+        "Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        tipo, bruto = resp.headers.get("content-type", ""), resp.read().decode("utf-8")
+    if "text/event-stream" in tipo:
+        bruto = [x[5:].strip() for x in bruto.splitlines() if x.startswith("data:")][-1]
+    return {t["name"]: t.get("description", "") for t in json.loads(bruto)["result"]["tools"]}
+
+
+def test_tools_list_traz_busca_sem_motor_com_descricao_valida(porta):
+    ferramentas = s.mcp._tool_manager._tools
+    antiga_motor = ferramentas.pop("motor", None)
+    antiga_busca = ferramentas.pop("busca", None)
+    desc_real = "busca em obras do acervo · use para: achar trechos"
+    try:
+        s.mcp.tool(name="busca", description=desc_real)(
+            s._faz_tool_verbo("motor", str(porta.verbo), desc_real))
+        tools = _tools_da_porta(porta, _token())
+        assert "busca" in tools
+        assert "motor" not in tools
+        assert tools["busca"] == desc_real
+        assert tools["busca"] != s.DESCRICAO_INDISPONIVEL
+    finally:
+        ferramentas.pop("busca", None)
+        if antiga_motor is not None:
+            ferramentas["motor"] = antiga_motor
+        if antiga_busca is not None:
+            ferramentas["busca"] = antiga_busca
+
+
+def test_gera_tools_verbos_registra_busca_com_descricao_do_acervo(tmp_path):
+    reg_yaml = (
+        "verbos:\n"
+        "  motor:\n"
+        "    nome: busca\n"
+        "transporte:\n"
+        "  malote: {}\n"
+    )
+    reg_arq = tmp_path / "porta.yaml"
+    reg_arq.write_text(reg_yaml, encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "motor").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    (bin_dir / "motor").chmod(0o755)
+    projecao = [{"tool": "busca", "verbo": "motor", "descricao": "busca em obras do acervo · use para: achar trechos"}]
+    cp = SimpleNamespace(stdout=json.dumps(projecao), stderr="", returncode=0)
+    with patch.object(s, "TOOLS_VERBOS", True), \
+         patch.object(s, "PERSONAS") as mock_personas, \
+         patch.object(s, "REGISTRO_PORTA", reg_arq), \
+         patch.object(s, "BIN_VERBOS", bin_dir), \
+         patch.object(s, "mcp") as mock_mcp, \
+         patch.object(s, "_faz_tool_verbo", return_value=lambda: None), \
+         patch("server.subprocess.run", return_value=cp):
+        mock_personas.is_dir.return_value = True
+        servidas = s._gera_tools_verbos()
+        assert "motor" in servidas
+        calls = {c.kwargs.get("name"): c.kwargs.get("description") for c in mock_mcp.tool.call_args_list}
+        assert "busca" in calls
+        assert "motor" not in calls
+        assert calls["busca"] == "busca em obras do acervo · use para: achar trechos"
+        assert calls["busca"] != s.DESCRICAO_INDISPONIVEL
+
+
 def test_tools_list_sem_preferencia_quando_o_handler_tira_a_oculta(porta, monkeypatch):
     antes = _lista_da_porta(porta, _token())
     assert "preferencia" in antes, "sem o handler novo a tool está na lista: é ele que a tira"

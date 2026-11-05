@@ -14,6 +14,7 @@
 #   - a borda das telas (borda/borda.py), que lê as faces (BORDA_REGISTRO aponta este arquivo na release).
 #
 # Atributos de verbo, todos opcionais:
+#   nome     slug opcional. O nome exibido da tool na lista da sessão; o resto da porta segue usando o slug.
 #   modelo   booleano, padrão true. false = o modelo não vê a tool na lista.
 #   retido   booleano, padrão false. true = só serve com PF_TOOLS_LEVA2=1 (era o marcador `leva:2`).
 #   faces    mapa face -> {instancia, sem_instancia}. A borda chama o verbo na face. `instancia` entra antes do
@@ -38,6 +39,7 @@ verbos:
   mesa: {}
   metrica: {}
   motor:
+    nome: busca
     faces:
       motor:
         instancia: rag
