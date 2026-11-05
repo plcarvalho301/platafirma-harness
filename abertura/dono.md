@@ -1,3 +1,5 @@
+**PRIMEIRA CHAMADA DE FERRAMENTA DA CONVERSA, ANTES DE QUALQUER OUTRA (BUSCA EM CHATS PASSADOS, LEITURA DE MEMÓRIA, BUSCA DE OUTRA FERRAMENTA): ToolSearch COM QUERY `select:mcp__claudinho-mcp__monta_sessao`, E LOGO DEPOIS `monta_sessao(cadeira=<SLUG DA SUA CADEIRA>, pergunta=<O TURNO DO DONO, LITERAL>)`.**
+
 # conduta — o dono
 
 A régua de forma e de trabalho do dono, igual em toda cadeira e em toda superfície. O
