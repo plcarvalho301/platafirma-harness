@@ -88,9 +88,20 @@ import json
 print(json.dumps([{{"tool": "acervo"}}, {{"tool": "repo"}}, {{"tool": "motor"}}]))
 """
 STUB_CLAUDE = """#!{py}
-import json, os, sys
+import json, os, sys, time
+if os.environ.get("STUB_CLAUDE_SLEEP"):
+    time.sleep(float(os.environ["STUB_CLAUDE_SLEEP"]))
+chaves_env = ("CLAUDE_CODE_DISABLE_CLAUDE_MDS", "DISABLE_AUTOUPDATER",
+              "ANTHROPIC_ORGANIZATION_ID", "ANTHROPIC_WORKSPACE_ID",
+              "ANTHROPIC_FEDERATION_RULE_ID", "ANTHROPIC_SERVICE_ACCOUNT_ID",
+              "ANTHROPIC_IDENTITY_TOKEN_FILE", "CLAUDE_CONFIG_DIR", "ANTHROPIC_CONFIG_DIR",
+              "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_PROFILE")
 open(os.environ["STUB_LOG"], "a").write(json.dumps({{"verbo": "claude", "argv": sys.argv[1:], "stdin": sys.stdin.read(),
-    "env": {{k: os.environ.get(k) for k in ("CLAUDE_CODE_DISABLE_CLAUDE_MDS", "DISABLE_AUTOUPDATER")}}}}) + "\\n")
+    "cwd": os.getcwd(),
+    "env": {{k: os.environ.get(k) for k in chaves_env}}}}) + "\\n")
+if os.environ.get("STUB_CLAUDE_EXIT"):
+    sys.stderr.write(os.environ.get("STUB_CLAUDE_ERRO", "erro no stub") + "\\n")
+    sys.exit(int(os.environ["STUB_CLAUDE_EXIT"]))
 print(json.dumps({{"type": "result", "is_error": False, "result": "veredito: 0 — x@y", "num_turns": 3,
                    "session_id": os.environ.get("STUB_SESSAO_CODE"),
                    "usage": {{"input_tokens": 100, "cache_creation_input_tokens": 50,
@@ -122,6 +133,40 @@ class _Ollama(BaseHTTPRequestHandler):
         pass
 
 
+def _jwt_mentira(jti: str) -> str:
+    import base64
+    cab = base64.urlsafe_b64encode(b'{"alg":"RS256","typ":"JWT"}').rstrip(b"=").decode("ascii")
+    corpo = base64.urlsafe_b64encode(json.dumps({"jti": jti, "sub": "524f47ea-7b2d-4680-b2f2-ab94974b511c"}).encode("utf-8")).rstrip(b"=").decode("ascii")
+    return f"{cab}.{corpo}.assinatura_fake"
+
+
+class _Keycloak(BaseHTTPRequestHandler):
+    falhar = False
+    status_erro = 500
+    contador = 0
+
+    def do_POST(self):
+        if type(self).falhar:
+            self.send_response(type(self).status_erro)
+            self.end_headers()
+            self.wfile.write(b"Keycloak offline")
+            return
+        tamanho = int(self.headers.get("Content-Length", 0))
+        self.rfile.read(tamanho)
+        type(self).contador += 1
+        num = type(self).contador
+        token = _jwt_mentira(f"jti-{num}")
+        resp = json.dumps({"access_token": token, "token_type": "Bearer", "expires_in": 300}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(resp)))
+        self.end_headers()
+        self.wfile.write(resp)
+
+    def log_message(self, *a):
+        pass
+
+
 @pytest.fixture
 def mundo(tmp_path, monkeypatch):
     posto, inst, bin_, stub_log = tmp_path / "posto", tmp_path / "inst", tmp_path / "bin", tmp_path / "stub.log"
@@ -137,6 +182,14 @@ def mundo(tmp_path, monkeypatch):
     for k in ("PF_SUJEITO", "PF_SESSAO", "STUB_SESSAO_EXIT", "STUB_EXPEDIENTE_EXIT"):
         monkeypatch.delenv(k, raising=False)
 
+    _Keycloak.falhar = False
+    _Keycloak.status_erro = 500
+    _Keycloak.contador = 0
+    kc_srv = ThreadingHTTPServer(("127.0.0.1", 0), _Keycloak)
+    threading.Thread(target=kc_srv.serve_forever, daemon=True).start()
+    monkeypatch.setenv("KEYCLOAK_TOKEN_URL", f"http://127.0.0.1:{kc_srv.server_port}")
+    monkeypatch.setenv("KEYCLOAK_CLIENT_SECRET_AGENTE_JUIZ", "segredo-mock-juiz")
+
     def escreve(*decls):
         for d in decls:
             (posto / "agentes" / f"{d['slug']}.yaml").write_text(yaml.safe_dump(d, allow_unicode=True, sort_keys=False))
@@ -150,7 +203,8 @@ def mundo(tmp_path, monkeypatch):
         rs = [{"estado": e, "conta": conta, "verificacao": f"v{i}", "detalhe": f"d{i}"} for i, e in enumerate(estados)]
         (pasta / "isolacao-2026-09-30.jsonl").write_text(json.dumps({"em": "x", "contas": [conta], "resultados": rs}) + "\n")
 
-    return SimpleNamespace(posto=posto, inst=inst, escreve=escreve, chamadas=chamadas, isolacao=isolacao)
+    yield SimpleNamespace(posto=posto, inst=inst, escreve=escreve, chamadas=chamadas, isolacao=isolacao, keycloak=_Keycloak)
+    kc_srv.shutdown()
 
 
 @pytest.fixture
@@ -948,6 +1002,10 @@ def _claude(mundo):
     return c
 
 
+def _claudes(mundo):
+    return [c for c in mundo.chamadas() if c["verbo"] == "claude"]
+
+
 def test_juiz_sem_lente_nao_chama_o_montador_e_o_prompt_de_sistema_e_so_o_fecho(mundo, pessoa, monkeypatch, capsys):
     mundo.escreve(JUIZ)
     assert roda(monkeypatch, "juiz", tarefa="plano e fonte") == 0
@@ -1042,3 +1100,143 @@ def test_anexo_mal_formado_sai_2_antes_de_abrir_sessao(mundo, pessoa, monkeypatc
     assert "[[anexo:3]]" in capsys.readouterr().err
     assert _roda_anexo(monkeypatch, "varredor", [str(img)]) == 2, "--anexo só vale em Claude"
     assert mundo.chamadas() == [], "nenhum desses abre sessão"
+
+
+# --- federação e isolamento do agente-juiz (card #4122) ---------------------------------------
+
+def test_federacao_juiz(mundo, pessoa, monkeypatch):
+    mundo.escreve(JUIZ)
+    assert roda(monkeypatch, "juiz", tarefa="julgue") == 0
+    c = _claude(mundo)
+    env = c["env"]
+    assert env["ANTHROPIC_ORGANIZATION_ID"] == "9f6bed2f-0150-46d6-8fad-a4d5932a6e70"
+    assert env["ANTHROPIC_WORKSPACE_ID"] == "wrkspc_01M1zLBdeKjhR6JTPKrGmHbP"
+    assert env["ANTHROPIC_FEDERATION_RULE_ID"] == "fdrl_012Ak1DB7pcZQyoZnhw6r2Ma"
+    assert env["ANTHROPIC_SERVICE_ACCOUNT_ID"] == "svac_01Tys7Q5uRNwLCiKTwEXGQvw"
+    assert env["ANTHROPIC_IDENTITY_TOKEN_FILE"]
+    (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+    assert log["credencial"] == "federacao:svac_01Tys7Q5uRNwLCiKTwEXGQvw"
+
+
+def test_pasta_isolada(mundo, pessoa, monkeypatch):
+    mundo.escreve(JUIZ)
+    assert roda(monkeypatch, "juiz", tarefa="julgue") == 0
+    c = _claude(mundo)
+    cwd = c["cwd"]
+    assert cwd == c["env"]["CLAUDE_CONFIG_DIR"] == c["env"]["ANTHROPIC_CONFIG_DIR"]
+    assert not cwd.startswith(str(mundo.posto))
+    assert "agente-wif-" in cwd
+    argv = c["argv"]
+    idx = argv.index("--setting-sources")
+    assert argv[idx + 1] == "project,local"
+    assert not Path(cwd).exists()
+
+
+def test_sombreia(mundo, pessoa, monkeypatch):
+    mundo.escreve(JUIZ)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "chave-sombra")
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "token-sombra")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "oauth-sombra")
+    monkeypatch.setenv("ANTHROPIC_PROFILE", "perfil-sombra")
+    assert roda(monkeypatch, "juiz", tarefa="julgue") == 0
+    c = _claude(mundo)
+    for k in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_PROFILE"):
+        assert c["env"].get(k) is None
+
+
+def test_emissor_fora(mundo, pessoa, monkeypatch, capsys):
+    mundo.escreve(JUIZ)
+    monkeypatch.delenv("KEYCLOAK_CLIENT_SECRET_AGENTE_JUIZ", raising=False)
+    assert roda(monkeypatch, "juiz", tarefa="julgue") == 3
+    assert "emissor" in capsys.readouterr().err
+    assert _claudes(mundo) == []
+    (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+    assert log["exit"] == 3
+    assert log["motivo"] == "emissor"
+    assert log["credencial"] == "federacao:svac_01Tys7Q5uRNwLCiKTwEXGQvw"
+
+
+def test_renovacao_cai(mundo, pessoa, monkeypatch, capsys):
+    mundo.escreve(JUIZ)
+    monkeypatch.setenv("STUB_CLAUDE_SLEEP", "0.8")
+    import lib.federacao
+    monkeypatch.setattr(lib.federacao, "INTERVALO_RENOVACAO_S", 0.1)
+    mundo.keycloak.falhar = True
+    assert roda(monkeypatch, "juiz", tarefa="julgue") == 3
+    assert "emissor" in capsys.readouterr().err
+    (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+    assert log["exit"] == 3
+    assert log["motivo"] == "emissor"
+
+
+def test_troca_recusada(mundo, pessoa, monkeypatch, capsys):
+    mundo.escreve(JUIZ)
+    monkeypatch.setenv("STUB_CLAUDE_EXIT", "1")
+    monkeypatch.setenv("STUB_CLAUDE_ERRO", "HTTP 401 Unauthorized: authentication token rejected")
+    assert roda(monkeypatch, "juiz", tarefa="julgue") == 3
+    assert "troca" in capsys.readouterr().err
+    assert len(_claudes(mundo)) == 1
+    (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+    assert log["exit"] == 3
+    assert log["motivo"] == "troca"
+    assert log["credencial"] == "federacao:svac_01Tys7Q5uRNwLCiKTwEXGQvw"
+
+
+def test_credito_acabou(mundo, pessoa, monkeypatch, capsys):
+    mundo.escreve(JUIZ)
+    monkeypatch.setenv("STUB_CLAUDE_EXIT", "1")
+    monkeypatch.setenv("STUB_CLAUDE_ERRO", "API Error: Credit balance exhausted or billing limit exceeded")
+    assert roda(monkeypatch, "juiz", tarefa="julgue") == 3
+    assert "credito" in capsys.readouterr().err
+    assert len(_claudes(mundo)) == 1
+    (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+    assert log["exit"] == 3
+    assert log["motivo"] == "credito"
+    assert log["credencial"] == "federacao:svac_01Tys7Q5uRNwLCiKTwEXGQvw"
+
+
+def test_com_lente_no_plano(mundo, pessoa, monkeypatch):
+    mundo.escreve(CONSULTOR)
+    assert roda(monkeypatch, "consultor", cadeira="ia", chapeu="agente") == 0
+    c = _claude(mundo)
+    for k in ("ANTHROPIC_ORGANIZATION_ID", "ANTHROPIC_FEDERATION_RULE_ID", "ANTHROPIC_IDENTITY_TOKEN_FILE"):
+        assert c["env"].get(k) is None
+    (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+    assert log["credencial"] == "plano"
+
+
+def test_sem_federacao(mundo, pessoa, monkeypatch, ollama):
+    mundo.escreve(VARREDOR, REVISOR)
+    assert roda(monkeypatch, "varredor", tarefa="texto para varrer") == 0
+    assert ollama.pedidos != []
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO("codigo para revisar"))
+    assert agente.ato_rodar("revisor", None, None, False, ligacao="delegado") == 0
+    c = _claudes(mundo)[-1]
+    for k in ("ANTHROPIC_ORGANIZATION_ID", "ANTHROPIC_FEDERATION_RULE_ID", "ANTHROPIC_IDENTITY_TOKEN_FILE"):
+        assert c["env"].get(k) is None
+    logs = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+    assert any(l["agente"] == "revisor" and l["credencial"] == "plano" for l in logs)
+
+
+def test_transcript_pasta_isolada(mundo, pessoa, monkeypatch):
+    mundo.escreve(JUIZ)
+    monkeypatch.setenv("STUB_SESSAO_CODE", "sess-code-test-123")
+    stub_com_transcript = STUB_CLAUDE.replace(
+        'print(json.dumps({{"type": "result"',
+        'tr_dir = os.path.join(os.getcwd(), "projects", "default")\n'
+        'os.makedirs(tr_dir, exist_ok=True)\n'
+        'with open(os.path.join(tr_dir, "sess-code-test-123.jsonl"), "w") as f:\n'
+        '    f.write(json.dumps({{"type": "user", "message": {{"content": "ok"}}}}) + "\\n")\n'
+        '    f.write(json.dumps({{"type": "assistant", "requestId": "req1", "message": {{"content": "veredito", "usage": {{"input_tokens": 12, "output_tokens": 4, "cache_creation_input_tokens": 2, "cache_read_input_tokens": 8}}}}}}) + "\\n")\n'
+        'print(json.dumps({{"type": "result"'
+    )
+    _stub(mundo.inst.parent, "claude", stub_com_transcript)
+    monkeypatch.setenv("PF_CLAUDE_BIN", str(mundo.inst.parent / "claude"))
+
+    assert roda(monkeypatch, "juiz", tarefa="julgue") == 0
+    (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+    assert log["uso"]["fonte"] == "transcript"
+    assert log["uso"]["chamadas"] == 1
+    assert log["uso"]["entrada"] == 12 + 2 + 8
+    assert log["uso"]["saida"] == 4

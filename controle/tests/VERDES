@@ -204,6 +204,7 @@ tests/test_metrica_investigar.py | bin/acervo bin/_acervo/** bin/acesso bin/_ace
 # em testes/VERDES; tests/test_portao_cobre_testes.py reprova arquivo de testes/ sem lista.
 tests/test_portao_cobre_testes.py | testes/**
 testes/test_agente.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/bot bin/chat bin/conferir bin/curar bin/descansar bin/encerrar bin/expediente bin/_expediente/** bin/fila bin/_fila/** bin/infra bin/_infra/** bin/ingerir bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/pesquisar bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste agente/** sessao/**
+testes/test_federacao.py | lib/federacao.py bin/agente registro/federacao-anthropic.json
 testes/test_agente_registro.py | bin/acervo bin/_acervo/** bin/agente bin/encerrar bin/expediente bin/_expediente/** bin/pesquisar bin/seg bin/sessao bin/_sessao/** agente/**
 testes/test_registro_porta.py | lib/registro_porta.py registro/porta.yaml ops-server/server.py bin/_acervo/** bin/*
 testes/test_bot_registro.py | bin/acervo bin/_acervo/** bin/agente bin/bot bin/chat bin/conferir bin/encerrar bin/expediente bin/_expediente/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/motor bin/_motor/** bin/pesquisar bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/tarefas bin/teste bin/_minuta/** abertura/** agente/**

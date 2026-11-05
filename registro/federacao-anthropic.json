@@ -1,0 +1,24 @@
+{
+  "organizacao": "9f6bed2f-0150-46d6-8fad-a4d5932a6e70",
+  "workspace": "wrkspc_01M1zLBdeKjhR6JTPKrGmHbP",
+  "contas": {
+    "agente-juiz": {
+      "cliente": "agente-juiz",
+      "regra": "fdrl_012Ak1DB7pcZQyoZnhw6r2Ma",
+      "conta_servico": "svac_01Tys7Q5uRNwLCiKTwEXGQvw",
+      "regime": "federacao"
+    },
+    "agente-consultado": {
+      "cliente": "agente-consultado",
+      "regra": "fdrl_01PdMxn1VMjoLKUPMhs8b8vq",
+      "conta_servico": "svac_01YFBzFQi3ep7J9rF1rdM846",
+      "regime": "plano"
+    },
+    "agente-agendado": {
+      "cliente": "agente-agendado",
+      "regra": "fdrl_01W2DHNetYUJz948UxHrCJVc",
+      "conta_servico": "svac_01Duw4kL8T4iSyHoo36kDsVd",
+      "regime": "plano"
+    }
+  }
+}
