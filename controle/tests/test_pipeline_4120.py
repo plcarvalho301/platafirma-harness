@@ -26,14 +26,14 @@ ACERVO = RAIZ / "bin" / "acervo"
 LOTE = "33333333-3333-4333-8333-333333333333"
 JOB = "44444444-4444-4444-8444-444444444444"
 
-ETAPAS = ("triagem", "catalogacao", "duplicata", "classificar", "indexar", "promocao")
+ETAPAS = ("triagem", "espelhar", "catalogacao", "duplicata", "classificar", "indexar", "promocao")
 
 
 def _job(estado="pausado", classificar="pausado"):
     etapas = []
     for obra in ("o1", "o2"):
         for nome in ETAPAS:
-            estado_etapa = "concluido" if ETAPAS.index(nome) < 3 else ("pausado" if nome == "classificar" else "pendente")
+            estado_etapa = "concluido" if ETAPAS.index(nome) < 4 else ("pausado" if nome == "classificar" else "pendente")
             if nome == "classificar":
                 estado_etapa = classificar
             etapas.append({"id": f"{obra}-{nome}", "obra_id": obra, "etapa": nome, "estado": estado_etapa})
@@ -92,9 +92,11 @@ class Falso:
     def criacoes(self):
         return [c for c in self.chamadas if c[0] == "POST"]
 
-    def rodar(self, *argv, ingerir=None, url=None, via_acervo=False):
+    def rodar(self, *argv, ingerir=None, url=None, via_acervo=False, conversor_sai=0):
         env = {**os.environ, "MOTOR_ACERVO_URL": url or self.url, "RAG_API_URL": "", "RAG_API_BASE": "",
-               "RAG_API_TOKEN": "tok-pipe", "PF_CADEIRA": "dados"}
+               "RAG_API_TOKEN": "tok-pipe", "PF_CADEIRA": "dados",
+               # o conversor de verdade nunca acorda num teste: o roteiro falso só anota a chamada
+               "PF_CONVERSOR_SOB_DEMANDA": str(self.conversor), "CONVERSOR_SAI": str(conversor_sai)}
         if ingerir:
             env["PF_INGERIR"] = str(ingerir)
         cmd = ["bash", str(ACERVO), "pipeline", *argv] if via_acervo else [sys.executable, str(PIPELINE), *argv]
@@ -103,8 +105,11 @@ class Falso:
 
 
 @pytest.fixture
-def servidor():
+def servidor(tmp_path):
     f = Falso()
+    f.conversor = tmp_path / "conversor_falso.sh"
+    f.conversor_chamadas = tmp_path / "conversor_chamadas.txt"
+    f.conversor.write_text(f'#!/usr/bin/env bash\necho "$@" >> {f.conversor_chamadas}\nexit "${{CONVERSOR_SAI:-0}}"\n')
     try:
         yield f
     finally:
@@ -142,7 +147,8 @@ def test_apply_incorpora_cria_o_job_e_devolve_o_id(servidor, tmp_path):
     assert f"job: {JOB}" in r.stdout
     assert time.monotonic() - t0 < 600
     # o ingerir recebeu a pasta, o --apply e o --json que o ato lê
-    assert json.loads(gravado.read_text()) == ["--lote", str(pasta), "--apply", "--ate", "chunk", "--json"]
+    # e só até catalogar: o espelho é etapa do job, no servidor, e não roda dentro desta chamada
+    assert json.loads(gravado.read_text()) == ["--lote", str(pasta), "--apply", "--json"]
     # o job nasce sobre o lote que o ingerir aplicou
     assert servidor.criacoes() == [("POST", "/acervo/jobs", {"pasta": str(pasta), "lote_id": LOTE})]
     assert f"lote: {LOTE} · 2 obra(s)" in r.stderr
@@ -387,3 +393,35 @@ def test_o_resumo_lista_a_obra_estacionada_com_o_par_ao_lado(servidor):
     assert f"acervo pipeline --job {JOB} --liberar <obra>" in r.stdout
     assert "o1 ↔ o2 (Jaccard 0.91)" in r.stdout
     assert "indexar: pendente 2" in r.stdout
+
+
+def test_o_resumo_conta_a_etapa_espelhar(servidor):
+    r = servidor.rodar("--job", JOB)
+    assert r.returncode == 0, r.stderr
+    assert "espelhar: concluido 2" in r.stdout
+    assert r.stdout.index("triagem:") < r.stdout.index("espelhar:") < r.stdout.index("catalogacao:")
+
+
+def test_o_conversor_acorda_antes_de_criar_o_job_porque_o_espelho_roda_no_servidor(servidor, tmp_path):
+    pasta = tmp_path / "entrada"
+    pasta.mkdir()
+    ingerir, _ = _ingerir_falso(tmp_path, _lote())
+    r = servidor.rodar(str(pasta), "--apply", ingerir=ingerir)
+    assert r.returncode == 0, r.stderr
+    assert servidor.conversor_chamadas.read_text().split() == ["acordar"]
+    r = servidor.rodar("--lote", LOTE)  # a retomada também: o conversor pode ter dormido
+    assert r.returncode == 0, r.stderr
+    assert servidor.conversor_chamadas.read_text().split() == ["acordar", "acordar"]
+
+
+def test_ver_o_estado_ou_liberar_nao_acorda_o_conversor(servidor):
+    servidor.rodar("--job", JOB)
+    servidor.rodar("--job", JOB, "--liberar", "o1")
+    assert not servidor.conversor_chamadas.exists()
+
+
+def test_conversor_que_nao_acorda_avisa_e_o_job_sai_assim_mesmo(servidor):
+    r = servidor.rodar("--lote", LOTE, conversor_sai=3)
+    assert r.returncode == 0, r.stderr
+    assert "o conversor nao acordou (3)" in r.stderr and "acervo pipeline --lote <id>" in r.stderr
+    assert f"job: {JOB}" in r.stdout and len(servidor.criacoes()) == 1
