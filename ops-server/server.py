@@ -82,6 +82,7 @@ if str(_LIB) not in sys.path:
 import raizes                                                 # noqa: E402
 import oplog                                                  # noqa: E402  (card #3344: o unico que escreve o bruto)
 import registro_porta                                         # noqa: E402  (card #4117: o unico leitor de registro/porta.yaml)
+import tokenizador                                             # noqa: E402  (card #4120: tokenizador da casa)
 
 INSTANCIA = raizes.instancia()
 # Cwd de quem não nomeia um: a casa da conta do processo. Não é raiz de produção — é o
@@ -557,17 +558,33 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
             "pecas_espelhadas": len(espelhadas) or None}
 
 
+def _texto_servido(r: dict) -> str:
+    if not isinstance(r, dict):
+        return ""
+    partes = []
+    for campo, sub in (("stdout", "texto"), ("stderr", "texto"), ("conteudo", None),
+                       ("content", None), ("erro", None)):
+        alvo = r.get(campo)
+        texto = (alvo or {}).get(sub) if sub else alvo
+        if isinstance(texto, str):
+            partes.append(texto)
+    return "\n".join(partes)
+
+
 def _campos_poda(r: dict) -> dict:
     """O que o ops log grava por retorno (arq:0101 §4): bytes SERVIDOS e sha do servido.
 
     A porta gravava bytes PRODUZIDOS e nenhum hash — por isso o dup de conteúdo entre
     chamadas nunca esteve medido, e a perícia teve de estimá-lo.
     """
+    texto = _texto_servido(r)
+    tk_cont, tk_metodo = tokenizador.conta_tokens(texto)
     p = (r or {}).get("poda") or {}
     if p:
         # `bytes_produzidos` e `lavado` (o que a poda lavou antes de servir) vem no mesmo dicionario
         # da poda e faltava na linha (card #3345, spec log-de-negocio §3).
         return {"bytes_produzidos": p.get("bytes_produzidos"), "bytes_servidos": p.get("bytes_servidos"),
+                "tokens": tk_cont, "metodo_tokens": tk_metodo,
                 "lavado": list(p.get("lavado") or []), "sha": p.get("sha"),
                 "poda_modo": p.get("modo"), "ledger": p.get("ledger")}
     # Retorno que a poda nao tocou — erro e exit != 0 saem inteiros (invariante iii) —
@@ -576,8 +593,9 @@ def _campos_poda(r: dict) -> dict:
     # de graca. A invariante continua: nao se corta o diagnostico; passa-se a CONTA-LO,
     # com `poda_modo: intocavel` dizendo que nao houve corte.
     crus = _bytes_crus(r)
-    return {"bytes_produzidos": crus, "bytes_servidos": crus, "lavado": [], "sha": None,
-            "poda_modo": "intocavel", "ledger": None}
+    return {"bytes_produzidos": crus, "bytes_servidos": crus,
+            "tokens": tk_cont, "metodo_tokens": tk_metodo,
+            "lavado": [], "sha": None, "poda_modo": "intocavel", "ledger": None}
 
 
 def _bytes_crus(r: dict) -> int | None:
@@ -1093,7 +1111,7 @@ def _audit(**campos) -> None:
         # record nao existe na release (arq:0123 §7).
         if (reg.get("tool", "-") != "-" and reg.get("tool") != "monta_sessao"
                 and reg.get("evento") in oplog.EVENTOS_DE_GIRO):
-            for _c in ("cadeira", "ordem_id", "exit_code", "bytes_produzidos", "bytes_servidos"):
+            for _c in ("cadeira", "ordem_id", "exit_code", "bytes_produzidos", "bytes_servidos", "tokens", "metodo_tokens"):
                 reg.setdefault(_c, None)
             reg.setdefault("lavado", [])
             reg.setdefault("capacidade", None)

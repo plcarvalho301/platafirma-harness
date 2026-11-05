@@ -18,7 +18,8 @@ TODA = {"ts": "2026-10-08T10:00:00.000-03:00", "evento_id": "01a11bd5-18d9-77e1-
 GIRO = {**TODA, **IDENT, "tool": "tarefas", "ato": "ler", "args": "3345", "sessao_id": "sid",
         "cadeira": "ia", "ordem_id": "o1", "exit_code": 0, "classe": "ok", "classe_fonte": "tabela",
         "bytes_produzidos": 120, "bytes_servidos": 100, "lavado": ["branco"], "capacidade": None,
-        "ferramenta": None, "escopo": "#3345", "turno_id": "T1", "turno_fonte": "declarado"}
+        "ferramenta": None, "escopo": "#3345", "turno_id": "T1", "turno_fonte": "declarado",
+        "tokens": 42, "metodo_tokens": "tokenizador qwen2.5"}
 ABERTURA = {**TODA, **IDENT, "tool": "monta_sessao", "sessao_id": "sid", "chapeu": "engenharia-de-harness",
             "roteador_via": "comando", "fallback": False, "superficie": "claude.ai", "pergunta": "oi", "pergunta_bytes": 2,
             "tokens_pecas": {"persona": 0, "chapeu": 1291}, "metodo_tokens": "tokenizador qwen2.5",

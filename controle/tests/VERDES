@@ -310,3 +310,6 @@ tests/test_casa_forma.py | bin/acervo
 # Pedido 20261102T091653-dados: `infra pecas | rodar` (peça não declarada sai 4; caminho da peça diferente de origin/main ou solto
 # fora do git sai 4; mudança fora dos caminhos não trava; a peça recebe o banco do cofre e o verbo não o imprime), num git de mentira.
 testes/test_infra_rodar_peca.py | bin/infra bin/_infra/** bin/_acervo/exportar registro/pecas.json
+tests/test_metrica_tokens_4120.py | bin/metrica bin/_metrica/** lib/tokenizador.py
+tests/test_ingerir_carga_4120.py | bin/ingerir bin/_ingerir/**
+tests/test_ingerir_4120.py | bin/ingerir

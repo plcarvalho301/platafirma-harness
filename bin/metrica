@@ -3,7 +3,7 @@
 # capacidade: metrica
 # dono: claudinho-ia
 # use para: «quantas chamadas deram erro?», «quem pediu help?», giro e lote por verbo
-# atos: eventos, dia, ate-acerto, tateio, casos, verbos, comportamento, turnos, abertura (leitura, abertura), investigar (escrita, investigacao)
+# atos: eventos, dia, ate-acerto, tateio, casos, verbos, comportamento, turnos, abertura (leitura, abertura), investigar (escrita, investigacao), tokens (leitura, medida)
 # forma: relatorio
 # cauda: nao
 #
@@ -69,6 +69,7 @@ if _BIN_DIR not in sys.path:
 from _metrica.abertura import main as _abertura_main  # noqa: E402
 from _metrica import particao  # noqa: E402
 from _metrica import investigar as _investigar  # noqa: E402  (card #3355: a linha inteira, so com incidente aberto)
+from _metrica import tokens_main as _tokens_main  # noqa: E402
 
 # Onde o ops log mora e como se le e do lib/oplog (arq:0123 §3); aqui so se guarda o
 # diretorio para o teste apontar a leitura para uma pasta em tmp.
@@ -76,7 +77,7 @@ LOG_OPS = str(oplog.diretorio())
 
 VERBO = "metrica"
 ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos", "verbos", "comportamento", "turnos", "abertura",
-        "investigar")
+        "investigar", "tokens")
 # Os atos que leem o que a particao nao leva (argumento, erro, a ordem das chamadas): ficam no bruto (D5.9).
 ATOS_DO_BRUTO = ("eventos", "ate-acerto", "tateio", "casos", "comportamento")
 # `turno` so sai com `--tipo turno` (a linha de turno ja conta como giro no stream sem tipo), sem o texto do dono.
@@ -1359,6 +1360,9 @@ def main(argv):
     # `investigar` tambem tem args proprios (`<dia> --incidente <n> --classe ...`) e sai com a tabela de exit dele.
     if ato == "investigar":
         return _investigar.investigar(argv[2:])
+    # `tokens` tem args proprios (`--ordem`, `--job`, `--ato`, etc.) (#4120).
+    if ato == "tokens":
+        return _tokens_main(argv[2:])
 
     p = argparse.ArgumentParser(prog=f"{VERBO} {ato}", add_help=False)
     p.add_argument("dia", nargs="?", default="")
