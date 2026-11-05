@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """acervo ler biblioteca posicao <obra> [--k N] [--json] — a obra está entre as k primeiras da busca pelo título? (#4120, item 23)
 
-Faz a busca pelo título da obra, do jeito que o acervo a serve (`motor rag buscar biblioteca`, origem `medida`: texto
+Faz a busca pelo título da obra, do jeito que o acervo a serve (`motor rag buscar biblioteca`, origem `autoteste`: texto
 literal, sem lint e fora da série de cobertura), e diz em que posição a obra aparece. É a conferência que a medida da
 4120 usa para provar que a obra que entrou pelo pipeline se acha.
 
@@ -25,6 +25,9 @@ HARNESS_DIR = Path(__file__).resolve().parents[2]
 # PF_MOTOR só existe para o teste trocar a busca de verdade por uma que devolve o JSON combinado
 MOTOR = Path(os.environ.get("PF_MOTOR") or HARNESS_DIR / "bin" / "motor")
 INSTANCIA = os.environ.get("PF_POSICAO_INSTANCIA", "rag")
+# as origens que mandam o texto literal, sem lint nem montagem, são abertura, bench, sombra e autoteste (bin/motor,
+# ORIGENS_LITERAIS); a conferição é o autoteste da busca. `medida` não existe: o ar recusou na primeira chamada.
+ORIGEM = "autoteste"
 K_PADRAO, K_TETO = 10, 100
 PRAZO_S = 120
 
@@ -91,7 +94,7 @@ def main(argv: list[str]) -> int:
     if not obra_id or not titulo:
         morre("acervo ler biblioteca posicao: o acervo nao devolveu o titulo da obra", 5)
 
-    cmd = [sys.executable, str(MOTOR), INSTANCIA, "buscar", "biblioteca", "--origem", "medida",
+    cmd = [sys.executable, str(MOTOR), INSTANCIA, "buscar", "biblioteca", "--origem", ORIGEM,
            "--k", str(args.k), titulo]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=PRAZO_S, check=False)
