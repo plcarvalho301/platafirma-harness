@@ -86,13 +86,21 @@ def _rodar(servidor, motor, *argv, via_acervo=False):
     return subprocess.run(cmd, capture_output=True, text=True, env=env, stdin=subprocess.DEVNULL, timeout=60, check=False)
 
 
+def _fonte(o, n, secao="a"):
+    # o formato que o motor devolve de verdade (medido no ar em 05/11/2026): `fontes[]`, e em cada uma `obra` e o
+    # TITULO da obra, nao o id
+    nome = TITULO if o == OBRA else f"Outra obra {o}"
+    return {"n": n, "obra": nome, "arquivo": f"{o}.pdf", "section_id": secao, "secao_id": f"id-{o}-{secao}",
+            "sim": 0.3, "score": 0.02, "texto": None}
+
+
 def _busca(*obras, por_trecho=False):
     itens = []
     for o in obras:
-        itens.append({"obra_id": o, "trecho": "a"})
+        itens.append(_fonte(o, len(itens) + 1))
         if por_trecho:
-            itens.append({"obra_id": o, "trecho": "b"})
-    return json.dumps({"itens": itens})
+            itens.append(_fonte(o, len(itens) + 1, secao="b"))
+    return json.dumps({"fontes": itens, "cobertura": "fraca", "sinal": {"medida": "sim"}})
 
 
 def test_obra_na_terceira_posicao_sai_0_com_a_posicao(servidor, tmp_path):
@@ -101,7 +109,8 @@ def test_obra_na_terceira_posicao_sai_0_com_a_posicao(servidor, tmp_path):
     assert r.returncode == 0, r.stderr
     assert f"posicao: 3 de 10 · {TITULO} ({OBRA})" in r.stdout
     # o titulo vai literal, numa origem que o motor aceita (as literais: abertura, bench, sombra, autoteste), com o k
-    assert json.loads(gravado.read_text()) == ["rag", "buscar", "biblioteca", "--origem", "autoteste", "--k", "10", TITULO]
+    assert json.loads(gravado.read_text()) == ["rag", "buscar", "biblioteca", "--origem", "autoteste", "--k", "10",
+                                                "--texto", "nenhum", TITULO]
 
 
 def test_a_posicao_conta_obra_e_nao_trecho(servidor, tmp_path):
@@ -129,6 +138,30 @@ def test_a_resposta_com_obra_aninhada_tambem_se_le(servidor, tmp_path):
     corpo = json.dumps({"resultado": {"secoes": [{"obra": "x"}, {"documento": {"obra_id": OBRA}}]}})
     motor, _ = _motor(tmp_path, corpo)
     assert _rodar(servidor, motor, OBRA).returncode == 0
+
+
+def test_o_titulo_casa_sem_diferenca_de_caixa_acento_composto_ou_espaco(servidor, tmp_path):
+    variante = "  NOTA TÉCNICA:  Como elaborar modelo lógico de programa "
+    corpo = json.dumps({"fontes": [{"n": 1, "obra": "Outra"}, {"n": 2, "obra": variante}]})
+    motor, _ = _motor(tmp_path, corpo)
+    r = _rodar(servidor, motor, OBRA)
+    assert r.returncode == 0 and "posicao: 2 de 10" in r.stdout
+
+
+def test_quando_o_motor_traz_o_id_o_id_decide_e_nao_o_titulo(servidor, tmp_path):
+    # outra obra com o mesmo título (uma edição) não conta como esta
+    corpo = json.dumps({"fontes": [{"obra_id": "outro-id", "obra": TITULO}, {"obra_id": OBRA, "obra": TITULO}]})
+    motor, _ = _motor(tmp_path, corpo)
+    assert "posicao: 2 de 10" in _rodar(servidor, motor, OBRA).stdout
+    corpo = json.dumps({"fontes": [{"obra_id": "outro-id", "obra": TITULO}]})
+    motor, _ = _motor(tmp_path, corpo)
+    assert _rodar(servidor, motor, OBRA).returncode == 1
+
+
+def test_resposta_sem_fontes_diz_fora_das_k_e_sai_1(servidor, tmp_path):
+    motor, _ = _motor(tmp_path, json.dumps({"fontes": [], "cobertura": "fraca"}))
+    r = _rodar(servidor, motor, OBRA)
+    assert r.returncode == 1 and "fora das 10 primeiras (0 obra(s) vieram)" in r.stdout
 
 
 def test_busca_que_falha_sai_5_ou_3_com_a_causa(servidor, tmp_path):

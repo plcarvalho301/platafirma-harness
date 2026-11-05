@@ -15,6 +15,7 @@ import json
 import os
 import subprocess
 import sys
+import unicodedata
 import urllib.parse
 from pathlib import Path
 
@@ -37,18 +38,27 @@ def morre(msg: str, codigo: int = 2):
     sys.exit(codigo)
 
 
-def obras_em_ordem(corpo) -> list[str]:
-    """As obras da resposta da busca, na ordem em que vieram e sem repetir (um trecho por vez vira uma obra só)."""
-    achadas: list[str] = []
+def _norma(titulo: str) -> str:
+    return " ".join(unicodedata.normalize("NFKC", titulo).casefold().split())
+
+
+def obras_em_ordem(corpo) -> list[dict]:
+    """As obras da resposta da busca, na ordem em que vieram e sem repetir (varias secoes da mesma obra contam uma vez).
+
+    A busca devolve `fontes[]` e, em cada fonte, `obra` com o TITULO da obra (nao o id); `obra_id` aparece quando o
+    motor o traz. Cada obra sai como {obra_id, titulo}, o que houver de cada um."""
+    achadas: list[dict] = []
+    vistas: set[str] = set()
 
     def visita(no):
         if isinstance(no, dict):
-            for chave in ("obra_id", "obra"):
-                valor = no.get(chave)
-                if isinstance(valor, str) and valor:
-                    if valor not in achadas:
-                        achadas.append(valor)
-                    break
+            ident = no.get("obra_id") if isinstance(no.get("obra_id"), str) and no.get("obra_id") else None
+            nome = no.get("obra") if isinstance(no.get("obra"), str) and no.get("obra") else None
+            if ident or nome:
+                chave = ident or _norma(nome)
+                if chave not in vistas:
+                    vistas.add(chave)
+                    achadas.append({"obra_id": ident, "titulo": nome})
             for filho in no.values():
                 if isinstance(filho, (dict, list)):
                     visita(filho)
@@ -58,6 +68,12 @@ def obras_em_ordem(corpo) -> list[str]:
 
     visita(corpo)
     return achadas
+
+
+def _e_a_obra(achada: dict, obra_id: str, titulo: str) -> bool:
+    if achada.get("obra_id"):
+        return achada["obra_id"] == obra_id
+    return bool(achada.get("titulo")) and _norma(achada["titulo"]) == _norma(titulo)
 
 
 def _json_da_saida(saida: str):
@@ -95,7 +111,7 @@ def main(argv: list[str]) -> int:
         morre("acervo ler biblioteca posicao: o acervo nao devolveu o titulo da obra", 5)
 
     cmd = [sys.executable, str(MOTOR), INSTANCIA, "buscar", "biblioteca", "--origem", ORIGEM,
-           "--k", str(args.k), titulo]
+           "--k", str(args.k), "--texto", "nenhum", titulo]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=PRAZO_S, check=False)
     except (OSError, subprocess.TimeoutExpired) as e:
@@ -109,7 +125,7 @@ def main(argv: list[str]) -> int:
         morre("acervo ler biblioteca posicao: a saida da busca nao e JSON; nada a medir", 5)
 
     ordem = obras_em_ordem(corpo)[: args.k]
-    posicao = ordem.index(obra_id) + 1 if obra_id in ordem else None
+    posicao = next((i + 1 for i, a in enumerate(ordem) if _e_a_obra(a, obra_id, titulo)), None)
     resultado = {"obra_id": obra_id, "titulo": titulo, "k": args.k, "posicao": posicao,
                  "entre_as_k_primeiras": posicao is not None, "vieram": len(ordem)}
     if args.como_json:
