@@ -23,6 +23,7 @@ TRANSITIVOS = {"anyio": "mcp", "starlette": "mcp"}
 LOCAIS_FORA_DO_DIRETORIO = {"hash_servido", "streams", "identidade", "pdp", "pep", "raizes",
                             "oplog",       # lib/oplog.py (card #3344), so biblioteca padrao
                             "registro_porta",  # lib/registro_porta.py (card #4117); o pyyaml dele ja esta declarado
+                            "tokenizador",     # lib/tokenizador.py (card #4120)
                             "reidratar"}  # bin/_sessao/reidratar.py (card #3145, Onda 1 Frente E)
 
 

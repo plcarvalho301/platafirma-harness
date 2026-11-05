@@ -43,7 +43,8 @@ LINHA_MAX = 8000      # bytes da linha inteira, ja com o \n
 
 # Campos que a classe, a chave e a juncao dependem: o aparo nunca os toca.
 PROTEGIDOS = frozenset({"ts", "evento_id", "schema_v", "tool", "evento", "classe", "causa",
-                        "classe_fonte", "aparado", "sessao_id", "ordem_id", "exit_code"})
+                        "classe_fonte", "aparado", "sessao_id", "ordem_id", "exit_code",
+                        "tokens", "metodo_tokens"})
 
 CLASSES = ("ok", "negativa", "gramatica", "negada", "execucao", "interrompida")
 _POR_EXIT = {0: "ok", 1: "negativa", 2: "gramatica", 4: "negada"}
@@ -245,7 +246,7 @@ CONTRATO = {
     "toda": ("ts", "evento_id", "schema_v", "origem", "mapa_v"),
     "giro": ("tool", "sessao_id", "cadeira", "ordem_id", "exit_code", "classe", "classe_fonte",
              "bytes_produzidos", "bytes_servidos", "lavado", "capacidade", "ferramenta", "escopo",
-             "turno_id", "turno_fonte") + IDENTIDADE,
+             "turno_id", "turno_fonte", "tokens", "metodo_tokens") + IDENTIDADE,
     "abertura": ("tool", "sessao_id", "chapeu", "roteador_via", "fallback", "superficie", "tokens_pecas",
                  "metodo_tokens", "prefixo_sha", "montador_sha", "pergunta", "pergunta_bytes") + IDENTIDADE,
     "fecho": ("tool", "evento", "sessao_id", "cadeira", "motivo_parada"),
@@ -262,6 +263,7 @@ CONTRATO = {
 NULAVEL = frozenset({"capacidade", "ferramenta", "mapa_v", "cadeira", "ordem_id", "exit_code",
                      "roteador_via", "particao", "origem_consulta", "chapeu",
                      "bytes_produzidos", "bytes_servidos",         # escrita e recusa nao devolvem corpo
+                     "tokens", "metodo_tokens",
                      "pergunta",                                    # reabertura sem mensagem nova
                      "linhas_omitidas",                             # a particao nao conta o que ficou de fora
                      "filtro_sessao", "filtro_tool", "filtro_classe"})   # filtro nao pedido

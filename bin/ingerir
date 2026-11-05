@@ -42,6 +42,11 @@ _FANTASMA_EXTS = (
 _FANTASMA_NAMES = {
     "manifest.json", "manifest.yaml", "inventario.csv", "fila-lote.jsonl",
 }
+try:
+    from bin._ingerir.carga import conferir_manifesto_portao_1, obter_manifesto_rclone
+except ImportError:
+    from _ingerir.carga import conferir_manifesto_portao_1, obter_manifesto_rclone
+
 _RE_WIKI_DATADO = re.compile(r"^(?:wiki/)?(.+?)@(\d{4}-\d{2}-\d{2})\.md$", re.IGNORECASE)
 
 USO = """uso:
@@ -62,8 +67,7 @@ opções de fonte (uma das opções):
   --origem <o>           pasta do Drive a espelhar para $PLATAFIRMA_INSTANCIA/var/entrada antes de ingerir;
                          aceita 'gdrive:<caminho>' ou URL drive/.../folders/<ID>
   --drive [<pasta>]      espelha pasta do Drive para staging local (~/AI/entrada/drive-<AAAAMMDD>-<rotulo>)
-                         antes de ingerir (default: PlataFirma/entrada); o espelho é fiel (rclone sync):
-                         arquivo que saiu do Drive sai do staging
+                         antes de ingerir (default: PlataFirma/entrada); o espelho é recursivo (rclone copy)
 
 opções adicionais:
   --apply                aplica o lote (default: falso, dry-run do plano)
@@ -76,6 +80,7 @@ opções adicionais:
   --autor <slug>         curador do lote (default: cadeira da sessão ou 'dados')
   --colecao, --bucket <s> coleção do acervo: firma | pessoal (default: firma)
   --json                 emite resultado em formato JSON bruto
+  --tabela               emite tabela detalhada de todos os itens (default: resumo sucinto e exceções)
 """
 
 
@@ -240,6 +245,19 @@ def aterrissar_origem(origem: str) -> str:
     if r.returncode != 0:
         sys.stderr.write(f"ingerir: erro: rclone copy falhou ({r.returncode}): {r.stderr.strip()}\n")
         sys.exit(1)
+
+    # PORTÃO 1 antes de ingerir (#4120)
+    try:
+        manifesto = obter_manifesto_rclone(remote)
+        ok_p1, motivo_p1 = conferir_manifesto_portao_1(manifesto, entrada)
+        if not ok_p1:
+            sys.stderr.write(f"ingerir: erro: {motivo_p1}\n")
+            sys.exit(1)
+        sys.stderr.write(f"ingerir: {motivo_p1}\n")
+    except Exception as e:
+        sys.stderr.write(f"ingerir: erro: PORTÃO 1 falhou: {e}\n")
+        sys.exit(1)
+
     return entrada
 
 def aterrissar_drive(pasta: str | None) -> str:
@@ -257,46 +275,30 @@ def aterrissar_drive(pasta: str | None) -> str:
     os.makedirs(staging, exist_ok=True)
     sys.stderr.write(f"ingerir: espelhando {remote} -> {staging}\n")
     try:
-        # sync, não copy: o staging é espelho fiel da pasta do Drive. O que saiu do Drive
-        # sai da cópia de trabalho, senão o PORTÃO 1 (contagem lsf = staging) recusa o lote
-        # pelo resto do dia e o arquivo tirado entra na ingestão. Só o staging é tocado.
+        # copy descendo em subpastas (#4120 item 1; rclone sync sai do verbo)
         r_copy = subprocess.run(
-            ["rclone", "sync", remote, staging, "--drive-acknowledge-abuse", "-P"],
+            ["rclone", "copy", remote, staging, "--drive-acknowledge-abuse", "-P"],
             capture_output=True, text=True, timeout=1800, check=False,
         )
     except (OSError, subprocess.SubprocessError) as e:
-        sys.stderr.write(f"ingerir: erro: rclone sync falhou: {e}\n")
+        sys.stderr.write(f"ingerir: erro: rclone copy falhou: {e}\n")
         sys.exit(1)
     if r_copy.returncode != 0:
-        sys.stderr.write(f"ingerir: erro: rclone sync falhou ({r_copy.returncode}): {r_copy.stderr.strip()}\n")
+        sys.stderr.write(f"ingerir: erro: rclone copy falhou ({r_copy.returncode}): {r_copy.stderr.strip()}\n")
         sys.exit(1)
 
-    # 4. PORTÃO 1 antes de ingerir: contagem de `rclone lsf` bate com o `ls` do
-    #    staging; divergiu, erra e não segue (não deixa lote incompleto passar).
+    # PORTÃO 1 antes de ingerir (#4120)
     try:
-        r_lsf = subprocess.run(
-            ["rclone", "lsf", remote],
-            capture_output=True, text=True, timeout=300, check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as e:
-        sys.stderr.write(f"ingerir: erro: rclone lsf falhou: {e}\n")
-        sys.exit(1)
-    if r_lsf.returncode != 0:
-        sys.stderr.write(f"ingerir: erro: rclone lsf falhou ({r_lsf.returncode}): {r_lsf.stderr.strip()}\n")
-        sys.exit(1)
-
-    itens_lsf = [l.strip() for l in r_lsf.stdout.splitlines() if l.strip()]
-    qtd_lsf = len(itens_lsf)
-    itens_staging = [f for f in os.listdir(staging) if not f.startswith(".")]
-    qtd_staging = len(itens_staging)
-
-    if qtd_lsf != qtd_staging:
-        sys.stderr.write(
-            f"ingerir: erro: PORTÃO 1: contagem de rclone lsf ({qtd_lsf}) diverge do staging ({qtd_staging}) — lote incompleto\n"
-        )
+        manifesto = obter_manifesto_rclone(remote)
+        ok_p1, motivo_p1 = conferir_manifesto_portao_1(manifesto, staging)
+        if not ok_p1:
+            sys.stderr.write(f"ingerir: erro: {motivo_p1}\n")
+            sys.exit(1)
+        sys.stderr.write(f"ingerir: {motivo_p1}\n")
+    except Exception as e:
+        sys.stderr.write(f"ingerir: erro: PORTÃO 1 falhou: {e}\n")
         sys.exit(1)
 
-    sys.stderr.write(f"ingerir: PORTÃO 1 aprovado: {qtd_staging} arquivo(s) conferidos no staging\n")
     return staging
 
 def escanear_pasta(pasta: str) -> tuple[list[tuple[str, str]], dict[str, dict]]:
@@ -466,6 +468,69 @@ def formatar_tabela_aplicado(lote: dict) -> str:
                     break
         linhas.append(f"{pos:<3} {arq:<40} {tit:<45} {ver:<12} {est:<12} {deg:<12} {det}")
     return "\n".join(linhas)
+
+
+def formatar_resumo_veredito_e_excecoes(lote: dict, fase: str = "plano") -> str:
+    linhas = []
+    resumo = lote.get("resumo", {})
+    total = len(lote.get("itens", []))
+    if fase == "plano":
+        linhas.append(f"Plano de Ingestão: lote {lote.get('id')} (dry-run)")
+        linhas.append(f"Autor: {lote.get('autor')} · Motor: {lote.get('motor') or '-'} · Até: {lote.get('ate')} · OCR: {lote.get('ocr')} · Coleção: {lote.get('colecao')}")
+        linhas.append(f"Resumo: total={total} | criar={resumo.get('criar', 0)} | edicao={resumo.get('edicao', 0)} | ja_ingerido={resumo.get('ja_ingerido', 0)} | bloqueada={resumo.get('bloqueada', 0)} | reprovado={resumo.get('reprovado', 0)}")
+    else:
+        feito = resumo.get("feito", 0)
+        falhou = resumo.get("falhou", 0)
+        bloqueada = resumo.get("bloqueada", 0)
+        edicao = resumo.get("edicao", 0)
+        pulado = sum(1 for it in lote.get("itens", []) if it.get("estado") in ("pulado", "parado"))
+        linhas.append(f"Execução de Ingestão: lote {lote.get('id')}")
+        linhas.append(f"Estado: {lote.get('estado')} · Autor: {lote.get('autor')} · Motor: {lote.get('motor') or '-'} · Até: {lote.get('ate')}")
+        linhas.append(f"Resumo: total={total} | feito={feito} | edicao={edicao} | bloqueada={bloqueada} | pulado={pulado} | falhou={falhou}")
+
+    excecoes = []
+    for it in lote.get("itens", []):
+        ver = it.get("veredito")
+        est = it.get("estado")
+        if ver in ("reprovado", "bloqueada", "ja_ingerido", "auxiliar", "sem_leitor", "vazio", "json_comum") or est in ("pulado", "parado", "falhou"):
+            arq = it.get("arquivo") or "-"
+            detalhes = []
+            for p in it.get("portoes", []):
+                if p.get("resultado") != "aprovado":
+                    motivo = f" — {p['detail']}" if p.get("detail") else ""
+                    detalhes.append(f"{p.get('portao')}:{p.get('title', p.get('resultado'))}{motivo}")
+            if it.get("problem"):
+                det = it["problem"].get("detail") or it["problem"].get("title") or str(it["problem"])
+                detalhes.append(det)
+            det_str = "; ".join(detalhes) if detalhes else (est or ver)
+            excecoes.append(f"  [{ver or est}] {arq}: {det_str}")
+
+    if excecoes:
+        linhas.append("")
+        linhas.append("Exceções e recusas:")
+        linhas.extend(excecoes)
+    return "\n".join(linhas)
+
+
+def calcular_sha256_pasta(pasta: str) -> str:
+    if os.path.isfile(pasta):
+        with open(pasta, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    h = hashlib.sha256()
+    entradas = []
+    for raiz, dirs, arqs in os.walk(pasta):
+        dirs[:] = [d for d in dirs if not d.startswith(".")]
+        for a in arqs:
+            if a.startswith("."):
+                continue
+            fp = os.path.join(raiz, a)
+            rel = os.path.relpath(fp, pasta).replace(os.sep, "/")
+            entradas.append((rel, fp))
+    for rel, fp in sorted(entradas):
+        with open(fp, "rb") as f:
+            h_arq = hashlib.sha256(f.read()).hexdigest()
+        h.update(f"{rel}:{h_arq}\n".encode("utf-8"))
+    return h.hexdigest()
 
 
 # --- encadear os estágios depois de Incorporar (arq:0119 §2) -------------------------------
@@ -685,6 +750,7 @@ def main():
     parser.add_argument("--autor", dest="autor", default=None)
     parser.add_argument("--colecao", "--bucket", dest="colecao", default="firma")
     parser.add_argument("--json", dest="como_json", action="store_true", default=False)
+    parser.add_argument("--tabela", dest="mostrar_tabela", action="store_true", default=False)
     parser.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true", default=False)
 
     args, desconhecidos = parser.parse_known_args()
@@ -790,6 +856,7 @@ def main():
 
     # O lote do servidor só incorpora (arq:0119 §2): transcrever e indexar são atos próprios,
     # encadeados aqui depois do aplicar (encadear_estagios).
+    sha256_pasta = calcular_sha256_pasta(args.lote)
     payload = {
         "autor": autor,
         "ate": "catalogar",
@@ -797,6 +864,7 @@ def main():
         "semantico": args.semantico,
         "colecao": args.colecao,
         "itens": itens,
+        "sha256_pasta": sha256_pasta,
     }
 
     # O conversor é sob demanda (#4026): o lote o liga antes, com ou sem --apply, porque o plano e o
@@ -837,18 +905,27 @@ def main():
     
     salvar_manifesto(lote)
 
-
     if not args.apply:
         if args.como_json:
             print(json.dumps(lote, indent=2, ensure_ascii=False))
-        else:
+        elif args.mostrar_tabela:
             print(formatar_tabela_plano(lote))
+        else:
+            print(formatar_resumo_veredito_e_excecoes(lote, fase="plano"))
         reprovados = sum(1 for it in lote.get("itens", []) if it.get("veredito") == "reprovado")
-        sys.exit(3 if reprovados > 0 else 0)
+        if reprovados > 0:
+            sys.exit(3)
+        excecoes_cnt = sum(
+            1 for it in lote.get("itens", [])
+            if it.get("veredito") in ("bloqueada", "ja_ingerido", "auxiliar", "sem_leitor", "vazio", "json_comum")
+        )
+        if excecoes_cnt > 0:
+            sys.exit(2)
+        sys.exit(0)
 
     # Execução assíncrona (--apply)
     try:
-        resp_app = requests.post(f"{BASE}/acervo/lotes/{lote_id}/aplicar", headers=headers)
+        resp_app = requests.post(f"{BASE}/acervo/lotes/{lote_id}/aplicar", json={"sha256_pasta": sha256_pasta}, headers=headers)
     except requests.exceptions.RequestException as e:
         falha_indeterminavel(e)
 
@@ -859,29 +936,42 @@ def main():
         sys.exit(1)
 
     while True:
-        time.sleep(1.0)
         try:
-            r_chk = requests.get(f"{BASE}/acervo/lotes/{lote_id}", headers=headers)
+            r_chk = requests.get(f"{BASE}/acervo/lotes/{lote_id}?espera=540", headers=headers, timeout=600)
         except requests.exceptions.RequestException as e:
             falha_indeterminavel(e)
         if r_chk.status_code >= 500:
             falha_indeterminavel(r_chk)
         if r_chk.status_code != 200:
+            time.sleep(1.0)
             continue
         lote_atual = r_chk.json()
-        if lote_atual.get("estado") in ("concluido", "falhou"):
+        if lote_atual.get("estado") in ("concluido", "falhou", "cancelado"):
             lote = lote_atual
             break
+        time.sleep(1.0)
 
     if args.como_json:
         print(json.dumps(lote, indent=2, ensure_ascii=False))
-    else:
+    elif args.mostrar_tabela:
         print(formatar_tabela_aplicado(lote))
+    else:
+        print(formatar_resumo_veredito_e_excecoes(lote, fase="aplicado"))
 
     salvar_manifesto(lote)
     if lote.get("estado") != "concluido":
         sys.exit(1)
     if args.ate == "catalogar":
+        reprovados = sum(1 for it in lote.get("itens", []) if it.get("veredito") == "reprovado" or it.get("estado") == "falhou")
+        if reprovados > 0:
+            sys.exit(3)
+        excecoes_cnt = sum(
+            1 for it in lote.get("itens", [])
+            if it.get("veredito") in ("bloqueada", "ja_ingerido", "auxiliar", "sem_leitor", "vazio", "json_comum")
+            or it.get("estado") in ("pulado", "parado")
+        )
+        if excecoes_cnt > 0:
+            sys.exit(2)
         sys.exit(0)
     barradas = encadear_estagios(lote, args.ate, args.motor or "rag", autor)
     sys.exit(1 if barradas else 0)
