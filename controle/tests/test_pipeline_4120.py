@@ -26,7 +26,7 @@ ACERVO = RAIZ / "bin" / "acervo"
 LOTE = "33333333-3333-4333-8333-333333333333"
 JOB = "44444444-4444-4444-8444-444444444444"
 
-ETAPAS = ("triagem", "catalogacao", "duplicata", "classificar", "promocao")
+ETAPAS = ("triagem", "catalogacao", "duplicata", "classificar", "indexar", "promocao")
 
 
 def _job(estado="pausado", classificar="pausado"):
@@ -64,6 +64,8 @@ class _Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("content-length") or 0)
         corpo = json.loads(self.rfile.read(n) or b"null")
         self.falso.chamadas.append(("POST", self.path, corpo))
+        if self.path == "/acervo/jobs/liberar":
+            return self._resp(200, self.falso.resposta_liberar)
         if self.path == "/acervo/jobs":
             if self.falso.post_jobs_status != 201:
                 return self._resp(self.falso.post_jobs_status, {"title": "Conflito", "detail": "lote sem obra"})
@@ -77,6 +79,7 @@ class Falso:
         self.chamadas = []
         self.job = _job()
         self.post_jobs_status = 201
+        self.resposta_liberar = {"job_id": JOB, "liberadas": [{"obra_id": "o1", "titulo": "Obra Um"}], "recusadas": []}
         handler = type("H", (_Handler,), {"falso": self})
         self.srv = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         self.url = f"http://127.0.0.1:{self.srv.server_address[1]}"
@@ -314,3 +317,73 @@ def test_o_ato_existe_na_porta_do_acervo(servidor):
     assert r.returncode == 0, r.stderr
     assert f"job: {JOB}" in r.stdout
     assert "command not found" not in r.stderr
+
+
+def test_a_ajuda_geral_do_acervo_sai_inteira_e_sem_executar_o_texto_de_uso():
+    # a crase sem escape no texto de uso do pipeline virava substituicao de comando: «Retoma:» e «estado:» saiam
+    # vazios, com «syntax error» no stderr (carta 20261105T182521-dados, ponto 4)
+    env = {**os.environ, "PF_CADEIRA": "dados"}
+    r = subprocess.run(["bash", str(ACERVO), "--ajuda"], capture_output=True, text=True, env=env,
+                       stdin=subprocess.DEVNULL, timeout=60, check=False)
+    assert r.returncode == 2
+    assert "Retoma: `pipeline --lote <id>`; estado: `pipeline --job <id>`" in r.stderr
+    assert "syntax error" not in r.stderr and "command not found" not in r.stderr
+    assert "--liberar <sha256|obra>" in r.stderr
+    # as outras duas crases soltas do texto de uso, mais antigas que a 4120: uma rodava `biblioteca objeto` (command not
+    # found) e a outra rodava `motor raciocinador` de verdade a cada pedido de ajuda
+    assert "(antes `biblioteca objeto`: o nome velho recusa" in r.stderr
+    assert "o raciocinador e `motor raciocinador`" in r.stderr
+    assert "nenhum python do rag" not in r.stderr and "uso: motor raciocinador" not in r.stderr
+
+
+def test_liberar_por_pasta_manda_os_itens_ao_servidor_e_diz_quem_saiu(servidor, tmp_path):
+    pasta = tmp_path / "entrada"
+    pasta.mkdir()
+    r = servidor.rodar(str(pasta), "--liberar", "o1")
+    assert r.returncode == 0, r.stderr
+    assert "liberada: o1 · Obra Um" in r.stdout and f"job: {JOB} · retomado" in r.stdout
+    assert servidor.criacoes() == [("POST", "/acervo/jobs/liberar", {"itens": ["o1"], "pasta": str(pasta)})]
+
+
+def test_liberar_por_job_ou_por_lote_leva_varios_itens(servidor):
+    r = servidor.rodar("--job", JOB, "--liberar", "o1", "a" * 64)
+    assert r.returncode == 0, r.stderr
+    r = servidor.rodar("--lote", LOTE, "--liberar", "o2", via_acervo=True)
+    assert r.returncode == 0, r.stderr
+    assert servidor.criacoes() == [
+        ("POST", "/acervo/jobs/liberar", {"itens": ["o1", "a" * 64], "job_id": JOB}),
+        ("POST", "/acervo/jobs/liberar", {"itens": ["o2"], "lote_id": LOTE}),
+    ]
+
+
+def test_liberar_o_que_nao_esta_estacionado_sai_1_com_o_motivo(servidor):
+    servidor.resposta_liberar = {"job_id": JOB, "liberadas": [], "recusadas": [
+        {"item": "zzz", "motivo": "a obra não está estacionada neste job"}]}
+    r = servidor.rodar("--job", JOB, "--liberar", "zzz")
+    assert r.returncode == 1
+    assert "recusada: zzz — a obra não está estacionada neste job" in r.stderr
+    assert "retomado" not in r.stdout
+
+
+def test_liberar_nao_combina_com_apply(servidor, tmp_path):
+    pasta = tmp_path / "entrada"
+    pasta.mkdir()
+    r = servidor.rodar(str(pasta), "--apply", "--liberar", "o1")
+    assert r.returncode == 2 and "nao combina com --apply" in r.stderr
+    assert servidor.chamadas == []
+
+
+def test_o_resumo_lista_a_obra_estacionada_com_o_par_ao_lado(servidor):
+    servidor.job = _job(estado="estacionado", classificar="pendente")
+    for e in servidor.job["etapas"]:
+        if e["obra_id"] == "o1" and e["etapa"] == "duplicata":
+            e["estado"] = "estacionado"
+            e["detalhe"] = {"duplicata_provavel": True, "pares": [
+                {"obra_id": "o2", "classificacao": "duplicata_provavel", "jaccard": 0.91}]}
+    r = servidor.rodar("--job", JOB)
+    assert r.returncode == 0, r.stderr
+    assert "estado: estacionado" in r.stdout and "duplicata: concluido 1 · estacionado 1" in r.stdout
+    assert "1 obra(s) estacionada(s) esperam o dono (duplicata provavel)" in r.stdout
+    assert f"acervo pipeline --job {JOB} --liberar <obra>" in r.stdout
+    assert "o1 ↔ o2 (Jaccard 0.91)" in r.stdout
+    assert "indexar: pendente 2" in r.stdout

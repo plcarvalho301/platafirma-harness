@@ -26,6 +26,8 @@ except ImportError:
     DEFAULT_BASE, DEFAULT_TOKEN = motor_enderecos.api_acervo(), ""
 
 TETO_ESPERA_S = 540  # o teto do servidor no GET do job; abaixo dos 600 s da chamada da porta
+# as etapas do job, na ordem em que cada obra as percorre (conhecimento@rag/motor_acervo/curadoria/job_pipeline.py)
+ETAPAS = ("triagem", "catalogacao", "duplicata", "classificar", "indexar", "promocao")
 
 
 class Falha(Exception):
@@ -101,6 +103,11 @@ def ver_job(job_id: str, espera: int = 0) -> dict:
     return chamar("GET", caminho, timeout=espera + 30)
 
 
+def liberar(corpo: dict) -> dict:
+    """Solta as obras estacionadas do job e o retoma: `corpo` leva `itens` (sha256 ou obra) e um de job_id, lote_id, pasta."""
+    return chamar("POST", "/acervo/jobs/liberar", corpo)
+
+
 def curar_indicacoes(lote_id: str | None, aplicar: bool, termos: list[str] | None = None) -> dict:
     corpo = {"lote_id": lote_id, "aplicar": bool(aplicar)}
     if termos:
@@ -117,7 +124,7 @@ def resumo_do_job(job: dict) -> str:
     for e in etapas:
         contagem = por_etapa.setdefault(e["etapa"], {})
         contagem[e["estado"]] = contagem.get(e["estado"], 0) + 1
-    for etapa in ("triagem", "catalogacao", "duplicata", "classificar", "promocao"):
+    for etapa in ETAPAS:
         if etapa in por_etapa:
             linhas.append(f"  {etapa}: " + " · ".join(f"{estado} {n}" for estado, n in sorted(por_etapa[etapa].items())))
     # o que as etapas deixaram no detalhe e pede um olho: par de duplicata e promoção que ficou para depois
@@ -126,6 +133,17 @@ def resumo_do_job(job: dict) -> str:
     if com_par:
         linhas.append(f"duplicata: {len(com_par)} obra(s) com par, {len(provaveis)} provavel(is); "
                       f"os pares estao no detalhe (`--json`)")
+    estacionadas = [e for e in etapas if e["estado"] == "estacionado"]
+    if estacionadas:
+        linhas.append(
+            f"{len(estacionadas)} obra(s) estacionada(s) esperam o dono (duplicata provavel): libere com "
+            f"`acervo pipeline --job {job['id']} --liberar <obra>` ou retire a obra com `acervo retirar biblioteca obra`")
+        for e in estacionadas:
+            pares = [p for p in (e.get("detalhe") or {}).get("pares") or [] if p.get("classificacao") == "duplicata_provavel"]
+            ao_lado = ", ".join(
+                f"{p['obra_id']} ({'Jaccard ' + str(p['jaccard']) if p.get('jaccard') is not None else p.get('motivo', '')})"
+                for p in pares)
+            linhas.append(f"  {e['obra_id']} ↔ {ao_lado}")
     sem_promocao = [e for e in etapas if e["etapa"] == "promocao"
                     and (e.get("detalhe") or {}).get("promovida") is False]
     if sem_promocao:

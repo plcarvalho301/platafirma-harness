@@ -5,9 +5,13 @@
     acervo pipeline <pasta> --apply             incorpora a pasta, cria o job no servidor e devolve o id
     acervo pipeline --lote <id> [--espera <s>]  cria o job sobre um lote ja aplicado, ou retoma o que ele tem
     acervo pipeline --job <id> [--espera <s>]   o estado do job e de cada etapa
+    acervo pipeline <pasta>|--lote <id>|--job <id> --liberar <sha256 ou obra> [...]
+                                                solta a obra estacionada que o dono liberou; o job retoma
 
 Cliente fino: nao classifica nem indexa. O job roda no servidor do acervo, obra a obra, em segundo plano,
-e pausa cada obra em `classificar` ate a sessao responder (`acervo catalogar biblioteca obra --job <id>`).
+pausa cada obra em `classificar` ate a sessao responder (`acervo catalogar biblioteca obra --job <id>`) e
+estaciona a obra com duplicata provavel (par com Jaccard de 0,8 ou mais, ou o mesmo identificador canonico)
+ate o dono liberar com `--liberar`; quem nao se liberta se retira (`acervo retirar biblioteca obra`).
 Por isso este ato devolve o id sem esperar o job inteiro: a chamada fica sempre abaixo dos 600 s da porta.
 A incorporacao reaproveita `bin/ingerir` (carga, portoes, plano guardado e --apply), sem duplicar nada.
 
@@ -38,6 +42,7 @@ USO = """uso:
   acervo pipeline <pasta> [--apply] [--espera <s>] [--json]
   acervo pipeline --lote <id> [--espera <s>] [--json]
   acervo pipeline --job <id> [--espera <s>] [--json]
+  acervo pipeline <pasta>|--lote <id>|--job <id> --liberar <sha256 ou obra> [...] [--json]
 """
 
 
@@ -88,10 +93,35 @@ def _job_do_lote(pasta: str, lote_id: str, espera: int, como_json: bool) -> int:
     return 0
 
 
+def _liberar(args) -> int:
+    """Solta do estacionamento as obras que o dono liberou e retoma o job. Sai 0 se alguma foi solta, 1 se nenhuma."""
+    corpo: dict = {"itens": args.liberar}
+    if args.job:
+        corpo["job_id"] = args.job
+    elif args.lote:
+        corpo["lote_id"] = args.lote
+    else:
+        corpo["pasta"] = args.pasta
+    try:
+        res = pc.liberar(corpo)
+    except pc.Falha as e:
+        morre(f"acervo pipeline: {e.mensagem}", e.codigo)
+    if args.como_json:
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+    else:
+        for it in res.get("liberadas") or []:
+            print(f"liberada: {it['obra_id']}" + (f" · {it['titulo']}" if it.get("titulo") else ""))
+        print(f"job: {res.get('job_id')}" + (" · retomado" if res.get("liberadas") else ""))
+    for it in res.get("recusadas") or []:
+        sys.stderr.write(f"recusada: {it['item']} — {it['motivo']}\n")
+    return 0 if res.get("liberadas") else 1
+
+
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="acervo pipeline", add_help=False)
     p.add_argument("pasta", nargs="?")
     p.add_argument("--apply", action="store_true")
+    p.add_argument("--liberar", nargs="+", metavar="ITEM")
     p.add_argument("--lote")
     p.add_argument("--job")
     p.add_argument("--espera", type=int, default=0)
@@ -112,6 +142,10 @@ def main(argv: list[str]) -> int:
               f"{', '.join(fontes) or 'nenhuma'})\n{USO}", 2)
     if args.apply and not args.pasta:
         morre("acervo pipeline: --apply acompanha <pasta>; --lote e --job nao incorporam nada", 2)
+    if args.liberar:
+        if args.apply:
+            morre("acervo pipeline: --liberar nao incorpora nada; nao combina com --apply", 2)
+        return _liberar(args)
 
     if args.job:
         try:

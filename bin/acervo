@@ -151,7 +151,9 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   plano sem --apply; --sem-ficha pega as obras nao retiradas com arquivo e sem ficha
   acervo lote     <id>
   acervo pipeline <pasta> [--apply] [--espera <s>] [--json]   o ato unico (#4120): sem --apply, o plano do lote; com ele, incorpora a
-                  pasta, cria o job no servidor e devolve o id. Retoma: `pipeline --lote <id>`; estado: `pipeline --job <id>`
+                  pasta, cria o job no servidor e devolve o id. Retoma: \`pipeline --lote <id>\`; estado: \`pipeline --job <id>\`
+  acervo pipeline <pasta>|--lote <id>|--job <id> --liberar <sha256|obra> [...]   solta a obra estacionada (duplicata provavel) que o
+                  dono liberou; o job retoma de onde parou. Quem nao se liberta, se retira: acervo retirar biblioteca obra
   acervo catalogar biblioteca obra --job <id> [--parte <n>] | --job <id> --resposta   a classificacao das obras do job pela sessao
   acervo curar    conceitos --indicacoes <lote|todas> [--termos a,b] [--apply]   a curadoria em lote das indicacoes
   acervo curar    casa alias <classe> <chave> <alias>
@@ -161,7 +163,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   o texto da obra pelo espelho de leitura, do comeco e em ordem
   acervo ler      biblioteca arquivo <uuid|prefixo|titulo> [--destino <pasta>]
                   o arquivo original da obra; --destino so na bancada ou var/tmp/<ordem_id> (exit 4 fora); diz caminho e sha256
-                  (antes `biblioteca objeto`: o nome velho recusa com exit 2 e nomeia este; arq:0108 §10)
+                  (antes \`biblioteca objeto\`: o nome velho recusa com exit 2 e nomeia este; arq:0108 §10)
   acervo ler      biblioteca posicao <obra> [--k N] [--json]
                   a obra esta entre as k primeiras da busca pelo titulo? e em que posicao (sai 0 se esta, 1 se nao)
   acervo ler      biblioteca ficha <obra> [--json]
@@ -221,7 +223,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo gerador  [--bancada <chave>] [--saida <pasta>] roda o gerador de outros_repos/conhecimento/ontologia
                   na bancada de platafirma-casa-espelho, sem banco, e diz a pasta de saida e a DDL gravada;
                   sai como o gerador (0 gerou · 1 reprova · 5 nao rodou) · 3 sem gerador na bancada.
-                  Chamada temporaria (#4077); o raciocinador e `motor raciocinador`
+                  Chamada temporaria (#4077); o raciocinador e \`motor raciocinador\`
   acervo psql     [--banco rag|motor]  <SQL por stdin>
   acervo balde    listar|ler|copiar|mover|apagar <bucket|sha256> [...] [--apply]
   acervo balde    varrer <bucket> [--limite <n>] [--retomar] [--prefixo <p>] [--teto-s <n>] [--json]
