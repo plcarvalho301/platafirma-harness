@@ -100,8 +100,8 @@ def test_obra_na_terceira_posicao_sai_0_com_a_posicao(servidor, tmp_path):
     r = _rodar(servidor, motor, OBRA)
     assert r.returncode == 0, r.stderr
     assert f"posicao: 3 de 10 · {TITULO} ({OBRA})" in r.stdout
-    # o titulo vai literal, na origem de medida, e o k vai junto
-    assert json.loads(gravado.read_text()) == ["rag", "buscar", "biblioteca", "--origem", "medida", "--k", "10", TITULO]
+    # o titulo vai literal, numa origem que o motor aceita (as literais: abertura, bench, sombra, autoteste), com o k
+    assert json.loads(gravado.read_text()) == ["rag", "buscar", "biblioteca", "--origem", "autoteste", "--k", "10", TITULO]
 
 
 def test_a_posicao_conta_obra_e_nao_trecho(servidor, tmp_path):
@@ -170,6 +170,20 @@ def test_uso_errado_sai_2_sem_buscar(servidor, tmp_path, argv, trecho):
     r = _rodar(servidor, motor, *argv)
     assert r.returncode == 2 and trecho in r.stderr
     assert not gravado.exists()
+
+
+def test_a_origem_da_busca_e_uma_que_o_motor_aceita_e_manda_texto_literal():
+    # o ar recusou `--origem medida` na primeira chamada de verdade: o motor so conhece as origens que declara.
+    # O teste le a lista do proprio bin/motor, em vez de repetir de memoria.
+    import re
+
+    motor = (RAIZ / "bin" / "motor").read_text(encoding="utf-8")
+    literais = re.search(r"^ORIGENS_LITERAIS = \(([^)]*)\)", motor, re.M).group(1)
+    todas = re.search(r"^ORIGENS = \(([^)]*)\)", motor, re.M).group(1)
+    nomes = lambda s: {x.strip().strip('"') for x in s.split(",") if x.strip()}  # noqa: E731
+    texto = POSICAO.read_text(encoding="utf-8")
+    origem = re.search(r'^ORIGEM = "([^"]+)"', texto, re.M).group(1)
+    assert origem in nomes(todas) and origem in nomes(literais)
 
 
 def test_o_ato_esta_na_porta_do_acervo(servidor, tmp_path):
