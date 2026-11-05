@@ -237,7 +237,7 @@ def main():
 
     if not (tool.endswith("malote") or tool.endswith("run_command") or tool.endswith("read_file") or tool.endswith("ler_arquivo") or
             tool.endswith("write_file") or tool.endswith("mesa") or tool.endswith("fila") or
-            tool.endswith("tarefas") or tool.endswith("motor") or tool.endswith("descansar") or
+            tool.endswith("tarefas") or tool.endswith("busca") or tool.endswith("descansar") or
             tool.endswith("monta_sessao") or ("claudinho-mcp" in tool) or ("platafirma-ops" in tool)):
         sys.exit(0)
 
