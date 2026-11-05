@@ -120,6 +120,17 @@ def resumo_do_job(job: dict) -> str:
     for etapa in ("triagem", "catalogacao", "duplicata", "classificar", "promocao"):
         if etapa in por_etapa:
             linhas.append(f"  {etapa}: " + " · ".join(f"{estado} {n}" for estado, n in sorted(por_etapa[etapa].items())))
+    # o que as etapas deixaram no detalhe e pede um olho: par de duplicata e promoção que ficou para depois
+    com_par = [e for e in etapas if e["etapa"] == "duplicata" and (e.get("detalhe") or {}).get("pares")]
+    provaveis = [e for e in com_par if (e["detalhe"] or {}).get("duplicata_provavel")]
+    if com_par:
+        linhas.append(f"duplicata: {len(com_par)} obra(s) com par, {len(provaveis)} provavel(is); "
+                      f"os pares estao no detalhe (`--json`)")
+    sem_promocao = [e for e in etapas if e["etapa"] == "promocao"
+                    and (e.get("detalhe") or {}).get("promovida") is False]
+    if sem_promocao:
+        linhas.append(f"promocao: {len(sem_promocao)} obra(s) ainda sem promocao (a impressao nao tem o que a "
+                      "marcacao exige); promover e `acervo promover biblioteca obra <obra> --impressao <id>`")
     if job.get("erro"):
         linhas.append(f"erro: {job['erro']}")
     esperando = sum(1 for e in etapas if e["etapa"] == "classificar" and e["estado"] == "pausado")

@@ -43,9 +43,11 @@ _FANTASMA_NAMES = {
     "manifest.json", "manifest.yaml", "inventario.csv", "fila-lote.jsonl",
 }
 try:
-    from bin._ingerir.carga import conferir_manifesto_portao_1, obter_manifesto_rclone
+    from bin._ingerir.carga import (conferir_manifesto_portao_1, escanear_pasta_triagem, itens_da_chegada,
+                                    linhas_das_excecoes, obter_manifesto_rclone)
 except ImportError:
-    from _ingerir.carga import conferir_manifesto_portao_1, obter_manifesto_rclone
+    from _ingerir.carga import (conferir_manifesto_portao_1, escanear_pasta_triagem, itens_da_chegada,
+                                linhas_das_excecoes, obter_manifesto_rclone)
 
 _RE_WIKI_DATADO = re.compile(r"^(?:wiki/)?(.+?)@(\d{4}-\d{2}-\d{2})\.md$", re.IGNORECASE)
 
@@ -512,6 +514,40 @@ def formatar_resumo_veredito_e_excecoes(lote: dict, fase: str = "plano") -> str:
     return "\n".join(linhas)
 
 
+def registrar_chegada_da_carga(pasta: str, lote_id: str, sidecars: dict, headers: dict, registrar: bool) -> list[str]:
+    """A triagem da pasta (itens 3 a 5): o que chegou e o que ficou de fora vai a `POST /acervo/chegada` (só com
+    --apply: o plano não grava), com a classificação da planilha presa ao sha256. Devolve as linhas das exceções.
+    A chegada não barra o lote: falha aqui vira aviso."""
+    try:
+        obras, excecoes, _ = escanear_pasta_triagem(pasta)
+    except Exception as e:  # noqa: BLE001
+        sys.stderr.write(f"ingerir: aviso: a triagem da chegada falhou ({e}); o lote segue\n")
+        return []
+    if registrar:
+        itens = itens_da_chegada(obras, excecoes, sidecars)
+        if itens:
+            try:
+                r = requests.post(f"{BASE}/acervo/chegada", json={"lote_id": lote_id, "itens": itens},
+                                  headers=headers, timeout=120)
+                if r.status_code >= 400:
+                    sys.stderr.write(f"ingerir: aviso: a chegada não registrou ({r.status_code}): {r.text[:200]}\n")
+                else:
+                    recusados = (r.json() or {}).get("recusados") or []
+                    for rec in recusados:
+                        sys.stderr.write(f"ingerir: aviso: chegada recusou {rec.get('sha256') or rec.get('item')}: "
+                                         f"{rec.get('motivo')}\n")
+            except (requests.exceptions.RequestException, ValueError) as e:
+                sys.stderr.write(f"ingerir: aviso: a chegada não registrou ({type(e).__name__}); o lote segue\n")
+    return linhas_das_excecoes(excecoes)
+
+
+def mostrar_excecoes_da_carga(linhas: list[str], como_json: bool) -> None:
+    """No `--json` a saída de dados fica pura: a lista vai para o stderr."""
+    if linhas:
+        destino = sys.stderr if como_json else sys.stdout
+        print("\n".join(linhas), file=destino)
+
+
 def calcular_sha256_pasta(pasta: str) -> str:
     if os.path.isfile(pasta):
         with open(pasta, "rb") as f:
@@ -905,6 +941,9 @@ def main():
     
     salvar_manifesto(lote)
 
+    # a chegada (itens 3 a 5): registra o que chegou e o que ficou de fora; o plano só lista
+    linhas_excecoes = registrar_chegada_da_carga(args.lote, lote_id, sidecars, headers, registrar=args.apply)
+
     if not args.apply:
         if args.como_json:
             print(json.dumps(lote, indent=2, ensure_ascii=False))
@@ -912,6 +951,7 @@ def main():
             print(formatar_tabela_plano(lote))
         else:
             print(formatar_resumo_veredito_e_excecoes(lote, fase="plano"))
+        mostrar_excecoes_da_carga(linhas_excecoes, args.como_json)
         reprovados = sum(1 for it in lote.get("itens", []) if it.get("veredito") == "reprovado")
         if reprovados > 0:
             sys.exit(3)
@@ -958,6 +998,7 @@ def main():
     else:
         print(formatar_resumo_veredito_e_excecoes(lote, fase="aplicado"))
 
+    mostrar_excecoes_da_carga(linhas_excecoes, args.como_json)
     salvar_manifesto(lote)
     if lote.get("estado") != "concluido":
         sys.exit(1)
