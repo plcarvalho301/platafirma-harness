@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import difflib
 import json
 import os
@@ -50,6 +51,8 @@ import claude_cli  # noqa: E402  (o CLI vem da trava da release, #2856 linha 248
 import transcript  # noqa: E402  (a régua de tokens da fita, a mesma do descansar)
 import uso  # noqa: E402
 import yaml  # noqa: E402
+import federacao  # noqa: E402  (card #4122: WIF para agentes sem lente)
+import shutil  # noqa: E402
 
 MODOS = ("varrer", "revisar", "avaliar", "testar", "executar", "consultar", "vigiar", "pesquisar", "parecer")
 LIGACOES = ("consultado", "delegado", "agendado")
@@ -607,15 +610,50 @@ def _bin() -> Path:
     return Path(os.environ.get("PF_BIN") or _AQUI)
 
 
-def _roda(argv: list[str], stdin: str | None = None, env: dict | None = None, timeout: int = 120):
+def carrega_config_federacao() -> dict:
+    sobrescreve = os.environ.get("PF_FEDERACAO_CONFIG")
+    if sobrescreve:
+        try:
+            return json.loads(sobrescreve)
+        except Exception:
+            pass
+    caminho = _AQUI.parent / "registro" / "federacao-anthropic.json"
+    if caminho.exists():
+        try:
+            return json.loads(caminho.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def _roda(argv: list[str], stdin: str | None = None, env: dict | None = None, timeout: int = 120,
+          cwd: Path | str | None = None, cred: federacao.Credencial | None = None):
     try:
-        p = subprocess.run(argv, input=stdin, capture_output=True, text=True, timeout=timeout,
-                           env={**os.environ, **(env or {})})
-    except subprocess.TimeoutExpired:
-        raise Falha(5, f"{Path(argv[0]).name}: passou de {timeout}s sem resposta")
+        p = subprocess.Popen(
+            argv,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+            cwd=str(cwd) if cwd else None,
+        )
+        if cred:
+            cred.registra_processo(p)
+        try:
+            stdout, stderr = p.communicate(input=stdin, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            stdout, stderr = p.communicate()
+            if cred and cred.falha:
+                raise Falha(3, cred.falha.motivo)
+            raise Falha(5, f"{Path(argv[0]).name}: passou de {timeout}s sem resposta")
+        except OSError as e:
+            raise Falha(3, f"{Path(argv[0]).name}: não executou ({e})")
+
+        return subprocess.CompletedProcess(argv, p.returncode, stdout, stderr)
     except OSError as e:
         raise Falha(3, f"{Path(argv[0]).name}: não executou ({e})")
-    return p
 
 
 def abre_sessao(cadeira: str, origem: str, slug: str, conta: str) -> dict:
@@ -668,7 +706,7 @@ def monta_lente(decl: dict, cadeira: str, chapeu: str, filha: dict, origem: str,
             "--modo", decl["modo"], "--json"]
     if decl.get("regua"):
         argv += ["--regua", *decl["regua"].split()]
-    env = {"PF_CADEIRA": cadeira, "PF_SESSAO": filha["sessao_id"], "PF_ORIGEM_SESSAO": origem,
+    env = {**os.environ, "PF_CADEIRA": cadeira, "PF_SESSAO": filha["sessao_id"], "PF_ORIGEM_SESSAO": origem,
            "PF_ORDEM_ID": filha.get("ordem_id") or "-"}
     p = _roda(argv, stdin=tarefa, env=env, timeout=180)
     try:
@@ -838,61 +876,130 @@ def resultado_do_cli(saida: str, stream: bool) -> dict:
     return obj
 
 
-def chama_claude(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | None = None) -> dict:
+def chama_claude(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | None = None,
+                 ligacao: str = "consultado") -> dict:
     t = decl["teto"]
     try:
         bin_claude = claude_cli.resolver()   # a trava da release, nunca o PATH (#2856 linha 248)
     except claude_cli.ClaudeAusente as e:
-        raise Falha(3, str(e))
-    argv = [bin_claude, "-p", "--model", decl["modelo"]["versao"],
-            "--max-turns", str(t["turnos"]), "--append-system-prompt", sistema]
-    if sem_lente(decl):
-        # O juiz sobe só com as ferramentas da declaração: `--tools` e a porta nomeada fora.
-        argv += ["--disallowedTools", ",".join([*PROIBIDAS, *FORA_DO_AGENTE, *CONECTORES_DE_FORA, *PORTAS_SERVIDOR]),
-                 "--tools", ",".join(decl["ferramentas"] or [])]
-    else:
-        argv += ["--disallowedTools", ",".join(negadas_do_agente(decl))]
-        if decl["ferramentas"]:
-            argv += ["--allowedTools", ",".join(g for f in decl["ferramentas"] for g in grafias(f))]
-    if anexos:
-        argv += ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
-        entrada = entrada_com_imagens(tarefa, anexos)
-    else:
-        argv += ["--output-format", "json"]
-        entrada = tarefa
-    p = _roda(argv, stdin=entrada, env={"DISABLE_AUTOUPDATER": "1", **SEM_ARRANQUE}, timeout=t.get("segundos", 900))
-    obj = resultado_do_cli(p.stdout, bool(anexos))
-    if p.returncode != 0 or obj.get("is_error") or not isinstance(obj.get("result"), str):
-        motivo = (p.stderr.strip().splitlines() or [str(obj.get("result") or "sem retorno")])[0]
-        raise Falha(5, f"claude -p não concluiu (saiu {p.returncode}): {motivo[:200]}")
-    # A régua é o transcript da sessão do Code, a mesma do fecho da fita (dono, 16/10/2026): uso por chamada,
-    # cada requestId uma vez. O resumo final do `claude -p` fica de reserva quando o transcript não aparece,
-    # e o registro diz qual das duas fontes valeu.
-    sessao_code = obj.get("session_id") if isinstance(obj.get("session_id"), str) else None
-    arq = transcript.da_sessao(sessao_code) if sessao_code else None
-    lido = transcript.soma(arq) if arq else None
-    if lido:
-        u = {"input_tokens": lido["entrada"], "output_tokens": lido["saida"],
-             "cache_creation_input_tokens": lido["cache_criacao"], "cache_read_input_tokens": lido["cache_leitura"]}
-        fonte, chamadas = "transcript", len(transcript.por_pedido(arq) or {})
-    else:
-        u, fonte, chamadas = obj.get("usage") or {}, "resumo", None
-    # o cache conta: sem ele a entrada saía 4 tokens numa revisão de 4 mil de saída (medido em 01/10).
-    # `entrada` é a soma, por chamada ao modelo, da janela inteira: cada turno relê o prefixo do cache e tudo
-    # o que as tools já devolveram. As três parcelas vão ao registro para separar o lido do cache do novo
-    # (pedido da gestão estratégica de 15/10/2026: o 1,3 milhão do parecerista era quase todo leitura de cache).
-    nova = u.get("input_tokens", 0)
-    criacao = u.get("cache_creation_input_tokens", 0)
-    leitura = u.get("cache_read_input_tokens", 0)
-    entrada = nova + criacao + leitura
-    saida = u.get("output_tokens", 0)
-    aviso = ""
-    if entrada + saida > t["tokens_execucao"]:         # o CLI só corta por turnos: aqui se mede e se avisa
-        aviso = f"tokens da execução {entrada + saida} passaram de tokens_execucao {t['tokens_execucao']} (medido, não cortado)"
-    return {"retorno": obj["result"], "aviso": aviso,
-            "uso": {"entrada": entrada, "saida": saida, "turnos": obj.get("num_turns"),
-                    "entrada_nova": nova, "cache_criacao": criacao, "cache_leitura": leitura,
-                    "chamadas": chamadas, "fonte": fonte, "sessao_code": sessao_code}}
+        raise Falha(3, str(e)) from e
+
+    config_fed = carrega_config_federacao()
+    regime_juiz = config_fed.get("contas", {}).get("agente-juiz", {}).get("regime")
+    usa_fed = (
+        sem_lente(decl)
+        and ligacao != "delegado"
+        and regime_juiz == "federacao"
+    )
+
+    pasta_isolada = None
+    cred_contexto = None
+    cred_obj = None
+
+    if usa_fed:
+        pasta_isolada = Path(tempfile.mkdtemp(prefix="agente-wif-"))
+        decl["_pasta_isolada"] = pasta_isolada
+        try:
+            cred_contexto = federacao.abre("agente-juiz", pasta_isolada, config_fed)
+            cred_obj = cred_contexto.__enter__()
+        except federacao.FalhaFederacao as e:
+            raise Falha(3, e.motivo) from e
+        except Exception as e:
+            raise Falha(3, "emissor") from e
+
+    try:
+        argv = [bin_claude, "-p", "--model", decl["modelo"]["versao"],
+                "--max-turns", str(t["turnos"]), "--append-system-prompt", sistema]
+        if sem_lente(decl):
+            # O juiz sobe só com as ferramentas da declaração: `--tools` e a porta nomeada fora.
+            argv += ["--disallowedTools", ",".join([*PROIBIDAS, *FORA_DO_AGENTE, *CONECTORES_DE_FORA, *PORTAS_SERVIDOR]),
+                     "--tools", ",".join(decl["ferramentas"] or [])]
+            if usa_fed:
+                argv += ["--setting-sources", "project,local"]
+        else:
+            argv += ["--disallowedTools", ",".join(negadas_do_agente(decl))]
+            if decl["ferramentas"]:
+                argv += ["--allowedTools", ",".join(g for f in decl["ferramentas"] for g in grafias(f))]
+        if anexos:
+            argv += ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
+            entrada = entrada_com_imagens(tarefa, anexos)
+        else:
+            argv += ["--output-format", "json"]
+            entrada = tarefa
+
+        env_exec = {"DISABLE_AUTOUPDATER": "1", **SEM_ARRANQUE}
+        if usa_fed and cred_obj and pasta_isolada:
+            env_exec["CLAUDE_CONFIG_DIR"] = str(pasta_isolada)
+            env_exec["ANTHROPIC_CONFIG_DIR"] = str(pasta_isolada)
+            env_exec.update(cred_obj.env)
+            env_base = {k: v for k, v in os.environ.items()
+                        if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_PROFILE")}
+            env_final = {**env_base, **env_exec}
+            for sombra in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_PROFILE"):
+                env_final.pop(sombra, None)
+        else:
+            env_final = {**os.environ, **env_exec}
+
+        p = _roda(argv, stdin=entrada, env=env_final, timeout=t.get("segundos", 900),
+                  cwd=pasta_isolada if usa_fed else None, cred=cred_obj)
+
+        if cred_obj and cred_obj.falha:
+            raise Falha(3, cred_obj.falha.motivo)
+
+        obj = resultado_do_cli(p.stdout, bool(anexos))
+        if p.returncode != 0 or obj.get("is_error") or not isinstance(obj.get("result"), str):
+            if cred_obj and cred_obj.falha:
+                raise Falha(3, cred_obj.falha.motivo)
+            texto_erro = ((p.stderr or "") + " " + (p.stdout or "") + " " + str(obj.get("result") or "")).lower()
+            if usa_fed:
+                if "credit" in texto_erro or "billing" in texto_erro or "crédito" in texto_erro:
+                    raise Falha(3, "credito")
+                if "401" in texto_erro or "authentication" in texto_erro or "autenticação" in texto_erro or "auth" in texto_erro:
+                    raise Falha(3, "troca")
+            motivo = (p.stderr.strip().splitlines() or [str(obj.get("result") or "sem retorno")])[0]
+            raise Falha(5, f"claude -p não concluiu (saiu {p.returncode}): {motivo[:200]}")
+        # A régua é o transcript da sessão do Code, a mesma do fecho da fita (dono, 16/10/2026): uso por chamada,
+        # cada requestId uma vez. O resumo final do `claude -p` fica de reserva quando o transcript não aparece,
+        # e o registro diz qual das duas fontes valeu.
+        sessao_code = obj.get("session_id") if isinstance(obj.get("session_id"), str) else None
+        arq = None
+        if sessao_code:
+            if usa_fed and pasta_isolada:
+                for cand in (pasta_isolada / "projects", pasta_isolada / ".claude" / "projects", pasta_isolada):
+                    if cand.exists():
+                        arq = transcript.da_sessao(sessao_code, raiz=cand)
+                        if arq:
+                            break
+            if not arq:
+                arq = transcript.da_sessao(sessao_code)
+        lido = transcript.soma(arq) if arq else None
+        if lido:
+            u = {"input_tokens": lido["entrada"], "output_tokens": lido["saida"],
+                 "cache_creation_input_tokens": lido["cache_criacao"], "cache_read_input_tokens": lido["cache_leitura"]}
+            fonte, chamadas = "transcript", len(transcript.por_pedido(arq) or {})
+        else:
+            u, fonte, chamadas = obj.get("usage") or {}, "resumo", None
+        # o cache conta: sem ele a entrada saía 4 tokens numa revisão de 4 mil de saída (medido em 01/10).
+        # `entrada` é a soma, por chamada ao modelo, da janela inteira: cada turno relê o prefixo do cache e tudo
+        # o que as tools já devolveram. As três parcelas vão ao registro para separar o lido do cache do novo
+        # (pedido da gestão estratégica de 15/10/2026: o 1,3 milhão do parecerista era quase todo leitura de cache).
+        nova = u.get("input_tokens", 0)
+        criacao = u.get("cache_creation_input_tokens", 0)
+        leitura = u.get("cache_read_input_tokens", 0)
+        entrada = nova + criacao + leitura
+        saida = u.get("output_tokens", 0)
+        aviso = ""
+        if entrada + saida > t["tokens_execucao"]:         # o CLI só corta por turnos: aqui se mede e se avisa
+            aviso = f"tokens da execução {entrada + saida} passaram de tokens_execucao {t['tokens_execucao']} (medido, não cortado)"
+        return {"retorno": obj["result"], "aviso": aviso,
+                "uso": {"entrada": entrada, "saida": saida, "turnos": obj.get("num_turns"),
+                        "entrada_nova": nova, "cache_criacao": criacao, "cache_leitura": leitura,
+                        "chamadas": chamadas, "fonte": fonte, "sessao_code": sessao_code},
+                "credencial": f"federacao:{cred_obj.conta_servico}" if (usa_fed and cred_obj) else "plano"}
+    finally:
+        if cred_contexto:
+            with contextlib.suppress(Exception):
+                cred_contexto.__exit__(None, None, None)
 
 
 def _bin_agy() -> str:
@@ -1019,12 +1126,13 @@ def chama_agy(decl: dict, sistema: str, tarefa: str) -> dict:
     return {"retorno": resposta, "aviso": "", "uso": uso}
 
 
-def chama_modelo(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | None = None) -> dict:
+def chama_modelo(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | None = None,
+                 ligacao: str = "consultado") -> dict:
     m = decl["modelo"]
     if m["familia"] == "qwen" and m.get("local"):
         return chama_ollama(decl, sistema, tarefa)
     if m["familia"] == "claude":
-        return chama_claude(decl, sistema, tarefa, anexos)
+        return chama_claude(decl, sistema, tarefa, anexos, ligacao=ligacao)
     if m["familia"] == "gemini":
         return chama_agy(decl, sistema, tarefa)
     raise Falha(3, f"a ligação {m['familia']} ainda não roda pelo agente rodar: a execução sob "
@@ -1091,6 +1199,13 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
     conta = conta_do_modelo(decl["modelo"])
     filha = None
     inicio = time.monotonic()
+    credencial_esperada = "plano"
+    if decl["modelo"]["familia"] == "claude" and sem_lente(decl) and ligacao != "delegado":
+        cfg = carrega_config_federacao()
+        cs = cfg.get("contas", {}).get("agente-juiz", {}).get("conta_servico", "svac_01Tys7Q5uRNwLCiKTwEXGQvw")
+        if cfg.get("contas", {}).get("agente-juiz", {}).get("regime") == "federacao":
+            credencial_esperada = f"federacao:{cs}"
+
     try:
         if conta in CONTAS_SEGREGADAS:
             ok, motivo = isolacao_conforme(conta)
@@ -1098,21 +1213,35 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
                 raise Falha(4, f"a conta {conta} não está conforme na última seg isolacao medir ({motivo})")
         filha = abre_sessao(cadeira, origem, slug, conta)
         lente = "" if sem_lente(decl) else monta_lente(decl, cadeira, chapeu, filha, origem, tarefa, variantes)
-        r = chama_modelo(decl, _sistema(decl, lente), numera(tarefa) if decl["modo"] == "varrer" else tarefa, imagens)
+        r = chama_modelo(decl, _sistema(decl, lente), numera(tarefa) if decl["modo"] == "varrer" else tarefa, imagens, ligacao=ligacao)
     except Falha as f:
         if filha:
             _encerra(filha["sessao_id"])
-        registra({"ts": _agora(), "agente": slug, "sujeito": sujeito, "em_nome_de": cadeira, "origem": origem,
-                  "conta": conta, "sessao_id": (filha or {}).get("sessao_id"), "exit": f.codigo, "motivo": f.msg})
+        reg_falha = {"ts": _agora(), "agente": slug, "sujeito": sujeito, "em_nome_de": cadeira, "origem": origem,
+                     "conta": conta, "sessao_id": (filha or {}).get("sessao_id"), "exit": f.codigo, "motivo": f.msg}
+        if decl["modelo"]["familia"] == "claude":
+            reg_falha["credencial"] = credencial_esperada
+            if f.codigo == 3 and f.msg in ("emissor", "troca", "credito"):
+                reg_falha["motivo"] = f.msg
+        registra(reg_falha)
+        pasta_limpar = decl.get("_pasta_isolada")
+        if pasta_limpar and pasta_limpar.exists():
+            shutil.rmtree(pasta_limpar, ignore_errors=True)
         return _erro(f.msg, f.codigo)
     _encerra(filha["sessao_id"])
     duracao = round(time.monotonic() - inicio, 1)
-    registra({"ts": _agora(), "agente": slug, "sujeito": sujeito, "em_nome_de": cadeira, "origem": origem,
+    reg_ok = {"ts": _agora(), "agente": slug, "sujeito": sujeito, "em_nome_de": cadeira, "origem": origem,
               "conta": conta, "sessao_id": filha["sessao_id"], "modelo": f"{decl['modelo']['familia']}:{decl['modelo']['versao']}",
               "uso": r["uso"], "segundos": duracao, "exit": 0,
               **({"variantes": marca_variantes(variantes)} if variantes else {}),
               **({"sem_lente": True} if sem_lente(decl) else {}),
-              **({"anexos": [a["bytes"] for a in imagens]} if imagens else {})})
+              **({"anexos": [a["bytes"] for a in imagens]} if imagens else {})}
+    if decl["modelo"]["familia"] == "claude":
+        reg_ok["credencial"] = r.get("credencial", "plano")
+    registra(reg_ok)
+    pasta_limpar = decl.get("_pasta_isolada")
+    if pasta_limpar and pasta_limpar.exists():
+        shutil.rmtree(pasta_limpar, ignore_errors=True)
     if r["aviso"]:
         print(f"aviso: {r['aviso']}", file=sys.stderr)
     print(f"agente {slug}: sessao {filha['sessao_id']} origem {origem} conta {conta} "
