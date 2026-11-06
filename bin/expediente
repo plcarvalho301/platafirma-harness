@@ -403,15 +403,43 @@ def _sem_acento(s: str) -> str:
                    if unicodedata.category(c) != "Mn").lower().strip().replace(" ", "-")
 
 
+def apelidos_de(cadeira: str) -> dict[str, str]:
+    """Apelido -> slug, do titulo de cada chapeu.md da cadeira: o que vem entre parenteses no
+    fim da primeira linha (`# Organizacao do conhecimento (corpus)`), varios por virgula."""
+    morada = os.environ.get("PF_ABERTURA_DIR", str(instancia() / "var" / "abertura-publicada"))
+    base = Path(morada) / "current" / "abertura" / cadeira
+    if not base.is_dir():
+        base = _REPO_REAL / "abertura" / cadeira
+    mapa: dict[str, str] = {}
+    for slug in chapeus_de(cadeira):
+        try:
+            with open(base / slug / "chapeu.md", encoding="utf-8") as f:
+                titulo = f.readline().strip()
+        except OSError:
+            continue
+        m = re.search(r"\(([^()]+)\)\s*$", titulo)
+        if not m:
+            continue
+        for apelido in m.group(1).split(","):
+            chave = _sem_acento(apelido)
+            if chave:
+                mapa.setdefault(chave, slug)
+    return mapa
+
+
 def resolve_chapeu(cadeira: str, dado: str) -> tuple[str, str | None, str | None]:
-    """(slug, aviso, erro). O dono nao decora slug: o nome exato passa; um pedaco que casa com
-    UM chapeu da cadeira vira o slug inteiro, com aviso (`harness` -> `engenharia-de-harness`);
-    pedaco que casa com mais de um recusa com as opcoes. Nada casou: segue como veio, e a
-    validacao de sempre recusa com a lista dos validos."""
+    """(slug, aviso, erro). O dono nao decora slug: o nome exato passa; o apelido declarado no
+    titulo do chapeu.md vira o slug, com aviso (`corpus` -> `organizacao-do-conhecimento`); um
+    pedaco que casa com UM chapeu da cadeira vira o slug inteiro, com aviso (`harness` ->
+    `engenharia-de-harness`); pedaco que casa com mais de um recusa com as opcoes. Nada casou:
+    segue como veio, e a validacao de sempre recusa com a lista dos validos."""
     validos = chapeus_de(cadeira)
     alvo = _sem_acento(dado)
     if not validos or alvo in validos:
         return (alvo if alvo in validos else dado), None, None
+    apelido = apelidos_de(cadeira).get(alvo)
+    if apelido:
+        return apelido, f"chapéu '{dado}' resolvido para '{apelido}'", None
     casam = [c for c in validos if alvo and alvo in c]
     if len(casam) == 1:
         return casam[0], f"chapéu '{dado}' resolvido para '{casam[0]}'", None
