@@ -278,9 +278,13 @@ def test_espera_vai_ao_servidor_e_nunca_passa_do_teto(servidor):
     assert alta.returncode == 2 and "o teto do servidor" in alta.stderr
 
 
-def test_json_devolve_o_job_inteiro(servidor):
+def test_json_devolve_o_resumo_versionado(servidor):
     r = servidor.rodar("--job", JOB, "--json")
-    assert r.returncode == 0 and json.loads(r.stdout)["id"] == JOB
+    assert r.returncode == 0
+    res = json.loads(r.stdout)
+    assert res["id"] == JOB and res["versao"] == 1
+    assert "etapas" not in res
+    assert res["por_etapa"]["triagem"] == {"concluido": 2}
 
 
 def test_job_que_o_servidor_nao_conhece_sai_1(servidor):
@@ -425,3 +429,92 @@ def test_conversor_que_nao_acorda_avisa_e_o_job_sai_assim_mesmo(servidor):
     assert r.returncode == 0, r.stderr
     assert "o conversor nao acordou (3)" in r.stderr and "acervo pipeline --lote <id>" in r.stderr
     assert f"job: {JOB}" in r.stdout and len(servidor.criacoes()) == 1
+
+
+# #4128: o mesmo job em todas as páginas; a união recupera toda exceção sem repetir.
+def test_excecoes_paginadas_e_contagem_global_sem_perder_detalhe(servidor):
+    servidor.job["etapas"] = [
+        {"id": str(i), "obra_id": f"obra-{i:03}", "etapa": "espelhar",
+         "estado": "falhou", "erro": f"erro {i}", "detalhe": {"causa": i}}
+        for i in range(47)]
+    vistos = []
+    for parte, quantidade in [(1, 20), (2, 20), (3, 7)]:
+        r = servidor.rodar("--job", JOB, "--json", "--parte", str(parte))
+        assert r.returncode == 0, r.stderr
+        res = json.loads(r.stdout)
+        assert res["obras"] == 47
+        assert res["por_etapa"] == {"espelhar": {"falhou": 47}}
+        pag = res["excecoes"]
+        assert pag["total"] == 47 and pag["partes"] == 3
+        assert pag["proxima_parte"] == (parte + 1 if parte < 3 else None)
+        assert len(pag["itens"]) == quantidade
+        vistos.extend(pag["itens"])
+    assert vistos == servidor.job["etapas"]
+
+def test_tabela_preserva_o_contrato_integral(servidor):
+    r = servidor.rodar("--job", JOB, "--json", "--tabela")
+    assert r.returncode == 0 and json.loads(r.stdout) == servidor.job
+
+def test_estado_desconhecido_erro_e_detalhe_nao_somem(servidor):
+    servidor.job["etapas"] = [
+        {"id": str(i), "obra_id": str(i), "etapa": "nova",
+         "estado": estado, **extra}
+        for i, (estado, extra) in enumerate([
+            ("inedito", {}), ("concluido", {"erro": "falha tardia"}),
+            ("concluido", {"detalhe": {"aviso": "nao promover"}}),
+            ("pendente", {}), ("executando", {}), ("concluido", {})])]
+    r = servidor.rodar("--job", JOB, "--json")
+    res = json.loads(r.stdout)
+    assert res["etapas_total"] == 6 and res["excecoes"]["total"] == 3
+    assert {e["id"] for e in res["excecoes"]["itens"]} == {"0", "1", "2"}
+    texto = servidor.rodar("--job", JOB).stdout
+    assert "nova:" in texto and "inedito 1" in texto
+
+def test_pagina_inexistente_e_combinacao_ambigua_recusam(servidor):
+    for flags in [("--parte", "0"), ("--parte", "2"), ("--parte", "2", "--tabela")]:
+        r = servidor.rodar("--job", JOB, *flags)
+        assert r.returncode == 2, (flags, r.stdout, r.stderr)
+
+def test_job_grande_sem_excecao_tem_saida_constante(servidor):
+    servidor.job["etapas"] = [
+        {"id": str(i), "obra_id": str(i), "etapa": "triagem", "estado": "concluido"}
+        for i in range(10000)]
+    r = servidor.rodar("--job", JOB, "--json")
+    assert r.returncode == 0
+    res = json.loads(r.stdout)
+    assert res["obras"] == 10000 and res["excecoes"]["total"] == 0
+    assert res["por_etapa"] == {"triagem": {"concluido": 10000}}
+    assert len(r.stdout.encode()) < 1500
+
+
+def test_detalhe_de_sucesso_regular_nao_vira_excecao(servidor):
+    casos = [
+        ("espelhar", {"metodo": "perfil", "trechos": 5, "servivel": True,
+                      "ja_selada": False, "julgamento": "servível", "impressao_id": "i"}),
+        ("duplicata", {"pares": [], "sem_espelho": False, "duplicata_provavel": False}),
+        ("classificar", {"especie": "livro", "conceitos": ["c"], "nenhum_cobre": False, "versao_ficha": 2}),
+        ("indexar", {"indexada": True, "lote_motor": "l", "gate_aprovado": True}),
+        ("promocao", {"promovida": True, "motivo": None}),
+    ]
+    servidor.job["etapas"] = [
+        {"id": str(i), "obra_id": "o1", "etapa": nome, "estado": "concluido", "detalhe": d}
+        for i, (nome, d) in enumerate(casos)]
+    r = servidor.rodar("--job", JOB, "--json")
+    assert json.loads(r.stdout)["excecoes"]["total"] == 0
+    for e in servidor.job["etapas"]:
+        e["detalhe"]["aviso_novo"] = "visivel"
+    r = servidor.rodar("--job", JOB, "--json")
+    assert json.loads(r.stdout)["excecoes"]["total"] == 5
+
+def test_medida_compara_mesmo_job_sem_fingir_uso_do_modelo(servidor):
+    servidor.job["etapas"] = [
+        {"id": str(i), "obra_id": str(i), "etapa": "triagem", "estado": "concluido"}
+        for i in range(200)]
+    r = servidor.rodar("--job", JOB, "--medida")
+    assert r.returncode == 0, r.stderr
+    res = json.loads(r.stdout)
+    assert res["job"] == JOB and res["obras"] == 200
+    assert "não medidos" in res["escopo"]
+    antes, depois = res["series"]["antes_json_integral"], res["series"]["depois_json"]
+    assert depois["media"] < antes["media"] / 10
+    assert depois["p90"] == depois["media"] and depois["metodo"]

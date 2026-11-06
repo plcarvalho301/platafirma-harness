@@ -41,10 +41,13 @@ PRAZO_INGERIR_S = 500
 # ligar o conversor espera ele responder; o acordar tem o teto dele, e este é a folga da chamada
 PRAZO_CONVERSOR_S = 240
 
-USO = """uso:
+USO = """Resumo por etapa/estado e excecoes paginadas (20 por pagina); --json usa contrato versao 1.
+--tabela devolve o job integral no formato JSON anterior; --parte escolhe a pagina de excecoes.
+--medida compara tokens do retorno antigo/novo no mesmo job; não mede uso do modelo.
+uso:
   acervo pipeline <pasta> [--apply] [--espera <s>] [--json]
   acervo pipeline --lote <id> [--espera <s>] [--json]
-  acervo pipeline --job <id> [--espera <s>] [--json]
+  acervo pipeline --job <id> [--espera <s>] [--json] [--parte <n>] [--tabela]
   acervo pipeline <pasta>|--lote <id>|--job <id> --liberar <sha256 ou obra> [...] [--json]
 """
 
@@ -79,8 +82,18 @@ def _lote_do_json(saida: str) -> dict | None:
     return None
 
 
-def _mostrar_job(job: dict, como_json: bool) -> None:
-    print(json.dumps(job, ensure_ascii=False, indent=2) if como_json else pc.resumo_do_job(job))
+def _mostrar_job(job: dict, opcoes: argparse.Namespace) -> None:
+    try:
+        if opcoes.medida:
+            print(json.dumps(pc.medida_do_retorno(job), ensure_ascii=False, indent=2))
+        elif opcoes.tabela:
+            print(json.dumps(job, ensure_ascii=False, indent=2))
+        elif opcoes.como_json:
+            print(json.dumps(pc.status_compacto(job, opcoes.parte), ensure_ascii=False, indent=2))
+        else:
+            print(pc.resumo_do_job(job, opcoes.parte))
+    except ValueError as e:
+        morre(f"acervo pipeline: {e}", 2)
 
 
 def _acordar_conversor() -> None:
@@ -98,17 +111,17 @@ def _acordar_conversor() -> None:
                          "a causa, e `acervo pipeline --lote <id>` retoma\n")
 
 
-def _job_do_lote(pasta: str, lote_id: str, espera: int, como_json: bool) -> int:
+def _job_do_lote(pasta: str, lote_id: str, opcoes: argparse.Namespace) -> int:
     _acordar_conversor()
     try:
         job = pc.criar_job(pasta, lote_id)
-        if espera:
-            job = pc.ver_job(job["id"], espera)
+        if opcoes.espera:
+            job = pc.ver_job(job["id"], opcoes.espera)
         elif "etapas" not in job:
             job = pc.ver_job(job["id"])
     except pc.Falha as e:
         morre(f"acervo pipeline: {e.mensagem}", e.codigo)
-    _mostrar_job(job, como_json)
+    _mostrar_job(job, opcoes)
     return 0
 
 
@@ -143,6 +156,9 @@ def main(argv: list[str]) -> int:
     p.add_argument("--liberar", nargs="+", metavar="ITEM")
     p.add_argument("--lote")
     p.add_argument("--job")
+    p.add_argument("--tabela", action="store_true")
+    p.add_argument("--medida", action="store_true")
+    p.add_argument("--parte", type=int, default=1)
     p.add_argument("--espera", type=int, default=0)
     p.add_argument("--json", dest="como_json", action="store_true")
     p.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true")
@@ -153,6 +169,10 @@ def main(argv: list[str]) -> int:
         return 2
     if desconhecidos:
         morre(f"acervo pipeline: argumento que o ato nao le: {' '.join(desconhecidos)}\n{USO}", 2)
+    if args.parte < 1:
+        morre("acervo pipeline: --parte deve ser positiva", 2)
+    if args.tabela and args.parte != 1:
+        morre("acervo pipeline: --tabela nao combina com --parte", 2)
     if args.espera < 0 or args.espera > pc.TETO_ESPERA_S:
         morre(f"acervo pipeline: --espera vai de 0 a {pc.TETO_ESPERA_S} s (o teto do servidor)", 2)
     fontes = [k for k, v in (("<pasta>", args.pasta), ("--lote", args.lote), ("--job", args.job)) if v]
@@ -171,11 +191,11 @@ def main(argv: list[str]) -> int:
             job = pc.ver_job(args.job, args.espera)
         except pc.Falha as e:
             morre(f"acervo pipeline: {e.mensagem}", e.codigo)
-        _mostrar_job(job, args.como_json)
+        _mostrar_job(job, args)
         return 0
 
     if args.lote:
-        return _job_do_lote(f"lote:{args.lote}", args.lote, args.espera, args.como_json)
+        return _job_do_lote(f"lote:{args.lote}", args.lote, args)
 
     pasta = args.pasta
     if not (os.path.isdir(pasta) or os.path.isfile(pasta)):
@@ -210,7 +230,7 @@ def main(argv: list[str]) -> int:
     if r.stderr.strip():
         sys.stderr.write(r.stderr)
     sys.stderr.write(f"lote: {lote['id']} · {len(com_obra)} obra(s) · ingerir saiu {r.returncode}\n")
-    return _job_do_lote(pasta, lote["id"], args.espera, args.como_json)
+    return _job_do_lote(pasta, lote["id"], args)
 
 
 if __name__ == "__main__":
