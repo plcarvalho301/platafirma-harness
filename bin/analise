@@ -1,0 +1,28 @@
+#!/opt/platafirma/current/venv/harness/bin/python
+# analise — prepara bases e monta resultados por receita registrada
+# capacidade: analise-de-dados
+# dono: dados
+# classe: C
+# use para: preparar uma base analítica, montar um resultado ou refazer uma execução
+# atos: preparar (escrita, operacao), montar (escrita, operacao), refazer (leitura, operacao), ler (leitura, operacao), listar (leitura, operacao), descartar (escrita, operacao), travar (escrita, operacao)
+# forma: texto
+# cauda: sim
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+
+from analise.atos import main  # noqa: E402
+
+if sys.argv[1:] == ["--coletar"]:
+    from analise.coleta import main as coletar
+
+    sys.exit(coletar())
+if "--_worker" in sys.argv[1:]:
+    sys.argv.remove("--_worker")
+    sys.exit(main())
+if len(sys.argv) > 1 and sys.argv[1] in {"preparar", "montar", "refazer"}:
+    from analise.processo import despachar
+
+    sys.exit(despachar(sys.argv[1:]))
+sys.exit(main())

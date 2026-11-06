@@ -1,0 +1,14 @@
+{
+  "populacao-de-turnos": {
+    "tipo": "preparacao",
+    "repositorio": "platafirma-conhecimento",
+    "caminho": "analise/populacao-de-turnos",
+    "versao": "8ae0249"
+  },
+  "contagem-por-fonte": {
+    "tipo": "analise",
+    "repositorio": "platafirma-conhecimento",
+    "caminho": "analise/contagem-por-fonte",
+    "versao": "8ae0249"
+  }
+}

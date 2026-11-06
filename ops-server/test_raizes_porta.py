@@ -46,12 +46,10 @@ import server as s  # noqa: E402
 if _BANCADA_ANTES is not None:
     os.environ["PLATAFIRMA_BANCADA"] = _BANCADA_ANTES
 
-
 @pytest.fixture
 def sem_bancada(monkeypatch, tmp_path):
     monkeypatch.delenv("PLATAFIRMA_BANCADA", raising=False)
     monkeypatch.setenv("PLATAFIRMA_ARQUIVO_BANCADA", str(tmp_path / "nao-declarada"))
-
 
 @pytest.fixture
 def bancada(monkeypatch, tmp_path):
@@ -61,12 +59,10 @@ def bancada(monkeypatch, tmp_path):
     monkeypatch.setenv("PLATAFIRMA_BANCADA", str(b))
     return b
 
-
 @pytest.fixture
 def sem_pep():
     with patch.object(s, "_autoriza", return_value=None), patch.object(s, "_audit"):
         yield
-
 
 def test_nenhuma_raiz_resolve_para_a_casa_da_conta():
     """Toda raiz de producao da porta deriva de PF_RELEASE_RAIZ ou PLATAFIRMA_INSTANCIA."""
@@ -78,15 +74,12 @@ def test_nenhuma_raiz_resolve_para_a_casa_da_conta():
     assert s.BIN_VERBOS == rel / "current/harness/bin"
     assert s.PDP_DIR == rel / "current/politica-acesso"
 
-
 def test_arranque_sem_bancada_nao_cria_nada():
     assert not (_TMP / "sem-declaracao").exists()
     assert not any(p.name == "bancada" for p in _TMP.iterdir())
 
-
 def test_path_do_subprocesso_traz_o_bin_da_release():
     assert s._env_subprocesso()["PATH"].split(":")[0] == str(s.BIN_VERBOS)
-
 
 def test_run_command_sem_cwd_roda_na_casa(sem_bancada, sem_pep):
     with patch.object(s, "PF_RUN_SO_VERBO", False), patch.object(s, "PF_GATE", False):
@@ -94,18 +87,15 @@ def test_run_command_sem_cwd_roda_na_casa(sem_bancada, sem_pep):
     assert r["exit_code"] == 0
     assert r["stdout"]["texto"].strip() == str(Path(os.path.expanduser("~")).resolve())
 
-
 def test_run_command_cwd_relativo_sem_bancada_recusa(sem_bancada, sem_pep):
     with patch.object(s, "PF_RUN_SO_VERBO", False), patch.object(s, "PF_GATE", False):
         r = asyncio.run(s.malote(command="pwd", cwd="platafirma-core"))
     assert r["recusado"] and "bancada" in r["motivo"]
 
-
 def test_run_command_cwd_relativo_e_na_bancada(bancada, sem_pep):
     with patch.object(s, "PF_RUN_SO_VERBO", False), patch.object(s, "PF_GATE", False):
         r = asyncio.run(s.malote(command="pwd", cwd="platafirma-harness"))
     assert r["stdout"]["texto"].strip() == str((bancada / "platafirma-harness").resolve())
-
 
 def test_ler_arquivo_relativo_sem_bancada_recusa_e_absoluto_le(sem_bancada, sem_pep, monkeypatch):
     r = s.ler_arquivo(caminho="platafirma-harness/ops-server/requirements.txt")
@@ -114,7 +104,6 @@ def test_ler_arquivo_relativo_sem_bancada_recusa_e_absoluto_le(sem_bancada, sem_
     monkeypatch.setattr(s, "_MORADAS_LEITURA", (*s._MORADAS_LEITURA, str(OPS_SERVER_DIR)))
     r = s.ler_arquivo(caminho=str(OPS_SERVER_DIR / "requirements.txt"))
     assert "mcp==" in r["conteudo"]
-
 
 def test_ler_arquivo_nega_segredos_de_qualquer_instancia(tmp_path, monkeypatch, sem_pep):
     monkeypatch.setattr(s, "_RAIZES_DE_INSTANCIA", (Path("/srv/platafirma"), tmp_path))
@@ -125,7 +114,6 @@ def test_ler_arquivo_nega_segredos_de_qualquer_instancia(tmp_path, monkeypatch, 
     assert r.get("recusado") and r["motivo"].startswith("segredo")
     assert s._sob_segredos_de_instancia(Path("/srv/platafirma/casa/segredos/x/Y"))
 
-
 @pytest.fixture
 def fita(monkeypatch):
     """Declara a fita da chamada: a porta resolve o sessao_id para esta ordem_id."""
@@ -134,7 +122,6 @@ def fita(monkeypatch):
             "sessao_id": "sid-teste", "ordem_id": ordem, "cadeira": "engenharia",
             "sujeito": "", "origem_sessao": ""})
     return _declara
-
 
 def test_write_file_rascunho_sem_sessao_id_recusa(sem_bancada, sem_pep):
     """#3280 (F4 do #3277): sem sessao_id a ordem_id resolve a \"-\", e o \"-\" nao pode
@@ -145,7 +132,6 @@ def test_write_file_rascunho_sem_sessao_id_recusa(sem_bancada, sem_pep):
     assert r.get("recusado") and "fita declarada" in r["motivo"], r
     assert not (s.TMP_FITA / "o-SEM-SESSAO-x").exists()
 
-
 def test_write_file_rascunho_com_fita_so_na_propria_subpasta(sem_bancada, sem_pep, fita):
     fita("o-minha")
     ok = s.write_file(path=str(s.TMP_FITA / "o-minha" / "probe.txt"), content="x\n", sessao_id="sid-teste")
@@ -153,14 +139,12 @@ def test_write_file_rascunho_com_fita_so_na_propria_subpasta(sem_bancada, sem_pe
     alheia = s.write_file(path=str(s.TMP_FITA / "o-outra" / "probe.txt"), content="x\n", sessao_id="sid-teste")
     assert alheia.get("recusado") and "nao e a pasta desta fita" in alheia["motivo"], alheia
 
-
 def test_write_file_sem_bancada_so_rascunho(sem_bancada, sem_pep, fita):
     fita("o-teste")
     ok = s.write_file(path=str(s.TMP_FITA / "o-teste" / "nota.md"), content="x\n", sessao_id="sid-teste")
     assert ok.get("ok"), ok
     r = s.write_file(path="platafirma-core/README.md", content="x\n")
     assert r.get("recusado") and "bancada" in r["motivo"]
-
 
 def test_write_file_na_bancada_worktree_e_bin(bancada, sem_pep):
     r = s.write_file(path="wt/platafirma-core/fabrica/nota.md", content="x\n")
@@ -173,7 +157,6 @@ def test_write_file_na_bancada_worktree_e_bin(bancada, sem_pep):
     assert os.access(bancada / "platafirma-harness/bin/verbo", os.X_OK)
     fora = s.write_file(path="outro-lugar/x.md", content="x\n")
     assert fora.get("recusado") and "fora de morada" in fora["motivo"]
-
 
 def test_write_file_hook_no_hooks_do_harness_sem_extensao_com_shebang(bancada, sem_pep):
     """#3376: hooks/<nome> do harness e morada de hook como bin/ e de verbo: sem extensao,
@@ -194,7 +177,6 @@ def test_write_file_hook_no_hooks_do_harness_sem_extensao_com_shebang(bancada, s
     scripts = s.write_file(path="platafirma-harness/scripts/x", content="#!/bin/sh\nexit 0\n")
     assert scripts.get("recusado") and "tipo" in scripts["motivo"], scripts
 
-
 def test_write_file_verbo_no_bin_da_bancada_por_cadeira_e_card(bancada, sem_pep):
     """card:3149 passo 3: a bancada e wt/platafirma-harness/<cadeira>/<card>/; o bin/ dela e
     morada de verbo como o do worktree plano (medido em 26/09: a porta recusava)."""
@@ -203,7 +185,6 @@ def test_write_file_verbo_no_bin_da_bancada_por_cadeira_e_card(bancada, sem_pep)
     assert r.get("ok"), r
     fora_do_bin = s.write_file(path="wt/platafirma-harness/ti/3150-x/deploy/unidade", content="x\n")
     assert fora_do_bin.get("recusado") and "tipo" in fora_do_bin["motivo"]
-
 
 def test_write_file_nao_recria_bancada_nem_worktree(monkeypatch, tmp_path, sem_pep):
     """Bancada declarada e apagada (ou worktree nunca aberto): recusa, e nada nasce."""
@@ -221,7 +202,6 @@ def test_write_file_nao_recria_bancada_nem_worktree(monkeypatch, tmp_path, sem_p
     assert r.get("recusado") and "repo abrir" in r["motivo"], r
     assert not (viva / "wt" / "platafirma-core" / "outra-cadeira").exists()
 
-
 def test_write_file_aceita_o_suporte_platafirma_casa(bancada, sem_pep):
     """arq:0115 §1.2: platafirma-casa e o suporte do documento de casa — worktree por cadeira
     (wt/platafirma-casa/<cadeira>) e clone (<bancada>/platafirma-casa) sao morada de escrita."""
@@ -238,7 +218,6 @@ def test_write_file_aceita_o_suporte_platafirma_casa(bancada, sem_pep):
     # worktree de cadeira que nao foi aberto segue recusado: write_file nao cria bancada
     nunca = s.write_file(path="wt/platafirma-casa/outra/x.md", content="x\n")
     assert nunca.get("recusado") and "repo abrir" in nunca["motivo"], nunca
-
 
 def test_write_file_aceita_o_rastreador(bancada, sem_pep):
     """#3132: platafirma-rastreador e morada de escrita como os demais clones da stack."""
@@ -266,7 +245,6 @@ def test_write_file_aceita_a_casa_espelho(bancada, sem_pep):
     assert clone.get("ok"), clone
     nunca = s.write_file(path="wt/platafirma-casa-espelho/outra/x.md", content="x\n")
     assert nunca.get("recusado") and "repo abrir" in nunca["motivo"], nunca
-
 
 def test_write_file_verbo_e_hook_do_harness_dentro_do_espelho(bancada, sem_pep):
     """#4087: platafirma-casa-espelho/outros_repos/harness/ e a copia do harness no espelho;
@@ -297,7 +275,6 @@ def test_write_file_verbo_e_hook_do_harness_dentro_do_espelho(bancada, sem_pep):
         r = s.write_file(path=fora, content="#!/bin/sh\nexit 0\n")
         assert r.get("recusado"), (fora, r)
 
-
 def test_write_file_aceita_php_e_mjs(bancada, sem_pep):
     """#3133: skin da wiki (.php) e provas do rastreador (.mjs) sao texto plano."""
     for nome in ("SkinPlataFirma.php", "2751_hierarquia_do_cartao.mjs"):
@@ -313,7 +290,6 @@ def test_write_file_aceita_fonte_de_diagrama(bancada, sem_pep):
     d2 = s.write_file(path="wt/platafirma-core/fabrica/x.d2", content="a -> b\n")
     assert d2.get("ok"), d2
 
-
 def test_write_file_aceita_texto_de_build_por_nome(bancada, sem_pep):
     """Dockerfile, .dockerignore, VERDES (baseline do pre-push) e .conferir-repo (excecao do
     lint de repositorio, #4114) pelo nome; conf do nginx pela extensao .conf."""
@@ -323,7 +299,6 @@ def test_write_file_aceita_texto_de_build_por_nome(bancada, sem_pep):
     # o nome casa inteiro: arquivo sem extensao qualquer segue recusado
     outro = s.write_file(path="wt/platafirma-core/fabrica/site/Makefile", content="x\n")
     assert outro.get("recusado") and "Dockerfile" in outro["motivo"], outro
-
 
 def test_write_file_aceita_unit_systemd(bancada, sem_pep):
     """#2856 linha 160 (card #3252): unit systemd nova (.service, .timer, .path, .socket) e
@@ -337,7 +312,6 @@ def test_write_file_aceita_unit_systemd(bancada, sem_pep):
     # a lista cresceu so nessas quatro: outra extensao de unit segue recusada
     mount = s.write_file(path="wt/platafirma-core/fabrica/deploy/x.mount", content="x\n")
     assert mount.get("recusado") and "tipo" in mount["motivo"], mount
-
 
 def test_write_file_aceita_tsv(bancada, sem_pep):
     """#3477: tabela TSV (platafirma-core, deploy/segredos/mapa.tsv) e texto plano; sem
@@ -353,7 +327,6 @@ def test_write_file_aceita_tsv(bancada, sem_pep):
         r = s.write_file(path=f"wt/platafirma-core/fabrica/deploy/{nome}", content="x\n")
         assert r.get("recusado") and "tipo" in r["motivo"], (nome, r)
 
-
 def test_write_file_aceita_turtle(bancada, sem_pep):
     """#2856 linha 320 (card #3755): a shape SHACL e o grafo de nucleo da raiz sao Turtle,
     texto plano; sem `.ttl` na lista a estrutura da entidade nao tinha como ser escrita."""
@@ -365,7 +338,6 @@ def test_write_file_aceita_turtle(bancada, sem_pep):
     for nome in ("nucleo.owl", "nucleo.rdf", "nucleo.nt"):
         r = s.write_file(path=f"wt/platafirma-core/fabrica/ontologia/{nome}", content="x\n")
         assert r.get("recusado") and "tipo" in r["motivo"], (nome, r)
-
 
 def test_write_file_aceita_jsonl(bancada, sem_pep):
     """#3909 (peca 8 da #3506): a bateria de avaliacao e JSON Lines, texto plano; sem
@@ -379,7 +351,6 @@ def test_write_file_aceita_jsonl(bancada, sem_pep):
         r = s.write_file(path=f"wt/platafirma-core/fabrica/avaliacao/{nome}", content="x\n")
         assert r.get("recusado") and "tipo" in r["motivo"], (nome, r)
 
-
 def test_write_file_aceita_dockerfile_com_sufixo(bancada, sem_pep):
     """#2856 linha 40: Dockerfile.<sufixo> (Dockerfile.gpu, Dockerfile.dev) e o mesmo texto
     de build do Dockerfile; o ponto exige sufixo, e outro nome segue recusado."""
@@ -389,7 +360,6 @@ def test_write_file_aceita_dockerfile_com_sufixo(bancada, sem_pep):
     for nome in ("Dockerfile.", "Dockerfilex", "dockerfile.gpu", "Makefile.gpu"):
         r = s.write_file(path=f"wt/platafirma-core/fabrica/site/{nome}", content="x\n")
         assert r.get("recusado") and "tipo" in r["motivo"], (nome, r)
-
 
 def test_write_file_aceita_codigo_de_front_jsx_ts_tsx(bancada, sem_pep):
     """#2856 linhas 237 e 240: componente JSX/TSX e TypeScript sao texto plano que o build de
@@ -402,7 +372,6 @@ def test_write_file_aceita_codigo_de_front_jsx_ts_tsx(bancada, sem_pep):
         r = s.write_file(path=f"wt/platafirma-core/fabrica/front/{nome}", content="x\n")
         assert r.get("recusado") and "tipo" in r["motivo"], (nome, r)
 
-
 def test_write_file_aceita_gitignore_e_operacao_e_recusa_segredo_por_nome(bancada, sem_pep):
     """#2856 linhas 173 e 195: lista nominal, nunca regra de dotfile: `.env` e afins seguem fora."""
     for nome in (".gitignore", ".operacao"):
@@ -411,7 +380,6 @@ def test_write_file_aceita_gitignore_e_operacao_e_recusa_segredo_por_nome(bancad
     for nome in (".env", ".npmrc", ".netrc"):
         r = s.write_file(path=f"wt/platafirma-core/fabrica/docs/{nome}", content="x\n")
         assert r.get("recusado"), (nome, r)
-
 
 def test_write_file_trecho_de_varias_linhas_casa_como_texto(bancada, sem_pep):
     """#2856 linhas 4, 193 e 217: o `antes` com parenteses, colchetes e quebra de linha casa como
@@ -443,15 +411,28 @@ def test_write_file_trecho_de_varias_linhas_casa_como_texto(bancada, sem_pep):
     dois = s.write_file(path=caminho, trecho={"antes": "k (1)\nm", "depois": "x"})
     assert dois.get("recusado") and "2 vez" in dois["motivo"], dois
 
-
 def test_write_file_nega_release_e_log(bancada, sem_pep):
     rel = s.write_file(path=str(s.BIN_VERBOS / "x.md"), content="x\n")
     assert rel.get("recusado") and "release" in rel["motivo"]
     log = s.write_file(path=str(s.LOG_DIR / "x.txt"), content="x\n")
     assert log.get("recusado") and "log" in log["motivo"]
 
-
 def test_derrame_devolve_caminho_absoluto(monkeypatch, tmp_path):
     monkeypatch.setattr(poda, "DERRAME", tmp_path / "retornos")
     caminho = poda.derrama("sessao-x", "g1.txt", "inteiro")
     assert Path(caminho).is_absolute() and Path(caminho).read_text() == "inteiro"
+
+
+def test_write_file_aceita_uv_lock_sem_abrir_outros_locks(bancada,sem_pep):
+    """O lock da receita precisa entrar no espelho pelo mesmo escritor da porta."""
+    esp=bancada/"wt/platafirma-casa-espelho/engenharia/main"
+    esp.mkdir(parents=True)
+    for base in ("wt/platafirma-core/fabrica/analise",
+                 "wt/platafirma-casa-espelho/engenharia/main/outros_repos/conhecimento/analise/exemplo"):
+        ok=s.write_file(path=base+"/uv.lock",content="version = 1\n")
+        assert ok.get("ok"),ok
+        for nome in ("qualquer.lock","uv.lock.exe"):
+            nao=s.write_file(path=base+"/"+nome,content="x\n")
+            assert nao.get("recusado") and "tipo" in nao["motivo"],nao
+    segredo=s.write_file(path=str(s.INSTANCIA/"segredos/rag/uv.lock"),content="x\n")
+    assert segredo.get("recusado"),segredo

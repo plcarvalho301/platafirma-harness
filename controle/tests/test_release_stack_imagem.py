@@ -427,3 +427,21 @@ def test_a_segunda_rodada_de_imagem_espera_a_primeira(raio):
     assert "espera a rodada de imagem em curso" in ob, ob
     assert "espera a rodada de imagem em curso" not in oa
     assert espera >= 1.0, espera                       # a segunda so rodou depois da primeira soltar a trava
+
+
+@pytest.mark.parametrize("imagem,destino,recria",[
+    ("postgres:16","/docker-entrypoint-initdb.d",False),
+    ("pgvector/pgvector:pg16","/docker-entrypoint-initdb.d",False),
+    ("postgres:16","/etc/postgresql",True),
+    ("firma/servico:1","/docker-entrypoint-initdb.d",True),
+])
+def test_sql_de_inicializacao_pg_nao_reinicia_base_viva(mundo,imagem,destino,recria):
+    """c3 muda somente o bind; inicialização de PG não participa do runtime."""
+    mundo["modelo"].write_text(json.dumps({"services":{"banco":{
+        "image":imagem,"volumes":[{"type":"bind","source":"${ARVORE}/app","target":destino}]}}}))
+    mundo["pontos"].mkdir()
+    (mundo["pontos"]/"x.atual").write_text(mundo["c2"]+"\n")
+    r=_roda(mundo,"promover","x",mundo["c3"])
+    assert r.returncode==0,r.stderr
+    assert bool(_chamadas(mundo,"up")) is recria
+    assert ("inalterada" in r.stdout) is not recria

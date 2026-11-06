@@ -1,0 +1,13 @@
+# S4130: prova pura no pequeno; banco descartável e systemd sob demanda da rodada.
+test_receita.py | bin/analise lib/analise/**
+test_refazer.py | bin/analise lib/analise/**
+test_migracao.py | bin/analise lib/analise/** ops-server/server.py | degrau: rodada
+test_extrator.py | bin/analise lib/analise/** ops-server/server.py | degrau: rodada
+test_executor.py | bin/analise lib/analise/** ops-server/server.py | degrau: rodada
+test_publicacao.py | bin/analise lib/analise/** ops-server/server.py | degrau: rodada
+test_projecao.py | bin/analise lib/analise/** | degrau: rodada
+test_coleta.py | bin/analise lib/analise/** ops-server/server.py | degrau: rodada
+test_travar.py | bin/analise lib/analise/** ops-server/server.py | degrau: rodada
+test_aceite.py | bin/analise lib/analise/** ops-server/server.py | degrau: rodada
+test_atos.py | bin/analise lib/analise/** ops-server/server.py | degrau: rodada
+test_processo.py | bin/analise lib/analise/** ops-server/server.py | degrau: rodada
