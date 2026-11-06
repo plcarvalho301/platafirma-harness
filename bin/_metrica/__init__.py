@@ -91,6 +91,9 @@ def _linha(rotulo: str, ident: str, stats: dict, n: int | None, por_obra: int | 
 
 
 def tokens_main(argv: list[str]) -> int:
+    if any(a.split("=")[0] in {"--fita", "--comparar-fita", "--tarefa"} for a in argv):
+        from .uso_modelo import main as uso_main
+        return uso_main(argv)
     parser = argparse.ArgumentParser(prog="metrica tokens", add_help=False)
     parser.add_argument("--ordem", default="")
     parser.add_argument("--job", default="")
@@ -106,9 +109,13 @@ def tokens_main(argv: list[str]) -> int:
     args, _ = parser.parse_known_args(argv)
 
     if args.ajuda:
-        print("uso: metrica tokens [--ordem <ordem_id>] [--job <job_id>] [--ato <ato>] [--dia <data> | --desde <data> --ate <data>]\n"
-              "                    [--obras-ordem <n>] [--obras-job <n>] [--json]\n"
-              "o giro não guarda a obra: sem --obras-ordem e --obras-job o por obra só sai quando o evento a traz")
+        print("""uso: metrica tokens [--ordem <ordem_id>] [--job <job_id>] [--ato <ato>]
+                    [--dia <data> | --desde <data> --ate <data>]
+                    [--obras-ordem <n>] [--obras-job <n>] [--json]
+uso real do modelo: metrica tokens --fita <UUID-Code|cadeira>
+                    [--comparar-fita <UUID-Code>] [--tarefa <rotulo>] [--json]
+Cada fita deve conter só a tarefa comparada; média e p90 vêm do usage, com cache separado.
+Sem --fita, o giro mede apenas o retorno da porta; o por obra exige o número de obras.""")
         return 0
 
     hoje = datetime.now().astimezone().date().isoformat()
