@@ -92,6 +92,10 @@ class Trabalho:
     def guarda_bruto(self, n: int, dados: bytes, ext: str = "html") -> Path:
         p = self.bruto / f"{n}.{ext}"
         p.write_bytes(dados)
+        try:
+            p.chmod(0o644)
+        except OSError:
+            pass
         return p
 
     def guarda_derivado(self, n: int, texto: str, ext: str) -> Path:
