@@ -24,6 +24,7 @@ LOCAIS_FORA_DO_DIRETORIO = {"hash_servido", "streams", "identidade", "pdp", "pep
                             "oplog",       # lib/oplog.py (card #3344), so biblioteca padrao
                             "registro_porta",  # lib/registro_porta.py (card #4117); o pyyaml dele ja esta declarado
                             "tokenizador",     # lib/tokenizador.py (card #4120)
+                            "analise",         # lib/analise: stdlib; consulta no venv harness (#4130)
                             "reidratar"}  # bin/_sessao/reidratar.py (card #3145, Onda 1 Frente E)
 
 
