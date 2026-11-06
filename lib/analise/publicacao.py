@@ -141,6 +141,36 @@ class Catalogo:
         base: dict | None = None,
         antes_de_pronto: Callable[[], None] | None = None,
     ) -> str:
+        from .manifesto import fase
+
+        # O estado pronto só fica visível quando as medidas finais também estão
+        # nos dois catálogos. A transação interna é um savepoint desta.
+        with self.conn.transaction():
+            with fase(manifesto, "publicar") as medida:
+                objeto = self._publicar(
+                    id, receita, slug, saida, manifesto, base, antes_de_pronto
+                )
+                medida["bytes"] = sum(
+                    saida.get("bytes", 0) for saida in manifesto["saidas"].values()
+                )
+            tabela = "base" if base is None else "resultado"
+            self.conn.execute(
+                "UPDATE analise." + tabela + " SET manifesto=%s::jsonb WHERE id=%s AND sujeito=%s",
+                (json_canonico(manifesto), objeto, self.sujeito),
+            )
+            self.concluir(id, "pronta", manifesto)
+        return objeto
+
+    def _publicar(
+        self,
+        id: str,
+        receita: dict,
+        slug: str,
+        saida: Path,
+        manifesto: dict,
+        base: dict | None = None,
+        antes_de_pronto: Callable[[], None] | None = None,
+    ) -> str:
         from psycopg import sql
 
         objeto = novo("bs" if receita["tipo"] == "preparacao" else "rs")

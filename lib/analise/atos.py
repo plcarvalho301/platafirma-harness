@@ -311,11 +311,7 @@ class MotorAnalise:
                         "causa": camada,
                         "expires_at": manifesto["expires_at"],
                     }
-                with fase(manifesto, "publicar"):
-                    objeto = catalogo.publicar(ex, r, slug, saida, manifesto, base)
-                # Publicação grava as medidas finais da fase na mesma linha da execução.
-                # Os catálogos já contêm as tabelas e o estado pronto atomicamente.
-                catalogo.concluir(ex, "pronta", manifesto)
+                objeto = catalogo.publicar(ex, r, slug, saida, manifesto, base)
                 return 0, {
                     "execucao_id": ex,
                     "base_id": objeto if not base else base_id,
