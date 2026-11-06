@@ -38,12 +38,12 @@ c="$(jq -r --arg f platafirma-conhecimento "$filtro" "$REG_VENVS" | sort | tr '\
 # harness-controle e recuperacao entraram com arq:0116 (uma subarvore, uma chave); politica-acesso
 # entrou quando a matriz sujeito x fonte passou a barrar no portao (10/10/2026); claude-code entrou
 # quando o CLI do Claude Code passou a vir de trava da release (#2856 linha 248, 11/10/2026)
-[ "$h" = "acervo borda claude-code harness harness-controle ops politica-acesso recuperacao " ] \
-  || falha "familia harness devia construir acervo, borda, claude-code, harness, harness-controle, ops, politica-acesso e recuperacao: '$h'"
+[ "$h" = "acervo analise borda claude-code harness harness-controle ops politica-acesso recuperacao " ] \
+  || falha "familia harness devia construir acervo, analise, borda, claude-code, harness, harness-controle, ops, politica-acesso e recuperacao: '$h'"
 # casa-site e casa-site-tela entraram com o site da casa (#3904, 17/10/2026)
 [ "$c" = "casa-site casa-site-tela conversor rag " ] \
   || falha "familia conhecimento devia construir casa-site, casa-site-tela, conversor e rag: '$c'"
-for n in harness acervo; do
+for n in harness acervo analise; do
   lock="$(jq -r --arg n "$n" '.[$n].lock' "$REG_VENVS")"
   [ "$(basename "$lock")" = uv.lock ] || falha "venv $n devia ter uv.lock (uv sync --frozen): $lock"
   [ -f "$REPO_ROOT/$lock" ] || falha "lock do venv $n ausente na arvore: $lock"

@@ -1789,12 +1789,24 @@ def _nega_segredo(p: Path, tool: str, alvo: Path | None = None):
     return None
 
 
+def _nega_analise(p: Path) -> bool:
+    """A posse dos temporários analíticos acompanha a leitura genérica (#4130)."""
+    try:
+        partes = p.relative_to(INSTANCIA / "var/tmp").parts
+    except ValueError:
+        return False
+    if len(partes) < 3 or partes[1] != "analise" or not partes[2].startswith("ex-"):
+        return False
+    from analise.acesso_arquivo import negar
+    return negar(p, _quem().get("sujeito") or "", INSTANCIA)
+
+
 def _nega_leitura(p: Path) -> bool:
     """A negativa do arquivo, sem auditoria, para cada entrada de diretório e para o
     ancestral de caminho ausente: não se lista o que a leitura não deixaria ler
     (spec ler-arquivo §9)."""
     alvo = _real(p)
-    return _sob_fila(p, alvo) or _e_segredo(p, alvo)
+    return _sob_fila(p, alvo) or _e_segredo(p, alvo) or _nega_analise(alvo)
 
 
 # Morada de LEITURA (card #3279, F1; spec_porta-so-verbo §8): a release, a instância e a bancada
@@ -1868,6 +1880,9 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
     if bloqueio:
         bloqueio["caminho"] = bloqueio.pop("path", str(p))
         return bloqueio
+    if _nega_analise(alvo):
+        _audit(tool=tool, evento="leitura_recusada", motivo="posse-analitica", **quem)
+        return {"recusado": True, "caminho": str(p), "motivo": "acesso analítico negado"}
     offset, modo = args.get("offset"), args.get("modo") or "texto"
     paginas = args.get("paginas") or None
     try:
@@ -2014,7 +2029,7 @@ TIPOS_TEXTO = {".py", ".md", ".mmd", ".d2", ".sh", ".sql", ".yaml", ".yml", ".js
 # `permite: <prefixo>  # motivo`) e texto plano na raiz do repo, e sem o nome a excecao nao tinha
 # como ser escrita pela porta.
 NOMES_TEXTO = {"Dockerfile", ".dockerignore", ".gitignore", ".operacao", "VERDES",
-               ".conferir-repo"}  # VERDES: baseline do pre-push (guia portoes-do-codigo)
+               ".conferir-repo", "uv.lock"}  # VERDES: baseline do pre-push (guia portoes-do-codigo)
 # Dockerfile.<sufixo> (Dockerfile.gpu, Dockerfile.dev): o mesmo texto de build, #2856 linha 40.
 PREFIXO_DOCKERFILE = "Dockerfile."
 # platafirma-ui entrou em 22/09/2026 (hotfix): o clone existia na bancada e o front do
@@ -2221,7 +2236,7 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
     extensao + shebang); na instancia, @TMP@/<ordem_id>/ (rascunho da fita). Tipos: .py .md .mmd .d2 .sh
     .sql .yaml .yml .json .toml .css .html .js .jsx .mjs .ts .tsx .php .txt .conf .tsv .service
     .timer .path .socket, e os nomes Dockerfile, Dockerfile.<sufixo>, .dockerignore, .gitignore,
-    .operacao, VERDES, .conferir-repo. Fora disso volta
+    .operacao, VERDES, .conferir-repo, uv.lock. Fora disso volta
     `{recusado, motivo}` nomeando o porque (release, fila, abertura publicada, log, segredos, .git, symlink,
     tipo, tamanho). `content` = arquivo
     INTEIRO (teto 1 MiB). `trecho={"antes","depois"}` = edicao por trecho: `antes` tem de

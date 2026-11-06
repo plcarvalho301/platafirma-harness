@@ -1,0 +1,8 @@
+[project]
+name = "testes-analise"
+version = "1"
+requires-python = ">=3.12"
+dependencies = ["psycopg[binary]>=3.2", "PyYAML>=6", "pytest>=8"]
+
+[tool.pytest.ini_options]
+addopts = "--confcutdir=."

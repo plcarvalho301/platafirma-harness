@@ -443,6 +443,14 @@ for s in (d.get("services") or {}).values():
             rel(v)
     for v in s.get("volumes") or []:
         if isinstance(v, dict) and v.get("type") == "bind":
+            # O entrypoint do PostgreSQL lê estes arquivos só ao criar a base.
+            # Migração de base viva passa por release migrar, sem reiniciá-la.
+            imagem = s.get("image") or ""
+            destino = (v.get("target") or "").rstrip("/")
+            inicializacao_pg = imagem.startswith(("postgres:", "pgvector/pgvector:")) and (
+                destino == "/docker-entrypoint-initdb.d" or destino.startswith("/docker-entrypoint-initdb.d/"))
+            if inicializacao_pg:
+                continue
             rel(v.get("source"))
 ' "$ARVORE"
 }
