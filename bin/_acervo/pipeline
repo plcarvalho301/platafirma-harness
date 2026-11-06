@@ -223,7 +223,8 @@ def main(argv: list[str]) -> int:
     if lote.get("estado") not in (None, "concluido"):
         sys.stderr.write(r.stderr)
         morre(f"acervo pipeline: o lote {lote['id']} terminou em '{lote.get('estado')}'; nenhum job criado", 1)
-    com_obra = [it for it in lote.get("itens", []) if it.get("obra_id")]
+    com_obra = [it for it in lote.get("itens", [])
+                if it.get("obra_id") and it.get("veredito") == "criar" and it.get("estado") == "feito"]
     if not com_obra:
         sys.stderr.write(r.stderr)
         morre(f"acervo pipeline: o lote {lote['id']} nao tem obra para o job (todos os itens ficaram como excecao)", 1)
