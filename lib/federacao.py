@@ -29,6 +29,7 @@ from lib import raizes
 INTERVALO_RENOVACAO_S = 240.0  # 4 minutos (o token do Keycloak dura 5 minutos)
 TIMEOUT_KEYCLOAK_S = 10.0      # 10 s de teto para a rede do Keycloak
 HTTP_OK = 200
+USER_AGENT = "PlataFirma-harness/1.0 (+https://platafirma.org)"
 
 
 class FalhaFederacao(Exception):
@@ -82,7 +83,10 @@ def _pede_token(cliente: str, segredo: str, url: str | None = None) -> str:
     req = urllib.request.Request(
         endpoint,
         data=dados,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": USER_AGENT,
+        },
         method="POST",
     )
     try:
