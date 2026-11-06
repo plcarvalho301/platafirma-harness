@@ -178,3 +178,83 @@ def test_json_sem_obras_traz_nulo_e_nao_zero(giros_reais):
     dados = json.loads(out.getvalue())
     assert dados["job"]["tokens_total"] == 5700 and dados["job"]["tokens_por_obra"] is None
     assert dados["job"]["obras"] is None and dados["ordem"]["tokens_por_obra"] is None
+
+
+# #4128: uso do provedor por chamada; fita inteira dedicada à tarefa.
+def _uso(n):
+    return {"input_tokens": n, "output_tokens": n * 2,
+            "cache_creation_input_tokens": n * 3, "cache_read_input_tokens": n * 4}
+
+def test_uso_modelo_media_p90_e_cache_separados():
+    from _metrica.uso_modelo import resumir
+    res = resumir({str(n): _uso(n) for n in range(1, 11)})
+    assert res["chamadas"] == 10
+    assert res["campos"]["entrada"] == {
+        "amostras": 10, "ausentes": 0, "total": 55, "media": 5.5, "p90": 9}
+    assert res["campos"]["saida"]["media"] == 11
+    assert res["campos"]["cache_criacao"]["p90"] == 27
+    assert res["campos"]["cache_leitura"]["p90"] == 36
+    assert res["campos"]["entrada_total"]["p90"] == 72
+
+def test_uso_modelo_ausencia_nao_vira_zero():
+    from _metrica.uso_modelo import resumir
+    res = resumir({"1": {"input_tokens": 0, "output_tokens": 2}, "2": {"output_tokens": -1}})
+    entrada = res["campos"]["entrada"]
+    assert entrada["media"] == 0 and entrada["ausentes"] == 1 and entrada["total"] is None
+    assert res["campos"]["entrada_total"]["media"] is None
+    assert res["campos"]["cache_leitura"]["p90"] is None
+    assert res["campos"]["saida"]["ausentes"] == 1
+
+def test_uso_modelo_le_transcript_real_e_deduplica_requestid(tmp_path):
+    import transcript
+    arquivo = tmp_path / "antes.jsonl"
+    arquivo.write_text("\n".join(json.dumps(d) for d in [
+        {"requestId": "r1", "message": {"usage": _uso(1)}},
+        {"requestId": "r1", "message": {"usage": _uso(3)}},
+        {"requestId": "r2", "message": {"usage": _uso(5)}},
+        {"type": "assistant", "message": {"content": "texto privado"}},
+    ]) + "\n")
+    out = io.StringIO()
+    with patch.object(transcript, "da_sessao", return_value=arquivo), patch("sys.stdout", out):
+        assert tokens_main(["--fita", JOB, "--tarefa", "status-job", "--json"]) == 0
+    res = json.loads(out.getvalue())
+    assert res["fitas"]["fita"]["chamadas"] == 2
+    assert res["fitas"]["fita"]["campos"]["entrada"]["media"] == 4
+    assert "texto privado" not in out.getvalue() and "r1" not in out.getvalue()
+
+def test_uso_modelo_compara_fitas_sem_misturar_populacoes(tmp_path):
+    import transcript
+    a, b = tmp_path / "antes.jsonl", tmp_path / "depois.jsonl"
+    for arquivo, n in [(a, 100), (b, 10)]:
+        arquivo.write_text(json.dumps({"requestId": "r1", "message": {"usage": _uso(n)}}) + "\n")
+    out = io.StringIO()
+    with patch.object(transcript, "da_sessao", side_effect=[a, b]), patch("sys.stdout", out):
+        assert tokens_main(["--fita", JOB, "--comparar-fita", OUTRO, "--tarefa", "status-job", "--json"]) == 0
+    res = json.loads(out.getvalue())
+    assert res["tarefa"] == "status-job"
+    assert res["fitas"]["antes"]["campos"]["entrada"]["media"] == 100
+    assert res["fitas"]["depois"]["campos"]["entrada"]["media"] == 10
+
+def test_uso_modelo_cadeira_resolve_fita_e_ausente_sai_indeterminavel(tmp_path):
+    import transcript
+    arquivo = tmp_path / "id-da-fita.jsonl"
+    arquivo.write_text(json.dumps({"requestId": "r", "message": {"usage": _uso(4)}}) + "\n")
+    out = io.StringIO()
+    with patch.object(transcript, "da_cadeira", return_value=arquivo), patch("sys.stdout", out):
+        assert tokens_main(["--fita", "dados", "--json"]) == 0
+    assert json.loads(out.getvalue())["fitas"]["fita"]["fita"] == "id-da-fita"
+    out = io.StringIO()
+    with patch.object(transcript, "da_sessao", return_value=None), patch("sys.stdout", out):
+        assert tokens_main(["--fita", JOB, "--json"]) == 5
+    res = json.loads(out.getvalue())
+    assert res["fitas"]["fita"]["estado"] == "ausente"
+    assert "campos" not in res["fitas"]["fita"]
+
+def test_uso_modelo_campo_ausente_nao_sai_verde(tmp_path):
+    import transcript
+    arquivo = tmp_path / "sem-cache.jsonl"
+    arquivo.write_text(json.dumps({"requestId": "r", "message": {"usage": {"input_tokens": 10}}}))
+    out = io.StringIO()
+    with patch.object(transcript, "da_sessao", return_value=arquivo), patch("sys.stdout", out):
+        assert tokens_main(["--fita", JOB, "--json"]) == 5
+    assert json.loads(out.getvalue())["fitas"]["fita"]["campos"]["saida"]["media"] is None
