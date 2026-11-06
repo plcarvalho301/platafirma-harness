@@ -6,11 +6,11 @@
     "repo": "platafirma-casa-espelho",
     "cwd": "outros_repos/conhecimento/rag",
     "modulo": "motor_acervo.casa",
-    "pythonpath": ["outros_repos/conhecimento/rag", "outros_repos/conhecimento/conversor"],
+    "pythonpath": ["outros_repos/conhecimento/rag"],
     "python": "rag",
     "ambiente": "banco-rag",
     "teto_s": 600,
-    "motivo": "S4061: portão, carregador, resolução de chave e conferência do schema casa, contra o banco do acervo"
+    "motivo": "S4061: portão, carregador, resolução de chave e conferência do schema casa, contra o banco do acervo; o conversor fica fora do caminho porque a peça não o importa, e cada caminho daqui entra no gate de origin/main (#4137)"
   },
   "diagrama": {
     "dono": "engenharia",

@@ -128,3 +128,12 @@ def test_registro_do_harness_declara_a_peca_casa():
     casa = reg["casa"]
     assert casa["origem"] == "espelho" and casa["repo"] == "platafirma-casa-espelho"
     assert casa["modulo"] == "motor_acervo.casa" and casa["ambiente"] == "banco-rag"
+
+
+def test_peca_casa_nao_depende_do_caminho_do_conversor():
+    """#4137: cada caminho da peça entra no gate de origin/main. O conversor, que a peça casa não
+    importa, no pythonpath fazia a chamada sair 4 sempre que outra cadeira commitava nele."""
+    reg = json.loads((RAIZ / "registro" / "pecas.json").read_text(encoding="utf-8"))
+    casa = reg["casa"]
+    assert casa["pythonpath"] == ["outros_repos/conhecimento/rag"]
+    assert not any("conversor" in c for c in [casa["cwd"], *casa["pythonpath"]])
