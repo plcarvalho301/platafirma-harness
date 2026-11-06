@@ -110,7 +110,8 @@ print(json.dumps({{"type": "result", "is_error": False, "result": "veredito: 0 �
 
 
 FEDERACAO_TESTE = json.loads((REPO_ROOT / "registro" / "federacao-anthropic.json").read_text(encoding="utf-8"))
-FEDERACAO_TESTE["contas"]["agente-juiz"]["regime"] = "federacao"
+FEDERACAO_TESTE["contas"]["agente-consultado"]["regime"] = "federacao"
+CONSULTADO = FEDERACAO_TESTE["contas"]["agente-consultado"]
 
 
 def _stub(pasta: Path, nome: str, corpo: str) -> None:
@@ -192,7 +193,7 @@ def mundo(tmp_path, monkeypatch):
     kc_srv = ThreadingHTTPServer(("127.0.0.1", 0), _Keycloak)
     threading.Thread(target=kc_srv.serve_forever, daemon=True).start()
     monkeypatch.setenv("KEYCLOAK_TOKEN_URL", f"http://127.0.0.1:{kc_srv.server_port}")
-    monkeypatch.setenv("KEYCLOAK_CLIENT_SECRET_AGENTE_JUIZ", "segredo-mock-juiz")
+    monkeypatch.setenv("KEYCLOAK_CLIENT_SECRET_AGENTE_CONSULTADO", "segredo-mock-consultado")
     # o regime de cada conta vem do teste, não do arquivo de identificadores: o arquivo muda por PR (#4136)
     monkeypatch.setenv("PF_FEDERACAO_CONFIG", json.dumps(FEDERACAO_TESTE))
 
@@ -1108,20 +1109,94 @@ def test_anexo_mal_formado_sai_2_antes_de_abrir_sessao(mundo, pessoa, monkeypatc
     assert mundo.chamadas() == [], "nenhum desses abre sessão"
 
 
-# --- federação e isolamento do agente-juiz (card #4122) ---------------------------------------
+# --- quem paga, por ligação: a consultada pelo crédito, pela conta agente-consultado (card #4136) -----
 
-def test_federacao_juiz(mundo, pessoa, monkeypatch):
+FEDERADO = f"federacao:{CONSULTADO['conta_servico']}"
+VARS_FEDERACAO = ("ANTHROPIC_ORGANIZATION_ID", "ANTHROPIC_FEDERATION_RULE_ID", "ANTHROPIC_SERVICE_ACCOUNT_ID",
+                  "ANTHROPIC_IDENTITY_TOKEN_FILE")
+
+
+def _registro(mundo) -> list[dict]:
+    return [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+
+
+def _sem_federacao(c) -> None:
+    for k in VARS_FEDERACAO:
+        assert c["env"].get(k) is None, f"{k}: não federa"
+
+
+def test_federacao_consultado(mundo, pessoa, monkeypatch):
     mundo.escreve(JUIZ)
     assert roda(monkeypatch, "juiz", tarefa="julgue") == 0
-    c = _claude(mundo)
-    env = c["env"]
-    assert env["ANTHROPIC_ORGANIZATION_ID"] == "9f6bed2f-0150-46d6-8fad-a4d5932a6e70"
-    assert env["ANTHROPIC_WORKSPACE_ID"] == "wrkspc_01M1zLBdeKjhR6JTPKrGmHbP"
-    assert env["ANTHROPIC_FEDERATION_RULE_ID"] == "fdrl_012Ak1DB7pcZQyoZnhw6r2Ma"
-    assert env["ANTHROPIC_SERVICE_ACCOUNT_ID"] == "svac_01Tys7Q5uRNwLCiKTwEXGQvw"
+    env = _claude(mundo)["env"]
+    assert env["ANTHROPIC_ORGANIZATION_ID"] == FEDERACAO_TESTE["organizacao"]
+    assert env["ANTHROPIC_WORKSPACE_ID"] == FEDERACAO_TESTE["workspace"]
+    assert env["ANTHROPIC_FEDERATION_RULE_ID"] == CONSULTADO["regra"] == "fdrl_01PdMxn1VMjoLKUPMhs8b8vq"
+    assert env["ANTHROPIC_SERVICE_ACCOUNT_ID"] == CONSULTADO["conta_servico"] == "svac_01YFBzFQi3ep7J9rF1rdM846"
     assert env["ANTHROPIC_IDENTITY_TOKEN_FILE"]
-    (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
-    assert log["credencial"] == "federacao:svac_01Tys7Q5uRNwLCiKTwEXGQvw"
+    (log,) = _registro(mundo)
+    assert log["credencial"] == FEDERADO
+
+
+def test_federacao_consultado_decide_pelas_ferramentas_e_nao_pela_lente():
+    """Quem paga sai da ligação e das ferramentas; a lente não entra na conta. (Hoje o molde exige monta_sessao
+    em todo agente com lente, e por isso só o agente sem lente chega a federar.)"""
+    sem_porta = com(CONSULTOR, ferramentas=["Read", "Grep"])
+    assert agente.conta_federada(sem_porta, "consultado", FEDERACAO_TESTE) == "agente-consultado"
+    assert agente.conta_federada(JUIZ, "consultado", FEDERACAO_TESTE) == "agente-consultado"
+    for grafia in agente.GRAFIAS:
+        com_porta = com(JUIZ, ferramentas=["Read", grafia + "ler_arquivo"])
+        assert agente.conta_federada(com_porta, "consultado", FEDERACAO_TESTE) is None, grafia
+    for ligacao in ("agendado", "delegado"):
+        assert agente.conta_federada(JUIZ, ligacao, FEDERACAO_TESTE) is None, ligacao
+    assert agente.conta_federada(VARREDOR, "consultado", FEDERACAO_TESTE) is None, "Qwen não federa"
+    assert agente.conta_federada(com(JUIZ, modelo={"familia": "gemini", "versao": "x"}), "consultado",
+                                 FEDERACAO_TESTE) is None, "Gemini não federa"
+
+
+def test_regime_plano_no_arquivo_nao_federa(mundo, pessoa, monkeypatch):
+    cfg = copy.deepcopy(FEDERACAO_TESTE)
+    cfg["contas"]["agente-consultado"]["regime"] = "plano"
+    monkeypatch.setenv("PF_FEDERACAO_CONFIG", json.dumps(cfg))
+    mundo.escreve(JUIZ)
+    assert roda(monkeypatch, "juiz") == 0
+    _sem_federacao(_claude(mundo))
+    assert _registro(mundo)[0]["credencial"] == "plano"
+
+
+def test_agendado_no_plano(mundo, pessoa, monkeypatch):
+    mundo.escreve(com(JUIZ, ligacoes=["consultado", "agendado"]))
+    monkeypatch.setattr(sys, "stdin", io.StringIO("julgue"))
+    assert agente.ato_rodar("juiz", None, None, False, ligacao="agendado") == 0
+    _sem_federacao(_claude(mundo))
+    assert _registro(mundo)[0]["credencial"] == "plano"
+
+
+def test_erro_do_cli(mundo, pessoa, monkeypatch, capsys):
+    """«oauth» e «author» no erro não são recusa da troca: saem 5 com a linha do erro."""
+    mundo.escreve(JUIZ)
+    monkeypatch.setenv("STUB_CLAUDE_EXIT", "1")
+    monkeypatch.setenv("STUB_CLAUDE_ERRO", "OAuth helper crashed; ask the author")
+    assert roda(monkeypatch, "juiz", tarefa="julgue") == 5
+    assert "OAuth helper crashed; ask the author" in capsys.readouterr().err
+    (log,) = _registro(mundo)
+    assert log["exit"] == 5 and log["motivo"] != "troca"
+    assert log["erro_cli"] == "OAuth helper crashed; ask the author"
+    assert log["credencial"] == FEDERADO
+
+
+def test_registro_sem_token(mundo, pessoa, monkeypatch, capsys):
+    mundo.escreve(JUIZ)
+    token = "eyJhbGciOiJSUzI1NiJ9.eyJqdGkiOiJqdGktMSJ9.assinatura"
+    monkeypatch.setenv("STUB_CLAUDE_EXIT", "1")
+    monkeypatch.setenv("STUB_CLAUDE_ERRO", f"API Error: 401 authentication_error: identity {token} rejected, Bearer abc123")
+    assert roda(monkeypatch, "juiz", tarefa="julgue") == 3
+    capsys.readouterr()
+    (log,) = _registro(mundo)
+    assert log["motivo"] == "troca"
+    assert "<token>" in log["erro_cli"] and "authentication_error" in log["erro_cli"]
+    texto = json.dumps(log)
+    assert token not in texto and "eyJ" not in texto and "abc123" not in texto
 
 
 def test_pasta_isolada(mundo, pessoa, monkeypatch):
@@ -1140,7 +1215,7 @@ def test_pasta_isolada(mundo, pessoa, monkeypatch):
 
 def test_sombreia(mundo, pessoa, monkeypatch):
     mundo.escreve(JUIZ)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "chave-sombra")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")        # vazia também sai: o CLI a lê antes da federação
     monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "token-sombra")
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "oauth-sombra")
     monkeypatch.setenv("ANTHROPIC_PROFILE", "perfil-sombra")
@@ -1152,14 +1227,14 @@ def test_sombreia(mundo, pessoa, monkeypatch):
 
 def test_emissor_fora(mundo, pessoa, monkeypatch, capsys):
     mundo.escreve(JUIZ)
-    monkeypatch.delenv("KEYCLOAK_CLIENT_SECRET_AGENTE_JUIZ", raising=False)
+    monkeypatch.delenv("KEYCLOAK_CLIENT_SECRET_AGENTE_CONSULTADO", raising=False)
     assert roda(monkeypatch, "juiz", tarefa="julgue") == 3
     assert "emissor" in capsys.readouterr().err
     assert _claudes(mundo) == []
-    (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+    (log,) = _registro(mundo)
     assert log["exit"] == 3
     assert log["motivo"] == "emissor"
-    assert log["credencial"] == "federacao:svac_01Tys7Q5uRNwLCiKTwEXGQvw"
+    assert log["credencial"] == FEDERADO
 
 
 def test_renovacao_cai(mundo, pessoa, monkeypatch, capsys):
@@ -1178,36 +1253,76 @@ def test_renovacao_cai(mundo, pessoa, monkeypatch, capsys):
 def test_troca_recusada(mundo, pessoa, monkeypatch, capsys):
     mundo.escreve(JUIZ)
     monkeypatch.setenv("STUB_CLAUDE_EXIT", "1")
-    monkeypatch.setenv("STUB_CLAUDE_ERRO", "HTTP 401 Unauthorized: authentication token rejected")
+    monkeypatch.setenv("STUB_CLAUDE_ERRO", "Authentication failed: identity token rejected by federation rule")
     assert roda(monkeypatch, "juiz", tarefa="julgue") == 3
     assert "troca" in capsys.readouterr().err
-    assert len(_claudes(mundo)) == 1
-    (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+    assert len(_claudes(mundo)) == 1, "sem segunda tentativa"
+    (log,) = _registro(mundo)
     assert log["exit"] == 3
     assert log["motivo"] == "troca"
-    assert log["credencial"] == "federacao:svac_01Tys7Q5uRNwLCiKTwEXGQvw"
+    assert log["erro_cli"].startswith("Authentication failed")
+    assert log["credencial"] == FEDERADO
 
 
 def test_credito_acabou(mundo, pessoa, monkeypatch, capsys):
     mundo.escreve(JUIZ)
     monkeypatch.setenv("STUB_CLAUDE_EXIT", "1")
-    monkeypatch.setenv("STUB_CLAUDE_ERRO", "API Error: Credit balance exhausted or billing limit exceeded")
+    monkeypatch.setenv("STUB_CLAUDE_ERRO", "API Error: 400 Your credit balance is too low to access the Anthropic API.")
     assert roda(monkeypatch, "juiz", tarefa="julgue") == 3
     assert "credito" in capsys.readouterr().err
-    assert len(_claudes(mundo)) == 1
-    (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+    assert len(_claudes(mundo)) == 1, "sem segunda tentativa"
+    (log,) = _registro(mundo)
     assert log["exit"] == 3
     assert log["motivo"] == "credito"
-    assert log["credencial"] == "federacao:svac_01Tys7Q5uRNwLCiKTwEXGQvw"
+    assert log["credencial"] == FEDERADO
 
 
-def test_com_lente_no_plano(mundo, pessoa, monkeypatch):
+def test_limite_do_workspace_e_credito(mundo, pessoa, monkeypatch, capsys):
+    mundo.escreve(JUIZ)
+    monkeypatch.setenv("STUB_CLAUDE_EXIT", "1")
+    monkeypatch.setenv("STUB_CLAUDE_ERRO", "API Error: 400 You have reached your specified workspace API usage limits.")
+    assert roda(monkeypatch, "juiz", tarefa="julgue") == 3
+    assert "credito" in capsys.readouterr().err
+
+
+def test_medir_federacao_troca_pela_conta_consultada_sem_agente(mundo, pessoa, monkeypatch, capsys):
+    cfg = copy.deepcopy(FEDERACAO_TESTE)
+    cfg["contas"]["agente-consultado"]["regime"] = "plano"       # a medida não lê o regime
+    monkeypatch.setenv("PF_FEDERACAO_CONFIG", json.dumps(cfg))
+    assert agente.main(["medir-federacao", "--json"]) == 0
+    saida = json.loads(capsys.readouterr().out)
+    assert saida["exit"] == 0 and saida["respostas"][0]["jti"] == "jti-1"
+    assert saida["credencial"] == FEDERADO
+    c = _claude(mundo)
+    assert c["env"]["ANTHROPIC_SERVICE_ACCOUNT_ID"] == CONSULTADO["conta_servico"]
+    assert c["env"]["ANTHROPIC_FEDERATION_RULE_ID"] == CONSULTADO["regra"]
+    assert c["cwd"] == c["env"]["CLAUDE_CONFIG_DIR"] and not Path(c["cwd"]).exists()
+    argv = c["argv"]
+    assert argv[argv.index("--tools") + 1] == "" and argv[argv.index("--setting-sources") + 1] == "project,local"
+    assert json.loads(c["stdin"])["message"]["content"] == "responda só: ok"
+    assert [c for c in mundo.chamadas() if c["verbo"] == "sessao"] == [], "não abre sessão: não roda agente"
+    (log,) = _registro(mundo)
+    assert log["agente"] == "medir-federacao" and log["exit"] == 0
+
+
+def test_medir_federacao_recusa_e_sem_pessoa(mundo, pessoa, monkeypatch, capsys):
+    monkeypatch.setenv("STUB_CLAUDE_EXIT", "1")
+    monkeypatch.setenv("STUB_CLAUDE_ERRO", "Authentication failed: eyJa.eyJb.c")
+    assert agente.main(["medir-federacao", "--json"]) == 3
+    saida = json.loads(capsys.readouterr().out)
+    assert saida["motivo"] == "troca" and "eyJ" not in json.dumps(saida)
+    monkeypatch.delenv("PF_SUJEITO")
+    assert agente.main(["medir-federacao"]) == 1
+
+
+def test_porta_no_plano(mundo, pessoa, monkeypatch):
+    """A porta só aceita pessoa: agente consultado com ferramenta dela fica no plano, em qualquer grafia."""
     mundo.escreve(CONSULTOR)
     assert roda(monkeypatch, "consultor", cadeira="ia", chapeu="agente") == 0
     c = _claude(mundo)
-    for k in ("ANTHROPIC_ORGANIZATION_ID", "ANTHROPIC_FEDERATION_RULE_ID", "ANTHROPIC_IDENTITY_TOKEN_FILE"):
-        assert c["env"].get(k) is None
-    (log,) = [json.loads(l) for f in (mundo.inst / "var" / "log" / "agente").glob("*.jsonl") for l in f.read_text().splitlines()]
+    _sem_federacao(c)
+    assert "--setting-sources" not in c["argv"] and c["env"]["CLAUDE_CONFIG_DIR"] is None
+    (log,) = _registro(mundo)
     assert log["credencial"] == "plano"
 
 
