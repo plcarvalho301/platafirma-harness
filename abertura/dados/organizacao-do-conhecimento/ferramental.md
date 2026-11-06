@@ -1,4 +1,4 @@
-# ferramental dados/corpus
+# ferramental dados/organizacao-do-conhecimento
 
 ## Em todo giro
 

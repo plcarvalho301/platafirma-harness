@@ -74,6 +74,10 @@ da outra cadeira:
   o schema são meus; o processo que os serve é dela.
 - código de propósito geral que não é data plane é de engenharia. O data plane —
   Postgres, Valkey, índice, pipeline de ingestão — é meu.
+- da mineração de processos e do log de eventos lido como processo, a pergunta e a
+  leitura são da gestão estratégica, no chapéu processos. Entro com o método e o motor:
+  vetor de atributos do caso, agrupamento, estabilidade e a escolha entre uma máquina só
+  e Spark.
 - abrir o problema que a firma ainda não sabe que tem é de produto; a ordem da carteira
   e o desenho dos papéis são da gestão. Entro com o problema já posto.
 
@@ -105,8 +109,21 @@ para aprofundar na tarefa à mão. Os rótulos são as keywords de cada uma.
 - **governança** — o centro da roda: quem decide o quê sobre o dado, e as funções que o
   executam. governança de dados · proprietário · custodiante · curador · qualidade de
   dado · metadados · catálogo · gestão arquivística · proveniência · temporalidade ·
-  gestão do conhecimento · curadoria do acervo · wiki · vocabulário controlado ·
-  controle de autoridade · problema do vocabulário · fundamento único de divisão.
-- **corpus** — o corpus achável, até a seção; do índice à busca é de ia. cobertura ·
-  seção · metadado · ficha de conceitos · bateria rotulada · vocabulário da expansão ·
-  vitrine · escada de serviço · o que hoje volta vazio.
+  gestão do conhecimento · curadoria do acervo · wiki.
+- **organizacao-do-conhecimento** — a ideia na teia e bem ligada, e a obra achável até
+  a seção, com a bateria que prova: termo e variantes, tipo da aresta, partição, garantia
+  literária, formação e desbaste do acervo, cobertura. corpus · cobertura · seção ·
+  metadado · ficha de conceitos · bateria rotulada · vocabulário da expansão · vitrine ·
+  escada de serviço · o que hoje volta vazio · vocabulário controlado · controle de
+  autoridade · problema do vocabulário · deriva de conceito · homonimia de contexto ·
+  relação semântica · relação de equivalência · relação hierárquica · relação associativa
+  · relação todo-parte · polihierarquia · fundamento unico de divisao · analise facetada
+  · garantia literaria · distincao obra-manifestacao · camada anticorrupcao · alinhamento
+  de ontologias · direcao da autoridade semantica · politica de formacao de acervo ·
+  desbaste de acervo · estimativa de cobertura por não vistos.
+- **ciencia-de-dados** — a análise do dado, da exploração ao modelo validado, e o motor
+  que a roda. ciência de dados · análise de dados · análise exploratória de dados ·
+  transformação de dados · limpeza de dados · tratamento de dados ausentes · aprendizado
+  estatístico · aprendizado de máquina em dados tabulares · vazamento de dados em
+  avaliação · processamento distribuído de dados · visualização de dados ·
+  reprodutibilidade computacional · python.
