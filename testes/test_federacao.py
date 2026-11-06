@@ -68,6 +68,7 @@ class HandlerKeycloakMentira(BaseHTTPRequestHandler):
     contador = 0
     trava = threading.Lock()
     atraso_s = 0.0
+    ultimo_user_agent = ""
 
     def do_POST(self):
         if self.atraso_s > 0:
@@ -77,6 +78,7 @@ class HandlerKeycloakMentira(BaseHTTPRequestHandler):
         with self.trava:
             HandlerKeycloakMentira.contador += 1
             num = HandlerKeycloakMentira.contador
+            HandlerKeycloakMentira.ultimo_user_agent = self.headers.get("User-Agent", "")
 
         token = _jwt_mentira(f"jti-{num}")
         resp = json.dumps({"access_token": token, "token_type": "Bearer", "expires_in": 300}).encode("utf-8")
@@ -164,3 +166,11 @@ def test_renova(tmp_path, keycloak_mentira, monkeypatch):
 
     assert len(jtis_vistos) >= 3, f"esperados pelo menos 3 tokens diferentes, vieram: {jtis_vistos}"
     assert len(set(jtis_vistos)) == len(jtis_vistos)
+
+
+def test_user_agent_enviado(tmp_path, keycloak_mentira, monkeypatch):
+    """Garante que a requisição ao Keycloak envia o User-Agent próprio da PlataFirma."""
+    monkeypatch.setenv("KEYCLOAK_CLIENT_SECRET_AGENTE_JUIZ", "segredo-teste")
+    with federacao.abre("agente-juiz", tmp_path, CONFIG_TESTE, url_token=keycloak_mentira):
+        pass
+    assert HandlerKeycloakMentira.ultimo_user_agent == federacao.USER_AGENT
