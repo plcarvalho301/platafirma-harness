@@ -31,8 +31,8 @@ def uso(code=2):
         "uso:\n"
         "  pesquisar consultar \"<consulta>\" [-k 8] [--cat geral|ciencia|codigo|social] [--desde AAAA] [--idioma pt|en|auto]\n"
         "  pesquisar resolver <dominio|doi|isbn|cnpj|orcid> <identificador>\n"
-        "  pesquisar ler <url> [--foco \"<pergunta>\"] [--render] [--max-chars 6000] [--offset N]\n"
-        "  pesquisar coletar <url> [<url>...]\n"
+        "  pesquisar ler <url> [--foco \"<pergunta>\"] [--render] [--max-chars 6000] [--offset N] [--imagens]\n"
+        "  pesquisar coletar <url> [<url>...] [--imagens]\n"
         "  pesquisar historico <url> [--em AAAA-MM-DD] [--salvar]\n"
         "  pesquisar manifesto [--md]\n"
         "  pesquisar verificar <relatorio.md>\n"
@@ -81,6 +81,7 @@ def main(argv):
     p.add_argument("--offset", type=int, default=0)
     p.add_argument("--em", default=None)
     p.add_argument("--salvar", action="store_true")
+    p.add_argument("--imagens", action="store_true")
     args = p.parse_args(argv[2:])
 
     trab = Trabalho(slug_trabalho(args.trabalho))
@@ -100,11 +101,11 @@ def main(argv):
             if not resto:
                 uso()
             env = atos.ler(resto[0], foco=args.foco, render=args.render,
-                          max_chars=args.max_chars, offset=args.offset, trab=trab)
+                          max_chars=args.max_chars, offset=args.offset, imagens=args.imagens, trab=trab)
         elif ato == "coletar":
             if not resto:
                 uso()
-            env = atos.coletar(resto, trab=trab)
+            env = atos.coletar(resto, imagens=args.imagens, trab=trab)
         elif ato == "historico":
             if not resto:
                 uso()

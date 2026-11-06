@@ -235,14 +235,67 @@ def test_pagina_que_depende_de_js_falha_com_sugestao(tmp_path):
     assert e.value.causa == "pagina-depende-de-javascript" and e.value.extra["sugestao"] == "--render"
 
 
-def test_pdf_sem_conversor_falha_declarada_com_bruto_pdf(tmp_path):
+def test_pdf_binario_permitido_sucesso_com_bruto_pdf_e_manifesto(tmp_path):
+    t = M.Trabalho("b1", raiz=tmp_path)
+    corpo = b"%PDF-1.7\n%conteudo..."
+    r = ler(t, resposta(corpo, ct="application/pdf"))
+    assert r["status"] == 200
+    assert r["binario"] is True
+    assert r["tipo_real"] == "application/pdf"
+    assert r["conteudo"] is None
+    ln = linhas(t)[-1]
+    assert ln["ato"] == "ler" and ln["nao_achado"] is False
+    assert ln["tipo"] == "application/pdf"
+    assert ln["bruto"].endswith(f"{ln['n']}.pdf")
+    assert (t.bruto / f"{ln['n']}.pdf").read_bytes() == corpo
+
+
+def test_tipo_nao_permitido_falha_sem_bruto(tmp_path):
     t = M.Trabalho("f7", raiz=tmp_path)
     with pytest.raises(FalhaFonte) as e:
-        ler(t, resposta(b"%PDF-1.7\n%...", ct="application/pdf"))
-    assert e.value.causa == "tipo-sem-conversor:application/pdf"
-    assert e.value.extra["tipo_real"] == "application/pdf" and "tipo" not in e.value.extra
-    ln = _ultima_nao_achado(t, "tipo-sem-conversor:application/pdf")
-    assert ln["bruto"].endswith(f"{ln['n']}.pdf")  # nunca mais .html
+        ler(t, resposta(b"MZ\x90\x00executable", ct="application/x-dosexec"))
+    assert e.value.causa == "tipo-nao-permitido:application/x-dosexec"
+    ln = _ultima_nao_achado(t, "tipo-nao-permitido:application/x-dosexec")
+    assert not any(t.bruto.iterdir())
+
+
+def test_teto_de_tamanho_excedido_falha_sem_bruto(tmp_path):
+    t = M.Trabalho("f_teto", raiz=tmp_path)
+    corpo_grande = b"%PDF-1.7\n" + (b"0" * (33 * 1024 * 1024))
+    with pytest.raises(FalhaFonte) as e:
+        ler(t, resposta(corpo_grande, ct="application/pdf"))
+    assert e.value.causa == "teto-de-tamanho-excedido"
+    ln = _ultima_nao_achado(t, "teto-de-tamanho-excedido")
+    assert not any(t.bruto.iterdir())
+
+
+def test_zip_gravado_fechado_sem_extracao(tmp_path):
+    t = M.Trabalho("b_zip", raiz=tmp_path)
+    zip_bytes = b"PK\x03\x04fakezipcontent"
+    r = ler(t, resposta(zip_bytes, ct="application/zip"))
+    assert r["status"] == 200
+    assert r["binario"] is True
+    assert (t.bruto / f"{r['n']}.zip").read_bytes() == zip_bytes
+    assert not (t.bruto / f"{r['n']}").exists()
+
+
+def test_html_com_imagens_coleta_imagens_vinculadas(tmp_path):
+    t = M.Trabalho("b_img", raiz=tmp_path)
+    img_bytes = b"\x89PNG\r\n\x1a\nfakeimage"
+    html_com_img = '<html lang="pt-BR"><body><p>Texto da pagina</p><img src="/img/foto.png"></body></html>'
+    mapa = {
+        URL: resposta(html_com_img.encode(), ct="text/html; charset=utf-8"),
+        "http://93.184.216.34/img/foto.png": resposta(img_bytes, ct="image/png", url="http://93.184.216.34/img/foto.png"),
+    }
+    def col(u, v):
+        v(u)
+        return mapa[u]
+    r = extrator.ler(URL, t, coletor=col, guarda_resolvedor=PUB, imagens=True, derivador=derivador_texto)
+    assert r["status"] == 200
+    assert len(r.get("imagens", [])) == 1
+    assert r["imagens"][0]["tipo"] == "image/png"
+    lns = linhas(t)
+    assert any(ln.get("imagem_de") == r["n"] for ln in lns)
 
 
 def test_derivador_que_devolve_erro_como_texto_vira_falha(tmp_path):
@@ -265,12 +318,13 @@ def test_envelope_do_ato_mantem_tipo_dado_no_sucesso_e_na_falha(tmp_path, monkey
     assert env["tipo"] == "dado" and env["tipo_real"] == "text/html"
 
     monkeypatch.setattr(extrator, "_coletor_httpx",
-                        lambda url, verifica: resposta(b"%PDF-1.7", ct="application/pdf", url=url))
+                        lambda url, verifica: resposta(b"MZ\x90\x00exe", ct="application/x-dosexec", url=url))
     with pytest.raises(FalhaFonte) as e:
-        atos.ler("http://93.184.216.34/doc.pdf", foco=None, render=False, max_chars=10, offset=0, trab=t)
+        atos.ler("http://93.184.216.34/doc.exe", foco=None, render=False, max_chars=10, offset=0, trab=t)
     falha = {"ok": False, "ato": "ler", "trabalho": t.slug, "tipo": "dado", "causa": e.value.causa,
              **e.value.extra}  # o que bin/pesquisar imprime
     assert falha["tipo"] == "dado"
+    assert "tipo-nao-permitido" in falha["causa"]
 
 
 # ------------------------------------------------------------------ cache por URL e hash do bruto

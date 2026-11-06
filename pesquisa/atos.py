@@ -67,18 +67,21 @@ def resolver(tipo, ident, *, trab: "M.Trabalho") -> dict[str, Any]:
 
 
 # ----------------------------------------------------------------------------- ler
-def ler(url, *, foco, render, max_chars, offset, trab: "M.Trabalho") -> dict[str, Any]:
-    r = extrator.ler(url, trab, foco=foco, render=render, max_chars=max_chars, offset=offset)
+def ler(url, *, foco, render, max_chars, offset, imagens=False, trab: "M.Trabalho") -> dict[str, Any]:
+    r = extrator.ler(url, trab, foco=foco, render=render, max_chars=max_chars, offset=offset, imagens=imagens)
     return envelope("ler", trab.slug, **r)
 
 
 # ------------------------------------------------------------------------- coletar
-def coletar(urls, *, trab: "M.Trabalho") -> dict[str, Any]:
+def coletar(urls, *, imagens=False, trab: "M.Trabalho") -> dict[str, Any]:
     """`ler` sem devolver conteúdo: só grava e manifesta. Paralelo com teto de 4 (§4.3)."""
     def _um(u):
         try:
-            r = extrator.ler(u, trab, foco=None, render=False, max_chars=0, offset=0)
-            return {"url": u, "n": r["n"], "sha256": r["sha256"], "status": r["status"], "ok": True}
+            r = extrator.ler(u, trab, foco=None, render=False, max_chars=0, offset=0, imagens=imagens)
+            item = {"url": u, "n": r["n"], "sha256": r["sha256"], "status": r["status"], "tipo_real": r.get("tipo_real"), "binario": r.get("binario", False), "ok": True}
+            if r.get("imagens"):
+                item["imagens"] = r["imagens"]
+            return item
         except FalhaFonte as f:
             return {"url": u, "ok": False, "causa": f.causa}
 

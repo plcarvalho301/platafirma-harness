@@ -81,6 +81,25 @@ _RE_BRANCO = re.compile(r"\s+")
 
 TIPOS_HTML = frozenset({"text/html", "application/xhtml+xml"})
 TIPOS_TEXTO = frozenset({"text/plain", "text/markdown", "text/csv", "application/json", "text/xml", "application/xml"})
+TIPOS_BINARIOS_PERMITIDOS = frozenset({
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "image/svg+xml",
+    "application/zip",
+})
+
+TETOS_BYTES_POR_TIPO = {
+    "application/pdf": 32 * 1024 * 1024,
+    "application/zip": 32 * 1024 * 1024,
+    "image/png": 10 * 1024 * 1024,
+    "image/jpeg": 10 * 1024 * 1024,
+    "image/gif": 10 * 1024 * 1024,
+    "image/webp": 10 * 1024 * 1024,
+    "image/svg+xml": 10 * 1024 * 1024,
+}
 _EXT = {
     "text/html": "html", "application/xhtml+xml": "xhtml", "text/plain": "txt",
     "text/markdown": "md", "text/csv": "csv", "application/json": "json",
@@ -90,6 +109,7 @@ _EXT = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
     "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif",
+    "image/webp": "webp", "image/svg+xml": "svg",
 }
 _ASSINATURAS = (
     (b"%PDF-", "application/pdf"),
@@ -97,7 +117,9 @@ _ASSINATURAS = (
     (b"\x89PNG\r\n\x1a\n", "image/png"),
     (b"\xff\xd8\xff", "image/jpeg"),
     (b"GIF8", "image/gif"),
+    (b"RIFF", "image/webp"),
 )
+_RE_IMG_SRC = re.compile(r'<img[^>]+src=["\']([^"\']+)["\']', re.IGNORECASE)
 # WHATWG Encoding: estes rótulos significam windows-1252 na web.
 _ROTULOS_1252 = frozenset({"iso-8859-1", "iso8859-1", "latin1", "latin-1", "l1", "us-ascii", "ascii", "cp1252"})
 
@@ -205,12 +227,18 @@ def tipo_real(corpo: bytes, content_type: str | None) -> tuple[str, str]:
             # zip é o envelope de docx/xlsx/pptx/epub: o content-type diz qual
             if mime == "application/zip" and declarado and declarado != "application/octet-stream":
                 return declarado, "content-type"
+            if mime == "image/webp":
+                if len(corpo) >= 12 and corpo[8:12] == b"WEBP":
+                    return mime, "assinatura"
+                continue
             return mime, "assinatura"
     if declarado and declarado != "application/octet-stream":
         return declarado, "content-type"
     cabeca = corpo[:1024].lstrip(b"\xef\xbb\xbf \t\r\n").lower()
     if cabeca.startswith((b"<!doctype html", b"<html")) or b"<html" in cabeca:
         return "text/html", "assinatura"
+    if cabeca.startswith(b"<svg") or b"<svg" in cabeca:
+        return "image/svg+xml", "assinatura"
     return "application/octet-stream", "desconhecido"
 
 
@@ -273,6 +301,7 @@ def ler(
     render: bool = False,
     max_chars: int = 6000,
     offset: int = 0,
+    imagens: bool = False,
     coletor: Coletor | None = None,
     renderizador: Renderizador | None = None,
     derivador: Derivador | None = None,
@@ -319,6 +348,16 @@ def ler(
     sha = M.sha256_bytes(resp.corpo)
     tipo, tipo_por = tipo_real(resp.corpo, resp.cabecalho("content-type"))
 
+    eh_binario = tipo in TIPOS_BINARIOS_PERMITIDOS
+    if not (tipo in TIPOS_HTML or tipo in TIPOS_TEXTO or eh_binario):
+        raise _nao_achado(trab, url, estrategia, f"tipo-nao-permitido:{tipo}", resp=resp,
+                          extra={"tipo": tipo, "tipo_por": tipo_por, "sha256": sha})
+
+    teto = TETOS_BYTES_POR_TIPO.get(tipo, TETO_BYTES)
+    if len(resp.corpo) > teto:
+        raise _nao_achado(trab, url, estrategia, "teto-de-tamanho-excedido", resp=resp,
+                          extra={"tamanho": len(resp.corpo), "teto": teto, "tipo": tipo, "tipo_por": tipo_por, "sha256": sha})
+
     anterior = _acha_cache(trab, url, sha, estrategia)
     if anterior is not None:
         return _serve_cache(trab, url, resp, sha, anterior, foco=foco, max_chars=max_chars, offset=offset)
@@ -328,51 +367,70 @@ def ler(
     trab.guarda_bruto(n, _resposta_json(resp, sha, tipo, tipo_por), "resposta.json")
     base = {"n": n, "sha256": sha, "bruto": str(p_bruto), "tipo": tipo, "tipo_por": tipo_por}
 
-    try:
-        if render:
-            d = _deriva_render(trab, n, url, renderizador)
-        else:
-            d = _deriva_http(resp, tipo, derivador)
-    except (FalhaFonte, _SemDerivado) as f:
-        causa = f.causa
-        extra = {**base, **getattr(f, "extra", {})}
-        if isinstance(f, FalhaFonte) and _eh_google_drive(url) and causa != "drive-exige-conector":
-            causa = "drive-exige-conector"
-            extra["detalhe"] = "Google Drive exige o conector"
-        raise _nao_achado(trab, url, estrategia, causa, resp=resp, extra=extra) from f
+    if eh_binario:
+        d = {"md": None, "vista": "binario", "encoding": None, "html": "", "binario": True}
+    else:
+        try:
+            if render:
+                d = _deriva_render(trab, n, url, renderizador)
+            else:
+                d = _deriva_http(resp, tipo, derivador)
+        except (FalhaFonte, _SemDerivado) as f:
+            causa = f.causa
+            extra = {**base, **getattr(f, "extra", {})}
+            if isinstance(f, FalhaFonte) and _eh_google_drive(url) and causa != "drive-exige-conector":
+                causa = "drive-exige-conector"
+                extra["detalhe"] = "Google Drive exige o conector"
+            raise _nao_achado(trab, url, estrategia, causa, resp=resp, extra=extra) from f
 
-    md = d["md"]
-    uteis = caracteres_uteis(md)
-    if uteis < PISO_CARACTERES_UTEIS:
-        raise _nao_achado(trab, url, estrategia, "extracao-abaixo-do-piso", resp=resp,
-                          extra={**base, "caracteres_uteis": uteis, "encoding": d.get("encoding"),
-                                 **({"sugestao": "--render"} if not render else {})})
-    if not render and _RE_ROOT_VAZIO.search(d.get("html") or ""):
-        raise _nao_achado(trab, url, estrategia, "pagina-depende-de-javascript", resp=resp,
-                          extra={**base, "caracteres_uteis": uteis, "sugestao": "--render"})
+    md = d.get("md")
+    uteis = caracteres_uteis(md) if md else 0
+    if not eh_binario:
+        if uteis < PISO_CARACTERES_UTEIS:
+            raise _nao_achado(trab, url, estrategia, "extracao-abaixo-do-piso", resp=resp,
+                              extra={**base, "caracteres_uteis": uteis, "encoding": d.get("encoding"),
+                                     **({"sugestao": "--render"} if not render else {})})
+        if not render and _RE_ROOT_VAZIO.search(d.get("html") or ""):
+            raise _nao_achado(trab, url, estrategia, "pagina-depende-de-javascript", resp=resp,
+                              extra={**base, "caracteres_uteis": uteis, "sugestao": "--render"})
 
-    trab.guarda_derivado(n, md, "md")
+        trab.guarda_derivado(n, md, "md")
 
     html_meta = d.get("html") or ""
-    avisos = acha_instrucoes(md)
-    idioma = detecta_idioma(html_meta)
-    datapub = detecta_data_publicacao(html_meta)
+    avisos = acha_instrucoes(md) if md else []
+    idioma = detecta_idioma(html_meta) if not eh_binario else "indeterminado"
+    datapub = detecta_data_publicacao(html_meta) if not eh_binario else {"valor": None, "origem": "ausente"}
     aviso = ("texto-curto: --render pode trazer mais" if (not render and tipo in TIPOS_HTML
              and uteis < LIMIAR_TEXTO_CURTO) else None)
 
-    linha = trab.grava_linha({
+    imagens_coletadas = []
+    if imagens and tipo in TIPOS_HTML:
+        imagens_coletadas = _coleta_imagens_html(
+            trab, n, html_meta, url_base=resp.url_final or url,
+            coletor=coletor, verifica=_verifica,
+        )
+
+    linha_dados = {
         "ato": "ler", "url": url, "url_final": resp.url_final, "status": resp.status,
         **base, "estrategia": estrategia, "encoding": d.get("encoding"), "vista": d.get("vista"),
         "caracteres_uteis": uteis, "derivados": d.get("derivados") or None,
         "idioma": idioma, "data_publicacao": datapub,
         "achado": ({"instrucao_em_pagina": avisos} if avisos else None),
-    })
+        "binario": eh_binario,
+        "bytes": len(resp.corpo),
+        "nao_achado": False,
+    }
+    if imagens_coletadas:
+        linha_dados["imagens"] = [img["n"] for img in imagens_coletadas]
 
-    corpo = _recorte_bm25(md, foco) if foco else md
+    linha = trab.grava_linha(linha_dados)
+
+    corpo = _recorte_bm25(md, foco) if (foco and md) else md
     return _retorno(n=n, url=url, resp=resp, sha=sha, bruto=str(p_bruto), tipo=tipo,
                     estrategia=estrategia, corpo=corpo, max_chars=max_chars, offset=offset,
                     idioma=idioma, datapub=datapub, avisos=avisos, encoding=d.get("encoding"),
-                    uteis=uteis, aviso=aviso, manifesto=trab.ref_manifesto(linha))
+                    uteis=uteis, aviso=aviso, manifesto=trab.ref_manifesto(linha),
+                    binario=eh_binario, tamanho_bytes=len(resp.corpo), imagens=imagens_coletadas)
 
 
 def _confere(resp: Resposta) -> None:
@@ -425,11 +483,13 @@ def _deriva_http(resp: Resposta, tipo: str, derivador: Derivador | None) -> dict
         d = (derivador or _derivador_crawl4ai)(texto, resp.url_final)
         fit = (d.get("md_fit") or "").strip()
         raw = (d.get("md_raw") or "").strip()
-        return {"md": fit or raw, "vista": "fit" if fit else "raw", "encoding": enc, "html": texto}
+        return {"md": fit or raw, "vista": "fit" if fit else "raw", "encoding": enc, "html": texto, "binario": False}
     if tipo in TIPOS_TEXTO:
         texto, enc = decodifica(resp.corpo, ct, html=False)
-        return {"md": texto, "vista": "texto", "encoding": enc, "html": ""}
-    raise _SemDerivado(f"tipo-sem-conversor:{tipo}")
+        return {"md": texto, "vista": "texto", "encoding": enc, "html": "", "binario": False}
+    if tipo in TIPOS_BINARIOS_PERMITIDOS:
+        return {"md": None, "vista": "binario", "encoding": None, "html": "", "binario": True}
+    raise _SemDerivado(f"tipo-nao-permitido:{tipo}")
 
 
 def _deriva_render(trab, n: int, url: str, renderizador: Renderizador | None) -> dict[str, Any]:
@@ -455,17 +515,31 @@ def _acha_cache(trab, url: str, sha: str, estrategia: str) -> dict[str, Any] | N
         if (ln.get("ato") == "ler" and ln.get("url") == url and ln.get("sha256") == sha
                 and ln.get("estrategia") == estrategia and isinstance(ln.get("n"), int)
                 and not ln.get("nao_achado")):
-            md = trab.derivado / f"{ln['n']}.md"
-            if md.exists() and Path(ln.get("bruto") or "").exists():
-                return ln
+            if ln.get("binario"):
+                if Path(ln.get("bruto") or "").exists():
+                    return ln
+            else:
+                md = trab.derivado / f"{ln['n']}.md"
+                if md.exists() and Path(ln.get("bruto") or "").exists():
+                    return ln
     return None
 
 
 def _serve_cache(trab, url, resp: Resposta, sha, ant, *, foco, max_chars, offset) -> dict[str, Any]:
     n = ant["n"]
+    eh_binario = ant.get("binario", False)
+    if eh_binario:
+        linha = trab.grava_linha({"ato": "ler", "url": url, "status": resp.status, "sha256": sha,
+                                  "estrategia": "cache", "cache_de": n, "binario": True, "bytes": len(resp.corpo), "nao_achado": False})
+        return _retorno(n=n, url=url, resp=resp, sha=sha, bruto=ant.get("bruto"), tipo=ant.get("tipo"),
+                        estrategia="cache", corpo=None, max_chars=max_chars, offset=offset,
+                        idioma=ant.get("idioma", "indeterminado"),
+                        datapub=ant.get("data_publicacao") or {"valor": None, "origem": "ausente"},
+                        avisos=[], encoding=None, uteis=0, aviso=None,
+                        manifesto=trab.ref_manifesto(linha), binario=True, tamanho_bytes=len(resp.corpo))
     md = (trab.derivado / f"{n}.md").read_text(encoding="utf-8")
     linha = trab.grava_linha({"ato": "ler", "url": url, "status": resp.status, "sha256": sha,
-                              "estrategia": "cache", "cache_de": n})
+                              "estrategia": "cache", "cache_de": n, "binario": False})
     corpo = _recorte_bm25(md, foco) if foco else md
     avisos = acha_instrucoes(md)
     return _retorno(n=n, url=url, resp=resp, sha=sha, bruto=ant.get("bruto"), tipo=ant.get("tipo"),
@@ -474,24 +548,86 @@ def _serve_cache(trab, url, resp: Resposta, sha, ant, *, foco, max_chars, offset
                     datapub=ant.get("data_publicacao") or {"valor": None, "origem": "ausente"},
                     avisos=avisos, encoding=ant.get("encoding"),
                     uteis=ant.get("caracteres_uteis", caracteres_uteis(md)), aviso=None,
-                    manifesto=trab.ref_manifesto(linha))
+                    manifesto=trab.ref_manifesto(linha), binario=False, tamanho_bytes=len(resp.corpo))
+
+
+def _coleta_imagens_html(
+    trab: "M.Trabalho",
+    n_pai: int,
+    html: str,
+    url_base: str,
+    *,
+    coletor: Coletor | None = None,
+    verifica: Callable[[str], None],
+) -> list[dict[str, Any]]:
+    from urllib.parse import urljoin
+
+    srcs = _RE_IMG_SRC.findall(html)
+    vistos = set()
+    coletadas = []
+    for s in srcs:
+        s = s.strip()
+        if not s or s.startswith("data:"):
+            continue
+        u = urljoin(url_base, s)
+        if u in vistos:
+            continue
+        vistos.add(u)
+        try:
+            verifica(u)
+            resp_img = (coletor or _coletor_httpx)(u, verifica)
+            _confere(resp_img)
+            img_sha = M.sha256_bytes(resp_img.corpo)
+            img_tipo, img_tipo_por = tipo_real(resp_img.corpo, resp_img.cabecalho("content-type"))
+            if img_tipo not in {"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"}:
+                continue
+            if len(resp_img.corpo) > TETOS_BYTES_POR_TIPO.get(img_tipo, 10 * 1024 * 1024):
+                continue
+            n_img = trab.proximo_n()
+            p_img = trab.guarda_bruto(n_img, resp_img.corpo, _EXT.get(img_tipo, "bin"))
+            trab.guarda_bruto(n_img, _resposta_json(resp_img, img_sha, img_tipo, img_tipo_por), "resposta.json")
+            trab.grava_linha({
+                "ato": "ler", "url": u, "status": resp_img.status, "n": n_img,
+                "sha256": img_sha, "bruto": str(p_img), "tipo": img_tipo, "tipo_por": img_tipo_por,
+                "estrategia": "http", "binario": True, "bytes": len(resp_img.corpo),
+                "imagem_de": n_pai, "nao_achado": False,
+            })
+            coletadas.append({
+                "url": u, "n": n_img, "sha256": img_sha, "tipo": img_tipo, "arquivo": str(p_img), "bytes": len(resp_img.corpo)
+            })
+        except (FalhaFonte, OSError):
+            continue
+    return coletadas
 
 
 def _retorno(*, n, url, resp, sha, bruto, tipo, estrategia, corpo, max_chars, offset, idioma,
-             datapub, avisos, encoding, uteis, aviso, manifesto) -> dict[str, Any]:
-    chars_total = len(corpo)
-    janela = corpo[offset: offset + max_chars]
-    truncado = (offset + max_chars) < chars_total
-    out = {
-        "n": n, "url": url, "url_final": resp.url_final, "conteudo": janela,
-        "chars_total": chars_total, "truncado": truncado,
-        "next_offset": (offset + max_chars) if truncado else None,
-        "estrategia": estrategia, "status": resp.status, "sha256": sha, "tipo_real": tipo,
-        "encoding": encoding, "caracteres_uteis": uteis, "idioma": idioma,
-        "data_publicacao": datapub, "avisos": avisos, "bruto": bruto, "manifesto": manifesto,
-    }
+             datapub, avisos, encoding, uteis, aviso, manifesto, binario=False, tamanho_bytes=None, imagens=None) -> dict[str, Any]:
+    if binario:
+        out = {
+            "n": n, "url": url, "url_final": resp.url_final, "conteudo": None,
+            "chars_total": 0, "truncado": False, "next_offset": None,
+            "estrategia": estrategia, "status": resp.status, "sha256": sha, "tipo_real": tipo,
+            "binario": True, "tamanho_bytes": tamanho_bytes if tamanho_bytes is not None else len(resp.corpo),
+            "encoding": encoding, "caracteres_uteis": 0, "idioma": idioma,
+            "data_publicacao": datapub, "avisos": avisos, "bruto": bruto, "manifesto": manifesto,
+        }
+    else:
+        chars_total = len(corpo or "")
+        janela = (corpo or "")[offset: offset + max_chars]
+        truncado = (offset + max_chars) < chars_total
+        out = {
+            "n": n, "url": url, "url_final": resp.url_final, "conteudo": janela,
+            "chars_total": chars_total, "truncado": truncado,
+            "next_offset": (offset + max_chars) if truncado else None,
+            "estrategia": estrategia, "status": resp.status, "sha256": sha, "tipo_real": tipo,
+            "binario": False, "tamanho_bytes": tamanho_bytes if tamanho_bytes is not None else len(resp.corpo),
+            "encoding": encoding, "caracteres_uteis": uteis, "idioma": idioma,
+            "data_publicacao": datapub, "avisos": avisos, "bruto": bruto, "manifesto": manifesto,
+        }
     if aviso:
         out["aviso"] = aviso
+    if imagens:
+        out["imagens"] = imagens
     return out
 
 

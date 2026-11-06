@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pesquisa import atos, manifesto as M, resolvedores, searxng
+from pesquisa import atos, extrator, manifesto as M, resolvedores, searxng
 
 
 def test_consultar_grava_nao_achado_quando_zero(tmp_path, monkeypatch):
@@ -56,3 +56,31 @@ def test_manifesto_render_md(tmp_path):
     t.grava_linha({"n": 1, "ato": "ler", "url": "https://f.org", "status": 200, "sha256": "abc" * 21 + "d"})
     env = atos.manifesto(t, md=True)
     assert "[m:1]" in env["_md"] and "Manifesto de pesquisa" in env["_md"]
+
+
+def test_ler_binario_envelope_e_campos(tmp_path, monkeypatch):
+    t = M.Trabalho("a6", raiz=tmp_path)
+    corpo = b"%PDF-1.7\nteste"
+    monkeypatch.setattr(extrator, "_coletor_httpx",
+                        lambda url, verifica: extrator.Resposta(corpo=corpo, status=200,
+                                                               cabecalhos=[("content-type", "application/pdf")],
+                                                               url_pedida=url, url_final=url,
+                                                               hora="2026-11-06T12:00:00Z"))
+    env = atos.ler("http://93.184.216.34/arquivo.pdf", foco=None, render=False, max_chars=6000, offset=0, trab=t)
+    assert env["ok"] is True
+    assert env["tipo"] == "dado"
+    assert env["tipo_real"] == "application/pdf"
+    assert env["binario"] is True
+    assert env["conteudo"] is None
+
+
+def test_coletar_com_imagens_passa_parametro(tmp_path, monkeypatch):
+    t = M.Trabalho("a7", raiz=tmp_path)
+    chamadas = []
+    def falso_ler(url, trab, **kw):
+        chamadas.append((url, kw.get("imagens")))
+        return {"n": 1, "sha256": "abc", "status": 200, "tipo_real": "text/html", "binario": False, "imagens": []}
+    monkeypatch.setattr(extrator, "ler", falso_ler)
+    res = atos.coletar(["http://x.org"], imagens=True, trab=t)
+    assert chamadas == [("http://x.org", True)]
+    assert res["ok"] is True
