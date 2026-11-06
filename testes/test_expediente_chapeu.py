@@ -71,6 +71,16 @@ def test_o_que_nao_casa_segue_para_a_validacao_de_sempre(raiz, env):  # noqa: F8
     assert "fora do vocabulário" in json.loads(proc.stdout)["erro"]
 
 
+def test_apelido_do_titulo_vira_o_slug_com_aviso(raiz, env):  # noqa: F811
+    titulo = Path(env["PF_ABERTURA_DIR"]) / "current" / "abertura" / "ia" / "contexto" / "chapeu.md"
+    titulo.write_text("# Contexto (janela, memoria)\n", encoding="utf-8")
+    proc = _monta(raiz, env, "Memória")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    d = json.loads(proc.stdout)
+    assert d["chapeu"] == "contexto"
+    assert "chapéu 'Memória' resolvido para 'contexto'" in d["avisos"]
+
+
 def test_vale_tambem_no_perfil_cadeirinha(raiz, env):  # noqa: F811
     proc = _monta(raiz, env, "harness", "--perfil", "cadeirinha", "--modo", "revisar")
     assert proc.returncode == 0, proc.stdout + proc.stderr
