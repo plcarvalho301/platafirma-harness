@@ -137,7 +137,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   a forma do texto da classe, resolvida (gênero, seções, origem e régua); exit 0 com seções,
                   3 canônica, coberta por ou sem forma, 2 classe ou suporte desconhecido (#4046)
   acervo consultar casa <pergunta> <args>   perguntas com nome sobre o schema casa da casa nova, so leitura:
-                  onde-mora|linhagem|descendentes|documento <entidade> · golden <modulo> <chave> (#4084)
+                  onde-mora|linhagem|descendentes|documento <entidade> · golden <modulo> <chave> · termo <termo> (#4084)
   acervo listar   casa [<especie>] [--todas]          sem especie: o catalogo (projecao, regime, contagem)
   acervo listar   casa [<especie>] --sobre <classe> <chave>   a documentacao de uma entidade
   acervo listar   casa ferramental --retrato [--json]   o retrato do dicionario de rotulos: rotulo, volta e

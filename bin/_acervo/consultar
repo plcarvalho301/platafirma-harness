@@ -36,6 +36,8 @@ perguntas (schema casa da casa nova, lido pela role busca, só leitura):
   documento    <entidade>          cada documento carregado da entidade: chave, papel, caminho, sha
   golden       <módulo> <chave>    a ficha que aponta o golden; módulo é schema.tabela
                                    (rastreador.item) ou a entidade (card)
+  termo        <termo>             confere se o termo é slug, rótulo ou apelido de entidade
+                                   ou vocabulário; devolve a entidade ou até três parecidos
 
 exit: 0 com linhas · 1 sem linha · 2 uso ou pergunta fora da lista · 3 falha do banco
 EOF
@@ -132,6 +134,29 @@ SELECT f.entidade, f.chave_humana AS chave, f.id AS ficha, f.estado, f.versao,
    AND (gs.endereco = :'a2' OR gs.endereco = gs.substrato || ':' || :'a2');
 SQL
 ) ;;
+  termo)
+    [ -n "$a1" ] || morre "termo exige <termo>" 2
+    sql=$(cat <<'SQL'
+WITH norm_input AS (
+  SELECT trim(regexp_replace(translate(lower(:'a1'), 'áàâãäéèêëíìîïóòôõöúùûüç-_', 'aaaaaeeeeiiiiooooouuuuc  '), '\s+', ' ', 'g')) AS termo
+)
+SELECT j->>'slug' AS slug, j->>'natureza' AS natureza, j->>'rotulo' AS rotulo,
+       j->>'definicao' AS definicao, j->>'mae' AS mae, j->>'categoria' AS categoria
+  FROM (
+    SELECT to_jsonb(e) AS j,
+           trim(regexp_replace(translate(lower(e.slug), 'áàâãäéèêëíìîïóòôõöúùûüç-_', 'aaaaaeeeeiiiiooooouuuuc  '), '\s+', ' ', 'g')) AS norm_slug,
+           trim(regexp_replace(translate(lower(e.rotulo), 'áàâãäéèêëíìîïóòôõöúùûüç-_', 'aaaaaeeeeiiiiooooouuuuc  '), '\s+', ' ', 'g')) AS norm_rotulo,
+           e.apelidos
+      FROM casa.entidade e
+  ) x, norm_input n
+ WHERE x.norm_slug = n.termo
+    OR x.norm_rotulo = n.termo
+    OR EXISTS (
+      SELECT 1 FROM unnest(coalesce(x.apelidos, '{}'::text[])) ap
+       WHERE trim(regexp_replace(translate(lower(ap), 'áàâãäéèêëíìîïóòôõöúùûüç-_', 'aaaaaeeeeiiiiooooouuuuc  '), '\s+', ' ', 'g')) = n.termo
+    );
+SQL
+) ;;
   *)
     printf '%s: pergunta %s fora da lista\n' "$VERBO" "$pergunta" >&2
     perguntas ;;
@@ -151,6 +176,43 @@ rc=$?
 if [ "$rc" -ne 0 ]; then
   cat "$err" >&2
   exit 3
+fi
+if [ "$pergunta" = "termo" ]; then
+  case "$out" in
+    *"(0 rows)"*)
+      sql_parecidos=$(cat <<'SQL'
+WITH norm_input AS (
+  SELECT trim(regexp_replace(translate(lower(:'a1'), 'áàâãäéèêëíìîïóòôõöúùûüç-_', 'aaaaaeeeeiiiiooooouuuuc  '), '\s+', ' ', 'g')) AS termo
+), palavras_termo AS (
+  SELECT DISTINCT w FROM norm_input n, unnest(string_to_array(n.termo, ' ')) w WHERE length(w) >= 4
+), cand AS (
+  SELECT coalesce(to_jsonb(e)->>'rotulo', e.rotulo) AS rotulo,
+         trim(regexp_replace(translate(lower(coalesce(to_jsonb(e)->>'rotulo', e.rotulo)), 'áàâãäéèêëíìîïóòôõöúùûüç-_', 'aaaaaeeeeiiiiooooouuuuc  '), '\s+', ' ', 'g')) AS norm_rotulo
+    FROM casa.entidade e
+)
+SELECT c.rotulo AS parecidos
+  FROM cand c, norm_input n
+ WHERE EXISTS (
+   SELECT 1 FROM palavras_termo pt
+    WHERE pt.w = ANY(string_to_array(c.norm_rotulo, ' '))
+ )
+ ORDER BY abs(length(c.norm_rotulo) - length(n.termo)), c.rotulo
+ LIMIT 3;
+SQL
+)
+      out_parecidos="$(docker exec -i -e PGOPTIONS='-c default_transaction_read_only=on' "$CTR" \
+              psql -X -q -U "$USR" -d "$BASE" -P pager=off -v ON_ERROR_STOP=1 \
+              -v a1="$a1" 2>"$err" <<<"$sql_parecidos")"
+      rc=$?
+      if [ "$rc" -ne 0 ]; then
+        cat "$err" >&2
+        exit 3
+      fi
+      printf '%s\n' "$out_parecidos"
+      exit 1 ;;
+  esac
+  printf '%s\n' "$out"
+  exit 0
 fi
 printf '%s\n' "$out"
 case "$out" in

@@ -88,8 +88,9 @@
                    Tipos: cadeira (subdirs de abertura/, prefixo claudinho-/
                    claudinha- aceito e descartado), verbo (~/AI/bin), card
                    (rastreador, via `tarefas ler`), arquivo (sob ~/AI; com
-                   `git log -1` quando rastreado) e mesa (item #N da cadeira
-                   corrente, via `mesa ver`). A PRIMEIRA linha da saida E a
+                   `git log -1` quando rastreado), mesa (item #N da cadeira
+                   corrente, via `mesa ver`) e entidade (catalogo da casa nova,
+                   via `acervo consultar casa termo`). A PRIMEIRA linha da saida E a
                    ancora: `existe:`/`nao-existe:` + evidencia. Sai 0 (existe),
                    1 (nao existe), 2 (indeterminavel — fonte fora do ar ou uso
                    errado; nunca colapsa em 1: ausencia de resposta nao e
@@ -2702,7 +2703,7 @@ def conferir_ferramental(alvo, como_json=False):
     return resultado.relatorio("ferramental", alvo, itens, _sha_release(), como_json=como_json)
 
 
-EXISTE_TIPOS = ("cadeira", "chapeu", "skill", "verbo", "card", "arquivo", "mesa")
+EXISTE_TIPOS = ("cadeira", "chapeu", "skill", "verbo", "card", "arquivo", "mesa", "entidade")
 
 
 def conferir_existe(tipo, nome, como_json=False):
@@ -2836,6 +2837,54 @@ def conferir_existe(tipo, nome, como_json=False):
                 return sai(True, f"mesa ver: {linha.strip()[:120]}")
         return sai(False, "mesa ver nao lista #%s (cadeira %s)"
                    % (n, os.environ.get("PF_CADEIRA", "?")))
+
+    if tipo == "entidade":
+        rc, out, err = sh([os.path.join(raiz_bin, "acervo"), "consultar", "casa", "termo", nome])
+        if rc == 3:
+            msg = ((err or out).strip().splitlines() or ["banco indisponivel"])[0]
+            return indeterminavel(f"acervo consultar saiu {rc}: {msg[:120]}")
+        if rc == 0:
+            for linha in out.splitlines():
+                l = linha.strip()
+                if "|" in l:
+                    parts = [p.strip() for p in l.split("|")]
+                    if parts and parts[0] not in ("slug", "") and not set(parts[0]).issubset({"-"}):
+                        slug = parts[0]
+                        natureza = parts[1] if len(parts) > 1 else ""
+                        rotulo = parts[2] if len(parts) > 2 else ""
+                        definicao = parts[3] if len(parts) > 3 else ""
+                        mae = parts[4] if len(parts) > 4 else ""
+                        categoria = parts[5] if len(parts) > 5 else ""
+                        campos = []
+                        if rotulo:
+                            campos.append(f"rótulo: {rotulo}")
+                        if definicao:
+                            campos.append(f"definição: {definicao}")
+                        if mae:
+                            campos.append(f"mãe: {mae}")
+                        if categoria:
+                            campos.append(f"categoria: {categoria}")
+                        if natureza == "vocabulario":
+                            campos.append(f"natureza: {natureza}")
+                        extra = " · ".join(campos) if campos else None
+                        return sai(True, slug, extra)
+            return indeterminavel(f"acervo consultar saiu 0 mas nao foi possivel extrair entidade de: {out[:120]}")
+        if rc == 1:
+            parecidos = []
+            for linha in out.splitlines():
+                l = linha.strip()
+                if not l or l.startswith("(") or set(l).issubset({"-", " "}) or l.lower() in ("parecidos", "rotulo"):
+                    continue
+                if "|" in l:
+                    val = l.split("|")[0].strip()
+                else:
+                    val = l
+                if val and val.lower() not in ("parecidos", "rotulo"):
+                    parecidos.append(val)
+            extra = f"parecidos: {', '.join(parecidos)}" if parecidos else None
+            return sai(False, "não é nome de entidade da ontologia", extra)
+        msg = ((err or out).strip().splitlines() or [f"exit {rc}"])[0]
+        return indeterminavel(f"acervo consultar saiu {rc}: {msg[:120]}")
 
     return 2
 
