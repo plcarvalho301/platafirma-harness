@@ -6,7 +6,7 @@
       "cliente": "agente-juiz",
       "regra": "fdrl_012Ak1DB7pcZQyoZnhw6r2Ma",
       "conta_servico": "svac_01Tys7Q5uRNwLCiKTwEXGQvw",
-      "regime": "federacao"
+      "regime": "plano"
     },
     "agente-consultado": {
       "cliente": "agente-consultado",

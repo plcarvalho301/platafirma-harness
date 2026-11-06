@@ -109,6 +109,10 @@ print(json.dumps({{"type": "result", "is_error": False, "result": "veredito: 0 ‚
 """
 
 
+FEDERACAO_TESTE = json.loads((REPO_ROOT / "registro" / "federacao-anthropic.json").read_text(encoding="utf-8"))
+FEDERACAO_TESTE["contas"]["agente-juiz"]["regime"] = "federacao"
+
+
 def _stub(pasta: Path, nome: str, corpo: str) -> None:
     arq = pasta / nome
     arq.write_text(corpo.format(py=sys.executable, filha=FILHA))
@@ -189,6 +193,8 @@ def mundo(tmp_path, monkeypatch):
     threading.Thread(target=kc_srv.serve_forever, daemon=True).start()
     monkeypatch.setenv("KEYCLOAK_TOKEN_URL", f"http://127.0.0.1:{kc_srv.server_port}")
     monkeypatch.setenv("KEYCLOAK_CLIENT_SECRET_AGENTE_JUIZ", "segredo-mock-juiz")
+    # o regime de cada conta vem do teste, n√£o do arquivo de identificadores: o arquivo muda por PR (#4136)
+    monkeypatch.setenv("PF_FEDERACAO_CONFIG", json.dumps(FEDERACAO_TESTE))
 
     def escreve(*decls):
         for d in decls:
