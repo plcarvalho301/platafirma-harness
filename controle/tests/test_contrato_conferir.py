@@ -364,3 +364,49 @@ def test_existe_skill_pede_o_skill_md_e_sem_pasta_e_indeterminavel(tmp_path, mon
     monkeypatch.setattr(conferir, "RAIZ", str(tmp_path / "vazia"))
     assert conferir.conferir_existe("skill", "prosa") == 5
     assert capsys.readouterr().out.startswith("indeterminavel: skill prosa")
+
+
+# --- existe entidade (#4133) --------------------------------------------------
+
+
+def test_existe_entidade_achada_sai_0(monkeypatch, capsys):
+    tabela = (
+        "       slug        | natureza |      rotulo       |     definicao      | mae | categoria \n"
+        "-------------------+----------+-------------------+--------------------+-----+-----------\n"
+        " conjunto-de-dados | entidade | conjunto de dados | Dados do contexto. |     | conteudo\n"
+        "(1 row)\n"
+    )
+    monkeypatch.setattr(conferir, "sh", lambda cmd: (0, tabela, ""))
+
+    assert conferir.conferir_existe("entidade", "conjunto de dados") == 0
+    linhas = capsys.readouterr().out.splitlines()
+    assert linhas[0].startswith("existe: entidade conjunto de dados — conjunto-de-dados")
+    assert "rótulo: conjunto de dados" in linhas[1]
+    assert "categoria: conteudo" in linhas[1]
+
+
+def test_existe_entidade_ausente_sai_1_com_parecidos(monkeypatch, capsys):
+    tabela_parecidos = (
+        "     parecidos     \n"
+        "-------------------\n"
+        " conjunto de dados\n"
+        "(1 row)\n"
+    )
+    monkeypatch.setattr(conferir, "sh", lambda cmd: (1, tabela_parecidos, ""))
+
+    assert conferir.conferir_existe("entidade", "banco rag") == 1
+    linhas = capsys.readouterr().out.splitlines()
+    assert linhas[0].startswith("nao-existe: entidade banco rag — não é nome de entidade da ontologia")
+    assert "parecidos: conjunto de dados" in linhas[1]
+
+
+def test_existe_entidade_banco_fora_sai_5(monkeypatch, capsys):
+    monkeypatch.setattr(conferir, "sh", lambda cmd: (3, "", "falha de conexao com o banco"))
+
+    assert conferir.conferir_existe("entidade", "substrato") == 5
+    linhas = capsys.readouterr().out.splitlines()
+    assert linhas[0].startswith("indeterminavel: entidade substrato")
+
+
+def test_existe_entidade_sem_nome_sai_2(capsys):
+    assert conferir.conferir_existe("entidade", None) == 2
