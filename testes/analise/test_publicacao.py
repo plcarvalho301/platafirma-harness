@@ -50,3 +50,13 @@ def test_ordem_com_empate_recusa(tmp_path):
         canonizar(p,{"colunas":[{"nome":"id","tipo":"inteiro"}],"ordem":["id"]},
             {"nulo":"","nan":"NaN","datas":"utc","decimais":3})
     assert e.value.exit==4
+
+def test_manifesto_publicado_tem_medidas_finais(catalogo,tmp_path,receita):
+    out=tmp_path/"out";out.mkdir()
+    id,r,m,ex=publicar_minima(catalogo,out,receita)
+    publicado=catalogo.objeto(id)["manifesto"]
+    execucao=catalogo.execucao(ex)["manifesto"]
+    assert publicado == execucao == m
+    fase=publicado["fases"]["publicar"]
+    assert fase["bytes"] == sum(x["bytes"] for x in publicado["saidas"].values()) > 0
+    assert fase["duracao_s"] > 0 and fase["pico_bytes"] > 0
