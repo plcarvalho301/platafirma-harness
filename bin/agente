@@ -950,12 +950,13 @@ def chama_claude(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | Non
         if p.returncode != 0 or obj.get("is_error") or not isinstance(obj.get("result"), str):
             if cred_obj and cred_obj.falha:
                 raise Falha(3, cred_obj.falha.motivo)
-            texto_erro = ((p.stderr or "") + " " + (p.stdout or "") + " " + str(obj.get("result") or "")).lower()
+            msg_res = str(obj.get("result") or "")
+            texto_erro = ((p.stderr or "") + " " + msg_res).lower()
             if usa_fed:
-                if "credit" in texto_erro or "billing" in texto_erro or "crédito" in texto_erro:
-                    raise Falha(3, "credito")
                 if "401" in texto_erro or "authentication" in texto_erro or "autenticação" in texto_erro or "auth" in texto_erro:
                     raise Falha(3, "troca")
+                if "credit" in texto_erro or "billing" in texto_erro or "crédito" in texto_erro:
+                    raise Falha(3, "credito")
             motivo = (p.stderr.strip().splitlines() or [str(obj.get("result") or "sem retorno")])[0]
             raise Falha(5, f"claude -p não concluiu (saiu {p.returncode}): {motivo[:200]}")
         # A régua é o transcript da sessão do Code, a mesma do fecho da fita (dono, 16/10/2026): uso por chamada,
