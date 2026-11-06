@@ -551,6 +551,77 @@ def test_tools_call_de_preferencia_ler_responde_200_com_o_mesmo_corpo_com_a_tool
     # com o handler de baixo rodando inteiro, o cache guarda a tool e a mcp não grava «not listed»
     assert not [r for r in caplog.records if "not listed" in r.getMessage()]
 
+
+
+# --- #4134: página pública sem alterar o transporte MCP nem a descoberta OAuth ------------------
+
+@pytest.mark.parametrize("caminho", ["/", "/mcp", "/mcp/"])
+@pytest.mark.parametrize("accept", [None, "*/*", "text/html"])
+def test_get_comum_tem_pagina_institucional_publica(caminho, accept):
+    from starlette.testclient import TestClient
+    with patch.object(s, "_sujeito_do_jwt", side_effect=AssertionError("página pediu login")):
+        cab = {"accept": accept} if accept is not None else {}
+        cliente = TestClient(s.app)
+        if accept is None:
+            cliente.headers.pop("accept", None)
+        resp = cliente.get(caminho, headers=cab)
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert '<html lang="pt-BR">' in resp.text
+    assert "<title>" in resp.text and 'name="description"' in resp.text
+    assert resp.text.count("<p>") >= 3 and "PlataFirma" in resp.text
+    assert "WWW-Authenticate" not in resp.headers
+    for reservado in ("tools/list", "ops-mcp", "/srv/", "/opt/", "cadeira", "uvicorn"):
+        assert reservado not in resp.text
+
+
+@pytest.mark.parametrize("metodo,caminho,accept", [
+    ("POST", "/mcp", "*/*"),
+    ("POST", "/mcp", "application/json, text/event-stream"),
+    ("GET", "/mcp", "text/event-stream"),
+    ("GET", "/mcp", "application/json, Text/Event-Stream; charset=utf-8"),
+    ("DELETE", "/mcp", "*/*"),
+    ("GET", "/sessao/encerrar", "text/html"),
+    ("GET", "/mcp/outro", "text/html"),
+])
+def test_transporte_e_rotas_privadas_seguem_401_com_descoberta(metodo, caminho, accept):
+    from starlette.testclient import TestClient
+    resp = TestClient(s.app).request(metodo, caminho, headers={"accept": accept})
+    assert resp.status_code == 401 and resp.json() == {"error": "unauthorized"}
+    assert resp.headers["WWW-Authenticate"] == (
+        'Bearer resource_metadata="' + s.OPS_RESOURCE + '/.well-known/oauth-protected-resource"')
+
+
+@pytest.mark.parametrize("caminho", [
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/mcp",
+])
+def test_metadata_oauth_continua_json_publico(caminho):
+    from starlette.testclient import TestClient
+    resp = TestClient(s.app).get(caminho)
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.json()["resource"] == s.OPS_RESOURCE + "/mcp"
+    assert resp.json()["authorization_servers"] == [s.OIDC_ISSUER]
+
+
+def test_sse_autenticado_chega_ao_handler_sem_virar_html(monkeypatch):
+    from starlette.applications import Starlette
+    from starlette.responses import PlainTextResponse
+    from starlette.routing import Route
+    from starlette.testclient import TestClient
+
+    async def canal(req):
+        return PlainTextResponse("canal MCP", media_type="text/event-stream")
+    app = Starlette(routes=[Route("/mcp", canal)])
+    app.add_middleware(s.BearerAuth)
+    monkeypatch.setattr(s, "_sujeito_do_jwt", lambda *a, **k: {"sujeito": SUB})
+    resp = TestClient(app).get("/mcp", headers={
+        "accept": "application/json, text/event-stream", "authorization": "Bearer teste"})
+    assert resp.status_code == 200 and resp.text == "canal MCP"
+    assert resp.headers["content-type"].startswith("text/event-stream")
+
+
 def test_o_pyyaml_do_ambiente_da_porta_le_o_registro_na_forma_do_desenho():
     """O ambiente da porta é o venv `ops`, o mesmo destes testes: o registro novo se lê por `yaml.safe_load` e
     a versão é a que o requirements.txt da porta fixa."""

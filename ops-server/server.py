@@ -63,7 +63,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse
+from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from starlette.routing import Route
 
 OPS_NAME = os.environ.get("OPS_NAME", "claudinho-mcp")
@@ -3300,8 +3300,45 @@ def _origem_da_requisicao(request) -> str:
     return cliente
 
 
+# Página institucional para navegadores e classificadores de URL (#4134).
+# A decisão fica antes da autenticação e só alcança GET comum nestes caminhos.
+# SSE e todos os métodos operacionais continuam na validação de JWT abaixo.
+PAGINA_PUBLICA = """<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PlataFirma — serviço de integração</title>
+<meta name="description" content="Serviço de integração da PlataFirma para conectar aplicações de trabalho com autenticação e acesso controlado.">
+</head>
+<body>
+<main>
+<h1>PlataFirma</h1>
+<h2>Serviço de integração de aplicações</h2>
+<p>A PlataFirma mantém este serviço para conectar aplicações de trabalho aos seus
+recursos digitais. A plataforma apoia atividades de pesquisa, organização de
+informações e colaboração em ambientes de trabalho.</p>
+<p>Este endereço oferece uma interface de integração entre aplicações. Seu uso
+operacional exige autenticação e respeita as permissões de acesso concedidas
+a cada pessoa. O acesso ocorre pela aplicação que utiliza a integração.</p>
+<p>Esta página apresenta o serviço ao público e é mantida pela PlataFirma.
+As informações de trabalho permanecem sujeitas aos controles de acesso da
+plataforma. Para conhecer a iniciativa, visite o
+<a href="https://platafirma.org/">site da PlataFirma</a>.</p>
+</main>
+</body>
+</html>"""
+
+
 class BearerAuth(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        aceita_sse = any(
+            item.split(";", 1)[0].strip().lower() == "text/event-stream"
+            for valor in request.headers.getlist("accept") for item in valor.split(",")
+        )
+        if (request.method == "GET" and request.url.path in ("/", "/mcp", "/mcp/")
+                and not aceita_sse):
+            return HTMLResponse(PAGINA_PUBLICA)
         caminho = request.url.path.rstrip("/")
         if caminho in ABERTAS or caminho.startswith("/.well-known/"):
             return await call_next(request)
