@@ -217,6 +217,30 @@ def test_lote_sem_obra_nao_cria_job(servidor, tmp_path):
     assert servidor.criacoes() == []
 
 
+def test_lote_ja_ingerido_nao_cria_job_nem_acorda_conversor(servidor, tmp_path):
+    pasta = tmp_path / "entrada"
+    pasta.mkdir()
+    lote = _lote()
+    for item in lote["itens"]:
+        item.update(veredito="ja_ingerido", estado="pulado")
+    ingerir, _ = _ingerir_falso(tmp_path, lote)
+    r = servidor.rodar(str(pasta), "--apply", ingerir=ingerir)
+    assert r.returncode == 1 and "nao tem obra para o job" in r.stderr
+    assert servidor.criacoes() == []
+    assert not servidor.conversor_chamadas.exists()
+
+
+def test_lote_misto_conta_so_as_obras_criadas(servidor, tmp_path):
+    pasta = tmp_path / "entrada"
+    pasta.mkdir()
+    lote = _lote()
+    lote["itens"][0].update(veredito="ja_ingerido", estado="pulado")
+    ingerir, _ = _ingerir_falso(tmp_path, lote)
+    r = servidor.rodar(str(pasta), "--apply", ingerir=ingerir)
+    assert r.returncode == 0, r.stderr
+    assert "1 obra(s)" in r.stderr
+
+
 def test_lote_que_falhou_nao_cria_job(servidor, tmp_path):
     pasta = tmp_path / "entrada"
     pasta.mkdir()
