@@ -10,5 +10,11 @@
     "repositorio": "platafirma-conhecimento",
     "caminho": "analise/contagem-por-fonte",
     "versao": "8ae0249"
+  },
+  "mineracao-ocel": {
+    "tipo": "preparacao",
+    "repositorio": "platafirma-conhecimento",
+    "caminho": "analise/mineracao-ocel",
+    "versao": "2edf400"
   }
 }
