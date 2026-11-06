@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # analise — prepara bases e monta resultados por receita registrada
-# capacidade: analise-de-dados
+# capacidade: gestao-de-dados
 # dono: dados
 # classe: C
 # use para: preparar uma base analítica, montar um resultado ou refazer uma execução
