@@ -289,6 +289,7 @@ def test_projecao_claude_leva_cabecalho_modelo_ferramentas_e_o_lote_de_abertura(
     assert "name: revisor" in linhas and "model: sonnet" in linhas and "maxTurns: 40" in linhas
     assert ("tools: Read, Grep, " + ", ".join(g + "ler_arquivo" for g in agente.GRAFIAS) + ", "
             + ", ".join(g + "monta_sessao" for g in agente.GRAFIAS)) in linhas
+    assert 'mcpServers: ["claudinho-mcp"]' in linhas
     assert ('1. `monta_sessao` com `cadeira="engenharia"`, `chapeu="devops"`, `perfil="cadeirinha"`, '
             '`modo="revisar"`, `agente="revisor"`, `origem=<o sessao_id que a delegação trouxe>`') in texto
     assert "sessao abrir" not in texto and "expediente montar" not in texto, "abre pela mesma tool da cadeira"
@@ -296,6 +297,12 @@ def test_projecao_claude_leva_cabecalho_modelo_ferramentas_e_o_lote_de_abertura(
     for proibida in agente.PROIBIDAS:
         assert f"{proibida}," not in texto and f", {proibida}" not in texto
     assert texto == agente.projecao_claude(REVISOR), "determinística: o --conferir compara byte a byte"
+
+
+def test_projecao_claude_sem_tools_de_porta_nao_injeta_mcp_servers():
+    sem_porta = com(REVISOR, ferramentas=["Read", "Grep"])
+    texto = agente.projecao_claude(sem_porta)
+    assert "mcpServers" not in texto
 
 
 def test_projecao_do_consultor_nao_fixa_cadeira():
