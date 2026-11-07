@@ -446,3 +446,67 @@ def test_coleta_traz_raiz_host(tmp_path, monkeypatch):
     dados = sinal.coleta()
     assert dados["servicos"]["raiz-host"]["estado"] == "fora"
     assert dados["servicos"]["raiz-host"]["lido_em"]
+
+
+# --- ci-controle (card #3269, débito #2856 linha 182): último run de main vermelho há mais de 1 h acusa
+
+def test_ci_controle_sem_gh_e_sem_sinal(monkeypatch):
+    monkeypatch.setattr(sinal.shutil, "which", lambda n: None)
+    e = sinal.do_ci_controle()
+    assert e["estado"] == "sem-sinal"
+    assert "gh ausente" in e["motivo"]
+
+
+def test_ci_controle_sem_runs_e_sem_sinal(monkeypatch):
+    e = sinal.do_ci_controle(fixture_runs=[])
+    assert e["estado"] == "sem-sinal"
+    assert "nenhum run" in e["motivo"]
+
+
+def test_ci_controle_ultimo_run_verde_e_no_ar():
+    runs = [{"databaseId": 100, "status": "completed", "conclusion": "success", "url": "https://github.com/run/100"}]
+    e = sinal.do_ci_controle(fixture_runs=runs)
+    assert e["estado"] == "no-ar"
+    assert "run/100" in e["exercitado"]
+
+
+def test_ci_controle_vermelho_menos_de_1_hora_e_degradado():
+    agora = datetime(2026, 10, 4, 12, 0, 0, tzinfo=timezone.utc)
+    fim = (agora - timedelta(minutes=30)).isoformat()
+    runs = [{"databaseId": 101, "status": "completed", "conclusion": "failure", "updatedAt": fim, "url": "https://github.com/run/101"}]
+    e = sinal.do_ci_controle(fixture_runs=runs, agora_dt=agora)
+    assert e["estado"] == "degradado"
+    assert "vermelho ha 30 min" in e["motivo"]
+    assert "run/101" in e["motivo"]
+
+
+def test_ci_controle_vermelho_mais_de_1_hora_e_fora():
+    agora = datetime(2026, 10, 4, 12, 0, 0, tzinfo=timezone.utc)
+    fim = (agora - timedelta(minutes=75)).isoformat()
+    runs = [{"databaseId": 102, "status": "completed", "conclusion": "failure", "updatedAt": fim, "url": "https://github.com/run/102"}]
+    e = sinal.do_ci_controle(fixture_runs=runs, agora_dt=agora)
+    assert e["estado"] == "fora"
+    assert "vermelho ha 75 min" in e["motivo"]
+    assert "run/102" in e["motivo"]
+
+
+def test_ci_controle_vermelho_fixture_de_ambiente(monkeypatch):
+    agora = datetime(2026, 10, 4, 12, 0, 0, tzinfo=timezone.utc)
+    fim = (agora - timedelta(minutes=90)).isoformat()
+    runs = [{"databaseId": 103, "status": "completed", "conclusion": "failure", "updatedAt": fim, "url": "https://github.com/run/103"}]
+    monkeypatch.setenv("SINAL_CI_RUNS", json.dumps(runs))
+    e = sinal.do_ci_controle(agora_dt=agora)
+    assert e["estado"] == "fora"
+    assert "vermelho ha 90 min" in e["motivo"]
+
+
+def test_coleta_traz_ci_controle(monkeypatch):
+    agora = datetime(2026, 10, 4, 12, 0, 0, tzinfo=timezone.utc)
+    fim = (agora - timedelta(minutes=90)).isoformat()
+    runs = [{"databaseId": 104, "status": "completed", "conclusion": "failure", "updatedAt": fim, "url": "https://github.com/run/104"}]
+    monkeypatch.setenv("SINAL_CI_RUNS", json.dumps(runs))
+    monkeypatch.setattr(sinal, "roda", lambda cmd, timeout=20: (125, "", "docker ausente"))
+    monkeypatch.setattr(sinal.shutil, "which", lambda nome: None)
+    dados = sinal.coleta()
+    assert "ci-controle" in dados["servicos"]
+    assert dados["servicos"]["ci-controle"]["estado"] == "fora"

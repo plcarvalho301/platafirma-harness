@@ -130,3 +130,21 @@ def test_segunda_promocao_com_mesmo_lock_reaproveita_o_venv(amb):
     r2 = amb.run("promover", "fixture", sha2)
     assert r2.returncode == 0, r2.stdout + r2.stderr
     assert "já construído" in r2.stdout
+
+
+def test_reaproveitamento_recusa_venv_com_pth_fora_de_opt_e_srv(amb):
+    r1 = amb.run("promover", "fixture")
+    assert r1.returncode == 0, r1.stdout + r1.stderr
+
+    venv_dir = next((Path(amb.env["PF_RELEASE_RAIZ"]) / "venv").glob("fx-*"))
+    subprocess.run(["chmod", "-R", "u+w", str(venv_dir)], check=True)
+    sp = next(venv_dir.glob("lib/python*/site-packages"))
+    pth = sp / "_editable_teste.pth"
+    pth.write_text("/home/claudinho/wt/qualquer\n", encoding="utf-8")
+
+    sha2 = amb.commit({"README.md": "retesta\n"})
+    r2 = amb.run("promover", "fixture", sha2)
+    assert r2.returncode == 0, r2.stdout + r2.stderr
+    assert "construído" in r2.stdout
+    assert "já construído" not in r2.stdout
+    assert not pth.exists()

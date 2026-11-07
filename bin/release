@@ -1237,7 +1237,7 @@ construir_venvs() {  # $1=repo $2=sha ; enche VENVS_PRONTOS; 0 ok, 3 falhou
       return 3
     }
     dest="$PROD_RAIZ/venv/$nome-$hash"
-    if [ -f "$dest/.pronto" ]; then
+    if [ -f "$dest/.pronto" ] && venv_autonomo "$dest"; then
       printf 'venv:      %s-%s já construído (lock e python inalterados)\n' "$nome" "$hash"
     else
       if [ -z "$uv" ]; then

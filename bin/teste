@@ -298,7 +298,7 @@ ambiente_do_registro() {  # $1=clone
   IFS=$'\t' read -r py py_real py_ver <<<"$pyid"
   hash="$(hash_do_ambiente "$c/$REG_LOCK" "$py_real" "$py_ver")" || exit 3
   dest="${PF_RELEASE_RAIZ}/venv/$REG_STACK-$hash"
-  if [ -f "$dest/.pronto" ]; then
+  if [ -f "$dest/.pronto" ] && venv_autonomo "$dest"; then
     printf 'ambiente:  %s-%s ja construido (lock e python inalterados) — reaproveitado\n' "$REG_STACK" "$hash" >&2
   else
     uv="$(resolver_uv)" || exit 3

@@ -190,6 +190,25 @@ construir_node() {  # $1=lock $2=destino
   fi
 }
 
+# 0 quando nenhum .pth do venv aponta para fora de /opt e /srv (ex. .pth editável de bancada em /home/*/wt)
+venv_autonomo() {  # $1=diretório do venv
+  local dest="$1" pth linha
+  [ -d "$dest" ] || return 1
+  while IFS= read -r -d '' pth; do
+    while IFS= read -r linha || [ -n "$linha" ]; do
+      case "$linha" in
+        ''|'#'*|import\ *) continue ;;
+        /*)
+          case "$linha" in
+            /opt/*|/srv/*|/usr/*) ;;
+            *) return 1 ;;
+          esac ;;
+      esac
+    done < "$pth"
+  done < <(find "$dest" -name '*.pth' -print0 2>/dev/null)
+  return 0
+}
+
 # Constrói $2 (destino) a partir do lock $1, com o uv $3 e o python $4 (versão $5).
 # uv.lock -> uv sync --frozen (projeto em modo biblioteca, sem instalar o próprio
 # pacote); qualquer outro nome -> uv venv + pip install -r. Falha alta (3) se o uv
@@ -204,6 +223,7 @@ construir_venv() {  # $1=lock $2=destino $3=uv $4=python $5=versão do python
   case "$(basename "$lock")" in
     uv.lock)
       "${uvenv[@]}" UV_PROJECT_ENVIRONMENT="$dest" "$uv" sync -q --frozen --no-dev --no-install-project \
+        --no-editable \
         --python "$py" --project "$(dirname "$lock")" </dev/null >&2 || rc=$? ;;
     package-lock.json)
       # ambiente node (card #3386): npm ci --ignore-scripts; a mensagem de falha é do próprio construtor
@@ -226,6 +246,10 @@ construir_venv() {  # $1=lock $2=destino $3=uv $4=python $5=versão do python
   if [ -z "$home" ] || python_gerenciado "$home" \
     || { [ "$home" != "$(dirname "$py")" ] && [ "$home" != "$(dirname "$(readlink -f "$py")")" ]; }; then
     printf '%s: falha alta: venv %s ficou ligado a %s, não ao python de sistema %s\n' "$PF_VENV_PREFIXO" "$dest" "${home:-(sem pyvenv.cfg)}" "$py" >&2
+    return 3
+  fi
+  if ! venv_autonomo "$dest"; then
+    printf '%s: falha alta: venv %s contém .pth apontando fora de /opt e /srv\n' "$PF_VENV_PREFIXO" "$dest" >&2
     return 3
   fi
 }
