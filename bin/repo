@@ -2012,7 +2012,19 @@ for p in sorted(caminhos):
     alvos_commit=("${session_paths[@]}")
   fi
 
-  "$GIT" -C "$c" add -- "${alvos_commit[@]}" || morre "git add falhou" 3
+  # DT 6: caminho que nao esta na arvore nem no indice mas esta no HEAD e remocao ja em stage (git rm):
+  # `git add -- <caminho>` o recusa («did not match any files») e o commit leva do indice. So o que
+  # existe (ou segue rastreado) vai ao add.
+  local add_alvos=() p_add
+  for p_add in "${alvos_commit[@]}"; do
+    if [ ! -e "$c/$p_add" ] && ! "$GIT" -C "$c" ls-files --error-unmatch -- "$p_add" >/dev/null 2>&1; then
+      continue
+    fi
+    add_alvos+=("$p_add")
+  done
+  if [ "${#add_alvos[@]}" -gt 0 ]; then
+    "$GIT" -C "$c" add -- "${add_alvos[@]}" || morre "git add falhou" 3
+  fi
   "$GIT" -C "$c" diff --cached --quiet && { fecho_commit "$c" "$nome" ja; exit 0; }
   
   # [3096] Gate de diagrama: confere se compila no Kroki antes de commitar
