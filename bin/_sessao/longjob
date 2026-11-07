@@ -67,13 +67,21 @@ case "$cmd" in
              PLATAFIRMA_INSTANCIA PLATAFIRMA_RELEASE MOTOR_ACERVO_URL RAG_API_URL RAG_API_BASE; do
       if [ -n "${!v:-}" ]; then ident+=("--setenv=$v=${!v}"); fi
     done
-    # DT #64: repassa o segredo da instancia (RAG_API_TOKEN) se presente no ambiente ou no arquivo da instancia
+    # DTs #64, #215 e #400: o verbo do acervo e do motor le a credencial em RAG_API_TOKEN e a unit
+    # transiente nao herda o ambiente da porta, entao o job saia 401. Repassa a do ambiente de quem
+    # chama; sem ela, a do arquivo da instancia (o do motor, depois o do rag). O valor NUNCA vai no
+    # argumento: `--setenv=NOME` sem valor manda o systemd-run ler do proprio ambiente, e assim o
+    # segredo nao aparece em `ps` nem no log do job.
     rag_token="${RAG_API_TOKEN:-}"
-    if [ -z "$rag_token" ] && [ -r "${PLATAFIRMA_INSTANCIA:-}/segredos/rag/RAG_API_TOKEN" ]; then
-      rag_token="$(tr -d '\r\n' < "${PLATAFIRMA_INSTANCIA:-}/segredos/rag/RAG_API_TOKEN")"
+    if [ -z "$rag_token" ]; then
+      for stk in busca rag; do
+        arq="${PLATAFIRMA_INSTANCIA:-}/segredos/$stk/RAG_API_TOKEN"
+        if [ -r "$arq" ]; then rag_token="$(tr -d '\r\n' < "$arq")"; break; fi
+      done
     fi
     if [ -n "$rag_token" ]; then
-      ident+=("--setenv=RAG_API_TOKEN=$rag_token")
+      export RAG_API_TOKEN="$rag_token"
+      ident+=("--setenv=RAG_API_TOKEN")
     fi
     printf '# unit=%s\n# inicio=%s\n# cwd=%s\n# sujeito=%s\n' \
       "$unit" "$(date -Is)" "$cwd" "${PF_SUJEITO:-(ausente)}" >> "$log"

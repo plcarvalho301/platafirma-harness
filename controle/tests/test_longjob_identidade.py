@@ -19,9 +19,11 @@ def _roda(tmp_path, extra):
     stubdir.mkdir()
     capt = tmp_path / "args.txt"
     stub = stubdir / "systemd-run"
-    stub.write_text(f'#!/bin/sh\nfor a in "$@"; do printf "%s\\n" "$a"; done > "{capt}"\n')
+    # grava os argumentos e, a parte, o RAG_API_TOKEN que a unit receberia do ambiente do systemd-run
+    stub.write_text(f'#!/bin/sh\nfor a in "$@"; do printf "%s\\n" "$a"; done > "{capt}"\n'
+                    f'printf "%s" "${{RAG_API_TOKEN:-}}" > "{capt}.token"\n')
     stub.chmod(0o755)
-    env = {k: v for k, v in os.environ.items() if k not in IDENT}
+    env = {k: v for k, v in os.environ.items() if k not in IDENT and k != "RAG_API_TOKEN"}
     env.update({
         "PATH": f"{stubdir}:{env.get('PATH', '/usr/bin:/bin')}",
         "PLATAFIRMA_INSTANCIA": str(tmp_path / "inst"),
@@ -53,18 +55,41 @@ def test_ausente_segue_ausente(tmp_path):
     assert "# agente=" not in log
 
 
-def test_repassa_segredo_rag_token_do_ambiente(tmp_path):
-    args, _ = _roda(tmp_path, {"RAG_API_TOKEN": "token-teste-env"})
-    assert "--setenv=RAG_API_TOKEN=token-teste-env" in args
+def _token_visto(tmp_path):
+    return (tmp_path / "args.txt.token").read_text()
+
+
+def test_repassa_segredo_rag_token_do_ambiente_sem_poe_lo_no_argumento(tmp_path):
+    args, log = _roda(tmp_path, {"RAG_API_TOKEN": "token-teste-env"})
+    assert "--setenv=RAG_API_TOKEN" in args                  # so o nome: o systemd-run le o valor do ambiente
+    assert _token_visto(tmp_path) == "token-teste-env"
+    assert not [a for a in args if "token-teste-env" in a]   # nunca no argv (ps)
+    assert "token-teste-env" not in log                      # nem no log do job
 
 
 def test_repassa_segredo_rag_token_da_instancia(tmp_path):
-    # Do arquivo da instancia quando ausente no ambiente (DT #64)
+    # Do arquivo da instancia quando ausente no ambiente (DT #64 e #400)
     segdir = tmp_path / "inst" / "segredos" / "rag"
     segdir.mkdir(parents=True)
     (segdir / "RAG_API_TOKEN").write_text("token-teste-disco\n")
     args, _ = _roda(tmp_path, {})
-    assert "--setenv=RAG_API_TOKEN=token-teste-disco" in args
+    assert "--setenv=RAG_API_TOKEN" in args
+    assert _token_visto(tmp_path) == "token-teste-disco"
+
+
+def test_token_do_motor_vale_mais_que_o_do_rag(tmp_path):
+    # o motor declara o segredo em segredos/busca (registro/motor-instancias.json)
+    for stk, val in (("busca", "token-do-motor"), ("rag", "token-do-rag")):
+        d = tmp_path / "inst" / "segredos" / stk
+        d.mkdir(parents=True)
+        (d / "RAG_API_TOKEN").write_text(val + "\n")
+    _roda(tmp_path, {})
+    assert _token_visto(tmp_path) == "token-do-motor"
+
+
+def test_sem_token_nao_cria_variavel(tmp_path):
+    args, _ = _roda(tmp_path, {})
+    assert "--setenv=RAG_API_TOKEN" not in args
 
 
 # ---- atributos do agente (card #3156, spec agente §11.1: o job herda os cinco) ----

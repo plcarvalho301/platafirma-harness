@@ -337,6 +337,9 @@ def _ato_efetivo(argv: list) -> str | None:
 _ATOS_CONSTITUTIVOS = {
     ("persona", "conduta"), ("persona", "ler"),
     ("mesa", "caderno"), ("expediente", "montar"),
+    # DT 430: o molde de card a cadeira copia literal; «igual ao giro N» dele, depois de fita compactada
+    # ou retomada com o mesmo sessao_id, deixa a cadeira sem o texto que ela precisa escrever.
+    ("tarefas", "modelo"),
 }
 
 

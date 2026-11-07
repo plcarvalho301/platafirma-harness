@@ -28,4 +28,5 @@ test_sessao_reidratar_porta.py | bin/acervo bin/_acervo/** bin/acesso bin/_acess
 test_stdin_json_porta.py | bin/repo bin/sessao bin/_sessao/** bin/_minuta/** ops-server/** politica-acesso/*.py
 test_turno_texto_porta.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/conferir bin/encerrar bin/infra bin/_infra/** bin/mesa bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** ops-server/** politica-acesso/*.py sessao/**
 test_run_command_lote_injecao.py | bin/sessao bin/_sessao/** bin/expediente bin/_expediente/** ops-server/** politica-acesso/*.py
+test_poda_giro_nao_entregue.py | bin/tarefas ops-server/** politica-acesso/*.py
 test_tokens_giro_4120.py | ops-server/** lib/oplog.py lib/tokenizador.py
