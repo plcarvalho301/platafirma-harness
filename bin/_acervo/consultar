@@ -107,8 +107,7 @@ SQL
   documento)
     [ -n "$a1" ] || morre "documento exige <entidade>" 2
     sql=$(cat <<'SQL'
-SELECT f.entidade, f.chave_humana AS chave, a.papel, a.caminho, left(a.sha, 12) AS sha,
-       a.ciclo, a.forca, a.titulo
+SELECT f.entidade, f.chave_humana AS chave, a.papel, a.formato, a.caminho, left(a.sha, 12) AS sha
   FROM casa.ficha f JOIN casa.arquivo a ON a.ficha_id = f.id
  WHERE f.entidade = :'a1'
     OR f.entidade = (SELECT slug FROM casa.entidade WHERE :'a1' = ANY (apelidos) LIMIT 1)
