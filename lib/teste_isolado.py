@@ -52,9 +52,20 @@ def isolar() -> Path:
 
     for sub in ("instancia", "opt", "bancada"):
         (raiz / sub).mkdir()
+    gitconfig = raiz / "gitconfig"
+    tmp_gitconfig = raiz / "gitconfig.tmp"
+    with open(tmp_gitconfig, "w", encoding="utf-8") as f:
+        f.write("[user]\n    useConfigOnly = true\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp_gitconfig, gitconfig)
+    for var in ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"):
+        os.environ.pop(var, None)
     os.environ.update({
         "USER": "teste",
         "LOGNAME": "teste",
+        "GIT_CONFIG_GLOBAL": str(gitconfig),
+        "GIT_CONFIG_NOSYSTEM": "1",
         "PLATAFIRMA_INSTANCIA": str(raiz / "instancia"),
         "PF_RELEASE_RAIZ": str(raiz / "opt"),
         "PLATAFIRMA_RELEASE": str(raiz / "opt" / "current"),

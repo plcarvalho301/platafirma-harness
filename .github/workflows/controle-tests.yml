@@ -41,4 +41,4 @@ jobs:
           # a linha pode trazer o raio depois de `|` (card #3370): aqui so o arquivo, a lista inteira roda
           arquivos=$(grep -v '^\s*#' tests/VERDES | grep -v '^\s*$' | sed 's/[[:space:]]*|.*$//' | grep -v '^testes/' | tr '\n' ' ')
           echo "baseline: $arquivos"
-          uv run pytest $arquivos -q
+          uv run pytest $arquivos -rf
