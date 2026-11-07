@@ -64,7 +64,7 @@ uso_texto() {
 uso:
   infra estado   [alvo] [--json]                contêineres, units de usuário e timers, uma tela
   infra saude    [alvo] [--json]                 /health do ops, contêiner não-saudável, disco, RAM, o bruto contra o teto
-  infra logs     <alvo> [n]                      alvo = contêiner OU unit --user (default 50)
+  infra logs     <alvo> [n] [--since <data>] [--until <data>]  contêiner ou unit; sem janela, últimas 50 linhas
   infra restart  <alvo> [--nao-esperar]          contêiner ou unit --user; confere antes de dizer ok
   infra remover  <alvo> [--ver]                  tira contêiner avulso ou unit --user fora do declarado; --ver só mostra
   infra unit-env <unit> [--ver | CHAVE=VALOR...] drop-in de ambiente da unit --user (daemon-reload)
@@ -574,11 +574,29 @@ saude() {
 }
 
 logs() {
-  local alvo="$1" n="${2:-50}"
+  local alvo="${1:-}" n=50 limite=0
+  local janela=()
+  [ -n "$alvo" ] || { echo "uso: infra logs <alvo> [n] [--since <data>] [--until <data>]" >&2; return 2; }
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --since|--until)
+        [ $# -ge 2 ] && [ -n "$2" ] && [[ "$2" != --* ]] || { echo "infra logs: $1 exige uma data" >&2; return 2; }
+        janela+=("$1" "$2"); shift 2 ;;
+      *[!0-9]*|"") echo "infra logs: argumento inválido: $1" >&2; return 2 ;;
+      *) [ "$limite" = 0 ] || { echo "infra logs: informe n uma vez" >&2; return 2; }; n="$1"; limite=1; shift ;;
+    esac
+  done
   if e_conteiner "$alvo"; then
-    docker logs --tail "$n" "$alvo" 2>&1
+    if [ "${#janela[@]}" -gt 0 ] && [ "$limite" = 0 ]; then
+      docker logs "${janela[@]}" "$alvo" 2>&1
+    else
+      docker logs --tail "$n" "${janela[@]}" "$alvo" 2>&1
+    fi
   else
-    journalctl --user -u "$alvo" -n "$n" --no-pager
+    local cauda=(-n "$n")
+    if [ "${#janela[@]}" -gt 0 ] && [ "$limite" = 0 ]; then cauda=(); fi
+    journalctl --user -u "$alvo" "${cauda[@]}" "${janela[@]}" --no-pager
   fi
 }
 
@@ -1491,7 +1509,7 @@ shift
 case "$cmd" in
   estado)    estado "$@" ;;
   saude)     saude "$@" ;;
-  logs)      logs "${1:?uso: infra logs <alvo> [n]}" "${2:-50}" ;;
+  logs)      logs "$@" ;;
   cache)     if [ $# -eq 0 ]; then cache ver; else cache "$@"; fi ;;
   hardware)  hardware "$@" ;;
   limites)   limites "$@" ;;

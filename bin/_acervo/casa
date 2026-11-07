@@ -695,6 +695,13 @@ def ler(especie, seletor, quero_json, situacao=False, offset=0, cru=False):
     fonte = _fonte()
     sit = _situacao(linha, fonte, _estado_espelho())
 
+    if situacao:
+        if quero_json:
+            print(json.dumps({"situacao": sit}, ensure_ascii=False, indent=2))
+        else:
+            sys.stdout.write(f"fonte: {sit['fonte']}   ingerido: {sit['ingerido']}   servido: {sit['servido']}\n"
+                             f"status: {sit['status']}\n")
+        return 0
     if linha.get("retirada_em"):
         # §3.5: a chave segue resolvível; responde a sucessora, sem o texto.
         if quero_json:

@@ -1504,7 +1504,7 @@ def cmd_buscar(nome_inst, inst, argv):
         sys.exit(2)
 
     particao, resto = resolve_particao(argv, "buscar")
-    corpo = {"particao": _PARA_A_API.get(particao, particao)}
+    corpo = {"particao": _PARA_A_API.get(particao, particao), "texto": "nenhum"}
     conceitos = []
     filtros = {}
     juncao = None
