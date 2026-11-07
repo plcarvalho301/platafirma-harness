@@ -535,7 +535,6 @@
       "Validade de construto",
       "construct validity",
       "Bateria de comportamento",
-      "Abstencao calibrada",
       "Análise de erro",
       "Reserva cega",
       "Disparo falso e perdido",
@@ -580,7 +579,8 @@
       "retrieval-augmented generation",
       "Embeddings",
       "Ranqueamento multiestágio",
-      "reranking"
+      "reranking",
+      "Abstencao calibrada"
     ]
   },
   "inteligencia": {
