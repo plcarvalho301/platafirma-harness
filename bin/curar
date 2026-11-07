@@ -66,7 +66,7 @@ USO = """uso:
                                                               o mesmo, só nas impressões da pasta (um <impressao>.json com
                                                               `faixas` cada): a quarta fonte lê essas faixas no lugar do
                                                               modelo local, com a mesma conferência (#3958)
-  curar --reextrair <id,id,…|@arquivo> --bancada <pasta> [--metodo <slug>] [--modo bancada|medida] [--refazer] [--timeout-s <n>] [--json]
+  curar --reextrair <id,id,…|id id …|@arquivo> --bancada <pasta> [--metodo <slug>] [--modo bancada|medida] [--refazer] [--timeout-s <n>] [--json]
                                                               converte em <pasta>/<metodo>/<obra_id>/, não escreve no acervo
   curar --expurgar --espelhos [--apply]                       espelho de impressão aposentada há +90 dias
   curar --restaurar --espelhos [<obra>] [--apply]             desfaz o expurgo de espelhos
@@ -2811,6 +2811,19 @@ def acao_reextrair_bancada(args, autor: str, como_json: bool, headers: dict) -> 
     return codigo
 
 
+def _absorve_ids_soltos(args, desconhecidos):
+    """DT 166: `--reextrair <id> <id> ... --bancada <pasta>` aceita a lista separada por espaco, como
+    aceita por virgula. O argparse entrega ao `--reextrair` so o primeiro; os demais chegam como
+    palavras soltas em `desconhecidos`. So na bancada (a lista em lote nao existe fora dela) e so as
+    palavras que nao sao flag; flag desconhecida segue recusada pelo chamador."""
+    if args.reextrair and args.bancada is not None and not args.lote:
+        soltas = [t for t in desconhecidos if not t.startswith("-") and t.strip()]
+        if soltas:
+            args.reextrair = ",".join([args.reextrair, *soltas])
+            desconhecidos = [t for t in desconhecidos if t not in soltas]
+    return args, desconhecidos
+
+
 def main(argv=None):
     if argv is None:
         argv = sys.argv[1:]
@@ -2917,6 +2930,7 @@ def main(argv=None):
     parser.add_argument("-h", "--help", "--ajuda", dest="ajuda", action="store_true", default=False)
 
     args, desconhecidos = parser.parse_known_args(argv)
+    args, desconhecidos = _absorve_ids_soltos(args, desconhecidos)
 
     if args.ajuda and args.relacionar is not None:
         print(CARTILHA)
