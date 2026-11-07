@@ -235,6 +235,77 @@ def parse_dt(iso_str: str) -> datetime:
     return datetime.fromisoformat(iso_str)
 
 
+LIMIAR_CI_VERMELHO_SEGUNDOS = 3600  # 1 h (card #3269, débito #2856 linha 182)
+
+
+def _obter_runs_ci(fixture_runs: list[dict] | None) -> tuple[list[dict] | None, str | None]:
+    if fixture_runs is not None:
+        return fixture_runs, None
+    caminho_fixture = os.environ.get("SINAL_CI_RUNS")
+    if caminho_fixture:
+        try:
+            return json.loads(Path(caminho_fixture).read_text(encoding="utf-8")), None
+        except OSError:
+            try:
+                return json.loads(caminho_fixture), None
+            except json.JSONDecodeError as e:
+                return None, f"SINAL_CI_RUNS ilegivel: {e}"
+        except json.JSONDecodeError as e:
+            return None, f"SINAL_CI_RUNS ilegivel: {e}"
+    if not shutil.which("gh"):
+        return None, "gh ausente no host"
+    repo = os.environ.get("SINAL_CI_REPO", "plcarvalho301/platafirma-harness")
+    cmd = ["gh", "run", "list", "--repo", repo, "--workflow", "controle-tests.yml",
+           "--branch", "main", "--limit", "1",
+           "--json", "databaseId,status,conclusion,createdAt,updatedAt,url"]
+    rc, out, err = roda(cmd, timeout=20)
+    if rc != 0:
+        return None, (err or out or f"gh saiu {rc}").splitlines()[0][:300]
+    try:
+        return json.loads(out), None
+    except json.JSONDecodeError as e:
+        return None, f"JSON do gh invalido: {e}"
+
+
+def do_ci_controle(fixture_runs: list[dict] | None = None, agora_dt: datetime | None = None) -> dict:
+    """O check «controle — testes» do CI de main no GitHub (card #3269, débito 182).
+    Lê o último run do workflow controle-tests.yml em main. Se o último run falhou há mais
+    de 1 h (3600s), o estado é 'fora'. Com falha há menos de 1 h, é 'degradado'. Com sucesso,
+    é 'no-ar'. Sem gh ou sem runs, 'sem-sinal'."""
+    onde = "gh run list --workflow controle-tests.yml --branch main"
+    runs, motivo_erro = _obter_runs_ci(fixture_runs)
+    if motivo_erro:
+        exercitado = None if "ausente" in motivo_erro else onde
+        return {"estado": "sem-sinal", "exercitado": exercitado, "motivo": motivo_erro}
+    if not runs:
+        return {"estado": "sem-sinal", "exercitado": onde,
+                "motivo": "nenhum run de controle-tests.yml em main"}
+
+    run = runs[0]
+    conclusion = run.get("conclusion")
+    status = run.get("status")
+    url = run.get("url") or f"run {run.get('databaseId', '?')}"
+    onde_com_run = f"{onde} ({url})"
+
+    if conclusion == "success":
+        return {"estado": "no-ar", "exercitado": onde_com_run}
+    if conclusion not in ("failure", "timed_out", "cancelled", "startup_failure") and status != "completed":
+        return {"estado": "no-ar", "exercitado": onde_com_run}
+
+    fim_str = run.get("updatedAt") or run.get("createdAt") or ""
+    try:
+        fim_dt = parse_dt(fim_str)
+    except (ValueError, TypeError):
+        fim_dt = None
+
+    agora = agora_dt or datetime.now(timezone.utc)
+    segundos = (agora - fim_dt).total_seconds() if fim_dt else LIMIAR_CI_VERMELHO_SEGUNDOS
+    minutos = int(max(0, segundos) // 60)
+    motivo = f"check 'controle — testes' em main vermelho ha {minutos} min ({conclusion or 'falha'}): {url}"
+    estado = "fora" if segundos >= LIMIAR_CI_VERMELHO_SEGUNDOS else "degradado"
+    return {"estado": estado, "exercitado": onde_com_run, "motivo": motivo}
+
+
 # Log e estado do contendor no incidente (card #3469): #3382 e #3383 ficaram sem causa porque o log
 # saiu com a recriacao do contendor. Capturado ao abrir o incidente, antes de qualquer recriacao, e
 # SEMPRE por `redigir`: o corpo do item e lido por gente e indexado, segredo nao entra.
@@ -474,6 +545,9 @@ def coleta():
     e = do_raiz()
     e["lido_em"] = agora()
     servicos["raiz-host"] = e
+    e = do_ci_controle()
+    e["lido_em"] = agora()
+    servicos["ci-controle"] = e
     runtime = do_runtime()
     runtime["lido_em"] = agora()
     return {"gerado_em": agora(), "runtime": runtime, "servicos": servicos}

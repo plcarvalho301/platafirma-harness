@@ -38,3 +38,18 @@ def test_programas_do_mundo_real_sao_delatores():
     r = subprocess.run(["gh", "pr", "list"], capture_output=True, text=True)
     assert r.returncode == 97
     assert "sem stub" in r.stderr
+
+
+def test_identidade_git_global_nao_vaza(tmp_path):
+    assert os.environ.get("GIT_CONFIG_NOSYSTEM") == "1"
+    gitconfig = os.environ.get("GIT_CONFIG_GLOBAL")
+    assert gitconfig, "GIT_CONFIG_GLOBAL ausente"
+    # commit sem identidade explicita falha porque useConfigOnly=true e sem user.name/email (#2856 linha 181)
+    repo = tmp_path / "repo-sem-identidade"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True, timeout=20)
+    (repo / "arq.txt").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "add", "arq.txt"], cwd=repo, check=True, timeout=20)
+    r = subprocess.run(["git", "commit", "-m", "teste"], cwd=repo, capture_output=True, text=True, timeout=20)
+    assert r.returncode == 128
+    assert "auto-detection is disabled" in r.stderr or "Please tell me who you are" in r.stderr
