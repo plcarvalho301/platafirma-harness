@@ -3,7 +3,7 @@
 # capacidade: metrica
 # dono: claudinho-ia
 # use para: «quantas chamadas deram erro?», «quem pediu help?», giro e lote por verbo
-# atos: eventos, dia, ate-acerto, tateio, casos, verbos, comportamento, turnos, abertura (leitura, abertura), investigar (escrita, investigacao), tokens (leitura, medida)
+# atos: eventos, dia, ate-acerto, tateio, casos, verbos, comportamento, turnos, abertura (leitura, abertura), investigar (escrita, investigacao), tokens (leitura, medida), fitas (leitura, medida), documentos (leitura, medida)
 # forma: relatorio
 # cauda: nao
 #
