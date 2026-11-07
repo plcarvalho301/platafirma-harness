@@ -910,9 +910,16 @@ restart() {
         || { echo "erro: systemctl --user restart falhou em $alvo — ver: infra logs $alvo" >&2; exit 1; }
       echo "unit $alvo reiniciada: $(systemctl --user is-active -- "$alvo" || true)"
     else
-      systemd-run --user --collect --quiet --unit="infra-restart-$$" systemctl --user restart "$alvo" \
+      # DT 498: destacar a execucao nao adia o restart. A porta precisa devolver o
+      # resultado de release antes que o systemd encerre seu cgroup.
+      local atraso=() nota=""
+      if [ "${alvo%.service}" = "${INFRA_UNIT_AUTO%.service}" ]; then
+        atraso=(--on-active=5s --timer-property=AccuracySec=100ms)
+        nota="; agendado para daqui a 5 s"
+      fi
+      systemd-run --user --collect --quiet --unit="infra-restart-$$" "${atraso[@]}" systemctl --user restart "$alvo" \
         || { echo "erro: não consegui despachar o restart de $alvo." >&2; exit 1; }
-      echo "restart da unit $alvo despachado destacado (a chamada não sobrevive a ele); conferir com: infra estado $alvo"
+      echo "restart da unit $alvo despachado destacado$nota; conferir com: infra estado $alvo"
     fi
     return
   fi

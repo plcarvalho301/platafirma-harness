@@ -213,15 +213,12 @@ def test_json_traz_preferencia_valor_e_motivo(pref, capsys):
     assert json.loads(out) == {"preferencia": "tema", "valor": "claro", "motivo": None}
 
 
-def test_cabecalho_poe_rotulo_e_volta_em_todo_ato_de_face():
-    """arq:0124 §3: ato que o cabeçalho põe numa face declara `rotulo:` e `volta:`."""
-    padrao = re.compile(r"^#\s*(face|rotulo|volta)\s*:\s*([A-Za-z0-9_-]+)\s*=\s*(.*?)\s*$")
+def test_preferencia_declara_mecanismo_da_casca_e_volta_da_escrita():
+    """A preferencia e mecanismo da casca, conforme o cabecalho servido."""
+    padrao = re.compile(r"^#\s*(mecanismo|volta)\s*:\s*([A-Za-z0-9_-]+)\s*=\s*(.*?)\s*$")
     linhas = VERBO.read_text(encoding="utf-8").splitlines()[:40]
     achados = [m for m in map(padrao.match, linhas) if m]
     campos = {c: {m.group(2): m.group(3) for m in achados if m.group(1) == c}
-              for c in ("face", "rotulo", "volta")}
-    assert campos["face"], "o verbo não declara face"
-    for ato in campos["face"]:
-        assert campos["rotulo"].get(ato), f"ato {ato} sem rotulo:"
-        assert campos["volta"].get(ato), f"ato {ato} sem volta:"
+              for c in ("mecanismo", "volta")}
+    assert campos["mecanismo"] == {"ler": "casca", "escrever": "casca"}
     assert campos["volta"]["escrever"].startswith("sim — ")

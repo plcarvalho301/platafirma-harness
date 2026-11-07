@@ -1447,8 +1447,8 @@ promover_stacks() {  # $1=sha ; usa STACKS_PROMOVER; devolve 0 ou o nome da stac
 # ops-mcp` despacha destacado e a chamada que o emite volta antes do restart (medido 15/09
 # pela porta). Chamado por último, depois de tudo relatado. PF_RELEASE_PORTA=0 desliga.
 reiniciar_porta() {
-  # O restart da porta mata o processo que a chamou (a chamada nao sobrevive): a tela da
-  # promocao tem de sair ANTES, senao quem promoveu recebe nada (medido em 26/09, a0c2108).
+  # A tela sai antes do restart. O infra desta release agenda a porta para daqui a
+  # 5 s (DT 498): destacar sem adiar podia matar esta chamada antes do exit 0.
   resumo_imprime
   local repo="$1"
   [ "$repo" = "$FAMILIA_BIN" ] || return 0

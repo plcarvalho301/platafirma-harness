@@ -237,9 +237,9 @@ def uso(cod=2):
                                         a necessidade e UMA frase legivel que nomeia o assunto pelo termo do
                                         acervo, um assunto por chamada (pt ou en); o verbo manda a pergunta com
                                         ela e, com PF_CHAPEU, o chapeu com cadeira, chapeu e rotulos dele;
-                                        recusa com exit 2, causa e jeito certo o que junta assuntos com ; ou |
-                                        ou vem em saco de palavras-chave. Dois assuntos = duas chamadas no mesmo
-                                        lote. O texto posicional passa pelo mesmo lint.
+                                        o lint avisa com causa e jeito certo, e a busca segue, quando junta assuntos
+                                        com ; ou | ou vem em saco de palavras-chave. Dois assuntos = duas chamadas
+                                        no mesmo lote. O texto posicional passa pelo mesmo lint de aviso.
                      [--origem abertura|bench|sombra|autoteste]   so a abertura e os atos de medida: texto literal,
                                         sem lint nem montagem (spec motor-do-conhecimento §2b)
                      [--previa [--piso 0.61] [--piso-revisor 0.7] [--instrucao "<texto>"]] [--rastro]

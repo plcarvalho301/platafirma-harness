@@ -30,23 +30,33 @@ RESPOSTA = {"id": 42, "titulo": "card de teste", "estado": "em-execucao",
 
 WRAPPER = r"""
 curl() {
-  local metodo="" url="" corpo="" a
+  local metodo="" url="" corpo="" a com_status=0
   while [ $# -gt 0 ]; do
     case "$1" in
       -X) metodo="$2"; shift 2 ;;
       -d) [ "$2" = "@-" ] && corpo="$(cat)"; shift 2 ;;
       -H) shift 2 ;;
+      -w) com_status=1; shift 2 ;;
       http*) url="$1"; shift ;;
       *) shift ;;
     esac
   done
   printf '%s\n' "$metodo $url" >> "$FAKE_LOG"
+  case "$url" in
+    */modelo)
+      printf '%s' '{"rotulos_da_conversao":["Negócio","Raio de ataque","Aceite × prova","Aceite","Comportamento esperado","Tarefas"]}'
+      return 0 ;;
+    */modelo/story|*/modelo/story-derivada)
+      printf '%s' '{"texto":"Tarefas: molde servido pela API\n"}'
+      return 0 ;;
+  esac
   printf '%s' "$corpo" > "$FAKE_CORPO"
   if [ -n "${FAKE_RECUSA:-}" ]; then
     printf '%s' '{"erro": "recusado pela maquina"}'
     return 22
   fi
   cat "$FAKE_RESPOSTA"
+  if [ "$com_status" = 1 ]; then printf '\n201'; fi
 }
 export -f curl
 exec bash "$FAKE_SCRIPT" "$@"
@@ -78,7 +88,8 @@ def test_desc_stdin_manda_patch_so_do_corpo(tmp_path):
     proc, chamadas, corpo = _run(["editar", "#42", "--desc-stdin"], tmp_path,
                                  stdin="Negócio: #1\n\nAceite: <sai 0>\n")
     assert proc.returncode == 0, proc.stderr
-    assert chamadas == ["PATCH http://127.0.0.1:9/api/itens/42"]
+    assert chamadas == ["GET http://127.0.0.1:9/api/modelo",
+                        "PATCH http://127.0.0.1:9/api/itens/42"]
     assert set(corpo) == {"descricao"}
     assert corpo["descricao"] == ("<p><strong>Negócio:</strong> #1</p>"
                                    "<p><strong>Aceite:</strong> &lt;sai 0&gt;</p>")
@@ -115,13 +126,13 @@ def test_tarefas_da_story_abre_paragrafo_proprio(tmp_path):
         "<p><strong>Aceite:</strong> ok</p>")
 
 
-def test_modelo_story_traz_tarefas(tmp_path):
-    for args in (["modelo", "story"], ["modelo", "story", "derivada"]):
-        proc = subprocess.run(["bash", str(SCRIPT), *args], capture_output=True, text=True,
-                              timeout=20, check=False)
-        assert proc.returncode == 0, proc.stderr
-        linhas = proc.stdout.splitlines()
-        assert any(l.startswith("Tarefas:") for l in linhas), args
+@pytest.mark.parametrize("extra,variante", [([], "story"), (["derivada"], "story-derivada")])
+def test_modelo_story_pede_o_texto_ao_rastreador(tmp_path, extra, variante):
+    proc, chamadas, corpo = _run(["modelo", "story", *extra], tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert chamadas == [f"GET http://127.0.0.1:9/api/modelo/{variante}"]
+    assert proc.stdout == "Tarefas: molde servido pela API\n"
+    assert corpo is None
 
 
 def test_titulo_sozinho_manda_so_titulo(tmp_path):
@@ -202,7 +213,8 @@ def test_comentar_com_a_opcao_stdin_le_o_corpo_do_stdin(tmp_path):
     """#2856 linhas 49 e 50: `comentar <id> --stdin` gravava «--stdin» como o corpo do comentário."""
     proc, chamadas, corpo = _run(["comentar", "42", "--stdin"], tmp_path, stdin="o texto vem do stdin\n")
     assert proc.returncode == 0, proc.stderr
-    assert chamadas == ["POST http://127.0.0.1:9/api/itens/42/comentarios"]
+    assert chamadas == ["GET http://127.0.0.1:9/api/modelo",
+                        "POST http://127.0.0.1:9/api/itens/42/comentarios"]
     assert corpo == {"corpo": "<p>o texto vem do stdin</p>"}
 
 
@@ -216,5 +228,6 @@ def test_comentar_recusa_opcao_desconhecida_sem_chamar_api(tmp_path):
 def test_comentar_texto_de_varias_palavras_com_travessao_segue_sendo_corpo(tmp_path):
     proc, chamadas, corpo = _run(["comentar", "42", "--versão 2 saiu"], tmp_path)
     assert proc.returncode == 0, proc.stderr
-    assert chamadas == ["POST http://127.0.0.1:9/api/itens/42/comentarios"]
+    assert chamadas == ["GET http://127.0.0.1:9/api/modelo",
+                        "POST http://127.0.0.1:9/api/itens/42/comentarios"]
     assert corpo == {"corpo": "<p>--versão 2 saiu</p>"}

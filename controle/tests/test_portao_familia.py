@@ -210,6 +210,29 @@ def test_lista_do_portao_roda_com_xdist_por_arquivo(tmp_path):
     assert {t for t, _, _ in _marcas(marcas).values()} == {"-"}, _marcas(marcas)
 
 
+def test_suite_fora_do_portao_tambem_paraleliza_diretorios(tmp_path):
+    """DT 496: a suite completa termina em paralelo e ainda permite serie explicita."""
+    marcas = tmp_path / "marcas.txt"
+    env, arv = _arvore(tmp_path, {"a": {
+        "test_a1.py": _marca(marcas, "a1", 0.2),
+        "test_a2.py": _marca(marcas, "a2", 0.2),
+    }}, {"a": None})
+    r = _run(dict(env, PF_TESTE_PARALELO="8"), "rodar", "k-a", "--arvore", str(arv))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "2 passed" in r.stdout
+    trabalhadores = {t for t, _, _ in _marcas(marcas).values()}
+    assert trabalhadores and trabalhadores <= {"gw0", "gw1"}, trabalhadores
+    marcas.unlink()
+    r = _run(dict(env, PF_TESTE_PARALELO="1", PF_TESTE_SEM_MEMO="1"),
+             "rodar", "k-a", "--arvore", str(arv))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert {t for t, _, _ in _marcas(marcas).values()} == {"-"}
+    _commita(arv, {"a/test_a2.py": VERMELHO})
+    r = _run(dict(env, PF_TESTE_PARALELO="2"), "rodar", "k-a", "--arvore", str(arv))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "reprovado:" in r.stdout and "test_f" in r.stdout
+
+
 def test_artefato_fora_do_cache_e_sem_url_e_dependencia_ausente(tmp_path):
     env, arv = _arvore(tmp_path, {"a": {"test_a.py": VERDE}}, {"a": "test_a.py\n"})
     Path(env["PLATAFIRMA_TERCEIROS"]).write_text(json.dumps(
