@@ -179,9 +179,9 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                        · <slug> --natureza <n> --motivo "…" (conceito existente: reclassifica)   (tesauro)
   acervo relacionar    biblioteca conceito <de> <para> --tipo <t> --garantia <g> --motivo <m> [--lastro <obra>] [--apply]
                        a aresta da teia (tesauro); --ajuda traz as famílias e as garantias
-  acervo desrelacionar biblioteca relacao <id> [--sim]                desfaz uma aresta (tesauro)
+  acervo desrelacionar biblioteca relacao <id> [--apply]              desfaz uma aresta (tesauro)
   acervo derivar       biblioteca obra <obra> --de <origem> [--motivo "…"] [--apply]   a obra deriva da origem (classificacao)
-  acervo desderivar    biblioteca obra <obra> --de <origem> [--sim]  desfaz uma derivacao (classificacao)
+  acervo desderivar    biblioteca obra <obra> --de <origem> [--apply] desfaz uma derivacao (classificacao)
   acervo listar        biblioteca relacao <conceito> · biblioteca derivacao <obra>
   acervo empacotar     biblioteca obra [dest]   planilha e capas das obras sem espécie, para classificar fora (classificacao)
   acervo curar    biblioteca --situacao <...>
