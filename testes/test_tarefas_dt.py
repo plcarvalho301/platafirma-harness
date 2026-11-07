@@ -442,3 +442,15 @@ def test_dt_sem_sub_e_uso_e_lista_os_atos():
     assert p.returncode == 2
     for ato in ("listar", "admitir", "matar", "vencidos", "indicadores"):
         assert f"tarefas dt {ato}" in p.stderr
+
+# #2856 linha 335: leitura pontual mantém o texto completo mesmo com balde grande.
+def test_ler_linha_completa_sem_vizinhas(balde):
+    b, base = balde
+    b.linhas = [_linha(1, texto="vizinha"), _linha(335, texto="alvo " + "x" * 10000)]
+    for args in (["dt", "ler", "335"], ["dt", "listar", "--linha", "335", "--stack", "harness"]):
+        p = _run(args, base)
+        assert p.returncode == 0, p.stderr
+        assert "x" * 10000 in p.stdout.replace("\n", "")
+        assert "vizinha" not in p.stdout
+    assert _run(["dt", "ler", "999"], base).returncode == 1
+    assert _run(["dt", "ler", "x"], base).returncode == 2

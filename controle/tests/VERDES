@@ -259,7 +259,7 @@ tests/test_recusa_origem.py | controle/harness_controle/** controle/compose.yaml
 # Medido em 12/10/2026 (card #3472): bloco Cadeiras da recepcao contra o pacote de hoje do `expediente montar` (4 passam;
 # com a coluna Manifesto, que lia a peca `oficio` que a abertura nao serve, os 4 ficam vermelhos: toda cadeira sai «ausente»).
 tests/test_render_cadeiras.py | controle/harness_controle/**
-testes/test_dt_cinco_harness.py | bin/tarefas bin/repo bin/release bin/_release/**
+testes/test_dt_cinco_harness.py | bin/tarefas bin/repo bin/release bin/_release/** bin/infra bin/_acervo/casa bin/_metrica/fitas.py lib/oplog.py
 # Card #3919 (R1 a R8 da spec eixos-do-host): o módulo comum dos eixos do host (JSON, frase, chave de serviço pelos dois caminhos,
 # teto lido da máquina), a medida da porta pela sonda (`sinal --porta`: ato leve, transporte separado de verbo, token nunca
 # impresso), o ato `infra medir rede` (porta achada pelo socket do processo, fonte muda sai 5, valor alto sai 0) e o

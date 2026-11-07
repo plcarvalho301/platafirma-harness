@@ -694,6 +694,16 @@ def ler(especie, seletor, quero_json, situacao=False, offset=0, cru=False):
     linha = resolver(especie, seletor, info)
     fonte = _fonte()
     sit = _situacao(linha, fonte, _estado_espelho())
+    if situacao:
+        # Consulta de publicação não precisa carregar nem montar o corpo.
+        if quero_json:
+            print(json.dumps(_item(linha) | {"situacao": sit}, ensure_ascii=False, indent=2))
+        else:
+            print(marca_linha(linha, especie))
+            print(f"{ident(linha)} · {linha.get('titulo') or '-'}")
+            print(f"fonte: {sit['fonte']}   ingerido: {sit['ingerido']}   servido: {sit['servido']}")
+            print(f"vetorizado: {sit['vetorizado']}   status: {sit['status']}")
+        return 0
 
     if situacao:
         if quero_json:
