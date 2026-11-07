@@ -292,6 +292,9 @@ def _giro(reg: dict, inv: Invalidos) -> dict:
         "dur_ms": _inteiro(reg.get("dur_ms"), "dur_ms", inv),
         "bytes_produzidos": _inteiro(reg.get("bytes_produzidos"), "bytes_produzidos", inv, maximo=_INT64),
         "bytes_servidos": _inteiro(reg.get("bytes_servidos"), "bytes_servidos", inv, maximo=_INT64),
+        **({"tokens": _inteiro(reg.get("tokens"), "tokens", inv, maximo=_INT64),
+            "metodo_tokens": reg.get("metodo_tokens") if isinstance(reg.get("metodo_tokens"), str) else None}
+           if "tokens" in reg or "metodo_tokens" in reg else {}),
         "lavado": lavado,
         "ledger": _forma(reg.get("ledger"), _P_NOME, "ledger", inv),
         "lote_id": _forma(reg.get("lote_id"), _P_ID_CURTO, "lote_id", inv),
