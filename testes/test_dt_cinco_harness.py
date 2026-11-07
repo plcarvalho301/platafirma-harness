@@ -156,3 +156,95 @@ def test_dt1_bancada_de_com_card_num(tmp_path):
     )
     assert p.returncode == 0, p.stderr
     assert "3169-guia-operacao" in p.stdout
+
+# #2856: leitura compacta e correlação de eventos, sem serviços de produção.
+def test_projecao_do_backlog(tmp_path):
+    falso = tmp_path / "curl"
+    corpo = {"itens": [{"id": 7, "pai": 3, "estado": "captada", "nivel": 2,
+                        "estado_fase": "funil", "destinos": ["x" * 60000]}], "total": 1, "estados": []}
+    falso.write_text("#!/bin/sh\ncat <<'JSON'\n" + json.dumps(corpo) + "\nJSON\n")
+    falso.chmod(0o755)
+    env = dict(os.environ, PATH=str(tmp_path) + ":" + os.environ["PATH"])
+    for ato in ("listar", "listar-tudo"):
+        p = subprocess.run([str(BIN_TAREFAS), ato, "--json", "--campos", "id,pai,estado,nivel"],
+                           env=env, capture_output=True, text=True)
+        assert p.returncode == 0, p.stderr
+        assert json.loads(p.stdout)["itens"] == [{"id": 7, "pai": 3, "estado": "captada", "nivel": 2}]
+        assert len(p.stdout) < 500
+
+
+def test_logs_filtram_antes_da_cauda(tmp_path):
+    log = tmp_path / "args"
+    docker = tmp_path / "docker"
+    docker.write_text("""#!/bin/sh
+if [ "$1" = ps ]; then echo alvo; exit 0; fi
+printf '%s\\n' "$@" > "$CAPTURA"
+printf 'antigo\\nerro recente\\noutro\\n'
+""")
+    docker.chmod(0o755)
+    journal = tmp_path / "journalctl"
+    journal.write_text("""#!/bin/sh
+printf '%s\\n' "$@" > "$CAPTURA"
+printf 'antigo\\nerro recente\\noutro\\n'
+""")
+    journal.chmod(0o755)
+    env = dict(os.environ, PATH=str(tmp_path) + ":" + os.environ["PATH"], CAPTURA=str(log))
+    for alvo in ("alvo", "unit"):
+        p = subprocess.run([str(REPO_ROOT / "bin/infra"), "logs", alvo, "1", "--desde",
+                            "2026-11-01", "--until", "2026-11-07", "--grep", "erro"],
+                           env=env, capture_output=True, text=True)
+        assert p.returncode == 0, p.stderr
+        assert p.stdout == "erro recente\n"
+        assert "--since\n2026-11-01" in log.read_text()
+        assert "--until\n2026-11-07" in log.read_text()
+    p = subprocess.run([str(REPO_ROOT / "bin/infra"), "logs", "alvo", "--desconhecido"],
+                       env=env, capture_output=True)
+    assert p.returncode == 2
+
+
+def _carrega_debito(nome, caminho):
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader(nome, str(REPO_ROOT / caminho))
+    spec = importlib.util.spec_from_loader(nome, loader)
+    m = importlib.util.module_from_spec(spec)
+    loader.exec_module(m)
+    return m
+
+
+def test_situacao_nao_le_corpo(monkeypatch, capsys):
+    import sys
+    monkeypatch.syspath_prepend(str(REPO_ROOT / "bin/_acervo"))
+    monkeypatch.syspath_prepend(str(REPO_ROOT / "lib"))
+    m = _carrega_debito("casa_dt222", "bin/_acervo/casa")
+    monkeypatch.setattr(m, "normalizar", lambda *a: None)
+    monkeypatch.setattr(m, "_especie", lambda *a: {})
+    monkeypatch.setattr(m, "resolver", lambda *a: {"id": "a", "titulo": "Guia"})
+    monkeypatch.setattr(m, "_fonte", lambda: {})
+    monkeypatch.setattr(m, "_estado_espelho", lambda: {})
+    monkeypatch.setattr(m, "_situacao", lambda *a: dict.fromkeys(
+        ("fonte", "ingerido", "servido", "vetorizado", "status"), "ok"))
+    monkeypatch.setattr(m, "marca_linha", lambda *a: "guia")
+    monkeypatch.setattr(m, "ident", lambda *a: "guia")
+    monkeypatch.setattr(m, "_q", lambda *a: pytest.fail("leu corpo"))
+    assert m.ler("guia", "teste", False, situacao=True) == 0
+    assert "servido: ok" in capsys.readouterr().out
+
+
+def test_fita_integra_exclui_sonda_e_nao_inventa_fecho(monkeypatch):
+    monkeypatch.syspath_prepend(str(REPO_ROOT / "lib"))
+    m = _carrega_debito("fitas_dt44", "bin/_metrica/fitas.py")
+    regs = [
+        {"tool": "sessao", "sessao_id": "-", "ordem_id": "sonda"},
+        {"tool": "monta_sessao", "sessao_id": "a", "ts": "2026-11-07T10:00:00+00:00"},
+        {"tool": "monta_sessao", "sessao_id": "a", "ts": "2026-11-07T10:01:00+00:00"},
+        {"tool": "descansar", "evento": "fecho", "sessao_id": "a", "ts": "2026-11-07T10:02:00+00:00"},
+        {"tool": "acervo", "ato": "ler", "sessao_id": "b", "cadeira": "ia",
+         "documento_especie": "guia", "documento_chave": "desenvolvimento"},
+    ]
+    r = m.medir(regs)
+    assert r["total_fitas"] == 2 and r["fitas_integras"] == 1
+    assert r["sondas_excluidas"] == 1
+    assert r["fitas"][0]["duracao_s"] == 120
+    assert r["fitas"][1]["abriu"] is None and not r["fitas"][1]["integra"]
+    assert r["documentos"][0]["leituras"] == 1

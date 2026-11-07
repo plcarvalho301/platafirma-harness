@@ -110,3 +110,13 @@ def test_falha_de_escrita_nao_derruba_a_operacao(tmp_path, capsys):
 def test_o_diretorio_do_bruto_e_o_do_modulo():
     import oplog
     assert s.LOG_DIR == oplog.diretorio()
+
+def test_documento_lido_e_identificado_sem_corpo(tmp_path):
+    campos = s._documento_lido("acervo", "ler", ["casa", "guia", "desenvolvimento", "--situacao"])
+    assert campos == {"documento_especie": "guia", "documento_chave": "desenvolvimento"}
+    (linha,) = _grava(tmp_path, tool="acervo", ato="ler", evento="verbo", exit_code=0, **campos)
+    assert linha["schema_v"] == 2
+    assert linha["documento_chave"] == "desenvolvimento"
+    assert "corpo" not in linha
+    assert s._documento_lido("acervo", "listar", ["casa", "guia"]) == {}
+    assert s._documento_lido("acervo", "ler", ["casa", "guia"]) == {}

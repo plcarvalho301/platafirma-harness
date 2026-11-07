@@ -256,7 +256,8 @@ def test_camada_dia_responde_as_quatro_perguntas():
         reg("10:00:04.000", "repo", "commitar", ordem="o2"),
     ])
     r = m.resumo_do_dia(giros, cadeias)
-    assert r["giros_por_fita"] == {"o2": 3, "o1": 2}
+    assert r["giros_por_fita"] == {"s1": 5}  # ordem é atributo; a identidade da fita é sessao_id
+    assert r["total"]["fitas"] == 1
     assert r["erros_por_verbo"]["repo"] == {"total": 2, "por_ato": {"commitar": 2}}
     assert r["profundidade_de_cadeia"]["maior"] == 2
     assert r["giros_de_help"] == {"fila": 1}

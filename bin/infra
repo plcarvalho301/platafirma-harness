@@ -64,7 +64,8 @@ uso_texto() {
 uso:
   infra estado   [alvo] [--json]                contêineres, units de usuário e timers, uma tela
   infra saude    [alvo] [--json]                 /health do ops, contêiner não-saudável, disco, RAM, o bruto contra o teto
-  infra logs     <alvo> [n]                      alvo = contêiner OU unit --user (default 50)
+  infra logs     <alvo> [n] [--desde|--since <data>] [--ate|--until <data>] [--grep <texto>]
+                                                contêiner ou unit; últimas n linhas após os filtros (default 50)
   infra restart  <alvo> [--nao-esperar]          contêiner ou unit --user; confere antes de dizer ok
   infra remover  <alvo> [--ver]                  tira contêiner avulso ou unit --user fora do declarado; --ver só mostra
   infra unit-env <unit> [--ver | CHAVE=VALOR...] drop-in de ambiente da unit --user (daemon-reload)
@@ -574,12 +575,45 @@ saude() {
 }
 
 logs() {
-  local alvo="$1" n="${2:-50}"
+  [ $# -ge 1 ] || { echo "uso: infra logs <alvo> [n] [--desde|--since <data>] [--ate|--until <data>] [--grep <texto>]" >&2; return 2; }
+  local alvo="$1" n=50 desde="" ate="" filtro="" janela=0
+  shift
+  if [ $# -gt 0 ] && [[ "$1" =~ ^[0-9]+$ ]]; then n="$1"; shift; fi
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --desde|--since|--ate|--until|--grep)
+        [ $# -ge 2 ] && [ -n "$2" ] || { echo "infra logs: $1 exige valor" >&2; return 2; }
+        case "$1" in
+          --desde|--since) desde="$2"; janela=1 ;;
+          --ate|--until) ate="$2"; janela=1 ;;
+          --grep) filtro="$2"; janela=1 ;;
+        esac
+        shift 2 ;;
+      *) echo "infra logs: opção desconhecida: $1" >&2; return 2 ;;
+    esac
+  done
+  local tmp rc=0
+  tmp=$(mktemp) || return 3
+  local -a opcoes=()
   if e_conteiner "$alvo"; then
-    docker logs --tail "$n" "$alvo" 2>&1
+    [ -n "$desde" ] && opcoes+=(--since "$desde")
+    [ -n "$ate" ] && opcoes+=(--until "$ate")
+    if [ "$janela" = 1 ]; then opcoes+=(--tail all); else opcoes+=(--tail "$n"); fi
+    docker logs "${opcoes[@]}" "$alvo" >"$tmp" 2>&1 || rc=$?
   else
-    journalctl --user -u "$alvo" -n "$n" --no-pager
+    [ -n "$desde" ] && opcoes+=(--since "$desde")
+    [ -n "$ate" ] && opcoes+=(--until "$ate")
+    if [ "$janela" = 0 ]; then opcoes+=(-n "$n"); fi
+    journalctl --user -u "$alvo" --no-pager "${opcoes[@]}" >"$tmp" 2>&1 || rc=$?
   fi
+  if [ "$rc" != 0 ]; then cat "$tmp"; rm -f "$tmp"; return 3; fi
+  if [ -n "$filtro" ]; then
+    # Texto literal: não interpreta expressão ou opção fornecida pelo chamador.
+    grep -F -- "$filtro" "$tmp" | tail -n "$n" || true
+  else
+    tail -n "$n" "$tmp"
+  fi
+  rm -f "$tmp"
 }
 
 # Cache de modelo (#3949): revisao e digest dos pesos no cache do Hugging Face, so leitura. O cache
@@ -1491,7 +1525,7 @@ shift
 case "$cmd" in
   estado)    estado "$@" ;;
   saude)     saude "$@" ;;
-  logs)      logs "${1:?uso: infra logs <alvo> [n]}" "${2:-50}" ;;
+  logs)      logs "$@" ;;
   cache)     if [ $# -eq 0 ]; then cache ver; else cache "$@"; fi ;;
   hardware)  hardware "$@" ;;
   limites)   limites "$@" ;;

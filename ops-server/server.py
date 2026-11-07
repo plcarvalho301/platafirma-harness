@@ -1081,6 +1081,18 @@ def _chapeu_do_giro(slug: str, ato, args, r, ident: dict) -> None:
         print(f"[valkey] gravacao chapeu giro sessao:{sid} falhou: {e!r}", file=sys.stderr, flush=True)
 
 
+def _documento_lido(slug, ato, args):
+    """Só identidade do documento; nunca transporta o corpo nem os demais argumentos."""
+    toks = list(args or [])
+    if slug == "acervo" and ato == "ler" and len(toks) >= 3 and toks[0] == "casa":
+        especie, chave = toks[1:3]
+        if (isinstance(especie, str) and isinstance(chave, str)
+                and re.fullmatch(r"[a-z][a-z0-9-]{0,79}", especie)
+                and re.fullmatch(r"[A-Za-z0-9_:.-]{1,240}", chave)):
+            return {"documento_especie": especie, "documento_chave": chave}
+    return {}
+
+
 def _audit(**campos) -> None:
     """Grava uma linha JSONL de auditoria. Nunca derruba a operação — mas falha de
     auditoria vai para o stderr (journal), porque auditoria que falha em silêncio é
@@ -1572,6 +1584,7 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
                 r["aviso"] = _aviso
         _audit(tool=slug, evento="verbo", via=nome,
                ato=argv[1] if len(argv) > 1 else None, args=" ".join(argv[2:])[:CMD_CAP],
+               **_documento_lido(slug, argv[1] if len(argv) > 1 else None, argv[2:]),
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
                bytes_stdout=(r.get("stdout") or {}).get("bytes_total") if isinstance(r.get("stdout"), dict) else None,
@@ -3080,6 +3093,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                            cosmetica=_cosmetica(_perf, _ato_efetivo(argv)),
                            escrita=_escreve(slug, binario, _ato_efetivo(argv)))
                 _audit(tool=slug, ato=_ato or None, args=" ".join(_args)[:CMD_CAP],
+                       **_documento_lido(slug, _ato, _args),
                        cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                        ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
                        bytes_stdout=(r.get("stdout") or {}).get("bytes_total"),
@@ -3126,6 +3140,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                    cosmetica=_cosmetica(_perf, _ato_efetivo(argv)),
                    escrita=_escreve(slug, binario, _ato_efetivo(argv)))
         _audit(tool=slug, ato=ato or None, args=" ".join(args)[:CMD_CAP],
+               **_documento_lido(slug, ato, args),
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
                bytes_stdout=r.get("stdout", {}).get("bytes_total"),
