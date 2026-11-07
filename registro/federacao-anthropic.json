@@ -4,19 +4,19 @@
   "contas": {
     "agente-juiz": {
       "cliente": "agente-juiz",
-      "regra": "fdrl_012Ak1DB7pcZQyoZnhw6r2Ma",
+      "regra": "fdrl_018oruKfGpQoDWa6DDS373Rg",
       "conta_servico": "svac_01Tys7Q5uRNwLCiKTwEXGQvw",
       "regime": "plano"
     },
     "agente-consultado": {
       "cliente": "agente-consultado",
-      "regra": "fdrl_01PdMxn1VMjoLKUPMhs8b8vq",
+      "regra": "fdrl_017KGXAm2QfD87Jgxq332SXh",
       "conta_servico": "svac_01YFBzFQi3ep7J9rF1rdM846",
       "regime": "plano"
     },
     "agente-agendado": {
       "cliente": "agente-agendado",
-      "regra": "fdrl_01W2DHNetYUJz948UxHrCJVc",
+      "regra": "fdrl_014ka8t8bbxrCbtBMZCKJkgw",
       "conta_servico": "svac_01Duw4kL8T4iSyHoo36kDsVd",
       "regime": "plano"
     }
