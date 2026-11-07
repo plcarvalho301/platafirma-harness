@@ -171,10 +171,11 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   encoding, lingua, camada de texto, inibidor); <obra> = uuid, prefixo de uuid (6+ hex) ou titulo
   Classificar (arq:0119 §2, §7) — plano seco sem --apply:
   acervo catalogar     biblioteca obra [<obra>] [--obras …|--de-dominio …|--de-conceito …|--sem-dominio]
-                       [--especie|--subtipo|--dominio|--subdominio|--trata-de|--remover-trata-de|--titulo|--vinculacao … ] [--apply]
+                       [--especie|--subtipo|--dominio|--subdominio|--trata-de|--remover-trata-de|--titulo|--resumo|--subtitulo|--emitido-por|--publicacao|--vinculacao … ] [--apply]
                        espécie, domínio, subdomínio, conceitos, vinculação e dados de catálogo da obra (classificacao)
   acervo definir       biblioteca conceito <slug> --rotulo … --definicao … --natureza … --estatuto … --pai <slug> --tipo <t>
                        --garantia <g> --motivo "…" [--apply] · <slug> --renomear <slug-novo> --motivo "…"
+                       · <slug> --rotulo … --definicao … --motivo \"…\" [--apply] (edita a descrição)
                        · <slug> --natureza <n> --motivo "…" (conceito existente: reclassifica)   (tesauro)
   acervo relacionar    biblioteca conceito <de> <para> --tipo <t> --garantia <g> --motivo <m> [--lastro <obra>] [--apply]
                        a aresta da teia (tesauro); --ajuda traz as famílias e as garantias

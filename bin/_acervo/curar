@@ -44,7 +44,8 @@ def _valor(argv, flag):
 # o que `catalogar --job` não combina: o job classifica as obras dele, e a obra avulsa é outro ato
 _FLAGS_DE_OBRA_AVULSA = ("--obra", "--obras", "--de-dominio", "--sem-dominio", "--de-conceito", "--trata-de",
                          "--remover-trata-de", "--substituir-trata-de", "--dominio", "--subdominio",
-                         "--especie", "--subtipo", "--titulo", "--vinculacao", "--apply")
+                         "--especie", "--subtipo", "--titulo", "--vinculacao", "--resumo", "--subtitulo",
+                         "--emitido-por", "--publicacao", "--id-canonico", "--apply")
 
 
 def classificar_pelo_job(argv):

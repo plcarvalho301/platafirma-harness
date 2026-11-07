@@ -140,6 +140,8 @@ opções de alteração (--reclassificar):
   --especie <slug>              nova espécie da obra (ou 'null' para limpar); sem --subtipo, zera o subtipo
   --subtipo <slug>              subtipo da espécie (exige --especie na mesma chamada; 'null' limpa)
   --titulo <texto>              novo título da obra (único no acervo)
+  --resumo <texto>              descrição do conteúdo da obra
+  --subtitulo <texto>           subtítulo da obra
   --id-canonico <texto>         identificador canônico (ISBN, DOI, número do ato); 'null' limpa
   --publicacao <texto>          dado de publicação (texto livre, como na fonte); 'null' limpa
   --emitido-por <a;b>           quem emitiu (autor, órgão); vários separados por ';'
@@ -896,6 +898,8 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
 
         url_alvo = f"{BASE}/acervo/conceitos"
         metodo = "POST"
+    elif (args.rotulo or args.definicao) and not pai_slug:
+        return acao_conceito_descricao(args, autor, como_json, headers)
     elif args.natureza and not pai_slug:
         # PATCH /acervo/conceitos/{id} {natureza} — reclassificar (cura K19, card #3163)
         return acao_conceito_natureza(args, autor, como_json, headers)
@@ -1267,6 +1271,29 @@ def formatar_plano_natureza(p: dict, hermit: dict | None, aprovado: bool) -> str
     return "\n".join(lin)
 
 
+def acao_conceito_descricao(args: argparse.Namespace, autor: str, como_json: bool, headers: dict) -> int:
+    if not args.motivo:
+        sys.stderr.write("curar: editar rótulo ou definição exige --motivo\n")
+        return 2
+    corpo = {c: getattr(args, c) for c in ("rotulo", "definicao") if getattr(args, c) is not None}
+    if args.natureza or args.estatuto or args.renomear:
+        sys.stderr.write("curar: edite rótulo/definição separadamente de natureza, estatuto e slug\n")
+        return 2
+    corpo.update(autor=autor, motivo=args.motivo, aplicar=args.apply)
+    url = f"{BASE}/acervo/conceitos/{urllib.parse.quote(args.conceito.strip(), safe='')}"
+    try:
+        resp = requests.patch(url, json=corpo, headers=headers, timeout=60)
+    except requests.exceptions.RequestException as exc:
+        falha_indeterminavel(exc)
+    if resp.status_code >= 500:
+        falha_indeterminavel(resp)
+    if resp.status_code != 200:
+        falha_problem(resp)
+    plano = resp.json()
+    print(json.dumps(plano, indent=2, ensure_ascii=False))
+    return 0
+
+
 def acao_conceito_natureza(args, autor: str, como_json: bool, headers: dict) -> int:
     slug = args.conceito.strip()
     nat = args.natureza.strip()
@@ -1559,6 +1586,9 @@ def acao_reclassificar(args, autor: str, como_json: bool, headers: dict) -> int:
         alteracao["vinculacao"] = None if args.vinculacao.lower() in ("null", "none", "") else args.vinculacao
     if args.titulo is not None:
         alteracao["titulo"] = args.titulo
+    for campo in ("resumo", "subtitulo"):
+        if getattr(args, campo, None) is not None:
+            alteracao[campo] = getattr(args, campo)
     if args.id_canonico is not None:
         alteracao["id_canonico"] = None if args.id_canonico.lower() in ("null", "none", "") else args.id_canonico
     if args.publicacao is not None:
@@ -2798,6 +2828,8 @@ def main(argv=None):
     parser.add_argument("--especie", default=None)
     parser.add_argument("--subtipo", default=None)
     parser.add_argument("--titulo", default=None)
+    parser.add_argument("--resumo", default=None)
+    parser.add_argument("--subtitulo", default=None)
     parser.add_argument("--id-canonico", dest="id_canonico", default=None)
     parser.add_argument("--publicacao", default=None)
     parser.add_argument("--emitido-por", dest="emitido_por", default=None)

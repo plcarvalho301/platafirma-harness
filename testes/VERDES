@@ -44,3 +44,4 @@ test_curar_expurgar_restaurar.py | bin/acervo bin/_acervo/** bin/curar bin/inger
 test_curar_flag_desconhecida.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_curar_lote.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_curar_vinculacao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_curar_descricao_4144.py | bin/acervo bin/_acervo/** bin/curar
