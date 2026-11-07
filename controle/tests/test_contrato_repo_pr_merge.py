@@ -142,6 +142,15 @@ def test_pr_merge_ja_feito_tambem_apaga_e_declara(tmp_path):
     assert not _no_origin(tmp_path, "fabrica/42-x")
 
 
+def test_pr_merge_recusa_pr_de_outra_cadeira(tmp_path):
+    bancada, forge = _montar(tmp_path)
+    _pr_empurrado(tmp_path, bancada, forge)
+    (forge / "ramo").write_text("arquiteto/42-x\n")
+    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7")
+    assert r.returncode == 4, r.stdout + r.stderr
+    assert "pertence a outra cadeira" in r.stderr
+
+
 # --- sanear alcanca o que o pr-merge de antes desta emenda deixou (card #3108) -----------
 
 def test_sanear_apaga_ramo_ja_mesclado_sem_bancada_nenhuma(tmp_path):

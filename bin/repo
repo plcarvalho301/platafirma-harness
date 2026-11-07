@@ -2256,6 +2256,7 @@ ato_pr_merge() {
     return 0
   fi
   [ "$st" = OPEN ] || morre "PR #$num esta $st, nao OPEN — nada a mesclar" 4
+  ramo_da_cadeira "$ramo_pr" || morre "recusa de política: o PR #$num (ramo '$ramo_pr') pertence a outra cadeira — quem escreveu mescla" 4
   if [ "$forcar" -eq 0 ]; then
     local status_checks
     status_checks="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json statusCheckRollup 2>/dev/null || true)"
