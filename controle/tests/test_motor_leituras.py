@@ -670,3 +670,52 @@ def test_estado_da_sombra_sem_hora_legivel_e_indeterminavel():
 def test_recomendacao_sem_acerto_na_medida_nao_recomenda():
     r, motivo = pendenciasmod.recomenda({"metricas": {}}, {"metricas": {"geral": {"hit@1": 0.7}}}, 3)
     assert r is None and "acerto" in motivo
+
+
+# --- DT #483 e DT #507: despacho de particoes e atos sem instancia -----------------------------
+
+def test_dispatch_particao_assume_rag_buscar(motor, tmp_path):
+    roda, grava, sqls, salva, instancia, gab, S = motor
+    # DT #483: motor biblioteca ... assume rag buscar biblioteca
+    registro = tmp_path / "motor-instancias.json"
+    estado = tmp_path / "docker-estado.json"
+    sql_log = tmp_path / "sql.log"
+    env = {**os.environ, "PF_MOTOR_REG": str(registro), "PLATAFIRMA_INSTANCIA": str(instancia),
+           "OPS_LOG_DIR": str(tmp_path / "ops"), "PF_CADEIRA": "ia", "FAKE_DOCKER": str(estado),
+           "FAKE_SQL_LOG": str(sql_log), "PATH": f"{tmp_path / 'bin'}:{os.environ['PATH']}"}
+    env.pop("PF_CHAPEU", None)
+    r = subprocess.run([sys.executable, str(MOTOR), "biblioteca", "--sem-lint",
+                        "--necessidade", "prazo de resposta", "--texto", "nenhum"],
+                       capture_output=True, text=True, env=env, timeout=30)
+    assert r.returncode == 0, r.stderr
+    assert "redirecionado para `motor rag buscar biblioteca`" in r.stderr
+
+
+def test_dispatch_atos_rag_assumem_rag_com_aviso(motor, tmp_path):
+    roda, grava, sqls, salva, instancia, gab, S = motor
+    # DT #507: motor ajuste, eleger, estado sem instancia assumem rag com aviso
+    registro = tmp_path / "motor-instancias.json"
+    estado = tmp_path / "docker-estado.json"
+    sql_log = tmp_path / "sql.log"
+    env = {**os.environ, "PF_MOTOR_REG": str(registro), "PLATAFIRMA_INSTANCIA": str(instancia),
+           "OPS_LOG_DIR": str(tmp_path / "ops"), "PF_CADEIRA": "ia", "FAKE_DOCKER": str(estado),
+           "FAKE_SQL_LOG": str(sql_log), "PATH": f"{tmp_path / 'bin'}:{os.environ['PATH']}"}
+    env.pop("PF_CHAPEU", None)
+    S.ajustes = {"aviso_de_cobertura_fraca": 0.342}
+    r = subprocess.run([sys.executable, str(MOTOR), "ajuste", "--json"],
+                       capture_output=True, text=True, env=env, timeout=30)
+    assert r.returncode == 0, r.stderr
+    assert "assumindo instancia 'rag' para `ajuste` com aviso" in r.stderr
+
+    # Chamada com argumento que falha dentro do ato: confirma que foi assumido rag e nao instancia desconhecida
+    r_falha_ato = subprocess.run([sys.executable, str(MOTOR), "ajuste", "inexistente"],
+                                 capture_output=True, text=True, env=env, timeout=30)
+    assert r_falha_ato.returncode == 1
+    assert "assumindo instancia 'rag' para `ajuste` com aviso" in r_falha_ato.stderr
+    assert "nao existe ajuste 'inexistente'" in r_falha_ato.stderr
+
+    r_inst_invalida = subprocess.run([sys.executable, str(MOTOR), "instancia_invalida"],
+                                     capture_output=True, text=True, env=env, timeout=30)
+    assert r_inst_invalida.returncode == 1
+    assert "nao conheco a instancia 'instancia_invalida'" in r_inst_invalida.stderr
+    assert "Se for um ato, use: motor rag instancia_invalida" in r_inst_invalida.stderr

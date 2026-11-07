@@ -134,6 +134,11 @@ SPEC = "spec motor (acervo ler casa spec motor)"
 # biblioteca e segue aceito como sinonimo; a API do rag aceita biblioteca diretamente.
 PARTICOES = ("biblioteca", "casa", "registro")
 _SINONIMOS = {"obra": "biblioteca"}
+ATOS_RAG = (
+    "ajuste", "buscar", "consultas", "eleger", "escrever", "estado",
+    "indexar", "julgar", "lintar", "medir", "parar", "parear",
+    "sortear", "trabalhos", "trocar",
+)
 _PARA_A_API = {}
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
 
@@ -4161,16 +4166,17 @@ def main():
     if a and a[0] == "motor":
         sys.stderr.write("motor: primeiro argumento 'motor' desduplicado com aviso\n")
         a = a[1:]
-    if a and a[0] == "casa":
-        sys.stderr.write("motor: 'motor casa' redirecionado para `motor rag buscar casa` com aviso\n")
-        a = ["rag", "buscar", "casa"] + a[1:]
-    elif a and a[0] == "buscar":
-        sys.stderr.write("motor: assumindo instancia 'rag' para `buscar` com aviso\n")
+    if a and (a[0] in PARTICOES or a[0] in _SINONIMOS):
+        part = _SINONIMOS.get(a[0], a[0])
+        sys.stderr.write(f"motor: 'motor {a[0]}' redirecionado para `motor rag buscar {part}` com aviso\n")
+        a = ["rag", "buscar", part] + a[1:]
+    elif a and a[0] in ATOS_RAG:
+        sys.stderr.write(f"motor: assumindo instancia 'rag' para `{a[0]}` com aviso\n")
         a = ["rag"] + a
-        # Lote pela tool (`ato: buscar`, args [rag, buscar, casa, ...]): a instancia e o ato chegam
-        # repetidos atras do `buscar` que a tool ja pos na frente (#2856 linha 23).
-        if len(a) >= 4 and a[2] in d and a[3] == "buscar":
-            sys.stderr.write("motor: `buscar <inst> buscar` desduplicado com aviso\n")
+        # Lote pela tool (`ato: <ato>`, args [rag, <ato>, ...]): a instancia e o ato chegam
+        # repetidos atras do `<ato>` que a tool ja pos na frente (#2856 linha 23).
+        if len(a) >= 4 and a[2] in d and a[3] == a[1]:
+            sys.stderr.write(f"motor: `{a[1]} <inst> {a[1]}` desduplicado com aviso\n")
             a = a[2:]
     if not a:
         uso()
@@ -4179,7 +4185,7 @@ def main():
     if a[0] == "raciocinador":
         return _raciocinador(a[1:])
     if a[0] not in d:
-        print(f"nao conheco a instancia '{a[0]}'. Ha: {', '.join(d)}", file=sys.stderr)
+        print(f"nao conheco a instancia '{a[0]}'. Ha: {', '.join(d)}. Se for um ato, use: motor rag {a[0]}", file=sys.stderr)
         sys.exit(1)
     inst = d[a[0]]
     if inst["estado"] != "ativa":
