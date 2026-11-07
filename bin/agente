@@ -1460,8 +1460,6 @@ def medir_cache() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv == ["medir-cache"]:
-        return medir_cache()
     uso.intercepta(argv, fonte=__file__)
     p = uso.Uso(descricao="a caixa de especialistas: lista, projeta e roda quem pensa, com modelo, ferramentas e teto fixos")
     atos = p.atos()
@@ -1489,7 +1487,10 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--espera", type=int, default=0, metavar="<segundos>",
                    help="manda a segunda mensagem depois da espera, no mesmo processo, e confere o jti")
     a.add_argument("--json", action="store_true")
+    atos.novo("medir-cache", "mede cache com prefixo próprio em duas famílias, sem ferramentas")
     ns = p.parse_args(argv)
+    if ns.ato == "medir-cache":
+        return medir_cache()
     if ns.ato == "medir-federacao":
         return ato_medir_federacao(ns.espera, ns.json)
     if ns.ato == "listar":
