@@ -16,5 +16,23 @@
     "repositorio": "platafirma-conhecimento",
     "caminho": "analise/mineracao-ocel",
     "versao": "2edf400"
+  },
+  "sequencia-por-evento": {
+    "tipo": "analise",
+    "repositorio": "platafirma-conhecimento",
+    "caminho": "analise/sequencia-por-evento",
+    "versao": "8701e2a"
+  },
+  "descoberta-indutiva": {
+    "tipo": "analise",
+    "repositorio": "platafirma-conhecimento",
+    "caminho": "analise/descoberta-indutiva",
+    "versao": "8701e2a"
+  },
+  "agrupamento-de-sequencias": {
+    "tipo": "analise",
+    "repositorio": "platafirma-conhecimento",
+    "caminho": "analise/agrupamento-de-sequencias",
+    "versao": "8701e2a"
   }
 }
