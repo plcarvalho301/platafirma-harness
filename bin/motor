@@ -3063,6 +3063,7 @@ def _julgar(inst, op, lote, est, arq_estado, base, tk):
     limite = time.monotonic() + float(op.get("--tempo", 480))
     pendentes = [r for r in lote["respostas"] if r["resposta_id"] not in est["julgados"]]
     falhas = []
+    total_lote = len(lote["respostas"])
     for r in pendentes:
         if time.monotonic() > limite:
             break
@@ -3074,6 +3075,9 @@ def _julgar(inst, op, lote, est, arq_estado, base, tk):
         except RuntimeError as e:
             falhas.append(f"{r['resposta_id']}: {e}")
         _salva_estado(arq_estado, est)
+        # DT #231: batimento / progresso no stream para não ficar mudo além de STREAM_MUDO_S
+        sys.stderr.write(f"motor julgar: progresso {len(est['julgados'])}/{total_lote} ({r['resposta_id']})\n")
+        sys.stderr.flush()
     feitos, total = len(est["julgados"]), len(lote["respostas"])
     contagem = dict(sorted(Counter(j["qualidade"] for j in est["julgados"].values()).items()))
     print(f"lote {lote['lote_id']} · juiz {est.get('modelo')} ({est.get('provider')}) · prompt {h[:12]} · "

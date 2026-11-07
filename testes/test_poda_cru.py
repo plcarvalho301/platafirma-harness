@@ -116,3 +116,57 @@ def test_acima_do_teto_o_corte_reusa_o_mesmo_cru(tmp_path, monkeypatch):
     fora, meta = _p.poda_texto(texto, **_args(cap=2_000))
     assert meta["modo"] == "corte" and meta["alca"] == meta["cru"]
     assert len(list(tmp_path.rglob("g00001-stdout.txt"))) == 1
+
+
+def test_cosmetica_lava_json_motor(tmp_path, monkeypatch):
+    """DT #353: lavagem cosmética de JSON de motor buscar / motor rag enxuga campos redundantes."""
+    monkeypatch.setattr(_p, "DERRAME", tmp_path)
+    retorno = json.dumps({
+        "pergunta": "conceito de heuristica",
+        "fontes": [
+            {
+                "section_id": "sec-1#anchor",
+                "secao_id": "sec-1",
+                "obra": "Simple Heuristics",
+                "sim": 0.89,
+                "score": 0.0164,
+                "rerank": None,
+                "codigo_exato": False,
+                "breadcrumb": "Simple Heuristics",
+            },
+            {
+                "section_id": "sec-2",
+                "secao_id": "sec-2",
+                "obra": "Bounded Rationality",
+                "sim": 0.85,
+                "score": 0.0164,
+                "rerank": None,
+                "codigo_exato": False,
+                "breadcrumb": "Outro Breadcrumb",
+            }
+        ],
+        "contexto": [
+            {
+                "arquivo": "doc1.md",
+                "breadcrumb": "Simple Heuristics",
+                "obra": "Simple Heuristics",
+                "texto": "trecho 1",
+                "rerank": None,
+            }
+        ]
+    })
+    fora, meta = _p.poda_texto(retorno, cosmetica=True, **_args(tool="motor", alca="motor:buscar"))
+    assert "cosmetica_json" in meta["lavado"]
+    dados = json.loads(fora)
+    # campos essenciais preservados
+    assert dados["fontes"][0]["section_id"] == "sec-1#anchor"
+    assert dados["fontes"][0]["obra"] == "Simple Heuristics"
+    assert dados["fontes"][0]["sim"] == 0.89
+    # campos podados por serem nulos, constantes ou repetidos
+    assert "score" not in dados["fontes"][0]
+    assert "rerank" not in dados["fontes"][0]
+    assert "codigo_exato" not in dados["fontes"][0]
+    assert "breadcrumb" not in dados["fontes"][0]  # repetia obra
+    assert dados["fontes"][1]["breadcrumb"] == "Outro Breadcrumb"  # diferente da obra, preservado
+    assert "rerank" not in dados["contexto"][0]
+    assert "breadcrumb" not in dados["contexto"][0]  # repetia obra
