@@ -159,6 +159,20 @@ def test_timeout_que_estoura_depois_do_prazo_vai_ao_resultado(resultado_dir):
     assert "timeout (1s)" in final["erro"]
 
 
+def test_processo_morto_por_sigterm_vai_ao_resultado_como_interrompido(resultado_dir):
+    r = s._run_verbo_blocking(["sh", "-c", "sleep 0.3; kill -TERM $$"], None, 5, IDENT, 0.1)
+    assert r["em_andamento"] is True
+    final = _espera_fim(Path(r["resultado"]))
+    assert final.get("interrompido") is True
+    assert "repetir é seguro" in final.get("motivo", "")
+
+
+def test_processo_morto_por_sigterm_sincrono_marca_interrompido(resultado_dir):
+    r = s._run_verbo_blocking(["sh", "-c", "kill -TERM $$"], None, 5, IDENT, 5)
+    assert r.get("interrompido") is True
+    assert "repetir é seguro" in r.get("motivo", "")
+
+
 def test_sem_prazo_e_o_comportamento_de_antes(resultado_dir):
     r = s._run_verbo_blocking(["sh", "-c", "sleep 0.3; echo ok"], None, 10, IDENT, None)
     assert r["exit_code"] == 0

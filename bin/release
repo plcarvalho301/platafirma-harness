@@ -2078,7 +2078,13 @@ abrir_log_promover() {  # $1=repo
   : >"$arq" 2>/dev/null || return 0
   PROMO_LOG="$arq"
   exec 3>&1 4>&2 >>"$PROMO_LOG" 2>&1
+  trap 'resumo_promover_term' TERM
   trap 'resumo_promover $?' EXIT
+}
+
+resumo_promover_term() {
+  printf 'release: aviso — processo interrompido por reinício da porta (SIGTERM); conferir com: release estado; repetir é seguro\n' >&2
+  resumo_promover 143
 }
 
 resumo_promover() {  # $1=exit
