@@ -2289,14 +2289,43 @@ CONVERSOR_URL_BANCADA = (os.environ.get("PF_CONVERSOR_URL") or "http://127.0.0.1
 _BANCADA_OCUPADO_TENTATIVAS = 20        # 409 do serviço: espera o Retry-After e tenta de novo (spec §4.2)
 
 
-def _bancada_lista(valor: str) -> list[str]:
+_UUID_OU_PREFIXO_RE = re.compile(r"^[0-9a-fA-F]{8}[0-9a-fA-F-]{0,28}$")
+
+
+def _quebra_item(v: str) -> list[str]:
+    v = v.strip()
+    if not v:
+        return []
+    if os.path.isfile(v):
+        return [v]
+    if "," in v or ";" in v:
+        partes = []
+        for p in re.split(r"[,;]+", v):
+            p = p.strip()
+            if p:
+                partes.extend(_quebra_item(p))
+        return partes
+    tokens = v.split()
+    if len(tokens) > 1 and all(_UUID_OU_PREFIXO_RE.match(t) for t in tokens):
+        return tokens
+    return [v]
+
+
+def _bancada_lista(valor: str | list[str]) -> list[str]:
     """`id1,id2,…` ou `@caminho` (um id por linha; vazias e '#' ignoradas). Sem repetição, na ordem."""
-    if valor.startswith("@"):
+    itens = []
+    if isinstance(valor, list):
+        for v in valor:
+            itens.extend(_bancada_lista(v))
+    elif valor.startswith("@"):
         with open(valor[1:], encoding="utf-8-sig") as f:   # BOM de editor não vira parte do 1º id
-            itens = [linha.strip() for linha in f.read().splitlines()]
-        itens = [i for i in itens if i and not i.startswith("#")]
+            linhas = [linha.strip() for linha in f.read().splitlines()]
+        for linha in linhas:
+            if linha and not linha.startswith("#"):
+                itens.extend(_quebra_item(linha))
     else:
-        itens = [p.strip() for p in valor.split(",") if p.strip()]
+        itens = _quebra_item(valor)
+
     vistos, res = set(), []
     for i in itens:
         if _UUID_RE.match(i):
