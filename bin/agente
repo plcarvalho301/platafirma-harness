@@ -291,13 +291,17 @@ def projecao_claude(decl: dict) -> str:
              "pergunta=<a mensagem de delegação, literal>"]
     abrir = ", ".join(f"`{a}`" for a in args)
     lente = f"a lente da cadeira `{cadeira}`, chapéu `{chapeu}`" if fixa else "a lente da cadeira que a delegação nomeia"
-    return "\n".join([
+    linhas = [
         "---",
         f"{CABECALHO_GERADO} (fonte: agentes/{slug}.yaml; regerar: agente projetar)",
         f"name: {nome}",
         f"description: {json.dumps(decl['descricao'].strip(), ensure_ascii=False)}",
         f"model: {exe['modelo']['versao']}",
         f"tools: {', '.join(g for f in exe['ferramentas'] for g in grafias(f))}",
+    ]
+    if any(f.startswith(PORTA) for f in exe["ferramentas"]):
+        linhas.append('mcpServers: ["claudinho-mcp"]')
+    linhas.extend([
         f"maxTurns: {exe['teto']['turnos']}",
         "---",
         "",
@@ -322,6 +326,7 @@ def projecao_claude(decl: dict) -> str:
         "Você registra e não publica: em código, abre PR e nunca mescla nem promove.",
         "",
     ])
+    return "\n".join(linhas)
 
 
 def _le_gerado(arq: Path) -> tuple[bool, str]:
