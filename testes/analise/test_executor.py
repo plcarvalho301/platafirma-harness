@@ -44,6 +44,20 @@ def test_calculo_contem_tentativas(tmp_path,codigo,esperado):
     assert metricas["pico_bytes"]>0
 
 
+def test_calculo_importa_pacote_do_venv_fora_de_opt(tmp_path):
+    """O venv da receita mora na instância, não em /usr nem /opt (#4140)."""
+    import subprocess
+    venv=tmp_path/"venv"
+    subprocess.run([sys.executable,"-m","venv","--without-pip",str(venv)],check=True)
+    sitio=next((venv/"lib").glob("python3*/site-packages"))
+    (sitio/"modulo_4140.py").write_text("VALOR=1\n")
+    receita=tmp_path/"receita";receita.mkdir()
+    saida=tmp_path/"saida";saida.mkdir()
+    (receita/"rodar.py").write_text("import modulo_4140\nassert modulo_4140.VALOR==1")
+    rc,_=executar([str(venv/"bin/python"),"-I","-B","/executor.py","rodar.py"],
+        pasta=receita,saida=saida,ambiente=venv)
+    assert rc==0
+
 def test_prazo_mata_so_a_unidade(tmp_path):
     from analise import Falha
     receita=tmp_path/"receita";receita.mkdir()

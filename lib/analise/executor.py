@@ -13,6 +13,9 @@ def main() -> int:
     codigo = sys.argv[1]
     houve_recusa = [False]
     entrada, saida = Path("/entrada"), Path("/saida")
+    # O venv da receita entra montado só para leitura no caminho real de sys.prefix,
+    # fora de /usr e /opt; sem ele, todo import de pacote do lock seria recusado.
+    ambiente = Path(sys.prefix).resolve()
 
     def recusar() -> None:
         houve_recusa[0] = True
@@ -52,6 +55,7 @@ def main() -> int:
                         entrada,
                         saida,
                         Path("/receita"),
+                        ambiente,
                         Path("/usr"),
                         Path("/opt"),
                         Path("/lib"),
