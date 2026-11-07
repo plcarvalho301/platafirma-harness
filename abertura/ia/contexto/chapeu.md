@@ -1,10 +1,17 @@
 # chapéu contexto — o que fica e o que sai conforme a fita cresce
 
-Vestido, o objeto é o ciclo de vida do que já entrou na janela: o que fica, o que sai, o
-que persiste entre sessões e onde. A carga de origem é dado de fora — outros decidem o
-que entra; aqui se governa o que fica depois que entrou.
+Vestido, o objeto é o envelope medido e o ciclo de vida do que já entrou na janela: quanto
+cabe e onde pega, o que fica, o que sai, o que persiste entre sessões e onde. A carga de
+origem é dado de fora — outros decidem o que entra; aqui se governa o que fica depois que
+entrou. O que se escreve dentro do envelope, e como, é da produto, no chapéu
+comportamento.
 
 ## a) Espaço de problema
+
+- **O envelope** — quanto cabe em cada nível antes de a adesão cair, onde na janela uma
+  peça pega ou se perde, o que fica estável na frente para o cache de prefixo valer, e o
+  efeito medido de cada restrição de formato. A regra que muda quando muda o modelo ou o
+  harness é daqui; a que muda com a situação do agente é do chapéu comportamento.
 
 - **Por que a janela degrada** — não que degrada, a causa: a degradação em contexto
   longo que lê pior o meio, o mecanismo de atenção que reparte peso e dilui o que importa
@@ -19,7 +26,8 @@ que entra; aqui se governa o que fica depois que entrou.
   formato que condensa por reescrita, não só por corte; a recuperação contextual que
   traz de volta o pedaço podado na hora em que a inferência volta a precisar.
 - **Modelagem de memória** — o que vira caderno (durável, sobrevive ao assunto) e o que
-  fica na mesa (impedimento, esvazia por ato); o transporte de estado entre sessões que
+  fica na mesa (impedimento, esvazia por ato), com o orçamento e a poda de cada um; a
+  forma da nota que a próxima fita lê é da produto; o transporte de estado entre sessões que
   escreve o que a próxima não pode recomeçar; e a fossilização de memória, que envelhece
   e passa a mentir sobre a sessão de hoje.
 - **Ciclo de vida na malha** — o que vive no Valkey e por quanto: a retenção e descarte

@@ -21,8 +21,12 @@ dados (`arq:0119` §1). Quanto custa servir é do chapéu engenharia-de-harness.
   valer; dados a monta, ancora na seção e versiona, o dono marca o domínio.
 - **Abstenção** — a cobertura que o motor declara bate com o que o acervo tem, nas três
   direções: correta, falsa, inventada.
-- **Juiz** — o juiz-modelo que julga as rodadas passou do piso contra a marca do dono, ou
-  a métrica sobe sem a coisa que importa subir?
+- **Juiz** — o juiz que julga as rodadas passou do piso contra a marca do dono? A
+  calibragem e o prompt do juiz são do chapéu avaliacao; aqui se usa a rodada que ele
+  julgou.
+- **Rota por motor** — quando nenhum gatilho reconhece o começo do pedido, a rota vai ao
+  motor: o que ela traz, e quando abstém, se mede como recuperação. O gatilho explícito
+  é da produto, no chapéu comportamento.
 
 ## b) Régua de resposta
 
@@ -47,7 +51,8 @@ raso. Abre-se além da faceta assim:
 |---|---|---|---|
 | o trecho certo não veio ao topo | `dominio=["ia"]` | ranqueamento multiestágio · embedding · avaliação de recuperação | a relevância é do motor; o mecanismo vem do canônico de IA |
 | como cortar a seção em trecho | `dominio=["ia"]` + `casa` | chunking · janela de contexto · spec deteccao-semantica-de-secao | o teto e o corte semântico dependem do embedder |
-| o que medir e com que tamanho | `casa` | protocolo-medicao-rag · bateria rotulada · validade de construto | o protocolo fixa estrato, poder e regra de decisão antes da rodada |
+| o que medir e com que tamanho | `casa` | protocolo-medicao-rag · bateria rotulada | o protocolo fixa estrato, poder e regra de decisão antes da rodada; se a medida mede o que diz medir é do chapéu avaliacao |
+| o pedido que nenhum gatilho reconheceu | `dominio=["ia"]` | recuperação · cobertura e relevância | a rota por motor se mede como busca; o gatilho que faltou vai à produto, chapéu comportamento |
 | o motor dizer «não sei» com critério | `dominio=["ia"]` | abstenção calibrada · cobertura e relevância | gerar e julgar são competências distintas |
 | a obra está no corpus e seccionada | consultar dados, chapéu corpus | cobertura · seção · ficha de conceitos | cobertura é de dados e se diagnostica antes |
 | quanto custa servir a busca | consultar chapéu engenharia-de-harness | custo por inferência · complexidade assintótica | o acerto é daqui, o custo é de lá |
