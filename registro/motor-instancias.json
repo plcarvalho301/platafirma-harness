@@ -192,7 +192,7 @@
     "faixa": "nome do modelo; vazio desliga",
     "codigo": "",
     "sobe": "um cross-encoder le pergunta e trecho juntos e reordena o funil",
-    "custa": "~325 ms por chamada e ~1,1 GiB de VRAM residente. E nao pagou aqui: medido 08/08 no gold de 82 (card #357), acerto na 1a posicao 0,780 COM revisor contra 0,817 SEM. Fica desligado por medicao, nao por esquecimento. Liga por chamada em `bracos` do /search (`bracos: [\"rerank\"]`; a flag `rerank` solta, que a bateria mandava ate o #3264, a API nao le: a rodada «com revisor» media o mesmo numero que a sem revisor). Com o provedor `off` do compose, o braco liga o `ce` junto",
+    "custa": "Medido em 07/11/2026 (DT 505), bateria de 228 sobre g4, mesmo acervo_sha 6eaa56627dd9 e k=8: 79 pontuaveis (52 sentido e 27 negativas), 30 sem alvo e 118 com alvo fora do indice. SEM: hit@1 0,385, MRR 0,468, mediana 297,0 ms, p90 443,2 ms. COM: hit@1 0,385, MRR 0,468, mediana 606,9 ms, p90 721,8 ms. RERANK_BLEND=0 nos dois: esta comparacao mede o custo e o sinal, nao o efeito de dar peso ao revisor na ordenacao. Sem obra, abstencao correta 2/22 -> 21/22; com obra, abstencao falsa 0/5 -> 2/5. O revisor segue desligado; o ganho de abstencao e o custo ficam para decisao do dono. Rodadas dt505-sem-20261107 e dt505-com-20261107 em var/medicoes/rag. Substitui a justificativa de 08/08 no gold anterior ao rechunk. Liga por chamada em `bracos` do /search (`bracos: [\"rerank\"]`; a flag `rerank` solta, que a bateria mandava ate o #3264, a API nao le: a rodada «com revisor» media o mesmo numero que a sem revisor). Com o provedor `off` do compose, o braco liga o `ce` junto",
     "medir": "acerto na 1a posicao contra tempo, os dois na mesma tabela"
    },
    {
