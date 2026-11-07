@@ -155,23 +155,24 @@ def test_posicional_em_frase_passa_pelo_lint_e_vira_necessidade(api):
     assert pedidos[-1]["consulta"]["necessidade"] == texto
 
 
-def test_tres_assuntos_com_ponto_e_virgula_sai_2_sem_chamar_a_api(api):
+def test_tres_assuntos_com_ponto_e_virgula_avisa_e_busca(api):
+    # incidente #4142: o lint nunca recusa; a busca segue e o aviso diz a causa
     roda, pedidos, _, _ = api
-    r = roda("buscar", "biblioteca", "SRE overload cascading failures; golden hammer lava flow; xUnit test smells")
-    assert r.returncode == 2
-    linhas = r.stderr.splitlines()
-    assert linhas[0] == "consulta recusada: três assuntos em uma chamada"
-    assert linhas[1].strip() == "uma necessidade por chamada; mande 3 chamadas no mesmo lote"
-    assert pedidos == []
+    texto = "SRE overload cascading failures; golden hammer lava flow; xUnit test smells"
+    r = roda("buscar", "biblioteca", texto)
+    assert r.returncode == 0, r.stderr
+    assert "aviso da consulta: três assuntos em uma chamada (a busca seguiu)" in r.stderr
+    assert "consulta recusada" not in r.stderr
+    assert pedidos[-1]["consulta"]["necessidade"] == texto
 
 
-def test_saco_de_palavras_sai_2_sem_chamar_a_api(api):
+def test_saco_de_palavras_avisa_e_busca(api):
     roda, pedidos, _, _ = api
-    r = roda("buscar", "biblioteca", "UTF-8 decoding truncated multibyte sequence byte boundary")
-    assert r.returncode == 2
-    assert r.stderr.splitlines()[0] == "consulta recusada: sem forma de frase"
-    assert "escreva a necessidade em frase" in r.stderr.splitlines()[1]
-    assert pedidos == []
+    texto = "UTF-8 decoding truncated multibyte sequence byte boundary"
+    r = roda("buscar", "biblioteca", texto)
+    assert r.returncode == 0, r.stderr
+    assert "aviso da consulta: sem forma de frase (a busca seguiu)" in r.stderr
+    assert pedidos[-1]["consulta"]["necessidade"] == texto
 
 
 def test_necessidade_em_ingles_passa_pelo_lint(api):
@@ -218,9 +219,12 @@ def test_texto_posicional_e_necessidade_juntos_sai_2(api):
 
 
 def test_origem_busca_explicita_tambem_passa_pelo_lint(api):
+    # incidente #4142: passa pelo lint, que avisa e deixa a busca seguir
     roda, pedidos, _, _ = api
     r = roda("buscar", "biblioteca", "a; b", "--origem", "busca")
-    assert r.returncode == 2 and pedidos == []
+    assert r.returncode == 0, r.stderr
+    assert "aviso da consulta: dois assuntos em uma chamada" in r.stderr
+    assert pedidos[-1]["consulta"]["necessidade"] == "a; b"
 
 
 def test_o_evento_consulta_do_ops_grava_a_necessidade_com_a_lista_enviada(api):

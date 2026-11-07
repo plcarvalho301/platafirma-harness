@@ -101,6 +101,10 @@ def lint(texto: str, *args, **kwargs) -> tuple[str, str] | None:
 def mensagem_de_recusa(causa: str, jeito: str) -> str:
     return f"consulta recusada: {causa}\n  {jeito}"
 
+def mensagem_de_aviso(causa: str, jeito: str) -> str:
+    """O lint so avisa (incidente #4142): a busca segue, e a cadeira ve a causa e o jeito."""
+    return f"aviso da consulta: {causa} (a busca seguiu)\n  {jeito}"
+
 
 # --- montagem -----------------------------------------------------------------------------------
 
