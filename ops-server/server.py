@@ -2867,6 +2867,10 @@ def _segue_apos_prazo(p: subprocess.Popen, argv: list, timeout: int, t0: float, 
             # retry de communicate nao perde saida; input so na primeira chamada
             so, se = p.communicate(timeout=max(1.0, timeout - (time.monotonic() - t0)))
             r = {"exit_code": p.returncode, "stdout": _cap(so), "stderr": _cap(se)}
+            if p.returncode in (-15, 143) or p.returncode == -signal.SIGTERM:
+                r["interrompido"] = True
+                r["motivo"] = ("a porta reiniciou durante a execução (SIGTERM); o ato pode ter sido "
+                               "feito em parte — confira o efeito antes de repetir (repetir é seguro)")
         except subprocess.TimeoutExpired:
             try:
                 os.killpg(os.getpgid(p.pid), signal.SIGKILL)
@@ -2913,7 +2917,7 @@ def _fecha_orfaos_do_prazo() -> None:
         if isinstance(d, dict) and d.pop("em_andamento", None):
             d.update(interrompido=True,
                      motivo="a porta reiniciou antes do fim do verbo; o ato pode ter sido "
-                            "feito em parte — confira o efeito antes de repetir")
+                            "feito em parte — confira o efeito antes de repetir (repetir é seguro)")
             _grava_resultado(f, d)
 
 
@@ -3043,6 +3047,16 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
             pass
         p.wait()
         return {"erro": f"timeout ({timeout}s) — grupo de processo morto", "cwd": str(d_cwd)}
+    if p.returncode in (-15, 143) or p.returncode == -signal.SIGTERM:
+        return {
+            "exit_code": p.returncode,
+            "interrompido": True,
+            "motivo": ("a porta reiniciou durante a execução (SIGTERM); o ato pode ter sido "
+                       "feito em parte — confira o efeito antes de repetir (repetir é seguro)"),
+            "stdout": _cap(stdout),
+            "stderr": _cap(stderr),
+            "cwd": str(d_cwd),
+        }
     return {"exit_code": p.returncode, "stdout": _cap(stdout),
             "stderr": _cap(stderr), "cwd": str(d_cwd)}
 

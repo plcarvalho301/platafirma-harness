@@ -1036,6 +1036,7 @@ ato_atualizar() {
 #   intacta, 4 com a lista) -> empurra -> confirma o sha no forge (ls-remote).
 # main sem nada novo e ramo ja no origin: 0, "ja em dia", nada muda.
 ato_sincronizar() {
+  trap 'printf "repo: aviso — processo interrompido por reinício da porta (SIGTERM); repetir é seguro\n" >&2; exit 143' TERM
   local nome="${1:-}"
   [ -n "$nome" ] || uso
   [ $# -le 1 ] || morre "argumento excedente: '$2'" 2
