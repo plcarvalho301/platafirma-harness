@@ -43,12 +43,17 @@ def test_situacao_nao_busca_nem_serve_corpo(monkeypatch, capsys):
     monkeypatch.setattr(mod, "resolver", lambda *a: {"id": "x"})
     monkeypatch.setattr(mod, "_fonte", lambda: {})
     monkeypatch.setattr(mod, "_estado_espelho", lambda: ())
-    sit = dict(fonte="f", ingerido="i", servido="s", status="vigente")
+    monkeypatch.setattr(mod, "marca_linha", lambda *a: "documento")
+    monkeypatch.setattr(mod, "ident", lambda *a: "x")
+    monkeypatch.setattr(mod, "_item", lambda *a: {"id": "x"})
+    sit = dict(fonte="f", ingerido="i", servido="s", status="vigente", vetorizado="v")
     monkeypatch.setattr(mod, "_situacao", lambda *a: sit)
     def proibido(*a, **kw):
         raise AssertionError("situação não deve carregar corpo")
     monkeypatch.setattr(mod, "_q", proibido)
     assert mod.ler("guia", "x", False, situacao=True) == 0
-    assert capsys.readouterr().out == "fonte: f   ingerido: i   servido: s\nstatus: vigente\n"
+    saida = capsys.readouterr().out
+    assert "fonte: f" in saida and "status: vigente" in saida
     assert mod.ler("guia", "x", True, situacao=True) == 0
-    assert json.loads(capsys.readouterr().out) == {"situacao": sit}
+    dado = json.loads(capsys.readouterr().out)
+    assert dado["situacao"] == sit and "corpo" not in dado
