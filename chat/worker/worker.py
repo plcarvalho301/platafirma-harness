@@ -193,14 +193,16 @@ class Giro:
         """Fica de olho enquanto o verbo trabalha. Devolve o motivo da morte,
         ou string vazia se ele terminou sozinho."""
         comeco = time.monotonic()
+        timeout_declarado = float(self.job.get("timeout") or os.environ.get("PF_TIMEOUT", 0) or 0)
+        limite_mudo = max(STREAM_MUDO_S, timeout_declarado)
         while proc.poll() is None:
             time.sleep(1.0)
             with self.trava:
                 mudo = time.monotonic() - self.ultimo_sinal
-            if mudo > STREAM_MUDO_S:
+            if mudo > limite_mudo:
                 self._mata(proc)
                 return (f"Sem evento no stream do verbo por {int(mudo)}s "
-                        f"(teto de {int(STREAM_MUDO_S)}s).")
+                        f"(teto de {int(limite_mudo)}s).")
             if TETO_ABSOLUTO_S and time.monotonic() - comeco > TETO_ABSOLUTO_S:
                 self._mata(proc)
                 return f"O giro passou do teto absoluto de {int(TETO_ABSOLUTO_S)}s."

@@ -754,3 +754,19 @@ def test_commitar_sem_caminho_sem_a_data_da_abertura_sai_3(tmp_path):
     assert r.returncode == 3 and "data da abertura" in r.stderr, "o texto que não é JSON não vira data"
     r = _commitar_sem_caminho(tmp_path, bancada, _sessao_aberta_em(tmp_path, "ontem"))
     assert r.returncode == 3 and "ilegível" in r.stderr
+
+
+def test_commitar_aceita_arquivo_removido_via_git_rm(tmp_path):
+    """DT #208: repo commitar com arquivo removido por git rm aceita o caminho nomeado."""
+    bancada = _montar(tmp_path)
+    wt = _abrir_42(tmp_path, bancada)
+    arq = wt / "remover.txt"
+    arq.write_text("vai sumir\n")
+    _git("add", "remover.txt", cwd=wt)
+    _git("commit", "-m", "adiciona remover.txt", cwd=wt)
+    _git("rm", "remover.txt", cwd=wt)
+    assert not arq.exists()
+    r = _repo(tmp_path, bancada, "s1", "commitar", "demo@42-x", "-m", "remove arquivo (#42)", "remover.txt")
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert "caminho 'remover.txt' não existe na bancada" not in r.stderr
+    assert "remover.txt" not in _git("ls-files", cwd=wt).splitlines()

@@ -135,6 +135,70 @@ def _eh_estruturada(linha: str) -> bool:
         return False
     return True
 
+
+def _lava_json_motor(texto: str) -> tuple[str, bool]:
+    """DT #353: lavagem cosmética de JSON de motor buscar / motor rag.
+
+    Remove campos nulos ou constantes (rerank: null, score: 0.0164, codigo_exato: false, etc.)
+    e desduplica metadados redundantes nas fontes e no contexto, preservando 100% dos trechos
+    do top-k e sem re-curar o conjunto (regime cosmético do card #3022).
+    """
+    s = texto.strip()
+    if not (s.startswith("{") and s.endswith("}")):
+        return texto, False
+    try:
+        dados = json.loads(s)
+    except Exception:
+        return texto, False
+    if not isinstance(dados, dict) or "fontes" not in dados or not isinstance(dados["fontes"], list):
+        return texto, False
+
+    mudou = False
+    novas_fontes = []
+    constantes = {None, False}
+    for f in dados["fontes"]:
+        if not isinstance(f, dict):
+            novas_fontes.append(f)
+            continue
+        nf = {}
+        for k, v in f.items():
+            if k in ("section_id", "secao_id", "obra", "sim", "trecho", "texto", "titulo", "id", "chave", "anchor"):
+                nf[k] = v
+            elif v in constantes or v == "" or (k == "score" and v == 0.0164):
+                mudou = True
+            elif k == "breadcrumb" and (v == f.get("obra") or not v):
+                mudou = True
+            else:
+                nf[k] = v
+        if len(nf) != len(f):
+            mudou = True
+        novas_fontes.append(nf)
+    dados["fontes"] = novas_fontes
+
+    if "contexto" in dados and isinstance(dados["contexto"], list):
+        novo_ctx = []
+        for c in dados["contexto"]:
+            if isinstance(c, dict):
+                nc = {}
+                for k, v in c.items():
+                    if v in constantes or v == "":
+                        mudou = True
+                    elif k == "breadcrumb" and (v == c.get("obra") or not v):
+                        mudou = True
+                    else:
+                        nc[k] = v
+                if len(nc) != len(c):
+                    mudou = True
+                novo_ctx.append(nc)
+            else:
+                novo_ctx.append(c)
+        dados["contexto"] = novo_ctx
+
+    if mudou:
+        return json.dumps(dados, ensure_ascii=False, separators=(",", ":")), True
+    return texto, False
+
+
 def _marca_blob(linha: str, *, janela: bool = True) -> tuple[str, bool]:
     """Base64/hex longo vira marcador com sha; linha longa qualquer vira janela ±120.
 
@@ -276,6 +340,13 @@ def lava(texto: str, cap: int = 50_000, *, cosmetica: bool = False,
     t = _sem_ansi(bruto) if terminal else bruto
     if t != bruto:
         classes.append("terminal")
+
+    if cosmetica and _eh_estruturada(t):
+        t_json, mudou_json = _lava_json_motor(t)
+        if mudou_json:
+            classes.append("cosmetica_json")
+            t = t_json
+
     linhas = t.split("\n")
 
     # `curar=False` (leitura de arquivo): a alca de restauracao devolve o arquivo como ele

@@ -783,6 +783,59 @@ def test_cosmetica_ainda_marca_base64_de_verdade():
     assert "<blob tipo=base64" in fora and rel["classes"] == ["blob"]
 
 
+def test_cosmetica_lava_json_motor():
+    """DT #353: lavagem cosmética de JSON de motor buscar / motor rag enxuga campos redundantes."""
+    retorno = json.dumps({
+        "pergunta": "conceito de heuristica",
+        "fontes": [
+            {
+                "section_id": "sec-1#anchor",
+                "secao_id": "sec-1",
+                "obra": "Simple Heuristics",
+                "sim": 0.89,
+                "score": 0.0164,
+                "rerank": None,
+                "codigo_exato": False,
+                "breadcrumb": "Simple Heuristics",
+            },
+            {
+                "section_id": "sec-2",
+                "secao_id": "sec-2",
+                "obra": "Bounded Rationality",
+                "sim": 0.85,
+                "score": 0.0164,
+                "rerank": None,
+                "codigo_exato": False,
+                "breadcrumb": "Outro Breadcrumb",
+            }
+        ],
+        "contexto": [
+            {
+                "arquivo": "doc1.md",
+                "breadcrumb": "Simple Heuristics",
+                "obra": "Simple Heuristics",
+                "texto": "trecho 1",
+                "rerank": None,
+            }
+        ]
+    })
+    fora, rel = _p.lava(retorno, cosmetica=True)
+    assert "cosmetica_json" in rel["classes"]
+    dados = json.loads(fora)
+    # campos essenciais preservados
+    assert dados["fontes"][0]["section_id"] == "sec-1#anchor"
+    assert dados["fontes"][0]["obra"] == "Simple Heuristics"
+    assert dados["fontes"][0]["sim"] == 0.89
+    # campos podados por serem nulos, constantes ou repetidos
+    assert "score" not in dados["fontes"][0]
+    assert "rerank" not in dados["fontes"][0]
+    assert "codigo_exato" not in dados["fontes"][0]
+    assert "breadcrumb" not in dados["fontes"][0]  # repetia obra
+    assert dados["fontes"][1]["breadcrumb"] == "Outro Breadcrumb"  # diferente da obra, preservado
+    assert "rerank" not in dados["contexto"][0]
+    assert "breadcrumb" not in dados["contexto"][0]  # repetia obra
+
+
 def test_cosmetica_acima_do_cap_derrama_inteiro_e_nunca_corta_o_miolo():
     texto = "\n".join(f"[{i}] trecho vetorial numero {i} " + "conteudo " * 30
                       for i in range(1, 21))

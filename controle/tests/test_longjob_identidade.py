@@ -55,6 +55,18 @@ def test_ausente_segue_ausente(tmp_path):
     assert "# agente=" not in log
 
 
+def test_repassa_urls_do_motor_e_rag(tmp_path):
+    """DT #215: repassa MOTOR_ACERVO_URL, RAG_API_URL e RAG_API_BASE à unit transiente."""
+    urls = {
+        "MOTOR_ACERVO_URL": "http://127.0.0.1:8100",
+        "RAG_API_URL": "http://127.0.0.1:8120/api",
+        "RAG_API_BASE": "http://127.0.0.1:8120",
+    }
+    args, _ = _roda(tmp_path, urls)
+    for k, v in urls.items():
+        assert f"--setenv={k}={v}" in args
+
+
 def _token_visto(tmp_path):
     return (tmp_path / "args.txt.token").read_text()
 
