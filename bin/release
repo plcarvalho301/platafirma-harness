@@ -101,7 +101,7 @@ uso:
                                               --caminho <prefixo> e apelido do prefixo)
   release conferir   <classe> [<alvo>] [--ref <rev>] [--json]
   release telas      [--json]                 as telas com stack promovida (declaracao registro/telas.json)
-  release promover   <repo> [<rev>] [--ensaio] [--aceitar-suite-indisponivel]
+  release promover   <repo> [<rev>] [--ensaio] [--aceitar-suite-indisponivel] [--confirmar-lotes]
   release reverter   <repo> [<rev>] [--ensaio]
   release promover   abertura [<rev>] [--ensaio]   publica a abertura do harness na rev (sem rev: origin/main)
   release reverter   abertura [<sha>] [--ensaio]   volta a abertura a um sha ja publicado (sem sha: o anterior)
@@ -2117,11 +2117,12 @@ resumo_imprime() {
 
 # ---- ato: promover <repo> [<rev>] [--ensaio] --------------------------------------
 cmd_promover() {
-  local ensaio=0 so_caderno=0 repo="" rev="" aceitar_suite=0
+  local ensaio=0 so_caderno=0 repo="" rev="" aceitar_suite=0 confirmar_lotes=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --ensaio) ensaio=1; shift ;;
       --so-caderno) so_caderno=1; shift ;;
+      --confirmar-lotes) confirmar_lotes=1; shift ;;
       --aceitar-suite-indisponivel) aceitar_suite=1; shift ;;
       -*) printf 'release: erro: opção desconhecida: %s\n' "$1" >&2; uso_texto; exit 2 ;;
       *)
@@ -2213,6 +2214,11 @@ cmd_promover() {
     exit 0
   fi
 
+  if [ "$repo" = "platafirma-conhecimento" ]; then
+    local lote_args=()
+    [ "$confirmar_lotes" -eq 0 ] || lote_args+=(--confirmar)
+    python3 "$AQUI/_release/lotes.py" "${lote_args[@]}" || { rc=$?; exit "$rc"; }
+  fi
   exigir_deploy_se_stack || { rc=$?; exit "$rc"; }
   materializar "$repo" "$sha" || { rc=$?; exit "$rc"; }
   materializar_terceiros "$repo" "$sha" || { rc=$?; exit "$rc"; }
