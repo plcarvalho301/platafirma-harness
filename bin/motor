@@ -1478,15 +1478,15 @@ ORIGENS_LITERAIS = ("abertura", "bench", "sombra", "autoteste")
 def _monta_consulta(texto, sem_lint):
     """A consulta montada da origem `busca` (#3360, #3364): lint, chapeu e rotulos.
 
-    Recusa com exit 2 e a causa na primeira linha, o jeito certo na seguinte. Nunca reescreve a
-    necessidade e nunca chama modelo: quem corrige e a cadeira, na chamada seguinte."""
+    O lint so avisa (incidente #4142): a busca segue com a necessidade como veio, e o aviso
+    sai no stderr com a causa e o jeito certo. Nunca recusa, nunca reescreve, nunca chama modelo."""
     chapeu = consulta.chapeu_vestido()
     cadeira = (os.environ.get("PF_CADEIRA") or "").strip()
+    aviso = None
     if not sem_lint:
-        recusa = consulta.lint(texto)
-        if recusa:
-            print(consulta.mensagem_de_recusa(*recusa), file=sys.stderr)
-            sys.exit(2)
+        aviso = consulta.lint(texto)
+        if aviso:
+            print(consulta.mensagem_de_aviso(*aviso), file=sys.stderr)
     rotulos = consulta.rotulos_do_chapeu(cadeira, chapeu)
     return consulta.consulta(texto, chapeu, rotulos, lint_desligado=sem_lint)
 
