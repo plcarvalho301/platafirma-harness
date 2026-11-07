@@ -262,6 +262,7 @@ def _imprime_abrir(ch: dict, sid: str, cunhada: bool, registrada: bool, duravel:
             obj[k] = ch[k]
     if motivo_duravel:
         obj["duravel_motivo"] = motivo_duravel
+        obj["avisos"] = [*avisos, f"registro durável indisponível: {motivo_duravel}"]
     if not ch.get("canonizada"):
         obj["regime"] = "nao canonizada — escrita restrita a cura"
     if saida.json:
