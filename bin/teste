@@ -40,8 +40,8 @@ CHAVE_PY=""; CHAVE_HASH=""; CHAVE_DEST=""
 uso() {
   cat >&2 <<EOF
 uso:
-  $VERBO rodar <nome> [<alvo>...] [--portao] [--arvore <caminho>] [--base <rev>] [--chave <nome>]
-  $VERBO rodar <nome> --portao [--degrau pequeno|imagem|rodada|demanda|todos] [--base <rev>]
+  $VERBO rodar <nome> [<alvo>...] [--portao] [--arvore <caminho>] [--base <rev>] [--chave <nome>] [--prazo <s>]
+  $VERBO rodar <nome> --portao [--degrau pequeno|imagem|rodada|demanda|todos] [--base <rev>] [--prazo <s>]
   $VERBO rodar <repositorio> --portao --origin-main [--teto-pequeno <s>]
   $VERBO detectar <nome> [--chave <nome>]
   $VERBO inventario [<nome>|--all] [--json]
@@ -78,6 +78,8 @@ uso:
                  bancada, mede a lista inteira (os três degraus, e a quarentena, se não houver
                  --degrau) numa árvore descartável dele e a remove (a rodada diária do bot, card
                  #3370; não grava veredito de seleção)
+  --prazo <s>: prazo máximo de execução em segundos por suíte ou bloco (default 300s python,
+               600s node, ou PF_TESTE_TIMEOUT)
   --chave <nome>: (deprecado) usa o ambiente de registro/venvs.json (arq:0110 §11)
 
 bancada: PLATAFIRMA_BANCADA, senão \$PLATAFIRMA_ARQUIVO_BANCADA (sem declaração: exit 3)
@@ -508,7 +510,8 @@ _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
       case "$f" in *.sh) cmd=(bash "$f_abs") ;; *) cmd=("$node" "$f_abs") ;; esac
     fi
     t0="$(date +%s%N)"
-    (cd "$c" && env "${envp[@]}" timeout "${PF_TESTE_TIMEOUT:-600}" ${pre[@]+"${pre[@]}"} "${cmd[@]}") >"$tmpr/$1.out" 2>&1 || rc=$?
+    local timeout_node="${PRAZO:-${PF_TESTE_TIMEOUT:-600}}"
+    (cd "$c" && env "${envp[@]}" timeout "$timeout_node" ${pre[@]+"${pre[@]}"} "${cmd[@]}") >"$tmpr/$1.out" 2>&1 || rc=$?
     t1="$(date +%s%N)"
     printf '%s' "$rc" > "$tmpr/$1.rc"
     printf '%s' "$(( (t1 - t0) / 1000000 ))" > "$tmpr/$1.ms"
@@ -719,14 +722,18 @@ PY
     env_opts=(UV_PROJECT_ENVIRONMENT="$envtmp/venv")
   fi
 
-  (cd "$raiz" && env ${env_opts:+"${env_opts[@]}"} timeout 300 "${runner[@]}" ${alvos:+"${alvos[@]}"} "${pytest_flags[@]}") >"$log" 2>&1 || rc=$?
+  local timeout_py="${PRAZO:-${PF_TESTE_TIMEOUT:-300}}"
+  (cd "$raiz" && env ${env_opts:+"${env_opts[@]}"} timeout "$timeout_py" "${runner[@]}" ${alvos:+"${alvos[@]}"} "${pytest_flags[@]}") >"$log" 2>&1 || rc=$?
   [ -n "${envtmp:-}" ] && rm -rf "$envtmp"
 
   if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
     rc=5
-    linha="suite INDISPONIVEL: $rotulo — timeout (300s excedidos)"
+    linha="suite INDISPONIVEL: $rotulo — timeout (${timeout_py}s excedidos)"
     rm -f "$xml"
     printf '%s\n' "$linha"
+    if [ -f "$log" ] && [ -s "$log" ]; then
+      tail -n 15 "$log" | sed 's/^/  | /'
+    fi
     printf 'saida inteira: %s\n' "$log"
     return 5
   fi
@@ -1225,11 +1232,13 @@ ato_inventario() {
 ato_rodar() {
   local nome="" alvo="" chave="" arvore="" base="" degrau="" teto_pequeno="" portao=0 origem_main=0 EM_ARVORE=0 c rc extras=() extras_resolvidos=()
   local SELECAO_HASH=""  # visto por pytest_em_bloco (chave do memo parcial)
+  local PRAZO=""         # visto por pytest_em_bloco e _node_em_bloco (--prazo ou PF_TESTE_TIMEOUT)
   while [ $# -gt 0 ]; do
     case "$1" in
       --chave) shift; [ $# -gt 0 ] || morre "--chave exige um valor" 2; chave="$1"; shift ;;
       --base) shift; [ $# -gt 0 ] || morre "--base exige uma rev" 2; base="$1"; shift ;;
       --degrau) shift; [ $# -gt 0 ] || morre "--degrau exige pequeno, imagem ou rodada" 2; degrau="$1"; shift ;;
+      --prazo) shift; [ $# -gt 0 ] || morre "--prazo exige os segundos" 2; PRAZO="$1"; shift ;;
       --teto-pequeno) shift; [ $# -gt 0 ] || morre "--teto-pequeno exige os segundos" 2; teto_pequeno="$1"; shift ;;
       --portao) portao=1; shift ;;
       --origin-main) origem_main=1; shift ;;
@@ -1257,6 +1266,10 @@ ato_rodar() {
     '') ;;
     *[!0-9]*) morre "--teto-pequeno '$teto_pequeno': use os segundos, um inteiro" 2 ;;
     *) [ "$origem_main" -eq 1 ] || morre "--teto-pequeno só com --origin-main: o teto é da rodada diária" 2 ;;
+  esac
+  case "$PRAZO" in
+    '') ;;
+    *[!0-9]*|0) morre "--prazo '$PRAZO': use os segundos, um inteiro positivo" 2 ;;
   esac
   local degrau_pedido="${degrau:-pequeno}"
   [ -n "$degrau" ] || [ "$origem_main" -ne 1 ] || degrau_pedido=todos
