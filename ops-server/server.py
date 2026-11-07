@@ -3049,7 +3049,8 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                     stdin: str | dict | list | None = None,
                     sessao_id: str | None = None, timeout: int = 120,
                     lote: list[dict] | None = None, encadeado: bool = False,
-                    turno: str = "", turno_texto: str = "", turno_fonte: str = "") -> dict:
+                    turno: str = "", turno_texto: str = "", turno_fonte: str = "",
+                    inteiro: bool = False) -> dict:
         # #3124: o cliente MCP desserializa stdin JSON valido antes de chegar aqui; a
         # anotacao velha (str | None) fazia o pydantic recusar sem rodar nada.
         stdin = _stdin_texto(stdin)
@@ -3091,7 +3092,8 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                 _perf = _perfil_verbo(slug, binario)
                 r = _serve(r, tool=slug, alca=_linha, ident=ident, cauda=_perf["cauda"],
                            cosmetica=_cosmetica(_perf, _ato_efetivo(argv)),
-                           escrita=_escreve(slug, binario, _ato_efetivo(argv)))
+                           escrita=_escreve(slug, binario, _ato_efetivo(argv)),
+                           esquece=bool(item.get("inteiro")))
                 _audit(tool=slug, ato=_ato or None, args=" ".join(_args)[:CMD_CAP],
                        **_documento_lido(slug, _ato, _args),
                        cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
@@ -3138,7 +3140,8 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
         _perf = _perfil_verbo(slug, binario)
         r = _serve(r, tool=slug, alca=linha, ident=ident, cauda=_perf["cauda"],
                    cosmetica=_cosmetica(_perf, _ato_efetivo(argv)),
-                   escrita=_escreve(slug, binario, _ato_efetivo(argv)))
+                   escrita=_escreve(slug, binario, _ato_efetivo(argv)),
+                   esquece=inteiro)
         _audit(tool=slug, ato=ato or None, args=" ".join(args)[:CMD_CAP],
                **_documento_lido(slug, ato, args),
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],

@@ -53,6 +53,20 @@ def test_ausente_segue_ausente(tmp_path):
     assert "# agente=" not in log
 
 
+def test_repassa_segredo_rag_token_do_ambiente(tmp_path):
+    args, _ = _roda(tmp_path, {"RAG_API_TOKEN": "token-teste-env"})
+    assert "--setenv=RAG_API_TOKEN=token-teste-env" in args
+
+
+def test_repassa_segredo_rag_token_da_instancia(tmp_path):
+    # Do arquivo da instancia quando ausente no ambiente (DT #64)
+    segdir = tmp_path / "inst" / "segredos" / "rag"
+    segdir.mkdir(parents=True)
+    (segdir / "RAG_API_TOKEN").write_text("token-teste-disco\n")
+    args, _ = _roda(tmp_path, {})
+    assert "--setenv=RAG_API_TOKEN=token-teste-disco" in args
+
+
 # ---- atributos do agente (card #3156, spec agente §11.1: o job herda os cinco) ----
 
 AGENTE = {"PF_AGENTE": "revisor", "PF_EM_NOME_DE": "engenharia", "PF_CONTA_AGENTE": "claudinho",

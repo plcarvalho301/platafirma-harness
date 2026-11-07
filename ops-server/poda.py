@@ -627,7 +627,7 @@ def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
     servir = lavado
     if ledger is not None:
         d = ledger.olha(alca, lavado, giro, tool, constitutiva=constitutiva,
-                        sufixo=SUFIXO_REENVIO if leitura else "")
+                        sufixo=SUFIXO_REENVIO)
         servir = d["texto"]
         meta["ledger"] = d.get("ledger")
         if d.get("distancia") is not None:
