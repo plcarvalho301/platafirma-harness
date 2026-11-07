@@ -45,11 +45,11 @@ dessas peças dentro do envelope que a ia mede.
 
 Boa parte das obras deste chapéu ainda não tem domínio no acervo: a consulta vai sem
 filtro de domínio, pelo conceito ou pela frase com o rótulo inteiro. «Persona ou cena
-na assinatura se-então» casa; «melhorar o prompt» casa raso. Gatilho, assinatura
-se-então, texto indutivo e instrutivo, disparo falso e perdido e seleção de ferramenta
-ainda não têm conceito no tesauro; o roteador casa este chapéu por personalidade
-situada, abordagem dramatúrgica, hábito, intenção de implementação, decisão por
-reconhecimento, encenação de papel, restrição de formato e engenharia de prompt.
+na assinatura se-então» casa; «melhorar o prompt» casa raso. Disposição e papel,
+circunstâncias dadas, definição da situação, status, vetor de persona, deixa de
+contexto, regra condição-ação e resolução de conflito entre gatilhos ainda não têm
+conceito no tesauro: a frase leva o rótulo inteiro, e o roteador não veste o chapéu por
+eles.
 
 | quando a pergunta é de | abre para | com | porque |
 |---|---|---|---|
@@ -58,9 +58,9 @@ reconhecimento, encenação de papel, restrição de formato e engenharia de pro
 | o modelo como ator | `conceito=["encenacao-de-papel","deriva-de-persona"]` | encenação de papel por modelo de linguagem · vetor de persona · deriva de persona | Shanahan e outros (o simulador e a superposição de personagens); Persona Vectors; Claude's character, para o traço escrito como inclinação e não como regra |
 | a personagem com poucos traços | `conceito=["personagem-de-ficcao","papel-instanciavel"]` | personagem de ficção · papel instanciavel | Candido e outros, A personagem de ficção, para a seleção de traços que o leitor completa; Thomasson, Fiction and Metaphysics, e Boal, Teatro do Oprimido |
 | induzir ou mandar | `conceito=["habito","intencao-de-implementacao"]` | texto indutivo e instrutivo · hábito · deixa de contexto · intenção de implementação | Wood e Neal (a deixa do contexto dispara sem passar pelo objetivo); Gollwitzer e Sheeran (o se-então que entrega o controle à deixa); Problems with Rules e Playing by the Rules, para quando a regra vale mais que o padrão |
-| o gatilho e o começo | `conceito=["decisao-por-reconhecimento","memoria-prospectiva","nivel-srk"]` | decisão por reconhecimento · memória prospectiva · níveis habilidade-regra-conhecimento · regra condição-ação · resolução de conflito entre gatilhos | Klein, Sources of Power; McDaniel e Einstein; Rasmussen; Soar e CoALA para a regra que dispara e o conflito entre as que casam; Fogg para o gatilho que chega na hora em que se pode agir |
+| o gatilho e o começo | `conceito=["gatilho","decisao-por-reconhecimento","memoria-prospectiva","nivel-srk"]` | gatilho · decisão por reconhecimento · memória prospectiva · níveis habilidade-regra-conhecimento · regra condição-ação · resolução de conflito entre gatilhos | Klein, Sources of Power; McDaniel e Einstein; Rasmussen; Soar e CoALA para a regra que dispara e o conflito entre as que casam; Fogg para o gatilho que chega na hora em que se pode agir |
 | o plano diante da situação | frase com «ação situada» | — | Suchman, Plans and Situated Actions: o plano é recurso da ação, não programa que a controla |
-| a descrição da tool e da skill | `dominio=["ia"]` | seleção de ferramenta · descrição como disparo · disparo falso e perdido · engenharia de prompt | Writing effective tools for agents, Equipping agents with Agent Skills, SkillJuror e The Prompt Report |
+| a descrição da tool e da skill | `dominio=["ia"]` | seleção de ferramenta · descricao como interface · disparo falso e perdido · engenharia de prompt | Writing effective tools for agents, Equipping agents with Agent Skills, SkillJuror e The Prompt Report |
 | quanto cabe e onde pega | consultar ia, chapéu contexto | menor conjunto de alto sinal · restrição de formato | o envelope se mede lá; aqui se decide o que vai dentro |
 | o que o agente fez de fato | consultar ia, chapéu avaliacao, e `abertura/produto/pesquisa` | — | a ia gera a avaliação; a pesquisa a questiona |
 | o passo de um processo | consultar gestão estratégica, chapéu processos | processo de negocio | o desenho do passo é de lá; a escrita para o agente é daqui |

@@ -43,11 +43,8 @@ engenharia-de-harness.
 ## c) Consulta dirigida
 
 O canônico volta pela faceta `dominio=["ia"]`, com `casa` para o protocolo de medição.
-Bateria de comportamento, análise de erro, reserva cega, análise de rastro, desenho de
-experimento, calibragem do juiz e disparo falso e perdido ainda não têm conceito no
-tesauro: a frase leva o rótulo inteiro, e o roteador casa este chapéu por juiz-modelo,
-validade de construto, abstenção calibrada, sinal implicito de uso e métrica de
-experiência.
+Análise de rastro, desenho de experimento e calibragem do juiz ainda não têm conceito no
+tesauro: a frase leva o rótulo inteiro, e o roteador não veste o chapéu por eles.
 
 | quando a pergunta é de | abre para | com | porque |
 |---|---|---|---|
