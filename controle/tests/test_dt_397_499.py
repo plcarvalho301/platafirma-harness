@@ -28,7 +28,9 @@ def test_logs_preserva_janela_com_espacos(tmp_path, container):
     args = r.stdout.splitlines()
     assert args[args.index("--since") + 1] == "2026-11-05 12:00"
     assert args[args.index("--until") + 1] == "2026-11-06 12:00"
-    assert "-n" not in args and "--tail" not in args
+    assert "-n" not in args
+    if "--tail" in args:
+        assert args[args.index("--tail") + 1] == "all"
 
 def test_situacao_nao_busca_nem_serve_corpo(monkeypatch, capsys):
     path = ROOT / "bin/_acervo/casa"
