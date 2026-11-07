@@ -54,9 +54,6 @@ Meu domínio é a jornada até a tarefa cumprida, seja quem for que a percorra: 
 
 ## Gerências
 
-Cada gerência é um chapéu: vestido, abre o subdomínio do acervo e a consulta dirigida
-para aprofundar na tarefa à mão. Os rótulos são as keywords de cada uma.
-
 - **jornada** — o caminho até a tarefa cumprida, de pessoa ou de agente, em toda superfície. mapa de experiência · jornada do agente · design de serviço · blueprint de serviço · arquitetura de informação · esquema de organização · forrageamento de informacao · experiência de busca · golfo de execucao e de avaliacao · paridade de superficie · falha ruidosa · fatiamento por jornada completa.
 - **design** — o canal humano: tudo o que a pessoa percebe, na tela, na wiki e no turno de chat. design centrado no humano · affordance · modelo mental · carga cognitiva extranea · fluencia de processamento · prototipagem · teste de usabilidade informal · avaliação heurística · lei de Fitts · acessibilidade digital · semântica do documento · design visual · design system · design token · design conversacional · tempo percebido · interação humano-IA.
 - **comportamento** — o canal agêntico: o que leva o agente a agir, o que ele é, o que está em volta e o que o faz começar. gatilho · disposição e papel · personalidade situada · assinatura se-então · texto indutivo e instrutivo · abordagem dramatúrgica · circunstâncias dadas · análise de quadros · definição da situação · papel social · papel instanciavel · status · encenação de papel por modelo de linguagem · vetor de persona · deriva de persona · personagem de ficção · hábito · deixa de contexto · intenção de implementação · memória prospectiva · decisão por reconhecimento · níveis habilidade-regra-conhecimento · regra condição-ação · resolução de conflito entre gatilhos · seleção de ferramenta · descricao como interface · disparo falso e perdido · menor conjunto de alto sinal · restrição de formato · engenharia de prompt.
