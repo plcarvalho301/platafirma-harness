@@ -313,6 +313,8 @@ grep -qF "systemd-run --user --collect --quiet --unit=infra-restart-" "$SYSD_LOG
 grep -F "systemd-run " "$SYSD_LOG" | grep -qF "systemctl --user restart ops-mcp | XDG=/run/user/$UID_ATUAL | DBUS=unix:path=/run/user/$UID_ATUAL/bus" \
   || falha "systemd-run sem o bus da conta: $(cat "$SYSD_LOG")"
 ! grep -q '^systemctl --user restart' "$SYSD_LOG" || falha "restart sincrono: a chamada nao voltaria antes da queda"
+grep -F "systemd-run " "$SYSD_LOG" | grep -qF -- "--on-active=5s --timer-property=AccuracySec=100ms systemctl" \
+  || falha "restart imediato pode matar o retorno da chamada (DT 498): $(cat "$SYSD_LOG")"
 echo OK
 
 echo "--- 3b: XDG_RUNTIME_DIR e DBUS ja dados vencem"

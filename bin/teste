@@ -600,11 +600,26 @@ pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isola
   # mesmo trabalhador). Trabalhadores = PF_TESTE_PARALELO (padrão: metade dos núcleos),
   # nunca mais que o número de arquivos; 0 ou 1 roda em série. Medido em 06/10: as quatro
   # chaves do harness de 291 s em série para 54 s, mesma contagem de testes.
-  local xdist=() trab
-  if [ "${portao:-0}" -eq 1 ] && [ "${modo%%:*}" = py ]; then
+  local xdist=() trab n_arquivos="${#alvos[@]}"
+  if [ "${modo%%:*}" = py ]; then
     trab="${PF_TESTE_PARALELO:-$(( $(nproc 2>/dev/null || echo 2) / 2 ))}"
     case "$trab" in ''|*[!0-9]*) trab=1 ;; esac
-    [ "$trab" -gt "${#alvos[@]}" ] && trab="${#alvos[@]}"
+    # DT 496: um diretorio tambem e uma suite de varios arquivos. A rodada fora
+    # do portao usava um so processo e perdia o resumo ao ultrapassar 300 s.
+    if [ "${portao:-0}" -ne 1 ]; then
+      n_arquivos="$(cd "$raiz" && python3 - "${alvos[@]}" <<'PY'
+import sys
+from pathlib import Path
+arquivos = set()
+for alvo in sys.argv[1:] or ["."]:
+    p = Path(alvo.split("::", 1)[0])
+    arquivos.update(p.rglob("test_*.py") if p.is_dir() else [p])
+print(len(arquivos))
+PY
+)"
+      [ "$trab" -gt 8 ] && trab=8
+    fi
+    [ "$trab" -gt "$n_arquivos" ] && trab="$n_arquivos"
     [ "$trab" -gt 1 ] && xdist=(-n "$trab" --dist loadfile)
   fi
   case "$modo" in

@@ -5,8 +5,8 @@ O verbo `motor <inst> buscar` monta a pergunta com a necessidade literal (`[nece
 chapéu vestido (PF_CHAPEU), envia o chapéu com cadeira, chapéu e rótulos para eleição na API (#3368).
 
 Se o chapéu estiver em fallback ou sem rótulos, a busca segue sem envio do bloco de chapéu.
-O verbo recusa com causa e jeito certo (`lint`) e nunca reescreve: não chama modelo, não traduz,
-não corrige. Quem corrige é a cadeira, na chamada seguinte.
+O lint avisa com causa e jeito certo, e a busca segue (#4142). O verbo nunca reescreve:
+não chama modelo, não traduz, não corrige. A cadeira pode reformular a chamada seguinte.
 
 Só funções puras e leitura de arquivo; sem rede, sem banco. `bin/motor` chama; o teste mede.
 """
