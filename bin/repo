@@ -1967,9 +1967,14 @@ for f in (sys.stdin,):
                             caminhos.add(rel)
                     elif tool == "repo":
                         # mutação do git na bancada pela sessão (ex: apply, rm, checkout, restore)
-                        cmd = obj.get("argv") or []
-                        if any(act in cmd for act in ("apply", "rm", "checkout", "restore")):
-                            tocou_repo = True
+                        # O giro da porta grava `ato` (git) e `args` (uma string: bancada, subato, caminhos);
+                        # nao ha `argv`. Medido no ar em 07/11/2026: com `argv`, o `rm` nunca contava (DT 6).
+                        cmd = obj.get("args") or obj.get("argv") or []
+                        if isinstance(cmd, str):
+                            cmd = cmd.split()
+                        if obj.get("ato") == "git" or "git" in cmd[:1]:
+                            if any(act in cmd for act in ("apply", "rm", "checkout", "restore", "mv")):
+                                tocou_repo = True
     except Exception:
         pass
 
