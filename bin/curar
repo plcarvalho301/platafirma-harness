@@ -1945,8 +1945,7 @@ def _linhas_portoes(relatorio: dict | None) -> list[str]:
 def acao_reextrair(args, autor: str, como_json: bool, headers: dict) -> int:
     """Espelho novo do próprio arquivo e impressão nova sobre ele (§9 caso 2; com o digest de
     um espelho atestado, regenera sob a mesma chave, §10.1). Plano seco sem --apply."""
-    alvo = args.reextrair if isinstance(args.reextrair, str) else args.reextrair[0]
-    obra_id = resolver_obra_id(alvo, headers)
+    obra_id = resolver_obra_id(args.reextrair, headers)
     # sem --metodo, o servidor usa o padrão do tipo real (spec §4.3; `acervo listar biblioteca metodos`)
     payload = {"autor": autor, "aplicar": args.apply, "metodo": args.metodo or None, "corte": args.corte}
     try:
@@ -2843,8 +2842,8 @@ def main(argv=None):
     # nargs="?": `--apagar --espelhos` não leva obra; o prefixo é opcional (#3332)
     parser.add_argument("--apagar", nargs="?", const="", default=None)
     parser.add_argument("--recortar", default=None)
-    # nargs="*": `--reextrair --lote` não leva obra (#3193); aceita lista de obras (#2856 linha 166)
-    parser.add_argument("--reextrair", nargs="*", default=None)
+    # nargs="?": `--reextrair --lote` não leva obra (#3193)
+    parser.add_argument("--reextrair", nargs="?", const="", default=None)
     parser.add_argument("--rejulgar", action="store_true", default=False)
     parser.add_argument("--marcar-secoes", dest="marcar_secoes", action="store_true", default=False)
     parser.add_argument("--so-sem-faixa", dest="so_sem_faixa", action="store_true", default=False)
@@ -2999,7 +2998,7 @@ def main(argv=None):
             return 2
         if args.rejulgar and args.reextrair is None:
             return acao_rejulgar(autor, args.apply, args.como_json, headers)
-        if (args.reextrair == "" or args.reextrair == []) and not args.rejulgar:
+        if args.reextrair == "" and not args.rejulgar:
             if args.relatorio is not None:
                 return acao_relatorio_lote(args.relatorio, args.como_json, headers)
             return acao_reextrair_lote(args, autor, args.como_json, headers)
