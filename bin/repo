@@ -1080,14 +1080,11 @@ ato_sincronizar() {
     novos="$("$GIT" -C "$c" rev-list --count "HEAD..$main")"
     if ! "$GIT" -C "$c" merge -q --no-edit "$main" >/dev/null 2>&1; then
       local conflito; conflito="$("$GIT" -C "$c" diff --name-only --diff-filter=U 2>/dev/null)"
-      "$GIT" -C "$c" merge --abort >/dev/null 2>&1
-      if [ "$("$GIT" -C "$c" rev-parse HEAD)" != "$antes" ] || [ -n "$("$GIT" -C "$c" status --porcelain)" ]; then
-        morre "indeterminavel: o merge falhou e a bancada nao voltou a ${antes:0:7} — confira a mao" 5
-      fi
-      printf '%s: conflito ao mesclar origin/main (%s) em %s — abortado, bancada intacta em %s\n' \
-        "$VERBO" "${main:0:7}" "$ramo" "${antes:0:7}" >&2
+      printf '%s: conflito ao mesclar origin/main (%s) em %s — mescla aberta na bancada\n' \
+        "$VERBO" "${main:0:7}" "$ramo" >&2
       printf '%s\n' "$conflito" | sed 's/^/  conflito: /' >&2
       printf 'vizinho: resolva os arquivos, repo commitar %s, e sincronizar de novo\n' "$nome" >&2
+      printf 'cancelar: repo git %s merge --abort\n' "$nome" >&2
       exit 4
     fi
     mesclou=1

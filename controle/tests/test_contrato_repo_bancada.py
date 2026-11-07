@@ -474,7 +474,7 @@ def test_sincronizar_main_novo_mescla_e_empurra(tmp_path):
     assert remoto == _git("rev-parse", "HEAD", cwd=wt)
 
 
-def test_sincronizar_conflito_sai_4_lista_e_deixa_a_bancada_intacta(tmp_path):
+def test_sincronizar_conflito_sai_4_lista_e_deixa_a_bancada_aberta(tmp_path):
     bancada = _montar(tmp_path)
     wt = _abrir_42(tmp_path, bancada)
     _commit_em(wt, "LEIA.md", "do card\n")
@@ -483,8 +483,10 @@ def test_sincronizar_conflito_sai_4_lista_e_deixa_a_bancada_intacta(tmp_path):
     r = _repo(tmp_path, bancada, "s1", "sincronizar", "demo")
     assert r.returncode == 4, r.stdout
     assert "conflito: LEIA.md" in r.stderr
+    assert "mescla aberta" in r.stderr
+    assert "repo git demo merge --abort" in r.stderr
     assert _git("rev-parse", "HEAD", cwd=wt) == antes
-    assert _git("status", "--porcelain", cwd=wt) == ""
+    assert "UU LEIA.md" in _git("status", "--porcelain", cwd=wt)
 
 
 def test_sincronizar_arvore_suja_sai_4_antes_de_mesclar(tmp_path):

@@ -1131,7 +1131,7 @@ def test_federacao_consultado(mundo, pessoa, monkeypatch):
     env = _claude(mundo)["env"]
     assert env["ANTHROPIC_ORGANIZATION_ID"] == FEDERACAO_TESTE["organizacao"]
     assert env["ANTHROPIC_WORKSPACE_ID"] == FEDERACAO_TESTE["workspace"]
-    assert env["ANTHROPIC_FEDERATION_RULE_ID"] == CONSULTADO["regra"] == "fdrl_01PdMxn1VMjoLKUPMhs8b8vq"
+    assert env["ANTHROPIC_FEDERATION_RULE_ID"] == CONSULTADO["regra"] == "fdrl_017KGXAm2QfD87Jgxq332SXh"
     assert env["ANTHROPIC_SERVICE_ACCOUNT_ID"] == CONSULTADO["conta_servico"] == "svac_01YFBzFQi3ep7J9rF1rdM846"
     assert env["ANTHROPIC_IDENTITY_TOKEN_FILE"]
     (log,) = _registro(mundo)
