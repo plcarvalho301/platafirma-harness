@@ -335,6 +335,14 @@ def validar(reg: dict) -> list[str]:
 
 # --- escrever -------------------------------------------------------------------------
 
+def tamanho_dia(dia, diretorio_=None):
+    """Tamanho atual do bruto, sem ler conteúdo. Ausência é None."""
+    try:
+        return caminho_do_dia(dia, diretorio_).stat().st_size
+    except FileNotFoundError:
+        return None
+
+
 def emitir(evento: dict, *, diretorio_=None, declara_exit: bool | None = None,
            agora: datetime | None = None) -> bool:
     """Grava uma linha no `ops-AAAA-MM-DD.jsonl` do dia, so por acrescimo (O_APPEND).
@@ -346,7 +354,8 @@ def emitir(evento: dict, *, diretorio_=None, declara_exit: bool | None = None,
         agora = agora or datetime.now().astimezone()
         reg = {k: v for k, v in dict(evento).items() if k not in ("evento_id", "schema_v")}
         carimbo = {"ts": reg.pop("ts", None) or agora.isoformat(timespec="milliseconds"),
-                   "evento_id": uuid7(int(agora.timestamp() * 1000)), "schema_v": SCHEMA_V}
+                   "evento_id": uuid7(int(agora.timestamp() * 1000)),
+                   "schema_v": 2 if "documento_chave" in reg else SCHEMA_V}
         if _e_giro(reg) and "classe" not in reg:
             reg.update(classificar(reg, declara_exit=declara_exit))
         reg.setdefault("origem", origem_da_linha(reg))

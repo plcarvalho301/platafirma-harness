@@ -77,7 +77,7 @@ LOG_OPS = str(oplog.diretorio())
 
 VERBO = "metrica"
 ATOS = ("eventos", "dia", "ate-acerto", "tateio", "casos", "verbos", "comportamento", "turnos", "abertura",
-        "investigar", "tokens")
+        "investigar", "tokens", "fitas", "documentos")
 # Os atos que leem o que a particao nao leva (argumento, erro, a ordem das chamadas): ficam no bruto (D5.9).
 ATOS_DO_BRUTO = ("eventos", "ate-acerto", "tateio", "casos", "comportamento")
 # `turno` so sai com `--tipo turno` (a linha de turno ja conta como giro no stream sem tipo), sem o texto do dono.
@@ -171,7 +171,7 @@ CAMPOS_GIRO = ("ts", "cadeira", "ordem_id", "sessao_id", "tool", "ato",
                "exit_code", "dur_ms", "lote_id", "lote_n",
                "evento_id", "schema_v", "classe", "origem", "escopo", "turno_id", "turno_fonte",
                # o despachante do item (malote ou run_command); giro de tool direta nao tem (#3414)
-               "via")
+               "via", "documento_especie", "documento_chave")
 
 
 # --- a FONTE: particao ou bruto (card #3353) --------------------------------------
@@ -448,7 +448,10 @@ def resumo_do_dia(giros, cadeias):
     erros_tool = defaultdict(int)
     por_via = defaultdict(int)
     for g in giros:
-        por_fita[g["ordem_id"] or "-"] += 1
+        if oplog.origem_da_linha(g.get("bruto", g)) != "sonda":
+            identidade = g.get("sessao_id")
+            if identidade not in (None, "", "-"):
+                por_fita[identidade] += 1
         por_via[g.get("via") or "ausente"] += 1
         if g["falhou"]:
             erros_tool[g["tool"]] += 1
@@ -1141,6 +1144,10 @@ def uso(codigo=2):
     saida.write("""uso:
   metrica eventos [<dia>] [--tipo giro|erro|help|acerto|cadeia|lote|turno] [--cadeira <slug>]
                   [--sessao <prefixo-ou-id>] [--azp <valor>] [--limite N]
+  metrica fitas [<dia>] [--desde <dia>] [--ate <dia>] [--cadeira <slug>] [--sessao <id>]
+      ciclo abertura–fecho, incompletas e bytes do bruto; janela explícita, retenção de 35 dias
+  metrica documentos [mesmos filtros de fitas]
+      leituras por espécie, chave, cadeira e sessão; anteriores sem identificação contam à parte
   metrica dia [<dia>] [--cadeira <slug>] [--fonte particao|bruto] [--resumo]
   metrica ate-acerto [<dia>] [--cadeira <slug>]
   metrica tateio [<dia>] [--cadeira <slug>]
@@ -1348,6 +1355,10 @@ def main(argv):
         return erro_gracioso(
             f"{VERBO}: ato desconhecido '{ato}'",
             [f"os atos: {', '.join(ATOS)}", f"a forma de cada um: {VERBO} --help"], 2)
+
+    if ato in ("fitas", "documentos"):
+        from _metrica.fitas import main as fitas_main
+        return fitas_main(ato, argv[2:])
 
     # `abertura` tem args proprios (`<cadeira>`, `--tudo`, `--json`, `--chapeu`), nao
     # os de `metrica` (`<dia>`, `--desde`, `--cadeira`...) — despacha ANTES do argparse
@@ -1614,6 +1625,7 @@ def main(argv):
     r = {"dia": r["dia"], "fonte": particao.BRUTO, **{k: v for k, v in r.items() if k != "dia"}}
     if ato == "dia":
         r.update(particao.contas_do_bruto(giros))
+        r["log_bytes"] = oplog.tamanho_dia(dia, LOG_OPS)
     if args.cadeira:
         r["cadeira"] = args.cadeira
     if args.sessao:

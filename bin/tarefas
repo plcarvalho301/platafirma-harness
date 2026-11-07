@@ -109,7 +109,7 @@ uso() {
   cat >&$fd <<'FIM'
 uso:
   tarefas listar [--cadeira <c>] [--estado <e>] [--nivel <n>] [--originacao <o>] [--executor <c>]
-                [--paradas] [--json]
+                [--paradas] [--json] [--campos id,pai,estado,nivel]
                                           itens abertos (fase != terminal), na ordem do posto;
                                           as paradas (despriorizada) ficam de fora salvo --paradas
                                           ou --estado despriorizada
@@ -193,7 +193,8 @@ uso:
   tarefas mover <id> despriorizada --motivo <código>
                                           o motivo é código da lista do registro; sem ele, ou com
                                           código fora dela, a recusa imprime a lista (R24)
-  tarefas dt <listar|admitir|matar|vencidos|indicadores>
+  tarefas dt <listar|ler|admitir|matar|vencidos|indicadores>
+                                          ler <n>: linha completa; listar --linha <n> ou --stack <stack>
                                           balde de débito técnico: dado do rastreador, uma linha
                                           por débito (rito §4); `dt` sem sub lista os atos
   tarefas estados                         os estados do registro, com fase
@@ -406,6 +407,7 @@ monta_query() { # monta_query "$@" -> ecoa a query string e devolve o resto em R
           *) echo "nível desconhecido: $2 (épico, feature, story, task)" >&2; exit 2 ;;
         esac
         q="$q&nivel=$n"; shift 2 ;;
+      --campos) [ $# -ge 2 ] && [ -n "$2" ] || { echo "--campos exige lista" >&2; exit 2; }; shift 2 ;;
       --json)    RESTO+=("--json"); shift ;;
       *)         RESTO+=("$1"); shift ;;
     esac
@@ -453,6 +455,21 @@ listar_quadro() {
   return 0
 }
 
+_projetar_campos() {
+  local campos="" a
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --campos) [ $# -ge 2 ] && [ -n "$2" ] || { echo "--campos exige lista separada por vírgula" >&2; return 2; }; campos="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  if [ -z "$campos" ]; then cat; return; fi
+  jq --arg campos "$campos" '
+    ($campos | split(",")) as $ks
+    | if any($ks[]; test("^[a-z_]+$") | not) then error("campo inválido") else . end
+    | .itens |= map(. as $i | reduce $ks[] as $k ({}; .[$k] = $i[$k]))'
+}
+
 listar() { # listar [filtros] [--paradas] [--json] [--quadro discovery|delivery]   — só os abertos
   _tem_flag --quadro "$@" && { listar_quadro "$@"; return; }
   local q; q=$(monta_query "$@")
@@ -483,13 +500,13 @@ listar() { # listar [filtros] [--paradas] [--json] [--quadro discovery|delivery]
         total
       }
     | .total = (.itens | length)')
-  if _tem_json "$@"; then printf '%s\n' "$corpo"; else printf '%s' "$corpo" | linhas; fi
+  if _tem_json "$@" || _tem_flag --campos "$@"; then printf '%s\n' "$corpo" | _projetar_campos "$@"; else printf '%s' "$corpo" | linhas; fi
 }
 
 listar_tudo() { # listar_tudo [filtros] [--json]
   local q; q=$(monta_query "$@")
   local corpo; corpo=$(busca GET "/itens${q:+?$q}")
-  if _tem_json "$@"; then printf '%s\n' "$corpo"; else printf '%s' "$corpo" | linhas; fi
+  if _tem_json "$@" || _tem_flag --campos "$@"; then printf '%s\n' "$corpo" | _projetar_campos "$@"; else printf '%s' "$corpo" | linhas; fi
 }
 
 estados() {
@@ -1262,9 +1279,10 @@ _dt_tabela() { # _dt_tabela <situacao> <stack|""> <desde> <curto 0|1> <idade-min
 
 dt_listar() {
   # --desde <n> e --curto (#2856 linha 143): a lista inteira passa dos 50 KB que a porta serve.
-  local desde="" curto=0 stack="" situacao=abertas
+  local desde="" curto=0 stack="" situacao=abertas linha=""
   while [ $# -gt 0 ]; do
     case "$1" in
+      --linha) [ $# -ge 2 ] && [[ "$2" =~ ^[0-9]+$ ]] || { echo "--linha exige um número" >&2; return 2; }; linha="$2"; shift 2 ;;
       --desde) [ $# -ge 2 ] || { echo "--desde exige o número da linha: tarefas dt listar --desde <n>" >&2; exit 2; }; desde="$2"; shift 2 ;;
       --curto) curto=1; shift ;;
       --stack) [ $# -ge 2 ] || { echo "--stack exige o nome da stack: tarefas dt listar --stack <stack>" >&2; exit 2; }; stack="$2"; shift 2 ;;
@@ -1284,7 +1302,13 @@ dt_listar() {
     abertas|saidas|todas) ;;
     *) echo "--situacao é abertas, saidas ou todas: $situacao" >&2; exit 2 ;;
   esac
-  local t; t=$(_dt_tabela "$situacao" "$stack" "$desde" "$curto" -1) || return 1
+  local t
+  if [ -n "$linha" ]; then
+    t=$(_dt_tabela "$situacao" "$stack" 0 0 -1 | awk -F '\t' -v n="$linha" 'NR == 1 || $1 == n') || return 1
+    [ "$(printf '%s\n' "$t" | wc -l)" -gt 1 ] || { echo "linha $linha não encontrada" >&2; return 1; }
+  else
+    t=$(_dt_tabela "$situacao" "$stack" "$desde" "$curto" -1)
+  fi || return 1
   if [ -z "$t" ]; then
     local rotulo="no balde"
     [ "$situacao" = abertas ] && rotulo="aberta"
@@ -1292,7 +1316,11 @@ dt_listar() {
     echo "(balde vazio: nenhuma linha $rotulo${stack:+ na stack $stack})"
     return 0
   fi
-  printf '%s\n' "$t"
+  if [ -n "$linha" ]; then
+    printf '%s\n' "$t" | fold -s -w 160
+  else
+    printf '%s\n' "$t"
+  fi
 }
 
 # `vencidos` É A PAUTA DA REVISÃO, GERADA (rito §2/§4): linhas acima de 30 dias pela data
@@ -1466,6 +1494,7 @@ dt() {
   local sub="${1:-}"; shift || true
   case "$sub" in
     listar)      dt_listar "$@" ;;
+    ler)         [ $# -eq 1 ] && [[ "$1" =~ ^[0-9]+$ ]] || { echo "uso: tarefas dt ler <n>" >&2; return 2; }; dt_listar --situacao todas --linha "$1" ;;
     admitir)     dt_admitir "$@" ;;
     matar)       dt_matar "$@" ;;
     vencidos)    dt_vencidos "$@" ;;
