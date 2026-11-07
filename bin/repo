@@ -1872,7 +1872,7 @@ ato_commitar() {
   if [ "${#caminhos[@]}" -gt 0 ]; then
     for p in "${caminhos[@]}"; do
       case "$p" in /*|*..*) morre "caminho inválido ou fora da raiz: '$p'" 4 ;; esac
-      if [ ! -e "$c/$p" ] && ! "$GIT" -C "$c" ls-files --error-unmatch "$p" >/dev/null 2>&1; then
+      if [ ! -e "$c/$p" ] && ! "$GIT" -C "$c" ls-files --error-unmatch "$p" >/dev/null 2>&1 && ! "$GIT" -C "$c" cat-file -e "HEAD:$p" >/dev/null 2>&1; then
         morre "caminho '$p' não existe na bancada '$nome'" 1
       fi
       alvos_commit+=("$p")
@@ -1908,14 +1908,14 @@ ato_commitar() {
     fi
     eventos="$(PYTHONPATH="$lib_pf${PYTHONPATH:+:$PYTHONPATH}" python3 -m oplog ler \
       --desde "$dia_aberto" --ate "$hoje_pf" \
-      --tool write_file --sessao "$PF_SESSAO" 2>/dev/null)"
+      --sessao "$PF_SESSAO" 2>/dev/null)"
     rc_ol=$?
     if [ "$rc_ol" -ne 0 ]; then
       morre "dependência ausente: log da porta ilegível (oplog ler saiu $rc_ol) — nomeie os caminhos" 3
     fi
     local py_out rc_py
     py_out="$(python3 -c '
-import sys, os, json
+import sys, os, json, subprocess
 
 sessao_id = sys.argv[1]
 repo_root = os.path.abspath(sys.argv[2])
@@ -1924,6 +1924,7 @@ bancada = os.path.realpath(sys.argv[4])
 
 # Os eventos chegam por stdin, uma linha JSON cada.
 caminhos = set()
+tocou_repo = False
 for f in (sys.stdin,):
     try:
         with f as fp:
@@ -1937,31 +1938,48 @@ for f in (sys.stdin,):
                     continue
                 if not isinstance(obj, dict):
                     continue
-                if obj.get("tool") == "write_file" and str(obj.get("sessao_id")) == sessao_id:
-                    p = obj.get("path")
-                    if not isinstance(p, str) or not p:
-                        continue
-                    p_norm = os.path.normpath(p)
-                    rel = None
-                    if p_norm == repo_root:
-                        continue
-                    elif os.path.isabs(p_norm):
-                        if p_norm.startswith(repo_root + os.sep):
-                            rel = os.path.relpath(p_norm, repo_root)
-                    elif p_norm == repo_nome:
-                        continue
-                    elif p_norm.startswith(repo_nome + os.sep) and \
-                            os.path.normpath(os.path.join(bancada, repo_nome)) == repo_root:
-                        rel = p_norm[len(repo_nome) + 1:]
-                    else:
-                        # relativo a bancada (wt/<repo>/<cadeira>/...) ou ao proprio clone
-                        for base in (bancada, repo_root):
-                            cand = os.path.normpath(os.path.join(base, p_norm))
-                            if cand.startswith(repo_root + os.sep) and os.path.exists(cand):
-                                rel = os.path.relpath(cand, repo_root)
-                                break
-                    if rel and not rel.startswith(".."):
-                        caminhos.add(rel)
+                if str(obj.get("sessao_id")) == sessao_id:
+                    tool = obj.get("tool")
+                    if tool == "write_file":
+                        p = obj.get("path")
+                        if not isinstance(p, str) or not p:
+                            continue
+                        p_norm = os.path.normpath(p)
+                        rel = None
+                        if p_norm == repo_root:
+                            continue
+                        elif os.path.isabs(p_norm):
+                            if p_norm.startswith(repo_root + os.sep):
+                                rel = os.path.relpath(p_norm, repo_root)
+                        elif p_norm == repo_nome:
+                            continue
+                        elif p_norm.startswith(repo_nome + os.sep) and \
+                                os.path.normpath(os.path.join(bancada, repo_nome)) == repo_root:
+                            rel = p_norm[len(repo_nome) + 1:]
+                        else:
+                            # relativo a bancada (wt/<repo>/<cadeira>/...) ou ao proprio clone
+                            for base in (bancada, repo_root):
+                                cand = os.path.normpath(os.path.join(base, p_norm))
+                                if cand.startswith(repo_root + os.sep) and os.path.exists(cand):
+                                    rel = os.path.relpath(cand, repo_root)
+                                    break
+                        if rel and not rel.startswith(".."):
+                            caminhos.add(rel)
+                    elif tool == "repo":
+                        # mutação do git na bancada pela sessão (ex: apply, rm, checkout, restore)
+                        cmd = obj.get("argv") or []
+                        if any(act in cmd for act in ("apply", "rm", "checkout", "restore")):
+                            tocou_repo = True
+    except Exception:
+        pass
+
+if not caminhos and tocou_repo:
+    try:
+        st = subprocess.check_output(["git", "-C", repo_root, "status", "--porcelain"], text=True)
+        for st_line in st.splitlines():
+            st_line = st_line.strip()
+            if len(st_line) > 3:
+                caminhos.add(st_line[3:].strip())
     except Exception:
         pass
 

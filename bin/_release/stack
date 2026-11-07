@@ -678,10 +678,18 @@ case "$ATO" in
     export PF_RELEASE_SHA="$(basename "$ARVORE")"
     cd "$(dirname "$COMPOSE")"
     rc=0
+    extra_up=()
+    if [ "$ACAO" = "up" ]; then
+      tem_detach=0
+      for a in "$@"; do
+        case "$a" in -d|--detach) tem_detach=1; break ;; esac
+      done
+      [ "$tem_detach" -eq 1 ] || extra_up=(-d)
+    fi
     if [ "$ACAO" = "config" ]; then
       compose "$@" | mascara_segredos || rc=$?
     else
-      compose "$@" || rc=$?
+      compose "$@" "${extra_up[@]}" || rc=$?
     fi
     if [ "$rc" -eq 0 ] && [ "$ACAO" = "up" ]; then gravar_atual "$(basename "$ARVORE")"; fi
     exit "$rc"
