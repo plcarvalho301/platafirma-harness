@@ -135,7 +135,7 @@
     "fase": "7 recuperacao",
     "faixa": "hybrid ou vector",
     "codigo": "hybrid",
-    "sobe": "hybrid soma os bracos de codigo e palavra exata ao de significado",
+    "sobe": "NAO SOBE POR COMPOSE: RETRIEVAL_MODE foi expurgado do servido no Rerefactor P1 (#2895); o processo serve sempre hybrid e a variavel no compose nao e lida. O modo vector so se alcanca pela bancada-cli (--mode vector). Em hybrid, a soma dos bracos de codigo e palavra exata ao de significado",
     "custa": "vector puro e mais simples de medir e mais barato, e perde toda pergunta que cita codigo",
     "medir": "as duas familias separadas",
     "onde": "compose"
@@ -246,9 +246,9 @@
     "fase": "9 montagem",
     "onde": "compose",
     "faixa": "0 a 1",
-    "codigo": "0.55",
+    "codigo": "0.342",
     "sobe": "a busca marca 'cobertura fraca' com mais frequencia, avisando que o acervo provavelmente nao cobre a pergunta. Nao filtra trecho nenhum: os mesmos trechos voltam, com outro rotulo",
-    "custa": "piso alto marca de fraca pergunta que o acervo cobre, e quem le passa a desconfiar de resposta boa. E ha limite: 4 dos 9 negativos medidos sao vizinhos tematicos (LGPD, PCI DSS, SOC 2, GDPR) e batem ate 0,766, acima de 40 dos 47 positivos — nenhum valor separa isso",
+    "custa": "piso alto marca de fraca pergunta que o acervo cobre, e quem le passa a desconfiar de resposta boa. Medido em 07/11/2026 (DT 504, nota tecnica 2026-11-07-calibracao-cobertura-dt504), bateria de 228 sobre a g4, k=5, 79 pontuaveis (52 positivos, 22 negativos sem obra e 5 negativos com obra tratados como cobertos): no piso 0,342, 20 nao cobertas saem marcadas boas e 2 cobertas saem marcadas fracas, erro total 22; em 0,459 sao 30, em 0,5 sao 40 e em 0,55 sao 48. O 0,342 e o minimo encontrado e segue servido. Nenhum valor separa os dois grupos: pela conta, marcar tudo como boa daria os mesmos 22 erros, entao nessa bateria o aviso nao acrescenta nada a essa regra trivial. O 0,55 e os numeros de 01/08/2026 (4 dos 9 negativos eram vizinhos tematicos — LGPD, PCI DSS, SOC 2, GDPR — e batiam ate 0,766, acima de 40 dos 47 positivos) sao de outro corpus e outra geracao",
     "medir": "erro total (coberta marcada fraca + nao coberta marcada boa) numa bateria com os dois lados. O corte relativo por gap foi medido e REPROVADO em 01/08"
    },
    {
@@ -325,7 +325,7 @@
     "onde": "compose",
     "faixa": "true ou false",
     "codigo": "false",
-    "sobe": "pergunta por um conceito estreito passa a recuperar tambem o que foi escrito sobre o conceito que o contem: uma consulta a mais, pelo rotulo do pai, fundida no RRF",
+    "sobe": "NAO SOBE POR COMPOSE: EXPANSAO_POR_CONCEITO foi expurgado do servido no Rerefactor P1 (#2895, medido sem efeito no #2882); o motor serve sempre com a expansao desligada e a variavel no compose nao e lida. O braco continua no codigo e so liga por chamada de bancada, com bracos=expansao (peso por chamada em peso_conceito). Ligada, a pergunta por um conceito estreito passa a recuperar tambem o que foi escrito sobre o conceito que o contem: uma consulta a mais, pelo rotulo do pai, fundida no RRF",
     "custa": "e o unico ajuste desta familia que pode PIORAR o resultado — substituir o especifico pelo genérico afasta a resposta da pergunta. Custa tambem um encode por conceito expandido (teto de 2). Sobe so pelas tres familias hierarquicas da ont:0080; associativa nunca",
     "medir": "as duas familias separadas NAO arbitram isto: das 228 perguntas da bateria, 38 casam conceito e so 14 tem pai hierarquico, zero no T1-deterministico. Exige estrato de bateria proprio, com perguntas que a expansao toque e alvo declarado"
    },
@@ -336,7 +336,7 @@
     "onde": "compose",
     "faixa": "0 a 3",
     "codigo": "0.7",
-    "sobe": "a consulta expandida manda mais na ordem final",
+    "sobe": "NAO SOBE POR COMPOSE: RRF_W_CONCEPT foi expurgado do servido no Rerefactor P1 (#2895); o peso e constante da bancada (0.7) e a variavel no compose nao e lida. Por chamada, o peso vai em peso_conceito junto com bracos=expansao. Com a expansao ligada na bancada, a consulta expandida manda mais na ordem final",
     "custa": "peso alto deixa o generico ganhar do especifico que a pergunta literalmente disse; so tem efeito com expansao-por-conceito ligado",
     "medir": "mesmo estrato da expansao, variando so este numero. 0,7 e palpite declarado ate a primeira medicao"
    },
