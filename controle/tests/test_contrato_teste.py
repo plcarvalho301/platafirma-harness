@@ -297,6 +297,16 @@ def test_ajuda_sai_2_sem_efeito_colateral(tmp_path):
     assert not inst.exists()
 
 
+def test_prazo_invalido_sai_2(tmp_path):
+    vjson = tmp_path / "venvs.json"
+    vjson.write_text('{"repositorios": {"repo-a": {"esteira": "codigo"}}, "stack-a": {"familia": "repo-a", "lock": "lock.txt"}}\\n')
+    env = {"PLATAFIRMA_VENVS": str(vjson)}
+    for inv in ("abc", "0", "-1"):
+        r = _run_teste(env, "rodar", "stack-a", "--prazo", inv)
+        assert r.returncode == 2, r.stdout + r.stderr
+        assert "--prazo" in (r.stdout + r.stderr)
+
+
 # --- esteira documento (passo 6): teste chama a admissao da ingestao, nao a copia ------
 
 def _documento(tmp_path, rc_stub: int):
