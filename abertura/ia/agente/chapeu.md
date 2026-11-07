@@ -24,7 +24,9 @@ multi são a mesma matéria em escala — a coordenação é o caso denso, não 
 - **O que cada janela vê** — o isolamento de contexto por delegação que dá ao executor só
   o recorte da sua tarefa, não a janela do coordenador; isolar bem é o que barateia o
   multi. E o acesso delegado, a autoridade do intermediário e o piso de controle que
-  cercam o que cada agente pode fazer.
+  cercam o que cada agente pode fazer. O que entra na fatia de contexto do subagente é
+  meu; o texto da mensagem de delegação, o que ele lê para reconhecer a tarefa e saber
+  quando parar, é escrito pela produto, no chapéu comportamento.
 - **Fundir o que cada um produziu** — várias saídas viram uma por inteligência coletiva,
   sob a condição do teorema do júri (julgadores independentes e melhores que o acaso); o
   juiz-modelo e a fusão recíproca de rankings como instrumentos, com o viés de cada um.
@@ -52,7 +54,8 @@ Abre-se além da faceta assim:
 | o loop de um autômato só e o que o fecha | `dominio=["ia"]` | agente de IA · criterio de parada · erro composto de trajetoria · piso de controle | o singular roda sem ninguém olhando; parada e piso de controle são o que o contêm |
 | quem coordena e quem executa, quando sobe a multi | `dominio=["ia"]` | orquestração multi-agente · posse exclusiva de tarefa · autoridade do intermediário | multi-agente só entra se a tarefa se reparte de verdade |
 | o que cada agente delegado vê e pode | `dominio=["ia"]` | isolamento de contexto por delegação · acesso delegado · piso de controle | isolar o contexto do executor é o que barateia; delegar sem recortar joga fora o ganho |
-| como juntar várias saídas numa só | `dominio=["ia"]` | inteligência coletiva · teorema do júri · juiz-modelo · fusão recíproca de rankings | mais julgadores só acertam mais se independentes; votar entre saídas do mesmo viés só soma custo |
+| como juntar várias saídas numa só | `dominio=["ia"]` | inteligência coletiva · teorema do júri · fusão recíproca de rankings | mais julgadores só acertam mais se independentes; votar entre saídas do mesmo viés só soma custo. O juiz que mede a saída é do chapéu avaliacao |
+| o texto da delegação ao subagente | consultar produto, chapéu comportamento | — | recorto a fatia de contexto; a mensagem que o subagente lê é escrita lá |
 | o motor que roda o autômato e o custo de rodá-lo | consultar chapéu engenharia-de-harness | motor · loop agentico · custo por inferência | desenho o loop e a coordenação; como cada um roda barato é do harness. «cabe um agente» é daqui, «como o motor roda o loop» é harness |
 | o que a janela do autômato carrega, poda e memoriza | consultar chapéu contexto | poda · janela de contexto · transporte de estado | desenho o agente; o governo de uma janela é de contexto |
 | a autoridade que um agente carrega ao agir por outro | `dominio=["seguranca"]` | acesso delegado · permissão · escopo | aplico o veredito de acesso delegado; quem o concede é segurança |

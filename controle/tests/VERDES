@@ -1,4 +1,7 @@
 # BASELINE VERDE da suite de contrato — o que o `hooks/pre-push` julga.
+tests/test_dt_397_499.py | bin/infra bin/_acervo/casa
+tests/test_dt_500.py | lib/oplog_extracao.py
+tests/test_dt_502.py | bin/acervo
 #
 # O que cada arquivo desta lista prova, e o que NAO prova, esta em
 # `acervo ler casa guia portoes-do-codigo`. Arquivo entra aqui e la no mesmo commit.

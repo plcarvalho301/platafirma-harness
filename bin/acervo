@@ -118,7 +118,7 @@ avisa() {
   fi
 }
 
-uso() {
+uso_completo() {
   cat >&2 <<FIM
 uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo ler      <particao> <entidade> <seletor> [--situacao]
@@ -242,6 +242,25 @@ doc de produto (o que cada ato faz, entidades por particao, transicao):
 FIM
   exit 2
 }
+
+# Ajuda por ato, derivada do mesmo catálogo para não manter duas usages (#2856 linha 502).
+AJUDA_ATO="${1:-}"
+uso() {
+  if [ "${AJUDA_COMPLETA:-0}" = 1 ]; then uso_completo; fi
+  local texto
+  texto=$(uso_completo 2>&1) || true
+  printf 'uso: acervo %s <particao> <entidade> [seletor]\n' "$AJUDA_ATO" >&2
+  printf '%s\n' "$texto" | awk -v ato="$AJUDA_ATO" '
+    /^  acervo / { ligado=($2 == ato) }
+    /^as particoes:/ { ligado=0 }
+    ligado { print }
+  ' >&2
+  printf 'Ajuda completa: acervo --ajuda\n  %s\n' "$SPEC" >&2
+  exit 2
+}
+for _arg in "$@"; do
+  if [ "$_arg" = --ajuda ]; then AJUDA_COMPLETA=1; fi
+done
 
 # --ajuda UNIVERSAL, sem efeito colateral (card #2868). ANTES do despacho e varrendo
 # TODOS os argumentos. EXCECAO: `... wiki ... --ajuda` cai para o sub-ato (argparse proprio), e
