@@ -3,20 +3,23 @@
 # capacidade: especialista
 # dono: ia
 # use para: delegar ação síncrona, «roda o revisor», «chama o varredor», sub-agente para segunda opinião; definir especialista, «quem são os especialistas?»
-# atos: listar (leitura, especialista), ler (leitura, especialista), rodar (escrita, especialista), projetar (escrita, especialista)
+# atos: listar (leitura, especialista), ler (leitura, especialista), rodar (escrita, especialista), projetar (escrita, especialista), medir-federacao (escrita, especialista)
 # ato: listar [--modelo <familia>] [--modo <modo>] [--json] — as declarações do posto, uma por linha
 # ato: ler <slug> — a declaração inteira de um especialista
 # ato: rodar <slug> [--cadeira <slug>] [--chapeu <slug>] [--ligacao consultado|agendado] [--peca <nome>=<arquivo>]... [--json] — modelo, ferramentas e teto saem da ligação (por_ligacao); abre a sessão filha, monta a lente e chama o modelo na conta dele; a tarefa vem em stdin (no modo varrer o modelo a recebe com as linhas numeradas, `N |`); --peca troca o conteúdo de uma peça da lente pelo do arquivo (vazio depois do = tira a peça), para par mínimo: os dois braços iguais menos a peça; --anexo <imagem> (repetível, só em Claude) põe a imagem em linha na mensagem, no lugar de [[anexo:N]] na tarefa ou, sem marca, antes do texto; a declaração com `pecas: []` roda sem lente: o prompt de sistema leva só o fecho e o CLI sobe só com as ferramentas dela
 # ato: projetar [--conferir] [--base <ref>] — gera as projeções do provedor a partir das declarações; --conferir só mede
+# ato: medir-federacao [--espera <segundos>] [--json] — o gate da federação consultada (#4136): claude -p pela conta agente-consultado numa pasta vazia, sem ferramenta nem agente, com «responda só: ok»; --espera manda a segunda mensagem no mesmo processo depois da espera e confere que o jti mudou; não lê o regime; sai 3 com motivo emissor|troca|credito
 # exit: 0 ok · 1 negativo de mérito (não existe, divergente, sem pessoa resolvida) · 2 uso · 3 dependência fora · 4 recusa de política · 5 indeterminável
 # le: listar=arquivo-local
 # le: ler=arquivo-local
 # le: rodar=arquivo-local
 # le: projetar=arquivo-local
+# le: medir-federacao=arquivo-local
 # escreve: listar=nada
 # escreve: ler=nada
 # escreve: rodar=arquivo-local,malha
 # escreve: projetar=arquivo-local
+# escreve: medir-federacao=arquivo-local,malha
 # consome: sessao, expediente, seg, ollama
 # ambiente: PF_SUJEITO (a pessoa em nome de quem o agente roda; obrigatoria em rodar; porta) · PF_SESSAO (a sessao de quem chamou; obrigatoria em rodar; porta) · PF_CADEIRA (porta) · PF_ORDEM_ID (porta) · PF_POSTO (opcional; padrao <bancada>/platafirma-posto, onde estao as declaracoes) · PF_BIN (opcional; padrao bin/ da propria arvore; so teste com stub) · PF_CLAUDE_BIN (opcional; padrao o binario da trava em <release>/venv/claude-code, lib/claude_cli.py; so teste com stub) · PF_AGY_BIN (opcional; padrao ~/.local/bin/agy da conta; so teste com stub) · OLLAMA_BASE_URL (opcional; o ollama local) · PLATAFIRMA_INSTANCIA (opcional; padrao /srv/platafirma/casa; var/log/agente e var/log/seg)
 # escrita: projetar grava .claude/agents/<slug>.md no posto; rodar grava a chave da sessao filha (sessao abrir) e uma linha em var/log/agente/; nada em listar|ler|projetar --conferir
@@ -51,7 +54,7 @@ import claude_cli  # noqa: E402  (o CLI vem da trava da release, #2856 linha 248
 import transcript  # noqa: E402  (a régua de tokens da fita, a mesma do descansar)
 import uso  # noqa: E402
 import yaml  # noqa: E402
-import federacao  # noqa: E402  (card #4122: WIF para agentes sem lente)
+import federacao  # noqa: E402  (card #4136: a ligação consultada paga pelo crédito de API)
 import shutil  # noqa: E402
 
 MODOS = ("varrer", "revisar", "avaliar", "testar", "executar", "consultar", "vigiar", "pesquisar", "parecer")
@@ -601,9 +604,11 @@ def ato_projetar(conferir: bool, base_ref: str | None) -> int:
 # --- ato: rodar ------------------------------------------------------------------------------
 
 class Falha(Exception):
-    def __init__(self, codigo: int, msg: str):
+    """`erro` é a primeira linha do erro do CLI, já mascarada, quando a falha veio dele: vai ao registro."""
+
+    def __init__(self, codigo: int, msg: str, erro: str | None = None):
         super().__init__(msg)
-        self.codigo, self.msg = codigo, msg
+        self.codigo, self.msg, self.erro = codigo, msg, erro
 
 
 def _bin() -> Path:
@@ -807,6 +812,55 @@ def sem_lente(decl) -> bool:
     return isinstance(decl, dict) and decl.get("pecas") == []
 
 
+# Quem paga, por ligação (spec agente §2.3, card #4136). A ligação consultada de agente Claude sem ferramenta da
+# porta paga pelo crédito de API, pela conta agente-consultado, quando o regime dela no arquivo de identificadores é
+# federacao. A porta só aceita pessoa: agente com ferramenta dela fica no plano até o token delegado. Agendado,
+# delegado, Qwen e Gemini não federam. Voltar ao plano é PR no arquivo, nunca queda em falha.
+CONTA_CONSULTADO = "agente-consultado"
+# Credenciais da Anthropic que o ambiente de quem chama pode trazer, mesmo vazias: na federação nenhuma passa ao
+# filho, senão o CLI as usa antes das variáveis da federação.
+SOMBRAS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_PROFILE")
+
+
+def usa_porta(decl) -> bool:
+    """A declaração lista alguma ferramenta da porta, em qualquer das três grafias."""
+    return any(isinstance(f, str) and f.startswith(GRAFIAS) for f in (decl.get("ferramentas") or []))
+
+
+def conta_federada(decl, ligacao: str, config: dict) -> str | None:
+    """A conta da federação que paga esta execução, ou None quando paga o plano."""
+    if familia_de(decl) != "claude" or ligacao != "consultado" or usa_porta(decl):
+        return None
+    dados = (config.get("contas") or {}).get(CONTA_CONSULTADO) or {}
+    return CONTA_CONSULTADO if dados.get("regime") == "federacao" else None
+
+
+# O erro do CLI vai ao registro com o que parece credencial trocado por marca (a trava: token nem segredo em log).
+MASCARAS = ((re.compile(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*"), "<token>"),
+            (re.compile(r"sk-ant-[A-Za-z0-9_-]+"), "<chave>"),
+            (re.compile(r"(?i)\b(bearer\s+)\S+"), r"\1<token>"))
+# A classificação casa texto exato. Troca: o tipo de erro da API e a frase do CLI na recusa da identidade. Crédito:
+# os textos que a API documenta para saldo esgotado e para limite do workspace, até o gate anotar o texto real.
+# «auth» solto pegava «oauth» e «author», e a falha comum virava motivo troca.
+TROCA_RECUSADA = ("authentication_error", "Authentication failed")
+CREDITO_ESGOTADO = ("credit balance is too low", "API usage limits")
+
+
+def mascara(texto: str) -> str:
+    for padrao, troca in MASCARAS:
+        texto = padrao.sub(troca, texto)
+    return texto
+
+
+def primeira_linha_do_erro(stderr: str | None, resultado) -> str:
+    """A primeira linha não vazia do stderr do CLI, senão a do resultado, mascarada."""
+    for fonte in (stderr or "", str(resultado or "")):
+        for linha in fonte.splitlines():
+            if linha.strip():
+                return mascara(linha.strip())[:500]
+    return "sem retorno"
+
+
 def negadas_do_agente(decl: dict) -> list[str]:
     """O que sai da janela do agente: as embutidas proibidas, os conectores de fora e a porta fora da declaração."""
     porta = tools_do_conector()
@@ -885,12 +939,8 @@ def chama_claude(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | Non
         raise Falha(3, str(e)) from e
 
     config_fed = carrega_config_federacao()
-    regime_juiz = config_fed.get("contas", {}).get("agente-juiz", {}).get("regime")
-    usa_fed = (
-        sem_lente(decl)
-        and ligacao != "delegado"
-        and regime_juiz == "federacao"
-    )
+    conta_fed = conta_federada(decl, ligacao, config_fed)
+    usa_fed = conta_fed is not None
 
     pasta_isolada = None
     cred_contexto = None
@@ -900,7 +950,7 @@ def chama_claude(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | Non
         pasta_isolada = Path(tempfile.mkdtemp(prefix="agente-wif-"))
         decl["_pasta_isolada"] = pasta_isolada
         try:
-            cred_contexto = federacao.abre("agente-juiz", pasta_isolada, config_fed)
+            cred_contexto = federacao.abre(conta_fed, pasta_isolada, config_fed)
             cred_obj = cred_contexto.__enter__()
         except federacao.FalhaFederacao as e:
             raise Falha(3, e.motivo) from e
@@ -914,12 +964,13 @@ def chama_claude(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | Non
             # O juiz sobe só com as ferramentas da declaração: `--tools` e a porta nomeada fora.
             argv += ["--disallowedTools", ",".join([*PROIBIDAS, *FORA_DO_AGENTE, *CONECTORES_DE_FORA, *PORTAS_SERVIDOR]),
                      "--tools", ",".join(decl["ferramentas"] or [])]
-            if usa_fed:
-                argv += ["--setting-sources", "project,local"]
         else:
             argv += ["--disallowedTools", ",".join(negadas_do_agente(decl))]
             if decl["ferramentas"]:
                 argv += ["--allowedTools", ",".join(g for f in decl["ferramentas"] for g in grafias(f))]
+        if usa_fed:
+            # na pasta isolada, sem a configuração nem os ganchos da conta (spec agente §3.1)
+            argv += ["--setting-sources", "project,local"]
         if anexos:
             argv += ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
             entrada = entrada_com_imagens(tarefa, anexos)
@@ -932,11 +983,10 @@ def chama_claude(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | Non
             env_exec["CLAUDE_CONFIG_DIR"] = str(pasta_isolada)
             env_exec["ANTHROPIC_CONFIG_DIR"] = str(pasta_isolada)
             env_exec.update(cred_obj.env)
-            env_base = {k: v for k, v in os.environ.items()
-                        if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_PROFILE")}
-            env_final = {**env_base, **env_exec}
-            for sombra in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_PROFILE"):
-                env_final.pop(sombra, None)
+            env_final = {**{k: v for k, v in os.environ.items() if k not in SOMBRAS}, **env_exec}
+            for sombra in SOMBRAS:
+                if sombra not in cred_obj.env:          # o perfil de federação, se a lib o puser, é do verbo
+                    env_final.pop(sombra, None)
         else:
             env_final = {**os.environ, **env_exec}
 
@@ -950,15 +1000,14 @@ def chama_claude(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | Non
         if p.returncode != 0 or obj.get("is_error") or not isinstance(obj.get("result"), str):
             if cred_obj and cred_obj.falha:
                 raise Falha(3, cred_obj.falha.motivo)
-            msg_res = str(obj.get("result") or "")
-            texto_erro = ((p.stderr or "") + " " + msg_res).lower()
+            erro = primeira_linha_do_erro(p.stderr, obj.get("result"))
             if usa_fed:
-                if "401" in texto_erro or "authentication" in texto_erro or "autenticação" in texto_erro or "auth" in texto_erro:
-                    raise Falha(3, "troca")
-                if "credit" in texto_erro or "billing" in texto_erro or "crédito" in texto_erro:
-                    raise Falha(3, "credito")
-            motivo = (p.stderr.strip().splitlines() or [str(obj.get("result") or "sem retorno")])[0]
-            raise Falha(5, f"claude -p não concluiu (saiu {p.returncode}): {motivo[:200]}")
+                texto_erro = f"{p.stderr or ''}\n{obj.get('result') or ''}"
+                if any(m in texto_erro for m in TROCA_RECUSADA):
+                    raise Falha(3, "troca", erro)
+                if any(m.lower() in texto_erro.lower() for m in CREDITO_ESGOTADO):
+                    raise Falha(3, "credito", erro)
+            raise Falha(5, f"claude -p não concluiu (saiu {p.returncode}): {erro[:200]}", erro)
         # A régua é o transcript da sessão do Code, a mesma do fecho da fita (dono, 16/10/2026): uso por chamada,
         # cada requestId uma vez. O resumo final do `claude -p` fica de reserva quando o transcript não aparece,
         # e o registro diz qual das duas fontes valeu.
@@ -1201,11 +1250,10 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
     filha = None
     inicio = time.monotonic()
     credencial_esperada = "plano"
-    if decl["modelo"]["familia"] == "claude" and sem_lente(decl) and ligacao != "delegado":
-        cfg = carrega_config_federacao()
-        cs = cfg.get("contas", {}).get("agente-juiz", {}).get("conta_servico", "svac_01Tys7Q5uRNwLCiKTwEXGQvw")
-        if cfg.get("contas", {}).get("agente-juiz", {}).get("regime") == "federacao":
-            credencial_esperada = f"federacao:{cs}"
+    cfg = carrega_config_federacao()
+    conta_fed = conta_federada(decl, ligacao, cfg)
+    if conta_fed:
+        credencial_esperada = f"federacao:{cfg['contas'][conta_fed].get('conta_servico', '')}"
 
     try:
         if conta in CONTAS_SEGREGADAS:
@@ -1224,6 +1272,8 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
             reg_falha["credencial"] = credencial_esperada
             if f.codigo == 3 and f.msg in ("emissor", "troca", "credito"):
                 reg_falha["motivo"] = f.msg
+            if f.erro:
+                reg_falha["erro_cli"] = f.erro
         registra(reg_falha)
         pasta_limpar = decl.get("_pasta_isolada")
         if pasta_limpar and pasta_limpar.exists():
@@ -1254,6 +1304,112 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
     else:
         print(r["retorno"])
     return 0
+
+
+# --- ato: medir-federacao (card #4136, gate das Tarefas 4 e 6) ---------------------------------
+
+def _jti_do_arquivo(arq: Path) -> str | None:
+    """O jti do token em disco, sem o token: o identificador de uso único que a troca não aceita repetido."""
+    try:
+        corpo = arq.read_text(encoding="utf-8").split(".")[1]
+        return json.loads(base64.urlsafe_b64decode(corpo + "=" * (-len(corpo) % 4))).get("jti")
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def _ate_o_resultado(proc: subprocess.Popen) -> dict:
+    for linha in proc.stdout:
+        try:
+            ev = json.loads(linha)
+        except ValueError:
+            continue
+        if isinstance(ev, dict) and ev.get("type") == "result":
+            return ev
+    return {}
+
+
+def ato_medir_federacao(espera: int, como_json: bool) -> int:
+    """O gate da federação consultada: `claude -p` pela conta agente-consultado numa pasta vazia, sem ferramenta,
+    sem login nem configuração da conta, com «responda só: ok». Com --espera, a segunda mensagem vai no mesmo
+    processo depois da espera, e o jti tem de ter mudado. Não roda agente nenhum e não lê o regime: mede a
+    troca antes de o regime mudar. Sai 0 respondido, 3 com motivo emissor|troca|credito, 5 o resto."""
+    if not os.environ.get("PF_SUJEITO", "").strip():
+        return _erro("sem pessoa resolvida (PF_SUJEITO): nega por padrão, a medida gasta crédito", 1)
+    cfg = carrega_config_federacao()
+    dados = (cfg.get("contas") or {}).get(CONTA_CONSULTADO)
+    if not dados:
+        return _erro(f"{CONTA_CONSULTADO} não está no arquivo de identificadores", 3)
+    try:
+        bin_claude = claude_cli.resolver()
+    except claude_cli.ClaudeAusente as e:
+        return _erro(str(e), 3)
+    medida: dict = {"ts": _agora(), "agente": "medir-federacao", "sujeito": os.environ["PF_SUJEITO"].strip(),
+                    "origem": os.environ.get("PF_SESSAO", "").strip() or None, "espera": espera,
+                    "credencial": f"federacao:{dados.get('conta_servico', '')}", "respostas": []}
+    codigo, motivo, erro = 0, "", ""
+    argv = [bin_claude, "-p", "--model", "sonnet", "--max-turns", "2", "--tools", "",
+            "--disallowedTools", ",".join([*PROIBIDAS, *FORA_DO_AGENTE, *CONECTORES_DE_FORA, *PORTAS_SERVIDOR]),
+            "--setting-sources", "project,local",
+            "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
+    mensagens = [("responda só: ok", 0)] + ([("responda só: ok de novo", espera)] if espera > 0 else [])
+    pasta = Path(tempfile.mkdtemp(prefix="agente-wif-medir-"))
+    try:
+        with federacao.abre(CONTA_CONSULTADO, pasta, cfg) as cred:
+            env = {**{k: v for k, v in os.environ.items() if k not in SOMBRAS}, "DISABLE_AUTOUPDATER": "1",
+                   **SEM_ARRANQUE, "CLAUDE_CONFIG_DIR": str(pasta), "ANTHROPIC_CONFIG_DIR": str(pasta), **cred.env}
+            proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    text=True, cwd=pasta, env=env)
+            cred.registra_processo(proc)
+            for i, (texto, antes) in enumerate(mensagens):
+                if antes:
+                    time.sleep(antes)
+                jti = _jti_do_arquivo(cred.token_path)
+                proc.stdin.write(json.dumps({"type": "user", "message": {"role": "user", "content": texto}},
+                                            ensure_ascii=False) + "\n")
+                proc.stdin.flush()
+                if i == len(mensagens) - 1:
+                    proc.stdin.close()
+                r = _ate_o_resultado(proc)
+                medida["respostas"].append({"jti": jti, "is_error": r.get("is_error"), "subtype": r.get("subtype"),
+                                            "result": mascara(str(r.get("result") or ""))[:500]})
+                if not r or r.get("is_error") or not str(r.get("result") or "").strip():
+                    break
+            if not proc.stdin.closed:
+                proc.stdin.close()
+            stderr = proc.stderr.read()
+            proc.wait(timeout=60)
+            medida["exit_cli"] = proc.returncode
+            medida["stderr"] = mascara(stderr)[-4000:]
+            if cred.falha:
+                raise cred.falha
+    except federacao.FalhaFederacao as e:
+        codigo, motivo, erro = 3, e.motivo, mascara(e.detalhe)[:500]
+    except (OSError, subprocess.TimeoutExpired) as e:
+        codigo, motivo, erro = 5, "", f"{type(e).__name__}: {e}"
+    finally:
+        shutil.rmtree(pasta, ignore_errors=True)
+    if codigo == 0:
+        resp = medida["respostas"]
+        ok = len(resp) == len(mensagens) and all(not r["is_error"] and r["result"].strip() for r in resp)
+        if not ok:
+            texto_erro = f"{medida.get('stderr', '')}\n" + "\n".join(r["result"] for r in resp)
+            erro = primeira_linha_do_erro(medida.get("stderr"), (resp[-1]["result"] if resp else ""))
+            if any(m in texto_erro for m in TROCA_RECUSADA):
+                codigo, motivo = 3, "troca"
+            elif any(m.lower() in texto_erro.lower() for m in CREDITO_ESGOTADO):
+                codigo, motivo = 3, "credito"
+            else:
+                codigo = 5
+        elif len(resp) > 1 and resp[0]["jti"] == resp[-1]["jti"]:
+            codigo, erro = 5, "o jti não mudou entre as duas mensagens: a identidade não foi renovada"
+    medida["exit"] = codigo
+    if motivo:
+        medida["motivo"] = motivo
+    if erro:
+        medida["erro_cli"] = erro
+    registra(medida)
+    print(json.dumps(medida, ensure_ascii=False, indent=None if como_json else 2))
+    return codigo
 
 
 def _agora() -> str:
@@ -1295,7 +1451,13 @@ def main(argv: list[str] | None = None) -> int:
     a = atos.novo("projetar", "gera as projeções do provedor; --conferir só mede")
     a.add_argument("--conferir", action="store_true")
     a.add_argument("--base", default=None)
+    a = atos.novo("medir-federacao", "o gate da federação consultada: claude -p pela conta agente-consultado, sem agente")
+    a.add_argument("--espera", type=int, default=0, metavar="<segundos>",
+                   help="manda a segunda mensagem depois da espera, no mesmo processo, e confere o jti")
+    a.add_argument("--json", action="store_true")
     ns = p.parse_args(argv)
+    if ns.ato == "medir-federacao":
+        return ato_medir_federacao(ns.espera, ns.json)
     if ns.ato == "listar":
         return ato_listar(ns.modelo, ns.modo, ns.json)
     if ns.ato == "ler":
