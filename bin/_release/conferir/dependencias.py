@@ -168,7 +168,10 @@ def _stacks(registro):
         dados = json.load(f)
     brutas = dados.get("stacks") if isinstance(dados.get("stacks"), dict) else {
         k: v for k, v in dados.items() if not k.startswith("_") and k != "repositorios"}
-    return {k: v for k, v in brutas.items() if isinstance(v, dict) and v.get("lock")}
+    # `promovida: false` (#2856 linha 453): a stack so tem venv de teste, nunca release servida;
+    # varre-la daria "declarada e nao servida" para sempre.
+    return {k: v for k, v in brutas.items()
+            if isinstance(v, dict) and v.get("lock") and v.get("promovida", True) is not False}
 
 
 def levantar(alvo, registro, prod_raiz):

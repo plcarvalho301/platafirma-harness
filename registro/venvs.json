@@ -134,9 +134,10 @@
     "lock": "provas/package-lock.json",
     "teste": "provas"
   },
-  "_vault-ontologia": "suite do vault da ontologia do posto (#2856 linha 453): o script que monta o vault do Obsidian a partir das shapes do espelho e a planilha, com rdflib, PyYAML e openpyxl. O posto nao e familia promovida: o venv nasce no `teste rodar`, pelo mesmo construtor, e a lista de portao mora em ferramentas/vault-ontologia/testes/VERDES.",
+  "_vault-ontologia": "suite do vault da ontologia do posto (#2856 linha 453): o script que monta o vault do Obsidian a partir das shapes do espelho e a planilha, com rdflib, PyYAML e openpyxl. O posto nao e familia promovida, de proposito: fica fora de registro/familias.json e declara `promovida: false`, que tira a stack do `release conferir dependencias` (sem release servida, o lock nunca estaria em current). O venv nasce no `teste rodar`, pelo mesmo construtor, e a lista de portao mora em ferramentas/vault-ontologia/testes/VERDES.",
   "vault-ontologia": {
     "familia": "platafirma-posto",
+    "promovida": false,
     "lock": "ferramentas/vault-ontologia/uv.lock",
     "teste": "ferramentas/vault-ontologia/testes"
   },

@@ -699,6 +699,15 @@ def test_procurar_com_termo_repetido_casa_qualquer_um_e_cada_um_literal(tmp_path
     assert "não encontrado" in alternancia.stdout
     vazio = _repo(tmp_path, bancada, "s1", "procurar", "demo", "--termo", "")
     assert vazio.returncode == 2
+    # spec repo §2: termo que parece flag chega ao git como dado (-e), nunca como opção
+    # (`--help` fica de fora: o verbo o lê antes de qualquer ato e imprime o uso)
+    for flag in ("-x", "--open-files-in-pager"):
+        r = _repo(tmp_path, bancada, "s1", "procurar", "demo", "--termo", flag, "--termo", "x")
+        assert r.returncode == 0 and "LEIA.md" in r.stdout, (flag, r.stderr)
+    # vários termos com prefixo: o ramo do `-- <prefixo>`
+    com_prefixo = _repo(tmp_path, bancada, "s1", "procurar", "demo", "--termo", "zz-nada", "--termo", "x",
+                        "LEIA.md")
+    assert com_prefixo.returncode == 0 and "LEIA.md" in com_prefixo.stdout
 
 
 # --- commitar sem caminho: o bruto da abertura da sessao em diante (card #3354, arq:0123 regra 10) -----------

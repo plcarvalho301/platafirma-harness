@@ -32,6 +32,20 @@ def _dependencias():
     return mod
 
 
+def test_stack_nao_promovida_fica_fora_do_levantamento(tmp_path):
+    """#2856 linha 453: `promovida: false` tira a stack do rol (sem release servida, o lock nunca
+    estaria em current); so o booleano false tira, e o registro real tira o vault-ontologia."""
+    dep = _dependencias()
+    falso = tmp_path / "venvs.json"
+    falso.write_text(json.dumps({"a": {"familia": "x", "lock": "a/uv.lock", "promovida": False},
+                                 "b": {"familia": "x", "lock": "b/uv.lock"},
+                                 "c": {"familia": "x", "lock": "c/uv.lock", "promovida": "nao"}}),
+                     encoding="utf-8")
+    assert sorted(dep._stacks(str(falso))) == ["b", "c"]
+    reais = dep._stacks(str(REPO_ROOT / "registro" / "venvs.json"))
+    assert "vault-ontologia" not in reais and "harness" in reais
+
+
 GHSA = {
     "id": "GHSA-aaaa-bbbb-cccc", "summary": "Poluicao de prototipo no pacote",
     "database_specific": {"severity": "HIGH"},

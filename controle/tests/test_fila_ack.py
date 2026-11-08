@@ -167,6 +167,14 @@ def test_tratar_recusa_nao_lida_e_inexistente(monkeypatch, capsys):
     assert "20261003T100000-ia: nao lida" in cap.out
     assert "nada-ia: nao existe" in cap.out
     assert rc.acks == []
+    # spec fila §5: a recusa diz a cura, a leitura quente que entrega (#2856 linha 463)
+    assert "cura:" in cap.err and "`fila ler ti`" in cap.err
+
+
+def test_tratar_inexistente_sem_cura_de_leitura(monkeypatch, capsys):
+    code, cap = _rodar(monkeypatch, capsys, ["tratar", "nada-ia"], _rc())
+    assert code == 1
+    assert "cura:" not in cap.err
 
 
 def test_penduradas_le_pel_e_nao_lidas_sem_mover(monkeypatch, capsys):
