@@ -24,9 +24,13 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
+import topologia  # noqa: E402
 
 SCHEMA_V = 1
 EIXOS = ("rede", "ram", "vram", "cpu")
@@ -507,36 +511,8 @@ def carregar_topologia(acervo: str | Path | None = None, timeout: int = TIMEOUT_
     return topologia
 
 
-def _composes(stack: dict) -> list[str]:
-    v = stack.get("compose") or []
-    return [v] if isinstance(v, str) else list(v)
-
-
-def stack_do_conteiner(labels: dict, topologia: list[dict]) -> str | None:
-    """Slug da stack cujo compose declarado é o do contêiner. O declarado mora sob .../current/<família
-    curta>/<rel>; o contêiner sobe de .../<família>/<sha>/<rel> e casa pela família curta e pelo <rel>.
-    Duas stacks com o mesmo compose desempatam pelo projeto que o contêiner declara; sem desempate, None."""
-    pares = set()
-    for arquivo in (labels.get("com.docker.compose.project.config_files") or "").split(","):
-        partes = arquivo.strip().split("/")
-        for i, parte in enumerate(partes):
-            if _RE_SHA.match(parte):
-                familia = partes[i - 1] if i > 0 else ""
-                pares.add((familia.removeprefix(PREFIXO_DA_FAMILIA), "/".join(partes[i + 1:])))
-                break
-    achados = []
-    for stack in topologia:
-        for comp in _composes(stack):
-            if "/current/" not in comp:
-                continue
-            resto = comp.split("/current/", 1)[1]
-            if "/" in resto and tuple(resto.split("/", 1)) in pares:
-                achados.append(stack.get("slug"))
-    if len(achados) <= 1:
-        return achados[0] if achados else None
-    projeto = labels.get("com.docker.compose.project")
-    do_projeto = [slug for slug in achados if slug == projeto]
-    return do_projeto[0] if len(do_projeto) == 1 else None
+_composes = topologia.composes_da_stack
+stack_do_conteiner = topologia.stack_do_container
 
 
 def chave_de_conteiner(nome: str, labels: dict, topologia: list[dict]) -> dict:

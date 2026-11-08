@@ -265,6 +265,7 @@ testes/test_dt_cinco_harness.py | bin/tarefas bin/repo bin/release bin/_release/
 # teto lido da máquina), a medida da porta pela sonda (`sinal --porta`: ato leve, transporte separado de verbo, token nunca
 # impresso), o ato `infra medir rede` (porta achada pelo socket do processo, fonte muda sai 5, valor alto sai 0) e o
 # cabeçalho, a ajuda e o despacho do `medir`; servidores HTTP e /proc de mentira, sem host.
+tests/test_lib_topologia.py | lib/topologia.py bin/_release/conferir/conferir.py bin/_infra/eixos.py
 tests/test_infra_eixos.py | bin/infra bin/_infra/**
 tests/test_sinal_porta.py | bin/sinal lib/raizes.py
 tests/test_infra_medir_rede.py | bin/infra bin/_infra/** bin/sinal lib/raizes.py

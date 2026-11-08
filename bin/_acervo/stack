@@ -30,7 +30,7 @@ USO = """uso:
   acervo stack ver [--json]           le a topologia da tabela acervo.stack
   acervo stack servicos <stack> [--json]  os servicos da stack: ficha de servico parte-de a ela, com a unit de cada um
   acervo stack resolver <unit>        `<stack>/<servico>` da unit, ou unit_sem_stack (exit 1)
-  acervo stack import <stacks.json>   carrega o JSON pra tabela (upsert por slug) —
+  acervo stack import|definir <stacks.json>  carrega o JSON pra tabela (upsert por slug) —
                                       a ponte pra matar o stacks.json
   acervo stack rm <slug>              remove a stack da tabela
 
@@ -111,6 +111,16 @@ def cmd_ver(quero_json):
     sys.stderr.write("\n%d stack(s) em acervo.stack.\n" % len(stacks))
 
 
+def _extrai_composes(val):
+    if not val:
+        return []
+    if isinstance(val, str):
+        return [val.strip()] if val.strip() else []
+    if isinstance(val, list):
+        return [str(x).strip() for x in val if str(x).strip()]
+    return []
+
+
 def cmd_import(arq):
     try:
         with open(arq, encoding="utf-8") as fh:
@@ -122,6 +132,36 @@ def cmd_import(arq):
     stacks = doc.get("stacks")
     if not stacks:
         morre("acervo stack import: %s nao tem a chave 'stacks'." % arq, 3)
+
+    # DT 289 e DT 291: unicidade do caminho de compose (ADR arq:0081, incidente #3586).
+    # Nenhuma duplicata de compose entre stacks conteiner é aceita.
+    composes_no_lote = {}
+    for slug, s in stacks.items():
+        forma = s.get("forma") or ("host" if s.get("compose") is None else "conteiner")
+        if forma != "conteiner":
+            continue
+        for comp in _extrai_composes(s.get("compose")):
+            if comp in composes_no_lote and composes_no_lote[comp] != slug:
+                morre("acervo stack import: compose %r ja pertence ao slug %r (duplicata com %r)."
+                      % (comp, composes_no_lote[comp], slug), 2)
+            composes_no_lote[comp] = slug
+
+    if composes_no_lote:
+        linhas_db = _psql("select slug, coalesce(compose, '') from acervo.stack where forma = 'conteiner' and compose is not null and compose != ''")
+        for linha in linhas_db.splitlines():
+            if not linha.strip():
+                continue
+            slug_db, _, comp_db_raw = linha.partition("|")
+            comp_db_val = comp_db_raw
+            if comp_db_raw.startswith("["):
+                try:
+                    comp_db_val = json.loads(comp_db_raw)
+                except ValueError:
+                    pass
+            for comp in _extrai_composes(comp_db_val):
+                if comp in composes_no_lote and composes_no_lote[comp] != slug_db:
+                    morre("acervo stack import: compose %r ja pertence a outra stack (%r no registro, tentando importar em %r)."
+                          % (comp, slug_db, composes_no_lote[comp]), 2)
 
     vals = []
     for slug, s in stacks.items():
@@ -220,9 +260,9 @@ def main(argv):
         if not resto:
             morre("acervo stack resolver: falta a unit\n\n%s" % USO)
         cmd_resolver(resto[0])
-    elif ato == "import":
+    elif ato in ("import", "definir"):
         if not resto:
-            morre("acervo stack import: falta o caminho do stacks.json\n\n%s" % USO)
+            morre("acervo stack %s: falta o caminho do stacks.json\n\n%s" % (ato, USO))
         cmd_import(resto[0])
     elif ato == "rm":
         if not resto:

@@ -162,6 +162,7 @@ import resultado
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "lib"))
 import raizes  # noqa: E402
+import topologia  # noqa: E402
 import units  # noqa: E402
 
 # Predicados extraídos para bin/_lint (card #3153)
@@ -373,50 +374,12 @@ def _topologia():
     return _TOPO
 
 
-def _composes(s):
-    v = s.get("compose") or []
-    return [v] if isinstance(v, str) else list(v)
+_composes = topologia.composes_da_stack
 
 
-def stack_do_container(c):
-    """slug da stack (acervo.stack) cujo compose declarado e o do container. O declarado mora
-    sob .../current/<familia curta>/<rel>; o container sobe de .../<familia>/<sha>/<rel>: casa
-    pelo <rel>. Sem casamento, None — e o render segue sem cofre, como antes.
-
-    Duas stacks com o mesmo compose (#3584, #3586 — stack registrada em duas entradas,
-    'borda' e 'harness-borda', para o mesmo arquivo) casavam as duas, e a primeira da lista
-    vencia por sorte de ordem; quando era a sem os ponteiros .atual/.servido, a conferencia
-    por desenho dava falso e `release promover` revertia uma promocao correta. Com mais de
-    um achado, desempata pelo projeto de compose que o proprio container declara
-    (com.docker.compose.project); sem desempate, None — a duplicata fica visivel como
-    divergencia, em vez de silenciar para o lado errado."""
-    # caminho relativo EXATO dentro da arvore da familia: casar por sufixo confundia
-    # rag/docker-compose.yml com o docker-compose.yml da raiz (stack conhecimento).
-    # E a familia junto (#3535): so o relativo tomava o docker-compose.yml da raiz do
-    # rastreador pelo do conhecimento, que vem antes na topologia, e o render saia sem cofre.
-    pares = set()
-    for f in [f for f in c["config_files"].split(",") if f]:
-        partes = f.split(os.sep)
-        for i, p in enumerate(partes):
-            if len(p) == 40 and all(ch in "0123456789abcdef" for ch in p):
-                familia = partes[i - 1] if i > 0 else ""
-                curta = familia[len("platafirma-"):] if familia.startswith("platafirma-") else familia
-                pares.add((curta, "/".join(partes[i + 1:])))
-                break
-    achados = []
-    for s in _topologia():
-        for comp in _composes(s):
-            if "/current/" not in comp:
-                continue
-            resto = comp.split("/current/", 1)[1]
-            if "/" not in resto:
-                continue
-            if tuple(resto.split("/", 1)) in pares:
-                achados.append(s.get("slug"))
-    if len(achados) <= 1:
-        return achados[0] if achados else None
-    casa_projeto = [slug for slug in achados if slug == c.get("projeto")]
-    return casa_projeto[0] if len(casa_projeto) == 1 else None
+def stack_do_container(c, topologia_lista=None):
+    """slug da stack (acervo.stack) cujo compose declarado e o do container. Delegado a lib/topologia.py."""
+    return topologia.stack_do_container(c, _topologia() if topologia_lista is None else topologia_lista)
 
 
 def segredos_da_stack(slug):
