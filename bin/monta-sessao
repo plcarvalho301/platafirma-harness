@@ -567,7 +567,7 @@ def dispara_acervo(cadeira, sujeito, pergunta):
     Reimplementar /search no adaptador foi o vacilo que este patch corrige. Motor frio
     ou fora do ar viram peca `indisponivel` DECLARADA, nunca excecao que trava a sessao.
     """
-    env = {"peca": "acervo-consultado", "dono": "dados",
+    env = {"peca": "acervo-consultado", "dono": "conhecimento",
            "ref": "verbo:rag_buscar(pergunta)", "regime": "valor",
            "volatilidade": "volatil", "sha": None, "tokens": 0}
     if not (pergunta or "").strip():

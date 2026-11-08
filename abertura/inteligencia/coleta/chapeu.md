@@ -6,7 +6,10 @@ Não avalio, não integro, não concluo — isso é o chapéu `analise`, depois.
 reunião de insumos (Doutrina §5.4, fase de reunião): o que perguntar, a que fonte, por
 que meio, e como o insumo chega avaliável. Cobre as três origens do dado (§3.1) —
 Humint, Techint (Sigint, Imint, Geoint, Masint) e Osint (Socmint) — com OSINT inteira
-aqui (dono, 03/09/2026). A operação de busca, obtenção do dado negado por técnica
+aqui (dono, 03/09/2026). A coleta é o molde da inteligência sobre a base comum de
+pesquisa, que o conhecimento define (missão com critério de parada, acervo antes da web,
+fonte separada de canal, manifesto); o processo dela, com preparo, preservação e
+manifesto próprios, é decisão da inteligência. A operação de busca, obtenção do dado negado por técnica
 operacional, é Elemento de Operações e fica fora.
 
 ## a) Espaço de problema
@@ -28,7 +31,9 @@ operacional, é Elemento de Operações e fica fora.
   cibernético; OSINT e SOCMINT: volume, padrão, custo de tempo, verificação de conteúdo
   digital, extração de dados como meio.
 - **Rastreabilidade** (§5.2) — cadeia de custódia, proveniencia de assercao, designacao
-  de fonte autoritativa quando duas divergem; metadado de autor, origem, equipamento,
+  de fonte autoritativa quando duas divergem, rastreamento de referente para que o
+  insumo aponte a mesma entidade, e garantia de proveniência, cuja régua é do
+  conhecimento; metadado de autor, origem, equipamento,
   data, local, sensor e histórico em cada insumo, para que a análise tenha o que pesar.
 - **Diversidade de origem** — mais fontes da mesma origem não aprofundam; a exaustão se
   mede por origens independentes cobertas, não por contagem de links.
@@ -54,7 +59,8 @@ dela quando:
 |---|---|---|---|
 | que origem responde a lacuna | `inteligencia` | OSINT · HUMINT · SOCMINT · delimitação do alvo | é o canônico deste chapéu |
 | ingestão, extração, pipeline de dado | `dominio=["engenharia-software","ia"]` | extração de dados | o meio é de lá; aqui se diz o que extrair e com que metadado |
-| proveniência, autoridade de fonte | `dominio=["estudos-ontologias","capacidade-estatal"]` | proveniencia de assercao · designacao de fonte autoritativa · cadeia de custódia | a garantia de origem se explica lá |
+| proveniência, autoridade de fonte | `dominio=["estudos-ontologias","capacidade-estatal"]` | proveniencia de assercao · designacao de fonte autoritativa · cadeia de custódia · garantia de proveniência · rastreamento de referente | a garantia de origem se explica lá; a régua da procedência é do conhecimento |
+| a base comum que o molde segue | consultar a cadeira conhecimento, chapéu pesquisa-academica | — | o mínimo que toda pesquisa da casa cumpre |
 | onde cavar a seguir | `dominio=["gestao-organizacional"]` | forrageamento de informacao | a trilha de coleta segue o cheiro da informação |
 | o que o acervo já tem sobre o alvo | `inteligencia`, `acervo listar biblioteca obra --sobre <termo>` | alvo de inteligência | não se coleta de novo o que já está na casa |
 | Techint, Sigint, plano de reunião | `inteligencia` em linguagem natural | — | hoje volta raso: sem conceito no acervo |

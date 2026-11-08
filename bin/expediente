@@ -21,7 +21,7 @@
 #   persona            abertura                 valor  estavel  persona ler {cadeira}                          gestao-estrategica
 #   alias-cadeiras     abertura                 valor  morna    persona foto                                   gestao-estrategica
 #   mesa               abertura                 valor  volatil  mesa ver                                       gestao-estrategica
-#   acervo-consultado  chapéu declarado, com pergunta  valor  volatil  motor rag buscar casa "{pergunta}" --k 6 --texto secao --origem abertura   dados (a partição)
+#   acervo-consultado  chapéu declarado, com pergunta  valor  volatil  motor rag buscar casa "{pergunta}" --k 6 --texto secao --origem abertura   conhecimento (a partição)
 #   chapeu             chapeu                   valor  estavel  persona ler {cadeira} --chapeu {chapeu}        gestao-estrategica
 #   cadernos           abertura; com chapeu, o corpo dele  valor  volatil  mesa caderno --chapeu {chapeu}   gestao-estrategica
 #   rotinas            abertura                 valor  estavel  acervo listar casa guia --mapa                 gestao-estrategica
@@ -84,7 +84,7 @@ CATALOGO = [
         "regime": "valor",
         "volatilidade": "volatil",
         "chamada": 'motor rag buscar casa "{pergunta}" --k 6 --texto secao --origem abertura',
-        "dono": "dados",
+        "dono": "conhecimento",
     },
     {
         "peca": "chapeu",
@@ -492,7 +492,7 @@ CATALOGO_CADEIRINHA = [
     {"peca": "acervo-consultado", "gatilho": "perfil cadeirinha, com mensagem", "regime": "valor",
      "volatilidade": "volatil",
      "chamada": 'motor rag buscar casa "{pergunta}" --k 6 --texto secao --origem abertura',
-     "dono": "dados"},
+     "dono": "conhecimento"},
     {"peca": "cadernos", "gatilho": "perfil cadeirinha", "regime": "valor", "volatilidade": "volatil",
      "chamada": "mesa caderno {chapeu} --categoria licao,premissa", "dono": "gestao-estrategica"},
 ]

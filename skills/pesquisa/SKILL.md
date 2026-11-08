@@ -1,11 +1,34 @@
 ---
 name: pesquisa
 description: Use quando a sessão precisar de fonte da WEB ABERTA — "pesquisa na web", "procura fonte sobre X", "o que se sabe sobre X fora do acervo", "acha a página oficial de", "resolve esse DOI/domínio/ORCID", "verifica as citações deste relatório". Dá o loop de pesquisa com procedência (consultar → triar → ler → sintetizar → verificar) sobre o verbo `pesquisar` (SearXNG + Crawl4AI soberanos, sem chave e sem conta). NÃO dispare para o acervo da casa — aí é `motor rag buscar` / `acervo listar biblioteca obra --sobre` primeiro, porque fonte da casa vence fonte externa.
-cadeiras: todas (matéria de pesquisa web; dono da capacidade é claudinha-inteligencia)
+cadeiras: todas (é a base comum da pesquisa da casa; dona: conhecimento, que confere a procedência; cada cadeira escreve o seu molde por cima)
 compatibility: precisa do verbo `pesquisar` (tool via cápsula) e da stack `searxng` no ar (TI). Sem SearXNG, `pesquisar saude` diz o que falta.
 ---
 
 # Pesquisa web com procedência
+
+## A base comum
+
+Esta é a base que toda pesquisa da casa segue, seja de que cadeira for. A cadeira
+conhecimento a define e confere a procedência do que volta; a pergunta e a execução
+ficam com quem pergunta. Cada cadeira pode escrever o seu molde por cima, sem contradizer
+a base: a coleta é o molde da inteligência, o benchmark é o do arquiteto, a pesquisa com
+usuário é a de produto e a de mercado é a da gestão estratégica.
+
+O mínimo que todo molde cumpre:
+
+1. **Missão com critério de parada.** Antes de buscar, a missão diz o que conta como
+   resposta, o que já se sabe e onde parar. Tema solto sem parada não é missão.
+2. **Acervo antes da web.** O que a casa já tem não se pesquisa fora; a web só cobre o
+   que voltou vazio, e o vazio se registra como insumo de aquisição.
+3. **Fonte separada de canal.** A fonte originária se separa de quem a repassou antes de
+   contar fontes: cinco cópias de uma origem são uma fonte.
+4. **Manifesto.** Toda afirmação aponta a linha do manifesto de onde saiu, e o que não
+   tem linha não entra no relatório.
+
+O loop abaixo é como a base se cumpre com o verbo `pesquisar`.
+
+## Acervo primeiro
 
 Fonte da casa vence fonte externa. Antes de qualquer coisa: `motor rag buscar '<assunto>'` e `acervo listar biblioteca obra --sobre <assunto>` —
 o que o acervo já tem NÃO se pesquisa. Só o que falta vai para a web.

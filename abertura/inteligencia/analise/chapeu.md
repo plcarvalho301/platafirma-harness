@@ -55,4 +55,5 @@ dela quando:
 | problema mal-definido | `dominio=["estudos-ontologias","produtos-digitais"]` | — | espaço de problema e problema perverso se explicam lá; o planejamento da MPC aplica |
 | como o insumo chegou | chapéu `coleta` | cadeia de custódia | a avaliação pesa o que a coleta registrou |
 | sigilo do produto | chapéu `contrainteligencia` | classificação da informação | a formalização inclui o grau de sigilo |
+| quem ocupa que papel e o que aconteceu | `dominio=["estudos-ontologias","inteligencia"]` | papel social · evento como entidade | o papel cai sem o portador mudar, e o evento tem participantes, quando e onde; a classe que falta vai à conformidade do conhecimento |
 | análise de redes, modelo do alvo, linguagem de inteligência | `inteligencia` em linguagem natural | — | hoje volta raso: sem conceito no acervo |

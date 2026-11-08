@@ -1,7 +1,7 @@
 """#4120, U7: `acervo curar conceitos --indicacoes <lote>` — a curadoria em lote das indicações.
 
 O classificador indica o conceito candidato com a obra como garantia (item 19). Este ato junta as indicações do
-lote e cria cada conceito uma vez. Sem --apply mostra o plano; quem cria conceito no tesauro é a cadeira dados,
+lote e cria cada conceito uma vez. Sem --apply mostra o plano; quem cria conceito no tesauro é a cadeira conhecimento,
 então o --apply de outra cadeira recusa antes de falar com o servidor.
 """
 
@@ -66,7 +66,7 @@ class Falso:
         self.srv.shutdown()
         self.srv.server_close()
 
-    def rodar(self, *argv, cadeira="dados"):
+    def rodar(self, *argv, cadeira="conhecimento"):
         env = {**os.environ, "MOTOR_ACERVO_URL": self.url, "RAG_API_URL": "", "RAG_API_BASE": "",
                "RAG_API_TOKEN": "tok-ind", "PF_CADEIRA": cadeira, "PF_SESSAO_ID": f"t-{uuid.uuid4().hex}"}
         return subprocess.run(["bash", str(ACERVO), *argv], capture_output=True, text=True, env=env,
@@ -91,7 +91,7 @@ def test_sem_apply_mostra_o_plano_e_nao_cria_nada(servidor):
     assert servidor.chamadas == [("/acervo/indicacoes", {"lote_id": LOTE, "aplicar": False})]
 
 
-def test_apply_da_cadeira_dados_cria_cada_conceito_uma_vez(servidor):
+def test_apply_da_cadeira_conhecimento_cria_cada_conceito_uma_vez(servidor):
     r = servidor.rodar("curar", "conceitos", "--indicacoes", LOTE, "--apply")
     assert r.returncode == 0, r.stderr
     assert "governanca-de-dados: criado" in r.stdout
@@ -103,7 +103,14 @@ def test_apply_da_cadeira_dados_cria_cada_conceito_uma_vez(servidor):
 def test_apply_de_outra_cadeira_recusa_sem_falar_com_o_servidor(servidor):
     r = servidor.rodar("curar", "conceitos", "--indicacoes", LOTE, "--apply", cadeira="engenharia")
     assert r.returncode == 4
-    assert "quem cria conceito no tesauro é a cadeira dados" in r.stderr
+    assert "quem cria conceito no tesauro é a cadeira conhecimento" in r.stderr
+    assert servidor.chamadas == []
+
+
+def test_apply_da_cadeira_dados_recusa_porque_o_ato_e_de_conhecimento(servidor):
+    r = servidor.rodar("curar", "conceitos", "--indicacoes", LOTE, "--apply", cadeira="dados")
+    assert r.returncode == 4
+    assert "quem cria conceito no tesauro é a cadeira conhecimento" in r.stderr
     assert servidor.chamadas == []
 
 
