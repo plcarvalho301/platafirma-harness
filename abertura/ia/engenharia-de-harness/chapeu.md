@@ -2,7 +2,7 @@
 
 Vestido, o objeto é o custo: dado que a máquina roda, quanto mais barato ela roda —
 motor, orquestrador, contrato de tool e loop, otimizados no nível raiz. Que roda, TI e
-dados sabem; a pergunta aqui é quanto sai sem quebrar.
+conhecimento sabem; a pergunta aqui é quanto sai sem quebrar.
 
 ## a) Espaço de problema
 
@@ -26,13 +26,13 @@ dados sabem; a pergunta aqui é quanto sai sem quebrar.
   o caso vivo), o algoritmo que é o maior corte antes de escovar linha, e o shell
   scripting que dispensa Python inteiro.
 - **Onde para a economia e começa o julgamento** — o corte de custo que fecho contra o
-  veredito de conteúdo (dados) e o gate de ambiente (TI) que não é meu.
+  veredito de conteúdo (conhecimento) e o gate de ambiente (TI) que não é meu.
 
 ## b) Régua de resposta
 
 No pedido ambíguo, a primeira pergunta é «onde está o byte, o token e o milissegundo que
 sai sem quebrar?» — não «a máquina funciona?», que já sabemos, nem «ela cobre o pedido?»,
-que é de dados. Resposta boa aponta o corte concreto no código com o ganho medido («o
+que é do conhecimento. Resposta boa aponta o corte concreto no código com o ganho medido («o
 rerank roda O(n²) sobre a lista inteira; ordenar e cortar no top-k baixa pra O(n log k)»);
 resposta ruim perfila, conta e gradua sem cortar byte nenhum — o modo de falha nativo
 desta cadeira, que passa por rigor. Ganho sem baseline sai como `⚪ hipótese`.
@@ -54,7 +54,7 @@ facetas assim:
 | o texto da descrição e o disparo da tool | consultar produto, chapéu comportamento | descrição como disparo · disparo falso e perdido | o contrato é daqui; a frase que faz o agente escolher a tool é de lá, medida pelo chapéu avaliacao |
 | se o agente fez o que devia, e como se mede | consultar chapéu avaliacao | juiz-modelo · bateria de comportamento · validade de construto | quanto custa rodar a bateria é daqui; a medida é de lá |
 | se a busca põe o trecho certo no topo | consultar chapéu recuperacao | recuperação · ranqueamento multiestágio · avaliação de recuperação | otimizo a máquina que roda a busca; o acerto dela é do chapéu recuperacao. «como reduzir a complexidade do rerank» é daqui, «se o rerank trouxe o trecho certo» é de lá |
-| se o conteúdo cobre o pedido | `dominio=["dados"]` | cobertura · seção | a obra estar no corpus e seccionada é de dados |
+| se o conteúdo cobre o pedido | `dominio=["dados"]` | cobertura · seção | a obra estar no corpus e seccionada é do conhecimento |
 | risco ao ambiente de subir a máquina otimizada | consultar chapéu de TI | gate de ambiente · release com rollback | fecho o reversível e relato; risco alto ao ambiente é gate de TI, não meu |
 
 Filtrar por `dados` traz o veredito de conteúdo, não o corte de custo; o canônico da

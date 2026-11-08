@@ -1,11 +1,11 @@
 # chapéu recuperacao — a busca achando bem, do índice ao serviço
 
-Vestido, o objeto é o acerto da busca: dada a obra seccionada e catalogada que dados
-entrega, o motor põe no topo o trecho que responde, diz «não sei» quando o acervo não
+Vestido, o objeto é o acerto da busca: dada a obra seccionada e catalogada que o
+conhecimento entrega, o motor põe no topo o trecho que responde, diz «não sei» quando o acervo não
 tem, e o acerto se mede contra a bateria? Do índice ao serviço é daqui: o corte da seção
 em trecho, o embedder, a fusão, o rerank, o prior, o que se monitora e o que a bateria
-precisa cobrir. A obra até a seção, a ficha de conceitos e a guarda da bateria são de
-dados (`arq:0119` §1). Quanto custa servir é do chapéu engenharia-de-harness.
+precisa cobrir. A obra até a seção, a lista de conceitos da obra e a guarda da bateria
+são do conhecimento (`arq:0119` §1). Quanto custa servir é do chapéu engenharia-de-harness.
 
 ## a) Espaço de problema
 
@@ -18,7 +18,7 @@ dados (`arq:0119` §1). Quanto custa servir é do chapéu engenharia-de-harness.
   alarme, mostra na face motor do plano de controle se a busca melhorou, piorou ou empatou;
   métrica sem ato que a siga sai.
 - **Bateria** — o que ela precisa cobrir (estratos, tamanho, sem obra) para a métrica
-  valer; dados a monta, ancora na seção e versiona, o dono marca o domínio.
+  valer; o conhecimento a monta, ancora na seção e versiona, o dono marca o domínio.
 - **Abstenção** — a cobertura que o motor declara bate com o que o acervo tem, nas três
   direções: correta, falsa, inventada.
 - **Juiz** — o juiz que julga as rodadas passou do piso contra a marca do dono? A
@@ -31,7 +31,7 @@ dados (`arq:0119` §1). Quanto custa servir é do chapéu engenharia-de-harness.
 ## b) Régua de resposta
 
 - No pedido ambíguo, a primeira pergunta é «o trecho certo estava no índice, e onde ele
-  ficou na lista?» — depois de dados ter dito que a obra está no corpus e seccionada.
+  ficou na lista?» — depois de o conhecimento ter dito que a obra está no corpus e seccionada.
   Cobertura antes de relevância: culpar o motor com o corpus furado é erro; culpar o
   corpus com o trecho certo no índice e fora do topo é o erro nativo daqui.
 - Resposta boa sai em delta contra o servido, por estrato, com o carimbo da rodada e o
@@ -54,7 +54,7 @@ raso. Abre-se além da faceta assim:
 | o que medir e com que tamanho | `casa` | protocolo-medicao-rag · bateria rotulada | o protocolo fixa estrato, poder e regra de decisão antes da rodada; se a medida mede o que diz medir é do chapéu avaliacao |
 | o pedido que nenhum gatilho reconheceu | `dominio=["ia"]` | recuperação · cobertura e relevância | a rota por motor se mede como busca; o gatilho que faltou vai à produto, chapéu comportamento |
 | o motor dizer «não sei» com critério | `dominio=["ia"]` | abstenção calibrada · cobertura e relevância | gerar e julgar são competências distintas |
-| a obra está no corpus e seccionada | consultar dados, chapéu corpus | cobertura · seção · ficha de conceitos | cobertura é de dados e se diagnostica antes |
+| a obra está no corpus e seccionada | consultar conhecimento, chapéu organizacao-do-conhecimento | cobertura · seção · lista de conceitos da obra | cobertura é do conhecimento e se diagnostica antes |
 | quanto custa servir a busca | consultar chapéu engenharia-de-harness | custo por inferência · complexidade assintótica | o acerto é daqui, o custo é de lá |
 
 Filtrar por `dados` traz a cobertura, não a relevância; o canônico de «o motor achou

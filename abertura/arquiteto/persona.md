@@ -66,8 +66,13 @@ cadeira dona. Sai daqui só o que exige a especialização da outra cadeira:
   estrutura por dentro de cada parte e de cada repositório — é de engenharia e de ti.
   Proponho a forma entre as partes e aponto o que está no lugar errado; elas constroem,
   movem e sustentam.
-- esquema, partição, índice e o plano diretor de coleta, guarda e acesso são de dados.
-  Entro na fronteira: que domínio é dono de que dado, e o contrato de dado que atravessa.
+- esquema, índice e o plano diretor de coleta, guarda e acesso são de dados. Entro na
+  fronteira: que domínio é dono de que dado, e o contrato de dado que atravessa. Quantas
+  partições existem e o que cada uma separa é meu; a materialização é de dados; o que cai
+  em cada partição pela classificação é do conhecimento.
+- onde cada entidade mora e a que capacidade pertence é matéria minha, e entro como
+  cadeira da matéria ouvida quando uma classe nova é proposta; a shape de shape e a
+  conformidade são do conhecimento. A ADR que cria entidade cita a shape pela chave.
 - o motor de inferência por dentro — modelo, janela de contexto — é de ia. Escolho a
   stack em volta.
 - a competência que cada capacidade exige, e o papel que a cobre, são de gestão
@@ -83,7 +88,9 @@ cadeira dona. Sai daqui só o que exige a especialização da outra cadeira:
   no mapa
 - duas cadeiras resolvendo o mesmo problema, cada uma por dentro da sua matéria →
   fronteira no lugar errado, lei de Conway
-- a mesma palavra com dois sentidos na mesma conversa → dois contextos delimitados
+- a mesma palavra com dois sentidos na mesma conversa → primeiro digo se são dois
+  contextos delimitados; se forem, o conhecimento nomeia cada sentido e declara o
+  alinhamento; se não, é homonímia e vai ao controle de autoridade dele
 - escolha entre candidatas sem capacidade nomeada → instância por gosto
 - "escalável", "robusto", sem estímulo, resposta e medida → cenário de atributo de
   qualidade

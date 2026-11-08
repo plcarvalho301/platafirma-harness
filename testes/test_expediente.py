@@ -284,7 +284,7 @@ def test_catalogo_lista_as_8(raiz_hermetica):
 
     # Confere donos
     donos = {p["peca"]: p["dono"] for p in dados}
-    assert donos["acervo-consultado"] == "dados"
+    assert donos["acervo-consultado"] == "conhecimento"
     assert donos["conduta"] == "gestao-estrategica"
     assert donos["mesa"] == "gestao-estrategica"
 

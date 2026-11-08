@@ -98,7 +98,7 @@ def curar_conceitos(argv):
     """`acervo curar conceitos --indicacoes <lote|todas> [--termos a,b] [--apply] [--json]` (item 19).
 
     Junta as indicações que o classificador deixou e cria cada conceito uma vez. Sem `--apply` mostra o plano.
-    Quem cria conceito no tesauro é a cadeira dados: o `--apply` de outra cadeira recusa (sai 4).
+    Quem cria conceito no tesauro é a cadeira conhecimento: o `--apply` de outra cadeira recusa (sai 4).
     """
     import pipeline_cliente as pc
 
@@ -111,8 +111,8 @@ def curar_conceitos(argv):
     if aplicar:
         cadeira = (os.environ.get("PF_CADEIRA") or os.environ.get("PF_CONTA") or "").strip().lower()
         cadeira = cadeira.removeprefix("claudinho-").removeprefix("claudinha-")
-        if cadeira != "dados":
-            morre("acervo curar conceitos --apply: quem cria conceito no tesauro é a cadeira dados "
+        if cadeira != "conhecimento":
+            morre("acervo curar conceitos --apply: quem cria conceito no tesauro é a cadeira conhecimento "
                   f"(esta sessão é '{cadeira or 'sem cadeira'}'); sem --apply, o plano sai igual", 4)
     try:
         resultado = pc.curar_indicacoes(None if lote == "todas" else lote, aplicar, termos)
@@ -132,7 +132,7 @@ def curar_conceitos(argv):
     for g in itens:
         print(f"  {g['termo']} -> {g['slug']} · {g['obras_contagem']} obra(s) de garantia")
     if itens:
-        print("plano seco — a cadeira dados repete com --apply para criar")
+        print("plano seco — a cadeira conhecimento repete com --apply para criar")
     return 0
 
 
@@ -174,7 +174,7 @@ def main(argv):
               "     acervo catalogar biblioteca obra --job <id> --resposta   a resposta da sessao em JSON no stdin; o "
               "servidor valida contra a lista fechada e o teto de 5 conceitos\n"
               "     acervo curar conceitos --indicacoes <lote|todas> [--termos a,b] [--apply]   junta as indicacoes e cria "
-              "cada conceito uma vez (plano sem --apply; o --apply e da cadeira dados)\n"
+              "cada conceito uma vez (plano sem --apply; o --apply e da cadeira conhecimento)\n"
               "     cartilha das familias e garantias: acervo relacionar biblioteca conceito --ajuda\n"
               "     --reclassificar, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes e "
               "--desderivar respondem com aviso: os atos de Classificar sao acervo catalogar, definir, relacionar, "
