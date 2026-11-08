@@ -134,8 +134,7 @@ uso:
   repo estado    [<repo>] [--json]
   repo listar    <repo> [<prefixo>] [--json]
   repo ler       <repo> <caminho>
-  repo procurar  <repo> <termo> [<prefixo>] [--json]   (a forma --termo <termo> segue valendo)
-  repo procurar  <repo> --termo <a> --termo <b>… [<prefixo>]   (linha que casa qualquer termo; cada termo é literal)
+  repo procurar  <repo> <termo> [<prefixo>] [--json]   (ou --termo <t>, repetido: casa qualquer um)
   repo historico <repo> [<caminho>] [--n <N>] [--json]
   repo diff      <repo> [<caminho>] [--staged]
   repo ramo      <repo> [<card>] [--slug <slug>]
