@@ -262,10 +262,10 @@ def sh(args, cwd=None, env=None):
 # --- classe: servico --------------------------------------------------------
 
 def containers(filtro=None):
-    """Containers de compose. `filtro` casa o nome do container OU o projeto do compose
-    (o nome da stack no registro: `harness-controle` e o projeto do container
-    harness-controle-tela-1). Card #3150: so pelo nome do container, a conferencia de
-    uma stack pelo nome da stack dizia "nenhum container" com o servico de pe."""
+    """Containers de compose. `filtro` casa o nome do container, o projeto do compose
+    (o nome da stack no registro: `harness-controle`), o servico compose, o slug da stack
+    (acervo.stack) ou a familia da release (curta ou completa, ex: core, platafirma-core).
+    Card #3150 e DT #275."""
     _, out, _ = sh(["docker", "ps", "--format", "{{.Names}}"])
     for nome in out.splitlines():
         _, j, _ = sh(["docker", "inspect", nome])
@@ -275,15 +275,14 @@ def containers(filtro=None):
             continue
         lab = d["Config"].get("Labels") or {}
         projeto = lab.get("com.docker.compose.project", "")
-        if filtro and filtro not in (nome, projeto):
-            continue
         wd = lab.get("com.docker.compose.project.working_dir")
         if not wd:
             continue
-        yield {
+        servico = lab.get("com.docker.compose.service", "?")
+        c = {
             "nome": nome,
             "projeto": projeto,
-            "servico": lab.get("com.docker.compose.service", "?"),
+            "servico": servico,
             "working_dir": wd,
             "config_files": lab.get("com.docker.compose.project.config_files", ""),
             "env": {l.split("=", 1)[0]: l.split("=", 1)[1] for l in d["Config"]["Env"] if "=" in l},
@@ -292,6 +291,23 @@ def containers(filtro=None):
             "imagem": d["Config"].get("Image") or "",
             "started_at": (d.get("State") or {}).get("StartedAt"),
         }
+        if filtro:
+            stk = stack_do_container(c)
+            rel = origem_release(wd)
+            fam = rel[0] if rel else ""
+            curta = fam[len("platafirma-"):] if fam.startswith("platafirma-") else fam
+            candidatos = {nome, projeto, servico}
+            if stk:
+                candidatos.add(stk)
+            if fam:
+                candidatos.add(fam)
+            if curta:
+                candidatos.add(curta)
+            if f"platafirma-{filtro}" == projeto:
+                candidatos.add(filtro)
+            if filtro not in candidatos:
+                continue
+        yield c
 
 
 PROD_RAIZ = os.environ.get("PF_RELEASE_RAIZ", "/opt/platafirma")
@@ -448,8 +464,14 @@ def env_declarado(c):
         base += ["-f", f]
     cofre = segredos_da_stack(stack_do_container(c))
     _SEGREDOS_VISTOS.update(cofre.values())
-    # so passa env quando ha cofre: stack sem segredo chama sh como sempre chamou
-    kw = {"env": dict(os.environ, **cofre)} if cofre else {}
+    env_extra = dict(os.environ)
+    env_extra.setdefault("PLATAFIRMA_INSTANCIA", INSTANCIA)
+    rel = origem_release(c["working_dir"])
+    if rel and rel[1]:
+        env_extra["PF_RELEASE_SHA"] = rel[1]
+    if cofre:
+        env_extra.update(cofre)
+    kw = {"env": env_extra}
     # `--profile "*"`: sem isso, servico sob profile (o rag-api esta em `serving`) some do
     # config renderizado e a conferencia acusa ausencia que nao existe.
     rc, out, err = sh(base + ["--profile", "*", "config", "--format", "json"], cwd=c["working_dir"], **kw)

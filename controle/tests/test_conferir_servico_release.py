@@ -52,7 +52,11 @@ def _montar(tmp_path, monkeypatch, sha_do_container):
         "State": {"StartedAt": "2026-09-26T20:00:00Z"},
     }]
 
-    def sh(args, cwd=None):
+    ultimos_args = {}
+
+    def sh(args, cwd=None, env=None):
+        ultimos_args["args"] = args
+        ultimos_args["env"] = env
         if args[:2] == ["docker", "ps"]:
             return 0, "harness-controle-tela-1\noutro-container-1", ""
         if args[:2] == ["docker", "inspect"]:
@@ -63,6 +67,7 @@ def _montar(tmp_path, monkeypatch, sha_do_container):
             return 0, json.dumps({"services": {"tela": {"environment": {}}}}), ""
         return 1, "", "stub"   # git: fora do escopo deste teste
     monkeypatch.setattr(conferir, "sh", sh)
+    conferir._ultimos_args = ultimos_args
     return conferir
 
 
@@ -132,3 +137,20 @@ def _roda(conferir, alvo):
     except SystemExit as e:
         return e.code
     return r if isinstance(r, int) else 0
+
+
+def test_filtro_casa_familia_curta_e_servico(tmp_path, monkeypatch):
+    conferir = _montar(tmp_path, monkeypatch, SHA_NO_AR)
+    assert [c["nome"] for c in conferir.containers("harness")] == ["harness-controle-tela-1"]
+    assert [c["nome"] for c in conferir.containers("platafirma-harness")] == ["harness-controle-tela-1"]
+    assert [c["nome"] for c in conferir.containers("tela")] == ["harness-controle-tela-1"]
+
+
+def test_env_declarado_injeta_release_sha_e_instancia(tmp_path, monkeypatch):
+    conferir = _montar(tmp_path, monkeypatch, SHA_NO_AR)
+    c = next(conferir.containers("harness-controle"))
+    decl, erro = conferir.env_declarado(c)
+    assert erro is None
+    env = conferir._ultimos_args.get("env") or {}
+    assert env.get("PF_RELEASE_SHA") == SHA_NO_AR
+    assert "PLATAFIRMA_INSTANCIA" in env
