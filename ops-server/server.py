@@ -3061,25 +3061,6 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
             "stderr": _cap(stderr), "cwd": str(d_cwd)}
 
 
-def _com_pilha_no_journal(slug: str, tool, descricao: str):
-    """DT 512: a excecao que o FastMCP devolve como `Error executing tool` perde a pilha. Grava-a no
-    journal (`[pilha] ...`) e a relanca igual. Temporario: sai quando a causa do 512 estiver achada."""
-    import functools
-    import traceback
-
-    @functools.wraps(tool)
-    async def _envolvida(*a, **k):
-        try:
-            return await tool(*a, **k)
-        except Exception:                                    # noqa: BLE001
-            print(f"[pilha] DT512 tool={slug} ato={k.get('ato')!r} args={k.get('args')!r}\n"
-                  + traceback.format_exc(), file=sys.stderr, flush=True)
-            raise
-    _envolvida.__name__ = slug.replace("-", "_")
-    _envolvida.__doc__ = descricao
-    return _envolvida
-
-
 def _faz_tool_verbo(slug: str, binario: str, descricao: str):
     async def _tool(ato: str = "", args: list[str] | None = None,
                     stdin: str | dict | list | None = None,
@@ -3188,7 +3169,9 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
         _escopo_do_giro(slug, ato, args, r, ident)
         _chapeu_do_giro(slug, ato, args, r, ident)
         return r
-    return _com_pilha_no_journal(slug, _tool, descricao)
+    _tool.__name__ = slug.replace("-", "_")
+    _tool.__doc__ = descricao
+    return _tool
 
 
 BINARIOS: dict = {}
