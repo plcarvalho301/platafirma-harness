@@ -217,6 +217,9 @@ def falha_indeterminavel(erro_ou_resp):
 
 
 def falha_problem(resp: requests.Response) -> None:
+    if resp.status_code == 401:
+        sys.stderr.write("curar: 401 não autorizado pelo motor — falta RAG_API_TOKEN (pelo terminal use bin/pf do posto)\n")
+        sys.exit(3)
     try:
         pj = resp.json()
         title = pj.get("title") or f"HTTP {resp.status_code}"

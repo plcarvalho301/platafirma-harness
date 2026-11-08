@@ -127,7 +127,21 @@ def test_apply_com_promover_abre_o_lote_e_devolve_como_acompanhar(api):
     assert r.returncode == 0, r.stderr
     assert r.stdout.splitlines()[0].startswith(f"lote {LOTE} aberto no rag-api")
     assert f"acompanhar: motor rag indexar biblioteca --relatorio {LOTE}" in r.stdout
-    assert pedidos[-1][3] == {"autor": "dados", "aplicar": True, "obras": [], "promover": True}
+    assert pedidos[-1][3] == {"autor": "dados", "aplicar": True, "obras": [], "promover": False}
+
+
+def test_relatorio_com_promover_chama_acervo_promover_para_aprovadas(api, tmp_path):
+    roda, pedidos = api
+    fake_acervo = tmp_path / "acervo"
+    fake_acervo.write_text(f"""#!/bin/sh
+echo "$@" >> {tmp_path / 'chamadas.log'}
+""")
+    fake_acervo.chmod(0o755)
+    r = roda("indexar", "biblioteca", "--relatorio", LOTE, "--promover",
+             ambiente={"PF_BIN_ACERVO": str(fake_acervo)})
+    assert r.returncode == 0, r.stderr
+    log = (tmp_path / "chamadas.log").read_text()
+    assert f"promover biblioteca obra {OBRA}" in log
 
 
 def test_so_faceta_manda_a_flag_e_o_plano_vazio_nao_abre_lote(api):
