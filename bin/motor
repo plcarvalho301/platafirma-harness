@@ -857,17 +857,30 @@ def _lote_indexacao(inst, tok, corpo=None, lote="", pula_ocupado=False):
     except urllib.error.URLError as e:
         _trata_erro_http(e, "motor indexar")
 
-def _texto_do_plano(p):
+def _promover_aprovadas(r):
+    """Para cada obra com o gate aprovado no lote de indexação, chama `acervo promover` (R24)."""
+    exe_acervo = os.environ.get("PF_BIN_ACERVO") or os.path.join(BIN, "acervo")
+    for it in r.get("itens") or []:
+        gate = it.get("gate") or {}
+        if gate.get("aprovado") and it.get("obra_id"):
+            cmd = [exe_acervo, "promover", "biblioteca", "obra", it["obra_id"]]
+            if it.get("impressao_id"):
+                cmd += ["--impressao", it["impressao_id"]]
+            subprocess.run(cmd, check=False)
+
+def _texto_do_plano(p, promover=False):
     """Primeira linha: o que o plano (ou o lote aberto) faz; depois, impressao a impressao."""
     conta = (f"{p.get('a_indexar', 0)} a indexar ({p.get('trechos_a_embedar', 0)} trechos a embedar) · "
              f"{p.get('prontas', 0)} com indice aprovado"
-             + ("" if p.get("promover") else " (sobem com --promover)")
+             + ("" if (p.get("promover") or promover) else " (sobem com --promover)")
              + f" · {p.get('fora_transcritas', 0)} transcrita(s) fora, o promover nao pede indice"
              f" · {p.get('fora_nao_indexaveis', 0)} nao indexavel(is) fora (espelho nao servivel)"
              f" · {p.get('indexadas', 0)} de {p.get('seladas', 0)} seladas marcadas para indexar"
              f" · {p.get('facetas_defasadas', 0)} faceta(s) a refazer no ar"
              + (f" · {p['fora_sem_faixa']} selada(s) sem faixa fora (o acervo marca a seção antes)"
-                if p.get("fora_sem_faixa") else ""))
+                if p.get("fora_sem_faixa") else "")
+             + (f" · {p['fora_sem_elegiveis']} selada(s) sem trecho elegivel fora"
+                if p.get("fora_sem_elegiveis") else ""))
     sem_faixa = [f"  sem faixa  {s['obra_id']}  {(s.get('titulo') or '')[:40]:<40}  "
                  f"{'com espelho' if s.get('espelho') else 'sem espelho'}"
                  for s in (p.get("sem_faixa") or [])[:20]]
@@ -965,16 +978,21 @@ def cmd_indexar(inst, argv):
             sys.exit(2)
     tok = token_da(inst)
     if lote and como_json:
+        if promover:
+            r = _lote_indexacao(inst, tok, lote=lote)
+            _promover_aprovadas(r)
         return _relatorio_em_json(inst, tok, lote)
     if lote:
         r = _lote_indexacao(inst, tok, lote=lote)
+        if promover:
+            _promover_aprovadas(r)
         print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_do_relatorio(r))
         return
-    corpo = {"autor": autor, "aplicar": apply_, "obras": obras, "promover": promover}
+    corpo = {"autor": autor, "aplicar": apply_, "obras": obras, "promover": False}
     if so_faceta:
         corpo["so_faceta"] = True
     r = _lote_indexacao(inst, tok, corpo, pula_ocupado=so_faceta)
-    print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_do_plano(r))
+    print(json.dumps(r, ensure_ascii=False, indent=1) if como_json else _texto_do_plano(r, promover=promover))
 
 
 # ---------------------------------------------------------------- trocar (troca de embedder, #3264)

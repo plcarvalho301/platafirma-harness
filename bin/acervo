@@ -234,7 +234,8 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
 
 as particoes: biblioteca, casa, registro (arq:0106 §2-3). conceito e transversal, vive na biblioteca.
 'obra' como particao saiu em 03/10/2026: recusa (exit 2) com a chamada em 'biblioteca'.
-leitura e anonima; escrever loga com a conta de bot. ato/particao/entidade desconhecidos
+leitura do motor pede RAG_API_TOKEN (do EnvironmentFile da conta, pela porta; pelo terminal use bin/pf do posto);
+escrever loga com a conta de bot. ato/particao/entidade desconhecidos
 recusam em vez de adivinhar — errar a chamada devolve o vocabulario certo.
 
 doc de produto (o que cada ato faz, entidades por particao, transicao):

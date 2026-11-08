@@ -71,6 +71,8 @@ def _post(corpo):
         raise Falha(3, f"rota fora: motor do acervo não respondeu em {BASE} ({e.__class__.__name__})") from e
     except requests.exceptions.RequestException as e:
         raise Falha(5, f"indeterminavel: {e}") from e
+    if resp.status_code == 401:
+        raise Falha(3, "401 não autorizado pelo motor — falta RAG_API_TOKEN (pelo terminal use bin/pf do posto)")
     if resp.status_code >= 400:
         try:
             pj = resp.json()
