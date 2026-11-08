@@ -136,6 +136,15 @@ def _eh_estruturada(linha: str) -> bool:
     return True
 
 
+_CONSTANTES_JSON = frozenset({None, False})
+
+
+def _eh_constante_json(v) -> bool:
+    """`v in {None, False}` sem estourar em lista ou dicionario (DT 512: campo `list` no JSON da busca).
+    Lista e dicionario nunca sao constante; o resto segue a igualdade de antes."""
+    return not isinstance(v, (list, dict)) and v in _CONSTANTES_JSON
+
+
 def _lava_json_motor(texto: str) -> tuple[str, bool]:
     """DT #353: lavagem cosmética de JSON de motor buscar / motor rag.
 
@@ -164,7 +173,7 @@ def _lava_json_motor(texto: str) -> tuple[str, bool]:
         for k, v in f.items():
             if k in ("section_id", "secao_id", "obra", "sim", "trecho", "texto", "titulo", "id", "chave", "anchor"):
                 nf[k] = v
-            elif v in constantes or v == "" or (k == "score" and v == 0.0164):
+            elif _eh_constante_json(v) or v == "" or (k == "score" and v == 0.0164):
                 mudou = True
             elif k == "breadcrumb" and (v == f.get("obra") or not v):
                 mudou = True
@@ -181,7 +190,7 @@ def _lava_json_motor(texto: str) -> tuple[str, bool]:
             if isinstance(c, dict):
                 nc = {}
                 for k, v in c.items():
-                    if v in constantes or v == "":
+                    if _eh_constante_json(v) or v == "":
                         mudou = True
                     elif k == "breadcrumb" and (v == c.get("obra") or not v):
                         mudou = True
