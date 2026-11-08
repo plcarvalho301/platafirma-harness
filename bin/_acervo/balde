@@ -31,7 +31,7 @@ _SHA_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
 
 USO = """uso:
   balde listar <colecao> [--prefixo <p>]               lista objetos do bucket (firma|pessoal)
-  balde ler <sha256> [--colecao <c>]                    metadados do objeto (bytes, content-type, obras)
+  balde ler <sha256> [--colecao <c>]                    metadados do objeto (só existência e tamanho; não lê bytes)
   balde copiar <sha256> --de <colecao> --para <colecao> [--apply]
   balde mover  <sha256> --de <colecao> --para <colecao> [--apply]
                                                          move atualiza objeto+coleção da obra no mesmo ato
@@ -135,6 +135,8 @@ def acao_listar(colecao, prefixo, como_json, headers):
     print(f"balde {colecao}: {len(itens)} objeto(s)")
     for it in itens:
         print(f"  {it.get('objeto'):<70} {it.get('bytes'):>12}  {it.get('modificado_em') or '-'}")
+    if len(itens) >= 1000 or data.get("proximo") is not None:
+        sys.stderr.write(f"balde: listagem truncada em {len(itens)} itens; use --prefixo ou acervo balde varrer para leitura exaustiva\n")
     return 0
 
 
@@ -160,6 +162,7 @@ def acao_ler(sha256, colecao, como_json, headers):
     print(f"content-type: {data.get('content_type')}")
     obras_ref = data.get("obras") or []
     print(f"obras       : {', '.join(obras_ref) if obras_ref else '(nenhuma)'}")
+    print("aferição    : este ato só mede existência e tamanho (stat); não lê bytes (varredura íntegra: acervo balde varrer)")
     return 0
 
 
