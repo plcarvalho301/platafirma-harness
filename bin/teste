@@ -4,7 +4,7 @@
 # dono: ti
 # classe: C
 # use para: ANTES de entregar código, «roda os testes», «a suíte passa?»
-# atos: rodar (leitura, operacao), detectar (leitura, operacao), inventario (leitura, operacao)
+# atos: rodar (leitura, operacao), detectar (leitura, operacao), inventario (leitura, operacao), bench (leitura, operacao)
 # forma: predicado
 # cauda: sim
 #
@@ -20,12 +20,24 @@
 #   rodar       roda a suite de teste (verde/vermelha, bloco fixo, veredito memoizado)
 #   detectar    mostra stack, runner, chave, caminho e a linha que rodaria
 #   inventario  lista arquivos de teste (em portão ou fora, fóssil: não medido)
+#   bench       roda instrumento de medição/benchmark na bancada com credenciais do banco (DT 376)
 set -uo pipefail
 
 . "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
 . "$(dirname "$(readlink -f "$0")")/../lib/venv.sh"
 . "$(dirname "$(readlink -f "$0")")/../lib/terceiros.sh"
 PF_VENV_PREFIXO="teste"
+
+carregar_ambiente_banco() {
+  local stack="${1:-rag}" k v
+  local script_py="$(dirname "$(readlink -f "$0")")/../lib/ambiente_banco.py"
+  if [ -f "$script_py" ]; then
+    while IFS='=' read -r k v; do
+      [ -n "$k" ] && export "$k=$v"
+    done < <(python3 "$script_py" "$stack" 2>/dev/null)
+  fi
+}
+
 # degrau de cada prova da rodada (arq:0129): pequeno, imagem, rodada ou preparo, pelo caminho que o runner recebe
 declare -A DEGRAU_DE_ALVO=()
 
@@ -40,9 +52,10 @@ CHAVE_PY=""; CHAVE_HASH=""; CHAVE_DEST=""
 uso() {
   cat >&2 <<EOF
 uso:
-  $VERBO rodar <nome> [<alvo>...] [--portao] [--arvore <caminho>] [--base <rev>] [--chave <nome>] [--prazo <s>]
+  $VERBO rodar <nome> [<alvo>...] [--banco] [--portao] [--arvore <caminho>] [--base <rev>] [--chave <nome>] [--prazo <s>]
   $VERBO rodar <nome> --portao [--degrau pequeno|imagem|rodada|demanda|todos] [--base <rev>] [--prazo <s>]
   $VERBO rodar <repositorio> --portao --origin-main [--teto-pequeno <s>]
+  $VERBO bench <nome> <script> [<args>...] [--prazo <s>]
   $VERBO detectar <nome> [--chave <nome>]
   $VERBO inventario [<nome>|--all] [--json]
 
@@ -50,6 +63,9 @@ uso:
   <alvo> = caminho dentro da subárvore de teste, um ou mais (sem ele, a suíte da stack:
            os globs de "testes" no registro, senão a subárvore; stack sem nenhum dos dois
            que divide repositório sai 5, card #3316)
+  --banco: roda com credenciais de leitura do banco de produção e EMBED_MODEL no ambiente (DT 376)
+  bench: roda script ou instrumento de medição (ex.: rag/bench/<script>.py) na bancada com
+         credenciais de leitura do banco de produção e devolve o stdout diretamente (DT 376)
   --portao: roda só a lista do portão da subárvore (<sub>/tests/VERDES ou <sub>/VERDES);
             com <nome> = repositório e sem <alvo>, toda chave dele que declara
             subárvore de teste, e passa quando todas passam (arq:0116 §6)
@@ -1230,11 +1246,12 @@ ato_inventario() {
 }
 
 ato_rodar() {
-  local nome="" alvo="" chave="" arvore="" base="" degrau="" teto_pequeno="" portao=0 origem_main=0 EM_ARVORE=0 c rc extras=() extras_resolvidos=()
+  local nome="" alvo="" chave="" arvore="" base="" degrau="" teto_pequeno="" portao=0 origem_main=0 EM_ARVORE=0 c rc extras=() extras_resolvidos=() com_banco=0
   local SELECAO_HASH=""  # visto por pytest_em_bloco (chave do memo parcial)
   local PRAZO=""         # visto por pytest_em_bloco e _node_em_bloco (--prazo ou PF_TESTE_TIMEOUT)
   while [ $# -gt 0 ]; do
     case "$1" in
+      --banco) com_banco=1; shift ;;
       --chave) shift; [ $# -gt 0 ] || morre "--chave exige um valor" 2; chave="$1"; shift ;;
       --base) shift; [ $# -gt 0 ] || morre "--base exige uma rev" 2; base="$1"; shift ;;
       --degrau) shift; [ $# -gt 0 ] || morre "--degrau exige pequeno, imagem ou rodada" 2; degrau="$1"; shift ;;
@@ -1482,6 +1499,7 @@ ato_rodar() {
 
   ambiente_do_registro "$c" || exit $?
   terceiros_na_arvore "$c"
+  [ "${com_banco:-0}" -eq 1 ] && carregar_ambiente_banco "${REG_STACK:-rag}"
 
   local rotulo="$nome"
   [ -n "$chave" ] && rotulo="$nome (chave $chave)"
@@ -1500,6 +1518,45 @@ ato_rodar() {
   return $?
 }
 
+ato_bench() {
+  local nome="" alvo="" PRAZO="" args=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --prazo) shift; [ $# -gt 0 ] || morre "--prazo exige os segundos" 2; PRAZO="$1"; shift ;;
+      *)
+        if [ -z "$nome" ]; then nome="$1"
+        elif [ -z "$alvo" ]; then alvo="$1"
+        else args+=("$1")
+        fi
+        shift ;;
+    esac
+  done
+
+  [ -n "$nome" ] && [ -n "$alvo" ] || morre "uso: $VERBO bench <nome> <script> [<args>...]" 2
+
+  local alvo_resolver="${nome%%@*}"
+  resolver_registro "$alvo_resolver"
+  case "$nome" in *@*) REG_BANCADA="${nome#*@}" ;; esac
+
+  declara_bancada
+  local c="$(clone_de "$REG_FAMILIA${REG_BANCADA:+@$REG_BANCADA}")" || exit $?
+  local alvo_abs="$(alvo_de "$c" "$alvo")" || exit $?
+
+  ambiente_do_registro "$c" || exit $?
+  terceiros_na_arvore "$c"
+  carregar_ambiente_banco "${REG_STACK:-rag}"
+
+  local raiz="$c"
+  [ -n "$REG_SUBARVORE" ] && raiz="$c/$REG_SUBARVORE"
+
+  export PYTHONPATH="${raiz}:${c}/rag:${c}/conversor:${PYTHONPATH:-}"
+
+  local timeout_bench="${PRAZO:-${PF_TESTE_TIMEOUT:-600}}"
+  printf '# %s · bench %s · python %s (raiz %s)\n' "$nome" "${alvo_abs#$c/}" "$CHAVE_PY" "$raiz" >&2
+  (cd "$raiz" && timeout "$timeout_bench" "$CHAVE_PY" "$alvo_abs" ${args[@]+"${args[@]}"})
+  return $?
+}
+
 # Despacho de atos
 if [ $# -eq 0 ]; then
   uso
@@ -1515,9 +1572,10 @@ ato="$1"
 shift
 
 case "$ato" in
-  rodar)      ato_rodar "$@" ;;
-  detectar)   ato_detectar "$@" ;;
-  inventario) ato_inventario "$@" ;;
+  rodar)        ato_rodar "$@" ;;
+  detectar)     ato_detectar "$@" ;;
+  inventario)   ato_inventario "$@" ;;
+  bench|medir)  ato_bench "$@" ;;
   *)
     # arq:0110 §3 Q9: teste <verbo>
     c="$(declara_bancada 2>/dev/null && clone_de "platafirma-harness" 2>/dev/null || true)"
@@ -1540,7 +1598,7 @@ case "$ato" in
       else printf 'suite VERMELHA: %s (bash) — exit %s\n' "$ato" "$rc"; fi
       exit "$rc"
     else
-      morre "ato desconhecido: '$ato' — atos: rodar, detectar, inventario" 2
+      morre "ato desconhecido: '$ato' — atos: rodar, detectar, inventario, bench" 2
     fi
     ;;
 esac

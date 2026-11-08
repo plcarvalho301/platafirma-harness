@@ -48,3 +48,4 @@ test_curar_lote.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_curar_vinculacao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_curar_descricao_4144.py | bin/acervo bin/_acervo/** bin/curar
 test_curar_desrelacionar_desderivar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_teste_bench_dt376.py | bin/teste lib/ambiente_banco.py
