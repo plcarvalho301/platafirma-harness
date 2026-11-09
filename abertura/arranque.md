@@ -22,7 +22,8 @@ mesmo parágrafo. Divergência entre elas não é visível de lugar nenhum.
 2. Pacote não chegou só com o retorno de uma chamada feita pela receita do
    provider, repetida uma vez depois de alguns segundos: erro do conector
    (autenticação, servidor desconectado), ou o cliente dizer que a própria
-   ferramenta da receita não existe (servidores MCP não carregados). Declare
+   ferramenta da receita não existe, só no provider em que isso foi medido como
+   servidores MCP não carregados (hoje, o agy). Declare
    citando o retorno literal, não escreva em repo, wiki nem fila, e responda só
    o que não depende de remit. Tool fora da lista, do bloco ou da busca não
    prova nada. Sem prova citada, não se declara. Não improvise cadeira.
@@ -52,6 +53,20 @@ login pode chegar depois do primeiro turno, o que explica as sessões que
 declaravam falta e abriam quando o dono insistia. A receita volta, a nova
 tentativa cobre o login que chega tarde, e o `providers/agy.md` separa o login do
 agy do login do conector.
+
+**A primitiva de um provider não vale para os outros (09/11/2026, incidente #4188).** O
+conserto do #4186 mediu no agy que «a ferramenta da receita não existe» prova MCP não
+carregado, e escreveu a regra para todo provider. No Codex o Code Mode não expõe
+`tool_search` (openai/codex#32101): a sessão recebeu `tools.tool_search is not a function`,
+declarou falta com o conector logado e mandou o dono sincronizar e refazer o login. Desde
+04/11 a primeira linha da conduta (`abertura/dono.md`), servida a toda superfície, mandava
+chamar `ToolSearch` com `select:`, que é primitiva só do Claude Code e do claude.ai, e a
+cultura do espelho copiou a linha. A conduta e a cultura agora mandam chamar `monta_sessao`
+pelo arranque do harness, sem nomear primitiva; a receita de cada provider mora só na
+tabela do arranque, e a prova por ferramenta inexistente vale só onde foi medida. O
+`sincroniza.sh` do posto, que aplicava a todo provider o passo do Claude Code (`gh api` do
+harness para `~/.claude`) e parava os outros no primeiro erro, virou um orquestrador de
+`sincroniza/<provider>.sh`, um processo por provider.
 
 **«Não chegou» é retorno de chamada, não leitura da lista (18/10/2026).** O agy
 (Gemini) travou a abertura com o conector autenticado: as tools dele vêm sob
@@ -101,8 +116,9 @@ arquivo não se lê antes de a sessão abrir. Mudou aqui, muda lá no mesmo ato.
 
 **O arranque é um só texto (10/10/2026).** `agente/CLAUDE.md` é byte a byte o `AGENTS.md`
 do posto: as duas linhas e a tabela que manda cada provider ao seu arquivo em
-`providers/` do posto, onde moram login, config e regra da sessão. O `sincroniza.sh` do
-posto, que toda instância roda, confere a igualdade antes de instalar e para se divergirem.
+`providers/` do posto, onde moram login, config e regra da sessão. O passo do Claude Code no
+`sincroniza.sh` do posto (`sincroniza/claude-code.sh`) confere a igualdade antes de instalar e
+para se divergirem; os outros providers seguem.
 Mudou um, muda o outro no mesmo ato, senão nenhuma instância atualiza.
 
 **O slug se diz de três jeitos (dono, 15/10/2026).** A primeira linha da mensagem, sozinha,
