@@ -125,7 +125,13 @@ uso:
   tarefas criar "<título>" [--desc "<txt>"|--desc-stdin]
                 [--nivel épico|feature|story] [--cadeira <c>] [--pai <id>] [--incidente]
                 [--originacao negocio|tecnico|incidente] [--executor <c>]
+                [--estado <estado>] [--registro "<porquê>"]
                                           default: story. Débito técnico não é card: `dt admitir`.
+                                          O estado de nascimento vem de --estado, ou de
+                                          PF_ESTADO_INICIAL, ou é captada (incidente: detectado).
+                                          Story sem pai em priorizada ou adiante exige
+                                          --registro, gravado como registro de negócio na
+                                          mesma transação (R16, arq:0127 D8).
                                           Nascer fora de `captada`, ou sair dela, exige o
                                           corpo no padrão do nível (arq:0096)
   tarefas editar <id> [--titulo "<t>"] [--desc "<txt>"|--desc-stdin]

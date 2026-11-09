@@ -32,6 +32,10 @@
       "esteira": "codigo",
       "stack": "rastreador",
       "conferir_no_ar": true
+    },
+    "platafirma-posto": {
+      "esteira": "codigo",
+      "stack": "vault-ontologia"
     }
   },
   "harness": {
@@ -129,6 +133,13 @@
     "familia": "platafirma-ui",
     "lock": "provas/package-lock.json",
     "teste": "provas"
+  },
+  "_vault-ontologia": "suite do vault da ontologia do posto (#2856 linha 453): o script que monta o vault do Obsidian a partir das shapes do espelho e a planilha, com rdflib, PyYAML e openpyxl. O posto nao e familia promovida, de proposito: fica fora de registro/familias.json e declara `promovida: false`, que tira a stack do `release conferir dependencias` (sem release servida, o lock nunca estaria em current). O venv nasce no `teste rodar`, pelo mesmo construtor, e a lista de portao mora em ferramentas/vault-ontologia/testes/VERDES.",
+  "vault-ontologia": {
+    "familia": "platafirma-posto",
+    "promovida": false,
+    "lock": "ferramentas/vault-ontologia/uv.lock",
+    "teste": "ferramentas/vault-ontologia/testes"
   },
   "_rastreador-tela": "stack node das provas de navegador da tela do rastreador (#2856 linha 144): o lock proprio de app/rastreador/provas poe o node_modules na raiz do clone, de onde `import 'puppeteer-core'` se resolve a partir de app/rastreador/provas/*.mjs. Sem 'teste': fora do portao da familia (muitas provas pedem a stack do rastreador no ar); roda por alvo, `teste rodar rastreador-tela@<bancada> provas/construir.sh app/rastreador/provas/<prova>.mjs` (o construir.sh primeiro: as provas medem o dist/).",
   "rastreador-tela": {

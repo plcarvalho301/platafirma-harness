@@ -134,7 +134,7 @@ uso:
   repo estado    [<repo>] [--json]
   repo listar    <repo> [<prefixo>] [--json]
   repo ler       <repo> <caminho>
-  repo procurar  <repo> <termo> [<prefixo>] [--json]   (a forma --termo <termo> segue valendo)
+  repo procurar  <repo> <termo> [<prefixo>] [--json]   (ou --termo <t>, repetido: casa qualquer um)
   repo historico <repo> [<caminho>] [--n <N>] [--json]
   repo diff      <repo> [<caminho>] [--staged]
   repo ramo      <repo> [<card>] [--slug <slug>]
@@ -779,14 +779,17 @@ cmd_ler() {
 }
 
 cmd_procurar() {
+  # --termo repete: a linha volta se casar com qualquer um dos termos, cada um literal (#2856 linha 443).
   local como_json=0 repo="" termo="" prefixo="" extra=""
+  local -a termos=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --json) como_json=1; COMO_JSON=1; shift ;;
       --termo)
         shift
         [ $# -gt 0 ] || morre "--termo exige um valor" 2
-        termo="$1"
+        [ -n "$1" ] || morre "--termo exige um valor não vazio" 2
+        termos+=("$1")
         shift
         ;;
       -*) morre "opção desconhecida: '$1'" 2 ;;
@@ -808,11 +811,15 @@ cmd_procurar() {
   [ -n "$repo" ] || morre "repo obrigatório para procurar" 2
   # O termo também vai posicional: repo procurar <repo> <termo> [<prefixo>] (#2856 linha 82).
   # Com --termo dado, o primeiro posicional depois do repo segue sendo o prefixo.
-  if [ -z "$termo" ] && [ -n "$prefixo" ]; then
-    termo="$prefixo"; prefixo="$extra"; extra=""
+  if [ "${#termos[@]}" -eq 0 ] && [ -n "$prefixo" ]; then
+    termos=("$prefixo"); prefixo="$extra"; extra=""
   fi
   [ -z "$extra" ] || morre "argumento excedente: '$extra'" 2
-  [ -n "$termo" ] || morre "termo obrigatório: repo procurar <repo> <termo> [<prefixo>]" 2
+  [ "${#termos[@]}" -gt 0 ] || morre "termo obrigatório: repo procurar <repo> <termo> [<prefixo>], ou --termo <t> repetido" 2
+  local -a padroes=()
+  local t
+  for t in "${termos[@]}"; do padroes+=(-e "$t"); done
+  termo="$(printf '%s | ' "${termos[@]}")"; termo="${termo% | }"
 
   local c; c="$(clone_de "$repo")" || exit $?
 
@@ -824,9 +831,9 @@ cmd_procurar() {
 
   local out=""
   if [ -n "$prefixo" ]; then
-    out="$("$GIT" -C "$c" grep -n -F -- "$termo" -- "$prefixo" 2>/dev/null || true)"
+    out="$("$GIT" -C "$c" grep -n -F "${padroes[@]}" -- "$prefixo" 2>/dev/null || true)"
   else
-    out="$("$GIT" -C "$c" grep -n -F -- "$termo" 2>/dev/null || true)"
+    out="$("$GIT" -C "$c" grep -n -F "${padroes[@]}" 2>/dev/null || true)"
   fi
 
   if [ -z "$out" ]; then

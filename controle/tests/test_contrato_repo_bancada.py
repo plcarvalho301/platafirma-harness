@@ -684,6 +684,32 @@ def test_procurar_aceita_o_termo_posicional_e_o_prefixo_depois(tmp_path):
     assert sem_termo.returncode == 2 and "termo obrigat" in sem_termo.stderr
 
 
+def test_procurar_com_termo_repetido_casa_qualquer_um_e_cada_um_literal(tmp_path):
+    """#2856 linha 443: uma chamada com vários termos, no lugar de uma busca por termo."""
+    bancada = _montar(tmp_path)
+    _abrir_42(tmp_path, bancada)
+    um = _repo(tmp_path, bancada, "s1", "procurar", "demo", "--termo", "x")
+    dois = _repo(tmp_path, bancada, "s1", "procurar", "demo", "--termo", "termo-que-nao-existe", "--termo", "x")
+    assert dois.returncode == 0, dois.stderr
+    assert "LEIA.md" in dois.stdout and dois.stdout == um.stdout
+    nenhum = _repo(tmp_path, bancada, "s1", "procurar", "demo", "--termo", "zz-nada", "--termo", "yy-nada")
+    assert nenhum.returncode == 0 and "zz-nada | yy-nada" in nenhum.stdout
+    # literal: a barra de alternância não é expressão regular
+    alternancia = _repo(tmp_path, bancada, "s1", "procurar", "demo", "--termo", "x|zz-nada")
+    assert "não encontrado" in alternancia.stdout
+    vazio = _repo(tmp_path, bancada, "s1", "procurar", "demo", "--termo", "")
+    assert vazio.returncode == 2
+    # spec repo §2: termo que parece flag chega ao git como dado (-e), nunca como opção
+    # (`--help` fica de fora: o verbo o lê antes de qualquer ato e imprime o uso)
+    for flag in ("-x", "--open-files-in-pager"):
+        r = _repo(tmp_path, bancada, "s1", "procurar", "demo", "--termo", flag, "--termo", "x")
+        assert r.returncode == 0 and "LEIA.md" in r.stdout, (flag, r.stderr)
+    # vários termos com prefixo: o ramo do `-- <prefixo>`
+    com_prefixo = _repo(tmp_path, bancada, "s1", "procurar", "demo", "--termo", "zz-nada", "--termo", "x",
+                        "LEIA.md")
+    assert com_prefixo.returncode == 0 and "LEIA.md" in com_prefixo.stdout
+
+
 # --- commitar sem caminho: o bruto da abertura da sessao em diante (card #3354, arq:0123 regra 10) -----------
 
 def _sessao_aberta_em(tmp_path, instante, texto=None):

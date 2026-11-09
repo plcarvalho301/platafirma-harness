@@ -659,11 +659,19 @@ def cmd_tratar(rc, eu: str, args):
     if not args.msgids:
         sys.stderr.write("erro: passe ao menos um msgid (o que `fila ler` imprime em ===MSG <id>===)\n")
         sys.exit(2)
-    falhou = False
+    falhou = nao_lida = False
     for mid, res in tratar(rc, alvo, args.msgids):
         print(f"{mid}: {res}")
         if res in ("nao existe", "nao lida"):
             falhou = True
+        if res == "nao lida":
+            nao_lida = True
+    if nao_lida:
+        # spec fila §5: recusa com a cura. `--tudo`, `--desde` e `--penduradas` sao frios e
+        # nao entregam; so `fila ler <eu>` entrega a carta e deixa trata-la (#2856 linha 463).
+        sys.stderr.write(
+            f"cura: carta nao lida nao se trata; entregue-a com `fila ler {alvo}` (a leitura "
+            "quente, sem --tudo/--desde/--penduradas) e trate de novo\n")
     if falhou:
         sys.exit(1)
 
