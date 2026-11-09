@@ -1368,3 +1368,35 @@ def test_transcript_pasta_isolada(mundo, pessoa, monkeypatch):
     assert log["uso"]["chamadas"] == 1
     assert log["uso"]["entrada"] == 12 + 2 + 8
     assert log["uso"]["saida"] == 4
+
+
+def test_aviso_mede_pico_da_janela_e_nao_soma_cumulativa_de_cache(mundo, pessoa, monkeypatch, capsys):
+    """DT 334: o aviso de tokens mede o pico da janela por chamada (maior entrada), não a soma com cache lido."""
+    juiz_teto = dict(JUIZ)
+    juiz_teto["teto"] = {"turnos": 10, "tokens_execucao": 200, "tokens_janela": 300000}
+    mundo.escreve(juiz_teto)
+    monkeypatch.setenv("STUB_SESSAO_CODE", "sess-code-pico-123")
+    stub_multiturno = STUB_CLAUDE.replace(
+        'print(json.dumps({{"type": "result"',
+        'tr_dir = os.path.join(os.getcwd(), "projects", "default")\n'
+        'os.makedirs(tr_dir, exist_ok=True)\n'
+        'with open(os.path.join(tr_dir, "sess-code-pico-123.jsonl"), "w") as f:\n'
+        '    f.write(json.dumps({{"type": "user", "message": {{"content": "ok"}}}}) + "\\n")\n'
+        '    f.write(json.dumps({{"type": "assistant", "requestId": "req1", "message": {{"content": "p1", "usage": {{"input_tokens": 50, "output_tokens": 10, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 100}}}}}}) + "\\n")\n'
+        '    f.write(json.dumps({{"type": "assistant", "requestId": "req2", "message": {{"content": "p2", "usage": {{"input_tokens": 50, "output_tokens": 10, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 100}}}}}}) + "\\n")\n'
+        'print(json.dumps({{"type": "result"'
+    )
+    _stub(mundo.inst.parent, "claude", stub_multiturno)
+    monkeypatch.setenv("PF_CLAUDE_BIN", str(mundo.inst.parent / "claude"))
+
+    # Soma cumulativa de entrada é 150 + 150 = 300 (> 200), mas o pico por chamada é 150 (<= 200) -> SEM aviso
+    assert roda(monkeypatch, "juiz", tarefa="julgue") == 0
+    err = capsys.readouterr().err
+    assert "passaram de tokens_execucao" not in err
+
+    # Agora com tokens_execucao = 120, o pico 150 ultrapassa -> COM aviso
+    juiz_teto["teto"]["tokens_execucao"] = 120
+    mundo.escreve(juiz_teto)
+    assert roda(monkeypatch, "juiz", tarefa="julgue") == 0
+    err = capsys.readouterr().err
+    assert "tokens da execução 150 passaram de tokens_execucao 120" in err

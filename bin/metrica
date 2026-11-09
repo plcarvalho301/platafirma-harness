@@ -1196,7 +1196,7 @@ com `fonte: bruto`.
 --fonte     particao ou bruto, em `dia` e `verbos`. `--fonte bruto` da a leitura de antes (fita, cadeia de erro,
             deduplicacao por lote, ajuda); `dia` traz nas duas fontes as mesmas chaves `giros_por_tool_e_classe`,
             `giros_por_classe`, `giros_por_tool` e `giros_por_origem`, para conferir uma contra a outra
---por       so em `turnos`: dia, superficie (default), cadeira, origem
+--por       so em `turnos` e `verbos`: em `turnos`: dia, superficie (default), cadeira, origem; em `verbos`: superficie, cadeira, origem
 --latencia  so em `verbos`, da particao (D5.7, medida=latencia): por verbo e por verbo:ato, os baldes de dur_ms,
             `sem_duracao`, a faixa do p50 e do p90 e o tempo total estimado; --resumo ordena pelo tempo, --csv da
             uma linha por verbo:ato (#3414)
@@ -1308,12 +1308,20 @@ def texto(ato, r):
 def _da_particao(ato, args, dias, rotulo, dia, hoje):
     """`dia`, `verbos` e `turnos` pela particao. Dia sem passada sai `ausente` com o motivo e exit 0: e uma resposta
     inteira (a cobertura diz por que), nao uma falha. A particao fora do ar e exit 3, com o caminho do bruto."""
-    por = [x.strip() for x in args.por.split(",") if x.strip()] or ["superficie"]
     if ato == "turnos":
+        por = [x.strip() for x in args.por.split(",") if x.strip()] or ["superficie"]
         fora = [x for x in por if x not in particao.POR_TURNOS]
         if fora:
             return erro_gracioso(f"{VERBO} turnos: --por {','.join(fora)} desconhecido",
                                  [f"as chaves: {', '.join(particao.POR_TURNOS)}"], 2)
+    elif ato == "verbos" and args.por:
+        por = [x.strip() for x in args.por.split(",") if x.strip()]
+        fora = [x for x in por if x not in particao.POR_VERBOS]
+        if fora:
+            return erro_gracioso(f"{VERBO} verbos: --por {','.join(fora)} desconhecido",
+                                 [f"as chaves: {', '.join(particao.POR_VERBOS)}"], 2)
+    else:
+        por = None
     try:
         api = _api()
         if ato == "dia":
@@ -1322,7 +1330,7 @@ def _da_particao(ato, args, dias, rotulo, dia, hoje):
         elif ato == "verbos":
             r = particao.verbos_da_particao(api, dias, rotulo, hoje, _bruto_ausente, TRANSPORTE,
                                             args.cadeira or None, latencia=args.latencia, bytes_=args.bytes,
-                                            origem=args.origem or None)
+                                            origem=args.origem or None, por=por)
             texto_ = (particao.latencia_texto if args.latencia else
                       particao.bytes_texto if args.bytes else particao.verbos_texto)
         else:
@@ -1449,9 +1457,13 @@ def main(argv):
     if args.origem and not args.bytes:
         return erro_gracioso(f"{VERBO} {ato}: --origem so vale com --bytes",
                              [f"{VERBO} verbos --desde AAAA-MM-DD --ate AAAA-MM-DD --bytes --origem cadeira"], 2)
-    if args.por and ato != "turnos":
-        return erro_gracioso(f"{VERBO} {ato}: --por so vale em `turnos`",
-                             [f"{VERBO} turnos [<dia>] --por dia,superficie,cadeira,origem"], 2)
+    if args.por and ato not in ("turnos", "verbos"):
+        return erro_gracioso(f"{VERBO} {ato}: --por so vale em `turnos` e `verbos`",
+                             [f"{VERBO} turnos [<dia>] --por dia,superficie,cadeira,origem",
+                              f"{VERBO} verbos [<dia>] --por superficie,cadeira,origem"], 2)
+    if args.por and ato == "verbos" and fonte_pedida == "bruto":
+        return erro_gracioso(f"{VERBO} verbos: --por le a particao (D5.7), nao o bruto",
+                             ["tire --fonte bruto; a janela tem de ter dia fechado (o dia aberto so o bruto tem)"], 2)
     if ato == "turnos" and (args.cadeira or args.sessao or args.azp or args.tipo):
         return erro_gracioso(
             f"{VERBO} turnos: --cadeira, --sessao, --azp e --tipo nao filtram `turnos`",

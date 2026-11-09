@@ -91,6 +91,8 @@ def test_stdin_texto_string_com_json_nao_e_reserializada():
 def test_eh_pipe_stdin_aceita_so_de_int_exato():
     assert s._eh_pipe_stdin({"de": 0}) is True
     assert s._eh_pipe_stdin({"de": 3}) is True
+    assert s._eh_pipe_stdin({"stdin_de": 0}) is True
+    assert s._eh_pipe_stdin({"stdin_de": 3}) is True
 
 
 def test_eh_pipe_stdin_recusa_forma_diferente():
@@ -102,6 +104,10 @@ def test_eh_pipe_stdin_recusa_forma_diferente():
     assert s._eh_pipe_stdin("de") is False
     assert s._eh_pipe_stdin(None) is False
     assert s._eh_pipe_stdin({"de": True}) is False          # bool é int em Python
+    assert s._eh_pipe_stdin({"stdin_de": "0"}) is False
+    assert s._eh_pipe_stdin({"stdin_de": 0, "extra": 1}) is False
+    assert s._eh_pipe_stdin({"de": 0, "stdin_de": 0}) is False
+    assert s._eh_pipe_stdin({"stdin_de": True}) is False
 
 
 # --- ponto de entrada 1: _item_de_lote (item de run_command, ~962) -----------------
@@ -178,6 +184,37 @@ async def test_run_command_lote_stdin_de_continua_pipe():
 
     assert len(chamadas) == 2
     assert chamadas[1] == "saida-do-item-0"
+    assert "lote" in res
+
+
+@pytest.mark.anyio
+async def test_run_command_lote_stdin_de_reaproveita_stdin():
+    """DT 517: {"stdin_de": n} reaproveita o stdin do item n sem repetir o corpo."""
+    chamadas = []
+
+    def fake_run_verbo_blocking(argv, stdin, timeout, ident, prazo=None):
+        chamadas.append(stdin)
+        return {"exit_code": 0, "stdout": {"texto": f"out-{len(chamadas)}", "bytes_total": 5, "truncado": False}}
+
+    novos_slugs = set(s.SLUGS_SERVIDOS) | {"repo"}
+    novos_bins = dict(s.BINARIOS)
+    novos_bins["repo"] = "/opt/bin/repo"
+
+    with patch("server.SLUGS_SERVIDOS", novos_slugs), \
+         patch("server.BINARIOS", novos_bins), \
+         patch("server._autoriza", return_value=None), \
+         patch("server._rc", return_value=_rc_vazio()), \
+         patch("server._audit"), \
+         patch("server._run_verbo_blocking", side_effect=fake_run_verbo_blocking):
+
+        res = await s.malote(commands=[
+            {"verbo": "repo", "ato": "commitar", "args": [], "stdin": "corpo compartilhado"},
+            {"verbo": "repo", "ato": "commitar", "args": [], "stdin": {"stdin_de": 0}},
+        ])
+
+    assert len(chamadas) == 2
+    assert chamadas[0] == "corpo compartilhado"
+    assert chamadas[1] == "corpo compartilhado"
     assert "lote" in res
 
 

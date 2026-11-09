@@ -67,6 +67,16 @@ class FakeRC:
     def xack(self, *a, **k):
         return True
 
+    def xadd(self, chave, campos):
+        persona = chave.split(":", 1)[1]
+        self._personas.setdefault(persona, {"xrange": [], "xlen": 0, "groups": [], "consumers": []})
+        self._personas[persona]["xrange"].append(("fake-id", campos))
+        self._personas[persona]["xlen"] += 1
+        return "fake-id"
+
+    def set(self, *a, **k):
+        return True
+
 
 def _rodar_cli(monkeypatch, capsys, argv, eu, rc):
     """Reproduz o caminho real: main() inteiro, com r_conn() trocado pelo fake."""
@@ -520,4 +530,27 @@ def test_desde_aceita_data_iso(monkeypatch, capsys):
     })
     code, cap = _rodar_cli(monkeypatch, capsys, ["ler", "ti", "--desde", "2026-09-18"], "ti", rc)
     assert code == 0
+
+
+def test_enviar_multidestinatarios(monkeypatch, capsys):
+    """DT 517: fila enviar aceita múltiplos destinatários, lê stdin 1 vez e grava em cada caixa."""
+    import io
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti", "ia", "fabrica"})
+    rc = FakeRC({
+        "ti": {"xlen": 0, "groups": [], "xrange": [], "consumers": []},
+        "ia": {"xlen": 0, "groups": [], "xrange": [], "consumers": []},
+    })
+    monkeypatch.setattr(sys, "stdin", io.StringIO("mensagem para ambos"))
+    code, cap = _rodar_cli(
+        monkeypatch, capsys,
+        ["enviar", "ti", "ia", "--tipo", "pedido", "--assunto", "circular"],
+        "fabrica", rc,
+    )
+    assert code == 0
+    linhas = [l for l in cap.out.strip().splitlines() if l]
+    assert len(linhas) == 2
+    assert len(rc._personas["ti"]["xrange"]) == 1
+    assert rc._personas["ti"]["xrange"][0][1]["corpo"] == "mensagem para ambos"
+    assert len(rc._personas["ia"]["xrange"]) == 1
+    assert rc._personas["ia"]["xrange"][0][1]["corpo"] == "mensagem para ambos"
 

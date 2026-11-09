@@ -1031,10 +1031,11 @@ def chama_claude(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | Non
             if not arq:
                 arq = transcript.da_sessao(sessao_code)
         lido = transcript.soma(arq) if arq else None
+        pedidos = transcript.por_pedido(arq) if arq else None
         if lido:
             u = {"input_tokens": lido["entrada"], "output_tokens": lido["saida"],
                  "cache_creation_input_tokens": lido["cache_criacao"], "cache_read_input_tokens": lido["cache_leitura"]}
-            fonte, chamadas = "transcript", len(transcript.por_pedido(arq) or {})
+            fonte, chamadas = "transcript", len(pedidos or {})
         else:
             u, fonte, chamadas = obj.get("usage") or {}, "resumo", None
         # o cache conta: sem ele a entrada saía 4 tokens numa revisão de 4 mil de saída (medido em 01/10).
@@ -1046,9 +1047,14 @@ def chama_claude(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | Non
         leitura = u.get("cache_read_input_tokens", 0)
         entrada = nova + criacao + leitura
         saida = u.get("output_tokens", 0)
+        # DT 334: o aviso de tokens mede o pico da janela por chamada (maior entrada de uma chamada), não a soma com cache lido
+        if pedidos:
+            pico = max((p.get("input_tokens", 0) + p.get("cache_creation_input_tokens", 0) + p.get("cache_read_input_tokens", 0)) for p in pedidos.values())
+        else:
+            pico = entrada
         aviso = ""
-        if entrada + saida > t["tokens_execucao"]:         # o CLI só corta por turnos: aqui se mede e se avisa
-            aviso = f"tokens da execução {entrada + saida} passaram de tokens_execucao {t['tokens_execucao']} (medido, não cortado)"
+        if pico > t["tokens_execucao"]:         # o CLI só corta por turnos: aqui se mede e se avisa
+            aviso = f"tokens da execução {pico} passaram de tokens_execucao {t['tokens_execucao']} (medido, não cortado)"
         return {"retorno": obj["result"], "aviso": aviso,
                 "uso": {"entrada": entrada, "saida": saida, "turnos": obj.get("num_turns"),
                         "entrada_nova": nova, "cache_criacao": criacao, "cache_leitura": leitura,

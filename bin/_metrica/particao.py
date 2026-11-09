@@ -205,25 +205,12 @@ def dia_da_particao(api, dia: str, hoje: date, bruto_ausente, cadeira: str | Non
 
 # --- metrica verbos ------------------------------------------------------------------------------------
 
+POR_VERBOS = ("superficie", "cadeira", "origem")
 COLS_VERBOS_PARTICAO = ("verbo", "giros", "erros", "taxa", "gramatica", "execucao", "negativa", "negada",
                         "interrompida")
 
 
-def verbos_da_particao(api, dias: list[str], rotulo: str, hoje: date, bruto_ausente, transporte: tuple,
-                       cadeira: str | None = None, latencia: bool = False, bytes_: bool = False,
-                       origem: str | None = None) -> dict:
-    """`metrica verbos` pela partição, numa janela de dias. Dia sem passada fica fora da conta e dentro de
-    `cobertura` (e de `dias_sem_log`) com o motivo: a taxa da janela é a dos dias que a partição tem. Com
-    `latencia`, também o tempo por verbo e por verbo:ato (`latencia_da_particao`, #3414)."""
-    cob = cobertura(api, dias, hoje, bruto_ausente)
-    base = {"dia": rotulo, "dias": dias, "dias_sem_log": _ausentes(cob), "fonte": FONTE,
-            "versoes_extrator": _versoes(cob), "cobertura": cob}
-    if len(_ausentes(cob)) == len(dias):
-        return {**base, "resultado": "ausente", "so_no_bruto": list(SO_NO_BRUTO_VERBOS)}
-    por = ["tool", "ato", "classe"] + (["cadeira"] if cadeira else [])
-    series = medir_giros(api, dias[0], dias[-1], por).get("series", [])
-    if cadeira:
-        series = [s for s in series if (s.get("chave") or {}).get("cadeira") == cadeira]
+def _processar_contagens(series: list[dict], transporte: tuple) -> tuple[dict, dict, dict]:
     por_tool: dict = defaultdict(lambda: Counter())
     for s in series:
         chave, n = s.get("chave") or {}, int(s.get("n") or 0)
@@ -239,15 +226,57 @@ def verbos_da_particao(api, dias: list[str], rotulo: str, hoje: date, bruto_ause
     transp = {t: linhas[t] for t in transporte if t in linhas}
     ordenado = dict(sorted(verbo.items(), key=lambda kv: (-kv[1]["erros"], -kv[1]["giros"], kv[0] or "")))
     tg, te = sum(d["giros"] for d in verbo.values()), sum(d["erros"] for d in verbo.values())
+    tot = {"verbos": len(verbo), "giros": tg, "erros": te, "taxa": round(te / tg, 4) if tg else 0}
+    return ordenado, dict(sorted(transp.items(), key=lambda kv: -kv[1]["giros"])), tot
+
+
+def verbos_da_particao(api, dias: list[str], rotulo: str, hoje: date, bruto_ausente, transporte: tuple,
+                       cadeira: str | None = None, latencia: bool = False, bytes_: bool = False,
+                       origem: str | None = None, por: list[str] | None = None) -> dict:
+    """`metrica verbos` pela partição, numa janela de dias. Dia sem passada fica fora da conta e dentro de
+    `cobertura` (e de `dias_sem_log`) com o motivo: a taxa da janela é a dos dias que a partição tem. Com
+    `latencia`, também o tempo por verbo e por verbo:ato (`latencia_da_particao`, #3414)."""
+    cob = cobertura(api, dias, hoje, bruto_ausente)
+    base = {"dia": rotulo, "dias": dias, "dias_sem_log": _ausentes(cob), "fonte": FONTE,
+            "versoes_extrator": _versoes(cob), "cobertura": cob}
+    if len(_ausentes(cob)) == len(dias):
+        return {**base, "resultado": "ausente", "so_no_bruto": list(SO_NO_BRUTO_VERBOS)}
+    dims = ["tool", "ato", "classe"]
+    if cadeira and "cadeira" not in dims:
+        dims.append("cadeira")
+    if origem and "origem" not in dims:
+        dims.append("origem")
+    for p in (por or []):
+        if p not in dims:
+            dims.append(p)
+    series = medir_giros(api, dias[0], dias[-1], dims).get("series", [])
+    if cadeira:
+        series = [s for s in series if (s.get("chave") or {}).get("cadeira") == cadeira]
+    if origem:
+        series = [s for s in series if (s.get("chave") or {}).get("origem") == origem]
+    ordenado, transp_ord, total = _processar_contagens(series, transporte)
     r = {**base, "por_verbo": ordenado,
-         "transporte": dict(sorted(transp.items(), key=lambda kv: -kv[1]["giros"])),
-         "total": {"verbos": len(verbo), "giros": tg, "erros": te, "taxa": round(te / tg, 4) if tg else 0},
+         "transporte": transp_ord,
+         "total": total,
          "regra_de_erro": _regra_de_erro(),
          "so_no_bruto": list(SO_NO_BRUTO_VERBOS)}
+    if por:
+        r["por"] = por
+        grupos = defaultdict(list)
+        for s in series:
+            ch = s.get("chave") or {}
+            k = tuple(ch.get(campo) for campo in por)
+            grupos[k].append(s)
+        particoes = []
+        for k, s_grupo in grupos.items():
+            ord_p, transp_p, tot_p = _processar_contagens(s_grupo, transporte)
+            particoes.append({"chave": dict(zip(por, k)), "total": tot_p, "por_verbo": ord_p, "transporte": transp_p})
+        particoes.sort(key=lambda p: (-p["total"]["giros"], -p["total"]["erros"], tuple(str(p["chave"].get(x)) for x in por)))
+        r["particoes"] = particoes
     if latencia:
         r["latencia"] = latencia_da_particao(api, dias[0], dias[-1], transporte, cadeira)
     if bytes_:
-        r["bytes"] = bytes_da_particao(api, dias[0], dias[-1], transporte, cadeira, origem)
+        r["bytes"] = bytes_da_particao(api, dias[0], dias[-1], transporte, cadeira, origem, por=por)
     if cadeira:
         r["cadeira"] = cadeira
     return r
@@ -262,8 +291,16 @@ REGRA_BYTES = ("servidos = o que a porta entregou (bytes_servidos); podados = pr
 SOMAS_BYTES = ("n", "com_bytes", "servidos", "produzidos", "podados", "cortados")
 
 
-def _series_bytes(api, desde: str, ate: str, por: list[str], cadeira: str | None, origem: str | None) -> list[dict]:
-    dims = por + (["origem"] if origem else []) + (["cadeira"] if cadeira else [])
+def _series_bytes(api, desde: str, ate: str, por: list[str], cadeira: str | None, origem: str | None,
+                  por_dims: list[str] | None = None) -> list[dict]:
+    dims = list(por)
+    for p in (por_dims or []):
+        if p not in dims:
+            dims.append(p)
+    if origem and "origem" not in dims:
+        dims.append("origem")
+    if cadeira and "cadeira" not in dims:
+        dims.append("cadeira")
     series = medir_giros(api, desde, ate, dims, medida="bytes").get("series", [])
     if origem:
         series = [s for s in series if (s.get("chave") or {}).get("origem") == origem]
@@ -289,23 +326,50 @@ def _juntar_bytes(series: list[dict], chave_de) -> dict:
 
 
 def bytes_da_particao(api, desde: str, ate: str, transporte: tuple, cadeira: str | None = None,
-                      origem: str | None = None) -> dict:
+                      origem: str | None = None, por: list[str] | None = None) -> dict:
     """D5.7 com medida=bytes, por verbo e por verbo:ato, numa ordem só (servidos desc). O transporte (ler_arquivo,
     malote...) entra na mesma ordem, porque o custo é de quem entrega bytes, e sai marcado em `transporte`."""
-    tools = _juntar_bytes(_series_bytes(api, desde, ate, ["tool"], cadeira, origem), lambda c: c.get("tool") or "-")
-    atos = _juntar_bytes(_series_bytes(api, desde, ate, ["tool", "ato"], cadeira, origem),
-                         lambda c: f"{c.get('tool') or '-'}:{c.get('ato') or '-'}")
+    s_tools = _series_bytes(api, desde, ate, ["tool"], cadeira, origem, por_dims=por)
+    s_atos = _series_bytes(api, desde, ate, ["tool", "ato"], cadeira, origem, por_dims=por)
+    tools = _juntar_bytes(s_tools, lambda c: c.get("tool") or "-")
+    atos = _juntar_bytes(s_atos, lambda c: f"{c.get('tool') or '-'}:{c.get('ato') or '-'}")
     total = sum(d["servidos"] for d in tools.values())
-    def com_pct(d: dict) -> dict:
+    def com_pct(d: dict, tot: int) -> dict:
         out = {}
         for k, v in sorted(d.items(), key=lambda kv: (-kv[1]["servidos"], kv[0])):
-            out[k] = {**v, "pct": round(v["servidos"] / total, 4) if total else 0}
+            out[k] = {**v, "pct": round(v["servidos"] / tot, 4) if tot else 0}
         return out
     r = {"medida": "bytes", "regra": REGRA_BYTES,
          "total": {"servidos": total, "podados": sum(d["podados"] for d in tools.values()),
                    "giros": sum(d["n"] for d in tools.values())},
-         "por_verbo": com_pct(tools), "por_ato": com_pct(atos),
+         "por_verbo": com_pct(tools, total), "por_ato": com_pct(atos, total),
          "transporte": sorted(t for t in tools if t in transporte)}
+    if por:
+        r["por"] = por
+        grupos_tools = defaultdict(list)
+        for s in s_tools:
+            k = tuple((s.get("chave") or {}).get(campo) for campo in por)
+            grupos_tools[k].append(s)
+        grupos_atos = defaultdict(list)
+        for s in s_atos:
+            k = tuple((s.get("chave") or {}).get(campo) for campo in por)
+            grupos_atos[k].append(s)
+        todas_chaves = sorted(set(grupos_tools.keys()) | set(grupos_atos.keys()))
+        particoes = []
+        for k in todas_chaves:
+            p_tools = _juntar_bytes(grupos_tools.get(k, []), lambda c: c.get("tool") or "-")
+            p_atos = _juntar_bytes(grupos_atos.get(k, []), lambda c: f"{c.get('tool') or '-'}:{c.get('ato') or '-'}")
+            p_total = sum(d["servidos"] for d in p_tools.values())
+            particoes.append({
+                "chave": dict(zip(por, k)),
+                "total": {"servidos": p_total, "podados": sum(d["podados"] for d in p_tools.values()),
+                          "giros": sum(d["n"] for d in p_tools.values())},
+                "por_verbo": com_pct(p_tools, p_total),
+                "por_ato": com_pct(p_atos, p_total),
+                "transporte": sorted(t for t in p_tools if t in transporte)
+            })
+        particoes.sort(key=lambda p: (-p["total"]["servidos"], -p["total"]["giros"], tuple(str(p["chave"].get(x)) for x in por)))
+        r["particoes"] = particoes
     if origem:
         r["origem"] = origem
     return r
@@ -342,17 +406,31 @@ def bytes_texto(r: dict, top_atos: int = 20) -> list[str]:
     recorte = f" · origem {b['origem']}" if b.get("origem") else ""
     linhas.append(f"{_tam(b['total']['servidos'])} servidos · {_tam(b['total']['podados'])} podados · "
                   f"{b['total']['giros']} giros{recorte}")
-    linhas.append("bytes por verbo, do maior total servido ao menor (* = transporte):")
-    linhas.append(f"{'verbo':16s} {'giros':>6s} {'servidos':>10s} {'%':>6s} {'p50':>9s} {'p90':>9s} "
-                  f"{'podados':>10s} {'cortes':>6s}")
-    for v, d in b["por_verbo"].items():
-        nome = v + ("*" if v in b["transporte"] else "")
-        linhas.append(f"{nome:16s} {d['n']:6d} {_tam(d['servidos']):>10s} {d['pct']:6.1%} {_tam(d['p50']):>9s} "
-                      f"{_tam(d['p90']):>9s} {_tam(d['podados']):>10s} {d['cortados']:6d}")
-    linhas.append("")
-    linhas.append(f"atos (top {top_atos} por bytes servidos):")
-    for a, d in list(b["por_ato"].items())[:top_atos]:
-        linhas.append(f"  {a:28s} {d['n']:6d} giros · {_tam(d['servidos'])} ({d['pct']:.1%}) · p50 {_tam(d['p50'])}")
+
+    def _tabela_bytes(b_bloco: dict) -> list[str]:
+        out = ["bytes por verbo, do maior total servido ao menor (* = transporte):",
+               f"{'verbo':16s} {'giros':>6s} {'servidos':>10s} {'%':>6s} {'p50':>9s} {'p90':>9s} "
+               f"{'podados':>10s} {'cortes':>6s}"]
+        for v, d in b_bloco["por_verbo"].items():
+            nome = v + ("*" if v in b_bloco["transporte"] else "")
+            out.append(f"{nome:16s} {d['n']:6d} {_tam(d['servidos']):>10s} {d['pct']:6.1%} {_tam(d['p50']):>9s} "
+                       f"{_tam(d['p90']):>9s} {_tam(d['podados']):>10s} {d['cortados']:6d}")
+        out.append("")
+        out.append(f"atos (top {top_atos} por bytes servidos):")
+        for a, d in list(b_bloco["por_ato"].items())[:top_atos]:
+            out.append(f"  {a:28s} {d['n']:6d} giros · {_tam(d['servidos'])} ({d['pct']:.1%}) · p50 {_tam(d['p50'])}")
+        return out
+
+    if b.get("particoes"):
+        for p in b["particoes"]:
+            ch = " · ".join(f"{k}={v}" for k, v in p["chave"].items())
+            pt = p["total"]
+            linhas.append("")
+            linhas.append(f"--- {ch}: {_tam(pt['servidos'])} servidos · {_tam(pt['podados'])} podados · {pt['giros']} giros ---")
+            linhas.extend(_tabela_bytes(p))
+    else:
+        linhas.extend(_tabela_bytes(b))
+
     linhas.append("")
     linhas.append("regra: " + b["regra"])
     return linhas
@@ -571,16 +649,30 @@ def verbos_texto(r: dict) -> list[str]:
         return linhas
     t = r["total"]
     linhas.append(f"{t['giros']} giros · {t['erros']} erros · taxa {t['taxa']:.1%} · {t['verbos']} verbos")
-    linhas.append(f"{'verbo':16s} {'giros':>6s} {'erros':>6s} {'taxa':>7s} {'gram':>5s} {'exec':>5s} "
-                  f"{'negat':>5s} {'negad':>5s} {'inter':>5s}")
-    for v, d in r["por_verbo"].items():
-        linhas.append(f"{(v or '-'):16s} {d['giros']:6d} {d['erros']:6d} {d['taxa']:7.1%} {d['gramatica']:5d} "
-                      f"{d['execucao']:5d} {d['negativa']:5d} {d['negada']:5d} {d['interrompida']:5d}")
-    if r.get("transporte"):
-        linhas.append("")
-        linhas.append("transporte (não é verbo da planilha):")
-        for v, d in r["transporte"].items():
-            linhas.append(f"  {v:14s} {d['giros']:6d} giros · {d['erros']:5d} erros")
+
+    def _tabela_verbos(por_verbo: dict, transporte: dict | None) -> list[str]:
+        out = [f"{'verbo':16s} {'giros':>6s} {'erros':>6s} {'taxa':>7s} {'gram':>5s} {'exec':>5s} "
+               f"{'negat':>5s} {'negad':>5s} {'inter':>5s}"]
+        for v, d in por_verbo.items():
+            out.append(f"{(v or '-'):16s} {d['giros']:6d} {d['erros']:6d} {d['taxa']:7.1%} {d['gramatica']:5d} "
+                       f"{d['execucao']:5d} {d['negativa']:5d} {d['negada']:5d} {d['interrompida']:5d}")
+        if transporte:
+            out.append("")
+            out.append("transporte (não é verbo da planilha):")
+            for v, d in transporte.items():
+                out.append(f"  {v:14s} {d['giros']:6d} giros · {d['erros']:5d} erros")
+        return out
+
+    if r.get("particoes"):
+        for p in r["particoes"]:
+            ch = " · ".join(f"{k}={v}" for k, v in p["chave"].items())
+            pt = p["total"]
+            linhas.append("")
+            linhas.append(f"--- {ch}: {pt['giros']} giros · {pt['erros']} erros · taxa {pt['taxa']:.1%} · {pt['verbos']} verbos ---")
+            linhas.extend(_tabela_verbos(p["por_verbo"], p.get("transporte")))
+    else:
+        linhas.extend(_tabela_verbos(r["por_verbo"], r.get("transporte")))
+
     linhas.append("")
     linhas.append("só no bruto (--fonte bruto): " + ", ".join(r["so_no_bruto"]))
     return linhas
