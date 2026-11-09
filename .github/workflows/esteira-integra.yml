@@ -1,0 +1,58 @@
+name: esteira — integra o PR com veredito verde
+
+# POR QUE EXISTE (incidente #4196; peças 1 e 2 da feature #4027): quem decide se a mudança
+# entra em main é o portão, não a cadeira nem o dedo do dono. O veredito do portão é medido no
+# host pelo pre-push, na rev empurrada, e `repo sincronizar|empurrar|pr-abrir` o publica aqui
+# como commit status `esteira/portao`. Este workflow integra o PR de ramo fabrica/ cuja ponta
+# tem esse status verde. Veredito vermelho ou ausente não integra nada.
+#
+# ROTEIRO LIDO DE MAIN, NUNCA DO PR: `status` e `pull_request_target` rodam o arquivo que está
+# em main. O PR não reescreve o juiz que o integra, e este job não faz checkout de código.
+#
+# O QUE SE TESTOU É O QUE ENTRA: `--match-head-commit` recusa o merge se a ponta do PR andou
+# depois do veredito. O squash cria sha novo com a mesma árvore, e o gate do `release promover`
+# reaproveita o veredito por árvore.
+
+on:
+  status:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: read
+
+concurrency:
+  group: esteira-integra-${{ github.event.pull_request.head.sha || github.event.sha }}
+  cancel-in-progress: false
+
+jobs:
+  integrar:
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event.context == 'esteira/portao' && github.event.state == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: integra o PR de fabrica/ cuja ponta tem veredito verde
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha || github.event.sha }}
+        run: |
+          set -euo pipefail
+          pr="$(gh pr list --state open --base main --limit 100 \
+                  --json number,headRefName,headRefOid,isDraft,isCrossRepository \
+                  --jq "[.[] | select(.headRefOid == \"$SHA\" and (.headRefName | startswith(\"fabrica/\")) and (.isDraft | not) and (.isCrossRepository | not))][0].number // empty")"
+          if [ -z "$pr" ]; then
+            echo "sem PR aberto de fabrica/ com a ponta em $SHA: nada a integrar"
+            exit 0
+          fi
+          estado="$(gh api "repos/$GH_REPO/commits/$SHA/statuses" \
+                      --jq '[.[] | select(.context == "esteira/portao")][0].state // "ausente"')"
+          if [ "$estado" != "success" ]; then
+            echo "PR #$pr: veredito do portão $estado em $SHA: não integra"
+            exit 0
+          fi
+          gh pr merge "$pr" --squash --match-head-commit "$SHA" --delete-branch
+          echo "PR #$pr integrado em main com veredito verde em $SHA"
