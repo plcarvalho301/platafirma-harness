@@ -12,7 +12,7 @@
       "cliente": "agente-consultado",
       "regra": "fdrl_017KGXAm2QfD87Jgxq332SXh",
       "conta_servico": "svac_01YFBzFQi3ep7J9rF1rdM846",
-      "regime": "plano"
+      "regime": "federacao"
     },
     "agente-agendado": {
       "cliente": "agente-agendado",
