@@ -15,7 +15,7 @@
     "tipo": "preparacao",
     "repositorio": "platafirma-conhecimento",
     "caminho": "analise/mineracao-ocel",
-    "versao": "2edf400"
+    "versao": "fc2e7ee"
   },
   "sequencia-por-evento": {
     "tipo": "analise",
@@ -46,5 +46,11 @@
     "repositorio": "platafirma-conhecimento",
     "caminho": "analise/leitura-dos-cadernos",
     "versao": "24aaa08"
+  },
+  "vista-por-capacidade": {
+    "tipo": "analise",
+    "repositorio": "platafirma-conhecimento",
+    "caminho": "analise/vista-por-capacidade",
+    "versao": "fc2e7ee"
   }
 }
