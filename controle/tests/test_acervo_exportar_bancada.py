@@ -58,5 +58,10 @@ def test_sem_marca_da_sessao_segue_recusando(mod, tmp_path, monkeypatch, capsys)
         mod.bancada_do_repo()
     assert e.value.code == 2 and "--bancada" in capsys.readouterr().err
 
+def test_bancada_main_desempata_quando_multiplas_abertas(mod, tmp_path):
+    # DT 469: quando há múltiplas bancadas abertas e nenhuma chave, escolhe a bancada de main
+    (tmp_path / "wt" / mod.REPO / "dados" / "main" / ".git").mkdir(parents=True)
+    assert mod.bancada_do_repo() == tmp_path / "wt" / mod.REPO / "dados" / "main"
+
 def test_argumento_desconhecido_e_uso(mod):
     assert mod.main(["--outra"]) == 2

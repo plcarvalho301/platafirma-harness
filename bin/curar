@@ -250,6 +250,9 @@ def resolver_obra_id(obra: str, headers: dict, retiradas: bool = False, timeout=
     obra = obra.strip()
     if _UUID_RE.match(obra):
         return obra
+    if "/" in obra:
+        sys.stderr.write(f"curar: '{obra}': títulos com barra não são aceitos na URL; passe o uuid (consulte com `acervo ler biblioteca ficha \"{obra[:30]}\"`)\n")
+        sys.exit(2)
     ordem_qs = ("?retiradas=true", "") if retiradas else ("", "?retiradas=true")
     resp = None
     for qs in ordem_qs:
@@ -336,6 +339,9 @@ def formatar_situacao(payload: dict) -> str:
 def acao_situacao(obra: str, como_json: bool, headers: dict) -> int:
     # `?retiradas=true` carrega SÓ o catálogo das retiradas (servidor): obra viva vira 404.
     # Primeiro o catálogo vivo; retirada só no 404, como segunda leitura.
+    if not _UUID_RE.match(obra) and "/" in obra:
+        sys.stderr.write(f"curar: '{obra}': títulos com barra não são aceitos na URL; passe o uuid (consulte com `acervo ler biblioteca ficha \"{obra[:30]}\"`)\n")
+        sys.exit(2)
     base_url = f"{BASE}/acervo/obras/{urllib.parse.quote(obra, safe='')}/situacao"
     resp = None
     for qs in ("", "?retiradas=true"):
@@ -709,7 +715,9 @@ def _hermit_com(mudanca: list[str], renomeia: tuple[str, str] | None = None) -> 
             "triplas": (base["triplas"], com["triplas"]), "repo": repo}
 
 
-def _exportar(repo: str) -> str | None:
+_BANCADA_CLI: str | None = None
+
+def _exportar(repo: str, bancada: str | None = None) -> str | None:
     """Regenera ontologia/acervo/*.jsonl no clone (cli exportar-acervo). Devolve os arquivos
     alterados segundo o git, ou None se não deu para rodar."""
     # Delega a `acervo exportar` (bin/_acervo/exportar), dono unico do export: venv rag,
@@ -718,7 +726,11 @@ def _exportar(repo: str) -> str | None:
     acervo = os.path.join(os.path.dirname(os.path.realpath(__file__)), "acervo")
     if not os.access(acervo, os.X_OK):
         return None
-    r = subprocess.run([acervo, "exportar"], capture_output=True, text=True, check=False)
+    cmd = [acervo, "exportar"]
+    alvo = bancada or _BANCADA_CLI
+    if alvo:
+        cmd.extend(["--bancada", alvo])
+    r = subprocess.run(cmd, capture_output=True, text=True, check=False)
     saida = (r.stdout + r.stderr).strip()
     if r.returncode:
         return f"acervo exportar falhou: {saida[-300:]}"
@@ -2935,6 +2947,8 @@ def main(argv=None):
 
     args, desconhecidos = parser.parse_known_args(argv)
     args, desconhecidos = _absorve_ids_soltos(args, desconhecidos)
+    global _BANCADA_CLI
+    _BANCADA_CLI = getattr(args, "bancada", None)
 
     if args.ajuda and args.relacionar is not None:
         print(CARTILHA)

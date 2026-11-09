@@ -53,6 +53,17 @@ def _dono_da_bancada(wt: Path) -> str:
     except OSError:
         return ""
 
+def _eh_bancada_main(wt: Path) -> bool:
+    if wt.name == "main":
+        return True
+    try:
+        r = subprocess.run(["git", "-C", str(wt), "rev-parse", "--abbrev-ref", "HEAD"],
+                           capture_output=True, text=True, check=False)
+        ramo = r.stdout.strip()
+        return ramo in ("main", "master") or ramo.endswith("/main")
+    except Exception:
+        return False
+
 def bancada_do_repo(chave: str = "") -> Path:
     """Mesma ordem do verbo `repo`: sessao, cadeira, clone. `chave` (de `--bancada <card-slug>`,
     a mesma do `repo <ato> platafirma-conhecimento@<chave>`) escolhe entre várias bancadas abertas da
@@ -86,6 +97,9 @@ def bancada_do_repo(chave: str = "") -> Path:
             minhas = [p for p in achadas if _dono_da_bancada(p) == os.environ.get("PF_SESSAO", "")]
             if os.environ.get("PF_SESSAO") and len(minhas) == 1:
                 return minhas[0]
+            mains = [p for p in achadas if _eh_bancada_main(p)]
+            if len(mains) == 1:
+                return mains[0]
             morre(f"{len(achadas)} bancadas de {REPO} abertas para {cadeira} "
                   f"({', '.join(p.name for p in achadas)}); diga qual com --bancada <chave>.", 2)
     clone = raiz / REPO

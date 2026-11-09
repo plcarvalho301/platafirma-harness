@@ -383,6 +383,12 @@ conforme() {
     # `--situacao` é aceito e não muda nada: a leitura da obra é a situação dela.
     ler:biblioteca:obra)
         args=(); for a in "$@"; do [[ "$a" == --situacao ]] || args+=("$a"); done
+        local _prim="${args[0]:-}"
+        if [[ "$_prim" == *"/"* ]] && [[ ! "$_prim" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+          echo "acervo ler: títulos com barra não são aceitos como seletor; passe o uuid da obra." >&2
+          echo "  contorno: consulte o id com \`acervo ler biblioteca ficha \"${_prim:0:30}\"\`" >&2
+          exit 2
+        fi
         exec "$ATOS/curar" obra --situacao "${args[@]}" ;;
     # o estado de um lote de espelhar, obra a obra (Transcrever, #3297)
     ler:biblioteca:lote)          exec "$ATOS/curar" obra --reextrair --lote --relatorio "$@" ;;
@@ -464,6 +470,11 @@ classificar() {
       # a obra posicional e opcional: sem ela, a selecao vai por flag (--obras, --de-dominio…)
       if [ $# -gt 0 ] && [[ "$1" != --* ]]; then
         local obra="$1"; shift
+        if [[ "$obra" == *"/"* ]] && [[ ! "$obra" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+          echo "acervo catalogar: títulos com barra não são aceitos como seletor; passe o uuid da obra." >&2
+          echo "  contorno: consulte o id com \`acervo ler biblioteca ficha \"${obra:0:30}\"\`" >&2
+          exit 2
+        fi
         exec "$ATOS/curar" obra --reclassificar --obra "$obra" "$@"
       fi
       exec "$ATOS/curar" obra --reclassificar "$@" ;;
