@@ -4,7 +4,7 @@
 # dono: dados
 # classe: C
 # use para: preparar uma base analítica, montar um resultado ou refazer uma execução
-# atos: bancos (leitura, operacao), preparar (escrita, operacao), montar (escrita, operacao), refazer (leitura, operacao), ler (leitura, operacao), listar (leitura, operacao), descartar (escrita, operacao), travar (escrita, operacao)
+# atos: bancos (leitura, operacao), preparar (escrita, operacao), montar (escrita, operacao), refazer (leitura, operacao), ler (leitura, operacao), listar (leitura, operacao), descartar (escrita, operacao), travar (escrita, operacao), entregar (escrita, operacao)
 # forma: texto
 # cauda: sim
 import sys

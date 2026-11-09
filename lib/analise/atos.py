@@ -353,6 +353,7 @@ def parser() -> Parser:
     p = Parser(add_help=False)
     p.add_argument("ato", nargs="?")
     p.add_argument("alvo", nargs="?")
+    p.add_argument("destino", nargs="?")
     p.add_argument("--ajuda", action="store_true")
     p.add_argument("--guia")
     p.add_argument("--base")
@@ -373,6 +374,7 @@ analise refazer <execucao_id> [--reler]
 analise ler <id> [--tabela <nome>] [--linhas <a-b>] [--projecao <nome>]
 analise listar [bases|resultados|execucoes]
 analise descartar <base_id|resultado_id>
+analise entregar <base_id|resultado_id> <sujeito|todos>
 analise travar <receita> --bancada <chave>
 analise --guia preparacao"""
 
@@ -425,6 +427,7 @@ def main(argv: list[str] | None = None) -> int:
                 "ler",
                 "listar",
                 "descartar",
+                "entregar",
                 "travar",
                 "bancos",
             },
@@ -492,6 +495,13 @@ def main(argv: list[str] | None = None) -> int:
                     motor.autorizar(motor.sujeito, ato, "analise:objeto/" + a.alvo)
                     cat.descartar(a.alvo)
                     bloco = {"estado": "descartada"}
+                    rc = 0
+                elif ato == "entregar":
+                    exigir(a.alvo and a.destino, "objeto-ou-destino-ausente")
+                    motor.autorizar(motor.sujeito, ato, "analise:objeto/" + a.alvo)
+                    bloco = cat.entregar(
+                        a.alvo, "*" if a.destino == "todos" else a.destino
+                    )
                     rc = 0
                 else:
                     exigir(a.alvo, "objeto-ausente")
