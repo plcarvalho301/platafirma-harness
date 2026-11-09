@@ -581,6 +581,7 @@ def listar_conceitos(quero_json, prefixo=None, desde=None, origem=None):
     if origem:
         conds.append("exists (select 1 from acervo.obra_trata_de tr join acervo.obra o on o.id = tr.obra_id join acervo.dominio d on d.id = o.dominio_id where tr.conceito_id = c.id and d.slug = %s)" % _lit(origem))
     where_cl = ("where " + " and ".join(conds)) if conds else ""
+    where_sub = ("\n  " + where_cl) if where_cl else ""
     sql = """
 select coalesce(json_agg(row_to_json(t) order by t.slug), '[]')
 from (
@@ -594,10 +595,9 @@ from (
             where tr.conceito_id = c.id), '{}') as origem,
          (select count(distinct tr.obra_id)
           from acervo.obra_trata_de tr where tr.conceito_id = c.id) as obras_ancora
-  from acervo.conceito c
-  {where_cl}
+  from acervo.conceito c%s
 ) t;
-""".format(where_cl=where_cl)
+""" % where_sub
     conceitos = _psql_json(sql, "conceitos")
     for c in conceitos:
         c["origem"] = c.get("origem") or None
