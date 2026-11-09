@@ -58,7 +58,7 @@ USO = """uso:
                                                               nada no acervo: o item sai `medida` com o relatório
   curar --reextrair --lote --relatorio <lote> [--json]         estado do lote, obra a obra
   curar --rejulgar --lote [--apply]                           espelhos com régua antiga: o veredito de novo, sem reconverter
-  curar --marcar-secoes [--impressao <id>] [--so-sem-faixa] [--apply] [--json]
+  curar --marcar-secoes [--impressao <id>] [--obra <id>] [--so-sem-faixa] [--apply] [--json]
                                                               as seções das impressões servindo como faixa de bytes do
                                                               espelho (spec modelo-acervo-secao §2-bis, #3907): plano confere;
                                                               --apply grava em acervo.secao_faixa
@@ -2117,9 +2117,11 @@ def acao_marcar_secoes(args, autor: str, headers: dict) -> int:
     payload = {"autor": autor, "aplicar": args.apply, "so_sem_faixa": args.so_sem_faixa}
     if args.impressao:
         payload["impressao"] = args.impressao
+    if args.obra:
+        payload["obra_id"] = resolver_obra_id(args.obra, headers)
     if getattr(args, "faixas_modelo", None):
-        if args.impressao or args.so_sem_faixa:
-            sys.stderr.write("curar: erro: --faixas-modelo já escolhe as impressões; não vai com --impressao nem --so-sem-faixa\n")
+        if args.impressao or args.so_sem_faixa or args.obra:
+            sys.stderr.write("curar: erro: --faixas-modelo já escolhe as impressões; não vai com --impressao, --obra nem --so-sem-faixa\n")
             return 2
         try:
             prontas = _faixas_modelo_da_pasta(args.faixas_modelo)
