@@ -194,6 +194,13 @@ def test_marcar_secoes_apply_so_sem_faixa_leva_o_pedido(falso):
 
 
 @precisa_requests
+def test_marcar_secoes_repassa_obra(falso):
+    r = _curar(falso, "--marcar-secoes", "--obra", OBRA)
+    assert r.returncode == 0, r.stderr
+    corpo = falso.chamadas[-1][2]
+    assert corpo.get("obra_id") == OBRA
+
+@precisa_requests
 def test_marcar_secoes_mostra_a_origem_o_sumario_e_a_secao_nao_marcada(falso):
     r = _curar(falso, "--marcar-secoes", "--impressao", "imp-1")
     assert r.returncode == 0, r.stderr
