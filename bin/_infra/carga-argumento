@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""carga-argumento — carga única de argumentos do bruto para acervo.log_argumento (card #4153).
+
+Lê todos os dias presentes em disco via `lib/oplog.py` (o único leitor autorizado) e
+grava em `acervo.log_argumento` (evento_id uuid PRIMARY KEY, args text).
+Diz na saída o primeiro e o último dia da janela e confere a contagem contra `acervo.log_giro`.
+"""
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+_RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+sys.path.insert(0, os.path.join(_RAIZ, "lib"))
+
+import oplog
+import oplog_extracao
+
+
+def obter_conexao():
+    import psycopg
+
+    host = os.environ.get("POSTGRES_HOST", "127.0.0.1")
+    port = int(os.environ.get("POSTGRES_PORT", "5432"))
+    user = os.environ.get("POSTGRES_USER", "rag")
+    dbname = os.environ.get("POSTGRES_DB", "rag_extractor")
+
+    senha = os.environ.get("POSTGRES_PASSWORD")
+    if not senha:
+        cofre = Path("/srv/platafirma/casa/segredos/rag/POSTGRES_PASSWORD")
+        if cofre.is_file():
+            senha = cofre.read_text(encoding="utf-8").strip()
+
+    return psycopg.connect(
+        host=host,
+        port=port,
+        user=user,
+        password=senha,
+        dbname=dbname,
+        connect_timeout=10,
+        autocommit=False,
+    )
+
+
+def carregar():
+    dias_dict = oplog.dias_no_disco()
+    if not dias_dict:
+        print("carga-argumento: nenhum dia no disco", file=sys.stderr)
+        return 1
+
+    dias = sorted(dias_dict.keys())
+    primeiro_dia = dias[0]
+    ultimo_dia = dias[-1]
+
+    print(f"janela: {primeiro_dia} a {ultimo_dia}")
+    print(f"primeiro dia: {primeiro_dia}")
+    print(f"ultimo dia: {ultimo_dia}")
+    print(f"dias no disco: {len(dias)}")
+
+    conn = obter_conexao()
+    total_lidas = 0
+
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TEMP TABLE tmp_carga_arg (
+                    evento_id uuid,
+                    args text
+                ) ON COMMIT DROP;
+            """)
+
+            with cur.copy("COPY tmp_carga_arg (evento_id, args) FROM STDIN") as copy:
+                for dia in dias:
+                    conteudo = oplog.conteudo_do_dia(dia)
+                    if conteudo is None:
+                        continue
+                    inv = oplog_extracao.Invalidos()
+                    for n, bruta, reg in oplog.linhas_do_dia(conteudo):
+                        if reg is None:
+                            continue
+                        try:
+                            tipo = oplog_extracao.tipo_particao(reg)
+                        except oplog_extracao.SemTraducao:
+                            continue
+                        if tipo != "giro":
+                            continue
+
+                        evento_id = (
+                            oplog_extracao._uuid_ou_nulo(reg.get("evento_id"), "evento_id", inv)
+                            or oplog.evento_id_da_linha(dia, n)
+                        )
+                        raw_args = reg.get("args")
+                        args_val = str(raw_args)[:2000] if raw_args is not None else None
+                        copy.write_row((evento_id, args_val))
+                        total_lidas += 1
+
+            cur.execute("""
+                INSERT INTO acervo.log_argumento (evento_id, args)
+                SELECT DISTINCT ON (evento_id) evento_id, args
+                FROM tmp_carga_arg
+                ON CONFLICT (evento_id) DO NOTHING;
+            """)
+
+            # Conferencia com acervo.log_giro para os dias fechados na partição
+            cur.execute("""
+                SELECT count(g.evento_id)
+                FROM acervo.log_giro g
+                JOIN acervo.log l ON l.evento_id = g.evento_id
+                JOIN acervo.log_extracao e ON e.id = l.extracao_id
+                WHERE e.dia >= %s::date AND e.dia <= %s::date;
+            """, (primeiro_dia, ultimo_dia))
+            row_giros = cur.fetchone()
+            total_giros_fechados = row_giros[0] if row_giros else 0
+
+            cur.execute("""
+                SELECT count(a.evento_id)
+                FROM acervo.log_argumento a
+                JOIN acervo.log l ON l.evento_id = a.evento_id
+                JOIN acervo.log_extracao e ON e.id = l.extracao_id
+                WHERE e.dia >= %s::date AND e.dia <= %s::date;
+            """, (primeiro_dia, ultimo_dia))
+            row_args = cur.fetchone()
+            total_args_fechados = row_args[0] if row_args else 0
+
+            cur.execute("SELECT count(*) FROM acervo.log_argumento;")
+            total_tabela = cur.fetchone()[0]
+
+    conn.close()
+
+    print(f"linhas lidas do bruto: {total_lidas}")
+    print(f"total na tabela acervo.log_argumento: {total_tabela}")
+    print(f"giros em dias fechados (acervo.log_giro): {total_giros_fechados}")
+    print(f"argumentos em dias fechados (acervo.log_argumento): {total_args_fechados}")
+
+    if total_giros_fechados != total_args_fechados:
+        print(
+            f"ERRO: contagem divergente nos dias fechados! "
+            f"log_giro={total_giros_fechados} vs log_argumento={total_args_fechados}",
+            file=sys.stderr,
+        )
+        return 1
+
+    print("conferencia: OK (contagens batem)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(carregar())
