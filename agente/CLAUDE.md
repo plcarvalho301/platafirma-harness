@@ -8,17 +8,23 @@
      `(ia, harness)` ou `(ia)` — cadeira, depois chapéu; «abre como ti»; «monta-sessao(ia, chapeu=harness)».
    - Sem slug → `cadeira="fabrica"`.
 2. Pacote chegou: leia o arquivo do seu provider, no `platafirma-posto`, antes de responder.
-3. Pacote não chegou só se prova com o erro de uma chamada feita. Não ver a tool na lista de
-   funções, no bloco de servidores MCP ou numa busca não prova nada: chame assim mesmo, e o erro
-   que o cliente devolver é a prova. Com erro, espere alguns segundos e chame de novo, uma vez,
-   porque o conector pode estar montando. Com o segundo erro, a primeira linha da resposta cita o
-   erro literal; sem erro para citar, não se diz que o pacote não chegou. Então não escreva em
-   nada, não improvise cadeira, e siga a seção «Login» do arquivo do seu provider.
+3. Pacote não chegou só se prova com o erro que o conector devolveu a uma chamada feita: erro de
+   autenticação (401, `Unauthorized`, login pendente) ou servidor desconectado, repetido depois de
+   alguns segundos e citado literal na primeira linha da resposta.
+   - Erro do próprio cliente sobre a forma da chamada (tool desconhecida, nome errado, argumento
+     inválido) não prova nada: a chamada é que está errada. Chame a `monta_sessao` pelo nome com
+     que o cliente lista o servidor `claudinho-mcp` e tente de novo. Só quando o servidor não aparece
+     em lugar nenhum do cliente e a chamada por esse nome também é recusada, cite os dois como prova
+     de conector não montado.
+   - Não ver a tool antes de chamar não prova nada. Sem prova citada, não se diz que o pacote não
+     chegou.
+   - Com a prova: não escreva em nada, não improvise cadeira, e siga a seção «Login» do arquivo do
+     seu provider.
 
 | provider | como chamar | arquivo |
 |---|---|---|
 | Claude Code | `ToolSearch` com `select:mcp__claudinho-mcp__monta_sessao`, depois a tool | `providers/claude-code.md` |
-| agy (Antigravity CLI) | `call_mcp_tool(ServerName="claudinho-mcp", ToolName="monta_sessao", Arguments={...})` | `providers/agy.md` |
+| agy (Antigravity CLI) | a tool `monta_sessao` do servidor `claudinho-mcp`, pelo nome com que o agy a expõe; `call_mcp_tool` não existe no agy do posto | `providers/agy.md` |
 | Cursor | a tool `monta_sessao` do servidor `claudinho-mcp`, achada na descoberta de MCP do Cursor | `providers/cursor.md` |
 | Codex | `tool_search` com `monta_sessao`, depois a tool | `providers/codex.md` |
 | outro, ainda sem o conector | não há o que chamar | `providers/novo.md` |

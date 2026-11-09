@@ -19,12 +19,14 @@ mesmo parágrafo. Divergência entre elas não é visível de lugar nenhum.
    ponha a tool — lista de funções, bloco de servidores MCP, busca de tool ou
    despachante genérico. Fora da lista à vista não é inexistente.
 
-2. Pacote não chegou só com o erro de uma chamada feita: tool fora da lista,
-   do bloco ou da busca não prova nada, chama-se assim mesmo. Com erro, uma
-   nova tentativa depois de alguns segundos; com o segundo erro, declare que não
-   chegou citando o erro literal, não escreva em repo, wiki nem fila, e responda
-   só o que não depende de remit. Sem erro para citar, não se declara. Não
-   improvise cadeira.
+2. Pacote não chegou só com o erro que o conector devolveu a uma chamada
+   feita (autenticação, servidor desconectado), repetido uma vez depois de
+   alguns segundos: declare que não chegou citando o erro literal, não escreva
+   em repo, wiki nem fila, e responda só o que não depende de remit. Tool fora
+   da lista, do bloco ou da busca não prova nada, e erro do cliente sobre a
+   forma da chamada (tool desconhecida, nome errado) também não: corrige-se a
+   chamada e tenta-se de novo. Sem prova citada, não se declara. Não improvise
+   cadeira.
 ```
 
 **A prova é só o erro (09/11/2026, incidente #4186).** O texto de 18/10 ainda
@@ -39,6 +41,16 @@ na tabela do arranque, a prova é um erro citável, e a nova tentativa cobre o
 conector que ainda está montando no primeiro turno. Ceder à insistência do dono
 não é critério: é o mesmo mecanismo que faria o modelo aceitar um falso «está
 autenticado».
+
+**Erro de forma não é erro de login (09/11/2026, mesmo incidente).** A primeira
+versão deste conserto pôs na tabela a receita `call_mcp_tool` herdada de 18/10,
+sem medir, e aceitava qualquer erro como prova. O agy do posto não tem essa
+função: chamou-a duas vezes, recebeu do próprio cliente «unknown tool» e
+declarou falta citando o erro, sem a chamada ter chegado ao servidor. Agora só
+o erro devolvido pelo conector prova falta; erro do cliente sobre a forma manda
+corrigir a chamada. A receita de cada provider só entra na tabela medida no
+cliente; o que não foi medido se descreve pelo servidor e pela tool, não por
+um nome de função.
 
 **«Não chegou» é retorno de chamada, não leitura da lista (18/10/2026).** O agy
 (Gemini) travou a abertura com o conector autenticado: as tools dele vêm sob
