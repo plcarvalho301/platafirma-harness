@@ -67,7 +67,9 @@ class Catalogo:
             (estado, json_canonico(manifesto), causa, id, self.sujeito),
         )
 
-    def objeto(self, id: str, *, aceitar_vencido: bool = False) -> dict:
+    def objeto(
+        self, id: str, *, aceitar_vencido: bool = False, so_dono: bool = False
+    ) -> dict:
         from psycopg.rows import dict_row
 
         tipo = (
@@ -82,13 +84,42 @@ class Catalogo:
             cur.execute("SELECT * FROM analise." + tipo + " WHERE id=%s", (id,))
             obj = cur.fetchone()
         exigir(obj, "identificador-desconhecido")
-        exigir(obj["sujeito"] == self.sujeito, "acesso-negado", 4)
+        exigir(
+            obj["sujeito"] == self.sujeito or (not so_dono and self._entregue(id)),
+            "acesso-negado",
+            4,
+        )
         exigir(
             aceitar_vencido or obj["expires_at"] is None or obj["expires_at"] > agora(),
             "objeto-vencido",
             5,
         )
         return {**obj, "tipo": tipo}
+
+    def _entregue(self, id: str) -> bool:
+        """O objeto foi entregue a este sujeito, ou a todo sujeito autorizado («*»)."""
+        return (
+            self.conn.execute(
+                "SELECT 1 FROM analise.entrega WHERE objeto_id=%s AND sujeito IN (%s,'*')",
+                (id, self.sujeito),
+            ).fetchone()
+            is not None
+        )
+
+    def entregar(self, id: str, destino: str) -> dict:
+        """Só quem gerou o objeto o entrega, e só enquanto ele vive."""
+        import re
+
+        obj = self.objeto(id, so_dono=True)
+        exigir(
+            destino == "*" or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.@-]{0,80}", destino),
+            "destino-invalido",
+        )
+        self.conn.execute(
+            "INSERT INTO analise.entrega(objeto_id,sujeito,entregue_por) VALUES(%s,%s,%s) ON CONFLICT DO NOTHING",
+            (id, destino, self.sujeito),
+        )
+        return {"estado": "entregue", "expires_at": obj["expires_at"]}
 
     def execucao(self, id: str) -> dict:
         from psycopg.rows import dict_row
@@ -309,7 +340,7 @@ class Catalogo:
     def descartar(self, id: str) -> None:
         from psycopg import sql
 
-        objeto = self.objeto(id, aceitar_vencido=True)
+        objeto = self.objeto(id, aceitar_vencido=True, so_dono=True)
         with self.conn.transaction():
             if objeto["tipo"] == "base":
                 exigir(
@@ -325,6 +356,7 @@ class Catalogo:
                 self.conn.execute(
                     sql.SQL("DROP TABLE IF EXISTS analise.{}").format(sql.Identifier(t))
                 )
+            self.conn.execute("DELETE FROM analise.entrega WHERE objeto_id=%s", (id,))
             self.conn.execute("DELETE FROM analise.tabela WHERE objeto_id=%s", (id,))
             self.conn.execute("DELETE FROM analise.projecao WHERE objeto_id=%s", (id,))
             self.conn.execute(

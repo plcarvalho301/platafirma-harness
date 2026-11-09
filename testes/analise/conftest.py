@@ -59,6 +59,9 @@ def pg():
         # #4185: a role de leitura do analise, a mesma de todo banco da casa.
         with admin.transaction():
             admin.execute((RAIZ/"lib/analise/sql/leitura.sql").read_text())
+        # #4184: a entrega de base e resultado a outro sujeito.
+        with admin.transaction():
+            admin.execute((RAIZ/"lib/analise/sql/entrega.sql").read_text())
         global CONTEINER_PG
         CONTEINER_PG=nome
         from psycopg import sql
@@ -75,7 +78,7 @@ def db(pg):
     cfg,admin=pg
     for (t,) in admin.execute("SELECT fisica FROM analise.tabela"):
         admin.execute(sql.SQL("DROP TABLE IF EXISTS analise.{}").format(sql.Identifier(t)))
-    admin.execute("TRUNCATE analise.projecao,analise.tabela,analise.resultado,analise.base,analise.execucao,acervo.log_giro,acervo.log CASCADE")
+    admin.execute("TRUNCATE analise.entrega,analise.projecao,analise.tabela,analise.resultado,analise.base,analise.execucao,acervo.log_giro,acervo.log CASCADE")
     return cfg,admin
 
 @pytest.fixture
