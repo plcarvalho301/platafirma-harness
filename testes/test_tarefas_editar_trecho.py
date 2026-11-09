@@ -27,6 +27,8 @@ ITEM = {"id": 42, "titulo": "card de teste", "estado": "em-execucao",
 class _Stub(BaseHTTPRequestHandler):
     chamadas: list = []
     recusa: str | None = None
+    item_desc: str | None = None
+    rotulos: list | None = None
 
     def log_message(self, *a):  # silencioso
         pass
@@ -50,12 +52,20 @@ class _Stub(BaseHTTPRequestHandler):
 
     def do_GET(self):
         type(self).chamadas.append(("GET", self.path, None))
+        m = re.match(r"^/itens/(\d+)$", self.path)
+        if m and type(self).item_desc is not None:
+            it = dict(ITEM)
+            it["descricao"] = type(self).item_desc
+            return self._json(it, 200)
+        if self.path == "/modelo" and type(self).rotulos is not None:
+            return self._json({"rotulos_da_conversao": type(self).rotulos}, 200)
         self._json({"erro": "o trecho não precisa de leitura nem da lista de rótulos"}, 404)
 
 
 @pytest.fixture()
 def stub():
     _Stub.chamadas, _Stub.recusa = [], None
+    _Stub.item_desc, _Stub.rotulos = None, None
     srv = HTTPServer(("127.0.0.1", 0), _Stub)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield _Stub, f"http://127.0.0.1:{srv.server_port}"
@@ -155,3 +165,48 @@ def test_o_ajuda_do_verbo_diz_o_trecho():
                            env=dict(os.environ, TAREFAS_BASE="http://127.0.0.1:9"))
     texto = ajuda.stdout + ajuda.stderr
     assert "--trecho --antes" in texto and "UMA vez" in texto
+
+
+def test_editar_desc_stdin_nao_dobra_barra_invertida(stub):
+    s, base = stub
+    s.rotulos = ["Tarefas", "Aceite"]
+    texto_com_barra = 'Aceite:\nrepo procurar platafirma-harness "acervo ler casa\\|planilha" skills/prosa\n'
+    p = subprocess.run([str(BIN), "editar", "42", "--desc-stdin"], input=texto_com_barra,
+                       capture_output=True, text=True,
+                       env=dict(os.environ, TAREFAS_BASE=base, PF_CADEIRA="engenharia"), timeout=30)
+    assert p.returncode == 0, p.stderr
+    patch_chamada = [c for c in s.chamadas if c[0] == "PATCH"][0]
+    descricao_recebida = patch_chamada[2]["descricao"]
+    assert 'acervo ler casa\\|planilha' in descricao_recebida
+    assert 'acervo ler casa\\\\|planilha' not in descricao_recebida
+
+
+def test_riscar_tarefa_envia_trecho_com_tachado(stub):
+    s, base = stub
+    s.item_desc = "<p><strong>Tarefas:</strong><br>1. Primeira tarefa · harness@a · pytest<br>2. Segunda tarefa · harness@b · pytest</p>"
+    p = _run(["riscar", "42", "1"], base)
+    assert p.returncode == 0, p.stderr
+    assert any(c[0] == "GET" and c[1] == "/itens/42" for c in s.chamadas)
+    patch_chamadas = [c for c in s.chamadas if c[0] == "PATCH"]
+    assert len(patch_chamadas) == 1
+    trecho = patch_chamadas[0][2]["descricao_trecho"]
+    assert trecho["antes"] == "<br>1. Primeira tarefa · harness@a · pytest"
+    assert trecho["depois"] == "<br>1. ~~Primeira tarefa · harness@a · pytest~~"
+
+
+def test_riscar_tarefa_ja_riscada_avisa_e_sai_zero(stub):
+    s, base = stub
+    s.item_desc = "<p><strong>Tarefas:</strong><br>1. ~~Primeira tarefa · harness@a · pytest~~</p>"
+    p = _run(["riscar", "42", "1"], base)
+    assert p.returncode == 0, p.stderr
+    assert "já está riscada" in p.stderr
+    assert not any(c[0] == "PATCH" for c in s.chamadas)
+
+
+def test_riscar_tarefa_inexistente_sai_um(stub):
+    s, base = stub
+    s.item_desc = "<p><strong>Tarefas:</strong><br>1. Primeira tarefa · harness@a · pytest</p>"
+    p = _run(["riscar", "42", "9"], base)
+    assert p.returncode == 1
+    assert "não encontrada" in p.stderr
+    assert not any(c[0] == "PATCH" for c in s.chamadas)

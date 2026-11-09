@@ -698,27 +698,31 @@ def cmd_enviar(rc, eu: str, args):
     if contestacao and not args.ref:
         sys.stderr.write("erro: --tipo contestacao exige --ref <indicador contestado>\n")
         sys.exit(2)
-    valida_persona(args.destinatario)
+    destinatarios = getattr(args, "destinatarios", None) or [args.destinatario]
+    for dest in destinatarios:
+        valida_persona(dest)
     valida_persona(de)
     # Grava sempre o nome canonico: a caixa e uma so, qualquer que seja a caixa
     # alta que o chamador digitou.
-    args.destinatario = canoniza_persona(args.destinatario)
+    destinatarios = [canoniza_persona(d) for d in destinatarios]
     de = canoniza_persona(de)
-    so_par_permitido(de, args.destinatario, _json_mode(args))
+    for dest in destinatarios:
+        so_par_permitido(de, dest, _json_mode(args))
 
     corpo = sys.stdin.read()
     if not corpo.strip():
         sys.stderr.write("erro: fundamento vazio (corpo em stdin)\n" if contestacao else "erro: corpo vazio\n")
         sys.exit(1)
 
-    stream = stream_key(args.destinatario)
-    existentes = {m["msgid"] for m in frias(rc, args.destinatario)}
-    msgid = gerar_msgid(de, existentes, rc)
-    rc.xadd(stream, {
-        "id": msgid, "de": de, "tipo": args.tipo, "assunto": args.assunto,
-        "ref": args.ref or "", "responde": args.responde or "", "corpo": corpo,
-    })
-    print(msgid)
+    for dest in destinatarios:
+        stream = stream_key(dest)
+        existentes = {m["msgid"] for m in frias(rc, dest)}
+        msgid = gerar_msgid(de, existentes, rc)
+        rc.xadd(stream, {
+            "id": msgid, "de": de, "tipo": args.tipo, "assunto": args.assunto,
+            "ref": args.ref or "", "responde": args.responde or "", "corpo": corpo,
+        })
+        print(msgid)
 
 
 # ---------- carta de bot (#3884) ----------
@@ -743,19 +747,22 @@ def remetente_bot(de: str):
 
 def cmd_enviar_bot(rc, args):
     de = PREFIXO_BOT + remetente_bot(args.de)
-    valida_persona(args.destinatario)
-    args.destinatario = canoniza_persona(args.destinatario)
+    destinatarios = getattr(args, "destinatarios", None) or [args.destinatario]
+    for dest in destinatarios:
+        valida_persona(dest)
+    destinatarios = [canoniza_persona(d) for d in destinatarios]
     corpo = sys.stdin.read()
     if not corpo.strip():
         sys.stderr.write("erro: corpo vazio\n")
         sys.exit(1)
-    existentes = {m["msgid"] for m in frias(rc, args.destinatario)}
-    msgid = gerar_msgid(de.replace(":", "-"), existentes, rc)
-    rc.xadd(stream_key(args.destinatario), {
-        "id": msgid, "de": de, "tipo": args.tipo, "assunto": args.assunto,
-        "ref": args.ref or "", "responde": args.responde or "", "corpo": corpo,
-    })
-    print(msgid)
+    for dest in destinatarios:
+        existentes = {m["msgid"] for m in frias(rc, dest)}
+        msgid = gerar_msgid(de.replace(":", "-"), existentes, rc)
+        rc.xadd(stream_key(dest), {
+            "id": msgid, "de": de, "tipo": args.tipo, "assunto": args.assunto,
+            "ref": args.ref or "", "responde": args.responde or "", "corpo": corpo,
+        })
+        print(msgid)
 
 
 # ---------- contestar ----------
@@ -826,7 +833,7 @@ def build_parser():
     p_tipos.add_argument("--eu", default=None)
 
     p_enviar = sub.add_parser("enviar", add_help=False)
-    p_enviar.add_argument("destinatario")
+    p_enviar.add_argument("destinatarios", nargs="+", metavar="destinatario")
     p_enviar.add_argument("--de", default=None)
     p_enviar.add_argument("--tipo", default=None)
     p_enviar.add_argument("--assunto", default=None)
@@ -850,7 +857,7 @@ def uso():
         "  fila tratar <msgid>...                   ack: a carta virou ato (resposta, card, mesa) ou foi superada\n"
         "  fila ler [<persona>] --tudo [remetente]  historico dos 7 dias, nao move o ponteiro\n"
         "  fila ler [<persona>] --desde <data> [remetente]\n"
-        "  fila enviar <destinatario> --tipo <t> --assunto <a> [--ref <r>] [--responde <id>]\n"
+        "  fila enviar <destinatario>... --tipo <t> --assunto <a> [--ref <r>] [--responde <id>]\n"
         "              (corpo em stdin)\n"
         "              --tipo contestacao: --ref e o indicador contestado, o corpo e o fundamento\n"
         "  fila tipos                             lista os tipos validos de --tipo\n"
@@ -896,10 +903,12 @@ def main():
         if not args.assunto:
             sys.stderr.write("erro: --assunto e obrigatorio\n")
             sys.exit(2)
-        if args.destinatario.startswith(PREFIXO_BOT):
-            sys.stderr.write("erro: bot nao tem caixa; responda a cadeira dona dele, que a carta "
-                             "nomeia (`bot listar` diz o dono)\n")
-            sys.exit(1)
+        destinatarios = getattr(args, "destinatarios", None) or [args.destinatario]
+        for dest in destinatarios:
+            if dest.startswith(PREFIXO_BOT):
+                sys.stderr.write("erro: bot nao tem caixa; responda a cadeira dona dele, que a carta "
+                                 "nomeia (`bot listar` diz o dono)\n")
+                sys.exit(1)
         if (args.de or "").startswith(PREFIXO_BOT):
             # o bot chega sem cadeira: o remetente se resolve no ato, e nao por resolve_eu
             rc = r_conn()

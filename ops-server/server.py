@@ -1379,10 +1379,16 @@ def _stdin_texto(v):
 
 
 def _eh_pipe_stdin(v) -> bool:
-    """So o marcador de pipe {"de": <int>} — chaves EXATAS, nada mais. Qualquer outro
-    dict/list e conteudo (JSON), nunca pipe; vira texto por `_stdin_texto` (#3124)."""
-    return (isinstance(v, dict) and set(v.keys()) == {"de"}
-            and isinstance(v.get("de"), int) and not isinstance(v.get("de"), bool))
+    """So o marcador de pipe {"de": <int>} ou {"stdin_de": <int>} — chaves EXATAS, nada mais. Qualquer outro
+    dict/list e conteudo (JSON), nunca pipe; vira texto por `_stdin_texto` (#3124, DT 517)."""
+    if not isinstance(v, dict) or isinstance(v.get("de"), bool) or isinstance(v.get("stdin_de"), bool):
+        return False
+    keys = set(v.keys())
+    if keys == {"de"} and isinstance(v.get("de"), int):
+        return True
+    if keys == {"stdin_de"} and isinstance(v.get("stdin_de"), int):
+        return True
+    return False
 
 
 # A tool de lote (#3270): `malote`. O primeiro token de um item com o nome dela é desduplicado. O apelido
@@ -1481,6 +1487,7 @@ async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: st
     _carimba_turno(ident, turno, turno_texto, turno_fonte)
     lote_id = uuid.uuid4().hex[:8]
     brutos: list = []
+    stdins_resolvidos: list = []
     _estado = {"ident": ident}
 
     async def _roda(_i, x, resultados):
@@ -1488,10 +1495,12 @@ async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: st
         esgotado = _prazo_esgotado(fim)
         if esgotado:
             brutos.append("")
+            stdins_resolvidos.append("")
             return esgotado
         r = await _roda_item_run_command(_i, x, resultados, brutos, ident, timeout,
                                          lote_id, encadeado, fim, nome=nome,
-                                         turno_texto=turno_texto, turno_fonte=turno_fonte)
+                                         turno_texto=turno_texto, turno_fonte=turno_fonte,
+                                         stdins_resolvidos=stdins_resolvidos)
         # Injeção entre itens do lote (Aberto spec_sessao/expediente, #3053):
         # se o item executado foi sessao abrir com sucesso, extrai sessao_id e
         # chama ident = _sessao_resolve(sid_novo) antes do item seguinte (n+1)
@@ -1517,10 +1526,13 @@ async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: st
 
 async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote_id,
                                  encadeado=False, fim=None, nome="run_command",
-                                 turno_texto="", turno_fonte="") -> dict:
+                                 turno_texto="", turno_fonte="",
+                                 stdins_resolvidos=None) -> dict:
     """Um item de `malote commands[]` (ou do apelido `run_command`): parte, confere
     stdin.de, autoriza, roda, serve e audita. A ordem e a parada da cadeia sao de
     `lote.itera`. `nome` e a tool chamada, gravada em `tool` (recusa) e `via` (item)."""
+    if stdins_resolvidos is None:
+        stdins_resolvidos = []
     aviso_dup = None
     if isinstance(x, str):
         try:
@@ -1533,10 +1545,12 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
         aviso_dup = str(x.get("verbo"))
     argv, stdin, recusa = _item_de_lote(x)
     if recusa is None and _eh_pipe_stdin(stdin):
-        n = stdin.get("de")
+        eh_stdin_de = "stdin_de" in stdin
+        n = stdin.get("stdin_de") if eh_stdin_de else stdin.get("de")
+        chave_nome = "stdin.stdin_de" if eh_stdin_de else "stdin.de"
         slug0 = argv[0].rsplit("/", 1)[-1]
         if not isinstance(n, int) or n < 0 or n >= _i:
-            recusa = _recusa(slug0, f"stdin.de={n!r} fora do lote (0..{_i - 1})")
+            recusa = _recusa(slug0, f"{chave_nome}={n!r} fora do lote (0..{_i - 1})")
         elif (resultados[n].get("recusado") or resultados[n].get("erro")
               or resultados[n].get("nao_rodou")):
             recusa = _recusa(slug0, f"insumo do item {n} nao rodou")
@@ -1548,7 +1562,7 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
             # rodar o seguinte sobre nada e efeito sobre entrada vazia.
             recusa = _recusa(slug0, f"insumo do item {n} saiu {_lote.exit_do_item(resultados[n])}")
         else:
-            stdin = brutos[n]
+            stdin = stdins_resolvidos[n] if eh_stdin_de else brutos[n]
     if recusa:
         _audit(tool=nome, evento="sem_verbo", verbo=recusa["verbo"],
                item=str(x)[:CMD_CAP],
@@ -1557,6 +1571,7 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
                ordem_id=ident["ordem_id"], lote_id=lote_id, lote_n=_i,
                encadeado=encadeado or None)
         brutos.append("")
+        stdins_resolvidos.append("")
         return recusa
     slug = argv[0].rsplit("/", 1)[-1]
     linha = " ".join([slug] + argv[1:])
@@ -1566,9 +1581,11 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
     if negado:
         r = negado
         brutos.append("")
+        stdins_resolvidos.append("")
     elif recusa_face:
         r = recusa_face
         brutos.append("")
+        stdins_resolvidos.append("")
     else:
         _ex = (fundamento,) if fundamento else ()
         t0 = time.monotonic()
@@ -1576,6 +1593,7 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
                                            _prazo_restante(fim), *_ex)
         so = r.get("stdout")
         brutos.append(so.get("texto", "") if isinstance(so, dict) else "")
+        stdins_resolvidos.append(stdin if isinstance(stdin, str) else ("" if stdin is None else str(stdin)))
         _perf = _perfil_verbo(slug, argv[0])
         r = _serve(r, tool=slug, alca=linha, ident=ident, cauda=_perf["cauda"],
                    cosmetica=_cosmetica(_perf, argv[1] if len(argv) > 1 else None),
