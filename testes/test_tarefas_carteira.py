@@ -539,3 +539,13 @@ def test_cabecalho_declara_face_rotulo_e_volta_dos_atos_novos():
     atos = next(l for l in texto.splitlines() if l.startswith("# atos:"))
     for ato in ("ordenar", "bloquear", "desbloquear", "carteira"):
         assert ato in atos
+
+
+def test_listar_e_listar_tudo_recusam_opcao_desconhecida_com_exit_2(stub):
+    _, base = stub
+    for ato in ("listar", "listar-tudo"):
+        for flag in ("--tipo", "--busca", "--termo", "--invalida"):
+            p = _run([ato, flag], base)
+            assert p.returncode == 2, f"{ato} {flag} deveria sair 2, saiu {p.returncode}"
+            assert f"opção desconhecida: {flag}" in p.stderr
+            assert "uso: tarefas listar|listar-tudo" in p.stderr
