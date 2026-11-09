@@ -285,6 +285,30 @@ def test_c13_diretorio_lista_em_ordem_e_esconde_o_negado(tmp_path):
     assert primeira["proximo_args"] == {"caminho": str(d), "linhas": "3-"}
 
 
+def test_dt242_diretorio_dica_ultimas_quando_truncado(tmp_path):
+    d = tmp_path / "muitos"
+    d.mkdir()
+    for i in range(10):
+        (d / f"f{i:02d}.txt").write_text("x")
+    pg = L.le(d, linhas="1-3")
+    assert "diretório · 10 entradas" in pg["cabecalho"]
+    assert "linhas=-3 para as últimas" in pg["cabecalho"]
+
+
+def test_dt242_diretorio_filtro_termo(tmp_path):
+    d = tmp_path / "mistura"
+    d.mkdir()
+    (d / "alvo1.log").write_text("1")
+    (d / "alvo2.log").write_text("2")
+    (d / "outro.txt").write_text("3")
+    (d / "alvo_dir").mkdir()
+    pg = L.le(d, termo="alvo")
+    assert pg["linhas_total"] == 3
+    assert "alvo1.log" in pg["conteudo"] and "alvo2.log" in pg["conteudo"] and "alvo_dir/" in pg["conteudo"]
+    assert "outro.txt" not in pg["conteudo"]
+    assert "filtro termo='alvo'" in pg["cabecalho"]
+
+
 # --- C14 lote --------------------------------------------------------------------------------------
 def test_c14_teto_do_lote_conta_o_servido_e_nao_o_arquivo(tmp_path):
     ps = []

@@ -486,6 +486,23 @@ def test_eventos_do_bruto_levam_a_via_de_cada_giro(monkeypatch, capsys, tmp_path
     assert [e["via"] for e in r["eventos"]] == ["malote", "malote", "run_command", None]
 
 
+def test_eventos_paginacao_com_cursor(monkeypatch, capsys, tmp_path):
+    _dia_com_via(tmp_path)
+    bruto_em(monkeypatch, tmp_path)
+    r1 = json_de(roda(monkeypatch, capsys, ApiFalsa(), "eventos", DIA, "--tipo", "giro", "--limite", "2")[1])
+    assert len(r1["eventos"]) == 2
+    assert r1["casaram"] == 4 and r1["omitidos"] == 2
+    assert r1["cursor"] is None
+    assert r1["proximo_cursor"] == "2"
+
+    r2 = json_de(roda(monkeypatch, capsys, ApiFalsa(), "eventos", DIA, "--tipo", "giro", "--limite", "2", "--cursor", r1["proximo_cursor"])[1])
+    assert len(r2["eventos"]) == 2
+    assert r2["casaram"] == 4 and r2["omitidos"] == 0
+    assert r2["cursor"] == "2"
+    assert r2["proximo_cursor"] is None
+    assert [e["tool"] for e in r1["eventos"]] + [e["tool"] for e in r2["eventos"]] == ["repo", "tarefas", "release", "mesa"]
+
+
 def test_dia_do_bruto_conta_giros_por_via(monkeypatch, capsys, tmp_path):
     _dia_com_via(tmp_path)
     bruto_em(monkeypatch, tmp_path)

@@ -1143,7 +1143,7 @@ def uso(codigo=2):
     saida = sys.stdout if codigo == 0 else sys.stderr
     saida.write("""uso:
   metrica eventos [<dia>] [--tipo giro|erro|help|acerto|cadeia|lote|turno] [--cadeira <slug>]
-                  [--sessao <prefixo-ou-id>] [--azp <valor>] [--limite N]
+                  [--sessao <prefixo-ou-id>] [--azp <valor>] [--limite N] [--cursor <token>]
   metrica fitas [<dia>] [--desde <dia>] [--ate <dia>] [--cadeira <slug>] [--sessao <id>]
       ciclo abertura–fecho, incompletas e bytes do bruto; janela explícita, retenção de 35 dias
   metrica documentos [mesmos filtros de fitas]
@@ -1166,6 +1166,7 @@ eventos     stream cru, um objeto por evento (giro, erro, help, acerto, cadeia, 
 --azp       menos `comportamento`); --azp casa o cliente OAuth por igualdade. Filtram ANTES
             de classificar e de truncar, e se combinam entre si e com --cadeira
 --limite    so em `eventos`: teto de eventos devolvidos, depois dos filtros (sem ele, sem teto)
+--cursor    so em `eventos`: continua a leitura a partir do token retornado em proximo_cursor
 dia         resumo: giros por fita, erros por verbo, profundidade de cadeia, help
 ate-acerto  a metrica-mae: giros-ate-acerto por (ordem_id, tool)
 tateio      separa tateio de GRAMATICA (exit 2, verbo nu, recusa da porta) de tateio de
@@ -1383,6 +1384,7 @@ def main(argv):
     p.add_argument("--sessao", default="")
     p.add_argument("--azp", default="")
     p.add_argument("--limite", default="")
+    p.add_argument("--cursor", default="")
     p.add_argument("--tool", default="")
     p.add_argument("--agregado", action="store_true")
     p.add_argument("--desde", default="")
@@ -1472,6 +1474,9 @@ def main(argv):
         except ValueError:
             return erro_gracioso(f"{VERBO}: --limite invalido '{args.limite}'",
                                  ["--limite e um inteiro maior que zero"], 2)
+    if args.cursor != "" and ato != "eventos":
+        return erro_gracioso(f"{VERBO} {ato}: --cursor so vale em `eventos`",
+                             [f"a paginacao por cursor: {VERBO} eventos AAAA-MM-DD --cursor <token>"], 2)
 
     if ato == "comportamento":
         # Sem <dia>, a janela e ONTEM: o timer roda de madrugada e o dia corrente esta
@@ -1597,10 +1602,31 @@ def main(argv):
 
     if ato == "eventos":
         evs = stream_eventos(giros, cadeias, args.tipo or None)
-        # `casaram` conta depois de tipo/cadeira/sessao/azp e ANTES do teto; `omitidos`
-        # e o que o teto cortou: quem le sabe se a lista esta inteira.
-        r = {"dia": dia, "eventos": evs[:limite] if limite else evs,
-             "casaram": len(evs), "omitidos": max(0, len(evs) - limite) if limite else 0,
+        inicio = 0
+        cursor_val = (args.cursor or "").strip()
+        if cursor_val:
+            try:
+                inicio = int(cursor_val)
+                if inicio < 0:
+                    raise ValueError
+            except ValueError:
+                achou = False
+                for idx, ev in enumerate(evs):
+                    if str(ev.get("evento_id") or "") == cursor_val or str(ev.get("ts") or "") == cursor_val:
+                        inicio = idx + 1
+                        achou = True
+                        break
+                if not achou:
+                    return erro_gracioso(f"{VERBO}: cursor invalido '{cursor_val}'",
+                                         ["o cursor deve ser o token retornado em proximo_cursor ou um indice inteiro >= 0"], 2)
+        fim = (inicio + limite) if limite else len(evs)
+        fatia = evs[inicio:fim]
+        proximo = str(fim) if (limite and fim < len(evs)) else None
+        omitidos = max(0, len(evs) - fim)
+        r = {"dia": dia, "eventos": fatia,
+             "casaram": len(evs), "omitidos": omitidos,
+             "cursor": cursor_val if cursor_val else None,
+             "proximo_cursor": proximo,
              "argumentos": _investigar.dica_de_argumentos(dia)}
     elif ato == "dia":
         r = {"dia": dia, **resumo_do_dia(giros, cadeias)}
