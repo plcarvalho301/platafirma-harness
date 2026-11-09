@@ -19,11 +19,26 @@ mesmo parágrafo. Divergência entre elas não é visível de lugar nenhum.
    ponha a tool — lista de funções, bloco de servidores MCP, busca de tool ou
    despachante genérico. Fora da lista à vista não é inexistente.
 
-2. Pacote não chegou, provado por tentativa (conector ausente de todo catálogo
-   do cliente, ou chamada com erro): declare que não chegou, com o erro, não
-   escreva em repo, wiki nem fila, e responda só o que não depende de remit.
-   Não improvise cadeira.
+2. Pacote não chegou só com o erro de uma chamada feita: tool fora da lista,
+   do bloco ou da busca não prova nada, chama-se assim mesmo. Com erro, uma
+   nova tentativa depois de alguns segundos; com o segundo erro, declare que não
+   chegou citando o erro literal, não escreva em repo, wiki nem fila, e responda
+   só o que não depende de remit. Sem erro para citar, não se declara. Não
+   improvise cadeira.
 ```
+
+**A prova é só o erro (09/11/2026, incidente #4186).** O texto de 18/10 ainda
+aceitava «conector ausente de todo catálogo do cliente» como prova, e o arquivo
+do agy aceitava «servidor fora do bloco». As duas condições são o modelo olhando
+o próprio contexto, a lista à vista que a mesma linha proíbe, e o agy voltou a
+declarar falta com o conector autenticado, citando quase literalmente essa
+cláusula, sem nenhuma chamada. A receita de chamada morava na seção «Login» do
+arquivo do provider, que só se lia depois do pacote: para saber chamar, o
+agente abria primeiro o roteiro de falha. Agora a receita de cada cliente está
+na tabela do arranque, a prova é um erro citável, e a nova tentativa cobre o
+conector que ainda está montando no primeiro turno. Ceder à insistência do dono
+não é critério: é o mesmo mecanismo que faria o modelo aceitar um falso «está
+autenticado».
 
 **«Não chegou» é retorno de chamada, não leitura da lista (18/10/2026).** O agy
 (Gemini) travou a abertura com o conector autenticado: as tools dele vêm sob
