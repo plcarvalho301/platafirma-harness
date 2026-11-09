@@ -4,6 +4,7 @@
 # dono: ti
 # classe: B
 # forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar, hooks-listar) / texto (ler, pr-diff) / fluxo (sanear, lock, hooks-apagar)
+# poda: cosmetica@git
 # use para: criar e atualizar bancada; ler e procurar nela, diff e histórico; commitar, empurrar ramo, abrir, revisar e integrar PR; descartar mudança; sanear bancada; procurar no que está publicado no GitHub; e sempre que um card de código for posto em execução ou a esteira reprovar a mudança
 # atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge), pr-fechar (escrita, forge), hooks-listar (leitura, forge), hooks-apagar (escrita, forge), sanear (escrita, forge), lock (escrita, operacao), git (escrita, operacao)
 # le: estado=repo
@@ -133,8 +134,8 @@ uso_texto() {
 uso:
   repo estado    [<repo>] [--json]
   repo listar    <repo> [<prefixo>] [--json]
-  repo ler       <repo> <caminho>
-  repo procurar  <repo> <termo> [<prefixo>] [--json]   (ou --termo <t>, repetido: casa qualquer um)
+  repo ler       <repo> <caminho> [--linhas <faixa>] [--offset <bytes>]
+  repo procurar  <repo> <termo> [<prefixo>] [--caminho <p>] [--json]   (ou --termo <t>; regex ERE)
   repo historico <repo> [<caminho>] [--n <N>] [--json]
   repo diff      <repo> [<caminho>] [--staged]
   repo ramo      <repo> [<card>] [--slug <slug>]
@@ -154,8 +155,7 @@ uso:
   repo hooks listar [<repo>|--todos] [--url <t>] [--json]
   repo hooks apagar <repo> <id> --url <t>   (porta: hooks-listar, hooks-apagar)
   repo lock      <repo> <projeto> [--conferir | --atualizar <pacote>[@<versao>]… | --atualizar-tudo]
-                                                    (uv.lock ou package-lock.json do <projeto>; nao commita;
-                                                     --atualizar sobe um pacote, --atualizar-tudo todos)
+                                                    (uv.lock ou package-lock.json; --atualizar sobe pacote)
   repo git       <repo> <args…>
 
 bancada: PLATAFIRMA_BANCADA[sem default] (exit 3)
@@ -732,10 +732,43 @@ cmd_listar() {
   return 0
 }
 
+# Página em bytes (#2856 linha 146, DT 213): a porta corta a saída em 50 KB sem next_offset;
+# o verbo pagina antes com --offset, no mesmo contrato de `release ler`.
+# Faixa de linhas (DT 426): --linhas "a-b", "a-" ou "-n" (base 1), como `ler_arquivo`.
+LER_PAGINA=45000
+
 cmd_ler() {
-  local repo="" caminho=""
+  local repo="" caminho="" offset=0 linhas=""
   while [ $# -gt 0 ]; do
     case "$1" in
+      --offset)
+        shift
+        if [ $# -eq 0 ] || ! [[ "$1" =~ ^[0-9]+$ ]]; then
+          morre "--offset pede um número de bytes (>= 0)" 2
+        fi
+        offset="$((10#$1))"
+        shift
+        ;;
+      --linhas)
+        shift
+        [ $# -gt 0 ] || morre "--linhas exige uma faixa (ex.: 1-25, 10-, -20)" 2
+        linhas="$1"
+        shift
+        ;;
+      --)
+        shift
+        while [ $# -gt 0 ]; do
+          if [ -z "$repo" ]; then
+            repo="$1"
+          elif [ -z "$caminho" ]; then
+            caminho="$1"
+          else
+            morre "argumento excedente: '$1'" 2
+          fi
+          shift
+        done
+        break
+        ;;
       -*) morre "opção desconhecida: '$1'" 2 ;;
       *)
         if [ -z "$repo" ]; then
@@ -764,7 +797,70 @@ cmd_ler() {
     exit 1
   fi
 
-  cat "$alvo_arquivo"
+  if [ -n "$linhas" ]; then
+    python3 - "$alvo_arquivo" "$linhas" "$repo" "$caminho" <<'PY' || exit $?
+import sys, re
+arq, faixa_str, repo, caminho = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+with open(arq, "rb") as f:
+    bruto = f.read()
+try:
+    linhas = bruto.decode("utf-8").splitlines(keepends=True)
+except UnicodeDecodeError:
+    linhas = [l.decode("utf-8", "replace") for l in bruto.splitlines(keepends=True)]
+total_l = len(linhas)
+
+m1 = re.fullmatch(r"\s*(\d+)\s*-\s*(\d*)\s*", faixa_str)
+m2 = re.fullmatch(r"\s*-\s*(\d+)\s*", faixa_str)
+if m1:
+    a = int(m1.group(1))
+    b = int(m1.group(2)) if m1.group(2) else total_l
+    if a < 1 or b < a:
+        sys.stderr.write(f"repo: erro: --linhas {faixa_str!r}: use 'a-b', 'a-' ou '-n' (base 1)\n")
+        sys.exit(2)
+    ini = a - 1
+    fim = min(b, total_l)
+elif m2:
+    n = int(m2.group(1))
+    if n < 1:
+        sys.stderr.write(f"repo: erro: --linhas {faixa_str!r}: n deve ser >= 1\n")
+        sys.exit(2)
+    ini = max(0, total_l - n)
+    fim = total_l
+else:
+    sys.stderr.write(f"repo: erro: --linhas {faixa_str!r}: use 'a-b', 'a-' ou '-n' (base 1)\n")
+    sys.exit(2)
+
+sel = linhas[ini:fim]
+sys.stdout.write("".join(sel))
+sys.stdout.flush()
+PY
+  else
+    python3 - "$alvo_arquivo" "$offset" "$LER_PAGINA" "$repo" "$caminho" <<'PY' || exit $?
+import sys
+arq, offset, pagina, repo, caminho = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5]
+with open(arq, "rb") as f:
+    bruto = f.read()
+total = len(bruto)
+if offset > total:
+    sys.stderr.write(f"repo: erro: --offset {offset} passa do fim do arquivo ({total} bytes)\n")
+    sys.exit(2)
+ini, fim = offset, min(offset + pagina, total)
+while offset > 0 and ini < fim and (bruto[ini] & 0xC0) == 0x80:
+    ini += 1
+if fim < total:
+    while fim > ini and (bruto[fim] & 0xC0) == 0x80:
+        fim -= 1
+corpo = bruto[ini:fim]
+out = sys.stdout.buffer
+out.write(corpo)
+if fim < total:
+    if corpo and not corpo.endswith(b"\n"):
+        out.write(b"\n")
+    out.write((f"truncado em {fim} de {total} bytes; continue com --offset {fim}"
+               f" (repo ler {repo} {caminho} --offset {fim})\n").encode("utf-8"))
+out.flush()
+PY
+  fi
 
   local ramo; ramo="$(ramo_atual "$c")"
   local sha; sha="$("$GIT" -C "$c" rev-parse --short HEAD 2>/dev/null || echo "")"
@@ -779,12 +875,16 @@ cmd_ler() {
 }
 
 cmd_procurar() {
-  # --termo repete: a linha volta se casar com qualquer um dos termos, cada um literal (#2856 linha 443).
-  local como_json=0 repo="" termo="" prefixo="" extra=""
+  # DT 213: aceita -- para fim de opções e --termo com traço
+  # DT 420: aceita regex ERE por padrão (-E), --literal/-F para fixo, e --caminho <prefixo>
+  local como_json=0 repo="" termo="" prefixo=""
   local -a termos=()
+  local -a posicionais=()
+  local literal=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --json) como_json=1; COMO_JSON=1; shift ;;
+      --literal|-F) literal=1; shift ;;
       --termo)
         shift
         [ $# -gt 0 ] || morre "--termo exige um valor" 2
@@ -792,29 +892,40 @@ cmd_procurar() {
         termos+=("$1")
         shift
         ;;
+      --caminho)
+        shift
+        [ $# -gt 0 ] || morre "--caminho exige um valor" 2
+        [ -n "$1" ] || morre "--caminho exige um valor não vazio" 2
+        prefixo="$1"
+        shift
+        ;;
+      --)
+        shift
+        while [ $# -gt 0 ]; do posicionais+=("$1"); shift; done
+        break
+        ;;
       -*) morre "opção desconhecida: '$1'" 2 ;;
       *)
-        if [ -z "$repo" ]; then
-          repo="$1"
-        elif [ -z "$prefixo" ]; then
-          prefixo="$1"
-        elif [ -z "$extra" ]; then
-          extra="$1"
-        else
-          morre "argumento excedente: '$1'" 2
-        fi
+        posicionais+=("$1")
         shift
         ;;
     esac
   done
 
+  local p
+  for p in "${posicionais[@]+"${posicionais[@]}"}"; do
+    if [ -z "$repo" ]; then
+      repo="$p"
+    elif [ "${#termos[@]}" -eq 0 ]; then
+      termos+=("$p")
+    elif [ -z "$prefixo" ]; then
+      prefixo="$p"
+    else
+      morre "argumento excedente: '$p'" 2
+    fi
+  done
+
   [ -n "$repo" ] || morre "repo obrigatório para procurar" 2
-  # O termo também vai posicional: repo procurar <repo> <termo> [<prefixo>] (#2856 linha 82).
-  # Com --termo dado, o primeiro posicional depois do repo segue sendo o prefixo.
-  if [ "${#termos[@]}" -eq 0 ] && [ -n "$prefixo" ]; then
-    termos=("$prefixo"); prefixo="$extra"; extra=""
-  fi
-  [ -z "$extra" ] || morre "argumento excedente: '$extra'" 2
   [ "${#termos[@]}" -gt 0 ] || morre "termo obrigatório: repo procurar <repo> <termo> [<prefixo>], ou --termo <t> repetido" 2
   local -a padroes=()
   local t
@@ -829,11 +940,14 @@ cmd_procurar() {
     fi
   fi
 
+  local grep_modo="-E"
+  [ "$literal" -eq 1 ] && grep_modo="-F"
+
   local out=""
   if [ -n "$prefixo" ]; then
-    out="$("$GIT" -C "$c" grep -n -F "${padroes[@]}" -- "$prefixo" 2>/dev/null || true)"
+    out="$("$GIT" -C "$c" grep -n "$grep_modo" "${padroes[@]}" -- "$prefixo" 2>/dev/null || true)"
   else
-    out="$("$GIT" -C "$c" grep -n -F "${padroes[@]}" 2>/dev/null || true)"
+    out="$("$GIT" -C "$c" grep -n "$grep_modo" "${padroes[@]}" 2>/dev/null || true)"
   fi
 
   if [ -z "$out" ]; then

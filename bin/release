@@ -716,9 +716,11 @@ cmd_procurar() {
   # Mesma forma do irmao `repo procurar` (#2856 linha 82, #3885): `<repo> <termo> [<prefixo>]`,
   # com `--termo <termo>` ainda valendo. A forma posicional era a que as cadeiras tentavam todo
   # dia e o release recusava com 2. `--caminho` e apelido do prefixo, a outra forma tentada.
+  local literal=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --json) como_json=1; shift ;;
+      --literal|-F) literal=1; shift ;;
       --termo)
         shift
         [ $# -gt 0 ] || { printf 'release: erro: --termo exige um valor\n' >&2; uso_texto; exit 2; }
@@ -730,6 +732,11 @@ cmd_procurar() {
         [ $# -gt 0 ] || { printf 'release: erro: --caminho exige um valor\n' >&2; uso_texto; exit 2; }
         prefixo="$1"
         shift
+        ;;
+      --)
+        shift
+        while [ $# -gt 0 ]; do posicionais+=("$1"); shift; done
+        break
         ;;
       -*)
         printf 'release: erro: opção desconhecida: %s\n' "$1" >&2
@@ -787,11 +794,14 @@ cmd_procurar() {
     exit "$rc"
   fi
 
+  local grep_modo="-E"
+  [ "$literal" -eq 1 ] && grep_modo="-F"
+
   local out=""
   if [ -n "$prefixo" ]; then
-    out="$("$GIT" -C "$TARGET_DIR" grep -n -F -- "$termo" -- "$prefixo" 2>/dev/null || true)"
+    out="$("$GIT" -C "$TARGET_DIR" grep -n "$grep_modo" -- "$termo" -- "$prefixo" 2>/dev/null || true)"
   else
-    out="$("$GIT" -C "$TARGET_DIR" grep -n -F -- "$termo" 2>/dev/null || true)"
+    out="$("$GIT" -C "$TARGET_DIR" grep -n "$grep_modo" -- "$termo" 2>/dev/null || true)"
   fi
 
   if [ -z "$out" ]; then
