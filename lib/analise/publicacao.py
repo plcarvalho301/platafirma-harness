@@ -21,6 +21,18 @@ from . import Falha, agora, exigir, json_canonico
 from .serializacao import canonizar
 
 
+# O keycloak guarda credencial e conta: o que sai dele só é lido por segurança e TI.
+BANCO_RESTRITO = "keycloak"
+CADEIRAS_DO_KEYCLOAK = ("seguranca", "ti")
+
+def restricao_das_origens(origens: list[dict], cadeira: str) -> list[str] | None:
+    """As cadeiras que podem ler o objeto, ou None quando ele é livre. Receita que lê o
+    keycloak só roda em segurança e TI."""
+    if any(t.get("banco") == BANCO_RESTRITO for t in origens):
+        exigir(cadeira in CADEIRAS_DO_KEYCLOAK, "keycloak-so-seguranca-e-ti", 4)
+        return list(CADEIRAS_DO_KEYCLOAK)
+    return None
+
 def novo(prefixo: str) -> str:
     return prefixo + "-" + uuid.uuid4().hex
 
@@ -37,9 +49,9 @@ def vencimento(
 
 
 class Catalogo:
-    def __init__(self, conn: Connection, sujeito: str) -> None:
+    def __init__(self, conn: Connection, sujeito: str, cadeira: str = "") -> None:
         conn.autocommit = True
-        self.conn, self.sujeito = conn, sujeito
+        self.conn, self.sujeito, self.cadeira = conn, sujeito, cadeira
 
     def abrir_execucao(
         self, id: str, ato: str, sessao: str, ordem: str, origem: str | None = None
@@ -89,6 +101,8 @@ class Catalogo:
             "acesso-negado",
             4,
         )
+        restrita = (obj["manifesto"] or {}).get("restrita_a")
+        exigir(so_dono or not restrita or self.cadeira in restrita, "acesso-negado", 4)
         exigir(
             aceitar_vencido or obj["expires_at"] is None or obj["expires_at"] > agora(),
             "objeto-vencido",

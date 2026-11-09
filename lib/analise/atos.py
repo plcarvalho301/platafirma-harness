@@ -31,7 +31,7 @@ from . import (
 from .extrator import conectar, extrair, resolver_corte
 from .manifesto import fase, identidade_receita
 from .materializacao import materializar
-from .publicacao import Catalogo, novo
+from .publicacao import Catalogo, novo, restricao_das_origens
 from .receita import carregar, parametros, pre_voo
 from .supervisor import admitir
 from .unidade import executar
@@ -48,6 +48,7 @@ class MotorAnalise:
         sujeito: str,
         sessao: str,
         ordem: str,
+        cadeira: str = "",
         conexao: Callable[..., Connection] = conectar,
         autorizar: Callable[..., dict] | None = None,
         construtor: Callable[..., tuple[Path, dict]] = ambiente.construir,
@@ -59,6 +60,7 @@ class MotorAnalise:
         )
         self.instancia = Path(instancia)
         self.sujeito, self.sessao, self.ordem = sujeito, sessao, ordem
+        self.cadeira = cadeira
         self.conexao = conexao
         if autorizar is None:
             from .acesso import autorizar
@@ -69,7 +71,7 @@ class MotorAnalise:
         self.tmp = self.instancia / "var/tmp"
 
     def catalogo(self) -> Catalogo:
-        return Catalogo(self.conexao("destino"), self.sujeito)
+        return Catalogo(self.conexao("destino"), self.sujeito, self.cadeira)
 
     def receita(self, slug: str, ato: str) -> tuple[Path, dict, dict]:
         nome_seguro(slug)
@@ -162,6 +164,10 @@ class MotorAnalise:
             else:
                 pre_voo(r)
                 corte = resolver_corte(r, corte)
+            # O que lê o keycloak só roda em segurança e TI, e o objeto só é lido por elas.
+            restrita = restricao_das_origens(
+                r.get("tabelas_de_origem", []), self.cadeira
+            ) or (base["manifesto"].get("restrita_a") if base else None)
             # Construção não vê origem, destino, credencial ou dado.
             amb, amb_ident = self.construtor(pasta, self.cache)
             catalogo = catalogo or self.catalogo()
@@ -206,6 +212,7 @@ class MotorAnalise:
                     "corte": str(corte) if corte else None,
                     "base_consumida": base_id,
                     "fases": {},
+                    "restrita_a": restrita,
                 }
                 catalogo.abrir_execucao(
                     ex, "refazer" if origem else ato, self.sessao, self.ordem, origem
@@ -400,6 +407,7 @@ def runtime() -> MotorAnalise:
         sujeito=os.environ["PF_SUJEITO"],
         sessao=os.environ["PF_SESSAO"],
         ordem=os.environ["PF_ORDEM_ID"],
+        cadeira=os.environ.get("PF_CADEIRA", ""),
     )
 
 
