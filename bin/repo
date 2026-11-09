@@ -1225,6 +1225,7 @@ ato_sincronizar() {
   env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" >&2
   fsha="$(forge_sha "$c" "$ramo")"; rc=$?
   if [ "$rc" -eq 0 ] && [ "$fsha" = "$head" ]; then
+    publica_veredito "$c" "$nome" "$head"
     if [ "$mesclou" -eq 1 ]; then
       printf 'sincronizado: %s = %s (mesclou origin/main %s, %s commit(s) novo(s)); origin/%s = %s [lido do forge]\n' \
         "$ramo" "${head:0:7}" "${main:0:7}" "$novos" "$ramo" "${fsha:0:7}"
@@ -2206,6 +2207,40 @@ fecho_commit() {
   printf 'próximo: repo sincronizar %s\n' "$nome"
 }
 
+# publica_veredito <clone> <repo> <sha> -- incidente #4196 (peca 1 da feature #4027): o veredito
+# do portao, medido pelo pre-push na rev empurrada, vira commit status `esteira/portao` no forge.
+# Quem integra o PR e a esteira do proprio repositorio (.github/workflows/esteira-integra.yml,
+# lido de main): PR de fabrica/ cuja ponta tem esse status verde entra em main sem ato de
+# cadeira nem do dono. A marca vem de hooks/pre-push: `verde <chaves>` quando a suite do portao
+# foi medida (ou reaproveitada) verde, `sem-suite` quando o registro nao declara chave de teste.
+# Sem marca (vermelho, ambiente que nao mediu, hook nao instalado) nada se publica, e veredito
+# ausente nao integra. Nunca muda o exit de quem chama: o push ja esta feito.
+publica_veredito() {
+  local c="$1" nome="${2%%@*}" sha="$3" v="" resto="" desc=""
+  local marca="$PLATAFIRMA_INSTANCIA/var/pre-push/vereditos/portao-$nome-$sha"
+  if [ ! -r "$marca" ]; then
+    printf 'veredito: sem medida do portão para %s; nada publicado, e a esteira não integra PR sem veredito\n' "${sha:0:7}"
+    return 0
+  fi
+  read -r v resto < "$marca" || true
+  case "$v" in
+    verde) desc="suite do portao verde na rev empurrada (${resto:-chave nao informada})" ;;
+    sem-suite) desc="registro sem chave de teste: nada a medir" ;;
+    *) printf 'veredito: marca ilegível para %s; nada publicado\n' "${sha:0:7}"; return 0 ;;
+  esac
+  if [ -z "$GH" ] || [ ! -x "$GH" ]; then
+    printf 'veredito: sem gh nesta conta; %s medido %s e não publicado\n' "${sha:0:7}" "$v"
+    return 0
+  fi
+  if (cd "$c" && env PATH="$PATH_FORGE" "$GH" api -X POST "repos/$GH_OWNER/$nome/statuses/$sha" \
+        -f state=success -f context=esteira/portao -f description="${desc:0:140}" >/dev/null 2>&1); then
+    printf 'veredito publicado: esteira/portao verde em %s (%s) [forge]\n' "${sha:0:7}" "$v"
+  else
+    printf 'veredito: o forge recusou o status de %s; a esteira não integra este PR sozinha\n' "${sha:0:7}"
+  fi
+  return 0
+}
+
 ato_empurrar() {
   local nome="${1:-}" ramo="${2:-}" c
   c="$(clone_de "$nome")" || exit $?
@@ -2234,6 +2269,7 @@ ato_empurrar() {
   env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" >&2
   fsha="$(forge_sha "$c" "$ramo")"; rc=$?
   if [ "$rc" -eq 0 ] && [ "$fsha" = "$local_sha" ]; then
+    publica_veredito "$c" "$nome" "$local_sha"
     printf 'empurrado: %s -> origin/%s = %s (%s) [lido do forge]\n' "$nome" "$ramo" "${fsha:0:7}" \
       "$("$GIT" -C "$c" log -1 --format='%s' "$local_sha")"
     printf 'próximo: repo pr-abrir %s --titulo <t> [--corpo <c>]\n' "$nome"
@@ -2274,7 +2310,8 @@ ato_pr_abrir() {
   if [ -n "$ja" ]; then
     printf 'já feito: PR %s aberto de %s\n' "$ja" "$ramo"
     local numero_ja="${ja#\#}"; numero_ja="${numero_ja%% *}"
-    printf 'próximo: repo pr-merge %s %s\n' "$nome" "$numero_ja"
+    publica_veredito "$c" "$nome" "$("$GIT" -C "$c" rev-parse HEAD)"
+    printf 'próximo: a esteira integra o PR com veredito verde; repo pr-ver %s %s mostra o sha do merge, que vai ao release promover\n' "$nome" "$numero_ja"
     return 0
   fi
   (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr create --base "$base" --head "$ramo" --title "$titulo" --body "$corpo" >/dev/null) \
@@ -2285,7 +2322,8 @@ ato_pr_abrir() {
     || morre "indeterminavel: PR criado? o forge nao confirmou" 5
   printf 'PR %s de %s -> %s [lido do forge]\n' "$lido" "$ramo" "$base"
   local numero="${lido#\#}"; numero="${numero%% *}"
-  printf 'próximo: repo pr-merge %s %s\n' "$nome" "$numero"
+  publica_veredito "$c" "$nome" "$("$GIT" -C "$c" rev-parse HEAD)"
+  printf 'próximo: a esteira integra o PR com veredito verde; repo pr-ver %s %s mostra o sha do merge, que vai ao release promover\n' "$nome" "$numero"
 }
 
 ato_pr_listar() {
@@ -2324,11 +2362,12 @@ ato_pr_ver() {
   # forge deprecou (Projects classic) e o GraphQL agora recusa — exit 3 sobre um PR que
   # existe. Pedindo so os campos usados, o campo morto nao entra na query. Campos e
   # template cobrem o que um 'ver' precisa; para o resto ha --json cru ou o proprio gh.
-  local campos="number,title,state,author,headRefName,baseRefName,url,isDraft,mergeable,body"
+  local campos="number,title,state,author,headRefName,baseRefName,url,isDraft,mergeable,mergeCommit,body"
   local tmpl='#{{.number}} {{.title}}  [{{.state}}]{{if .isDraft}} (rascunho){{end}}
   autor : {{.author.login}}
   ramo  : {{.headRefName}} -> {{.baseRefName}}
-  merge : {{.mergeable}}
+  merge : {{.mergeable}}{{if .mergeCommit}}
+  mesclado em : {{.mergeCommit.oid}}{{end}}
   url   : {{.url}}
 
 {{.body}}

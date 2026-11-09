@@ -80,8 +80,23 @@ esteira="$(printf '%s' "$res" | cut -f4)"
 chaves="$(PLATAFIRMA_VENVS="$VENVS_CLONE" python3 "$REGISTRO" --familia "$REPO" 2>/dev/null | awk -F'\t' '$3 != ""' | wc -l)"
 if [ "${chaves:-0}" -eq 0 ]; then
   printf 'pre-push: %s sem chave de teste no registro — não medido, deixando passar.\n' "$REPO" >&2
+  # incidente #4196: sem suite declarada, nada ha a medir, e a marca diz isso; `repo` a publica
+  # no forge como veredito do portao, com esse motivo escrito.
+  while read -r _ oid_marca _ _; do
+    case "$oid_marca" in ''|*[!0-9a-f]*|0000000000000000000000000000000000000000) continue ;; esac
+    printf 'sem-suite\n' > "$VEREDITOS_DIR/portao-$REPO-$oid_marca" 2>/dev/null || true
+  done
   exit 0
 fi
+# marca_do_portao <rev> <verde ...|vazio> -- incidente #4196: o veredito MEDIDO da rev empurrada
+# fica numa marca por (repositorio, sha), que `repo sincronizar|empurrar|pr-abrir` publica no
+# forge como commit status `esteira/portao`. Vermelho e nao medido apagam a marca: veredito
+# ausente nao integra PR nenhum.
+marca_do_portao() {
+  local alvo="$VEREDITOS_DIR/portao-$REPO-$1"
+  if [ -n "${2:-}" ]; then printf '%s\n' "$2" > "$alvo" 2>/dev/null || true
+  else rm -f "$alvo" 2>/dev/null || true; fi
+}
 
 # A REV A JULGAR vem do stdin do hook: "<local_ref> <local_oid> <remote_ref> <remote_oid>".
 # TODA linha e uma ref empurrada (A4). local_oid todo-zero e delecao de ref: nao ha
@@ -183,8 +198,10 @@ medir_rev() {  # $1=rev $2=base (vazio: lista inteira)
       fi
       # card #3370: o push diz o que mediu (raio total ou quantos arquivos da lista rodaram)
       grep -hE '^(raio total|seleção):' "$saida" | sort -u | sed 's/^/pre-push: /' >&2 || true
+      marca_do_portao "$rev" "verde $chaves_id"
       return 0 ;;
     1)
+      marca_do_portao "$rev" ""
       if grep -q "veredito reaproveitado" "$saida" && ! grep -qE '^[[:space:]]*reprovado:' "$saida"; then
         printf 'pre-push: BASELINE VERDE QUEBROU na rev %s — veredito reaproveitado (%s, mesma árvore já medida vermelha).\n' "${rev:0:7}" "$chaves_id" >&2
       else
@@ -201,6 +218,7 @@ medir_rev() {  # $1=rev $2=base (vazio: lista inteira)
       fi
       return 1 ;;
     *)
+      marca_do_portao "$rev" ""
       printf 'pre-push: teste rodar saiu %s medindo %s (%s) — não medido, deixando passar.\n' \
         "$rc_teste" "${rev:0:7}" "$REPO" >&2
       cat "$saida" >&2
