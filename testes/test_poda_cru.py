@@ -170,3 +170,31 @@ def test_cosmetica_lava_json_motor(tmp_path, monkeypatch):
     assert dados["fontes"][1]["breadcrumb"] == "Outro Breadcrumb"  # diferente da obra, preservado
     assert "rerank" not in dados["contexto"][0]
     assert "breadcrumb" not in dados["contexto"][0]  # repetia obra
+
+
+def test_tabela_markdown_nao_vira_linhas_no_mesmo_molde(tmp_path, monkeypatch):
+    """DT 63: linhas de tabela markdown (|) variando números não se colapsam como molde."""
+    monkeypatch.setattr(_p, "DERRAME", tmp_path)
+    linhas = ["| id | data | autor | comentario |"]
+    for i in range(1, 15):
+        linhas.append(f"| {i} | 2026-10-{i:02d} | autor | texto do comentario numero {i} |")
+    tabela = "\n".join(linhas)
+    fora, meta = _p.poda_texto(tabela, **_args())
+    assert "linhas no mesmo molde" not in fora
+    assert "repeticao" not in meta["lavado"]
+    for l in linhas:
+        assert l in fora
+
+
+def test_repeticao_abaixo_do_teto_gera_cru_e_alca(tmp_path, monkeypatch):
+    """DT 63: repetição que colapsa linhas gera o arquivo cru no derrame e alça humana."""
+    monkeypatch.setattr(_p, "DERRAME", tmp_path)
+    linhas = [f"Item numero {i} de uma lista longa" for i in range(1, 20)]
+    texto = "\n".join(linhas)
+    fora, meta = _p.poda_texto(texto, **_args())
+    assert "linhas no mesmo molde" in fora
+    assert "repeticao" in meta["lavado"]
+    assert meta.get("cru") and Path(meta["cru"]).read_text(encoding="utf-8") == texto
+    humana = _p.linha_humana(meta)
+    assert meta["cru"] in humana
+    assert "repeticao saiu do retorno" in humana

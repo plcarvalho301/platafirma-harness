@@ -21,7 +21,9 @@ if not shutil.which("bash"):
 DOCKER = """#!/usr/bin/env bash
 case "$1" in
   inspect) echo true ;;
-  exec) cat ;;
+  exec)
+    if [ -n "$LOG_EXEC" ]; then echo "$*" > "$LOG_EXEC"; fi
+    cat ;;
   *) exit 1 ;;
 esac
 """
@@ -55,3 +57,21 @@ def test_c_sem_query_sai_2(tmp_path):
     r = _psql(tmp_path, "-c")
     assert r.returncode == 2
     assert "--sql exige uma query" in r.stderr
+
+
+def test_opcoes_formato_psql_passam_ao_exec(tmp_path):
+    """DT 138: -A, -t, --csv, -F passam ao psql sem virar syntax error."""
+    log = tmp_path / "exec.log"
+    stub = tmp_path / "bin"
+    stub.mkdir(exist_ok=True)
+    docker = stub / "docker"
+    docker.write_text(DOCKER)
+    docker.chmod(0o755)
+    env = {**os.environ, "PATH": f"{stub}{os.pathsep}{os.environ.get('PATH', '')}", "LOG_EXEC": str(log)}
+    r = subprocess.run([str(PSQL), "-A", "-t", "--csv", "-F", ",", "-c", "SELECT 1"], env=env,
+                       capture_output=True, text=True, timeout=30, check=False)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "SELECT 1"
+    registrado = log.read_text()
+    for flag in ("-A", "-t", "--csv", "-F ,"):
+        assert flag in registrado, f"flag {flag} ausente de {registrado}"

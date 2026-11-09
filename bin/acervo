@@ -6,6 +6,7 @@
 # use para: incorporar item, «põe essa obra no acervo», «ingere o repo de docs»; classificar item, «cataloga essa obra», «de que domínio ela é?»; definir e relacionar conceitos no tesauro, «o que é o conceito X?», «como X se liga a Y?»; selar impressão, pôr item em serviço, retirar e restaurar item; abrir obra ou documento que já se sabe qual é, ou que a busca achou, «abre a ADR 97»; publicar página de wiki
 # atos: pipeline (escrita, incorporacao), ler (leitura, casa), listar (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), empacotar (leitura, classificacao), espelhar (escrita, transcricao), recortar (escrita, transcricao), promover (escrita, transcricao), julgar (escrita, transcricao), converter (escrita, transcricao), recolher (escrita, transcricao), repor (escrita, transcricao), retirar (escrita, retirada), restaurar (escrita, retirada), apagar (escrita, retirada), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), consultar (leitura, casa), balde (escrita, acervo), medir (escrita, acervo), gerar (escrita, acervo), gerador (escrita, acervo)
 # forma: texto
+# poda: cosmetica@psql
 # le: pipeline=repo,acervo.obra
 # le: ler=acervo.casa,acervo.obra,acervo.registro,repo
 # le: listar=acervo.casa,acervo.obra,acervo.registro,repo,arquivo-local

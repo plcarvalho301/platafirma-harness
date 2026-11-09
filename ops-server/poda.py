@@ -248,6 +248,12 @@ def _colapsa_repeticao(linhas: list[str]) -> tuple[list[str], int]:
             cortadas += n - 1
             i = j + 1
             continue
+        # DT 63: linha de tabela markdown (|) ou cerca de código não se colapsa como molde
+        s_i = linhas[i].strip()
+        if s_i.startswith("|") or s_i.count("|") >= 2 or s_i.startswith("```"):
+            fora.append(linhas[i])
+            i += 1
+            continue
         # molde: mesma linha a menos dos números
         molde = _NUMERO.sub("#", linhas[i])
         k = i
@@ -696,12 +702,11 @@ def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
             "lavado": rel["classes"], "bytes_produzidos": rel["bytes_antes"]}
     if cosmetica:
         meta["perfil"] = "cosmetica"
-    # Invariante (ii): `blob` e a unica classe do lavador que TIRA conteudo do retorno
-    # (marcador de base64/hex, janela de linha longa), e o sha no marcador nao e alca —
-    # nada nesta porta desreferencia sha. Medido em 18/09: abaixo do teto o cru nao ia
-    # a lugar nenhum, e quem recebia `<linha longa … sha=…>` nao tinha como reler. O cru
-    # derrama sempre que a classe marca, e o caminho sai no envelope e na linha humana.
-    cru = derrama(sessao_id, nome_derrame, texto) if "blob" in rel["classes"] else None
+    # Invariante (ii): classes do lavador que TIRAM conteudo do retorno (marcador de base64/hex,
+    # janela de linha longa, ou repeticao/busca colapsadas — DT 63). O cru derrama sempre que
+    # alguma dessas classes marca, e o caminho sai no envelope e na linha humana.
+    tira_conteudo = bool({"blob", "repeticao", "busca"} & set(rel["classes"]))
+    cru = derrama(sessao_id, nome_derrame, texto) if tira_conteudo else None
     if cru:
         meta["cru"] = cru
     servir = lavado
@@ -760,12 +765,16 @@ def linha_humana(meta: dict) -> str:
                 + (f" — inteiro em {alca}" if alca else ""))
     if meta.get("lavado"):
         linha = "poda: lavado (" + ", ".join(meta["lavado"]) + ")"
-        # `blob` tira conteudo; as outras classes so tiram ruido. Quem le precisa saber
-        # qual das duas aconteceu, e onde esta o que saiu (carta do arquiteto, 18/09).
+        # `blob`, `repeticao` e `busca` tiram conteudo; as outras classes so tiram ruido.
         if "blob" in meta["lavado"]:
             cru = meta.get("cru")
             linha += (" — blob/linha longa saiu do retorno; cru em "
                       f"{cru}; `ler_arquivo`" if cru
                       else " — blob/linha longa saiu do retorno; sem alca")
+        elif cru := meta.get("cru"):
+            classes_tira = [c for c in ("repeticao", "busca") if c in meta["lavado"]]
+            if classes_tira:
+                linha += (f" — {'/'.join(classes_tira)} saiu do retorno; cru em "
+                          f"{cru}; `ler_arquivo`")
         return linha
     return ""
