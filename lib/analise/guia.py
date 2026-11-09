@@ -6,7 +6,7 @@ import subprocess
 
 from . import Falha
 
-CAMINHO = "6-processo/processo/escrever-receita-de-preparacao.md"
+CAMINHO = "6-processo/procedimento/escrever-receita-de-preparacao.md"
 
 
 def ler() -> str:

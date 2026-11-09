@@ -49,6 +49,13 @@ def despachar(argv: list[str]) -> int:
         "PLATAFIRMA_INSTANCIA",
         "PF_RELEASE_RAIZ",
         "PLATAFIRMA_RELEASE",
+        # #4185: a extração entra em cada banco por docker exec; a unidade precisa
+        # achar o mesmo daemon (rootless) que a porta acha.
+        "DOCKER_HOST",
+        "DOCKER_CONTEXT",
+        "XDG_RUNTIME_DIR",
+        # Só o ensaio o define; a porta não recebe ambiente do chamador.
+        "PF_ANALISE_BANCOS",
     ):
         if chave in os.environ:
             cmd.append("--setenv=" + chave + "=" + os.environ[chave])

@@ -142,7 +142,11 @@ class MotorAnalise:
             politica = []
             for t in r.get("tabelas_de_origem", []):
                 politica.append(
-                    self.autorizar(self.sujeito, ato, "analise:origem/" + t["tabela"])
+                    self.autorizar(
+                        self.sujeito,
+                        ato,
+                        "analise:origem/" + t.get("banco", "rag") + "/" + t["tabela"],
+                    )
                 )
             base = None
             if ato == "montar":
@@ -362,7 +366,8 @@ def parser() -> Parser:
     return p
 
 
-AJUDA = """analise preparar <receita> [--corte <instante>] [--param nome=valor]
+AJUDA = """analise bancos [<banco>]        todo Postgres da casa; com <banco>, as tabelas e colunas que a receita declara
+analise preparar <receita> [--corte <instante>] [--param nome=valor]
 analise montar <receita> --base <base_id> [--param nome=valor]
 analise refazer <execucao_id> [--reler]
 analise ler <id> [--tabela <nome>] [--linhas <a-b>] [--projecao <nome>]
@@ -421,11 +426,17 @@ def main(argv: list[str] | None = None) -> int:
                 "listar",
                 "descartar",
                 "travar",
+                "bancos",
             },
             "ato-desconhecido",
         )
         motor = runtime()
-        if ato in {"preparar", "montar"}:
+        if ato == "bancos":
+            from .bancos import listar as listar_bancos
+
+            motor.autorizar(motor.sujeito, "listar", "analise:bancos/" + (a.alvo or "*"))
+            rc, bloco = listar_bancos(a.alvo)
+        elif ato in {"preparar", "montar"}:
             exigir(a.alvo, "receita-ausente")
             rc, bloco = motor.rodar(
                 ato, a.alvo, base_id=a.base, corte=a.corte, params=a.param

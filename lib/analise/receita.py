@@ -51,29 +51,48 @@ def carregar(pasta: Path, ato: str | None = None) -> dict:
         )
         for chave in ("tabelas_de_origem", "consultas", "corte"):
             exigir(r.get(chave), "campo-ausente:" + chave)
+        registrados = bancos_registrados()
         declaradas = {}
         for t in r["tabelas_de_origem"]:
             exigir(
                 re.fullmatch(r"[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*", t["tabela"]),
                 "origem-invalida",
             )
+            # #4185: toda tabela mora num banco do registro; sem banco, é o do acervo.
+            t.setdefault("banco", "rag")
+            exigir(t["banco"] in registrados, "banco-fora-do-registro:" + str(t["banco"]))
             exigir(
                 t.get("colunas")
                 and all(re.fullmatch(r"[a-z_][a-z0-9_]*", c) for c in t["colunas"]),
                 "colunas-invalidas",
             )
-            exigir(t["tabela"] not in declaradas, "origem-duplicada")
-            declaradas[t["tabela"]] = t["colunas"]
-        todas = {t + "." + c for t, cols in declaradas.items() for c in cols}
+            exigir(origem_id(t) not in declaradas, "origem-duplicada")
+            declaradas[origem_id(t)] = t
+        r["corte"] = normalizar_corte(r["corte"], declaradas)
         exigir(set(r["corte"]) == set(declaradas), "corte-por-origem-ausente")
-        for tabela_corte, corte in r["corte"].items():
+        for oid, corte in r["corte"].items():
+            t = declaradas[oid]
+            if corte.get("por") == "snapshot":
+                # Tabela sem coluna de tempo: vale o snapshot da transação, sem recorte.
+                corte.setdefault("garantia", "snapshot")
+                corte.setdefault("margem_estimada", False)
+                exigir(corte["garantia"] == "snapshot", "corte-invalido")
+                continue
             if "." not in corte.get("coluna", ""):
-                corte["coluna"] = tabela_corte + "." + corte.get("coluna", "")
+                corte["coluna"] = t["tabela"] + "." + corte.get("coluna", "")
             exigir(
                 set(("por", "coluna", "margem", "margem_estimada", "garantia"))
                 <= corte.keys(),
                 "corte-incompleto",
             )
+            # A coluna do corte pode ser de outra tabela do mesmo banco (o giro se corta
+            # pelo ts do log a que se liga), nunca de outro banco.
+            todas = {
+                o["tabela"] + "." + c
+                for o in declaradas.values()
+                if o["banco"] == t["banco"]
+                for c in o["colunas"]
+            }
             exigir(corte["coluna"] in todas, "coluna-corte-nao-declarada")
             exigir(
                 corte["por"] in {"instante", "chave"}
@@ -87,7 +106,8 @@ def carregar(pasta: Path, ato: str | None = None) -> dict:
             exigir(q["nome"] not in nomes, "consulta-duplicada")
             nomes.add(q["nome"])
             sql = relativo(pasta, q["arquivo"]).read_text()
-            validar_sql(sql, r)
+            q["banco"] = banco_da_consulta(q, sql, r)
+            validar_sql(sql, r, q["banco"])
         if r["populacao"]["objeto"] == "turno":
             chave = r.get("chave_do_turno", {})
             exigir(
@@ -200,7 +220,103 @@ _PALAVRAS = set(
 )
 
 
-def validar_sql(sql: str, receita: dict) -> list[str]:
+def bancos_registrados() -> dict:
+    """Os Postgres da casa, de registro/bancos.json do harness (#4185)."""
+    import json
+
+    import os
+
+    # PF_ANALISE_BANCOS só aponta outro registro no ensaio; a porta não o repassa.
+    arq = Path(
+        os.getenv("PF_ANALISE_BANCOS")
+        or Path(__file__).resolve().parents[2] / "registro/bancos.json"
+    )
+    try:
+        return json.loads(arq.read_text())
+    except (OSError, ValueError):
+        raise Falha(3, "registro-de-bancos-ausente") from None
+
+
+def origem_id(t: dict) -> str:
+    return t.get("banco", "rag") + "/" + t["tabela"]
+
+
+def normalizar_corte(corte: dict, declaradas: dict) -> dict:
+    """Chave do corte: `banco/schema.tabela`, ou só `schema.tabela` quando única."""
+    exigir(isinstance(corte, dict), "corte-invalido")
+    saida = {}
+    for chave, valor in corte.items():
+        if chave in declaradas:
+            oid = chave
+        else:
+            achadas = [o for o, t in declaradas.items() if t["tabela"] == chave]
+            exigir(achadas, "corte-de-origem-nao-declarada")
+            exigir(len(achadas) == 1, "corte-ambiguo:" + chave)
+            oid = achadas[0]
+        exigir(oid not in saida, "corte-duplicado")
+        exigir(isinstance(valor, dict), "corte-invalido")
+        saida[oid] = valor
+    return saida
+
+
+def _tokens(sql: str) -> list[str]:
+    tokens, fim = [], 0
+    for m in _TOKEN.finditer(sql):
+        exigir(m.start() == fim, "sql-fora-do-contrato", 4)
+        fim = m.end()
+        s = m.group()
+        if not s.isspace() and not s.startswith(("--", "/*")):
+            tokens.append(s.lower())
+    exigir(fim == len(sql), "sql-fora-do-contrato", 4)
+    if tokens and tokens[-1] == ";":
+        tokens.pop()
+    return tokens
+
+
+def _tabelas_usadas(tokens: list[str]) -> set[str]:
+    usadas = set()
+    for i, t in enumerate(tokens):
+        if t in {"from", "join"}:
+            exigir(
+                i + 3 < len(tokens) and tokens[i + 2] == ".", "origem-nao-declarada", 4
+            )
+            usadas.add(tokens[i + 1] + "." + tokens[i + 3])
+    return usadas
+
+
+def banco_da_consulta(q: dict, sql: str, receita: dict) -> str:
+    """Uma consulta lê um banco; o cruzamento entre bancos se faz no código da receita."""
+    usadas = _tabelas_usadas(_tokens(sql))
+    exigir(usadas, "origem-ausente")
+    origens = receita["tabelas_de_origem"]
+    if q.get("banco"):
+        exigir(
+            any(t.get("banco", "rag") == q["banco"] for t in origens),
+            "banco-da-consulta-sem-origem",
+        )
+        return q["banco"]
+    comuns = None
+    for tabela in usadas:
+        tem = {t.get("banco", "rag") for t in origens if t["tabela"] == tabela}
+        exigir(tem, "origem-nao-declarada", 4)
+        comuns = tem if comuns is None else comuns & tem
+    exigir(comuns, "consulta-cruza-bancos")
+    exigir(len(comuns) == 1, "banco-da-consulta-ambiguo")
+    return next(iter(comuns))
+
+
+def validar_sql(sql: str, receita: dict, banco: str | None = None) -> list[str]:
+    if banco is None:
+        banco = banco_da_consulta({}, sql, receita)
+    origens = [t for t in receita["tabelas_de_origem"] if t.get("banco", "rag") == banco]
+    cortes = {
+        t["tabela"]: receita["corte"].get(origem_id(t), receita["corte"].get(t["tabela"], {}))
+        for t in origens
+    }
+    return _validar_sql(sql, origens, cortes)
+
+
+def _validar_sql(sql: str, origens: list[dict], cortes: dict) -> list[str]:
     tokens, fim = [], 0
     for m in _TOKEN.finditer(sql):
         exigir(m.start() == fim, "sql-fora-do-contrato", 4)
@@ -219,8 +335,14 @@ def validar_sql(sql: str, receita: dict) -> list[str]:
         "sql-somente-select",
         4,
     )
-    exigir(":corte" in tokens, "consulta-sem-corte")
-    declaradas = {t["tabela"]: set(t["colunas"]) for t in receita["tabelas_de_origem"]}
+    declaradas = {t["tabela"]: set(t["colunas"]) for t in origens}
+    usadas_aqui = _tabelas_usadas(tokens)
+    recortadas = {
+        tab: c for tab, c in cortes.items()
+        if tab in usadas_aqui and c.get("por") != "snapshot"
+    }
+    if recortadas:
+        exigir(":corte" in tokens, "consulta-sem-corte")
     aliases, usados = {}, set()
     for i, t in enumerate(tokens):
         if t in {"from", "join"}:
@@ -257,9 +379,11 @@ def validar_sql(sql: str, receita: dict) -> list[str]:
                 "coluna-nao-declarada",
                 4,
             )
+    if not recortadas:
+        return tokens
     exigir("where" in tokens, "consulta-sem-recorte", 4)
     wi = tokens.index("where")
-    corte_colunas = {v["coluna"] for v in receita["corte"].values()}
+    corte_colunas = {v["coluna"] for v in recortadas.values()}
     for coluna in corte_colunas:
         tab, col = coluna.rsplit(".", 1)
         achou = any(
