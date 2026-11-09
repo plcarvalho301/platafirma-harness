@@ -460,7 +460,7 @@ aposentado() {
   echo "persona $1: aposentado (#3273) — persona nao mexe mais em git." >&2
   echo "  1. repo abrir platafirma-harness <card> --slug persona-<tema>" >&2
   echo "  2. edite abertura/ na bancada (write_file) e rode: persona conferir / persona salvar -m \"<msg>\"" >&2
-  echo "  3. entregue: repo commitar → sincronizar → pr-abrir → pr-merge → release promover" >&2
+  echo "  3. entregue: repo commitar → sincronizar → pr-abrir (a esteira integra com veredito verde) → release promover" >&2
   exit 2
 }
 
@@ -517,7 +517,7 @@ salvar() {
   local slug
   slug="$(basename "$REPO")"
   echo "conferido · nada commitado nem empurrado (persona nao faz mais git) · bancada $slug"
-  echo "entrega: repo commitar platafirma-harness@$slug -m \"$msg\" → repo sincronizar → repo pr-abrir → repo pr-merge → release promover platafirma-harness <sha>"
+  echo "entrega: repo commitar platafirma-harness@$slug -m \"$msg\" → repo sincronizar → repo pr-abrir (a esteira integra com veredito verde) → release promover platafirma-harness <sha>"
 }
 
 # rotas — regenera abertura/rotas-chapeu.json a partir das personas do clone (card
