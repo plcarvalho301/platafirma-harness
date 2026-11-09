@@ -143,3 +143,10 @@ def test_camada_d_aviso_uma_vez_por_sessao():
     r2 = _acervo("bancada", "biblioteca", "lote", env=env)
     assert "acervo: `acervo bancada` e a forma vigente" not in r2.stderr
     shutil.rmtree(f"/tmp/platafirma-avisos-{sess_id}", ignore_errors=True)
+
+
+def test_listar_conceitos_filtros_sql_valido(tmp_path):
+    env = _docker_de_fixture(tmp_path, 'echo "[]"\n')
+    r = _acervo("listar", "biblioteca", "conceito", "res", "--desde", "r", "--origem", "diretrizes", env=env)
+    assert r.returncode == 0
+    assert "nenhum conceito no golden record" in r.stderr
