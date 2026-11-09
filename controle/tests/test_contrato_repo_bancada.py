@@ -694,9 +694,11 @@ def test_procurar_com_termo_repetido_casa_qualquer_um_e_cada_um_literal(tmp_path
     assert "LEIA.md" in dois.stdout and dois.stdout == um.stdout
     nenhum = _repo(tmp_path, bancada, "s1", "procurar", "demo", "--termo", "zz-nada", "--termo", "yy-nada")
     assert nenhum.returncode == 0 and "zz-nada | yy-nada" in nenhum.stdout
-    # literal: a barra de alternância não é expressão regular
+    # DT #420: busca com regex (ERE) por padrão, como rg; --literal desliga
     alternancia = _repo(tmp_path, bancada, "s1", "procurar", "demo", "--termo", "x|zz-nada")
-    assert "não encontrado" in alternancia.stdout
+    assert alternancia.returncode == 0 and "LEIA.md" in alternancia.stdout
+    literal = _repo(tmp_path, bancada, "s1", "procurar", "demo", "--literal", "--termo", "x|zz-nada")
+    assert "não encontrado" in literal.stdout
     vazio = _repo(tmp_path, bancada, "s1", "procurar", "demo", "--termo", "")
     assert vazio.returncode == 2
     # spec repo §2: termo que parece flag chega ao git como dado (-e), nunca como opção
