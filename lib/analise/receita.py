@@ -40,6 +40,7 @@ def carregar(pasta: Path, ato: str | None = None) -> dict:
             "tipo-trocado",
         )
     exigir(r["metodo"] in METODOS, "metodo-invalido")
+    exigir(r.get("entrega", "todos") in {"todos", "privada"}, "entrega-invalida")
     exigir(
         isinstance(r["populacao"], dict) and r["populacao"].get("objeto"),
         "populacao-invalida",

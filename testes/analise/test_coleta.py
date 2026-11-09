@@ -27,10 +27,12 @@ def test_vencido_impede_leitura(catalogo,tmp_path,receita):
     assert e.value.exit==5
     assert coletar(catalogo,tmp_path)==1
 
-def test_outro_sujeito_nao_le(catalogo,tmp_path,receita):
+def test_outro_sujeito_le_pelo_padrao_e_nao_lista(catalogo,tmp_path,receita):
     out=tmp_path/"out";out.mkdir()
     id,r,m,ex=publicar_minima(catalogo,out,receita)
     outro=Catalogo(catalogo.conn,"outro")
     assert outro.listar("bases")==[]
+    assert outro.objeto(id)["id"]==id
+    catalogo.conn.execute("DELETE FROM analise.entrega WHERE objeto_id=%s",(id,))
     with pytest.raises(Falha) as e:outro.objeto(id)
     assert e.value.exit==4

@@ -332,6 +332,11 @@ class Catalogo:
                         json_canonico(manifesto),
                     ),
                 )
+            if receita.get("entrega", "todos") != "privada":
+                self.conn.execute(
+                    "INSERT INTO analise.entrega(objeto_id,sujeito,entregue_por) VALUES(%s,'*',%s) ON CONFLICT DO NOTHING",
+                    (objeto, self.sujeito),
+                )
             if antes_de_pronto:
                 antes_de_pronto()
             self.concluir(id, "pronta", manifesto)
