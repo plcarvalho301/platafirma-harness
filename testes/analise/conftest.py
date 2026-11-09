@@ -12,6 +12,7 @@ RAIZ=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(RAIZ/"lib"))
 CONHECIMENTO=None
 _FONTE_TEMP=None
+CONTEINER_PG=None
 
 def pytest_configure(config):
     """O ensaio usa artefatos fixados no teste, sem ler release ou bancada viva."""
@@ -55,6 +56,11 @@ def pg():
         mig=CONHECIMENTO/"rag/db/init/159_schema_analise.sql"
         with admin.transaction():
             admin.execute(mig.read_text())
+        # #4185: a role de leitura do analise, a mesma de todo banco da casa.
+        with admin.transaction():
+            admin.execute((RAIZ/"lib/analise/sql/leitura.sql").read_text())
+        global CONTEINER_PG
+        CONTEINER_PG=nome
         from psycopg import sql
         for role in ("analise_extracao","analise_publicacao"):
             admin.execute(sql.SQL("ALTER ROLE {} PASSWORD {}").format(sql.Identifier(role),sql.Literal(senha)))
@@ -71,6 +77,15 @@ def db(pg):
         admin.execute(sql.SQL("DROP TABLE IF EXISTS analise.{}").format(sql.Identifier(t)))
     admin.execute("TRUNCATE analise.projecao,analise.tabela,analise.resultado,analise.base,analise.execucao,acervo.log_giro,acervo.log CASCADE")
     return cfg,admin
+
+@pytest.fixture
+def bancos(pg,tmp_path,monkeypatch):
+    """Registro de bancos do ensaio: o rag e o rastreador são o mesmo contêiner descartável."""
+    import json
+    reg={s:{"conteiner":CONTEINER_PG,"base":"postgres","dono":"postgres"} for s in ("rag","rastreador")}
+    arq=tmp_path/"bancos.json";arq.write_text(json.dumps(reg))
+    monkeypatch.setenv("PF_ANALISE_BANCOS",str(arq))
+    return reg
 
 @pytest.fixture
 def receita(tmp_path):

@@ -1,0 +1,50 @@
+{
+  "rag": {
+    "conteiner": "rag-extractor-pg",
+    "base": "rag_extractor",
+    "dono": "rag",
+    "o_que_guarda": "acervo, log da porta, catálogo do analise"
+  },
+  "motor": {
+    "conteiner": "motor-pg",
+    "base": "motor",
+    "dono": "motor",
+    "o_que_guarda": "índice, trecho e vetor do motor de busca"
+  },
+  "sessao": {
+    "conteiner": "harness-sessao-db",
+    "base": "sessao",
+    "dono": "sessao",
+    "o_que_guarda": "fita, giro, pacote, caderno e lousa das sessões"
+  },
+  "rastreador": {
+    "conteiner": "rastreador-db",
+    "base": "rastreador",
+    "dono": "rastreador",
+    "o_que_guarda": "card, estado, transição, comentário e vínculo"
+  },
+  "eventos": {
+    "conteiner": "eventos-db",
+    "base": "eventos",
+    "dono": "eventos",
+    "o_que_guarda": "banco de eventos de plataforma"
+  },
+  "identidade": {
+    "conteiner": "platafirma-core-identidade-db-1",
+    "base": "identidade",
+    "dono": "identidade",
+    "o_que_guarda": "identidade interna, concessão e correlação externa"
+  },
+  "keycloak": {
+    "conteiner": "platafirma-core-keycloak-db-1",
+    "base": "keycloak",
+    "dono": "keycloak",
+    "o_que_guarda": "base do IdP"
+  },
+  "mdm_rh": {
+    "conteiner": "platafirma-core-mdm-rh-db-1",
+    "base": "mdm_rh",
+    "dono": "mdm_rh",
+    "o_que_guarda": "golden source de RH: vínculo, cargo, lotação"
+  }
+}

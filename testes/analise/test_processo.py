@@ -9,7 +9,7 @@ import pytest
 from conftest import RAIZ,CONHECIMENTO
 from test_extrator import semear
 
-def test_cli_em_unidade_dedicada(db,tmp_path):
+def test_cli_em_unidade_dedicada(db,bancos,tmp_path):
     cfg,admin=db
     semear(admin)
     servido=tmp_path/"release";servido.mkdir()

@@ -12,15 +12,28 @@ set -uo pipefail
 
 VERBO="${PF_VERBO_NOME:-release migrar}"
 
-# Allowlist de bancos: slug -> "contêiner:usuario:base". Cresce por acrescimo, aqui,
-# sob revisao — nao por argumento do chamador.
-declare -A BANCOS=(
-  [rag]="rag-extractor-pg:rag:rag_extractor"
-  [motor]="motor-pg:motor:motor"
-  [sessao]="harness-sessao-db:sessao:sessao"
-  [rastreador]="rastreador-db:rastreador:rastreador"
-  [eventos]="eventos-db:eventos:eventos"
-)
+# Allowlist de bancos: slug -> "contêiner:usuario:base", lida de registro/bancos.json da
+# mesma árvore (#4185: um registro só para migrar e para o analise). Cresce por acréscimo
+# no registro, sob revisão — nunca por argumento do chamador.
+REGISTRO_BANCOS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/registro/bancos.json"
+declare -A BANCOS=()
+# Bash puro: o verbo roda com PATH mínimo. O registro tem uma chave por linha.
+if [ -r "$REGISTRO_BANCOS" ]; then
+  _s="" _c="" _b="" _d=""
+  while IFS= read -r _l || [ -n "$_l" ]; do
+    if [[ "$_l" =~ ^\ \ \"([a-z_][a-z0-9_]*)\":\ \{ ]]; then _s="${BASH_REMATCH[1]}" _c="" _b="" _d=""
+    elif [[ "$_l" =~ \"conteiner\":\ \"([^\"]+)\" ]]; then _c="${BASH_REMATCH[1]}"
+    elif [[ "$_l" =~ \"base\":\ \"([^\"]+)\" ]]; then _b="${BASH_REMATCH[1]}"
+    elif [[ "$_l" =~ \"dono\":\ \"([^\"]+)\" ]]; then _d="${BASH_REMATCH[1]}"
+    elif [[ "$_l" =~ ^\ \ \} ]] && [ -n "$_s" ] && [ -n "$_c" ] && [ -n "$_b" ] && [ -n "$_d" ]; then
+      BANCOS[$_s]="$_c:$_d:$_b"; _s=""
+    fi
+  done <"$REGISTRO_BANCOS"
+fi
+if [ "${#BANCOS[@]}" -eq 0 ]; then
+  printf '%s: erro: registro de bancos ausente ou ilegível: %s\n' "$VERBO" "$REGISTRO_BANCOS" >&2
+  exit 3
+fi
 
 uso_texto() {
   cat >&2 <<EOF

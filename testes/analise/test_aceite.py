@@ -10,7 +10,7 @@ from analise.atos import MotorAnalise
 from analise.ambiente import construir,travar
 
 @pytest.fixture
-def motor(db,tmp_path):
+def motor(db,bancos,tmp_path):
     cfg,admin=db
     semear(admin)
     reg={
