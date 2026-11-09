@@ -665,13 +665,16 @@ def sumario(tipo: str, texto: str, total: int | None = None) -> tuple[list | Non
 
 
 # ============================================================== diretório e caminho (§9)
-def _entradas(p: Path, nega) -> tuple[list[tuple[str, int | None]], int]:
+def _entradas(p: Path, nega, termo: str = "") -> tuple[list[tuple[str, int | None]], int]:
     """[(nome com `/` se diretório, bytes ou None)], em ordem, e quantas a negativa tirou."""
     nomes, ocultas = [], 0
+    t_filtro = termo.strip() if termo else ""
     with os.scandir(p) as it:
         for e in it:
             if nega and nega(Path(e.path)):
                 ocultas += 1
+                continue
+            if t_filtro and t_filtro not in e.name:
                 continue
             try:
                 if e.is_dir():
@@ -686,10 +689,10 @@ def _entradas(p: Path, nega) -> tuple[list[tuple[str, int | None]], int]:
     return nomes, ocultas
 
 
-def lista_diretorio(p, nega=None) -> tuple[str, int, int]:
+def lista_diretorio(p, nega=None, termo: str = "") -> tuple[str, int, int]:
     """(texto da listagem, entradas, ocultas pela negativa). Uma entrada por linha:
     `nome/` para diretório, `nome  <bytes>` para arquivo (§9.2)."""
-    nomes, ocultas = _entradas(Path(p), nega)
+    nomes, ocultas = _entradas(Path(p), nega, termo=termo)
     texto = "".join(f"{n}  {t}\n" if t is not None else f"{n}\n" for n, t in nomes)
     return texto, len(nomes), ocultas
 
@@ -774,7 +777,7 @@ def _alem_do_fim(p: Path, total) -> dict:
 def le(p, *, linhas=None, modo: str = "texto", max_bytes: int = ORCAMENTO_PADRAO,
        versao: str | None = None, offset: int | None = None, encoding: str | None = None,
        nega=None, curto: str | None = None, abre=open, paginas=None,
-       dpi: int = _formatos.DPI_PADRAO, membro: str | None = None) -> dict:
+       dpi: int = _formatos.DPI_PADRAO, membro: str | None = None, termo: str = "") -> dict:
     """O retorno da §3.2, sem poda.
 
     `nega(Path) -> bool` é a negativa da porta, aplicada a entrada de diretório e a
@@ -825,7 +828,7 @@ def le(p, *, linhas=None, modo: str = "texto", max_bytes: int = ORCAMENTO_PADRAO
     except OSError as e:
         return _erro(f"não consegui ler: {e.strerror}", "caminho", caminho=str(p))
     if _stat.S_ISDIR(st.st_mode):
-        return _le_diretorio(p, curto, faixa, orcamento, nega)
+        return _le_diretorio(p, curto, faixa, orcamento, nega, termo=termo)
     if not _stat.S_ISREG(st.st_mode):
         return _erro("existe mas não é arquivo comum (socket, fifo ou dispositivo)", "caminho",
                      caminho=str(p))
@@ -849,12 +852,12 @@ def le(p, *, linhas=None, modo: str = "texto", max_bytes: int = ORCAMENTO_PADRAO
     return r
 
 
-def _le_diretorio(p: Path, curto: str, faixa, orcamento: int, nega) -> dict:
+def _le_diretorio(p: Path, curto: str, faixa, orcamento: int, nega, termo: str = "") -> dict:
     if faixa is None:
         return _erro("offset não se aplica a diretório: a listagem pagina por linhas",
                      "gramatica", cura=f'{TOOL}(caminho="{p}")')
     try:
-        texto, n, ocultas = lista_diretorio(p, nega)
+        texto, n, ocultas = lista_diretorio(p, nega, termo=termo)
     except OSError as e:
         return _erro(f"não consegui listar: {e.strerror}", "caminho", caminho=str(p))
     dados = texto.encode("utf-8", "surrogateescape")
@@ -876,17 +879,26 @@ def _le_diretorio(p: Path, curto: str, faixa, orcamento: int, nega) -> dict:
     partes = [curto, f"diretório · {_n(n)} entradas"]
     if f.linhas:
         partes.append(f"linhas {_n(f.linhas[0])}–{_n(f.linhas[1])}")
+        if f.linhas[1] < n:
+            qtd = f.linhas[1] - f.linhas[0] + 1
+            partes.append(f"linhas=-{qtd} para as últimas")
+    if termo:
+        partes.append(f"filtro termo={termo!r}")
     if ocultas:
         partes.append(f"{_n(ocultas)} fora por negativa")
     partes.append(f"versão {idx.versao}")
     seguinte = f.linhas[1] + 1 if f.linhas and f.linhas[1] < n else None
-    proximo, proximo_args = continuacao(
-        {"caminho": str(p), "linhas": f"{seguinte}-"} if seguinte else None)
+    pargs = {"caminho": str(p), "linhas": f"{seguinte}-"} if seguinte else None
+    if pargs and termo:
+        pargs["termo"] = termo
+    proximo, proximo_args = continuacao(pargs)
     r = {"cabecalho": " · ".join(partes), "conteudo": f.dados.decode("utf-8", "replace"),
          "proximo": proximo, "proximo_args": proximo_args, "caminho": str(p),
          "linhas": list(f.linhas) if f.linhas else None, "linhas_total": n,
          "bytes": [f.ini, f.fim], "bytes_total": len(dados), "versao": idx.versao,
          "diretorio": True, "ocultas": ocultas}
+    if termo:
+        r["termo"] = termo
     return {k: v for k, v in r.items() if v is not None}
 
 

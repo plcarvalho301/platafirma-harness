@@ -1909,13 +1909,14 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
                     max_bytes=args.get("max_bytes") or _leitura.ORCAMENTO_PADRAO,
                     versao=args.get("versao") or None, offset=offset,
                     encoding=args.get("encoding") or None, nega=_nega_leitura, curto=_curto(p, bancada),
-                    paginas=paginas, dpi=dpi, membro=membro)
+                    paginas=paginas, dpi=dpi, membro=membro, termo=args.get("termo") or "")
     classe = r.pop("classe_erro", None)
     # A alça é o pedido (§11.2), a mesma para as duas tools: releitura pelo apelido e pela
     # nova deduplicam juntas. `caminho` é identificador exato — nunca entra na poda (iv).
     faixa = f"b{offset}" if offset is not None else (args.get("linhas") or "1-")
     alvo = f"{p}!{membro}" if membro else str(p)
-    r = _serve(r, tool="ler_arquivo", alca=f"{alvo}|{modo}|{paginas or ''}|{faixa}", ident=ident,
+    alca_termo = f"|{args.get('termo')}" if args.get("termo") else ""
+    r = _serve(r, tool="ler_arquivo", alca=f"{alvo}|{modo}|{paginas or ''}|{faixa}{alca_termo}", ident=ident,
                esquece=bool(args.get("inteiro")))
     enc, servidas = r.get("encoding") or {}, r.get("linhas")
     unidades = r.get("paginas")
@@ -1937,7 +1938,7 @@ def ler_arquivo(caminho: str = "", linhas: str = "", modo: str = "texto",
                 encoding: str = "", inteiro: bool = False, sessao_id: str | None = None,
                 caminhos: list[str | dict] | None = None, paginas: str = "",
                 dpi: int = 150, turno: str = "", turno_texto: str = "",
-                turno_fonte: str = "") -> dict:
+                turno_fonte: str = "", termo: str = "") -> dict:
     """lê arquivo pelo caminho · use para: texto por linhas, PDF, EPUB, DOCX, planilha ou imagem; o retorno grande que a porta guardou; o arquivo de uma obra pelo caminho
 
     `caminho` absoluto, ou relativo à bancada declarada.
@@ -1968,7 +1969,7 @@ def ler_arquivo(caminho: str = "", linhas: str = "", modo: str = "texto",
     _carimba_turno(ident, turno, turno_texto, turno_fonte)
     comuns = {"linhas": linhas, "modo": modo, "max_bytes": max_bytes, "versao": versao,
               "offset": offset, "encoding": encoding, "inteiro": inteiro, "paginas": paginas,
-              "dpi": dpi}
+              "dpi": dpi, "termo": termo}
     if caminhos and PF_TOOLS_LOTE:
         lote_id = uuid.uuid4().hex[:8]
 

@@ -118,10 +118,12 @@ uso:
                                           mostrado, cadeira, executor e título, na ordem dele;
                                           sem --paradas, a despriorizada sai do delivery e a
                                           saída diz quantas saíram
-  tarefas listar-tudo [mesmos filtros]    inclui os terminais
-  tarefas ler|ver <id>                    item em texto: cabeçalho (originação, executor,
+  tarefas listar-tudo [mesmos filtros] [--ultimos <n>] inclui os terminais; com --ultimos,
+                                          ordena por data decrescente e inclui data na saída
+  tarefas ler|ver <id> [--cabecalho]      item em texto: cabeçalho (originação, executor,
                                           quem bloqueia e por quem é bloqueado), ancestrais,
-                                          corpo e filhas abertas em ordem de dependência
+                                          corpo e filhas abertas em ordem de dependência;
+                                          com --cabecalho, devolve só o cabeçalho
   tarefas criar "<título>" [--desc "<txt>"|--desc-stdin]
                 [--nivel épico|feature|story] [--cadeira <c>] [--pai <id>] [--incidente]
                 [--originacao negocio|tecnico|incidente] [--executor <c>]
@@ -413,10 +415,11 @@ monta_query() { # monta_query "$@" -> ecoa a query string
         esac
         q="$q&nivel=$n"; shift 2 ;;
       --campos) [ $# -ge 2 ] && [ -n "$2" ] || { echo "--campos exige lista" >&2; exit 2; }; shift 2 ;;
+      --ultimos) [ $# -ge 2 ] && [[ "$2" =~ ^[0-9]+$ ]] || { echo "--ultimos exige número" >&2; exit 2; }; shift 2 ;;
       --json)    shift ;;
       *)
         echo "opção desconhecida: $1" >&2
-        echo "uso: tarefas listar|listar-tudo [--cadeira <c>] [--estado <e>] [--nivel <n>] [--originacao <o>] [--executor <c>] [--paradas] [--json] [--campos <lista>]" >&2
+        echo "uso: tarefas listar|listar-tudo [--cadeira <c>] [--estado <e>] [--nivel <n>] [--originacao <o>] [--executor <c>] [--paradas] [--json] [--campos <lista>] [--ultimos <n>]" >&2
         exit 2 ;;
     esac
   done
@@ -434,6 +437,16 @@ linhas() { # id, marca de terminal, título
     | .itens[]
     | . as $it
     | "\($it.id)\t\(if ($it.estado_derivado != null and ($term | index([$it.estado_derivado]) != null)) or ($it.estado_derivado == null and $it.estado_fase == "terminal") then "x" else " " end)\t\($it.titulo)"'
+}
+
+linhas_com_data() { # id, marca de terminal, data (AAAA-MM-DD), título
+  jq -r '
+    ([.estados[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado]
+     + ["entregue", "recusada", "cancelada", "englobada", "encerrada", "resolvido"]
+     | unique) as $term
+    | .itens[]
+    | . as $it
+    | "\($it.id)\t\(if ($it.estado_derivado != null and ($term | index([$it.estado_derivado]) != null)) or ($it.estado_derivado == null and $it.estado_fase == "terminal") then "x" else " " end)\t\(($it.ultimo_movimento // $it.criado_em // "")[0:10])\t\($it.titulo)"'
 }
 
 # QUADRO (R35 da spec tarefas, card #3619): `--quadro` bypassa `/itens` e vai direto à
@@ -511,10 +524,38 @@ listar() { # listar [filtros] [--paradas] [--json] [--quadro discovery|delivery]
   if _tem_json "$@" || _tem_flag --campos "$@"; then printf '%s\n' "$corpo" | _projetar_campos "$@"; else printf '%s' "$corpo" | linhas; fi
 }
 
-listar_tudo() { # listar_tudo [filtros] [--json]
-  local q; q=$(monta_query "$@")
+listar_tudo() { # listar_tudo [filtros] [--json] [--ultimos <n>]
+  local ultimos=""
+  local args=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --ultimos)
+        [ $# -ge 2 ] && [[ "$2" =~ ^[0-9]+$ ]] || { echo "--ultimos exige número" >&2; exit 2; }
+        ultimos="$2"
+        shift 2
+        ;;
+      *)
+        args+=("$1")
+        shift
+        ;;
+    esac
+  done
+  local q; q=$(monta_query "${args[@]}")
   local corpo; corpo=$(busca GET "/itens${q:+?$q}")
-  if _tem_json "$@" || _tem_flag --campos "$@"; then printf '%s\n' "$corpo" | _projetar_campos "$@"; else printf '%s' "$corpo" | linhas; fi
+  if [ -n "$ultimos" ]; then
+    corpo=$(printf '%s' "$corpo" | jq --argjson n "$ultimos" '
+      .itens |= (sort_by(.ultimo_movimento // .criado_em // "") | reverse | .[0:$n])
+      | .total = (.itens | length)')
+  fi
+  if _tem_json "${args[@]}" || _tem_flag --campos "${args[@]}"; then
+    printf '%s\n' "$corpo" | _projetar_campos "${args[@]}"
+  else
+    if [ -n "$ultimos" ]; then
+      printf '%s' "$corpo" | linhas_com_data
+    else
+      printf '%s' "$corpo" | linhas
+    fi
+  fi
 }
 
 estados() {
@@ -539,12 +580,47 @@ so_id() { printf '%s' "${1#\#}"; }
 # PENDENTE PRIMEIRO, e a ordem é o ponto: é ele que segura o item em `Em parecer`, e é a
 # única linha sobre a qual alguém pode agir agora. Respondido é registro; pendente é dívida.
 ler() {
-  local id; id=$(so_id "$1")
+  local id="" so_cabecalho=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --cabecalho) so_cabecalho=1; shift ;;
+      *)
+        if [ -z "$id" ]; then
+          id=$(so_id "$1")
+          shift
+        else
+          echo "tarefas ler: argumento desconhecido: $1" >&2
+          exit 2
+        fi
+        ;;
+    esac
+  done
+  [ -n "$id" ] || { echo "uso: tarefas ler <id> [--cabecalho]" >&2; exit 2; }
   # UMA LEITURA SERVE A TUDO (card #3526): o detalhe do item já traz o vínculo (`bloqueia`,
   # `bloqueado_por`, #3523) e, quando o item tem filha, `filhas` em ordem de dependência. Antes as
   # filhas vinham de uma segunda chamada que puxava o board inteiro e peneirava por pai.
   local j; j=$(busca GET "/itens/$id") || return 1
   local term; term=$(_estados_terminais) || term='[]'
+  if [ "$so_cabecalho" -eq 1 ]; then
+    printf '%s' "$j" | jq -r --argjson term "$term" '
+      "# \(.titulo)",
+      "#\(.id) · \(.nivel_nome) · "
+      + (if .estado_derivado != null
+         then "\(.estado_derivado) [derivado; cru: \(.estado_nome) (\(.estado_fase))]"
+         else "\(.estado_nome) (\(.estado_fase))"
+         end)
+      + " · cadeira: \(.cadeira // "—")"
+      + (if .tipo_demanda then " · originação: \(.tipo_demanda)" else "" end)
+      + (if .executor then " · executor: \(.executor)" else "" end)
+      + (if (.ancestrais|length) > 0 then "\n  em: " + ([.ancestrais[] | "#\(.id) \(.titulo)"] | join(" > ")) else "" end)
+      + (if ((.bloqueia // []) | length) > 0
+         then "\n  bloqueia: " + ([.bloqueia[] | "#\(.id) (\(.estado))"] | join(", ")) else "" end)
+      + (if ((.bloqueado_por // []) | length) > 0
+         then "\n  bloqueado por: " + ([.bloqueado_por[] | "#\(.id) (\(.estado))"] | join(", ")) else "" end)
+      + (([(.bloqueado_por // [])[] | select(.estado as $e | ($term | index([$e])) == null)] | if length > 0
+         then "\n  travada por: " + ([.[] | "#\(.id) (\(.estado))"] | join(", ")) else "" end))' | para_texto
+    return 0
+  fi
   printf '%s' "$j" | jq -r --argjson term "$term" '
     "# \(.titulo)",
     "#\(.id) · \(.nivel_nome) · "
@@ -1701,7 +1777,7 @@ cmd="${1:-}"; shift || uso
 case "$cmd" in
   listar)      descarta_projeto "${1:-}" && shift; listar "$@" ;;
   listar-tudo) descarta_projeto "${1:-}" && shift; listar_tudo "$@" ;;
-  ler|ver)     ler "${1:?uso: tarefas ler <id>}" ;;
+  ler|ver)     ler "$@" ;;
   criar)       criar "$@" ;;
   editar)      editar "$@" ;;
   comentar)    comentar "$@" ;;
