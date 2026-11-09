@@ -376,9 +376,8 @@ descarta_projeto() {
 # A API filtra por cadeira, estado e nível. "Aberto" NÃO é filtro dela: é a fase do estado,
 # que vem em cada item (`estado_fase`). Peneirar aqui e não lá é o certo — inventar um
 # filtro `aberto=` no servidor duplicaria a régua de fase em dois lugares.
-monta_query() { # monta_query "$@" -> ecoa a query string e devolve o resto em RESTO[]
-  local q="" a
-  RESTO=()
+monta_query() { # monta_query "$@" -> ecoa a query string
+  local q=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --cadeira)
@@ -402,20 +401,23 @@ monta_query() { # monta_query "$@" -> ecoa a query string e devolve o resto em R
       --executor)
         local exe="${2:?--executor pede o nome da cadeira}"
         q="$q&executor=$exe"; shift 2 ;;
-      --paradas) RESTO+=("--paradas"); shift ;;
+      --paradas) shift ;;
       --nivel)
         local n
-        case "$2" in
+        case "${2:-}" in
           épico|epico|0) n=0 ;;
           feature|1)     n=1 ;;
           story|2)       n=2 ;;
           task|3)        n=3 ;;
-          *) echo "nível desconhecido: $2 (épico, feature, story, task)" >&2; exit 2 ;;
+          *) echo "nível desconhecido: ${2:-} (épico, feature, story, task)" >&2; exit 2 ;;
         esac
         q="$q&nivel=$n"; shift 2 ;;
       --campos) [ $# -ge 2 ] && [ -n "$2" ] || { echo "--campos exige lista" >&2; exit 2; }; shift 2 ;;
-      --json)    RESTO+=("--json"); shift ;;
-      *)         RESTO+=("$1"); shift ;;
+      --json)    shift ;;
+      *)
+        echo "opção desconhecida: $1" >&2
+        echo "uso: tarefas listar|listar-tudo [--cadeira <c>] [--estado <e>] [--nivel <n>] [--originacao <o>] [--executor <c>] [--paradas] [--json] [--campos <lista>]" >&2
+        exit 2 ;;
     esac
   done
   printf '%s' "${q:+${q:1}}"
