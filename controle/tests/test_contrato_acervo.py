@@ -100,9 +100,9 @@ def test_camada_d_cabecalho_q1():
     assert "# dono: dados" in text
     assert "# classe: B" in text
     with open(BIN, "r", encoding="utf-8") as f:
-        # 80: o cabecalho cresceu com as linhas de acesso dos atos de Transcrever (#3297) e de Retirar (#3298)
-        # e com a capacidade por ato de ler e listar (#3465)
-        text = "".join(f.readline() for _ in range(80))
+        # 85: o cabecalho cresceu com as linhas de acesso dos atos de Transcrever (#3297) e de Retirar (#3298),
+        # com a capacidade por ato de ler e listar (#3465) e # poda: (#2856)
+        text = "".join(f.readline() for _ in range(85))
     # acesso e POR ATO: uma linha `# le:`/`# escreve:` para cada um destes atos
     for ato in ("ler", "listar", "escrever", "ingerir", "curar", "extrato", "psql"):
         assert f"# le: {ato}=" in text

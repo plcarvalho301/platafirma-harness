@@ -137,8 +137,11 @@ from (
 # biblioteca metodos` a lê da árvore do conhecimento (`_padrao_do_conhecimento`).
 
 USO = """uso:
-  acervo listar conceitos [--json]              golden record acervo.conceito:
+  acervo listar conceitos [prefixo] [--desde <slug>] [--origem <d>] [--json]
+                                                golden record acervo.conceito:
                                                 slug . rotulo . outros rotulos . origem . obras-ancora
+                                                [prefixo]: filtra por slug ou rotulo; --desde: slug >= <slug>
+                                                --origem: filtra por dominio da obra-ancora
   acervo listar ferramental [--json] [--oficio] [--tools] golden record acervo.ferramental:
                                                 capacidade . tool . verbo . sot . descricao . instancias
                                                 --oficio: so os verbos do nucleo de abertura
@@ -569,13 +572,42 @@ def listar_topologia_acessos(stack_slug):
     for l in linhas:
         print(l)
 
-def listar_conceitos(quero_json):
-    conceitos = _psql_json(SQL_CONCEITOS, "conceitos")
+def listar_conceitos(quero_json, prefixo=None, desde=None, origem=None):
+    conds = []
+    if prefixo:
+        conds.append("(c.slug ilike %s or c.rotulo ilike %s)" % (_lit("%" + prefixo + "%"), _lit("%" + prefixo + "%")))
+    if desde:
+        conds.append("c.slug >= %s" % _lit(desde))
+    if origem:
+        conds.append("exists (select 1 from acervo.obra_trata_de tr join acervo.obra o on o.id = tr.obra_id join acervo.dominio d on d.id = o.dominio_id where tr.conceito_id = c.id and d.slug = %s)" % _lit(origem))
+    where_cl = ("where " + " and ".join(conds)) if conds else ""
+    sql = """
+select coalesce(json_agg(row_to_json(t) order by t.slug), '[]')
+from (
+  select c.slug, c.id, c.rotulo,
+         nullif(array_to_string(c.outros_rotulos, ' / '), '') as outros_rotulos,
+         coalesce(
+           (select array_agg(distinct d.slug)
+            from acervo.obra_trata_de tr
+            join acervo.obra o on o.id = tr.obra_id
+            join acervo.dominio d on d.id = o.dominio_id
+            where tr.conceito_id = c.id), '{}') as origem,
+         (select count(distinct tr.obra_id)
+          from acervo.obra_trata_de tr where tr.conceito_id = c.id) as obras_ancora
+  from acervo.conceito c
+  {where_cl}
+) t;
+""".format(where_cl=where_cl)
+    conceitos = _psql_json(sql, "conceitos")
     for c in conceitos:
         c["origem"] = c.get("origem") or None
         c["obras_ancora"] = int(c.get("obras_ancora") or 0)
     if quero_json:
         print(json.dumps(conceitos, ensure_ascii=False, indent=2))
+        return
+    if not conceitos:
+        sys.stderr.write("nenhum conceito no golden record (acervo.conceito)%s.\n" %
+                         ((" com filtro informado" if (prefixo or desde or origem) else "")))
         return
     w = max((len(c["slug"]) for c in conceitos), default=4)
     print("%-*s  %5s  %-20s  %s" % (w, "slug", "obras", "origem", "rotulo"))
@@ -583,7 +615,8 @@ def listar_conceitos(quero_json):
     for c in conceitos:
         org = ",".join(c["origem"]) if c["origem"] else "-"
         print("%-*s  %5d  %-20s  %s" % (w, c["slug"], c["obras_ancora"], org, c["rotulo"]))
-    sys.stderr.write("\n%d conceito(s) no golden record (acervo.conceito).\n" % len(conceitos))
+    rotulo = " (%s)" % (", ".join(filter(None, [prefixo and ("filtro=%s" % prefixo), desde and ("desde=%s" % desde), origem and ("origem=%s" % origem)]))) if (prefixo or desde or origem) else ""
+    sys.stderr.write("\n%d conceito(s) no golden record (acervo.conceito)%s.\n" % (len(conceitos), rotulo))
 
 def listar_ferramental_tools():
     """Projecao do que o modelo ve, em tools MCP (spec_capsula-de-verbos §3.2; registro da porta, #4117).
@@ -1146,6 +1179,10 @@ def main(argv):
     stack_alvo = None
     termo = None
     eixo = None
+    prefixo_conceito = None
+    desde_conceito = None
+    origem_conceito = None
+    quero_resumo = False
 
     i = 0
     while i < len(resto):
@@ -1186,6 +1223,15 @@ def main(argv):
         elif a == "--acessos" and alvo == "topologia":
             quero_acessos = True
             i += 1
+        elif a == "--desde" and alvo == "conceitos" and i + 1 < len(resto):
+            desde_conceito = resto[i + 1]
+            i += 2
+        elif a == "--origem" and alvo == "conceitos" and i + 1 < len(resto):
+            origem_conceito = resto[i + 1]
+            i += 2
+        elif a == "--resumo" and alvo == "obra":
+            quero_resumo = True
+            i += 1
         elif a == "--sobre" and alvo == "obra" and i + 1 < len(resto):
             termo = resto[i + 1]
             i += 2
@@ -1209,6 +1255,9 @@ def main(argv):
             i += 2
         elif alvo == "topologia" and not a.startswith("-") and stack_alvo is None:
             stack_alvo = a
+            i += 1
+        elif alvo == "conceitos" and not a.startswith("-") and prefixo_conceito is None:
+            prefixo_conceito = a
             i += 1
         else:
             morre("acervo listar: opcao desconhecida %r\n\n%s" % (a, USO))
@@ -1247,7 +1296,7 @@ def main(argv):
         morre("acervo listar topologia --rotas/--acessos exige <stack>.\n\n%s" % USO)
 
     if alvo == "conceitos":
-        listar_conceitos(quero_json)
+        listar_conceitos(quero_json, prefixo=prefixo_conceito, desde=desde_conceito, origem=origem_conceito)
     elif alvo == "topologia":
         if quero_rotas:
             listar_topologia_rotas(stack_alvo)
@@ -1280,7 +1329,7 @@ def main(argv):
             # so stdlib, sem banco: a logica mora ao lado (bancada_conversao.py)
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             import bancada_conversao
-            sys.exit(bancada_conversao.executar(pasta_bancada, quero_json, arquivo_estratos))
+            sys.exit(bancada_conversao.executar(pasta_bancada, quero_json, arquivo_estratos, so_resumo=quero_resumo))
         if quero_metodos:
             listar_obra_metodos(quero_json)
         else:

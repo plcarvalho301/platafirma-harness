@@ -211,7 +211,7 @@ def _extrai_sessao_id(texto: str) -> str | None:
 
 # --- helpers puros ---
 def _cap(raw: bytes) -> dict:
-    return {"texto": raw[:CAP].decode("utf-8", "replace"),
+    return {"texto": raw.decode("utf-8", "replace"),
             "truncado": len(raw) > CAP, "bytes_total": len(raw)}
 
 

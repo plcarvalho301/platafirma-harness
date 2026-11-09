@@ -562,22 +562,25 @@ def _bloco_resumo(r, modo):
     return linhas
 
 
-def render_markdown(res):
+def render_markdown(res, so_resumo=False):
     out = ["# Bancada de conversão: perfil x docling", "", "pasta: `%s`" % res["pasta"], "",
-           REGRA, "", "## (a) Por obra", ""]
-    cab = ["obra", "tipo", "estrato", "classe", "perda p / d", "inserção p / d",
-           "duplicação p / d", "ordem p / d", "irrecuperável p / d", "converter ms p / d",
-           "vencedor"]
-    out.append("| " + " | ".join(cab) + " |")
-    out.append("|" + "---|" * len(cab))
-    for d in res["obras"]:
-        out.append("| " + " | ".join([
-            d["obra_id"][:8], d["tipo"], _esc(d["estrato"]), d["classe"] or "-",
-            _par(d, "perda", marca=True), _par(d, "insercao"), _par(d, "duplicacao"),
-            _par(d, "ordem"), _par(d, "irrecuperavel"), _par(d, "converter_ms"),
-            _vencedor_cell(d)]) + " |")
-    out += ["", "`!` = método falhou: perda imputada = tamanho_referencia (demais termos 0). "
-            "`p / d` = perfil / docling.", "", "## (b) Resumo por tipo", ""]
+           REGRA, ""]
+    if not so_resumo:
+        out += ["## (a) Por obra", ""]
+        cab = ["obra", "tipo", "estrato", "classe", "perda p / d", "inserção p / d",
+               "duplicação p / d", "ordem p / d", "irrecuperável p / d", "converter ms p / d",
+               "vencedor"]
+        out.append("| " + " | ".join(cab) + " |")
+        out.append("|" + "---|" * len(cab))
+        for d in res["obras"]:
+            out.append("| " + " | ".join([
+                d["obra_id"][:8], d["tipo"], _esc(d["estrato"]), d["classe"] or "-",
+                _par(d, "perda", marca=True), _par(d, "insercao"), _par(d, "duplicacao"),
+                _par(d, "ordem"), _par(d, "irrecuperavel"), _par(d, "converter_ms"),
+                _vencedor_cell(d)]) + " |")
+        out += ["", "`!` = método falhou: perda imputada = tamanho_referencia (demais termos 0). "
+                "`p / d` = perfil / docling.", ""]
+    out += ["## (b) Resumo por tipo", ""]
     for t in res["tipos"]:
         out += ["### %s (%s)" % (t["tipo"], "amostrado" if t["regime"] == "amostrado" else "censo"),
                 ""] + _bloco_resumo(t, t["regime"]) + [""]
@@ -595,7 +598,7 @@ def render_json(res):
     return json.dumps(res, ensure_ascii=False, indent=2) + "\n"
 
 
-def executar(pasta, quero_json=False, arquivo_estratos=None, out=None, err=None):
+def executar(pasta, quero_json=False, arquivo_estratos=None, so_resumo=False, out=None, err=None):
     """Ponto de entrada de `acervo listar biblioteca bancada`. Devolve o exit code."""
     out = out or sys.stdout
     err = err or sys.stderr
@@ -614,5 +617,5 @@ def executar(pasta, quero_json=False, arquivo_estratos=None, out=None, err=None)
         err.write("acervo listar biblioteca bancada: nenhum relatorio.json em %s/perfil nem em "
                   "%s/docling\n" % (pasta, pasta))
         return 1
-    out.write(render_json(res) if quero_json else render_markdown(res))
+    out.write(render_json(res) if quero_json else render_markdown(res, so_resumo=so_resumo))
     return 0
