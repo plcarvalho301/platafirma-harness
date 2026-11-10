@@ -161,6 +161,9 @@ tests/test_contrato_infra_backup_piso.py | bin/infra bin/_infra/** bin/_release/
 # Card #3473: `infra ingress` copia o ingress versionado do core para a copia da instancia que o cloudflared le,
 # mostra a diferenca antes (--ver), reinicia o contêiner e volta a anterior se ele nao subir (docker de mentira).
 tests/test_contrato_infra_ingress.py | bin/infra bin/_infra/** lib/raizes.sh
+# Medido em 10/11/2026 (balde #2856 linha 351): `infra sobreposicao remover <stack>` apaga a sobreposicao da instancia
+# (deploy/<stack>/compose.override.yaml) guardando a copia antes, idempotente, recusando slug com caminho, link e diretorio.
+tests/test_contrato_infra_sobreposicao.py | bin/infra bin/_infra/** lib/raizes.sh
 # Medido em 19/10/2026 (balde #2856 linha 17): `infra remover` tira contêiner avulso (inspeção guardada antes), unit
 # transitória parada e unit da conta não declarada (arquivo para a quarentena), recusando o declarado. O `infra limpeza
 # jobs` virou, em 21/10/2026 (card #3920), a limpeza de fóssil só de job: a suite dele é a test_infra_limpeza_fossil abaixo.
