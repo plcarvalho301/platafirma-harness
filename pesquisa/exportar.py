@@ -185,6 +185,12 @@ def juntar(trab: "M.Trabalho", titulo: str, rotulo: str | None = None,
             pulados.append({"url": ln["url"], "motivo": "sem-markdown"})
             continue
         t, corpo = _secao(md, url)
+        if t == (urlsplit(url).path.strip("/") or urlsplit(url).netloc):
+            # o extrator tira o H1 de página HTML; o <title> do bruto, sem o sufixo do site, nomeia a seção
+            b = Path(ln["bruto"])
+            tt = _titulo(b.read_bytes(), b.suffix.lstrip(".").lower())
+            if tt:
+                t = re.split(r"\s+[|—–]\s+", tt)[0].strip() or tt
         partes.append(f"\n## {t}\n\nFonte: <{url}>\n\n{corpo}\n")
         paginas.append({"url": ln["url"], "url_final": ln.get("url_final"), "titulo": t,
                         "sha256": ln["sha256"], "n": ln["n"], "linha_manifesto": ln["_linha"],
