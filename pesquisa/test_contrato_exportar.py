@@ -24,11 +24,21 @@ def test_um_arquivo_por_url_o_ultimo_integro(tmp_path):
     t.grava_linha({"n": 4, "ato": "ler", "url": "https://ex.org/c", "status": 404, "nao_achado": True})
     r = X.exportar(t, "lote", raiz=tmp_path / "entrada")
     nomes = sorted(e["arquivo"] for e in r["exportados"])
-    assert nomes == ["ex.org_a.html", "ex.org_b.md"]
+    assert nomes == ["b.md", "ex.org_a.html"]
     assert (tmp_path / "entrada/lote/ex.org_a.html").read_bytes() == b"<html>novo</html>"
     proc = [json.loads(l) for l in (tmp_path / "entrada/lote/PROCEDENCIA.jsonl").read_text().splitlines()]
     assert {p["url"] for p in proc} == {"https://ex.org/a/", "https://ex.org/b/index.md"}
     assert r["ok_destino"]
+
+
+def test_nome_pelo_titulo_e_titulo_repetido_ganha_o_caminho(tmp_path):
+    t = M.Trabalho("t", raiz=tmp_path / "pesq")
+    _ler(t, 1, "https://ex.org/p/azure", b"<html><title>Azure | OAuth2 Proxy</title></html>")
+    _ler(t, 2, "https://ex.org/x/termos/index.md", b"---\ntitle: Useful terms\n---\n# Useful terms", ext="md")
+    _ler(t, 3, "https://ex.org/y/termos/index.md", b"# Useful terms\noutro", ext="md")
+    r = X.exportar(t, "lote", raiz=tmp_path / "entrada")
+    nomes = sorted(e["arquivo"] for e in r["exportados"])
+    assert nomes == ["Azure OAuth2 Proxy.html", "Useful terms (y-termos).md", "Useful terms.md"]
 
 
 def test_bruto_sobrescrito_nao_sai(tmp_path):

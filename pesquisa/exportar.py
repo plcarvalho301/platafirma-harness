@@ -30,6 +30,36 @@ RAIZ_ENTRADA = Path(os.environ.get("PF_ENTRADA_DIR", str(Path.home() / "AI" / "e
 _RE_ROTULO = re.compile(r"^[a-z0-9][a-z0-9._-]{0,80}$")
 
 
+_RE_TITLE = re.compile(rb"<title[^>]*>(.*?)</title>", re.I | re.S)
+_RE_H1 = re.compile(r"^\s*(?:title:\s*[\"']?(.+?)[\"']?\s*$|#\s+(.+?)\s*$)", re.M)
+
+
+def _titulo(corpo: bytes, ext: str) -> str | None:
+    """O título da página, que o pipeline usa como título provisório de HTML pelo nome do arquivo.
+
+    Nomear pelo endereço deixava páginas diferentes com nomes 90% iguais
+    (`..._providers_azure` e `..._providers_adfs`), e a checagem de identidade do pipeline as
+    reprovava como obra ambígua (plano do lote pesquisa-aquisicao-ti-20261110: 24 de 28).
+    """
+    import html as _h
+    if ext in ("html", "htm"):
+        m = _RE_TITLE.search(corpo[:200_000])
+        if m:
+            t = _h.unescape(m.group(1).decode("utf-8", "replace"))
+            return " ".join(t.split()) or None
+        return None
+    if ext in ("md", "markdown", "txt"):
+        m = _RE_H1.search(corpo[:50_000].decode("utf-8", "replace"))
+        if m:
+            return (m.group(1) or m.group(2) or "").strip() or None
+    return None
+
+
+def _limpo(t: str) -> str:
+    t = re.sub(r"[^\w .()&+,-]+", " ", t, flags=re.UNICODE)
+    return " ".join(t.split()).strip(" .")[:150]
+
+
 def _nome(url: str, ext: str) -> str:
     p = urlsplit(url)
     caminho = p.path.strip("/")
@@ -84,10 +114,23 @@ def exportar(trab: "M.Trabalho", rotulo: str | None = None, excluir: list[str] |
     escolhidas, pulados = escolher(trab, excluir)
     exportados, conflitos = [], []
     procedencia = destino / "PROCEDENCIA.jsonl"
+    usados: set[str] = set()
     for ln in escolhidas:
         origem = Path(ln["bruto"])
         ext = origem.suffix.lstrip(".") or "bin"
-        alvo = destino / _nome(ln.get("url_final") or ln["url"], ext)
+        url_nome = ln.get("url_final") or ln["url"]
+        titulo = _titulo(origem.read_bytes(), ext)
+        base = _limpo(titulo) if titulo else ""
+        if not base:
+            nome = _nome(url_nome, ext)
+        else:
+            nome = f"{base}.{ext}"
+            ocupado = (destino / nome)
+            if nome in usados or (ocupado.exists() and M.sha256_bytes(ocupado.read_bytes()) != ln["sha256"]):
+                cauda = [s for s in urlsplit(url_nome).path.split("/") if s and s not in ("index.md", "index.html")]
+                nome = f"{base} ({'-'.join(cauda[-2:]) or urlsplit(url_nome).netloc}).{ext}"
+        usados.add(nome)
+        alvo = destino / nome
         if alvo.exists():
             if M.sha256_bytes(alvo.read_bytes()) == ln["sha256"]:
                 exportados.append({"url": ln["url"], "arquivo": alvo.name, "ja_estava": True})
