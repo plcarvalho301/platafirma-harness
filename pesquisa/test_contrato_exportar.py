@@ -1,0 +1,53 @@
+"""Contrato de `pesquisar exportar`: um arquivo por URL, o último bruto íntegro, sem sobrescrever."""
+
+from __future__ import annotations
+
+import json
+
+from pesquisa import exportar as X
+from pesquisa import manifesto as M
+
+
+def _ler(t, n, url, corpo, ext="html", status=200, **extra):
+    p = t.guarda_bruto(n, corpo, ext)
+    t.grava_linha({"n": n, "ato": "ler", "url": url, "status": status,
+                   "sha256": M.sha256_bytes(corpo), "bruto": str(p), **extra})
+    return p
+
+
+def test_um_arquivo_por_url_o_ultimo_integro(tmp_path):
+    t = M.Trabalho("t", raiz=tmp_path / "pesq")
+    _ler(t, 1, "https://ex.org/a/", b"<html>velho</html>")
+    _ler(t, 2, "https://ex.org/a/", b"<html>novo</html>")
+    _ler(t, 3, "https://ex.org/b/index.md", b"# b", ext="md")
+    t.grava_linha({"ato": "ler", "url": "https://ex.org/a/", "status": 200, "sha256": "x", "bruto": ""})  # cache
+    t.grava_linha({"n": 4, "ato": "ler", "url": "https://ex.org/c", "status": 404, "nao_achado": True})
+    r = X.exportar(t, "lote", raiz=tmp_path / "entrada")
+    nomes = sorted(e["arquivo"] for e in r["exportados"])
+    assert nomes == ["ex.org_a.html", "ex.org_b.md"]
+    assert (tmp_path / "entrada/lote/ex.org_a.html").read_bytes() == b"<html>novo</html>"
+    proc = [json.loads(l) for l in (tmp_path / "entrada/lote/PROCEDENCIA.jsonl").read_text().splitlines()]
+    assert {p["url"] for p in proc} == {"https://ex.org/a/", "https://ex.org/b/index.md"}
+    assert r["ok_destino"]
+
+
+def test_bruto_sobrescrito_nao_sai(tmp_path):
+    t = M.Trabalho("t", raiz=tmp_path / "pesq")
+    p = _ler(t, 1, "https://ex.org/a", b"<html>a</html>")
+    p.write_bytes(b"<html>outra pagina</html>")
+    r = X.exportar(t, "lote", raiz=tmp_path / "entrada")
+    assert r["exportados"] == [] and r["pulados"][0]["motivo"] == "bruto-nao-confere"
+
+
+def test_excluir_e_nao_sobrescrever(tmp_path):
+    t = M.Trabalho("t", raiz=tmp_path / "pesq")
+    _ler(t, 1, "https://ex.org/llms.txt", b"indice", ext="txt")
+    _ler(t, 2, "https://ex.org/a", b"<html>a</html>")
+    dest = tmp_path / "entrada/lote"
+    dest.mkdir(parents=True)
+    (dest / "ex.org_a.html").write_bytes(b"<html>outro</html>")
+    r = X.exportar(t, "lote", [r"llms\.txt$"], raiz=tmp_path / "entrada")
+    assert r["pulados"][0]["motivo"] == "excluida"
+    assert r["conflitos"][0]["motivo"] == "outro-sha256-no-destino"
+    assert (dest / "ex.org_a.html").read_bytes() == b"<html>outro</html>"
+    assert not r["ok_destino"]

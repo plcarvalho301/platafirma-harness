@@ -132,6 +132,18 @@ def render_md(slug: str, linhas: list[dict[str, Any]]) -> str:
     return "\n".join(out)
 
 
+# -------------------------------------------------------------------------- exportar
+def exportar(*, rotulo, excluir, trab: "M.Trabalho") -> dict[str, Any]:
+    from . import exportar as X
+    try:
+        r = X.exportar(trab, rotulo, excluir)
+    except ValueError as e:
+        from .envelope import UsoInvalido
+        raise UsoInvalido(str(e)) from e
+    ok = r.pop("ok_destino")
+    return envelope("exportar", trab.slug, ok=ok, **r)
+
+
 # ------------------------------------------------------------------------- verificar
 def verificar(relatorio, *, trab: "M.Trabalho") -> dict[str, Any]:
     r = V.verificar(relatorio, trab)
