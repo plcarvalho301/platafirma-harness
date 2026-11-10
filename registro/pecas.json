@@ -22,5 +22,17 @@
     "python": "rag",
     "teto_s": 600,
     "motivo": "S4115: lint, renderização, checagem estrutural e os dois juízes de figura de arquitetura; a pasta skills/diagrama entra no caminho para o portão comparar os esquemas com origin/main"
+  },
+  "persona": {
+    "dono": "ti",
+    "origem": "espelho",
+    "repo": "platafirma-casa-espelho",
+    "cwd": "outros_repos/harness/lib",
+    "modulo": "postura",
+    "pythonpath": ["outros_repos/harness/lib"],
+    "python": "rag",
+    "ambiente": "banco-rag",
+    "teto_s": 120,
+    "motivo": "S4182: o verbo persona da casa nova em sessão de ensaio (ler, trocar, voltar, cenario) e a composição das posturas por eixo, contra o banco do acervo e a memória de trabalho; o expediente e a porta do espelho só rodam na troca da casa"
   }
 }
