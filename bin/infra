@@ -4,15 +4,15 @@
 # dono: ti
 # componente: docker, systemd --user, cron
 # use para: SEMPRE que for subir, reiniciar, derrubar ou remover serviço, «reinicia a unit», «sobe a stack»; construir e baixar imagem; alterar configuração; fazer backup; limpar disco; logs do contêiner, cron, VRAM e disco, «os logs do contêiner», «quanto de VRAM está ocupado?»
-# atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), remover (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), hardware (leitura, operacao), limites (leitura, operacao), gpu (leitura, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao), units (escrita, operacao), ingress (escrita, operacao), medir (leitura, operacao), pecas (leitura, operacao), rodar (escrita, operacao)
+# atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), remover (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), hardware (leitura, operacao), limites (leitura, operacao), gpu (leitura, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao), units (escrita, operacao), ingress (escrita, operacao), sobreposicao (escrita, operacao), medir (leitura, operacao), pecas (leitura, operacao), rodar (escrita, operacao)
 # forma: log
 # cauda: sim
 # classe: B
 # consome: porta@ops-log
 # ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_PRESSAO_MEMORIA[=/proc/pressure/memory] porta (medir ram) · INFRA_SLICE_EVENTS[=memory.events do slice da conta] porta (medir ram) · INFRA_FOSSIL_IDADE_H[=24] porta (limpeza fossil: horas de vida do contêiner sem label de projeto) · LONGJOB_LOGDIR[=$PLATAFIRMA_INSTANCIA/var/log/jobs] porta (limpeza fossil: onde o evento de fim do job é gravado) · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · INFRA_UNITS_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-units.sh] porta · INFRA_INGRESS_FONTE[=$PLATAFIRMA_RELEASE/core/deploy/cloudflared-config.yml] porta · INFRA_INGRESS_COPIA[=$PLATAFIRMA_INSTANCIA/deploy/core/cloudflared.yml] porta · INFRA_INGRESS_CONTEINER[=platafirma-core-cloudflared-1] porta · INFRA_INGRESS_ESPERA[=5] porta (ingress: segundos até conferir o contêiner de pé) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (saude: lido por lib/oplog, o bruto contra o teto) · INFRA_PECAS[=$AQUI/../registro/pecas.json] porta (pecas, rodar) · PF_CADEIRA e PF_SESSAO porta (rodar: a bancada da sessão, a mesma escolha de acervo exportar) · PF_SUJEITO[obrigatória em up|down|pull|build|rodar] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
 # depende: docker · systemctl --user · curl · diff (ingress) · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · ps (limites) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs, bin/_infra/limpeza-quarentena e bin/_infra/limpeza-fossil (ajudantes de limpeza) · bin/_infra/medir-rede, bin/_infra/medir-ram, bin/_infra/medir-vram, bin/_infra/medir-cpu e bin/_infra/eixos.py (medir rede, ram, vram e cpu) · journalctl --user (medir ram: a morte por limite das units) · bin/sinal (medir rede: a medida da porta) · nvidia-smi (medir vram) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda) · o script declarado em INFRA_UNITS_SCRIPT (units) · bin/_infra/rodar-peca.py, bin/_acervo/exportar e git (pecas, rodar: o registro, a bancada, o python do rag, o banco pelo cofre e a comparação com origin/main)
-# escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · remover=contêiner avulso removido (a inspeção dele guardada antes em var/log/infra/removidos), unit transitória tirada da lista (reset-failed) ou unit da conta parada, desabilitada e com o arquivo movido para var/quarentena · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados; fossil=contêiner sem label de projeto removido (logs e inspeção guardados antes em var/log/infra/removidos) e unit platafirma-job-* falha tirada da lista (reset-failed) depois do evento de fim gravado no log do job · agenda=crontab do sistema (aplicar) · units=symlink das units da instância em ~/.local/share/systemd/user e daemon-reload (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · rodar=o que a peça declarada grava (a peça casa grava no banco do acervo) · estado/saude/logs/ps/config/backup/hardware/limites/gpu/medir=nada · pecas=nada
-# substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build (deploy apagado — decisão do dono, 27/09) · crontab -e a mão · cp à mão do ingress versionado para deploy/core/cloudflared.yml da instância + docker restart do cloudflared · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra por arq:0110 §14 emenda 26/09/2026)
+# escreve: restart=contêiner/unit reiniciado (efeito, não arquivo) · remover=contêiner avulso removido (a inspeção dele guardada antes em var/log/infra/removidos), unit transitória tirada da lista (reset-failed) ou unit da conta parada, desabilitada e com o arquivo movido para var/quarentena · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados; fossil=contêiner sem label de projeto removido (logs e inspeção guardados antes em var/log/infra/removidos) e unit platafirma-job-* falha tirada da lista (reset-failed) depois do evento de fim gravado no log do job · agenda=crontab do sistema (aplicar) · units=symlink das units da instância em ~/.local/share/systemd/user e daemon-reload (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · sobreposicao=compose.override.yaml da instância apagado (deploy/<stack>/, a cópia guardada antes em var/log/infra/removidos; nenhum contêiner tocado) · rodar=o que a peça declarada grava (a peça casa grava no banco do acervo) · estado/saude/logs/ps/config/backup/hardware/limites/gpu/medir=nada · pecas=nada
+# substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build (deploy apagado — decisão do dono, 27/09) · sudo rm da sobreposição compose.override.yaml de uma stack · crontab -e a mão · cp à mão do ingress versionado para deploy/core/cloudflared.yml da instância + docker restart do cloudflared · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra por arq:0110 §14 emenda 26/09/2026)
 # face: medir=Operação
 # rotulo: medir=Medir rede
 # volta: medir=sim — só lê
@@ -86,6 +86,7 @@ uso:
   infra agenda   conferir|aplicar                convergência do crontab (instala-crontab.sh)
   infra units    conferir|aplicar                convergência das units da instância (instala-units.sh)
   infra ingress  [--ver]                         copia o ingress versionado do túnel para a cópia da instância e reinicia o cloudflared
+  infra sobreposicao remover <stack> [--ver]     tira a sobreposição da instância da stack (deploy/<stack>/compose.override.yaml), guardando a cópia antes
   infra medir    rede [--json]                   a rede do host: conexões dos três túneis com a borda, reconexões e a porta por fora; só lê
   infra medir    ram [--json] [--janela <s>]     a memória do host: uso real, cache e total à parte, pressão, quem consome e as mortes por limite; só lê
   infra medir    vram [--json]                   a VRAM: a placa e, por processo, o reservado e o SM, na chave de serviço; só lê
@@ -105,6 +106,9 @@ lado deste script (bin/_release/stack), nunca pelo PATH.
 ingress mostra a diferença entre o ingress versionado do core (release no ar) e a cópia da instância
 (deploy/core/cloudflared.yml, a que o contêiner lê) e, sem --ver, grava a cópia e reinicia o contêiner
 cloudflared. --ver só mostra: 0 igual, 1 divergente. Cópia já igual: nada gravado, nada reiniciado.
+sobreposicao remover apaga só o arquivo regular deploy/<stack>/compose.override.yaml da instância, depois de guardar a
+cópia em var/log/infra/removidos e conferi-la; não toca contêiner (o efeito entra no próximo infra up <stack>). Arquivo
+já ausente: nada a remover, exit 0. Exige identidade (PF_SUJEITO); --ver só mostra. Slug com caminho e link simbólico: exit 4.
 
 exit: tabela arq:0110 §4 — 0 ok · 1 negativo de mérito (alvo/stack inexistente,
       agenda divergente) · 2 uso · 3 dependência ausente (docker, systemctl,
@@ -1433,6 +1437,65 @@ ingress() {
   exit 1
 }
 
+# sobreposicao remover <stack> [--ver]: tira a sobreposição da instância de uma stack
+# ($PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml). Débito #2856 linha 351: nenhum verbo da
+# conta apagava arquivo de deploy/<stack> da instância (write_file recusa a morada, malote não tem rm), e a
+# sobreposição de stack que perdeu o serviço (rag-api tirado da base) travava o `release promover` até o dono
+# dar `sudo rm`. A volta fica antes do ato: a cópia do arquivo é guardada em $INFRA_REMOVIDOS e conferida
+# byte a byte antes do rm; nenhum contêiner é tocado, o efeito entra no próximo `infra up <stack>`. Idempotente:
+# arquivo já ausente é "nada a remover", exit 0 (repetir depois de queda não dá erro). Só apaga o arquivo
+# regular com esse nome sob deploy/<stack>/: slug com caminho, link simbólico e diretório saem 4, com ou sem
+# --ver. --ver só mostra, sem efeito e sem identidade; sem --ver exige PF_SUJEITO (exit 3).
+sobreposicao() {
+  local acao="${1:-}" stack="" ver=0 a
+  [ -n "$acao" ] || { echo "uso: infra sobreposicao remover <stack> [--ver]" >&2; exit 2; }
+  shift
+  [ "$acao" = remover ] || { printf 'infra: erro: sobreposicao: ato desconhecido: %s (só remover)\n' "$acao" >&2; exit 2; }
+  for a in "$@"; do
+    case "$a" in
+      --ver) ver=1 ;;
+      -*) printf 'infra: erro: opção desconhecida em sobreposicao remover: %s\n' "$a" >&2; exit 2 ;;
+      *) [ -z "$stack" ] || { echo "uso: infra sobreposicao remover <stack> [--ver]" >&2; exit 2; }
+         stack="$a" ;;
+    esac
+  done
+  [ -n "$stack" ] || { echo "uso: infra sobreposicao remover <stack> [--ver]" >&2; exit 2; }
+  [[ "$stack" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || {
+    printf 'infra: erro: "%s" não é slug de stack (é caminho?) — recusado, nada removido\n' "$stack" >&2; exit 4; }
+
+  local base arq copia
+  base="${PLATAFIRMA_INSTANCIA:?}/deploy/$stack"
+  arq="$base/compose.override.yaml"
+  if [ -L "$arq" ]; then
+    printf 'infra: erro: %s é link simbólico — recusado, nada removido\n' "$arq" >&2; exit 4
+  fi
+  if [ ! -e "$arq" ]; then
+    printf 'ausente: %s — nada a remover\n' "$arq"
+    return 0
+  fi
+  if [ ! -f "$arq" ]; then
+    printf 'infra: erro: %s não é arquivo regular — recusado, nada removido\n' "$arq" >&2; exit 4
+  fi
+  printf 'sobreposição: %s (%s bytes)\n' "$arq" "$(stat -c %s -- "$arq")"
+  if [ "$ver" = 1 ]; then
+    printf 'ver: removeria o arquivo, guardando a cópia em %s; o efeito entra no próximo: infra up %s -d\n' "$INFRA_REMOVIDOS" "$stack"
+    return 0
+  fi
+  exigir_sujeito "infra sobreposicao remover" || exit 3
+  if [ ! -w "$base" ]; then
+    printf 'infra: erro: diretório %s sem escrita para esta conta — nada removido\n' "$base" >&2; exit 3
+  fi
+  mkdir -p -- "$INFRA_REMOVIDOS" || { printf 'infra: erro: não criei %s — nada removido\n' "$INFRA_REMOVIDOS" >&2; exit 3; }
+  copia="$INFRA_REMOVIDOS/sobreposicao-$stack-$(date +%Y%m%dT%H%M%S).yaml"
+  if ! { cp -p -- "$arq" "$copia" && cmp -s -- "$arq" "$copia"; }; then
+    rm -f -- "$copia"
+    printf 'infra: erro: não consegui guardar a cópia de %s — nada removido\n' "$arq" >&2; exit 3
+  fi
+  rm -f -- "$arq" || { printf 'infra: erro: rm de %s falhou (a cópia ficou em %s)\n' "$arq" "$copia" >&2; exit 3; }
+  printf 'removida: %s (cópia guardada em %s, pedida por %s)\n' "$arq" "$copia" "$PF_SUJEITO"
+  printf 'a stack no ar não foi tocada; o efeito entra no próximo: infra up %s -d\n' "$stack"
+}
+
 # limites: o teto de processos e threads da conta e a memória, lidos juntos, para medir
 # `fork: retry: Resource temporarily unavailable` (#3496). Só leitura. fork(2) devolve EAGAIN
 # no teto de processos (RLIMIT_NPROC, pids do cgroup, threads-max) e ENOMEM na falta de
@@ -1542,6 +1605,7 @@ case "$cmd" in
   agenda)    cmd_agenda "$@" ;;
   units)     cmd_units "$@" ;;
   ingress)   ingress "$@" ;;
+  sobreposicao) sobreposicao "$@" ;;
   medir)     cmd_medir "$@" ;;
   # peça declarada (registro/pecas.json): o gate de declaração e de procedência mora no ajudante;
   # rodar grava o que a peça grava, e por isso pede identidade como up/down
@@ -1550,7 +1614,7 @@ case "$cmd" in
              exec python3 "$AQUI/_infra/rodar-peca.py" rodar "$@" ;;
   *)
     printf 'infra: erro: ato desconhecido: %s\n' "$cmd" >&2
-    printf 'atos: estado, saude, logs, restart, remover, unit-env, cache, hardware, limites, gpu, backup, up, down, ps, config, pull, build, limpeza, agenda, units, ingress, medir, pecas, rodar\n' >&2
+    printf 'atos: estado, saude, logs, restart, remover, unit-env, cache, hardware, limites, gpu, backup, up, down, ps, config, pull, build, limpeza, agenda, units, ingress, sobreposicao, medir, pecas, rodar\n' >&2
     uso_texto
     exit 2
     ;;
