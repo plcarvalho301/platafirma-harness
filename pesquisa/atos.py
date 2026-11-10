@@ -143,7 +143,6 @@ def verificar(relatorio, *, trab: "M.Trabalho") -> dict[str, Any]:
 def saude(*, trab: "M.Trabalho | None" = None) -> dict[str, Any]:
     """engines_ok/total, latência da sonda, versões, Chromium presente (§4.7)."""
     import concurrent.futures as cf
-    import shutil
     import time
 
     engines_ok: list[str] = []
@@ -186,8 +185,7 @@ def saude(*, trab: "M.Trabalho | None" = None) -> dict[str, Any]:
         ver_crawl = getattr(getattr(crawl4ai, "__version__", None), "__version__", None) or "instalado"
     except Exception:  # noqa: BLE001
         ver_crawl = None
-    chromium = bool(shutil.which("chromium") or shutil.which("chromium-browser")) or \
-        _tem_chromium_playwright()
+    chromium = _tem_chromium_playwright()
 
     # relatorio: o comando teve sucesso mesmo com o SearXNG fora — a saude esta no corpo
     # (engines_ok/causa), lida por `sinal`. `saudavel` e o juizo; `ok` e "o probe rodou".
@@ -206,6 +204,16 @@ def saude(*, trab: "M.Trabalho | None" = None) -> dict[str, Any]:
 
 
 def _tem_chromium_playwright() -> bool:
-    from pathlib import Path as _P
-    cache = _P.home() / ".cache" / "ms-playwright"
-    return cache.exists() and any(cache.glob("chromium-*"))
+    """O navegador que o `--render` abre de fato, não um chromium qualquer no cache (#2856 linha 556).
+
+    Antes bastava existir `chromium-*` em ~/.cache/ms-playwright; o Playwright do lock pedia o
+    headless shell de outra revisão, e a saúde dizia true com o render quebrado. Agora se abre
+    o headless e se fecha: é a mesma chamada que o crawl4ai faz.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            p.chromium.launch(headless=True).close()
+        return True
+    except Exception:  # noqa: BLE001
+        return False

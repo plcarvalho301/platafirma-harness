@@ -33,6 +33,16 @@ def test_proximo_n_continua_numeracao(tmp_path):
     assert t2.proximo_n() == 3
 
 
+def test_proximo_n_unico_com_atos_em_paralelo(tmp_path):
+    """#2856 linha 555: coletar com várias URLs reservava o mesmo n e gravava no mesmo bruto."""
+    from concurrent.futures import ThreadPoolExecutor
+    t = M.Trabalho("t5", raiz=tmp_path)
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        ns = list(ex.map(lambda _: M.Trabalho("t5", raiz=tmp_path).proximo_n(), range(40)))
+    assert sorted(ns) == list(range(1, 41))
+    t.guarda_bruto(41, b"x", "html")
+    assert t.proximo_n() == 42
+
 def test_sha256_estavel():
     assert M.sha256_bytes(b"abc") == M.sha256_texto("abc")
     assert len(M.sha256_bytes(b"abc")) == 64
