@@ -209,6 +209,17 @@ venv_autonomo() {  # $1=diretório do venv
   return 0
 }
 
+# O navegador do Playwright acompanha a versão travada no lock do venv $1 (#2856 linha 556):
+# subir o playwright no lock deixava o cache com a revisão antiga e o `pesquisar ler --render`
+# quebrava com a saúde verde. Venv sem playwright: nada a fazer. Idempotente: com o navegador
+# da revisão já no cache, o install só confere e sai. 0 ok, 3 falhou.
+garantir_navegador() {  # $1=venv
+  [ -x "$1/bin/playwright" ] || return 0
+  "$1/bin/playwright" install chromium chromium-headless-shell </dev/null >&2 && return 0
+  printf '%s: falha alta: playwright install saiu != 0 no venv %s\n' "$PF_VENV_PREFIXO" "$1" >&2
+  return 3
+}
+
 # Constrói $2 (destino) a partir do lock $1, com o uv $3 e o python $4 (versão $5).
 # uv.lock -> uv sync --frozen (projeto em modo biblioteca, sem instalar o próprio
 # pacote); qualquer outro nome -> uv venv + pip install -r. Falha alta (3) se o uv
@@ -224,7 +235,8 @@ construir_venv() {  # $1=lock $2=destino $3=uv $4=python $5=versão do python
     uv.lock)
       "${uvenv[@]}" UV_PROJECT_ENVIRONMENT="$dest" "$uv" sync -q --frozen --no-dev --no-install-project \
         --no-editable \
-        --python "$py" --project "$(dirname "$lock")" </dev/null >&2 || rc=$? ;;
+        --python "$py" --project "$(dirname "$lock")" </dev/null >&2 || rc=$?
+      if [ "$rc" -eq 0 ]; then garantir_navegador "$dest" || return 3; fi ;;
     package-lock.json)
       # ambiente node (card #3386): npm ci --ignore-scripts; a mensagem de falha é do próprio construtor
       construir_node "$lock" "$dest" || return 3

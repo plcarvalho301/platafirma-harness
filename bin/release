@@ -1249,6 +1249,11 @@ construir_venvs() {  # $1=repo $2=sha ; enche VENVS_PRONTOS; 0 ok, 3 falhou
     dest="$PROD_RAIZ/venv/$nome-$hash"
     if [ -f "$dest/.pronto" ] && venv_autonomo "$dest"; then
       printf 'venv:      %s-%s já construído (lock e python inalterados)\n' "$nome" "$hash"
+      # venv reaproveitado também confere o navegador da revisão do lock (#2856 linha 556)
+      garantir_navegador "$dest" || {
+        printf 'release: navegador do playwright não instalou no venv %s-%s — current intacto\n' "$nome" "$hash" >&2
+        return 3
+      }
     else
       if [ -z "$uv" ]; then
         uv="$(resolver_uv)" || {

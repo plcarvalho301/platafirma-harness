@@ -16,6 +16,7 @@ continue a numeração em vez de sobrescrever bruto/derivado.
 from __future__ import annotations
 
 import datetime as _dt
+import fcntl
 import hashlib
 import json
 import os
@@ -73,12 +74,36 @@ class Trabalho:
         return out
 
     def proximo_n(self) -> int:
-        maior = 0
-        for ln in self.linhas():
-            n = ln.get("n")
-            if isinstance(n, int) and n > maior:
-                maior = n
-        return maior + 1
+        """Reserva o próximo `n` do trabalho, único mesmo com atos em paralelo (#2856 linha 555).
+
+        O manifesto só ganha a linha depois do fetch; dois atos simultâneos liam o mesmo maior
+        `n` e gravavam no mesmo `bruto/<n>.*`. A reserva fica em `.proximo_n`, sob flock, e o
+        próximo é o maior entre o manifesto, a reserva e os arquivos já em bruto/ e derivado/.
+        """
+        trava = self.dir / ".proximo_n.lock"
+        reserva = self.dir / ".proximo_n"
+        with trava.open("a") as fh:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            try:
+                maior = 0
+                for ln in self.linhas():
+                    n = ln.get("n")
+                    if isinstance(n, int) and n > maior:
+                        maior = n
+                try:
+                    maior = max(maior, int(reserva.read_text().strip() or 0))
+                except (OSError, ValueError):
+                    pass
+                for d in (self.bruto, self.derivado):
+                    for p in d.iterdir():
+                        cabeca = p.name.split(".", 1)[0].split("-", 1)[0]
+                        if cabeca.isdigit():
+                            maior = max(maior, int(cabeca))
+                novo = maior + 1
+                reserva.write_text(str(novo))
+                return novo
+            finally:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
     # ---------------------------------------------------------------- escrita
     def grava_linha(self, campos: dict[str, Any]) -> int:
