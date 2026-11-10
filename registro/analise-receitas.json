@@ -52,5 +52,11 @@
     "repositorio": "platafirma-conhecimento",
     "caminho": "analise/vista-por-capacidade",
     "versao": "7868a84"
+  },
+  "desfecho-da-leitura": {
+    "tipo": "analise",
+    "repositorio": "platafirma-conhecimento",
+    "caminho": "analise/desfecho-da-leitura",
+    "versao": "cae68e8"
   }
 }
