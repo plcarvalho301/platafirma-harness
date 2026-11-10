@@ -133,10 +133,10 @@ def render_md(slug: str, linhas: list[dict[str, Any]]) -> str:
 
 
 # -------------------------------------------------------------------------- exportar
-def exportar(*, rotulo, excluir, trab: "M.Trabalho") -> dict[str, Any]:
+def exportar(*, rotulo, excluir, trab: "M.Trabalho", juntar: str | None = None) -> dict[str, Any]:
     from . import exportar as X
     try:
-        r = X.exportar(trab, rotulo, excluir)
+        r = X.juntar(trab, juntar, rotulo, excluir) if juntar else X.exportar(trab, rotulo, excluir)
     except ValueError as e:
         from .envelope import UsoInvalido
         raise UsoInvalido(str(e)) from e

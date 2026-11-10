@@ -37,6 +37,7 @@ def uso(code=2):
         "  pesquisar manifesto [--md]\n"
         "  pesquisar exportar [--para <rotulo>] [--excluir <regex>]...   o último bruto íntegro de cada URL do trabalho,\n"
         "                  um arquivo por página, em ~/AI/entrada/<rotulo> (padrão pesquisa-<trabalho>), para `acervo pipeline <pasta>`\n"
+        "      [--juntar \"<título>\"]   o site inteiro num Markdown só, uma obra: H1 com o título, uma seção por página\n"
         "  pesquisar verificar <relatorio.md>\n"
         "  pesquisar saude\n\n"
         "comum: --trabalho <slug> (default $PF_ORDEM_ID; sem sessão, manual-<data>) · --json (default) · --md\n"
@@ -86,6 +87,7 @@ def main(argv):
     p.add_argument("--imagens", action="store_true")
     p.add_argument("--para", default=None)
     p.add_argument("--excluir", action="append", default=[])
+    p.add_argument("--juntar", default=None)
     args = p.parse_args(argv[2:])
 
     trab = Trabalho(slug_trabalho(args.trabalho))
@@ -117,7 +119,7 @@ def main(argv):
         elif ato == "manifesto":
             env = atos.manifesto(trab, md=args.md)
         elif ato == "exportar":
-            env = atos.exportar(rotulo=args.para, excluir=args.excluir, trab=trab)
+            env = atos.exportar(rotulo=args.para, excluir=args.excluir, trab=trab, juntar=args.juntar)
         elif ato == "verificar":
             if not resto:
                 uso()
