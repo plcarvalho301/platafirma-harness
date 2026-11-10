@@ -318,6 +318,9 @@ ambiente_do_registro() {  # $1=clone
   dest="${PF_RELEASE_RAIZ}/venv/$REG_STACK-$hash"
   if [ -f "$dest/.pronto" ] && venv_autonomo "$dest"; then
     printf 'ambiente:  %s-%s ja construido (lock e python inalterados) — reaproveitado\n' "$REG_STACK" "$hash" >&2
+    # o navegador da revisão do playwright do lock também no venv reaproveitado (#2856 linha 556);
+    # aqui só avisa: a suíte que não abre navegador não deve cair por ele
+    garantir_navegador "$dest" || printf 'ambiente:  aviso: navegador do playwright não instalou em %s-%s\n' "$REG_STACK" "$hash" >&2
   else
     uv="$(resolver_uv)" || exit 3
     mkdir -p "$(dirname "$dest")"
