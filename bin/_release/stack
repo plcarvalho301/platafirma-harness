@@ -348,8 +348,22 @@ gravar_atual() { mkdir -p "$PONTOS"; printf '%s\n' "$1" > "$PONTOS/$STACK.atual"
 # Tudo le o `docker compose config --format json` ja interpolado (depois de materializar_env e
 # de exportar PF_RELEASE_SHA): o mesmo compose que o `up` usaria. Falha de leitura nunca
 # decide a favor de pular nada: volta 1 e a stack segue o caminho de sempre.
+# DT #2856 linha 350: o stderr do `docker compose config` nao se descarta. Quando a leitura falha, ele entra
+# no log da promocao (mascarado como o `config`), porque e ele que diz a causa — ex.: sobreposicao da
+# instancia sobrepondo servico que a rev removeu. Leitura que da certo segue muda (avisos de variavel
+# nao definida nao entram). A saida de erro vai na hora, sem esperar quem chamou decidir o que dizer.
 config_json() {  # [--profile teste] ; imprime o JSON do compose montado
-  compose "$@" config --format json 2>/dev/null
+  local err rc=0
+  err="$(mktemp "${TMPDIR:-/tmp}/compose-config.XXXXXX")" || { compose "$@" config --format json; return; }
+  compose "$@" config --format json 2>"$err" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    {
+      printf 'erro: docker compose config de "%s" falhou (saiu %s)' "$STACK" "$rc"
+      if [ -s "$err" ]; then printf ' — o que ele disse:\n'; mascara_segredos <"$err" | sed 's/^/  | /'; else printf ' sem dizer a causa\n'; fi
+    } >&2
+  fi
+  rm -f "$err"
+  return "$rc"
 }
 
 # "servico<TAB>imagem" de cada servico com build: (dos perfis ativos, ou dos pedidos em $@)

@@ -60,6 +60,9 @@ while i < len(args):
     sub = a
     break
 resto = args[i + 1:] if sub else []
+if sub == "config" and os.environ.get("STUB_CONFIG_ERRO"):
+    sys.stderr.write(os.environ["STUB_CONFIG_ERRO"] + "\n")
+    sys.exit(1)
 if sub == "config":
     arvore = arquivos[0].split("/deploy/")[0]
     modelo = json.load(open(os.environ["STUB_MODELO"]))
@@ -319,6 +322,36 @@ def test_testar_reprovado_sai_4(mundo):
 def test_testar_exige_rev(mundo):
     r = _roda(mundo, "testar", "x")
     assert r.returncode == 2
+
+
+# --- DT #2856 linha 350: a causa que o docker compose config diz nao se perde ---------------------------
+
+CAUSA = "service rag-api has neither an image nor a build context specified: invalid compose project"
+
+
+def test_testar_com_compose_que_nao_le_diz_a_causa_do_docker(mundo):
+    r = _roda(mundo, "testar", "x", mundo["c1"], STUB_CONFIG_ERRO=CAUSA)
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert "nao se le" in r.stderr
+    assert CAUSA in r.stderr, r.stderr                 # o stderr do docker entra no log, nao some em /dev/null
+
+
+def test_promover_com_compose_que_nao_le_diz_a_causa_do_docker(mundo):
+    r = _roda(mundo, "promover", "x", mundo["c1"], STUB_CONFIG_ERRO=CAUSA)
+    assert CAUSA in r.stderr, r.stderr
+    assert "falhou (saiu 1)" in r.stderr
+
+
+def test_causa_do_docker_sai_com_segredo_mascarado(mundo):
+    r = _roda(mundo, "testar", "x", mundo["c1"], STUB_CONFIG_ERRO="  DB_PASSWORD: hunter2")
+    assert "hunter2" not in r.stderr, r.stderr
+    assert "DB_PASSWORD" in r.stderr
+
+
+def test_leitura_que_da_certo_nao_ecoa_stderr(mundo):
+    r = _roda(mundo, "promover", "x", mundo["c1"])
+    assert r.returncode == 0, r.stderr
+    assert "docker compose config" not in r.stderr
 
 
 # --- o estagio de teste por selecao do raio (card #3733, arq:0129 D4) --------------------------------
