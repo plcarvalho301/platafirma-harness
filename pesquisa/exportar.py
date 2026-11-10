@@ -104,6 +104,114 @@ def escolher(trab: "M.Trabalho", excluir: list[str] | None = None) -> tuple[list
     return escolhidas, pulados
 
 
+_RE_FRONT = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.S)
+_RE_FRONT_TITLE = re.compile(r"^title:\s*[\"']?(.+?)[\"']?\s*$", re.M)
+_RE_CERCA = re.compile(r"^\s*(```|~~~)")
+
+
+def _markdown_da_pagina(trab: "M.Trabalho", ln: dict) -> str | None:
+    """O Markdown da página: o derivado do extrator, ou o bruto quando o site já serve Markdown."""
+    d = trab.derivado / f"{ln['n']}.md"
+    if d.is_file():
+        return d.read_text(encoding="utf-8", errors="replace")
+    b = Path(ln["bruto"])
+    if b.suffix.lower() in (".md", ".markdown", ".txt"):
+        return b.read_text(encoding="utf-8", errors="replace")
+    return None
+
+
+def _secao(md: str, url: str) -> tuple[str, str]:
+    """(título, corpo) da página, sem frontmatter, com os títulos rebaixados um nível.
+
+    O documento juntado tem um H1 só, o do site; cada página vira H2 e o que era H2 vira H3.
+    Linha dentro de bloco de código não é título e não muda.
+    """
+    titulo = None
+    m = _RE_FRONT.match(md)
+    if m:
+        t = _RE_FRONT_TITLE.search(m.group(1))
+        titulo = t.group(1).strip() if t else None
+        md = md[m.end():]
+    linhas, dentro, h1_tirado = [], False, False
+    for linha in md.splitlines():
+        if _RE_CERCA.match(linha):
+            dentro = not dentro
+        elif not dentro and linha.startswith("#"):
+            nivel = len(linha) - len(linha.lstrip("#"))
+            texto = linha[nivel:].strip()
+            if nivel == 1 and not h1_tirado and (titulo is None or texto == titulo):
+                titulo = titulo or texto
+                h1_tirado = True
+                continue
+            linha = "#" * min(nivel + 1, 6) + linha[nivel:]
+        linhas.append(linha)
+    titulo = titulo or (urlsplit(url).path.strip("/") or urlsplit(url).netloc)
+    return " ".join(titulo.split()), "\n".join(linhas).strip()
+
+
+def _ordem(url: str) -> tuple:
+    """Página-mãe antes das filhas: ordena pelos segmentos do caminho."""
+    p = urlsplit(url)
+    segs = [s for s in p.path.split("/") if s and s not in ("index.md", "index.html")]
+    return (p.netloc, segs)
+
+
+def juntar(trab: "M.Trabalho", titulo: str, rotulo: str | None = None,
+           excluir: list[str] | None = None, *, raiz: Path | None = None) -> dict[str, Any]:
+    """O site coletado vira UM arquivo Markdown, uma obra: um H1 com o título dado e uma seção
+    H2 por página, na ordem do caminho, cada uma com a URL de origem.
+
+    Uma documentação de produto é uma obra, como um manual em PDF; exportada página a página,
+    o site entrava no acervo como dezenas de obras (lote acervo-aquisicao-ti-20261110: 62 do
+    Cloudflare Tunnel e 36 do OAuth2 Proxy). Página sem Markdown (sem derivado e com bruto que
+    não é Markdown) volta em `pulados` e não entra calada.
+    """
+    rotulo = rotulo or f"pesquisa-{trab.slug}"
+    if not _RE_ROTULO.match(rotulo):
+        raise ValueError(f"rotulo-invalido:{rotulo}")
+    base = _limpo(titulo or "")
+    if not base:
+        raise ValueError("titulo-vazio")
+    destino = (raiz or RAIZ_ENTRADA) / rotulo
+    destino.mkdir(parents=True, exist_ok=True)
+    escolhidas, pulados = escolher(trab, excluir)
+    escolhidas.sort(key=lambda ln: _ordem(ln.get("url_final") or ln["url"]))
+    partes = [f"---\ntitle: \"{titulo}\"\n---\n\n# {titulo}\n"]
+    paginas = []
+    for ln in escolhidas:
+        url = ln.get("url_final") or ln["url"]
+        md = _markdown_da_pagina(trab, ln)
+        if md is None:
+            pulados.append({"url": ln["url"], "motivo": "sem-markdown"})
+            continue
+        t, corpo = _secao(md, url)
+        partes.append(f"\n## {t}\n\nFonte: <{url}>\n\n{corpo}\n")
+        paginas.append({"url": ln["url"], "url_final": ln.get("url_final"), "titulo": t,
+                        "sha256": ln["sha256"], "n": ln["n"], "linha_manifesto": ln["_linha"],
+                        "coletado_em": ln.get("ts")})
+    if not paginas:
+        raise ValueError("nenhuma-pagina-com-markdown")
+    texto = "".join(partes).encode("utf-8")
+    sha = M.sha256_bytes(texto)
+    alvo = destino / f"{base}.md"
+    conflitos = []
+    if alvo.exists() and M.sha256_bytes(alvo.read_bytes()) != sha:
+        conflitos.append({"arquivo": alvo.name, "motivo": "outro-sha256-no-destino"})
+    elif not alvo.exists():
+        tmp = alvo.with_suffix(".md.parcial")
+        tmp.write_bytes(texto)
+        tmp.replace(alvo)
+        with (destino / "PROCEDENCIA.jsonl").open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"arquivo": alvo.name, "sha256": sha, "trabalho": trab.slug,
+                                 "juntado_de": paginas}, ensure_ascii=False) + "\n")
+    linha = trab.grava_linha({"ato": "exportar", "juntar": True, "destino": str(destino),
+                              "status": 200, "arquivo": alvo.name, "paginas": len(paginas),
+                              "pulados": len(pulados), "conflitos": len(conflitos)})
+    return {"destino": str(destino), "arquivo": alvo.name, "sha256": sha,
+            "paginas": len(paginas), "pulados": pulados, "conflitos": conflitos,
+            "ok_destino": not conflitos, "manifesto": trab.ref_manifesto(linha)}
+
+
 def exportar(trab: "M.Trabalho", rotulo: str | None = None, excluir: list[str] | None = None,
              *, raiz: Path | None = None) -> dict[str, Any]:
     rotulo = rotulo or f"pesquisa-{trab.slug}"

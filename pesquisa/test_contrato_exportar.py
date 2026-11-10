@@ -41,6 +41,27 @@ def test_nome_pelo_titulo_e_titulo_repetido_ganha_o_caminho(tmp_path):
     assert nomes == ["Azure OAuth2 Proxy.html", "Useful terms (y-termos).md", "Useful terms.md"]
 
 
+def test_juntar_faz_do_site_um_markdown_so(tmp_path):
+    t = M.Trabalho("t", raiz=tmp_path / "pesq")
+    _ler(t, 1, "https://ex.org/doc/b/index.md", b"---\ntitle: Filha\n---\n# Filha\n## Passo\n```\n# comentario\n```", ext="md")
+    _ler(t, 2, "https://ex.org/doc/index.md", b"# Inicio\ntexto", ext="md")
+    _ler(t, 3, "https://ex.org/doc/c", b"<html><title>C</title></html>")
+    t.guarda_derivado(3, "# C\ncorpo de c", "md")
+    _ler(t, 4, "https://ex.org/doc/d", b"<html><title>D</title></html>")  # sem derivado
+    r = X.juntar(t, "Doc de Ex", "lote", raiz=tmp_path / "entrada")
+    assert r["arquivo"] == "Doc de Ex.md" and r["paginas"] == 3 and r["ok_destino"]
+    assert [p["motivo"] for p in r["pulados"]] == ["sem-markdown"]
+    md = (tmp_path / "entrada/lote/Doc de Ex.md").read_text()
+    assert md.count("\n# ") == 1 and "# Doc de Ex" in md
+    assert md.index("## Inicio") < md.index("## Filha") < md.index("## C")
+    assert "### Passo" in md and "\n# comentario" in md
+    assert "Fonte: <https://ex.org/doc/b/index.md>" in md
+    proc = [json.loads(l) for l in (tmp_path / "entrada/lote/PROCEDENCIA.jsonl").read_text().splitlines()]
+    assert len(proc) == 1 and len(proc[0]["juntado_de"]) == 3
+    r2 = X.juntar(t, "Doc de Ex", "lote", raiz=tmp_path / "entrada")
+    assert r2["ok_destino"] and r2["sha256"] == r["sha256"]
+
+
 def test_bruto_sobrescrito_nao_sai(tmp_path):
     t = M.Trabalho("t", raiz=tmp_path / "pesq")
     p = _ler(t, 1, "https://ex.org/a", b"<html>a</html>")
