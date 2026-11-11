@@ -162,9 +162,15 @@ def test_dois_cards_da_mesma_cadeira_nao_colidem_e_ambiguo_pede_a_chave(tmp_path
     assert "fabrica/42-x" in r.stdout
 
 
-def test_ler_sem_bancada_aberta_da_vizinho_nao_desconhecido(tmp_path):
+def test_ler_sem_bancada_le_origin_main_e_escrita_da_vizinho(tmp_path):
+    """#2856 linha 81: leitura sem bancada le origin/main do forge; escrita segue exigindo bancada."""
     bancada = _montar(tmp_path)
     r = _repo(tmp_path, bancada, "sessao-1", "ler", "demo", "LEIA.md")
+    assert r.returncode == 0, r.stderr
+    assert "sem bancada: lendo origin/main@" in r.stderr
+    assert "desconhecido" not in r.stderr
+
+    r = _repo(tmp_path, bancada, "sessao-1", "commitar", "demo", "-m", "x", "LEIA.md")
     assert r.returncode == 1, r.stderr
     assert "vizinho: repo abrir" in r.stderr
     assert "desconhecido" not in r.stderr
