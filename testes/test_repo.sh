@@ -185,4 +185,52 @@ if grep -q "Dockerfile" <<<"$out_caminho" || grep -q "bin/curar" <<<"$out_caminh
 fi
 echo "OK: repo procurar suporta regex ERE, âncoras e --caminho"
 
+# 4. #2856 linha 81: leitura sem bancada le origin/main buscado do forge, nunca a arvore do cache
+echo "--- Teste 4: leitura sem bancada (#2856 linha 81) ---"
+FORGE="$TMP_DIR/forge.git"
+SEMENTE="$TMP_DIR/semente"
+git init -q --bare -b main "$FORGE"
+git clone -q "$FORGE" "$SEMENTE" 2>/dev/null
+git -C "$SEMENTE" config user.name "Test Repo"
+git -C "$SEMENTE" config user.email "test@platafirma.org"
+echo "v1" > "$SEMENTE/a.txt"
+git -C "$SEMENTE" add a.txt
+git -C "$SEMENTE" commit -q -m "v1"
+git -C "$SEMENTE" push -q origin main
+# o clone base (cache) nasce em v1 e fica velho
+git clone -q "$FORGE" "$BANCADA_TESTE/demo2"
+echo "v2" > "$SEMENTE/a.txt"
+echo "novo" > "$SEMENTE/novo.txt"
+git -C "$SEMENTE" add a.txt novo.txt
+git -C "$SEMENTE" commit -q -m "v2"
+git -C "$SEMENTE" push -q origin main
+
+err4="$TMP_DIR/err4"
+out4="$("$VERBO" ler demo2 a.txt 2>"$err4")" || { echo "FALHA: repo ler sem bancada saiu $?: $(cat "$err4")" >&2; exit 1; }
+[ "$out4" = "v2" ] || { echo "FALHA: repo ler sem bancada devia ler v2 de origin/main, leu '$out4'" >&2; exit 1; }
+grep -q "sem bancada: lendo origin/main@" "$err4" || { echo "FALHA: repo ler sem bancada nao declarou a ref lida" >&2; exit 1; }
+grep -q "versão: origin/main@" "$err4" || { echo "FALHA: repo ler sem bancada nao trouxe a versão" >&2; exit 1; }
+[ "$(cat "$BANCADA_TESTE/demo2/a.txt")" = "v1" ] || { echo "FALHA: a arvore do cache mudou" >&2; exit 1; }
+
+out4p="$("$VERBO" procurar demo2 '^v2$' 2>/dev/null)"
+grep -qx "a.txt:1:v2" <<<"$out4p" || { echo "FALHA: repo procurar sem bancada devia dar 'a.txt:1:v2', deu '$out4p'" >&2; exit 1; }
+
+out4l="$("$VERBO" listar demo2 2>/dev/null)"
+grep -qx "novo.txt" <<<"$out4l" || { echo "FALHA: repo listar sem bancada nao listou novo.txt de origin/main" >&2; exit 1; }
+
+out4h="$("$VERBO" historico demo2 a.txt 2>/dev/null)"
+[ "$(grep -c . <<<"$out4h")" -eq 2 ] || { echo "FALHA: repo historico sem bancada devia ter 2 commits, teve: $out4h" >&2; exit 1; }
+
+set +e
+"$VERBO" ler demo2 ausente.txt >/dev/null 2>&1; rc_aus=$?
+"$VERBO" ler demo2@outra a.txt >/dev/null 2>&1; rc_chave=$?
+mv "$FORGE" "$FORGE.fora"
+"$VERBO" ler demo2 a.txt >/dev/null 2>&1; rc_forge=$?
+mv "$FORGE.fora" "$FORGE"
+set -e
+[ "$rc_aus" -eq 1 ] || { echo "FALHA: arquivo ausente em origin/main devia sair 1, saiu $rc_aus" >&2; exit 1; }
+[ "$rc_chave" -eq 1 ] || { echo "FALHA: <repo>@<chave> sem bancada devia sair 1 sem cair em main, saiu $rc_chave" >&2; exit 1; }
+[ "$rc_forge" -eq 5 ] || { echo "FALHA: forge fora devia sair 5, saiu $rc_forge" >&2; exit 1; }
+echo "OK: sem bancada, ler/procurar/listar/historico leem origin/main do forge; chave nomeada exige bancada; forge fora sai 5"
+
 echo "=== Todos os testes do verbo repo passaram com sucesso! ==="
