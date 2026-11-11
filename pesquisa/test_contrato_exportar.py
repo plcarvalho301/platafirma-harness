@@ -45,8 +45,8 @@ def test_juntar_faz_do_site_um_markdown_so(tmp_path):
     t = M.Trabalho("t", raiz=tmp_path / "pesq")
     _ler(t, 1, "https://ex.org/doc/b/index.md", b"---\ntitle: Filha\n---\n# Filha\n## Passo\n```\n# comentario\n```", ext="md")
     _ler(t, 2, "https://ex.org/doc/index.md", b"# Inicio\ntexto", ext="md")
-    _ler(t, 3, "https://ex.org/doc/c", b"<html><title>C</title></html>")
-    t.guarda_derivado(3, "# C\ncorpo de c", "md")
+    _ler(t, 3, "https://ex.org/doc/c", b"<html><title>C | Ex Docs</title></html>")
+    t.guarda_derivado(3, "corpo de c, sem H1", "md")
     _ler(t, 4, "https://ex.org/doc/d", b"<html><title>D</title></html>")  # sem derivado
     r = X.juntar(t, "Doc de Ex", "lote", raiz=tmp_path / "entrada")
     assert r["arquivo"] == "Doc de Ex.md" and r["paginas"] == 3 and r["ok_destino"]
