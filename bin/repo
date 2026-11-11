@@ -457,6 +457,43 @@ base_de_repo() {
   printf '%s' "$BANCADA/$n"
 }
 
+# --- leitura sem bancada (#2856 linha 81) -------------------------------------------------
+# Os atos de leitura (ler, listar, procurar, historico) nao exigem bancada. Sem bancada da
+# cadeira, leem origin/main buscado do forge no mesmo ato, pelo clone base e so por objeto
+# (cat-file, show, ls-tree, grep e log sobre a ref), nunca pela arvore do cache: o que se
+# le e o que main aceitou agora, nunca copia velha nem ramo preso no cache
+# (spec_ambiente-de-desenvolvimento §2). Forge que nao responde sai 5. Com <repo>@<chave>
+# nomeada, a bancada pedida e obrigatoria e nao ha volta a main.
+LEITURA_REF=""
+ALVO=""
+
+# alvo_leitura <repo> -- poe em ALVO o diretorio a ler e, sem bancada, em LEITURA_REF a ref.
+# Chamar sem substituicao de comando, para LEITURA_REF chegar a quem chama.
+alvo_leitura() {
+  local nome="${1:-}" err c rc base
+  err="$(mktemp)"
+  c="$(clone_de "$nome" 2>"$err")"; rc=$?
+  if [ "$rc" -eq 0 ]; then
+    rm -f "$err"; ALVO="$c"; return 0
+  fi
+  base="${nome%%@*}"
+  if [ "$rc" -ne 1 ] || [ "$base" != "$nome" ] || [ ! -e "$BANCADA/$base/.git" ]; then
+    [ -n "$c" ] && printf '%s\n' "$c"
+    cat "$err" >&2; rm -f "$err"
+    return "$rc"
+  fi
+  rm -f "$err"
+  git_sem_engolir "$BANCADA/$base" fetch --prune origin \
+    || morre "indeterminavel: sem bancada de '$base', e o forge nao respondeu para ler origin/main ($REPLY)" 5
+  "$GIT" -C "$BANCADA/$base" rev-parse --verify -q origin/main >/dev/null \
+    || morre "indeterminavel: '$base' sem origin/main depois de buscar o forge" 5
+  LEITURA_REF="origin/main"
+  ALVO="$BANCADA/$base"
+  printf 'sem bancada: lendo %s@%s de %s, buscado do forge agora\n' "$LEITURA_REF" \
+    "$("$GIT" -C "$ALVO" rev-parse --short "$LEITURA_REF")" "$base" >&2
+  return 0
+}
+
 ramo_atual() {
   local c="$1"
   "$GIT" -C "$c" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD"
@@ -700,7 +737,8 @@ cmd_listar() {
   done
   [ -n "$repo" ] || morre "repo obrigatório para listar" 2
 
-  local c; c="$(clone_de "$repo")" || exit $?
+  alvo_leitura "$repo" || exit $?
+  local c="$ALVO"
 
   if [ -n "$prefixo" ]; then
     if [[ "$prefixo" == /* ]] || [[ "$prefixo" == *..* ]]; then
@@ -708,11 +746,13 @@ cmd_listar() {
     fi
   fi
 
+  local -a lista=(ls-files)
+  [ -n "$LEITURA_REF" ] && lista=(ls-tree -r --name-only "$LEITURA_REF")
   local files
   if [ -n "$prefixo" ]; then
-    files="$("$GIT" -C "$c" ls-files -- "$prefixo" 2>/dev/null || true)"
+    files="$("$GIT" -C "$c" "${lista[@]}" -- "$prefixo" 2>/dev/null || true)"
   else
-    files="$("$GIT" -C "$c" ls-files 2>/dev/null || true)"
+    files="$("$GIT" -C "$c" "${lista[@]}" 2>/dev/null || true)"
   fi
 
   if [ -z "$files" ]; then
@@ -784,13 +824,27 @@ cmd_ler() {
   done
   [ -n "$repo" ] && [ -n "$caminho" ] || morre "repo e caminho são obrigatórios para ler" 2
 
-  local c; c="$(clone_de "$repo")" || exit $?
+  alvo_leitura "$repo" || exit $?
+  local c="$ALVO"
 
   if [[ "$caminho" == /* ]] || [[ "$caminho" == *..* ]]; then
     morre "caminho fora da raiz ou símbolo que escapa: '$caminho'" 4
   fi
 
   local alvo_arquivo="$c/$caminho"
+  if [ -n "$LEITURA_REF" ]; then
+    if [ "$("$GIT" -C "$c" cat-file -t "$LEITURA_REF:$caminho" 2>/dev/null)" != blob ]; then
+      printf 'varrido: %s@%s (sem bancada): arquivo ausente\n' "$LEITURA_REF" \
+        "$("$GIT" -C "$c" rev-parse --short "$LEITURA_REF")" >&2
+      printf 'vizinho: repo listar %s <prefixo>\n' "$repo" >&2
+      exit 1
+    fi
+    LER_TMP="$(mktemp)"
+    trap 'rm -f "$LER_TMP"' EXIT
+    "$GIT" -C "$c" show "$LEITURA_REF:$caminho" >"$LER_TMP" 2>/dev/null \
+      || morre "indeterminavel: nao li $LEITURA_REF:$caminho" 5
+    alvo_arquivo="$LER_TMP"
+  fi
   if [ ! -f "$alvo_arquivo" ]; then
     info_varrido "$c" "$repo"
     printf 'vizinho: release ler %s %s\n' "$repo" "$caminho" >&2
@@ -860,6 +914,12 @@ if fim < total:
                f" (repo ler {repo} {caminho} --offset {fim})\n").encode("utf-8"))
 out.flush()
 PY
+  fi
+
+  if [ -n "$LEITURA_REF" ]; then
+    printf 'versão: %s@%s (sem bancada)\n' "$LEITURA_REF" \
+      "$("$GIT" -C "$c" rev-parse --short "$LEITURA_REF")" >&2
+    return 0
   fi
 
   local ramo; ramo="$(ramo_atual "$c")"
@@ -932,7 +992,8 @@ cmd_procurar() {
   for t in "${termos[@]}"; do padroes+=(-e "$t"); done
   termo="$(printf '%s | ' "${termos[@]}")"; termo="${termo% | }"
 
-  local c; c="$(clone_de "$repo")" || exit $?
+  alvo_leitura "$repo" || exit $?
+  local c="$ALVO"
 
   if [ -n "$prefixo" ]; then
     if [[ "$prefixo" == /* ]] || [[ "$prefixo" == *..* ]]; then
@@ -942,19 +1003,28 @@ cmd_procurar() {
 
   local grep_modo="-E"
   [ "$literal" -eq 1 ] && grep_modo="-F"
+  local -a ref_arg=()
+  local onde="na bancada"
+  if [ -n "$LEITURA_REF" ]; then
+    ref_arg=("$LEITURA_REF")
+    onde="em $LEITURA_REF (sem bancada)"
+  fi
 
   local out=""
   if [ -n "$prefixo" ]; then
-    out="$("$GIT" -C "$c" grep -n "$grep_modo" "${padroes[@]}" -- "$prefixo" 2>/dev/null || true)"
+    out="$("$GIT" -C "$c" grep -n "$grep_modo" "${padroes[@]}" "${ref_arg[@]+"${ref_arg[@]}"}" -- "$prefixo" 2>/dev/null || true)"
   else
-    out="$("$GIT" -C "$c" grep -n "$grep_modo" "${padroes[@]}" 2>/dev/null || true)"
+    out="$("$GIT" -C "$c" grep -n "$grep_modo" "${padroes[@]}" "${ref_arg[@]+"${ref_arg[@]}"}" 2>/dev/null || true)"
+  fi
+  if [ -n "$LEITURA_REF" ] && [ -n "$out" ]; then
+    out="$(printf '%s\n' "$out" | sed "s#^$LEITURA_REF:##")"
   fi
 
   if [ -z "$out" ]; then
     if [ "$como_json" -eq 1 ]; then
-      python3 -c 'import sys, json; print(json.dumps({"repo": sys.argv[1], "termo": sys.argv[2], "ocorrencias": [], "total": 0, "motivo": "termo não encontrado na bancada"}, indent=2))' "$repo" "$termo"
+      python3 -c 'import sys, json; print(json.dumps({"repo": sys.argv[1], "termo": sys.argv[2], "ocorrencias": [], "total": 0, "motivo": "termo não encontrado " + sys.argv[3]}, indent=2))' "$repo" "$termo" "$onde"
     else
-      printf 'motivo: termo '\''%s'\'' não encontrado na bancada %s\n' "$termo" "$repo"
+      printf 'motivo: termo '\''%s'\'' não encontrado %s %s\n' "$termo" "$onde" "$repo"
     fi
     return 0
   fi
@@ -1005,14 +1075,27 @@ cmd_historico() {
   [ -n "$repo" ] || { printf '%s: erro: repo obrigatório para historico\n' "$VERBO" >&2; uso; }
   case "$n_commits" in *[!0-9]*) morre "número de commits inválido: '$n_commits'" 2 ;; esac
 
-  local c; c="$(clone_de "$repo")" || exit $?
+  alvo_leitura "$repo" || exit $?
+  local c="$ALVO"
+  local -a ref_arg=()
+  [ -n "$LEITURA_REF" ] && ref_arg=("$LEITURA_REF")
 
   if [ -n "$caminho" ]; then
     if [[ "$caminho" == /* ]] || [[ "$caminho" == *..* ]]; then
       morre "caminho fora da raiz ou símbolo que escapa: '$caminho'" 4
     fi
-    if [ ! -e "$c/$caminho" ] && [ -z "$("$GIT" -C "$c" log -1 --format='%h' -- "$caminho" 2>/dev/null)" ]; then
-      info_varrido "$c" "$repo"
+    local na_arvore=1
+    if [ -n "$LEITURA_REF" ]; then
+      "$GIT" -C "$c" cat-file -e "$LEITURA_REF:$caminho" 2>/dev/null || na_arvore=0
+    else
+      [ -e "$c/$caminho" ] || na_arvore=0
+    fi
+    if [ "$na_arvore" -eq 0 ] && [ -z "$("$GIT" -C "$c" log -1 --format='%h' "${ref_arg[@]+"${ref_arg[@]}"}" -- "$caminho" 2>/dev/null)" ]; then
+      if [ -n "$LEITURA_REF" ]; then
+        printf 'varrido: %s (sem bancada): caminho sem histórico\n' "$LEITURA_REF" >&2
+      else
+        info_varrido "$c" "$repo"
+      fi
       printf 'vizinho: release ler %s %s\n' "$repo" "$caminho" >&2
       exit 1
     fi
@@ -1021,9 +1104,9 @@ cmd_historico() {
   local log_fmt='%h%x09%ad%x09%an%x09%s'
   local out=""
   if [ -n "$caminho" ]; then
-    out="$("$GIT" -C "$c" log -n "$n_commits" --format="$log_fmt" --date=short -- "$caminho" 2>/dev/null || true)"
+    out="$("$GIT" -C "$c" log -n "$n_commits" --format="$log_fmt" --date=short "${ref_arg[@]+"${ref_arg[@]}"}" -- "$caminho" 2>/dev/null || true)"
   else
-    out="$("$GIT" -C "$c" log -n "$n_commits" --format="$log_fmt" --date=short 2>/dev/null || true)"
+    out="$("$GIT" -C "$c" log -n "$n_commits" --format="$log_fmt" --date=short "${ref_arg[@]+"${ref_arg[@]}"}" 2>/dev/null || true)"
   fi
 
   if [ -z "$out" ]; then
