@@ -29,6 +29,7 @@ from pathlib import Path
 AQUI = Path(__file__).resolve().parent
 REG = Path(os.environ.get("INFRA_PECAS") or (AQUI.parents[1] / "registro" / "pecas.json"))
 TETO_PADRAO_S = 600
+OLARIA_URL = "http://127.0.0.1:8103"      # a stack olaria (story 4213) publica a porta só no loopback do host
 USO = ("uso:\n  infra pecas [--json]\n"
        "  infra rodar <peca> [--bancada <chave>] [-- <args da peça>…]")
 
@@ -48,6 +49,21 @@ def _exportar():
     loader.exec_module(mod)
     mod.morre = morre
     return mod
+
+
+def ambiente_da_olaria(ex) -> dict:
+    """O ambiente do verbo olaria (card #4214): o endereço do serviço e a chave de serviço, lida do cofre
+    (segredos/olaria/OLARIA_CHAVE, pelo mesmo caminho do banco-rag) e nunca impressa: só os nomes saem no stderr."""
+    arquivo = ex.raizes.instancia() / "segredos" / "olaria" / "OLARIA_CHAVE"
+    try:
+        chave = arquivo.read_text(encoding="utf-8").strip()
+    except OSError as e:
+        morre(f"a chave de serviço da Olaria não abriu em {arquivo}: {e.strerror}", 3)
+    if not chave:
+        morre(f"a chave de serviço da Olaria está vazia em {arquivo}", 3)
+    env = {"OLARIA_URL": OLARIA_URL, "OLARIA_CHAVE": chave}
+    print(f"ambiente: {arquivo.parent} ({', '.join(sorted(env))})", file=sys.stderr)
+    return env
 
 
 def registro() -> dict:
@@ -151,8 +167,10 @@ def rodar(argv: list) -> int:
     ambiente = p.get("ambiente") or ""
     if ambiente == "banco-rag":
         env.update(ex.ambiente_da_ingestao())
+    elif ambiente == "olaria":
+        env.update(ambiente_da_olaria(ex))
     elif ambiente:
-        morre(f"peça {nome}: ambiente {ambiente!r} não servido (só banco-rag)", 3)
+        morre(f"peça {nome}: ambiente {ambiente!r} não servido (banco-rag ou olaria)", 3)
     env["PYTHONPATH"] = os.pathsep.join(str(raiz / c) for c in (p.get("pythonpath") or []))
     # DT 456: o bytecode gravado na bancada fazia o gate recusar a chamada seguinte (fora do git).
     env["PYTHONDONTWRITEBYTECODE"] = "1"

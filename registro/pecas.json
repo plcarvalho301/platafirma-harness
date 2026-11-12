@@ -1,5 +1,5 @@
 {
-  "_sobre": "Peças de código que `infra rodar <peca>` executa (bin/_infra/rodar-peca). Só roda o que está aqui: declarar é PR neste arquivo. origem=espelho roda o código da bancada da sessão no repositório nomeado, e só se os caminhos da peça forem iguais a origin/main (commit e sincronizar antes); origem=release roda a árvore da release no ar. python=rag é o venv do rag da release. ambiente=banco-rag dá o banco do acervo pelo cofre, sem imprimir a credencial. A peça é `python -m <modulo> <args>` com cwd e PYTHONPATH relativos à raiz do repositório.",
+  "_sobre": "Peças de código que `infra rodar <peca>` executa (bin/_infra/rodar-peca). Só roda o que está aqui: declarar é PR neste arquivo. origem=espelho roda o código da bancada da sessão no repositório nomeado, e só se os caminhos da peça forem iguais a origin/main (commit e sincronizar antes); origem=release roda a árvore da release no ar. python=rag é o venv do rag da release. ambiente=banco-rag dá o banco do acervo pelo cofre, sem imprimir a credencial. ambiente=olaria dá o endereço do serviço da Olaria e a chave de serviço pelo cofre, sem imprimir a chave. A peça é `python -m <modulo> <args>` com cwd e PYTHONPATH relativos à raiz do repositório.",
   "casa": {
     "dono": "dados",
     "origem": "espelho",
@@ -34,5 +34,17 @@
     "ambiente": "banco-rag",
     "teto_s": 120,
     "motivo": "S4182: o verbo persona da casa nova em sessão de ensaio (ler, trocar, voltar, cenario) e a composição das posturas por eixo, contra o banco do acervo e a memória de trabalho; o expediente e a porta do espelho só rodam na troca da casa"
+  },
+  "olaria": {
+    "dono": "ti",
+    "origem": "espelho",
+    "repo": "platafirma-casa-espelho",
+    "cwd": "outros_repos/harness/bin",
+    "modulo": "_olaria",
+    "pythonpath": ["outros_repos/harness/bin"],
+    "python": "rag",
+    "ambiente": "olaria",
+    "teto_s": 120,
+    "motivo": "S4214: o verbo olaria (preparar, ensaiar, gravar, apagar e gerar) da casa nova em sessão de ensaio, cliente do serviço de escrita da ontologia na stack olaria; a chave de serviço vem do cofre sem ser impressa, e o mesmo código vira o bin/olaria da porta na troca da casa"
   }
 }
