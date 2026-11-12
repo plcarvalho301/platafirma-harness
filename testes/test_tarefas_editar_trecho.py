@@ -181,32 +181,10 @@ def test_editar_desc_stdin_nao_dobra_barra_invertida(stub):
     assert 'acervo ler casa\\\\|planilha' not in descricao_recebida
 
 
-def test_riscar_tarefa_envia_trecho_com_tachado(stub):
+def test_o_ato_riscar_saiu_do_verbo(stub):
+    # R37 (#4223): a task é filha da story, com estado; riscar linha de `Tarefas:` não existe mais
     s, base = stub
-    s.item_desc = "<p><strong>Tarefas:</strong><br>1. Primeira tarefa · harness@a · pytest<br>2. Segunda tarefa · harness@b · pytest</p>"
     p = _run(["riscar", "42", "1"], base)
-    assert p.returncode == 0, p.stderr
-    assert any(c[0] == "GET" and c[1] == "/itens/42" for c in s.chamadas)
-    patch_chamadas = [c for c in s.chamadas if c[0] == "PATCH"]
-    assert len(patch_chamadas) == 1
-    trecho = patch_chamadas[0][2]["descricao_trecho"]
-    assert trecho["antes"] == "<br>1. Primeira tarefa · harness@a · pytest"
-    assert trecho["depois"] == "<br>1. ~~Primeira tarefa · harness@a · pytest~~"
-
-
-def test_riscar_tarefa_ja_riscada_avisa_e_sai_zero(stub):
-    s, base = stub
-    s.item_desc = "<p><strong>Tarefas:</strong><br>1. ~~Primeira tarefa · harness@a · pytest~~</p>"
-    p = _run(["riscar", "42", "1"], base)
-    assert p.returncode == 0, p.stderr
-    assert "já está riscada" in p.stderr
-    assert not any(c[0] == "PATCH" for c in s.chamadas)
-
-
-def test_riscar_tarefa_inexistente_sai_um(stub):
-    s, base = stub
-    s.item_desc = "<p><strong>Tarefas:</strong><br>1. Primeira tarefa · harness@a · pytest</p>"
-    p = _run(["riscar", "42", "9"], base)
-    assert p.returncode == 1
-    assert "não encontrada" in p.stderr
-    assert not any(c[0] == "PATCH" for c in s.chamadas)
+    assert p.returncode != 0
+    assert not s.chamadas
+    assert "riscar" not in BIN.read_text(encoding="utf-8")

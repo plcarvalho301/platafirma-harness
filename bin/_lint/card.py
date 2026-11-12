@@ -44,12 +44,11 @@ CAMPOS_STORY = [
     "Comportamento esperado:",
 ]
 
+# A task é o passo da story (#4223, R41 da spec tarefas): o molde dela diz onde se mexe e como
+# se confere; Referencial é opcional e não entra aqui.
 CAMPOS_TASK = [
-    "Problema encontrado:",
-    "Solução proposta:",
-    "Referencial:",
-    "Raio de ataque:",
-    "Comportamento esperado:",
+    "Onde:",
+    "Confere:",
 ]
 
 # arq:0096 item 4: a aposta e exigida na saida de captada; a forma, na saida de em-lapidacao.
@@ -679,6 +678,31 @@ def _conferir_regras(nome_alvo: str, conteudo: str) -> list[Apontamento]:
             for n, t in secao.nao_vazias()
             if not RE_ORIGEM_DA_REGRA.search(_visivel(t)) and not RE_REGRAS_NENHUMA.match(t)]
 
+# R41 da spec tarefas (card #4223, arq:0096 item 3): a lista do que fazer da story mora nas tasks
+# filhas dela, com estado, e não no corpo. Story com `Tarefas:` ou `Unidades:` no corpo sai com
+# aviso, nunca bloqueante. Story em estado terminal é histórico (as listas das stories que já
+# existem ficam no corpo e não migram) e não se aponta; sem estado lido (arquivo, stdin), aponta.
+ROTULOS_FORA_DO_CORPO = ("Tarefas", "Unidades")
+ESTADOS_DE_HISTORICO = {"entregue", "cancelada", "encerrada", "englobada", "descartada", "recusada"}
+CURA_TASKS = ("o passo da story é task filha dela: `tarefas criar \"<o que fazer>\" --nivel task "
+              "--pai <story>`; Tarefas e Unidades saíram do corpo (arq:0096, item 3)")
+
+
+def _conferir_tasks_no_lugar_da_lista(nome_alvo: str, conteudo: str, estado: str) -> list[Apontamento]:
+    if _norm_estado(estado) in ESTADOS_DE_HISTORICO:
+        return []
+    achados = []
+    for n, linha in enumerate(conteudo.splitlines(), 1):
+        for rotulo in ROTULOS_FORA_DO_CORPO:
+            if re.match(rf"^\s*(?:\*\*)?{rotulo}(?:\*\*)?\s*:", linha):
+                achados.append(Apontamento(
+                    nome_alvo, n,
+                    f"story com «{rotulo}:» no corpo: a lista do que fazer mora nas tasks dela",
+                    CURA_TASKS, severidade="aviso", id=f"CARD_{rotulo.upper()}_NO_CORPO"))
+                break
+    return achados
+
+
 def _conferir_adr(nome_alvo: str, conteudo: str, nivel: str) -> list[Apontamento]:
     campos_esperados = CAMPOS_TASK if nivel == "task" else CAMPOS_STORY
     apontamentos: list[Apontamento] = []
@@ -766,7 +790,11 @@ def verificar_card_regua(
     nivel = detectar_nivel(conteudo)
     titulo = _conferir_titulo(nome_alvo, conteudo)
     if nivel in ("story", "task"):
-        return titulo + _conferir_adr(nome_alvo, conteudo, nivel), CHAVE_ADR, REV_ADR, []
+        # R41 (#4223): a lista do que fazer da story mora nas tasks, e o corpo novo não a traz
+        listas = (_conferir_tasks_no_lugar_da_lista(
+            nome_alvo, conteudo, ler_cabecalho(conteudo).get("estado", ""))
+            if nivel == "story" else [])
+        return titulo + _conferir_adr(nome_alvo, conteudo, nivel) + listas, CHAVE_ADR, REV_ADR, []
 
     if lista is None:
         from .lista import resolver_lista

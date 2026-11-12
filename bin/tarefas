@@ -3,7 +3,7 @@
 # capacidade: trabalho
 # dono: gestao-estrategica
 # use para: SEMPRE que o assunto for card, épico, feature, story, incidente ou débito técnico; captar demanda, «cria um card»; lapidar, dar parecer, apostar, formalizar, priorizar, pôr em execução, concluir, validar e entregar card, «move para refinamento», «comenta no card»; declarar, mitigar e fechar incidente; «o que está comigo?», «lê o card», «os comentários do card», sign-off; e sempre que o pacto quebrar ou uma execução cair
-# atos: listar, listar-tudo, ler, criar, editar, riscar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub, ordenar, bloquear, desbloquear, carteira, espera-dono (leitura, trabalho)
+# atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub, ordenar, bloquear, desbloquear, carteira, espera-dono (leitura, trabalho)
 # mecanismo: espera-dono=casca
 #
 # Texto do controle (arq:0124 §3; arq:0125 U33; card #3446). Todo ato cai na face Entrega.
@@ -17,7 +17,6 @@
 # face: ler=Entrega
 # face: criar=Entrega
 # face: editar=Entrega
-# face: riscar=Entrega
 # face: modelo=Entrega
 # face: comentar=Entrega
 # face: comentarios=Entrega
@@ -37,7 +36,6 @@
 # rotulo: ler=Abrir card
 # rotulo: criar=Criar card
 # rotulo: editar=Editar card
-# rotulo: riscar=Riscar tarefa de card
 # rotulo: modelo=Abrir molde de card
 # rotulo: comentar=Comentar card
 # rotulo: comentarios=Listar comentário
@@ -57,7 +55,6 @@
 # volta: ler=sim — só lê
 # volta: criar=sim — tarefas apagar, enquanto o item está no funil
 # volta: editar=nao
-# volta: riscar=nao
 # volta: modelo=sim — só lê
 # volta: comentar=nao
 # volta: comentarios=sim — só lê
@@ -125,13 +122,19 @@ uso:
                                           ordena por data decrescente e inclui data na saída
   tarefas ler|ver <id> [--cabecalho]      item em texto: cabeçalho (originação, executor,
                                           quem bloqueia e por quem é bloqueado), ancestrais,
-                                          corpo e filhas abertas em ordem de dependência;
+                                          corpo e filhas abertas em ordem de dependência (na
+                                          story, as tasks dela, todas, com o estado de cada uma);
                                           com --cabecalho, devolve só o cabeçalho
   tarefas criar "<título>" [--desc "<txt>"|--desc-stdin]
-                [--nivel épico|feature|story] [--cadeira <c>] [--pai <id>] [--incidente]
+                [--nivel épico|feature|story|task] [--cadeira <c>] [--pai <id>] [--incidente]
                 [--originacao negocio|tecnico|incidente] [--executor <c>]
                 [--estado <estado>] [--registro "<porquê>"]
                                           default: story. Débito técnico não é card: `dt admitir`.
+                                          `--nivel task` cria o passo de uma story e exige
+                                          `--pai <story>`; o título é o que fazer, e a API
+                                          recusa pai que não seja story (R37). Para ajustar
+                                          a task, `editar`; para concluí-la, `mover <id> entregue`;
+                                          as tasks de uma story saem em `ler <story>`
                                           O estado de nascimento vem de --estado, ou de
                                           PF_ESTADO_INICIAL, ou é captada (incidente: detectado).
                                           Story sem pai em priorizada ou adiante exige
@@ -154,8 +157,6 @@ uso:
                                           simples é <br>. Trecho que cruza rótulo em negrito ou link não
                                           casa (a API recusa e diz quantas vezes ele ocorreu): `--bruto`
                                           manda `--antes` e `--depois` como estão, em HTML
-  tarefas riscar <id> <n>                 marca a tarefa N sob Tarefas: como feita (~~...~~) por patch atômico
-                                          sem reenviar o corpo inteiro nem duplicar barras ou escapes
   tarefas modelo <épico|feature|story|task>
                                           esqueleto do corpo, com os rótulos que a API exige;
                                           épico e feature saem no two-pager
@@ -200,7 +201,7 @@ uso:
   tarefas bloquear <a> <b>                <a> bloqueia <b>; o que fecharia ciclo a API recusa e o
                                           caminho sai na recusa (R23)
   tarefas desbloquear <a> <b>             retira o vínculo "<a> bloqueia <b>"
-  tarefas carteira [--desde <AAAA-MM-DD>] a fatia por originação das stories e tasks entregues
+  tarefas carteira [--desde <AAAA-MM-DD>] a fatia por originação das stories entregues
                                           desde a data (padrão: a segunda-feira desta semana), a
                                           linha do balde ao lado e as paradas com idade (R25)
   tarefas mover <id> despriorizada --motivo <código>
@@ -660,8 +661,15 @@ ler() {
   # já entrega em `.filhas` (card #3523), com a travada marcada. SÓ ABERTAS: terminal
   # (entregue, englobada, etc.) fica fora — a mesma régua de fase que `listar` aplica, pela
   # mesma razão. Filha entregue é auditoria, e auditoria é `listar-tudo`, não leitura de card.
-  local filhas; filhas=$(filhas_do_json "$j")
-  [ -n "$filhas" ] && printf '\nfilhas (abertas):\n%s\n' "$filhas"
+  # Card #4223 (R37): as filhas de uma STORY são as tasks dela, e saem todas, na ordem, com o
+  # estado de cada uma (`tasks_do_json`); as de feature e de épico seguem só as abertas.
+  if [ "$(printf '%s' "$j" | jq -r '.nivel')" = "2" ]; then
+    local tasks; tasks=$(tasks_do_json "$j" "$term")
+    if [ -n "$tasks" ]; then printf '\n%s\n' "$tasks"; fi
+  else
+    local filhas; filhas=$(filhas_do_json "$j")
+    if [ -n "$filhas" ]; then printf '\nfilhas (abertas):\n%s\n' "$filhas"; fi
+  fi
   # Sem filha aberta o `[ -n ]` acima devolve 1 e, sendo o ultimo comando da funcao sob
   # `set -e`, o verbo saia com exit 1 DEPOIS de imprimir o card inteiro. Medido em
   # 11/09/2026: 24 dos 33 "erros" de tarefas no ops log eram isto (metrica casos).
@@ -685,6 +693,27 @@ filhas_do_json() {
       + (if $f.travada
          then "  [travada por " + ([($f.bloqueada_por // [])[] | "#\(if type == "object" then .id else . end)"] | join(", ")) + "]"
          else "" end)'
+}
+
+# AS TASKS DA STORY (card #4223, R37 da spec tarefas): a task é o passo da story, filha direta
+# dela, e a leitura da story as traz TODAS, abertas e concluídas, na ordem que a API entrega em
+# `.filhas` (dependência, com o posto desempatando), cada uma com o estado. Não há peneira de
+# terminal aqui: ao contrário das filhas de feature e de épico, o que a cadeira que retoma a story
+# precisa ver é onde a fita anterior parou, e isso está nas concluídas também. $1 é o JSON da
+# story, $2 a lista de estados terminais (a mesma de `ler`).
+tasks_do_json() {
+  printf '%s' "$1" | jq -r --argjson term "${2:-[]}" '
+    def aberta: (.estado as $e | ($term | index([$e])) == null);
+    def rotulo: if aberta then "aberta" elif .estado == "entregue" then "concluída" else .estado end;
+    [.filhas[]?] as $ts
+    | if ($ts | length) == 0 then empty else
+        "tasks (\([$ts[] | select(aberta)] | length) abertas de \($ts | length)):",
+        ($ts | to_entries[] | .key as $i | .value
+           | "  \($i + 1). #\(.id)\t\(rotulo)\t\(.estado)\t\(.titulo)"
+             + (if .travada
+                then "  [travada por " + ([(.bloqueada_por // [])[] | "#\(if type == "object" then .id else . end)"] | join(", ")) + "]"
+                else "" end))
+      end'
 }
 
 # ENTREGA É DERIVADA DO PAI (arq:0095, dono 02/09/2026). Item executável movido devolve, no
@@ -750,10 +779,11 @@ assinar() {
 criar() {
   descarta_projeto "${1:-}" && shift
   local titulo="${1:?uso: tarefas criar \"<título>\" [opções]}"; shift || true
-  # DEFAULT É STORY (arq:0096, dono 02/09/2026): task é débito técnico e nasce só por
-  # `tarefas dt admitir`. Medido antes da virada: 390 tasks, 156 órfãs, 13 stories com
-  # filha task — o default `task` fazia da task uma "story sem nome".
-  local desc="" nivel="story" cadeira="$QUEM" pai="" classe="planejado" via_dt="${TAREFAS_VIA_DT:-}"
+  # DEFAULT É STORY (arq:0096, dono 02/09/2026). Medido antes da virada: 390 tasks, 156 órfãs, 13
+  # stories com filha task — o default `task` fazia da task uma "story sem nome". Desde o #4223
+  # a task é o passo da story e só nasce com `--nivel task --pai <story>`; débito técnico
+  # é `tarefas dt admitir`, que não passa por aqui.
+  local desc="" nivel="story" cadeira="$QUEM" pai="" classe="planejado"
   local originacao="" executor="" registro="" estado_opt=""
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -785,9 +815,11 @@ criar() {
     épico|epico|0)   n=0 ;;
     feature|1)       n=1 ;;
     story|2)         n=2 ;;
+    # Card #4223 (R37 da spec tarefas): a task é o passo da story. Sem `--pai` o verbo diz o
+    # comando; com pai que não é story a recusa é da API, que é quem sabe o nível do pai.
     task|3)          n=3
-                     if [ -z "$via_dt" ]; then
-                       echo "recusado: task é débito técnico e nasce por \`tarefas dt admitir \"<problema>\" --solucao \"<txt>\" --medido-em <data> --evidencia <...>\`. Trabalho de execução é story (arq:0096)." >&2
+                     if [ -z "$pai" ]; then
+                       echo "recusado: a task é o passo da story e nasce sob ela: \`tarefas criar \"<o que fazer>\" --nivel task --pai <story>\`. Débito técnico é \`tarefas dt admitir\`." >&2
                        exit 2
                      fi ;;
     *) echo "nível desconhecido: $nivel (épico, feature, story, task)" >&2; exit 2 ;;
@@ -918,75 +950,6 @@ editar() {
         + (if $o != "" then " · originação \(.tipo_demanda // "?")" else "" end)
         + (if $x != "" then " · executor \(.executor // "?")" else "" end)
         + " · estado \(.estado_nome) (inalterado)"'
-}
-
-# RISCAR TAREFA POR TRECHO ATÔMICO — DT 433: riscar a tarefa N do card sob Tarefas:
-# sem precisar reenviar o corpo inteiro nem duplicar barras ou escapes. Localiza a
-# linha N sob "Tarefas:" e a substitui por "N. ~~...~~" usando `editar --trecho --bruto`.
-riscar() {
-  local id; id=$(so_id "${1:?uso: tarefas riscar <id> <n>}"); shift
-  local n="${1:?uso: tarefas riscar <id> <n>}"; shift
-  if ! [[ "$n" =~ ^[0-9]+$ ]]; then
-    echo "erro: número da tarefa deve ser inteiro positivo" >&2
-    exit 2
-  fi
-  local item_json; item_json=$(busca GET "/itens/$id") || return 1
-  local desc; desc=$(printf '%s' "$item_json" | jq -r '.descricao // ""')
-  if [ -z "$desc" ]; then
-    echo "erro: card #$id não tem descrição" >&2
-    exit 1
-  fi
-  local resultado
-  resultado=$(DESC="$desc" N="$n" python3 -c '
-import os, sys, re, json
-
-desc = os.environ["DESC"]
-n = os.environ["N"]
-
-m_sec = re.search(r"(?:<strong>Tarefas:</strong>|Tarefas:)(.*?)(?:<strong>[A-Za-zÀ-ÿ\s]+:</strong>|$)", desc, re.S)
-texto_busca = m_sec.group(1) if m_sec else desc
-
-padrao = re.compile(rf"(?:<br>|<p>|^)(\s*(?:-\s*\[\s*\]\s*)?{re.escape(n)}\.\s*)(.*?)(?=<br>|</p>|$)", re.S)
-m = padrao.search(texto_busca)
-if not m and m_sec:
-    m = padrao.search(desc)
-
-if not m:
-    sys.stderr.write(f"erro: tarefa {n} não encontrada sob Tarefas: no card\n")
-    sys.exit(1)
-
-prefixo = m.group(1)
-corpo = m.group(2)
-
-if corpo.strip().startswith("~~") and corpo.strip().endswith("~~"):
-    sys.stderr.write(f"aviso: tarefa {n} já está riscada\n")
-    sys.exit(0)
-
-antes_bruto = m.group(0)
-tag = ""
-if antes_bruto.startswith("<br>"):
-    tag = "<br>"
-elif antes_bruto.startswith("<p>"):
-    tag = "<p>"
-
-if re.search(r"-\s*\[\s*\]\s*", prefixo):
-    novo_prefixo = re.sub(r"-\s*\[\s*\]\s*", "- [x] ", prefixo)
-else:
-    novo_prefixo = prefixo
-
-depois_bruto = tag + novo_prefixo + "~~" + corpo.strip() + "~~"
-print(json.dumps({"antes": antes_bruto, "depois": depois_bruto}))
-') || exit $?
-
-  if [ -z "$resultado" ]; then
-    return 0
-  fi
-
-  local antes_b depois_b
-  antes_b=$(printf '%s' "$resultado" | jq -r '.antes')
-  depois_b=$(printf '%s' "$resultado" | jq -r '.depois')
-
-  editar "$id" --trecho --bruto --antes "$antes_b" --depois "$depois_b"
 }
 
 # COMENTÁRIO É TEXTO NO CORPO, por ordem do dono (16/08/2026). O modelo do rastreador não
@@ -1744,7 +1707,7 @@ desbloquear() { # desbloquear <bloqueador> <bloqueado>
 # CARTEIRA (R25): o que a firma entregou na semana, por originação, e o que está parado.
 #
 # AGREGA NO VERBO, sobre `GET /api/itens`, sem rota nova no rastreador: a consulta direta é da F8
-# (#3482). Conta story e task ENTREGUES (`entregue`, e `resolvido` que é o fecho do incidente) cuja
+# (#3482). Conta story ENTREGUE (`entregue`, e `resolvido` que é o fecho do incidente) cuja
 # entrada no terminal — `ultimo_movimento` — é de `--desde` em diante, fora as de origem `prova`,
 # por `tipo_demanda`. A linha do balde conta as saídas do balde (`GET /api/balde`) no mesmo período e fica AO LADO,
 # sem somar: débito que sai não é card entregue. As paradas são as despriorizadas, com a idade (hoje
@@ -1764,7 +1727,8 @@ carteira() { # carteira [--desde AAAA-MM-DD]
   printf '%s' "$desde" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' \
     || { echo "--desde pede AAAA-MM-DD: $desde" >&2; exit 2; }
   local lista registro balde saidas
-  lista=$(busca GET "/itens?nivel=2&nivel=3") || return 1
+  # Card #4223 (R25 emendado): a carteira conta só stories; a task é passo da story e não entra.
+  lista=$(busca GET "/itens?nivel=2") || return 1
   registro=$(busca GET /registro) || return 1
   # As saídas se contam na API (R26: o balde é dado, não corpo de card), pela data em que a linha
   # saiu. Rastreador que não respondeu não derruba a fatia.
@@ -1790,7 +1754,7 @@ carteira() { # carteira [--desde AAAA-MM-DD]
     | [$par[] | select(.pai != null and .pai_estado != null and (($ordem[.pai_estado] // 0) >= $aposta))] as $sob
     | [$par[] | select(.pai == null)] as $livres
     | [$par[] | select(.pai != null and (.pai_estado == null or (($ordem[.pai_estado] // 0) < $aposta)))] as $espera
-    | "carteira desde \($desde) — story e task entregues, fora de origem prova",
+    | "carteira desde \($desde) — stories entregues, fora de origem prova",
       (["negocio", "tecnico", "incidente"][] as $t
          | "  \($t)\t\([$ent[] | select(.tipo_demanda == $t)] | length)"),
       (([$ent[] | select(.tipo_demanda == null)] | length) as $sem
@@ -1854,7 +1818,6 @@ case "$cmd" in
   ler|ver)     ler "$@" ;;
   criar)       criar "$@" ;;
   editar)      editar "$@" ;;
-  riscar)      riscar "$@" ;;
   comentar)    comentar "$@" ;;
   comentarios) comentarios "${1:?uso: tarefas comentarios <id> [--indice] [--id <n>]... [--desde <n>] [--ultimos <k>]}" "${@:2}" ;;
   mover)       mover "$@" ;;

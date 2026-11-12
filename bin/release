@@ -1975,7 +1975,7 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
   # entregue (promoção de outra família do mesmo card, ou ramo que cita story fechada), não comenta,
   # não move e não falha a promoção. O cabeçalho de `tarefas ler` é `#N · nível · Estado (fase) · ...`;
   # o estado vem em minúsculas, sem a fase. Estado que não se lê segue o caminho de antes.
-  local rc_c=0 rc_m=0 nivel estado fecha=0 cabecalho
+  local rc_c=0 rc_m=0 nivel estado fecha=0 cabecalho saida_m=""
   if pr_fecha_card "$repo" "$para" "$card"; then fecha=1; fi
   cabecalho="$("$tarefas_bin" ler "$card" 2>/dev/null)" || true
   nivel="$(printf '%s\n' "$cabecalho" | sed -n "s/^#$card · \([^ ]*\) · .*/\1/p" | head -n 1)" || nivel=""
@@ -1988,7 +1988,9 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
     case "$nivel" in
       story|task)
         if [ "$fecha" -eq 1 ]; then
-          "$tarefas_bin" mover "$card" entregue >/dev/null 2>&1 || rc_m=$?
+          # Card #4223 (R39 da spec tarefas): a recusa do rastreador (story com task aberta, com o
+          # título da task) vai ao aviso abaixo, em vez de morrer em /dev/null.
+          saida_m="$("$tarefas_bin" mover "$card" entregue 2>&1)" || rc_m=$?
         else
           printf 'card:      %s segue em execução — o PR não diz `fecha #%s`; mova a entregue quando o aceite fechar\n' "$card" "$card"
           rc_m=-1
@@ -2003,6 +2005,9 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
     printf 'card:      %s movido para entregue (estágio 4)\n' "$card"
   elif [ "$rc_m" -gt 0 ]; then
     printf 'card:      AVISO — %s não moveu para entregue (tarefas saiu %s); mova à mão\n' "$card" "$rc_m" >&2
+    if [ -n "$saida_m" ]; then
+      printf 'card:      recusa do rastreador: %s\n' "$(printf '%s\n' "$saida_m" | head -n 1)" >&2
+    fi
   fi
   [ "$rc_c" -eq 0 ] || printf 'card:      AVISO — comentário em %s falhou (tarefas saiu %s)\n' "$card" "$rc_c" >&2
   release_bin="$(achar_verbo release)"
