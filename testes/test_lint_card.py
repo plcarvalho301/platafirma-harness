@@ -13,6 +13,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / "bin"))
 
@@ -152,6 +154,48 @@ def test_feature_cita_a_lista_e_a_rev():
     _, chave, rev, _ = verificar_card_regua("#3408", texto=CARD_3408, comentarios="",
                                             lista=LISTA, fecha_existe=True)
     assert chave == CHAVE_DISCOVERY and rev == 2
+
+
+# ------------------------------------------------------------------ tasks no lugar da lista (#4223, R41)
+
+def _story_com_lista(rotulo, estado="em-execucao"):
+    return f"#1 · story · {estado}\nNegócio: #2\n{rotulo}:\n1. fazer x · repo@a · pytest\n"
+
+
+@pytest.mark.parametrize("rotulo", ["Tarefas", "Unidades"])
+def test_story_com_tarefas_ou_unidades_no_corpo_avisa(rotulo):
+    aps, *_ = verificar_card_regua("#1", texto=_story_com_lista(rotulo), lista=LISTA,
+                                   fecha_existe=False)
+    achados = [a for a in aps if a.id == f"CARD_{rotulo.upper()}_NO_CORPO"]
+    assert len(achados) == 1
+    assert achados[0].severidade == "aviso" and "--nivel task --pai <story>" in achados[0].cura
+    assert achados[0].linha == 3
+
+
+def test_story_sem_lista_no_corpo_nao_avisa():
+    aps, *_ = verificar_card_regua("#1", texto="#1 · story · em-execucao\nNegócio: #2\n", lista=LISTA,
+                                   fecha_existe=False)
+    assert not any(a.id.endswith("_NO_CORPO") for a in aps)
+
+
+def test_story_entregue_com_lista_e_historico_e_nao_avisa():
+    aps, *_ = verificar_card_regua("#1", texto=_story_com_lista("Tarefas", "entregue"), lista=LISTA,
+                                   fecha_existe=False)
+    assert not any(a.id.endswith("_NO_CORPO") for a in aps)
+
+
+def test_story_de_prova_em_arquivo_sem_estado_avisa():
+    aps, *_ = verificar_card_regua("x.md", texto="Negócio: #2\nTarefas:\n1. fazer x\n", lista=LISTA,
+                                   fecha_existe=False)
+    assert "CARD_TAREFAS_NO_CORPO" in _ids(aps)
+
+
+def test_task_pede_onde_e_confere_e_nao_o_debito_antigo():
+    aps, *_ = verificar_card_regua("#9", texto="#9 · task · priorizada\nOnde: repo@a\n", lista=LISTA,
+                                   fecha_existe=False)
+    ids = _ids(aps)
+    assert "CARD_CONFERE" in ids and "CARD_ONDE" not in ids
+    assert "CARD_PROBLEMA ENCONTRADO" not in ids
 
 
 # ------------------------------------------------------------------ titulo (#3887)

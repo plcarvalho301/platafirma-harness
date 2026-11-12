@@ -497,12 +497,13 @@ def test_carteira_por_padrao_comeca_na_segunda_da_semana(stub, hoje, segunda):
     assert p.stdout.splitlines()[0].startswith(f"carteira desde {segunda}")
 
 
-def test_carteira_busca_so_story_e_task_e_nao_soma_o_balde(stub):
+def test_carteira_busca_so_story_e_nao_soma_o_balde(stub):
+    # R25 emendado (#4223): a task é passo da story e não entra na carteira
     s, base = stub
     _rotas_da_carteira(s)
     _run(["carteira"], base, TAREFAS_HOJE="2026-10-14")
     q = _caminhos(s, "GET")
-    assert "/itens?nivel=2&nivel=3" in q
+    assert "/itens?nivel=2" in q and not any("nivel=3" in c for c in q)
     assert not any(c == "/itens" for c in q)
 
 

@@ -111,6 +111,7 @@ class Ambiente:
             "  fi\n"
             "  exit 0\n"
             "fi\n"
+            "if [ -n \"${TAREFAS_ERRO:-}\" ]; then printf '%s\\n' \"$TAREFAS_ERRO\" >&2; fi\n"
             "exit \"${TAREFAS_RC:-0}\"\n", encoding="utf-8")
         tarefas_stub.chmod(0o755)
 
@@ -149,13 +150,15 @@ class Ambiente:
 
     def run(self, *args: str, gh_ref: str = "", tarefas_rc: int = 0,
             nivel: str = "story", estado: str = "priorizada",
-            gh_texto: str = "titulo do PR\nfecha #4242") -> subprocess.CompletedProcess:
+            gh_texto: str = "titulo do PR\nfecha #4242",
+            tarefas_erro: str = "") -> subprocess.CompletedProcess:
         env = dict(self.env)
         env["GH_STUB_REF"] = gh_ref
         env["GH_STUB_TEXTO"] = gh_texto
         env["TAREFAS_RC"] = str(tarefas_rc)
         env["TAREFAS_NIVEL"] = nivel
         env["TAREFAS_ESTADO"] = estado
+        env["TAREFAS_ERRO"] = tarefas_erro
         return subprocess.run([str(SCRIPT), *args], env=env,
                                capture_output=True, text=True, timeout=90)
 
@@ -240,6 +243,27 @@ def test_card_que_recusa_nao_derruba_a_promocao(amb):
     saida = r.stdout + r.stderr
     assert "AVISO" in saida and "4242" in saida, saida
     assert r.stdout.strip().splitlines()[-1] == amb.sha1
+
+
+def test_story_com_task_aberta_leva_a_primeira_linha_da_recusa_ao_aviso(amb):
+    # R39 da spec tarefas (#4223): o rastreador recusa a entrega da story com task aberta e
+    # nomeia a task; o aviso do promover imprime a PRIMEIRA linha da recusa, e só ela.
+    recusa = ("a story tem task aberta e não vai a `entregue`: #9001 «task de prova» está em "
+              "`em-execucao` (R39 da spec tarefas).\nConclua a task com `tarefas mover 9001 entregue`")
+    r = amb.run("promover", "fixture", gh_ref="fabrica/4242-teste-estagio", tarefas_rc=1,
+                tarefas_erro=recusa)
+    assert r.returncode == 0, r.stdout + r.stderr
+    saida = r.stdout + r.stderr
+    assert "4242 não moveu para entregue" in saida
+    assert "recusa do rastreador: a story tem task aberta e não vai a `entregue`: #9001 «task de prova»" in saida
+    assert "Conclua a task com" not in saida
+    assert r.stdout.strip().splitlines()[-1] == amb.sha1
+
+
+def test_entrega_sem_recusa_nao_imprime_linha_de_recusa(amb):
+    r = amb.run("promover", "fixture", gh_ref="fabrica/4242-teste-estagio")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "recusa do rastreador" not in r.stdout + r.stderr
 
 
 @pytest.mark.parametrize("nivel", ["story", "task", "feature"])
