@@ -68,7 +68,7 @@ entra em `PF_FACE_CLIENTS` na story do portão do core (#3902).
 
 A casca da Taipa lê três coisas da própria origem, cada uma do verbo dono do objeto (arq:0124 §3, mecanismo
 comum). Elas não caem em face: o cabeçalho do verbo as declara por `# mecanismo: <ato>=casca`, e a borda lê a
-carga daí (a chave `face:` com `casca` não carrega nada, e `release conferir cabecalho` a acusa).
+carga daí (a chave `face:` com `casca` não carrega nada, e `release conferir verbo` a acusa).
 
 | rota | verbo e ato | corpo |
 |---|---|---|

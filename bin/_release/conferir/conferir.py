@@ -13,12 +13,11 @@
                    paridade entre o `environment` declarado e o ambiente do processo,
                    e o filtro de e-mail dos gates oauth2-proxy: `--email-domain=*` junto
                    da lista, ou gate sem filtro, e divergente (#3476).
-  cabecalho [nome] cabecalho de cada verbo do PATH da plataforma: origem (symlink de repo,
-                   copia, so no host, divergente), proposito, capacidade e dono, a
+  verbo   [nome]   cada verbo do PATH da plataforma: origem (symlink de repo, copia, so
+                   no host, divergente), cabecalho (proposito, capacidade e dono), a
                    capacidade conferida contra o mapa vigente (vocabulario
                    arquitetura-negocio-operacao, como o acervo o serve), e a conta de
-                   arq:0037 — um verbo por capacidade. `verbo` e o nome antigo: responde,
-                   com aviso.
+                   arq:0037 — um verbo por capacidade. `cabecalho` responde, com aviso.
   skill   [nome]   skill servida no claude.ai: o blob que o carimbo do arquivo montado
                    declara, contra o blob da fonte no harness. O servido vive do outro
                    lado da fronteira — a sessao le o carimbo e passa em --servido.
@@ -241,7 +240,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . cabecalho . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs . dependencias . sessao-orfa . copia", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs . dependencias . sessao-orfa . copia", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -1066,7 +1065,7 @@ def conferir_verbo(alvo, como_json=False):
             itens.append((nome_item, v))
     if not como_json:
         print()
-    return resultado.relatorio("cabecalho", alvo, itens, _sha_release(), como_json=como_json,
+    return resultado.relatorio("verbo", alvo, itens, _sha_release(), como_json=como_json,
                                extra={"avisos": avisos} if avisos else None)
 
 
@@ -3359,12 +3358,12 @@ def main(argv):
         return 2
     if classe == "servico":
         return conferir_servico(alvo, como_json=como_json)
-    if classe == "cabecalho":
-        return conferir_verbo(alvo, como_json=como_json)
     if classe == "verbo":
-        # nome antigo da classe `cabecalho` (12/11/2026): responde, com aviso (arq:0110 §11)
-        print("conferir: a classe `verbo` passou a se chamar `cabecalho`; use "
-              "`release conferir cabecalho`", file=sys.stderr)
+        return conferir_verbo(alvo, como_json=como_json)
+    if classe == "cabecalho":
+        # `cabecalho` foi nome desta classe por um dia (13/11/2026): responde, com aviso (arq:0110 §11)
+        print("conferir: a classe `cabecalho` voltou a se chamar `verbo`; use "
+              "`release conferir verbo`", file=sys.stderr)
         return conferir_verbo(alvo, como_json=como_json)
     if classe == "procedencia":
         return conferir_procedencia(alvo, como_json=como_json)

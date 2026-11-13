@@ -70,8 +70,8 @@ if [ ! -x "$GIT" ]; then
 fi
 
 CLASSES_SERVIDO=(
-  "cabecalho"
   "verbo"
+  "cabecalho"
   "servico"
   "skill"
   "procedencia"
@@ -1704,7 +1704,7 @@ reverter_abertura() {  # $1=sha(opcional) $2=ensaio
 
 # gate de promocao (arq:0110 §9; mapa: `conferir` e o gate de infra/promocao-de-mudanca). A familia
 # que serve verbos so troca current se cada verbo que a rev MUDOU (bin/<verbo> ou bin/_<verbo>/,
-# em relacao ao current) passa em `conferir cabecalho` medido no checkout ja materializado. Conformacao
+# em relacao ao current) passa em `conferir verbo` medido no checkout ja materializado. Conformacao
 # e para frente (arq:0042): verbo que a rev nao tocou carrega o debito que ja carregava e nao
 # segura a promocao. Mede com o conferir da propria rev, PF_CONFERIR_ORIGEM=0 (o checkout E o
 # repo; origem nao mede nada ali). Divergencia e politica: exit 4, current intacto.
@@ -1734,15 +1734,15 @@ gate_conferir_verbo() {  # $1=repo $2=sha_candidato $3=sha_atual(ou vazio)
     printf 'gate:      %s → %s nao muda verbo nenhum em bin/ — nada a medir\n' "${atual:0:7}" "${sha:0:7}"
     return 0
   fi
-  printf 'gate:      conferir cabecalho na rev %s para o que ela mudou: %s\n' "${sha:0:7}" "${verbos[*]}"
+  printf 'gate:      conferir verbo na rev %s para o que ela mudou: %s\n' "${sha:0:7}" "${verbos[*]}"
   local rc=0 reprovados=()
   for v in "${verbos[@]}"; do
     rc=0
-    PF_PROD_RAIZ="$PROD_RAIZ" PF_BIN_DIR="$arvore/bin" PF_HARNESS_DIR="$arvore" PF_CONFERIR_ORIGEM=0 python3 "$impl" cabecalho "$v" || rc=$?
+    PF_PROD_RAIZ="$PROD_RAIZ" PF_BIN_DIR="$arvore/bin" PF_HARNESS_DIR="$arvore" PF_CONFERIR_ORIGEM=0 python3 "$impl" verbo "$v" || rc=$?
     [ "$rc" -eq 0 ] || reprovados+=("$v")
   done
   if [ "${#reprovados[@]}" -gt 0 ]; then
-    printf 'release: recusa: rev %s reprova em conferir cabecalho: %s — current segue em %s; corrija o cabecalho (capacidade do mapa vigente: acervo ler casa vocabulario arquitetura-negocio-operacao) e promova de novo\n' \
+    printf 'release: recusa: rev %s reprova em conferir verbo: %s — current segue em %s; corrija o cabecalho (capacidade do mapa vigente: acervo ler casa vocabulario arquitetura-negocio-operacao) e promova de novo\n' \
       "${sha:0:7}" "${reprovados[*]}" "${atual:0:7}" >&2
     return 4
   fi

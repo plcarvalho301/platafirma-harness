@@ -44,7 +44,7 @@ class ContratoViolado(ValueError):
 
 
 # --------------------------------------------------------------- vocabulário fechado
-# Fechado e conferível por máquina (§3). `release conferir cabecalho` reprova valor fora do enum.
+# Fechado e conferível por máquina (§3). `release conferir verbo` reprova valor fora do enum.
 
 
 class Cobertura(StrEnum):

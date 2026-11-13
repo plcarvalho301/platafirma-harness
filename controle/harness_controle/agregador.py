@@ -179,7 +179,7 @@ SONDAS: list[Sonda] = [
     Sonda("conferir_servico", _intervalo("CONFERIR", 90), _timeout("CONFERIR", 60),
           lambda: ["conferir", "servico", "--json"]),
     Sonda("conferir_verbo", _intervalo("CONFERIR", 90), _timeout("CONFERIR", 30),
-          lambda: ["conferir", "cabecalho", "--json"]),
+          lambda: ["conferir", "verbo", "--json"]),
     Sonda("conferir_repo", _intervalo("CONFERIR", 90), _timeout("CONFERIR", 60),
           lambda: ["conferir", "repo", "--json"]),
 ]
