@@ -2128,8 +2128,10 @@ def _moradas_escrita():
 
 
 def _em_bin_do_harness(real_pai: Path) -> bool:
-    """bin/ e hooks/ de um clone ou worktree do harness na bancada: morada de verbo e de hook
-    (sem extensao, com shebang). hooks/ entrou em 09/10/2026 (#3376): hooks/pre-push nao tem
+    """bin/, hooks/ e deploy-harness/ de um clone ou worktree do harness na bancada: morada de verbo,
+    de hook e do instalar (sem extensao, com shebang). deploy-harness/ entrou em 13/11/2026 (debito
+    605): deploy-harness/instalar nao tem extensao e nenhum caminho o escrevia.
+    hooks/ entrou em 09/10/2026 (#3376): hooks/pre-push nao tem
     extensao e ficava sem porta. O core.hooksPath das contas aponta para a release, entao a
     copia da bancada so vale depois de `release promover`, como o bin/. A copia do harness no
     espelho (platafirma-casa-espelho/outros_repos/harness/) conta igual (#4087)."""
@@ -2153,7 +2155,7 @@ def _em_bin_do_harness(real_pai: Path) -> bool:
             continue
         n = len(miolo)
         if any(len(partes) > p + n and partes[p:p + n] == miolo
-               and partes[p + n] in ("bin", "hooks") for p in profs):
+               and partes[p + n] in ("bin", "hooks", "deploy-harness") for p in profs):
             return True
     return False
 
