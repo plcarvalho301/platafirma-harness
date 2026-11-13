@@ -52,11 +52,11 @@
       "porque": "os conectores vivem do lado do app; o host nao ve a lista"
     },
     "agy": {
-      "papel": "Antigravity CLI no platafirma-posto, conta megafone; cliente OAuth agy-cli no Keycloak",
+      "papel": "Antigravity (CLI agy, App e IDE) no platafirma-posto, conta megafone; cliente OAuth agy-cli no Keycloak",
       "conectores": [
         "claudinho-mcp"
       ],
-      "onde_declara": "~/.gemini/config/mcp_config.json da conta, instalado pelo sincroniza.sh a partir de .agents/mcp_config.json do platafirma-posto",
+      "onde_declara": "~/.gemini/config/mcp_config.json da conta, gravado pelo sincroniza/agy.sh a partir de config_providers/agy_modelo_permissoes.json do platafirma-posto",
       "verificavel_do_host": false,
       "porque": "o arquivo vive na home de outra conta; o host ve o azp agy-cli em cada linha do log da porta"
     },
@@ -70,13 +70,13 @@
       "porque": "o arquivo vive no clone de outra conta; o host ve o azp cursor-cli em cada linha do log da porta"
     },
     "codex": {
-      "papel": "Codex CLI (OpenAI) no platafirma-posto, conta megafone; cliente OAuth publico codex-cli no Keycloak, callback fixo em 127.0.0.1:8788",
+      "papel": "Codex (CLI e Desktop, OpenAI) no platafirma-posto, conta megafone; cliente OAuth publico codex-cli no Keycloak, callback fixo em 127.0.0.1:8788",
       "conectores": [
         "claudinho-mcp"
       ],
-      "onde_declara": ".codex/config.toml do platafirma-posto, lido da pasta do projeto quando o projeto e confiavel (sem sincroniza.sh)",
+      "onde_declara": "~/.codex/config.toml da conta, gravado por tabela pelo sincroniza/codex.sh a partir de config_providers/codex_modelo_permissoes.toml do platafirma-posto",
       "verificavel_do_host": false,
-      "porque": "o arquivo vive no clone de outra conta; o host ve o azp codex-cli em cada linha do log da porta"
+      "porque": "o arquivo vive na home de outra conta; o host ve o azp codex-cli em cada linha do log da porta"
     },
     "code": {
       "papel": "Claude Code no platafirma-posto, conta megafone; cliente OAuth publico code-cli no Keycloak, PKCE S256, callback fixo em localhost:8789 (#3396)",
