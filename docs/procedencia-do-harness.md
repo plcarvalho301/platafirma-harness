@@ -28,7 +28,7 @@ Link quebrado também reprova: caminho de execução que não chega a lugar nenh
 é ausência, e ausência se declara.
 
 Isto **não** é a régua de `arq:0037` — cabeçalho de três linhas e a conta de um
-verbo por capacidade são de `conferir verbo`. Aqui só se pergunta onde o
+verbo por capacidade são de `release conferir cabecalho`. Aqui só se pergunta onde o
 arquivo executado mora.
 
 ## Exceções declaradas

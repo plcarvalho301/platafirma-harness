@@ -150,7 +150,7 @@ def test_verbo_json_formato_ok(tmp_path, monkeypatch, capsys):
 
     assert exit_code == 0
     dado = json.loads(saida.out)
-    assert dado["classe"] == "verbo"
+    assert dado["classe"] == "cabecalho"
     itens = {i["nome"]: i for i in dado["itens"]}
     assert itens["meuverbo"]["estado"] == "conforme"
     assert itens["meuverbo"]["desde"] == "2026-09-20T10:00:00Z"
@@ -203,9 +203,11 @@ def test_verbo_capacidade_ausente_e_indeterminavel_se_acervo_falha(tmp_path, mon
         conferir, "origem",
         lambda nome, caminho: ("symlink", str(bin_dir.parent / "origem-real" / nome)),
     )
+    # o mapa vigente nao se leu (acervo fora do ar): indeterminavel
+    monkeypatch.setattr(conferir, "_MAPA", {})
     monkeypatch.setattr(
-        conferir, "_resolver_capacidade_forma",
-        lambda forma: (3, "dependencia ausente: acervo"),
+        conferir, "_ler_mapa_vigente",
+        lambda: (3, "", "dependencia ausente: acervo"),
     )
 
     exit_code = conferir.conferir_verbo("meuverbo", como_json=True)
