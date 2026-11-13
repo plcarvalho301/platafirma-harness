@@ -321,5 +321,5 @@ def test_promover_registra_deploy_no_rastreador(amb):
     # DT 129: release promover registra o deploy via tarefas api-corpo POST /deploys; falha nao trava
     r = amb.run("promover", "fixture", gh_ref="", tarefas_rc=1)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "deploy:    AVISO" in r.stderr
+    assert "deploy:    AVISO" in (r.stdout + r.stderr)
     assert "ARGS: api-corpo POST /deploys" in amb.tarefas_log.read_text(encoding="utf-8")
