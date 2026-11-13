@@ -2197,7 +2197,7 @@ resumo_imprime() {
   PROMO_LOG="$log"
   [ -f "$PROMO_LOG" ] || { PROMO_LOG=""; return 0; }
   # grep sem casamento sai 1: com set -e/pipefail isso mataria o resumo e trocaria o exit
-  { grep -E '^(== |de: |gate: |venv: |current: |no ar: |ambiente: |suite: |card: |ensaio: |já no ar: |espelho: |checkout: |stacks: |terceiro: |porta: )' "$PROMO_LOG" \
+  { grep -E '^(== |de: |gate: |venv: |current: |no ar: |ambiente: |suite: |card: |deploy: |ensaio: |já no ar: |espelho: |checkout: |stacks: |terceiro: |porta: )' "$PROMO_LOG" \
       | grep -v 'NAO MEDIDA'; } || true
   # "release: /opt/..." e o eco do ajudante da stack, nao recusa: fica no log
   { grep -E '^(release: |varrido: |saida inteira: |caminho: )|NAO MEDIDA|PROMOCAO|RETOMAR|VOLTAR CODIGO' "$PROMO_LOG" \
