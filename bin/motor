@@ -130,10 +130,10 @@ DOCKER = {"DOCKER_HOST": "unix:///run/user/1001/docker.sock"}
 
 
 SPEC = "spec motor (acervo ler casa spec motor)"
-# arq:0106 §3: as particoes sao biblioteca, casa e registro. `obra` e o nome anterior da
-# biblioteca e segue aceito como sinonimo; a API do rag aceita biblioteca diretamente.
-PARTICOES = ("biblioteca", "casa", "registro")
-_SINONIMOS = {"obra": "biblioteca"}
+# arq:0106 §3: biblioteca, casa e log. Os nomes anteriores obra e registro
+# seguem como sinonimos; a API recebe o nome canonico antes de consultar o enum.
+PARTICOES = ("biblioteca", "casa", "log")
+_SINONIMOS = {"obra": "biblioteca", "registro": "log"}
 ATOS_RAG = (
     "ajuste", "buscar", "consultas", "eleger", "escrever", "estado",
     "indexar", "julgar", "lintar", "medir", "parar", "parear",
@@ -1676,9 +1676,21 @@ def cmd_buscar(nome_inst, inst, argv):
     ordem = os.environ.get("PF_ORDEM_ID", "").strip()
     if ordem and ordem != "-":
         corpo.setdefault("ordem_id", ordem)
-    if conceitos:
-        corpo["conceitos"] = conceitos
+    import retorno
+    avisos_conceitos = []
     tok = token_da(inst)
+    if conceitos:
+        from lib import motor_enderecos
+        catalogo = http(motor_enderecos.api_acervo(nome_inst) + "/acervo/conceitos", tok)
+        # A coleção é integral hoje. Não resolver contra catálogo parcial em silêncio.
+        if catalogo.get("proximo"):
+            print("buscar: catalogo de conceitos paginado; resolucao incompleta", file=sys.stderr)
+            sys.exit(3)
+        resolvidos, avisos_conceitos = retorno.resolver_conceitos(conceitos, catalogo["itens"])
+        if resolvidos:
+            corpo["conceitos"] = resolvidos
+        for aviso in avisos_conceitos:
+            print("buscar: " + aviso, file=sys.stderr)
     req = urllib.request.Request(
         inst["endpoint"], data=json.dumps(corpo).encode(),
         headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
@@ -1689,15 +1701,20 @@ def cmd_buscar(nome_inst, inst, argv):
     except (urllib.error.HTTPError, urllib.error.URLError) as e:
         _trata_erro_http(e, "motor")
     dur_ms = int((time.monotonic() - t0) * 1000)
-    # choke point (#2911): parse best-effort so para instrumentar; a saida ao cliente
-    # continua sendo o corpo cru, byte a byte, para nao alterar contrato de nenhuma
-    # superficie que consome esta stdout.
+    # Parse best-effort para instrumentar e acrescentar as instrucoes de leitura.
+    # Ranking, texto recuperado e cobertura permanecem os da API.
     try:
         resp = json.loads(bruto)
     except Exception:
         resp = None
     _emite_consulta(nome_inst, inst, corpo, resp, dur_ms)
-    print(bruto)
+    if isinstance(resp, dict):
+        retorno.completar(resp, particao, corpo["texto"], avisos_conceitos)
+        if corpo["texto"] == "nenhum":
+            print("buscar: " + resp["aviso_texto"], file=sys.stderr)
+        print(json.dumps(resp, ensure_ascii=False))
+    else:
+        print(bruto)
 
 
 # ---------------------------------------------------------------- medir

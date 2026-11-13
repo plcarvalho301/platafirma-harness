@@ -1,4 +1,5 @@
 # BASELINE VERDE da suite de contrato — o que o `hooks/pre-push` julga.
+tests/test_motor_dt537_538_552_553.py | regressivo #2856
 tests/test_dt140_364.py | bin/release bin/_release/lotes.py bin/sessao bin/expediente
 tests/test_dt_397_499.py | bin/infra bin/_acervo/casa
 tests/test_dt_500.py | lib/oplog_extracao.py
