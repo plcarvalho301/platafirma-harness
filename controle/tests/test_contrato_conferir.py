@@ -150,7 +150,7 @@ def test_verbo_json_formato_ok(tmp_path, monkeypatch, capsys):
 
     assert exit_code == 0
     dado = json.loads(saida.out)
-    assert dado["classe"] == "cabecalho"
+    assert dado["classe"] == "verbo"
     itens = {i["nome"]: i for i in dado["itens"]}
     assert itens["meuverbo"]["estado"] == "conforme"
     assert itens["meuverbo"]["desde"] == "2026-09-20T10:00:00Z"

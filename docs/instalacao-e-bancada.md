@@ -50,7 +50,7 @@ Depois de instalar:
 
 ```
 release conferir procedencia    todo caminho de execução resolve para dentro da release (0 = sim)
-release conferir cabecalho      cabeçalho de cada verbo contra o mapa de capacidades vigente
+release conferir verbo          cabeçalho de cada verbo contra o mapa de capacidades vigente
 sinal                           estado de saúde dos serviços, um por linha
 ```
 

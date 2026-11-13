@@ -70,7 +70,7 @@ def test_bloco_procedencia_mostra_os_numeros_do_incidente():
     limpo = _bloco_conferir([_item("conforme")])
     skills = {"estado": "ok", "lido_em": 1000.0, "itens": []}
     html = bloco_procedencia(servico, limpo, skills, limpo)
-    trecho_servico = html.split("conferir servico")[1].split("conferir cabecalho")[0]
+    trecho_servico = html.split("conferir servico")[1].split("conferir verbo")[0]
     assert ">10<" in trecho_servico and "divergem" in trecho_servico and "18 sem leitura" in trecho_servico
-    trecho_verbo = html.split("conferir cabecalho")[1].split("conferir skill")[0]
+    trecho_verbo = html.split("conferir verbo")[1].split("conferir skill")[0]
     assert "sem divergência" in trecho_verbo

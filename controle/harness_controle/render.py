@@ -595,7 +595,7 @@ def bloco_procedencia(servico: dict, verbo: dict, skills: dict, repo: dict) -> s
     ))
     predicados = (
         _predicado("conferir servico", servico)
-        + _predicado("conferir cabecalho", verbo)
+        + _predicado("conferir verbo", verbo)
         + _predicado_skills(skills)
         + _predicado("conferir repo", repo)
     )

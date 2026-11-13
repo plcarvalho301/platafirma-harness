@@ -1,4 +1,4 @@
-"""release conferir cabecalho: a capacidade do cabecalho se confere contra o mapa vigente (vocabulario
+"""release conferir verbo: a capacidade do cabecalho se confere contra o mapa vigente (vocabulario
 arquitetura-negocio-operacao, como o acervo o serve), e nao contra a existencia de uma ficha no acervo.
 Ficha do mapa antigo segue no acervo depois que o mapa muda; por ela `verificacao` passava (pedido de
 gestao-estrategica, 12/11/2026)."""
