@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # conferir — confere o SERVIDO contra o DECLARADO
-# capacidade: verificacao
+# capacidade: operacao
 # dono: ti
 # classe: C
 # use para: SEMPRE ANTES de agir sobre algo da casa e ANTES de dizer que algo dela não existe, «existe o verbo X?», «tem skill de Y?»; a régua da bancada; «o que está no ar bate com o declarado?», em serviço, verbo, skill, jobs, acervo e release
-# atos: existe (leitura, operacao), repo (leitura, operacao), commit (leitura, operacao), arranque (leitura, operacao), verbo (leitura, operacao), servico (leitura, operacao), skill (leitura, operacao), procedencia (leitura, operacao), superficie (leitura, operacao), front (leitura, operacao), sessao (leitura, operacao), chapeu (leitura, operacao), ferramental (leitura, operacao), pdp (leitura, operacao), alcance (leitura, operacao), vocabulario (leitura, operacao)
+# atos: existe (leitura, operacao), repo (leitura, operacao), commit (leitura, operacao), arranque (leitura, operacao), cabecalho (leitura, operacao), verbo (leitura, operacao), servico (leitura, operacao), skill (leitura, operacao), procedencia (leitura, operacao), superficie (leitura, operacao), front (leitura, operacao), sessao (leitura, operacao), chapeu (leitura, operacao), ferramental (leitura, operacao), pdp (leitura, operacao), alcance (leitura, operacao), vocabulario (leitura, operacao)
 # forma: predicado
 # le: existe=repo,rastreador,arquivo-local
 # le: repo=repo
 # le: commit=rastreador,arquivo-local
 # le: arranque=repo
-# le: verbo=release
+# le: cabecalho=release,acervo.casa
+# le: verbo=release,acervo.casa
 # le: servico=release
 # le: skill=release
 # le: procedencia=release
@@ -26,6 +27,7 @@
 # escreve: repo=nada
 # escreve: commit=nada
 # escreve: arranque=nada
+# escreve: cabecalho=nada
 # escreve: verbo=nada
 # escreve: servico=nada
 # escreve: skill=nada
@@ -53,7 +55,7 @@ BIN_DIR="${PF_BIN_DIR:-$HOME/AI/bin}"
 AQUI="$(dirname "$(readlink -f "$0")")"
 IMPL="$AQUI/_release/conferir/conferir.py"
 
-CLASSES_SERVIDO="verbo servico skill procedencia superficie ferramental front sessao chapeu pdp alcance card jobs acervo dependencias sessao-orfa copia"
+CLASSES_SERVIDO="cabecalho verbo servico skill procedencia superficie ferramental front sessao chapeu pdp alcance card jobs acervo dependencias sessao-orfa copia"
 CLASSES_BANCADA="existe repo commit arranque vocabulario diagrama"
 
 avisa_deprecado() {  # uma vez por sessao (arq:0110 §11)

@@ -1726,36 +1726,33 @@ def test_diagrama_indeterminavel_quando_kroki_inalcancavel(monkeypatch, capsys, 
 # Regressao: o gate de `release promover` reprovou 746a69b porque o acervo era chamado
 # em ~/AI/bin/acervo (rc 127) — a bancada nao tem bin/ desde arq:0097.
 
-def test_capacidade_le_identidade_do_bin_da_release(monkeypatch, tmp_path):
-    # #3259: o ato `acervo resolver` morreu; a capacidade se resolve pela biblioteca
-    # _acervo/_identidade.py, e ela tambem sai do bin da release, nunca de RAIZ/bin.
-    acervo_dir = tmp_path / "rel" / "harness" / "bin" / "_acervo"
-    acervo_dir.mkdir(parents=True)
-    (acervo_dir / "_identidade.py").write_text(
-        "chamados = []\n"
-        "def validar_forma(classe, s):\n"
-        "    chamados.append(classe)\n"
-        "    return s, None\n"
-        "def resolver_canon(classe, canon, num=None):\n"
-        "    return [{'id': 'u-1', 'chave_humana': canon, 'via': 'exato'}]\n",
+def test_capacidade_le_o_mapa_pelo_acervo_do_bin_da_release(monkeypatch, tmp_path):
+    # o mapa vigente se le pelo `acervo` do bin da release, nunca de RAIZ/bin (#3142).
+    bin_rel = tmp_path / "rel" / "harness" / "bin"
+    bin_rel.mkdir(parents=True)
+    acervo = bin_rel / "acervo"
+    acervo.write_text(
+        "#!/usr/bin/env bash\n"
+        "echo \"$@\" > \"$(dirname \"$0\")/chamado\"\n"
+        "printf '| `operacao` | — | a plataforma | ti |\\n'\n",
         encoding="utf-8",
     )
+    acervo.chmod(0o755)
     monkeypatch.setattr(conferir, "RAIZ", "/bancada-sem-bin")
-    monkeypatch.setattr(conferir, "BIN_IRMAOS", str(tmp_path / "rel" / "harness" / "bin"))
-    monkeypatch.setattr(conferir, "_IDENTIDADE", {})
+    monkeypatch.setattr(conferir, "BIN_IRMAOS", str(bin_rel))
+    monkeypatch.setattr(conferir, "_MAPA", {})
 
-    v = conferir._capacidade_veredito("verificacao")
+    assert conferir._capacidade_veredito("operacao").estado == "conforme"
+    assert conferir._capacidade_veredito("verificacao").estado == "divergente"
+    assert (bin_rel / "chamado").read_text().split() == [
+        "ler", "casa", "vocabulario", "arquitetura-negocio-operacao"]
 
-    assert v.estado == "conforme"
-    ident = conferir._identidade_da_release()
-    assert ident.chamados == ["capacidade"]
 
-
-def test_capacidade_indeterminavel_sem_biblioteca(monkeypatch, tmp_path):
+def test_capacidade_indeterminavel_sem_acervo(monkeypatch, tmp_path):
     monkeypatch.setattr(conferir, "BIN_IRMAOS", str(tmp_path / "vazio"))
-    monkeypatch.setattr(conferir, "_IDENTIDADE", {})
+    monkeypatch.setattr(conferir, "_MAPA", {})
 
-    v = conferir._capacidade_veredito("verificacao")
+    v = conferir._capacidade_veredito("operacao")
 
     assert v.estado == "indeterminavel"
 

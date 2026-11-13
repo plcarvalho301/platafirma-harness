@@ -85,7 +85,8 @@ gasto a toa.
   a equalização é pelo MEIO — as três servem `claudinho-mcp` e `platafirma-wiki`.
   Texto de cadeira não se reescreve para caber em superfície mais pobre.
 - **Todo verbo declara `capacidade:` e `dono:`** no cabeçalho, e a conta é um verbo
-  por capacidade (`arq:0037`). `conferir verbo` mede.
+  por capacidade (`arq:0037`), e a capacidade é uma das do mapa vigente (vocabulário
+  `arquitetura-negocio-operacao`). `release conferir cabecalho` mede.
 
 Clones de trabalho: `platafirma-{core,conhecimento,arquitetura,harness,motor,posto,ui,casa,rastreador}`,
 todos na bancada declarada pela conta (`~/.config/platafirma/bancada`),

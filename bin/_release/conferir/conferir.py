@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # conferir — compara o que esta DECLARADO com o que esta SERVIDO, por classe de alvo.
-# capacidade: verificacao
+# capacidade: operacao
 # dono: claudinho-TI
 # use para: declarado × servido, 'existe X?' (âncora de NEGATIVA), cabeçalho de verbo, paridade de serviço
 # atos: existe, servico, verbo, skill, procedencia, repo, superficie, front, arranque, ferramental, commit, vocabulario, diagrama
@@ -13,9 +13,12 @@
                    paridade entre o `environment` declarado e o ambiente do processo,
                    e o filtro de e-mail dos gates oauth2-proxy: `--email-domain=*` junto
                    da lista, ou gate sem filtro, e divergente (#3476).
-  verbo   [nome]   verbo do PATH da plataforma: origem (symlink de repo, copia, so no
-                   host, divergente), cabecalho de tres linhas, e a conta de
-                   arq:0037 — um verbo por capacidade.
+  cabecalho [nome] cabecalho de cada verbo do PATH da plataforma: origem (symlink de repo,
+                   copia, so no host, divergente), proposito, capacidade e dono, a
+                   capacidade conferida contra o mapa vigente (vocabulario
+                   arquitetura-negocio-operacao, como o acervo o serve), e a conta de
+                   arq:0037 — um verbo por capacidade. `verbo` e o nome antigo: responde,
+                   com aviso.
   skill   [nome]   skill servida no claude.ai: o blob que o carimbo do arquivo montado
                    declara, contra o blob da fonte no harness. O servido vive do outro
                    lado da fronteira — a sessao le o carimbo e passa em --servido.
@@ -238,7 +241,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs . dependencias . sessao-orfa . copia", file=sys.stderr)
+    print("     classes implementadas : servico . cabecalho . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs . dependencias . sessao-orfa . copia", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -744,91 +747,66 @@ def origem(nome, caminho):
     return "so-no-host", "sem contraparte em repo"
 
 
-def normaliza(cap):
-    """Formas equivalentes do mesmo termo. BizBOK nomeia a capacidade por extenso
-    (`gestao-de-motores`); o mapa da mesa lavra a contracao (`motor`). As duas valem,
-    e nenhuma das duas e erro — o dicionario nao e do verificador."""
-    c = (cap or "").strip().lower()
-    if c == "release":
-        return {"release", "promocao-de-mudanca", "mudanca"}
-    for prefixo in ("gestao-de-", "gestao-do-", "gestao-da-", "gestao-dos-", "gestao-das-"):
-        if c.startswith(prefixo):
-            c = c[len(prefixo):]
-            break
-    formas = {c}
-    if c.endswith("es"):
-        formas.add(c[:-2])
-    if c.endswith("s"):
-        formas.add(c[:-1])
-    return formas
+# O mapa de capacidades vigente: a tabela do vocabulario arquitetura-negocio-operacao, como o
+# acervo o serve. A capacidade do cabecalho se confere contra ESTE mapa, e nao contra a
+# existencia de uma ficha no acervo: ficha do mapa antigo segue no acervo depois que o mapa
+# muda, e por ela `verificacao`, `trabalho` e `motor` passavam como conformes (pedido de
+# gestao-estrategica, 12/11/2026).
+MAPA_VIGENTE = ("vocabulario", "arquitetura-negocio-operacao")
+_LINHA_DO_MAPA = re.compile(
+    r"^\|\s*`(?P<cap>[a-z0-9-]+)`\s*\|\s*(?:—|-|`(?P<mae>[a-z0-9-]+)`)\s*\|[^|]*\|\s*(?P<persona>[a-z0-9-]+)\s*\|$")
+_MAPA = {}
 
 
-_IDENTIDADE = {}
+def _ler_mapa_vigente():
+    """Texto do mapa vigente, pelo `acervo` da release no ar (BIN_IRMAOS, #3142).
+    (rc, texto, erro)."""
+    return sh([os.path.join(BIN_IRMAOS, "acervo"), "ler", "casa", *MAPA_VIGENTE])
 
 
-def _identidade_da_release():
-    """A biblioteca de identidade da raiz (bin/_acervo/_identidade.py) do bin da release
-    no ar, nunca de RAIZ/bin (#3142). Carregada por caminho e guardada por caminho."""
-    caminho = os.path.join(BIN_IRMAOS, "_acervo", "_identidade.py")
-    if caminho not in _IDENTIDADE:
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("_identidade_release", caminho)
-        if spec is None or spec.loader is None:
-            raise ImportError(f"biblioteca de identidade ausente: {caminho}")
-        modulo = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(modulo)
-        _IDENTIDADE[caminho] = modulo
-    return _IDENTIDADE[caminho]
+def _mapa_vigente():
+    """(capacidades, erro). capacidades = {slug: {"mae": slug|None, "persona": cadeira}}, lidas
+    das linhas da tabela «As 28 capacidades». Acervo fora do ar ou tabela que nao se le dao
+    (None, motivo): a conferencia sai indeterminavel, nunca conforme nem divergente."""
+    if "v" not in _MAPA:
+        rc, out, err = _ler_mapa_vigente()
+        if rc != 0:
+            _MAPA["v"] = (None, f"acervo ler casa {' '.join(MAPA_VIGENTE)} saiu {rc}: "
+                                f"{(err or out or '').strip()[:200]}")
+        else:
+            caps = {}
+            for linha in (out or "").splitlines():
+                m = _LINHA_DO_MAPA.match(linha.strip())
+                if m:
+                    caps[m["cap"]] = {"mae": m["mae"], "persona": m["persona"]}
+            _MAPA["v"] = (caps, None) if caps else (
+                None, f"{' '.join(MAPA_VIGENTE)} servido sem a tabela de capacidades")
+    return _MAPA["v"]
 
 
-def _resolver_capacidade_forma(forma):
-    """(rc, saida) de uma forma na classe `capacidade` da raiz, pela biblioteca
-    _identidade (validar_forma + resolver_canon). O ato `acervo resolver` morreu (#3259);
-    a biblioteca fica. rc no contrato de antes: 0 uma ficha · 1 nenhuma · 2 ambigua ou
-    forma invalida · 3/5 banco fora do ar ou biblioteca ausente (ela sai por morre())."""
-    import contextlib
-    import io
-    err = io.StringIO()
-    try:
-        ident = _identidade_da_release()
-        with contextlib.redirect_stderr(err):
-            canon, num = ident.validar_forma("capacidade", forma)
-            cand = ident.resolver_canon("capacidade", canon, num)
-    except SystemExit as e:
-        return (e.code if isinstance(e.code, int) else 3), err.getvalue()
-    except Exception as e:  # biblioteca ausente ou quebrada: nao da pra olhar
-        return 3, f"{type(e).__name__}: {e}"
-    if not cand:
-        return 1, ""
-    if len(cand) > 1:
-        return 2, "; ".join(f"{c['id']} ({c['chave_humana']})" for c in cand)
-    return 0, cand[0]["id"]
+def _capacidade_do_mapa(cap):
+    """Slug do mapa que o cabecalho declara: `filha` ou `mae/filha` dao a filha."""
+    return (cap or "").strip().lower().split("/")[-1]
 
 
 def _capacidade_veredito(cap):
-    """Veredito da capacidade `cap`, resolvendo cada forma de normaliza() na classe
-    `capacidade` da raiz (card #3142, passo 4; pela biblioteca desde #3259). Primeira forma
-    que resolve (rc 0) ganha; rc 1 em TODAS as formas = nao existe (divergente); rc 2 =
-    ambigua (divergente, com a lista no motivo); qualquer outro rc, ou o acervo fora do ar,
-    e indeterminavel — nao da pra afirmar que a capacidade nao existe so porque a consulta
-    falhou."""
-    algum_rc1 = False
-    ultimo_rc, ultimo_saida = None, ""
-    for forma in sorted(normaliza(cap)):
-        rc, saida = _resolver_capacidade_forma(forma)
-        if rc == 0:
-            return resultado.conforme()
-        if rc == 2:
+    """Veredito da capacidade `cap` contra o mapa vigente (MAPA_VIGENTE). O cabecalho declara o
+    slug como o mapa o escreve, ou `mae/filha` com a mae que o mapa da a filha. Fora do mapa e
+    divergente; mapa que nao se leu e indeterminavel."""
+    caps, erro = _mapa_vigente()
+    if caps is None:
+        return resultado.indeterminavel(f"mapa de capacidades nao lido: {erro}")
+    c = (cap or "").strip().lower()
+    slug = _capacidade_do_mapa(c)
+    if slug not in caps:
+        return resultado.divergente(
+            f"capacidade {cap!r} nao esta no mapa vigente ({' '.join(MAPA_VIGENTE)})")
+    if "/" in c:
+        mae = c.rsplit("/", 1)[0]
+        if caps[slug]["mae"] != mae:
             return resultado.divergente(
-                f"{cap!r} e capacidade ambigua ({forma!r}): {saida.strip()[:200]}")
-        if rc == 1:
-            algum_rc1 = True
-            continue
-        ultimo_rc, ultimo_saida = rc, saida.strip()[:200]
-    if algum_rc1 and ultimo_rc is None:
-        return resultado.divergente(f"capacidade {cap!r} nao esta no acervo")
-    return resultado.indeterminavel(
-        f"resolucao da capacidade saiu {ultimo_rc} para {cap!r}: {ultimo_saida}")
+                f"no mapa vigente, a mae de {slug!r} e {caps[slug]['mae'] or 'nenhuma'}, nao {mae!r}")
+    return resultado.conforme()
 
 
 def _desde_familia(familia):
@@ -1034,7 +1012,7 @@ def conferir_verbo(alvo, como_json=False):
                     print(f"    capacid?: {cap_v.motivo}")
             else:
                 if not como_json:
-                    print(f"    capacid : {cap!r} resolvida no acervo")
+                    print(f"    capacid : {cap!r} no mapa vigente")
         for motivo_mec in _mecanismo_fora_da_regra(nome, caminho):
             tem_divergencia = True
             problemas.append(motivo_mec)
@@ -1045,7 +1023,9 @@ def conferir_verbo(alvo, como_json=False):
             avisos.append(aviso)
             if not como_json:
                 print(f"    AVISO   : ato {ato_face} esta numa face e nao declara {' nem '.join(faltam)}")
-        porcapacidade.setdefault(cap or "(nao declarada)", []).append(nome)
+        # a conta de arq:0037 e por capacidade do mapa: `dados/analise` e `analise` sao a mesma
+        chave = _capacidade_do_mapa(cap) if cap and cap != "orfa" else (cap or "(nao declarada)")
+        porcapacidade.setdefault(chave, []).append(nome)
         motivo = "; ".join(problemas) if problemas else None
         if tem_divergencia:
             itens.append((nome, resultado.divergente(motivo, desde=desde_familia)))
@@ -1073,7 +1053,7 @@ def conferir_verbo(alvo, como_json=False):
                 cap_v = cap_cache.get(cap) or _capacidade_veredito(cap)
                 cap_cache[cap] = cap_v
                 if cap_v.estado == "divergente":
-                    v = resultado.divergente(f"capacidade nao resolvida no acervo: {cap_v.motivo}")
+                    v = resultado.divergente(f"capacidade fora do mapa vigente: {cap_v.motivo}")
                 elif cap_v.estado == "indeterminavel":
                     v = resultado.indeterminavel(cap_v.motivo)
                 elif len(verbos) != 1:
@@ -1086,7 +1066,7 @@ def conferir_verbo(alvo, como_json=False):
             itens.append((nome_item, v))
     if not como_json:
         print()
-    return resultado.relatorio("verbo", alvo, itens, _sha_release(), como_json=como_json,
+    return resultado.relatorio("cabecalho", alvo, itens, _sha_release(), como_json=como_json,
                                extra={"avisos": avisos} if avisos else None)
 
 
@@ -3379,7 +3359,12 @@ def main(argv):
         return 2
     if classe == "servico":
         return conferir_servico(alvo, como_json=como_json)
+    if classe == "cabecalho":
+        return conferir_verbo(alvo, como_json=como_json)
     if classe == "verbo":
+        # nome antigo da classe `cabecalho` (12/11/2026): responde, com aviso (arq:0110 §11)
+        print("conferir: a classe `verbo` passou a se chamar `cabecalho`; use "
+              "`release conferir cabecalho`", file=sys.stderr)
         return conferir_verbo(alvo, como_json=como_json)
     if classe == "procedencia":
         return conferir_procedencia(alvo, como_json=como_json)
