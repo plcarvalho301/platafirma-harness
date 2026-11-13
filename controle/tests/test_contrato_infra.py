@@ -609,3 +609,30 @@ def test_units_sem_sub_exit_2(arvore):
     fake = _stub(arvore / "bin" / "_infra", "units-fake.sh", FAKE_CRONTAB)
     r = _roda_arvore(arvore, "units", env_extra={"INFRA_UNITS_SCRIPT": str(fake)}, checa_exit=2)
     assert "units exige conferir ou aplicar" in r.stderr
+
+
+# `infra ambiente` (debito 605): o verbo que roda deploy-harness/instalar.
+def test_ambiente_conferir_chama_o_instalar_com_check(arvore):
+    fake = _stub(arvore / "bin" / "_infra", "ambiente-fake.sh", FAKE_CRONTAB)
+    r = _roda_arvore(arvore, "ambiente", "conferir",
+                      env_extra={"INFRA_AMBIENTE_SCRIPT": str(fake)}, checa_exit=0)
+    assert "CRONTAB_ARGS: [--check]" in r.stdout
+
+
+def test_ambiente_aplicar_chama_o_instalar_sem_check_e_sem_pf_sujeito(arvore):
+    fake = _stub(arvore / "bin" / "_infra", "ambiente-fake.sh", FAKE_CRONTAB)
+    r = _roda_arvore(arvore, "ambiente", "aplicar",
+                      env_extra={"INFRA_AMBIENTE_SCRIPT": str(fake), "PF_SUJEITO": ""}, checa_exit=0)
+    assert r.stdout.strip() == "CRONTAB_ARGS:"
+
+
+def test_ambiente_sem_script_dependencia_ausente_exit_3(arvore):
+    r = _roda_arvore(arvore, "ambiente", "conferir",
+                      env_extra={"INFRA_AMBIENTE_SCRIPT": str(arvore / "nao-existe")}, checa_exit=3)
+    assert "dependência" in r.stderr
+
+
+def test_ambiente_sem_sub_exit_2(arvore):
+    fake = _stub(arvore / "bin" / "_infra", "ambiente-fake.sh", FAKE_CRONTAB)
+    r = _roda_arvore(arvore, "ambiente", env_extra={"INFRA_AMBIENTE_SCRIPT": str(fake)}, checa_exit=2)
+    assert "ambiente exige conferir ou aplicar" in r.stderr
