@@ -2045,10 +2045,10 @@ registrar_deploy_no_rastreador() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
   ambiente="${PLATAFIRMA_AMBIENTE:-prod}"
   ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
   if [ -d "$git_dir" ]; then
-    if [ -n "$de" ] && git --git-dir="$git_dir" cat-file -e "$de^{commit}" 2>/dev/null; then
-      commits_raw="$(git --git-dir="$git_dir" log -n 1000 --format="%H%x1f%B%x1e" "$de..$para" 2>/dev/null || true)"
+    if [ -n "$de" ] && "$GIT" --git-dir="$git_dir" cat-file -e "$de^{commit}" 2>/dev/null; then
+      commits_raw="$("$GIT" --git-dir="$git_dir" log -n 1000 --format="%H%x1f%B%x1e" "$de..$para" 2>/dev/null || true)"
     else
-      commits_raw="$(git --git-dir="$git_dir" log -n 1 --format="%H%x1f%B%x1e" "$para" 2>/dev/null || true)"
+      commits_raw="$("$GIT" --git-dir="$git_dir" log -n 1 --format="%H%x1f%B%x1e" "$para" 2>/dev/null || true)"
     fi
   else
     commits_raw=""
