@@ -577,7 +577,20 @@ _estados_terminais() {
 
 # `#N` e `N` são o MESMO número: o rastreador tem um identificador só por item, e é essa a
 # razão de o Vikunja ter saído. O `#` é aceito porque a fila e os cards o escrevem.
-so_id() { printf '%s' "${1#\#}"; }
+#
+# A TASK TEM CHAVE POR STORY (card #4245): `<story>.t<n>`, como `4216.t1`. O rastreador guarda o
+# id dela numa sequência própria, que nenhuma superfície mostra; aqui a chave que a pessoa
+# digita vira o id que as rotas endereçam, por `GET /itens/chave/<chave>`. Chave que não existe
+# sai como a recusa do rastreador (404), e não como id inventado.
+so_id() {
+  local a="${1#\#}"
+  case "$a" in
+    [0-9]*.t[0-9]*)
+      local r; r=$(busca GET "/itens/chave/$a") || return 1
+      printf '%s' "$r" | jq -r '.id' ;;
+    *) printf '%s' "$a" ;;
+  esac
+}
 
 # CARD #347: a leitura mostra quem falta assinar, e SEM chamada extra — o detalhe do item
 # já devolve `sign_offs` desde o #466. Enquanto não estava aqui, a informação existia na API
@@ -689,7 +702,7 @@ filhas_do_json() {
     | .filhas[]?
     | . as $f
     | select($t | index([$f.estado_derivado // $f.estado]) == null)
-    | "  #\($f.id)\t\($f.estado)\t\($f.cadeira // "—")\t\($f.titulo)"
+    | "  \(if ($f.chave // "") | test("\\.t[0-9]+$") then $f.chave else "#\($f.id)" end)\t\($f.estado)\t\($f.cadeira // "—")\t\($f.titulo)"
       + (if $f.travada
          then "  [travada por " + ([($f.bloqueada_por // [])[] | "#\(if type == "object" then .id else . end)"] | join(", ")) + "]"
          else "" end)'
@@ -709,7 +722,7 @@ tasks_do_json() {
     | if ($ts | length) == 0 then empty else
         "tasks (\([$ts[] | select(aberta)] | length) abertas de \($ts | length)):",
         ($ts | to_entries[] | .key as $i | .value
-           | "  \($i + 1). #\(.id)\t\(rotulo)\t\(.estado)\t\(.titulo)"
+           | "  \($i + 1). \(if (.chave // "") | test("\\.t[0-9]+$") then .chave else "#\(.id)" end)\t\(rotulo)\t\(.estado)\t\(.titulo)"
              + (if .travada
                 then "  [travada por " + ([(.bloqueada_por // [])[] | "#\(if type == "object" then .id else . end)"] | join(", ")) + "]"
                 else "" end))
@@ -847,7 +860,7 @@ criar() {
       + (if $x == "" then {} else {executor:$x} end)
       + (if $r == "" then {} else {registro:$r} end)' \
     | envia POST /itens \
-    | jq -r '"item \(.id) criado: \(.titulo)"'
+    | jq -r '"item \(.chave // .id) criado: \(.titulo)"'
 }
 
 # EDITAR É O PATCH DO CORPO COM NOME DE ATO — card #3134 (dono, 25/09/2026): toda chamada
@@ -1171,7 +1184,7 @@ mover() {
       + (if $g == "" then {} else {englobado_em:($g|tonumber)} end)
       + (if $d == "" then {} else {decisao:($d|tonumber)} end)' \
     | envia PATCH "/itens/$id$q") || return 1
-  printf '%s' "$resp" | jq -r '"item \(.id) → "
+  printf '%s' "$resp" | jq -r '"item \(.chave // .id) → "
              + (if .estado_derivado != null
                 then "\(.estado_derivado) [derivado; cru: \(.estado_nome)]"
                 else .estado_nome
