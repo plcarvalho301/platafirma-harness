@@ -42,17 +42,19 @@ conector que ainda está montando no primeiro turno. Ceder à insistência do do
 não é critério: é o mesmo mecanismo que faria o modelo aceitar um falso «está
 autenticado».
 
-**O agy carrega MCP só com o login dele (09/11/2026, mesmo incidente).** Uma
-segunda versão deste conserto tirou `call_mcp_tool` da tabela, lendo «unknown
+**O agy carrega MCP só com o login dele — e separa o cofre do App do cofre do CLI (09/11 e 13/11/2026, #4186 e #4249).** Uma
+segunda versão do conserto de 09/11 tirou `call_mcp_tool` da tabela, lendo «unknown
 tool» como receita errada. Estava errado: a fita do agy de 07/11 abre sessão por
-`call_mcp_tool`. O que faltava era outro login. O `cli.log` do agy de 09/11 traz
+`call_mcp_tool`. O `cli.log` do agy de 09/11 traz
 `Not reloading plugin MCP servers: ... You are not logged into Antigravity`: sem a
-conta Google do próprio agy, ele não carrega servidor MCP nenhum e a
-ferramenta `call_mcp_tool` nem existe, com o token do `claudinho-mcp` válido. Esse
-login pode chegar depois do primeiro turno, o que explica as sessões que
-declaravam falta e abriam quando o dono insistia. A receita volta, a nova
-tentativa cobre o login que chega tarde, e o `providers/agy.md` separa o login do
-agy do login do conector.
+conta Google do próprio agy, ele não carrega servidor MCP nenhum. Em 13/11, no `agy-app`
+com login Google ativo, o mesmo `unknown tool: "call_mcp_tool"` apareceu antes de autenticar o
+`claudinho-mcp`: como o modelo do posto só declara esse servidor, sem OAuth dele na superfície há
+zero servidores conectados e o Antigravity omite `call_mcp_tool`; além disso, App/IDE
+(`~/.gemini/antigravity/`) e CLI (`~/.gemini/antigravity-cli/`) guardam tokens em cofres distintos
+(`MCP Google Antigravity Docs`). O modelo do posto agora marca `monta_sessao` como `eager: true`
+(`mcp_claudinho-mcp_monta_sessao` direto na lista, sem precisar ler arquivo de schema antes do
+arranque) com fallback para `call_mcp_tool` nas estações ainda não ressincronizadas, e `timeoutSeconds: 300`.
 
 **A primitiva de um provider não vale para os outros (09/11/2026, incidente #4188).** O
 conserto do #4186 mediu no agy que «a ferramenta da receita não existe» prova MCP não
@@ -117,8 +119,8 @@ arquivo não se lê antes de a sessão abrir. Mudou aqui, muda lá no mesmo ato.
 **O arranque é um só texto (10/10/2026).** `agente/CLAUDE.md` é byte a byte o `AGENTS.md`
 do posto: as duas linhas e a tabela que manda cada provider ao seu arquivo em
 `providers/` do posto, onde moram login, config e regra da sessão. O passo do Claude Code no
-`sincroniza.sh` do posto (`sincroniza/claude-code.sh`) confere a igualdade antes de instalar e
-para se divergirem; os outros providers seguem.
+`sincroniza.sh` do posto (`sincroniza/claude-code.sh`) confere essa igualdade (e também a de
+`abertura/dono.md`) antes de instalar e para se divergirem; os outros providers seguem.
 Mudou um, muda o outro no mesmo ato, senão nenhuma instância atualiza.
 
 **O slug se diz de três jeitos (dono, 15/10/2026).** A primeira linha da mensagem, sozinha,
