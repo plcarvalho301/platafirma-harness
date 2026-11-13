@@ -60,7 +60,7 @@ def _montar(tmp_path):
     return bancada, forge
 
 
-def _repo(tmp_path, bancada, *args):
+def _repo(tmp_path, bancada, *args, extra=None):
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": str(tmp_path),
@@ -71,7 +71,11 @@ def _repo(tmp_path, bancada, *args):
         "PF_SESSAO": "s1",
         "PF_TAREFAS_BIN": "/bin/true",
         "PF_GH_BIN": str(tmp_path / "forge" / "gh"),
+        # sem hook por padrao (debito 604): o hook real mediria o clone de fixture; so os testes
+        # do 604 apontam um hook de fixture
+        "PF_HOOK_PREPUSH": "/nao-existe/pre-push",
         **IDENT,
+        **(extra or {}),
     }
     return subprocess.run([str(REPO_BIN), *args], env=env, capture_output=True, text=True)
 
@@ -113,6 +117,64 @@ def test_sem_marca_nada_publica_e_diz_que_a_esteira_nao_integra(tmp_path):
     assert not (forge / "api").exists()
     assert f"sem medida do portão para {sha[:7]}" in r.stdout
     assert "não integra PR sem veredito" in r.stdout
+
+
+HOOK_FIXTURE = """#!/bin/sh
+# faz o papel do hooks/pre-push: le a linha do stdin e grava a marca da rev, como o hook real
+read -r _ oid _ _
+echo "$oid" >> "$(dirname "$0")/mediu"
+d="$PLATAFIRMA_INSTANCIA/var/pre-push/vereditos"
+mkdir -p "$d"
+[ -f "$(dirname "$0")/vermelho" ] && exit 1
+echo "verde demo-0123456789ab" > "$d/portao-demo-$oid"
+"""
+
+
+def _hook_de_fixture(tmp_path):
+    pasta = tmp_path / "hookfix"
+    pasta.mkdir()
+    hook = pasta / "pre-push"
+    hook.write_text(HOOK_FIXTURE)
+    hook.chmod(0o755)
+    return pasta, hook
+
+
+def _repo_com_hook(tmp_path, bancada, hook, *args):
+    return _repo(tmp_path, bancada, *args, extra={"PF_HOOK_PREPUSH": str(hook)})
+
+
+def test_sem_marca_o_empurrar_mede_pelo_hook_e_publica_debito_604(tmp_path):
+    """Clone sem core.hooksPath empurra sem o hook rodar (PR #66 do #4234): sem marca, o verbo
+    chama o hook com a rev empurrada, e a marca que ele grava vira o status."""
+    bancada, forge = _montar(tmp_path)
+    _, sha = _commit_na_bancada(tmp_path, bancada)
+    pasta, hook = _hook_de_fixture(tmp_path)
+    r = _repo_com_hook(tmp_path, bancada, hook, "empurrar", "demo")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (pasta / "mediu").read_text().split() == [sha]
+    assert f"statuses/{sha}" in (forge / "api").read_text()
+    assert f"veredito publicado: esteira/portao verde em {sha[:7]}" in r.stdout
+
+
+def test_hook_vermelho_nao_publica_debito_604(tmp_path):
+    bancada, forge = _montar(tmp_path)
+    _, sha = _commit_na_bancada(tmp_path, bancada)
+    pasta, hook = _hook_de_fixture(tmp_path)
+    (pasta / "vermelho").write_text("x\n")
+    r = _repo_com_hook(tmp_path, bancada, hook, "empurrar", "demo")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not (forge / "api").exists()
+    assert f"sem medida do portão para {sha[:7]}" in r.stdout
+
+
+def test_marca_ja_gravada_nao_mede_de_novo_debito_604(tmp_path):
+    bancada, forge = _montar(tmp_path)
+    _commit_na_bancada(tmp_path, bancada, marca="verde harness-0123456789ab")
+    pasta, hook = _hook_de_fixture(tmp_path)
+    r = _repo_com_hook(tmp_path, bancada, hook, "empurrar", "demo")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not (pasta / "mediu").exists()
+    assert (forge / "api").exists()
 
 
 def test_marca_sem_suite_publica_com_o_motivo(tmp_path):

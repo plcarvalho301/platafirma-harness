@@ -2279,6 +2279,18 @@ fecho_commit() {
 publica_veredito() {
   local c="$1" nome="${2%%@*}" sha="$3" v="" resto="" desc=""
   local marca="$PLATAFIRMA_INSTANCIA/var/pre-push/vereditos/portao-$nome-$sha"
+  # debito 604: o hook so grava a marca se o clone tem core.hooksPath; clone sem ele empurrava sem
+  # medir e o PR ficava sem veredito (PR #66 do #4234). Marca ausente: mede aqui, chamando o MESMO
+  # hook deste verbo com a linha que o git poria no stdin (ref nova: base origin/main). Nao e um
+  # segundo medidor: a marca, o memo por arvore e a regra de barrar continuam so do hook. Veredito
+  # vermelho ou nao medido apaga a marca, e o teste abaixo segue valendo: nada se publica.
+  if [ ! -r "$marca" ]; then
+    local hook; hook="${PF_HOOK_PREPUSH:-$(dirname "$(readlink -f "$0")")/../hooks/pre-push}"   # PF_HOOK_PREPUSH: teste
+    if [ -x "$hook" ]; then
+      printf 'veredito: sem marca do portão para %s; medindo agora pelo hook do harness\n' "${sha:0:7}"
+      (cd "$c" && printf 'refs/heads/x %s refs/heads/x %s\n' "$sha" 0000000000000000000000000000000000000000 | "$hook") >&2 || true
+    fi
+  fi
   if [ ! -r "$marca" ]; then
     printf 'veredito: sem medida do portão para %s; nada publicado, e a esteira não integra PR sem veredito\n' "${sha:0:7}"
     return 0

@@ -1467,6 +1467,18 @@ reiniciar_porta() {
   resumo_imprime
   local repo="$1"
   [ "$repo" = "$FAMILIA_BIN" ] || return 0
+  # Debito 605: nenhum verbo rodava deploy-harness/instalar, entao o core.hooksPath dos clones e as
+  # units so convergiam a mao. Promover o harness o roda em converge (e idempotente, roda N vezes,
+  # e e a sincronizacao que a biblioteca pede contra a deriva), e relata o que corrigiu ou nao
+  # pode corrigir. Nunca falha a promocao: o codigo ja esta no ar.
+  local inst="$PLATAFIRMA_RELEASE/harness/deploy-harness/instalar" saida_i rc_i=0
+  if [ -x "$inst" ]; then
+    saida_i="$("$inst" 2>&1)" || rc_i=$?
+    printf 'instalar:  %s\n' "$(grep -E '^resumo:' <<<"$saida_i" | tail -n 1)"
+    grep -E '^ +(corrigido|divergente) ' <<<"$saida_i" | sed 's/^ */instalar:    /' >&2 || true
+  else
+    printf 'instalar:  AVISO — %s ausente ou sem execucao; clones e units nao foram convergidos\n' "$inst" >&2
+  fi
   if [ "${PF_RELEASE_PORTA:-1}" != "1" ]; then
     printf 'porta:     restart desligado (PF_RELEASE_PORTA=0) — reinicie com: infra restart ops-mcp\n'
     return 0

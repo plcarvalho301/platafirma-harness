@@ -177,6 +177,20 @@ def test_write_file_hook_no_hooks_do_harness_sem_extensao_com_shebang(bancada, s
     scripts = s.write_file(path="platafirma-harness/scripts/x", content="#!/bin/sh\nexit 0\n")
     assert scripts.get("recusado") and "tipo" in scripts["motivo"], scripts
 
+def test_write_file_instalar_no_deploy_harness_sem_extensao_com_shebang(bancada, sem_pep):
+    """Debito 605: deploy-harness/instalar nao tem extensao; e morada de executavel como bin/ e
+    hooks/, so no harness. Sem shebang, ou em outro diretorio ou repositorio, segue recusado."""
+    sem = s.write_file(path="platafirma-harness/deploy-harness/instalar", content="echo\n")
+    assert sem.get("recusado") and "shebang" in sem["motivo"], sem
+    ok = s.write_file(path="platafirma-harness/deploy-harness/instalar",
+                      content="#!/usr/bin/env bash\nexit 0\n")
+    assert ok.get("ok"), ok
+    assert os.access(bancada / "platafirma-harness/deploy-harness/instalar", os.X_OK)
+    outro = s.write_file(path="platafirma-core/deploy-harness/instalar", content="#!/bin/sh\nexit 0\n")
+    assert outro.get("recusado") and "tipo" in outro["motivo"], outro
+    fora = s.write_file(path="platafirma-harness/deploy/instalar", content="#!/bin/sh\nexit 0\n")
+    assert fora.get("recusado") and "tipo" in fora["motivo"], fora
+
 def test_write_file_verbo_no_bin_da_bancada_por_cadeira_e_card(bancada, sem_pep):
     """card:3149 passo 3: a bancada e wt/platafirma-harness/<cadeira>/<card>/; o bin/ dela e
     morada de verbo como o do worktree plano (medido em 26/09: a porta recusava)."""
