@@ -592,6 +592,14 @@ so_id() {
   esac
 }
 
+# O NOME QUE SE EXIBE DA TASK É SÓ `t<n>` (ordem do dono, 13/11/2026, card #4245): a task é sempre
+# filha de uma story, que o contexto já diz, e `<story>.t<n>` é o que se DIGITA (`so_id`) e o que o
+# banco guarda. `rot` é a forma de listagem (`#id` no card, `t<n>` na task); `rotn`, a do relato
+# (`id` sem sustenido no card, `t<n>` na task). Quem exibe item prefixa o programa jq com isto.
+JQ_ROT='def rot: if ((.chave // "") | test("\\.t[0-9]+$")) then (.chave | sub("^[0-9]+\\."; "")) else "#\(.id)" end;
+def rotn: if ((.chave // "") | test("\\.t[0-9]+$")) then (.chave | sub("^[0-9]+\\."; "")) else (.id | tostring) end;
+'
+
 # CARD #347: a leitura mostra quem falta assinar, e SEM chamada extra — o detalhe do item
 # já devolve `sign_offs` desde o #466. Enquanto não estava aqui, a informação existia na API
 # e não existia para quem lê pelo terminal, que é a superfície que a cadeira tem.
@@ -621,9 +629,9 @@ ler() {
   local j; j=$(busca GET "/itens/$id") || return 1
   local term; term=$(_estados_terminais) || term='[]'
   if [ "$so_cabecalho" -eq 1 ]; then
-    printf '%s' "$j" | jq -r --argjson term "$term" '
+    printf '%s' "$j" | jq -r --argjson term "$term" "$JQ_ROT"'
       "# \(.titulo)",
-      "#\(.id) · \(.nivel_nome) · "
+      "\(rot) · \(.nivel_nome) · "
       + (if .estado_derivado != null
          then "\(.estado_derivado) [derivado; cru: \(.estado_nome) (\(.estado_fase))]"
          else "\(.estado_nome) (\(.estado_fase))"
@@ -633,16 +641,16 @@ ler() {
       + (if .executor then " · executor: \(.executor)" else "" end)
       + (if (.ancestrais|length) > 0 then "\n  em: " + ([.ancestrais[] | "#\(.id) \(.titulo)"] | join(" > ")) else "" end)
       + (if ((.bloqueia // []) | length) > 0
-         then "\n  bloqueia: " + ([.bloqueia[] | "#\(.id) (\(.estado))"] | join(", ")) else "" end)
+         then "\n  bloqueia: " + ([.bloqueia[] | "\(rot) (\(.estado))"] | join(", ")) else "" end)
       + (if ((.bloqueado_por // []) | length) > 0
-         then "\n  bloqueado por: " + ([.bloqueado_por[] | "#\(.id) (\(.estado))"] | join(", ")) else "" end)
+         then "\n  bloqueado por: " + ([.bloqueado_por[] | "\(rot) (\(.estado))"] | join(", ")) else "" end)
       + (([(.bloqueado_por // [])[] | select(.estado as $e | ($term | index([$e])) == null)] | if length > 0
-         then "\n  travada por: " + ([.[] | "#\(.id) (\(.estado))"] | join(", ")) else "" end))' | para_texto
+         then "\n  travada por: " + ([.[] | "\(rot) (\(.estado))"] | join(", ")) else "" end))' | para_texto
     return 0
   fi
-  printf '%s' "$j" | jq -r --argjson term "$term" '
+  printf '%s' "$j" | jq -r --argjson term "$term" "$JQ_ROT"'
     "# \(.titulo)",
-    "#\(.id) · \(.nivel_nome) · "
+    "\(rot) · \(.nivel_nome) · "
     + (if .estado_derivado != null
        then "\(.estado_derivado) [derivado; cru: \(.estado_nome) (\(.estado_fase))]"
        else "\(.estado_nome) (\(.estado_fase))"
@@ -652,11 +660,11 @@ ler() {
     + (if .executor then " · executor: \(.executor)" else "" end)
     + (if (.ancestrais|length) > 0 then "\n  em: " + ([.ancestrais[] | "#\(.id) \(.titulo)"] | join(" > ")) else "" end)
     + (if ((.bloqueia // []) | length) > 0
-       then "\n  bloqueia: " + ([.bloqueia[] | "#\(.id) (\(.estado))"] | join(", ")) else "" end)
+       then "\n  bloqueia: " + ([.bloqueia[] | "\(rot) (\(.estado))"] | join(", ")) else "" end)
     + (if ((.bloqueado_por // []) | length) > 0
-       then "\n  bloqueado por: " + ([.bloqueado_por[] | "#\(.id) (\(.estado))"] | join(", ")) else "" end)
+       then "\n  bloqueado por: " + ([.bloqueado_por[] | "\(rot) (\(.estado))"] | join(", ")) else "" end)
     + (([(.bloqueado_por // [])[] | select(.estado as $e | ($term | index([$e])) == null)] | if length > 0
-       then "\n  travada por: " + ([.[] | "#\(.id) (\(.estado))"] | join(", ")) else "" end)),
+       then "\n  travada por: " + ([.[] | "\(rot) (\(.estado))"] | join(", ")) else "" end)),
     "",
     (if ((.sign_offs // []) | length) > 0 then
        (["sign-off:"]
@@ -697,12 +705,12 @@ ler() {
 # registro (um GET pequeno), e não do board inteiro, que é o que esta função puxava antes.
 filhas_do_json() {
   local termos; termos=$(busca GET /registro | jq -c '[.estados[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado]') || return 1
-  printf '%s' "$1" | jq -r --argjson term "$termos" '
+  printf '%s' "$1" | jq -r --argjson term "$termos" "$JQ_ROT"'
     ($term + ["entregue","recusada","cancelada","englobada","encerrada","resolvido"] | unique) as $t
     | .filhas[]?
     | . as $f
     | select($t | index([$f.estado_derivado // $f.estado]) == null)
-    | "  \(if ($f.chave // "") | test("\\.t[0-9]+$") then $f.chave else "#\($f.id)" end)\t\($f.estado)\t\($f.cadeira // "—")\t\($f.titulo)"
+    | "  \($f | rot)\t\($f.estado)\t\($f.cadeira // "—")\t\($f.titulo)"
       + (if $f.travada
          then "  [travada por " + ([($f.bloqueada_por // [])[] | "#\(if type == "object" then .id else . end)"] | join(", ")) + "]"
          else "" end)'
@@ -715,14 +723,14 @@ filhas_do_json() {
 # precisa ver é onde a fita anterior parou, e isso está nas concluídas também. $1 é o JSON da
 # story, $2 a lista de estados terminais (a mesma de `ler`).
 tasks_do_json() {
-  printf '%s' "$1" | jq -r --argjson term "${2:-[]}" '
+  printf '%s' "$1" | jq -r --argjson term "${2:-[]}" "$JQ_ROT"'
     def aberta: (.estado as $e | ($term | index([$e])) == null);
     def rotulo: if aberta then "aberta" elif .estado == "entregue" then "concluída" else .estado end;
     [.filhas[]?] as $ts
     | if ($ts | length) == 0 then empty else
         "tasks (\([$ts[] | select(aberta)] | length) abertas de \($ts | length)):",
         ($ts | to_entries[] | .key as $i | .value
-           | "  \($i + 1). \(if (.chave // "") | test("\\.t[0-9]+$") then .chave else "#\(.id)" end)\t\(rotulo)\t\(.estado)\t\(.titulo)"
+           | "  \($i + 1). \(rot)\t\(rotulo)\t\(.estado)\t\(.titulo)"
              + (if .travada
                 then "  [travada por " + ([(.bloqueada_por // [])[] | "#\(if type == "object" then .id else . end)"] | join(", ")) + "]"
                 else "" end))
@@ -860,7 +868,7 @@ criar() {
       + (if $x == "" then {} else {executor:$x} end)
       + (if $r == "" then {} else {registro:$r} end)' \
     | envia POST /itens \
-    | jq -r '"item \(.chave // .id) criado: \(.titulo)"'
+    | jq -r "$JQ_ROT"'"item \(rotn) criado: \(.titulo)"'
 }
 
 # EDITAR É O PATCH DO CORPO COM NOME DE ATO — card #3134 (dono, 25/09/2026): toda chamada
@@ -1184,7 +1192,7 @@ mover() {
       + (if $g == "" then {} else {englobado_em:($g|tonumber)} end)
       + (if $d == "" then {} else {decisao:($d|tonumber)} end)' \
     | envia PATCH "/itens/$id$q") || return 1
-  printf '%s' "$resp" | jq -r '"item \(.chave // .id) → "
+  printf '%s' "$resp" | jq -r "$JQ_ROT"'"item \(rotn) → "
              + (if .estado_derivado != null
                 then "\(.estado_derivado) [derivado; cru: \(.estado_nome)]"
                 else .estado_nome
@@ -1205,10 +1213,10 @@ mover() {
     if [ -n "$bpor" ] && [ "$bpor" != "[]" ]; then
       local term; term=$(_estados_terminais) || term='[]'
       local travada
-      travada=$(printf '%s' "$bpor" | jq -r --argjson term "$term" '
+      travada=$(printf '%s' "$bpor" | jq -r --argjson term "$term" "$JQ_ROT"'
         [.[] | select(.estado as $e | ($term | index([$e])) == null)]
         | if length > 0
-          then "  travada por: " + ([.[] | "#\(.id) (\(.estado))"] | join(", "))
+          then "  travada por: " + ([.[] | "\(rot) (\(.estado))"] | join(", "))
           else empty
           end')
       [ -n "$travada" ] && printf '%s\n' "$travada"

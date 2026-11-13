@@ -108,7 +108,9 @@ def test_ler_pela_chave_da_task_resolve_para_o_id_e_le_o_item(stub):
     assert p.returncode == 0, p.stderr
     assert ("GET", "/itens/chave/7.t3") in s.chamadas
     assert ("GET", f"/itens/{ID_INTERNO}") in s.chamadas
-    assert "item 7.t3" in p.stdout
+    # o nome exibido é só t3, e o id interno não aparece
+    assert "t3 · task ·" in p.stdout and "#7.t3" not in p.stdout
+    assert str(ID_INTERNO) not in p.stdout
 
 
 def test_o_sustenido_antes_da_chave_e_aceito(stub):
@@ -143,7 +145,7 @@ def test_mover_a_task_pela_chave_patcha_o_id_e_mostra_a_chave(stub):
     p = _run(["mover", "7.t3", "entregue"], base)
     assert p.returncode == 0, p.stderr
     assert any(c[0] == "PATCH" and c[1].startswith(f"/itens/{ID_INTERNO}") for c in s.chamadas)
-    assert "item 7.t3 →" in p.stdout
+    assert "item t3 →" in p.stdout
     assert str(ID_INTERNO) not in p.stdout
 
 
@@ -151,7 +153,7 @@ def test_criar_task_mostra_a_chave_e_nao_o_id_interno(stub):
     s, base = stub
     p = _run(["criar", "task de prova", "--nivel", "task", "--pai", "7"], base)
     assert p.returncode == 0, p.stderr
-    assert "item 7.t3 criado: task de prova" in p.stdout
+    assert "item t3 criado: task de prova" in p.stdout
     assert str(ID_INTERNO) not in p.stdout
 
 
@@ -173,6 +175,21 @@ def test_a_leitura_da_story_lista_as_tasks_pela_chave(stub):
     assert p.returncode == 0, p.stderr
     linhas = p.stdout.splitlines()
     i = linhas.index("tasks (1 abertas de 2):")
-    assert linhas[i + 1].startswith("  1. 7.t1") and "concluída" in linhas[i + 1]
-    assert linhas[i + 2].startswith("  2. 7.t2") and "aberta" in linhas[i + 2]
-    assert str(ID_INTERNO) not in p.stdout
+    assert linhas[i + 1].startswith("  1. t1\t") and "concluída" in linhas[i + 1]
+    assert linhas[i + 2].startswith("  2. t2\t") and "aberta" in linhas[i + 2]
+    assert "7.t" not in p.stdout and str(ID_INTERNO) not in p.stdout
+
+
+def test_os_vinculos_da_task_exibem_t_n_e_os_do_card_seguem_com_sustenido(stub):
+    s, base = stub
+    s.itens[ID_INTERNO] = _item(
+        ID_INTERNO, "7.t3", 3, "task",
+        bloqueia=[{"id": 1000000004, "chave": "7.t4", "titulo": "x", "estado": "em-execucao"}],
+        bloqueado_por=[{"id": 11, "chave": "7.t1", "titulo": "y", "estado": "em-execucao"},
+                       {"id": 40, "chave": "40", "titulo": "z", "estado": "em-execucao"}])
+    p = _run(["ler", "7.t3"], base)
+    assert p.returncode == 0, p.stderr
+    assert "bloqueia: t4 (em-execucao)" in p.stdout
+    assert "bloqueado por: t1 (em-execucao), #40 (em-execucao)" in p.stdout
+    assert "travada por: t1 (em-execucao), #40 (em-execucao)" in p.stdout
+    assert "1000000004" not in p.stdout
