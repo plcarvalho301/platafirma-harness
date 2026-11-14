@@ -205,7 +205,7 @@ def dia_da_particao(api, dia: str, hoje: date, bruto_ausente, cadeira: str | Non
 
 # --- metrica verbos ------------------------------------------------------------------------------------
 
-POR_VERBOS = ("superficie", "cadeira", "origem")
+POR_VERBOS = ("dia", "hora", "cadeira", "origem")
 COLS_VERBOS_PARTICAO = ("verbo", "giros", "erros", "taxa", "gramatica", "execucao", "negativa", "negada",
                         "interrompida")
 
@@ -354,7 +354,8 @@ def bytes_da_particao(api, desde: str, ate: str, transporte: tuple, cadeira: str
         for s in s_atos:
             k = tuple((s.get("chave") or {}).get(campo) for campo in por)
             grupos_atos[k].append(s)
-        todas_chaves = sorted(set(grupos_tools.keys()) | set(grupos_atos.keys()))
+        todas_chaves = sorted(set(grupos_tools.keys()) | set(grupos_atos.keys()),
+                              key=lambda k: tuple((v is None, v) for v in k))
         particoes = []
         for k in todas_chaves:
             p_tools = _juntar_bytes(grupos_tools.get(k, []), lambda c: c.get("tool") or "-")

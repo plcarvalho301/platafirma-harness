@@ -520,5 +520,59 @@ def test_sem_ato_imprime_uso_exit_2(capsys):
 
 def test_ajuda_sai_zero_no_stdout(capsys):
     assert m.main(["metrica", "--ajuda"]) == 0
-    assert "uso:" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "uso:" in out
+    assert "em `verbos`: dia, hora, cadeira, origem" in out
+
+
+def test_verbos_por_superficie_recusa_exit_2(capsys):
+    assert m.main(["metrica", "verbos", "2026-10-30", "--por", "superficie", "--fonte", "particao"]) == 2
+    err = capsys.readouterr().err
+    assert "--por superficie desconhecido" in err
+    assert "dia, hora, cadeira, origem" in err
+
+
+def test_verbos_por_hora_pela_particao(monkeypatch, capsys):
+    chamadas = []
+
+    class _ApiFalsa:
+        def chamar(self, metodo, caminho, params=None):
+            chamadas.append((metodo, caminho, params))
+            if caminho == "/acervo/log/dias":
+                return 200, {"itens": [{"dia": "2026-10-30", "cobertura": "completo", "versao_extrator": "1"}]}
+            return 200, {
+                "series": [
+                    {"chave": {"tool": "repo", "ato": "ler", "classe": "ok", "hora": 9}, "n": 3},
+                    {"chave": {"tool": "repo", "ato": "ler", "classe": "ok", "hora": 14}, "n": 5},
+                ]
+            }
+
+    monkeypatch.setattr(m, "_api", lambda: _ApiFalsa())
+    assert m.main(["metrica", "verbos", "2026-10-30", "--por", "hora", "--fonte", "particao"]) == 0
+    dados = json.loads(capsys.readouterr().out)
+    assert dados["por"] == ["hora"]
+    assert [p["chave"] for p in dados["particoes"]] == [{"hora": 14}, {"hora": 9}]
+    assert any(c[1] == "/acervo/log/giros/medida" and "hora" in c[2]["por"].split(",") for c in chamadas)
+
+
+def test_verbos_por_bytes_ordena_com_none_e_hora():
+    class _ApiBytes:
+        def chamar(self, metodo, caminho, params=None):
+            por = params["por"].split(",")
+            if "ato" in por:
+                return 200, {"series": [
+                    {"chave": {"tool": "repo", "ato": "ler", "hora": None},
+                     "n": 1, "com_bytes": 1, "servidos": 10, "produzidos": 10, "podados": 0, "cortados": 0, "p50": 10, "p90": 10},
+                    {"chave": {"tool": "repo", "ato": "ler", "hora": 9},
+                     "n": 2, "com_bytes": 2, "servidos": 20, "produzidos": 20, "podados": 0, "cortados": 0, "p50": 10, "p90": 10},
+                ]}
+            return 200, {"series": [
+                {"chave": {"tool": "repo", "hora": None},
+                 "n": 1, "com_bytes": 1, "servidos": 10, "produzidos": 10, "podados": 0, "cortados": 0, "p50": 10, "p90": 10},
+                {"chave": {"tool": "repo", "hora": 9},
+                 "n": 2, "com_bytes": 2, "servidos": 20, "produzidos": 20, "podados": 0, "cortados": 0, "p50": 10, "p90": 10},
+            ]}
+
+    r = m.particao.bytes_da_particao(_ApiBytes(), "2026-10-30", "2026-10-30", (), por=["hora"])
+    assert [p["chave"] for p in r["particoes"]] == [{"hora": 9}, {"hora": None}]
 
