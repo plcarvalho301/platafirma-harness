@@ -654,8 +654,16 @@ PY
   case "$modo" in
     py:*)
       if [[ "${REG_LOCK:-}" == venv:* ]]; then
-        [ "${#xdist[@]}" -gt 0 ] && ! "${modo#py:}" -c "import xdist" 2>/dev/null && xdist=()
-        runner=("${modo#py:}" -m pytest)
+        if "${modo#py:}" -c "import pytest" 2>/dev/null; then
+          [ "${#xdist[@]}" -gt 0 ] && ! "${modo#py:}" -c "import xdist" 2>/dev/null && xdist=()
+          runner=("${modo#py:}" -m pytest)
+        else
+          local uv_bin
+          uv_bin="$(resolver_uv)" || exit 3
+          local com=(--with pytest)
+          [ "${#xdist[@]}" -gt 0 ] && com+=(--with pytest-xdist)
+          runner=("$uv_bin" run --no-project --python "${modo#py:}" "${com[@]}" pytest)
+        fi
       else
         local com=(--with pytest)
         [ "${#xdist[@]}" -gt 0 ] && com+=(--with pytest-xdist)

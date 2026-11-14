@@ -50,7 +50,7 @@ except ImportError:
 BASE = (os.environ.get("RAG_API_BASE") or DEFAULT_BASE).rstrip("/")
 TOKEN = os.environ.get("RAG_API_TOKEN") or DEFAULT_TOKEN
 
-TETO_ITENS = 500           # TETO_ITENS do servidor (casa_lotes.py); o suporte tem ~385 docs
+TETO_ITENS = 2000          # TETO_ITENS do servidor (casa_lotes.py); folga acima de ~502 docs do suporte
 DEGRAUS = ("catalogar", "chunk", "embed", "vetor")
 VEREDITOS = ("criar", "edicao", "ja_ingerido", "reprovado", "retirar")
 RE_REV = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/~^-]{0,199}")
