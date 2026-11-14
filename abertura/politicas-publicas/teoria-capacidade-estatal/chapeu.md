@@ -1,46 +1,35 @@
-# chapéu teoria-capacidade-estatal — por que o Estado consegue ou não consegue
+# Teoria da capacidade estatal
 
-Vestido este chapéu, a matéria é o mecanismo: por que um arranjo produz ou destrói a
-capacidade de o Estado fazer o que se propõe. Não é como os sistemas se ligam (isso é
-`arranjo-institucional`) nem quem compra e quem responde (isso é `analise-politica`) —
-é a pergunta anterior a ambas: de onde vem, e para onde vai, a competência de executar.
-O lastro é Andrews-Pritchett-Woolcock (Building State Capability) e a dinâmica de
-Repenning-Sterman: capacidade é estoque, não evento, e o que a consome é lento e difuso
-demais para ser ligado à causa que o causou.
+Entidade: chapeu
 
-## a) Espaço de problema
+## Espaço de problema
 
-- **Falha de capacidade ou de vontade** — o Estado não fez: faltou saber fazer, ou
-  faltou querer? Recurso, mandato e coordenação pedem remédios diferentes, e confundir
-  os dois receita o remédio errado.
-- **O que a competência ausente fecha** — quem não sabe especificar também não sabe
-  reconhecer que especificou mal; a mesma competência falta nos dois lados, e por isso
-  o órgão não percebe o que está perdendo.
-- **Estoque, não fluxo** — capacidade não cai na hora em que se para de investir nela;
-  parece que deu certo, e o buraco só aparece depois, maior. A pergunta é o que está
-  sendo consumido agora sem aparecer no indicador.
-- **Trazer para dentro vs. comprar a solução** — sai-se da armadilha trazendo quem já
-  tem a competência, nunca contratando a solução; cada contrato de escopo fechado
-  afasta o dia em que o órgão saberia fazer.
-- **A parte exclusiva** — o que só este órgão faz (reconhecer o vínculo, lançar o
-  tributo, liquidar o pagamento) é o que não se entrega sob escopo fechado; o comum
-  (folha, protocolo, login) delega-se sem perda.
+- A falha é de capacidade ou de vontade: faltou saber fazer, ou faltou querer?
+- Recurso, mandato e coordenação pedem remédios diferentes: qual deles faltou?
+- O que está sendo consumido agora sem aparecer no indicador? Capacidade não cai na hora em que se para de investir nela, e o buraco aparece depois, maior.
+- Quem não sabe especificar também não reconhece que especificou mal: o órgão percebe o que está perdendo?
+- É armadilha de capacidade: cada contrato de escopo fechado afasta o dia em que o órgão saberia fazer?
+- Pela titularidade do core, o que só este órgão faz, e por isso não se entrega sob escopo fechado, e o que é comum, como folha, protocolo e autenticação, e se delega sem perda?
+- A obrigação foi ligada antes do instrumento que a torna cumprível (carga prematura)?
+- A capacidade se constrói aqui por adaptação iterativa orientada a problema, em ciclos curtos com quem convive com a solução, ou a forma foi adotada sem ninguém ter aprendido?
+- O que a organização retém quando a equipe sai (retenção estrutural, memória organizacional)?
 
-## b) Régua de resposta
+## Régua de resposta
 
-Resposta boa nomeia o mecanismo e o que ele consome sem aparecer — "é armadilha de
-capacidade: cada contrato de escopo fechado entrega a parte exclusiva, e o órgão perde a
-competência de especificar a próxima, sem perceber que perdeu". Resposta ruim toma o
-sintoma por causa — "atrasou porque a equipe é pequena" —, sem o estoque que foi
-consumido para cavar o buraco, nem o mecanismo. No pedido ambíguo, a primeira pergunta é
-se a falha é de capacidade ou de vontade.
+Resposta boa nomeia o mecanismo e o que ele consome sem aparecer: é armadilha de capacidade, cada contrato de escopo fechado entrega a parte exclusiva, e o órgão perde a competência de especificar a próxima.
 
-## c) Consulta dirigida
+Resposta ruim toma o sintoma por causa, como «atrasou porque a equipe é pequena», sem o estoque que foi consumido nem o mecanismo.
 
-O canônico deste chapéu volta pela faceta `capacidade-estatal`. Abre-se além dela
-quando:
+## Consulta dirigida
 
-| Quando a pergunta é de | Abre para | Porque este chapéu depende disso |
-|---|---|---|
-| como a organização retém ou perde o que aprendeu | `dominio=["gestao-organizacional"]` | memória organizacional e gap desenho-realidade dizem por que capacidade inscrita se esvazia quando a equipe que a mantinha sai |
-| como um arranjo concreto encarna o mecanismo | `dominio=["capacidade-estatal"]` filtrando os conceitos de `arranjo-institucional` | a armadilha se vê num caso: SIGEPE congelado, RNDS com carga prematura; o mecanismo é a leitura do arranjo |
+- O mecanismo: Andrews, Pritchett e Woolcock, Building State Capability, trazem a armadilha de capacidade, a carga prematura e a adaptação iterativa.
+- Capacidade como estoque: Repenning e Sterman, sobre a dinâmica em que o que consome a capacidade é lento e difuso demais para ser ligado à causa.
+- Como a organização retém ou perde o que aprendeu: a busca vai por memória organizacional e gap desenho-realidade.
+- Forma importada sem função: a busca vai por isomorfismo institucional.
+- Retenção estrutural é conceito sem obra ancorada; a consulta por ela volta vazia.
+
+## Rótulos de busca
+
+- rótulos: capacidade estatal · armadilha de capacidade · titularidade do core · capacidade absortiva · retenção estrutural · carga prematura · adaptação iterativa orientada a problema · isomorfismo institucional · memória organizacional · gap desenho-realidade · metis · nova gestao publica
+- recorte de domínio: capacidade-estatal · gestao-organizacional
+- homônimos: capacidade, que neste ramo é a capacidade do Estado de executar, e não a capacidade de negocio da arquitetura · core, que é a parte exclusiva do órgão, e não o núcleo de um sistema

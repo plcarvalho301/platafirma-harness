@@ -142,6 +142,28 @@ def _sem_acento(s: str) -> str:
     return "".join(c for c in nf if not unicodedata.combining(c))
 
 
+_RE_ROTULOS_SECAO = re.compile(r"^##\s+R[óo]tulos de busca\b.*?$(.*?)(?=^##\s+|\Z)", re.M | re.S)
+_RE_ROTULOS_LINHA = re.compile(r"^-\s*r[óo]tulos:\s*(.*)$", re.M | re.I)
+
+
+def _rotulos_do_chapeu_md(chapeu_md_path: str) -> list[str] | None:
+    """Extrai `- rótulos: a · b · ...` da seção `## Rótulos de busca` do chapeu.md (casa-espelho)."""
+    if not os.path.isfile(chapeu_md_path):
+        return None
+    with open(chapeu_md_path, encoding="utf-8") as f:
+        texto = f.read()
+    sec = _RE_ROTULOS_SECAO.search(texto)
+    if not sec:
+        return None
+    ml = _RE_ROTULOS_LINHA.search(sec.group(1))
+    if not ml:
+        return None
+    rotulos = [s.strip() for s in ml.group(1).split(" · ") if s.strip()]
+    if rotulos and rotulos[-1].endswith("."):
+        rotulos[-1] = rotulos[-1][:-1].strip()
+    return [r for r in rotulos if r]
+
+
 def rotulos_da_gerencias(persona_md: str, base_dir: str | None = None) -> tuple[dict[str, list[str]], list[str]]:
     """{slug-do-chapeu: [rótulos]} a partir da seção `## Gerências` de um `persona.md`
     (molde novo, card #3110 — substitui `rotulos_da_secao_b`/`## b)` do `chapeu.md`
@@ -183,6 +205,12 @@ def rotulos_da_gerencias(persona_md: str, base_dir: str | None = None) -> tuple[
                 f"gerência '{slug_bruto}' (slug '{slug}') sem diretório de chapéu "
                 f"correspondente — órfão de chapéu")
             continue
+
+        if base_dir is not None:
+            chapeu_rotulos = _rotulos_do_chapeu_md(os.path.join(base_dir, slug, "chapeu.md"))
+            if chapeu_rotulos is not None:
+                gerencias[slug] = chapeu_rotulos
+                continue
 
         segmentos = [s.strip() for s in cauda.split(" · ") if s.strip()]
         if not segmentos:
