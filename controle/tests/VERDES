@@ -340,3 +340,5 @@ tests/test_posicao_4120.py | bin/acervo bin/_acervo/**
 tests/test_ingerir_drive.py | bin/ingerir bin/_ingerir/**
 # Card #4096: `tarefas espera-dono` exibe stories em refinamento com regras novas pendentes além das perguntas legadas.
 tests/test_espera_regras.py | bin/tarefas
+# DTs 278 e 449: `tarefas ler` mostra `resolvido_de` e recusa de `registro-de-negocio` não força `--estado priorizada`.
+testes/test_tarefas_dt_278_449.py | bin/tarefas
