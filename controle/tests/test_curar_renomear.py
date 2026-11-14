@@ -539,3 +539,18 @@ def test_insatisfazivel_de_outro_conceito_que_surge_na_troca_continua_reprovando
     p = _curar(env, *BASE_ARGS)
     assert p.returncode == 1, p.stdout + p.stderr
     assert "HermiT insatisfazíveis 1 -> 2  REPROVA +1  novos: outra-classe" in p.stdout
+
+
+def test_imprimir_export_sem_bancada_nao_diz_regenerado():
+    codigo = (
+        "import importlib.util\n"
+        "from importlib.machinery import SourceFileLoader\n"
+        f"spec = importlib.util.spec_from_loader('curar_dt139', SourceFileLoader('curar_dt139', {str(CURAR)!r}))\n"
+        "mod = importlib.util.module_from_spec(spec)\n"
+        "spec.loader.exec_module(mod)\n"
+        "mod._imprimir_export('acervo exportar falhou: sem bancada na sessao')\n"
+    )
+    p = subprocess.run([PY, "-c", codigo], capture_output=True, text=True, check=True)
+    assert "NÃO regenerado" in p.stdout
+    assert "acervo exportar" in p.stdout
+    assert "regenerado no clone" not in p.stdout
