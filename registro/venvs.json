@@ -26,7 +26,8 @@
       "esteira": "codigo"
     },
     "platafirma-ui": {
-      "esteira": "codigo"
+      "esteira": "codigo",
+      "conferir_no_ar": true
     },
     "platafirma-rastreador": {
       "esteira": "codigo",
