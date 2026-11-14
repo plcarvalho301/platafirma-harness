@@ -233,9 +233,10 @@ def bancos_registrados() -> dict:
         or Path(__file__).resolve().parents[2] / "registro/bancos.json"
     )
     try:
-        return json.loads(arq.read_text())
+        dados = json.loads(arq.read_text())
     except (OSError, ValueError):
         raise Falha(3, "registro-de-bancos-ausente") from None
+    return {k: v for k, v in dados.items() if not k.startswith("_")}
 
 
 def origem_id(t: dict) -> str:

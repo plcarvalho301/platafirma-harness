@@ -342,3 +342,5 @@ tests/test_ingerir_drive.py | bin/ingerir bin/_ingerir/**
 tests/test_espera_regras.py | bin/tarefas
 # DTs 278 e 449: `tarefas ler` mostra `resolvido_de` e recusa de `registro-de-negocio` não força `--estado priorizada`.
 testes/test_tarefas_dt_278_449.py | bin/tarefas
+# DTs 634, 375 e 523: volta automática não mexe na abertura, fallback de stacks e declaração de banco fora da casa.
+tests/test_dts_634_375_523.py | bin/release bin/_release/** lib/analise/receita.py registro/bancos.json

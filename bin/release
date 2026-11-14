@@ -934,15 +934,41 @@ ler_stacks_da_familia() {
   STACKS_FORA=()
   STACKS_CATALOGO=()
   STACKS_TESTE=()
-  local acervo_bin; acervo_bin="$(achar_verbo acervo)"
-  if [ -z "$acervo_bin" ]; then
-    printf 'release: dependência ausente: acervo (registro de stacks) não encontrado\n' >&2
-    return 3
+  local acervo_bin; acervo_bin="$(achar_verbo acervo || true)"
+  if [ -n "$acervo_bin" ]; then
+    json="$("$acervo_bin" ler casa stack "$repo" --json 2>/dev/null || true)"
   fi
-  json="$("$acervo_bin" ler casa stack "$repo" --json 2>/dev/null)" || {
+  if [ -z "$json" ]; then
+    # DT 375: fallback direto em acervo.stack quando o acervo servido quebrou, para
+    # `release promover` e `release reverter` não perderem a porta de recuperação.
+    local pg="${PF_ACERVO_PG:-rag-extractor-pg}" usr="${PF_ACERVO_PG_USER:-rag}" db="${PF_ACERVO_PG_DB:-rag_extractor}"
+    local sql_tsv
+    [[ "$repo" =~ ^[A-Za-z0-9_.-]+$ ]] || { printf 'release: nome de família inválido: %s\n' "$repo" >&2; return 2; }
+    sql_tsv="$(docker exec -i "$pg" psql -U "$usr" -d "$db" -v ON_ERROR_STOP=1 -tAF'|' \
+      -c "select slug, coalesce(repo,''), coalesce(compose,''), coalesce(reversao::text,'null') from acervo.stack where repo = '$repo' order by slug" 2>/dev/null || true)"
+    if [ -n "$sql_tsv" ]; then
+      json="$(python3 -c '
+import sys, json
+out = []
+for l in sys.stdin.read().splitlines():
+    if not l.strip(): continue
+    c = l.split("|")
+    if len(c) != 4: continue
+    slug, rp, comp, rev = c
+    if comp.startswith("["):
+        try: comp = json.loads(comp)
+        except ValueError: pass
+    out.append({"slug": slug, "repo": rp, "compose": comp or None,
+                "reversao": None if rev in ("null", "") else json.loads(rev)})
+print(json.dumps(out))
+' <<<"$sql_tsv" 2>/dev/null || true)"
+      [ -z "$json" ] || printf 'aviso: acervo ler casa stack falhou; registro de stacks lido direto de acervo.stack\n' >&2
+    fi
+  fi
+  if [ -z "$json" ]; then
     printf 'release: dependência ausente: acervo ler casa stack não respondeu (registro de stacks)\n' >&2
     return 3
-  }
+  fi
   local linhas
   linhas="$(python3 -c '
 import sys, json
@@ -2420,8 +2446,9 @@ cmd_promover() {
         exit 4
       fi
       printf 'release: conferencia no ar VERMELHA na rev %s: %s — voltando a %s\n' "${sha:0:7}" "$CONF_AR_DETALHE" "${atual:0:7}" >&2
-      # restart da porta desligado no filho: quem reinicia e este processo, depois da tela
-      PF_RELEASE_PORTA=0 "$AQUI/release" reverter "$repo" "$atual" || true
+      # restart da porta e abertura desligados no filho: quem reinicia e este processo,
+      # e a abertura tem publicacao propria (DT 634)
+      PF_RELEASE_PORTA=0 PF_RELEASE_ABERTURA=0 "$AQUI/release" reverter "$repo" "$atual" || true
       local depois="" rc_id2=0
       resolver_identidade "$repo" || rc_id2=$?
       [ "$rc_id2" -eq 0 ] && depois="$SHA"
@@ -2554,9 +2581,11 @@ cmd_reverter() {
   printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${alvo:0:7}"
   assentar_atalhos "$repo"
   local rc_ab=0
-  # reverter volta a uma abertura ja servida: o gate de rotas avisa, nao barra (card #3143)
-  ROTAS_GATE=aviso
-  publicar_abertura_da_familia "$repo" "$alvo" || rc_ab=$?
+  if [ "${PF_RELEASE_ABERTURA:-1}" != 0 ]; then
+    # reverter volta a uma abertura ja servida: o gate de rotas avisa, nao barra (card #3143)
+    ROTAS_GATE=aviso
+    publicar_abertura_da_familia "$repo" "$alvo" || rc_ab=$?
+  fi
 
   local rc_st=0
   promover_stacks "$alvo" || rc_st=$?
