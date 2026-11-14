@@ -9,7 +9,7 @@ Por que existe: Plano de controle do harness, especificação de tela — `acerv
 ## Como sobe
 
 Pré-requisitos: as redes externas `plataforma-wiki_default` e `motor_malha` de pé (stacks de
-conhecimento e do motor), e a imagem `platafirma/ui:0.1.0` disponível, de onde o build copia o front.
+conhecimento e do motor), e a imagem `platafirma/ui:0.22.0` disponível, de onde o build copia o front.
 
 ```
 release promover platafirma-harness <sha>

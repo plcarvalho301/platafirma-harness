@@ -315,7 +315,10 @@ def _agrupa_busca(linhas: list[str]) -> tuple[list[str], int] | None:
         for lin, resto in ms[:RG_MAX_MATCH]:
             fora.append(f"  {lin}: {resto.strip()[:LINHA_LONGA]}")
         if len(ms) > RG_MAX_MATCH:
-            fora.append(f"  … +{len(ms) - RG_MAX_MATCH} matches neste arquivo")
+            fora.append(
+                f"  … +{len(ms) - RG_MAX_MATCH} matches neste arquivo "
+                f"(filtre por '{valor}' ou use --json; inteiro no cru em poda_aviso)"
+            )
             cortadas += len(ms) - RG_MAX_MATCH
     return fora, cortadas
 
@@ -687,7 +690,8 @@ def intocavel(r: dict) -> bool:
 def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
                giro: int, tool: str, ledger: Ledger | None,
                nome_derrame: str, cosmetica: bool = False,
-               constitutiva: bool = False) -> tuple[str, dict]:
+               constitutiva: bool = False,
+               preserva_branco: bool = False) -> tuple[str, dict]:
     """Um retorno textual, a régua inteira na ordem do R8. Devolve (texto, campo `poda`)."""
     # A leitura de arquivo E a alca de restauracao (invariante ii): o aviso de poda manda
     # reler o cru com ela. Janelar aqui fecha a unica porta de volta — medido em 20/09:
@@ -695,9 +699,10 @@ def poda_texto(texto: str, *, cap: int, cauda: bool, alca: str, sessao_id: str,
     # JSON inteiro e uma linha so. Quem le ja limitou o tamanho por `max_bytes`; linha
     # longa, base64 e `\r` ali sao o conteudo pedido, nao ruido (spec ler-arquivo §6, §11).
     leitura = tool in TOOLS_LEITURA
-    lavado, rel = lava(texto, cap, cosmetica=cosmetica, preserva_branco=leitura,
-                       janela=not leitura, curar=not leitura, blob=not leitura,
-                       terminal=not leitura)
+    lavado, rel = lava(texto, cap, cosmetica=cosmetica,
+                       preserva_branco=leitura or preserva_branco,
+                       janela=not leitura, curar=not (leitura or preserva_branco),
+                       blob=not leitura, terminal=not leitura)
     meta = {"ato": tool, "giro": giro, "sha": sha_servido(lavado),
             "lavado": rel["classes"], "bytes_produzidos": rel["bytes_antes"]}
     if cosmetica:

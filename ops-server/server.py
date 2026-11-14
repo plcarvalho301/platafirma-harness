@@ -390,10 +390,15 @@ def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
         # `max_bytes`, e cortar quebraria a soma das páginas (spec ler-arquivo §6).
         cap_efetivo = (max(CAP, len(texto.encode("utf-8", "replace")))
                        if tool in _poda.TOOLS_LEITURA else CAP)
+        # DT 394: `release ler` e `repo ler` servem código-fonte onde linhas em branco
+        # e repetidas deslocariam âncoras `arquivo:linha`.
+        _partes_alca = (alca or "").split()
+        _leitura_codigo = tool in ("release", "repo") and len(_partes_alca) > 1 and _partes_alca[1] == "ler"
         servido, meta = _poda.poda_texto(
             texto, cap=cap_efetivo, cauda=cauda, alca=f"{tool}:{alca}", sessao_id=sessao_id,
             giro=giro, tool=tool, ledger=None if escrita else ledger, cosmetica=cosmetica,
             constitutiva=_eh_constitutiva(tool, alca),
+            preserva_branco=_leitura_codigo,
             nome_derrame=f"g{giro:05d}-{campo}.txt")
         if sub:
             r[campo] = {**alvo, sub: servido}
