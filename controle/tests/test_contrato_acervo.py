@@ -96,7 +96,7 @@ def test_camada_d_cabecalho_q1():
     with open(BIN, "r", encoding="utf-8") as f:
         lines = [f.readline() for _ in range(15)]
     text = "".join(lines)
-    assert "# capacidade: conhecimento" in text
+    assert "# capacidade: acervo" in text
     assert "# dono: dados" in text
     assert "# classe: B" in text
     with open(BIN, "r", encoding="utf-8") as f:
