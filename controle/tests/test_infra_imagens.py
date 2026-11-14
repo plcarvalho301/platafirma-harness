@@ -68,6 +68,9 @@ class Cena:
         docker = self.bin / "docker"
         docker.write_text(DOCKER_STUB, encoding="utf-8")
         docker.chmod(docker.stat().st_mode | stat.S_IEXEC)
+        uv = self.bin / "uv"
+        uv.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+        uv.chmod(uv.stat().st_mode | stat.S_IEXEC)
         for arq in ("ps.jsonl", "images.jsonl", "rastro", "inativas_ids"):
             (self.dir / arq).write_text("", encoding="utf-8")
 
@@ -182,6 +185,12 @@ def test_docker_fora_do_ar_sai_5(cena: Cena):
     r = cena.roda("imagens", FAKE_PS_FALHA="1")
     assert r.returncode == 5
     assert "docker ps não respondeu" in r.stderr
+
+
+def test_limpeza_cache_poda_build_e_imagens(cena: Cena):
+    r = cena.roda("limpeza", "cache")
+    assert r.returncode == 0, r.stderr
+    assert cena.rastro() == ["builder prune -a -f", "image prune -a -f"]
 
 
 def test_opcao_desconhecida_sai_2(cena: Cena):
