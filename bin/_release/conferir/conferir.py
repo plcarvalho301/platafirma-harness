@@ -3447,8 +3447,39 @@ def conferir_ontologia(alvo, como_json=False):
     erros = [e for e in (corpo.get("erros") or []) if isinstance(e, dict)]
     avisos = [f"classes ({len(classes)}): {', '.join(classes)}" if classes else "nenhuma classe no alvo"]
     if corpo.get("estado") == "divergente" or erros or status == 422:
-        motivo = "; ".join(_linha_achado(e) for e in erros) or "divergencia na sonda"
-        itens = [(c, resultado.divergente(motivo)) for c in classes] if classes else [(alvo, resultado.divergente(motivo))]
+        por_classe = {c: [] for c in classes}
+        sem_classe = []
+        classes_set = set(classes)
+        for e in erros:
+            c = str(e.get("classe") or "").strip()
+            if not c:
+                onde = str(e.get("onde") or "")
+                rec = str(e.get("recebido") or "").strip()
+                if onde.startswith("/classes/"):
+                    cand = onde[len("/classes/"):].split("/", 1)[0]
+                    if cand in classes_set:
+                        c = cand
+                elif onde.startswith("/catalogo/"):
+                    cand = onde[len("/catalogo/"):].split("/", 1)[0]
+                    if cand in classes_set:
+                        c = cand
+                elif rec in classes_set:
+                    c = rec
+            if c and c in por_classe:
+                por_classe[c].append(_linha_achado(e))
+            else:
+                sem_classe.append(_linha_achado(e))
+
+        itens = []
+        for c in classes:
+            if por_classe[c]:
+                itens.append((c, resultado.divergente("; ".join(por_classe[c]))))
+            else:
+                itens.append((c, resultado.conforme()))
+        if sem_classe:
+            itens.append((alvo, resultado.divergente("; ".join(sem_classe))))
+        elif not itens:
+            itens.append((alvo, resultado.divergente("divergencia na sonda")))
         return resultado.relatorio("ontologia", alvo, itens, _sha_release(), como_json=como_json, extra={"avisos": avisos})
 
     itens = [(c, resultado.conforme()) for c in classes] if classes else [(alvo, resultado.conforme())]
