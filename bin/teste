@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # teste — roda a suíte do repositório
-# capacidade: qualidade-do-codigo-teste
+# capacidade: operacao
 # dono: ti
 # classe: C
 # use para: ANTES de entregar código, «roda os testes», «a suíte passa?»
