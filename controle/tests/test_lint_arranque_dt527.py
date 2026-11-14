@@ -52,4 +52,4 @@ def test_permite_primitiva_na_tabela_de_providers_do_agents_e_claude(tmp_path):
 
 def test_repo_atual_passa_sem_primitiva_em_dono_md():
     apts = verificar_arranque(RAIZ, alvo="abertura/dono.md")
-    assert apts == []
+    assert apts == []  # DT 527

@@ -4,6 +4,7 @@ tests/test_dt140_364.py | bin/release bin/_release/lotes.py bin/sessao bin/exped
 tests/test_dt_397_499.py | bin/infra bin/_acervo/casa
 tests/test_dt_500.py | lib/oplog_extracao.py
 tests/test_dt_502.py | bin/acervo
+tests/test_dt_202_tipos_fila.py | lib/fila_tipos.py bin/_fila/streams.py controle/harness_controle/web.py
 tests/test_lint_arranque_dt527.py | bin/_lint/arranque.py bin/lint abertura/dono.md
 #
 # O que cada arquivo desta lista prova, e o que NAO prova, esta em
