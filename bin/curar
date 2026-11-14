@@ -186,7 +186,7 @@ opções de --reextrair --bancada (card #3187; "bancada" aqui é só uma pasta d
 
 opções gerais:
   --apply                       aplica as alterações (default: falso, dry-run do plano)
-  --autor <slug>                curador responsável (default: cadeira da sessão ou 'dados')
+  --autor <slug>                curador responsável (default: cadeira da sessão; cadeira de construção usa 'time-platafirma'; sem sessão: 'dados')
   --impressao <id>              ID da impressão a promover (obrigatório com --promover)
   --json                        emite resultado em formato JSON
   --sim, -y                     confirma expurgo sem prompt interativo
@@ -225,6 +225,11 @@ def falha_problem(resp: requests.Response) -> None:
         title = pj.get("title") or f"HTTP {resp.status_code}"
         detail = pj.get("detail")
         msg = f"{title}\n{detail}" if detail else f"{title}\n"
+        if resp.status_code == 422 and (
+            title == "CuradorDesconhecido"
+            or (detail and "Curador" in detail and "desconhecido" in detail)
+        ):
+            msg += "\ndica: passe --autor time-platafirma (curador de máquina) ou um curador cadastrado"
     except Exception:
         msg = f"HTTP {resp.status_code}\n{resp.text}"
     sys.stderr.write(msg.rstrip() + "\n")
@@ -2974,6 +2979,8 @@ def main(argv=None):
         cad = (os.environ.get("PF_CADEIRA") or os.environ.get("PF_CONTA") or "").strip().lower()
         if cad:
             autor = cad.removeprefix("claudinho-").removeprefix("claudinha-")
+            if autor in {"engenharia", "ti", "ia", "arquiteto", "seguranca"}:
+                autor = "time-platafirma"
         else:
             autor = "dados"
 
