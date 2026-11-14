@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # curar — cliente fino da API de curadoria do acervo
-# capacidade: classificacao
+# capacidade: acervo
 # dono: claudinho-dados
 # use para: curadoria do acervo, reclassificação em lote e avulsa, expurgo, restauração, promoção, criação de conceito (nó), teia de conceitos (aresta entre conceitos), derivação entre obras e registro de obra não adquirida
 # atos: --reclassificar, --situacao, --expurgar, --restaurar, --apagar, --promover, --recortar, --reextrair, --rejulgar, --conceito, --relacionar, --relacoes, --desrelacionar, --derivar, --derivacoes, --desderivar, --registrar-obra

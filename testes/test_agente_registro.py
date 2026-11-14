@@ -30,7 +30,7 @@ def sql(monkeypatch):
 
 def test_capacidade_e_descricao_saem_do_cabecalho(sql):
     cap, desc, _ = sql
-    assert cap == "especialista"
+    assert cap == "delegacao"
     # o texto da pagina Gatilhos da porta (#4117): a abertura e o `use para:` do agente
     assert desc.startswith("delega uma ação a um especialista, na hora")
     assert "use para: delegar ação síncrona, «roda o revisor»" in desc

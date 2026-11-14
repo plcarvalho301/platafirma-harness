@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # lint — aponta desvio de padrão
-# capacidade: qualidade-do-codigo-lint
+# capacidade: desenvolvimento
 # dono: ti
 # classe: C
 # use para: ANTES de entregar código, documento ou card, «passa o lint», «confere a prosa», «o card está no padrão?»

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # seg — cuida dos segredos e da linha de base de segurança
-# capacidade: politica
+# capacidade: controles
 # componente: openscap, keycloak, openssl+oqsprovider
 # dono: claudinho-seguranca
 # classe: B
