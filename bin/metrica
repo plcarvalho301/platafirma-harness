@@ -1196,7 +1196,7 @@ com `fonte: bruto`.
 --fonte     particao ou bruto, em `dia` e `verbos`. `--fonte bruto` da a leitura de antes (fita, cadeia de erro,
             deduplicacao por lote, ajuda); `dia` traz nas duas fontes as mesmas chaves `giros_por_tool_e_classe`,
             `giros_por_classe`, `giros_por_tool` e `giros_por_origem`, para conferir uma contra a outra
---por       so em `turnos` e `verbos`: em `turnos`: dia, superficie (default), cadeira, origem; em `verbos`: superficie, cadeira, origem
+--por       so em `turnos` e `verbos`: em `turnos`: dia, superficie (default), cadeira, origem; em `verbos`: dia, hora, cadeira, origem
 --latencia  so em `verbos`, da particao (D5.7, medida=latencia): por verbo e por verbo:ato, os baldes de dur_ms,
             `sem_duracao`, a faixa do p50 e do p90 e o tempo total estimado; --resumo ordena pelo tempo, --csv da
             uma linha por verbo:ato (#3414)
@@ -1460,7 +1460,7 @@ def main(argv):
     if args.por and ato not in ("turnos", "verbos"):
         return erro_gracioso(f"{VERBO} {ato}: --por so vale em `turnos` e `verbos`",
                              [f"{VERBO} turnos [<dia>] --por dia,superficie,cadeira,origem",
-                              f"{VERBO} verbos [<dia>] --por superficie,cadeira,origem"], 2)
+                              f"{VERBO} verbos [<dia>] --por dia,hora,cadeira,origem"], 2)
     if args.por and ato == "verbos" and fonte_pedida == "bruto":
         return erro_gracioso(f"{VERBO} verbos: --por le a particao (D5.7), nao o bruto",
                              ["tire --fonte bruto; a janela tem de ter dia fechado (o dia aberto so o bruto tem)"], 2)
