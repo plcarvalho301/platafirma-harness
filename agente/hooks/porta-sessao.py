@@ -270,8 +270,10 @@ def main():
             novo = com_turno(sid_code, novo)
         if novo == ti:
             sys.exit(0)                    # o agente ja portou — respeita
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PreToolUse", "updatedInput": novo}}))
+        out = {"hookEventName": "PreToolUse", "updatedInput": novo}
+        if ev.get("permission_mode") != "plan":
+            out["permissionDecision"] = "allow"
+        print(json.dumps({"hookSpecificOutput": out}))
         sys.exit(0)
     sys.exit(0)
 
