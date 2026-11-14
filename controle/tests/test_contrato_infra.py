@@ -636,3 +636,16 @@ def test_ambiente_sem_sub_exit_2(arvore):
     fake = _stub(arvore / "bin" / "_infra", "ambiente-fake.sh", FAKE_CRONTAB)
     r = _roda_arvore(arvore, "ambiente", env_extra={"INFRA_AMBIENTE_SCRIPT": str(fake)}, checa_exit=2)
     assert "ambiente exige conferir ou aplicar" in r.stderr
+
+
+def test_rodar_repassa_help_apos_duplo_traco(arvore):
+    alvo = arvore / "bin" / "_infra" / "rodar-peca.py"
+    alvo.write_text("#!/usr/bin/env python3\nimport sys\nprint('RODAR_ARGS:', sys.argv[1:])\n",
+                    encoding="utf-8")
+    alvo.chmod(0o755)
+    for flag in ("--help", "--ajuda"):
+        r = _roda_arvore(arvore, "rodar", "p", "--", flag,
+                         env_extra={"PF_SUJEITO": "ti"}, checa_exit=0)
+        assert f"RODAR_ARGS: ['rodar', 'p', '--', '{flag}']" in r.stdout
+    r_uso = _roda_arvore(arvore, "rodar", "--ajuda", checa_exit=2)
+    assert "uso:" in r_uso.stderr

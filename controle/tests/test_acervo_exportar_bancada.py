@@ -34,6 +34,19 @@ def test_chave_escolhe_a_bancada(mod, tmp_path):
     assert mod.bancada_do_repo("3163-export") == tmp_path / "wt" / mod.REPO / "dados" / "3163-export"
 
 
+def test_chave_filtra_por_pf_cadeira(mod, tmp_path, monkeypatch):
+    (tmp_path / "wt" / mod.REPO / "ti" / "main" / ".git").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "wt" / mod.REPO / "dados" / "main" / ".git").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("PF_CADEIRA", "ti")
+    assert mod.bancada_do_repo("main") == tmp_path / "wt" / mod.REPO / "ti" / "main"
+
+
+def test_chave_aceita_repo_arroba_chave(mod, tmp_path, monkeypatch):
+    (tmp_path / "wt" / mod.REPO / "ti" / "main" / ".git").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("PF_CADEIRA", "ti")
+    assert mod.bancada_do_repo(f"{mod.REPO}@main") == tmp_path / "wt" / mod.REPO / "ti" / "main"
+
+
 def test_chave_que_nao_existe_recusa(mod):
     with pytest.raises(SystemExit) as e:
         mod.bancada_do_repo("9999-nada")
