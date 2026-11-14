@@ -287,3 +287,37 @@ def test_para_html_falha_da_api_recusa():
     script = f'envia() {{ return 1; }}; source <(sed -n "/^para_html()/,/^}}/p" {BIN}); para_html'
     p = subprocess.run(["bash", "-c", script], input="Problema: x", capture_output=True, text=True)
     assert p.returncode != 0 and "POST /para-html" in p.stderr
+
+
+def test_exec_curl_401_sem_corpo_expoe_http_status_e_rota(tmp_path):
+    """DT 641: erro HTTP sem corpo JSON (ex: 401 no POST /para-html) relata rota e código HTTP."""
+    curl_falso = tmp_path / "curl"
+    curl_falso.write_text("#!/usr/bin/env bash\nprintf '\\n401'\nexit 22\n", encoding="utf-8")
+    curl_falso.chmod(0o755)
+    script = (
+        f'PATH="{tmp_path}:$PATH"; BASE="http://127.0.0.1:8120/api"; QUEM=""; '
+        f'eval "$(sed -n "/^_recusa()/,/^para_html()/p" {BIN} | sed "\\$d")"; '
+        f'envia POST /para-html <<< \'{{"texto":"x"}}\''
+    )
+    p = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    assert p.returncode != 0
+    assert "HTTP 401" in p.stderr
+    assert "POST /para-html" in p.stderr
+
+
+def test_exec_curl_detail_json_expoe_detalhe(tmp_path):
+    """DT 641: resposta JSON com `.detail` (FastAPI) é extraída em `_recusa`."""
+    curl_falso = tmp_path / "curl"
+    curl_falso.write_text(
+        '#!/usr/bin/env bash\nprintf \'{"detail":"sujeito ausente"}\\n401\'\nexit 22\n',
+        encoding="utf-8",
+    )
+    curl_falso.chmod(0o755)
+    script = (
+        f'PATH="{tmp_path}:$PATH"; BASE="http://127.0.0.1:8120/api"; QUEM=""; '
+        f'eval "$(sed -n "/^_recusa()/,/^para_html()/p" {BIN} | sed "\\$d")"; '
+        f'envia POST /para-html <<< \'{{"texto":"x"}}\''
+    )
+    p = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    assert p.returncode != 0
+    assert "sujeito ausente" in p.stderr
