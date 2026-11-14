@@ -145,5 +145,12 @@
   "rastreador-tela": {
     "familia": "platafirma-ui",
     "lock": "app/rastreador/provas/package-lock.json"
+  },
+  "espelho-conhecimento": {
+    "familia": "platafirma-casa-espelho",
+    "esteira": "codigo",
+    "promovida": false,
+    "venv": "rag",
+    "teste": "outros_repos/conhecimento/rag"
   }
 }

@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # expediente — monta o pacote da cadeira e veste o chapéu
-# capacidade: expediente
+# capacidade: comportamento
 # dono: gestao-estrategica
 # classe: B
 # forma: objeto (montar, rotear) / lista (catalogo)

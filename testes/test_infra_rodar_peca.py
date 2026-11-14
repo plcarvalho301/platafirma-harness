@@ -97,6 +97,22 @@ def test_caminho_alterado_ou_solto_sai_4(monkeypatch, tmp_path, bancada):
     assert e.value.code == 4
 
 
+def test_bancada_atras_de_origin_main_sai_4(monkeypatch, tmp_path, bancada, capsys):
+    mod = _modulo()
+    _prepara(mod, monkeypatch, tmp_path, bancada)
+    (bancada / "rag" / "pkg" / "extra.py").write_text("x = 1\n")
+    _git(bancada, "add", "-A")
+    _git(bancada, "commit", "-m", "adiante")
+    _git(bancada, "push", "origin", "HEAD:main")
+    _git(bancada, "reset", "--hard", "HEAD~1")
+    with pytest.raises(SystemExit) as e:
+        mod.main(["rodar", "p"])
+    assert e.value.code == 4
+    err = capsys.readouterr().err
+    assert "bancada 1 commits atrás de origin/main: repo atualizar" in err
+    assert "commite e sincronize" not in err
+
+
 def test_mudanca_fora_dos_caminhos_da_peca_nao_trava(monkeypatch, tmp_path, bancada):
     mod = _modulo()
     _prepara(mod, monkeypatch, tmp_path, bancada)

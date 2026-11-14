@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # pesquisar — pesquisa a web aberta com procedência
-# capacidade: pesquisa-web
+# capacidade: pesquisa
 # dono: claudinha-inteligencia
 # use para: SEMPRE que a fonte estiver fora do acervo, pesquisar fora, «procura na internet», «acha a página oficial»; ler página por URL; coletar achado; resolver DOI, ISBN, ORCID ou CNPJ; conferir as citações de um relatório
 # atos: consultar, resolver, ler, coletar, historico, manifesto, exportar, verificar, saude

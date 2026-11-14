@@ -368,46 +368,18 @@ def test_existe_skill_pede_o_skill_md_e_sem_pasta_e_indeterminavel(tmp_path, mon
     assert capsys.readouterr().out.startswith("indeterminavel: skill prosa")
 
 
-# --- existe entidade (#4133) --------------------------------------------------
+# --- existe entidade (#4133; fonte removida em 13/11/2026) --------------------
 
 
-def test_existe_entidade_achada_sai_0(monkeypatch, capsys):
-    tabela = (
-        "       slug        | natureza |      rotulo       |     definicao      | mae | categoria \n"
-        "-------------------+----------+-------------------+--------------------+-----+-----------\n"
-        " conjunto-de-dados | entidade | conjunto de dados | Dados do contexto. |     | conteudo\n"
-        "(1 row)\n"
-    )
-    monkeypatch.setattr(conferir, "sh", lambda cmd: (0, tabela, ""))
-
-    assert conferir.conferir_existe("entidade", "conjunto de dados") == 0
-    linhas = capsys.readouterr().out.splitlines()
-    assert linhas[0].startswith("existe: entidade conjunto de dados — conjunto-de-dados")
-    assert "rótulo: conjunto de dados" in linhas[1]
-    assert "categoria: conteudo" in linhas[1]
-
-
-def test_existe_entidade_ausente_sai_1_com_parecidos(monkeypatch, capsys):
-    tabela_parecidos = (
-        "     parecidos     \n"
-        "-------------------\n"
-        " conjunto de dados\n"
-        "(1 row)\n"
-    )
-    monkeypatch.setattr(conferir, "sh", lambda cmd: (1, tabela_parecidos, ""))
-
-    assert conferir.conferir_existe("entidade", "banco rag") == 1
-    linhas = capsys.readouterr().out.splitlines()
-    assert linhas[0].startswith("nao-existe: entidade banco rag — não é nome de entidade da ontologia")
-    assert "parecidos: conjunto de dados" in linhas[1]
-
-
-def test_existe_entidade_banco_fora_sai_5(monkeypatch, capsys):
-    monkeypatch.setattr(conferir, "sh", lambda cmd: (3, "", "falha de conexao com o banco"))
+def test_existe_entidade_sai_5_sem_chamar_o_acervo_e_aponta_a_shape(monkeypatch, capsys):
+    chamadas = []
+    monkeypatch.setattr(conferir, "sh", lambda cmd: chamadas.append(cmd) or (0, "", ""))
 
     assert conferir.conferir_existe("entidade", "substrato") == 5
     linhas = capsys.readouterr().out.splitlines()
     assert linhas[0].startswith("indeterminavel: entidade substrato")
+    assert "shapes/entidade/substrato.ttl" in "\n".join(linhas)
+    assert not any("consultar" in c for cmd in chamadas for c in cmd)
 
 
 def test_existe_entidade_sem_nome_sai_2(capsys):

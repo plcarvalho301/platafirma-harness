@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # situacao — consulta o estado vivo de servico de uma obra na escada do acervo
-# capacidade: situacao
+# capacidade: analise
 # dono: claudinho-dados
 # use para: situação de uma obra na escada: servível, degrau, impressão
 # atos: ato=<obra>; args opcionais --json

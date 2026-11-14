@@ -2028,6 +2028,62 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
   return 0
 }
 
+# ---- estágio 5 (DT 129, #2856): registrar deploy no rastreador --------------------
+# Nunca bloqueia a promoção: tarefas ou python3 ausente, ou falha de API, só avisa.
+registrar_deploy_no_rastreador() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
+  local repo="$1" de="$2" para="$3" tarefas_bin git_dir ambiente ts commits_raw payload rc_dep=0
+  tarefas_bin="$(achar_verbo tarefas)"
+  if [ -z "$tarefas_bin" ]; then
+    printf 'deploy:    AVISO — tarefas não encontrado; deploy não registrado\n' >&2
+    return 0
+  fi
+  command -v python3 >/dev/null 2>&1 || {
+    printf 'deploy:    AVISO — python3 não encontrado; deploy não registrado\n' >&2
+    return 0
+  }
+  git_dir="$PROD_RAIZ/$repo/.repo.git"
+  ambiente="${PLATAFIRMA_AMBIENTE:-prod}"
+  ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  if [ -d "$git_dir" ]; then
+    if [ -n "$de" ] && "$GIT" --git-dir="$git_dir" cat-file -e "$de^{commit}" 2>/dev/null; then
+      commits_raw="$("$GIT" --git-dir="$git_dir" log -n 1000 --format="%H%x1f%B%x1e" "$de..$para" 2>/dev/null || true)"
+    else
+      commits_raw="$("$GIT" --git-dir="$git_dir" log -n 1 --format="%H%x1f%B%x1e" "$para" 2>/dev/null || true)"
+    fi
+  else
+    commits_raw=""
+  fi
+  payload="$(printf '%s' "$commits_raw" | python3 -c '
+import json, sys
+commits = []
+for reg in sys.stdin.read().split("\x1e"):
+    reg = reg.strip("\n")
+    if not reg or "\x1f" not in reg:
+        continue
+    csha, msg = reg.split("\x1f", 1)
+    csha = csha.strip()
+    if csha:
+        commits.append({"sha": csha, "mensagem": msg.strip()})
+print(json.dumps({
+    "sha": sys.argv[1],
+    "ambiente": sys.argv[2],
+    "timestamp": sys.argv[3],
+    "resultado": "sucesso",
+    "commits": commits,
+}, ensure_ascii=False))
+' "$para" "$ambiente" "$ts")" || {
+    printf 'deploy:    AVISO — falha ao montar payload de deploy\n' >&2
+    return 0
+  }
+  printf '%s\n' "$payload" | "$tarefas_bin" api-corpo POST /deploys >/dev/null 2>&1 || rc_dep=$?
+  if [ "$rc_dep" -eq 0 ]; then
+    printf 'deploy:    registrado no rastreador (%s, %s)\n' "$ambiente" "${para:0:7}"
+  else
+    printf 'deploy:    AVISO — registro no rastreador falhou (tarefas saiu %s)\n' "$rc_dep" >&2
+  fi
+  return 0
+}
+
 # NOTA (arq:0110 item 11c): nao ha mais reversao automatica de current na recusa de
 # stack. current e stack sao planos separados; stack que recusa vira incidente e o
 # current fica onde o gate o pos. A volta deliberada e `release reverter <repo> <sha>`.
@@ -2141,7 +2197,7 @@ resumo_imprime() {
   PROMO_LOG="$log"
   [ -f "$PROMO_LOG" ] || { PROMO_LOG=""; return 0; }
   # grep sem casamento sai 1: com set -e/pipefail isso mataria o resumo e trocaria o exit
-  { grep -E '^(== |de: |gate: |venv: |current: |no ar: |ambiente: |suite: |card: |ensaio: |já no ar: |espelho: |checkout: |stacks: |terceiro: |porta: )' "$PROMO_LOG" \
+  { grep -E '^(== |de: |gate: |venv: |current: |no ar: |ambiente: |suite: |card: |deploy: |ensaio: |já no ar: |espelho: |checkout: |stacks: |terceiro: |porta: )' "$PROMO_LOG" \
       | grep -v 'NAO MEDIDA'; } || true
   # "release: /opt/..." e o eco do ajudante da stack, nao recusa: fica no log
   { grep -E '^(release: |varrido: |saida inteira: |caminho: )|NAO MEDIDA|PROMOCAO|RETOMAR|VOLTAR CODIGO' "$PROMO_LOG" \
@@ -2393,6 +2449,7 @@ cmd_promover() {
   local rc_card=0
   estagio_card "$repo" "$atual" "$sha" || rc_card=$?
   [ "$rc_card" -eq 0 ] || printf 'card:      AVISO — estágio 4 saiu %s; código no ar em %s, mova o card à mão\n' "$rc_card" "${sha:0:7}" >&2
+  registrar_deploy_no_rastreador "$repo" "$atual" "$sha" || true
   reiniciar_porta "$repo"
   printf '%s\n' "$sha"
 }

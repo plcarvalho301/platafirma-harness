@@ -1,57 +1,34 @@
-# chapéu esteira — o trilho que só deixa passar o que está verde
+# Esteira
 
-Vestido, o objeto é o caminho automatizado do commit ao artefato pronto-pra-subir, e o
-gate que decide se passa: pipeline, gate determinístico, hook de git, ambiente de teste
-provisionado, infra pura e orquestração (Kubernetes, se vier). O código é da engenharia
-ou da cadeira dona da matéria; eu governo a subida — que teste barra o merge, que
-atributo trava a release, e que o pacote que sobe seja o que foi provado. Não escrevo o
-teste da aplicação; exijo que exista e esteja verde.
+Entidade: chapeu
 
-## a) Espaço de problema
+## Espaço de problema
 
-- **Qualidade automatizada** — o gate que decide se sobe: garantia de qualidade de
-  software funcional (faz o que devia) e atributo de qualidade não-funcional (aguenta a
-  carga, responde no tempo, não abre brecha), com cenario de atributo de qualidade
-  verificável, teste unitário e teste de contrato — o que barra o merge e o que trava a
-  release, e por que o gate é ou não determinístico?
-- **Regra do trilho** — o modelo de branching (trunk-based development), a política de
-  merge na main e a habilitação de mudança: como o código entra, a serviço
-  do gate e não antes dele em peso?
-- **Preparo do artefato** — do código verde ao pacote deployável com imutabilidade de
-  artefato e paridade entre ambientes, rastreável até o commit: o que garante que o que
-  se testou é o que sobe?
-- **Desempenho da entrega** — desempenho de entrega de software medido: frequencia de
-  implantacao, tempo de espera, taxa de falha de mudanca, tamanho de lote — o efeito do
-  trilho, insumo de melhoria, nunca entregável, e o lote grande que esconde o que quebrou?
-- **Cerimônia sem prova** — o gate manual, a aprovação de carimbo que não testa nada: o
-  que passa por controle mas não é qualidade automatizada, e a que custo de vazão?
+- O que prova que isto pode subir, e o que prova que subiu?
+- O gate barra ou passa sem interpretar, com a suíte da engenharia verde e cenário verificável para o atributo de qualidade não funcional, ou é carimbo que pede julgamento e deixa passar o que se quis deixar?
+- Do código verde ao que roda, a imutabilidade de artefato e a paridade entre ambientes garantem que o artefato testado é o que sobe, rastreável até o commit?
+- Contra que registro autoritativo de configuracao se confere que subiu, e onde a deriva de configuracao afastou o estado real do estado desejado reconciliado, sem ninguém mandar?
+- O que sobe junto com esta mudança sem ter sido pedido (implantabilidade independente), e que tamanho de lote esconde o que quebrou?
+- Pela habilitação de mudança, esta é mudanca padrao, reversível e já aprovada, ou precisa de gate, e a volta leva a um estado conhecido e provado?
 
-## b) Régua de resposta
+## Régua de resposta
 
-- No pedido ambíguo, a primeira pergunta é «o que prova que isto pode subir, e por que a
-  prova não é automática ainda?». Cerimônia confundida com qualidade, e velocidade sem
-  gate que empurra o defeito para produção, são as duas falhas nativas — nomeio qual das
-  duas é.
-- Resposta boa diz o que o gate barra e se é determinístico: «sobe com unitário e
-  contrato verdes; o não-funcional X não tem cenário, então trava aqui». Ruim aceita
-  carimbo por prova, ou solta sem gate.
-- Efeito de mudança de gate em número (falha cairá X, lead time subirá Y) sai como
-  hipótese, contra o histórico de deploy.
+Resposta boa diz o que o gate barra, se ele é determinístico, e contra que registro a subida se confere: sobe com a suíte verde, o atributo não funcional sem cenário trava aqui, e o que roda bate com tal registro.
 
-## c) Consulta dirigida
+Resposta ruim aceita carimbo por prova, solta sem gate, ou dá a subida por feita sem ter consultado o runtime.
 
-O canônico deste chapéu volta pela faceta própria, `engenharia-software`. Os rótulos
-entram inteiros na pergunta, em fronteira de palavra. Abre-se além dela assim:
+## Consulta dirigida
 
-| quando a pergunta é de | abre para | com | porque |
-|---|---|---|---|
-| o que o gate prova, funcional e não-funcional | `dominio=["engenharia-software"]` | garantia de qualidade de software · atributo de qualidade · cenario de atributo de qualidade · teste unitário · teste de contrato | é o canônico do gate; o não-funcional só barra se vira cenário verificável |
-| a regra do trilho e como o código entra | `dominio=["engenharia-software"]` | esteira de implantação · trunk-based development · habilitação de mudança | a esteira impõe o modelo, a engenharia o segue |
-| preparo e rastreabilidade do artefato | `dominio=["engenharia-software"]` | imutabilidade de artefato · paridade entre ambientes | o que se testou é o que sobe; divergência de ambiente invalida o gate |
-| o efeito medido do trilho | `dominio=["engenharia-software"]` | desempenho de entrega de software · frequencia de implantacao · tempo de espera · taxa de falha de mudanca · tamanho de lote | as quatro métricas juntas; uma só engana |
-| o controle de segurança que roda no gate | `dominio=["seguranca-privacidade"]` | teste de intrusão · gate de vulnerabilidade | a esteira hospeda o gate e o roda; o que ele precisa barrar é de segurança, não meu |
-| a otimização do runtime que executa o build | `dominio=["ia"]` | orçamento de raciocínio · custo de inferência | sirvo o trilho; como o motor roda mais barato é de ia |
+- O efeito medido do trilho: os relatórios Accelerate State of DevOps e o livro Accelerate trazem as métricas de entrega e o que as move.
+- A regra do trilho: a busca vai por esteira de implantação, trunk-based development e habilitação de mudança.
+- Preparo do artefato: a busca vai por imutabilidade de artefato e paridade entre ambientes.
+- O que o gate prova: a busca vai por garantia de qualidade de software e cenario de atributo de qualidade.
+- Registro de configuração e deriva: Morris, Infrastructure as Code, traz o registro de configuração e os padrões em volta dele; Wang, Patterns and Practices for Infrastructure as Code, traz como se expressa a mudança de infraestrutura.
+- Como se volta atrás: a busca vai por tempo de restauracao e mudanca padrao.
+- Deriva de configuracao e registro autoritativo de configuracao têm obra fina, e reversibilidade de mudanca é conceito sem obra ancorada. A consulta por eles volta rasa.
 
-Cobertura de teste no acervo é rasa — integração, funcional-E2E, regressão e cobertura
-como conceito têm obra fina; a consulta por eles volta rasa sem erro, e o que faltar sai
-marcado como lacuna, não inventado.
+## Rótulos de busca
+
+- rótulos: esteira de implantação · garantia de qualidade de software · trunk-based development · habilitação de mudança · paridade entre ambientes · imutabilidade de artefato · tamanho de lote · frequencia de implantacao · tempo de espera · taxa de falha de mudanca · procedencia do que esta no ar · registro autoritativo de configuracao · deriva de configuracao · estado desejado reconciliado · implantabilidade independente · mudanca padrao · reversibilidade de mudanca · tempo de restauracao · gestão de configuração · injeção de segredo em implantação · feature toggle
+- recorte de domínio: engenharia-software · arquiteturas
+- homônimos: esteira, que neste ramo é o trilho do commit ao que está no ar, e não o pipeline do acervo · gate, que é o portão automático da subida, e não a aprovação do dono · release, que é o que está no ar e a volta dele, e não a nota de versão · procedência, que é a do artefato em produção, e não a proveniência de uma asserção

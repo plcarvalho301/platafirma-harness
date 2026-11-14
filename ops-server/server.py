@@ -61,6 +61,7 @@ import anyio
 import redis
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from mcp.types import ToolAnnotations
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
@@ -2169,7 +2170,7 @@ def _clone_ausente(raiz: Path, real_pai: Path) -> str | None:
     rel = real_pai.relative_to(raiz).parts
     if raiz.parent.name == "wt":
         if not rel:
-            return f"morada: {raiz}/<cadeira>/<arquivo> — worktree da cadeira e obrigatorio"
+            return f"morada: {raiz}/<cadeira>/<card-ou-slug>/<arquivo> — worktree da cadeira e obrigatorio"
         base = raiz / rel[0]
     else:
         base = raiz
@@ -2236,7 +2237,8 @@ def _resolve_escrita(path: str, ident: dict):
     moradas = ", ".join(str(r) + "/" for r, _ in _moradas_escrita())
     if _bancada() is None:
         moradas += " (bancada nao declarada: clones e worktrees fora de alcance)"
-    return None, "fora de morada: " + moradas
+    return None, (f"fora de morada ({alvo}): caminho relativo parte da bancada declarada "
+                  f"(ex.: wt/<repo>/<cadeira>/<card-ou-slug>/<arquivo>), nao da raiz do repo — moradas: {moradas}")
 
 def _escreve_atomico(real_alvo: Path, data: bytes, modo: int) -> None:
     """mkstemp no MESMO dir -> write -> fsync -> rename -> fsync do dir. Inteira ou nada
@@ -2733,11 +2735,22 @@ _TOOLS = [malote, ler_arquivo, write_file]
 if PERSONAS.is_dir():
     _TOOLS.append(monta_sessao)
 
+def _anotacoes_tool(nome: str, binario: str = "") -> ToolAnnotations:
+    """Anotações MCP (card #4149): sem `annotations`, a spec assume `destructiveHint=True` e
+    `openWorldHint=True`, e clientes que consultam `annotations` (Codex sem `approve` explícito,
+    Claude Code / claude.ai) pedem confirmação manual em toda chamada. A porta é fechada
+    (`openWorldHint=False`) e toda escrita passa pelo PDP no servidor (`destructiveHint=False`)."""
+    so_le = (nome in {"ler_arquivo", "conferir", "lint", "metrica"}
+             or bool(binario and not _atos_que_escrevem(nome, binario)))
+    return ToolAnnotations(readOnlyHint=so_le, destructiveHint=False,
+                           idempotentHint=so_le, openWorldHint=False)
+
+
 for _fn in _TOOLS:
     _fn.__doc__ = ((_fn.__doc__ or "").replace("@LOG@", str(LOG_DIR))
                    .replace("@BIN@", str(BIN_VERBOS)).replace("@TMP@", str(TMP_FITA))
                    .replace("@USER@", OPS_USER))
-    mcp.tool()(_fn)
+    mcp.tool(annotations=_anotacoes_tool(_fn.__name__))(_fn)
 
 
 # --- Cápsula de verbos: tools derivadas do golden record (spec_capsula-de-verbos) ---
@@ -3270,7 +3283,8 @@ def _gera_tools_verbos(registro: dict | None = None) -> list:
             # Descrição = coluna `descricao` do golden record, SEM edição (spec §3.1): o contrato comum (ato,
             # args, sessao_id) está no ofício, uma vez, não 17. A oculta não aparece na lista: descrição curta.
             desc = descricoes.get(slug) or DESCRICAO_INDISPONIVEL
-            mcp.tool(name=nome_tool, description=desc)(_faz_tool_verbo(slug, str(binario), desc))
+            mcp.tool(name=nome_tool, description=desc,
+                     annotations=_anotacoes_tool(slug, str(binario)))(_faz_tool_verbo(slug, str(binario), desc))
     print(f"[capsula] verbos do registro servidos ({len(servidas)}): {' '.join(servidas)}"
           + (f" · fora da lista do modelo: {' '.join(sorted(OCULTAS))}" if OCULTAS else "")
           + (f" · retido: {' '.join(retidas)}" if retidas else ""),

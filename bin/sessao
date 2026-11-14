@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # sessao — autoriza e cunha a sessão
-# capacidade: sessao
+# capacidade: acesso
 # dono: ia
 # classe: A
 # forma: objeto (abrir, ver, limpar) / lista (listar) / predicado (encerrar) / fluxo (longjob)

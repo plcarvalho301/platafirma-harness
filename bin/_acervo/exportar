@@ -77,6 +77,15 @@ def bancada_do_repo(chave: str = "") -> Path:
         if cadeira.startswith(prefixo):
             cadeira = cadeira[len(prefixo):]
     if chave:
+        if "@" in chave:
+            repo_ref, chave_ref = chave.split("@", 1)
+            if repo_ref == REPO and chave_ref:
+                chave = chave_ref
+        if cadeira:
+            wt = raiz / "wt" / REPO / cadeira / chave
+            if (wt / ".git").exists():
+                return wt
+            morre(f"--bancada {chave}: nenhuma bancada de {REPO} para {cadeira} (varrido: {wt})", 2)
         achadas = sorted(p for p in (raiz / "wt" / REPO).glob(f"*/{chave}") if (p / ".git").exists())
         if len(achadas) != 1:
             morre(f"--bancada {chave}: {len(achadas)} bancada(s) de {REPO} com essa chave", 2)

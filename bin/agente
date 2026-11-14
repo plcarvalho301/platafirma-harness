@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # agente — delega uma ação a um especialista, na hora
-# capacidade: especialista
+# capacidade: delegacao
 # dono: ia
 # use para: delegar ação síncrona, «roda o revisor», «chama o varredor», sub-agente para segunda opinião; definir especialista, «quem são os especialistas?»
 # atos: listar (leitura, especialista), ler (leitura, especialista), rodar (escrita, especialista), projetar (escrita, especialista), medir-federacao (escrita, especialista), medir-cache (leitura, medida)

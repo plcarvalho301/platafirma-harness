@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # motor — acha pelo sentido o trecho do acervo que responder, filtrável por domínio e/ou conceitos
-# capacidade: motor
+# capacidade: gestao-de-motores
 # dono: ia
 # componente: platafirma-motor
 # classe: B
@@ -145,13 +145,13 @@ _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 def resolve_particao(argv, ato):
     """Gramatica arq:0106: motor <inst> <ato> <particao>. Forma vigente sem particao
     NAO some em silencio: cai em 'biblioteca' com aviso ao stderr apontando a forma nova e
-    a spec (spec_motor §5). Enquanto so a biblioteca esta povoada, o default e seguro."""
+    a spec (spec_motor §5)."""
     if argv and (argv[0] in PARTICOES or argv[0] in _SINONIMOS):
         return _SINONIMOS.get(argv[0], argv[0]), argv[1:]
     sys.stderr.write(
         f"motor {ato}: sem particao — a forma conforme e "
         f"`motor <inst> {ato} <particao> ...` (particoes: {', '.join(PARTICOES)}).\n"
-        f"  assumindo 'biblioteca' (unica povoada hoje); declare a particao.\n  {SPEC}\n")
+        f"  assumindo 'biblioteca'; declare a particao.\n  {SPEC}\n")
     return "biblioteca", argv
 
 def sh(cmd, env_extra=None, **kw):
@@ -4217,6 +4217,9 @@ def main():
         if len(a) >= 4 and a[2] in d and a[3] == a[1]:
             sys.stderr.write(f"motor: `{a[1]} <inst> {a[1]}` desduplicado com aviso\n")
             a = a[2:]
+        elif len(a) >= 3 and a[2] in d:
+            sys.stderr.write(f"motor: `{a[1]} {a[2]}` — instancia '{a[2]}' ja assumida pela tool; desduplicada com aviso\n")
+            a = [a[2], a[1]] + a[3:]
     if not a:
         uso()
     if a[0] == "listar":

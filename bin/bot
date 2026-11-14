@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # bot — delega uma ação para depois, por agenda ou evento
-# capacidade: agendamento
+# capacidade: operacao
 # dono: ti
 # classe: B
 # forma: objeto (declarar, desligar) / lista (listar) / fluxo (rodar) / predicado (caidas)

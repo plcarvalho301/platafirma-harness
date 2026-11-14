@@ -47,7 +47,7 @@ def sql(monkeypatch):
 
 def test_capacidade_e_descricao_saem_do_cabecalho(sql):
     cap, desc, _ = sql
-    assert cap == "agendamento", "a folha existe no acervo (068); conferir verbo a resolve"
+    assert cap == "operacao", "a folha existe no acervo (068); conferir verbo a resolve"
     # o texto da pagina Gatilhos da porta (#4117): a abertura e o `use para:` do bot, sem a lista antiga de objetos
     assert desc.startswith("delega uma ação para depois, por agenda ou evento")
     assert "use para: delegar ação assíncrona ou por cron, «agenda isso toda noite»" in desc

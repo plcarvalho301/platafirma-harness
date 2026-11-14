@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # infra — OPERA o serviço e a máquina em que ele roda
-# capacidade: infra
+# capacidade: operacao
 # dono: ti
 # componente: docker, systemd --user, cron
 # use para: SEMPRE que for subir, reiniciar, derrubar ou remover serviço, «reinicia a unit», «sobe a stack»; construir e baixar imagem; alterar configuração; fazer backup; limpar disco; logs do contêiner, cron, VRAM e disco, «os logs do contêiner», «quanto de VRAM está ocupado?»
@@ -1610,6 +1610,7 @@ fi
 # despacho, varrendo TODOS os argumentos: cobre `infra --ajuda` e `infra <ato> --ajuda`
 # em qualquer posição. `uso` já sai 2.
 for _a in "$@"; do
+  [ "$_a" = "--" ] && break
   case "$_a" in
     --ajuda|--help|-h) uso ;;
   esac

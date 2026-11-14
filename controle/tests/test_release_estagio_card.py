@@ -303,11 +303,23 @@ def test_estagio_card_pula_sem_pr_fabrica(amb):
     r = amb.run("promover", "fixture", gh_ref="ti/algum-ramo-de-mesa")
     assert r.returncode == 0, r.stdout + r.stderr
     assert "estagio 4 pulado" in r.stdout
-    assert not amb.tarefas_log.exists()
+    log = amb.tarefas_log.read_text(encoding="utf-8")
+    assert "ARGS: ler " not in log and "ARGS: comentar " not in log and "ARGS: mover " not in log
+    assert "ARGS: api-corpo POST /deploys" in log
 
 
 def test_estagio_card_pula_sem_pr_nenhum(amb):
     r = amb.run("promover", "fixture", gh_ref="")
     assert r.returncode == 0, r.stdout + r.stderr
     assert "estagio 4 pulado" in r.stdout
-    assert not amb.tarefas_log.exists()
+    log = amb.tarefas_log.read_text(encoding="utf-8")
+    assert "ARGS: ler " not in log and "ARGS: comentar " not in log and "ARGS: mover " not in log
+    assert "ARGS: api-corpo POST /deploys" in log
+
+
+def test_promover_registra_deploy_no_rastreador(amb):
+    # DT 129: release promover registra o deploy via tarefas api-corpo POST /deploys; falha nao trava
+    r = amb.run("promover", "fixture", gh_ref="", tarefas_rc=1)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "deploy:    AVISO" in (r.stdout + r.stderr), f"STDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}"
+    assert "ARGS: api-corpo POST /deploys" in amb.tarefas_log.read_text(encoding="utf-8")

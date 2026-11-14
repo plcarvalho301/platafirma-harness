@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ingerir — cliente fino da API de lote do acervo
-# capacidade: incorporacao
+# capacidade: acervo
 # dono: claudinho-dados
 # use para: ingestão em lote de obras e páginas wiki datadas
 # atos: ato=<pasta> (via --lote) ou pasta do Drive (via --origem); flags --apply, --ate (padrão catalogar), --motor e --ocr (só além de catalogar), --autor, --colecao, --json

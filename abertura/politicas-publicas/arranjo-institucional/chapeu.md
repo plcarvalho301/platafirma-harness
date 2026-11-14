@@ -1,48 +1,34 @@
-# chapéu arranjo-institucional — como os sistemas do Estado se ligam e falham
+# Arranjo institucional
 
-Vestido este chapéu, a matéria é o arranjo: como os sistemas de donos diferentes se
-ligam, o que passa na fronteira entre eles e onde a costura falha. Não é por que o
-Estado consegue (isso é `teoria-capacidade-estatal`) nem quem decide (isso é
-`analise-politica`) — é o desenho concreto da ligação: quem traduz, quem valida, por
-onde o dado passa, o que a interface recusa. O lastro são os estudos de caso da APF —
-Pix, SPED, RNDS, gov.br, CadÚnico, urna, SIGEPE, CAR/SICAR — lidos na wiki, sob
-`Frente:paper-capability-trap/case-<sistema>`, e não no RAG.
+Entidade: chapeu
 
-## a) Espaço de problema
+## Espaço de problema
 
-- **De quem é o trabalho de traduzir** — dois sistemas com vocabulários diferentes
-  precisam conversar; quem converte define a qualidade. No destino, um time o faz uma
-  vez e devolve erro nomeado; na origem, o remetente mais fraco define o conjunto.
-- **O que a interface devolve quando recusa** — recusar sem dizer o motivo, ou mudar o
-  formato sem avisar, transfere o trabalho inteiro para o outro lado, que descobre em
-  produção. O contrato diz o que se aceita, o que se devolve e quem paga a mudança.
-- **A exigência sem a ferramenta** — mandar entregar num formato exige entregar a
-  ferramenta que o produz; sem ela, "valide antes de enviar" vai para quem não tem como
-  validar, e o trabalho não acontece.
-- **A fronteira que a superfície não sinaliza** — um sistema é legível quando mostra
-  onde uma parte termina e outra começa; documentar tudo não é deixar navegável, e quem
-  consome um sistema ilegível conclui que o problema é ele.
-- **Quem costura o sistema de sistemas** — peças de donos diferentes, sem superior
-  comum; a costura fica órfã porque não há chefe a quem endereçar o pedido. Nomear o
-  responsável pela integração é o ato que costuma faltar.
+- De que lado da fronteira ficou a responsabilidade de traduzir?
+- Quando dois sistemas de vocabulários diferentes conversam, quem converte: o destino, que confere e devolve erro nomeado, ou a origem, em que o remetente mais fraco define a qualidade do conjunto?
+- O que a interface devolve quando recusa, e quem paga quando o acordo muda depois de estar em uso (contrato de interface)?
+- A exigência de formato veio com a ferramenta que o produz, ou «valide antes de enviar» caiu sobre quem não tem como validar?
+- O sistema mostra onde uma parte termina e outra começa (legibilidade do sistema), ou quem o consome conclui que o problema é ele?
+- No sistema de sistemas, com peças de donos diferentes e sem superior comum, quem foi nomeado para costurar?
+- A governança federada mantém uma regra só no centro, com cada ente sob a própria autoridade e um fórum onde o vocabulário é negociado, e não imposto?
+- Que dado mestre os entes compartilham, e que consistência de dados o arranjo sustenta?
 
-## b) Régua de resposta
+## Régua de resposta
 
-Resposta boa nomeia o lado em que o trabalho ficou e o que a fronteira faz ao recusar —
-"a RNDS deixou a integração com cada ente e chama a falha de taxa de rejeição, nome que
-localiza o erro em quem enviou; no Pix o centro recebe, confere e devolve erro nomeado".
-Resposta ruim descreve a arquitetura sem dizer onde a costura falha — "integram por API
-REST com OAuth" —, desenho impecável, nenhuma fronteira nomeada, nenhum lado de tradução
-identificado. No pedido ambíguo, a primeira pergunta é de que lado ficou a
-responsabilidade de traduzir.
+Resposta boa nomeia o lado em que o trabalho ficou e o que a fronteira faz ao recusar: um arranjo deixa a integração com cada ente e chama a falha de taxa de rejeição, nome que localiza o erro em quem enviou; em outro, o centro recebe, confere e devolve erro nomeado.
 
-## c) Consulta dirigida
+Resposta ruim descreve a arquitetura sem dizer onde a costura falha, como «integram por API com autenticação delegada»: nenhuma fronteira nomeada, nenhum lado de tradução identificado.
 
-O canônico deste chapéu volta pela faceta `capacidade-estatal`, filtrando os conceitos
-de arranjo. Abre-se além dela quando:
+## Consulta dirigida
 
-| Quando a pergunta é de | Abre para | Porque este chapéu depende disso |
-|---|---|---|
-| a topologia e o contrato como decisão de arquitetura | `dominio=["arquiteturas"]` | hub-and-spoke, camada anticorrupção e teste de contrato têm régua lavrada lá; aqui aplico ao arranjo entre órgãos |
-| a fronteira de identidade entre sistemas | `dominio=["seguranca-privacidade"]` filtrando `iam` | federação e garantia de identidade seguem a régua de segurança; o arranjo as consome, não as define |
-| por que a costura órfã não vira capacidade | `dominio=["capacidade-estatal"]` filtrando `teoria-capacidade-estatal` | o arranjo mal desenhado é o mecanismo da armadilha encarnado; a leitura do porquê é do outro chapéu |
+- Casos de arranjo na administração federal: os estudos de caso de Pix, SPED, RNDS, gov.br, CadÚnico, urna, SIGEPE e CAR estão na wiki da casa, e não na biblioteca.
+- Topologia e contrato: a busca vai por topologia de integração, contrato de interface e interoperabilidade.
+- Identidade entre sistemas: a busca vai por federação de identidade e identidade digital.
+- Coordenação sem superior comum: a busca vai por mecanismo de coordenação e antinomia de coordenação.
+- Governança federada, responsabilidade de traduzir, sistema de sistemas e atestação de confiança são conceitos sem obra ancorada; a consulta por eles volta vazia.
+
+## Rótulos de busca
+
+- rótulos: governança federada · topologia de integração · contrato de interface · responsabilidade de traduzir · exigência sem instrumento · interoperabilidade · sistema de sistemas · dado mestre · consistência de dados · legibilidade do sistema · atestação de confiança · independência gerencial dos constituintes · mecanismo de coordenação · antinomia de coordenação · serviços compartilhados · arranjo jurídico-institucional
+- recorte de domínio: capacidade-estatal · arquiteturas
+- homônimos: arranjo, que neste ramo é a ligação entre sistemas de donos diferentes, e não o conjunto de normas que sustenta uma política · interface, que é a fronteira entre órgãos, e não a tela

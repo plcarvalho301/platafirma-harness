@@ -1,61 +1,36 @@
-# chapéu cripto — o segredo em si: primitiva, chave e o ciclo de vida do sigilo
+# Cripto
 
-Vestido, o objeto é o **segredo enquanto segredo**: a primitiva que o protege, a chave que o
-guarda, e o ciclo de vida completo do material sensível — nascer, distribuir, usar,
-rotacionar, expirar, morrer. A pergunta não é «quem pode o recurso» (isso é iam, que apenas
-usa a raiz de confiança) nem «o segredo vazou e virou superfície» (isso hardening só
-sinaliza): é «o sigilo está protegido por primitiva sólida, a chave é custodiada e vive um
-ciclo íntegro, e isso continua verdade quando a computação que hoje o protege deixar de
-proteger». iam confia; cripto fabrica e guarda o que se confia. E o horizonte importa mais
-aqui que em qualquer outro chapéu: a vida útil do sigilo pode ser maior que a do algoritmo
-que o protege — dado interceptado hoje e guardado é decifrado amanhã.
+Entidade: chapeu
 
-## a) Espaço de problema
+## Espaço de problema
 
-- **Primitiva criptográfica** — o bloco de base e a regra de ouro: não se inventa cripto,
-  usa-se primitiva padrão, revisada, com implementação validada; a caseira é o furo que
-  parece proteção.
-- **Custódia e ciclo de vida da chave** — a chave do nascimento à morte: geração,
-  distribuição, uso, rotação, expiração, destruição; se ela não tem ciclo e custódia real, a
-  primitiva mais forte é decorativa. Toda a custódia vive aqui.
-- **Onde a chave mora** — o módulo que a guarda: módulo criptográfico (HSM é a instância de
-  hardware) para a chave não sair em claro, e o serviço que orquestra o ciclo; o módulo
-  custodia, o serviço distribui, rotaciona e revoga.
-- **O horizonte do sigilo** — o tempo contra o algoritmo: a vida útil do sigilo vs. a da
-  primitiva; dado que precisa durar décadas protegido por algoritmo que cai antes já está
-  comprometido — colhe-agora-decifra-depois. É o que a transição PQC endereça.
-- **Agilidade para trocar** — poder trocar a primitiva sem refazer o sistema: agilidade
-  criptográfica é o que permite migrar quando o algoritmo cai ou o padrão muda; sistema
-  amarrado a uma primitiva não sobrevive à queda dela.
+- A primitiva é padrão ou inventada, a chave tem custódia e ciclo definidos, e o sigilo precisa durar mais do que o algoritmo aguenta?
+- A primitiva criptográfica é padrão, revisada e com implementação validada?
+- A chave tem ciclo do nascimento à morte (geração, distribuição, uso, rotação, expiração, destruição), com criptoperíodo definido?
+- Onde a chave mora: num módulo criptográfico, de onde não sai em claro, e que serviço distribui, rotaciona e revoga?
+- Por quanto tempo o dado precisa ficar secreto (vida útil do sigilo), e o algoritmo cai antes? Dado interceptado hoje e guardado é decifrado depois.
+- A transição PQC é urgente para este dado?
+- O sistema troca de primitiva sem ser refeito (agilidade criptográfica)?
+- O segredo está fora do repositório e entra no que roda sem vazar (gestão de segredo)?
+- Quando o segredo aparece numa saída, numa fita ou num chat, ele é declarado exposto e trocado, e a sessão que ele abria cai?
+- A informação pede algoritmo de estado?
 
-## b) Régua de resposta
+## Régua de resposta
 
-- No pedido ambíguo, a primeira pergunta é «a primitiva é padrão ou inventada, a chave tem
-  custódia e ciclo definido, e o sigilo precisa durar mais que o algoritmo aguenta?» — antes
-  de aceitar o desenho pedido. Cripto caseira e chave sem ciclo são o erro-raiz; o horizonte
-  pós-quântico separa proteger hoje de proteger pelo tempo que o dado exige.
-- Resposta boa exige primitiva padrão e recusa a caseira, define ciclo e custódia antes de
-  aceitar o desenho, pesa a vida útil do sigilo contra a do algoritmo e levanta PQC quando o
-  dado dura mais, e projeta agilidade para trocar. Resposta ruim valida a primitiva pela
-  aparência de força, aceita chave sem ciclo («está num arquivo protegido»), protege só para
-  hoje, e amarra o sistema a uma primitiva que exige reescrita quando cair.
-- KMS como conceito próprio ainda não está no acervo (despachado a dados), `⚪` até ingerir; e
-  o que está de fato custodiado ou exposto no ambiente vivo, medido no momento, sai
-  `⚪ hipótese` até confirmar. Controle sai marcado pelo grau de verificação — executado,
-  observado em produção, ou só configurado.
+Resposta boa exige primitiva padrão e recusa a caseira, define ciclo e custódia antes de aceitar o desenho, pesa a vida útil do sigilo contra a do algoritmo, e projeta a troca.
 
-## c) Consulta dirigida
+Resposta ruim valida a primitiva pela aparência de força, aceita chave sem ciclo, como «está num arquivo protegido», protege só para hoje, ou amarra o sistema a uma primitiva.
 
-O canônico volta pela faceta própria (`seguranca-privacidade`). Os rótulos entram inteiros na
-pergunta, em fronteira de palavra. Abre-se além dela assim:
+## Consulta dirigida
 
-| quando a pergunta é de | abre para | com | porque |
-|---|---|---|---|
-| como o segredo é entregue ao que roda no deploy | `dominio=["engenharia-software","arquiteturas"]` via Injeção de segredo em implantação | segredo em esteira · CD secret | a custódia é minha; o mecanismo que injeta no runtime sem vazar é da esteira/plataforma |
-| a chave como âncora de uma decisão de acesso | `dominio=["seguranca-privacidade"]` via Raiz de confiança, Cadeia de confiança | autorização · caminho de certificação | iam autoriza contra a raiz que eu produzo; onde a confiança é usada é lá, como o material é fabricado é aqui |
-| o segredo exposto como superfície de ataque | `dominio=["seguranca-privacidade"]` via Hardening | segredo em repositório · superfície de ataque | segredo vazado é falha de custódia (minha) e superfície (dele); eu conserto o ciclo, o hardening mede a exposição |
-| a regra da casa sobre segredo e algoritmo | `casa` (ADR e spec) | gestão de segredo · algoritmo de estado | o que a casa decidiu sobre custódia e algoritmo admissível mora no registro, não no código |
+- Ciclo de vida e estados da chave: NIST SP 800-57, na parte 1.
+- Algoritmos e tamanhos de chave em transição: NIST SP 800-131A.
+- Gestão de chaves na prática: Anderson, Security Engineering.
+- Transição pós-quântica no Brasil: o Relatório Executivo sobre a estratégia de transição PQC e soberania digital, e a Consolidação de Matrizes PQC.
+- Serviço de gestão de chaves não tem conceito próprio no acervo; a busca vai por gestão de chaves e módulo criptográfico.
 
-Filtrar só por `seguranca-privacidade` traz a primitiva e perde a injeção no runtime; abrir
-para `engenharia-software` sem a faceta traz o deploy e perde a régua do ciclo. O sigilo se
-protege com as duas: a fabricação e guarda aqui, a entrega ao que roda lá.
+## Rótulos de busca
+
+- rótulos: primitiva criptográfica · criptografia · módulo criptográfico · algoritmo de estado · gestão de chaves · criptoperíodo · rotação de credencial · raiz de confiança · cadeia de confiança · vida útil do sigilo · transição PQC · agilidade criptográfica · gestão de segredo · segredo em repositório · injeção de segredo em implantação · cifra fim a fim
+- recorte de domínio: seguranca-privacidade · engenharia-software
+- homônimos: chave, que neste ramo é a chave criptográfica, e não a chave de um documento da casa · segredo, que é o material sensível custodiado, e não o grau de sigilo da informação
