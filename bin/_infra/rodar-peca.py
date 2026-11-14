@@ -111,7 +111,7 @@ def _git(wt: Path, *args) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(wt), *args], capture_output=True, text=True)
 
 
-def gate_origin_main(wt: Path, caminhos: list) -> str:
+def gate_origin_main(wt: Path, caminhos: list, repo: str = "") -> str:
     """O sha de origin/main, se cada caminho da peça é igual a ele; senão sai 4 dizendo o quê."""
     r = _git(wt, "fetch", "--quiet", "origin", "main")
     if r.returncode != 0:
@@ -120,11 +120,28 @@ def gate_origin_main(wt: Path, caminhos: list) -> str:
     if r.returncode != 0:
         morre(f"{wt} sem origin/main: {r.stderr.strip()[:300]}", 3)
     sha = r.stdout.strip()
-    dif = _git(wt, "diff", "--name-only", "origin/main", "--", *caminhos)
+    dif_wt = _git(wt, "diff", "--name-only", "HEAD", "--", *caminhos)
+    dif_idx = _git(wt, "diff", "--cached", "--name-only", "--", *caminhos)
     soltos = _git(wt, "ls-files", "--others", "--exclude-standard", "--", *caminhos)
-    if dif.returncode != 0 or soltos.returncode != 0:
-        morre(f"não consegui comparar {wt} com origin/main: {(dif.stderr or soltos.stderr).strip()[:300]}", 3)
-    fora = [l for l in dif.stdout.splitlines() if l] + [f"{l} (fora do git)" for l in soltos.stdout.splitlines() if l]
+    if dif_wt.returncode != 0 or dif_idx.returncode != 0 or soltos.returncode != 0:
+        morre(f"não consegui comparar {wt} com HEAD: {(dif_wt.stderr or dif_idx.stderr or soltos.stderr).strip()[:300]}", 3)
+    locais = sorted({l for l in dif_wt.stdout.splitlines() if l} | {l for l in dif_idx.stdout.splitlines() if l})
+    fora_local = locais + [f"{l} (fora do git)" for l in soltos.stdout.splitlines() if l]
+    if fora_local:
+        mostra = ", ".join(fora_local[:10]) + (f" … +{len(fora_local) - 10}" if len(fora_local) > 10 else "")
+        morre(f"a peça difere de origin/main ({sha[:12]}): {mostra} — commite e sincronize antes de rodar", 4)
+    atras = _git(wt, "rev-list", "--count", "HEAD..origin/main")
+    if atras.returncode == 0:
+        try:
+            n_atras = int(atras.stdout.strip() or "0")
+        except ValueError:
+            n_atras = 0
+        if n_atras > 0:
+            morre(f"bancada {n_atras} commits atrás de origin/main: repo atualizar {repo or wt.name}", 4)
+    dif = _git(wt, "diff", "--name-only", "origin/main", "--", *caminhos)
+    if dif.returncode != 0:
+        morre(f"não consegui comparar {wt} com origin/main: {dif.stderr.strip()[:300]}", 3)
+    fora = [l for l in dif.stdout.splitlines() if l]
     if fora:
         mostra = ", ".join(fora[:10]) + (f" … +{len(fora) - 10}" if len(fora) > 10 else "")
         morre(f"a peça difere de origin/main ({sha[:12]}): {mostra} — commite e sincronize antes de rodar", 4)
@@ -151,7 +168,7 @@ def rodar(argv: list) -> int:
         ex.REPO = p.get("repo") or morre(f"peça {nome} sem repo no registro", 3)
         raiz = ex.bancada_do_repo(chave)
         caminhos = sorted({p.get("cwd") or "."} | set(p.get("pythonpath") or []))
-        sha = gate_origin_main(raiz, caminhos)
+        sha = gate_origin_main(raiz, caminhos, ex.REPO)
         procedencia = f"{ex.REPO}@{sha[:12]} (origin/main) na bancada {raiz}"
     elif origem == "release":
         raiz = ex.raizes.release() / (p.get("dir") or morre(f"peça {nome} sem dir no registro", 3))
