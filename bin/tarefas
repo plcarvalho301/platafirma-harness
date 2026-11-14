@@ -312,46 +312,19 @@ envia() { # envia MÉTODO /caminho  (corpo JSON em stdin)
 # (R34): o algoritmo e a regex da URL sao os mesmos, sem aspa simples porque o Python mora
 # dentro de aspas simples do shell (\x22 e \x27; a crase, \x60, tambem termina o endereco, e
 # o sublinhado e o asterisco finais saem do link, como a pontuacao).
-# Card #4058: a lista de rótulos não mora aqui; vem do molde da API (`GET /modelo`), a fonte
-# única. Sem a lista, a conversão não roda: gravar corpo com rótulo errado é pior que recusar.
+# DT 292: a conversão mora exclusivamente em `api/logica.py:para_html` (platafirma-rastreador),
+# exposta por `POST /para-html`. O verbo não mantém cópia local do algoritmo.
 para_html() {
-  local indice rotulos
-  indice=$(busca GET /modelo) \
-    || { echo "sem a lista de rótulos do molde (GET /modelo no rastreador)" >&2; return 1; }
-  rotulos=$(printf '%s' "$indice" | jq -c '.rotulos_da_conversao // empty' 2>/dev/null)
-  [ -n "$rotulos" ] \
-    || { echo "sem a lista de rótulos do molde (GET /modelo no rastreador)" >&2; return 1; }
-  ROTULOS="$rotulos" python3 -c 'import html,json,os,re,sys
-R = json.loads(os.environ["ROTULOS"])
-R.sort(key=len, reverse=True)
-L = re.compile("^(" + "|".join(map(re.escape, R)) + "):", re.I)
-U = re.compile(r"https?://(?:(?!&(?:lt|gt|quot|#x27);)[^\s<>\x22\x27\x60])+", re.I)
-E = re.compile(r"&#?\w+;$")
-def liga(m):
-    u, r = m.group(0), ""
-    while u and (u[-1] in ".,:!?_*" or (u[-1] == ";" and not E.search(u)) or (u[-1] == ")" and u.count(")") > u.count("("))):
-        u, r = u[:-1], u[-1] + r
-    if u.endswith("//"):
-        return m.group(0)
-    return "<a href=\"%s\">%s</a>%s" % (u, u, r)
-ps, p = [], []
-for l in html.escape(sys.stdin.read().strip()).split("\n"):
-    if not l.strip():
-        if p:
-            ps.append(p)
-            p = []
-        continue
-    l = U.sub(liga, l)
-    m = L.match(l)
-    if m:
-        if p:
-            ps.append(p)
-        p = ["<strong>%s:</strong>%s" % (m.group(1), l[m.end():])]
-    else:
-        p.append(l)
-if p:
-    ps.append(p)
-print("".join("<p>%s</p>" % "<br>".join(x) for x in ps))'
+  local texto resp html
+  texto=$(cat)
+  resp=$(jq -Rn --arg t "$texto" '{texto: $t}' | envia POST /para-html) \
+    || { echo "erro ao converter corpo na API (POST /para-html no rastreador)" >&2; return 1; }
+  html=$(printf '%s' "$resp" | jq -r '.html // empty' 2>/dev/null)
+  if [ -z "$html" ] && [ -n "$(printf '%s' "$texto" | tr -d '[:space:]')" ]; then
+    echo "resposta invalida de POST /para-html no rastreador" >&2
+    return 1
+  fi
+  printf '%s\n' "$html"
 }
 
 # Card #4110: o trecho de `editar --trecho`. O corpo gravado é HTML (`para_html`, acima) e o
