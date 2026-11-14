@@ -102,7 +102,7 @@ uso:
                                               --caminho <prefixo> e apelido do prefixo)
   release conferir   <classe> [<alvo>] [--ref <rev>] [--json]
   release telas      [--json]                 as telas com stack promovida (declaracao registro/telas.json)
-  release promover   <repo> [<rev>] [--ensaio] [--aceitar-suite-indisponivel] [--confirmar-lotes]
+  release promover   <repo> [<rev>] [--ensaio] [--aceitar-suite-indisponivel] [--confirmar-lotes] [--reconstruir]
   release reverter   <repo> [<rev>] [--ensaio]
   release promover   abertura [<rev>] [--ensaio]   publica a abertura do harness na rev (sem rev: origin/main)
   release reverter   abertura [<sha>] [--ensaio]   volta a abertura a um sha ja publicado (sem sha: o anterior)
@@ -2212,13 +2212,14 @@ resumo_imprime() {
 
 # ---- ato: promover <repo> [<rev>] [--ensaio] --------------------------------------
 cmd_promover() {
-  local ensaio=0 so_caderno=0 repo="" rev="" aceitar_suite=0 confirmar_lotes=0
+  local ensaio=0 so_caderno=0 repo="" rev="" aceitar_suite=0 confirmar_lotes=0 reconstruir=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --ensaio) ensaio=1; shift ;;
       --so-caderno) so_caderno=1; shift ;;
       --confirmar-lotes) confirmar_lotes=1; shift ;;
       --aceitar-suite-indisponivel) aceitar_suite=1; shift ;;
+      --reconstruir) reconstruir=1; shift ;;
       -*) printf 'release: erro: opção desconhecida: %s\n' "$1" >&2; uso_texto; exit 2 ;;
       *)
         if [ -z "$repo" ]; then repo="$1"
@@ -2291,6 +2292,13 @@ cmd_promover() {
   esac
 
   if [ "$atual" = "$sha" ]; then
+    if [ "$reconstruir" -eq 1 ]; then
+      printf '== release promover %s %s --reconstruir ==\n' "$repo" "${sha:0:7}"
+      gate_biblioteca "$repo" "$sha" || { rc=$?; exit "$rc"; }
+      printf 'no ar:     %s %s (biblioteca garantida)\n' "$repo" "${sha:0:7}"
+      printf '%s\n' "$sha"
+      exit 0
+    fi
     printf 'já no ar:  %s current → %s — nada a mover\n' "$repo" "${sha:0:7}"
     exit 1
   fi

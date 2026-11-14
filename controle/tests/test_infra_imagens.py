@@ -42,6 +42,10 @@ case "$cmd" in
       cat "$STUB_DIR/inativas_ids" > "$STUB_DIR/removidas" 2>/dev/null || true
       echo "Total reclaimed space: 63.52GB"
       exit 0
+    elif [ "$sub" = "rm" ]; then
+      echo "image rm $*" >> "$STUB_DIR/rastro"
+      [ -z "${FAKE_PRUNE_FALHA:-}" ] || { echo "rm error" >&2; exit 1; }
+      exit 0
     fi
     echo "docker-stub: image sub desconhecido: $sub" >&2
     exit 1
@@ -196,3 +200,24 @@ def test_limpeza_cache_poda_build_e_imagens(cena: Cena):
 def test_opcao_desconhecida_sai_2(cena: Cena):
     assert cena.roda("imagens", "--bogus").returncode == 2
     assert cena.roda("limpeza", "imagens", "--bogus").returncode == 2
+
+
+def test_biblioteca_current_protegida_do_expurgo(cena: Cena, tmp_path: Path):
+    rel_raiz = tmp_path / "release"
+    pkg = rel_raiz / "platafirma-ui" / "current" / "src" / "base" / "package.json"
+    pkg.parent.mkdir(parents=True)
+    pkg.write_text(json.dumps({"version": "0.22.0"}), encoding="utf-8")
+    cena.imagem("platafirma/ui:0.22.0", "sha256:ui0220", "120MB", ativa=False)
+
+    r_list = cena.roda("imagens", PF_RELEASE_RAIZ=str(rel_raiz))
+    assert r_list.returncode == 0, r_list.stderr
+    assert "== em produção (3 imagens" in r_list.stdout
+    assert "platafirma/ui:0.22.0  [biblioteca:current]" in r_list.stdout
+
+    r_prune = cena.roda("limpeza", "imagens", PF_RELEASE_RAIZ=str(rel_raiz))
+    assert r_prune.returncode == 0, r_prune.stderr
+    rastro = cena.rastro()
+    assert len(rastro) == 1
+    assert rastro[0].startswith("image rm -f ")
+    assert "platafirma/ui:0.22.0" not in rastro[0]
+    assert "platafirma-rag:velha" in rastro[0]
