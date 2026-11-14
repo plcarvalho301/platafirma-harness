@@ -58,9 +58,8 @@ import transcript  # noqa: E402  (a régua de tokens da fita, a mesma do descans
 import uso  # noqa: E402
 import yaml  # noqa: E402
 import federacao  # noqa: E402  (card #4136: a ligação consultada paga pelo crédito de API)
+import modos as modos_casa  # noqa: E402
 import shutil  # noqa: E402
-
-MODOS = ("varrer", "revisar", "avaliar", "testar", "executar", "consultar", "vigiar", "pesquisar", "parecer")
 LIGACOES = ("consultado", "delegado", "agendado")
 FAMILIAS = ("claude", "gemini", "qwen")
 PERNAS = ("fonte_de_fora", "dado_pessoal", "muda_estado")
@@ -193,8 +192,9 @@ def valida(decl, stem: str) -> list[str]:
         p.append("dono: precisa de cadeira (e chapeu)")
     elif dono["cadeira"] != "{cadeira}" and not _texto(dono.get("chapeu")):
         p.append("dono.chapeu: obrigatório quando a cadeira é fixa")
-    if decl.get("modo") not in MODOS:
-        p.append(f"modo: um de {', '.join(MODOS)}")
+    modos = modos_casa.listar(_AQUI)
+    if decl.get("modo") not in modos:
+        p.append(f"modo: um de {', '.join(modos)}")
     p += _valida_execucao(decl, "")
     if "pecas" in decl and decl["pecas"] != []:
         p.append("pecas: só `[]` (sem lente) por ora; a lente toda é a ausência do campo")
@@ -299,8 +299,6 @@ def projecao_claude(decl: dict) -> str:
         f"model: {exe['modelo']['versao']}",
         f"tools: {', '.join(g for f in exe['ferramentas'] for g in grafias(f))}",
     ]
-    if any(f.startswith(PORTA) for f in exe["ferramentas"]):
-        linhas.append('mcpServers: ["claudinho-mcp"]')
     linhas.extend([
         f"maxTurns: {exe['teto']['turnos']}",
         "---",
@@ -501,6 +499,10 @@ def _posto_ou_erro() -> tuple[Path | None, int]:
 
 
 def ato_listar(modelo: str | None, modo: str | None, como_json: bool) -> int:
+    if modo is not None:
+        modos = modos_casa.listar(_AQUI)
+        if modo not in modos:
+            return _erro(f"--modo inválido: {modo!r} (escolha entre {', '.join(modos)})", 2)
     posto, rc = _posto_ou_erro()
     if posto is None:
         return rc
@@ -1476,7 +1478,7 @@ def main(argv: list[str] | None = None) -> int:
     atos = p.atos()
     a = atos.novo("listar", "as declarações do posto, uma por linha")
     a.add_argument("--modelo", choices=FAMILIAS, default=None)
-    a.add_argument("--modo", choices=MODOS, default=None)
+    a.add_argument("--modo", default=None)
     a.add_argument("--json", action="store_true")
     a = atos.novo("ler", "a declaração inteira de um especialista")
     a.add_argument("slug")

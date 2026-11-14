@@ -42,6 +42,7 @@ sys.path.insert(0, str(_REPO_REAL / "lib"))
 sys.path.insert(0, str(_REPO_REAL / "comum"))
 
 from hash_servido import sha_servido
+import modos as modos_casa
 from uso import Uso
 
 # Catálogo de peças (spec_expediente §7, transição: declarado no verbo até dados averbar no acervo)
@@ -472,7 +473,6 @@ def valida_chapeu(cadeira: str, slug: str) -> tuple[bool, str]:
 # era 8438 dos 18335 tokens do pacote na Medida de 30/09). As linhas de persona e rotinas servem o que
 # o verbo inteiro devolve hoje; o recorte da spec (`persona ler --recorte`, `acervo listar ... --mapa
 # --modo`) entra por troca de UMA linha quando o verbo subir.
-MODOS = ("varrer", "revisar", "avaliar", "testar", "executar", "consultar", "vigiar", "pesquisar", "parecer")
 MODOS_COM_REGUA = ("revisar", "avaliar")
 ESPECIES_REGUA = ("lista-de-verificacao", "padrao")
 PERFIS = ("cadeira", "cadeirinha")
@@ -585,8 +585,9 @@ def ato_montar_cadeirinha(cadeira_arg: str | None, chapeu: str | None, modo: str
     if falta:
         return _erro(f"--perfil cadeirinha exige {' e '.join(falta)}: o roteador nao roda, quem "
                      "chama sabe o que pede", 2, como_json)
-    if modo not in MODOS:
-        return _erro(f"modo '{modo}' fora do vocabulário — modos: {', '.join(MODOS)}", 2, como_json)
+    modos = modos_casa.listar(_REPO_REAL / "bin")
+    if modo not in modos:
+        return _erro(f"modo '{modo}' fora do vocabulário — modos: {', '.join(modos)}", 2, como_json)
     if regua:
         if modo not in MODOS_COM_REGUA:
             return _erro(f"--regua so vale em {' e '.join(MODOS_COM_REGUA)}; o modo '{modo}' nao a serve",

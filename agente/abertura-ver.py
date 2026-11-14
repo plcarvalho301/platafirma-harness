@@ -65,16 +65,10 @@ def sem_acento(s: str) -> str:
 
 # ------------------------------------------------------------------ código do clone
 def carrega_do_clone(clone: Path):
-    """hash_servido e o roteador vêm do clone: a simulação usa o código real."""
+    """hash_servido vem do clone: a simulação usa o código real."""
     sys.path[:0] = [str(clone / "lib"), str(clone / "comum")]
     from hash_servido import sha_servido
-    caminho = clone / "bin" / "_expediente" / "rotear"
-    loader = importlib.machinery.SourceFileLoader("rotear_clone", str(caminho))
-    spec = importlib.util.spec_from_loader("rotear_clone", loader)
-    rotear = importlib.util.module_from_spec(spec)
-    sys.modules["rotear_clone"] = rotear   # @dataclass procura o módulo aqui
-    loader.exec_module(rotear)
-    return sha_servido, rotear
+    return sha_servido
 
 
 def medidor(clone: Path):
@@ -173,6 +167,7 @@ def peca_alias(arv, _cad, _ch):
 
 
 SIMULADA = {
+    "rotinas": "(SIMULADA — `acervo listar casa guia --mapa` lê o acervo na instância, fora do clone.)",
     "cadernos": "(SIMULADA — `mesa caderno` lê o caderno no banco da sessão desde a #3217 "
                 "(arq:0120), fora do clone. Em produção entram aqui o índice da cadeira e, "
                 "com chapéu, o corpo dele por categoria.)",
@@ -187,9 +182,10 @@ CATALOGO = {  # peça -> (dono, volatilidade, ref, leitor)
     "persona": ("gestao-estrategica", "estavel", "persona ler {cad}", peca_persona),
     "chapeu": ("gestao-estrategica", "estavel", "persona ler {cad} --chapeu {ch}", peca_chapeu),
     "conduta": ("gestao-estrategica", "estavel", "persona conduta", peca_conduta),
+    "rotinas": ("gestao-estrategica", "estavel", "acervo listar casa guia --mapa", None),
     "alias-cadeiras": ("gestao-estrategica", "morna", "persona foto", peca_alias),
     "mesa": ("gestao-estrategica", "volatil", "mesa ver{flag_mesa}", None),
-    "acervo-consultado": ("dados", "volatil",
+    "acervo-consultado": ("conhecimento", "volatil",
                           'motor rag buscar casa "{perg}" --k 6 --texto secao --origem abertura', None),
     "cadernos": ("gestao-estrategica", "volatil", "mesa caderno{flag}", None),
 }
@@ -198,22 +194,21 @@ CATALOGO = {  # peça -> (dono, volatilidade, ref, leitor)
 # ------------------------------------------------------------------ montagem
 def monta(clone, cad, chapeu, pergunta, forcado):
     arv = clone / "abertura"
-    sha_servido, rotear = carrega_do_clone(clone)
+    sha_servido = carrega_do_clone(clone)
     conta, metodo = medidor(clone)
 
     if forcado:
         roteador = {"via": "comando", "slug": chapeu, "acertos": {},
                     "motivo": "chapéu forçado por argumento"}
     else:
-        d = rotear.escolhe(pergunta, cad, raiz_chapeus=str(arv))
-        via = {"deterministico": "determinístico", "semantico": "semântico"}.get(d.via, d.via)
-        roteador = {"via": via, "slug": d.slug, "acertos": d.acertos or {}, "motivo": d.motivo}
-        chapeu = d.slug
-    avisos = [] if chapeu else [f"chapéu não roteado (fallback): {roteador['motivo']}"]
+        roteador = {"via": "nenhum", "slug": None, "acertos": {},
+                    "motivo": "sem chapéu declarado na abertura (#3931)"}
+    avisos = []
 
-    # Mesma ordem de bin/expediente montar: persona → [chapeu] → conduta (spec expediente §2, §7; #3146).
-    ordem = ["persona"] + (["chapeu"] if chapeu else []) + ["conduta", "alias-cadeiras", "mesa"]
-    ordem += (["acervo-consultado"] if pergunta else []) + ["cadernos"]
+    # Mesma ordem de bin/expediente montar (spec expediente rev 1.3, #3931):
+    # sem chapéu: persona, conduta, rotinas, alias-cadeiras, mesa, cadernos (6 peças, sem acervo-consultado).
+    ordem = ["persona"] + (["chapeu"] if chapeu else []) + ["conduta", "rotinas", "alias-cadeiras", "mesa"]
+    ordem += (["acervo-consultado"] if chapeu and pergunta else []) + ["cadernos"]
 
     pecas = []
     for nome in ordem:

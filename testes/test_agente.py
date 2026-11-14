@@ -84,8 +84,12 @@ print(json.dumps({{"pecas": [{{"peca": "persona", "conteudo": "LENTE-PERSONA"}},
                               {{"peca": "mesa", "conteudo": None}}]}}))
 """
 STUB_ACERVO = """#!{py}
-import json
-print(json.dumps([{{"tool": "acervo"}}, {{"tool": "repo"}}, {{"tool": "motor"}}]))
+import json, sys
+if sys.argv[1:4] == ["listar", "casa", "modo"]:
+    modos = ("varrer", "revisar", "avaliar", "testar", "executar", "consultar", "parecer", "pesquisar")
+    print(json.dumps([{{"chave": m}} for m in modos]))
+else:
+    print(json.dumps([{{"tool": "acervo"}}, {{"tool": "repo"}}, {{"tool": "motor"}}]))
 """
 STUB_CLAUDE = """#!{py}
 import json, os, sys, time
@@ -289,7 +293,7 @@ def test_projecao_claude_leva_cabecalho_modelo_ferramentas_e_o_lote_de_abertura(
     assert "name: revisor" in linhas and "model: sonnet" in linhas and "maxTurns: 40" in linhas
     assert ("tools: Read, Grep, " + ", ".join(g + "ler_arquivo" for g in agente.GRAFIAS) + ", "
             + ", ".join(g + "monta_sessao" for g in agente.GRAFIAS)) in linhas
-    assert 'mcpServers: ["claudinho-mcp"]' in linhas
+    assert "mcpServers" not in texto
     assert ('1. `monta_sessao` com `cadeira="engenharia"`, `chapeu="devops"`, `perfil="cadeirinha"`, '
             '`modo="revisar"`, `agente="revisor"`, `origem=<o sessao_id que a delegação trouxe>`') in texto
     assert "sessao abrir" not in texto and "expediente montar" not in texto, "abre pela mesma tool da cadeira"
@@ -303,6 +307,17 @@ def test_projecao_claude_sem_tools_de_porta_nao_injeta_mcp_servers():
     sem_porta = com(REVISOR, ferramentas=["Read", "Grep"])
     texto = agente.projecao_claude(sem_porta)
     assert "mcpServers" not in texto
+
+
+def test_valida_aceita_modo_novo_vindo_do_acervo(tmp_path, monkeypatch):
+    stub_bin = tmp_path / "bin"
+    stub_bin.mkdir()
+    acervo = stub_bin / "acervo"
+    acervo.write_text("#!/bin/sh\necho '[{\"chave\":\"sintetizar\"}]'\n", encoding="utf-8")
+    acervo.chmod(0o755)
+    monkeypatch.setenv("PF_BIN", str(stub_bin))
+    assert agente.valida(com(REVISOR, modo="sintetizar"), "revisor") == []
+    assert any("modo:" in a for a in agente.valida(com(REVISOR, modo="revisar"), "revisor"))
 
 
 def test_projecao_do_consultor_nao_fixa_cadeira():
