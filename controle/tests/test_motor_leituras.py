@@ -719,3 +719,28 @@ def test_dispatch_atos_rag_assumem_rag_com_aviso(motor, tmp_path):
     assert r_inst_invalida.returncode == 1
     assert "nao conheco a instancia 'instancia_invalida'" in r_inst_invalida.stderr
     assert "Se for um ato, use: motor rag instancia_invalida" in r_inst_invalida.stderr
+
+
+def test_busca_com_instancia_rag_apos_ato_desduplica_e_sem_aviso_velho(motor, tmp_path):
+    """DT 570: `busca` (ato=buscar, args=[rag, biblioteca, ...]) nao le 'rag' como particao,
+    e o aviso de particao padrao nao diz mais que so biblioteca esta povoada."""
+    roda, grava, sqls, salva, instancia, gab, S = motor
+    registro = tmp_path / "motor-instancias.json"
+    estado = tmp_path / "docker-estado.json"
+    sql_log = tmp_path / "sql.log"
+    env = {**os.environ, "PF_MOTOR_REG": str(registro), "PLATAFIRMA_INSTANCIA": str(instancia),
+           "OPS_LOG_DIR": str(tmp_path / "ops"), "PF_CADEIRA": "ia", "FAKE_DOCKER": str(estado),
+           "FAKE_SQL_LOG": str(sql_log), "PATH": f"{tmp_path / 'bin'}:{os.environ['PATH']}"}
+    env.pop("PF_CHAPEU", None)
+    r = subprocess.run([sys.executable, str(MOTOR), "buscar", "rag", "biblioteca", "--sem-lint",
+                        "--necessidade", "prazo de resposta", "--texto", "nenhum"],
+                       capture_output=True, text=True, env=env, timeout=30)
+    assert r.returncode == 0, r.stderr
+    assert "desduplicada com aviso" in r.stderr
+    assert "unica povoada hoje" not in r.stderr
+
+    r_sem_part = subprocess.run([sys.executable, str(MOTOR), "buscar", "--sem-lint",
+                                 "--necessidade", "prazo de resposta", "--texto", "nenhum"],
+                                capture_output=True, text=True, env=env, timeout=30)
+    assert r_sem_part.returncode == 0, r_sem_part.stderr
+    assert "unica povoada hoje" not in r_sem_part.stderr

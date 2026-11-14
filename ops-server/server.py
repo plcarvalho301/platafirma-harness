@@ -2169,7 +2169,7 @@ def _clone_ausente(raiz: Path, real_pai: Path) -> str | None:
     rel = real_pai.relative_to(raiz).parts
     if raiz.parent.name == "wt":
         if not rel:
-            return f"morada: {raiz}/<cadeira>/<arquivo> — worktree da cadeira e obrigatorio"
+            return f"morada: {raiz}/<cadeira>/<card-ou-slug>/<arquivo> — worktree da cadeira e obrigatorio"
         base = raiz / rel[0]
     else:
         base = raiz
@@ -2236,7 +2236,8 @@ def _resolve_escrita(path: str, ident: dict):
     moradas = ", ".join(str(r) + "/" for r, _ in _moradas_escrita())
     if _bancada() is None:
         moradas += " (bancada nao declarada: clones e worktrees fora de alcance)"
-    return None, "fora de morada: " + moradas
+    return None, (f"fora de morada ({alvo}): caminho relativo parte da bancada declarada "
+                  f"(ex.: wt/<repo>/<cadeira>/<card-ou-slug>/<arquivo>), nao da raiz do repo — moradas: {moradas}")
 
 def _escreve_atomico(real_alvo: Path, data: bytes, modo: int) -> None:
     """mkstemp no MESMO dir -> write -> fsync -> rename -> fsync do dir. Inteira ou nada
