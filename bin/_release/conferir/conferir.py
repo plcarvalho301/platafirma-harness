@@ -3,7 +3,7 @@
 # capacidade: operacao
 # dono: claudinho-TI
 # use para: declarado × servido, 'existe X?' (âncora de NEGATIVA), cabeçalho de verbo, paridade de serviço
-# atos: existe, servico, verbo, skill, procedencia, repo, superficie, front, arranque, ferramental, commit, vocabulario, diagrama
+# atos: existe, servico, verbo, skill, procedencia, repo, superficie, front, arranque, ferramental, commit, vocabulario, diagrama, ontologia
 # forma: relatorio
 # cauda: sim
 # componente: docker, git
@@ -240,7 +240,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs . dependencias . sessao-orfa . copia", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs . dependencias . sessao-orfa . copia . ontologia", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -3372,6 +3372,89 @@ def conferir_jobs(alvo=None, como_json=False):
     return resultado.relatorio("jobs", alvo, itens, _sha_release(), como_json=como_json)
 
 
+# --- classe: ontologia (card #4254 / #4937) --------------------------------
+
+
+def _olaria_chave():
+    if os.environ.get("OLARIA_CHAVE"):
+        return os.environ["OLARIA_CHAVE"].strip()
+    caminho = os.path.join(INSTANCIA, "segredos", "olaria", "OLARIA_CHAVE")
+    try:
+        with open(caminho, encoding="utf-8") as fh:
+            return fh.read().strip()
+    except OSError:
+        return ""
+
+
+def _linha_achado(e):
+    return " · ".join([
+        str(e.get("codigo", "?")),
+        str(e.get("onde", "")),
+        f"recebido: {e.get('recebido', '')}",
+        f"regra: {e.get('regra', '')}",
+        f"cura: {e.get('cura', '')}",
+        f"proximo: {e.get('proximo', '')}",
+    ])
+
+
+def conferir_ontologia(alvo, como_json=False):
+    if not alvo or not (alvo.startswith("estrato:") or alvo.startswith("capacidade:")) or not alvo.split(":", 1)[1].strip():
+        msg = "uso: conferir ontologia estrato:<slug> | capacidade:<slug>"
+        if como_json:
+            print(json.dumps({"erro": msg}))
+            return 2
+        uso(msg)
+
+    url = os.environ.get("OLARIA_URL", "http://127.0.0.1:8103").rstrip("/")
+    chave = _olaria_chave()
+    if not chave:
+        itens = [(alvo, resultado.indeterminavel("chave de servico da Olaria ausente"))]
+        return resultado.relatorio("ontologia", alvo, itens, _sha_release(), como_json=como_json)
+
+    req = urllib.request.Request(
+        f"{url}/sonda",
+        data=json.dumps({"alvo": alvo}).encode("utf-8"),
+        method="POST",
+        headers={
+            "X-Olaria-Chave": chave,
+            "Content-Type": "application/json; charset=utf-8",
+            "User-Agent": "conferir-ontologia",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            status = resp.status
+            corpo = json.loads(resp.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as err:
+        status = err.code
+        try:
+            corpo = json.loads(err.read().decode("utf-8") or "{}")
+        except Exception:
+            corpo = {"erro": str(err)}
+        if status >= 500 or status == 403:
+            itens = [(alvo, resultado.indeterminavel(f"Olaria respondeu {status}: {corpo.get('erro') or corpo.get('motivos') or status}"))]
+            return resultado.relatorio("ontologia", alvo, itens, _sha_release(), como_json=como_json)
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as err:
+        itens = [(alvo, resultado.indeterminavel(f"Olaria fora do ar: {err}"))]
+        return resultado.relatorio("ontologia", alvo, itens, _sha_release(), como_json=como_json)
+
+    if not corpo.get("pronto", True) or corpo.get("estado") == "fora-do-ar":
+        motivos = "; ".join(corpo.get("motivos") or ["servico indisponivel"])
+        itens = [(alvo, resultado.indeterminavel(motivos))]
+        return resultado.relatorio("ontologia", alvo, itens, _sha_release(), como_json=como_json)
+
+    classes = [str(c) for c in (corpo.get("classes") or [])]
+    erros = [e for e in (corpo.get("erros") or []) if isinstance(e, dict)]
+    avisos = [f"classes ({len(classes)}): {', '.join(classes)}" if classes else "nenhuma classe no alvo"]
+    if corpo.get("estado") == "divergente" or erros or status == 422:
+        motivo = "; ".join(_linha_achado(e) for e in erros) or "divergencia na sonda"
+        itens = [(c, resultado.divergente(motivo)) for c in classes] if classes else [(alvo, resultado.divergente(motivo))]
+        return resultado.relatorio("ontologia", alvo, itens, _sha_release(), como_json=como_json, extra={"avisos": avisos})
+
+    itens = [(c, resultado.conforme()) for c in classes] if classes else [(alvo, resultado.conforme())]
+    return resultado.relatorio("ontologia", alvo, itens, _sha_release(), como_json=como_json, extra={"avisos": avisos})
+
+
 def main(argv):
     # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4): varre
     # todos os argumentos antes do despacho; nenhuma classe chega a rodar. uso() sai 2.
@@ -3507,6 +3590,8 @@ def main(argv):
         # card #3763: toda materializacao viva tem declaracao de copia, por substrato (balde, banco, indice)
         import copia
         return copia.conferir_copia(alvo, _sha_release(), como_json=como_json)
+    if classe == "ontologia":
+        return conferir_ontologia(alvo, como_json=como_json)
     if como_json:
         print(json.dumps({"erro": f"classe desconhecida: {classe}"}))
     uso(f"classe desconhecida: {classe}")
