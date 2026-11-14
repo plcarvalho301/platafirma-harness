@@ -75,15 +75,7 @@ class Cena:
         with (self.dir / "ps.jsonl").open("a", encoding="utf-8") as f:
             f.write(json.dumps({"Names": nome, "Image": imagem}) + "\n")
 
-    def imagem(
-        self,
-        ref: str,
-        img_id: str,
-        *,
-        tamanho: str = "1.2GB",
-        criado: str = "3 days ago",
-        ativa: bool = False,
-    ) -> None:
+    def imagem(self, ref: str, img_id: str, tamanho: str = "1.2GB", *, ativa: bool = False) -> None:
         repo, _, tag = ref.partition(":")
         with (self.dir / "images.jsonl").open("a", encoding="utf-8") as f:
             f.write(
@@ -93,7 +85,7 @@ class Cena:
                         "Tag": tag or "<none>",
                         "ID": img_id,
                         "Size": tamanho,
-                        "CreatedSince": criado,
+                        "CreatedSince": "9 days ago",
                     }
                 )
                 + "\n"
@@ -128,15 +120,15 @@ def cena(tmp_path: Path) -> Cena:
     c = Cena(tmp_path)
     c.conteiner("platafirma-core-keycloak-1", "quay.io/keycloak/keycloak:26.0")
     c.conteiner("rag-extractor-api", "sha256:1111111111112222222222223333333333334444444444445555555555556666")
-    c.imagem("quay.io/keycloak/keycloak:26.0", "sha256:aaaa", tamanho="900MB", ativa=True)
+    c.imagem("quay.io/keycloak/keycloak:26.0", "sha256:aaaa", "900MB", ativa=True)
     c.imagem(
         "platafirma-rag:current",
         "sha256:1111111111112222222222223333333333334444444444445555555555556666",
-        tamanho="4.5GB",
+        "4.5GB",
         ativa=True,
     )
-    c.imagem("platafirma-rag:velha", "sha256:bbbb", tamanho="4.2GB", criado="9 days ago", ativa=False)
-    c.imagem("<none>:<none>", "sha256:cccc", tamanho="500MB", criado="12 days ago", ativa=False)
+    c.imagem("platafirma-rag:velha", "sha256:bbbb", "4.2GB", ativa=False)
+    c.imagem("<none>:<none>", "sha256:cccc", "500MB", ativa=False)
     return c
 
 
