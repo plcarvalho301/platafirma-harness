@@ -199,3 +199,29 @@ def test_main_cadeira_preserva_ordem_de_chave_das_outras_byte_a_byte(monkeypatch
     assert final["outra-cadeira"] == {"zulu-chapeu": ["gatilho-z"], "alfa-chapeu": ["gatilho-a"]}
     assert "alfa" in final["testecadeira"]
     assert "governanca" in final["testecadeira"]
+
+
+def test_rotulos_da_gerencias_prefere_chapeu_md_rotulos_de_busca(tmp_path):
+    """No formato casa-espelho, os rótulos moram em `<chapeu>/chapeu.md` (`## Rótulos de busca`)."""
+    cad = tmp_path / "testecadeira"
+    (cad / "alfa").mkdir(parents=True)
+    (cad / "alfa" / "chapeu.md").write_text(
+        "# Alfa\n\n## Rótulos de busca\n\n"
+        "- rótulos: quando cabe um agente · direcionamento vs. implementabilidade.\n"
+        "- recorte de domínio: ia\n",
+        encoding="utf-8",
+    )
+    persona_txt = "## Gerências\n\n- **alfa** — descrição sem rótulos na persona.\n"
+
+    gerencias, orfaos = grc.rotulos_da_gerencias(persona_txt, str(cad))
+
+    assert orfaos == []
+    assert gerencias == {
+        "alfa": ["quando cabe um agente", "direcionamento vs. implementabilidade"],
+    }
+
+
+def test_rotulos_do_chapeu_md_sem_secao_retorna_none(tmp_path):
+    p = tmp_path / "chapeu.md"
+    p.write_text("# Alfa\n\nSem secao de rotulos.\n", encoding="utf-8")
+    assert grc._rotulos_do_chapeu_md(str(p)) is None

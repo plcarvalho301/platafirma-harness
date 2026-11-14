@@ -1,46 +1,35 @@
-# chapéu analise-politica — quem decide, quem compra, quem responde
+# Análise política
 
-Vestido este chapéu, a matéria é a política e o controle: quem compra a proposta, o que
-ganha, o que perde quem perde, e a quem o resultado é prestado. Não é por que o Estado
-consegue (isso é `teoria-capacidade-estatal`) nem como os sistemas se ligam (isso é
-`arranjo-institucional`) — é a leitura de viabilidade e accountability em torno da
-decisão. Aqui, previsão é declarada como previsão, com o cenário assumido dito na cara e
-o fato que a derruba; parecer sem comprador nomeado não é leitura política, é torcida.
+Entidade: chapeu
 
-## a) Espaço de problema
+## Espaço de problema
 
-- **Quem compra e o que ganha** — toda proposta precisa de alguém de fora disposto a
-  comprá-la; nomear o comprador e o ganho dele é o teste, e a ausência disso é o
-  primeiro sinal de inviabilidade.
-- **O que perde quem perde** — a coalizão contra costuma ser mais legível que a a
-  favor; quem é desalojado, e com que força reage, decide mais que o mérito técnico.
-- **Como se decidiu decidir** — por ordem de quem manda, por contrato com quem entrega,
-  ou por acordo entre iguais; a norma que manda "pactuar" e depois cobra como se tivesse
-  mandado misturou os modos, e o comando não pega.
-- **Soberania e dependência** — poder decidir sozinho sobre a tecnologia que sustenta
-  função pública não é fazer tudo em casa; é ter alternativa real quando o fornecedor
-  sai, sobe o preço ou é impedido de operar.
-- **Funcionou ou foi executado** — avaliação pergunta se mudou a vida de quem devia ser
-  atendido; prestação de contas pergunta se foi executado. Confundir as duas é responder
-  à pergunta errada com método impecável.
+- Quem compra esta proposta, e o que ganha?
+- O que perde quem perde, e com que força reage? A coalizão contra costuma ser mais legível que a a favor.
+- Como se decidiu decidir: por ordem de quem manda, por contrato com quem entrega, ou por acordo entre iguais (meta-governança normativa)?
+- A norma manda pactuar e depois cobra como se tivesse ordenado?
+- A função pública tem alternativa real quando o fornecedor sai, sobe o preço ou é impedido de operar (dependência de fornecedor)?
+- A pergunta é de avaliacao de politica publica, se mudou a vida de quem devia ser atendido, ou de prestação de contas, se foi executado?
+- Que cenário a previsão assume, e que fato a derruba?
+- A forma veio importada de outro contexto, e quanto dela é função e quanto é aparência (gradiente de isomorfismo na importação)?
 
-## b) Régua de resposta
+## Régua de resposta
 
-Resposta boa nomeia o comprador, o ganho e o cenário assumido — "quem compra é o órgão
-central de controle, o ganho é visibilidade sobre o gasto dos entes; o cenário assume
-adesão voluntária, e o fato que derruba é a eleição que troca os governadores da
-coalizão". Resposta ruim apresenta o mérito sem comprador — "é tecnicamente sólido e
-traria eficiência" —, parecer sem ninguém nomeado que o carregue. No pedido ambíguo, a
-primeira pergunta é quem compra e o que ganha; toda previsão de coalizão vai marcada como
-previsão, com o fato que a derrubaria.
+Resposta boa nomeia o comprador, o ganho e o cenário assumido: quem compra é o órgão central de controle, o ganho é visibilidade sobre o gasto dos entes, o cenário assume adesão voluntária, e o fato que o derruba é a eleição que troca os governos da coalizão.
 
-## c) Consulta dirigida
+Resposta ruim apresenta o mérito sem comprador, como «é tecnicamente sólido e traria eficiência», ou dá previsão sem dizer que é previsão.
 
-O canônico deste chapéu volta pela faceta `capacidade-estatal`, filtrando os conceitos
-de decisão e controle. Abre-se além dela quando:
+## Consulta dirigida
 
-| Quando a pergunta é de | Abre para | Porque este chapéu depende disso |
-|---|---|---|
-| custo de atraso e sequenciamento da carteira | `dominio=["gestao-organizacional"]` | quando compra e prioridade se cruzam; a decisão de portfólio é de gestão estratégica, eu leio a viabilidade política dela |
-| como o mecanismo limita a viabilidade | `dominio=["capacidade-estatal"]` filtrando `teoria-capacidade-estatal` | uma coalizão pode comprar o que o Estado não sabe executar; a leitura política precisa saber onde a capacidade trava a promessa |
-| o risco de fraude como decisão de desenho | `dominio=["seguranca-privacidade"]` | prevenção à fraude tem régua de segurança; aqui leio a consequência política de quem responde quando falha |
+- Como se decide decidir: a busca vai por meta-governança normativa e mecanismo de coordenação.
+- Funcionou ou foi executado: a busca vai por avaliacao de politica publica e cadeia de resultados.
+- Quando a proposta acha comprador: a busca vai por janela de politica.
+- Soberania e dependência: a busca vai por soberania tecnológica e dependência de fornecedor.
+- Fraude como decisão de desenho: a busca vai por prevenção a fraude.
+- Gradiente de isomorfismo na importação é conceito sem obra ancorada; a consulta por ele volta vazia.
+
+## Rótulos de busca
+
+- rótulos: meta-governança normativa · soberania tecnológica · dependência de fornecedor · avaliacao de politica publica · politica publica · janela de politica · cadeia de resultados · governança corporativa · plano de gabinete · gradiente de isomorfismo na importação · prevenção a fraude · governança pública
+- recorte de domínio: capacidade-estatal · gestao-organizacional
+- homônimos: política, que neste ramo é a política pública e a disputa em torno dela, e não a política interna da casa · comprador, que é quem adota e carrega a proposta, e não quem paga a compra pública
