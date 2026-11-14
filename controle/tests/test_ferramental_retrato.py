@@ -307,8 +307,8 @@ def test_acervo_declara_leitura_e_descoberta_sem_mexer_no_par_do_pep():
     campos, desc = registrar._le_cabecalho(os.path.join(BIN, "acervo"))
     assert "ler (leitura, casa)" in campos["atos"] and "listar (leitura, casa)" in campos["atos"]
     assert registrar._capacidade_por_ato(campos, "acervo") == {
-        "ler": "leitura", "listar": "descoberta", "consultar": "leitura"}
-    assert "capacidade por ato: ler=leitura, listar=descoberta, consultar=leitura" in desc
+        "ler": "leitura", "listar": "descoberta"}
+    assert "capacidade por ato: ler=leitura, listar=descoberta" in desc
 
 
 # ------------------------------------------------------------------ o retrato

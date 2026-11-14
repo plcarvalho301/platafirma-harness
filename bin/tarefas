@@ -190,7 +190,8 @@ uso:
                                           subárvore? a recusa NOMEIA quem seria encerrado
                                           junto, e `--cascata` confirma. Para mover, `mover`.
   tarefas apagar <id> [--cascata]        APAGA o item. Fora do miolo do fluxo (funil e
-                                         terminal); `--cascata` leva a subárvore junto.
+                                         terminal); `--cascata` leva a subárvore e
+                                         os itens englobados por ele junto.
   tarefas assinar <id> --aprovador <c> [--decisao aprovado|recusado] [--motivo "<txt>"]
                                           sign-off. Sem --decisao, inscreve o aprovador
                                           como PENDENTE. `recusado` exige --motivo.
@@ -607,10 +608,11 @@ def rotn: if ((.chave // "") | test("\\.t[0-9]+$")) then (.chave | sub("^[0-9]+\
 # PENDENTE PRIMEIRO, e a ordem é o ponto: é ele que segura o item em `Em parecer`, e é a
 # única linha sobre a qual alguém pode agir agora. Respondido é registro; pendente é dívida.
 ler() {
-  local id="" so_cabecalho=0
+  local id="" so_cabecalho=0 direto=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --cabecalho) so_cabecalho=1; shift ;;
+      --direto) direto=1; shift ;;
       *)
         if [ -z "$id" ]; then
           id=$(so_id "$1")
@@ -622,11 +624,13 @@ ler() {
         ;;
     esac
   done
-  [ -n "$id" ] || { echo "uso: tarefas ler <id> [--cabecalho]" >&2; exit 2; }
+  [ -n "$id" ] || { echo "uso: tarefas ler <id> [--cabecalho] [--direto]" >&2; exit 2; }
   # UMA LEITURA SERVE A TUDO (card #3526): o detalhe do item já traz o vínculo (`bloqueia`,
   # `bloqueado_por`, #3523) e, quando o item tem filha, `filhas` em ordem de dependência. Antes as
   # filhas vinham de uma segunda chamada que puxava o board inteiro e peneirava por pai.
-  local j; j=$(busca GET "/itens/$id") || return 1
+  local q=""
+  [ "$direto" -eq 1 ] && q="?direto=1"
+  local j; j=$(busca GET "/itens/$id$q") || return 1
   local term; term=$(_estados_terminais) || term='[]'
   if [ "$so_cabecalho" -eq 1 ]; then
     printf '%s' "$j" | jq -r --argjson term "$term" "$JQ_ROT"'

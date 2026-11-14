@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # acervo — cuida do item do acervo, obra ou documento da casa, da incorporação à retirada
-# capacidade: conhecimento
+# capacidade: acervo
 # dono: dados
 # classe: B
 # use para: incorporar item, «põe essa obra no acervo», «ingere o repo de docs»; classificar item, «cataloga essa obra», «de que domínio ela é?»; definir e relacionar conceitos no tesauro, «o que é o conceito X?», «como X se liga a Y?»; selar impressão, pôr item em serviço, retirar e restaurar item; abrir obra ou documento que já se sabe qual é, ou que a busca achou, «abre a ADR 97»; publicar página de wiki
-# atos: pipeline (escrita, incorporacao), ler (leitura, casa), listar (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), empacotar (leitura, classificacao), espelhar (escrita, transcricao), recortar (escrita, transcricao), promover (escrita, transcricao), julgar (escrita, transcricao), converter (escrita, transcricao), recolher (escrita, transcricao), repor (escrita, transcricao), retirar (escrita, retirada), restaurar (escrita, retirada), apagar (escrita, retirada), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), consultar (leitura, casa), balde (escrita, acervo), medir (escrita, acervo), gerar (escrita, acervo), gerador (escrita, acervo)
+# atos: pipeline (escrita, incorporacao), ler (leitura, casa), listar (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), empacotar (leitura, classificacao), espelhar (escrita, transcricao), recortar (escrita, transcricao), promover (escrita, transcricao), julgar (escrita, transcricao), converter (escrita, transcricao), recolher (escrita, transcricao), repor (escrita, transcricao), retirar (escrita, retirada), restaurar (escrita, retirada), apagar (escrita, retirada), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo), medir (escrita, acervo), gerar (escrita, acervo), gerador (escrita, acervo)
 # forma: texto
 # poda: cosmetica@psql
 # le: pipeline=repo,acervo.obra
@@ -33,7 +33,6 @@
 # le: extrato=acervo.*
 # le: exportar=acervo.*,repo
 # le: psql=acervo.*
-# le: consultar=acervo.casa
 # le: balde=acervo.*,minio
 # le: medir=acervo.*,repo
 # le: gerar=acervo.*,repo
@@ -64,7 +63,6 @@
 # escreve: extrato=arquivo-local
 # escreve: exportar=repo
 # escreve: psql=acervo.*
-# escreve: consultar=nada
 # escreve: balde=acervo.obra,minio
 # escreve: medir=repo
 # escreve: gerar=acervo.*
@@ -77,7 +75,6 @@
 # volta: apagar=nao
 # capacidade-ato: ler=leitura
 # capacidade-ato: listar=descoberta
-# capacidade-ato: consultar=leitura
 # consome: motor_acervo_rest, rag_extractor_pg
 # ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (ingerir casa le o suporte platafirma-casa pelo sha no espelho bare <instancia>/var/acervo/suporte/platafirma-casa.git, com a credencial da conta; nunca release, nunca clone de bancada; ler/listar casa so leem o origin/main ja buscado dele, para o campo servido), PF_SUPORTE_ESPELHO (opcional, override do espelho), PF_SUPORTE_URL[=https://github.com/plcarvalho301/platafirma-casa.git] (opcional, forge do suporte), RAG_API_BASE (opcional, url do motor), RAG_API_TOKEN (opcional, auth do motor), MOTOR_ACERVO_URL e RAG_API_URL (opcionais, url do motor; valem mais que RAG_API_BASE; a ficha as le nesta ordem), PF_CADEIRA e PF_CONTA (opcionais, o autor de `ingerir biblioteca ficha`; --autor vale mais), PF_SUJEITO e PF_SESSAO (opcionais, so assinam a varredura de `balde varrer`), DOCKER_HOST (opcional; o padrao e o socket do usuario, de onde `balde varrer` le a credencial do MinIO e fala com o rag-extractor-pg)
 # depende: docker, git, psql
@@ -137,8 +134,6 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo ler      casa forma <classe> | --suporte <repo>@<caminho> [--json]
                   a forma do texto da classe, resolvida (gênero, seções, origem e régua); exit 0 com seções,
                   3 canônica, coberta por ou sem forma, 2 classe ou suporte desconhecido (#4046)
-  acervo consultar casa <pergunta> <args>   perguntas com nome sobre o schema casa da casa nova, so leitura:
-                  onde-mora|linhagem|descendentes|documento <entidade> · golden <modulo> <chave> · termo <termo> (#4084)
   acervo listar   casa [<especie>] [--todas]          sem especie: o catalogo (projecao, regime, contagem)
   acervo listar   casa [<especie>] --sobre <classe> <chave>   a documentacao de uma entidade
   acervo listar   casa ferramental --retrato [--json]   o retrato do dicionario de rotulos: rotulo, volta e
@@ -751,9 +746,14 @@ case "$ATO" in
       *) ;;
     esac
     exec bash "$ATOS/psql" "$@" ;;
-  # consultar: perguntas com nome sobre o schema casa da casa nova, pela role busca, so leitura
-  # (#4084, decisao do dono no comentario 4197; a skill casa-espelho as usa durante o E3650).
-  consultar)       exec bash "$ATOS/consultar" "$@" ;;
+  # consultar saiu por ordem do dono (13/11/2026): o schema casa antigo, que as perguntas liam, foi
+  # apagado no #4211, e a rota so devolvia erro de SQL. Recusa com o caminho que responde, como o adr.
+  consultar)
+    echo "acervo consultar: ato removido por ordem do dono (13/11/2026); o schema casa que ele lia foi apagado (#4211)." >&2
+    echo "  onde mora e o documento de uma entidade estao na shape dela:" >&2
+    echo "  repo ler platafirma-casa-espelho outros_repos/conhecimento/ontologia/shapes/entidade/<slug>.ttl" >&2
+    echo "  a lista das entidades: repo listar platafirma-casa-espelho outros_repos/conhecimento/ontologia/shapes/entidade" >&2
+    exit 2 ;;
 
   # formas VIGENTES/DEPRECADAS com implementacao: avisam uma vez por sessao e delegam
   registrar)       avisa "acervo registrar <verbo>" "acervo escrever casa ferramental <verbo>"
@@ -774,7 +774,7 @@ case "$ATO" in
 
   -h|--help|ajuda) uso ;;
   *)
-    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, escrever, ingerir, curar, extrato, exportar, psql, pipeline, consultar, balde, catalogar, definir, relacionar, desrelacionar, derivar, desderivar, empacotar, espelhar, recortar, promover, julgar, converter, recolher, repor, retirar, restaurar, apagar, medir, gerar, gerador." >&2
+    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, escrever, ingerir, curar, extrato, exportar, psql, pipeline, balde, catalogar, definir, relacionar, desrelacionar, derivar, desderivar, empacotar, espelhar, recortar, promover, julgar, converter, recolher, repor, retirar, restaurar, apagar, medir, gerar, gerador." >&2
     echo "  $SPEC" >&2
     exit 2 ;;
 esac
