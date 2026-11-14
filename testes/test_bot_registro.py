@@ -56,7 +56,7 @@ def test_capacidade_e_descricao_saem_do_cabecalho(sql):
 
 @pytest.mark.parametrize("ato,op", ATOS.items())
 def test_cada_ato_entra_com_a_acao_e_a_folha(sql, ato, op):
-    assert f"'bot', '{ato}', 'operacao', '{op}', 'agendamento'" in sql[2]
+    assert f"'bot', '{ato}', 'operacao', '{op}', 'operacao'" in sql[2]
 
 
 def test_o_acesso_de_cada_ato_e_declarado_com_recurso_do_enum(sql):

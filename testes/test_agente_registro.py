@@ -39,7 +39,7 @@ def test_capacidade_e_descricao_saem_do_cabecalho(sql):
 
 @pytest.mark.parametrize("ato,op", [("listar", "leitura"), ("ler", "leitura"), ("rodar", "escrita"), ("projetar", "escrita")])
 def test_cada_ato_entra_com_a_acao_e_a_folha(sql, ato, op):
-    assert f"'agente', '{ato}', 'delegacao', '{op}', 'especialista'" in sql[2]
+    assert f"'agente', '{ato}', 'delegacao', '{op}', 'delegacao'" in sql[2]
 
 
 def test_o_acesso_de_cada_ato_e_declarado(sql):
