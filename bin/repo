@@ -135,7 +135,7 @@ uso:
   repo estado    [<repo>] [--json]
   repo listar    <repo> [<prefixo>] [--json]
   repo ler       <repo> <caminho> [--linhas <faixa>] [--offset <bytes>]
-  repo procurar  <repo> <termo> [<prefixo>] [--caminho <p>] [--json]   (ou --termo <t>; regex ERE)
+  repo procurar  <repo> <termo> [<caminho>…] [--caminho <p>] [-i] [-F] [--json]   (ou --termo <t>; regex ERE)
   repo historico <repo> [<caminho>] [--n <N>] [--json]
   repo diff      <repo> [<caminho>] [--staged]
   repo ramo      <repo> [<card>] [--slug <slug>]
@@ -149,7 +149,7 @@ uso:
   repo pr-abrir  <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
   repo pr-listar <repo> [--todos]
   repo pr-ver    <repo> <numero> [--checks] [--log]
-  repo pr-diff   <repo> <numero>
+  repo pr-diff   <repo> <numero> [<caminho>…] [--caminho <p>] [--stat|--name-only]
   repo pr-merge  <repo> <numero> [--squash|--merge|--rebase] [--forcar]
   repo pr-fechar <repo> <numero> --motivo <texto>   (descarta sem merge; apaga ramo e bancadas)
   repo hooks listar [<repo>|--todos] [--url <t>] [--json]
@@ -935,16 +935,19 @@ PY
 }
 
 cmd_procurar() {
-  # DT 213: aceita -- para fim de opções e --termo com traço
-  # DT 420: aceita regex ERE por padrão (-E), --literal/-F para fixo, e --caminho <prefixo>
-  local como_json=0 repo="" termo="" prefixo=""
+  # DT 213/476: aceita -- para fim de opções e --termo com traço
+  # DT 420/524: aceita regex ERE por padrão (-E), --literal/-F para fixo, -i/--ignore-case, e múltiplos --caminho
+  # DT 8: aceita múltiplos caminhos posicionais ou via --caminho repetido
+  local como_json=0 repo="" termo=""
   local -a termos=()
+  local -a prefixos=()
   local -a posicionais=()
-  local literal=0
+  local literal=0 ignore_case=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --json) como_json=1; COMO_JSON=1; shift ;;
       --literal|-F) literal=1; shift ;;
+      --ignore-case|-i) ignore_case=1; shift ;;
       --termo)
         shift
         [ $# -gt 0 ] || morre "--termo exige um valor" 2
@@ -956,7 +959,7 @@ cmd_procurar() {
         shift
         [ $# -gt 0 ] || morre "--caminho exige um valor" 2
         [ -n "$1" ] || morre "--caminho exige um valor não vazio" 2
-        prefixo="$1"
+        prefixos+=("$1")
         shift
         ;;
       --)
@@ -978,15 +981,13 @@ cmd_procurar() {
       repo="$p"
     elif [ "${#termos[@]}" -eq 0 ]; then
       termos+=("$p")
-    elif [ -z "$prefixo" ]; then
-      prefixo="$p"
     else
-      morre "argumento excedente: '$p'" 2
+      prefixos+=("$p")
     fi
   done
 
   [ -n "$repo" ] || morre "repo obrigatório para procurar" 2
-  [ "${#termos[@]}" -gt 0 ] || morre "termo obrigatório: repo procurar <repo> <termo> [<prefixo>], ou --termo <t> repetido" 2
+  [ "${#termos[@]}" -gt 0 ] || morre "termo obrigatório: repo procurar <repo> <termo> [<caminho>…], ou --termo <t> repetido" 2
   local -a padroes=()
   local t
   for t in "${termos[@]}"; do padroes+=(-e "$t"); done
@@ -995,14 +996,16 @@ cmd_procurar() {
   alvo_leitura "$repo" || exit $?
   local c="$ALVO"
 
-  if [ -n "$prefixo" ]; then
-    if [[ "$prefixo" == /* ]] || [[ "$prefixo" == *..* ]]; then
-      morre "prefixo fora da raiz ou símbolo que escapa: '$prefixo'" 4
+  for p in "${prefixos[@]+"${prefixos[@]}"}"; do
+    if [[ "$p" == /* ]] || [[ "$p" == *..* ]]; then
+      morre "prefixo fora da raiz ou símbolo que escapa: '$p'" 4
     fi
-  fi
+  done
 
   local grep_modo="-E"
   [ "$literal" -eq 1 ] && grep_modo="-F"
+  local -a grep_flags=(-n "$grep_modo")
+  [ "$ignore_case" -eq 1 ] && grep_flags+=(-i)
   local -a ref_arg=()
   local onde="na bancada"
   if [ -n "$LEITURA_REF" ]; then
@@ -1011,10 +1014,10 @@ cmd_procurar() {
   fi
 
   local out=""
-  if [ -n "$prefixo" ]; then
-    out="$("$GIT" -C "$c" grep -n "$grep_modo" "${padroes[@]}" "${ref_arg[@]+"${ref_arg[@]}"}" -- "$prefixo" 2>/dev/null || true)"
+  if [ "${#prefixos[@]}" -gt 0 ]; then
+    out="$("$GIT" -C "$c" grep "${grep_flags[@]}" "${padroes[@]}" "${ref_arg[@]+"${ref_arg[@]}"}" -- "${prefixos[@]}" 2>/dev/null || true)"
   else
-    out="$("$GIT" -C "$c" grep -n "$grep_modo" "${padroes[@]}" "${ref_arg[@]+"${ref_arg[@]}"}" 2>/dev/null || true)"
+    out="$("$GIT" -C "$c" grep "${grep_flags[@]}" "${padroes[@]}" "${ref_arg[@]+"${ref_arg[@]}"}" 2>/dev/null || true)"
   fi
   if [ -n "$LEITURA_REF" ] && [ -n "$out" ]; then
     out="$(printf '%s\n' "$out" | sed "s#^$LEITURA_REF:##")"
@@ -2485,12 +2488,124 @@ for i in ids:
 }
 
 ato_pr_diff() {
-  local nome="${1:-}" num="${2:-}" c
+  # DT 8: aceita filtro de caminho (--caminho ou posicionais após <numero>), --stat e --name-only,
+  # e avisa em stderr quando o diff sem filtro passa de 50 KB.
+  local nome="" num="" modo="patch" c
+  local -a caminhos=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --stat) modo="stat"; shift ;;
+      --name-only) modo="name-only"; shift ;;
+      --caminho)
+        shift
+        [ $# -gt 0 ] || morre "--caminho exige um valor" 2
+        [ -n "$1" ] || morre "--caminho exige um valor não vazio" 2
+        caminhos+=("$1")
+        shift
+        ;;
+      --)
+        shift
+        while [ $# -gt 0 ]; do
+          if [ -z "$nome" ]; then nome="$1"
+          elif [ -z "$num" ]; then num="$1"
+          else caminhos+=("$1")
+          fi
+          shift
+        done
+        break
+        ;;
+      -*) morre "opção desconhecida: '$1'" 2 ;;
+      *)
+        if [ -z "$nome" ]; then nome="$1"
+        elif [ -z "$num" ]; then num="$1"
+        else caminhos+=("$1")
+        fi
+        shift
+        ;;
+    esac
+  done
+  [ -n "$nome" ] || morre "repo obrigatório para pr-diff" 2
   [ -n "$num" ] || morre "falta o numero do PR" 2
   case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
+  local p
+  for p in "${caminhos[@]+"${caminhos[@]}"}"; do
+    if [[ "$p" == /* ]] || [[ "$p" == *..* ]]; then
+      morre "caminho fora da raiz ou símbolo que escapa: '$p'" 4
+    fi
+  done
   tem_gh
   c="$(base_de_repo "$nome")" || exit $?
-  (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr diff "$num") || morre "gh pr diff falhou" 3
+  if [ "$modo" = "name-only" ]; then
+    local names
+    names="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr diff "$num" --name-only)" || morre "gh pr diff falhou" 3
+    if [ "${#caminhos[@]}" -gt 0 ]; then
+      python3 -c '
+import sys
+filtros = [f.rstrip("/") for f in sys.argv[1:]]
+for line in sys.stdin.read().splitlines():
+    if any(line == f or line.startswith(f + "/") for f in filtros):
+        print(line)
+' "${caminhos[@]}" <<<"$names"
+    else
+      printf '%s\n' "$names"
+    fi
+    return 0
+  fi
+  local raw
+  raw="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr diff "$num")" || morre "gh pr diff falhou" 3
+  if [ "${#caminhos[@]}" -eq 0 ] && [ "$modo" = "patch" ]; then
+    local nbytes=${#raw}
+    if [ "$nbytes" -gt 51200 ]; then
+      printf 'aviso: diff do PR #%s tem %d bytes (> 50 KB) — filtre com --caminho <p>, --stat ou --name-only\n' "$num" "$nbytes" >&2
+    fi
+    printf '%s\n' "$raw"
+    return 0
+  fi
+  python3 -c '
+import sys
+modo = sys.argv[1]
+filtros = [f.rstrip("/") for f in sys.argv[2:]]
+raw = sys.stdin.read()
+
+def casa(arq):
+    if not filtros:
+        return True
+    return any(arq == f or arq.startswith(f + "/") for f in filtros)
+
+blocos = []
+cur_arq = None
+cur_linhas = []
+for linha in raw.splitlines():
+    if linha.startswith("diff --git "):
+        if cur_arq is not None and casa(cur_arq):
+            blocos.append((cur_arq, cur_linhas))
+        partes = linha.split(" ")
+        arq = partes[2][2:] if len(partes) >= 4 and partes[2].startswith("a/") else ""
+        cur_arq = arq
+        cur_linhas = [linha]
+    else:
+        if cur_arq is not None:
+            cur_linhas.append(linha)
+if cur_arq is not None and casa(cur_arq):
+    blocos.append((cur_arq, cur_linhas))
+
+if not blocos:
+    print("motivo: nenhuma alteração encontrada nos caminhos informados")
+    sys.exit(0)
+
+if modo == "stat":
+    tot_add = tot_del = 0
+    for arq, linhas in blocos:
+        add = sum(1 for l in linhas if l.startswith("+") and not l.startswith("+++ "))
+        rem = sum(1 for l in linhas if l.startswith("-") and not l.startswith("--- "))
+        tot_add += add
+        tot_del += rem
+        print(f" {arq} | +{add} -{rem}")
+    print(f" {len(blocos)} arquivo(s), +{tot_add} -{tot_del}")
+else:
+    for _, linhas in blocos:
+        print("\n".join(linhas))
+' "$modo" "${caminhos[@]+"${caminhos[@]}"}" <<<"$raw"
 }
 
 ato_pr_merge() {
@@ -3778,11 +3893,23 @@ if [ $# -eq 0 ]; then
   uso
 fi
 
-for _a in "$@"; do
-  case "$_a" in
-    --ajuda|--help|-h) uso ;;
-  esac
-done
+if [ "$1" != "git" ]; then
+  _skip_next=0
+  for _a in "$@"; do
+    if [ "$_skip_next" -eq 1 ]; then
+      _skip_next=0
+      continue
+    fi
+    case "$_a" in
+      --) break ;;
+      --termo|--caminho|--linhas|--offset|--n|--slug|-m|--titulo|--corpo|--base|--checks|--url|--motivo|--atualizar)
+        _skip_next=1 ;;
+      --ajuda|--help|-h) uso ;;
+    esac
+  done
+elif [ "${2:-}" = "--ajuda" ] || [ "${2:-}" = "--help" ] || [ "${2:-}" = "-h" ]; then
+  uso
+fi
 
 cmd="$1"
 shift

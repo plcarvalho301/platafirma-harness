@@ -685,7 +685,9 @@ def test_procurar_aceita_o_termo_posicional_e_o_prefixo_depois(tmp_path):
     assert "LEIA.md" in posicional.stdout and posicional.stdout == com_flag.stdout
     com_prefixo = _repo(tmp_path, bancada, "s1", "procurar", "demo", "x", "LEIA.md")
     assert com_prefixo.returncode == 0 and "LEIA.md" in com_prefixo.stdout
-    assert _repo(tmp_path, bancada, "s1", "procurar", "demo", "x", "LEIA.md", "sobra").returncode == 2
+    # DT 8: múltiplos caminhos posicionais são aceitos (ex.: LEIA.md e outro)
+    com_dois = _repo(tmp_path, bancada, "s1", "procurar", "demo", "x", "LEIA.md", "inexistente.md")
+    assert com_dois.returncode == 0 and "LEIA.md" in com_dois.stdout
     sem_termo = _repo(tmp_path, bancada, "s1", "procurar", "demo")
     assert sem_termo.returncode == 2 and "termo obrigat" in sem_termo.stderr
 
