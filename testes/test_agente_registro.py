@@ -30,7 +30,7 @@ def sql(monkeypatch):
 
 def test_capacidade_e_descricao_saem_do_cabecalho(sql):
     cap, desc, _ = sql
-    assert cap == "especialista"
+    assert cap == "delegacao"
     # o texto da pagina Gatilhos da porta (#4117): a abertura e o `use para:` do agente
     assert desc.startswith("delega uma ação a um especialista, na hora")
     assert "use para: delegar ação síncrona, «roda o revisor»" in desc
@@ -39,7 +39,7 @@ def test_capacidade_e_descricao_saem_do_cabecalho(sql):
 
 @pytest.mark.parametrize("ato,op", [("listar", "leitura"), ("ler", "leitura"), ("rodar", "escrita"), ("projetar", "escrita")])
 def test_cada_ato_entra_com_a_acao_e_a_folha(sql, ato, op):
-    assert f"'agente', '{ato}', 'especialista', '{op}', 'especialista'" in sql[2]
+    assert f"'agente', '{ato}', 'delegacao', '{op}', 'especialista'" in sql[2]
 
 
 def test_o_acesso_de_cada_ato_e_declarado(sql):
