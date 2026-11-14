@@ -425,6 +425,31 @@ def test_write_file_trecho_de_varias_linhas_casa_como_texto(bancada, sem_pep):
     dois = s.write_file(path=caminho, trecho={"antes": "k (1)\nm", "depois": "x"})
     assert dois.get("recusado") and "2 vez" in dois["motivo"], dois
 
+
+def test_write_file_trecho_nao_trava_em_muitas_linhas_em_branco(bancada, sem_pep):
+    """Incidente #4252: linhas em branco e recuos nao disparam backtracking exponencial."""
+    import time
+    caminho = "wt/platafirma-core/fabrica/docs/grande.py"
+    alvo = bancada / caminho
+    alvo.parent.mkdir(parents=True, exist_ok=True)
+    corpo = ("\n    \n\t\n" * 200) + "def alvo():\n\n    return 1\n"
+    alvo.write_text(corpo, encoding="utf-8")
+
+    t0 = time.monotonic()
+    zero = s.write_file(
+        path=caminho,
+        trecho={"antes": "\ndef alvo():\n\n    return 2\n", "depois": "x"},
+    )
+    assert time.monotonic() - t0 < 1.0
+    assert zero.get("recusado") and "0 vez" in zero["motivo"], zero
+
+    ok = s.write_file(
+        path=caminho,
+        trecho={"antes": "def alvo():\nreturn 1", "depois": "def alvo():\n    return 2"},
+    )
+    assert ok.get("ok"), ok
+    assert alvo.read_text(encoding="utf-8").endswith("def alvo():\n    return 2\n")
+
 def test_write_file_nega_release_e_log(bancada, sem_pep):
     rel = s.write_file(path=str(s.BIN_VERBOS / "x.md"), content="x\n")
     assert rel.get("recusado") and "release" in rel["motivo"]

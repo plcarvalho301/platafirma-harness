@@ -2371,6 +2371,99 @@ def _escreve_atomico(real_alvo: Path, data: bytes, modo: int) -> None:
     finally:
         os.close(dfd)
 
+def _casa_trecho_multilinha(atual: str, a: str) -> list[tuple[int, int]]:
+    """Casa `a` em `atual` tolerando quebra e recuo entre linhas, em O(N) sem regex sobre `atual`."""
+    partes = re.split(r'(?:\r?\n[ \t]*)+', a)
+    if len(partes) <= 1:
+        return []
+    tem_sep_inicio = partes[0] == ""
+    tem_sep_fim = partes[-1] == ""
+    blocos = [p for p in partes if p != ""]
+    if not blocos:
+        return []
+
+    linhas: list[tuple[int, int, str, str]] = []
+    pos = 0
+    for ln in atual.splitlines(keepends=True):
+        raw = ln.rstrip("\r\n")
+        lstr = raw.lstrip(" \t")
+        linhas.append((pos, pos + len(ln), raw, lstr))
+        pos += len(ln)
+
+    matches: list[tuple[int, int]] = []
+    i = 0
+    n_lin = len(linhas)
+    while i < n_lin:
+        start_i, _, raw_i, lstr_i = linhas[i]
+        if tem_sep_inicio:
+            if i == 0:
+                i += 1
+                continue
+            j_sep = i - 1
+            while j_sep > 0 and linhas[j_sep][3] == "":
+                j_sep -= 1
+            sep_start = linhas[j_sep][0] + len(linhas[j_sep][2])
+            if len(blocos) == 1 and not tem_sep_fim:
+                if not lstr_i.startswith(blocos[0]):
+                    i += 1
+                    continue
+                m_end = start_i + (len(raw_i) - len(lstr_i)) + len(blocos[0])
+                matches.append((sep_start, m_end))
+                i += 1
+                continue
+            if lstr_i != blocos[0]:
+                i += 1
+                continue
+            m_start = sep_start
+        else:
+            if not raw_i.endswith(blocos[0]):
+                i += 1
+                continue
+            m_start = start_i + len(raw_i) - len(blocos[0])
+
+        j = i
+        casou = True
+        for k in range(1, len(blocos)):
+            j += 1
+            while j < n_lin and linhas[j][3] == "":
+                j += 1
+            if j >= n_lin:
+                casou = False
+                break
+            _, _, raw_j, lstr_j = linhas[j]
+            ultimo = (k == len(blocos) - 1)
+            if ultimo and not tem_sep_fim:
+                if not lstr_j.startswith(blocos[k]):
+                    casou = False
+                    break
+                m_end = linhas[j][0] + (len(raw_j) - len(lstr_j)) + len(blocos[k])
+            else:
+                if lstr_j != blocos[k]:
+                    casou = False
+                    break
+
+        if not casou:
+            i += 1
+            continue
+
+        if tem_sep_fim:
+            if len(linhas[j][2]) == (linhas[j][1] - linhas[j][0]):
+                i += 1
+                continue
+            j_fim = j + 1
+            while j_fim < n_lin and linhas[j_fim][3] == "":
+                j_fim += 1
+            if j_fim < n_lin:
+                m_end = linhas[j_fim][0] + (len(linhas[j_fim][2]) - len(linhas[j_fim][3]))
+            else:
+                m_end = len(atual)
+
+        matches.append((m_start, m_end))
+        i = j + 1
+
+    return matches
+
+
 def write_file(path: str, content: str = "", sessao_id: str | None = None,
                trecho: dict | None = None, turno: str = "", turno_texto: str = "",
                turno_fonte: str = "") -> dict:
@@ -2420,14 +2513,10 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
         if n == 1:
             content = atual.replace(a, d, 1)
         else:
-            # O antes de varias linhas casa tolerando a quebra e o recuo entre elas: cada trecho entre
-            # quebras e literal (re.escape) e so a emenda e regex. Escapar o texto inteiro e trocar a
-            # quebra depois deixava uma barra solta, e o re.finditer morria com «unbalanced parenthesis».
-            pat = r'(?:\r?\n[ \t]*)+'.join(re.escape(p) for p in re.split(r'(?:\r?\n[ \t]*)+', a))
-            matches = list(re.finditer(pat, atual))
+            matches = _casa_trecho_multilinha(atual, a)
             if len(matches) == 1:
-                m = matches[0]
-                content = atual[:m.start()] + d + atual[m.end():]
+                m_start, m_end = matches[0]
+                content = atual[:m_start] + d + atual[m_end:]
             else:
                 return _rec(
                     f"trecho: `antes` ocorre {len(matches) if matches else n} vez(es) — precisa ser exatamente 1",
