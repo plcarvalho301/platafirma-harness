@@ -342,7 +342,8 @@ materializar_env() {
   mv -f "$ENV_TMP" "$ENV_FILE"; ENV_TMP=""
 }
 
-gravar_atual() { mkdir -p "$PONTOS"; printf '%s\n' "$1" > "$PONTOS/$STACK.atual"; }
+gravar_atual()   { mkdir -p "$PONTOS"; printf '%s\n' "$1" > "$PONTOS/$STACK.atual"; }
+gravar_servido() { mkdir -p "$PONTOS"; printf '%s\n' "$1" > "$PONTOS/$STACK.servido"; }
 
 # --- imagem pinada, stack inalterada, passo de teste (card #3192) ------------------
 # Tudo le o `docker compose config --format json` ja interpolado (depois de materializar_env e
@@ -576,7 +577,7 @@ case "$ATO" in
       rc=0
       if imagem_pinada; then garantir_imagens || rc=$?; else compose build || rc=$?; fi
       if [ "$rc" -eq 0 ]; then
-        gravar_atual "$SHA"; printf '%s\n' "$SHA" > "$PONTOS/$STACK.servido"
+        gravar_atual "$SHA"; gravar_servido "$SHA"
         printf 'stack %s sob demanda e parada: imagem de %s pronta, nada ligado (liga quem converte)\n' "$STACK" "${SHA:0:7}"
       fi
       exit "$rc"
@@ -588,7 +589,7 @@ case "$ATO" in
       # current" (debito 52 do #2856: sem isto toda promocao sem mudanca de stack se revertia).
       SERVIDO="$ANTES"
       if [ -r "$PONTOS/$STACK.servido" ]; then SERVIDO="$(cat "$PONTOS/$STACK.servido")"; fi
-      printf '%s\n' "$SERVIDO" > "$PONTOS/$STACK.servido"
+      gravar_servido "$SERVIDO"
       gravar_atual "$SHA"
       exit 0
     fi
@@ -601,7 +602,7 @@ case "$ATO" in
     else
       compose up -d --build --force-recreate "$@" || rc=$?
     fi
-    if [ "$rc" -eq 0 ]; then gravar_atual "$SHA"; printf '%s\n' "$SHA" > "$PONTOS/$STACK.servido"; fi
+    if [ "$rc" -eq 0 ]; then gravar_atual "$SHA"; gravar_servido "$SHA"; fi
     exit "$rc"
     ;;
   # passo de teste da imagem: nada sobe, nada muda de ponto; so constroi e mede
@@ -705,7 +706,10 @@ case "$ATO" in
     else
       compose "$@" "${extra_up[@]}" || rc=$?
     fi
-    if [ "$rc" -eq 0 ] && [ "$ACAO" = "up" ]; then gravar_atual "$(basename "$ARVORE")"; fi
+    if [ "$rc" -eq 0 ] && [ "$ACAO" = "up" ]; then
+      gravar_atual "$(basename "$ARVORE")"
+      gravar_servido "$(basename "$ARVORE")"
+    fi
     exit "$rc"
     ;;
 esac

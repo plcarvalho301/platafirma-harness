@@ -455,6 +455,80 @@ def env_declarado(c):
     return {k: ("" if v is None else str(v)) for k, v in (svc.get("environment") or {}).items()}, None
 
 
+def _resolver_compose_stack(caminho):
+    if os.path.exists(caminho):
+        return caminho
+    prefixo = "/opt/platafirma/current/"
+    if caminho.startswith(prefixo):
+        resto = caminho[len(prefixo):]
+        curta, _, rel = resto.partition("/")
+        if curta and rel:
+            cand = os.path.join(PROD_RAIZ, f"platafirma-{curta}", "current", rel)
+            if os.path.exists(cand):
+                return cand
+    return caminho
+
+
+def _compose_sob_demanda(caminho):
+    """True quando o compose base declara `x-platafirma: {sob_demanda: true}`."""
+    try:
+        with open(caminho, encoding="utf-8") as f:
+            texto = f.read()
+    except OSError:
+        return False
+    try:
+        import yaml
+        doc = yaml.safe_load(texto) or {}
+        return (doc.get("x-platafirma") or {}).get("sob_demanda") is True
+    except Exception:
+        pass
+    em_bloco = False
+    for linha in texto.splitlines():
+        limpa = linha.split("#", 1)[0].rstrip()
+        if not limpa.strip():
+            continue
+        if not linha[0].isspace():
+            em_bloco = limpa.strip() == "x-platafirma:"
+        elif em_bloco and re.match(r"^\s+sob_demanda\s*:\s*true\s*$", limpa, re.IGNORECASE):
+            return True
+    return False
+
+
+def _ausencia_esperada(alvo):
+    """Motivo legitimo para `conferir servico <alvo>` nao achar container em execucao, ou None."""
+    stack = next((s for s in _topologia() if s.get("slug") == alvo), None)
+    if not stack:
+        return None
+    via = ((stack.get("reversao") or {}).get("via") or "").strip()
+    if via in ("catalogo", "teste"):
+        return f"stack {alvo} de {via} — nao sobe container"
+    composes = [_resolver_compose_stack(c) for c in _composes(stack)]
+    if not composes:
+        return f"stack {alvo} sem compose no registro"
+    if _compose_sob_demanda(composes[0]):
+        return f"stack {alvo} sob demanda e parada"
+    if all(os.path.exists(c) for c in composes):
+        base = ["docker", "compose"]
+        for c in composes:
+            base += ["-f", c]
+        override = os.path.join(INSTANCIA, "deploy", alvo, "compose.override.yaml")
+        if os.path.isfile(override):
+            base += ["-f", override]
+        for p in (stack.get("profiles") or []):
+            base += ["--profile", str(p)]
+        env = dict(os.environ)
+        env.update(segredos_da_stack(alvo))
+        fam = stack.get("repo") or ""
+        sha_fam = sha_current(fam) if fam else None
+        if sha_fam:
+            env.setdefault("PF_RELEASE_SHA", sha_fam)
+        env.setdefault("PLATAFIRMA_INSTANCIA", INSTANCIA)
+        rc, out, _ = sh(base + ["config", "--services"], env=env)
+        if rc == 0 and not out.strip():
+            return f"stack {alvo} sem servicos ativos no compose"
+    return None
+
+
 def _inalterada_por_desenho(c, atual, sha_c):
     """True quando a stack foi promovida ao current SEM recriar (`stack promover` achou
     compose, build e binds iguais, card #3192) e segue na arvore em que subiu. Prova pelos
@@ -646,6 +720,11 @@ def conferir_servico(alvo, como_json=False):
         else:
             itens.append((nome_item, resultado.conforme(desde=c.get("started_at"))))
     if alvo and vistos == 0:
+        motivo_ausencia = _ausencia_esperada(alvo)
+        if motivo_ausencia:
+            if not como_json:
+                print(f"\n    dispensada: {motivo_ausencia}\n")
+            return resultado.relatorio("servico", alvo, itens, _sha_release(), como_json=como_json)
         msg = f"nenhum container em execucao com o nome {alvo!r} — nao confundir com conferido"
         if como_json:
             print(json.dumps({"erro": msg}))
