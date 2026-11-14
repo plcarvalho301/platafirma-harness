@@ -216,7 +216,7 @@ def test_tool_face_com_texto_roda_e_o_verbo_ve_o_fundamento(verbo, tmp_path):
 
 def test_tool_face_sem_texto_recusa_a_escrita_e_o_verbo_nao_roda(verbo, tmp_path):
     r = _roda(_tool(verbo, tmp_path), tmp_path, ato="gravar", turno="T1", turno_fonte="face")
-    assert r["recusado"] is True and "exit_code" not in r
+    assert r["recusado"] is True and r["exit_code"] == 2 and r.get("falta") and r.get("proximo")
     assert not verbo.marca.exists()
 
 
@@ -289,7 +289,7 @@ def test_face_com_token_de_outro_client_e_recusada_e_o_verbo_nao_roda(verbo, tmp
     with _com_token(OUTRO_CLIENT):
         r = _roda(_tool(verbo, tmp_path), tmp_path, ato=ato, turno="T1",
                   turno_texto="porque sim", turno_fonte="face")
-    assert r["recusado"] is True and "azp" in r["motivo"] and "exit_code" not in r
+    assert r["recusado"] is True and "azp" in r["motivo"] and r["exit_code"] == 4 and r.get("falta")
     assert not verbo.marca.exists()
     (linha,) = [t for t in _linhas(tmp_path) if t.get("evento") == "escrita_recusada"]
     assert linha["tool"] == "fake" and oplog.validar(linha) == []

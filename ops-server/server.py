@@ -225,6 +225,8 @@ import poda as _poda                                          # noqa: E402
 import lote as _lote                                          # noqa: E402  (card:3149 passo 7)
 import leitura as _leitura                                    # noqa: E402  (card:3263)
 
+_envelope_erro = _leitura.envelope_erro
+
 
 def _poda_ligada() -> bool:
     return os.environ.get("PF_PODA", "1") != "0"
@@ -1004,21 +1006,26 @@ def _fundamento_do_ato(slug: str, binario: str, argv: list, ident: dict,
     declarados, so_escrita = _atos_do_cabecalho(slug, binario)
     ato = _ato_do_argv(argv, declarados)
     motivo = None
+    proximo = None
+    exit_code = 2
     if not _client_da_face(_quem()):
+        exit_code = 4
         motivo = ("a fonte face so vale com token do client do gate do cubo (azp em PF_FACE_CLIENTS); "
                   f"o token desta chamada nao e dele ({slug})")
     elif any(t == "--fundamento" or t.startswith("--fundamento=") for t in argv[1:]):
         motivo = ("a face entrega o fundamento em turno_texto; --fundamento junto daria dois textos "
                   "para o mesmo ato")
+        proximo = f'{slug.replace("-", "_")}(ato={json.dumps(ato or "<ato>", ensure_ascii=False)}, turno_texto="...", turno_fonte="face")'
     elif ato in so_escrita and not fundamento:
         motivo = (f"ato de escrita da face sem fundamento: mande o texto do dono em turno_texto "
                   f"({slug} {ato})")
+        proximo = f'{slug.replace("-", "_")}(ato={json.dumps(ato or "<ato>", ensure_ascii=False)}, turno_texto="<motivo do dono>", turno_fonte="face")'
     if motivo is None:
         return fundamento, None
     _audit(tool=slug, evento="escrita_recusada", ato=ato, motivo=motivo,
            cadeira=ident.get("cadeira") or None, sessao_id=ident.get("sessao_id"),
            ordem_id=ident.get("ordem_id"))
-    return None, _recusa(slug, motivo)
+    return None, _recusa(slug, motivo, proximo=proximo, exit_code=exit_code)
 
 
 def _escopo_do_giro(slug: str, ato, args, r, ident: dict) -> None:
@@ -1257,16 +1264,24 @@ def _autoriza(tool: str, acao: str, tipo: str, alvo: str, dominio: str,
     quem = (ident or _quem()).get("sujeito") or "-"
     if est.get("erro"):
         _audit(tool=tool, evento="pep_indisponivel", motivo=est["erro"], sujeito=quem)
-        return {"erro": "politica de acesso indisponivel — nego por default",
-                "detalhe": est["erro"]}
+        return _envelope_erro(
+            3,
+            f"política de acesso indisponível ({est['erro']}) — o ato é de ti/seguranca",
+            erro="politica de acesso indisponivel — nego por default",
+            detalhe=est["erro"],
+        )
     from pdp import Recurso, Sujeito, decide
     atrib = (est["sujeitos"] or {}).get(quem)
     if not atrib:
         _audit(tool=tool, evento="pep_negou", regra="projecao", sujeito=quem,
                motivo="sujeito sem atributos declarados")
-        return {"erro": f"sujeito {quem!r} nao tem atributos em "
-                        "politica-acesso/sujeitos.yaml — o PDP nega por atributo ausente",
-                "regra": "projecao"}
+        return _envelope_erro(
+            4,
+            f"sujeito {quem!r} sem atributos declarados em politica-acesso/sujeitos.yaml — o ato é de seguranca",
+            erro=f"sujeito {quem!r} nao tem atributos em "
+                 "politica-acesso/sujeitos.yaml — o PDP nega por atributo ausente",
+            regra="projecao",
+        )
     s = Sujeito(id=quem, natureza=atrib.get("natureza"),
                 papeis=tuple(atrib.get("papeis") or ()),
                 dominios=tuple(atrib.get("dominios") or ()),
@@ -1276,7 +1291,12 @@ def _autoriza(tool: str, acao: str, tipo: str, alvo: str, dominio: str,
         return None
     _audit(tool=tool, evento="pep_negou", regra=d.regra, motivo=d.motivo, sujeito=quem,
            por_atributo_ausente=d.por_atributo_ausente, alvo=alvo[:CMD_CAP])
-    return {"erro": f"negado pela politica de acesso: {d.motivo}", "regra": d.regra}
+    return _envelope_erro(
+        4,
+        f"negado pela política de acesso ({d.regra}): {d.motivo} — o ato é de seguranca",
+        erro=f"negado pela politica de acesso: {d.motivo}",
+        regra=d.regra,
+    )
 
 
 mcp = FastMCP(
@@ -1305,7 +1325,12 @@ def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               start_new_session=True)
     except OSError as e:
-        return {"erro": str(e), "cwd": str(d)}
+        return _envelope_erro(
+            5,
+            f"falha ao executar comando no sistema operacional ({type(e).__name__}: {e}) — o ato é de ti",
+            erro=str(e),
+            cwd=str(d),
+        )
     try:
         stdout, stderr = p.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -1314,7 +1339,15 @@ def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid
         except ProcessLookupError:
             pass
         p.wait()
-        return {"erro": f"timeout ({timeout}s) — grupo de processo morto", "cwd": str(d)}
+        prox = (f"malote(command={json.dumps(command, ensure_ascii=False)}, "
+                f"timeout={min(600, timeout * 2)})") if timeout < 600 else None
+        return _envelope_erro(
+            5,
+            f"tempo limite de {timeout}s esgotado — o grupo de processo foi morto e não se sabe se houve efeito parcial",
+            prox,
+            erro=f"timeout ({timeout}s) — grupo de processo morto",
+            cwd=str(d),
+        )
     return {"exit_code": p.returncode, "stdout": _cap(stdout),
             "stderr": _cap(stderr), "cwd": str(d)}
 
@@ -1350,15 +1383,38 @@ _SUGESTAO = {
     "deploy": "verbo retirado: release promover <família> <rev> · infra up <stack>",
 }
 
-def _recusa(verbo: str, motivo: str) -> dict:
-    r = {"recusado": True, "verbo": verbo[:80], "motivo": motivo,
-         "sugestao": _SUGESTAO.get(verbo.split("/")[-1])}
-    if motivo == "sem verbo" and r["sugestao"] is None:
-        # sem reflexo conhecido: nao devolve so o null seco (spec_porta-so-verbo,
-        # card fabrica/devops) — a lista inteira + o golden de uso, incondicional.
-        r["verbos_servidos"] = sorted(SLUGS_SERVIDOS)
-        r["golden"] = "<verbo> sem ato lista os atos, e a descricao da tool e o golden record"
-    return r
+def _proximo_da_sugestao(sug: str | None) -> str | None:
+    if not sug:
+        return None
+    if sug in SLUGS_SERVIDOS:
+        return f'{sug}(ato="<ato>", args=[...])'
+    if sug == "ler_arquivo":
+        return 'ler_arquivo(caminho="...")'
+    if sug == "write_file":
+        return 'write_file(path="...", content="...")'
+    return None
+
+
+def _recusa(verbo: str, motivo: str, proximo: str | None = None,
+            exit_code: int = 2) -> dict:
+    v = verbo[:80]
+    if motivo == "sem verbo":
+        sug = _SUGESTAO.get(verbo.split("/")[-1])
+        prox = proximo or _proximo_da_sugestao(sug)
+        falta = f"verbo {v!r} não é servido pela porta"
+        if sug:
+            falta += f" — use {sug}"
+        elif sug is None:
+            falta += " — escolha um dos `verbos_servidos` ou abra card se faltar verbo"
+        r = _envelope_erro(exit_code, falta, prox, recusado=True, verbo=v, motivo=motivo,
+                           sugestao=sug)
+        if sug is None:
+            # sem reflexo conhecido: nao devolve so o null seco (spec_porta-so-verbo,
+            # card fabrica/devops) — a lista inteira + o golden de uso, incondicional.
+            r["verbos_servidos"] = sorted(SLUGS_SERVIDOS)
+            r["golden"] = "<verbo> sem ato lista os atos, e a descricao da tool e o golden record"
+        return r
+    return _envelope_erro(exit_code, motivo, proximo, recusado=True, verbo=v, motivo=motivo)
 
 
 def _stdin_texto(v):
@@ -1404,15 +1460,23 @@ def _item_de_lote(x):
         try:
             toks = shlex.split(x)
         except ValueError as e:
-            return None, None, _recusa(x, f"nao parte: {e}")
+            return None, None, _recusa(
+                x, f"nao parte: {e}",
+                proximo='malote(commands=[{"verbo": "<verbo>", "ato": "<ato>", "args": [...]}])')
         if not toks:
-            return None, None, _recusa("", "item vazio")
+            return None, None, _recusa(
+                "", "item vazio",
+                proximo='malote(commands=[{"verbo": "<verbo>", "ato": "<ato>"}])')
         if toks[0] in TOOLS_LOTE and len(toks) > 1:
             toks = toks[1:]
         for t in toks:
             if t in _OPERADORES_SHELL:
-                return None, None, _recusa(toks[0], "metacaractere de shell — um verbo por item; "
-                                                    "pipe vira stdin.de, ';' vira dois itens")
+                v_ex = json.dumps(toks[0], ensure_ascii=False)
+                a_ex = json.dumps(toks[1], ensure_ascii=False) if len(toks) > 1 else '"<ato>"'
+                return None, None, _recusa(
+                    toks[0],
+                    "metacaractere de shell — um verbo por item; pipe vira stdin.de, ';' vira dois itens",
+                    proximo=f'malote(commands=[{{"verbo": {v_ex}, "ato": {a_ex}, "args": [...]}}])')
         verbo, resto = toks[0], toks[1:]
     elif isinstance(x, dict):
         verbo = str(x.get("verbo") or "")
@@ -1426,19 +1490,27 @@ def _item_de_lote(x):
         # verbo com token corrompido, sem erro. O contrato quer lista; string e erro de
         # uso, e a porta o recusa aqui em vez de mascarar (custou a fita e8a97d73, 08/09).
         if isinstance(args, (str, bytes)):
+            v_ex = json.dumps(verbo or "<verbo>", ensure_ascii=False)
+            a_ex = json.dumps(ato or "<ato>", ensure_ascii=False)
             return None, None, _recusa(
-                verbo, "args deve ser lista de tokens, recebido string; use args: [ ... ]")
+                verbo,
+                "args deve ser lista de tokens, recebido string; use args: [ ... ]",
+                proximo=f'malote(commands=[{{"verbo": {v_ex}, "ato": {a_ex}, "args": [...]}}])')
         resto = ([ato] if ato else []) + [str(a) for a in args]
         stdin = x.get("stdin")
         if not _eh_pipe_stdin(stdin):
             stdin = _stdin_texto(stdin)
     else:
-        return None, None, _recusa(str(x)[:40], "item nem string nem {verbo, ato, args, stdin}")
+        return None, None, _recusa(
+            str(x)[:40],
+            "item nem string nem {verbo, ato, args, stdin}",
+            proximo='malote(commands=[{"verbo": "<verbo>", "ato": "<ato>", "args": [...]}])')
     slug = verbo.split("/")[-1]
     slug = NOMES_EXIBIDOS.get(slug, slug)
     if slug not in SLUGS_SERVIDOS:
         if slug in SLUGS_RETIDOS:
-            return None, None, _recusa(slug, "leva 2 desligada (PF_TOOLS_LEVA2)")
+            return None, None, _recusa(
+                slug, "leva 2 desligada (PF_TOOLS_LEVA2) — o ato é de ti", exit_code=4)
         return None, None, _recusa(slug, "sem verbo")
     return [BINARIOS[slug]] + resto, stdin, None
 
@@ -1481,7 +1553,14 @@ async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: st
                                          turno_fonte=turno_fonte)
     itens = list(commands) if commands else ([command] if command else [])
     if not itens:
-        return {"recusado": True, "motivo": "sem item", "verbos_servidos": sorted(SLUGS_SERVIDOS)}
+        return _envelope_erro(
+            2,
+            "nenhum item informado em `commands` nem `command`",
+            'malote(commands=[{"verbo": "<verbo>", "ato": "<ato>"}])',
+            recusado=True,
+            motivo="sem item",
+            verbos_servidos=sorted(SLUGS_SERVIDOS),
+        )
     timeout = max(1, min(timeout, 600))
     fim = _prazo_da_chamada()          # #3249: o prazo e da chamada, nao do item
     ident = _sessao_resolve(sessao_id)
@@ -1551,7 +1630,10 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
         chave_nome = "stdin.stdin_de" if eh_stdin_de else "stdin.de"
         slug0 = argv[0].rsplit("/", 1)[-1]
         if not isinstance(n, int) or n < 0 or n >= _i:
-            recusa = _recusa(slug0, f"{chave_nome}={n!r} fora do lote (0..{_i - 1})")
+            recusa = _recusa(
+                slug0, f"{chave_nome}={n!r} fora do lote (0..{_i - 1})",
+                proximo='malote(commands=[{"verbo": "<verbo>", "ato": "<ato>"}, '
+                        '{"verbo": "<verbo>", "ato": "<ato>", "stdin": {"de": 0}}])')
         elif (resultados[n].get("recusado") or resultados[n].get("erro")
               or resultados[n].get("nao_rodou")):
             recusa = _recusa(slug0, f"insumo do item {n} nao rodou")
@@ -1567,7 +1649,7 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
     if recusa:
         _audit(tool=nome, evento="sem_verbo", verbo=recusa["verbo"],
                item=str(x)[:CMD_CAP],
-               motivo=recusa["motivo"], sugestao=recusa["sugestao"],
+               motivo=recusa["motivo"], sugestao=recusa.get("sugestao"),
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                ordem_id=ident["ordem_id"], lote_id=lote_id, lote_n=_i,
                encadeado=encadeado or None)
@@ -1647,7 +1729,8 @@ async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 1
     d, erro_cwd = _cwd_de(cwd)
     if erro_cwd:
         _audit(tool=nome, evento="cwd_recusado", cwd=cwd, motivo=erro_cwd)
-        return {"recusado": True, "cwd": cwd, "motivo": erro_cwd}
+        return _envelope_erro(2, erro_cwd, 'malote(commands=[{"verbo": "<verbo>", "ato": "<ato>"}])',
+                              recusado=True, cwd=cwd, motivo=erro_cwd)
     if commands and PF_TOOLS_LOTE:
         timeout = max(1, min(timeout, 600))
         ident = _sessao_resolve(sessao_id)
@@ -1769,10 +1852,17 @@ def _classe_recusa(tool: str) -> dict:
 def _nega_fila(p: Path, tool: str, alvo: Path | None = None):
     if _sob_fila(p, alvo):
         _audit(tool=tool, path=str(p), erro="fila: use o verbo `fila`", **_classe_recusa(tool))
-        return {"erro": "caminho sob a fila — ler_arquivo/write_file nao operam ai. "
-                        "Use o verbo: `fila status|ler|consumir|enviar` (append sob "
-                        "flock, com identidade). Motivo: write_file substitui.",
-                "path": str(p)}
+        motivo = ("caminho sob a fila — ler_arquivo/write_file nao operam ai. "
+                  "Use o verbo: `fila status|ler|consumir|enviar` (append sob "
+                  "flock, com identidade). Motivo: write_file substitui.")
+        return _envelope_erro(
+            4,
+            "caminho sob a fila não é acessível por ler_arquivo/write_file — use o verbo `fila`",
+            'fila(ato="status")',
+            recusado=True,
+            motivo=motivo,
+            path=str(p),
+        )
     return None
 
 
@@ -1819,8 +1909,8 @@ def _nega_segredo(p: Path, tool: str, alvo: Path | None = None):
     if _e_segredo(p, alvo):
         _audit(tool=tool, evento="leitura_recusada", path=str(p), motivo="segredo",
                **_classe_recusa(tool))
-        return {"recusado": True, "path": str(p),
-                "motivo": "segredo: fora do alcance da leitura de arquivo (spec_porta-so-verbo §4.6)"}
+        motivo = "segredo: fora do alcance da leitura de arquivo (spec_porta-so-verbo §4.6)"
+        return _envelope_erro(4, motivo, recusado=True, path=str(p), motivo=motivo)
     return None
 
 
@@ -1868,8 +1958,8 @@ def _nega_morada(p: Path, tool: str, alvo: Path, bancada: Path | None):
     moradas = ", ".join((*_MORADAS_LEITURA, raiz_bancada or "(bancada nao declarada)"))
     _audit(tool=tool, evento="leitura_recusada", path=str(p), motivo="fora de morada",
            **_classe_recusa(tool))
-    return {"recusado": True, "path": str(p),
-            "motivo": f"fora de morada: ler_arquivo alcanca so {moradas} (spec_porta-so-verbo §8)"}
+    motivo = f"fora de morada: ler_arquivo alcanca so {moradas} (spec_porta-so-verbo §8)"
+    return _envelope_erro(4, motivo, recusado=True, path=str(p), motivo=motivo)
 
 
 def _curto(p: Path, bancada=_SEM_BANCADA_DADA) -> str:
@@ -1895,7 +1985,9 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
             "ordem_id": ident["ordem_id"], "lote_id": lote_id, "lote_n": lote_n}
     if not caminho:
         _audit(tool=tool, erro="caminho vazio", classe_erro="gramatica", **quem)
-        return {"erro": "caminho vazio", "cura": 'ler_arquivo(caminho="/caminho/absoluto")'}
+        cura = 'ler_arquivo(caminho="/caminho/absoluto")'
+        return _envelope_erro(2, "parâmetro `caminho` vazio — informe o caminho absoluto ou relativo à bancada",
+                              cura, erro="caminho vazio", cura=cura)
     # `caminho!membro`: autoriza e nega pelo arquivo; o membro é leitura dentro dele (§7.4).
     caminho, membro = _separa_membro(caminho)
     # A ação do PDP é `read_file`, e segue sendo depois que o apelido saiu (#4117): é a capacidade de ler
@@ -1908,7 +2000,8 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
     if erro_caminho:
         _audit(tool=tool, evento="leitura_recusada", path=caminho, motivo=erro_caminho,
                erro=erro_caminho, classe_erro="recusado", **quem)
-        return {"recusado": True, "caminho": caminho, "motivo": erro_caminho}
+        return _envelope_erro(2, erro_caminho, 'ler_arquivo(caminho="/caminho/absoluto")',
+                              recusado=True, caminho=caminho, motivo=erro_caminho)
     alvo = _real(p)   # o único realpath do alvo: fila, segredo e morada leem este
     bloqueio = (_nega_fila(p, tool, alvo) or _nega_segredo(p, tool, alvo)
                 or _nega_morada(p, tool, alvo, bancada))
@@ -1917,7 +2010,13 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
         return bloqueio
     if _nega_analise(alvo):
         _audit(tool=tool, evento="leitura_recusada", motivo="posse-analitica", **quem)
-        return {"recusado": True, "caminho": str(p), "motivo": "acesso analítico negado"}
+        return _envelope_erro(
+            4,
+            "arquivo temporário analítico pertence a outro sujeito — só o sujeito dono da execução pode lê-lo",
+            recusado=True,
+            caminho=str(p),
+            motivo="acesso analítico negado",
+        )
     offset, modo = args.get("offset"), args.get("modo") or "texto"
     paginas = args.get("paginas") or None
     try:
@@ -1972,8 +2071,9 @@ def ler_arquivo(caminho: str = "", linhas: str = "", modo: str = "texto",
     se o arquivo mudou, o cabeçalho abre com ARQUIVO MUDOU. `encoding`: força a decodificação
     quando o cabeçalho diz NÃO JULGADO. `inteiro=true`: reenvia a página que a porta tinha
     por já servida.
-    Diretório devolve a listagem; caminho que não existe devolve `existe_ate`, `la_tem` e
-    `parecidos`.
+    Diretório devolve a listagem (`termo` filtra entradas pelo nome, sem diferenciar
+    maiúsculas; só vale em diretório); caminho que não existe devolve `existe_ate`,
+    `la_tem` e `parecidos`.
     Formatos do acervo (PDF, EPUB, DOCX, PPTX, XLSX, MOBI, HTML, MHTML, imagem, ZIP) se leem
     pelo leitor do formato: `paginas="a-b"` escolhe a unidade do original (página, item do
     spine, slide, planilha), cada uma aberta por `<!-- p. N -->`; `modo="pagina"` devolve a
@@ -2237,6 +2337,8 @@ def _resolve_escrita(path: str, ident: dict):
     moradas = ", ".join(str(r) + "/" for r, _ in _moradas_escrita())
     if _bancada() is None:
         moradas += " (bancada nao declarada: clones e worktrees fora de alcance)"
+    if pp.is_absolute():
+        return None, f"fora de morada ({alvo}) — moradas: {moradas}"
     return None, (f"fora de morada ({alvo}): caminho relativo parte da bancada declarada "
                   f"(ex.: wt/<repo>/<cadeira>/<card-ou-slug>/<arquivo>), nao da raiz do repo — moradas: {moradas}")
 
@@ -2288,23 +2390,26 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
     ident = _sessao_resolve(sessao_id)
     _carimba_turno(ident, turno, turno_texto, turno_fonte)
 
-    def _rec(motivo):
+    def _rec(motivo, exit_code=4, proximo=None):
         _audit(tool="write_file", evento="escrita_recusada", path=path, motivo=motivo,
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                ordem_id=ident["ordem_id"])
-        return {"recusado": True, "path": path, "motivo": motivo}
+        return _envelope_erro(exit_code, motivo, proximo, recusado=True, path=path, motivo=motivo)
 
     real_alvo, erro = _resolve_escrita(path, ident)
     if erro:
-        return _rec(erro)
+        ec = 2 if erro.startswith("caminho:") else 4
+        return _rec(erro, exit_code=ec)
     existia = real_alvo.is_file()
     antes_sha = hashlib.sha256(real_alvo.read_bytes()).hexdigest() if existia else None
     if trecho:
         if not existia:
-            return _rec("trecho: arquivo nao existe")
+            return _rec("trecho: arquivo nao existe", exit_code=2,
+                        proximo=f'write_file(path={json.dumps(path, ensure_ascii=False)}, content="...")')
         a, d = str(trecho.get("antes") or ""), str(trecho.get("depois") or "")
         if not a:
-            return _rec("trecho: `antes` vazio")
+            return _rec("trecho: `antes` vazio", exit_code=2,
+                        proximo=f'write_file(path={json.dumps(path, ensure_ascii=False)}, trecho={{"antes": "...", "depois": "..."}})')
         atual = real_alvo.read_text("utf-8", "replace")
         n = atual.count(a)
         if n == 1:
@@ -2319,13 +2424,18 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
                 m = matches[0]
                 content = atual[:m.start()] + d + atual[m.end():]
             else:
-                return _rec(f"trecho: `antes` ocorre {len(matches) if matches else n} vez(es) — precisa ser exatamente 1")
+                return _rec(
+                    f"trecho: `antes` ocorre {len(matches) if matches else n} vez(es) — precisa ser exatamente 1",
+                    exit_code=2,
+                    proximo=f'ler_arquivo(caminho={json.dumps(str(real_alvo), ensure_ascii=False)})',
+                )
     data = (content or "").encode("utf-8")
     if len(data) > ESCRITA_TETO:
-        return _rec(f"tamanho: {len(data)} B > teto {ESCRITA_TETO} B")
+        return _rec(f"tamanho: {len(data)} B > teto {ESCRITA_TETO} B", exit_code=2)
     em_bin = _em_bin_do_harness(real_alvo.parent)
     if em_bin and not real_alvo.suffix and not data.startswith(b"#!"):
-        return _rec("tipo: verbo sem shebang na primeira linha")
+        return _rec("tipo: verbo sem shebang na primeira linha", exit_code=2,
+                    proximo=f'write_file(path={json.dumps(path, ensure_ascii=False)}, content="#!/usr/bin/env python3\\n...")')
     if existia:
         modo = real_alvo.stat().st_mode & 0o777
     else:
@@ -2333,7 +2443,12 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
     try:
         _escreve_atomico(real_alvo, data, modo)
     except OSError as e:
-        return {"erro": str(e), "path": str(real_alvo)}
+        return _envelope_erro(
+            5,
+            f"falha ao gravar no disco ({type(e).__name__}: {e}) — o ato é de ti (conferir permissão e espaço em {real_alvo.parent})",
+            erro=str(e),
+            path=str(real_alvo),
+        )
     depois_sha = hashlib.sha256(data).hexdigest()
     _audit(tool="write_file", evento="escrita", path=str(real_alvo), bytes=len(data),
            substituiu=existia, trecho=bool(trecho), sha256_antes=antes_sha, sha256=depois_sha,
@@ -2487,27 +2602,50 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
             cwd=d_cwd,
         )
     except (OSError, subprocess.SubprocessError) as e:
-        return {"erro": f"falha ao executar sessao abrir: {type(e).__name__}: {e}",
-                "verbo": " ".join(argv_abrir), "cadeiras": _cadeiras()}
+        return _envelope_erro(
+            3,
+            f"falha ao executar sessao abrir ({type(e).__name__}: {e}) — o ato é de ti",
+            erro=f"falha ao executar sessao abrir: {type(e).__name__}: {e}",
+            verbo=" ".join(argv_abrir),
+            cadeiras=_cadeiras(),
+        )
 
     # Falha em abrir (exit ≠ 0) interrompe — não roda expediente e devolve o erro do abrir com o id, se houver.
     if proc_abrir.returncode != 0:
         try:
             err_json = json.loads(proc_abrir.stdout)
             if isinstance(err_json, dict):
-                return err_json
+                ec = err_json.get("exit_code")
+                if not isinstance(ec, int) or isinstance(ec, bool):
+                    ec = proc_abrir.returncode if proc_abrir.returncode in (2, 3, 4, 5) else 3
+                return _envelope_erro(
+                    ec,
+                    err_json.get("falta") or err_json.get("erro") or err_json.get("motivo") or "sessao abrir recusou",
+                    err_json.get("proximo"),
+                    **{k: v for k, v in err_json.items() if k not in ("exit_code", "falta", "proximo")},
+                )
         except Exception:
             pass
         msg = proc_abrir.stderr.strip() or proc_abrir.stdout.strip() or f"exit {proc_abrir.returncode}"
-        return {"erro": msg, "exit_code": proc_abrir.returncode}
+        ec = proc_abrir.returncode if proc_abrir.returncode in (2, 3, 4, 5) else 3
+        return _envelope_erro(ec, msg, erro=msg)
 
     try:
         abrir_json = json.loads(proc_abrir.stdout)
     except Exception as e:
-        return {"erro": f"sessao abrir devolveu JSON inválido: {e}", "stdout": proc_abrir.stdout[:200]}
+        return _envelope_erro(
+            3,
+            f"sessao abrir devolveu JSON inválido ({e}) — o ato é de ti (conferir bin/sessao)",
+            erro=f"sessao abrir devolveu JSON inválido: {e}",
+            stdout=proc_abrir.stdout[:200],
+        )
 
     if not isinstance(abrir_json, dict):
-        return {"erro": f"sessao abrir saída inesperada: {proc_abrir.stdout[:200]}"}
+        return _envelope_erro(
+            3,
+            "sessao abrir devolveu saída fora do formato esperado — o ato é de ti (conferir bin/sessao)",
+            erro=f"sessao abrir saída inesperada: {proc_abrir.stdout[:200]}",
+        )
 
     # (b) Lê sessao_id do JSON de abrir; RELÊ sessao:{id} no msg-mem (arq:0110 §5) —
     # ausente (promocao recriou o msg-mem vazio, card #3145 decisao 1): reidrata por
@@ -2564,23 +2702,41 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
             cwd=d_cwd,
         )
     except (OSError, subprocess.SubprocessError) as e:
-        return {"erro": f"falha ao executar expediente montar: {type(e).__name__}: {e}",
-                "verbo": " ".join(argv_exp)}
+        return _envelope_erro(
+            3,
+            f"falha ao executar expediente montar ({type(e).__name__}: {e}) — o ato é de ti",
+            erro=f"falha ao executar expediente montar: {type(e).__name__}: {e}",
+            verbo=" ".join(argv_exp),
+        )
 
     if proc_exp.returncode != 0:
         try:
             err_exp = json.loads(proc_exp.stdout)
             if isinstance(err_exp, dict):
-                return err_exp
+                ec = err_exp.get("exit_code")
+                if not isinstance(ec, int) or isinstance(ec, bool):
+                    ec = proc_exp.returncode if proc_exp.returncode in (2, 3, 4, 5) else 3
+                return _envelope_erro(
+                    ec,
+                    err_exp.get("falta") or err_exp.get("erro") or err_exp.get("motivo") or "expediente montar recusou",
+                    err_exp.get("proximo"),
+                    **{k: v for k, v in err_exp.items() if k not in ("exit_code", "falta", "proximo")},
+                )
         except Exception:
             pass
         msg = proc_exp.stderr.strip() or proc_exp.stdout.strip() or f"expediente exit {proc_exp.returncode}"
-        return {"erro": msg, "exit_code": proc_exp.returncode}
+        ec = proc_exp.returncode if proc_exp.returncode in (2, 3, 4, 5) else 3
+        return _envelope_erro(ec, msg, erro=msg)
 
     try:
         exp_json = json.loads(proc_exp.stdout)
     except Exception as e:
-        return {"erro": f"expediente montar devolveu JSON inválido: {e}", "stdout": proc_exp.stdout[:200]}
+        return _envelope_erro(
+            3,
+            f"expediente montar devolveu JSON inválido ({e}) — o ato é de ti (conferir bin/expediente)",
+            erro=f"expediente montar devolveu JSON inválido: {e}",
+            stdout=proc_exp.stdout[:200],
+        )
 
     # (d) Resposta = JSON do expediente com o bloco `sessao` (saída do abrir) no topo,
     # campo `chapeu` preservado; `atualizar` continua aceito e sem efeito.
@@ -2677,10 +2833,17 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     # traz o prompt do dono; id malformado quem recusa é `sessao abrir` (exit 2).
     if not sessao_id and not _primeiro_giro(pergunta):
         _audit(tool="monta_sessao", evento="sessao_id_ausente_na_reabertura", cadeira=cadeira)
-        return {"erro": "sessao_id ausente numa reabertura — a fita deve portar o "
-                        "`sessao_id` da primeira abertura (arq:0101 §1); a primeira "
-                        "abertura envia a pergunta e NÃO envia `sessao_id`",
-                "regra": "sessao"}
+        msg = ("sessao_id ausente numa reabertura — a fita deve portar o "
+               "`sessao_id` da primeira abertura (arq:0101 §1); a primeira "
+               "abertura envia a pergunta e NÃO envia `sessao_id`")
+        cad_ex = json.dumps(cadeira or "fabrica", ensure_ascii=False)
+        return _envelope_erro(
+            2,
+            msg,
+            f'monta_sessao(cadeira={cad_ex}, pergunta="<turno do dono>")',
+            erro=msg,
+            regra="sessao",
+        )
 
     t0 = time.monotonic()
     _q = _quem()  # async: no contexto da task MCP (#2911)
@@ -2854,8 +3017,8 @@ def _prazo_esgotado(fim: float | None) -> dict | None:
     resto = _prazo_restante(fim)
     if resto is None or resto > 0:
         return None
-    return {"nao_rodou": True,
-            "motivo": f"prazo da chamada ({PRAZO_S:g}s) esgotado antes deste item — rode-o de novo"}
+    motivo = f"prazo da chamada ({PRAZO_S:g}s) esgotado antes deste item — rode-o de novo"
+    return _envelope_erro(5, motivo, nao_rodou=True, motivo=motivo)
 
 
 def _campo_prazo(r: dict) -> dict:
@@ -2911,9 +3074,18 @@ def _segue_apos_prazo(p: subprocess.Popen, argv: list, timeout: int, t0: float, 
             except ProcessLookupError:
                 pass
             p.wait()
-            r = {"erro": f"timeout ({timeout}s) — grupo de processo morto"}
+            r = _envelope_erro(
+                5,
+                f"tempo limite de {timeout}s esgotado — o grupo de processo foi morto e não se sabe se houve efeito parcial",
+                _proximo_timeout_verbo(argv, timeout),
+                erro=f"timeout ({timeout}s) — grupo de processo morto",
+            )
         except Exception as e:                              # noqa: BLE001
-            r = {"erro": f"espera apos o prazo falhou: {e!r}"}
+            r = _envelope_erro(
+                5,
+                f"espera após o prazo falhou ({type(e).__name__}: {e}) — o ato é de ti",
+                erro=f"espera apos o prazo falhou: {e!r}",
+            )
         dur_ms = round((time.monotonic() - t0) * 1000)
         _grava_resultado(caminho, {**base, "dur_ms": dur_ms, **r, "cwd": str(d_cwd)})
         _audit(tool=slug, evento="verbo_concluido_apos_prazo", id=rid,
@@ -2971,6 +3143,22 @@ def _timeout_com_piso(argv: list, timeout: int) -> int:
     slug = Path(str(argv[0])).name if argv else ""
     ato = str(argv[1]) if len(argv) > 1 else ""
     return max(timeout, TIMEOUT_PISO.get((slug, ato), 0))
+
+
+def _proximo_timeout_verbo(argv: list, timeout: int) -> str | None:
+    if timeout >= 600 or not argv:
+        return None
+    slug = Path(str(argv[0])).name
+    nome_ex = next((k for k, v in NOMES_EXIBIDOS.items() if v == slug), slug).replace("-", "_")
+    novo_t = min(600, timeout * 2)
+    ato_ex = str(argv[1]) if len(argv) > 1 else ""
+    args_ex = [str(a) for a in argv[2:]]
+    if ato_ex and args_ex:
+        return (f"{nome_ex}(ato={json.dumps(ato_ex, ensure_ascii=False)}, "
+                f"args={json.dumps(args_ex, ensure_ascii=False)}, timeout={novo_t})")
+    if ato_ex:
+        return f"{nome_ex}(ato={json.dumps(ato_ex, ensure_ascii=False)}, timeout={novo_t})"
+    return f"{nome_ex}(timeout={novo_t})"
 
 
 def _busca_em_andamento(linha: str, d_cwd: Path, chave: str = "") -> tuple[Path, dict] | None:
@@ -3066,7 +3254,12 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              start_new_session=True)
     except OSError as e:
-        return {"erro": str(e), "cwd": str(d_cwd)}
+        return _envelope_erro(
+            5,
+            f"falha ao executar {slug} no sistema operacional ({type(e).__name__}: {e}) — o ato é de ti",
+            erro=str(e),
+            cwd=str(d_cwd),
+        )
     t0 = time.monotonic()
     espera = timeout if prazo is None or prazo >= timeout else max(0.0, prazo)
     try:
@@ -3080,7 +3273,13 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
         except ProcessLookupError:
             pass
         p.wait()
-        return {"erro": f"timeout ({timeout}s) — grupo de processo morto", "cwd": str(d_cwd)}
+        return _envelope_erro(
+            5,
+            f"tempo limite de {timeout}s esgotado — o grupo de processo foi morto e não se sabe se houve efeito parcial",
+            _proximo_timeout_verbo(argv, timeout),
+            erro=f"timeout ({timeout}s) — grupo de processo morto",
+            cwd=str(d_cwd),
+        )
     if p.returncode in (-15, 143) or p.returncode == -signal.SIGTERM:
         return {
             "exit_code": p.returncode,
@@ -3096,7 +3295,9 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
 
 
 def _faz_tool_verbo(slug: str, binario: str, descricao: str):
-    async def _tool(ato: str = "", args: list[str] | None = None,
+    nome_ex = slug.replace("-", "_")
+
+    async def _tool(ato: str = "", args: list[str] | str | None = None,
                     stdin: str | dict | list | None = None,
                     sessao_id: str | None = None, timeout: int = 120,
                     lote: list[dict] | None = None, encadeado: bool = False,
@@ -3104,6 +3305,8 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                     inteiro: bool = False) -> dict:
         # #3124: o cliente MCP desserializa stdin JSON valido antes de chegar aqui; a
         # anotacao velha (str | None) fazia o pydantic recusar sem rodar nada.
+        # #4251: o mesmo vale para `args: list[str] | str | None`, que antes devolvia erro
+        # cru do pydantic em inglês em vez da recusa padrão do malote.
         stdin = _stdin_texto(stdin)
         fim = _prazo_da_chamada()          # #3249: o prazo e da chamada, nao do item
         if lote and PF_TOOLS_LOTE:
@@ -3117,14 +3320,19 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
             # no primeiro item fora de exit 0/1 (lote.py tem a regra).
             async def _roda(_i, item, _resultados):
                 if not isinstance(item, dict):
-                    return _recusa(slug, "item do lote deve ser {ato, args, stdin}")
+                    return _recusa(
+                        slug, "item do lote deve ser {ato, args, stdin}",
+                        proximo=f'{nome_ex}(lote=[{{"ato": "<ato>", "args": [...]}}])')
                 esgotado = _prazo_esgotado(fim)
                 if esgotado:
                     return esgotado
                 _ato = item.get("ato", "")
                 _args = item.get("args") or []
                 if isinstance(_args, (str, bytes)):
-                    return _recusa(slug, "args deve ser lista de tokens, recebido string; use args: [ ... ]")
+                    _a_ex = json.dumps(_ato or "<ato>", ensure_ascii=False)
+                    return _recusa(
+                        slug, "args deve ser lista de tokens, recebido string; use args: [ ... ]",
+                        proximo=f'{nome_ex}(lote=[{{"ato": {_a_ex}, "args": [...]}}])')
                 _args = [str(a) for a in _args]
                 _stdin = _stdin_texto(item.get("stdin"))
                 _linha = " ".join([slug] + ([_ato] if _ato else []) + _args)
@@ -3166,6 +3374,11 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                        nao_rodou=len(_c["nao_rodou"]), cadeira=ident["cadeira"] or None,
                        sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"])
             return out
+        if isinstance(args, (str, bytes)):
+            _a_ex = json.dumps(ato or "<ato>", ensure_ascii=False)
+            return _recusa(
+                slug, "args deve ser lista de tokens, recebido string; use args: [ ... ]",
+                proximo=f'{nome_ex}(ato={_a_ex}, args=["..."])')
         args = list(args or [])
         linha = " ".join([slug] + ([ato] if ato else []) + args)
         # Leva 1: mesma decisão do fallback (acao/tipo de run_command), auditada pelo
@@ -3315,6 +3528,53 @@ def _esconde_as_ocultas() -> None:
 
 
 _esconde_as_ocultas()
+
+
+def _deve_marcar_erro(payload: dict) -> bool:
+    if payload.get("em_andamento"):
+        return False
+    ec = payload.get("exit_code")
+    if isinstance(ec, int) and not isinstance(ec, bool):
+        return ec not in (0, 1)
+    cadeia = payload.get("cadeia")
+    if isinstance(cadeia, dict):
+        ce = cadeia.get("exit")
+        if isinstance(ce, int) and not isinstance(ce, bool):
+            return ce not in (0, 1)
+    return bool(payload.get("recusado") or payload.get("erro"))
+
+
+def _marca_erros_mcp() -> None:
+    """Marca `isError=True` no protocolo MCP sempre que o retorno tem exit_code de erro (2..5,
+    ou fora de 0..1), preservando o mesmo corpo (arq:0064 §6). Exit 0 e 1 saem sem a marca."""
+    from mcp import types as _tipos
+    baixo = mcp._mcp_server
+    original = baixo.request_handlers.get(_tipos.CallToolRequest)
+    if original is None:
+        return
+
+    async def _com_is_error(req):
+        res = await original(req)
+        root = getattr(res, "root", None)
+        if not isinstance(root, _tipos.CallToolResult) or root.isError:
+            return res
+        payload = root.structuredContent
+        if not isinstance(payload, dict) and root.content:
+            primeiro = root.content[0]
+            txt = getattr(primeiro, "text", None)
+            if isinstance(txt, str):
+                try:
+                    payload = json.loads(txt)
+                except ValueError:
+                    payload = None
+        if isinstance(payload, dict) and _deve_marcar_erro(payload):
+            return _tipos.ServerResult(root.model_copy(update={"isError": True}))
+        return res
+
+    baixo.request_handlers[_tipos.CallToolRequest] = _com_is_error
+
+
+_marca_erros_mcp()
 
 
 class RedigeToken(logging.Filter):

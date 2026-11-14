@@ -748,11 +748,39 @@ def continuacao(args: dict | None) -> tuple[str, dict | None]:
     return f"{TOOL}({corpo})", args
 
 
+_CLASSE_EXIT = {
+    "gramatica": 2,
+    "faixa": 2,
+    "caminho": 2,
+    "binario": 2,
+    "recusado": 4,
+}
+
+
+def envelope_erro(exit_code: int, falta: str, proximo: str | None = None, **extra) -> dict:
+    """Forma única de recusa ou erro da porta (arq:0064 §6): `exit_code` (2..5), `falta`
+    em português dizendo o que impediu a chamada, e `proximo` com a chamada literal que
+    resolve (omitido quando nenhuma chamada de quem chamou resolve)."""
+    d = dict(extra)
+    d["exit_code"] = exit_code
+    d["falta"] = falta
+    if proximo:
+        d["proximo"] = proximo
+    return d
+
+
 def _erro(msg: str, classe: str, **extra) -> dict:
-    return {"erro": msg, **extra, "classe_erro": classe}
+    exit_code = extra.pop("exit_code", _CLASSE_EXIT.get(classe, 2))
+    falta = extra.pop("falta", msg)
+    proximo = extra.pop("proximo", None)
+    if proximo is None:
+        cura = extra.get("cura")
+        if isinstance(cura, str) and cura.startswith(f"{TOOL}("):
+            proximo = cura
+    return envelope_erro(exit_code, falta, proximo, erro=msg, **extra, classe_erro=classe)
 
 
-def _faixa(linhas) -> tuple | dict:
+def _faixa(linhas, p: Path | None = None) -> tuple | dict:
     """(a, b, cauda) de `"a-b"`, `"a-"` ou `"-n"`, base 1."""
     if linhas in (None, ""):
         return 1, None, None
@@ -764,8 +792,9 @@ def _faixa(linhas) -> tuple | dict:
     m = re.fullmatch(r"\s*-\s*(\d+)\s*", str(linhas))
     if m and int(m.group(1)) >= 1:
         return None, None, int(m.group(1))
+    alvo = f'"{p}"' if p is not None else "…"
     return _erro(f'linhas={linhas!r}: use "a-b", "a-" ou "-n" (base 1, extremos incluídos)',
-                 "gramatica", cura=f'{TOOL}(caminho=…, linhas="1-")')
+                 "gramatica", cura=f'{TOOL}(caminho={alvo}, linhas="1-")')
 
 
 def _alem_do_fim(p: Path, total) -> dict:
@@ -808,7 +837,7 @@ def le(p, *, linhas=None, modo: str = "texto", max_bytes: int = ORCAMENTO_PADRAO
         return _erro(f"dpi={dpi!r}: inteiro de 36 a {_formatos.DPI_MAX}", "gramatica")
     faixa = None
     if offset is None:
-        faixa = _faixa(linhas)
+        faixa = _faixa(linhas, p)
         if isinstance(faixa, dict):
             return faixa
     elif isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
@@ -826,12 +855,15 @@ def le(p, *, linhas=None, modo: str = "texto", max_bytes: int = ORCAMENTO_PADRAO
         return _erro("não existe", "caminho", caminho=str(p), **v,
                      cura=f'{TOOL}(caminho="{v["existe_ate"]}")')
     except OSError as e:
-        return _erro(f"não consegui ler: {e.strerror}", "caminho", caminho=str(p))
+        return _erro(f"não consegui ler: {e.strerror}", "caminho", caminho=str(p), exit_code=5)
     if _stat.S_ISDIR(st.st_mode):
         return _le_diretorio(p, curto, faixa, orcamento, nega, termo=termo)
     if not _stat.S_ISREG(st.st_mode):
         return _erro("existe mas não é arquivo comum (socket, fifo ou dispositivo)", "caminho",
                      caminho=str(p))
+    if termo:
+        return _erro("termo só se aplica a diretório: filtra a listagem pelo nome",
+                     "gramatica", caminho=str(p), cura=f'{TOOL}(caminho="{p}")')
     pedido_bytes = max_bytes if max_bytes and max_bytes != ORCAMENTO_PADRAO else None
     with abre(p, "rb") as fh:
         for _tentativa in range(2):
@@ -950,8 +982,9 @@ def _le_membro(fh, p: Path, idx: Indice, tp: dict, membro: str, **kw) -> dict:
                      parecidos=difflib.get_close_matches(membro, nomes, n=3),
                      cura=f'{TOOL}(caminho="{p}")')
     except ValueError as e:
-        return {"recusado": True, "motivo": str(e), "caminho": f"{p}!{membro}",
-                "classe_erro": "recusado"}
+        return envelope_erro(4, f"membro recusado ({e})",
+                             recusado=True, motivo=str(e), caminho=f"{p}!{membro}",
+                             classe_erro="recusado")
     finally:
         doc.fecha()
     chave = (f"{p}!{membro}", len(dados), idx.versao, 0)
@@ -980,9 +1013,10 @@ def _le_gzip(fh, p: Path, idx: Indice, **kw) -> dict:
                      caminho=str(p), tipo="application/gzip", bytes_total=idx.tamanho,
                      versao=idx.versao)
     if len(dados) > _formatos.MEMBRO_MAX:
-        return {"recusado": True, "motivo": "gzip acima de 64 MiB descomprimido",
-                "caminho": str(p), "bytes_total": idx.tamanho, "versao": idx.versao,
-                "classe_erro": "recusado"}
+        return envelope_erro(4, "arquivo gzip excede o limite de 64 MiB descomprimido",
+                             recusado=True, motivo="gzip acima de 64 MiB descomprimido",
+                             caminho=str(p), bytes_total=idx.tamanho, versao=idx.versao,
+                             classe_erro="recusado")
     chave = (f"{p}!gunzip", len(dados), idx.versao, 0)
     with _TRAVA:
         midx = _INDICES.get(chave)
@@ -1018,12 +1052,16 @@ def _le_corpo(fh, p: Path, idx: Indice, tp: dict, dados, *, curto, faixa, modo, 
                                orcamento=orcamento, versao=versao, paginas=paginas, dpi=dpi,
                                offset=offset, pedido_bytes=pedido_bytes)
         # §7.2.2: só o binário fora da tabela da §7.4 recusa, e com nome.
-        return {"recusado": True, "motivo": "sem_leitor", "tipo": tipo, "caminho": str(p),
-                "bytes_total": idx.tamanho, "versao": idx.versao,
-                "cura": (f"{tipo} não está na tabela de formatos do acervo (spec ler-arquivo "
-                         "§7.4) e não se lê como texto. Tipo do acervo que cai aqui é defeito "
-                         "da tool: abra incidente."),
-                "classe_erro": "binario"}
+        return envelope_erro(
+            2,
+            f"{tipo} não está na tabela de formatos do acervo (spec ler-arquivo §7.4) e não se lê como texto",
+            recusado=True, motivo="sem_leitor", tipo=tipo, caminho=str(p),
+            bytes_total=idx.tamanho, versao=idx.versao,
+            cura=(f"{tipo} não está na tabela de formatos do acervo (spec ler-arquivo "
+                  "§7.4) e não se lê como texto. Tipo do acervo que cai aqui é defeito "
+                  "da tool: abra incidente."),
+            classe_erro="binario",
+        )
     if modo == "visivel" and tipo in (_formatos.HTML, _formatos.MHTML):
         return _le_formato(fh, p, idx, tp, curto=curto, faixa=faixa, modo=modo,
                            orcamento=orcamento, versao=versao, paginas=paginas, dpi=dpi,
@@ -1045,10 +1083,14 @@ def _le_corpo(fh, p: Path, idx: Indice, tp: dict, dados, *, curto, faixa, modo, 
     inv = None
     if tp["bom"] and tp["bom"] != "utf-8":
         if idx.tamanho > UTF16_MAX:
-            return {"recusado": True, "motivo": f"{tp['bom']} acima de 16 MiB",
-                    "caminho": str(p), "bytes_total": idx.tamanho, "versao": idx.versao,
-                    "cura": "a porta transcodifica UTF-16/32 em memória só até 16 MiB",
-                    "classe_erro": "recusado"}
+            return envelope_erro(
+                4,
+                f"arquivo {tp['bom']} excede o limite de 16 MiB para transcodificação em memória",
+                recusado=True, motivo=f"{tp['bom']} acima de 16 MiB",
+                caminho=str(p), bytes_total=idx.tamanho, versao=idx.versao,
+                cura="a porta transcodifica UTF-16/32 em memória só até 16 MiB",
+                classe_erro="recusado",
+            )
         utf8, inv = _transcodifica(fonte, tp["bom"])
         fonte = io.BytesIO(utf8)
         fidx = varre(fonte)
@@ -1359,12 +1401,16 @@ def _pagina_formato(doc, p: Path, idx: Indice, tp: dict, enc: dict, *, curto, fa
                                             "largura": dim[0] if dim else None,
                                             "altura": dim[1] if dim else None}], **base}, mudou)
         if not doc.render:
-            return {"recusado": True, "motivo": "sem_render", "tipo": tipo, "caminho": str(p),
-                    "bytes_total": idx.tamanho, "versao": idx.versao,
-                    "cura": (f"{tipo} ainda não tem renderizador livre na imagem da porta "
-                             f'(spec ler-arquivo §7.4.2); o texto vale: {TOOL}(caminho="{p}"'
-                             + (f', paginas="{a}-{b_fim}")' if com_unidade else ")")),
-                    "classe_erro": "recusado"}
+            prox = f'{TOOL}(caminho="{p}"' + (f', paginas="{a}-{b_fim}")' if com_unidade else ")")
+            return envelope_erro(
+                4,
+                f'{tipo} ainda não tem renderizador livre na imagem da porta (spec ler-arquivo §7.4.2) — leia como texto',
+                prox,
+                recusado=True, motivo="sem_render", tipo=tipo, caminho=str(p),
+                bytes_total=idx.tamanho, versao=idx.versao,
+                cura=f'{tipo} ainda não tem renderizador livre na imagem da porta (spec ler-arquivo §7.4.2); o texto vale: {prox}',
+                classe_erro="recusado",
+            )
         imagens, total, u = [], 0, a
         while u <= b_fim and (not imagens or total < _formatos.IMAGEM_TETO):
             try:
