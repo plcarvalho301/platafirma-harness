@@ -478,3 +478,15 @@ def test_sql_de_inicializacao_pg_nao_reinicia_base_viva(mundo,imagem,destino,rec
     assert r.returncode==0,r.stderr
     assert bool(_chamadas(mundo,"up")) is recria
     assert ("inalterada" in r.stdout) is not recria
+
+
+def test_compose_up_grava_servido_junto_com_atual(mundo):
+    """DT 632: `infra up` (`stack compose up`) atualiza `.servido` junto com `.atual`."""
+    rel = Path(mundo["env"]["PF_RELEASE_RAIZ"]) / FAMILIA
+    (rel / "current").symlink_to(mundo["c2"])
+    mundo["pontos"].mkdir()
+    (mundo["pontos"] / "x.servido").write_text(mundo["c1"] + "\n")
+    r = _roda(mundo, "compose", "x", "up")
+    assert r.returncode == 0, r.stderr
+    assert (mundo["pontos"] / "x.atual").read_text().strip() == mundo["c2"]
+    assert (mundo["pontos"] / "x.servido").read_text().strip() == mundo["c2"]

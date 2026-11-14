@@ -154,3 +154,67 @@ def test_env_declarado_injeta_release_sha_e_instancia(tmp_path, monkeypatch):
     env = conferir._ultimos_args.get("env") or {}
     assert env.get("PF_RELEASE_SHA") == SHA_NO_AR
     assert "PLATAFIRMA_INSTANCIA" in env
+
+
+def _montar_sem_containers(tmp_path, monkeypatch, topo_entry, compose_yaml, services_out=""):
+    conferir = _carregar()
+    raiz = tmp_path / "opt"
+    comp = raiz / "platafirma-conhecimento" / SHA_NO_AR / "deploy" / "x" / "compose.yaml"
+    comp.parent.mkdir(parents=True)
+    comp.write_text(compose_yaml, encoding="utf-8")
+    os.symlink(SHA_NO_AR, raiz / "platafirma-conhecimento" / "current")
+    monkeypatch.setattr(conferir, "PROD_RAIZ", str(raiz))
+    monkeypatch.setattr(conferir, "INSTANCIA", str(tmp_path / "instancia"))
+    monkeypatch.setattr(conferir, "_TOPO", [{**topo_entry, "compose": str(comp)}])
+
+    def sh(args, cwd=None, env=None):
+        if args[:2] == ["docker", "ps"]:
+            return 0, "", ""
+        if args[:2] == ["docker", "compose"] and "config" in args and "--services" in args:
+            return 0, services_out, ""
+        return 1, "", "stub"
+
+    monkeypatch.setattr(conferir, "sh", sh)
+    return conferir
+
+
+def test_sob_demanda_parada_sem_container_nao_diverge(tmp_path, monkeypatch, capsys):
+    """DT 632: stack sob demanda parada não falha `conferir servico` na promoção."""
+    conferir = _montar_sem_containers(
+        tmp_path, monkeypatch,
+        {"slug": "conversor", "repo": "platafirma-conhecimento", "reversao": {"via": "promover"}},
+        "name: conversor\nx-platafirma:\n  sob_demanda: true\nservices:\n  conversor: {}\n",
+        services_out="conversor\n",
+    )
+    rc = _roda(conferir, "conversor")
+    saida = capsys.readouterr().out
+    assert rc == 0, saida
+    assert "sob demanda" in saida
+
+
+def test_stack_sem_servicos_ativos_sem_container_nao_diverge(tmp_path, monkeypatch, capsys):
+    """DT 632: stack expurgada/sem serviços ativos no compose não reverte promoção."""
+    conferir = _montar_sem_containers(
+        tmp_path, monkeypatch,
+        {"slug": "antiga", "repo": "platafirma-conhecimento", "reversao": {"via": "promover"}},
+        "name: antiga\nservices: {}\n",
+        services_out="",
+    )
+    rc = _roda(conferir, "antiga")
+    saida = capsys.readouterr().out
+    assert rc == 0, saida
+    assert "sem servicos ativos" in saida
+
+
+def test_stack_ativa_sem_container_segue_divergente(tmp_path, monkeypatch, capsys):
+    """Stack comum parada continua divergente (não mascara serviço caído)."""
+    conferir = _montar_sem_containers(
+        tmp_path, monkeypatch,
+        {"slug": "harness-controle", "repo": "platafirma-harness", "reversao": {"via": "promover"}},
+        "name: harness-controle\nservices:\n  tela: {}\n",
+        services_out="tela\n",
+    )
+    rc = _roda(conferir, "harness-controle")
+    saida = capsys.readouterr().out
+    assert rc == 1, saida
+    assert "nenhum container em execucao" in saida
