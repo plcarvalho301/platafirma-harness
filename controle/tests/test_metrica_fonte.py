@@ -767,44 +767,45 @@ def test_cli_ajuda_e_ato_desconhecido_dizem_turnos_e_fonte(tmp_path):
     assert erro.returncode == 2 and "eventos, dia, ate-acerto" in erro.stderr and "turnos" in erro.stderr
 
 
-def test_verbos_com_por_superficie_particiona_giros_e_chama_medida(monkeypatch, capsys):
-    s1 = {"chave": {"tool": "acervo", "ato": "ler", "classe": "ok", "superficie": "claude-code"}, "n": 10}
-    s2 = {"chave": {"tool": "acervo", "ato": "ler", "classe": "execucao", "superficie": "agy"}, "n": 2}
-    s3 = {"chave": {"tool": "repo", "ato": "diff", "classe": "ok", "superficie": "agy"}, "n": 5}
+def test_verbos_com_por_hora_particiona_giros_e_chama_medida(monkeypatch, capsys):
+    s1 = {"chave": {"tool": "acervo", "ato": "ler", "classe": "ok", "hora": 9}, "n": 10}
+    s2 = {"chave": {"tool": "acervo", "ato": "ler", "classe": "execucao", "hora": 14}, "n": 2}
+    s3 = {"chave": {"tool": "repo", "ato": "diff", "classe": "ok", "hora": 14}, "n": 5}
     api = ApiFalsa({DIA: linha_dia(DIA)}, [s1, s2, s3])
-    codigo, saida, _ = roda(monkeypatch, capsys, api, "verbos", DIA, "--por", "superficie")
+    codigo, saida, _ = roda(monkeypatch, capsys, api, "verbos", DIA, "--por", "hora")
     assert codigo == 0
     r = json_de(saida)
-    assert r["por"] == ["superficie"]
+    assert r["por"] == ["hora"]
     assert "particoes" in r
     assert len(r["particoes"]) == 2
-    part_agy = next(p for p in r["particoes"] if p["chave"] == {"superficie": "agy"})
-    part_cc = next(p for p in r["particoes"] if p["chave"] == {"superficie": "claude-code"})
-    assert part_agy["total"] == {"verbos": 2, "giros": 7, "erros": 2, "taxa": round(2 / 7, 4)}
-    assert part_cc["total"] == {"verbos": 1, "giros": 10, "erros": 0, "taxa": 0.0}
+    part_14 = next(p for p in r["particoes"] if p["chave"] == {"hora": 14})
+    part_09 = next(p for p in r["particoes"] if p["chave"] == {"hora": 9})
+    assert part_14["total"] == {"verbos": 2, "giros": 7, "erros": 2, "taxa": round(2 / 7, 4)}
+    assert part_09["total"] == {"verbos": 1, "giros": 10, "erros": 0, "taxa": 0.0}
     assert api.medidas() == [("GET", "/acervo/log/giros/medida",
-                              {"desde": DIA, "ate": DIA, "por": "tool,ato,classe,superficie", "medida": "contagem"})]
+                              {"desde": DIA, "ate": DIA, "por": "tool,ato,classe,hora", "medida": "contagem"})]
 
 
-def test_verbos_bytes_com_por_superficie(monkeypatch, capsys):
+def test_verbos_bytes_com_por_cadeira(monkeypatch, capsys):
     api = ApiBytes({DIA: linha_dia(DIA)}, [],
-                   por_tool=[byt({"tool": "acervo", "superficie": "claude-code"}, 10, 60000),
-                             byt({"tool": "acervo", "superficie": "agy"}, 5, 30000)],
-                   por_ato=[byt({"tool": "acervo", "ato": "ler", "superficie": "claude-code"}, 10, 60000),
-                            byt({"tool": "acervo", "ato": "ler", "superficie": "agy"}, 5, 30000)])
-    codigo, saida, _ = roda(monkeypatch, capsys, api, "verbos", DIA, "--bytes", "--por", "superficie")
+                   por_tool=[byt({"tool": "acervo", "cadeira": "dados"}, 10, 60000),
+                             byt({"tool": "acervo", "cadeira": "ia"}, 5, 30000)],
+                   por_ato=[byt({"tool": "acervo", "ato": "ler", "cadeira": "dados"}, 10, 60000),
+                            byt({"tool": "acervo", "ato": "ler", "cadeira": "ia"}, 5, 30000)])
+    codigo, saida, _ = roda(monkeypatch, capsys, api, "verbos", DIA, "--bytes", "--por", "cadeira")
     assert codigo == 0
     r = json_de(saida)
-    assert r["bytes"]["por"] == ["superficie"]
+    assert r["bytes"]["por"] == ["cadeira"]
     assert "particoes" in r["bytes"]
     assert len(r["bytes"]["particoes"]) == 2
-    part_cc = next(p for p in r["bytes"]["particoes"] if p["chave"] == {"superficie": "claude-code"})
-    assert part_cc["total"]["servidos"] == 60000
-    assert part_cc["total"]["giros"] == 10
+    part_dados = next(p for p in r["bytes"]["particoes"] if p["chave"] == {"cadeira": "dados"})
+    assert part_dados["total"]["servidos"] == 60000
+    assert part_dados["total"]["giros"] == 10
 
 
-def test_verbos_por_chave_invalida_recusa(monkeypatch, capsys):
-    codigo, _, erro = roda(monkeypatch, capsys, ApiFalsa(), "verbos", DIA, "--por", "invalida")
+@pytest.mark.parametrize("chave", ["invalida", "superficie"])
+def test_verbos_por_chave_invalida_recusa(monkeypatch, capsys, chave):
+    codigo, _, erro = roda(monkeypatch, capsys, ApiFalsa(), "verbos", DIA, "--por", chave)
     assert codigo == 2
     assert "desconhecido" in erro
 
