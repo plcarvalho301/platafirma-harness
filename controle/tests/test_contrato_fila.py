@@ -330,7 +330,7 @@ def test_status_json_sem_identidade_vira_objeto_erro(monkeypatch, capsys):
         fila_streams.main()
     cap = capsys.readouterr()
 
-    assert exc.value.code == 2
+    assert exc.value.code == 3
     assert cap.err == ""
     saida = json.loads(cap.out)
     assert set(saida.keys()) == {"erro"}
@@ -494,11 +494,35 @@ def test_status_e_ler_sem_argumento_usam_cadeira(monkeypatch, capsys):
 
 
 def test_recusa_sem_cadeira(monkeypatch, capsys):
-    """Chamada sem cadeira recusa com 'sem cadeira na sessão: passe sessao_id'."""
+    """DT 409 / arq:0110 §5: chamada sem cadeira sai 3 nomeando a cura."""
     rc = FakeRC({})
+    monkeypatch.delenv("PF_SESSAO", raising=False)
     code, cap = _rodar_cli(monkeypatch, capsys, ["status"], "", rc)
-    assert code == 2
-    assert "sem cadeira na sessão: passe sessao_id" in cap.err
+    assert code == 3
+    assert "monta_sessao" in cap.err
+
+    # Com PF_SESSAO já presente mas sem PF_CADEIRA, não pede "passe sessao_id"
+    monkeypatch.setenv("PF_SESSAO", "1db7e1ef-0000-4000-8000-000000000000")
+    code2, cap2 = _rodar_cli(monkeypatch, capsys, ["status"], "", rc)
+    assert code2 == 3
+    assert "1db7e1ef" in cap2.err
+    assert "passe sessao_id" not in cap2.err
+
+
+def test_enviar_sem_tipo_e_assunto_usa_defaults(monkeypatch, capsys):
+    """DT 357 / arq:0110 Q13: `fila enviar <dest>` sem --tipo e --assunto assume defaults."""
+    import io
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti", "fabrica"})
+    rc = FakeRC({
+        "ti": {"xlen": 0, "groups": [], "xrange": [], "consumers": []},
+    })
+    monkeypatch.setattr(sys, "stdin", io.StringIO("\n  Primeira linha do pedido  \nSegunda linha"))
+    code, cap = _rodar_cli(monkeypatch, capsys, ["enviar", "ti"], "fabrica", rc)
+    assert code == 0
+    assert len(rc._personas["ti"]["xrange"]) == 1
+    msg = rc._personas["ti"]["xrange"][0][1]
+    assert msg["tipo"] == "pedido"
+    assert msg["assunto"] == "Primeira linha do pedido"
 
 
 def test_eu_em_qualquer_posicao(monkeypatch, capsys):

@@ -198,3 +198,22 @@ def test_repeticao_abaixo_do_teto_gera_cru_e_alca(tmp_path, monkeypatch):
     humana = _p.linha_humana(meta)
     assert meta["cru"] in humana
     assert "repeticao saiu do retorno" in humana
+
+
+def test_poda_preserva_branco_mantem_numeracao(tmp_path, monkeypatch):
+    """DT 394: `preserva_branco=True` (release/repo ler) não colapsa linhas em branco."""
+    monkeypatch.setattr(_p, "DERRAME", tmp_path)
+    texto = "linha 1\n\n\n\nlinha 5"
+    fora, meta = _p.poda_texto(texto, preserva_branco=True, **_args(tool="release", alca="release:release ler h a.py"))
+    assert fora == texto
+    assert "branco" not in meta["lavado"]
+
+
+def test_agrupa_busca_indica_como_continuar(tmp_path, monkeypatch):
+    """DT 394: quando +N matches neste arquivo corta ocorrências, aponta como continuar."""
+    monkeypatch.setattr(_p, "DERRAME", tmp_path)
+    texto = "\n".join(f"src/a.py:{i}:match {i}" for i in range(1, 10))
+    fora, meta = _p.poda_texto(texto, **_args(tool="release", alca="release:release procurar h match"))
+    assert "+4 matches neste arquivo" in fora
+    assert "--json" in fora and "src/a.py" in fora
+    assert meta.get("cru")
