@@ -337,5 +337,3 @@ tests/test_posicao_4120.py | bin/acervo bin/_acervo/**
 tests/test_ingerir_drive.py | bin/ingerir bin/_ingerir/**
 # Card #4096: `tarefas espera-dono` exibe stories em refinamento com regras novas pendentes além das perguntas legadas.
 tests/test_espera_regras.py | bin/tarefas
-# Separação de imagens Docker em produção vs inativas (`infra imagens`) e poda (`infra limpeza imagens|cache`).
-tests/test_infra_imagens.py | bin/infra bin/_infra/**
