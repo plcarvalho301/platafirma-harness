@@ -45,6 +45,18 @@
     "python": "rag",
     "ambiente": "olaria",
     "teto_s": 120,
-    "motivo": "S4214: o verbo olaria (preparar, ensaiar, gravar, apagar e gerar) da casa nova em sessão de ensaio, cliente do serviço de escrita da ontologia na stack olaria; a chave de serviço vem do cofre sem ser impressa, e o mesmo código vira o bin/olaria da porta na troca da casa"
+    "motivo": "S4214: variante do verbo ontologia em sessão de ensaio, cliente do serviço da Olaria"
+  },
+  "ontologia": {
+    "dono": "ti",
+    "origem": "espelho",
+    "repo": "platafirma-casa-espelho",
+    "cwd": "outros_repos/harness/bin",
+    "modulo": "_olaria",
+    "pythonpath": ["outros_repos/harness/bin"],
+    "python": "rag",
+    "ambiente": "olaria",
+    "teto_s": 120,
+    "motivo": "C4254: o verbo ontologia (ler, listar, criar, trocar, recompor, ensaiar, renomear, apagar, gerar, sonda) da casa nova em sessão de ensaio, cliente do serviço da Olaria na stack olaria"
   }
 }
