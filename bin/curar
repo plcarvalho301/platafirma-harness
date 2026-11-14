@@ -459,10 +459,7 @@ def acao_expurgar(obra: str, autor: str, motivo: str, aplicar: bool, como_json: 
         r = resultado or {}
         print(f"Obra {obra_id} retirada ({titulo}): {len(r.get('impressoes_aposentadas') or [])} impressão(ões) "
               f"aposentada(s), {len(r.get('indices_aposentados') or [])} índice(s) fora do motor.")
-        if export is None:
-            print("  export : NÃO regenerado (clone de conhecimento em main / venv não achados) — rode `exportar-acervo` e commite")
-        else:
-            print(f"  export : regenerado no clone — commit e push são seus:\n    {export.replace(chr(10), chr(10) + '    ')}")
+        _imprimir_export(export)
     return 0
 
 
@@ -533,10 +530,7 @@ def acao_restaurar(obra: str, autor: str, motivo: str, aplicar: bool, como_json:
         }, indent=2, ensure_ascii=False))
     else:
         print(f"Obra {obra_id} restaurada ({titulo}).")
-        if export is None:
-            print("  export : NÃO regenerado (clone de conhecimento em main / venv não achados) — rode `exportar-acervo` e commite")
-        else:
-            print(f"  export : regenerado no clone — commit e push são seus:\n    {export.replace(chr(10), chr(10) + '    ')}")
+        _imprimir_export(export)
     return 0
 
 
@@ -741,6 +735,15 @@ def _exportar(repo: str, bancada: str | None = None) -> str | None:
         return f"acervo exportar falhou: {saida[-300:]}"
     i = saida.rfind("bancada:")
     return saida[i:] if i >= 0 else (saida[-300:] or "(export sem saida)")
+
+
+def _imprimir_export(export: str | None) -> None:
+    if export is None or export.startswith("acervo exportar falhou:"):
+        print("  export : NÃO regenerado (sem bancada na sessão ou erro no export) — abra a bancada e rode `acervo exportar`")
+        if export:
+            print(f"    {export.replace(chr(10), chr(10) + '    ')}")
+    else:
+        print(f"  export : regenerado no clone — commit e push são seus:\n    {export.replace(chr(10), chr(10) + '    ')}")
 
 
 def formatar_plano_relacao(p: dict, hermit: dict | None) -> str:
@@ -1030,10 +1033,7 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
         print(json.dumps({"aplicado": feito, "hermit": hermit, "export": export}, indent=2, ensure_ascii=False))
     else:
         print(formatar(feito, hermit))
-        if export is None:
-            print("  export : NÃO regenerado (clone de conhecimento em main / venv não achados) — rode `exportar-acervo` e commite")
-        else:
-            print(f"  export : regenerado no clone — commit e push são seus:\n    {export.replace(chr(10), chr(10) + '    ')}")
+        _imprimir_export(export)
     return 0
 
 
