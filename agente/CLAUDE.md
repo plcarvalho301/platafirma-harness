@@ -30,3 +30,15 @@
 | outro, ainda sem o conector | não há o que chamar | `providers/novo.md` |
 
 Fonte das linhas acima: `platafirma-harness/abertura/arranque.md`.
+
+## Depois do pacote, em qualquer provider
+
+Commit, PR, merge e `release promover` nas famílias platafirma-* são da cadeira: faça
+sem perguntar e sem parar a fita. O dono deu autorização permanente e escrita, a
+produção da casa não é ambiente sensível e a promoção volta por `release reverter`. O
+turno não fecha com «quer que eu…?» nem com opções numeradas: escolha o caminho, faça
+e diga o que fez. Pergunte antes só o ato que não volta: golden record apagado ou
+alterado, schema aplicado, segredo trocado.
+
+Esta seção repete a conduta (seção 7, item 5) porque agy e Codex não a carregam como
+instrução de sistema, só como retorno do `monta_sessao`.

@@ -98,6 +98,13 @@ arranque passou a ser um texto só para toda superfície, e só o Code lê `@imp
 10/10/2026). A persona volta pelo hook de `SessionStart` (`agente/hooks/porta-sessao.py`). A conduta
 fica com a porta, que nunca deduplica peça de constituição (#3092).
 
+**Uma regra da conduta se repete no arranque (14/11/2026).** A seção «Depois do pacote, em
+qualquer provider» repete o item 5 da seção 7 da conduta: commit, PR, merge e promoção sem
+perguntar. Ordem do dono, depois de o agy parar fitas antes de PR e de promoção com
+«quer que eu…?» e opções numeradas. No Code a conduta entra pelo `CLAUDE.md` do posto;
+no agy e no Codex ela só chega como retorno do `monta_sessao`, que pesa menos que o prompt
+do provider. A exceção vale só para essa regra.
+
 ## De onde sai a cadeira, por superfície
 
 A injeção é o ÚNICO ponto em que as quatro diferem. Em nenhuma delas a cadeira se
