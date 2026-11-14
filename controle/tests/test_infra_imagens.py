@@ -194,7 +194,7 @@ def test_docker_fora_do_ar_sai_5(cena: Cena):
 def test_limpeza_cache_poda_build_e_imagens(cena: Cena):
     r = cena.roda("limpeza", "cache")
     assert r.returncode == 0, r.stderr
-    assert cena.rastro() == ["builder prune -a -f", "image prune -a -f"]
+    assert cena.rastro() == ["builder prune -a -f --keep-storage 25GB", "image prune -a -f"]
 
 
 def test_opcao_desconhecida_sai_2(cena: Cena):

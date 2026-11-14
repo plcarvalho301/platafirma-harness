@@ -696,6 +696,10 @@ cache() {
       echo; echo "== cache em disco"
       du -sh "$HOME/.cache/huggingface" "$HOME/.cache/uv" 2>/dev/null
       docker system df 2>/dev/null | sed -n '1,5p'
+      if [ -x "$IMAGENS_AJUDANTE" ]; then
+        echo; echo "== imagens docker"
+        "$IMAGENS_AJUDANTE" listar
+      fi
       ;;
     vram)
       # #2856 linha 142: `vram` DESCARREGA o modelo residente (nao mede; medir e `cache ver`) e
@@ -718,7 +722,7 @@ cache() {
       [ "$falhou" -eq 0 ] || exit 3
       ;;
     disco)
-      docker builder prune -a -f
+      docker builder prune -a -f --keep-storage "${INFRA_BUILD_CACHE_KEEP_STORAGE:-25GB}"
       if [ -x "$IMAGENS_AJUDANTE" ]; then
         "$IMAGENS_AJUDANTE" limpar
       else
@@ -954,6 +958,10 @@ restart() {
   fi
 
   if e_unit "$alvo"; then
+    if [ "$(systemctl --user show -p NeedDaemonReload --value -- "$alvo" 2>/dev/null || true)" = "yes" ]; then
+      systemctl --user daemon-reload \
+        || { echo "erro: systemctl --user daemon-reload falhou antes de reiniciar $alvo." >&2; exit 1; }
+    fi
     if [ "$esperar" = 1 ] && [ "${alvo%.service}" != "${INFRA_UNIT_AUTO%.service}" ]; then
       systemctl --user restart "$alvo" \
         || { echo "erro: systemctl --user restart falhou em $alvo — ver: infra logs $alvo" >&2; exit 1; }
@@ -1153,7 +1161,8 @@ unit_env() {
   [ -n "$unit" ] || { echo "uso: infra unit-env <unit> [--ver | CHAVE=VALOR...]" >&2; exit 2; }
   unit="${unit%.service}.service"
   e_unit "$unit" || { echo "erro: unit --user '$unit' nao existe (systemctl --user cat)." >&2; exit 2; }
-  local dir="$HOME/.config/systemd/user/$unit.d" arq
+  local cfg_dir="${INFRA_UNITS_CONFIG_DIR:-$HOME/.config/systemd/user}"
+  local dir="$cfg_dir/$unit.d" arq
   # drop-in vence por ordem lexica (o ultimo ganha); `zz-` para passar por cima de
   # drop-in sem numero (capsula.conf), senao a chave gravada aqui perde calada.
   arq="$dir/zz-infra-env.conf"
@@ -1171,6 +1180,18 @@ unit_env() {
       *) echo "erro: '$kv' nao e CHAVE=VALOR." >&2; exit 2 ;;
     esac
   done
+  if [ -d "$dir" ] && [ ! -w "$dir" ]; then
+    local dono
+    dono="$(stat -c %U -- "$dir" 2>/dev/null || echo root)"
+    echo "recusa: diretorio '$dir' pertence a '$dono' e nao e gravavel pelo usuario atual; unit de root exige rodar o setup da unit como root (sudo bash de deploy/units-da-instancia.json)." >&2
+    exit 4
+  fi
+  if [ ! -d "$dir" ] && [ -e "$cfg_dir" ] && [ ! -w "$cfg_dir" ]; then
+    local dono
+    dono="$(stat -c %U -- "$cfg_dir" 2>/dev/null || echo root)"
+    echo "recusa: diretorio '$cfg_dir' pertence a '$dono' e nao permite criar '$unit.d'; unit de root exige rodar o setup da unit como root (sudo bash de deploy/units-da-instancia.json)." >&2
+    exit 4
+  fi
   mkdir -p "$dir"
   python3 - "$arq" "$@" <<'PY'
 import os, sys, tempfile
