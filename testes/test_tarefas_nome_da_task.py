@@ -134,6 +134,8 @@ class _Rastreador(BaseHTTPRequestHandler):
             return self._json({"id": 77, "item": 9230}, 201)
         if re.match(r"^/itens/\d+/posto$", p):
             return self._json({"id": 9230, "chave": f"{STORY}.t1", "posto": "zz", "titulo": T1["titulo"]})
+        if p == "/para-html":
+            return self._json({"html": "<p>ok</p>"})
         self._json({"erro": "rota"}, 404)
 
 

@@ -41,6 +41,14 @@ class _Stub(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b)
 
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0))
+        corpo = json.loads(self.rfile.read(n) or b"{}")
+        if self.path == "/para-html":
+            texto = corpo.get("texto", "")
+            return self._json({"html": f"<p>{texto}</p>" if texto else ""}, 200)
+        self._json({"erro": "rota"}, 404)
+
     def do_PATCH(self):
         n = int(self.headers.get("Content-Length", 0))
         corpo = json.loads(self.rfile.read(n) or b"{}")
