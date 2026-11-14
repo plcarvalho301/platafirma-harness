@@ -61,6 +61,9 @@ class _MockRastreador(BaseHTTPRequestHandler):
     def do_POST(self):
         tam = int(self.headers.get("Content-Length", 0))
         dados = json.loads(self.rfile.read(tam) or b"{}")
+        if self.path == "/para-html":
+            texto = dados.get("texto", "")
+            return self._envia_json({"html": f"<p>{texto}</p>" if texto else ""})
         type(self).pedidos.append(("POST", self.path, dados))
         if self.path == "/itens":
             return self._envia_json({"id": 200, "titulo": dados.get("titulo", "")}, 201)
