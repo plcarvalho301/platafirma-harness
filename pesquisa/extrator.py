@@ -81,8 +81,8 @@ _RE_BRANCO = re.compile(r"\s+")
 
 TIPOS_HTML = frozenset({"text/html", "application/xhtml+xml"})
 TIPOS_TEXTO = frozenset({"text/plain", "text/markdown", "text/csv", "application/json", "text/xml", "application/xml"})
+TIPOS_PDF = frozenset({"application/pdf"})
 TIPOS_BINARIOS_PERMITIDOS = frozenset({
-    "application/pdf",
     "image/png",
     "image/jpeg",
     "image/gif",
@@ -147,6 +147,7 @@ class Resposta:
 Coletor = Callable[[str, Callable[[str], None]], Resposta]
 Renderizador = Callable[[str], dict]
 Derivador = Callable[[str, str], dict]
+LeitorPdf = Callable[[bytes], dict[str, Any]]
 
 
 class _SemDerivado(Exception):
@@ -305,6 +306,7 @@ def ler(
     coletor: Coletor | None = None,
     renderizador: Renderizador | None = None,
     derivador: Derivador | None = None,
+    leitor_pdf: LeitorPdf | None = None,
     guarda_resolvedor=None,
 ) -> dict[str, Any]:
     """Lê uma URL com procedência. Devolve os campos de retorno do §4.2 + `n`/`linha`.
@@ -349,7 +351,7 @@ def ler(
     tipo, tipo_por = tipo_real(resp.corpo, resp.cabecalho("content-type"))
 
     eh_binario = tipo in TIPOS_BINARIOS_PERMITIDOS
-    if not (tipo in TIPOS_HTML or tipo in TIPOS_TEXTO or eh_binario):
+    if not (tipo in TIPOS_HTML or tipo in TIPOS_TEXTO or tipo in TIPOS_PDF or eh_binario):
         raise _nao_achado(trab, url, estrategia, f"tipo-nao-permitido:{tipo}", resp=resp,
                           extra={"tipo": tipo, "tipo_por": tipo_por, "sha256": sha})
 
@@ -371,10 +373,10 @@ def ler(
         d = {"md": None, "vista": "binario", "encoding": None, "html": "", "binario": True}
     else:
         try:
-            if render:
+            if render and tipo not in TIPOS_PDF:
                 d = _deriva_render(trab, n, url, renderizador)
             else:
-                d = _deriva_http(resp, tipo, derivador)
+                d = _deriva_http(resp, tipo, derivador, leitor_pdf=leitor_pdf)
         except (FalhaFonte, _SemDerivado) as f:
             causa = f.causa
             extra = {**base, **getattr(f, "extra", {})}
@@ -400,8 +402,15 @@ def ler(
     avisos = acha_instrucoes(md) if md else []
     idioma = detecta_idioma(html_meta) if not eh_binario else "indeterminado"
     datapub = detecta_data_publicacao(html_meta) if not eh_binario else {"valor": None, "origem": "ausente"}
-    aviso = ("texto-curto: --render pode trazer mais" if (not render and tipo in TIPOS_HTML
-             and uteis < LIMIAR_TEXTO_CURTO) else None)
+    sem_camada = d.get("sem_camada") or []
+    if sem_camada:
+        lista = ", ".join(str(x) for x in sem_camada[:8])
+        if len(sem_camada) > 8:
+            lista += f" +{len(sem_camada) - 8}"
+        aviso = f"SEM CAMADA DE TEXTO p. {lista}"
+    else:
+        aviso = ("texto-curto: --render pode trazer mais" if (not render and tipo in TIPOS_HTML
+                 and uteis < LIMIAR_TEXTO_CURTO) else None)
 
     imagens_coletadas = []
     if imagens and tipo in TIPOS_HTML:
@@ -476,7 +485,49 @@ def _resposta_json(resp: Resposta, sha: str, tipo: str, tipo_por: str) -> bytes:
     return json.dumps(doc, ensure_ascii=False, indent=2).encode("utf-8")
 
 
-def _deriva_http(resp: Resposta, tipo: str, derivador: Derivador | None) -> dict[str, Any]:
+def _carrega_formatos():
+    import importlib.util
+    import sys
+
+    caminho = Path(__file__).resolve().parent.parent / "ops-server" / "formatos.py"
+    spec = importlib.util.spec_from_file_location("_ops_formatos", caminho)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"leitor de formatos ausente: {caminho}")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _leitor_pdf_formatos(corpo: bytes) -> dict[str, Any]:
+    """Extrai texto de PDF pelo mesmo leitor do `ler_arquivo` (`ops-server/formatos.py`)."""
+    formatos = _carrega_formatos()
+    try:
+        doc = formatos.abre(formatos.PDF, dados=corpo)
+    except ValueError as exc:
+        raise _SemDerivado("pdf-cifrado", detalhe=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise _SemDerivado("pdf-invalido", detalhe=f"{type(exc).__name__}: {str(exc)[:160]}") from exc
+    try:
+        partes: list[str] = []
+        sem_camada: list[int] = []
+        for i in range(1, doc.n + 1):
+            txt = doc.texto(i)
+            if not txt.strip():
+                sem_camada.append(i)
+            partes.append(f"<!-- p. {i} -->\n{txt}" if txt else f"<!-- p. {i} -->\n")
+        return {"md": "\n".join(partes).strip(), "paginas": doc.n, "sem_camada": sem_camada}
+    finally:
+        doc.fecha()
+
+
+def _deriva_http(
+    resp: Resposta,
+    tipo: str,
+    derivador: Derivador | None,
+    *,
+    leitor_pdf: LeitorPdf | None = None,
+) -> dict[str, Any]:
     ct = resp.cabecalho("content-type")
     if tipo in TIPOS_HTML:
         texto, enc = decodifica(resp.corpo, ct, html=True)
@@ -487,6 +538,15 @@ def _deriva_http(resp: Resposta, tipo: str, derivador: Derivador | None) -> dict
     if tipo in TIPOS_TEXTO:
         texto, enc = decodifica(resp.corpo, ct, html=False)
         return {"md": texto, "vista": "texto", "encoding": enc, "html": "", "binario": False}
+    if tipo in TIPOS_PDF:
+        res = (leitor_pdf or _leitor_pdf_formatos)(resp.corpo)
+        paginas = int(res.get("paginas") or 0)
+        sem_camada = list(res.get("sem_camada") or [])
+        md = res.get("md") or ""
+        if paginas == 0 or len(sem_camada) == paginas or not caracteres_uteis(md):
+            raise _SemDerivado("pdf-sem-camada-de-texto", paginas=paginas)
+        enc = {"decidido": "utf-8", "por": "pymupdf", "substituicoes": md.count("\ufffd")}
+        return {"md": md, "vista": "pdf", "encoding": enc, "html": "", "binario": False, "sem_camada": sem_camada}
     if tipo in TIPOS_BINARIOS_PERMITIDOS:
         return {"md": None, "vista": "binario", "encoding": None, "html": "", "binario": True}
     raise _SemDerivado(f"tipo-nao-permitido:{tipo}")
