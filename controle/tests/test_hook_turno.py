@@ -164,6 +164,10 @@ def test_o_porte_do_sessao_id_continua_junto_com_o_turno(hook, capsys):
     saida, _ = rodar(hook, pre({"ato": "ler"}), capsys)
     novo = atualizado(saida)
     assert (novo["sessao_id"], novo["turno"], novo["turno_texto"]) == (SID, "T0", "oi")
+    assert json.loads(saida)["hookSpecificOutput"]["permissionDecision"] == "allow"
+    rodar(hook, prompt("no plano"), capsys)
+    saida_plan, _ = rodar(hook, pre({"ato": "ler"}, permission_mode="plan"), capsys)
+    assert "permissionDecision" not in json.loads(saida_plan)["hookSpecificOutput"]
 
 
 def test_o_settings_registra_o_evento_no_mesmo_script():
