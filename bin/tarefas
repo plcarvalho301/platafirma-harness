@@ -1758,11 +1758,17 @@ ordenar() {
 }
 
 # Os dois lados do vínculo de <id>, como a API os devolve ao declarar e ao retirar. A task sai como
-# `t<n>` dos dois lados (#4250): o nome de <id> vem de `rotulo_de`, e o da outra ponta, da chave
-# que a API devolve ou do mapa da vizinhança de <id>.
-_vinculos_texto() { # _vinculos_texto <id>   (JSON da API em stdin)
-  local nome mapa
-  nome=$(rotulo_de "$1"); mapa=$(mapa_de "$1")
+# `t<n>` dos dois lados (#4250): o nome de <id> e o mapa id → chave das duas pontas se leem ANTES do
+# ato (`_vinculos_contexto`), para a escrita ser a última chamada ao rastreador.
+_vinculos_contexto() { # _vinculos_contexto <a> <b>  → "<nome de a>\t<mapa JSON>"
+  local nome ma mb
+  nome=$(rotulo_de "$1"); ma=$(mapa_de "$1"); mb=$(mapa_de "$2")
+  printf '%s\t%s' "$nome" "$(jq -cn --argjson a "$ma" --argjson b "$mb" '$a + $b' 2>/dev/null || printf '{}')"
+}
+
+_vinculos_texto() { # _vinculos_texto <nome de id> <mapa JSON>   (JSON da API em stdin)
+  local nome="$1" mapa="${2:-}"
+  [ -n "$mapa" ] || mapa='{}'
   jq -r --arg nome "$nome" --argjson m "$mapa" "$JQ_ROT"'
     def lado: if ((. // []) | length) > 0 then ([.[] | rotx($m)] | join(", ")) else "ninguém" end;
     "\($nome) bloqueia: \(.bloqueia | lado)",
@@ -1776,7 +1782,8 @@ bloquear() { # bloquear <bloqueador> <bloqueado>
   a=$(so_id "${1:?uso: tarefas bloquear <a> <b> — <a> bloqueia <b>}")
   b=$(so_id "${2:?uso: tarefas bloquear <a> <b> — <a> bloqueia <b>}")
   case "$a$b" in ''|*[!0-9]*) echo "uso: tarefas bloquear <a> <b> — <a> bloqueia <b>" >&2; exit 2 ;; esac
-  jq -n --argjson b "$b" '{bloqueado:$b}' | envia POST "/itens/$a/bloqueia" | _vinculos_texto "$a"
+  local ctx; ctx=$(_vinculos_contexto "$a" "$b")
+  jq -n --argjson b "$b" '{bloqueado:$b}' | envia POST "/itens/$a/bloqueia" | _vinculos_texto "${ctx%%$'\t'*}" "${ctx#*$'\t'}"
 }
 
 desbloquear() { # desbloquear <bloqueador> <bloqueado>
@@ -1784,7 +1791,8 @@ desbloquear() { # desbloquear <bloqueador> <bloqueado>
   a=$(so_id "${1:?uso: tarefas desbloquear <a> <b> — retira \"<a> bloqueia <b>\"}")
   b=$(so_id "${2:?uso: tarefas desbloquear <a> <b> — retira \"<a> bloqueia <b>\"}")
   case "$a$b" in ''|*[!0-9]*) echo "uso: tarefas desbloquear <a> <b> — retira \"<a> bloqueia <b>\"" >&2; exit 2 ;; esac
-  busca DELETE "/itens/$a/bloqueia/$b" | _vinculos_texto "$a"
+  local ctx; ctx=$(_vinculos_contexto "$a" "$b")
+  busca DELETE "/itens/$a/bloqueia/$b" | _vinculos_texto "${ctx%%$'\t'*}" "${ctx#*$'\t'}"
 }
 
 # CARTEIRA (R25): o que a firma entregou na semana, por originação, e o que está parado.

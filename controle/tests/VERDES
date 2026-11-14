@@ -244,6 +244,9 @@ testes/test_sessao_origem.py | bin/acesso bin/_acesso/** bin/agente bin/chat bin
 testes/test_tarefas_moldes.py | bin/tarefas
 testes/test_tarefas_task.py | bin/tarefas
 testes/test_tarefas_task_chave.py | bin/tarefas
+# Incidente #4250 (13/11/2026): fora do banco a task se chama só t<n>; um caso por ato que mostra item (sub,
+# listar, listar-tudo, ler, editar, mover, apagar, bloquear, comentar, ordenar), contra um rastreador de mentira.
+testes/test_tarefas_nome_da_task.py | bin/tarefas
 testes/test_tarefas_editar_trecho.py | bin/tarefas
 # Medido em 14/10/2026 (card #3526): originacao e executor, listar com paradas escondidas, ler com vinculo e filhas do
 # detalhe, ordenar, bloquear, desbloquear, despriorizar com a lista de motivos e carteira (34 passam; contra o
