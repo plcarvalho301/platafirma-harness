@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # acervo — cuida do item do acervo, obra ou documento da casa, da incorporação à retirada
-# capacidade: conhecimento
+# capacidade: acervo
 # dono: dados
 # classe: B
 # use para: incorporar item, «põe essa obra no acervo», «ingere o repo de docs»; classificar item, «cataloga essa obra», «de que domínio ela é?»; definir e relacionar conceitos no tesauro, «o que é o conceito X?», «como X se liga a Y?»; selar impressão, pôr item em serviço, retirar e restaurar item; abrir obra ou documento que já se sabe qual é, ou que a busca achou, «abre a ADR 97»; publicar página de wiki
