@@ -1768,9 +1768,11 @@ ordenar() {
   case "$id" in ''|*[!0-9]*) lado="" ;; esac
   case "$ref" in ''|*[!0-9]*) lado="" ;; esac
   [ -n "$lado" ] || { echo "uso: tarefas ordenar <id> --antes-de <id> | --depois-de <id>" >&2; exit 2; }
+  local rot_ref
+  rot_ref=$(rotulo_de "$ref")
   jq -n --arg l "$lado" --argjson r "$ref" '{($l): $r}' \
     | envia POST "/itens/$id/posto" \
-    | jq -r --arg l "$lado" --arg r "$(rotulo_de "$ref")" "$JQ_ROT"'
+    | jq -r --arg l "$lado" --arg r "$rot_ref" "$JQ_ROT"'
         "item \(rotn) ficou \(if $l == "antes_de" then "antes" else "depois" end) de \($r) (posto \(.posto)): \(.titulo)"'
 }
 
