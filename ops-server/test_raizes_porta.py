@@ -450,3 +450,13 @@ def test_write_file_aceita_uv_lock_sem_abrir_outros_locks(bancada,sem_pep):
             assert nao.get("recusado") and "tipo" in nao["motivo"],nao
     segredo=s.write_file(path=str(s.INSTANCIA/"segredos/rag/uv.lock"),content="x\n")
     assert segredo.get("recusado"),segredo
+
+
+def test_write_file_recusa_relativo_ao_repo_explicando_bancada(bancada, sem_pep):
+    """DT 564: caminho relativo parte da bancada (wt/<repo>/<cadeira>/<card-ou-slug>/),
+    e a recusa mostra o caminho resolvido e o prefixo esperado."""
+    r = s.write_file(path="3-gatilho/prosa.md", content="x\n")
+    assert r.get("recusado"), r
+    assert "fora de morada" in r["motivo"]
+    assert "wt/<repo>/<cadeira>/<card-ou-slug>/" in r["motivo"]
+    assert str(bancada / "3-gatilho/prosa.md") in r["motivo"]
