@@ -38,12 +38,11 @@ from . import render
 from .agregador import ESTADO_PATH
 from .estado_leitura import carregar_estado
 from .verbos import BIN, HARNESS, chamar
+from fila_tipos import TIPOS_VALIDOS  # noqa: E402
 
 # /feito le `git log` da mesma arvore de onde saem os verbos: a propria, no host; a
 # release montada somente-leitura, no container.
 REPO_HARNESS = HARNESS
-
-TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff", "recusa"}
 PF_CADEIRA_TELA = os.environ.get("PF_CADEIRA_TELA", "ti")
 TAREFAS_PROJETO_PADRAO = os.environ.get("TAREFAS_PROJETO_PADRAO", "46")
 

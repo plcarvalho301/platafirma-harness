@@ -64,6 +64,7 @@ except ImportError:
 # (arq:0097, card #3010), nunca a arvore de um clone.
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
+from fila_tipos import TIPOS_VALIDOS  # noqa: E402
 from raizes import instancia  # noqa: E402
 
 ABERTURA = os.path.join(
@@ -79,7 +80,6 @@ ESPIA = "gestao-estrategica"
 # Pode so medir profundidade (status); qualquer outro verbo e negado em so_leitura().
 LEITOR = "sonda"
 GRUPO = "cadeira"
-TIPOS_VALIDOS = {"decisao", "resposta", "pedido", "minuta", "demanda", "handoff", "recusa", "contestacao"}
 # O contestar da R16 (arq:0124 §3, mecanismo comum; card #3532): `--ref` leva o indicador contestado e o
 # corpo leva o fundamento. Sem armazenamento novo: os dois campos ja existem em toda carta.
 TIPO_CONTESTACAO = "contestacao"
