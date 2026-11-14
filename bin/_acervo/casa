@@ -131,6 +131,90 @@ def _especies_vivas():
               "acervo.especie_da_casa") or []
 
 
+def _raiz_casa_nova():
+    """Raiz do clone/bancada de `platafirma-casa-espelho` (a casa nova), se existir no host."""
+    env = os.environ.get("PF_CASA_ESPELHO")
+    if env and os.path.isdir(env):
+        return env
+    bancada = os.environ.get("PLATAFIRMA_BANCADA", "/home/claudinho/AI")
+    cand = os.path.join(bancada, "platafirma-casa-espelho")
+    return cand if os.path.isdir(cand) else None
+
+def _arquivos_especie_casa_nova(especie):
+    """Lista caminhos relativos `<estrato>/<especie>/*.md` (ou `catalogo/*.md`) na casa nova."""
+    raiz = _raiz_casa_nova()
+    if not raiz:
+        return None, []
+    achados = []
+    if especie == "catalogo":
+        pasta = os.path.join(raiz, "catalogo")
+        if os.path.isdir(pasta):
+            for nome in sorted(os.listdir(pasta)):
+                if nome.endswith(".md"):
+                    achados.append(f"catalogo/{nome}")
+        return raiz, achados
+    for entrada in sorted(os.listdir(raiz)):
+        sub = os.path.join(raiz, entrada, especie)
+        if os.path.isdir(sub):
+            for nome in sorted(os.listdir(sub)):
+                if nome.endswith(".md"):
+                    achados.append(f"{entrada}/{especie}/{nome}")
+    return raiz, achados
+
+def _ler_casa_nova(especie, seletor, quero_json, offset=0):
+    """Lê documento da casa nova (`platafirma-casa-espelho`) por chave exata/slug (DT 549)."""
+    raiz, arquivos = _arquivos_especie_casa_nova(especie)
+    if not arquivos:
+        return None
+    s = seletor.strip()
+    chave = s[:-3] if s.endswith(".md") else s
+    exatos = [rel for rel in arquivos if os.path.basename(rel) == f"{chave}.md"]
+    if not exatos and re.fullmatch(r"[a-z0-9-]+", chave):
+        suf = f"-{chave}.md"
+        exatos = [rel for rel in arquivos if os.path.basename(rel).endswith(suf)]
+    if len(exatos) > 1:
+        ops = "\n".join(f"    repo ler platafirma-casa-espelho {rel}" for rel in exatos[:20])
+        morre(f"acervo ler casa {especie}: '{seletor}' ambiguo na casa nova ({len(exatos)} arquivos):\n{ops}", 2)
+    if not exatos:
+        morre(
+            f"acervo casa: nada da especie '{especie}' com chave '{seletor}' em platafirma-casa-espelho.\n"
+            f"  contorno: repo listar platafirma-casa-espelho · repo ler platafirma-casa-espelho <caminho>",
+            1,
+        )
+    rel = exatos[0]
+    caminho = os.path.join(raiz, rel)
+    with open(caminho, encoding="utf-8") as f:
+        completo = f.read()
+    corpo, total, proximo = pagina(completo, offset)
+    if quero_json:
+        doc = {
+            "especie": especie,
+            "chave": os.path.basename(rel).removesuffix(".md"),
+            "repo": "platafirma-casa-espelho",
+            "path": rel,
+            "corpo": corpo,
+            "bytes_total": total,
+            "offset": offset,
+            "truncado": proximo is not None,
+            "next_offset": proximo,
+        }
+        print(json.dumps(doc, ensure_ascii=False, indent=2))
+        return 0
+    print(f"casa nova · platafirma-casa-espelho · {rel}")
+    sys.stdout.write(corpo)
+    if not corpo.endswith("\n"):
+        sys.stdout.write("\n")
+    if proximo is not None:
+        sys.stdout.write(
+            f"truncado em {proximo} de {total} bytes; continue com --offset {proximo}"
+            f" (acervo ler casa {especie} {chave} --offset {proximo})\n"
+        )
+    return 0
+
+def _especie_existe(especie):
+    return bool(_q(f"select 1 from acervo.especie_da_casa d where d.especie = {_lit(especie)} limit 1;",
+                   "acervo.especie_da_casa"))
+
 def _especie(especie):
     """Espécie com projeção, regime e contagem; fora do vocabulário (arq:0059) recusa."""
     info = _q(f"""
@@ -153,6 +237,16 @@ def _especie(especie):
                             group by c.serie) t))
         from acervo.especie_da_casa d where d.especie = {_lit(especie)};""", "acervo.especie_da_casa")
     if not info:
+        _, arquivos_nova = _arquivos_especie_casa_nova(especie)
+        if arquivos_nova:
+            morre(
+                "acervo casa: especie '%s' pertence a casa nova (platafirma-casa-espelho), "
+                "nao a acervo.especie_da_casa.\n"
+                "  para ler:    acervo ler casa %s <chave>  ou  repo ler platafirma-casa-espelho <caminho>\n"
+                "  para listar: repo listar platafirma-casa-espelho  ou  acervo consultar casa <entidade>"
+                % (especie, especie),
+                2,
+            )
         morre("acervo casa: especie '%s' nao existe em acervo.especie_da_casa.\n"
               "  especies vivas: %s" % (especie, ", ".join(_especies_vivas())), 2)
     return info
@@ -690,6 +784,10 @@ def montagem(linha, completo):
 
 def ler(especie, seletor, quero_json, situacao=False, offset=0, cru=False):
     normalizar(especie, seletor)   # forma inválida é erro de uso (exit 2) antes de tocar o banco
+    if _arquivos_especie_casa_nova(especie)[1] and not _especie_existe(especie):
+        res = _ler_casa_nova(especie, seletor, quero_json, offset=offset)
+        if res is not None:
+            return res
     info = _especie(especie)
     linha = resolver(especie, seletor, info)
     fonte = _fonte()
