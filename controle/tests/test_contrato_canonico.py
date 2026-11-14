@@ -76,25 +76,31 @@ def test_instrumento_passa(linha):
 
 
 def test_e_canonico():
+    assert e_canonico("adr/arq/0118-x.md")
+    assert e_canonico("spec/verbo-minuta.md")
     assert e_canonico(ADR)
     assert e_canonico("ont/decisions/0001-x.md")
     assert e_canonico("docs/spec_verbo-minuta.md")
+    assert not e_canonico("adr/arq/README.md")
+    assert not e_canonico("adr/0118-x.md")
     assert not e_canonico("minuta/0038-processamento-de-texto.md")
     assert not e_canonico("docs/guia-x.md")
 
 
-def test_pre_commit_recusa_adr_que_cita_minuta(tmp_path):
-    repo = _repo(tmp_path, {ADR: "# 0200 — Exemplo\n\nDecisão fechando a minuta 0038.\n"})
+@pytest.mark.parametrize("caminho", [ADR, "adr/arq/0118-x.md"])
+def test_pre_commit_recusa_adr_que_cita_minuta(tmp_path, caminho):
+    repo = _repo(tmp_path, {caminho: "# 0200 — Exemplo\n\nDecisão fechando a minuta 0038.\n"})
     r = _pre_commit(repo)
     assert r.returncode == 1, r.stdout + r.stderr
-    assert f"[canonico] {ADR}:3:" in r.stderr
+    assert f"[canonico] {caminho}:3:" in r.stderr
 
 
-def test_pre_commit_recusa_spec_que_cita_minuta(tmp_path):
-    repo = _repo(tmp_path, {"docs/spec_x.md": "# X\n\nResolvidas na minuta as três.\n"})
+@pytest.mark.parametrize("caminho", ["docs/spec_x.md", "spec/x.md"])
+def test_pre_commit_recusa_spec_que_cita_minuta(tmp_path, caminho):
+    repo = _repo(tmp_path, {caminho: "# X\n\nResolvidas na minuta as três.\n"})
     r = _pre_commit(repo)
     assert r.returncode == 1, r.stdout + r.stderr
-    assert "[canonico] docs/spec_x.md:3:" in r.stderr
+    assert f"[canonico] {caminho}:3:" in r.stderr
 
 
 def test_pre_commit_passa_canonico_limpo(tmp_path):
