@@ -125,8 +125,22 @@ def _associar_conteineres(chaves: list[str], refs: dict[str, list[str]]) -> list
     return sorted(achados)
 
 
+def _imagens_biblioteca_current() -> set[str]:
+    """Protege platafirma/ui:<versao> do current: usada em build (COPY --from), sem contêiner ativo."""
+    raiz = Path(os.environ.get("PF_RELEASE_RAIZ", "/opt/platafirma"))
+    pkg = raiz / "platafirma-ui" / "current" / "src" / "base" / "package.json"
+    if not pkg.is_file():
+        return set()
+    try:
+        versao = json.loads(pkg.read_text(encoding="utf-8")).get("version")
+    except (OSError, ValueError, AttributeError):
+        return set()
+    return {f"platafirma/ui:{versao}"} if versao else set()
+
+
 def _coletar() -> tuple[list[dict], list[dict]]:
     refs = _refs_conteineres()
+    protegidas = _imagens_biblioteca_current()
     proc = _roda("docker", "images", "--no-trunc", "--format", "{{json .}}")
     imagens_raw: list[dict] = []
     ids_em_uso: set[str] = set()
@@ -138,6 +152,8 @@ def _coletar() -> tuple[list[dict], list[dict]]:
         tam_str = (d.get("Size") or "0B").strip()
         ref = f"{repo}:{tag}" if repo != "<none>" and tag != "<none>" else (repo if repo != "<none>" else img_id)
         conteineres = _associar_conteineres(_chaves_imagem(ref, img_id), refs)
+        if not conteineres and ref in protegidas:
+            conteineres = ["biblioteca:current"]
         if conteineres and img_id:
             ids_em_uso.add(img_id)
         imagens_raw.append(
@@ -243,8 +259,19 @@ def _executar_prune(inativas: list[dict], em_uso: list[dict]) -> int:
         _anotar(resumo)
         return SAIDA_OK
 
+    # Se há imagem protegida sem contêiner (ex.: biblioteca:current), `docker image prune -a`
+    # a apagaria; removemos apenas as inativas listadas para preservá-la.
+    tem_protegida_sem_conteiner = any(x["conteineres"] == ["biblioteca:current"] for x in em_uso)
+    reclaimed = ""
     try:
-        proc = _roda("docker", "image", "prune", "-a", "-f", timeout=300)
+        if tem_protegida_sem_conteiner:
+            alvos = [x["referencia"] if x["repositorio"] != "<none>" else x["id"] for x in inativas]
+            alvos = [a for a in alvos if a]
+            if alvos:
+                _roda("docker", "image", "rm", "-f", *alvos, timeout=300)
+        else:
+            proc = _roda("docker", "image", "prune", "-a", "-f", timeout=300)
+            reclaimed = _extrair_reclaimed(proc.stdout)
     except RuntimeError as e:
         print(f"infra: erro: {e}", file=sys.stderr)
         return SAIDA_DEP
@@ -252,7 +279,6 @@ def _executar_prune(inativas: list[dict], em_uso: list[dict]) -> int:
         print(f"infra limpeza imagens: {e}", file=sys.stderr)
         return SAIDA_MUDA
 
-    reclaimed = _extrair_reclaimed(proc.stdout)
     detalhe = f" ({reclaimed})" if reclaimed else f" (~{_fmt_bytes(bytes_inativas)})"
     resumo = f"limpeza-imagens: {len(inativas)} saíram{detalhe}, {len(em_uso)} ficam"
     print(resumo)
