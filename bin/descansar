@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # descansar — encerra o expediente conferindo a memória
-# capacidade: encerramento
+# capacidade: memoria
 # dono: claudinho-IA
 # use para: «encerra», «fecha por hoje», «paramos aqui», ANTES de encerrar o expediente
 # atos: fita, varredura

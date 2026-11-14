@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # sinal — coleta o estado de saude dos servicos e escreve o arquivo de sinal.
-# capacidade: incidente
+# capacidade: operacao
 # dono: claudinho-TI
 # use para: 'está no ar?', saúde dos serviços, arquivo de sinal
 # atos: nenhum — roda direto, sem ato

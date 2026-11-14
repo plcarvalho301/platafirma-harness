@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # publicar-abertura — publica o pacote de abertura de um REF FIXADO para a morada servida.
 #
-# capacidade: infra/promocao-de-mudanca
+# capacidade: operacao
 # dono: ti
 #
 # DEPRECADO como ponto de entrada (#3054): e o motor da familia abertura do `release`.

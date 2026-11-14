@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # persona — quem a cadeira e e como se comporta: leitura para o expediente, escrita compartimentada.
-# capacidade: organizacao
+# capacidade: gestao-estrategica
 # dono: gestao-estrategica
 # classe: B
 # use para: ler persona/chapeu/conduta/foto (o que o expediente serve), escrever/editar persona, designar, afastar, desligar, filme da cadeira
