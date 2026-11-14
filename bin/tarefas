@@ -255,7 +255,8 @@ _recusa() { # lê o corpo do erro em $1 e devolve a mensagem da API
     erro="$erro · tarefas criar \"<título>\" --estado priorizada --registro \"<porquê>\" (item existente: tarefas comentar <id> \"registro de negócio: <porquê>\" e repita o ato)"
   fi
   # CARD #3526 (R23): o vínculo que fecharia ciclo volta com `caminho` (ids), e a recusa o mostra.
-  local caminho; caminho=$(printf '%s' "$1" | jq -r '(.caminho // []) | map("#\(if type == "object" then .id else . end)") | join(" → ")' 2>/dev/null || true)
+  # #4250: o passo do caminho que é task sai como `t<n>` quando a API manda a chave dele.
+  local caminho; caminho=$(printf '%s' "$1" | jq -r '(.caminho // []) | map(if type == "object" and ((.chave // "") | tostring | test("\\.t[0-9]+$")) then (.chave | tostring | sub("^[0-9]+\\."; "")) else "#\(if type == "object" then .id else . end)" end) | join(" → ")' 2>/dev/null || true)
   [ -n "$caminho" ] && erro="$erro · caminho: $caminho"
   # `-S` sai do curl porque a mensagem util e o CORPO, e a linha `curl: (22) ... 400` so
   # empurrava o texto da maquina para fora da tela. Falha SEM corpo (rede, servico fora)
@@ -436,24 +437,28 @@ monta_query() { # monta_query "$@" -> ecoa a query string
 _tem_json() { local a; for a in "$@"; do [ "$a" = "--json" ] && return 0; done; return 1; }
 _tem_flag() { local f="$1" a; shift; for a in "$@"; do [ "$a" = "$f" ] && return 0; done; return 1; }
 
-linhas() { # id, marca de terminal, título
-  jq -r '
+# A task sai como `t<n>` e leva a story no fim da linha, porque a listagem não tem o contexto que a
+# leitura da story dá (#4250); o card sai pelo id, como sempre.
+linhas() { # id (t<n> na task), marca de terminal, título
+  jq -r "$JQ_ROT"'
+    def da_story: if ((.chave // "") | test("\\.t[0-9]+$")) then " · story #\(.pai)" else "" end;
     ([.estados[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado]
      + ["entregue", "recusada", "cancelada", "englobada", "encerrada", "resolvido"]
      | unique) as $term
     | .itens[]
     | . as $it
-    | "\($it.id)\t\(if ($it.estado_derivado != null and ($term | index([$it.estado_derivado]) != null)) or ($it.estado_derivado == null and $it.estado_fase == "terminal") then "x" else " " end)\t\($it.titulo)"'
+    | "\($it | rotn)\t\(if ($it.estado_derivado != null and ($term | index([$it.estado_derivado]) != null)) or ($it.estado_derivado == null and $it.estado_fase == "terminal") then "x" else " " end)\t\($it.titulo)\($it | da_story)"'
 }
 
-linhas_com_data() { # id, marca de terminal, data (AAAA-MM-DD), título
-  jq -r '
+linhas_com_data() { # id (t<n> na task), marca de terminal, data (AAAA-MM-DD), título
+  jq -r "$JQ_ROT"'
+    def da_story: if ((.chave // "") | test("\\.t[0-9]+$")) then " · story #\(.pai)" else "" end;
     ([.estados[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado]
      + ["entregue", "recusada", "cancelada", "englobada", "encerrada", "resolvido"]
      | unique) as $term
     | .itens[]
     | . as $it
-    | "\($it.id)\t\(if ($it.estado_derivado != null and ($term | index([$it.estado_derivado]) != null)) or ($it.estado_derivado == null and $it.estado_fase == "terminal") then "x" else " " end)\t\(($it.ultimo_movimento // $it.criado_em // "")[0:10])\t\($it.titulo)"'
+    | "\($it | rotn)\t\(if ($it.estado_derivado != null and ($term | index([$it.estado_derivado]) != null)) or ($it.estado_derivado == null and $it.estado_fase == "terminal") then "x" else " " end)\t\(($it.ultimo_movimento // $it.criado_em // "")[0:10])\t\($it.titulo)\($it | da_story)"'
 }
 
 # QUADRO (R35 da spec tarefas, card #3619): `--quadro` bypassa `/itens` e vai direto à
@@ -477,7 +482,7 @@ listar_quadro() {
     printf '%s\n' "$corpo"
     return 0
   fi
-  printf '%s' "$corpo" | jq -r '.itens[] | "#\(.id)\t\(.estado_mostrado)\t\(.cadeira // "—")\t\(.executor // "—")\t\(.titulo)"'
+  printf '%s' "$corpo" | jq -r "$JQ_ROT"'.itens[] | "\(rot)\t\(.estado_mostrado)\t\(.cadeira // "—")\t\(.executor // "—")\t\(.titulo)"'
   local escondidas; escondidas=$(printf '%s' "$corpo" | jq -r '.dormentes_excluidos // 0')
   [ "$escondidas" != 0 ] && printf '%s dormente(s) escondida(s)\n' "$escondidas"
   return 0
@@ -597,9 +602,45 @@ so_id() {
 # filha de uma story, que o contexto já diz, e `<story>.t<n>` é o que se DIGITA (`so_id`) e o que o
 # banco guarda. `rot` é a forma de listagem (`#id` no card, `t<n>` na task); `rotn`, a do relato
 # (`id` sem sustenido no card, `t<n>` na task). Quem exibe item prefixa o programa jq com isto.
+#
+# INCIDENTE #4250 (13/11/2026): fora do banco, a task se chama SÓ `t<n>`, em toda saída do verbo,
+# e nenhuma linha imprime o id dela (ordem do dono: «não é pra voltar esse número inteiro em nenhuma
+# interface»). Onde a API devolve o item sem `chave` (o bloqueador de uma task, a filha movida junto,
+# o apagado), `rotx($m)` acha a chave num mapa id → chave montado do detalhe que já está na mão; e
+# onde só se tem o id (o argumento resolvido por `so_id`, o item de um comentário), `rotulo_de`
+# pergunta ao rastreador. `mapa_chaves` monta o mapa a partir do detalhe de um item e das filhas dele.
 JQ_ROT='def rot: if ((.chave // "") | test("\\.t[0-9]+$")) then (.chave | sub("^[0-9]+\\."; "")) else "#\(.id)" end;
 def rotn: if ((.chave // "") | test("\\.t[0-9]+$")) then (.chave | sub("^[0-9]+\\."; "")) else (.id | tostring) end;
+def rotk($k): if (($k // "") | tostring | test("\\.t[0-9]+$")) then ($k | tostring | sub("^[0-9]+\\."; "")) else null end;
+def rotx($m): (if type == "object" then . else {id: .} end) as $o
+  | (rotk($o.chave // ($m[($o.id | tostring)])) // "#\($o.id)");
+def mapa_chaves: ((reduce ((.filhas // [])[], (.bloqueia // [])[], (.bloqueado_por // [])[]) as $f
+  ({}; if ($f | type) == "object" and $f.chave then .[($f.id | tostring)] = $f.chave else . end))
+  + (if .id and .chave then {(.id | tostring): .chave} else {} end));
 '
+
+# O nome de exibição de um item pelo id (#4250): `t<n>` na task, `#id` no card; com `n` no segundo
+# argumento, o card sai sem sustenido (a forma do relato, como `rotn`). Sem resposta do rastreador,
+# devolve o que recebeu, como foi digitado.
+rotulo_de() { # rotulo_de <id> [n]
+  local j
+  if j=$(busca GET "/itens/$1" 2>/dev/null) && [ -n "$j" ]; then
+    if [ -n "${2:-}" ]; then printf '%s' "$j" | jq -r "$JQ_ROT"'rotn'
+    else printf '%s' "$j" | jq -r "$JQ_ROT"'rot'; fi
+  else
+    if [ -n "${2:-}" ]; then printf '%s' "$1"; else printf '#%s' "$1"; fi
+  fi
+}
+
+# O mapa id → chave de um item e da vizinhança dele (filhas e vínculos), para as saídas que recebem
+# o item sem chave. Falha vira mapa vazio: o pior caso é o sustenido do card, nunca uma recusa.
+mapa_de() { # mapa_de <id>
+  local j m
+  j=$(busca GET "/itens/$1" 2>/dev/null) || { printf '{}'; return 0; }
+  m=$(printf '%s' "$j" | jq -c "$JQ_ROT"'mapa_chaves' 2>/dev/null) || m='{}'
+  [ -n "$m" ] || m='{}'
+  printf '%s' "$m"
+}
 
 # CARD #347: a leitura mostra quem falta assinar, e SEM chamada extra — o detalhe do item
 # já devolve `sign_offs` desde o #466. Enquanto não estava aqui, a informação existia na API
@@ -711,12 +752,13 @@ filhas_do_json() {
   local termos; termos=$(busca GET /registro | jq -c '[.estados[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado]') || return 1
   printf '%s' "$1" | jq -r --argjson term "$termos" "$JQ_ROT"'
     ($term + ["entregue","recusada","cancelada","englobada","encerrada","resolvido"] | unique) as $t
+    | mapa_chaves as $m
     | .filhas[]?
     | . as $f
     | select($t | index([$f.estado_derivado // $f.estado]) == null)
     | "  \($f | rot)\t\($f.estado)\t\($f.cadeira // "—")\t\($f.titulo)"
       + (if $f.travada
-         then "  [travada por " + ([($f.bloqueada_por // [])[] | "#\(if type == "object" then .id else . end)"] | join(", ")) + "]"
+         then "  [travada por " + ([($f.bloqueada_por // [])[] | rotx($m)] | join(", ")) + "]"
          else "" end)'
 }
 
@@ -730,13 +772,14 @@ tasks_do_json() {
   printf '%s' "$1" | jq -r --argjson term "${2:-[]}" "$JQ_ROT"'
     def aberta: (.estado as $e | ($term | index([$e])) == null);
     def rotulo: if aberta then "aberta" elif .estado == "entregue" then "concluída" else .estado end;
-    [.filhas[]?] as $ts
+    mapa_chaves as $m
+    | [.filhas[]?] as $ts
     | if ($ts | length) == 0 then empty else
         "tasks (\([$ts[] | select(aberta)] | length) abertas de \($ts | length)):",
         ($ts | to_entries[] | .key as $i | .value
            | "  \($i + 1). \(rot)\t\(rotulo)\t\(.estado)\t\(.titulo)"
              + (if .travada
-                then "  [travada por " + ([(.bloqueada_por // [])[] | "#\(if type == "object" then .id else . end)"] | join(", ")) + "]"
+                then "  [travada por " + ([(.bloqueada_por // [])[] | rotx($m)] | join(", ")) + "]"
                 else "" end))
       end'
 }
@@ -797,7 +840,7 @@ assinar() {
       + (if $d == "" then {} else {decisao:$d} end)
       + (if $t == "" then {} else {texto:$t} end)' \
     | envia POST "/itens/$id/sign-offs" \
-    | jq -r '"sign-off de \(.aprovador) em #\(.item // '"$id"'): \(.decisao // "PENDENTE")"
+    | jq -r --arg it "$(rotulo_de "$id")" '"sign-off de \(.aprovador) em \($it): \(.decisao // "PENDENTE")"
              + (if .texto then " — \(.texto)" else "" end)'
 }
 
@@ -968,8 +1011,8 @@ editar() {
       + (if $o == "" then {} else {tipo_demanda:$o} end)
       + (if $x == "" then {} else {executor:$x} end)' \
     | envia PATCH "/itens/$id" \
-    | jq -r --argjson tc "$tem_cadeira" --arg n "$nivel" --arg o "$originacao" --arg x "$executor" '
-        "item \(.id) editado: \(.titulo)"
+    | jq -r --argjson tc "$tem_cadeira" --arg n "$nivel" --arg o "$originacao" --arg x "$executor" "$JQ_ROT"'
+        "item \(rotn) editado: \(.titulo)"
         + (if $tc == 1 then " · cadeira \(.cadeira // "nenhuma")" else "" end)
         + (if $n != "" then " · nível \(.nivel_nome // .nivel)" else "" end)
         + (if $o != "" then " · originação \(.tipo_demanda // "?")" else "" end)
@@ -1031,7 +1074,7 @@ comentar() {
   body="${saida%$'\n'*}"
   case "$status" in
     201)
-      printf '%s' "$body" | jq -r '"comentário #\(.id) criado no item \(.item)"'
+      printf '%s' "$body" | jq -r --arg it "$(rotulo_de "$id" n)" '"comentário #\(.id) criado no item \($it)"'
       ;;
     400)
       printf '%s' "$body" | jq -r '
@@ -1086,8 +1129,8 @@ fechar_comentario() {
   body="${saida%$'\n'*}"
   case "$status" in
     200)
-      printf '%s' "$body" | jq -r \
-        '"comentário #\(.id) do item \(.item) fechado — fecho: \(.fecho_resultado) — \(.fecho_destino)"'
+      printf '%s' "$body" | jq -r --arg it "$(rotulo_de "$id" n)" \
+        '"comentário #\(.id) do item \($it) fechado — fecho: \(.fecho_resultado) — \(.fecho_destino)"'
       ;;
     400|403)
       printf '%s' "$body" | jq -r '
@@ -1196,14 +1239,20 @@ mover() {
       + (if $g == "" then {} else {englobado_em:($g|tonumber)} end)
       + (if $d == "" then {} else {decisao:($d|tonumber)} end)' \
     | envia PATCH "/itens/$id$q") || return 1
-  printf '%s' "$resp" | jq -r "$JQ_ROT"'"item \(rotn) → "
+  # #4250: a filha movida junto é task quando o item é story, e a API a devolve só com o id; o
+  # mapa vem do detalhe do item, lido só quando houve filha movida.
+  local mapa='{}'
+  if printf '%s' "$resp" | jq -e '((.propagacao.movidas // []) | length) > 0' >/dev/null 2>&1; then
+    mapa=$(mapa_de "$id")
+  fi
+  printf '%s' "$resp" | jq -r --argjson m "$mapa" "$JQ_ROT"'"item \(rotn) → "
              + (if .estado_derivado != null
                 then "\(.estado_derivado) [derivado; cru: \(.estado_nome)]"
                 else .estado_nome
                 end)
              + ": \(.titulo)"
              + (if ((.propagacao.movidas // []) | length) > 0
-                then "\n  filhas movidas junto: " + ([.propagacao.movidas[] | "#\(.id)"] | join(", "))
+                then "\n  filhas movidas junto: " + ((mapa_chaves + $m) as $mm | [.propagacao.movidas[] | rotx($mm)] | join(", "))
                 else "" end)'
   # Se o item estiver travado por bloqueador aberto e entrou em em-execucao (card #3750):
   if [ "$destino" = "em-execucao" ]; then
@@ -1250,6 +1299,8 @@ avisa_dona() {
   dona="${dona#claudinho-}"; dona="${dona#claudinha-}"; dona=$(printf '%s' "$dona" | tr 'A-Z' 'a-z')
   local eu="${QUEM#claudinho-}"; eu="${eu#claudinha-}"
   local nivel titulo; nivel=$(printf '%s' "$j" | jq -r '.nivel_nome'); titulo=$(printf '%s' "$j" | jq -r '.titulo')
+  # #4250: a filha que fecha a story é task, e a carta a nomeia como `t<n>`, nunca pelo id.
+  local nome_filha; nome_filha=$(rotulo_de "$filha")
   # QUEM CONFERE (dono, 27/09/2026): a conferência do pai com o dono é da gestão
   # estratégica, gestora do portfólio; a cadeira dona do card também pode, e nenhuma outra.
   # O aviso vai às duas; quem chamou o `mover` lê a linha aqui mesmo, sem carta.
@@ -1266,8 +1317,8 @@ avisa_dona() {
       printf '  aviso de conferência (%s) NÃO enviado: verbo fila ausente em %s\n' "$d" "$fila_bin"
       continue
     fi
-    if out=$(printf 'A última filha aberta de #%s (%s: %s) fechou com #%s. %s está em em-homologacao e espera a conferência (gestão estratégica, ou a cadeira dona do card): rode o `Sai quando:` (feature) ou confira a `Medida:` (épico), comente o retorno no card e leve a linha ENTREGA: ao dono. Se faltar coisa, abra a story que falta — o pai volta a em-execucao sozinho.\n' \
-          "$pai" "$nivel" "$titulo" "$filha" "$([ "$nivel" = feature ] && echo "A feature" || echo "O $nivel")" \
+    if out=$(printf 'A última filha aberta de #%s (%s: %s) fechou com %s. %s está em em-homologacao e espera a conferência (gestão estratégica, ou a cadeira dona do card): rode o `Sai quando:` (feature) ou confira a `Medida:` (épico), comente o retorno no card e leve a linha ENTREGA: ao dono. Se faltar coisa, abra a story que falta — o pai volta a em-execucao sozinho.\n' \
+          "$pai" "$nivel" "$titulo" "$nome_filha" "$([ "$nivel" = feature ] && echo "A feature" || echo "O $nivel")" \
         | "$fila_bin" enviar "$d" --tipo pedido --assunto "#$pai em homologação: conferência antes do dono" --ref "#$pai" 2>&1); then
       printf '  aviso de conferência enviado: %s (%s)\n' "$d" "$(printf '%s' "$out" | head -1)"
     else
@@ -1287,18 +1338,20 @@ apagar() {
   local id; id=$(so_id "$1"); shift || true
   local q=""
   [ "${1:-}" = "--cascata" ] && q="?cascata=1"
+  # #4250: o mapa id → chave sai antes do DELETE, porque depois dele o item não se lê mais.
+  local mapa; mapa=$(mapa_de "$id")
   busca DELETE "/itens/$id$q" \
-    | jq -r '"apagado(s): \(.quantos)", (.apagados[]? | "  #\(.id) [\(.estado)] \(.titulo)")'
+    | jq -r --argjson m "$mapa" "$JQ_ROT"'"apagado(s): \(.quantos)", (.apagados[]? | "  \(rotx($m)) [\(.estado)] \(.titulo)")'
 }
 
 fechar() {
-  local id; id=$(so_id "$1"); shift || true
+  local digitado="$1" id; id=$(so_id "$1"); shift || true
   local como="entregue"
   [ "${1:-}" = "--como" ] && { como="$2"; shift 2; }
   if ! busca GET "/registro" \
        | jq -e --arg e "$como" '.estados[]? | select(.estado==$e and .natureza=="terminal")' \
        >/dev/null 2>&1; then
-    echo "aviso: \`$como\` não é estado terminal — \`fechar\` fecha; para mover pelo fluxo use \`tarefas mover $id $como\`" >&2
+    echo "aviso: \`$como\` não é estado terminal — \`fechar\` fecha; para mover pelo fluxo use \`tarefas mover $digitado $como\`" >&2
   fi
   mover "$id" "$como" "$@"
 }
@@ -1341,20 +1394,21 @@ subtarefa() {
   local pai; pai=$(so_id "${1:?uso: tarefas sub <pai> [<filho>]}")
   if [ -z "${2:-}" ]; then
     local j; j=$(busca GET "/itens/$pai") || return 1
-    printf '%s' "$j" | jq -r '
-      .filhas[]? | "#\(.id)\t\(.estado)\t\(.cadeira // "—")\t\(.titulo)"'
+    printf '%s' "$j" | jq -r "$JQ_ROT"'
+      .filhas[]? | "\(rot)\t\(.estado)\t\(.cadeira // "—")\t\(.titulo)"'
     return 0
   fi
   local filho; filho=$(so_id "$2")
   jq -n --argjson p "$pai" '{pai:$p}' | envia PATCH "/itens/$filho" >/dev/null
-  echo "item $filho agora é filho de $pai"
+  echo "item $(rotulo_de "$filho" n) agora é filho de $(rotulo_de "$pai" n)"
 }
 
 apagar_comentario() {
   local id cid
   id=$(so_id "${1:?uso: tarefas apagar-comentario <id> <cid>}")
   cid=$(so_id "${2:?uso: tarefas apagar-comentario <id> <cid>}")
-  busca DELETE "/itens/$id/comentarios/$cid" | jq -r '"comentário #\(.apagado) apagado do item \(.item)"'
+  local nome; nome=$(rotulo_de "$id" n)
+  busca DELETE "/itens/$id/comentarios/$cid" | jq -r --arg it "$nome" '"comentário #\(.apagado) apagado do item \($it)"'
 }
 
 # --- débito técnico ---------------------------------------------------------
@@ -1699,16 +1753,20 @@ ordenar() {
   [ -n "$lado" ] || { echo "uso: tarefas ordenar <id> --antes-de <id> | --depois-de <id>" >&2; exit 2; }
   jq -n --arg l "$lado" --argjson r "$ref" '{($l): $r}' \
     | envia POST "/itens/$id/posto" \
-    | jq -r --arg l "$lado" --arg r "$ref" \
-        '"item \(.id) ficou \(if $l == "antes_de" then "antes" else "depois" end) de #\($r) (posto \(.posto)): \(.titulo)"'
+    | jq -r --arg l "$lado" --arg r "$(rotulo_de "$ref")" "$JQ_ROT"'
+        "item \(rotn) ficou \(if $l == "antes_de" then "antes" else "depois" end) de \($r) (posto \(.posto)): \(.titulo)"'
 }
 
-# Os dois lados do vínculo de <id>, como a API os devolve ao declarar e ao retirar.
+# Os dois lados do vínculo de <id>, como a API os devolve ao declarar e ao retirar. A task sai como
+# `t<n>` dos dois lados (#4250): o nome de <id> vem de `rotulo_de`, e o da outra ponta, da chave
+# que a API devolve ou do mapa da vizinhança de <id>.
 _vinculos_texto() { # _vinculos_texto <id>   (JSON da API em stdin)
-  jq -r --arg id "$1" '
-    def lado: if ((. // []) | length) > 0 then ([.[] | "#\(.id)"] | join(", ")) else "ninguém" end;
-    "#\($id) bloqueia: \(.bloqueia | lado)",
-    "#\($id) bloqueado por: \(.bloqueado_por | lado)"'
+  local nome mapa
+  nome=$(rotulo_de "$1"); mapa=$(mapa_de "$1")
+  jq -r --arg nome "$nome" --argjson m "$mapa" "$JQ_ROT"'
+    def lado: if ((. // []) | length) > 0 then ([.[] | rotx($m)] | join(", ")) else "ninguém" end;
+    "\($nome) bloqueia: \(.bloqueia | lado)",
+    "\($nome) bloqueado por: \(.bloqueado_por | lado)"'
 }
 
 # BLOQUEAR e DESBLOQUEAR (R23). O ciclo quem recusa é o banco, pela API: 409 com o caminho que o
