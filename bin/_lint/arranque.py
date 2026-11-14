@@ -23,6 +23,12 @@ SINAIS_ARRANQUE = (
 FORA_DA_REGUA = ("archi_base", "mdm_rh", "i-have-adhd")
 INSTANCIA_EFEMERA = ("fitas",)
 
+TEXTOS_COMUNS_ARRANQUE = (
+    "abertura/dono.md",
+    "2-comportamento/cultura/cultura.md",
+)
+PRIMITIVAS_PROVIDER_RE = re.compile(r"\b(ToolSearch|call_mcp_tool|tool_search)\b")
+
 
 def _sh(args: list[str], cwd: Optional[str | Path] = None) -> tuple[int, str, str]:
     try:
@@ -59,28 +65,62 @@ def achar_claude_mds(raiz: Path) -> list[Path]:
     return achados
 
 
+def verificar_texto_comum_sem_primitiva(caminho: Path, rel: str) -> list[Apontamento]:
+    """Reprova texto comum a toda superficie que cite primitiva especifica de provider (DT 527)."""
+    try:
+        texto = caminho.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        return [
+            Apontamento(
+                rel,
+                1,
+                f"nao consegui ler arquivo: {e}",
+                "verificar permissoes de leitura",
+                severidade="bloqueante",
+            )
+        ]
+
+    achados: list[Apontamento] = []
+    for num, linha in enumerate(texto.splitlines(), 1):
+        for m in PRIMITIVAS_PROVIDER_RE.finditer(linha):
+            achados.append(
+                Apontamento(
+                    rel,
+                    num,
+                    f"texto comum cita primitiva de provider ({m.group(1)})",
+                    "mover a receita por provider para a tabela do AGENTS.md/agente/CLAUDE.md",
+                    severidade="bloqueante",
+                    id="PRIMITIVA_PROVIDER",
+                )
+            )
+    return achados
+
+
 def verificar_arranque(
     raiz: Path | str,
     staged: bool = False,
     alvo: Optional[str] = None,
 ) -> list[Apontamento]:
-    """Verifica se CLAUDE.md aponta para abertura/arranque.md sem copiar redacao."""
+    """Verifica CLAUDE.md (ponteiro para abertura/arranque.md) e textos comuns sem primitiva de provider."""
     raiz = Path(raiz)
     alvos: list[Path] = []
+    comuns: list[tuple[Path, str]] = []
 
     if staged:
         rc, saida, _ = _sh(["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"], cwd=raiz)
         if rc == 0 and saida:
             for n in saida.splitlines():
-                if n.strip().endswith("CLAUDE.md"):
-                    caminho = raiz / n.strip()
-                    if caminho.is_file():
-                        alvos.append(caminho)
+                rel_s = n.strip()
+                caminho = raiz / rel_s
+                if not caminho.is_file():
+                    continue
+                if rel_s.endswith("CLAUDE.md"):
+                    alvos.append(caminho)
+                elif rel_s in TEXTOS_COMUNS_ARRANQUE:
+                    comuns.append((caminho, rel_s))
     elif alvo:
         caminho = (raiz / alvo).resolve()
-        if caminho.is_file():
-            alvos.append(caminho)
-        else:
+        if not caminho.is_file():
             return [
                 Apontamento(
                     alvo,
@@ -90,8 +130,20 @@ def verificar_arranque(
                     severidade="bloqueante",
                 )
             ]
+        try:
+            rel_alvo = str(caminho.relative_to(raiz.resolve()))
+        except ValueError:
+            rel_alvo = alvo
+        if rel_alvo in TEXTOS_COMUNS_ARRANQUE:
+            comuns.append((caminho, rel_alvo))
+        else:
+            alvos.append(caminho)
     else:
         alvos = achar_claude_mds(raiz)
+        for rel_c in TEXTOS_COMUNS_ARRANQUE:
+            cand = raiz / rel_c
+            if cand.is_file():
+                comuns.append((cand, rel_c))
 
     apontamentos: list[Apontamento] = []
     for c in alvos:
@@ -126,5 +178,8 @@ def verificar_arranque(
                     id="COPIA",
                 )
             )
+
+    for caminho_c, rel_c in comuns:
+        apontamentos.extend(verificar_texto_comum_sem_primitiva(caminho_c, rel_c))
 
     return apontamentos
