@@ -40,10 +40,10 @@ def test_o_modelo_nao_ve_chat_minuta_persona_preferencia_sinal_situacao_e_sessao
     vistos = set(rp.visiveis(registro))
     assert not (vistos & FORA_DA_LISTA)
     assert "metrica" in vistos
-    # chat, minuta, persona, sinal e situacao saem do registro: a porta nao os executa nem pelo malote
-    assert not ({"chat", "minuta", "persona", "sinal", "situacao"} & set(registro["verbos"]))
-    # preferencia e sessao ficam executaveis, fora da lista (decisao do dono, comentario 4402)
-    for oculto in ("preferencia", "sessao"):
+    # chat, minuta, sinal e situacao saem do registro: a porta nao os executa nem pelo malote
+    assert not ({"chat", "minuta", "sinal", "situacao"} & set(registro["verbos"]))
+    # preferencia, sessao e persona (DT 573) ficam executaveis, fora da lista
+    for oculto in ("preferencia", "sessao", "persona"):
         assert oculto in registro["verbos"] and registro["verbos"][oculto]["modelo"] is False
 
 

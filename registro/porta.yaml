@@ -45,6 +45,8 @@ verbos:
       motor:
         instancia: rag
         sem_instancia: [listar]
+  persona:
+    modelo: false
   pesquisar: {}
   preferencia:
     modelo: false
