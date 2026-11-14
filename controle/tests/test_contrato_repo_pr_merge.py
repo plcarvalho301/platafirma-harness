@@ -275,3 +275,64 @@ def test_pr_ver_sem_flag_nao_lista_checks_e_flag_desconhecida_recusa(tmp_path):
     (forge / "checks").write_text(_ROLLUP)
     assert "checks:" not in _repo(tmp_path, bancada, "pr-ver", "demo", "7").stdout
     assert _repo(tmp_path, bancada, "pr-ver", "demo", "7", "--xis").returncode == 2
+
+
+# --- DT 490: isolamento de bancada em ramo/pr-merge e portão de story em repo git commit ---
+
+def test_ramo_cria_bancada_nova_sem_trocar_existente(tmp_path):
+    bancada, _ = _montar(tmp_path)
+    assert _repo(tmp_path, bancada, "abrir", "demo", "--slug", "leitura-regras").returncode == 0
+    wt_antiga = bancada / "wt" / "demo" / "ti" / "leitura-regras"
+    assert _git("rev-parse", "--abbrev-ref", "HEAD", cwd=wt_antiga) == "ti/leitura-regras"
+
+    r = _repo(tmp_path, bancada, "ramo", "demo", "3961")
+    assert r.returncode == 0, r.stdout + r.stderr
+    wt_nova = bancada / "wt" / "demo" / "ti" / "3961"
+    assert wt_nova.is_dir()
+    assert _git("rev-parse", "--abbrev-ref", "HEAD", cwd=wt_antiga) == "ti/leitura-regras"
+    assert _git("rev-parse", "--abbrev-ref", "HEAD", cwd=wt_nova) == "fabrica/3961"
+
+    recusa = _repo(tmp_path, bancada, "ramo", "demo@leitura-regras", "3961")
+    assert recusa.returncode == 4
+
+
+def test_pr_merge_nao_remove_bancada_de_outra_chave(tmp_path):
+    bancada, forge = _montar(tmp_path)
+    wt_42 = _pr_empurrado(tmp_path, bancada, forge)
+    # Simula uma bancada de outro trabalho cujo HEAD aponta para o ramo do PR por acidente
+    assert _repo(tmp_path, bancada, "abrir", "demo", "--slug", "leitura-regras").returncode == 0
+    wt_outra = bancada / "wt" / "demo" / "ti" / "leitura-regras"
+    _git("checkout", "--detach", cwd=wt_42)
+    _git("checkout", "fabrica/42-x", cwd=wt_outra)
+
+    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7", "--forcar")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert wt_outra.is_dir(), "pr-merge nao deve remover bancada de outra chave"
+    assert "nao removo" in r.stdout
+
+
+def test_git_commit_aplica_portao_de_story_em_execucao(tmp_path):
+    bancada, _ = _montar(tmp_path)
+    assert _repo(tmp_path, bancada, "abrir", "demo", "3961").returncode == 0
+    wt = bancada / "wt" / "demo" / "ti" / "3961"
+    (wt / "X.md").write_text("x\n")
+    _git("add", "X.md", cwd=wt)
+
+    fake_tarefas = tmp_path / "tarefas-fake"
+    fake_tarefas.write_text('#!/bin/sh\necho \'{"nivel_nome":"story","estado":"priorizada"}\'\n')
+    fake_tarefas.chmod(0o755)
+    env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": str(tmp_path),
+        "PLATAFIRMA_BANCADA": str(bancada),
+        "PF_RELEASE_RAIZ": str(tmp_path / "release"),
+        "PLATAFIRMA_INSTANCIA": str(tmp_path / "instancia"),
+        "PF_CADEIRA": "claudinho-ti",
+        "PF_SESSAO": "s1",
+        "PF_TAREFAS_BIN": str(fake_tarefas),
+        **IDENT,
+    }
+    r = subprocess.run([str(REPO_BIN), "git", "demo@3961", "commit", "-m", "tenta"],
+                       env=env, capture_output=True, text=True)
+    assert r.returncode == 4
+    assert "story #3961 em priorizada" in r.stderr
