@@ -303,15 +303,31 @@ _exec_curl() { # _exec_curl MÉTODO /caminho [corpo_em_stdin=0|1]
   curl_err=$(tr '\r\n' ' ' <"$err_arq" | sed 's/[[:space:]]*$//')
   rm -f "$err_arq"
   if [ "$rc" -ne 0 ]; then
-    http_code=$(printf '%s' "$bruto" | tail -n 1)
+    http_code="${bruto##*$'\n'}"
     case "$http_code" in
-      [0-9][0-9][0-9]) saida=$(printf '%s' "$bruto" | sed '$d') ;;
+      [0-9][0-9][0-9])
+        if [ "$bruto" != "$http_code" ]; then
+          saida="${bruto%$'\n'*}"
+        else
+          saida=""
+        fi
+        ;;
       *) http_code=""; saida="$bruto" ;;
     esac
     _recusa "$saida" "$http_code" "$metodo $caminho" "$curl_err"
     return 1
   fi
-  printf '%s' "$bruto" | sed '$d'
+  local ultima="${bruto##*$'\n'}"
+  case "$ultima" in
+    [0-9][0-9][0-9])
+      if [ "$bruto" != "$ultima" ]; then
+        printf '%s' "${bruto%$'\n'*}"
+      else
+        printf '%s' "$bruto"
+      fi
+      ;;
+    *) printf '%s' "$bruto" ;;
+  esac
 }
 
 busca() { # busca MÉTODO /caminho

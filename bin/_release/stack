@@ -605,6 +605,7 @@ case "$ATO" in
       exit "$rc"
     fi
     SERVIDO_REAL="$(sha_servido_no_ar 2>/dev/null || true)"
+    [ -z "$SERVIDO_REAL" ] && SERVIDO_REAL="$ANTES"
     if [ "${PF_STACK_RECRIAR:-0}" != 1 ] && [ -n "${SERVIDO_REAL:-}" ] && inalterada_desde "$SERVIDO_REAL"; then
       printf 'stack %s inalterada de %s a %s (compose, build e binds) — nada recriado\n' "$STACK" "${SERVIDO_REAL:0:7}" "${SHA:0:7}"
       # Sem recriar, os conteineres seguem na arvore em que subiram. `.servido` guarda o sha
