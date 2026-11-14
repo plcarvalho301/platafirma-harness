@@ -136,7 +136,8 @@ uso:
                                           a task, `editar`; para concluí-la, `mover <id> entregue`;
                                           as tasks de uma story saem em `ler <story>`
                                           O estado de nascimento vem de --estado, ou de
-                                          PF_ESTADO_INICIAL, ou é captada (incidente: detectado).
+                                          PF_ESTADO_INICIAL, ou é captada (story/task:
+                                          priorizada; incidente: detectado).
                                           Story sem pai em priorizada ou adiante exige
                                           --registro, gravado como registro de negócio na
                                           mesma transação (R16, arq:0127 D8).
@@ -252,7 +253,7 @@ _recusa() { # lê o corpo do erro em $1 e devolve a mensagem da API
   # —, para quem lê agir sem reparsear a frase; a tradução é a linha de comando que resolve.
   local exige; exige=$(printf '%s' "$1" | jq -r '.exige // empty' 2>/dev/null || true)
   if [ "$exige" = "registro-de-negocio" ]; then
-    erro="$erro · tarefas criar \"<título>\" --estado priorizada --registro \"<porquê>\" (item existente: tarefas comentar <id> \"registro de negócio: <porquê>\" e repita o ato)"
+    erro="$erro · tarefas criar \"<título>\" --registro \"<porquê>\" (com --estado priorizada exige corpo no padrão; item existente: tarefas comentar <id> \"registro de negócio: <porquê>\" e repita o ato)"
   fi
   # CARD #3526 (R23): o vínculo que fecharia ciclo volta com `caminho` (ids), e a recusa o mostra.
   # #4250: o passo do caminho que é task sai como `t<n>` quando a API manda a chave dele.
@@ -685,6 +686,7 @@ ler() {
       + (if .tipo_demanda then " · originação: \(.tipo_demanda)" else "" end)
       + (if .executor then " · executor: \(.executor)" else "" end)
       + (if (.ancestrais|length) > 0 then "\n  em: " + ([.ancestrais[] | "#\(.id) \(.titulo)"] | join(" > ")) else "" end)
+      + (if .resolvido_de then "\n  resolvido de: #\(.resolvido_de) (englobado neste item; use --direto para ler o original)" else "" end)
       + (if ((.bloqueia // []) | length) > 0
          then "\n  bloqueia: " + ([.bloqueia[] | "\(rot) (\(.estado))"] | join(", ")) else "" end)
       + (if ((.bloqueado_por // []) | length) > 0
@@ -704,6 +706,7 @@ ler() {
     + (if .tipo_demanda then " · originação: \(.tipo_demanda)" else "" end)
     + (if .executor then " · executor: \(.executor)" else "" end)
     + (if (.ancestrais|length) > 0 then "\n  em: " + ([.ancestrais[] | "#\(.id) \(.titulo)"] | join(" > ")) else "" end)
+    + (if .resolvido_de then "\n  resolvido de: #\(.resolvido_de) (englobado neste item; use --direto para ler o original)" else "" end)
     + (if ((.bloqueia // []) | length) > 0
        then "\n  bloqueia: " + ([.bloqueia[] | "\(rot) (\(.estado))"] | join(", ")) else "" end)
     + (if ((.bloqueado_por // []) | length) > 0
