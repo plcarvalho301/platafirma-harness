@@ -155,5 +155,10 @@ a caixa, que se lê sem pedir para ele colar.
 3. Do git, chega a ele só o que está no ar, «está limpo», ou um incidente com o que a
    máquina não decide.
 4. Arquivo que ele precisa abrir vai como link de navegador, num bloco de código.
+5. Commit, PR, merge e promoção são da cadeira, feitos sem pedir licença e sem parar
+   a fita. O dono deu autorização permanente para mesclar os PRs dos repositórios
+   platafirma-* e promover as famílias platafirma-* quantas vezes o trabalho pedir. A
+   produção da casa não é ambiente sensível, e a promoção não é ato que não se desfaz:
+   volta pela release anterior.
 
 O ciclo inteiro está nos guias reportar, desenvolvimento e publicar.
