@@ -214,10 +214,16 @@ def valida_persona(p: str, json_mode: bool = False):
 def resolve_eu(args) -> str:
     eu = getattr(args, "eu", None) or os.environ.get("PF_CADEIRA", "")
     if not eu:
+        sid = os.environ.get("PF_SESSAO", "").strip()
+        if sid:
+            msg = (f"sessao {sid} sem cadeira resolvida (expirada ou sem cadeira): "
+                   "reabra com monta_sessao(cadeira=<slug>) ou passe --eu <cadeira>")
+        else:
+            msg = "sem cadeira na sessão: abra com monta_sessao(cadeira=<slug>) ou passe --eu <cadeira>"
         if _json_mode(args):
-            _falha_json("sem cadeira na sessão: passe sessao_id", 2)
-        sys.stderr.write("erro: sem cadeira na sessão: passe sessao_id\n")
-        sys.exit(2)
+            _falha_json(msg, 3)
+        sys.stderr.write(f"erro: {msg}\n")
+        sys.exit(3)
     # Case/prefixo fossil na entrada (PF_CADEIRA legado, --eu digitado) -> slug puro.
     canon = canoniza_persona(eu)
     return canon if canon else eu
@@ -676,6 +682,15 @@ def cmd_tratar(rc, eu: str, args):
         sys.exit(1)
 
 # ---------- enviar ----------
+def _assunto_do_corpo(corpo: str, limite: int = 120) -> str:
+    """Primeira linha não vazia do corpo, normalizada e truncada ao limite."""
+    for linha in corpo.splitlines():
+        texto = " ".join(linha.split())
+        if texto:
+            return texto if len(texto) <= limite else texto[:limite - 3].rstrip() + "..."
+    return ""
+
+
 def cmd_enviar(rc, eu: str, args):
     de = args.de or eu
     if de != eu:
@@ -683,18 +698,11 @@ def cmd_enviar(rc, eu: str, args):
             f'erro: --de "{de}" nao bate com a identidade da sessao ({eu}) — remetente nao se forja.\n'
         )
         sys.exit(1)
-    if not args.tipo:
-        sys.stderr.write(
-            f"erro: --tipo e obrigatorio\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n"
-        )
-        sys.exit(2)
-    if args.tipo not in TIPOS_VALIDOS:
-        sys.stderr.write(f"erro: tipo invalido: {args.tipo}\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n")
+    tipo = args.tipo or "pedido"
+    if tipo not in TIPOS_VALIDOS:
+        sys.stderr.write(f"erro: tipo invalido: {tipo}\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n")
         sys.exit(1)
-    if not args.assunto:
-        sys.stderr.write("erro: --assunto e obrigatorio\n")
-        sys.exit(2)
-    contestacao = args.tipo == TIPO_CONTESTACAO
+    contestacao = tipo == TIPO_CONTESTACAO
     if contestacao and not args.ref:
         sys.stderr.write("erro: --tipo contestacao exige --ref <indicador contestado>\n")
         sys.exit(2)
@@ -713,13 +721,14 @@ def cmd_enviar(rc, eu: str, args):
     if not corpo.strip():
         sys.stderr.write("erro: fundamento vazio (corpo em stdin)\n" if contestacao else "erro: corpo vazio\n")
         sys.exit(1)
+    assunto = (args.assunto or "").strip() or _assunto_do_corpo(corpo)
 
     for dest in destinatarios:
         stream = stream_key(dest)
         existentes = {m["msgid"] for m in frias(rc, dest)}
         msgid = gerar_msgid(de, existentes, rc)
         rc.xadd(stream, {
-            "id": msgid, "de": de, "tipo": args.tipo, "assunto": args.assunto,
+            "id": msgid, "de": de, "tipo": tipo, "assunto": assunto,
             "ref": args.ref or "", "responde": args.responde or "", "corpo": corpo,
         })
         print(msgid)
@@ -747,6 +756,7 @@ def remetente_bot(de: str):
 
 def cmd_enviar_bot(rc, args):
     de = PREFIXO_BOT + remetente_bot(args.de)
+    tipo = args.tipo or "pedido"
     destinatarios = getattr(args, "destinatarios", None) or [args.destinatario]
     for dest in destinatarios:
         valida_persona(dest)
@@ -755,11 +765,12 @@ def cmd_enviar_bot(rc, args):
     if not corpo.strip():
         sys.stderr.write("erro: corpo vazio\n")
         sys.exit(1)
+    assunto = (args.assunto or "").strip() or _assunto_do_corpo(corpo)
     for dest in destinatarios:
         existentes = {m["msgid"] for m in frias(rc, dest)}
         msgid = gerar_msgid(de.replace(":", "-"), existentes, rc)
         rc.xadd(stream_key(dest), {
-            "id": msgid, "de": de, "tipo": args.tipo, "assunto": args.assunto,
+            "id": msgid, "de": de, "tipo": tipo, "assunto": assunto,
             "ref": args.ref or "", "responde": args.responde or "", "corpo": corpo,
         })
         print(msgid)
@@ -857,8 +868,8 @@ def uso():
         "  fila tratar <msgid>...                   ack: a carta virou ato (resposta, card, mesa) ou foi superada\n"
         "  fila ler [<persona>] --tudo [remetente]  historico dos 7 dias, nao move o ponteiro\n"
         "  fila ler [<persona>] --desde <data> [remetente]\n"
-        "  fila enviar <destinatario>... --tipo <t> --assunto <a> [--ref <r>] [--responde <id>]\n"
-        "              (corpo em stdin)\n"
+        "  fila enviar <destinatario>... [--tipo <t>] [--assunto <a>] [--ref <r>] [--responde <id>]\n"
+        "              (corpo em stdin; default: --tipo pedido, --assunto = 1a linha do corpo)\n"
         "              --tipo contestacao: --ref e o indicador contestado, o corpo e o fundamento\n"
         "  fila tipos                             lista os tipos validos de --tipo\n"
         "  fila contestar <cadeira> --indicador <nome>   contestacao a cadeira que configurou o indicador;\n"
@@ -892,17 +903,9 @@ def main():
         sys.stdout.write("\n".join(sorted(TIPOS_VALIDOS)) + "\n")
         sys.exit(0)
     if args.verbo == "enviar":
-        if not args.tipo:
-            sys.stderr.write(
-                f"erro: --tipo e obrigatorio\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n"
-            )
-            sys.exit(2)
-        if args.tipo not in TIPOS_VALIDOS:
+        if args.tipo and args.tipo not in TIPOS_VALIDOS:
             sys.stderr.write(f"erro: tipo invalido: {args.tipo}\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n")
             sys.exit(1)
-        if not args.assunto:
-            sys.stderr.write("erro: --assunto e obrigatorio\n")
-            sys.exit(2)
         destinatarios = getattr(args, "destinatarios", None) or [args.destinatario]
         for dest in destinatarios:
             if dest.startswith(PREFIXO_BOT):
