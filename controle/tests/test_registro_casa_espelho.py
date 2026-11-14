@@ -86,3 +86,58 @@ def test_release_promove_a_familia_declarada_e_recusa_a_fora_do_registro(tmp_pat
     sem.write_text(json.dumps(declaradas), encoding="utf-8")
     r = _promover_em_ensaio(tmp_path, sem)
     assert r.returncode == 2 and "fora do registro de famílias" in r.stderr, (r.returncode, r.stderr)
+
+
+def test_espelho_conhecimento_resolve_e_teste_roda_sob_venv(tmp_path):
+    """DT 567: stack espelho-conhecimento usa venv:rag e `teste rodar <espelho> <alvo>` cai nela."""
+    raiz = Path(__file__).resolve().parents[2]
+    reg = raiz / "bin" / "_release" / "registro.py"
+    r_reg = subprocess.run(
+        ["python3", str(reg), "espelho-conhecimento"],
+        env={"PATH": "/usr/bin:/bin", "PLATAFIRMA_VENVS": str(VENVS)},
+        capture_output=True, text=True, check=False, timeout=30,
+    )
+    assert r_reg.returncode == 0, r_reg.stderr
+    assert r_reg.stdout.strip() == (
+        f"{ESPELHO}\tvenv:rag\toutros_repos/conhecimento/rag\tcodigo\tespelho-conhecimento\t-"
+    )
+
+    bancada = tmp_path / "bancada"
+    wt = bancada / "wt" / ESPELHO / "ti" / "t1"
+    alvo_dir = wt / "outros_repos" / "conhecimento" / "rag" / "tests"
+    alvo_dir.mkdir(parents=True)
+    (wt / ".git").mkdir()
+    (alvo_dir / "test_ok.py").write_text("def test_ok(): assert True\n", encoding="utf-8")
+
+    rel_venv = tmp_path / "release" / "current" / "venv" / "rag" / "bin"
+    rel_venv.mkdir(parents=True)
+    py_stub = rel_venv / "python"
+    py_stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "if [ \"$1\" = -c ]; then exit 1; fi\n"
+        "echo \"PYTEST_ARGS: $*\"\n"
+        "echo '1 passed in 0.01s'\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    py_stub.chmod(0o755)
+
+    inst = tmp_path / "instancia"
+    inst.mkdir()
+    env = {
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "HOME": str(tmp_path),
+        "PLATAFIRMA_BANCADA": str(bancada),
+        "PLATAFIRMA_VENVS": str(VENVS),
+        "PF_CADEIRA": "ti",
+        "PF_RELEASE_RAIZ": str(tmp_path / "release"),
+        "PLATAFIRMA_INSTANCIA": str(inst),
+        "PF_TESTE_SEM_MEMO": "1",
+    }
+    r_teste = subprocess.run(
+        [str(raiz / "bin" / "teste"), "rodar", f"{ESPELHO}@t1",
+         "outros_repos/conhecimento/rag/tests/test_ok.py"],
+        env=env, capture_output=True, text=True, check=False, timeout=30,
+    )
+    assert r_teste.returncode == 0, r_teste.stdout + r_teste.stderr
+    assert "suite VERDE: platafirma-casa-espelho@t1 (chave espelho-conhecimento)" in r_teste.stdout

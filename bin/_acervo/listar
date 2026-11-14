@@ -844,7 +844,36 @@ def listar_obra_metodos(quero_json):
         "\n%d tipo(s) real(is) conhecido(s) — configuracao do ato de ingestao "
         "(spec espelho-de-leitura §4.3), nao golden record.\n" % len(itens))
 
-def listar_obra(termo, eixo, situacao, quero_json):
+FORMATOS_OBRA_ALIASES = {
+    "pdf": "application/pdf",
+    "md": "text/markdown",
+    "markdown": "text/markdown",
+    "epub": "application/epub+zip",
+    "html": "text/html",
+    "txt": "text/plain",
+    "plain": "text/plain",
+    "mobi": "application/x-mobipocket-ebook",
+    "mhtml": "application/x-mhtml",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "json": "application/json",
+}
+
+def _normaliza_formato_obra(valor):
+    chave = (valor or "").strip().lower()
+    if chave in FORMATOS_OBRA_ALIASES:
+        return FORMATOS_OBRA_ALIASES[chave]
+    if chave in FORMATOS_OBRA_ALIASES.values():
+        return chave
+    morre(
+        "acervo listar biblioteca obra: --formato desconhecido '%s' (aceitos: %s)."
+        % (valor, ", ".join(sorted(FORMATOS_OBRA_ALIASES))),
+        2,
+    )
+
+def listar_obra(termo, eixo, situacao, quero_json, *, autor=None, titulo=None, formato=None):
+    formato_mime = _normaliza_formato_obra(formato) if formato else None
     cat_info = _psql_json(
         "select coalesce(json_agg(row_to_json(t)), '[]') from ("
         "  select count(*) as total, to_char(max(coalesce(classificado_em, now())), 'YYYY-MM-DD') as data "
@@ -860,7 +889,7 @@ def listar_obra(termo, eixo, situacao, quero_json):
     if termo:
         cond_t = "o.titulo ilike %s" % _lit("%" + termo + "%")
         cond_s = "lower(sd.slug) = lower(%s)" % _lit(termo)
-        cond_c = "lower(cr.rotulo) = lower(%s)" % _lit(termo)
+        cond_c = "(lower(cr.rotulo) = lower(%s) or lower(c.slug) = lower(%s))" % (_lit(termo), _lit(termo))
 
         if eixo == "titulo":
             sql = """
@@ -890,11 +919,12 @@ def listar_obra(termo, eixo, situacao, quero_json):
             sql = """
             select distinct on (o.id) o.id, o.titulo, o.objeto, 'conceito' as eixo,
                    sd.slug as subdominio,
-                   cr.rotulo as conceito,
+                   coalesce(cr.rotulo, c.rotulo) as conceito,
                    imp.id as impressao_id, imp.estado as impressao_estado
             from acervo.obra o
             join acervo.obra_trata_de ot on ot.obra_id = o.id
-            join acervo.conceito_rotulo cr on cr.conceito_id = ot.conceito_id
+            join acervo.conceito c on c.id = ot.conceito_id
+            left join acervo.conceito_rotulo cr on cr.conceito_id = ot.conceito_id
             left join acervo.subdominio sd on sd.id = o.subdominio_id
             left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
             where {cond_c}
@@ -935,11 +965,12 @@ def listar_obra(termo, eixo, situacao, quero_json):
                     union all
                     select o.id, o.titulo, o.objeto, 'conceito' as eixo, 3 as forca,
                            sd.slug as subdominio,
-                           cr.rotulo as conceito,
+                           coalesce(cr.rotulo, c.rotulo) as conceito,
                            imp.id as impressao_id, imp.estado as impressao_estado
                       from acervo.obra o
                       join acervo.obra_trata_de ot on ot.obra_id = o.id
-                      join acervo.conceito_rotulo cr on cr.conceito_id = ot.conceito_id
+                      join acervo.conceito c on c.id = ot.conceito_id
+                      left join acervo.conceito_rotulo cr on cr.conceito_id = ot.conceito_id
                       left join acervo.subdominio sd on sd.id = o.subdominio_id
                       left join acervo.impressao imp on imp.obra_id = o.id and imp.estado = 'servindo'
                      where {cond_c}
@@ -973,10 +1004,40 @@ def listar_obra(termo, eixo, situacao, quero_json):
     # Obra retirada (retirada_em preenchido) não é achada pelo catálogo: sai de todos os eixos, com
     # ou sem --situacao (arq:0119 §1.4, §9; #3317). Filtro único sobre o resultado, para não repetir
     # a condição nos sete SELECTs; quem quer ver a retirada usa `acervo curar biblioteca --expurgadas`.
+    filtros_ext = ["t.id not in (select id from acervo.obra where retirada_em is not null)"]
+    ordem_ext = ""
+    if titulo:
+        tokens_t = [tok for tok in titulo.strip().split() if tok]
+        if tokens_t:
+            cond_toks_t = " and ".join(
+                "unaccent(o2.titulo) ilike unaccent(%s)" % _lit("%" + tok + "%") for tok in tokens_t
+            )
+            filtros_ext.append(
+                f"(({cond_toks_t}) or similarity(unaccent(o2.titulo), unaccent({_lit(titulo)})) >= 0.25)"
+            )
+            ordem_ext = f" order by similarity(unaccent(o2.titulo), unaccent({_lit(titulo)})) desc, t.titulo"
+    if autor:
+        tokens_a = [tok for tok in autor.strip().split() if tok]
+        if tokens_a:
+            cond_toks_a = " and ".join(
+                "unaccent(array_to_string(o2.emitido_por, ' ')) ilike unaccent(%s)" % _lit("%" + tok + "%")
+                for tok in tokens_a
+            )
+            filtros_ext.append(
+                f"(({cond_toks_a}) or exists (select 1 from unnest(o2.emitido_por) as a "
+                f"where similarity(unaccent(a), unaccent({_lit(autor)})) >= 0.3))"
+            )
+    if formato_mime:
+        filtros_ext.append("lower(fa.tipo) = lower(%s)" % _lit(formato_mime))
+
     raw_itens = _psql_json(
-        "select coalesce(json_agg(row_to_json(t)), '[]') from (%s) t "
-        "where t.id not in (select id from acervo.obra where retirada_em is not null);"
-        % sql.strip().rstrip(";"),
+        "select coalesce(json_agg(row_to_json(w)), '[]') from ("
+        "  select t.*, o2.emitido_por as autores, fa.tipo as formato"
+        "  from (%s) t"
+        "  join acervo.obra o2 on o2.id = t.id"
+        "  left join acervo.ficha_arquivo fa on fa.sha256 = o2.objeto_id"
+        "  where %s%s"
+        ") w;" % (sql.strip().rstrip(";"), " and ".join(filtros_ext), ordem_ext),
         "listar obra"
     )
 
@@ -1029,9 +1090,12 @@ def listar_obra(termo, eixo, situacao, quero_json):
         item = {
             "id": row["id"],
             "titulo": row["titulo"],
+            "autores": list(row.get("autores") or []),
+            "formato": row.get("formato"),
             "eixo": row.get("eixo"),
             "subdominio": row.get("subdominio"),
             "conceito": row.get("conceito"),
+            "degrau": degrau,
         }
         if situacao:
             item["situacao"] = {
@@ -1050,7 +1114,29 @@ def listar_obra(termo, eixo, situacao, quero_json):
             print("[]")
         else:
             if termo:
-                print(f"motivo: nenhuma obra encontrada para --sobre '{termo}'")
+                casou_conceito = False
+                if eixo in (None, "conceito"):
+                    achou_c = _psql_json(
+                        "select coalesce(json_agg(row_to_json(t)), '[]') from ("
+                        "  select 1 from acervo.conceito c"
+                        "  left join acervo.conceito_rotulo cr on cr.conceito_id = c.id"
+                        "  where lower(c.slug) = lower(%s) or lower(cr.rotulo) = lower(%s)"
+                        "  limit 1"
+                        ") t;" % (_lit(termo), _lit(termo)),
+                        "conceito_existe",
+                    )
+                    casou_conceito = bool(achou_c)
+                if eixo == "conceito" and not casou_conceito:
+                    print(f"motivo: nenhuma obra encontrada para --sobre '{termo}' (o termo não casou com rótulo nem com slug de conceito)")
+                elif eixo is None and not casou_conceito:
+                    print(f"motivo: nenhuma obra encontrada para --sobre '{termo}' (o termo não casou com título, subdomínio, rótulo nem slug de conceito)")
+                else:
+                    print(f"motivo: nenhuma obra encontrada para --sobre '{termo}'")
+            elif autor or titulo or formato:
+                filtros_txt = [
+                    f"{k} '{v}'" for k, v in (("--autor", autor), ("--titulo", titulo), ("--formato", formato)) if v
+                ]
+                print(f"motivo: nenhuma obra encontrada para {' e '.join(filtros_txt)}")
             else:
                 print("motivo: nenhuma obra no catalogo")
             print(f"varrido:   acervo.obra ({total_obras} obras, catálogo de {data_cat})")
@@ -1064,20 +1150,31 @@ def listar_obra(termo, eixo, situacao, quero_json):
         for i in itens:
             sit = i["situacao"]
             eixo_tag = f"[{i['eixo']}] " if i.get("eixo") and i['eixo'] != "obra" else ""
-            print(f"{eixo_tag}{i['titulo']}")
+            autores_txt = ", ".join(i.get("autores") or [])
+            suf_aut = f" — {autores_txt}" if autores_txt else ""
+            print(f"{eixo_tag}{i['id']}  {i['titulo']}{suf_aut}")
             print(f"  servida inteira: {sit['servida_inteira']}   servivel: {sit['servivel']}   degrau: {sit['degrau']}   store: {sit['store']}   impressao: {sit['impressao']}   marcacao: {sit['marcacao'] or '-'}\n")
         sys.stderr.write(f"\n{len(itens)} obra(s) encontrada(s).\n")
         return 0
 
+    modo_filtrado = bool(autor or titulo or formato)
     for i in itens:
         eixo_tag = f"[{i['eixo']}] " if i.get("eixo") and i['eixo'] != "obra" else ""
         extra = []
+        if modo_filtrado or i.get("autores"):
+            autores_txt = ", ".join(i.get("autores") or []) or "-"
+            extra.append(f"autores: {autores_txt}")
+        if modo_filtrado:
+            extra.append(f"situacao: {i['degrau']}")
+        if i.get("formato") and formato:
+            extra.append(f"formato: {i['formato']}")
         if i.get("subdominio"):
             extra.append(f"subdominio: {i['subdominio']}")
         if i.get("conceito"):
             extra.append(f"conceito: {i['conceito']}")
         info = f" ({', '.join(extra)})" if extra else ""
-        print(f"{eixo_tag}{i['titulo']}{info}")
+        prefixo_id = f"{i['id']}  " if modo_filtrado else ""
+        print(f"{eixo_tag}{prefixo_id}{i['titulo']}{info}")
     sys.stderr.write(f"\n{len(itens)} obra(s) encontrada(s).\n")
     return 0
 
@@ -1179,6 +1276,9 @@ def main(argv):
     stack_alvo = None
     termo = None
     eixo = None
+    autor_obra = None
+    titulo_obra = None
+    formato_obra = None
     prefixo_conceito = None
     desde_conceito = None
     origem_conceito = None
@@ -1237,6 +1337,15 @@ def main(argv):
             i += 2
         elif a == "--eixo" and alvo == "obra" and i + 1 < len(resto):
             eixo = resto[i + 1]
+            i += 2
+        elif a == "--autor" and alvo == "obra" and i + 1 < len(resto):
+            autor_obra = resto[i + 1]
+            i += 2
+        elif a == "--titulo" and alvo == "obra" and i + 1 < len(resto):
+            titulo_obra = resto[i + 1]
+            i += 2
+        elif a == "--formato" and alvo == "obra" and i + 1 < len(resto):
+            formato_obra = resto[i + 1]
             i += 2
         elif a == "bancada" and alvo == "obra" and not quero_bancada:
             quero_bancada = True
@@ -1333,7 +1442,8 @@ def main(argv):
         if quero_metodos:
             listar_obra_metodos(quero_json)
         else:
-            listar_obra(termo, eixo, situacao, quero_json)
+            listar_obra(termo, eixo, situacao, quero_json,
+                        autor=autor_obra, titulo=titulo_obra, formato=formato_obra)
     elif so_tools:
         listar_ferramental_tools()
     else:

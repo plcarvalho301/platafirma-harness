@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # repo — opera a bancada do card, do clone ao PR integrado
-# capacidade: construcao
+# capacidade: desenvolvimento
 # dono: ti
 # classe: B
 # forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar, hooks-listar) / texto (ler, pr-diff) / fluxo (sanear, lock, hooks-apagar)

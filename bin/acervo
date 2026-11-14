@@ -120,7 +120,7 @@ uso_completo() {
   cat >&2 <<FIM
 uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo ler      <particao> <entidade> <seletor> [--situacao]
-  acervo listar   <particao> <entidade> [--sobre <termo>] [--eixo <eixo>] [--situacao] [--dono <cadeira>] [--json]
+  acervo listar   <particao> <entidade> [--sobre <termo>] [--eixo <eixo>] [--autor <texto>] [--titulo <texto>] [--formato <tipo>] [--situacao] [--dono <cadeira>] [--json]
   acervo listar   biblioteca obra --situacao --retrato [--json] [--guardar]   o retrato da biblioteca, com data (#3324);
                   --guardar grava em acervo.retrato e acervo.retrato_obra (banco rag), a linha de base do gate
   acervo escrever <particao> <entidade> <seletor>
@@ -284,7 +284,15 @@ conforme() {
   # Recusa com a chamada certa. A tabela acervo.obra e a entidade `obra` nao mudam.
   if [ "$particao" = "obra" ]; then
     shift
-    echo "acervo $ato obra: a particao 'obra' saiu em 03/10/2026; chame \`acervo $ato biblioteca $*\` (arq:0106 §2)." >&2
+    case "$ato:${1:-}" in
+      ler:obra|ler:conceito|ler:metodos|ler:bancada|ler:relacao|ler:derivacao|ler:arquivo|ler:objeto|ler:impressao|ler:ficha|ler:posicao|ler:secao|ler:citacao|ler:lote|ler:espelho|\
+      listar:obra|listar:conceito|listar:metodos|listar:bancada|listar:relacao|listar:derivacao|listar:arquivo|listar:objeto|listar:impressao|listar:ficha|listar:posicao|listar:secao|listar:citacao|listar:lote|listar:espelho)
+        echo "acervo $ato obra: a particao 'obra' saiu em 03/10/2026; chame \`acervo $ato biblioteca $*\` (arq:0106 §2)." >&2 ;;
+      ler:*|listar:*)
+        echo "acervo $ato obra: a particao 'obra' saiu em 03/10/2026; chame \`acervo $ato biblioteca obra${*:+ $*}\` (arq:0106 §2)." >&2 ;;
+      *)
+        echo "acervo $ato obra: a particao 'obra' saiu em 03/10/2026; chame \`acervo $ato biblioteca $*\` (arq:0106 §2)." >&2 ;;
+    esac
     echo "  $SPEC" >&2
     exit 2
   fi

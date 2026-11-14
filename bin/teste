@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # teste — roda a suíte do repositório
-# capacidade: qualidade-do-codigo-teste
+# capacidade: operacao
 # dono: ti
 # classe: C
 # use para: ANTES de entregar código, «roda os testes», «a suíte passa?»
@@ -307,6 +307,13 @@ ambiente_do_registro() {  # $1=clone
   local c="$1"
   if [ -z "$REG_LOCK" ]; then
     morre "stack '$REG_STACK' sem lock declarado em registro/venvs.json" 5
+  fi
+  if [[ "$REG_LOCK" == venv:* ]]; then
+    local vname="${REG_LOCK#venv:}"
+    local vdir="${PF_RELEASE_RAIZ:-/opt/platafirma}/current/venv/$vname"
+    [ -x "$vdir/bin/python" ] || morre "venv '$vname' ausente em $vdir — nada a medir" 5
+    CHAVE_PY="$vdir/bin/python"; CHAVE_HASH="venv-$vname"; CHAVE_DEST="$vdir"
+    return 0
   fi
   if [ ! -f "$c/$REG_LOCK" ]; then
     morre "lock '$REG_LOCK' ausente em $c — nada a medir" 5
@@ -646,12 +653,17 @@ PY
   fi
   case "$modo" in
     py:*)
-      local com=(--with pytest)
-      [ "${#xdist[@]}" -gt 0 ] && com+=(--with pytest-xdist)
-      if [ -f "$raiz/uv.lock" ]; then
-        runner=(uv run --frozen --python "${modo#py:}" "${com[@]}" pytest)
+      if [[ "${REG_LOCK:-}" == venv:* ]]; then
+        [ "${#xdist[@]}" -gt 0 ] && ! "${modo#py:}" -c "import xdist" 2>/dev/null && xdist=()
+        runner=("${modo#py:}" -m pytest)
       else
-        runner=(uv run --python "${modo#py:}" "${com[@]}" pytest)
+        local com=(--with pytest)
+        [ "${#xdist[@]}" -gt 0 ] && com+=(--with pytest-xdist)
+        if [ -f "$raiz/uv.lock" ]; then
+          runner=(uv run --frozen --python "${modo#py:}" "${com[@]}" pytest)
+        else
+          runner=(uv run --python "${modo#py:}" "${com[@]}" pytest)
+        fi
       fi
       ;;
     isolado) runner=(uvx pytest) ;;
@@ -1330,6 +1342,22 @@ ato_rodar() {
 
   local raiz="$c"
   [ -n "$REG_SUBARVORE" ] && raiz="$c/$REG_SUBARVORE"
+
+  if [ "$REG_ESTEIRA" = "documento" ] && [ -n "$alvo" ]; then
+    local venvs_doc s_nome s_lock s_sub s_casada=""
+    venvs_doc="${PLATAFIRMA_VENVS:-$(dirname "$(readlink -f "$0")")/../registro/venvs.json}"
+    while IFS=$'\t' read -r s_nome s_lock s_sub; do
+      [ -n "$s_sub" ] && [ "$s_sub" != "-" ] || continue
+      case "${alvo%%::*}" in
+        "$s_sub"|"$s_sub"/*) s_casada="$s_nome"; break ;;
+      esac
+    done < <(PLATAFIRMA_VENVS="$venvs_doc" python3 "$REGISTRO" --familia "$REG_FAMILIA")
+    if [ -n "$s_casada" ]; then
+      resolver_registro "${s_casada}${REG_BANCADA:+@$REG_BANCADA}"
+      raiz="$c"
+      [ -n "$REG_SUBARVORE" ] && raiz="$c/$REG_SUBARVORE"
+    fi
+  fi
 
   if [ "$REG_ESTEIRA" = "documento" ]; then
     [ -z "$alvo" ] || morre "esteira documento mede a árvore inteira: <alvo> não se aplica" 2

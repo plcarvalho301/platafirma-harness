@@ -101,6 +101,14 @@ def carregar(caminho: Path | None = None) -> dict:
     return stacks
 
 
+def _lock_ou_venv(decl: dict) -> str:
+    lock = decl.get("lock", "") or ""
+    if lock:
+        return lock
+    venv = decl.get("venv", "") or ""
+    return f"venv:{venv}" if venv else ""
+
+
 def stacks_da_familia(familia: str, caminho: Path | None = None) -> list[tuple[str, str, str]]:
     """[(nome, lock, subárvore de teste)] das stacks declaradas para <familia>."""
     stacks, _ = carregar_tudo(caminho)
@@ -108,7 +116,7 @@ def stacks_da_familia(familia: str, caminho: Path | None = None) -> list[tuple[s
     for nome, decl in stacks.items():
         if not isinstance(decl, dict) or decl.get("familia") != familia:
             continue
-        saida.append((nome, decl.get("lock", "") or "", decl.get("teste", "") or ""))
+        saida.append((nome, _lock_ou_venv(decl), decl.get("teste", "") or ""))
     return saida
 
 
@@ -124,7 +132,7 @@ def resolver(nome: str, caminho: Path | None = None) -> tuple[str, str, str, str
         if not isinstance(decl, dict):
             raise StackDesconhecida(nome, sorted(list(stacks.keys()) + list(repos.keys())))
         familia = decl.get("familia", "") or ""
-        lock = decl.get("lock", "") or ""
+        lock = _lock_ou_venv(decl)
         teste = decl.get("teste", "") or ""
         esteira = decl.get("esteira") or repos.get(familia, {}).get("esteira", "codigo")
         if not lock:
@@ -135,7 +143,7 @@ def resolver(nome: str, caminho: Path | None = None) -> tuple[str, str, str, str
         repo_decl = repos[nome]
         esteira = repo_decl.get("esteira", "codigo")
         stack_alvo = repo_decl.get("stack")
-        if not stack_alvo:
+        if not stack_alvo and esteira != "documento":
             cands = [s for s, d in stacks.items() if isinstance(d, dict) and d.get("familia") == nome]
             sufixo = nome.replace("platafirma-", "")
             if sufixo in cands:
@@ -144,7 +152,7 @@ def resolver(nome: str, caminho: Path | None = None) -> tuple[str, str, str, str
                 stack_alvo = cands[0]
         if stack_alvo and stack_alvo in stacks:
             s_decl = stacks[stack_alvo]
-            lock = s_decl.get("lock", "") or ""
+            lock = _lock_ou_venv(s_decl)
             teste = s_decl.get("teste", "") or ""
             esteira = s_decl.get("esteira") or esteira
             if not lock:
@@ -205,7 +213,7 @@ def _main(argv: list[str]) -> int:
             return 2
         for s_nome, s_decl in sorted(stacks.items()):
             fam = s_decl.get("familia", "")
-            lock = s_decl.get("lock", "")
+            lock = _lock_ou_venv(s_decl)
             teste = s_decl.get("teste", "")
             t_s = teste if teste else "-"
             esteira = s_decl.get("esteira") or repos.get(fam, {}).get("esteira", "codigo")

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # chat — despacha o giro do motor por cadeira e abre a fita da sala
-# capacidade: solicitacao
+# capacidade: harness
 # dono: claudinho-TI
 # use para: giro do motor, despachar prompt a uma cadeira, fita da sala
 # atos: cadeiras, despachar, versao

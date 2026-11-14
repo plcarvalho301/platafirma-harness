@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # fila — lê e envia mensagens entre cadeiras
-# capacidade: mensagem
+# capacidade: mensageria
 # dono: ia
 # componente: harness
 # use para: SEMPRE que o dono disser «mensagem», «carta», «recado», «caixa», «fila» ou «o que chegou?», e SEMPRE que não houver pedido ou o pedido já estiver atendido; ler a caixa, tratar mensagem e contestar; enviar mensagem, handoff, resposta ou pauta a outra cadeira
