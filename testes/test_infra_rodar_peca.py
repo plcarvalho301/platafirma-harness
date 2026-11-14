@@ -44,6 +44,7 @@ def bancada(tmp_path):
     (pkg / "__init__.py").write_text("")
     (pkg / "__main__.py").write_text(
         "import os, sys\nprint('args=' + ' '.join(sys.argv[1:]))\n"
+        "print('peca=' + os.environ.get('PF_PECA', ''))\n"
         "print('banco=' + os.environ.get('POSTGRES_PASSWORD', ''))\nsys.exit(7)\n")
     _git(wt, "add", "-A")
     _git(wt, "commit", "-m", "peca")
@@ -78,6 +79,7 @@ def test_igual_a_origin_main_roda_e_devolve_o_exit_da_peca(monkeypatch, tmp_path
     assert mod.main(["rodar", "p", "--", "carregar", "--seco"]) == 7
     out, err = capfd.readouterr()
     assert "args=carregar --seco" in out
+    assert "peca=p" in out
     assert "banco=segredo" in out           # a peça recebe a credencial do cofre
     assert "segredo" not in err             # e o verbo não a imprime
     assert "(origin/main)" in err and "peça saiu 7" in err
