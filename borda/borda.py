@@ -231,15 +231,15 @@ def _envelope_do_rpc(tipo, bruto):
         resultado = msg["result"]
     except (ValueError, KeyError, IndexError, TypeError):
         return 502, {"erro": "a porta devolveu uma resposta fora do contrato"}
-    if resultado.get("isError"):
-        return 502, {"erro": "a porta recusou a chamada do verbo"}
     envelope = resultado.get("structuredContent")
     if not isinstance(envelope, dict):
         try:
             envelope = json.loads(resultado["content"][0]["text"])
         except (ValueError, KeyError, IndexError, TypeError):
-            return 502, {"erro": "a porta devolveu uma resposta fora do contrato"}
+            envelope = None
     if not isinstance(envelope, dict):
+        if resultado.get("isError"):
+            return 502, {"erro": "a porta recusou a chamada do verbo"}
         return 502, {"erro": "a porta devolveu uma resposta fora do contrato"}
     return 200, envelope
 

@@ -30,3 +30,4 @@ test_turno_texto_porta.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** 
 test_run_command_lote_injecao.py | bin/sessao bin/_sessao/** bin/expediente bin/_expediente/** ops-server/** politica-acesso/*.py
 test_poda_giro_nao_entregue.py | bin/tarefas ops-server/** politica-acesso/*.py
 test_tokens_giro_4120.py | ops-server/** lib/oplog.py lib/tokenizador.py
+test_erro_envelope_4251.py | borda/** ops-server/**

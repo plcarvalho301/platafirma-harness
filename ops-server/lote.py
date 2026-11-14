@@ -27,11 +27,11 @@ def exit_do_item(r: Any) -> int:
     """O exit que conta para a cadeia (tabela da arq:0110 §4)."""
     if not isinstance(r, dict):
         return 5
-    if r.get("recusado"):
-        return 2
     e = r.get("exit_code")
     if isinstance(e, int) and not isinstance(e, bool):
         return e if 0 <= e <= 5 else 5
+    if r.get("recusado"):
+        return 2
     if r.get("regra"):          # negado pela politica de acesso (PDP)
         return 4
     return 5                    # timeout, erro de execucao, forma desconhecida
