@@ -718,7 +718,7 @@ cache() {
       [ "$falhou" -eq 0 ] || exit 3
       ;;
     disco)
-      docker builder prune -f
+      docker builder prune -a -f
       docker image prune -a -f
       uv cache prune 2>/dev/null || true
       echo "cache de modelo (huggingface, ollama) nao e apagado aqui: rebaixar custa GiB de re-download."
