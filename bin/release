@@ -88,6 +88,7 @@ CLASSES_SERVIDO=(
   "dependencias"
   "sessao-orfa"
   "copia"
+  "ontologia"
 )
 
 uso_texto() {
