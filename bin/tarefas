@@ -568,6 +568,9 @@ listar_tudo() { # listar_tudo [filtros] [--json] [--ultimos <n>]
     esac
   done
   local q; q=$(monta_query "${args[@]}")
+  if [ -n "$ultimos" ]; then
+    q="${q:+${q}&}limite_terminal=${ultimos}"
+  fi
   local corpo; corpo=$(busca GET "/itens${q:+?$q}")
   if [ -n "$ultimos" ]; then
     corpo=$(printf '%s' "$corpo" | jq --argjson n "$ultimos" '
