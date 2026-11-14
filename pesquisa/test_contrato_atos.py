@@ -60,16 +60,16 @@ def test_manifesto_render_md(tmp_path):
 
 def test_ler_binario_envelope_e_campos(tmp_path, monkeypatch):
     t = M.Trabalho("a6", raiz=tmp_path)
-    corpo = b"%PDF-1.7\nteste"
+    corpo = b"PK\x03\x04fakezip"
     monkeypatch.setattr(extrator, "_coletor_httpx",
                         lambda url, verifica: extrator.Resposta(corpo=corpo, status=200,
-                                                               cabecalhos=[("content-type", "application/pdf")],
+                                                               cabecalhos=[("content-type", "application/zip")],
                                                                url_pedida=url, url_final=url,
                                                                hora="2026-11-06T12:00:00Z"))
-    env = atos.ler("http://93.184.216.34/arquivo.pdf", foco=None, render=False, max_chars=6000, offset=0, trab=t)
+    env = atos.ler("http://93.184.216.34/arquivo.zip", foco=None, render=False, max_chars=6000, offset=0, trab=t)
     assert env["ok"] is True
     assert env["tipo"] == "dado"
-    assert env["tipo_real"] == "application/pdf"
+    assert env["tipo_real"] == "application/zip"
     assert env["binario"] is True
     assert env["conteudo"] is None
 

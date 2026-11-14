@@ -235,19 +235,86 @@ def test_pagina_que_depende_de_js_falha_com_sugestao(tmp_path):
     assert e.value.causa == "pagina-depende-de-javascript" and e.value.extra["sugestao"] == "--render"
 
 
-def test_pdf_binario_permitido_sucesso_com_bruto_pdf_e_manifesto(tmp_path):
+def _pdf_bytes(paginas: list[str | None]) -> bytes:
+    pymupdf = pytest.importorskip("pymupdf")
+    doc = pymupdf.open()
+    for txt in paginas:
+        pg = doc.new_page()
+        if txt is not None:
+            pg.insert_text((72, 72), txt, fontsize=12)
+        else:
+            pix = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 100, 50), False)
+            pix.set_rect(pix.irect, (200, 30, 30))
+            pg.insert_image(pymupdf.Rect(50, 50, 250, 150), pixmap=pix)
+    return doc.tobytes()
+
+
+def test_pdf_extrai_texto_pelo_leitor_do_ler_arquivo_e_grava_manifesto(tmp_path):
     t = M.Trabalho("b1", raiz=tmp_path)
-    corpo = b"%PDF-1.7\n%conteudo..."
+    corpo = _pdf_bytes(["Primeira pagina do PDF.", "Segunda pagina do PDF."])
     r = ler(t, resposta(corpo, ct="application/pdf"))
     assert r["status"] == 200
-    assert r["binario"] is True
+    assert r["binario"] is False
     assert r["tipo_real"] == "application/pdf"
-    assert r["conteudo"] is None
+    assert "<!-- p. 1 -->" in r["conteudo"]
+    assert "Primeira pagina do PDF." in r["conteudo"]
+    assert "Segunda pagina do PDF." in r["conteudo"]
     ln = linhas(t)[-1]
     assert ln["ato"] == "ler" and ln["nao_achado"] is False
     assert ln["tipo"] == "application/pdf"
     assert ln["bruto"].endswith(f"{ln['n']}.pdf")
     assert (t.bruto / f"{ln['n']}.pdf").read_bytes() == corpo
+    assert (t.derivado / f"{ln['n']}.md").read_text(encoding="utf-8") == r["conteudo"]
+
+
+def test_pdf_sem_camada_de_texto_falha_e_guarda_bruto(tmp_path):
+    t = M.Trabalho("b_pdf_esc", raiz=tmp_path)
+    corpo = _pdf_bytes([None])
+    with pytest.raises(FalhaFonte) as e:
+        ler(t, resposta(corpo, ct="application/pdf"))
+    assert e.value.causa == "pdf-sem-camada-de-texto"
+    ln = _ultima_nao_achado(t, "pdf-sem-camada-de-texto")
+    assert (t.bruto / f"{ln['n']}.pdf").read_bytes() == corpo
+    assert not (t.derivado / f"{ln['n']}.md").exists()
+
+
+def test_pdf_com_pagina_mista_emite_aviso_sem_camada(tmp_path):
+    t = M.Trabalho("b_pdf_misto", raiz=tmp_path)
+    corpo = _pdf_bytes(["Pagina com texto.", None])
+    r = ler(t, resposta(corpo, ct="application/pdf"))
+    assert "Pagina com texto." in r["conteudo"]
+    assert r["aviso"] == "SEM CAMADA DE TEXTO p. 2"
+
+
+def test_pdf_injetado_grava_derivado_e_manifesto(tmp_path):
+    t = M.Trabalho("b_pdf_inj", raiz=tmp_path)
+    corpo = b"%PDF-1.7\n%stub"
+    r = ler(
+        t,
+        resposta(corpo, ct="application/pdf"),
+        leitor_pdf=lambda b: {"md": "<!-- p. 1 -->\nTexto do PDF.", "paginas": 1, "sem_camada": []},
+    )
+    assert r["binario"] is False
+    assert r["tipo_real"] == "application/pdf"
+    assert r["conteudo"] == "<!-- p. 1 -->\nTexto do PDF."
+    ln = linhas(t)[-1]
+    assert ln["nao_achado"] is False and ln["binario"] is False
+    assert (t.derivado / f"{ln['n']}.md").read_text(encoding="utf-8") == "<!-- p. 1 -->\nTexto do PDF."
+
+
+def test_pdf_injetado_sem_camada_falha_e_guarda_bruto(tmp_path):
+    t = M.Trabalho("b_pdf_inj_vazio", raiz=tmp_path)
+    corpo = b"%PDF-1.7\n%stub"
+    with pytest.raises(FalhaFonte) as e:
+        ler(
+            t,
+            resposta(corpo, ct="application/pdf"),
+            leitor_pdf=lambda b: {"md": "<!-- p. 1 -->\n", "paginas": 1, "sem_camada": [1]},
+        )
+    assert e.value.causa == "pdf-sem-camada-de-texto"
+    ln = _ultima_nao_achado(t, "pdf-sem-camada-de-texto")
+    assert (t.bruto / f"{ln['n']}.pdf").read_bytes() == corpo
+    assert not (t.derivado / f"{ln['n']}.md").exists()
 
 
 def test_tipo_nao_permitido_falha_sem_bruto(tmp_path):
