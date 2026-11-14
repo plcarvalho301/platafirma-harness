@@ -23,6 +23,10 @@ ORIGEM = "11111111-1111-4111-8111-111111111111"
 
 ACERVO_STUB = """#!/bin/sh
 if [ "$*" = "listar casa guia --mapa" ]; then echo "ROTINAS (stub)"; exit 0; fi
+if [ "$*" = "listar casa modo --json" ]; then
+  echo '[{"chave":"varrer"},{"chave":"revisar"},{"chave":"avaliar"},{"chave":"testar"},{"chave":"executar"},{"chave":"consultar"},{"chave":"parecer"},{"chave":"pesquisar"}]'
+  exit 0
+fi
 if [ "$1 $2 $3" = "ler casa modo" ]; then
   if [ "${STUB_ACERVO_MODO:-ok}" = "falha" ]; then echo "acervo: fora do ar (stub)" >&2; exit 3; fi
   if [ "$4" = "revisar" ]; then echo "# modo revisar (stub)"; echo "O que faz: revisa."; exit 0; fi
