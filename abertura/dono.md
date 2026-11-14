@@ -8,45 +8,33 @@ dela.
 
 ## Cenário: tombando legado
 
-**Condição.** O trabalho é um card do épico E3650 ou de uma filha dele. Enquanto
-isso, a casa atual (platafirma-casa, harness, posto, conhecimento) segue no ar, e a
-casa nova se monta ao lado, no repositório platafirma-casa-espelho. Fora do E3650
-valem a casa atual e o resto da conduta: trabalho jurídico, operação, incidente da
-casa no ar e todo o resto. O conserto de incidente que mexe no harness, no posto ou
-no conhecimento vai também à pasta outros_repos do espelho, na mesma fita, porque a
-troca sobrescreve esses repositórios. O cenário acaba quando o E3650 passa na
-homologação final.
+Enquanto o épico do tombamento (E3650) estiver aberto, a PlataFirma tem duas casas no
+ar, e esta seção vale sobre o resto da conduta e sobre guia, skill e registro de
+decisão da casa velha. Ela sai daqui quando o épico for entregue.
 
-**Efeito.** Dentro do cenário, isto prevalece sobre o resto da conduta e sobre guia,
-skill e ADR da casa atual.
+É da casa velha o que a sessão serve como rotina, guia, skill, registro de decisão e
+parte casa do acervo, e o que mora nos repositórios platafirma-casa, harness, posto e
+conhecimento. É da casa nova o que está no platafirma-casa-espelho, conferido pela
+skill casa-espelho. A biblioteca do acervo segue valendo.
 
-1. A fonte da verdade é uma só: o que já está no espelho, onde a shape de cada
-   entidade (o arquivo que define a classe) manda sobre o resto, e os cards do
-   cenário. A planilha Ontologia da Casa está aposentada: não se lê nem se atualiza,
-   e card, skill ou documento que a cite se lê contra o espelho. Fonte que contradiz
-   outra vai ao dono.
-2. A casa atual é objeto, não régua. Documento velho se lê como matéria a revisar, e
-   arquitetura e decisão velhas não decidem o novo.
-3. O que a sessão serve fala da casa atual: rotinas, guias, a parte casa do acervo, a
-   lista de tools e verbos da porta e o resto da conduta. O espelho não está no
-   acervo: a casa nova se confere sempre pela skill casa-espelho, inclusive antes de
-   dizer que algo dela não existe. O que a casa atual não tem não é NEGATIVA sobre a
-   nova. A biblioteca do acervo segue valendo.
-4. Grava-se só no espelho, onde o card manda: o documento na pasta da entidade dele,
-   e o que vai morar no harness, no posto ou no conhecimento em outros_repos, na
-   pasta do repositório de destino. Nada se grava direto na casa atual, salvo a
-   sobrescrita que o runbook do tombamento faz no dia da troca. No espelho, suíte
-   INDISPONÍVEL e promoção com --aceitar-suite-indisponivel não são parada. Documento
-   do espelho se aponta ao dono pelo caminho a partir da raiz do repositório, sem
-   extensão, como 1-formal/conjunto-de-dados/casa, no lugar do link de navegador:
-   ele acompanha a migração no Vault da ontologia, a cópia local do espelho que o
-   vault.sh do posto sincroniza.
-5. Story da F3973 se põe em execução, e se retoma quando o dono a devolve, sempre
-   pela skill revisao-de-documentos. Texto que alguém vai ler (documento, card,
-   comentário) se escreve pela skill prosa-espelho; código, dado e frontmatter, não.
-6. Vão de estrutura ou de conteúdo da ontologia, como entidade sem shape ou shape
-   que não diz onde a instância mora, vai ao dono, sem procurar na casa atual nem
-   decidir por palpite.
+1. Quando uma regra da casa velha e outra da casa nova tratam do mesmo ponto, siga a
+   da casa nova, porque só ela passou pela validação do dono.
+2. Quando o trabalho depender de regra que só a casa velha tem, use-a como ponto de
+   partida e siga o trabalho, sem cumpri-la à risca nem abrir ali a revisão dela,
+   porque a ordem do que se revisa vem dos cards.
+3. Quando a dúvida travar o trabalho e só a regra velha a responderia, leve-a ao
+   dono, porque é ele quem diz o que passa de uma casa para a outra.
+4. Quando o card for da F4141 ou da F4205, ou for incidente, entregue só com o ciclo
+   fechado: o que o dono validou empacotado, gravado numa fornada da Olaria, no ar e
+   apagado da casa velha, porque a regra que mora nas duas casas é a que a cadeira
+   confunde.
+5. Quando o trabalho produzir documento ou código da casa nova, grave no
+   platafirma-casa-espelho: o documento na pasta da entidade dele, e o que vai morar
+   no harness, no posto ou no conhecimento em outros_repos, porque é de lá que a
+   troca monta a casa nova.
+6. Quando o conserto de um incidente mexer no harness, no posto ou no conhecimento,
+   leve-o também à pasta outros_repos do espelho, na mesma fita, porque a troca
+   sobrescreve esses repositórios.
 
 ## 1. Para quem se escreve
 
