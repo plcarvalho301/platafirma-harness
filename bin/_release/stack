@@ -311,10 +311,17 @@ mascara_segredos() {
 }
 
 compose() {
-  local env_args=()
+  local env_args=() perfis=("${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}") args=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --profile)   [ $# -ge 2 ] || { echo "erro: --profile exige valor" >&2; return 2; }; perfis+=(--profile "$2"); shift 2 ;;
+      --profile=*) perfis+=(--profile "${1#--profile=}"); shift ;;
+      *)           args+=("$1"); shift ;;
+    esac
+  done
   [ -z "$ENV_FILE" ] || env_args=(--env-file "$ENV_FILE")
   docker compose -p "$PROJETO" "${COMPOSE_ARGS[@]}" "${env_args[@]+"${env_args[@]}"}" \
-    "${PERFIL_ARGS[@]+"${PERFIL_ARGS[@]}"}" "$@"
+    "${perfis[@]+"${perfis[@]}"}" "${args[@]+"${args[@]}"}"
 }
 
 # Segredo para compose: um arquivo por variavel em $SEGREDOS_STACK, escrito num env-file 0600
