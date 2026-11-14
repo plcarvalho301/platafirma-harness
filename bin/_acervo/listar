@@ -1004,7 +1004,7 @@ def listar_obra(termo, eixo, situacao, quero_json, *, autor=None, titulo=None, f
     # Obra retirada (retirada_em preenchido) não é achada pelo catálogo: sai de todos os eixos, com
     # ou sem --situacao (arq:0119 §1.4, §9; #3317). Filtro único sobre o resultado, para não repetir
     # a condição nos sete SELECTs; quem quer ver a retirada usa `acervo curar biblioteca --expurgadas`.
-    filtros_ext = ["o2.retirada_em is null"]
+    filtros_ext = ["t.id not in (select id from acervo.obra where retirada_em is not null)"]
     ordem_ext = ""
     if titulo:
         tokens_t = [tok for tok in titulo.strip().split() if tok]

@@ -284,11 +284,14 @@ conforme() {
   # Recusa com a chamada certa. A tabela acervo.obra e a entidade `obra` nao mudam.
   if [ "$particao" = "obra" ]; then
     shift
-    case "${1:-}" in
-      obra|conceito|metodos|bancada|relacao|derivacao|arquivo|objeto|impressao|ficha|posicao|secao|citacao|lote|espelho)
+    case "$ato:${1:-}" in
+      ler:obra|ler:conceito|ler:metodos|ler:bancada|ler:relacao|ler:derivacao|ler:arquivo|ler:objeto|ler:impressao|ler:ficha|ler:posicao|ler:secao|ler:citacao|ler:lote|ler:espelho|\
+      listar:obra|listar:conceito|listar:metodos|listar:bancada|listar:relacao|listar:derivacao|listar:arquivo|listar:objeto|listar:impressao|listar:ficha|listar:posicao|listar:secao|listar:citacao|listar:lote|listar:espelho)
         echo "acervo $ato obra: a particao 'obra' saiu em 03/10/2026; chame \`acervo $ato biblioteca $*\` (arq:0106 §2)." >&2 ;;
-      *)
+      ler:*|listar:*)
         echo "acervo $ato obra: a particao 'obra' saiu em 03/10/2026; chame \`acervo $ato biblioteca obra${*:+ $*}\` (arq:0106 §2)." >&2 ;;
+      *)
+        echo "acervo $ato obra: a particao 'obra' saiu em 03/10/2026; chame \`acervo $ato biblioteca $*\` (arq:0106 §2)." >&2 ;;
     esac
     echo "  $SPEC" >&2
     exit 2
