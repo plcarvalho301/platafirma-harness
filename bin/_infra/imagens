@@ -1,0 +1,309 @@
+#!/usr/bin/env python3
+# imagens — lista e poda imagens Docker locais separando o que está em produção do resto.
+# Sub-ato de `infra` (arq:0110 §14): fora do PATH e do golden record, mora em bin/_infra/.
+# Chamado por `infra imagens [--json]` (leitura) e `infra limpeza imagens [--ver]` (poda).
+#
+# Critério positivo de produção:
+#   - Imagem referenciada por qualquer contêiner existente (`docker ps -a --format {{.Image}}`),
+#     resolvendo tanto o nome/tag da imagem quanto o seu ImageID (`sha256:...`).
+#   - Tudo o que não é referenciado por nenhum contêiner existente é candidato à poda.
+#
+# `infra limpeza imagens`:
+#   - `--ver`: lista o que sairia e o espaço recuperável, sem apagar nada e sem gravar marca.
+#   - sem `--ver`: executa `docker image prune -a -f`, grava a linha de marca em `var/log/poda.log`
+#     e imprime o resumo e o espaço liberado.
+#
+# saída: 0 ok · 2 uso · 3 dependência ausente (docker) · 5 fonte muda (docker não respondeu)
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+TIMEOUT_S = 120
+LIMITE_BYTES = 1000
+CURTO_LEN = 12
+SAIDA_OK, SAIDA_USO, SAIDA_DEP, SAIDA_MUDA = 0, 2, 3, 5
+
+UNIDADES_BYTES = {
+    "B": 1,
+    "KB": 1000,
+    "MB": 1000**2,
+    "GB": 1000**3,
+    "TB": 1000**4,
+    "KIB": 1024,
+    "MIB": 1024**2,
+    "GIB": 1024**3,
+    "TIB": 1024**4,
+}
+
+
+def _roda(*cmd: str, timeout: int = TIMEOUT_S) -> subprocess.CompletedProcess[str]:
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+    except FileNotFoundError as exc:
+        raise RuntimeError("dependência docker: ausente") from exc
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise LookupError(f"{' '.join(cmd[:2])} não respondeu: {exc}") from exc
+    if proc.returncode != 0:
+        detalhe = (proc.stderr or "").strip() or f"exit {proc.returncode}"
+        raise LookupError(f"{' '.join(cmd[:2])} não respondeu: {detalhe}")
+    return proc
+
+
+def _instancia() -> Path:
+    return Path(os.environ.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa"))
+
+
+def _agora() -> str:
+    return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+def _parse_tamanho(texto: str) -> int:
+    s = (texto or "").strip()
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([A-Za-z]+)?", s)
+    if not m:
+        return 0
+    num, uni = m.group(1), (m.group(2) or "B").upper()
+    fator = UNIDADES_BYTES.get(uni, 1)
+    return int(float(num) * fator)
+
+
+def _fmt_bytes(n: int) -> str:
+    if n < LIMITE_BYTES:
+        return f"{n} B"
+    for unidade, lim in (("GB", 1000**3), ("MB", 1000**2), ("kB", LIMITE_BYTES)):
+        if n >= lim:
+            return f"{n / lim:.2f} {unidade}"
+    return f"{n} B"
+
+
+def _linhas_json(proc: subprocess.CompletedProcess[str], origem: str) -> list[dict]:
+    itens: list[dict] = []
+    for linha in proc.stdout.splitlines():
+        linha = linha.strip()
+        if not linha:
+            continue
+        try:
+            itens.append(json.loads(linha))
+        except ValueError as exc:
+            raise LookupError(f"{origem} devolveu saída ilegível") from exc
+    return itens
+
+
+def _refs_conteineres() -> dict[str, list[str]]:
+    proc = _roda("docker", "ps", "-a", "--format", "{{json .}}")
+    refs: dict[str, list[str]] = {}
+    for d in _linhas_json(proc, "docker ps"):
+        img = (d.get("Image") or "").strip()
+        nome = (d.get("Names") or d.get("ID") or "").strip()
+        if img:
+            refs.setdefault(img, []).append(nome)
+    return refs
+
+
+def _chaves_imagem(ref: str, img_id: str) -> list[str]:
+    chaves = [ref]
+    if img_id:
+        chaves.append(img_id)
+        curto = img_id.removeprefix("sha256:")[:CURTO_LEN]
+        if curto:
+            chaves.append(curto)
+    return chaves
+
+
+def _associar_conteineres(chaves: list[str], refs: dict[str, list[str]]) -> list[str]:
+    achados: list[str] = []
+    for ch in chaves:
+        for nome in refs.get(ch, ()):
+            if nome not in achados:
+                achados.append(nome)
+    return sorted(achados)
+
+
+def _coletar() -> tuple[list[dict], list[dict]]:
+    refs = _refs_conteineres()
+    proc = _roda("docker", "images", "--no-trunc", "--format", "{{json .}}")
+    imagens_raw: list[dict] = []
+    ids_em_uso: set[str] = set()
+    for d in _linhas_json(proc, "docker images"):
+        repo = (d.get("Repository") or "<none>").strip()
+        tag = (d.get("Tag") or "<none>").strip()
+        img_id = (d.get("ID") or "").strip()
+        criado = (d.get("CreatedSince") or d.get("CreatedAt") or "").strip()
+        tam_str = (d.get("Size") or "0B").strip()
+        ref = f"{repo}:{tag}" if repo != "<none>" and tag != "<none>" else (repo if repo != "<none>" else img_id)
+        conteineres = _associar_conteineres(_chaves_imagem(ref, img_id), refs)
+        if conteineres and img_id:
+            ids_em_uso.add(img_id)
+        imagens_raw.append(
+            {
+                "id": img_id,
+                "repositorio": repo,
+                "tag": tag,
+                "referencia": ref,
+                "tamanho": tam_str,
+                "bytes": _parse_tamanho(tam_str),
+                "criado": criado,
+                "conteineres": conteineres,
+            }
+        )
+
+    em_uso = [x for x in imagens_raw if x["conteineres"] or (x["id"] and x["id"] in ids_em_uso)]
+    inativas = [x for x in imagens_raw if x not in em_uso]
+    em_uso.sort(key=lambda x: (-x["bytes"], x["referencia"]))
+    inativas.sort(key=lambda x: (-x["bytes"], x["referencia"]))
+    return em_uso, inativas
+
+
+def cmd_listar(argv: list[str]) -> int:
+    como_json = False
+    for a in argv:
+        if a == "--json":
+            como_json = True
+        else:
+            print(f"infra imagens: opção desconhecida: {a}", file=sys.stderr)
+            print("uso: infra imagens [--json]", file=sys.stderr)
+            return SAIDA_USO
+
+    try:
+        em_uso, inativas = _coletar()
+    except RuntimeError as e:
+        print(f"infra: erro: {e}", file=sys.stderr)
+        return SAIDA_DEP
+    except LookupError as e:
+        print(f"infra imagens: {e}", file=sys.stderr)
+        return SAIDA_MUDA
+
+    bytes_uso = sum(x["bytes"] for x in em_uso)
+    bytes_inativas = sum(x["bytes"] for x in inativas)
+
+    if como_json:
+        print(
+            json.dumps(
+                {
+                    "em_uso": em_uso,
+                    "inativas": inativas,
+                    "resumo": {
+                        "em_uso_qtd": len(em_uso),
+                        "em_uso_bytes": bytes_uso,
+                        "inativas_qtd": len(inativas),
+                        "inativas_bytes": bytes_inativas,
+                    },
+                },
+                ensure_ascii=False,
+            )
+        )
+        return SAIDA_OK
+
+    print(f"== em produção ({len(em_uso)} imagens, {_fmt_bytes(bytes_uso)})")
+    if not em_uso:
+        print("  (nenhuma)")
+    for x in em_uso:
+        conts = ", ".join(x["conteineres"])
+        print(f"  {x['tamanho']:>10}  {x['referencia']}  [{conts}]")
+
+    print()
+    print(f"== fora de produção / recuperáveis ({len(inativas)} imagens, {_fmt_bytes(bytes_inativas)})")
+    if not inativas:
+        print("  (nenhuma)")
+    for x in inativas:
+        curto = x["id"].removeprefix("sha256:")[:CURTO_LEN] if x["id"] else "-"
+        print(f"  {x['tamanho']:>10}  {x['referencia']}  ({curto}, {x['criado']})")
+
+    return SAIDA_OK
+
+
+def _anotar(texto: str) -> None:
+    marca = _instancia() / "var" / "log" / "poda.log"
+    try:
+        marca.parent.mkdir(parents=True, exist_ok=True)
+        with marca.open("a", encoding="utf-8") as f:
+            f.write(f"{_agora()} limpeza-imagens: {texto}\n")
+    except OSError:
+        pass
+
+
+def _extrair_reclaimed(stdout: str) -> str:
+    for linha in (stdout or "").splitlines():
+        if "reclaimed space" in linha.lower():
+            return linha.strip()
+    return ""
+
+
+def _executar_prune(inativas: list[dict], em_uso: list[dict]) -> int:
+    bytes_inativas = sum(x["bytes"] for x in inativas)
+    if not inativas:
+        resumo = f"limpeza-imagens: 0 saíram, {len(em_uso)} ficam (nada a podar)"
+        print(resumo)
+        _anotar(resumo)
+        return SAIDA_OK
+
+    try:
+        proc = _roda("docker", "image", "prune", "-a", "-f", timeout=300)
+    except RuntimeError as e:
+        print(f"infra: erro: {e}", file=sys.stderr)
+        return SAIDA_DEP
+    except LookupError as e:
+        print(f"infra limpeza imagens: {e}", file=sys.stderr)
+        return SAIDA_MUDA
+
+    reclaimed = _extrair_reclaimed(proc.stdout)
+    detalhe = f" ({reclaimed})" if reclaimed else f" (~{_fmt_bytes(bytes_inativas)})"
+    resumo = f"limpeza-imagens: {len(inativas)} saíram{detalhe}, {len(em_uso)} ficam"
+    print(resumo)
+    _anotar(resumo)
+    return SAIDA_OK
+
+
+def cmd_limpar(argv: list[str]) -> int:
+    ver = False
+    for a in argv:
+        if a == "--ver":
+            ver = True
+        else:
+            print(f"infra limpeza imagens: opção desconhecida: {a}", file=sys.stderr)
+            print("uso: infra limpeza imagens [--ver]", file=sys.stderr)
+            return SAIDA_USO
+
+    try:
+        em_uso, inativas = _coletar()
+    except RuntimeError as e:
+        print(f"infra: erro: {e}", file=sys.stderr)
+        return SAIDA_DEP
+    except LookupError as e:
+        print(f"infra limpeza imagens: {e}", file=sys.stderr)
+        return SAIDA_MUDA
+
+    if ver:
+        bytes_inativas = sum(x["bytes"] for x in inativas)
+        for x in inativas:
+            curto = x["id"].removeprefix("sha256:")[:CURTO_LEN] if x["id"] else "-"
+            print(f"sairia: {x['referencia']} ({curto}, {x['tamanho']})")
+        for x in em_uso:
+            print(f"fica: {x['referencia']} (em uso por {', '.join(x['conteineres'])})")
+        print(f"limpeza-imagens: {len(inativas)} sairiam (~{_fmt_bytes(bytes_inativas)}), {len(em_uso)} ficam")
+        return SAIDA_OK
+
+    return _executar_prune(inativas, em_uso)
+
+
+def main(argv: list[str]) -> int:
+    if not argv:
+        print("uso: imagens <listar|limpar> [args...]", file=sys.stderr)
+        return SAIDA_USO
+    modo, resto = argv[0], argv[1:]
+    if modo == "listar":
+        return cmd_listar(resto)
+    if modo == "limpar":
+        return cmd_limpar(resto)
+    print(f"imagens: modo desconhecido: {modo}", file=sys.stderr)
+    return SAIDA_USO
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

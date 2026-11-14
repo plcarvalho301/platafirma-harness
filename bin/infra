@@ -4,14 +4,14 @@
 # dono: ti
 # componente: docker, systemd --user, cron
 # use para: SEMPRE que for subir, reiniciar, derrubar ou remover serviço, «reinicia a unit», «sobe a stack»; construir e baixar imagem; alterar configuração; fazer backup; limpar disco; logs do contêiner, cron, VRAM e disco, «os logs do contêiner», «quanto de VRAM está ocupado?»
-# atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), remover (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), hardware (leitura, operacao), limites (leitura, operacao), gpu (leitura, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao), units (escrita, operacao), ambiente (escrita, operacao), ingress (escrita, operacao), sobreposicao (escrita, operacao), medir (leitura, operacao), pecas (leitura, operacao), rodar (escrita, operacao)
+# atos: estado (leitura, operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita, operacao), remover (escrita, operacao), unit-env (escrita, operacao), cache (escrita, operacao), imagens (leitura, operacao), hardware (leitura, operacao), limites (leitura, operacao), gpu (leitura, operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao), ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao), units (escrita, operacao), ambiente (escrita, operacao), ingress (escrita, operacao), sobreposicao (escrita, operacao), medir (leitura, operacao), pecas (leitura, operacao), rodar (escrita, operacao)
 # forma: log
 # cauda: sim
 # classe: B
 # consome: porta@ops-log
 # ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_PRESSAO_MEMORIA[=/proc/pressure/memory] porta (medir ram) · INFRA_SLICE_EVENTS[=memory.events do slice da conta] porta (medir ram) · INFRA_FOSSIL_IDADE_H[=24] porta (limpeza fossil: horas de vida do contêiner sem label de projeto) · LONGJOB_LOGDIR[=$PLATAFIRMA_INSTANCIA/var/log/jobs] porta (limpeza fossil: onde o evento de fim do job é gravado) · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · INFRA_UNITS_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-units.sh] porta · INFRA_INGRESS_FONTE[=$PLATAFIRMA_RELEASE/core/deploy/cloudflared-config.yml] porta · INFRA_INGRESS_COPIA[=$PLATAFIRMA_INSTANCIA/deploy/core/cloudflared.yml] porta · INFRA_INGRESS_CONTEINER[=platafirma-core-cloudflared-1] porta · INFRA_INGRESS_ESPERA[=5] porta (ingress: segundos até conferir o contêiner de pé) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (saude: lido por lib/oplog, o bruto contra o teto) · INFRA_PECAS[=$AQUI/../registro/pecas.json] porta (pecas, rodar) · PF_CADEIRA e PF_SESSAO porta (rodar: a bancada da sessão, a mesma escolha de acervo exportar) · PF_SUJEITO[obrigatória em up|down|pull|build|rodar] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
-# depende: docker · systemctl --user · curl · diff (ingress) · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · ps (limites) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs, bin/_infra/limpeza-quarentena e bin/_infra/limpeza-fossil (ajudantes de limpeza) · bin/_infra/medir-rede, bin/_infra/medir-ram, bin/_infra/medir-vram, bin/_infra/medir-cpu e bin/_infra/eixos.py (medir rede, ram, vram e cpu) · journalctl --user (medir ram: a morte por limite das units) · bin/sinal (medir rede: a medida da porta) · nvidia-smi (medir vram) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda) · o script declarado em INFRA_UNITS_SCRIPT (units) · bin/_infra/rodar-peca.py, bin/_acervo/exportar e git (pecas, rodar: o registro, a bancada, o python do rag, o banco pelo cofre e a comparação com origin/main)
-# escreve: ambiente=core.hooksPath dos clones da bancada, symlinks de unit e texto de arranque nao rastreado (aplicar, por deploy-harness/instalar) · restart=contêiner/unit reiniciado (efeito, não arquivo) · remover=contêiner avulso removido (a inspeção dele guardada antes em var/log/infra/removidos), unit transitória tirada da lista (reset-failed) ou unit da conta parada, desabilitada e com o arquivo movido para var/quarentena · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados; fossil=contêiner sem label de projeto removido (logs e inspeção guardados antes em var/log/infra/removidos) e unit platafirma-job-* falha tirada da lista (reset-failed) depois do evento de fim gravado no log do job · agenda=crontab do sistema (aplicar) · units=symlink das units da instância em ~/.local/share/systemd/user e daemon-reload (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · sobreposicao=compose.override.yaml da instância apagado (deploy/<stack>/, a cópia guardada antes em var/log/infra/removidos; nenhum contêiner tocado) · rodar=o que a peça declarada grava (a peça casa grava no banco do acervo) · estado/saude/logs/ps/config/backup/hardware/limites/gpu/medir=nada · pecas=nada
+# depende: docker · systemctl --user · curl · diff (ingress) · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · ps (limites) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs, bin/_infra/limpeza-quarentena, bin/_infra/limpeza-fossil e bin/_infra/imagens (ajudantes de limpeza e imagens) · bin/_infra/medir-rede, bin/_infra/medir-ram, bin/_infra/medir-vram, bin/_infra/medir-cpu e bin/_infra/eixos.py (medir rede, ram, vram e cpu) · journalctl --user (medir ram: a morte por limite das units) · bin/sinal (medir rede: a medida da porta) · nvidia-smi (medir vram) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda) · o script declarado em INFRA_UNITS_SCRIPT (units) · bin/_infra/rodar-peca.py, bin/_acervo/exportar e git (pecas, rodar: o registro, a bancada, o python do rag, o banco pelo cofre e a comparação com origin/main)
+# escreve: ambiente=core.hooksPath dos clones da bancada, symlinks de unit e texto de arranque nao rastreado (aplicar, por deploy-harness/instalar) · restart=contêiner/unit reiniciado (efeito, não arquivo) · remover=contêiner avulso removido (a inspeção dele guardada antes em var/log/infra/removidos), unit transitória tirada da lista (reset-failed) ou unit da conta parada, desabilitada e com o arquivo movido para var/quarentena · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados, imagens Docker fora de produção podadas (imagens) e cache de build/uv podado (cache); fossil=contêiner sem label de projeto removido (logs e inspeção guardados antes em var/log/infra/removidos) e unit platafirma-job-* falha tirada da lista (reset-failed) depois do evento de fim gravado no log do job · agenda=crontab do sistema (aplicar) · units=symlink das units da instância em ~/.local/share/systemd/user e daemon-reload (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · sobreposicao=compose.override.yaml da instância apagado (deploy/<stack>/, a cópia guardada antes em var/log/infra/removidos; nenhum contêiner tocado) · rodar=o que a peça declarada grava (a peça casa grava no banco do acervo) · estado/saude/logs/ps/config/backup/hardware/limites/gpu/medir=nada · imagens=nada · pecas=nada
 # substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build (deploy apagado — decisão do dono, 27/09) · sudo rm da sobreposição compose.override.yaml de uma stack · crontab -e a mão · cp à mão do ingress versionado para deploy/core/cloudflared.yml da instância + docker restart do cloudflared · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra por arq:0110 §14 emenda 26/09/2026)
 # face: medir=Operação
 # rotulo: medir=Medir rede
@@ -36,6 +36,7 @@ STACK_AJUDANTE="$AQUI/_release/stack"
 LIMPEZA_LOGS="$AQUI/_infra/limpeza-logs"
 LIMPEZA_QUARENTENA="$AQUI/_infra/limpeza-quarentena"
 LIMPEZA_FOSSIL="$AQUI/_infra/limpeza-fossil"
+IMAGENS_AJUDANTE="$AQUI/_infra/imagens"
 MEDIR_REDE="$AQUI/_infra/medir-rede"
 MEDIR_RAM="$AQUI/_infra/medir-ram"
 MEDIR_VRAM="$AQUI/_infra/medir-vram"
@@ -72,6 +73,7 @@ uso:
   infra unit-env <unit> [--ver | CHAVE=VALOR...] drop-in de ambiente da unit --user (daemon-reload)
   infra cache    [ver|vram|disco]                o que ocupa VRAM e disco; liberar é explícito
   infra cache    modelos [--json]                revisão e digest dos pesos no cache do Hugging Face; só lê
+  infra imagens  [--json]                        separa imagens Docker em produção das fora de produção; só lê
   infra hardware [--json]                        CPU, RAM, GPU e consumo em W agora; a fonte (PSU) não se lê
   infra limites  [--amostrar <s>]                teto de processos e threads da conta e a memória, lidos juntos; --amostrar dá o pico em <s> segundos
   infra gpu      [--json]                        GPU ao vivo: uso, VRAM, temperatura, W e processos
@@ -82,8 +84,10 @@ uso:
   infra config   <stack> [args compose…] [<serviço>…]  … config
   infra pull     <stack> [args compose…] [<serviço>…]  … pull
   infra build    <stack> [args compose…] [<serviço>…]  … build
-  infra limpeza  logs|quarentena|jobs|fossil [args…] despacha para bin/_infra/limpeza-{logs,quarentena,fossil}; jobs é o fossil só de job
+  infra limpeza  logs|quarentena|jobs|fossil|imagens|cache [args…]
+                                                despacha limpeza de logs, quarentena, fóssil, imagens Docker fora de produção ou cache de build/uv
   infra limpeza  fossil [--ver] [--so-jobs] [--dias N]  tira contêiner sem label de projeto com mais de 24 h e unit platafirma-job-* em failed; --ver só lista
+  infra limpeza  imagens [--ver]                 remove imagens Docker não usadas por contêiner ativo (docker image prune -a); --ver só lista
   infra agenda   conferir|aplicar                convergência do crontab (instala-crontab.sh)
   infra units    conferir|aplicar                convergência das units da instância (instala-units.sh)
 infra ambiente conferir|aplicar                convergência do ambiente do harness: core.hooksPath dos clones da bancada, units e arranque (deploy-harness/instalar, debito 605)
@@ -715,6 +719,7 @@ cache() {
       ;;
     disco)
       docker builder prune -f
+      docker image prune -a -f
       uv cache prune 2>/dev/null || true
       echo "cache de modelo (huggingface, ollama) nao e apagado aqui: rebaixar custa GiB de re-download."
       ;;
@@ -1284,10 +1289,18 @@ cmd_limpeza() {
       [ -x "$LIMPEZA_FOSSIL" ] || { printf 'infra: erro: dependência bin/_infra/limpeza-fossil: ausente (%s)\n' "$LIMPEZA_FOSSIL" >&2; exit 3; }
       exec "$LIMPEZA_FOSSIL" --so-jobs "$@"
       ;;
+    imagens)
+      [ -x "$IMAGENS_AJUDANTE" ] || { printf 'infra: erro: dependência bin/_infra/imagens: ausente (%s)\n' "$IMAGENS_AJUDANTE" >&2; exit 3; }
+      exec "$IMAGENS_AJUDANTE" limpar "$@"
+      ;;
+    cache)
+      [ $# -eq 0 ] || { printf 'infra: erro: limpeza cache não aceita argumentos: %s\n' "$*" >&2; uso; }
+      cache disco
+      ;;
     "")
-      printf 'infra: erro: limpeza exige logs, quarentena, jobs ou fossil\n' >&2; uso ;;
+      printf 'infra: erro: limpeza exige logs, quarentena, jobs, fossil, imagens ou cache\n' >&2; uso ;;
     *)
-      printf 'infra: erro: limpeza desconhecida: %s — valores válidos: logs, quarentena, jobs, fossil\n' "$alvo" >&2; uso ;;
+      printf 'infra: erro: limpeza desconhecida: %s — valores válidos: logs, quarentena, jobs, fossil, imagens, cache\n' "$alvo" >&2; uso ;;
   esac
 }
 
@@ -1611,6 +1624,8 @@ case "$cmd" in
   saude)     saude "$@" ;;
   logs)      logs "$@" ;;
   cache)     if [ $# -eq 0 ]; then cache ver; else cache "$@"; fi ;;
+  imagens)   [ -x "$IMAGENS_AJUDANTE" ] || { printf 'infra: erro: dependência bin/_infra/imagens: ausente (%s)\n' "$IMAGENS_AJUDANTE" >&2; exit 3; }
+             exec "$IMAGENS_AJUDANTE" listar "$@" ;;
   hardware)  hardware "$@" ;;
   limites)   limites "$@" ;;
   gpu)       gpu "$@" ;;
@@ -1636,7 +1651,7 @@ case "$cmd" in
              exec python3 "$AQUI/_infra/rodar-peca.py" rodar "$@" ;;
   *)
     printf 'infra: erro: ato desconhecido: %s\n' "$cmd" >&2
-    printf 'atos: estado, saude, logs, restart, remover, unit-env, cache, hardware, limites, gpu, backup, up, down, ps, config, pull, build, limpeza, agenda, units, ambiente, ingress, sobreposicao, medir, pecas, rodar\n' >&2
+    printf 'atos: estado, saude, logs, restart, remover, unit-env, cache, imagens, hardware, limites, gpu, backup, up, down, ps, config, pull, build, limpeza, agenda, units, ambiente, ingress, sobreposicao, medir, pecas, rodar\n' >&2
     uso_texto
     exit 2
     ;;
