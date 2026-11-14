@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # motor — acha pelo sentido o trecho do acervo que responder, filtrável por domínio e/ou conceitos
-# capacidade: motor
+# capacidade: gestao-de-motores
 # dono: ia
 # componente: platafirma-motor
 # classe: B
