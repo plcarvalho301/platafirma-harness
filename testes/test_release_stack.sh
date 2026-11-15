@@ -55,6 +55,8 @@ cat > "$DEPLOY_TOPO_ARQUIVO" <<'EOF'
   "legado": {"slug": "legado", "repo": "platafirma-core", "compose": "docker-compose.yml",
              "segredos": ["~/segredos/core/TOKEN"]},
   "semnome": {"slug": "semnome", "repo": "platafirma-core", "compose": "sem-nome/compose.yaml"},
+  "semcompose": {"slug": "semcompose", "repo": "platafirma-core", "compose": []},
+  "composeausente": {"slug": "composeausente", "repo": "platafirma-core", "compose": "inexistente/docker-compose.yml"},
   "atalho": {"slug": "atalho", "repo": "platafirma-core", "projeto": "platafirma-core",
              "compose": "PLACEHOLDER/core/docker-compose.yml"}
 }}
@@ -140,9 +142,13 @@ set +e; out="$("$VERBO" compose legado up -d 2>&1)"; rc=$?; set -e
 [ ! -s "$DOCKER_LOG" ] || falha "legado subiu com segredo fora das raizes"
 echo "OK"
 
-echo "--- 8: stack fora do registro → 2; ato desconhecido → 2"
+echo "--- 8: stack fora do registro vs registrada sem compose (DT 286); ato desconhecido → 2"
 set +e; out="$("$VERBO" compose inexistente up 2>&1)"; rc=$?; set -e
-[ "$rc" -eq 2 ] && grep -q "nao esta no registro" <<<"$out" || falha "stack desconhecida: rc=$rc $out"
+[ "$rc" -eq 2 ] && grep -q "nao esta no registro" <<<"$out" && grep -q "registradas:" <<<"$out" || falha "stack desconhecida: rc=$rc $out"
+set +e; out="$("$VERBO" compose semcompose up 2>&1)"; rc=$?; set -e
+[ "$rc" -eq 2 ] && grep -q "registrada, sem compose" <<<"$out" && ! grep -q "registradas:" <<<"$out" || falha "stack sem compose declarado: rc=$rc $out"
+set +e; out="$("$VERBO" compose composeausente up 2>&1)"; rc=$?; set -e
+[ "$rc" -eq 1 ] && grep -q "registrada em stacks.yaml, mas sem compose em" <<<"$out" || falha "stack com compose ausente no disco: rc=$rc $out"
 set +e; out="$("$VERBO" reverter core 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 2 ] && grep -q "ato desconhecido" <<<"$out" || falha "ato desconhecido devia sair 2: rc=$rc $out"
 echo "OK"

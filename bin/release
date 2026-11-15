@@ -97,11 +97,11 @@ uso_texto() {
 uso:
   release estado     [<repo>] [--json]
   release listar     <repo> [<prefixo>] [--json]
-  release ler        <repo> <caminho> [--offset <bytes>]
+  release ler        <repo> <caminho> [--offset <bytes>] [--linhas <faixa>]
                                               arquivo maior que 45000 bytes vem em paginas; a ultima linha diz
                                               `truncado em N de M bytes; continue com --offset N`
-  release procurar   <repo> <termo> [<prefixo>] [--json]   (a forma --termo <termo> segue valendo;
-                                              --caminho <prefixo> e apelido do prefixo)
+  release procurar   <repo> <termo> [<prefixo>] [--json] [-E|-F|--literal] [-i]   (a forma --termo <termo> segue valendo;
+                                              --caminho <prefixo> e apelido do prefixo; regex ERE por padrao)
   release conferir   <classe> [<alvo>] [--ref <rev>] [--json]
   release telas      [--json]                 as telas com stack promovida (declaracao registro/telas.json)
   release promover   <repo> [<rev>] [--ensaio] [--aceitar-suite-indisponivel] [--confirmar-lotes] [--reconstruir]
@@ -576,10 +576,32 @@ cmd_listar() {
   fi
 
   local files
-  if [ -n "$prefixo" ]; then
-    files="$("$GIT" -C "$TARGET_DIR" ls-files -- "$prefixo" "$prefixo*" 2>/dev/null || true)"
+  if [ -e "$TARGET_DIR/.git" ]; then
+    if [ -n "$prefixo" ]; then
+      files="$("$GIT" -C "$TARGET_DIR" ls-files -- "$prefixo" "$prefixo*" 2>/dev/null || true)"
+    else
+      files="$("$GIT" -C "$TARGET_DIR" ls-files 2>/dev/null || true)"
+    fi
   else
-    files="$("$GIT" -C "$TARGET_DIR" ls-files 2>/dev/null || true)"
+    files="$(python3 - "$TARGET_DIR" "$prefixo" "$repo" <<'PY' 2>/dev/null || true
+import os, sys
+raiz, pref, repo = sys.argv[1], sys.argv[2], sys.argv[3]
+todos = []
+for d, _, arqs in os.walk(raiz):
+    for a in arqs:
+        todos.append(os.path.relpath(os.path.join(d, a), raiz))
+todos.sort()
+if pref:
+    p = pref.rstrip("/")
+    filtrados = [f for f in todos if f == p or f.startswith(p)]
+    if not filtrados and repo == "abertura":
+        p2 = f"abertura/{p}"
+        filtrados = [f for f in todos if f == p2 or f.startswith(p2)]
+    todos = filtrados
+if todos:
+    print("\n".join(todos))
+PY
+)"
   fi
 
   if [ -z "$files" ]; then
@@ -608,6 +630,8 @@ cmd_ler() {
   local repo=""
   local caminho=""
   local offset=0
+  local linhas=""
+  local numerar=0
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -620,6 +644,36 @@ cmd_ler() {
         fi
         offset="$((10#$1))"
         shift
+        ;;
+      --linhas)
+        shift
+        if [ $# -eq 0 ] || [ -z "$1" ]; then
+          printf 'release: erro: --linhas exige uma faixa (ex.: 1-25, 10-, -20)\n' >&2
+          uso_texto
+          exit 2
+        fi
+        linhas="$1"
+        shift
+        ;;
+      --numerar|-n)
+        numerar=1
+        shift
+        ;;
+      --)
+        shift
+        while [ $# -gt 0 ]; do
+          if [ -z "$repo" ]; then
+            repo="$1"
+          elif [ -z "$caminho" ]; then
+            caminho="$1"
+          else
+            printf 'release: erro: argumento extra: %s\n' "$1" >&2
+            uso_texto
+            exit 2
+          fi
+          shift
+        done
+        break
         ;;
       -*)
         printf 'release: erro: opção desconhecida: %s\n' "$1" >&2
@@ -670,15 +724,72 @@ cmd_ler() {
   fi
 
   local alvo_arquivo="$TARGET_DIR/$caminho"
+  if [ ! -f "$alvo_arquivo" ] && [ "$repo" = "abertura" ]; then
+    if [ -f "$TARGET_DIR/abertura/$caminho" ]; then
+      alvo_arquivo="$TARGET_DIR/abertura/$caminho"
+    elif [[ "$caminho" == abertura/* ]] && [ -f "$TARGET_DIR/${caminho#abertura/}" ]; then
+      alvo_arquivo="$TARGET_DIR/${caminho#abertura/}"
+    fi
+  fi
   if [ ! -f "$alvo_arquivo" ]; then
     printf 'varrido: servido %s (%s, promovido %s)\n' "$repo" "$TARGET_DIR" "$QUANDO" >&2
     printf 'vizinho: repo ler %s %s\n' "$repo" "$caminho" >&2
     exit 1
   fi
 
-  python3 - "$alvo_arquivo" "$offset" "$LER_PAGINA" "$repo" "$caminho" <<'PY' || exit $?
+  if [ -n "$linhas" ]; then
+    python3 - "$alvo_arquivo" "$linhas" "$repo" "$caminho" "$numerar" <<'PY' || exit $?
+import sys, re
+arq, faixa_str, repo, caminho, numerar = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
+with open(arq, "rb") as f:
+    bruto = f.read()
+linhas = bruto.splitlines(keepends=True)
+total_l = len(linhas)
+
+m1 = re.fullmatch(r"\s*(\d+)\s*-\s*(\d*)\s*", faixa_str)
+m2 = re.fullmatch(r"\s*-\s*(\d+)\s*", faixa_str)
+m3 = re.fullmatch(r"\s*(\d+)\s*", faixa_str)
+if m1:
+    a = int(m1.group(1))
+    b = int(m1.group(2)) if m1.group(2) else total_l
+    if a < 1 or b < a:
+        sys.stderr.write(f"release: erro: --linhas {faixa_str!r}: use 'a-b', 'a-' ou '-n' (base 1)\n")
+        sys.exit(2)
+    ini = a - 1
+    fim = min(b, total_l)
+elif m2:
+    n = int(m2.group(1))
+    if n < 1:
+        sys.stderr.write(f"release: erro: --linhas {faixa_str!r}: n deve ser >= 1\n")
+        sys.exit(2)
+    ini = max(0, total_l - n)
+    fim = total_l
+elif m3:
+    a = int(m3.group(1))
+    if a < 1:
+        sys.stderr.write(f"release: erro: --linhas {faixa_str!r}: use 'a-b', 'a-' ou '-n' (base 1)\n")
+        sys.exit(2)
+    ini = a - 1
+    fim = min(a, total_l)
+else:
+    sys.stderr.write(f"release: erro: --linhas {faixa_str!r}: use 'a-b', 'a-' ou '-n' (base 1)\n")
+    sys.exit(2)
+
+sel = linhas[ini:fim]
+out = sys.stdout.buffer
+if numerar:
+    for idx, l in enumerate(sel, start=ini + 1):
+        out.write(f"{idx}: ".encode("utf-8") + l)
+        if not l.endswith(b"\n"):
+            out.write(b"\n")
+else:
+    out.write(b"".join(sel))
+out.flush()
+PY
+  else
+    python3 - "$alvo_arquivo" "$offset" "$LER_PAGINA" "$repo" "$caminho" "$numerar" <<'PY' || exit $?
 import sys
-arq, offset, pagina, repo, caminho = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5]
+arq, offset, pagina, repo, caminho, numerar = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5], int(sys.argv[6])
 with open(arq, "rb") as f:
     bruto = f.read()
 total = len(bruto)
@@ -693,7 +804,12 @@ if fim < total:
         fim -= 1
 corpo = bruto[ini:fim]
 out = sys.stdout.buffer
-out.write(corpo)
+if numerar:
+    base_l = bruto[:ini].count(b"\n") + 1
+    for idx, l in enumerate(corpo.splitlines(keepends=True), start=base_l):
+        out.write(f"{idx}: ".encode("utf-8") + l)
+else:
+    out.write(corpo)
 if fim < total:
     if corpo and not corpo.endswith(b"\n"):
         out.write(b"\n")
@@ -701,6 +817,7 @@ if fim < total:
                f" (release ler {repo} {caminho} --offset {fim})\n").encode("utf-8"))
 out.flush()
 PY
+  fi
   if [ -n "$TAG" ]; then
     printf 'versão: current@%s (%s)\n' "$SHA_CURTO" "$TAG" >&2
   else
@@ -714,26 +831,31 @@ cmd_procurar() {
   local repo=""
   local termo=""
   local prefixo=""
-  local posicionais=()
+  local -a termos=()
+  local -a prefixos=()
+  local -a posicionais=()
 
-  # Mesma forma do irmao `repo procurar` (#2856 linha 82, #3885): `<repo> <termo> [<prefixo>]`,
-  # com `--termo <termo>` ainda valendo. A forma posicional era a que as cadeiras tentavam todo
-  # dia e o release recusava com 2. `--caminho` e apelido do prefixo, a outra forma tentada.
-  local literal=0
+  # Mesma forma do irmao `repo procurar` (#2856 linha 82, #3885, DT 333): `<repo> <termo> [<prefixo>]`,
+  # com `--termo <termo>` ainda valendo, regex ERE (-E) por padrao e -F/--literal para texto fixo.
+  local literal=0 ignore_case=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --json) como_json=1; shift ;;
-      --literal|-F) literal=1; shift ;;
-      --termo)
+      --literal|-F|--fixed-strings) literal=1; shift ;;
+      --extended-regexp|-E) literal=0; shift ;;
+      --ignore-case|-i) ignore_case=1; shift ;;
+      --termo|-e)
         shift
         [ $# -gt 0 ] || { printf 'release: erro: --termo exige um valor\n' >&2; uso_texto; exit 2; }
-        termo="$1"
+        [ -n "$1" ] || { printf 'release: erro: --termo exige um valor não vazio\n' >&2; uso_texto; exit 2; }
+        termos+=("$1")
         shift
         ;;
       --caminho)
         shift
         [ $# -gt 0 ] || { printf 'release: erro: --caminho exige um valor\n' >&2; uso_texto; exit 2; }
-        prefixo="$1"
+        [ -n "$1" ] || { printf 'release: erro: --caminho exige um valor não vazio\n' >&2; uso_texto; exit 2; }
+        prefixos+=("$1")
         shift
         ;;
       --)
@@ -759,10 +881,10 @@ cmd_procurar() {
   for p in "${posicionais[@]+"${posicionais[@]}"}"; do
     if [ -z "$repo" ]; then
       repo="$p"
-    elif [ -z "$termo" ]; then
-      termo="$p"
-    elif [ -z "$prefixo" ]; then
-      prefixo="$p"
+    elif [ "${#termos[@]}" -eq 0 ]; then
+      termos+=("$p")
+    elif [ "${#prefixos[@]}" -eq 0 ]; then
+      prefixos+=("$p")
     else
       printf 'release: erro: argumento extra: %s\n' "$p" >&2
       uso_texto
@@ -771,16 +893,21 @@ cmd_procurar() {
   done
 
   [ -n "$repo" ] || { printf 'release: erro: repo obrigatório para procurar\n' >&2; uso_texto; exit 2; }
-  [ -n "$termo" ] || { printf 'release: erro: termo obrigatório para procurar: release procurar %s <termo> [<prefixo>]\n' "$repo" >&2; uso_texto; exit 2; }
+  [ "${#termos[@]}" -gt 0 ] || { printf 'release: erro: termo obrigatório para procurar: release procurar %s <termo> [<prefixo>]\n' "$repo" >&2; uso_texto; exit 2; }
+
+  local -a padroes=()
+  local t
+  for t in "${termos[@]}"; do padroes+=(-e "$t"); done
+  termo="$(printf '%s | ' "${termos[@]}")"; termo="${termo% | }"
 
   validar_repo_ou_sair "$repo"
 
-  if [ -n "$prefixo" ]; then
-    if [[ "$prefixo" == /* ]] || [[ "$prefixo" == *..* ]]; then
-      printf 'release: erro: prefixo fora da raiz ou símbolo que escapa: %s\n' "$prefixo" >&2
+  for p in "${prefixos[@]+"${prefixos[@]}"}"; do
+    if [[ "$p" == /* ]] || [[ "$p" == *..* ]]; then
+      printf 'release: erro: prefixo fora da raiz ou símbolo que escapa: %s\n' "$p" >&2
       exit 4
     fi
-  fi
+  done
 
   local rc=0
   resolver_identidade "$repo" || rc=$?
@@ -797,14 +924,31 @@ cmd_procurar() {
     exit "$rc"
   fi
 
+  if [ "$repo" = "abertura" ] && [ "${#prefixos[@]}" -gt 0 ]; then
+    local idx_p=0
+    for p in "${prefixos[@]}"; do
+      if [ ! -e "$TARGET_DIR/$p" ] && [ -e "$TARGET_DIR/abertura/$p" ]; then
+        prefixos[$idx_p]="abertura/$p"
+      elif [[ "$p" == abertura/* ]] && [ ! -e "$TARGET_DIR/$p" ] && [ -e "$TARGET_DIR/${p#abertura/}" ]; then
+        prefixos[$idx_p]="${p#abertura/}"
+      fi
+      idx_p=$((idx_p + 1))
+    done
+  fi
+
   local grep_modo="-E"
   [ "$literal" -eq 1 ] && grep_modo="-F"
+  local -a grep_flags=(-n "$grep_modo")
+  [ "$ignore_case" -eq 1 ] && grep_flags+=(-i)
+  # DT 633: familias materializadas sem .git (como abertura, gerada por git archive)
+  # precisam de --no-index para o git grep varrer a arvore publicada em $TARGET_DIR.
+  [ ! -e "$TARGET_DIR/.git" ] && grep_flags+=(--no-index)
 
   local out=""
-  if [ -n "$prefixo" ]; then
-    out="$("$GIT" -C "$TARGET_DIR" grep -n "$grep_modo" -- "$termo" -- "$prefixo" 2>/dev/null || true)"
+  if [ "${#prefixos[@]}" -gt 0 ]; then
+    out="$("$GIT" -C "$TARGET_DIR" grep "${grep_flags[@]}" "${padroes[@]}" -- "${prefixos[@]}" 2>/dev/null || true)"
   else
-    out="$("$GIT" -C "$TARGET_DIR" grep -n "$grep_modo" -- "$termo" 2>/dev/null || true)"
+    out="$("$GIT" -C "$TARGET_DIR" grep "${grep_flags[@]}" "${padroes[@]}" 2>/dev/null || true)"
   fi
 
   if [ -z "$out" ]; then
@@ -1448,9 +1592,61 @@ gate_biblioteca() {  # $1=repo $2=sha $3=sha no ar (ou vazio)
   esac
 }
 
+STACKS_RESTANTES=()
+STACKS_PENDENTES=()
+
+gravar_stacks_pendentes() {  # $1=repo $2=sha ; grava STACKS_RESTANTES em $PONTOS/$repo/stacks_pendentes
+  local repo="$1" sha="$2" s
+  mkdir -p "$PONTOS/$repo"
+  {
+    printf 'sha=%s\n' "$sha"
+    for s in "${STACKS_RESTANTES[@]+"${STACKS_RESTANTES[@]}"}"; do
+      [ -n "$s" ] && printf '%s\n' "$s"
+    done
+  } > "$PONTOS/$repo/stacks_pendentes"
+}
+
+limpar_stacks_pendentes() {  # $1=repo
+  rm -f "$PONTOS/$1/stacks_pendentes"
+}
+
+# DT 256: identifica stacks de STACKS_PROMOVER que ficaram por subir após PROMOCAO PARCIAL
+# (registradas em $PONTOS/$repo/stacks_pendentes ou com $DEPLOY_PONTOS/<stack>.atual != $sha).
+apurar_stacks_pendentes() {  # $1=repo $2=sha
+  local repo="$1" sha="$2" s arq_p="$PONTOS/$repo/stacks_pendentes"
+  local deploy_pts="${DEPLOY_PONTOS:-$PLATAFIRMA_INSTANCIA/var/deploy}"
+  STACKS_PENDENTES=()
+  [ "${#STACKS_PROMOVER[@]}" -gt 0 ] || return 0
+  local sha_p=""
+  local -a lista_p=()
+  if [ -f "$arq_p" ]; then
+    sha_p="$(sed -n 's/^sha=//p' "$arq_p" | head -n 1)"
+    if [ "$sha_p" = "$sha" ]; then
+      while IFS= read -r s; do
+        [[ "$s" == sha=* ]] || [ -z "$s" ] && continue
+        lista_p+=("$s")
+      done < "$arq_p"
+    fi
+  fi
+  for s in "${STACKS_PROMOVER[@]}"; do
+    local pend=0 p
+    for p in "${lista_p[@]+"${lista_p[@]}"}"; do
+      [ "$p" = "$s" ] && pend=1 && break
+    done
+    if [ "$pend" -eq 0 ] && [ -f "$deploy_pts/$s.atual" ]; then
+      local st_at
+      st_at="$(head -n 1 "$deploy_pts/$s.atual" 2>/dev/null || true)"
+      [ "$st_at" != "$sha" ] && pend=1
+    fi
+    [ "$pend" -eq 1 ] && STACKS_PENDENTES+=("$s")
+  done
+  return 0
+}
+
 promover_stacks() {  # $1=sha ; usa STACKS_PROMOVER; devolve 0 ou o nome da stack que recusou em STACK_FALHOU
-  local sha="$1" s
+  local sha="$1" s idx=0
   STACK_FALHOU=""
+  STACKS_RESTANTES=()
   local ajudante_bin; ajudante_bin="$(achar_deploy)"
   if [ "${#STACKS_PROMOVER[@]}" -eq 0 ]; then
     return 0
@@ -1475,9 +1671,11 @@ promover_stacks() {  # $1=sha ; usa STACKS_PROMOVER; devolve 0 ou o nome da stac
     if [ "$rc_dep" -ne 0 ]; then
       STACK_FALHOU="$s"
       STACK_MOTIVO="$(tail -n 3 "$errf" 2>/dev/null || true)"
+      STACKS_RESTANTES=("${STACKS_PROMOVER[@]:$idx}")
       rm -f "$errf"
       return 5
     fi
+    idx=$((idx + 1))
   done
   rm -f "$errf"
   return 0
@@ -2340,8 +2538,59 @@ cmd_promover() {
       printf '%s\n' "$sha"
       exit 0
     fi
-    printf 'já no ar:  %s current → %s — nada a mover\n' "$repo" "${sha:0:7}"
-    exit 1
+    apurar_stacks_pendentes "$repo" "$sha"
+    if [ "${#STACKS_PENDENTES[@]}" -eq 0 ]; then
+      printf 'já no ar:  %s current → %s — nada a mover\n' "$repo" "${sha:0:7}"
+      exit 1
+    fi
+    STACKS_PROMOVER=("${STACKS_PENDENTES[@]}")
+    printf '== release promover %s %s (retomando stacks pendentes: %s) ==\n' "$repo" "${sha:0:7}" "${STACKS_PROMOVER[*]}"
+    printf 'current:   já em %s — retomando reconciliação das stacks\n' "${sha:0:7}"
+    if [ "$ensaio" -eq 1 ]; then
+      printf 'ensaio:    nada tocado\n'
+      exit 0
+    fi
+    exigir_deploy_se_stack || { rc=$?; exit "$rc"; }
+    local rc_st_ret=0
+    promover_stacks "$sha" || rc_st_ret=$?
+    if [ "$rc_st_ret" -ne 0 ]; then
+      gravar_stacks_pendentes "$repo" "$sha"
+      {
+        printf '\n'
+        printf '=========================================================================\n'
+        printf 'PROMOCAO PARCIAL — ESTADO PARTIDO, LEIA (release %s)\n' "$repo"
+        printf '=========================================================================\n'
+        printf '  codigo (current): NO AR em %s — verbos ja servem esta rev\n' "${sha:0:7}"
+        printf '  stack recusada  : %s — NAO subiu\n' "$STACK_FALHOU"
+        if [ -n "${STACK_MOTIVO:-}" ]; then
+          printf '  motivo (ajudante %s):\n' "$STACK_FALHOU"
+          printf '%s\n' "$STACK_MOTIVO" | sed 's/^/    /'
+        fi
+        printf '  RETOMAR         : conserte a causa acima e repita  release promover %s %s  (ou infra up %s -d --build --force-recreate)\n' "$repo" "${sha:0:7}" "$STACK_FALHOU"
+        printf '=========================================================================\n'
+      } >&2
+      reiniciar_porta "$repo"
+      exit "$rc_st_ret"
+    fi
+    limpar_stacks_pendentes "$repo"
+    local rc_ar_ret=0
+    conferencia_no_ar "$repo" "$sha" || rc_ar_ret=$?
+    if [ "$rc_ar_ret" -eq 0 ] && [ -n "$CONF_AR_DETALHE" ]; then
+      printf 'no ar:     conferido — %s\n' "$CONF_AR_DETALHE"
+    elif [ "$rc_ar_ret" -eq 5 ]; then
+      printf 'no ar:     conferencia nao olhou (%s) — sem volta automatica; confira: release conferir servico\n' "$CONF_AR_DETALHE"
+    elif [ "$rc_ar_ret" -ne 0 ]; then
+      printf 'release: conferencia no ar VERMELHA na rev %s: %s\n' "${sha:0:7}" "$CONF_AR_DETALHE" >&2
+      reiniciar_porta "$repo"
+      exit 4
+    fi
+    printf 'no ar:     %s %s\n' "$repo" "${sha:0:7}"
+    local rc_card_ret=0
+    estagio_card "$repo" "$atual" "$sha" || rc_card_ret=$?
+    registrar_deploy_no_rastreador "$repo" "$atual" "$sha" || true
+    reiniciar_porta "$repo"
+    printf '%s\n' "$sha"
+    exit 0
   fi
 
   local tag; tag="$("$GIT" --git-dir="$esp" describe --tags --exact-match "$sha" 2>/dev/null || echo '')"
@@ -2423,6 +2672,7 @@ cmd_promover() {
     # gravar_pontos mantem 'atual' = sha novo (o current de fato no ar) e 'anterior' =
     # o sha de onde saiu, para o reverter deliberado ter para onde voltar.
     gravar_pontos "$repo" "$atual" "$sha"
+    gravar_stacks_pendentes "$repo" "$sha"
     {
       printf '\n'
       printf '=========================================================================\n'
@@ -2437,13 +2687,14 @@ cmd_promover() {
         printf '  motivo (ajudante %s):\n' "$STACK_FALHOU"
         printf '%s\n' "$STACK_MOTIVO" | sed 's/^/    /'
       fi
-      printf '  RETOMAR         : conserte a causa acima e rode  bin/_release/stack promover %s %s\n' "$STACK_FALHOU" "${sha:0:7}"
+      printf '  RETOMAR         : conserte a causa acima e repita  release promover %s %s  (ou infra up %s -d --build --force-recreate)\n' "$repo" "${sha:0:7}" "$STACK_FALHOU"
       printf '  VOLTAR CODIGO   : release reverter %s %s  (devolve o current; a stack ainda depende do ajudante subir)\n' "$repo" "$(curto_ou "$atual" '<sha-anterior>')"
       printf '=========================================================================\n'
     } >&2
     reiniciar_porta "$repo"
     exit "$rc_st"
   fi
+  limpar_stacks_pendentes "$repo"
 
   # Estagio 3 (spec_ambiente-de-desenvolvimento §3; card #3150, comentario C5):
   # conferencia no ar. Vermelho -> volta automatica ao sha anterior, current relido;
@@ -2611,6 +2862,7 @@ cmd_reverter() {
     # justo quando ele volta por algo quebrado. O current FICA no alvo, a stack vira
     # incidente, e o relato GRITA onde partiu.
     gravar_pontos "$repo" "$atual" "$alvo"
+    gravar_stacks_pendentes "$repo" "$alvo"
     {
       printf '\n'
       printf '=========================================================================\n'
@@ -2622,12 +2874,13 @@ cmd_reverter() {
         printf '  motivo (ajudante %s):\n' "$STACK_FALHOU"
         printf '%s\n' "$STACK_MOTIVO" | sed 's/^/    /'
       fi
-      printf '  RETOMAR         : conserte a causa acima e rode  bin/_release/stack promover %s %s\n' "$STACK_FALHOU" "${alvo:0:7}"
+      printf '  RETOMAR         : conserte a causa acima e rode  infra up %s -d --build --force-recreate  (ou release promover %s %s)\n' "$STACK_FALHOU" "$repo" "${alvo:0:7}"
       printf '=========================================================================\n'
     } >&2
     reiniciar_porta "$repo"
     exit "$rc_st"
   fi
+  limpar_stacks_pendentes "$repo"
 
   printf 'no ar:     %s %s\n' "$repo" "${alvo:0:7}"
   if [ "$rc_ab" -ne 0 ]; then
