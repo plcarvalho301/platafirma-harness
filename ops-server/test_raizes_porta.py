@@ -524,3 +524,21 @@ def test_write_file_preserva_escape_barra_u_e_crontab(bancada, sem_pep):
     assert ok_trecho.get("ok"), ok_trecho
     atualizado = (bancada / "wt/platafirma-core/fabrica/deploy/crontab-claudinho").read_text("utf-8")
     assert "\\u00e9" in atualizado
+
+
+def test_write_file_docstring_lista_tipos_e_nomes():
+    """DT 473: docstring de write_file lista exatamente TIPOS_TEXTO e NOMES_TEXTO."""
+    doc = " ".join((s.write_file.__doc__ or "").split())
+    apos_tipos = doc.split("Tipos: ", 1)[1]
+    bloco_tipos, resto = apos_tipos.split(", e os nomes ", 1)
+    bloco_nomes = resto.split(". Fora disso", 1)[0]
+
+    tipos_doc = bloco_tipos.split()
+    assert len(tipos_doc) == len(s.TIPOS_TEXTO), f"tipos duplicados na docstring: {tipos_doc}"
+    assert set(tipos_doc) == s.TIPOS_TEXTO
+
+    nomes_brutos = [n.strip() for n in bloco_nomes.split(",")]
+    assert "Dockerfile.<sufixo>" in nomes_brutos
+    nomes_doc = [n for n in nomes_brutos if n != "Dockerfile.<sufixo>"]
+    assert len(nomes_doc) == len(s.NOMES_TEXTO), f"nomes duplicados na docstring: {nomes_doc}"
+    assert set(nomes_doc) == s.NOMES_TEXTO
