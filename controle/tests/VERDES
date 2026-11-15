@@ -354,3 +354,5 @@ tests/test_dts_634_375_523.py | bin/release bin/_release/** lib/analise/receita.
 testes/test_abertura_ver.py | agente/abertura-ver.py abertura/**
 # DTs 271, 323, 404 e 592: KiB e aviso em `dt listar --curto` e parser da tabela Unidades em `mover em-execucao`.
 tests/test_tarefas_dts_271_323_404_592.py | bin/tarefas
+# DTs 37, 203, 285, 414 e 530: `repo commitar` restaura stage em falha do gate, `repo estado` inclui caminho absoluto, `repo descartar` e `repo abrir` recolocando direto-em-main.
+tests/test_repo_dts_37_203_285_414.py | bin/repo
