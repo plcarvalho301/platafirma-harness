@@ -1598,6 +1598,28 @@ mover() {
   if [ "$destino" = "em-execucao" ]; then
     _validar_unidades_plano "$id" || return 1
   fi
+  # DT-35: só avisa a dona quando este mover de fato fecha a filha e faz o pai entrar em
+  # `em-homologacao`. Re-mover filha já terminal ou mover com o pai já em `em-homologacao`
+  # não pode reenviar a carta.
+  local ja_era_terminal=0 pai_ja_em_homologacao=0
+  local term_dest; term_dest=$(_estados_terminais) || term_dest='[]'
+  if printf '%s' "$term_dest" | jq -e --arg e "$destino" 'index($e) != null' >/dev/null 2>&1; then
+    local antes_item; antes_item=$(busca GET "/itens/$id" 2>/dev/null) || antes_item=""
+    if [ -n "$antes_item" ]; then
+      if [ "$(printf '%s' "$antes_item" | jq -r '.estado_natureza // ""' 2>/dev/null)" = "terminal" ] \
+         || printf '%s' "$antes_item" | jq -e --argjson t "$term_dest" '(.estado // "") as $e | ($t | index($e)) != null' >/dev/null 2>&1; then
+        ja_era_terminal=1
+      else
+        local pai_antes; pai_antes=$(printf '%s' "$antes_item" | jq -r '.pai // empty' 2>/dev/null)
+        if [ -n "$pai_antes" ]; then
+          local antes_pai; antes_pai=$(busca GET "/itens/$pai_antes" 2>/dev/null) || antes_pai=""
+          if [ "$(printf '%s' "$antes_pai" | jq -r '.estado_derivado // ""' 2>/dev/null)" = "em-homologacao" ]; then
+            pai_ja_em_homologacao=1
+          fi
+        fi
+      fi
+    fi
+  fi
   local resp; resp=$(jq -n --arg e "$destino" --arg m "$motivo" --arg g "$elo" --arg d "$decisao" \
      '{estado:$e}
       + (if $m == "" then {} else {motivo:$m} end)
@@ -1647,7 +1669,8 @@ mover() {
   # AVISO À DONA (ordem do dono, 27/09/2026): fechou a última filha e o pai parou em
   # `em-homologacao` — a conferência da feature/épico é da gestão estratégica ou da cadeira
   # dona dele, e depois do dono. Quem executou a story nem sempre é a dona; sem o aviso, o dono pedia à mão.
-  if [ -n "$pai" ] && [ "$(printf '%s' "$resp" | jq -r '.estado_natureza // ""')" = "terminal" ]; then
+  if [ -n "$pai" ] && [ "$(printf '%s' "$resp" | jq -r '.estado_natureza // ""')" = "terminal" ] \
+     && [ "$ja_era_terminal" -eq 0 ] && [ "$pai_ja_em_homologacao" -eq 0 ]; then
     avisa_dona "$pai" "$id"
   fi
   return 0
