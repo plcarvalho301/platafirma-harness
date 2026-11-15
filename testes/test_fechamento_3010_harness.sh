@@ -110,8 +110,13 @@ mkdir -p "$CACHE"; cp "$TMP_DIR/artefato" "$CACHE/$PINO"
 out="$("$VERBO" promover platafirma-harness "$SHA1" 2>&1)" || falha "promover com cache semeado: $out"
 alvo="$PROD_RAIZ/platafirma-harness/$SHA1/terceiros/tokenizers/fixture.json"
 [ -f "$alvo" ] && [ "$(sha256sum "$alvo" | cut -d' ' -f1)" = "$PINO" ] || falha "terceiro nao chegou na arvore com o pino: $out"
-[ ! -w "$alvo" ] && [ ! -w "$(dirname "$alvo")" ] && [ ! -w "$PROD_RAIZ/platafirma-harness/$SHA1" ] \
-  || falha "arvore da rev ficou gravavel depois de por o terceiro"
+if [ "$(id -u)" -ne 0 ]; then
+  [ ! -w "$alvo" ] && [ ! -w "$(dirname "$alvo")" ] && [ ! -w "$PROD_RAIZ/platafirma-harness/$SHA1" ] \
+    || falha "arvore da rev ficou gravavel depois de por o terceiro"
+else
+  ! stat -c %A "$alvo" "$(dirname "$alvo")" "$PROD_RAIZ/platafirma-harness/$SHA1" | grep -q 'w' \
+    || falha "arvore da rev ficou com bit de escrita depois de por o terceiro"
+fi
 [ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$SHA1" ] || falha "current nao trocou"
 [ "$(readlink -f "$PROD_RAIZ/current/harness/terceiros/tokenizers/fixture.json")" = "$(readlink -f "$alvo")" ] \
   || falha "atalho current/harness nao serve o terceiro"

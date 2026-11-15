@@ -210,12 +210,14 @@ printf '#!/bin/sh\necho entrada\n' > "$BINPF/platafirma"; cp "$BINPF/platafirma"
 roda env PATH="$BINPF:$PATH" PLATAFIRMA_ARQUIVO_SHELLRC="$TMP_DIR/rc-cmd" "$PUXAR" --alias
 [ "$RC" -eq 0 ] && grep -qx "alias pf -> platafirma: criado" <<<"$OUT" || falha "pf igual a platafirma no PATH nao e alheio: $RC $OUT"
 # rc somente leitura: 3, sem editar (rename no diretorio contornaria o modo do arquivo)
-rc9="$TMP_DIR/rc-somente-leitura"; printf 'export R=1\n' > "$rc9"; chmod 444 "$rc9"; antes_rc="$(md5sum < "$rc9")"
-roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc9" "$PUXAR" --alias
-[ "$RC" -eq 3 ] && grep -q "recusado (nao gravavel" <<<"$OUT" && [ "$(md5sum < "$rc9")" = "$antes_rc" ] && [ "$(stat -c %a "$rc9")" = 444 ] \
-  || falha "rc somente leitura devia sair 3 sem editar: $RC $OUT"
-roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc9" "$PUXAR" --alias --ensaio
-[ "$RC" -eq 3 ] && [ "$(md5sum < "$rc9")" = "$antes_rc" ] || falha "ensaio sobre rc somente leitura devia antecipar o 3: $RC $OUT"
+if [ "$(id -u)" -ne 0 ]; then
+  rc9="$TMP_DIR/rc-somente-leitura"; printf 'export R=1\n' > "$rc9"; chmod 444 "$rc9"; antes_rc="$(md5sum < "$rc9")"
+  roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc9" "$PUXAR" --alias
+  [ "$RC" -eq 3 ] && grep -q "recusado (nao gravavel" <<<"$OUT" && [ "$(md5sum < "$rc9")" = "$antes_rc" ] && [ "$(stat -c %a "$rc9")" = 444 ] \
+    || falha "rc somente leitura devia sair 3 sem editar: $RC $OUT"
+  roda env PLATAFIRMA_ARQUIVO_SHELLRC="$rc9" "$PUXAR" --alias --ensaio
+  [ "$RC" -eq 3 ] && [ "$(md5sum < "$rc9")" = "$antes_rc" ] || falha "ensaio sobre rc somente leitura devia antecipar o 3: $RC $OUT"
+fi
 # sem python3: recusa 3 com relato, nao 127 calado
 SEMPY="$TMP_DIR/bin-sem-python"; mkdir -p "$SEMPY"
 for c in bash dirname readlink cat; do ln -sf "$(command -v "$c")" "$SEMPY/$c"; done

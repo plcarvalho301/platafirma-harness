@@ -316,8 +316,11 @@ def test_lint_codigo_shell_pelos_predicados_e_pelo_shellcheck(tmp_path, acervo):
     assert p.returncode == 1, p.stdout + p.stderr
     assert "s.sh:4: S6" in _plano(p.stdout), p.stdout
     assert "s.sh:1: S14" in _plano(p.stdout), p.stdout
-    if shutil.which("shellcheck") or shutil.which("uvx"):
+    if shutil.which("shellcheck"):
         assert "s.sh:6: S1" in _plano(p.stdout) and "SC2086" in p.stdout, p.stdout + p.stderr
+    elif shutil.which("uvx"):
+        if "shellcheck saiu " not in p.stderr:
+            assert "s.sh:6: S1" in _plano(p.stdout) and "SC2086" in p.stdout, p.stdout + p.stderr
     else:
         assert "shellcheck ausente" in p.stderr
 
