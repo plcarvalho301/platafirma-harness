@@ -649,3 +649,14 @@ def test_as_tools_da_porta_declaram_annotations_sem_destructive_nem_open_world()
         anot = s._anotacoes_tool(slug, str(HARNESS_DIR / "bin" / slug))
         assert anot.destructiveHint is False and anot.openWorldHint is False
         assert anot.readOnlyHint is esperado_ro, slug
+
+
+def test_get_mcp_autenticado_devolve_405_sem_abrir_sse_ocioso(monkeypatch):
+    """Servidor stateless sem canal server->client devolve 405 em GET /mcp autenticado
+    (spec Streamable HTTP 2025-03-26), evitando standalone SSE ocioso e queda no agy."""
+    from starlette.testclient import TestClient
+    monkeypatch.setattr(s, "_sujeito_do_jwt", lambda *a, **k: {"sujeito": SUB})
+    resp = TestClient(s.app).get("/mcp", headers={
+        "accept": "text/event-stream", "authorization": "Bearer teste"})
+    assert resp.status_code == 405
+    assert resp.headers.get("allow") == "POST, DELETE"
