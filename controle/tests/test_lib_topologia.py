@@ -71,5 +71,58 @@ def test_duas_stacks_mesmo_compose_desempata_por_projeto_ou_retorna_none():
     assert topologia.stack_do_container(cont_sem_projeto, duas) is None
 
 
+def test_stack_com_multiplos_composes_nao_duplica_achado():
+    # Regressivo DT #381: stack com dois composes (busca, conversor) não pode entrar
+    # duas vezes em `achados` e falhar no desempate por len(do_projeto) != 1.
+    topo = [
+        {
+            "slug": "busca",
+            "compose": [
+                "/opt/platafirma/current/motor/rag/docker-compose.yml",
+                "/opt/platafirma/current/motor/rag/docker-compose.gpu.yml",
+            ],
+        },
+        {
+            "slug": "conversor",
+            "compose": [
+                "/opt/platafirma/current/conhecimento/deploy/conversor/compose.yaml",
+                "/opt/platafirma/current/conhecimento/deploy/conversor/compose.gpu.yaml",
+            ],
+        },
+    ]
+    cont_busca = {
+        "com.docker.compose.project": "busca",
+        "com.docker.compose.service": "busca",
+        "com.docker.compose.project.config_files": (
+            f"/opt/platafirma/platafirma-motor/{SHA}/rag/docker-compose.yml,"
+            f"/opt/platafirma/platafirma-motor/{SHA}/rag/docker-compose.gpu.yml,"
+            "/srv/platafirma/casa/deploy/busca/compose.override.yaml"
+        ),
+    }
+    assert topologia.stack_do_container(cont_busca, topo) == "busca"
+
+    # Réplicas nomeadas (conversor, conversor-2, conversor-3, conversor-4) com projeto distinto do slug
+    for proj in ("conversor", "conversor-2", "conversor-3", "conversor-4"):
+        cont_conv = {
+            "com.docker.compose.project": proj,
+            "com.docker.compose.service": "conversor",
+            "com.docker.compose.project.config_files": (
+                f"/opt/platafirma/platafirma-conhecimento/{SHA}/deploy/conversor/compose.yaml,"
+                f"/opt/platafirma/platafirma-conhecimento/{SHA}/deploy/conversor/compose.gpu.yaml"
+            ),
+        }
+        assert topologia.stack_do_container(cont_conv, topo) == "conversor"
+
+    # Caminho via /current/ (sem SHA resolvido) também casa
+    cont_current = {
+        "com.docker.compose.project": "busca",
+        "com.docker.compose.project.config_files": (
+            "/opt/platafirma/current/motor/rag/docker-compose.yml,"
+            "/opt/platafirma/current/motor/rag/docker-compose.gpu.yml"
+        ),
+    }
+    assert topologia.stack_do_container(cont_current, topo) == "busca"
+
+
 def test_alias_stack_do_conteiner():
     assert topologia.stack_do_conteiner is topologia.stack_do_container
