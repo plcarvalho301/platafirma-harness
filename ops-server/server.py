@@ -1388,6 +1388,8 @@ _SUGESTAO = {
                  "(o que o acervo tem) · motor rag buscar <partição> \"<pergunta>\" (trechos)",
     "recuperar": "verbo nunca servido: motor rag buscar <partição> \"<pergunta>\"",
     "deploy": "verbo retirado: release promover <família> <rev> · infra up <stack>",
+    # DT #679: ontologia (#4254) roda via infra até a promoção da porta da casa nova (#4073).
+    "ontologia": "infra rodar ontologia -- <ato> ...",
 }
 
 def _proximo_da_sugestao(sug: str | None) -> str | None:

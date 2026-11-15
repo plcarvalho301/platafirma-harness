@@ -129,6 +129,14 @@ def test_recusa_sugestao_so_em_sem_verbo():
     assert "proximo" not in r_falta
     assert "verbos_servidos" in r_falta
 
+    # DT #679: ontologia não é verbo servido, mas tem contorno em infra rodar ontologia
+    _, _, r_ont = s._item_de_lote({"verbo": "ontologia", "ato": "listar", "args": ["shape"]})
+    assert r_ont["recusado"] is True
+    assert r_ont["motivo"] == "sem verbo"
+    assert r_ont["sugestao"] is not None
+    assert "infra rodar ontologia" in r_ont["sugestao"]
+    assert "infra rodar ontologia" in r_ont["falta"]
+
 
 # --------------------------------------------------------------------------- 8. Retornos sem chamada que resolve
 def test_retornos_sem_chamada_que_resolve(tmp_path, monkeypatch):
