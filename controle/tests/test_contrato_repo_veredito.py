@@ -10,7 +10,10 @@ publica de novo e aponta `pr-ver`, nao mais `pr-merge`.
 Nao prova: o hook gravando a marca (os clones de teste nao tem hooksPath), o GitHub de
 verdade aceitando o status, nem o workflow esteira-integra.yml integrando o PR.
 """
+import json
 import os
+import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -224,3 +227,27 @@ def test_pr_abrir_publica_e_aponta_pr_ver_no_lugar_de_pr_merge(tmp_path):
     assert "já feito: PR #7" in de_novo.stdout
     assert "repo pr-ver demo 7" in de_novo.stdout
     assert "repo pr-merge" not in de_novo.stdout
+
+
+def test_workflow_esteira_integra_aceita_pr_de_qualquer_ramo_do_repo_dt_658():
+    """DT-658: PRs de ia/, engenharia/, etc. tambem recebem `esteira/portao` verde e devem integrar."""
+    wf = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "esteira-integra.yml"
+    texto = wf.read_text()
+    assert 'startswith("fabrica/")' not in texto
+    assert "esteira/portao" in texto
+    assert "--match-head-commit" in texto
+    m = re.search(r'--jq\s+"((?:[^"\\]|\\.)+)"', texto)
+    assert m, "filtro jq nao encontrado em esteira-integra.yml"
+    sha = "deadbeef" * 5
+    jq_expr = m.group(1).replace('\\"', '"').replace("$SHA", sha)
+    jq_bin = shutil.which("jq")
+    if jq_bin:
+        prs = [
+            {"number": 1001, "headRefOid": sha, "isDraft": True, "isCrossRepository": False},
+            {"number": 1002, "headRefOid": sha, "isDraft": False, "isCrossRepository": True},
+            {"number": 1003, "headRefOid": "0" * 40, "isDraft": False, "isCrossRepository": False},
+            {"number": 1004, "headRefOid": sha, "isDraft": False, "isCrossRepository": False},
+        ]
+        r = subprocess.run([jq_bin, "-r", jq_expr], input=json.dumps(prs),
+                           capture_output=True, text=True, check=True)
+        assert r.stdout.strip() == "1004"
