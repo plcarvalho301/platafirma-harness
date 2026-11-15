@@ -224,18 +224,21 @@ def _estado(saude="unhealthy", saida="curl: (7) Failed to connect to localhost p
     }
 
 class DockerETarefasFalsos:
-    """Troca `roda` e `shutil.which`: responde o docker conforme a mesa e anota o `tarefas criar`."""
+    """Troca `roda` e `shutil.which`: responde o docker conforme a mesa, lista abertos e anota `tarefas criar`."""
 
-    def __init__(self, monkeypatch, estado=None, log="", ps="", *, docker_ok=True):
+    def __init__(self, monkeypatch, estado=None, log="", ps="", *, docker_ok=True, abertos=None):
         self.chamadas = []
         self.criado = None
         self.estado, self.log, self.ps, self.docker_ok = estado, log, ps, docker_ok
+        self.abertos = list(abertos or [])
         monkeypatch.setattr(sinal, "roda", self.roda)
         monkeypatch.setattr(sinal.shutil, "which", lambda nome: "/falso/tarefas")
 
     def roda(self, cmd, timeout=20):
         self.chamadas.append(list(cmd))
         if cmd[0] == "/falso/tarefas":
+            if len(cmd) > 1 and cmd[1] == "listar":
+                return 0, json.dumps({"itens": self.abertos}), ""
             self.criado = {"titulo": cmd[2], "desc": cmd[cmd.index("--desc") + 1], "cmd": list(cmd)}
             return 0, "item 4242 criado", ""
         if not self.docker_ok:
@@ -315,11 +318,30 @@ def test_sonda_externa_acha_o_conteiner_pelo_host_da_url(monkeypatch):
     assert sinal.contendor_do_servico("mcp") is None
     assert sinal.contendor_do_servico("gpu-host") is None
 
-def test_sonda_do_cloudflared_usa_a_porta_de_metricas_fixada_no_core():
-    # O compose do core fixa `--metrics 0.0.0.0:20243` (spec eixos-do-host R6). Sonda em 20241 acusou
-    # queda falsa com o tunel de pe (#3935).
-    urls = {n: url for n, _posto, url, _exige, _proibido in sinal.POR_SONDA_EXTERNA}
-    assert urls["cloudflared"] == "http://cloudflared:20243/ready"
+def test_sonda_do_cloudflared_usa_a_porta_de_metricas_fixada_no_core(tmp_path, monkeypatch):
+    # DT 378: a porta do cloudflared não pode ficar duplicada no código — lê do `--metrics` do compose do core.
+    assert "20243" not in SINAL_PATH.read_text(encoding="utf-8")
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text(
+        "services:\n  cloudflared:\n    command: tunnel --no-autoupdate --metrics 0.0.0.0:20249 run\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SINAL_CORE_COMPOSE", str(compose))
+    capturado = []
+
+    def roda_falso(cmd, timeout=20):
+        capturado.append(list(cmd))
+        return 0, '{"status":"ok","readyConnections":4}', ""
+
+    monkeypatch.setattr(sinal, "roda", roda_falso)
+    res = sinal.do_cloudflared()
+    assert res["estado"] == "no-ar"
+    assert capturado and capturado[0][-1] == "http://cloudflared:20249/ready"
+
+    compose.write_text("services:\n  cloudflared:\n    command: tunnel run\n", encoding="utf-8")
+    sem_porta = sinal.do_cloudflared()
+    assert sem_porta["estado"] == "sem-sinal"
+    assert "--metrics" in sem_porta["motivo"]
 
 def test_redigir_tira_so_o_segredo():
     for segredo in SEGREDOS:
@@ -510,3 +532,176 @@ def test_coleta_traz_ci_controle(monkeypatch):
     dados = sinal.coleta()
     assert "ci-controle" in dados["servicos"]
     assert dados["servicos"]["ci-controle"]["estado"] == "fora"
+
+
+# --- DT 550: unit oneshot em queda contínua não abre incidente repetido -----------------------------
+
+def test_unit_oneshot_activating_e_degradado_e_nao_zera_incidente(monkeypatch):
+    monkeypatch.setattr(
+        sinal,
+        "roda",
+        lambda cmd, timeout=20: (0, "Result=success\nActiveState=activating\n", ""),
+    )
+    e = sinal.do_systemd_result("casa-site-publicar", "casa-site-publicar.service")
+    assert e["estado"] == "degradado"
+    assert "ActiveState=activating" in e["motivo"]
+
+    agora = datetime(2026, 10, 5, 17, 20, 0, tzinfo=timezone.utc)
+    ant = {
+        "estado": "fora",
+        "fora_desde": "2026-10-05T17:00:00+00:00",
+        "incidente_id": "4198",
+    }
+    sinal.processa_estado_item("casa-site-publicar", e, ant, agora, abre_incidente_fn=lambda _n, _i: "9999")
+    assert e["fora_desde"] == "2026-10-05T17:00:00+00:00"
+    assert e["incidente_id"] == "4198"
+
+
+def test_unit_oneshot_so_limpa_estado_apos_n_leituras_seguidas_no_ar(monkeypatch):
+    monkeypatch.setenv("SINAL_RECUPERACAO_LEITURAS", "3")
+    t0 = datetime(2026, 10, 5, 17, 0, 0, tzinfo=timezone.utc)
+    ant = {"estado": "fora", "fora_desde": t0.isoformat(timespec="seconds"), "incidente_id": "4198"}
+
+    # 1a e 2a leituras `no-ar` ainda preservam fora_desde e incidente_id
+    r1 = {"estado": "no-ar"}
+    sinal.processa_estado_item("casa-site-publicar", r1, ant, t0 + timedelta(minutes=12))
+    assert r1["fora_desde"] == ant["fora_desde"]
+    assert r1["incidente_id"] == "4198"
+    assert r1["recuperacoes_seguidas"] == 1
+
+    r2 = {"estado": "no-ar"}
+    sinal.processa_estado_item("casa-site-publicar", r2, r1, t0 + timedelta(minutes=13))
+    assert r2["fora_desde"] == ant["fora_desde"]
+    assert r2["incidente_id"] == "4198"
+    assert r2["recuperacoes_seguidas"] == 2
+
+    # Se cair de novo antes da 3a leitura, segue com o mesmo incidente e mesmo fora_desde (sem reabrir)
+    chamadas = []
+    caiu = {"estado": "fora", "motivo": "Result=exit-code", "lido_em": (t0 + timedelta(minutes=14)).isoformat(timespec="seconds")}
+    sinal.processa_estado_item(
+        "casa-site-publicar",
+        caiu,
+        r2,
+        t0 + timedelta(minutes=14),
+        abre_incidente_fn=lambda n, i: chamadas.append((n, i)) or "4199",
+    )
+    assert chamadas == []
+    assert caiu["fora_desde"] == ant["fora_desde"]
+    assert caiu["incidente_id"] == "4198"
+
+    # Só 3 leituras consecutivas `no-ar` limpam o estado
+    estado_atual = r2
+    for step in range(3):
+        limpou = {"estado": "no-ar"}
+        sinal.processa_estado_item(
+            "casa-site-publicar",
+            limpou,
+            r2 if step == 2 else ({"estado": "no-ar", "fora_desde": ant["fora_desde"], "incidente_id": "4198", "recuperacoes_seguidas": step} if step > 0 else caiu),
+            t0 + timedelta(minutes=15 + step),
+        )
+        estado_atual = limpou
+    assert "fora_desde" not in estado_atual
+    assert "incidente_id" not in estado_atual
+    assert "recuperacoes_seguidas" not in estado_atual
+
+
+def test_abre_incidente_reaproveita_incidente_aberto_no_rastreador(monkeypatch):
+    f = DockerETarefasFalsos(
+        monkeypatch,
+        abertos=[
+            {"id": 4190, "classe": "incidente", "estado_fase": "terminal", "titulo": "casa-site-publicar: antigo"},
+            {"id": 4198, "classe": "incidente", "estado_fase": "execucao", "titulo": "casa-site-publicar: Result=exit-code"},
+        ],
+    )
+    incidente_id = sinal.abre_incidente(
+        "casa-site-publicar",
+        {"fora_desde": "2026-10-05T17:00:00+00:00", "exercitado": "systemctl", "motivo": "Result=exit-code"},
+    )
+    assert incidente_id == "4198"
+    assert f.criado is None
+
+
+def test_abre_incidente_ignora_terminal_e_abre_novo_incidente(monkeypatch):
+    f = DockerETarefasFalsos(
+        monkeypatch,
+        abertos=[
+            {"id": 4190, "classe": "incidente", "estado_fase": "terminal", "titulo": "casa-site-publicar: antigo"},
+        ],
+    )
+    incidente_id = sinal.abre_incidente(
+        "casa-site-publicar",
+        {"fora_desde": "2026-10-05T17:00:00+00:00", "exercitado": "systemctl", "motivo": "Result=exit-code"},
+    )
+    assert incidente_id == "4242"
+    assert f.criado is not None
+
+
+# --- DT 347: sonda da borda pública do ingress ----------------------------------------------------
+
+def test_borda_ingress_extrai_apenas_hostnames_ativos(tmp_path, monkeypatch):
+    ingress = tmp_path / "cloudflared.yml"
+    ingress.write_text(
+        "ingress:\n"
+        "  - hostname: auth.platafirma.org\n"
+        "    path: ^/admin(/|$).*\n"
+        "    service: http_status:403\n"
+        "  - hostname: auth.platafirma.org\n"
+        "    service: http://keycloak:8080\n"
+        "  - hostname: wiki.platafirma.org\n"
+        "    service: http://oauth2-proxy:4180\n"
+        "  - hostname: mcp.platafirma.org\n"
+        "    service: http_status:404\n"
+        "  - service: http_status:404\n",
+        encoding="utf-8",
+    )
+    hosts, erro = sinal._hostnames_publicos_ingress(ingress)
+    assert erro is None
+    assert hosts == ["auth.platafirma.org", "wiki.platafirma.org"]
+
+
+def test_borda_ingress_marca_fora_em_530_ou_1033_e_no_ar_em_302(tmp_path, monkeypatch):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    import threading
+
+    estado = {"code": 530, "body": "error code: 1033"}
+
+    class Manipulador(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(estado["code"])
+            if estado["code"] == 302:
+                self.send_header("Location", "https://auth.platafirma.org/login")
+            self.end_headers()
+            self.wfile.write(estado["body"].encode("utf-8"))
+
+        def log_message(self, *_args):
+            return
+
+    ingress = tmp_path / "cloudflared.yml"
+    ingress.write_text(
+        "ingress:\n"
+        "  - hostname: wiki.platafirma.org\n"
+        "    service: http://oauth2-proxy:4180\n"
+        "  - service: http_status:404\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SINAL_INGRESS_CONFIG", str(ingress))
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), Manipulador)
+    th = threading.Thread(target=srv.serve_forever, daemon=True)
+    th.start()
+    try:
+        url_fn = lambda _h: f"http://127.0.0.1:{srv.server_port}/"
+        res_530 = sinal.do_borda_ingress(url_para_host=url_fn)
+        assert res_530["estado"] == "fora"
+        assert "530" in res_530["motivo"] and "1033" in res_530["motivo"]
+
+        estado["code"], estado["body"] = 302, ""
+        res_302 = sinal.do_borda_ingress(url_para_host=url_fn)
+        assert res_302["estado"] == "no-ar"
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+    ingress.unlink()
+    sem = sinal.do_borda_ingress()
+    assert sem["estado"] == "sem-sinal"

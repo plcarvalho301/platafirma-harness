@@ -4,11 +4,11 @@
 # `infra medir rede [--json]`, nunca direto. Só lê: não grava série, não reinicia túnel (R1; spec tuneis).
 #
 # O que lê. Por túnel, a métrica do cloudflared (`/ready` e `/metrics`): as conexões mantidas com a borda da
-# Cloudflare e as reconexões. A borda (`wiki`) tem porta fixa, 127.0.0.1:20243, publicada do contêiner. Os túneis
+# Cloudflare e as reconexões. A borda (`wiki`) lê a porta publicada de `--metrics` no compose do core. Os túneis
 # `ops` e `recuperacao` rodam em units do root, que a casa não escreve, e abrem a métrica na faixa padrão por
 # ordem de chegada: um reinício troca as portas. Por isso o ato acha a porta pelo socket em escuta do processo
 # principal da unit (/proc/<pid>/fd contra /proc/<pid>/net/tcp), a cada leitura, e nunca por porta escrita no
-# código (R6). Da porta (túnel `ops`), a latência pelo endereço público e o tempo que ela registrou, pela
+# código (R6, DT 378). Da porta (túnel `ops`), a latência pelo endereço público e o tempo que ela registrou, pela
 # medida do `sinal --porta`, que chama a porta uma vez e nunca abre sessão (R7, R8).
 #
 # Reconexão sai acumulada desde a partida do processo: o ato só lê e não guarda cursor, e quem diferencia entre
@@ -16,7 +16,8 @@
 # nunca zero. Medida não reprova: o número, por alto que seja, sai 0; só a fonte que não respondeu sai 5.
 #
 # ambiente: INFRA_REDE_UNIT_OPS[=ops-tunnel.service] · INFRA_REDE_UNIT_RECUPERACAO[=recuperacao-tunnel.service] ·
-#   INFRA_REDE_BORDA_METRICA[=127.0.0.1:20243] · INFRA_INGRESS_CONTEINER[=platafirma-core-cloudflared-1] ·
+#   INFRA_REDE_BORDA_METRICA[=compose do core] · INFRA_CORE_COMPOSE[=<release>/core/docker-compose.yml] ·
+#   INFRA_INGRESS_CONTEINER[=platafirma-core-cloudflared-1] ·
 #   INFRA_REDE_TIMEOUT[=5] · INFRA_PROC[=/proc] · INFRA_SINAL[=bin/sinal] · INFRA_ACERVO[=bin/acervo]
 # depende: systemctl --user · docker · bin/acervo (registro de stacks) · bin/sinal (--porta) · bin/_infra/eixos.py
 # saída: 0 lido · 2 uso · 5 não consegui olhar (a fonte não respondeu)
@@ -208,6 +209,16 @@ def porta_pela_sonda() -> dict:
     return {"estado_leitura": "nao_consegui_olhar", "causa": "sonda_indisponivel", "fonte": sinal}
 
 
+def _endereco_borda_metrica() -> str:
+    """Endereço host:porta da métrica do túnel da borda (`INFRA_REDE_BORDA_METRICA` ou `--metrics` do core)."""
+    if os.environ.get("INFRA_REDE_BORDA_METRICA"):
+        return os.environ["INFRA_REDE_BORDA_METRICA"]
+    porta, info = eixos.topologia.porta_metricas_cloudflared(env_var="INFRA_CORE_COMPOSE")
+    if porta is None:
+        raise eixos.ErroDeLeitura("porta_nao_resolvida", info)
+    return f"127.0.0.1:{porta}"
+
+
 def _ler_os_tuneis(proc: Path) -> tuple[list[tuple[str, str | None, dict]], list[dict]]:
     """(lidos, falhos): cada túnel lido como (nome, unit ou None, leitura); cada um que não leu, a linha dele."""
     unidades = (("ops", os.environ.get("INFRA_REDE_UNIT_OPS", "ops-tunnel.service")),
@@ -219,7 +230,7 @@ def _ler_os_tuneis(proc: Path) -> tuple[list[tuple[str, str | None, dict]], list
         except eixos.ErroDeLeitura as e:
             falhos.append({"tunel": nome, "estado_leitura": "nao_consegui_olhar", "causa": e.causa, "fonte": e.fonte})
     try:
-        lidos.append(("wiki", None, ler_cloudflared(os.environ.get("INFRA_REDE_BORDA_METRICA", "127.0.0.1:20243"))))
+        lidos.append(("wiki", None, ler_cloudflared(_endereco_borda_metrica())))
     except eixos.ErroDeLeitura as e:
         falhos.append({"tunel": "wiki", "estado_leitura": "nao_consegui_olhar", "causa": e.causa, "fonte": e.fonte})
     return lidos, falhos

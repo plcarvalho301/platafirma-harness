@@ -346,6 +346,22 @@ def test_argumento_desconhecido_sai_2(capsys):
     assert "não conhece --ram" in capsys.readouterr().err
 
 
+def test_porta_da_borda_nao_esta_escrita_no_codigo_e_vem_do_compose_do_core(tmp_path, monkeypatch):
+    assert "20243" not in MEDIR.read_text(encoding="utf-8")
+    monkeypatch.delenv("INFRA_REDE_BORDA_METRICA", raising=False)
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text(
+        "services:\n  cloudflared:\n    command: tunnel --no-autoupdate --metrics 0.0.0.0:29943 run\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("INFRA_CORE_COMPOSE", str(compose))
+    assert medir_rede._endereco_borda_metrica() == "127.0.0.1:29943"
+    compose.unlink()
+    with pytest.raises(eixos.ErroDeLeitura) as exc:
+        medir_rede._endereco_borda_metrica()
+    assert exc.value.causa == "porta_nao_resolvida"
+
+
 def test_pela_linha_de_comando_o_json_sai_valido_e_o_codigo_acompanha(mundo):
     p = subprocess.run([sys.executable, str(MEDIR), "--json"], capture_output=True, text=True, timeout=60)
     assert p.returncode == 0, p.stderr
