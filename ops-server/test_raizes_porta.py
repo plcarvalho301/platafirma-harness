@@ -542,3 +542,123 @@ def test_write_file_docstring_lista_tipos_e_nomes():
     nomes_doc = [n for n in nomes_brutos if n != "Dockerfile.<sufixo>"]
     assert len(nomes_doc) == len(s.NOMES_TEXTO), f"nomes duplicados na docstring: {nomes_doc}"
     assert set(nomes_doc) == s.NOMES_TEXTO
+
+
+def test_write_file_em_massa_caminhos_glob_e_trecho(bancada, monkeypatch):
+    """DT-466: write_file com caminhos/glob e trecho edita varios arquivos num giro com auditoria."""
+    shapes = bancada / "wt" / "platafirma-core" / "fabrica" / "shapes"
+    shapes.mkdir(parents=True)
+    for i in range(4):
+        (shapes / f"s{i}.md").write_text(f"# Shape {i}\nlinha_antiga: sim\n", encoding="utf-8")
+    (shapes / "sem.md").write_text("# Sem a linha\n", encoding="utf-8")
+
+    audits = []
+    monkeypatch.setattr(s, "_autoriza", lambda *a, **kw: None)
+    monkeypatch.setattr(s, "_audit", lambda **kw: audits.append(kw))
+
+    r = s.write_file(
+        caminhos=["wt/platafirma-core/fabrica/shapes/*.md"],
+        trecho={"antes": "linha_antiga: sim\n", "depois": ""},
+    )
+    assert r["ok"] is False
+    assert r["total"] == 5
+    assert r["aplicados"] == 4
+    assert r["recusados"] == 1
+    assert r["lote_id"]
+    for i in range(4):
+        assert (shapes / f"s{i}.md").read_text("utf-8") == f"# Shape {i}\n"
+    escritas = [a for a in audits if a.get("evento") == "escrita"]
+    recusas = [a for a in audits if a.get("evento") == "escrita_recusada"]
+    assert len(escritas) == 4
+    assert len(recusas) == 1
+    assert all(e["sha256_antes"] and e["sha256"] and e["lote_id"] == r["lote_id"] for e in escritas)
+
+
+def test_write_file_em_massa_dicts_e_trecho_todos(bancada, sem_pep):
+    """DT-466: caminhos com dicts heterogeneos e trecho.todos=True."""
+    base = bancada / "wt" / "platafirma-core" / "fabrica"
+    (base / "a.md").write_text("x=1\nx=1\n", encoding="utf-8")
+    r = s.write_file(
+        caminhos=[
+            {"path": "wt/platafirma-core/fabrica/a.md", "trecho": {"antes": "x=1", "depois": "x=2", "todos": True}},
+            {"path": "wt/platafirma-core/fabrica/b.md", "content": "novo\n"},
+        ]
+    )
+    assert r["ok"] is True, r
+    assert r["aplicados"] == 2
+    assert (base / "a.md").read_text("utf-8") == "x=2\nx=2\n"
+    assert (base / "b.md").read_text("utf-8") == "novo\n"
+
+
+def test_write_file_em_massa_glob_invalido_ou_vazio(bancada, sem_pep):
+    """DT-466: glob com '..' ou sem correspondencia recusa com motivo claro."""
+    r_vazio = s.write_file(caminhos=["wt/platafirma-core/fabrica/nao-existe/*.md"], content="x")
+    assert r_vazio["ok"] is False and r_vazio["recusados"] == 1
+    assert "glob sem correspondencia" in r_vazio["resultados"][0]["motivo"]
+
+    r_dot = s.write_file(caminhos=["wt/platafirma-core/fabrica/../*.md"], content="x")
+    assert r_dot["ok"] is False and r_dot["recusados"] == 1
+    assert "glob invalido" in r_dot["resultados"][0]["motivo"]
+
+
+def test_write_file_patch_unified_diff_multi_arquivo(bancada, monkeypatch):
+    """DT-466: write_file(patch=...) aplica unified diff multi-arquivo na bancada com auditoria."""
+    base = bancada / "wt" / "platafirma-core" / "fabrica"
+    (base / "f1.md").write_text("um\ndois\ntres\n", encoding="utf-8")
+    (base / "f2.md").write_text("alfa\nbeta\n", encoding="utf-8")
+
+    audits = []
+    monkeypatch.setattr(s, "_autoriza", lambda *a, **kw: None)
+    monkeypatch.setattr(s, "_audit", lambda **kw: audits.append(kw))
+
+    diff = (
+        "--- a/f1.md\n"
+        "+++ b/f1.md\n"
+        "@@ -1,3 +1,2 @@\n"
+        " um\n"
+        "-dois\n"
+        " tres\n"
+        "--- a/f2.md\n"
+        "+++ b/f2.md\n"
+        "@@ -1,2 +1,3 @@\n"
+        " alfa\n"
+        "+meio\n"
+        " beta\n"
+        "--- /dev/null\n"
+        "+++ b/f3.md\n"
+        "@@ -0,0 +1,2 @@\n"
+        "+linha 1\n"
+        "+linha 2\n"
+    )
+    r = s.write_file(path="wt/platafirma-core/fabrica", patch=diff)
+    assert r["ok"] is True, r
+    assert r["aplicados"] == 3
+    assert (base / "f1.md").read_text("utf-8") == "um\ntres\n"
+    assert (base / "f2.md").read_text("utf-8") == "alfa\nmeio\nbeta\n"
+    assert (base / "f3.md").read_text("utf-8") == "linha 1\nlinha 2\n"
+    escritas = [a for a in audits if a.get("evento") == "escrita"]
+    assert len(escritas) == 3
+    assert all(e["sha256"] and e["lote_id"] == r["lote_id"] for e in escritas)
+
+
+def test_write_file_patch_recusa_delecao_e_hunk_invalido(bancada, sem_pep):
+    """DT-466: patch recusa delecao (/dev/null), .git e hunk que nao casa."""
+    base = bancada / "wt" / "platafirma-core" / "fabrica"
+    (base / "f1.md").write_text("um\n", encoding="utf-8")
+    diff = (
+        "--- a/f1.md\n"
+        "+++ /dev/null\n"
+        "@@ -1 +0,0 @@\n"
+        "-um\n"
+        "--- a/f1.md\n"
+        "+++ b/f1.md\n"
+        "@@ -1 +1 @@\n"
+        "-nao_existe\n"
+        "+outro\n"
+    )
+    r = s.write_file(path="wt/platafirma-core/fabrica", patch=diff)
+    assert r["ok"] is False
+    assert r["recusados"] == 2
+    assert "remocao" in r["resultados"][0]["motivo"]
+    assert "nao casa" in r["resultados"][1]["motivo"]
+    assert (base / "f1.md").read_text("utf-8") == "um\n"
