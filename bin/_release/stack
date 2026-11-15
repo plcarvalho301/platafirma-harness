@@ -125,9 +125,13 @@ esac
 case "$STACK" in
   */*|.*|*..*) echo "erro: '$STACK' e slug de stack, nao caminho" >&2; exit 4 ;;
 esac
-if ! jq -e --arg s "$STACK" '.stacks | has($s)' <<<"$TOPO_JSON" >/dev/null || [ -z "$(lista "$STACK" compose)" ]; then
-  echo "erro: stack \"$STACK\" nao esta no registro (ou nao declara compose) — nao invento caminho de compose." >&2
+if ! jq -e --arg s "$STACK" '.stacks | has($s)' <<<"$TOPO_JSON" >/dev/null; then
+  echo "erro: stack não registrada em stacks.yaml: '$STACK' (stack \"$STACK\" nao esta no registro) — nao invento caminho de compose." >&2
   echo "      registradas: $(stacks | tr '\n' ' ')" >&2
+  exit 2
+fi
+if [ -z "$(lista "$STACK" compose)" ]; then
+  echo "erro: stack '$STACK' registrada em stacks.yaml, mas sem compose em $PLATAFIRMA_INSTANCIA/stacks/$STACK (stack \"$STACK\" registrada, sem compose) — nao invento caminho de compose." >&2
   exit 2
 fi
 
@@ -199,7 +203,7 @@ montar_compose() {  # $1=arvore da release
       echo "      config da instancia vai na sobreposicao: $OVERRIDE" >&2
       exit 3; }
     c="$ARVORE/$rel"
-    [ -r "$c" ] || { echo "erro: compose declarado e ilegivel: $c" >&2; exit 1; }
+    [ -r "$c" ] || { echo "erro: stack '$STACK' registrada em stacks.yaml, mas sem compose em $c (compose declarado e ilegivel: $c)" >&2; exit 1; }
     [ -n "$COMPOSE" ] || COMPOSE="$c"   # o primeiro manda no diretorio de projeto e no que se imprime
     COMPOSE_ARGS+=(-f "$c")
   done < <(lista "$STACK" compose)
