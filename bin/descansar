@@ -411,13 +411,40 @@ def _idade_dias_msgid(msgid):
     return (time.time() - ts) / 86400
 
 
-def roda_fila_cabecalho(rotulo, cmd, timeout=90):
-    """Cartas penduradas so em CABECALHO: uma linha por carta
-    (`quando · estado · de · tipo · assunto`), com aviso na que passa de
-    AVISO_VENCE_DIAS (o trim a corta aos 7). Corpo inteiro estourava o teto do
-    retorno e cortava a cauda onde mora o roteiro (medido 26/09/2026). Corpo sob
-    demanda: `fila ler <eu> --tudo <remetente>`."""
+def _imprime_grupo_cartas(titulo, grupo, rodape_fn):
+    """Imprime um grupo de cartas (novas ou penduradas) em cabecalho, separado (#4289)."""
+    print(f"\n  [{titulo}]")
+    if not grupo:
+        print("  (nenhuma)")
+        return
+    vencendo = 0
+    for c in grupo:
+        quando = c["id"][:13]
+        dias = _idade_dias_msgid(c["id"])
+        aviso = ""
+        if dias is not None and dias >= AVISO_VENCE_DIAS:
+            vencendo += 1
+            aviso = f"  ⚠ VENCE — {dias:.0f} d; o trim corta aos 7"
+        estado = c.get("estado") or "?"
+        print(f"  {quando} · {c['id']} · {estado} · {c.get('de', '?')} · {c.get('tipo', '?')}"
+              f" · {c.get('assunto', '')[:100]}{aviso}")
+    print(rodape_fn(len(grupo), vencendo))
+
+
+def roda_fila_cabecalho(rotulo, cmd, timeout=90, status_cmd=None):
+    """Cartas so em CABECALHO, mostrando `fila status` e separando novas (`nao lida`)
+    das ja lidas (`pendurada`) (#4289). Corpo inteiro estourava o teto do retorno e
+    cortava a cauda onde mora o roteiro (medido 26/09/2026)."""
     print(f"\n-- {rotulo}")
+    if status_cmd:
+        try:
+            ps = subprocess.run(["bash", "-lc", status_cmd], capture_output=True, text=True,
+                                timeout=timeout, cwd=os.path.expanduser("~"))
+            st = (ps.stdout or ps.stderr or "").strip()
+            if st:
+                print(f"  status: {st.splitlines()[0]}")
+        except subprocess.SubprocessError as e:
+            print(f"  status: NAO MEDIDO — {type(e).__name__}: {e}")
     try:
         p = subprocess.run(["bash", "-lc", cmd], capture_output=True, text=True,
                            timeout=timeout, cwd=os.path.expanduser("~"))
@@ -440,21 +467,24 @@ def roda_fila_cabecalho(rotulo, cmd, timeout=90):
         saida = (p.stdout or p.stderr or "").strip()
         print("  " + (saida.splitlines()[0] if saida else "(sem carta)"))
         return
-    vencendo = 0
-    for c in cartas:
-        quando = c["id"][:13]
-        dias = _idade_dias_msgid(c["id"])
-        aviso = ""
-        if dias is not None and dias >= AVISO_VENCE_DIAS:
-            vencendo += 1
-            aviso = f"  ⚠ VENCE — {dias:.0f} d; o trim corta aos 7"
-        estado = c.get("estado") or "?"
-        print(f"  {quando} · {c['id']} · {estado} · {c.get('de', '?')} · {c.get('tipo', '?')}"
-              f" · {c.get('assunto', '')[:100]}{aviso}")
-    print(f"  {len(cartas)} carta(s) pendurada(s) ou nao lida(s)"
-          + (f", {vencendo} perto de vencer" if vencendo else "")
-          + "; corpo: `fila ler <eu> --tudo <remetente>` ou `fila ler --id <msgid>`; "
-            "ack: `fila tratar <msgid>...` (ou responder com `--responde`)")
+    novas = [c for c in cartas if c.get("estado") == "nao lida"]
+    penduradas = [c for c in cartas if c.get("estado") == "pendurada"]
+    outras = [c for c in cartas if c.get("estado") not in ("nao lida", "pendurada")]
+    _imprime_grupo_cartas(
+        "novas — esperando leitura", novas,
+        lambda n, v: (f"  {n} nova(s) (nao lida(s))"
+                      + (f", {v} perto de vencer" if v else "")
+                      + "; corpo: `fila ler <eu> --tudo <remetente>` ou `fila ler --id <msgid>`; "
+                        "ack: `fila tratar <msgid>...` (ou responder com `--responde`)"))
+    _imprime_grupo_cartas(
+        "penduradas — ja lidas, aguardando `fila tratar` (nao esperam leitura)", penduradas,
+        lambda n, v: (f"  {n} pendurada(s) (ja lida(s), sem `fila tratar`)"
+                      + (f", {v} perto de vencer" if v else "")
+                      + "; se ja resolvida/superada: `fila tratar <msgid>...`"))
+    if outras:
+        _imprime_grupo_cartas(
+            "outras", outras,
+            lambda n, v: f"  {n} carta(s)" + (f", {v} perto de vencer" if v else ""))
 
 
 def _marca_encerrada_duravel(sid):
@@ -607,8 +637,9 @@ def ato_fita(args):
         print(_l)
 
     if not args.so_memoria:
-        roda_fila_cabecalho(f"fila — cartas penduradas e nao lidas ({curto}), so cabecalho;"
-                            " nao entrega nem confirma", f"fila ler {curto} --penduradas")
+        roda_fila_cabecalho(f"fila — caixa de {curto} (so cabecalho; nao entrega nem confirma)",
+                            f"fila ler {curto} --penduradas",
+                            status_cmd=f"fila status {curto}")
 
     print("\n== entidade-sessao (arq:0101 §1) ==")
     for _l in estado_sessao(os.environ.get("PF_SESSAO", "")):
@@ -621,14 +652,18 @@ def ato_fita(args):
           "   priorizado nao e item: ele mora no rastreador. Sem isso, diga \"mesa sem\n"
           "   item\". Item listado acima que a fita fez sai por `mesa fez <n>`.\n"
           "   Premissa a reconferir e beco descartado vao ao caderno, no passo 2a.\n"
-          "   As cartas penduradas listadas acima se tratam AQUI, no descanso, ou\n"
-          "   ficam penduradas na caixa: a triagem delas nunca vira item de mesa.\n"
+          "   Apenas as cartas NOVAS (nao lidas) listadas acima se tratam AQUI,\n"
+          "   no descanso: a triagem delas nunca vira item de mesa\n"
           "   (so cabecalho; corpo por `fila ler <eu> --tudo <remetente>`).\n"
-          "   Separe em tres: (i) DECISAO DO DONO — vai na tela dele no relato\n"
-          "   do descanso, uma linha cada, com remetente e o que se decide; fica\n"
-          "   pendurada ate a decisao dele virar ato; (ii) ATO DA CADEIRA pendente\n"
-          "   — faca agora, ou card se nao cabe na fita, e depois `fila tratar\n"
-          "   <msgid>`; (iii) ja respondida ou superada — `fila tratar <msgid>`.\n"
+          "   Cartas PENDURADAS ja foram lidas em algum momento e apenas aguardam\n"
+          "   `fila tratar <msgid>` — nao as trate como carta nova nem como\n"
+          "   pendencia sem resposta (so de `fila tratar` se ja resolvida/superada).\n"
+          "   Para as novas, separe em tres: (i) DECISAO DO DONO — vai na tela dele\n"
+          "   no relato do descanso, uma linha cada, com remetente e o que se\n"
+          "   decide; fica pendurada ate a decisao dele virar ato; (ii) ATO DA\n"
+          "   CADEIRA pendente — faca agora, ou card se nao cabe na fita, e depois\n"
+          "   `fila tratar <msgid>`; (iii) ja respondida ou superada —\n"
+          "   `fila tratar <msgid>`.\n"
           "   A marcada VENCE sai da caixa aos 7 dias,\n"
           "   tratada ou nao: o que tem de durar vira card ou mesa antes.\n"
           "   Carta parada que ninguem apresenta ao dono e decisao que nao existe.\n"
