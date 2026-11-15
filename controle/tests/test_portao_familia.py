@@ -393,6 +393,7 @@ def test_raio_declarado_nas_listas_reais_casa_arquivo_que_existe():
             if not linha.strip() or linha.lstrip().startswith("#"):
                 continue
             _, _, globs = linha.partition("|")
+            globs, _, _ = globs.partition("|")   # ignora sufixo opcional `| degrau: ...`
             if globs.split()[:1] in (["regressivo"], ["preparo"]):   # #3535, arq:0128: marca, nao glob
                 continue
             mortos += [f"{lista.relative_to(REPO_ROOT)}: {g}" for g in globs.split()
