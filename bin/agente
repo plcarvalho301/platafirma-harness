@@ -625,6 +625,17 @@ def _bin() -> Path:
     return Path(os.environ.get("PF_BIN") or _AQUI)
 
 
+def _chapeus_da_cadeira(cadeira: str) -> list[str]:
+    """Lista os slugs de chapéu da cadeira na abertura publicada ou na árvore do harness."""
+    morada = os.environ.get("PF_ABERTURA_DIR") or str(raizes.instancia() / "var" / "abertura-publicada")
+    base = Path(morada) / "current" / "abertura" / cadeira
+    if not base.is_dir():
+        base = _AQUI.parent / "abertura" / cadeira
+    if not base.is_dir():
+        return []
+    return sorted(p.name for p in base.iterdir() if p.is_dir() and (p / "chapeu.md").is_file())
+
+
 def carrega_config_federacao() -> dict:
     sobrescreve = os.environ.get("PF_FEDERACAO_CONFIG")
     if sobrescreve:
@@ -1251,7 +1262,9 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
             return _erro(f"{slug} tem dono {{cadeira}}: passe --cadeira <slug>", 2)
         cadeira, chapeu = cadeira_arg, chapeu_arg or dono.get("chapeu")
         if not chapeu:
-            return _erro(f"{slug} tem dono {{cadeira}} sem chapéu fixo: passe --chapeu <slug>", 2)
+            validos = _chapeus_da_cadeira(cadeira)
+            sufixo = f" — válidos: {', '.join(validos)}" if validos else ""
+            return _erro(f"{slug} tem dono {{cadeira}} sem chapéu fixo: passe --chapeu <slug>{sufixo}", 2)
     else:
         if cadeira_arg:
             return _erro(f"--cadeira só vale no agente cujo dono é {{cadeira}}; o de {slug} é {dono['cadeira']}", 2)
