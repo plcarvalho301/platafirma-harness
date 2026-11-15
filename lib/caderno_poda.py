@@ -32,6 +32,9 @@ RE_CARD_CITADO = re.compile(r"(?<![\w/])#(\d{3,5})\b")
 RE_VERBO_CITADO = re.compile(r"`([a-z][a-z0-9-]*) [a-z][^`]*`")
 RE_CHAPEU_CITADO = re.compile(r"\bchapeu:([a-z0-9-]+)/([a-z0-9-]+)")
 RE_ESTADO_CARD = re.compile(r"· ([^·(]+?) \((\w+)\)")
+VIVOS_TERMINAIS = {"entregue", "englobada", "resolvido"}
+MORTOS_CARD = {"cancelada", "cancelado", "recusada", "recusado", "descartada", "descartado",
+               "encerrada", "encerrado"}
 # O que foi ao debito tecnico ja tem morada duravel: a linha do balde (o dono, 13/10/2026, #3501:
 # «Se foi pra DT tem que tirar do caderno»).
 RE_DEBITO = re.compile(r"#2856\W{0,3}linha\s+(\d+)", re.IGNORECASE)
@@ -90,7 +93,8 @@ def duplicata_do_canone(texto):
 
 
 def estado_card(n, cache):
-    """('vivo'|'morto'|None, rotulo). Morto: apagado, ou terminal sem herdeiro (englobada tem)."""
+    """('vivo'|'morto'|None, rotulo). Morto: apagado, ou terminal sem produto nem herdeiro
+    (cancelado, recusado, descartado, encerrado). Card entregue ou englobado continua vivo."""
     if n in cache:
         return cache[n]
     rc, out = _verbo("tarefas", "ler", n)
@@ -103,9 +107,10 @@ def estado_card(n, cache):
         if not m:
             r = (None, "")
         else:
-            rotulo, fase = m.group(1).strip(), m.group(2)
-            r = (("morto" if fase == "terminal" and rotulo.lower() != "englobada" else "vivo"),
-                 rotulo.lower())
+            rotulo = m.group(1).split("[", 1)[0].strip().lower()
+            fase = m.group(2)
+            morto = rotulo in MORTOS_CARD or (fase == "terminal" and rotulo not in VIVOS_TERMINAIS)
+            r = ("morto" if morto else "vivo", rotulo)
     cache[n] = r
     return r
 

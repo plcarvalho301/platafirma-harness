@@ -29,8 +29,8 @@
 # ato. Dois substratos duraveis, um eixo — o chapeu (slot) e o mesmo nos dois:
 #
 #   mesa    (item)    tabela `sessao.mesa_item`, instancia harness-sessao. Item com
-#                     ATO e ALVO, que esvazia por execucao do ato. O que a fita de
-#                     hoje precisa que a fita de amanha FACA.
+#                     ATO e ALVO, que esvazia por execucao do ato (`mesa item <n>` ou
+#                     `mesa corrigir <n>` corrige ato/alvo sem dar como feito).
 #   caderno (duravel) tabelas `sessao.caderno_*`, mesma instancia (arq:0120, #3218,
 #                     migracao 0097). Uma linha por entrada, com categoria e o campo
 #                     dela, historico por evento, saida por estado; nada se apaga e
@@ -399,15 +399,88 @@ def ato_ver(args):
     return 0
 
 
+def _num_item_arg(v):
+    """`2` ou `#2` -> 2 (int), ou None se nao for numero de item."""
+    m = re.fullmatch(r"#?(\d+)", str(v or "").strip())
+    return int(m.group(1)) if m else None
+
+
+def ato_corrigir_item(args, num=None):
+    """Corrige o ato e/ou o alvo de um item ja plantado (#N) sem marca-lo como feito (DT 425)."""
+    bruto = num if num is not None else getattr(args, "n", None)
+    if bruto is None:
+        bruto = getattr(args, "corrigir", None)
+    n = _num_item_arg(bruto)
+    if not n:
+        sys.stderr.write(
+            f"erro: numero de item invalido {bruto!r} — use o #N exibido em `mesa ver`\n"
+            "  uso: mesa item <n> [--ato <o-que-fazer>] [--alvo <sobre-o-que>]\n"
+        )
+        return 2
+    novo_ato = (getattr(args, "ato", None) or "").strip() or None
+    novo_alvo = (getattr(args, "alvo", None) or "").strip() or None
+    texto = "" if sys.stdin.isatty() else sys.stdin.read().strip()
+    if not novo_ato and not novo_alvo:
+        sys.stderr.write(
+            "erro: informe --ato e/ou --alvo para corrigir o item\n"
+            "  uso: mesa item <n> [--ato <o-que-fazer>] [--alvo <sobre-o-que>]\n"
+        )
+        return 2
+    con = pg()
+    if con is None:
+        return 3
+    with con, con.cursor() as cur:
+        cur.execute(
+            "SELECT id, ciclo FROM sessao.mesa_item "
+            "WHERE cadeira = %s AND num = %s ORDER BY ciclo DESC",
+            (canonica(), n),
+        )
+        vivos = cur.fetchall()
+        if not vivos:
+            print(f"mesa: item #{n} nao existe nesta cadeira — nada a corrigir",
+                  file=sys.stderr)
+            return 3
+        if len(vivos) > 1 and vivos[0][1] == vivos[1][1]:
+            print(f"mesa: #{n} ambiguo (mais de um no mesmo ciclo) — caso "
+                  f"impossivel sob o indice unico; investigar", file=sys.stderr)
+            return 3
+        alvo_id = vivos[0][0]
+        campos, params = [], []
+        if novo_ato:
+            campos.append("ato = %s")
+            params.append(novo_ato)
+        if novo_alvo:
+            campos.append("alvo = %s")
+            params.append(novo_alvo)
+        if texto:
+            campos.append("texto = %s")
+            params.append(texto)
+        params.append(alvo_id)
+        cur.execute(
+            f"UPDATE sessao.mesa_item SET {', '.join(campos)} "
+            "WHERE id = %s RETURNING chapeu, ato, alvo",
+            tuple(params),
+        )
+        linha = cur.fetchone()
+    print(f"mesa: item #{n} corrigido em [{linha[0]}] — {linha[1]} → {linha[2]}")
+    return 0
+
+
 def ato_item(args):
-    """Planta um item. Sem ato e sem alvo nao entra: a regua de admissao da mesa e
+    """Planta um item, ou corrige o ato/alvo de um item existente (#N) sem marca-lo como feito.
+    Sem ato e sem alvo nao entra: a regua de admissao da mesa e
     'se eu nao fizer nada, isso continua do jeito que esta?' — sem ato, nao continua
     nada, e o lugar do texto e outro (caderno, card)."""
+    if getattr(args, "corrigir", None) is not None:
+        return ato_corrigir_item(args, args.corrigir)
+    if args.chapeu is not None and _num_item_arg(args.chapeu) is not None:
+        return ato_corrigir_item(args, args.chapeu)
     chapeu = args.chapeu or os.environ.get("PF_CHAPEU")
     if not chapeu:
         sys.stderr.write(
             "erro: chapeu obrigatorio (sem chapeu na sessao: passe <chapeu> ou defina PF_CHAPEU)\n"
             "  uso: mesa item [<chapeu>] --ato <o-que-fazer> --alvo <sobre-o-que>\n"
+            "       mesa item <n> [--ato <o-que-fazer>] [--alvo <sobre-o-que>]\n"
         )
         return 2
     if not args.ato or not args.alvo:
@@ -415,6 +488,7 @@ def ato_item(args):
             "erro: --ato e --alvo sao obrigatorios\n"
             "  exemplo: mesa item --ato conferir --alvo card:3065\n"
             "  uso: mesa item [<chapeu>] --ato <o-que-fazer> --alvo <sobre-o-que>\n"
+            "       mesa item <n> [--ato <o-que-fazer>] [--alvo <sobre-o-que>]\n"
         )
         return 2
     slot = valida_slot(chapeu)
@@ -496,6 +570,10 @@ def ato_legado(args):
         return _legado_caderno(args)
     if getattr(args, "capturar", False):
         sys.stderr.write("erro: --capturar e do legado de caderno: `mesa legado --caderno --capturar`\n")
+        return 2
+    if getattr(args, "anexar", None) or getattr(args, "origem", None):
+        sys.stderr.write("erro: --anexar e --origem sao do legado de caderno: "
+                         "`mesa legado --caderno --anexar <cadeira>/<chapeu> --origem <ref>`\n")
         return 2
     con = pg()
     if con is None:
@@ -1601,8 +1679,51 @@ def _captura_cadernos():
     return 0
 
 
+def _anexa_caderno(args):
+    """Anexa ao legado de um chapeu (<cadeira>/<chapeu>) o texto em stdin com ponteiro de origem
+    (chave_origem), entrando a triar como o capturado (DT 105, arq:0120 §11)."""
+    if getattr(args, "capturar", False) or getattr(args, "triado", None):
+        sys.stderr.write("erro: --anexar não combina com --capturar nem --triado\n")
+        return 2
+    alvo = (getattr(args, "anexar", None) or "").strip()
+    origem = (getattr(args, "origem", None) or "").strip()
+    if not alvo or not origem:
+        sys.stderr.write("erro: --anexar pede <cadeira>/<chapeu> e --origem <ref> (texto em stdin)\n"
+                         "  uso: mesa legado --caderno --anexar <cadeira>/<chapeu> --origem <ref>\n")
+        return 2
+    m = CHAPEU_PONTA_RE.match(alvo)
+    if not m:
+        sys.stderr.write(f"erro: --anexar espera <cadeira>/<chapeu>, veio {alvo!r}\n"
+                         "  uso: mesa legado --caderno --anexar <cadeira>/<chapeu> --origem <ref>\n")
+        return 2
+    cad, ch = m.group(1), m.group(2)
+    texto = "" if sys.stdin.isatty() else sys.stdin.read()
+    if not texto.strip():
+        sys.stderr.write("erro: mesa legado --caderno --anexar: corpo vazio em stdin\n"
+                         "  uso: mesa legado --caderno --anexar <cadeira>/<chapeu> --origem <ref>\n")
+        return 2
+    b = texto.encode("utf-8")
+    sha = hashlib.sha256(b).hexdigest()
+    con = pg()
+    if con is None:
+        return 3
+    with con, con.cursor() as cur:
+        cur.execute(
+            "INSERT INTO sessao.caderno_legado AS l (chave_origem, cadeira, chapeu, texto, bytes, sha256) "
+            "VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (chave_origem) DO UPDATE SET "
+            "cadeira = EXCLUDED.cadeira, chapeu = EXCLUDED.chapeu, "
+            "texto = EXCLUDED.texto, bytes = EXCLUDED.bytes, sha256 = EXCLUDED.sha256, "
+            "capturado_em = now() WHERE l.triado_em IS NULL",
+            (origem, cad, ch, texto, len(b), sha),
+        )
+    print(f"caderno legado: anexado {origem} em [{cad}/{ch}] ({len(b)} B, a triar)")
+    return 0
+
+
 def _legado_caderno(args):
     """O legado de caderno da cadeira, e a triagem dele (arq:0120 §11)."""
+    if getattr(args, "anexar", None) is not None or getattr(args, "origem", None) is not None:
+        return _anexa_caderno(args)
     if args.capturar:
         return _captura_cadernos()
     con = pg()
@@ -2219,11 +2340,20 @@ def main():
     v.add_argument("slot", nargs="?")
     v.set_defaults(func=ato_ver)
 
-    i = sub.add_parser("item", help="planta um item de mesa: ato e alvo obrigatorios")
-    i.add_argument("chapeu", nargs="?", default=None, help="slug do chapeu (default: PF_CHAPEU)")
+    i = sub.add_parser("item", help="planta um item de mesa (ato e alvo obrigatorios) ou corrige #N existente")
+    i.add_argument("chapeu", nargs="?", default=None,
+                   help="slug do chapeu (default: PF_CHAPEU), ou #N/N de item existente para corrigir")
+    i.add_argument("--corrigir", metavar="N", default=None,
+                   help="corrige o ato e/ou o alvo do item #N sem marca-lo como feito")
     i.add_argument("--ato", default=None, help="o que a proxima fita tem de FAZER")
     i.add_argument("--alvo", default=None, help="sobre o que: card, arquivo, servico, cadeira")
     i.set_defaults(func=ato_item)
+
+    cr = sub.add_parser("corrigir", help="corrige o ato e/ou o alvo de um item (#N) sem marca-lo como feito")
+    cr.add_argument("n", help="o numero exibido em `mesa ver` (#N ou N)")
+    cr.add_argument("--ato", default=None, help="novo ato (opcional se --alvo vier)")
+    cr.add_argument("--alvo", default=None, help="novo alvo (opcional se --ato vier)")
+    cr.set_defaults(func=ato_corrigir_item)
 
     e = sub.add_parser("escrever", help="escreve UMA entrada do caderno do chapeu, com a categoria "
                                         "e o campo dela (arq:0120)")
@@ -2325,6 +2455,10 @@ def main():
                    help="o legado de caderno (abertura/<cadeira>/<chapeu>/caderno.md), nao o da mesa")
     g.add_argument("--capturar", action="store_true",
                    help="com --caderno: captura os caderno.md da abertura publicada; idempotente")
+    g.add_argument("--anexar", metavar="CADEIRA/CHAPEU", default=None,
+                   help="com --caderno: anexa texto em stdin ao legado a triar de <cadeira>/<chapeu>; pede --origem")
+    g.add_argument("--origem", metavar="REF", default=None,
+                   help="com --anexar: ponteiro de origem (chave_origem em sessao.caderno_legado)")
     g.add_argument("--corpo", action="store_true", help="imprime o texto, nao so o cabecalho")
     g.add_argument("--triado", metavar="CHAPEU", help="marca o chapeu como triado")
     g.set_defaults(func=ato_legado)
