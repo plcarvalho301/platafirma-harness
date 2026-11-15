@@ -59,3 +59,30 @@ def test_json_mascara_o_valor_e_guarda_a_virgula():
 def test_linha_sem_segredo_e_chave_sem_valor_passam_intactas():
     entrada = "services:\n  rag:\n    secrets:\n      - rag_api_token\n    image: rag:1\n"
     assert _mascara(entrada) == entrada
+
+
+def test_mascara_segredos_em_portugues_chave_senha_segredo():
+    yaml_mapa = _mascara(
+        "    environment:\n"
+        "      OLARIA_CHAVE: segredo-olaria\n"
+        "      DB_SENHA: minha-senha\n"
+        "      APP_SEGREDO: meu-segredo\n"
+        "      OLARIA_URL: http://127.0.0.1:8765\n"
+    )
+    assert "OLARIA_CHAVE: ***\n" in yaml_mapa
+    assert "DB_SENHA: ***\n" in yaml_mapa
+    assert "APP_SEGREDO: ***\n" in yaml_mapa
+    assert "OLARIA_URL: http://127.0.0.1:8765\n" in yaml_mapa
+    for valor in ("segredo-olaria", "minha-senha", "meu-segredo"):
+        assert valor not in yaml_mapa
+
+    yaml_lista = _mascara("      - OLARIA_CHAVE=segredo-olaria\n")
+    assert "- OLARIA_CHAVE=***\n" in yaml_lista
+    assert "segredo-olaria" not in yaml_lista
+
+    json_txt = _mascara('{\n    "OLARIA_CHAVE": "segredo-olaria",\n    "DB_SENHA": "minha-senha",\n    "APP_SEGREDO": "meu-segredo"\n}\n')
+    assert '"OLARIA_CHAVE": "***",' in json_txt
+    assert '"DB_SENHA": "***",' in json_txt
+    assert '"APP_SEGREDO": "***"' in json_txt
+    for valor in ("segredo-olaria", "minha-senha", "meu-segredo"):
+        assert valor not in json_txt
