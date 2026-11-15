@@ -144,6 +144,19 @@ def test_operadores_como_token_recusam_e_regex_passa():
             assert rec["recusado"] is True
             assert "metacaractere de shell" in rec["motivo"]
 
+        # Operadores colados no fim do token tambem recusam (DT #186)
+        for cmd_colado in (
+            "repo ver; fila status",
+            "repo ver| fila status",
+            "repo ver&",
+            "repo ver&& fila status",
+            "repo ver|| fila status",
+        ):
+            _, _, rec = s._item_de_lote(cmd_colado)
+            assert rec is not None
+            assert rec["recusado"] is True
+            assert "metacaractere de shell" in rec["motivo"]
+
         # Desduplicação do primeiro token malote (#3045 passo 5; o apelido run_command saiu no #4117)
         argv, stdin, rec = s._item_de_lote("malote repo estado")
         assert rec is None

@@ -1477,7 +1477,7 @@ def _item_de_lote(x):
         if toks[0] in TOOLS_LOTE and len(toks) > 1:
             toks = toks[1:]
         for t in toks:
-            if t in _OPERADORES_SHELL:
+            if t in _OPERADORES_SHELL or t.endswith((";", "|", "&")):
                 v_ex = json.dumps(toks[0], ensure_ascii=False)
                 a_ex = json.dumps(toks[1], ensure_ascii=False) if len(toks) > 1 else '"<ato>"'
                 return None, None, _recusa(
