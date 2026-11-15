@@ -756,3 +756,127 @@ def test_teto_pequeno_so_com_a_rodada_diaria_e_so_inteiro(tmp_path):
     assert "--teto-pequeno só com --origin-main" in r.stdout + r.stderr
     r = _run(env, "rodar", "demo", "--portao", "--origin-main", "--teto-pequeno", "cinco")
     assert r.returncode == 2, r.stdout + r.stderr
+
+
+# --- DT #312 (arq:0129 D3): degrau pequeno python sem rede, loopback por ioctl e uv --offline --------
+
+def _sem_userns() -> bool:
+    return subprocess.run(["unshare", "--user", "--map-root-user", "--net", "--", "true"],
+                          capture_output=True).returncode != 0
+
+
+def _servidor_local():
+    import socket
+    import threading
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    s.listen(8)
+
+    def aceitar():
+        while True:
+            try:
+                c, _ = s.accept()
+                c.sendall(b"ok")
+                c.close()
+            except OSError:
+                return
+    threading.Thread(target=aceitar, daemon=True).start()
+    return s, s.getsockname()[1]
+
+
+def test_pequeno_python_roda_sem_rede_com_loopback_ligada_e_externo_sai_vermelho(tmp_path):
+    if _sem_userns():
+        pytest.skip("este host nao deixa criar namespace de rede (unshare --user --map-root-user --net)")
+    srv, porta = _servidor_local()
+    try:
+        teste_peq = (
+            "import socket, threading\n"
+            "def test_loopback_proprio_funciona_e_rede_do_host_e_externa_falham():\n"
+            "    with socket.socket() as s:\n"
+            "        s.settimeout(1)\n"
+            f"        try:\n            s.connect(('127.0.0.1', {porta}))\n"
+            "            assert False, 'nao devia alcancar o servidor do host no degrau pequeno'\n"
+            "        except OSError:\n"
+            "            pass\n"
+            "    with socket.socket() as s:\n"
+            "        s.settimeout(1)\n"
+            "        try:\n"
+            "            s.connect(('192.0.2.1', 80))\n"
+            "            assert False, 'nao devia alcancar endereco externo no degrau pequeno'\n"
+            "        except OSError:\n"
+            "            pass\n"
+            "    srv = socket.socket()\n"
+            "    srv.bind(('127.0.0.1', 0))\n"
+            "    srv.listen(1)\n"
+            "    p = srv.getsockname()[1]\n"
+            "    def _acc():\n"
+            "        c, _ = srv.accept()\n"
+            "        c.sendall(b'ok')\n"
+            "        c.close()\n"
+            "    threading.Thread(target=_acc, daemon=True).start()\n"
+            "    with socket.socket() as cli:\n"
+            "        cli.settimeout(2)\n"
+            "        cli.connect(('127.0.0.1', p))\n"
+            "        assert cli.recv(2) == b'ok'\n"
+            "    srv.close()\n"
+        )
+        teste_rod = (
+            "import socket\n"
+            "def test_rodada_alcanca_servidor_do_host():\n"
+            "    with socket.socket() as s:\n"
+            "        s.settimeout(2)\n"
+            f"        s.connect(('127.0.0.1', {porta}))\n"
+            "        assert s.recv(2) == b'ok'\n"
+        )
+        teste_ext = (
+            "import socket\n"
+            "def test_abre_conexao_externa():\n"
+            "    with socket.socket() as s:\n"
+            "        s.settimeout(1)\n"
+            "        s.connect(('192.0.2.1', 80))\n"
+        )
+        env, arv = _arvore(
+            tmp_path,
+            {"a": {"test_peq.py": teste_peq, "test_rod.py": teste_rod}},
+            {"a": "test_peq.py\ntest_rod.py | degrau: rodada\n"},
+        )
+        r = _run(dict(env, PF_TESTE_SEM_MEMO="1"), "rodar", "demo", "--portao", "--arvore", str(arv))
+        assert r.returncode == 0, r.stdout + r.stderr
+        r_rod = _run(dict(env, PF_TESTE_SEM_MEMO="1"), "rodar", "demo", "--portao", "--degrau", "rodada", "--arvore", str(arv))
+        assert r_rod.returncode == 0, r_rod.stdout + r_rod.stderr
+
+        env2, arv2 = _arvore(
+            tmp_path / "ext",
+            {"a": {"test_ext.py": teste_ext}},
+            {"a": "test_ext.py\n"},
+        )
+        r_ext = _run(dict(env2, PF_TESTE_SEM_MEMO="1"), "rodar", "demo", "--portao", "--arvore", str(arv2))
+        assert r_ext.returncode == 1, r_ext.stdout + r_ext.stderr
+    finally:
+        srv.close()
+
+
+def test_pequeno_python_aquece_cache_no_preparo_e_roda_uv_offline(tmp_path):
+    if _sem_userns():
+        pytest.skip("este host nao deixa criar namespace de rede (unshare --user --map-root-user --net)")
+    uv_real = shutil.which("uv")
+    if not uv_real:
+        pytest.skip("uv ausente")
+    log = tmp_path / "uv.log"
+    wdir = tmp_path / "bin"
+    wdir.mkdir()
+    uv_wrap = wdir / "uv"
+    uv_wrap.write_text(
+        "#!/usr/bin/env bash\n"
+        f'printf "%s\\n" "$*" >> "{log}"\n'
+        f'exec "{uv_real}" "$@"\n',
+        encoding="utf-8",
+    )
+    uv_wrap.chmod(0o755)
+    env, arv = _arvore(tmp_path, {"a": {"test_ok.py": VERDE}}, {"a": "test_ok.py\n"})
+    env["PATH"] = f"{wdir}{os.pathsep}{os.environ.get('PATH', '')}"
+    r = _run(dict(env, PF_TESTE_SEM_MEMO="1"), "rodar", "demo", "--portao", "--arvore", str(arv))
+    assert r.returncode == 0, r.stdout + r.stderr
+    chamadas = log.read_text(encoding="utf-8").splitlines()
+    assert any("--version" in c and "--offline" not in c for c in chamadas), chamadas
+    assert any("run --offline" in c and "pytest" in c and "--version" not in c for c in chamadas), chamadas
