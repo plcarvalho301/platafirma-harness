@@ -2896,13 +2896,37 @@ ato_pr_merge() {
   # o ramo local e falha quando 'main' (ou o ramo do PR) esta preso em worktree, o que
   # propaga exit != 0 mesmo com o merge remoto ja valido (#3057 item 7). Separa-se:
   # merge remoto primeiro (sem tocar ramo local); poda em seguida, best-effort.
-  if ! (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr merge "$num" --admin "$modo"); then
+  local merged_ok=0 tentativa=1 max_tentativas=3 retry_sleep="${PF_GH_RETRY_SLEEP:-1}" merge_err="" errf
+  errf="$(mktemp)" || errf=""
+  while [ "$tentativa" -le "$max_tentativas" ]; do
+    if (cd "$c" && env PATH="$PATH_FORGE" GH_PROMPT_DISABLED=1 "$GH" pr merge "$num" --admin "$modo" </dev/null 2>"${errf:-/dev/null}"); then
+      merged_ok=1
+      break
+    fi
+    [ -n "$errf" ] && [ -s "$errf" ] && merge_err="$(head -n 3 "$errf" | tr '\n' ' ' | sed 's/ *$//')"
     local pr_state_check
-    pr_state_check="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json state --jq .state 2>/dev/null || true)"
-    if [ "$pr_state_check" != "MERGED" ]; then
-      morre "gh pr merge falhou" 3
+    pr_state_check="$(cd "$c" && env PATH="$PATH_FORGE" GH_PROMPT_DISABLED=1 "$GH" pr view "$num" --json state --jq .state </dev/null 2>/dev/null || true)"
+    if [ "$pr_state_check" = "MERGED" ]; then
+      merged_ok=1
+      break
+    fi
+    [ "$tentativa" -lt "$max_tentativas" ] && [ "$retry_sleep" != "0" ] && sleep "$retry_sleep"
+    tentativa=$((tentativa + 1))
+  done
+  if [ "$merged_ok" -eq 0 ]; then
+    local slug rest_method
+    slug="$(slug_forge "$nome")"
+    rest_method="${modo#--}"
+    if (cd "$c" && env PATH="$PATH_FORGE" GH_PROMPT_DISABLED=1 "$GH" api -X PUT "repos/$slug/pulls/$num/merge" -f merge_method="$rest_method" </dev/null >/dev/null 2>"${errf:-/dev/null}"); then
+      merged_ok=1
+    else
+      local pr_state_check
+      pr_state_check="$(cd "$c" && env PATH="$PATH_FORGE" GH_PROMPT_DISABLED=1 "$GH" pr view "$num" --json state --jq .state </dev/null 2>/dev/null || true)"
+      [ "$pr_state_check" = "MERGED" ] && merged_ok=1
     fi
   fi
+  [ -n "$errf" ] && rm -f "$errf"
+  [ "$merged_ok" -eq 1 ] || morre "gh pr merge falhou${merge_err:+ ($merge_err)}" 3
 
   # Fecho: o merge se confirma no forge (MERGED + sha do merge), nunca pelo exit do gh.
   info="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json state,mergeCommit \
