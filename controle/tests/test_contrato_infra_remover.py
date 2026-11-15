@@ -37,6 +37,20 @@ case "$1" in
     c="${@: -1}"
     echo "rm $c" >> "$STUB_DIR/rastro"
     grep -vx "$c" "$vivos" > "$vivos.novo" || true; mv "$vivos.novo" "$vivos" ;;
+  network)
+    sub="$2"; redes="$STUB_DIR/redes"
+    case "$sub" in
+      ls) cat "$redes" 2>/dev/null ;;
+      inspect)
+        r="${@: -1}"
+        grep -qx "$r" "$redes" 2>/dev/null || exit 1
+        cat "$STUB_DIR/inspect-rede-$r.json" ;;
+      rm)
+        r="${@: -1}"
+        echo "network rm $r" >> "$STUB_DIR/rastro"
+        grep -vx "$r" "$redes" > "$redes.novo" || true; mv "$redes.novo" "$redes" ;;
+      *) echo "docker-stub network: nao coberto: $*" >&2; exit 1 ;;
+    esac ;;
   *) echo "docker-stub: nao coberto: $*" >&2; exit 1 ;;
 esac
 """
@@ -89,6 +103,7 @@ class Cena:
             f.chmod(f.stat().st_mode | stat.S_IEXEC)
         (self.dir / "rastro").write_text("")
         (self.dir / "conteineres").write_text("")
+        (self.dir / "redes").write_text("")
         (self.decl / "units-da-instancia.json").write_text('{"units": ["ops-healthcheck", "sinal"]}\n')
 
     def conteiner(self, nome, projeto=None):
@@ -96,8 +111,20 @@ class Cena:
             f.write(nome + "\n")
         (self.dir / f"inspect-{nome}.json").write_text(json.dumps(inspecao(nome, projeto)))
 
+    def rede(self, nome, projeto=None, endpoints=()):
+        with (self.dir / "redes").open("a") as f:
+            f.write(nome + "\n")
+        labels = {"com.docker.compose.project": projeto} if projeto else {}
+        conts = {f"cid-{i}": {"Name": ep} for i, ep in enumerate(endpoints)}
+        doc = [{"Name": nome, "Driver": "bridge", "Scope": "local",
+                "Created": "2026-10-15T13:22:13Z", "Labels": labels, "Containers": conts}]
+        (self.dir / f"inspect-rede-{nome}.json").write_text(json.dumps(doc))
+
     def vivos(self):
         return (self.dir / "conteineres").read_text().split()
+
+    def redes_vivas(self):
+        return (self.dir / "redes").read_text().split()
 
     def rastro(self):
         return (self.dir / "rastro").read_text().splitlines()
@@ -160,6 +187,63 @@ def test_sem_identidade_nao_remove(cena):
     assert r.returncode == 3, r.stdout + r.stderr
     assert "PF_SUJEITO" in r.stderr
     assert cena.vivos() == ["kind_gould"] and cena.rastro() == []
+
+
+# --- rede docker avulsa ----------------------------------------------------------------------
+
+def test_rede_vazia_ver_mostra_inspecao_e_nao_remove(cena):
+    cena.rede("pf-conversor")
+    r = cena.roda("remover", "pf-conversor", "--ver", sujeito=None)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "rede:      pf-conversor" in r.stdout
+    assert "endpoints: nenhum (vazia)" in r.stdout
+    assert "nenhuma (avulsa)" in r.stdout and "removível: sim" in r.stdout
+    assert cena.redes_vivas() == ["pf-conversor"] and cena.rastro() == []
+
+
+def test_remove_rede_vazia_guardando_inspecao_antes(cena):
+    cena.rede("pf-conversor")
+    r = cena.roda("remover", "pf-conversor")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert cena.redes_vivas() == [] and cena.rastro() == ["network rm pf-conversor"]
+    guardadas = list((cena.inst / "removidos").glob("rede-pf-conversor-*.json"))
+    assert len(guardadas) == 1
+    assert json.loads(guardadas[0].read_text())[0]["Name"] == "pf-conversor"
+    assert "removida: rede pf-conversor" in r.stdout
+
+
+def test_rede_com_endpoints_recusa_com_4(cena):
+    cena.rede("pf-conversor", endpoints=["conversor-api"])
+    for args in (("remover", "pf-conversor"), ("remover", "pf-conversor", "--ver")):
+        r = cena.roda(*args)
+        assert r.returncode == 4, r.stdout + r.stderr
+        assert "endpoints conectados" in r.stderr and "conversor-api" in r.stderr
+    assert cena.redes_vivas() == ["pf-conversor"] and cena.rastro() == []
+
+
+def test_rede_de_stack_recusa_com_4_e_aponta_o_down(cena):
+    cena.rede("core_default", projeto="core")
+    for args in (("remover", "core_default"), ("remover", "core_default", "--ver")):
+        r = cena.roda(*args)
+        assert r.returncode == 4, r.stdout + r.stderr
+        assert "stack compose 'core'" in r.stderr and "infra down" in r.stderr
+    assert cena.redes_vivas() == ["core_default"] and cena.rastro() == []
+
+
+def test_rede_padrao_recusa_com_4(cena):
+    cena.rede("bridge")
+    r = cena.roda("remover", "bridge")
+    assert r.returncode == 4, r.stdout + r.stderr
+    assert "rede padrão do Docker" in r.stderr
+    assert cena.redes_vivas() == ["bridge"] and cena.rastro() == []
+
+
+def test_rede_sem_identidade_nao_remove(cena):
+    cena.rede("pf-conversor")
+    r = cena.roda("remover", "pf-conversor", sujeito=None)
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert "PF_SUJEITO" in r.stderr
+    assert cena.redes_vivas() == ["pf-conversor"] and cena.rastro() == []
 
 
 # --- unit transitória ------------------------------------------------------------------------
