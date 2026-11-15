@@ -305,8 +305,8 @@ exigir_de_pe() {
 # da sessao (#2856 linha 76). Mascara o valor quando o NOME sugere segredo; o nome e o resto ficam.
 mascara_segredos() {
   sed -E \
-    -e 's/^([[:space:]]*(- +)?[A-Za-z0-9_]*(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|PRIVATE_?KEY|_KEY|COOKIE)[A-Za-z0-9_]*[[:space:]]*[:=][[:space:]]*).+$/\1***/I' \
-    -e 's/^([[:space:]]*"[A-Za-z0-9_]*(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|PRIVATE_?KEY|_KEY|COOKIE)[A-Za-z0-9_]*"[[:space:]]*:[[:space:]]*)"[^"]*"/\1"***"/I' \
+    -e 's/^([[:space:]]*(- +)?[A-Za-z0-9_]*(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|PRIVATE_?KEY|_KEY|COOKIE|CHAVE|SENHA|SEGREDO)[A-Za-z0-9_]*[[:space:]]*[:=][[:space:]]*).+$/\1***/I' \
+    -e 's/^([[:space:]]*"[A-Za-z0-9_]*(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|PRIVATE_?KEY|_KEY|COOKIE|CHAVE|SENHA|SEGREDO)[A-Za-z0-9_]*"[[:space:]]*:[[:space:]]*)"[^"]*"/\1"***"/I' \
     -e 's#(://[^:/@[:space:]"]+):[^@[:space:]/"]+@#\1:***@#g'
 }
 
