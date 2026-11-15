@@ -45,12 +45,19 @@ def stack_do_container(conteiner_ou_labels: dict, topologia: list[dict]) -> str 
     pares = set()
     for arquivo in [f.strip() for f in config_files.split(",") if f.strip()]:
         partes = arquivo.split(os.sep) if os.sep in arquivo else arquivo.split("/")
+        achou_sha = False
         for i, parte in enumerate(partes):
             if _RE_SHA.match(parte):
                 familia = partes[i - 1] if i > 0 else ""
                 curta = familia.removeprefix(PREFIXO_DA_FAMILIA)
                 pares.add((curta, "/".join(partes[i + 1:])))
+                achou_sha = True
                 break
+        if not achou_sha and "/current/" in arquivo:
+            resto = arquivo.split("/current/", 1)[1]
+            if "/" in resto:
+                curta, rel = resto.split("/", 1)
+                pares.add((curta.removeprefix(PREFIXO_DA_FAMILIA), rel))
 
     achados = []
     for stack in topologia:
@@ -60,8 +67,9 @@ def stack_do_container(conteiner_ou_labels: dict, topologia: list[dict]) -> str 
             resto = comp.split("/current/", 1)[1]
             if "/" in resto and tuple(resto.split("/", 1)) in pares:
                 slug = stack.get("slug")
-                if slug:
+                if slug and slug not in achados:
                     achados.append(slug)
+                break
 
     if len(achados) <= 1:
         return achados[0] if achados else None
