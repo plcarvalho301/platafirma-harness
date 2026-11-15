@@ -358,3 +358,5 @@ tests/test_tarefas_dts_271_323_404_592.py | bin/tarefas
 tests/test_repo_dts_37_203_285_414.py | bin/repo
 # DTs 256, 286, 333, 394 e 633: retomada de stacks após PROMOCAO PARCIAL, separação de stack sem registro vs sem compose, procurar em abertura e com ERE, ler --linhas preservando linha vazia.
 tests/test_dts_256_286_333_394_633.py | bin/release bin/_release/stack
+# DT 470 (#2856 linha 470): `tarefas editar` e `tarefas comentar` com curl falso respondendo POST /para-html.
+tests/test_tarefas_editar.py | bin/tarefas
