@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # acervo casa — leitura da partição casa pela CHAVE, da tabela acervo.casa (rag_extractor).
 # capacidade: conhecimento
-# dono: claudinho-dados
+# dono: dados
 #   (matéria/semântica: claudinho-dados · dono; mecanismo/harness: claudinho-TI · construcao)
 #
 # Documento de casa é ficha do acervo (arq:0115 §1): lê-se pela chave (§3), nunca pelo

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # _acervo/casa-ingerir — cliente fino da ingestão da partição `casa` (card #3027, arq:0115).
 # capacidade: incorporacao
-# dono: claudinho-dados
+# dono: dados
 #   (recorte de dados: o que vai no payload e o que o plano diz · dono; o mecanismo HTTP
 #    espelha bin/ingerir de obra · construcao TI)
 #

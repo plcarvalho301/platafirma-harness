@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # _giro-carga.py — carga em lote do giro auto-relatado (claude.ai) em sessao.giro.
-# capacidade: memoria (giro) · dono: claudinho-IA
+# capacidade: memoria (giro) · dono: ia
 #
 # Chamado pelo ops-mcp (_giro_carrega, server.py::_sessao_encerrar), nunca direto
 # por uma cadeira. ops-mcp roda no venv ops, sem driver de banco; a escrita fica

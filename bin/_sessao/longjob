@@ -2,7 +2,7 @@
 # longjob — dispara trabalho longo como unit transiente do systemd --user.
 # capacidade: orfa
 # orfa por design: entra em gerenciamento de memoria (F3d)
-# dono: claudinho-TI
+# dono: ti
 #
 # A unit nasce IRMÃ do ops-mcp.service dentro do app.slice, não filha: fica fora
 # do process group do run_command (imune ao os.killpg do timeout) e fora do

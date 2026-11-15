@@ -2,7 +2,7 @@
 """acervo wiki <ato> — a wiki (MediaWiki) como fonte do acervo.
 
 capacidade: conhecimento
-dono: claudinho-dados
+dono: dados
 
 Sub-ato do verbo `acervo` (arq:0069): a wiki é SoT de registro editável, dona dados,
 alcançada por `acervo wiki <ato>`. Fonte é argumento, não verbo — não há `bin/wiki`

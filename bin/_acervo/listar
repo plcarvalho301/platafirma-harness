@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # acervo listar — referências do acervo. Hoje: conceitos, ferramental e topologia (golden records).
 # capacidade: conhecimento
-# dono: claudinho-dados
+# dono: dados
 #   (matéria/semântica: claudinho-dados · dono; mecanismo/harness: claudinho-TI · construcao)
 #
 # `acervo listar conceitos [--json]`   — golden record acervo.conceito (rag-extractor-pg).
