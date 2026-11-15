@@ -2497,8 +2497,8 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
     (working tree, fora de .git), com bin/ e hooks/ do harness aceitando verbo e hook (sem
     extensao + shebang); na instancia, @TMP@/<ordem_id>/ (rascunho da fita). Tipos: .py .md .mmd .d2 .sh
     .sql .yaml .yml .json .toml .css .html .js .jsx .mjs .ts .tsx .php .txt .conf .tsv .service
-    .timer .path .socket, e os nomes Dockerfile, Dockerfile.<sufixo>, .dockerignore, .gitignore,
-    .operacao, VERDES, .conferir-repo, uv.lock. Fora disso volta
+    .timer .path .socket .ttl .jsonl, e os nomes Dockerfile, Dockerfile.<sufixo>, .dockerignore,
+    .gitignore, .operacao, VERDES, .conferir-repo, uv.lock, crontab-claudinho. Fora disso volta
     `{recusado, motivo}` nomeando o porque (release, fila, abertura publicada, log, segredos, .git, symlink,
     tipo, tamanho). `content` = arquivo
     INTEIRO (teto 1 MiB). `trecho={"antes","depois"}` = edicao por trecho: `antes` tem de
