@@ -409,28 +409,34 @@ def formatar_tabela_plano(lote: dict) -> str:
     linhas.append(f"Autor: {lote.get('autor')} · Motor: {lote.get('motor') or '-'} · Até: {lote.get('ate')} · OCR: {lote.get('ocr')} · Coleção: {lote.get('colecao')}")
     linhas.append(f"Resumo: total={total} | criar={resumo.get('criar', 0)} | edicao={resumo.get('edicao', 0)} | ja_ingerido={resumo.get('ja_ingerido', 0)} | bloqueada={resumo.get('bloqueada', 0)} | reprovado={resumo.get('reprovado', 0)}")
     linhas.append("")
-    linhas.append(f"{'#':<3} {'Arquivo':<40} {'Formato (ficha)':<24} {'Título':<45} {'Veredito':<14} {'Portões / Detalhe'}")
-    linhas.append("-" * 155)
+    linhas.append(f"{'#':<3} {'Arquivo':<40} {'Formato (ficha)':<24} {'Exposição':<10} {'Título':<40} {'Veredito':<14} {'Portões / Detalhe'}")
+    linhas.append("-" * 160)
     for it in lote.get("itens", []):
         pos = str(it.get("posicao", 0))
         arq = it.get("arquivo") or "-"
         if len(arq) > 38:
             arq = arq[:35] + "..."
         tit = it.get("titulo") or "-"
-        if len(tit) > 43:
-            tit = tit[:40] + "..."
+        if len(tit) > 38:
+            tit = tit[:35] + "..."
         ver = it.get("veredito") or "-"
+        exp = it.get("exposicao") or "-"
         detalhes = []
         for p in it.get("portoes", []):
             if p.get("resultado") != "aprovado":
                 # o motivo da recusa (#3307): a obra que já tem o arquivo, o formato que os bytes dizem
                 motivo = f" — {p['detail']}" if p.get("detail") else ""
                 detalhes.append(f"{p.get('portao')}:{p.get('title', p.get('resultado'))}{motivo}")
-        det = "; ".join(detalhes) if detalhes else "todos aprovados"
+        if detalhes:
+            det = "; ".join(detalhes)
+        elif it.get("portao_parada"):
+            det = f"para em: {it['portao_parada']}"
+        else:
+            det = "todos aprovados"
         fmt = descrever_ficha(it)
         if len(fmt) > 22:
             fmt = fmt[:21] + "…"
-        linhas.append(f"{pos:<3} {arq:<40} {fmt:<24} {tit:<45} {ver:<14} {det}")
+        linhas.append(f"{pos:<3} {arq:<40} {fmt:<24} {exp:<10} {tit:<40} {ver:<14} {det}")
     return "\n".join(linhas)
 
 
@@ -511,6 +517,16 @@ def formatar_resumo_veredito_e_excecoes(lote: dict, fase: str = "plano") -> str:
         linhas.append("")
         linhas.append("Exceções e recusas:")
         linhas.extend(excecoes)
+    if fase == "plano":
+        paradas = [
+            f"  {it.get('arquivo') or '-'}: exposição {it.get('exposicao') or '-'} · para em: {it.get('portao_parada') or '-'}"
+            for it in lote.get("itens", [])
+            if it.get("exposicao") or it.get("portao_parada")
+        ]
+        if paradas:
+            linhas.append("")
+            linhas.append("Exposição e portão de parada:")
+            linhas.extend(paradas)
     return "\n".join(linhas)
 
 
