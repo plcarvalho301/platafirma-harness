@@ -51,7 +51,8 @@ def test_2b_nao_manda_mais_gravar_diario_no_caderno():
 def test_resto_do_ritual_intacto():
     texto = _ritual()
     assert "2a. conhecimento curado" in texto
-    assert "3. triagem da memoria do claude.ai" in texto
+    assert "triagem da memoria" not in texto, "a triagem da memoria saiu do roteiro (debito 654)"
+    assert "3. SO POR ORDEM DO DONO" in texto
     assert "descansar fita --encerra-sessao" in texto
 
 
@@ -79,63 +80,24 @@ def test_2c_marca_a_aresta_so_do_que_entrou_na_resposta():
     assert "#2947" in p and "puxado de fora da cadeira" in p
 
 
-# ---------------------------------------------------------------- #3930: a memoria do claude.ai
-def test_3_cobre_as_duas_camadas_e_a_passada_automatica():
-    p = _passo(_ritual(), "\n3. ", "\n4. ")
-    assert "camada do Project" in p and "/projects/<id>/" in p
-    assert "camada de conta" in p and "passada automatica" in p
-    assert "REPETE-CONDUTA" in p and "SUBSTRATO" in p and "FOSSIL" in p and "TRATO" in p
+# ---------------------------------------------------------------- debito 654: o encerramento sem trava
+def _corrido(p: str) -> str:
+    return " ".join(p.split())
 
 
-def test_3_limpa_so_o_project_e_so_com_pedido_do_dono():
-    p = _passo(_ritual(), "\n3. ", "\n4. ")
-    assert "PORTAO" in p and "MENSAGEM DO DONO neste turno" in p
-    assert "nunca se edita daqui" in p, "a conta nao se escreve da sessao do Project"
-    assert "configuracao de memoria do Project" in p and "ato dele" in p, "a escolha do caminho e do dono"
+def test_3_encerra_com_a_ordem_do_dono_sem_pergunta_no_fecho():
+    p = _corrido(_passo(_ritual(), "\n3. ", "segundo caminho de morte"))
+    assert "SO POR ORDEM DO DONO" in p and "depois dos passos 1 e 2" in p
+    assert "sem perguntar nada no fecho" in p
+    assert "limpo?" not in _ritual() and "NAO rode o passo" not in _ritual()
 
 
-# ---------------------------------------------------------------- #3966: alcance de conta, rotulos, teto
-def _passo_3_corrido() -> str:
-    """O passo 3 com o espaco colapsado: a quebra de linha do print nao parte a frase fixada."""
-    return " ".join(_passo(_ritual(), "\n3. ", "\n4. ").split())
-
-
-def test_3_poda_a_conta_inteira_numa_conversa_fora_de_project():
-    p = _passo_3_corrido()
-    assert "conversa fora de Project" in p and "todos os Projects" in p
-    # a tarefa agendada e hipotese ate a rodada de teste do dono voltar no card
-    assert "tarefa agendada" in p and "hipotese" in p
-    # a medicao desmentiu o roteiro antigo, que mandava so o dono mexer fora do Project
-    assert "so a interface do dono" not in p
-
-
-def test_3_fossil_inclui_data_vencida_e_entra_duplicata():
-    p = _passo_3_corrido()
-    assert "FOSSIL" in p and "data ou prazo vencido" in p and "contradiz o dossie" in p
-    assert "DUPLICATA" in p and "dois arquivos do mesmo Project" in p
-
-
-def test_3_respeita_o_teto_de_dez_gravacoes_por_turno():
-    p = _passo_3_corrido()
-    assert "dez gravacoes por turno" in p
-    assert "apague o arquivo inteiro antes de mexer em linha" in p.lower()
-    assert "numa reescrita so" in p
-    assert "turno seguinte sem perguntar" in p
-    # a Trava: sem ordem do dono no turno a ferramenta nao grava; o roteiro nao promete o contrario
-    assert "segue" in p and "ordem" in p
-
-
-def test_3_nao_acrescenta_mais_a_regra_negativa():
-    p = _passo_3_corrido()
-    assert "regra negativa" in p and "uma copia por Project" in p
-    assert "acrescente" not in p, "o passo que acrescentava a regra saiu"
-    assert "nao a acrescenta" in p and "nao espera efeito" in p
-
-
-def test_3_nao_promete_vencer_a_passada_automatica_nem_apagar_sem_ordem():
-    p = _passo_3_corrido()
-    assert "roda depois de todo turno" in p and "nao a alcanca" in p
-    assert "sem ordem do dono no turno nada se apaga" in p
+# ---------------------------------------------------------------- debito 423: a mesa so com repasse
+def test_1_planta_item_so_com_repasse_e_a_carta_nao_vira_item():
+    p = _corrido(_passo(_ritual(), "1. ", "\n2. "))
+    assert "item so quando a fita deixa pendurado" in p and "mesa sem item" in p
+    assert "nunca vira item de mesa" in p
+    assert "escreva a mesa antes de a fita morrer" not in p
 
 
 def test_a_mesa_do_passo_1_e_item_nao_prosa():
