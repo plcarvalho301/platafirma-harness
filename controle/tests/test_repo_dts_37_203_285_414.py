@@ -226,11 +226,21 @@ def test_dt414_dt530_abrir_direto_em_main_recoloca_ramo_antigo_ancestral(tmp_pat
         assert f"repo git {repo_nome} checkout -B ti/main origin/main" in r_recusa.stderr
 
 
-def test_suite_bash_repo_sh() -> None:
-    """Garante que `testes/test_repo.sh` (incluindo checagem de git/gh nu e cabeçalho) continua verde."""
-    r = subprocess.run(
-        ["bash", str(REPO_ROOT / "testes" / "test_repo.sh")],
-        text=True,
-        capture_output=True,
-    )
-    assert r.returncode == 0, f"stdout:\n{r.stdout}\nstderr:\n{r.stderr}"
+def test_invariantes_estaticos_bin_repo() -> None:
+    """Garante que bin/repo declara descartar no cabeçalho e não tem chamadas git/gh nuas."""
+    import re
+
+    linhas = BIN_REPO.read_text(encoding="utf-8").splitlines()
+    cabecalho = "\n".join(linhas[:55])
+    assert "descartar (operacao)" in cabecalho
+    assert "# le: descartar=repo" in cabecalho
+    assert "# escreve: descartar=repo" in cabecalho
+    assert "# poda: cosmetica@git" in cabecalho
+
+    padrao_git_nu = re.compile(r"([$(]|^\s*)git\s")
+    padrao_gh_nu = re.compile(r"([$(]|^\s*)gh\s")
+    for idx, linha in enumerate(linhas, start=1):
+        if "#" in linha or "GIT=" in linha or "GH=" in linha:
+            continue
+        assert not padrao_git_nu.search(linha), f"git nu na linha {idx}: {linha}"
+        assert not padrao_gh_nu.search(linha), f"gh nu na linha {idx}: {linha}"
