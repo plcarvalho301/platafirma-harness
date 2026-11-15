@@ -233,6 +233,26 @@ def test_titulo_acima_de_60_avisa_em_feature():
     assert "CARD_TITULO" in _ids(aps)
 
 
+@pytest.mark.parametrize(("titulo", "trecho"), [
+    ("Ajustar F4 no lint de card", "F4"),
+    ("Cobrir H2 na conferência", "H2"),
+    ("Reconhecer compose em AP8", "AP8"),
+    ("Conferir critério (C1) nos comentários", "C1"),
+    ("Adequar molde à arq:0096", "arq:0096"),
+    ("Formalizar minuta 0037 no verbo", "minuta 0037"),
+    ("Corrigir regressão do #3103", "#3103"),
+    ("Alinhar §5 da spec do verbo", "§5"),
+])
+def test_titulo_com_codigo_opaco_avisa(titulo, trecho):
+    aps, *_ = verificar_card_regua("#1", texto=_story_com_titulo(titulo), lista=LISTA,
+                                   fecha_existe=False)
+    cod = [a for a in aps if a.id == "CARD_TITULO_CODIGO"]
+    assert len(cod) == 1
+    assert f"«{trecho}»" in cod[0].o_que_fere
+    assert "código mora no corpo" in cod[0].cura
+    assert cod[0].severidade == "aviso"
+
+
 # ------------------------------------------------------------------ prova minima
 
 def test_3408_nao_e_apontado_por_continuidade():
@@ -354,6 +374,20 @@ def test_f4_aberto_com_aposta_e_fecho_proprio_conta():
            "--- #4 · produto · x ---\ndecisão (dono): apostar e formalizar\nDescartado: -\n")
     f4 = [a for a in _rodar(CARD_3408, com, fecha=False)[0] if a.id == "F4"]
     assert [a.arquivo for a in f4] == ["#3408 comentário #1"]
+
+
+def test_f4_reconhece_fecho_em_negrito_gravado_pelo_rastreador():
+    # DT 354: `tarefas comentar --fecha` grava `**fecho:** <Resultado> — <destino>` no fim do
+    # comentário; F4 não pode apontar esses comentários como abertos (caso real #3602).
+    com = ("--- #2928 · produto · x ---\nrequisito: barra das portas\nConfere: prova 8\n"
+           "**fecho:** Aceito — peças 2 e 8 e Apetite do corpo; a aba foi à spec da Taipa\n\n"
+           "--- #2929 · produto · x ---\nburaco: duas regras\nCaso: spec taipa\nRemendo: linha\n"
+           "**fecho:** Remendado — linha na Solução e na peça 9\n\n"
+           "--- #3065 · arquiteto · x ---\ndecisão (dono): apostar e formalizar\nDescartado: -\n"
+           "**fecho:** Formalizada — arq:0124 §3; spec taipa R57 a R60\n")
+    aps, _ = _rodar(CARD_3408, com)
+    assert "F4" not in _ids(aps)
+    assert "F2" not in _ids(aps)
 
 
 def test_l1_l2():
