@@ -1,5 +1,5 @@
 {
-  "_sobre": "Peças de código que `infra rodar <peca>` executa (bin/_infra/rodar-peca). Só roda o que está aqui: declarar é PR neste arquivo. origem=espelho roda o código da bancada da sessão no repositório nomeado, e só se os caminhos da peça forem iguais a origin/main (commit e sincronizar antes); origem=release roda a árvore da release no ar. python=rag é o venv do rag da release. ambiente=banco-rag dá o banco do acervo pelo cofre, sem imprimir a credencial. ambiente=olaria dá o endereço do serviço da Olaria e a chave de serviço pelo cofre, sem imprimir a chave. A peça é `python -m <modulo> <args>` com cwd e PYTHONPATH relativos à raiz do repositório.",
+  "_sobre": "Peças de código que `infra rodar <peca>` executa (bin/_infra/rodar-peca). Só roda o que está aqui: declarar é PR neste arquivo. origem=espelho roda o código da bancada da sessão no repositório nomeado, e só se os caminhos da peça forem iguais a origin/main (commit e sincronizar antes); origem=release roda a árvore da release no ar. python=rag é o venv do rag da release. ambiente=banco-rag dá o banco do acervo pelo cofre, sem imprimir a credencial. ambiente=banco-casa dá o banco próprio da casa (casa-db, 127.0.0.1:5439/casa) pelo cofre, sem imprimir a credencial. ambiente=olaria dá o endereço do serviço da Olaria e a chave de serviço pelo cofre, sem imprimir a chave. A peça é `python -m <modulo> <args>` com cwd e PYTHONPATH relativos à raiz do repositório.",
   "casa": {
     "dono": "dados",
     "origem": "espelho",
@@ -8,9 +8,9 @@
     "modulo": "motor_acervo.casa",
     "pythonpath": ["outros_repos/conhecimento/rag"],
     "python": "rag",
-    "ambiente": "banco-rag",
+    "ambiente": "banco-casa",
     "teto_s": 600,
-    "motivo": "S4061: portão, carregador, resolução de chave e conferência do schema casa, contra o banco do acervo; o conversor fica fora do caminho porque a peça não o importa, e cada caminho daqui entra no gate de origin/main (#4137)"
+    "motivo": "S4061: portão, carregador, resolução de chave e conferência do schema casa, contra o banco da casa (casa-db); o conversor fica fora do caminho porque a peça não o importa, e cada caminho daqui entra no gate de origin/main (#4137, #4286)"
   },
   "diagrama": {
     "dono": "engenharia",
@@ -31,9 +31,9 @@
     "modulo": "postura",
     "pythonpath": ["outros_repos/harness/lib"],
     "python": "rag",
-    "ambiente": "banco-rag",
+    "ambiente": "banco-casa",
     "teto_s": 120,
-    "motivo": "S4182: o verbo persona da casa nova em sessão de ensaio (ler, trocar, voltar, cenario) e a composição das posturas por eixo, contra o banco do acervo e a memória de trabalho; o expediente e a porta do espelho só rodam na troca da casa"
+    "motivo": "S4182: o verbo persona da casa nova em sessão de ensaio (ler, trocar, voltar, cenario) e a composição das posturas por eixo, contra o banco da casa (casa-db) e a memória de trabalho; o expediente e a porta do espelho só rodam na troca da casa (#4286)"
   },
   "olaria": {
     "dono": "ti",

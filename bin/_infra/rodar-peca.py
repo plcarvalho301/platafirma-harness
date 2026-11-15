@@ -51,6 +51,32 @@ def _exportar():
     return mod
 
 
+def ambiente_do_banco_casa(ex) -> dict:
+    """O ambiente do banco próprio da casa (card #4286): lê segredos/casa-db/POSTGRES_PASSWORD do cofre
+    e injeta CASA_PG_* e POSTGRES_* para 127.0.0.1:5439/casa sem imprimir a credencial."""
+    arquivo = ex.raizes.instancia() / "segredos" / "casa-db" / "POSTGRES_PASSWORD"
+    try:
+        senha = arquivo.read_text(encoding="utf-8").strip()
+    except OSError as e:
+        morre(f"a senha do casa-db não abriu em {arquivo}: {e.strerror}", 3)
+    if not senha:
+        morre(f"a senha do casa-db está vazia em {arquivo}", 3)
+    env = {
+        "CASA_PG_HOST": "127.0.0.1",
+        "CASA_PG_PORT": "5439",
+        "CASA_PG_DB": "casa",
+        "CASA_PG_USER": "casa",
+        "CASA_PG_PASSWORD": senha,
+        "POSTGRES_HOST": "127.0.0.1",
+        "POSTGRES_PORT": "5439",
+        "POSTGRES_DB": "casa",
+        "POSTGRES_USER": "casa",
+        "POSTGRES_PASSWORD": senha,
+    }
+    print(f"ambiente: {arquivo.parent} ({', '.join(sorted(env))})", file=sys.stderr)
+    return env
+
+
 def ambiente_da_olaria(ex) -> dict:
     """O ambiente do verbo olaria (card #4214): o endereço do serviço e a chave de serviço, lida do cofre
     (segredos/olaria/OLARIA_CHAVE, pelo mesmo caminho do banco-rag) e nunca impressa: só os nomes saem no stderr."""
@@ -184,10 +210,12 @@ def rodar(argv: list) -> int:
     ambiente = p.get("ambiente") or ""
     if ambiente == "banco-rag":
         env.update(ex.ambiente_da_ingestao())
+    elif ambiente == "banco-casa":
+        env.update(ambiente_do_banco_casa(ex))
     elif ambiente == "olaria":
         env.update(ambiente_da_olaria(ex))
     elif ambiente:
-        morre(f"peça {nome}: ambiente {ambiente!r} não servido (banco-rag ou olaria)", 3)
+        morre(f"peça {nome}: ambiente {ambiente!r} não servido (banco-rag, banco-casa ou olaria)", 3)
     env["PYTHONPATH"] = os.pathsep.join(str(raiz / c) for c in (p.get("pythonpath") or []))
     env["PF_PECA"] = nome
     # DT 456: o bytecode gravado na bancada fazia o gate recusar a chamada seguinte (fora do git).

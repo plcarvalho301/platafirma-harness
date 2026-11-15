@@ -145,7 +145,8 @@ def test_registro_do_harness_declara_a_peca_casa():
     reg = json.loads((RAIZ / "registro" / "pecas.json").read_text(encoding="utf-8"))
     casa = reg["casa"]
     assert casa["origem"] == "espelho" and casa["repo"] == "platafirma-casa-espelho"
-    assert casa["modulo"] == "motor_acervo.casa" and casa["ambiente"] == "banco-rag"
+    assert casa["modulo"] == "motor_acervo.casa" and casa["ambiente"] == "banco-casa"
+    assert reg["persona"]["ambiente"] == "banco-casa"
 
 
 def test_peca_casa_nao_depende_do_caminho_do_conversor():
@@ -213,3 +214,52 @@ def test_registro_do_harness_declara_a_peca_olaria():
     assert conferir["cwd"] == "outros_repos/harness/bin" and conferir["pythonpath"] == ["outros_repos/harness/bin"]
     assert conferir["modulo"] == "_conferir" and conferir["python"] == "rag" and conferir["ambiente"] == "olaria"
     assert conferir["teto_s"] == 120
+
+
+def _peca_banco_casa(mod, monkeypatch, tmp_path, wt, *, com_senha: bool):
+    pkg = wt / "rag" / "pkg3"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("")
+    (pkg / "__main__.py").write_text(
+        "import os\n"
+        "print('casa=' + os.environ.get('CASA_PG_HOST', '') + ':' + os.environ.get('CASA_PG_PORT', '') + '/' + os.environ.get('CASA_PG_DB', '') + '@' + os.environ.get('CASA_PG_USER', '') + ':' + os.environ.get('CASA_PG_PASSWORD', ''))\n"
+        "print('pg=' + os.environ.get('POSTGRES_HOST', '') + ':' + os.environ.get('POSTGRES_PORT', '') + '/' + os.environ.get('POSTGRES_DB', '') + '@' + os.environ.get('POSTGRES_USER', '') + ':' + os.environ.get('POSTGRES_PASSWORD', ''))\n"
+    )
+    _git(wt, "add", "-A")
+    _git(wt, "commit", "-m", "peca banco-casa")
+    _git(wt, "push", "origin", "HEAD:main")
+    reg = tmp_path / "pecas.json"
+    reg.write_text(json.dumps({
+        "p": {"dono": "dados", "origem": "espelho", "repo": "r", "cwd": "rag", "modulo": "pkg3",
+              "pythonpath": ["rag"], "python": "rag", "ambiente": "banco-casa", "teto_s": 30},
+    }))
+    monkeypatch.setattr(mod, "REG", reg)
+    ex = mod._exportar()
+    monkeypatch.setattr(ex, "bancada_do_repo", lambda chave="": wt)
+    monkeypatch.setattr(ex, "python_do_rag", lambda: sys.executable)
+    instancia = tmp_path / "instancia"
+    if com_senha:
+        (instancia / "segredos" / "casa-db").mkdir(parents=True)
+        (instancia / "segredos" / "casa-db" / "POSTGRES_PASSWORD").write_text("senha-secreta-casa\n")
+    monkeypatch.setattr(ex.raizes, "instancia", lambda: instancia)
+    monkeypatch.setattr(mod, "_exportar", lambda: ex)
+
+
+def test_ambiente_banco_casa_injeta_casa_pg_e_postgres_sem_imprimir_senha(monkeypatch, tmp_path, bancada, capfd):
+    mod = _modulo()
+    _peca_banco_casa(mod, monkeypatch, tmp_path, bancada, com_senha=True)
+    assert mod.main(["rodar", "p"]) == 0
+    out, err = capfd.readouterr()
+    assert "casa=127.0.0.1:5439/casa@casa:senha-secreta-casa" in out
+    assert "pg=127.0.0.1:5439/casa@casa:senha-secreta-casa" in out
+    assert "senha-secreta-casa" not in err
+    assert "(CASA_PG_DB, CASA_PG_HOST, CASA_PG_PASSWORD, CASA_PG_PORT, CASA_PG_USER," in err
+
+
+def test_ambiente_banco_casa_sem_senha_no_cofre_sai_3(monkeypatch, tmp_path, bancada, capfd):
+    mod = _modulo()
+    _peca_banco_casa(mod, monkeypatch, tmp_path, bancada, com_senha=False)
+    with pytest.raises(SystemExit) as e:
+        mod.main(["rodar", "p"])
+    assert e.value.code == 3
+    assert "segredos/casa-db/POSTGRES_PASSWORD" in capfd.readouterr().err
