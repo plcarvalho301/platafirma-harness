@@ -52,8 +52,8 @@ uso() {
   cat >&2 <<'EOF'
 uso:
   leitura, da morada publicada (o que o expediente serve):
-  persona ler <cadeira>                 persona.md da cadeira, cru
-  persona ler <cadeira> --chapeu <slug> chapeu.md + ferramental.md do chapeu, crus
+  persona ler [<cadeira>]                 persona.md da cadeira (ou PF_CADEIRA), cru
+  persona ler [<cadeira>] --chapeu <slug> chapeu.md + ferramental.md do chapeu, crus
   persona conduta                       dono.md — a conduta do dono, igual em toda cadeira
   persona foto [--json]                 vocabulário de cadeiras e aliases da morada publicada
 
@@ -119,10 +119,14 @@ chapeus_da_cadeira() {
 
 ler() {
   exige_morada
-  local cad chapeu=""
-  cad=$(slug_cadeira "${1:-}")
+  local cad="" chapeu=""
+  if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then
+    cad=$(slug_cadeira "${1:-}")
+    shift
+  else
+    cad=$(slug_cadeira "${PF_CADEIRA:-}")
+  fi
   [ -n "$cad" ] || { echo "persona ler: falta <cadeira> — validas: $(cadeiras_validas)" >&2; exit 2; }
-  shift
   while [ $# -gt 0 ]; do
     case "$1" in
       --chapeu) chapeu="${2:-}"; [ -n "$chapeu" ] || { echo "persona ler: --chapeu exige <slug>" >&2; exit 2; }; shift 2 ;;
@@ -598,7 +602,7 @@ case "${1:-}" in
     # existe noutra unidade. O arquiteto QUALIFICA a decisao, nao a toma: quem bate o
     # martelo continua sendo o dono, e o ledger nao espera parecer de ninguem. Hoje quem
     # lembra e sempre o dono; esta linha divide esse trabalho com ele.
-    echo "lembrete: passou pelo mapa de capacidades? platafirma-arquitetura@docs/arquitetura-negocio-operacao.md · arq:0059" >&2
+    echo "lembrete: passou pelo mapa de capacidades? acervo ler casa vocabulario arquitetura-negocio-operacao (acervo ler casa vocabulario capacidades) · arq:0059" >&2
     echo "          claudinho-arquiteto qualifica; nao e gate e nao bloqueia este ato." >&2
     entra_no_clone
     exec python3 "$AQUI/_persona/org.py" "$@"
