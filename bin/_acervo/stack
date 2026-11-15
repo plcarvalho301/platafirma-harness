@@ -121,17 +121,50 @@ def _extrai_composes(val):
     return []
 
 
+def _lista_para_stacks(itens, fonte):
+    if not itens:
+        morre("acervo stack import: lista vazia em %s." % fonte, 3)
+    stacks = {}
+    for i, item in enumerate(itens):
+        if not isinstance(item, dict) or not isinstance(item.get("slug"), str) or not item["slug"].strip():
+            morre("acervo stack import: item %d de %s sem 'slug' valido." % (i, fonte), 2)
+        slug = item["slug"].strip()
+        if slug in stacks:
+            morre("acervo stack import: slug %r duplicado na lista de %s." % (slug, fonte), 2)
+        stacks[slug] = item
+    return stacks
+
+
+def _normaliza_stacks(doc, fonte):
+    if isinstance(doc, list):
+        return _lista_para_stacks(doc, fonte)
+    if isinstance(doc, dict):
+        if "stacks" in doc:
+            raw = doc["stacks"]
+            if isinstance(raw, dict) and raw:
+                return raw
+            if isinstance(raw, list):
+                return _lista_para_stacks(raw, fonte)
+            morre("acervo stack import: %s nao tem a chave 'stacks'." % fonte, 3)
+        if isinstance(doc.get("slug"), str) and doc["slug"].strip():
+            return {doc["slug"].strip(): doc}
+        morre("acervo stack import: %s nao tem a chave 'stacks'." % fonte, 3)
+    morre("acervo stack import: %s deve ser um objeto ou lista JSON." % fonte, 3)
+
+
 def cmd_import(arq):
+    fonte = "<stdin>" if arq == "-" else arq
     try:
-        with open(arq, encoding="utf-8") as fh:
-            doc = json.load(fh)
+        if arq == "-":
+            doc = json.load(sys.stdin)
+        else:
+            with open(arq, encoding="utf-8") as fh:
+                doc = json.load(fh)
     except FileNotFoundError:
         morre("acervo stack import: nao achei %s" % arq, 3)
     except json.JSONDecodeError as e:
-        morre("acervo stack import: %s nao e JSON valido: %s" % (arq, e), 3)
-    stacks = doc.get("stacks")
-    if not stacks:
-        morre("acervo stack import: %s nao tem a chave 'stacks'." % arq, 3)
+        morre("acervo stack import: %s nao e JSON valido: %s" % (fonte, e), 3)
+    stacks = _normaliza_stacks(doc, fonte)
 
     # DT 289 e DT 291: unicidade do caminho de compose (ADR arq:0081, incidente #3586).
     # Nenhuma duplicata de compose entre stacks conteiner é aceita.
@@ -176,7 +209,8 @@ def cmd_import(arq):
             _lit_txt(s.get("repo")), _lit_compose(s.get("compose")),
             _lit_jsonb(s.get("rotas")), _lit_jsonb(s.get("segredos")),
             _lit_jsonb(s.get("reversao")), _lit_jsonb(s.get("gate")),
-            _lit_jsonb(s.get("profiles")), _lit_txt(s.get("_nota")),
+            _lit_jsonb(s.get("profiles")),
+            _lit_txt(s.get("_nota") if s.get("_nota") is not None else s.get("nota")),
             _lit_txt(s.get("pre_build")), _lit_txt(forma),
         ]) + ")")
     sets = ",".join("%s = excluded.%s" % (c, c) for c in
@@ -189,7 +223,7 @@ def cmd_import(arq):
     sys.stderr.write("acervo stack import: %d stack(s) carregada(s)/atualizada(s) de %s.\n"
                      "  confira com `acervo stack ver` e `acervo listar topologia --completo --json`;\n"
                      "  batendo, o %s pode ser apagado — a tabela e a fonte.\n"
-                     % (len(stacks), arq, arq))
+                     % (len(stacks), fonte, fonte))
 
 
 def cmd_rm(slug):
@@ -262,8 +296,11 @@ def main(argv):
         cmd_resolver(resto[0])
     elif ato in ("import", "definir"):
         if not resto:
-            morre("acervo stack %s: falta o caminho do stacks.json\n\n%s" % (ato, USO))
-        cmd_import(resto[0])
+            if sys.stdin.isatty():
+                morre("acervo stack %s: falta o caminho do stacks.json\n\n%s" % (ato, USO))
+            cmd_import("-")
+        else:
+            cmd_import(resto[0])
     elif ato == "rm":
         if not resto:
             morre("acervo stack rm: falta o slug\n\n%s" % USO)

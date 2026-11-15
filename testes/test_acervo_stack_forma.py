@@ -124,3 +124,93 @@ def test_definir_como_subcomando_valido(tmp_path, monkeypatch):
     arq.write_text("{}", encoding="utf-8")
     mod.main(["definir", str(arq)])
     assert chamou == [str(arq)]
+
+
+def test_import_aceita_lista_do_stack_ver_json(tmp_path, monkeypatch):
+    # DT #20: `acervo stack ver --json` devolve uma lista de objetos com `slug` e `nota`
+    mod = _modulo()
+    sqls = []
+    monkeypatch.setattr(mod, "_psql", lambda sql, stdin=None: sqls.append(stdin) or "")
+    arq = tmp_path / "ver.json"
+    arq.write_text(json.dumps([
+        {
+            "slug": "core",
+            "papel": "núcleo",
+            "critico": True,
+            "repo": "platafirma-core",
+            "compose": "/opt/platafirma/current/core/compose.yml",
+            "rotas": None,
+            "segredos": None,
+            "reversao": None,
+            "gate": None,
+            "profiles": None,
+            "nota": "nota preservada",
+            "pre_build": None,
+        },
+        {
+            "slug": "harness",
+            "papel": "catálogo",
+            "critico": False,
+            "repo": "platafirma-harness",
+            "compose": None,
+            "nota": None,
+        },
+    ]), encoding="utf-8")
+    mod.cmd_import(str(arq))
+    sql = sqls[-1]
+    assert "('core','núcleo',true,'platafirma-core','/opt/platafirma/current/core/compose.yml'" in sql
+    assert "'nota preservada'" in sql
+    assert "'conteiner')" in sql
+    assert "('harness','catálogo',false,'platafirma-harness',null" in sql
+    assert "'host')" in sql
+
+
+def test_import_aceita_objeto_unico_com_slug(tmp_path, monkeypatch):
+    mod = _modulo()
+    sqls = []
+    monkeypatch.setattr(mod, "_psql", lambda sql, stdin=None: sqls.append(stdin) or "")
+    arq = tmp_path / "unica.json"
+    arq.write_text(json.dumps({"slug": "borda", "compose": "/opt/platafirma/current/borda/compose.yml"}), encoding="utf-8")
+    mod.cmd_import(str(arq))
+    assert "('borda',null,false,null,'/opt/platafirma/current/borda/compose.yml'" in sqls[-1]
+
+
+def test_import_le_stdin_com_hifen_e_sem_argumento(monkeypatch):
+    import io
+    mod = _modulo()
+    sqls = []
+    monkeypatch.setattr(mod, "_psql", lambda sql, stdin=None: sqls.append(stdin) or "")
+
+    payload = json.dumps([{"slug": "via-stdin", "compose": None, "papel": "teste"}])
+    fake_stdin = io.StringIO(payload)
+    fake_stdin.isatty = lambda: False
+    monkeypatch.setattr(mod.sys, "stdin", fake_stdin)
+    mod.cmd_import("-")
+    assert "('via-stdin','teste',false,null,null" in sqls[-1]
+
+    fake_stdin2 = io.StringIO(json.dumps({"slug": "obj-stdin", "compose": None}))
+    fake_stdin2.isatty = lambda: False
+    monkeypatch.setattr(mod.sys, "stdin", fake_stdin2)
+    mod.main(["import"])
+    assert "('obj-stdin',null,false,null,null" in sqls[-1]
+
+
+def test_import_recusa_lista_invalida(tmp_path):
+    mod = _modulo()
+    vazia = tmp_path / "vazia.json"
+    vazia.write_text("[]", encoding="utf-8")
+    with pytest.raises(SystemExit) as saida:
+        mod.cmd_import(str(vazia))
+    assert saida.value.code == 3
+
+    sem_slug = tmp_path / "sem_slug.json"
+    sem_slug.write_text(json.dumps([{"papel": "x"}]), encoding="utf-8")
+    with pytest.raises(SystemExit) as saida2:
+        mod.cmd_import(str(sem_slug))
+    assert saida2.value.code == 2
+
+    duplicada = tmp_path / "dup_slug.json"
+    duplicada.write_text(json.dumps([{"slug": "a"}, {"slug": "a"}]), encoding="utf-8")
+    with pytest.raises(SystemExit) as saida3:
+        mod.cmd_import(str(duplicada))
+    assert saida3.value.code == 2
