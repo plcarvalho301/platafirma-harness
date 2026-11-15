@@ -1,4 +1,12 @@
 {
+  "casa": {
+    "conteiner": "casa-db",
+    "base": "casa",
+    "dono": "casa",
+    "porta": 5439,
+    "ddl": "outros_repos/conhecimento/ontologia/ddl/casa.sql",
+    "o_que_guarda": "ontologia da casa: catálogo, dicionários, fichário, eventos e vistas de leitura"
+  },
   "rag": {
     "conteiner": "rag-extractor-pg",
     "base": "rag_extractor",

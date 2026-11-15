@@ -24,10 +24,11 @@ set -uo pipefail
 
 VERBO="acervo psql"
 
-# Mesma allowlist do `migrar` — os dois Postgres versionados da casa. slug -> ctr:usr:base
+# Allowlist dos Postgres de conhecimento/busca/ontologia da casa. slug -> ctr:usr:base
 declare -A BANCOS=(
   [rag]="rag-extractor-pg:rag:rag_extractor"
   [motor]="motor-pg:motor:motor"
+  [casa]="casa-db:casa:casa"
 )
 
 uso() {
@@ -72,6 +73,9 @@ while [ $# -gt 0 ]; do
       ;;
     -t|--tuples-only)
       psql_flags+=("-t")
+      ;;
+    -At|-tA)
+      psql_flags+=("-A" "-t")
       ;;
     --csv)
       psql_flags+=("--csv")
