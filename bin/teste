@@ -620,10 +620,28 @@ arvore_da_bancada() {  # $1=clone
   return 0
 }
 
+_LO_NETNS_PY='import fcntl, os, socket, struct, sys
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    ifr = struct.pack("16s24x", b"lo")
+    flags = struct.unpack("16sH", fcntl.ioctl(s.fileno(), 0x8913, ifr)[:18])[1]
+    fcntl.ioctl(s.fileno(), 0x8914, struct.pack("16sH22x", b"lo", flags | 0x1))
+finally:
+    s.close()
+os.execvp(sys.argv[1], sys.argv[1:])'
+
 pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isolado|projeto) [$5=alvo...]
   local c="$1" raiz="$2" rotulo="$3" modo="$4"; shift 4
   local alvos=("$@") rc=0
-  local runner=()
+  local runner=() usa_uv=0
+  local pequeno_n=0 outros_n=0 prep_n=0 alvos_peq=() alvos_out=() alvos_prep=() x
+  for x in ${alvos[@]+"${alvos[@]}"}; do
+    case "${DEGRAU_DE_ALVO[$x]:-livre}" in
+      pequeno) pequeno_n=$((pequeno_n + 1)); alvos_peq+=("$x") ;;
+      preparo) prep_n=$((prep_n + 1)); alvos_prep+=("$x") ;;
+      *) outros_n=$((outros_n + 1)); alvos_out+=("$x") ;;
+    esac
+  done
   # Portão em paralelo (incidente #3335): a lista do portão roda com pytest-xdist, um
   # processo por arquivo (--dist loadfile: fixture de módulo e servidor falso ficam no
   # mesmo trabalhador). Trabalhadores = PF_TESTE_PARALELO (padrão: metade dos núcleos),
@@ -663,6 +681,7 @@ PY
           local com=(--with pytest)
           [ "${#xdist[@]}" -gt 0 ] && com+=(--with pytest-xdist)
           runner=("$uv_bin" run --no-project --python "${modo#py:}" "${com[@]}" pytest)
+          usa_uv=1
         fi
       else
         local com=(--with pytest)
@@ -672,13 +691,37 @@ PY
         else
           runner=(uv run --python "${modo#py:}" "${com[@]}" pytest)
         fi
+        usa_uv=1
       fi
       ;;
     isolado) runner=(uvx pytest) ;;
-    *)       runner=(uv run pytest) ;;
+    *)       runner=(uv run pytest); usa_uv=1 ;;
   esac
+  local runner_peq=("${runner[@]}")
+  if [ "$usa_uv" -eq 1 ]; then
+    runner_peq=("${runner[0]}" run --offline "${runner[@]:2}")
+  fi
+  local py_lo="python3"
+
   if [ "${PF_TESTE_VERBOSO:-0}" = 1 ]; then
-    (cd "$raiz" && "${runner[@]}" ${alvos:+"${alvos[@]}"}) || rc=$?
+    if [ "$pequeno_n" -gt 0 ]; then
+      unshare --user --map-root-user --net -- true 2>/dev/null \
+        || morre "o degrau pequeno roda sem rede e este host não deixou criar o namespace de rede (unshare --user --map-root-user --net): não medido" 5
+      [ "$usa_uv" -eq 0 ] || (cd "$raiz" && "${runner[@]}" --version >/dev/null 2>&1) || true
+      if [ "$prep_n" -gt 0 ]; then
+        (cd "$raiz" && "${runner[@]}" ${alvos_prep:+"${alvos_prep[@]}"}) || rc=$?
+      fi
+      if [ "$rc" -eq 0 ]; then
+        (cd "$raiz" && unshare --user --map-root-user --net -- "$py_lo" -c "$_LO_NETNS_PY" "${runner_peq[@]}" ${alvos_peq:+"${alvos_peq[@]}"}) || rc=$?
+      fi
+      if [ "$outros_n" -gt 0 ]; then
+        local rc_out=0
+        (cd "$raiz" && "${runner[@]}" ${alvos_out:+"${alvos_out[@]}"}) || rc_out=$?
+        [ "$rc" -eq 0 ] && rc="$rc_out"
+      fi
+    else
+      (cd "$raiz" && "${runner[@]}" ${alvos:+"${alvos[@]}"}) || rc=$?
+    fi
     if [ "$rc" -eq 0 ]; then printf 'suite VERDE: %s\n' "$rotulo"; else printf 'suite VERMELHA: %s — exit %s\n' "$rotulo" "$rc"; fi
     return "$rc"
   fi
@@ -761,14 +804,42 @@ PY
     env_opts=(UV_PROJECT_ENVIRONMENT="$envtmp/venv")
   fi
 
-  local timeout_py="${PRAZO:-${PF_TESTE_TIMEOUT:-300}}"
-  (cd "$raiz" && env ${env_opts:+"${env_opts[@]}"} timeout "$timeout_py" "${runner[@]}" ${alvos:+"${alvos[@]}"} "${pytest_flags[@]}") >"$log" 2>&1 || rc=$?
+  local timeout_py="${PRAZO:-${PF_TESTE_TIMEOUT:-300}}" xml_out=""
+  if [ "$pequeno_n" -gt 0 ]; then
+    if ! unshare --user --map-root-user --net -- true 2>/dev/null; then
+      [ -n "${envtmp:-}" ] && rm -rf "$envtmp"
+      rm -f "$xml"
+      morre "o degrau pequeno roda sem rede e este host não deixou criar o namespace de rede (unshare --user --map-root-user --net): não medido" 5
+    fi
+    [ "$usa_uv" -eq 0 ] || (cd "$raiz" && env ${env_opts:+"${env_opts[@]}"} "${runner[@]}" --version >/dev/null 2>&1) || true
+    : > "$log"
+    if [ "$prep_n" -gt 0 ]; then
+      local pytest_flags_prep=(-q)
+      [ "${EM_ARVORE:-0}" -eq 1 ] && pytest_flags_prep+=(-p no:cacheprovider)
+      (cd "$raiz" && env ${env_opts:+"${env_opts[@]}"} timeout "$timeout_py" "${runner[@]}" ${alvos_prep:+"${alvos_prep[@]}"} "${pytest_flags_prep[@]}") >>"$log" 2>&1 || rc=$?
+    fi
+    if [ "$rc" -eq 0 ]; then
+      (cd "$raiz" && env ${env_opts:+"${env_opts[@]}"} timeout "$timeout_py" unshare --user --map-root-user --net -- "$py_lo" -c "$_LO_NETNS_PY" "${runner_peq[@]}" ${alvos_peq:+"${alvos_peq[@]}"} "${pytest_flags[@]}") >>"$log" 2>&1 || rc=$?
+    fi
+    if [ "$outros_n" -gt 0 ] && [ "$rc" -ne 124 ] && [ "$rc" -ne 137 ]; then
+      local rc_out=0 pytest_flags_out=(-q ${xdist[@]+"${xdist[@]}"})
+      xml_out="$(mktemp "${TMPDIR:-/tmp}/teste-junit.XXXXXX.xml")"
+      pytest_flags_out+=(--junitxml="$xml_out")
+      [ "${EM_ARVORE:-0}" -eq 1 ] && pytest_flags_out+=(-p no:cacheprovider)
+      (cd "$raiz" && env ${env_opts:+"${env_opts[@]}"} timeout "$timeout_py" "${runner[@]}" ${alvos_out:+"${alvos_out[@]}"} "${pytest_flags_out[@]}") >>"$log" 2>&1 || rc_out=$?
+      if [ "$rc_out" -eq 124 ] || [ "$rc_out" -eq 137 ]; then rc="$rc_out"
+      elif [ "$rc" -eq 0 ] || [ "$rc_out" -eq 1 ]; then [ "$rc_out" -ne 0 ] && rc="$rc_out"
+      fi
+    fi
+  else
+    (cd "$raiz" && env ${env_opts:+"${env_opts[@]}"} timeout "$timeout_py" "${runner[@]}" ${alvos:+"${alvos[@]}"} "${pytest_flags[@]}") >"$log" 2>&1 || rc=$?
+  fi
   [ -n "${envtmp:-}" ] && rm -rf "$envtmp"
 
   if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
     rc=5
     linha="suite INDISPONIVEL: $rotulo — timeout (${timeout_py}s excedidos)"
-    rm -f "$xml"
+    rm -f "$xml" "$xml_out"
     printf '%s\n' "$linha"
     if [ -f "$log" ] && [ -s "$log" ]; then
       tail -n 15 "$log" | sed 's/^/  | /'
@@ -783,10 +854,13 @@ PY
     linha="suite VERDE: $rotulo — ${resumo:-sem contagem}"
   else
     linha="suite VERMELHA: $rotulo — exit $rc${resumo:+, $resumo}"
-    [ "$rc" -eq 1 ] && extra="$(nomear_reprovados "$xml" | sed 's/^/  reprovado: /')"
-    [ "$rc" -eq 1 ] || extra="$(tail -n 5 "$log" | sed 's/^/  | /')"
+    if [ "$rc" -eq 1 ]; then
+      extra="$({ nomear_reprovados "$xml"; [ -z "$xml_out" ] || nomear_reprovados "$xml_out"; } | sed 's/^/  reprovado: /')"
+    else
+      extra="$(tail -n 5 "$log" | sed 's/^/  | /')"
+    fi
   fi
-  rm -f "$xml"
+  rm -f "$xml" "$xml_out"
   printf '%s\n' "$linha"
   [ -z "$extra" ] || printf '%s\n' "$extra"
   printf 'saida inteira: %s\n' "$log"
