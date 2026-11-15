@@ -401,9 +401,36 @@ def test_minuta_formalizar_adr_nasce_na_serie_com_o_proximo_numero(tmp_path):
     assert _no_origin(tmp_path, "minuta/0006-pauta.md") is None
     adr = _no_origin(tmp_path, "adr/arq/0118-pauta.md")
     assert adr is not None
+    cabecalho = adr.split("\n## ", 1)[0]
     # a ingestao recusa documento sem Especie: antes do primeiro ## (arq:0115 §7)
-    assert "\nEspécie: adr\n" in adr.split("\n## ", 1)[0]
+    assert "\nEspécie: adr\n" in cabecalho
+    assert "- **Fechado:** <preencher>\n" in cabecalho
+    assert "- **Procedência:** <preencher>\n" in cabecalho
     assert _no_origin(tmp_path, "macro-global/decisions/0001-pauta.md") is None
+
+
+def test_minuta_formalizar_vencido_nao_grava_secao_aberto_e_avisa_ausencia(tmp_path):
+    bancada = _montar(tmp_path)
+    _abrir(tmp_path, bancada)
+    _main_novo(tmp_path, "minuta/0006-pauta.md",
+               _pauta(["engenharia"], {"arquiteto": "posição",
+                                       "engenharia": "<a preencher pela própria cadeira>"}))
+    r = _minuta(tmp_path, bancada, "formalizar", "6", "--como", "adr", "--serie", "arq", "--vencido")
+    assert r.returncode == 0, r.stderr
+    assert "vencida — sem manifestação de: engenharia" in r.stderr
+    adr = _no_origin(tmp_path, "adr/arq/0001-pauta.md")
+    assert adr is not None
+    assert "## Aberto" not in adr
+
+    _main_novo(tmp_path, "minuta/0007-outra.md",
+               _pauta(["engenharia"], {"arquiteto": "posição",
+                                       "engenharia": "<a preencher pela própria cadeira>"}))
+    r_spec = _minuta(tmp_path, bancada, "formalizar", "7", "--como", "spec", "--destino", "outra", "--vencido")
+    assert r_spec.returncode == 0, r_spec.stderr
+    assert "vencida — sem manifestação de: engenharia" in r_spec.stderr
+    spec = _no_origin(tmp_path, "spec/outra.md")
+    assert spec is not None
+    assert "## Aberto" not in spec
 
 
 def test_minuta_formalizar_adr_em_serie_vazia_comeca_em_0001(tmp_path):
