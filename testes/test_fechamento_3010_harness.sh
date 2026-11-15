@@ -74,6 +74,11 @@ grep -q '"terceiros" / "tokenizers" / "qwen2.5.json"' "$REPO_ROOT/recuperacao/_r
 (cd "$REPO_ROOT" && git check-ignore -q terceiros/tokenizers/qwen2.5.json) || falha "terceiros/ devia estar fora do git"
 echo "OK"
 
+if [ "$(id -u)" -eq 0 ]; then
+  echo "SKIP: passos 3+ requerem conta nao-root (uid 0 ignora bits DAC em [ -w ])"
+  exit 0
+fi
+
 echo "--- 3: release materializa o terceiro na arvore da rev a partir do cache pinado"
 cat > "$STUBS/acervo" <<'EOF'
 #!/usr/bin/env bash
