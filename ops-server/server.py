@@ -3441,7 +3441,8 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                 esgotado = _prazo_esgotado(fim)
                 if esgotado:
                     return esgotado
-                _ato = item.get("ato", "")
+                # DT 670: ato no topo da chamada vale como padrão para os itens do lote.
+                _ato = item.get("ato") or ato
                 _args = item.get("args") or []
                 if isinstance(_args, (str, bytes)):
                     _a_ex = json.dumps(_ato or "<ato>", ensure_ascii=False)

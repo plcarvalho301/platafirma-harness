@@ -299,6 +299,23 @@ def test_estado_ilegivel_segue_o_caminho_de_antes(amb):
     assert "ARGS: comentar 4242" in amb.tarefas_log.read_text(encoding="utf-8")
 
 
+def test_dt668_feature_comenta_com_insumo(amb):
+    r = amb.run("promover", "fixture", gh_ref="fabrica/4269-feature", nivel="feature", estado="Captada (funil)")
+    assert r.returncode == 0, r.stdout + r.stderr
+    log = amb.tarefas_log.read_text(encoding="utf-8")
+    assert "ARGS: comentar 4269" in log
+    assert "STDIN: insumo: release promover fixture:" in log
+
+
+def test_dt668_falha_ao_comentar_traz_recusa_do_rastreador(amb):
+    r_err = amb.run("promover", "fixture", gh_ref="fabrica/4269-feature", nivel="feature",
+                    estado="Captada (funil)", tarefas_rc=4, tarefas_erro="tipo obrigatorio em feature")
+    assert r_err.returncode == 0, r_err.stdout + r_err.stderr
+    saida = r_err.stdout + r_err.stderr
+    assert "AVISO — comentário em 4269 falhou (tarefas saiu 4)" in saida
+    assert "recusa do rastreador: tipo obrigatorio em feature" in saida
+
+
 def test_estagio_card_pula_sem_pr_fabrica(amb):
     r = amb.run("promover", "fixture", gh_ref="ti/algum-ramo-de-mesa")
     assert r.returncode == 0, r.stdout + r.stderr

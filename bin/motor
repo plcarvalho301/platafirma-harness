@@ -4,7 +4,7 @@
 # dono: ia
 # componente: platafirma-motor
 # classe: B
-# use para: SEMPRE ANTES de responder de cabeça e ANTES de abrir o acervo, consultar a casa ou a biblioteca, «o que a literatura diz de X?», «onde a casa fala de Y?», «tem fonte sobre Z?»; parametrizar ou ajustar as consultas do motor
+# use para: SEMPRE ANTES de responder de cabeça e ANTES de abrir o acervo, consultar a casa ou a biblioteca, «o que a literatura diz de X?», «onde a casa fala de Y?», «tem fonte sobre Z?»; parametrizar ou ajustar as consultas do motor · forma na tool: ato="rag", args=["buscar", "<biblioteca|casa|log>", "<frase>"] (ou ato="buscar", args=["<biblioteca|casa|log>", "<frase>"])
 # atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, bateria), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote), julgar (escrita, lote), eleger (leitura, medida), consultas (leitura, medida), trabalhos (leitura, medida), estado (leitura, geracao), parar (escrita, medida), raciocinar (leitura, medida)
 # (buscar/medir/indexar/trocar/sortear/escrever/parear/julgar exigem particao; eleger e lintar leem o log inteiro e nao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar|desativar), eventos, juiz)
 # forma: json
@@ -4227,7 +4227,12 @@ def main():
     if a[0] == "raciocinador":
         return _raciocinador(a[1:])
     if a[0] not in d:
-        print(f"nao conheco a instancia '{a[0]}'. Ha: {', '.join(d)}. Se for um ato, use: motor rag {a[0]}", file=sys.stderr)
+        print(
+            f"nao conheco a instancia '{a[0]}'. Ha: {', '.join(d)}. Se for um ato, use: motor rag {a[0]}. "
+            f"Para buscar no acervo: motor rag buscar <biblioteca|casa|log> \"<frase>\" "
+            f"(na tool: ato=\"rag\", args=[\"buscar\", \"biblioteca\", \"<frase>\"])",
+            file=sys.stderr,
+        )
         sys.exit(1)
     inst = d[a[0]]
     if inst["estado"] != "ativa":
@@ -4268,7 +4273,11 @@ def main():
         return cmd_estado(inst, a[2:])
     if a[1] == "parar":
         return cmd_parar(inst, a[2:])
-    print(f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, consultas, eleger, escrever, estado, indexar, julgar, lintar, medir, parar, parear, sortear, trabalhos, trocar", file=sys.stderr)
+    print(
+        f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, consultas, eleger, escrever, estado, indexar, julgar, lintar, medir, parar, parear, sortear, trabalhos, trocar. "
+        f"Para buscar: motor {a[0]} buscar <biblioteca|casa|log> \"<frase>\"",
+        file=sys.stderr,
+    )
     sys.exit(1)
 
 
