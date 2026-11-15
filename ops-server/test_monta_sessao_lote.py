@@ -762,4 +762,73 @@ def test_claude_ai_segundo_giro_mantem_o_aviso_r2_so_para_o_balde_2():
     assert conta["pecas_espelhadas"] == 2
 
 
+def _pacote_com_cenario():
+    conduta_txt = (
+        "# conduta — o dono\n\n"
+        "## Cenário: tombando legado\n\n"
+        "Regra do cenario.\n"
+        "### Subsecao do cenario\n"
+        "Detalhe do cenario.\n\n"
+        "## 1. Para quem se escreve\n\n"
+        "Resto da conduta.\n"
+    )
+    return {"nome_canonico": "ti", "pecas": [
+        _peca("persona", "PERSONA " * 40),
+        _peca("conduta", conduta_txt),
+        _peca("acervo-consultado", "TRECHOS " * 40),
+    ]}
+
+
+def test_claude_ai_conduta_com_cenario_serve_cenario_por_valor():
+    """DT-630: no claude.ai, conduta sai como ponteiro mas a secao Cenário entra por valor."""
+    rc = _redis_com_estado()
+    with patch.object(s, "_rc", return_value=rc), \
+         patch.object(s, "_poda_ligada", return_value=True), \
+         patch.object(s, "_superficie", return_value="claude.ai"), \
+         patch.object(s, "_sha_publicado", return_value="abc123def456"):
+        r = _pacote_com_cenario()
+        conta = s._delta_pecas(r, _UUID_3265)
+    nomes = [p["peca"] for p in r["pecas"]]
+    assert nomes == ["persona", "conduta", "cenario", "acervo-consultado"]
+    conduta, cenario = r["pecas"][1], r["pecas"][2]
+    assert conduta["regime"] == "ponteiro" and conduta["conteudo"] is None
+    assert cenario["regime"] == "valor"
+    assert cenario["frescor"] == "fresco"
+    assert cenario["conteudo"].startswith("## Cenário: tombando legado")
+    assert "Detalhe do cenario." in cenario["conteudo"]
+    assert "Para quem se escreve" not in cenario["conteudo"]
+    assert cenario["sha"] == s._poda.sha_servido(cenario["conteudo"])
+    assert cenario["tokens"] > 0
+    assert conta["pecas_espelhadas"] == 2
+    assert conta["bytes_servidos"] >= len(cenario["conteudo"].encode())
+
+
+def test_claude_ai_cenario_permanece_por_valor_no_segundo_giro():
+    """DT-630: cenario nao entra no balde 2; no 2o giro continua por valor."""
+    rc = _redis_com_estado()
+    with patch.object(s, "_rc", return_value=rc), \
+         patch.object(s, "_poda_ligada", return_value=True), \
+         patch.object(s, "_superficie", return_value="claude.ai"), \
+         patch.object(s, "_sha_publicado", return_value="abc123def456"):
+        s._delta_pecas(_pacote_com_cenario(), _UUID_3265)
+        r2 = _pacote_com_cenario()
+        s._delta_pecas(r2, _UUID_3265)
+    cenario = next(p for p in r2["pecas"] if p["peca"] == "cenario")
+    assert cenario["regime"] == "valor"
+    assert "Regra do cenario." in cenario["conteudo"]
+
+
+def test_fora_do_claude_ai_nao_duplica_cenario():
+    """Fora do claude.ai, conduta vai inteira e nao cria peca cenario separada."""
+    rc = _redis_com_estado()
+    with patch.object(s, "_rc", return_value=rc), \
+         patch.object(s, "_poda_ligada", return_value=True), \
+         patch.object(s, "_superficie", return_value="code"), \
+         patch.object(s, "_sha_publicado", return_value="abc123def456"):
+        r = _pacote_com_cenario()
+        s._delta_pecas(r, _UUID_3265)
+    assert [p["peca"] for p in r["pecas"]] == ["persona", "conduta", "acervo-consultado"]
+    assert "## Cenário: tombando legado" in r["pecas"][1]["conteudo"]
+
+
 

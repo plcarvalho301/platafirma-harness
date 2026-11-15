@@ -471,12 +471,36 @@ def _falha_sha(e: dict, r: dict, pid: str, sha_declarado: str, conteudo: str) ->
             return True
     return False
 
+def _extrai_cenario(texto: str) -> str | None:
+    """Extrai seção(ões) `## Cenário:...` de `conduta` (dono.md) para servir por valor no claude.ai."""
+    if not isinstance(texto, str) or not texto:
+        return None
+    secoes: list[str] = []
+    coletando = False
+    atual: list[str] = []
+    for linha in texto.splitlines():
+        if re.match(r"^##\s+", linha):
+            if coletando and atual:
+                secoes.append("\n".join(atual).strip())
+                atual = []
+            coletando = bool(re.match(r"^##\s+Cen[áa]rio\b", linha, re.IGNORECASE))
+            if coletando:
+                atual.append(linha)
+        elif coletando:
+            atual.append(linha)
+    if coletando and atual:
+        secoes.append("\n".join(atual).strip())
+    bloco = "\n\n".join(s for s in secoes if s).strip()
+    return bloco or None
+
+
 def _delta_pecas(r: dict, sessao_id: str) -> dict:
     """R2 na abertura — dedup por baldes (spec_contexto-na-porta §4, §5).
 
     Balde 1: persona, conduta -> cache de prefixo, inteiras (#3067). Única exceção: no claude.ai,
     que já as carrega (instruções do projeto e preferências), saem como ponteiro (ref, sha
-    publicado) se o sha publicado existe; sem ele, inteiras (spec §3.1, #3247).
+    publicado) se o sha publicado existe; sem ele, inteiras (spec §3.1, #3247). Se `conduta`
+    contém seção `## Cenário:`, ela entra por valor como peça `cenario` (DT-630).
     Balde 2: acervo-consultado, corpo de caderno -> vira ponteiro (ref, sha) do 2º giro em diante.
     Balde 3: mesa do chapéu ativo, alias-cadeiras, índice de cadernos, turno, erro -> SEMPRE inteiro.
     Conferência de sha: recomputa sha e recusa fail-closed se não bater.
@@ -493,7 +517,9 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
     servidos = deduplicadas = 0
     espelhadas = []      # persona/conduta que o claude.ai ja carrega (spec §3.1)
     novos = {}
+    novas_pecas: list[dict] = []
     for e in pecas:
+        novas_pecas.append(e)
         sha, pid = e.get("sha"), e.get("peca")
         conteudo = e.get("conteudo")
         if not sha or not pid:
@@ -502,12 +528,10 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
             if _superficie() == "claude.ai":
                 if _falha_sha(e, r, pid, sha, conteudo):
                     continue
-                
                 cadeira = r.get("nome_canonico", "")
                 sha_pub = _sha_publicado(pid, cadeira)
-
-                
                 if sha_pub:
+                    cenario_txt = _extrai_cenario(conteudo) if pid == "conduta" else None
                     bytes_omitidos = len(conteudo.encode()) if isinstance(conteudo, str) else 0
                     e["regime"] = "ponteiro"
                     e["conteudo"] = None
@@ -515,11 +539,24 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
                     e["poda"] = {"ato": "monta_sessao", "modo": "ponteiro", "sha": sha_pub,
                                  "ref": e.get("ref"), "bytes_omitidos": bytes_omitidos}
                     espelhadas.append(pid)
+                    if cenario_txt:
+                        tk_cen, _ = tokenizador.conta_tokens(cenario_txt)
+                        novas_pecas.append({
+                            "peca": "cenario",
+                            "dono": e.get("dono", "gestao-estrategica"),
+                            "ref": e.get("ref"),
+                            "sha": _poda.sha_servido(cenario_txt),
+                            "regime": "valor",
+                            "volatilidade": e.get("volatilidade", "estavel"),
+                            "tokens": tk_cen,
+                            "frescor": "fresco",
+                            "motivo": None,
+                            "conteudo": cenario_txt,
+                        })
+                        servidos += len(cenario_txt.encode())
                     continue
-                
                 # Se não temos o sha publicado (arquivo ausente ou cadeira irresolvida),
                 # degradamos de forma segura servindo a peça inteira. Fall-through para o comportamento padrão.
-            
             # Balde 1 (outras superfícies): prefixo estável é cache, nunca ponteiro (#3067).
             servidos += len(conteudo.encode()) if isinstance(conteudo, str) else 0
             continue
@@ -552,6 +589,7 @@ def _delta_pecas(r: dict, sessao_id: str) -> dict:
                 continue
         novos[alca] = json.dumps({"sha": sha, "ref": e.get("ref"), "giro": 0, "tool": "monta_sessao"})
         servidos += len(conteudo.encode()) if isinstance(conteudo, str) else 0
+    r["pecas"] = novas_pecas
     try:
         if novos:
             rc.hset(chave, mapping=novos)
