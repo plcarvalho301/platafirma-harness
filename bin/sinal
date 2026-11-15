@@ -1010,7 +1010,7 @@ def ler_eixo(eixo: str, janela_s: int) -> dict:
     que nao e o JSON do eixo) vira `nao_consegui_olhar` com a causa: nunca zero e nunca minuto calado."""
     comando = [_binario_irmao("SINAL_INFRA", "infra"), "medir", eixo, "--json"]
     if eixo == "ram":
-        comando += ["--janela", str(janela_s)]      # as mortes que a frase do ato conta; a serie nao as guarda
+        comando += ["--janela", str(janela_s), "--sem-mortes"]  # quem olha as mortes na passada e o detector-morte
     try:
         p = _rodar_com_teto(comando, ATO_TIMEOUT_S)
         j = json.loads(p.stdout)

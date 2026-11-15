@@ -94,7 +94,7 @@ infra ambiente conferir|aplicar                convergência do ambiente do harn
   infra ingress  [--ver]                         copia o ingress versionado do túnel para a cópia da instância e reinicia o cloudflared
   infra sobreposicao remover <stack> [--ver]     tira a sobreposição da instância da stack (deploy/<stack>/compose.override.yaml), guardando a cópia antes
   infra medir    rede [--json]                   a rede do host: conexões dos três túneis com a borda, reconexões e a porta por fora; só lê
-  infra medir    ram [--json] [--janela <s>]     a memória do host: uso real, cache e total à parte, pressão, quem consome e as mortes por limite; só lê
+  infra medir    ram [--json] [--janela <s>] [--sem-mortes]  a memória do host: uso real, cache e total à parte, pressão, quem consome e as mortes por limite; só lê
   infra medir    vram [--json]                   a VRAM: a placa e, por processo, o reservado e o SM, na chave de serviço; só lê
   infra medir    cpu  [--json]                   o processamento: a carga contra as threads, a pressão do kernel e o consumo por chave; só lê
   infra pecas    [--json]                        as peças de código declaradas em registro/pecas.json; só lê
@@ -148,7 +148,7 @@ FIM
 
 ajuda_medir_ram() {
   cat <<'FIM'
-uso: infra medir ram [--json] [--janela <segundos>]
+uso: infra medir ram [--json] [--janela <segundos>] [--sem-mortes]
 
 Mede a memória do host: o uso real (o que o kernel não devolve), o cache que ele devolve e o total da máquina, cada um
 em campo próprio e nunca somados, a pressão de memória do kernel (10, 60 e 300 s), os maiores consumidores pela chave de
