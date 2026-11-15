@@ -32,7 +32,7 @@ def uso(code=2):
         "  pesquisar consultar \"<consulta>\" [-k 8] [--cat geral|ciencia|codigo|social] [--desde AAAA] [--idioma pt|en|auto]\n"
         "                  geral: página e documentação · ciencia: artigo e preprint · codigo: repositório, pacote e\n"
         "                  pergunta-e-resposta, não a documentação da ferramenta · social: rede aberta\n"
-        "  pesquisar resolver <dominio|doi|isbn|cnpj|orcid> <identificador>\n"
+        "  pesquisar resolver <dominio|doi|isbn|cnpj|orcid> <identificador> [--completo]\n"
         "  pesquisar ler <url> [--foco \"<pergunta>\"] [--render] [--max-chars 6000] [--offset N] [--imagens]\n"
         "  pesquisar coletar <url> [<url>...] [--imagens]\n"
         "  pesquisar historico <url> [--em AAAA-MM-DD [--foco \"<pergunta>\"] [--max-chars 6000] [--offset N]] [--salvar]\n"
@@ -91,6 +91,7 @@ def main(argv):
     p.add_argument("--para", default=None)
     p.add_argument("--excluir", action="append", default=[])
     p.add_argument("--juntar", default=None)
+    p.add_argument("--completo", action="store_true")
     args = p.parse_args(argv[2:])
 
     trab = Trabalho(slug_trabalho(args.trabalho))
@@ -105,7 +106,7 @@ def main(argv):
         elif ato == "resolver":
             if len(resto) < 2:
                 uso()
-            env = atos.resolver(resto[0], resto[1], trab=trab)
+            env = atos.resolver(resto[0], resto[1], completo=args.completo, trab=trab)
         elif ato == "ler":
             if not resto:
                 uso()
