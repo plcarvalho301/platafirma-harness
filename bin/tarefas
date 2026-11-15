@@ -1247,6 +1247,248 @@ comentarios() {
 # levando erro. A lista de destinos válidos vem da API, derivada da própria máquina: este
 # verbo não guarda tabela de arestas, e é isso que o mantém correto quando um estado novo
 # entra no registro por INSERT.
+# DTs 323, 404 e 592: valida a tabela/lista de Unidades do Plano na entrada em `em-execucao`.
+# Identifica a coluna `arquivos` (ou fallback `escreve`) pelo cabeçalho da tabela Markdown (ex.:
+# `| # | escreve | arquivos | verificacao | depende |`), ignora texto descritivo do que a unidade
+# escreve, parênteses `(...)` e o rótulo literal `escreve`, aceita `—`/`nenhum` quando a unidade
+# não escreve arquivo, e cita explicitamente o nome da coluna lida quando recusa arquivo fora do raio.
+_validar_unidades_plano() {
+  local id="$1" j
+  j=$(busca GET "/itens/$id" 2>/dev/null) || return 0
+  [ -n "$j" ] || return 0
+  ITEM_JSON="$j" python3 -c '
+import fnmatch, html, json, os, re, sys, unicodedata
+
+try:
+    dados = json.loads(os.environ.get("ITEM_JSON", "") or "{}")
+except Exception:
+    sys.exit(0)
+
+desc = dados.get("descricao") or ""
+if not isinstance(desc, str) or not desc.strip():
+    sys.exit(0)
+
+if "<" in desc and ">" in desc:
+    t = re.sub(r"</p>|<br\s*/?>|</h[0-9]>|</li>|</pre>", "\n", desc, flags=re.I)
+    t = re.sub(r"<li>", "  - ", t, flags=re.I)
+    t = re.sub(r"<[^>]*>", "", t)
+    texto = html.unescape(t)
+else:
+    texto = desc
+
+linhas = [l.rstrip() for l in texto.splitlines()]
+
+def _norm(s: str) -> str:
+    s = unicodedata.normalize("NFD", s.strip().lower())
+    return "".join(c for c in s if unicodedata.category(c) != "Mn")
+
+re_hdr_md = re.compile(r"^\s*#{1,4}\s+(.+?)\s*$")
+re_rotulo = re.compile(r"^\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-z0-9áéíóúâêôãõçÁÉÍÓÚÂÊÔÃÕÇ _/-]{1,40}):\s*(.*)$")
+
+secoes = {}
+atual = None
+for l in linhas:
+    m_md = re_hdr_md.match(l)
+    if m_md:
+        h = _norm(m_md.group(1)).rstrip(":")
+        if "arquivos no raio" in h or h in ("raio", "raio de ataque", "raio emendado"):
+            atual = "raio"
+            secoes.setdefault("raio", [])
+        elif h == "unidades" or h.startswith("unidades "):
+            atual = "unidades"
+            secoes.setdefault("unidades", [])
+        else:
+            atual = None
+        continue
+    m_rot = re_rotulo.match(l)
+    if m_rot and not l.lstrip().startswith(("-", "*", "|")):
+        r = _norm(m_rot.group(1))
+        resto = m_rot.group(2).strip()
+        if r in ("raio de ataque", "raio emendado", "arquivos no raio", "raio"):
+            atual = "raio"
+            secoes.setdefault("raio", [])
+            if resto:
+                secoes["raio"].append(resto)
+            continue
+        elif r == "unidades":
+            atual = "unidades"
+            secoes.setdefault("unidades", [])
+            if resto:
+                secoes["unidades"].append(resto)
+            continue
+        elif r in ("premissas", "regras novas", "travas", "fora", "solucao", "problema", "sai quando", "onde", "traz"):
+            atual = None
+            continue
+    if atual:
+        secoes[atual].append(l)
+
+if "raio" not in secoes or "unidades" not in secoes:
+    sys.exit(0)
+
+VAZIOS = {"", "-", "—", "–", "nenhum", "nenhuma", "nada", "n/a", "nao", "não", "so le", "só lê", "nao escreve", "não escreve"}
+NOMES_CONHECIDOS = {"dockerfile", "makefile", "verdes", "procfile", "gemfile", "rakefile", "justfile", "caddyfile"}
+
+ASPAS = "`\x27\x22"
+
+def _parece_caminho(tok: str) -> bool:
+    t = tok.strip().strip(ASPAS).rstrip(".,;:")
+    if not t or _norm(t) in VAZIOS or _norm(t) == "escreve":
+        return False
+    if " " in t or "\t" in t:
+        return False
+    if "@" in t or "/" in t:
+        return True
+    if _norm(t) in NOMES_CONHECIDOS:
+        return True
+    if re.match(r"^[A-Za-z0-9_.-]+\.[A-Za-z0-9]{1,10}$", t):
+        return True
+    return False
+
+def _limpar_celula_arquivos(celula: str) -> list[str]:
+    # DT 323 e DT 404: tira observações entre parênteses (ex.: `(e o lock, pelo npm)`) e rótulo `escreve`
+    s = celula.strip()
+    while True:
+        novo = re.sub(r"\([^()]*\)", " ", s)
+        if novo == s:
+            break
+        s = novo
+    s = re.sub(r"[()]", " ", s)
+    s = re.sub(r"^\s*escreve\s*:?\s*", "", s, flags=re.I).strip()
+    if _norm(s.strip(ASPAS + " ")) in VAZIOS:
+        return []
+    partes = re.split(r"[,;]+|\s+", s)
+    arqs = []
+    for p in partes:
+        p_limpo = p.strip().strip(ASPAS).rstrip(".,;:")
+        if not p_limpo or _norm(p_limpo) in VAZIOS or _norm(p_limpo) == "escreve":
+            continue
+        if _parece_caminho(p_limpo):
+            arqs.append(p_limpo)
+    return arqs
+
+raio_entradas = []
+for l in secoes["raio"]:
+    s = l.strip()
+    if not s or s.startswith("<!--"):
+        continue
+    if s.startswith("|"):
+        cels = [c.strip() for c in s.strip("|").split("|")]
+        if not cels or all(re.match(r"^:?-+:?$", c) for c in cels if c):
+            continue
+        if _norm(cels[0]) in ("arquivo", "arquivos", "caminho", "raio", "#"):
+            continue
+        s = cels[0]
+    else:
+        s = re.sub(r"^[-*+]\s+", "", s)
+    s = re.sub(r"\([^()]*\)", " ", s)
+    s = re.split(r"\s+[—–-]\s+|\s+#\s+", s, maxsplit=1)[0].strip()
+    for cand in re.split(r"[,;]+|\s+", s):
+        c = cand.strip().strip(ASPAS).rstrip(".,;:")
+        if _parece_caminho(c):
+            raio_entradas.append(c)
+
+if not raio_entradas:
+    sys.exit(0)
+
+def _no_raio(arq: str) -> bool:
+    arq_sem_repo = arq.split("@", 1)[1] if "@" in arq else arq
+    for r in raio_entradas:
+        r_sem_repo = r.split("@", 1)[1] if "@" in r else r
+        if arq == r or arq_sem_repo == r_sem_repo or arq == r_sem_repo or arq_sem_repo == r:
+            return True
+        if "*" in r or "?" in r:
+            if fnmatch.fnmatch(arq, r) or fnmatch.fnmatch(arq_sem_repo, r_sem_repo):
+                return True
+        r_dir = r_sem_repo.rstrip("/")
+        if r_dir and arq_sem_repo.startswith(r_dir + "/"):
+            return True
+    return False
+
+linhas_u = [l.strip() for l in secoes["unidades"] if "|" in l and not l.strip().startswith("<!--")]
+if not linhas_u:
+    sys.exit(0)
+
+def _partir_linha(l: str) -> list[str]:
+    s = l.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|"):
+        s = s[:-1]
+    return [c.strip() for c in s.split("|")]
+
+def _eh_separador(cels: list[str]) -> bool:
+    return bool(cels) and all(re.match(r"^:?-{2,}:?$", c) for c in cels if c != "")
+
+def _eh_cabecalho(cels: list[str]) -> bool:
+    nomes = {_norm(c) for c in cels}
+    chaves = {"arquivos", "arquivo", "escreve", "verificacao", "depende", "prova", "unidade", "unidades"}
+    if not (nomes & chaves):
+        return False
+    prim = _norm(cels[0]) if cels else ""
+    if re.match(r"^(u?\d+)\b", prim) and prim not in ("#", "id", "n", "no", "num", "numero", "unidade"):
+        return False
+    return True
+
+col_idx = None
+col_nome = "arquivos"
+inicio = 0
+
+prim_cels = _partir_linha(linhas_u[0])
+if _eh_cabecalho(prim_cels):
+    inicio = 1
+    if len(linhas_u) > 1 and _eh_separador(_partir_linha(linhas_u[1])):
+        inicio = 2
+    norm_cels = [_norm(c) for c in prim_cels]
+    # DT 592: prioriza a coluna `arquivos` pelo cabeçalho; usa `escreve` só como fallback se não houver `arquivos`
+    for i, nc in enumerate(norm_cels):
+        if nc in ("arquivos", "arquivo", "arquivos no raio", "caminhos"):
+            col_idx = i
+            col_nome = prim_cels[i].strip() or "arquivos"
+            break
+    if col_idx is None:
+        for i, nc in enumerate(norm_cels):
+            if nc == "escreve" or nc.startswith("escreve "):
+                col_idx = i
+                col_nome = prim_cels[i].strip() or "escreve"
+                break
+    if col_idx is None:
+        col_idx = 2 if len(prim_cels) >= 5 else 1
+        col_nome = prim_cels[col_idx].strip() if col_idx < len(prim_cels) else "arquivos"
+
+for l in linhas_u[inicio:]:
+    cels = _partir_linha(l)
+    if not cels or _eh_separador(cels) or _eh_cabecalho(cels):
+        continue
+    uid_bruto = cels[0].strip()
+    m_u = re.match(r"^(U?\d+)\b", uid_bruto, flags=re.I)
+    uid = m_u.group(1) if m_u else (uid_bruto.split()[0] if uid_bruto else "?")
+    if uid.isdigit():
+        uid = f"U{uid}"
+    idx = col_idx
+    nome_lido = col_nome
+    if idx is None:
+        # Fallback sem cabeçalho: se tem >= 4 colunas e a 2ª coluna é descrição sem caminhos enquanto a 3ª tem caminhos/vazio
+        if len(cels) >= 4 and not _limpar_celula_arquivos(cels[1]) and _norm(cels[1].strip(ASPAS + " ")) not in VAZIOS and (
+            _limpar_celula_arquivos(cels[2]) or _norm(cels[2].strip(ASPAS + " ")) in VAZIOS
+        ):
+            idx = 2
+            nome_lido = "arquivos"
+        else:
+            idx = 1
+            nome_lido = "arquivos"
+    if idx >= len(cels):
+        continue
+    arqs = _limpar_celula_arquivos(cels[idx])
+    for arq in arqs:
+        if not _no_raio(arq):
+            sys.stderr.write(
+                f"recusado: Unidade {uid} toca \x27{arq}\x27 (coluna \x27{nome_lido}\x27 de ### Unidades) "
+                f"fora de ### Arquivos no Raio (use \x27—\x27 ou \x27nenhum\x27 quando a unidade não escreve arquivo)\n"
+            )
+            sys.exit(1)
+'
+}
+
 mover() {
   local id; id=$(so_id "${1:?uso: tarefas mover <id> <estado> [--motivo \"...\"]}")
   local destino="${2:?uso: tarefas mover <id> <estado> [--motivo \"...\"]}"; shift 2
@@ -1268,6 +1510,9 @@ mover() {
       *) echo "opção desconhecida: $1" >&2; exit 2 ;;
     esac
   done
+  if [ "$destino" = "em-execucao" ]; then
+    _validar_unidades_plano "$id" || return 1
+  fi
   local resp; resp=$(jq -n --arg e "$destino" --arg m "$motivo" --arg g "$elo" --arg d "$decisao" \
      '{estado:$e}
       + (if $m == "" then {} else {motivo:$m} end)
@@ -1417,7 +1662,22 @@ modelo() {
     *) echo "uso: tarefas modelo <épico|feature|story|task> | story refinada | story derivada | comentario <tipo>" >&2; exit 2 ;;
   esac
   local j; j=$(busca GET "/modelo/$variante") || return 1
-  printf '%s' "$j" | jq -j '.texto'
+  if [ "$variante" = "story-refinada" ]; then
+    # DTs 404 e 592: se o molde servido trouxer tabela de Unidades desalinhada (ex.: `escreve` sem
+    # coluna `arquivos` ou `escreve <repo@caminho>` dentro da célula de caminhos), normaliza para
+    # que `modelo story refinada` e o gate de `mover em-execucao` falem a mesma coluna `arquivos`.
+    MODELO_JSON="$j" python3 -c '
+import json, os, re, sys
+j = json.loads(os.environ["MODELO_JSON"])
+t = j.get("texto") or ""
+if "Unidades" in t:
+    t = re.sub(r"\|\s*#\s*\|\s*unidade\s*\|\s*escreve\s*\|", "| # | escreve | arquivos |", t, flags=re.I)
+    t = re.sub(r"\|\s*escreve\s*:\s*(<[^|>]+>)", r"| \1", t, flags=re.I)
+sys.stdout.write(t)
+'
+  else
+    printf '%s' "$j" | jq -j '.texto'
+  fi
   local aviso; aviso=$(printf '%s' "$j" | jq -r '.aviso // empty')
   [ -n "$aviso" ] && printf '%s\n' "$aviso" >&2
   return 0
@@ -1502,6 +1762,29 @@ _dt_stacks() {
 # três no texto, e repeti-los dobrava a linha (#2856 linha 316). `curto` tira
 # raio, esperado e onde, que são o que faz a lista inteira passar dos 50 KB que a porta serve
 # (#2856 linha 143); a saída leva o jeito e a âncora. Sem linha, não imprime nada.
+# DT 271: calcula o tamanho do corpo do balde (#2856) em KiB e emite AVISO acima de 100 KiB.
+_dt_balde_kib() { # _dt_balde_kib <json_balde> [consultar_item=0|1]
+  local j="${1:-}" consultar="${2:-0}" bytes="" b_j=0 b_it=0 item_j="" desc=""
+  bytes=$(printf '%s' "$j" | jq -r '.corpo_bytes // .tamanho_bytes // .bytes // empty' 2>/dev/null || true)
+  if ! [[ "$bytes" =~ ^[0-9]+$ ]]; then
+    b_j=$(printf '%s' "$j" | wc -c | tr -d '[:space:]')
+    if [ "$consultar" = "1" ]; then
+      item_j=$(curl -fsS "$BASE/itens/2856" 2>/dev/null || true)
+      if [ -n "$item_j" ]; then
+        desc=$(printf '%s' "$item_j" | jq -r '.descricao // .corpo // empty' 2>/dev/null || true)
+        [ -n "$desc" ] && b_it=$(printf '%s' "$desc" | wc -c | tr -d '[:space:]')
+      fi
+    fi
+    bytes="$b_j"
+    [ "${b_it:-0}" -gt "${bytes:-0}" ] && bytes="$b_it"
+  fi
+  local kib=$(( (bytes + 1023) / 1024 ))
+  printf 'corpo #2856: %s KiB\n' "$kib"
+  if [ "$kib" -gt 100 ]; then
+    printf 'AVISO: balde de DTs com %s KiB (teto 100 KiB)\n' "$kib"
+  fi
+}
+
 _dt_tabela() { # _dt_tabela <situacao> <stack|""> <desde> <curto 0|1> <idade-minima>
   local q="situacao=$1" j rows
   [ -n "$2" ] && q="$q&stack=$2"
@@ -1519,7 +1802,12 @@ _dt_tabela() { # _dt_tabela <situacao> <stack|""> <desde> <curto 0|1> <idade-min
               + parte("Onde"; (.onde as $o | if $o == null or $o == "" or ($t | contains($o | uma)) then null else $o end))
               + (if .saida_jeito then " · saiu " + .saida_jeito + ": " + (.saida_ancora | uma) else "" end)
          end)') || return 1
-  [ -n "$rows" ] && printf 'n\tidade\tstack\tdébito\n%s\n' "$rows"
+  if [ -n "$rows" ]; then
+    printf 'n\tidade\tstack\tdébito\n%s\n' "$rows"
+    if [ "$4" = "1" ]; then
+      _dt_balde_kib "$j" 1
+    fi
+  fi
   return 0
 }
 
@@ -1602,6 +1890,9 @@ dt_indicadores() {
       + (if (.semana.saidas | length) > 0
          then " (" + ([.semana.saidas | to_entries[] | "\(.key) \(.value)"] | join(", ")) + ")"
          else "" end)'
+  if printf '%s' "$j" | jq -e '(.corpo_bytes // .tamanho_bytes // .bytes) != null' >/dev/null 2>&1; then
+    _dt_balde_kib "$j" 0
+  fi
 }
 
 # `admitir` É O TESTE DE ADMISSÃO VIRANDO CÓDIGO (rito §1, R11): sem --evidencia ou sem --medido-em
