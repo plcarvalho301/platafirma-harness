@@ -8,8 +8,7 @@ quando 0038 renasce com outro assunto (a arq:0115 apontou para o processamento d
 minuta por número, ou pela decisão da minuta («resolvidas na minuta»).
 
 Escopo do detector:
-  - arquivos: `.md` dentro de uma pasta `decisions/` (ADR, de qualquer família) e
-    `spec_*.md` (spec);
+  - arquivos: `adr/<série>/NNNN-*.md` (ADR) e `spec/<slug>.md` (spec);
   - só as linhas que o commit acrescenta: menção legada não trava edição de outro
     trecho, e a limpeza das 25 ADRs de 28/09 (inteligencia) já tirou o estoque;
   - a minuta como instrumento (a espécie, o verbo `minuta ler`, o molde «minuta NNNN» sem
@@ -33,6 +32,7 @@ _RE_DECISAO = re.compile(
     re.I,
 )
 _RE_HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+_RE_ADR_NOME = re.compile(r"^\d{4}-.+\.md$", re.I)
 
 CURA = ("tirar a citação: pôr a decisão do dono com data e as cadeiras que tinham posição, "
         "ou o canônico que fechou a matéria (arq:0028)")
@@ -42,9 +42,14 @@ def e_canonico(caminho: str) -> bool:
     p = PurePosixPath(caminho)
     if p.suffix.lower() != ".md":
         return False
+    parts = p.parts
+    if len(parts) == 3 and parts[0] == "adr" and bool(_RE_ADR_NOME.match(p.name)):
+        return True
+    if len(parts) >= 2 and parts[0] == "spec":
+        return True
     if p.name.startswith("spec_"):
         return True
-    return "decisions" in p.parts[:-1]
+    return "decisions" in parts[:-1]
 
 
 def citacao(linha: str) -> Optional[str]:
