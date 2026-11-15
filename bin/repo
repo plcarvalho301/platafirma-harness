@@ -158,7 +158,7 @@ uso:
   repo hooks listar [<repo>|--todos] [--url <t>] [--json]
   repo hooks apagar <repo> <id> --url <t>   (porta: hooks-listar, hooks-apagar)
   repo lock      <repo> <projeto> [--conferir | --atualizar <pacote>[@<versao>]… | --atualizar-tudo]
-                                                    (uv.lock ou package-lock.json; --atualizar sobe pacote)
+                 (uv.lock ou package-lock.json; --atualizar sobe pacote)
   repo git       <repo> <args…>
 
 bancada: PLATAFIRMA_BANCADA[sem default] (exit 3)

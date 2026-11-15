@@ -227,12 +227,12 @@ def test_dt414_dt530_abrir_direto_em_main_recoloca_ramo_antigo_ancestral(tmp_pat
 
 
 def test_invariantes_estaticos_bin_repo() -> None:
-    """Garante que bin/repo declara descartar no cabeçalho e não tem chamadas git/gh nuas."""
+    """Garante que bin/repo declara descartar no cabeçalho e não contém chamadas git/gh nuas."""
     import re
 
     linhas = BIN_REPO.read_text(encoding="utf-8").splitlines()
-    cabecalho = "\n".join(linhas[:55])
-    assert "descartar (operacao)" in cabecalho
+    cabecalho = "\n".join(linhas[:65])
+    assert "descartar (escrita, operacao)" in cabecalho
     assert "# le: descartar=repo" in cabecalho
     assert "# escreve: descartar=repo" in cabecalho
     assert "# poda: cosmetica@git" in cabecalho
