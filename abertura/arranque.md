@@ -115,9 +115,9 @@ a resposta — ela faz a sessão falar em nome de quem não é e escrever na mes
 |---|---|---|
 | claude.ai | instruções do Project fixam a cadeira | o dono, na configuração do app |
 | fita | slug chumbado no cwd da fita | `bin/chat`, que já recebe `--cadeira` |
-| fábrica | slug dito na abertura; sem slug, `fabrica` por default | o arranque de conta, `agente/CLAUDE.md` |
+| fábrica | slug dito na abertura; sem slug, `engenharia` por default | o arranque de conta, `agente/CLAUDE.md` |
 | Code seco | o mesmo arranque de conta: cai no default | escopo de usuário, em qualquer diretório |
-| posto (qualquer máquina, qualquer agente) | slug dito na abertura; sem slug, `fabrica` | `platafirma-posto/AGENTS.md`, por projeto, via `git pull`; o `CLAUDE.md` do posto só o importa |
+| posto (qualquer máquina, qualquer agente) | slug dito na abertura; sem slug, `engenharia` | `platafirma-posto/AGENTS.md`, por projeto, via `git pull`; o `CLAUDE.md` do posto só o importa |
 
 O posto é a porta de entrada humana (dono, 20/09/2026) e a única exceção à regra do
 ponteiro: as duas linhas estão ESCRITAS no `AGENTS.md` de lá, porque daquela porta este
@@ -147,7 +147,7 @@ abertura recusa cadeira desconhecida e devolve a lista das válidas.
 - **Code sem injeção só existe em conta onde o arranque não foi instalado.** Rodado o
   posto ou o instalador, o arranque de conta (`agente/CLAUDE.md`, escopo de usuário)
   alcança qualquer diretório: com slug dito, vale o slug; sem slug, abre
-  `fabrica` por default, porque é o que a conta faz na maior parte do tempo e sessão
+  `engenharia` por default, porque é o que a conta faz na maior parte do tempo e sessão
   sem cadeira não é opção. O que eu chamava de "Code seco sem injeção" era, na medição
   do TI, sessão com a cadeira ERRADA e calada — a persona da fábrica morava buildada
   no arquivo de conta, já derivada da fonte. Pior que órfã.
