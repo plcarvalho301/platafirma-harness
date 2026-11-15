@@ -628,3 +628,12 @@ def test_o_timer_do_sinal_dispara_no_segundo_zero_de_cada_minuto_e_nao_deriva():
     opcoes = dict(linha.split("=", 1) for linha in texto.splitlines() if "=" in linha and not linha.startswith("#"))
     assert opcoes["OnCalendar"] == "minutely" and opcoes["AccuracySec"] == "1s"
     assert "OnUnitActiveSec" not in opcoes, "relativo ao disparo anterior: a fase deriva e cruza a virada do minuto"
+
+
+def test_ver_nao_toma_a_trava_e_roda_ao_lado_da_passada_com_trava_segurada(mundo):
+    with eventos.trava(mundo.pasta) as livre:
+        assert livre
+        r = sinal.passada_de_eventos(passar(0), ver=True)
+    assert "pulada" not in r and "ver" in r
+    assert mundo.rota.eventos() == []
+    assert list((mundo.pasta / "fila").glob("*.jsonl")) == []

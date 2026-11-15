@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 
 PREFIXO_DA_FAMILIA = "platafirma-"
 _RE_SHA = re.compile(r"^[0-9a-f]{40}$")
+PORTA_MINIMA = 1
+PORTA_MAXIMA = 65535
 
 
 def composes_da_stack(stack: dict) -> list[str]:
@@ -72,3 +75,69 @@ def stack_do_container(conteiner_ou_labels: dict, topologia: list[dict]) -> str 
 
 
 stack_do_conteiner = stack_do_container
+
+
+def _porta_metricas_de_tokens(tokens: list[str]) -> int | None:
+    """Extrai a porta de `--metrics [host]:PORTA` ou `--metrics=[host]:PORTA`."""
+    alvo = ""
+    for i, tok in enumerate(tokens):
+        if tok == "--metrics" and i + 1 < len(tokens):
+            alvo = tokens[i + 1]
+            break
+        if tok.startswith("--metrics="):
+            alvo = tok.split("=", 1)[1]
+            break
+    achado = re.search(r":(\d+)$", alvo.strip())
+    if not achado:
+        return None
+    porta = int(achado.group(1))
+    return porta if PORTA_MINIMA <= porta <= PORTA_MAXIMA else None
+
+
+def _tokens_command_cloudflared(caminho: Path) -> tuple[list[str] | None, str]:
+    """Lê os tokens de `services.cloudflared.command` em um docker-compose.yml."""
+    import shlex
+
+    import yaml
+
+    origem = str(caminho)
+    try:
+        dados = yaml.safe_load(caminho.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as e:
+        return None, f"compose ilegível ({origem}): {e}"
+    if not isinstance(dados, dict):
+        return None, f"compose inválido em {origem}"
+    services = dados.get("services")
+    cf = services.get("cloudflared") if isinstance(services, dict) else None
+    cmd = cf.get("command") if isinstance(cf, dict) else None
+    if isinstance(cmd, str):
+        try:
+            return shlex.split(cmd), origem
+        except ValueError as e:
+            return None, f"command inválido em {origem}: {e}"
+    if isinstance(cmd, list):
+        return [str(t) for t in cmd], origem
+    return None, f"serviço cloudflared sem command em {origem}"
+
+
+def porta_metricas_cloudflared(
+    compose_path: str | os.PathLike[str] | None = None,
+    *,
+    env_var: str | None = None,
+) -> tuple[int | None, str]:
+    """Porta de `--metrics` do `cloudflared` no compose do `core` (fonte única, DT 378)."""
+    import raizes
+
+    if compose_path is not None:
+        caminho = Path(compose_path)
+    elif env_var and os.environ.get(env_var):
+        caminho = Path(os.environ[env_var])
+    else:
+        caminho = raizes.release() / "core" / "docker-compose.yml"
+    tokens, info = _tokens_command_cloudflared(caminho)
+    if tokens is None:
+        return None, info
+    porta = _porta_metricas_de_tokens(tokens)
+    if porta is None:
+        return None, f"--metrics sem porta válida em {info}"
+    return porta, info
