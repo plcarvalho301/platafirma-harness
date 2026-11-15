@@ -11,7 +11,7 @@
 # consome: porta@ops-log
 # ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_PRESSAO_MEMORIA[=/proc/pressure/memory] porta (medir ram) · INFRA_SLICE_EVENTS[=memory.events do slice da conta] porta (medir ram) · INFRA_FOSSIL_IDADE_H[=24] porta (limpeza fossil: horas de vida do contêiner sem label de projeto) · LONGJOB_LOGDIR[=$PLATAFIRMA_INSTANCIA/var/log/jobs] porta (limpeza fossil: onde o evento de fim do job é gravado) · INFRA_UNIT_AUTO[=ops-mcp] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · INFRA_UNITS_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-units.sh] porta · INFRA_INGRESS_FONTE[=$PLATAFIRMA_RELEASE/core/deploy/cloudflared-config.yml] porta · INFRA_INGRESS_COPIA[=$PLATAFIRMA_INSTANCIA/deploy/core/cloudflared.yml] porta · INFRA_INGRESS_CONTEINER[=platafirma-core-cloudflared-1] porta · INFRA_INGRESS_ESPERA[=5] porta (ingress: segundos até conferir o contêiner de pé) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (saude: lido por lib/oplog, o bruto contra o teto) · INFRA_PECAS[=$AQUI/../registro/pecas.json] porta (pecas, rodar) · PF_CADEIRA e PF_SESSAO porta (rodar: a bancada da sessão, a mesma escolha de acervo exportar) · PF_SUJEITO[obrigatória em up|down|pull|build|rodar] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
 # depende: docker · systemctl --user · curl · diff (ingress) · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · ps (limites) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs, bin/_infra/limpeza-quarentena, bin/_infra/limpeza-fossil e bin/_infra/imagens (ajudantes de limpeza e imagens) · bin/_infra/medir-rede, bin/_infra/medir-ram, bin/_infra/medir-vram, bin/_infra/medir-cpu e bin/_infra/eixos.py (medir rede, ram, vram e cpu) · journalctl --user (medir ram: a morte por limite das units) · bin/sinal (medir rede: a medida da porta) · nvidia-smi (medir vram) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda) · o script declarado em INFRA_UNITS_SCRIPT (units) · bin/_infra/rodar-peca.py, bin/_acervo/exportar e git (pecas, rodar: o registro, a bancada, o python do rag, o banco pelo cofre e a comparação com origin/main)
-# escreve: ambiente=core.hooksPath dos clones da bancada, symlinks de unit e texto de arranque nao rastreado (aplicar, por deploy-harness/instalar) · restart=contêiner/unit reiniciado (efeito, não arquivo) · remover=contêiner avulso removido (a inspeção dele guardada antes em var/log/infra/removidos), unit transitória tirada da lista (reset-failed) ou unit da conta parada, desabilitada e com o arquivo movido para var/quarentena · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados, imagens Docker fora de produção podadas (imagens) e cache de build/uv podado (cache); fossil=contêiner sem label de projeto removido (logs e inspeção guardados antes em var/log/infra/removidos) e unit platafirma-job-* falha tirada da lista (reset-failed) depois do evento de fim gravado no log do job · agenda=crontab do sistema (aplicar) · units=symlink das units da instância em ~/.local/share/systemd/user e daemon-reload (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · sobreposicao=compose.override.yaml da instância apagado (deploy/<stack>/, a cópia guardada antes em var/log/infra/removidos; nenhum contêiner tocado) · rodar=o que a peça declarada grava (a peça casa grava no banco do acervo) · estado/saude/logs/ps/config/backup/hardware/limites/gpu/medir=nada · imagens=nada · pecas=nada
+# escreve: ambiente=core.hooksPath dos clones da bancada, symlinks de unit e texto de arranque nao rastreado (aplicar, por deploy-harness/instalar) · restart=contêiner/unit reiniciado (efeito, não arquivo) · remover=contêiner ou rede avulsa removida (a inspeção guardada antes em var/log/infra/removidos), unit transitória tirada da lista (reset-failed) ou unit da conta parada, desabilitada e com o arquivo movido para var/quarentena · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados, imagens Docker fora de produção podadas (imagens) e cache de build/uv podado (cache); fossil=contêiner sem label de projeto removido (logs e inspeção guardados antes em var/log/infra/removidos) e unit platafirma-job-* falha tirada da lista (reset-failed) depois do evento de fim gravado no log do job · agenda=crontab do sistema (aplicar) · units=symlink das units da instância em ~/.local/share/systemd/user e daemon-reload (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · sobreposicao=compose.override.yaml da instância apagado (deploy/<stack>/, a cópia guardada antes em var/log/infra/removidos; nenhum contêiner tocado) · rodar=o que a peça declarada grava (a peça casa grava no banco do acervo) · estado/saude/logs/ps/config/backup/hardware/limites/gpu/medir=nada · imagens=nada · pecas=nada
 # substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build (deploy apagado — decisão do dono, 27/09) · sudo rm da sobreposição compose.override.yaml de uma stack · crontab -e a mão · cp à mão do ingress versionado para deploy/core/cloudflared.yml da instância + docker restart do cloudflared · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra por arq:0110 §14 emenda 26/09/2026)
 # face: medir=Operação
 # rotulo: medir=Medir rede
@@ -69,7 +69,7 @@ uso:
   infra logs     <alvo> [n] [--desde|--since <data>] [--ate|--until <data>] [--grep <texto>]
                                                 contêiner ou unit; últimas n linhas após os filtros (default 50)
   infra restart  <alvo> [--nao-esperar]          contêiner ou unit --user; confere antes de dizer ok
-  infra remover  <alvo> [--ver]                  tira contêiner avulso ou unit --user fora do declarado; --ver só mostra
+  infra remover  <alvo> [--ver]                  tira contêiner avulso, rede docker vazia ou unit --user fora do declarado; --ver só mostra
   infra unit-env <unit> [--ver | CHAVE=VALOR...] drop-in de ambiente da unit --user (daemon-reload)
   infra cache    [ver|vram|disco]                o que ocupa VRAM e disco; liberar é explícito
   infra cache    modelos [--json]                revisão e digest dos pesos no cache do Hugging Face; só lê
@@ -101,9 +101,10 @@ infra ambiente conferir|aplicar                convergência do ambiente do harn
   infra rodar    <peca> [--bancada <chave>] [-- <args>…]  roda a peça declarada; origem espelho só com os caminhos dela iguais a origin/main
 
 Leitura aceita alvo opcional; sem alvo, olha tudo. Mutação exige alvo explícito.
-remover recusa (4) contêiner de stack compose (é infra down), unit declarada no core ou
-no harness e unit fora de ~/.config/systemd/user; guarda a inspeção do contêiner antes
-de removê-lo e move o arquivo da unit para a quarentena, de onde volta com mv.
+remover recusa (4) contêiner de stack compose (é infra down), rede padrão (bridge/host/none),
+rede de stack compose ou com endpoints conectados, unit declarada no core ou no harness e
+unit fora de ~/.config/systemd/user; guarda a inspeção do contêiner ou rede antes de
+remover e move o arquivo da unit para a quarentena, de onde volta com mv.
 up, down, pull, build e remover exigem identidade: variável PF_SUJEITO (sem fallback; a
 porta a injeta pelo fluxo OAuth). agenda conferir roda com --check (0 igual, 1
 divergente); agenda aplicar aplica de fato. units conferir|aplicar, o mesmo para as units
@@ -234,6 +235,7 @@ units_vivas() {
 units_falhadas()   { systemctl --user list-units --state=failed --no-pager --no-legend || true; }
 timers()           { systemctl --user list-timers --no-pager --no-legend | awk '{print $NF"\t"$1,$2,$3}'; }
 e_conteiner()      { docker ps -a --format '{{.Names}}' | grep -qx "$1"; }
+e_rede()           { docker network ls --format '{{.Name}}' 2>/dev/null | grep -qx "$1"; }
 e_unit()           { systemctl --user cat -- "$1" >/dev/null 2>&1; }
 
 # --- apoio a --json -----------------------------------------------------
@@ -1073,6 +1075,62 @@ _remover_conteiner() {  # $1=contêiner $2=ver
   echo "removido: $c · inspeção guardada em $arq · a imagem ${img:-?} segue no disco"
 }
 
+_inspecao_rede_campo() {  # stdin=docker network inspect; $1=resumo|projeto|endpoints
+  python3 -c '
+import json, sys
+d = json.load(sys.stdin)[0]
+labels = d.get("Labels") or {}
+proj = labels.get("com.docker.compose.project") or ""
+if sys.argv[1] == "projeto":
+    print(proj); raise SystemExit(0)
+conts = d.get("Containers") or {}
+nomes = sorted((v.get("Name") or k) for k, v in conts.items())
+if sys.argv[1] == "endpoints":
+    print(", ".join(nomes)); raise SystemExit(0)
+print("rede:      %s" % (d.get("Name") or "-"))
+print("driver:    %s (%s)" % (d.get("Driver") or "-", d.get("Scope") or "-"))
+print("criada:    %s" % (d.get("Created") or "-"))
+print("endpoints: %s" % (", ".join(nomes) or "nenhum (vazia)"))
+print("stack:     %s" % (proj or "nenhuma (avulsa)"))
+' "$1"
+}
+
+_remover_rede() {  # $1=rede $2=ver
+  local r="$1" ver="$2" j proj endpoints arq
+  j=$(docker network inspect -- "$r" 2>/dev/null) || { echo "infra: erro: docker network inspect falhou em $r — nada removido" >&2; exit 5; }
+  printf '%s' "$j" | _inspecao_rede_campo resumo \
+    || { echo "infra: erro: inspeção da rede $r ilegível — nada removido" >&2; exit 5; }
+  proj=$(printf '%s' "$j" | _inspecao_rede_campo projeto)
+  endpoints=$(printf '%s' "$j" | _inspecao_rede_campo endpoints)
+  case "$r" in
+    bridge|host|none)
+      echo "infra: $r é rede padrão do Docker — recusado; nada removido" >&2
+      exit 4
+      ;;
+  esac
+  if [ -n "$proj" ]; then
+    echo "infra: $r é da stack compose '$proj', não avulsa — derrube por: infra down $proj; nada removido" >&2
+    exit 4
+  fi
+  if [ -n "$endpoints" ]; then
+    echo "infra: $r tem endpoints conectados ($endpoints) — desconecte ou pare os contêineres antes; nada removido" >&2
+    exit 4
+  fi
+  if [ "$ver" = 1 ]; then
+    echo "removível: sim — sem --ver, a inspeção vai para $INFRA_REMOVIDOS e a rede sai"
+    return 0
+  fi
+  mkdir -p "$INFRA_REMOVIDOS" 2>/dev/null || { echo "infra: erro: não consegui criar $INFRA_REMOVIDOS — nada removido" >&2; exit 3; }
+  arq="$INFRA_REMOVIDOS/rede-$r-$(date +%Y%m%dT%H%M%S).json"
+  printf '%s\n' "$j" > "$arq" 2>/dev/null || { echo "infra: erro: não consegui gravar a inspeção em $arq — nada removido" >&2; exit 3; }
+  docker network rm -- "$r" >/dev/null || { echo "infra: erro: docker network rm falhou em $r — a inspeção ficou em $arq" >&2; exit 1; }
+  if e_rede "$r"; then
+    echo "infra: erro: $r ainda aparece em docker network ls depois do rm" >&2
+    exit 1
+  fi
+  echo "removida: rede $r · inspeção guardada em $arq"
+}
+
 _remover_unit() {  # $1=unit (.service) $2=ver
   local u="$1" ver="$2" transit ativo frag dir dono decl leva
   transit=$(systemctl --user show -p Transient --value -- "$u" 2>/dev/null || true)
@@ -1142,12 +1200,13 @@ remover() {
   [ -n "$alvo" ] || { echo "erro: remover exige alvo explícito — não remove nada em lote." >&2; exit 2; }
   [ "$ver" = 1 ] || exigir_sujeito "infra remover" || exit 3
   if e_conteiner "$alvo"; then _remover_conteiner "$alvo" "$ver"; return; fi
+  if e_rede "$alvo"; then _remover_rede "$alvo" "$ver"; return; fi
   if e_unit "${alvo%.service}.service"; then _remover_unit "${alvo%.service}.service" "$ver"; return; fi
   if ! systemctl --user show-environment >/dev/null 2>&1; then
     echo "erro: sem bus do systemd --user (XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR) — '$alvo' não foi achado nem removido" >&2
     exit 3
   fi
-  echo "infra: '$alvo' não é contêiner (docker ps -a) nem unit --user (systemctl --user cat) — nada removido" >&2
+  echo "infra: '$alvo' não é contêiner (docker ps -a), rede (docker network ls) nem unit --user (systemctl --user cat) — nada removido" >&2
   exit 1
 }
 
