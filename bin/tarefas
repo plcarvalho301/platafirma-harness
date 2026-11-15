@@ -1899,7 +1899,28 @@ dt_indicadores() {
 # em AAAA-MM-DD, RECUSA, e sem --raio, --esperado e --stack também: a linha nasce pronta para
 # execução, e o modelo barato que a conserta não reconstrói o que faltou. Suspeita não é DT:
 # vira medição ou morre. A forma de cada campo é da API; a stack se confere aqui, no catálogo.
+_dt_tem_ajuda() {
+  local a
+  for a in "$@"; do
+    case "$a" in
+      --ajuda|--help|-h) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+_dt_admitir_uso() {
+  local codigo="${1:-2}" fd=2
+  [ "$codigo" = 0 ] && fd=1
+  cat >&$fd <<'FIM'
+uso: tarefas dt admitir "<o que falha>" --medido-em <AAAA-MM-DD> --evidencia <onde se mediu> --raio <repo@caminho> [--raio ...] --esperado "<comportamento esperado>" --stack <stack> [--verbo <v>] [--solucao "<txt>"]
+  obrigatórios: "<o que falha>", --medido-em <AAAA-MM-DD>, --evidencia <onde se mediu>, --raio <repo@caminho>, --esperado "<comportamento esperado>", --stack <stack>
+FIM
+  exit "$codigo"
+}
+
 dt_admitir() {
+  _dt_tem_ajuda "$@" && _dt_admitir_uso 0
   local texto="${1:-}"; shift || true
   local medido_em="" evidencia="" esperado="" stack="" verbo="" solucao="" cadeira=""
   local raios=()
@@ -1916,10 +1937,7 @@ dt_admitir() {
       *) echo "opção desconhecida: $1" >&2; exit 2 ;;
     esac
   done
-  if [ -z "$texto" ]; then
-    echo "uso: tarefas dt admitir \"<o que falha>\" --medido-em <AAAA-MM-DD> --evidencia <onde se mediu> --raio <repo@caminho> [--raio ...] --esperado \"<comportamento esperado>\" --stack <stack> [--verbo <v>] [--solucao \"<txt>\"]" >&2
-    exit 2
-  fi
+  [ -n "$texto" ] || _dt_admitir_uso 2
   if [ -z "$evidencia" ]; then
     echo "recusado: DT sem --evidencia não entra. Suspeita não é DT: meça (repro, retorno colado, arquivo:linha) ou não abra. (rito §1)" >&2
     exit 2
@@ -2055,18 +2073,10 @@ dt_restack() {
   fi
 }
 
-dt() {
-  local sub="${1:-}"; shift || true
-  case "$sub" in
-    listar)      dt_listar "$@" ;;
-    ler)         [ $# -eq 1 ] && [[ "$1" =~ ^[0-9]+$ ]] || { echo "uso: tarefas dt ler <n>" >&2; return 2; }; dt_listar --situacao todas --linha "$1" ;;
-    admitir)     dt_admitir "$@" ;;
-    restack)     dt_restack "$@" ;;
-    matar)       dt_matar "$@" ;;
-    vencidos)    dt_vencidos "$@" ;;
-    indicadores) dt_indicadores "$@" ;;
-    ''|*)
-      cat >&2 <<'FIM'
+_dt_uso() {
+  local codigo="${1:-2}" fd=2
+  [ "$codigo" = 0 ] && fd=1
+  cat >&$fd <<'FIM'
 uso:
   tarefas dt listar [--stack <s>] [--desde <n>] [--curto] [--situacao abertas|saidas|todas]
                                           linhas abertas do balde, as mais antigas primeiro, com a
@@ -2095,7 +2105,21 @@ O balde é dado do rastreador (tabela `balde`), uma linha por débito, com o nú
 tinha no corpo do #2856. Card próprio só pelo jeito englobada.
 Rito: padrao rito-debito-tecnico
 FIM
-      exit 2 ;;
+  exit "$codigo"
+}
+
+dt() {
+  local sub="${1:-}"; shift || true
+  case "$sub" in
+    --ajuda|--help|-h) _dt_uso 0 ;;
+    listar)      _dt_tem_ajuda "$@" && { echo "uso: tarefas dt listar [--stack <s>] [--desde <n>] [--curto] [--situacao abertas|saidas|todas] [--linha <n>]"; return 0; }; dt_listar "$@" ;;
+    ler)         _dt_tem_ajuda "$@" && { echo "uso: tarefas dt ler <n>"; return 0; }; [ $# -eq 1 ] && [[ "$1" =~ ^[0-9]+$ ]] || { echo "uso: tarefas dt ler <n>" >&2; return 2; }; dt_listar --situacao todas --linha "$1" ;;
+    admitir)     dt_admitir "$@" ;;
+    restack)     _dt_tem_ajuda "$@" && { echo "uso: tarefas dt restack <n> --stack <s> [--motivo \"<txt>\"]"; return 0; }; dt_restack "$@" ;;
+    matar)       _dt_tem_ajuda "$@" && { echo "uso: tarefas dt matar <n> --como resolvida --commit <sha> | --como cancelada --motivo \"<txt>\" | --como englobada --card <id>"; return 0; }; dt_matar "$@" ;;
+    vencidos)    _dt_tem_ajuda "$@" && { echo "uso: tarefas dt vencidos"; return 0; }; dt_vencidos "$@" ;;
+    indicadores) _dt_tem_ajuda "$@" && { echo "uso: tarefas dt indicadores [--dias <n>]"; return 0; }; dt_indicadores "$@" ;;
+    ''|*)        _dt_uso 2 ;;
   esac
 }
 
@@ -2268,11 +2292,15 @@ espera_dono() {
 # varrendo TODOS os argumentos: `tarefas criar --ajuda` criava um card chamado "--ajuda"
 # porque `--ajuda` caía como título posicional. Interceptar aqui cobre tanto `tarefas
 # --ajuda` quanto `tarefas <sub> --ajuda`, e nenhum sub-ato chega a rodar. `uso` já sai 2.
-for _a in "$@"; do
-  case "$_a" in
-    --ajuda|--help|-h) uso 0 ;;
-  esac
-done
+# Exceção (DT #682): `tarefas dt ...` trata `--ajuda` dentro do subcomando para imprimir
+# o uso específico de `dt` ou do sub-ato (`dt admitir --ajuda`, etc.).
+if [ "${1:-}" != "dt" ]; then
+  for _a in "$@"; do
+    case "$_a" in
+      --ajuda|--help|-h) uso 0 ;;
+    esac
+  done
+fi
 
 cmd="${1:-}"; shift || uso
 
