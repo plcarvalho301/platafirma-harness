@@ -128,6 +128,7 @@ tests/test_motor_registro.py | bin/acervo bin/_acervo/** bin/chat bin/conferir b
 tests/test_motor_eleger.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/lint bin/_lint/** bin/mesa bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/seg bin/sessao bin/_sessao/** bin/sinal bin/_expediente/** bin/_release/** abertura/** sessao/**
 tests/test_stack_mascara_segredos.py | bin/_release/**
 tests/test_pesquisar_consultar_palavras.py | bin/pesquisar pesquisa/**
+tests/test_pesquisar_dt_93_546_661_662_663.py | bin/pesquisar pesquisa/**
 tests/test_acervo_psql_c.py | bin/acervo bin/_acervo/**
 # Débito 330 do balde #2856: `acervo medir` roda o instrumento da medida (python -m medida) na bancada de
 # platafirma-conhecimento e diz a primeira linha do relatório; o exportar, de quem ele reusa o módulo, segue com o nome dele.

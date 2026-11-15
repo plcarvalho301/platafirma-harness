@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from pesquisa import exportar as X
 from pesquisa import manifesto as M
@@ -52,7 +53,10 @@ def test_juntar_faz_do_site_um_markdown_so(tmp_path):
     assert r["arquivo"] == "Doc de Ex.md" and r["paginas"] == 3 and r["ok_destino"]
     assert [p["motivo"] for p in r["pulados"]] == ["sem-markdown"]
     md = (tmp_path / "entrada/lote/Doc de Ex.md").read_text()
-    assert md.count("\n# ") == 1 and "# Doc de Ex" in md
+    # um H1 só, contado fora da cerca de código: a linha `# comentario` de dentro dela fica
+    # como está (#2856 linha 665: a contagem crua dava 2 e o teste nunca passou)
+    fora_da_cerca = re.sub(r"```.*?```", "", md, flags=re.S)
+    assert fora_da_cerca.count("\n# ") == 1 and "# Doc de Ex" in md
     assert md.index("## Inicio") < md.index("## Filha") < md.index("## C")
     assert "### Passo" in md and "\n# comentario" in md
     assert "Fonte: <https://ex.org/doc/b/index.md>" in md
