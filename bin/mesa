@@ -915,7 +915,7 @@ def _avisa_residuo(categoria, texto):
     sys.stderr.write(
         f"mesa: aviso — a lição traz resíduo de episódio ({vistos}). Grava assim mesmo. A lição é "
         "diretriz — «quando X, faça Y, porque Z» — e o episódio vai no --caso; reescreva com "
-        "`mesa substituir <id> --texto \"<diretriz>\"` (arq:0120 §2).\n")
+        "`mesa substituir <id> \"<diretriz>\"` (arq:0120 §2).\n")
 
 
 def _campos(categoria, args, hoje, base=None):
