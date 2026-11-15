@@ -1621,6 +1621,12 @@ def acao_reclassificar(args, autor: str, como_json: bool, headers: dict) -> int:
         alteracao["anotacao"] = args.anotacao
     if args.vinculacao is not None:
         alteracao["vinculacao"] = None if args.vinculacao.lower() in ("null", "none", "") else args.vinculacao
+    if getattr(args, "exposicao", None) is not None:
+        exp = args.exposicao.strip()
+        if exp not in ("arquivo", "texto", "trecho"):
+            sys.stderr.write(f"curar: erro: --exposicao inválida: '{exp}' (esperado: arquivo, texto ou trecho)\n")
+            sys.exit(2)
+        alteracao["exposicao"] = exp
     if args.titulo is not None:
         alteracao["titulo"] = args.titulo
     for campo in ("resumo", "subtitulo"):
@@ -1721,6 +1727,8 @@ def acao_reclassificar(args, autor: str, como_json: bool, headers: dict) -> int:
                 print(f"  Título     : {data.get('titulo')}")
                 print(f"  Domínio    : {data.get('dominio')} / {data.get('subdominio')}")
                 print(f"  Espécie    : {data.get('especie')}")
+                if data.get("exposicao"):
+                    print(f"  Exposição  : {data.get('exposicao')}")
                 print(f"  Emitido por: {'; '.join(data.get('emitido_por') or [])}")
                 print(f"  Publicação : {data.get('publicacao')} · id canônico: {data.get('id_canonico')}")
                 print(f"  Conceitos  : {', '.join(data.get('conceitos', []))}")
@@ -2003,6 +2011,12 @@ def acao_reextrair(args, autor: str, como_json: bool, headers: dict) -> int:
     print(f"  objeto    : {data.get('objeto')}")
     print(f"  método    : {data.get('metodo') or data.get('metodo_alvo')}"
           + (" (regenerar sob a mesma chave)" if data.get("regenerar") else ""))
+    if data.get("exposicao"):
+        print(f"  exposição : {data['exposicao']}")
+    if data.get("medida_atual"):
+        print(f"  medida    : {data['medida_atual']}")
+    if not aplicado and data.get("portao_parada"):
+        print(f"  portão    : {data['portao_parada']}")
     print(f"  espelho   : atual {data.get('espelho_atual') or '(nenhum)'}")
     if aplicado:
         print(f"  novo      : {_linha_espelho(data.get('espelho'))}" + ("  [já existia]" if data.get("ja_existia") else ""))
@@ -2249,8 +2263,10 @@ def acao_reextrair_lote(args, autor: str, como_json: bool, headers: dict) -> int
         print(f"  acompanhar: {data.get('acompanhar')}")
         return 0
     for it in data.get("itens", [])[:_LOTE_LINHAS]:
+        exp = it.get("exposicao") or it.get("marcacao") or "-"
+        portao = f"  [{it['portao_parada']}]" if it.get("portao_parada") else ""
         print(f"  {it.get('posicao'):>5}  {it.get('obra_id')}  {it.get('tipo'):<8} {_mib(it.get('bytes')):>10}  "
-              f"{it.get('metodo_atual')} -> {it.get('metodo_alvo')}  {it.get('marcacao')}"
+              f"{it.get('metodo_atual')} -> {it.get('metodo_alvo')}  {exp}{portao}"
               + (f"  [fonte servindo em {it['servindo_da_fonte']}]" if (it.get("servindo_da_fonte") or 0) > 1 else "")
               + f"  {_bancada_curta(it.get('titulo') or '', 60)}")
     resto = len(data.get("itens", [])) - _LOTE_LINHAS
@@ -2930,6 +2946,7 @@ def main(argv=None):
     parser.add_argument("--emitido-por", dest="emitido_por", default=None)
     parser.add_argument("--anotacao", default=None)
     parser.add_argument("--vinculacao", default=None)
+    parser.add_argument("--exposicao", default=None)
     parser.add_argument("--colecao", default=None)
 
     # Seleção
