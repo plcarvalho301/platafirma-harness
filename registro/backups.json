@@ -20,6 +20,15 @@
       "piso_bytes": 1048576,
       "alcance": "aqui"
     },
+    "casa-db": {
+      "o_que": "Postgres da ontologia da casa (schemas casa e casa_leitura)",
+      "cobertura": "cron do claudinho, 03:35",
+      "diretorio": "/srv/platafirma/casa/dados/backups/casa",
+      "padrao": "casa-*.sql.gz",
+      "piso_bytes": 65536,
+      "alcance": "aqui",
+      "_nota": "platafirma-casa-espelho:outros_repos/conhecimento/casa-db/backup-db.sh (#4286). O piso repete o PISO_BYTES do script (64 KiB)."
+    },
     "rag-minio": {
       "o_que": "object storage do acervo",
       "cobertura": "cron do claudinho, 03:45",

@@ -29,7 +29,7 @@ _EXTINTO = "platafirma-" + "arquitetura"  # partido: o próprio módulo não cas
 _RE = re.compile(
     re.escape(_EXTINTO) + r"[/@][\w.\-]"
     r"|\brelease\(\)\s*/\s*[\"']casa[\"']"
-    r"|\bcurrent/casa\b"
+    r"|\bcurrent/casa(?![-\w])"
 )
 # o detector e o teste dele carregam as formas de propósito
 ISENTOS = ("bin/_lint/casa_por_caminho.py", "controle/tests/test_contrato_casa_por_caminho.py")
