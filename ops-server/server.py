@@ -2218,8 +2218,25 @@ def _real(p: Path) -> Path:
         return p
 
 
+TIPOS_ENTRADA = {".csv"}
+
+
+def _clones_na_bancada(b: Path) -> list[str]:
+    """CLONES declarados mais qualquer diretorio `platafirma-*` ja presente na bancada."""
+    nomes = list(CLONES)
+    for raiz in (b, b / "wt"):
+        if raiz.is_dir():
+            try:
+                for p in sorted(raiz.iterdir()):
+                    if p.is_dir() and p.name.startswith("platafirma-") and p.name not in nomes:
+                        nomes.append(p.name)
+            except OSError:
+                pass
+    return nomes
+
+
 def _moradas_escrita():
-    """Rascunho da fita (instancia) + clones e worktrees da bancada DECLARADA.
+    """Rascunho da fita (instancia) + clones/worktrees e entrada da bancada DECLARADA.
 
     Sem bancada declarada sobra so o rascunho: a porta nao inventa lugar de codigo.
     `<bancada>/<repo>` e o clone base (o `repo` cai nele sem worktree da cadeira) e
@@ -2228,8 +2245,10 @@ def _moradas_escrita():
     b = _bancada()
     if b is not None:
         b = _real(b)
-        moradas += [(b / "wt" / c, TIPOS_TEXTO) for c in CLONES]
-        moradas += [(b / c, TIPOS_TEXTO) for c in CLONES]
+        clones = _clones_na_bancada(b)
+        moradas += [(b / "wt" / c, TIPOS_TEXTO) for c in clones]
+        moradas += [(b / c, TIPOS_TEXTO) for c in clones]
+        moradas.append((b / "entrada", TIPOS_ENTRADA))
     return moradas
 
 
@@ -2280,6 +2299,8 @@ def _clone_ausente(raiz: Path, real_pai: Path) -> str | None:
     else:
         base = raiz
     if not base.is_dir():
+        if raiz.name == "entrada":
+            return f"fora de morada: {base}/ nao existe"
         return (f"fora de morada: {base}/ nao existe — clone e worktree nascem por "
                 f"`repo abrir {raiz.name}`, write_file nao os cria")
     return None

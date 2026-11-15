@@ -485,3 +485,42 @@ def test_write_file_recusa_relativo_ao_repo_explicando_bancada(bancada, sem_pep)
     assert "fora de morada" in r["motivo"]
     assert "wt/<repo>/<cadeira>/<card-ou-slug>/" in r["motivo"]
     assert str(bancada / "3-gatilho/prosa.md") in r["motivo"]
+
+
+def test_write_file_aceita_entrada_csv_e_clone_novo_platafirma(bancada, sem_pep):
+    """DT 401 e DT 431: entrada/ aceita .csv quando existe; clone novo platafirma-* vale como morada."""
+    sem_entrada = s.write_file(path="entrada/lote/classificacao.csv", content="titulo,especie\n")
+    assert sem_entrada.get("recusado") and "fora de morada" in sem_entrada["motivo"], sem_entrada
+
+    (bancada / "entrada").mkdir()
+    ok_csv = s.write_file(path="entrada/lote/classificacao.csv", content="titulo,especie\n")
+    assert ok_csv.get("ok"), ok_csv
+    recusa_py = s.write_file(path="entrada/lote/script.py", content="print(1)\n")
+    assert recusa_py.get("recusado") and "tipo" in recusa_py["motivo"], recusa_py
+
+    (bancada / "platafirma-novo").mkdir()
+    ok_clone = s.write_file(path="platafirma-novo/README.md", content="# novo\n")
+    assert ok_clone.get("ok"), ok_clone
+
+    (bancada / "wt" / "platafirma-novo" / "engenharia").mkdir(parents=True)
+    ok_wt = s.write_file(path="wt/platafirma-novo/engenharia/nota.md", content="ok\n")
+    assert ok_wt.get("ok"), ok_wt
+
+
+def test_write_file_preserva_escape_barra_u_e_crontab(bancada, sem_pep):
+    """DT 59 e DT 371: literal \\u00ea nao e decodificado; deploy/crontab-claudinho e aceito."""
+    ok_cron = s.write_file(
+        path="wt/platafirma-core/fabrica/deploy/crontab-claudinho",
+        content="0 4 * * * echo \\u00ea\n",
+    )
+    assert ok_cron.get("ok"), ok_cron
+    gravado = (bancada / "wt/platafirma-core/fabrica/deploy/crontab-claudinho").read_text("utf-8")
+    assert "\\u00ea" in gravado
+
+    ok_trecho = s.write_file(
+        path="wt/platafirma-core/fabrica/deploy/crontab-claudinho",
+        trecho={"antes": "\\u00ea", "depois": "\\u00e9"},
+    )
+    assert ok_trecho.get("ok"), ok_trecho
+    atualizado = (bancada / "wt/platafirma-core/fabrica/deploy/crontab-claudinho").read_text("utf-8")
+    assert "\\u00e9" in atualizado

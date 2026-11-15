@@ -1814,6 +1814,16 @@ cmd_abrir() {
     base_ref="origin/main"
   elif "$GIT" -C "$clone_raiz" rev-parse --verify main >/dev/null 2>&1; then
     base_ref="main"
+  elif ! "$GIT" -C "$clone_raiz" rev-parse --verify HEAD >/dev/null 2>&1; then
+    "$GIT" -C "$clone_raiz" checkout -q -B main >/dev/null 2>&1 \
+      || morre "falha ao criar ramo main em repositorio vazio" 3
+    env GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME:-PlataFirma}" \
+        GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-bot@platafirma.org}" \
+        GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-PlataFirma}" \
+        GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-bot@platafirma.org}" \
+        "$GIT" -C "$clone_raiz" commit --allow-empty -q -m "chore: commit inicial" >/dev/null 2>&1 \
+      || morre "falha ao criar commit inicial em repositorio vazio" 3
+    base_ref="main"
   fi
 
   mkdir -p "$(dirname "$wt_dir")" || morre "falha ao criar diretório pai de $wt_dir" 3

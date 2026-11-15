@@ -233,4 +233,23 @@ set -e
 [ "$rc_forge" -eq 5 ] || { echo "FALHA: forge fora devia sair 5, saiu $rc_forge" >&2; exit 1; }
 echo "OK: sem bancada, ler/procurar/listar/historico leem origin/main do forge; chave nomeada exige bancada; forge fora sai 5"
 
+# 5. DT 431: repo abrir em repositorio vazio cria o primeiro commit em main e abre o worktree
+echo "--- Teste 5: DT 431 — repo abrir em repositorio vazio ---"
+FORGE_VAZIO="$TMP_DIR/forge-vazio.git"
+git init -q --bare -b main "$FORGE_VAZIO"
+git clone -q "$FORGE_VAZIO" "$BANCADA_TESTE/platafirma-vazio" 2>/dev/null
+out5="$("$VERBO" abrir platafirma-vazio --slug primeiro-commit 2>&1)" || {
+  echo "FALHA: repo abrir em repositorio vazio saiu $?: $out5" >&2
+  exit 1
+}
+[ -e "$BANCADA_TESTE/wt/platafirma-vazio/ti/primeiro-commit/.git" ] || {
+  echo "FALHA: worktree nao nasceu em repositorio vazio ($out5)" >&2
+  exit 1
+}
+git -C "$BANCADA_TESTE/platafirma-vazio" rev-parse --verify main >/dev/null 2>&1 || {
+  echo "FALHA: ramo main nao foi criado em repositorio vazio" >&2
+  exit 1
+}
+echo "OK: repo abrir em repositorio vazio inicializa main e abre a bancada"
+
 echo "=== Todos os testes do verbo repo passaram com sucesso! ==="
