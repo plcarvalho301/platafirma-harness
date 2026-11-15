@@ -1,7 +1,7 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # descansar — encerra o expediente conferindo a memória
 # capacidade: memoria
-# dono: claudinho-IA
+# dono: ia
 # use para: «encerra», «fecha por hoje», «paramos aqui», ANTES de encerrar o expediente
 # atos: fita, varredura
 # forma: relatorio
@@ -11,19 +11,20 @@
 # depender de a sessao saber que vai morrer — ela nao sabe. O que este verbo faz e
 # tornar barato o unico momento em que ela SABE que esta fechando.
 #
-# TRES ATOS, um so proposito — separar o que a sessao mediu do que ela supoe:
-#   1. estado da memoria  — slot escrito x slug declarado na persona; slot orfao
-#      (typo, chapeu extinto) aparece nomeado, nunca some calado.
-#   2. dossie volatil     — os numeros e o estado que envelhecem entre fitas,
-#      medidos AGORA pelo verbo canonico de cada um. E contra esta lista que a
-#      sessao confere afirmacao vinda de memoria de conversa (classe C). Fecha
-#      com as cartas PENDURADAS da caixa (`fila ler --penduradas`): lidas e sem
-#      ack, mais as nao lidas, entradas antes ou depois desta fita. Le frio, sem
-#      entregar nem confirmar: quem confirma e `fila tratar`, quando a carta
-#      vira ato. Antes (ack na entrega) a fila nao sabia o que estava tratado e
-#      este passo relia os 7 dias inteiros (decisao do dono, 03/10/2026).
-#   3. carimbo            — `mem:<cadeira>` (sem slot: fora do padrao que `mesa
-#      ver` varre) guarda quando a cadeira descansou pela ultima vez.
+# O QUE O RELATORIO MOSTRA, so o que o Sair usa:
+#   1. a mesa             — pelo `mesa ver` da abertura (#656): item vivo (o feito ja
+#      saiu por `mesa fez`), prosa de `mesa anota` so como anotacao sem ato; chapeu
+#      fora da persona (typo, chapeu extinto) aparece nomeado, nunca some calado.
+#   2. o caderno e a aresta (abaixo).
+#   3. as cartas PENDURADAS da caixa (`fila ler --penduradas`): lidas e sem ack,
+#      mais as nao lidas. Le frio, sem entregar nem confirmar: quem confirma e
+#      `fila tratar`, quando a carta vira ato (decisao do dono, 03/10/2026).
+# O dossie de release, servico e acervo saiu (dono, 14/11/2026): conferir e antes do
+# ato, nao no fim da fita, e ele existia para gabaritar a triagem da memoria do
+# claude.ai, que saiu junto. A contagem de giro saiu tambem: so imprimia, nao
+# gravava nada, e nao e custo. O que fica gravado e o fecho do `--encerra-sessao`.
+# CARIMBO: `mem:<cadeira>` (sem slot: fora do padrao que `mesa ver` varre) guarda
+# quando a cadeira ENCERROU a fita pela ultima vez; o relatorio so o le.
 #
 # O CADERNO E A ARESTA (#3217, arq:0120). O caderno mora no banco e chega aqui pelo
 # mesmo verbo que a abertura usa (`mesa caderno`): o indice, com o que ficou fora do servido e o
@@ -32,20 +33,10 @@
 # a cadeira nao escreve nele (spec rotinas-e-ciclos, tipologia, decisao 1) — e a lista e
 # so a lista: marcar e da cadeira, e so o que entrou na resposta (#2947).
 #
-# O ultimo passo — triagem da memoria do claude.ai, em duas camadas (Project e
-# conta, #3930) — o verbo EMITE, nao executa, e
-# a razao nao e que a tool seja "da sessao" (`run_command` tambem e). E que a
-# memoria do claude.ai tem TRES portas e nenhuma e automatizavel: a UI do dono, a
-# fita do Project e a conversa fora de Project (#3966; medido em 22/10/2026: ela le,
-# edita e apaga os arquivos de todos os Projects). A fita do Project so escreve sob /projects/<id>/; a
-# camada de conta volta ao dono como lista, e a passada automatica da Anthropic
-# (depois de todo turno) refaz o que se limpou. Nao ha endpoint que liste ou edite Project por API —
-# so a ZIP de conta inteira, que nao serve. Sem segundo caminho, roteiro impresso
-# no fim de fita e o mecanismo mais forte disponivel; nao ha versao com timer.
-# Sai aqui, e nao no ato `varredura`, por duas razoes que se somam: a varredura
-# roda por timer, sem sessao do outro lado que possa executar o roteiro; e o fim
-# de fita e o unico instante em que o dossie medido ja esta impresso acima — que
-# e o gabarito contra o qual um edit se julga fossil em vez de suspeito.
+# A TRIAGEM DA MEMORIA DO CLAUDE.AI SAIU DO ROTEIRO (dono, 14/11/2026; debito 654): a
+# passada automatica refaz depois de todo turno, a camada de conta nao se edita do
+# Project, e a trava dela (so com pedido de limpeza no turno) segurava o encerramento
+# ordenado pelo dono e fechava a fita com pergunta.
 #
 # NAO APAGA MEMORIA. Poda automatica de mesa seria robo decidindo o que a cadeira
 # esquece; o TTL de 48 h do item e da prosa (MEM_MESA_TTL_HORAS) ja e a poda, e ela e
@@ -66,9 +57,9 @@ except ImportError:
     sys.exit("erro: modulo 'redis' nao instalado neste venv (uv pip install redis)")
 
 # Duas raizes e so duas (card #3010). A abertura e a MORADA PUBLICADA da instancia
-# (arq:0097: runtime nao le working tree), a mesma de monta-sessao e fila; o ledger
-# chega pela release — a arvore deste arquivo, por realpath —; ops log e derrame
-# moram na instancia.
+# (arq:0097: runtime nao le working tree), a mesma de monta-sessao e fila; lib/ chega
+# pela release — a arvore deste arquivo, por realpath —; ops log e derrame moram na
+# instancia.
 HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.insert(0, os.path.join(HARNESS_DIR, "lib"))
 from raizes import instancia  # noqa: E402
@@ -77,7 +68,6 @@ import oplog  # noqa: E402  (card #3344: o unico que le o bruto da porta)
 ABERTURA = os.path.join(
     os.environ.get("PF_ABERTURA_DIR") or str(instancia() / "var" / "abertura-publicada"),
     "current", "abertura")
-LEDGER = os.path.join(HARNESS_DIR, "registro", "eventos-org.jsonl")
 LOG_OPS = str(oplog.diretorio())   # onde o bruto mora e do lib/oplog; aqui so para o teste apontar
 
 
@@ -88,49 +78,8 @@ def _janela_do_bruto(dias, diretorio=None):
     return oplog.ler(hoje - _dt.timedelta(days=dias - 1), hoje, diretorio_=diretorio or LOG_OPS)
 
 
-def _ledger_map():
-    """{sufixo_minusculo: slug_canonico} do ledger de vinculo (arq:0073). Fonte do
-    canonico e do case; a persona do form novo poe alias na linha 1, nao serve mais."""
-    mapa = {}
-    try:
-        with open(LEDGER, encoding="utf-8", errors="replace") as fh:
-            for linha in fh:
-                linha = linha.strip()
-                if not linha:
-                    continue
-                try:
-                    slug = (json.loads(linha).get("cadeira") or "").strip()
-                except ValueError:
-                    continue
-                suf = slug
-                for pref in ("claudinho-", "claudinha-"):
-                    if suf.startswith(pref):
-                        suf = suf[len(pref):]
-                        break
-                if suf:
-                    mapa[suf.lower()] = suf.lower()  # valor canonico igual a chave: o campo cadeira cru pode trazer prefixo/maiuscula fossil (arq:0075)
-    except OSError:
-        pass
-    return mapa
 HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
 PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))
-RE_SLUG = re.compile(r"^- ([a-z0-9][a-z0-9-]*)(?: ·|—)")
-RE_HEAD = re.compile(r"roda no slug `([a-z0-9-]+)`")
-RE_CANON = re.compile(r"\b(claudinh[oa]-[A-Za-z0-9-]+)")
-
-# Fatos volateis comuns a toda cadeira. Cada linha e (rotulo, comando) — o verbo
-# canonico de cada materia, nunca uma segunda medicao propria.
-COMUM = [
-    ("release no ar (sha e idade do que a sessao leu)", "release estado 2>&1 | tail -12"),
-    ("declarado x servido", "conferir servico 2>&1 | tail -12"),
-]
-# Por cadeira: o que envelhece na materia dela. Lista curta e revisavel de proposito
-# — dossie que mede tudo para todo mundo custa minuto e ninguem le.
-POR_CADEIRA = {
-    "ia": [("acervo — escada por obra", "acervo escada 2>&1 | tail -14")],
-    "conhecimento": [("acervo — escada por obra", "acervo escada 2>&1 | tail -14")],
-    "ti": [("o que esta no ar", "infra estado 2>&1 | tail -15")],
-}
 
 
 def conn():
@@ -161,29 +110,24 @@ def cadeira():
     sys.exit("\n".join(linhas))
 
 
-def resolve():
-    """(curto, canonico) a partir de PF_CADEIRA, que chega nas DUAS formas.
+def slug():
+    """O slug da cadeira, como a porta o injeta (`ia`, `ti`). O prefixo claudinho-/claudinha-
+    e o ledger saíram (dono, 14/11/2026): o ledger nao traz prefixo nenhum e a
+    `monta_sessao` devolve o slug curto, entao a tabela so repetia o que chegou."""
+    return cadeira().lower()
 
-    `monta_sessao` aceita `IA` e `claudinho-IA` e descarta o prefixo; o adaptador
-    exporta ora um, ora outro. Sem esta resolucao o fecho procura
-    `persona-claudinho-IA.md`, nao acha, e sai sem conferir remit nem medir fila —
-    falha muda, porque o resto do verbo segue rodando. A fonte e a linha 1 de cada
-    persona, igual ao `mesa.canonica()`; tabela a parte diverge.
-    Devolve (bruta, None) quando nao casa: nao inventa cadeira.
-    """
-    bruta = cadeira()
-    suf = bruta
-    for pref in ("claudinho-", "claudinha-"):
-        if suf.lower().startswith(pref):
-            suf = suf[len(pref):]
-            break
-    suf = suf.lower()
-    return suf, _ledger_map().get(suf)
+
+def cadeiras_da_abertura():
+    """As cadeiras com abertura publicada: um subdir por cadeira (a varredura)."""
+    try:
+        return sorted(n for n in os.listdir(ABERTURA) if os.path.isdir(os.path.join(ABERTURA, n)))
+    except OSError:
+        return []
 
 
 def slugs_declarados(alvo):
-    """Os chapeus que a persona declara. Fonte e o texto da persona, nunca o que
-    esta escrito no substrato: a memoria seguir o remit e o ponto da conferencia."""
+    """Os chapeus da cadeira: os subdirs da abertura publicada dela, nunca o que esta
+    escrito no substrato. A memoria seguir o remit e o ponto da conferencia."""
     base = os.path.join(ABERTURA, alvo.lower())
     if not os.path.isdir(base):
         return None, f"abertura da cadeira nao encontrada em {base}"
@@ -191,13 +135,6 @@ def slugs_declarados(alvo):
     # ou ferramental.md — a guarda ainda esta com chapeu.md em backfill.
     slugs = {n for n in os.listdir(base) if os.path.isdir(os.path.join(base, n))}
     return slugs, None
-
-
-def nome_canonico(alvo):
-    """Nome de caixa da cadeira, extraido da linha 1 da persona — mesma fonte que
-    o monta_sessao usa. Nunca o nome do arquivo: `persona-IA.md` nao diz se a
-    caixa e claudinho- ou claudinha-."""
-    return _ledger_map().get(alvo.lower())
 
 
 def idade(seg):
@@ -211,32 +148,58 @@ def idade(seg):
 
 
 
-def estado_memoria(curto, canon, rc):
-    """Slots escritos x slugs declarados. Devolve (linhas, orfaos).
+RE_MESA_ITEM = re.compile(r"^#\d+ \[([a-z0-9][a-z0-9-]*)\] ")
+RE_MESA_PROSA = re.compile(r"^\[([a-z0-9][a-z0-9-]*)\] anotação \(expira em ([^)]*)\)$")
 
-    A chave do substrato e o SUFIXO (decisao do dono, 18/08/2026) — a mesma que o
-    `mesa` escreve. O que sobrou na convencao velha sai marcado LEGADO, nunca
-    somado ao vivo: pacote menor em silencio e indistinguivel de pacote certo."""
-    alvo = curto
+
+def estado_memoria(curto):
+    """A mesa pelo verbo, o mesmo `mesa ver` da abertura (#656). Devolve (linhas, orfaos).
+
+    Antes este passo lia direto `mem:<cadeira>:*` no Valkey: a prosa de `mesa anota`, que
+    nao tem tratamento (`mesa fez` so apaga item no Postgres) e vive 48 h. O descanso dava
+    como retido o que ja se fizera e nao via os itens vivos. Agora: o item vivo sai como o
+    `mesa ver` o serve (o feito ja saiu dele); a prosa sai so com o cabecalho, marcada como
+    anotacao sem ato, porque nada nela diz o que ja se tratou. O chapeu fora da persona sai
+    marcado nos dois. `mesa ver` expurga o vencido ao servir, como na abertura."""
     linhas, orfaos = [], []
     declarados, erro = slugs_declarados(curto)
-    chaves = sorted(rc.keys(f"mem:{alvo.lower()}:*"))
-    if not chaves:
-        linhas.append("  mesa vazia — nada retido da fita anterior")
-    for k in chaves:
-        slot = k.split(":", 2)[2]
-        try:
-            d = json.loads(rc.get(k))
-            ts, n = d.get("t", 0), len(d.get("x", "").splitlines())
-        except (ValueError, TypeError, AttributeError):
-            ts, n = 0, 0
-        ttl = rc.ttl(k)
-        marca = ""
-        if declarados is not None and slot not in declarados:
-            marca = "  ÓRFÃO — slug não declarado na persona"
-            orfaos.append(slot)
-        linhas.append(f"  {slot:<16} {n:>3} linhas  escrito ha {idade(time.time() - ts)}"
-                      f"  vence em {idade(ttl) if ttl and ttl > 0 else '—'}{marca}")
+    try:
+        p = subprocess.run([os.path.join(_bin(), "mesa"), "ver"], capture_output=True,
+                           text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        linhas.append(f"  mesa: NAO MEDIDA — {type(e).__name__}: {e}")
+        p = None
+    if p is not None:
+        for aviso in (p.stderr or "").strip().splitlines():
+            linhas.append(f"  {aviso.strip()}")
+        saida = (p.stdout or "").splitlines()
+        if p.returncode != 0 and not saida:
+            linhas.append(f"  mesa: NAO MEDIDA — mesa ver saiu {p.returncode}")
+        i, itens = 0, 0
+        while i < len(saida):
+            linha = saida[i]
+            m_item, m_prosa = RE_MESA_ITEM.match(linha), RE_MESA_PROSA.match(linha)
+            if m_item:
+                itens += 1
+                marca = ("  ÓRFÃO — chapéu fora da persona" if declarados is not None
+                         and m_item.group(1) not in declarados else "")
+                linhas.append(f"  {linha}{marca}")
+            elif m_prosa:
+                slot, n = m_prosa.group(1), 0
+                while i + 1 < len(saida) and saida[i + 1].strip():
+                    i, n = i + 1, n + 1
+                marca = ""
+                if declarados is not None and slot not in declarados:
+                    marca = "  ÓRFÃO — slug não declarado na persona"
+                    orfaos.append(slot)
+                linhas.append(f"  [{slot}] anotação sem ato, {n} linha(s), expira em "
+                              f"{m_prosa.group(2)}: não é item aberto, e o que já se fez não "
+                              f"sai dela{marca}")
+            elif linha.startswith("(mesa:") or linha.strip() == "mesa vazia":
+                linhas.append(f"  {linha.strip()}")
+            i += 1
+        if itens:
+            linhas.append(f"  {itens} item(ns) vivo(s); o feito sai por `mesa fez <n>`")
     if erro:
         linhas.append(f"  (aviso: {erro} — sem conferencia contra o remit)")
     linhas += caderno_do_banco(declarados)
@@ -435,28 +398,6 @@ def puxado_de_fora(curto, sessao_id, ordem_id, diretorio=None, resolver=resolve_
 # moravam aqui, agora em lib/caderno_poda.py. O descanso so mostra o indice.
 
 
-def _verbo(nome, *args, timeout=30):
-    """(exit, stdout) de um verbo irmao; (None, "") quando nao roda: indeterminado, nao negativa."""
-    try:
-        p = subprocess.run([os.path.join(_bin(), nome), *args], capture_output=True, text=True,
-                           timeout=timeout)
-    except (OSError, subprocess.SubprocessError):
-        return None, ""
-    return p.returncode, (p.stdout or "") + (p.stderr or "")
-
-
-def roda(rotulo, cmd, timeout=60):
-    print(f"\n-- {rotulo}")
-    try:
-        p = subprocess.run(["bash", "-lc", cmd], capture_output=True, text=True,
-                           timeout=timeout, cwd=os.path.expanduser("~"))
-        saida = (p.stdout or p.stderr).rstrip()
-        print(saida if saida else "  (sem saida)")
-    except subprocess.SubprocessError as e:
-        # Fato que nao pode ser medido nao vira fato suposto: declara e segue.
-        print(f"  NAO MEDIDO — {type(e).__name__}: {e}")
-
-
 AVISO_VENCE_DIAS = 5   # retencao da caixa e 7 dias por idade, tratada ou nao (trim do motor)
 
 
@@ -516,193 +457,6 @@ def roda_fila_cabecalho(rotulo, cmd, timeout=90):
             "nao lida se entrega com `fila ler <eu>` antes do ack: `fila tratar <msgid>...`")
 
 
-def _turnos_por_gap(tss, gap_s):
-    """Turnos de uma fita por gap temporal entre registros de tool. Sem marca
-    de turno no log (marca-la custaria 1 giro/turno, o oposto do que se corta),
-    o gap e o sinal disponivel: dentro do turno as tools saem em rajada de
-    segundos; entre turnos entra resposta + leitura + digitacao do dono.
-    Estimativa declarada, nao medida exata."""
-    from datetime import datetime
-    ts = []
-    for s in tss:
-        try:
-            ts.append(datetime.fromisoformat(s))
-        except (ValueError, TypeError):
-            continue
-    if not ts:
-        return 0
-    ts.sort()
-    turnos = 1
-    for a, b in zip(ts, ts[1:]):
-        if (b - a).total_seconds() > gap_s:
-            turnos += 1
-    return turnos
-
-
-def economia_de_giro(ordem_id):
-    """Custo de giro DESTA fita, lido do ops log por ordem_id (leva 3 da
-    economia-de-giro). Mede o que a otimizacao quer derrubar: volume de tool e,
-    dentro do fallback run_command, quanto era evitavel (verbo que ja tem tool,
-    sessao_id passado por export). NAO separa giro de item: com PF_TOOLS_LOTE um
-    giro em lote rende varios registros — o marcador de lote (server.py, passo 2,
-    exige restart do TI) fecha essa conta. O que sai limpo aqui — volume e classe
-    de fallback — independe de lote. Fonte e o proprio log; medicao, nao suposicao."""
-    from collections import Counter
-    if not ordem_id or ordem_id == "-":
-        return ["  sem ordem_id — sessao de mao nao tem fita a medir"]
-    VERBOS = {"mesa", "fila", "tarefas", "acervo", "motor", "conferir",
-              "situacao", "persona", "acesso", "chat", "infra", "seg",
-              "sinal", "lint", "teste", "minuta", "descansar", "encerrar", "metrica"}
-    por_tool, classe_fb = Counter(), Counter()
-    tss, lote_ids, giros_avulsos = [], set(), 0
-    try:
-        for d in _janela_do_bruto(3):
-            if d.get("ordem_id") != ordem_id:
-                continue
-            tool = d.get("tool") or "-"
-            if tool == "-":
-                continue
-            por_tool[tool] += 1
-            _ts = d.get("ts")
-            if _ts:
-                tss.append(_ts)
-            _lid = d.get("lote_id")
-            if _lid:
-                lote_ids.add(_lid)
-            else:
-                giros_avulsos += 1
-            if tool in ("malote", "run_command") and d.get("evento") == "fallback":
-                cmd = (d.get("comando") or "").strip()
-                prim = cmd.split()[0] if cmd else ""
-                if "PF_CADEIRA" in cmd[:80]:
-                    classe_fb["export PF_CADEIRA (era parametro sessao_id)"] += 1
-                elif prim in VERBOS:
-                    classe_fb[f"verbo '{prim}' (ja tem tool)"] += 1
-                else:
-                    classe_fb["exploracao/fluxo (git, rg, sed... legitimo)"] += 1
-    except OSError:
-        pass
-    total = sum(por_tool.values())
-    if not total:
-        return [f"  nenhum registro de tool nesta fita (ordem {ordem_id})"]
-    linhas = [f"  {total} registros de tool na fita (ordem {ordem_id})",
-              "  registro != giro: com lote, 1 giro rende varios (separacao: passo 2)"]
-    for tool, n in por_tool.most_common():
-        linhas.append(f"    {tool:<16} {n:>4}")
-    giros = len(lote_ids) + giros_avulsos
-    linhas.append(f"  {giros} giro(s) na fita (lote_id conta 1; registro sem lote_id conta 1)")
-    if giros_avulsos and (por_tool.get("malote") or por_tool.get("run_command")):
-        linhas.append("    run_command/read_file em lote so carimbam lote_id apos o restart")
-        linhas.append("    do server -> ate la giro=registro nesses dois (sobreconta giro).")
-    gap_s = int(os.environ.get("PF_TURNO_GAP_S", "60"))
-    turnos = _turnos_por_gap(tss, gap_s)
-    if turnos:
-        linhas.append(f"  turnos ~= {turnos}  (ESTIMATIVA por gap > {gap_s}s; em sessao de mao o")
-        linhas.append("    gap confunde rodada-de-tool com turno — o /turno abaixo e so ordem de grandeza)")
-        linhas.append(f"    giros/turno ~= {giros / turnos:.1f}  ·  registros/turno ~= {total / turnos:.1f}")
-    fb = por_tool.get("malote", 0) + por_tool.get("run_command", 0)
-    if fb:
-        linhas.append(f"  fallback malote/run_command: {fb} ({100 * fb // total}% dos registros)")
-        for cl, n in classe_fb.most_common():
-            linhas.append(f"    {n:>4}  {cl}")
-        evitaveis = sum(n for c, n in classe_fb.items() if "legitimo" not in c)
-        if evitaveis:
-            linhas.append(f"  -> {evitaveis} evitavel(is): iam por tool/parametro, nao por bash")
-    return linhas
-
-
-def fabrica_pela_porta():
-    """Serie da persona FABRICA, medida na PORTA (arq:0100). FABRICA e PERSONA de
-    agente, transversal ao provider de inferencia: mede-se por
-    cadeira=fabrica, nunca por provider. As chamadas da persona cruzam a porta do
-    connector e viram linha no ops log. Le-se VOLUME de chamada e classe de
-    desperdicio (run_command em fallback, verbo contornado), o alvo direto da
-    economia-de-giro; nao giros/turno (turno nao carimba na porta). Fonte:
-    o bruto da porta, lido pelo lib/oplog, filtro cadeira=fabrica."""
-    from collections import Counter
-    total = 0
-    por_tool, desperdicio = Counter(), Counter()
-    ult_ts = None
-    try:
-        for d in _janela_do_bruto(5):
-            if d.get("cadeira") != "fabrica":
-                continue
-            tool = d.get("tool") or "-"
-            if tool == "-":
-                continue
-            total += 1
-            por_tool[tool] += 1
-            ev = d.get("evento")
-            if ev == "fallback" and tool in ("malote", "run_command"):
-                desperdicio[f"{tool} em fallback (encadeado sem verbo?)"] += 1
-            elif ev == "verbo_contornado":
-                desperdicio[f"verbo contornado ({tool})"] += 1
-            if d.get("ts"):
-                ult_ts = d["ts"]
-    except OSError:
-        pass
-    if not total:
-        return ["  persona fabrica sem chamada na porta nos ultimos 5 dias"]
-    linhas = [f"  {total} chamada(s) da persona fabrica na porta (cadeira=fabrica, 5 dias)",
-              f"  ultima: {ult_ts or '-'}",
-              "  VOLUME e desperdicio, NAO giros/turno (turno nao carimba na porta)",
-              "  por tool:"]
-    for t, n in por_tool.most_common():
-        linhas.append(f"    {t:<14} {n:>4}")
-    if desperdicio:
-        linhas.append("  desperdicio (o que a economia-de-giro corta):")
-        for c, n in desperdicio.most_common():
-            linhas.append(f"    {n:>4}  {c}")
-    return linhas
-
-
-def giros_por_turno_code_local(cadeira):
-    """PARCIAL — uma superficie so (arq:0100): fita de Code LOCAL desta cadeira, no
-    host, lida de ~/.claude/projects/*fitas-<cadeira>/. NAO e a fabrica (essa mede-se na porta por cadeira=fabrica — fabrica_pela_porta) e NAO ve
-    claude.ai. Ler disco de runtime para medir e leitura parcial por design: a
-    saida se declara parcial e nunca vale como verdade do conjunto.
-    Antiga "Serie da FABRICA (Code)": giros/turno da fita de Code desta cadeira, lida do
-    transcript que o Claude Code ja grava em ~/.claude/projects/*fitas-<cadeira>/.
-    giro = requestId distinto; turno = linha type=last-prompt (spec 2, spec 7). E a
-    unica fonte que enxerga o Bash/Edit/Read nativo do Code, invisivel ao ops log.
-    Nunca fundida com a serie da porta: outra superficie, outro nome. Zero
-    instrumentacao — so consulta o que o Code ja escreve."""
-    import glob
-    base = os.path.expanduser("~/.claude/projects")
-    alvo = cadeira.lower()
-    dirs = [d for d in glob.glob(os.path.join(base, "*fitas-*"))
-            if d.lower().endswith("fitas-" + alvo)]
-    arqs = [a for d in dirs for a in glob.glob(os.path.join(d, "*.jsonl"))]
-    if not arqs:
-        return [f"  sem transcript de Code para '{cadeira}'"
-                " (cwd da fita != $PLATAFIRMA_INSTANCIA/var/fitas/<cadeira>, ou nunca rodou no Code)"]
-    f = max(arqs, key=os.path.getmtime)
-    idade_s = time.time() - os.path.getmtime(f)
-    sid = os.path.basename(f)[:-6]
-    rids, turnos = set(), 0
-    try:
-        with open(f, encoding="utf-8", errors="replace") as fh:
-            for linha in fh:
-                try:
-                    d = json.loads(linha)
-                except ValueError:
-                    continue
-                if d.get("type") == "last-prompt":
-                    turnos += 1
-                rid = d.get("requestId")
-                if rid:
-                    rids.add(rid)
-    except OSError as e:
-        return [f"  transcript ilegivel: {type(e).__name__}: {e}"]
-    quando = "ativa agora" if idade_s < 300 else f"{idade(idade_s)} atras"
-    giros = len(rids)
-    if not turnos:
-        return [f"  fita {sid[:8]} ({quando}): {giros} giros, 0 turno (last-prompt) — sem taxa"]
-    return [f"  fita {sid[:8]} ({quando})",
-            f"    {giros} giros (requestId) / {turnos} turnos (last-prompt)"
-            f" = {giros / turnos:.2f} giros/turno"]
-
-
 def encerra_sessao(rc, sessao_id):
     """DEL `sessao:{id}`, `ledger:{id}`, `giro:{id}` e o derrame da fita (arq:0101 §1).
 
@@ -741,11 +495,11 @@ def encerra_sessao(rc, sessao_id):
 
 
 def estado_sessao(sessao_id):
-    """So DIZ o que ha para morrer. Matar e o passo 4 do roteiro, nao este ponto."""
+    """So DIZ o que ha para morrer. Matar e o passo 3 do roteiro, nao este ponto."""
     sid = (sessao_id or "").strip()
     if not sid:
         return ["  sem PF_SESSAO — fita sem entidade-sessao (roda sem ledger, por desenho)"]
-    return [f"  sessao {sid} viva; so o dono manda encerrar (passo 4, depois da mesa e do caderno):",
+    return [f"  sessao {sid} viva; so o dono manda encerrar (passo 3, depois da mesa e do caderno):",
             "    `descansar fita --encerra-sessao`"]
 
 
@@ -786,26 +540,36 @@ def ato_fita(args):
     # `mesa caderno <chapeu>`) perdem a cadeira — a porta resolve PF_CADEIRA a partir de
     # `sessao:{id}`, e sem ela `mesa caderno` responde "PF_CADEIRA nao definida". A ADR
     # diz O QUE morre; em que ponto do rito, quem diz e o rito.
+    parada = getattr(args, "parada", None)
     if getattr(args, "encerra_sessao", False):
-        curto, _ = resolve()
+        parada = parada or "concluiu"
+        curto = slug()
+        rc = conn()
         print(f"== contrato de morte da sessao (arq:0101 §1) — {curto} ==")
-        for _l in encerra_sessao(conn(), os.environ.get("PF_SESSAO", "")):
+        for _l in encerra_sessao(rc, os.environ.get("PF_SESSAO", "")):
             print(_l)
-        gravou, tokens = grava_fecho(curto, getattr(args, "parada", "concluiu"))
-        print(f"fecho da fita no log da porta: parada={getattr(args, 'parada', 'concluiu')}"
+        gravou, tokens = grava_fecho(curto, parada)
+        print(f"fecho da fita no log da porta: parada={parada}"
               + (f", tokens={sum(tokens.values())} (provedor, transcript do Code)" if tokens
                  else ", sem tokens (sem transcript de Code achado)")
               + ("" if gravou else " — NAO GRAVOU"))
+        # O carimbo e do encerramento, nao do relatorio: "ultimo descanso" e a ultima fita
+        # que fechou, e e isso que a varredura cobra aos 30 dias.
+        try:
+            rc.set(f"mem:{curto}", int(time.time()))
+        except Exception as e:                                # noqa: BLE001
+            print(f"carimbo de descanso NAO GRAVOU: {type(e).__name__}: {e}")
         return 0
-    curto, canon = resolve()
-    alvo = curto
+    if parada:
+        sys.exit("erro: --parada so vale com --encerra-sessao (e o motivo gravado no fecho)")
+    curto = slug()
     rc = conn()
-    print(f"== descanso de {alvo} ==")
-    ultimo = rc.get(f"mem:{alvo.lower()}")
-    print(f"ultimo descanso: {idade(time.time() - int(ultimo)) + ' atras' if ultimo else 'nunca'}")
+    print(f"== descanso de {curto} ==")
+    ultimo = rc.get(f"mem:{curto}")
+    print(f"ultima fita encerrada: {idade(time.time() - int(ultimo)) + ' atras' if ultimo else 'nunca'}")
 
-    print("\n== memoria retida ==")
-    linhas, orfaos = estado_memoria(curto, canon, rc)
+    print("\n== mesa (o mesmo `mesa ver` da abertura) ==")
+    linhas, orfaos = estado_memoria(curto)
     print("\n".join(linhas))
     if orfaos:
         print(f"\n  {len(orfaos)} orfao(s): {', '.join(sorted(set(orfaos)))}")
@@ -817,47 +581,29 @@ def ato_fita(args):
         print(_l)
 
     if not args.so_memoria:
-        print("\n== fatos volateis, medidos agora ==")
-        print("Confira contra isto o que a fita afirmou de memoria de conversa.")
-        for rotulo, cmd in COMUM + POR_CADEIRA.get(curto.lower(), []):
-            roda(rotulo, cmd)
-        if canon:
-            roda_fila_cabecalho(f"fila — cartas penduradas e nao lidas ({canon}), so cabecalho;"
-                                " nao entrega nem confirma", f"fila ler {canon} --penduradas")
-        else:
-            print(f"\n-- fila\n  NAO MEDIDO — PF_CADEIRA={alvo!r} nao casa com"
-                  f" nenhuma persona em {ABERTURA}")
-
-    if not args.so_memoria:
-        print("\n== economia de giro - serie da porta (esta fita) ==")
-        for _l in economia_de_giro(os.environ.get("PF_ORDEM_ID", "")):
-            print(_l)
-
-        print("\n== fabrica — serie da PORTA (arq:0100) ==")
-        for _l in fabrica_pela_porta():
-            print(_l)
-
-        print("\n== Code local desta cadeira — PARCIAL, uma superficie (arq:0100) ==")
-        for _l in giros_por_turno_code_local(curto):
-            print(_l)
+        roda_fila_cabecalho(f"fila — cartas penduradas e nao lidas ({curto}), so cabecalho;"
+                            " nao entrega nem confirma", f"fila ler {curto} --penduradas")
 
     print("\n== entidade-sessao (arq:0101 §1) ==")
     for _l in estado_sessao(os.environ.get("PF_SESSAO", "")):
         print(_l)
 
-    rc.set(f"mem:{alvo.lower()}", int(time.time()))
     print("\n== proximo passo ==\n"
-          "1. escreva a mesa antes de a fita morrer: `mesa item <chapeu> --ato ...\n"
-          "   --alvo ...` (repasse: a proxima jogada do que a fita nao fechou; guia\n"
-          "   registrar, secao Mesa). Premissa a reconferir e beco descartado vao\n"
-          "   ao caderno, no passo 2a, como premissa e licao.\n"
-          "   Trate as cartas penduradas listadas acima (lidas sem ack e nao\n"
-          "   lidas; so cabecalho, corpo por `fila ler <eu> --tudo <remetente>`).\n"
+          "1. a mesa — item so quando a fita deixa pendurado trabalho fora de story,\n"
+          "   incidente ou ordem do dia (guia expediente, Sair, passo 1):\n"
+          "   `mesa item <chapeu> --ato ... --alvo ...`, a proxima jogada. Card que nao esta\n"
+          "   priorizado nao e item: ele mora no rastreador. Sem isso, diga \"mesa sem\n"
+          "   item\". Item listado acima que a fita fez sai por `mesa fez <n>`.\n"
+          "   Premissa a reconferir e beco descartado vao ao caderno, no passo 2a.\n"
+          "   As cartas penduradas listadas acima se tratam AQUI, no descanso, ou\n"
+          "   ficam penduradas na caixa: a triagem delas nunca vira item de mesa.\n"
+          "   (so cabecalho; corpo por `fila ler <eu> --tudo <remetente>`).\n"
           "   Separe em tres: (i) DECISAO DO DONO — vai na tela dele no relato\n"
           "   do descanso, uma linha cada, com remetente e o que se decide; fica\n"
           "   pendurada ate a decisao dele virar ato; (ii) ATO DA CADEIRA pendente\n"
-          "   — `mesa item` e depois `fila tratar <msgid>`; (iii) ja respondida ou\n"
-          "   superada — `fila tratar <msgid>`. Carta nao lida se entrega\n"
+          "   — faca agora, ou card se nao cabe na fita, e depois `fila tratar\n"
+          "   <msgid>`; (iii) ja respondida ou superada — `fila tratar <msgid>`.\n"
+          "   Carta nao lida se entrega\n"
           "   antes com `fila ler <eu>`, sem --tudo: o --tudo so mostra, nao\n"
           "   entrega, e o tratar recusa a nao lida. A marcada VENCE sai da caixa aos 7 dias,\n"
           "   tratada ou nao: o que tem de durar vira card ou mesa antes.\n"
@@ -907,82 +653,10 @@ def ato_fita(args):
           "   `--quem dono` quando o dono pediu; `--declarada` quando a ponta ja\n"
           "   esta na consulta dirigida do chapeu. Nada usado: diga \"sem aresta\".\n"
           "\n"
-          "3. triagem da memoria do claude.ai — o host nao a alcanca; a tool e da\n"
-          "   sessao (mcp__memory__*; a memory_user_edits saiu de cena em set/2026).\n"
-          "   A memoria tem duas camadas e uma passada automatica:\n"
-          "   - camada do Project: os arquivos sob /projects/<id>/. A sessao do\n"
-          "     Project le, escreve e apaga so aqui.\n"
-          "   - camada de conta: perfil, preferencias, topicos e areas. Entram nas\n"
-          "     fitas do Project, e o bloco de preferencias entra inteiro em todo\n"
-          "     turno; a sessao do Project nao os escreve nem apaga.\n"
-          "   - a passada automatica da Anthropic roda depois de todo turno e\n"
-          "     arquiva o que julga duravel, estado da casa inclusive. Limpar uma\n"
-          "     vez nao basta: a mesma triagem se repete na fita seguinte. A casa\n"
-          "     nao a alcanca, e o roteiro nao promete impedi-la.\n"
-          "   - conversa fora de Project (medido em 22/10/2026): a mesma tool le,\n"
-          "     edita e apaga os arquivos de todos os Projects. E por aqui que se\n"
-          "     tria o Project que nao abre fita (item e).\n"
-          "   a) a listagem (memory_list) diz a camada de cada arquivo; leia so o\n"
-          "      arquivo que for rotular\n"
-          "   b) uma linha por arquivo (ou por linha dele), com a camada e so um\n"
-          "      destes rotulos:\n"
-          "      SUBSTRATO  monta_sessao, mesa, caderno, wiki ou rastreador ja serve\n"
-          "                 — nomeie qual\n"
-          "      REPETE-CONDUTA  diz de novo o que a conduta do dono ja diz (linha de\n"
-          "                 passo, contestacao depois da resposta literal, link de\n"
-          "                 arquivo em bloco de codigo) — nomeie a secao; a copia nao\n"
-          "                 muda quando o dono.md muda\n"
-          "      FOSSIL     contradiz o dossie medido acima, ou traz data ou prazo\n"
-          "                 vencido (prazo, marco ou evento ja passado) — o dossie\n"
-          "                 mede release, servico, acervo e infra, e so isso\n"
-          "      DUPLICATA  a mesma linha em dois arquivos do mesmo Project; fica\n"
-          "                 uma, a outra sai\n"
-          "      TRATO      preferencia do Pedro sobre como trabalhar; fica\n"
-          "   c) camada do Project — PORTAO: a tool de memoria so escreve ou apaga se\n"
-          "      a MENSAGEM DO DONO neste turno pediu limpeza (\"descansa e limpa\" ou\n"
-          "      equivalente). Ordem deste roteiro nao conta: e retorno de tool, nao\n"
-          "      pedido dele.\n"
-          "      - pediu: remova SUBSTRATO, REPETE-CONDUTA, FOSSIL e DUPLICATA (linha:\n"
-          "        memory_str_replace com new_str vazio; arquivo inteiro:\n"
-          "        memory_delete); o passo 4 so roda se ele tambem mandou encerrar.\n"
-          "      - nao pediu: mostre a lista rotulada, compacta, e feche o turno com\n"
-          "        UMA pergunta: \"limpo?\". NAO rode o passo 4. O \"sim\" do\n"
-          "        dono e o pedido: limpa, e a sessao segue aberta.\n"
-          "      - sem ordem do dono no turno nada se apaga: a lista rotulada vai a ele.\n"
-          "      - teto: a memoria aceita dez gravacoes por turno. Apague o arquivo\n"
-          "        inteiro antes de mexer em linha (uma gravacao leva tudo), junte as\n"
-          "        linhas de um arquivo numa reescrita so, e siga no turno seguinte\n"
-          "        sem perguntar. Se a tool recusar por falta de ordem dele no turno,\n"
-          "        ponha o que resta na tela, em uma linha: o \"segue\" dele e a ordem.\n"
-          "   d) camada de conta — nunca se edita daqui, com ou sem pedido de limpeza.\n"
-          "      Entregue ao dono, na tela, a lista das linhas SUBSTRATO,\n"
-          "      REPETE-CONDUTA e FOSSIL (arquivo, linha, rotulo), com o caminho para\n"
-          "      tirar: abrir uma conversa fora de Project e pedir ali a remocao, ou\n"
-          "      mexer na configuracao de memoria do Project na interface. Qual das\n"
-          "      duas e ato dele; nao escolha por ele e siga.\n"
-          "   e) a conta inteira: o Project que nao abre fita (Firma, EDM-RAG, MDM,\n"
-          "      o backfill de julho) so se tria aqui. Rode b) e c) numa conversa\n"
-          "      fora de Project, Project por Project (memory_list de cada um), com\n"
-          "      a ordem do dono no turno. Numa tarefa agendada do claude.ai o texto\n"
-          "      que o dono escreveu talvez valha como essa ordem: e hipotese ate a\n"
-          "      rodada de teste mostrar que a tarefa tem a tool e apaga (resultado\n"
-          "      em comentario no card #3966); ate la o roteiro nao conta com ela.\n"
-          "   f) regra negativa: a memoria do Project nao guarda estado da\n"
-          "      PlataFirma (persona, remit, org, verbo, numero do acervo, card,\n"
-          "      estado de trabalho saem de monta_sessao, mesa, caderno, wiki e\n"
-          "      rastreador). Ja esta escrita em nove Projects, uma copia por\n"
-          "      Project. Este roteiro nao a acrescenta e nao espera efeito dela: a\n"
-          "      passada automatica a ignora. Segunda copia no mesmo Project e\n"
-          "      DUPLICATA.\n"
-          "   g) reporte o que saiu, o que ficou, o que foi para a lista do dono e o\n"
-          "      que nao deu para conferir.\n"
-          "   Nao remova o que voce so SUSPEITA estar velho: sem tool que confirme,\n"
-          "   fica e a duvida vai no relatorio.\n"
-          "\n"
-          "4. SO POR ORDEM DO DONO («encerra», «fecha a fita», «fecha o dia»), ou em\n"
+          "3. SO POR ORDEM DO DONO («encerra», «fecha a fita», «fecha o dia»), ou em\n"
           "   fluxo agentico (sem o dono na tela) ao fim do trabalho. Sem a ordem, pare no\n"
-          "   passo 3: a fita fica de pe e a sessao segue atendendo. Com ela, por ultimo,\n"
-          "   depois dos tres acima e so com o passo 3 fechado:\n"
+          "   passo 2: a fita fica de pe e a sessao segue atendendo. Com ela, por ultimo,\n"
+          "   depois dos passos 1 e 2, sem perguntar nada no fecho:\n"
           "   `descansar fita --encerra-sessao`\n"
           "   (contrato de morte, arq:0101 §1: DEL sessao/ledger/giro + derrame).\n"
           "   Diga por que a fita parou: sem flag, `concluiu`; senao\n"
@@ -1001,7 +675,7 @@ def ato_varredura(args):
     Nao apaga e nao carimba — varredura que muda estado esconde o proprio efeito."""
     rc = conn()
     achados = 0
-    for alvo in sorted(_ledger_map().keys()):
+    for alvo in cadeiras_da_abertura():
         declarados, _ = slugs_declarados(alvo)
         if declarados is None:
             continue
@@ -1012,7 +686,7 @@ def ato_varredura(args):
                 achados += 1
         ultimo = rc.get(f"mem:{alvo.lower()}")
         if ultimo and time.time() - int(ultimo) > 30 * 86400:
-            print(f"parada {alvo}: sem descanso ha {idade(time.time() - int(ultimo))}")
+            print(f"parada {alvo}: sem fita encerrada ha {idade(time.time() - int(ultimo))}")
             achados += 1
     print(f"varredura: {achados} achado(s)" if achados else "varredura: nada fora do lugar")
     return 1 if achados else 0
@@ -1026,19 +700,19 @@ def main():
     # Chamado por dois nomes (`encerrar` e `descansar` sao o mesmo verbo): o uso
     # tem de sair com o nome que a pessoa digitou, ou o texto contradiz o comando.
     p = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
-                                description="fim de fita: memoria conferida e fatos volateis medidos")
+                                description="fim de fita: a mesa, o caderno, a aresta e a caixa, e o encerramento")
     sub = p.add_subparsers(dest="ato")
 
     f = sub.add_parser("fita", help="o descanso da cadeira corrente (PF_CADEIRA)")
     f.add_argument("--so-memoria", action="store_true",
-                   help="pula o dossie volatil; so o estado da memoria")
+                   help="pula a caixa (cartas penduradas); so a mesa, o caderno e a aresta")
     f.add_argument("--encerra-sessao", action="store_true",
                    help="ULTIMO ato da fita: DEL sessao/ledger/giro + derrame (arq:0101 "
                         "§1). Separado porque matar a sessao tira a cadeira das tools "
                         "seguintes; rode depois da mesa e do delta de caderno")
-    f.add_argument("--parada", choices=oplog.MOTIVOS_PARADA, default="concluiu",
-                   help="por que a fita parou, gravado no fecho (so com --encerra-sessao): "
-                        "concluiu (padrao) | teto_giros | orcamento_erro | interrompida")
+    f.add_argument("--parada", choices=oplog.MOTIVOS_PARADA, default=None,
+                   help="por que a fita parou, gravado no fecho (so com --encerra-sessao; sem "
+                        "ela, recusa): concluiu (padrao) | teto_giros | orcamento_erro | interrompida")
     f.set_defaults(func=ato_fita)
 
     v = sub.add_parser("varredura", help="passada por todas as cadeiras; so o que esta fora do lugar")

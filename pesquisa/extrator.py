@@ -57,6 +57,12 @@ LIMIAR_TEXTO_CURTO = 400  # abaixo disso o retorno avisa que `--render` pode tra
 TETO_BYTES = 64 * 1024 * 1024
 MAX_REDIRECIONAMENTOS = 10
 TIMEOUT_S = 30.0
+# Falha de rede não diz por que a fonte não respondeu, só que não respondeu a este coletor, que se
+# identifica (spec §2.5: bloqueio é resultado medido). A recusa leva o caminho que sobra (#2856
+# linha 93: o Planalto derruba a conexão e a norma ficava sem rota).
+SUGESTAO_REDE = ("a fonte não respondeu a este coletor: procure outra fonte primária do mesmo "
+                 "conteúdo, ou a cópia de terceiro com `historico <url>` (lista as capturas) e "
+                 "`historico <url> --em <AAAA-MM-DD>` (lê a captura)")
 
 PADROES_INSTRUCAO = [
     r"ignore (as )?(instru\w+|previous|todas)",
@@ -734,7 +740,7 @@ def _coletor_httpx(url: str, verifica: Callable[[str], None], *, transport=None)
                     )
     except httpx.HTTPError as exc:
         raise FalhaFonte(f"rede:{type(exc).__name__}", detalhe=str(exc)[:200],
-                         url_do_erro=atual) from exc
+                         url_do_erro=atual, sugestao=SUGESTAO_REDE) from exc
     raise FalhaFonte("redirecionamentos-demais", redirecionamentos=len(saltos))
 
 

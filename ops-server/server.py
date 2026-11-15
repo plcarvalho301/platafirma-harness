@@ -3961,7 +3961,16 @@ def _giro_carrega(sessao_id: str, cadeira: str, chapeu, giro: list) -> dict:
         return {"ok": False, "erro": f"{type(e).__name__}: {e}"}
 
 
+async def _mcp_get_recusa(_req):
+    """MCP Streamable HTTP (2025-03-26): servidor stateless sem notificacao server->client
+    responde 405 em GET /mcp para o cliente nao abrir standalone SSE ocioso e derrubar a
+    sessao apos retries sem progresso (caso agy/mcp_manager.go)."""
+    return JSONResponse({"erro": "Method Not Allowed"}, status_code=405,
+                        headers={"Allow": "POST, DELETE"})
+
+
 app = mcp.streamable_http_app()
+app.router.routes.insert(0, Route("/mcp", _mcp_get_recusa, methods=["GET"]))
 app.router.routes.append(Route("/health", _health))
 app.router.routes.append(Route("/.well-known/oauth-authorization-server", _as_metadata))
 app.router.routes.append(Route("/.well-known/oauth-authorization-server/mcp", _as_metadata))

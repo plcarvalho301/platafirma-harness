@@ -8,12 +8,18 @@ isso é do dono (settings.yml).
 
 from __future__ import annotations
 
+import contextlib
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 from . import extrator, historico, manifesto as M, resolvedores, searxng, verificar as V
 from .envelope import FalhaFonte, envelope
+
+
+DICA_CODIGO = ("codigo consulta repositório, pacote e pergunta-e-resposta; documentação oficial de "
+               "ferramenta sai por --cat geral, ou por `ler` direto no site dela")
 
 
 # ---------------------------------------------------------------------- consultar
@@ -35,10 +41,15 @@ def consultar(consulta, *, k, categoria, desde, idioma, trab: "M.Trabalho") -> d
             "status": 200, "nao_achado": True, "resultados": 0, "engines_ok": r["engines_ok"],
             "engines_vivos": r.get("engines_vivos"), "engines_falha": r["engines_falha"],
         })
+    # A categoria `codigo` é a `it` do SearXNG: repositório, pacote e pergunta-e-resposta. Nenhum
+    # engine dela indexa o site da ferramenta, então consulta de documentação voltava página fora
+    # do assunto sem aviso (#2856 linha 546). O recorte de engines é política do dono; o verbo diz
+    # onde a documentação sai.
+    extra = {"dica": DICA_CODIGO} if categoria == "codigo" else {}
     return envelope("consultar", trab.slug, consulta=consulta, categoria=categoria,
                     resultados=resultados, engines_ok=r["engines_ok"],
                     engines_vivos=r.get("engines_vivos"),
-                    engines_falha=r["engines_falha"], manifesto=trab.ref_manifesto(linha))
+                    engines_falha=r["engines_falha"], manifesto=trab.ref_manifesto(linha), **extra)
 
 
 # ------------------------------------------------------------------------ resolver
@@ -83,16 +94,28 @@ def coletar(urls, *, imagens=False, trab: "M.Trabalho") -> dict[str, Any]:
                 item["imagens"] = r["imagens"]
             return item
         except FalhaFonte as f:
-            return {"url": u, "ok": False, "causa": f.causa}
+            item = {"url": u, "ok": False, "causa": f.causa}
+            sugestao = f.extra.get("sugestao")
+            if sugestao:
+                # o coletar não renderiza: a saída da página que depende de script é o `ler`
+                item["sugestao"] = "ler <url> --render" if sugestao == "--render" else sugestao
+            return item
 
-    with ThreadPoolExecutor(max_workers=4) as ex:
+    # O derivador troca sys.stdout por sys.stderr enquanto a Crawl4AI fala, e essa troca não é
+    # segura entre threads: com duas URLs ou mais, uma thread guardava como «original» o stderr
+    # que a outra tinha posto, e o envelope do ato saía no stderr com o stdout vazio (#2856 linha
+    # 662). A troca feita uma vez aqui, por fora do pool, faz toda thread guardar e devolver o
+    # mesmo destino, e o stdout de verdade volta quando o pool termina.
+    with contextlib.redirect_stdout(sys.stderr), ThreadPoolExecutor(max_workers=4) as ex:
         colhidos = list(ex.map(_um, urls))
     return envelope("coletar", trab.slug, coletados=colhidos, total=len(colhidos),
                     manifesto={"arquivo": str(trab.manifesto)})
 
 
 # ----------------------------------------------------------------------- historico
-def hist(url, *, em, salvar, trab: "M.Trabalho") -> dict[str, Any]:
+def hist(url, *, em, salvar, leitura: dict[str, Any] | None = None,
+         trab: "M.Trabalho") -> dict[str, Any]:
+    """`leitura` é a janela do `--em`: foco, max_chars e offset, como no `ler`."""
     if salvar:
         r = historico.salvar(url)
         linha = trab.grava_linha({"ato": "historico", "url": url, "status": r["status"],
@@ -100,8 +123,13 @@ def hist(url, *, em, salvar, trab: "M.Trabalho") -> dict[str, Any]:
         return envelope("historico", trab.slug, url=url, **r, manifesto=trab.ref_manifesto(linha))
     if em:
         alvo = historico.url_captura(url, em)
-        r = extrator.ler(alvo, trab, foco=None, render=False, max_chars=6000, offset=0)
+        janela = {"foco": None, "max_chars": 6000, "offset": 0, **(leitura or {})}
+        r = extrator.ler(alvo, trab, render=False, **janela)
         r["origem"] = "arquivo"
+        # `r` traz a URL que o `ler` pediu, que é a do arquivo. No envelope, `url` é a página
+        # pedida ao ato e `url_arquivo` a do arquivo; antes as duas iam como `url` e o ato caía
+        # com TypeError (#2856 linha 661). A captura que o Wayback serviu está em `url_final`.
+        r["url_arquivo"] = r.pop("url", alvo)
         return envelope("historico", trab.slug, url=url, em=em, **r)
     r = historico.capturas(url)
     linha = trab.grava_linha({"ato": "historico", "url": url, "status": 200,

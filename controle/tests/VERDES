@@ -128,6 +128,7 @@ tests/test_motor_registro.py | bin/acervo bin/_acervo/** bin/chat bin/conferir b
 tests/test_motor_eleger.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/lint bin/_lint/** bin/mesa bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/seg bin/sessao bin/_sessao/** bin/sinal bin/_expediente/** bin/_release/** abertura/** sessao/**
 tests/test_stack_mascara_segredos.py | bin/_release/**
 tests/test_pesquisar_consultar_palavras.py | bin/pesquisar pesquisa/**
+tests/test_pesquisar_dt_93_546_661_662_663.py | bin/pesquisar pesquisa/**
 tests/test_acervo_psql_c.py | bin/acervo bin/_acervo/**
 # Débito 330 do balde #2856: `acervo medir` roda o instrumento da medida (python -m medida) na bancada de
 # platafirma-conhecimento e diz a primeira linha do relatório; o exportar, de quem ele reusa o módulo, segue com o nome dele.
@@ -223,6 +224,8 @@ testes/test_deploy_seg_suites.py | bin/_release/** bin/release bin/seg bin/teste
 testes/test_descansar_fecho.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/chat bin/conferir bin/descansar bin/encerrar bin/fila bin/_fila/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/motor bin/_motor/** bin/persona bin/_persona/** bin/seg bin/sinal bin/situacao bin/tarefas bin/teste
 testes/test_descansar_poda.py | bin/descansar bin/mesa lib/caderno_poda.py
 testes/test_descansar_puxado.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/bot bin/chat bin/conferir bin/curar bin/descansar bin/encerrar bin/expediente bin/_expediente/** bin/fila bin/_fila/** bin/infra bin/_infra/** bin/ingerir bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/pesquisar bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste agente/**
+testes/test_descansar_mesa.py | bin/descansar bin/encerrar bin/mesa
+testes/test_descansar_enxuto.py | bin/descansar bin/encerrar
 testes/test_descansar_ritual.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/chat bin/conferir bin/descansar bin/encerrar bin/fila bin/_fila/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/motor bin/_motor/** bin/persona bin/_persona/** bin/seg bin/sinal bin/situacao bin/tarefas bin/teste
 testes/test_expediente.py | bin/expediente bin/_expediente/**
 testes/test_expediente_cadeirinha.py | bin/expediente bin/_expediente/** testes/test_expediente.py

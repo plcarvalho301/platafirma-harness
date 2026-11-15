@@ -13,6 +13,8 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
+
 RAIZ = Path(__file__).resolve().parents[2]
 FAMILIAS = RAIZ / "registro" / "familias.json"
 VENVS = RAIZ / "registro" / "venvs.json"
@@ -146,6 +148,14 @@ def test_espelho_conhecimento_resolve_e_teste_roda_sob_venv(tmp_path):
     assert "suite VERDE: platafirma-casa-espelho@t1 (chave espelho-conhecimento)" in r_teste.stdout
 
 
+def _uv_de_sistema():
+    """O uv que o `teste` procura (PLATAFIRMA_UV, /usr/local/bin, /usr/bin, PATH de sistema)."""
+    import os
+    import shutil
+    return (os.environ.get("PLATAFIRMA_UV") or shutil.which("uv", path="/usr/local/bin:/usr/bin:/bin"))
+
+
+@pytest.mark.skipif(not _uv_de_sistema(), reason="sem uv de sistema (runner do forge): o host da casa tem")
 def test_espelho_conhecimento_cai_para_uv_quando_venv_nao_tem_pytest(tmp_path):
     """Venv de execução sem pytest (ex.: rag em produção) deve cair para `uv run --no-project --with pytest`."""
     import os
