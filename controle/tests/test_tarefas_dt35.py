@@ -1,4 +1,4 @@
-"""Teste do DT-35: aviso de feature em homologação não repete o envio."""
+"""Teste do DT-35: aviso de feature em homologação não repete o envio (transição única, re-movimento terminal e pai já em homologação)."""
 from __future__ import annotations
 
 import json
