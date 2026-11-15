@@ -65,7 +65,7 @@ def morre(msg: str, code: int = 1):
 
 
 # ---- transporte (Action API) ------------------------------------------------------
-def _get(params: dict) -> dict:
+def _get(params: dict, *, aceitar_erro: bool = False) -> dict:
     url = f"{API}?{urllib.parse.urlencode({**params, 'format': 'json'})}"
     try:
         with _opener.open(url, timeout=TIMEOUT_S) as r:
@@ -76,7 +76,7 @@ def _get(params: dict) -> dict:
         morre(f"timeout em {API}")
     except ValueError:
         morre("resposta da wiki não é JSON")
-    if isinstance(data, dict) and "error" in data:
+    if not aceitar_erro and isinstance(data, dict) and "error" in data:
         # O MediaWiki devolve 200 com erro no corpo: parse do JSON, nunca status HTTP.
         err = data["error"]
         morre(f"{err.get('code', 'erro')}: {err.get('info', err)}")
@@ -395,6 +395,248 @@ def ato_mostrar_revisao(a):
         print(f"ok: {titulo} → rev {', '.join(ids)} restaurada (texto e resumo)")
 
 
+_CARGO_IMPLICITOS = frozenset({
+    "_pageName", "_pageTitle", "_pageNamespace", "_pageID", "_ID",
+})
+_CARGO_SQL_KEYWORDS = frozenset({
+    "AND", "OR", "NOT", "IS", "NULL", "IN", "LIKE", "RLIKE", "REGEXP",
+    "BETWEEN", "TRUE", "FALSE", "ASC", "DESC", "DISTINCT", "AS",
+    "CASE", "WHEN", "THEN", "ELSE", "END", "HOLDS", "NEAR",
+})
+_RE_IDENT_SQL = re.compile(
+    r"\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\b(?!\s*\()"
+)
+
+
+def _strip_sql_strings(expr: str) -> str:
+    """Remove literais entre aspas simples/duplas para não confundir valores com campos."""
+    out: list[str] = []
+    i, n = 0, len(expr)
+    while i < n:
+        ch = expr[i]
+        if ch in ("'", '"'):
+            quote = ch
+            i += 1
+            while i < n:
+                if expr[i] == "\\" and i + 1 < n:
+                    i += 2
+                elif expr[i] == quote:
+                    if i + 1 < n and expr[i + 1] == quote:
+                        i += 2
+                    else:
+                        i += 1
+                        break
+                else:
+                    i += 1
+            out.append(" ")
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
+def _split_csv_top_level(expr: str) -> list[str]:
+    """Separa por vírgula apenas fora de parênteses e aspas."""
+    partes: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    quote = ""
+    i, n = 0, len(expr)
+    while i < n:
+        ch = expr[i]
+        if quote:
+            buf.append(ch)
+            if ch == "\\" and i + 1 < n:
+                buf.append(expr[i + 1])
+                i += 2
+                continue
+            if ch == quote:
+                quote = ""
+        elif ch in ("'", '"'):
+            quote = ch
+            buf.append(ch)
+        elif ch == "(":
+            depth += 1
+            buf.append(ch)
+        elif ch == ")" and depth > 0:
+            depth -= 1
+            buf.append(ch)
+        elif ch == "," and depth == 0:
+            item = "".join(buf).strip()
+            if item:
+                partes.append(item)
+            buf = []
+        else:
+            buf.append(ch)
+        i += 1
+    item = "".join(buf).strip()
+    if item:
+        partes.append(item)
+    return partes
+
+
+def _extrair_identificadores_sql(expr: str) -> list[str]:
+    limpo = _strip_sql_strings(expr)
+    achados: list[str] = []
+    for m in _RE_IDENT_SQL.finditer(limpo):
+        tok = m.group(1)
+        if tok.upper() in _CARGO_SQL_KEYWORDS:
+            continue
+        if tok not in achados:
+            achados.append(tok)
+    return achados
+
+
+def _cargo_campos_e_aliases(fields_expr: str) -> tuple[list[str], set[str]]:
+    refs: list[str] = []
+    aliases: set[str] = set()
+    for item in _split_csv_top_level(fields_expr):
+        expr = item
+        # Alias no Cargo usa `expr=alias` ou `expr AS alias` fora de parênteses.
+        depth = 0
+        quote = ""
+        eq_pos = -1
+        for i, ch in enumerate(item):
+            if quote:
+                if ch == "\\" and i + 1 < len(item):
+                    continue
+                if ch == quote:
+                    quote = ""
+            elif ch in ("'", '"'):
+                quote = ch
+            elif ch == "(":
+                depth += 1
+            elif ch == ")" and depth > 0:
+                depth -= 1
+            elif ch == "=" and depth == 0:
+                eq_pos = i
+        if eq_pos != -1:
+            expr = item[:eq_pos].strip()
+            alias = item[eq_pos + 1:].strip()
+            if alias:
+                aliases.add(alias)
+        else:
+            m_as = re.search(r"\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)\s*$", item, re.IGNORECASE)
+            if m_as:
+                expr = item[:m_as.start()].strip()
+                aliases.add(m_as.group(1))
+        for tok in _extrair_identificadores_sql(expr):
+            if tok not in refs:
+                refs.append(tok)
+    return refs, aliases
+
+
+def _cargo_tabelas_lista(expr: str) -> list[tuple[str, str]]:
+    saida: list[tuple[str, str]] = []
+    for item in _split_csv_top_level(expr):
+        if "=" in item:
+            nome, _, alias = item.partition("=")
+            saida.append((nome.strip(), alias.strip() or nome.strip()))
+        else:
+            m_as = re.match(r"^(\S+)\s+(?:AS\s+)?(\S+)$", item, re.IGNORECASE)
+            if m_as:
+                saida.append((m_as.group(1), m_as.group(2)))
+            else:
+                saida.append((item.strip(), item.strip()))
+    return saida
+
+
+def _cargo_campos_tabela(tabela: str) -> list[str] | None:
+    data = _get({"action": "cargofields", "table": tabela}, aceitar_erro=True)
+    if not isinstance(data, dict) or "error" in data:
+        return None
+    cf = data.get("cargofields")
+    if isinstance(cf, dict) and cf:
+        return list(cf.keys())
+    if isinstance(cf, list) and cf:
+        return [str(x) for x in cf]
+    return None
+
+
+def _cargo_tabelas_disponiveis() -> list[str] | None:
+    data = _get({"action": "cargotables"}, aceitar_erro=True)
+    if not isinstance(data, dict) or "error" in data:
+        return None
+    ct = data.get("cargotables")
+    if isinstance(ct, list):
+        return [str(x) for x in ct]
+    if isinstance(ct, dict):
+        return list(ct.keys())
+    return None
+
+
+def _cargo_diagnosticar(a, err: dict):
+    code = err.get("code", "erro")
+    info = err.get("info", err)
+    tabelas = _cargo_tabelas_lista(a.tabela)
+    campos_por_tabela: dict[str, list[str]] = {}
+    alias_para_tabela: dict[str, str] = {}
+
+    for t_real, t_alias in tabelas:
+        campos = _cargo_campos_tabela(t_real)
+        if campos is None:
+            disponiveis = _cargo_tabelas_disponiveis()
+            if disponiveis is not None and t_real not in disponiveis:
+                lista_tab = ", ".join(disponiveis) if disponiveis else "(nenhuma)"
+                morre(f"tabela Cargo desconhecida: '{t_real}'. "
+                      f"Tabelas disponíveis: {lista_tab}")
+            morre(f"{code}: {info}")
+        campos_por_tabela[t_real] = campos
+        alias_para_tabela[t_real] = t_real
+        alias_para_tabela[t_alias] = t_real
+
+    refs_fields, aliases = _cargo_campos_e_aliases(a.campos)
+    refs_todas: list[str] = list(refs_fields)
+    for clausula, aceita_alias in (
+        (a.where, False),
+        (a.join_on, False),
+        (a.group_by, True),
+        (a.order_by, True),
+    ):
+        if not clausula:
+            continue
+        for tok in _extrair_identificadores_sql(clausula):
+            if aceita_alias and tok in aliases:
+                continue
+            if tok not in refs_todas:
+                refs_todas.append(tok)
+
+    invalidos: list[str] = []
+    for ref in refs_todas:
+        if "." in ref:
+            pref, _, nome = ref.partition(".")
+            t_alvo = alias_para_tabela.get(pref)
+            valido = (
+                t_alvo is not None
+                and (nome in campos_por_tabela[t_alvo] or nome in _CARGO_IMPLICITOS)
+            )
+        else:
+            valido = (
+                ref in _CARGO_IMPLICITOS
+                or any(ref in cs for cs in campos_por_tabela.values())
+            )
+        if not valido and ref not in invalidos:
+            invalidos.append(ref)
+
+    implicitos = ", ".join(sorted(_CARGO_IMPLICITOS))
+    if invalidos:
+        rotulo = "campo inválido" if len(invalidos) == 1 else "campos inválidos"
+        if len(tabelas) == 1:
+            t_nome = tabelas[0][0]
+            lista = ", ".join(campos_por_tabela[t_nome])
+            morre(f"{rotulo} na tabela {t_nome}: {', '.join(invalidos)}. "
+                  f"Campos disponíveis: {lista} (implícitos: {implicitos})")
+        detalhe = "; ".join(f"{t}: {', '.join(cs)}" for t, cs in campos_por_tabela.items())
+        morre(f"{rotulo}: {', '.join(invalidos)}. "
+              f"Campos disponíveis — {detalhe} (implícitos: {implicitos})")
+
+    if len(tabelas) == 1:
+        t_nome = tabelas[0][0]
+        lista = ", ".join(campos_por_tabela[t_nome])
+        morre(f"{code}: {info} (campos de {t_nome}: {lista})")
+    morre(f"{code}: {info}")
+
+
 def ato_cargo(a):
     params = {"action": "cargoquery", "tables": a.tabela, "fields": a.campos,
               "limit": min(a.limite, 100)}
@@ -402,7 +644,9 @@ def ato_cargo(a):
                  ("group_by", a.group_by), ("order_by", a.order_by)):
         if v:
             params[k] = v
-    data = _get(params)
+    data = _get(params, aceitar_erro=True)
+    if isinstance(data, dict) and "error" in data:
+        _cargo_diagnosticar(a, data["error"])
     linhas = [row.get("title", row) for row in data.get("cargoquery", [])]
     if a.json:
         print(json.dumps(linhas, ensure_ascii=False, indent=2))
