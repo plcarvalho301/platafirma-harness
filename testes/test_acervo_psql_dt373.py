@@ -78,3 +78,42 @@ fi
     assert "No such file or directory" not in err_rapida
     assert "No such file or directory" not in err_lenta
     assert list(tmpdir.iterdir()) == []
+
+
+def test_falha_psql_preserva_exit_code_e_limpa_tmp(tmp_path):
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    tmpdir = tmp_path / "tmp"
+    tmpdir.mkdir()
+
+    docker_fake = fake_bin / "docker"
+    docker_fake.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [ "${1:-}" = "inspect" ]; then
+  echo "true"
+  exit 0
+fi
+echo "ERROR: syntax error" >&2
+exit 1
+""",
+        encoding="utf-8",
+    )
+    docker_fake.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}",
+        "TMPDIR": str(tmpdir),
+    }
+    r = subprocess.run(
+        ["bash", str(ACERVO_PSQL), "--sql", "SELECT broken"],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=10,
+        check=False,
+    )
+    assert r.returncode == 1
+    assert "ERROR: syntax error" in r.stderr
+    assert list(tmpdir.iterdir()) == []
