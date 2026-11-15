@@ -814,7 +814,30 @@ def test_cadeira_so_vale_no_agente_de_dono_generico(mundo, pessoa, monkeypatch, 
     assert roda(monkeypatch, "consultor") == 2
     assert "passe --cadeira" in capsys.readouterr().err
     assert roda(monkeypatch, "consultor", cadeira="ia") == 2, "dono {cadeira} sem chapéu fixo pede --chapeu"
-    assert "passe --chapeu" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "passe --chapeu" in err
+    assert "válidos:" in err and "agente" in err
+
+
+def test_recusa_sem_chapeu_lista_chapeus_validos_da_cadeira(mundo, pessoa, tmp_path, monkeypatch, capsys):
+    abertura = tmp_path / "abertura-pub"
+    for chapeu in ("beta", "alpha"):
+        p = abertura / "current" / "abertura" / "arquiteto" / chapeu
+        p.mkdir(parents=True)
+        (p / "chapeu.md").write_text(f"# {chapeu}\n", encoding="utf-8")
+    (abertura / "current" / "abertura" / "arquiteto" / "rascunho").mkdir(parents=True)
+    monkeypatch.setenv("PF_ABERTURA_DIR", str(abertura))
+
+    mundo.escreve(CONSULTOR)
+    assert roda(monkeypatch, "consultor", cadeira="arquiteto") == 2
+    err = capsys.readouterr().err
+    assert "passe --chapeu <slug> — válidos: alpha, beta" in err
+    assert "rascunho" not in err
+
+    assert roda(monkeypatch, "consultor", cadeira="cadeira-inexistente") == 2
+    err_sem = capsys.readouterr().err
+    assert "passe --chapeu <slug>" in err_sem
+    assert "válidos:" not in err_sem
 
 
 def test_claude_monta_a_chamada_do_cli_com_modelo_teto_e_ferramentas(mundo, pessoa, monkeypatch, capsys):
