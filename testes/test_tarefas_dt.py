@@ -454,3 +454,36 @@ def test_ler_linha_completa_sem_vizinhas(balde):
         assert "vizinha" not in p.stdout
     assert _run(["dt", "ler", "999"], base).returncode == 1
     assert _run(["dt", "ler", "x"], base).returncode == 2
+
+
+# #2856 linha 682: `tarefas dt --ajuda` e `tarefas dt <ato> --ajuda` imprimem o uso específico.
+@pytest.mark.parametrize("flag", ["--ajuda", "--help", "-h"])
+def test_dt_ajuda_imprime_uso_do_dt_em_stdout_com_exit_0(flag):
+    p = _run(["dt", flag])
+    assert p.returncode == 0, p.stderr
+    assert p.stderr == ""
+    assert "tarefas dt admitir" in p.stdout
+    assert "tarefas criar" not in p.stdout
+
+
+@pytest.mark.parametrize("args", [["dt", "admitir", "--ajuda"],
+                                  ["dt", "admitir", "falha x", "--ajuda"],
+                                  ["dt", "admitir", "-h"]])
+def test_dt_admitir_ajuda_imprime_uso_com_opcoes_obrigatorias_sem_efeito(balde, args):
+    s, base = balde
+    p = _run(args, base)
+    assert p.returncode == 0, p.stderr
+    assert p.stderr == ""
+    for opt in ("tarefas dt admitir", "--medido-em", "--evidencia", "--raio", "--esperado", "--stack"):
+        assert opt in p.stdout
+    assert not s.pedidos
+
+
+@pytest.mark.parametrize("sub", ["listar", "ler", "matar", "restack", "vencidos", "indicadores"])
+def test_dt_outros_atos_ajuda_imprime_uso_especifico_sem_efeito(balde, sub):
+    s, base = balde
+    p = _run(["dt", sub, "--ajuda"], base)
+    assert p.returncode == 0, p.stderr
+    assert p.stderr == ""
+    assert f"tarefas dt {sub}" in p.stdout
+    assert not s.pedidos
