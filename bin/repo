@@ -616,10 +616,12 @@ ato_git() {
   fi
 
   # [3096] Recusa commit em ramo de outra cadeira
+  # DT 490: o portao de story em execucao vale tambem para `repo git commit`
   if [ "${1:-}" = "commit" ]; then
     local ramo_atual
     ramo_atual="$(ramo_atual "$c")"
     ramo_da_cadeira "$ramo_atual" || morre "commit recusado: o ramo '$ramo_atual' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, main)." 3
+    portao_story_em_execucao "$nome" "$c" "$ramo_atual"
   fi
 
   if [ "${1:-}" = apply ]; then
@@ -2119,17 +2121,22 @@ migra_plana() {
   return 0
 }
 
+# DT 490: ramo cria bancada nova (via cmd_abrir) e nunca troca o branch de bancada existente.
 ato_ramo() {
   local nome="${1:-}"
   [ -n "$nome" ] || uso
-  local c; c="$(clone_de "$nome")" || exit $?
   shift || true
 
   if [ $# -eq 0 ]; then
+    local c; c="$(clone_de "$nome")" || exit $?
     printf '%s  ·  atual: %s\n' "$nome" "$(ramo_atual "$c")"
     "$GIT" -C "$c" branch --format='  %(refname:short)' || morre "git branch falhou" 3
     return 0
   fi
+
+  case "$nome" in
+    *@*) morre "ramo cria bancada nova; nao use @<chave> para trocar bancada existente" 2 ;;
+  esac
 
   local card="" slug=""
   while [ $# -gt 0 ]; do
@@ -2155,43 +2162,41 @@ ato_ramo() {
   done
 
   local card_num="${card###}"
-  local ramo_alvo=""
   if [[ "$card_num" =~ ^[0-9]+$ ]]; then
     if [ -n "$slug" ]; then
-      ramo_alvo="fabrica/${card_num}-${slug}"
+      cmd_abrir "$nome" "$card_num" --slug "$slug"
     else
-      ramo_alvo="fabrica/${card_num}"
+      cmd_abrir "$nome" "$card_num"
     fi
   else
-    ramo_alvo="$card"
-    if [ -n "$slug" ]; then
-      ramo_alvo="${ramo_alvo}-${slug}"
-    fi
-    printf 'aviso: nome livre de ramo ('\''%s'\''); padrão da casa é '\''repo ramo <repo> <card> [--slug <slug>]'\'' -> fabrica/<card>-<slug>\n' "$ramo_alvo" >&2
+    local slug_alvo="${card}${slug:+-$slug}"
+    [ -n "$slug_alvo" ] || uso
+    case "$slug_alvo" in
+      -*|*' '*|*'..'*) morre "nome de ramo invalido: '$slug_alvo'" 2 ;;
+    esac
+    cmd_abrir "$nome" --slug "$slug_alvo"
   fi
+}
 
-  case "$ramo_alvo" in
-    -*|*' '*|*'..'*) morre "nome de ramo invalido: '$ramo_alvo'" 2 ;;
-  esac
-
-  local atual; atual="$(ramo_atual "$c")"
-  if [ "$atual" = "$ramo_alvo" ]; then
-    printf 'ramo já em '\''%s'\'' (@ %s)\n' "$ramo_alvo" "$("$GIT" -C "$c" rev-parse --short HEAD)"
-    exit 1
+# arq:0096, Consequências (card #3599) + DT 490: story de código só comita em em-execucao.
+portao_story_em_execucao() {
+  local nome="$1" c="$2" ramo="$3"
+  direto_em_main "$nome" && return 0
+  local card_num=""
+  if [[ "$ramo" =~ ^fabrica/([0-9]+) ]]; then
+    card_num="${BASH_REMATCH[1]}"
+  elif [[ "$(basename "$c")" =~ ^([0-9]+) ]]; then
+    card_num="${BASH_REMATCH[1]}"
   fi
-
-  if "$GIT" -C "$c" show-ref --verify --quiet "refs/heads/$ramo_alvo"; then
-    "$GIT" -C "$c" checkout "$ramo_alvo" || morre "checkout falhou" 3
-    printf 'ramo trocado: %s (ja existia)\n' "$ramo_alvo"
-  else
-    local base_ref="HEAD"
-    if "$GIT" -C "$c" rev-parse --verify origin/main >/dev/null 2>&1; then
-      base_ref="origin/main"
-    elif "$GIT" -C "$c" rev-parse --verify main >/dev/null 2>&1; then
-      base_ref="main"
-    fi
-    "$GIT" -C "$c" checkout -b "$ramo_alvo" "$base_ref" || morre "checkout -b falhou" 3
-    printf 'ramo criado: %s (de %s)\n' "$ramo_alvo" "$base_ref"
+  [ -n "$card_num" ] || return 0
+  local tarefas_bin="${PF_TAREFAS_BIN:-$(dirname "$(readlink -f "$0")")/tarefas}"
+  [ -x "$tarefas_bin" ] || return 0
+  local item nivel estado
+  item="$("$tarefas_bin" api GET "/itens/$card_num" 2>/dev/null)" || item=""
+  nivel="$(printf '%s' "$item" | jq -r '.nivel_nome // empty' 2>/dev/null)" || nivel=""
+  estado="$(printf '%s' "$item" | jq -r '.estado // empty' 2>/dev/null)" || estado=""
+  if [ "$nivel" = "story" ] && [ -n "$estado" ] && [ "$estado" != "em-execucao" ]; then
+    morre "story #$card_num em $estado: escreva o Plano e mova para em-execucao (tarefas modelo story refinada)" 4
   fi
 }
 
@@ -2229,26 +2234,7 @@ ato_commitar() {
   ramo_da_cadeira "$ramo" || morre "commit recusado: o ramo '$ramo' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, main)." 3
 
   # arq:0096, Consequências (card #3599): story de código só comita em em-execucao
-  if ! direto_em_main "$nome"; then
-    local card_num=""
-    if [[ "$ramo" =~ ^fabrica/([0-9]+) ]]; then
-      card_num="${BASH_REMATCH[1]}"
-    elif [[ "$(basename "$c")" =~ ^([0-9]+) ]]; then
-      card_num="${BASH_REMATCH[1]}"
-    fi
-    if [ -n "$card_num" ]; then
-      local tarefas_bin="${PF_TAREFAS_BIN:-$(dirname "$(readlink -f "$0")")/tarefas}"
-      if [ -x "$tarefas_bin" ]; then
-        local item nivel estado
-        item="$("$tarefas_bin" api GET "/itens/$card_num" 2>/dev/null)" || item=""
-        nivel="$(printf '%s' "$item" | jq -r '.nivel_nome // empty' 2>/dev/null)" || nivel=""
-        estado="$(printf '%s' "$item" | jq -r '.estado // empty' 2>/dev/null)" || estado=""
-        if [ "$nivel" = "story" ] && [ -n "$estado" ] && [ "$estado" != "em-execucao" ]; then
-          morre "story #$card_num em $estado: escreva o Plano e mova para em-execucao (tarefas modelo story refinada)" 4
-        fi
-      fi
-    fi
-  fi
+  portao_story_em_execucao "$nome" "$c" "$ramo"
 
   # DT 37: salva a arvore do indice antes do git add; se o gate de diagrama ou o commit
   # recusar, restaura o stage para nao deixar arquivo novo staged (A).
@@ -3372,13 +3358,23 @@ remove_bancada() {
 # limpa_ramo_entregue <clone> <ramo> <oid> -- pr-merge: remove na conta toda bancada do ramo
 # entregue, de qualquer cadeira, salvando antes o que so existe nela.
 limpa_ramo_entregue() {
-  local c="$1" ramo="$2" oid="$3" base wt br trava linha dono
+  local c="$1" ramo="$2" oid="$3" base wt br trava linha dono nome_repo
   base="$(base_de "$c")" || return 0
+  nome_repo="$(basename "$base")"
   while IFS=$'\t' read -r wt br trava; do
     [ "$br" = "refs/heads/$ramo" ] || continue
     [ -z "$trava" ] || { printf 'bancada %s: travada (%s), nao toco\n' "${wt#"$BANCADA"/}" "$trava"; continue; }
     [ "$wt" = "$base" ] && continue
     dono="$(dono_da_pasta "$wt")"
+    # DT 490: em bancada de eixo (wt/<repo>/<cadeira>/<chave>), so remove se a chave
+    # corresponde ao ramo entregue; nunca remove bancada de outro trabalho.
+    if [ "$(classe_da_pasta "$wt" "$nome_repo")" = "eixo" ]; then
+      local chave_wt; chave_wt="$(basename "$wt")"
+      if [ "$ramo" != "fabrica/$chave_wt" ] && [ "$ramo" != "$dono/$chave_wt" ] && [ "$ramo" != "$chave_wt" ]; then
+        printf 'bancada %s: no ramo %s mas chave '\''%s'\'' e de outro trabalho — nao removo\n' "${wt#"$BANCADA"/}" "$ramo" "$chave_wt"
+        continue
+      fi
+    fi
     linha="$(remove_bancada "$base" "$wt" "$dono" "$oid")"
     printf 'bancada %s: %s\n' "${wt#"$BANCADA"/}" "$linha"
   done < <(worktrees_tab "$base")
