@@ -1278,6 +1278,7 @@ def _verbo_com_face(tmp_path, monkeypatch, linhas_de_ato):
         + "echo ok\n", encoding="utf-8")
     monkeypatch.setattr(conferir, "BIN", str(bin_dir))
     monkeypatch.setattr(conferir, "_capacidade_veredito", lambda cap: resultado.conforme())
+    monkeypatch.setattr(conferir, "_donos_ferramental", lambda: ({}, None))
     monkeypatch.setattr(conferir, "_desde_familia", lambda familia: None)
     monkeypatch.setattr(conferir, "origem", lambda nome, caminho: ("symlink-release", str(caminho)))
     monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")

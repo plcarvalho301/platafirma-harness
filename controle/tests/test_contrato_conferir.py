@@ -139,6 +139,7 @@ def test_verbo_json_formato_ok(tmp_path, monkeypatch, capsys):
     )
     monkeypatch.setattr(conferir, "BIN", str(bin_dir))
     monkeypatch.setattr(conferir, "_capacidade_veredito", lambda cap: conferir.resultado.conforme())
+    monkeypatch.setattr(conferir, "_donos_ferramental", lambda: ({"meuverbo": "claudinho-TI"}, None))
     monkeypatch.setattr(conferir, "_desde_familia", lambda familia: "2026-09-20T10:00:00Z")
     monkeypatch.setattr(
         conferir, "origem",
@@ -217,6 +218,81 @@ def test_verbo_capacidade_ausente_e_indeterminavel_se_acervo_falha(tmp_path, mon
     dado = json.loads(saida.out)
     item = next(i for i in dado["itens"] if i["nome"] == "meuverbo")
     assert item["estado"] == "indeterminavel"
+
+
+def test_verbo_dono_divergente_no_catalogo_reprova(tmp_path, monkeypatch, capsys):
+    """DT #273: divergencia entre acervo.ferramental_verbo.dono e `# dono:` do bin aparece em conferir verbo."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "tarefas").write_text(
+        "#!/usr/bin/env bash\n"
+        "# tarefas - conduz o card\n"
+        "# capacidade: tarefas\n"
+        "# dono: gestao-estrategica\n"
+        "echo ok\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(conferir, "BIN", str(bin_dir))
+    monkeypatch.setattr(conferir, "_capacidade_veredito", lambda cap: conferir.resultado.conforme())
+    monkeypatch.setattr(conferir, "_donos_ferramental", lambda: ({"tarefas": "ti"}, None))
+    monkeypatch.setattr(conferir, "_desde_familia", lambda familia: None)
+    monkeypatch.setattr(conferir, "origem", lambda nome, caminho: ("symlink", str(bin_dir / "tarefas")))
+
+    exit_code = conferir.conferir_verbo("tarefas", como_json=True)
+    dado = json.loads(capsys.readouterr().out)
+    item = next(i for i in dado["itens"] if i["nome"] == "tarefas")
+    assert exit_code == 1
+    assert item["estado"] == "divergente"
+    assert "ti" in item["motivo"] and "gestao-estrategica" in item["motivo"]
+
+
+def test_verbo_dono_nao_conferido_quando_banco_falha_e_indeterminavel(tmp_path, monkeypatch, capsys):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "tarefas").write_text(
+        "#!/usr/bin/env bash\n"
+        "# tarefas - conduz o card\n"
+        "# capacidade: tarefas\n"
+        "# dono: gestao-estrategica\n"
+        "echo ok\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(conferir, "BIN", str(bin_dir))
+    monkeypatch.setattr(conferir, "_capacidade_veredito", lambda cap: conferir.resultado.conforme())
+    monkeypatch.setattr(conferir, "_donos_ferramental", lambda: (None, "psql fora"))
+    monkeypatch.setattr(conferir, "_desde_familia", lambda familia: None)
+    monkeypatch.setattr(conferir, "origem", lambda nome, caminho: ("symlink", str(bin_dir / "tarefas")))
+
+    exit_code = conferir.conferir_verbo("tarefas", como_json=True)
+    dado = json.loads(capsys.readouterr().out)
+    item = next(i for i in dado["itens"] if i["nome"] == "tarefas")
+    assert exit_code == 5
+    assert item["estado"] == "indeterminavel"
+
+
+def test_verbo_dono_ignorado_no_gate_de_rev_antes_da_promocao(tmp_path, monkeypatch, capsys):
+    """Com PF_CONFERIR_ORIGEM=0 (gate_conferir_verbo), o catalogo ainda nao foi reconciliado."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "tarefas").write_text(
+        "#!/usr/bin/env bash\n"
+        "# tarefas - conduz o card\n"
+        "# capacidade: tarefas\n"
+        "# dono: gestao-estrategica\n"
+        "echo ok\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PF_CONFERIR_ORIGEM", "0")
+    monkeypatch.setattr(conferir, "BIN", str(bin_dir))
+    monkeypatch.setattr(conferir, "_capacidade_veredito", lambda cap: conferir.resultado.conforme())
+    monkeypatch.setattr(conferir, "_donos_ferramental", lambda: (_ for _ in ()).throw(AssertionError("nao deveria consultar")))
+    monkeypatch.setattr(conferir, "_desde_familia", lambda familia: None)
+
+    exit_code = conferir.conferir_verbo("tarefas", como_json=True)
+    dado = json.loads(capsys.readouterr().out)
+    item = next(i for i in dado["itens"] if i["nome"] == "tarefas")
+    assert exit_code == 0
+    assert item["estado"] == "conforme"
 
 
 # --- skill ------------------------------------------------------------------

@@ -1361,6 +1361,23 @@ assentar_atalhos() {  # $1=repo
   done
 }
 
+# Reconcilia acervo.ferramental_verbo.dono com o `# dono:` do cabeçalho dos bins servidos
+# (DT #273, #2856 linha 273). Nunca aborta a promoção que já trocou current.
+reconciliar_ferramental() {  # $1=repo
+  local repo="$1"
+  [ "$repo" = "$FAMILIA_BIN" ] || return 0
+  local reg="$PROD_RAIZ/$repo/current/bin/_acervo/registrar"
+  [ -x "$reg" ] || return 0
+  local out rc=0
+  out="$("$reg" --reconciliar-dono 2>&1)" || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    [ -z "$out" ] || printf 'ferramental: %s\n' "$(tail -n 1 <<<"$out")"
+  else
+    printf 'ferramental: AVISO — reconciliação de dono saiu %s: %s\n' "$rc" "$(tail -n 1 <<<"$out")" >&2
+  fi
+  return 0
+}
+
 # venv/<nome>-<hash-do-lock>, construído do lockfile da rev antes de trocar current (desenho #3010
 # §2). O hash é do CONTEÚDO do lock: rev que não mexe no lock reaproveita o venv pronto. Declaração
 # em registro/venvs.json: {"<nome>": {"familia": "<familia>", "lock": "<caminho na árvore>"}}.
@@ -2658,6 +2675,7 @@ cmd_promover() {
   printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${sha:0:7}"
   [ -z "$atual" ] || PROMO_VOLTA="release reverter $repo ${atual:0:7}"
   assentar_atalhos "$repo"
+  reconciliar_ferramental "$repo"
   local rc_ab=0
   publicar_abertura_da_familia "$repo" "$sha" || rc_ab=$?
 
@@ -2846,6 +2864,7 @@ cmd_reverter() {
   trocar_current "$repo" "$alvo" "$atual"
   printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${alvo:0:7}"
   assentar_atalhos "$repo"
+  reconciliar_ferramental "$repo"
   local rc_ab=0
   if [ "${PF_RELEASE_ABERTURA:-1}" != 0 ]; then
     # reverter volta a uma abertura ja servida: o gate de rotas avisa, nao barra (card #3143)
