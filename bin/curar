@@ -68,8 +68,8 @@ USO = """uso:
                                                               modelo local, com a mesma conferência (#3958)
   curar --reextrair <id,id,…|id id …|@arquivo> --bancada <pasta> [--metodo <slug>] [--modo bancada|medida] [--refazer] [--timeout-s <n>] [--json]
                                                               converte em <pasta>/<metodo>/<obra_id>/, não escreve no acervo
-  curar --expurgar --espelhos [--apply]                       espelho de impressão aposentada há +90 dias
-  curar --restaurar --espelhos [<obra>] [--apply]             desfaz o expurgo de espelhos
+  curar --expurgar --espelhos [--apply]                       espelho de impressão toda aposentada (acervo recolher biblioteca espelho)
+  curar --restaurar --espelhos [<obra>] [--apply]             repor espelho recolhido (acervo repor biblioteca espelho)
   curar --apagar --espelhos [<hex>/<digest>] [--apply]        apaga, SEM VOLTA, o espelho que nenhuma impressão reclama
                                                               (#3332); prefixo de espelho reclamado recusa
   curar --conceito <slug> [--rotulo … --definicao … --natureza … --estatuto … --alt "rótulo@pt,…"] --pai <slug> --tipo <t> --garantia <g> --motivo "…" [--lastro …] [--apply]
@@ -2015,7 +2015,7 @@ def acao_reextrair(args, autor: str, como_json: bool, headers: dict) -> int:
 
 
 def acao_espelhos(ato: str, obra: str | None, autor: str, aplicar: bool, como_json: bool, headers: dict) -> int:
-    """`--expurgar --espelhos` e `--restaurar --espelhos` (§10.2). Plano seco sem --apply."""
+    """`acervo recolher|repor biblioteca espelho` (`--expurgar|--restaurar --espelhos`, §10.2). Plano seco sem --apply."""
     payload = {"autor": autor, "aplicar": aplicar}
     if obra:
         payload["obra"] = resolver_obra_id(obra, headers)
@@ -2024,11 +2024,12 @@ def acao_espelhos(ato: str, obra: str | None, autor: str, aplicar: bool, como_js
     if como_json:
         print(json.dumps(data, indent=2, ensure_ascii=False))
         return 0
-    verbo = "expurgado(s)" if ato == "expurgar" else "restaurado(s)"
+    ato_visivel = "recolher" if ato == "expurgar" else "repor"
+    verbo = "recolhido(s)" if ato == "expurgar" else "reposto(s)"
     cabeca = f"{data.get('n', 0)} espelho(s) {verbo}" if data.get("modo") == "aplicado" else \
-        f"Plano: {data.get('n', 0)} espelho(s) a {ato}"
+        f"Plano: {data.get('n', 0)} espelho(s) a {ato_visivel}"
     if ato == "expurgar":
-        cabeca += f" (impressões todas aposentadas há mais de {data.get('prazo_dias', 90)} dias)"
+        cabeca += " (impressões todas aposentadas)"
     print(cabeca)
     for it in data.get("itens", []):
         extra = ""

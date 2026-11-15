@@ -83,6 +83,16 @@ class _FalsoHandler(BaseHTTPRequestHandler):
         if self.path == f"/acervo/obras/{RETIRADA}/restauracao":
             return self._resp(200, {"id": RETIRADA, "titulo": "Obra Retirada",
                                     "retirada": False, "retirada_em": None})
+        if self.path == "/acervo/espelhos/expurgo":
+            modo = "aplicado" if corpo.get("aplicar") else "plano"
+            return self._resp(200, {"modo": modo, "n": 0, "prazo_dias": 90, "itens": []})
+        if self.path == "/acervo/espelhos/restauro":
+            modo = "aplicado" if corpo.get("aplicar") else "plano"
+            return self._resp(200, {
+                "modo": modo,
+                "n": 1,
+                "itens": [{"bucket": "acervo", "fonte_versao": "sha256:abcdef1234567890", "digest": "1234567890ab"}],
+            })
         return self._resp(404, {"title": "NaoEncontrada", "detail": self.path})
 
 
@@ -242,3 +252,28 @@ def test_motivo_em_branco_vale_como_sem_motivo(servidor_falso, motivo):
     r = servidor_falso.rodar("--expurgar", VIVA, "--motivo", motivo, "--apply")
     assert r.returncode == 2
     assert servidor_falso.chamadas == []
+
+
+@precisa_requests
+def test_espelhos_recolher_e_repor_sem_prazo_90_dias(servidor_falso):
+    r_rec_plano = servidor_falso.rodar("--expurgar", "--espelhos")
+    assert r_rec_plano.returncode == 0, r_rec_plano.stderr
+    assert "Plano: 0 espelho(s) a recolher (impressões todas aposentadas)" in r_rec_plano.stdout
+    assert "expurgar" not in r_rec_plano.stdout
+    assert "90 dias" not in r_rec_plano.stdout
+
+    r_rec_app = servidor_falso.rodar("--expurgar", "--espelhos", "--apply")
+    assert r_rec_app.returncode == 0, r_rec_app.stderr
+    assert "0 espelho(s) recolhido(s) (impressões todas aposentadas)" in r_rec_app.stdout
+    assert "expurgado" not in r_rec_app.stdout
+    assert "90 dias" not in r_rec_app.stdout
+
+    r_rep_plano = servidor_falso.rodar("--restaurar", "--espelhos")
+    assert r_rep_plano.returncode == 0, r_rep_plano.stderr
+    assert "Plano: 1 espelho(s) a repor" in r_rep_plano.stdout
+    assert "restaurar" not in r_rep_plano.stdout
+
+    r_rep_app = servidor_falso.rodar("--restaurar", "--espelhos", "--apply")
+    assert r_rep_app.returncode == 0, r_rep_app.stderr
+    assert "1 espelho(s) reposto(s)" in r_rep_app.stdout
+    assert "restaurado" not in r_rep_app.stdout
