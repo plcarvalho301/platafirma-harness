@@ -492,21 +492,71 @@ alvo_leitura() {
     rm -f "$err"; ALVO="$c"; avisa_atras_origin "$c" "$nome"; return 0
   fi
   base="${nome%%@*}"
-  if [ "$rc" -ne 1 ] || [ "$base" != "$nome" ] || [ ! -e "$BANCADA/$base/.git" ]; then
-    [ -n "$c" ] && printf '%s\n' "$c"
-    cat "$err" >&2; rm -f "$err"
-    return "$rc"
+  if [ "$rc" -eq 1 ] && [ "$base" = "$nome" ] && [ -e "$BANCADA/$base/.git" ]; then
+    rm -f "$err"
+    git_sem_engolir "$BANCADA/$base" fetch --prune origin \
+      || morre "indeterminavel: sem bancada de '$base', e o forge nao respondeu para ler origin/main ($REPLY)" 5
+    "$GIT" -C "$BANCADA/$base" rev-parse --verify -q origin/main >/dev/null \
+      || morre "indeterminavel: '$base' sem origin/main depois de buscar o forge" 5
+    LEITURA_REF="origin/main"
+    ALVO="$BANCADA/$base"
+    printf 'sem bancada: lendo %s@%s de %s, buscado do forge agora\n' "$LEITURA_REF" \
+      "$("$GIT" -C "$ALVO" rev-parse --short "$LEITURA_REF")" "$base" >&2
+    return 0
   fi
-  rm -f "$err"
-  git_sem_engolir "$BANCADA/$base" fetch --prune origin \
-    || morre "indeterminavel: sem bancada de '$base', e o forge nao respondeu para ler origin/main ($REPLY)" 5
-  "$GIT" -C "$BANCADA/$base" rev-parse --verify -q origin/main >/dev/null \
-    || morre "indeterminavel: '$base' sem origin/main depois de buscar o forge" 5
-  LEITURA_REF="origin/main"
-  ALVO="$BANCADA/$base"
-  printf 'sem bancada: lendo %s@%s de %s, buscado do forge agora\n' "$LEITURA_REF" \
-    "$("$GIT" -C "$ALVO" rev-parse --short "$LEITURA_REF")" "$base" >&2
-  return 0
+  # DT-568: repositório do dono fora da bancada (ex.: fora da família platafirma-*), só leitura.
+  if [ "$rc" -eq 2 ] && [ "$base" = "$nome" ] && [ "$nome" != "pull" ] && [ "$nome" != "-C" ] && [ ! -e "$BANCADA/$base/.git" ]; then
+    local cache_dir="$BANCADA/.leitura/$base.git" url clone_err=""
+    if [ -d "$cache_dir" ] && "$GIT" -C "$cache_dir" rev-parse --git-dir >/dev/null 2>&1; then
+      if ! git_sem_engolir "$cache_dir" fetch --prune origin; then
+        rm -f "$err"
+        morre "indeterminavel: sem bancada de '$base', e o forge nao respondeu ($REPLY)" 5
+      fi
+    else
+      url="$(url_forge "$base")"
+      mkdir -p "$BANCADA/.leitura" || {
+        rm -f "$err"
+        morre "indeterminavel: nao criei cache de leitura em $BANCADA/.leitura" 5
+      }
+      rm -rf "$cache_dir"
+      if ! clone_err="$(env PATH="$PATH_FORGE" GIT_TERMINAL_PROMPT=0 "$GIT" clone --bare --quiet "$url" "$cache_dir" 2>&1)"; then
+        rm -rf "$cache_dir"
+        if grep -qiE 'not found|does not exist|repository .* not found' <<<"$clone_err"; then
+          [ -n "$c" ] && printf '%s\n' "$c"
+          cat "$err" >&2; rm -f "$err"
+          return "$rc"
+        fi
+        rm -f "$err"
+        morre "indeterminavel: nao acessei '$base' no forge ($url): $(printf '%s' "$clone_err" | head -1)" 5
+      fi
+      "$GIT" -C "$cache_dir" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+      if ! git_sem_engolir "$cache_dir" fetch --prune origin; then
+        rm -f "$err"
+        morre "indeterminavel: '$base' clonado mas fetch do forge falhou ($REPLY)" 5
+      fi
+    fi
+    rm -f "$err"
+    local ref="" head_branch=""
+    if "$GIT" -C "$cache_dir" rev-parse --verify -q origin/main >/dev/null; then
+      ref="origin/main"
+    else
+      head_branch="$("$GIT" -C "$cache_dir" symbolic-ref --short HEAD 2>/dev/null || true)"
+      if [ -n "$head_branch" ] && "$GIT" -C "$cache_dir" rev-parse --verify -q "origin/$head_branch" >/dev/null; then
+        ref="origin/$head_branch"
+      elif "$GIT" -C "$cache_dir" rev-parse --verify -q origin/master >/dev/null; then
+        ref="origin/master"
+      fi
+    fi
+    [ -n "$ref" ] || morre "indeterminavel: '$base' sem ramo padrao no forge" 5
+    LEITURA_REF="$ref"
+    ALVO="$cache_dir"
+    printf 'sem bancada (só leitura): lendo %s@%s de %s, buscado do forge agora\n' "$LEITURA_REF" \
+      "$("$GIT" -C "$ALVO" rev-parse --short "$LEITURA_REF")" "$base" >&2
+    return 0
+  fi
+  [ -n "$c" ] && printf '%s\n' "$c"
+  cat "$err" >&2; rm -f "$err"
+  return "$rc"
 }
 
 ramo_atual() {
