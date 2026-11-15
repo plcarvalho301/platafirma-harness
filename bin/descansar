@@ -457,6 +457,31 @@ def roda_fila_cabecalho(rotulo, cmd, timeout=90):
             "ack: `fila tratar <msgid>...` (ou responder com `--responde`)")
 
 
+def _marca_encerrada_duravel(sid):
+    """Grava `encerrada_em = now()` em sessao.sessao ao encerrar por `descansar fita
+    --encerra-sessao` (DT 535, migração 0092): sem isto, `sessao ver <id>` reidratava
+    a sessão encerrada a partir do registro durável. Melhor esforço."""
+    try:
+        import psycopg
+        bin_dir = os.environ.get("PF_BIN") or os.path.join(HARNESS_DIR, "bin")
+        env = {**os.environ, "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}"}
+        p = subprocess.run(["seg", "segredo", "ler", "harness-sessao/SESSAO_PG_PASSWORD"],
+                           capture_output=True, text=True, timeout=5, env=env, check=False)
+        senha = (p.stdout or "").strip() if p.returncode == 0 else ""
+        if not senha:
+            return
+        pg_porta = os.environ.get("SESSAO_PG_PORT", "5437")
+        dsn = f"host=127.0.0.1 port={pg_porta} dbname=sessao user=sessao password={senha}"
+        with psycopg.connect(dsn, connect_timeout=3) as con, con.cursor() as cur:
+            cur.execute(
+                "UPDATE sessao.sessao SET encerrada_em = now() "
+                "WHERE sessao_id = %s::uuid AND encerrada_em IS NULL",
+                (sid,))
+            con.commit()
+    except Exception:                                         # noqa: BLE001
+        pass
+
+
 def encerra_sessao(rc, sessao_id):
     """DEL `sessao:{id}`, `ledger:{id}`, `giro:{id}` e o derrame da fita (arq:0101 §1).
 
@@ -477,6 +502,7 @@ def encerra_sessao(rc, sessao_id):
         fora.append(f"  sessao {sid}: {apagadas} chave(s) apagada(s) no msg-mem")
     except Exception as e:                                    # noqa: BLE001
         fora.append(f"  msg-mem nao respondeu ao DEL: {type(e).__name__}: {e}")
+    _marca_encerrada_duravel(sid)
     derrame = os.path.join(os.environ.get("PF_DERRAME",
                                           str(instancia() / "var" / "tmp" / "retornos")), sid)
     n = 0

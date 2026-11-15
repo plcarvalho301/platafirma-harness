@@ -768,3 +768,98 @@ def test_ato_abrir_passa_a_ordem_da_abertura_ao_registro_duravel(monkeypatch):
     nova = json.loads(mem.data[f"sessao:{sid}"])["ordem_id"]
     assert nova != "o-velho"
     assert capturas and capturas[-1][1][-1] == nova   # o durável recebe a MESMA ordem da chave viva
+
+
+# ---------------------------------------------------------------- DT 165 & DT 535
+def test_reidratar_e_reabrir_preservam_canonizada_e_autorizada_por(monkeypatch):
+    """DT 165: reidratação devolve canonizada=True e autorizada_por='reidratada', e reabrir
+    a mesma conversa atualiza canonizada e autorizada_por sem imprimir regime nao canonizada."""
+    sid = str(uuid.uuid4())
+    aberta_em = datetime.now(timezone.utc) - timedelta(hours=1)
+    row = ("engenharia", "devops", "code", aberta_em, None, "jose-123", ORDEM)
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg(row))
+    mem = FakeMsgMem()
+
+    ch = reidratar_mod.reidratar(sid, mem, _roda_seg_ok)
+    assert ch is not None
+    assert ch["canonizada"] is True
+    assert ch["autorizada_por"] == "reidratada"
+
+    # Reabrir a conversa reidratada atualiza autorizada_por para a regra decidida e não imprime regime restrito
+    monkeypatch.setenv("PF_SUJEITO", "jose-123")
+    capturas: list = []
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg_update_capturado(capturas))
+    saida = sessao_mod.Saida(como_json=True)
+    f = io.StringIO()
+    with patch.object(sessao_mod, "_msgmem", return_value=(mem, None)), \
+         patch.object(sessao_mod, "_vocabulario", return_value=({"engenharia": {}}, None)), \
+         patch.object(sessao_mod, "_decidir", return_value=(0, {"regra": "operador-plataforma", "plano": "p1"}, "")), \
+         patch.object(sessao_mod, "_senha_pg", return_value=("senha-fake", None)):
+        with redirect_stdout(f):
+            rc = sessao_mod.ato_abrir("engenharia", sid, saida)
+
+    assert rc == 0
+    out = json.loads(f.getvalue())
+    assert out["canonizada"] is True
+    assert out["autorizada_por"] == "operador-plataforma@p1"
+    assert "regime" not in out
+
+
+def test_sessao_abrir_aceita_platafirma_cadeira_e_flag_cadeira(monkeypatch):
+    """ fallback de PLATAFIRMA_CADEIRA e --cadeira em `sessao abrir`."""
+    monkeypatch.setenv("PLATAFIRMA_CADEIRA", "ti")
+    f = io.StringIO()
+    with redirect_stdout(f):
+        rc = sessao_mod.main(["abrir", "--dry-run", "--json"])
+    assert rc == 0
+    assert json.loads(f.getvalue())["cadeira"] == "ti"
+
+
+def test_ver_sessao_encerrada_declara_encerrada_em_e_sai_1(monkeypatch):
+    """DT 535: `sessao ver <id>` de sessão já encerrada (encerrada_em preenchida) sai 1,
+    não reidrata no msg-mem e informa que foi encerrada e quando."""
+    sid = str(uuid.uuid4())
+    aberta_em = datetime.now(timezone.utc) - timedelta(hours=2)
+    encerrada_em = datetime(2026, 11, 9, 18, 0, 0, tzinfo=timezone.utc)
+    row = ("conhecimento", None, "claude.ai", aberta_em, encerrada_em, "user-abc", ORDEM)
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg(row))
+    mem = FakeMsgMem()
+    saida = sessao_mod.Saida(como_json=True)
+    f = io.StringIO()
+
+    with patch.object(sessao_mod, "_msgmem", return_value=(mem, None)), \
+         patch.object(sessao_mod, "_roda", side_effect=_roda_seg_ok):
+        with redirect_stdout(f):
+            rc = sessao_mod.ato_ver(sid, saida)
+
+    assert rc == 1
+    assert f"sessao:{sid}" not in mem.data
+    out = json.loads(f.getvalue())
+    assert out["encerrada"] is True
+    assert out["encerrada_em"] == encerrada_em.isoformat()
+    assert "encerrada em" in out["erro"]
+
+
+def test_descansar_encerra_sessao_marca_encerrada_em_no_duravel(monkeypatch):
+    """DT 535: `descansar fita --encerra-sessao` grava `encerrada_em = now()` em sessao.sessao."""
+    loader_d = SourceFileLoader("descansar", str(REPO_ROOT / "bin" / "descansar"))
+    spec_d = importlib.util.spec_from_loader("descansar", loader_d)
+    assert spec_d and spec_d.loader
+    descansar_mod = importlib.util.module_from_spec(spec_d)
+    loader_d.exec_module(descansar_mod)
+
+    sid = str(uuid.uuid4())
+    mem = FakeMsgMem({f"sessao:{sid}": '{"cadeira": "conhecimento"}'})
+    capturas: list = []
+    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg_update_capturado(capturas))
+
+    import subprocess as _sp
+    with patch.object(descansar_mod.subprocess, "run",
+                      return_value=_sp.CompletedProcess(["seg"], 0, stdout="senha-fake\n", stderr="")):
+        descansar_mod.encerra_sessao(mem, sid)
+
+    assert f"sessao:{sid}" not in mem.data
+    assert len(capturas) == 1
+    sql, params = capturas[0]
+    assert "UPDATE sessao.sessao SET encerrada_em = now()" in sql
+    assert params == (sid,)
