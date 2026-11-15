@@ -116,7 +116,14 @@ async def test_malote_pipe_grande_nao_omite_consumidor_por_teto_dt281():
             out["poda"] = {"ato": "release", "modo": "inteiro", "bytes_servidos": r["stdout"]["bytes_total"]}
         return out
 
-    with patch("server.SLUGS_SERVIDOS", {"repo", "release"}), \\\n         patch("server.BINARIOS", {"repo": "/opt/bin/repo", "release": "/opt/bin/release"}), \\\n         patch("server._autoriza", return_value=None), \\\n         patch("server._audit"), \\\n         patch("server._serve", side_effect=fake_serve), \\\n         patch("server._run_verbo_blocking", side_effect=fake_run):
+    with (
+        patch("server.SLUGS_SERVIDOS", {"repo", "release"}),
+        patch("server.BINARIOS", {"repo": "/opt/bin/repo", "release": "/opt/bin/release"}),
+        patch("server._autoriza", return_value=None),
+        patch("server._audit"),
+        patch("server._serve", side_effect=fake_serve),
+        patch("server._run_verbo_blocking", side_effect=fake_run),
+    ):
         res = await s.malote(commands=[
             {"verbo": "repo", "ato": "ler", "args": ["r", "mig.sql"]},
             {"verbo": "release", "ato": "migrar", "args": ["aplicar", "rastreador"], "stdin": {"de": 0}},
