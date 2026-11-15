@@ -462,6 +462,8 @@ def test_licao_com_residuo_de_episodio_grava_e_avisa_o_trecho(mesa_caderno, caps
     assert len(estado["inseridas"]) == 1
     assert "aviso" in saida.err and f"«{trecho}»" in saida.err
     assert "quando X, faça Y, porque Z" in saida.err and "--caso" in saida.err
+    assert '`mesa substituir <id> "<diretriz>"`' in saida.err
+    assert "--texto" not in saida.err
     assert "escrita (lição)" in saida.out
 
 
