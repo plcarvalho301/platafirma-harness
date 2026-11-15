@@ -140,7 +140,7 @@ def test_ler_usa_pf_cadeira_quando_cadeira_omitida(tmp_path):
 
 
 def test_lembrete_mapa_capacidades_aponta_acervo_vigente():
-    """DT 608: bin/persona aponta para o vocabulário no acervo da casa (arq:0059 / arq:0119)."""
+    """DT 608: bin/persona aponta para o vocabulário vigente no acervo da casa (arq:0059 / arq:0119)."""
     texto = BIN_PERSONA.read_text(encoding="utf-8")
     caminho_legado = "platafirma-arquitetura" + "@" + "docs/arquitetura-negocio-operacao.md"
     assert caminho_legado not in texto
