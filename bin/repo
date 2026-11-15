@@ -1546,22 +1546,20 @@ PY
 }
 
 # sincronizar_direto_em_main <repo> <worktree> -- o sincronizar do regime direto em main:
-# busca o forge (falhou: 5) -> arvore suja: 4, vizinho commitar -> nada local: anda em
-# fast-forward, "já em dia" -> rebase sobre origin/main (conflito: aborta, bancada intacta,
-# 4 com a lista) -> empurra HEAD para main -> confirma o sha no forge (ls-remote). Vale para
-# a worktree de main e para a bancada por card antiga do mesmo repo, que assim se entrega.
+# busca o forge (falhou: 5) -> escrita rastreada nao commitada: 4, vizinho commitar (nao
+# rastreado alheio nao trava, bancada compartilhada) -> nada local: anda em fast-forward,
+# "já em dia" -> rebase sobre origin/main (conflito: aborta, bancada intacta, 4 com a lista)
+# -> empurra HEAD para main -> confirma o sha no forge (ls-remote). Vale para a worktree de
+# main e para a bancada por card antiga do mesmo repo, que assim se entrega.
 sincronizar_direto_em_main() {
   local nome="$1" c="$2" ramo antes main head frente novos=0 fsha rc
   ramo="$(ramo_atual "$c")"
   [ "$ramo" != HEAD ] || morre "HEAD destacado em '$nome' — abra a worktree de main: repo abrir ${nome%%@*}" 4
   git_sem_engolir "$c" fetch --prune origin || morre "indeterminavel: fetch do forge falhou ($REPLY)" 5
-  local st; st="$("$GIT" -C "$c" status --porcelain 2>/dev/null)" || morre "indeterminavel: git status falhou" 5
+  local st; st="$("$GIT" -C "$c" status --porcelain --untracked-files=no 2>/dev/null)" || morre "indeterminavel: git status falhou" 5
   if [ -n "$st" ]; then
     printf '%s: arvore com escrita nao commitada (%s) — nao rebaseio sobre ela\n' "$VERBO" "$(printf '%s\n' "$st" | wc -l) arquivo(s)" >&2
     printf 'vizinho: repo commitar %s -m <msg> <caminhos>\n' "$nome" >&2
-    if ! grep -qv '^?? ' <<<"$st"; then
-      printf 'vizinho: so ha nao rastreado; se for artefato ou cache, repo git %s clean -n -d e depois repo git %s clean -f -d <caminhos>\n' "$nome" "$nome" >&2
-    fi
     exit 4
   fi
   main="$("$GIT" -C "$c" rev-parse --verify -q origin/main)" || morre "indeterminavel: sem origin/main" 5
@@ -1579,13 +1577,18 @@ sincronizar_direto_em_main() {
     if ! "$GIT" -C "$c" rebase -q "$main" >/dev/null 2>&1; then
       local conflito; conflito="$("$GIT" -C "$c" diff --name-only --diff-filter=U 2>/dev/null)"
       "$GIT" -C "$c" rebase --abort >/dev/null 2>&1
-      if [ "$("$GIT" -C "$c" rev-parse HEAD)" != "$antes" ] || [ -n "$("$GIT" -C "$c" status --porcelain)" ]; then
+      if [ "$("$GIT" -C "$c" rev-parse HEAD)" != "$antes" ] || [ -n "$("$GIT" -C "$c" status --porcelain --untracked-files=no)" ]; then
         morre "indeterminavel: o rebase falhou e a bancada nao voltou a ${antes:0:7} — confira a mao" 5
       fi
-      printf '%s: conflito ao rebasear %s sobre origin/main (%s) — abortado, bancada intacta em %s\n' \
-        "$VERBO" "$ramo" "${main:0:7}" "${antes:0:7}" >&2
-      printf '%s\n' "$conflito" | sed 's/^/  conflito: /' >&2
-      printf 'vizinho: resolva os arquivos, repo commitar %s, e sincronizar de novo\n' "$nome" >&2
+      if [ -n "$conflito" ]; then
+        printf '%s: conflito ao rebasear %s sobre origin/main (%s) — abortado, bancada intacta em %s\n' \
+          "$VERBO" "$ramo" "${main:0:7}" "${antes:0:7}" >&2
+        printf '%s\n' "$conflito" | sed 's/^/  conflito: /' >&2
+        printf 'vizinho: resolva os arquivos, repo commitar %s, e sincronizar de novo\n' "$nome" >&2
+      else
+        printf '%s: nao rebaseei %s sobre origin/main (%s) — possivel colisao com arquivo nao rastreado na bancada; bancada intacta em %s\n' \
+          "$VERBO" "$ramo" "${main:0:7}" "${antes:0:7}" >&2
+      fi
       exit 4
     fi
   fi
