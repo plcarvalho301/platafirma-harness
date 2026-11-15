@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # medir-ram — o eixo de memória do host: uso real, cache, total, pressão, quem consome e quem morreu por limite
 # (spec eixos-do-host R9 e R4, card #3920). Sub-ato de `infra` (como medir-rede): fora do PATH e do golden record,
-# mora em bin/_infra/. Chamado por `infra medir ram [--json] [--janela <s>]`, nunca direto. Só lê: não grava série.
+# mora em bin/_infra/. Chamado por `infra medir ram [--json] [--janela <s>] [--sem-mortes]`, nunca direto. Só lê: não grava série.
 #
 # O que lê. /proc/meminfo dá três números que nunca se somam: o uso real (MemTotal menos MemAvailable, o que o
 # kernel não devolve), o cache que ele devolve (Buffers + Cached + SReclaimable menos Shmem) e o total da máquina,
@@ -253,7 +253,7 @@ def oom_kill_do_slice(caminho: str | None = None) -> int | None:
 
 # --- a medida -------------------------------------------------------------------------------------
 
-def medir(janela: int = JANELA_PADRAO_S) -> dict:
+def medir(janela: int = JANELA_PADRAO_S, *, sem_mortes: bool = False) -> dict:
     meminfo = os.environ.get("INFRA_MEMINFO", "/proc/meminfo")
     pressao = os.environ.get("INFRA_PRESSAO_MEMORIA", "/proc/pressure/memory")
     proc = Path(os.environ.get("INFRA_PROC", "/proc"))
@@ -265,9 +265,12 @@ def medir(janela: int = JANELA_PADRAO_S) -> dict:
         topologia = eixos.carregar_topologia(acervo)
         resolver_unit = functools.lru_cache(maxsize=None)(eixos.resolvedor_do_registro(acervo))
         maiores, omitidos, valor_omitido = consumidores(proc, resolver_unit, topologia)
-        ate = int(time.time())
-        mortes = [*mortes_do_docker(ate - janela, ate, topologia),
-                  *mortes_do_journal(ate - janela, ate, resolver_unit)]
+        if sem_mortes:
+            mortes = []
+        else:
+            ate = int(time.time())
+            mortes = [*mortes_do_docker(ate - janela, ate, topologia),
+                      *mortes_do_journal(ate - janela, ate, resolver_unit)]
     except eixos.ErroDeLeitura as e:
         return eixos.montar("ram", INSTRUMENTO, estado="nao_consegui_olhar", causa=e.causa, fonte=e.fonte,
                             janela=janela)
@@ -280,15 +283,18 @@ def medir(janela: int = JANELA_PADRAO_S) -> dict:
 
 
 def _uso_errado(texto: str) -> int:
-    print(f"infra: erro: medir ram {texto} — uso: infra medir ram [--json] [--janela <segundos>]", file=sys.stderr)
+    print(f"infra: erro: medir ram {texto} — uso: infra medir ram [--json] [--janela <segundos>] [--sem-mortes]",
+          file=sys.stderr)
     return 2
 
 
 def main(argv: list[str]) -> int:
-    janela, como_json, i = JANELA_PADRAO_S, False, 0
+    janela, como_json, sem_mortes, i = JANELA_PADRAO_S, False, False, 0
     while i < len(argv):
         if argv[i] == "--json":
             como_json = True
+        elif argv[i] == "--sem-mortes":
+            sem_mortes = True
         elif argv[i] == "--janela":
             i += 1
             if i >= len(argv) or not argv[i].isdigit() or int(argv[i]) == 0:
@@ -297,7 +303,7 @@ def main(argv: list[str]) -> int:
         else:
             return _uso_errado(f"não conhece {argv[i]}")
         i += 1
-    return eixos.imprimir_saida(medir(janela), como_json=como_json)
+    return eixos.imprimir_saida(medir(janela, sem_mortes=sem_mortes), como_json=como_json)
 
 
 if __name__ == "__main__":

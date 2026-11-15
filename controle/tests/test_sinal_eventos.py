@@ -230,10 +230,10 @@ def test_cada_ato_roda_uma_vez_so_por_passada(mundo):
     assert sorted(mundo.chamou()) == sorted(CADEIA_ATOS * 2)
 
 
-def test_o_ato_de_ram_recebe_a_janela_da_passada_para_nao_reler_uma_hora_de_mortes(mundo):
+def test_o_ato_de_ram_recebe_a_janela_e_sem_mortes_para_nao_duplicar_o_detector(mundo):
     sinal.passada_de_eventos(passar(0))
     linha_do_ram = next(c for c in mundo.chamadas.read_text(encoding="utf-8").splitlines() if c.startswith("ram "))
-    assert linha_do_ram == "ram medir ram --json --janela 60"
+    assert linha_do_ram == "ram medir ram --json --janela 60 --sem-mortes"
 
 
 def test_uma_hora_no_ar_com_o_registro_no_padrao_da_sessenta_amostras_por_eixo(mundo):

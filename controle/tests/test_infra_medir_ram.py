@@ -376,6 +376,15 @@ def test_o_ato_so_le_e_nao_grava_nada(mundo, tmp_path):
     assert sorted(p.name for p in tmp_path.rglob("*")) == antes
 
 
+def test_sem_mortes_pula_docker_events_e_journal_e_devolve_mortes_vazias(tmp_path, monkeypatch, capsys):
+    _mundo(tmp_path, monkeypatch, docker_events_ok=False, journal_estado="sem_permissao")
+    assert medir_ram.main(["--json", "--janela", "60", "--sem-mortes"]) == 0
+    j = json.loads(capsys.readouterr().out)
+    assert j["estado_leitura"] == "lida" and j["janela"] == 60 and j["mortes"] == []
+    assert por_servico(j)["core/keycloak"]["valor"] == 3 * GIB_KB * 1024
+    assert eixos.validar(j) == []
+
+
 def test_pela_linha_de_comando_o_json_sai_valido(mundo):
     p = subprocess.run([sys.executable, str(MEDIR), "--json"], capture_output=True, text=True, timeout=60)
     assert p.returncode == 0, p.stderr
