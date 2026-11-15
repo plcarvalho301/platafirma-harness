@@ -71,6 +71,7 @@ def test_forma_pega(linha):
     "acervo ler casa adr arq:0115",
     "O repositório platafirma-arquitetura saiu da release em 22/09.",
     'release() / "harness"',
+    "/opt/platafirma/current/casa-espelho/outros_repos/conhecimento/casa-db/backup-db.sh",
 ])
 def test_forma_passa(linha):
     assert forma(linha) is None
