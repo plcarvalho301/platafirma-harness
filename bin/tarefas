@@ -120,7 +120,8 @@ uso:
                                           saída diz quantas saíram
   tarefas listar-tudo [mesmos filtros] [--ultimos <n>] inclui os terminais; com --ultimos,
                                           ordena por data decrescente e inclui data na saída
-  tarefas ler|ver <id> [--cabecalho]      item em texto: cabeçalho (originação, executor,
+  tarefas ler|ver <id> [--cabecalho] [--todas-filhas]
+                                          item em texto: cabeçalho (originação, executor,
                                           quem bloqueia e por quem é bloqueado), ancestrais,
                                           corpo e filhas abertas em ordem de dependência (na
                                           story, as tasks dela, todas, com o estado de cada uma);
@@ -196,7 +197,8 @@ uso:
   tarefas assinar <id> --aprovador <c> [--decisao aprovado|recusado] [--motivo "<txt>"]
                                           sign-off. Sem --decisao, inscreve o aprovador
                                           como PENDENTE. `recusado` exige --motivo.
-  tarefas sub <pai> [<filho>]             declara <filho> filho de <pai>, ou lista as filhas de <pai>
+  tarefas sub <pai> [<filho>] | <filho> --sem-pai
+                                          declara <filho> filho de <pai>, lista as filhas ou desvincula pai
   tarefas ordenar <id> --antes-de <id> | --depois-de <id>
                                           põe o card ao lado do vizinho na ordem única da casa;
                                           o servidor calcula o posto (R21)
@@ -383,7 +385,8 @@ para_texto() {
   sed -e 's#</p>#\n#g' -e 's#<br */\?>#\n#g' -e 's#</h[0-9]>#\n#g' \
       -e 's#<li>#  - #g' -e 's#</li>#\n#g' -e 's#</pre>#\n#g' \
       -e 's#<[^>]*>##g' \
-      -e 's#&lt;#<#g' -e 's#&gt;#>#g' -e 's#&quot;#"#g' -e "s@&#39;@'@g" -e 's#&amp;#\&#g' | cat -s
+  | python3 -c 'import html, sys; print(html.unescape(sys.stdin.read()), end="")' \
+  | cat -s
 }
 
 # Argumento numérico solto na posição do antigo <projeto>: ignora e avisa. Existe para que
@@ -426,6 +429,9 @@ monta_query() { # monta_query "$@" -> ecoa a query string
       --executor)
         local exe="${2:?--executor pede o nome da cadeira}"
         q="$q&executor=$exe"; shift 2 ;;
+      --pai)
+        local p_id; p_id=$(so_id "${2:?--pai pede o id do pai}")
+        q="$q&pai=$p_id"; shift 2 ;;
       --paradas) shift ;;
       --nivel)
         local n
@@ -667,11 +673,12 @@ mapa_de() { # mapa_de <id>
 # PENDENTE PRIMEIRO, e a ordem é o ponto: é ele que segura o item em `Em parecer`, e é a
 # única linha sobre a qual alguém pode agir agora. Respondido é registro; pendente é dívida.
 ler() {
-  local id="" so_cabecalho=0 direto=0
+  local id="" so_cabecalho=0 direto=0 todas_filhas=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --cabecalho) so_cabecalho=1; shift ;;
       --direto) direto=1; shift ;;
+      --todas-filhas) todas_filhas=1; shift ;;
       *)
         if [ -z "$id" ]; then
           id=$(so_id "$1")
@@ -683,7 +690,7 @@ ler() {
         ;;
     esac
   done
-  [ -n "$id" ] || { echo "uso: tarefas ler <id> [--cabecalho] [--direto]" >&2; exit 2; }
+  [ -n "$id" ] || { echo "uso: tarefas ler <id> [--cabecalho] [--direto] [--todas-filhas]" >&2; exit 2; }
   # UMA LEITURA SERVE A TUDO (card #3526): o detalhe do item já traz o vínculo (`bloqueia`,
   # `bloqueado_por`, #3523) e, quando o item tem filha, `filhas` em ordem de dependência. Antes as
   # filhas vinham de uma segunda chamada que puxava o board inteiro e peneirava por pai.
@@ -752,6 +759,9 @@ ler() {
   if [ "$(printf '%s' "$j" | jq -r '.nivel')" = "2" ]; then
     local tasks; tasks=$(tasks_do_json "$j" "$term")
     if [ -n "$tasks" ]; then printf '\n%s\n' "$tasks"; fi
+  elif [ "$todas_filhas" -eq 1 ]; then
+    local filhas; filhas=$(filhas_do_json "$j" --todas)
+    if [ -n "$filhas" ]; then printf '\nfilhas (todas):\n%s\n' "$filhas"; fi
   else
     local filhas; filhas=$(filhas_do_json "$j")
     if [ -n "$filhas" ]; then printf '\nfilhas (abertas):\n%s\n' "$filhas"; fi
@@ -769,13 +779,18 @@ ler() {
 # (arq:0095) e a leitura do card nunca discordem sobre o que pende. O que é terminal sai do
 # registro (um GET pequeno), e não do board inteiro, que é o que esta função puxava antes.
 filhas_do_json() {
-  local termos; termos=$(busca GET /registro | jq -c '[.estados[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado]') || return 1
-  printf '%s' "$1" | jq -r --argjson term "$termos" "$JQ_ROT"'
+  local termos="[]" incluir_todas=0
+  if [ "${2:-}" = "--todas" ]; then
+    incluir_todas=1
+  else
+    termos=$(busca GET /registro | jq -c '[.estados[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado]') || return 1
+  fi
+  printf '%s' "$1" | jq -r --argjson term "$termos" --argjson todas "$incluir_todas" "$JQ_ROT"'
     ($term + ["entregue","recusada","cancelada","englobada","encerrada","resolvido"] | unique) as $t
     | mapa_chaves as $m
     | .filhas[]?
     | . as $f
-    | select($t | index([$f.estado_derivado // $f.estado]) == null)
+    | select($todas == 1 or ($t | index([$f.estado_derivado // $f.estado]) == null))
     | "  \($f | rot)\t\($f.estado)\t\($f.cadeira // "—")\t\($f.titulo)"
       + (if $f.travada
          then "  [travada por " + ([($f.bloqueada_por // [])[] | rotx($m)] | join(", ")) + "]"
@@ -1411,16 +1426,27 @@ modelo() {
 # Filho declara o pai, e o pai tem de ser de nível estritamente MENOR — a restrição é do
 # banco (`pai_nivel`, escrito por subconsulta), não deste verbo. Recusa vem nomeada da API.
 subtarefa() {
-  local pai; pai=$(so_id "${1:?uso: tarefas sub <pai> [<filho>]}")
-  if [ -z "${2:-}" ]; then
-    local j; j=$(busca GET "/itens/$pai") || return 1
+  local sem_pai=0 a1="${1:-}" a2="${2:-}"
+  if [ "$a1" = "--sem-pai" ]; then
+    sem_pai=1; a1="$a2"; a2=""
+  elif [ "$a2" = "--sem-pai" ]; then
+    sem_pai=1; a2=""
+  fi
+  local id; id=$(so_id "${a1:?uso: tarefas sub <pai> [<filho>] | tarefas sub <filho> --sem-pai}")
+  if [ "$sem_pai" -eq 1 ]; then
+    jq -n '{pai:null}' | envia PATCH "/itens/$id" >/dev/null
+    echo "item $(rotulo_de "$id" n) agora está sem pai"
+    return 0
+  fi
+  if [ -z "$a2" ]; then
+    local j; j=$(busca GET "/itens/$id") || return 1
     printf '%s' "$j" | jq -r "$JQ_ROT"'
       .filhas[]? | "\(rot)\t\(.estado)\t\(.cadeira // "—")\t\(.titulo)"'
     return 0
   fi
-  local filho; filho=$(so_id "$2")
-  jq -n --argjson p "$pai" '{pai:$p}' | envia PATCH "/itens/$filho" >/dev/null
-  echo "item $(rotulo_de "$filho" n) agora é filho de $(rotulo_de "$pai" n)"
+  local filho; filho=$(so_id "$a2")
+  jq -n --argjson p "$id" '{pai:$p}' | envia PATCH "/itens/$filho" >/dev/null
+  echo "item $(rotulo_de "$filho" n) agora é filho de $(rotulo_de "$id" n)"
 }
 
 apagar_comentario() {
@@ -1710,12 +1736,41 @@ dt_matar() {
   printf '%s' "$r" | jq -r '"débito \(.numero) saiu do balde: \(.saida_jeito) em \(.saida_em[0:10]): \(.saida_ancora)"'
 }
 
+dt_restack() {
+  local n="${1:-}" stack="" motivo=""
+  [[ "$n" =~ ^[0-9]+$ ]] || { echo "uso: tarefas dt restack <n> --stack <s> [--motivo \"<txt>\"]" >&2; exit 2; }
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --stack)  stack="${2:?--stack pede o nome da stack}"; shift 2 ;;
+      --motivo) motivo="${2:?--motivo pede texto}"; shift 2 ;;
+      *) echo "tarefas dt restack: opção desconhecida: $1" >&2; exit 2 ;;
+    esac
+  done
+  [ -n "$stack" ] || { echo "uso: tarefas dt restack <n> --stack <s> [--motivo \"<txt>\"]" >&2; exit 2; }
+  local stacks
+  stacks=$(_dt_stacks) || return $?
+  if ! printf '%s\n' "$stacks" | grep -Fxq "$stack"; then
+    local lista; lista=$(printf '%s\n' "$stacks" | paste -sd, -)
+    echo "recusado: stack '$stack' fora do catálogo do acervo (válidas: $lista). (R11)" >&2
+    exit 4
+  fi
+  local r
+  r=$(jq -nc --arg stack "$stack" '{stack: $stack}' | envia PATCH "/balde/$n") || return 1
+  if [ -n "$motivo" ]; then
+    printf '%s' "$r" | jq -r --arg m "$motivo" '"débito \(.numero) movido para a stack \(.stack): \($m)"'
+  else
+    printf '%s' "$r" | jq -r '"débito \(.numero) movido para a stack \(.stack)"'
+  fi
+}
+
 dt() {
   local sub="${1:-}"; shift || true
   case "$sub" in
     listar)      dt_listar "$@" ;;
     ler)         [ $# -eq 1 ] && [[ "$1" =~ ^[0-9]+$ ]] || { echo "uso: tarefas dt ler <n>" >&2; return 2; }; dt_listar --situacao todas --linha "$1" ;;
     admitir)     dt_admitir "$@" ;;
+    restack)     dt_restack "$@" ;;
     matar)       dt_matar "$@" ;;
     vencidos)    dt_vencidos "$@" ;;
     indicadores) dt_indicadores "$@" ;;
@@ -1739,6 +1794,8 @@ uso:
                                           tira a linha por um dos três jeitos (rito §3, R12) e a
                                           registra com a âncora e a data; cada jeito pede a sua
                                           âncora. `--porta` segue aceito, com aviso (deprecado)
+  tarefas dt restack <n> --stack <s> [--motivo "<txt>"]
+                                          troca a stack da linha mantendo número e idade
   tarefas dt vencidos                     pauta da revisão: linhas acima de 30 dias (rito §2)
   tarefas dt indicadores [--dias <n>]     por stack, os abertos e a idade do mais velho; na semana
                                           (7 dias, ou os de --dias), as entradas e as saídas por jeito
