@@ -158,5 +158,12 @@
     "promovida": false,
     "venv": "rag",
     "teste": "outros_repos/conhecimento/rag"
+  },
+  "espelho-vault-ontologia": {
+    "familia": "platafirma-casa-espelho",
+    "esteira": "codigo",
+    "promovida": false,
+    "lock": "outros_repos/posto/ferramentas/vault-ontologia/uv.lock",
+    "teste": "outros_repos/posto/ferramentas/vault-ontologia/testes"
   }
 }

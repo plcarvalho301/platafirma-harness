@@ -197,3 +197,90 @@ def test_espelho_conhecimento_cai_para_uv_quando_venv_nao_tem_pytest(tmp_path):
     )
     assert r_teste.returncode == 0, r_teste.stdout + r_teste.stderr
     assert "suite VERDE: platafirma-casa-espelho@t1 (chave espelho-conhecimento)" in r_teste.stdout
+
+
+def test_espelho_vault_ontologia_resolve_no_registro():
+    """DT 666: espelho-vault-ontologia declara lock e subarvore proprios do espelho, com promovida: false."""
+    r = subprocess.run(
+        ["python3", str(REGISTRO), "espelho-vault-ontologia"],
+        env={"PATH": "/usr/bin:/bin", "PLATAFIRMA_VENVS": str(VENVS)},
+        capture_output=True, text=True, check=False, timeout=30,
+    )
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == (
+        f"{ESPELHO}\toutros_repos/posto/ferramentas/vault-ontologia/uv.lock\t"
+        "outros_repos/posto/ferramentas/vault-ontologia/testes\tcodigo\tespelho-vault-ontologia\t-"
+    )
+    assert json.loads(VENVS.read_text(encoding="utf-8"))["espelho-vault-ontologia"]["promovida"] is False
+
+
+def test_espelho_sem_alvo_roda_portao_das_stacks_e_nao_chama_acervo_ingerir(tmp_path):
+    """DT 534: platafirma-casa-espelho nao tem ingestao; rodar sem alvo e detectar apontam para as stacks da familia."""
+    raiz = Path(__file__).resolve().parents[2]
+    bancada = tmp_path / "bancada"
+    wt = bancada / "wt" / ESPELHO / "ti" / "t1"
+    (wt / ".git").mkdir(parents=True)
+
+    vjson = tmp_path / "venvs.json"
+    vjson.write_text(json.dumps({
+        "repositorios": {ESPELHO: {"esteira": "documento"}},
+        "espelho-demo": {
+            "familia": ESPELHO,
+            "esteira": "codigo",
+            "promovida": False,
+            "venv": "rag",
+            "teste": "outros_repos/demo",
+        },
+    }), encoding="utf-8")
+
+    teste_dir = wt / "outros_repos" / "demo" / "tests"
+    teste_dir.mkdir(parents=True)
+    (teste_dir / "test_ok.py").write_text("def test_ok(): assert True\n", encoding="utf-8")
+    (teste_dir / "VERDES").write_text("tests/test_ok.py\n", encoding="utf-8")
+
+    rel_venv = tmp_path / "release" / "current" / "venv" / "rag" / "bin"
+    rel_venv.mkdir(parents=True)
+    py_stub = rel_venv / "python"
+    py_stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "if [ \"$1\" = -c ]; then\n"
+        "  [[ \"${2:-}\" == *pytest* ]] && exit 0\n"
+        "  exit 1\n"
+        "fi\n"
+        "echo '1 passed in 0.01s'\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    py_stub.chmod(0o755)
+
+    acervo_stub = tmp_path / "acervo-nao-chamar"
+    acervo_stub.write_text("#!/usr/bin/env bash\nexit 99\n", encoding="utf-8")
+    acervo_stub.chmod(0o755)
+
+    inst = tmp_path / "instancia"
+    inst.mkdir()
+    env = {
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "HOME": str(tmp_path),
+        "PLATAFIRMA_BANCADA": str(bancada),
+        "PLATAFIRMA_VENVS": str(vjson),
+        "PF_CADEIRA": "ti",
+        "PF_RELEASE_RAIZ": str(tmp_path / "release"),
+        "PLATAFIRMA_INSTANCIA": str(inst),
+        "PF_ACERVO_BIN": str(acervo_stub),
+        "PF_TESTE_SEM_MEMO": "1",
+    }
+
+    r_det = subprocess.run(
+        [str(raiz / "bin" / "teste"), "detectar", f"{ESPELHO}@t1"],
+        env=env, capture_output=True, text=True, check=False, timeout=30,
+    )
+    assert r_det.returncode == 0, r_det.stdout + r_det.stderr
+    assert f"teste rodar {ESPELHO} --portao" in r_det.stdout
+
+    r_rodar = subprocess.run(
+        [str(raiz / "bin" / "teste"), "rodar", f"{ESPELHO}@t1"],
+        env=env, capture_output=True, text=True, check=False, timeout=30,
+    )
+    assert r_rodar.returncode == 0, r_rodar.stdout + r_rodar.stderr
+    assert "suite VERDE:" in r_rodar.stdout
