@@ -5,7 +5,7 @@
 # dono: claudinho-seguranca
 # classe: B
 # use para: gerar, checar, rotacionar e destruir segredo; fixar linha de base; varrer ativo, «roda a varredura»; «avalia esse risco», a régua de segurança de um serviço; e sempre que um segredo for exposto, faltar ou vencer
-# atos: oscap (leitura, casco), isolacao medir (leitura, casco), ssg (escrita, regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo), segredo gravar (escrita, segredo), segredo importar (escrita, segredo), segredo rotacionar (escrita, segredo), segredo exigidos (leitura, segredo), segredo apagar (escrita, segredo)
+# atos: oscap (leitura, casco), isolacao medir (leitura, casco), ssg (escrita, regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo), segredo gravar (escrita, segredo), segredo gerar (escrita, segredo), segredo importar (escrita, segredo), segredo rotacionar (escrita, segredo), segredo exigidos (leitura, segredo), segredo apagar (escrita, segredo)
 # folhas: oscap|ssg|isolacao -> politica/avaliacao · keycloak|openssl -> politica/acesso · segredo -> politica/segredo
 # escreve: $PLATAFIRMA_INSTANCIA/segredos/<stack>/<nome>
 # ambiente: SEG_SECRETS_DIR[=$PLATAFIRMA_INSTANCIA/segredos] · SEG_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/seg] · SEG_OSCAP_DIR[=$PLATAFIRMA_INSTANCIA/var/oscap] · SEG_SSG_DIR[=/opt/terceiros/ssg/current] · SEG_OQS_DIR[=/opt/terceiros/oqs/current] · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
@@ -42,6 +42,7 @@
 #   segredo ler       politica            leitura de segredo
 #   segredo listar    politica            metadados de segredo
 #   segredo gravar    politica            escrita atomica de segredo
+#   segredo gerar     politica            geracao e escrita atomica de segredo
 #   segredo importar  politica            importacao de .env
 #   segredo rotacionar politica           rotacao de client-secret no keycloak
 #   segredo exigidos  politica            exigido (acervo.stack.segredos) x presente (era `deploy <stack> segredos`)
@@ -91,6 +92,8 @@ seg — toolkit de seguranca da PlataFirma
   seg segredo listar [<stack>]    lista metadados dos segredos (nome, stack, bytes, mtime, modo)
   seg segredo gravar <stack>/<nome>
                                   grava segredo vindo de stdin (escrita atomica)
+  seg segredo gerar <stack>/<nome> [--bytes N] [--hex]
+                                  sorteia valor aleatorio e grava em 0600 sem imprimir
   seg segredo importar <stack> --de <caminho .env>
                                   importa segredos de arquivo .env
   seg segredo rotacionar <stack>/<nome> --keycloak-client <clientId>
@@ -308,6 +311,84 @@ cmd_segredo_gravar() {
   chmod 600 "$dir/$nome"
 
   echo "gravado: $stack/$nome ($bytes bytes)"
+}
+
+cmd_segredo_gerar() {
+  local alvo="" bytes="32" formato="hex"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --bytes)
+        [ $# -ge 2 ] || { echo "seg segredo gerar: --bytes exige inteiro >= 1" >&2; exit 2; }
+        bytes="$2"
+        shift 2
+        ;;
+      --bytes=*)
+        bytes="${1#--bytes=}"
+        shift
+        ;;
+      --hex)
+        formato="hex"
+        shift
+        ;;
+      --*)
+        echo "seg segredo gerar: flag desconhecida: $1" >&2
+        exit 2
+        ;;
+      *)
+        if [ -z "$alvo" ]; then
+          alvo="$1"
+        else
+          echo "seg segredo gerar: argumento inesperado: $1" >&2
+          exit 2
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  if [ -z "$alvo" ] || [[ ! "$alvo" =~ ^([A-Za-z0-9][A-Za-z0-9_.-]*)/([A-Za-z0-9][A-Za-z0-9_.-]*)$ ]] || [[ "$alvo" == *..* ]]; then
+    echo "uso: seg segredo gerar <stack>/<nome> [--bytes N] [--hex]" >&2
+    exit 2
+  fi
+  local stack="${BASH_REMATCH[1]}"
+  local nome="${BASH_REMATCH[2]}"
+
+  if [[ ! "$bytes" =~ ^[0-9]+$ ]] || [ "$bytes" -lt 1 ]; then
+    echo "seg segredo gerar: --bytes deve ser inteiro >= 1 (recebido: $bytes)" >&2
+    exit 2
+  fi
+
+  local dir="$SEG_SECRETS_DIR/$stack"
+  mkdir -p "$dir"
+  chmod 700 "$dir"
+  chmod 700 "$SEG_SECRETS_DIR" 2>/dev/null || true
+
+  local val="" esperado=0
+  case "$formato" in
+    hex)
+      val="$(head -c "$bytes" /dev/urandom | od -An -tx1 | tr -d ' \n')"
+      esperado=$((bytes * 2))
+      ;;
+  esac
+  if [ "${#val}" -ne "$esperado" ]; then
+    unset val
+    echo "seg segredo gerar: falha ao sortear $bytes bytes aleatorios" >&2
+    exit 3
+  fi
+
+  local tmp
+  tmp="$(mktemp "$dir/tmp.XXXXXXXXXX")"
+  chmod 600 "$tmp"
+  printf '%s' "$val" > "$tmp"
+  unset val
+
+  local out_bytes
+  out_bytes="$(stat -c '%s' "$tmp")"
+  sync "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$dir/$nome"
+  chmod 600 "$dir/$nome"
+
+  echo "gerado: $stack/$nome ($out_bytes bytes)"
 }
 
 cmd_segredo_importar() {
@@ -739,6 +820,9 @@ case "$SUB" in
         ;;
       gravar)
         cmd_segredo_gravar "$ALVO"
+        ;;
+      gerar)
+        cmd_segredo_gerar "${ARGS[@]:2}"
         ;;
       importar)
         cmd_segredo_importar "${ARGS[@]:2}"
