@@ -1044,6 +1044,106 @@ def test_busca_preserva_linha_que_nao_e_match():
     assert "src/a.py  (8 matches)" in fora
 
 
+def _duble_msg_mem():
+    """Sobe um duble TCP (protocolo RESP2) do msg-mem em porta livre; devolve (porta, fecha)."""
+    import socketserver
+    import threading
+
+    kv = {}
+    lock = threading.Lock()
+
+    def _ler_linha(rfile):
+        linha = rfile.readline()
+        if not linha:
+            return None
+        return linha.rstrip(b"\r\n")
+
+    def _ler_cmd(rfile):
+        cab = _ler_linha(rfile)
+        if cab is None:
+            return None
+        if not cab.startswith(b"*"):
+            return cab.decode("utf-8", "replace").split()
+        n = int(cab[1:])
+        partes = []
+        for _ in range(n):
+            tam_b = _ler_linha(rfile)
+            if tam_b is None or not tam_b.startswith(b"$"):
+                return None
+            tam = int(tam_b[1:])
+            dado = rfile.read(tam)
+            rfile.read(2)
+            partes.append(dado.decode("utf-8", "replace"))
+        return partes
+
+    class _Handler(socketserver.StreamRequestHandler):
+        def handle(self):
+            resp3 = False
+            while True:
+                cmd = _ler_cmd(self.rfile)
+                if not cmd:
+                    break
+                op = cmd[0].upper()
+                if op == "PING":
+                    self.wfile.write(b"+PONG\r\n")
+                elif op == "HELLO":
+                    if len(cmd) > 1 and cmd[1] == "3":
+                        resp3 = True
+                        self.wfile.write(
+                            b"%3\r\n$6\r\nserver\r\n$5\r\nredis\r\n"
+                            b"$7\r\nversion\r\n$5\r\n7.0.0\r\n$5\r\nproto\r\n:3\r\n"
+                        )
+                    else:
+                        resp3 = False
+                        self.wfile.write(
+                            b"*6\r\n$6\r\nserver\r\n$5\r\nredis\r\n"
+                            b"$7\r\nversion\r\n$5\r\n7.0.0\r\n$5\r\nproto\r\n:2\r\n"
+                        )
+                elif op == "CLIENT":
+                    self.wfile.write(b"+OK\r\n")
+                elif op == "QUIT":
+                    self.wfile.write(b"+OK\r\n")
+                    self.wfile.flush()
+                    break
+                elif op == "SET" and len(cmd) >= 3:
+                    with lock:
+                        kv[cmd[1]] = cmd[2]
+                    self.wfile.write(b"+OK\r\n")
+                elif op == "GET" and len(cmd) >= 2:
+                    with lock:
+                        val = kv.get(cmd[1])
+                    if val is None:
+                        self.wfile.write(b"_\r\n" if resp3 else b"$-1\r\n")
+                    else:
+                        b = val.encode("utf-8")
+                        self.wfile.write(f"${len(b)}\r\n".encode("ascii") + b + b"\r\n")
+                elif op == "EXISTS":
+                    with lock:
+                        n = sum(1 for k in cmd[1:] if k in kv)
+                    self.wfile.write(f":{n}\r\n".encode("ascii"))
+                elif op == "DEL":
+                    with lock:
+                        n = sum(1 for k in cmd[1:] if kv.pop(k, None) is not None)
+                    self.wfile.write(f":{n}\r\n".encode("ascii"))
+                else:
+                    self.wfile.write(f"-ERR comando desconhecido: {op}\r\n".encode("ascii"))
+                self.wfile.flush()
+
+    class _Srv(socketserver.ThreadingTCPServer):
+        allow_reuse_address = True
+        daemon_threads = True
+
+    srv = _Srv(("127.0.0.1", 0), _Handler)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+
+    def _fecha():
+        srv.shutdown()
+        srv.server_close()
+
+    return srv.server_address[1], _fecha
+
+
 def test_contrato_de_morte_e_o_ultimo_ato_nao_o_do_meio():
     """`descansar fita` sem flag NAO mata: matar `sessao:{id}` no meio do rito tira a
     cadeira dos passos que o proprio verbo manda executar em seguida (medido 06/09)."""
@@ -1052,43 +1152,30 @@ def test_contrato_de_morte_e_o_ultimo_ato_nao_o_do_meio():
     sid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
     # O EFEITO, nao a string: "contrato de morte" aparece no roteiro do passo 4 mesmo
     # quando nada morreu — assert de texto aqui passaria verde com a chave apagada.
-    # O efeito pede um Valkey de verdade; o isolamento aponta o msg-mem para a porta 9, e
-    # o teste nao usa o da casa: sobe um proprio, efemero, numa porta livre. Sem o
-    # binario no PATH a medida nao existe e o teste se declara pulado, nao verde.
-    exe = shutil.which("valkey-server") or shutil.which("redis-server")
-    if not exe:
-        pytest.skip("sem valkey-server/redis-server no PATH: o efeito sobre a chave nao se mede")
-    with socket.socket() as _sk:
-        _sk.bind(("127.0.0.1", 0))
-        porta = _sk.getsockname()[1]
-    srv = _sp.Popen([exe, "--port", str(porta), "--bind", "127.0.0.1", "--save", "",
-                     "--appendonly", "no"], stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+    # O isolamento aponta o msg-mem para a porta 9; o teste sobe um duble RESP2 proprio
+    # numa porta livre e aponta MEM_REDIS_HOST/PORT para ele, medindo o DEL real sem
+    # depender de valkey-server/redis-server no PATH (DT-187).
+    porta, fecha = _duble_msg_mem()
     try:
         import redis as _redis
         rc_real = _redis.Redis(host="127.0.0.1", port=porta, decode_responses=True,
                                socket_connect_timeout=2)
-        for _ in range(50):
-            try:
-                if rc_real.ping():
-                    break
-            except _redis.exceptions.ConnectionError:
-                time.sleep(0.1)
-        else:
-            raise AssertionError(f"{exe} nao subiu na porta {porta}")
+        assert rc_real.ping()
         env = {**os.environ, "PF_CADEIRA": "fabrica", "PF_SESSAO": sid,
                "MEM_REDIS_HOST": "127.0.0.1", "MEM_REDIS_PORT": str(porta)}
         rc_real.set(f"sessao:{sid}", "{}", ex=120)
         rc_real.set(f"ledger:{sid}", "{}", ex=120)
-        sem = _sp.run([verbo, "fita", "--so-memoria"], capture_output=True, text=True,
-                      timeout=120, env=env).stdout
-        assert "descansar fita --encerra-sessao" in sem, "o rito nomeia o passo 4"
+        r_sem = _sp.run([verbo, "fita", "--so-memoria"], capture_output=True, text=True,
+                        timeout=120, env=env)
+        assert r_sem.returncode == 0, f"descansar fita --so-memoria falhou: {r_sem.stderr}"
+        assert "descansar fita --encerra-sessao" in r_sem.stdout, "o rito nomeia o passo 4"
         assert rc_real.exists(f"sessao:{sid}"), "sem a flag, a sessao SOBREVIVE ao rito"
-        _sp.run([verbo, "fita", "--encerra-sessao"], capture_output=True, text=True,
-                timeout=120, env=env)
+        r_fim = _sp.run([verbo, "fita", "--encerra-sessao"], capture_output=True, text=True,
+                        timeout=120, env=env)
+        assert r_fim.returncode == 0, f"descansar fita --encerra-sessao falhou: {r_fim.stderr}"
         assert not rc_real.exists(f"sessao:{sid}") and not rc_real.exists(f"ledger:{sid}")
     finally:
-        srv.terminate()
-        srv.wait(timeout=10)
+        fecha()
 
 import json
 import pytest
