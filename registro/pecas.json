@@ -57,6 +57,18 @@
     "python": "rag",
     "ambiente": "olaria",
     "teto_s": 120,
-    "motivo": "C4254: o verbo ontologia (ler, listar, criar, trocar, recompor, ensaiar, renomear, apagar, gerar, sonda) da casa nova em sessão de ensaio, cliente do serviço da Olaria na stack olaria"
+    "motivo": "C4254: o verbo ontologia (ler, listar, criar, trocar, recompor, ensaiar, renomear, apagar, gerar) da casa nova em sessão de ensaio, cliente do serviço da Olaria na stack olaria"
+  },
+  "conferir": {
+    "dono": "ti",
+    "origem": "espelho",
+    "repo": "platafirma-casa-espelho",
+    "cwd": "outros_repos/harness/bin",
+    "modulo": "_conferir",
+    "pythonpath": ["outros_repos/harness/bin"],
+    "python": "rag",
+    "ambiente": "olaria",
+    "teto_s": 120,
+    "motivo": "S4276: o verbo conferir no recorte ontologia (`conferir ontologia <estrato:slug|capacidade:slug|classe>`) da casa nova em sessão de ensaio, cliente do serviço da Olaria na stack olaria"
   }
 }
