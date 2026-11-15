@@ -74,6 +74,11 @@ grep -q '"terceiros" / "tokenizers" / "qwen2.5.json"' "$REPO_ROOT/recuperacao/_r
 (cd "$REPO_ROOT" && git check-ignore -q terceiros/tokenizers/qwen2.5.json) || falha "terceiros/ devia estar fora do git"
 echo "OK"
 
+if [ "$(id -u)" -eq 0 ]; then
+  echo "SKIP: passos 3+ requerem conta nao-root (uid 0 ignora bits DAC em [ -w ])"
+  exit 0
+fi
+
 echo "--- 3: release materializa o terceiro na arvore da rev a partir do cache pinado"
 cat > "$STUBS/acervo" <<'EOF'
 #!/usr/bin/env bash
@@ -110,8 +115,13 @@ mkdir -p "$CACHE"; cp "$TMP_DIR/artefato" "$CACHE/$PINO"
 out="$("$VERBO" promover platafirma-harness "$SHA1" 2>&1)" || falha "promover com cache semeado: $out"
 alvo="$PROD_RAIZ/platafirma-harness/$SHA1/terceiros/tokenizers/fixture.json"
 [ -f "$alvo" ] && [ "$(sha256sum "$alvo" | cut -d' ' -f1)" = "$PINO" ] || falha "terceiro nao chegou na arvore com o pino: $out"
-[ ! -w "$alvo" ] && [ ! -w "$(dirname "$alvo")" ] && [ ! -w "$PROD_RAIZ/platafirma-harness/$SHA1" ] \
-  || falha "arvore da rev ficou gravavel depois de por o terceiro"
+if [ "$(id -u)" -ne 0 ]; then
+  [ ! -w "$alvo" ] && [ ! -w "$(dirname "$alvo")" ] && [ ! -w "$PROD_RAIZ/platafirma-harness/$SHA1" ] \
+    || falha "arvore da rev ficou gravavel depois de por o terceiro"
+else
+  ! stat -c %A "$alvo" "$PROD_RAIZ/platafirma-harness/$SHA1" | grep -qE '^..w' \
+    || falha "arvore da rev ficou com bit de escrita do dono depois de por o terceiro"
+fi
 [ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$SHA1" ] || falha "current nao trocou"
 [ "$(readlink -f "$PROD_RAIZ/current/harness/terceiros/tokenizers/fixture.json")" = "$(readlink -f "$alvo")" ] \
   || falha "atalho current/harness nao serve o terceiro"
