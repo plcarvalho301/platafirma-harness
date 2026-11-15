@@ -13,6 +13,10 @@ Cobre:
   - Stdin vazio -> exit 2
   - Alvo sem stack -> exit 2
   - Escrita atomica: dir 700, arquivo 600
+- `seg segredo gerar` (DT #593):
+  - Sorteia valor aleatorio (default 32 bytes hex) e grava em 0600 sem imprimir
+  - Suporta --bytes N e --hex; valor nunca aparece em stdout/stderr/log
+  - Recusa alvo fora de <stack>/<nome>, --bytes invalido e flag desconhecida (exit 2)
 - `seg segredo importar`:
   - .env parseado para dir 700 e arquivos 600
   - Imprime apenas os nomes
@@ -435,3 +439,66 @@ def test_apagar_inexistente_sai_1(tmp_path):
     cofre = _cofre_com(tmp_path, "velha", ["A"])
     res = _run_seg(["segredo", "apagar", "outra/", "--confirmar"], env_extra={"SEG_SECRETS_DIR": str(cofre)})
     assert res.returncode == 1
+
+
+# --- segredo gerar (DT #593): sorteia e grava em 0600 sem imprimir ----------------
+def test_gerar_default_32_bytes_hex_sem_vazar(tmp_path):
+    import re
+    secrets_dir = tmp_path / "secrets"
+    log_dir = tmp_path / "logs"
+    res = _run_seg(
+        ["segredo", "gerar", "olaria/OLARIA_CHAVE"],
+        env_extra={"SEG_SECRETS_DIR": str(secrets_dir), "SEG_LOG_DIR": str(log_dir)},
+    )
+    assert res.returncode == 0, res.stderr
+    assert "gerado: olaria/OLARIA_CHAVE (64 bytes)" in res.stdout
+
+    target = secrets_dir / "olaria" / "OLARIA_CHAVE"
+    assert target.is_file()
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
+    assert stat.S_IMODE(target.parent.stat().st_mode) == 0o700
+
+    valor = target.read_text(encoding="utf-8")
+    assert re.fullmatch(r"[0-9a-f]{64}", valor), f"formato inesperado: {len(valor)} chars"
+    assert valor not in res.stdout
+    assert valor not in res.stderr
+    for log_file in log_dir.glob("*.jsonl"):
+        assert valor not in log_file.read_text(encoding="utf-8")
+
+
+def test_gerar_com_bytes_e_hex(tmp_path):
+    import re
+    secrets_dir = tmp_path / "secrets"
+    res = _run_seg(
+        ["segredo", "gerar", "stack1/TOKEN", "--bytes", "16", "--hex"],
+        env_extra={"SEG_SECRETS_DIR": str(secrets_dir)},
+    )
+    assert res.returncode == 0, res.stderr
+    assert "gerado: stack1/TOKEN (32 bytes)" in res.stdout
+
+    target = secrets_dir / "stack1" / "TOKEN"
+    valor = target.read_text(encoding="utf-8")
+    assert re.fullmatch(r"[0-9a-f]{32}", valor)
+    assert valor not in res.stdout
+    assert valor not in res.stderr
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        [],
+        ["semstack"],
+        ["../x"],
+        ["a/../b"],
+        ["a/b/c"],
+        ["olaria/CHAVE", "--bytes", "0"],
+        ["olaria/CHAVE", "--bytes", "-5"],
+        ["olaria/CHAVE", "--bytes", "abc"],
+        ["olaria/CHAVE", "--bytes"],
+        ["olaria/CHAVE", "--desconhecida"],
+    ],
+)
+def test_gerar_entradas_invalidas(tmp_path, args):
+    secrets_dir = tmp_path / "secrets"
+    res = _run_seg(["segredo", "gerar", *args], env_extra={"SEG_SECRETS_DIR": str(secrets_dir)})
+    assert res.returncode == 2
