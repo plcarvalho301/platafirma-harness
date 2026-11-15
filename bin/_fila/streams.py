@@ -47,6 +47,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from datetime import datetime
 
 try:
@@ -256,6 +257,9 @@ def so_leitura(eu: str, verbo: str, json_mode: bool = False):
         sys.exit(1)
 
 
+RETENCAO_INDICE_SEG = 8 * 86400
+
+
 def gerar_msgid(de: str, existentes, rc=None) -> str:
     """`<carimbo>-<remetente>`, único por carta (#2856 linha 79): não repete o que já está na caixa do
     destino (`existentes`) nem, com `rc`, o que a mesma remetente mandou a outra caixa no mesmo
@@ -266,9 +270,61 @@ def gerar_msgid(de: str, existentes, rc=None) -> str:
     while True:
         candidato = (agora + timedelta(seconds=seg)).strftime("%Y%m%dT%H%M%S") + f"-{de}"
         if candidato not in existentes and (
-                rc is None or rc.set(f"msgid:{candidato}", "1", nx=True, ex=8 * 86400)):
+                rc is None or rc.set(f"msgid:{candidato}", "1", nx=True, ex=RETENCAO_INDICE_SEG)):
             return candidato
         seg += 1
+
+
+def _registra_msgid(rc, msgid: str, caixa: str, tecnico: str, de: str):
+    """Ponteiro O(1) em `msgid:<id>` + indice `enviadas:<de>` (TTL 8d, arq:0092)."""
+    if hasattr(rc, "set"):
+        meta = json.dumps({"caixa": caixa, "tecnico": tecnico, "de": de}, ensure_ascii=False)
+        rc.set(f"msgid:{msgid}", meta, ex=RETENCAO_INDICE_SEG)
+    if hasattr(rc, "zadd"):
+        agora = time.time()
+        chave_env = f"enviadas:{de}"
+        rc.zadd(chave_env, {msgid: agora})
+        if hasattr(rc, "zremrangebyscore"):
+            rc.zremrangebyscore(chave_env, "-inf", agora - RETENCAO_INDICE_SEG)
+        if hasattr(rc, "expire"):
+            rc.expire(chave_env, RETENCAO_INDICE_SEG)
+
+
+def _ler_meta_msgid(rc, msgid: str):
+    if not hasattr(rc, "get"):
+        return None
+    bruto = rc.get(f"msgid:{msgid}")
+    if isinstance(bruto, str) and bruto.startswith("{"):
+        try:
+            meta = json.loads(bruto)
+            if isinstance(meta, dict) and meta.get("caixa") and meta.get("tecnico"):
+                return meta
+        except json.JSONDecodeError:
+            pass
+    return None
+
+
+def _achar_na_malha(rc, msgid: str, caixas_fallback=None):
+    """Resolve `msgid` para `(caixa, tecnico, carta)` via ponteiro `msgid:<id>` ou fallback."""
+    meta = _ler_meta_msgid(rc, msgid)
+    if meta:
+        caixa = meta["caixa"]
+        tecnico = meta["tecnico"]
+        entradas = rc.xrange(stream_key(caixa), min=tecnico, max=tecnico)
+        for t, plano in entradas:
+            return caixa, t, _campos(plano, t)
+        return None
+    for caixa in (caixas_fallback or ()):
+        for t, plano in rc.xrange(stream_key(caixa), min="-", max="+"):
+            if plano.get("id", t) == msgid:
+                return caixa, t, _campos(plano, t)
+    return None
+
+
+def _pre_tratadas(rc, persona: str) -> set:
+    if not hasattr(rc, "smembers"):
+        return set()
+    return set(rc.smembers(f"tratadas:{persona}") or ())
 
 
 def _campos(plano: dict, tecnico: str) -> dict:
@@ -306,12 +362,23 @@ def frias(rc, persona: str, desde: str = None):
 
 def novas(rc, persona: str, quantas: int = 500):
     """XREADGROUP '>': so o que a cadeira ainda nao viu. Entrega e move o ponteiro,
-    SEM XACK — a carta fica pendurada ate `tratar`."""
+    SEM XACK — a carta fica pendurada ate `tratar`. Cartas ja pre-tratadas em
+    `tratadas:<persona>` recebem XACK imediato e nao sao reentregues (DT 413)."""
     garante_grupo(rc, persona)
     resp = rc.xreadgroup(GRUPO, persona, {stream_key(persona): ">"}, count=quantas)
     if not resp:
         return []
-    return [_campos(plano, tecnico) for tecnico, plano in resp[0][1]]
+    chave = stream_key(persona)
+    pre = _pre_tratadas(rc, persona)
+    saida = []
+    for tecnico, plano in resp[0][1]:
+        if tecnico in pre:
+            rc.xack(chave, GRUPO, tecnico)
+            if hasattr(rc, "srem"):
+                rc.srem(f"tratadas:{persona}", tecnico)
+            continue
+        saida.append(_campos(plano, tecnico))
+    return saida
 
 def _ids_pendurados(rc, persona: str):
     """Ids tecnicos na PEL do grupo (entregues e sem XACK), mais antigo primeiro."""
@@ -348,7 +415,10 @@ def penduradas(rc, persona: str):
         if g["name"] == GRUPO:
             ponteiro = g.get("last-delivered-id", "0-0")
             break
+    pre = _pre_tratadas(rc, persona)
     for t, plano in rc.xrange(chave, min=f"({ponteiro}", max="+"):
+        if t in pre:
+            continue
         m = _campos(plano, t)
         m["estado"] = "nao lida"
         saida.append(m)
@@ -356,14 +426,17 @@ def penduradas(rc, persona: str):
 
 def tratar(rc, persona: str, msgids):
     """XACK por msgid. Devolve [(msgid, resultado)] com resultado em
-    'tratada' | 'ja tratada' | 'nao lida' | 'nao existe'. Nao se trata carta nao
-    lida: em mensageria de producao o ack vem depois da entrega."""
+    'tratada' | 'ja tratada' | 'nao lida' | 'nao existe'. Cartas lidas em modo
+    frio (`--tudo`/`--desde`/`--penduradas`, ainda a frente do ponteiro) sao
+    registradas em `tratadas:<persona>` para receber XACK automatico em `novas()`
+    sem queimar cartas novas de outros remetentes (DT 413)."""
     garante_grupo(rc, persona)
     chave = stream_key(persona)
     por_msgid = {}
     for t, plano in rc.xrange(chave, min="-", max="+"):
         por_msgid.setdefault(plano.get("id", t), t)
     pend = set(_ids_pendurados(rc, persona))
+    pre = _pre_tratadas(rc, persona)
     ponteiro = "0-0"
     for g in rc.xinfo_groups(chave):
         if g["name"] == GRUPO:
@@ -383,7 +456,16 @@ def tratar(rc, persona: str, msgids):
             rc.xack(chave, GRUPO, tecnico)
             saida.append((mid, "tratada"))
         elif _id(tecnico) > _id(ponteiro):
-            saida.append((mid, "nao lida"))
+            if tecnico in pre:
+                saida.append((mid, "ja tratada"))
+            elif hasattr(rc, "sadd"):
+                rc.sadd(f"tratadas:{persona}", tecnico)
+                if hasattr(rc, "expire"):
+                    rc.expire(f"tratadas:{persona}", RETENCAO_INDICE_SEG)
+                pre.add(tecnico)
+                saida.append((mid, "tratada"))
+            else:
+                saida.append((mid, "nao lida"))
         else:
             saida.append((mid, "ja tratada"))
     return saida
@@ -453,16 +535,17 @@ def conta_novas(rc, persona: str, detalhado: bool = False):
     total = rc.xlen(chave)
     n = total
     ponteiro = "0-0"
+    pre = _pre_tratadas(rc, persona)
     for g in rc.xinfo_groups(chave):
         if g["name"] != GRUPO:
             continue
         # So o que nao foi entregue. A pendurada (PEL) conta a parte, em
         # conta_penduradas: lida e nao tratada nao e carta nova.
         ponteiro = g.get("last-delivered-id", "0-0")
-        if g.get("lag") is not None:
+        if g.get("lag") is not None and not pre:
             n = g["lag"]
         else:
-            depois = rc.xrange(chave, min=f"({ponteiro}", max="+")
+            depois = [t for t, _ in rc.xrange(chave, min=f"({ponteiro}", max="+") if t not in pre]
             n = len(depois)
         break
 
@@ -471,10 +554,11 @@ def conta_novas(rc, persona: str, detalhado: bool = False):
 
     idade_mais_antiga_seg = None
     if n:
-        entradas = rc.xrange(chave, min=f"({ponteiro}", max="+", count=1)
-        if entradas:
-            _tecnico, campos = entradas[0]
+        for t, campos in rc.xrange(chave, min=f"({ponteiro}", max="+"):
+            if t in pre:
+                continue
             idade_mais_antiga_seg = _idade_seg_do_msgid(campos.get("id", ""))
+            break
 
     ultima_leitura_seg = _idle_consumer_seg(rc, chave, persona)
     return n, total, idade_mais_antiga_seg, ultima_leitura_seg
@@ -491,6 +575,8 @@ def conta_penduradas(rc, persona: str) -> int:
 def imprime(m: dict):
     print(f"===MSG {m['msgid']}===")
     print(f"de: {m['de']}")
+    if m.get("para"):
+        print(f"para: {m['para']}")
     print(f"tipo: {m['tipo']}")
     if m.get("estado"):
         print(f"estado: {m['estado']}")
@@ -571,8 +657,83 @@ def cmd_status(rc, eu: str, args):
 
 
 # ---------- ler ----------
+def _carta_json(m: dict, chaves: tuple) -> dict:
+    item = {k: m.get(k, "") for k in chaves}
+    item["idade_seg"] = _idade_seg_do_msgid(m.get("msgid", ""))
+    return item
+
+
+def _ler_enviadas(rc, remetente: str, filtro_para: str = None) -> list:
+    """Leitura fria das cartas enviadas por `remetente` nos ultimos 7-8 dias (DT 188)."""
+    msgs = []
+    if hasattr(rc, "zrange"):
+        ids = rc.zrange(f"enviadas:{remetente}", 0, -1) or []
+        for mid in ids:
+            achou = _achar_na_malha(rc, mid)
+            if not achou:
+                continue
+            caixa, _t, carta = achou
+            if filtro_para and caixa != filtro_para:
+                continue
+            carta["para"] = caixa
+            msgs.append(carta)
+        return msgs
+    caixas = [filtro_para] if filtro_para else sorted(personas_validas() or set())
+    for p in caixas:
+        for m in frias(rc, p):
+            if m["de"] == remetente:
+                m["para"] = p
+                msgs.append(m)
+    return msgs
+
+
+def _cmd_ler_id(rc, eu: str, msgid: str, json_mode: bool):
+    """Leitura fria de uma carta especifica pelo `msgid`, para destinatario ou remetente (DT 188)."""
+    caixas = sorted(personas_validas() or set())
+    achou = _achar_na_malha(rc, msgid, caixas)
+    if not achou:
+        msg = f"carta nao encontrada: {msgid} (expirada >7d ou id errado)"
+        if json_mode:
+            _falha_json(msg, 1)
+        sys.stderr.write(f"erro: {msg}\n")
+        sys.exit(1)
+    caixa, _t, carta = achou
+    if eu != ESPIA and caixa != eu and carta["de"] != eu:
+        so_minha(eu, caixa, json_mode=json_mode)
+    carta["para"] = caixa
+    if json_mode:
+        chaves = ("msgid", "de", "para", "tipo", "assunto", "ref", "responde", "corpo")
+        print(json.dumps([_carta_json(carta, chaves)], ensure_ascii=False))
+        return
+    imprime(carta)
+
+
 def cmd_ler(rc, eu: str, args):
     json_mode = bool(getattr(args, "json", False))
+    msgid_alvo = getattr(args, "msgid", None)
+    if msgid_alvo:
+        _cmd_ler_id(rc, eu, msgid_alvo, json_mode)
+        return
+
+    env = bool(getattr(args, "enviadas", False))
+    if env:
+        filtro_para = getattr(args, "remetente", None) or (
+            args.persona if args.persona and args.persona != eu else None)
+        if filtro_para:
+            valida_persona(filtro_para, json_mode=json_mode)
+            filtro_para = canoniza_persona(filtro_para)
+        msgs = _ler_enviadas(rc, eu, filtro_para)
+        if json_mode:
+            chaves = ("msgid", "de", "para", "tipo", "assunto", "ref", "responde", "corpo")
+            print(json.dumps([_carta_json(m, chaves) for m in reversed(msgs)], ensure_ascii=False))
+            return
+        if not msgs:
+            print("nenhuma carta enviada no historico")
+            return
+        for m in reversed(msgs):
+            imprime(m)
+        return
+
     alvo = args.persona or eu
     if not alvo:
         if json_mode:
@@ -617,8 +778,7 @@ def cmd_ler(rc, eu: str, args):
             if args.remetente:
                 msgs = [m for m in msgs if m["de"] == args.remetente]
             for m in reversed(msgs):
-                item = {k: m.get(k, "") for k in chaves}
-                item["idade_seg"] = _idade_seg_do_msgid(m.get("msgid", ""))
+                item = _carta_json(m, chaves)
                 if len(personas) > 1:
                     item["caixa"] = p
                 saida.append(item)
@@ -691,6 +851,24 @@ def _assunto_do_corpo(corpo: str, limite: int = 120) -> str:
     return ""
 
 
+def _valida_responde(rc, responde: str, eu: str = None):
+    """Recusa `--responde` cujo msgid nao existe na malha (DT 439)."""
+    if hasattr(rc, "get") and rc.get(f"msgid:{responde}") is not None:
+        return
+    caixas = []
+    if eu:
+        caixas.append(eu)
+    for p in sorted(personas_validas() or set()):
+        if p not in caixas:
+            caixas.append(p)
+    if _achar_na_malha(rc, responde, caixas):
+        return
+    sys.stderr.write(
+        f'erro: --responde "{responde}" nao existe na malha (expirado >7d ou id errado).\n'
+    )
+    sys.exit(1)
+
+
 def cmd_enviar(rc, eu: str, args):
     de = args.de or eu
     if de != eu:
@@ -716,6 +894,8 @@ def cmd_enviar(rc, eu: str, args):
     de = canoniza_persona(de)
     for dest in destinatarios:
         so_par_permitido(de, dest, _json_mode(args))
+    if args.responde:
+        _valida_responde(rc, args.responde, eu)
 
     corpo = sys.stdin.read()
     if not corpo.strip():
@@ -727,11 +907,20 @@ def cmd_enviar(rc, eu: str, args):
         stream = stream_key(dest)
         existentes = {m["msgid"] for m in frias(rc, dest)}
         msgid = gerar_msgid(de, existentes, rc)
-        rc.xadd(stream, {
+        tecnico = rc.xadd(stream, {
             "id": msgid, "de": de, "tipo": tipo, "assunto": assunto,
             "ref": args.ref or "", "responde": args.responde or "", "corpo": corpo,
         })
+        _registra_msgid(rc, msgid, dest, tecnico, de)
         print(msgid)
+
+    # DT 336: responder uma carta da propria caixa ja a da por tratada (at-least-once: ack apos XADD).
+    if args.responde:
+        for mid, res in tratar(rc, eu, [args.responde]):
+            if res == "tratada":
+                sys.stderr.write(f"responde: {mid} tratada\n")
+            elif res == "ja tratada":
+                sys.stderr.write(f"responde: {mid} ja estava tratada\n")
 
 
 # ---------- carta de bot (#3884) ----------
@@ -766,13 +955,16 @@ def cmd_enviar_bot(rc, args):
         sys.stderr.write("erro: corpo vazio\n")
         sys.exit(1)
     assunto = (args.assunto or "").strip() or _assunto_do_corpo(corpo)
+    if args.responde:
+        _valida_responde(rc, args.responde)
     for dest in destinatarios:
         existentes = {m["msgid"] for m in frias(rc, dest)}
         msgid = gerar_msgid(de.replace(":", "-"), existentes, rc)
-        rc.xadd(stream_key(dest), {
+        tecnico = rc.xadd(stream_key(dest), {
             "id": msgid, "de": de, "tipo": tipo, "assunto": assunto,
             "ref": args.ref or "", "responde": args.responde or "", "corpo": corpo,
         })
+        _registra_msgid(rc, msgid, dest, tecnico, de)
         print(msgid)
 
 
@@ -807,10 +999,11 @@ def cmd_contestar(rc, args):
         sys.exit(2)
     existentes = {m["msgid"] for m in frias(rc, para)}
     msgid = gerar_msgid(de, existentes, rc)
-    rc.xadd(stream_key(para), {
+    tecnico = rc.xadd(stream_key(para), {
         "id": msgid, "de": de, "tipo": TIPO_CONTESTACAO, "assunto": f"contestacao do indicador: {indicador}",
         "ref": indicador, "responde": "", "corpo": fundamento,
     })
+    _registra_msgid(rc, msgid, para, tecnico, de)
     print(json.dumps({"msgid": msgid, "de": de, "para": para, "tipo": TIPO_CONTESTACAO, "indicador": indicador},
                      ensure_ascii=False))
 
@@ -832,6 +1025,8 @@ def build_parser():
     p_ler.add_argument("--tudo", nargs="?", const=True, default=False)
     p_ler.add_argument("--desde", default=None)
     p_ler.add_argument("--penduradas", action="store_true")
+    p_ler.add_argument("--enviadas", action="store_true")
+    p_ler.add_argument("--id", dest="msgid", default=None)
     p_ler.add_argument("--json", action="store_true")
     p_ler.add_argument("--eu", default=None)
 
@@ -868,6 +1063,8 @@ def uso():
         "  fila tratar <msgid>...                   ack: a carta virou ato (resposta, card, mesa) ou foi superada\n"
         "  fila ler [<persona>] --tudo [remetente]  historico dos 7 dias, nao move o ponteiro\n"
         "  fila ler [<persona>] --desde <data> [remetente]\n"
+        "  fila ler --enviadas [destinatario]       cartas que voce enviou nos 7 dias (frio)\n"
+        "  fila ler --id <msgid>                    le uma carta especifica (destinatario ou remetente)\n"
         "  fila enviar <destinatario>... [--tipo <t>] [--assunto <a>] [--ref <r>] [--responde <id>]\n"
         "              (corpo em stdin; default: --tipo pedido, --assunto = 1a linha do corpo)\n"
         "              --tipo contestacao: --ref e o indicador contestado, o corpo e o fundamento\n"
