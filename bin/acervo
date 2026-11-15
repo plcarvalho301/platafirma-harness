@@ -217,9 +217,11 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   platafirma-conhecimento e passa o catalogo.sql ao banco rag numa transacao so; sem --apply
                   o SQL roda inteiro e a transacao e desfeita (plano seco); sai 0 rodou · 1 reprova ou o
                   SQL deu erro · 5 nao olhou; a linha de entidade do catalogo so muda por ele (migracao 111)
-  acervo gerador  [--bancada <chave>] [--saida <pasta>] roda o gerador de outros_repos/conhecimento/ontologia
-                  na bancada de platafirma-casa-espelho, sem banco, e diz a pasta de saida e a DDL gravada;
-                  sai como o gerador (0 gerou · 1 reprova · 5 nao rodou) · 3 sem gerador na bancada.
+  acervo gerador  [--bancada <chave>] [--saida <pasta>] [--migracao <arquivo>] [--arvore] [-- <opcoes>...]
+                  roda o gerador de outros_repos/conhecimento/ontologia na bancada de platafirma-casa-espelho,
+                  sem banco, e diz a pasta de saida e a DDL gravada; --migracao repassa ao gerador; --arvore
+                  grava so a DDL versionada na arvore (sem os artefatos soltos); sai como o gerador
+                  (0 gerou · 1 reprova · 5 nao rodou) · 3 sem gerador na bancada.
                   Chamada temporaria (#4077); o raciocinador e \`motor raciocinador\`
   acervo psql     [--banco rag|motor]  <SQL por stdin>
   acervo balde    listar|ler|copiar|mover|apagar <bucket|sha256> [...] [--apply]
