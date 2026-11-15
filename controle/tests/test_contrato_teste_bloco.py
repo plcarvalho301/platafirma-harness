@@ -96,3 +96,32 @@ def test_vermelho_nomeia_o_reprovado_e_arvore_nova_mede_de_novo(bancada):
     assert "reaproveitado" not in r.stdout
     assert "suite VERMELHA" in r.stdout
     assert "reprovado:" in r.stdout and "test_ok" in r.stdout
+
+
+def test_alvo_diretorio_ou_arquivo_shell_roda_em_bash(bancada):
+    tmp_path, b, wt = bancada
+    sh_dir = wt / "deploy" / "tests"
+    sh_dir.mkdir(parents=True)
+    (sh_dir / "test_um.sh").write_text("#!/usr/bin/env bash\necho ok-um\n")
+    (sh_dir / "test_dois.sh").write_text("#!/usr/bin/env bash\necho ok-dois\n")
+    (sh_dir / "helper.sh").write_text("#!/usr/bin/env bash\nexit 99\n")
+
+    r = _teste(tmp_path, b, "rodar", "demo", "deploy/tests")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "suite VERDE: demo" in r.stdout, r.stdout
+    assert "2 arquivo(s) shell" in r.stdout, r.stdout
+
+    (sh_dir / "test_dois.sh").write_text("#!/usr/bin/env bash\necho falhou >&2\nexit 1\n")
+    r2 = _teste(tmp_path, b, "rodar", "demo", "deploy/tests/test_dois.sh")
+    assert r2.returncode == 1, r2.stdout + r2.stderr
+    assert "suite VERMELHA: demo" in r2.stdout, r2.stdout
+    assert "test_dois.sh" in r2.stdout, r2.stdout
+
+
+def test_alvo_diretorio_misto_python_e_shell_roda_ambos(bancada):
+    tmp_path, b, wt = bancada
+    (wt / "tests" / "test_extra.sh").write_text("#!/usr/bin/env bash\necho ok-sh\n")
+    r = _teste(tmp_path, b, "rodar", "demo", "tests")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "1 passed" in r.stdout, r.stdout
+    assert "1 arquivo(s) shell" in r.stdout, r.stdout

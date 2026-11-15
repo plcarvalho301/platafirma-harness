@@ -1557,11 +1557,106 @@ ato_rodar() {
     return $?
   fi
 
-  printf '# %s · chave %s-%s · uv run --python %s --with pytest pytest (raiz %s)\n' \
-    "$nome" "$REG_STACK" "$CHAVE_HASH" "$CHAVE_PY" "$raiz" >&2
+  # DT #57: alvo .sh explícito ou diretório com test_*.sh / *_test.sh roda em bash
+  # em vez de cair no pytest e sair 5 ('no tests ran').
+  local alvos_py=() alvos_sh=() a a_abs sh_dir=() py_tem="" f_sh
+  for a in ${alvos[@]+"${alvos[@]}"}; do
+    case "$a" in /*) a_abs="$a" ;; *) a_abs="$raiz/$a" ;; esac
+    if [ -f "$a_abs" ]; then
+      case "$a_abs" in
+        *.sh) alvos_sh+=("$a_abs") ;;
+        *)    alvos_py+=("$a") ;;
+      esac
+    elif [ -d "$a_abs" ]; then
+      sh_dir=()
+      while IFS= read -r f_sh; do
+        [ -n "$f_sh" ] && sh_dir+=("$f_sh")
+      done < <(find "$a_abs" -type f \( -name "test_*.sh" -o -name "*_test.sh" \) 2>/dev/null | sort)
+      if [ "${#sh_dir[@]}" -gt 0 ]; then
+        alvos_sh+=("${sh_dir[@]}")
+        py_tem="$(find "$a_abs" -type f \( -name "test_*.py" -o -name "*_test.py" \) -print -quit 2>/dev/null)"
+        [ -n "$py_tem" ] && alvos_py+=("$a")
+      else
+        alvos_py+=("$a")
+      fi
+    else
+      alvos_py+=("$a")
+    fi
+  done
 
-  pytest_em_bloco "$c" "$raiz" "$rotulo" "py:$CHAVE_PY" ${alvos:+"${alvos[@]}"}
-  return $?
+  if [ "${#alvos_sh[@]}" -gt 0 ] && [ "${#alvos_py[@]}" -eq 0 ]; then
+    printf '# %s · chave %s-%s · bash <arquivo.sh> (raiz %s)\n' "$nome" "$REG_STACK" "$CHAVE_HASH" "$c" >&2
+    shell_em_bloco "$c" "$raiz" "$rotulo" "${alvos_sh[@]}"
+    return $?
+  fi
+
+  local rc_py=0 rc_sh=0
+  if [ "${#alvos_py[@]}" -gt 0 ] || [ "${#alvos_sh[@]}" -eq 0 ]; then
+    printf '# %s · chave %s-%s · uv run --python %s --with pytest pytest (raiz %s)\n' \
+      "$nome" "$REG_STACK" "$CHAVE_HASH" "$CHAVE_PY" "$raiz" >&2
+    pytest_em_bloco "$c" "$raiz" "$rotulo" "py:$CHAVE_PY" ${alvos_py:+"${alvos_py[@]}"} || rc_py=$?
+  fi
+  if [ "${#alvos_sh[@]}" -gt 0 ]; then
+    printf '# %s · chave %s-%s · bash <arquivo.sh> (raiz %s)\n' "$nome" "$REG_STACK" "$CHAVE_HASH" "$c" >&2
+    shell_em_bloco "$c" "$raiz" "$rotulo" "${alvos_sh[@]}" || rc_sh=$?
+  fi
+  [ "$rc_py" -eq 1 ] || [ "$rc_sh" -eq 1 ] && return 1
+  [ "$rc_py" -eq 5 ] || [ "$rc_sh" -eq 5 ] && return 5
+  [ "$rc_py" -ne 0 ] && return "$rc_py"
+  return "$rc_sh"
+}
+
+shell_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo [$4=alvo...]
+  local c="$1" raiz="$2" rotulo="$3"; shift 3
+  local alvos=("$@") f f_abs rel rc_f n=0 n_falhos=0 falhos=()
+  local inst="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}" logd log tmpr timeout_sh path_env
+  timeout_sh="${PRAZO:-${PF_TESTE_TIMEOUT:-300}}"
+  path_env="$PATH"
+  [ -d "${CHAVE_DEST:-}/bin" ] && path_env="$CHAVE_DEST/bin:$PATH"
+
+  if [ "${PF_TESTE_VERBOSO:-0}" = 1 ]; then
+    for f in "${alvos[@]}"; do
+      case "$f" in /*) f_abs="$f" ;; *) f_abs="$raiz/$f" ;; esac
+      rc_f=0
+      (cd "$c" && PATH="$path_env" timeout "$timeout_sh" bash "$f_abs") || rc_f=$?
+      [ "$rc_f" -eq 0 ] || n_falhos=$((n_falhos + 1))
+      n=$((n + 1))
+    done
+    if [ "$n_falhos" -eq 0 ]; then
+      printf 'suite VERDE: %s — %s arquivo(s) shell\n' "$rotulo" "$n"
+      return 0
+    fi
+    printf 'suite VERMELHA: %s — %s de %s arquivo(s) shell reprovado(s)\n' "$rotulo" "$n_falhos" "$n"
+    return 1
+  fi
+
+  logd="$inst/var/log/teste"; mkdir -p "$logd" 2>/dev/null || logd="${TMPDIR:-/tmp}"
+  log="$logd/$(date -u +%Y%m%dT%H%M%SZ)-${rotulo%% *}-sh-$$.txt"
+  tmpr="$(mktemp -d "${TMPDIR:-/tmp}/teste-sh.XXXXXX")" || morre "não criei o diretório de saída das provas shell" 3
+
+  for f in "${alvos[@]}"; do
+    case "$f" in /*) f_abs="$f" ;; *) f_abs="$raiz/$f" ;; esac
+    rel="${f_abs#"$c"/}"
+    rc_f=0
+    (cd "$c" && PATH="$path_env" timeout "$timeout_sh" bash "$f_abs") >"$tmpr/out" 2>&1 || rc_f=$?
+    n=$((n + 1))
+    { printf '=== %s · exit %s ===\n' "$rel" "$rc_f"; cat "$tmpr/out" 2>/dev/null; } >> "$log" 2>/dev/null || true
+    if [ "$rc_f" -ne 0 ]; then
+      n_falhos=$((n_falhos + 1))
+      falhos+=("$rel (exit $rc_f)")
+      tail -n 15 "$tmpr/out" 2>/dev/null | sed "s|^|  reprovado: $rel: |"
+    fi
+  done
+  rm -rf "$tmpr"
+
+  if [ "$n_falhos" -gt 0 ]; then
+    printf 'suite VERMELHA: %s — %s de %s arquivo(s) shell reprovado(s): %s\n' "$rotulo" "$n_falhos" "$n" "${falhos[*]}"
+    printf 'saida inteira: %s\n' "$log"
+    return 1
+  fi
+  printf 'suite VERDE: %s — %s arquivo(s) shell\n' "$rotulo" "$n"
+  printf 'saida inteira: %s\n' "$log"
+  return 0
 }
 
 ato_bench() {
