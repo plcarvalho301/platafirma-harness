@@ -1000,6 +1000,8 @@ def _mecanismo_fora_da_regra(nome, caminho):
 
 def conferir_verbo(alvo, como_json=False):
     desde_familia = _desde_familia("platafirma-harness")
+    em_rev = os.environ.get("PF_CONFERIR_ORIGEM", "1") == "0"
+    donos_cache = None
     cap_cache = {}
     porcapacidade = {}
     vistos = 0
@@ -1091,6 +1093,22 @@ def conferir_verbo(alvo, como_json=False):
             else:
                 if not como_json:
                     print(f"    capacid : {cap!r} no mapa vigente")
+        if not em_rev and cab["dono"]:
+            if donos_cache is None:
+                donos_cache = _donos_ferramental()
+            donos_cat, erro_donos = donos_cache
+            if erro_donos:
+                tem_indeterminavel = True
+                problemas.append(f"dono no catalogo nao conferido: {erro_donos}")
+                if not como_json:
+                    print(f"    DONO?   : nao consegui ler acervo.ferramental_verbo: {erro_donos}")
+            elif nome in donos_cat and donos_cat[nome] != cab["dono"]:
+                tem_divergencia = True
+                dono_cat = donos_cat[nome] or "(vazio)"
+                problemas.append(
+                    f"dono no catalogo ({dono_cat}) difere do cabecalho ({cab['dono']})")
+                if not como_json:
+                    print(f"    DONO    : catalogo={dono_cat} difere do cabecalho={cab['dono']}")
         for motivo_mec in _mecanismo_fora_da_regra(nome, caminho):
             tem_divergencia = True
             problemas.append(motivo_mec)
@@ -2665,6 +2683,19 @@ def _ferramental_psql(sql):
     if p.returncode != 0:
         return None, (p.stderr or p.stdout or f"psql saiu {p.returncode}").strip()[:200]
     return [l for l in p.stdout.splitlines() if l.strip()], None
+
+
+def _donos_ferramental():
+    """({slug: dono}|None, erro|None). Le o dono registrado em acervo.ferramental_verbo."""
+    linhas, erro = _ferramental_psql(
+        "select slug, coalesce(dono, '') from acervo.ferramental_verbo")
+    if erro:
+        return None, erro
+    donos = {}
+    for l in linhas:
+        slug, dono = (l.split("|", 1) + [""])[:2]
+        donos[slug] = dono
+    return donos, None
 
 
 def conferir_ferramental(alvo, como_json=False):

@@ -252,3 +252,55 @@ def test_so_descricao_funciona_nos_sete_verbos_que_o_registro_inteiro_recusa(mon
     monkeypatch.setattr(registrar, "_psql", lambda sql, escreve=False: re.search(r"slug = '(\w+)'", sql).group(1) + "\n")
     for verbo in ("acesso", "expediente", "infra", "mesa", "release", "seg", "sessao"):
         assert registrar.registrar_descricao(verbo), verbo
+
+
+def test_registrar_um_grava_dono_no_golden_record(tmp_path, monkeypatch):
+    """DT #273: registrar_um grava e atualiza dono em acervo.ferramental_verbo."""
+    registrar = _registrar()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "meuverbo").write_text(
+        "#!/usr/bin/env bash\n"
+        "# meuverbo — faz algo\n"
+        "# capacidade: operacao\n"
+        "# dono: gestao-estrategica\n"
+        "# atos: ler (leitura, operacao)\n"
+        "# le: ler=nada\n"
+        "# escreve: ler=nada\n"
+        "echo ok\n",
+        encoding="utf-8",
+    )
+    enviados = []
+    monkeypatch.setattr(registrar, "BIN", str(bin_dir))
+    monkeypatch.setattr(registrar, "_psql", lambda sql, escreve=False: enviados.append(sql) or "")
+    registrar.registrar_um("meuverbo")
+    sql = "\n".join(enviados)
+    assert "insert into acervo.ferramental_verbo (slug, capacidade_id, sot, descricao, dono)" in sql
+    assert "'gestao-estrategica'" in sql
+    assert "dono=coalesce(excluded.dono, acervo.ferramental_verbo.dono)" in sql
+
+
+def test_reconciliar_donos_atualiza_em_lote_inclusive_verbos_com_acesso_em_prosa(tmp_path, monkeypatch):
+    """DT #273: reconciliar_donos relê `# dono:` de todo bin/<verbo> e atualiza acervo.ferramental_verbo."""
+    registrar = _registrar()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "_interno").write_text("#!/usr/bin/env bash\n# dono: ti\n", encoding="utf-8")
+    (bin_dir / "tarefas").write_text(
+        "#!/usr/bin/env bash\n# tarefas — card\n# capacidade: tarefas\n# dono: gestao-estrategica\n",
+        encoding="utf-8",
+    )
+    (bin_dir / "infra").write_text(
+        "#!/usr/bin/env bash\n# infra — sobe\n# capacidade: infra\n# dono: ti\n# le: texto em prosa\n",
+        encoding="utf-8",
+    )
+    enviados = []
+    monkeypatch.setattr(registrar, "BIN", str(bin_dir))
+    monkeypatch.setattr(registrar, "_psql", lambda sql, escreve=False: enviados.append(sql) or "")
+    pares = registrar.reconciliar_donos()
+    assert pares == [("infra", "ti"), ("tarefas", "gestao-estrategica")]
+    (sql,) = enviados
+    assert "update acervo.ferramental_verbo f" in sql
+    assert "('tarefas', 'gestao-estrategica')" in sql
+    assert "('infra', 'ti')" in sql
+    assert "_interno" not in sql
