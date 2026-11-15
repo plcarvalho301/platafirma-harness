@@ -36,6 +36,7 @@ Com `--json`, retorna objeto com `ancora`, `classe`, `alvo`, `release` e lista d
 - `alcance`: inventário de alcance de recursos.
 - `card`: integridade de cards citados.
 - `jobs`: timers do systemd --user contra declarantes da release.
+- `unit`: convergência das units de conta instaladas por script de setup com `--check` sem root (ex.: `prior-secao`).
 - `acervo`: predicados de fidelidade e invariantes I1..I13 contra os bancos rag e motor.
 - `dependencias`: travas e inventário de dependências das famílias.
 - `sessao-orfa` (card #3375): contagem de `sessao_id` gravados no acervo e na fita sem sessão canônica em `sessao.sessao` (legado de fontes recicláveis e gravações com o banco de sessão fora), comparada contra a linha de base.

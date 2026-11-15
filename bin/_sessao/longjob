@@ -91,7 +91,9 @@ case "$cmd" in
         "${PF_CONTA_AGENTE:-(ausente)}" >> "$log"
     fi
     printf '# comando=%s\n' "$*" >> "$log"
-    systemd-run --user --unit="$unit" --quiet \
+    # DT 380: nasce já coletável (--collect) e grava o próprio evento de fim ao sair
+    # (ExecStopPost), para unit falhada não ficar carregada nem perder Result/status.
+    systemd-run --user --collect --unit="$unit" --quiet \
       "${ident[@]}" \
       --property=WorkingDirectory="$cwd" \
       --property=StandardOutput="append:$log" \
@@ -99,6 +101,7 @@ case "$cmd" in
       --property=SyslogIdentifier="$unit" \
       --property=CPUWeight="${LONGJOB_CPU_PESO:-50}" \
       --property=MemoryHigh="${LONGJOB_MEM_ALTA:-16G}" \
+      --property="ExecStopPost=/bin/sh -c 'echo \"# fim=\$(date -Is) result=\${SERVICE_RESULT:-desconhecido} status=\${EXIT_STATUS:-desconhecido}\" >> \"\$1\"' _ \"$log\"" \
       --setenv=PATH="$PLATAFIRMA_RELEASE/harness/bin:$PATH" \
       --setenv=PYTHONUNBUFFERED=1 \
       -- "$@"

@@ -1161,7 +1161,19 @@ unit_env() {
   [ -n "$unit" ] || { echo "uso: infra unit-env <unit> [--ver | CHAVE=VALOR...]" >&2; exit 2; }
   unit="${unit%.service}.service"
   e_unit "$unit" || { echo "erro: unit --user '$unit' nao existe (systemctl --user cat)." >&2; exit 2; }
-  local cfg_dir="${INFRA_UNITS_CONFIG_DIR:-$HOME/.config/systemd/user}"
+  # DTs 390 e 479: ~/.config/systemd/user tem dono root de propósito; units da conta
+  # moram em ~/.local/share/systemd/user, onde o systemd --user também lê drop-ins
+  # <unit>.d/*.conf. Unit de root continua recusada (exit 4) abaixo.
+  local cfg_dir="${INFRA_UNITS_CONFIG_DIR:-}"
+  if [ -z "$cfg_dir" ]; then
+    local frag
+    frag="$(systemctl --user show -p FragmentPath --value -- "$unit" 2>/dev/null || true)"
+    if [[ "$frag" == "$HOME/.config/systemd/user/"* ]] || [ -w "$HOME/.config/systemd/user" ]; then
+      cfg_dir="$HOME/.config/systemd/user"
+    else
+      cfg_dir="${XDG_DATA_HOME:-$HOME/.local/share}/systemd/user"
+    fi
+  fi
   local dir="$cfg_dir/$unit.d" arq
   # drop-in vence por ordem lexica (o ultimo ganha); `zz-` para passar por cima de
   # drop-in sem numero (capsula.conf), senao a chave gravada aqui perde calada.
