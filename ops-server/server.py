@@ -38,6 +38,7 @@ nem .profile — sem isto, o bin da release e ~/.local/bin existem no disco e
 é invisível para quem chama a tool. O env do subprocesso também é depurado dos segredos
 da instância: um comando qualquer não deve conseguir ecoar o token que o autorizou.
 """
+import glob
 import hashlib
 import ipaddress
 import json
@@ -2210,6 +2211,7 @@ CLONES = ("platafirma-core", "platafirma-conhecimento",
 # do clone do harness.
 HARNESS_NO_ESPELHO = ("outros_repos", "harness")
 ESCRITA_TETO = 1_048_576
+ESCRITA_LOTE_TETO = 500
 TMP_FITA = INSTANCIA / "var" / "tmp"
 
 
@@ -2504,72 +2506,77 @@ def _casa_trecho_multilinha(atual: str, a: str) -> list[tuple[int, int]]:
     return matches
 
 
-def write_file(path: str, content: str = "", sessao_id: str | None = None,
-               trecho: dict | None = None, turno: str = "", turno_texto: str = "",
-               turno_fonte: str = "") -> dict:
-    """grava arquivo na bancada ou no rascunho da fita · use para: escrever mudança, o arquivo inteiro ou a troca de um trecho
+_RE_HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
-    `path` absoluto, ou relativo à bancada declarada (sem ela, recusa). Moradas: na
-    bancada, clones platafirma-* e seus worktrees em wt/<repo>/<cadeira>
-    (working tree, fora de .git), com bin/ e hooks/ do harness aceitando verbo e hook (sem
-    extensao + shebang); na instancia, @TMP@/<ordem_id>/ (rascunho da fita). Tipos: .py .md .mmd .d2 .sh
-    .sql .yaml .yml .json .toml .css .html .js .jsx .mjs .ts .tsx .php .txt .conf .tsv .service
-    .timer .path .socket .ttl .jsonl, e os nomes Dockerfile, Dockerfile.<sufixo>, .dockerignore,
-    .gitignore, .operacao, VERDES, .conferir-repo, uv.lock, crontab-claudinho. Fora disso volta
-    `{recusado, motivo}` nomeando o porque (release, fila, abertura publicada, log, segredos, .git, symlink,
-    tipo, tamanho). `content` = arquivo
-    INTEIRO (teto 1 MiB). `trecho={"antes","depois"}` = edicao por trecho: `antes` tem de
-    ocorrer exatamente UMA vez no arquivo; zero ou mais recusa com a contagem. Escrita por
-    mkstemp no mesmo dir + fsync + rename: inteira ou nada. Auditoria com sha256 antes/depois.
-    """
+
+def _recusa_escrita(ident: dict, path: str, motivo: str, exit_code: int = 4,
+                    proximo: str | None = None, extra: dict | None = None) -> dict:
+    _audit(tool="write_file", evento="escrita_recusada", path=path, motivo=motivo,
+           cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
+           ordem_id=ident["ordem_id"], **(extra or {}))
+    return _envelope_erro(exit_code, motivo, proximo, recusado=True, path=path, motivo=motivo)
+
+
+def _escreve_um(path: str, content: str, ident: dict, trecho: dict | None = None,
+                lote_id: str | None = None, lote_n: int | None = None) -> dict:
+    """Executa a escrita de um único arquivo com autorização, morada, escrita atômica e auditoria."""
     negado = _autoriza("write_file", "write_file", "documento", path, DOM_PLATAFORMA)
     if negado:
         return negado
-    ident = _sessao_resolve(sessao_id)
-    _carimba_turno(ident, turno, turno_texto, turno_fonte)
-
-    def _rec(motivo, exit_code=4, proximo=None):
-        _audit(tool="write_file", evento="escrita_recusada", path=path, motivo=motivo,
-               cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
-               ordem_id=ident["ordem_id"])
-        return _envelope_erro(exit_code, motivo, proximo, recusado=True, path=path, motivo=motivo)
+    extra = {"lote_id": lote_id, "lote_n": lote_n} if lote_id is not None else {}
 
     real_alvo, erro = _resolve_escrita(path, ident)
     if erro:
         ec = 2 if erro.startswith("caminho:") else 4
-        return _rec(erro, exit_code=ec)
+        return _recusa_escrita(ident, path, erro, exit_code=ec, extra=extra)
     existia = real_alvo.is_file()
     antes_sha = hashlib.sha256(real_alvo.read_bytes()).hexdigest() if existia else None
     if trecho:
         if not existia:
-            return _rec("trecho: arquivo nao existe", exit_code=2,
-                        proximo=f'write_file(path={json.dumps(path, ensure_ascii=False)}, content="...")')
+            return _recusa_escrita(
+                ident, path, "trecho: arquivo nao existe", exit_code=2,
+                proximo=f'write_file(path={json.dumps(path, ensure_ascii=False)}, content="...")',
+                extra=extra,
+            )
         a, d = str(trecho.get("antes") or ""), str(trecho.get("depois") or "")
         if not a:
-            return _rec("trecho: `antes` vazio", exit_code=2,
-                        proximo=f'write_file(path={json.dumps(path, ensure_ascii=False)}, trecho={{"antes": "...", "depois": "..."}})')
+            return _recusa_escrita(
+                ident, path, "trecho: `antes` vazio", exit_code=2,
+                proximo=f'write_file(path={json.dumps(path, ensure_ascii=False)}, trecho={{"antes": "...", "depois": "..."}})',
+                extra=extra,
+            )
+        todos = bool(trecho.get("todos") or trecho.get("todas"))
         atual = real_alvo.read_text("utf-8", "replace")
         n = atual.count(a)
-        if n == 1:
-            content = atual.replace(a, d, 1)
+        if n == 1 or (todos and n >= 1):
+            content = atual.replace(a, d) if todos else atual.replace(a, d, 1)
         else:
             matches = _casa_trecho_multilinha(atual, a)
-            if len(matches) == 1:
-                m_start, m_end = matches[0]
-                content = atual[:m_start] + d + atual[m_end:]
+            if len(matches) == 1 or (todos and len(matches) >= 1):
+                novo = atual
+                for m_start, m_end in reversed(matches):
+                    novo = novo[:m_start] + d + novo[m_end:]
+                content = novo
             else:
-                return _rec(
-                    f"trecho: `antes` ocorre {len(matches) if matches else n} vez(es) — precisa ser exatamente 1",
+                esperado = "ao menos 1" if todos else "exatamente 1"
+                return _recusa_escrita(
+                    ident, path,
+                    f"trecho: `antes` ocorre {len(matches) if matches else n} vez(es) — precisa ser {esperado}",
                     exit_code=2,
                     proximo=f'ler_arquivo(caminho={json.dumps(str(real_alvo), ensure_ascii=False)})',
+                    extra=extra,
                 )
     data = (content or "").encode("utf-8")
     if len(data) > ESCRITA_TETO:
-        return _rec(f"tamanho: {len(data)} B > teto {ESCRITA_TETO} B", exit_code=2)
+        return _recusa_escrita(ident, path, f"tamanho: {len(data)} B > teto {ESCRITA_TETO} B",
+                               exit_code=2, extra=extra)
     em_bin = _em_bin_do_harness(real_alvo.parent)
     if em_bin and not real_alvo.suffix and not data.startswith(b"#!"):
-        return _rec("tipo: verbo sem shebang na primeira linha", exit_code=2,
-                    proximo=f'write_file(path={json.dumps(path, ensure_ascii=False)}, content="#!/usr/bin/env python3\\n...")')
+        return _recusa_escrita(
+            ident, path, "tipo: verbo sem shebang na primeira linha", exit_code=2,
+            proximo=f'write_file(path={json.dumps(path, ensure_ascii=False)}, content="#!/usr/bin/env python3\\n...")',
+            extra=extra,
+        )
     if existia:
         modo = real_alvo.stat().st_mode & 0o777
     else:
@@ -2587,9 +2594,256 @@ def write_file(path: str, content: str = "", sessao_id: str | None = None,
     _audit(tool="write_file", evento="escrita", path=str(real_alvo), bytes=len(data),
            substituiu=existia, trecho=bool(trecho), sha256_antes=antes_sha, sha256=depois_sha,
            cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
-           ordem_id=ident["ordem_id"])
+           ordem_id=ident["ordem_id"], **extra)
     return {"ok": True, "path": str(real_alvo), "bytes": len(data), "substituiu": existia,
             "sha256": depois_sha}
+
+
+def _expande_caminhos_escrita(caminhos: list, trecho_padrao: dict | None,
+                              content_padrao: str) -> tuple[list[tuple[str, str, dict | None]], list[dict]]:
+    """Expande `caminhos` (strings, globs ou dicts) em alvos individuais de escrita."""
+    alvos: list[tuple[str, str, dict | None]] = []
+    erros: list[dict] = []
+    b = _bancada()
+    for it in caminhos:
+        if isinstance(it, dict):
+            p = str(it.get("path") or it.get("caminho") or "")
+            tr = it.get("trecho") if "trecho" in it else trecho_padrao
+            ct = str(it.get("content") or "") if "content" in it else content_padrao
+            alvos.append((p, ct, tr))
+            continue
+        p = str(it or "")
+        if any(ch in p for ch in "*?["):
+            pp = PurePosixPath(p)
+            if not p or ".." in pp.parts or ".git" in pp.parts or any(ord(c) < 32 for c in p):
+                erros.append({"recusado": True, "path": p,
+                              "motivo": "caminho: glob invalido (sem '..' nem '.git' nem controle)"})
+                continue
+            if p.startswith("/"):
+                padrao_abs = p
+            else:
+                if b is None:
+                    erros.append({"recusado": True, "path": p,
+                                  "motivo": "caminho: glob relativo exige bancada declarada"})
+                    continue
+                padrao_abs = str(b / p)
+            casados = sorted(m for m in glob.glob(padrao_abs, recursive=True)
+                             if os.path.isfile(m) or os.path.islink(m))
+            if not casados:
+                erros.append({"recusado": True, "path": p,
+                              "motivo": f"glob sem correspondencia: {p}"})
+                continue
+            for m in casados:
+                alvos.append((m, content_padrao, trecho_padrao))
+        else:
+            alvos.append((p, content_padrao, trecho_padrao))
+    return alvos, erros
+
+
+def _limpa_caminho_diff(raw: str, prefixo: str) -> str:
+    p = raw.rstrip("\r\n").split("\t", 1)[0].strip()
+    if p.startswith('"') and p.endswith('"') and len(p) >= 2:
+        p = p[1:-1]
+    if p != "/dev/null" and p.startswith(prefixo):
+        p = p[len(prefixo):]
+    return p
+
+
+def _parse_unified_diff(patch_text: str) -> list[dict]:
+    """Analisa unified diff em registros por arquivo com seus hunks."""
+    linhas = patch_text.splitlines(keepends=True)
+    arquivos: list[dict] = []
+    i = 0
+    n = len(linhas)
+    while i < n:
+        ln = linhas[i]
+        if ln.startswith("--- ") and i + 1 < n and linhas[i + 1].startswith("+++ "):
+            old_p = _limpa_caminho_diff(ln[4:], "a/")
+            new_p = _limpa_caminho_diff(linhas[i + 1][4:], "b/")
+            i += 2
+            hunks: list[dict] = []
+            while i < n:
+                if linhas[i].startswith("--- ") or linhas[i].startswith("diff --git "):
+                    break
+                m = _RE_HUNK.match(linhas[i])
+                if not m:
+                    i += 1
+                    continue
+                old_start = int(m.group(1))
+                old_count = int(m.group(2)) if m.group(2) is not None else 1
+                new_start = int(m.group(3))
+                new_count = int(m.group(4)) if m.group(4) is not None else 1
+                i += 1
+                hunk_lines: list[str] = []
+                rem_old, rem_new = old_count, new_count
+                while i < n and (rem_old > 0 or rem_new > 0 or linhas[i].startswith("\\")):
+                    hl = linhas[i]
+                    if hl.startswith("\\"):
+                        hunk_lines.append(hl)
+                        i += 1
+                    elif hl.startswith(" "):
+                        hunk_lines.append(hl)
+                        rem_old -= 1
+                        rem_new -= 1
+                        i += 1
+                    elif hl.startswith("-"):
+                        hunk_lines.append(hl)
+                        rem_old -= 1
+                        i += 1
+                    elif hl.startswith("+"):
+                        hunk_lines.append(hl)
+                        rem_new -= 1
+                        i += 1
+                    elif hl in ("\n", "\r\n") and rem_old > 0 and rem_new > 0:
+                        hunk_lines.append(" " + hl)
+                        rem_old -= 1
+                        rem_new -= 1
+                        i += 1
+                    else:
+                        break
+                hunks.append({
+                    "old_start": old_start, "old_count": old_count,
+                    "new_start": new_start, "new_count": new_count,
+                    "lines": hunk_lines,
+                })
+            arquivos.append({"old_path": old_p, "new_path": new_p, "hunks": hunks})
+        else:
+            i += 1
+    return arquivos
+
+
+def _aplica_hunks(atual: str, hunks: list[dict], novo_arquivo: bool) -> tuple[str | None, str | None]:
+    """Aplica hunks de unified diff sobre `atual`, devolvendo `(novo_texto, erro)`."""
+    linhas = [] if (novo_arquivo and atual == "") else atual.splitlines(keepends=True)
+    offset = 0
+    for h in hunks:
+        esperadas: list[str] = []
+        novas: list[str] = []
+        ultimo_tipo = ""
+        for hl in h["lines"]:
+            if hl.startswith("\\"):
+                if ultimo_tipo in (" ", "-") and esperadas:
+                    esperadas[-1] = esperadas[-1].rstrip("\r\n")
+                if ultimo_tipo in (" ", "+") and novas:
+                    novas[-1] = novas[-1].rstrip("\r\n")
+                continue
+            tag, body = hl[0], hl[1:]
+            ultimo_tipo = tag
+            if tag in (" ", "-"):
+                esperadas.append(body)
+            if tag in (" ", "+"):
+                novas.append(body)
+        if not esperadas:
+            idx = 0 if novo_arquivo else max(0, min(len(linhas), h["old_start"] - 1 + offset))
+        else:
+            alvo_idx = max(0, h["old_start"] - 1 + offset)
+            idx = None
+            max_idx = len(linhas) - len(esperadas)
+            for delta in range(0, 51):
+                for cand in ((alvo_idx,) if delta == 0 else (alvo_idx + delta, alvo_idx - delta)):
+                    if 0 <= cand <= max_idx and linhas[cand:cand + len(esperadas)] == esperadas:
+                        idx = cand
+                        break
+                if idx is not None:
+                    break
+            if idx is None:
+                return None, f"patch: hunk @@ -{h['old_start']} +{h['new_start']} @@ nao casa no arquivo"
+        linhas[idx:idx + len(esperadas)] = novas
+        offset += len(novas) - len(esperadas)
+    return "".join(linhas), None
+
+
+def write_file(path: str = "", content: str = "", sessao_id: str | None = None,
+               trecho: dict | None = None, caminhos: list[str | dict] | None = None,
+               patch: str = "", turno: str = "", turno_texto: str = "",
+               turno_fonte: str = "") -> dict:
+    """grava arquivo na bancada ou no rascunho da fita · use para: escrever mudança, o arquivo inteiro ou a troca de um trecho
+
+    `path` absoluto, ou relativo à bancada declarada (sem ela, recusa). Moradas: na
+    bancada, clones platafirma-* e seus worktrees em wt/<repo>/<cadeira>
+    (working tree, fora de .git), com bin/ e hooks/ do harness aceitando verbo e hook (sem
+    extensao + shebang); na instancia, @TMP@/<ordem_id>/ (rascunho da fita). Tipos: .py .md .mmd .d2 .sh
+    .sql .yaml .yml .json .toml .css .html .js .jsx .mjs .ts .tsx .php .txt .conf .tsv .service
+    .timer .path .socket .ttl .jsonl, e os nomes Dockerfile, Dockerfile.<sufixo>, .dockerignore,
+    .gitignore, .operacao, VERDES, .conferir-repo, uv.lock, crontab-claudinho. Fora disso volta
+    `{recusado, motivo}` nomeando o porque (release, fila, abertura publicada, log, segredos, .git, symlink,
+    tipo, tamanho). `content` = arquivo
+    INTEIRO (teto 1 MiB). `trecho={"antes","depois"}` = edicao por trecho: `antes` tem de
+    ocorrer exatamente UMA vez no arquivo (ou >=1 com `"todos": true`); zero ou mais recusa com a contagem.
+    `caminhos`: lista de caminhos, globs (`*`, `**`) ou `{path, trecho|content}` para edição em massa num giro.
+    `patch`: unified diff multi-arquivo (com `path` opcional como diretório-base).
+    Escrita por mkstemp no mesmo dir + fsync + rename: inteira ou nada. Auditoria com sha256 antes/depois.
+    """
+    ident = _sessao_resolve(sessao_id)
+    _carimba_turno(ident, turno, turno_texto, turno_fonte)
+
+    if patch:
+        pp_base = PurePosixPath(path) if path else None
+        if pp_base and (".." in pp_base.parts or any(ord(c) < 32 for c in path)):
+            return _recusa_escrita(ident, path, "caminho: base invalida (sem '..' nem controle)", exit_code=2)
+        arqs = _parse_unified_diff(patch)
+        if not arqs:
+            return _recusa_escrita(ident, path or "-", "patch: nenhum arquivo encontrado no unified diff", exit_code=2)
+        if len(arqs) > ESCRITA_LOTE_TETO:
+            return _recusa_escrita(ident, path or "-", f"lote: {len(arqs)} arquivos > teto {ESCRITA_LOTE_TETO}", exit_code=2)
+        lote_id = uuid.uuid4().hex[:8]
+        resultados: list[dict] = []
+        for idx, arq in enumerate(arqs):
+            extra = {"lote_id": lote_id, "lote_n": idx}
+            if arq["new_path"] == "/dev/null":
+                resultados.append(_recusa_escrita(
+                    ident, arq["old_path"], "patch: remocao de arquivo nao e suportada por write_file",
+                    exit_code=4, extra=extra))
+                continue
+            alvo_rel = arq["new_path"]
+            alvo_path = str(PurePosixPath(path) / alvo_rel) if path else alvo_rel
+            negado = _autoriza("write_file", "write_file", "documento", alvo_path, DOM_PLATAFORMA)
+            if negado:
+                resultados.append(negado)
+                continue
+            real_alvo, erro = _resolve_escrita(alvo_path, ident)
+            if erro:
+                ec = 2 if erro.startswith("caminho:") else 4
+                resultados.append(_recusa_escrita(ident, alvo_path, erro, exit_code=ec, extra=extra))
+                continue
+            novo_arquivo = arq["old_path"] == "/dev/null"
+            existia = real_alvo.is_file()
+            if not novo_arquivo and not existia:
+                resultados.append(_recusa_escrita(ident, alvo_path, "patch: arquivo nao existe",
+                                                  exit_code=2, extra=extra))
+                continue
+            atual = real_alvo.read_text("utf-8", "replace") if existia else ""
+            novo_texto, err_hunk = _aplica_hunks(atual, arq["hunks"], novo_arquivo=novo_arquivo)
+            if err_hunk is not None or novo_texto is None:
+                resultados.append(_recusa_escrita(ident, alvo_path, err_hunk or "patch: falha ao aplicar",
+                                                  exit_code=2, extra=extra))
+                continue
+            resultados.append(_escreve_um(alvo_path, novo_texto, ident, lote_id=lote_id, lote_n=idx))
+        ok_n = sum(1 for r in resultados if r.get("ok"))
+        return {"ok": ok_n == len(resultados), "lote_id": lote_id, "total": len(resultados),
+                "aplicados": ok_n, "recusados": len(resultados) - ok_n, "resultados": resultados}
+
+    if caminhos is not None:
+        if not caminhos:
+            return _recusa_escrita(ident, path or "-", "caminhos: lista vazia", exit_code=2)
+        alvos, erros_exp = _expande_caminhos_escrita(caminhos, trecho, content)
+        if len(alvos) > ESCRITA_LOTE_TETO:
+            return _recusa_escrita(ident, path or "-",
+                                   f"lote: {len(alvos)} arquivos > teto {ESCRITA_LOTE_TETO}", exit_code=2)
+        lote_id = uuid.uuid4().hex[:8]
+        resultados = list(erros_exp)
+        for er in erros_exp:
+            _audit(tool="write_file", evento="escrita_recusada", path=er["path"],
+                   motivo=er["motivo"], cadeira=ident["cadeira"] or None,
+                   sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"],
+                   lote_id=lote_id)
+        for idx, (p, ct, tr) in enumerate(alvos):
+            resultados.append(_escreve_um(p, ct, ident, trecho=tr, lote_id=lote_id, lote_n=idx))
+        ok_n = sum(1 for r in resultados if r.get("ok"))
+        return {"ok": ok_n == len(resultados), "lote_id": lote_id, "total": len(resultados),
+                "aplicados": ok_n, "recusados": len(resultados) - ok_n, "resultados": resultados}
+
+    return _escreve_um(path, content, ident, trecho=trecho)
 
 
 # --- contexto de abertura de cadeira -----------------------------------------
