@@ -453,8 +453,8 @@ def roda_fila_cabecalho(rotulo, cmd, timeout=90):
               f" · {c.get('assunto', '')[:100]}{aviso}")
     print(f"  {len(cartas)} carta(s) pendurada(s) ou nao lida(s)"
           + (f", {vencendo} perto de vencer" if vencendo else "")
-          + "; corpo: `fila ler <eu> --tudo <remetente>` (frio, nao entrega); "
-            "nao lida se entrega com `fila ler <eu>` antes do ack: `fila tratar <msgid>...`")
+          + "; corpo: `fila ler <eu> --tudo <remetente>` ou `fila ler --id <msgid>`; "
+            "ack: `fila tratar <msgid>...` (ou responder com `--responde`)")
 
 
 def encerra_sessao(rc, sessao_id):
@@ -603,9 +603,7 @@ def ato_fita(args):
           "   pendurada ate a decisao dele virar ato; (ii) ATO DA CADEIRA pendente\n"
           "   — faca agora, ou card se nao cabe na fita, e depois `fila tratar\n"
           "   <msgid>`; (iii) ja respondida ou superada — `fila tratar <msgid>`.\n"
-          "   Carta nao lida se entrega\n"
-          "   antes com `fila ler <eu>`, sem --tudo: o --tudo so mostra, nao\n"
-          "   entrega, e o tratar recusa a nao lida. A marcada VENCE sai da caixa aos 7 dias,\n"
+          "   A marcada VENCE sai da caixa aos 7 dias,\n"
           "   tratada ou nao: o que tem de durar vira card ou mesa antes.\n"
           "   Carta parada que ninguem apresenta ao dono e decisao que nao existe.\n"
           "\n"
