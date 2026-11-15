@@ -6,7 +6,7 @@
    - Slug dito na abertura → `monta_sessao(cadeira=<slug>, chapeu=<chapéu, se dito>,
      pergunta=<o turno do dono, literal>)`. Formas: a primeira linha da mensagem, sozinha, como
      `(ia, harness)` ou `(ia)` — cadeira, depois chapéu; «abre como ti»; «monta-sessao(ia, chapeu=harness)».
-   - Sem slug → `cadeira="fabrica"`.
+   - Sem slug → `cadeira="engenharia"`.
 2. Pacote chegou: leia o arquivo do seu provider, no `platafirma-posto`, antes de responder.
 3. Pacote não chegou só se prova com o retorno de uma chamada feita, do jeito da tabela, repetida
    depois de alguns segundos (o cliente pode carregar os servidores MCP depois do primeiro turno) e

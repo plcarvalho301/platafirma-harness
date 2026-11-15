@@ -2955,7 +2955,7 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
         msg = ("sessao_id ausente numa reabertura — a fita deve portar o "
                "`sessao_id` da primeira abertura (arq:0101 §1); a primeira "
                "abertura envia a pergunta e NÃO envia `sessao_id`")
-        cad_ex = json.dumps(cadeira or "fabrica", ensure_ascii=False)
+        cad_ex = json.dumps(cadeira or "engenharia", ensure_ascii=False)
         return _envelope_erro(
             2,
             msg,
