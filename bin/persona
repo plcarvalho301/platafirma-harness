@@ -59,7 +59,7 @@ uso:
 
   redacao, na bancada de card (repo abrir platafirma-harness <card> --slug persona-<tema>):
   persona abrir | sanear     aposentados (#3273): saem 2 com o caminho; persona nao faz git
-  persona idade              sha, data do último commit e idade da bancada
+  persona idade              sha, data e idade da bancada de redação e da morada publicada
   persona conferir [alvo]    roda os checks do molde novo (alvo: cadeira, arquivo ou dir)
   persona salvar -m "<msg>"  confere o que mudou em abertura/ e no ledger; NAO commita nem
                              empurra — diz o fluxo de entrega (commitar, sincronizar, pr-abrir)
@@ -302,12 +302,47 @@ entra_no_clone() {
 }
 
 idade() {
-  local sha data seg
+  local sha data ct slug manifest
   sha=$(git rev-parse --short HEAD)
   data=$(git log -1 --format=%cI)
-  seg=$(( $(date +%s) - $(git log -1 --format=%ct) ))
-  printf '%s · último commit %s · clone com %dh%02dm\n' \
-    "$sha" "$data" $((seg/3600)) $(( (seg%3600)/60 ))
+  ct=$(git log -1 --format=%ct)
+  slug=$(basename "$REPO")
+  manifest="$MORADA/current/MANIFEST.json"
+  python3 - "$slug" "$sha" "$data" "$ct" "$MORADA" "$manifest" <<'PY'
+import datetime, json, pathlib, sys, time
+
+slug, sha, data, ct_str, morada, manifest_path = sys.argv[1:7]
+agora = int(time.time())
+
+def fmt_idade(seg):
+    if seg < 0:
+        seg = 0
+    return f"{seg // 3600}h{(seg % 3600) // 60:02d}m"
+
+ct = int(ct_str)
+print(f"bancada de redação ({slug}): {sha} · último commit {data} · {fmt_idade(agora - ct)}")
+
+mp = pathlib.Path(manifest_path)
+cur = pathlib.Path(morada) / "current"
+if mp.is_file():
+    try:
+        m = json.loads(mp.read_text(encoding="utf-8"))
+        m_sha = m.get("sha_curto") or (m.get("sha") or "")[:7] or "?"
+        pub = m.get("publicado_em") or ""
+        if pub:
+            ts_pub = pub[:-1] + "+00:00" if pub.endswith("Z") else pub
+            dt = datetime.datetime.fromisoformat(ts_pub)
+            idade_pub = fmt_idade(agora - int(dt.timestamp()))
+            print(f"morada publicada ({cur}): {m_sha} · publicado {pub} · {idade_pub}")
+        else:
+            print(f"morada publicada ({cur}): {m_sha} · sem publicado_em no MANIFEST.json")
+    except Exception as e:
+        print(f"morada publicada ({cur}): MANIFEST.json ilegivel ({e})")
+elif cur.is_dir():
+    print(f"morada publicada ({cur}): publicada sem MANIFEST.json")
+else:
+    print(f"morada publicada ({cur}): nao publicada")
+PY
 }
 
 # conferir le a MORADA PUBLICADA por padrao (arq:0097: o que as cadeiras recebem), ou o

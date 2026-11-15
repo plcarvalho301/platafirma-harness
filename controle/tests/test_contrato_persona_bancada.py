@@ -7,7 +7,9 @@ em HEAD destacado e o `git push origin HEAD` recusou: o commit ficou preso no ca
 bancada de card e para; commit, push e PR sao do fluxo de bancada. Estes testes rodam o
 bin/persona de verdade contra bancada, cache e git montados em tmp_path.
 """
+import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -174,3 +176,36 @@ def test_abrir_e_sanear_aposentados_nao_mexem_no_git(casa, ato):
     assert "aposentado" in p.stderr and "repo abrir platafirma-harness" in p.stderr
     assert "clone em dia" not in p.stdout
     casa.cache_intacto(head_cache)
+
+
+def test_idade_mostra_bancada_e_morada_publicada(casa):
+    """DT #367: persona idade declara bancada de redacao e morada publicada."""
+    b = casa.abrir_bancada("persona-x")
+    sha_b = _git(b, "rev-parse", "--short", "HEAD")
+    cur = casa.tmp / "instancia" / "var" / "abertura-publicada" / "current"
+    cur.mkdir(parents=True)
+    pub_iso = "2026-10-12T10:00:00Z"
+    (cur / "MANIFEST.json").write_text(json.dumps({
+        "sha": "abc1234deadbeef",
+        "sha_curto": "abc1234",
+        "publicado_em": pub_iso,
+    }))
+    p = casa.persona("idade")
+    assert p.returncode == 0, p.stdout + p.stderr
+    linhas = p.stdout.strip().splitlines()
+    assert len(linhas) == 2, p.stdout
+    assert "bancada de redação" in linhas[0] and "persona-x" in linhas[0] and sha_b in linhas[0]
+    assert "morada publicada" in linhas[1] and "abc1234" in linhas[1] and pub_iso in linhas[1]
+    assert re.search(r"\d+h\d{2}m", linhas[1]), linhas[1]
+
+
+def test_idade_declara_morada_nao_publicada(casa):
+    """DT #367: sem MANIFEST.json na morada, declara nao publicada e ainda mede a bancada."""
+    b = casa.abrir_bancada("persona-x")
+    sha_b = _git(b, "rev-parse", "--short", "HEAD")
+    p = casa.persona("idade")
+    assert p.returncode == 0, p.stdout + p.stderr
+    linhas = p.stdout.strip().splitlines()
+    assert len(linhas) == 2, p.stdout
+    assert "bancada de redação" in linhas[0] and sha_b in linhas[0]
+    assert "morada publicada" in linhas[1] and "nao publicada" in linhas[1]
