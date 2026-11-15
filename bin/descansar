@@ -12,8 +12,9 @@
 # tornar barato o unico momento em que ela SABE que esta fechando.
 #
 # TRES ATOS, um so proposito — separar o que a sessao mediu do que ela supoe:
-#   1. estado da memoria  — slot escrito x slug declarado na persona; slot orfao
-#      (typo, chapeu extinto) aparece nomeado, nunca some calado.
+#   1. estado da mesa     — pelo `mesa ver` da abertura (#656): item vivo (o feito ja
+#      saiu por `mesa fez`), prosa de `mesa anota` so como anotacao sem ato; chapeu
+#      fora da persona (typo, chapeu extinto) aparece nomeado, nunca some calado.
 #   2. dossie volatil     — os numeros e o estado que envelhecem entre fitas,
 #      medidos AGORA pelo verbo canonico de cada um. E contra esta lista que a
 #      sessao confere afirmacao vinda de memoria de conversa (classe C). Fecha
@@ -211,32 +212,58 @@ def idade(seg):
 
 
 
-def estado_memoria(curto, canon, rc):
-    """Slots escritos x slugs declarados. Devolve (linhas, orfaos).
+RE_MESA_ITEM = re.compile(r"^#\d+ \[([a-z0-9][a-z0-9-]*)\] ")
+RE_MESA_PROSA = re.compile(r"^\[([a-z0-9][a-z0-9-]*)\] anotação \(expira em ([^)]*)\)$")
 
-    A chave do substrato e o SUFIXO (decisao do dono, 18/08/2026) — a mesma que o
-    `mesa` escreve. O que sobrou na convencao velha sai marcado LEGADO, nunca
-    somado ao vivo: pacote menor em silencio e indistinguivel de pacote certo."""
-    alvo = curto
+
+def estado_memoria(curto):
+    """A mesa pelo verbo, o mesmo `mesa ver` da abertura (#656). Devolve (linhas, orfaos).
+
+    Antes este passo lia direto `mem:<cadeira>:*` no Valkey: a prosa de `mesa anota`, que
+    nao tem tratamento (`mesa fez` so apaga item no Postgres) e vive 48 h. O descanso dava
+    como retido o que ja se fizera e nao via os itens vivos. Agora: o item vivo sai como o
+    `mesa ver` o serve (o feito ja saiu dele); a prosa sai so com o cabecalho, marcada como
+    anotacao sem ato, porque nada nela diz o que ja se tratou. O chapeu fora da persona sai
+    marcado nos dois. `mesa ver` expurga o vencido ao servir, como na abertura."""
     linhas, orfaos = [], []
     declarados, erro = slugs_declarados(curto)
-    chaves = sorted(rc.keys(f"mem:{alvo.lower()}:*"))
-    if not chaves:
-        linhas.append("  mesa vazia — nada retido da fita anterior")
-    for k in chaves:
-        slot = k.split(":", 2)[2]
-        try:
-            d = json.loads(rc.get(k))
-            ts, n = d.get("t", 0), len(d.get("x", "").splitlines())
-        except (ValueError, TypeError, AttributeError):
-            ts, n = 0, 0
-        ttl = rc.ttl(k)
-        marca = ""
-        if declarados is not None and slot not in declarados:
-            marca = "  ÓRFÃO — slug não declarado na persona"
-            orfaos.append(slot)
-        linhas.append(f"  {slot:<16} {n:>3} linhas  escrito ha {idade(time.time() - ts)}"
-                      f"  vence em {idade(ttl) if ttl and ttl > 0 else '—'}{marca}")
+    try:
+        p = subprocess.run([os.path.join(_bin(), "mesa"), "ver"], capture_output=True,
+                           text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        linhas.append(f"  mesa: NAO MEDIDA — {type(e).__name__}: {e}")
+        p = None
+    if p is not None:
+        for aviso in (p.stderr or "").strip().splitlines():
+            linhas.append(f"  {aviso.strip()}")
+        saida = (p.stdout or "").splitlines()
+        if p.returncode != 0 and not saida:
+            linhas.append(f"  mesa: NAO MEDIDA — mesa ver saiu {p.returncode}")
+        i, itens = 0, 0
+        while i < len(saida):
+            linha = saida[i]
+            m_item, m_prosa = RE_MESA_ITEM.match(linha), RE_MESA_PROSA.match(linha)
+            if m_item:
+                itens += 1
+                marca = ("  ÓRFÃO — chapéu fora da persona" if declarados is not None
+                         and m_item.group(1) not in declarados else "")
+                linhas.append(f"  {linha}{marca}")
+            elif m_prosa:
+                slot, n = m_prosa.group(1), 0
+                while i + 1 < len(saida) and saida[i + 1].strip():
+                    i, n = i + 1, n + 1
+                marca = ""
+                if declarados is not None and slot not in declarados:
+                    marca = "  ÓRFÃO — slug não declarado na persona"
+                    orfaos.append(slot)
+                linhas.append(f"  [{slot}] anotação sem ato, {n} linha(s), expira em "
+                              f"{m_prosa.group(2)}: não é item aberto, e o que já se fez não "
+                              f"sai dela{marca}")
+            elif linha.startswith("(mesa:") or linha.strip() == "mesa vazia":
+                linhas.append(f"  {linha.strip()}")
+            i += 1
+        if itens:
+            linhas.append(f"  {itens} item(ns) vivo(s); o feito sai por `mesa fez <n>`")
     if erro:
         linhas.append(f"  (aviso: {erro} — sem conferencia contra o remit)")
     linhas += caderno_do_banco(declarados)
@@ -804,8 +831,8 @@ def ato_fita(args):
     ultimo = rc.get(f"mem:{alvo.lower()}")
     print(f"ultimo descanso: {idade(time.time() - int(ultimo)) + ' atras' if ultimo else 'nunca'}")
 
-    print("\n== memoria retida ==")
-    linhas, orfaos = estado_memoria(curto, canon, rc)
+    print("\n== mesa (o mesmo `mesa ver` da abertura) ==")
+    linhas, orfaos = estado_memoria(curto)
     print("\n".join(linhas))
     if orfaos:
         print(f"\n  {len(orfaos)} orfao(s): {', '.join(sorted(set(orfaos)))}")
