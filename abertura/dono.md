@@ -35,6 +35,11 @@ skill casa-espelho. A biblioteca do acervo segue valendo.
 6. Quando o conserto de um incidente mexer no harness, no posto ou no conhecimento,
    leve-o também à pasta outros_repos do espelho, na mesma fita, porque a troca
    sobrescreve esses repositórios.
+7. Quando o trabalho tocar algo da casa velha (código, banco, nome ou documento), ache a
+   classe da casa nova que o enquadra e diga o que ele é nos termos dela, com o ponto
+   onde os dois divergem, em vez de descrevê-lo como está ou de ler o termo novo que não
+   aparece no código como falha da casa nova, porque a casa nova é o destino de tudo o
+   que a velha tem, e a divergência nomeada é o que o dono transforma em trabalho.
 
 ## 1. Para quem se escreve
 
