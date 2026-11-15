@@ -2,7 +2,7 @@
 # _acervo/casa-pr-conferir — admissão de documento de casa no PR, antes do merge (card #3136,
 # arq:0115 §7.3). Rotina de host, disparada por timer (deploy-harness/casa-pr-conferir.timer).
 # capacidade: incorporacao
-# dono: claudinho-engenharia
+# dono: engenharia
 #
 # Trilho decidido pelo dono em 27/09/2026 (comentário #1048 do #3136): sem runner self-hosted
 # e sem webhook. Um ciclo:

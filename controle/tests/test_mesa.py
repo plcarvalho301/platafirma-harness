@@ -1039,3 +1039,36 @@ def test_corrigir_subcomando_atualiza_ato_e_alvo_e_recusa_inexistente(monkeypatc
     rc_vazio = mesa.ato_corrigir_item(argparse.Namespace(n="2", ato=None, alvo=None))
     assert rc_vazio == 2
     assert "--ato e/ou --alvo" in capsys.readouterr().err
+
+
+# --- DT 657: cadeira vem direto da porta, sem tirar prefixo nem ler ledger -------------------
+
+def test_cadeira_e_canonica_usam_slug_da_porta_sem_prefixo_nem_ledger(monkeypatch):
+    mesa = carrega_mesa()
+    assert not hasattr(mesa, "LEDGER")
+    assert not hasattr(mesa, "_resolve")
+
+    monkeypatch.setenv("PF_CADEIRA", " IA ")
+    assert mesa.cadeira() == "ia"
+    assert mesa.canonica() == "ia"
+
+    monkeypatch.setenv("PF_CADEIRA", "")
+    with pytest.raises(SystemExit):
+        mesa.cadeira()
+
+
+def test_cabecalhos_dono_em_bin_sem_prefixo_claudinho():
+    import re
+    padrao = re.compile(r"(?:^|\s)dono:\s*claudinh[oa]-", re.IGNORECASE)
+    violacoes = []
+    for arq in sorted((REPO_ROOT / "bin").rglob("*")):
+        if not arq.is_file():
+            continue
+        try:
+            texto = arq.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        for i, linha in enumerate(texto.splitlines()[:25], 1):
+            if padrao.search(linha):
+                violacoes.append(f"{arq.relative_to(REPO_ROOT)}:{i}: {linha}")
+    assert violacoes == []

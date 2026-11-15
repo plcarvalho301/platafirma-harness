@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # acervo registrar — ESCREVE um verbo no golden record a partir do cabecalho do bin.
 # capacidade: conhecimento
-# dono: claudinho-dados
+# dono: dados
 #
 # `acervo registrar <verbo>`   upsert de capacidade + verbo + descricao lendo o
 #                              cabecalho de bin/<verbo> (# <verbo> — desc, # capacidade:).

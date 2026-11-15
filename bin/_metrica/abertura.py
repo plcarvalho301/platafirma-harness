@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # capacidade: metrica
-# dono: claudinho-IA
+# dono: ia
 """abertura — tokens do pacote de abertura, por cadeira e por arquivo.
 
 Miolo de `metrica abertura` (card #3145; antes `bin/conta-abertura` + este arquivo

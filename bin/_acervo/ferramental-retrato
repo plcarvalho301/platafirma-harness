@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # acervo listar casa ferramental --retrato — o retrato do dicionario de rotulos dos atos.
 # capacidade: conhecimento
-# dono: claudinho-dados
+# dono: dados
 #   (mecanismo/harness: claudinho-TI · construcao)
 #
 # Le o registro mestre do ferramental (acervo.ferramental_ato) e emite o RETRATO: um JSON com o

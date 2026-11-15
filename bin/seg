@@ -2,7 +2,7 @@
 # seg — cuida dos segredos e da linha de base de segurança
 # capacidade: controles
 # componente: openscap, keycloak, openssl+oqsprovider
-# dono: claudinho-seguranca
+# dono: seguranca
 # classe: B
 # use para: gerar, checar, rotacionar e destruir segredo; fixar linha de base; varrer ativo, «roda a varredura»; «avalia esse risco», a régua de segurança de um serviço; e sempre que um segredo for exposto, faltar ou vencer
 # atos: oscap (leitura, casco), isolacao medir (leitura, casco), ssg (escrita, regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo), segredo gravar (escrita, segredo), segredo gerar (escrita, segredo), segredo importar (escrita, segredo), segredo rotacionar (escrita, segredo), segredo exigidos (leitura, segredo), segredo apagar (escrita, segredo)

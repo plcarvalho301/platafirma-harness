@@ -114,9 +114,8 @@ TTL_MESA_S = TTL_MESA_H * 3600
 TTL_FITA = int(os.environ.get("MEM_FITA_TTL_DIAS", "14")) * 86400  # guarda de fita corrente, outro eixo
 TETO_AVISO = 4000  # bytes; acima disto e sintoma de fato nao despachado
 # Duas raizes e so duas (card #3010). Cadernos saem da MORADA PUBLICADA da instancia
-# (arq:0097: runtime nao le working tree), a mesma de monta-sessao e fila; o ledger chega
-# pela release — a arvore deste arquivo, por realpath —; o segredo do banco mora na
-# instancia, um arquivo por nome.
+# (arq:0097: runtime nao le working tree), a mesma de monta-sessao e fila; o segredo do
+# banco mora na instancia, um arquivo por nome.
 HARNESS = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.insert(0, os.path.join(HARNESS, "lib"))
 from raizes import instancia  # noqa: E402
@@ -126,7 +125,6 @@ import caderno_poda  # noqa: E402  (a decisao da poda, #3884)
 CADERNOS = os.path.join(
     os.environ.get("PF_ABERTURA_DIR") or str(instancia() / "var" / "abertura-publicada"),
     "current", "abertura")
-LEDGER = os.path.join(HARNESS, "registro", "eventos-org.jsonl")
 SESSAO_SEGREDO = str(instancia() / "segredos" / "harness-sessao" / "SESSAO_PG_PASSWORD")
 SLOT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 
@@ -204,66 +202,20 @@ def pg(silencioso=False):
         return None
 
 
-def _bruta():
+def cadeira():
+    """O slug da cadeira, como a porta o injeta (`ia`, `ti`).
+
+    Sem tirar prefixo nem ler o ledger: a porta ja injeta o slug curto.
+    """
     c = os.environ.get("PF_CADEIRA", "").strip().lower()
     if not c:
         sys.exit("erro: PF_CADEIRA nao definida — a memoria e privada da cadeira (arq:0041)")
     return c
 
 
-_RESOLVIDA = []
-
-
-def _resolve():
-    """(curto, canonico) a partir de PF_CADEIRA, que chega nas DUAS formas.
-
-    Sufixo e deterministico: tira o prefixo claudinho-/claudinha- e baixa a caixa. O
-    canonico (chave da fila) vem do LEDGER de vinculo (arq:0073) — a persona do form
-    novo poe o ALIAS na linha 1, nao o slug, entao a linha 1 nao serve mais de fonte.
-    Nao achando no ledger, devolve (curto, None): nao inventa cadeira.
-    """
-    if _RESOLVIDA:
-        return _RESOLVIDA[0]
-    bruta = _bruta()
-    curto = bruta
-    for pref in ("claudinho-", "claudinha-"):
-        if curto.lower().startswith(pref):
-            curto = curto[len(pref):]
-    curto = curto.lower()
-    canon = None
-    try:
-        with open(LEDGER, encoding="utf-8", errors="replace") as fh:
-            for linha in fh:
-                try:
-                    cad = (json.loads(linha).get("cadeira") or "").strip()
-                except ValueError:
-                    continue
-                suf = cad
-                for pref in ("claudinho-", "claudinha-"):
-                    if suf.lower().startswith(pref):
-                        suf = suf[len(pref):]
-                if suf.lower() == curto:
-                    canon = cad
-    except OSError:
-        pass
-    par = (curto, canon)
-    _RESOLVIDA.append(par)
-    return par
-
-
-def cadeira():
-    """Chave do SUBSTRATO: o sufixo (`ia`, `ti`). Decisao do dono, 18/08/2026.
-
-    Vale para `mem:`, `fita:` e `caderno/`. A caixa da fila continua canonica —
-    sao endereços de coisas diferentes, e colapsar os dois foi o que partiu a mesa
-    em duas metades (medido em 16/08).
-    """
-    return _resolve()[0]
-
-
 def canonica():
-    """Slug canonico: caixa da fila e substrato NOVO (Postgres)."""
-    return _resolve()[1] or _bruta()
+    """Slug da cadeira: o mesmo devolvido por `cadeira()`."""
+    return cadeira()
 
 
 def dir_legado():

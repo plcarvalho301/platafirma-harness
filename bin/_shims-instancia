@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # _shims-instancia — materializa um shim por INSTÂNCIA cujo nome ≠ o verbo que serve.
 # capacidade: expediente
-# dono: claudinho-TI
+# dono: ti
 #
 # O PORQUÊ (card do catálogo de ferramental, 24/08/2026):
 #   O golden record tem 3 níveis — capacidade → verbo → instância. A instância é o

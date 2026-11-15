@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # acesso — grava e revoga concessões de acesso
 # capacidade: acesso
-# dono: claudinho-seguranca
+# dono: seguranca
 # classe: A (proposta)
 # forma: predicado (decidir, politica, conceder, revogar, desligar) · lista (listar, historico, vocabulario, orfaos)
 # use para: gravar concessão, «dá acesso a fulano»; revogar concessão, «tira o acesso»; ver o que um sujeito alcança, «quem pode entrar?»; importar política de acesso; varrer órfãos e tratar órfão, conta órfã; desligar sujeito; e sempre que um órfão for detectado

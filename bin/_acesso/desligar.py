@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # _acesso-desligar — motor dos sub-atos `desligar` e `orfaos` do verbo `acesso`.
 # capacidade: acesso
-# dono: claudinho-seguranca
+# dono: seguranca
 #
 # Existe porque desligar um sujeito eram quatro operacoes manuais em quatro lugares
 # (realm, sujeitos.yaml, PAP, segredo em disco) e nada media resíduo: a entrada tinha

@@ -11,7 +11,7 @@
 # uso:  acervo escada [--json] [--detalhe] [--colecao firma|pessoal]
 # saída: 0 medido e invariante fechado · 2 uso inválido · 3 invariante FUROU · 4 fonte fora
 # capacidade: incorporacao
-# dono: claudinho-dados
+# dono: dados
 
 import argparse
 import json

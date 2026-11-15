@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # acervo entidade — leitura do indice da raiz da casa (acervo.entidade*, arq:0108).
 # capacidade: conhecimento
-# dono: claudinho-dados
+# dono: dados
 #   (materia/semantica: claudinho-dados · dono; mecanismo/harness: claudinho-TI · construcao)
 #
 # Serve o ato de leitura da raiz, sobre as tabelas acervo.entidade_classe /

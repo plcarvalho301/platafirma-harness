@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # acervo stack — le e escreve a topologia de deploy na tabela acervo.stack.
 # capacidade: conhecimento
-# dono: claudinho-dados
+# dono: dados
 #   (materia/semantica: claudinho-dados; a tabela e o golden record da topologia)
 #
 # `acervo stack ver [--json]`            le a tabela (mesma fonte do `listar topologia`)

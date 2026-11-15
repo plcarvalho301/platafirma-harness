@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # acervo ler casa forma — a forma do texto de uma classe, resolvida, numa chamada (card #4046).
 # capacidade: conhecimento
-# dono: claudinho-dados
+# dono: dados
 #
 # A forma é atributo da classe (decisão do dono de 30/10/2026): o gerador a resolve a partir da shape (a raiz prosa,
 # o andar comum, o gênero, a mãe genérica e a própria classe) e a leva a acervo.entidade_classe.forma (migração 148

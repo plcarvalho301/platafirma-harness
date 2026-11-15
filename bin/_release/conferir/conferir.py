@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # conferir — compara o que esta DECLARADO com o que esta SERVIDO, por classe de alvo.
 # capacidade: operacao
-# dono: claudinho-TI
+# dono: ti
 # use para: declarado × servido, 'existe X?' (âncora de NEGATIVA), cabeçalho de verbo, paridade de serviço
 # atos: existe, servico, verbo, skill, procedencia, repo, superficie, front, arranque, ferramental, commit, vocabulario, diagrama, ontologia
 # forma: relatorio

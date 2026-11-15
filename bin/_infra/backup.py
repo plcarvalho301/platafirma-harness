@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # _infra-backup.py — corpo de `infra backup`. Mede o declarado em registro/backups.json.
 # capacidade: infra
-# dono: claudinho-TI
+# dono: ti
 """Mede backup; nao faz backup e nao propoe rotina.
 
 Tres estados existem para nao mentir por omissao: `sem-backup` e alvo declarado sem
