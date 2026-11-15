@@ -925,3 +925,117 @@ def test_legado_separa_vazio_orfao_e_cabeca(tmp_path):
     assert fora == {"vazio": ["abertura/gestao-estrategica/rh2/caderno.md"],
                     "órfão": ["abertura/gestao-estrategica/construcao/caderno.md"],
                     "cabeça": ["abertura/gestao-estrategica/caderno.md"]}
+
+
+# --- DT 105: anexar texto avulso ao legado de caderno com ponteiro de origem ------------------
+
+def test_legado_caderno_anexar_grava_com_chave_origem_e_entra_a_triar(monkeypatch, capsys):
+    mesa = carrega_mesa()
+    cursor = _Cursor()
+    monkeypatch.setattr(mesa, "pg", lambda *a, **k: _Conexao(cursor))
+    texto = "## conhecimento curado\n- lição que ficou em PR sem mesclar\n"
+    monkeypatch.setattr("sys.stdin", io.StringIO(texto))
+
+    rc = mesa.ato_legado(argparse.Namespace(
+        caderno=True, capturar=False, anexar="dados/ontologia",
+        origem="pr:platafirma-harness#312", corpo=False, triado=None,
+    ))
+    saida = capsys.readouterr()
+    assert rc == 0
+    assert saida.err == ""
+    assert "anexado pr:platafirma-harness#312 em [dados/ontologia]" in saida.out
+    assert len(cursor.feitos) == 1
+    sql, params = cursor.feitos[0]
+    assert "INSERT INTO sessao.caderno_legado" in sql
+    assert params[:4] == ("pr:platafirma-harness#312", "dados", "ontologia", texto)
+    assert params[4] == len(texto.encode("utf-8"))
+
+
+def test_legado_caderno_anexar_recusa_sem_origem_sem_caderno_ou_stdin_vazio(monkeypatch, capsys):
+    mesa = carrega_mesa()
+    cursor = _Cursor()
+    monkeypatch.setattr(mesa, "pg", lambda *a, **k: _Conexao(cursor))
+
+    # Sem --caderno
+    rc = mesa.ato_legado(argparse.Namespace(
+        caderno=False, capturar=False, anexar="dados/ontologia", origem="pr:1",
+        corpo=False, triado=None,
+    ))
+    assert rc == 2 and "--caderno" in capsys.readouterr().err
+
+    # Sem --origem
+    monkeypatch.setattr("sys.stdin", io.StringIO("texto"))
+    rc = mesa.ato_legado(argparse.Namespace(
+        caderno=True, capturar=False, anexar="dados/ontologia", origem=None,
+        corpo=False, triado=None,
+    ))
+    assert rc == 2 and "--origem" in capsys.readouterr().err
+
+    # Alvo fora de <cadeira>/<chapeu>
+    monkeypatch.setattr("sys.stdin", io.StringIO("texto"))
+    rc = mesa.ato_legado(argparse.Namespace(
+        caderno=True, capturar=False, anexar="so-um-slug", origem="pr:1",
+        corpo=False, triado=None,
+    ))
+    assert rc == 2 and "<cadeira>/<chapeu>" in capsys.readouterr().err
+
+    # Stdin vazio
+    monkeypatch.setattr("sys.stdin", io.StringIO("   \n"))
+    rc = mesa.ato_legado(argparse.Namespace(
+        caderno=True, capturar=False, anexar="dados/ontologia", origem="pr:1",
+        corpo=False, triado=None,
+    ))
+    assert rc == 2 and "vazio" in capsys.readouterr().err
+    assert cursor.feitos == []
+
+
+# --- DT 425: corrigir ato e/ou alvo de item de mesa sem marcá-lo como feito -------------------
+
+def test_item_corrigir_atualiza_ato_e_alvo_sem_apagar(monkeypatch, capsys):
+    mesa = carrega_mesa()
+    monkeypatch.setenv("PF_CADEIRA", "dados")
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    cursor = _Cursor([
+        [(77, date(2026, 10, 26))],
+        [("ontologia", "conferir", "card:3066")],
+    ])
+    monkeypatch.setattr(mesa, "pg", lambda *a, **k: _Conexao(cursor))
+
+    # Pela forma `mesa item 2 --alvo card:3066`
+    rc = mesa.ato_item(argparse.Namespace(chapeu="2", corrigir=None, ato=None, alvo="card:3066"))
+    saida = capsys.readouterr()
+    assert rc == 0
+    assert "item #2 corrigido em [ontologia] — conferir → card:3066" in saida.out
+    sql_update, params = cursor.feitos[-1]
+    assert sql_update.startswith("UPDATE sessao.mesa_item SET alvo = %s WHERE id = %s")
+    assert params == ("card:3066", 77)
+    assert not any(s.startswith("DELETE") for s, _ in cursor.feitos)
+
+
+def test_corrigir_subcomando_atualiza_ato_e_alvo_e_recusa_inexistente(monkeypatch, capsys):
+    mesa = carrega_mesa()
+    monkeypatch.setenv("PF_CADEIRA", "dados")
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    cursor = _Cursor([
+        [(77, date(2026, 10, 26))],
+        [("ontologia", "revisar", "card:3066")],
+        [],
+    ])
+    monkeypatch.setattr(mesa, "pg", lambda *a, **k: _Conexao(cursor))
+
+    rc = mesa.ato_corrigir_item(argparse.Namespace(n="#2", ato="revisar", alvo="card:3066"))
+    assert rc == 0
+    assert "item #2 corrigido em [ontologia] — revisar → card:3066" in capsys.readouterr().out
+    sql_update, params = cursor.feitos[-1]
+    assert "ato = %s, alvo = %s" in sql_update
+    assert params == ("revisar", "card:3066", 77)
+
+    # Item inexistente sai 3
+    rc_inex = mesa.ato_corrigir_item(argparse.Namespace(n="99", ato="revisar", alvo=None))
+    assert rc_inex == 3
+    assert "nao existe" in capsys.readouterr().err
+
+    # Sem --ato nem --alvo sai 2
+    rc_vazio = mesa.ato_corrigir_item(argparse.Namespace(n="2", ato=None, alvo=None))
+    assert rc_vazio == 2
+    assert "--ato e/ou --alvo" in capsys.readouterr().err

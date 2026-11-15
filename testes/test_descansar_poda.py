@@ -47,9 +47,12 @@ esac
 """
 STUB_TAREFAS = """#!/bin/sh
 case "$2" in
-  3001) printf '# titulo\\n#3001 \\302\\267 story \\302\\267 Entregue (terminal) \\302\\267 cadeira: ia\\n' ;;
+  3001) printf '# titulo\\n#3001 \\302\\267 story \\302\\267 Cancelada (terminal) \\302\\267 cadeira: ia\\n' ;;
   3002) printf '# titulo\\n#3002 \\302\\267 story \\302\\267 Englobada (terminal) \\302\\267 cadeira: ia\\n' ;;
   3003) echo "item 3003 foi apagado" >&2; exit 1 ;;
+  3345) printf '# titulo\\n#3345 \\302\\267 story \\302\\267 Entregue (terminal) \\302\\267 cadeira: ia\\n' ;;
+  3730) printf '# titulo\\n#3730 \\302\\267 feature \\302\\267 cancelada [derivado; cru: Cancelada (terminal)] \\302\\267 cadeira: ia\\n' ;;
+  3803) printf '# titulo\\n#3803 \\302\\267 feature \\302\\267 entregue [derivado; cru: concluida] (terminal) \\302\\267 cadeira: ia\\n' ;;
   *) printf '# titulo\\n#%s \\302\\267 story \\302\\267 Em execu\\303\\247\\303\\243o (delivery)\\n' "$2" ;;
 esac
 """
@@ -88,7 +91,7 @@ def test_aceite_cada_motivo_de_saida_e_a_sa_fica(stubs):
     motivos = {e["id"]: m for e, m in retirar}
     assert motivos == {
         1: "duplicata do cânone guia ddl-e-migracao (sim 0.73)",
-        2: "referência morta #3001 (entregue)",
+        2: "referência morta #3001 (cancelada)",
         3: "foi ao débito técnico: #2856 linha 12",
         4: f"venceu sem confirmação desde {(HOJE - timedelta(days=31)).strftime('%d/%m/%Y')} (30 dias)",
         5: f"premissa vencida em {(HOJE - timedelta(days=1)).strftime('%d/%m/%Y')}",
@@ -146,12 +149,25 @@ def test_parecer_e_material_nao_canone(stubs):
     assert caderno_poda.duplicata_do_canone(DUPLICADA) == "guia ddl-e-migracao (sim 0.73)"
 
 
-def test_card_terminal_sem_herdeiro_e_morto_englobado_tem_herdeiro(stubs):
+def test_card_terminal_sem_herdeiro_e_morto_englobado_e_entregue_sao_vivos(stubs):
     cache = {}
-    assert caderno_poda.estado_card("3001", cache) == ("morto", "entregue")
-    assert caderno_poda.estado_card("3002", cache)[0] == "vivo"
+    assert caderno_poda.estado_card("3001", cache) == ("morto", "cancelada")
+    assert caderno_poda.estado_card("3002", cache) == ("vivo", "englobada")
     assert caderno_poda.estado_card("3003", cache) == ("morto", "apagado")
+    assert caderno_poda.estado_card("3345", cache) == ("vivo", "entregue")
+    assert caderno_poda.estado_card("3730", cache) == ("morto", "cancelada")
+    assert caderno_poda.estado_card("3803", cache) == ("vivo", "entregue")
     assert caderno_poda.estado_card("3498", cache)[0] == "vivo"
+
+
+def test_card_entregue_nao_e_referencia_morta_e_estado_derivado_sai_limpo(stubs):
+    """DT 272 e DT 341: card entregue (direto ou derivado) não é referência morta; card morto
+    com estado derivado (`[derivado; cru: ...]`) sai só com o nome limpo do estado no motivo."""
+    licao_entregue = _e(20, "Lição medida nos cards #3345 e #3803")
+    licao_morta_derivada = _e(21, "Dependia da feature #3730 que foi cancelada")
+    retirar, _ = caderno_poda.decide([licao_entregue, licao_morta_derivada], HOJE,
+                                     canone=lambda t: None, mortas=_mortas)
+    assert retirar == [(licao_morta_derivada, "referência morta #3730 (cancelada)")]
 
 
 def test_referencia_morta_le_o_texto_verbo_e_chapeu(stubs):
