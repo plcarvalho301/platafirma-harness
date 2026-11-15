@@ -84,3 +84,80 @@ def test_coletar_com_imagens_passa_parametro(tmp_path, monkeypatch):
     res = atos.coletar(["http://x.org"], imagens=True, trab=t)
     assert chamadas == [("http://x.org", True)]
     assert res["ok"] is True
+
+
+def test_resolver_doi_usa_select_e_devolve_resumo_sem_registro(tmp_path, monkeypatch):
+    import json
+    chamadas = []
+
+    def falso_fetch(url, headers):
+        chamadas.append(url)
+        corpo = json.dumps({
+            "status": "ok",
+            "message": {
+                "items": [{
+                    "DOI": "10.1145/3597503",
+                    "title": ["Estudo de Caso"],
+                    "author": [{"given": "Ana", "family": "Silva"}, {"name": "Grupo X"}],
+                    "published": {"date-parts": [[2024, 5, 1]]},
+                    "container-title": ["Anais"],
+                    "publisher": "ACM",
+                    "ISSN": ["1234-5678"],
+                    "type": "proceedings-article",
+                    "URL": "https://doi.org/10.1145/3597503",
+                }],
+            },
+        }).encode()
+        return 200, corpo
+
+    t = M.Trabalho("a8", raiz=tmp_path)
+    monkeypatch.setattr(resolvedores, "_fetch_httpx", falso_fetch)
+    env = atos.resolver("doi", "https://doi.org/10.1145/3597503", trab=t)
+    assert chamadas == [
+        "https://api.crossref.org/works?filter=doi:10.1145/3597503&select="
+        "DOI,title,author,published,issued,container-title,publisher,ISSN,ISBN,type,URL"
+    ]
+    assert env["resolvido"] is True
+    assert "registro" not in env
+    assert env["resumo"] == {
+        "titulo": "Estudo de Caso",
+        "autores": ["Ana Silva", "Grupo X"],
+        "ano": 2024,
+        "veiculo": "Anais",
+        "editora": "ACM",
+        "tipo": "proceedings-article",
+        "identificadores": {
+            "doi": "10.1145/3597503",
+            "issn": ["1234-5678"],
+            "url": "https://doi.org/10.1145/3597503",
+        },
+    }
+
+
+def test_resolver_doi_vazio_marca_nao_achado(tmp_path, monkeypatch):
+    import json
+
+    def falso_fetch(url, headers):
+        return 200, json.dumps({"status": "ok", "message": {"items": []}}).encode()
+
+    t = M.Trabalho("a9", raiz=tmp_path)
+    monkeypatch.setattr(resolvedores, "_fetch_httpx", falso_fetch)
+    env = atos.resolver("doi", "10.0/inexistente", trab=t)
+    assert env["resolvido"] is False
+    assert t.linhas()[-1]["nao_achado"] is True
+
+
+def test_resolver_doi_completo_usa_works_e_devolve_registro(tmp_path, monkeypatch):
+    import json
+    chamadas = []
+
+    def falso_fetch(url, headers):
+        chamadas.append(url)
+        return 200, json.dumps({"status": "ok", "message": {"DOI": "10.1/x", "reference": [1, 2]}}).encode()
+
+    t = M.Trabalho("a10", raiz=tmp_path)
+    monkeypatch.setattr(resolvedores, "_fetch_httpx", falso_fetch)
+    env = atos.resolver("doi", "10.1/x", completo=True, trab=t)
+    assert chamadas == ["https://api.crossref.org/works/10.1/x"]
+    assert env["resolvido"] is True
+    assert env["registro"] == {"status": "ok", "message": {"DOI": "10.1/x", "reference": [1, 2]}}

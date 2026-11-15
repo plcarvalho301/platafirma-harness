@@ -53,8 +53,8 @@ def consultar(consulta, *, k, categoria, desde, idioma, trab: "M.Trabalho") -> d
 
 
 # ------------------------------------------------------------------------ resolver
-def resolver(tipo, ident, *, trab: "M.Trabalho") -> dict[str, Any]:
-    r = resolvedores.resolver(tipo, ident)
+def resolver(tipo, ident, *, completo: bool = False, trab: "M.Trabalho") -> dict[str, Any]:
+    r = resolvedores.resolver(tipo, ident, completo=completo)
     n = trab.proximo_n()
     if r["resolvido"]:
         trab.guarda_bruto(n, r["bruto_bytes"] or b"", "json")
@@ -66,9 +66,14 @@ def resolver(tipo, ident, *, trab: "M.Trabalho") -> dict[str, Any]:
             "url": r["url"], "status": r["status"], "sha256": sha,
             "bruto": str(trab.bruto / f"{n}.json"), "resolvedor": r["resolvedor"],
         })
+        extra = (
+            {"resumo": r["resumo"]}
+            if not completo and r.get("resumo") is not None
+            else {"registro": r["registro"]}
+        )
         return envelope("resolver", trab.slug, tipo=tipo, identificador=ident,
                         resolvido=True, resolvedor=r["resolvedor"], status=r["status"],
-                        sha256=sha, registro=r["registro"], manifesto=trab.ref_manifesto(linha))
+                        sha256=sha, **extra, manifesto=trab.ref_manifesto(linha))
     linha = trab.grava_linha({
         "ato": "resolver", "tipo": tipo, "identificador": ident, "url": r["url"],
         "status": r["status"], "nao_achado": True, "resolvedor": r["resolvedor"],
