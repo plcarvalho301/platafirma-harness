@@ -352,5 +352,9 @@ testes/test_tarefas_dt_278_449.py | bin/tarefas
 tests/test_dts_634_375_523.py | bin/release bin/_release/** lib/analise/receita.py registro/bancos.json
 # DT 369: `agente/abertura-ver.py` alinhado ao expediente sem roteador e com rotinas.
 testes/test_abertura_ver.py | agente/abertura-ver.py abertura/**
+# DTs 271, 323, 404 e 592: KiB e aviso em `dt listar --curto` e parser da tabela Unidades em `mover em-execucao`.
+tests/test_tarefas_dts_271_323_404_592.py | bin/tarefas
+# DTs 37, 203, 285, 414 e 530: `repo commitar` restaura stage em falha do gate, `repo estado` inclui caminho absoluto, `repo descartar` e `repo abrir` recolocando direto-em-main.
+tests/test_repo_dts_37_203_285_414.py | bin/repo
 # DTs 256, 286, 333, 394 e 633: retomada de stacks após PROMOCAO PARCIAL, separação de stack sem registro vs sem compose, procurar em abertura e com ERE, ler --linhas preservando linha vazia.
 tests/test_dts_256_286_333_394_633.py | bin/release bin/_release/stack

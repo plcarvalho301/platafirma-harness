@@ -112,6 +112,7 @@ def reidratar(sid: str, rc_mem, roda, pg_porta: str = "5437",
         return None  # fora da janela de validade (arq:0091 §3) — vencida, nao reidrata
     ch = {
         "cadeira": cadeira, "chapeu": chapeu, "superficie": superficie or "desconhecida",
+        "canonizada": True, "autorizada_por": "reidratada",
         "ordem_id": ordem_id or "-", "aberto_em": aberta_em.isoformat(), "origem": "reidratada",
     }
     # sujeito (card #3145, migracao 0094): so entra quando o registro duravel o tem --
@@ -124,6 +125,35 @@ def reidratar(sid: str, rc_mem, roda, pg_porta: str = "5437",
     except Exception:  # noqa: BLE001 — msg-mem mudo no regravar: devolve mesmo assim
         pass
     return ch
+
+
+def encerrada_em_duravel(sid: str, roda, pg_porta: str = "5437") -> str | None:
+    """Devolve o ISO de `encerrada_em` em `sessao.sessao` quando a linha foi encerrada de
+    propósito (`sessao encerrar`, `sessao limpar`, `descansar fita --encerra-sessao`), ou
+    None se não existe, segue aberta ou o banco/coluna não responde (DT 535)."""
+    try:
+        import psycopg
+    except ImportError:
+        return None
+    senha, _motivo = _senha_pg(roda)
+    if not senha:
+        return None
+    dsn = f"host=127.0.0.1 port={pg_porta} dbname=sessao user=sessao password={senha}"
+    try:
+        with psycopg.connect(dsn, connect_timeout=3) as con, con.cursor() as cur:
+            cur.execute(
+                "SELECT cadeira, chapeu, superficie, aberta_em, encerrada_em "
+                "FROM sessao.sessao WHERE sessao_id = %s",
+                (sid,))
+            row = cur.fetchone()
+    except Exception:  # noqa: BLE001
+        return None
+    if not row or len(row) < 5 or row[4] is None:
+        return None
+    enc = row[4]
+    if hasattr(enc, "tzinfo") and enc.tzinfo is None:
+        enc = enc.replace(tzinfo=timezone.utc)
+    return enc.isoformat() if hasattr(enc, "isoformat") else str(enc)
 
 
 def reidratar_via_verbo(sid: str, bin_sessao: str, env: dict, timeout: int = 10) -> dict | None:

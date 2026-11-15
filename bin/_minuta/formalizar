@@ -176,13 +176,9 @@ def main():
         erro("slug de destino ficou vazio depois de normalizar — use --destino")
     hoje = datetime.date.today().isoformat()
 
-    aberto = ""
-    if faltando:
-        aberto = "\n## Aberto\n\n" + "".join(
-            f"- {c} não se manifestou até o fechamento (--vencido).\n" for c in faltando
-        )
-
-    # Espécie: antes do primeiro ## — a ingestão recusa documento de casa sem ela (arq:0115 §7)
+    # Espécie: antes do primeiro ## — a ingestão recusa documento de casa sem ela (arq:0115 §7).
+    # ADR e spec não têm seção «Aberto» (arq:0115 §13.1): a ausência de convocada em --vencido
+    # sai na saída do ato, nunca no documento.
     if como == "adr":
         pasta = os.path.join(REPO, "adr", serie)
         os.makedirs(pasta, exist_ok=True)
@@ -195,11 +191,12 @@ def main():
             f"Espécie: adr\n\n"
             f"- **Status:** aceito ({hoje})\n"
             f"- **Tipo:** <preencher>\n"
-            f"- **Alcance:** <preencher>\n\n"
+            f"- **Alcance:** <preencher>\n"
+            f"- **Fechado:** <preencher>\n"
+            f"- **Procedência:** <preencher>\n\n"
             f"## Contexto\n\n<preencher>\n\n"
             f"## Decisão\n\n<preencher>\n\n"
             f"## Consequências\n\n<preencher>\n"
-            f"{aberto}"
         )
     else:
         pasta = os.path.join(REPO, "spec")
@@ -208,7 +205,7 @@ def main():
         if os.path.exists(destino):
             erro(f"{destino} já existe")
         # Sobre: é obrigatório em spec (arq:0115 §6.1); a cadeira o preenche antes de publicar
-        conteudo = f"# {titulo}\n\nEspécie: spec\nSobre: <preencher>\n\n<preencher>\n{aberto}"
+        conteudo = f"# {titulo}\n\nEspécie: spec\nSobre: <preencher>\n\n<preencher>\n"
 
     with open(destino, "w", encoding="utf-8") as f:
         f.write(conteudo)

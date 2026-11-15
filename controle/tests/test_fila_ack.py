@@ -350,3 +350,159 @@ def test_sonda_nao_trata(monkeypatch, capsys):
     rc = _rc()
     code, _ = _rodar(monkeypatch, capsys, ["tratar", "x"], rc, eu="sonda")
     assert code == 1
+
+
+def test_dt_60_remetente_le_propria_carta_por_id_e_frio_sem_ack(monkeypatch, capsys):
+    import io
+    rc = StreamRC([])
+    monkeypatch.setattr(fila_streams, "personas_validas", lambda: {"ti", "ia", "dados"})
+    monkeypatch.setattr(sys, "stdin", io.StringIO("relatorio enviado"))
+    code, cap = _rodar(monkeypatch, capsys, ["enviar", "dados", "--tipo", "decisao", "--assunto", "rel"], rc, eu="ti")
+    assert code == 0
+    mid = cap.out.strip()
+
+    # Mesmo se o ponteiro rapido `msgid:<id>` tiver expirado ou a carta tiver prefixo legado `claudinho-ti`,
+    # o remetente le por `--id <id>`, `ler <destino> --id <id>`, `<id>` posicional e leitura fria `--tudo`:
+    rc.kv.pop(f"msgid:{mid}", None)
+    rc.streams["caixa:dados"][0][1]["de"] = "claudinho-ti"
+
+    for argv in (
+        ["ler", "--id", mid],
+        ["ler", "dados", "--id", mid],
+        ["ler", mid],
+        ["ler", "dados", "--tudo", "ti"],
+        ["ler", "dados", "--tudo", "--de", "ti"],
+    ):
+        code, cap = _rodar(monkeypatch, capsys, argv, rc, eu="ti")
+        assert code == 0, f"falhou para {argv}: {cap.err}"
+        assert mid in cap.out
+        assert "relatorio enviado" in cap.out
+
+    # Nenhum ponteiro movido nem ack marcado na caixa do destinatario!
+    assert rc.ponteiros.get("caixa:dados", "0-0") == "0-0"
+    assert rc.pels.get("caixa:dados", []) == []
+    assert rc.acks == []
+
+    # Terceira cadeira continua barrada tanto em `--id` quanto em `--tudo <remetente>` alheio:
+    code_ia, _ = _rodar(monkeypatch, capsys, ["ler", "--id", mid], rc, eu="ia")
+    assert code_ia == 1
+    code_ia2, _ = _rodar(monkeypatch, capsys, ["ler", "dados", "--tudo", "ti"], rc, eu="ia")
+    assert code_ia2 == 1
+
+    # Destinatario continua vendo 1 nova e recebendo normalmente na leitura quente:
+    _, st = _rodar(monkeypatch, capsys, ["status"], rc, eu="dados")
+    assert "1 nova(s)" in st.out
+
+
+def test_dt_357_enviar_posicional_e_flag_corpo(monkeypatch, capsys):
+    rc = StreamRC([])
+    # Forma curta posicional do guia discovery: `fila enviar <dest> "<msg>"` sem stdin
+    code, cap = _rodar(
+        monkeypatch, capsys,
+        ["enviar", "dados", "Primeira linha posicional\nDetalhe do pedido"],
+        rc, eu="ti",
+    )
+    assert code == 0
+    mid1 = cap.out.strip()
+    carta1 = rc.streams["caixa:dados"][0][1]
+    assert carta1["id"] == mid1
+    assert carta1["tipo"] == "pedido"
+    assert carta1["assunto"] == "Primeira linha posicional"
+    assert carta1["corpo"] == "Primeira linha posicional\nDetalhe do pedido"
+
+    # Flag explicita `--corpo` / `-m`
+    code2, cap2 = _rodar(
+        monkeypatch, capsys,
+        ["enviar", "dados", "--tipo", "handoff", "--assunto", "titulo", "--corpo", "Corpo via flag"],
+        rc, eu="ti",
+    )
+    assert code2 == 0
+    carta2 = rc.streams["caixa:dados"][1][1]
+    assert carta2["id"] == cap2.out.strip()
+    assert carta2["tipo"] == "handoff"
+    assert carta2["assunto"] == "titulo"
+    assert carta2["corpo"] == "Corpo via flag"
+
+    # Tipo invalido explicita os tipos aceitos
+    code3, cap3 = _rodar(
+        monkeypatch, capsys,
+        ["enviar", "dados", "--tipo", "invalido", "corpo"],
+        rc, eu="ti",
+    )
+    assert code3 == 1
+    assert "validos:" in cap3.err and "pedido" in cap3.err
+
+
+def test_dt_409_resolve_cadeira_por_sessao_id(monkeypatch, capsys, tmp_path):
+    rc = StreamRC([])
+    # 1. Via chave `sessao:<sid>` (inclusive prefixo de 8 chars em scan_iter) quando PF_CADEIRA/PLATAFIRMA_CADEIRA vazios
+    rc.kv["sessao:1db7e1ef-1111-2222-3333-444444444444"] = json.dumps({"cadeira": "ti"})
+    rc.scan_iter = lambda match=None, count=None: [
+        k for k in rc.kv if k.startswith((match or "").rstrip("*"))
+    ]
+    monkeypatch.setattr(fila_streams, "mem_conn", lambda: rc)
+    monkeypatch.delenv("PF_CADEIRA", raising=False)
+    monkeypatch.delenv("PLATAFIRMA_CADEIRA", raising=False)
+    monkeypatch.setenv("PLATAFIRMA_SESSAO_ID", "1db7e1ef")
+
+    code, cap = _rodar(
+        monkeypatch, capsys,
+        ["enviar", "dados", "Carta com sessao_id sem PF_CADEIRA"],
+        rc, eu="",
+    )
+    assert code == 0
+    assert rc.streams["caixa:dados"][0][1]["de"] == "ti"
+
+    # 2. Via arquivo em PLATAFIRMA_SESSAO_DIR
+    rc2 = StreamRC([])
+    arq_sessao = tmp_path / "sessao-abcd1234.json"
+    arq_sessao.write_text(json.dumps({"cadeira": "ia"}), encoding="utf-8")
+    monkeypatch.setenv("PLATAFIRMA_SESSAO_DIR", str(tmp_path))
+    monkeypatch.setenv("PLATAFIRMA_SESSAO_ID", "abcd1234")
+    code2, cap2 = _rodar(
+        monkeypatch, capsys,
+        ["enviar", "ti", "Carta via arquivo de sessao"],
+        rc2, eu="",
+    )
+    assert code2 == 0
+    assert rc2.streams["caixa:ti"][0][1]["de"] == "ia"
+
+
+def test_dt_671_help_e_filtros_ler(monkeypatch, capsys):
+    rc = _rc()
+    for argv in (
+        ["--help"],
+        ["-h"],
+        ["ler", "--help"],
+        ["ler", "-h"],
+        ["enviar", "--help"],
+        ["status", "-h"],
+    ):
+        code, cap = _rodar(monkeypatch, capsys, argv, rc)
+        assert code == 0, f"esperava exit 0 para {argv}, veio {code} (err={cap.err})"
+        assert "uso:" in cap.out
+        assert "--remetente" in cap.out and "--de" in cap.out
+        assert cap.err == ""
+
+    # Opcao desconhecida falha com mensagem clara e exit 2
+    code_bad, cap_bad = _rodar(monkeypatch, capsys, ["ler", "--filtro-inexistente"], rc)
+    assert code_bad == 2
+    assert "opção desconhecida: '--filtro-inexistente'" in cap_bad.err
+
+    # Filtros `--de` / `--remetente` e `--desde <data> <remetente>` sem persona posicional
+    rc_mix = StreamRC([
+        ("1700000000000-1", {"id": "20261003T100000-ia", "de": "ia", "tipo": "pedido",
+                             "assunto": "de ia", "ref": "", "responde": "", "corpo": "c1"}),
+        ("1700000000000-2", {"id": "20261003T110000-dados", "de": "dados", "tipo": "pedido",
+                             "assunto": "de dados", "ref": "", "responde": "", "corpo": "c2"}),
+    ])
+    for argv in (
+        ["ler", "--tudo", "--de", "ia"],
+        ["ler", "--tudo", "--remetente", "ia"],
+        ["ler", "--desde", "2020-01-01", "ia"],
+        ["ler", "--desde", "2020-01-01", "--de", "ia"],
+    ):
+        code_f, cap_f = _rodar(monkeypatch, capsys, argv, rc_mix, eu="ti")
+        assert code_f == 0, f"falhou em {argv}: {cap_f.err}"
+        assert "20261003T100000-ia" in cap_f.out
+        assert "20261003T110000-dados" not in cap_f.out

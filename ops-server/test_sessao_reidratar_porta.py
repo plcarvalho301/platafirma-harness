@@ -451,3 +451,20 @@ def test_verbo_seguinte_a_troca_de_chapeu_recebe_pf_chapeu():
     assert r["exit_code"] == 0
     assert capturado["env"]["PF_CHAPEU"] == "contexto"
     assert capturado["env"]["PF_CADEIRA"] == "ia"
+
+
+def test_chapeu_do_giro_sem_cadeira_explicita_usa_cadeira_da_sessao():
+    """DT 518 / DT 601: `persona ler --chapeu X` (sem <cadeira>, usando PF_CADEIRA) grava o chapéu na sessão."""
+    sid = "11111111-2222-3333-4444-555555555555"
+    mock_rc = MagicMock()
+    mock_rc.get.return_value = json.dumps({"cadeira": "ia", "ordem_id": "o1", "fallback": True})
+
+    ident = {"sessao_id": sid, "cadeira": "ia", "ordem_id": "o1"}
+    with patch.object(s, "_rc", return_value=mock_rc):
+        s._chapeu_do_giro("persona", "ler", ["--chapeu", "contexto"], {"exit_code": 0}, ident)
+
+    mock_rc.set.assert_called_once()
+    _chave, raw = mock_rc.set.call_args[0]
+    dados = json.loads(raw)
+    assert dados["chapeu"] == "contexto"
+    assert ident["chapeu"] == "contexto"

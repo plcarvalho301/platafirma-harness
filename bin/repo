@@ -3,10 +3,10 @@
 # capacidade: desenvolvimento
 # dono: ti
 # classe: B
-# forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar, hooks-listar) / texto (ler, pr-diff) / fluxo (sanear, lock, hooks-apagar)
+# forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar, hooks-listar) / texto (ler, pr-diff) / fluxo (sanear, descartar, lock, hooks-apagar)
 # poda: cosmetica@git
 # use para: criar e atualizar bancada; ler e procurar nela, diff e histórico; commitar, empurrar ramo, abrir, revisar e integrar PR; descartar mudança; sanear bancada; procurar no que está publicado no GitHub; e sempre que um card de código for posto em execução ou a esteira reprovar a mudança
-# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge), pr-fechar (escrita, forge), hooks-listar (leitura, forge), hooks-apagar (escrita, forge), sanear (escrita, forge), lock (escrita, operacao), git (escrita, operacao)
+# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge), pr-fechar (escrita, forge), hooks-listar (leitura, forge), hooks-apagar (escrita, forge), sanear (escrita, forge), descartar (escrita, operacao), lock (escrita, operacao), git (escrita, operacao)
 # le: estado=repo
 # le: listar=repo
 # le: ler=repo
@@ -29,6 +29,7 @@
 # le: hooks-listar=repo
 # le: hooks-apagar=repo
 # le: sanear=repo
+# le: descartar=repo
 # le: lock=repo
 # le: git=repo
 # escreve: estado=nada
@@ -53,6 +54,7 @@
 # escreve: hooks-listar=nada
 # escreve: hooks-apagar=repo
 # escreve: sanear=repo
+# escreve: descartar=repo
 # escreve: lock=repo
 # escreve: git=repo
 # (recursos pelo enum de ferramental_recurso; o forge - origin, PR - pende id proprio, e ate la sai como repo; commitar le o log da porta em arquivo-local)
@@ -146,6 +148,7 @@ uso:
   repo abrir     <repo> [<card>] [--slug <s>] [--da-producao] [--assumir] [--sem-mover]
   repo clonar    <url|owner/nome> [<nome>]
   repo sanear    [<repo>] [--relatar]
+  repo descartar <repo>[@<chave>] [--forcar]
   repo pr-abrir  <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
   repo pr-listar <repo> [--todos]
   repo pr-ver    <repo> <numero> [--checks] [--log]
@@ -155,7 +158,7 @@ uso:
   repo hooks listar [<repo>|--todos] [--url <t>] [--json]
   repo hooks apagar <repo> <id> --url <t>   (porta: hooks-listar, hooks-apagar)
   repo lock      <repo> <projeto> [--conferir | --atualizar <pacote>[@<versao>]… | --atualizar-tudo]
-                                                    (uv.lock ou package-lock.json; --atualizar sobe pacote)
+                 (uv.lock ou package-lock.json; --atualizar sobe pacote)
   repo git       <repo> <args…>
 
 bancada: PLATAFIRMA_BANCADA[sem default] (exit 3)
@@ -633,6 +636,7 @@ cmd_estado() {
         if [ -n "$upstream" ]; then
           read -r atras frente < <("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null || echo "0 0")
         fi
+        local c_abs; c_abs="$(realpath "$c" 2>/dev/null || printf '%s' "$c")"
         json_recs+=("$(python3 -c '
 import sys, json
 print(json.dumps({
@@ -643,8 +647,9 @@ print(json.dumps({
   "atras": int(sys.argv[5]),
   "a_frente": int(sys.argv[6]),
   "limpo": int(sys.argv[7]) == 0,
-  "alteracoes": int(sys.argv[7])
-}))' "$r" "$ramo" "$sha" "$upstream" "${atras:-0}" "${frente:-0}" "${sujo_qtd:-0}")")
+  "alteracoes": int(sys.argv[7]),
+  "bancada": sys.argv[8]
+}))' "$r" "$ramo" "$sha" "$upstream" "${atras:-0}" "${frente:-0}" "${sujo_qtd:-0}" "$c_abs")")
       done
       python3 -c '
 import sys, json
@@ -660,14 +665,15 @@ print(json.dumps({"bancadas": {r["repo"]: r for r in recs}}, indent=2))' <<<"$(p
         printf '  %-28s %s\n' "$r" "$([ "$rc_b" -eq 2 ] && echo 'mais de uma bancada: nomeie <repo>@<chave>' || echo 'sem bancada nesta cadeira')"
         continue
       fi
-      local ramo sujo
+      local ramo sujo c_abs
+      c_abs="$(realpath "$c" 2>/dev/null || printf '%s' "$c")"
       if ! ramo="$("$GIT" -C "$c" rev-parse --abbrev-ref HEAD 2>&1)"; then
         printf '  %-28s %-34s %s\n' "$r" "-" "indeterminavel: $(printf '%s' "$ramo" | head -1)"
         continue
       fi
       sujo="$("$GIT" -C "$c" status --porcelain 2>/dev/null | wc -l)"
-      printf '  %-28s %-34s %s\n' "$r" "$ramo" \
-        "$([ "${sujo:-0}" -eq 0 ] && echo limpo || echo "$sujo alteracao(oes)")"
+      printf '  %-28s %-34s %s  (%s)\n' "$r" "$ramo" \
+        "$([ "${sujo:-0}" -eq 0 ] && echo limpo || echo "$sujo alteracao(oes)")" "$c_abs"
     done
     return 0
   fi
@@ -712,7 +718,7 @@ print(json.dumps({
     return 0
   fi
 
-  printf '%s  ·  ramo %s  ·  bancada %s\n' "$repo_alvo" "$ramo" "${c#"$BANCADA"/}"
+  printf '%s  ·  ramo %s  ·  bancada %s\n' "$repo_alvo" "$ramo" "$c"
   printf '  origin/main  ·  atras %s%s\n' "$atras_main" "${nota_forge:+  ($nota_forge)}"
   if [ -n "$upstream" ]; then
     printf '  upstream %s  ·  atras %s  ·  a frente %s\n' "$upstream" "${atras:-0}" "${frente:-0}"
@@ -1378,7 +1384,24 @@ abrir_direto_em_main() {
     fi
   fi
   local atual; atual="$(ramo_atual "$wt_dir")"
-  [ "$atual" = "$ramo" ] || morre "a worktree de main $wt_dir esta em '$atual', nao em '$ramo' — nao mexo" 4
+  if [ "$atual" != "$ramo" ]; then
+    local st_a
+    st_a="$("$GIT" -C "$wt_dir" status --porcelain 2>/dev/null)" || morre "indeterminavel: git status falhou em $wt_dir" 5
+    if [ -z "$st_a" ] && "$GIT" -C "$wt_dir" merge-base --is-ancestor HEAD origin/main 2>/dev/null; then
+      if "$GIT" -C "$wt_dir" show-ref --verify --quiet "refs/heads/$ramo" \
+         && ! "$GIT" -C "$wt_dir" merge-base --is-ancestor "refs/heads/$ramo" origin/main 2>/dev/null; then
+        "$GIT" -C "$wt_dir" checkout -q "$ramo" >/dev/null 2>&1 \
+          || morre "git checkout $ramo falhou em $wt_dir" 3
+      else
+        "$GIT" -C "$wt_dir" checkout -q -B "$ramo" origin/main >/dev/null 2>&1 \
+          || morre "git checkout -B $ramo origin/main falhou em $wt_dir" 3
+      fi
+      printf 'recolocada: worktree %s estava em %s (contido em origin/main, arvore limpa) -> %s\n' "$wt_dir" "$atual" "$ramo"
+      atual="$ramo"
+    else
+      morre "a worktree de main $wt_dir esta em '$atual', nao em '$ramo' — nao mexo (para voltar: repo git $nome checkout -B $ramo origin/main)" 4
+    fi
+  fi
   # o ramo da cadeira segue origin/main, sempre (ramo antigo sem upstream ganha o seu)
   "$GIT" -C "$wt_dir" branch -q --set-upstream-to=origin/main "$ramo" >/dev/null 2>&1 || true
 
@@ -2177,27 +2200,53 @@ ato_commitar() {
     fi
   fi
 
+  # DT 37: salva a arvore do indice antes do git add; se o gate de diagrama ou o commit
+  # recusar, restaura o stage para nao deixar arquivo novo staged (A).
+  local idx_antes conferir_bin
+  idx_antes="$("$GIT" -C "$c" write-tree 2>/dev/null || true)"
+  conferir_bin="${PF_CONFERIR_BIN:-}"
+  if [ -z "$conferir_bin" ]; then
+    if command -v conferir >/dev/null 2>&1; then
+      conferir_bin="conferir"
+    else
+      conferir_bin="$(dirname "$(readlink -f "$0")")/conferir"
+    fi
+  fi
+
   if [ "$tudo" -eq 1 ]; then
     printf 'deprecado: --tudo faz add -A no clone compartilhado; prefira caminhos nomeados ou lista da sessão\n' >&2
     "$GIT" -C "$c" add -A || morre "git add falhou" 3
     "$GIT" -C "$c" diff --cached --quiet && { fecho_commit "$c" "$nome" ja; exit 0; }
-    
-  # [3096] Gate de diagrama: confere se compila no Kroki antes de commitar
-  local staged_diagrams
-  staged_diagrams=$("$GIT" -C "$c" diff --cached --name-only --diff-filter=ACM | grep -E '\.(mmd|d2)$' || true)
-  if [ -n "$staged_diagrams" ]; then
-    for arq in $staged_diagrams; do
-      # 1 = o Kroki recusou, diagrama quebrado; outro exit = nao consegui olhar (#3099).
-      # Os dois barram: gate que nao mede e deixa passar e gate desligado.
-      local rc_d=0
-      conferir diagrama "$c/$arq" || rc_d=$?
-      [ "$rc_d" -eq 0 ] || [ "$rc_d" -ne 1 ] || morre "diagrama $arq quebrado: Kroki recusou a compilacao." 1
-      [ "$rc_d" -eq 0 ] || morre "diagrama $arq nao medido: conferir diagrama saiu $rc_d, Kroki fora de alcance? -- nada commitado" 5
-      :
-    done
-  fi
 
-    "$GIT" -C "$c" commit -m "$msg" >/dev/null || morre "git commit falhou" 3
+    # [3096] Gate de diagrama: confere se compila no Kroki antes de commitar
+    local staged_diagrams
+    staged_diagrams=$("$GIT" -C "$c" diff --cached --name-only --diff-filter=ACM | grep -E '\.(mmd|d2)$' || true)
+    if [ -n "$staged_diagrams" ]; then
+      for arq in $staged_diagrams; do
+        # 1 = o Kroki recusou, diagrama quebrado; outro exit = nao consegui olhar (#3099).
+        # Os dois barram: gate que nao mede e deixa passar e gate desligado.
+        local rc_d=0
+        "$conferir_bin" diagrama "$c/$arq" || rc_d=$?
+        if [ "$rc_d" -ne 0 ]; then
+          if [ -n "$idx_antes" ]; then
+            "$GIT" -C "$c" read-tree "$idx_antes" >/dev/null 2>&1 || "$GIT" -C "$c" reset -q >/dev/null 2>&1 || true
+          else
+            "$GIT" -C "$c" reset -q >/dev/null 2>&1 || true
+          fi
+          [ "$rc_d" -ne 1 ] || morre "diagrama $arq quebrado: Kroki recusou a compilacao." 1
+          morre "diagrama $arq nao medido: conferir diagrama saiu $rc_d, Kroki fora de alcance? -- nada commitado" 5
+        fi
+      done
+    fi
+
+    if ! "$GIT" -C "$c" commit -m "$msg" >/dev/null; then
+      if [ -n "$idx_antes" ]; then
+        "$GIT" -C "$c" read-tree "$idx_antes" >/dev/null 2>&1 || "$GIT" -C "$c" reset -q >/dev/null 2>&1 || true
+      else
+        "$GIT" -C "$c" reset -q >/dev/null 2>&1 || true
+      fi
+      morre "git commit falhou" 3
+    fi
     fecho_commit "$c" "$nome" novo
     return 0
   fi
@@ -2369,14 +2418,27 @@ for p in sorted(caminhos):
       # 1 = o Kroki recusou, diagrama quebrado; outro exit = nao consegui olhar (#3099).
       # Os dois barram: gate que nao mede e deixa passar e gate desligado.
       local rc_d=0
-      conferir diagrama "$c/$arq" || rc_d=$?
-      [ "$rc_d" -eq 0 ] || [ "$rc_d" -ne 1 ] || morre "diagrama $arq quebrado: Kroki recusou a compilacao." 1
-      [ "$rc_d" -eq 0 ] || morre "diagrama $arq nao medido: conferir diagrama saiu $rc_d, Kroki fora de alcance? -- nada commitado" 5
-      :
+      "$conferir_bin" diagrama "$c/$arq" || rc_d=$?
+      if [ "$rc_d" -ne 0 ]; then
+        if [ -n "$idx_antes" ]; then
+          "$GIT" -C "$c" read-tree "$idx_antes" >/dev/null 2>&1 || "$GIT" -C "$c" reset -q >/dev/null 2>&1 || true
+        else
+          "$GIT" -C "$c" reset -q >/dev/null 2>&1 || true
+        fi
+        [ "$rc_d" -ne 1 ] || morre "diagrama $arq quebrado: Kroki recusou a compilacao." 1
+        morre "diagrama $arq nao medido: conferir diagrama saiu $rc_d, Kroki fora de alcance? -- nada commitado" 5
+      fi
     done
   fi
 
-    "$GIT" -C "$c" commit -m "$msg" >/dev/null || morre "git commit falhou" 3
+  if ! "$GIT" -C "$c" commit -m "$msg" >/dev/null; then
+    if [ -n "$idx_antes" ]; then
+      "$GIT" -C "$c" read-tree "$idx_antes" >/dev/null 2>&1 || "$GIT" -C "$c" reset -q >/dev/null 2>&1 || true
+    else
+      "$GIT" -C "$c" reset -q >/dev/null 2>&1 || true
+    fi
+    morre "git commit falhou" 3
+  fi
   fecho_commit "$c" "$nome" novo
   return 0
 }
@@ -3323,6 +3385,74 @@ classe_da_pasta() {
   fi
 }
 
+# DT 285: descarta uma bancada e seu ramo local quando limpa e sem commits exclusivos
+# (ou quando --forcar for pedido explicitamente).
+ato_descartar() {
+  local alvo="" forcar=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --forcar) forcar=1; shift ;;
+      -*) morre "opção desconhecida: '$1'" 2 ;;
+      *) [ -z "$alvo" ] && { alvo="$1"; shift; } || morre "argumento excedente: '$1'" 2 ;;
+    esac
+  done
+  [ -n "$alvo" ] || morre "uso: repo descartar <repo>[@<chave>] [--forcar]" 2
+
+  local nome_base="${alvo%%@*}"
+  local chave_pedida=""
+  case "$alvo" in *@*) chave_pedida="${alvo#*@}" ;; esac
+  if direto_em_main "$nome_base" && [ -z "$chave_pedida" ]; then
+    morre "repositório de deliberação '$nome_base' usa bancada direta em main — para descartar bancada antiga por card nomeie $nome_base@<chave>" 4
+  fi
+
+  local c
+  c="$(clone_de "$alvo")" || exit $?
+  local base_repo="$BANCADA/$nome_base"
+  local base_real
+  base_real="$(realpath "$base_repo" 2>/dev/null || printf '%s' "$base_repo")"
+  if [ "$c" = "$base_repo" ] || [ "$c" = "$base_real" ]; then
+    morre "recusado: '$c' é o clone base de '$nome_base', não uma bancada descartável" 4
+  fi
+
+  local ramo sujo exclusivos=""
+  ramo="$(ramo_atual "$c")"
+  sujo="$("$GIT" -C "$c" status --porcelain 2>/dev/null || true)"
+  if "$GIT" -C "$c" rev-parse --verify -q origin/main >/dev/null 2>&1; then
+    exclusivos="$("$GIT" -C "$c" log --oneline origin/main..HEAD 2>/dev/null || true)"
+  fi
+
+  if [ "$forcar" -eq 0 ] && { [ -n "$sujo" ] || [ -n "$exclusivos" ]; }; then
+    printf '%s: descartar recusado em %s (%s):\n' "$VERBO" "$c" "$ramo" >&2
+    if [ -n "$sujo" ]; then
+      printf '  árvore suja:\n%s\n' "$(printf '%s\n' "$sujo" | sed 's/^/    /')" >&2
+    fi
+    if [ -n "$exclusivos" ]; then
+      printf '  commits exclusivos fora de origin/main:\n%s\n' "$(printf '%s\n' "$exclusivos" | sed 's/^/    /')" >&2
+    fi
+    printf 'vizinho: commite/abra PR ou passe --forcar (repo descartar %s --forcar)\n' "$alvo" >&2
+    exit 4
+  fi
+
+  if ! "$GIT" -C "$base_repo" worktree remove --force "$c" >/dev/null 2>&1; then
+    rm -rf "$c"
+    "$GIT" -C "$base_repo" worktree prune >/dev/null 2>&1 || true
+  fi
+
+  local ramo_apagado=0
+  if [ -n "$ramo" ] && [ "$ramo" != "HEAD" ] && [ "$ramo" != "main" ] && [ "$ramo" != "master" ]; then
+    if "$GIT" -C "$base_repo" show-ref --verify --quiet "refs/heads/$ramo"; then
+      "$GIT" -C "$base_repo" branch -D "$ramo" >/dev/null 2>&1 && ramo_apagado=1 || true
+    fi
+  fi
+
+  if [ "$ramo_apagado" -eq 1 ]; then
+    printf 'descartada: %s (ramo %s removido)\n' "$c" "$ramo"
+  else
+    printf 'descartada: %s (%s)\n' "$c" "$ramo"
+  fi
+  return 0
+}
+
 ato_sanear() {
   local alvo="" relatar=0
   while [ $# -gt 0 ]; do
@@ -4062,7 +4192,7 @@ cmd="$1"
 shift
 
 case "$cmd" in
-  estado|listar|ler|procurar|historico|diff|ramo|commitar|empurrar|atualizar|sincronizar|abrir|clonar|sanear|pr-abrir|pr-listar|pr-ver|pr-diff|pr-merge|pr-fechar|hooks|hooks-listar|hooks-apagar|lock|git)
+  estado|listar|ler|procurar|historico|diff|ramo|commitar|empurrar|atualizar|sincronizar|abrir|clonar|sanear|descartar|pr-abrir|pr-listar|pr-ver|pr-diff|pr-merge|pr-fechar|hooks|hooks-listar|hooks-apagar|lock|git)
     declara_bancada "$@" ;;
 esac
 
@@ -4081,6 +4211,7 @@ case "$cmd" in
   abrir)     cmd_abrir "$@" ;;
   clonar)    ato_clonar "$@" ;;
   sanear)    ato_sanear "$@" ;;
+  descartar) ato_descartar "$@" ;;
   pr-abrir)  ato_pr_abrir "$@" ;;
   pr-listar) ato_pr_listar "$@" ;;
   pr-ver)    ato_pr_ver "$@" ;;
@@ -4094,7 +4225,7 @@ case "$cmd" in
   git)       ato_git "$@" ;;
   *)
     printf '%s: erro: ato desconhecido '\''%s'\''\n' "$VERBO" "$cmd" >&2
-    printf 'atos: estado · listar · ler · procurar · historico · diff · ramo · commitar · empurrar · atualizar · sincronizar · abrir · clonar · sanear · pr-abrir · pr-listar · pr-ver · pr-diff · pr-merge · pr-fechar · hooks-listar · hooks-apagar · lock · git\n' >&2
+    printf 'atos: estado · listar · ler · procurar · historico · diff · ramo · commitar · empurrar · atualizar · sincronizar · abrir · clonar · sanear · descartar · pr-abrir · pr-listar · pr-ver · pr-diff · pr-merge · pr-fechar · hooks-listar · hooks-apagar · lock · git\n' >&2
     uso_texto
     exit 2
     ;;
