@@ -73,6 +73,8 @@ POR_HEALTHCHECK = {
     "motor-busca": "motor-busca",
     "acervo-guarda": "acervo-guarda",
     "acervo-api": "acervo-api",
+    "casa-db": "casa-db",
+    "olaria": "olaria",
 }
 
 # Imagem sem shell: sonda de fora, pelo posto.

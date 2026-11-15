@@ -750,7 +750,7 @@ case "$ATO" in
       --banco|--sql) ;;
       "") ;;
       -h|--help|ajuda) ;;
-      rag|motor) avisa "acervo psql <banco>" "acervo psql --banco <banco>" ;;
+      rag|motor|casa) avisa "acervo psql <banco>" "acervo psql --banco <banco>" ;;
       *) ;;
     esac
     exec bash "$ATOS/psql" "$@" ;;
