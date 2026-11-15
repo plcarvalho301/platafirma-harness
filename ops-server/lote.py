@@ -98,9 +98,12 @@ def resumo_cadeia(resultados: list, parou_em: int | None,
 async def itera(itens: list, roda: Callable[[int, Any, list], Awaitable[dict]], *,
                 encadeado: bool = False, cap: int | None = None,
                 bytes_de: Callable[[dict], int] | None = None,
-                brutos: list | None = None) -> dict:
+                brutos: list | None = None,
+                pipe_fontes: set[int] | None = None) -> dict:
     """Roda os itens em ordem. `roda(i, item, resultados_ate_aqui)` devolve o resultado do
-    item. Sem `encadeado`, erro num item nao derruba os outros (comportamento de sempre)."""
+    item. Sem `encadeado`, erro num item nao derruba os outros (comportamento de sempre).
+    `pipe_fontes` sao indices cujo stdout alimenta `stdin: {"de": n}` no mesmo lote; eles
+    nao contam contra o teto `cap` para nao bloquear o consumidor do pipe (DT-281)."""
     resultados: list = []
     acumulado, lote_next, parou_em = 0, None, None
     for i, x in enumerate(itens):
@@ -109,7 +112,7 @@ async def itera(itens: list, roda: Callable[[int, Any, list], Awaitable[dict]], 
             break
         r = await roda(i, x, resultados)
         resultados.append(r)
-        if bytes_de is not None:
+        if bytes_de is not None and (not pipe_fontes or i not in pipe_fontes):
             acumulado += bytes_de(r) or 0
         if encadeado and exit_do_item(r) not in SEGUE:
             parou_em = i
@@ -126,5 +129,18 @@ async def itera(itens: list, roda: Callable[[int, Any, list], Awaitable[dict]], 
 
 
 def bytes_stdout(r: dict) -> int:
-    so = r.get("stdout") if isinstance(r, dict) else None
-    return so.get("bytes_total", 0) if isinstance(so, dict) else 0
+    """Bytes servidos ao chamador (apos poda/truncagem), nao os bytes brutos (DT-281)."""
+    if not isinstance(r, dict):
+        return 0
+    poda = r.get("poda")
+    if isinstance(poda, dict):
+        servidos = poda.get("bytes_servidos")
+        if isinstance(servidos, int) and not isinstance(servidos, bool):
+            return servidos
+    so = r.get("stdout")
+    if not isinstance(so, dict):
+        return 0
+    texto = so.get("texto")
+    if isinstance(texto, str):
+        return len(texto.encode("utf-8", "replace"))
+    return so.get("bytes_total", 0)

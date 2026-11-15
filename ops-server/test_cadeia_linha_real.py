@@ -92,3 +92,37 @@ async def test_malote_encadeado_leva_a_linha_real_com_corpo_podado():
     assert res["cadeia"]["itens"][0]["linha"] == "a saiu 0"
     assert res["cadeia"]["itens"][1]["linha"] == "b saiu 4"
     assert res["cadeia"]["motivo"] == "parou em 1: b saiu 4"
+
+
+@pytest.mark.anyio
+async def test_malote_pipe_grande_nao_omite_consumidor_por_teto_dt281():
+    """DT-281: repo ler de 197 KB -> release migrar aplicar com stdin.de=0 nao volta omitido_por_teto."""
+    sql_grande = "-- sql\n" * 30000
+    stdins_recebidos = []
+
+    def fake_run(argv, stdin, timeout, ident, prazo=None):
+        stdins_recebidos.append(stdin)
+        if argv[0].endswith("repo"):
+            return {"exit_code": 0, "stdout": {"texto": sql_grande, "bytes_total": len(sql_grande),
+                                               "truncado": False}}
+        return {"exit_code": 0, "stdout": {"texto": "aplicado\n", "bytes_total": 9, "truncado": False}}
+
+    def fake_serve(r, **kw):
+        out = dict(r)
+        if r["stdout"]["bytes_total"] > s.CAP:
+            out["stdout"] = {"texto": MARCADOR, "bytes_total": r["stdout"]["bytes_total"], "truncado": False}
+            out["poda"] = {"ato": "repo", "modo": "igual", "ledger": "igual", "bytes_servidos": len(MARCADOR)}
+        else:
+            out["poda"] = {"ato": "release", "modo": "inteiro", "bytes_servidos": r["stdout"]["bytes_total"]}
+        return out
+
+    with patch("server.SLUGS_SERVIDOS", {"repo", "release"}), \\\n         patch("server.BINARIOS", {"repo": "/opt/bin/repo", "release": "/opt/bin/release"}), \\\n         patch("server._autoriza", return_value=None), \\\n         patch("server._audit"), \\\n         patch("server._serve", side_effect=fake_serve), \\\n         patch("server._run_verbo_blocking", side_effect=fake_run):
+        res = await s.malote(commands=[
+            {"verbo": "repo", "ato": "ler", "args": ["r", "mig.sql"]},
+            {"verbo": "release", "ato": "migrar", "args": ["aplicar", "rastreador"], "stdin": {"de": 0}},
+        ], encadeado=True)
+
+    assert res["lote_next"] is None
+    assert not res["lote"][1].get("omitido_por_teto")
+    assert res["lote"][1]["exit_code"] == 0
+    assert stdins_recebidos[1] == sql_grande

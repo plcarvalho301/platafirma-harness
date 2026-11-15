@@ -1550,6 +1550,19 @@ async def malote(command: str = "", cwd: str = "", timeout: int = 120,
                          turno_texto, turno_fonte)
 
 
+def _fontes_de_pipe(itens: list) -> set[int]:
+    """Indices de itens cujo stdout alimenta `stdin: {"de": n}` de um item posterior."""
+    fontes: set[int] = set()
+    for i, x in enumerate(itens):
+        if isinstance(x, dict):
+            st = x.get("stdin")
+            if _eh_pipe_stdin(st) and "de" in st:
+                n = st["de"]
+                if 0 <= n < i:
+                    fontes.add(n)
+    return fontes
+
+
 async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: str | None,
                   commands: list | None, encadeado: bool, turno: str = "",
                   turno_texto: str = "", turno_fonte: str = "") -> dict:
@@ -1599,8 +1612,10 @@ async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: st
                 _estado["ident"] = _sessao_resolve(sid_novo)
         return r
 
+    pipe_fontes = _fontes_de_pipe(itens)
     out = await _lote.itera(itens, _roda, encadeado=encadeado, cap=CAP,
-                            bytes_de=_lote.bytes_stdout, brutos=brutos)
+                            bytes_de=_lote.bytes_stdout, brutos=brutos,
+                            pipe_fontes=pipe_fontes)
     if encadeado:
         _c = out["cadeia"]
         _audit(tool=nome, evento="lote_encadeado", lote_id=lote_id,
