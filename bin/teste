@@ -1146,8 +1146,13 @@ ato_detectar() {
   declara_bancada
   c="$(clone_de "$REG_FAMILIA${REG_BANCADA:+@$REG_BANCADA}")" || exit $?
   if [ "$REG_ESTEIRA" = "documento" ]; then
-    printf '%s  ·  esteira documento  ·  runner admissão da ingestão  ·  caminho %s  ·  rodaria: acervo ingerir casa %s --arvore <cópia da bancada>\n' \
-      "$nome" "$c" "$REG_FAMILIA"
+    if [ "$REG_FAMILIA" = "platafirma-casa-espelho" ]; then
+      printf '%s  ·  esteira documento (sem ingestão)  ·  runner portão das stacks da família  ·  caminho %s  ·  rodaria: teste rodar %s --portao\n' \
+        "$nome" "$c" "$REG_FAMILIA"
+    else
+      printf '%s  ·  esteira documento  ·  runner admissão da ingestão  ·  caminho %s  ·  rodaria: acervo ingerir casa %s --arvore <cópia da bancada>\n' \
+        "$nome" "$c" "$REG_FAMILIA"
+    fi
     return 0
   fi
   ambiente_do_registro "$c" || exit $?
@@ -1369,12 +1374,14 @@ ato_rodar() {
 
   if [ "$REG_ESTEIRA" = "documento" ]; then
     [ -z "$alvo" ] || morre "esteira documento mede a árvore inteira: <alvo> não se aplica" 2
-    rodar_documento "$c" "$REG_FAMILIA" "$EM_ARVORE"
-    return $?
+    if [ "$REG_FAMILIA" != "platafirma-casa-espelho" ]; then
+      rodar_documento "$c" "$REG_FAMILIA" "$EM_ARVORE"
+      return $?
+    fi
   fi
 
   # arq:0116 §6: o repositório inteiro no portão — toda chave com subárvore de teste
-  if [ "$portao" -eq 1 ] && [ -z "$alvo" ] && [ -z "$chave" ] && [ "${nome%%@*}" = "$REG_FAMILIA" ]; then
+  if { [ "$portao" -eq 1 ] || [ "$REG_ESTEIRA" = "documento" ]; } && [ -z "$alvo" ] && [ -z "$chave" ] && [ "${nome%%@*}" = "$REG_FAMILIA" ]; then
     local arv_fam=""
     [ "$EM_ARVORE" -eq 1 ] && arv_fam="$c"
     if [ "$origem_main" -eq 1 ] && [ "$degrau_pedido" = todos ]; then
