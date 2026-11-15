@@ -1059,7 +1059,7 @@ def _escopo_do_giro(slug: str, ato, args, r, ident: dict) -> None:
 
 
 def _chapeu_do_giro(slug: str, ato, args, r, ident: dict) -> None:
-    """Giro de `persona ler <cadeira da sessão> --chapeu <slug>` que saiu 0: a porta grava
+    """Giro de `persona ler [<cadeira da sessão>] --chapeu <slug>` que saiu 0: a porta grava
     `chapeu = <slug>` na chave `sessao:{id}`, keepttl; `fallback` não muda (card #3385)."""
     if not isinstance(r, dict) or r.get("exit_code") != 0:
         return
@@ -1069,7 +1069,9 @@ def _chapeu_do_giro(slug: str, ato, args, r, ident: dict) -> None:
     if len(toks) < 2 or toks[0] != "ler":
         return
     cadeira_sessao = (ident or {}).get("cadeira")
-    if not cadeira_sessao or toks[1] != cadeira_sessao:
+    if not cadeira_sessao:
+        return
+    if not toks[1].startswith("-") and toks[1] != cadeira_sessao:
         return
     chapeu = None
     for i, t in enumerate(toks):

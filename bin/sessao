@@ -292,6 +292,8 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
               origem: str | None = None, agente: dict | None = None) -> int:
     # etapa 1 — uso
     if not (cadeira or "").strip():
+        cadeira = (os.environ.get("PLATAFIRMA_CADEIRA") or "").strip()
+    if not (cadeira or "").strip():
         return saida.erro("uso: sessao abrir <cadeira> [--sessao-id <uuid>] [--origem <uuid>] [--dry-run] [--json]", 2)
     sid_portado = None
     if sessao_id is not None:
@@ -392,13 +394,16 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
         existente = _le_chave(rc_mem, sid) if sid_portado else None
         if existente:
             # reabrir a mesma conversa: atualiza ordem_id e nada mais (§2), exceto
-            # sujeito AUSENTE (card #3145): backfill do PF_SUJEITO desta abertura --
-            # cobre a chave reidratada de um registro duravel anterior a migracao
-            # 0094 (ou qualquer sessao gravada sem sujeito). Nunca sobrescreve um
-            # sujeito ja presente: identidade nao muda por reabertura.
+            # sujeito AUSENTE (card #3145) e canonizada/autorizada_por ausentes ou
+            # vindas de reidratacao (DT 165): backfill desta abertura. Nunca sobrescreve
+            # um sujeito ja presente: identidade nao muda por reabertura.
             existente["ordem_id"] = ordem_id
             if not existente.get("sujeito"):
                 existente["sujeito"] = sujeito
+            if existente.get("canonizada") is None or existente.get("origem") == "reidratada":
+                existente["canonizada"] = canonizada
+            if not existente.get("autorizada_por") or existente.get("autorizada_por") in ("-", "reidratada"):
+                existente["autorizada_por"] = autorizada_por
             if origem_sessao and not existente.get("origem_sessao"):
                 existente["origem_sessao"] = origem_sessao   # nunca troca a origem ja gravada
             for k, v in (agente or {}).items():
@@ -491,6 +496,20 @@ def ato_ver(sessao_id: str, saida: Saida) -> int:
         except Exception:  # noqa: BLE001 — reidratar nunca pode travar `ver`
             ch = None
     if ch is None:
+        enc_em = None
+        if _reidratar_mod is not None and hasattr(_reidratar_mod, "encerrada_em_duravel"):
+            try:
+                val = _reidratar_mod.encerrada_em_duravel(sid, _roda, pg_porta=PG_PORTA)
+                if isinstance(val, str) and val:
+                    enc_em = val
+            except Exception:  # noqa: BLE001
+                enc_em = None
+        if enc_em:
+            return saida.erro(f"sessao {sid} encerrada em {enc_em} — nao existe mais no msg-mem "
+                              f"{MEM_HOST}:{MEM_PORTA} (TTL {TTL_SESSAO_S // 3600} h); "
+                              "vizinho: `sessao listar`", 1,
+                              encerrada=True, encerrada_em=enc_em,
+                              varrido=f"msg-mem {MEM_HOST}:{MEM_PORTA}", vizinho="sessao listar")
         return saida.erro(f"sessao {sid} nao existe ou expirou — varrido: msg-mem "
                           f"{MEM_HOST}:{MEM_PORTA} (TTL {TTL_SESSAO_S // 3600} h); "
                           "vizinho: `sessao listar`", 1,
@@ -769,6 +788,7 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog=f"sessao {ato}", add_help=False)
     if ato == "abrir":
         p.add_argument("cadeira", nargs="?")
+        p.add_argument("--cadeira", dest="cadeira_opt", default=None)
         p.add_argument("--sessao-id", dest="sessao_id", default=None)
         p.add_argument("--origem", dest="origem", default=None)
         p.add_argument("--agente", dest="agente", default=None)
@@ -795,7 +815,8 @@ def main(argv: list[str] | None = None) -> int:
         if ns.agente or ns.em_nome_de or ns.conta_agente:
             agente = {"agente": ns.agente or "", "em_nome_de": ns.em_nome_de or "",
                       "conta_agente": ns.conta_agente or ""}
-        return ato_abrir(ns.cadeira or "", ns.sessao_id, saida, dry_run=ns.dry_run, origem=ns.origem,
+        cad_arg = ns.cadeira or ns.cadeira_opt or os.environ.get("PLATAFIRMA_CADEIRA") or ""
+        return ato_abrir(cad_arg, ns.sessao_id, saida, dry_run=ns.dry_run, origem=ns.origem,
                          agente=agente)
     if ato == "ver":
         return ato_ver(ns.sessao_id or "", saida)

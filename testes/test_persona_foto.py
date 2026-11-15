@@ -116,3 +116,33 @@ def test_foto_cadeira_ausente_do_mapa(tmp_path):
     dados = json.loads(proc_json.stdout)
     assert dados["nova"]["alias"] is None
     assert dados["ia"]["alias"] == "Elias Elefante"
+
+
+def test_ler_usa_pf_cadeira_quando_cadeira_omitida(tmp_path):
+    """DT 518 / DT 601: `persona ler` e `persona ler --chapeu <slug>` usam PF_CADEIRA quando <cadeira> é omitida."""
+    abertura = tmp_path / "current" / "abertura"
+    cad = abertura / "conhecimento"
+    ch = cad / "modelos-formais"
+    ch.mkdir(parents=True)
+    (cad / "persona.md").write_text("# Persona Conhecimento\n")
+    (ch / "chapeu.md").write_text("# Chapeu Modelos Formais\n")
+
+    proc_p = _run_persona(["ler"], env_extra={"PF_ABERTURA_DIR": str(tmp_path), "PF_CADEIRA": "conhecimento"})
+    assert proc_p.returncode == 0, proc_p.stderr
+    assert "# Persona Conhecimento" in proc_p.stdout
+
+    proc_c = _run_persona(
+        ["ler", "--chapeu", "modelos-formais"],
+        env_extra={"PF_ABERTURA_DIR": str(tmp_path), "PF_CADEIRA": "conhecimento"},
+    )
+    assert proc_c.returncode == 0, proc_c.stderr
+    assert "# Chapeu Modelos Formais" in proc_c.stdout
+
+
+def test_lembrete_mapa_capacidades_aponta_acervo_vigente():
+    """DT 608: bin/persona aponta para o vocabulário vigente no acervo da casa (arq:0059 / arq:0119)."""
+    texto = BIN_PERSONA.read_text(encoding="utf-8")
+    caminho_legado = "platafirma-arquitetura" + "@" + "docs/arquitetura-negocio-operacao.md"
+    assert caminho_legado not in texto
+    assert "acervo ler casa vocabulario arquitetura-negocio-operacao" in texto
+    assert "acervo ler casa vocabulario capacidades" in texto
