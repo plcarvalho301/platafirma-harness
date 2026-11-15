@@ -93,3 +93,27 @@ def test_sem_encadeado_o_comportamento_de_sempre():
     assert rodados == [0, 1]
     assert "cadeia" not in out
     assert out["lote_next"] is None
+
+
+def test_bytes_stdout_conta_servido_e_nao_bruto_dt281():
+    """DT-281: item podado (ex: igual ao giro N) tem bytes_total bruto alto, mas bytes_servidos baixo."""
+    grande_podado = {
+        "exit_code": 0,
+        "stdout": {"texto": "[igual ao giro 76]\n", "bytes_total": 197035},
+        "poda": {"modo": "igual", "bytes_servidos": 19},
+    }
+    assert lote.bytes_stdout(grande_podado) == 19
+    out, rodados = _rodar([grande_podado, _ex(0)], encadeado=True, cap=50,
+                          bytes_de=lote.bytes_stdout)
+    assert rodados == [0, 1]
+    assert out["lote_next"] is None
+
+
+def test_pipe_fontes_nao_bloqueia_consumidor_por_teto_dt281():
+    """DT-281: item cujo stdout alimenta stdin.de no lote nao estoura o teto antes do consumidor."""
+    grande = {"exit_code": 0, "stdout": {"texto": "x" * 100, "bytes_total": 100},
+              "poda": {"bytes_servidos": 100}}
+    out, rodados = _rodar([grande, _ex(0), _ex(0)], encadeado=True, cap=50,
+                          bytes_de=lote.bytes_stdout, pipe_fontes={0})
+    assert rodados == [0, 1, 2]
+    assert out["lote_next"] is None
