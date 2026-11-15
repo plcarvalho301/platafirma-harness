@@ -89,6 +89,7 @@ tests/test_release_stack_imagem.py | bin/release bin/_release/**
 # Medido em 14/10/2026: stack registrada sem compose (a `harness` do #3551) fica fora da lista de promocao do `bin/release`; sem isso,
 # `stack testar harness` saia 2 e toda promocao do platafirma-harness parava (5 passam; sem a mudanca, 4 ficam vermelhos).
 tests/test_release_stack_catalogo.py | bin/release bin/_release/**
+tests/test_repo_dts_80_95_407_451.py | bin/repo
 tests/test_bot.py | bin/acervo bin/_acervo/** bin/agente bin/bot bin/conferir bin/curar bin/encerrar bin/expediente bin/_expediente/** bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/pesquisar bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste agente/** deploy-harness/** registro/**
 # Raio (card #3370): `<arquivo> | <glob> <glob>...`, globs relativos a raiz do repositorio. O push e a
 # promocao rodam a linha quando o diff alcanca algum glob (ou o proprio arquivo); linha sem `|` roda
