@@ -67,14 +67,13 @@ materializar_terceiros_em() {
     local -a partes
     IFS='/' read -ra partes <<<"$(dirname "$destino")"
     # só fecha de novo o que estava fechado: bancada gravável continua gravável
-    # checa o bit de escrita do dono (stat), pois `[ -w ]` mente sob uid 0
-    [[ "$(stat -c %A "$d" 2>/dev/null)" == ??w* ]] || { chmod u+w "$d"; fechar+=("$d"); }
+    [ -w "$d" ] || { chmod u+w "$d"; fechar+=("$d"); }
     abertos+=("$d")
     for parte in "${partes[@]}"; do
       [ -n "$parte" ] && [ "$parte" != "." ] || continue
       d="$d/$parte"
       if [ -d "$d" ]; then
-        [[ "$(stat -c %A "$d" 2>/dev/null)" == ??w* ]] || { chmod u+w "$d"; fechar+=("$d"); }
+        [ -w "$d" ] || { chmod u+w "$d"; fechar+=("$d"); }
       else
         mkdir "$d"
         [ "${#fechar[@]}" -eq 0 ] || fechar+=("$d")

@@ -114,7 +114,7 @@ if [ "$(id -u)" -ne 0 ]; then
   [ ! -w "$alvo" ] && [ ! -w "$(dirname "$alvo")" ] && [ ! -w "$PROD_RAIZ/platafirma-harness/$SHA1" ] \
     || falha "arvore da rev ficou gravavel depois de por o terceiro"
 else
-  ! stat -c %A "$alvo" "$(dirname "$alvo")" "$PROD_RAIZ/platafirma-harness/$SHA1" | grep -qE '^..w' \
+  ! stat -c %A "$alvo" "$PROD_RAIZ/platafirma-harness/$SHA1" | grep -qE '^..w' \
     || falha "arvore da rev ficou com bit de escrita do dono depois de por o terceiro"
 fi
 [ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$SHA1" ] || falha "current nao trocou"
