@@ -124,9 +124,12 @@ docker inspect -f '{{.State.Running}}' "$ctr" 2>/dev/null | grep -qx true \
 # meta-comandos (\d, \dt, \l) e SQL na mesma sessao, igual a um psql interativo.
 # Capturamos stdout e stderr SEPARADOS e devolvemos os dois — a query sai no stdout,
 # NOTICE/erro de sintaxe no stderr. Este e o conserto do debito migrar-stdout.
-out="$(docker exec -i "$ctr" psql -U "$usr" -d "$base" -P pager=off "${psql_flags[@]}" 2>/tmp/acervo-psql.err <<<"$sql")"
+err_arq="$(mktemp "${TMPDIR:-/tmp}/acervo-psql.XXXXXX")" || morre "mktemp falhou" 3
+trap 'rm -f "$err_arq"' EXIT
+out="$(docker exec -i "$ctr" psql -U "$usr" -d "$base" -P pager=off "${psql_flags[@]}" 2>"$err_arq" <<<"$sql")"
 rc=$?
-err="$(cat /tmp/acervo-psql.err)"; rm -f /tmp/acervo-psql.err
+err="$(cat "$err_arq")"
+rm -f "$err_arq"
 
 [ -n "$out" ] && printf '%s\n' "$out"
 [ -n "$err" ] && printf '%s\n' "$err" >&2
