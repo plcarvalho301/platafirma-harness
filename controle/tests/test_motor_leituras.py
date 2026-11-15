@@ -719,6 +719,7 @@ def test_dispatch_atos_rag_assumem_rag_com_aviso(motor, tmp_path):
     assert r_inst_invalida.returncode == 1
     assert "nao conheco a instancia 'instancia_invalida'" in r_inst_invalida.stderr
     assert "Se for um ato, use: motor rag instancia_invalida" in r_inst_invalida.stderr
+    assert 'ato="rag"' in r_inst_invalida.stderr
 
 
 def test_busca_com_instancia_rag_apos_ato_desduplica_e_sem_aviso_velho(motor, tmp_path):

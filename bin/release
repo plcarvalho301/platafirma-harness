@@ -2018,7 +2018,7 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
   # entregue (promoção de outra família do mesmo card, ou ramo que cita story fechada), não comenta,
   # não move e não falha a promoção. O cabeçalho de `tarefas ler` é `#N · nível · Estado (fase) · ...`;
   # o estado vem em minúsculas, sem a fase. Estado que não se lê segue o caminho de antes.
-  local rc_c=0 rc_m=0 nivel estado fecha=0 cabecalho saida_m=""
+  local rc_c=0 rc_m=0 nivel estado fecha=0 cabecalho saida_m="" saida_c="" msg_c=""
   if pr_fecha_card "$repo" "$para" "$card"; then fecha=1; fi
   cabecalho="$("$tarefas_bin" ler "$card" 2>/dev/null)" || true
   nivel="$(printf '%s\n' "$cabecalho" | sed -n "s/^#$card · \([^ ]*\) · .*/\1/p" | head -n 1)" || nivel=""
@@ -2027,7 +2027,12 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
     printf 'card:      #%s já entregue — sem comentário (R22)\n' "$card"
     rc_m=-1
   else
-    "$tarefas_bin" comentar "$card" <<<"release promover $repo: $(curto_ou "$de" '(novo)') -> ${para:0:7}, gate verde, no ar." >/dev/null 2>&1 || rc_c=$?
+    # DT 668: épico e feature exigem comentário tipado na primeira linha (card #3614).
+    msg_c="release promover $repo: $(curto_ou "$de" '(novo)') -> ${para:0:7}, gate verde, no ar."
+    case "$nivel" in
+      feature|épico|epico) msg_c="insumo: $msg_c" ;;
+    esac
+    saida_c="$("$tarefas_bin" comentar "$card" <<<"$msg_c" 2>&1)" || rc_c=$?
     case "$nivel" in
       story|task)
         if [ "$fecha" -eq 1 ]; then
@@ -2052,7 +2057,12 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
       printf 'card:      recusa do rastreador: %s\n' "$(printf '%s\n' "$saida_m" | head -n 1)" >&2
     fi
   fi
-  [ "$rc_c" -eq 0 ] || printf 'card:      AVISO — comentário em %s falhou (tarefas saiu %s)\n' "$card" "$rc_c" >&2
+  if [ "$rc_c" -ne 0 ]; then
+    printf 'card:      AVISO — comentário em %s falhou (tarefas saiu %s)\n' "$card" "$rc_c" >&2
+    if [ -n "$saida_c" ]; then
+      printf 'card:      recusa do rastreador: %s\n' "$(printf '%s\n' "$saida_c" | head -n 1)" >&2
+    fi
+  fi
   release_bin="$(achar_verbo release)"
   if [ -n "$release_bin" ]; then "$release_bin" conferir card "$card" >/dev/null 2>&1 || true; fi
   return 0

@@ -247,6 +247,13 @@ def test_tool_em_lote_entrega_o_fundamento_a_cada_item(verbo, tmp_path, monkeypa
     assert all("FUND=uma razao so" in _saiu(item) for item in out["lote"])
 
 
+def test_dt670_tool_em_lote_herda_ato_do_topo_quando_item_omite(verbo, tmp_path, monkeypatch):
+    monkeypatch.setattr(s, "PF_TOOLS_LOTE", True)
+    out = _roda(_tool(verbo, tmp_path), tmp_path, ato="ler",
+                lote=[{"args": ["a"]}, {"args": ["b"]}])
+    assert [item["exit_code"] for item in out["lote"]] == [0, 0]
+
+
 # --- o malote -------------------------------------------------------------------------------
 
 def _malote(verbo_, tmp_path, monkeypatch, item, **kw):
