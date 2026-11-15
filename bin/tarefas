@@ -173,12 +173,12 @@ uso:
   tarefas comentar <id> --fecha <n> "<resultado> — <destino>"
                                           escreve «fecho: …» como última linha do comentário n
                                           (comentário tipado; insumo não leva fecho)
-  tarefas comentarios <id> [--indice] [--id <n>]... [--desde <n>] [--ultimos <k>]
-                                          lista os comentários do item, em ordem. A porta corta a
-                                          saída em ~50 KB: em card longo, --indice dá uma linha por
-                                          comentário (id, autor, data, tamanho, começo); --id lê
-                                          só aquele(s); --desde <n> os de id >= n; --ultimos <k> os
-                                          k mais novos
+  tarefas comentarios <id> [--indice] [--busca <termo>] [--arvore] [--id <n>]... [--desde <n>] [--ultimos <k>]
+                                          lista os comentários do item, em ordem. --busca <termo>
+                                          filtra as linhas que casam (id, card e linha); --arvore
+                                          desce a subárvore inteira. A porta corta a saída em ~50 KB:
+                                          --indice dá uma linha por comentário; --id lê só aquele(s);
+                                          --desde <n> os de id >= n; --ultimos <k> os k mais novos
   tarefas mover <id> <estado> [--motivo "<txt>"] [--englobado-em <id>]
                                           move o card pelo fluxo; a recusa diz para onde
                                           se PODE ir a partir do estado atual. Item com
@@ -1195,13 +1195,16 @@ fechar_comentario() {
 # fim, justamente os mais novos. Daí as fatias — a API devolve tudo de uma vez, quem recorta é este
 # verbo, e cada recorte cabe na porta.
 comentarios() {
-  local uso='uso: tarefas comentarios <id> [--indice] [--id <n>]... [--desde <n>] [--ultimos <k>]'
-  local id; id=$(so_id "${1:?$uso}"); shift
-  local ids='[]' desde=0 ultimos=0 indice=false
+  local uso='uso: tarefas comentarios <id> [--indice] [--busca <termo>] [--arvore] [--id <n>]... [--desde <n>] [--ultimos <k>]'
+  local id='' ids='[]' desde=0 ultimos=0 indice=false arvore=false busca_termo=''
   local numero='^[0-9]+$'
   while [ $# -gt 0 ]; do
     case "$1" in
       --indice) indice=true; shift ;;
+      --arvore) arvore=true; shift ;;
+      --busca)
+        [ -n "${2:-}" ] || { echo "tarefas comentarios: --busca pede um termo" >&2; echo "$uso" >&2; exit 2; }
+        busca_termo="$2"; shift 2 ;;
       --id|--desde|--ultimos)
         [[ "${2:-}" =~ $numero ]] || { echo "tarefas comentarios: $1 pede um número" >&2; echo "$uso" >&2; exit 2; }
         case "$1" in
@@ -1210,25 +1213,107 @@ comentarios() {
           --ultimos) ultimos=$2 ;;
         esac
         shift 2 ;;
-      *) echo "tarefas comentarios: opção desconhecida: $1" >&2; echo "$uso" >&2; exit 2 ;;
+      --*) echo "tarefas comentarios: opção desconhecida: $1" >&2; echo "$uso" >&2; exit 2 ;;
+      *)
+        [ -z "$id" ] || { echo "tarefas comentarios: argumento inesperado: $1" >&2; echo "$uso" >&2; exit 2; }
+        id=$(so_id "$1") || return 1
+        shift ;;
     esac
   done
+  [ -n "$id" ] || { echo "$uso" >&2; exit 2; }
   local saida bytes
-  saida=$(busca GET "/itens/$id/comentarios" | jq -r \
-    --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" --argjson indice "$indice" '
-    .comentarios as $todos
-    | ($todos
-       | (if ($ids | length) > 0 then map(select(.id as $i | any($ids[]; . == $i))) else . end)
-       | map(select(.id >= $desde))
-       | (if $ultimos > 0 then .[-$ultimos:] else . end)) as $sel
-    | if ($todos | length) == 0 then "(sem comentários)"
-      elif ($sel | length) == 0 then
-        "(nenhum comentário na seleção; o item tem \($todos | length), de #\($todos[0].id) a #\($todos[-1].id))"
-      elif $indice then
-        $sel[] | "#\(.id) · \(.autor // "anônimo") · \(.carimbo) · \(.corpo | length) car. · \(.corpo[0:100] | gsub("\n"; " "))"
+  if [ "$arvore" = "true" ] || [ -n "$busca_termo" ]; then
+    local -a fila=("$id")
+    local -A visitado=()
+    visitado["$id"]=1
+    local idx=0 linhas_acum='' bloco=''
+    while [ "$idx" -lt "${#fila[@]}" ]; do
+      local cid="${fila[$idx]}"
+      idx=$((idx + 1))
+      local card_rot=''
+      if [ "$arvore" = "true" ]; then
+        local item_j
+        item_j=$(busca GET "/itens/$cid") || return 1
+        card_rot=$(printf '%s' "$item_j" | jq -r "$JQ_ROT"'rot')
+        local fid
+        while IFS= read -r fid; do
+          [ -n "$fid" ] || continue
+          if [ -z "${visitado[$fid]:-}" ]; then
+            visitado["$fid"]=1
+            fila+=("$fid")
+          fi
+        done < <(printf '%s' "$item_j" | jq -r '.filhas[]?.id // empty')
       else
-        $sel[] | "--- #\(.id) · \(.autor // "anônimo") · \(.carimbo) ---\n\(.corpo)\n"
-      end' | para_texto)
+        card_rot=$(rotulo_de "$cid")
+      fi
+      local com_j
+      com_j=$(busca GET "/itens/$cid/comentarios") || return 1
+      if [ -n "$busca_termo" ]; then
+        bloco=$(printf '%s' "$com_j" | jq -c \
+          --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" '
+          .comentarios
+          | (if ($ids | length) > 0 then map(select(.id as $i | any($ids[]; . == $i))) else . end)
+          | map(select(.id >= $desde))
+          | (if $ultimos > 0 then .[-$ultimos:] else . end)' \
+          | BUSCA_TERMO="$busca_termo" CARD_ROT="$card_rot" python3 -c '
+import html, json, os, re, sys
+q = os.environ["BUSCA_TERMO"].casefold()
+card = os.environ["CARD_ROT"]
+for c in json.load(sys.stdin):
+    txt = re.sub(r"(?i)<br */?>|</p>|</li>|</h[0-9]>|</pre>", "\n", c.get("corpo") or "")
+    txt = html.unescape(re.sub(r"<[^>]*>", "", txt))
+    for linha in txt.splitlines():
+        if q in linha.casefold():
+            cid = c["id"]
+            print(f"#{cid} · {card} · {linha}")
+')
+      else
+        bloco=$(printf '%s' "$com_j" | jq -r \
+          --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" \
+          --argjson indice "$indice" --arg card "$card_rot" '
+          .comentarios as $todos
+          | ($todos
+             | (if ($ids | length) > 0 then map(select(.id as $i | any($ids[]; . == $i))) else . end)
+             | map(select(.id >= $desde))
+             | (if $ultimos > 0 then .[-$ultimos:] else . end)) as $sel
+          | if $indice then
+              $sel[] | "\($card) · #\(.id) · \(.autor // "anônimo") · \(.carimbo) · \(.corpo | length) car. · \(.corpo[0:100] | gsub("\n"; " "))"
+            else
+              $sel[] | "--- \($card) · #\(.id) · \(.autor // "anônimo") · \(.carimbo) ---\n\(.corpo)\n"
+            end' | para_texto)
+      fi
+      if [ -n "$bloco" ]; then
+        if [ -n "$linhas_acum" ]; then
+          linhas_acum+=$'\n'"$bloco"
+        else
+          linhas_acum="$bloco"
+        fi
+      fi
+    done
+    if [ -n "$linhas_acum" ]; then
+      saida="$linhas_acum"
+    elif [ -n "$busca_termo" ]; then
+      saida="(nenhum comentário encontrado para \"$busca_termo\")"
+    else
+      saida="(sem comentários)"
+    fi
+  else
+    saida=$(busca GET "/itens/$id/comentarios" | jq -r \
+      --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" --argjson indice "$indice" '
+      .comentarios as $todos
+      | ($todos
+         | (if ($ids | length) > 0 then map(select(.id as $i | any($ids[]; . == $i))) else . end)
+         | map(select(.id >= $desde))
+         | (if $ultimos > 0 then .[-$ultimos:] else . end)) as $sel
+      | if ($todos | length) == 0 then "(sem comentários)"
+        elif ($sel | length) == 0 then
+          "(nenhum comentário na seleção; o item tem \($todos | length), de #\($todos[0].id) a #\($todos[-1].id))"
+        elif $indice then
+          $sel[] | "#\(.id) · \(.autor // "anônimo") · \(.carimbo) · \(.corpo | length) car. · \(.corpo[0:100] | gsub("\n"; " "))"
+        else
+          $sel[] | "--- #\(.id) · \(.autor // "anônimo") · \(.carimbo) ---\n\(.corpo)\n"
+        end' | para_texto)
+  fi
   bytes=$(printf '%s' "$saida" | wc -c)
   if [ "$bytes" -gt 45000 ]; then
     echo "aviso: ${bytes} bytes; a porta corta a saída em 50000 e perde o fim. Leia por partes: tarefas comentarios $id --indice, depois --id <n>, --desde <n> ou --ultimos <k>"
@@ -2311,7 +2396,7 @@ case "$cmd" in
   criar)       criar "$@" ;;
   editar)      editar "$@" ;;
   comentar)    comentar "$@" ;;
-  comentarios) comentarios "${1:?uso: tarefas comentarios <id> [--indice] [--id <n>]... [--desde <n>] [--ultimos <k>]}" "${@:2}" ;;
+  comentarios) comentarios "$@" ;;
   mover)       mover "$@" ;;
   fechar)      fechar "${1:?uso: tarefas fechar <id>}" "${@:2}" ;;
   apagar)      apagar "${1:?uso: tarefas apagar <id> [--cascata]}" "${@:2}" ;;
