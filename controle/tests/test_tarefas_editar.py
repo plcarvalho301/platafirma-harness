@@ -49,8 +49,12 @@ curl() {
     */modelo/story|*/modelo/story-derivada)
       printf '%s' '{"texto":"Tarefas: molde servido pela API\n"}'
       return 0 ;;
+    */para-html)
+      printf '%s' "$corpo" | jq -c '{html: ("<p>" + (.texto | sub("\\n$"; "")) + "</p>")}'
+      if [ "$com_status" = 1 ]; then printf '\n200'; fi
+      return 0 ;;
   esac
-  printf '%s' "$corpo" > "$FAKE_CORPO"
+  [ -n "$corpo" ] && printf '%s' "$corpo" > "$FAKE_CORPO"
   if [ -n "${FAKE_RECUSA:-}" ]; then
     printf '%s' '{"erro": "recusado pela maquina"}'
     return 22
@@ -88,51 +92,12 @@ def test_desc_stdin_manda_patch_so_do_corpo(tmp_path):
     proc, chamadas, corpo = _run(["editar", "#42", "--desc-stdin"], tmp_path,
                                  stdin="Negócio: #1\n\nAceite: <sai 0>\n")
     assert proc.returncode == 0, proc.stderr
-    assert chamadas == ["GET http://127.0.0.1:9/api/modelo",
+    assert chamadas == ["POST http://127.0.0.1:9/api/para-html",
                         "PATCH http://127.0.0.1:9/api/itens/42"]
     assert set(corpo) == {"descricao"}
-    assert corpo["descricao"] == ("<p><strong>Negócio:</strong> #1</p>"
-                                   "<p><strong>Aceite:</strong> &lt;sai 0&gt;</p>")
+    assert corpo["descricao"] == "<p>Negócio: #1\n\nAceite: <sai 0></p>"
     assert "item 42 editado: card de teste" in proc.stdout
     assert "(inalterado)" in proc.stdout
-
-
-def test_rotulo_do_modelo_sai_em_negrito_e_cada_campo_abre_paragrafo(tmp_path):
-    """Campos colados em linhas seguidas viram um parágrafo cada; as linhas de lista e de
-    passo ficam no parágrafo do rótulo; rótulo de dois termos não é partido pelo menor."""
-    corpo_in = ("Negócio: #3196\nRaio de ataque:\n- repo@a.py\n- repo@b.py\n"
-                "Aceite × prova: x | y\nAceite: ok\n\nTexto livre: sem rótulo\n")
-    proc, _, corpo = _run(["editar", "42", "--desc-stdin"], tmp_path, stdin=corpo_in)
-    assert proc.returncode == 0, proc.stderr
-    assert corpo["descricao"] == (
-        "<p><strong>Negócio:</strong> #3196</p>"
-        "<p><strong>Raio de ataque:</strong><br>- repo@a.py<br>- repo@b.py</p>"
-        "<p><strong>Aceite × prova:</strong> x | y</p>"
-        "<p><strong>Aceite:</strong> ok</p>"
-        "<p>Texto livre: sem rótulo</p>")
-
-
-def test_tarefas_da_story_abre_paragrafo_proprio(tmp_path):
-    """arq:0060 §3 revista em 12/10/2026: a task mora na lista «Tarefas:» do corpo da story, e o
-    rótulo abre parágrafo próprio em vez de colar no campo anterior."""
-    corpo_in = ("Comportamento esperado: sai 0\nTarefas: na ordem\n1. lint · repo@a.py · sai 0\n"
-                "2. build · repo@b.js · sai 0\nAceite: ok\n")
-    proc, _, corpo = _run(["editar", "42", "--desc-stdin"], tmp_path, stdin=corpo_in)
-    assert proc.returncode == 0, proc.stderr
-    assert corpo["descricao"] == (
-        "<p><strong>Comportamento esperado:</strong> sai 0</p>"
-        "<p><strong>Tarefas:</strong> na ordem<br>1. lint · repo@a.py · sai 0<br>"
-        "2. build · repo@b.js · sai 0</p>"
-        "<p><strong>Aceite:</strong> ok</p>")
-
-
-@pytest.mark.parametrize("extra,variante", [([], "story"), (["derivada"], "story-derivada")])
-def test_modelo_story_pede_o_texto_ao_rastreador(tmp_path, extra, variante):
-    proc, chamadas, corpo = _run(["modelo", "story", *extra], tmp_path)
-    assert proc.returncode == 0, proc.stderr
-    assert chamadas == [f"GET http://127.0.0.1:9/api/modelo/{variante}"]
-    assert proc.stdout == "Tarefas: molde servido pela API\n"
-    assert corpo is None
 
 
 def test_titulo_sozinho_manda_so_titulo(tmp_path):
@@ -213,8 +178,9 @@ def test_comentar_com_a_opcao_stdin_le_o_corpo_do_stdin(tmp_path):
     """#2856 linhas 49 e 50: `comentar <id> --stdin` gravava «--stdin» como o corpo do comentário."""
     proc, chamadas, corpo = _run(["comentar", "42", "--stdin"], tmp_path, stdin="o texto vem do stdin\n")
     assert proc.returncode == 0, proc.stderr
-    assert chamadas == ["GET http://127.0.0.1:9/api/modelo",
-                        "POST http://127.0.0.1:9/api/itens/42/comentarios"]
+    assert chamadas == ["POST http://127.0.0.1:9/api/para-html",
+                        "POST http://127.0.0.1:9/api/itens/42/comentarios",
+                        "GET http://127.0.0.1:9/api/itens/42"]
     assert corpo == {"corpo": "<p>o texto vem do stdin</p>"}
 
 
@@ -228,6 +194,7 @@ def test_comentar_recusa_opcao_desconhecida_sem_chamar_api(tmp_path):
 def test_comentar_texto_de_varias_palavras_com_travessao_segue_sendo_corpo(tmp_path):
     proc, chamadas, corpo = _run(["comentar", "42", "--versão 2 saiu"], tmp_path)
     assert proc.returncode == 0, proc.stderr
-    assert chamadas == ["GET http://127.0.0.1:9/api/modelo",
-                        "POST http://127.0.0.1:9/api/itens/42/comentarios"]
+    assert chamadas == ["POST http://127.0.0.1:9/api/para-html",
+                        "POST http://127.0.0.1:9/api/itens/42/comentarios",
+                        "GET http://127.0.0.1:9/api/itens/42"]
     assert corpo == {"corpo": "<p>--versão 2 saiu</p>"}
