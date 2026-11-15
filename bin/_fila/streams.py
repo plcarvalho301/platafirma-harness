@@ -212,19 +212,140 @@ def valida_persona(p: str, json_mode: bool = False):
     sys.exit(1)
 
 
+def _extrai_cadeira_de_texto(bruto: str) -> str:
+    texto = (bruto or "").strip()
+    if not texto:
+        return ""
+    if texto.startswith("{"):
+        try:
+            d = json.loads(texto)
+            if isinstance(d, dict):
+                cad = d.get("cadeira") or d.get("PF_CADEIRA") or d.get("PLATAFIRMA_CADEIRA") or ""
+                if isinstance(cad, str) and cad.strip():
+                    return cad.strip()
+        except Exception:
+            pass
+    for linha in texto.splitlines():
+        linha = linha.strip()
+        for prefixo in ("PF_CADEIRA=", "PLATAFIRMA_CADEIRA=", "cadeira=", "cadeira:"):
+            if linha.startswith(prefixo):
+                val = linha[len(prefixo):].strip().strip("\"'")
+                if val:
+                    return val
+    if "\n" not in texto and " " not in texto and ":" not in texto:
+        return texto
+    return ""
+
+
+def mem_conn():
+    host = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
+    port = int(os.environ.get("MEM_REDIS_PORT", "6380"))
+    return redis.Redis(host=host, port=port, decode_responses=True,
+                       socket_connect_timeout=1, socket_timeout=1)
+
+
+def _resolve_cadeira_por_sessao(sid: str) -> str:
+    """Resolve a cadeira a partir do id/arquivo da sessao (DT 409)."""
+    sid = (sid or "").strip()
+    if not sid or sid == "-":
+        return ""
+
+    # 1. Arquivo de estado da sessao (explicito no env, caminho direto ou em diretorio de sessao)
+    candidatos_arq = []
+    for var in ("PLATAFIRMA_SESSAO_ARQUIVO", "PF_SESSAO_ARQUIVO"):
+        v = (os.environ.get(var) or "").strip()
+        if v:
+            candidatos_arq.append(v)
+    if os.path.isfile(sid):
+        candidatos_arq.append(sid)
+    dirs_sessao = []
+    for var in ("PLATAFIRMA_SESSAO_DIR", "PF_SESSAO_DIR"):
+        v = (os.environ.get(var) or "").strip()
+        if v:
+            dirs_sessao.append(v)
+    try:
+        dirs_sessao.append(str(instancia() / "var" / "sessao"))
+    except Exception:
+        pass
+    for d in dirs_sessao:
+        if not d or not os.path.isdir(d):
+            continue
+        for nome in (f"{sid}.json", f"sessao-{sid}.json", sid):
+            p = os.path.join(d, nome)
+            if os.path.isfile(p):
+                candidatos_arq.append(p)
+        if len(sid) >= 4:
+            try:
+                for entrada in os.scandir(d):
+                    if entrada.is_file() and (
+                        entrada.name.startswith(sid) or entrada.name.startswith(f"sessao-{sid}")
+                    ):
+                        candidatos_arq.append(entrada.path)
+            except OSError:
+                pass
+    for arq in candidatos_arq:
+        try:
+            with open(arq, encoding="utf-8") as f:
+                cad = _extrai_cadeira_de_texto(f.read())
+                if cad:
+                    return cad
+        except OSError:
+            pass
+
+    # 2. Chave viva `sessao:<sid>` no msg-mem (ou no cliente Redis mockado)
+    for fabrica in (mem_conn, r_conn):
+        try:
+            rc_s = fabrica()
+        except Exception:
+            continue
+        if not hasattr(rc_s, "get"):
+            continue
+        try:
+            bruto = rc_s.get(f"sessao:{sid}")
+            if isinstance(bruto, str) and bruto.strip():
+                cad = _extrai_cadeira_de_texto(bruto)
+                if cad:
+                    return cad
+            if len(sid) >= 4 and hasattr(rc_s, "scan_iter"):
+                cads = set()
+                for ch in rc_s.scan_iter(match=f"sessao:{sid}*", count=50):
+                    b = rc_s.get(ch)
+                    if isinstance(b, str):
+                        c = _extrai_cadeira_de_texto(b)
+                        if c:
+                            cads.add(c)
+                if len(cads) == 1:
+                    return next(iter(cads))
+        except Exception:
+            continue
+    return ""
+
+
 def resolve_eu(args) -> str:
-    eu = getattr(args, "eu", None) or os.environ.get("PF_CADEIRA", "")
+    eu = (
+        getattr(args, "eu", None)
+        or os.environ.get("PF_CADEIRA", "")
+        or os.environ.get("PLATAFIRMA_CADEIRA", "")
+    ).strip()
     if not eu:
-        sid = os.environ.get("PF_SESSAO", "").strip()
-        if sid:
-            msg = (f"sessao {sid} sem cadeira resolvida (expirada ou sem cadeira): "
-                   "reabra com monta_sessao(cadeira=<slug>) ou passe --eu <cadeira>")
-        else:
-            msg = "sem cadeira na sessão: abra com monta_sessao(cadeira=<slug>) ou passe --eu <cadeira>"
-        if _json_mode(args):
-            _falha_json(msg, 3)
-        sys.stderr.write(f"erro: {msg}\n")
-        sys.exit(3)
+        sid = (
+            getattr(args, "sessao_id", None)
+            or os.environ.get("PF_SESSAO", "")
+            or os.environ.get("PLATAFIRMA_SESSAO_ID", "")
+            or os.environ.get("PF_SESSAO_ID", "")
+        ).strip()
+        if sid and sid != "-":
+            eu = _resolve_cadeira_por_sessao(sid)
+        if not eu:
+            if sid and sid != "-":
+                msg = (f"sessao {sid} sem cadeira resolvida (expirada ou sem cadeira): "
+                       "reabra com monta_sessao(cadeira=<slug>) ou passe --eu <cadeira>")
+            else:
+                msg = "sem cadeira na sessão: abra com monta_sessao(cadeira=<slug>) ou passe --eu <cadeira>"
+            if _json_mode(args):
+                _falha_json(msg, 3)
+            sys.stderr.write(f"erro: {msg}\n")
+            sys.exit(3)
     # Case/prefixo fossil na entrada (PF_CADEIRA legado, --eu digitado) -> slug puro.
     canon = canoniza_persona(eu)
     return canon if canon else eu
@@ -632,11 +753,9 @@ def cmd_status(rc, eu: str, args):
         so_minha(eu, eu, json_mode=json_mode)
         personas = [eu]
     else:
-        msg = "sem cadeira na sessão: passe sessao_id"
-        if json_mode:
-            _falha_json(msg, 2)
-        sys.stderr.write(f"erro: {msg}\n")
-        sys.exit(2)
+        eu = resolve_eu(args)
+        valida_persona(eu, json_mode=json_mode)
+        personas = [eu]
 
     if json_mode:
         print(json.dumps([detalhe_status(rc, p) for p in personas], ensure_ascii=False))
@@ -663,6 +782,14 @@ def _carta_json(m: dict, chaves: tuple) -> dict:
     return item
 
 
+def _eh_msgid(val: str) -> bool:
+    """Identifica um msgid no formato AAAAMMDDTHHMMSS-<de>."""
+    if not val or len(val) < 17 or "-" not in val:
+        return False
+    carimbo = val[:15]
+    return len(carimbo) == 15 and carimbo[8] == "T" and carimbo[:8].isdigit() and carimbo[9:15].isdigit()
+
+
 def _ler_enviadas(rc, remetente: str, filtro_para: str = None) -> list:
     """Leitura fria das cartas enviadas por `remetente` nos ultimos 7-8 dias (DT 188)."""
     msgs = []
@@ -687,9 +814,13 @@ def _ler_enviadas(rc, remetente: str, filtro_para: str = None) -> list:
     return msgs
 
 
-def _cmd_ler_id(rc, eu: str, msgid: str, json_mode: bool):
-    """Leitura fria de uma carta especifica pelo `msgid`, para destinatario ou remetente (DT 188)."""
-    caixas = sorted(personas_validas() or set())
+def _cmd_ler_id(rc, eu: str, msgid: str, json_mode: bool, caixa_dica: str = None):
+    """Leitura fria de uma carta especifica pelo `msgid`, para destinatario ou remetente (DT 60 / DT 188)."""
+    todas_caixas = sorted(personas_validas() or set())
+    if caixa_dica and caixa_dica in todas_caixas:
+        caixas = [caixa_dica] + [c for c in todas_caixas if c != caixa_dica]
+    else:
+        caixas = todas_caixas
     achou = _achar_na_malha(rc, msgid, caixas)
     if not achou:
         msg = f"carta nao encontrada: {msgid} (expirada >7d ou id errado)"
@@ -698,7 +829,8 @@ def _cmd_ler_id(rc, eu: str, msgid: str, json_mode: bool):
         sys.stderr.write(f"erro: {msg}\n")
         sys.exit(1)
     caixa, _t, carta = achou
-    if eu != ESPIA and caixa != eu and carta["de"] != eu:
+    de_canon = canoniza_persona(carta["de"]) or carta["de"]
+    if eu != ESPIA and caixa != eu and de_canon != eu:
         so_minha(eu, caixa, json_mode=json_mode)
     carta["para"] = caixa
     if json_mode:
@@ -711,14 +843,21 @@ def _cmd_ler_id(rc, eu: str, msgid: str, json_mode: bool):
 def cmd_ler(rc, eu: str, args):
     json_mode = bool(getattr(args, "json", False))
     msgid_alvo = getattr(args, "msgid", None)
+    if not msgid_alvo and args.persona and not canoniza_persona(args.persona) and _eh_msgid(args.persona):
+        msgid_alvo = args.persona
+        args.persona = None
     if msgid_alvo:
-        _cmd_ler_id(rc, eu, msgid_alvo, json_mode)
+        dica = canoniza_persona(args.persona) if args.persona else None
+        _cmd_ler_id(rc, eu, msgid_alvo, json_mode, caixa_dica=dica)
         return
 
     env = bool(getattr(args, "enviadas", False))
     if env:
-        filtro_para = getattr(args, "remetente", None) or (
-            args.persona if args.persona and args.persona != eu else None)
+        filtro_para = (
+            getattr(args, "para_opt", None)
+            or getattr(args, "remetente", None)
+            or (args.persona if args.persona and args.persona != eu else None)
+        )
         if filtro_para:
             valida_persona(filtro_para, json_mode=json_mode)
             filtro_para = canoniza_persona(filtro_para)
@@ -734,22 +873,28 @@ def cmd_ler(rc, eu: str, args):
             imprime(m)
         return
 
-    alvo = args.persona or eu
+    alvo = "--todas" if getattr(args, "todas", False) else (args.persona or eu)
     if not alvo:
-        if json_mode:
-            _falha_json("sem cadeira na sessão: passe sessao_id", 2)
-        sys.stderr.write("erro: sem cadeira na sessão: passe sessao_id\n")
-        sys.exit(2)
+        alvo = resolve_eu(args)
+    if getattr(args, "remetente_opt", None):
+        args.remetente = args.remetente_opt
+
+    pend = bool(getattr(args, "penduradas", False))
+    frio = args.tudo or args.desde or pend
+
     if alvo == "--todas":
         so_espia(eu, json_mode=json_mode)
         personas = sorted(personas_validas() or set())
     else:
         valida_persona(alvo, json_mode=json_mode)
-        so_minha(eu, alvo, json_mode=json_mode)
+        alvo = canoniza_persona(alvo) or alvo
+        rem_canon = (canoniza_persona(args.remetente) or args.remetente) if args.remetente else None
+        # DT 60: o remetente pode ler em modo frio (--tudo / --desde) as proprias cartas enviadas
+        # a caixa de `<destino>` sem mover o ponteiro nem confirmar nada.
+        leitura_fria_propria = bool((args.tudo or args.desde) and not pend and rem_canon == eu)
+        if not leitura_fria_propria:
+            so_minha(eu, alvo, json_mode=json_mode)
         personas = [alvo]
-
-    pend = bool(getattr(args, "penduradas", False))
-    frio = args.tudo or args.desde or pend
 
     def _carrega(p):
         if pend:
@@ -765,6 +910,8 @@ def cmd_ler(rc, eu: str, args):
         )
         sys.exit(2)
 
+    rem_filtro = (canoniza_persona(args.remetente) or args.remetente) if args.remetente else None
+
     if json_mode:
         # Contrato de maquina pra tela: SEMPRE JSON. Sucesso = array de cartas
         # (mais nova primeiro); erro ja saiu por _falha_json acima. Cada carta
@@ -775,8 +922,8 @@ def cmd_ler(rc, eu: str, args):
         saida = []
         for p in personas:
             msgs = _carrega(p)
-            if args.remetente:
-                msgs = [m for m in msgs if m["de"] == args.remetente]
+            if rem_filtro:
+                msgs = [m for m in msgs if (canoniza_persona(m["de"]) or m["de"]) == rem_filtro]
             for m in reversed(msgs):
                 item = _carta_json(m, chaves)
                 if len(personas) > 1:
@@ -788,8 +935,8 @@ def cmd_ler(rc, eu: str, args):
     vazio = True
     for p in personas:
         msgs = _carrega(p)
-        if args.remetente:
-            msgs = [m for m in msgs if m["de"] == args.remetente]
+        if rem_filtro:
+            msgs = [m for m in msgs if (canoniza_persona(m["de"]) or m["de"]) == rem_filtro]
         if not msgs:
             continue
         vazio = False
@@ -851,6 +998,41 @@ def _assunto_do_corpo(corpo: str, limite: int = 120) -> str:
     return ""
 
 
+def _separa_destinatarios_e_corpo_pos(destinatarios: list, corpo_inicial: str = None):
+    """Suporta `fila enviar <dest> "<msg>"` (DT 357): quando nenhum `--corpo` foi
+    passado e o ultimo argumento posicional nao e uma persona valida (mas os
+    anteriores sao), separa-o como candidato a corpo posicional sem tocar stdin
+    antes de validar os destinatarios."""
+    if (
+        not (corpo_inicial or "").strip()
+        and len(destinatarios) >= 2
+        and personas_validas() is not None
+        and all(canoniza_persona(d) for d in destinatarios[:-1])
+        and not canoniza_persona(destinatarios[-1])
+        and not destinatarios[-1].startswith(PREFIXO_BOT)
+    ):
+        return destinatarios[:-1], destinatarios[-1]
+    return destinatarios, None
+
+
+def _resolve_corpo_enviar(corpo_opt: str = None, corpo_pos: str = None) -> str:
+    if (corpo_opt or "").strip():
+        return corpo_opt
+    corpo_stdin = ""
+    try:
+        if not sys.stdin.isatty():
+            corpo_stdin = sys.stdin.read()
+    except OSError:
+        corpo_stdin = ""
+    if corpo_stdin.strip():
+        if corpo_pos is not None:
+            valida_persona(corpo_pos)
+        return corpo_stdin
+    if corpo_pos is not None:
+        return corpo_pos
+    return corpo_stdin
+
+
 def _valida_responde(rc, responde: str, eu: str = None):
     """Recusa `--responde` cujo msgid nao existe na malha (DT 439)."""
     if hasattr(rc, "get") and rc.get(f"msgid:{responde}") is not None:
@@ -884,7 +1066,9 @@ def cmd_enviar(rc, eu: str, args):
     if contestacao and not args.ref:
         sys.stderr.write("erro: --tipo contestacao exige --ref <indicador contestado>\n")
         sys.exit(2)
-    destinatarios = getattr(args, "destinatarios", None) or [args.destinatario]
+    destinatarios = list(getattr(args, "destinatarios", None) or [args.destinatario])
+    corpo_opt = getattr(args, "corpo_opt", None)
+    destinatarios, corpo_pos = _separa_destinatarios_e_corpo_pos(destinatarios, corpo_opt)
     for dest in destinatarios:
         valida_persona(dest)
     valida_persona(de)
@@ -897,7 +1081,7 @@ def cmd_enviar(rc, eu: str, args):
     if args.responde:
         _valida_responde(rc, args.responde, eu)
 
-    corpo = sys.stdin.read()
+    corpo = _resolve_corpo_enviar(corpo_opt, corpo_pos)
     if not corpo.strip():
         sys.stderr.write("erro: fundamento vazio (corpo em stdin)\n" if contestacao else "erro: corpo vazio\n")
         sys.exit(1)
@@ -946,11 +1130,13 @@ def remetente_bot(de: str):
 def cmd_enviar_bot(rc, args):
     de = PREFIXO_BOT + remetente_bot(args.de)
     tipo = args.tipo or "pedido"
-    destinatarios = getattr(args, "destinatarios", None) or [args.destinatario]
+    destinatarios = list(getattr(args, "destinatarios", None) or [args.destinatario])
+    corpo_opt = getattr(args, "corpo_opt", None)
+    destinatarios, corpo_pos = _separa_destinatarios_e_corpo_pos(destinatarios, corpo_opt)
     for dest in destinatarios:
         valida_persona(dest)
     destinatarios = [canoniza_persona(d) for d in destinatarios]
-    corpo = sys.stdin.read()
+    corpo = _resolve_corpo_enviar(corpo_opt, corpo_pos)
     if not corpo.strip():
         sys.stderr.write("erro: corpo vazio\n")
         sys.exit(1)
@@ -1011,6 +1197,7 @@ def cmd_contestar(rc, args):
 def build_parser():
     ap = argparse.ArgumentParser(prog="fila", add_help=False)
     ap.add_argument("--eu", default=None)
+    ap.add_argument("--sessao-id", dest="sessao_id", default=None)
     sub = ap.add_subparsers(dest="verbo")
 
     p_status = sub.add_parser("status", add_help=False)
@@ -1018,22 +1205,28 @@ def build_parser():
     p_status.add_argument("--todas", action="store_true")
     p_status.add_argument("--json", action="store_true")
     p_status.add_argument("--eu", default=None)
+    p_status.add_argument("--sessao-id", dest="sessao_id", default=None)
 
     p_ler = sub.add_parser("ler", add_help=False)
     p_ler.add_argument("persona", nargs="?", default=None)
     p_ler.add_argument("remetente", nargs="?", default=None)
     p_ler.add_argument("--tudo", nargs="?", const=True, default=False)
     p_ler.add_argument("--desde", default=None)
+    p_ler.add_argument("--remetente", "--de", dest="remetente_opt", default=None)
+    p_ler.add_argument("--para", dest="para_opt", default=None)
+    p_ler.add_argument("--todas", action="store_true")
     p_ler.add_argument("--penduradas", action="store_true")
     p_ler.add_argument("--enviadas", action="store_true")
     p_ler.add_argument("--id", dest="msgid", default=None)
     p_ler.add_argument("--json", action="store_true")
     p_ler.add_argument("--eu", default=None)
+    p_ler.add_argument("--sessao-id", dest="sessao_id", default=None)
 
     p_tratar = sub.add_parser("tratar", add_help=False)
     p_tratar.add_argument("msgids", nargs="*")
     p_tratar.add_argument("--caixa", dest="persona", default=None)
     p_tratar.add_argument("--eu", default=None)
+    p_tratar.add_argument("--sessao-id", dest="sessao_id", default=None)
 
     p_tipos = sub.add_parser("tipos", add_help=False)
     p_tipos.add_argument("--eu", default=None)
@@ -1043,9 +1236,11 @@ def build_parser():
     p_enviar.add_argument("--de", default=None)
     p_enviar.add_argument("--tipo", default=None)
     p_enviar.add_argument("--assunto", default=None)
+    p_enviar.add_argument("--corpo", "-m", dest="corpo_opt", default=None)
     p_enviar.add_argument("--ref", default=None)
     p_enviar.add_argument("--responde", default=None)
     p_enviar.add_argument("--eu", default=None)
+    p_enviar.add_argument("--sessao-id", dest="sessao_id", default=None)
 
     p_contestar = sub.add_parser("contestar", add_help=False)
     p_contestar.add_argument("destinatario")
@@ -1054,47 +1249,93 @@ def build_parser():
     return ap
 
 
-def uso():
-    sys.stderr.write(
+def uso(codigo: int = 2):
+    out = sys.stdout if codigo == 0 else sys.stderr
+    out.write(
         "uso:\n"
-        "  fila status [<persona>] | --todas\n"
-        "  fila ler [<persona>]                     so o que chegou desde a ultima leitura (fica pendurada ate tratar)\n"
+        "  fila status [<persona>] [--todas] [--json]\n"
+        "  fila ler [<persona>] [--json]            so o que chegou desde a ultima leitura (fica pendurada ate tratar)\n"
         "  fila ler [<persona>] --penduradas        o que nao foi tratado: lidas sem ack + nao lidas; nao move nada\n"
-        "  fila tratar <msgid>...                   ack: a carta virou ato (resposta, card, mesa) ou foi superada\n"
-        "  fila ler [<persona>] --tudo [remetente]  historico dos 7 dias, nao move o ponteiro\n"
-        "  fila ler [<persona>] --desde <data> [remetente]\n"
-        "  fila ler --enviadas [destinatario]       cartas que voce enviou nos 7 dias (frio)\n"
-        "  fila ler --id <msgid>                    le uma carta especifica (destinatario ou remetente)\n"
-        "  fila enviar <destinatario>... [--tipo <t>] [--assunto <a>] [--ref <r>] [--responde <id>]\n"
-        "              (corpo em stdin; default: --tipo pedido, --assunto = 1a linha do corpo)\n"
+        "  fila ler [<persona>] --tudo [remetente]  historico dos 7 dias, nao move o ponteiro (ou --remetente / --de <slug>)\n"
+        "  fila ler [<persona>] --desde <data> [remetente]   historico desde AAAA-MM-DD ou AAAAMMDDTHHMMSS (ou --remetente / --de <slug>)\n"
+        "  fila ler --enviadas [destinatario]       cartas que voce enviou nos 7 dias (frio; aceita --para <slug>)\n"
+        "  fila ler --id <msgid>                    le uma carta especifica (destinatario ou remetente, sem mover ponteiro)\n"
+        "  fila tratar <msgid>... [--caixa <p>]     ack: a carta virou ato (resposta, card, mesa) ou foi superada\n"
+        "  fila enviar <destinatario>... [--tipo <t>] [--assunto <a>] [--ref <r>] [--responde <id>] [--corpo <txt>]\n"
+        "              (corpo em stdin ou posicional final `fila enviar <dest> \"<msg>\"`; default: --tipo pedido, --assunto = 1a linha)\n"
         "              --tipo contestacao: --ref e o indicador contestado, o corpo e o fundamento\n"
-        "  fila tipos                             lista os tipos validos de --tipo\n"
+        "  fila tipos                               lista os tipos validos de --tipo\n"
         "  fila contestar <cadeira> --indicador <nome>   contestacao a cadeira que configurou o indicador;\n"
         "              o fundamento vem no stdin (pela face, no envelope da porta)\n"
+        "  opcoes comuns: --eu <cadeira> · --sessao-id <id> · --help / -h\n"
     )
-    sys.exit(2)
+    sys.exit(codigo)
 
 
 def main():
+    argv = sys.argv[1:]
+    if any(a in ("-h", "--help", "--ajuda") for a in argv) or (argv and argv[0] in ("ajuda", "help")):
+        uso(0)
     ap = build_parser()
     args, _resto = ap.parse_known_args()
-    if not getattr(args, "eu", None) and _resto:
-        for _idx, _tok in enumerate(_resto):
-            if _tok == "--eu" and _idx + 1 < len(_resto):
-                args.eu = _resto[_idx + 1]
-                break
-            elif _tok.startswith("--eu="):
-                args.eu = _tok.split("=", 1)[1]
-                break
+    if _resto:
+        resto_limpo = []
+        idx = 0
+        while idx < len(_resto):
+            tok = _resto[idx]
+            if tok == "--eu" and idx + 1 < len(_resto):
+                if not getattr(args, "eu", None):
+                    args.eu = _resto[idx + 1]
+                idx += 2
+                continue
+            if tok.startswith("--eu="):
+                if not getattr(args, "eu", None):
+                    args.eu = tok.split("=", 1)[1]
+                idx += 1
+                continue
+            if tok == "--sessao-id" and idx + 1 < len(_resto):
+                if not getattr(args, "sessao_id", None):
+                    args.sessao_id = _resto[idx + 1]
+                idx += 2
+                continue
+            if tok.startswith("--sessao-id="):
+                if not getattr(args, "sessao_id", None):
+                    args.sessao_id = tok.split("=", 1)[1]
+                idx += 1
+                continue
+            if tok.startswith("-"):
+                sys.stderr.write(f"fila: erro: opção desconhecida: '{tok}'\n")
+                uso(2)
+            resto_limpo.append(tok)
+            idx += 1
+        _resto = resto_limpo
     if not args.verbo:
-        uso()
+        uso(2)
     if args.verbo == "ler":
-        if isinstance(args.tudo, str):
+        if getattr(args, "remetente_opt", None):
+            args.remetente = args.remetente_opt
+        elif isinstance(args.tudo, str):
             if not args.remetente:
                 args.remetente = args.tudo
             args.tudo = True
         elif not args.remetente and _resto:
             args.remetente = _resto[0]
+        elif (
+            args.desde
+            and args.persona
+            and not args.remetente
+            and "--desde" in argv
+        ):
+            # `fila ler --desde <data> <remetente>` sem `<persona>` antes de `--desde`:
+            # o unico posicional depois de `--desde <data>` e o filtro de remetente.
+            idx_desde = argv.index("--desde")
+            pos_antes = [
+                t for t in argv[1:idx_desde]
+                if not t.startswith("-")
+            ]
+            if not pos_antes and argv[idx_desde + 2:] and argv[idx_desde + 2] == args.persona:
+                args.remetente = args.persona
+                args.persona = None
     # `tipos` responde ANTES de tocar a malha: e info estatica e deve funcionar offline.
     if args.verbo == "tipos":
         sys.stdout.write("\n".join(sorted(TIPOS_VALIDOS)) + "\n")
@@ -1103,7 +1344,7 @@ def main():
         if args.tipo and args.tipo not in TIPOS_VALIDOS:
             sys.stderr.write(f"erro: tipo invalido: {args.tipo}\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n")
             sys.exit(1)
-        destinatarios = getattr(args, "destinatarios", None) or [args.destinatario]
+        destinatarios = list(getattr(args, "destinatarios", None) or [args.destinatario])
         for dest in destinatarios:
             if dest.startswith(PREFIXO_BOT):
                 sys.stderr.write("erro: bot nao tem caixa; responda a cadeira dona dele, que a carta "
@@ -1151,7 +1392,7 @@ def main():
     elif args.verbo == "enviar":
         cmd_enviar(rc, eu, args)
     else:
-        uso()
+        uso(2)
 
 
 if __name__ == "__main__":
