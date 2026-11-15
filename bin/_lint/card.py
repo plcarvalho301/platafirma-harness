@@ -83,8 +83,9 @@ RE_TIPO = re.compile(r"^(insumo|pergunta|buraco|requisito|decisão|fecho)( \(.+\
 # tipos da F3 e ficam fora do C1 (contraponto da lista)
 PREFIXOS_DELIVERY = ("conferencia", "registro de negocio", "registro de trabalho")
 RE_APOSTA = re.compile(r"^decisão \(dono\):\s*apostar", re.IGNORECASE)
-RE_FECHO = re.compile(r"^fecho(?: #\d+)?:")
-RE_FECHO_PROPRIO = re.compile(r"^fecho #(\d+)")
+RE_FECHO = re.compile(r"^\*{0,2}fecho(?:\s+#\d+)?\*{0,2}\s*:\s*\*{0,2}", re.IGNORECASE)
+RE_FECHO_PROPRIO = re.compile(r"^\*{0,2}fecho\s+#(\d+)", re.IGNORECASE)
+RE_FECHO_EMBUTIDO = re.compile(r"^\*{0,2}fecho\*{0,2}\s*:\s*\*{0,2}", re.IGNORECASE)
 
 CADEIRAS = (
     "dono", "gestao estrategica", "ia", "engenharia", "arquiteto", "arquitetura", "seguranca",
@@ -261,8 +262,11 @@ class Comentario:
         return _sem_acento(self.primeira().lower()).startswith(PREFIXOS_DELIVERY)
 
     def linha_com(self, prefixo: str) -> int | None:
+        rotulo = re.escape(prefixo.rstrip(":"))
+        flags = re.IGNORECASE if prefixo.islower() else 0
+        rx = re.compile(rf"^\s*\**{rotulo}\**\s*:\**", flags)
         for i, t in self.nao_vazias():
-            if t.strip().startswith(prefixo):
+            if t.strip().startswith(prefixo) or rx.match(t):
                 return i
         return None
 
@@ -475,7 +479,7 @@ def _c5(ctx: Contexto) -> list[Achado]:
         nv = c.nao_vazias()
         ultima = nv[-1][0] if nv else 0
         for i, t in nv:
-            if not t.strip().startswith("fecho:"):
+            if not RE_FECHO_EMBUTIDO.match(t.strip()):
                 continue
             if c.tipo() == "insumo":
                 achados.append((arq, i, "linha «fecho:» em comentário insumo"))
@@ -512,7 +516,7 @@ def _f2(ctx: Contexto) -> list[Achado]:
     for c in ctx.discovery():
         for i, t in c.nao_vazias():
             s = t.strip()
-            if RE_FECHO.match(s) and re.search(r"\b(formalizada|aceito)\b", s) \
+            if RE_FECHO.match(s) and re.search(r"\b(formalizada|aceito)\b", s, re.IGNORECASE) \
                     and not _RE_DESTINO.search(s.split(":", 1)[1]):
                 achados.append((ctx.arquivo_comentario(c), i, "fecho de formalização sem destino"))
     return achados
@@ -638,9 +642,18 @@ def _tarefas(*args: str) -> str:
 # ------------------------------------------------------------------ verificacao
 
 # arq:0096, emenda de 15/10/2026: o titulo e o rotulo onde se clica, ate 60 caracteres, em todo
-# nivel. Aviso, nunca bloqueante (#3887).
+# nivel. Aviso, nunca bloqueante (#3887). Codigo opaco (serie de ADR, minuta, numero de card,
+# secao § ou codigo interno de regra/item como F4, H2, AP8, C1) mora no corpo, nao no titulo (DT 25).
 LIMITE_TITULO = 60
 CURA_TITULO = "o título é o rótulo onde se clica; a lista do que entra vai ao corpo"
+CURA_TITULO_CODIGO = "o código mora no corpo; o título diz o que o card entrega (arq:0096)"
+RE_CODIGO_TITULO = re.compile(
+    r"#\d+\b"
+    r"|(?i:\b(?:arq|org|ont|seg|infra|integracao|dt)\s*:\s*\d+\b)"
+    r"|(?i:\b(?:adr|minuta)\s+\d+\b)"
+    r"|§\s*\d+(?:\.\d+)*"
+    r"|\b[A-Z]{1,2}\d+\b"
+)
 
 def ler_titulo(texto: str) -> str | None:
     """O titulo da saida de `tarefas ler`: a linha `# <titulo>` no topo. None sem ela: o lint
@@ -652,15 +665,27 @@ def ler_titulo(texto: str) -> str | None:
 
 def _conferir_titulo(nome_alvo: str, conteudo: str) -> list[Apontamento]:
     titulo = ler_titulo(conteudo)
-    if titulo is None or len(titulo) <= LIMITE_TITULO:
+    if titulo is None:
         return []
-    return [Apontamento(
-        nome_alvo, 1,
-        f"título com {len(titulo)} caracteres, acima do teto de {LIMITE_TITULO} (arq:0096)",
-        CURA_TITULO,
-        severidade="aviso",
-        id="CARD_TITULO",
-    )]
+    achados: list[Apontamento] = []
+    if len(titulo) > LIMITE_TITULO:
+        achados.append(Apontamento(
+            nome_alvo, 1,
+            f"título com {len(titulo)} caracteres, acima do teto de {LIMITE_TITULO} (arq:0096)",
+            CURA_TITULO,
+            severidade="aviso",
+            id="CARD_TITULO",
+        ))
+    m = RE_CODIGO_TITULO.search(titulo)
+    if m:
+        achados.append(Apontamento(
+            nome_alvo, 1,
+            f"título com código opaco «{m.group(0)}» sem significado próprio fora da origem (arq:0096)",
+            CURA_TITULO_CODIGO,
+            severidade="aviso",
+            id="CARD_TITULO_CODIGO",
+        ))
+    return achados
 
 # arq:0096, emenda de 21/10/2026 (card #3937): cada linha do bloco Regras da feature aponta o
 # R da spec ou o D da ADR de onde sai. Aviso, como o titulo. A feature sem o bloco nao se
