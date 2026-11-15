@@ -240,7 +240,7 @@ def uso(erro=None):
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs . dependencias . sessao-orfa . copia . ontologia", file=sys.stderr)
+    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs . unit . dependencias . sessao-orfa . copia . ontologia", file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
     sys.exit(2)
@@ -3372,6 +3372,52 @@ def conferir_jobs(alvo=None, como_json=False):
     return resultado.relatorio("jobs", alvo, itens, _sha_release(), como_json=como_json)
 
 
+# --- classe: unit (DT 352) --------------------------------------------------
+
+_SETUPS_UNIT_CHECK = {
+    "prior-secao": ("conhecimento", "rag/deploy/setup-prior-secao.sh"),
+}
+
+
+def conferir_unit(alvo=None, como_json=False):
+    """Confere convergencia das units de conta instaladas por setup com `--check` sem root."""
+    release = os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")
+    norm = alvo
+    if norm:
+        for suf in (".service", ".timer", ".path", ".socket"):
+            if norm.endswith(suf):
+                norm = norm[:-len(suf)]
+                break
+        if norm not in _SETUPS_UNIT_CHECK:
+            msg = f"unit sem --check declarado: {alvo!r} (validas: {', '.join(sorted(_SETUPS_UNIT_CHECK))})"
+            if como_json:
+                print(json.dumps({"erro": msg}))
+            else:
+                uso(msg)
+            return 2
+
+    itens = []
+    alvos = [norm] if norm else sorted(_SETUPS_UNIT_CHECK)
+    for nome in alvos:
+        familia, rel = _SETUPS_UNIT_CHECK[nome]
+        script = os.path.join(release, familia, rel)
+        if not os.path.isfile(script):
+            itens.append((nome, resultado.indeterminavel(f"setup ausente na release: {script}")))
+            continue
+        rc, out, err = units.sh(["bash", script, "--check"], timeout=60)
+        if rc == 0:
+            itens.append((nome, resultado.conforme()))
+            continue
+        linhas = [l.strip() for l in (out + "\n" + err).splitlines() if l.strip()]
+        detalhe = "; ".join(linhas[:5]) or f"setup --check saiu {rc}"
+        if rc == 1 and "nao consegui ler" not in detalhe.lower():
+            itens.append((nome, resultado.divergente(detalhe)))
+        else:
+            itens.append((nome, resultado.indeterminavel(detalhe)))
+
+    return resultado.relatorio("unit", alvo, itens, _sha_release(), como_json=como_json)
+
+
 # --- classe: ontologia (card #4254 / #4937) --------------------------------
 
 
@@ -3592,6 +3638,8 @@ def main(argv):
         return conferir_card(alvo, como_json=como_json)
     if classe == "jobs":
         return conferir_jobs(alvo, como_json=como_json)
+    if classe == "unit":
+        return conferir_unit(alvo, como_json=como_json)
     if classe == "acervo":
         import predicados_acervo
         return predicados_acervo.conferir_acervo(alvo, _sha_release(), como_json=como_json)

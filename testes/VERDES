@@ -50,3 +50,4 @@ test_curar_descricao_4144.py | bin/acervo bin/_acervo/** bin/curar
 test_curar_autor_dt141.py | bin/acervo bin/_acervo/** bin/curar
 test_curar_desrelacionar_desderivar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_teste_bench_dt376.py | bin/teste lib/ambiente_banco.py
+test_dt_unidades_systemd.py | bin/infra bin/_sessao/longjob bin/_release/conferir/**
