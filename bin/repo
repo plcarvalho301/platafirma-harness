@@ -469,12 +469,24 @@ ALVO=""
 
 # alvo_leitura <repo> -- poe em ALVO o diretorio a ler e, sem bancada, em LEITURA_REF a ref.
 # Chamar sem substituicao de comando, para LEITURA_REF chegar a quem chama.
+avisa_atras_origin() {
+  local c="$1" repo="$2"
+  "$GIT" -C "$c" rev-parse --verify -q origin/main >/dev/null 2>&1 || return 0
+  local atras
+  atras="$("$GIT" -C "$c" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)"
+  if [ "${atras:-0}" -gt 0 ] 2>/dev/null; then
+    printf "aviso: bancada atrás de origin/main por %s commit(s) — rode 'repo atualizar %s' ou 'repo sincronizar %s'\n" \
+      "$atras" "$repo" "$repo" >&2
+  fi
+  return 0
+}
+
 alvo_leitura() {
   local nome="${1:-}" err c rc base
   err="$(mktemp)"
   c="$(clone_de "$nome" 2>"$err")"; rc=$?
   if [ "$rc" -eq 0 ]; then
-    rm -f "$err"; ALVO="$c"; return 0
+    rm -f "$err"; ALVO="$c"; avisa_atras_origin "$c" "$nome"; return 0
   fi
   base="${nome%%@*}"
   if [ "$rc" -ne 1 ] || [ "$base" != "$nome" ] || [ ! -e "$BANCADA/$base/.git" ]; then
@@ -1751,6 +1763,13 @@ cmd_abrir() {
   cadeira="${cadeira#claudinho-}"
   cadeira="${cadeira#claudinha-}"
   [ -n "$cadeira" ] || morre "dependência ausente: PF_CADEIRA não definida — abrir exige cadeira" 3
+
+  if [ -n "$card" ]; then
+    local _card_num="${card###}"
+    if ! [[ "$_card_num" =~ ^[0-9]+$ ]]; then
+      morre "id de card deve ser numérico (recebido '$card'); para abrir sem card use: repo abrir $nome --slug ${card}${slug:+-$slug}" 2
+    fi
+  fi
 
   if direto_em_main "$nome"; then
     [ "$da_producao" -eq 0 ] \
