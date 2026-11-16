@@ -1,7 +1,7 @@
 """Contrato da `ler_arquivo` sobre `leitura.py` (spec ler-arquivo §14, card #3263).
 
 Sem subir a porta e sem estado do host: cada caso escreve a própria fixture em `tmp_path`.
-C15 e C16 são da poda e moram no `_ensaio.py`, que precisa do servidor.
+C15 e C16 são da poda e moram no `test_poda_porta.py`, que precisa do servidor.
 """
 import json
 import sys

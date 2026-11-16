@@ -21,7 +21,7 @@ INVARIANTES de toda poda, em ordem de dureza:
 
 O que este módulo NÃO faz: não fala com a rede, não decide política de acesso, não
 conhece FastMCP. Recebe texto e dicionário, devolve texto e dicionário — é o que o
-torna testável sem subir a porta (ver `_ensaio.py`, bloco arq:0101).
+torna testável sem subir a porta (ver `test_poda_porta.py`, bloco arq:0101).
 """
 from __future__ import annotations
 
