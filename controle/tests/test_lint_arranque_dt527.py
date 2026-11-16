@@ -56,13 +56,34 @@ def test_repo_atual_passa_sem_primitiva_em_dono_md():
 
 
 def test_arranque_sem_slug_aponta_cadeira_viva():
-    """DT #427: cadeira default sem slug no arranque deve existir em abertura/."""
+    """DT #427 e DT #706: toda cadeira default sem slug no arranque deve existir em abertura/."""
     import re
 
-    claude_md = (RAIZ / "agente" / "CLAUDE.md").read_text(encoding="utf-8")
-    m = re.search(r'Sem slug[^\n]*cadeira="([a-z0-9-]+)"', claude_md)
-    assert m is not None, "agente/CLAUDE.md deve declarar cadeira default para 'Sem slug'"
-    slug = m.group(1)
-    assert (RAIZ / "abertura" / slug / "persona.md").is_file(), (
-        f"cadeira default {slug!r} nao existe em abertura/"
+    for rel in ("agente/CLAUDE.md", "abertura/arranque.md"):
+        texto = (RAIZ / rel).read_text(encoding="utf-8")
+        slugs = [
+            m.group(1) or m.group(2)
+            for m in re.finditer(
+                r'(?:Sem slug[^\n]*cadeira="([a-z0-9-]+)"|sem slug,\s*(?:abre\s+)?`([a-z0-9-]+)`)',
+                texto,
+                re.I,
+            )
+        ]
+        assert slugs, f"{rel} deve declarar cadeira default para 'sem slug'"
+        for slug in slugs:
+            assert (RAIZ / "abertura" / slug / "persona.md").is_file(), (
+                f"cadeira default {slug!r} em {rel} nao existe em abertura/"
+            )
+    assert verificar_arranque(RAIZ, alvo="abertura/arranque.md") == []
+
+
+def test_reprova_cadeira_default_inexistente_em_arranque(tmp_path):
+    """DT 706: lint arranque barra default sem slug (ex.: fabrica) que nao existe em abertura/."""
+    (tmp_path / "abertura" / "engenharia").mkdir(parents=True)
+    (tmp_path / "abertura" / "engenharia" / "persona.md").write_text("# eng\n", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text(
+        '- Sem slug → `cadeira="fabrica"`.\nConsulte `abertura/arranque.md`.\n',
+        encoding="utf-8",
     )
+    apts = verificar_arranque(tmp_path)
+    assert any(a.id == "CADEIRA_DEFAULT_INVALIDA" and "fabrica" in a.o_que_fere for a in apts)

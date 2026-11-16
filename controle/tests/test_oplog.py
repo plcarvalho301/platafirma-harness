@@ -140,6 +140,9 @@ def test_chamador_que_cancelou_e_interrompida():
 def test_recusa_de_argumento_e_gramatica_e_negacao_do_pep_e_negada():
     assert oplog.classificar({"evento": "sem_verbo", "motivo": "x"})["classe"] == "gramatica"
     assert oplog.classificar({"evento": "cwd_recusado"})["classe"] == "gramatica"
+    assert oplog.classificar({"evento": "sessao_id_ausente_na_reabertura"})["classe"] == "gramatica"
+    assert oplog.classificar({"tool": "monta_sessao", "erro": "cadeira desconhecida: 'fabrica' — validas: ti"})["classe"] == "gramatica"
+    assert oplog.classificar({"tool": "monta_sessao", "exit_code": None})["classe"] == "ok"
     assert oplog.classificar({"evento": "pep_negou"})["classe"] == "negada"
     assert oplog.classificar({"evento": "pep_indisponivel"})["classe"] == "execucao"
 

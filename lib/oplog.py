@@ -48,10 +48,13 @@ PROTEGIDOS = frozenset({"ts", "evento_id", "schema_v", "tool", "evento", "classe
 
 CLASSES = ("ok", "negativa", "gramatica", "negada", "execucao", "interrompida")
 _POR_EXIT = {0: "ok", 1: "negativa", 2: "gramatica", 4: "negada"}
-_EVENTO_GRAMATICA = frozenset({"sem_verbo", "cwd_recusado", "escrita_recusada"})
+_EVENTO_GRAMATICA = frozenset({"sem_verbo", "cwd_recusado", "argumento_recusado",
+                               "escrita_recusada", "sessao_id_ausente_na_reabertura"})
 _POR_CLASSE_ERRO = {"gramatica": "gramatica", "faixa": "gramatica", "recusado": "negada",
                     "caminho": "negativa", "binario": "negativa"}
 _ABRIR_PROCESSO = ("falha ao abrir", "nao abriu", "não abriu")
+_ERRO_GRAMATICA_ABERTURA = ("cadeira desconhecida", "uso:", "--sessao-id", "--origem",
+                            "--agente", "sessao_id ausente")
 
 
 # --- onde mora ------------------------------------------------------------------------
@@ -192,7 +195,9 @@ def classificar(desfecho: dict, *, declara_exit: bool | None = None) -> dict:
     if por_classe_erro:
         return r(por_classe_erro)          # `causa` so existe na execucao (CHECK de acervo.log_giro)
     if erro:
-        texto = str(erro).lower()
+        texto = str(erro).strip().lower()
+        if desfecho.get("tool") in ("monta_sessao", "monta-sessao") and texto.startswith(_ERRO_GRAMATICA_ABERTURA):
+            return r("gramatica")
         if texto.startswith("timeout"):
             return r("execucao", "timeout")
         if texto.startswith(_ABRIR_PROCESSO):

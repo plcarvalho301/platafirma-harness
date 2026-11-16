@@ -37,10 +37,11 @@ VERSAO = "3f2a9c1b7d40"
 
 # --- andaime --------------------------------------------------------------------------------------
 
-def linha_dia(dia, cobertura="completo", motivo=None, versao=VERSAO):
+def linha_dia(dia, cobertura="completo", motivo=None, versao=VERSAO, por_tipo=None):
     passada = None if cobertura == "ausente" else {
         "id": "7d0c0f3e-0000-4000-8000-000000000001", "versao_extrator": versao, "linhas_lidas": 12,
-        "linhas_legiveis": 12, "linhas_ilegiveis": 0, "eventos_novos": 12, "eventos_existentes": 0, "amostra_n": 4}
+        "linhas_legiveis": 12, "linhas_ilegiveis": 0, "eventos_novos": 12, "eventos_existentes": 0, "amostra_n": 4,
+        **({"por_tipo": por_tipo} if por_tipo is not None else {})}
     return {"dia": dia, "cobertura": cobertura, "motivo": motivo, "versao_extrator": None if passada is None else versao,
             "arquivo": f"ops-{dia}.jsonl", "bytes": 100, "sha256": "a" * 64, "passada": passada}
 
@@ -53,8 +54,9 @@ class ApiFalsa:
     """O que a API devolve de D5.5, D5.7 e D5.8. Dia que ela não conhece sai como o serviço o devolve: ausente,
     `nao_extraido`."""
 
-    def __init__(self, dias=None, giros=(), turnos=None, erro=None):
+    def __init__(self, dias=None, giros=(), turnos=None, erro=None, eventos_abertura=()):
         self.dias, self.giros, self.turnos, self.erro = dias or {}, list(giros), turnos, erro
+        self.eventos_abertura = list(eventos_abertura)
         self.chamadas = []
 
     def chamar(self, metodo, caminho, corpo=None, params=None, aceita=(200,)):
@@ -65,6 +67,8 @@ class ApiFalsa:
             itens = [self.dias.get(d) or linha_dia(d, "ausente", "nao_extraido")
                      for d in particao.dias_entre(params["desde"], params["ate"])]
             return 200, {"itens": itens}
+        if caminho.endswith("/eventos"):
+            return 200, {"itens": self.eventos_abertura, "proximo": None}
         if caminho == "/acervo/log/giros/medida":
             return 200, {"fonte": "partição", "series": self.giros}
         if caminho == "/acervo/log/turnos/medida":
@@ -108,7 +112,8 @@ def _dia_misto(pasta, dia=DIA):
         {"ts": _ts(5), "tool": "sessao", "exit_code": 0},                                              # a sonda
         {"ts": _ts(6), "cadeira": "ti", "ordem_id": "o1", "sessao_id": SESSAO, "tool": "acervo", "ato": "ler",
          "evento": "pep_negou", "exit_code": None},                                                    # negada pelo PEP
-        {"ts": _ts(7), "cadeira": "ti", "ordem_id": "o3", "sessao_id": SESSAO, "tool": "monta_sessao", "exit_code": 0},
+        {"ts": _ts(7), "cadeira": "ti", "ordem_id": "o3", "sessao_id": SESSAO, "tool": "monta_sessao",
+         "classe": "ok", "exit_code": None},
         {"ts": _ts(8), "cadeira": "ti", "ordem_id": "o3", "sessao_id": SESSAO, "tool": "motor", "evento": "consulta",
          "query": "q", "exit_code": 0},
         {"ts": _ts(9), "tool": "-", "evento": "http_req", "path": "/mcp"},
@@ -222,23 +227,48 @@ def test_as_duas_fontes_dao_a_mesma_conta_de_giros_por_tool_e_classe(monkeypatch
     do_bruto = json_de(roda(monkeypatch, capsys, ApiFalsa(), "dia", DIA, "--fonte", "bruto")[1])
 
     series = {}
+    aberturas = []
     for item in ex.extrair(DIA, tmp_path).itens:
         if item["evento"]["tipo"] == "giro":
             g = item["giro"]
             chave = (g["tool"], g["ato"], g["classe"], item["evento"]["origem"])
             series[chave] = series.get(chave, 0) + 1
-    api = ApiFalsa({DIA: linha_dia(DIA)}, [serie(*k, n) for k, n in series.items()])
+        elif item["evento"]["tipo"] == "abertura":
+            aberturas.append(item["evento"])
+    api = ApiFalsa({DIA: linha_dia(DIA, por_tipo={"abertura": len(aberturas)})},
+                   [serie(*k, n) for k, n in series.items()], eventos_abertura=aberturas)
     da_particao = json_de(roda(monkeypatch, capsys, api, "dia", DIA, "--fonte", "particao")[1])
 
     assert do_bruto["fonte"] == "bruto" and da_particao["fonte"] == "partição"
     for chave in ("giros_tipo_giro", "giros_por_tool_e_classe", "giros_por_classe", "giros_por_tool", "giros_por_origem"):
         assert do_bruto[chave] == da_particao[chave], chave
     assert do_bruto["giros_por_tool_e_classe"] == {"acervo:negada": 1, "acervo:negativa": 1, "acervo:ok": 1, "mesa:ok": 1,
-                                                   "repo:execucao": 1, "repo:gramatica": 1, "sessao:ok": 1}
-    assert do_bruto["giros_por_origem"] == {"cadeira": 6, "sonda": 1}
-    # O bruto de antes conta toda linha com `tool`; a partição só o que é giro. A diferença são a abertura e a
-    # consulta ao motor, e vem dita, não escondida.
-    assert do_bruto["total"]["giros"] - do_bruto["giros_tipo_giro"] == 2
+                                                   "monta_sessao:ok": 1, "repo:execucao": 1, "repo:gramatica": 1, "sessao:ok": 1}
+    assert do_bruto["giros_por_origem"] == {"cadeira": 7, "sonda": 1}
+    # A abertura entra como `monta_sessao:ok` (DT 704); a diferença é só a consulta ao motor, e vem dita, não escondida.
+    assert do_bruto["total"]["giros"] - do_bruto["giros_tipo_giro"] == 1
+
+
+def test_verbos_da_particao_conta_abertura_como_monta_sessao_ok_e_da_a_mesma_taxa_do_bruto(monkeypatch, capsys, tmp_path):
+    """DT 704: `metrica verbos` pela partição soma as aberturas (`por_tipo.abertura`) aos giros de `monta_sessao` e dá
+    a mesma contagem e taxa de falha que `--fonte bruto` para o mesmo dia (ex.: 155 giros e 23 erros = 0.1484)."""
+    linhas = (
+        [{"ts": _ts(0), "cadeira": "engenharia", "ordem_id": f"o{i}", "sessao_id": SESSAO,
+          "tool": "monta_sessao", "classe": "ok", "exit_code": None} for i in range(132)]
+        + [{"ts": _ts(1), "cadeira": "engenharia", "ordem_id": f"e{i}", "sessao_id": SESSAO,
+            "tool": "monta_sessao", "erro": "cadeira desconhecida: 'fabrica' — validas: ti"} for i in range(23)]
+    )
+    (tmp_path / oplog.nome_do_dia(DIA)).write_text("\n".join(json.dumps(l) for l in linhas) + "\n", encoding="utf-8")
+    bruto_em(monkeypatch, tmp_path)
+
+    do_bruto = json_de(roda(monkeypatch, capsys, ApiFalsa(), "verbos", DIA, "--fonte", "bruto")[1])
+    api = ApiFalsa({DIA: linha_dia(DIA, por_tipo={"abertura": 132, "giro": 23})},
+                   [serie("monta_sessao", None, "gramatica", "cadeira", 23)])
+    da_particao = json_de(roda(monkeypatch, capsys, api, "verbos", DIA)[1])
+
+    mb = do_bruto["por_verbo"]["monta_sessao"]
+    mp = da_particao["por_verbo"]["monta_sessao"]
+    assert (mp["giros"], mp["erros"], mp["taxa"]) == (mb["giros"], mb["erros"], mb["taxa"]) == (155, 23, 0.1484)
 
 
 def test_contas_do_bruto_nao_conta_o_giro_que_o_extrator_nao_traduz():

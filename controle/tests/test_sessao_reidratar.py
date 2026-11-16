@@ -815,6 +815,23 @@ def test_sessao_abrir_aceita_platafirma_cadeira_e_flag_cadeira(monkeypatch):
     assert json.loads(f.getvalue())["cadeira"] == "ti"
 
 
+def test_sessao_abrir_sem_cadeira_ou_desconhecida_lista_validas_na_recusa(monkeypatch):
+    """DT 706: slug que nao existe ou vazio volta com a lista das validas na recusa."""
+    monkeypatch.delenv("PLATAFIRMA_CADEIRA", raising=False)
+    monkeypatch.setenv("PF_SUJEITO", "jose-123")
+    voc = {"arquiteto": {}, "engenharia": {}, "gestao-estrategica": {}}
+    with patch.object(sessao_mod, "_vocabulario", return_value=(voc, None)):
+        for arg in ("", "fabrica", "arquitetura"):
+            f = io.StringIO()
+            saida = sessao_mod.Saida(como_json=True)
+            with redirect_stdout(f):
+                rc = sessao_mod.ato_abrir(arg, None, saida)
+            assert rc == 2, arg
+            out = json.loads(f.getvalue())
+            assert out["cadeiras_validas"] == ["arquiteto", "engenharia", "gestao-estrategica"]
+            assert "validas: arquiteto engenharia gestao-estrategica" in out["erro"]
+
+
 def test_ver_sessao_encerrada_declara_encerrada_em_e_sai_1(monkeypatch):
     """DT 535: `sessao ver <id>` de sessão já encerrada (encerrada_em preenchida) sai 1,
     não reidrata no msg-mem e informa que foi encerrada e quando."""

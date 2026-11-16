@@ -294,6 +294,14 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
     if not (cadeira or "").strip():
         cadeira = (os.environ.get("PLATAFIRMA_CADEIRA") or "").strip()
     if not (cadeira or "").strip():
+        voc_vazio, _ = _vocabulario()
+        if voc_vazio:
+            validas = " ".join(sorted(voc_vazio))
+            return saida.erro(
+                f"uso: sessao abrir <cadeira> [--sessao-id <uuid>] [--origem <uuid>] [--dry-run] [--json] — validas: {validas}",
+                2,
+                cadeiras_validas=sorted(voc_vazio),
+            )
         return saida.erro("uso: sessao abrir <cadeira> [--sessao-id <uuid>] [--origem <uuid>] [--dry-run] [--json]", 2)
     sid_portado = None
     if sessao_id is not None:

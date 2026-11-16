@@ -138,14 +138,19 @@ def contas(por_tool_e_classe: Counter, por_origem: Counter) -> dict:
 
 
 def contas_do_bruto(giros: list[dict]) -> dict:
-    """Das linhas do bruto que o dia lê (`giros_do_dia`): só as que a partição guardaria como `giro` entram, pela
-    MESMA regra do extrator (`tipo_particao`, `classe_do_giro`, `origem_do_evento`). A linha que não tem
+    """Das linhas do bruto que o dia lê (`giros_do_dia`): as que a partição guarda como `giro` ou `abertura` entram,
+    pela MESMA regra do extrator (`tipo_particao`, `classe_do_giro`, `origem_do_evento`). A linha que não tem
     tradução fica fora e conta em `sem_traducao`."""
     por_tc, por_origem, sem = Counter(), Counter(), Counter()
     for g in giros:
         reg = g["bruto"]
         try:
-            if extracao.tipo_particao(reg) != "giro":
+            tipo = extracao.tipo_particao(reg)
+            if tipo == "abertura":
+                por_tc[("monta_sessao", "ok")] += 1
+                por_origem[extracao.origem_do_evento(reg)] += 1
+                continue
+            if tipo != "giro":
                 continue
             bloco = extracao.bloco_giro(reg)
         except extracao.SemTraducao as e:
@@ -165,6 +170,69 @@ def _regra_de_erro() -> dict:
     return {"erro": list(CLASSES_DE_ERRO), "fora_do_erro": [c for c in CLASSES if c not in CLASSES_DE_ERRO]}
 
 
+def _aberturas_do_dia(api, dia: str) -> list[dict]:
+    """Lê os eventos de tipo `abertura` do dia (D5.6) para recuperar hora, cadeira e origem."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    fuso = ZoneInfo("America/Sao_Paulo")
+    series = Counter()
+    cursor = None
+    for _ in range(20):
+        params = {"tipo": "abertura", "limite": 1000}
+        if cursor:
+            params["cursor"] = cursor
+        _, corpo = api.chamar("GET", f"/acervo/log/dias/{dia}/eventos", params=params)
+        itens = (corpo or {}).get("itens") or []
+        for it in itens:
+            ts = it.get("ts")
+            hora = None
+            if isinstance(ts, str) and ts:
+                try:
+                    hora = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(fuso).hour
+                except ValueError:
+                    hora = None
+            series[(dia, hora, it.get("cadeira"), it.get("origem") or "cadeira")] += 1
+        cursor = (corpo or {}).get("proximo")
+        if not cursor:
+            break
+    return [{"chave": {"tool": "monta_sessao", "ato": None, "classe": "ok",
+                       "dia": d, "hora": h, "cadeira": c, "origem": o}, "n": n}
+            for (d, h, c, o), n in sorted(series.items(), key=lambda kv: str(kv[0]))]
+
+
+def _series_abertura(api, cob_detalhe: list[dict], series_giros: list[dict],
+                     precisa_detalhe: bool = False) -> list[dict]:
+    """A abertura que deu certo entra na partição como `tipo = 'abertura'`, fora de `log_giro`. Soma as aberturas de
+    cada dia concluído como `monta_sessao` `ok` (pelo `por_tipo.abertura` de D5.5, ou por D5.6 quando o recorte pede
+    cadeira, origem ou hora) para que a partição conte cada chamada de `monta_sessao` como o bruto (DT 704)."""
+    por_dia = {}
+    for c in cob_detalhe:
+        if c.get("cobertura") == "ausente":
+            continue
+        n_ab = int(((c.get("passada") or {}).get("por_tipo") or {}).get("abertura") or 0)
+        if n_ab > 0:
+            por_dia[c["dia"]] = n_ab
+    if not por_dia:
+        return []
+    ja_ok = sum(int(s.get("n") or 0) for s in series_giros
+                if (s.get("chave") or {}).get("tool") == "monta_sessao"
+                and (s.get("chave") or {}).get("classe") == "ok")
+    if ja_ok >= sum(por_dia.values()):
+        return []
+    if not precisa_detalhe:
+        return [{"chave": {"tool": "monta_sessao", "ato": None, "classe": "ok", "dia": d}, "n": n}
+                for d, n in sorted(por_dia.items())]
+    out = []
+    for d, n_ab in sorted(por_dia.items()):
+        det = _aberturas_do_dia(api, d)
+        if det:
+            out.extend(det)
+        else:
+            out.append({"chave": {"tool": "monta_sessao", "ato": None, "classe": "ok",
+                                  "dia": d, "origem": "cadeira"}, "n": n_ab})
+    return out
+
+
 def dia_da_particao(api, dia: str, hoje: date, bruto_ausente, cadeira: str | None = None) -> dict:
     """`metrica dia` pela partição. O dia sem passada sai `ausente` com o motivo e sem uma única contagem."""
     cob = cobertura(api, [dia], hoje, bruto_ausente, detalhe=True)
@@ -173,6 +241,7 @@ def dia_da_particao(api, dia: str, hoje: date, bruto_ausente, cadeira: str | Non
         return {**base, "resultado": "ausente", "motivo": cob[0]["motivo"], "so_no_bruto": list(SO_NO_BRUTO_DIA)}
     por = ["tool", "ato", "classe", "origem"] + (["cadeira"] if cadeira else [])
     series = medir_giros(api, dia, dia, por).get("series", [])
+    series = list(series) + _series_abertura(api, cob, series, precisa_detalhe=True)
     if cadeira:
         series = [s for s in series if (s.get("chave") or {}).get("cadeira") == cadeira]
     por_tc, por_origem, erros_ato = Counter(), Counter(), defaultdict(Counter)
@@ -236,7 +305,8 @@ def verbos_da_particao(api, dias: list[str], rotulo: str, hoje: date, bruto_ause
     """`metrica verbos` pela partição, numa janela de dias. Dia sem passada fica fora da conta e dentro de
     `cobertura` (e de `dias_sem_log`) com o motivo: a taxa da janela é a dos dias que a partição tem. Com
     `latencia`, também o tempo por verbo e por verbo:ato (`latencia_da_particao`, #3414)."""
-    cob = cobertura(api, dias, hoje, bruto_ausente)
+    cob_det = cobertura(api, dias, hoje, bruto_ausente, detalhe=True)
+    cob = [{k: v for k, v in c.items() if k not in ("sha256", "passada")} for c in cob_det]
     base = {"dia": rotulo, "dias": dias, "dias_sem_log": _ausentes(cob), "fonte": FONTE,
             "versoes_extrator": _versoes(cob), "cobertura": cob}
     if len(_ausentes(cob)) == len(dias):
@@ -250,6 +320,8 @@ def verbos_da_particao(api, dias: list[str], rotulo: str, hoje: date, bruto_ause
         if p not in dims:
             dims.append(p)
     series = medir_giros(api, dias[0], dias[-1], dims).get("series", [])
+    precisa_det = bool(cadeira or origem or (set(por or ()) - {"dia"}))
+    series = list(series) + _series_abertura(api, cob_det, series, precisa_detalhe=precisa_det)
     if cadeira:
         series = [s for s in series if (s.get("chave") or {}).get("cadeira") == cadeira]
     if origem:
