@@ -649,3 +649,73 @@ def test_rodar_repassa_help_apos_duplo_traco(arvore):
         assert f"RODAR_ARGS: ['rodar', 'p', '--', '{flag}']" in r.stdout
     r_uso = _roda_arvore(arvore, "rodar", "--ajuda", checa_exit=2)
     assert "uso:" in r_uso.stderr
+
+
+def _carrega_rodar_peca():
+    import importlib.util
+    caminho = Path(__file__).resolve().parents[2] / "bin" / "_infra" / "rodar-peca.py"
+    spec = importlib.util.spec_from_loader("rodar_peca_test", importlib.machinery.SourceFileLoader("rodar_peca_test", str(caminho)))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_rodar_atualiza_bancada_limpa_por_fast_forward(tmp_path):
+    import importlib.machinery
+    mod = _carrega_rodar_peca()
+
+    remote = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(remote)], check=True, capture_output=True)
+    seed = tmp_path / "seed"
+    subprocess.run(["git", "clone", str(remote), str(seed)], check=True, capture_output=True)
+    for k, v in (("user.name", "t"), ("user.email", "t@t")):
+        subprocess.run(["git", "-C", str(seed), "config", k, v], check=True)
+    (seed / "peca.py").write_text("x = 1\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(seed), "add", "peca.py"], check=True)
+    subprocess.run(["git", "-C", str(seed), "commit", "-m", "c1"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(seed), "push", "origin", "main"], check=True, capture_output=True)
+
+    wt = tmp_path / "wt"
+    subprocess.run(["git", "clone", str(remote), str(wt)], check=True, capture_output=True)
+    for k, v in (("user.name", "t"), ("user.email", "t@t")):
+        subprocess.run(["git", "-C", str(wt), "config", k, v], check=True)
+
+    (seed / "outro.txt").write_text("novo\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(seed), "add", "outro.txt"], check=True)
+    subprocess.run(["git", "-C", str(seed), "commit", "-m", "c2"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(seed), "push", "origin", "main"], check=True, capture_output=True)
+    sha_main = subprocess.check_output(["git", "-C", str(seed), "rev-parse", "HEAD"], text=True).strip()
+
+    sha = mod.gate_origin_main(wt, ["peca.py"], "espelho")
+    assert sha == sha_main
+    head_wt = subprocess.check_output(["git", "-C", str(wt), "rev-parse", "HEAD"], text=True).strip()
+    assert head_wt == sha_main
+
+
+def test_rodar_recusa_fast_forward_com_arvore_suja(tmp_path):
+    mod = _carrega_rodar_peca()
+
+    remote = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(remote)], check=True, capture_output=True)
+    seed = tmp_path / "seed"
+    subprocess.run(["git", "clone", str(remote), str(seed)], check=True, capture_output=True)
+    for k, v in (("user.name", "t"), ("user.email", "t@t")):
+        subprocess.run(["git", "-C", str(seed), "config", k, v], check=True)
+    (seed / "peca.py").write_text("x = 1\n", encoding="utf-8")
+    (seed / "outro.txt").write_text("v1\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(seed), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(seed), "commit", "-m", "c1"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(seed), "push", "origin", "main"], check=True, capture_output=True)
+
+    wt = tmp_path / "wt"
+    subprocess.run(["git", "clone", str(remote), str(wt)], check=True, capture_output=True)
+    (wt / "outro.txt").write_text("sujo\n", encoding="utf-8")
+
+    (seed / "outro.txt").write_text("v2\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(seed), "add", "outro.txt"], check=True)
+    subprocess.run(["git", "-C", str(seed), "commit", "-m", "c2"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(seed), "push", "origin", "main"], check=True, capture_output=True)
+
+    with pytest.raises(SystemExit) as exc:
+        mod.gate_origin_main(wt, ["peca.py"], "espelho")
+    assert exc.value.code == 4

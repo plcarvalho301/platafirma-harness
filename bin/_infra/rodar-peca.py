@@ -163,7 +163,13 @@ def gate_origin_main(wt: Path, caminhos: list, repo: str = "") -> str:
         except ValueError:
             n_atras = 0
         if n_atras > 0:
-            morre(f"bancada {n_atras} commits atrás de origin/main: repo atualizar {repo or wt.name}", 4)
+            suja = _git(wt, "status", "--porcelain", "--untracked-files=no")
+            if suja.returncode == 0 and suja.stdout.strip():
+                morre(f"bancada {n_atras} commits atrás de origin/main e com alterações locais: repo atualizar {repo or wt.name}", 4)
+            ff = _git(wt, "merge", "--ff-only", "origin/main")
+            if ff.returncode != 0:
+                morre(f"bancada {n_atras} commits atrás de origin/main (fast-forward recusado): repo sincronizar {repo or wt.name}", 4)
+            print(f"infra rodar: bancada atualizada por fast-forward (+{n_atras} commit(s) até {sha[:12]})", file=sys.stderr)
     dif = _git(wt, "diff", "--name-only", "origin/main", "--", *caminhos)
     if dif.returncode != 0:
         morre(f"não consegui comparar {wt} com origin/main: {dif.stderr.strip()[:300]}", 3)
