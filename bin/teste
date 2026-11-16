@@ -1430,19 +1430,44 @@ ato_rodar() {
   local raiz="$c"
   [ -n "$REG_SUBARVORE" ] && raiz="$c/$REG_SUBARVORE"
 
-  if [ "$REG_ESTEIRA" = "documento" ] && [ -n "$alvo" ]; then
-    local venvs_doc s_nome s_lock s_sub s_casada=""
+  if [ -n "$alvo" ] && [ -z "$chave" ] && { [ "$REG_ESTEIRA" = "documento" ] || [ "${nome%%@*}" = "$REG_FAMILIA" ]; }; then
+    local venvs_doc s_nome s_lock s_sub s_casada="" melhor_len=0 alvo_rel="${alvo%%::*}"
+    alvo_rel="${alvo_rel#./}"
+    alvo_rel="${alvo_rel%/}"
     venvs_doc="${PLATAFIRMA_VENVS:-$(dirname "$(readlink -f "$0")")/../registro/venvs.json}"
     while IFS=$'\t' read -r s_nome s_lock s_sub; do
       [ -n "$s_sub" ] && [ "$s_sub" != "-" ] || continue
-      case "${alvo%%::*}" in
-        "$s_sub"|"$s_sub"/*) s_casada="$s_nome"; break ;;
+      case "$alvo_rel" in
+        "$s_sub"|"$s_sub"/*)
+          if [ "${#s_sub}" -gt "$melhor_len" ]; then
+            s_casada="$s_nome"
+            melhor_len="${#s_sub}"
+          fi
+          ;;
       esac
     done < <(PLATAFIRMA_VENVS="$venvs_doc" python3 "$REGISTRO" --familia "$REG_FAMILIA")
     if [ -n "$s_casada" ]; then
+      local stack_antes="$REG_STACK"
       resolver_registro "${s_casada}${REG_BANCADA:+@$REG_BANCADA}"
-      raiz="$c"
-      [ -n "$REG_SUBARVORE" ] && raiz="$c/$REG_SUBARVORE"
+      # Stack com globs "testes" (ex.: acervo em testes/) só casa alvo dentro desses globs
+      if [ -n "$REG_TESTES" ] && [ "$alvo_rel" != "$REG_SUBARVORE" ]; then
+        local _casa_glob=0 _g _base="${alvo_rel##*/}"
+        local _globs=()
+        IFS=',' read -r -a _globs <<<"$REG_TESTES"
+        for _g in "${_globs[@]}"; do
+          case "$_base" in $_g) _casa_glob=1; break ;; esac
+        done
+        if [ "$_casa_glob" -eq 0 ]; then
+          resolver_registro "$alvo_resolver"
+          case "$nome" in *@*) REG_BANCADA="${nome#*@}" ;; esac
+          s_casada=""
+        fi
+      fi
+      if [ -n "$s_casada" ]; then
+        raiz="$c"
+        [ -n "$REG_SUBARVORE" ] && raiz="$c/$REG_SUBARVORE"
+        [ "$REG_STACK" = "$stack_antes" ] || printf 'ambiente:  %s -> stack %s (subárvore %s)\n' "$nome" "$REG_STACK" "$REG_SUBARVORE" >&2
+      fi
     fi
   fi
 
