@@ -730,6 +730,7 @@ cache() {
       else
         docker image prune -a -f
       fi
+      docker volume prune -f
       uv cache prune 2>/dev/null || true
       echo "cache de modelo (huggingface, ollama) nao e apagado aqui: rebaixar custa GiB de re-download."
       ;;
