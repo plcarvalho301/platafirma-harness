@@ -39,6 +39,7 @@ VARIANTES_DO_STUB = ["epico", "feature", "story", "story-derivada", "story-refin
 class _Stub(BaseHTTPRequestHandler):
     comentarios: list = []
     fechos: list = []
+    edicoes: list = []
     espera: dict = {}
 
     VOCAB = {
@@ -76,7 +77,28 @@ class _Stub(BaseHTTPRequestHandler):
             return self._json({"item": int(m.group(1)), "comentarios": self.comentarios})
         self._json({"erro": "nao existe"}, 404)
 
+    def do_PATCH(self):
+        m = re.match(r"^/itens/(\d+)/comentarios/(\d+)$", self.path)
+        if not m:
+            return self._json({"erro": "rota"}, 404)
+        item_id, cid = int(m.group(1)), int(m.group(2))
+        n = int(self.headers.get("Content-Length", 0))
+        corpo = json.loads(self.rfile.read(n) or b"{}")
+        alvo = next((c for c in self.comentarios if c["id"] == cid), None)
+        if alvo is None:
+            return self._json({"erro": f"comentário {cid} não existe no item {item_id}"}, 404)
+        if alvo.get("tipo") == "buraco" and "<p>buraco:" not in (corpo.get("corpo") or "").lower():
+            return self._json({"erro": f"PATCH não pode trocar o tipo gravado (`buraco`) do comentário #{cid} (R13)"}, 400)
+        alvo["corpo"] = corpo.get("corpo", "")
+        type(self).edicoes.append((item_id, cid, dict(corpo), self.headers.get("x-auth-request-preferred-username")))
+        return self._json({"id": cid, "item": item_id, "corpo": alvo["corpo"]})
+
     def do_POST(self):
+        if self.path == "/para-html":
+            n = int(self.headers.get("Content-Length", 0))
+            corpo = json.loads(self.rfile.read(n) or b"{}")
+            texto = corpo.get("texto", "")
+            return self._json({"html": f"<p>{texto}</p>"})
         m = re.match(r"^/itens/(\d+)/comentarios/(\d+)/fecho$", self.path)
         if not m:
             return self._json({"erro": "rota"}, 404)
@@ -110,7 +132,7 @@ class _Stub(BaseHTTPRequestHandler):
 
 @pytest.fixture()
 def stub():
-    _Stub.comentarios, _Stub.fechos, _Stub.espera = [], [], {}
+    _Stub.comentarios, _Stub.fechos, _Stub.edicoes, _Stub.espera = [], [], [], {}
     srv = HTTPServer(("127.0.0.1", 0), _Stub)
     t = threading.Thread(target=srv.serve_forever, daemon=True)
     t.start()
@@ -321,3 +343,64 @@ def test_exec_curl_detail_json_expoe_detalhe(tmp_path):
     p = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
     assert p.returncode != 0
     assert "sujeito ausente" in p.stderr
+
+
+def test_comentar_edita_converte_para_html_e_envia_patch(stub):
+    """DT 743: `tarefas comentar <id> --edita <n> <txt>` converte via /para-html e envia PATCH."""
+    s, base = stub
+    s.comentarios.append({"id": 5161, "tipo": "insumo", "corpo": "<p>insumo: antigo</p>"})
+    env = dict(os.environ, TAREFAS_BASE=base, PF_CADEIRA="engenharia")
+    p = subprocess.run(
+        [str(BIN), "comentar", "4314", "--edita", "5161", "insumo: novo corpo"],
+        capture_output=True, text=True, env=env, timeout=30,
+    )
+    assert p.returncode == 0, p.stderr
+    assert "comentário #5161 do item 4314 editado" in p.stdout
+    assert s.edicoes == [(4314, 5161, {"corpo": "<p>insumo: novo corpo</p>"}, "engenharia")]
+
+
+def test_comentar_edita_aceita_sustenido_e_stdin(stub):
+    """DT 743: `--edita #<n>` sem texto lê o corpo de stdin e converte em HTML."""
+    s, base = stub
+    s.comentarios.append({"id": 5161, "tipo": "insumo", "corpo": "<p>insumo: antigo</p>"})
+    env = dict(os.environ, TAREFAS_BASE=base, PF_CADEIRA="engenharia")
+    p = subprocess.run(
+        [str(BIN), "comentar", "4314", "--edita", "#5161"],
+        input="insumo: via stdin", capture_output=True, text=True, env=env, timeout=30,
+    )
+    assert p.returncode == 0, p.stderr
+    assert "comentário #5161 do item 4314 editado" in p.stdout
+    assert s.edicoes == [(4314, 5161, {"corpo": "<p>insumo: via stdin</p>"}, "engenharia")]
+
+
+def test_comentar_edita_recusa_r13_sai_4_e_404_sai_1(stub):
+    """DT 743: recusa 400 (R13) sai exit 4 com mensagem; 404 sai exit 1."""
+    s, base = stub
+    s.comentarios.append({"id": 5161, "tipo": "buraco", "corpo": "<p>buraco: antigo</p>"})
+    env = dict(os.environ, TAREFAS_BASE=base, PF_CADEIRA="engenharia")
+    p400 = subprocess.run(
+        [str(BIN), "comentar", "4314", "--edita", "5161", "pergunta: trocou tipo"],
+        capture_output=True, text=True, env=env, timeout=30,
+    )
+    assert p400.returncode == 4
+    assert "R13" in p400.stderr
+    p404 = subprocess.run(
+        [str(BIN), "comentar", "4314", "--edita", "9999", "texto"],
+        capture_output=True, text=True, env=env, timeout=30,
+    )
+    assert p404.returncode == 1
+    assert "não existe" in p404.stderr
+
+
+def test_comentar_edita_uso_errado_sai_2(stub):
+    """DT 743: id de comentário inválido, ausente, opção desconhecida ou corpo vazio saem exit 2."""
+    _, base = stub
+    env = dict(os.environ, TAREFAS_BASE=base, PF_CADEIRA="engenharia")
+    for args in (
+        ["comentar", "4314", "--edita"],
+        ["comentar", "4314", "--edita", "abc", "texto"],
+        ["comentar", "4314", "--edita", "5161", "--nada"],
+        ["comentar", "4314", "--edita", "5161", "   "],
+    ):
+        p = subprocess.run([str(BIN), *args], input="", capture_output=True, text=True, env=env, timeout=30)
+        assert p.returncode == 2, (args, p.stdout, p.stderr)
