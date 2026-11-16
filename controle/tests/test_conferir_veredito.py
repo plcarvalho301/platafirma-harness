@@ -1762,3 +1762,65 @@ def test_bin_irmaos_segue_plataforma_release(monkeypatch):
     monkeypatch.setenv("PLATAFIRMA_RELEASE", "/tmp/rel-x")
     modulo = _carregar(CONFERIR_PATH, "conferir_bin_irmaos_teste")
     assert modulo.BIN_IRMAOS == "/tmp/rel-x/harness/bin"
+
+
+def test_dt691_conferir_ontologia_chama_raciocinar_e_nunca_sai_conforme_sem_classe_ou_em_404(monkeypatch, capsys):
+    """DT 691: conferir ontologia chama /raciocinar, trata HTTP 404 como indeterminável (5) e nunca dá conforme (0)
+    quando nenhuma classe foi achada no alvo (Zalando RESTful API Guidelines, seção 11; QuickCheck, 2.3)."""
+    import io
+    monkeypatch.setenv("OLARIA_URL", "http://olaria.test:8103")
+    monkeypatch.setenv("OLARIA_CHAVE", "chave-teste")
+    monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+
+    rotas_chamadas = []
+
+    class _Resp:
+        def __init__(self, status, payload):
+            self.status = status
+            self._payload = payload
+
+        def read(self):
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    # 1. Alvo com classes conformes -> chama /raciocinar e sai 0
+    def _urlopen_ok(req, timeout=110):
+        rotas_chamadas.append(req.full_url)
+        return _Resp(200, {"pronto": True, "estado": "conforme", "classes": ["shape", "dicionario"], "erros": []})
+
+    monkeypatch.setattr(conferir.urllib.request, "urlopen", _urlopen_ok)
+    rc_ok = conferir.conferir_ontologia("estrato:formal")
+    out_ok = capsys.readouterr().out
+    assert rc_ok == 0
+    assert rotas_chamadas == ["http://olaria.test:8103/raciocinar"]
+    assert "2 conforme · 0 divergente · 0 não consegui olhar" in out_ok
+
+    # 2. Alvo sem classes -> sai 5 (não consegui olhar), nunca 0 (conforme)
+    monkeypatch.setattr(
+        conferir.urllib.request,
+        "urlopen",
+        lambda req, timeout=110: _Resp(200, {"pronto": True, "estado": "conforme", "classes": [], "erros": []}),
+    )
+    rc_vazio = conferir.conferir_ontologia("estrato:formal")
+    out_vazio = capsys.readouterr().out
+    assert rc_vazio == 5
+    assert "0 conforme · 0 divergente · 1 não consegui olhar" in out_vazio
+    assert "nenhuma classe no alvo" in out_vazio
+
+    # 3. Erro HTTP 404 (ex.: rota inexistente) -> sai 5 (não consegui olhar), nunca 0 (conforme)
+    def _urlopen_404(req, timeout=110):
+        raise conferir.urllib.error.HTTPError(
+            req.full_url, 404, "Not Found", {}, io.BytesIO(b'{"estado":"nao-existe","erro":"/sonda"}')
+        )
+
+    monkeypatch.setattr(conferir.urllib.request, "urlopen", _urlopen_404)
+    rc_404 = conferir.conferir_ontologia("capacidade:modelos-formais")
+    out_404 = capsys.readouterr().out
+    assert rc_404 == 5
+    assert "0 conforme · 0 divergente · 1 não consegui olhar" in out_404
+    assert "Olaria respondeu 404" in out_404

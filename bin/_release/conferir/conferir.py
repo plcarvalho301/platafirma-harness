@@ -3475,8 +3475,13 @@ def _linha_achado(e):
 
 
 def conferir_ontologia(alvo, como_json=False):
-    if not alvo or not (alvo.startswith("estrato:") or alvo.startswith("capacidade:")) or not alvo.split(":", 1)[1].strip():
-        msg = "uso: conferir ontologia estrato:<slug> | capacidade:<slug>"
+    alvo_invalido = (
+        not alvo
+        or not alvo.strip()
+        or (":" in alvo and (not alvo.startswith(("estrato:", "capacidade:")) or not alvo.split(":", 1)[1].strip()))
+    )
+    if alvo_invalido:
+        msg = "uso: conferir ontologia estrato:<slug> | capacidade:<slug> | <classe>"
         if como_json:
             print(json.dumps({"erro": msg}))
             return 2
@@ -3489,7 +3494,7 @@ def conferir_ontologia(alvo, como_json=False):
         return resultado.relatorio("ontologia", alvo, itens, _sha_release(), como_json=como_json)
 
     req = urllib.request.Request(
-        f"{url}/sonda",
+        f"{url}/raciocinar",
         data=json.dumps({"alvo": alvo}).encode("utf-8"),
         method="POST",
         headers={
@@ -3499,7 +3504,7 @@ def conferir_ontologia(alvo, como_json=False):
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=110) as resp:
             status = resp.status
             corpo = json.loads(resp.read().decode("utf-8") or "{}")
     except urllib.error.HTTPError as err:
@@ -3508,7 +3513,7 @@ def conferir_ontologia(alvo, como_json=False):
             corpo = json.loads(err.read().decode("utf-8") or "{}")
         except Exception:
             corpo = {"erro": str(err)}
-        if status >= 500 or status == 403:
+        if status != 422:
             itens = [(alvo, resultado.indeterminavel(f"Olaria respondeu {status}: {corpo.get('erro') or corpo.get('motivos') or status}"))]
             return resultado.relatorio("ontologia", alvo, itens, _sha_release(), como_json=como_json)
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as err:
@@ -3559,7 +3564,11 @@ def conferir_ontologia(alvo, como_json=False):
             itens.append((alvo, resultado.divergente("divergencia na sonda")))
         return resultado.relatorio("ontologia", alvo, itens, _sha_release(), como_json=como_json, extra={"avisos": avisos})
 
-    itens = [(c, resultado.conforme()) for c in classes] if classes else [(alvo, resultado.conforme())]
+    if not classes or corpo.get("estado") != "conforme":
+        itens = [(alvo, resultado.indeterminavel("nenhuma classe no alvo"))]
+        return resultado.relatorio("ontologia", alvo, itens, _sha_release(), como_json=como_json, extra={"avisos": avisos})
+
+    itens = [(c, resultado.conforme()) for c in classes]
     return resultado.relatorio("ontologia", alvo, itens, _sha_release(), como_json=como_json, extra={"avisos": avisos})
 
 
