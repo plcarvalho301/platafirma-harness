@@ -411,7 +411,7 @@ def _idade_dias_msgid(msgid):
     return (time.time() - ts) / 86400
 
 
-def _imprime_grupo_cartas(titulo, grupo, rodape_fn):
+def _imprime_grupo_cartas(titulo, grupo, rodape_fn, *, avisa_vence=True):
     """Imprime um grupo de cartas (novas ou penduradas) em cabecalho, separado (#4289)."""
     print(f"\n  [{titulo}]")
     if not grupo:
@@ -420,7 +420,7 @@ def _imprime_grupo_cartas(titulo, grupo, rodape_fn):
     vencendo = 0
     for c in grupo:
         quando = c["id"][:13]
-        dias = _idade_dias_msgid(c["id"])
+        dias = _idade_dias_msgid(c["id"]) if avisa_vence else None
         aviso = ""
         if dias is not None and dias >= AVISO_VENCE_DIAS:
             vencendo += 1
@@ -478,9 +478,9 @@ def roda_fila_cabecalho(rotulo, cmd, timeout=90, status_cmd=None):
                         "ack: `fila tratar <msgid>...` (ou responder com `--responde`)"))
     _imprime_grupo_cartas(
         "penduradas — ja lidas, aguardando `fila tratar` (nao esperam leitura)", penduradas,
-        lambda n, v: (f"  {n} pendurada(s) (ja lida(s), sem `fila tratar`)"
-                      + (f", {v} perto de vencer" if v else "")
-                      + "; se ja resolvida/superada: `fila tratar <msgid>...`"))
+        lambda n, _v: (f"  {n} pendurada(s) (ja lida(s), sem `fila tratar`)"
+                       "; se ja resolvida/superada: `fila tratar <msgid>...`"),
+        avisa_vence=False)
     if outras:
         _imprime_grupo_cartas(
             "outras", outras,
@@ -664,9 +664,9 @@ def ato_fita(args):
           "   CADEIRA pendente — faca agora, ou card se nao cabe na fita, e depois\n"
           "   `fila tratar <msgid>`; (iii) ja respondida ou superada —\n"
           "   `fila tratar <msgid>`.\n"
-          "   A marcada VENCE sai da caixa aos 7 dias,\n"
+          "   A nova marcada VENCE sai da caixa aos 7 dias,\n"
           "   tratada ou nao: o que tem de durar vira card ou mesa antes.\n"
-          "   Carta parada que ninguem apresenta ao dono e decisao que nao existe.\n"
+          "   Carta nova parada que ninguem apresenta ao dono e decisao que nao existe.\n"
           "\n"
           "2. por chapeu tocado nesta fita — OBRIGATORIO, TRES partes, sempre as\n"
           "   tres: o que se aprendeu vai ao caderno; o que a ferramenta fez\n"

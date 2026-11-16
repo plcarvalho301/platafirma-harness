@@ -506,3 +506,38 @@ def test_dt_671_help_e_filtros_ler(monkeypatch, capsys):
         assert code_f == 0, f"falhou em {argv}: {cap_f.err}"
         assert "20261003T100000-ia" in cap_f.out
         assert "20261003T110000-dados" not in cap_f.out
+
+
+def test_4289_reconcilia_pel_ja_respondida_superada_e_enviadas_stream(monkeypatch, capsys):
+    rc = StreamRC([
+        ("100-1", {"id": "20261110T100000-dados", "de": "dados", "tipo": "pedido",
+                   "assunto": "ja respondida antes do DT 336", "ref": "", "responde": "", "corpo": "p1"}),
+        ("100-2", {"id": "20261115T144540-dados", "de": "dados", "tipo": "pedido",
+                   "assunto": "aviso cancelado pelo remetente", "ref": "", "responde": "", "corpo": "p2"}),
+        ("100-3", {"id": "20261115T144641-dados", "de": "dados", "tipo": "decisao",
+                   "assunto": "desconsiderar aviso", "ref": "", "responde": "20261115T144540-dados", "corpo": "p3"}),
+    ])
+    # Resposta enviada por `ti` a `dados` no stream (sem indice ZSET `enviadas:ti`, como antes do PR #1013):
+    rc.streams["caixa:dados"] = [
+        ("200-1", {"id": "20261110T120000-ti", "de": "ti", "tipo": "resposta",
+                   "assunto": "re p1", "ref": "", "responde": "20261110T100000-dados", "corpo": "r1"}),
+    ]
+    # Entrega quente coloca 100-1, 100-2, 100-3 na PEL de `ti`, mais um id fantasma 99-1 ja cortado pelo trim:
+    rc.xreadgroup("cadeira", "ti", {"caixa:ti": ">"}, count=10)
+    rc.pel.insert(0, "99-1")
+
+    # `fila status` e `fila ler --penduradas` reconciliam 99-1 (trim), 100-1 (ja respondida) e 100-2 (superada):
+    code_st, cap_st = _rodar(monkeypatch, capsys, ["status"], rc, eu="ti")
+    assert code_st == 0
+    assert "1 pendurada(s)" in cap_st.out
+    assert rc.pel == ["100-3"]
+
+    code_p, cap_p = _rodar(monkeypatch, capsys, ["ler", "--penduradas", "--json"], rc, eu="ti")
+    assert code_p == 0
+    itens = json.loads(cap_p.out)
+    assert [m["msgid"] for m in itens] == ["20261115T144641-dados"]
+
+    # `fila ler --enviadas` encontra a carta no stream mesmo sem estar no ZSET `enviadas:ti`:
+    code_env, cap_env = _rodar(monkeypatch, capsys, ["ler", "--enviadas"], rc, eu="ti")
+    assert code_env == 0
+    assert "20261110T120000-ti" in cap_env.out
