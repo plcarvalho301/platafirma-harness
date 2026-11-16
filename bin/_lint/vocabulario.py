@@ -89,7 +89,7 @@ def julgar_citacao(
         return None
     if tokens[1].startswith("-"):
         return None
-    if v == "motor" and len(tokens) >= 3 and tokens[1] in ("rag", "reasoner", "embeddings"):
+    if v == "motor" and len(tokens) >= 3 and tokens[1] in ("rag", "embeddings"):
         ato = tokens[2]
     else:
         ato = tokens[1]

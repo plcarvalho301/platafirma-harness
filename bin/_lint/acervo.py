@@ -162,7 +162,7 @@ def ler_projecao() -> dict:
     else:
         from lib.raizes import release
         raiz = release()
-        script = raiz / "conhecimento" / "ontologia" / "projecao" / "gerar-e-raciocinar.py"
+        script = raiz / "conhecimento" / "ontologia" / "tesauro" / "raciocinar.py"
         py = os.environ.get("PF_PROJECAO_PYTHON") or str(raiz / "venv" / "acervo" / "bin" / "python")
         if not script.is_file() or not os.path.isfile(py):
             return {"erro": f"sem o gerador ({script}) ou o venv acervo ({py}) na release"}

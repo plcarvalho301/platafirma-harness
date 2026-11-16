@@ -394,10 +394,5 @@
   "endpoint": "http://127.0.0.1:8130",
   "token_em": "/srv/platafirma/casa/segredos/marcacao-api/MARCACAO_TOKEN",
   "ajustes": []
- },
- "reasoner": {
-  "estado": "planejada",
-  "container": null,
-  "ajustes": []
  }
 }

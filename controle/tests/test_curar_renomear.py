@@ -266,9 +266,9 @@ def test_lista_que_nao_se_resolve_deixa_o_d7_indeterminavel_e_o_apply_recusa(amb
 # ------------------------------------------------------------------ HermiT
 
 def _hermit_falso(tmp_path, ambiente, depois=(), sai=0, antes=()):
-    arvore = Path(ambiente["PLATAFIRMA_RELEASE"]) / "conhecimento" / "ontologia" / "projecao"
+    arvore = Path(ambiente["PLATAFIRMA_RELEASE"]) / "conhecimento" / "ontologia" / "tesauro"
     arvore.mkdir(parents=True, exist_ok=True)
-    (arvore / "gerar-e-raciocinar.py").write_text("# o falso nao le o script\n", encoding="utf-8")
+    (arvore / "raciocinar.py").write_text("# o falso nao le o script\n", encoding="utf-8")
     anotados = tmp_path / "args.txt"
     py = tmp_path / "py-falso"
     py.write_text(

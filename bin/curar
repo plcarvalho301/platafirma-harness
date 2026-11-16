@@ -646,7 +646,7 @@ depois de --apply: o export ontologia/acervo/conceito_relacao.jsonl é regenerad
 conhecimento — commit e push são da cadeira que lavrou.
 """
 
-_PROJECAO_REL = "ontologia/projecao/gerar-e-raciocinar.py"
+_PROJECAO_REL = "ontologia/tesauro/raciocinar.py"   # o raciocinador do tesauro da biblioteca (#4313)
 
 
 def _repo_conhecimento() -> str | None:
