@@ -173,6 +173,10 @@ uso:
   tarefas comentar <id> --fecha <n> "<resultado> — <destino>"
                                           escreve «fecho: …» como última linha do comentário n
                                           (comentário tipado; insumo não leva fecho)
+  tarefas comentar <id> --edita <n> ["<txt>"]
+                                          troca o corpo do comentário n (lê stdin se sem texto,
+                                          converte em HTML como na criação; a API recusa trocar
+                                          o tipo ou mexer no fecho, R13)
   tarefas comentarios <id> [--indice] [--busca <termo>] [--arvore] [--id <n>]... [--desde <n>] [--ultimos <k>]
                                           lista os comentários do item, em ordem. --busca <termo>
                                           filtra as linhas que casam (id, card e linha); --arvore
@@ -1170,6 +1174,10 @@ comentar() {
     fechar_comentario "$id" "${3:-}" "${4:-}"
     return
   fi
+  if [ "${2:-}" = "--edita" ]; then
+    editar_comentario "$id" "${3:-}" "${4:-}"
+    return
+  fi
   local txt="${2:-}"
   # Opção no lugar do texto não é corpo (#2856 linhas 49 e 50): `--stdin` manda ler o stdin; outra
   # opção de uma palavra só é recusada, em vez de gravada como comentário.
@@ -1228,6 +1236,55 @@ comentar() {
 # só partir o argumento em resultado/destino e traduzir o status HTTP: 400 (sem tipo, ou
 # resultado fora do vocabulário) e 403 (quem fecha não pode) saem 4; 409 (já fechado) e 404
 # (não existe) saem 1, porque não há nada a repetir.
+# DT 743: troca o corpo de um comentário existente via `PATCH /itens/{id}/comentarios/{cid}`.
+# A API (card #3410, R13 da spec comentario-tipado) guarda o corpo anterior no ledger e recusa
+# com 400 se a edição trocar o tipo gravado ou alterar a linha de fecho.
+editar_comentario() {
+  local id="$1" cid="${2:-}" txt="${3:-}"
+  local uso='uso: tarefas comentar <id> --edita <n> ["<txt>"] (ou corpo em stdin)'
+  cid="${cid#\#}"
+  case "$cid" in ''|*[!0-9]*) echo "$uso" >&2; exit 2 ;; esac
+  if [[ "$txt" =~ ^--[a-zA-Z][a-zA-Z0-9-]*$ ]]; then
+    [ "$txt" = "--stdin" ] || { echo "erro: tarefas comentar --edita: opção desconhecida '$txt'; o corpo vai entre aspas ou em stdin." >&2; exit 2; }
+    txt=""
+  fi
+  if [ -z "$txt" ] && [ ! -t 0 ]; then
+    txt="$(cat)"
+  fi
+  local trim
+  trim="$(printf '%s' "$txt" | tr -d '[:space:]')"
+  if [ -z "$trim" ]; then
+    echo "erro: tarefas comentar --edita: corpo do comentário não pode ser vazio." >&2
+    echo "$uso" >&2
+    exit 2
+  fi
+  local html; html=$(printf '%s' "$txt" | para_html) || return 1
+  local corpo saida status body
+  corpo=$(jq -n --arg c "$html" '{corpo:$c}')
+  if [ -n "$QUEM" ]; then
+    saida=$(printf '%s' "$corpo" | curl -s -X PATCH "$BASE/itens/$id/comentarios/$cid" \
+                 -H 'Content-Type: application/json' \
+                 -H "x-auth-request-preferred-username: $QUEM" -d @- -w '\n%{http_code}')
+  else
+    saida=$(printf '%s' "$corpo" | curl -s -X PATCH "$BASE/itens/$id/comentarios/$cid" \
+                 -H 'Content-Type: application/json' -d @- -w '\n%{http_code}')
+  fi
+  status="${saida##*$'\n'}"
+  body="${saida%$'\n'*}"
+  case "$status" in
+    200)
+      printf '%s' "$body" | jq -r --arg it "$(rotulo_de "$id" n)" '"comentário #\(.id) do item \($it) editado"'
+      ;;
+    400)
+      printf '%s' "$body" | jq -r '.erro // .detail // empty' >&2
+      exit 4 ;;
+    *)
+      local msg; msg=$(printf '%s' "$body" | jq -r '.erro // .detail // empty' 2>/dev/null || true)
+      printf '%s\n' "${msg:-falha ao falar com o rastreador em $BASE (status ${status:-desconhecido})}" >&2
+      exit 1 ;;
+  esac
+}
+
 fechar_comentario() {
   local id="$1" cid="${2:-}" txt="${3:-}"
   local uso='uso: tarefas comentar <card> --fecha <n> "<resultado> — <destino>"'
