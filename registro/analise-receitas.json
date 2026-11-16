@@ -58,5 +58,17 @@
     "repositorio": "platafirma-conhecimento",
     "caminho": "analise/desfecho-da-leitura",
     "versao": "c6fdfb7"
+  },
+  "trilha-do-card": {
+    "tipo": "preparacao",
+    "repositorio": "platafirma-conhecimento",
+    "caminho": "analise/trilha-do-card",
+    "versao": "6109e08"
+  },
+  "aposta-e-stories": {
+    "tipo": "analise",
+    "repositorio": "platafirma-conhecimento",
+    "caminho": "analise/aposta-e-stories",
+    "versao": "6109e08"
   }
 }
