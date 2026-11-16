@@ -91,6 +91,8 @@ def test_teste_bench_executa_script_com_ambiente(tmp_path):
     (venv_dir / "pyvenv.cfg").write_text(f"home = {os.path.dirname(py_real)}\n", encoding="utf-8")
     (venv_dir / ".pronto").touch()
 
+    terceiros_json = tmp_path / "terceiros.json"
+    terceiros_json.write_text('{"_leia": "fixture sem terceiro"}\n', encoding="utf-8")
     env = {
         **os.environ,
         "PLATAFIRMA_BANCADA": str(bancada),
@@ -99,6 +101,7 @@ def test_teste_bench_executa_script_com_ambiente(tmp_path):
         "PF_RELEASE_RAIZ": str(release_raiz),
         "PF_CADEIRA": "ti",
         "PF_MOTOR_REG": str(tmp_path / "inexistente.json"),
+        "PLATAFIRMA_TERCEIROS": str(terceiros_json),
     }
 
     r = subprocess.run(

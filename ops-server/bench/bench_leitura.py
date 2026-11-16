@@ -585,10 +585,11 @@ def medir(fn, *, curto: str, frio: bool, reps: int = REPETICOES) -> dict:
 
 
 def _linha(tarefa: str, arq, tool: str, estado: str, m: dict) -> dict:
-    return {"tarefa": tarefa, "arquivo": arq.nome, "tipo": arq.tipo, "faixa": arq.faixa,
-            "bytes": arq.bytes, "tool": tool, "estado": estado, "chamadas": m["chamadas"],
-            "servidos": m["servidos"], "lidos": m["lidos"], "tempos": m["tempos"],
-            "defeitos": m["defeitos"], "recusou": m["recusou"], "extra": dict(m["extra"])}
+    return {"tarefa": tarefa, "arquivo": arq.nome, "origem": arq.origem, "tipo": arq.tipo,
+            "faixa": arq.faixa, "bytes": arq.bytes, "tool": tool, "estado": estado,
+            "chamadas": m["chamadas"], "servidos": m["servidos"], "lidos": m["lidos"],
+            "tempos": m["tempos"], "defeitos": m["defeitos"], "recusou": m["recusou"],
+            "extra": dict(m["extra"])}
 
 
 def par(linhas: list, tarefa: str, arq, fn_ref, fn_cand, *, quente: bool = True) -> None:
@@ -619,6 +620,8 @@ def coleta(c: _corpus.Corpus) -> tuple[list, list]:
         orc = Oraculo(arq.caminho)
         par(linhas, "T1", arq, lambda x, a=arq, o=orc: t1("ref", x, a, o),
             lambda x, a=arq, o=orc: t1("cand", x, a, o))
+        if arq.origem != "fixture":
+            continue
         if arq.bytes > LIMIAR_T2_T3:
             par(linhas, "T2", arq, lambda x, a=arq, o=orc: t2("ref", x, a, o),
                 lambda x, a=arq, o=orc: t2("cand", x, a, o))
@@ -709,15 +712,19 @@ def criterios(linhas: list) -> list[dict]:
                       if x["extra"].get("recusa_nova")})
     cs.append(_criterio(3, "recusas novas de arquivo de texto: zero", "0", str(len(recusas)),
                         recusas))
-    # 4 e 5. T1, bytes servidos e chamadas, somados no corpus
-    sr, sc = _soma(linhas, "T1", "ref", "unico", "servidos"), \
-        _soma(linhas, "T1", "cand", "frio", "servidos")
+    # 4 a 8. Custo e razão de I/O em disco medem apenas as fixtures sintéticas determinísticas
+    # (DT 732); a varredura da árvore viva (origem == "repo") fica nos critérios 1 a 3.
+    linhas_fix = [x for x in linhas
+                  if x.get("origem") == "fixture" or str(x.get("arquivo", "")).startswith("fixture:")]
+    cand_fix = [x for x in linhas_fix if x["tool"] == "cand"]
+    sr, sc = _soma(linhas_fix, "T1", "ref", "unico", "servidos"), \
+        _soma(linhas_fix, "T1", "cand", "frio", "servidos")
     r4 = _razao(sc, sr)
     cs.append(_criterio(4, "T1: bytes servidos da candidata ≤ 1,05 × a referência (soma no corpus)",
                         f"≤ {LIMITE_BYTES_T1}", f"{_n(sc)} / {_n(sr)} = {_fr(r4)}",
                         [] if r4 is None or r4 <= LIMITE_BYTES_T1 else [f"razão {_fr(r4)}"]))
-    cr, cc = _soma(linhas, "T1", "ref", "unico", "chamadas"), \
-        _soma(linhas, "T1", "cand", "frio", "chamadas")
+    cr, cc = _soma(linhas_fix, "T1", "ref", "unico", "chamadas"), \
+        _soma(linhas_fix, "T1", "cand", "frio", "chamadas")
     r5 = _razao(cc, cr)
     cs.append(_criterio(5, "T1: chamadas da candidata ≤ 1,05 × a referência (soma no corpus)",
                         f"≤ {LIMITE_CHAMADAS_T1}", f"{_n(cc)} / {_n(cr)} = {_fr(r5)}",
@@ -726,7 +733,7 @@ def criterios(linhas: list) -> list[dict]:
     viol6, partes6, custos6 = [], [], []
     for tarefa in ("T2", "T3"):
         rb, rc_ = [], []
-        for ref, frio, _q in _instancias(linhas, tarefa):
+        for ref, frio, _q in _instancias(linhas_fix, tarefa):
             if frio is None:
                 continue
             # Os dois custos conhecidos da emenda de 04/10/2026, mostrados com o número.
@@ -763,10 +770,10 @@ def criterios(linhas: list) -> list[dict]:
                         + ("; custos conhecidos: " + "; ".join(custos6) if custos6 else ""),
                         viol6))
     # 7. T4: bytes servidos da segunda leitura (somados)
-    s4r, s4c = _soma(linhas, "T4", "ref", "unico", "segunda"), \
-        _soma(linhas, "T4", "cand", "unico", "segunda")
-    ref_t4 = {x["arquivo"]: x for x in linhas if x["tarefa"] == "T4" and x["tool"] == "ref"}
-    por_arquivo = sum(1 for x in cand if x["tarefa"] == "T4"
+    s4r, s4c = _soma(linhas_fix, "T4", "ref", "unico", "segunda"), \
+        _soma(linhas_fix, "T4", "cand", "unico", "segunda")
+    ref_t4 = {x["arquivo"]: x for x in linhas_fix if x["tarefa"] == "T4" and x["tool"] == "ref"}
+    por_arquivo = sum(1 for x in cand_fix if x["tarefa"] == "T4"
                       and x["extra"]["segunda"] > ref_t4[x["arquivo"]]["extra"]["segunda"])
     n_t4 = len(ref_t4)
     cs.append(_criterio(7, "T4: bytes servidos da segunda leitura ≤ a referência (soma no corpus)",
@@ -775,9 +782,9 @@ def criterios(linhas: list) -> list[dict]:
                         [] if s4c <= s4r else [f"segunda leitura {_n(s4c)} > {_n(s4r)}"]))
     # 8. I/O em bytes lidos
     viol8, partes8, relatado8 = [], [], []
-    lr = _soma(linhas, "T1", "ref", "unico", "lidos")
-    lf, lq = _soma(linhas, "T1", "cand", "frio", "lidos"), \
-        _soma(linhas, "T1", "cand", "quente", "lidos")
+    lr = _soma(linhas_fix, "T1", "ref", "unico", "lidos")
+    lf, lq = _soma(linhas_fix, "T1", "cand", "frio", "lidos"), \
+        _soma(linhas_fix, "T1", "cand", "quente", "lidos")
     rf, rq = _razao(lf, lr), _razao(lq, lr)
     partes8.append(f"T1 frio {_n(lf)} / {_n(lr)} = {_fr(rf)}; T1 quente {_n(lq)} / {_n(lr)} = "
                    f"{_fr(rq)}")
@@ -788,7 +795,7 @@ def criterios(linhas: list) -> list[dict]:
     for tarefa in ("T2", "T3"):
         n = pior_f = pior_q = 0
         pf, pq = 0.0, 0.0
-        for ref, frio, quente in _instancias(linhas, tarefa):
+        for ref, frio, quente in _instancias(linhas_fix, tarefa):
             if frio is None or quente is None:
                 continue
             n += 1

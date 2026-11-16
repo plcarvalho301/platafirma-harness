@@ -30,7 +30,6 @@ import json
 import os
 import re
 import sys
-import time
 from pathlib import Path
 
 _ARVORE = Path(__file__).resolve().parent.parent
@@ -458,23 +457,6 @@ def derrama(sessao_id: str, nome: str, texto: str) -> str | None:
     except OSError as e:                                      # noqa: BLE001
         print(f"[poda] derrame falhou ({nome}): {e!r}", file=sys.stderr, flush=True)
         return None
-
-
-def prune_derrame() -> int:
-    """TTL 48 h por varredura preguiçosa — quem grava também limpa o vencido."""
-    limite = time.time() - TTL_DERRAME_S
-    n = 0
-    try:
-        for p in DERRAME.rglob("*.txt"):
-            try:
-                if p.stat().st_mtime < limite:
-                    p.unlink()
-                    n += 1
-            except OSError:
-                pass
-    except OSError:
-        pass
-    return n
 
 
 def corta(texto: str, cap: int, *, cauda: bool, alca: str | None) -> tuple[str, dict]:

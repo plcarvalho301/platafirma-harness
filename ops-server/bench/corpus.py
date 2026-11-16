@@ -143,20 +143,62 @@ def _mudanca() -> bytes:
     return b"".join(f"{i:04d} ".encode() + b"palavra " * 123 + b"\n" for i in range(1, 101))
 
 
+def _py_sintetico(funcoes: int) -> bytes:
+    blocos = ['"""Fixture sintética determinística de código Python para o bench."""\n\n']
+    for i in range(1, funcoes + 1):
+        blocos.append(
+            f"def bloco_{i:04d}(valor: int) -> int:\n"
+            f'    """Calcula a etapa {i:04d} de forma determinística."""\n'
+            + "".join(f"    acumulado_{j:02d} = (valor + {i * 17 + j}) * {j + 2}\n" for j in range(1, 15))
+            + "    return acumulado_14\n\n\n"
+        )
+    return "".join(blocos).encode("utf-8")
+
+
+def _md_sintetico(secoes: int) -> bytes:
+    blocos = ["# Documento sintético de referência para o bench\n\n"]
+    for i in range(1, secoes + 1):
+        blocos.append(
+            f"## Seção {i:04d} — verificação determinística\n\n"
+            + "".join(
+                f"Parágrafo {i:04d}.{j:02d} com texto estável para medição de leitura paginada em disco.\n"
+                for j in range(1, 12)
+            )
+            + "\n"
+        )
+    return "".join(blocos).encode("utf-8")
+
+
 # nome -> (conteúdo, entra em T1/T4)
 def _definicoes() -> dict[str, tuple[bytes, bool]]:
     return {"multibyte": (_multibyte(), True), "linha_longa": (_linha_longa(), True),
             "cp1252": (_cp1252(), True), "byte_invalido": (_utf8_com_byte_invalido(), True),
-            "sem_quebra": (_sem_quebra(), True), "binario": (_binario(), False),
+            "sem_quebra": (_sem_quebra(), True),
+            "py_ate_10kb": (_py_sintetico(8), True),
+            "py_10_200kb": (_py_sintetico(120), True),
+            "py_acima_200kb": (_py_sintetico(320), True),
+            "md_10_200kb": (_md_sintetico(90), True),
+            "binario": (_binario(), False),
             "vazio": (b"", False), "mudanca": (_mudanca(), False)}
+
+
+def _ext_fixture(nome: str) -> str:
+    if nome in ("binario", "vazio"):
+        return ".bin"
+    if nome == "linha_longa":
+        return ".json"
+    if nome.startswith("py_"):
+        return ".py"
+    if nome.startswith("md_"):
+        return ".md"
+    return ".txt"
 
 
 def fixtures(destino: Path) -> tuple[dict[str, Path], list[Arquivo]]:
     destino.mkdir(parents=True, exist_ok=True)
     caminhos, arquivos = {}, []
     for nome, (dados, texto) in _definicoes().items():
-        p = destino / f"{nome}.bin" if nome in ("binario", "vazio") else \
-            destino / (f"{nome}.json" if nome == "linha_longa" else f"{nome}.txt")
+        p = destino / f"{nome}{_ext_fixture(nome)}"
         p.write_bytes(dados)
         caminhos[nome] = p
         if texto:
