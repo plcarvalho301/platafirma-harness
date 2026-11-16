@@ -430,7 +430,9 @@ def portao_da_troca(slug: str, nova: dict, base: dict | None) -> list[str]:
 
 def _git(posto: Path, *args: str) -> tuple[int, str]:
     try:
-        p = subprocess.run(["git", "-C", str(posto), *args], capture_output=True, text=True, timeout=30)
+        # stdin=DEVNULL impede que git/ssh consumam o stdin da tarefa em `agente rodar` (DTs 734, 742).
+        p = subprocess.run(["git", "-C", str(posto), *args], stdin=subprocess.DEVNULL,
+                           capture_output=True, text=True, timeout=30)
     except (OSError, subprocess.SubprocessError) as e:
         return 125, str(e)
     return p.returncode, p.stdout
@@ -1229,6 +1231,9 @@ def registra(reg: dict) -> None:
 
 def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_json: bool,
               ligacao: str = "consultado", pecas: list[str] | None = None, anexos: list[str] | None = None) -> int:
+    tarefa = sys.stdin.read() if not sys.stdin.isatty() else ""
+    if not tarefa.strip():
+        return _erro("a tarefa vem em stdin: agente rodar <slug> < tarefa", 2)
     posto, rc = _posto_ou_erro()
     if posto is None:
         return rc
@@ -1242,9 +1247,6 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
         return _erro(f"a declaração de {slug} está fora do molde ({'; '.join(problemas[slug])}); "
                      "agente projetar --conferir diz o resto", 4)
     decl = efetiva(decl, ligacao)                          # modelo, ferramentas e teto da ligação (spec agente §2)
-    tarefa = sys.stdin.read() if not sys.stdin.isatty() else ""
-    if not tarefa.strip():
-        return _erro("a tarefa vem em stdin: agente rodar <slug> < tarefa", 2)
     try:
         variantes = le_variantes(pecas)                    # erro de forma sai antes de abrir sessão
         imagens = le_anexos(anexos)
