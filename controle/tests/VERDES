@@ -75,6 +75,7 @@ tests/test_contrato_acervo.py | bin/acervo bin/_acervo/** bin/bot bin/conferir b
 tests/test_contrato_organizacao.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/lint bin/_lint/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/situacao bin/tarefas bin/teste docs/**
 tests/test_contrato_release_migrar.py | bin/release bin/_release/**
 tests/test_contrato_metrica_abertura.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/chat bin/conferir bin/fila bin/_fila/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/sinal bin/tarefas bin/teste abertura/**
+tests/test_contrato_metrica_abertura_tudo.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/chat bin/conferir bin/fila bin/_fila/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/sinal bin/tarefas bin/teste abertura/** controle/tests/test_contrato_metrica_abertura.py
 tests/test_sessao_reidratar.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/mesa bin/monta-sessao bin/persona bin/_persona/** bin/repo bin/seg bin/sessao bin/_sessao/** chat/** sessao/**
 tests/test_contrato_acervo_topologia.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/situacao bin/tarefas bin/teste
 tests/test_contrato_seg_segredo.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/situacao bin/tarefas bin/teste ops-server/**
@@ -141,6 +142,7 @@ tests/test_identidade_classe_decisao.py | bin/acervo bin/_acervo/**
 tests/test_acervo_arquivo_renome.py | bin/acervo bin/_acervo/** bin/curar
 tests/test_fila_msgid.py | bin/_fila/**
 tests/test_fila_ack.py | bin/fila bin/_fila/** bin/minuta bin/_minuta/** bin/persona bin/_persona/**
+tests/test_descansar_fila.py | bin/descansar bin/fila bin/_fila/**
 tests/test_fila_contestacao.py | bin/fila bin/_fila/**
 # Card #3884: carta assinada por bot (`bot:<slug>`), so de dentro do proprio `bot rodar`; carta a bot recusa.
 tests/test_fila_bot.py | bin/fila bin/_fila/**
@@ -222,6 +224,7 @@ testes/test_descansar_mesa.py | bin/descansar bin/encerrar bin/mesa
 testes/test_descansar_enxuto.py | bin/descansar bin/encerrar
 testes/test_descansar_ritual.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/chat bin/conferir bin/descansar bin/encerrar bin/fila bin/_fila/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/motor bin/_motor/** bin/persona bin/_persona/** bin/seg bin/sinal bin/situacao bin/tarefas bin/teste
 testes/test_expediente.py | bin/expediente bin/_expediente/**
+testes/test_expediente_montagem.py | bin/expediente bin/_expediente/** testes/test_expediente.py
 testes/test_expediente_cadeirinha.py | bin/expediente bin/_expediente/** testes/test_expediente.py
 testes/test_expediente_chapeu.py | bin/expediente bin/_expediente/** testes/test_expediente.py testes/test_expediente_cadeirinha.py
 testes/test_bateria_chave.py | avaliacao/bateria.jsonl
