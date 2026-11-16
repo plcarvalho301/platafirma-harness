@@ -138,6 +138,7 @@ def test_chamador_que_cancelou_e_interrompida():
 
 
 def test_recusa_de_argumento_e_gramatica_e_negacao_do_pep_e_negada():
+    """DT 704: recusas de forma na abertura e reabertura sem sessao_id entram em gramatica."""
     assert oplog.classificar({"evento": "sem_verbo", "motivo": "x"})["classe"] == "gramatica"
     assert oplog.classificar({"evento": "cwd_recusado"})["classe"] == "gramatica"
     assert oplog.classificar({"evento": "sessao_id_ausente_na_reabertura"})["classe"] == "gramatica"
