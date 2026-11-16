@@ -40,7 +40,10 @@ curl() {
         printf '%s' '{"id":42,"chave":"42","nivel":1,"nivel_nome":"feature","titulo":"Feature 42","estado":"em-execucao","estado_nome":"Em execução","estado_fase":"execucao","estado_derivado":null,"cadeira":"engenharia","ancestrais":[],"bloqueia":[],"bloqueado_por":[],"sign_offs":[],"descricao":"<p>Aceite: &#x27;aspas hex&#x27;, &#39;decimal&#39; &amp; &quot;aspas&quot;</p>","filhas":[{"id":101,"chave":"101","estado":"em-execucao","cadeira":"engenharia","titulo":"Story aberta","travada":false},{"id":102,"chave":"102","estado":"entregue","cadeira":"engenharia","titulo":"Story entregue","travada":false}]}'
       fi
       ;;
-    */itens?*)
+    */itens/699)
+      printf '%s' '{"id":699,"chave":"699","nivel":1,"nivel_nome":"feature","titulo":"Feature 699","estado":"em-execucao","estado_nome":"Em execução","estado_fase":"execucao","estado_derivado":null,"cadeira":"engenharia","ancestrais":[],"bloqueia":[],"bloqueado_por":[],"sign_offs":[],"descricao":"<p>Peças:</p><ol><li>primeira peça</li><li>segunda peça</li></ol><p>Fora:</p><ul><li>item fora</li></ul>","filhas":[]}'
+      ;;
+    */itens\?*)
       printf '%s' '{"itens":[{"id":101,"chave":"101","titulo":"Story aberta","estado":"em-execucao","estado_fase":"execucao","estado_derivado":null}],"estados":[]}'
       ;;
     */balde/528)
@@ -132,3 +135,11 @@ def test_dt539_dt_restack(tmp_path: Path):
     )
     assert proc_bad.returncode == 4
     assert "fora do catálogo do acervo" in proc_bad.stderr
+
+
+def test_dts_699_700_718_para_texto_preserva_numeracao_de_ol(tmp_path: Path):
+    proc, _, _ = _run(["ler", "699"], tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert "1. primeira peça" in proc.stdout
+    assert "2. segunda peça" in proc.stdout
+    assert "  - item fora" in proc.stdout

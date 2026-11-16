@@ -26,7 +26,17 @@ from .resultado import Apontamento
 CHAVE_LISTA = "checklist-antipadroes-organizacao-documental"
 
 EXT_IMAGEM = (".svg", ".png", ".pdf")
-MANIFESTOS = ("pyproject.toml", "package.json", "Dockerfile", "Makefile")
+MANIFESTOS = (
+    "pyproject.toml",
+    "package.json",
+    "Dockerfile",
+    "Makefile",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "compose.yml",
+    "compose.yaml",
+    "requirements.txt",
+)
 MARCAS_FOSSIL = ("handoff", "demanda", "rascunho", "rodada")
 NOME_OK = re.compile(r"^[A-Za-z0-9._-]+$")
 DATA = re.compile(r"(?<!\d)(\d{4}-\d{2}-\d{2}|\d{8})(?!\d)")

@@ -382,11 +382,53 @@ print(re.sub(r"\n{2,}", "</p><p>", t).replace("\n", "<br>"), end="")'
 }
 
 para_texto() {
-  sed -e 's#</p>#\n#g' -e 's#<br */\?>#\n#g' -e 's#</h[0-9]>#\n#g' \
-      -e 's#<li>#  - #g' -e 's#</li>#\n#g' -e 's#</pre>#\n#g' \
-      -e 's#<[^>]*>##g' \
-  | python3 -c 'import html, sys; print(html.unescape(sys.stdin.read()), end="")' \
-  | cat -s
+  python3 -c '
+import html, re, sys
+
+texto = sys.stdin.read()
+pilha = []
+
+def _sub(m):
+    tag = m.group(0)
+    low = tag.lower()
+    if low == "</p>" or re.fullmatch(r"<br\s*/?>", low) or re.fullmatch(r"</h[0-9]>", low) or low == "</pre>":
+        return "\n"
+    if low == "</li>":
+        return "\n"
+    if re.fullmatch(r"<ol(?:\s[^>]*)?>", low):
+        sm = re.search(r"\bstart=[\"\x27]?(\d+)", low)
+        pilha.append(["ol", int(sm.group(1)) if sm else 1])
+        return ""
+    if low == "</ol>":
+        for i in range(len(pilha) - 1, -1, -1):
+            if pilha[i][0] == "ol":
+                del pilha[i:]
+                break
+        return ""
+    if re.fullmatch(r"<ul(?:\s[^>]*)?>", low):
+        pilha.append(["ul", 0])
+        return ""
+    if low == "</ul>":
+        for i in range(len(pilha) - 1, -1, -1):
+            if pilha[i][0] == "ul":
+                del pilha[i:]
+                break
+        return ""
+    if re.fullmatch(r"<li(?:\s[^>]*)?>", low):
+        if pilha and pilha[-1][0] == "ol":
+            n = pilha[-1][1]
+            pilha[-1][1] += 1
+            indent = "  " * (len(pilha) - 1)
+            return f"{indent}{n}. "
+        indent = "  " * max(1, len(pilha))
+        return f"{indent}- "
+    return ""
+
+saida = re.sub(r"<[^>]*>", _sub, texto)
+saida = html.unescape(saida)
+saida = re.sub(r"\n{3,}", "\n\n", saida)
+print(saida, end="")
+'
 }
 
 # Argumento numérico solto na posição do antigo <projeto>: ignora e avisa. Existe para que
