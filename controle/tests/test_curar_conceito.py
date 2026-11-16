@@ -229,3 +229,51 @@ def test_conceito_com_pai_usa_formato_de_aresta_e_oferece_desrelacionar(ambiente
     s = p.stdout
     assert "Aresta aplicada: novo-conceito -generica-> conceito-pai" in s
     assert f"(desfazer: curar --desrelacionar {EDGE_ID})" in s
+
+
+def test_troca_de_pai_em_conceito_existente_leva_menos_e_mais_ao_hermit(ambiente, falso, tmp_path):
+    """DT #207: PATCH de pai substitui mais_amplo_id; HermiT precisa simular --menos antes do --mais."""
+    env, anotados = _hermit_falso(tmp_path, ambiente)
+    falso.cenario_get = lambda caminho: (
+        200,
+        {
+            "itens": [
+                {"conceito": "pai-antigo", "rotulo": "Pai Antigo", "tipo": "generica",
+                 "direcao": "saida", "papel": "mais-amplo"},
+                {"conceito": "lateral-qualquer", "rotulo": "Lateral", "tipo": "relacionada",
+                 "direcao": "saida", "papel": "lateral", "origem": "tabela"},
+            ]
+        },
+    )
+    falso.cenario_patch = lambda corpo, caminho: (
+        200,
+        {
+            "modo": "aplicado" if corpo.get("aplicar") else "plano",
+            "aprovado": True,
+            "aresta": {
+                "de": SLUG,
+                "para": corpo["pai"],
+                "tipo": corpo["tipo"],
+                "familia": "hierarquica",
+                "garantia": corpo["garantia"],
+                "motivo": corpo["motivo"],
+            },
+            "conferencias": {n: {"antes": 0, "depois": 0, "novas": []} for n in CONFERENCIAS},
+            "molde": "A é parte de B",
+        },
+    )
+    p = _curar(
+        env,
+        "--conceito", SLUG,
+        "--pai", "pai-novo",
+        "--tipo", "partitiva",
+        "--garantia", "literaria",
+        "--motivo", "reparo de hierarquia",
+        "--autor", "dados",
+    )
+    assert p.returncode == 0, p.stdout + p.stderr
+    chamadas = anotados.read_text(encoding="utf-8").splitlines()
+    assert len(chamadas) == 2
+    assert chamadas[1].endswith(
+        f"--menos {SLUG}:pai-antigo:mais-amplo --mais {SLUG}:pai-novo:partitiva"
+    )
