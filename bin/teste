@@ -996,6 +996,10 @@ raio_total_de() {  # stdin: arquivos do diff ; imprime o primeiro de raio total 
   local f g
   while IFS= read -r f; do
     [ -n "$f" ] || continue
+    # Receita do verbo analise: o lock e o pyproject dela montam o ambiente isolado da
+    # receita (analise travar), e não o de teste nenhum. Contados como raio total, rodavam
+    # todas as suítes do repositório a cada receita empurrada.
+    case "$f" in analise/*) continue ;; esac
     for g in "${RAIO_TOTAL[@]}"; do
       if casa_glob "$f" "$g"; then printf '%s' "$f"; return 0; fi
     done
