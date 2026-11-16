@@ -612,10 +612,60 @@ _estados_terminais() {
 # id dela numa sequência própria, que nenhuma superfície mostra; aqui a chave que a pessoa
 # digita vira o id que as rotas endereçam, por `GET /itens/chave/<chave>`. Chave que não existe
 # sai como a recusa do rastreador (404), e não como id inventado.
+# DT 690: aceita `<story>-t<n>` além de `<story>.t<n>`, e resolve `t<n>` (o id curto que `criar`
+# e `sub` devolvem) pelo `--pai`/última story operada na sessão ou pelas tasks abertas em `/itens`.
+_arq_pai_sessao() {
+  printf '/tmp/pf-tarefas-pai-%s' "$(printf '%s' "${PF_SESSAO:-}|${BASE}" | sha256sum | cut -c1-16)"
+}
+
+_lembra_pai() {
+  local p="${1:-}"
+  [[ "$p" =~ ^[0-9]+$ ]] && printf '%s' "$p" > "$(_arq_pai_sessao)" 2>/dev/null || true
+}
+
 so_id() {
-  local a="${1#\#}"; [[ "$a" =~ ^[EeFfSs]#?([0-9]+(\.t[0-9]+)?)$ ]] && a="${BASH_REMATCH[1]}"
+  local a="${1#\#}"
+  if [[ "$a" =~ ^[EeFfSs]?#?([0-9]+)[.-][tT]([0-9]+)$ ]]; then
+    a="${BASH_REMATCH[1]}.t${BASH_REMATCH[2]}"
+  elif [[ "$a" =~ ^[EeFfSs]#?([0-9]+)$ ]]; then
+    a="${BASH_REMATCH[1]}"
+  elif [[ "$a" =~ ^[tT]([0-9]+)$ ]]; then
+    local tn="${BASH_REMATCH[1]}" p_ctx="${TAREFAS_PAI:-}" r="" id_res=""
+    if [ -n "$p_ctx" ]; then
+      a="${p_ctx}.t${tn}"
+    else
+      local arq_p; arq_p=$(_arq_pai_sessao)
+      [ -f "$arq_p" ] && p_ctx=$(cat "$arq_p" 2>/dev/null || true)
+      if [[ "$p_ctx" =~ ^[0-9]+$ ]]; then
+        if r=$(_exec_curl GET "$(_apipath "/itens/chave/${p_ctx}.t${tn}")" 0 2>/dev/null); then
+          id_res=$(printf '%s' "$r" | jq -r '.id // empty' 2>/dev/null || true)
+          if [ -n "$id_res" ]; then
+            printf '%s' "$id_res"
+            return 0
+          fi
+        fi
+      fi
+      local lj; lj=$(_exec_curl GET "$(_apipath "/itens?nivel=3")" 0 2>/dev/null || true)
+      if [ -n "$lj" ]; then
+        id_res=$(printf '%s' "$lj" | jq -r --arg tn "$tn" --arg q "$QUEM" '
+          [(.itens // [])[] | select((.chave // "") | test("^[0-9]+\\.t" + $tn + "$"))] as $all
+          | (if ($q != "") then [$all[] | select(.executor == $q or .cadeira == $q)] else [] end) as $por_q
+          | (if ($por_q | length) > 0 then $por_q else $all end) as $cand
+          | [$cand[] | select([(.ancestrais // [])[]? | select(.nivel == 2 and (.estado == "em-execucao" or .estado == "em-refinamento-tecnico"))] | length > 0)] as $ativos
+          | (if ($ativos | length) > 0 then $ativos else $cand end)
+          | sort_by(.ultimo_movimento // .criado_em // "", .id) | last | .id // empty
+        ' 2>/dev/null || true)
+        if [ -n "$id_res" ]; then
+          printf '%s' "$id_res"
+          return 0
+        fi
+      fi
+      a="${p_ctx:+${p_ctx}.}t${tn}"
+    fi
+  fi
   case "$a" in
-    [0-9]*.t[0-9]*)
+    [0-9]*.t[0-9]*|t[0-9]*)
+      [[ "$a" =~ ^([0-9]+)\.t[0-9]+$ ]] && _lembra_pai "${BASH_REMATCH[1]}"
       local r; r=$(busca GET "/itens/chave/$a") || return 1
       printf '%s' "$r" | jq -r '.id' ;;
     *) printf '%s' "$a" ;;
@@ -697,6 +747,8 @@ ler() {
   local q=""
   [ "$direto" -eq 1 ] && q="?direto=1"
   local j; j=$(busca GET "/itens/$id$q") || return 1
+  local p_lembrar; p_lembrar=$(printf '%s' "$j" | jq -r 'if .nivel == 2 then .id elif .nivel == 3 then .pai else empty end' 2>/dev/null || true)
+  [ -n "$p_lembrar" ] && _lembra_pai "$p_lembrar"
   local term; term=$(_estados_terminais) || term='[]'
   if [ "$so_cabecalho" -eq 1 ]; then
     printf '%s' "$j" | jq -r --argjson term "$term" "$JQ_ROT"'
@@ -924,7 +976,8 @@ criar() {
                      if [ -z "$pai" ]; then
                        echo "recusado: a task é o passo da story e nasce sob ela: \`tarefas criar \"<o que fazer>\" --nivel task --pai <story>\`. Débito técnico é \`tarefas dt admitir\`." >&2
                        exit 2
-                     fi ;;
+                     fi
+                     _lembra_pai "$pai" ;;
     *) echo "nível desconhecido: $nivel (épico, feature, story, task)" >&2; exit 2 ;;
   esac
   local html=""
@@ -961,8 +1014,8 @@ criar() {
 # PATCH que trocasse corpo e estado juntos regrediria a coluna sem ninguém pedir. A régua do
 # corpo por nível (arq:0096) é da API, como em `criar` — este verbo não a duplica.
 editar() {
-  local id; id=$(so_id "${1:?uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin]}"); shift
-  local titulo="" desc="" tem_desc="" cadeira="" tem_cadeira=0 nivel="" originacao="" executor=""
+  local alvo="${1:?uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin]}"; shift
+  local titulo="" desc="" tem_desc="" cadeira="" tem_cadeira=0 nivel="" originacao="" executor="" pai_ed=""
   local trecho=0 antes="" tem_antes=0 depois="" tem_depois=0 bruto=0
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -971,6 +1024,7 @@ editar() {
       # o registro (422) e não tem lista para o executor: este verbo não repete nenhuma das duas.
       --originacao) originacao="${2:?--originacao pede negocio, tecnico ou incidente}"; shift 2 ;;
       --executor)   executor="${2:?--executor pede o nome da cadeira}"; shift 2 ;;
+      --pai)        pai_ed=$(so_id "${2:?--pai pede o id da story}"); _lembra_pai "$pai_ed"; shift 2 ;;
       --desc)       desc="${2:?--desc pede texto}"; tem_desc=1; shift 2 ;;
       --desc-stdin) desc="$(cat)"; tem_desc=1; shift ;;
       # Card #4110: o corpo por trecho. `--depois` pode ser vazio (apaga o trecho), por isso
@@ -997,6 +1051,7 @@ editar() {
       *) echo "opção desconhecida: $1" >&2; exit 2 ;;
     esac
   done
+  local id; id=$(TAREFAS_PAI="${pai_ed:-${TAREFAS_PAI:-}}" so_id "$alvo") || exit 1
   if [ -z "$titulo" ] && [ -z "$tem_desc" ] && [ "$tem_cadeira" -eq 0 ] && [ -z "$nivel" ] \
      && [ -z "$originacao" ] && [ -z "$executor" ] && [ "$trecho" -eq 0 ]; then
     echo "uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin] [--cadeira <c>|--sem-cadeira] [--nivel épico|feature|story|task] [--originacao negocio|tecnico|incidente] [--executor <c>] — nada a editar" >&2
@@ -1808,6 +1863,7 @@ subtarefa() {
   fi
   if [ -z "$a2" ]; then
     local j; j=$(busca GET "/itens/$id") || return 1
+    _lembra_pai "$id"
     printf '%s' "$j" | jq -r "$JQ_ROT"'
       .filhas[]? | "\(rot)\t\(.estado)\t\(.cadeira // "—")\t\(.titulo)"'
     return 0

@@ -166,6 +166,8 @@ def _sem_id_de_task(saida):
     (("ler", str(STORY)), ["t1", "t5", "[travada por t1, #9247]"]),
     (("ler", f"{STORY}.t5"), ["t5 · task", "bloqueado por: t1"]),
     (("editar", f"{STORY}.t1", "--titulo", "novo"), ["item t1 editado"]),
+    (("editar", f"{STORY}-t1", "--titulo", "novo"), ["item t1 editado"]),
+    (("editar", "t1", "--titulo", "novo"), ["item t1 editado"]),
     (("mover", str(STORY), "em-execucao"), ["filhas movidas junto: t1, t4"]),
     (("apagar", f"{STORY}.t4"), ["  t4 [priorizada]"]),
     (("bloquear", f"{STORY}.t1", f"{STORY}.t5"), ["t1 bloqueia: t5"]),

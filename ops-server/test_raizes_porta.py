@@ -530,6 +530,16 @@ def test_write_file_preserva_escape_barra_u_e_crontab(bancada, sem_pep):
     assert "\\u00e9" in atualizado
 
 
+def test_write_file_aceita_svg(bancada, sem_pep):
+    """DT 711: write_file aceita .svg como texto, como aceita .html."""
+    caminho = "wt/platafirma-core/fabrica/instancias/figura/2026-11-03-arquitetura-raiz-norte.svg"
+    r = s.write_file(path=caminho, content='<svg xmlns="http://www.w3.org/2000/svg"><text>oi</text></svg>\n')
+    assert r.get("ok"), r
+    r_tr = s.write_file(path=caminho, trecho={"antes": "<text>oi</text>", "depois": "<text>ok</text>"})
+    assert r_tr.get("ok"), r_tr
+    assert "<text>ok</text>" in (bancada / caminho).read_text("utf-8")
+
+
 def test_write_file_docstring_lista_tipos_e_nomes():
     """DT 473: docstring de write_file lista exatamente TIPOS_TEXTO e NOMES_TEXTO."""
     doc = " ".join((s.write_file.__doc__ or "").split())
