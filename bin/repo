@@ -582,6 +582,30 @@ ramo_da_cadeira() {
   esac
 }
 
+# DT 7: HEAD destacado nao e "ramo de outra cadeira"; recusa com 4 e vizinho claro.
+_checar_ramo_commit() {
+  local nome="$1" ramo="$2"
+  if [ "$ramo" = "HEAD" ]; then
+    printf '%s: commit recusado: HEAD destacado em '\''%s'\'' — crie um ramo antes de commitar\n' "$VERBO" "$nome" >&2
+    if direto_em_main "$nome"; then
+      printf 'vizinho: repo abrir %s\n' "${nome%%@*}" >&2
+    else
+      printf 'vizinho: repo ramo %s <card> [--slug <slug>]\n' "$nome" >&2
+    fi
+    exit 4
+  fi
+  ramo_da_cadeira "$ramo" || morre "commit recusado: o ramo '$ramo' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, main)." 3
+}
+
+# DT 7: devolve o caminho do worktree que ja tem <ramo_alvo> aberto (vazio se livre).
+_worktree_do_ramo() {
+  local c="$1" ramo_alvo="$2"
+  "$GIT" -C "$c" worktree list --porcelain 2>/dev/null | awk -v alvo="refs/heads/$ramo_alvo" '
+    /^worktree / { wt = substr($0, 10) }
+    /^branch /   { if (substr($0, 8) == alvo) { print wt; exit } }
+  '
+}
+
 info_varrido() {
   local c="$1" repo="$2"
   local cadeira="${PF_CADEIRA:-sem-cadeira}"
@@ -615,12 +639,12 @@ ato_git() {
     done
   fi
 
-  # [3096] Recusa commit em ramo de outra cadeira
+  # [3096] Recusa commit em HEAD destacado ou ramo de outra cadeira
   # DT 490: o portao de story em execucao vale tambem para `repo git commit`
   if [ "${1:-}" = "commit" ]; then
     local ramo_atual
     ramo_atual="$(ramo_atual "$c")"
-    ramo_da_cadeira "$ramo_atual" || morre "commit recusado: o ramo '$ramo_atual' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, main)." 3
+    _checar_ramo_commit "$nome" "$ramo_atual"
     portao_story_em_execucao "$nome" "$c" "$ramo_atual"
   fi
 
@@ -2124,7 +2148,9 @@ migra_plana() {
   return 0
 }
 
-# DT 490: ramo cria bancada nova (via cmd_abrir) e nunca troca o branch de bancada existente.
+# DT 7 + DT 490: ramo cria bancada nova (via cmd_abrir) e nunca troca o branch de bancada
+# existente de outro trabalho; em bancada nomeada (@<chave>) que está em HEAD destacado,
+# anexa um ramo local a ela (recusando com 4 se o ramo já estiver preso em outro worktree).
 ato_ramo() {
   local nome="${1:-}"
   [ -n "$nome" ] || uso
@@ -2137,8 +2163,15 @@ ato_ramo() {
     return 0
   fi
 
+  local c_destacado=""
   case "$nome" in
-    *@*) morre "ramo cria bancada nova; nao use @<chave> para trocar bancada existente" 2 ;;
+    *@*)
+      local c_chk; c_chk="$(clone_de "$nome")" || exit $?
+      if [ "$(ramo_atual "$c_chk")" != "HEAD" ]; then
+        morre "ramo cria bancada nova; nao use @<chave> para trocar bancada existente" 2
+      fi
+      c_destacado="$c_chk"
+      ;;
   esac
 
   local card="" slug=""
@@ -2165,6 +2198,38 @@ ato_ramo() {
   done
 
   local card_num="${card###}"
+  if [ -n "$c_destacado" ]; then
+    local ramo_alvo=""
+    if [[ "$card_num" =~ ^[0-9]+$ ]]; then
+      ramo_alvo="fabrica/${card_num}${slug:+-$slug}"
+    else
+      ramo_alvo="${card}${slug:+-$slug}"
+      [ -n "$ramo_alvo" ] || uso
+    fi
+    case "$ramo_alvo" in
+      -*|*' '*|*'..'*) morre "nome de ramo invalido: '$ramo_alvo'" 2 ;;
+    esac
+    if "$GIT" -C "$c_destacado" show-ref --verify --quiet "refs/heads/$ramo_alvo"; then
+      local wt_dono
+      wt_dono="$(_worktree_do_ramo "$c_destacado" "$ramo_alvo")"
+      if [ -n "$wt_dono" ]; then
+        printf '%s: ramo '\''%s'\'' já está preso em outro worktree: %s\n' "$VERBO" "$ramo_alvo" "$wt_dono" >&2
+        if [[ "$wt_dono" == */wt/* ]]; then
+          printf 'vizinho: use essa bancada (%s@%s) ou crie outro ramo com `repo ramo %s <card> [--slug <slug>]`\n' "${nome%%@*}" "$(basename "$wt_dono")" "$nome" >&2
+        else
+          printf 'vizinho: solte o ramo em %s ou crie outro ramo com `repo ramo %s <card> [--slug <slug>]`\n' "$wt_dono" "$nome" >&2
+        fi
+        exit 4
+      fi
+      "$GIT" -C "$c_destacado" checkout "$ramo_alvo" || morre "checkout falhou" 3
+      printf 'ramo trocado: %s (ja existia)\n' "$ramo_alvo"
+    else
+      "$GIT" -C "$c_destacado" checkout -b "$ramo_alvo" HEAD || morre "checkout -b falhou" 3
+      printf 'ramo criado: %s (de HEAD)\n' "$ramo_alvo"
+    fi
+    return 0
+  fi
+
   if [[ "$card_num" =~ ^[0-9]+$ ]]; then
     if [ -n "$slug" ]; then
       cmd_abrir "$nome" "$card_num" --slug "$slug"
@@ -2231,10 +2296,10 @@ ato_commitar() {
   [ -n "$msg" ] || morre "falta a mensagem (-m)" 2
   local c; c="$(clone_de "$nome")" || exit $?
 
-  # [3096] Recusa commit em ramo de outra cadeira
+  # [3096] Recusa commit em HEAD destacado ou ramo de outra cadeira
   local ramo
   ramo="$(ramo_atual "$c")"
-  ramo_da_cadeira "$ramo" || morre "commit recusado: o ramo '$ramo' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, main)." 3
+  _checar_ramo_commit "$nome" "$ramo"
 
   # arq:0096, Consequências (card #3599): story de código só comita em em-execucao
   portao_story_em_execucao "$nome" "$c" "$ramo"
