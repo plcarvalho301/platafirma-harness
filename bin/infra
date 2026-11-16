@@ -1223,11 +1223,12 @@ unit_env() {
   # DTs 390 e 479: ~/.config/systemd/user tem dono root de propósito; units da conta
   # moram em ~/.local/share/systemd/user, onde o systemd --user também lê drop-ins
   # <unit>.d/*.conf. Unit de root continua recusada (exit 4) abaixo.
+  _dir_gravavel() { [ -w "$1" ] && [[ "$(stat -c %A -- "$1" 2>/dev/null)" == ??w* ]]; }
   local cfg_dir="${INFRA_UNITS_CONFIG_DIR:-}"
   if [ -z "$cfg_dir" ]; then
     local frag
     frag="$(systemctl --user show -p FragmentPath --value -- "$unit" 2>/dev/null || true)"
-    if [[ "$frag" == "$HOME/.config/systemd/user/"* ]] || [ -w "$HOME/.config/systemd/user" ]; then
+    if [[ "$frag" == "$HOME/.config/systemd/user/"* ]] || _dir_gravavel "$HOME/.config/systemd/user"; then
       cfg_dir="$HOME/.config/systemd/user"
     else
       cfg_dir="${XDG_DATA_HOME:-$HOME/.local/share}/systemd/user"
@@ -1251,13 +1252,13 @@ unit_env() {
       *) echo "erro: '$kv' nao e CHAVE=VALOR." >&2; exit 2 ;;
     esac
   done
-  if [ -d "$dir" ] && [ ! -w "$dir" ]; then
+  if [ -d "$dir" ] && ! _dir_gravavel "$dir"; then
     local dono
     dono="$(stat -c %U -- "$dir" 2>/dev/null || echo root)"
     echo "recusa: diretorio '$dir' pertence a '$dono' e nao e gravavel pelo usuario atual; unit de root exige rodar o setup da unit como root (sudo bash de deploy/units-da-instancia.json)." >&2
     exit 4
   fi
-  if [ ! -d "$dir" ] && [ -e "$cfg_dir" ] && [ ! -w "$cfg_dir" ]; then
+  if [ ! -d "$dir" ] && [ -e "$cfg_dir" ] && ! _dir_gravavel "$cfg_dir"; then
     local dono
     dono="$(stat -c %U -- "$cfg_dir" 2>/dev/null || echo root)"
     echo "recusa: diretorio '$cfg_dir' pertence a '$dono' e nao permite criar '$unit.d'; unit de root exige rodar o setup da unit como root (sudo bash de deploy/units-da-instancia.json)." >&2
