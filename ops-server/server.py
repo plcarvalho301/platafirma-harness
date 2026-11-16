@@ -167,7 +167,7 @@ def _reidratar_porta(sid: str) -> dict | None:
 
 
 _rc_instancia: redis.Redis | None = None
-_rc_alvo: tuple[str, int] | None = None
+_rc_alvo: tuple | None = None
 
 
 def _rc() -> redis.Redis:
@@ -175,7 +175,7 @@ def _rc() -> redis.Redis:
     fechado no fim do ciclo de vida ASGI; connect_timeout curto porque banco mudo nunca pode
     segurar a porta."""
     global _rc_instancia, _rc_alvo
-    alvo = (MEM_REDIS_HOST, MEM_REDIS_PORT)
+    alvo = (MEM_REDIS_HOST, MEM_REDIS_PORT, redis.Redis)
     if _rc_instancia is None or _rc_alvo != alvo:
         _fecha_rc()
         _rc_instancia = redis.Redis(host=MEM_REDIS_HOST, port=MEM_REDIS_PORT, decode_responses=True,
