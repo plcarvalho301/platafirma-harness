@@ -1229,6 +1229,7 @@ def registra(reg: dict) -> None:
 
 def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_json: bool,
               ligacao: str = "consultado", pecas: list[str] | None = None, anexos: list[str] | None = None) -> int:
+    tarefa = sys.stdin.read() if not sys.stdin.isatty() else ""
     posto, rc = _posto_ou_erro()
     if posto is None:
         return rc
@@ -1242,7 +1243,6 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
         return _erro(f"a declaração de {slug} está fora do molde ({'; '.join(problemas[slug])}); "
                      "agente projetar --conferir diz o resto", 4)
     decl = efetiva(decl, ligacao)                          # modelo, ferramentas e teto da ligação (spec agente §2)
-    tarefa = sys.stdin.read() if not sys.stdin.isatty() else ""
     if not tarefa.strip():
         return _erro("a tarefa vem em stdin: agente rodar <slug> < tarefa", 2)
     try:

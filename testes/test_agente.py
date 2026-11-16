@@ -84,7 +84,11 @@ print(json.dumps({{"pecas": [{{"peca": "persona", "conteudo": "LENTE-PERSONA"}},
                               {{"peca": "mesa", "conteudo": None}}]}}))
 """
 STUB_ACERVO = """#!{py}
-import json, sys
+import json, os, sys
+try:
+    os.read(0, 100000)
+except OSError:
+    pass
 if sys.argv[1:4] == ["listar", "casa", "modo"]:
     modos = ("varrer", "revisar", "avaliar", "testar", "executar", "consultar", "parecer", "pesquisar")
     print(json.dumps([{{"chave": m}} for m in modos]))
@@ -1438,3 +1442,19 @@ def test_aviso_mede_pico_da_janela_e_nao_soma_cumulativa_de_cache(mundo, pessoa,
     assert roda(monkeypatch, "juiz", tarefa="julgue") == 0
     err = capsys.readouterr().err
     assert "tokens da execução 150 passaram de tokens_execucao 120" in err
+
+
+def test_rodar_subprocesso_nao_perde_stdin_para_acervo(mundo, pessoa):
+    """DT 742: quando `agente rodar` corre como subprocesso com stdin em pipe (porta/malote),
+    o `acervo listar casa modo` (`docker exec -i`) chamado em `carrega(posto)` não drena a tarefa."""
+    import os
+    mundo.escreve(JUIZ)
+    r = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "bin" / "agente"), "rodar", "juiz", "--json"],
+        input="tarefa vinda da porta pelo stdin\n",
+        capture_output=True, text=True, env=dict(os.environ), timeout=30,
+    )
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)["retorno"] == "veredito: 0 — x@y"
+    c = _claude(mundo)
+    assert "tarefa vinda da porta pelo stdin" in c["stdin"]
