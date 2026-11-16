@@ -5,7 +5,7 @@ Cobre:
   sessao abrir cunha sessao_id e grava na chave;
   antes do item n+1, ident é resolvido via _sessao_resolve;
   o item seguinte recebe PF_SESSAO, PF_ORDEM_ID e PF_CADEIRA no subprocesso.
-- Ramo legado (_run_command_legado com PF_RUN_SO_VERBO=0) executando sessao abrir seguido de comando posterior.
+- Recusa de shell arbitrário mesmo com PF_RUN_SO_VERBO=0 e PF_GATE=0 no ambiente (DT 728).
 """
 from __future__ import annotations
 
@@ -82,39 +82,30 @@ async def test_run_command_injecao_entre_itens_lote():
 
 
 @pytest.mark.anyio
-async def test_run_command_legado_injecao_entre_itens_lote():
-    sid_novo = "44444444-5555-6666-7777-888888888888"
-    oid_novo = "o20260914T160000-legadooid"
-    cad_nova = "ia"
+async def test_malote_recusa_shell_arbitrario_mesmo_com_env_legado(monkeypatch):
+    monkeypatch.setenv("PF_RUN_SO_VERBO", "0")
+    monkeypatch.setenv("PF_GATE", "0")
+    assert not hasattr(s, "_run_blocking")
+    assert not hasattr(s, "PF_RUN_SO_VERBO")
+    assert not hasattr(s, "PF_GATE")
 
     mock_rc = MagicMock()
-    def fake_get(k):
-        if k == f"sessao:{sid_novo}":
-            return json.dumps({"cadeira": cad_nova, "ordem_id": oid_novo})
-        return None
-    mock_rc.get.side_effect = fake_get
+    mock_rc.get.return_value = None
     mock_rc.hget.return_value = None
 
-    chamadas = []
-    def fake_run_blocking(cmd, d, timeout, sessao_id, ordem_id, cadeira):
-        chamadas.append({"cmd": cmd, "sessao_id": sessao_id, "ordem_id": ordem_id, "cadeira": cadeira})
-        if "sessao abrir" in cmd:
-            out = json.dumps({"sessao_id": sid_novo, "cadeira": cad_nova, "ordem_id": oid_novo})
-            return {"exit_code": 0, "stdout": {"texto": out, "bytes_total": len(out), "truncado": False}}
-        return {"exit_code": 0, "stdout": {"texto": "ok", "bytes_total": 2, "truncado": False}}
-
-    with patch("server.PF_RUN_SO_VERBO", False),          patch("server.PF_TOOLS_LOTE", True),          patch("server._autoriza", return_value=None),          patch("server._rc", return_value=mock_rc),          patch("server._audit"),          patch("server._run_blocking", side_effect=fake_run_blocking):
-
+    with patch("server.SLUGS_SERVIDOS", {"sessao"}), \
+         patch("server.BINARIOS", {"sessao": "/opt/bin/sessao"}), \
+         patch("server._autoriza", return_value=None), \
+         patch("server._rc", return_value=mock_rc), \
+         patch("server._audit"):
         res = await s.malote(commands=[
-            "sessao abrir ia --json",
-            "git status"
+            "pwd",
+            "sh -c 'echo oi'",
         ])
 
-    assert len(chamadas) == 2
-    assert chamadas[0]["sessao_id"] == "-"
-    assert chamadas[1]["sessao_id"] == sid_novo
-    assert chamadas[1]["ordem_id"] == oid_novo
-    assert chamadas[1]["cadeira"] == cad_nova
+    assert len(res["lote"]) == 2
+    assert res["lote"][0]["recusado"] is True and res["lote"][0]["motivo"] == "sem verbo"
+    assert res["lote"][1]["recusado"] is True and res["lote"][1]["motivo"] == "sem verbo"
 
 
 def test_operadores_como_token_recusam_e_regex_passa():

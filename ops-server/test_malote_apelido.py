@@ -126,14 +126,14 @@ async def test_acao_do_pdp_segue_run_command():
 
 
 @pytest.mark.anyio
-async def test_ramo_legado_grava_tool_malote():
-    with _Lote() as lote, patch("server.PF_RUN_SO_VERBO", False), patch("server.PF_GATE", False), \
-            patch("server._run_blocking", return_value={"exit_code": 0, "stdout": {
-                "texto": "ok", "bytes_total": 2, "truncado": False}}):
-        await s.malote(command="true")
-    fallback = lote.auditados(evento="fallback")
-    assert fallback and {kw["tool"] for kw in fallback} == {"malote"}
-    assert lote.autoriza.call_args.args[:2] == ("malote", "run_command")
+async def test_sem_ramo_legado_recusa_programa_fora_de_bin_e_grava_tool_malote(monkeypatch):
+    monkeypatch.setenv("PF_RUN_SO_VERBO", "0")
+    monkeypatch.setenv("PF_GATE", "0")
+    with _Lote() as lote:
+        r = await s.malote(command="true")
+    assert r["recusado"] is True and r["motivo"] == "sem verbo"
+    recusas = lote.auditados(evento="sem_verbo")
+    assert recusas and {kw["tool"] for kw in recusas} == {"malote"}
 
 
 # --- primeiro token e recusa -------------------------------------------------------

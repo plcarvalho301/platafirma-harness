@@ -81,21 +81,25 @@ def test_arranque_sem_bancada_nao_cria_nada():
 def test_path_do_subprocesso_traz_o_bin_da_release():
     assert s._env_subprocesso()["PATH"].split(":")[0] == str(s.BIN_VERBOS)
 
-def test_run_command_sem_cwd_roda_na_casa(sem_bancada, sem_pep):
-    with patch.object(s, "PF_RUN_SO_VERBO", False), patch.object(s, "PF_GATE", False):
-        r = asyncio.run(s.malote(command="pwd"))
-    assert r["exit_code"] == 0
-    assert r["stdout"]["texto"].strip() == str(Path(os.path.expanduser("~")).resolve())
+def test_run_command_sem_cwd_roda_na_casa(sem_bancada, sem_pep, monkeypatch):
+    monkeypatch.setenv("PF_RUN_SO_VERBO", "0")
+    monkeypatch.setenv("PF_GATE", "0")
+    assert not hasattr(s, "_run_blocking") and not hasattr(s, "_run_command_legado")
+    assert not hasattr(s, "PF_RUN_SO_VERBO") and not hasattr(s, "PF_GATE")
+    r = asyncio.run(s.malote(command="pwd"))
+    assert r["recusado"] is True and r["motivo"] == "sem verbo"
 
-def test_run_command_cwd_relativo_sem_bancada_recusa(sem_bancada, sem_pep):
-    with patch.object(s, "PF_RUN_SO_VERBO", False), patch.object(s, "PF_GATE", False):
-        r = asyncio.run(s.malote(command="pwd", cwd="platafirma-core"))
-    assert r["recusado"] and "bancada" in r["motivo"]
+def test_run_command_cwd_relativo_sem_bancada_recusa(sem_bancada, sem_pep, monkeypatch):
+    monkeypatch.setenv("PF_RUN_SO_VERBO", "0")
+    monkeypatch.setenv("PF_GATE", "0")
+    r = asyncio.run(s.malote(command="pwd", cwd="platafirma-core"))
+    assert r["recusado"] is True and r["motivo"] == "sem verbo"
 
-def test_run_command_cwd_relativo_e_na_bancada(bancada, sem_pep):
-    with patch.object(s, "PF_RUN_SO_VERBO", False), patch.object(s, "PF_GATE", False):
-        r = asyncio.run(s.malote(command="pwd", cwd="platafirma-harness"))
-    assert r["stdout"]["texto"].strip() == str((bancada / "platafirma-harness").resolve())
+def test_run_command_cwd_relativo_e_na_bancada(bancada, sem_pep, monkeypatch):
+    monkeypatch.setenv("PF_RUN_SO_VERBO", "0")
+    monkeypatch.setenv("PF_GATE", "0")
+    r = asyncio.run(s.malote(command="pwd", cwd="platafirma-harness"))
+    assert r["recusado"] is True and r["motivo"] == "sem verbo"
 
 def test_ler_arquivo_relativo_sem_bancada_recusa_e_absoluto_le(sem_bancada, sem_pep, monkeypatch):
     r = s.ler_arquivo(caminho="platafirma-harness/ops-server/requirements.txt")

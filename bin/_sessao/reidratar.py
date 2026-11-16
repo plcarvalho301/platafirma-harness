@@ -29,9 +29,7 @@ enquanto a coluna ainda não existe, a consulta tolera o erro e cai na forma ant
 
 NUM SÓ LUGAR, DOS DOIS LADOS DO VENV: bin/sessao roda no venv harness (psycopg já é
 dependência dele, via `_registra_duravel`) e chama `reidratar()` direto, em processo.
-ops-server/server.py roda no venv ops, SEM driver de banco (mesma razão declarada em
-bin/_sessao/giro-carga.py: "ops-mcp roda no venv ops da release, sem driver de
-banco") — nunca importa psycopg; chama `reidratar_via_verbo()`, que invoca o verbo
+ops-server/server.py roda no venv ops, SEM driver de banco — nunca importa psycopg; chama `reidratar_via_verbo()`, que invoca o verbo
 `sessao ver <id> --json` (subprocesso, harness venv) em vez de abrir conexão própria.
 As DUAS funções aplicam a mesma regra de validade; só a via de acesso ao Postgres
 muda. `ledger:{id}` e `giro:{id}` não se reidratam (são rederiváveis).

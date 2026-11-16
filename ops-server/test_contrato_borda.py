@@ -582,7 +582,6 @@ def test_get_comum_tem_pagina_institucional_publica(caminho, accept):
     ("GET", "/mcp", "text/event-stream"),
     ("GET", "/mcp", "application/json, Text/Event-Stream; charset=utf-8"),
     ("DELETE", "/mcp", "*/*"),
-    ("GET", "/sessao/encerrar", "text/html"),
     ("GET", "/mcp/outro", "text/html"),
 ])
 def test_transporte_e_rotas_privadas_seguem_401_com_descoberta(metodo, caminho, accept):
@@ -604,6 +603,11 @@ def test_metadata_oauth_continua_json_publico(caminho):
     assert resp.headers["content-type"].startswith("application/json")
     assert resp.json()["resource"] == s.OPS_RESOURCE + "/mcp"
     assert resp.json()["authorization_servers"] == [s.OIDC_ISSUER]
+
+
+def test_rota_encerrar_fita_removida():
+    caminhos = {getattr(r, "path", None) for r in s.app.router.routes}
+    assert "/sessao/encerrar" not in caminhos
 
 
 def test_sse_autenticado_chega_ao_handler_sem_virar_html(monkeypatch):

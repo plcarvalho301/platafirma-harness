@@ -1,7 +1,6 @@
 """Reidratação de `sessao:{id}` do lado da PORTA (card #3145, Onda 1 Frente E).
 
-A porta roda no venv ops (sem driver de banco -- mesma razão de
-bin/_sessao/giro-carga.py) e por isso nunca fala com o Postgres direto: quando
+A porta roda no venv ops (sem driver de banco) e por isso nunca fala com o Postgres direto: quando
 `sessao:{id}` falta do msg-mem, delega ao módulo comum (bin/_sessao/reidratar.py,
 `reidratar_via_verbo`), que por sua vez chama o verbo `sessao ver --json`.
 

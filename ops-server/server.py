@@ -95,7 +95,7 @@ CASA = Path(os.path.expanduser("~"))
 PF_HARNESS = Path(os.environ.get("PF_HARNESS", raizes.release() / "harness"))
 # Verbo servido: bin/ da release no ar. Override por PF_BIN (teste, ensaio).
 BIN_VERBOS = Path(os.environ.get("PF_BIN", raizes.release() / "harness" / "bin"))
-# CODIGO do PDP (pdp.py, identidade.py, pep.py) mora no repo — versionado, importavel.
+# CODIGO do PDP (pdp.py, identidade.py) mora no repo — versionado, importavel.
 PDP_CODE_DIR = PF_HARNESS / "politica-acesso"
 if str(PDP_CODE_DIR) not in sys.path:
     sys.path.insert(0, str(PDP_CODE_DIR))
@@ -127,10 +127,6 @@ _sessao: ContextVar[str] = ContextVar("sessao", default="-")
 # cunhado UMA vez por `monta_sessao` e carregado PELA FITA em cada chamada. A porta nao
 # infere sessao na abertura.
 #
-# Antes disto a entidade nascia em quatro pontos com tres identificadores (monta_sessao
-# cunhava uuid; /sessao cunhava so ordem_id; o sid de conexao; _giro-carga.py cunhava um
-# SEGUNDO uuid no encerrar) — e o ledger de dedup precisa de chave estavel, que nao havia.
-#
 # `ordem_id` e o `sid` de conexao sao ATRIBUTOS dentro de `sessao:{id}`, nunca identidade.
 # Os dicionarios de RAM (_ordem_por_sid, _sessao_por_sid) sairam: o join conexao->sessao
 # vive no msg-mem (`sessao:{id}`), e por isso sobrevive ao restart da porta — fita viva
@@ -138,8 +134,7 @@ _sessao: ContextVar[str] = ContextVar("sessao", default="-")
 TTL_SESSAO_S = 172800          # 48 h — o mesmo de `sessao:{id}`, `ledger:` e `giro:`
 
 # Ajudante de reidratacao (bin/_sessao/reidratar.py, arq:0110 §1; card #3145 decisao
-# 1). A porta roda no venv ops, SEM driver de banco (mesma razao de
-# bin/_sessao/giro-carga.py) — nunca fala com o Postgres direto; quando `sessao:{id}`
+# 1). A porta roda no venv ops, SEM driver de banco — nunca fala com o Postgres direto; quando `sessao:{id}`
 # falta, delega ao verbo `sessao ver --json`, que reidrata de `sessao.sessao` por
 # dentro. Import protegido: um ajudante ausente ou quebrado NUNCA derruba a porta —
 # uma falha de import aqui tiraria todas as ferramentas do ar depois da promocao, que
@@ -729,11 +724,6 @@ def _resolve_relativo(caminho: str, bancada=_SEM_BANCADA_DADA) -> tuple[Path | N
     return b / p, None
 
 
-def _cwd_de(cwd: str) -> tuple[Path | None, str | None]:
-    """Cwd de run_command: vazio = a casa da conta; relativo = na bancada declarada."""
-    return (CASA, None) if not cwd else _resolve_relativo(cwd)
-
-
 def _sessao_atual() -> str:
     """Identidade da sessão MCP em curso, em três degraus.
 
@@ -1095,7 +1085,8 @@ def _fundamento_do_ato(slug: str, binario: str, argv: list, ident: dict,
     return None, _recusa(slug, motivo, proximo=proximo, exit_code=exit_code)
 
 
-def _escopo_do_giro(slug: str, ato, args, r, ident: dict) -> None:
+def _escopo_do_giro(slug: str, ato, args, r, ident: dict,
+                    _ident_jwt: dict | None = None) -> None:
     """Giro de `repo abrir <repo> <card>` ou de `tarefas mover <card> em-execucao` que saiu 0: a
     porta emite a linha `escopo`, guarda o card como escopo corrente da sessao e o carimba nos
     giros seguintes. Fita com dois cards: vale o ultimo. Um escritor so: a porta, sobre o giro
@@ -1116,8 +1107,9 @@ def _escopo_do_giro(slug: str, ato, args, r, ident: dict) -> None:
     if _carimbos_de(sid).get("escopo") == escopo:
         return
     _guarda_carimbo(sid, escopo=escopo)
-    _audit(tool="sessao", evento="escopo", sessao_id=sid, cadeira=ident.get("cadeira") or None,
-           ordem_id=ident.get("ordem_id"), escopo=escopo, card=int(card))
+    _audit(_ident_jwt=_ident_jwt, tool="sessao", evento="escopo", sessao_id=sid,
+           cadeira=ident.get("cadeira") or None, ordem_id=ident.get("ordem_id"),
+           escopo=escopo, card=int(card))
 
 
 def _chapeu_do_giro(slug: str, ato, args, r, ident: dict) -> None:
@@ -1159,6 +1151,13 @@ def _chapeu_do_giro(slug: str, ato, args, r, ident: dict) -> None:
             _rc().set(chave, json.dumps(dados, ensure_ascii=False), keepttl=True)
     except Exception as e:
         print(f"[valkey] gravacao chapeu giro sessao:{sid} falhou: {e!r}", file=sys.stderr, flush=True)
+
+
+def _pos_giro_verbo(slug: str, ato, args, r, ident: dict,
+                    _ident_jwt: dict | None = None) -> None:
+    """Atualiza escopo e chapéu ao fim do verbo, tanto no caminho síncrono quanto após o prazo."""
+    _escopo_do_giro(slug, ato, args, r, ident, _ident_jwt=_ident_jwt)
+    _chapeu_do_giro(slug, ato, args, r, ident)
 
 
 def _documento_lido(slug, ato, args):
@@ -1385,53 +1384,6 @@ mcp = FastMCP(
 )
 
 
-# Por que thread + process group (rationale que morava no __doc__ de run_command):
-# o FastMCP despacha tool síncrona inline (`fn(**args)`, sem offload) e o processo é
-# single-threaded/asyncio cooperativo — um run_command inline travaria TODO o ops-mcp
-# (outras tools, /health, accept()) até retornar. Por isso a parte bloqueante vai a
-# anyio.to_thread (limite padrão 40) e roda em session própria (start_new_session):
-# no timeout mata-se o grupo (os.killpg), senão `&`/nohup/docker exec sobrevivem e,
-# herdando o fd do pipe, travam o communicate() driblando o timeout declarado.
-def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid: str = "-",
-                  cadeira: str = "") -> dict:
-    """Parte síncrona de run_command — roda em thread do anyio, nunca no event loop
-    (ver docstring de run_command pra motivo)."""
-    env = {**_env_subprocesso(), "PF_SESSAO": sessao_id, "PF_ORDEM_ID": oid}
-    if cadeira:
-        env["PF_CADEIRA"] = cadeira
-    try:
-        p = subprocess.Popen(["bash", "-c", command], cwd=d, env=env,
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                              start_new_session=True)
-    except OSError as e:
-        return _envelope_erro(
-            5,
-            f"falha ao executar comando no sistema operacional ({type(e).__name__}: {e}) — o ato é de ti",
-            erro=str(e),
-            cwd=str(d),
-        )
-    try:
-        stdout, stderr = p.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        try:
-            os.killpg(os.getpgid(p.pid), signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        p.wait()
-        prox = (f"malote(command={json.dumps(command, ensure_ascii=False)}, "
-                f"timeout={min(600, timeout * 2)})") if timeout < 600 else None
-        return _envelope_erro(
-            5,
-            f"tempo limite de {timeout}s esgotado — o grupo de processo foi morto e não se sabe se houve efeito parcial",
-            prox,
-            erro=f"timeout ({timeout}s) — grupo de processo morto",
-            cwd=str(d),
-        )
-    return {"exit_code": p.returncode, "stdout": _cap(stdout),
-            "stderr": _cap(stderr), "cwd": str(d)}
-
-
-PF_RUN_SO_VERBO = os.environ.get("PF_RUN_SO_VERBO", "1") != "0"
 _OPERADORES_SHELL = {"|", ";", "&&", "||", ">", "<", ">>", "&"}
 
 # spec_porta-so-verbo §3.5: programa que era fallback -> quem o cobre. `null` = verbo que falta.
@@ -1612,7 +1564,7 @@ async def malote(command: str = "", cwd: str = "", timeout: int = 120,
     o null seco). Sequencial; erro ou recusa num item nao derruba os outros; teto
     `CAP` por lote com `omitido_por_teto`/`lote_next`. `command` escalar = lote de 1 e
     devolve o resultado do item. `sessao_id` e o do `monta_sessao`. AUDITORIA: um JSONL
-    por item em @LOG@/ — nao e silenciavel. Rollback: PF_RUN_SO_VERBO=0 + restart.
+    por item em @LOG@/ — nao e silenciavel.
     `encadeado=true`: cadeia fixa — item com exit 0 ou 1 segue; qualquer outro (2..5,
     recusa, negado, timeout, exit fora da tabela) PARA, e os seguintes voltam
     `nao_rodou`; o bloco `cadeia` diz exit e primeira linha de cada item, `parou_em` e o
@@ -1641,10 +1593,6 @@ async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: st
     """O lote das duas tools (#3270). `nome` e o nome chamado: a auditoria o grava em `tool`
     na recusa e no lote encadeado, e em `via` no item despachado, e a regra de saida do
     apelido conta os dois (spec porta-so-verbo §3.7). A acao do PDP segue `run_command`."""
-    if not PF_RUN_SO_VERBO:
-        return await _run_command_legado(command, cwd, timeout, sessao_id, commands, nome=nome,
-                                         turno=turno, turno_texto=turno_texto,
-                                         turno_fonte=turno_fonte)
     itens = list(commands) if commands else ([command] if command else [])
     if not itens:
         return _envelope_erro(
@@ -1791,138 +1739,10 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
                dur_ms=round((time.monotonic() - t0) * 1000),
                lote_id=lote_id, lote_n=_i, encadeado=encadeado or None, **_campo_prazo(r),
                **_campos_poda(r))
-        _escopo_do_giro(slug, argv[1] if len(argv) > 1 else "", argv[2:], r, ident)
-        _chapeu_do_giro(slug, argv[1] if len(argv) > 1 else "", argv[2:], r, ident)
+        _pos_giro_verbo(slug, argv[1] if len(argv) > 1 else "", argv[2:], r, ident)
     ato = argv[1] if len(argv) > 1 else ""
     if slug == "sessao" and ato == "abrir" and r.get("exit_code") == 0:
         r["_sessao_abriu"] = True     # quem itera troca o ident antes do item n+1
-    return r
-
-async def _run_command_legado(command: str = "", cwd: str = "", timeout: int = 120,
-                       sessao_id: str | None = None,
-                       commands: list[str] | None = None,
-                       nome: str = "run_command", turno: str = "", turno_texto: str = "",
-                       turno_fonte: str = "") -> dict:
-    """FALLBACK: executa um comando shell (`bash -c`) como o usuário @USER@, para o que
-    não tem verbo — git, docker (rootless), systemctl --user, rg, fluxo de dado entre
-    verbos. Verbo do núcleo tem tool própria (nome = slug); usá-lo por aqui é medido.
-
-    cwd vazio = a casa da conta; absoluto vale como está; relativo é relativo à bancada
-    declarada (PLATAFIRMA_BANCADA ou ~/.config/platafirma/bancada) e, sem ela, a chamada é
-    recusada. timeout em segundos (teto 600); estourou,
-    o grupo de processo inteiro é morto. stdout/stderr voltam com truncagem declarada
-    (`truncado`/`bytes_total`). `&&` engole o exit code — use `;` ou chamadas separadas.
-
-    `commands`: lista de comandos, cada um seu próprio `bash -c`, sequencial, mesmo
-    `ident`; erro num item não derruba o lote. Atrás de `PF_TOOLS_LOTE` (§5c); teto de
-    bytes do lote = `CAP` (D4), item excedente volta `{"omitido_por_teto": True}` com
-    `lote_next`. `command` escalar segue válido quando `commands` não vem.
-
-    PATH já traz @BIN@ e ~/.local/bin (bash -c não lê .bashrc). Segredos da instância
-    NÃO descem para o ambiente. AUDITORIA: toda chamada grava JSONL em @LOG@/
-    (comando, cwd, exit, duração) — não é silenciável.
-    """
-    d, erro_cwd = _cwd_de(cwd)
-    if erro_cwd:
-        _audit(tool=nome, evento="cwd_recusado", cwd=cwd, motivo=erro_cwd)
-        return _envelope_erro(2, erro_cwd, 'malote(commands=[{"verbo": "<verbo>", "ato": "<ato>"}])',
-                              recusado=True, cwd=cwd, motivo=erro_cwd)
-    if commands and PF_TOOLS_LOTE:
-        timeout = max(1, min(timeout, 600))
-        ident = _sessao_resolve(sessao_id)
-        _carimba_turno(ident, turno, turno_texto, turno_fonte)
-        lote_id = uuid.uuid4().hex[:8]
-        resultados = []
-        acumulado = 0
-        lote_next = None
-        for _i, cmd in enumerate(commands):
-            if acumulado >= CAP:
-                lote_next = _i
-                break
-            negado_item = _autoriza(nome, "run_command", "comando", cmd, DOM_RUNTIME)
-            if negado_item:
-                r = negado_item
-            else:
-                t0 = time.monotonic()
-                r = await anyio.to_thread.run_sync(_run_blocking, cmd, d, timeout,
-                                                   ident["sessao_id"], ident["ordem_id"], ident["cadeira"])
-                so = r.get("stdout")
-                txt_bruto = so.get("texto", "") if isinstance(so, dict) else (so if isinstance(so, str) else "")
-                r = _serve(r, tool="run_command", alca=f"{d}|{cmd}", ident=ident)
-                _audit(tool=nome, comando=cmd[:CMD_CAP], evento="fallback",
-                       cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
-                       ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
-                       bytes_stdout=r.get("stdout", {}).get("bytes_total"),
-                       dur_ms=round((time.monotonic() - t0) * 1000),
-                       lote_id=lote_id, lote_n=_i, **_campos_poda(r))
-                if r.get("exit_code") == 0 and re.search(r"\bsessao\s+abrir\b", cmd):
-                    sid_novo = _extrai_sessao_id(txt_bruto)
-                    if sid_novo:
-                        ident = _sessao_resolve(sid_novo)
-            acumulado += (r.get("stdout") or {}).get("bytes_total", 0)
-            resultados.append(r)
-        for _i in range(len(resultados), len(commands)):
-            resultados.append({"omitido_por_teto": True})
-        return {"lote": resultados, "lote_n": len(commands), "lote_next": lote_next}
-    negado = _autoriza(nome, "run_command", "comando", command,
-                       DOM_RUNTIME)
-    if negado:
-        return negado
-    timeout = max(1, min(timeout, 600))
-    ident = _sessao_resolve(sessao_id)
-    _carimba_turno(ident, turno, turno_texto, turno_fonte)
-    if PF_GATE:
-        segs = [s.strip() for s in command.split(";") if s.strip()]
-        elegivel = bool(segs)
-        argvs = []
-        if elegivel:
-            for seg in segs:
-                try:
-                    argv = shlex.split(seg)
-                except ValueError:
-                    elegivel = False
-                    break
-                if not argv:
-                    elegivel = False
-                    break
-                argv[0] = NOMES_EXIBIDOS.get(argv[0], argv[0])
-                if argv[0] not in SLUGS_SERVIDOS:
-                    elegivel = False
-                    break
-                # Barreira DEPOIS do shlex: procura metacaracteres nus nos tokens
-                if any(t in ("|", "&", ">", "<", "$", "`", "*", "?", "(", ")") for t in argv):
-                    elegivel = False
-                    break
-                argvs.append(argv)
-        if elegivel:
-            resultados = []
-            for argv in argvs:
-                r = await anyio.to_thread.run_sync(
-                    _run_verbo_blocking, argv, None, timeout, ident)
-                _perf = _perfil_verbo(argv[0], str(BIN_VERBOS / argv[0]))
-                r = _serve(r, tool=argv[0], alca=" ".join(argv), ident=ident,
-                           cauda=_perf["cauda"],
-                           cosmetica=_cosmetica(_perf, argv[1] if len(argv) > 1 else None),
-                           escrita=_escreve(argv[0], str(BIN_VERBOS / argv[0]),
-                                            argv[1] if len(argv) > 1 else None))
-                _audit(tool=argv[0], evento="verbo_contornado", comando=" ".join(argv)[:CMD_CAP],
-                       cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
-                       ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"),
-                       erro=r.get("erro"), **_campos_poda(r))
-                resultados.append(r)
-            if len(resultados) == 1:
-                return {**resultados[0], "aviso": f"tem tool {argvs[0][0]} — chamada roteada pela porta"}
-            return {"lote": resultados, "aviso": f"{len(resultados)} verbos roteados"}
-    t0 = time.monotonic()
-    r = await anyio.to_thread.run_sync(_run_blocking, command, d, timeout,
-                                       ident["sessao_id"], ident["ordem_id"], ident["cadeira"])
-    r = _serve(r, tool="run_command", alca=f"{d}|{command}", ident=ident)
-    _audit(tool=nome, comando=command[:CMD_CAP], evento="fallback",
-           comando_truncado=len(command) > CMD_CAP, cwd=str(d),
-           cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"],
-           exit_code=r.get("exit_code"), erro=r.get("erro"),
-           bytes_stdout=r.get("stdout", {}).get("bytes_total"),
-           dur_ms=round((time.monotonic() - t0) * 1000), **_campos_poda(r))
     return r
 
 
@@ -2918,19 +2738,9 @@ def write_file(path: str = "", content: str = "", sessao_id: str | None = None,
 
 
 # --- contexto de abertura de cadeira -----------------------------------------
-# As duas variáveis saem do TEXTO da persona, nunca do nome do arquivo: a linha 1
-# ("Você é <nome>,") dá o nome canônico — que é o diretório da fila — e a linha
-# FERRAMENTAL: dá o caminho do manifesto. Convenção de nome de arquivo não produz o
-# "claudinha" de persona-fabrica.md.
 # A abertura servida e a MORADA PUBLICADA da instancia (arq:0097), nunca o clone.
 PERSONAS = Path(os.environ.get(
     "PF_PERSONAS", INSTANCIA / "var/abertura-publicada/current/abertura"))
-ORG_CANONICO = Path(os.environ.get(
-    "PF_ORG", raizes.release() / "arquitetura/docs/org-template-canonico.md"))
-
-
-RE_NOME = re.compile(r"^Você é ([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ-]*)")
-RE_FERRAMENTAL = re.compile(r"^FERRAMENTAL:\s*(\S+\.md)")
 
 
 def _cadeiras() -> list:
@@ -2938,41 +2748,6 @@ def _cadeiras() -> list:
     if not PERSONAS.is_dir():
         return []
     return sorted(p.name for p in PERSONAS.iterdir() if p.is_dir())
-
-
-def _ler(p: Path) -> dict:
-    if not p.is_file():
-        return {"path": str(p), "ausente": True}
-    return {"path": str(p), "content": p.read_text(encoding="utf-8", errors="replace")}
-
-
-def _memoria(cadeira: str) -> dict:
-    """Memória da cadeira, lida pelo verbo `mesa` — nunca por cliente redis próprio
-    aqui dentro: segunda implementação da mesma regra diverge em silêncio, que é o
-    mesmo motivo de a fila ser lida pelo verbo.
-
-    A mesa (classe `mem`, arq:0041) entra INTEIRA — é o resíduo curto da fita
-    anterior. Do caderno durável entra só o ÍNDICE; o corpo sai por
-    `mesa caderno <chapéu>`, na fita que o quiser. Carregar o caderno de todos os
-    chapéus a cada giro anularia a razão de a memória ser partida por chapéu.
-    """
-    out = {}
-    verbo = str(BIN_VERBOS / "mesa")
-    for chave, args in (("mesa", ["ver"]), ("cadernos", ["caderno"])):
-        try:
-            proc = subprocess.run([verbo, *args], capture_output=True, text=True,
-                                  timeout=15, env={**_env_subprocesso(), "PF_CADEIRA": cadeira})
-            if proc.returncode == 0:
-                out[chave] = {"texto": proc.stdout.strip()}
-            else:
-                out[chave] = {"indisponivel": True,
-                              "erro": (proc.stderr or proc.stdout).strip()[:300]}
-        except (OSError, subprocess.SubprocessError) as e:
-            out[chave] = {"indisponivel": True, "erro": f"{type(e).__name__}: {e}"}
-    out["nota"] = ("chapéu declarado na persona é o slot nos dois: `mesa anota <slot>` "
-                   "escreve a mesa, `mesa caderno <slot>` abre o caderno. Substrato "
-                   "fora do ar é declarado como indisponivel, nunca como memória vazia")
-    return out
 
 
 def _acha_bin(nome: str) -> str:
@@ -3390,7 +3165,6 @@ for _fn in _TOOLS:
 # fica pro teste de superfície, §3.2/§7.3).
 TOOLS_VERBOS = os.environ.get("PF_TOOLS_VERBOS", "1") != "0"
 TOOLS_LEVA2 = os.environ.get("PF_TOOLS_LEVA2", "0") == "1"
-PF_GATE = os.environ.get("PF_GATE", "1") != "0"          # gate transparente (§4)
 PF_TOOLS_LOTE = os.environ.get("PF_TOOLS_LOTE", "0") == "1" # chamada em lote (§5) — Leva 2
 # Quem é retido (o que era leva 2) NÃO mora aqui: é o atributo `retido` do verbo em registro/porta.yaml.
 
@@ -3555,6 +3329,8 @@ def _segue_apos_prazo(p: subprocess.Popen, argv: list, timeout: int, t0: float, 
                cadeira=ident.get("cadeira") or None, sessao_id=ident.get("sessao_id"),
                ordem_id=ident.get("ordem_id"), exit_code=r.get("exit_code"), erro=r.get("erro"),
                dur_ms=dur_ms)
+        _pos_giro_verbo(slug, argv[1] if len(argv) > 1 else "", argv[2:], r, ident,
+                        _ident_jwt=quem_fio)
 
     threading.Thread(target=_espera, name=f"prazo-{rid}", daemon=True).start()
     return {"em_andamento": True, "id": rid, "resultado": str(caminho),
@@ -3877,8 +3653,7 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                bytes_stdout=r.get("stdout", {}).get("bytes_total"),
                dur_ms=round((time.monotonic() - t0) * 1000), **_campo_prazo(r),
                **_campos_poda(r))
-        _escopo_do_giro(slug, ato, args, r, ident)
-        _chapeu_do_giro(slug, ato, args, r, ident)
+        _pos_giro_verbo(slug, ato, args, r, ident)
         return r
     _tool.__name__ = slug.replace("-", "_")
     _tool.__doc__ = descricao
@@ -4237,90 +4012,6 @@ async def _token(req):
     return RedirectResponse(destino, status_code=307)
 
 
-# --- Encerramento de fita por HTTP --------------------------------------------
-# O canal mediado da colaboracao externa (rotas /sessao e /msg, card 344) saiu no
-# card #3117. Fica o encerramento, que as superficies sem Code usam para a nota da
-# mesa e o auto-relato do giro.
-
-def _ident_req(req) -> dict:
-    """Mesma cadeia do middleware: lê `request.state.ident` já validado pelo `BearerAuth`."""
-    st = getattr(req, "state", None)
-    guardada = getattr(st, "ident", None) if st is not None else None
-    if isinstance(guardada, dict):
-        return dict(guardada)
-    header = req.headers.get("authorization", "")
-    ident = _sujeito_do_jwt(header, auditor=_audit, jwks_url=OIDC_JWKS_URL,
-                            audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER)
-    if st is not None:
-        try:
-            st.ident = dict(ident)
-        except Exception:                               # noqa: BLE001
-            pass
-    return ident
-
-
-async def _sessao_encerrar(req):
-    """Fechamento da fita: a nota que a proxima precisa saber. Substitui, nao acumula
-    — mesma classe `mem` da mesa das cadeiras (arq:0041)."""
-    ident = _ident_req(req)
-    quem = ident.get("sujeito", "-")
-    est = _carrega_politica()
-    if est.get("erro") or not (est["sujeitos"] or {}).get(quem):
-        return JSONResponse({"erro": "sujeito sem atributos declarados"}, status_code=403)
-    try:
-        corpo = json.loads(await req.body() or b"{}")
-    except ValueError:
-        return JSONResponse({"erro": "corpo nao e JSON"}, status_code=400)
-    nota = (corpo.get("nota") or "").strip()
-    if not nota:
-        return JSONResponse({"erro": "campo obrigatorio: nota"}, status_code=400)
-    r = await anyio.to_thread.run_sync(_anota_mesa, quem, nota)
-    # 3 primeiros giros auto-relatados -> sessao.giro (ordem do dono 02/09, #2945).
-    # Best-effort: falha aqui nunca derruba o encerramento (a nota da mesa e o ato).
-    giro = corpo.get("giro") or []
-    if isinstance(giro, list) and giro:
-        sid = (corpo.get("sessao_id") or os.environ.get("PF_SESSAO") or "").strip()
-        r["giro"] = await anyio.to_thread.run_sync(
-            _giro_carrega, sid, quem, corpo.get("chapeu"), giro[:3])
-    _audit(tool="sessao", evento="fita_encerrada", sujeito=quem, bytes_nota=len(nota),
-           ok=r.get("ok"))
-    return JSONResponse(r, status_code=200 if r.get("ok") else 500)
-
-
-def _anota_mesa(quem: str, nota: str) -> dict:
-    """Pelo verbo `mesa`, nunca por cliente redis proprio: segunda implementacao da
-    mesma regra diverge em silencio (mesma razao de `_memoria`)."""
-    try:
-        proc = subprocess.run([str(BIN_VERBOS / "mesa"), "anota", quem],
-                              input=nota, capture_output=True, text=True, timeout=15,
-                              env={**_env_subprocesso(), "PF_CADEIRA": quem})
-        if proc.returncode == 0:
-            return {"ok": True, "slot": quem, "saida": proc.stdout.strip()}
-        return {"ok": False, "erro": (proc.stderr or proc.stdout).strip()[:300]}
-    except (OSError, subprocess.SubprocessError) as e:
-        return {"ok": False, "erro": f"{type(e).__name__}: {e}"}
-
-
-def _giro_carrega(sessao_id: str, cadeira: str, chapeu, giro: list) -> dict:
-    """Carrega os 3 primeiros giros auto-relatados em sessao.giro pelo verbo
-    bin/_sessao/giro-carga.py — nunca cliente de banco proprio (ops-mcp roda no venv ops
-    da release, sem driver de banco; mesma razao de _anota_mesa)."""
-    if not sessao_id:
-        return {"ok": False, "erro": "sem sessao_id"}
-    payload = json.dumps({"sessao_id": sessao_id, "cadeira": cadeira,
-                          "chapeu": chapeu, "giro": giro})
-    try:
-        proc = subprocess.run([str(BIN_VERBOS / "_sessao" / "giro-carga.py")],
-                              input=payload, capture_output=True, text=True,
-                              timeout=15, env={**_env_subprocesso()})
-        try:
-            return json.loads(proc.stdout or "{}")
-        except ValueError:
-            return {"ok": False, "erro": (proc.stderr or proc.stdout).strip()[:300]}
-    except (OSError, subprocess.SubprocessError) as e:
-        return {"ok": False, "erro": f"{type(e).__name__}: {e}"}
-
-
 async def _mcp_get_recusa(_req):
     """MCP Streamable HTTP (2025-03-26): servidor stateless sem notificacao server->client
     responde 405 em GET /mcp para o cliente nao abrir standalone SSE ocioso e derrubar a
@@ -4354,5 +4045,4 @@ app.router.routes.append(Route("/authorize", _authorize))
 app.router.routes.append(Route("/token", _token, methods=["POST", "GET"]))
 app.router.routes.append(Route("/.well-known/oauth-protected-resource", _prm))
 app.router.routes.append(Route("/.well-known/oauth-protected-resource/mcp", _prm))
-app.router.routes.append(Route("/sessao/encerrar", _sessao_encerrar, methods=["POST"]))
 app.add_middleware(BearerAuth)

@@ -5,7 +5,7 @@
 #
 # Dependencias MEDIDAS por import (AST, transitivo pelos pacotes da propria arvore) dos verbos
 # com shebang /opt/platafirma/current/venv/harness/bin/python e das units que o usam:
-#   psycopg     sessao, mesa, expediente, monta-sessao, _sessao/giro-carga.py,
+#   psycopg     sessao, mesa, expediente, monta-sessao,
 #               sessao/migracao/capturar-mesa-legada.py, chat/comum/giro.py (chat-worker)
 #   redis       sessao, mesa, descansar, monta-sessao (recuperacao/cache.py), _fila/streams.py
 #   tokenizers  monta-sessao, expediente, recuperacao/catalogo.py e gerador.py

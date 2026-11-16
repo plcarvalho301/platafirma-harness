@@ -105,6 +105,66 @@ def test_fio_pos_prazo_recebe_identidade_por_argumento_sem_revalidar_jwt(tmp_pat
     assert concluido["sub"] == quem_req["sub"] and concluido["azp"] == "agy-cli"
 
 
+def test_repo_abrir_e_troca_de_chapeu_apos_prazo_atualizam_escopo_e_chapeu(tmp_path):
+    """DT 726: verbo que conclui após PRAZO_S atualiza escopo e chapéu igual ao caminho síncrono."""
+    sid = "72600000-0000-4000-8000-000000000726"
+    ident = {"sessao_id": sid, "ordem_id": "o20261116T120000-dt0726",
+             "cadeira": "engenharia", "sujeito": "b6986be0-c5b6-4693-839f-73c90b79b25a",
+             "origem_sessao": "", "chapeu": "front-end"}
+    quem_req = {"sub": ident["sujeito"], "sujeito": ident["sujeito"],
+                "username": "megafone", "azp": "agy-cli", "sid": "s726", "jti": "j726"}
+    kv = {f"sessao:{sid}": json.dumps({"cadeira": "engenharia", "ordem_id": ident["ordem_id"],
+                                       "sujeito": ident["sujeito"], "chapeu": "front-end"})}
+    rc = MagicMock()
+    rc.get.side_effect = lambda k: kv.get(k)
+    rc.set.side_effect = lambda k, v, **kw: kv.__setitem__(k, v)
+    s._CARIMBOS.pop(sid, None)
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for nome, arg_portao in (("repo", "$2"), ("persona", "$5")):
+        script = bin_dir / nome
+        script.write_text(f'#!/bin/sh\nwhile [ ! -e "{arg_portao}" ]; do sleep 0.02; done\necho ok\n',
+                          encoding="utf-8")
+        script.chmod(0o755)
+
+    portao_repo = tmp_path / "liberar_repo"
+    portao_persona = tmp_path / "liberar_persona"
+    audit = MagicMock()
+    with patch("server.RESULTADO_DIR", tmp_path), patch("server._rc", return_value=rc), \
+            patch("server._audit", audit):
+        r_repo = s._run_verbo_blocking(
+            [str(bin_dir / "repo"), "abrir", str(portao_repo), "4276"],
+            None, 10, ident, 0.1, quem=quem_req)
+        assert r_repo.get("em_andamento") is True
+        portao_repo.touch()
+        final_repo = _espera_fim(Path(r_repo["resultado"]))
+        assert final_repo["exit_code"] == 0
+
+        r_pers = s._run_verbo_blocking(
+            [str(bin_dir / "persona"), "ler", "engenharia", "--chapeu", "back-end", str(portao_persona)],
+            None, 10, ident, 0.1, quem=quem_req)
+        assert r_pers.get("em_andamento") is True
+        portao_persona.touch()
+        final_pers = _espera_fim(Path(r_pers["resultado"]))
+        assert final_pers["exit_code"] == 0
+
+        for _ in range(40):
+            if json.loads(kv[f"sessao:{sid}"]).get("chapeu") == "back-end":
+                break
+            time.sleep(0.02)
+
+    dados_sessao = json.loads(kv[f"sessao:{sid}"])
+    assert dados_sessao["escopo_atual"] == "#4276"
+    assert dados_sessao["chapeu"] == "back-end"
+    assert s._carimbos_de(sid)["escopo"] == "#4276"
+    eventos = [c.kwargs.get("evento") for c in audit.call_args_list]
+    assert eventos.index("verbo_concluido_apos_prazo") < eventos.index("escopo")
+    ev_escopo = next(c.kwargs for c in audit.call_args_list if c.kwargs.get("evento") == "escopo")
+    assert ev_escopo["escopo"] == "#4276" and ev_escopo["card"] == 4276
+    assert ev_escopo["_ident_jwt"] == quem_req
+
+
 def test_stdin_chega_inteiro_mesmo_passando_do_prazo(resultado_dir):
     r = s._run_verbo_blocking(["sh", "-c", "sleep 0.5; cat"], "abc", 10, IDENT, 0.1)
     assert r["em_andamento"] is True
