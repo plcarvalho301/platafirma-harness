@@ -99,7 +99,8 @@ def test_caminho_alterado_ou_solto_sai_4(monkeypatch, tmp_path, bancada):
     assert e.value.code == 4
 
 
-def test_bancada_atras_de_origin_main_sai_4(monkeypatch, tmp_path, bancada, capsys):
+def test_bancada_limpa_atras_de_origin_main_atualiza_por_fast_forward(monkeypatch, tmp_path, bancada, capfd):
+    """DT 736: bancada limpa atrás de origin/main atualiza sozinha por fast-forward."""
     mod = _modulo()
     _prepara(mod, monkeypatch, tmp_path, bancada)
     (bancada / "rag" / "pkg" / "extra.py").write_text("x = 1\n")
@@ -107,12 +108,28 @@ def test_bancada_atras_de_origin_main_sai_4(monkeypatch, tmp_path, bancada, caps
     _git(bancada, "commit", "-m", "adiante")
     _git(bancada, "push", "origin", "HEAD:main")
     _git(bancada, "reset", "--hard", "HEAD~1")
+    assert mod.main(["rodar", "p"]) == 7
+    err = capfd.readouterr().err
+    assert "bancada atualizada por fast-forward (+1 commit(s)" in err
+
+
+def test_bancada_divergida_atras_de_origin_main_sai_4(monkeypatch, tmp_path, bancada, capsys):
+    """DT 736: bancada divergida (não fast-forward) continua saindo 4."""
+    mod = _modulo()
+    _prepara(mod, monkeypatch, tmp_path, bancada)
+    (bancada / "rag" / "pkg" / "extra.py").write_text("x = 1\n")
+    _git(bancada, "add", "-A")
+    _git(bancada, "commit", "-m", "adiante")
+    _git(bancada, "push", "origin", "HEAD:main")
+    _git(bancada, "reset", "--hard", "HEAD~1")
+    (bancada / "outro.txt").write_text("local\n")
+    _git(bancada, "add", "outro.txt")
+    _git(bancada, "commit", "-m", "local")
     with pytest.raises(SystemExit) as e:
         mod.main(["rodar", "p"])
     assert e.value.code == 4
     err = capsys.readouterr().err
-    assert "bancada 1 commits atrás de origin/main: repo atualizar" in err
-    assert "commite e sincronize" not in err
+    assert "fast-forward recusado" in err
 
 
 def test_mudanca_fora_dos_caminhos_da_peca_nao_trava(monkeypatch, tmp_path, bancada):
