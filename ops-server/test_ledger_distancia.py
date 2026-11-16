@@ -1,6 +1,6 @@
 """Medidor de distancia do Ledger — roda sem o pacote `mcp` (importa so `poda`).
 
-O `_ensaio.py` importa `server`, que importa FastMCP; em bancada sem `mcp` ele nem
+`test_poda_porta.py` importa `server`, que importa FastMCP; em bancada sem `mcp` ele nem
 coleta. A regua de distancia e logica pura de `poda.Ledger`, e este arquivo a trava
 onde quer que o pytest rode.
 """

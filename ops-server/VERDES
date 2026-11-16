@@ -31,3 +31,10 @@ test_run_command_lote_injecao.py | bin/sessao bin/_sessao/** bin/expediente bin/
 test_poda_giro_nao_entregue.py | bin/tarefas ops-server/** politica-acesso/*.py
 test_tokens_giro_4120.py | ops-server/** lib/oplog.py lib/tokenizador.py
 test_erro_envelope_4251.py | borda/** ops-server/**
+test_agente_log_porta.py | bin/agente bin/sessao bin/_sessao/** lib/oplog.py ops-server/** politica-acesso/*.py
+test_origem_sessao_porta.py | bin/sessao bin/_sessao/** lib/oplog.py ops-server/** politica-acesso/*.py
+test_poda_json_motor_lista_512.py | bin/motor bin/_motor/** ops-server/**
+test_sessao_sem_default.py | bin/sessao bin/_sessao/** ops-server/** politica-acesso/*.py
+test_autoriza_porta.py | ops-server/** politica-acesso/** | regressivo #722
+test_poda_porta.py | bin/descansar bin/expediente bin/mesa bin/motor bin/persona bin/repo bin/tarefas bin/teste comum/** ops-server/** politica-acesso/*.py | regressivo #722
+test_superficie_catalogo_porta.py | bin/descansar bin/mesa bin/monta-sessao lib/registro_porta.py ops-server/** politica-acesso/*.py registro/porta.yaml
