@@ -80,6 +80,31 @@ def test_passou_do_prazo_devolve_em_andamento_e_grava_o_final(resultado_dir):
     assert "verbo_concluido_apos_prazo" in eventos
 
 
+def test_fio_pos_prazo_recebe_identidade_por_argumento_sem_revalidar_jwt(tmp_path):
+    """DT 731: o fio de pós-prazo recebe a identidade por argumento e grava no bruto sem chamar _quem()."""
+    portao = tmp_path / "liberar_ident"
+    espera = 'while [ ! -e "$1" ]; do sleep 0.02; done; echo fim'
+    quem_req = {"sub": "b6986be0-c5b6-4693-839f-73c90b79b25a",
+                "sujeito": "b6986be0-c5b6-4693-839f-73c90b79b25a",
+                "username": "megafone", "azp": "agy-cli", "sid": "s1", "jti": "j1"}
+    with patch("server.RESULTADO_DIR", tmp_path), patch("server.LOG_DIR", tmp_path), \
+            patch("server._rc", return_value=_rc_vazio()), \
+            patch("server._quem", side_effect=AssertionError("fio pós-prazo chamou _quem()")):
+        r = s._run_verbo_blocking(["sh", "-c", espera, "sh", str(portao)], None, 10, IDENT, 0.2,
+                                  quem=quem_req)
+        assert r.get("em_andamento") is True
+        portao.touch()
+        _espera_fim(Path(r["resultado"]))
+        for _ in range(40):
+            if list(tmp_path.glob("ops-*.jsonl")):
+                break
+            time.sleep(0.02)
+    linhas = [json.loads(ln) for f in tmp_path.glob("ops-*.jsonl")
+              for ln in f.read_text(encoding="utf-8").splitlines()]
+    (concluido,) = [x for x in linhas if x.get("evento") == "verbo_concluido_apos_prazo"]
+    assert concluido["sub"] == quem_req["sub"] and concluido["azp"] == "agy-cli"
+
+
 def test_stdin_chega_inteiro_mesmo_passando_do_prazo(resultado_dir):
     r = s._run_verbo_blocking(["sh", "-c", "sleep 0.5; cat"], "abc", 10, IDENT, 0.1)
     assert r["em_andamento"] is True
