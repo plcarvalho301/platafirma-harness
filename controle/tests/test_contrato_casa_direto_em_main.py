@@ -153,7 +153,7 @@ def test_abrir_da_a_worktree_de_main_da_cadeira_com_ou_sem_card(tmp_path):
     r = _repo(tmp_path, bancada, "abrir", CASA, "42", "--slug", "x")
     assert r.returncode == 0, r.stderr
     assert "bancada já aberta" in r.stdout and str(wt) in r.stdout
-    assert "card #42: em-execucao" in r.stdout
+    assert "card #42: em-refinamento-tecnico" in r.stdout
     assert not (bancada / "wt" / CASA / "dados" / "42-x").exists()
     assert _git("branch", "--list", "fabrica/*", cwd=bancada / CASA) == ""
 

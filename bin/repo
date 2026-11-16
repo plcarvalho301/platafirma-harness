@@ -1423,7 +1423,7 @@ ato_sincronizar() {
 # abrir_direto_em_main <repo> <cadeira> <card> -- a worktree de main da cadeira (regime
 # direto em main, acima). Nasce do origin/main de agora (sem forge: 5, nada criado). Ja
 # aberta: busca o forge e anda em fast-forward quando esta limpa e sem commit local; com
-# commit local ou suja, so relata. O card, se vier, so se move a em-execucao.
+# commit local ou suja, so relata. O card, se vier, move para em-refinamento-tecnico.
 abrir_direto_em_main() {
   local nome="$1" cadeira="$2" card="$3" sem_mover="${4:-0}"
   local clone_raiz="$BANCADA/$nome" wt_dir="$BANCADA/wt/$nome/$cadeira/$PASTA_DIRETO_EM_MAIN"
@@ -2024,8 +2024,9 @@ cmd_abrir() {
 # la e ato de quem prioriza, e o mover logo abaixo conta o que o rastreador responder. Leitura ou
 # nivel que nao se obtem (verbo ausente, rastreador fora) = nao grava e nao diz nada.
 # move_card <n> [repo] [cadeira] [sem_mover] -- abrir com card poe a story/task da propria
-# cadeira em em-refinamento-tecnico (regime ramo e PR) ou em-execucao (direto em main,
-# arq:0096) somente quando o estado atual e anterior ao destino (DTs 80, 95, 407, 451).
+# cadeira em em-refinamento-tecnico somente quando o estado atual e anterior ao destino
+# (DTs 80, 95, 407, 451, 741; procedimento refinar-story passo 3.1). Quem poe em
+# em-execucao e tarefas mover, depois do Plano.
 # Recusa do rastreador se declara na saida e NAO derruba o abrir: a bancada ja existe, e o
 # card e ato do rastreador (spec_ambiente-de-desenvolvimento §2).
 move_card() {
@@ -2043,9 +2044,6 @@ move_card() {
   fi
 
   local destino="em-refinamento-tecnico"
-  if direto_em_main "$repo"; then
-    destino="em-execucao"
-  fi
 
   local item="" classe="" nivel="" estado="" fase="" card_cadeira="" card_executor=""
   item="$("$tarefas_bin" api GET "/itens/$n" 2>/dev/null)" || item=""

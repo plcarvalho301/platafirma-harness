@@ -188,3 +188,47 @@ def test_abrir_avanca_story_priorizada_da_propria_cadeira(tmp_path):
         "editar 500 --executor engenharia",
         "mover 500 em-refinamento-tecnico",
     ]
+
+
+def test_dt741_abrir_direto_em_main_move_para_em_refinamento_tecnico(tmp_path):
+    """DT 741: repo abrir em repo direto_em_main (platafirma-casa e platafirma-casa-espelho)
+    move story priorizada para em-refinamento-tecnico, nao para em-execucao."""
+    itens = {
+        "4295": {
+            "classe": "planejado",
+            "nivel_nome": "story",
+            "estado": "priorizada",
+            "estado_fase": "funil",
+            "cadeira": "engenharia",
+            "executor": "",
+        },
+        "4304": {
+            "classe": "planejado",
+            "nivel_nome": "story",
+            "estado": "priorizada",
+            "estado_fase": "funil",
+            "cadeira": "engenharia",
+            "executor": "",
+        },
+    }
+    env_espelho, log_espelho = _prepara_ambiente(
+        tmp_path / "espelho", itens, repo_nome="platafirma-casa-espelho"
+    )
+    r_esp = _roda(env_espelho, "abrir", "platafirma-casa-espelho", "4295")
+    assert r_esp.returncode == 0, r_esp.stderr
+    assert "card #4295: em-refinamento-tecnico" in r_esp.stdout
+    assert log_espelho.read_text(encoding="utf-8").splitlines() == [
+        "editar 4295 --executor engenharia",
+        "mover 4295 em-refinamento-tecnico",
+    ]
+
+    env_casa, log_casa = _prepara_ambiente(
+        tmp_path / "casa", itens, repo_nome="platafirma-casa"
+    )
+    r_casa = _roda(env_casa, "abrir", "platafirma-casa", "4304")
+    assert r_casa.returncode == 0, r_casa.stderr
+    assert "card #4304: em-refinamento-tecnico" in r_casa.stdout
+    assert log_casa.read_text(encoding="utf-8").splitlines() == [
+        "editar 4304 --executor engenharia",
+        "mover 4304 em-refinamento-tecnico",
+    ]
