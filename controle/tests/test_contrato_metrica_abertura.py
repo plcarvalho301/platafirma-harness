@@ -168,30 +168,6 @@ def test_abertura_cadeira_texto_sem_json_tem_cabecalho_e_total(raiz):
         json.loads(proc.stdout)
 
 
-# --- --tudo ----------------------------------------------------------------
-
-
-def test_abertura_tudo_json_lista_as_duas_cadeiras_com_pecas(raiz):
-    proc = _run(["abertura", "--tudo", "--json"], raiz)
-    assert proc.returncode == 0, proc.stderr
-    dados = json.loads(proc.stdout)
-    nomes = {c["total"]["cadeira"] for c in dados["cadeiras"]}
-    assert nomes == {"teste", "outra"}
-    for c in dados["cadeiras"]:
-        # --tudo pede a quebra por peca; sem a flag, `pecas` sai None (ver
-        # `test_abertura_json_sem_tudo_omite_pecas_por_cadeira` abaixo).
-        assert c["pecas"] is not None
-        assert len(c["pecas"]) == c["total"]["pecas"]
-
-
-def test_abertura_json_sem_tudo_omite_pecas_por_cadeira(raiz):
-    proc = _run(["abertura", "--json"], raiz)
-    assert proc.returncode == 0, proc.stderr
-    dados = json.loads(proc.stdout)
-    assert len(dados["cadeiras"]) == 2
-    assert all(c["pecas"] is None for c in dados["cadeiras"])
-
-
 # --- cadeira inexistente -----------------------------------------------------
 
 

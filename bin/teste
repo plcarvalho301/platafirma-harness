@@ -657,7 +657,7 @@ pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isola
       trab="$(( _ncpu / 3 ))"
       [ "$trab" -lt 2 ] && trab=2
     else
-      trab="$(( _ncpu * 2 / 3 ))"
+      trab="$_ncpu"
       [ "$trab" -lt 2 ] && trab=2
     fi
     case "$trab" in ''|*[!0-9]*) trab=1 ;; esac
