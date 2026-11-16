@@ -507,7 +507,10 @@ def _ids_pendurados(rc, persona: str):
     try:
         bruto = rc.xpending_range(chave, GRUPO, min="-", max="+", count=10_000)
     except AttributeError:
-        bruto = rc.execute_command("XPENDING", chave, GRUPO, "-", "+", 10_000)
+        try:
+            bruto = rc.execute_command("XPENDING", chave, GRUPO, "-", "+", 10_000)
+        except (AttributeError, redis.exceptions.ResponseError):
+            return []
     except redis.exceptions.ResponseError:
         return []
     ids = []
@@ -518,19 +521,64 @@ def _ids_pendurados(rc, persona: str):
             ids.append(item[0])
     return [i for i in ids if i]
 
+
+def _pares_respondidos_no_stream(rc: object, persona: str, remetentes: set[str]) -> set[tuple[str, str]]:
+    """Coleta pares `(autor, msgid_respondido)` em `caixa:<persona>` e nas caixas dos remetentes."""
+    respondidas: set[tuple[str, str]] = set()
+    caixas = [persona] + [r for r in sorted(remetentes) if r != persona]
+    for cx in caixas:
+        for _t, plano in rc.xrange(stream_key(cx), min="-", max="+"):
+            resp_id = (plano.get("responde") or "").strip()
+            if resp_id:
+                de_c = canoniza_persona(plano.get("de", "")) or plano.get("de", "")
+                if cx == persona or de_c == persona:
+                    respondidas.add((de_c, resp_id))
+    return respondidas
+
+
+def _reconcilia_pel_respondidas(rc: object, persona: str) -> list[dict]:
+    """Devolve as cartas vivas na PEL (`estado='pendurada'`), reconciliando com XACK:
+    (a) entradas na PEL que o XTRIM ja cortou do stream; e
+    (b) cartas ja respondidas por `persona` (`responde == msgid` na caixa do remetente)
+        ou superadas pelo proprio remetente (`responde == msgid` na caixa de `persona`)
+        antes do ack automatico do DT 336 (#4289)."""
+    chave = stream_key(persona)
+    candidatas: list[tuple[str, dict]] = []
+    remetentes: set[str] = set()
+    for tecnico in _ids_pendurados(rc, persona):
+        entradas = rc.xrange(chave, min=tecnico, max=tecnico)
+        if not entradas:
+            rc.xack(chave, GRUPO, tecnico)
+            continue
+        t, plano = entradas[0]
+        m = _campos(plano, t)
+        m["estado"] = "pendurada"
+        candidatas.append((tecnico, m))
+        de_canon = canoniza_persona(m["de"]) or m["de"]
+        if de_canon and not de_canon.startswith(PREFIXO_BOT):
+            remetentes.add(de_canon)
+    if not candidatas:
+        return []
+    respondidas = _pares_respondidos_no_stream(rc, persona, remetentes)
+    vivas: list[dict] = []
+    for tecnico, m in candidatas:
+        mid = m["msgid"]
+        de_c = canoniza_persona(m["de"]) or m["de"]
+        if (persona, mid) in respondidas or (de_c, mid) in respondidas:
+            rc.xack(chave, GRUPO, tecnico)
+            continue
+        vivas.append(m)
+    return vivas
+
+
 def penduradas(rc, persona: str):
     """Leitura FRIA do que nao foi tratado: as penduradas (PEL) e as nao lidas
-    (depois do ponteiro). Nao entrega, nao move ponteiro, nao confirma. Cada carta
-    leva `estado` ('pendurada' | 'nao lida'). Id na PEL cuja entrada o trim ja
-    cortou nao volta (o trim tira da PEL no mesmo passo)."""
+    (depois do ponteiro). Nao entrega, nao move ponteiro, nao confirma (salvo reconciliar
+    carta ja respondida com `--responde` ou ja cortada pelo trim, #4289). Cada carta
+    leva `estado` ('pendurada' | 'nao lida')."""
     garante_grupo(rc, persona)
     chave = stream_key(persona)
-    saida = []
-    for tecnico in _ids_pendurados(rc, persona):
-        for t, plano in rc.xrange(chave, min=tecnico, max=tecnico):
-            m = _campos(plano, t)
-            m["estado"] = "pendurada"
-            saida.append(m)
+    saida = list(_reconcilia_pel_respondidas(rc, persona))
     ponteiro = "0-0"
     for g in rc.xinfo_groups(chave):
         if g["name"] == GRUPO:
@@ -690,7 +738,10 @@ def conta_penduradas(rc, persona: str) -> int:
     garante_grupo(rc, persona)
     for g in rc.xinfo_groups(stream_key(persona)):
         if g["name"] == GRUPO:
-            return int(g.get("pending", 0) or 0)
+            pend_n = int(g.get("pending", 0) or 0)
+            if pend_n and (hasattr(rc, "xpending_range") or hasattr(rc, "execute_command")):
+                return len(_reconcilia_pel_respondidas(rc, persona))
+            return pend_n
     return 0
 
 def imprime(m: dict):
@@ -793,6 +844,7 @@ def _eh_msgid(val: str) -> bool:
 def _ler_enviadas(rc, remetente: str, filtro_para: str = None) -> list:
     """Leitura fria das cartas enviadas por `remetente` nos ultimos 7-8 dias (DT 188)."""
     msgs = []
+    vistos = set()
     if hasattr(rc, "zrange"):
         ids = rc.zrange(f"enviadas:{remetente}", 0, -1) or []
         for mid in ids:
@@ -804,13 +856,16 @@ def _ler_enviadas(rc, remetente: str, filtro_para: str = None) -> list:
                 continue
             carta["para"] = caixa
             msgs.append(carta)
-        return msgs
+            vistos.add(carta["msgid"])
     caixas = [filtro_para] if filtro_para else sorted(personas_validas() or set())
     for p in caixas:
         for m in frias(rc, p):
-            if m["de"] == remetente:
+            de_canon = canoniza_persona(m["de"]) or m["de"]
+            if de_canon == remetente and m["msgid"] not in vistos:
                 m["para"] = p
                 msgs.append(m)
+                vistos.add(m["msgid"])
+    msgs.sort(key=lambda m: m.get("msgid", ""))
     return msgs
 
 
@@ -1105,6 +1160,11 @@ def cmd_enviar(rc, eu: str, args):
                 sys.stderr.write(f"responde: {mid} tratada\n")
             elif res == "ja tratada":
                 sys.stderr.write(f"responde: {mid} ja estava tratada\n")
+            elif res == "nao existe":
+                for dest in destinatarios:
+                    achou = _achar_na_malha(rc, mid, [dest])
+                    if achou and (canoniza_persona(achou[2].get("de", "")) or achou[2].get("de", "")) == eu:
+                        tratar(rc, dest, [mid])
 
 
 # ---------- carta de bot (#3884) ----------

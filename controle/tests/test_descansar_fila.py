@@ -93,3 +93,5 @@ def test_roda_fila_cabecalho_separa_novas_de_penduradas(capsys):
     assert idx_novas < idx_pend
     assert "1 nova(s) (nao lida(s))" in out[idx_novas:idx_pend]
     assert "1 pendurada(s) (ja lida(s), sem `fila tratar`)" in out[idx_pend:]
+    assert "⚠ VENCE" not in out[idx_pend:]
+    assert "perto de vencer" not in out[idx_pend:]

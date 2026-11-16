@@ -152,6 +152,7 @@ tests/test_identidade_classe_decisao.py | bin/acervo bin/_acervo/**
 tests/test_acervo_arquivo_renome.py | bin/acervo bin/_acervo/** bin/curar
 tests/test_fila_msgid.py | bin/_fila/**
 tests/test_fila_ack.py | bin/fila bin/_fila/** bin/minuta bin/_minuta/** bin/persona bin/_persona/**
+tests/test_descansar_fila.py | bin/descansar bin/fila bin/_fila/**
 tests/test_fila_contestacao.py | bin/fila bin/_fila/**
 # Card #3884: carta assinada por bot (`bot:<slug>`), so de dentro do proprio `bot rodar`; carta a bot recusa.
 tests/test_fila_bot.py | bin/fila bin/_fila/**
