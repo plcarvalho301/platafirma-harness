@@ -482,8 +482,19 @@ avisa_atras_origin() {
   local atras
   atras="$("$GIT" -C "$c" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)"
   if [ "${atras:-0}" -gt 0 ] 2>/dev/null; then
-    printf "aviso: bancada atrás de origin/main por %s commit(s) — rode 'repo atualizar %s' ou 'repo sincronizar %s'\n" \
-      "$atras" "$repo" "$repo" >&2
+    local ramo up
+    ramo="$(ramo_atual "$c")"
+    up="$("$GIT" -C "$c" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null || true)"
+    if [ "$up" = "origin/main" ] && ! direto_em_main "$repo" && { [ "$ramo" = "main" ] || [ "$ramo" = "master" ]; }; then
+      printf "aviso: bancada atrás de origin/main por %s commit(s) — rode 'repo atualizar %s'\n" \
+        "$atras" "$repo" >&2
+    elif [ "$up" = "origin/main" ]; then
+      printf "aviso: bancada atrás de origin/main por %s commit(s) — rode 'repo atualizar %s' ou 'repo sincronizar %s'\n" \
+        "$atras" "$repo" "$repo" >&2
+    else
+      printf "aviso: bancada atrás de origin/main por %s commit(s) — rode 'repo sincronizar %s'\n" \
+        "$atras" "$repo" >&2
+    fi
   fi
   return 0
 }
@@ -1314,7 +1325,7 @@ ato_atualizar() {
     HEAD) morre "HEAD destacado em '$nome' — sem ramo para atualizar" 3 ;;
   esac
   up="$("$GIT" -C "$c" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)" \
-    || morre "'$ramo' nao tem upstream — nada para puxar" 3
+    || morre "'$ramo' nao tem upstream — nada para puxar (para trazer origin/main, rode 'repo sincronizar $nome')" 3
   env PATH="$PATH_FORGE" "$GIT" -C "$c" fetch --prune origin || morre "git fetch falhou" 3
 
   local atras frente
@@ -1517,11 +1528,15 @@ portao_admissao_casa() {
   ingerir="${PF_CASA_INGERIR:-$bin_dir/_acervo/casa-ingerir}"
   [ -x "$ingerir" ] || return 0
 
-  local tocados
-  tocados="$("$GIT" -C "$c" diff --name-only "$main_sha..HEAD" 2>/dev/null)" || return 0
-  [ -n "$tocados" ] || return 0
+  local tocados_arq plano_arq
+  tocados_arq="$(mktemp)" || return 0
+  if ! "$GIT" -C "$c" diff --name-only "$main_sha..HEAD" >"$tocados_arq" 2>/dev/null || [ ! -s "$tocados_arq" ]; then
+    rm -f "$tocados_arq"
+    return 0
+  fi
+  plano_arq="$(mktemp)" || { rm -f "$tocados_arq"; return 0; }
 
-  local inst arvore="" f saida rc
+  local inst arvore="" f rc
   inst="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}"
   if mkdir -p "$inst/var/pre-push/arvores" 2>/dev/null \
     && arvore="$(mktemp -d "$inst/var/pre-push/arvores/repo-casa.XXXXXX" 2>/dev/null)"; then
@@ -1529,22 +1544,25 @@ portao_admissao_casa() {
       [ -f "$c/$f" ] || continue
       mkdir -p "$arvore/$(dirname "$f")" && cp "$c/$f" "$arvore/$f" 2>/dev/null || true
     done < <("$GIT" -C "$c" ls-files -co --exclude-standard -z)
-    saida="$(python3 "$ingerir" platafirma-casa --arvore "$arvore" --json 2>/dev/null)"; rc=$?
+    python3 "$ingerir" platafirma-casa --arvore "$arvore" --json >"$plano_arq" 2>/dev/null; rc=$?
     rm -rf "$arvore"
   else
-    saida="$(python3 "$ingerir" platafirma-casa --arvore "$c" --json 2>/dev/null)"; rc=$?
+    python3 "$ingerir" platafirma-casa --arvore "$c" --json >"$plano_arq" 2>/dev/null; rc=$?
   fi
   if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then
+    rm -f "$tocados_arq" "$plano_arq"
     printf '%s: aviso: portão de ingestão indisponível (exit %s) — seguindo push\n' "$VERBO" "$rc" >&2
     return 0
   fi
 
   local recusas
-  recusas="$(PF_TOCADOS="$tocados" PF_PLANO="$saida" python3 - <<'PY'
-import json, os, sys
-tocados = set(os.environ.get("PF_TOCADOS", "").splitlines())
+  recusas="$(python3 - "$tocados_arq" "$plano_arq" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8", errors="replace") as f:
+    tocados = {l.strip() for l in f if l.strip()}
 try:
-    plano = json.loads(os.environ.get("PF_PLANO", ""))
+    with open(sys.argv[2], encoding="utf-8") as f:
+        plano = json.load(f)
 except Exception:
     sys.exit(2)
 pref = "platafirma-casa@"
@@ -1573,12 +1591,13 @@ if out:
     sys.exit(1)
 PY
 )"; rc=$?
+  rm -f "$tocados_arq" "$plano_arq"
   if [ "$rc" -eq 1 ]; then
     printf '%s: admissão da ingestão recusou documento(s) tocado(s) antes do push:\n' "$VERBO" >&2
     printf '%s\n' "$recusas" | sed 's/^/  /' >&2
     printf 'vizinho: corrija o documento, repo commitar %s, e rode repo sincronizar %s de novo\n' "$nome" "$nome" >&2
     exit 4
-  elif [ "$rc" -eq 2 ]; then
+  elif [ "$rc" -ne 0 ]; then
     printf '%s: aviso: retorno do portão de ingestão ilegível — seguindo push\n' "$VERBO" >&2
   fi
   return 0

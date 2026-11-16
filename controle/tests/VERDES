@@ -370,3 +370,5 @@ tests/test_acervo_dt228.py | bin/acervo bin/_acervo/curar bin/curar bin/ingerir
 tests/test_repo_dt7.py | bin/repo
 tests/test_contrato_repo_pr_merge.py | bin/repo
 tests/test_repo_dt_490.py | bin/repo
+# DTs 744 e 747 (#2856 linhas 744 e 747): avisa_atras_origin sugere repo sincronizar em ramo sem upstream, e portao_admissao_casa passa arquivos/plano por arquivo temporario sem estourar ARG_MAX.
+tests/test_repo_dts_744_747.py | bin/repo
