@@ -217,3 +217,55 @@ def test_registro_glob_invalido_sai_3(tmp_path, glob):
     env = _env_registro(tmp_path, {"a": {"familia": "f", "lock": "x", "testes": [glob]}})
     r = subprocess.run([sys.executable, str(REGISTRO), "a"], env=env, capture_output=True, text=True)
     assert r.returncode == 3, r.stdout + r.stderr
+
+
+def test_rodar_repo_com_subpasta_resolve_stack_do_registro(banc):
+    """DT 721: `teste rodar <repo> <subpasta>` usa a stack cujo `teste` casa com `<subpasta>`."""
+    ops = banc.clone / "ops-sub"
+    ops.mkdir()
+    (ops / "lock.txt").write_text(LOCK_SEM_DEP, encoding="utf-8")
+    (ops / "test_ops.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+    reg = json.loads(banc.venvs_json.read_text(encoding="utf-8"))
+    reg["repositorios"] = {"alvo": {"esteira": "codigo", "stack": "chave-fixture"}}
+    reg["ops-sub"] = {"familia": "alvo", "lock": "ops-sub/lock.txt", "teste": "ops-sub"}
+    banc.venvs_json.write_text(json.dumps(reg), encoding="utf-8")
+
+    r = banc.rodar("alvo", "ops-sub")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "chave ops-sub-" in r.stderr
+    assert "1 passed" in r.stdout
+
+
+def test_rodar_repo_com_subpasta_prefere_subarvore_mais_longa(banc):
+    """DT 721: `testes/analise` casa antes de `testes`, e arquivo fora dos globs fica na padrão."""
+    analise = banc.clone / "testes" / "analise"
+    analise.mkdir(parents=True)
+    (analise / "lock.txt").write_text(LOCK_SEM_DEP, encoding="utf-8")
+    (analise / "test_an.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+    (banc.clone / "testes" / "test_outro.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+    reg = json.loads(banc.venvs_json.read_text(encoding="utf-8"))
+    reg["repositorios"] = {"alvo": {"esteira": "codigo", "stack": "chave-fixture"}}
+    reg["acervo-sub"] = {
+        "familia": "alvo",
+        "lock": "subarvore/lock.txt",
+        "teste": "testes",
+        "testes": ["test_a_*.py"],
+    }
+    reg["analise-sub"] = {
+        "familia": "alvo",
+        "lock": "testes/analise/lock.txt",
+        "teste": "testes/analise",
+    }
+    banc.venvs_json.write_text(json.dumps(reg), encoding="utf-8")
+
+    r_analise = banc.rodar("alvo", "testes/analise")
+    assert r_analise.returncode == 0, r_analise.stdout + r_analise.stderr
+    assert "chave analise-sub-" in r_analise.stderr
+
+    r_acervo = banc.rodar("alvo", "testes/test_a_ok.py")
+    assert r_acervo.returncode == 0, r_acervo.stdout + r_acervo.stderr
+    assert "chave acervo-sub-" in r_acervo.stderr
+
+    r_padrao = banc.rodar("alvo", "testes/test_outro.py")
+    assert r_padrao.returncode == 0, r_padrao.stdout + r_padrao.stderr
+    assert "chave chave-fixture-" in r_padrao.stderr

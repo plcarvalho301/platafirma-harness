@@ -30,7 +30,7 @@ teste rodar ops
 ```
 
 Roda no ambiente `ops`, que tem o pacote `mcp`. Passou quando a primeira linha diz `suite VERDE` e
-sai com exit 0. Apontar a bancada e a pasta (`teste rodar platafirma-harness@<bancada> ops-server`)
-roda no ambiente `harness` e a coleta falha com `No module named 'mcp'`.
+sai com exit 0. `teste rodar platafirma-harness@<bancada> ops-server` também resolve para a stack
+`ops` pela subárvore `ops-server` em `registro/venvs.json`.
 
 Topologia, transporte sem estado e auditoria: `docs/ops-server.md` na raiz do repositório.
