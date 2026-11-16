@@ -6,7 +6,7 @@
 # forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar, hooks-listar) / texto (ler, pr-diff) / fluxo (sanear, descartar, lock, hooks-apagar)
 # poda: cosmetica@git
 # use para: criar e atualizar bancada; ler e procurar nela, diff e histórico; commitar, empurrar ramo, abrir, revisar e integrar PR; descartar mudança; sanear bancada; procurar no que está publicado no GitHub; e sempre que um card de código for posto em execução ou a esteira reprovar a mudança
-# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge), pr-fechar (escrita, forge), hooks-listar (leitura, forge), hooks-apagar (escrita, forge), sanear (escrita, forge), descartar (escrita, operacao), lock (escrita, operacao), git (escrita, operacao)
+# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), copiar (escrita, operacao), mover (escrita, forge), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge), pr-fechar (escrita, forge), hooks-listar (leitura, forge), hooks-apagar (escrita, forge), sanear (escrita, forge), descartar (escrita, operacao), lock (escrita, operacao), git (escrita, operacao)
 # le: estado=repo
 # le: listar=repo
 # le: ler=repo
@@ -19,6 +19,8 @@
 # le: sincronizar=repo
 # le: abrir=repo
 # le: clonar=repo
+# le: copiar=repo,arquivo-local
+# le: mover=repo
 # le: empurrar=repo
 # le: pr-abrir=repo
 # le: pr-listar=repo
@@ -44,6 +46,8 @@
 # escreve: sincronizar=repo
 # escreve: abrir=repo
 # escreve: clonar=repo
+# escreve: copiar=repo
+# escreve: mover=repo
 # escreve: empurrar=repo
 # escreve: pr-abrir=repo
 # escreve: pr-listar=nada
@@ -147,6 +151,8 @@ uso:
   repo sincronizar <repo>
   repo abrir     <repo> [<card>] [--slug <s>] [--da-producao] [--assumir] [--sem-mover]
   repo clonar    <url|owner/nome> [<nome>]
+  repo copiar    <repo> <origem-rascunho> <destino>
+  repo mover     <origem>[@<sha>]:<caminho> <destino>:<caminho>
   repo sanear    [<repo>] [--relatar]
   repo descartar <repo>[@<chave>] [--forcar]
   repo pr-abrir  <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
@@ -1517,8 +1523,19 @@ portao_admissao_casa() {
   tocados="$("$GIT" -C "$c" diff --name-only "$main_sha..HEAD" 2>/dev/null)" || return 0
   [ -n "$tocados" ] || return 0
 
-  local saida rc
-  saida="$(python3 "$ingerir" platafirma-casa --arvore "$c" --json 2>/dev/null)"; rc=$?
+  local inst arvore="" f saida rc
+  inst="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}"
+  if mkdir -p "$inst/var/pre-push/arvores" 2>/dev/null \
+    && arvore="$(mktemp -d "$inst/var/pre-push/arvores/repo-casa.XXXXXX" 2>/dev/null)"; then
+    while IFS= read -r -d '' f; do
+      [ -f "$c/$f" ] || continue
+      mkdir -p "$arvore/$(dirname "$f")" && cp "$c/$f" "$arvore/$f" 2>/dev/null || true
+    done < <("$GIT" -C "$c" ls-files -co --exclude-standard -z)
+    saida="$(python3 "$ingerir" platafirma-casa --arvore "$arvore" --json 2>/dev/null)"; rc=$?
+    rm -rf "$arvore"
+  else
+    saida="$(python3 "$ingerir" platafirma-casa --arvore "$c" --json 2>/dev/null)"; rc=$?
+  fi
   if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then
     printf '%s: aviso: portão de ingestão indisponível (exit %s) — seguindo push\n' "$VERBO" "$rc" >&2
     return 0
@@ -1624,6 +1641,9 @@ sincronizar_direto_em_main() {
   if [ "$rc" -eq 0 ] && [ "$fsha" = "$head" ]; then
     printf 'sincronizado: main = %s (%s commit(s) de %s%s); origin/main = %s [lido do forge]\n' \
       "${head:0:7}" "$frente" "$ramo" "$([ "$novos" -gt 0 ] && printf ', rebaseado sobre origin/main %s' "${main:0:7}")" "${fsha:0:7}"
+    if [ "${nome%%@*}" = "platafirma-casa" ]; then
+      printf 'próximo: acervo ingerir casa platafirma-casa@%s --apply\n' "${head:0:7}"
+    fi
     return 0
   fi
   [ "$rc" -eq 5 ] && morre "indeterminavel: empurrei? o forge nao respondeu ($fsha)" 5
@@ -4327,8 +4347,164 @@ fi
 cmd="$1"
 shift
 
+# valida_rel_bancada <caminho> -- rejeita caminho vazio, absoluto, '..', '.git' (exit 4).
+valida_rel_bancada() {
+  local p="${1:-}"
+  [ -n "$p" ] || morre "caminho relativo obrigatório" 2
+  case "$p" in
+    /*|..|../*|*/..|*/../*|.git|.git/*)
+      morre "caminho fora da raiz ou reservado: '$p'" 4 ;;
+  esac
+}
+
+# copia um arquivo do rascunho da fita (<instancia>/var/tmp/<ordem_id>/...) para a bancada
+# sem passar o conteúdo pela janela (DT 482, DT 733).
+ato_copiar() {
+  local repo="${1:-}" origem="${2:-}" destino="${3:-}"
+  [ "$#" -eq 3 ] || morre "uso: repo copiar <repo> <origem-rascunho> <destino>" 2
+  local c; c="$(clone_de "$repo")" || exit $?
+  valida_rel_bancada "$destino"
+
+  local inst tmp_raiz ordem orig_cand
+  inst="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}"
+  tmp_raiz="$inst/var/tmp"
+  ordem="${PF_ORDEM_ID:-}"
+
+  case "$origem" in
+    ..|../*|*/..|*/../*) morre "origem inválida: '$origem'" 4 ;;
+  esac
+  if [[ "$origem" == /* ]]; then
+    orig_cand="$origem"
+  else
+    [ -n "$ordem" ] || morre "origem relativa exige PF_ORDEM_ID ou caminho absoluto sob $tmp_raiz" 2
+    orig_cand="$tmp_raiz/$ordem/$origem"
+  fi
+
+  local verif
+  verif="$(python3 - "$tmp_raiz" "$orig_cand" "$c" "$destino" <<'PY'
+import os, sys
+tmp_raiz = os.path.realpath(sys.argv[1])
+orig_real = os.path.realpath(sys.argv[2])
+c_real = os.path.realpath(sys.argv[3])
+dest_rel = sys.argv[4]
+
+if not orig_real.startswith(tmp_raiz + os.sep):
+    print("ERR:4:origem fora do rascunho da fita (" + tmp_raiz + "): " + sys.argv[2])
+    sys.exit(0)
+rel_tmp = os.path.relpath(orig_real, tmp_raiz)
+if os.sep not in rel_tmp:
+    print("ERR:4:origem deve estar dentro de uma subpasta da fita (<ordem_id>/...): " + sys.argv[2])
+    sys.exit(0)
+if not os.path.isfile(orig_real):
+    print("ERR:1:arquivo não existe no rascunho: " + sys.argv[2])
+    sys.exit(0)
+
+dest_abs = os.path.realpath(os.path.join(c_real, dest_rel))
+if dest_abs != c_real and not dest_abs.startswith(c_real + os.sep):
+    print("ERR:4:destino escapa da bancada via symlink: " + dest_rel)
+    sys.exit(0)
+print("OK:" + orig_real + "\t" + dest_abs)
+PY
+)"
+  if [[ "$verif" == ERR:* ]]; then
+    local rest="${verif#ERR:}"
+    local rc="${rest%%:*}"
+    local msg="${rest#*:}"
+    morre "$msg" "$rc"
+  fi
+  local payload="${verif#OK:}"
+  local orig_real="${payload%%$'\t'*}"
+  local dest_abs="${payload#*$'\t'}"
+
+  mkdir -p "$(dirname "$dest_abs")" || morre "falha ao criar diretório para '$destino'" 3
+  cp "$orig_real" "$dest_abs" || morre "falha ao copiar '$orig_real' para '$destino'" 3
+  local bytes
+  bytes="$(wc -c < "$dest_abs" | tr -d ' ')"
+  printf 'copiado: %s -> %s:%s (%s bytes)\n' "$orig_real" "$repo" "$destino" "$bytes"
+  printf 'próximo: repo commitar %s -m "<msg>" %s\n' "$repo" "$destino"
+  return 0
+}
+
+# traz pasta ou arquivo de <origem>[@<sha>]:<caminho> para <destino>:<caminho> na bancada,
+# pronto para commit (DT 735).
+ato_mover() {
+  local orig_spec="${1:-}" dest_spec="${2:-}"
+  [ "$#" -eq 2 ] || morre "uso: repo mover <origem>[@<sha>]:<caminho> <destino>:<caminho>" 2
+  [[ "$orig_spec" == *:* ]] || morre "origem deve ser <repo>[@<sha>]:<caminho>" 2
+  [[ "$dest_spec" == *:* ]] || morre "destino deve ser <repo>:<caminho>" 2
+
+  local orig_ref="${orig_spec%%:*}" orig_path="${orig_spec#*:}"
+  local dest_repo="${dest_spec%%:*}" dest_path="${dest_spec#*:}"
+  valida_rel_bancada "$orig_path"
+  valida_rel_bancada "$dest_path"
+
+  local orig_repo orig_sha
+  if [[ "$orig_ref" == *@* ]]; then
+    orig_repo="${orig_ref%%@*}"
+    orig_sha="${orig_ref#*@}"
+  else
+    orig_repo="$orig_ref"
+    orig_sha="main"
+  fi
+  case "$orig_repo" in
+    ""|*/*|.*|*..*|*[!A-Za-z0-9._-]*) morre "nome de repo de origem inválido: '$orig_repo'" 4 ;;
+  esac
+  case "$orig_sha" in
+    ""|-*|*..*|*[[:space:]]*) morre "referência de origem inválida: '$orig_sha'" 2 ;;
+  esac
+
+  local dest_c; dest_c="$(clone_de "$dest_repo")" || exit $?
+  local dest_real_check
+  dest_real_check="$(python3 - "$dest_c" "$dest_path" <<'PY'
+import os, sys
+c_real = os.path.realpath(sys.argv[1])
+d_real = os.path.realpath(os.path.join(c_real, sys.argv[2]))
+if d_real != c_real and not d_real.startswith(c_real + os.sep):
+    print("BAD")
+PY
+)"
+  [ "$dest_real_check" != "BAD" ] || morre "destino escapa da bancada via symlink: '$dest_path'" 4
+
+  local fetched=0
+  if [ -e "$BANCADA/$orig_repo/.git" ]; then
+    if git_sem_engolir "$dest_c" fetch --depth=1 "$BANCADA/$orig_repo" "$orig_sha"; then
+      fetched=1
+    fi
+  fi
+  if [ "$fetched" -eq 0 ]; then
+    local orig_url; orig_url="$(url_forge "$orig_repo")"
+    git_sem_engolir "$dest_c" fetch --depth=1 "$orig_url" "$orig_sha" \
+      || morre "falha ao buscar $orig_repo@$orig_sha ($REPLY)" 3
+  fi
+
+  local obj_type n_files=0
+  obj_type="$("$GIT" -C "$dest_c" cat-file -t "FETCH_HEAD:$orig_path" 2>/dev/null)" \
+    || morre "caminho não existe em $orig_repo@$orig_sha: '$orig_path'" 1
+
+  if [ "$obj_type" = "tree" ]; then
+    local prefix="${dest_path%/}/"
+    if ! "$GIT" -C "$dest_c" read-tree --prefix="$prefix" -u "FETCH_HEAD:$orig_path" >/dev/null 2>&1; then
+      morre "falha ao trazer pasta para $dest_repo:$dest_path (conflito com arquivos existentes?)" 4
+    fi
+    n_files="$("$GIT" -C "$dest_c" ls-tree -r --name-only "FETCH_HEAD:$orig_path" | wc -l | tr -d ' ')"
+  elif [ "$obj_type" = "blob" ]; then
+    mkdir -p "$(dirname "$dest_c/$dest_path")" || morre "falha ao criar diretório para '$dest_path'" 3
+    "$GIT" -C "$dest_c" cat-file -p "FETCH_HEAD:$orig_path" > "$dest_c/$dest_path" \
+      || morre "falha ao gravar '$dest_path'" 3
+    "$GIT" -C "$dest_c" add -- "$dest_path" || morre "falha ao preparar '$dest_path' no índice" 3
+    n_files=1
+  else
+    morre "tipo de objeto git não suportado ($obj_type): '$orig_path'" 4
+  fi
+
+  printf 'movido: %s@%s:%s -> %s:%s (%s arquivo(s), staged)\n' \
+    "$orig_repo" "$orig_sha" "$orig_path" "$dest_repo" "$dest_path" "$n_files"
+  printf 'próximo: repo commitar %s -m "<msg>" %s\n' "$dest_repo" "$dest_path"
+  return 0
+}
+
 case "$cmd" in
-  estado|listar|ler|procurar|historico|diff|ramo|commitar|empurrar|atualizar|sincronizar|abrir|clonar|sanear|descartar|pr-abrir|pr-listar|pr-ver|pr-diff|pr-merge|pr-fechar|hooks|hooks-listar|hooks-apagar|lock|git)
+  estado|listar|ler|procurar|historico|diff|ramo|commitar|empurrar|atualizar|sincronizar|abrir|clonar|copiar|mover|sanear|descartar|pr-abrir|pr-listar|pr-ver|pr-diff|pr-merge|pr-fechar|hooks|hooks-listar|hooks-apagar|lock|git)
     declara_bancada "$@" ;;
 esac
 
@@ -4346,6 +4522,8 @@ case "$cmd" in
   sincronizar) ato_sincronizar "$@" ;;
   abrir)     cmd_abrir "$@" ;;
   clonar)    ato_clonar "$@" ;;
+  copiar)    ato_copiar "$@" ;;
+  mover)     ato_mover "$@" ;;
   sanear)    ato_sanear "$@" ;;
   descartar) ato_descartar "$@" ;;
   pr-abrir)  ato_pr_abrir "$@" ;;
@@ -4361,7 +4539,7 @@ case "$cmd" in
   git)       ato_git "$@" ;;
   *)
     printf '%s: erro: ato desconhecido '\''%s'\''\n' "$VERBO" "$cmd" >&2
-    printf 'atos: estado · listar · ler · procurar · historico · diff · ramo · commitar · empurrar · atualizar · sincronizar · abrir · clonar · sanear · descartar · pr-abrir · pr-listar · pr-ver · pr-diff · pr-merge · pr-fechar · hooks-listar · hooks-apagar · lock · git\n' >&2
+    printf 'atos: estado · listar · ler · procurar · historico · diff · ramo · commitar · empurrar · atualizar · sincronizar · abrir · clonar · copiar · mover · sanear · descartar · pr-abrir · pr-listar · pr-ver · pr-diff · pr-merge · pr-fechar · hooks-listar · hooks-apagar · lock · git\n' >&2
     uso_texto
     exit 2
     ;;
