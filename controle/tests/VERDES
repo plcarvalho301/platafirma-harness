@@ -85,6 +85,9 @@ tests/test_contrato_casa_direto_em_main.py | bin/acervo bin/_acervo/** bin/chat 
 tests/test_contrato_canonico.py | bin/repo bin/sessao bin/_sessao/** bin/_lint/** bin/_minuta/** docs/**
 tests/test_longjob_identidade.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/expediente bin/_expediente/** bin/mesa bin/monta-sessao bin/persona bin/_persona/** bin/pesquisar bin/seg bin/sessao bin/_sessao/** agente/** sessao/**
 tests/test_portao_familia.py | bin/teste lib/venv.sh
+tests/test_portao_raio.py | bin/teste lib/venv.sh controle/tests/test_portao_familia.py
+tests/test_portao_degrau.py | bin/teste lib/venv.sh controle/tests/test_portao_familia.py controle/tests/test_portao_raio.py
+tests/test_portao_rodada.py | bin/teste lib/venv.sh controle/tests/test_portao_familia.py controle/tests/test_portao_raio.py controle/tests/test_portao_degrau.py
 tests/test_release_stack_imagem.py | bin/release bin/_release/**
 # Medido em 14/10/2026: stack registrada sem compose (a `harness` do #3551) fica fora da lista de promocao do `bin/release`; sem isso,
 # `stack testar harness` saia 2 e toda promocao do platafirma-harness parava (5 passam; sem a mudanca, 4 ficam vermelhos).
