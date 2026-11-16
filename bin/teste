@@ -651,6 +651,7 @@ pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isola
   if [ "${modo%%:*}" = py ]; then
     trab="${PF_TESTE_PARALELO:-$(( $(nproc 2>/dev/null || echo 2) / 2 ))}"
     case "$trab" in ''|*[!0-9]*) trab=1 ;; esac
+    [ -z "${PF_TESTE_PARALELO:-}" ] && [ "$trab" -gt 2 ] && trab=2
     # DT 496: um diretorio tambem e uma suite de varios arquivos. A rodada fora
     # do portao usava um so processo e perdia o resumo ao ultrapassar 300 s.
     if [ "${portao:-0}" -ne 1 ]; then
