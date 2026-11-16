@@ -760,9 +760,9 @@ case "$ATO" in
   # apagado no #4211, e a rota so devolvia erro de SQL. Recusa com o caminho que responde, como o adr.
   consultar)
     echo "acervo consultar: ato removido por ordem do dono (13/11/2026); o schema casa que ele lia foi apagado (#4211)." >&2
-    echo "  onde mora e o documento de uma entidade estao na shape dela:" >&2
-    echo "  repo ler platafirma-casa-espelho outros_repos/conhecimento/ontologia/shapes/entidade/<slug>.ttl" >&2
-    echo "  a lista das entidades: repo listar platafirma-casa-espelho outros_repos/conhecimento/ontologia/shapes/entidade" >&2
+    echo "  onde mora e o documento de uma entidade estao na shape dela, via verbo ontologia:" >&2
+    echo "  infra rodar ontologia -- ler shape <slug>   (ou ontologia ler shape <slug>)" >&2
+    echo "  a lista das entidades: infra rodar ontologia -- listar shape   (ou ontologia listar shape)" >&2
     exit 2 ;;
 
   # formas VIGENTES/DEPRECADAS com implementacao: avisam uma vez por sessao e delegam

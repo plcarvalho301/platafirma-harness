@@ -454,7 +454,7 @@ def test_existe_entidade_sai_5_sem_chamar_o_acervo_e_aponta_a_shape(monkeypatch,
     assert conferir.conferir_existe("entidade", "substrato") == 5
     linhas = capsys.readouterr().out.splitlines()
     assert linhas[0].startswith("indeterminavel: entidade substrato")
-    assert "shapes/entidade/substrato.ttl" in "\n".join(linhas)
+    assert "ontologia -- ler shape substrato" in "\n".join(linhas)
     assert not any("consultar" in c for cmd in chamadas for c in cmd)
 
 
