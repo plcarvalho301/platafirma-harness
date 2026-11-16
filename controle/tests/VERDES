@@ -366,3 +366,7 @@ tests/test_registro_bancos_postgres.py | registro/bancos.json | degrau: rodada
 tests/test_tarefas_dt450.py | bin/tarefas
 # DT 228: --exposicao em catalogar e exposicao/portao nos planos de ingerir e espelhar.
 tests/test_acervo_dt228.py | bin/acervo bin/_acervo/curar bin/curar bin/ingerir
+# DTs 7, 48, 487 e 490 (#2856 linhas 7, 48, 487 e 490): HEAD destacado e ramo preso em outro worktree, retry e fallback REST em pr-merge, sincronizar/empurrar sem travar por não rastreado alheio, e isolamento de ramo/pr-merge/portão em git commit.
+tests/test_repo_dt7.py | bin/repo
+tests/test_contrato_repo_pr_merge.py | bin/repo
+tests/test_repo_dt_490.py | bin/repo

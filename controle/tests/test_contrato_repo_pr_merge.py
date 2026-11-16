@@ -34,9 +34,25 @@ case "$1 $2" in
       *) cat "$d/estado" ;;
     esac ;;
   "pr merge")
+    if [ -f "$d/merge-fail" ]; then
+      n="$(cat "$d/merge-fail")"
+      if [ "$n" -gt 0 ] 2>/dev/null; then
+        echo $((n - 1)) > "$d/merge-fail"
+        echo "EOF" >&2
+        exit 1
+      fi
+    fi
     echo MERGED > "$d/estado"
     [ -s "$d/mergeoid" ] || cat "$d/oid" > "$d/mergeoid"
     exit 0 ;;
+  "api -X")
+    if [ -f "$d/api-merge-ok" ]; then
+      echo MERGED > "$d/estado"
+      [ -s "$d/mergeoid" ] || cat "$d/oid" > "$d/mergeoid"
+      exit 0
+    fi
+    echo "EOF" >&2
+    exit 1 ;;
   "run view")
     cat "$d/runlog" 2>/dev/null ;;
   "pr list")
@@ -87,6 +103,7 @@ def _repo(tmp_path, bancada, *args):
         "PF_SESSAO": "s1",
         "PF_TAREFAS_BIN": "/bin/true",
         "PF_GH_BIN": str(tmp_path / "forge" / "gh"),
+        "PF_GH_RETRY_SLEEP": "0",
         **IDENT,
     }
     return subprocess.run([str(REPO_BIN), *args], env=env, capture_output=True, text=True)
@@ -275,3 +292,37 @@ def test_pr_ver_sem_flag_nao_lista_checks_e_flag_desconhecida_recusa(tmp_path):
     (forge / "checks").write_text(_ROLLUP)
     assert "checks:" not in _repo(tmp_path, bancada, "pr-ver", "demo", "7").stdout
     assert _repo(tmp_path, bancada, "pr-ver", "demo", "7", "--xis").returncode == 2
+
+
+# --- DT-48: retry e fallback REST quando gh pr merge falha com EOF ---------------------
+
+def test_pr_merge_retenta_quando_gh_pr_merge_falha_com_eof(tmp_path):
+    bancada, forge = _montar(tmp_path)
+    _pr_empurrado(tmp_path, bancada, forge)
+    (forge / "merge-fail").write_text("1\n")
+    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7", "--forcar")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "MERGED" in r.stdout
+    assert not _no_origin(tmp_path, "fabrica/42-x")
+
+
+def test_pr_merge_fallback_rest_quando_gh_pr_merge_persiste_em_eof(tmp_path):
+    bancada, forge = _montar(tmp_path)
+    _pr_empurrado(tmp_path, bancada, forge)
+    (forge / "merge-fail").write_text("9\n")
+    (forge / "api-merge-ok").write_text("1\n")
+    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7", "--forcar")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "MERGED" in r.stdout
+    assert not _no_origin(tmp_path, "fabrica/42-x")
+
+
+def test_pr_merge_falha_definitiva_sai_3_com_motivo(tmp_path):
+    bancada, forge = _montar(tmp_path)
+    _pr_empurrado(tmp_path, bancada, forge)
+    (forge / "merge-fail").write_text("9\n")
+    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7", "--forcar")
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert "gh pr merge falhou" in r.stderr
+    assert "EOF" in r.stderr
+    assert _no_origin(tmp_path, "fabrica/42-x")

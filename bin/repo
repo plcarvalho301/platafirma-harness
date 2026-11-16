@@ -582,6 +582,30 @@ ramo_da_cadeira() {
   esac
 }
 
+# DT 7: HEAD destacado nao e "ramo de outra cadeira"; recusa com 4 e vizinho claro.
+_checar_ramo_commit() {
+  local nome="$1" ramo="$2"
+  if [ "$ramo" = "HEAD" ]; then
+    printf '%s: commit recusado: HEAD destacado em '\''%s'\'' — crie um ramo antes de commitar\n' "$VERBO" "$nome" >&2
+    if direto_em_main "$nome"; then
+      printf 'vizinho: repo abrir %s\n' "${nome%%@*}" >&2
+    else
+      printf 'vizinho: repo ramo %s <card> [--slug <slug>]\n' "$nome" >&2
+    fi
+    exit 4
+  fi
+  ramo_da_cadeira "$ramo" || morre "commit recusado: o ramo '$ramo' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, main)." 3
+}
+
+# DT 7: devolve o caminho do worktree que ja tem <ramo_alvo> aberto (vazio se livre).
+_worktree_do_ramo() {
+  local c="$1" ramo_alvo="$2"
+  "$GIT" -C "$c" worktree list --porcelain 2>/dev/null | awk -v alvo="refs/heads/$ramo_alvo" '
+    /^worktree / { wt = substr($0, 10) }
+    /^branch /   { if (substr($0, 8) == alvo) { print wt; exit } }
+  '
+}
+
 info_varrido() {
   local c="$1" repo="$2"
   local cadeira="${PF_CADEIRA:-sem-cadeira}"
@@ -615,11 +639,13 @@ ato_git() {
     done
   fi
 
-  # [3096] Recusa commit em ramo de outra cadeira
+  # [3096] Recusa commit em HEAD destacado ou ramo de outra cadeira
+  # DT 490: o portao de story em execucao vale tambem para `repo git commit`
   if [ "${1:-}" = "commit" ]; then
     local ramo_atual
     ramo_atual="$(ramo_atual "$c")"
-    ramo_da_cadeira "$ramo_atual" || morre "commit recusado: o ramo '$ramo_atual' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, main)." 3
+    _checar_ramo_commit "$nome" "$ramo_atual"
+    portao_story_em_execucao "$nome" "$c" "$ramo_atual"
   fi
 
   if [ "${1:-}" = apply ]; then
@@ -1544,22 +1570,20 @@ PY
 }
 
 # sincronizar_direto_em_main <repo> <worktree> -- o sincronizar do regime direto em main:
-# busca o forge (falhou: 5) -> arvore suja: 4, vizinho commitar -> nada local: anda em
-# fast-forward, "já em dia" -> rebase sobre origin/main (conflito: aborta, bancada intacta,
-# 4 com a lista) -> empurra HEAD para main -> confirma o sha no forge (ls-remote). Vale para
-# a worktree de main e para a bancada por card antiga do mesmo repo, que assim se entrega.
+# busca o forge (falhou: 5) -> escrita rastreada nao commitada: 4, vizinho commitar (nao
+# rastreado alheio nao trava, bancada compartilhada) -> nada local: anda em fast-forward,
+# "já em dia" -> rebase sobre origin/main (conflito: aborta, bancada intacta, 4 com a lista)
+# -> empurra HEAD para main -> confirma o sha no forge (ls-remote). Vale para a worktree de
+# main e para a bancada por card antiga do mesmo repo, que assim se entrega.
 sincronizar_direto_em_main() {
   local nome="$1" c="$2" ramo antes main head frente novos=0 fsha rc
   ramo="$(ramo_atual "$c")"
   [ "$ramo" != HEAD ] || morre "HEAD destacado em '$nome' — abra a worktree de main: repo abrir ${nome%%@*}" 4
   git_sem_engolir "$c" fetch --prune origin || morre "indeterminavel: fetch do forge falhou ($REPLY)" 5
-  local st; st="$("$GIT" -C "$c" status --porcelain 2>/dev/null)" || morre "indeterminavel: git status falhou" 5
+  local st; st="$("$GIT" -C "$c" status --porcelain --untracked-files=no 2>/dev/null)" || morre "indeterminavel: git status falhou" 5
   if [ -n "$st" ]; then
     printf '%s: arvore com escrita nao commitada (%s) — nao rebaseio sobre ela\n' "$VERBO" "$(printf '%s\n' "$st" | wc -l) arquivo(s)" >&2
     printf 'vizinho: repo commitar %s -m <msg> <caminhos>\n' "$nome" >&2
-    if ! grep -qv '^?? ' <<<"$st"; then
-      printf 'vizinho: so ha nao rastreado; se for artefato ou cache, repo git %s clean -n -d e depois repo git %s clean -f -d <caminhos>\n' "$nome" "$nome" >&2
-    fi
     exit 4
   fi
   main="$("$GIT" -C "$c" rev-parse --verify -q origin/main)" || morre "indeterminavel: sem origin/main" 5
@@ -1577,13 +1601,18 @@ sincronizar_direto_em_main() {
     if ! "$GIT" -C "$c" rebase -q "$main" >/dev/null 2>&1; then
       local conflito; conflito="$("$GIT" -C "$c" diff --name-only --diff-filter=U 2>/dev/null)"
       "$GIT" -C "$c" rebase --abort >/dev/null 2>&1
-      if [ "$("$GIT" -C "$c" rev-parse HEAD)" != "$antes" ] || [ -n "$("$GIT" -C "$c" status --porcelain)" ]; then
+      if [ "$("$GIT" -C "$c" rev-parse HEAD)" != "$antes" ] || [ -n "$("$GIT" -C "$c" status --porcelain --untracked-files=no)" ]; then
         morre "indeterminavel: o rebase falhou e a bancada nao voltou a ${antes:0:7} — confira a mao" 5
       fi
-      printf '%s: conflito ao rebasear %s sobre origin/main (%s) — abortado, bancada intacta em %s\n' \
-        "$VERBO" "$ramo" "${main:0:7}" "${antes:0:7}" >&2
-      printf '%s\n' "$conflito" | sed 's/^/  conflito: /' >&2
-      printf 'vizinho: resolva os arquivos, repo commitar %s, e sincronizar de novo\n' "$nome" >&2
+      if [ -n "$conflito" ]; then
+        printf '%s: conflito ao rebasear %s sobre origin/main (%s) — abortado, bancada intacta em %s\n' \
+          "$VERBO" "$ramo" "${main:0:7}" "${antes:0:7}" >&2
+        printf '%s\n' "$conflito" | sed 's/^/  conflito: /' >&2
+        printf 'vizinho: resolva os arquivos, repo commitar %s, e sincronizar de novo\n' "$nome" >&2
+      else
+        printf '%s: nao rebaseei %s sobre origin/main (%s) — possivel colisao com arquivo nao rastreado na bancada; bancada intacta em %s\n' \
+          "$VERBO" "$ramo" "${main:0:7}" "${antes:0:7}" >&2
+      fi
       exit 4
     fi
   fi
@@ -2119,17 +2148,31 @@ migra_plana() {
   return 0
 }
 
+# DT 7 + DT 490: ramo cria bancada nova (via cmd_abrir) e nunca troca o branch de bancada
+# existente de outro trabalho; em bancada nomeada (@<chave>) que está em HEAD destacado,
+# anexa um ramo local a ela (recusando com 4 se o ramo já estiver preso em outro worktree).
 ato_ramo() {
   local nome="${1:-}"
   [ -n "$nome" ] || uso
-  local c; c="$(clone_de "$nome")" || exit $?
   shift || true
 
   if [ $# -eq 0 ]; then
+    local c; c="$(clone_de "$nome")" || exit $?
     printf '%s  ·  atual: %s\n' "$nome" "$(ramo_atual "$c")"
     "$GIT" -C "$c" branch --format='  %(refname:short)' || morre "git branch falhou" 3
     return 0
   fi
+
+  local c_destacado=""
+  case "$nome" in
+    *@*)
+      local c_chk; c_chk="$(clone_de "$nome")" || exit $?
+      if [ "$(ramo_atual "$c_chk")" != "HEAD" ]; then
+        morre "ramo cria bancada nova; nao use @<chave> para trocar bancada existente" 2
+      fi
+      c_destacado="$c_chk"
+      ;;
+  esac
 
   local card="" slug=""
   while [ $# -gt 0 ]; do
@@ -2155,43 +2198,73 @@ ato_ramo() {
   done
 
   local card_num="${card###}"
-  local ramo_alvo=""
+  if [ -n "$c_destacado" ]; then
+    local ramo_alvo=""
+    if [[ "$card_num" =~ ^[0-9]+$ ]]; then
+      ramo_alvo="fabrica/${card_num}${slug:+-$slug}"
+    else
+      ramo_alvo="${card}${slug:+-$slug}"
+      [ -n "$ramo_alvo" ] || uso
+    fi
+    case "$ramo_alvo" in
+      -*|*' '*|*'..'*) morre "nome de ramo invalido: '$ramo_alvo'" 2 ;;
+    esac
+    if "$GIT" -C "$c_destacado" show-ref --verify --quiet "refs/heads/$ramo_alvo"; then
+      local wt_dono
+      wt_dono="$(_worktree_do_ramo "$c_destacado" "$ramo_alvo")"
+      if [ -n "$wt_dono" ]; then
+        printf '%s: ramo '\''%s'\'' já está preso em outro worktree: %s\n' "$VERBO" "$ramo_alvo" "$wt_dono" >&2
+        if [[ "$wt_dono" == */wt/* ]]; then
+          printf 'vizinho: use essa bancada (%s@%s) ou crie outro ramo com `repo ramo %s <card> [--slug <slug>]`\n' "${nome%%@*}" "$(basename "$wt_dono")" "$nome" >&2
+        else
+          printf 'vizinho: solte o ramo em %s ou crie outro ramo com `repo ramo %s <card> [--slug <slug>]`\n' "$wt_dono" "$nome" >&2
+        fi
+        exit 4
+      fi
+      "$GIT" -C "$c_destacado" checkout "$ramo_alvo" || morre "checkout falhou" 3
+      printf 'ramo trocado: %s (ja existia)\n' "$ramo_alvo"
+    else
+      "$GIT" -C "$c_destacado" checkout -b "$ramo_alvo" HEAD || morre "checkout -b falhou" 3
+      printf 'ramo criado: %s (de HEAD)\n' "$ramo_alvo"
+    fi
+    return 0
+  fi
+
   if [[ "$card_num" =~ ^[0-9]+$ ]]; then
     if [ -n "$slug" ]; then
-      ramo_alvo="fabrica/${card_num}-${slug}"
+      cmd_abrir "$nome" "$card_num" --slug "$slug"
     else
-      ramo_alvo="fabrica/${card_num}"
+      cmd_abrir "$nome" "$card_num"
     fi
   else
-    ramo_alvo="$card"
-    if [ -n "$slug" ]; then
-      ramo_alvo="${ramo_alvo}-${slug}"
-    fi
-    printf 'aviso: nome livre de ramo ('\''%s'\''); padrão da casa é '\''repo ramo <repo> <card> [--slug <slug>]'\'' -> fabrica/<card>-<slug>\n' "$ramo_alvo" >&2
+    local slug_alvo="${card}${slug:+-$slug}"
+    [ -n "$slug_alvo" ] || uso
+    case "$slug_alvo" in
+      -*|*' '*|*'..'*) morre "nome de ramo invalido: '$slug_alvo'" 2 ;;
+    esac
+    cmd_abrir "$nome" --slug "$slug_alvo"
   fi
+}
 
-  case "$ramo_alvo" in
-    -*|*' '*|*'..'*) morre "nome de ramo invalido: '$ramo_alvo'" 2 ;;
-  esac
-
-  local atual; atual="$(ramo_atual "$c")"
-  if [ "$atual" = "$ramo_alvo" ]; then
-    printf 'ramo já em '\''%s'\'' (@ %s)\n' "$ramo_alvo" "$("$GIT" -C "$c" rev-parse --short HEAD)"
-    exit 1
+# arq:0096, Consequências (card #3599) + DT 490: story de código só comita em em-execucao.
+portao_story_em_execucao() {
+  local nome="$1" c="$2" ramo="$3"
+  direto_em_main "$nome" && return 0
+  local card_num=""
+  if [[ "$ramo" =~ ^fabrica/([0-9]+) ]]; then
+    card_num="${BASH_REMATCH[1]}"
+  elif [[ "$(basename "$c")" =~ ^([0-9]+) ]]; then
+    card_num="${BASH_REMATCH[1]}"
   fi
-
-  if "$GIT" -C "$c" show-ref --verify --quiet "refs/heads/$ramo_alvo"; then
-    "$GIT" -C "$c" checkout "$ramo_alvo" || morre "checkout falhou" 3
-    printf 'ramo trocado: %s (ja existia)\n' "$ramo_alvo"
-  else
-    local base_ref="HEAD"
-    if "$GIT" -C "$c" rev-parse --verify origin/main >/dev/null 2>&1; then
-      base_ref="origin/main"
-    elif "$GIT" -C "$c" rev-parse --verify main >/dev/null 2>&1; then
-      base_ref="main"
-    fi
-    "$GIT" -C "$c" checkout -b "$ramo_alvo" "$base_ref" || morre "checkout -b falhou" 3
-    printf 'ramo criado: %s (de %s)\n' "$ramo_alvo" "$base_ref"
+  [ -n "$card_num" ] || return 0
+  local tarefas_bin="${PF_TAREFAS_BIN:-$(dirname "$(readlink -f "$0")")/tarefas}"
+  [ -x "$tarefas_bin" ] || return 0
+  local item nivel estado
+  item="$("$tarefas_bin" api GET "/itens/$card_num" 2>/dev/null)" || item=""
+  nivel="$(printf '%s' "$item" | jq -r '.nivel_nome // empty' 2>/dev/null)" || nivel=""
+  estado="$(printf '%s' "$item" | jq -r '.estado // empty' 2>/dev/null)" || estado=""
+  if [ "$nivel" = "story" ] && [ -n "$estado" ] && [ "$estado" != "em-execucao" ]; then
+    morre "story #$card_num em $estado: escreva o Plano e mova para em-execucao (tarefas modelo story refinada)" 4
   fi
 }
 
@@ -2223,32 +2296,13 @@ ato_commitar() {
   [ -n "$msg" ] || morre "falta a mensagem (-m)" 2
   local c; c="$(clone_de "$nome")" || exit $?
 
-  # [3096] Recusa commit em ramo de outra cadeira
+  # [3096] Recusa commit em HEAD destacado ou ramo de outra cadeira
   local ramo
   ramo="$(ramo_atual "$c")"
-  ramo_da_cadeira "$ramo" || morre "commit recusado: o ramo '$ramo' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, main)." 3
+  _checar_ramo_commit "$nome" "$ramo"
 
   # arq:0096, Consequências (card #3599): story de código só comita em em-execucao
-  if ! direto_em_main "$nome"; then
-    local card_num=""
-    if [[ "$ramo" =~ ^fabrica/([0-9]+) ]]; then
-      card_num="${BASH_REMATCH[1]}"
-    elif [[ "$(basename "$c")" =~ ^([0-9]+) ]]; then
-      card_num="${BASH_REMATCH[1]}"
-    fi
-    if [ -n "$card_num" ]; then
-      local tarefas_bin="${PF_TAREFAS_BIN:-$(dirname "$(readlink -f "$0")")/tarefas}"
-      if [ -x "$tarefas_bin" ]; then
-        local item nivel estado
-        item="$("$tarefas_bin" api GET "/itens/$card_num" 2>/dev/null)" || item=""
-        nivel="$(printf '%s' "$item" | jq -r '.nivel_nome // empty' 2>/dev/null)" || nivel=""
-        estado="$(printf '%s' "$item" | jq -r '.estado // empty' 2>/dev/null)" || estado=""
-        if [ "$nivel" = "story" ] && [ -n "$estado" ] && [ "$estado" != "em-execucao" ]; then
-          morre "story #$card_num em $estado: escreva o Plano e mova para em-execucao (tarefas modelo story refinada)" 4
-        fi
-      fi
-    fi
-  fi
+  portao_story_em_execucao "$nome" "$c" "$ramo"
 
   # DT 37: salva a arvore do indice antes do git add; se o gate de diagrama ou o commit
   # recusar, restaura o stage para nao deixar arquivo novo staged (A).
@@ -2910,13 +2964,37 @@ ato_pr_merge() {
   # o ramo local e falha quando 'main' (ou o ramo do PR) esta preso em worktree, o que
   # propaga exit != 0 mesmo com o merge remoto ja valido (#3057 item 7). Separa-se:
   # merge remoto primeiro (sem tocar ramo local); poda em seguida, best-effort.
-  if ! (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr merge "$num" --admin "$modo"); then
+  local merged_ok=0 tentativa=1 max_tentativas=3 retry_sleep="${PF_GH_RETRY_SLEEP:-1}" merge_err="" errf
+  errf="$(mktemp)" || errf=""
+  while [ "$tentativa" -le "$max_tentativas" ]; do
+    if (cd "$c" && env PATH="$PATH_FORGE" GH_PROMPT_DISABLED=1 "$GH" pr merge "$num" --admin "$modo" </dev/null 2>"${errf:-/dev/null}"); then
+      merged_ok=1
+      break
+    fi
+    [ -n "$errf" ] && [ -s "$errf" ] && merge_err="$(head -n 3 "$errf" | tr '\n' ' ' | sed 's/ *$//')"
     local pr_state_check
-    pr_state_check="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json state --jq .state 2>/dev/null || true)"
-    if [ "$pr_state_check" != "MERGED" ]; then
-      morre "gh pr merge falhou" 3
+    pr_state_check="$(cd "$c" && env PATH="$PATH_FORGE" GH_PROMPT_DISABLED=1 "$GH" pr view "$num" --json state --jq .state </dev/null 2>/dev/null || true)"
+    if [ "$pr_state_check" = "MERGED" ]; then
+      merged_ok=1
+      break
+    fi
+    [ "$tentativa" -lt "$max_tentativas" ] && [ "$retry_sleep" != "0" ] && sleep "$retry_sleep"
+    tentativa=$((tentativa + 1))
+  done
+  if [ "$merged_ok" -eq 0 ]; then
+    local slug rest_method
+    slug="$(slug_forge "$nome")"
+    rest_method="${modo#--}"
+    if (cd "$c" && env PATH="$PATH_FORGE" GH_PROMPT_DISABLED=1 "$GH" api -X PUT "repos/$slug/pulls/$num/merge" -f merge_method="$rest_method" </dev/null >/dev/null 2>"${errf:-/dev/null}"); then
+      merged_ok=1
+    else
+      local pr_state_check
+      pr_state_check="$(cd "$c" && env PATH="$PATH_FORGE" GH_PROMPT_DISABLED=1 "$GH" pr view "$num" --json state --jq .state </dev/null 2>/dev/null || true)"
+      [ "$pr_state_check" = "MERGED" ] && merged_ok=1
     fi
   fi
+  [ -n "$errf" ] && rm -f "$errf"
+  [ "$merged_ok" -eq 1 ] || morre "gh pr merge falhou${merge_err:+ ($merge_err)}" 3
 
   # Fecho: o merge se confirma no forge (MERGED + sha do merge), nunca pelo exit do gh.
   info="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json state,mergeCommit \
@@ -3372,13 +3450,23 @@ remove_bancada() {
 # limpa_ramo_entregue <clone> <ramo> <oid> -- pr-merge: remove na conta toda bancada do ramo
 # entregue, de qualquer cadeira, salvando antes o que so existe nela.
 limpa_ramo_entregue() {
-  local c="$1" ramo="$2" oid="$3" base wt br trava linha dono
+  local c="$1" ramo="$2" oid="$3" base wt br trava linha dono nome_repo
   base="$(base_de "$c")" || return 0
+  nome_repo="$(basename "$base")"
   while IFS=$'\t' read -r wt br trava; do
     [ "$br" = "refs/heads/$ramo" ] || continue
     [ -z "$trava" ] || { printf 'bancada %s: travada (%s), nao toco\n' "${wt#"$BANCADA"/}" "$trava"; continue; }
     [ "$wt" = "$base" ] && continue
     dono="$(dono_da_pasta "$wt")"
+    # DT 490: em bancada de eixo (wt/<repo>/<cadeira>/<chave>), so remove se a chave
+    # corresponde ao ramo entregue; nunca remove bancada de outro trabalho.
+    if [ "$(classe_da_pasta "$wt" "$nome_repo")" = "eixo" ]; then
+      local chave_wt; chave_wt="$(basename "$wt")"
+      if [ "$ramo" != "fabrica/$chave_wt" ] && [ "$ramo" != "$dono/$chave_wt" ] && [ "$ramo" != "$chave_wt" ]; then
+        printf 'bancada %s: no ramo %s mas chave '\''%s'\'' e de outro trabalho — nao removo\n' "${wt#"$BANCADA"/}" "$ramo" "$chave_wt"
+        continue
+      fi
+    fi
     linha="$(remove_bancada "$base" "$wt" "$dono" "$oid")"
     printf 'bancada %s: %s\n' "${wt#"$BANCADA"/}" "$linha"
   done < <(worktrees_tab "$base")

@@ -257,6 +257,54 @@ def test_empurrar_no_regime_e_o_sincronizar_e_nao_cria_ramo_no_origin(tmp_path):
     assert _git("--git-dir", str(_bare(tmp_path, CASA)), "branch", "--list", "dados/*") == ""
 
 
+def test_dt487_sincronizar_e_empurrar_com_nao_rastreado_alheio_na_bancada(tmp_path):
+    """DT-487: arquivo nao rastreado de outra fita na bancada main nao trava sincronizar/empurrar."""
+    espelho = "platafirma-casa-espelho"
+    bancada = tmp_path / "bancada"
+    bancada.mkdir()
+    _criar_origem(tmp_path, espelho, {"LEIA.md": "x\n"})
+    _git("clone", "-q", str(_bare(tmp_path, espelho)), str(bancada / espelho))
+    assert _repo(tmp_path, bancada, "abrir", espelho).returncode == 0
+    wt = bancada / "wt" / espelho / "dados" / "main"
+    (wt / "guia.md").write_text("guia\n")
+    (wt / "alheio-4120.md").write_text("rascunho de outra fita\n")
+    assert _repo(tmp_path, bancada, "commitar", espelho, "-m", "guia", "guia.md").returncode == 0
+
+    r = _repo(tmp_path, bancada, "sincronizar", espelho)
+    assert r.returncode == 0, r.stderr
+    assert "sincronizado: main" in r.stdout
+    assert _main_do_origin(tmp_path, espelho) == _git("rev-parse", "HEAD", cwd=wt)
+    assert (wt / "alheio-4120.md").read_text() == "rascunho de outra fita\n"
+
+    # Tambem com rebase sobre origin/main novo e via `repo empurrar`
+    _commit_em(wt, "guia2.md", "guia 2\n")
+    _main_novo(tmp_path, nome=espelho)
+    r2 = _repo(tmp_path, bancada, "empurrar", espelho)
+    assert r2.returncode == 0, r2.stderr
+    assert _main_do_origin(tmp_path, espelho) == _git("rev-parse", "HEAD", cwd=wt)
+    assert (wt / "alheio-4120.md").read_text() == "rascunho de outra fita\n"
+
+
+def test_dt487_sincronizar_recusa_rastreado_nao_commitado_e_preserva_nao_rastreado_em_conflito(tmp_path):
+    bancada = _montar(tmp_path)
+    wt = _abrir(tmp_path, bancada)
+    (wt / "alheio.md").write_text("outra fita\n")
+    (wt / "LEIA.md").write_text("edicao nao commitada\n")
+    r_sujo = _repo(tmp_path, bancada, "sincronizar", CASA)
+    assert r_sujo.returncode == 4
+    assert "arvore com escrita nao commitada" in r_sujo.stderr
+
+    _git("checkout", "--", "LEIA.md", cwd=wt)
+    _commit_em(wt, "LEIA.md", "da cadeira\n")
+    antes = _git("rev-parse", "HEAD", cwd=wt)
+    _main_novo(tmp_path, "LEIA.md", "de main\n")
+    r_conf = _repo(tmp_path, bancada, "sincronizar", CASA)
+    assert r_conf.returncode == 4, r_conf.stderr
+    assert "conflito: LEIA.md" in r_conf.stderr
+    assert _git("rev-parse", "HEAD", cwd=wt) == antes
+    assert (wt / "alheio.md").read_text() == "outra fita\n"
+
+
 # --- PR recusa -------------------------------------------------------------------------------
 
 def test_pr_abrir_e_pr_merge_recusam_com_2(tmp_path):
