@@ -51,6 +51,7 @@ import oplog  # noqa: E402
 import server as s  # noqa: E402
 from mcp import types as mcp_types  # noqa: E402
 
+_RC_REAL = s._rc
 SUB = "b6986be0-c5b6-4693-839f-73c90b79b25a"      # o dono em politica-acesso/sujeitos.yaml
 CLIENT_CUBO = "cubo-controle"
 ORIGEM = "https://controle.exemplo.org"
@@ -660,3 +661,63 @@ def test_get_mcp_autenticado_devolve_405_sem_abrir_sse_ocioso(monkeypatch):
         "accept": "text/event-stream", "authorization": "Bearer teste"})
     assert resp.status_code == 405
     assert resp.headers.get("allow") == "POST, DELETE"
+
+
+def test_dt_730_rc_compartilha_uma_instancia_por_processo_e_fecha_no_lifespan(monkeypatch):
+    """DT 730: _rc() devolve sempre a mesma instância com pool compartilhado, criada uma vez
+    e fechada no fim do ciclo de vida ASGI."""
+    criados = []
+    class FakeRedis:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.fechado = False
+            self.connection_pool = object()
+            criados.append(self)
+
+        def close(self):
+            self.fechado = True
+
+    monkeypatch.setattr(s, "_rc", _RC_REAL)
+    s._fecha_rc()
+    with patch.object(s.redis, "Redis", FakeRedis):
+        c1 = s._rc()
+        c2 = s._rc()
+        c3 = s._rc()
+        assert c1 is c2 is c3
+        assert len(criados) == 1
+        assert c1.fechado is False
+
+        async def _ciclo_asgi():
+            lifespan = s._envolve_lifespan(None)
+            async with lifespan(s.app):
+                assert s._rc() is c1
+                assert len(criados) == 1
+
+        asyncio.run(_ciclo_asgi())
+        assert c1.fechado is True
+        assert s._rc_instancia is None
+
+        c4 = s._rc()
+        assert c4 is not c1 and len(criados) == 2
+        s._fecha_rc()
+        assert c4.fechado is True
+
+
+def test_dt_731_jwt_verificado_uma_vez_por_requisicao_na_escrita_da_borda(porta, tmp_path, monkeypatch):
+    """DT 731: instrumentado identidade._sujeito_do_jwt, um pedido de escrita vindo da borda web
+    conta uma execução (BearerAuth guarda em request.state.ident e as etapas internas leem)."""
+    chamadas = []
+    original = identidade._sujeito_do_jwt
+
+    def contado(*args, **kwargs):
+        chamadas.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(s, "_sujeito_do_jwt", contado)
+    monkeypatch.setattr(identidade, "_sujeito_do_jwt", contado)
+    status, resposta = _pede(porta, "POST", "/api/motor/ajuste", _token(),
+                             {"args": ["piso", "0.6"], "fundamento": FUNDAMENTO})
+    assert status == 200 and resposta["exit_code"] == 0
+    assert len(chamadas) == 1
+    (giro,) = [g for g in _linhas(tmp_path) if g.get("tool") == "motor" and not g.get("evento")]
+    assert giro["sub"] == SUB and giro["sujeito"] == SUB and giro["azp"] == CLIENT_CUBO

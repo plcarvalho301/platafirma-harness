@@ -54,6 +54,7 @@ import tempfile
 import sys
 import threading
 import time
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -170,11 +171,33 @@ def _reidratar_porta(sid: str) -> dict | None:
         return None
 
 
-def _rc():
-    """Cliente do msg-mem. Uma funcao, nao um cliente por chamador: connect_timeout
-    curto porque banco mudo nunca pode segurar a porta."""
-    return redis.Redis(host=MEM_REDIS_HOST, port=MEM_REDIS_PORT, decode_responses=True,
-                       socket_connect_timeout=2, socket_timeout=3)
+_rc_instancia: redis.Redis | None = None
+_rc_alvo: tuple[str, int] | None = None
+
+
+def _rc() -> redis.Redis:
+    """Cliente do msg-mem compartilhado por processo (DT 730): criado uma vez com pool unico e
+    fechado no fim do ciclo de vida ASGI; connect_timeout curto porque banco mudo nunca pode
+    segurar a porta."""
+    global _rc_instancia, _rc_alvo
+    alvo = (MEM_REDIS_HOST, MEM_REDIS_PORT)
+    if _rc_instancia is None or _rc_alvo != alvo:
+        _fecha_rc()
+        _rc_instancia = redis.Redis(host=MEM_REDIS_HOST, port=MEM_REDIS_PORT, decode_responses=True,
+                                    socket_connect_timeout=2, socket_timeout=3)
+        _rc_alvo = alvo
+    return _rc_instancia
+
+
+def _fecha_rc() -> None:
+    """Fecha o cliente e o pool compartilhado do msg-mem no encerramento ASGI."""
+    global _rc_instancia, _rc_alvo
+    rc, _rc_instancia, _rc_alvo = _rc_instancia, None, None
+    if rc is not None:
+        try:
+            rc.close()
+        except Exception:                                   # noqa: BLE001
+            pass
 
 
 def _uuid_valido(bruto: str) -> str | None:
@@ -1150,13 +1173,15 @@ def _documento_lido(slug, ato, args):
     return {}
 
 
-def _audit(**campos) -> None:
+def _audit(_ident_jwt: dict | None = None, **campos) -> None:
     """Grava uma linha JSONL de auditoria. Nunca derruba a operação — mas falha de
     auditoria vai para o stderr (journal), porque auditoria que falha em silêncio é
     pior que auditoria ausente: a ausência pelo menos é visível."""
     try:
         global _em_audit
-        if campos.get("tool", "-") != "-" and not _em_audit:
+        if _ident_jwt is not None:
+            ident = dict(_ident_jwt)
+        elif campos.get("tool", "-") != "-" and not _em_audit:
             _em_audit = True
             try:
                 ident = _quem()
@@ -1215,18 +1240,26 @@ def _declara_exit(slug) -> bool:
 
 
 def _quem() -> dict:
-    """Identidade de quem chamou, do ponto de vista de DENTRO da tool.
+    """Identidade de quem chamou, do ponto de vista de DENTRO da tool (DT 731).
 
-    O contextvar setado no middleware não propaga até aqui (mesma razão de
-    `_sessao_atual`), então o caminho honesto é reler o header do request que o FastMCP
-    carrega no seu próprio contexto e revalidar. O JWKS está em cache: custa uma
-    verificação de assinatura, não uma ida à rede."""
+    Lê `request.state.ident` gravado uma vez por requisição pelo `BearerAuth` no Request
+    que o FastMCP carrega no seu próprio contexto. Se a chamada não passou pelo middleware
+    (ex.: ensaio/teste direto), valida o header e memoriza em `req.state.ident`."""
     try:
         req = getattr(mcp.get_context().request_context, "request", None)
         if req is not None:
+            st = getattr(req, "state", None)
+            guardada = getattr(st, "ident", None) if st is not None else None
+            if isinstance(guardada, dict):
+                return dict(guardada)
             header = req.headers.get("authorization", "")
             ident = _sujeito_do_jwt(header, auditor=_audit, jwks_url=OIDC_JWKS_URL,
                                     audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER)
+            if st is not None:
+                try:
+                    st.ident = dict(ident)
+                except Exception:                           # noqa: BLE001
+                    pass
             return ident
     except Exception:                                       # noqa: BLE001
         pass
@@ -3475,7 +3508,7 @@ def _chave_da_chamada(stdin: str | None, ident: dict) -> str:
 
 
 def _segue_apos_prazo(p: subprocess.Popen, argv: list, timeout: int, t0: float, ident: dict,
-                      d_cwd: Path, chave: str = "") -> dict:
+                      d_cwd: Path, chave: str = "", quem: dict | None = None) -> dict:
     """O verbo passou do prazo da chamada: segue rodando, e esta chamada devolve onde o
     retorno final vai estar. Quem espera e uma thread daemon, fora do limitador do anyio."""
     rid = uuid.uuid4().hex[:12]
@@ -3486,6 +3519,7 @@ def _segue_apos_prazo(p: subprocess.Popen, argv: list, timeout: int, t0: float, 
     base = {"id": rid, "verbo": linha, "chave": chave, "inicio": inicio, "timeout": timeout,
             "cwd": str(d_cwd)}
     _grava_resultado(caminho, {"em_andamento": True, **base, "pid": p.pid})
+    quem_fio = dict(quem) if isinstance(quem, dict) else dict(_quem())
 
     def _espera():
         try:
@@ -3516,7 +3550,7 @@ def _segue_apos_prazo(p: subprocess.Popen, argv: list, timeout: int, t0: float, 
             )
         dur_ms = round((time.monotonic() - t0) * 1000)
         _grava_resultado(caminho, {**base, "dur_ms": dur_ms, **r, "cwd": str(d_cwd)})
-        _audit(tool=slug, evento="verbo_concluido_apos_prazo", id=rid,
+        _audit(_ident_jwt=quem_fio, tool=slug, evento="verbo_concluido_apos_prazo", id=rid,
                ato=argv[1] if len(argv) > 1 else None, args=" ".join(map(str, argv[2:]))[:CMD_CAP],
                cadeira=ident.get("cadeira") or None, sessao_id=ident.get("sessao_id"),
                ordem_id=ident.get("ordem_id"), exit_code=r.get("exit_code"), erro=r.get("erro"),
@@ -3614,7 +3648,8 @@ def _busca_em_andamento(linha: str, d_cwd: Path, chave: str = "") -> tuple[Path,
 
 
 def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: int, ident: dict,
-                        prazo: float | None = None, fundamento: str | None = None) -> dict:
+                        prazo: float | None = None, fundamento: str | None = None,
+                        quem: dict | None = None) -> dict:
     """`prazo`: segundos ate a chamada devolver em_andamento (#3249); None = sem prazo.
     `fundamento` (#3513): o texto do dono que a face mandou; vira `PF_FUNDAMENTO` no verbo."""
     timeout = _timeout_com_piso(argv, timeout)
@@ -3695,7 +3730,7 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
                                        timeout=espera)
     except subprocess.TimeoutExpired:
         if espera < timeout:
-            return _segue_apos_prazo(p, argv, timeout, t0, ident, d_cwd, chave)
+            return _segue_apos_prazo(p, argv, timeout, t0, ident, d_cwd, chave, quem=quem)
         try:
             os.killpg(os.getpgid(p.pid), signal.SIGKILL)
         except ProcessLookupError:
@@ -4142,6 +4177,7 @@ class BearerAuth(BaseHTTPMiddleware):
                 headers={"WWW-Authenticate": 'Bearer resource_metadata='
                          f'"{OPS_RESOURCE}/.well-known/oauth-protected-resource"'})
 
+        request.state.ident = dict(ident)
         _sessao.set(request.headers.get("mcp-session-id", "-"))
         _audit(tool="-", evento="http_req", path=request.url.path, via=via, **ident,
                mcp_session=request.headers.get("mcp-session-id", "-"))
@@ -4207,10 +4243,20 @@ async def _token(req):
 # mesa e o auto-relato do giro.
 
 def _ident_req(req) -> dict:
-    """Mesma cadeia do middleware: so o JWT do realm."""
+    """Mesma cadeia do middleware: lê `request.state.ident` já validado pelo `BearerAuth`."""
+    st = getattr(req, "state", None)
+    guardada = getattr(st, "ident", None) if st is not None else None
+    if isinstance(guardada, dict):
+        return dict(guardada)
     header = req.headers.get("authorization", "")
-    return _sujeito_do_jwt(header, auditor=_audit, jwks_url=OIDC_JWKS_URL,
-                           audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER)
+    ident = _sujeito_do_jwt(header, auditor=_audit, jwks_url=OIDC_JWKS_URL,
+                            audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER)
+    if st is not None:
+        try:
+            st.ident = dict(ident)
+        except Exception:                               # noqa: BLE001
+            pass
+    return ident
 
 
 async def _sessao_encerrar(req):
@@ -4283,7 +4329,22 @@ async def _mcp_get_recusa(_req):
                         headers={"Allow": "POST, DELETE"})
 
 
+def _envolve_lifespan(lifespan_original):
+    @asynccontextmanager
+    async def _lifespan(app_):
+        try:
+            if lifespan_original is not None:
+                async with lifespan_original(app_) as estado:
+                    yield estado
+            else:
+                yield
+        finally:
+            _fecha_rc()
+    return _lifespan
+
+
 app = mcp.streamable_http_app()
+app.router.lifespan_context = _envolve_lifespan(app.router.lifespan_context)
 app.router.routes.insert(0, Route("/mcp", _mcp_get_recusa, methods=["GET"]))
 app.router.routes.append(Route("/health", _health))
 app.router.routes.append(Route("/.well-known/oauth-authorization-server", _as_metadata))
