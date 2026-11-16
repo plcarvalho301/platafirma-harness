@@ -34,8 +34,9 @@ def test_consultar_recusa_com_exit_2_e_aponta_a_shape(tmp_path):
         r = _acervo(*argv, tmp_path=tmp_path)
         assert r.returncode == 2, (argv, r.stderr)
         assert "removido por ordem do dono" in r.stderr
-        assert "shapes/entidade/<slug>.ttl" in r.stderr
-        assert "repo ler platafirma-casa-espelho" in r.stderr
+        assert "ontologia -- ler shape <slug>" in r.stderr
+        assert "ontologia -- listar shape" in r.stderr
+        assert "shapes/entidade" not in r.stderr
     assert not (tmp_path / "docker-chamado").exists()
 
 

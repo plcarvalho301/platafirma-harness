@@ -2916,8 +2916,7 @@ def conferir_existe(tipo, nome, como_json=False):
         # A fonte era `acervo consultar casa termo`, removido por ordem do dono (13/11/2026): o schema
         # casa que ele lia foi apagado no #4211. Sem fonte, indeterminavel, nunca negativa.
         return indeterminavel("fonte removida (acervo consultar saiu em 13/11/2026); a entidade se confere "
-                              "na shape: repo ler platafirma-casa-espelho "
-                              f"outros_repos/conhecimento/ontologia/shapes/entidade/{nome}.ttl")
+                              f"no catalogo via ontologia: infra rodar ontologia -- ler shape {nome}")
 
     return 2
 

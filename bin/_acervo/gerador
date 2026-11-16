@@ -20,6 +20,7 @@ tempo ou não abriu.
 import importlib.machinery
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -30,7 +31,10 @@ SPEC = "spec acervo (acervo ler casa spec acervo)"
 TETO_S = 600
 REPO = "platafirma-casa-espelho"
 ONTOLOGIA = Path("outros_repos") / "conhecimento" / "ontologia"
-USO = f"uso: acervo gerador [--bancada <card-slug>] [--saida <pasta>]\n  {SPEC}"
+USO = (
+    "uso: acervo gerador [--bancada <card-slug>] [--saida <pasta>] "
+    f"[--migracao <arquivo>] [--arvore] [-- <opcoes>...]\n  {SPEC}"
+)
 
 
 def _exportar():
@@ -47,15 +51,26 @@ def _exportar():
 
 
 def argumentos(argv: list):
-    """(chave da bancada, pasta de saída) ou None se o uso está errado. Cada opção no máximo uma vez."""
-    opcoes, i = {}, 0
+    """(chave, saida, migracao, arvore, extras) ou None se o uso está errado. Cada opção no máximo uma vez."""
+    opcoes, arvore, extras, i = {}, False, [], 0
     while i < len(argv):
         nome = argv[i]
-        if nome not in ("--bancada", "--saida") or nome in opcoes or i + 1 >= len(argv) or not argv[i + 1]:
+        if nome == "--":
+            extras = list(argv[i + 1:])
+            break
+        if nome == "--arvore":
+            if arvore:
+                return None
+            arvore = True
+            i += 1
+            continue
+        if nome not in ("--bancada", "--saida", "--migracao") or nome in opcoes or i + 1 >= len(argv) or not argv[i + 1]:
             return None
         opcoes[nome] = argv[i + 1]
         i += 2
-    return opcoes.get("--bancada", ""), opcoes.get("--saida", "")
+    if arvore and "--saida" in opcoes:
+        return None
+    return opcoes.get("--bancada", ""), opcoes.get("--saida", ""), opcoes.get("--migracao", ""), arvore, extras
 
 
 def _dentro(alvo: Path, raiz: Path) -> bool:
@@ -66,23 +81,44 @@ def _dentro(alvo: Path, raiz: Path) -> bool:
         return False
 
 
+def _valida_caminho(pedida: str, opcao: str, ex) -> Path:
+    """Resolve `pedida` e exige que caia dentro da bancada declarada ou de var/tmp da instância."""
+    tmp = (ex.raizes.instancia() / "var" / "tmp").resolve()
+    alvo = Path(pedida).expanduser().resolve()
+    try:
+        bancada = ex.raizes.bancada().resolve()
+    except ex.raizes.BancadaNaoDeclarada:
+        bancada = None
+    if not (_dentro(alvo, tmp) or (bancada is not None and _dentro(alvo, bancada))):
+        ex.morre(f"{opcao} {pedida}: fora da bancada declarada e de {tmp}", 2)
+    return alvo
+
+
 def pasta_de_saida(pedida: str, ex) -> Path:
     """A pasta onde o gerador grava: a pedida, se cai na bancada declarada ou em var/tmp da instância;
     senão uma nova em var/tmp/<ordem_id>/ da instância."""
-    tmp = (ex.raizes.instancia() / "var" / "tmp").resolve()
     if pedida:
-        alvo = Path(pedida).expanduser().resolve()
-        try:
-            bancada = ex.raizes.bancada().resolve()
-        except ex.raizes.BancadaNaoDeclarada:
-            bancada = None
-        if not (_dentro(alvo, tmp) or (bancada is not None and _dentro(alvo, bancada))):
-            ex.morre(f"--saida {pedida}: fora da bancada declarada e de {tmp}", 2)
+        alvo = _valida_caminho(pedida, "--saida", ex)
         alvo.mkdir(parents=True, exist_ok=True)
         return alvo
+    tmp = (ex.raizes.instancia() / "var" / "tmp").resolve()
     base = tmp / (os.environ.get("PF_ORDEM_ID") or "gerador")
     base.mkdir(parents=True, exist_ok=True)
     return Path(tempfile.mkdtemp(prefix="acervo-gerador-", dir=base))
+
+
+def _copiar_ddl_para_arvore(saida: Path, ontologia: Path) -> list[str]:
+    """Copia apenas os `.sql` de `<saida>/ddl/` para `<ontologia>/ddl/`, sem os demais artefatos."""
+    origem = saida / "ddl"
+    if not origem.is_dir():
+        return []
+    destino = ontologia / "ddl"
+    copiados = []
+    for arq in sorted(origem.glob("*.sql")):
+        destino.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(arq, destino / arq.name)
+        copiados.append(f"ddl/{arq.name}")
+    return copiados
 
 
 def main(argv: list) -> int:
@@ -90,7 +126,7 @@ def main(argv: list) -> int:
     if lido is None:
         print(USO, file=sys.stderr)
         return 2
-    chave, pedida = lido
+    chave, pedida, migracao, arvore, extras = lido
     ex = _exportar()
     wt = ex.bancada_do_repo(chave)
     py = ex.python_do_rag()
@@ -98,10 +134,13 @@ def main(argv: list) -> int:
     if not (ontologia / "gerador" / "__main__.py").is_file():
         ex.morre(f"{ontologia / 'gerador' / '__main__.py'} não existe nesta bancada: o gerador ainda não chegou "
                  f"a {ONTOLOGIA} do espelho", 3)
-    saida = pasta_de_saida(pedida, ex)
+    cmd = [py, "-m", "gerador", "--saida", str(pasta_de_saida(pedida, ex))]
+    saida = Path(cmd[4])
+    if migracao:
+        cmd.extend(["--migracao", str(_valida_caminho(migracao, "--migracao", ex))])
+    cmd.extend(extras)
     try:
-        r = subprocess.run([py, "-m", "gerador", "--saida", str(saida)], cwd=ontologia, capture_output=True,
-                           text=True, timeout=TETO_S, check=False)
+        r = subprocess.run(cmd, cwd=ontologia, capture_output=True, text=True, timeout=TETO_S, check=False)
     except (OSError, subprocess.TimeoutExpired) as e:
         ex.morre(f"o gerador não rodou: {type(e).__name__}: {e}", 5)
     if r.stdout.strip():
@@ -114,6 +153,9 @@ def main(argv: list) -> int:
         ddl = sorted(p.relative_to(saida).as_posix() for p in (saida / "ddl").glob("*.sql")) \
             if (saida / "ddl").is_dir() else []
         print("ddl: " + (", ".join(ddl) if ddl else "nenhuma"))
+        if arvore:
+            copiados = _copiar_ddl_para_arvore(saida, ontologia)
+            print("arvore: " + (", ".join(copiados) if copiados else "nenhuma"))
     return r.returncode
 
 

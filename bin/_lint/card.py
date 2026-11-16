@@ -33,15 +33,13 @@ CHAVE_DISCOVERY = "antipadroes-de-discovery"
 
 CAMPOS_STORY = [
     "Negócio:",
-    "Ambiente:",
-    "Onde:",
-    "Passos:",
-    "Aceite:",
-    "Travas:",
-    "Entrega:",
     "Referencial:",
     "Raio de ataque:",
     "Comportamento esperado:",
+    "Travas:",
+    "Ambiente:",
+    "Entrega:",
+    "Aceite:",
 ]
 
 # A task é o passo da story (#4223, R41 da spec tarefas): o molde dela diz onde se mexe e como

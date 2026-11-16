@@ -217,9 +217,11 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   platafirma-conhecimento e passa o catalogo.sql ao banco rag numa transacao so; sem --apply
                   o SQL roda inteiro e a transacao e desfeita (plano seco); sai 0 rodou · 1 reprova ou o
                   SQL deu erro · 5 nao olhou; a linha de entidade do catalogo so muda por ele (migracao 111)
-  acervo gerador  [--bancada <chave>] [--saida <pasta>] roda o gerador de outros_repos/conhecimento/ontologia
-                  na bancada de platafirma-casa-espelho, sem banco, e diz a pasta de saida e a DDL gravada;
-                  sai como o gerador (0 gerou · 1 reprova · 5 nao rodou) · 3 sem gerador na bancada.
+  acervo gerador  [--bancada <chave>] [--saida <pasta>] [--migracao <arquivo>] [--arvore] [-- <opcoes>...]
+                  roda o gerador de outros_repos/conhecimento/ontologia na bancada de platafirma-casa-espelho,
+                  sem banco, e diz a pasta de saida e a DDL gravada; --migracao repassa ao gerador; --arvore
+                  grava so a DDL versionada na arvore (sem os artefatos soltos); sai como o gerador
+                  (0 gerou · 1 reprova · 5 nao rodou) · 3 sem gerador na bancada.
                   Chamada temporaria (#4077); o raciocinador e \`motor raciocinador\`
   acervo psql     [--banco rag|motor]  <SQL por stdin>
   acervo balde    listar|ler|copiar|mover|apagar <bucket|sha256> [...] [--apply]
@@ -758,9 +760,9 @@ case "$ATO" in
   # apagado no #4211, e a rota so devolvia erro de SQL. Recusa com o caminho que responde, como o adr.
   consultar)
     echo "acervo consultar: ato removido por ordem do dono (13/11/2026); o schema casa que ele lia foi apagado (#4211)." >&2
-    echo "  onde mora e o documento de uma entidade estao na shape dela:" >&2
-    echo "  repo ler platafirma-casa-espelho outros_repos/conhecimento/ontologia/shapes/entidade/<slug>.ttl" >&2
-    echo "  a lista das entidades: repo listar platafirma-casa-espelho outros_repos/conhecimento/ontologia/shapes/entidade" >&2
+    echo "  onde mora e o documento de uma entidade estao na shape dela, via verbo ontologia:" >&2
+    echo "  infra rodar ontologia -- ler shape <slug>   (ou ontologia ler shape <slug>)" >&2
+    echo "  a lista das entidades: infra rodar ontologia -- listar shape   (ou ontologia listar shape)" >&2
     exit 2 ;;
 
   # formas VIGENTES/DEPRECADAS com implementacao: avisam uma vez por sessao e delegam
