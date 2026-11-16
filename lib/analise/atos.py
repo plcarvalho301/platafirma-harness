@@ -364,6 +364,7 @@ def parser() -> Parser:
     p.add_argument("--ajuda", action="store_true")
     p.add_argument("--guia")
     p.add_argument("--base")
+    p.add_argument("--receita")
     p.add_argument("--corte")
     p.add_argument("--param", action="append", default=[])
     p.add_argument("--reler", action="store_true")
@@ -379,7 +380,7 @@ analise preparar <receita> [--corte <instante>] [--param nome=valor]
 analise montar <receita> --base <base_id> [--param nome=valor]
 analise refazer <execucao_id> [--reler]
 analise ler <id> [--tabela <nome>] [--linhas <a-b>] [--projecao <nome>]
-analise listar [bases|resultados|execucoes]
+analise listar [bases|resultados|execucoes] [--receita <receita>]
 analise descartar <base_id|resultado_id>
 analise entregar <base_id|resultado_id> <sujeito|todos>
 analise travar <receita> --bancada <chave>
@@ -495,8 +496,10 @@ def main(argv: list[str] | None = None) -> int:
                     exigir(
                         tipo in {"bases", "resultados", "execucoes"}, "lista-invalida"
                     )
+                    if a.receita:
+                        nome_seguro(a.receita)
                     motor.autorizar(motor.sujeito, ato, "analise:" + tipo + "/*")
-                    bloco = {"estado": "pronta", "itens": cat.listar(tipo)}
+                    bloco = {"estado": "pronta", "itens": cat.listar(tipo, a.receita)}
                     rc = 0
                 elif ato == "descartar":
                     exigir(a.alvo, "objeto-ausente")

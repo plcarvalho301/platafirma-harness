@@ -2175,7 +2175,7 @@ def _separa_membro(caminho: str) -> tuple[str, str | None]:
 # (platafirma-harness, avaliacao/bateria.jsonl) e texto plano, um objeto por linha, e a
 # reenderecacao dele pela chave da secao nao tinha como ser escrita.
 TIPOS_TEXTO = {".py", ".md", ".mmd", ".d2", ".sh", ".sql", ".yaml", ".yml", ".json", ".toml",
-               ".css", ".html", ".js", ".jsx", ".mjs", ".ts", ".tsx", ".php", ".txt", ".conf", ".tsv",
+               ".css", ".html", ".svg", ".js", ".jsx", ".mjs", ".ts", ".tsx", ".php", ".txt", ".conf", ".tsv",
                ".service", ".timer", ".path", ".socket", ".ttl", ".jsonl"}
 # Texto de build que se reconhece pelo nome, nao pela extensao. Entrou em 23/09/2026: sem
 # ele, stack nova com imagem propria (Dockerfile, conf do nginx) nao tinha como ser escrita
@@ -2757,7 +2757,7 @@ def write_file(path: str = "", content: str = "", sessao_id: str | None = None,
     bancada, clones platafirma-* e seus worktrees em wt/<repo>/<cadeira>
     (working tree, fora de .git), com bin/ e hooks/ do harness aceitando verbo e hook (sem
     extensao + shebang); na instancia, @TMP@/<ordem_id>/ (rascunho da fita). Tipos: .py .md .mmd .d2 .sh
-    .sql .yaml .yml .json .toml .css .html .js .jsx .mjs .ts .tsx .php .txt .conf .tsv .service
+    .sql .yaml .yml .json .toml .css .html .svg .js .jsx .mjs .ts .tsx .php .txt .conf .tsv .service
     .timer .path .socket .ttl .jsonl, e os nomes Dockerfile, Dockerfile.<sufixo>, .dockerignore,
     .gitignore, .operacao, VERDES, .conferir-repo, uv.lock, crontab-claudinho. Fora disso volta
     `{recusado, motivo}` nomeando o porque (release, fila, abertura publicada, log, segredos, .git, symlink,

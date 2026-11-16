@@ -77,8 +77,12 @@ class _Stub(BaseHTTPRequestHandler):
         type(self).chamadas.append(("PATCH", self.path, corpo))
         m = re.match(r"^/itens/(\d+)", self.path)
         if m and int(m.group(1)) in self.itens:
-            return self._json({**self.itens[int(m.group(1))], "estado": corpo["estado"],
-                               "estado_nome": "Entregue", "estado_natureza": "terminal"})
+            it = dict(self.itens[int(m.group(1))])
+            if "titulo" in corpo:
+                it["titulo"] = corpo["titulo"]
+            if "estado" in corpo:
+                it.update(estado=corpo["estado"], estado_nome="Entregue", estado_natureza="terminal")
+            return self._json(it)
         self._json({"erro": "nao existe"}, 404)
 
     def do_POST(self):
@@ -182,6 +186,20 @@ def test_criar_task_mostra_a_chave_e_nao_o_id_interno(stub):
     assert p.returncode == 0, p.stderr
     assert "item t3 criado: task de prova" in p.stdout
     assert str(ID_INTERNO) not in p.stdout
+
+
+def test_editar_task_pelo_id_curto_t_n_e_com_hifen(stub):
+    """DT 690: `tarefas editar t3` e `tarefas editar 7-t3` acham a task que `criar --nivel task` devolveu."""
+    s, base = stub
+    s.itens[ID_INTERNO] = _item(ID_INTERNO, "7.t3", 3, "task")
+    pc = _run(["criar", "task de prova", "--nivel", "task", "--pai", "7"], base)
+    assert pc.returncode == 0, pc.stderr
+    pe1 = _run(["editar", "t3", "--titulo", "titulo via t3"], base)
+    assert pe1.returncode == 0, pe1.stderr
+    assert "item t3 editado: titulo via t3" in pe1.stdout
+    pe2 = _run(["editar", "7-t3", "--titulo", "titulo via 7-t3"], base)
+    assert pe2.returncode == 0, pe2.stderr
+    assert "item t3 editado: titulo via 7-t3" in pe2.stdout
 
 
 def test_criar_card_segue_mostrando_o_numero_do_card(stub):

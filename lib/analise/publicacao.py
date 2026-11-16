@@ -155,7 +155,7 @@ class Catalogo:
                 self.objeto(obj)
         return ex
 
-    def listar(self, tipo: str) -> list[dict]:
+    def listar(self, tipo: str, receita: str | None = None) -> list[dict]:
         from psycopg.rows import dict_row
 
         tabela = {"bases": "base", "resultados": "resultado", "execucoes": "execucao"}[
@@ -163,17 +163,43 @@ class Catalogo:
         ]
         with self.conn.cursor(row_factory=dict_row) as cur:
             if tabela == "execucao":
-                cur.execute(
-                    "SELECT id,estado,temporarios_ate AS expires_at FROM analise.execucao WHERE sujeito=%s ORDER BY iniciada_em DESC",
-                    (self.sujeito,),
+                sql = (
+                    "SELECT id,ato,manifesto->>'slug' AS receita,"
+                    "manifesto->>'pergunta' AS pergunta,manifesto->>'corte' AS corte,"
+                    "manifesto->'guarda' AS guarda,estado,temporarios_ate AS expires_at"
+                    " FROM analise.execucao WHERE sujeito=%s"
                 )
+                params: list[object] = [self.sujeito]
+                if receita:
+                    sql += " AND manifesto->>'slug'=%s"
+                    params.append(receita)
+                cur.execute(sql + " ORDER BY iniciada_em DESC", tuple(params))
+            elif tabela == "base":
+                sql = (
+                    "SELECT b.id,b.receita,b.manifesto->>'pergunta' AS pergunta,"
+                    "b.manifesto->>'corte' AS corte,b.guarda,e.estado,b.n,b.expires_at"
+                    " FROM analise.base b JOIN analise.execucao e ON e.id=b.execucao_id"
+                    " WHERE b.sujeito=%s AND (b.expires_at IS NULL OR b.expires_at>clock_timestamp())"
+                )
+                params = [self.sujeito]
+                if receita:
+                    sql += " AND b.receita=%s"
+                    params.append(receita)
+                cur.execute(sql + " ORDER BY b.id", tuple(params))
             else:
-                cur.execute(
-                    "SELECT id,expires_at FROM analise."
-                    + tabela
-                    + " WHERE sujeito=%s AND (expires_at IS NULL OR expires_at>clock_timestamp()) ORDER BY id",
-                    (self.sujeito,),
+                sql = (
+                    "SELECT r.id,r.receita,r.base_id,r.manifesto->>'pergunta' AS pergunta,"
+                    "COALESCE(r.manifesto->>'corte',b.manifesto->>'corte') AS corte,"
+                    "r.guarda,e.estado,r.expires_at"
+                    " FROM analise.resultado r JOIN analise.execucao e ON e.id=r.execucao_id"
+                    " LEFT JOIN analise.base b ON b.id=r.base_id"
+                    " WHERE r.sujeito=%s AND (r.expires_at IS NULL OR r.expires_at>clock_timestamp())"
                 )
+                params = [self.sujeito]
+                if receita:
+                    sql += " AND r.receita=%s"
+                    params.append(receita)
+                cur.execute(sql + " ORDER BY r.id", tuple(params))
             return cur.fetchall()
 
     def publicar(
@@ -224,6 +250,10 @@ class Catalogo:
         manifesto.update(
             {"expires_at": exp.isoformat() if exp else None, "guarda": guarda}
         )
+        if receita.get("pergunta") and "pergunta" not in manifesto:
+            manifesto["pergunta"] = receita["pergunta"]
+        if "slug" not in manifesto:
+            manifesto["slug"] = slug
         manifesto["base_id" if base is None else "resultado_id"] = objeto
         esperados = {t["nome"] + ".csv" for t in receita["saidas"].get("tabelas", [])}
         esperados |= {
