@@ -1438,3 +1438,24 @@ def test_aviso_mede_pico_da_janela_e_nao_soma_cumulativa_de_cache(mundo, pessoa,
     assert roda(monkeypatch, "juiz", tarefa="julgue") == 0
     err = capsys.readouterr().err
     assert "tokens da execução 150 passaram de tokens_execucao 120" in err
+
+
+def test_git_fecha_stdin_e_rodar_le_stdin_antes_de_avancar_posto(mundo, pessoa, monkeypatch):
+    """DTs 734, 742: _git passa stdin=DEVNULL e ato_rodar lê stdin antes de _posto_ou_erro."""
+    mundo.escreve(JUIZ)
+    (mundo.posto / ".git").mkdir(exist_ok=True)
+    chamadas_git = []
+    real_run = agente.subprocess.run
+
+    def fake_run(cmd, *args, **kwargs):
+        if cmd and cmd[0] == "git":
+            chamadas_git.append((cmd, kwargs.get("stdin")))
+            # Se stdin não fosse isolado e um filho o lesse antes de ato_rodar, a tarefa sumiria.
+            if kwargs.get("stdin") is None and not sys.stdin.isatty():
+                sys.stdin.read()
+            return agente.subprocess.CompletedProcess(cmd, 0, "", "")
+        return real_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(agente.subprocess, "run", fake_run)
+    assert roda(monkeypatch, "juiz", tarefa="tarefa intacta") == 0
+    assert chamadas_git and all(st == agente.subprocess.DEVNULL for _, st in chamadas_git)
