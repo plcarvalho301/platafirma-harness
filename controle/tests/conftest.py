@@ -24,7 +24,7 @@ _RAIZ = None
 
 def pytest_configure(config):
     global _RAIZ
-    _RAIZ = teste_isolado.isolar()
+    _RAIZ = teste_isolado.isolar(config)
 
 
 def pytest_unconfigure(config):

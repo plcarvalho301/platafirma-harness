@@ -6,6 +6,9 @@ porta para o mundo real, e todo o resto da suíte volta a poder passar por sorte
 import os
 import shutil
 import subprocess
+from pathlib import Path
+
+import pytest
 
 REAIS = ("/srv/platafirma", "/opt/platafirma", os.path.expanduser("~/AI"),
          os.path.expanduser("~/.config/platafirma"))
@@ -37,7 +40,40 @@ def test_programas_do_mundo_real_sao_delatores():
         assert caminho and "delatores" in caminho, f"{prog} resolve para {caminho}"
     r = subprocess.run(["gh", "pr", "list"], capture_output=True, text=True)
     assert r.returncode == 97
+    assert r.stderr.startswith("isolamento:")
     assert "sem stub" in r.stderr
+
+
+def _injetar_real_bin_apos_delatores(tmp_path, monkeypatch):
+    real_bin = tmp_path / "real_bin"
+    real_bin.mkdir()
+    psql_real = real_bin / "psql"
+    psql_real.write_text("#!/bin/sh\necho \"real-psql:$*\"\n", encoding="utf-8")
+    psql_real.chmod(0o755)
+    delatores_dir = str(Path(shutil.which("psql")).parent)
+    resto = os.pathsep.join(p for p in os.environ["PATH"].split(os.pathsep) if p != delatores_dir)
+    monkeypatch.setenv("PATH", f"{delatores_dir}{os.pathsep}{real_bin}{os.pathsep}{resto}")
+
+
+@pytest.mark.isolamento_libera("psql")
+def test_marcador_libera_apenas_verbos_listados(tmp_path, monkeypatch):
+    _injetar_real_bin_apos_delatores(tmp_path, monkeypatch)
+
+    r_ok = subprocess.run(["psql", "-c", "select 1"], capture_output=True, text=True)
+    assert r_ok.returncode == 0
+    assert "real-psql:-c select 1" in r_ok.stdout
+
+    r_bloqueado = subprocess.run(["gh", "pr", "list"], capture_output=True, text=True)
+    assert r_bloqueado.returncode == 97
+    assert r_bloqueado.stderr.startswith("isolamento:")
+
+
+def test_marcador_nao_vaza_para_proximo_teste(tmp_path, monkeypatch):
+    _injetar_real_bin_apos_delatores(tmp_path, monkeypatch)
+
+    r = subprocess.run(["psql", "-c", "select 1"], capture_output=True, text=True)
+    assert r.returncode == 97
+    assert r.stderr.startswith("isolamento:")
 
 
 def test_identidade_git_global_nao_vaza(tmp_path):

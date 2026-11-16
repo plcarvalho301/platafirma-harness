@@ -21,6 +21,11 @@ import shutil
 import tempfile
 from pathlib import Path
 
+try:
+    import pytest
+except ImportError:
+    pytest = None
+
 PREFIXOS = (
     "PLATAFIRMA_", "PF_", "RAG_", "MOTOR_", "MEM_", "FILA_", "SESSAO_", "MW_",
     "KROKI_", "ACESSO_", "PDP_", "OPS_", "SEG_", "TAREFAS_", "REC_", "CHAT_",
@@ -42,9 +47,48 @@ VARIAVEIS_DE_NAVEGADOR = ("CHROME", "PUPPETEER_EXECUTABLE_PATH")
 DELATORES = ("docker", "gh", "systemctl", "psql", "redis-cli") + NAVEGADORES
 
 SERVICO_MORTO = "http://127.0.0.1:9"
+MARCADOR = "isolamento_libera"
+ENV_LIBERADOS = "PF_ISOLAMENTO_LIBERADOS"
 
 
-def isolar() -> Path:
+class _PluginIsolamento:
+    """Libera delatores listados em `@pytest.mark.isolamento_libera(...)` só durante o teste."""
+
+    @staticmethod
+    def _coletar_liberados(item) -> list[str]:
+        liberados: list[str] = []
+        for mark in item.iter_markers(MARCADOR):
+            for arg in mark.args:
+                if isinstance(arg, (list, tuple, set)):
+                    liberados.extend(str(a) for a in arg)
+                else:
+                    liberados.append(str(arg))
+        return liberados
+
+    def pytest_runtest_protocol(self, item, nextitem):
+        liberados = self._coletar_liberados(item)
+        if not liberados:
+            yield
+            return
+        antes = os.environ.get(ENV_LIBERADOS)
+        atuais = [v for v in (antes or "").split(",") if v]
+        os.environ[ENV_LIBERADOS] = ",".join(dict.fromkeys([*atuais, *liberados]))
+        try:
+            yield
+        finally:
+            if antes is None:
+                os.environ.pop(ENV_LIBERADOS, None)
+            else:
+                os.environ[ENV_LIBERADOS] = antes
+
+
+if pytest is not None:
+    _PluginIsolamento.pytest_runtest_protocol = pytest.hookimpl(hookwrapper=True)(
+        _PluginIsolamento.pytest_runtest_protocol
+    )
+
+
+def isolar(config=None) -> Path:
     raiz = Path(tempfile.mkdtemp(prefix="pf-teste-"))
     for nome in list(os.environ):
         if nome.startswith(PREFIXOS) and nome not in PRESERVAR:
@@ -94,12 +138,31 @@ def isolar() -> Path:
                 if prog in NAVEGADORES else "")
         p.write_text(
             "#!/bin/sh\n"
-            f'echo "teste chamou o {prog} real sem stub: $*{cura}" >&2\n'
+            f'case ",${{{ENV_LIBERADOS}:-}}," in\n'
+            f'  *,{prog},*)\n'
+            '    _novo_path=""\n'
+            '    _ifs="$IFS"; IFS=":"\n'
+            '    for _p in $PATH; do\n'
+            f'      [ "$_p" = "{delatores}" ] && continue\n'
+            '      _novo_path="${_novo_path:+$_novo_path:}$_p"\n'
+            '    done\n'
+            '    IFS="$_ifs"\n'
+            f'    PATH="$_novo_path" exec {prog} "$@"\n'
+            '    ;;\n'
+            'esac\n'
+            f'echo "isolamento: teste chamou o {prog} real sem stub: $*{cura}" >&2\n'
             "exit 97\n")
         p.chmod(0o755)
     for var in VARIAVEIS_DE_NAVEGADOR:
         os.environ[var] = str(delatores / "chromium")
     os.environ["PATH"] = f"{delatores}{os.pathsep}{os.environ.get('PATH', '')}"
+    if config is not None and pytest is not None:
+        config.addinivalue_line(
+            "markers",
+            f"{MARCADOR}(*verbos): libera os delatores listados apenas durante o teste",
+        )
+        if not config.pluginmanager.has_plugin("pf_teste_isolado"):
+            config.pluginmanager.register(_PluginIsolamento(), name="pf_teste_isolado")
     return raiz
 
 
