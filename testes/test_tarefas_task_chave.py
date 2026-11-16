@@ -63,6 +63,9 @@ class _Stub(BaseHTTPRequestHandler):
                 if it["chave"] == m.group(1):
                     return self._json({"id": it["id"], "chave": it["chave"]})
             return self._json({"erro": f"item {m.group(1)} não existe"}, 404)
+        m = re.match(r"^/itens/(\d+)/comentarios$", self.path)
+        if m and int(m.group(1)) in self.itens:
+            return self._json({"comentarios": self.itens[int(m.group(1))].get("comentarios", [])})
         m = re.match(r"^/itens/(\d+)$", self.path)
         if m and int(m.group(1)) in self.itens:
             return self._json(self.itens[int(m.group(1))])
@@ -87,13 +90,19 @@ class _Stub(BaseHTTPRequestHandler):
         return self._json({"id": 9001, "chave": "9001", "titulo": corpo["titulo"]}, 201)
 
 
-@pytest.fixture()
-def stub():
-    _Stub.itens, _Stub.chamadas = {}, []
+@pytest.fixture(scope="module")
+def _srv():
     srv = HTTPServer(("127.0.0.1", 0), _Stub)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield _Stub, f"http://127.0.0.1:{srv.server_port}"
     srv.shutdown()
+    srv.server_close()
+
+
+@pytest.fixture()
+def stub(_srv):
+    _Stub.itens, _Stub.chamadas = {}, []
+    return _srv
 
 
 def _run(args, base):
@@ -130,6 +139,24 @@ def test_id_de_card_segue_sem_resolver_chave(stub):
     p = _run(["ler", "#7"], base)
     assert p.returncode == 0, p.stderr
     assert not any(c[1].startswith("/itens/chave/") for c in s.chamadas)
+
+
+def test_prefixo_de_nivel_em_ler_e_comentarios_resolve_o_id_do_card(stub):
+    """DT 705: o dono escreve F4269, S4163, E3650; tarefas aceita o id com prefixo de nível."""
+    s, base = stub
+    s.itens[4269] = _item(4269, "4269", 1, "feature", comentarios=[
+        {"id": 101, "autor": "engenharia", "carimbo": "2026-11-15", "corpo": "<p>nota</p>"},
+    ])
+    s.itens[4163] = _item(4163, "4163", 2, "story")
+    s.itens[3650] = _item(3650, "3650", 0, "épico")
+    for arg, cid in (("F4269", 4269), ("#F4269", 4269), ("f4269", 4269), ("S4163", 4163), ("E3650", 3650)):
+        p = _run(["ler", arg], base)
+        assert p.returncode == 0, (arg, p.stderr)
+        assert ("GET", f"/itens/{cid}") in s.chamadas
+    pc = _run(["comentarios", "F4269"], base)
+    assert pc.returncode == 0, pc.stderr
+    assert ("GET", "/itens/4269/comentarios") in s.chamadas
+    assert "#101" in pc.stdout and "nota" in pc.stdout
 
 
 def test_chave_que_nao_existe_sobe_a_recusa_do_rastreador(stub):

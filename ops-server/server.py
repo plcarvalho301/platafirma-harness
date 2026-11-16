@@ -3258,10 +3258,11 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     # o `sessao_id` não cunha outro — a porta nega, não adivinha. Abertura de verdade
     # traz o prompt do dono; id malformado quem recusa é `sessao abrir` (exit 2).
     if not sessao_id and not _primeiro_giro(pergunta):
-        _audit(tool="monta_sessao", evento="sessao_id_ausente_na_reabertura", cadeira=cadeira)
         msg = ("sessao_id ausente numa reabertura — a fita deve portar o "
                "`sessao_id` da primeira abertura (arq:0101 §1); a primeira "
                "abertura envia a pergunta e NÃO envia `sessao_id`")
+        _audit(tool="monta_sessao", evento="sessao_id_ausente_na_reabertura",
+               cadeira=cadeira, exit_code=2, erro=msg)
         cad_ex = json.dumps(cadeira or "engenharia", ensure_ascii=False)
         return _envelope_erro(
             2,
@@ -3300,8 +3301,9 @@ async def monta_sessao(cadeira: str = "", atualizar: bool = True, chapeu: str = 
     # fica no bruto, 35 dias, e nunca atravessa para o evento. O pacote montado NAO se grava: a
     # abertura leva so o que ele custou, em tokens por peça com o método, o sha do prefixo
     # cacheável e o montador.
+    _ec_erro = {"exit_code": r.get("exit_code")} if r.get("erro") and r.get("exit_code") is not None else {}
     _audit(tool="monta_sessao", cadeira=cadeira, atualizar=atualizar,
-           resolvida=r.get("cadeira"), erro=r.get("erro"),
+           resolvida=r.get("cadeira"), erro=r.get("erro"), **_ec_erro,
            chapeu=(r.get("chapeu") or None),
            pergunta=(pergunta or None),
            pergunta_bytes=len((pergunta or "").encode("utf-8")),

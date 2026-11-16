@@ -613,7 +613,7 @@ _estados_terminais() {
 # digita vira o id que as rotas endereçam, por `GET /itens/chave/<chave>`. Chave que não existe
 # sai como a recusa do rastreador (404), e não como id inventado.
 so_id() {
-  local a="${1#\#}"
+  local a="${1#\#}"; [[ "$a" =~ ^[EeFfSs]#?([0-9]+(\.t[0-9]+)?)$ ]] && a="${BASH_REMATCH[1]}"
   case "$a" in
     [0-9]*.t[0-9]*)
       local r; r=$(busca GET "/itens/chave/$a") || return 1

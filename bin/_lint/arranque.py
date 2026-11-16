@@ -27,7 +27,16 @@ TEXTOS_COMUNS_ARRANQUE = (
     "abertura/dono.md",
     "2-comportamento/cultura/cultura.md",
 )
+TEXTOS_CADEIRA_DEFAULT = (
+    "AGENTS.md",
+    "agente/CLAUDE.md",
+    "abertura/arranque.md",
+)
 PRIMITIVAS_PROVIDER_RE = re.compile(r"\b(ToolSearch|call_mcp_tool|tool_search)\b")
+DEFAULT_SEM_SLUG_RE = re.compile(
+    r'(?:Sem slug[^\n]*cadeira="([a-z0-9-]+)"|sem slug,\s*(?:abre\s+)?`([a-z0-9-]+)`)',
+    re.I,
+)
 
 
 def _sh(args: list[str], cwd: Optional[str | Path] = None) -> tuple[int, str, str]:
@@ -136,7 +145,7 @@ def verificar_arranque(
             rel_alvo = alvo
         if rel_alvo in TEXTOS_COMUNS_ARRANQUE:
             comuns.append((caminho, rel_alvo))
-        else:
+        elif rel_alvo not in TEXTOS_CADEIRA_DEFAULT or rel_alvo.endswith("CLAUDE.md"):
             alvos.append(caminho)
     else:
         alvos = achar_claude_mds(raiz)
@@ -181,5 +190,33 @@ def verificar_arranque(
 
     for caminho_c, rel_c in comuns:
         apontamentos.extend(verificar_texto_comum_sem_primitiva(caminho_c, rel_c))
+
+    abertura_dir = raiz / "abertura"
+    vivas = {p.parent.name for p in abertura_dir.glob("*/persona.md") if p.is_file()} if abertura_dir.is_dir() else set()
+    if vivas:
+        for rel_d in TEXTOS_CADEIRA_DEFAULT:
+            if alvo and rel_d != rel_alvo:
+                continue
+            cand_d = raiz / rel_d
+            if not cand_d.is_file():
+                continue
+            try:
+                txt_d = cand_d.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for num, linha in enumerate(txt_d.splitlines(), 1):
+                for m in DEFAULT_SEM_SLUG_RE.finditer(linha):
+                    slug = m.group(1) or m.group(2)
+                    if slug and slug not in vivas:
+                        apontamentos.append(
+                            Apontamento(
+                                rel_d,
+                                num,
+                                f"cadeira default sem slug ({slug!r}) nao existe em abertura/",
+                                "usar slug de cadeira viva em abertura/<slug>/persona.md",
+                                severidade="bloqueante",
+                                id="CADEIRA_DEFAULT_INVALIDA",
+                            )
+                        )
 
     return apontamentos
