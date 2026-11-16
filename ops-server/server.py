@@ -367,17 +367,34 @@ def _argv_verbo(binario: str, ato: str, args: list) -> list:
     return [binario] + ([ato] if ato else []) + list(args or [])
 
 
-def _ato_efetivo(argv: list) -> str | None:
-    """O ato que o escopo `cosmetica@ato` enxerga e o do argv, nao o do parametro `ato`.
+def _binario_do_argv(argv: list, binario: str | None = None) -> tuple[str, str]:
+    caminho = binario or (str(argv[0]) if argv else "")
+    slug = caminho.rsplit("/", 1)[-1]
+    if caminho and not os.path.isfile(caminho) and slug:
+        for base in (BIN_VERBOS, PF_HARNESS / "bin", _LIB.parent / "bin"):
+            cand = base / slug
+            if cand.is_file():
+                return slug, str(cand)
+    return slug, caminho
 
-    O cliente MCP chama o mesmo execve de duas formas: `ato="rag", args=["buscar", ...]`
-    e `ato="", args=["rag", "buscar", ...]`. Medido em 18/09: decidir o perfil pelo
-    parametro tirava o regime cosmetico da segunda forma, a janela de linha longa comia
-    o JSON de linha unica do `motor rag buscar` (13 kB -> 289 bytes) e a cadeira ficava
-    sem o corpo dos trechos — o caso que o #3022 fechou, reaberto pela forma da chamada.
-    `run_command` ja decidia pelo argv; agora as quatro saidas decidem igual.
-    """
-    return argv[1] if len(argv) > 1 else None
+
+def _ato_efetivo(argv: list, declarados: frozenset | None = None,
+                 binario: str | None = None) -> str | None:
+    """Resolve o ato efetivo do argv, pulando a instância quando o verbo declara atos
+    (`motor rag <ato> ...` -> `argv[2]`). Serve `_escreve`, `_cosmetica` e `_fundamento_do_ato`."""
+    if not argv or len(argv) <= 1:
+        return None
+    if declarados is None:
+        slug, cam = _binario_do_argv(argv, binario)
+        declarados, _ = _atos_do_cabecalho(slug, cam)
+        poda_atos = _perfil_verbo(slug, cam).get("poda_atos") or ()
+        conhecidos = declarados | frozenset(poda_atos)
+    else:
+        conhecidos = declarados
+    for t in argv[1:3]:
+        if t in conhecidos:
+            return t
+    return argv[1]
 
 
 # ALCA DE CONSTITUICAO (ordem do dono, 20/09/2026, insumo Hermes / arq:0061 par.5): estas
@@ -1134,15 +1151,6 @@ def _atos_do_cabecalho(slug: str, binario: str) -> tuple[frozenset, frozenset]:
     return _ATOS_DO_CABECALHO[slug]
 
 
-def _ato_do_argv(argv: list, declarados: frozenset) -> str | None:
-    """O ato do argv: o primeiro de argv[1] e argv[2] que o cabecalho declara. O motor poe a
-    instancia antes do ato (`motor rag trocar ...`), entao argv[1] sozinho nao basta."""
-    for t in argv[1:3]:
-        if t in declarados:
-            return t
-    return None
-
-
 def _fundamento_do_ato(slug: str, binario: str, argv: list, ident: dict,
                        turno_texto, turno_fonte) -> tuple[str | None, dict | None]:
     """`(fundamento, recusa)` de uma chamada de verbo. Fora da face: `(None, None)`, sem mudar nada.
@@ -1154,7 +1162,7 @@ def _fundamento_do_ato(slug: str, binario: str, argv: list, ident: dict,
     texto = turno_texto.strip() if isinstance(turno_texto, str) else ""
     fundamento = texto.encode("utf-8")[:FUNDAMENTO_MAX].decode("utf-8", "ignore").strip() or None
     declarados, so_escrita = _atos_do_cabecalho(slug, binario)
-    ato = _ato_do_argv(argv, declarados)
+    ato = _ato_efetivo(argv, declarados, binario=binario)
     motivo = None
     proximo = None
     exit_code = 2
@@ -1816,9 +1824,10 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
             brutos.append(so.get("texto", "") if isinstance(so, dict) else "")
         stdins_resolvidos.append(stdin if isinstance(stdin, str) else ("" if stdin is None else str(stdin)))
         _perf = _perfil_verbo(slug, argv[0])
+        _ato_ef = _ato_efetivo(argv, binario=argv[0])
         r = _serve(r, tool=slug, alca=linha, ident=ident, cauda=_perf["cauda"],
-                   cosmetica=_cosmetica(_perf, argv[1] if len(argv) > 1 else None),
-                   escrita=_escreve(slug, argv[0], argv[1] if len(argv) > 1 else None))
+                   cosmetica=_cosmetica(_perf, _ato_ef),
+                   escrita=_escreve(slug, argv[0], _ato_ef))
         if aviso_dup and isinstance(r, dict):
             _aviso = f"{nome}: primeiro token '{aviso_dup}' desduplicado com aviso"
             r.setdefault("avisos", []).append(_aviso)
@@ -3696,9 +3705,10 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                 r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, _stdin, timeout,
                                                    ident, _prazo_restante(fim), *_ex)
                 _perf = _perfil_verbo(slug, binario)
+                _ato_ef = _ato_efetivo(argv, binario=binario)
                 r = _serve(r, tool=slug, alca=_linha, ident=ident, cauda=_perf["cauda"],
-                           cosmetica=_cosmetica(_perf, _ato_efetivo(argv)),
-                           escrita=_escreve(slug, binario, _ato_efetivo(argv)),
+                           cosmetica=_cosmetica(_perf, _ato_ef),
+                           escrita=_escreve(slug, binario, _ato_ef),
                            esquece=bool(item.get("inteiro")))
                 _audit(tool=slug, ato=_ato or None, args=" ".join(_args)[:CMD_CAP],
                        **_documento_lido(slug, _ato, _args),
@@ -3749,9 +3759,10 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
         # R4: a forma e a cauda saem do cabeçalho DESTE verbo. `descansar` é o caso que
         # nomeia a regra — batia o teto e era cortado só na cabeça, perdendo o veredito.
         _perf = _perfil_verbo(slug, binario)
+        _ato_ef = _ato_efetivo(argv, binario=binario)
         r = _serve(r, tool=slug, alca=linha, ident=ident, cauda=_perf["cauda"],
-                   cosmetica=_cosmetica(_perf, _ato_efetivo(argv)),
-                   escrita=_escreve(slug, binario, _ato_efetivo(argv)),
+                   cosmetica=_cosmetica(_perf, _ato_ef),
+                   escrita=_escreve(slug, binario, _ato_ef),
                    esquece=inteiro)
         _audit(tool=slug, ato=ato or None, args=" ".join(args)[:CMD_CAP],
                **_documento_lido(slug, ato, args),

@@ -125,6 +125,8 @@ def test_quem_escreve_sai_do_cabecalho_do_verbo(tmp_path):
     for ato in ("ler", "listar", "comentarios", "modelo", None):
         assert not s._escreve("tarefas", str(bin_ / "tarefas"), ato), ato
     assert s._escreve("motor", str(bin_ / "motor"), "indexar")
+    for ato_rag in ("trocar", "indexar", "parear", "sortear"):
+        assert s._escreve("motor", str(bin_ / "motor"), s._ato_efetivo(["/bin/motor", "rag", ato_rag])), ato_rag
     assert not s._escreve("motor", str(bin_ / "motor"), "eleger")
     assert not s._escreve("motor", str(bin_ / "motor"), "rag")
     sem = tmp_path / "semdecl"
@@ -430,14 +432,29 @@ def test_eixo_poda_cabecalho_e_argv(tmp_path):
     bin_ = HARNESS_DIR / "bin"
     s._PERFIS.clear()
     motor = s._perfil_verbo("motor", str(bin_ / "motor"))
-    assert motor["poda"] == "cosmetica" and motor["poda_atos"] == ("rag", "casa", "buscar")
+    assert motor["poda"] == "cosmetica" and motor["poda_atos"] == ("casa", "buscar")
     assert s._cosmetica(motor, "casa") and not s._cosmetica(motor, "listar")
     no_ato = s._argv_verbo("bin/motor", "rag", ["buscar", "obra", "pergunta"])
     no_args = s._argv_verbo("bin/motor", "", ["rag", "buscar", "obra", "pergunta"])
     assert no_ato == no_args
-    assert s._ato_efetivo(no_args) == "rag" and s._cosmetica(motor, s._ato_efetivo(no_args))
+    assert s._ato_efetivo(no_args) == "buscar" and s._cosmetica(motor, s._ato_efetivo(no_args))
     assert not s._cosmetica(motor, s._ato_efetivo(s._argv_verbo("bin/motor", "", ["listar"])))
+    assert not s._cosmetica(motor, s._ato_efetivo(s._argv_verbo("bin/motor", "rag", ["consultas"])))
     assert s._ato_efetivo(s._argv_verbo("bin/motor", "", [])) is None
+
+    listagem = "\n".join("abcdefghij"[i % 10] * (i % 7 + 3) + " consulta " + ("z" * 60) for i in range(900))
+    bruto = listagem.encode("utf-8")
+    assert len(bruto) > s.CAP
+    ato_rag = s._ato_efetivo(s._argv_verbo("bin/motor", "rag", ["consultas"]))
+    with _derrame_tmp(), patch.object(s, "_rc", return_value=FakeRedisMemoria()):
+        env = {"exit_code": 0, "stdout": {"texto": listagem, "bytes_total": len(bruto)}}
+        servido = s._serve(
+            env, tool="motor", alca="motor rag consultas", ident={"sessao_id": _UUID_A},
+            cosmetica=s._cosmetica(motor, ato_rag),
+            escrita=s._escreve("motor", str(bin_ / "motor"), ato_rag),
+        )
+    assert servido["stdout"]["truncado"] is True and servido["poda"]["modo"] == "corte"
+    assert Path(servido["stdout"]["cru"]).read_text(encoding="utf-8") == listagem
 
     sint = tmp_path / "sintetico"
     sint.write_text("#!/usr/bin/env python3\n# forma: listagem\n# poda: cosmetica@casa,buscar\n", encoding="utf-8")
