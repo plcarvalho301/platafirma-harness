@@ -150,6 +150,23 @@ def test_story_segue_a_arq_0096():
     assert "CARD_AMBIENTE" in _ids(aps)
 
 
+def test_dt701_story_no_molde_nao_cobra_onde_nem_passos():
+    corpo = (
+        "# Escrever a regra no verbo\n"
+        "#4288 · story · priorizada\n"
+        "Negócio: #10\n"
+        "Referencial: spec x\n"
+        "Raio de ataque: bin/y · muda: z\n"
+        "Comportamento esperado: quando chama, devolve 0\n"
+        "Travas: nenhuma\n"
+        "Ambiente: bancada local\n"
+        "Entrega: ramo main\n"
+        "Aceite: pytest -> 1 passed\n"
+    )
+    aps, *_ = verificar_card_regua("#4288", texto=corpo, lista=LISTA, fecha_existe=False)
+    assert aps == []
+
+
 def test_feature_cita_a_lista_e_a_rev():
     _, chave, rev, _ = verificar_card_regua("#3408", texto=CARD_3408, comentarios="",
                                             lista=LISTA, fecha_existe=True)

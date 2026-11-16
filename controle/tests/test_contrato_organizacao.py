@@ -184,3 +184,24 @@ def test_pre_commit_sem_lista_avisa_e_nao_barra(tmp_path):
     r = _repo_commit(tmp_path, ["demo-org"], servida=False)
     assert r.returncode == 0, r.stderr
     assert "organizacao nao verificada" in r.stderr
+
+
+def test_dt31_ap8_reconhece_compose_e_requirements_sem_readme(tmp_path):
+    wt = tmp_path / "bancada" / "wt" / "demo-org" / "ti" / "fixture"
+    for rel, corpo in {
+        "README.md": "# Demo\n",
+        "chat/docker-compose.yml": "services:\n  app:\n    image: alpine\n",
+        "ops-server/requirements.txt": "fastapi\n",
+    }.items():
+        p = wt / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(corpo, encoding="utf-8")
+    _git(wt, "init", "-q", "-b", "main")
+    _git(wt, "add", "-A")
+    _git(wt, "commit", "-q", "-m", "fixture")
+    env = {"PLATAFIRMA_BANCADA": str(tmp_path / "bancada"), "PF_CADEIRA": "ti",
+           "PF_LINT_ACERVO": _acervo(tmp_path)}
+    r, d = _lint(env, "--todas")
+    assert r.returncode == 1
+    faltando = {a["arquivo"] for a in d["apontamentos"] if a["id"] == "AP8"}
+    assert faltando == {"chat/README.md", "ops-server/README.md"}
