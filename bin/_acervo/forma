@@ -88,8 +88,8 @@ def resolver(consulta, lit, classe=None, suporte=None):
                    "vizinho": " · ".join(f"acervo ler casa forma {s}" for s in perto)}
     forma = linha.get("forma")
     if not forma:
-        return 2, {"erro": f"a classe {classe} ainda não tem forma no catálogo (o gerador não reaplicou o catálogo "
-                           "depois da migração 148)", "vizinho": "acervo gerar --apply"}
+        return 2, {"erro": f"a classe {classe} ainda não tem forma no catálogo (o catálogo velho não muda mais; a "
+                           "forma da classe se lê na Olaria)", "vizinho": "ontologia ler shape " + classe}
     carga = {"classe": linha["classe"], "marca": forma["marca"],
              "genero": forma.get("genero"),
              "shape": {"endereco": linha.get("shape_endereco"), "versao": linha.get("shape_versao"),

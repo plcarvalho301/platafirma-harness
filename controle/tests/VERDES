@@ -135,17 +135,7 @@ tests/test_stack_mascara_segredos.py | bin/_release/**
 tests/test_pesquisar_consultar_palavras.py | bin/pesquisar pesquisa/**
 tests/test_pesquisar_dt_93_546_661_662_663.py | bin/pesquisar pesquisa/**
 tests/test_acervo_psql_c.py | bin/acervo bin/_acervo/**
-# Débito 330 do balde #2856: `acervo medir` roda o instrumento da medida (python -m medida) na bancada de
-# platafirma-conhecimento e diz a primeira linha do relatório; o exportar, de quem ele reusa o módulo, segue com o nome dele.
-tests/test_acervo_medir.py | bin/acervo bin/_acervo/**
-# Débito 340 do balde #2856 (card #3761): `acervo gerar` roda o gerador de ontologia na bancada de platafirma-conhecimento e passa
-# o catalogo.sql ao banco numa transação só (plano seco por padrão); desde a migração 111 só o gerador escreve a linha de entidade.
-tests/test_acervo_gerar.py | bin/acervo bin/_acervo/**
-# Card #4077: chamadas temporarias da story 3972 (dono, 01/11/2026). `acervo gerador` roda o gerador de
-# outros_repos/conhecimento/ontologia na bancada do espelho, sem banco; `motor raciocinador raciocinar` roda o HermiT
-# sobre o modelo com o MIREOT servido e os casos somados (0 fecha, 1 reprova, 5 nao rodou).
-tests/test_acervo_gerador.py | bin/acervo bin/_acervo/**
-tests/test_motor_raciocinador.py | bin/motor bin/_motor/**
+# Card #4313: sairam os testes de `acervo medir`, `acervo gerar`, `acervo gerador` e `motor raciocinador`, com os atos.
 # Card #3761: a ficha da ADR mora na classe decisao; adr segue como nome de entrada e se le na classe nova.
 tests/test_identidade_classe_decisao.py | bin/acervo bin/_acervo/**
 # Card #3761 (comentário #3015): `acervo ler biblioteca objeto` virou `arquivo`; o nome velho recusa com exit 2 e nomeia o novo.

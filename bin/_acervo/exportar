@@ -28,7 +28,7 @@ sys.path.insert(0, str(_ARVORE / "lib"))
 import raizes  # noqa: E402
 
 REPO = "platafirma-conhecimento"
-ATO = "exportar"   # o nome nas mensagens; `acervo medir` reusa este módulo e o troca
+ATO = "exportar"   # o nome nas mensagens
 REG = os.environ.get("PF_MOTOR_REG") or str(_ARVORE / "registro" / "motor-instancias.json")
 CANON_INSTANCIA = "/srv/platafirma/casa/"
 DOCKER_HOST = "unix:///run/user/1001/docker.sock"  # o mesmo do bin/motor

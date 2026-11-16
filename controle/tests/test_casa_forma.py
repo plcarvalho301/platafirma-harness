@@ -52,7 +52,7 @@ def consulta(sql, alvo=None):
         if slug not in CATALOGO:
             return None
         return {"classe": slug, "forma": CATALOGO[slug],
-                "shape_endereco": f"ontologia/shapes/entidade/{slug}.ttl", "shape_versao": SHA}
+                "shape_endereco": f"classe:{slug}", "shape_versao": SHA}
     if "json_agg(slug" in sql:
         return sorted(CATALOGO)
     if "acervo.entidade_suporte" in sql:

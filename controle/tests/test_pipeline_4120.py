@@ -363,11 +363,10 @@ def test_a_ajuda_geral_do_acervo_sai_inteira_e_sem_executar_o_texto_de_uso():
     assert "Retoma: `pipeline --lote <id>`; estado: `pipeline --job <id>`" in r.stderr
     assert "syntax error" not in r.stderr and "command not found" not in r.stderr
     assert "--liberar <sha256|obra>" in r.stderr
-    # as outras duas crases soltas do texto de uso, mais antigas que a 4120: uma rodava `biblioteca objeto` (command not
-    # found) e a outra rodava `motor raciocinador` de verdade a cada pedido de ajuda
+    # a outra crase solta do texto de uso, mais antiga que a 4120, rodava `biblioteca objeto` (command not found); a
+    # que rodava `motor raciocinador` saiu com o ato `acervo gerador` (#4313)
     assert "(antes `biblioteca objeto`: o nome velho recusa" in r.stderr
-    assert "o raciocinador e `motor raciocinador`" in r.stderr
-    assert "nenhum python do rag" not in r.stderr and "uso: motor raciocinador" not in r.stderr
+    assert "motor raciocinador" not in r.stderr and "acervo gerador" not in r.stderr
 
 
 def test_liberar_por_pasta_manda_os_itens_ao_servidor_e_diz_quem_saiu(servidor, tmp_path):
