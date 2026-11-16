@@ -22,14 +22,25 @@ GERADOR = RAIZ / "bin" / "_acervo" / "gerador"
 REPO = "platafirma-casa-espelho"
 
 BRINQUEDO = '''\
+import json
 import sys
 from pathlib import Path
 
-saida = Path(sys.argv[sys.argv.index("--saida") + 1])
+args = sys.argv[1:]
+saida = Path(args[args.index("--saida") + 1])
 saida.mkdir(parents=True, exist_ok=True)
 if %(saida)d == 0:
     (saida / "ddl").mkdir(exist_ok=True)
     (saida / "ddl" / "casa.sql").write_text("CREATE SCHEMA casa;\\n", encoding="utf-8")
+    for solto in ("plataforma.ttl", "gerado.ttl", "catalogo.jsonl", "catalogo.sql", "manifesto.json"):
+        (saida / solto).write_text("solto\\n", encoding="utf-8")
+    (saida / "tabelas").mkdir(exist_ok=True)
+    (saida / "tabelas" / "obra.md").write_text("# obra\\n", encoding="utf-8")
+    if "--migracao" in args:
+        mig = Path(args[args.index("--migracao") + 1])
+        mig.parent.mkdir(parents=True, exist_ok=True)
+        mig.write_text("-- 149\\nCREATE SCHEMA IF NOT EXISTS casa;\\n", encoding="utf-8")
+    (saida / "argv.json").write_text(json.dumps(args), encoding="utf-8")
     print("gerador: versão abc · 2 entidades")
 elif %(saida)d == 1:
     print("gerador: reprova: shapes/entidade/gatilho.ttl: categorias cruzadas", file=sys.stderr)
@@ -135,8 +146,48 @@ def test_duas_bancadas_sem_chave_recusa_e_chave_escolhe(mundo, capsys):
     assert f"bancada: {escolhida}" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("argv", [["--outra"], ["--bancada"], ["--saida", ""], ["--saida", "a", "--saida", "b"],
-                                  ["extra"]])
+def test_repassa_migracao_na_bancada(mundo, capsys):
+    wt = _bancada(mundo["bancada"], "3972-shapes-v8")
+    mig = wt / "outros_repos" / "conhecimento" / "rag" / "db" / "init" / "149_schema_casa.sql"
+    assert _modulo().main(["--migracao", str(mig)]) == 0
+    assert mig.is_file() and "CREATE SCHEMA IF NOT EXISTS casa;" in mig.read_text(encoding="utf-8")
+
+
+def test_migracao_fora_da_bancada_e_da_instancia_recusa(mundo, tmp_path, capsys):
+    _bancada(mundo["bancada"], "3972-shapes-v8")
+    with pytest.raises(SystemExit) as e:
+        _modulo().main(["--migracao", str(tmp_path / "fora.sql")])
+    assert e.value.code == 2 and "fora da bancada" in capsys.readouterr().err
+
+
+def test_arvore_grava_so_ddl_e_migracao_sem_arquivos_soltos(mundo, capsys):
+    wt = _bancada(mundo["bancada"], "3972-shapes-v8")
+    ontologia = wt / "outros_repos" / "conhecimento" / "ontologia"
+    mig = wt / "outros_repos" / "conhecimento" / "rag" / "db" / "init" / "149_schema_casa.sql"
+    assert _modulo().main(["--arvore", "--migracao", str(mig)]) == 0
+    saida = capsys.readouterr().out
+    assert "arvore: ddl/casa.sql" in saida
+    assert (ontologia / "ddl" / "casa.sql").is_file()
+    assert mig.is_file()
+    for solto in ("plataforma.ttl", "gerado.ttl", "catalogo.jsonl", "catalogo.sql", "manifesto.json", "tabelas"):
+        assert not (ontologia / solto).exists()
+
+
+def test_repassa_opcoes_apos_duplo_traco(mundo, capsys):
+    import json
+
+    _bancada(mundo["bancada"], "3972-shapes-v8")
+    pedida = mundo["bancada"] / "rascunho" / "extras"
+    assert _modulo().main(["--saida", str(pedida), "--", "--shapes", "custom"]) == 0
+    argv_gerador = json.loads((pedida / "argv.json").read_text(encoding="utf-8"))
+    assert argv_gerador[-2:] == ["--shapes", "custom"]
+
+
+@pytest.mark.parametrize("argv", [
+    ["--outra"], ["--bancada"], ["--saida", ""], ["--saida", "a", "--saida", "b"],
+    ["--migracao"], ["--migracao", ""], ["--migracao", "a", "--migracao", "b"],
+    ["--arvore", "--arvore"], ["--arvore", "--saida", "a"], ["extra"],
+])
 def test_uso_errado_sai_2(mundo, capsys, argv):
     assert _modulo().main(argv) == 2
     assert capsys.readouterr().err.startswith("uso: acervo gerador")
