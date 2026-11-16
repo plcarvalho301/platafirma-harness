@@ -148,8 +148,7 @@ def test_escrita_repetida_serve_a_confirmacao_inteira_toda_vez(tmp_path):
     }
     esc_editar = s._escreve("tarefas", bin_tarefas, "editar")
     esc_ler = s._escreve("tarefas", bin_tarefas, "ler")
-    with _derrame_tmp(), patch.object(s, "redis") as _rmod:
-        _rmod.Redis = FakeRedisMemoria()
+    with _derrame_tmp(), patch.object(s, "_rc", return_value=FakeRedisMemoria()):
         um = s._serve(dict(r), escrita=esc_editar, **kw)
         dois = s._serve(dict(r), escrita=esc_editar, **kw)
         lido = s._serve(dict(r), escrita=esc_ler, **{**kw, "alca": "tarefas ler 3497"})
@@ -174,9 +173,8 @@ def test_escrita_repetida_serve_a_confirmacao_inteira_toda_vez(tmp_path):
     ), patch.object(
         s, "_run_verbo_blocking", side_effect=lambda *a, **k: dict(r)
     ), patch.object(
-        s, "redis"
-    ) as _rmod2:
-        _rmod2.Redis = FakeRedisMemoria()
+        s, "_rc", return_value=FakeRedisMemoria()
+    ):
         t1 = asyncio.run(tool(ato="editar", args=["3497"]))
         t2 = asyncio.run(tool(ato="editar", args=["3497"]))
     assert t1["stdout"]["texto"] == conf and t2["stdout"]["texto"] == conf

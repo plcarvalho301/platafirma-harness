@@ -122,22 +122,26 @@ def test_registro_ilegivel_deixa_a_porta_sem_verbo_e_sem_abrir_o_bin(tmp_path):
 
 
 def test_audit_tools_carregam_identidade_e_metricas(tmp_path):
-    with patch.object(s, "_audit") as _aud, patch.object(s, "_autoriza", return_value=None):
+    fake_rc = FakeRedisMemoria()
+    with patch.object(s, "_audit") as _aud, patch.object(s, "_autoriza", return_value=None), patch.object(
+        s, "_rc", return_value=fake_rc
+    ):
         asyncio.run(s.malote(command="git status", sessao_id="ensaio-sid-abc"))
     achou_m = [c.kwargs for c in _aud.call_args_list if c.kwargs.get("tool") == "malote"]
     assert achou_m and all(("sessao_id" in kw and "ordem_id" in kw and "cadeira" in kw) for kw in achou_m)
 
     with patch.object(s, "_audit") as _aud, patch.object(s, "_autoriza", return_value=None), patch.object(
-        s, "redis"
-    ) as _rmod, patch.object(_p, "DERRAME", tmp_path):
-        _rmod.Redis = FakeRedisMemoria()
+        s, "_rc", return_value=fake_rc
+    ), patch.object(_p, "DERRAME", tmp_path):
         s.ler_arquivo(caminho=_REQ, sessao_id=_UUID_A)
     achou_l = [c.kwargs for c in _aud.call_args_list if c.kwargs.get("tool") == "ler_arquivo"]
     assert achou_l and all(("sessao_id" in kw and "ordem_id" in kw and "cadeira" in kw) for kw in achou_l)
     assert achou_l[0]["bytes_servidos"] and achou_l[0]["sha"]
 
     alvo = s.TMP_FITA / "_ensaio_write_probe.txt"
-    with patch.object(s, "_audit") as _aud, patch.object(s, "_autoriza", return_value=None):
+    with patch.object(s, "_audit") as _aud, patch.object(s, "_autoriza", return_value=None), patch.object(
+        s, "_rc", return_value=fake_rc
+    ):
         s.write_file(path=str(alvo), content="ensaio\n", sessao_id="ensaio-sid-abc")
     achou_w = [c.kwargs for c in _aud.call_args_list if c.kwargs.get("tool") == "write_file"]
     assert achou_w and all(("sessao_id" in kw and "ordem_id" in kw and "cadeira" in kw) for kw in achou_w)
@@ -187,10 +191,10 @@ def _pacote_falso(sessao_id=None, **extra):
 
 
 def test_sessao_cunhagem_repasse_e_resolucao():
+    fake_rc = FakeRedisMemoria()
     with patch.object(s, "_autoriza", return_value=None), patch.object(
         s, "_montar", side_effect=lambda *a: _pacote_falso(a[4] or None)
-    ), patch.object(s, "redis") as _rmod:
-        _rmod.Redis = FakeRedisMemoria()
+    ), patch.object(s, "_rc", return_value=fake_rc):
         r1 = asyncio.run(s.monta_sessao(cadeira="fabrica", pergunta="oi"))
         sid = r1["sessao_id"]
         r2 = asyncio.run(s.monta_sessao(cadeira="fabrica", sessao_id=sid))
@@ -206,8 +210,7 @@ def test_sessao_cunhagem_repasse_e_resolucao():
 
     with patch.object(s, "_autoriza", return_value=None), patch.object(
         s, "_montar", side_effect=_duble
-    ), patch.object(s, "redis") as _rmod:
-        _rmod.Redis = FakeRedisMemoria()
+    ), patch.object(s, "_rc", return_value=FakeRedisMemoria()):
         asyncio.run(s.monta_sessao(cadeira="fabrica", sessao_id=_UUID_A))
     assert visto["sessao_id"] == _UUID_A
 
@@ -231,8 +234,7 @@ def test_sessao_cunhagem_repasse_e_resolucao():
             "conexao:hdr-abc": _UUID_A,
         }
     )
-    with patch.object(s, "redis") as _rmod:
-        _rmod.Redis = fake_res
+    with patch.object(s, "_rc", return_value=fake_res):
         assert s._sessao_resolve(None)["sessao_id"] == "-"
         out = s._sessao_resolve(_UUID_A)
     assert out["sessao_id"] == _UUID_A and out["cadeira"] == "fabrica"
@@ -293,13 +295,12 @@ def _roda_monta_com_headers(tmp_path, headers, quem, mapa=None):
     ), patch.object(s, "_quem", return_value=quem), patch.object(
         s, "_mapa_azp_superficie", return_value=mapa_dict
     ), patch.object(
-        s, "redis"
-    ) as _rmod, patch.object(
+        s, "_rc", return_value=FakeRedisMemoria()
+    ), patch.object(
         s, "_montar", side_effect=_fake_montar_superficie
     ), patch.dict(
         "os.environ", {"PF_ABERTURA_DIR": str(tmp_path), "PF_SUPERFICIE": "desconhecida"}
     ):
-        _rmod.Redis = FakeRedisMemoria()
         sup = s._superficie()
         r = asyncio.run(s.monta_sessao(cadeira="ia", pergunta="oi"))
     return sup, next(x for x in r["pecas"] if x["peca"] == "persona")
@@ -309,10 +310,11 @@ def test_superficie_resolucao_e_ponteiros(tmp_path):
     ab_ia = tmp_path / "current" / "abertura" / "ia"
     ab_ia.mkdir(parents=True)
     for rel, txt in (
-        ("dono.md", "CONDUTA FAKE"),
-        ("ia/persona.md", "PERSONA FAKE"),
+        ("abertura/dono.md", "CONDUTA FAKE"),
+        ("abertura/ia/persona.md", "PERSONA FAKE"),
+        ("MANIFEST.json", '{"ref": "fake", "sha": "fake", "publicado_em": "agora"}'),
     ):
-        (tmp_path / "current" / "abertura" / rel).write_text(txt, encoding="utf-8")
+        (tmp_path / "current" / rel).write_text(txt, encoding="utf-8")
     sha_persona = s._poda.sha_servido("PERSONA FAKE")
 
     sup1, p1 = _roda_monta_com_headers(

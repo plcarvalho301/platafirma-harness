@@ -54,6 +54,7 @@ import tempfile
 import sys
 import threading
 import time
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -170,11 +171,33 @@ def _reidratar_porta(sid: str) -> dict | None:
         return None
 
 
-def _rc():
-    """Cliente do msg-mem. Uma funcao, nao um cliente por chamador: connect_timeout
-    curto porque banco mudo nunca pode segurar a porta."""
-    return redis.Redis(host=MEM_REDIS_HOST, port=MEM_REDIS_PORT, decode_responses=True,
-                       socket_connect_timeout=2, socket_timeout=3)
+_rc_instancia: redis.Redis | None = None
+_rc_alvo: tuple[str, int] | None = None
+
+
+def _rc() -> redis.Redis:
+    """Cliente do msg-mem compartilhado por processo (DT 730): criado uma vez com pool unico e
+    fechado no fim do ciclo de vida ASGI; connect_timeout curto porque banco mudo nunca pode
+    segurar a porta."""
+    global _rc_instancia, _rc_alvo
+    alvo = (MEM_REDIS_HOST, MEM_REDIS_PORT)
+    if _rc_instancia is None or _rc_alvo != alvo:
+        _fecha_rc()
+        _rc_instancia = redis.Redis(host=MEM_REDIS_HOST, port=MEM_REDIS_PORT, decode_responses=True,
+                                    socket_connect_timeout=2, socket_timeout=3)
+        _rc_alvo = alvo
+    return _rc_instancia
+
+
+def _fecha_rc() -> None:
+    """Fecha o cliente e o pool compartilhado do msg-mem no encerramento ASGI."""
+    global _rc_instancia, _rc_alvo
+    rc, _rc_instancia, _rc_alvo = _rc_instancia, None, None
+    if rc is not None:
+        try:
+            rc.close()
+        except Exception:                                   # noqa: BLE001
+            pass
 
 
 def _uuid_valido(bruto: str) -> str | None:
@@ -211,12 +234,6 @@ def _extrai_sessao_id(texto: str) -> str | None:
     return None
 
 
-# --- helpers puros ---
-def _cap(raw: bytes) -> dict:
-    return {"texto": raw.decode("utf-8", "replace"),
-            "truncado": len(raw) > CAP, "bytes_total": len(raw)}
-
-
 # --- PODA (arq:0101 §3) — a régua mora em poda.py; aqui fica só a costura ------
 # `PF_PODA=0` + restart reverte tudo abaixo sem tocar banco, ADR nem catálogo: é a
 # reversão declarada da ADR, e por isso é lida em runtime, não capturada na subida.
@@ -225,6 +242,40 @@ if str(Path(__file__).resolve().parent) not in sys.path:
 import poda as _poda                                          # noqa: E402
 import lote as _lote                                          # noqa: E402  (card:3149 passo 7)
 import leitura as _leitura                                    # noqa: E402  (card:3263)
+
+
+# --- helpers puros ---
+def _cap(raw: bytes, *, sessao_id: str = "-", nome: str = "") -> dict:
+    texto = raw.decode("utf-8", "replace")
+    if len(raw) <= CAP:
+        return {"texto": texto, "truncado": False, "bytes_total": len(raw)}
+    cru = _poda.derrama(sessao_id, nome or f"cap-{uuid.uuid4().hex[:8]}.txt", texto)
+    out = {"texto": raw[:CAP].decode("utf-8", "replace"), "truncado": True, "bytes_total": len(raw)}
+    if cru:
+        out["cru"] = cru
+    return out
+
+
+def _normaliza_canal_teto(alvo: dict, sessao_id: str, nome: str) -> dict:
+    texto = alvo.get("texto")
+    if not isinstance(texto, str):
+        return alvo
+    bruto = texto.encode("utf-8", "replace")
+    if len(bruto) > CAP:
+        cru = alvo.get("cru") or _poda.derrama(sessao_id, nome, texto)
+        novo = {
+            **alvo,
+            "texto": bruto[:CAP].decode("utf-8", "replace"),
+            "truncado": True,
+            "bytes_total": max(int(alvo.get("bytes_total") or 0), len(bruto)),
+        }
+        if cru:
+            novo["cru"] = cru
+        return novo
+    ja_cortado = bool(alvo.get("cru")) and int(alvo.get("bytes_total") or 0) > len(bruto)
+    if "truncado" in alvo and alvo["truncado"] != ja_cortado:
+        return {**alvo, "truncado": ja_cortado}
+    return alvo
 
 _envelope_erro = _leitura.envelope_erro
 
@@ -371,9 +422,15 @@ def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
     `escrita` é o ato que o cabeçalho do verbo declara como escrita (`_escreve`): lava e
     corta igual, mas não passa pelo ledger — a confirmação sai sempre (#3503).
     """
-    if not isinstance(r, dict) or not _poda_ligada() or _poda.intocavel(r):
+    if not isinstance(r, dict):
         return r
-    sessao_id = ident.get("sessao_id") or "-"
+    sessao_id = (ident or {}).get("sessao_id") or "-"
+    if isinstance(r.get("stderr"), dict):
+        r["stderr"] = _normaliza_canal_teto(r["stderr"], sessao_id, f"{tool}-{uuid.uuid4().hex[:8]}-stderr.txt")
+    if not _poda_ligada() or _poda.intocavel(r):
+        if isinstance(r.get("stdout"), dict):
+            r["stdout"] = _normaliza_canal_teto(r["stdout"], sessao_id, f"{tool}-{uuid.uuid4().hex[:8]}-stdout.txt")
+        return r
     try:
         ledger = _poda.Ledger(_rc(), sessao_id, TTL_SESSAO_S)
         if esquece:
@@ -387,6 +444,15 @@ def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
         texto = (alvo or {}).get(sub) if sub else alvo
         if not isinstance(texto, str) or not texto:
             continue
+        cru_previo = alvo.get("cru") if (sub and isinstance(alvo, dict)) else None
+        if cru_previo and alvo.get("truncado"):
+            try:
+                p_previo = Path(cru_previo)
+                if p_previo.is_file():
+                    texto = p_previo.read_text(encoding="utf-8", errors="replace")
+                    p_previo.unlink(missing_ok=True)
+            except OSError:
+                pass
         # A leitura de arquivo nunca se corta pelo teto: a página já vem limitada por
         # `max_bytes`, e cortar quebraria a soma das páginas (spec ler-arquivo §6).
         cap_efetivo = (max(CAP, len(texto.encode("utf-8", "replace")))
@@ -402,7 +468,15 @@ def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
             preserva_branco=_leitura_codigo,
             nome_derrame=f"g{giro:05d}-{campo}.txt")
         if sub:
-            r[campo] = {**alvo, sub: servido}
+            novo_alvo = {k: v for k, v in alvo.items() if k != "cru"}
+            novo_alvo[sub] = servido
+            cortou = bool(meta.get("modo") == "corte")
+            if "truncado" in novo_alvo or cortou:
+                novo_alvo["truncado"] = cortou
+            cru_final = meta.get("alca") or meta.get("cru")
+            if cru_final:
+                novo_alvo["cru"] = cru_final
+            r[campo] = novo_alvo
         else:
             r[campo] = servido
         metas.append(meta)
@@ -813,13 +887,12 @@ def _superficie() -> str:
     return os.environ.get("PF_SUPERFICIE", "desconhecida")
 
 
-# GUARDA DE REENTRANCIA explicita (#2481, Onda 2). O ciclo `_audit`->`_quem`->
-# `_sujeito_do_jwt`->(recusa) `auditor=_audit` derrubava o servidor em todo
-# Bearer malformado (RecursionError, 25/08). Aqui `tool=="-"` ja evita resolver
-# identidade na recusa, mas 'acidente de formato nao e controle' (caderno iam 25/08):
-# a guarda torna o ciclo impossivel mesmo que um chamador futuro audite a recusa com
-# tool real.
-_em_audit = False
+# GUARDA DE REENTRANCIA explicita (#2481, Onda 2; DT 724: ContextVar por tarefa/fio).
+# O ciclo `_audit`->`_quem`->`_sujeito_do_jwt`->(recusa) `auditor=_audit` derrubava o
+# servidor em todo Bearer malformado (RecursionError, 25/08). Com ContextVar a trava
+# isola apenas a recursão na mesma linha de execução, sem suprimir `_quem()` em chamadas
+# concorrentes no pool do anyio ou em ThreadPoolExecutor.
+_em_audit: ContextVar[bool] = ContextVar("_em_audit", default=False)
 
 
 # Ligacao filha->mae (card #3158): `sessao abrir --origem` grava `origem_sessao` na chave viva e o
@@ -911,17 +984,60 @@ def _carimbos_de(sessao_id) -> dict:
     return c
 
 
+def _atualiza_sessao_valkey(sessao_id: str, mutar, *, tentativas: int = 8,
+                            levantar: bool = False) -> bool:
+    """DT 725: leitura-mudança-escrita atômica em `sessao:{id}` via WATCH/MULTI/EXEC com retry,
+    mantendo o formato JSON que `bin/sessao` lê e preservando o prazo de expiração (`keepttl`)."""
+    if not sessao_id or sessao_id == "-":
+        return False
+    chave = f"sessao:{sessao_id}"
+    try:
+        rc = _rc()
+        for _ in range(max(1, tentativas)):
+            pipe = rc.pipeline()
+            try:
+                pipe.watch(chave)
+                raw = pipe.get(chave)
+                if not isinstance(raw, (str, bytes, bytearray)) and raw is not None:
+                    pipe.reset()
+                    raw = rc.get(chave)
+                    dados = json.loads(raw) if raw else None
+                    if not isinstance(dados, dict):
+                        return False
+                    mutar(dados)
+                    rc.set(chave, json.dumps(dados, ensure_ascii=False), keepttl=True)
+                    return True
+                dados = json.loads(raw) if raw else None
+                if not isinstance(dados, dict):
+                    pipe.unwatch()
+                    return False
+                mutar(dados)
+                novo = json.dumps(dados, ensure_ascii=False)
+                pipe.multi()
+                pipe.set(chave, novo, keepttl=True)
+                res = pipe.execute()
+                if res is None:
+                    continue
+                return True
+            except redis.WatchError:
+                continue
+            finally:
+                try:
+                    pipe.reset()
+                except Exception:                           # noqa: BLE001
+                    pass
+    except Exception:                                       # noqa: BLE001
+        if levantar:
+            raise
+    return False
+
+
 def _guarda_carimbo(sessao_id, **campos) -> None:
     _carimbos_de(sessao_id).update(campos)
-    try:
-        chave = f"sessao:{sessao_id}"
-        raw = _rc().get(chave)
-        d = json.loads(raw) if raw else None
-        if isinstance(d, dict):
-            d.update({_CARIMBO_CHAVE[k]: v for k, v in campos.items()})
-            _rc().set(chave, json.dumps(d, ensure_ascii=False), keepttl=True)
-    except Exception:                                       # noqa: BLE001
-        pass
+    _atualiza_sessao_valkey(
+        sessao_id,
+        lambda d: d.update({_CARIMBO_CHAVE[k]: v for k, v in campos.items()}),
+    )
 
 
 def _carimbos_do_giro(reg: dict) -> dict:
@@ -1128,12 +1244,7 @@ def _chapeu_do_giro(slug: str, ato, args, r, ident: dict) -> None:
     if isinstance(ident, dict):
         ident["chapeu"] = chapeu
     try:
-        chave = f"sessao:{sid}"
-        raw = _rc().get(chave)
-        dados = json.loads(raw) if raw else None
-        if isinstance(dados, dict):
-            dados["chapeu"] = chapeu
-            _rc().set(chave, json.dumps(dados, ensure_ascii=False), keepttl=True)
+        _atualiza_sessao_valkey(sid, lambda dados: dados.__setitem__("chapeu", chapeu), levantar=True)
     except Exception as e:
         print(f"[valkey] gravacao chapeu giro sessao:{sid} falhou: {e!r}", file=sys.stderr, flush=True)
 
@@ -1150,18 +1261,20 @@ def _documento_lido(slug, ato, args):
     return {}
 
 
-def _audit(**campos) -> None:
+def _audit(_ident_jwt: dict | None = None, **campos) -> None:
     """Grava uma linha JSONL de auditoria. Nunca derruba a operação — mas falha de
     auditoria vai para o stderr (journal), porque auditoria que falha em silêncio é
     pior que auditoria ausente: a ausência pelo menos é visível."""
     try:
-        global _em_audit
-        if campos.get("tool", "-") != "-" and not _em_audit:
-            _em_audit = True
+        ident_arg = _ident_jwt if _ident_jwt is not None else campos.pop("_ident_quem", None)
+        if isinstance(ident_arg, dict):
+            ident = dict(ident_arg)
+        elif campos.get("tool", "-") != "-" and not _em_audit.get():
+            tok = _em_audit.set(True)
             try:
                 ident = _quem()
             finally:
-                _em_audit = False
+                _em_audit.reset(tok)
         else:
             ident = {}
         reg = {"ts": datetime.now().astimezone().isoformat(timespec="milliseconds"),
@@ -1215,18 +1328,26 @@ def _declara_exit(slug) -> bool:
 
 
 def _quem() -> dict:
-    """Identidade de quem chamou, do ponto de vista de DENTRO da tool.
+    """Identidade de quem chamou, do ponto de vista de DENTRO da tool (DT 731).
 
-    O contextvar setado no middleware não propaga até aqui (mesma razão de
-    `_sessao_atual`), então o caminho honesto é reler o header do request que o FastMCP
-    carrega no seu próprio contexto e revalidar. O JWKS está em cache: custa uma
-    verificação de assinatura, não uma ida à rede."""
+    Lê `request.state.ident` gravado uma vez por requisição pelo `BearerAuth` no Request
+    que o FastMCP carrega no seu próprio contexto. Se a chamada não passou pelo middleware
+    (ex.: ensaio/teste direto), valida o header e memoriza em `req.state.ident`."""
     try:
         req = getattr(mcp.get_context().request_context, "request", None)
         if req is not None:
+            st = getattr(req, "state", None)
+            guardada = getattr(st, "ident", None) if st is not None else None
+            if isinstance(guardada, dict):
+                return dict(guardada)
             header = req.headers.get("authorization", "")
             ident = _sujeito_do_jwt(header, auditor=_audit, jwks_url=OIDC_JWKS_URL,
                                     audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER)
+            if st is not None:
+                try:
+                    st.ident = dict(ident)
+                except Exception:                           # noqa: BLE001
+                    pass
             return ident
     except Exception:                                       # noqa: BLE001
         pass
@@ -1394,8 +1515,11 @@ def _run_blocking(command: str, d: Path, timeout: int, sessao_id: str = "-", oid
             erro=f"timeout ({timeout}s) — grupo de processo morto",
             cwd=str(d),
         )
-    return {"exit_code": p.returncode, "stdout": _cap(stdout),
-            "stderr": _cap(stderr), "cwd": str(d)}
+    cid = uuid.uuid4().hex[:8]
+    return {"exit_code": p.returncode,
+            "stdout": _cap(stdout, sessao_id=sessao_id, nome=f"run-{cid}-stdout.txt"),
+            "stderr": _cap(stderr, sessao_id=sessao_id, nome=f"run-{cid}-stderr.txt"),
+            "cwd": str(d)}
 
 
 PF_RUN_SO_VERBO = os.environ.get("PF_RUN_SO_VERBO", "1") != "0"
@@ -1738,7 +1862,13 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
         r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident,
                                            _prazo_restante(fim), *_ex)
         so = r.get("stdout")
-        brutos.append(so.get("texto", "") if isinstance(so, dict) else "")
+        if isinstance(so, dict) and so.get("cru") and so.get("truncado"):
+            try:
+                brutos.append(Path(so["cru"]).read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                brutos.append(so.get("texto", ""))
+        else:
+            brutos.append(so.get("texto", "") if isinstance(so, dict) else "")
         stdins_resolvidos.append(stdin if isinstance(stdin, str) else ("" if stdin is None else str(stdin)))
         _perf = _perfil_verbo(slug, argv[0])
         r = _serve(r, tool=slug, alca=linha, ident=ident, cauda=_perf["cauda"],
@@ -3175,17 +3305,15 @@ def _montar(cadeira: str, atualizar: bool = True, chapeu: str = "", pergunta: st
     eh_fallback = (via == "fallback")
     chapeu_resolvido = exp_json.get("chapeu")
     if sid:
+        def _muta_abertura(dados: dict) -> None:
+            dados["fallback"] = eh_fallback
+            if chapeu_resolvido:
+                dados["chapeu"] = chapeu_resolvido
+            else:
+                dados.pop("chapeu", None)
+
         try:
-            chave = f"sessao:{sid}"
-            raw = _rc().get(chave)
-            dados = json.loads(raw) if raw else None
-            if isinstance(dados, dict):
-                dados["fallback"] = eh_fallback
-                if chapeu_resolvido:
-                    dados["chapeu"] = chapeu_resolvido
-                else:
-                    dados.pop("chapeu", None)
-                _rc().set(chave, json.dumps(dados, ensure_ascii=False), keepttl=True)
+            _atualiza_sessao_valkey(sid, _muta_abertura, levantar=True)
         except Exception as e:
             print(f"[valkey] gravacao chapeu sessao:{sid} falhou: {e!r}", file=sys.stderr, flush=True)
 
@@ -3475,7 +3603,7 @@ def _chave_da_chamada(stdin: str | None, ident: dict) -> str:
 
 
 def _segue_apos_prazo(p: subprocess.Popen, argv: list, timeout: int, t0: float, ident: dict,
-                      d_cwd: Path, chave: str = "") -> dict:
+                      d_cwd: Path, chave: str = "", quem: dict | None = None) -> dict:
     """O verbo passou do prazo da chamada: segue rodando, e esta chamada devolve onde o
     retorno final vai estar. Quem espera e uma thread daemon, fora do limitador do anyio."""
     rid = uuid.uuid4().hex[:12]
@@ -3486,12 +3614,23 @@ def _segue_apos_prazo(p: subprocess.Popen, argv: list, timeout: int, t0: float, 
     base = {"id": rid, "verbo": linha, "chave": chave, "inicio": inicio, "timeout": timeout,
             "cwd": str(d_cwd)}
     _grava_resultado(caminho, {"em_andamento": True, **base, "pid": p.pid})
+    sid = (ident or {}).get("sessao_id") or "-"
+    if isinstance(quem, dict):
+        quem_fio = dict(quem)
+    else:
+        quem_fio = {k: v for k, v in (ident or {}).items()
+                    if k in ("sujeito", "sub", "username", "azp", "sid", "jti") and v}
+        quem_fio.update(_quem())
 
-    def _espera():
+    def _espera(quem_resolvido: dict | None = None):
         try:
             # retry de communicate nao perde saida; input so na primeira chamada
             so, se = p.communicate(timeout=max(1.0, timeout - (time.monotonic() - t0)))
-            r = {"exit_code": p.returncode, "stdout": _cap(so), "stderr": _cap(se)}
+            r = {
+                "exit_code": p.returncode,
+                "stdout": _cap(so, sessao_id=sid, nome=f"prazo-{rid}-stdout.txt"),
+                "stderr": _cap(se, sessao_id=sid, nome=f"prazo-{rid}-stderr.txt"),
+            }
             if p.returncode in (-15, 143) or p.returncode == -signal.SIGTERM:
                 r["interrompido"] = True
                 r["motivo"] = ("a porta reiniciou durante a execução (SIGTERM); o ato pode ter sido "
@@ -3516,13 +3655,14 @@ def _segue_apos_prazo(p: subprocess.Popen, argv: list, timeout: int, t0: float, 
             )
         dur_ms = round((time.monotonic() - t0) * 1000)
         _grava_resultado(caminho, {**base, "dur_ms": dur_ms, **r, "cwd": str(d_cwd)})
-        _audit(tool=slug, evento="verbo_concluido_apos_prazo", id=rid,
+        _audit(_ident_jwt=quem_resolvido, tool=slug, evento="verbo_concluido_apos_prazo", id=rid,
                ato=argv[1] if len(argv) > 1 else None, args=" ".join(map(str, argv[2:]))[:CMD_CAP],
+               **(quem_resolvido or {}),
                cadeira=ident.get("cadeira") or None, sessao_id=ident.get("sessao_id"),
                ordem_id=ident.get("ordem_id"), exit_code=r.get("exit_code"), erro=r.get("erro"),
                dur_ms=dur_ms)
 
-    threading.Thread(target=_espera, name=f"prazo-{rid}", daemon=True).start()
+    threading.Thread(target=_espera, args=(quem_fio,), name=f"prazo-{rid}", daemon=True).start()
     return {"em_andamento": True, "id": rid, "resultado": str(caminho),
             "motivo": (f"em andamento: {slug} passou do prazo da chamada e segue no host ate "
                        f"{timeout}s; o retorno final sera gravado em {caminho}"),
@@ -3614,7 +3754,8 @@ def _busca_em_andamento(linha: str, d_cwd: Path, chave: str = "") -> tuple[Path,
 
 
 def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: int, ident: dict,
-                        prazo: float | None = None, fundamento: str | None = None) -> dict:
+                        prazo: float | None = None, fundamento: str | None = None,
+                        quem: dict | None = None) -> dict:
     """`prazo`: segundos ate a chamada devolver em_andamento (#3249); None = sem prazo.
     `fundamento` (#3513): o texto do dono que a face mandou; vira `PF_FUNDAMENTO` no verbo."""
     timeout = _timeout_com_piso(argv, timeout)
@@ -3695,7 +3836,7 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
                                        timeout=espera)
     except subprocess.TimeoutExpired:
         if espera < timeout:
-            return _segue_apos_prazo(p, argv, timeout, t0, ident, d_cwd, chave)
+            return _segue_apos_prazo(p, argv, timeout, t0, ident, d_cwd, chave, quem=quem)
         try:
             os.killpg(os.getpgid(p.pid), signal.SIGKILL)
         except ProcessLookupError:
@@ -3708,18 +3849,22 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
             erro=f"timeout ({timeout}s) — grupo de processo morto",
             cwd=str(d_cwd),
         )
+    sid = (ident or {}).get("sessao_id") or "-"
+    cid = uuid.uuid4().hex[:8]
+    so_cap = _cap(stdout, sessao_id=sid, nome=f"{slug}-{cid}-stdout.txt")
+    se_cap = _cap(stderr, sessao_id=sid, nome=f"{slug}-{cid}-stderr.txt")
     if p.returncode in (-15, 143) or p.returncode == -signal.SIGTERM:
         return {
             "exit_code": p.returncode,
             "interrompido": True,
             "motivo": ("a porta reiniciou durante a execução (SIGTERM); o ato pode ter sido "
                        "feito em parte — confira o efeito antes de repetir (repetir é seguro)"),
-            "stdout": _cap(stdout),
-            "stderr": _cap(stderr),
+            "stdout": so_cap,
+            "stderr": se_cap,
             "cwd": str(d_cwd),
         }
-    return {"exit_code": p.returncode, "stdout": _cap(stdout),
-            "stderr": _cap(stderr), "cwd": str(d_cwd)}
+    return {"exit_code": p.returncode, "stdout": so_cap,
+            "stderr": se_cap, "cwd": str(d_cwd)}
 
 
 def _faz_tool_verbo(slug: str, binario: str, descricao: str):
@@ -4142,6 +4287,7 @@ class BearerAuth(BaseHTTPMiddleware):
                 headers={"WWW-Authenticate": 'Bearer resource_metadata='
                          f'"{OPS_RESOURCE}/.well-known/oauth-protected-resource"'})
 
+        request.state.ident = dict(ident)
         _sessao.set(request.headers.get("mcp-session-id", "-"))
         _audit(tool="-", evento="http_req", path=request.url.path, via=via, **ident,
                mcp_session=request.headers.get("mcp-session-id", "-"))
@@ -4207,10 +4353,20 @@ async def _token(req):
 # mesa e o auto-relato do giro.
 
 def _ident_req(req) -> dict:
-    """Mesma cadeia do middleware: so o JWT do realm."""
+    """Mesma cadeia do middleware: lê `request.state.ident` já validado pelo `BearerAuth`."""
+    st = getattr(req, "state", None)
+    guardada = getattr(st, "ident", None) if st is not None else None
+    if isinstance(guardada, dict):
+        return dict(guardada)
     header = req.headers.get("authorization", "")
-    return _sujeito_do_jwt(header, auditor=_audit, jwks_url=OIDC_JWKS_URL,
-                           audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER)
+    ident = _sujeito_do_jwt(header, auditor=_audit, jwks_url=OIDC_JWKS_URL,
+                            audience=OIDC_AUDIENCE, issuer=OIDC_ISSUER)
+    if st is not None:
+        try:
+            st.ident = dict(ident)
+        except Exception:                               # noqa: BLE001
+            pass
+    return ident
 
 
 async def _sessao_encerrar(req):
@@ -4283,7 +4439,22 @@ async def _mcp_get_recusa(_req):
                         headers={"Allow": "POST, DELETE"})
 
 
+def _envolve_lifespan(lifespan_original):
+    @asynccontextmanager
+    async def _lifespan(app_):
+        try:
+            if lifespan_original is not None:
+                async with lifespan_original(app_) as estado:
+                    yield estado
+            else:
+                yield
+        finally:
+            _fecha_rc()
+    return _lifespan
+
+
 app = mcp.streamable_http_app()
+app.router.lifespan_context = _envolve_lifespan(app.router.lifespan_context)
 app.router.routes.insert(0, Route("/mcp", _mcp_get_recusa, methods=["GET"]))
 app.router.routes.append(Route("/health", _health))
 app.router.routes.append(Route("/.well-known/oauth-authorization-server", _as_metadata))
