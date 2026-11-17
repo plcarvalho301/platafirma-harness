@@ -15,6 +15,9 @@ PF_VENV_PREFIXO="${PF_VENV_PREFIXO:-release}"
 
 sha256_de() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
 
+# [ -w ] retorna verdadeiro sob uid 0 mesmo sem bit de escrita; checar os bits via stat (DT-696)
+_dir_gravavel() { (( (8#$(stat -c '%a' "$1") & 8#222) != 0 )); }
+
 # $1=familia $2=arvore $3=registro terceiros.json $4=cache (dir por sha256)
 # 0 ok (ou nada declarado), 3 dependência ausente, 4 conteúdo fora do pino, 5 não pôs
 materializar_terceiros_em() {
@@ -67,13 +70,13 @@ materializar_terceiros_em() {
     local -a partes
     IFS='/' read -ra partes <<<"$(dirname "$destino")"
     # só fecha de novo o que estava fechado: bancada gravável continua gravável
-    [ -w "$d" ] || { chmod u+w "$d"; fechar+=("$d"); }
+    _dir_gravavel "$d" || { chmod u+w "$d"; fechar+=("$d"); }
     abertos+=("$d")
     for parte in "${partes[@]}"; do
       [ -n "$parte" ] && [ "$parte" != "." ] || continue
       d="$d/$parte"
       if [ -d "$d" ]; then
-        [ -w "$d" ] || { chmod u+w "$d"; fechar+=("$d"); }
+        _dir_gravavel "$d" || { chmod u+w "$d"; fechar+=("$d"); }
       else
         mkdir "$d"
         [ "${#fechar[@]}" -eq 0 ] || fechar+=("$d")
