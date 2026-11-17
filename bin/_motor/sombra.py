@@ -62,13 +62,21 @@ from pgvector.psycopg import register_vector  # noqa: E402
 
 DEV = "cuda" if torch.cuda.is_available() else "cpu"
 
+def _lado_da_pergunta(c):
+    """O que vai antes da pergunta, como o servido o monta (`motor_acervo/ingestao/embedding.py`, `_instructed`):
+    com instrução declarada, «Instruct: <instrução>\nQuery: » e o prefixo não entra; sem ela, o prefixo literal.
+    Sem isto, candidato treinado com instrução se mediria sem ela, e perderia por isso."""
+    instrucao = c.get("instrucao_da_pergunta") or ""
+    return f"Instruct: {instrucao}\nQuery: " if instrucao else c["prefixo_da_pergunta"]
+
+
 def candidatos():
     """Os embedders que o bench-sombra pode medir: todo embedder declarado no golden record
     (`motor_acervo/config/embedders.toml`, #3946). Acrescentar candidato é declarar a entrada lá, não editar
     este arquivo."""
     from motor_acervo.config import embedders
     return {
-        nome: {"curto": c["rotulo"], "q": c["prefixo_da_pergunta"], "p": c["prefixo_do_trecho"],
+        nome: {"curto": c["rotulo"], "q": _lado_da_pergunta(c), "p": c["prefixo_do_trecho"],
                "dims": list(c["dimensoes"]), "dtype": c["dtype"], "trust": c["trust_remote_code"],
                "attn": c["attn_implementation"], "max_seq": c["max_seq_length"]}
         for nome, c in embedders.declarados().items()
