@@ -108,10 +108,15 @@ def liberar(corpo: dict) -> dict:
     return chamar("POST", "/acervo/jobs/liberar", corpo)
 
 
-def curar_indicacoes(lote_id: str | None, aplicar: bool, termos: list[str] | None = None) -> dict:
+def curar_indicacoes(lote_id: str | None, aplicar: bool, termos: list[str] | None = None,
+                     descartar: list[str] | None = None, autor: str | None = None) -> dict:
     corpo = {"lote_id": lote_id, "aplicar": bool(aplicar)}
     if termos:
         corpo["termos"] = termos
+    if descartar:
+        corpo["descartar"] = descartar
+    if autor:
+        corpo["autor"] = autor
     return chamar("POST", "/acervo/indicacoes", corpo)
 
 
