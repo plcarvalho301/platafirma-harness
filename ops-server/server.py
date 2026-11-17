@@ -338,8 +338,9 @@ SO_LE = "sim — só lê"
 
 
 def _atos_que_escrevem(slug: str, binario: str) -> frozenset:
-    if slug in _ESCREVEM:
-        return _ESCREVEM[slug]
+    chave = (slug, binario)
+    if chave in _ESCREVEM:
+        return _ESCREVEM[chave]
     escrevem = set()
     try:
         with open(binario, encoding="utf-8", errors="replace") as fh:
@@ -353,9 +354,10 @@ def _atos_que_escrevem(slug: str, binario: str) -> frozenset:
                     escrevem.update(a for a, acao in _RE_ATO_PAR.findall(ln)
                                     if "escrita" in acao)
     except OSError:
-        pass
-    _ESCREVEM[slug] = frozenset(escrevem)
-    return _ESCREVEM[slug]
+        return frozenset()
+    _ESCREVEM[chave] = frozenset(escrevem)
+    _ESCREVEM[slug] = _ESCREVEM[chave]
+    return _ESCREVEM[chave]
 
 
 def _escreve(slug: str, binario: str, ato: str | None) -> bool:
