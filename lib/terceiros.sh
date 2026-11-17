@@ -15,7 +15,7 @@ PF_VENV_PREFIXO="${PF_VENV_PREFIXO:-release}"
 
 sha256_de() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
 
-# [ -w ] retorna verdadeiro sob uid 0 mesmo sem bit de escrita; checar os bits via stat (DT-696)
+# [ -w ] retorna verdadeiro sob uid 0 mesmo sem bit de escrita; checar os bits de modo via stat (DT-696)
 _dir_gravavel() { (( (8#$(stat -c '%a' "$1") & 8#222) != 0 )); }
 
 # $1=familia $2=arvore $3=registro terceiros.json $4=cache (dir por sha256)
