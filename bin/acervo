@@ -4,7 +4,7 @@
 # dono: dados
 # classe: B
 # use para: incorporar item, «põe essa obra no acervo», «ingere o repo de docs»; classificar item, «cataloga essa obra», «de que domínio ela é?»; definir e relacionar conceitos no tesauro, «o que é o conceito X?», «como X se liga a Y?»; selar impressão, pôr item em serviço, retirar e restaurar item; abrir obra ou documento que já se sabe qual é, ou que a busca achou, «abre a ADR 97»; publicar página de wiki
-# atos: pipeline (escrita, incorporacao), ler (leitura, casa), listar (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), empacotar (leitura, classificacao), espelhar (escrita, transcricao), recortar (escrita, transcricao), promover (escrita, transcricao), julgar (escrita, transcricao), converter (escrita, transcricao), recolher (escrita, transcricao), repor (escrita, transcricao), retirar (escrita, retirada), restaurar (escrita, retirada), apagar (escrita, retirada), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo)
+# atos: pipeline (escrita, incorporacao), ler (leitura, casa), listar (leitura, casa), escrever (escrita, registro), ingerir (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao), definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita, tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao), empacotar (leitura, classificacao), espelhar (escrita, transcricao), recortar (escrita, transcricao), promover (escrita, transcricao), julgar (escrita, transcricao), converter (escrita, transcricao), recolher (escrita, transcricao), repor (escrita, transcricao), retirar (escrita, retirada), restaurar (escrita, retirada), apagar (escrita, retirada), extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), balde (escrita, acervo), criar (escrita, tesauro), trocar (escrita, tesauro), renomear (escrita, tesauro), admitir (escrita, curadoria), descartar (escrita, curadoria), ensaiar (leitura, tesauro)
 # forma: texto
 # poda: cosmetica@psql
 # le: pipeline=repo,acervo.obra
@@ -34,6 +34,12 @@
 # le: exportar=acervo.*,repo
 # le: psql=acervo.*
 # le: balde=acervo.*,minio
+# le: criar=acervo.obra
+# le: trocar=acervo.obra
+# le: renomear=acervo.obra
+# le: admitir=acervo.obra
+# le: descartar=acervo.obra
+# le: ensaiar=acervo.obra
 # escreve: pipeline=acervo.obra,acervo.registro,motor
 # escreve: ler=nada
 # escreve: listar=acervo.obra
@@ -61,6 +67,12 @@
 # escreve: exportar=repo
 # escreve: psql=acervo.*
 # escreve: balde=acervo.obra,minio
+# escreve: criar=acervo.obra
+# escreve: trocar=acervo.obra
+# escreve: renomear=acervo.obra
+# escreve: admitir=acervo.obra
+# escreve: descartar=acervo.obra
+# escreve: ensaiar=nada
 # rotulo: retirar=Retirar
 # rotulo: restaurar=Restaurar
 # rotulo: apagar=Apagar
@@ -142,7 +154,16 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo pipeline <pasta>|--lote <id>|--job <id> --liberar <sha256|obra> [...]   solta a obra estacionada (duplicata provavel) que o
                   dono liberou; o job retoma de onde parou. Quem nao se liberta, se retira: acervo retirar biblioteca obra
   acervo catalogar biblioteca obra --job <id> [--parte <n>] | --job <id> --resposta   a classificacao das obras do job pela sessao
-  acervo curar    conceitos --indicacoes <lote|todas> [--termos a,b] [--descartar a,b] [--apply]   a curadoria em lote das indicacoes
+  acervo curar    conceitos --indicacoes <lote|todas> [--termos a,b] [--descartar a,b] [--motivo <m>] [--apply]   a curadoria em lote das indicacoes
+  acervo ler      biblioteca conceito <slug|uuid> [--json]   conceito completo com rotulos e versao
+  acervo criar    biblioteca conceito <slug> --rotulo … --definicao … --natureza … --estatuto … [--lingua …] [--rotulo-alt 'l|r'] [--pedido <uuid>]
+  acervo trocar   biblioteca conceito <slug> <versao> --motivo … [--rotulo …] [--lingua …] [--definicao …] [--rotulo-alt 'l|r'] [--sem-rotulo-alt <r>]
+  acervo renomear biblioteca conceito <slug-atual> <slug-novo> --motivo … [--pedido <uuid>]
+  acervo listar   biblioteca indicacao [<lote|todas>] [--estado <pendente|admitida|descartada|todas>] [--termo <t>] [--json]
+  acervo ler      biblioteca indicacao <uuid|termo|slug> [--json]
+  acervo admitir  biblioteca indicacao [<lote|todas>] --motivo … [--termos a,b] [--ids i1,i2] [--pedido <uuid>]
+  acervo descartar biblioteca indicacao [<lote|todas>] --motivo … [--termos a,b] [--ids i1,i2] [--pedido <uuid>]
+  acervo ensaiar  <criar|trocar|renomear|admitir|descartar> biblioteca <conceito|indicacao> …   ensaio sem gravar
   acervo curar    casa alias <classe> <chave> <alias>
   acervo curar    casa revisao <revid>... --motivo <m> [--apply]   tira texto antigo do historico da wiki
   acervo ler      biblioteca impressao <obra> [--paginas a-b | --capitulo <ancora>] [--formato md|blocos]
@@ -242,9 +263,22 @@ for _arg in "$@"; do
 done
 
 # --ajuda UNIVERSAL, sem efeito colateral (card #2868). ANTES do despacho e varrendo
-# TODOS os argumentos. EXCECAO: `... wiki ... --ajuda` cai para o sub-ato (argparse proprio), e
-# `relacionar ... --ajuda` cai para a cartilha das familias e garantias do bin/curar.
-if [ "${1:-}" != "wiki" ] && [ "${1:-}" != "relacionar" ]; then
+# TODOS os argumentos. EXCECAO: wiki, relacionar, curar conceitos e os atos do padrao do verbo
+# respondem com a ajuda propria do ato (exit 0).
+_ajuda_propria=0
+case "${1:-}" in
+  wiki|relacionar|criar|trocar|renomear|gravar|admitir|descartar|ensaiar) _ajuda_propria=1 ;;
+  curar)
+    if [ "${2:-}" = "conceitos" ] || { [ "${2:-}" = "biblioteca" ] && [ "${3:-}" = "conceitos" ]; }; then
+      _ajuda_propria=1
+    fi ;;
+  ler|listar)
+    case "${2:-}:${3:-}" in
+      conceito:*|indicacao:*|indicacoes:*|biblioteca:conceito|biblioteca:indicacao|biblioteca:indicacoes)
+        _ajuda_propria=1 ;;
+    esac ;;
+esac
+if [ "$_ajuda_propria" = 0 ]; then
   for _a in "$@"; do
     case "$_a" in
       --ajuda|--help|-h) uso ;;
@@ -344,7 +378,18 @@ conforme() {
     # agregador perfil x docling da pasta que `curar --reextrair --bancada` gravou (card #3187):
     # so stdlib, le arquivos, nao toca o acervo
     listar:biblioteca:bancada)    exec "$ATOS/listar" obra bancada "$@" ;;
-    listar:biblioteca:conceito)   exec "$ATOS/listar" conceitos "$@" ;;
+    ler:biblioteca:conceito)      exec python3 "$ATOS/tesauro.py" ler conceito "$@" ;;
+    ler:biblioteca:indicacao|ler:biblioteca:indicacoes)
+                                  exec python3 "$ATOS/tesauro.py" ler indicacao "$@" ;;
+    listar:biblioteca:indicacao|listar:biblioteca:indicacoes)
+                                  exec python3 "$ATOS/tesauro.py" listar indicacao "$@" ;;
+    listar:biblioteca:conceito)
+        case " $* " in
+          *" --natureza "*|*" --estatuto "*|*" --termo "*|*" --help "*|*" -h "*|*" --ajuda "*)
+            exec python3 "$ATOS/tesauro.py" listar conceito "$@" ;;
+        esac
+        exec "$ATOS/listar" conceitos "$@" ;;
+    curar:biblioteca:conceitos)   exec "$ATOS/curar" conceitos "$@" ;;
     # as arestas de um conceito e as derivacoes de uma obra (Classificar, #3296)
     listar:biblioteca:relacao)    exec "$ATOS/curar" obra --relacoes "$@" ;;
     listar:biblioteca:derivacao)  exec "$ATOS/curar" obra --derivacoes "$@" ;;
@@ -627,6 +672,8 @@ forma_velha_retirar() {
 }
 
 case "$ATO" in
+  criar|trocar|renomear|gravar|admitir|descartar|ensaiar)
+    exec python3 "$ATOS/tesauro.py" "$ATO" "$@" ;;
   catalogar|definir|relacionar|desrelacionar|derivar|desderivar|empacotar) classificar "$ATO" "$@" ;;
   espelhar|recortar|promover|julgar|converter) transcrever "$ATO" "$@" ;;
   retirar|restaurar|apagar|recolher|repor) retirada "$ATO" "$@" ;;
@@ -648,6 +695,9 @@ case "$ATO" in
       echo "acervo ler entidade: o ato saiu (#4313); a lista de classes é \`ontologia listar shape\`." >&2
       exit 2
     fi
+    case "${1:-}" in
+      conceito|conceitos|indicacao|indicacoes) exec python3 "$ATOS/tesauro.py" ler "$@" ;;
+    esac
     conforme "$ATO" "$@" ;;
 
   listar)
@@ -656,6 +706,14 @@ case "$ATO" in
       exit 2
     fi
     case "${1:-}" in
+      indicacao|indicacoes) exec python3 "$ATOS/tesauro.py" listar "$@" ;;
+      conceito)
+        case " $* " in
+          *" --desde "*|*" --origem "*) ;;
+          *) exec python3 "$ATOS/tesauro.py" listar "$@" ;;
+        esac
+        avisa "acervo listar <entidade>" "acervo listar <particao> <entidade>"
+        exec "$ATOS/listar" "$@" ;;
       biblioteca|obra|casa|registro) conforme "$ATO" "$@" ;;
       *)
         avisa "acervo listar <entidade>" "acervo listar <particao> <entidade>"
@@ -758,7 +816,7 @@ case "$ATO" in
 
   -h|--help|ajuda) uso ;;
   *)
-    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, escrever, ingerir, curar, extrato, exportar, psql, pipeline, balde, catalogar, definir, relacionar, desrelacionar, derivar, desderivar, empacotar, espelhar, recortar, promover, julgar, converter, recolher, repor, retirar, restaurar, apagar." >&2
+    echo "acervo: ato '$ATO' desconhecido. Atos canonicos: ler, listar, escrever, ingerir, curar, extrato, exportar, psql, pipeline, balde, catalogar, definir, relacionar, desrelacionar, derivar, desderivar, empacotar, espelhar, recortar, promover, julgar, converter, recolher, repor, retirar, restaurar, apagar, criar, trocar, renomear, admitir, descartar, ensaiar." >&2
     echo "  $SPEC" >&2
     exit 2 ;;
 esac
