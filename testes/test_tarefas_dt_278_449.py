@@ -69,15 +69,15 @@ def _rodar(*args: str):
         srv.server_close()
 
 
-def test_dt_278_ler_mostra_resolvido_de_em_cabecalho_e_completo():
-    r_cab = _rodar("ler", "3531", "--cabecalho")
-    assert r_cab.returncode == 0, r_cab.stderr
-    assert "#3513" in r_cab.stdout
-    assert "resolvido de: #3531 (englobado neste item; use --direto para ler o original)" in r_cab.stdout
-
-    r_full = _rodar("ler", "3531")
-    assert r_full.returncode == 0, r_full.stderr
-    assert "resolvido de: #3531 (englobado neste item; use --direto para ler o original)" in r_full.stdout
+def test_dt_278_ler_item_englobado_recusa_e_aponta_o_englobante():
+    """Ordem do dono, 17/11/2026: o englobado está fora do funil e não aparece em leitura; a recusa
+    nomeia o englobante, que é o que se lê, e não traz título nem corpo."""
+    for args in (("ler", "3531", "--cabecalho"), ("ler", "3531")):
+        r = _rodar(*args)
+        assert r.returncode == 1, r.stdout
+        assert r.stdout == ""
+        assert "#3531 está fora do funil (englobada em #3513)" in r.stderr
+        assert "Item absorvedor" not in r.stderr
 
 
 def test_dt_449_recusa_de_registro_nao_forca_estado_priorizada():

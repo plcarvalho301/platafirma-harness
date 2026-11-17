@@ -219,9 +219,10 @@ def test_a_leitura_da_story_lista_as_tasks_pela_chave(stub):
     p = _run(["ler", "7"], base)
     assert p.returncode == 0, p.stderr
     linhas = p.stdout.splitlines()
-    i = linhas.index("tasks (1 abertas de 2):")
-    assert linhas[i + 1].startswith("  1. t1\t") and "concluída" in linhas[i + 1]
-    assert linhas[i + 2].startswith("  2. t2\t") and "aberta" in linhas[i + 2]
+    # a task concluída (t1) está fora do funil e não aparece na leitura (ordem do dono, 17/11/2026)
+    i = linhas.index("tasks (1 abertas de 1):")
+    assert linhas[i + 1].startswith("  1. t2\t") and "aberta" in linhas[i + 1]
+    assert "t1" not in p.stdout
     assert "7.t" not in p.stdout and str(ID_INTERNO) not in p.stdout
 
 
