@@ -87,3 +87,28 @@ def test_definir_edita_descricao_de_conceito_existente(api, aplicar):
     assert path == "/acervo/conceitos/conceito"
     assert corpo["rotulo"] == "Rótulo conferido" and corpo["definicao"] == "Definição conferida"
     assert corpo["aplicar"] is aplicar
+
+
+@pytest.mark.parametrize("aplicar", [False, True])
+def test_definir_edita_rotulos_de_conceito_existente_sem_descricao(api, aplicar):
+    """DT 805: --lingua, --rotulo-alt e --sem-rotulo-alt chegam à API sem exigir --rotulo nem --definicao."""
+    chamadas, env = api
+    r = rodar(env, "definir", "biblioteca", "conceito", "conceito", "--lingua", "pt",
+              "--rotulo-alt", "en|legistics", "--sem-rotulo-alt", "velho",
+              "--motivo", "ont:0086", *(["--apply"] if aplicar else []))
+    assert r.returncode == 0, r.stderr
+    path, corpo = chamadas[-1]
+    assert path == "/acervo/conceitos/conceito"
+    assert corpo["lingua"] == "pt"
+    assert corpo["rotulos_alternativos"] == ["en|legistics"]
+    assert corpo["remover_rotulos"] == ["velho"]
+    assert "rotulo" not in corpo and "definicao" not in corpo
+    assert corpo["aplicar"] is aplicar
+
+
+def test_definir_recusa_rotulo_alternativo_sem_lingua(api):
+    chamadas, env = api
+    r = rodar(env, "definir", "biblioteca", "conceito", "conceito", "--rotulo-alt", "legistics",
+              "--motivo", "ont:0086")
+    assert r.returncode == 2 and "sem língua" in r.stderr
+    assert not any(p.startswith("/acervo/conceitos") for p, _ in chamadas)

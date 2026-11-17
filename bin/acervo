@@ -142,7 +142,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo pipeline <pasta>|--lote <id>|--job <id> --liberar <sha256|obra> [...]   solta a obra estacionada (duplicata provavel) que o
                   dono liberou; o job retoma de onde parou. Quem nao se liberta, se retira: acervo retirar biblioteca obra
   acervo catalogar biblioteca obra --job <id> [--parte <n>] | --job <id> --resposta   a classificacao das obras do job pela sessao
-  acervo curar    conceitos --indicacoes <lote|todas> [--termos a,b] [--apply]   a curadoria em lote das indicacoes
+  acervo curar    conceitos --indicacoes <lote|todas> [--termos a,b] [--descartar a,b] [--apply]   a curadoria em lote das indicacoes
   acervo curar    casa alias <classe> <chave> <alias>
   acervo curar    casa revisao <revid>... --motivo <m> [--apply]   tira texto antigo do historico da wiki
   acervo ler      biblioteca impressao <obra> [--paginas a-b | --capitulo <ancora>] [--formato md|blocos]
@@ -163,6 +163,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo definir       biblioteca conceito <slug> --rotulo … --definicao … --natureza … --estatuto … --pai <slug> --tipo <t>
                        --garantia <g> --motivo "…" [--apply] · <slug> --renomear <slug-novo> --motivo "…"
                        · <slug> --rotulo … --definicao … --motivo \"…\" [--apply] (edita a descrição)
+                       · <slug> [--lingua <l>] [--rotulo-alt 'lingua|rotulo'] [--sem-rotulo-alt <rotulo>] --motivo \"…\" [--apply] (rótulos)
                        · <slug> --natureza <n> --motivo "…" (conceito existente: reclassifica)   (tesauro)
   acervo relacionar    biblioteca conceito <de> <para> --tipo <t> --garantia <g> --motivo <m> [--lastro <obra>] [--apply]
                        a aresta da teia (tesauro); --ajuda traz as famílias e as garantias

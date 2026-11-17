@@ -95,21 +95,31 @@ def classificar_pelo_job(argv):
 
 
 def curar_conceitos(argv):
-    """`acervo curar conceitos --indicacoes <lote|todas> [--termos a,b] [--apply] [--json]` (item 19).
+    """`acervo curar conceitos --indicacoes <lote|todas> [--termos a,b] [--descartar a,b] [--apply] [--json]`.
 
-    Junta as indicações que o classificador deixou e cria cada conceito uma vez. Sem `--apply` mostra o plano.
-    Qualquer cadeira que roda o pipeline cria o conceito do lote com `--apply`.
+    Leva cada termo pendente a um destino: liga as obras ao conceito que já existe (pelo slug ou por um
+    rótulo), cria o conceito uma vez, ou deixa pendente o termo sem obra viva de garantia, que só sai por
+    `--descartar`. A indicação de obra retirada não é garantia e fica descartada quando o termo é admitido.
+    Sem `--apply` mostra o plano.
     """
+    import os
     import pipeline_cliente as pc
 
-    uso = "uso: acervo curar conceitos --indicacoes <lote|todas> [--termos a,b] [--apply] [--json]"
+    uso = ("uso: acervo curar conceitos --indicacoes <lote|todas> [--termos a,b] [--descartar a,b] "
+           "[--apply] [--json]")
     lote = _valor(argv, "--indicacoes")
     if lote is None:
         morre(uso, 2)
     termos = [t.strip() for t in (_valor(argv, "--termos") or "").split(",") if t.strip()] or None
+    descartar = [t.strip() for t in (_valor(argv, "--descartar") or "").split(",") if t.strip()] or None
     aplicar = "--apply" in argv
+    cad = (os.environ.get("PF_CADEIRA") or os.environ.get("PF_CONTA") or "").strip().lower()
+    # o mesmo curador que o bin/curar resolve: cadeira de engenharia lavra como time-platafirma
+    autor = cad.removeprefix("claudinho-").removeprefix("claudinha-") or "dados"
+    if autor in {"engenharia", "ti", "ia", "arquiteto", "seguranca"}:
+        autor = "time-platafirma"
     try:
-        resultado = pc.curar_indicacoes(None if lote == "todas" else lote, aplicar, termos)
+        resultado = pc.curar_indicacoes(None if lote == "todas" else lote, aplicar, termos, descartar, autor)
     except pc.Falha as e:
         morre(f"acervo curar conceitos: {e.mensagem}", e.codigo)
     if "--json" in argv:
@@ -117,16 +127,29 @@ def curar_conceitos(argv):
         return 0
     if aplicar:
         for c in resultado.get("criados") or []:
-            print(f"{c['slug']}: {'já existia' if c.get('ja_existia') else 'criado'} ({c.get('rotulo')})")
-        print(f"indicações admitidas: {resultado.get('indicacoes_admitidas', 0)}")
+            print(f"{c['slug']}: criado ({c.get('rotulo')})")
+        for c in resultado.get("ligados_a_existente") or []:
+            print(f"{c['slug']}: já existia; obras ligadas ({c.get('termo')})")
+        for c in resultado.get("sem_garantia") or []:
+            print(f"{c['termo']}: segue pendente — {c['motivo']}")
+        print(f"indicações admitidas: {resultado.get('indicacoes_admitidas', 0)} · "
+              f"descartadas: {resultado.get('indicacoes_descartadas', 0)}")
         return 0
     itens = resultado.get("itens") or []
-    print(f"plano: {len(itens)} conceito(s) a criar a partir das indicações" if itens
-          else "nenhuma indicação pendente")
+    descartes = resultado.get("descartes") or []
+    if not itens and not descartes:
+        print("nenhuma indicação pendente")
+        return 0
+    rotulo = {"criar": "criar", "ligar_existente": "ligar ao existente", "sem_garantia": "sem garantia"}
+    print(f"plano: {len(itens)} termo(s) a admitir, {len(descartes)} a descartar")
     for g in itens:
-        print(f"  {g['termo']} -> {g['slug']} · {g['obras_contagem']} obra(s) de garantia")
-    if itens:
-        print("plano seco — repita com --apply para criar")
+        alvo = g.get("conceito") or g["slug"]
+        extra = f" · {len(g.get('de_obra_retirada') or [])} de obra retirada a descartar" if g.get("de_obra_retirada") else ""
+        print(f"  {g['termo']} -> {rotulo.get(g.get('acao') or 'criar', g.get('acao'))} {alvo} · "
+              f"{g['obras_contagem']} obra(s) viva(s) de garantia{extra}")
+    for d in descartes:
+        print(f"  {d['termo']} -> descartar · {d['indicacoes']} indicação(ões)")
+    print("plano seco — repita com --apply para gravar")
     return 0
 
 
