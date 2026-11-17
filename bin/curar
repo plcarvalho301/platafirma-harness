@@ -879,6 +879,9 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
 
     if not existe:
         # POST /acervo/conceitos (criar)
+        if getattr(args, "sem_rotulo_alt", None):
+            sys.stderr.write("curar: erro: --sem-rotulo-alt só se aplica a conceito existente\n")
+            return 2
         faltam = [k for k in ("rotulo", "definicao", "natureza", "estatuto") if not getattr(args, k)]
         if faltam:
             sys.stderr.write(f"curar: erro: criar conceito exige --{' --'.join(faltam)}\n")
@@ -894,6 +897,9 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
             if faltam_pai:
                 sys.stderr.write(f"curar: erro: --pai exige --{' --'.join(faltam_pai)}\n")
                 return 2
+        elif tipo or garantia or lastro:
+            sys.stderr.write("curar: erro: --tipo, --garantia e --lastro exigem --pai\n")
+            return 2
 
         corpo = {
             "slug": slug,
@@ -903,6 +909,14 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
             "estatuto": args.estatuto,
             "autor": autor,
         }
+        if getattr(args, "lingua", None):
+            corpo["lingua"] = args.lingua.strip()
+        if getattr(args, "endereco", None):
+            corpo["endereco"] = args.endereco.strip()
+        if getattr(args, "filhos_exclusivos", False):
+            corpo["filhos_exclusivos"] = True
+        if getattr(args, "trata_de", None):
+            corpo["trata_de"] = [resolver_obra_id(o.strip(), headers) for o in args.trata_de.split(",") if o.strip()]
         if pai_slug:
             pai_dict = {
                 "slug": pai_slug,
@@ -947,6 +961,20 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
         return acao_conceito_natureza(args, autor, como_json, headers)
     else:
         # PATCH /acervo/conceitos/{id}/pai (trocar pai)
+        incompativeis_pai = [
+            f"--{c.replace('_', '-')}"
+            for c in (
+                "rotulo", "definicao", "natureza", "estatuto", "lingua", "alt",
+                "rotulo_alt", "sem_rotulo_alt", "endereco", "filhos_exclusivos", "trata_de",
+            )
+            if getattr(args, c, None)
+        ]
+        if incompativeis_pai:
+            sys.stderr.write(
+                f"curar: erro: conceito já existe; opção(ões) {', '.join(incompativeis_pai)} não se aplica(m) "
+                f"sem a operação correspondente (use 'acervo trocar biblioteca conceito' ou edite separadamente)\n"
+            )
+            return 2
         if not pai_slug:
             sys.stderr.write("curar: erro: conceito já existe; use --pai para fixar ou trocar o pai de navegação\n")
             return 2
@@ -1315,15 +1343,52 @@ def formatar_plano_natureza(p: dict, hermit: dict | None, aprovado: bool) -> str
     return "\n".join(lin)
 
 
+def _formatar_plano_descricao_humana(p: dict) -> str:
+    c = p.get("conceito") or {}
+    antes = p.get("antes") or {}
+    depois = p.get("depois") or {}
+    aprovado = bool(p.get("aprovado", True))
+    cab = "Descrição e rótulos gravados" if p.get("modo") == "aplicado" else "Plano de descrição e rótulos"
+    lin = [
+        f"{cab}: {c.get('slug')}  «{depois.get('rotulo') or c.get('rotulo')}»",
+        f"  rotulo   : {antes.get('rotulo')} -> {depois.get('rotulo')}",
+    ]
+    if antes.get("definicao") != depois.get("definicao"):
+        lin.append(f"  definicao: {antes.get('definicao')} -> {depois.get('definicao')}")
+    rot_a = ", ".join(f"{r.get('lingua') or '?'}|{r.get('rotulo')} ({r.get('papel')})" for r in (antes.get("rotulos") or [])) or "(nenhum)"
+    rot_d = ", ".join(f"{r.get('lingua') or '?'}|{r.get('rotulo')} ({r.get('papel')})" for r in (depois.get("rotulos") or [])) or "(nenhum)"
+    lin.append(f"  rotulos  : {rot_a}")
+    lin.append(f"          -> {rot_d}")
+    for col in p.get("colisoes") or []:
+        lin.append(f"  colisao  : {col.get('rotulo')} já pertence a {col.get('conceito')}")
+    lin.append(f"  motivo   : {p.get('motivo')}")
+    lin.append(f"  emitido_por: {p.get('emitido_por')}")
+    if p.get("modo") == "aplicado":
+        lin.append(f"  id       : {p.get('id')}")
+    else:
+        lin.append("  veredito : " + ("APROVADO — repita com --apply para gravar" if aprovado else "REPROVADO — nada gravado"))
+    return "\n".join(lin)
+
+
+_DESCRICAO_NAO_COMBINA = (
+    "natureza", "estatuto", "renomear", "alt", "endereco", "filhos_exclusivos",
+    "trata_de", "tipo", "garantia", "lastro", "mais_amplo", "mais_amplo_tipo",
+)
+
+
 def acao_conceito_descricao(args: argparse.Namespace, autor: str, como_json: bool, headers: dict) -> int:
     """Conceito que já existe: descrição (--rotulo, --definicao) e rótulos (--lingua do preferido,
     --rotulo-alt 'lingua|rotulo' para acrescentar ou trocar a língua, --sem-rotulo-alt <rotulo> para tirar)."""
     if not args.motivo:
         sys.stderr.write("curar: editar rótulo, definição ou rótulos exige --motivo\n")
         return 2
-    if args.natureza or args.estatuto or args.renomear or getattr(args, "alt", None):
-        sys.stderr.write("curar: edite rótulos e descrição separadamente de natureza, estatuto e slug; "
-                         "rótulo alternativo vai em --rotulo-alt 'lingua|rotulo'\n")
+    indevidas = [f"--{c.replace('_', '-')}" for c in _DESCRICAO_NAO_COMBINA if getattr(args, c, None)]
+    if indevidas:
+        sys.stderr.write(
+            f"curar: opção(ões) {', '.join(indevidas)} não se aplica(m) à edição de descrição e rótulos; "
+            "edite natureza/pai/slug separadamente (ou use 'acervo trocar biblioteca conceito') e passe "
+            "rótulo alternativo em --rotulo-alt 'lingua|rotulo'\n"
+        )
         return 2
     corpo = {c: getattr(args, c) for c in ("rotulo", "definicao", "lingua") if getattr(args, c) is not None}
     if args.rotulo_alt:
@@ -1345,13 +1410,24 @@ def acao_conceito_descricao(args: argparse.Namespace, autor: str, como_json: boo
     if resp.status_code != 200:
         falha_problem(resp)
     plano = resp.json()
-    print(json.dumps(plano, indent=2, ensure_ascii=False))
-    return 0
+    if como_json:
+        print(json.dumps(plano, indent=2, ensure_ascii=False))
+    else:
+        print(_formatar_plano_descricao_humana(plano))
+    return 0 if plano.get("aprovado", True) else 1
 
 
 def acao_conceito_natureza(args, autor: str, como_json: bool, headers: dict) -> int:
     slug = args.conceito.strip()
     nat = args.natureza.strip()
+    indevidas = [
+        f"--{c.replace('_', '-')}"
+        for c in ("estatuto", "endereco", "filhos_exclusivos", "trata_de", "alt", "tipo", "garantia", "lastro")
+        if getattr(args, c, None)
+    ]
+    if indevidas:
+        sys.stderr.write(f"curar: erro: opção(ões) {', '.join(indevidas)} não se aplica(m) à reclassificação de natureza\n")
+        return 2
     if not args.motivo or not args.motivo.strip():
         sys.stderr.write("curar: erro: reclassificar natureza exige --motivo\n")
         return 2

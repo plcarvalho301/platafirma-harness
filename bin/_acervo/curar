@@ -95,23 +95,55 @@ def classificar_pelo_job(argv):
 
 
 def curar_conceitos(argv):
-    """`acervo curar conceitos --indicacoes <lote|todas> [--termos a,b] [--descartar a,b] [--apply] [--json]`.
+    """`acervo curar conceitos --indicacoes <lote|todas> [--termos a,b] [--descartar a,b] [--motivo <m>] [--apply] [--json]`.
 
     Leva cada termo pendente a um destino: liga as obras ao conceito que já existe (pelo slug ou por um
     rótulo), cria o conceito uma vez, ou deixa pendente o termo sem obra viva de garantia, que só sai por
     `--descartar`. A indicação de obra retirada não é garantia e fica descartada quando o termo é admitido.
-    Sem `--apply` mostra o plano.
+    Sem `--apply` mostra o plano. Atos no padrão do verbo: `acervo admitir|descartar biblioteca indicacao`.
     """
+    uso = (
+        "uso: acervo curar conceitos --indicacoes <lote|todas> [--termos a,b] [--descartar a,b] "
+        "[--motivo <texto>] [--apply] [--json]\n"
+        "  Passa indicações pendentes a admitida (ligando obras vivas ao conceito existente ou criando o novo)\n"
+        "  ou a descartada (--descartar a,b), recusando obra retirada como garantia.\n"
+        "  Atos canônicos equivalentes: acervo admitir|descartar biblioteca indicacao --motivo ..."
+    )
+    if any(a in ("-h", "--help", "--ajuda") for a in argv):
+        print(uso)
+        return 0
+
     import os
     import pipeline_cliente as pc
 
-    uso = ("uso: acervo curar conceitos --indicacoes <lote|todas> [--termos a,b] [--descartar a,b] "
-           "[--apply] [--json]")
+    valoradas = {"--indicacoes", "--termos", "--descartar", "--motivo"}
+    booleanas = {"--apply", "--json"}
+    i = 0
+    while i < len(argv):
+        tok = argv[i]
+        flag = tok.split("=", 1)[0] if tok.startswith("--") and "=" in tok else tok
+        if flag in booleanas:
+            if "=" in tok:
+                morre(f"acervo curar conceitos: opção {flag} não aceita valor\n{uso}", 2)
+            i += 1
+        elif flag in valoradas:
+            if "=" in tok:
+                if not tok.split("=", 1)[1].strip():
+                    morre(f"acervo curar conceitos: opção {flag} exige valor\n{uso}", 2)
+                i += 1
+            else:
+                if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+                    morre(f"acervo curar conceitos: opção {flag} exige valor\n{uso}", 2)
+                i += 2
+        else:
+            morre(f"acervo curar conceitos: opção desconhecida ou não aplicável '{tok}'\n{uso}", 2)
+
     lote = _valor(argv, "--indicacoes")
     if lote is None:
         morre(uso, 2)
     termos = [t.strip() for t in (_valor(argv, "--termos") or "").split(",") if t.strip()] or None
     descartar = [t.strip() for t in (_valor(argv, "--descartar") or "").split(",") if t.strip()] or None
+    motivo = (_valor(argv, "--motivo") or "").strip() or None
     aplicar = "--apply" in argv
     cad = (os.environ.get("PF_CADEIRA") or os.environ.get("PF_CONTA") or "").strip().lower()
     # o mesmo curador que o bin/curar resolve: cadeira de engenharia lavra como time-platafirma
@@ -119,7 +151,9 @@ def curar_conceitos(argv):
     if autor in {"engenharia", "ti", "ia", "arquiteto", "seguranca"}:
         autor = "time-platafirma"
     try:
-        resultado = pc.curar_indicacoes(None if lote == "todas" else lote, aplicar, termos, descartar, autor)
+        resultado = pc.curar_indicacoes(
+            None if lote == "todas" else lote, aplicar, termos, descartar, autor, motivo=motivo,
+        )
     except pc.Falha as e:
         morre(f"acervo curar conceitos: {e.mensagem}", e.codigo)
     if "--json" in argv:
