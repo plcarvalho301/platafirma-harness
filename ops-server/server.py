@@ -3361,8 +3361,14 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
 
 
 def _rlimits_filho():
-    """Teto por verbo (TLPI cap. 36): processos e tamanho de arquivo. Nunca sobe o hard."""
-    for lim, val in ((resource.RLIMIT_NPROC, 2048), (resource.RLIMIT_FSIZE, 2 * 1024 ** 3)):
+    """Teto por verbo (TLPI cap. 36): processos e tamanho de arquivo. Nunca sobe o hard.
+
+    O RLIMIT_NPROC conta processos e threads de toda a conta claudinho (docker rootless
+    incluso), nao so do verbo: 2048 fazia fork e pthread_create falharem com a conta cheia
+    (#4323). 56000 e ~25% do kernel.threads-max (226170), abaixo do pids.max do
+    user-1001.slice (74636), que segue como freio contra disparo de processos.
+    """
+    for lim, val in ((resource.RLIMIT_NPROC, 56000), (resource.RLIMIT_FSIZE, 2 * 1024 ** 3)):
         try:
             soft, hard = resource.getrlimit(lim)
             novo = val if hard == resource.RLIM_INFINITY else min(val, hard)
