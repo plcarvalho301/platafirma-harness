@@ -80,27 +80,24 @@ def test_mesa_sem_chapeu_fail_to_inteiro(raiz_hermetica):  # noqa: F811
     assert peca_mesa["ref"] == "verbo:mesa ver"
 
 
-def test_rotinas_logo_apos_conduta_sem_chapeu(raiz_hermetica):  # noqa: F811
+def test_alias_cadeiras_logo_apos_conduta_sem_chapeu(raiz_hermetica):  # noqa: F811
     proc = _run_expediente(
         ["montar", "--json"], raiz_hermetica, stdin_data="pergunta sem rotulo",
         env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin")},
     )
     assert proc.returncode == 0
     pecas = json.loads(proc.stdout)["pecas"]
-    assert [p["peca"] for p in pecas[:3]] == ["persona", "conduta", "rotinas"]
-    assert pecas[2]["ref"] == "verbo:acervo listar casa guia --mapa"
-    assert pecas[2]["frescor"] == "fresco"
-    assert pecas[2]["conteudo"].startswith("ROTINAS")
+    assert [p["peca"] for p in pecas[:3]] == ["persona", "conduta", "alias-cadeiras"]
 
 
-def test_rotinas_logo_apos_chapeu(raiz_hermetica):  # noqa: F811
+def test_conduta_logo_apos_chapeu(raiz_hermetica):  # noqa: F811
     proc = _run_expediente(
         ["montar", "--chapeu", "contexto", "--json"], raiz_hermetica,
         env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin")},
     )
     assert proc.returncode == 0
     pecas = json.loads(proc.stdout)["pecas"]
-    assert [p["peca"] for p in pecas[:4]] == ["persona", "chapeu", "conduta", "rotinas"]
+    assert [p["peca"] for p in pecas[:4]] == ["persona", "chapeu", "conduta", "alias-cadeiras"]
 
 
 def test_a_consulta_da_abertura_manda_origem_abertura_ao_motor(raiz_hermetica):  # noqa: F811
@@ -129,7 +126,7 @@ def test_sem_chapeu_declarado_a_abertura_nao_roteia_nem_consulta_o_acervo(raiz_h
     d = json.loads(proc.stdout)
     assert not log_motor.exists()
     assert "chapeu" not in d and "roteador" not in d
-    assert [p["peca"] for p in d["pecas"]] == ["persona", "conduta", "rotinas", "alias-cadeiras", "mesa", "cadernos"]
+    assert [p["peca"] for p in d["pecas"]] == ["persona", "conduta", "alias-cadeiras", "mesa", "cadernos"]
 
 
 def test_com_chapeu_declarado_a_abertura_segue_como_sempre_foi(raiz_hermetica):  # noqa: F811
@@ -142,7 +139,7 @@ def test_com_chapeu_declarado_a_abertura_segue_como_sempre_foi(raiz_hermetica): 
     assert proc.returncode == 0
     d = json.loads(proc.stdout)
     assert d["chapeu"] == "contexto" and d["roteador"]["via"] == "comando"
-    assert [p["peca"] for p in d["pecas"]] == ["persona", "chapeu", "conduta", "rotinas", "alias-cadeiras", "mesa",
+    assert [p["peca"] for p in d["pecas"]] == ["persona", "chapeu", "conduta", "alias-cadeiras", "mesa",
                                                "acervo-consultado", "cadernos"]
     refs = {p["peca"]: p["ref"] for p in d["pecas"]}
     assert refs["mesa"] == "verbo:mesa ver contexto" and refs["cadernos"] == "verbo:mesa caderno --chapeu contexto"

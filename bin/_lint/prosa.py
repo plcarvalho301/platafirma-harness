@@ -7,10 +7,9 @@ from typing import List, Optional, Tuple
 from .lista import resolver_lista
 from .resultado import Apontamento
 
-CHAVE_LISTA = "styleguide-da-wiki"
-# A regua mora no acervo como `padrao`, nao como lista-de-verificacao (#2856 linha 84); a lista
-# segue aceita primeiro, para o dia em que ela existir.
-ESPECIES_REGUA = ("lista-de-verificacao", "padrao")
+CHAVE_LISTA = "marcas-pt-br"
+# Na casa nova (platafirma-casa-espelho) a regua de prosa mora em `gabarito/marcas-pt-br`.
+ESPECIES_REGUA = ("gabarito",)
 
 
 def verificar_prosa(
