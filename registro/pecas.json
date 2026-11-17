@@ -82,5 +82,17 @@
     "ambiente": "olaria",
     "teto_s": 600,
     "motivo": "F4277: seleção na fita, admissão de vínculo e medida de eficácia por mutação da suíte de testes"
+  },
+  "esteira": {
+    "dono": "ti",
+    "origem": "release",
+    "dir": "casa-espelho",
+    "cwd": "outros_repos/harness/lib",
+    "modulo": "suite",
+    "pythonpath": ["outros_repos/harness/lib"],
+    "python": "rag",
+    "ambiente": "olaria",
+    "teto_s": 600,
+    "motivo": "S4297: rodada da esteira isolada e gravação do veredito pelo coletor da release servida"
   }
 }
