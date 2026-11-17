@@ -29,6 +29,7 @@ declare -A BANCOS=(
   [rag]="rag-extractor-pg:rag:rag_extractor"
   [motor]="motor-pg:motor:motor"
   [casa]="casa-db:casa:casa"
+  [analise]="analise-db:analise:analise"
 )
 
 uso() {

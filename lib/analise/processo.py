@@ -59,11 +59,10 @@ def despachar(argv: list[str]) -> int:
     ):
         if chave in os.environ:
             cmd.append("--setenv=" + chave + "=" + os.environ[chave])
-    # Configurações de endereço não são senhas e origem/destino seguem separados.
+    # Configurações de endereço não são senhas. O destino não entra: vem só do registro
+    # de bancos (#4287), e um ANALISE_DESTINO_* do ambiente não o desvia.
     for chave, valor in os.environ.items():
-        if chave.startswith(
-            ("ANALISE_ORIGEM_", "ANALISE_DESTINO_")
-        ) and not chave.endswith("PASSWORD"):
+        if chave.startswith("ANALISE_ORIGEM_") and not chave.endswith("PASSWORD"):
             cmd.append("--setenv=" + chave + "=" + valor)
     cmd.append("--setenv=PF_ANALISE_UNIDADE=" + unit)
     cmd.extend(

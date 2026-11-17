@@ -11,7 +11,15 @@
     "conteiner": "rag-extractor-pg",
     "base": "rag_extractor",
     "dono": "rag",
-    "o_que_guarda": "acervo, log da porta, catálogo do analise"
+    "o_que_guarda": "acervo e log da porta"
+  },
+  "analise": {
+    "conteiner": "analise-db",
+    "base": "analise",
+    "dono": "analise",
+    "porta": 5440,
+    "ddl": "outros_repos/conhecimento/analise-db/init/002_schema_analise.sql",
+    "o_que_guarda": "destino do verbo analise: catálogo, bases, resultados, tabelas t_ e projeções"
   },
   "motor": {
     "conteiner": "motor-pg",

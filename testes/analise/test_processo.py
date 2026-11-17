@@ -19,14 +19,12 @@ def test_cli_em_unidade_dedicada(db,bancos,tmp_path):
         shutil.copy2(RAIZ/"politica-acesso"/nome,politica/nome)
     (politica/"sujeitos.yaml").write_text('sujeitos:\n  teste:\n    natureza: pessoa\n    papeis: [operador]\n    dominios: [plataforma]\n')
     instancia=tmp_path/"instancia"
-    cofre=instancia/"segredos/rag";cofre.mkdir(parents=True)
+    # #4287: o destino vem da entrada analise do registro (fixture bancos) e da senha em segredos/analise-db.
+    cofre=instancia/"segredos/analise-db";cofre.mkdir(parents=True)
+    (cofre/"ANALISE_DESTINO_PASSWORD").write_text(cfg["password"])
     env={**os.environ,"PLATAFIRMA_RELEASE":str(servido),
          "PLATAFIRMA_INSTANCIA":str(instancia),"PF_SUJEITO":"teste",
          "PF_SESSAO":"teste","PF_ORDEM_ID":"teste-cli","PF_CADEIRA":"engenharia"}
-    for prefixo in ("ANALISE_ORIGEM_","ANALISE_DESTINO_"):
-        (cofre/(prefixo+"PASSWORD")).write_text(cfg["password"])
-        env[prefixo+"HOST"]=cfg["host"];env[prefixo+"PORT"]=str(cfg["port"])
-        env[prefixo+"DB"]=cfg["dbname"]
     p=subprocess.run([sys.executable,str(RAIZ/"bin/analise"),"preparar","populacao-de-turnos",
                       "--corte","2026-11-02T00:00:00Z"],env=env,capture_output=True,text=True,
                      timeout=60,check=False)

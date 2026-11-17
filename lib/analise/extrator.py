@@ -31,21 +31,37 @@ TETO_ENTRADA = 2 * 1024**3
 CORRECAO_ROLE = "release migrar aplicar {banco} com lib/analise/sql/leitura.sql no stdin"
 
 
+BANCO_DESTINO = "analise"
+COFRE_DESTINO = "segredos/analise-db"
+SENHA_DESTINO = "ANALISE_DESTINO_PASSWORD"
+
+
 def configuracao(parte: str) -> dict:
-    # Só o destino (catálogo do analise, no banco do acervo) usa conexão com senha.
+    """O destino (catálogo, bases, resultados, tabelas t_ e projeções) mora só no banco analise (#4287).
+
+    Endereço e base vêm da entrada `analise` de registro/bancos.json e a senha da role de
+    publicação, de segredos/analise-db. Não há default: sem a entrada ou sem a senha o verbo
+    sai 3, e nunca grava no banco do acervo.
+    """
     from raizes import instancia
 
     exigir(parte == "destino", "origem-por-banco")
-    prefixo = "ANALISE_DESTINO_"
-    cofre = instancia() / "segredos/rag"
-    arq = cofre / (prefixo + "PASSWORD")
-    exigir(arq.is_file(), "credencial-ausente:" + arq.name, 3)
+    banco = bancos_registrados().get(BANCO_DESTINO)
+    exigir(isinstance(banco, dict), "destino-fora-do-registro:" + BANCO_DESTINO, 3)
+    exigir(
+        banco.get("base") and type(banco.get("porta")) is int,
+        "destino-incompleto-no-registro:" + BANCO_DESTINO,
+        3,
+    )
+    arq = instancia() / COFRE_DESTINO / SENHA_DESTINO
+    senha = arq.read_text().strip() if arq.is_file() else ""
+    exigir(senha, "credencial-ausente:" + COFRE_DESTINO + "/" + SENHA_DESTINO, 3)
     return dict(
-        host=os.getenv(prefixo + "HOST", "127.0.0.1"),
-        port=int(os.getenv(prefixo + "PORT", "5432")),
-        dbname=os.getenv(prefixo + "DB", "rag_extractor"),
+        host=banco.get("host", "127.0.0.1"),
+        port=banco["porta"],
+        dbname=banco["base"],
         user="analise_publicacao",
-        password=arq.read_text().strip(),
+        password=senha,
         connect_timeout=5,
     )
 
