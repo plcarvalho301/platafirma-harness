@@ -299,6 +299,37 @@ def test_origin_main_mede_a_main_do_clone_base_e_a_arvore_some(tmp_path):
     assert r.returncode == 2, r.stdout + r.stderr
 
 
+# --- F4277 regra 1: o lock de uma stack alcança só aquela stack (carta 20261116T195115) ----
+
+def _duas(tmp_path, marcas: Path):
+    env, arv = _arvore(tmp_path, {"a": {"test_a1.py": _marca(marcas, "a1")},
+                                  "b": {"test_b1.py": _marca(marcas, "b1")}},
+                       {"a": "test_a1.py | a/src/**\n", "b": "test_b1.py | b/src/**\n"})
+    return env, arv, _rev(arv)
+
+
+def test_lock_na_pasta_de_uma_stack_e_raio_total_so_dela(tmp_path):
+    """O rag/uv.lock rodava conversor e casa-site inteiras: agora só a dona roda a lista toda."""
+    marcas = tmp_path / "marcas.txt"
+    env, arv, base = _duas(tmp_path, marcas)
+    _commita(arv, {"a/uv.lock": "# x\n", "a/requirements-teste.txt": "# x\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv), "--base", base)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.stdout.count("raio total: a/") == 1, r.stdout
+    assert "seleção: 0 de 1 arquivos" in r.stdout, r.stdout
+    assert _rodou(marcas) == {"a1"}
+
+
+def test_lock_na_raiz_segue_raio_total_de_toda_stack(tmp_path):
+    marcas = tmp_path / "marcas.txt"
+    env, arv, base = _duas(tmp_path, marcas)
+    _commita(arv, {"uv.lock": "# x\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv), "--base", base)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.stdout.count("raio total: uv.lock") == 2, r.stdout
+    assert _rodou(marcas) == {"a1", "b1"}
+
+
 def test_veredito_da_rodada_inteira_verde_responde_pela_parcial(tmp_path):
     marcas = tmp_path / "marcas.txt"
     env, arv, base = _tres(tmp_path, marcas, RAIOS)
