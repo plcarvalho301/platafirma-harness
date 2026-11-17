@@ -1,4 +1,4 @@
-"""DT 807: `acervo retirar|restaurar biblioteca conceito` chegam às rotas de retirada, fusão e restauração."""
+"""DT 807: `acervo retirar biblioteca conceito` chega às rotas de retirada e de fusão; conceito não se restaura."""
 from __future__ import annotations
 
 import json
@@ -61,29 +61,25 @@ def test_retirar_conceito_vai_a_retirada_em_plano_seco(servidor):
                          {"motivo": "sem lastro", "autor": "conhecimento", "aplicar": False})]
 
 
-def test_retirar_com_em_funde_e_aplica(servidor):
+def test_retirar_com_em_vai_a_fusao(servidor):
     chamadas, rodar = servidor
     r = rodar("retirar", "biblioteca", "conceito", "analise-de-vinculos", "--em", "analise-de-redes-sociais",
-              "--motivo", "mesmo conceito", "--apply")
+              "--motivo", "mesmo conceito")
     assert r.returncode == 0, r.stderr
     assert chamadas == [("/acervo/conceitos/analise-de-vinculos/fusao",
-                         {"motivo": "mesmo conceito", "autor": "conhecimento", "aplicar": True,
+                         {"motivo": "mesmo conceito", "autor": "conhecimento", "aplicar": False,
                           "em": "analise-de-redes-sociais"})]
 
 
-def test_restaurar_conceito_vai_a_restauracao(servidor):
+def test_restaurar_conceito_nao_existe(servidor):
     chamadas, rodar = servidor
     r = rodar("restaurar", "biblioteca", "conceito", "efeito-de-real", "--motivo", "volta")
-    assert r.returncode == 0, r.stderr
-    assert chamadas[-1][0] == "/acervo/conceitos/efeito-de-real/restauracao"
+    assert r.returncode == 2 and "acervo restaurar biblioteca obra" in r.stderr
+    assert chamadas == []
 
 
-@pytest.mark.parametrize("argv,trecho", [
-    (("retirar", "biblioteca", "conceito", "x"), "falta --motivo"),
-    (("restaurar", "biblioteca", "conceito", "x", "--em", "y", "--motivo", "m"), "--em só vale"),
-])
-def test_uso_errado_sai_2_sem_chamar(servidor, argv, trecho):
+def test_sem_motivo_sai_2_sem_chamar(servidor):
     chamadas, rodar = servidor
-    r = rodar(*argv)
-    assert r.returncode == 2 and trecho in r.stderr
+    r = rodar("retirar", "biblioteca", "conceito", "x")
+    assert r.returncode == 2 and "falta --motivo" in r.stderr
     assert chamadas == []
