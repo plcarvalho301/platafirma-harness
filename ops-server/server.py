@@ -3916,12 +3916,13 @@ SLUGS_SERVIDOS = set(TOOLS_DERIVADAS)
 
 
 def _esquema_plano(esquema: dict) -> dict:
-    """Achata `anyOf` em `type` explícito no `inputSchema` servido por `tools/list` (#4257).
+    """Achata `anyOf` em `type` explícito e enxuga `title`/`default` no `inputSchema` servido por `tools/list` (#4257).
 
     O conversor `convertMapToSchema` do Antigravity (`agy`) ignora `anyOf` e emite `{}` (`TYPE_UNSPECIFIED`)
     para qualquer propriedade sem `type` no topo (ou `items: {}` em listas sem tipo), o que leva o
-    `streamGenerateContent` da API Gemini a abortar o stream com `400 INVALID_ARGUMENT`. O cache interno do
-    FastMCP segue com o esquema completo para `tools/call` aceitar `None`, `str`, `list` e `dict`."""
+    `streamGenerateContent` da API Gemini a abortar o stream com `400 INVALID_ARGUMENT`. Remover `title` e
+    `default` redundantes do Pydantic economiza ~2.600 tokens no orçamento de customizações do `agy` sem alterar
+    o cache interno do FastMCP usado em `tools/call`."""
     if not isinstance(esquema, dict):
         return esquema
     out = dict(esquema)
@@ -3929,10 +3930,10 @@ def _esquema_plano(esquema: dict) -> dict:
         ramos = [r for r in out.pop("anyOf") if isinstance(r, dict) and r.get("type") != "null"]
         if ramos:
             escolhido = dict(ramos[0])
-            escolhido.update({k: v for k, v in out.items() if k != "default" or v is not None})
+            escolhido.update(out)
             out = escolhido
-    if out.get("default") is None and "default" in out:
-        out.pop("default")
+    out.pop("title", None)
+    out.pop("default", None)
     if "properties" in out and isinstance(out["properties"], dict):
         props = {}
         for k, v in out["properties"].items():
@@ -3976,7 +3977,10 @@ def _esconde_as_ocultas() -> None:
     async def _sem_ocultas(req):
         lista = (await original(req)).root
         visiveis = [
-            t.model_copy(update={"inputSchema": _esquema_plano(t.inputSchema)})
+            t.model_copy(update={
+                "description": (t.description or "").strip().split("\n\n", 1)[0],
+                "inputSchema": _esquema_plano(t.inputSchema),
+            })
             for t in lista.tools if t.name not in OCULTAS
         ]
         return _tipos.ServerResult(_tipos.ListToolsResult(tools=visiveis, nextCursor=lista.nextCursor))

@@ -666,6 +666,8 @@ def test_tools_list_devolve_input_schema_plano_sem_anyof_nem_propriedades_sem_ty
 
     def _confere_no(no: dict, trilha: str) -> None:
         assert "anyOf" not in no, f"{trilha} ainda expõe anyOf: {no}"
+        assert "title" not in no, f"{trilha} ainda expõe title redundante: {no}"
+        assert "default" not in no, f"{trilha} ainda expõe default redundante: {no}"
         assert isinstance(no.get("type"), str) and no["type"], f"{trilha} sem type explícito: {no}"
         if no["type"] == "array":
             assert isinstance(no.get("items"), dict), f"{trilha} array sem items: {no}"
@@ -676,8 +678,16 @@ def test_tools_list_devolve_input_schema_plano_sem_anyof_nem_propriedades_sem_ty
     por_nome = {t.name: t for t in res.tools}
     for nome, tool in por_nome.items():
         _confere_no(tool.inputSchema, nome)
+        assert "\n\n" not in (tool.description or ""), f"{nome} expõe múltiplos parágrafos em tools/list"
     trecho_props = por_nome["write_file"].inputSchema["properties"]["trecho"]["properties"]
     assert set(trecho_props) >= {"antes", "depois", "todos"}
+    import math
+    teto_tokens_agy = 9000
+    tokens_agy = sum(
+        math.ceil(len(("claudinho-mcp" + (t.description or "") + json.dumps(t.inputSchema, separators=(",", ":"))).encode("utf-8")) / 3.0)
+        for t in res.tools
+    )
+    assert tokens_agy <= teto_tokens_agy, f"tools/list ({tokens_agy} tokens) excede {teto_tokens_agy}"
 
 
 def test_get_mcp_autenticado_devolve_405_sem_abrir_sse_ocioso(monkeypatch):
