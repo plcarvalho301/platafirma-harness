@@ -792,6 +792,44 @@ def _resolve_relativo(caminho: str, bancada=_SEM_BANCADA_DADA) -> tuple[Path | N
     return b / p, None
 
 
+def _aviso_copia_atras(repo_dir: Path) -> str | None:
+    """Se `repo_dir` é um clone Git atrás de origin/main, devolve aviso curto; senão None."""
+    if not (repo_dir / ".git").exists():
+        return None
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(repo_dir), "rev-list", "--count", "HEAD..origin/main"],
+            capture_output=True, text=True, timeout=1, check=False,
+        )
+        if out.returncode == 0:
+            n = int((out.stdout or "0").strip() or "0")
+            if n > 0:
+                return f"CÓPIA ATRÁS DE origin/main ({n} commit(s))"
+    except Exception:
+        pass
+    return None
+
+
+def _resolve_leitura_relativo(
+    caminho: str, bancada: Path | None, cadeira: str = ""
+) -> tuple[Path | None, str | None, str | None]:
+    """(caminho, erro, aviso). Em caminho relativo `<repo>/...`, prefere a bancada da
+    cadeira (`wt/<repo>/<cadeira>/main`) quando existe; se cair no clone da raiz da
+    bancada atrás de origin/main, devolve aviso (DT-772)."""
+    p = Path(caminho)
+    if p.is_absolute():
+        return p, None, None
+    if bancada is None:
+        return None, _SEM_BANCADA, None
+    parts = p.parts
+    if parts and parts[0] not in ("wt", ".", "..") and cadeira:
+        wt_main = bancada / "wt" / parts[0] / cadeira / "main"
+        if wt_main.is_dir():
+            return wt_main.joinpath(*parts[1:]), None, None
+    aviso = _aviso_copia_atras(bancada / parts[0]) if parts and parts[0] not in ("wt", ".", "..") else None
+    return bancada / p, None, aviso
+
+
 def _sessao_atual() -> str:
     """Identidade da sessão MCP em curso, em três degraus.
 
@@ -2015,7 +2053,7 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
     if negado:
         return negado
     bancada = _bancada()   # uma leitura do disco por chamada: serve ao relativo, à morada e ao cabeçalho
-    p, erro_caminho = _resolve_relativo(caminho, bancada)
+    p, erro_caminho, aviso_copia = _resolve_leitura_relativo(caminho, bancada, ident.get("cadeira") or "")
     if erro_caminho:
         _audit(tool=tool, evento="leitura_recusada", path=caminho, motivo=erro_caminho,
                erro=erro_caminho, classe_erro="recusado", **quem)
@@ -2047,6 +2085,9 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
                     versao=args.get("versao") or None, offset=offset,
                     encoding=args.get("encoding") or None, nega=_nega_leitura, curto=_curto(p, bancada),
                     paginas=paginas, dpi=dpi, membro=membro, termo=args.get("termo") or "")
+    if aviso_copia and "cabecalho" in r:
+        r["cabecalho"] = f"{aviso_copia} · {r['cabecalho']}"
+        r["aviso"] = aviso_copia
     classe = r.pop("classe_erro", None)
     # A alça é o pedido (§11.2), a mesma para as duas tools: releitura pelo apelido e pela
     # nova deduplicam juntas. `caminho` é identificador exato — nunca entra na poda (iv).

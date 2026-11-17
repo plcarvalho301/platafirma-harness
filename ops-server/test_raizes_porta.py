@@ -676,3 +676,30 @@ def test_write_file_patch_recusa_delecao_e_hunk_invalido(bancada, sem_pep):
     assert "remocao" in r["resultados"][0]["motivo"]
     assert "nao casa" in r["resultados"][1]["motivo"]
     assert (base / "f1.md").read_text("utf-8") == "um\n"
+
+
+def test_ler_arquivo_relativo_prefere_worktree_da_cadeira_e_avisa_copia_atras(bancada, sem_pep, monkeypatch):
+    """DT-772: `<repo>/...` resolve para `wt/<repo>/<cadeira>/main` quando existe; senão avisa se atrás."""
+    clone = bancada / "platafirma-casa-espelho"
+    clone.mkdir(parents=True)
+    (clone / "doc.md").write_text("velho\n", encoding="utf-8")
+    wt = bancada / "wt" / "platafirma-casa-espelho" / "gestao-estrategica" / "main"
+    wt.mkdir(parents=True)
+    (wt / "doc.md").write_text("novo\n", encoding="utf-8")
+
+    monkeypatch.setattr(s, "_sessao_resolve", lambda sid: {
+        "sessao_id": "sid-dt772", "ordem_id": "o-dt772", "cadeira": "gestao-estrategica",
+        "sujeito": "", "origem_sessao": "",
+    })
+    r_wt = s.ler_arquivo(caminho="platafirma-casa-espelho/doc.md", sessao_id="sid-dt772")
+    assert r_wt["conteudo"] == "novo\n"
+    assert "aviso" not in r_wt
+
+    monkeypatch.setattr(s, "_sessao_resolve", lambda sid: {
+        "sessao_id": "sid-dt772-b", "ordem_id": "o-dt772-b", "cadeira": "outra-cadeira",
+        "sujeito": "", "origem_sessao": "",
+    })
+    monkeypatch.setattr(s, "_aviso_copia_atras", lambda d: "CÓPIA ATRÁS DE origin/main (3 commit(s))" if d == clone else None)
+    r_clone = s.ler_arquivo(caminho="platafirma-casa-espelho/doc.md", sessao_id="sid-dt772-b")
+    assert r_clone["conteudo"] == "velho\n"
+    assert r_clone["cabecalho"].startswith("CÓPIA ATRÁS DE origin/main (3 commit(s)) · ")
