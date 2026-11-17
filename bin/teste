@@ -106,6 +106,7 @@ exit: 0 suíte verde / inventário lido · 1 suíte vermelha / sem bancada
       5 indeterminável (nenhuma stack detectada, stack sem lock, lista de portão ausente,
         base de --base que não se lê)
       6 só com PF_TESTE_SO_MEMO=1: árvore ainda sem veredito gravado (nada rodou)
+      7 outra rodada em curso na mesma bancada (nada rodou; a recusa diz o pid, desde quando e o alvo)
 EOF
   exit 2
 }
@@ -121,6 +122,26 @@ avisa_deprecado() {  # uma vez por sessão (arq:0110 §11)
     touch "$trava" 2>/dev/null || true
     printf '%s: aviso: %s\n' "$VERBO" "$aviso" >&2
   fi
+}
+
+# DT 810: uma rodada por bancada. A chamada que perdeu a conexão com a porta segue no host, e a
+# repetida subia outra na mesma bancada: as duas disputavam o Chromium e o node_modules da stack e
+# reprovavam juntas. A rodada de topo segura um flock por clone e exporta PF_TESTE_TRAVA; as rodadas
+# filhas do portão (que o próprio teste dispara, em paralelo, na mesma bancada) herdam e não travam.
+# A segunda rodada de fora não espera: recusa com exit 7 e diz quem tem a bancada.
+travar_bancada() {  # $1=clone ; o resto: o que a rodada pediu (vai para o .dono)
+  [ -z "${PF_TESTE_TRAVA:-}" ] || return 0
+  command -v flock >/dev/null 2>&1 || return 0
+  local clone="$1" dir arq; shift
+  dir="${PF_TESTE_TRAVAS:-${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/lock/teste}"
+  mkdir -p "$dir" 2>/dev/null || return 0
+  arq="$dir/$(printf '%s' "$(readlink -f "$clone")" | sha256sum | cut -c1-16)"
+  exec 9>>"$arq" || return 0
+  if ! flock -n 9; then
+    morre "outra rodada em curso nesta bancada ($clone): $(cat "$arq.dono" 2>/dev/null || echo 'dono não registrado') — espere ela acabar e rode de novo" 7
+  fi
+  printf 'pid %s, desde %s, rodar %s\n' "$$" "$(date -Iseconds)" "$*" >"$arq.dono" 2>/dev/null || true
+  export PF_TESTE_TRAVA="$arq"
 }
 
 declara_bancada() {
@@ -1550,6 +1571,7 @@ ato_rodar() {
   else
     declara_bancada
     c="$(clone_de "$REG_FAMILIA${REG_BANCADA:+@$REG_BANCADA}")" || exit $?
+    travar_bancada "$c" "$nome" "$alvo" ${extras[@]+"${extras[@]}"}
   fi
 
   local raiz="$c"
