@@ -31,7 +31,7 @@ import json
 import sys
 import types
 import uuid
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timedelta, timezone
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
@@ -531,6 +531,29 @@ def test_ato_abrir_reabertura_nao_sobrescreve_sujeito_existente(monkeypatch):
     assert rc == 0
     gravado = json.loads(mem.data[f"sessao:{sid}"])
     assert gravado["sujeito"] == "sujeito-original"
+
+
+def test_ato_abrir_reabertura_em_outra_cadeira_recusa_com_causa(monkeypatch):
+    """DT 782: reabrir a sessao viva noutra cadeira sai 4 dizendo de que cadeira ela e e
+    como abrir a nova, sem tocar a chave; antes saia 5 com 'msg-mem instavel'."""
+    sid = str(uuid.uuid4())
+    original = json.dumps({"cadeira": "ia", "ordem_id": "o-velho", "sujeito": "s1"})
+    mem = FakeMsgMem({f"sessao:{sid}": original})
+    monkeypatch.setenv("PF_SUJEITO", "s1")
+    saida = sessao_mod.Saida(como_json=True)
+    f, e = io.StringIO(), io.StringIO()
+
+    with patch.object(sessao_mod, "_msgmem", return_value=(mem, None)), \
+         patch.object(sessao_mod, "_vocabulario", return_value=({"ti": {}, "ia": {}}, None)), \
+         patch.object(sessao_mod, "_decidir", return_value=(0, {"regra": "default", "plano": "p1"}, "")):
+        with redirect_stdout(f), redirect_stderr(e):
+            rc = sessao_mod.ato_abrir("ti", sid, saida)
+
+    assert rc == 4
+    saida_txt = f.getvalue() + e.getvalue()
+    assert "da cadeira ia" in saida_txt and "sem `--sessao-id`" in saida_txt
+    assert "msg-mem instavel" not in saida_txt
+    assert mem.data[f"sessao:{sid}"] == original
 
 
 # ---------------------------------------------------------------- encerrar/limpar marcam encerrada_em

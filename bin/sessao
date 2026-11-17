@@ -400,6 +400,14 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
     chave = f"sessao:{sid}"
     try:
         existente = _le_chave(rc_mem, sid) if sid_portado else None
+        if existente and existente.get("cadeira") and existente.get("cadeira") != slug:
+            # DT 782: a cadeira e identidade da sessao (arq:0101 §1) e reabrir nao a troca.
+            # Antes a chave seguia com a cadeira antiga e a releitura acusava msg-mem instavel.
+            antiga = existente.get("cadeira")
+            return saida.erro(f"sessao {sid} e da cadeira {antiga}, nao de {slug}: reabrir nao troca "
+                              f"de cadeira — para abrir {slug}, chame sem `--sessao-id` (cunha uma "
+                              f"sessao nova); para seguir em {antiga}, reabra com cadeira={antiga}",
+                              4, sessao_id=sid, cadeira_da_sessao=antiga)
         if existente:
             # reabrir a mesma conversa: atualiza ordem_id e nada mais (§2), exceto
             # sujeito AUSENTE (card #3145) e canonizada/autorizada_por ausentes ou
@@ -777,7 +785,7 @@ USO = """uso:
   sessao limpar    --rascunho <subpasta> [--apply] [--json]              apaga, e so, <instancia>/var/tmp/<PF_ORDEM_ID>/<subpasta> (rascunho da propria fita); sem --apply mostra o plano e os bytes; recusa a raiz inteira e o que sai dela
   sessao longjob   <args...>                                             contrato herdado de bin/_sessao/longjob
 
-exit (abrir): 0 cunhou · 2 uso/cadeira desconhecida · 3 sem sujeito/politica ausente/msg-mem mudo · 4 nao autorizado · 5 gravou e nao confirma
+exit (abrir): 0 cunhou · 2 uso/cadeira desconhecida · 3 sem sujeito/politica ausente/msg-mem mudo · 4 nao autorizado ou --sessao-id vivo de outra cadeira · 5 gravou e nao confirma
 exit (ver/listar/encerrar/limpar): 0 · 1 nao existe · 2 uso · 3 msg-mem mudo · 5 DEL sem confirmacao
 exit (limpar --rascunho): 0 plano ou apagado · 1 subpasta nao existe · 2 uso · 4 sem PF_ORDEM_ID, raiz inteira ou fora da raiz (nada apagado) · 5 apagou sem confirmacao"""
 

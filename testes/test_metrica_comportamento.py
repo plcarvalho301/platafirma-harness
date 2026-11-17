@@ -97,6 +97,30 @@ def test_eventos_mostra_chave_classe_origem_escopo_e_turno_do_giro(tmp_path):
     assert antigo["escopo"] is None and antigo["turno_fonte"] is None and antigo["evento_id"] is None
 
 
+def test_infra_rodar_conferir_conta_e_sincronizar_e_efeito(tmp_path):
+    # DT 778: a conferencia corrente e `infra rodar conferir`; `repo sincronizar` empurra
+    # para o forge. `infra rodar` de outra peca nao confere nada.
+    ts = f"{JANELA.isoformat()}T10:00:00"
+
+    def com_args(ordem, tool, ato, args):
+        d = json.loads(_linha(ts, "ti", ordem, tool, ato, 0))
+        d["args"] = args
+        return json.dumps(d)
+
+    _dia(tmp_path, JANELA, [
+        _linha(ts, "ti", "oa", "release", "promover", 0),
+        com_args("oa", "infra", "rodar", "conferir release platafirma-harness"),
+        _linha(ts, "ti", "ob", "repo", "sincronizar", 0),
+        com_args("ob", "infra", "rodar", "outra-peca"),
+        _linha(ts, "ti", "oc", "repo", "sincronizar", 0),
+        com_args("oc", "infra", "rodar", "conferir"),
+    ])
+    r = _roda(tmp_path, JANELA.isoformat())
+    assert r.returncode == 0, r.stderr
+    s = json.loads(r.stdout)["por_cadeira"]["ti"]["sinais"]
+    assert s["efeito_sem_conferencia"]["janela"] == 1  # so a fita ob
+
+
 def test_sem_log_nenhum_sai_4(tmp_path):
     r = _roda(tmp_path, JANELA.isoformat())
     assert r.returncode == 4

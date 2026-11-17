@@ -996,10 +996,13 @@ BASE_DIAS = 7
 PISO = 3
 FATOR = 1.5
 # Ato com efeito fora da fita, e o que conta como conferir o efeito depois dele.
+# DT 778: `repo sincronizar` empurra para o forge como `repo empurrar`, e a conferencia
+# corrente e a peca `conferir` rodada por `infra rodar conferir` (o primeiro argumento
+# do giro, gravado em `args`). Terceiro termo do par: o primeiro argumento exigido.
 COM_EFEITO = (("release", "promover"), ("release", "reverter"), ("repo", "pr-merge"), ("repo", "pr-fechar"),
-              ("repo", "empurrar"), ("deploy", None))
+              ("repo", "empurrar"), ("repo", "sincronizar"), ("deploy", None))
 CONFERENCIA = (("release", "conferir"), ("release", "estado"), ("conferir", None),
-               ("infra", "estado"), ("infra", "saude"))
+               ("infra", "estado"), ("infra", "saude"), ("infra", "rodar", "conferir"))
 # Sinais que medem tropeco (mais = pior). `abertura_remontada` e `giros` ficam no
 # relatorio como contexto: remontar e a cura da abertura evaporada, e volume nao e
 # comportamento.
@@ -1014,8 +1017,17 @@ SINAIS = {
 }
 CONTEXTO = ("fitas", "giros", "sessoes", "abertura_remontada")
 
+def _primeiro_arg(g):
+    args = (g.get("bruto") or {}).get("args")
+    toks = args.split() if isinstance(args, str) else (args if isinstance(args, list) else [])
+    return str(toks[0]) if toks else None
+
 def _casa_par(g, pares):
-    return any(g["tool"] == t and (a is None or g["ato"] == a) for t, a in pares)
+    for par in pares:
+        t, a, arg = (tuple(par) + (None,))[:3]
+        if g["tool"] == t and (a is None or g["ato"] == a) and (arg is None or _primeiro_arg(g) == arg):
+            return True
+    return False
 
 def sinais_por_cadeira(giros, cadeias):
     # Giro sem cadeira (transporte, sessao sem chave) nao tem a quem atribuir

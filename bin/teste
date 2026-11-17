@@ -677,6 +677,10 @@ PY
       [ "$trab" -gt 8 ] && trab=8
     fi
     [ "$trab" -gt "$n_arquivos" ] && trab="$n_arquivos"
+    # DT 777: nunca mais trabalhadores que a folga do teto de processos do usuario
+    local _pedido="$trab"
+    trab="$(teto_por_folga "$trab")"
+    [ "$trab" -lt "$_pedido" ] && printf 'paralelo: folga do teto de processos cabe %s de %s trabalhador(es)\n' "$trab" "$_pedido" >&2
     [ "$trab" -gt 1 ] && xdist=(-n "$trab" --dist loadfile)
   fi
   case "$modo" in
@@ -1193,6 +1197,32 @@ memo_do_portao() {  # $1=vereditos_dir $2=arvore
   printf '%s' "$m"
 }
 
+# DT 777: o RLIMIT_NPROC (2048 na porta, _rlimits_filho) conta processos e threads de todo
+# o usuario, nao so desta suite. folga_nproc imprime quantos ainda cabem (soft menos as
+# tarefas vivas do usuario), ou nada quando o teto e ilimitado ou ilegivel; teto_por_folga
+# corta um numero de trabalhadores para caber nela, a PF_TESTE_THREADS_POR_TRABALHADOR
+# (padrao 150) por trabalhador, nunca abaixo de 1.
+folga_nproc() {
+  local soft vivas
+  soft="$(ulimit -Su 2>/dev/null)" || return 0
+  case "$soft" in ''|unlimited|*[!0-9]*) return 0 ;; esac
+  vivas="$(ps -L -u "$(id -u)" --no-headers 2>/dev/null | wc -l)" || return 0
+  case "$vivas" in ''|*[!0-9]*|0) return 0 ;; esac
+  printf '%s' "$(( soft > vivas ? soft - vivas : 0 ))"
+}
+
+teto_por_folga() {  # $1=trabalhadores pedidos; imprime o que cabe
+  local pedido="$1" folga orc cabe
+  folga="$(folga_nproc)"
+  [ -n "$folga" ] || { printf '%s' "$pedido"; return 0; }
+  orc="${PF_TESTE_THREADS_POR_TRABALHADOR:-150}"
+  case "$orc" in ''|*[!0-9]*|0) orc=150 ;; esac
+  cabe="$(( folga / orc ))"
+  [ "$cabe" -lt 1 ] && cabe=1
+  [ "$cabe" -lt "$pedido" ] && pedido="$cabe"
+  printf '%s' "$pedido"
+}
+
 # arq:0116 §6: `teste rodar <repositório> --portao` roda a lista de portão de toda chave do
 # repositório que declara subárvore de teste, cada uma no seu ambiente, e passa quando
 # todas passam. O registro das chaves vem da árvore medida (a que o push ou a promoção
@@ -1228,21 +1258,48 @@ portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvor
   # artefato pinado entra na árvore uma vez, antes: as chaves o achariam ao mesmo tempo e
   # o construtor escreve no mesmo destino. Só a leitura do memo dispensa isso.
   [ "${PF_TESTE_SO_MEMO:-0}" = 1 ] || terceiros_na_arvore "$c"
-  local tmpd i pids=()
+  # DT 777: concorrência com teto (antipadrões de código F9). As sete chaves do harness
+  # subindo juntas, cada uma com seu pool do pytest-xdist, estouravam o RLIMIT_NPROC do
+  # host (EAGAIN, can't start new thread). No máximo PF_TESTE_CHAVES_PARALELAS chaves
+  # rodam ao mesmo tempo (padrão 3), e sem PF_TESTE_PARALELO cada uma recebe a sua fatia
+  # dos núcleos, de modo que a soma dos trabalhadores não passa de nproc.
+  local tmpd i conc ncpu_fam fatia
+  conc="${PF_TESTE_CHAVES_PARALELAS:-3}"
+  case "$conc" in ''|*[!0-9]*|0) conc=1 ;; esac
+  [ "$conc" -gt "${#chaves[@]}" ] && conc="${#chaves[@]}"
+  ncpu_fam="$(nproc 2>/dev/null || echo 2)"
+  fatia="$(( ncpu_fam / conc ))"
+  [ "$fatia" -lt 2 ] && fatia=2
+  # a folga do teto de processos se divide entre as chaves simultaneas
+  local cabem
+  cabem="$(teto_por_folga "$(( conc * fatia ))")"
+  if [ "$cabem" -lt "$(( conc * fatia ))" ]; then
+    [ "$cabem" -lt "$conc" ] && conc="$cabem"
+    fatia="$(( cabem / conc ))"
+    [ "$fatia" -lt 1 ] && fatia=1
+    # prefixo `paralelo:`, nunca `portao `: o release le a primeira linha `portao ` como veredito
+    printf 'paralelo: %s: folga do teto de processos cabe %s trabalhador(es): %s chave(s) por vez, %s cada\n' \
+      "$familia" "$cabem" "$conc" "$fatia" >&2
+  fi
   tmpd="$(mktemp -d "${TMPDIR:-/tmp}/teste-portao.XXXXXX")" || morre "não criei o diretório de saída do portão" 3
   for i in "${!chaves[@]}"; do
     chave="${chaves[$i]}"
-    if [ -n "$arv" ]; then
-      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave" --portao --degrau "$degrau_fam" --arvore "$arv" ${base_args[@]+"${base_args[@]}"} >"$tmpd/$i.out" 2>"$tmpd/$i.err" &
-    else
-      PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave${bancada:+@$bancada}" --portao --degrau "$degrau_fam" ${base_args[@]+"${base_args[@]}"} >"$tmpd/$i.out" 2>"$tmpd/$i.err" &
-    fi
-    pids+=("$!")
+    while [ "$(jobs -rp | wc -l)" -ge "$conc" ]; do wait -n 2>/dev/null || true; done
+    (
+      export PF_TESTE_PARALELO="${PF_TESTE_PARALELO:-$fatia}"
+      if [ -n "$arv" ]; then
+        PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave" --portao --degrau "$degrau_fam" --arvore "$arv" ${base_args[@]+"${base_args[@]}"} >"$tmpd/$i.out" 2>"$tmpd/$i.err"
+      else
+        PLATAFIRMA_VENVS="$venvs" "$0" rodar "$chave${bancada:+@$bancada}" --portao --degrau "$degrau_fam" ${base_args[@]+"${base_args[@]}"} >"$tmpd/$i.out" 2>"$tmpd/$i.err"
+      fi
+      echo "$?" >"$tmpd/$i.rc"
+    ) &
   done
+  wait
   for i in "${!chaves[@]}"; do
     chave="${chaves[$i]}"
-    rc=0
-    wait "${pids[$i]}" || rc=$?
+    rc=5
+    [ -s "$tmpd/$i.rc" ] && read -r rc <"$tmpd/$i.rc"
     cat "$tmpd/$i.err" >&2
     cat "$tmpd/$i.out"
     case "$rc" in
