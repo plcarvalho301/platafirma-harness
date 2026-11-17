@@ -247,6 +247,8 @@ testes/test_sessao_origem.py | bin/acesso bin/_acesso/** bin/agente bin/chat bin
 testes/test_tarefas_moldes.py | bin/tarefas
 testes/test_tarefas_task.py | bin/tarefas
 testes/test_tarefas_task_chave.py | bin/tarefas
+# Card #4339: o nome `ideia` vira o nível 4 em criar, listar e editar, e a ideia nasce em captada só com o título.
+testes/test_tarefas_ideia.py | bin/tarefas
 # Incidente #4250 (13/11/2026): fora do banco a task se chama só t<n>; um caso por ato que mostra item (sub,
 # listar, listar-tudo, ler, editar, mover, apagar, bloquear, comentar, ordenar), contra um rastreador de mentira.
 testes/test_tarefas_nome_da_task.py | bin/tarefas
