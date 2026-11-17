@@ -207,6 +207,38 @@ def test_chaves_do_portao_rodam_ao_mesmo_tempo(tmp_path):
     assert r.stdout.index("suite VERDE: k-a") < r.stdout.index("suite VERDE: k-b"), r.stdout
 
 
+def test_teto_de_chaves_simultaneas_no_portao(tmp_path):
+    """DT 777: no maximo PF_TESTE_CHAVES_PARALELAS chaves rodam juntas (sete chaves do
+    harness juntas estouravam o RLIMIT_NPROC); com 1, uma depois da outra, e o veredito e a
+    saida de cada chave seguem inteiros e na ordem do registro."""
+    marcas = tmp_path / "marcas.txt"
+    env, arv = _arvore(tmp_path, {s: {f"test_{s}.py": _marca(marcas, s, 1)} for s in "abc"},
+                       {s: f"test_{s}.py\n" for s in "abc"})
+    r = _run(dict(env, PF_TESTE_CHAVES_PARALELAS="1"), "rodar", "demo", "--portao", "--arvore", str(arv))
+    assert r.returncode == 0, r.stdout + r.stderr
+    m = sorted(_marcas(marcas).values(), key=lambda x: x[1])
+    assert all(m[i][2] <= m[i + 1][1] for i in range(len(m) - 1)), m
+    assert "portao demo: VERDE — k-a k-b k-c" in r.stdout
+    assert r.stdout.index("suite VERDE: k-a") < r.stdout.index("suite VERDE: k-b") < r.stdout.index("suite VERDE: k-c")
+
+
+def test_trabalhadores_cabem_na_folga_do_teto_de_processos(tmp_path):
+    """DT 777: o RLIMIT_NPROC conta todo o usuario; com orcamento por trabalhador maior que
+    a folga inteira, cabe um so trabalhador e a lista roda em serie, dizendo por que."""
+    import resource
+    if resource.getrlimit(resource.RLIMIT_NPROC)[0] == resource.RLIM_INFINITY:
+        pytest.skip("teto de processos ilimitado: nao ha folga a medir")
+    marcas = tmp_path / "marcas.txt"
+    env, arv = _arvore(tmp_path, {"a": {"test_a1.py": _marca(marcas, "a1"),
+                                        "test_a2.py": _marca(marcas, "a2")}},
+                       {"a": "test_a1.py\ntest_a2.py\n"})
+    r = _run(dict(env, PF_TESTE_PARALELO="8", PF_TESTE_THREADS_POR_TRABALHADOR="1000000000"),
+             "rodar", "k-a", "--portao", "--arvore", str(arv))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "folga do teto de processos cabe 1 de 2" in r.stderr, r.stderr
+    assert {t for t, _, _ in _marcas(marcas).values()} == {"-"}, _marcas(marcas)
+
+
 def test_lista_do_portao_roda_com_xdist_por_arquivo(tmp_path):
     """Incidente #3335: a lista do portão roda em trabalhadores do pytest-xdist, nunca
     mais que os arquivos da lista; PF_TESTE_PARALELO=1 roda em série."""
