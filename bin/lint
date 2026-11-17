@@ -16,7 +16,7 @@
 # regua: chapeu lista-de-verificacao checklist-chapeu
 # regua: organizacao lista-de-verificacao checklist-antipadroes-organizacao-documental
 # regua: card lista-de-verificacao antipadroes-de-discovery
-# regua: prosa lista-de-verificacao styleguide-da-wiki
+# regua: prosa gabarito marcas-pt-br
 # regua: testes lista-de-verificacao checklist-testes
 # regua: acervo lista-de-verificacao antipadroes-do-acervo
 # forma: relatorio
@@ -134,10 +134,10 @@ CLASSES_LINT = {
         "descricao": "corpo e comentarios do card, pela regua do nivel",
     },
     "prosa": {
-        "tipo": "lista-de-verificacao",
-        "chave": "styleguide-da-wiki",
+        "tipo": "gabarito",
+        "chave": "marcas-pt-br",
         "detector": "regras de prosa e estilo",
-        "descricao": "regras de escrita da wiki e conduta",
+        "descricao": "regras de escrita da casa e conduta",
     },
     "testes": {
         "tipo": "lista-de-verificacao",
@@ -165,7 +165,7 @@ def imprimir_uso(stream=sys.stdout):
     print("  lint codigo <repo>[@<chave>] [<alvo>] [--leitura] [--com <repo>[,<repo>]] [--resumo]   --leitura: o modelo local julga os criterios de leitura (minutos na stack inteira); --com: outros repositorios no indice da stack\n", file=stream)
     print("classes:", file=stream)
     for c, info in CLASSES_LINT.items():
-        lista_desc = f"{info['tipo']} {info['chave']}" if info['tipo'] == 'lista-de-verificacao' else info['tipo']
+        lista_desc = f"{info['tipo']} {info['chave']}" if info['tipo'] in ('lista-de-verificacao', 'gabarito') else info['tipo']
         print(f"  {c:<12} {lista_desc:<50} {info['detector']}", file=stream)
     print("\nbancada: PLATAFIRMA_BANCADA, senao ~/.config/platafirma/bancada", file=stream)
     print("exit: 0 limpo · 1 apontamentos · 2 uso · 3 falha do linter · 4 alvo fora da raiz", file=stream)

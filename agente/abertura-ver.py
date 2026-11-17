@@ -167,7 +167,6 @@ def peca_alias(arv, _cad, _ch):
 
 
 SIMULADA = {
-    "rotinas": "(SIMULADA — `acervo listar casa guia --mapa` lê o acervo na instância, fora do clone.)",
     "cadernos": "(SIMULADA — `mesa caderno` lê o caderno no banco da sessão desde a #3217 "
                 "(arq:0120), fora do clone. Em produção entram aqui o índice da cadeira e, "
                 "com chapéu, o corpo dele por categoria.)",
@@ -182,7 +181,6 @@ CATALOGO = {  # peça -> (dono, volatilidade, ref, leitor)
     "persona": ("gestao-estrategica", "estavel", "persona ler {cad}", peca_persona),
     "chapeu": ("gestao-estrategica", "estavel", "persona ler {cad} --chapeu {ch}", peca_chapeu),
     "conduta": ("gestao-estrategica", "estavel", "persona conduta", peca_conduta),
-    "rotinas": ("gestao-estrategica", "estavel", "acervo listar casa guia --mapa", None),
     "alias-cadeiras": ("gestao-estrategica", "morna", "persona foto", peca_alias),
     "mesa": ("gestao-estrategica", "volatil", "mesa ver{flag_mesa}", None),
     "acervo-consultado": ("conhecimento", "volatil",
@@ -206,8 +204,8 @@ def monta(clone, cad, chapeu, pergunta, forcado):
     avisos = []
 
     # Mesma ordem de bin/expediente montar (spec expediente rev 1.3, #3931):
-    # sem chapéu: persona, conduta, rotinas, alias-cadeiras, mesa, cadernos (6 peças, sem acervo-consultado).
-    ordem = ["persona"] + (["chapeu"] if chapeu else []) + ["conduta", "rotinas", "alias-cadeiras", "mesa"]
+    # sem chapéu: persona, conduta, alias-cadeiras, mesa, cadernos (5 peças, sem acervo-consultado).
+    ordem = ["persona"] + (["chapeu"] if chapeu else []) + ["conduta", "alias-cadeiras", "mesa"]
     ordem += (["acervo-consultado"] if chapeu and pergunta else []) + ["cadernos"]
 
     pecas = []

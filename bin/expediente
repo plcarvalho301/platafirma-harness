@@ -24,7 +24,6 @@
 #   acervo-consultado  chapéu declarado, com pergunta  valor  volatil  motor rag buscar casa "{pergunta}" --k 6 --texto secao --origem abertura   conhecimento (a partição)
 #   chapeu             chapeu                   valor  estavel  persona ler {cadeira} --chapeu {chapeu}        gestao-estrategica
 #   cadernos           abertura; com chapeu, o corpo dele  valor  volatil  mesa caderno --chapeu {chapeu}   gestao-estrategica
-#   rotinas            abertura                 valor  estavel  acervo listar casa guia --mapa                 gestao-estrategica
 #
 from __future__ import annotations
 
@@ -101,16 +100,6 @@ CATALOGO = [
         "regime": "valor",
         "volatilidade": "volatil",
         "chamada": "mesa caderno [--chapeu {chapeu}]",
-        "dono": "gestao-estrategica",
-    },
-    {
-        # #3084: o mapa das rotinas (quando cada uma serve e o guia que a descreve), extraído da
-        # seção `## Mapa` dos guias. Fica no prefixo, logo depois da conduta/chapéu.
-        "peca": "rotinas",
-        "gatilho": "abertura",
-        "regime": "valor",
-        "volatilidade": "estavel",
-        "chamada": "acervo listar casa guia --mapa",
         "dono": "gestao-estrategica",
     },
 ]
@@ -485,8 +474,6 @@ CATALOGO_CADEIRINHA = [
      "chamada": "persona ler {cadeira} --chapeu {chapeu}", "dono": "gestao-estrategica"},
     {"peca": "modo", "gatilho": "perfil cadeirinha", "regime": "valor", "volatilidade": "estavel",
      "chamada": "acervo ler casa modo {modo}", "dono": "gestao-estrategica"},
-    {"peca": "rotinas", "gatilho": "perfil cadeirinha", "regime": "valor", "volatilidade": "estavel",
-     "chamada": "acervo listar casa guia --mapa", "dono": "gestao-estrategica"},
     {"peca": "regua", "gatilho": "perfil cadeirinha, com --regua", "regime": "valor",
      "volatilidade": "estavel", "chamada": "acervo ler casa {regua}", "dono": "gestao-estrategica"},
     {"peca": "acervo-consultado", "gatilho": "perfil cadeirinha, com mensagem", "regime": "valor",
@@ -751,13 +738,12 @@ def ato_montar(cadeira_arg: str | None = None, chapeu_forcado: str | None = None
     cat_por_id = {item["peca"]: item for item in CATALOGO}
 
     # Ordem de injeção por saliência (spec expediente §2, §7; #3146):
-    # persona → [chapeu] → conduta → rotinas → alias-cadeiras → mesa → [acervo-consultado] → cadernos.
-    # Com chapéu declarado, o chapéu vem em 2º, entre persona e conduta, e a consulta ao acervo entra; sem chapéu, persona → conduta → rotinas → alias-cadeiras → mesa → cadernos.
+    # persona → [chapeu] → conduta → alias-cadeiras → mesa → [acervo-consultado] → cadernos.
+    # Com chapéu declarado, o chapéu vem em 2º, entre persona e conduta, e a consulta ao acervo entra; sem chapéu, persona → conduta → alias-cadeiras → mesa → cadernos.
     ordem_chaves = ["persona"]
     if chapeu_slug:
         ordem_chaves.append("chapeu")
     ordem_chaves.append("conduta")
-    ordem_chaves.append("rotinas")
     ordem_chaves.append("alias-cadeiras")
     ordem_chaves.append("mesa")
     if chapeu_slug and pergunta and not sem_acervo:

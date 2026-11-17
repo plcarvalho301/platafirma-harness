@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 ESPECIE = "lista-de-verificacao"
+ESPECIES_PADRAO = ("gabarito", "lista-de-verificacao")
 
 # nome da coluna no cabecalho da tabela (normalizado) -> campo do item
 COLUNAS = {
@@ -130,10 +131,10 @@ def _acervo_bin() -> str:
     return str(local) if local.exists() else "acervo"
 
 
-def resolver_lista(chave: str, especies: tuple = (ESPECIE,)) -> Optional[Dict[str, Any]]:
+def resolver_lista(chave: str, especies: tuple = ESPECIES_PADRAO) -> Optional[Dict[str, Any]]:
     """Obtem a regua `chave` do acervo, ja lida, na primeira de `especies` que a serve.
 
-    Regua que mora no acervo como `padrao` (styleguide-da-wiki) le-se pelo mesmo parse.
+    Tenta primeiro `gabarito` (casa nova) e depois `lista-de-verificacao` (acervo).
     """
     for especie in especies:
         lista = _resolver_na_especie(chave, especie)
