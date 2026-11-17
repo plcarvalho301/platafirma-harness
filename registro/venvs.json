@@ -166,6 +166,13 @@
     "venv": "rag",
     "teste": "outros_repos/harness/lib/diagrama"
   },
+  "espelho-suite": {
+    "familia": "platafirma-casa-espelho",
+    "esteira": "codigo",
+    "promovida": false,
+    "lock": "outros_repos/harness/venvs/harness/uv.lock",
+    "teste": "outros_repos/harness/lib/suite/testes"
+  },
   "espelho-vault-ontologia": {
     "familia": "platafirma-casa-espelho",
     "esteira": "codigo",
