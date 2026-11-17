@@ -83,9 +83,12 @@ def db(pg):
 
 @pytest.fixture
 def bancos(pg,tmp_path,monkeypatch):
-    """Registro de bancos do ensaio: o rag e o rastreador são o mesmo contêiner descartável."""
+    """Registro de bancos do ensaio: rag, rastreador e o destino analise são o mesmo contêiner descartável."""
     import json
+    cfg,_=pg
     reg={s:{"conteiner":CONTEINER_PG,"base":"postgres","dono":"postgres"} for s in ("rag","rastreador")}
+    # #4287: o destino do verbo lê endereço e base só desta entrada.
+    reg["analise"]={"conteiner":CONTEINER_PG,"base":cfg["dbname"],"dono":"postgres","porta":cfg["port"]}
     arq=tmp_path/"bancos.json";arq.write_text(json.dumps(reg))
     monkeypatch.setenv("PF_ANALISE_BANCOS",str(arq))
     return reg

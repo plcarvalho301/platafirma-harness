@@ -74,6 +74,7 @@ POR_HEALTHCHECK = {
     "acervo-guarda": "acervo-guarda",
     "acervo-api": "acervo-api",
     "casa-db": "casa-db",
+    "analise-db": "analise-db",
     "olaria": "olaria",
 }
 

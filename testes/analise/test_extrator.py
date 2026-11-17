@@ -117,3 +117,70 @@ def test_duas_consultas_mesmo_snapshot(db,bancos,receita,tmp_path):
     m=extrair(None,r,receita,entrada,datetime(2026,11,2,tzinfo=timezone.utc))
     assert m["primeira"]["linhas"]==m["segunda"]["linhas"]==3
     assert m["primeira"]["snapshot"]==m["segunda"]["snapshot"]
+
+
+# #4287: o destino mora só no banco analise do registro, sem fallback para rag_extractor.
+def _registro(tmp_path,monkeypatch,reg):
+    import json
+    arq=tmp_path/"bancos-destino.json";arq.write_text(json.dumps(reg))
+    monkeypatch.setenv("PF_ANALISE_BANCOS",str(arq))
+
+def _cofre(tmp_path,monkeypatch,senha="senha-de-teste"):
+    instancia=tmp_path/"instancia"
+    cofre=instancia/"segredos/analise-db";cofre.mkdir(parents=True,exist_ok=True)
+    if senha is not None:
+        (cofre/"ANALISE_DESTINO_PASSWORD").write_text(senha+"\n")
+    monkeypatch.setenv("PLATAFIRMA_INSTANCIA",str(instancia))
+
+ANALISE={"conteiner":"analise-db","base":"analise","dono":"analise","porta":5440}
+
+def test_destino_lido_do_registro(tmp_path,monkeypatch):
+    from analise.extrator import configuracao
+    _registro(tmp_path,monkeypatch,{"rag":{"conteiner":"rag-extractor-pg","base":"rag_extractor","dono":"rag"},"analise":ANALISE})
+    _cofre(tmp_path,monkeypatch)
+    for chave in ("ANALISE_DESTINO_HOST","ANALISE_DESTINO_PORT","ANALISE_DESTINO_DB"):
+        monkeypatch.setenv(chave,"desvio" if chave!="ANALISE_DESTINO_PORT" else "5432")
+    c=configuracao("destino")
+    assert (c["host"],c["port"],c["dbname"],c["user"])==("127.0.0.1",5440,"analise","analise_publicacao")
+    assert c["password"]=="senha-de-teste"
+
+def test_destino_fora_do_registro_sai_3(tmp_path,monkeypatch):
+    from analise.extrator import configuracao
+    _registro(tmp_path,monkeypatch,{"rag":{"conteiner":"rag-extractor-pg","base":"rag_extractor","dono":"rag"}})
+    _cofre(tmp_path,monkeypatch)
+    with pytest.raises(Falha) as e:
+        configuracao("destino")
+    assert e.value.exit==3 and e.value.causa=="destino-fora-do-registro:analise"
+
+def test_destino_sem_porta_sai_3(tmp_path,monkeypatch):
+    from analise.extrator import configuracao
+    _registro(tmp_path,monkeypatch,{"analise":{k:v for k,v in ANALISE.items() if k!="porta"}})
+    _cofre(tmp_path,monkeypatch)
+    with pytest.raises(Falha) as e:
+        configuracao("destino")
+    assert e.value.exit==3 and e.value.causa=="destino-incompleto-no-registro:analise"
+
+@pytest.mark.parametrize("senha",[None,"","   "])
+def test_destino_sem_senha_sai_3(tmp_path,monkeypatch,senha):
+    from analise.extrator import configuracao
+    _registro(tmp_path,monkeypatch,{"analise":ANALISE})
+    _cofre(tmp_path,monkeypatch,senha)
+    with pytest.raises(Falha) as e:
+        configuracao("destino")
+    assert e.value.exit==3 and e.value.causa=="credencial-ausente:segredos/analise-db/ANALISE_DESTINO_PASSWORD"
+
+def test_destino_que_nao_responde_sai_5_sem_fallback(tmp_path,monkeypatch):
+    """Banco analise parado: sai 5 com banco-indisponivel e não tenta rag_extractor."""
+    import psycopg
+    from analise.extrator import conectar
+    _registro(tmp_path,monkeypatch,{"rag":{"conteiner":"rag-extractor-pg","base":"rag_extractor","dono":"rag"},"analise":ANALISE})
+    _cofre(tmp_path,monkeypatch)
+    tentativas=[]
+    def recusa(**kw):
+        tentativas.append(kw)
+        raise psycopg.OperationalError("connection refused")
+    monkeypatch.setattr(psycopg,"connect",recusa)
+    with pytest.raises(Falha) as e:
+        conectar("destino")
+    assert e.value.exit==5 and e.value.causa=="banco-indisponivel"
+    assert [(t["port"],t["dbname"]) for t in tentativas]==[(5440,"analise")]
