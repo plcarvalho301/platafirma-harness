@@ -39,13 +39,11 @@ def test_adr_se_le_na_classe_decisao_e_o_resto_fica_como_esta(ident):
 
 
 @pytest.mark.parametrize("entrada", ["adr", "decisao"])
-def test_a_forma_da_chave_vem_da_classe_decisao(ident, monkeypatch, entrada):
+def test_a_forma_da_chave_se_valida_no_cliente_sem_consultar_banco(ident, monkeypatch, entrada):
     vistos = []
-    monkeypatch.setattr(ident, "psql_json", lambda sql, alvo="query": vistos.append(sql) or [
-        {"slug": "decisao", "forma_chave": None}])
+    monkeypatch.setattr(ident, "psql_json", lambda sql, alvo="query": vistos.append(sql) or [])
     canon, _ = ident.validar_forma(entrada, "arq:0110")
-    assert canon == "arq:0110"
-    assert "slug = 'decisao'" in vistos[-1] and "'adr'" not in vistos[-1]
+    assert canon == "arq:0110" and vistos == []
 
 
 @pytest.mark.parametrize("entrada", ["adr", "decisao"])

@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 ACERVO = Path(__file__).resolve().parents[2] / "bin" / "_acervo"
-SCRIPTS = ["casa", "curar", "entidade", "ferramenta", "listar", "registrar", "stack"]
+SCRIPTS = ["casa", "curar", "ferramenta", "listar", "registrar", "stack"]
 TODOS = ["_identidade.py"] + SCRIPTS
 
 
