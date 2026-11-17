@@ -109,7 +109,10 @@ opções de --conceito:
   --mais-amplo <slug>           conceito pai (opcional; exige --mais-amplo-tipo)
   --mais-amplo-tipo <t>         generica|partitiva|instancia|instrumental|aferidora|patologica|condicional|economica|tematica
   --rotulo-alt 'lingua|rotulo'  rótulo alternativo (repetível; lingua pt|en|zxx)
-  --lingua <l>                  língua do rótulo preferido (default pt)
+  --lingua <l>                  língua do rótulo preferido (default pt); em conceito que já existe, cria o
+                                preferido que falta ou troca a língua dele
+  --sem-rotulo-alt <rotulo>     em conceito que já existe, tira o rótulo alternativo (repetível); --rotulo-alt
+                                ali acrescenta o alternativo ou troca a língua do que já existe
   --endereco <texto>            endereço/URI canônico (opcional)
   --filhos-exclusivos           filhos mutuamente exclusivos
   --trata-de <obras>            obra(s) de lastro literário (uuid/título, vírgula)
@@ -937,7 +940,7 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
 
         url_alvo = f"{BASE}/acervo/conceitos"
         metodo = "POST"
-    elif (args.rotulo or args.definicao) and not pai_slug:
+    elif (args.rotulo or args.definicao or args.lingua or args.rotulo_alt or args.sem_rotulo_alt) and not pai_slug:
         return acao_conceito_descricao(args, autor, como_json, headers)
     elif args.natureza and not pai_slug:
         # PATCH /acervo/conceitos/{id} {natureza} — reclassificar (cura K19, card #3163)
@@ -1069,7 +1072,7 @@ _VARREDURA_TIMEOUT_S = 60
 _VARREDURA_FORA = ("ontologia/acervo/", "rag/docs/ontologia/vocabulario.json")
 _VARREDURA_SEM_RAIZ = ("venv", "terceiros")    # em release(): ambientes e artefato de terceiro, não repositório
 _RENOMEAR_NAO_COMBINA = ("pai", "mais_amplo", "mais_amplo_tipo", "rotulo", "definicao", "natureza", "estatuto",
-                         "alt", "rotulo_alt", "endereco", "lingua", "tipo", "garantia", "lastro",
+                         "alt", "rotulo_alt", "sem_rotulo_alt", "endereco", "lingua", "tipo", "garantia", "lastro",
                          "filhos_exclusivos")
 # opções de OUTRO ato: a escada de despacho do `main` entregaria o pedido a esse ato e calaria o --renomear
 _RENOMEAR_OUTROS_ATOS = ("reclassificar", "situacao", "expurgar", "restaurar", "espelhos", "apagar", "recortar",
@@ -1313,13 +1316,24 @@ def formatar_plano_natureza(p: dict, hermit: dict | None, aprovado: bool) -> str
 
 
 def acao_conceito_descricao(args: argparse.Namespace, autor: str, como_json: bool, headers: dict) -> int:
+    """Conceito que já existe: descrição (--rotulo, --definicao) e rótulos (--lingua do preferido,
+    --rotulo-alt 'lingua|rotulo' para acrescentar ou trocar a língua, --sem-rotulo-alt <rotulo> para tirar)."""
     if not args.motivo:
-        sys.stderr.write("curar: editar rótulo ou definição exige --motivo\n")
+        sys.stderr.write("curar: editar rótulo, definição ou rótulos exige --motivo\n")
         return 2
-    corpo = {c: getattr(args, c) for c in ("rotulo", "definicao") if getattr(args, c) is not None}
-    if args.natureza or args.estatuto or args.renomear:
-        sys.stderr.write("curar: edite rótulo/definição separadamente de natureza, estatuto e slug\n")
+    if args.natureza or args.estatuto or args.renomear or getattr(args, "alt", None):
+        sys.stderr.write("curar: edite rótulos e descrição separadamente de natureza, estatuto e slug; "
+                         "rótulo alternativo vai em --rotulo-alt 'lingua|rotulo'\n")
         return 2
+    corpo = {c: getattr(args, c) for c in ("rotulo", "definicao", "lingua") if getattr(args, c) is not None}
+    if args.rotulo_alt:
+        for item in args.rotulo_alt:
+            if "|" not in item:
+                sys.stderr.write(f"curar: --rotulo-alt '{item}' sem língua; use 'lingua|rotulo'\n")
+                return 2
+        corpo["rotulos_alternativos"] = list(args.rotulo_alt)
+    if args.sem_rotulo_alt:
+        corpo["remover_rotulos"] = list(args.sem_rotulo_alt)
     corpo.update(autor=autor, motivo=args.motivo, aplicar=args.apply)
     url = f"{BASE}/acervo/conceitos/{urllib.parse.quote(args.conceito.strip(), safe='')}"
     try:
@@ -2944,6 +2958,7 @@ def main(argv=None):
     parser.add_argument("--mais-amplo", dest="mais_amplo", default=None)
     parser.add_argument("--mais-amplo-tipo", dest="mais_amplo_tipo", default=None)
     parser.add_argument("--rotulo-alt", dest="rotulo_alt", action="append", default=None)
+    parser.add_argument("--sem-rotulo-alt", dest="sem_rotulo_alt", action="append", default=None)
     parser.add_argument("--filhos-exclusivos", dest="filhos_exclusivos", action="store_true", default=False)
     parser.add_argument("--tipo", default=None)
     parser.add_argument("--garantia", default=None)
