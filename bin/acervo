@@ -213,6 +213,8 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo repor         biblioteca espelho [<obra>] [--apply]   a volta de recolher
   Retirar (arq:0119 §2, §9) — plano seco sem --apply:
   acervo retirar       biblioteca obra <obra> --motivo <m> [--apply]    fora de servico, com volta, em cascata (catalogo, impressao, indice)
+  acervo retirar       biblioteca conceito <slug> --motivo <m> [--apply]   apaga do tesauro o conceito sem obra, filho e aresta, com a ficha
+  acervo retirar       biblioteca conceito <slug> --em <slug> --motivo <m> [--apply]   funde no que fica (obras, filhos, arestas e rotulos) e apaga o absorvido
   acervo restaurar     biblioteca obra <obra> --motivo <m> [--apply]    a obra retirada volta ao catalogo
                        (--motivo e obrigatorio nos dois: fica com a obra, com o autor e a data; sem ele sai 2)
   acervo apagar        biblioteca obra <obra> [--apply]    SEM VOLTA, so a obra ja retirada (catalogo, motor, balde);
@@ -623,12 +625,14 @@ retirada() {
   local particao="${1:-}" entidade="${2:-}"
   case "$ato:$particao:$entidade" in
     retirar:biblioteca:obra|restaurar:biblioteca:obra|apagar:biblioteca:obra) ;;
+    retirar:biblioteca:conceito) ;;
     retirar:casa:revisao|restaurar:casa:revisao) ;;
     recolher:biblioteca:espelho|repor:biblioteca:espelho|apagar:biblioteca:espelho) ;;
     *)
       local forma="biblioteca obra <obra>"
       case "$ato" in
-        retirar|restaurar) forma="biblioteca obra <obra>\` ou \`acervo $ato casa revisao <revid>" ;;
+        retirar)   forma="biblioteca obra <obra>\`, \`acervo retirar biblioteca conceito <slug>\` ou \`acervo retirar casa revisao <revid>" ;;
+        restaurar) forma="biblioteca obra <obra>\` ou \`acervo restaurar casa revisao <revid>" ;;
         apagar)            forma="biblioteca obra <obra>\` ou \`acervo apagar biblioteca espelho [<hex>/<digest>]" ;;
         recolher|repor)    forma="biblioteca espelho [<obra>]" ;;
       esac
@@ -639,6 +643,9 @@ retirada() {
   shift 2
   case "$ato:$entidade" in
     retirar:obra)     exec "$ATOS/curar" obra --expurgar "$@" ;;
+    # conceito do tesauro (DT 807): retirar apaga o vazio com a ficha; retirar --em <slug> funde no que fica
+    retirar:conceito)
+      exec "$(command -v python3)" "$ATOS/conceito_saida.py" "$ato" "$@" ;;
     restaurar:obra)   exec "$ATOS/curar" obra --restaurar "$@" ;;
     apagar:obra)      exec "$ATOS/curar" obra --apagar "$@" ;;
     retirar:revisao)  exec "$ATOS/wiki" ocultar-revisao "$@" ;;

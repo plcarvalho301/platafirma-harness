@@ -64,7 +64,7 @@ def test_cabecalho_declara_a_capacidade():
 
 
 @pytest.mark.parametrize("argv, forma", [
-    (("retirar", "biblioteca", "conceito", "x"), "acervo retirar biblioteca obra <obra>"),
+    (("retirar", "biblioteca", "relacao", "x"), "acervo retirar biblioteca obra <obra>"),
     (("restaurar", "casa", "obra", "x"), "acervo restaurar biblioteca obra <obra>"),
     (("apagar", "casa", "revisao", "1"), "acervo apagar biblioteca obra <obra>"),
     (("recolher", "biblioteca", "obra", "x"), "acervo recolher biblioteca espelho [<obra>]"),

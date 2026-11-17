@@ -2796,6 +2796,51 @@ def _aplica_hunks(atual: str, hunks: list[dict], novo_arquivo: bool) -> tuple[st
     return "".join(linhas), None
 
 
+def _formatar_raiz_patch(pp_base: PurePosixPath, raiz_wt: Path) -> str:
+    b_root = _bancada()
+    if not pp_base.is_absolute() and b_root is not None:
+        try:
+            r_s = str(raiz_wt.relative_to(_real(b_root)))
+        except ValueError:
+            r_s = str(raiz_wt)
+    else:
+        r_s = str(raiz_wt)
+    return f'write_file(path={json.dumps(r_s, ensure_ascii=False)}, patch="...")'
+
+
+def _resolver_alvo_patch(path: str, pp_base: PurePosixPath | None, alvo_rel: str) -> tuple[str, str | None]:
+    if not pp_base:
+        return alvo_rel, None
+    pp_rel = PurePosixPath(alvo_rel)
+    base_fs, _ = _resolve_relativo(str(pp_base))
+    mesmo_arq = (
+        len(pp_rel.parts) <= len(pp_base.parts)
+        and pp_base.parts[-len(pp_rel.parts):] == pp_rel.parts
+        and not (base_fs is not None and base_fs.is_dir() and (base_fs / alvo_rel).exists())
+    )
+    if mesmo_arq:
+        return path, None
+    if base_fs is not None and base_fs.is_file():
+        anc = base_fs.parent
+        raiz_wt = base_fs.parent
+        while anc != anc.parent:
+            if (anc / ".git").exists():
+                raiz_wt = anc
+                break
+            anc = anc.parent
+        return path, _formatar_raiz_patch(pp_base, raiz_wt)
+    return str(pp_base / pp_rel), None
+
+
+def _proximo_raiz_patch(pp_base: PurePosixPath, real_alvo: Path, alvo_rel: str) -> str | None:
+    anc = real_alvo.parent
+    while anc != anc.parent:
+        if (anc / ".git").exists() or (anc / alvo_rel).is_file():
+            return _formatar_raiz_patch(pp_base, anc)
+        anc = anc.parent
+    return None
+
+
 def write_file(path: str = "", content: str = "", sessao_id: str | None = None,
                trecho: dict | None = None, caminhos: list[str | dict] | None = None,
                patch: str = "", turno: str = "", turno_texto: str = "",
@@ -2839,7 +2884,14 @@ def write_file(path: str = "", content: str = "", sessao_id: str | None = None,
                     exit_code=4, extra=extra))
                 continue
             alvo_rel = arq["new_path"]
-            alvo_path = str(PurePosixPath(path) / alvo_rel) if path else alvo_rel
+            alvo_path, proximo_outro = _resolver_alvo_patch(path, pp_base, alvo_rel)
+            if proximo_outro is not None:
+                resultados.append(_recusa_escrita(
+                    ident, path,
+                    f"patch: path e a raiz da bancada (ou o mesmo arquivo do diff '{alvo_rel}')",
+                    exit_code=2, proximo=proximo_outro, extra=extra,
+                ))
+                continue
             negado = _autoriza("write_file", "write_file", "documento", alvo_path, DOM_PLATAFORMA)
             if negado:
                 resultados.append(negado)
@@ -2852,8 +2904,13 @@ def write_file(path: str = "", content: str = "", sessao_id: str | None = None,
             novo_arquivo = arq["old_path"] == "/dev/null"
             existia = real_alvo.is_file()
             if not novo_arquivo and not existia:
-                resultados.append(_recusa_escrita(ident, alvo_path, "patch: arquivo nao existe",
-                                                  exit_code=2, extra=extra))
+                proximo_raiz = _proximo_raiz_patch(pp_base, real_alvo, alvo_rel) if pp_base else None
+                motivo_inex = (
+                    "patch: arquivo nao existe (path em patch e a raiz da bancada ou o proprio arquivo do diff)"
+                    if proximo_raiz else "patch: arquivo nao existe"
+                )
+                resultados.append(_recusa_escrita(ident, alvo_path, motivo_inex,
+                                                  exit_code=2, proximo=proximo_raiz, extra=extra))
                 continue
             atual = real_alvo.read_text("utf-8", "replace") if existia else ""
             novo_texto, err_hunk = _aplica_hunks(atual, arq["hunks"], novo_arquivo=novo_arquivo)
