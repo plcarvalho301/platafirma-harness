@@ -85,4 +85,25 @@ roda "$LINT" detectar ../fora
 [ "$RC" -eq 4 ] || falha "lint com nome que escapa devia sair 4, saiu $RC"
 echo "OK: escape sai 4"
 
+# 7. DT 810: uma rodada por bancada. A segunda de fora recusa com 7 e diz quem tem a bancada;
+# a filha do portão (PF_TESTE_TRAVA herdado) não trava; acabada a primeira, a bancada volta.
+FUNCS="$(sed -n '/^morre() {/p; /^travar_bancada() {/,/^}/p' "$TESTE")"
+grep -q '^travar_bancada() {' <<<"$FUNCS" || falha "bin/teste sem travar_bancada"
+export PF_TESTE_TRAVAS="$TMP_DIR/travas"
+CLONE="$TMP_DIR/clone-trava"; mkdir -p "$CLONE"
+unset PF_TESTE_TRAVA
+bash -c "VERBO=teste; $FUNCS; travar_bancada '$CLONE' primeira alvo-a; sleep 4" &
+DONO=$!
+sleep 1
+roda bash -c "VERBO=teste; $FUNCS; travar_bancada '$CLONE' segunda; echo passou"
+[ "$RC" -eq 7 ] || falha "segunda rodada na mesma bancada devia sair 7, saiu $RC: $OUT"
+grep -q "outra rodada em curso" <<<"$OUT" && grep -q "primeira alvo-a" <<<"$OUT" \
+  || falha "a recusa devia dizer quem tem a bancada: $OUT"
+roda bash -c "VERBO=teste; export PF_TESTE_TRAVA=mae; $FUNCS; travar_bancada '$CLONE' filha; echo passou"
+[ "$RC" -eq 0 ] && grep -q passou <<<"$OUT" || falha "rodada filha do portão não devia travar: rc=$RC $OUT"
+wait "$DONO"
+roda bash -c "VERBO=teste; $FUNCS; travar_bancada '$CLONE' terceira; echo passou"
+[ "$RC" -eq 0 ] && grep -q passou <<<"$OUT" || falha "bancada livre devia rodar: rc=$RC $OUT"
+echo "OK: uma rodada por bancada; a segunda recusa com 7 e o dono"
+
 echo "=== teste/lint: todos passaram ==="
