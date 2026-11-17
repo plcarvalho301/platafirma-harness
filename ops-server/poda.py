@@ -591,7 +591,7 @@ class Ledger:
         if bruto:
             try:
                 antes = json.loads(bruto)
-            except ValueError:
+            except (ValueError, TypeError):
                 antes = {}
         if not antes:
             self._grava(alca, sha, giro, tool, lavado)
