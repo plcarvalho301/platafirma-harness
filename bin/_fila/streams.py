@@ -640,6 +640,41 @@ def tratar(rc, persona: str, msgids):
     return saida
 
 
+def _ate_normalizado(ate: str):
+    """`--ate` em AAAA-MM-DD (o dia inteiro) ou AAAAMMDDTHHMMSS. Devolve o prefixo de msgid que
+    se compara como texto (o msgid comeca pelo carimbo AAAAMMDDTHHMMSS), ou None se nao se le."""
+    s = (ate or "").strip()
+    if len(s) == 10 and s[4] == s[7] == "-" and (s[:4] + s[5:7] + s[8:]).isdigit():
+        return s[:4] + s[5:7] + s[8:] + "T235959"
+    if len(s) == 15 and s[8] == "T" and (s[:8] + s[9:]).isdigit():
+        return s
+    return None
+
+
+def selecionar(rc, persona: str, de: str = None, tipo: str = None, assunto: str = None,
+               ate: str = None):
+    """Consumidor seletivo (Hohpe e Woolf, *Enterprise Integration Patterns*, Selective
+    Consumer): o seletor avalia os cabecalhos da carta e devolve so as que casam. Le o mesmo
+    que `ler --penduradas` (penduradas e nao lidas) e devolve os msgids, mais antigo primeiro,
+    cujo remetente, tipo, trecho de assunto (sem caixa) e carimbo (ate `ate`, inclusive) casam
+    todos os criterios dados. Nao escreve nada alem do que `penduradas` ja reconcilia (DT 798)."""
+    de_c = (canoniza_persona(de) or de) if de else None
+    trecho = (assunto or "").lower()
+    ids = []
+    for m in penduradas(rc, persona):
+        if de_c and (canoniza_persona(m["de"]) or m["de"]) != de_c:
+            continue
+        if tipo and m["tipo"] != tipo:
+            continue
+        if trecho and trecho not in (m["assunto"] or "").lower():
+            continue
+        if ate and m["msgid"][:15] > ate:
+            continue
+        if m["msgid"] not in ids:
+            ids.append(m["msgid"])
+    return ids
+
+
 def _idade_seg_do_msgid(msgid: str):
     """Idade em segundos a partir do carimbo embutido no msgid (formato
     AAAAMMDDTHHMMSS-<de>, ver gerar_msgid). Mesma leitura de fuso que `frias()`
@@ -995,6 +1030,11 @@ def cmd_ler(rc, eu: str, args):
         if not msgs:
             continue
         vazio = False
+        if getattr(args, "ids", False):
+            # DT 798: so os msgids, um por linha, para alimentar `fila tratar` ou um script.
+            for m in reversed(msgs):
+                print(f"{p} {m['msgid']}" if len(personas) > 1 else m["msgid"])
+            continue
         if len(personas) > 1:
             print(f"## caixa: {p}\n")
         for m in reversed(msgs):
@@ -1024,8 +1064,34 @@ def cmd_tratar(rc, eu: str, args):
     valida_persona(alvo)
     alvo = canoniza_persona(alvo)
     so_minha(eu, alvo)
+    # DT 798: tratar em lote pelo seletor (remetente, tipo, trecho de assunto, carimbo), em vez
+    # de listar centenas de msgids a mao. O seletor e os msgids se excluem: a mistura deixaria
+    # ambiguo o que o ack cobriu.
+    filtros = {k: getattr(args, k, None) for k in ("de", "tipo", "assunto", "ate")}
+    if any(filtros.values()):
+        if args.msgids:
+            sys.stderr.write("erro: passe msgids OU o seletor (--de, --tipo, --assunto, --ate), "
+                             "nao os dois\n")
+            sys.exit(2)
+        ate = None
+        if filtros["ate"]:
+            ate = _ate_normalizado(filtros["ate"])
+            if ate is None:
+                sys.stderr.write(f"erro: --ate le AAAA-MM-DD ou AAAAMMDDTHHMMSS (recebi "
+                                 f"{filtros['ate']!r})\n")
+                sys.exit(2)
+        if filtros["tipo"] and filtros["tipo"] not in TIPOS_VALIDOS:
+            sys.stderr.write(f"erro: tipo invalido: {filtros['tipo']}\n  validos: "
+                             f"{', '.join(sorted(TIPOS_VALIDOS))}\n")
+            sys.exit(2)
+        args.msgids = selecionar(rc, alvo, de=filtros["de"], tipo=filtros["tipo"],
+                                 assunto=filtros["assunto"], ate=ate)
+        if not args.msgids:
+            print("nenhuma carta por tratar casa o seletor · `fila ler --penduradas` mostra o que ha")
+            sys.exit(1)
     if not args.msgids:
-        sys.stderr.write("erro: passe ao menos um msgid (o que `fila ler` imprime em ===MSG <id>===)\n")
+        sys.stderr.write("erro: passe ao menos um msgid (o que `fila ler` imprime em ===MSG <id>===), "
+                         "ou o seletor --de/--tipo/--assunto/--ate\n")
         sys.exit(2)
     falhou = nao_lida = False
     for mid, res in tratar(rc, alvo, args.msgids):
@@ -1278,6 +1344,7 @@ def build_parser():
     p_ler.add_argument("--penduradas", action="store_true")
     p_ler.add_argument("--enviadas", action="store_true")
     p_ler.add_argument("--id", dest="msgid", default=None)
+    p_ler.add_argument("--ids", action="store_true")
     p_ler.add_argument("--json", action="store_true")
     p_ler.add_argument("--eu", default=None)
     p_ler.add_argument("--sessao-id", dest="sessao_id", default=None)
@@ -1285,6 +1352,10 @@ def build_parser():
     p_tratar = sub.add_parser("tratar", add_help=False)
     p_tratar.add_argument("msgids", nargs="*")
     p_tratar.add_argument("--caixa", dest="persona", default=None)
+    p_tratar.add_argument("--de", "--remetente", dest="de", default=None)
+    p_tratar.add_argument("--tipo", default=None)
+    p_tratar.add_argument("--assunto", default=None)
+    p_tratar.add_argument("--ate", default=None)
     p_tratar.add_argument("--eu", default=None)
     p_tratar.add_argument("--sessao-id", dest="sessao_id", default=None)
 
@@ -1320,7 +1391,10 @@ def uso(codigo: int = 2):
         "  fila ler [<persona>] --desde <data> [remetente]   historico desde AAAA-MM-DD ou AAAAMMDDTHHMMSS (ou --remetente / --de <slug>)\n"
         "  fila ler --enviadas [destinatario]       cartas que voce enviou nos 7 dias (frio; aceita --para <slug>)\n"
         "  fila ler --id <msgid>                    le uma carta especifica (destinatario ou remetente, sem mover ponteiro)\n"
+        "  fila ler ... --ids                       so os msgids, um por linha (vale com --penduradas, --tudo, --desde)\n"
         "  fila tratar <msgid>... [--caixa <p>]     ack: a carta virou ato (resposta, card, mesa) ou foi superada\n"
+        "  fila tratar --de <remetente> [--tipo <t>] [--assunto <trecho>] [--ate <data>] [--caixa <p>]\n"
+        "              ack em lote do que nao foi tratado e casa o seletor; --ate AAAA-MM-DD ou AAAAMMDDTHHMMSS\n"
         "  fila enviar <destinatario>... [--tipo <t>] [--assunto <a>] [--ref <r>] [--responde <id>] [--corpo <txt>]\n"
         "              (corpo em stdin ou posicional final `fila enviar <dest> \"<msg>\"`; default: --tipo pedido, --assunto = 1a linha)\n"
         "              --tipo contestacao: --ref e o indicador contestado, o corpo e o fundamento\n"
