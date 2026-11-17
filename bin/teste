@@ -1197,7 +1197,7 @@ memo_do_portao() {  # $1=vereditos_dir $2=arvore
   printf '%s' "$m"
 }
 
-# DT 777: o RLIMIT_NPROC (2048 na porta, _rlimits_filho) conta processos e threads de todo
+# DT 777: o RLIMIT_NPROC (56000 na porta, _rlimits_filho, #4323) conta processos e threads de todo
 # o usuario, nao so desta suite. folga_nproc imprime quantos ainda cabem (soft menos as
 # tarefas vivas do usuario), ou nada quando o teto e ilimitado ou ilegivel; teto_por_folga
 # corta um numero de trabalhadores para caber nela, a PF_TESTE_THREADS_POR_TRABALHADOR
