@@ -699,6 +699,35 @@ def test_write_file_patch_recusa_delecao_e_hunk_invalido(bancada, sem_pep):
     assert (base / "f1.md").read_text("utf-8") == "um\n"
 
 
+def test_write_file_patch_aceita_path_do_mesmo_arquivo_e_recusa_outro_com_raiz(bancada, sem_pep):
+    """DT-790: write_file(path=<bancada>/src/tokens.css, patch=--- a/src/tokens.css) aplica no arquivo."""
+    base = bancada / "wt" / "platafirma-core" / "fabrica"
+    (base / "src").mkdir(parents=True, exist_ok=True)
+    alvo = base / "src" / "tokens.css"
+    alvo.write_text(":root {\n  --cor: red;\n}\n", encoding="utf-8")
+    outro = base / "src" / "outro.css"
+    outro.write_text("body {}\n", encoding="utf-8")
+
+    diff = (
+        "--- a/src/tokens.css\n"
+        "+++ b/src/tokens.css\n"
+        "@@ -1,3 +1,3 @@\n"
+        " :root {\n"
+        "-  --cor: red;\n"
+        "+  --cor: blue;\n"
+        " }\n"
+    )
+    r_ok = s.write_file(path=str(alvo), patch=diff)
+    assert r_ok["ok"] is True, r_ok
+    assert alvo.read_text("utf-8") == ":root {\n  --cor: blue;\n}\n"
+
+    r_outro = s.write_file(path=str(outro), patch=diff)
+    assert r_outro["ok"] is False
+    rec = r_outro["resultados"][0]
+    assert "raiz" in rec["motivo"]
+    assert str(base) in rec["proximo"]
+
+
 def test_ler_arquivo_relativo_prefere_worktree_da_cadeira_e_avisa_copia_atras(bancada, sem_pep, monkeypatch):
     """DT-772: `<repo>/...` resolve para `wt/<repo>/<cadeira>/main` quando existe; senão avisa se atrás."""
     clone = bancada / "platafirma-casa-espelho"
