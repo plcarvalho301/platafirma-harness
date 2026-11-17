@@ -226,7 +226,9 @@ def test_ler_mostra_travada_por_somente_com_bloqueador_aberto(stub):
         ]))
     p = _run(["ler", "10"], base)
     assert p.returncode == 0, p.stderr
-    assert "bloqueado por: #12 (entregue), #13 (em-execucao)" in p.stdout
+    # o bloqueador entregue está fora do funil e não aparece na leitura (ordem do dono, 17/11/2026)
+    assert "bloqueado por: #13 (em-execucao)" in p.stdout
+    assert "#12" not in p.stdout
     assert "travada por: #13 (em-execucao)" in p.stdout
     linha_travada = next(linha for linha in p.stdout.splitlines() if "travada por:" in linha)
     assert "#12" not in linha_travada
@@ -240,7 +242,8 @@ def test_ler_mostra_travada_por_somente_com_bloqueador_aberto(stub):
         ]))
     p2 = _run(["ler", "11"], base)
     assert p2.returncode == 0, p2.stderr
-    assert "bloqueado por: #12 (entregue), #14 (cancelada)" in p2.stdout
+    assert "bloqueado por:" not in p2.stdout
+    assert "#12" not in p2.stdout and "#14" not in p2.stdout
     assert "travada por:" not in p2.stdout
 
 

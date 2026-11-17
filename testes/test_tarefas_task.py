@@ -121,10 +121,11 @@ def test_ler_a_story_traz_todas_as_tasks_na_ordem_com_o_estado_de_cada_uma(stub)
     p = _run(["ler", "7"], base)
     assert p.returncode == 0, p.stderr
     linhas = p.stdout.splitlines()
-    i = linhas.index("tasks (2 abertas de 3):")
-    assert linhas[i + 1].startswith("  1. #11") and "concluída" in linhas[i + 1]
-    assert linhas[i + 2].startswith("  2. #12") and "aberta" in linhas[i + 2]
-    assert linhas[i + 3].startswith("  3. #13") and "[travada por #12]" in linhas[i + 3]
+    # a task concluída está fora do funil e não aparece na leitura (ordem do dono, 17/11/2026)
+    i = linhas.index("tasks (2 abertas de 2):")
+    assert linhas[i + 1].startswith("  1. #12") and "aberta" in linhas[i + 1]
+    assert linhas[i + 2].startswith("  2. #13") and "[travada por #12]" in linhas[i + 2]
+    assert "#11" not in p.stdout
     assert "filhas (abertas)" not in p.stdout
 
 

@@ -32,7 +32,7 @@
 # face: desbloquear=Entrega
 # face: carteira=Entrega
 # rotulo: listar=Listar card aberto
-# rotulo: listar-tudo=Listar card, fechado inclusive
+# rotulo: listar-tudo=Listar card do funil, parado inclusive
 # rotulo: ler=Abrir card
 # rotulo: criar=Criar card
 # rotulo: editar=Editar card
@@ -118,8 +118,14 @@ uso:
                                           mostrado, cadeira, executor e título, na ordem dele;
                                           sem --paradas, a despriorizada sai do delivery e a
                                           saída diz quantas saíram
-  tarefas listar-tudo [mesmos filtros] [--ultimos <n>] inclui os terminais; com --ultimos,
-                                          ordena por data decrescente e inclui data na saída
+  tarefas listar-tudo [mesmos filtros] [--ultimos <n>] o funil inteiro, paradas inclusive;
+                                          com --ultimos, ordena por data decrescente e inclui
+                                          data na saída
+                                          CARD EM ESTADO TERMINAL (entregue, encerrado, cancelado,
+                                          englobado, descartado) NÃO SAI EM ATO DE LEITURA NENHUM:
+                                          listar, listar-tudo, ler, comentarios, sub, espera-dono,
+                                          --quadro e api GET o tiram da lista, e o pedido direto
+                                          dele sai recusado com exit 1 (ordem do dono, 17/11/2026)
   tarefas ler|ver <id> [--cabecalho] [--todas-filhas]
                                           item em texto: cabeçalho (originação, executor,
                                           quem bloqueia e por quem é bloqueado), ancestrais,
@@ -298,7 +304,7 @@ _recusa() { # lê o corpo do erro em $1 (e opcionalmente $2=http_code $3=rota $4
 # RECUSA E' FALHA (medido 12/09/2026): `|| _recusa` imprimia a causa e a funcao seguia
 # para o printf e devolvia 0 — `tarefas mover` recusado pela API saia "item null → : null"
 # com exit 0. Falha silenciosa e' pior que exit 1: o log de erro nao a ve.
-_exec_curl() { # _exec_curl MÉTODO /caminho [corpo_em_stdin=0|1]
+_exec_curl_cru() { # _exec_curl_cru MÉTODO /caminho [corpo_em_stdin=0|1]  — sem o portão do funil
   local metodo="$1" caminho="$2" com_corpo="${3:-0}"
   local err_arq rc=0 bruto="" http_code="" saida="" curl_err=""
   local -a args=(-sS --fail-with-body -w $'\n%{http_code}' -X "$metodo" "$BASE$caminho")
@@ -348,6 +354,135 @@ busca() { # busca MÉTODO /caminho
 
 envia() { # envia MÉTODO /caminho  (corpo JSON em stdin)
   _exec_curl "$1" "$2" 1
+}
+
+# --- portão do funil -----------------------------------------------------------
+
+# CARD FORA DO FUNIL NÃO APARECE EM LEITURA (ordem do dono, 17/11/2026): para quem usa o
+# gatilho de tarefas, card em estado terminal (entregue, encerrado, cancelado, englobado,
+# descartado, recusado, resolvido, e o que mais o registro marcar terminal) não aparece sob
+# hipótese nenhuma. O portão mora AQUI, no transporte, e não em cada ato: todo GET que um ato
+# de leitura faz ao rastreador passa por ele, e o ato novo que ler card já nasce coberto.
+# O despacho liga o portão (`_SO_FUNIL=1`) só nos atos de leitura; os de escrita seguem
+# vendo o card terminal, porque mover de volta, apagar e reabrir dependem disso.
+#   - card terminal pedido pelo id ou pela chave: recusa, exit 1, sem título nem corpo;
+#   - card englobado lido pelo número antigo (a API devolve o englobante com `resolvido_de`):
+#     recusa, nomeando o englobante, que é o que se lê;
+#   - subrecurso de card terminal (`/itens/<n>/comentarios`): recusa;
+#   - lista, quadro, espera-dono, filhas, ancestrais e vínculos: o card terminal sai da lista,
+#     e o objeto que só o apontava vira null; os totais se recontam.
+# Objeto de card sem estado na resposta (o `pai` do quadro, as linhas de espera-dono) se
+# confere pelo detalhe dele, um GET por id distinto.
+_SO_FUNIL=0
+_FUNIL_TERMOS=""
+JQ_FUNIL='
+def card_id: if ((.item // null) | type) == "number" then .item else .id end;
+def ehcard: type == "object" and has("titulo") and ((card_id | type) == "number");
+def temestado: has("estado") or has("estado_fase") or has("estado_mostrado") or has("estado_derivado");
+def terminal($t; $ids):
+  . as $o
+  | if (($o.item // null) | type) == "number" then (($ids | index([$o.item])) != null)
+    elif ($o.estado_derivado // null) != null then (($t | index([$o.estado_derivado])) != null)
+    elif ($o | temestado) then ($o.estado_fase == "terminal" or $o.estado_natureza == "terminal"
+                         or (($t | index([$o.estado // $o.estado_mostrado])) != null))
+    else (($ids | index([$o.id])) != null) end;
+def fora($t; $ids): ehcard and terminal($t; $ids);
+def podar($t; $ids):
+  walk(if type == "array" then map(select(fora($t; $ids) | not))
+       elif type == "object" then with_entries(if ((.value | type) == "object") and (.value | fora($t; $ids)) then .value = null else . end)
+       else . end);
+def sem_inventario: if type == "object" then del(.inventario) else . end;
+def podar_card($t; $ids):
+  (if type == "object" then (.inventario // null) else null end) as $inv
+  | sem_inventario | podar($t; $ids)
+  | if $inv != null then .inventario = $inv else . end;
+def recontar:
+  (if type == "object" and has("itens") and has("total") and ((.itens | type) == "array") then .total = (.itens | length) else . end)
+  | (if type == "object" and ((.do_dono // null) | type) == "object" and (.do_dono | has("total"))
+     then .do_dono.total = ([.do_dono | to_entries[] | select(.key != "total") | .value | arrays | length] | add // 0) else . end)
+  | (if type == "object" and ((.com_cadeiras // null) | type) == "object" and ((.com_cadeiras.cards // null) | type) == "array"
+     then (if (.com_cadeiras | has("abertos")) then .com_cadeiras.abertos = ([.com_cadeiras.cards[].abertos[]?] | length) else . end)
+          | (if (.com_cadeiras | has("parados")) then .com_cadeiras.parados = ([.com_cadeiras.cards[].abertos[]? | select(.parado == true)] | length) else . end)
+     else . end);
+'
+
+# Os estados terminais: o que o registro marca com fase ou natureza terminal, mais a lista fixa
+# que `listar` já usa (o registro pode ter retirado o estado e o card antigo ainda o carregar).
+_funil_termos() {
+  if [ -z "$_FUNIL_TERMOS" ]; then
+    _FUNIL_TERMOS=$(_exec_curl_cru GET /registro 2>/dev/null | jq -c '
+      [(if type == "array" then . else (.estados // []) end)[]?
+       | select(.fase == "terminal" or .natureza == "terminal") | .estado]' 2>/dev/null) || _FUNIL_TERMOS=""
+    [ -n "$_FUNIL_TERMOS" ] || _FUNIL_TERMOS='[]'
+    _FUNIL_TERMOS=$(jq -c '. + ["entregue","recusada","cancelada","englobada","encerrada","resolvido","descartada"] | unique' <<<"$_FUNIL_TERMOS")
+  fi
+  printf '%s' "$_FUNIL_TERMOS"
+}
+
+_funil_recusa() { # _funil_recusa <json do card>
+  local msg
+  msg=$(printf '%s' "$1" | jq -r "$JQ_ROT"'
+    "\(rot) está fora do funil (\(.estado_derivado // .estado // .estado_mostrado // "terminal")): card em estado terminal não aparece em leitura do verbo tarefas"' 2>/dev/null)
+  [ -n "$msg" ] || msg="card fora do funil: card em estado terminal não aparece em leitura do verbo tarefas"
+  printf '%s\n' "$msg" >&2
+  return 1
+}
+
+# O card pedido é terminal? Recusa. $1 é o JSON do detalhe.
+_funil_confere() {
+  local j="$1" t; t=$(_funil_termos)
+  local englobante; englobante=$(printf '%s' "$j" | jq -r 'if type == "object" and (.resolvido_de // null) != null then .id else empty end' 2>/dev/null || true)
+  if [ -n "$englobante" ]; then
+    local orig; orig=$(printf '%s' "$j" | jq -r '.resolvido_de')
+    printf '#%s está fora do funil (englobada em #%s): card em estado terminal não aparece em leitura do verbo tarefas; leia #%s\n' "$orig" "$englobante" "$englobante" >&2
+    return 1
+  fi
+  if printf '%s' "$j" | jq -e --argjson t "$t" "$JQ_FUNIL"'fora($t; [])' >/dev/null 2>&1; then
+    _funil_recusa "$j"
+    return 1
+  fi
+  return 0
+}
+
+# Poda a resposta de uma rota de leitura. $1 é o corpo.
+_funil_podar() {
+  local corpo="$1" t ids='[]' i ji
+  t=$(_funil_termos)
+  _funil_confere "$corpo" || return 1
+  # Card citado sem estado na resposta: confere pelo detalhe dele.
+  local sem_estado
+  sem_estado=$(printf '%s' "$corpo" | jq -r "$JQ_FUNIL"'
+    [sem_inventario | .. | objects | select(ehcard and ((((.item // null) | type) == "number") or (temestado | not))) | card_id] | unique | .[]' 2>/dev/null || true)
+  for i in $sem_estado; do
+    ji=$(_exec_curl_cru GET "/itens/$i" 2>/dev/null) || continue
+    if printf '%s' "$ji" | jq -e --argjson t "$t" "$JQ_FUNIL"'(.resolvido_de // null) != null or fora($t; [])' >/dev/null 2>&1; then
+      ids=$(jq -c --argjson n "$i" '. + [$n]' <<<"$ids")
+    fi
+  done
+  printf '%s' "$corpo" | jq -c --argjson t "$t" --argjson ids "$ids" "$JQ_FUNIL"'podar_card($t; $ids) | recontar'
+}
+
+# O transporte que os atos chamam. Com o portão desligado, ou fora de GET, ou fora das rotas
+# de card, é o transporte cru.
+_exec_curl() { # _exec_curl MÉTODO /caminho [corpo_em_stdin=0|1]
+  local metodo="$1" caminho="$2"
+  if [ "$_SO_FUNIL" != 1 ] || [ "${metodo^^}" != GET ]; then
+    _exec_curl_cru "$@"
+    return
+  fi
+  local rota="${caminho%%\?*}"
+  case "$rota" in
+    /itens|/itens/*|/quadro|/quadro/*|/espera-dono|/espera-dono/*) ;;
+    *) _exec_curl_cru "$@"; return ;;
+  esac
+  # Os termos se leem ANTES da rota pedida, e a rota pedida é a última chamada do caminho comum.
+  _funil_termos >/dev/null
+  if [[ "$rota" =~ ^/itens/([0-9]+)/ ]]; then
+    local jc; jc=$(_exec_curl_cru GET "/itens/${BASH_REMATCH[1]}") || return 1
+    _funil_confere "$jc" || return 1
+  fi
+  local corpo; corpo=$(_exec_curl_cru "$@") || return 1
+  _funil_podar "$corpo"
 }
 
 # --- corpo: o rastreador guarda HTML, como o Vikunja guardava ---------------
@@ -1485,6 +1620,9 @@ comentarios() {
     esac
   done
   [ -n "$id" ] || { echo "$uso" >&2; exit 2; }
+  # Portão do funil: o card terminal sai recusado aqui, limpo, antes dos encadeamentos abaixo
+  # (que, recusados no meio do pipe, imprimiam o traceback do conversor junto da recusa).
+  if [ "$_SO_FUNIL" = 1 ]; then busca GET "/itens/$id" >/dev/null || return 1; fi
   local saida bytes
   if [ "$arvore" = "true" ] || [ -n "$busca_termo" ]; then
     local -a fila=("$id")
@@ -2640,7 +2778,9 @@ carteira() { # carteira [--desde AAAA-MM-DD]
     || { echo "--desde pede AAAA-MM-DD: $desde" >&2; exit 2; }
   local lista registro balde saidas
   # Card #4223 (R25 emendado): a carteira conta só stories; a task é passo da story e não entra.
-  lista=$(busca GET "/itens?nivel=2") || return 1
+  # O portão do funil não poda esta lista: a carteira CONTA as entregues e não mostra nenhuma
+  # (sai só o número por originação); as linhas que ela mostra são as paradas, que são funil.
+  lista=$(_exec_curl_cru GET "/itens?nivel=2") || return 1
   registro=$(busca GET /registro) || return 1
   # As saídas se contam na API (R26: o balde é dado, não corpo de card), pela data em que a linha
   # saiu. Rastreador que não respondeu não derruba a fatia.
@@ -2730,6 +2870,14 @@ if [ "${1:-}" != "dt" ] && [ "${1:-}" != "achado" ] && [ "${1:-}" != "desvio" ];
 fi
 
 cmd="${1:-}"; shift || uso
+
+# Portão do funil (ordem do dono, 17/11/2026): ligado em todo ato que só lê card. `sub` liga
+# só quando lista as filhas (um argumento); `api` e `api-corpo`, só em GET.
+case "$cmd" in
+  listar|listar-tudo|ler|ver|comentarios|carteira|espera-dono) _SO_FUNIL=1 ;;
+  sub) if [ $# -eq 1 ] && [ "${1:-}" != "--sem-pai" ]; then _SO_FUNIL=1; fi ;;
+  api|api-corpo) _m="${1:-}"; if [ "${_m^^}" = GET ]; then _SO_FUNIL=1; fi ;;
+esac
 
 case "$cmd" in
   listar)      descarta_projeto "${1:-}" && shift; listar "$@" ;;

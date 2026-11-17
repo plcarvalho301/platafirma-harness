@@ -75,6 +75,12 @@ class _Stub(BaseHTTPRequestHandler):
         m = re.match(r"^/itens/(\d+)/comentarios$", self.path)
         if m:
             return self._json({"item": int(m.group(1)), "comentarios": self.comentarios})
+        # O portão do funil confere o card antes de ler os comentários dele: o stub o serve aberto.
+        m = re.match(r"^/itens/(\d+)$", self.path)
+        if m:
+            return self._json({"id": int(m.group(1)), "chave": m.group(1), "titulo": "card aberto",
+                               "estado": "em-execucao", "estado_fase": "delivery",
+                               "estado_derivado": None})
         self._json({"erro": "nao existe"}, 404)
 
     def do_PATCH(self):
