@@ -55,6 +55,11 @@ class _Stub(BaseHTTPRequestHandler):
         type(self).chamadas.append(("PATCH", self.path, corpo))
         if self.recusa:
             return self._json({"erro": self.recusa}, 400)
+        if type(self).item_desc is not None and "descricao_trecho" in corpo:
+            antes_env = corpo["descricao_trecho"]["antes"]
+            cnt = type(self).item_desc.count(antes_env)
+            if cnt != 1:
+                return self._json({"erro": f"descricao_trecho: `antes` ocorre {cnt} vezes no corpo do item; tem de ocorrer exatamente uma"}, 400)
         m = re.match(r"^/itens/(\d+)$", self.path)
         return self._json(ITEM if m else {"erro": "rota"}, 200 if m else 404)
 
@@ -196,3 +201,24 @@ def test_o_ato_riscar_saiu_do_verbo(stub):
     assert p.returncode != 0
     assert not s.chamadas
     assert "riscar" not in BIN.read_text(encoding="utf-8")
+
+
+def test_dt_783_trecho_com_lista_numerada_aspas_angulares_e_tag_inline_resolve_contra_corpo(stub):
+    s, base = stub
+    s.item_desc = (
+        "<p><strong>Regras novas:</strong></p>"
+        "<ol><li>Transição de épico ou feature para <code>priorizada</code> exige no comentário "
+        "de decisão (ou no Apetite do card) o número de fitas e o que se corta primeiro; decisão "
+        "que só diz «aprovada» ou «priorizar» sem apetite e corte é recusada nomeando o que falta.</li></ol>"
+    )
+    antes = (
+        "1. Transição de épico ou feature para priorizada exige no comentário de decisão "
+        "(ou no Apetite do card) o número de fitas e o que se corta primeiro; decisão que só "
+        "diz «aprovada» ou «priorizar» sem apetite e corte é recusada nomeando o que falta."
+    )
+    marca = " · validada (dono, 2026-11-17, sessao=01a35b7f)"
+    p = _run(["editar", "42", "--trecho", "--antes", antes, "--depois", antes + marca], base)
+    assert p.returncode == 0, p.stderr
+    patch_final = [c for c in s.chamadas if c[0] == "PATCH"][-1][2]["descricao_trecho"]
+    assert "<code>priorizada</code>" in patch_final["antes"]
+    assert patch_final["depois"].endswith(marca)
