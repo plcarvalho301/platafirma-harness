@@ -202,25 +202,22 @@ def test_erro_e_exit_diferente_de_zero_nunca_podam():
     assert _p.intocavel({"exit_code": 1})
     assert not _p.intocavel({"exit_code": 0})
     ruidoso = {"exit_code": 2, "stdout": {"texto": "a\n" * 500, "bytes_total": 1000}}
-    with patch.object(s, "redis") as _rmod:
-        _rmod.Redis = FakeRedisMemoria()
+    with patch.object(s, "_rc", return_value=FakeRedisMemoria()):
         assert s._serve(dict(ruidoso), tool="t", alca="a", ident={"sessao_id": _UUID_A}) == ruidoso
 
 
 def test_identificador_exato_nao_se_toca():
     with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), patch.object(
-        s, "redis"
-    ) as _rmod:
-        _rmod.Redis = FakeRedisMemoria()
+        s, "_rc", return_value=FakeRedisMemoria()
+    ):
         r = s.ler_arquivo(caminho=_REQ, sessao_id=_UUID_A)
     assert r["caminho"].endswith("requirements.txt")
 
 
 def test_releitura_identica_serve_aviso_estavel_sem_timestamp():
     with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), patch.object(
-        s, "redis"
-    ) as _rmod:
-        _rmod.Redis = FakeRedisMemoria()
+        s, "_rc", return_value=FakeRedisMemoria()
+    ):
         r1 = s.ler_arquivo(caminho=_SERVER, linhas="1-80", sessao_id=_UUID_A)
         r2 = s.ler_arquivo(caminho=_SERVER, linhas="1-80", sessao_id=_UUID_A)
         r3 = s.ler_arquivo(caminho=_SERVER, linhas="1-80", sessao_id=_UUID_A)
@@ -235,9 +232,8 @@ def test_retorno_curto_nao_deduplica_porque_o_aviso_custaria_mais(tmp_path, monk
     curto = tmp_path / "curto.txt"
     curto.write_text("mcp==1.0\nredis==5.0\n", encoding="utf-8")
     with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), patch.object(
-        s, "redis"
-    ) as _rmod:
-        _rmod.Redis = FakeRedisMemoria()
+        s, "_rc", return_value=FakeRedisMemoria()
+    ):
         s.ler_arquivo(caminho=str(curto), sessao_id=_UUID_A)
         r2 = s.ler_arquivo(caminho=str(curto), sessao_id=_UUID_A)
     assert r2["poda"]["ledger"] == "curto" and "mcp==1.0" in r2["conteudo"]
@@ -249,9 +245,8 @@ def test_c15_leitura_serve_blob_e_crlf_como_estao(tmp_path, monkeypatch):
     alvo = tmp_path / "blob.txt"
     alvo.write_bytes(texto.encode())
     with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), patch.object(
-        s, "redis"
-    ) as _rmod:
-        _rmod.Redis = FakeRedisMemoria()
+        s, "_rc", return_value=FakeRedisMemoria()
+    ):
         r = s.ler_arquivo(caminho=str(alvo), sessao_id=_UUID_A)
     assert r["conteudo"] == texto and r["poda"]["lavado"] == []
 
@@ -261,9 +256,8 @@ def test_c16_releitura_igual_avisa_e_inteiro_reenvia(tmp_path, monkeypatch):
     alvo = tmp_path / "relido.txt"
     alvo.write_text("".join(f"linha {i} de um arquivo relido\n" for i in range(200)))
     with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), patch.object(
-        s, "redis"
-    ) as _rmod:
-        _rmod.Redis = FakeRedisMemoria()
+        s, "_rc", return_value=FakeRedisMemoria()
+    ):
         r1 = s.ler_arquivo(caminho=str(alvo), sessao_id=_UUID_A)
         r2 = s.ler_arquivo(caminho=str(alvo), sessao_id=_UUID_A)
         r3 = s.ler_arquivo(caminho=str(alvo), sessao_id=_UUID_A, inteiro=True)
@@ -276,9 +270,8 @@ def test_c16_releitura_igual_avisa_e_inteiro_reenvia(tmp_path, monkeypatch):
 def test_ler_arquivo_audita_classe_do_erro(tmp_path, monkeypatch):
     _na_morada(monkeypatch, tmp_path)
     with _derrame_tmp(), patch.object(s, "_autoriza", return_value=None), patch.object(
-        s, "redis"
-    ) as _rmod, patch.object(s, "_audit") as aud:
-        _rmod.Redis = FakeRedisMemoria()
+        s, "_rc", return_value=FakeRedisMemoria()
+    ), patch.object(s, "_audit") as aud:
         r = s.ler_arquivo(caminho=str(tmp_path / "nao" / "existe.py"), sessao_id=_UUID_A)
     assert r["erro"] == "não existe" and r["existe_ate"] == str(tmp_path)
     assert "classe_erro" not in r
@@ -288,8 +281,7 @@ def test_ler_arquivo_audita_classe_do_erro(tmp_path, monkeypatch):
 
 def test_releitura_de_arquivo_mudado_serve_diff():
     fake = FakeRedisMemoria()
-    with _derrame_tmp(), patch.object(s, "redis") as _rmod:
-        _rmod.Redis = fake
+    with _derrame_tmp(), patch.object(s, "_rc", return_value=fake):
         led = _p.Ledger(fake, _UUID_A)
         base = "linha 1\nlinha 2\nlinha 3\n" * 20
         led.olha("arq", base, 1, "ler_arquivo")
@@ -327,9 +319,8 @@ def test_pf_poda_zero_reverte_a_porta_inteira():
     with patch.dict(os.environ, {"PF_PODA": "0"}):
         assert s._serve(dict(r), tool="t", alca="a", ident={"sessao_id": _UUID_A}) == r
     with patch.dict(os.environ, {"PF_PODA": "1"}), _derrame_tmp(), patch.object(
-        s, "redis"
-    ) as _rmod:
-        _rmod.Redis = FakeRedisMemoria()
+        s, "_rc", return_value=FakeRedisMemoria()
+    ):
         assert s._serve(dict(r), tool="t", alca="a", ident={"sessao_id": _UUID_A}) != r
 
 
@@ -476,8 +467,7 @@ def test_hash_unico_pecas_e_busca():
     acervo = {"peca": "acervo-consultado", "ref": "verbo:acervo", "conteudo": corpo, "sha": _p.sha_servido(corpo)}
     texto = "TEXTO DA PERSONA " * 50
     persona = {"peca": "persona", "sha": _p.sha_servido(texto), "conteudo": texto}
-    with patch.object(s, "redis") as _rmod, patch.object(s, "_superficie", return_value="cli"):
-        _rmod.Redis = FakeRedisMemoria()
+    with patch.object(s, "_rc", return_value=FakeRedisMemoria()), patch.object(s, "_superficie", return_value="cli"):
         r1 = {"pecas": [dict(acervo), dict(persona)]}
         s._delta_pecas(r1, _UUID_A)
         r2 = {"pecas": [dict(acervo), dict(persona)]}
