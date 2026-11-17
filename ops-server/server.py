@@ -3909,17 +3909,70 @@ TOOLS_DERIVADAS = _gera_tools_verbos()
 SLUGS_SERVIDOS = set(TOOLS_DERIVADAS)
 
 
+def _esquema_plano(esquema: dict) -> dict:
+    """Achata `anyOf` em `type` explícito no `inputSchema` servido por `tools/list` (#4257).
+
+    O conversor `convertMapToSchema` do Antigravity (`agy`) ignora `anyOf` e emite `{}` (`TYPE_UNSPECIFIED`)
+    para qualquer propriedade sem `type` no topo (ou `items: {}` em listas sem tipo), o que leva o
+    `streamGenerateContent` da API Gemini a abortar o stream com `400 INVALID_ARGUMENT`. O cache interno do
+    FastMCP segue com o esquema completo para `tools/call` aceitar `None`, `str`, `list` e `dict`."""
+    if not isinstance(esquema, dict):
+        return esquema
+    out = dict(esquema)
+    if "anyOf" in out and "type" not in out:
+        ramos = [r for r in out.pop("anyOf") if isinstance(r, dict) and r.get("type") != "null"]
+        if ramos:
+            escolhido = dict(ramos[0])
+            escolhido.update({k: v for k, v in out.items() if k != "default" or v is not None})
+            out = escolhido
+    if out.get("default") is None and "default" in out:
+        out.pop("default")
+    if "properties" in out and isinstance(out["properties"], dict):
+        props = {}
+        for k, v in out["properties"].items():
+            p = _esquema_plano(v)
+            if k == "trecho" and isinstance(p, dict) and p.get("type") == "object" and "properties" not in p:
+                p["properties"] = {
+                    "antes": {"type": "string"},
+                    "depois": {"type": "string"},
+                    "todos": {"type": "boolean"},
+                }
+            elif k == "lote" and isinstance(p, dict) and p.get("type") == "array":
+                p["items"] = {
+                    "type": "object",
+                    "properties": {
+                        "ato": {"type": "string"},
+                        "args": {"type": "array", "items": {"type": "string"}},
+                        "stdin": {"type": "string"},
+                        "inteiro": {"type": "boolean"},
+                    },
+                }
+            props[k] = p
+        out["properties"] = props
+    if "items" in out and isinstance(out["items"], dict):
+        it = _esquema_plano(out["items"])
+        if "type" not in it:
+            it = {**it, "type": "string"}
+        out["items"] = it
+    elif out.get("type") == "array":
+        out["items"] = {"type": "string"}
+    return out
+
+
 def _esconde_as_ocultas() -> None:
-    """`tools/list` sem as tools de `OCULTAS`. O handler de baixo roda inteiro, então o cache de definições da
-    `mcp` segue com a tool oculta: o `tools/call` dela passa pela validação do esquema e não grava o aviso
-    «not listed» (medido em ops-server/test_contrato_borda.py, #4117)."""
+    """`tools/list` sem as tools de `OCULTAS` e com `inputSchema` plano (#4117, #4257). O handler de baixo
+    roda inteiro, então o cache de definições da `mcp` segue com a tool oculta e o esquema completo: o
+    `tools/call` passa pela validação do esquema sem gravar «not listed» e aceita uniões em runtime."""
     from mcp import types as _tipos
     baixo = mcp._mcp_server
     original = baixo.request_handlers[_tipos.ListToolsRequest]
 
     async def _sem_ocultas(req):
         lista = (await original(req)).root
-        visiveis = [t for t in lista.tools if t.name not in OCULTAS]
+        visiveis = [
+            t.model_copy(update={"inputSchema": _esquema_plano(t.inputSchema)})
+            for t in lista.tools if t.name not in OCULTAS
+        ]
         return _tipos.ServerResult(_tipos.ListToolsResult(tools=visiveis, nextCursor=lista.nextCursor))
 
     baixo.request_handlers[_tipos.ListToolsRequest] = _sem_ocultas
