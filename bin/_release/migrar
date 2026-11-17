@@ -46,6 +46,13 @@ uso:
                              gera a senha da <role>, troca no <banco> e guarda em
                              cada segredos/<stack>/<nome> (0600); o valor nunca se imprime.
                              Segredo que ja existe so se troca com --rotacionar.
+  $VERBO cortar <banco> <schema> <banco-destino>|--rascunho
+                             corta o <schema> do <banco> para outro banco do registro, ou
+                             para uma base de rascunho nova no conteiner do <banco>: pg_dump
+                             -Fc a var/cortes/ da instancia (0600), pg_restore em transacao
+                             unica, e a contagem de tabelas dos dois lados (diverge: exit 1).
+                             Destino que ja tem tabela no schema recusa (exit 4). O dump
+                             nunca passa pelo stdin nem pelo stdout. Exige PF_SUJEITO.
 
 bancos declarados: ${!BANCOS[*]}
 o SQL entra SEMPRE por stdin — a tool passa \`stdin=<corpo da migracao>\`.
@@ -193,9 +200,69 @@ case "$ato" in
     printf '%s: role %s em %s com senha nova; segredo em segredos/%s (0600) — o valor nao se imprime%s\n' \
       "$VERBO" "$role" "$banco" "$(IFS=,; echo "${alvos[*]}")" "${PF_SUJEITO:+ (sujeito=$PF_SUJEITO)}"
     ;;
+  cortar)
+    # DT 792: o corte de um schema de um banco do registro para outro (ou para uma base de
+    # rascunho no conteiner do destino). O dump nasce no conteiner de origem (pg_dump -Fc),
+    # desce a um arquivo 0600 da instancia e entra no destino por pg_restore numa transacao
+    # unica; nunca passa pelo stdin nem pelo stdout da porta. Sai com a contagem de tabelas
+    # do schema nos dois lados, e diferenca e exit 1.
+    origem="${1:-}"; schema="${2:-}"; destino="${3:-}"; shift 3 2>/dev/null || true
+    [ $# -eq 0 ] || morre "erro: uso: $VERBO cortar <banco> <schema> <banco-destino>|--rascunho" 2
+    [ -n "$origem" ] && [ -n "$schema" ] && [ -n "$destino" ] \
+      || morre "erro: uso: $VERBO cortar <banco> <schema> <banco-destino>|--rascunho" 2
+    [[ "$schema" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || morre "erro: schema '$schema' invalido — so [a-z0-9_], comecando por letra ou _" 2
+    [ -n "${BANCOS[$origem]:-}" ] || morre "erro: banco '$origem' fora da allowlist — validos: ${!BANCOS[*]}" 4
+    rascunho=""
+    if [ "$destino" = "--rascunho" ]; then
+      rascunho="rascunho_${schema}_$(date -u +%Y%m%dt%H%M%S)"
+      IFS=: read -r ctr_d usr_d _base_d <<<"${BANCOS[$origem]}"
+      base_d="$rascunho"
+    else
+      [ -n "${BANCOS[$destino]:-}" ] || morre "erro: banco '$destino' fora da allowlist — validos: ${!BANCOS[*]}" 4
+      [ "$destino" != "$origem" ] || morre "erro: origem e destino sao o mesmo banco ($origem)" 2
+      IFS=: read -r ctr_d usr_d base_d <<<"${BANCOS[$destino]}"
+    fi
+    exigir_sujeito "$VERBO cortar"
+    IFS=: read -r ctr usr base <<<"${BANCOS[$origem]}"
+    command -v docker >/dev/null 2>&1 || morre "erro: dependência docker: ausente — 'docker' nao esta no PATH desta conta" 3
+    for _c in "$ctr" "$ctr_d"; do
+      docker inspect -f '{{.State.Running}}' "$_c" 2>/dev/null | grep -qx true \
+        || morre "erro: dependência $_c: ausente — contêiner nao esta de pe; \`infra estado\`" 3
+    done
+    contar() {  # $1=ctr $2=usr $3=base ; imprime o numero de tabelas do schema
+      docker exec -i "$1" psql -U "$2" -d "$3" -X -tA -v ON_ERROR_STOP=1 \
+        -c "select count(*) from information_schema.tables where table_schema = '$schema'" 2>/dev/null
+    }
+    n_origem="$(contar "$ctr" "$usr" "$base")"
+    [[ "$n_origem" =~ ^[0-9]+$ ]] || morre "erro: nao consegui contar as tabelas de $schema em $origem" 5
+    [ "$n_origem" -gt 0 ] || morre "erro: schema $schema sem tabela em $origem — nada a cortar" 1
+    if [ -z "$rascunho" ]; then
+      n_antes="$(contar "$ctr_d" "$usr_d" "$base_d")"
+      [[ "$n_antes" =~ ^[0-9]+$ ]] || morre "erro: nao consegui contar as tabelas de $schema em $destino" 5
+      [ "$n_antes" -eq 0 ] || morre "erro: $destino ja tem $n_antes tabela(s) em $schema — o corte nao sobrescreve" 4
+    fi
+    pasta="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/cortes"
+    umask 077
+    mkdir -p "$pasta" || morre "erro: nao consegui criar $pasta" 3
+    dump="$pasta/$(date -u +%Y%m%dT%H%M%SZ)-$origem-$schema.dump"
+    docker exec "$ctr" pg_dump -U "$usr" -d "$base" --schema="$schema" -Fc >"$dump" \
+      || { rm -f "$dump"; morre "erro: pg_dump de $schema em $origem falhou" 1; }
+    if [ -n "$rascunho" ]; then
+      docker exec "$ctr_d" createdb -U "$usr_d" "$rascunho" \
+        || morre "erro: nao consegui criar a base de rascunho $rascunho em $ctr_d" 1
+    fi
+    docker exec -i "$ctr_d" pg_restore -U "$usr_d" -d "$base_d" --no-owner --no-privileges \
+        --exit-on-error -1 <"$dump" \
+      || morre "erro: pg_restore em ${rascunho:-$destino} abortou — a transacao nao commitou; o dump fica em $dump" 1
+    n_destino="$(contar "$ctr_d" "$usr_d" "$base_d")"
+    printf '%s: %s.%s → %s: %s tabela(s) na origem, %s no destino; dump em %s%s\n' \
+      "$VERBO" "$origem" "$schema" "${rascunho:+$ctr_d/}${rascunho:-$destino}" "$n_origem" "${n_destino:-?}" "$dump" \
+      "${PF_SUJEITO:+ (sujeito=$PF_SUJEITO)}"
+    [ "$n_destino" = "$n_origem" ] || morre "erro: contagem diverge ($n_origem na origem, ${n_destino:-?} no destino)" 1
+    ;;
   *)
     printf '%s: erro: ato desconhecido: %s\n' "$VERBO" "$ato" >&2
-    printf 'atos: aplicar, bancos, senha\n' >&2
+    printf 'atos: aplicar, bancos, senha, cortar\n' >&2
     uso_texto
     exit 2
     ;;
