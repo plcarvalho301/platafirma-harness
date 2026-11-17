@@ -143,26 +143,71 @@ def indices_servindo(cm, api):
         "AND particao = %s", (api,)).fetchall()]
 
 
-def subcorpus_biblioteca(conn, cm, ind, perguntas, Qs, gold):
+def geracao_servindo(cm, api):
+    """(geracao_id, trecho_morada) da geração servindo na partição (`acervo` ou `motor`)."""
+    row = cm.execute(
+        "SELECT id::text, trecho_morada FROM motor.geracao "
+        "WHERE particao = %s AND estado = 'servindo' LIMIT 1",
+        (api,),
+    ).fetchone()
+    if not row:
+        return None, "acervo"
+    return row[0], row[1] or "acervo"
+
+
+def subcorpus_biblioteca(conn, cm, ind, perguntas, Qs, gold,
+                         geracao_id=None, trecho_morada="acervo"):
     """ids de trecho do subcorpus da biblioteca (ver docstring do módulo)."""
     sel = set()
     secs = sorted({_base(g["alvo_section_id"]) for g in gold if g.get("alvo_section_id")})
     obras = sorted({o for g in gold for o in (g.get("alvo_obra_ids") or [])})
-    if secs:
-        sel |= {r[0] for r in conn.execute(
-            """SELECT t.id::text FROM acervo.trecho t
-                 JOIN acervo.secao s ON s.id = t.secao_id
-                 JOIN acervo.impressao i ON i.id = t.impressao_id
-                WHERE i.estado = 'servindo'
-                  AND regexp_replace(s.ancora, '~[0-9]+$', '') = ANY(%s)""", (secs,)).fetchall()}
-    if obras:
-        sel |= {r[0] for r in conn.execute(
-            """SELECT id FROM (
-                 SELECT t.id::text AS id,
-                        row_number() OVER (PARTITION BY i.obra_id ORDER BY random()) AS rn
-                   FROM acervo.trecho t JOIN acervo.impressao i ON i.id = t.impressao_id
-                  WHERE i.estado = 'servindo' AND i.obra_id = ANY(%s::uuid[])) x
-                WHERE rn <= %s""", (obras, POR_OBRA)).fetchall()}
+    if trecho_morada == "motor" and geracao_id:
+        if secs:
+            sec_ids = [r[0] for r in conn.execute(
+                """SELECT s.id::text FROM acervo.secao s
+                     JOIN acervo.impressao i ON i.id = s.impressao_id
+                    WHERE i.estado = 'servindo'
+                      AND regexp_replace(s.ancora, '~[0-9]+$', '') = ANY(%s)""",
+                (secs,),
+            ).fetchall()]
+            if sec_ids:
+                sel |= {r[0] for r in cm.execute(
+                    "SELECT id::text FROM motor.trecho "
+                    "WHERE geracao_id = %s::uuid AND secao_id = ANY(%s::uuid[])",
+                    (geracao_id, sec_ids),
+                ).fetchall()}
+        if obras:
+            imp_ids = [r[0] for r in conn.execute(
+                "SELECT id::text FROM acervo.impressao "
+                "WHERE estado = 'servindo' AND obra_id = ANY(%s::uuid[])",
+                (obras,),
+            ).fetchall()]
+            if imp_ids:
+                sel |= {r[0] for r in cm.execute(
+                    """SELECT id FROM (
+                         SELECT id::text AS id,
+                                row_number() OVER (PARTITION BY impressao_id ORDER BY random()) AS rn
+                           FROM motor.trecho
+                          WHERE geracao_id = %s::uuid AND impressao_id = ANY(%s::uuid[])) x
+                        WHERE rn <= %s""",
+                    (geracao_id, imp_ids, POR_OBRA),
+                ).fetchall()}
+    else:
+        if secs:
+            sel |= {r[0] for r in conn.execute(
+                """SELECT t.id::text FROM acervo.trecho t
+                     JOIN acervo.secao s ON s.id = t.secao_id
+                     JOIN acervo.impressao i ON i.id = t.impressao_id
+                    WHERE i.estado = 'servindo'
+                      AND regexp_replace(s.ancora, '~[0-9]+$', '') = ANY(%s)""", (secs,)).fetchall()}
+        if obras:
+            sel |= {r[0] for r in conn.execute(
+                """SELECT id FROM (
+                     SELECT t.id::text AS id,
+                            row_number() OVER (PARTITION BY i.obra_id ORDER BY random()) AS rn
+                       FROM acervo.trecho t JOIN acervo.impressao i ON i.id = t.impressao_id
+                      WHERE i.estado = 'servindo' AND i.obra_id = ANY(%s::uuid[])) x
+                    WHERE rn <= %s""", (obras, POR_OBRA)).fetchall()}
     n_gold = len(sel)
     from motor_acervo.store import acervo_store as acs
     from motor_acervo.store import motor_store as ms
@@ -189,7 +234,8 @@ def subcorpus_biblioteca(conn, cm, ind, perguntas, Qs, gold):
     return sel
 
 
-def carrega_corpus(conn, cm, api, ind, sel=None):
+def carrega_corpus(conn, cm, api, ind, sel=None,
+                   geracao_id=None, trecho_morada="acervo"):
     """ids, textos e vetores do servido. `sel` restringe a um conjunto de ids."""
     ids, vecs = [], []
     if sel is None:
@@ -214,9 +260,38 @@ def carrega_corpus(conn, cm, api, ind, sel=None):
             uniq.append(a)
             uvec.append(v)
     meta = {}
-    for i in range(0, len(uniq), 5000):
-        for r in conn.execute(SQL_TXT[api], (uniq[i:i + 5000],)).fetchall():
-            meta[r[0]] = {"texto": r[1] or "", "obra": r[2], "ancora": r[3] or "", "arquivo": r[4]}
+    if api in ("biblioteca", "obra") and trecho_morada == "motor" and geracao_id:
+        trechos = {}
+        sec_ids = set()
+        for i in range(0, len(uniq), 5000):
+            for tid, texto, sid in cm.execute(
+                "SELECT id::text, texto, secao_id::text FROM motor.trecho "
+                "WHERE geracao_id = %s::uuid AND id = ANY(%s::uuid[])",
+                (geracao_id, uniq[i:i + 5000]),
+            ).fetchall():
+                trechos[tid] = (texto or "", sid)
+                if sid:
+                    sec_ids.add(sid)
+        secoes = {}
+        sec_lista = sorted(sec_ids)
+        for i in range(0, len(sec_lista), 5000):
+            for sid, oid, ancora, arquivo in conn.execute(
+                """SELECT s.id::text, o.id::text, s.ancora, o.arquivo
+                     FROM acervo.secao s
+                     JOIN acervo.impressao imp ON imp.id = s.impressao_id
+                     JOIN acervo.obra o ON o.id = imp.obra_id
+                    WHERE s.id = ANY(%s::uuid[])""",
+                (sec_lista[i:i + 5000],),
+            ).fetchall():
+                secoes[sid] = (oid, ancora or "", arquivo)
+        for tid, (texto, sid) in trechos.items():
+            if sid in secoes:
+                oid, ancora, arquivo = secoes[sid]
+                meta[tid] = {"texto": texto, "obra": oid, "ancora": ancora, "arquivo": arquivo}
+    else:
+        for i in range(0, len(uniq), 5000):
+            for r in conn.execute(SQL_TXT[api], (uniq[i:i + 5000],)).fetchall():
+                meta[r[0]] = {"texto": r[1] or "", "obra": r[2], "ancora": r[3] or "", "arquivo": r[4]}
     manter = [j for j, a in enumerate(uniq) if a in meta and meta[a]["texto"].strip()]
     return {"ids": [uniq[j] for j in manter], "meta": meta,
             "servido": np.stack([uvec[j] for j in manter])}
@@ -318,9 +393,36 @@ def main():
     # texto normalizado como a view o normaliza.
     parts_log = sorted({_API[p] for p in ARGS["particoes"]} | {BALDE_ANTIGO})
     if MAX_PERGUNTAS > 0:
-        linhas = conn.execute("SELECT particao, pergunta_normalizada, pergunta_exemplo "
-                              "FROM acervo.bateria_recuperacao WHERE particao = ANY(%s)",
-                              (parts_log,)).fetchall()
+        try:
+            linhas = conn.execute(
+                "SELECT particao, pergunta_normalizada, pergunta_exemplo "
+                "FROM acervo.bateria_recuperacao WHERE particao = ANY(%s)",
+                (parts_log,),
+            ).fetchall()
+        except psycopg.errors.InsufficientPrivilege:
+            # A role de leitura do motor-busca (R26) lê acervo.evento_recuperacao, não a view
+            # acervo.bateria_recuperacao (085_evento_particao_origem.sql): consulta equivalente.
+            linhas = conn.execute(
+                """WITH base AS (
+                     SELECT coalesce(particao, %s) AS particao,
+                            lower(btrim(regexp_replace(pergunta, '\\s+', ' ', 'g'))) AS pergunta_normalizada,
+                            criado_em,
+                            pergunta
+                       FROM acervo.evento_recuperacao
+                      WHERE disparou
+                        AND (origem IN ('busca', 'abertura')
+                             OR (origem IS NULL
+                                 AND lower(btrim(regexp_replace(pergunta, '\\s+', ' ', 'g')))
+                                     <> 'o que é um espaço vetorial para recuperação'))
+                   )
+                   SELECT particao,
+                          pergunta_normalizada,
+                          (array_agg(pergunta ORDER BY criado_em DESC))[1] AS pergunta_exemplo
+                     FROM base
+                    WHERE particao = ANY(%s)
+                    GROUP BY particao, pergunta_normalizada""",
+                (BALDE_ANTIGO, parts_log),
+            ).fetchall()
     else:
         # `--perguntas 0`: sem replay do log, só a bateria. O log nem se lê, e o resultado diz replay 0.
         linhas = []
@@ -351,10 +453,14 @@ def main():
     for p in particoes:
         api = _API[p]
         ind = indices_servindo(cm, api)
-        sel = subcorpus_biblioteca(conn, cm, ind, perguntas, Qs, gold) if p == "biblioteca" else None
-        corpus[p] = carrega_corpus(conn, cm, api, ind, sel)
+        ger_id, morada = geracao_servindo(cm, api)
+        sel = (subcorpus_biblioteca(conn, cm, ind, perguntas, Qs, gold,
+                                    geracao_id=ger_id, trecho_morada=morada)
+               if p == "biblioteca" else None)
+        corpus[p] = carrega_corpus(conn, cm, api, ind, sel,
+                                   geracao_id=ger_id, trecho_morada=morada)
         res["corpus"][p] = len(corpus[p]["ids"])
-        log(f"particao {p}: {len(ind)} indices servindo, {res['corpus'][p]} trechos no corpus da medida")
+        log(f"particao {p}: {len(ind)} indices servindo (morada={morada}), {res['corpus'][p]} trechos no corpus da medida")
 
     ranking = {}
     variante = f"{SERVIDO}:{st.embed_model.split('/')[-1]}"
