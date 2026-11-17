@@ -1277,7 +1277,8 @@ portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvor
     [ "$cabem" -lt "$conc" ] && conc="$cabem"
     fatia="$(( cabem / conc ))"
     [ "$fatia" -lt 1 ] && fatia=1
-    printf 'portao %s: folga do teto de processos cabe %s trabalhador(es): %s chave(s) por vez, %s cada\n' \
+    # prefixo `paralelo:`, nunca `portao `: o release le a primeira linha `portao ` como veredito
+    printf 'paralelo: %s: folga do teto de processos cabe %s trabalhador(es): %s chave(s) por vez, %s cada\n' \
       "$familia" "$cabem" "$conc" "$fatia" >&2
   fi
   tmpd="$(mktemp -d "${TMPDIR:-/tmp}/teste-portao.XXXXXX")" || morre "não criei o diretório de saída do portão" 3
