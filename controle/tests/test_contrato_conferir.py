@@ -460,3 +460,46 @@ def test_existe_entidade_sai_5_sem_chamar_o_acervo_e_aponta_a_shape(monkeypatch,
 
 def test_existe_entidade_sem_nome_sai_2(capsys):
     assert conferir.conferir_existe("entidade", None) == 2
+
+
+# --- servico: filtro por slug de stack (DT 803) -----------------------------------
+# A familia platafirma-rastreador tem duas stacks: rastreador (promove por release) e
+# bancada-rastreador (fora da promocao). `conferir servico rastreador` casava os dois
+# grupos pela familia e acusava DERIVA na bancada, revertendo a promocao boa.
+
+
+def _mundo_rastreador(monkeypatch):
+    docker = {
+        "rastreador-api": ("rastreador", "api", "/opt/platafirma/platafirma-rastreador/" + "b" * 40),
+        "bancada-api": ("bancada-rastreador", "bancada-api", "/opt/platafirma/platafirma-rastreador/" + "a" * 40),
+    }
+
+    def sh(args, cwd=None, env=None):
+        if args[:2] == ["docker", "ps"]:
+            return 0, "\n".join(docker), ""
+        if args[:2] == ["docker", "inspect"]:
+            projeto, servico, wd = docker[args[2]]
+            return 0, json.dumps([{"Config": {"Env": [], "Labels": {
+                "com.docker.compose.project": projeto,
+                "com.docker.compose.service": servico,
+                "com.docker.compose.project.working_dir": wd}}, "State": {}}]), ""
+        return 1, "", ""
+
+    monkeypatch.setattr(conferir, "sh", sh)
+    monkeypatch.setattr(conferir, "_topologia", lambda: [
+        {"slug": "rastreador", "repo": "platafirma-rastreador"},
+        {"slug": "bancada-rastreador", "repo": "platafirma-rastreador"}])
+    monkeypatch.setattr(conferir, "stack_do_container", lambda c, t=None: c["projeto"])
+    monkeypatch.setattr(conferir, "PROD_RAIZ", "/opt/platafirma")
+
+
+def test_servico_por_slug_de_stack_ignora_a_outra_stack_da_familia(monkeypatch):
+    _mundo_rastreador(monkeypatch)
+    assert [c["nome"] for c in conferir.containers("rastreador")] == ["rastreador-api"]
+    assert [c["nome"] for c in conferir.containers("bancada-rastreador")] == ["bancada-api"]
+
+
+def test_servico_pela_familia_completa_segue_casando_as_duas_stacks(monkeypatch):
+    _mundo_rastreador(monkeypatch)
+    assert sorted(c["nome"] for c in conferir.containers("platafirma-rastreador")) == [
+        "bancada-api", "rastreador-api"]

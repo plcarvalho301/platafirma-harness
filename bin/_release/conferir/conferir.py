@@ -310,6 +310,13 @@ def containers(filtro=None):
                 candidatos.add(filtro)
             if filtro not in candidatos:
                 continue
+            # DT 803: filtro que e slug de stack confere so os conteineres DESSA stack. A familia
+            # (curta ou completa) casava tambem os de outra stack do mesmo repositorio — a
+            # bancada-rastreador, que a promocao declara fora — e a conferencia no ar do
+            # `release promover rastreador` acusava DERIVA nela e revertia a promocao boa.
+            if (stk and stk != filtro and filtro not in (nome, projeto, servico)
+                    and any(s.get("slug") == filtro for s in _topologia())):
+                continue
         yield c
 
 
