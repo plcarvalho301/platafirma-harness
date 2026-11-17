@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # _identidade.py — biblioteca de identidade da raiz da casa (acervo.entidade*, arq:0108).
 # Os três passos da spec_acervo.md §3:
-#   1. validar_forma: valida seletor contra entidade_classe.forma_chave (exit 2 se invalido)
+#   1. validar_forma: valida seletor no cliente para adr/decisao/minuta (exit 2 se invalido)
 #   2. resolver_canon: busca exata em chave_humana; se 0, busca em entidade_alias
 #      (0 -> exit 1 com 4 linhas fixas; 1 -> uuid; >1 -> exit 2 com candidatos)
 #   3. obter_substrato: busca endereco (repo@path) em acervo.entidade_suporte
@@ -16,7 +16,7 @@ import subprocess
 import sys
 
 # Biblioteca: nao mexe em SIGPIPE no import (#3274). Quem sai limpo no `| head` e o main()
-# de cada script que a usa (casa, curar, entidade).
+# de cada script que a usa (casa, curar).
 
 PG = "rag-extractor-pg"
 DB = "rag_extractor"
@@ -24,11 +24,8 @@ USR = "rag"
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _suporte import SUPORTE  # noqa: E402  (suporte da particao casa, arq:0115 §1.2)
 
-# Forma da chave de adr (arq:0115 §3.2): a mesma RE_ADR de _acervo/casa. Mora no cliente
-# porque a 060 tira adr de entidade_classe (§6.2).
+# Forma da chave de adr (arq:0115 §3.2): a mesma RE_ADR de _acervo/casa.
 FORMA_ADR = r"^(?:([a-z]+):)?(\d{1,4})$"
-# Especies de documento de casa que ainda tem classe em entidade_classe ate a 060.
-DOC_CASA = ("adr", "decisao", "spec", "parecer")
 # A ficha da ADR mora na classe `decisao` do catalogo (triagem da #3764; migracao 114 da #3761); `adr` segue
 # valendo como nome de entrada (a especie do documento e o que o humano digita) e se le na classe nova.
 CLASSE_DA_RAIZ = {"adr": "decisao"}
@@ -97,51 +94,28 @@ def psql_json(sql, alvo="query"):
 
 def validar_forma(classe, seletor):
     """Passo 1 da spec §3.
-    Valida se a classe existe e se o seletor casa com forma_chave.
+    Valida se o seletor casa com a forma da chave no cliente (adr/decisao/minuta).
     Retorna (canonico, numero_sem_serie).
-
-    adr: a forma da chave mora AQUI (FORMA_ADR, a mesma de _acervo/casa), nao em
-    entidade_classe.forma_chave: a 060 tira adr/spec/parecer de entidade_classe (arq:0115
-    §6.2). Classe de documento de casa que ja saiu de entidade_classe recusa (exit 2)
-    apontando `acervo ler casa`, em vez de morrer com "classe nao existe".
     """
-    if classe in CLASSES_ADR and not re.match(FORMA_ADR, seletor.strip()):
-        morre("acervo: seletor '%s' invalido para classe 'adr'. Forma esperada: %s"
-              % (seletor.strip(), FORMA_ADR), 2)
-    classes_info = psql_json(
-        "select coalesce(json_agg(row_to_json(t)), '[]') from ("
-        "  select slug, forma_chave from acervo.entidade_classe where slug = %s"
-        ") t;" % _lit(da_raiz(classe)), "classe"
-    )
-    if not classes_info and classe in DOC_CASA:
-        morre("acervo identidade: '%s' e especie de documento de casa, que se le pela chave em "
-              "acervo.casa (arq:0115 §6.2, §11):\n  acervo ler casa %s %s"
-              % (classe, classe, seletor.strip()), 2)
-    if not classes_info:
-        vivas = psql_json(
-            "select coalesce(json_agg(slug order by slug),'[]') from acervo.entidade_classe;",
-            "classes vivas"
-        )
-        morre("acervo: classe '%s' nao existe em acervo.entidade_classe.\n"
-              "  classes vivas: %s" % (classe, ", ".join(vivas)), 2)
-
-    forma = FORMA_ADR if classe in CLASSES_ADR else classes_info[0].get("forma_chave")
     s = seletor.strip()
+    if classe in CLASSES_ADR and not re.match(FORMA_ADR, s):
+        morre("acervo: seletor '%s' invalido para classe 'adr'. Forma esperada: %s"
+              % (s, FORMA_ADR), 2)
     if classe == "minuta" and re.match(r"^\d+$", s):
         s = f"arq:{s.zfill(4)}"
+    forma = FORMA_ADR if classe in CLASSES_ADR + ("minuta",) else None
     if forma:
         m = re.match(forma, s)
         if not m:
             morre("acervo: seletor '%s' invalido para classe '%s'. Forma esperada: %s"
                   % (s, classe, forma), 2)
-        if classe in CLASSES_ADR + ("minuta",):
-            serie = m.group(1) if m.lastindex and m.lastindex >= 1 else None
-            num = m.group(2) if m.lastindex and m.lastindex >= 2 else m.group(1)
-            num_pad = num.zfill(4)
-            if serie:
-                return f"{serie}:{num_pad}", None
-            else:
-                return f"arq:{num_pad}", num_pad
+        serie = m.group(1) if m.lastindex and m.lastindex >= 1 else None
+        num = m.group(2) if m.lastindex and m.lastindex >= 2 else m.group(1)
+        num_pad = num.zfill(4)
+        if serie:
+            return f"{serie}:{num_pad}", None
+        else:
+            return f"arq:{num_pad}", num_pad
 
     return s, None
 

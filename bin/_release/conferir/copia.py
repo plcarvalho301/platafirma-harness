@@ -23,9 +23,8 @@ Três substratos, um coletor cada:
           arquivo da obra (comentário #3488 do #3763).
 
 Partição de tabela particionada não conta: a declaração fica na tabela-mãe. Visão não conta: não guarda nada.
-Tabela que o catálogo da raiz nomeia como substrato golden (`acervo.entidade_classe.substrato_golden`) é fonte, não cópia,
-e sai à parte. O que não é uma coisa nem outra sai como não declarado, com o prefixo de fóssil assinalado (_backup_,
-_mig_, _fusao_, _osint). Nada se expurga aqui: o expurgo é ato próprio, reversível, e a remoção definitiva vai ao dono.
+Tabela sem declaração sai como não declarada, com o prefixo de fóssil assinalado (_backup_, _mig_, _fusao_, _osint).
+Nada se expurga aqui: o expurgo é ato próprio, reversível, e a remoção definitiva vai ao dono.
 
 Fora da classe, e contado na primeira linha como «sem coletor»: o modelo formal gerado, a unit gerada pelo bot, o
 CLAUDE.md da fita, as instruções de Project e as preferências do claude.ai, e a projeção de card.
@@ -79,7 +78,6 @@ SEM_COLETOR = (
 # o espelho é a pasta `espelho/<sha do arquivo>/<digest do método>/`; o que mora nela (espelho.md, mapa.json, indice.json) é dele
 _ESPELHO_DIR = re.compile(r"espelho/([0-9a-f]{64})/([0-9a-f]{64})/[^/]+$")
 _SOB_ESPELHO = re.compile(r"(?:^|/)espelho/")
-_NOME_NO_GOLDEN = re.compile(r"\b([a-z_]+)\.([a-z_][a-z0-9_]*)")
 
 SQL_TABELAS = """
 select coalesce(json_agg(json_build_object(
@@ -91,12 +89,6 @@ select coalesce(json_agg(json_build_object(
        order by c.relname), '[]'::json)
   from pg_class c join pg_namespace n on n.oid = c.relnamespace
  where n.nspname = '{schema}' and c.relkind in ('r', 'p', 'm') and not c.relispartition
-"""
-
-# o que o catálogo da raiz diz ser substrato golden: texto livre que cita tabelas (`acervo.obra`, `motor.indice`…)
-SQL_GOLDEN = """
-select coalesce(json_agg(substrato_golden), '[]'::json)
-  from acervo.entidade_classe where substrato_golden is not null
 """
 
 
@@ -114,8 +106,7 @@ class Portas:
 class Medida:
     itens: list[tuple[str, resultado.Veredito]] = field(default_factory=list)
     avisos: list[str] = field(default_factory=list)
-    contagem: dict[str, int] = field(default_factory=lambda: {"total": 0, "declaradas": 0, "nao_declaradas": 0,
-                                                              "fontes": 0})
+    contagem: dict[str, int] = field(default_factory=lambda: {"total": 0, "declaradas": 0, "nao_declaradas": 0})
     detalhe: dict[str, Any] = field(default_factory=dict)
     familias: dict[str, set[str | None]] = field(default_factory=dict)
 
@@ -182,23 +173,14 @@ def _eh_fossil(nome: str) -> bool:
 
 # --- banco e índice: as tabelas ----------------------------------------------------------------
 
-def golden_nomeado(textos: list[str] | None) -> set[str]:
-    """Os `schema.tabela` que o catálogo cita nos substratos golden."""
-    nomeados: set[str] = set()
-    for texto in textos or []:
-        for m in _NOME_NO_GOLDEN.finditer(texto or ""):
-            nomeados.add(f"{m.group(1)}.{m.group(2)}")
-    return nomeados
-
-
-def classificar(tabelas: list[dict[str, Any]], golden: set[str]) -> dict[str, Any]:
-    """Cada tabela em declarada, com defeito, fonte nomeada no catálogo ou não declarada."""
-    declaradas, defeituosas, fontes, nao, conflitos = [], [], [], [], []
+def classificar(tabelas: list[dict[str, Any]]) -> dict[str, Any]:
+    """Cada tabela em declarada, com defeito ou não declarada."""
+    declaradas, defeituosas, nao = [], [], []
     for t in tabelas:
         nome = f"{t['schema']}.{t['tabela']}"
         linha = linha_de_declaracao(t.get("comentario"))
         if linha is None:
-            (fontes if nome in golden else nao).append(nome)
+            nao.append(nome)
             continue
         decl, forma = ler_declaracao(linha)
         falhas = forma + defeitos_da_declaracao(decl, t.get("colunas"))
@@ -206,10 +188,7 @@ def classificar(tabelas: list[dict[str, Any]], golden: set[str]) -> dict[str, An
             defeituosas.append((nome, falhas))
             continue
         declaradas.append((nome, decl))
-        if nome in golden:
-            conflitos.append(nome)
-    return {"declaradas": declaradas, "defeituosas": defeituosas, "fontes": fontes, "nao": nao,
-            "conflitos": conflitos}
+    return {"declaradas": declaradas, "defeituosas": defeituosas, "nao": nao}
 
 
 def _veredito_das_tabelas(c: dict[str, Any]) -> resultado.Veredito:
@@ -223,18 +202,15 @@ def _veredito_das_tabelas(c: dict[str, Any]) -> resultado.Veredito:
                       + (f" — {len(fosseis)} com prefixo de fóssil" if fosseis else ""))
     if not partes:
         return resultado.conforme()
-    return resultado.divergente(" · ".join(partes) + " — cura: a cadeira dona declara a tabela (COMMENT `copia-de:`) "
-                                "ou o catálogo a nomeia como fonte; expurgo é ato próprio, com a lista ao dono")
+    return resultado.divergente(" · ".join(partes) + " — cura: a cadeira dona declara a tabela (COMMENT `copia-de:`); "
+                                "expurgo é ato próprio, com a lista ao dono")
 
 
-def _classificar_substrato(ler: Callable[[str, str], Any], substrato: str, golden: set[str] | None,
-                           golden_erro: str | None) -> dict[str, Any]:
-    """A classificação das tabelas do substrato, ou {"erro": …} se o banco ou o catálogo não responderam."""
+def _classificar_substrato(ler: Callable[[str, str], Any], substrato: str) -> dict[str, Any]:
+    """A classificação das tabelas do substrato, ou {"erro": …} se o banco não respondeu."""
     try:
-        if golden is None:
-            raise Indeterminavel(golden_erro or "catálogo da raiz sem leitura")
         banco, schema = ONDE[substrato]
-        return classificar(ler(banco, SQL_TABELAS.format(schema=schema)) or [], golden)
+        return classificar(ler(banco, SQL_TABELAS.format(schema=schema)) or [])
     except Indeterminavel as e:
         return {"erro": str(e)}
 
@@ -248,17 +224,13 @@ def _relatar_tabelas(m: Medida, substrato: str, c: dict[str, Any]) -> None:
     m.contagem["total"] += len(c["declaradas"]) + nao
     m.contagem["declaradas"] += len(c["declaradas"])
     m.contagem["nao_declaradas"] += nao
-    m.contagem["fontes"] += len(c["fontes"])
     m.detalhe[substrato] = {
         "declaradas": [n for n, _ in c["declaradas"]], "nao_declaradas": c["nao"],
-        "com_defeito": [{"tabela": n, "defeitos": f} for n, f in c["defeituosas"]], "fontes": c["fontes"]}
-    m.avisos.append(f"{substrato}: {len(c['declaradas'])} declarada(s) · {len(c['fontes'])} fonte(s) nomeada(s) no "
-                    f"catálogo · {nao} sem declaração válida")
+        "com_defeito": [{"tabela": n, "defeitos": f} for n, f in c["defeituosas"]]}
+    m.avisos.append(f"{substrato}: {len(c['declaradas'])} declarada(s) · {nao} sem declaração válida")
     for nome, decl in c["declaradas"]:
         m.avisos.append(_linha_declarada(nome, decl))
         m.familias.setdefault(decl.get("familia", "?"), set()).add(decl.get("reproduzivel"))
-    m.avisos += [f"conflito: o catálogo nomeia {n} como substrato golden e a tabela está declarada como cópia "
-                 "(as duas leituras não fecham, #3057)" for n in c["conflitos"]]
 
 
 def _linha_declarada(nome: str, decl: dict[str, str]) -> str:
@@ -368,14 +340,7 @@ def medir(alvo: str | None, portas: Portas) -> Medida:
     pedidos = [alvo] if alvo else list(SUBSTRATOS)
     m = Medida()
 
-    # o balde também precisa do catálogo: a declaração da família do espelho está nas tabelas do rag
-    golden, golden_erro = None, None
-    try:
-        golden = golden_nomeado(portas.ler("rag", SQL_GOLDEN))
-    except Indeterminavel as e:
-        golden_erro = f"catálogo da raiz não respondeu: {e}"
-
-    classificado = {sub: _classificar_substrato(portas.ler, sub, golden, golden_erro)
+    classificado = {sub: _classificar_substrato(portas.ler, sub)
                     for sub in ("banco", "indice") if sub in pedidos or (sub == "banco" and "balde" in pedidos)}
     for sub in ("banco", "indice"):
         if sub in pedidos:

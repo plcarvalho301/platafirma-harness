@@ -40,7 +40,6 @@ def _rag(**mudancas):
     tabelas = {
         "impressao": _tab("acervo", "impressao", _linha()),
         "secao": _tab("acervo", "secao", _linha(chave="impressao_id")),
-        "obra": _tab("acervo", "obra"),
     }
     tabelas.update(mudancas)
     return [t for t in tabelas.values() if t is not None]
@@ -59,12 +58,11 @@ def _motor(**mudancas):
 
 
 class Bancos:
-    """A porta `ler(banco, sql)`: o catálogo da raiz, as tabelas do rag e as do motor."""
+    """A porta `ler(banco, sql)`: as tabelas do rag e as do motor."""
 
-    def __init__(self, rag=None, motor=None, golden=("acervo.obra; arquivo no balde",), fora=()):
+    def __init__(self, rag=None, motor=None, fora=()):
         self.rag = _rag() if rag is None else rag
         self.motor = _motor() if motor is None else motor
-        self.golden = list(golden)
         self.fora = set(fora)
         self.chamadas = []
 
@@ -72,8 +70,6 @@ class Bancos:
         self.chamadas.append((banco, sql))
         if banco in self.fora:
             raise pa.Indeterminavel(f"{banco}: fora do ar")
-        if "substrato_golden" in sql:
-            return self.golden
         assert "pg_class" in sql
         return self.rag if banco == "rag" else self.motor
 
@@ -154,12 +150,6 @@ def test_campo_mal_formado_repetido_ou_desconhecido_tem_defeito():
     assert any("desconhecido" in f for f in forma)
 
 
-def test_o_catalogo_nomeia_a_tabela_golden_pelo_schema_e_pelo_nome():
-    nomeados = copia.golden_nomeado(["acervo.obra; arquivo no balde", "motor.indice.metodo; casado por conteudo",
-                                     "rastreador.projecao"])
-    assert {"acervo.obra", "motor.indice", "rastreador.projecao"} <= nomeados
-
-
 # --- a classe, com tudo declarado ---------------------------------------------------------------------
 
 def test_tudo_declarado_sai_0_e_conta_o_que_leu():
@@ -167,8 +157,8 @@ def test_tudo_declarado_sai_0_e_conta_o_que_leu():
     assert rc == 0
     assert all(i["estado"] == "conforme" for i in dados["itens"]) and len(dados["itens"]) == 3
     c = dados["contagem"]
-    # banco: impressao e secao; indice: indice, vetor e trecho; balde: dois espelhos; obra é fonte e não conta
-    assert (c["total"], c["declaradas"], c["nao_declaradas"], c["fontes"], c["sem_coletor"]) == (7, 7, 0, 1, 5)
+    # banco: impressao e secao; indice: indice, vetor e trecho; balde: dois espelhos
+    assert (c["total"], c["declaradas"], c["nao_declaradas"], c["sem_coletor"]) == (7, 7, 0, 5)
     assert dados["ancora"].startswith("release conferir copia: 3 conforme · 0 divergente · 0 não consegui olhar — release abc1234")
     assert "materializações: 7 · declaradas 7 · não declaradas 0 · sem coletor 5" in dados["ancora"]
 
@@ -204,23 +194,6 @@ def test_tabela_com_prefixo_de_fossil_e_assinalada():
     assert rc == 1
     assert "3 sem declaração" in _item(dados, "banco")["motivo"]
     assert "2 com prefixo de fóssil" in _item(dados, "banco")["motivo"]
-
-
-def test_tabela_que_o_catalogo_nomeia_como_golden_e_fonte_e_nao_cobra_declaracao():
-    bancos = Bancos(rag=_rag(), golden=["acervo.obra; arquivo no balde"])
-    rc, dados = _rodar("banco", bancos)
-    assert rc == 0
-    assert dados["substratos"]["banco"]["fontes"] == ["acervo.obra"]
-    sem_catalogo = Bancos(rag=_rag(), golden=[])
-    rc, dados = _rodar("banco", sem_catalogo)
-    assert rc == 1 and dados["substratos"]["banco"]["nao_declaradas"] == ["acervo.obra"]
-
-
-def test_tabela_declarada_que_o_catalogo_tambem_nomeia_golden_vira_aviso_de_conflito():
-    bancos = Bancos(golden=["acervo.impressao; parte-de obra", "acervo.obra"])
-    rc, dados = _rodar("banco", bancos)
-    assert rc == 0
-    assert any(a.startswith("conflito: o catálogo nomeia acervo.impressao") for a in dados["avisos"])
 
 
 def test_tabela_do_indice_sem_declaracao_sai_1():

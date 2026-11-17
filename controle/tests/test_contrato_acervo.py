@@ -67,6 +67,16 @@ def test_resolver_e_ato_extinto():
     assert "acervo listar casa <espécie>" in r.stderr
 
 
+def test_casa_forma_e_entidade_sairam_e_apontam_ontologia():
+    # #4313: a ontologia velha saiu do banco; forma e entidade apontam o verbo ontologia
+    r = _acervo("ler", "casa", "forma", "parecer")
+    assert r.returncode == 2 and "ontologia ler shape <slug>" in r.stderr
+    for argv in (("listar", "entidade"), ("ler", "entidade"),
+                 ("listar", "casa", "entidade"), ("ler", "casa", "entidade")):
+        r = _acervo(*argv)
+        assert r.returncode == 2 and "ontologia listar shape" in r.stderr, argv
+
+
 def test_escrever_recusa_de_fronteira():
     r = _acervo("escrever", "casa", "adr", "x")
     assert r.returncode == 2

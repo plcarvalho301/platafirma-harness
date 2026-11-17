@@ -602,7 +602,7 @@ def _entidade(classe, chave):
               f"({onde}; exato nem alias).\n"
               f"varrido:   acervo.entidade ({onde}, estado ativa) e acervo.entidade_alias\n"
               f"parecidos: {', '.join(parecidos) or '(nenhuma chave parecida)'}\n"
-              f"vizinho:   acervo listar entidade\n"
+              f"vizinho:   ontologia listar shape\n"
               f"cura:      a ficha do referente nasce no fichário (migração/curadoria de "
               f"dados), não no documento; o Sobre: só cita a chave (arq:0115 §6)", 1)
     if len(cand) > 1:
