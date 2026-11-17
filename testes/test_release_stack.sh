@@ -75,6 +75,8 @@ for a in "$@"; do
   prev="$a"
 done
 case " $* " in *" config --services "*) echo app ;; esac
+case " $* " in *" config --format json "*) [ -z "${STUB_TESTE_JSON:-}" ] || printf '%s\n' "$STUB_TESTE_JSON" ;; esac
+case " $* " in *" run "*) exit "${STUB_RUN_RC:-0}" ;; esac
 exit 0
 EOF
 chmod +x "$STUBS/docker"
@@ -151,6 +153,25 @@ set +e; out="$("$VERBO" compose composeausente up 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 1 ] && grep -q "registrada em stacks.yaml, mas sem compose em" <<<"$out" || falha "stack com compose ausente no disco: rc=$rc $out"
 set +e; out="$("$VERBO" reverter core 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 2 ] && grep -q "ato desconhecido" <<<"$out" || falha "ato desconhecido devia sair 2: rc=$rc $out"
+echo "OK"
+
+echo "--- 9: testar --agora (infra testar, DT 800): current sem rev, mede mesmo inalterada, teste com dependencias, exit do teste"
+export STUB_TESTE_JSON='{"services":{"app":{"image":"busybox"},"teste":{"image":"busybox","profiles":["teste"]}}}'
+printf '%s\n' "$SHA1" > "$INSTANCIA/var/deploy/core.atual"
+: > "$DOCKER_LOG"
+set +e; out="$(STUB_RUN_RC=1 "$VERBO" testar core --agora 2>&1)"; rc=$?; set -e
+[ "$rc" -eq 4 ] && grep -q "REPROVOU" <<<"$out" || falha "teste vermelho devia sair 4: rc=$rc $out"
+grep -qF -- "-f $BASE1 " "$DOCKER_LOG" || falha "--agora sem rev devia medir o current (sha1): $(cat "$DOCKER_LOG")"
+grep -qF -- "--profile teste run --rm -T teste" "$DOCKER_LOG" || falha "--agora devia rodar o teste com as dependencias: $(grep ' run ' "$DOCKER_LOG")"
+! grep -q -- "--no-deps" "$DOCKER_LOG" || falha "--agora nao leva --no-deps: $(grep ' run ' "$DOCKER_LOG")"
+out="$(STUB_RUN_RC=0 "$VERBO" testar core --agora 2>&1)" || falha "teste verde devia sair 0: $out"
+grep -q "verde" <<<"$out" || falha "teste verde sem a linha verde: $out"
+set +e; out="$("$VERBO" testar core 2>&1)"; rc=$?; set -e
+[ "$rc" -eq 2 ] && grep -q "rev obrigatoria" <<<"$out" || falha "passo da promocao sem rev devia sair 2: rc=$rc $out"
+: > "$DOCKER_LOG"
+out="$(STUB_RUN_RC=0 "$VERBO" testar core "$SHA2" 2>&1)" || falha "passo da promocao: $out"
+grep -qF -- "run --rm --no-deps -T teste" "$DOCKER_LOG" || falha "passo da promocao segue com --no-deps: $(grep ' run ' "$DOCKER_LOG")"
+unset STUB_TESTE_JSON
 echo "OK"
 
 echo "=== bin/_release/stack: todos os testes passaram ==="

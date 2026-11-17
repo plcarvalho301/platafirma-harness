@@ -31,6 +31,9 @@
 #                                             lista e cada uma roda dentro do estagio (ato `estagio`); o
 #                                             estagio so se constroi quando a selecao nao e vazia, e uma
 #                                             rodada de imagem por vez no host (trava; a segunda espera)
+#   stack testar   <stack> [<rev>] --agora   o mesmo passo a pedido (`infra testar`, DT 800): sem rev, o current;
+#                                             mede sempre (nao pula por inalterada) e sobe o servico de teste
+#                                             com as dependencias dele; o exit e o do teste (0 · 4 · 3)
 #   stack estagio  <stack> <rev> preparar|rodar <prova>
 #                                             interno do bin/teste: constroi o estagio, ou roda uma prova
 #                                             (caminho relativo a raiz do repositorio) dentro dele
@@ -93,6 +96,8 @@ uso:
   stack promover <stack> [<rev>]              sobe da arvore da release nessa rev (sem rev: current da familia)
   stack compose  <stack> <acao> [args...]     acao = up | down | stop | ps | logs | config | pull | build
   stack testar   <stack> <rev>                passo de teste da imagem da rev (servicos do perfil teste)
+  stack testar   <stack> [<rev>] --agora      o mesmo, a pedido (infra testar): sem rev, o current; sem pular
+                                              por inalterada; o teste sobe com as dependencias; exit do teste
 
 base: $PF_RELEASE_RAIZ/<familia>/<sha>/<compose> · sobreposicao: $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml
 segredos: $PLATAFIRMA_INSTANCIA/segredos/<stack>/ (env-file em tmpfs, apagado na saida)
@@ -632,9 +637,21 @@ case "$ATO" in
     exit "$rc"
     ;;
   # passo de teste da imagem: nada sobe, nada muda de ponto; so constroi e mede
+  #
+  # --agora (DT 800, `infra testar`): mede a stack como esta, a pedido, e nao como passo da promocao.
+  # Sem rev, a arvore e o current da familia; a medida nunca se pula por "inalterada" (o ponto que o
+  # `infra up` grava nao diz que o teste passou); e o servico de teste sobe COM as dependencias
+  # declaradas (o banco da bancada), porque e o exit dele, e nao o do `up`, que decide.
   testar)
-    REV="${1:-}"
-    [ -n "$REV" ] || { echo "erro: rev obrigatoria: stack testar $STACK <rev>" >&2; exit 2; }
+    AGORA=0; REV=""
+    for a in "$@"; do
+      case "$a" in
+        --agora) AGORA=1 ;;
+        -*)      echo "erro: opcao desconhecida em stack testar: $a" >&2; exit 2 ;;
+        *)       [ -z "$REV" ] || { echo "erro: stack testar $STACK aceita uma rev so" >&2; exit 2; }; REV="$a" ;;
+      esac
+    done
+    [ -n "$REV" ] || [ "$AGORA" = 1 ] || { echo "erro: rev obrigatoria: stack testar $STACK <rev>" >&2; exit 2; }
     resolver_arvore "$REV"
     montar_compose "$ARV"; fixar_projeto; exigir_segredos; materializar_env
     export PF_RELEASE_SHA="$SHA"
@@ -651,17 +668,20 @@ case "$ATO" in
     fi
     ANTES=""
     if [ -r "$PONTOS/$STACK.atual" ]; then ANTES="$(cat "$PONTOS/$STACK.atual")"; fi
-    if [ "${PF_STACK_RECRIAR:-0}" != 1 ] && [ -n "$ANTES" ] && inalterada_desde "$ANTES"; then
+    if [ "$AGORA" != 1 ] && [ "${PF_STACK_RECRIAR:-0}" != 1 ] && [ -n "$ANTES" ] && inalterada_desde "$ANTES"; then
       printf 'teste imagem: %s inalterada de %s a %s — a imagem no ar e a medida naquela promocao\n' "$STACK" "${ANTES:0:7}" "${SHA:0:7}"
       exit 0
     fi
     garantir_imagens || { echo "teste imagem: build de $STACK na rev ${SHA:0:7} falhou" >&2; exit 3; }
     garantir_imagens --profile teste || { echo "teste imagem: build do teste de $STACK na rev ${SHA:0:7} falhou" >&2; exit 3; }
+    # no passo da promocao o teste roda sozinho na imagem (--no-deps); a pedido, com as dependencias
+    DEPS=(--no-deps)
+    [ "$AGORA" != 1 ] || DEPS=()
     FALHOU=()
     while read -r t; do
       [ -n "$t" ] || continue
       printf 'teste imagem: %s → %s (%s)\n' "$STACK" "$t" "${SHA:0:7}"
-      compose --profile teste run --rm --no-deps -T "$t" </dev/null || FALHOU+=("$t")
+      compose --profile teste run --rm "${DEPS[@]+"${DEPS[@]}"}" -T "$t" </dev/null || FALHOU+=("$t")
     done <<<"$TESTES"
     if [ "${#FALHOU[@]}" -gt 0 ]; then
       printf 'teste imagem: %s REPROVOU na rev %s: %s\n' "$STACK" "${SHA:0:7}" "${FALHOU[*]}" >&2
