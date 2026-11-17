@@ -792,6 +792,44 @@ def _resolve_relativo(caminho: str, bancada=_SEM_BANCADA_DADA) -> tuple[Path | N
     return b / p, None
 
 
+def _aviso_copia_atras(repo_dir: Path) -> str | None:
+    """Se `repo_dir` é um clone Git atrás de origin/main, devolve aviso curto; senão None."""
+    if not (repo_dir / ".git").exists():
+        return None
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(repo_dir), "rev-list", "--count", "HEAD..origin/main"],
+            capture_output=True, text=True, timeout=1, check=False,
+        )
+        if out.returncode == 0:
+            n = int((out.stdout or "0").strip() or "0")
+            if n > 0:
+                return f"CÓPIA ATRÁS DE origin/main ({n} commit(s))"
+    except Exception:
+        pass
+    return None
+
+
+def _resolve_leitura_relativo(
+    caminho: str, bancada: Path | None, cadeira: str = ""
+) -> tuple[Path | None, str | None, str | None]:
+    """(caminho, erro, aviso). Em caminho relativo `<repo>/...`, prefere a bancada da
+    cadeira (`wt/<repo>/<cadeira>/main`) quando existe; se cair no clone da raiz da
+    bancada atrás de origin/main, devolve aviso (DT-772)."""
+    p = Path(caminho)
+    if p.is_absolute():
+        return p, None, None
+    if bancada is None:
+        return None, _SEM_BANCADA, None
+    parts = p.parts
+    if parts and parts[0] not in ("wt", ".", "..") and cadeira:
+        wt_main = bancada / "wt" / parts[0] / cadeira / "main"
+        if wt_main.is_dir():
+            return wt_main.joinpath(*parts[1:]), None, None
+    aviso = _aviso_copia_atras(bancada / parts[0]) if parts and parts[0] not in ("wt", ".", "..") else None
+    return bancada / p, None, aviso
+
+
 def _sessao_atual() -> str:
     """Identidade da sessão MCP em curso, em três degraus.
 
@@ -2015,7 +2053,7 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
     if negado:
         return negado
     bancada = _bancada()   # uma leitura do disco por chamada: serve ao relativo, à morada e ao cabeçalho
-    p, erro_caminho = _resolve_relativo(caminho, bancada)
+    p, erro_caminho, aviso_copia = _resolve_leitura_relativo(caminho, bancada, ident.get("cadeira") or "")
     if erro_caminho:
         _audit(tool=tool, evento="leitura_recusada", path=caminho, motivo=erro_caminho,
                erro=erro_caminho, classe_erro="recusado", **quem)
@@ -2047,6 +2085,9 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
                     versao=args.get("versao") or None, offset=offset,
                     encoding=args.get("encoding") or None, nega=_nega_leitura, curto=_curto(p, bancada),
                     paginas=paginas, dpi=dpi, membro=membro, termo=args.get("termo") or "")
+    if aviso_copia and "cabecalho" in r:
+        r["cabecalho"] = f"{aviso_copia} · {r['cabecalho']}"
+        r["aviso"] = aviso_copia
     classe = r.pop("classe_erro", None)
     # A alça é o pedido (§11.2), a mesma para as duas tools: releitura pelo apelido e pela
     # nova deduplicam juntas. `caminho` é identificador exato — nunca entra na poda (iv).
@@ -2184,7 +2225,7 @@ TIPOS_TEXTO = {".py", ".md", ".mmd", ".d2", ".sh", ".sql", ".yaml", ".yml", ".js
 # `permite: <prefixo>  # motivo`) e texto plano na raiz do repo, e sem o nome a excecao nao tinha
 # como ser escrita pela porta.
 NOMES_TEXTO = {"Dockerfile", ".dockerignore", ".gitignore", ".operacao", "VERDES",
-               ".conferir-repo", "uv.lock", "crontab-claudinho"}  # VERDES: baseline do pre-push (guia portoes-do-codigo)
+               ".conferir-repo", "uv.lock", "crontab-claudinho"}  # VERDES: baseline do pre-push (referencias/instancias/verbo/desenvolvimento.md no platafirma-casa-espelho)
 # Dockerfile.<sufixo> (Dockerfile.gpu, Dockerfile.dev): o mesmo texto de build, #2856 linha 40.
 PREFIXO_DOCKERFILE = "Dockerfile."
 # platafirma-ui entrou em 22/09/2026 (hotfix): o clone existia na bancada e o front do
@@ -3874,17 +3915,70 @@ TOOLS_DERIVADAS = _gera_tools_verbos()
 SLUGS_SERVIDOS = set(TOOLS_DERIVADAS)
 
 
+def _esquema_plano(esquema: dict) -> dict:
+    """Achata `anyOf` em `type` explícito no `inputSchema` servido por `tools/list` (#4257).
+
+    O conversor `convertMapToSchema` do Antigravity (`agy`) ignora `anyOf` e emite `{}` (`TYPE_UNSPECIFIED`)
+    para qualquer propriedade sem `type` no topo (ou `items: {}` em listas sem tipo), o que leva o
+    `streamGenerateContent` da API Gemini a abortar o stream com `400 INVALID_ARGUMENT`. O cache interno do
+    FastMCP segue com o esquema completo para `tools/call` aceitar `None`, `str`, `list` e `dict`."""
+    if not isinstance(esquema, dict):
+        return esquema
+    out = dict(esquema)
+    if "anyOf" in out and "type" not in out:
+        ramos = [r for r in out.pop("anyOf") if isinstance(r, dict) and r.get("type") != "null"]
+        if ramos:
+            escolhido = dict(ramos[0])
+            escolhido.update({k: v for k, v in out.items() if k != "default" or v is not None})
+            out = escolhido
+    if out.get("default") is None and "default" in out:
+        out.pop("default")
+    if "properties" in out and isinstance(out["properties"], dict):
+        props = {}
+        for k, v in out["properties"].items():
+            p = _esquema_plano(v)
+            if k == "trecho" and isinstance(p, dict) and p.get("type") == "object" and "properties" not in p:
+                p["properties"] = {
+                    "antes": {"type": "string"},
+                    "depois": {"type": "string"},
+                    "todos": {"type": "boolean"},
+                }
+            elif k == "lote" and isinstance(p, dict) and p.get("type") == "array":
+                p["items"] = {
+                    "type": "object",
+                    "properties": {
+                        "ato": {"type": "string"},
+                        "args": {"type": "array", "items": {"type": "string"}},
+                        "stdin": {"type": "string"},
+                        "inteiro": {"type": "boolean"},
+                    },
+                }
+            props[k] = p
+        out["properties"] = props
+    if "items" in out and isinstance(out["items"], dict):
+        it = _esquema_plano(out["items"])
+        if "type" not in it:
+            it = {**it, "type": "string"}
+        out["items"] = it
+    elif out.get("type") == "array":
+        out["items"] = {"type": "string"}
+    return out
+
+
 def _esconde_as_ocultas() -> None:
-    """`tools/list` sem as tools de `OCULTAS`. O handler de baixo roda inteiro, então o cache de definições da
-    `mcp` segue com a tool oculta: o `tools/call` dela passa pela validação do esquema e não grava o aviso
-    «not listed» (medido em ops-server/test_contrato_borda.py, #4117)."""
+    """`tools/list` sem as tools de `OCULTAS` e com `inputSchema` plano (#4117, #4257). O handler de baixo
+    roda inteiro, então o cache de definições da `mcp` segue com a tool oculta e o esquema completo: o
+    `tools/call` passa pela validação do esquema sem gravar «not listed» e aceita uniões em runtime."""
     from mcp import types as _tipos
     baixo = mcp._mcp_server
     original = baixo.request_handlers[_tipos.ListToolsRequest]
 
     async def _sem_ocultas(req):
         lista = (await original(req)).root
-        visiveis = [t for t in lista.tools if t.name not in OCULTAS]
+        visiveis = [
+            t.model_copy(update={"inputSchema": _esquema_plano(t.inputSchema)})
+            for t in lista.tools if t.name not in OCULTAS
+        ]
         return _tipos.ServerResult(_tipos.ListToolsResult(tools=visiveis, nextCursor=lista.nextCursor))
 
     baixo.request_handlers[_tipos.ListToolsRequest] = _sem_ocultas

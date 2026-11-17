@@ -2,7 +2,7 @@
 
 Roda o verbo como a unit roda (subprocesso, OPS_LOG_DIR apontado), sobre log sintetico
 com um tropeco plantado na janela e ausente da base. O smoke contra o log real saiu em
-27/09/2026: teste nao le estado real (guia portoes-do-codigo).
+27/09/2026: teste nao le estado real (referencias/classes/teste.md no platafirma-casa-espelho).
 """
 import json
 import os

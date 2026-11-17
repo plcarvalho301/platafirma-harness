@@ -340,5 +340,5 @@ def test_busca_medida_devolve_latencia():
 
 # Conformidade adaptador x verbo humano sobre o estado vivo (registro contra `acervo
 # listar casa`, fila contra `fila ler --tudo`) saiu daqui em 27/09/2026: compara a
-# produção consigo mesma, e isso é conferência de estado, não teste (guia
-# portoes-do-codigo, «Teste não lê estado real»).
+# produção consigo mesma, e isso é conferência de estado, não teste
+# (referencias/classes/teste.md no platafirma-casa-espelho, «O ambiente»).

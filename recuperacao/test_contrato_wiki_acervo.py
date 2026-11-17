@@ -334,4 +334,4 @@ def test_leitura_fora_do_ar_declara_a_fonte_em_vez_de_servir_meio_envelope():
 
 # A conformidade contra a wiki e o rag vivos saiu daqui em 27/09/2026: compara a produção
 # consigo mesma, e um dos casos existia para ficar vermelho quando a API evoluísse. É
-# conferência de estado, não teste (guia portoes-do-codigo, «Teste não lê estado real»).
+# conferência de estado, não teste (referencias/classes/teste.md no platafirma-casa-espelho, «O ambiente»).

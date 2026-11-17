@@ -1014,7 +1014,7 @@ linha_arquivo() {
   printf '%s' "$l"
 }
 
-# Gramática da linha (arq:0129 D1; spec teste §4): depois do arquivo, campos separados por `|`, cada
+# Gramática da linha (arq:0129 D1; referencias/classes/teste.md no platafirma-casa-espelho): depois do arquivo, campos separados por `|`, cada
 # um nomeado ou de palavra reservada, em qualquer ordem: `degrau: imagem|rodada`, `regressivo [#n]`,
 # `quarentena [#débito]`, `preparo`; o que sobra é o raio, globs separados por espaço. Preenche
 # CAMPO_*; CAMPO_ERRO diz o campo que a gramática não lê (nomeado e desconhecido, ou degrau de valor

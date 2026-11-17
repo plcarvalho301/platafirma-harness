@@ -404,3 +404,24 @@ def test_comentar_edita_uso_errado_sai_2(stub):
     ):
         p = subprocess.run([str(BIN), *args], input="", capture_output=True, text=True, env=env, timeout=30)
         assert p.returncode == 2, (args, p.stdout, p.stderr)
+
+
+def test_comentarios_indice_com_tag_html_cortada_nao_cola_linhas(stub):
+    """DT-775: tag HTML aberta perto do byte 100 nao engole o comentario seguinte no --indice."""
+    s, base = stub
+    corpo1 = "<p>" + ("a" * 94) + "<br>restante do primeiro</p>"
+    corpo2 = "<p>segundo comentario</p>"
+    s.comentarios.extend([
+        {"id": 5128, "autor": "ia", "carimbo": "2026-11-16T12:00:00Z", "corpo": corpo1},
+        {"id": 5135, "autor": "ia", "carimbo": "2026-11-16T12:05:00Z", "corpo": corpo2},
+    ])
+    env = dict(os.environ, TAREFAS_BASE=base, PF_CADEIRA="engenharia")
+    p = subprocess.run(
+        [str(BIN), "comentarios", "4314", "--indice"],
+        capture_output=True, text=True, env=env, timeout=30,
+    )
+    assert p.returncode == 0, p.stderr
+    linhas = [ln for ln in p.stdout.splitlines() if ln.strip()]
+    assert len(linhas) == 2, p.stdout
+    assert linhas[0].startswith("#5128 · ")
+    assert linhas[1].startswith("#5135 · ")
