@@ -1,7 +1,7 @@
 """`descansar fita` enxuto (dono, 14/11/2026).
 
-O que se trava: o relatorio do fim de fita mostra so o que o Sair usa (mesa, caderno, aresta e
-caixa). Saiu o dossie de release, servico e acervo; saiu a contagem de giro, que so imprimia e nao
+O que se trava: o relatorio do fim de fita mostra so o que o Sair usa (mesa, caderno e aresta; a
+caixa saiu em 17/11/2026). Saiu o dossie de release, servico e acervo; saiu a contagem de giro, que so imprimia e nao
 era custo; saiu a descoberta de cadeira pelo ledger com o prefixo claudinho-; o carimbo de
 descanso e do encerramento; `--parada` sem `--encerra-sessao` recusa.
 """
