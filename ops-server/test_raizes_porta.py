@@ -679,7 +679,7 @@ def test_write_file_patch_recusa_delecao_e_hunk_invalido(bancada, sem_pep):
 
 
 def test_ler_arquivo_relativo_prefere_worktree_da_cadeira_e_avisa_copia_atras(bancada, sem_pep, monkeypatch):
-    """DT-772: `<repo>/...` resolve para `wt/<repo>/<cadeira>/main` quando existe; senao avisa se atras."""
+    """DT-772: `<repo>/...` resolve para `wt/<repo>/<cadeira>/main` quando existe; senão avisa se atrás."""
     clone = bancada / "platafirma-casa-espelho"
     clone.mkdir(parents=True)
     (clone / "doc.md").write_text("velho\n", encoding="utf-8")
