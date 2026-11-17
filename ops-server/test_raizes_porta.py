@@ -287,11 +287,32 @@ def test_write_file_verbo_e_hook_do_harness_dentro_do_espelho(bancada, sem_pep):
             r = s.write_file(path=fora, content="#!/bin/sh\nexit 0\n")
             assert r.get("recusado") and "tipo" in r["motivo"], (fora, r)
     base = "platafirma-casa-espelho"
-    # bin/ do espelho fora de outros_repos/harness/ nao e morada de verbo
+    # bin/ do espelho fora de outros_repos/harness/ e outros_repos/posto/ nao e morada de verbo
     for fora in (f"{base}/bin/x", f"{base}/outros_repos/bin/x", f"{base}/outros_repos/motor/bin/x",
                  f"{base}/harness/bin/x"):
         r = s.write_file(path=fora, content="#!/bin/sh\nexit 0\n")
         assert r.get("recusado"), (fora, r)
+
+
+def test_write_file_bin_do_posto_e_no_espelho_sem_extensao_com_shebang(bancada, sem_pep):
+    """DT-751: bin/ do platafirma-posto (clone, worktree) e outros_repos/posto/bin/ do espelho
+    aceitam executavel sem extensao com shebang; fora de bin/ segue recusado."""
+    (bancada / "platafirma-posto" / "bin").mkdir(parents=True)
+    (bancada / "wt" / "platafirma-posto" / "ti" / "pf-vault" / "bin").mkdir(parents=True)
+    (bancada / "platafirma-casa-espelho" / "outros_repos" / "posto" / "bin").mkdir(parents=True)
+    (bancada / "wt" / "platafirma-casa-espelho" / "engenharia" / "751-x"
+     / "outros_repos" / "posto" / "bin").mkdir(parents=True)
+    for base in ("platafirma-posto",
+                 "wt/platafirma-posto/ti/pf-vault",
+                 "platafirma-casa-espelho/outros_repos/posto",
+                 "wt/platafirma-casa-espelho/engenharia/751-x/outros_repos/posto"):
+        sem = s.write_file(path=f"{base}/bin/pf", content="echo\n")
+        assert sem.get("recusado") and "shebang" in sem["motivo"], (base, sem)
+        ok = s.write_file(path=f"{base}/bin/pf", content="#!/bin/sh\necho\n")
+        assert ok.get("ok"), (base, ok)
+        assert os.access(bancada / base / "bin/pf", os.X_OK)
+        fora = s.write_file(path=f"{base}/scripts/pf", content="#!/bin/sh\necho\n")
+        assert fora.get("recusado") and "tipo" in fora["motivo"], (base, fora)
 
 def test_write_file_aceita_php_e_mjs(bancada, sem_pep):
     """#3133: skin da wiki (.php) e provas do rastreador (.mjs) sao texto plano."""
