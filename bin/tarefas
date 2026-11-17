@@ -1421,20 +1421,35 @@ for c in json.load(sys.stdin):
             cid = c["id"]
             print(f"#{cid} · {card} · {linha}")
 ')
+      elif [ "$indice" = "true" ]; then
+        bloco=$(printf '%s' "$com_j" | jq -c \
+          --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" '
+          .comentarios
+          | (if ($ids | length) > 0 then map(select(.id as $i | any($ids[]; . == $i))) else . end)
+          | map(select(.id >= $desde))
+          | (if $ultimos > 0 then .[-$ultimos:] else . end)' \
+          | CARD_ROT="$card_rot" python3 -c '
+import html, json, os, re, sys
+card = os.environ["CARD_ROT"]
+for c in json.load(sys.stdin):
+    raw = c.get("corpo") or ""
+    txt = html.unescape(re.sub(r"<[^>]*>", " ", raw))
+    prev = " ".join(txt.split())[:100]
+    autor = c.get("autor") or "anônimo"
+    cid = c["id"]
+    carimbo = c.get("carimbo", "")
+    print(f"{card} · #{cid} · {autor} · {carimbo} · {len(raw)} car. · {prev}")
+')
       else
         bloco=$(printf '%s' "$com_j" | jq -r \
           --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" \
-          --argjson indice "$indice" --arg card "$card_rot" '
+          --arg card "$card_rot" '
           .comentarios as $todos
           | ($todos
              | (if ($ids | length) > 0 then map(select(.id as $i | any($ids[]; . == $i))) else . end)
              | map(select(.id >= $desde))
              | (if $ultimos > 0 then .[-$ultimos:] else . end)) as $sel
-          | if $indice then
-              $sel[] | "\($card) · #\(.id) · \(.autor // "anônimo") · \(.carimbo) · \(.corpo | length) car. · \(.corpo[0:100] | gsub("\n"; " "))"
-            else
-              $sel[] | "--- \($card) · #\(.id) · \(.autor // "anônimo") · \(.carimbo) ---\n\(.corpo)\n"
-            end' | para_texto)
+          | $sel[] | "--- \($card) · #\(.id) · \(.autor // "anônimo") · \(.carimbo) ---\n\(.corpo)\n"' | para_texto)
       fi
       if [ -n "$bloco" ]; then
         if [ -n "$linhas_acum" ]; then
@@ -1452,21 +1467,48 @@ for c in json.load(sys.stdin):
       saida="(sem comentários)"
     fi
   else
-    saida=$(busca GET "/itens/$id/comentarios" | jq -r \
-      --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" --argjson indice "$indice" '
-      .comentarios as $todos
-      | ($todos
-         | (if ($ids | length) > 0 then map(select(.id as $i | any($ids[]; . == $i))) else . end)
-         | map(select(.id >= $desde))
-         | (if $ultimos > 0 then .[-$ultimos:] else . end)) as $sel
-      | if ($todos | length) == 0 then "(sem comentários)"
-        elif ($sel | length) == 0 then
-          "(nenhum comentário na seleção; o item tem \($todos | length), de #\($todos[0].id) a #\($todos[-1].id))"
-        elif $indice then
-          $sel[] | "#\(.id) · \(.autor // "anônimo") · \(.carimbo) · \(.corpo | length) car. · \(.corpo[0:100] | gsub("\n"; " "))"
-        else
-          $sel[] | "--- #\(.id) · \(.autor // "anônimo") · \(.carimbo) ---\n\(.corpo)\n"
-        end' | para_texto)
+    if [ "$indice" = "true" ]; then
+      saida=$(busca GET "/itens/$id/comentarios" | jq -c \
+        --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" '
+        .comentarios as $todos
+        | ($todos
+           | (if ($ids | length) > 0 then map(select(.id as $i | any($ids[]; . == $i))) else . end)
+           | map(select(.id >= $desde))
+           | (if $ultimos > 0 then .[-$ultimos:] else . end)) as $sel
+        | if ($todos | length) == 0 then {vazio: "(sem comentários)"}
+          elif ($sel | length) == 0 then
+            {vazio: "(nenhum comentário na seleção; o item tem \($todos | length), de #\($todos[0].id) a #\($todos[-1].id))"}
+          else {itens: $sel}
+          end' | python3 -c '
+import html, json, re, sys
+d = json.load(sys.stdin)
+if "vazio" in d:
+    print(d["vazio"])
+else:
+    for c in d["itens"]:
+        raw = c.get("corpo") or ""
+        txt = html.unescape(re.sub(r"<[^>]*>", " ", raw))
+        prev = " ".join(txt.split())[:100]
+        autor = c.get("autor") or "anônimo"
+        cid = c["id"]
+        carimbo = c.get("carimbo", "")
+        print(f"#{cid} · {autor} · {carimbo} · {len(raw)} car. · {prev}")
+')
+    else
+      saida=$(busca GET "/itens/$id/comentarios" | jq -r \
+        --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" '
+        .comentarios as $todos
+        | ($todos
+           | (if ($ids | length) > 0 then map(select(.id as $i | any($ids[]; . == $i))) else . end)
+           | map(select(.id >= $desde))
+           | (if $ultimos > 0 then .[-$ultimos:] else . end)) as $sel
+        | if ($todos | length) == 0 then "(sem comentários)"
+          elif ($sel | length) == 0 then
+            "(nenhum comentário na seleção; o item tem \($todos | length), de #\($todos[0].id) a #\($todos[-1].id))"
+          else
+            $sel[] | "--- #\(.id) · \(.autor // "anônimo") · \(.carimbo) ---\n\(.corpo)\n"
+          end' | para_texto)
+    fi
   fi
   bytes=$(printf '%s' "$saida" | wc -c)
   if [ "$bytes" -gt 45000 ]; then

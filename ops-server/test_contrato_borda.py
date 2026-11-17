@@ -656,6 +656,30 @@ def test_as_tools_da_porta_declaram_annotations_sem_destructive_nem_open_world()
         assert anot.readOnlyHint is esperado_ro, slug
 
 
+def test_tools_list_devolve_input_schema_plano_sem_anyof_nem_propriedades_sem_type():
+    """Incidente #4257: o conversor de esquemas MCP do agy ignora `anyOf` e gera `{}` (`TYPE_UNSPECIFIED`),
+    causando `INVALID_ARGUMENT (code 400)` em `streamGenerateContent`. Todo nó de propriedade e `items`
+    em `tools/list` precisa declarar `type` explícito no topo."""
+    handler = s.mcp._mcp_server.request_handlers[mcp_types.ListToolsRequest]
+    res = asyncio.run(handler(mcp_types.ListToolsRequest())).root
+    assert res.tools
+
+    def _confere_no(no: dict, trilha: str) -> None:
+        assert "anyOf" not in no, f"{trilha} ainda expõe anyOf: {no}"
+        assert isinstance(no.get("type"), str) and no["type"], f"{trilha} sem type explícito: {no}"
+        if no["type"] == "array":
+            assert isinstance(no.get("items"), dict), f"{trilha} array sem items: {no}"
+            _confere_no(no["items"], f"{trilha}.items")
+        for k, sub in (no.get("properties") or {}).items():
+            _confere_no(sub, f"{trilha}.{k}")
+
+    por_nome = {t.name: t for t in res.tools}
+    for nome, tool in por_nome.items():
+        _confere_no(tool.inputSchema, nome)
+    trecho_props = por_nome["write_file"].inputSchema["properties"]["trecho"]["properties"]
+    assert set(trecho_props) >= {"antes", "depois", "todos"}
+
+
 def test_get_mcp_autenticado_devolve_405_sem_abrir_sse_ocioso(monkeypatch):
     """Servidor stateless sem canal server->client devolve 405 em GET /mcp autenticado
     (spec Streamable HTTP 2025-03-26), evitando standalone SSE ocioso e queda no agy."""

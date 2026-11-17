@@ -3,7 +3,7 @@
 Regra do dono (27/09/2026): teste não depende de estado real — acervo, instância,
 release no ar, bancada da conta, serviço de pé, forge, identidade de quem roda. Teste
 que depende dele muda de cor quando o sistema evolui, e vermelho por evolução não é
-risco a anotar: é teste errado. Regra e porquê: `acervo ler casa guia portoes-do-codigo`.
+risco a anotar: é teste errado. Regra e porquê: `referencias/classes/teste.md` no `platafirma-casa-espelho`.
 
 Cada suíte chama `isolar()` do seu conftest.py, uma vez, antes da coleta:
   1. sai do ambiente toda variável da plataforma (PREFIXOS) e a identidade da conta

@@ -763,7 +763,7 @@ def _inventario(banc, *args: str) -> subprocess.CompletedProcess:
 
 
 def test_inventario_conta_por_degrau_e_por_tipo_com_zero_explicito(banc):
-    """spec teste §4: o inventario le a lista de portao pelos dois eixos da arq:0129; o que falta
+    """referencias/classes/teste.md (platafirma-casa-espelho): o inventario le a lista de portao pelos dois eixos da arq:0129; o que falta
     sai com zero escrito, e o tipo que ainda não tem marca na linha diz isso."""
     _com_portao(banc, "construir.sh | preparo\nverde.mjs\na.mjs | degrau: imagem\n"
                       "b.mjs | degrau: imagem | quarentena #5\nc.mjs | degrau: rodada\nd.mjs | regressivo #9\n")

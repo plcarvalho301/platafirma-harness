@@ -215,4 +215,4 @@ def test_cli_fonte_sem_estado_falha_declarando_e_nao_apaga_o_resto(tmp_path, mon
 
 
 # A geração contra board e registro vivos saiu daqui em 27/09/2026: é conferência de
-# estado, não teste (guia portoes-do-codigo, «Teste não lê estado real»).
+# estado, não teste (referencias/classes/teste.md no platafirma-casa-espelho, «O ambiente»).

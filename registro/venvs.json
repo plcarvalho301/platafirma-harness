@@ -156,7 +156,7 @@
     "familia": "platafirma-casa-espelho",
     "esteira": "codigo",
     "promovida": false,
-    "venv": "rag",
+    "lock": "outros_repos/conhecimento/rag/uv.lock",
     "teste": "outros_repos/conhecimento/rag"
   },
   "espelho-diagrama": {

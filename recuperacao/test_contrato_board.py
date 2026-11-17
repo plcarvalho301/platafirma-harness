@@ -239,4 +239,4 @@ def test_board_manda_o_header_de_identidade_quando_ha_cadeira():
 
 # A conformidade contra o rastreador vivo (adaptador x `tarefas listar`, carimbo que
 # não anda por leitura) saiu daqui em 27/09/2026: é conferência de estado de produção,
-# não teste (guia portoes-do-codigo, «Teste não lê estado real»).
+# não teste (referencias/classes/teste.md no platafirma-casa-espelho, «O ambiente»).

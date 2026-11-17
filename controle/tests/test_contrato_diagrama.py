@@ -121,7 +121,7 @@ def test_diagrama_kroki_fora_de_alcance_sai_5_e_nao_reprova(tmp_path):
 
 
 # --- `lint diagrama ... --json` (card #3096, revisao do PR #306) --------------------
-# contrato de saida que muda pede teste de contrato (arq:0116 / guia portoes-do-codigo):
+# contrato de saida que muda pede teste de contrato (arq:0116 / referencias/classes/teste.md no platafirma-casa-espelho):
 # nem test_contrato_diagrama.py (so testava texto puro) nem test_contrato_lint.py (so
 # testa --json da classe 'codigo') mediam o {ancora, classe, alvo, chave, rev,
 # apontamentos} que bin/lint monta para a classe 'diagrama'.

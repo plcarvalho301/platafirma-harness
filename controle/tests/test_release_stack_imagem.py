@@ -1,5 +1,5 @@
 """Contrato de bin/_release/stack no que o card #3192 acrescentou (spec
-conversor-pdf-combinado §2 e §13; guia portoes-do-codigo, gate de promoção):
+conversor-pdf-combinado §2 e §13; referencias/classes/teste.md no platafirma-casa-espelho, gate de promoção):
 
 - imagem pinada pelo sha: stack cujo compose dá a todo serviço com build uma image
   terminada em :${PF_RELEASE_SHA} sobe SEM --build quando a imagem daquele sha já
