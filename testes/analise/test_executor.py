@@ -68,13 +68,50 @@ def test_prazo_mata_so_a_unidade(tmp_path):
             pasta=receita,saida=saida,ambiente=Path(sys.prefix),prazo=1)
     assert e.value.exit==5
 
-def test_oom_mata_so_a_unidade(tmp_path):
-    from analise import Falha
+TETO_PEQUENO = 128*1024**2
+
+
+def test_teto_pequeno_vale_na_unidade_sem_oom(tmp_path):
+    """Nenhum teste provoca OOM real no host (F4277, carta 20261116T201603).
+
+    A unidade sobe com teto pequeno e a receita aloca um oitavo dele: o executar
+    só devolve depois de o systemd confirmar MemoryMax e MemoryHigh iguais ao teto,
+    e a receita termina a alocação sem OOM killer.
+    """
     receita=tmp_path/"receita";receita.mkdir()
     saida=tmp_path/"saida";saida.mkdir()
-    (receita/"rodar.py").write_text("import mmap\nx=mmap.mmap(-1,3*1024**3,flags=mmap.MAP_PRIVATE|mmap.MAP_ANONYMOUS|mmap.MAP_POPULATE)")
+    (receita/"rodar.py").write_text("import mmap\nx=mmap.mmap(-1,16*1024**2,flags=mmap.MAP_PRIVATE|mmap.MAP_ANONYMOUS|mmap.MAP_POPULATE)\nopen('/saida/alocou','w').write(str(len(x)))")
+    rc,metricas=executar([sys.executable,"-I","-B","/executor.py","rodar.py"],
+        pasta=receita,saida=saida,ambiente=Path(sys.prefix),
+        _tetos_memoria=(TETO_PEQUENO,TETO_PEQUENO))
+    assert rc==0
+    assert (saida/"alocou").read_text()==str(16*1024**2), "a receita não terminou antes de o executar devolver"
+    assert metricas["pico_bytes"]>0
+
+
+def test_oom_da_unidade_vira_falha_e_para_so_a_unidade(tmp_path,monkeypatch):
+    """O caminho do OOM roda com systemd falso: a unit diz Result=oom-kill."""
+    from analise import Falha, unidade
+    chamadas=[]
+    estado={"Result":"oom-kill","ExecMainStatus":"9","MemoryPeak":str(TETO_PEQUENO),
+        "MemoryMax":str(TETO_PEQUENO),"MemoryHigh":str(TETO_PEQUENO),"MemorySwapMax":"0",
+        "TasksMax":str(unidade.TASKS_MAX),"CPUQuotaPerSecUSec":"2s","SubState":"failed",
+        "ActiveState":"failed"}
+    def rodar_falso(argv):
+        chamadas.append(argv)
+        if argv[:3]==["systemctl","--user","show"]:
+            return {"exit":0,"stdout":"".join(f"{k}={v}\n" for k,v in estado.items()),"stderr":""}
+        return {"exit":0,"stdout":"","stderr":""}
+    monkeypatch.setattr(unidade,"_rodar",rodar_falso)
+    monkeypatch.setattr(unidade.shutil,"which",lambda nome:"/usr/bin/"+nome)
+    receita=tmp_path/"receita";receita.mkdir()
+    saida=tmp_path/"saida";saida.mkdir()
     with pytest.raises(Falha) as e:
         executar([sys.executable,"-I","-B","/executor.py","rodar.py"],
             pasta=receita,saida=saida,ambiente=Path(sys.prefix),
-            _tetos_memoria=(128*1024**2,128*1024**2))
+            _tetos_memoria=(TETO_PEQUENO,TETO_PEQUENO))
     assert e.value.exit==5 and e.value.causa=="teto-oom-kill"
+    unit=chamadas[0][3].removeprefix("--unit=")
+    assert f"--property=MemoryMax={TETO_PEQUENO}" in chamadas[0]
+    assert ["systemctl","--user","stop",unit] in chamadas
+    assert ["systemctl","--user","reset-failed",unit] in chamadas
