@@ -317,9 +317,14 @@ def main():
     # traz as origens busca e abertura; a bateria, que e arquivo daqui, sai neste ponto, pelo
     # texto normalizado como a view o normaliza.
     parts_log = sorted({_API[p] for p in ARGS["particoes"]} | {BALDE_ANTIGO})
-    linhas = conn.execute("SELECT particao, pergunta_normalizada, pergunta_exemplo "
-                          "FROM acervo.bateria_recuperacao WHERE particao = ANY(%s)",
-                          (parts_log,)).fetchall()
+    if MAX_PERGUNTAS > 0:
+        linhas = conn.execute("SELECT particao, pergunta_normalizada, pergunta_exemplo "
+                              "FROM acervo.bateria_recuperacao WHERE particao = ANY(%s)",
+                              (parts_log,)).fetchall()
+    else:
+        # `--perguntas 0`: sem replay do log, só a bateria. O log nem se lê, e o resultado diz replay 0.
+        linhas = []
+        log("replay do log desligado (--perguntas 0): só a bateria")
     gold_txt = {_normaliza(g["pergunta"]) for g in gold}
     por_particao, vistas = {}, {}
     for part, norm, exemplo in linhas:
