@@ -18,20 +18,20 @@ def _roda(*args: str) -> dict:
     return json.loads(p.stdout)
 
 
-def test_sem_chapeu_nao_roteia_e_serve_seis_pecas():
+def test_sem_chapeu_nao_roteia_e_serve_cinco_pecas():
     pac = _roda("ia", "--pergunta", "janela de contexto")
     assert pac["chapeu"] is None
     assert pac["roteador"]["via"] == "nenhum"
     assert [p["peca"] for p in pac["pecas"]] == [
-        "persona", "conduta", "rotinas", "alias-cadeiras", "mesa", "cadernos",
+        "persona", "conduta", "alias-cadeiras", "mesa", "cadernos",
     ]
 
 
-def test_com_chapeu_serve_chapeu_rotinas_e_acervo_consultado():
+def test_com_chapeu_serve_chapeu_e_acervo_consultado():
     pac = _roda("ia", "orquestracao", "--pergunta", "janela de contexto")
     assert pac["chapeu"] == "orquestracao"
     assert pac["roteador"]["via"] == "comando"
     assert [p["peca"] for p in pac["pecas"]] == [
-        "persona", "chapeu", "conduta", "rotinas", "alias-cadeiras", "mesa",
+        "persona", "chapeu", "conduta", "alias-cadeiras", "mesa",
         "acervo-consultado", "cadernos",
     ]

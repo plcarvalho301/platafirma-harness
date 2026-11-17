@@ -460,26 +460,25 @@ def test_pre_commit_bloqueante_vs_aviso():
         assert "artefato regeneravel rastreado" in res2.stderr
 
 
-def test_lint_prosa_le_a_regua_que_mora_como_padrao(bancada, tmp_path):
-    # #2856 linha 84: styleguide-da-wiki mora no acervo como `padrao`, e `lint prosa` saia 5 sempre
-    doc = tmp_path / "styleguide-da-wiki"
-    doc.write_text("força não declarada · vigente — padrao styleguide-da-wiki · Styleguide\n"
-                   "# Styleguide da wiki\n\nEspécie: padrao\n")
-    stub = tmp_path / "acervo-padrao"
+def test_lint_prosa_le_o_gabarito_da_casa_nova(bancada, tmp_path):
+    doc = tmp_path / "marcas-pt-br"
+    doc.write_text("casa nova · platafirma-casa-espelho · instancias/gabarito/marcas-pt-br.md\n"
+                   "# Marcas de máquina\n\nEntidade: gabarito\n")
+    stub = tmp_path / "acervo-gabarito"
     stub.write_text("#!/bin/sh\n"
-                    f'[ "$1 $2 $3 $4" = "ler casa padrao styleguide-da-wiki" ] && exec cat "{doc}"\n'
+                    f'[ "$1 $2 $3 $4" = "ler casa gabarito marcas-pt-br" ] && exec cat "{doc}"\n'
                     'echo "acervo casa: nada com chave $4" >&2; exit 1\n')
     stub.chmod(0o755)
     p = _rodar_lint("prosa", "platafirma-harness", env_extra={**bancada, "PF_LINT_ACERVO": str(stub)})
     assert p.returncode == 0, p.stdout + p.stderr
-    assert "styleguide-da-wiki@rev1" in p.stdout.splitlines()[0]
+    assert "marcas-pt-br@rev1" in p.stdout.splitlines()[0]
 
 
 def test_lint_prosa_sem_a_regua_em_nenhuma_especie_exit_5(bancada, acervo):
     p = _rodar_lint("prosa", "platafirma-harness", env_extra={**bancada, **acervo()})
     assert p.returncode == 5, p.stdout + p.stderr
     assert "indeterminavel" in p.stderr
-    assert "styleguide-da-wiki" in p.stderr
+    assert "marcas-pt-br" in p.stderr
 
 
 # ------------------------------------------------------------------ predicados da casa

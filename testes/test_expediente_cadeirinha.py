@@ -97,7 +97,7 @@ def test_o_pacote_nao_traz_conduta_nem_alias_nem_mesa(raiz):
     pecas = _pecas(_monta(raiz, stdin="revise o README"))
     for fora in ("conduta", "alias-cadeiras", "mesa"):
         assert fora not in pecas
-    assert pecas == ["persona", "chapeu", "modo", "rotinas", "acervo-consultado", "cadernos"]
+    assert pecas == ["persona", "chapeu", "modo", "acervo-consultado", "cadernos"]
 
 
 def test_o_caderno_do_agente_e_licao_e_premissa_do_banco(raiz):
@@ -139,7 +139,7 @@ def test_o_modo_chega_pelo_documento_da_casa(raiz):
 # ---------------------------------------------------------------- a regua
 def test_lista_de_verificacao_entra_so_com_criterios_e_contrapontos(raiz):
     d = json.loads(_monta(raiz, "--regua", "lista-de-verificacao", "readme").stdout)
-    assert [p["peca"] for p in d["pecas"]][3:5] == ["rotinas", "regua"], "a regua vem depois das rotinas"
+    assert [p["peca"] for p in d["pecas"]][2:4] == ["modo", "regua"], "a regua vem depois do modo"
     regua = next(p for p in d["pecas"] if p["peca"] == "regua")["conteudo"]
     assert "A1 | README existe" in regua and "A2 | README cabe" in regua
     assert "**A1** — pasta sem manifesto" in regua
@@ -227,11 +227,11 @@ def test_perfil_cadeira_segue_igual_e_nao_ganha_campos(raiz):
     assert "perfil" not in d and "modo" not in d
 
 
-def test_catalogo_por_perfil_e_o_padrao_segue_com_8(raiz):
+def test_catalogo_por_perfil_e_o_padrao_segue_com_7(raiz):
     cad = json.loads(_run_expediente(["catalogo", "--json"], raiz).stdout)
-    assert len(cad) == 8 and "conduta" in [p["peca"] for p in cad]
+    assert len(cad) == 7 and "conduta" in [p["peca"] for p in cad]
     cdi = json.loads(_run_expediente(["catalogo", "--perfil", "cadeirinha", "--json"], raiz).stdout)
-    assert [p["peca"] for p in cdi] == ["persona", "chapeu", "modo", "rotinas", "regua",
+    assert [p["peca"] for p in cdi] == ["persona", "chapeu", "modo", "regua",
                                         "acervo-consultado", "cadernos"]
     assert "conduta" not in [p["peca"] for p in cdi]
 

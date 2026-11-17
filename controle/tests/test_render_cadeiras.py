@@ -19,7 +19,7 @@ def _peca(nome, frescor="fresco"):
 
 
 PACOTE_DE_HOJE = [_peca(n) for n in
-                  ("conduta", "persona", "alias-cadeiras", "mesa", "cadernos", "rotinas")]
+                  ("conduta", "persona", "alias-cadeiras", "mesa", "cadernos")]
 
 
 def _item(cadeira, pecas):

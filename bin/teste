@@ -1011,6 +1011,64 @@ raio_total_de() {  # stdin: arquivos do diff ; imprime o primeiro de raio total 
   return 1
 }
 
+# F4277, regra 1: o lock de uma stack alcança só aquela stack. Arquivo de raio total dentro
+# da pasta de uma stack (a do lock ou a subárvore de teste, valendo a mais funda entre todas
+# as stacks da família) pesa só para a dona. Na raiz, numa pasta acima da stack, nas peças
+# globais do construtor ou sem stack dona, pesa para todas, como antes. Antes disto o
+# rag/uv.lock rodava também conversor e casa-site (carta 20261116T195115).
+RAIO_GLOBAL=('lib/venv.sh' 'lib/terceiros.sh' 'registro/terceiros.json')
+
+sob_ou_igual() {  # $1=pasta $2=pasta-mãe ; 0 se $1 é $2 ou está dentro dela ("" é a raiz)
+  [ -z "$2" ] && return 0
+  [ "$1" = "$2" ] && return 0
+  case "$1" in "$2"/*) return 0 ;; esac
+  return 1
+}
+
+raio_total_da_stack() {  # $1=stack $2=linhas do registro da família (nome TAB lock TAB teste) ; stdin: diff
+  local stack="$1" pastas f d g n p casa acima dono_len meu_len
+  # nome TAB pasta, uma por linha: a pasta do lock e a subárvore de teste de cada stack
+  # (awk, e não read com IFS de tab, porque campo vazio colapsaria; lição c1135)
+  pastas="$(printf '%s\n' "$2" | awk -F'\t' 'NF && $1 != "" {
+      if ($2 != "" && $2 !~ /^venv:/) { d = $2; sub(/\/[^\/]*$/, "", d); if (d != $2) print $1 "\t" d }
+      if ($3 != "") print $1 "\t" $3 }')"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$f" in analise/*) continue ;; esac
+    casa=0
+    for g in "${RAIO_TOTAL[@]}"; do
+      if casa_glob "$f" "$g"; then casa=1; break; fi
+    done
+    [ "$casa" -eq 1 ] || continue
+    for g in "${RAIO_GLOBAL[@]}"; do
+      if [ "$f" = "$g" ]; then printf '%s' "$f"; return 0; fi
+    done
+    d="${f%/*}"; [ "$d" = "$f" ] && d=""
+    acima=0; dono_len=0; meu_len=0
+    while IFS=$'\t' read -r n p; do
+      [ -n "$p" ] || continue
+      if [ "$n" = "$stack" ] && sob_ou_igual "$p" "$d"; then acima=1; fi
+      if sob_ou_igual "$d" "$p"; then
+        [ "${#p}" -gt "$dono_len" ] && dono_len="${#p}"
+        if [ "$n" = "$stack" ] && [ "${#p}" -gt "$meu_len" ]; then meu_len="${#p}"; fi
+      fi
+    done <<<"$pastas"
+    if [ "$acima" -eq 1 ] || [ "$dono_len" -eq 0 ] || [ "$meu_len" -eq "$dono_len" ]; then
+      printf '%s' "$f"; return 0
+    fi
+  done
+  return 1
+}
+
+# O raio total visto da stack em rodagem; sem stack resolvida, o de antes (todo lock pesa).
+raio_total_desta_stack() {  # stdin: diff
+  local venvs linhas
+  if [ -z "$REG_STACK" ] || [ -z "$REG_FAMILIA" ]; then raio_total_de; return $?; fi
+  venvs="${PLATAFIRMA_VENVS:-$(dirname "$(readlink -f "$0")")/../registro/venvs.json}"
+  linhas="$(PLATAFIRMA_VENVS="$venvs" python3 "$REGISTRO" --familia "$REG_FAMILIA")" || { raio_total_de; return $?; }
+  raio_total_da_stack "$REG_STACK" "$linhas"
+}
+
 # Linha da lista de portão: `<arquivo> | <glob> <glob>...`; sem `|`, sem raio declarado.
 linha_arquivo() {
   local l="${1%%|*}"
@@ -1171,16 +1229,12 @@ teto_por_folga() {  # $1=trabalhadores pedidos; imprime o que cabe
 # leva), não do verbo no ar. Cada chave é um processo próprio (memo por árvore e chave).
 portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvore(ou vazio) $5=base(ou vazio) $6=degrau
   local c="$1" familia="$2" bancada="$3" arv="$4" base="${5:-}" degrau_fam="${6:-pequeno}" venvs linhas chave lock sub
-  # card #3370: caminho de raio total no diff roda a lista inteira de toda chave; o aviso sai
-  # uma vez, aqui, e as chaves rodam sem --base. Base ilegível: lista inteira, com aviso.
-  local base_args=() dif_fam tot_fam
+  # card #3370 e F4277 regra 1: toda chave recebe --base, e cada uma decide o próprio raio
+  # total (raio_total_desta_stack): o lock de uma stack não roda a lista inteira das outras.
+  local base_args=()
   if [ -n "$base" ]; then
-    if dif_fam="$(diff_da_base "$c" "$base" "$([ -n "$arv" ] && echo 1 || echo 0)")"; then
-      if tot_fam="$(printf '%s\n' "$dif_fam" | raio_total_de)"; then
-        printf 'raio total: %s\n' "$tot_fam"
-      else
-        base_args=(--base "$base")
-      fi
+    if diff_da_base "$c" "$base" "$([ -n "$arv" ] && echo 1 || echo 0)" >/dev/null; then
+      base_args=(--base "$base")
     else
       # arq:0128 §5: base que não se lê é falha de ambiente, não lista inteira
       printf 'portao %s: NAO MEDIDO — base %s ilegível em %s\n' "$familia" "$base" "$c"
@@ -1585,7 +1639,7 @@ ato_rodar() {
     local seleciona=0 dif="" tot="" pulados=() sel_rels=() n_lista=0 linha_crua globs dest rel_repo
     if [ -n "$base" ] && [ -z "$alvo" ]; then
       if dif="$(diff_da_base "$c" "$base" "$EM_ARVORE")"; then
-        if tot="$(printf '%s\n' "$dif" | raio_total_de)"; then
+        if tot="$(printf '%s\n' "$dif" | raio_total_desta_stack)"; then
           printf 'raio total: %s\n' "$tot"
         else
           seleciona=1
