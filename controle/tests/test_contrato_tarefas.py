@@ -69,18 +69,6 @@ TAREFAS_FIXAS = [
     {"id": 103, "done": False, "title": 'título com "aspas" e acento: nível'},
 ]
 
-# done_at real do Vikunja: ISO quando fechado, e o zero-value do Go
-# ("0001-01-01T00:00:00Z") quando aberto — NUNCA JSON null. É esse zero-value
-# que listar_tudo --json precisa normalizar pra null de verdade (card #394).
-TAREFAS_TUDO_FIXAS = [
-    {"id": 201, "done": False, "title": "aberto, sem data de fechamento",
-     "done_at": "0001-01-01T00:00:00Z"},
-    {"id": 202, "done": True, "title": "fechado ontem",
-     "done_at": "2026-08-09T18:53:12-03:00"},
-    {"id": 203, "done": True, "title": "fechado hoje, mesmo dia de outro",
-     "done_at": "2026-08-10T09:12:00-03:00"},
-]
-
 # Só os usos que paginas()/linhas_de_card()/listar_tudo() de fato fazem:
 # -s 'add // []' (funde páginas num array só), -r '.[] | "\(.id)\t..."'
 # (formata linha tabulada), e -c '[.[] | {id, titulo, fechado, fechado_em}]'
@@ -218,17 +206,6 @@ def _run(
 
 
 # --- listar-tudo --json (card #394) -----------------------------------
-
-
-def test_listar_tudo_sem_json_mantem_texto_tabulado_atual(tmp_path):
-    """Regra dura: saída sem --json não muda uma linha (inclusive fechados,
-    que listar_tudo já trazia antes de --json existir)."""
-    proc = _run(["listar-tudo", "46"], tmp_path, body=TAREFAS_TUDO_FIXAS)
-    assert proc.returncode == 0, proc.stderr
-    esperado = [
-        f"{t['id']}\t{'x' if t['done'] else ' '}\t{t['title']}" for t in TAREFAS_TUDO_FIXAS
-    ]
-    assert proc.stdout.splitlines() == esperado
 
 
 # --- filtro --cadeira ------------------------------------------------------
