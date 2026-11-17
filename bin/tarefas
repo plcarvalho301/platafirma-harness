@@ -127,10 +127,16 @@ uso:
                                           story, as tasks dela, todas, com o estado de cada uma);
                                           com --cabecalho, devolve só o cabeçalho
   tarefas criar "<título>" [--desc "<txt>"|--desc-stdin]
-                [--nivel épico|feature|story|task] [--cadeira <c>] [--pai <id>] [--incidente]
+                [--nivel épico|feature|story|task|ideia] [--cadeira <c>] [--pai <id>] [--incidente]
                 [--originacao negocio|tecnico|incidente] [--executor <c>]
                 [--estado <estado>] [--registro "<porquê>"]
                                           default: story. Débito técnico não é card: `dt admitir`.
+                                          `--nivel ideia` guarda uma ideia, ou um balde de ideias
+                                          de um tema, só com o título: nasce em captada, não tem
+                                          pai nem filha, e cada nova ideia do tema entra em
+                                          `comentar <id>` como insumo. Sai só por
+                                          `mover <id> englobada --englobado-em <card>` ou
+                                          `mover <id> descartada --motivo "<txt>"`
                                           `--nivel task` cria o passo de uma story e exige
                                           `--pai <story>`; o título é o que fazer, e a API
                                           recusa pai que não seja story (R37). Para ajustar
@@ -145,7 +151,7 @@ uso:
                                           Nascer fora de `captada`, ou sair dela, exige o
                                           corpo no padrão do nível (arq:0096)
   tarefas editar <id> [--titulo "<t>"] [--desc "<txt>"|--desc-stdin]
-                [--cadeira <c>|--sem-cadeira] [--nivel épico|feature|story|task]
+                [--cadeira <c>|--sem-cadeira] [--nivel épico|feature|story|task|ideia]
                 [--originacao negocio|tecnico|incidente] [--executor <c>]
                 [--trecho --antes "<txt>" --depois "<txt>" [--bruto]]
                                           troca título, corpo, cadeira, nível, originação e/ou executor (o corpo é
@@ -566,7 +572,8 @@ monta_query() { # monta_query "$@" -> ecoa a query string
           feature|1)     n=1 ;;
           story|2)       n=2 ;;
           task|3)        n=3 ;;
-          *) echo "nível desconhecido: ${2:-} (épico, feature, story, task)" >&2; exit 2 ;;
+          ideia|4)       n=4 ;;
+          *) echo "nível desconhecido: ${2:-} (épico, feature, story, task, ideia)" >&2; exit 2 ;;
         esac
         q="$q&nivel=$n"; shift 2 ;;
       --campos) [ $# -ge 2 ] && [ -n "$2" ] || { echo "--campos exige lista" >&2; exit 2; }; shift 2 ;;
@@ -1104,7 +1111,10 @@ criar() {
                        exit 2
                      fi
                      _lembra_pai "$pai" ;;
-    *) echo "nível desconhecido: $nivel (épico, feature, story, task)" >&2; exit 2 ;;
+    # Card #4339: a ideia guarda um tema sem compromisso, nasce em captada só com o título e não
+    # tem pai nem filha. Quem recusa `--pai` é a API, que é quem sabe a regra.
+    ideia|4)         n=4 ;;
+    *) echo "nível desconhecido: $nivel (épico, feature, story, task, ideia)" >&2; exit 2 ;;
   esac
   local html=""
   [ -n "$desc" ] && html="$(printf '%s' "$desc" | para_html)"
@@ -1166,12 +1176,13 @@ editar() {
       --cadeira)    cadeira="${2:?--cadeira pede o nome da cadeira}"; tem_cadeira=1; shift 2 ;;
       --sem-cadeira) cadeira=""; tem_cadeira=1; shift ;;
       --nivel)
-        case "${2:?--nivel pede épico, feature, story ou task}" in
+        case "${2:?--nivel pede épico, feature, story, task ou ideia}" in
           épico|epico|0) nivel=0 ;;
           feature|1)     nivel=1 ;;
           story|2)       nivel=2 ;;
           task|3)        nivel=3 ;;
-          *) echo "nível desconhecido: $2 (épico, feature, story, task)" >&2; exit 2 ;;
+          ideia|4)       nivel=4 ;;
+          *) echo "nível desconhecido: $2 (épico, feature, story, task, ideia)" >&2; exit 2 ;;
         esac
         shift 2 ;;
       *) echo "opção desconhecida: $1" >&2; exit 2 ;;
@@ -1180,7 +1191,7 @@ editar() {
   local id; id=$(TAREFAS_PAI="${pai_ed:-${TAREFAS_PAI:-}}" so_id "$alvo") || exit 1
   if [ -z "$titulo" ] && [ -z "$tem_desc" ] && [ "$tem_cadeira" -eq 0 ] && [ -z "$nivel" ] \
      && [ -z "$originacao" ] && [ -z "$executor" ] && [ "$trecho" -eq 0 ]; then
-    echo "uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin] [--cadeira <c>|--sem-cadeira] [--nivel épico|feature|story|task] [--originacao negocio|tecnico|incidente] [--executor <c>] — nada a editar" >&2
+    echo "uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin] [--cadeira <c>|--sem-cadeira] [--nivel épico|feature|story|task|ideia] [--originacao negocio|tecnico|incidente] [--executor <c>] — nada a editar" >&2
     exit 2
   fi
   # Card #4110. As recusas de forma saem aqui, sem chamar a API; a contagem do `antes` no corpo
