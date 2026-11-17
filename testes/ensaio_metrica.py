@@ -6,8 +6,8 @@ de 2026-09-07 (cadeia de repo commitar, help de conferir chapeu) esta reproduzid
 casos sinteticos.
 
 O GABARITO contra o ops log real de 2026-09-07 saiu em 27/09/2026: o arquivo ja tinha
-rotacionado e o caso pulava para sempre, e teste nao le estado real (guia
-portoes-do-codigo).
+rotacionado e o caso pulava para sempre, e teste nao le estado real
+(referencias/classes/teste.md no platafirma-casa-espelho).
 """
 import importlib.machinery
 import importlib.util
