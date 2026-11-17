@@ -7,8 +7,8 @@ tests/test_dt_502.py | bin/acervo
 tests/test_dt_202_tipos_fila.py | lib/fila_tipos.py bin/_fila/streams.py controle/harness_controle/web.py
 tests/test_lint_arranque_dt527.py | bin/_lint/arranque.py bin/lint abertura/dono.md
 #
-# O que cada arquivo desta lista prova, e o que NAO prova, esta em
-# `acervo ler casa guia portoes-do-codigo`. Arquivo entra aqui e la no mesmo commit.
+# O que cada arquivo desta lista prova esta em
+# `referencias/classes/teste.md` no `platafirma-casa-espelho`.
 #
 # Regra: so entra arquivo que passa INTEIRO. Arquivo consertado entra na lista no
 # mesmo commit que o conserta; a lista so cresce. Card #204 item 2.

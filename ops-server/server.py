@@ -2184,7 +2184,7 @@ TIPOS_TEXTO = {".py", ".md", ".mmd", ".d2", ".sh", ".sql", ".yaml", ".yml", ".js
 # `permite: <prefixo>  # motivo`) e texto plano na raiz do repo, e sem o nome a excecao nao tinha
 # como ser escrita pela porta.
 NOMES_TEXTO = {"Dockerfile", ".dockerignore", ".gitignore", ".operacao", "VERDES",
-               ".conferir-repo", "uv.lock", "crontab-claudinho"}  # VERDES: baseline do pre-push (guia portoes-do-codigo)
+               ".conferir-repo", "uv.lock", "crontab-claudinho"}  # VERDES: baseline do pre-push (referencias/instancias/verbo/desenvolvimento.md no platafirma-casa-espelho)
 # Dockerfile.<sufixo> (Dockerfile.gpu, Dockerfile.dev): o mesmo texto de build, #2856 linha 40.
 PREFIXO_DOCKERFILE = "Dockerfile."
 # platafirma-ui entrou em 22/09/2026 (hotfix): o clone existia na bancada e o front do

@@ -1498,7 +1498,7 @@ exigir_deploy_se_stack() {
   }
 }
 
-# Passo de teste da imagem (card #3192; spec conversor-pdf-combinado §13; guia portoes-do-codigo):
+# Passo de teste da imagem (card #3192; spec conversor-pdf-combinado §13; referencias/classes/teste.md no platafirma-casa-espelho):
 # cada stack da familia que declara servico no perfil `teste` do compose constroi as imagens da
 # rev e roda esse servico dentro delas ANTES de trocar current. Reprovou: exit 4, current
 # intacto. Nao construiu: exit 3, current intacto. Stack sem perfil `teste`: nada a medir. A
