@@ -295,8 +295,8 @@ def test_write_file_verbo_e_hook_do_harness_dentro_do_espelho(bancada, sem_pep):
 
 
 def test_write_file_bin_do_posto_e_no_espelho_sem_extensao_com_shebang(bancada, sem_pep):
-    """DT-751: bin/ do platafirma-posto (clone, worktree) e outros_repos/posto/bin/ do espelho
-    aceitam executavel sem extensao com shebang; fora de bin/ segue recusado."""
+    """DT-751: bin/ do platafirma-posto (clone e worktree por cadeira/card) e outros_repos/posto/bin/
+    do espelho aceitam executavel sem extensao com shebang; fora de bin/ segue recusado."""
     (bancada / "platafirma-posto" / "bin").mkdir(parents=True)
     (bancada / "wt" / "platafirma-posto" / "ti" / "pf-vault" / "bin").mkdir(parents=True)
     (bancada / "platafirma-casa-espelho" / "outros_repos" / "posto" / "bin").mkdir(parents=True)
