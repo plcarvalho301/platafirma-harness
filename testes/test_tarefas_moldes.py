@@ -425,3 +425,27 @@ def test_comentarios_indice_com_tag_html_cortada_nao_cola_linhas(stub):
     assert len(linhas) == 2, p.stdout
     assert linhas[0].startswith("#5128 · ")
     assert linhas[1].startswith("#5135 · ")
+
+
+def test_dt_767_espera_dono_exibe_card_orfao_e_aberto_parado(stub):
+    s, base = stub
+    s.espera = {
+        "do_dono": {"perguntas": [], "prontos_para_aposta": [], "em_homologacao": [], "total": 0},
+        "com_cadeiras": {
+            "cards": [
+                {"id": 100, "titulo": "story sem cadeira", "cadeira": None, "orfao": True, "abertos": []},
+                {"id": 102, "titulo": "story com buraco antigo", "cadeira": "engenharia",
+                 "abertos": [{"id": 9, "tipo": "buraco", "primeira_linha": "buraco: antigo",
+                              "carimbo": "2026-10-01T00:00:00Z", "parado": True}]},
+            ],
+            "abertos": 1,
+            "orfaos": 1,
+            "parados": 1,
+        },
+        "gerado_em": "2026-11-17T12:00:00Z",
+    }
+    p = _run(["espera-dono"], base)
+    assert p.returncode == 0, p.stderr
+    assert "com as cadeiras (1 abertos, 1 órfãos, 1 parados):" in p.stdout
+    assert "  #100 [—] story sem cadeira · órfão" in p.stdout
+    assert "    #9 buraco · parado — buraco: antigo" in p.stdout

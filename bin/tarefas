@@ -385,6 +385,86 @@ t = html.escape(os.environ["FRAG"].replace("\r\n", "\n"))
 print(re.sub(r"\n{2,}", "</p><p>", t).replace("\n", "<br>"), end="")'
 }
 
+# DT 783: quando um servidor sem resolução de HTML recusa `antes` com «ocorre 0 vezes»,
+# resolve `antes` e `depois` (como `tarefas ler` exibe: listas `1. `/`  - `, tags inline
+# `<code>`/`<strong>` omitidas, « » e …) contra o `.descricao` do item e devolve o par HTML.
+_resolve_trecho_no_corpo() { # _resolve_trecho_no_corpo <json_item> <antes> <depois>
+  ITEM_J="$1" ANTES_RAW="$2" DEPOIS_RAW="$3" python3 -c '
+import html, json, os, re, sys
+
+corpo = (json.loads(os.environ["ITEM_J"]).get("descricao") or "")
+antes_txt = os.environ["ANTES_RAW"].replace("\r\n", "\n")
+depois_txt = os.environ["DEPOIS_RAW"].replace("\r\n", "\n")
+if not corpo or not antes_txt.strip():
+    sys.exit(1)
+
+TAG_INLINE = r"(?:</?(?:code|strong|em|a|span|b|i)(?:\s[^>]*)?>)*"
+TAG_ABRE = r"(?:<(?:code|strong|em|a|span|b|i)(?:\s[^>]*)?>)*"
+TAG_FECHA = r"(?:</(?:code|strong|em|a|span|b|i)>)*"
+MARC_RE = re.compile(r"^(\s*(?:\d+\.|[-*])\s+)(.*)$")
+
+def tok_re(tok):
+    if tok.isspace():
+        return r"(?:\s|&nbsp;)+"
+    mapa = {"&": r"(?:&amp;|&)", "<": r"(?:&lt;|<)", ">": r"(?:&gt;|>)",
+            "\"": r"(?:&quot;|&#34;|\")", "\x27": r"(?:&#x27;|&#39;|\x27)"}
+    return "".join(mapa.get(c, re.escape(c)) for c in tok)
+
+def linha_re(s):
+    toks = re.findall(r"\s+|\w+|[^\w\s]", s)
+    return f"{TAG_ABRE}{TAG_INLINE.join(tok_re(t) for t in toks)}{TAG_FECHA}" if toks else ""
+
+linhas = [l for l in antes_txt.split("\n") if l != ""]
+if not linhas:
+    sys.exit(1)
+partes, marcs = [], []
+for idx, l in enumerate(linhas):
+    m = MARC_RE.match(l)
+    if m:
+        mc, r = m.group(1), m.group(2)
+        marcs.append((mc, r))
+        pm, pr = linha_re(mc), linha_re(r)
+        partes.append(f"(?:(?P<_li0><li(?:\\s[^>]*)?>\\s*)|(?:{pm})){pr}" if idx == 0 else f"(?:<li(?:\\s[^>]*)?>\\s*|{pm}){pr}")
+    else:
+        marcs.append(("", l))
+        partes.append(linha_re(l))
+
+sep_re = r"\s*(?:<br\s*/?>|</?(?:p|li|ol|ul|blockquote|h[1-6]|pre)(?:\s[^>]*)?>|\s)+\s*"
+achados = list(re.finditer(sep_re.join(partes), corpo))
+if len(achados) != 1:
+    sys.exit(1)
+m = achados[0]
+li0 = m.groupdict().get("_li0") or ""
+em_li = bool(li0)
+ini, fim = m.start() + len(li0), m.end()
+trecho_h = corpo[ini:fim]
+if corpo.count(trecho_h) != 1:
+    sys.exit(1)
+antes_base = "\n".join(r if em_li else (mc + r) for mc, r in marcs)
+linhas_dep = [l for l in depois_txt.split("\n") if l != ""] if depois_txt else []
+if em_li and linhas_dep:
+    linhas_dep_limpas = [MARC_RE.match(l).group(2) if MARC_RE.match(l) else l for l in linhas_dep]
+    depois_base = "\n".join(linhas_dep_limpas)
+else:
+    linhas_dep_limpas = linhas_dep
+    depois_base = depois_txt
+
+if depois_txt == "":
+    depois_h = ""
+elif len(linhas) == 1 and len(linhas_dep) == 1 and depois_base.startswith(antes_base):
+    depois_h = trecho_h + html.escape(depois_base[len(antes_base):])
+else:
+    depois_h = "<br>".join(html.escape(l) for l in linhas_dep_limpas)
+    for mt in re.finditer(r"<(code|strong|em)(\s[^>]*)?>([^<>]+)</\1>", trecho_h):
+        tg, at, mi = mt.group(1), mt.group(2) or "", mt.group(3)
+        bl = f"<{tg}{at}>{mi}</{tg}>"
+        if bl not in depois_h:
+            depois_h = re.sub(rf"(?<![</>a-zA-Z0-9_]){re.escape(mi)}(?![</>a-zA-Z0-9_])", bl, depois_h, count=1)
+
+print(json.dumps({"antes": trecho_h, "depois": depois_h}))
+'
+}
+
 para_texto() {
   python3 -c '
 import html, re, sys
@@ -1136,7 +1216,8 @@ editar() {
       || { echo "não consegui converter o trecho para o formato do corpo (python3)" >&2; exit 1; }
   fi
   # `cadeira: null` tira a cadeira (a API trata o nulo explícito como pedido); ausente não mexe.
-  jq -n --arg t "$titulo" --arg d "$html" --argjson tem_d "$tem_d" --argjson tc "$tem_cadeira" --arg c "$cadeira" --arg n "$nivel" \
+  local corpo_patch resp_patch err_patch rc_patch=0
+  corpo_patch=$(jq -n --arg t "$titulo" --arg d "$html" --argjson tem_d "$tem_d" --argjson tc "$tem_cadeira" --arg c "$cadeira" --arg n "$nivel" \
         --arg o "$originacao" --arg x "$executor" \
         --argjson tr "$trecho" --arg ta "$antes_h" --arg td "$depois_h" \
      '(if $t == "" then {} else {titulo:$t} end)
@@ -1145,8 +1226,26 @@ editar() {
       + (if $tc == 1 then {cadeira: (if $c == "" then null else $c end)} else {} end)
       + (if $n == "" then {} else {nivel: ($n|tonumber)} end)
       + (if $o == "" then {} else {tipo_demanda:$o} end)
-      + (if $x == "" then {} else {executor:$x} end)' \
-    | envia PATCH "/itens/$id" \
+      + (if $x == "" then {} else {executor:$x} end)')
+  err_patch=$(mktemp)
+  resp_patch=$(printf '%s' "$corpo_patch" | envia PATCH "/itens/$id" 2>"$err_patch") || rc_patch=$?
+  if [ "$rc_patch" -ne 0 ] && [ "$trecho" -eq 1 ] && [ "$bruto" -eq 0 ] && grep -q "ocorre 0 vezes" "$err_patch"; then
+    local item_j par_res
+    if item_j=$(busca GET "/itens/$id" 2>/dev/null) && par_res=$(_resolve_trecho_no_corpo "$item_j" "$antes" "$depois" 2>/dev/null); then
+      antes_h=$(printf '%s' "$par_res" | jq -r '.antes')
+      depois_h=$(printf '%s' "$par_res" | jq -r '.depois')
+      corpo_patch=$(printf '%s' "$corpo_patch" | jq --arg ta "$antes_h" --arg td "$depois_h" '.descricao_trecho = {antes:$ta, depois:$td}')
+      rc_patch=0
+      resp_patch=$(printf '%s' "$corpo_patch" | envia PATCH "/itens/$id" 2>"$err_patch") || rc_patch=$?
+    fi
+  fi
+  if [ "$rc_patch" -ne 0 ]; then
+    cat "$err_patch" >&2
+    rm -f "$err_patch"
+    return "$rc_patch"
+  fi
+  rm -f "$err_patch"
+  printf '%s' "$resp_patch" \
     | jq -r --argjson tc "$tem_cadeira" --arg n "$nivel" --arg o "$originacao" --arg x "$executor" "$JQ_ROT"'
         "item \(rotn) editado: \(.titulo)"
         + (if $tc == 1 then " · cadeira \(.cadeira // "nenhuma")" else "" end)
@@ -2090,9 +2189,10 @@ _dt_balde_kib() { # _dt_balde_kib <json_balde> [consultar_item=0|1]
   fi
 }
 
-_dt_tabela() { # _dt_tabela <situacao> <stack|""> <desde> <curto 0|1> <idade-minima>
+_dt_tabela() { # _dt_tabela <situacao> <stack|""> <desde> <curto 0|1> <idade-minima> [<tipo>]
   local q="situacao=$1" j rows
   [ -n "$2" ] && q="$q&stack=$2"
+  [ -n "${6:-}" ] && q="$q&tipo=$6"
   j=$(busca GET "/balde?$q") || return 1
   rows=$(printf '%s' "$j" | jq -r --argjson desde "${3:-0}" --argjson curto "$4" --argjson minima "$5" '
     def uma: gsub("[\\t\\r\\n]+"; " ");
@@ -2102,6 +2202,7 @@ _dt_tabela() { # _dt_tabela <situacao> <stack|""> <desde> <curto 0|1> <idade-min
     | "\(.numero)\t\(.idade_dias)d\t\(.stack)\t"
       + (if $curto == 1 then ($t | if length <= 200 then . else .[0:199] + "…" end)
          else $t
+              + parte("Tipo"; (if .tipo != null and .tipo != "" and .tipo != "debito-tecnico" then .tipo else null end))
               + parte("Raio"; (.raio // [] | map(uma) | map(select(. as $r | ($t | contains($r)) | not)) | join(", ")))
               + parte("Esperado"; (.esperado as $e | if $e == null or $e == "" or ($t | contains($e | uma)) then null else $e end))
               + parte("Onde"; (.onde as $o | if $o == null or $o == "" or ($t | contains($o | uma)) then null else $o end))
@@ -2118,7 +2219,7 @@ _dt_tabela() { # _dt_tabela <situacao> <stack|""> <desde> <curto 0|1> <idade-min
 
 dt_listar() {
   # --desde <n> e --curto (#2856 linha 143): a lista inteira passa dos 50 KB que a porta serve.
-  local desde="" curto=0 stack="" situacao=abertas linha=""
+  local desde="" curto=0 stack="" situacao=abertas linha="" tipo="${TAREFAS_BALDE_TIPO:-}"
   while [ $# -gt 0 ]; do
     case "$1" in
       --linha) [ $# -ge 2 ] && [[ "$2" =~ ^[0-9]+$ ]] || { echo "--linha exige um número" >&2; return 2; }; linha="$2"; shift 2 ;;
@@ -2126,7 +2227,8 @@ dt_listar() {
       --curto) curto=1; shift ;;
       --stack) [ $# -ge 2 ] || { echo "--stack exige o nome da stack: tarefas dt listar --stack <stack>" >&2; exit 2; }; stack="$2"; shift 2 ;;
       --situacao) [ $# -ge 2 ] || { echo "--situacao exige abertas, saidas ou todas" >&2; exit 2; }; situacao="$2"; shift 2 ;;
-      *) echo "opção desconhecida: $1 (uso: tarefas dt listar [--stack <s>] [--desde <n>] [--curto] [--situacao abertas|saidas|todas])" >&2; exit 2 ;;
+      --tipo) [ $# -ge 2 ] || { echo "--tipo exige debito-tecnico, achado ou desvio" >&2; exit 2; }; tipo="$2"; shift 2 ;;
+      *) echo "opção desconhecida: $1 (uso: tarefas dt listar [--stack <s>] [--tipo debito-tecnico|achado|desvio] [--desde <n>] [--curto] [--situacao abertas|saidas|todas])" >&2; exit 2 ;;
     esac
   done
   case "$desde" in
@@ -2141,12 +2243,16 @@ dt_listar() {
     abertas|saidas|todas) ;;
     *) echo "--situacao é abertas, saidas ou todas: $situacao" >&2; exit 2 ;;
   esac
+  case "$tipo" in
+    ''|debito-tecnico|achado|desvio) ;;
+    *) echo "--tipo é debito-tecnico, achado ou desvio: $tipo" >&2; exit 2 ;;
+  esac
   local t
   if [ -n "$linha" ]; then
-    t=$(_dt_tabela "$situacao" "$stack" 0 0 -1 | awk -F '\t' -v n="$linha" 'NR == 1 || $1 == n') || return 1
+    t=$(_dt_tabela "$situacao" "$stack" 0 0 -1 "$tipo" | awk -F '\t' -v n="$linha" 'NR == 1 || $1 == n') || return 1
     [ "$(printf '%s\n' "$t" | wc -l)" -gt 1 ] || { echo "linha $linha não encontrada" >&2; return 1; }
   else
-    t=$(_dt_tabela "$situacao" "$stack" "$desde" "$curto" -1)
+    t=$(_dt_tabela "$situacao" "$stack" "$desde" "$curto" -1 "$tipo")
   fi || return 1
   if [ -z "$t" ]; then
     local rotulo="no balde"
@@ -2218,7 +2324,7 @@ _dt_admitir_uso() {
   local codigo="${1:-2}" fd=2
   [ "$codigo" = 0 ] && fd=1
   cat >&$fd <<'FIM'
-uso: tarefas dt admitir "<o que falha>" --medido-em <AAAA-MM-DD> --evidencia <onde se mediu> --raio <repo@caminho> [--raio ...] --esperado "<comportamento esperado>" --stack <stack> [--verbo <v>] [--solucao "<txt>"]
+uso: tarefas dt admitir "<o que falha>" --medido-em <AAAA-MM-DD> --evidencia <onde se mediu> --raio <repo@caminho> [--raio ...] --esperado "<comportamento esperado>" --stack <stack> [--tipo debito-tecnico|achado|desvio] [--verbo <v>] [--solucao "<txt>"]
   obrigatórios: "<o que falha>", --medido-em <AAAA-MM-DD>, --evidencia <onde se mediu>, --raio <repo@caminho>, --esperado "<comportamento esperado>", --stack <stack>
 FIM
   exit "$codigo"
@@ -2227,7 +2333,7 @@ FIM
 dt_admitir() {
   _dt_tem_ajuda "$@" && _dt_admitir_uso 0
   local texto="${1:-}"; shift || true
-  local medido_em="" evidencia="" esperado="" stack="" verbo="" solucao="" cadeira=""
+  local medido_em="" evidencia="" esperado="" stack="" verbo="" solucao="" cadeira="" tipo="${TAREFAS_BALDE_TIPO:-}"
   local raios=()
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -2236,6 +2342,7 @@ dt_admitir() {
       --raio)      raios+=("${2:-}");  shift 2 ;;
       --esperado)  esperado="${2:-}";  shift 2 ;;
       --stack)     stack="${2:-}";     shift 2 ;;
+      --tipo)      tipo="${2:-}";      shift 2 ;;
       --verbo)     verbo="${2:-}";     shift 2 ;;
       --solucao)   solucao="${2:-}";   shift 2 ;;
       --cadeira)   cadeira="${2:-}";   shift 2 ;;
@@ -2243,6 +2350,10 @@ dt_admitir() {
     esac
   done
   [ -n "$texto" ] || _dt_admitir_uso 2
+  case "$tipo" in
+    ''|debito-tecnico|achado|desvio) ;;
+    *) echo "recusado: --tipo tem de ser debito-tecnico, achado ou desvio: $tipo" >&2; exit 2 ;;
+  esac
   if [ -z "$evidencia" ]; then
     echo "recusado: DT sem --evidencia não entra. Suspeita não é DT: meça (repro, retorno colado, arquivo:linha) ou não abra. (rito §1)" >&2
     exit 2
@@ -2274,11 +2385,11 @@ dt_admitir() {
   [ -z "$solucao" ] || linha="$linha · solução: $solucao"
   local corpo r
   corpo=$(jq -nc --arg texto "$linha" --arg esperado "$esperado" --arg stack "$stack" \
-            --arg medido_em "$medido_em" --arg onde "$evidencia" \
-            '{texto: $texto, raio: $ARGS.positional, esperado: $esperado, stack: $stack, medido_em: $medido_em, onde: $onde}' \
+            --arg medido_em "$medido_em" --arg onde "$evidencia" --arg tipo "$tipo" \
+            '{texto: $texto, raio: $ARGS.positional, esperado: $esperado, stack: $stack, medido_em: $medido_em, onde: $onde} + (if $tipo == "" then {} else {tipo: $tipo} end)' \
             --args "${raios[@]}")
   r=$(printf '%s' "$corpo" | envia POST /balde) || return 1
-  printf '%s' "$r" | jq -r '"débito \(.numero) admitido no balde: [\(.medido_em)] \(.texto) · stack \(.stack)"'
+  printf '%s' "$r" | jq -r '((if .tipo == "achado" then "achado" elif .tipo == "desvio" then "desvio" else "débito" end) + " \(.numero) admitido no balde: [\(.medido_em)] \(.texto) · stack \(.stack)")'
 }
 
 # `matar` É A SAÍDA DO RITO (§3, R12): três jeitos, nenhum silencioso, cada um com a âncora que
@@ -2347,7 +2458,7 @@ dt_matar() {
   local r
   r=$(jq -nc --arg jeito "$como" --arg ancora "$ancora_api" '{jeito: $jeito, ancora: $ancora}' \
         | envia POST "/balde/$n/saida") || return 1
-  printf '%s' "$r" | jq -r '"débito \(.numero) saiu do balde: \(.saida_jeito) em \(.saida_em[0:10]): \(.saida_ancora)"'
+  printf '%s' "$r" | jq -r '((if .tipo == "achado" then "achado" elif .tipo == "desvio" then "desvio" else "débito" end) + " \(.numero) saiu do balde: \(.saida_jeito) em \(.saida_em[0:10]): \(.saida_ancora)")'
 }
 
 dt_restack() {
@@ -2584,10 +2695,10 @@ espera_dono() {
     (.do_dono.prontos_para_aposta[] | "  pronto para a aposta · #\(.id) [\(.cadeira // "—")] \(.titulo)"),
     (.do_dono.em_homologacao[] | "  em homologação · #\(.id) [\(.cadeira // "—")] \(.titulo)"),
     "",
-    "com as cadeiras (\(.com_cadeiras.abertos) abertos, \(.com_cadeiras.orfaos) órfãos):",
+    "com as cadeiras (\(.com_cadeiras.abertos) abertos, \(.com_cadeiras.orfaos) órfãos\(if (.com_cadeiras.parados // 0) > 0 then ", \(.com_cadeiras.parados) parados" else "" end)):",
     (if (.com_cadeiras.cards | length) == 0 then "  nada" else empty end),
-    (.com_cadeiras.cards[] | "  #\(.id) [\(.cadeira // "—")] \(.titulo)",
-      (.abertos[] | "    #\(.id) \(.tipo)" + (if .orfao then " · órfão" else "" end) + " — \(.primeira_linha)"))
+    (.com_cadeiras.cards[] | "  #\(.id) [\(.cadeira // "—")] \(.titulo)" + (if .orfao then " · órfão" else "" end),
+      (.abertos[] | "    #\(.id) \(.tipo)" + (if .parado then " · parado" elif .orfao then " · órfão" else "" end) + " — \(.primeira_linha)"))
   '
 }
 
@@ -2599,7 +2710,7 @@ espera_dono() {
 # --ajuda` quanto `tarefas <sub> --ajuda`, e nenhum sub-ato chega a rodar. `uso` já sai 2.
 # Exceção (DT #682): `tarefas dt ...` trata `--ajuda` dentro do subcomando para imprimir
 # o uso específico de `dt` ou do sub-ato (`dt admitir --ajuda`, etc.).
-if [ "${1:-}" != "dt" ]; then
+if [ "${1:-}" != "dt" ] && [ "${1:-}" != "achado" ] && [ "${1:-}" != "desvio" ]; then
   for _a in "$@"; do
     case "$_a" in
       --ajuda|--help|-h) uso 0 ;;
@@ -2631,6 +2742,8 @@ case "$cmd" in
   modelo)      modelo "${1:-}" "${2:-}" ;;
   estados)     estados ;;
   dt)          dt "$@" ;;
+  achado)      TAREFAS_BALDE_TIPO=achado dt "$@" ;;
+  desvio)      TAREFAS_BALDE_TIPO=desvio dt "$@" ;;
   projetos)    echo "não há projeto neste modelo: o recorte é por eixo (cadeira, estado, nível)." >&2; exit 2 ;;
   api)         busca "${1:?método}" "$(_apipath "${2:?caminho}")" ;;
   api-corpo)   envia "${1:?método}" "$(_apipath "${2:?caminho}")" ;;

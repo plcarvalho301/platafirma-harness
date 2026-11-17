@@ -68,14 +68,16 @@ class _Balde(BaseHTTPRequestHandler):
         if url.path == "/balde":
             situacao = q.get("situacao", ["abertas"])[0]
             stack = q.get("stack", [None])[0]
+            tipo = q.get("tipo", [None])[0]
             achadas = [x for x in self.linhas
                        if (stack is None or x["stack"] == stack)
+                       and (tipo is None or x.get("tipo", "debito-tecnico") == tipo)
                        and (situacao == "todas"
                             or (x["saida_jeito"] is None) == (situacao == "abertas"))]
             # a mais antiga primeiro (R27): a API ordena por medido_em e número
             achadas.sort(key=lambda x: (-x["idade_dias"], x["numero"]))
-            return self._json({"situacao": situacao, "stack": stack, "linhas": achadas,
-                               "total": len(achadas)})
+            return self._json({"situacao": situacao, "stack": stack, "tipo": tipo,
+                               "linhas": achadas, "total": len(achadas)})
         self._json({"erro": "rota"}, 404)
 
     def do_POST(self):
@@ -487,3 +489,25 @@ def test_dt_outros_atos_ajuda_imprime_uso_especifico_sem_efeito(balde, sub):
     assert p.stderr == ""
     assert f"tarefas dt {sub}" in p.stdout
     assert not s.pedidos
+
+
+def test_dt_766_achado_e_desvio_entram_e_saem_pelo_mesmo_balde(balde, acervo):
+    s, base = balde
+    p_ach = _run(["achado", *ADMITE[1:]], base, acervo())
+    assert p_ach.returncode == 0, p_ach.stderr
+    assert "achado 1 admitido no balde" in p_ach.stdout
+    assert s.pedidos[-1][2]["tipo"] == "achado"
+
+    p_des = _run([*ADMITE, "--tipo", "desvio"], base, acervo())
+    assert p_des.returncode == 0, p_des.stderr
+    assert "desvio 2 admitido no balde" in p_des.stdout
+    assert s.pedidos[-1][2]["tipo"] == "desvio"
+
+    p_lst = _run(["dt", "listar", "--tipo", "achado"], base)
+    assert p_lst.returncode == 0, p_lst.stderr
+    assert [linha[0] for linha in _linhas_da_tabela(p_lst.stdout)] == ["1"]
+    assert "Tipo: achado" in p_lst.stdout
+
+    p_mat = _run(["achado", "matar", "1", "--como", "resolvida", "--commit", "abc1234"], base)
+    assert p_mat.returncode == 0, p_mat.stderr
+    assert "achado 1 saiu do balde: resolvida" in p_mat.stdout
