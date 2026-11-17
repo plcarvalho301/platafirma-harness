@@ -2308,13 +2308,14 @@ def _moradas_escrita():
     return moradas
 
 
+POSTO_NO_ESPELHO = ("outros_repos", "posto")
+
+
 def _em_bin_do_harness(real_pai: Path) -> bool:
-    """bin/, hooks/ e deploy-harness/ de um clone ou worktree do harness na bancada: morada de verbo,
-    de hook e do instalar (sem extensao, com shebang). deploy-harness/ entrou em 13/11/2026 (debito
-    605): deploy-harness/instalar nao tem extensao e nenhum caminho o escrevia.
-    hooks/ entrou em 09/10/2026 (#3376): hooks/pre-push nao tem
-    extensao e ficava sem porta. O core.hooksPath das contas aponta para a release, entao a
-    copia da bancada so vale depois de `release promover`, como o bin/. A copia do harness no
+    """bin/, hooks/ e deploy-harness/ de um clone ou worktree do harness na bancada (e bin/ do
+    platafirma-posto / outros_repos/posto, DT-751): morada de executavel sem extensao com shebang.
+    deploy-harness/ entrou em 13/11/2026 (debito 605): deploy-harness/instalar nao tem extensao.
+    hooks/ entrou em 09/10/2026 (#3376): hooks/pre-push nao tem extensao. A copia do harness no
     espelho (platafirma-casa-espelho/outros_repos/harness/) conta igual (#4087)."""
     b = _bancada()
     if b is None:
@@ -2325,18 +2326,23 @@ def _em_bin_do_harness(real_pai: Path) -> bool:
     # wt/platafirma-harness/<cadeira>/<card-ou-slug>/bin 2 (card:3149 passo 3)
     # A copia do harness no espelho (platafirma-casa-espelho/outros_repos/harness/) e o mesmo
     # bin/ e hooks/ um nivel abaixo: a troca sobrescreve o harness com ela (#4087).
-    for raiz_clone, profs, miolo in (
-            (b / "platafirma-harness", (0,), ()),
-            (b / "wt" / "platafirma-harness", (1, 2), ()),
-            (b / "platafirma-casa-espelho", (0,), HARNESS_NO_ESPELHO),
-            (b / "wt" / "platafirma-casa-espelho", (1, 2), HARNESS_NO_ESPELHO)):
+    dirs_harness = ("bin", "hooks", "deploy-harness")
+    for raiz_clone, profs, miolo, dirs in (
+            (b / "platafirma-harness", (0,), (), dirs_harness),
+            (b / "wt" / "platafirma-harness", (1, 2), (), dirs_harness),
+            (b / "platafirma-casa-espelho", (0,), HARNESS_NO_ESPELHO, dirs_harness),
+            (b / "wt" / "platafirma-casa-espelho", (1, 2), HARNESS_NO_ESPELHO, dirs_harness),
+            (b / "platafirma-posto", (0,), (), ("bin",)),
+            (b / "wt" / "platafirma-posto", (1, 2), (), ("bin",)),
+            (b / "platafirma-casa-espelho", (0,), POSTO_NO_ESPELHO, ("bin",)),
+            (b / "wt" / "platafirma-casa-espelho", (1, 2), POSTO_NO_ESPELHO, ("bin",))):
         try:
             partes = real_pai.relative_to(raiz_clone).parts
         except ValueError:
             continue
         n = len(miolo)
         if any(len(partes) > p + n and partes[p:p + n] == miolo
-               and partes[p + n] in ("bin", "hooks", "deploy-harness") for p in profs):
+               and partes[p + n] in dirs for p in profs):
             return True
     return False
 
