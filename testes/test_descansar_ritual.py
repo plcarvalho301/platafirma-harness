@@ -68,9 +68,9 @@ def test_2a_escreve_por_categoria_no_banco_e_a_poda_e_do_bot():
         assert f"mesa escrever <chapeu> {categoria}" in p
     assert "--caso" in p and "--dito-em" in p and "--vale-ate" in p, "o campo de cada categoria"
     assert "guia\n   registrar" in p or "guia registrar" in p
-    # #3884: a cadeira nao resolve nada antes de escrever; a poda e do bot, e a carta dele pede o tombamento
+    # #3884: a cadeira nao resolve nada antes de escrever; a poda e do bot. A carta dele se trata na fila, nao aqui (dono, 17/11)
     assert "A poda nao e sua" in p and "a revisar" not in p, "a marca a revisar saiu (arq:0120, 19/10)"
-    assert "mesa tombar <id> --destino" in p and "legado" in p, "lembra a carta do bot e o legado"
+    assert "mesa tombar" not in p and "legado" in p, "a carta do bot saiu do descanso; o legado fica"
     assert "seis\n   heuristicas" not in p and "historico e o git" not in p, "a arq:0072 saiu"
 
 
@@ -93,10 +93,11 @@ def test_3_encerra_com_a_ordem_do_dono_sem_pergunta_no_fecho():
 
 
 # ---------------------------------------------------------------- debito 423: a mesa so com repasse
-def test_1_planta_item_so_com_repasse_e_a_carta_nao_vira_item():
+def test_1_planta_item_so_com_repasse_e_o_descanso_nao_le_a_caixa():
     p = _corrido(_passo(_ritual(), "1. ", "\n2. "))
     assert "item so quando a fita deixa pendurado" in p and "mesa sem item" in p
-    assert "nunca vira item de mesa" in p
+    # dono, 17/11/2026: o descanso encerra a fita, nao a interpreta; a caixa saiu inteira
+    assert "fila" not in _ritual() and "cartas" not in _ritual().lower()
     assert "escreva a mesa antes de a fita morrer" not in p
 
 

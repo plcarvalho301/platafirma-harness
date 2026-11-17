@@ -32,8 +32,8 @@
 # XACK, depois que a carta virou ato (resposta, card, mesa) ou foi superada. Antes
 # o ack vinha na entrega (o auto-commit do Kafka), e a carta lida pela metade
 # sumia sem ninguem ter tratado; por isso o `descansar` relia os 7 dias inteiros.
-# Agora o `descansar` le `--penduradas` (PEL + nao lidas), sem mover nada — o
-# equivalente da reentrega do que nao teve ack (XAUTOCLAIM, visibility timeout).
+# `--penduradas` le PEL + nao lidas, sem mover nada — o equivalente da reentrega
+# do que nao teve ack (XAUTOCLAIM, visibility timeout). O `descansar` nao le mais a caixa.
 #
 # `--tudo` e `--desde` sao leitura FRIA (XRANGE): nao movem o ponteiro, entao
 # reler historico nunca queima carta nova.

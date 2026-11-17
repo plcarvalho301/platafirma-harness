@@ -16,9 +16,8 @@
 #      saiu por `mesa fez`), prosa de `mesa anota` so como anotacao sem ato; chapeu
 #      fora da persona (typo, chapeu extinto) aparece nomeado, nunca some calado.
 #   2. o caderno e a aresta (abaixo).
-#   3. as cartas PENDURADAS da caixa (`fila ler --penduradas`): lidas e sem ack,
-#      mais as nao lidas. Le frio, sem entregar nem confirmar: quem confirma e
-#      `fila tratar`, quando a carta vira ato (decisao do dono, 03/10/2026).
+# A leitura da caixa saiu (dono, 17/11/2026): o descanso encerra a fita, nao a
+# interpreta; carta se trata com `fila`, no trabalho, nunca no fecho.
 # O dossie de release, servico e acervo saiu (dono, 14/11/2026): conferir e antes do
 # ato, nao no fim da fita, e ele existia para gabaritar a triagem da memoria do
 # claude.ai, que saiu junto. A contagem de giro saiu tambem: so imprimia, nao
@@ -398,95 +397,6 @@ def puxado_de_fora(curto, sessao_id, ordem_id, diretorio=None, resolver=resolve_
 # moravam aqui, agora em lib/caderno_poda.py. O descanso so mostra o indice.
 
 
-AVISO_VENCE_DIAS = 5   # retencao da caixa e 7 dias por idade, tratada ou nao (trim do motor)
-
-
-def _idade_dias_msgid(msgid):
-    """Dias desde o carimbo do msgid (AAAAMMDDTHHMMSS-<de>), hora local; None se nao casa."""
-    from datetime import datetime
-    try:
-        ts = datetime.strptime(msgid[:15], "%Y%m%dT%H%M%S").timestamp()
-    except (ValueError, TypeError):
-        return None
-    return (time.time() - ts) / 86400
-
-
-def _imprime_grupo_cartas(titulo, grupo, rodape_fn, *, avisa_vence=True):
-    """Imprime um grupo de cartas (novas ou penduradas) em cabecalho, separado (#4289)."""
-    print(f"\n  [{titulo}]")
-    if not grupo:
-        print("  (nenhuma)")
-        return
-    vencendo = 0
-    for c in grupo:
-        quando = c["id"][:13]
-        dias = _idade_dias_msgid(c["id"]) if avisa_vence else None
-        aviso = ""
-        if dias is not None and dias >= AVISO_VENCE_DIAS:
-            vencendo += 1
-            aviso = f"  ⚠ VENCE — {dias:.0f} d; o trim corta aos 7"
-        estado = c.get("estado") or "?"
-        print(f"  {quando} · {c['id']} · {estado} · {c.get('de', '?')} · {c.get('tipo', '?')}"
-              f" · {c.get('assunto', '')[:100]}{aviso}")
-    print(rodape_fn(len(grupo), vencendo))
-
-
-def roda_fila_cabecalho(rotulo, cmd, timeout=90, status_cmd=None):
-    """Cartas so em CABECALHO, mostrando `fila status` e separando novas (`nao lida`)
-    das ja lidas (`pendurada`) (#4289). Corpo inteiro estourava o teto do retorno e
-    cortava a cauda onde mora o roteiro (medido 26/09/2026)."""
-    print(f"\n-- {rotulo}")
-    if status_cmd:
-        try:
-            ps = subprocess.run(["bash", "-lc", status_cmd], capture_output=True, text=True,
-                                timeout=timeout, cwd=os.path.expanduser("~"))
-            st = (ps.stdout or ps.stderr or "").strip()
-            if st:
-                print(f"  status: {st.splitlines()[0]}")
-        except subprocess.SubprocessError as e:
-            print(f"  status: NAO MEDIDO — {type(e).__name__}: {e}")
-    try:
-        p = subprocess.run(["bash", "-lc", cmd], capture_output=True, text=True,
-                           timeout=timeout, cwd=os.path.expanduser("~"))
-    except subprocess.SubprocessError as e:
-        print(f"  NAO MEDIDO — {type(e).__name__}: {e}")
-        return
-    cartas, atual = [], None
-    for linha in (p.stdout or "").splitlines():
-        m = re.match(r"^===MSG (\S+)===$", linha.strip())
-        if m:
-            atual = {"id": m.group(1)}
-            cartas.append(atual)
-            continue
-        if atual is None:
-            continue
-        for campo in ("de", "tipo", "estado", "assunto"):
-            if linha.startswith(campo + ":") and campo not in atual:
-                atual[campo] = linha.split(":", 1)[1].strip()
-    if not cartas:
-        saida = (p.stdout or p.stderr or "").strip()
-        print("  " + (saida.splitlines()[0] if saida else "(sem carta)"))
-        return
-    novas = [c for c in cartas if c.get("estado") == "nao lida"]
-    penduradas = [c for c in cartas if c.get("estado") == "pendurada"]
-    outras = [c for c in cartas if c.get("estado") not in ("nao lida", "pendurada")]
-    _imprime_grupo_cartas(
-        "novas — esperando leitura", novas,
-        lambda n, v: (f"  {n} nova(s) (nao lida(s))"
-                      + (f", {v} perto de vencer" if v else "")
-                      + "; corpo: `fila ler <eu> --tudo <remetente>` ou `fila ler --id <msgid>`; "
-                        "ack: `fila tratar <msgid>...` (ou responder com `--responde`)"))
-    _imprime_grupo_cartas(
-        "penduradas — ja lidas, aguardando `fila tratar` (nao esperam leitura)", penduradas,
-        lambda n, _v: (f"  {n} pendurada(s) (ja lida(s), sem `fila tratar`)"
-                       "; se ja resolvida/superada: `fila tratar <msgid>...`"),
-        avisa_vence=False)
-    if outras:
-        _imprime_grupo_cartas(
-            "outras", outras,
-            lambda n, v: f"  {n} carta(s)" + (f", {v} perto de vencer" if v else ""))
-
-
 def _marca_encerrada_duravel(sid):
     """Grava `encerrada_em = now()` em sessao.sessao ao encerrar por `descansar fita
     --encerra-sessao` (DT 535, migração 0092): sem isto, `sessao ver <id>` reidratava
@@ -636,11 +546,6 @@ def ato_fita(args):
                              os.environ.get("PF_ORDEM_ID", "").strip()):
         print(_l)
 
-    if not args.so_memoria:
-        roda_fila_cabecalho(f"fila — caixa de {curto} (so cabecalho; nao entrega nem confirma)",
-                            f"fila ler {curto} --penduradas",
-                            status_cmd=f"fila status {curto}")
-
     print("\n== entidade-sessao (arq:0101 §1) ==")
     for _l in estado_sessao(os.environ.get("PF_SESSAO", "")):
         print(_l)
@@ -652,21 +557,6 @@ def ato_fita(args):
           "   priorizado nao e item: ele mora no rastreador. Sem isso, diga \"mesa sem\n"
           "   item\". Item listado acima que a fita fez sai por `mesa fez <n>`.\n"
           "   Premissa a reconferir e beco descartado vao ao caderno, no passo 2a.\n"
-          "   Apenas as cartas NOVAS (nao lidas) listadas acima se tratam AQUI,\n"
-          "   no descanso: a triagem delas nunca vira item de mesa\n"
-          "   (so cabecalho; corpo por `fila ler <eu> --tudo <remetente>`).\n"
-          "   Cartas PENDURADAS ja foram lidas em algum momento e apenas aguardam\n"
-          "   `fila tratar <msgid>` — nao as trate como carta nova nem como\n"
-          "   pendencia sem resposta (so de `fila tratar` se ja resolvida/superada).\n"
-          "   Para as novas, separe em tres: (i) DECISAO DO DONO — vai na tela dele\n"
-          "   no relato do descanso, uma linha cada, com remetente e o que se\n"
-          "   decide; fica pendurada ate a decisao dele virar ato; (ii) ATO DA\n"
-          "   CADEIRA pendente — faca agora, ou card se nao cabe na fita, e depois\n"
-          "   `fila tratar <msgid>`; (iii) ja respondida ou superada —\n"
-          "   `fila tratar <msgid>`.\n"
-          "   A nova marcada VENCE sai da caixa aos 7 dias,\n"
-          "   tratada ou nao: o que tem de durar vira card ou mesa antes.\n"
-          "   Carta nova parada que ninguem apresenta ao dono e decisao que nao existe.\n"
           "\n"
           "2. por chapeu tocado nesta fita — OBRIGATORIO, TRES partes, sempre as\n"
           "   tres: o que se aprendeu vai ao caderno; o que a ferramenta fez\n"
@@ -677,8 +567,7 @@ def ato_fita(args):
           "   por ato (arq:0120). A poda nao e sua: o bot caderno-poda passa duas\n"
           "   vezes por dia, retira o que venceu e manda carta com o que tombar\n"
           "   (Emenda de 19/10/2026). Escreva sem medo do teto: ele corta o servido,\n"
-          "   nao a escrita. Carta do bot na caixa: escreva a regua no chapeu e\n"
-          "   `mesa tombar <id> --destino <chave>`, ou `mesa retirar <id> --motivo`.\n"
+          "   nao a escrita.\n"
           "   Legado a triar: o corpo por `mesa caderno <chapeu>`; o que vale vira\n"
           "   entrada, e `mesa legado --caderno --triado <chapeu>` fecha. Escreva\n"
           "   so o que passa no teste do guia registrar, secao Caderno:\n"
@@ -759,12 +648,10 @@ def main():
     # Chamado por dois nomes (`encerrar` e `descansar` sao o mesmo verbo): o uso
     # tem de sair com o nome que a pessoa digitou, ou o texto contradiz o comando.
     p = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
-                                description="fim de fita: a mesa, o caderno, a aresta e a caixa, e o encerramento")
+                                description="fim de fita: a mesa, o caderno e a aresta, e o encerramento")
     sub = p.add_subparsers(dest="ato")
 
     f = sub.add_parser("fita", help="o descanso da cadeira corrente (PF_CADEIRA)")
-    f.add_argument("--so-memoria", action="store_true",
-                   help="pula a caixa (cartas penduradas); so a mesa, o caderno e a aresta")
     f.add_argument("--encerra-sessao", action="store_true",
                    help="ULTIMO ato da fita: DEL sessao/ledger/giro + derrame (arq:0101 "
                         "§1). Separado porque matar a sessao tira a cadeira das tools "

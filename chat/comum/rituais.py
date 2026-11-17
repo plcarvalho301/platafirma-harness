@@ -17,7 +17,7 @@ from __future__ import annotations
 
 ENCERRAMENTO = (
     "A sala desta conversa foi rodada e esta fita esta sendo encerrada. "
-    "Rode `encerrar fita --so-memoria` e nao responda nada: o produto deste "
+    "Rode `encerrar fita` e nao responda nada: o produto deste "
     "giro e a memoria, e nao ha sala para onde falar."
 )
 
