@@ -5,7 +5,7 @@
 # componente: platafirma-motor
 # classe: B
 # use para: SEMPRE ANTES de responder de cabeça e ANTES de abrir o acervo, consultar a casa ou a biblioteca, «o que a literatura diz de X?», «onde a casa fala de Y?», «tem fonte sobre Z?»; parametrizar ou ajustar as consultas do motor · forma na tool: ato="rag", args=["buscar", "<biblioteca|casa|log>", "<frase>"] (ou ato="buscar", args=["<biblioteca|casa|log>", "<frase>"])
-# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, bateria), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote), julgar (escrita, lote), eleger (leitura, medida), consultas (leitura, medida), trabalhos (leitura, medida), estado (leitura, geracao), parar (escrita, medida)
+# atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, bateria), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote), julgar (escrita, lote), eleger (leitura, medida), consultas (leitura, medida), trabalhos (leitura, medida), estado (leitura, geracao), parar (escrita, medida), limpar (escrita, medida)
 # (buscar/medir/indexar/trocar/sortear/escrever/parear/julgar exigem particao; eleger e lintar leem o log inteiro e nao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar|desativar), eventos, juiz)
 # forma: json
 # cauda: nao
@@ -28,6 +28,7 @@
 # le: trabalhos=motor
 # le: estado=motor,arquivo-local
 # le: parar=motor
+# le: limpar=motor,arquivo-local
 # escreve: listar=nada
 # escreve: ajuste=motor,arquivo-local
 # escreve: buscar=arquivo-local
@@ -44,6 +45,7 @@
 # escreve: trabalhos=nada
 # escreve: estado=nada
 # escreve: parar=motor
+# escreve: limpar=arquivo-local
 # face: buscar=motor
 # face: medir=motor
 # face: listar=motor
@@ -54,6 +56,7 @@
 # face: trabalhos=motor
 # face: estado=motor
 # face: parar=motor
+# face: limpar=motor
 # rotulo: buscar=Buscar no acervo
 # rotulo: medir=Medir o acerto da busca
 # rotulo: listar=Listar instancias do motor
@@ -65,6 +68,7 @@
 # rotulo: trabalhos=Listar trabalhos longos do motor
 # rotulo: estado=Ler o estado da troca
 # rotulo: parar=Parar a sombra de bench
+# rotulo: limpar=Limpar sobras do bench de embedder
 # rotulo: trocar --descartar=Descartar a geracao em sombra
 # volta: buscar=sim — so le o indice; a busca entra no log de consultas
 # volta: medir=sim — a medicao entra no historico e nao muda o servido
@@ -77,6 +81,7 @@
 # volta: trabalhos=sim — so le
 # volta: estado=sim — so le
 # volta: parar=nao
+# volta: limpar=nao
 # volta: trocar --descartar=nao
 # (parar e descartar nao voltam: a sombra de bench parada nao retoma, e `medir --sombra` abre outra do zero; a
 #  geracao em sombra descartada se apaga, e montar de novo e outra troca. #3518, buracos #2553 e #2554: o estado
@@ -121,6 +126,7 @@ import consultas as consultasmod  # noqa: E402  (o log de recuperacao como o don
 import trabalhos as trabalhosmod  # noqa: E402  (os lotes do rag e as sombras de bench, com o estado de vida, #3513)
 import historico as historicomod  # noqa: E402  (o historico de medida com o marco das geracoes e dos ajustes, #3513)
 import pendencias as pendenciasmod  # noqa: E402  (a decisao pendente do estado da troca, forma da R23, #3513)
+import limpeza as limpezamod  # noqa: E402  (limpeza de sombras encerradas e pesos de embedder sem geracao, DT-787)
 
 REG = os.environ.get("PF_MOTOR_REG") or str(_ARVORE / "registro" / "motor-instancias.json")
 BIN = os.environ.get("PF_BIN") or str(_ARVORE / "bin")
@@ -134,7 +140,7 @@ PARTICOES = ("biblioteca", "casa", "log")
 _SINONIMOS = {"obra": "biblioteca", "registro": "log"}
 ATOS_RAG = (
     "ajuste", "buscar", "consultas", "eleger", "escrever", "estado",
-    "indexar", "julgar", "lintar", "medir", "parar", "parear",
+    "indexar", "julgar", "limpar", "lintar", "medir", "parar", "parear",
     "sortear", "trabalhos", "trocar",
 )
 _PARA_A_API = {}
@@ -293,6 +299,10 @@ def uso(cod=2):
   motor <inst> parar biblioteca --sombra <id>
                                         encerra a sombra de bench em curso (o `medir --sombra-parar`, num
                                         ato de escrita); a sombra parada nao retoma
+  motor <inst> limpar [--sombra <id>] [--modelo <repo>] [--ver] [--json]
+                                        apaga pastas /tmp/sombra-<id> encerradas no conteiner e pesos de
+                                        embedder no cache HF sem geracao servindo ou em construcao
+                                        (--ver so mostra)
   motor <inst> indexar biblioteca [--obra <uuid>,…] [--promover] [--autor <slug>] [--apply] [--json]
                                         indexa a impressao selada da obra marcada para
                                         indexar, no rag-api, sem po-la no ar (plano sem --apply);
@@ -4174,6 +4184,120 @@ def cmd_parar(inst, argv):
     return cmd_sombra_parar(inst, argv[1])
 
 
+def _embedders_declarados_no_conteiner(container):
+    """Lista os nomes de embedders declarados no catálogo do motor dentro do contêiner."""
+    py = "import json; from motor_acervo.config import embedders; print(json.dumps(list(embedders.declarados().keys())))"
+    r = sh(f"docker exec {container} python -c {shlex.quote(py)}")
+    if r.returncode != 0:
+        return None, (r.stderr or "").strip()[-200:]
+    try:
+        return set(json.loads(r.stdout.strip().splitlines()[-1])), None
+    except (ValueError, IndexError):
+        return None, "saida invalida ao ler embedders.declarados()"
+
+
+def cmd_limpar(inst, argv):
+    """`motor <inst> limpar [--sombra <id>] [--modelo <repo>] [--ver] [--json]` (DT-787):
+    apaga pastas `/tmp/sombra-<id>` encerradas no contêiner e pesos de embedder no cache HF
+    que nenhuma geração servindo ou em construção usa."""
+    forma = "motor <inst> limpar [--sombra <id>] [--modelo <repo>] [--ver] [--json]"
+    if argv and (argv[0] in PARTICOES or argv[0] in _SINONIMOS):
+        argv = argv[1:]
+    sid = None
+    modelo = None
+    ver = False
+    como_json = False
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--ver":
+            ver = True
+        elif arg == "--json":
+            como_json = True
+        elif arg in ("--sombra", "--modelo"):
+            if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+                _usa("limpar", forma, f"a flag {arg} exige um valor")
+            if arg == "--sombra":
+                sid = argv[i + 1]
+            else:
+                modelo = argv[i + 1]
+            i += 1
+        else:
+            _usa("limpar", forma, f"argumento desconhecido {arg!r}")
+        i += 1
+
+    limpar_sombras = sid is not None or modelo is None
+    limpar_modelos = modelo is not None or sid is None
+
+    c = inst.get("container")
+    sombras_apagar, sombras_em_curso = [], []
+    if limpar_sombras:
+        sombras, erro = trabalhosmod.ler_sombras(
+            c, lambda cmd: (lambda r: (r.returncode, r.stdout, r.stderr))(sh(cmd))
+        )
+        if erro:
+            print(f"motor limpar: {erro}", file=sys.stderr)
+            sys.exit(3)
+        try:
+            sombras_apagar, sombras_em_curso = limpezamod.selecionar_sombras(sombras, sid=sid)
+        except limpezamod.ErroLimpeza as e:
+            print(e.mensagem, file=sys.stderr)
+            sys.exit(e.codigo)
+
+    hub = limpezamod.raiz_hf_cache()
+    modelos_apagar, modelos_mantidos = [], []
+    if limpar_modelos:
+        bancos = inst.get("bancos") or {}
+        if "motor" not in bancos:
+            print("motor limpar: a instancia nao declara bancos.motor em motor-instancias.json", file=sys.stderr)
+            sys.exit(3)
+        em_uso = set(_psql_json(
+            bancos["motor"],
+            "SELECT COALESCE(json_agg(DISTINCT parametros->>'embedder'), '[]'::json) "
+            "FROM motor.geracao WHERE estado IN ('servindo', 'em_construcao') AND parametros ? 'embedder';",
+        ) or [])
+        conhecidos, err_emb = _embedders_declarados_no_conteiner(c) if c else (None, "sem conteiner")
+        if modelo is None and conhecidos is None:
+            print(f"motor limpar: nao consegui ler o catalogo de embedders ({err_emb})", file=sys.stderr)
+            sys.exit(3)
+        try:
+            modelos_apagar, modelos_mantidos = limpezamod.selecionar_modelos(
+                hub, em_uso, conhecidos or set(), modelo=modelo
+            )
+        except limpezamod.ErroLimpeza as e:
+            print(e.mensagem, file=sys.stderr)
+            sys.exit(e.codigo)
+
+    def _apaga_sombra(s_id):
+        r = sh(f"docker exec {c} rm -rf /tmp/sombra-{s_id}")
+        if r.returncode != 0:
+            print(f"motor limpar: falhou apagar /tmp/sombra-{s_id}: {r.stderr.strip()[-200:]}", file=sys.stderr)
+            sys.exit(3)
+
+    try:
+        res = limpezamod.executar_limpeza(
+            sombras_apagar, sombras_em_curso, modelos_apagar, modelos_mantidos, hub, _apaga_sombra, ver=ver
+        )
+    except limpezamod.ErroLimpeza as e:
+        print(e.mensagem, file=sys.stderr)
+        sys.exit(e.codigo)
+
+    if como_json:
+        print(json.dumps(res, ensure_ascii=False))
+        return
+    prefixo = "[--ver] " if ver else ""
+    acao = "apagaria" if ver else "apagada(s)"
+    print(f"{prefixo}sombras: {len(res['sombras_apagadas'])} {acao} ({', '.join(res['sombras_apagadas']) or 'nenhuma'}); "
+          f"{len(res['sombras_em_curso'])} em curso mantida(s)")
+    if res["modelos_apagados"]:
+        nomes = ", ".join(f"{m['modelo']} ({m['bytes'] // (1024 * 1024)} MiB)" for m in res["modelos_apagados"])
+        print(f"{prefixo}modelos: {len(res['modelos_apagados'])} {acao}: {nomes}")
+    else:
+        print(f"{prefixo}modelos: 0 {acao}")
+    if res["modelos_mantidos"]:
+        print(f"  mantidos: {', '.join(res['modelos_mantidos'])}")
+
+
 def main():
     d = reg()
     a = sys.argv[1:]
@@ -4254,8 +4378,10 @@ def main():
         return cmd_estado(inst, a[2:])
     if a[1] == "parar":
         return cmd_parar(inst, a[2:])
+    if a[1] == "limpar":
+        return cmd_limpar(inst, a[2:])
     print(
-        f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, consultas, eleger, escrever, estado, indexar, julgar, lintar, medir, parar, parear, sortear, trabalhos, trocar. "
+        f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, consultas, eleger, escrever, estado, indexar, julgar, limpar, lintar, medir, parar, parear, sortear, trabalhos, trocar. "
         f"Para buscar: motor {a[0]} buscar <biblioteca|casa|log> \"<frase>\"",
         file=sys.stderr,
     )
