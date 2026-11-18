@@ -1076,7 +1076,14 @@ cmd_procurar() {
         while [ $# -gt 0 ]; do posicionais+=("$1"); shift; done
         break
         ;;
-      -*) morre "opção desconhecida: '$1'" 2 ;;
+      -*)
+        if [ "${#posicionais[@]}" -eq 1 ] && [ "${#termos[@]}" -eq 0 ]; then
+          posicionais+=("$1")
+          shift
+        else
+          morre "opção desconhecida: '$1'" 2
+        fi
+        ;;
       *)
         posicionais+=("$1")
         shift
@@ -1733,7 +1740,10 @@ abrir_da_producao() {
     esac
     ramo_alvo="fabrica/${card_num}${slug:+-$slug}"
   elif [ -n "$slug" ]; then
-    morre "--slug exige <card>" 2
+    case "$slug" in
+      *[!a-z0-9-]*|-*) morre "slug invalido com --da-producao: '$slug' — use [a-z0-9-]" 2 ;;
+    esac
+    ramo_alvo="$cadeira/$slug"
   fi
 
   if [ -d "$wt_dir" ] && [ -e "$wt_dir/.git" ]; then
@@ -2126,15 +2136,19 @@ move_card() {
 
   case "$nivel" in
     story|task)
-      local exec_val="${PF_CADEIRA:-$sessao_cadeira}"
-      if [ -z "$exec_val" ]; then
-        printf 'card #%s: executor nao gravado (PF_CADEIRA ausente)\n' "$n"
+      if [ -n "$card_executor" ]; then
+        printf 'card #%s: executor mantido (%s)\n' "$n" "$card_executor"
       else
-        out="$("$tarefas_bin" editar "$n" --executor "$exec_val" 2>&1)"; rc=$?
-        if [ "$rc" -eq 0 ]; then
-          printf 'card #%s: executor %s\n' "$n" "$exec_val"
+        local exec_val="${PF_CADEIRA:-$sessao_cadeira}"
+        if [ -z "$exec_val" ]; then
+          printf 'card #%s: executor nao gravado (PF_CADEIRA ausente)\n' "$n"
         else
-          printf 'card #%s: executor NAO gravado (exit %s): %s\n' "$n" "$rc" "$(printf '%s' "$out" | head -1)"
+          out="$("$tarefas_bin" editar "$n" --executor "$exec_val" 2>&1)"; rc=$?
+          if [ "$rc" -eq 0 ]; then
+            printf 'card #%s: executor %s\n' "$n" "$exec_val"
+          else
+            printf 'card #%s: executor NAO gravado (exit %s): %s\n' "$n" "$rc" "$(printf '%s' "$out" | head -1)"
+          fi
         fi
       fi
       if [ "$estado" = "despriorizada" ]; then
@@ -2304,14 +2318,18 @@ portao_story_em_execucao() {
 }
 
 ato_commitar() {
-  local nome="${1:-}" msg="" tudo=0 caminhos=()
+  local nome="${1:-}" tudo=0 caminhos=() tem_msg=0
+  local -a msg_args=()
   shift || uso
   while [ $# -gt 0 ]; do
     case "$1" in
       -m|--mensagem)
         shift
         [ $# -gt 0 ] || { printf '%s: erro: -m exige mensagem\n' "$VERBO" >&2; exit 2; }
-        msg="$1"
+        if [ -n "$1" ]; then
+          msg_args+=(-m "$1")
+          tem_msg=1
+        fi
         shift
         ;;
       --tudo)
@@ -2328,7 +2346,7 @@ ato_commitar() {
     esac
   done
 
-  [ -n "$msg" ] || morre "falta a mensagem (-m)" 2
+  [ "$tem_msg" -eq 1 ] || morre "falta a mensagem (-m)" 2
   local c; c="$(clone_de "$nome")" || exit $?
 
   # [3096] Recusa commit em HEAD destacado ou ramo de outra cadeira
@@ -2378,7 +2396,7 @@ ato_commitar() {
       done
     fi
 
-    if ! "$GIT" -C "$c" commit -m "$msg" >/dev/null; then
+    if ! "$GIT" -C "$c" commit "${msg_args[@]}" >/dev/null; then
       if [ -n "$idx_antes" ]; then
         "$GIT" -C "$c" read-tree "$idx_antes" >/dev/null 2>&1 || "$GIT" -C "$c" reset -q >/dev/null 2>&1 || true
       else
@@ -2570,7 +2588,7 @@ for p in sorted(caminhos):
     done
   fi
 
-  if ! "$GIT" -C "$c" commit -m "$msg" >/dev/null; then
+  if ! "$GIT" -C "$c" commit "${msg_args[@]}" >/dev/null; then
     if [ -n "$idx_antes" ]; then
       "$GIT" -C "$c" read-tree "$idx_antes" >/dev/null 2>&1 || "$GIT" -C "$c" reset -q >/dev/null 2>&1 || true
     else
