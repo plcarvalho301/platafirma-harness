@@ -48,10 +48,36 @@ SERVIDO_CONVERSOR = os.environ.get(
     "PF_CONVERSOR_SERVIDO",
     os.path.join(PROD_RAIZ, "platafirma-conhecimento", "current", "conversor", "conversor"))
 
-BANCOS = {
-    "rag": ("rag-extractor-pg", "rag", "rag_extractor"),
-    "motor": ("motor-pg", "motor", "motor"),
-}
+ROLE_LEITURA = "analise_leitura"
+PGOPTIONS_RO = "-c default_transaction_read_only=on"
+REGISTRO_BANCOS = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "registro", "bancos.json"
+)
+
+
+def carregar_bancos(caminho=None):
+    """Deriva {slug: (conteiner, role_leitura, base)} do inventário declarativo registro/bancos.json (DT 834, DT 851)."""
+    arq = caminho or os.environ.get("PF_REGISTRO_BANCOS") or REGISTRO_BANCOS
+    out = {
+        "rag": ("rag-extractor-pg", ROLE_LEITURA, "rag_extractor"),
+        "motor": ("motor-pg", ROLE_LEITURA, "motor"),
+    }
+    try:
+        with open(arq, encoding="utf-8") as fh:
+            dados = json.load(fh)
+        for slug, info in (dados or {}).items():
+            if slug.startswith("_") or not isinstance(info, dict):
+                continue
+            ctr = str(info.get("conteiner") or "").strip()
+            base = str(info.get("base") or "").strip()
+            if ctr and base:
+                out[slug] = (ctr, ROLE_LEITURA, base)
+    except (OSError, ValueError):
+        pass
+    return out
+
+
+BANCOS = carregar_bancos()
 
 METRICAS_BLOQUEANTES = ("perda", "insercao", "duplicacao")
 MARCACAO_INDEXADA = "transcrita e indexada"   # motor_acervo.curadoria.obras.MARCACAO_INDEXADA
@@ -70,13 +96,15 @@ class Indeterminavel(Exception):
 
 def psql_json(banco, sql):
     """Roda `sql` (um SELECT que devolve UMA linha com um json) no banco da allowlist e devolve o
-    valor decodificado. Qualquer falha levanta Indeterminavel."""
+    valor decodificado. Roda com papel de leitura e transação somente-leitura (DT 834).
+    Qualquer falha levanta Indeterminavel."""
     ctr, usr, base = BANCOS[banco]
     env = dict(os.environ)
     env.setdefault("DOCKER_HOST", f"unix:///run/user/{os.getuid()}/docker.sock")
     try:
         p = subprocess.run(
-            ["docker", "exec", "-i", ctr, "psql", "-U", usr, "-d", base, "-tA",
+            ["docker", "exec", "-e", f"PGOPTIONS={PGOPTIONS_RO}", "-i", ctr,
+             "psql", "-X", "-U", usr, "-d", base, "-tA",
              "-v", "ON_ERROR_STOP=1", "-c", sql],
             capture_output=True, text=True, env=env, timeout=120)
     except (OSError, subprocess.TimeoutExpired) as e:

@@ -23,9 +23,12 @@ from typing import Any, Callable
 
 import resultado
 
+ROLE_LEITURA = "analise_leitura"
+PGOPTIONS_RO = "-c default_transaction_read_only=on"
+
 BANCOS = {
-    "rag": ("rag-extractor-pg", "rag", "rag_extractor"),
-    "sessao": ("harness-sessao-db", "sessao", "sessao"),
+    "rag": ("rag-extractor-pg", ROLE_LEITURA, "rag_extractor"),
+    "sessao": ("harness-sessao-db", ROLE_LEITURA, "sessao"),
 }
 
 # Linha de base do legado de sessao_id órfãos anterior à trava do card #3375.
@@ -59,7 +62,8 @@ def psql_json(banco: str, sql: str, env_docker: dict[str, str] | None = None) ->
     env.setdefault("DOCKER_HOST", f"unix:///run/user/{os.getuid()}/docker.sock")
     try:
         p = subprocess.run(
-            ["docker", "exec", "-i", ctr, "psql", "-U", usr, "-d", base, "-tA",
+            ["docker", "exec", "-e", f"PGOPTIONS={PGOPTIONS_RO}", "-i", ctr,
+             "psql", "-X", "-U", usr, "-d", base, "-tA",
              "-v", "ON_ERROR_STOP=1", "-c", sql],
             capture_output=True, text=True, env=env, timeout=60,
         )

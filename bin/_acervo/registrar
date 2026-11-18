@@ -504,34 +504,48 @@ def registrar_descricao(verbo):
 
 
 def reconciliar_donos():
-    """Relê `# dono:` de cada bin/<verbo> em BIN e reconcilia acervo.ferramental_verbo.dono (DT #273).
+    """Relê `# dono:` e a descrição do cabeçalho de cada bin/<verbo> em BIN e reconcilia
+    acervo.ferramental_verbo.dono (DT #273) e descricao (DT #850).
 
     Atualiza em lote por slug onde o valor no catálogo difere do cabeçalho, sem tocar
     em ato/acesso (funciona mesmo para verbos cujo `# le:`/`# escreve:` ainda está em prosa)."""
     pares = []
+    descs = []
     for nome in sorted(os.listdir(BIN)):
         if nome.startswith("_"):
             continue
         path = _resolve(nome)
         if not path:
             continue
-        campos, _ = _le_cabecalho(path)
+        campos, desc = _le_cabecalho(path)
         dono = (campos.get("dono") or "").strip()
         if dono:
             pares.append((nome, dono))
-    if not pares:
+        if desc:
+            descs.append((nome, desc))
+    if not pares and not descs:
         return []
-    valores = ", ".join("(%s, %s)" % (_lit(slug), _lit(dono)) for slug, dono in pares)
-    sql = (
-        "begin;\n"
-        "update acervo.ferramental_verbo f\n"
-        "   set dono = v.dono\n"
-        "  from (values %s) as v(slug, dono)\n"
-        " where f.slug = v.slug\n"
-        "   and f.dono is distinct from v.dono;\n"
-        "commit;\n" % valores
-    )
-    _psql(sql, escreve=True)
+    partes_sql = ["begin;\n"]
+    if pares:
+        valores = ", ".join("(%s, %s)" % (_lit(slug), _lit(dono)) for slug, dono in pares)
+        partes_sql.append(
+            "update acervo.ferramental_verbo f\n"
+            "   set dono = v.dono\n"
+            "  from (values %s) as v(slug, dono)\n"
+            " where f.slug = v.slug\n"
+            "   and f.dono is distinct from v.dono;\n" % valores
+        )
+    if descs:
+        valores_d = ", ".join("(%s, %s)" % (_lit(slug), _lit(d)) for slug, d in descs)
+        partes_sql.append(
+            "update acervo.ferramental_verbo f\n"
+            "   set descricao = v.descricao\n"
+            "  from (values %s) as v(slug, descricao)\n"
+            " where f.slug = v.slug\n"
+            "   and f.descricao is distinct from v.descricao;\n" % valores_d
+        )
+    partes_sql.append("commit;\n")
+    _psql("".join(partes_sql), escreve=True)
     return pares
 
 

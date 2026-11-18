@@ -1519,13 +1519,16 @@ def test_alcance_texto_preserva_saltos_detalhados(monkeypatch, capsys):
     assert "release conferir alcance claudinho acervo: 1 conforme" in saida.out
 
 
-# --- conferir_pdp (card #3142) ---------------------------------------------
+# --- conferir_pdp (card #3142 / DT 835) ------------------------------------
 
 def _pdp_current_com_release(tmp_path):
-    """Cria uma release fake e devolve o symlink current -> release, para testar
-    o caminho onde a tag corrente E encontrada."""
+    """Cria uma release fake com politica-acesso/{politica,sujeitos}.yaml e devolve
+    o symlink current -> release."""
     release = tmp_path / "rel-abc1234"
-    release.mkdir()
+    pdp = release / "politica-acesso"
+    pdp.mkdir(parents=True)
+    (pdp / "politica.yaml").write_text("versao: 1\n", encoding="utf-8")
+    (pdp / "sujeitos.yaml").write_text("versao: 1\nsujeitos: {}\n", encoding="utf-8")
     link = tmp_path / "current"
     link.symlink_to(release)
     return link
@@ -1533,8 +1536,10 @@ def _pdp_current_com_release(tmp_path):
 
 def test_pdp_conforme_quando_tag_encontrada(monkeypatch, tmp_path, capsys):
     link = _pdp_current_com_release(tmp_path)
+    resumo_esp = conferir._resumo_pdp_dir(str(link / "politica-acesso"))
     monkeypatch.setenv("PF_CURRENT_LINK", str(link))
     monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
+    monkeypatch.setattr(conferir, "_sonda_pdp_servidor", lambda s, _c: (resumo_esp, "/health:x-pf-pdp-resumo"))
 
     exit_code = conferir.conferir_pdp("ops-server", como_json=True)
     saida = capsys.readouterr()
@@ -1569,22 +1574,64 @@ def test_pdp_indeterminavel_quando_current_nao_encontrada(monkeypatch, tmp_path,
     assert "3 não consegui olhar" in dado["ancora"]
 
 
-def test_pdp_sem_caminho_de_divergencia_hoje(monkeypatch, tmp_path, capsys):
-    """Documenta o estado real da classe: sem uma tag 'esperada' distinta para
-    comparar, tag encontrada so pode sair conforme — nao ha hoje logica que
-    produza divergente para pdp. Se essa comparacao for adicionada depois, este
-    teste precisa mudar junto."""
+def test_pdp_divergente_quando_resumo_carregado_difere_da_release(monkeypatch, tmp_path, capsys):
+    """DT 835: conferir pdp compara o resumo SHA-256 da politica e sujeitos carregados
+    por cada PEP com o arquivo da release no ar; divergente sai 1."""
     link = _pdp_current_com_release(tmp_path)
+    resumo_esp = conferir._resumo_pdp_dir(str(link / "politica-acesso"))
+    resumo_velho = "f" * 64
     monkeypatch.setenv("PF_CURRENT_LINK", str(link))
     monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
 
-    exit_code = conferir.conferir_pdp(None, como_json=True)
+    def _sonda(s, _curr):
+        if s["nome"] == "wiki-mcp":
+            return resumo_velho, "auditoria:pep_politica_carregada"
+        return resumo_esp, "/health:x-pf-pdp-resumo"
+
+    exit_code = conferir.conferir_pdp(None, como_json=True, sonda_pdp=_sonda)
     saida = capsys.readouterr()
 
-    assert exit_code == 0
+    assert exit_code == 1
     dado = json.loads(saida.out)
-    assert len(dado["itens"]) == 3
-    assert all(item["estado"] == "conforme" for item in dado["itens"])
+    estados = {item["nome"]: item["estado"] for item in dado["itens"]}
+    assert estados == {"ops-server": "conforme", "wiki-mcp": "divergente", "rastreador-api": "conforme"}
+
+
+def test_dt_850_classes_implementadas_e_help_sai_0(monkeypatch, capsys):
+    """DT 850: conferir lista exatamente as 23 classes implementadas sem sessao/chapeu, e --help sai 0."""
+    assert "sessao" not in conferir.CLASSES_IMPLEMENTADAS
+    assert "chapeu" not in conferir.CLASSES_IMPLEMENTADAS
+    for cl in ("card", "jobs", "unit", "acervo", "dependencias", "sessao-orfa", "copia", "diagrama", "ontologia"):
+        assert cl in conferir.CLASSES_IMPLEMENTADAS
+    with pytest.raises(SystemExit) as exc:
+        conferir.uso(exit_code=0)
+    assert exc.value.code == 0
+    err = capsys.readouterr().err
+    assert "sessao-orfa" in err and "ontologia" in err
+
+
+def test_dt_834_consultas_psql_usam_role_leitura_e_transacao_ro(monkeypatch):
+    """DT 834: toda consulta do conferir usa role analise_leitura e default_transaction_read_only=on."""
+    import predicados_acervo as pa
+    import sessao_orfa as so
+
+    comandos = []
+
+    class _Proc:
+        returncode = 0
+        stdout = "[]"
+        stderr = ""
+
+    monkeypatch.setattr(pa.subprocess, "run", lambda cmd, **kw: (comandos.append(cmd), _Proc())[1])
+    pa.psql_json("rag", "SELECT 1")
+    assert "-U" in comandos[-1]
+    assert comandos[-1][comandos[-1].index("-U") + 1] == "analise_leitura"
+    assert "PGOPTIONS=-c default_transaction_read_only=on" in comandos[-1]
+
+    monkeypatch.setattr(so.subprocess, "run", lambda cmd, **kw: (comandos.append(cmd), _Proc())[1])
+    so.psql_json("sessao", "SELECT 1")
+    assert comandos[-1][comandos[-1].index("-U") + 1] == "analise_leitura"
+    assert "PGOPTIONS=-c default_transaction_read_only=on" in comandos[-1]
 
 
 # --- conferir_vocabulario (card #3142) ------------------------------------

@@ -78,8 +78,6 @@ CLASSES_SERVIDO=(
   "superficie"
   "ferramental"
   "front"
-  "sessao"
-  "chapeu"
   "pdp"
   "alcance"
   "card"

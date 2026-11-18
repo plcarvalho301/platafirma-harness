@@ -5,7 +5,7 @@
 # dono: seguranca
 # classe: B
 # use para: gerar, checar, rotacionar e destruir segredo; fixar linha de base; varrer ativo, «roda a varredura»; «avalia esse risco», a régua de segurança de um serviço; e sempre que um segredo for exposto, faltar ou vencer
-# atos: oscap (leitura, casco), isolacao medir (leitura, casco), ssg (escrita, regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo), segredo gravar (escrita, segredo), segredo gerar (escrita, segredo), segredo importar (escrita, segredo), segredo rotacionar (escrita, segredo), segredo exigidos (leitura, segredo), segredo apagar (escrita, segredo)
+# atos: oscap (leitura, casco), isolacao medir (leitura, casco), ssg (escrita, regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo), segredo resumo (leitura, segredo), segredo gravar (escrita, segredo), segredo gerar (escrita, segredo), segredo importar (escrita, segredo), segredo rotacionar (escrita, segredo), segredo exigidos (leitura, segredo), segredo apagar (escrita, segredo)
 # folhas: oscap|ssg|isolacao -> politica/avaliacao · keycloak|openssl -> politica/acesso · segredo -> politica/segredo
 # escreve: $PLATAFIRMA_INSTANCIA/segredos/<stack>/<nome>
 # ambiente: SEG_SECRETS_DIR[=$PLATAFIRMA_INSTANCIA/segredos] · SEG_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/seg] · SEG_OSCAP_DIR[=$PLATAFIRMA_INSTANCIA/var/oscap] · SEG_SSG_DIR[=/opt/terceiros/ssg/current] · SEG_OQS_DIR[=/opt/terceiros/oqs/current] · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
@@ -817,6 +817,35 @@ case "$SUB" in
         ;;
       listar)
         cmd_segredo_listar "$ALVO"
+        ;;
+      resumo)
+        if [ -d "$SEG_SECRETS_DIR" ]; then
+          python3 - "$SEG_SECRETS_DIR" "${ALVO:-}" <<'PY'
+import hashlib, os, re, sys
+raiz, stack = sys.argv[1], sys.argv[2]
+stacks = [stack] if stack else sorted(os.listdir(raiz))
+for st in stacks:
+    pasta = os.path.join(raiz, st)
+    if not os.path.isdir(pasta):
+        continue
+    for nome in sorted(os.listdir(pasta)):
+        f = os.path.join(pasta, nome)
+        if not os.path.isfile(f) or not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", nome):
+            continue
+        try:
+            with open(f, "rb") as fh:
+                raw = fh.read()
+        except OSError:
+            continue
+        if raw.endswith(b"\n"):
+            raw = raw[:-1]
+        if b"\n" in raw:
+            continue
+        h = hashlib.sha256(raw).hexdigest()
+        chave = nome if stack else f"{st}/{nome}"
+        print(f"{chave} sha256:{h}")
+PY
+        fi
         ;;
       gravar)
         cmd_segredo_gravar "$ALVO"

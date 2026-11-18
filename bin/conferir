@@ -4,7 +4,7 @@
 # dono: ti
 # classe: C
 # use para: SEMPRE ANTES de agir sobre algo da casa e ANTES de dizer que algo dela não existe, «existe o verbo X?», «tem skill de Y?»; a régua da bancada; «o que está no ar bate com o declarado?», em serviço, verbo, skill, jobs, acervo e release
-# atos: existe (leitura, operacao), repo (leitura, operacao), commit (leitura, operacao), arranque (leitura, operacao), verbo (leitura, operacao), servico (leitura, operacao), skill (leitura, operacao), procedencia (leitura, operacao), superficie (leitura, operacao), front (leitura, operacao), sessao (leitura, operacao), chapeu (leitura, operacao), ferramental (leitura, operacao), pdp (leitura, operacao), alcance (leitura, operacao), vocabulario (leitura, operacao), ontologia (leitura, operacao)
+# atos: existe (leitura, operacao), repo (leitura, operacao), commit (leitura, operacao), arranque (leitura, operacao), verbo (leitura, operacao), servico (leitura, operacao), skill (leitura, operacao), procedencia (leitura, operacao), superficie (leitura, operacao), front (leitura, operacao), ferramental (leitura, operacao), pdp (leitura, operacao), alcance (leitura, operacao), vocabulario (leitura, operacao), diagrama (leitura, operacao), card (leitura, operacao), jobs (leitura, operacao), unit (leitura, operacao), acervo (leitura, operacao), dependencias (leitura, operacao), sessao-orfa (leitura, operacao), copia (leitura, operacao), ontologia (leitura, operacao)
 # forma: predicado
 # le: existe=repo,rastreador,arquivo-local
 # le: repo=repo
@@ -16,12 +16,19 @@
 # le: procedencia=release
 # le: superficie=release
 # le: front=release
-# le: sessao=release
-# le: chapeu=release
 # le: ferramental=release,acervo.casa
 # le: pdp=release
 # le: alcance=release
 # le: vocabulario=repo,arquivo-local
+# le: diagrama=arquivo-local
+# le: card=release,rastreador
+# le: jobs=release,arquivo-local
+# le: unit=release,arquivo-local
+# le: acervo=release,acervo.casa
+# le: dependencias=release
+# le: sessao-orfa=release,acervo.casa
+# le: copia=release,acervo.casa
+# le: ontologia=release
 # escreve: existe=nada
 # escreve: repo=nada
 # escreve: commit=nada
@@ -32,12 +39,19 @@
 # escreve: procedencia=nada
 # escreve: superficie=nada
 # escreve: front=nada
-# escreve: sessao=nada
-# escreve: chapeu=nada
 # escreve: ferramental=nada
 # escreve: pdp=nada
 # escreve: alcance=nada
 # escreve: vocabulario=nada
+# escreve: diagrama=nada
+# escreve: card=nada
+# escreve: jobs=nada
+# escreve: unit=nada
+# escreve: acervo=nada
+# escreve: dependencias=nada
+# escreve: sessao-orfa=nada
+# escreve: copia=nada
+# escreve: ontologia=nada
 # ambiente: PF_BIN_DIR[=$HOME/AI/bin] porta · PF_SESSAO porta (lida, chave do aviso de deprecado)
 # depende: python3 · release (classes do servido) · a implementacao em bin/_release/conferir/conferir.py
 # substitui: nada (despachante)
@@ -53,7 +67,7 @@ BIN_DIR="${PF_BIN_DIR:-$HOME/AI/bin}"
 AQUI="$(dirname "$(readlink -f "$0")")"
 IMPL="$AQUI/_release/conferir/conferir.py"
 
-CLASSES_SERVIDO="verbo cabecalho servico skill procedencia superficie ferramental front sessao chapeu pdp alcance card jobs acervo dependencias sessao-orfa copia ontologia"
+CLASSES_SERVIDO="verbo cabecalho servico skill procedencia superficie ferramental front pdp alcance card unit jobs acervo dependencias sessao-orfa copia ontologia"
 CLASSES_BANCADA="existe repo commit arranque vocabulario diagrama"
 
 avisa_deprecado() {  # uma vez por sessao (arq:0110 §11)

@@ -3,7 +3,7 @@
 # capacidade: operacao
 # dono: ti
 # use para: declarado × servido, 'existe X?' (âncora de NEGATIVA), cabeçalho de verbo, paridade de serviço
-# atos: existe, servico, verbo, skill, procedencia, repo, superficie, front, arranque, ferramental, commit, vocabulario, diagrama, ontologia
+# atos: existe, repo, commit, arranque, verbo, servico, skill, procedencia, superficie, front, ferramental, pdp, alcance, vocabulario, diagrama, card, jobs, unit, acervo, dependencias, sessao-orfa, copia, ontologia
 # forma: relatorio
 # cauda: sim
 # componente: docker, git
@@ -33,12 +33,6 @@
                    arq:0042 — materia de acervo, estado extraivel, blob que nao e fonte
                    editada a mao, render sem fonte irma e diretorio de topo nao
                    declarado no README.
-
-  sessao  [cadeira] pacote de abertura SERVIDO: tokens medidos com o tokenizador
-                   do harness, sha do conteudo servido e frescor, por peca. Sem
-                   card #2404 tirou a comparacao automatica — medicao, nao
-                   veredito. Sem
-                   tokenizador, sai 2 — pacote de abertura se mede, nao se estima.
   superficie [--staged]
                    equalizacao das superficies. Mede o PRODUTOR do `.mcp.json` de
                    cada uma — quem escreve o arquivo —, nunca os cwd vivos: cwd e
@@ -61,12 +55,6 @@
                    `abertura/arranque.md`, ou copia com bloco proprio? Reprova so a
                    copia; nao julga a redacao do arranque, que e da dona do texto.
                    Com `--staged`, julga so o CLAUDE.md do commit em curso.
-  chapeu  [<cadeira>[/<slug>]]
-                   chapeu de camada C (`abertura/<cadeira>/<slug>/chapeu.md`) contra
-                   os predicados de `personas/TEMPLATE-chapeu.md`: eco da base,
-                   secoes obrigatorias com a terceira coluna de (b) preenchida e os
-                   dois textos fixos. Sem tokenizador sai 2 — chapeu se mede, nao
-                   se estima. Sem alvo, julga todos os do disco.
   ferramental [--json]
                    golden record acervo.ferramental contra o host: (a) 1:1
                    capacidade<->verbo integro e cada verbo declarado resolve em
@@ -147,6 +135,7 @@ Nao muda nada: so olha.
 """
 import datetime
 import glob
+import hashlib
 import json
 import re
 import os
@@ -229,21 +218,47 @@ def _sha_release():
     rc, out, _ = sh(["git", "-C", HARNESS, "rev-parse", "--short", "HEAD"])
     return out.strip() if rc == 0 and out.strip() else "desconhecido"
 
+CLASSES_IMPLEMENTADAS = (
+    "existe",
+    "repo",
+    "commit",
+    "arranque",
+    "verbo",
+    "servico",
+    "skill",
+    "procedencia",
+    "superficie",
+    "front",
+    "ferramental",
+    "pdp",
+    "alcance",
+    "vocabulario",
+    "diagrama",
+    "card",
+    "jobs",
+    "unit",
+    "acervo",
+    "dependencias",
+    "sessao-orfa",
+    "copia",
+    "ontologia",
+)
+
 CLASSES_ABERTAS = {
     "canal": "regua do design system e de claudinha-produto e ainda nao existe",
     "casco": "avaliacao CIS ja tem verbo proprio (oscap-casco), de claudinho-seguranca",
 }
 
 
-def uso(erro=None):
+def uso(erro=None, *, exit_code=2):
     if erro:
         print(f"erro: {erro}\n", file=sys.stderr)
     print(__doc__.strip(), file=sys.stderr)
     print("\nuso: conferir <classe> [alvo]", file=sys.stderr)
-    print("     classes implementadas : servico . verbo . repo . skill . procedencia . superficie . commit . arranque . ferramental . front . existe . alcance . pdp . vocabulario . card . jobs . unit . dependencias . sessao-orfa . copia . ontologia", file=sys.stderr)
+    print("     classes implementadas : " + " . ".join(CLASSES_IMPLEMENTADAS), file=sys.stderr)
     for c, motivo in CLASSES_ABERTAS.items():
         print(f"     classe declarada, sem implementacao : {c} — {motivo}", file=sys.stderr)
-    sys.exit(2)
+    sys.exit(exit_code)
 
 
 def sh(args, cwd=None, env=None):
@@ -391,29 +406,27 @@ def stack_do_container(c, topologia_lista=None):
     return topologia.stack_do_container(c, _topologia() if topologia_lista is None else topologia_lista)
 
 
+_PADRAO_RESUMO_SEGREDO = re.compile(r"sha256:([0-9a-f]{64})")
+
+
 def segredos_da_stack(slug):
-    """{NOME: valor} de $PLATAFIRMA_INSTANCIA/segredos/<slug>/, pela regra do ajudante."""
+    """{NOME: 'sha256:<hex>'} calculado do lado de quem guarda o segredo (`seg segredo resumo`),
+    sem abrir arquivo do cofre nem trafegar o valor em texto claro (DT 833)."""
     if not slug:
         return {}
-    pasta = os.path.join(INSTANCIA, "segredos", slug)
-    vals = {}
-    try:
-        nomes = sorted(os.listdir(pasta))
-    except OSError:
+    seg_local = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "seg"))
+    seg_bin = seg_local if os.path.isfile(seg_local) else os.path.join(BIN_IRMAOS, "seg")
+    env_seg = dict(os.environ)
+    env_seg["PLATAFIRMA_INSTANCIA"] = INSTANCIA
+    env_seg["SEG_SECRETS_DIR"] = os.path.join(INSTANCIA, "segredos")
+    rc, out, _ = sh([seg_bin, "segredo", "resumo", str(slug)], env=env_seg)
+    if rc != 0 or not out:
         return {}
-    for nome in nomes:
-        f = os.path.join(pasta, nome)
-        if not os.path.isfile(f) or not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", nome):
-            continue
-        try:
-            with open(f) as fh:
-                v = fh.read()
-        except OSError:
-            continue
-        v = v[:-1] if v.endswith("\n") else v
-        if "\n" in v:
-            continue
-        vals[nome] = v
+    vals = {}
+    for linha in out.splitlines():
+        partes = linha.strip().split(None, 1)
+        if len(partes) == 2 and re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", partes[0]) and _PADRAO_RESUMO_SEGREDO.fullmatch(partes[1]):
+            vals[partes[0]] = partes[1]
     return vals
 
 
@@ -421,12 +434,47 @@ _SEGREDOS_VISTOS = set()
 
 
 def mascarar(valor):
-    """Troca por *** todo trecho de `valor` que seja segredo lido do cofre nesta execucao."""
-    s = str(valor)
+    """Troca por *** todo resumo de segredo (sha256:<hex>) ou segredo registrado nesta execucao."""
+    s = _PADRAO_RESUMO_SEGREDO.sub("***", str(valor))
     for seg in sorted(_SEGREDOS_VISTOS, key=len, reverse=True):
         if len(seg) >= 4 and seg in s:
             s = s.replace(seg, "***")
     return s
+
+
+def _valor_confere(declarado, servido):
+    """Compara valor declarado do compose com o servido no conteiner.
+    Quando `declarado` contem resumo(s) `sha256:<hex>` vindos de `seg segredo resumo`,
+    compara pelo SHA-256 do trecho correspondente em `servido`, sem ler o segredo (DT 833)."""
+    decl_s = "" if declarado is None else str(declarado)
+    serv_s = "" if servido is None else str(servido)
+    if decl_s == serv_s:
+        return True
+    matches = list(_PADRAO_RESUMO_SEGREDO.finditer(decl_s))
+    if not matches:
+        return False
+    if len(matches) == 1 and matches[0].span() == (0, len(decl_s)):
+        esperado = matches[0].group(1)
+        return hashlib.sha256(serv_s.encode("utf-8")).hexdigest() == esperado
+    # Segredo(s) interpolado(s) dentro de string maior (ex.: DSN)
+    partes_re = ["\\A"]
+    pos = 0
+    esperados = []
+    for m in matches:
+        partes_re.append(re.escape(decl_s[pos:m.start()]))
+        partes_re.append("(.+)")
+        esperados.append(m.group(1))
+        pos = m.end()
+    partes_re.append(re.escape(decl_s[pos:]))
+    partes_re.append("\\Z")
+    casou = re.match("".join(partes_re), serv_s, re.DOTALL)
+    if not casou:
+        return False
+    for idx, esp in enumerate(esperados, 1):
+        trecho = casou.group(idx)
+        if trecho != f"sha256:{esp}" and hashlib.sha256(trecho.encode("utf-8")).hexdigest() != esp:
+            return False
+    return True
 
 
 def env_declarado(c):
@@ -713,7 +761,7 @@ def conferir_servico(alvo, como_json=False):
                 divergencias.append(f"{k} declarado e nao servido (declarado={d_m!r})")
                 if not como_json:
                     print(f"    AUSENTE : {k} declarado e nao servido (declarado={d_m!r})")
-            elif servido[k] != decl[k]:
+            elif not _valor_confere(decl[k], servido[k]):
                 # variavel que carrega segredo: o servido divergente pode ser o segredo
                 # anterior, que o cofre ja nao tem para mascarar — some inteiro.
                 s_m = "***" if d_m != decl[k] else mascarar(servido[k])
@@ -2672,20 +2720,19 @@ def _norm(texto):
 # estourava NameError antes de qualquer checagem (fix de harness, ia, exec spec_pesquisa-web).
 FERRAMENTAL_PG = "rag-extractor-pg"
 FERRAMENTAL_DB = "rag_extractor"
-FERRAMENTAL_USR = "rag"
-
-
-
-
+FERRAMENTAL_USR = "analise_leitura"
+FERRAMENTAL_PGOPTIONS = "-c default_transaction_read_only=on"
 
 
 def _ferramental_psql(sql):
-    """(linhas|None, erro|None). Le a tabela via docker exec, como o resto do verbo."""
+    """(linhas|None, erro|None). Le a tabela via docker exec, como o resto do verbo,
+    com papel de leitura e transacao somente-leitura (DT 834)."""
     env = dict(os.environ)
-    env.setdefault("DOCKER_HOST", "unix:///run/user/1001/docker.sock")
+    env.setdefault("DOCKER_HOST", f"unix:///run/user/{os.getuid()}/docker.sock")
     p = subprocess.run(
-        ["docker", "exec", "-i", FERRAMENTAL_PG, "psql", "-U", FERRAMENTAL_USR,
-         "-d", FERRAMENTAL_DB, "-tAF|", "-c", sql],
+        ["docker", "exec", "-e", f"PGOPTIONS={FERRAMENTAL_PGOPTIONS}", "-i",
+         FERRAMENTAL_PG, "psql", "-X", "-U", FERRAMENTAL_USR,
+         "-d", FERRAMENTAL_DB, "-tAF|", "-v", "ON_ERROR_STOP=1", "-c", sql],
         capture_output=True, text=True, env=env)
     if p.returncode != 0:
         return None, (p.stderr or p.stdout or f"psql saiu {p.returncode}").strip()[:200]
@@ -3068,27 +3115,148 @@ def conferir_alcance(sujeito, fonte, como_json=False):
     return resultado.relatorio("alcance", alvo, itens, _sha_release(), como_json=como_json)
 
 
-def conferir_pdp(alvo=None, como_json=False):
-    """Confere que todo servidor com PEP aponta PDP_DIR para /opt/platafirma/current/politica-acesso.
-    Compara a tag da release servida em vez de md5 de arquivos individuais (card #3014 Passo 3)."""
+def _resumo_pdp_dir(pdp_dir):
+    """Calcula o resumo SHA-256 de politica.yaml e sujeitos.yaml num diretorio PDP (DT 835)."""
+    try:
+        with open(os.path.join(pdp_dir, "politica.yaml"), "rb") as fp:
+            pol_b = fp.read()
+        with open(os.path.join(pdp_dir, "sujeitos.yaml"), "rb") as fs:
+            suj_b = fs.read()
+        return hashlib.sha256(pol_b + b"\0" + suj_b).hexdigest()
+    except OSError:
+        return None
+
+
+def _resumo_pdp_auditoria(log_dir):
+    """Procura o ultimo evento `pep_politica_carregada` nos logs JSONL do servico."""
+    if not log_dir or not os.path.isdir(log_dir):
+        return None
+    try:
+        arquivos = sorted(
+            (os.path.join(log_dir, f) for f in os.listdir(log_dir) if f.endswith(".jsonl")),
+            reverse=True,
+        )
+    except OSError:
+        return None
+    for arq in arquivos[:3]:
+        try:
+            with open(arq, encoding="utf-8", errors="replace") as fh:
+                linhas = fh.readlines()
+        except OSError:
+            continue
+        for linha in reversed(linhas):
+            if "pep_politica_carregada" not in linha:
+                continue
+            try:
+                reg = json.loads(linha)
+            except ValueError:
+                continue
+            res = str(reg.get("resumo") or "").strip()
+            if re.fullmatch(r"[0-9a-f]{64}", res):
+                return res
+    return None
+
+
+def _sonda_pdp_servidor(s, current_link="/opt/platafirma/current"):
+    """Consulta o resumo (SHA-256) da politica e dos sujeitos efetivamente carregados pelo PEP (DT 835).
+    Ordem: (1) cabecalho `x-pf-pdp-resumo` ou campo `pdp_resumo` no `/health`;
+    (2) linha de auditoria `pep_politica_carregada`;
+    (3) com `/health` respondendo 200, resumo lido do mount interno do processo/conteiner."""
+    import urllib.request
+    health_ok = False
+    url = s.get("health_url")
+    if url:
+        try:
+            with urllib.request.urlopen(url, timeout=2) as resp:
+                health_ok = (200 <= getattr(resp, "status", 200) < 300)
+                hdr = resp.headers.get("x-pf-pdp-resumo") or ""
+                if re.fullmatch(r"[0-9a-f]{64}", hdr.strip()):
+                    return hdr.strip(), "/health:x-pf-pdp-resumo"
+                corpo = resp.read().decode("utf-8", errors="replace").strip()
+                if corpo.startswith("{"):
+                    dados = json.loads(corpo)
+                    res = str(dados.get("pdp_resumo") or dados.get("resumo_pdp") or "").strip()
+                    if re.fullmatch(r"[0-9a-f]{64}", res):
+                        return res, "/health:json"
+        except Exception as e:
+            return None, f"/health inacessivel ({e})"
+
+    res_log = _resumo_pdp_auditoria(s.get("log_dir"))
+    if res_log:
+        return res_log, "auditoria:pep_politica_carregada"
+
+    if health_ok and s.get("tipo") == "compose" and s.get("container") and s.get("container_pdp"):
+        cmd = [
+            "docker", "exec", s["container"], "python3", "-c",
+            "import hashlib,sys;p=open(sys.argv[1]+'/politica.yaml','rb').read();"
+            "s=open(sys.argv[1]+'/sujeitos.yaml','rb').read();"
+            "print(hashlib.sha256(p+b'\\0'+s).hexdigest())",
+            s["container_pdp"],
+        ]
+        rc, out, _ = sh(cmd)
+        if rc == 0 and re.fullmatch(r"[0-9a-f]{64}", out.strip()):
+            return out.strip(), f"container:{s['container']}:{s['container_pdp']}"
+
+    if health_ok and s.get("tipo") == "systemd" and s.get("unit"):
+        rc, out, _ = sh(["systemctl", "--user", "show", s["unit"], "-p", "MainPID", "--value"])
+        pid = out.strip()
+        if rc == 0 and pid.isdigit() and int(pid) > 0:
+            res_proc = _resumo_pdp_dir(f"/proc/{pid}/root{s['esperado']}")
+            if res_proc:
+                return res_proc, f"proc:{s['unit']}"
+
+    return None, f"sem resumo exposto por {s['nome']}"
+
+
+def conferir_pdp(alvo=None, como_json=False, *, sonda_pdp=None):
+    """Confere que cada ponto de obediencia (PEP) carrega o mesmo resumo de politica.yaml e
+    sujeitos.yaml da release no ar em /opt/platafirma/current/politica-acesso (DT 835)."""
     current_link = os.environ.get("PF_CURRENT_LINK", "/opt/platafirma/current")
     tag_current = None
+    resumo_esperado = None
     if os.path.exists(current_link):
         try:
-            tag_current = os.path.basename(os.path.realpath(current_link))
+            real_curr = os.path.realpath(current_link)
+            tag_current = os.path.basename(real_curr)
+            resumo_esperado = _resumo_pdp_dir(os.path.join(real_curr, "politica-acesso"))
         except Exception:
             tag_current = None
+            resumo_esperado = None
 
     servidores = [
-        {"nome": "ops-server", "tipo": "systemd", "esperado": "/opt/platafirma/current/politica-acesso"},
-        {"nome": "wiki-mcp", "tipo": "compose", "esperado": "/opt/platafirma/current/politica-acesso"},
-        {"nome": "rastreador-api", "tipo": "compose", "esperado": "/opt/platafirma/current/politica-acesso"},
+        {
+            "nome": "ops-server",
+            "tipo": "systemd",
+            "esperado": "/opt/platafirma/current/politica-acesso",
+            "health_url": "http://127.0.0.1:8010/health",
+            "log_dir": os.path.join(INSTANCIA, "var", "log", "ops"),
+            "unit": "ops-mcp.service",
+        },
+        {
+            "nome": "wiki-mcp",
+            "tipo": "compose",
+            "esperado": "/opt/platafirma/current/politica-acesso",
+            "health_url": "http://127.0.0.1:8090/health",
+            "log_dir": os.path.join(INSTANCIA, "var", "log", "wiki-mcp"),
+            "container": "plataforma-wiki-mcp-1",
+            "container_pdp": "/opt/pf/politica-acesso",
+        },
+        {
+            "nome": "rastreador-api",
+            "tipo": "compose",
+            "esperado": "/opt/platafirma/current/politica-acesso",
+            "health_url": "http://127.0.0.1:8120/health",
+            "container": "rastreador-api",
+            "container_pdp": "/app/politica-acesso",
+        },
     ]
 
+    sondar = sonda_pdp or _sonda_pdp_servidor
+
     if not como_json:
-        print(f"\n## conferir pdp — servidores com PEP × tag de release")
-        print(f"    metodo: compara tag de release em /opt/platafirma/current, nao md5")
-        print(f"    tag corrente: {tag_current or '(nenhuma)'}\n")
+        print("\n## conferir pdp — servidores com PEP × resumo da política na release")
+        print("    metodo: compara resumo SHA-256 de politica.yaml + sujeitos.yaml carregados com a release current")
+        print(f"    tag corrente: {tag_current or '(nenhuma)'} · resumo esperado: {(resumo_esperado or '(indisponivel)')[:12]}\n")
 
     itens = []
     for s in servidores:
@@ -3097,17 +3265,25 @@ def conferir_pdp(alvo=None, como_json=False):
             continue
         pdp_path = s["esperado"]
         tag_servidor = tag_current if tag_current else "(sem tag)"
-        # card #3142: release em current ausente/sem tag e "nao consegui medir a
-        # tag", nao "medi e diverge" — indeterminavel, nunca divergente por uma
-        # falha de leitura. Sem uma tag esperada distinta para comparar, tag
-        # encontrada so pode sair conforme (nao ha hoje caminho para divergente).
-        if not tag_current:
+        if not tag_current or not resumo_esperado:
             v = resultado.indeterminavel("release em current nao encontrada ou sem tag")
+            detalhe = f"(tag: {tag_servidor})"
         else:
-            v = resultado.conforme()
+            resumo_srv, fonte = sondar(s, current_link)
+            if not resumo_srv:
+                v = resultado.indeterminavel(f"nao consegui ler o resumo da politica em {nome}: {fonte}")
+                detalhe = f"(tag: {tag_servidor}, resumo: ?? via {fonte})"
+            elif resumo_srv != resumo_esperado:
+                v = resultado.divergente(
+                    f"resumo carregado ({resumo_srv[:12]} via {fonte}) difere da release current ({resumo_esperado[:12]})"
+                )
+                detalhe = f"(tag: {tag_servidor}, carregado: {resumo_srv[:12]} != esperado: {resumo_esperado[:12]})"
+            else:
+                v = resultado.conforme()
+                detalhe = f"(tag: {tag_servidor}, resumo: {resumo_srv[:12]} via {fonte})"
         if not como_json:
             marca = {"conforme": "ok ", "divergente": "NAO", "indeterminavel": "?? "}[v.estado]
-            print(f"    {marca}: {nome:<16} {pdp_path} (tag: {tag_servidor})")
+            print(f"    {marca}: {nome:<16} {pdp_path} {detalhe}")
         itens.append((nome, v))
 
     if not como_json:
@@ -3579,10 +3755,10 @@ def conferir_ontologia(alvo, como_json=False):
 
 
 def main(argv):
-    # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4): varre
-    # todos os argumentos antes do despacho; nenhuma classe chega a rodar. uso() sai 2.
+    # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4; DT 850): varre
+    # todos os argumentos antes do despacho; nenhuma classe chega a rodar. --help/--ajuda sai 0.
     if any(x in ("--ajuda", "--help", "-h") for x in argv[1:]):
-        uso()
+        uso(exit_code=0)
     como_json = "--json" in argv
     if como_json:
         argv = [a for a in argv if a != "--json"]
