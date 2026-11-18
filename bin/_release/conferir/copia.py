@@ -54,6 +54,56 @@ ONDE = {"banco": ("rag", "acervo"), "indice": ("motor", "motor")}
 NOMES = {"banco": "banco: tabelas do schema acervo (rag)", "indice": "indice: tabelas do schema motor",
          "balde": "balde: espelhos de leitura"}
 
+import os as _os
+
+REGISTRO_BANCOS = _os.path.join(
+    _os.path.dirname(_os.path.abspath(__file__)), "..", "..", "..", "registro", "bancos.json"
+)
+REGISTRO_BACKUPS = _os.path.join(
+    _os.path.dirname(_os.path.abspath(__file__)), "..", "..", "..", "registro", "backups.json"
+)
+
+
+def bancos_postgres_declarados(caminho_bancos: str | None = None,
+                               caminho_backups: str | None = None) -> list[dict[str, Any]]:
+    """Deriva a lista dos 10 bancos PostgreSQL do inventário declarativo registro/bancos.json,
+    cruzando com a cobertura declarada em registro/backups.json (DT 851)."""
+    arq_b = caminho_bancos or _os.environ.get("PF_REGISTRO_BANCOS") or REGISTRO_BANCOS
+    arq_k = caminho_backups or _os.environ.get("INFRA_BACKUPS") or REGISTRO_BACKUPS
+    try:
+        with open(arq_b, encoding="utf-8") as fh:
+            bancos = json.load(fh) or {}
+    except (OSError, ValueError):
+        bancos = {}
+    try:
+        with open(arq_k, encoding="utf-8") as fh:
+            alvos_backup = (json.load(fh) or {}).get("alvos") or {}
+    except (OSError, ValueError):
+        alvos_backup = {}
+
+    out = []
+    for slug, info in bancos.items():
+        if slug.startswith("_") or not isinstance(info, dict):
+            continue
+        ctr = str(info.get("conteiner") or "").strip()
+        base = str(info.get("base") or "").strip()
+        # O alvo em backups.json usa <slug>-db (ex.: rag-db, casa-db) ou o nome do contêiner
+        alvo_bk = None
+        for cand in (f"{slug}-db", ctr, slug):
+            if cand in alvos_backup:
+                alvo_bk = cand
+                break
+        info_bk = alvos_backup.get(alvo_bk) if alvo_bk else None
+        cobertura = (info_bk or {}).get("cobertura") or "nao-declarado"
+        out.append({
+            "banco": slug,
+            "conteiner": ctr,
+            "base": base,
+            "alvo_backup": alvo_bk,
+            "cobertura": cobertura,
+        })
+    return out
+
 PREFIXO = "copia-de:"
 SEPARADOR = " | "
 CAMPOS = ("familia", "fonte", "chave", "atributos", "repoe", "modo", "reproduzivel", "metodo", "insumos", "migracao")
@@ -109,6 +159,7 @@ class Medida:
     contagem: dict[str, int] = field(default_factory=lambda: {"total": 0, "declaradas": 0, "nao_declaradas": 0})
     detalhe: dict[str, Any] = field(default_factory=dict)
     familias: dict[str, set[str | None]] = field(default_factory=dict)
+    bancos_postgres: list[dict[str, Any]] = field(default_factory=list)
 
 
 # --- a declaração ----------------------------------------------------------------------------
@@ -348,6 +399,11 @@ def medir(alvo: str | None, portas: Portas) -> Medida:
     if "balde" in pedidos:
         _relatar_balde(m, portas, classificado["banco"])
 
+    bancos_pg = bancos_postgres_declarados()
+    m.bancos_postgres = bancos_pg
+    if bancos_pg:
+        resumo_pg = ", ".join(f"{b['banco']} ({b['alvo_backup'] or 'sem-alvo'}: {b['cobertura']})" for b in bancos_pg)
+        m.avisos.append(f"bancos PostgreSQL declarados ({len(bancos_pg)}): {resumo_pg}")
     m.avisos.append(f"sem coletor ({len(SEM_COLETOR)}): " + "; ".join(f"{n} ({p})" for n, p in SEM_COLETOR))
     nao_repro = sorted(f for f, valores in m.familias.items() if "nao" in valores)
     m.avisos.append("famílias declaradas não reproduzíveis, que a régua de bootstrap trata como fonte (arq:0130 D4): "
@@ -379,6 +435,7 @@ def conferir_copia(alvo: str | None, sha_release: str, *, como_json: bool = Fals
             "ancora": linha, "classe": "copia", "alvo": alvo, "release": sha_release,
             "itens": [{"nome": n, **v.dict()} for n, v in m.itens],
             "contagem": m.contagem, "substratos": m.detalhe,
+            "bancos_postgres": m.bancos_postgres,
             "sem_coletor": [{"familia": n, "porque": p} for n, p in SEM_COLETOR],
             "avisos": m.avisos,
         }, ensure_ascii=False))

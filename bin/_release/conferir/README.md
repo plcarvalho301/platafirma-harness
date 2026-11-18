@@ -30,8 +30,6 @@ Com `--json`, retorna objeto com `ancora`, `classe`, `alvo`, `release` e lista d
 - `superficie`: conformidade dos arquivos de superfície e conectores MCP.
 - `ferramental`: golden record `acervo.ferramental` contra o host.
 - `front`: telas e aplicações web contra regras de fronteira (arq:0057) e, desde o card #3426, o pacote de `platafirma-ui` lido da árvore dela, um item por peça, tela e retrato: **peça sem página** (`src/pf/<tag>.js` sem `<tag` em nenhum `.html` de `exemplo/`, R13); **tela com versão diferente do pacote** (`COPY --from=platafirma/ui:<versão>` de `app/<tela>/Dockerfile` contra `version` de `src/base/package.json`, R1: as telas de hoje que copiam em versão antiga saem divergentes); **retrato do dicionário de atos** (`src/retrato/atos.json`, campo `sha_registro`) contra o sha do registro do ferramental (R45). Sem retrato, ou enquanto o registro não serve o sha (dependência de dados no #3409), o item sai «não consegui olhar», nunca conforme.
-- `sessao`: pacote de abertura servido e frescor por peça.
-- `chapeu`: conformidade de chapéus das personas.
 - `pdp`: conformidade de políticas de acesso.
 - `alcance`: inventário de alcance de recursos.
 - `card`: integridade de cards citados.

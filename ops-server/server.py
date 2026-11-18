@@ -1413,7 +1413,7 @@ def _quem() -> dict:
 DOM_PLATAFORMA = "plataforma"
 DOM_RUNTIME = "plataforma-runtime"
 DOM_MENSAGERIA = "mensageria"     # fora do prefixo por ordem do dono, 13/08/2026
-_pdp: dict = {"carimbo": None, "politica": None, "sujeitos": None, "erro": "nao carregada"}
+_pdp: dict = {"carimbo": None, "politica": None, "sujeitos": None, "resumo": None, "erro": "nao carregada"}
 
 
 # --- gate de ref canonico da fonte de identidade (incidente #2956) ---
@@ -1436,7 +1436,7 @@ def _carrega_politica() -> dict:
     try:
         carimbo = (pol_f.stat().st_mtime_ns, suj_f.stat().st_mtime_ns)
     except OSError as e:
-        _pdp.update(carimbo=None, politica=None, sujeitos=None,
+        _pdp.update(carimbo=None, politica=None, sujeitos=None, resumo=None,
                     erro=f"politica ilegivel: {e}")
         return _pdp
     if _pdp["carimbo"] == carimbo:
@@ -1446,9 +1446,13 @@ def _carrega_politica() -> dict:
             sys.path.insert(0, str(PDP_CODE_DIR))
         import yaml
         from pdp import Politica
+        pol_bytes = pol_f.read_bytes()
+        suj_bytes = suj_f.read_bytes()
+        resumo = hashlib.sha256(pol_bytes + b"\0" + suj_bytes).hexdigest()
         pol = Politica.de_arquivo(pol_f)
-        suj = (yaml.safe_load(suj_f.read_text(encoding="utf-8")) or {}).get("sujeitos") or {}
-        _pdp.update(carimbo=carimbo, politica=pol, sujeitos=suj, erro=None)
+        suj = (yaml.safe_load(suj_bytes.decode("utf-8")) or {}).get("sujeitos") or {}
+        _pdp.update(carimbo=carimbo, politica=pol, sujeitos=suj, resumo=resumo, erro=None)
+        _audit(tool="-", evento="pep_politica_carregada", resumo=resumo)
         # Divergencia de vocabulario NAO derruba o servidor: o PDP ja nega sozinho.
         # O que faltava era o typo aparecer COMO typo, em vez de virar negativa
         # silenciosa por intersecao.
@@ -1463,7 +1467,7 @@ def _carrega_politica() -> dict:
                     _audit(tool="-", evento="pep_vocabulario_divergente",
                            onde="sujeitos.yaml", sujeito=nome, dominio=d)
     except Exception as e:                                  # noqa: BLE001
-        _pdp.update(carimbo=carimbo, politica=None, sujeitos=None,
+        _pdp.update(carimbo=carimbo, politica=None, sujeitos=None, resumo=None,
                     erro=f"{type(e).__name__}: {e}")
     return _pdp
 
@@ -4250,7 +4254,10 @@ class BearerAuth(BaseHTTPMiddleware):
 
 
 async def _health(_req):
-    return PlainTextResponse("ok")
+    est = _carrega_politica()
+    resumo = est.get("resumo") or ""
+    headers = {"x-pf-pdp-resumo": resumo} if resumo else {}
+    return PlainTextResponse("ok", headers=headers)
 
 
 async def _prm(_req):

@@ -135,25 +135,47 @@ def test_stack_do_container_duas_stacks_mesmo_compose_desempata_pelo_projeto(mon
     assert c.stack_do_container(cont_sem_projeto_que_casa) is None
 
 def test_segredos_da_stack_segue_a_regra_do_ajudante(monkeypatch, tmp_path):
+    import hashlib
     c = _conferir(monkeypatch, tmp_path)
     pasta = tmp_path / "inst" / "segredos" / "rag"
     pasta.mkdir(parents=True)
     (pasta / "POSTGRES_PASSWORD").write_text("s3gredo-longo\n")
     (pasta / "multi").write_text("a\nb\n")
     (pasta / "nome-invalido").write_text("x")
-    assert c.segredos_da_stack("rag") == {"POSTGRES_PASSWORD": "s3gredo-longo"}
+    esperado = "sha256:" + hashlib.sha256(b"s3gredo-longo").hexdigest()
+    assert c.segredos_da_stack("rag") == {"POSTGRES_PASSWORD": esperado}
+
+
+def test_conferir_servico_compara_segredo_por_resumo(monkeypatch, tmp_path, capsys):
+    import hashlib
+    c = _conferir(monkeypatch, tmp_path)
+    resumo = "sha256:" + hashlib.sha256(b"s3gredo-longo").hexdigest()
+    cont_ok = {"nome": "x", "projeto": "p", "servico": "api", "working_dir": os.path.join(c.DEPLOY, "p"),
+               "config_files": "", "env": {"POSTGRES_PASSWORD": "s3gredo-longo",
+                                           "DSN": "postgres://u:s3gredo-longo@h/db"}, "started_at": None}
+    os.makedirs(cont_ok["working_dir"], exist_ok=True)
+    monkeypatch.setattr(c, "containers", lambda alvo: iter([cont_ok]))
+    monkeypatch.setattr(c, "git_estado", lambda wd: None)
+    monkeypatch.setattr(c, "env_declarado", lambda cc: ({"POSTGRES_PASSWORD": resumo,
+                                                         "DSN": f"postgres://u:{resumo}@h/db"}, None))
+    assert c.conferir_servico("x") == 0
+    saida_ok = capsys.readouterr().out
+    assert "todas conferem" in saida_ok
+    assert "s3gredo-longo" not in saida_ok
 
 
 def test_conferir_servico_nunca_imprime_segredo(monkeypatch, tmp_path, capsys):
+    import hashlib
     c = _conferir(monkeypatch, tmp_path)
-    c._SEGREDOS_VISTOS.add("s3gredo-longo")
+    resumo = "sha256:" + hashlib.sha256(b"s3gredo-longo").hexdigest()
     cont = {"nome": "x", "projeto": "p", "servico": "api", "working_dir": str(tmp_path),
             "config_files": "", "env": {"DSN": "postgres://u:outro-antigo@h/db"}, "started_at": None}
     monkeypatch.setattr(c, "containers", lambda alvo: iter([cont]))
     monkeypatch.setattr(c, "git_estado", lambda wd: None)
-    monkeypatch.setattr(c, "env_declarado", lambda cc: ({"DSN": "postgres://u:s3gredo-longo@h/db"}, None))
+    monkeypatch.setattr(c, "env_declarado", lambda cc: ({"DSN": f"postgres://u:{resumo}@h/db"}, None))
     c.conferir_servico("x")
     saida = capsys.readouterr().out
     assert "s3gredo-longo" not in saida
     assert "outro-antigo" not in saida
+    assert resumo not in saida
     assert "DIFERE" in saida

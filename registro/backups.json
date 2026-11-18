@@ -79,6 +79,24 @@
       "cobertura": "nenhuma",
       "alcance": "aqui",
       "_nota": "Entra na lista no dia em que nasce, sem rotina: alvo que nao esta na lista deixa de ser medido e vira surpresa. Fita, giro, pacote e peca-servida sao registro do que a sessao serviu — perda se paga em historico, nao em restauracao. `mesa_item` e o unico conteudo cuja perda custa re-derivacao, e o estatuto dela vem de arq:0041, que a declara memoria de trabalho SEM durabilidade — o substrato mudou de Valkey para Postgres na fase 6 do #189 e essa ADR ainda nao foi emendada. Ate ser, a postura aqui e a mesma do keycloak-db."
+    },
+    "motor-db": {
+      "o_que": "Postgres do motor de busca (schema motor: índice, trecho e vetor)",
+      "cobertura": "nenhuma",
+      "alcance": "aqui",
+      "_nota": "Materialização reproduzível a partir do acervo e do balde (motor indexar); entra no registro para cobrir os 10 Postgres de registro/bancos.json (DT 851)."
+    },
+    "identidade-db": {
+      "o_que": "Postgres de identidade interna, concessão e correlação externa",
+      "cobertura": "nenhuma",
+      "alcance": "aqui",
+      "_nota": "Mesma postura do keycloak-db: política de acesso e sujeitos estão versionados no git (DT 851)."
+    },
+    "mdm_rh-db": {
+      "o_que": "Postgres de golden source de RH (vínculo, cargo, lotação)",
+      "cobertura": "nenhuma",
+      "alcance": "aqui",
+      "_nota": "Mesma postura do keycloak-db: seed versionado no repositório do core (DT 851)."
     }
   }
 }

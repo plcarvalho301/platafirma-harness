@@ -418,3 +418,15 @@ def test_particao_e_visao_ficam_fora_da_leitura_das_tabelas():
     sqls = [sql for banco, sql in bancos.chamadas if "pg_class" in sql]
     assert sqls and all("not c.relispartition" in s and "relkind in ('r', 'p', 'm')" in s for s in sqls)
     assert "n.nspname = 'acervo'" in sqls[0]
+
+
+def test_bancos_postgres_declarados_cobre_todos_os_10_bancos_do_registro():
+    """DT 851: conferir copia deriva a lista de bancos do inventario declarativo registro/bancos.json,
+    cobrindo todos os 10 PostgreSQL."""
+    bancos_pg = copia.bancos_postgres_declarados()
+    slugs = [b["banco"] for b in bancos_pg]
+    esperados = ["casa", "rag", "analise", "motor", "sessao", "rastreador", "eventos", "identidade", "keycloak", "mdm_rh"]
+    assert slugs == esperados
+    assert all(b["alvo_backup"] is not None and b["cobertura"] != "nao-declarado" for b in bancos_pg)
+    _, dados = _rodar()
+    assert [b["banco"] for b in dados["bancos_postgres"]] == esperados
