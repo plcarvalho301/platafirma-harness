@@ -522,7 +522,7 @@ def test_sincronizar_arvore_suja_rastreada_nao_nomeia_o_clean(tmp_path):
     assert "clean -n -d" not in r.stderr
 
 
-def test_sincronizar_ramo_divergido_do_proprio_upstream_sai_4(tmp_path):
+def test_sincronizar_ramo_divergido_mescla_origin_ramo(tmp_path):
     bancada = _montar(tmp_path)
     wt = _abrir_42(tmp_path, bancada)
     _commit_em(wt, "card.md", "c\n")
@@ -533,8 +533,9 @@ def test_sincronizar_ramo_divergido_do_proprio_upstream_sai_4(tmp_path):
     _git("push", "-q", "origin", "fabrica/42-x", cwd=outra)
     _commit_em(wt, "local.md", "l\n")
     r = _repo(tmp_path, bancada, "s1", "sincronizar", "demo")
-    assert r.returncode == 4, r.stdout
-    assert "vizinho: repo atualizar" in r.stderr
+    assert r.returncode == 0, r.stderr
+    assert "mesclou origin/fabrica/42-x" in r.stdout
+    assert (wt / "da-outra.md").exists() and (wt / "local.md").exists()
 
 
 def test_sincronizar_termina_com_proximo_pr_abrir(tmp_path):

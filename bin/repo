@@ -663,6 +663,39 @@ ato_git() {
     portao_story_em_execucao "$nome" "$c" "$ramo_atual"
   fi
 
+  # DT 797: em repositorio direto em main, a pasta de main nao troca de ramo
+  if direto_em_main "$nome" && [ "$(basename "$c")" = "$PASTA_DIRETO_EM_MAIN" ]; then
+    local _sub="${1:-}"
+    if [ "$_sub" = "switch" ] || [ "$_sub" = "checkout" ]; then
+      local _trocando=0 _alvo="" _arg _apos_dd=0 _esperado="" _skip_next=0
+      if [ -n "${PF_CADEIRA:-}" ]; then
+        _esperado="${PF_CADEIRA#claudinho-}"
+        _esperado="${_esperado#claudinha-}/$PASTA_DIRETO_EM_MAIN"
+      fi
+      for _arg in "${@:2}"; do
+        if [ "$_skip_next" -eq 1 ]; then
+          _alvo="$_arg"; _trocando=1; _skip_next=0; continue
+        fi
+        [ "$_apos_dd" -eq 1 ] && continue
+        case "$_arg" in
+          --) _apos_dd=1 ;;
+          -b|-B|--orphan|-c|-C) _trocando=1; _skip_next=1 ;;
+          -*) ;;
+          *)
+            if [ "$_sub" = "switch" ]; then
+              _trocando=1; [ -z "$_alvo" ] && _alvo="$_arg"
+            elif [ ! -e "$c/$_arg" ] && ! "$GIT" -C "$c" ls-files --error-unmatch -- "$_arg" >/dev/null 2>&1; then
+              _trocando=1; [ -z "$_alvo" ] && _alvo="$_arg"
+            fi
+            ;;
+        esac
+      done
+      if [ "$_trocando" -eq 1 ] && [ "$_alvo" != "$_esperado" ]; then
+        morre "repositório de deliberação ($nome): a pasta de main não troca de ramo${_alvo:+ (tentou '$_alvo')} — mantenha '${_esperado:-<cadeira>/$PASTA_DIRETO_EM_MAIN}' (arq:0083)" 4
+      fi
+    fi
+  fi
+
   if [ "${1:-}" = apply ]; then
     shift
     local tem_unidiff=0
@@ -1345,7 +1378,7 @@ ato_atualizar() {
   if ! "$GIT" -C "$c" merge --ff-only "@{upstream}" >/dev/null 2>&1; then
     local trilha
     trilha="$("$GIT" -C "$c" rev-list --left-right --count "@{upstream}...HEAD" 2>/dev/null)"
-    morre "recuso atualizar '$nome': '$ramo' divergiu de '$up' (atras/frente: ${trilha:-?}). ff-only nao funde nem forca — reconcilie a mao com \`repo ramo\` + merge/rebase deliberado." 4
+    morre "recuso atualizar '$nome': '$ramo' divergiu de '$up' (atras/frente: ${trilha:-?}). vizinho: repo sincronizar $nome (mescla origin/$ramo e origin/main)" 4
   fi
   printf 'atualizado: %s/%s -> %s\n' "$nome" "$ramo" \
     "$("$GIT" -C "$c" log -1 --format='%h %s')"
@@ -1387,19 +1420,26 @@ ato_sincronizar() {
   local fsha rc
   fsha="$(forge_sha "$c" "$ramo")"; rc=$?
   [ "$rc" -eq 5 ] && morre "indeterminavel: nao li origin/$ramo ($fsha)" 5
+  local mesclou_ramo=0 mesclou=0 novos=0
   if [ "$rc" -eq 0 ] && ! "$GIT" -C "$c" merge-base --is-ancestor "$fsha" HEAD 2>/dev/null; then
     if "$GIT" -C "$c" merge-base --is-ancestor HEAD "$fsha" 2>/dev/null; then
       "$GIT" -C "$c" merge -q --ff-only "$fsha" >/dev/null 2>&1 || morre "ff-only de origin/$ramo falhou" 3
     else
-      printf '%s: %s divergiu de origin/%s — nao mesclo main sobre ramo divergido\n' "$VERBO" "$ramo" "$ramo" >&2
-      printf 'vizinho: repo atualizar %s\n' "$nome" >&2
-      exit 4
+      if ! "$GIT" -C "$c" merge -q --no-edit "$fsha" >/dev/null 2>&1; then
+        local conflito_ramo; conflito_ramo="$("$GIT" -C "$c" diff --name-only --diff-filter=U 2>/dev/null)"
+        printf '%s: conflito ao mesclar origin/%s (%s) em %s — mescla aberta na bancada\n' \
+          "$VERBO" "$ramo" "${fsha:0:7}" "$ramo" >&2
+        printf '%s\n' "$conflito_ramo" | sed 's/^/  conflito: /' >&2
+        printf 'vizinho: resolva os arquivos, repo commitar %s, e sincronizar de novo\n' "$nome" >&2
+        printf 'cancelar: repo git %s merge --abort\n' "$nome" >&2
+        exit 4
+      fi
+      mesclou_ramo=1
     fi
   fi
 
   local antes; antes="$("$GIT" -C "$c" rev-parse HEAD)"
   local main; main="$("$GIT" -C "$c" rev-parse --verify -q origin/main)" || morre "indeterminavel: sem origin/main" 5
-  local mesclou=0 novos=0
   if ! "$GIT" -C "$c" merge-base --is-ancestor "$main" HEAD 2>/dev/null; then
     novos="$("$GIT" -C "$c" rev-list --count "HEAD..$main")"
     if ! "$GIT" -C "$c" merge -q --no-edit "$main" >/dev/null 2>&1; then
@@ -1415,7 +1455,7 @@ ato_sincronizar() {
   fi
 
   local head; head="$("$GIT" -C "$c" rev-parse HEAD)"
-  if [ "$mesclou" -eq 0 ] && [ "$rc" -eq 0 ] && [ "$(forge_sha "$c" "$ramo")" = "$head" ]; then
+  if [ "$mesclou" -eq 0 ] && [ "$mesclou_ramo" -eq 0 ] && [ "$rc" -eq 0 ] && [ "$(forge_sha "$c" "$ramo")" = "$head" ]; then
     printf 'já em dia: %s @ %s, origin/%s igual, origin/main %s ja contido\n' "$ramo" "${head:0:7}" "$ramo" "${main:0:7}"
     printf 'próximo: repo pr-abrir %s --titulo <t> [--corpo <c>]\n' "$nome"
     return 0
@@ -1431,6 +1471,9 @@ ato_sincronizar() {
     if [ "$mesclou" -eq 1 ]; then
       printf 'sincronizado: %s = %s (mesclou origin/main %s, %s commit(s) novo(s)); origin/%s = %s [lido do forge]\n' \
         "$ramo" "${head:0:7}" "${main:0:7}" "$novos" "$ramo" "${fsha:0:7}"
+    elif [ "$mesclou_ramo" -eq 1 ]; then
+      printf 'sincronizado: %s = %s (mesclou origin/%s, main ja contido); origin/%s = %s [lido do forge]\n' \
+        "$ramo" "${head:0:7}" "$ramo" "$ramo" "${fsha:0:7}"
     else
       printf 'sincronizado: %s = %s (main ja contido); origin/%s = %s [lido do forge]\n' \
         "$ramo" "${head:0:7}" "$ramo" "${fsha:0:7}"
@@ -1497,7 +1540,13 @@ abrir_direto_em_main() {
       printf 'recolocada: worktree %s estava em %s (contido em origin/main, arvore limpa) -> %s\n' "$wt_dir" "$atual" "$ramo"
       atual="$ramo"
     else
-      morre "a worktree de main $wt_dir esta em '$atual', nao em '$ramo' — nao mexo (para voltar: repo git $nome checkout -B $ramo origin/main)" 4
+      local _marca _dono="" _desde="" _info=""
+      _marca="$(_marca_sessao_ler "$wt_dir")"
+      if [ -n "$_marca" ]; then
+        IFS=$'\t' read -r _dono _desde <<< "$_marca"
+        [ -n "$_dono" ] && _info=" (sessão $_dono desde ${_desde:-?})"
+      fi
+      morre "a worktree de main $wt_dir esta em '$atual', nao em '$ramo'$_info — nao mexo (para voltar: repo git $nome checkout -B $ramo origin/main)" 4
     fi
   fi
   # o ramo da cadeira segue origin/main, sempre (ramo antigo sem upstream ganha o seu)
@@ -1518,6 +1567,7 @@ abrir_direto_em_main() {
   printf '%s: %s (ramo %s @ %s, direto em main: atras de origin/main: %s, a frente: %s, %s)%s\n' \
     "$rotulo" "$wt_dir" "$ramo" "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)" "$atras" "$frente" \
     "$estado_arvore" "$andou"
+  [ -n "${PF_SESSAO:-}" ] && _marca_sessao_escrever "$wt_dir" "$PF_SESSAO"
   local card_num="${card###}"
   if [[ "$card_num" =~ ^[0-9]+$ ]]; then move_card "$card_num" "$nome" "$cadeira" "$sem_mover"; fi
   return 0
@@ -1622,14 +1672,15 @@ sincronizar_direto_em_main() {
   [ "$ramo" != HEAD ] || morre "HEAD destacado em '$nome' — abra a worktree de main: repo abrir ${nome%%@*}" 4
   git_sem_engolir "$c" fetch --prune origin || morre "indeterminavel: fetch do forge falhou ($REPLY)" 5
   local st; st="$("$GIT" -C "$c" status --porcelain --untracked-files=no 2>/dev/null)" || morre "indeterminavel: git status falhou" 5
-  if [ -n "$st" ]; then
+  main="$("$GIT" -C "$c" rev-parse --verify -q origin/main)" || morre "indeterminavel: sem origin/main" 5
+  antes="$("$GIT" -C "$c" rev-parse HEAD)"
+  frente="$("$GIT" -C "$c" rev-list --count "$main..HEAD")" || morre "indeterminavel: rev-list falhou" 5
+  novos="$("$GIT" -C "$c" rev-list --count "HEAD..$main")"
+  if [ "$novos" -gt 0 ] && [ -n "$st" ]; then
     printf '%s: arvore com escrita nao commitada (%s) — nao rebaseio sobre ela\n' "$VERBO" "$(printf '%s\n' "$st" | wc -l) arquivo(s)" >&2
     printf 'vizinho: repo commitar %s -m <msg> <caminhos>\n' "$nome" >&2
     exit 4
   fi
-  main="$("$GIT" -C "$c" rev-parse --verify -q origin/main)" || morre "indeterminavel: sem origin/main" 5
-  antes="$("$GIT" -C "$c" rev-parse HEAD)"
-  frente="$("$GIT" -C "$c" rev-list --count "$main..HEAD")" || morre "indeterminavel: rev-list falhou" 5
   if [ "$frente" -eq 0 ]; then
     if [ "$antes" != "$main" ]; then
       "$GIT" -C "$c" merge -q --ff-only "$main" >/dev/null 2>&1 || morre "ff-only de origin/main falhou" 3
@@ -1637,7 +1688,6 @@ sincronizar_direto_em_main() {
     printf 'já em dia: %s @ %s = origin/main (direto em main, nada local a empurrar)\n' "$ramo" "${main:0:7}"
     return 0
   fi
-  novos="$("$GIT" -C "$c" rev-list --count "HEAD..$main")"
   if [ "$novos" -gt 0 ]; then
     if ! "$GIT" -C "$c" rebase -q "$main" >/dev/null 2>&1; then
       local conflito; conflito="$("$GIT" -C "$c" diff --name-only --diff-filter=U 2>/dev/null)"
@@ -1924,6 +1974,8 @@ cmd_abrir() {
   if direto_em_main "$nome"; then
     [ "$da_producao" -eq 0 ] \
       || morre "repositório de deliberação: --da-producao nao se aplica, a bancada segue origin/main (arq:0083)" 2
+    [ -z "$slug" ] \
+      || morre "repositório de deliberação ($nome): --slug nao se aplica — commit direto em main (arq:0083); rode sem --slug: repo abrir $nome" 2
     abrir_direto_em_main "$nome" "$cadeira" "$card" "$sem_mover"
     return $?
   fi

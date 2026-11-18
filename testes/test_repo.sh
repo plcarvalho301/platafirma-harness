@@ -252,4 +252,133 @@ git -C "$BANCADA_TESTE/platafirma-vazio" rev-parse --verify main >/dev/null 2>&1
 }
 echo "OK: repo abrir em repositorio vazio inicializa main e abre a bancada"
 
+# 6. DTs 814, 797, 793: regime direto em main (platafirma-casa-espelho)
+echo "--- Teste 6: DT 814 — repo abrir --slug em direto_em_main sai 2 ---"
+FORGE_ESPELHO="$TMP_DIR/forge-espelho.git"
+SEMENTE_ESPELHO="$TMP_DIR/semente-espelho"
+git init -q --bare -b main "$FORGE_ESPELHO"
+git clone -q "$FORGE_ESPELHO" "$SEMENTE_ESPELHO" 2>/dev/null
+git -C "$SEMENTE_ESPELHO" config user.name "Test Repo"
+git -C "$SEMENTE_ESPELHO" config user.email "test@platafirma.org"
+echo "base" > "$SEMENTE_ESPELHO/doc.md"
+git -C "$SEMENTE_ESPELHO" add doc.md
+git -C "$SEMENTE_ESPELHO" commit -q -m "base"
+git -C "$SEMENTE_ESPELHO" push -q origin main
+git clone -q "$FORGE_ESPELHO" "$BANCADA_TESTE/platafirma-casa-espelho"
+
+set +e
+out_slug="$(PF_SESSAO="sessao-a" "$VERBO" abrir platafirma-casa-espelho --slug nao-pode 2>&1)"
+rc_slug=$?
+set -e
+[ "$rc_slug" -eq 2 ] || { echo "FALHA: DT 814 devia sair 2, saiu $rc_slug: $out_slug" >&2; exit 1; }
+grep -q -- "--slug nao se aplica" <<< "$out_slug" || { echo "FALHA: DT 814 mensagem sem '--slug nao se aplica': $out_slug" >&2; exit 1; }
+echo "OK: DT 814 — --slug em direto_em_main recusa com 2"
+
+echo "--- Teste 7: DT 797 — repo git nao troca ramo da pasta de main; recusa diz sessao e desde ---"
+PF_SESSAO="sessao-a" "$VERBO" abrir platafirma-casa-espelho >/dev/null
+WT_ESPELHO="$BANCADA_TESTE/wt/platafirma-casa-espelho/ti/main"
+git -C "$WT_ESPELHO" config user.name "Test Repo"
+git -C "$WT_ESPELHO" config user.email "test@platafirma.org"
+
+set +e
+out_sw="$("$VERBO" git platafirma-casa-espelho switch -c outro 2>&1)"
+rc_sw=$?
+out_co="$("$VERBO" git platafirma-casa-espelho checkout -b outro 2>&1)"
+rc_co=$?
+set -e
+[ "$rc_sw" -eq 4 ] || { echo "FALHA: DT 797 switch devia sair 4, saiu $rc_sw: $out_sw" >&2; exit 1; }
+[ "$rc_co" -eq 4 ] || { echo "FALHA: DT 797 checkout -b devia sair 4, saiu $rc_co: $out_co" >&2; exit 1; }
+
+# Simula pasta deixada em outro ramo com escrita suja (nao recuperavel automaticamente)
+git -C "$WT_ESPELHO" checkout -q -b outro-ramo
+echo "sujo" >> "$WT_ESPELHO/doc.md"
+set +e
+out_797="$(PF_SESSAO="sessao-b" "$VERBO" abrir platafirma-casa-espelho 2>&1)"
+rc_797=$?
+set -e
+[ "$rc_797" -eq 4 ] || { echo "FALHA: DT 797 abrir em outro ramo sujo devia sair 4, saiu $rc_797: $out_797" >&2; exit 1; }
+grep -q "sessão sessao-a desde " <<< "$out_797" || { echo "FALHA: DT 797 recusa nao informou sessao e desde: $out_797" >&2; exit 1; }
+# Restaura para o proximo teste
+git -C "$WT_ESPELHO" checkout -q -- doc.md
+"$VERBO" git platafirma-casa-espelho checkout -B ti/main origin/main >/dev/null 2>&1
+git -C "$WT_ESPELHO" branch -D outro-ramo >/dev/null 2>&1 || true
+echo "OK: DT 797 — repo git bloqueia troca de ramo em main e recusa informa sessao e desde"
+
+echo "--- Teste 8: DT 793 — sincronizar_direto_em_main empurra quando atras 0 mesmo com arvore suja ---"
+echo "commit-novo" > "$WT_ESPELHO/novo.md"
+git -C "$WT_ESPELHO" add novo.md
+git -C "$WT_ESPELHO" commit -q -m "commit novo"
+echo "sujo-alheio" >> "$WT_ESPELHO/doc.md"
+
+out_793_ok="$("$VERBO" sincronizar platafirma-casa-espelho 2>&1)" || {
+  echo "FALHA: DT 793 devia empurrar com atras 0 mesmo com arvore suja: $out_793_ok" >&2
+  exit 1
+}
+grep -q "sincronizado: main =" <<< "$out_793_ok" || { echo "FALHA: DT 793 saida inesperada: $out_793_ok" >&2; exit 1; }
+grep -q "sujo-alheio" "$WT_ESPELHO/doc.md" || { echo "FALHA: DT 793 tocou escrita alheia" >&2; exit 1; }
+
+# Agora com atras > 0, deve recusar como antes
+git -C "$SEMENTE_ESPELHO" pull -q origin main
+echo "remoto" >> "$SEMENTE_ESPELHO/doc.md"
+git -C "$SEMENTE_ESPELHO" add doc.md
+git -C "$SEMENTE_ESPELHO" commit -q -m "remoto"
+git -C "$SEMENTE_ESPELHO" push -q origin main
+set +e
+out_793_atras="$("$VERBO" sincronizar platafirma-casa-espelho 2>&1)"
+rc_793_atras=$?
+set -e
+[ "$rc_793_atras" -eq 4 ] || { echo "FALHA: DT 793 com atras > 0 e sujo devia sair 4, saiu $rc_793_atras: $out_793_atras" >&2; exit 1; }
+echo "OK: DT 793 — empurra com atras 0 sem tocar escrita alheia e recusa com atras > 0"
+
+# 9. DT 826: ramo divergido de origin/<ramo>
+echo "--- Teste 9: DT 826 — repo sincronizar mescla ramo divergido de origin/<ramo> ---"
+FORGE_DIV="$TMP_DIR/forge-div.git"
+SEMENTE_DIV="$TMP_DIR/semente-div"
+git init -q --bare -b main "$FORGE_DIV"
+git clone -q "$FORGE_DIV" "$SEMENTE_DIV" 2>/dev/null
+git -C "$SEMENTE_DIV" config user.name "Test Repo"
+git -C "$SEMENTE_DIV" config user.email "test@platafirma.org"
+echo "base" > "$SEMENTE_DIV/base.txt"
+git -C "$SEMENTE_DIV" add base.txt
+git -C "$SEMENTE_DIV" commit -q -m "base"
+git -C "$SEMENTE_DIV" push -q origin main
+git clone -q "$FORGE_DIV" "$BANCADA_TESTE/demo3"
+
+"$VERBO" abrir demo3 --slug div-teste >/dev/null
+WT_DIV="$BANCADA_TESTE/wt/demo3/ti/div-teste"
+git -C "$WT_DIV" config user.name "Test Repo"
+git -C "$WT_DIV" config user.email "test@platafirma.org"
+echo "local" > "$WT_DIV/local.txt"
+git -C "$WT_DIV" add local.txt
+git -C "$WT_DIV" commit -q -m "local"
+"$VERBO" empurrar demo3 >/dev/null
+
+# Outro clone empurra commit proprio no mesmo ramo
+git -C "$SEMENTE_DIV" fetch -q origin
+git -C "$SEMENTE_DIV" checkout -q -b ti/div-teste origin/ti/div-teste
+echo "remoto" > "$SEMENTE_DIV/remoto.txt"
+git -C "$SEMENTE_DIV" add remoto.txt
+git -C "$SEMENTE_DIV" commit -q -m "remoto"
+git -C "$SEMENTE_DIV" push -q origin ti/div-teste
+
+# Local tambem faz commit proprio -> divergido
+echo "local2" > "$WT_DIV/local2.txt"
+git -C "$WT_DIV" add local2.txt
+git -C "$WT_DIV" commit -q -m "local2"
+
+set +e
+out_atu="$("$VERBO" atualizar demo3 2>&1)"
+rc_atu=$?
+set -e
+[ "$rc_atu" -eq 4 ] || { echo "FALHA: DT 826 atualizar divergido devia sair 4, saiu $rc_atu: $out_atu" >&2; exit 1; }
+grep -q "vizinho: repo sincronizar demo3" <<< "$out_atu" || { echo "FALHA: DT 826 atualizar sem vizinho repo sincronizar: $out_atu" >&2; exit 1; }
+
+out_826="$("$VERBO" sincronizar demo3 2>&1)" || {
+  echo "FALHA: DT 826 sincronizar divergido saiu $?: $out_826" >&2
+  exit 1
+}
+grep -q "mesclou origin/ti/div-teste" <<< "$out_826" || { echo "FALHA: DT 826 saida sem mescla de origin/ramo: $out_826" >&2; exit 1; }
+[ -f "$WT_DIV/remoto.txt" ] && [ -f "$WT_DIV/local2.txt" ] || { echo "FALHA: DT 826 arquivos faltando apos mescla" >&2; exit 1; }
+echo "OK: DT 826 — atualizar aponta para sincronizar e sincronizar mescla ramo divergido"
+
 echo "=== Todos os testes do verbo repo passaram com sucesso! ==="

@@ -150,12 +150,16 @@ def test_abrir_da_a_worktree_de_main_da_cadeira_com_ou_sem_card(tmp_path):
     assert _git("rev-parse", "--abbrev-ref", "HEAD", cwd=wt) == "dados/main"
     assert _git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=wt) == "origin/main"
 
-    r = _repo(tmp_path, bancada, "abrir", CASA, "42", "--slug", "x")
+    r = _repo(tmp_path, bancada, "abrir", CASA, "42")
     assert r.returncode == 0, r.stderr
     assert "bancada já aberta" in r.stdout and str(wt) in r.stdout
     assert "card #42: em-refinamento-tecnico" in r.stdout
-    assert not (bancada / "wt" / CASA / "dados" / "42-x").exists()
+    assert not (bancada / "wt" / CASA / "dados" / "42").exists()
     assert _git("branch", "--list", "fabrica/*", cwd=bancada / CASA) == ""
+
+    r_slug = _repo(tmp_path, bancada, "abrir", CASA, "--slug", "x")
+    assert r_slug.returncode == 2
+    assert "--slug nao se aplica" in r_slug.stderr
 
 
 def test_casa_espelho_segue_o_regime_da_casa(tmp_path):
@@ -187,7 +191,7 @@ def test_abrir_de_novo_traz_main_novo_do_forge(tmp_path):
     bancada = _montar(tmp_path)
     wt = _abrir(tmp_path, bancada)
     _main_novo(tmp_path)
-    r = _repo(tmp_path, bancada, "abrir", CASA, "--slug", "qualquer")
+    r = _repo(tmp_path, bancada, "abrir", CASA)
     assert r.returncode == 0, r.stderr
     assert "trouxe 1 commit(s) do forge" in r.stdout
     assert _git("rev-parse", "HEAD", cwd=wt) == _main_do_origin(tmp_path)
@@ -290,6 +294,7 @@ def test_dt487_sincronizar_recusa_rastreado_nao_commitado_e_preserva_nao_rastrea
     wt = _abrir(tmp_path, bancada)
     (wt / "alheio.md").write_text("outra fita\n")
     (wt / "LEIA.md").write_text("edicao nao commitada\n")
+    _main_novo(tmp_path, "OUTRO.md", "novo\n")
     r_sujo = _repo(tmp_path, bancada, "sincronizar", CASA)
     assert r_sujo.returncode == 4
     assert "arvore com escrita nao commitada" in r_sujo.stderr
