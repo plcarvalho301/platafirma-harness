@@ -375,3 +375,27 @@ def test_origem_da_requisicao_so_confia_no_cabecalho_do_conector(tmp_path, clien
     headers = [("cf-connecting-ip", cabecalho)] if cabecalho else []
     _, (linha,) = _nega(tmp_path, headers, client=(cliente, 5000))
     assert linha["origem_requisicao"] == esperado
+
+
+def test_lote_de_verbo_sem_ato_explicito_grava_ato_efetivo_no_audit(tmp_path):
+    """DT-828: membro de lote com o ato no inicio de args grava o ato efetivo no log."""
+    tool = s._faz_tool_verbo("motor", "/bin/true", "motor")
+    with (
+        patch.object(s, "PF_TOOLS_LOTE", True),
+        patch.object(s, "LOG_DIR", tmp_path),
+        patch.object(s, "_autoriza", return_value=None),
+        patch.object(s, "_sessao_resolve", return_value=dict(IDENT)),
+        patch.object(s, "_carimba_turno"),
+        patch.object(s, "_fundamento_do_ato", return_value=(None, None)),
+        patch.object(s, "_run_verbo_blocking", return_value={"exit_code": 0, "stdout": {"texto": "", "bytes_total": 0}}),
+        patch.object(s, "_atos_do_cabecalho", return_value=(frozenset({"buscar"}), frozenset())),
+        patch.object(s, "_perfil_verbo", return_value={"cauda": False, "cosmetica": False, "poda_atos": ()}),
+        patch.object(s, "_escreve", return_value=False),
+        patch.object(s, "_escopo_do_giro"),
+        patch.object(s, "_chapeu_do_giro"),
+    ):
+        asyncio.run(tool(lote=[{"args": ["buscar", "biblioteca", "--necessidade", "x"]}], sessao_id=SID))
+    (linha,) = _linhas(tmp_path)
+    assert linha["tool"] == "motor"
+    assert linha["ato"] == "buscar"
+    assert oplog.validar(linha) == []
