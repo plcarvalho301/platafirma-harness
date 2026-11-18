@@ -3382,6 +3382,25 @@ PF_TOOLS_LOTE = os.environ.get("PF_TOOLS_LOTE", "0") == "1" # chamada em lote (�
 # Quem é retido (o que era leva 2) NÃO mora aqui: é o atributo `retido` do verbo em registro/porta.yaml.
 
 
+# DT 877: o terminal do dono (`bin/pf`, azp pf-cli, superfície `terminal` em
+# registro/superficies.json) chama a porta sem cadeira e sem `monta_sessao`, por desenho.
+# Sem sessão, o sujeito não tinha de onde vir, e todo verbo que exige identidade (infra
+# rodar, que o `pf vault` usa para ler a Olaria) recusava com «PF_SUJEITO ausente». O
+# sujeito aqui é o `sub` do token já validado na borda — a mesma regra da face (#3516) —,
+# e só para a superfície terminal: chamada sem sessão de qualquer outra superfície segue
+# sem sujeito, e a cadeira segue obrigada a abrir sessão.
+SUPERFICIES_SEM_SESSAO = frozenset({"terminal"})
+
+def _sujeito_do_terminal() -> str:
+    # Pelo azp do token, e não pelo header x-pf-superficie, que o cliente escreve.
+    try:
+        quem = _quem()
+        if _mapa_azp_superficie().get(quem.get("azp") or "") not in SUPERFICIES_SEM_SESSAO:
+            return ""
+        return str(quem.get("sub") or "").strip()
+    except Exception:                                       # noqa: BLE001
+        return ""
+
 def _sessao_resolve(sessao_id: str | None) -> dict:
     """cadeira/ordem/sujeito da sessão: SÓ o `sessao_id` que a fita porta, cunhado por
     `monta_sessao`.
@@ -3407,6 +3426,7 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
     out = {"sessao_id": sessao_id or "-", "ordem_id": "-", "cadeira": "", "sujeito": "",
            "origem_sessao": "", "chapeu": ""}
     if not sessao_id or sessao_id == "-":
+        out["sujeito"] = _sujeito_do_terminal()
         return out
     try:
         raw = _rc().get(f"sessao:{sessao_id}")
