@@ -93,7 +93,7 @@ def test_o_compose_liga_cada_instancia_a_declaracao_das_telas_e_as_tres_leituras
 def test_a_lista_de_atos_da_face_motor_e_a_do_cabecalho_do_verbo_real():
     atos = borda.Face("motor", verbo=str(MOTOR)).atos()
     assert set(atos) == {"buscar", "medir", "listar", "ajuste", "indexar", "trocar", "consultas", "trabalhos",
-                         "estado", "parar"}
+                         "estado", "parar", "limpar"}
     assert atos["ajuste"] == {"leitura", "escrita"}
     assert atos["trocar"] == {"escrita"} and atos["indexar"] == {"escrita"}
     assert atos["consultas"] == {"leitura"} and atos["trabalhos"] == {"leitura"}
