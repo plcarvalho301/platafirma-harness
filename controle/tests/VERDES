@@ -370,3 +370,7 @@ tests/test_repo_dt_490.py | bin/repo
 tests/test_repo_dts_744_747.py | bin/repo
 # DTs 774 e 776: sombra.py le motor.trecho na morada motor e cai em evento_recuperacao sem permissao na view bateria_recuperacao.
 testes/test_motor_sombra.py | bin/_motor/sombra.py
+# Story #4359: o ponteiro do processo do estágio no retorno do `tarefas mover` (a linha que o catálogo liga ao estado de destino;
+# recusa, estado sem processo, catálogo que falha e teto de tempo saem sem linha, sem stderr e com o código de saída do mover),
+# contra um rastreador e um `infra` de mentira.
+tests/test_tarefas_ponteiro_estagio.py | bin/tarefas

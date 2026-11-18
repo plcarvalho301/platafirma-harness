@@ -200,6 +200,9 @@ uso:
                                           se PODE ir a partir do estado atual. Item com
                                           pai devolve junto o derivado do pai e as irmãs
                                           abertas (arq:0095) — é a âncora do PARCIAL:
+                                          No sucesso traz ainda, depois deles, a linha do
+                                          processo que conduz o estado de destino, quando o
+                                          catálogo o liga (card #4359)
   tarefas mover <pai> priorizada --decisao <n>
                                           a aposta: <n> é o comentário de decisão do PRÓPRIO
                                           pai; sem ele a API recusa dizendo como informar (R36)
@@ -2018,6 +2021,119 @@ for l in linhas_u[inicio:]:
 '
 }
 
+# ponteiro_do_estagio <nivel> <estado> -- a linha do processo que conduz o estado de destino do
+# card movido (card #4359). A ligação mora na ficha do processo, no catálogo da casa (propriedade
+# `conduz`, valores `<nivel>:<estado>`); o verbo só a lê e não guarda tabela de estado para
+# processo, porque uma cópia aqui seria a segunda verdade. O ponteiro INFORMA E NÃO BARRA: infra
+# ausente, saída diferente de 0, JSON ou fichas ilegíveis e teto estourado não imprimem nada, nem
+# aviso nem stderr, e não mudam o código de saída do `mover`. O executável do infra se troca por
+# PF_INFRA_BIN (o ponto de substituição da prova), e o teto da consulta inteira, em segundos, por
+# PF_PONTEIRO_TETO. As classes lidas são `processo` e as filhas dela; o caminho do documento sai do
+# endereço da shape da classe, com <slug> trocado pela chave sem o prefixo.
+ponteiro_do_estagio() {
+  local nivel="${1:-}" estado="${2:-}"
+  [ -n "$nivel" ] && [ -n "$estado" ] || return 0
+  PYTHONUTF8=1 PYTHONIOENCODING=utf-8 \
+  PF_PONTEIRO_INFRA="${PF_INFRA_BIN:-$(dirname "$(readlink -f "$0")")/infra}" \
+    python3 - "$nivel:$estado" "${PF_PONTEIRO_TETO:-20}" 2>/dev/null <<'PY' || true
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+alvo, teto = sys.argv[1], float(sys.argv[2])
+infra = os.environ["PF_PONTEIRO_INFRA"]
+fim = time.monotonic() + teto
+
+
+def rodar(*args):
+    restante = fim - time.monotonic()
+    if restante <= 0:
+        raise TimeoutError("teto")
+    # grupo de processos à parte: o infra passa a vez a um python que lança outro, e só o grupo
+    # inteiro some quando o teto estoura (o neto órfão seguraria o banco por até o teto da peça)
+    p = subprocess.Popen([infra, "rodar", "ontologia", "--", *args, "--json"],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         encoding="utf-8", start_new_session=True)
+    try:
+        saida, _ = p.communicate(timeout=restante)
+    except BaseException:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        p.communicate()
+        raise
+    if p.returncode != 0:
+        raise RuntimeError("catalogo")
+    return json.loads(saida)
+
+
+def limpo(valor):
+    return valor.strip().strip("'\"")
+
+
+def conduz_por_ficha(texto):
+    achados, chave, lista = {}, None, False
+    for linha in texto.splitlines():
+        s = linha.strip()
+        if linha.startswith("- chave:"):
+            chave, lista = limpo(linha.split(":", 1)[1]), False
+        elif chave is None:
+            continue
+        elif s.startswith("conduz:"):
+            resto = limpo(s.split(":", 1)[1])
+            achados.setdefault(chave, [])
+            if resto:
+                achados[chave].append(resto)
+            lista = not resto
+        elif lista and s.startswith("- "):
+            achados[chave].append(limpo(s[2:]))
+        else:
+            lista = False
+    return achados
+
+
+def endereco_da_classe(texto):
+    blocos, atual = {}, None
+    for linha in texto.splitlines():
+        s = linha.strip()
+        if linha in ("  golden:", "  referencia:"):
+            atual = s[:-1]
+        elif atual and linha.startswith("    "):
+            if s.startswith("endereco:"):
+                blocos.setdefault(atual, limpo(s.split(":", 1)[1]))
+        elif linha.startswith("  ") and not linha.startswith("   "):
+            atual = None
+    endereco = blocos.get("golden") or blocos.get("referencia")
+    if not endereco:
+        raise RuntimeError("sem endereco")
+    return endereco
+
+
+try:
+    filhas = rodar("listar", "shape", "--filhas", "processo")["chaves"]
+    classes = ["processo"] + [c for c in filhas if c != "processo"]
+    with ThreadPoolExecutor(max_workers=len(classes)) as pool:
+        lidas = list(pool.map(
+            lambda c: (c, conduz_por_ficha(rodar("ler", c, "--fichas")["yaml"])), classes))
+    ligados = sorted((c, k) for c, fichas in lidas for k, valores in fichas.items() if alvo in valores)
+    linhas = []
+    for classe, chave in ligados:
+        endereco = endereco_da_classe(rodar("ler", "shape", classe)["yaml"])
+        slug = chave.split(":", 1)[-1]
+        linhas.append(f"  processo do estágio: {chave} — leia {endereco.replace('<slug>', slug)}")
+    if linhas:
+        print("\n".join(linhas))
+except Exception:
+    pass
+PY
+  return 0
+}
+
 mover() {
   local id; id=$(so_id "${1:?uso: tarefas mover <id> <estado> [--motivo \"...\"]}")
   local destino="${2:?uso: tarefas mover <id> <estado> [--motivo \"...\"]}"; shift 2
@@ -2110,6 +2226,18 @@ mover() {
   # que entra em `em-execucao` também tem de saber quantas irmãs faltam.
   local pai; pai=$(printf '%s' "$resp" | jq -r '.pai // empty')
   [ -n "$pai" ] && pai_e_irmas "$pai"
+  # PONTEIRO DO PROCESSO DO ESTÁGIO (card #4359): só aqui, no caminho de sucesso, depois do pai e das
+  # irmãs; a recusa já saiu em `envia` e nunca chega a esta linha. Nível e estado vêm do retorno do PATCH
+  # e, se ele não os trouxer, do detalhe do item. A consulta nunca muda o código de saída.
+  local nivel_novo estado_novo
+  nivel_novo=$(printf '%s' "$resp" | jq -r '.nivel_nome // empty' 2>/dev/null) || nivel_novo=""
+  estado_novo=$(printf '%s' "$resp" | jq -r '.estado // empty' 2>/dev/null) || estado_novo=""
+  if [ -z "$nivel_novo" ] || [ -z "$estado_novo" ]; then
+    local detalhe_novo; detalhe_novo=$(busca GET "/itens/$id" 2>/dev/null) || detalhe_novo=""
+    [ -n "$nivel_novo" ] || nivel_novo=$(printf '%s' "$detalhe_novo" | jq -r '.nivel_nome // empty' 2>/dev/null) || nivel_novo=""
+    [ -n "$estado_novo" ] || estado_novo=$(printf '%s' "$detalhe_novo" | jq -r '.estado // empty' 2>/dev/null) || estado_novo=""
+  fi
+  ponteiro_do_estagio "$nivel_novo" "$estado_novo"
   # AVISO À DONA (ordem do dono, 27/09/2026): fechou a última filha e o pai parou em
   # `em-homologacao` — a conferência da feature/épico é da gestão estratégica ou da cadeira
   # dona dele, e depois do dono. Quem executou a story nem sempre é a dona; sem o aviso, o dono pedia à mão.
