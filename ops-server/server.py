@@ -1873,9 +1873,10 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
             r.setdefault("avisos", []).append(_aviso)
             if "aviso" not in r:
                 r["aviso"] = _aviso
+        _ato_audit = _ato_ef or (argv[1] if len(argv) > 1 else None)
         _audit(tool=slug, evento="verbo", via=nome,
-               ato=argv[1] if len(argv) > 1 else None, args=" ".join(argv[2:])[:CMD_CAP],
-               **_documento_lido(slug, argv[1] if len(argv) > 1 else None, argv[2:]),
+               ato=_ato_audit, args=" ".join(argv[2:])[:CMD_CAP],
+               **_documento_lido(slug, _ato_audit, argv[2:]),
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
                bytes_stdout=(r.get("stdout") or {}).get("bytes_total") if isinstance(r.get("stdout"), dict) else None,
@@ -3822,8 +3823,9 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                            cosmetica=_cosmetica(_perf, _ato_ef),
                            escrita=_escreve(slug, binario, _ato_ef),
                            esquece=bool(item.get("inteiro")))
-                _audit(tool=slug, ato=_ato or None, args=" ".join(_args)[:CMD_CAP],
-                       **_documento_lido(slug, _ato, _args),
+                _ato_audit = _ato or _ato_ef or None
+                _audit(tool=slug, ato=_ato_audit, args=" ".join(_args)[:CMD_CAP],
+                       **_documento_lido(slug, _ato_audit, _args),
                        cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                        ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
                        bytes_stdout=(r.get("stdout") or {}).get("bytes_total"),
@@ -3876,8 +3878,9 @@ def _faz_tool_verbo(slug: str, binario: str, descricao: str):
                    cosmetica=_cosmetica(_perf, _ato_ef),
                    escrita=_escreve(slug, binario, _ato_ef),
                    esquece=inteiro)
-        _audit(tool=slug, ato=ato or None, args=" ".join(args)[:CMD_CAP],
-               **_documento_lido(slug, ato, args),
+        _ato_audit = ato or _ato_ef or None
+        _audit(tool=slug, ato=_ato_audit, args=" ".join(args)[:CMD_CAP],
+               **_documento_lido(slug, _ato_audit, args),
                cadeira=ident["cadeira"] or None, sessao_id=ident["sessao_id"],
                ordem_id=ident["ordem_id"], exit_code=r.get("exit_code"), erro=r.get("erro"),
                bytes_stdout=r.get("stdout", {}).get("bytes_total"),
