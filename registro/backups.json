@@ -48,7 +48,7 @@
       "log": "/srv/platafirma/casa/var/log/cron/backup-rag-minio.log"
     },
     "eventos-db": {
-      "o_que": "Postgres do banco de eventos de plataforma (schema plataforma: eixos do host, morte por limite)",
+      "o_que": "Postgres do banco de eventos (schemas plataforma e negocio: eixos do host, morte por limite e mensagem)",
       "cobertura": "timer eventos-backup do claudinho, 03:55",
       "diretorio": "/srv/platafirma/casa/dados/backups/eventos",
       "padrao": "eventos-*.sql.gz",

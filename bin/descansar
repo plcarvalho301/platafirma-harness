@@ -3,7 +3,7 @@
 # capacidade: memoria
 # dono: ia
 # use para: «encerra», «fecha por hoje», «paramos aqui», ANTES de encerrar o expediente
-# atos: fita, varredura
+# atos: fita, varredura, publicar
 # forma: relatorio
 # cauda: sim
 #
@@ -387,8 +387,7 @@ def puxado_de_fora(curto, sessao_id, ordem_id, diretorio=None, resolver=resolve_
     chapeu = os.environ.get("PF_CHAPEU", "").strip() or "<chapeu>"
     return ([f"  {len(linhas)} leitura(s) de fora da cadeira; marque so o que entrou na resposta"]
             + linhas
-            + [f"  marcar: `mesa aresta {chapeu} --de conceito:<slug>|termo:<texto> "
-               "--para <ponta> --para-que \"<linha>\"`"])
+            + ["  publicar: `descansar publicar` (JSON na entrada padrao com enunciado, destinatario, tipo-de-mensagem e etiqueta)"])
 
 
 # ------------------------------------------------------------------ a poda saiu daqui (#3884)
@@ -640,6 +639,41 @@ def ato_varredura(args):
     return 1 if achados else 0
 
 
+def ato_publicar(args):
+    """Publica uma mensagem (JSON no stdin) na familia negocio.mensagem do banco de eventos (#4355)."""
+    from descanso.publicar import Recusada, SemDestino, publicar
+
+    como_json = bool(getattr(args, "como_json", False))
+    bruto = "" if sys.stdin is None or sys.stdin.isatty() else sys.stdin.read().strip()
+
+    def _sai(msg, codigo):
+        if como_json:
+            print(json.dumps({"erro": msg, "exit_code": codigo}, ensure_ascii=False))
+        else:
+            print(msg, file=sys.stderr)
+        return codigo
+
+    try:
+        dado = json.loads(bruto) if bruto else None
+    except ValueError as erro:
+        return _sai(f"a mensagem não é JSON: {erro}", 2)
+    sessao = (os.environ.get("PF_SESSAO") or "").strip() or None
+    cadeira = (os.environ.get("PF_CADEIRA") or "").strip() or None
+    try:
+        msg, gravou = publicar(dado, sessao=sessao, cadeira=cadeira)
+    except Recusada as erro:
+        return _sai(f"recusada: {erro}", 2)
+    except SemDestino as erro:
+        return _sai(str(erro), 3)
+    saida = {"chave": msg.chave(), "gravada": gravou, "tipo-de-mensagem": msg.tipo,
+             "destinatario": msg.destinatario, "etiqueta": msg.etiqueta, "correlacao": msg.correlacao}
+    if como_json:
+        print(json.dumps(saida, ensure_ascii=False))
+    else:
+        print(("gravada " if gravou else "já estava ") + msg.chave()[:12])
+    return 0
+
+
 def main():
     # --ajuda UNIVERSAL (card #2868, ex-#2274 defeito 4): argparse ja da -h/--help;
     # aqui so mapeamos o alias PT --ajuda -> --help antes do parse, sem colidir com
@@ -663,6 +697,10 @@ def main():
 
     v = sub.add_parser("varredura", help="passada por todas as cadeiras; so o que esta fora do lugar")
     v.set_defaults(func=ato_varredura)
+
+    pub = sub.add_parser("publicar", help="publica uma mensagem (JSON na entrada padrao) no banco de eventos")
+    pub.add_argument("--json", action="store_true", dest="como_json", help="saida em JSON")
+    pub.set_defaults(func=ato_publicar)
 
     args = p.parse_args()
     if not args.ato:
