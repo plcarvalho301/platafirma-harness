@@ -235,6 +235,37 @@ def test_run_verbo_blocking_sem_chave_sujeito_no_ident_nao_quebra():
     assert "PF_SUJEITO" not in capturado["env"]
 
 
+# ---------------------------------------------------------------- terminal do dono sem sessão (DT 877)
+# `bin/pf` (azp pf-cli, superfície terminal) chama sem `monta_sessao` por desenho; o sujeito
+# vem do `sub` do token validado, só para essa superfície.
+
+def _mapa_terminal():
+    return {"pf-cli": "terminal", "claudinho-mcp": "claude.ai"}
+
+
+def test_sessao_resolve_sem_sessao_do_terminal_traz_sub_do_token():
+    with patch.object(s, "_quem", return_value={"azp": "pf-cli", "sub": "dono-sub"}), \
+         patch.object(s, "_mapa_azp_superficie", side_effect=_mapa_terminal):
+        out = s._sessao_resolve(None)
+    assert out["sujeito"] == "dono-sub"
+    assert out["cadeira"] == ""
+    assert out["sessao_id"] == "-"
+
+
+def test_sessao_resolve_sem_sessao_de_outra_superficie_segue_sem_sujeito():
+    with patch.object(s, "_quem", return_value={"azp": "claudinho-mcp", "sub": "dono-sub"}), \
+         patch.object(s, "_mapa_azp_superficie", side_effect=_mapa_terminal):
+        out = s._sessao_resolve(None)
+    assert out["sujeito"] == ""
+
+
+def test_sessao_resolve_sem_sessao_sem_token_segue_sem_sujeito():
+    with patch.object(s, "_quem", return_value={}), \
+         patch.object(s, "_mapa_azp_superficie", side_effect=_mapa_terminal):
+        out = s._sessao_resolve("-")
+    assert out["sujeito"] == ""
+
+
 # ---------------------------------------------------------------- PF_CHAPEU no execve (card #3367)
 
 def test_sessao_resolve_traz_chapeu_da_chave_viva():
