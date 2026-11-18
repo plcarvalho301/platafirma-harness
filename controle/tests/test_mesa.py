@@ -927,66 +927,41 @@ def test_legado_separa_vazio_orfao_e_cabeca(tmp_path):
                     "cabeça": ["abertura/gestao-estrategica/caderno.md"]}
 
 
-# --- DT 105: anexar texto avulso ao legado de caderno com ponteiro de origem ------------------
+# --- S4355: rota de escrita do caderno fechada, apontando para descansar publicar -------------
 
-def test_legado_caderno_anexar_grava_com_chave_origem_e_entra_a_triar(monkeypatch, capsys):
+def test_legado_caderno_recusa_com_exit_2_e_aponta_descansar_publicar(monkeypatch, capsys):
     mesa = carrega_mesa()
     cursor = _Cursor()
     monkeypatch.setattr(mesa, "pg", lambda *a, **k: _Conexao(cursor))
-    texto = "## conhecimento curado\n- lição que ficou em PR sem mesclar\n"
-    monkeypatch.setattr("sys.stdin", io.StringIO(texto))
-
     rc = mesa.ato_legado(argparse.Namespace(
         caderno=True, capturar=False, anexar="dados/ontologia",
         origem="pr:platafirma-harness#312", corpo=False, triado=None,
     ))
-    saida = capsys.readouterr()
-    assert rc == 0
-    assert saida.err == ""
-    assert "anexado pr:platafirma-harness#312 em [dados/ontologia]" in saida.out
-    assert len(cursor.feitos) == 1
-    sql, params = cursor.feitos[0]
-    assert "INSERT INTO sessao.caderno_legado" in sql
-    assert params[:4] == ("pr:platafirma-harness#312", "dados", "ontologia", texto)
-    assert params[4] == len(texto.encode("utf-8"))
-
-
-def test_legado_caderno_anexar_recusa_sem_origem_sem_caderno_ou_stdin_vazio(monkeypatch, capsys):
-    mesa = carrega_mesa()
-    cursor = _Cursor()
-    monkeypatch.setattr(mesa, "pg", lambda *a, **k: _Conexao(cursor))
-
-    # Sem --caderno
-    rc = mesa.ato_legado(argparse.Namespace(
-        caderno=False, capturar=False, anexar="dados/ontologia", origem="pr:1",
-        corpo=False, triado=None,
-    ))
-    assert rc == 2 and "--caderno" in capsys.readouterr().err
-
-    # Sem --origem
-    monkeypatch.setattr("sys.stdin", io.StringIO("texto"))
-    rc = mesa.ato_legado(argparse.Namespace(
-        caderno=True, capturar=False, anexar="dados/ontologia", origem=None,
-        corpo=False, triado=None,
-    ))
-    assert rc == 2 and "--origem" in capsys.readouterr().err
-
-    # Alvo fora de <cadeira>/<chapeu>
-    monkeypatch.setattr("sys.stdin", io.StringIO("texto"))
-    rc = mesa.ato_legado(argparse.Namespace(
-        caderno=True, capturar=False, anexar="so-um-slug", origem="pr:1",
-        corpo=False, triado=None,
-    ))
-    assert rc == 2 and "<cadeira>/<chapeu>" in capsys.readouterr().err
-
-    # Stdin vazio
-    monkeypatch.setattr("sys.stdin", io.StringIO("   \n"))
-    rc = mesa.ato_legado(argparse.Namespace(
-        caderno=True, capturar=False, anexar="dados/ontologia", origem="pr:1",
-        corpo=False, triado=None,
-    ))
-    assert rc == 2 and "vazio" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert rc == 2 and "descansar publicar" in err
     assert cursor.feitos == []
+
+
+@pytest.mark.parametrize("argv", [
+    ["mesa", "escrever", "dados", "--licao", "x", "--caso", "#4355"],
+    ["mesa", "substituir", "c1", "novo"],
+    ["mesa", "confirmar", "c1"],
+    ["mesa", "retirar", "c1", "--motivo", "x"],
+    ["mesa", "restaurar", "c1"],
+    ["mesa", "tombar", "c1", "--destino", "chapeu:dados/engenharia-de-dados"],
+    ["mesa", "apontar", "c1", "--motivo", "duplicata"],
+    ["mesa", "aresta", "engenharia-de-dados", "--de", "termo:a", "--para", "termo:b", "--para-que", "x"],
+    ["mesa", "veredito", "--de", "a", "--para", "b", "--retirar", "x"],
+    ["mesa", "balde"],
+    ["mesa", "podar"],
+    ["mesa", "legado", "--caderno"],
+])
+def test_atos_de_escrita_do_caderno_recusam_com_exit_2_e_apontam_descansar_publicar(monkeypatch, capsys, argv):
+    mesa = carrega_mesa()
+    monkeypatch.setattr("sys.argv", argv)
+    rc = mesa.main()
+    err = capsys.readouterr().err
+    assert rc == 2 and "descansar publicar" in err
 
 
 # --- DT 425: corrigir ato e/ou alvo de item de mesa sem marcá-lo como feito -------------------

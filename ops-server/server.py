@@ -119,7 +119,7 @@ LOG_DIR = oplog.diretorio()    # onde mora o bruto e do lib/oplog; o teto da lin
 CMD_CAP = 2_000        # teto do comando gravado na auditoria
 
 # Segredos da instância não descem para o subprocesso.
-ENV_OCULTO = ("OPS_AUTH_TOKEN", "TUNNEL_TOKEN")
+ENV_OCULTO = ("OPS_AUTH_TOKEN", "TUNNEL_TOKEN", "EVENTOS_NEGOCIO_TOKEN")
 
 _sessao: ContextVar[str] = ContextVar("sessao", default="-")
 
@@ -3673,6 +3673,8 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
         env["PF_CHAPEU"] = ident["chapeu"]
     d_cwd = CASA if CASA.is_dir() else Path.cwd()
     slug = Path(argv[0]).name
+    if slug == "descansar" and os.environ.get("EVENTOS_NEGOCIO_TOKEN"):
+        env["EVENTOS_NEGOCIO_TOKEN"] = os.environ["EVENTOS_NEGOCIO_TOKEN"]
     linha = " ".join([slug] + [str(a) for a in argv[1:]])[:CMD_CAP]
     # Defesa extra (#3124): quem chega aqui deveria vir normalizado dos pontos de
     # entrada (_stdin_texto na tool, no lote, em _item_de_lote) — mas se nao veio, nao

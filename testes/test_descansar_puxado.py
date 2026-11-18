@@ -119,7 +119,7 @@ def test_lista_o_documento_de_outra_cadeira_e_deixa_o_da_propria_fora(log_ops, m
     assert f"obra:{UUID_IA}" not in texto, "obra do dominio de mesmo nome da cadeira"
     assert "casa:adr/arq:0120" in texto and "dono não resolvido" in texto, "nao resolvido fica, dito"
     assert linhas[0].startswith("  5 leitura(s) de fora da cadeira")
-    assert "mesa aresta <chapeu> --de" in linhas[-1]
+    assert "descansar publicar" in linhas[-1]
 
 
 def test_acervo_fora_do_ar_lista_tudo_com_o_dono_indeterminavel(log_ops):
@@ -136,10 +136,10 @@ def test_fita_que_nao_leu_nada_de_fora_diz_isso(log_ops):
     assert linhas == ["  nada de fora da cadeira lido pela chave nesta fita (0 giro(s) lido(s))"]
 
 
-def test_o_chapeu_do_ambiente_vai_na_linha_de_marcar(log_ops, monkeypatch):
+def test_a_linha_de_marcar_aponta_descansar_publicar(log_ops, monkeypatch):
     monkeypatch.setenv("PF_CHAPEU", "engenharia-de-harness")
     linhas = descansar.puxado_de_fora("ia", SID, OID, log_ops, resolver=lambda a: ACERVO)
-    assert "mesa aresta engenharia-de-harness --de" in linhas[-1]
+    assert "descansar publicar" in linhas[-1]
 
 
 # ---------------------------------------------------------------- o indice do banco

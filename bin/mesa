@@ -519,7 +519,7 @@ def ato_legado(args):
     de triagem: o que ainda tem ato vira `mesa item`, o resto morre com o registro.
     Com --caderno, o legado de caderno (arq:0120 §11), outra tabela e outra triagem."""
     if getattr(args, "caderno", False):
-        return _legado_caderno(args)
+        return _recusar_escrita_caderno("legado --caderno")
     if getattr(args, "capturar", False):
         sys.stderr.write("erro: --capturar e do legado de caderno: `mesa legado --caderno --capturar`\n")
         return 2
@@ -2280,6 +2280,20 @@ def ato_podar(args, decide=None, envia=None):
     return 3 if falhas else 0
 
 
+ATOS_CADERNO_FECHADOS = frozenset({
+    "escrever", "substituir", "confirmar", "retirar", "restaurar",
+    "tombar", "apontar", "aresta", "veredito", "balde", "podar",
+})
+
+
+def _recusar_escrita_caderno(ato: str) -> int:
+    sys.stderr.write(
+        f"erro: a escrita do caderno (`mesa {ato}`) fechou (story #4355); "
+        "publique a mensagem por `descansar publicar` (JSON na entrada padrao).\n"
+    )
+    return 2
+
+
 def main():
     # --ajuda UNIVERSAL (card #2868, ex-#2274 defeito 4): argparse ja da -h/--help;
     # aqui so mapeamos o alias PT --ajuda -> --help antes do parse, sem colidir com
@@ -2453,6 +2467,8 @@ def main():
     if not getattr(args, "func", None):
         p.print_help()
         return 2
+    if args.subcomando in ATOS_CADERNO_FECHADOS:
+        return _recusar_escrita_caderno(args.subcomando)
     return args.func(args)
 
 
