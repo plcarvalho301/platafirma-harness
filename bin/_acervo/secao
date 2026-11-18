@@ -84,7 +84,14 @@ def _post(corpo):
 
 def ler(particao, ids, quero_json, post=None):
     post = post or _post
-    dados = post({"particao": particao, "secao_ids": ids})
+    corpo = {"particao": particao, "secao_ids": ids}
+    sessao_id = os.environ.get("PF_SESSAO", "").strip()
+    ordem_id = os.environ.get("PF_ORDEM_ID", "").strip()
+    if sessao_id:
+        corpo["sessao_id"] = sessao_id
+    if ordem_id:
+        corpo["ordem_id"] = ordem_id
+    dados = post(corpo)
     achadas = dados.get("secoes") or []
     faltam = dados.get("nao_achadas") or []
     if quero_json:
