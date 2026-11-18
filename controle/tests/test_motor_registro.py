@@ -26,7 +26,7 @@ loader.exec_module(registrar)
 
 MOTOR = REPO_ROOT / "bin" / "motor"
 ATOS = ["listar", "ajuste", "buscar", "medir", "indexar", "trocar", "sortear", "lintar", "parear", "escrever", "julgar",
-        "eleger", "consultas", "trabalhos", "estado", "parar"]
+        "eleger", "consultas", "trabalhos", "estado", "parar", "limpar"]
 # julgar: #3350; consultas e trabalhos: #3513; estado e parar: #3518; raciocinar saiu com a ontologia velha (#4313)
 # os 11 ids de acervo.ferramental_recurso (047): a FK reprova qualquer outro
 RECURSOS = {"acervo.obra", "acervo.casa", "acervo.registro", "acervo.*", "release", "repo", "rastreador", "malha",
@@ -82,7 +82,7 @@ def test_a_face_cobre_os_atos_da_emenda_e_deixa_a_exclusao_de_fora():
     julgar, lintar e eleger ficam na exclusao "instrumento de medida da ia"."""
     faces = _chaves("face")
     assert sorted(faces) == sorted(["buscar", "medir", "listar", "ajuste", "indexar", "trocar", "consultas", "trabalhos",
-                                    "estado", "parar"])
+                                    "estado", "parar", "limpar"])
     for excluido in ("sortear", "parear", "escrever", "julgar", "lintar", "eleger"):
         assert excluido not in faces
     assert all(f in ATOS for f in faces)
