@@ -2227,16 +2227,11 @@ mover() {
   local pai; pai=$(printf '%s' "$resp" | jq -r '.pai // empty')
   [ -n "$pai" ] && pai_e_irmas "$pai"
   # PONTEIRO DO PROCESSO DO ESTÁGIO (card #4359): só aqui, no caminho de sucesso, depois do pai e das
-  # irmãs; a recusa já saiu em `envia` e nunca chega a esta linha. Nível e estado vêm do retorno do PATCH
-  # e, se ele não os trouxer, do detalhe do item. A consulta nunca muda o código de saída.
+  # irmãs; a recusa já saiu em `envia` e nunca chega a esta linha. Nível e estado vêm do retorno do PATCH,
+  # que os traz; sem eles não há ponteiro. A consulta nunca muda o código de saída.
   local nivel_novo estado_novo
   nivel_novo=$(printf '%s' "$resp" | jq -r '.nivel_nome // empty' 2>/dev/null) || nivel_novo=""
   estado_novo=$(printf '%s' "$resp" | jq -r '.estado // empty' 2>/dev/null) || estado_novo=""
-  if [ -z "$nivel_novo" ] || [ -z "$estado_novo" ]; then
-    local detalhe_novo; detalhe_novo=$(busca GET "/itens/$id" 2>/dev/null) || detalhe_novo=""
-    [ -n "$nivel_novo" ] || nivel_novo=$(printf '%s' "$detalhe_novo" | jq -r '.nivel_nome // empty' 2>/dev/null) || nivel_novo=""
-    [ -n "$estado_novo" ] || estado_novo=$(printf '%s' "$detalhe_novo" | jq -r '.estado // empty' 2>/dev/null) || estado_novo=""
-  fi
   ponteiro_do_estagio "$nivel_novo" "$estado_novo"
   # AVISO À DONA (ordem do dono, 27/09/2026): fechou a última filha e o pai parou em
   # `em-homologacao` — a conferência da feature/épico é da gestão estratégica ou da cadeira

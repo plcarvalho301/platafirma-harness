@@ -284,12 +284,13 @@ def test_sem_identidade_o_infra_recusa_e_o_ponteiro_some_calado(api, infra, tmp_
     assert "processo do estágio" not in r.stdout and r.stderr == ""
 
 
-def test_sem_nivel_ou_estado_no_retorno_do_patch_o_verbo_le_o_detalhe_do_item(api, infra, tmp_path):
+def test_retorno_do_patch_sem_nivel_ou_estado_sai_sem_ponteiro_e_sem_nova_leitura(api, infra, tmp_path):
     api.rotas[("PATCH", "/api/itens/5000")] = (200, {"id": 5000, "titulo": "o card", "estado_nome": "x"})
-    api.rotas[("GET", "/api/itens/5000")] = (200, movido("story", "em-refinamento-tecnico"))
     r = mover(api, infra, "em-refinamento-tecnico", tmp_path=tmp_path)
     assert r.returncode == 0, r.stderr
-    assert r.stdout.splitlines()[-1] == LINHA_REFINAR
+    assert "processo do estágio" not in r.stdout and r.stderr == ""
+    assert chamadas(infra) == []
+    assert [c["metodo"] for c in api.recebido if c["caminho"] != "/api/registro"] == ["PATCH"]
 
 
 def test_o_verbo_nao_guarda_tabela_de_estado_para_processo(api, infra, tmp_path):
