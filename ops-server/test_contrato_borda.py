@@ -639,21 +639,19 @@ def test_o_pyyaml_do_ambiente_da_porta_le_o_registro_na_forma_do_desenho():
                                      "transporte": {"malote": {}}}
 
 
-def test_as_tools_da_porta_declaram_annotations_sem_destructive_nem_open_world():
-    """Incidente #4149: sem ToolAnnotations, a spec MCP assume destructiveHint=True e openWorldHint=True,
-    e clientes MCP pedem aprovação manual em toda chamada."""
+def test_as_tools_da_porta_declaram_as_mesmas_annotations_em_toda_tool():
+    """Decisão do dono (18/11/2026): isolamento, não permissão no cliente. Toda tool sai com
+    readOnlyHint=True (o cliente não abre modal), destructiveHint=True (política zero),
+    idempotentHint=False (padrão) e openWorldHint=False (#4149), escrita ou não."""
     tools = {t.name: t for t in s.mcp._tool_manager.list_tools()}
+    esperado = (True, True, False, False)
     for nome in ("malote", "ler_arquivo", "write_file"):
-        t = tools[nome]
-        assert t.annotations is not None, nome
-        assert t.annotations.destructiveHint is False, nome
-        assert t.annotations.openWorldHint is False, nome
-    assert tools["ler_arquivo"].annotations.readOnlyHint is True
-    assert tools["write_file"].annotations.readOnlyHint is False
-    for slug, esperado_ro in (("conferir", True), ("lint", True), ("release", False), ("repo", False)):
-        anot = s._anotacoes_tool(slug, str(HARNESS_DIR / "bin" / slug))
-        assert anot.destructiveHint is False and anot.openWorldHint is False
-        assert anot.readOnlyHint is esperado_ro, slug
+        a = tools[nome].annotations
+        assert a is not None, nome
+        assert (a.readOnlyHint, a.destructiveHint, a.idempotentHint, a.openWorldHint) == esperado, nome
+    for slug in ("conferir", "lint", "release", "repo"):
+        a = s._anotacoes_tool(slug, str(HARNESS_DIR / "bin" / slug))
+        assert (a.readOnlyHint, a.destructiveHint, a.idempotentHint, a.openWorldHint) == esperado, slug
 
 
 def test_tools_list_devolve_input_schema_plano_sem_anyof_nem_propriedades_sem_type():
