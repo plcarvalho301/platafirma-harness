@@ -94,5 +94,16 @@
     "ambiente": "olaria",
     "teto_s": 600,
     "motivo": "S4297: rodada da esteira isolada e gravação do veredito pelo coletor da release servida"
+  },
+  "protecao": {
+    "dono": "engenharia",
+    "origem": "release",
+    "dir": "casa-espelho",
+    "cwd": "outros_repos/harness/bin/_release/conferir",
+    "modulo": "protecao_main",
+    "pythonpath": ["outros_repos/harness/bin/_release/conferir"],
+    "python": "rag",
+    "teto_s": 300,
+    "motivo": "S4300: confere e aplica a regra de ramo da main (status esteira, ramo atualizado, ninguém por cima) nos repositórios que integram por pedido, pelo gh da conta dona"
   }
 }
