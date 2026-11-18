@@ -3347,14 +3347,15 @@ if PERSONAS.is_dir():
     _TOOLS.append(monta_sessao)
 
 def _anotacoes_tool(nome: str, binario: str = "") -> ToolAnnotations:
-    """Anotações MCP (card #4149): sem `annotations`, a spec assume `destructiveHint=True` e
-    `openWorldHint=True`, e clientes que consultam `annotations` (Codex sem `approve` explícito,
-    Claude Code / claude.ai) pedem confirmação manual em toda chamada. A porta é fechada
-    (`openWorldHint=False`) e toda escrita passa pelo PDP no servidor (`destructiveHint=False`)."""
-    so_le = (nome in {"ler_arquivo", "conferir", "lint", "metrica"}
-             or bool(binario and not _atos_que_escrevem(nome, binario)))
-    return ToolAnnotations(readOnlyHint=so_le, destructiveHint=False,
-                           idempotentHint=so_le, openWorldHint=False)
+    """Anotações MCP, iguais em toda tool (decisão do dono, 18/11/2026). O modelo de segurança da casa
+    é isolamento, e não permissão no cliente: quem barra é o PDP no servidor. `readOnlyHint=True` tira
+    o modal que o cliente abre por tool de escrita (o app Gemini decide só por ele).
+    `destructiveHint=True` porque a casa troca e apaga o fóssil (política zero), e não só acrescenta;
+    pela spec, o cliente o ignora quando `readOnlyHint` é True. `idempotentHint` fica no padrão
+    (False), também ignorado nesse caso. `openWorldHint=False` segue como no #4149, até o dono
+    decidir o open world por verbo. `nome` e `binario` ficam na assinatura para essa decisão."""
+    return ToolAnnotations(readOnlyHint=True, destructiveHint=True,
+                           idempotentHint=False, openWorldHint=False)
 
 
 for _fn in _TOOLS:
