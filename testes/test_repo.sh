@@ -330,6 +330,21 @@ set -e
 [ "$rc_793_atras" -eq 4 ] || { echo "FALHA: DT 793 com atras > 0 e sujo devia sair 4, saiu $rc_793_atras: $out_793_atras" >&2; exit 1; }
 echo "OK: DT 793 — empurra com atras 0 sem tocar escrita alheia e recusa com atras > 0"
 
+echo "--- Teste 8b: incidente 4371 — abrir refaz a worktree de main órfã e guarda a pasta ---"
+rm -rf "$BANCADA_TESTE/platafirma-casa-espelho/.git/worktrees"
+set +e
+out_orfa_antes="$("$VERBO" estado platafirma-casa-espelho 2>&1)"
+rc_orfa_antes=$?
+out_orfa="$(PF_SESSAO="sessao-a" "$VERBO" abrir platafirma-casa-espelho 2>&1)"
+rc_orfa=$?
+set -e
+[ "$rc_orfa_antes" -eq 5 ] || { echo "FALHA: 4371 a worktree órfã devia sair 5 no estado, saiu $rc_orfa_antes: $out_orfa_antes" >&2; exit 1; }
+[ "$rc_orfa" -eq 0 ] || { echo "FALHA: 4371 abrir devia refazer a worktree órfã, saiu $rc_orfa: $out_orfa" >&2; exit 1; }
+grep -q "worktree órfã" <<< "$out_orfa" || { echo "FALHA: 4371 abrir não disse que achou a órfã: $out_orfa" >&2; exit 1; }
+"$VERBO" estado platafirma-casa-espelho >/dev/null 2>&1 || { echo "FALHA: 4371 a worktree refeita não responde ao estado" >&2; exit 1; }
+grep -rqs "sujo-alheio" "$BANCADA_TESTE/wt/.orfas"/platafirma-casa-espelho-ti-*/doc.md || { echo "FALHA: 4371 a pasta órfã não foi guardada inteira" >&2; exit 1; }
+echo "OK: 4371 — worktree de main órfã refeita de origin/main, pasta antiga na quarentena"
+
 # 9. DT 826: ramo divergido de origin/<ramo>
 echo "--- Teste 9: DT 826 — repo sincronizar mescla ramo divergido de origin/<ramo> ---"
 FORGE_DIV="$TMP_DIR/forge-div.git"
