@@ -132,11 +132,11 @@ def test_a_secao_corta_o_tamanho():
     assert len(_corpo("conhecimento-curado")) < len(_corpo())
 
 
-def test_cli_secao_sem_chapeu_e_erro_de_uso():
+def test_cli_caderno_recusa_apontando_para_banco_de_eventos():
     import subprocess
     import sys
     env = {**os.environ, "PF_CADEIRA": "engenharia"}
     p = subprocess.run([sys.executable, str(REPO_ROOT / "bin" / "mesa"), "caderno", "--secao", "conhecimento-curado"],
                        capture_output=True, text=True, env=env, timeout=30)
-    assert p.returncode != 0
-    assert "--secao" in p.stderr and "chapeu" in p.stderr
+    assert p.returncode == 2
+    assert "banco de eventos" in p.stderr and "negocio.mensagem" in p.stderr

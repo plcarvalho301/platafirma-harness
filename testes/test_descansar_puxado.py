@@ -142,42 +142,5 @@ def test_a_linha_de_marcar_aponta_descansar_publicar(log_ops, monkeypatch):
     assert "descansar publicar" in linhas[-1]
 
 
-# ---------------------------------------------------------------- o indice do banco
-MESA_INDICE = """#!/bin/sh
-case "${STUB_MESA:-ok}" in
-  ok)
-    echo "  contexto         2 vigentes · 120/1500 tk · última escrita há 3 d · 1 a revisar"
-    echo "  extinto          1 vigente · 40/1500 tk · última escrita há 20 d"
-    echo "  engenharia-de-harness 0 vigentes · 0/1500 tk · legado 131 B a triar"
-    echo "  (corpo sob demanda: \\`mesa caderno <chapeu>\\`)"
-    ;;
-  mudo) echo "cadernos: indisponíveis — sessao-db não respondeu; não é caderno vazio"; exit 3 ;;
-esac
-"""
-
-
-@pytest.fixture()
-def bin_stub(tmp_path: Path, monkeypatch) -> Path:
-    d = tmp_path / "bin"
-    d.mkdir()
-    mesa = d / "mesa"
-    mesa.write_text(MESA_INDICE, encoding="utf-8")
-    mesa.chmod(0o755)
-    monkeypatch.setenv("PF_BIN", str(d))
-    return d
-
-
-def test_indice_do_caderno_vem_do_banco_e_marca_o_chapeu_fora_da_persona(bin_stub):
-    linhas = descansar.caderno_do_banco({"contexto", "engenharia-de-harness", "agente"})
-    texto = "\n".join(linhas)
-    assert "caderno/contexto         2 vigentes" in texto and "1 a revisar" in texto
-    assert "legado 131 B a triar" in texto
-    extinto = next(l for l in linhas if "extinto" in l)
-    assert "ÓRFÃO" in extinto
-    assert not any("ÓRFÃO" in l for l in linhas if "contexto" in l)
-
-
-def test_banco_mudo_sai_declarado_e_nao_como_caderno_vazio(bin_stub, monkeypatch):
-    monkeypatch.setenv("STUB_MESA", "mudo")
-    assert descansar.caderno_do_banco(None) == [
-        "  caderno: cadernos: indisponíveis — sessao-db não respondeu; não é caderno vazio"]
+def test_descansar_nao_tem_mais_caderno_do_banco():
+    assert not hasattr(descansar, "caderno_do_banco")

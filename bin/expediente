@@ -94,14 +94,6 @@ CATALOGO = [
         "chamada": "persona ler {cadeira} --chapeu {chapeu}",
         "dono": "gestao-estrategica",
     },
-    {
-        "peca": "cadernos",
-        "gatilho": "abertura; com chapeu, o corpo dele",
-        "regime": "valor",
-        "volatilidade": "volatil",
-        "chamada": "mesa caderno [--chapeu {chapeu}]",
-        "dono": "gestao-estrategica",
-    },
 ]
 
 from raizes import instancia  # noqa: E402  (lib/ ja esta no sys.path)
@@ -480,8 +472,6 @@ CATALOGO_CADEIRINHA = [
      "volatilidade": "volatil",
      "chamada": 'motor rag buscar casa "{pergunta}" --k 6 --texto secao --origem abertura',
      "dono": "conhecimento"},
-    {"peca": "cadernos", "gatilho": "perfil cadeirinha", "regime": "valor", "volatilidade": "volatil",
-     "chamada": "mesa caderno {chapeu} --categoria licao,premissa", "dono": "gestao-estrategica"},
 ]
 
 
@@ -748,7 +738,6 @@ def ato_montar(cadeira_arg: str | None = None, chapeu_forcado: str | None = None
     ordem_chaves.append("mesa")
     if chapeu_slug and pergunta and not sem_acervo:
         ordem_chaves.append("acervo-consultado")
-    ordem_chaves.append("cadernos")
 
     servidas: list[dict] = []
 
@@ -783,13 +772,6 @@ def ato_montar(cadeira_arg: str | None = None, chapeu_forcado: str | None = None
             cmd = ["motor", "rag", "buscar", "casa", pergunta, "--k", "6", "--texto", "secao",
                    "--origem", "abertura"]
             ref = f'verbo:motor rag buscar casa "{pergunta[:40]}" --k 6 --texto secao --origem abertura'
-        elif peca_id == "cadernos":
-            if chapeu_slug:
-                cmd = f"mesa caderno --chapeu {chapeu_slug}"
-                ref = f"verbo:mesa caderno --chapeu {chapeu_slug}"
-            else:
-                cmd = "mesa caderno"
-                ref = "verbo:mesa caderno"
         else:
             cmd = chamada_tmpl.replace("{cadeira}", cadeira).replace("{chapeu}", chapeu_slug or "")
             ref = f"verbo:{cmd}"

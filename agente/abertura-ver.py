@@ -167,9 +167,6 @@ def peca_alias(arv, _cad, _ch):
 
 
 SIMULADA = {
-    "cadernos": "(SIMULADA — `mesa caderno` lê o caderno no banco da sessão desde a #3217 "
-                "(arq:0120), fora do clone. Em produção entram aqui o índice da cadeira e, "
-                "com chapéu, o corpo dele por categoria.)",
     "mesa": "(SIMULADA — `mesa ver` lê o banco da sessão na instância, fora do clone. "
             "Em produção entram aqui os itens pendentes da cadeira, ou \"mesa vazia\".)",
     "acervo-consultado": "(SIMULADA — `motor rag buscar casa` consulta o acervo na "
@@ -185,7 +182,6 @@ CATALOGO = {  # peça -> (dono, volatilidade, ref, leitor)
     "mesa": ("gestao-estrategica", "volatil", "mesa ver{flag_mesa}", None),
     "acervo-consultado": ("conhecimento", "volatil",
                           'motor rag buscar casa "{perg}" --k 6 --texto secao --origem abertura', None),
-    "cadernos": ("gestao-estrategica", "volatil", "mesa caderno{flag}", None),
 }
 
 
@@ -203,10 +199,10 @@ def monta(clone, cad, chapeu, pergunta, forcado):
                     "motivo": "sem chapéu declarado na abertura (#3931)"}
     avisos = []
 
-    # Mesma ordem de bin/expediente montar (spec expediente rev 1.3, #3931):
-    # sem chapéu: persona, conduta, alias-cadeiras, mesa, cadernos (5 peças, sem acervo-consultado).
+    # Mesma ordem de bin/expediente montar (spec expediente rev 1.3, #3931, #4377):
+    # sem chapéu: persona, conduta, alias-cadeiras, mesa (4 peças, sem acervo-consultado).
     ordem = ["persona"] + (["chapeu"] if chapeu else []) + ["conduta", "alias-cadeiras", "mesa"]
-    ordem += (["acervo-consultado"] if chapeu and pergunta else []) + ["cadernos"]
+    ordem += ["acervo-consultado"] if chapeu and pergunta else []
 
     pecas = []
     for nome in ordem:

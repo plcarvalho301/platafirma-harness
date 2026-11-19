@@ -93,20 +93,11 @@ def _pecas(proc) -> list[str]:
 
 
 # ---------------------------------------------------------------- o pacote
-def test_o_pacote_nao_traz_conduta_nem_alias_nem_mesa(raiz):
+def test_o_pacote_nao_traz_conduta_nem_alias_nem_mesa_nem_cadernos(raiz):
     pecas = _pecas(_monta(raiz, stdin="revise o README"))
-    for fora in ("conduta", "alias-cadeiras", "mesa"):
+    for fora in ("conduta", "alias-cadeiras", "mesa", "cadernos"):
         assert fora not in pecas
-    assert pecas == ["persona", "chapeu", "modo", "acervo-consultado", "cadernos"]
-
-
-def test_o_caderno_do_agente_e_licao_e_premissa_do_banco(raiz):
-    """#3217: o agente delegado recebe so o que orienta o chapeu; preferencia do dono, aresta e o
-    legado a triar ficam com a cadeira (`--categoria` sem `--secao` nao serve o legado)."""
-    d = json.loads(_monta(raiz).stdout)
-    cadernos = next(p for p in d["pecas"] if p["peca"] == "cadernos")
-    assert cadernos["ref"] == "verbo:mesa caderno contexto --categoria licao,premissa"
-    assert cadernos["frescor"] == "fresco"
+    assert pecas == ["persona", "chapeu", "modo", "acervo-consultado"]
 
 
 def test_o_envelope_diz_perfil_modo_e_nao_roteia(raiz):
@@ -227,12 +218,12 @@ def test_perfil_cadeira_segue_igual_e_nao_ganha_campos(raiz):
     assert "perfil" not in d and "modo" not in d
 
 
-def test_catalogo_por_perfil_e_o_padrao_segue_com_7(raiz):
+def test_catalogo_por_perfil_e_o_padrao_segue_com_6(raiz):
     cad = json.loads(_run_expediente(["catalogo", "--json"], raiz).stdout)
-    assert len(cad) == 7 and "conduta" in [p["peca"] for p in cad]
+    assert len(cad) == 6 and "conduta" in [p["peca"] for p in cad]
     cdi = json.loads(_run_expediente(["catalogo", "--perfil", "cadeirinha", "--json"], raiz).stdout)
     assert [p["peca"] for p in cdi] == ["persona", "chapeu", "modo", "regua",
-                                        "acervo-consultado", "cadernos"]
+                                        "acervo-consultado"]
     assert "conduta" not in [p["peca"] for p in cdi]
 
 

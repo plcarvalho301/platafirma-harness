@@ -119,20 +119,3 @@ CREATE TABLE sessao.mesa_legado (
 
 CREATE INDEX mesa_legado_pendente_idx ON sessao.mesa_legado (cadeira, chapeu)
   WHERE triado_em IS NULL;
-
--- ---------------------------------------------------------------- entrada de caderno
--- PROJEÇÃO, não fonte. O caderno é fonte editada pela cadeira e continua versionado em
--- `platafirma-harness@caderno/<cadeira>/<slug>.md` por arq:0042 — é de lá que saem diff e
--- revisão, que são a razão de o caderno não ser mesa. Esta tabela existe para o índice de
--- abertura sair por SQL junto do resto, e é regenerável do git a qualquer momento.
--- Enquanto o projetor da fase 5 não existir, fica vazia: vazia e declarada, não esquecida.
-CREATE TABLE sessao.caderno_entrada (
-  cadeira      text        NOT NULL,
-  chapeu       text        NOT NULL,
-  texto        text        NOT NULL,
-  bytes        integer     NOT NULL,
-  blob_sha     text        NOT NULL,
-  escrita_em   timestamptz NOT NULL,
-  projetado_em timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (cadeira, chapeu)
-);

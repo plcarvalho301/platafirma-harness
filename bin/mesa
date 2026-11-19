@@ -2281,6 +2281,7 @@ def ato_podar(args, decide=None, envia=None):
 
 
 ATOS_CADERNO_FECHADOS = frozenset({
+    "caderno", "colheita",
     "escrever", "substituir", "confirmar", "retirar", "restaurar",
     "tombar", "apontar", "aresta", "veredito", "balde", "podar",
 })
@@ -2288,8 +2289,8 @@ ATOS_CADERNO_FECHADOS = frozenset({
 
 def _recusar_escrita_caderno(ato: str) -> int:
     sys.stderr.write(
-        f"erro: a escrita do caderno (`mesa {ato}`) fechou (story #4355); "
-        "publique a mensagem por `descansar publicar` (JSON na entrada padrao).\n"
+        f"erro: o caderno no banco sessao (`mesa {ato}`) foi encerrado e migrado para o banco de eventos "
+        "(familia negocio.mensagem, story #4377); publique mensagens por `descansar publicar`.\n"
     )
     return 2
 

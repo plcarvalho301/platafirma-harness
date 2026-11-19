@@ -265,60 +265,14 @@ def test_mesa_aceita_pf_cadeira_nas_duas_formas():
     assert AdaptadorMesa(sufixo="IA").sufixo == "ia"
 
 
-# ------------------------------------------------- mesa: o caderno vem do banco (#3217)
+# ------------------------------------------------- mesa: sem consulta a sessao.caderno_* (#4377)
 
-HOJE = datetime.now(timezone.utc)
-CADERNO = [
-    (12, "harness", "licao", "corte por passagem, uma story por passagem", "#3217",
-     None, None, None, None, HOJE),
-    (13, "harness", "premissa", "o caderno mora no banco", None,
-     None, None, date(2026, 11, 30), None, HOJE),
-    (14, "harness", "licao", "lição velha", "#3000", None, None, None, None,
-     HOJE - timedelta(days=120)),
-]
-
-
-def test_mesa_le_o_caderno_do_banco_com_chave_e_versao_proprias():
-    a = AdaptadorMesa(sufixo="ia", cliente=ValkeyFalso({}), conexao_pg=PgFalso(ITEM, CADERNO))
-    por_chave = {i.procedencia.chave: i for i in a.busca().itens}
-    assert "mem:ia:harness#167" in por_chave, "o item de mesa segue"
-    c12 = por_chave["mem:ia:harness#c12"]
-    assert c12.procedencia.versao.tipo is VersaoTipo.SEQ and c12.procedencia.versao.valor == "12"
-    assert c12.conteudo == "c12 [harness] lição: corte por passagem, uma story por passagem (caso: #3217)"
-    assert "vale até 30/11/2026" in por_chave["mem:ia:harness#c13"].conteudo
-    assert "a revisar: não confirmada desde" in por_chave["mem:ia:harness#c14"].conteudo
-
-
-def test_mesa_serve_do_caderno_so_o_vigente_sem_aresta_nem_premissa_vencida():
-    pg = PgFalso(ITEM, CADERNO)
-    AdaptadorMesa(sufixo="ia", cliente=ValkeyFalso({}), conexao_pg=pg).busca("harness")
-    sql, args = pg.sql_do_caderno()
-    assert "estado = 'vigente'" in sql and "categoria <> 'aresta'" in sql
-    assert "vale_ate < " in sql, "a premissa vencida sai no dia seguinte ao «vale até»"
-    assert args == ["ia", "harness"], "a cadeira pelo sufixo, o chapéu pelo alvo"
-
-
-def test_mesa_filtro_de_categoria_serve_so_o_caderno():
-    pg = PgFalso(ITEM, CADERNO[:2])
-    r = AdaptadorMesa(sufixo="ia", cliente=ValkeyFalso(PROSA), conexao_pg=pg).busca(
-        filtros={"categoria": "licao,premissa"})
-    assert [i.procedencia.chave for i in r.itens] == ["mem:ia:harness#c12", "mem:ia:harness#c13"]
-    sql, args = pg.sql_do_caderno()
-    assert "categoria = ANY(%s)" in sql and args[-1] == ["licao", "premissa"]
-
-
-def test_mesa_filtro_de_ato_nao_traz_o_caderno():
-    a = AdaptadorMesa(sufixo="ia", cliente=ValkeyFalso({}), conexao_pg=PgFalso(ITEM, CADERNO))
-    chaves = [i.procedencia.chave for i in a.busca(filtros={"ato": "emendar o verbo"}).itens]
-    assert chaves == ["mem:ia:harness#167"]
-
-
-def test_mesa_caderno_mudo_declara_causa_e_serve_a_mesa():
-    a = AdaptadorMesa(sufixo="ia", cliente=ValkeyFalso({}), conexao_pg=PgCadernoMudo(ITEM, CADERNO))
-    r = a.busca()
-    assert [i.procedencia.chave for i in r.itens] == ["mem:ia:harness#167"]
-    assert r.linha.causa is Causa.SEM_ROTA, "caderno mudo não é caderno vazio"
-    assert " c:? " in r.linha.carimbo, "o carimbo diz que não sabe do caderno"
+def test_mesa_nao_consulta_tabelas_de_caderno_apos_remocao():
+    pg = PgFalso(ITEM)
+    r = AdaptadorMesa(sufixo="ia", cliente=ValkeyFalso(PROSA), conexao_pg=pg).busca()
+    assert any(i.procedencia.chave == "mem:ia:harness#167" for i in r.itens)
+    assert not any("caderno_" in sql for sql, _ in pg.chamadas)
+    assert " c:" not in r.linha.carimbo
 
 
 # ========================================== 4. o núcleo: N adaptadores → um envelope
