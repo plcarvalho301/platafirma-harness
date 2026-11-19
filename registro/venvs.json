@@ -193,13 +193,6 @@
     "lock": "outros_repos/harness/venvs/harness/uv.lock",
     "teste": "outros_repos/harness/lib/suite/testes"
   },
-  "espelho-testes": {
-    "familia": "platafirma-casa-espelho",
-    "esteira": "codigo",
-    "promovida": false,
-    "lock": "outros_repos/harness/venvs/harness/uv.lock",
-    "teste": "outros_repos/harness/testes"
-  },
   "espelho-controle": {
     "familia": "platafirma-casa-espelho",
     "esteira": "codigo",
