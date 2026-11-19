@@ -1,0 +1,18 @@
+{
+  "pergunta": "Como os módulos se dividem?",
+  "leitor": "engenharia",
+  "tipo": "modulo",
+  "fontes": [
+    "referencias/instancias/observacao/2026-11-04-de-para-taxonomia-de-diagramas.md"
+  ],
+  "entidades": [
+    {
+      "id": "sem_fonte",
+      "nome": "Entidade Sem Fonte",
+      "fonte": "documento-que-nao-esta-em-fontes.md",
+      "tipo": "componente",
+      "categoria": "servico"
+    }
+  ],
+  "relacoes": []
+}

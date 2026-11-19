@@ -21,7 +21,7 @@ import yaml
 # dados de identidade fora do working tree de fabrica (#2956, minuta arq 0015 perna 1)
 RAIZ = Path(os.environ.get("ACESSO_POLITICA_DIR",
     os.environ.get("ACESSO_PDP_DIR",
-        os.environ.get("PDP_DIR", "/opt/platafirma/current/politica-acesso"))))
+        os.environ.get("PDP_DIR", "/opt/platafirma/current/core/acesso"))))
 SUJEITOS = RAIZ / "sujeitos.yaml"
 POLITICA = RAIZ / "politica.yaml"
 # HARNESS/PERSONAS derivam da propria arvore (realpath), nao de RAIZ (a morada de dados)
@@ -45,8 +45,8 @@ UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 
 
 def bancada_pap() -> Path:
-    """politica-acesso/ no worktree da cadeira, na bancada declarada:
-    <bancada>/wt/platafirma-harness/<cadeira>/politica-acesso (arq:0109 §2).
+    """acesso/ no worktree da cadeira, na bancada declarada:
+    <bancada>/wt/platafirma-core/<cadeira>/acesso (arq:0109 §2).
     ACESSO_BANCADA_DIR vence (teste). Nunca dentro da release."""
     explicito = os.environ.get("ACESSO_BANCADA_DIR")
     if explicito:
@@ -56,7 +56,7 @@ def bancada_pap() -> Path:
         cadeira = cadeira.removeprefix("claudinho-").removeprefix("claudinha-")
         if not cadeira:
             raise BancadaNaoDeclarada("PF_CADEIRA ausente: sem cadeira nao ha worktree de bancada")
-        alvo = bancada() / "wt" / "platafirma-harness" / cadeira / "politica-acesso"
+        alvo = bancada() / "wt" / "platafirma-core" / cadeira / "acesso"
     opt = release_raiz().resolve()
     if alvo.resolve() == opt or opt in alvo.resolve().parents:
         raise BancadaNaoDeclarada(f"{alvo} esta dentro da release ({opt}): a release nao se edita")

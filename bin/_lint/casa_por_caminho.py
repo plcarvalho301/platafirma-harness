@@ -1,19 +1,12 @@
-"""casa_por_caminho — documento de casa não se lê pelo caminho do arquivo (arq:0115 §11.3).
+"""casa_por_caminho — bloqueia citações a caminhos e artefatos da casa velha (F4073, #4348).
 
-Desde arq:0115 o documento de casa é ficha do acervo, e o repositório que o suporta,
-platafirma-casa, não é unidade de release (§1.2). Verbo, skill ou instrução de agente que lia
-o suporte por caminho quebra no movimento, e a cura é ler pelo acervo (§11.3). O incidente
-#3225 foi esse caso: `minuta ler` lia `<release>/casa/minuta`, que não existe, e respondia
-«não encontrada» para uma minuta publicada. Nada barrava a forma no commit.
+A casa nova mora na Olaria e no repositório platafirma-casa-espelho. Código, skill,
+configuração ou documento em core, harness, posto e conhecimento não pode citar o
+repositório da casa velha, suas pastas numeradas (1-orientacao a 6-artefato), originais/,
+abertura/dono.md, var/abertura-publicada nem leituras de casa na release.
 
-Formas que o detector pega numa linha:
-  - o repositório extinto de arquitetura seguido de caminho ou de `@` (o suporte de antes);
-  - a pasta `casa` da release, em código: `release() / "casa"` e `current/casa`.
-A instância (`/srv/platafirma/casa`) e a bancada de main da casa, que os atos de minuta usam
-para ESCREVER, não são leitura de produção e não entram.
-
-Dois usos: o pre-commit recusa a forma em linha ACRESCENTADA (bloqueante: o estoque legado
-não trava a edição de outro trecho); `lint fossil` relata o estoque, como aviso.
+Dois usos: o pre-commit recusa a forma em linha ACRESCENTADA (bloqueante); `varrer`
+(usado por `lint fossil` e pelo portão) varre a árvore inteira.
 """
 from __future__ import annotations
 
@@ -22,25 +15,86 @@ import subprocess
 from pathlib import Path
 from typing import Optional, Tuple
 
-from .canonico import _linhas_acrescentadas
 from .resultado import Apontamento
 
-_EXTINTO = "platafirma-" + "arquitetura"  # partido: o próprio módulo não casa a forma
+# Literais partidos para o próprio módulo não disparar o detector nem o pre-commit vigente.
+_EXTINTO = "platafirma-" + "arquitetura"
+_CASA_VELHA = "platafirma-" + "casa"
+_REL_CASA = r"\brelease\(\)\s*/\s*[\"']" + "casa" + r"[\"']"
+_CUR_CASA = r"\bcurrent/" + "casa" + r"(?![-\w])"
+_PASTAS_NUM = (
+    r"(?<![-\w])(?:"
+    + "1-" + "orientacao"
+    + "|" + "2-" + "comportamento"
+    + "|" + "3-" + "(?:estrutura|sistema|organizacao)"
+    + "|" + "4-" + "(?:operacao|capacidade|processo)"
+    + "|" + "5-" + "(?:conhecimento|execucao|referencia)"
+    + "|" + "6-" + "artefato"
+    + r")(?![-\w])"
+)
+_ORIGINAIS = r"(?<![-\w])" + "origi" + "nais/"
+_DONO_MD = r"(?<![-\w])" + "abertura/" + r"dono\.md(?![-\w])"
+_ABERTURA_PUB = r"(?<![-\w])" + "var/abertura-" + r"publicada(?![-\w])"
+
 _RE = re.compile(
     re.escape(_EXTINTO) + r"[/@][\w.\-]"
-    r"|\brelease\(\)\s*/\s*[\"']casa[\"']"
-    r"|\bcurrent/casa(?![-\w])"
+    + r"|\b" + re.escape(_CASA_VELHA) + r"(?![-\w])"
+    + r"|" + _REL_CASA
+    + r"|" + _CUR_CASA
+    + r"|" + _PASTAS_NUM
+    + r"|" + _ORIGINAIS
+    + r"|" + _DONO_MD
+    + r"|" + _ABERTURA_PUB
 )
-# o detector e o teste dele carregam as formas de propósito
-ISENTOS = ("bin/_lint/casa_por_caminho.py", "controle/tests/test_contrato_casa_por_caminho.py")
-CURA = ("ler pelo acervo: `acervo ler casa <espécie> <chave>` ou `acervo listar casa "
-        "<espécie>` (arq:0115 §11.3); ponteiro para documento de casa cita a chave, não o "
-        "caminho (§3.3)")
+
+# O detector e o teste dele carregam as formas de propósito.
+ISENTOS_SUFIXO = (
+    "bin/_lint/casa_por_caminho.py",
+    "controle/tests/test_contrato_casa_por_caminho.py",
+)
+# Migrações SQL históricas já aplicadas em produção são imutáveis (trava do #4348).
+ISENTOS_MIGRACAO_SQL = (
+    "rag/db/init/159_schema_analise.sql",
+    "rag/db/init/161_grant_mineracao_ocel.sql",
+)
+# Arquivos em transição pertencentes a F4376 / E3650 (retirada do suporte da casa velha,
+# casa-site, vault-ontologia e bloco temporário de tombamento do posto).
+ISENTOS_TRANSICAO_E3650 = (
+    "bin/acervo",
+    "bin/_acervo/_identidade.py",
+    "bin/_acervo/_suporte.py",
+    "bin/_acervo/listar",
+    "bin/curar",
+    "bin/repo",
+    "registro/venvs.json",
+    "casa-site/publicar.py",
+    "casa-site/tests/test_publicar.py",
+    "rag/tests/test_casa_admissao.py",
+    "posto/AGENTS.md",
+    "posto/gerado/claude-ai/preferencias.md",
+    "posto/gerado/gemini-web/instrucoes.md",
+    "ferramentas/vault-ontologia/vault.sh",
+    "ferramentas/vault-ontologia/vault_ontologia.py",
+    "ferramentas/vault-ontologia/testes/test_vault_ontologia.py",
+)
+CURA = (
+    "ler pela Olaria (`ontologia ler <classe> <chave>`) ou pela busca da casa nova; "
+    "remover referências à casa velha"
+)
 ID = "CASA_POR_CAMINHO"
 
 
+def _isento(rel: str) -> bool:
+    norm = rel.replace("\\", "/")
+    return (
+        norm.endswith(ISENTOS_SUFIXO)
+        or norm.endswith(ISENTOS_MIGRACAO_SQL)
+        or norm.endswith(ISENTOS_TRANSICAO_E3650)
+    )
+
+
 def forma(linha: str) -> Optional[str]:
-    """O trecho que lê documento de casa por caminho, ou None."""
+    """O trecho que cita a casa velha por caminho/repositório, ou None."""
     m = _RE.search(linha)
     return m.group(0) if m else None
 
@@ -51,11 +105,13 @@ def _no_stage(raiz: Path) -> list[str]:
         cwd=raiz, capture_output=True, text=True,
     )
     nomes = [x for x in p.stdout.split("\0") if x] if p.returncode == 0 else []
-    return [n for n in nomes if n not in ISENTOS]
+    return [n for n in nomes if not _isento(n)]
 
 
 def bloqueantes_no_stage(raiz: Path | str) -> Tuple[list[Apontamento], Optional[str]]:
     """Para o pre-commit: (apontamentos bloqueantes, aviso). Nunca lança."""
+    from .canonico import _linhas_acrescentadas
+
     raiz = Path(raiz)
     achados: list[Apontamento] = []
     for arquivo in _no_stage(raiz):
@@ -63,7 +119,7 @@ def bloqueantes_no_stage(raiz: Path | str) -> Tuple[list[Apontamento], Optional[
             trecho = forma(texto)
             if trecho:
                 achados.append(Apontamento(
-                    arquivo, n, f"lê documento de casa por caminho: «{trecho}»", CURA,
+                    arquivo, n, f"cita caminho ou artefato da casa velha: «{trecho}»", CURA,
                     severidade="bloqueante", id=ID))
     return achados, None
 
@@ -80,7 +136,7 @@ def _arquivos(raiz: Path, alvo: Optional[str]) -> list[Path]:
 
 
 def varrer(raiz: Path | str, alvo: Optional[str] = None) -> list[Apontamento]:
-    """Para `lint fossil`: o estoque, um aviso por linha. Pula binário e arquivo grande."""
+    """Varre a árvore (ou subárvore `alvo`) procurando citações à casa velha. Pula binário e arquivo grande."""
     raiz = Path(raiz)
     achados: list[Apontamento] = []
     for arq in _arquivos(raiz, alvo):
@@ -88,7 +144,7 @@ def varrer(raiz: Path | str, alvo: Optional[str] = None) -> list[Apontamento]:
             rel = str(arq.relative_to(raiz))
         except ValueError:
             rel = arq.name
-        if rel in ISENTOS:
+        if _isento(rel):
             continue
         try:
             if arq.stat().st_size > 1_000_000:
@@ -102,6 +158,6 @@ def varrer(raiz: Path | str, alvo: Optional[str] = None) -> list[Apontamento]:
             trecho = forma(linha)
             if trecho:
                 achados.append(Apontamento(
-                    rel, i, f"lê documento de casa por caminho: «{trecho}»", CURA,
+                    rel, i, f"cita caminho ou artefato da casa velha: «{trecho}»", CURA,
                     severidade="aviso", id=ID))
     return achados

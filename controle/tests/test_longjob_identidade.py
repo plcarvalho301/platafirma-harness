@@ -142,8 +142,9 @@ class _Mem:
     def __init__(self, d):
         self.d = d
 
-    def get(self, k):
-        return self.d.get(k)
+    def hgetall(self, k):
+        v = self.d.get(k)
+        return dict(v) if isinstance(v, dict) else {}
 
 
 def _exec_env(monkeypatch, env_extra, mem=(None, "sem"), resto=("run", "nome", "true")):
@@ -159,7 +160,7 @@ def _exec_env(monkeypatch, env_extra, mem=(None, "sem"), resto=("run", "nome", "
 
 def test_sessao_longjob_herda_da_chave(monkeypatch):
     env = _exec_env(monkeypatch, {"PF_SUJEITO": "jose-123", "PF_SESSAO": FILHA},
-                    mem=(_Mem({f"sessao:{FILHA}": json.dumps(CHAVE)}), None))
+                    mem=(_Mem({f"sessao:{FILHA}": CHAVE}), None))
     for k, v in AGENTE.items():
         assert env[k] == v
     assert env["PF_SUJEITO"] == "jose-123"
@@ -168,21 +169,21 @@ def test_sessao_longjob_herda_da_chave(monkeypatch):
 def test_sessao_longjob_nao_tira_sujeito_da_chave(monkeypatch):
     """spec_acesso §2: a pessoa vem da porta, nunca da chave; sem PF_SUJEITO segue sem."""
     env = _exec_env(monkeypatch, {"PF_SESSAO": FILHA},
-                    mem=(_Mem({f"sessao:{FILHA}": json.dumps(CHAVE)}), None))
+                    mem=(_Mem({f"sessao:{FILHA}": CHAVE}), None))
     assert "PF_SUJEITO" not in env
     assert env["PF_AGENTE"] == "revisor"
 
 
 def test_sessao_longjob_ambiente_declarado_vence(monkeypatch):
     env = _exec_env(monkeypatch, {"PF_SESSAO": FILHA, "PF_AGENTE": "curador"},
-                    mem=(_Mem({f"sessao:{FILHA}": json.dumps(CHAVE)}), None))
+                    mem=(_Mem({f"sessao:{FILHA}": CHAVE}), None))
     assert env["PF_AGENTE"] == "curador"
     assert env["PF_EM_NOME_DE"] == "engenharia"
 
 
 def test_sessao_longjob_sessao_comum_nao_ganha_atributo(monkeypatch):
     env = _exec_env(monkeypatch, {"PF_SESSAO": FILHA},
-                    mem=(_Mem({f"sessao:{FILHA}": json.dumps({"sujeito": "x", "cadeira": "ti"})}), None))
+                    mem=(_Mem({f"sessao:{FILHA}": {"sujeito": "x", "cadeira": "ti"}}), None))
     assert not set(AGENTE) & set(env)
 
 

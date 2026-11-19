@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FonteDeDiagrama",
+  "description": "Fonte que a peça diagrama desenha pela grade: quem desenha diz a faixa, a coluna e a ordem de cada caixa, e a peça calcula as coordenadas, roteia as setas em ângulo reto e pinta com os tokens",
+  "type": "object",
+  "required": ["tipo", "titulo", "faixas", "elementos", "arestas"],
+  "properties": {
+    "tipo": {
+      "type": "string",
+      "enum": ["camada", "modulo", "componente-e-conector", "alocacao", "fluxo"]
+    },
+    "titulo": {"type": "string", "minLength": 1},
+    "faixas": {
+      "type": "array",
+      "minItems": 1,
+      "description": "As faixas horizontais da figura, de cima para baixo",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "nome": {"type": "string", "description": "O nome escrito no topo da faixa, à esquerda; sem ele a faixa não leva nome"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "zonas": {
+      "type": "array",
+      "description": "Agrupamento de caixas da mesma faixa, desenhado em volta delas",
+      "items": {
+        "type": "object",
+        "required": ["id", "nome", "faixa"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "nome": {"type": "string"},
+          "faixa": {"type": "string", "description": "A faixa em que a zona e todas as caixas dela ficam"},
+          "categoria": {"type": "string"},
+          "cadeira": {"type": "string"},
+          "tipo": {"type": "string"},
+          "tracejada": {"type": "boolean", "description": "A zona agrupa uma camada: a borda sai tracejada. Só quando a camada diz algo ao leitor"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "elementos": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "titulo", "tipo", "faixa", "coluna", "ordem"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "titulo": {"type": "string", "minLength": 1},
+          "subtitulo": {"type": "string"},
+          "categoria": {
+            "type": "string",
+            "enum": ["persistencia", "servico", "superficie", "porta", "conhecimento", "host", "mensageria", "identidade", "cadeira"],
+            "description": "Só para componente técnico ou cadeira; sem ela a caixa sai neutra"
+          },
+          "cadeira": {"type": "string"},
+          "tipo": {"type": "string", "description": "No fluxo, a forma: inicio, fim, passo, decisao ou coisa; banco sai em cilindro"},
+          "zona": {"type": "string"},
+          "tracejada": {"type": "boolean", "description": "A caixa é de outra camada: o fio sai tracejado. Só quando a camada diz algo ao leitor"},
+          "faixa": {"type": "string", "description": "O id da faixa em que a caixa fica"},
+          "coluna": {"type": "integer", "minimum": 1, "description": "A coluna da grade, contada da esquerda a partir de 1"},
+          "colunas": {"type": "integer", "minimum": 1, "description": "Quantas colunas a caixa ocupa a partir da sua; sem o campo, uma"},
+          "ordem": {"type": "integer", "minimum": 1, "description": "A posição da caixa dentro da célula, de cima para baixo, a partir de 1"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "arestas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["de", "para"],
+        "if": {"not": {"properties": {"tracejada": {"const": true}}, "required": ["tracejada"]}},
+        "then": {"required": ["rotulo"]},
+        "properties": {
+          "de": {"type": "string"},
+          "para": {"type": "string"},
+          "rotulo": {"type": "string", "minLength": 1, "description": "O que a seta diz; só a seta tracejada o dispensa"},
+          "tracejada": {"type": "boolean", "description": "A ligação é de outra camada: a linha sai tracejada e o rótulo é opcional. Só quando a camada diz algo ao leitor"},
+          "sai": {"type": "string", "enum": ["cima", "baixo", "esquerda", "direita"], "description": "O lado da caixa de origem por onde a seta sai; sem ele a peça escolhe"},
+          "chega": {"type": "string", "enum": ["cima", "baixo", "esquerda", "direita"], "description": "O lado da caixa de destino por onde a seta chega; sem ele a peça escolhe"}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

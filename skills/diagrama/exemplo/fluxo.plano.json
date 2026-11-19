@@ -1,0 +1,27 @@
+{
+  "pergunta": "Como uma figura de arquitetura anda do pedido até a entrega ao dono?",
+  "pedido": "Mostre o caminho de uma figura, com as voltas de correção quando o plano ou a figura não passam e a saída pelo teto de voltas da figura (fica de fora a seta de duas reprovações seguidas do plano para entregar, para não cruzar o retorno da figura)",
+  "leitor": "engenharia",
+  "tipo": "fluxo",
+  "fontes": [
+    "instancias/procedimento/desenhar-diagrama.md"
+  ],
+  "entidades": [
+    {"id": "pedido", "nome": "Pedido de figura", "fonte": "instancias/procedimento/desenhar-diagrama.md", "tipo": "inicio"},
+    {"id": "planejar", "nome": "Planejar", "fonte": "instancias/procedimento/desenhar-diagrama.md", "tipo": "passo"},
+    {"id": "plano_ok", "nome": "O plano passa?", "fonte": "instancias/procedimento/desenhar-diagrama.md", "tipo": "decisao"},
+    {"id": "produzir", "nome": "Produzir", "fonte": "instancias/procedimento/desenhar-diagrama.md", "tipo": "passo"},
+    {"id": "figura_ok", "nome": "A figura passa?", "fonte": "instancias/procedimento/desenhar-diagrama.md", "tipo": "decisao"},
+    {"id": "entregar", "nome": "Entregar ao dono", "fonte": "instancias/procedimento/desenhar-diagrama.md", "tipo": "fim"}
+  ],
+  "relacoes": [
+    {"de": "pedido", "para": "planejar", "rotulo": "abre o plano"},
+    {"de": "planejar", "para": "plano_ok", "rotulo": "conferir-plano"},
+    {"de": "plano_ok", "para": "produzir", "rotulo": "veredito 0"},
+    {"de": "plano_ok", "para": "planejar", "rotulo": "veredito 1, com a lista"},
+    {"de": "produzir", "para": "figura_ok", "rotulo": "conferir-figura"},
+    {"de": "figura_ok", "para": "entregar", "rotulo": "passou, ou bateu o teto de voltas"},
+    {"de": "figura_ok", "para": "planejar", "rotulo": "defeito de conteúdo"},
+    {"de": "figura_ok", "para": "produzir", "rotulo": "defeito de forma"}
+  ]
+}

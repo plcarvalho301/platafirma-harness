@@ -153,7 +153,7 @@ def test_raio_declarado_nas_listas_reais_casa_arquivo_que_existe():
     Le so a arvore da rev: as quatro listas de portao e os arquivos do checkout."""
     import fnmatch
     listas = [REPO_ROOT / p for p in ("controle/tests/VERDES", "testes/VERDES",
-                                      "recuperacao/VERDES", "ops-server/VERDES")]
+                                      "recuperacao/VERDES")]
     arquivos = []
     for raiz, dirs, nomes in os.walk(REPO_ROOT):
         dirs[:] = [d for d in dirs if d != ".git"]

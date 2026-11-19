@@ -29,6 +29,13 @@ dependencies = [
     "pymupdf==1.28.2",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "jsonschema>=4.23",
+    "coverage>=7.6",
+]
+
 # nltk fora do lock (#3461): 3.10.3 tem GHSA-8mgp-746c-j5xp (HIGH, sem versao corrigida) e so o
 # crawl4ai o puxa; o pesquisar usa DefaultMarkdownGenerator e PruningContentFilter, que nao
 # tocam nltk (prova: a segunda verificacao do README desta pasta). O exclude tira o pacote

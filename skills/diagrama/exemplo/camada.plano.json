@@ -1,0 +1,52 @@
+{
+  "pergunta": "Como os níveis arquiteturais da PlataFirma se organizam de baixo para cima?",
+  "leitor": "engenharia",
+  "tipo": "camada",
+  "fontes": [
+    "referencias/instancias/observacao/2026-11-04-de-para-taxonomia-de-diagramas.md",
+    "instancias/padrao/diagramas.md"
+  ],
+  "camadas": [
+    "apresentacao",
+    "servico",
+    "dados"
+  ],
+  "entidades": [
+    {
+      "id": "ui",
+      "nome": "Taipa UI",
+      "fonte": "referencias/instancias/observacao/2026-11-04-de-para-taxonomia-de-diagramas.md",
+      "tipo": "tela",
+      "categoria": "superficie",
+      "camada": "apresentacao"
+    },
+    {
+      "id": "api",
+      "nome": "API da Porta",
+      "fonte": "referencias/instancias/observacao/2026-11-04-de-para-taxonomia-de-diagramas.md",
+      "tipo": "porta",
+      "categoria": "porta",
+      "camada": "servico"
+    },
+    {
+      "id": "db",
+      "nome": "Postgres do Acervo",
+      "fonte": "referencias/instancias/observacao/2026-11-04-de-para-taxonomia-de-diagramas.md",
+      "tipo": "banco",
+      "categoria": "persistencia",
+      "camada": "dados"
+    }
+  ],
+  "relacoes": [
+    {
+      "de": "ui",
+      "para": "api",
+      "rotulo": "consome por HTTPS"
+    },
+    {
+      "de": "api",
+      "para": "db",
+      "rotulo": "consulta SQL"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+#!/opt/platafirma/current/venv/harness/bin/python
+# olaria — a porta da ontologia da casa: prepara, ensaia, grava e apaga a mudança de classe e de ficha, e gera o pacote do raciocinador
+# capacidade: conhecimento
+# dono: conhecimento
+# classe: B
+# use para: mudar a ontologia da casa, classe, ficha ou lote de fichas, pelo YAML da mudança; preparar o YAML do que está gravado, «prepara a classe chapeu»; ensaiar a mudança sem gravar e ver todos os erros de uma vez; ensaiar as capacidades e ver o que a régua recusa no que já está gravado; gravar a mudança como uma fornada, «grava este YAML»; reenviar a fornada que caiu, pelo id; apagar uma ficha do fichário com o motivo; gerar o pacote do raciocinador da última fornada
+# atos: preparar (leitura, ontologia), ensaiar (leitura, ontologia), gravar (escrita, ontologia), apagar (escrita, ontologia), gerar (leitura, ontologia)
+# forma: texto
+# escreve: nada; o serviço de escrita da Olaria, que o verbo chama, é o único que grava no catálogo e no fichário
+# consome: o serviço de escrita da Olaria (HTTP, stack olaria)
+# ambiente: OLARIA_URL (o endereço do serviço) e OLARIA_CHAVE (a chave de serviço, lida do cofre pela peça, nunca impressa), PF_CADEIRA (a cadeira que chama, injetada pela porta; o serviço a grava na fornada), OLARIA_PRAZO_S[=110], OLARIA_CHAMADA_S e OLARIA_REENVIO_S[=5] (opcionais, só para prova)
+# depende: nada além do python
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _olaria.__main__ import main  # noqa: E402
+
+sys.exit(main(prog="olaria"))

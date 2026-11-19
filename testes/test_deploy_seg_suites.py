@@ -1,5 +1,4 @@
-"""Suites bash novas do card #3010: bin/_release/stack (ex-`deploy`, card #3145), `seg`,
-`teste`/`lint` e o fechamento do harness.
+"""Suites bash do harness: bin/_release/stack, `seg`, `teste`/`lint`, `repo` e o fechamento do harness.
 
 Rodam pelo `teste rodar platafirma-harness`. Cada suite monta a propria fixture em /tmp
 (release, instancia e tmpfs de env-file), com docker de stub, e nao toca producao nem bancada.
@@ -16,7 +15,7 @@ SUITES = [
     "test_release_stack.sh",
     "test_seg.sh",
     "test_teste.sh",
-    "test_fechamento_3010_harness.sh",
+    "test_fechamento_harness.sh",
     # sem dono ate o #3326: nenhum gate rodava
     "test_puxar_bancada.sh",
     "test_repo.sh",

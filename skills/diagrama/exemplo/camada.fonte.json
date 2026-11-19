@@ -1,0 +1,62 @@
+{
+  "tipo": "camada",
+  "titulo": "Arquitetura em camadas da PlataFirma",
+  "faixas": [
+    {
+      "id": "apresentacao",
+      "nome": "Apresentação"
+    },
+    {
+      "id": "servico",
+      "nome": "Serviços"
+    },
+    {
+      "id": "dados",
+      "nome": "Dados"
+    }
+  ],
+  "elementos": [
+    {
+      "id": "ui",
+      "titulo": "Taipa UI",
+      "subtitulo": "Web frontend",
+      "categoria": "superficie",
+      "tipo": "tela",
+      "faixa": "apresentacao",
+      "coluna": 1,
+      "ordem": 1
+    },
+    {
+      "id": "api",
+      "titulo": "API da Porta",
+      "subtitulo": "FastAPI / Starlette",
+      "categoria": "porta",
+      "tipo": "porta",
+      "faixa": "servico",
+      "coluna": 1,
+      "ordem": 1
+    },
+    {
+      "id": "db",
+      "titulo": "Postgres do Acervo",
+      "subtitulo": "PostgreSQL 16",
+      "categoria": "persistencia",
+      "tipo": "banco",
+      "faixa": "dados",
+      "coluna": 1,
+      "ordem": 1
+    }
+  ],
+  "arestas": [
+    {
+      "de": "ui",
+      "para": "api",
+      "rotulo": "consome por HTTPS"
+    },
+    {
+      "de": "api",
+      "para": "db",
+      "rotulo": "consulta SQL"
+    }
+  ]
+}

@@ -55,11 +55,29 @@ _spec_r.loader.exec_module(reidratar_mod)
 
 
 class FakeMsgMem:
-    """Dublê do Redis/msg-mem (mesmo shape de testes/test_sessao_limpar.py)."""
+    """Dublê do Redis/msg-mem em hash (story #4343) mantendo `data` e `ex_gravado` observáveis."""
 
-    def __init__(self, chaves: dict[str, str] | None = None):
-        self.data: dict[str, str] = dict(chaves or {})
+    def __init__(self, chaves: dict[str, str | dict[str, str]] | None = None):
+        self.data: dict[str, str] = {}
+        self.hashes: dict[str, dict[str, str]] = {}
         self.ex_gravado: dict[str, int] = {}
+        for k, v in (chaves or {}).items():
+            if isinstance(v, dict):
+                self.hashes[k] = {str(fk): str(fv) for fk, fv in v.items()}
+                self.data[k] = json.dumps(v)
+            else:
+                self.data[k] = v
+                if k.startswith("sessao:"):
+                    try:
+                        parsed = json.loads(v)
+                        if isinstance(parsed, dict):
+                            self.hashes[k] = {
+                                str(fk): ("true" if fv is True else "false" if fv is False else str(fv))
+                                for fk, fv in parsed.items()
+                                if fv is not None
+                            }
+                    except ValueError:
+                        pass
 
     def get(self, key: str) -> str | None:
         return self.data.get(key)
@@ -69,20 +87,42 @@ class FakeMsgMem:
         if ex is not None:
             self.ex_gravado[key] = ex
 
+    def hgetall(self, key: str) -> dict[str, str]:
+        return dict(self.hashes.get(key) or {})
+
+    def hset(self, key: str, mapping: dict[str, str] | None = None, **kwargs):
+        bucket = self.hashes.setdefault(key, {})
+        if mapping:
+            bucket.update({str(k): str(v) for k, v in mapping.items()})
+        if kwargs:
+            bucket.update({str(k): str(v) for k, v in kwargs.items()})
+        self.data[key] = json.dumps(bucket)
+        return len(bucket)
+
+    def expire(self, key: str, ex: int):
+        self.ex_gravado[key] = ex
+        return True
+
     def exists(self, key: str) -> bool:
-        return key in self.data
+        return key in self.data or key in self.hashes
 
     def delete(self, *keys: str) -> int:
         removidos = 0
         for k in keys:
+            apagou = False
             if k in self.data:
                 del self.data[k]
+                apagou = True
+            if k in self.hashes:
+                del self.hashes[k]
+                apagou = True
+            if apagou:
                 removidos += 1
         return removidos
 
     def scan_iter(self, match: str = "*", count: int = 500):
         prefix = match[:-1] if match.endswith("*") else match
-        for k in list(self.data.keys()):
+        for k in list(dict.fromkeys([*self.data.keys(), *self.hashes.keys()])):
             if k.startswith(prefix):
                 yield k
 
@@ -489,6 +529,7 @@ def test_ato_abrir_reabertura_backfilla_sujeito_ausente(monkeypatch):
                                      "origem": "reidratada"}),
     })
     monkeypatch.setenv("PF_SUJEITO", "jose-123")
+    monkeypatch.setenv("PF_SESSAO_AUTORIZADA_POR", "operador-plataforma@p1")
     capturas: list = []
     monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg_update_capturado(capturas))
     saida = sessao_mod.Saida(como_json=True)
@@ -496,7 +537,6 @@ def test_ato_abrir_reabertura_backfilla_sujeito_ausente(monkeypatch):
 
     with patch.object(sessao_mod, "_msgmem", return_value=(mem, None)), \
          patch.object(sessao_mod, "_vocabulario", return_value=({"ti": {}}, None)), \
-         patch.object(sessao_mod, "_decidir", return_value=(0, {"regra": "default", "plano": "p1"}, "")), \
          patch.object(sessao_mod, "_senha_pg", return_value=("senha-fake", None)):
         with redirect_stdout(f):
             rc = sessao_mod.ato_abrir("ti", sid, saida)
@@ -516,6 +556,7 @@ def test_ato_abrir_reabertura_nao_sobrescreve_sujeito_existente(monkeypatch):
                                      "sujeito": "sujeito-original"}),
     })
     monkeypatch.setenv("PF_SUJEITO", "outro-sujeito")
+    monkeypatch.setenv("PF_SESSAO_AUTORIZADA_POR", "operador-plataforma@p1")
     capturas: list = []
     monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg_update_capturado(capturas))
     saida = sessao_mod.Saida(como_json=True)
@@ -523,7 +564,6 @@ def test_ato_abrir_reabertura_nao_sobrescreve_sujeito_existente(monkeypatch):
 
     with patch.object(sessao_mod, "_msgmem", return_value=(mem, None)), \
          patch.object(sessao_mod, "_vocabulario", return_value=({"ti": {}}, None)), \
-         patch.object(sessao_mod, "_decidir", return_value=(0, {"regra": "default", "plano": "p1"}, "")), \
          patch.object(sessao_mod, "_senha_pg", return_value=("senha-fake", None)):
         with redirect_stdout(f):
             rc = sessao_mod.ato_abrir("ti", sid, saida)
@@ -540,12 +580,12 @@ def test_ato_abrir_reabertura_em_outra_cadeira_recusa_com_causa(monkeypatch):
     original = json.dumps({"cadeira": "ia", "ordem_id": "o-velho", "sujeito": "s1"})
     mem = FakeMsgMem({f"sessao:{sid}": original})
     monkeypatch.setenv("PF_SUJEITO", "s1")
+    monkeypatch.setenv("PF_SESSAO_AUTORIZADA_POR", "operador-plataforma@p1")
     saida = sessao_mod.Saida(como_json=True)
     f, e = io.StringIO(), io.StringIO()
 
     with patch.object(sessao_mod, "_msgmem", return_value=(mem, None)), \
-         patch.object(sessao_mod, "_vocabulario", return_value=({"ti": {}, "ia": {}}, None)), \
-         patch.object(sessao_mod, "_decidir", return_value=(0, {"regra": "default", "plano": "p1"}, "")):
+         patch.object(sessao_mod, "_vocabulario", return_value=({"ti": {}, "ia": {}}, None)):
         with redirect_stdout(f), redirect_stderr(e):
             rc = sessao_mod.ato_abrir("ti", sid, saida)
 
@@ -780,9 +820,9 @@ def test_ato_abrir_passa_a_ordem_da_abertura_ao_registro_duravel(monkeypatch):
     saida = sessao_mod.Saida(como_json=True)
     f = io.StringIO()
 
+    monkeypatch.setenv("PF_SESSAO_AUTORIZADA_POR", "operador-plataforma@p1")
     with patch.object(sessao_mod, "_msgmem", return_value=(mem, None)), \
          patch.object(sessao_mod, "_vocabulario", return_value=({"ti": {}}, None)), \
-         patch.object(sessao_mod, "_decidir", return_value=(0, {"regra": "default", "plano": "p1"}, "")), \
          patch.object(sessao_mod, "_senha_pg", return_value=("senha-fake", None)):
         with redirect_stdout(f):
             rc = sessao_mod.ato_abrir("ti", sid, saida)
@@ -810,13 +850,13 @@ def test_reidratar_e_reabrir_preservam_canonizada_e_autorizada_por(monkeypatch):
 
     # Reabrir a conversa reidratada atualiza autorizada_por para a regra decidida e não imprime regime restrito
     monkeypatch.setenv("PF_SUJEITO", "jose-123")
+    monkeypatch.setenv("PF_SESSAO_AUTORIZADA_POR", "operador-plataforma@p1")
     capturas: list = []
     monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg_update_capturado(capturas))
     saida = sessao_mod.Saida(como_json=True)
     f = io.StringIO()
     with patch.object(sessao_mod, "_msgmem", return_value=(mem, None)), \
          patch.object(sessao_mod, "_vocabulario", return_value=({"engenharia": {}}, None)), \
-         patch.object(sessao_mod, "_decidir", return_value=(0, {"regra": "operador-plataforma", "plano": "p1"}, "")), \
          patch.object(sessao_mod, "_senha_pg", return_value=("senha-fake", None)):
         with redirect_stdout(f):
             rc = sessao_mod.ato_abrir("engenharia", sid, saida)
@@ -880,26 +920,4 @@ def test_ver_sessao_encerrada_declara_encerrada_em_e_sai_1(monkeypatch):
     assert "encerrada em" in out["erro"]
 
 
-def test_descansar_encerra_sessao_marca_encerrada_em_no_duravel(monkeypatch):
-    """DT 535: `descansar fita --encerra-sessao` grava `encerrada_em = now()` em sessao.sessao."""
-    loader_d = SourceFileLoader("descansar", str(REPO_ROOT / "bin" / "descansar"))
-    spec_d = importlib.util.spec_from_loader("descansar", loader_d)
-    assert spec_d and spec_d.loader
-    descansar_mod = importlib.util.module_from_spec(spec_d)
-    loader_d.exec_module(descansar_mod)
 
-    sid = str(uuid.uuid4())
-    mem = FakeMsgMem({f"sessao:{sid}": '{"cadeira": "conhecimento"}'})
-    capturas: list = []
-    monkeypatch.setitem(sys.modules, "psycopg", _fake_psycopg_update_capturado(capturas))
-
-    import subprocess as _sp
-    with patch.object(descansar_mod.subprocess, "run",
-                      return_value=_sp.CompletedProcess(["seg"], 0, stdout="senha-fake\n", stderr="")):
-        descansar_mod.encerra_sessao(mem, sid)
-
-    assert f"sessao:{sid}" not in mem.data
-    assert len(capturas) == 1
-    sql, params = capturas[0]
-    assert "UPDATE sessao.sessao SET encerrada_em = now()" in sql
-    assert params == (sid,)

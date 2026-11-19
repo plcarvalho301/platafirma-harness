@@ -1,0 +1,121 @@
+openapi: 3.1.0
+info:
+  title: interface-de-prova — catálogo mínimo de itens
+  version: 1.0.0
+  description: Interface de prova em OpenAPI 3.1 para os casos do pacote suite.
+paths:
+  /itens:
+    get:
+      operationId: listarItens
+      responses:
+        "200":
+          description: Lista paginada de itens
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListaItens"
+              example:
+                itens:
+                  - id: item-1
+                    nome: Exemplo
+                proximo: null
+    post:
+      operationId: criarItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NovoItem"
+            example:
+              nome: Novo item
+      responses:
+        "201":
+          description: Item criado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+              example:
+                id: item-2
+                nome: Novo item
+        "422":
+          description: Entrada inválida
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              example:
+                type: about:blank
+                title: EntradaInvalida
+                detail: nome obrigatório
+  /itens/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        example: item-1
+    get:
+      operationId: lerItem
+      responses:
+        "200":
+          description: Item encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+              example:
+                id: item-1
+                nome: Exemplo
+        "404":
+          description: Item não encontrado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              example:
+                type: about:blank
+                title: NaoEncontrado
+                detail: item não encontrado
+components:
+  schemas:
+    Item:
+      type: object
+      additionalProperties: false
+      required: [id, nome]
+      properties:
+        id:
+          type: string
+        nome:
+          type: string
+    NovoItem:
+      type: object
+      additionalProperties: false
+      required: [nome]
+      properties:
+        nome:
+          type: string
+          minLength: 1
+    ListaItens:
+      type: object
+      additionalProperties: false
+      required: [itens, proximo]
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: "#/components/schemas/Item"
+        proximo:
+          type: ["string", "null"]
+    Problem:
+      type: object
+      required: [type, title]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        detail:
+          type: string

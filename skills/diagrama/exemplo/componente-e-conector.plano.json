@@ -1,0 +1,44 @@
+{
+  "pergunta": "Como os componentes de busca e catálogo conversam na ingestão?",
+  "leitor": "diretoria",
+  "tipo": "componente-e-conector",
+  "fontes": [
+    "referencias/instancias/observacao/2026-11-04-de-para-taxonomia-de-diagramas.md",
+    "referencias/instancias/capacidade/acervo.md"
+  ],
+  "entidades": [
+    {
+      "id": "crawler",
+      "nome": "Ingestor",
+      "fonte": "referencias/instancias/capacidade/acervo.md",
+      "tipo": "servico",
+      "categoria": "servico"
+    },
+    {
+      "id": "fila_msg",
+      "nome": "Fila de Ingestão",
+      "fonte": "referencias/instancias/observacao/2026-11-04-de-para-taxonomia-de-diagramas.md",
+      "tipo": "mensagem",
+      "categoria": "mensageria"
+    },
+    {
+      "id": "acervo_core",
+      "nome": "Motor do Acervo",
+      "fonte": "referencias/instancias/capacidade/acervo.md",
+      "tipo": "servico",
+      "categoria": "conhecimento"
+    }
+  ],
+  "relacoes": [
+    {
+      "de": "crawler",
+      "para": "fila_msg",
+      "rotulo": "publica evento"
+    },
+    {
+      "de": "fila_msg",
+      "para": "acervo_core",
+      "rotulo": "entrega lote"
+    }
+  ]
+}
