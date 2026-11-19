@@ -11,3 +11,4 @@ test_travar.py | bin/analise lib/analise/** ops-server/server.py | degrau: rodad
 test_aceite.py | bin/analise lib/analise/** ops-server/server.py | degrau: rodada
 test_atos.py | bin/analise lib/analise/** ops-server/server.py | degrau: rodada
 test_processo.py | bin/analise lib/analise/** ops-server/server.py | degrau: rodada
+test_pouso.py | bin/analise lib/analise/** | degrau: rodada

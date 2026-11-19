@@ -36,3 +36,21 @@ def test_outro_sujeito_le_pelo_padrao_e_nao_lista(catalogo,tmp_path,receita):
     catalogo.conn.execute("DELETE FROM analise.entrega WHERE objeto_id=%s",(id,))
     with pytest.raises(Falha) as e:outro.objeto(id)
     assert e.value.exit==4
+
+def test_coleta_remove_temporario_sem_escrita(catalogo,tmp_path):
+    ex=novo("ex")
+    catalogo.abrir_execucao(ex,"preparar","s","o-perm")
+    catalogo.concluir(ex,"pronta",{})
+    catalogo.conn.execute(
+        "UPDATE analise.execucao SET temporarios_ate=clock_timestamp()-interval '1 second' WHERE id=%s",
+        (ex,),
+    )
+    raiz=tmp_path/"o-perm"/"analise"/ex
+    receita_dir=raiz/"receita"
+    receita_dir.mkdir(parents=True)
+    arq=receita_dir/"preparar.py"
+    arq.write_text("print(1)\n")
+    arq.chmod(0o444)
+    receita_dir.chmod(0o555)
+    assert coletar(catalogo,tmp_path)==0
+    assert not raiz.exists()
