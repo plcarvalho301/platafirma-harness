@@ -41,22 +41,28 @@ def test_resolvedor_do_teste_conhece_o_repositorio():
     assert campos[0] == ESPELHO and campos[3] == "documento", campos
 
 
-def test_posto_resolve_para_a_stack_do_vault_e_fica_fora_das_familias():
-    """#2856 linha 453: o posto e repositorio de trabalho do `teste`, sem release. A stack
-    vault-ontologia tem lock e subarvore no posto, declara `promovida: false` e o posto fica fora
-    de familias.json. Nao prova: que o venv constroi (isso e `teste rodar vault-ontologia`)."""
+def test_posto_esta_nas_familias_e_resolve_stacks_do_posto_e_espelho():
+    """#4345 (premissa 2): o posto passa a familia promovida em familias.json e declara as stacks
+    vault-ontologia, harnesses e espelho-posto-harnesses em venvs.json."""
     def resolver(nome):
         r = subprocess.run(["python3", str(REGISTRO), nome], capture_output=True, text=True,
                            env={"PATH": "/usr/bin:/bin", "PLATAFIRMA_VENVS": str(VENVS)}, check=False)
         assert r.returncode == 0, r.stderr
         return r.stdout.rstrip("\n").split("\t")
-    pela_stack, pelo_repo = resolver("vault-ontologia"), resolver("platafirma-posto")
-    # colunas do registro.py: familia, lock, subarvore, esteira, stack, globs
-    assert pela_stack == pelo_repo
-    assert pela_stack[:5] == ["platafirma-posto", "ferramentas/vault-ontologia/uv.lock",
-                              "ferramentas/vault-ontologia/testes", "codigo", "vault-ontologia"], pela_stack
-    assert json.loads(VENVS.read_text(encoding="utf-8"))["vault-ontologia"]["promovida"] is False
-    assert "platafirma-posto" not in json.loads(FAMILIAS.read_text(encoding="utf-8"))
+
+    vault = resolver("vault-ontologia")
+    assert vault[:5] == ["platafirma-posto", "ferramentas/vault-ontologia/uv.lock",
+                         "ferramentas/vault-ontologia/testes", "codigo", "vault-ontologia"], vault
+    harnesses = resolver("harnesses")
+    assert harnesses[:5] == ["platafirma-posto", "ferramentas/vault-ontologia/uv.lock",
+                             "harnesses/tests", "codigo", "harnesses"], harnesses
+    espelho_h = resolver("espelho-posto-harnesses")
+    assert espelho_h[:5] == [ESPELHO, "outros_repos/posto/ferramentas/vault-ontologia/uv.lock",
+                             "outros_repos/posto/harnesses/tests", "codigo", "espelho-posto-harnesses"], espelho_h
+    venvs = json.loads(VENVS.read_text(encoding="utf-8"))
+    assert venvs["espelho-posto-harnesses"]["promovida"] is False
+    familias = json.loads(FAMILIAS.read_text(encoding="utf-8"))
+    assert familias["platafirma-posto"] == "https://github.com/plcarvalho301/platafirma-posto.git"
 
 def _promover_em_ensaio(tmp_path, familias):
     """Mesmo arranjo de test_release_ensaio_fetch.py: stub de `acervo` (registro de stacks vazio)."""
