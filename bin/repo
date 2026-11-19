@@ -2502,7 +2502,7 @@ portao_story_em_execucao() {
   nivel="$(printf '%s' "$item" | jq -r '.nivel_nome // empty' 2>/dev/null)" || nivel=""
   estado="$(printf '%s' "$item" | jq -r '.estado // empty' 2>/dev/null)" || estado=""
   if [ "$nivel" = "story" ] && [ -n "$estado" ] && [ "$estado" != "em-execucao" ]; then
-    morre "story #$card_num em $estado: escreva o Plano e mova para em-execucao (tarefas modelo story refinada)" 4
+    morre "story #$card_num em $estado: a dona escreve o Plano (tarefas modelo story refinada), e a executora o revisa e move para em-execucao" 4
   fi
 }
 

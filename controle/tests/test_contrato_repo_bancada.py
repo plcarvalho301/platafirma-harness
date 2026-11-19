@@ -370,7 +370,7 @@ def test_commitar_recusa_story_de_codigo_fora_de_em_execucao(tmp_path):
     r = _repo(tmp_path, bancada, "s1", "commitar", "demo@42-x", "-m", "teste (#42)", "novo.py",
               env_extra={"PF_TAREFAS_BIN": str(falso)})
     assert r.returncode == 4, r.stderr
-    assert "story #42 em em-refinamento-tecnico: escreva o Plano e mova para em-execucao (tarefas modelo story refinada)" in r.stderr
+    assert "story #42 em em-refinamento-tecnico: a dona escreve o Plano (tarefas modelo story refinada), e a executora o revisa e move para em-execucao" in r.stderr
 
     # Depois de mover a story para em-execucao, commitar sai 0
     falso_exec, _ = _tarefas_falsa(tmp_path, nivel="story", estado="em-execucao")
