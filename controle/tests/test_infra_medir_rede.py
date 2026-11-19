@@ -366,3 +366,25 @@ def test_pela_linha_de_comando_o_json_sai_valido_e_o_codigo_acompanha(mundo):
     p = subprocess.run([sys.executable, str(MEDIR), "--json"], capture_output=True, text=True, timeout=60)
     assert p.returncode == 0, p.stderr
     assert eixos.validar(json.loads(p.stdout)) == []
+
+
+def test_recuperacao_e_lido_como_unit_de_sistema_sem_flag_user(mundo):
+    # DT 883: recuperacao-tunnel.service roda como unit de sistema (sem --user); ops segue em --user.
+    _script(mundo.bindir / "systemctl", '''
+if [ "$1" = "--user" ]; then
+  case "$*" in
+    *ops-tunnel.service) echo "MainPID=1111" ;;
+    *) echo "MainPID=0" ;;
+  esac
+else
+  case "$*" in
+    *recuperacao-tunnel.service) echo "MainPID=2222" ;;
+    *) echo "MainPID=0" ;;
+  esac
+fi
+''')
+    j = medir_rede.medir()
+    assert j["estado_leitura"] == "lida"
+    assert tunel(j, "ops")["estado_leitura"] == "lida"
+    assert tunel(j, "recuperacao")["estado_leitura"] == "lida"
+    assert tunel(j, "recuperacao")["pid"] == 2222
