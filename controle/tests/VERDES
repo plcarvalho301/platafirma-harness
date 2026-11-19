@@ -377,3 +377,5 @@ testes/test_motor_sombra.py | bin/_motor/sombra.py
 tests/test_tarefas_ponteiro_estagio.py | bin/tarefas
 # DTs 791, 801, 836 e 837 (#2856 linhas 791, 801, 836 e 837): abrir mantem executor ja definido, abrir --da-producao --slug sem card, commitar com multiplos -m e procurar padrao com hifen apos <repo>.
 tests/test_repo_dts_791_801_836_837.py | bin/repo
+# DTs 809, 822, 853 e 884 (#2856): fabrica/<card> sem slug no estagio 4, pr-revisar e autoria/revisao em pr-ver, leitura direta @origin/main e atualizar HEAD destacado, abrir pela dona mantendo executor.
+tests/test_repo_dts_809_822_853_884.py | bin/repo bin/release

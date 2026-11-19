@@ -2190,6 +2190,13 @@ resolver_card_do_sha() {  # $1=repo $2=sha ; imprime NNNN (o card) ou nada, 1 se
     fabrica/[0-9]*-*)
       printf '%s' "${ramo#fabrica/}" | sed -n 's/^\([0-9]\{1,\}\)-.*/\1/p'
       return 0 ;;
+    fabrica/[0-9]*)
+      # DT 809: repo abrir <repo> <card> sem --slug abre ramo fabrica/<card>; aceitar tambem.
+      local num="${ramo#fabrica/}"
+      case "$num" in
+        *[!0-9]*|"") return 1 ;;
+        *) printf '%s' "$num"; return 0 ;;
+      esac ;;
     *) return 1 ;;
   esac
 }

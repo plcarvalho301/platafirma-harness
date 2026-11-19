@@ -3016,7 +3016,7 @@ def conferir_card(alvo, como_json=False):
                 continue
             sha, _, quando = linha.partition(" ")
             achados.append((sha, quando))
-    rc2, out2, _ = sh(["git", "-C", HARNESS, "branch", "-a", "--list", f"*fabrica/{ident}-*"])
+    rc2, out2, _ = sh(["git", "-C", HARNESS, "branch", "-a", "--list", f"*fabrica/{ident}", f"*fabrica/{ident}-*"])
     ramos = [l.strip().lstrip("* ").strip() for l in out2.splitlines() if l.strip()] if rc2 == 0 else []
 
     nome_item = f"#{ident}"
