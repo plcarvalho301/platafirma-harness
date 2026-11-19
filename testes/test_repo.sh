@@ -342,8 +342,8 @@ set -e
 [ "$rc_orfa" -eq 0 ] || { echo "FALHA: 4371 abrir devia refazer a worktree órfã, saiu $rc_orfa: $out_orfa" >&2; exit 1; }
 grep -q "worktree órfã" <<< "$out_orfa" || { echo "FALHA: 4371 abrir não disse que achou a órfã: $out_orfa" >&2; exit 1; }
 "$VERBO" estado platafirma-casa-espelho >/dev/null 2>&1 || { echo "FALHA: 4371 a worktree refeita não responde ao estado" >&2; exit 1; }
-grep -rqs "sujo-alheio" "$BANCADA_TESTE/wt/.orfas"/platafirma-casa-espelho-ti-*/doc.md || { echo "FALHA: 4371 a pasta órfã não foi guardada inteira" >&2; exit 1; }
-echo "OK: 4371 — worktree de main órfã refeita de origin/main, pasta antiga na quarentena"
+grep -qs "sujo-alheio" "$BANCADA_TESTE/wt/platafirma-casa-espelho/ti/main/doc.md" || { echo "FALHA: 4371/DT-879 a árvore da worktree órfã não foi preservada" >&2; exit 1; }
+echo "OK: 4371/DT-879 — worktree de main órfã religada a origin/main com árvore preservada"
 
 # 9. DT 826: ramo divergido de origin/<ramo>
 echo "--- Teste 9: DT 826 — repo sincronizar mescla ramo divergido de origin/<ramo> ---"
