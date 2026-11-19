@@ -7,12 +7,19 @@ import sys
 import zipfile
 from pathlib import Path
 
+import pytest
+
 HARNESS_BIN = Path(__file__).resolve().parents[1] / "bin"
 BIN_LER = HARNESS_BIN / "ler_arquivo"
 BIN_WRITE = HARNESS_BIN / "write_file"
 
 
 _PY_HARNESS = Path("/opt/platafirma/current/venv/harness/bin/python")
+
+
+@pytest.fixture(autouse=True)
+def _morada_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PLATAFIRMA_BANCADA", str(tmp_path))
 
 
 def _chamar(binario: Path, payload: dict) -> tuple[int, dict]:
@@ -29,21 +36,23 @@ def _chamar(binario: Path, payload: dict) -> tuple[int, dict]:
 
 
 def test_write_file_inteiro_trecho_e_patch_por_processo(tmp_path: Path):
-    alvo = tmp_path / "sub" / "notas.txt"
-    rc, res = _chamar(BIN_WRITE, {"path": str(alvo), "content": "linha 1\nlinha 2\nlinha 3\n"})
+    inst = tmp_path / "inst"
+    alvo = inst / "var" / "tmp" / "ordem-teste" / "sub" / "notas.txt"
+    ctx = {"instancia": str(inst), "ordem_id": "ordem-teste"}
+    rc, res = _chamar(BIN_WRITE, {**ctx, "path": str(alvo), "content": "linha 1\nlinha 2\nlinha 3\n"})
     assert rc == 0 and res["ok"] is True and res["substituiu"] is False
 
     # Troca por trecho
     rc, res = _chamar(
         BIN_WRITE,
-        {"path": str(alvo), "trecho": {"antes": "linha 2", "depois": "linha DOIS"}},
+        {**ctx, "path": str(alvo), "trecho": {"antes": "linha 2", "depois": "linha DOIS"}},
     )
     assert rc == 0 and res["ok"] is True and res["ocorrencias"] == 1
     assert "linha DOIS" in alvo.read_text(encoding="utf-8")
 
     # Patch unified diff
     patch = "--- a/notas.txt\n+++ b/notas.txt\n@@ -1,3 +1,3 @@\n linha 1\n-linha DOIS\n+linha 2-patch\n linha 3\n"
-    rc, res = _chamar(BIN_WRITE, {"path": str(alvo), "patch": patch})
+    rc, res = _chamar(BIN_WRITE, {**ctx, "path": str(alvo), "patch": patch})
     assert rc == 0 and res["ok"] is True
     assert "linha 2-patch" in alvo.read_text(encoding="utf-8")
 

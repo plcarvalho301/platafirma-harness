@@ -8,11 +8,18 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 _RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_RAIZ / "lib"))
 
 import oplog  # noqa: E402
 from leitura import leitura as L  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _morada_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PLATAFIRMA_BANCADA", str(tmp_path))
 
 
 # --- #4251: forma única e chamada que resolve -----------------------------------------------------

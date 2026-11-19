@@ -20,6 +20,11 @@ from leitura import leitura as L  # noqa: E402
 ORCAMENTOS = (1_024, 4_096, 40_000)
 
 
+@pytest.fixture(autouse=True)
+def _morada_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PLATAFIRMA_BANCADA", str(tmp_path))
+
+
 def _segue(p, **kw):
     paginas = [L.ler(p, **kw)]
     limite = Path(p).stat().st_size * 2 + 10

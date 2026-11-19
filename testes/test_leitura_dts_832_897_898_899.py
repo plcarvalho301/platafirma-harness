@@ -25,6 +25,11 @@ BIN_LER = _RAIZ / "bin" / "ler_arquivo"
 _PY_HARNESS = Path("/opt/platafirma/current/venv/harness/bin/python")
 
 
+@pytest.fixture(autouse=True)
+def _morada_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PLATAFIRMA_BANCADA", str(tmp_path))
+
+
 def _chamar(payload: dict) -> tuple[int, dict]:
     py = str(_PY_HARNESS) if _PY_HARNESS.is_file() else sys.executable
     cp = subprocess.run(
