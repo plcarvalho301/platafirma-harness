@@ -441,7 +441,9 @@ def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
     sessao_id = (ident or {}).get("sessao_id") or "-"
     if isinstance(r.get("stderr"), dict):
         r["stderr"] = _normaliza_canal_teto(r["stderr"], sessao_id, f"{tool}-{uuid.uuid4().hex[:8]}-stderr.txt")
-    if not _poda_ligada() or _poda.intocavel(r):
+    # O terminal do dono (pf) é máquina, não contexto de modelo: a poda (lavagem, ledger, corte de
+    # linha com alça) corrompia o JSON e o YAML que o pf vault lê. Sai cru, só com o teto.
+    if not _poda_ligada() or _poda.intocavel(r) or _chamada_do_terminal():
         if isinstance(r.get("stdout"), dict):
             r["stdout"] = _normaliza_canal_teto(r["stdout"], sessao_id, f"{tool}-{uuid.uuid4().hex[:8]}-stdout.txt")
         return r
@@ -3392,13 +3394,19 @@ PF_TOOLS_LOTE = os.environ.get("PF_TOOLS_LOTE", "0") == "1" # chamada em lote (�
 # sem sujeito, e a cadeira segue obrigada a abrir sessão.
 SUPERFICIES_SEM_SESSAO = frozenset({"terminal"})
 
-def _sujeito_do_terminal() -> str:
-    # Pelo azp do token, e não pelo header x-pf-superficie, que o cliente escreve.
+def _chamada_do_terminal() -> bool:
+    """A chamada vem de uma superfície sem sessão (o terminal do dono), pelo azp do token, e não pelo
+    header x-pf-superficie, que o cliente escreve."""
     try:
-        quem = _quem()
-        if _mapa_azp_superficie().get(quem.get("azp") or "") not in SUPERFICIES_SEM_SESSAO:
+        return _mapa_azp_superficie().get(_quem().get("azp") or "") in SUPERFICIES_SEM_SESSAO
+    except Exception:                                       # noqa: BLE001
+        return False
+
+def _sujeito_do_terminal() -> str:
+    try:
+        if not _chamada_do_terminal():
             return ""
-        return str(quem.get("sub") or "").strip()
+        return str(_quem().get("sub") or "").strip()
     except Exception:                                       # noqa: BLE001
         return ""
 

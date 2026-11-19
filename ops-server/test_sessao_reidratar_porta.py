@@ -266,6 +266,20 @@ def test_sessao_resolve_sem_sessao_sem_token_segue_sem_sujeito():
     assert out["sujeito"] == ""
 
 
+def test_serve_do_terminal_sai_cru_sem_poda():
+    """O retorno ao terminal do dono não passa pela poda: o JSON que o pf vault lê sai como o verbo o
+    escreveu, sem linha cortada com alça nem campo `poda`."""
+    longa = "x" * 5000
+    texto = '{"yaml": "classes:\\n- nome: a\\n  descricao: ' + longa + '\\n"}\n'
+    r = {"exit_code": 0, "stdout": {"texto": texto, "truncado": False, "bytes_total": len(texto)}}
+    with patch.object(s, "_quem", return_value={"azp": "pf-cli", "sub": "dono-sub"}), \
+         patch.object(s, "_mapa_azp_superficie", side_effect=_mapa_terminal):
+        out = s._serve(r, tool="infra", alca="infra rodar ontologia-servida -- ler shape a --json",
+                       ident={"sessao_id": "-"})
+    assert out["stdout"]["texto"] == texto
+    assert "poda" not in out
+
+
 # ---------------------------------------------------------------- PF_CHAPEU no execve (card #3367)
 
 def test_sessao_resolve_traz_chapeu_da_chave_viva():
