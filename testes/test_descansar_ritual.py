@@ -52,21 +52,23 @@ def test_resto_do_ritual_intacto():
     texto = _ritual()
     assert "2a. conhecimento curado" in texto
     assert "triagem da memoria" not in texto, "a triagem da memoria saiu do roteiro (debito 654)"
-    assert "3. SO POR ORDEM DO DONO" in texto
-    assert "descansar fita --encerra-sessao" in texto
+    assert "3. encerramento" in texto
+    assert "descansar encerrar" in texto and "descansar fita --encerra-sessao" in texto
 
 
-# ---------------------------------------------------------------- #3217: o caderno no banco
+# ---------------------------------------------------------------- #3217 / DTs 885, 889: publicar no banco de eventos
 def _passo(texto: str, ini: str, fim: str) -> str:
     i = texto.index(ini)
     return texto[i:texto.index(fim, i)]
 
 
-def test_2a_escreve_por_categoria_no_banco_e_a_poda_e_do_bot():
+def test_2a_aponta_descansar_publicar_com_esquema_json_e_a_poda_e_do_bot():
     p = _passo(_ritual(), "2a.", "2b.")
-    for categoria in ("--licao", "--preferencia", "--premissa"):
-        assert f"mesa escrever <chapeu> {categoria}" in p
-    assert "--caso" in p and "--dito-em" in p and "--vale-ate" in p, "o campo de cada categoria"
+    assert "descansar publicar" in p
+    for campo in ("enunciado", "destinatario", "tipo-de-mensagem", "etiqueta", "<classe>:<slug>"):
+        assert campo in p, f"esquema JSON sem {campo}"
+    assert "mesa escrever <chapeu>" not in p, "mesa escrever fechou na story 4355 (DT 885/889)"
+    assert "mesa substituir" not in p
     assert "guia\n   registrar" in p or "guia registrar" in p
     # #3884: a cadeira nao resolve nada antes de escrever; a poda e do bot. A carta dele se trata na fila, nao aqui (dono, 17/11)
     assert "A poda nao e sua" in p and "a revisar" not in p, "a marca a revisar saiu (arq:0120, 19/10)"
@@ -74,20 +76,21 @@ def test_2a_escreve_por_categoria_no_banco_e_a_poda_e_do_bot():
     assert "seis\n   heuristicas" not in p and "historico e o git" not in p, "a arq:0072 saiu"
 
 
-def test_2c_marca_a_aresta_so_do_que_entrou_na_resposta():
+def test_2c_marca_a_aresta_por_descansar_publicar_so_do_que_entrou_na_resposta():
     p = _passo(_ritual(), "2c.", "\n3. ")
-    assert "mesa aresta <chapeu>" in p and "--para <ponta>" in p and "--para-que" in p
+    assert "descansar publicar" in p and "etiqueta" in p and "<classe>:<slug>" in p
+    assert "mesa aresta <chapeu>" not in p, "mesa aresta fechou na story 4355 (DT 889)"
     assert "#2947" in p and "puxado de fora da cadeira" in p
 
 
-# ---------------------------------------------------------------- debito 654: o encerramento sem trava
+# ---------------------------------------------------------------- debito 654 / DT 896: encerramento no mesmo ato
 def _corrido(p: str) -> str:
     return " ".join(p.split())
 
 
-def test_3_encerra_com_a_ordem_do_dono_sem_pergunta_no_fecho():
+def test_3_encerra_no_mesmo_ato_sem_pergunta_no_fecho():
     p = _corrido(_passo(_ritual(), "\n3. ", "segundo caminho de morte"))
-    assert "SO POR ORDEM DO DONO" in p and "depois dos passos 1 e 2" in p
+    assert "descansar fita" in p and "descansar encerrar" in p and "no mesmo ato" in p
     assert "sem perguntar nada no fecho" in p
     assert "limpo?" not in _ritual() and "NAO rode o passo" not in _ritual()
 

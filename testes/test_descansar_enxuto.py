@@ -49,16 +49,16 @@ def test_a_varredura_le_as_cadeiras_da_abertura(monkeypatch, tmp_path):
 
 
 def test_o_carimbo_e_do_encerramento_nao_do_relatorio():
+    fecho = TEXTO[TEXTO.index("def _fechar_sessao"):TEXTO.index("def ato_fita")]
     ato = TEXTO[TEXTO.index("def ato_fita"):TEXTO.index("def ato_varredura")]
-    encerra, relatorio = ato.split("    if parada:\n", 1)
-    assert 'rc.set(f"mem:{curto}"' in encerra
-    assert "rc.set(" not in relatorio
+    assert 'rc.set(f"mem:{curto}"' in fecho
+    assert "rc.set(" not in ato
 
 
-def test_parada_sem_encerra_sessao_recusa(monkeypatch):
+def test_parada_com_sem_encerrar_recusa(monkeypatch):
     monkeypatch.setenv("PF_CADEIRA", "ia")
-    monkeypatch.setattr(descansar.sys, "argv", ["descansar", "fita", "--parada", "teto_giros"])
+    monkeypatch.setattr(descansar.sys, "argv", ["descansar", "fita", "--sem-encerrar", "--parada", "teto_giros"])
     monkeypatch.setattr(descansar, "conn", lambda: pytest.fail("a recusa nao toca o msg-mem"))
     with pytest.raises(SystemExit) as saiu:
         descansar.main()
-    assert "--parada so vale com --encerra-sessao" in str(saiu.value)
+    assert "--parada nao vale com --sem-encerrar" in str(saiu.value)
