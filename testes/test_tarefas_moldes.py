@@ -455,3 +455,97 @@ def test_dt_767_espera_dono_exibe_card_orfao_e_aberto_parado(stub):
     assert "com as cadeiras (1 abertos, 1 órfãos, 1 parados):" in p.stdout
     assert "  #100 [—] story sem cadeira · órfão" in p.stdout
     assert "    #9 buraco · parado — buraco: antigo" in p.stdout
+
+
+def test_inventario_subcomandos_e_leitura(tmp_path):
+    """DTs 903/906: `tarefas inventario` expõe ler, criar, editar, validar, cortar, ligar, desligar."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    pedidos = []
+
+    class H(BaseHTTPRequestHandler):
+        def log_message(self, *_):
+            pass
+
+        def _resp(self, codigo, corpo):
+            b = json.dumps(corpo).encode()
+            self.send_response(codigo)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+
+        def do_GET(self):
+            pedidos.append(("GET", self.path, None))
+            if self.path == "/registro":
+                self._resp(200, {"estados": []})
+            elif self.path.startswith("/itens/4376/inventario"):
+                self._resp(200, {
+                    "linha": "Inventário: 1 peça, 1 regra (0 validadas, 1 sem story), 0 produtos documentais",
+                    "itens": {
+                        "pecas": [{"chave": "4376.p1", "descricao": "leitor", "classe_declarada": "componente"}],
+                        "regras": [{"chave": "4376.r1", "peca_numero": 1, "frase": "lê tudo", "validada": False}],
+                        "documentos": [],
+                    },
+                })
+            elif self.path == "/itens/4376":
+                self._resp(200, {
+                    "id": 4376, "nivel": 1, "titulo": "Busca", "estado": "em-parecer",
+                    "cadeira": "ti", "descricao": "Problema: p",
+                    "inventario": {"linha": "Inventário: 1 peça, 0 regras, 0 produtos documentais"},
+                })
+            else:
+                self._resp(404, {"erro": "nao achou"})
+
+        def do_POST(self):
+            tam = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(tam).decode() or "{}")
+            pedidos.append(("POST", self.path, body))
+            if self.path == "/itens/4376/inventario/pecas":
+                self._resp(200, {"chave": "4376.p1"})
+            elif self.path == "/itens/4376/inventario/regras/1/validar":
+                self._resp(200, {"chave": "4376.r1", "validada_por": "dono", "validada_em": "2026-11-19"})
+            elif self.path == "/itens/4376/inventario/pecas/1/cortar":
+                self._resp(200, {"chave": "4376.p1"})
+            elif self.path == "/itens/4376/inventario/regras/1/stories":
+                self._resp(200, {"chave": "4376.r1"})
+            else:
+                self._resp(404, {"erro": "nao achou"})
+
+        def do_PATCH(self):
+            tam = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(tam).decode() or "{}")
+            pedidos.append(("PATCH", self.path, body))
+            self._resp(200, {"chave": "4376.r1", "validada": False})
+
+        def do_DELETE(self):
+            pedidos.append(("DELETE", self.path, None))
+            self._resp(200, {"chave": "4376.r1"})
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    try:
+        base = f"http://127.0.0.1:{srv.server_address[1]}"
+        assert "# atos:" in BIN.read_text(encoding="utf-8") and "inventario" in BIN.read_text(encoding="utf-8")
+        assert _run(["inventario"], base).returncode == 2
+        p_ler = _run(["inventario", "ler", "4376"], base)
+        assert p_ler.returncode == 0 and "4376.p1 · leitor" in p_ler.stdout
+        p_criar = _run(["inventario", "criar", "4376", "peca", "--descricao", "leitor", "--classe", "componente"], base)
+        assert p_criar.returncode == 0 and "4376.p1 criado" in p_criar.stdout
+        p_edit = _run(["inventario", "editar", "4376.r1", "--frase", "nova"], base)
+        assert p_edit.returncode == 0 and "4376.r1 editado · não validada" in p_edit.stdout
+        p_val = _run(["inventario", "validar", "4376.r1", "--frase", "nova"], base)
+        assert p_val.returncode == 0 and "4376.r1 validada por dono" in p_val.stdout
+        p_cort = _run(["inventario", "cortar", "4376.p1"], base)
+        assert p_cort.returncode == 0 and "4376.p1 cortado" in p_cort.stdout
+        p_lig = _run(["inventario", "ligar", "4376.r1", "4400"], base)
+        assert p_lig.returncode == 0 and "4376.r1 ligada à story 4400" in p_lig.stdout
+        p_des = _run(["inventario", "desligar", "4376.r1", "4400"], base)
+        assert p_des.returncode == 0 and "4376.r1 desligada da story 4400" in p_des.stdout
+        p_card = _run(["ler", "4376"], base)
+        assert p_card.returncode == 0 and "Inventário: 1 peça, 0 regras, 0 produtos documentais" in p_card.stdout
+    finally:
+        srv.shutdown()
+        srv.server_close()
