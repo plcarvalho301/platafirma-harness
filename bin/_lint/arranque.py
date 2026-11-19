@@ -23,14 +23,10 @@ SINAIS_ARRANQUE = (
 FORA_DA_REGUA = ("archi_base", "mdm_rh", "i-have-adhd")
 INSTANCIA_EFEMERA = ("fitas",)
 
-TEXTOS_COMUNS_ARRANQUE = (
-    "abertura/dono.md",
-    "2-comportamento/cultura/cultura.md",
-)
+TEXTOS_COMUNS_ARRANQUE = ()
 TEXTOS_CADEIRA_DEFAULT = (
     "AGENTS.md",
     "agente/CLAUDE.md",
-    "abertura/arranque.md",
 )
 PRIMITIVAS_PROVIDER_RE = re.compile(r"\b(ToolSearch|call_mcp_tool|tool_search)\b")
 DEFAULT_SEM_SLUG_RE = re.compile(

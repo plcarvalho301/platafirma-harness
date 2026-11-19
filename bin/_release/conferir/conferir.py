@@ -56,13 +56,9 @@
                    copia; nao julga a redacao do arranque, que e da dona do texto.
                    Com `--staged`, julga so o CLAUDE.md do commit em curso.
   ferramental [--json]
-                   golden record acervo.ferramental contra o host: (a) 1:1
-                   capacidade<->verbo integro e cada verbo declarado resolve em
-                   ~/AI/bin (arq:0037); (b) paridade de transicao: todo stack do
-                   registro/stacks.json ja absorvido em acervo.stack — pre-condicao
-                   de o arquivo poder morrer. NAO confere instancia->stack: stack e
-                   conveniencia de deploy, nao invariante de capacidade; instancia
-                   avulsa (ollama no harness) e normal. So olha.
+                   manifesto registro/porta.yaml contra o host: verbos em bin/
+                   declarados no registro da porta resolvem no harness ou em
+                   ~/AI/bin. So olha.
   commit  <arquivo> mensagem de commit em curso: os ids que ela CITA, contra o
                    rastreador. Recusa id inexistente e id de item fechado — os dois
                    predicados da F9 do rastreador, §5.1, e so eles. Ausencia de id
@@ -74,13 +70,12 @@
                    em todos ao mesmo tempo. Rollout e ato declarado, nao efeito colateral.
   existe  <tipo> <nome>
                    fato de existencia com ancora colavel — o produtor da linha
-                   `NEGATIVA:` do gate de abertura/dono.md (mesa ia #8, 26/08/2026).
-                   Tipos: cadeira (subdirs de abertura/, prefixo claudinho-/
-                   claudinha- aceito e descartado), verbo (~/AI/bin), card
-                   (rastreador, via `tarefas ler`), arquivo (sob ~/AI; com
-                   `git log -1` quando rastreado), mesa (item #N da cadeira
-                   corrente, via `mesa ver`) e entidade (sai indeterminavel desde
-                   13/11/2026: a fonte, acervo consultar, foi removida). A PRIMEIRA linha da saida E a
+                   `NEGATIVA:` da conduta do dono (mesa ia #8, 26/08/2026).
+                   Tipos: cadeira (Olaria, classe persona), chapeu (Olaria, classe
+                   chapeu), verbo (~/AI/bin), card (rastreador, via `tarefas ler`),
+                   arquivo (sob ~/AI; com `git log -1` quando rastreado), mesa
+                   (item #N da cadeira corrente, via `mesa ver`) e entidade (Olaria
+                   `/listar shape`). A PRIMEIRA linha da saida E a
                    ancora: `existe:`/`nao-existe:` + evidencia. Sai 0 (existe),
                    1 (nao existe), 2 (indeterminavel — fonte fora do ar ou uso
                    errado; nunca colapsa em 1: ausencia de resposta nao e
@@ -206,7 +201,7 @@ HARNESS = os.environ.get("PF_HARNESS_DIR", os.path.join(RAIZ, "platafirma-harnes
 BIN_IRMAOS = os.path.join(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"),
                           "harness", "bin")
 POLITICA_DIR = os.environ.get("PDP_DIR",
-    os.path.join(RAIZ, "var", "politica-acesso"))  # dados fora do WT de fabrica (#2956)
+    os.path.join(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"), "core", "acesso"))
 SUPERFICIES = os.path.join(POLITICA_DIR, "superficies.yaml")
 
 
@@ -880,65 +875,122 @@ def origem(nome, caminho):
     return "so-no-host", "sem contraparte em repo"
 
 
-# O mapa de capacidades vigente: a tabela do vocabulario arquitetura-negocio-operacao, como o
-# acervo o serve. A capacidade do cabecalho se confere contra ESTE mapa, e nao contra a
-# existencia de uma ficha no acervo: ficha do mapa antigo segue no acervo depois que o mapa
-# muda, e por ela `verificacao`, `trabalho` e `motor` passavam como conformes (pedido de
-# gestao-estrategica, 12/11/2026).
-MAPA_VIGENTE = ("vocabulario", "arquitetura-negocio-operacao")
-_LINHA_DO_MAPA = re.compile(
-    r"^\|\s*`(?P<cap>[a-z0-9-]+)`\s*\|\s*(?:—|-|`(?P<mae>[a-z0-9-]+)`)\s*\|[^|]*\|\s*(?P<persona>[a-z0-9-]+)\s*\|$")
-_MAPA = {}
+_CAPACIDADES_OLARIA = {}
 
 
-def _ler_mapa_vigente():
-    """Texto do mapa vigente, pelo `acervo` da release no ar (BIN_IRMAOS, #3142).
-    (rc, texto, erro)."""
-    return sh([os.path.join(BIN_IRMAOS, "acervo"), "ler", "casa", *MAPA_VIGENTE])
+def _olaria_post(rota, corpo, timeout=15):
+    """POST JSON para a Olaria usando OLARIA_URL e _olaria_chave().
+    Devolve (status, dict | None, erro | None)."""
+    url = os.environ.get("OLARIA_URL", "http://127.0.0.1:8103").rstrip("/")
+    chave = _olaria_chave()
+    if not chave:
+        return None, None, "chave de servico da Olaria ausente (OLARIA_CHAVE)"
+    req = urllib.request.Request(
+        f"{url}{rota}",
+        data=json.dumps(corpo).encode("utf-8"),
+        method="POST",
+        headers={
+            "X-Olaria-Chave": chave,
+            "Content-Type": "application/json; charset=utf-8",
+            "User-Agent": "conferir-olaria",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            return resp.status, json.loads(raw or "{}"), None
+    except urllib.error.HTTPError as err:
+        try:
+            raw = err.read().decode("utf-8", errors="replace")
+            dado = json.loads(raw or "{}")
+        except Exception:
+            dado = {"erro": str(err)}
+        return err.code, dado, f"Olaria respondeu {err.code}: {dado.get('erro') or err}"
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as err:
+        return None, None, f"Olaria fora do ar ({url}): {err}"
 
 
-def _mapa_vigente():
-    """(capacidades, erro). capacidades = {slug: {"mae": slug|None, "persona": cadeira}}, lidas
-    das linhas da tabela «As 28 capacidades». Acervo fora do ar ou tabela que nao se le dao
-    (None, motivo): a conferencia sai indeterminavel, nunca conforme nem divergente."""
-    if "v" not in _MAPA:
-        rc, out, err = _ler_mapa_vigente()
-        if rc != 0:
-            _MAPA["v"] = (None, f"acervo ler casa {' '.join(MAPA_VIGENTE)} saiu {rc}: "
-                                f"{(err or out or '').strip()[:200]}")
-        else:
-            caps = {}
-            for linha in (out or "").splitlines():
-                m = _LINHA_DO_MAPA.match(linha.strip())
-                if m:
-                    caps[m["cap"]] = {"mae": m["mae"], "persona": m["persona"]}
-            _MAPA["v"] = (caps, None) if caps else (
-                None, f"{' '.join(MAPA_VIGENTE)} servido sem a tabela de capacidades")
-    return _MAPA["v"]
+def _slug_olaria(valor, prefixo):
+    if isinstance(valor, list):
+        valor = valor[0] if valor else None
+    if not isinstance(valor, str) or not valor.strip():
+        return None
+    s = valor.strip()
+    return s[len(prefixo):] if s.startswith(prefixo) else s
+
+
+def _capacidades_olaria():
+    """Carrega as capacidades da Olaria (chave, mãe componente-de e persona sob-autoridade-de).
+    Cacheado por (OLARIA_URL, OLARIA_CHAVE). Devolve (dict_slug_info | None, erro | None)."""
+    url = os.environ.get("OLARIA_URL", "http://127.0.0.1:8103").rstrip("/")
+    chave = _olaria_chave()
+    chave_cache = (url, chave)
+    if chave_cache in _CAPACIDADES_OLARIA:
+        return _CAPACIDADES_OLARIA[chave_cache], None
+
+    status, corpo, erro = _olaria_post("/ler", {"classe": "capacidade", "chaves": [], "fichas": True})
+    if erro or status != 200 or not isinstance(corpo, dict):
+        st2, corpo2, erro2 = _olaria_post("/listar", {"classe": "capacidade"})
+        if erro2 or st2 != 200 or not isinstance(corpo2, dict):
+            return None, erro or erro2 or f"Olaria respondeu {status}"
+        corpo = corpo2
+
+    caps = {}
+    fichas = corpo.get("fichas")
+    if isinstance(fichas, list) and fichas:
+        for f in fichas:
+            if not isinstance(f, dict):
+                continue
+            ch = str(f.get("chave") or "").strip()
+            if not ch:
+                continue
+            slug = ch[len("capacidade:"):] if ch.startswith("capacidade:") else ch
+            lig = f.get("ligacoes") if isinstance(f.get("ligacoes"), dict) else {}
+            caps[slug] = {
+                "chave": ch,
+                "mae": _slug_olaria(lig.get("componente-de"), "capacidade:"),
+                "persona": _slug_olaria(lig.get("sob-autoridade-de"), "persona:"),
+            }
+    elif isinstance(corpo.get("chaves"), list):
+        for ch in corpo["chaves"]:
+            ch_s = str(ch).strip()
+            if not ch_s:
+                continue
+            slug = ch_s[len("capacidade:"):] if ch_s.startswith("capacidade:") else ch_s
+            caps[slug] = {"chave": ch_s, "mae": None, "persona": None}
+
+    if not caps:
+        return None, "Olaria nao retornou nenhuma capacidade"
+    _CAPACIDADES_OLARIA[chave_cache] = caps
+    return caps, None
 
 
 def _capacidade_do_mapa(cap):
-    """Slug do mapa que o cabecalho declara: `filha` ou `mae/filha` dao a filha."""
-    return (cap or "").strip().lower().split("/")[-1]
+    """Slug da capacidade que o cabecalho declara: `filha` ou `mae/filha` dao a filha."""
+    alvo = (cap or "").strip().lower()
+    if alvo.startswith("capacidade:"):
+        alvo = alvo[len("capacidade:"):]
+    return alvo.split("/")[-1]
 
 
 def _capacidade_veredito(cap):
-    """Veredito da capacidade `cap` contra o mapa vigente (MAPA_VIGENTE). O cabecalho declara o
-    slug como o mapa o escreve, ou `mae/filha` com a mae que o mapa da a filha. Fora do mapa e
-    divergente; mapa que nao se leu e indeterminavel."""
-    caps, erro = _mapa_vigente()
+    """Veredito da capacidade `cap`, conferindo contra as capacidades da Olaria
+    (com mãe e persona). Se a Olaria não responder, devolve indeterminavel (exit 5),
+    sem mascarar divergência de capacidade."""
+    caps, erro = _capacidades_olaria()
     if caps is None:
-        return resultado.indeterminavel(f"mapa de capacidades nao lido: {erro}")
+        return resultado.indeterminavel(erro or f"Olaria indisponivel para conferir {cap!r}")
     c = (cap or "").strip().lower()
+    if c.startswith("capacidade:"):
+        c = c[len("capacidade:"):]
     slug = _capacidade_do_mapa(c)
     if slug not in caps:
-        return resultado.divergente(
-            f"capacidade {cap!r} nao esta no mapa vigente ({' '.join(MAPA_VIGENTE)})")
+        return resultado.divergente(f"capacidade {cap!r} nao existe na Olaria")
     if "/" in c:
         mae = c.rsplit("/", 1)[0]
         if caps[slug]["mae"] != mae:
             return resultado.divergente(
-                f"no mapa vigente, a mae de {slug!r} e {caps[slug]['mae'] or 'nenhuma'}, nao {mae!r}")
+                f"na Olaria, a mae de {slug!r} e {caps[slug]['mae'] or 'nenhuma'}, nao {mae!r}")
     return resultado.conforme()
 
 
@@ -1055,8 +1107,6 @@ def _mecanismo_fora_da_regra(nome, caminho):
 
 def conferir_verbo(alvo, como_json=False):
     desde_familia = _desde_familia("platafirma-harness")
-    em_rev = os.environ.get("PF_CONFERIR_ORIGEM", "1") == "0"
-    donos_cache = None
     cap_cache = {}
     porcapacidade = {}
     vistos = 0
@@ -1084,7 +1134,7 @@ def conferir_verbo(alvo, como_json=False):
         # (20/08/2026). Sem esta segunda condicao, `fila` -> `fila_streams.py` caia como
         # alias por causa do sufixo `.py` e nao entrava na conta de capacidade nenhuma —
         # verbo unico do proprio ato, medido como se nao existisse. O nome de arquivo
-        # carrega o sufixo porque o modulo TAMBEM e importado (`ops-server/server.py` e
+        # carrega o sufixo porque o modulo TAMBEM e importado pela porta e
         # `controle/tests/test_contrato_fila.py` fazem `import fila_streams`); o symlink
         # e o verbo. Alias de verdade e nome que DUPLICA outro ja exposto, e e so esse
         # caso que arq:0037 precisa isentar.
@@ -1147,23 +1197,7 @@ def conferir_verbo(alvo, como_json=False):
                     print(f"    capacid?: {cap_v.motivo}")
             else:
                 if not como_json:
-                    print(f"    capacid : {cap!r} no mapa vigente")
-        if not em_rev and cab["dono"]:
-            if donos_cache is None:
-                donos_cache = _donos_ferramental()
-            donos_cat, erro_donos = donos_cache
-            if erro_donos:
-                tem_indeterminavel = True
-                problemas.append(f"dono no catalogo nao conferido: {erro_donos}")
-                if not como_json:
-                    print(f"    DONO?   : nao consegui ler acervo.ferramental_verbo: {erro_donos}")
-            elif nome in donos_cat and donos_cat[nome] != cab["dono"]:
-                tem_divergencia = True
-                dono_cat = donos_cat[nome] or "(vazio)"
-                problemas.append(
-                    f"dono no catalogo ({dono_cat}) difere do cabecalho ({cab['dono']})")
-                if not como_json:
-                    print(f"    DONO    : catalogo={dono_cat} difere do cabecalho={cab['dono']}")
+                    print(f"    capacid : {cap!r} resolvida na Olaria")
         for motivo_mec in _mecanismo_fora_da_regra(nome, caminho):
             tem_divergencia = True
             problemas.append(motivo_mec)
@@ -1204,7 +1238,7 @@ def conferir_verbo(alvo, como_json=False):
                 cap_v = cap_cache.get(cap) or _capacidade_veredito(cap)
                 cap_cache[cap] = cap_v
                 if cap_v.estado == "divergente":
-                    v = resultado.divergente(f"capacidade fora do mapa vigente: {cap_v.motivo}")
+                    v = resultado.divergente(f"capacidade nao resolvida na Olaria: {cap_v.motivo}")
                 elif cap_v.estado == "indeterminavel":
                     v = resultado.indeterminavel(cap_v.motivo)
                 elif len(verbos) != 1:
@@ -2377,25 +2411,20 @@ _RE_COPY_UI = re.compile(r"^\s*COPY\s+(?:--\S+\s+)*--from=platafirma/ui:(\S+)", 
 
 
 def _sha_do_registro():
-    """O sha do registro do ferramental SERVIDO, ou None quando nao ha de onde le-lo.
-
-    O verbo e `acervo listar casa ferramental --retrato --json` (#3444): o registro guarda
-    rotulo, volta e atalho por ato e emite o retrato com o sha dele, no campo `sha`. Sai None, e
-    o item do retrato fica `nao consegui olhar`, nunca conforme, quando o verbo sai diferente de
-    0, quando a saida nao e o JSON do esquema `retrato-ferramental/1` ou quando nao traz `sha`:
-    nao ter de onde ler o sha nao e o retrato estar em dia."""
-    rc, out, _ = sh([os.path.join(BIN_IRMAOS, "acervo"), "listar", "casa", "ferramental",
-                     "--retrato", "--json"])
-    if rc != 0:
-        return None
-    try:
-        retrato = json.loads(out)
-    except ValueError:
-        return None
-    if not isinstance(retrato, dict) or retrato.get("esquema") != "retrato-ferramental/1":
-        return None
-    sha = retrato.get("sha")
-    return sha.strip() if isinstance(sha, str) and sha.strip() else None
+    """O sha do manifesto registro/porta.yaml SERVIDO, ou None quando ausente."""
+    candidatos = [
+        os.path.join(HARNESS, "registro", "porta.yaml"),
+        os.path.join(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"),
+                     "harness", "registro", "porta.yaml"),
+    ]
+    for arq in candidatos:
+        if os.path.isfile(arq):
+            try:
+                with open(arq, "rb") as fh:
+                    return hashlib.sha256(fh.read()).hexdigest()[:12]
+            except OSError:
+                return None
+    return None
 
 
 def _ler_json(caminho):
@@ -2739,95 +2768,46 @@ def _ferramental_psql(sql):
     return [l for l in p.stdout.splitlines() if l.strip()], None
 
 
-def _donos_ferramental():
-    """({slug: dono}|None, erro|None). Le o dono registrado em acervo.ferramental_verbo."""
-    linhas, erro = _ferramental_psql(
-        "select slug, coalesce(dono, '') from acervo.ferramental_verbo")
-    if erro:
-        return None, erro
-    donos = {}
-    for l in linhas:
-        slug, dono = (l.split("|", 1) + [""])[:2]
-        donos[slug] = dono
-    return donos, None
-
-
 def conferir_ferramental(alvo, como_json=False):
+    import yaml
     itens = []
-
-    # (0) 1:1 capacidade<->verbo integro (invariante de schema, arq:0037).
-    nome_1a1 = "arq:0037 1:1 capacidade<->verbo"
-    achados_1a1 = []  # (severidade, texto): 'FALHA' muda veredito; 'DERIVA' so observa.
-    linhas, erro = _ferramental_psql(
-        "select c.slug, v.slug from acervo.ferramental_capacidade c "
-        "full outer join acervo.ferramental_verbo v on v.capacidade_id=c.id "
-        "where c.id is null or v.id is null")
-    if erro:
-        # card #3142: nao conseguir consultar o acervo e indeterminavel, nao um exit
-        # cedo — a outra checagem (bin) segue sendo tentada, e o motivo entra na lista.
-        motivo = f"nao consegui ler acervo.ferramental: {erro}"
-        if not como_json:
-            print(f"  ??  {nome_1a1}: {motivo}")
-        itens.append((nome_1a1, resultado.indeterminavel(motivo)))
-    else:
-        for l in linhas:
-            cap, vb = (l.split("|") + [""])[:2]
-            if not vb:
-                achados_1a1.append(("FALHA", f"capacidade {cap!r} sem verbo (quebra 1:1)"))
-            elif not cap:
-                achados_1a1.append(("FALHA", f"verbo {vb!r} sem capacidade (quebra 1:1)"))
-        falhas_1a1 = [t for sev, t in achados_1a1 if sev == "FALHA"]
-        derivas_1a1 = [t for sev, t in achados_1a1 if sev == "DERIVA"]
-        if not como_json:
-            for t in falhas_1a1:
-                print(f"  FALHA  {t}")
-            for t in derivas_1a1:
-                print(f"  deriva {t}")
-        if falhas_1a1:
-            itens.append((nome_1a1, resultado.divergente("; ".join(falhas_1a1))))
-        else:
-            itens.append((nome_1a1, resultado.conforme()))
-
-    # (a) cada verbo declarado resolve em ~/AI/bin.
-    nome_bin = "arq:0037 verbo resolve em ~/AI/bin"
-    achados_bin = []  # (severidade, texto): 'FALHA' muda veredito; 'DERIVA' so observa.
-    verbos, erro = _ferramental_psql(
-        "select slug, coalesce(sot,'') from acervo.ferramental_verbo order by slug")
-    if erro:
-        motivo = f"nao consegui ler acervo.ferramental: {erro}"
+    nome_bin = "verbo declarado em registro/porta.yaml resolve em bin/"
+    arq = os.path.join(HARNESS, "registro", "porta.yaml")
+    if not os.path.isfile(arq):
+        arq = os.path.join(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"),
+                           "harness", "registro", "porta.yaml")
+    if not os.path.isfile(arq):
+        motivo = f"registro/porta.yaml ausente ({arq})"
         if not como_json:
             print(f"  ??  {nome_bin}: {motivo}")
         itens.append((nome_bin, resultado.indeterminavel(motivo)))
-    else:
-        for l in verbos:
-            slug, sot = (l.split("|") + [""])[:2]
-            # so cobra PATH de verbo cujo sot aponta bin/ (ollama/matrix tem sot em stacks.json).
-            if not sot.startswith("bin/"):
-                continue
-            if not os.path.exists(os.path.join(BIN, slug)):
-                achados_bin.append(("FALHA", f"verbo {slug!r} declarado (sot={sot}) nao existe em ~/AI/bin"))
-        falhas_bin = [t for sev, t in achados_bin if sev == "FALHA"]
-        derivas_bin = [t for sev, t in achados_bin if sev == "DERIVA"]
+        return resultado.relatorio("ferramental", alvo, itens, _sha_release(), como_json=como_json)
+    try:
+        with open(arq, encoding="utf-8") as fh:
+            doc = yaml.safe_load(fh) or {}
+    except (OSError, yaml.YAMLError) as e:
+        motivo = f"nao consegui ler registro/porta.yaml: {e}"
         if not como_json:
-            for t in falhas_bin:
-                print(f"  FALHA  {t}")
-            for t in derivas_bin:
-                print(f"  deriva {t}")
-        if falhas_bin:
-            itens.append((nome_bin, resultado.divergente("; ".join(falhas_bin))))
-        else:
-            itens.append((nome_bin, resultado.conforme()))
-
-    # instancia -> stack NAO se confere aqui: stack e recorte de conveniencia de
-    # deploy (o que sobe junto num compose), arbitrario. Nao existe regra
-    # "capacidade X mora na stack Y"; instancia rodar avulsa (ollama no harness)
-    # e estado normal, nao divergencia. O mapa instancia_roda_em_stack fica como
-    # INFORMACAO consultavel (JOIN), nunca como invariante que reprova.
-    # (c) Paridade de TRANSICAO: aposentada. Media stacks.json (registro/) contra
-    #     acervo.stack como pre-condicao de morte do arquivo. O arquivo ja morreu
-    #     (arq:0076: acervo.stack e a fonte-verdade, registro/stacks.json nao existe),
-    #     entao a pre-condicao esta cumprida e nao ha mais nada a medir aqui.
-
+            print(f"  ??  {nome_bin}: {motivo}")
+        itens.append((nome_bin, resultado.indeterminavel(motivo)))
+        return resultado.relatorio("ferramental", alvo, itens, _sha_release(), como_json=como_json)
+    verbos = doc.get("verbos") if isinstance(doc, dict) else None
+    if not isinstance(verbos, dict):
+        itens.append((nome_bin, resultado.divergente("registro/porta.yaml sem mapa 'verbos'")))
+        return resultado.relatorio("ferramental", alvo, itens, _sha_release(), como_json=como_json)
+    falhas_bin = []
+    for slug in sorted(verbos):
+        if alvo and alvo != slug:
+            continue
+        if not (os.path.exists(os.path.join(HARNESS, "bin", slug)) or os.path.exists(os.path.join(BIN, slug))):
+            falhas_bin.append(f"verbo {slug!r} declarado em registro/porta.yaml nao existe em bin/")
+    if not como_json:
+        for t in falhas_bin:
+            print(f"  FALHA  {t}")
+    if falhas_bin:
+        itens.append((nome_bin, resultado.divergente("; ".join(falhas_bin))))
+    else:
+        itens.append((nome_bin, resultado.conforme()))
     return resultado.relatorio("ferramental", alvo, itens, _sha_release(), como_json=como_json)
 
 
@@ -2836,7 +2816,7 @@ EXISTE_TIPOS = ("cadeira", "chapeu", "skill", "verbo", "card", "arquivo", "mesa"
 
 def conferir_existe(tipo, nome, como_json=False):
     """Fato de existencia com ancora colavel — produtor da linha `NEGATIVA:`
-    (gate de abertura/dono.md; mesa ia #8, 26/08/2026).
+    (gate da conduta do dono; mesa ia #8, 26/08/2026).
 
     A primeira linha da saida e a ancora. Exit 0 existe, 1 nao existe, 2
     indeterminavel — fonte fora do ar NUNCA vira 1: ausencia de resposta nao e
@@ -2880,33 +2860,28 @@ def conferir_existe(tipo, nome, como_json=False):
         for pref in ("claudinho-", "claudinha-"):
             if alvo.lower().startswith(pref):
                 alvo = alvo[len(pref):]
-        aber = os.path.join(RAIZ, "platafirma-harness", "abertura")
-        if not os.path.isdir(aber):
-            return indeterminavel(f"{aber} inacessivel")
-        cadeiras = sorted(p for p in os.listdir(aber)
-                          if os.path.isdir(os.path.join(aber, p)))
+        st, corpo, erro = _olaria_post("/listar", {"classe": "persona"})
+        if erro or st != 200 or not isinstance(corpo, dict):
+            return indeterminavel(erro or f"Olaria respondeu {st}")
+        cadeiras = sorted(str(c).removeprefix("persona:") for c in (corpo.get("chaves") or []))
         return sai(alvo in cadeiras,
-                   f"abertura/ lista {len(cadeiras)}: {', '.join(cadeiras)}")
+                   f"Olaria lista {len(cadeiras)} personas: {', '.join(cadeiras)}")
 
     if tipo == "chapeu":
-        # <chapeu> ou <cadeira>/<chapeu>: abertura/<cadeira>/<chapeu>/chapeu.md (#2856 linha 94)
-        aber = os.path.join(RAIZ, "platafirma-harness", "abertura")
-        if not os.path.isdir(aber):
-            return indeterminavel(f"{aber} inacessivel")
+        st, corpo, erro = _olaria_post("/listar", {"classe": "chapeu"})
+        if erro or st != 200 or not isinstance(corpo, dict):
+            return indeterminavel(erro or f"Olaria respondeu {st}")
         cadeira_pedida, _, chapeu_pedido = nome.rpartition("/")
         for pref in ("claudinho-", "claudinha-"):
             if cadeira_pedida.lower().startswith(pref):
                 cadeira_pedida = cadeira_pedida[len(pref):]
-        chapeus = sorted(f"{c}/{h}" for c in os.listdir(aber)
-                         if os.path.isdir(os.path.join(aber, c))
-                         for h in os.listdir(os.path.join(aber, c))
-                         if os.path.isfile(os.path.join(aber, c, h, "chapeu.md")))
+        chapeus = sorted(str(c).removeprefix("chapeu:") for c in (corpo.get("chaves") or []))
         achados = [x for x in chapeus
-                   if x.endswith("/" + chapeu_pedido)
+                   if (x == chapeu_pedido or x.endswith("/" + chapeu_pedido))
                    and (not cadeira_pedida or x.startswith(cadeira_pedida + "/"))]
         if achados:
-            return sai(True, f"abertura/ tem {', '.join(achados)}")
-        return sai(False, f"abertura/ lista {len(chapeus)} chapeus e nenhum casa com {nome!r}",
+            return sai(True, f"Olaria tem {', '.join(achados)}")
+        return sai(False, f"Olaria lista {len(chapeus)} chapeus e nenhum casa com {nome!r}",
                    ", ".join(chapeus))
 
     if tipo == "skill":
@@ -3016,7 +2991,7 @@ def conferir_card(alvo, como_json=False):
                 continue
             sha, _, quando = linha.partition(" ")
             achados.append((sha, quando))
-    rc2, out2, _ = sh(["git", "-C", HARNESS, "branch", "-a", "--list", f"*fabrica/{ident}", f"*fabrica/{ident}-*"])
+    rc2, out2, _ = sh(["git", "-C", HARNESS, "branch", "-a", "--list", f"*fabrica/{ident}-*"])
     ramos = [l.strip().lstrip("* ").strip() for l in out2.splitlines() if l.strip()] if rc2 == 0 else []
 
     nome_item = f"#{ident}"
@@ -3070,11 +3045,11 @@ def conferir_alcance(sujeito, fonte, como_json=False):
     MEDIDOR, nao validador: onde o alvo nao tem ACL canonica (portao paralelo que
     nao conhece papel nem dominio), DECLARA — nao presume um canon inexistente. As
     5 fontes-de-verdade (claudinho-seguranca, card #2452 sob #191):
-      identidade -> politica-acesso/sujeitos.yaml
-      credencial -> politica-acesso/sujeitos.yaml (client/conta/usuario/segredos) [+ realm]
-      PDP        -> politica-acesso/politica.yaml
-      rede       -> politica-acesso/superficies.yaml::ingress
-      ACL        -> politica-acesso/superficies.yaml::portao
+      identidade -> core/acesso/sujeitos.yaml
+      credencial -> core/acesso/sujeitos.yaml (client/conta/usuario/segredos) [+ realm]
+      PDP        -> core/acesso/politica.yaml
+      rede       -> core/acesso/superficies.yaml::ingress
+      ACL        -> core/acesso/superficies.yaml::portao
 
     Exit 0 cadeia inteira; 1 elo modelado quebra; 2 indeterminavel (fonte/catalogo).
     """
@@ -3210,7 +3185,7 @@ def _sonda_pdp_servidor(s, current_link="/opt/platafirma/current"):
 
 def conferir_pdp(alvo=None, como_json=False, *, sonda_pdp=None):
     """Confere que cada ponto de obediencia (PEP) carrega o mesmo resumo de politica.yaml e
-    sujeitos.yaml da release no ar em /opt/platafirma/current/politica-acesso (DT 835)."""
+    sujeitos.yaml da release no ar em /opt/platafirma/current/core/acesso (DT 835)."""
     current_link = os.environ.get("PF_CURRENT_LINK", "/opt/platafirma/current")
     tag_current = None
     resumo_esperado = None
@@ -3218,16 +3193,16 @@ def conferir_pdp(alvo=None, como_json=False, *, sonda_pdp=None):
         try:
             real_curr = os.path.realpath(current_link)
             tag_current = os.path.basename(real_curr)
-            resumo_esperado = _resumo_pdp_dir(os.path.join(real_curr, "politica-acesso"))
+            resumo_esperado = _resumo_pdp_dir(os.path.join(real_curr, "core", "acesso"))
         except Exception:
             tag_current = None
             resumo_esperado = None
 
     servidores = [
         {
-            "nome": "ops-server",
+            "nome": "ops-mcp",
             "tipo": "systemd",
-            "esperado": "/opt/platafirma/current/politica-acesso",
+            "esperado": "/opt/platafirma/current/core/acesso",
             "health_url": "http://127.0.0.1:8010/health",
             "log_dir": os.path.join(INSTANCIA, "var", "log", "ops"),
             "unit": "ops-mcp.service",
@@ -3235,7 +3210,7 @@ def conferir_pdp(alvo=None, como_json=False, *, sonda_pdp=None):
         {
             "nome": "wiki-mcp",
             "tipo": "compose",
-            "esperado": "/opt/platafirma/current/politica-acesso",
+            "esperado": "/opt/platafirma/current/core/acesso",
             "health_url": "http://127.0.0.1:8090/health",
             "log_dir": os.path.join(INSTANCIA, "var", "log", "wiki-mcp"),
             "container": "plataforma-wiki-mcp-1",
@@ -3244,7 +3219,7 @@ def conferir_pdp(alvo=None, como_json=False, *, sonda_pdp=None):
         {
             "nome": "rastreador-api",
             "tipo": "compose",
-            "esperado": "/opt/platafirma/current/politica-acesso",
+            "esperado": "/opt/platafirma/current/core/acesso",
             "health_url": "http://127.0.0.1:8120/health",
             "container": "rastreador-api",
             "container_pdp": "/app/politica-acesso",
@@ -3412,8 +3387,6 @@ def conferir_vocabulario(alvo=None, como_json=False):
             return 2
     else:
         padroes = [
-            os.path.join(repo_raiz, "abertura", "dono.md"),
-            os.path.join(repo_raiz, "abertura", "oficio.md"),
             os.path.join(repo_raiz, "docs", "spec_*.md"),
             os.path.join(repo_raiz, "skills", "*", "SKILL.md"),
         ]

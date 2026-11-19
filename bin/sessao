@@ -7,23 +7,12 @@
 # use para: «de quem é esta sessão?», autorizar, cunhar, achar a fita; limpar sessões órfãs
 # atos: abrir (escrita, sessao), ver (leitura, sessao), listar (leitura, sessao), encerrar (escrita, sessao), limpar (escrita, sessao), longjob (herdado do alvo)
 # folhas: abrir|encerrar|limpar -> sessao/cunhagem · ver|listar -> sessao/estado · longjob -> sessao/execucao-longa
-# escreve: sessao:{id}, ledger:{id}, giro:{id} (msg-mem; DEL em encerrar|limpar), sessao.sessao (duravel; encerrar|limpar tambem gravam encerrada_em=now(), migracao 0092); <instancia>/var/tmp/<PF_ORDEM_ID>/<subpasta> (so `limpar --rascunho --apply`: apaga, e so, o que mora ali); nada em ver|listar
-# consome: a API da entidade-sessao, quando houver (ate la: msg-mem e Postgres direto, declarados abaixo)
-# ambiente: PF_SUJEITO (obrigatoria em abrir; origem: fluxo OAuth, entregue pela porta), PF_SUPERFICIE[=desconhecida] (origem: superficie), PF_BIN[=<bin/ da propria arvore; na release /opt/platafirma/current/harness/bin>] (origem: teste); MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380] e SESSAO_PG_PORT[=5437] sao endereco de servico, constantes do verbo; SESSAO_PG_PASSWORD nao e variavel: e segredo, obtido por `seg segredo ler` no processo. PF_ORDEM_ID (origem: verbo `sessao abrir`, injetada pela porta; so lida em `limpar --rascunho`, onde define a unica raiz apagavel) e PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (origem: superficie/instalacao; so `limpar --rascunho`); PF_CADEIRA nao e lida — este verbo a origina; PF_SESSAO so e lida em `longjob run`, para herdar os atributos do agente da chave (card #3156)
-# depende: msg-mem (modulo redis), Postgres da sessao (psycopg), persona (vocabulario: `persona foto --json`), acesso (`acesso decidir sessao_abrir sessao:<cadeira> --json`), seg (`seg segredo ler`), longjob (bin/_sessao/longjob, contrato herdado), reidratar (bin/_sessao/reidratar.py, ajudante)
-# substitui: monta-sessao <cadeira> na parte que cunha; redis-cli SET sessao:*; psql -d sessao
-# conforme: parcial — chave viva e registro duravel gravados direto ate a API da entidade-sessao existir (spec_sessao §6)
-#
-# spec_sessao rev 3, §3 (forma), §4 (exit por etapa), §0 (a pergunta a `acesso decidir`).
-#
-# O que este verbo E: o arranque. Recebe QUEM chegou (PF_SUJEITO, do token, pela porta) e
-# ONDE quer sentar (a cadeira, do arranque), pergunta a politica se pode, e so com o sim
-# cunha. Nunca deriva um do outro; nunca cola sujeito depois. O pacote (conduta, persona,
-# mesa) e de `expediente montar`, que le PF_CADEIRA/PF_SESSAO que a porta injeta a partir
-# da chave que este verbo gravou.
-#
-# Falha alta, nunca muda (classe A): o que impede a porta de resolver a fita sai exit != 0
-# com causa e cura; o que nao impede (registro duravel) sai exit 0 declarado.
+# escreve: sessao:{id} (hash no msg-mem; DEL em encerrar|limpar), ledger:{id}, giro:{id}, sessao.sessao (duravel)
+# consome: msg-mem (hash sessao:{id}) e Postgres da sessao
+# ambiente: PF_SUJEITO, PF_SESSAO_AUTORIZADA_POR, PF_SUPERFICIE[=desconhecida], PF_BIN, MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380], SESSAO_PG_PORT[=5437], PF_ORDEM_ID, PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa], PF_SESSAO
+# depende: msg-mem (modulo redis), Postgres da sessao (psycopg), persona, seg, longjob, reidratar
+# substitui: monta-sessao <cadeira> na parte que cunha; redis-cli HSET sessao:*; psql -d sessao
+# conforme: parcial — chave viva em hash (story #4343, F4073) e registro duravel
 from __future__ import annotations
 
 import argparse
@@ -36,26 +25,23 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from typing import Any
 
 _REPO_REAL = Path(__file__).resolve().parent.parent
-# Verbos irmaos: o bin/ desta mesma arvore (card #3010). PF_BIN so existe para teste.
 BIN = os.environ.get("PF_BIN") or str(_REPO_REAL / "bin")
 MEM_HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
 MEM_PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))
 PG_PORTA = os.environ.get("SESSAO_PG_PORT", "5437")
 TTL_SESSAO_S = 172800          # 48 h — o mesmo da porta, para nao haver duas verdades
 ATOS = ("abrir", "ver", "listar", "encerrar", "limpar", "longjob")
-# O que `--agente`/`--em-nome-de`/`--conta` gravam na chave viva (card #3156, spec agente §11.1).
 ATRIBUTOS_AGENTE = ("agente", "em_nome_de", "conta_agente")
 PREFIXOS_CADEIRA = ("claudinho-", "claudinha-")
 SUPERFICIES = (
     "claude.ai", "chat", "code", "desconhecida",
     "agy", "cursor", "codex", "fabrica", "fita",
 )
+_CAMPOS_BOOL = frozenset({"canonizada", "aviso_carimbo_enviado"})
 
-# Ajudante de reidratacao (arq:0110 §1: mora em bin/_<verbo>/, card #3145 decisao 1).
-# Import protegido: sem ele, `ver` mantem o comportamento de hoje ("nao existe") —
-# nunca derruba o verbo por um ajudante ausente ou quebrado.
 _AJUDANTE_SESSAO = str(_REPO_REAL / "bin" / "_sessao")
 if _AJUDANTE_SESSAO not in sys.path:
     sys.path.insert(0, _AJUDANTE_SESSAO)
@@ -64,27 +50,29 @@ try:
 except ImportError:
     _reidratar_mod = None
 
+
 # ------------------------------------------------------------------ util
 def _agora_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
 
+
 def _uuid_valido(s: str | None) -> str | None:
-    """RFC-4122 canonico, ou None. Portado invalido NAO vira id novo (arq:0101 §1)."""
     try:
         return str(uuid.UUID(str(s).strip()))
     except (ValueError, AttributeError, TypeError):
         return None
 
+
 def _superficie() -> str:
     sup = (os.environ.get("PF_SUPERFICIE") or "").strip() or "desconhecida"
     return sup if sup in SUPERFICIES else "desconhecida"
 
+
 def _env_verbo() -> dict[str, str]:
-    """PATH explicito para os verbos que este chama (persona, acesso, seg): quando a porta
-    ou um servico chama este binario, o PATH herdado nao tem o bin/ dos verbos."""
     e = dict(os.environ)
     e["PATH"] = f"{BIN}:" + os.environ.get("PATH", "")
     return e
+
 
 def _roda(argv: list[str], timeout: int = 20, stdin: str | None = None) -> tuple[int, str, str]:
     try:
@@ -94,6 +82,7 @@ def _roda(argv: list[str], timeout: int = 20, stdin: str | None = None) -> tuple
     except (OSError, subprocess.SubprocessError) as e:
         return 127, "", f"{type(e).__name__}: {e}"
 
+
 def _sufixo(cadeira: str) -> str:
     cad = (cadeira or "").strip()
     for pref in PREFIXOS_CADEIRA:
@@ -101,10 +90,8 @@ def _sufixo(cadeira: str) -> str:
             return cad[len(pref):].lower()
     return cad.lower()
 
-class Saida:
-    """Texto ou JSON, decidido uma vez. Erro em --json e objeto {erro} em stdout; em
-    texto, stderr. Exit 2 sai uma vez."""
 
+class Saida:
     def __init__(self, como_json: bool):
         self.json = como_json
 
@@ -115,10 +102,9 @@ class Saida:
             print(msg, file=sys.stderr)
         return exit_code
 
-# ------------------------------------------------------------------ msg-mem
+
+# ------------------------------------------------------------------ msg-mem (hash)
 def _msgmem():
-    """Cliente do msg-mem. `None` com o motivo quando nao alcanca: classe A decide o exit,
-    nao esta funcao. Separada para o teste substituir por um fake em memoria."""
     try:
         import redis
     except ImportError:
@@ -128,27 +114,68 @@ def _msgmem():
                          socket_connect_timeout=2, socket_timeout=3)
         rc.ping()
         return rc, None
-    except Exception as e:  # noqa: BLE001 — o motivo vai na linha, o exit e do ato
+    except Exception as e:  # noqa: BLE001
         return None, f"{type(e).__name__}"
+
 
 def _cura_msgmem(motivo: str) -> str:
     return (f"msg-mem: ausente ({MEM_HOST}:{MEM_PORTA} — {motivo}); "
             "levanta com `infra estado` / `infra restart` na stack do msg-mem")
 
+
+def _serializar_hash(campos: dict[str, Any]) -> dict[str, str]:
+    saida: dict[str, str] = {}
+    for k, v in campos.items():
+        if v is None:
+            continue
+        if isinstance(v, bool):
+            saida[str(k)] = "true" if v else "false"
+        elif isinstance(v, (dict, list)):
+            saida[str(k)] = json.dumps(v, ensure_ascii=False)
+        else:
+            saida[str(k)] = str(v)
+    return saida
+
+
+def _desserializar_hash(bruto: dict[str, Any]) -> dict[str, Any]:
+    saida: dict[str, Any] = {}
+    for k, v in bruto.items():
+        ks = k.decode("utf-8", errors="replace") if isinstance(k, bytes) else str(k)
+        vs = v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v)
+        if ks in _CAMPOS_BOOL:
+            if vs == "true":
+                saida[ks] = True
+                continue
+            if vs == "false":
+                saida[ks] = False
+                continue
+        if vs.startswith(("{", "[")):
+            try:
+                saida[ks] = json.loads(vs)
+                continue
+            except ValueError:
+                pass
+        saida[ks] = vs
+    return saida
+
+
 def _le_chave(rc, sid: str) -> dict | None:
-    bruto = rc.get(f"sessao:{sid}")
-    if bruto is None:
+    bruto = rc.hgetall(f"sessao:{sid}")
+    if not bruto:
         return None
-    try:
-        val = json.loads(bruto)
-    except ValueError:
-        return {}
-    return val if isinstance(val, dict) else {}
+    return _desserializar_hash(bruto)
+
+
+def _grava_chave(rc, sid: str, ch: dict[str, Any], ttl_s: int = TTL_SESSAO_S) -> None:
+    chave = f"sessao:{sid}"
+    mapping = _serializar_hash(ch)
+    if mapping:
+        rc.hset(chave, mapping=mapping)
+        rc.expire(chave, ttl_s)
+
 
 # ------------------------------------------------------------------ organizacao
 def _vocabulario() -> tuple[dict | None, str | None]:
-    """`persona foto --json`: {slug: {alias, chapeus}}. Exit 0 e 1 (aliases ilegivel,
-    degrada declarado) trazem o vocabulario; qualquer outro e organizacao muda."""
     rc, out, err = _roda(["persona", "foto", "--json"], timeout=15)
     if rc not in (0, 1) or not out.strip():
         return None, (err or out).strip()[:200] or f"persona foto: exit {rc}"
@@ -158,8 +185,8 @@ def _vocabulario() -> tuple[dict | None, str | None]:
         return None, "persona foto: saida nao e JSON"
     return (d if isinstance(d, dict) else None), (None if isinstance(d, dict) else "persona foto: JSON inesperado")
 
+
 def _canoniza(cadeira: str, voc: dict) -> str | None:
-    """Slug puro se a cadeira existe no vocabulario — por slug ou por alias humano."""
     suf = _sufixo(cadeira)
     if suf in voc:
         return suf
@@ -170,39 +197,17 @@ def _canoniza(cadeira: str, voc: dict) -> str | None:
             return slug
     return None
 
-# ------------------------------------------------------------------ autorizacao
-def _decidir(slug: str) -> tuple[int, dict, str]:
-    """`acesso decidir sessao_abrir sessao:<slug> --json` (spec_acesso §7). Devolve
-    (exit, objeto, stderr)."""
-    rc, out, err = _roda(["acesso", "decidir", "sessao_abrir", f"sessao:{slug}", "--json"], timeout=20)
-    d = {}
-    if out.strip():
-        try:
-            d = json.loads(out.strip().splitlines()[-1])
-        except ValueError:
-            d = {}
-    return rc, (d if isinstance(d, dict) else {}), (err or "").strip()
 
 # ------------------------------------------------------------------ registro duravel
 def _senha_pg() -> tuple[str | None, str | None]:
-    """Segredo por verbo, no processo (spec_acesso §2). Sem fallback de variavel nem de
-    arquivo: `SESSAO_PG_PASSWORD` nao e ambiente (spec_sessao §5)."""
     rc, out, err = _roda(["seg", "segredo", "ler", "harness-sessao/SESSAO_PG_PASSWORD"], timeout=10)
     if rc == 0 and out.strip():
         return out.strip(), None
     return None, f"seg segredo ler harness-sessao/SESSAO_PG_PASSWORD: {(err or out).strip()[:120] or f'exit {rc}'}"
 
+
 def _registra_duravel(sid: str, slug: str, sujeito: str | None = None,
                       ordem_id: str | None = None) -> str | None:
-    """INSERT em sessao.sessao (arq:0091). Devolve o motivo quando nao grava; nunca trava.
-
-    `ordem_id` (migracao 0098, balde #2856 linha 152) e a ordem da ULTIMA abertura: a
-    reidratacao a devolve, em vez de «-», depois que a chave viva some numa promocao.
-    Coluna ainda ausente: o INSERT novo falha e cai na forma de antes, sem ela.
-    `sujeito` entra na coluna que a migracao 0094 acrescentou (card #3145, defeito
-    pos-fita): sem ela — banco ainda nao migrado — o INSERT falha e cai no mesmo
-    'nunca trava' de sempre; a chave viva (msg-mem) e quem carrega o sujeito nesse
-    intervalo, este INSERT so serve a reidratacao depois de uma promocao."""
     try:
         import psycopg
     except ImportError:
@@ -213,12 +218,6 @@ def _registra_duravel(sid: str, slug: str, sujeito: str | None = None,
     dsn = f"host=127.0.0.1 port={PG_PORTA} dbname=sessao user=sessao password={senha}"
     try:
         with psycopg.connect(dsn, connect_timeout=3) as con, con.cursor() as cur:
-            # ON CONFLICT preserva a linha (2a abertura da mesma conversa reusa, nunca
-            # recria), mas BACKFILLA sujeito quando a linha existente ainda nao tem --
-            # cobre a linha gravada antes da migracao 0094 (card #3145): sem isto, uma
-            # sessao antiga que perdeu a chave viva (promocao) e foi reidratada ficava
-            # PARA SEMPRE sem sujeito, mesmo depois da coluna existir. COALESCE nunca
-            # troca um sujeito ja gravado -- identidade nao muda por reabertura.
             if ordem_id:
                 try:
                     cur.execute(
@@ -229,7 +228,7 @@ def _registra_duravel(sid: str, slug: str, sujeito: str | None = None,
                         (sid, slug, None, _superficie(), sujeito or None, ordem_id))
                     con.commit()
                     return None
-                except Exception:  # noqa: BLE001 — 0098 nao aplicada: forma de antes, abaixo
+                except Exception:  # noqa: BLE001
                     con.rollback()
             cur.execute(
                 "INSERT INTO sessao.sessao (sessao_id, cadeira, chapeu, superficie, sujeito) "
@@ -237,9 +236,10 @@ def _registra_duravel(sid: str, slug: str, sujeito: str | None = None,
                 "sujeito = COALESCE(sessao.sessao.sujeito, EXCLUDED.sujeito)",
                 (sid, slug, None, _superficie(), sujeito or None))
             con.commit()
-    except Exception as e:  # noqa: BLE001 — banco mudo nao derruba a cunhagem
+    except Exception as e:  # noqa: BLE001
         return f"Postgres da sessao: {type(e).__name__}"
     return None
+
 
 # ------------------------------------------------------------------ ato: abrir
 def _imprime_abrir(ch: dict, sid: str, cunhada: bool, registrada: bool, duravel: bool,
@@ -288,9 +288,10 @@ def _imprime_abrir(ch: dict, sid: str, cunhada: bool, registrada: bool, duravel:
     for a in avisos:
         print(f"(aviso: {a})")
 
+
 def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool = False,
-              origem: str | None = None, agente: dict | None = None) -> int:
-    # etapa 1 — uso
+              origem: str | None = None, agente: dict | None = None,
+              autorizada_por: str | None = None) -> int:
     if not (cadeira or "").strip():
         cadeira = (os.environ.get("PLATAFIRMA_CADEIRA") or "").strip()
     if not (cadeira or "").strip():
@@ -310,9 +311,6 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
             return saida.erro(f"--sessao-id {sessao_id!r} nao e RFC-4122 — chame sem `--sessao-id` "
                               "para cunhar uma sessao nova; um id invalido nunca vira id novo "
                               "(arq:0101 §1)", 2)
-    # `--origem`: a sessao de quem chamou (o orquestrador). Liga a filha a mae para o ops log reconstruir
-    # a fita; nao concede nada (alcance e o da conta). Nome `origem_sessao` porque `origem` da chave
-    # ja e o marcador de como ela nasceu (`sessao abrir`, `reidratada`).
     origem_sessao = None
     if origem is not None:
         origem_sessao = _uuid_valido(origem)
@@ -321,16 +319,11 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
                               "chamou; sem ele, abra sem `--origem`", 2)
         if sid_portado and origem_sessao == sid_portado:
             return saida.erro("--origem igual a --sessao-id: a sessao nao e origem de si mesma", 2)
-    # `--agente`, `--em-nome-de` e `--conta` (card #3156, spec agente §11.1): quem e o agente, que cadeira
-    # responde e em que conta de SO ele roda. Vao juntos, so descrevem (nao concedem nada: alcance e o da
-    # pessoa pela porta) e entram na chave para o ops log repeti-los em toda linha da sessao filha.
     if agente is not None:
-        import re as _re
-        ruim = [k for k, v in agente.items() if not _re.fullmatch(r"[a-z][a-z0-9_-]*", v or "")]
+        ruim = [k for k, v in agente.items() if not re.fullmatch(r"[a-z][a-z0-9_-]*", v or "")]
         if ruim:
             return saida.erro("--agente, --em-nome-de e --conta vao juntos e cada um e um slug (minusculas, digitos, "
                               "- e _); fora do molde: " + ", ".join(ruim), 2)
-    # etapa 2 — sujeito
     sujeito = (os.environ.get("PF_SUJEITO") or "").strip()
     if not sujeito:
         if dry_run:
@@ -338,7 +331,6 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
         else:
             return saida.erro("sem sujeito: a porta nao autenticou — PF_SUJEITO vem do fluxo OAuth "
                               "(sub do token), nunca de arquivo ou unit (spec_acesso §2)", 3)
-    # etapa 3 — organizacao (canonizacao); 3' organizacao muda degrada, mas so DEPOIS da 4
     avisos: list[str] = []
     voc, motivo_org = _vocabulario()
     canonizada = False
@@ -356,27 +348,17 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
         avisos.append(f"organizacao muda ({motivo_org}): cadeira gravada como rotulo "
                       f"normalizado {slug!r}, canonizada: false — regime restrito ate "
                       "`publicar-abertura` (arq:0110 §6 A(a))")
-    # etapa 4 — autorizacao; nunca degrada
-    rc, d, err = _decidir(slug)
-    if rc == 0:
-        autorizada_por = f"{d.get('regra') or 'default'}@{d.get('plano') or '?'}"
+    decisao_porta = (autorizada_por or os.environ.get("PF_SESSAO_AUTORIZADA_POR") or "").strip()
+    if decisao_porta:
+        autorizada_por = decisao_porta
     elif dry_run:
         autorizada_por = "dry-run@sonda"
-    elif rc == 1:
-        regra = d.get("regra") or "default"
-        return saida.erro(f"nao autorizado: {sujeito[:8]} nao abre sessao:{slug} — regra {regra} "
-                          f"({d.get('motivo') or err or 'sem motivo'}); quem concede: merge no PAP "
-                          "com fundamento (seguranca), depois `release promover`", 4,
-                          regra=regra, plano=d.get("plano"))
-    elif rc == 5:
-        faltou = ", ".join(d.get("faltou") or []) or "?"
-        return saida.erro(f"projecao incompleta: faltou: {faltou} — nasce na tabela de sujeitos "
-                          "(sujeitos.yaml) ou no claim do token; a politica nao decidiu", 3,
-                          faltou=d.get("faltou"))
     else:
-        return saida.erro(f"politica: ausente — `acesso decidir` saiu {rc} "
-                          f"({err[:160] or 'sem stderr'}); sem plano nao ha sessao", 3)
-    # etapa 5 — chave viva (uma vez, inteira)
+        return saida.erro(
+            f"nao autorizado: abertura de sessao:{slug} exige decisao da porta "
+            "(--autorizada-por ou PF_SESSAO_AUTORIZADA_POR); a decisao de acesso e tomada no core",
+            4,
+        )
     sid = sid_portado or str(uuid.uuid4())
     cunhada = sid_portado is None
     ordem_id = f"o{time.strftime('%Y%m%dT%H%M%S', time.gmtime())}-{uuid.uuid4().hex[:6]}"
@@ -401,30 +383,25 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
     try:
         existente = _le_chave(rc_mem, sid) if sid_portado else None
         if existente and existente.get("cadeira") and existente.get("cadeira") != slug:
-            # DT 782: a cadeira e identidade da sessao (arq:0101 §1) e reabrir nao a troca.
-            # Antes a chave seguia com a cadeira antiga e a releitura acusava msg-mem instavel.
             antiga = existente.get("cadeira")
             return saida.erro(f"sessao {sid} e da cadeira {antiga}, nao de {slug}: reabrir nao troca "
                               f"de cadeira — para abrir {slug}, chame sem `--sessao-id` (cunha uma "
                               f"sessao nova); para seguir em {antiga}, reabra com cadeira={antiga}",
                               4, sessao_id=sid, cadeira_da_sessao=antiga)
         if existente:
-            # reabrir a mesma conversa: atualiza ordem_id e nada mais (§2), exceto
-            # sujeito AUSENTE (card #3145) e canonizada/autorizada_por ausentes ou
-            # vindas de reidratacao (DT 165): backfill desta abertura. Nunca sobrescreve
-            # um sujeito ja presente: identidade nao muda por reabertura.
-            existente["ordem_id"] = ordem_id
+            campos_novos: dict[str, Any] = {"ordem_id": ordem_id}
             if not existente.get("sujeito"):
-                existente["sujeito"] = sujeito
+                campos_novos["sujeito"] = sujeito
             if existente.get("canonizada") is None or existente.get("origem") == "reidratada":
-                existente["canonizada"] = canonizada
+                campos_novos["canonizada"] = canonizada
             if not existente.get("autorizada_por") or existente.get("autorizada_por") in ("-", "reidratada"):
-                existente["autorizada_por"] = autorizada_por
+                campos_novos["autorizada_por"] = autorizada_por
             if origem_sessao and not existente.get("origem_sessao"):
-                existente["origem_sessao"] = origem_sessao   # nunca troca a origem ja gravada
+                campos_novos["origem_sessao"] = origem_sessao
             for k, v in (agente or {}).items():
-                existente.setdefault(k, v)                    # idem os atributos do agente
-            ch = existente
+                if k not in existente:
+                    campos_novos[k] = v
+            _grava_chave(rc_mem, sid, campos_novos, TTL_SESSAO_S)
         else:
             ch = {"sujeito": sujeito, "cadeira": slug, "canonizada": canonizada,
                   "autorizada_por": autorizada_por, "ordem_id": ordem_id,
@@ -434,20 +411,18 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
                 ch["origem_sessao"] = origem_sessao
             if agente:
                 ch.update(agente)
-        rc_mem.set(chave, json.dumps(ch, ensure_ascii=False), ex=TTL_SESSAO_S)
+            _grava_chave(rc_mem, sid, ch, TTL_SESSAO_S)
     except Exception as e:  # noqa: BLE001
         return saida.erro(f"{_cura_msgmem(type(e).__name__)} — sessao_id cunhado e NAO gravado: {sid}",
                           3, sessao_id=sid)
     if origem_sessao:
         try:
             viva = _le_chave(rc_mem, origem_sessao) is not None
-        except Exception:  # noqa: BLE001 — msg-mem mudo: nao acusa o que nao conferiu
+        except Exception:  # noqa: BLE001
             viva = True
         if not viva:
             avisos.append(f"origem {origem_sessao} nao esta viva no msg-mem: ligada mesmo assim")
-    # etapa 6 — registro duravel; nunca trava
     motivo_dur = _registra_duravel(sid, slug, sujeito, ordem_id)
-    # etapa 7 — releitura
     try:
         relida = _le_chave(rc_mem, sid) or {}
     except Exception as e:  # noqa: BLE001
@@ -461,13 +436,8 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
     _imprime_abrir(relida, sid, cunhada, True, motivo_dur is None, motivo_dur, avisos, saida)
     return 0
 
+
 def _marca_encerrada(sids: list[str]) -> None:
-    """Grava `encerrada_em = now()` em sessao.sessao para os sids dados (migracao 0092,
-    card #3145 decisao sobre o item 5: sessao encerrada de proposito nao reidrata).
-    Melhor esforco: psycopg ausente, segredo indisponivel, coluna ainda ausente (a
-    migracao ainda nao rodou apos a promocao) ou banco mudo nunca travam
-    `encerrar`/`limpar` — so avisam em stderr, o mesmo regime do registro duravel em
-    `_registra_duravel` (o ato de msg-mem e o que decide o exit)."""
     if not sids:
         return
     try:
@@ -487,9 +457,9 @@ def _marca_encerrada(sids: list[str]) -> None:
                 "WHERE sessao_id = ANY(%s::uuid[]) AND encerrada_em IS NULL",
                 (sids,))
             con.commit()
-    except Exception as e:  # noqa: BLE001 — coluna ausente (0092 nao aplicada ainda) ou
-        # banco mudo: nunca trava encerrar/limpar, so avisa
+    except Exception as e:  # noqa: BLE001
         print(f"sessao.sessao.encerrada_em nao gravada: {type(e).__name__}", file=sys.stderr)
+
 
 # ------------------------------------------------------------------ ato: ver
 def ato_ver(sessao_id: str, saida: Saida) -> int:
@@ -504,12 +474,9 @@ def ato_ver(sessao_id: str, saida: Saida) -> int:
     except Exception as e:  # noqa: BLE001
         return saida.erro(_cura_msgmem(type(e).__name__), 3)
     if ch is None and _reidratar_mod is not None:
-        # sessao:{id} ausente (promocao recriou o msg-mem vazio): relE sessao.sessao
-        # (Postgres, duravel) e regrava a chave com o TTL que resta (card #3145
-        # decisao 1; regra de validade em bin/_sessao/reidratar.py, arq:0091 §3).
         try:
             ch = _reidratar_mod.reidratar(sid, rc_mem, _roda, pg_porta=PG_PORTA)
-        except Exception:  # noqa: BLE001 — reidratar nunca pode travar `ver`
+        except Exception:  # noqa: BLE001
             ch = None
     if ch is None:
         enc_em = None
@@ -553,6 +520,7 @@ def ato_ver(sessao_id: str, saida: Saida) -> int:
         print(f"regime: {regime}")
     return 0
 
+
 # ------------------------------------------------------------------ ato: listar
 def ato_listar(cadeira: str | None, saida: Saida) -> int:
     rc_mem, motivo = _msgmem()
@@ -589,6 +557,7 @@ def ato_listar(cadeira: str | None, saida: Saida) -> int:
               + ("" if l.get("canonizada", True) else "  [nao canonizada]"))
     return 0
 
+
 # ------------------------------------------------------------------ ato: encerrar
 def ato_encerrar(sessao_id: str, saida: Saida) -> int:
     sid = _uuid_valido(sessao_id)
@@ -613,6 +582,7 @@ def ato_encerrar(sessao_id: str, saida: Saida) -> int:
     else:
         print(f"encerrada: {sid}   apagadas: {' '.join(apagadas)}   (registro duravel fica)")
     return 0
+
 
 # ------------------------------------------------------------------ ato: limpar
 def ato_limpar(dry_run: bool, saida: Saida) -> int:
@@ -664,20 +634,17 @@ def ato_limpar(dry_run: bool, saida: Saida) -> int:
               f"apagadas={apagadas} preservadas={preservadas}")
     return 0
 
+
 # ------------------------------------------------------------------ ato: limpar --rascunho
-# Balde #2856, linha 152 (card #3162): a fita grava rascunho em <instancia>/var/tmp/<ordem_id> (ex.:
-# `acervo curar obra --reextrair --bancada <pasta>`) e nao havia verbo que o apagasse. A raiz e UMA: a pasta
-# da propria ordem (PF_ORDEM_ID da chamada). Resolve `..` e link simbolico antes de decidir; o que sai da
-# raiz, ou e a raiz inteira, recusa com exit 4 e nada e apagado. Sem --apply so mostra o plano.
-# Fora do ato (pendencia): apagar na bancada declarada (ex. dt153-aceite) — so a raiz de var/tmp e deste verbo.
 ORDEM_VALIDA = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
-PLANO_MAX = 40   # linhas do plano mostradas; o total vai nos numeros
+PLANO_MAX = 40
+
 
 def _instancia() -> Path:
     return Path(os.environ.get("PLATAFIRMA_INSTANCIA") or "/srv/platafirma/casa")
 
+
 def _inventario(alvo: Path) -> list[tuple[Path, int]]:
-    """(caminho, bytes) de cada arquivo ou link sob `alvo`, sem seguir link simbolico."""
     if not alvo.is_dir():
         return [(alvo, alvo.lstat().st_size)]
     itens: list[tuple[Path, int]] = []
@@ -689,6 +656,7 @@ def _inventario(alvo: Path) -> list[tuple[Path, int]]:
             except OSError:
                 itens.append((p, 0))
     return sorted(itens)
+
 
 def ato_limpar_rascunho(subpasta: str, apply: bool, saida: Saida) -> int:
     ordem = (os.environ.get("PF_ORDEM_ID") or "").strip()
@@ -735,18 +703,13 @@ def ato_limpar_rascunho(subpasta: str, apply: bool, saida: Saida) -> int:
           + ("" if apply else f" — para apagar: sessao limpar --rascunho {sub} --apply"))
     return 0
 
+
 # ------------------------------------------------------------------ ato: longjob
-# Atributos do agente que o job herda (card #3156, spec agente §11.1: «`sessao longjob` herda os cinco»).
-# sujeito ja chega por PF_SUJEITO (a porta o injeta; nunca sai da chave, spec_acesso §2); os outros quatro
-# moram na chave viva da sessao que dispara o job e viram ambiente aqui, porque o systemd --user nao herda
-# a sessao de quem chama. Chave da chave viva -> variavel do job.
 HERANCA_LONGJOB = (("agente", "PF_AGENTE"), ("em_nome_de", "PF_EM_NOME_DE"),
                    ("conta_agente", "PF_CONTA_AGENTE"), ("origem_sessao", "PF_ORIGEM_SESSAO"))
 
+
 def _heranca_longjob(env: dict[str, str]) -> dict[str, str]:
-    """Le `sessao:{PF_SESSAO}` e devolve as variaveis do agente que faltam em `env`. Ambiente presente vence
-    (quem chama declarou); sem PF_SESSAO, sessao comum ou msg-mem mudo, devolve vazio e avisa no stderr: o
-    job sobe igual, e o verbo dentro dele decide o que fazer sem os atributos (sem fallback aqui)."""
     sid = _uuid_valido(env.get("PF_SESSAO"))
     if not sid:
         return {}
@@ -762,9 +725,8 @@ def _heranca_longjob(env: dict[str, str]) -> dict[str, str]:
     return {var: ch[k] for k, var in HERANCA_LONGJOB
             if isinstance(ch.get(k), str) and ch[k].strip() and not (env.get(var) or "").strip()}
 
+
 def ato_longjob(resto: list[str]) -> int:
-    """Contrato herdado de bin/_sessao/longjob (spec_sessao §1): exec, sem reinterpretar os argumentos. Em
-    `run`, o ambiente ganha antes os atributos do agente da sessao que dispara (_heranca_longjob)."""
     alvo = _REPO_REAL / "bin" / "_sessao" / "longjob"
     if not alvo.is_file():
         print(f"longjob: nao existe {alvo}", file=sys.stderr)
@@ -773,21 +735,19 @@ def ato_longjob(resto: list[str]) -> int:
     if resto[:1] == ["run"]:
         env.update(_heranca_longjob(env))
     os.execve(str(alvo), [str(alvo), *resto], env)
-    return 3  # pragma: no cover — execve nao volta
+    return 3  # pragma: no cover
+
 
 # ------------------------------------------------------------------ CLI
 USO = """uso:
-  sessao abrir     <cadeira> [--sessao-id <uuid>] [--origem <uuid>] [--agente <slug> --em-nome-de <cadeira> --conta <unix>] [--dry-run] [--json]  autoriza (acesso decidir), cunha e grava a chave viva; --origem liga a filha a sessao de quem chamou; --agente/--em-nome-de/--conta descrevem o agente que a abre (spec agente §11.1)
-  sessao ver       <sessao_id> [--json]                                  a chave como esta: sujeito, cadeira, regra, ordem_id
-  sessao listar    [--cadeira <slug>] [--json]                           as sessoes vivas
-  sessao encerrar  <sessao_id>                                           apaga sessao:{id}, ledger:{id}, giro:{id}; o duravel fica
-  sessao limpar    [--dry-run] [--json]                                  remove chaves-sonda acumuladas (sujeito ausente ou '-')
-  sessao limpar    --rascunho <subpasta> [--apply] [--json]              apaga, e so, <instancia>/var/tmp/<PF_ORDEM_ID>/<subpasta> (rascunho da propria fita); sem --apply mostra o plano e os bytes; recusa a raiz inteira e o que sai dela
-  sessao longjob   <args...>                                             contrato herdado de bin/_sessao/longjob
+  sessao abrir     <cadeira> [--sessao-id <uuid>] [--origem <uuid>] [--agente <slug> --em-nome-de <cadeira> --conta <unix>] [--dry-run] [--json]
+  sessao ver       <sessao_id> [--json]
+  sessao listar    [--cadeira <slug>] [--json]
+  sessao encerrar  <sessao_id>
+  sessao limpar    [--dry-run] [--json]
+  sessao limpar    --rascunho <subpasta> [--apply] [--json]
+  sessao longjob   <args...>"""
 
-exit (abrir): 0 cunhou · 2 uso/cadeira desconhecida · 3 sem sujeito/politica ausente/msg-mem mudo · 4 nao autorizado ou --sessao-id vivo de outra cadeira · 5 gravou e nao confirma
-exit (ver/listar/encerrar/limpar): 0 · 1 nao existe · 2 uso · 3 msg-mem mudo · 5 DEL sem confirmacao
-exit (limpar --rascunho): 0 plano ou apagado · 1 subpasta nao existe · 2 uso · 4 sem PF_ORDEM_ID, raiz inteira ou fora da raiz (nada apagado) · 5 apagou sem confirmacao"""
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -810,6 +770,7 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--agente", dest="agente", default=None)
         p.add_argument("--em-nome-de", dest="em_nome_de", default=None)
         p.add_argument("--conta", dest="conta_agente", default=None)
+        p.add_argument("--autorizada-por", dest="autorizada_por", default=None)
         p.add_argument("--dry-run", action="store_true")
     elif ato in ("ver", "encerrar"):
         p.add_argument("sessao_id", nargs="?")
@@ -833,7 +794,7 @@ def main(argv: list[str] | None = None) -> int:
                       "conta_agente": ns.conta_agente or ""}
         cad_arg = ns.cadeira or ns.cadeira_opt or os.environ.get("PLATAFIRMA_CADEIRA") or ""
         return ato_abrir(cad_arg, ns.sessao_id, saida, dry_run=ns.dry_run, origem=ns.origem,
-                         agente=agente)
+                         agente=agente, autorizada_por=ns.autorizada_por)
     if ato == "ver":
         return ato_ver(ns.sessao_id or "", saida)
     if ato == "listar":
@@ -849,6 +810,7 @@ def main(argv: list[str] | None = None) -> int:
         return saida.erro("sessao limpar: --apply so vale com --rascunho <subpasta>; o limpar de "
                           "sondas apaga sem ele (use --dry-run para ver)", 2)
     return ato_limpar(dry_run=ns.dry_run, saida=saida)
+
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -1,0 +1,20 @@
+#!/opt/platafirma/current/venv/harness/bin/python
+# ontologia — o verbo do catálogo e do fichário da casa: lê, lista, cria, troca, recompõe, ensaia, renomeia, apaga e gera o modelo
+# capacidade: conhecimento
+# dono: conhecimento
+# classe: B
+# use para: ler classe, ficha, dicionário ou shape do catálogo e do fichário, «lê a classe chapeu»; listar classes, descendentes (--filhas), referenciadores (--aponta-para) ou chaves gravadas; criar novas classes ou fichas; trocar objeto existente com a versão lida; recompor o conjunto inteiro de fichas de uma classe; ensaiar mudança sem gravar; renomear chave humana; apagar ficha com motivo; gerar o pacote do raciocinador
+# atos: ler (leitura, ontologia), listar (leitura, ontologia), criar (escrita, ontologia), trocar (escrita, ontologia), recompor (escrita, ontologia), ensaiar (leitura, ontologia), renomear (escrita, ontologia), apagar (escrita, ontologia), gerar (leitura, ontologia)
+# forma: texto
+# escreve: nada; o serviço da Olaria, que o verbo chama, é o único que grava no catálogo e no fichário
+# consome: o serviço da Olaria (HTTP, stack olaria)
+# ambiente: OLARIA_URL (o endereço do serviço) e OLARIA_CHAVE (a chave de serviço, lida do cofre pela peça, nunca impressa), PF_CADEIRA (a cadeira que chama, injetada pela porta), OLARIA_PRAZO_S[=110], OLARIA_CHAMADA_S e OLARIA_REENVIO_S[=5] (opcionais, só para prova)
+# depende: nada além do python
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _olaria.__main__ import main  # noqa: E402
+
+sys.exit(main(prog="ontologia"))

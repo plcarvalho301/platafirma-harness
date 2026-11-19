@@ -114,9 +114,6 @@ def verificar_vocabulario(
         elif p.is_dir():
             candidatos.extend(p.glob("**/*.md"))
     else:
-        for fixa in ("abertura/dono.md", "abertura/oficio.md"):
-            if (raiz / fixa).is_file():
-                candidatos.append(raiz / fixa)
         for padrao in ("docs/spec_*.md", "skills/*/SKILL.md"):
             for cand in sorted(raiz.glob(padrao)):
                 if cand.is_file() and cand not in candidatos:

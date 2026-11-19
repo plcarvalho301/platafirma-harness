@@ -1,0 +1,31 @@
+{
+  "pergunta": "Como os módulos conversam?",
+  "leitor": "engenharia",
+  "tipo": "modulo",
+  "fontes": [
+    "referencias/instancias/observacao/2026-11-04-de-para-taxonomia-de-diagramas.md"
+  ],
+  "entidades": [
+    {
+      "id": "a",
+      "nome": "Módulo A",
+      "fonte": "referencias/instancias/observacao/2026-11-04-de-para-taxonomia-de-diagramas.md",
+      "tipo": "componente",
+      "categoria": "servico"
+    },
+    {
+      "id": "b",
+      "nome": "Módulo B",
+      "fonte": "referencias/instancias/observacao/2026-11-04-de-para-taxonomia-de-diagramas.md",
+      "tipo": "componente",
+      "categoria": "servico"
+    }
+  ],
+  "relacoes": [
+    {
+      "de": "a",
+      "para": "b",
+      "rotulo": ""
+    }
+  ]
+}

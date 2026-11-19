@@ -1,6 +1,6 @@
 """lista — resolucao de lista de verificacao via acervo da casa.
 
-O acervo serve documento de casa em markdown (`acervo ler casa <especie> <chave>`):
+A casa serve listas de verificação em markdown:
 primeira linha de situacao («<forca> · <vigencia> — <especie> <chave> · <titulo>»),
 depois o corpo do documento. A lista se le desse formato, que e o de todo o acervo:
 cabecalho de metadado (`Rev:`, `Dono:`...) e os criterios em tabela markdown.

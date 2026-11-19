@@ -34,7 +34,7 @@
 #   oscap avaliar     politica            era oscap-casco
 #   oscap falhas      politica            era oscap-casco-falhas
 #   oscap --          politica            passthrough openscap
-#   isolacao medir    politica            era ops-server/test_exec_conta_host.py (#3007), tirado da suite em 27/09
+#   isolacao medir    politica            era test_exec_conta_host.py (#3007), tirado da suite em 27/09
 #   ssg derivar       politica            era ssg-deriva
 #   keycloak entrar   acesso              sessao kcadm dentro do conteiner
 #   keycloak --       acesso              passthrough kcadm.sh (era kcadm)
@@ -123,12 +123,8 @@ cmd_segredo_ler() {
     exit 2
   fi
 
-  # Recusa: (a) stdout e TTY ou (b) processo pai e a porta (cmdline contem ops-server/server.py)
-  local pai_cmd=""
-  if [ -f "/proc/$PPID/cmdline" ]; then
-    pai_cmd="$(tr '\0' ' ' < "/proc/$PPID/cmdline" 2>/dev/null || true)"
-  fi
-  if [ -t 1 ] || [[ "$pai_cmd" == *"ops-server/server.py"* ]]; then
+  # Recusa: (a) stdout e TTY ou (b) processo pai e a porta (PF_PORTA_PID == PPID)
+  if [ -t 1 ] || { [ -n "${PF_PORTA_PID:-}" ] && [ "$PPID" = "$PF_PORTA_PID" ]; }; then
     echo "segredo não atravessa a porta: chame de dentro do verbo que o consome" >&2
     exit 4
   fi
@@ -757,7 +753,7 @@ case "$SUB" in
   isolacao)
     case "$ATO" in
       medir)
-        exec python3 "$(dirname "$(readlink -f "$0")")/../ops-server/medir_isolacao.py" "${ARGS[@]:2}"
+        exec python3 "$(dirname "$(readlink -f "$0")")/../lib/isolacao/medir_isolacao.py" "${ARGS[@]:2}"
         ;;
       *) uso ;;
     esac

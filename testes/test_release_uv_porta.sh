@@ -131,8 +131,8 @@ prep_locks() {
 mk_repo platafirma-arquitetura prep_locks
 mk_repo platafirma-harness
 
-printf '{"platafirma-arquitetura": "%s", "platafirma-harness": "%s", "platafirma-motor": "%s"}\n' \
-  "$FORGE/platafirma-arquitetura.git" "$FORGE/platafirma-harness.git" "$FORGE/platafirma-motor.git" > "$TMP_DIR/familias.json"
+printf '{"platafirma-arquitetura": "%s", "platafirma-harness": "%s", "platafirma-core": "%s", "platafirma-motor": "%s"}\n' \
+  "$FORGE/platafirma-arquitetura.git" "$FORGE/platafirma-harness.git" "$FORGE/platafirma-core.git" "$FORGE/platafirma-motor.git" > "$TMP_DIR/familias.json"
 cat > "$TMP_DIR/venvs.json" <<'EOF'
 {"_leia": "fixture",
  "req":  {"familia": "platafirma-arquitetura", "lock": "req/requirements.txt"},
@@ -355,11 +355,12 @@ else
   echo OK
 fi
 
-echo "--- 3d: release promover do harness, sem XDG_RUNTIME_DIR, reinicia a porta pelo infra com bus"
-H1="$(novo_commit platafirma-harness h1)"
+echo "--- 3d: release promover do core, sem XDG_RUNTIME_DIR, reinicia a porta pelo infra com bus (#4340)"
+mk_repo platafirma-core true
+H1="$(novo_commit platafirma-core h1)"
 : > "$SYSD_LOG"
-set +e; out="$(env -u XDG_RUNTIME_DIR -u DBUS_SESSION_BUS_ADDRESS PF_RELEASE_PORTA=1 "$VERBO" promover platafirma-harness "$H1" 2>&1)"; rc=$?; set -e
-[ "$rc" -eq 0 ] || falha "promover harness: rc=$rc $out"
+set +e; out="$(env -u XDG_RUNTIME_DIR -u DBUS_SESSION_BUS_ADDRESS PF_RELEASE_PORTA=1 "$VERBO" promover platafirma-core "$H1" 2>&1)"; rc=$?; set -e
+[ "$rc" -eq 0 ] || falha "promover core: rc=$rc $out"
 grep -q '^porta: .*despachado destacado' <<<"$out" || falha "release nao relatou o restart despachado: $out"
 grep -F "systemd-run " "$SYSD_LOG" | grep -qF "systemctl --user restart ops-mcp | XDG=/run/user/$UID_ATUAL | DBUS=unix:path=/run/user/$UID_ATUAL/bus" \
   || falha "release -> infra sem bus: $(cat "$SYSD_LOG")"
@@ -373,10 +374,10 @@ else
   mkdir -p "$TMP_DIR/infra-velho"
   printf '#!/usr/bin/env bash\nexec systemd-run --user --collect --quiet --unit=infra-restart-$$ systemctl --user restart "$2"\n' > "$TMP_DIR/infra-velho/infra"
   chmod +x "$TMP_DIR/infra-velho/infra"
-  H2="$(novo_commit platafirma-harness h2)"
+  H2="$(novo_commit platafirma-core h2)"
   : > "$SYSD_LOG"
-  set +e; out="$(env -u DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR=/usr PATH="$TMP_DIR/infra-velho:$PATH_BASE" PF_RELEASE_PORTA=1 "$VERBO" promover platafirma-harness "$H2" 2>&1)"; rc=$?; set -e
-  [ "$rc" -eq 0 ] || falha "promover harness com XDG estranho: rc=$rc $out"
+  set +e; out="$(env -u DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR=/usr PATH="$TMP_DIR/infra-velho:$PATH_BASE" PF_RELEASE_PORTA=1 "$VERBO" promover platafirma-core "$H2" 2>&1)"; rc=$?; set -e
+  [ "$rc" -eq 0 ] || falha "promover core com XDG estranho: rc=$rc $out"
   grep -F "systemd-run " "$SYSD_LOG" | grep -qF "XDG=/run/user/$UID_ATUAL | DBUS=unix:path=/run/user/$UID_ATUAL/bus" \
     || falha "release passou XDG de outra conta ao infra: $(cat "$SYSD_LOG")"
   echo OK

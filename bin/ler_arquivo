@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+"""Ponto de entrada executável do harness para `ler_arquivo` por processo."""
+# atos: ler (leitura, arquivo)
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+_LIB = Path(__file__).resolve().parents[1] / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+
+from leitura.__main__ import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())

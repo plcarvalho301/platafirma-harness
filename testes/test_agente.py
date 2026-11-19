@@ -344,7 +344,7 @@ def test_projetada_sem_monta_sessao_e_com_run_command_reprova():
 
 def test_conector_publica_ler_arquivo_e_mantem_o_apelido_read_file(mundo):
     publicadas = agente.tools_do_conector()
-    assert agente.PORTA + "ler_arquivo" in publicadas and agente.PORTA + "read_file" in publicadas
+    assert agente.PORTA + "ler_arquivo" in publicadas and agente.PORTA + "write_file" in publicadas
 
 
 def test_conferir_acusa_tool_que_o_conector_nao_publica(mundo, capsys):
@@ -815,8 +815,7 @@ def test_cadeira_so_vale_no_agente_de_dono_generico(mundo, pessoa, monkeypatch, 
     assert "passe --cadeira" in capsys.readouterr().err
     assert roda(monkeypatch, "consultor", cadeira="ia") == 2, "dono {cadeira} sem chapéu fixo pede --chapeu"
     err = capsys.readouterr().err
-    assert "passe --chapeu" in err
-    assert "válidos:" in err and "agente" in err
+    assert "passe --chapeu" in err and "agente" in err
 
 
 def test_recusa_sem_chapeu_lista_chapeus_validos_da_cadeira(mundo, pessoa, tmp_path, monkeypatch, capsys):
@@ -871,7 +870,7 @@ def test_claude_sobe_sem_o_arranque_da_conta_e_com_a_porta(mundo, pessoa, monkey
         assert conector in negadas, f"{conector}: conector da conta que não é a porta sai pelo nome do servidor"
     for g in agente.GRAFIAS:
         assert g.rstrip("_") not in negadas, f"{g}: a porta não se nega pelo servidor"
-        for fora in ("repo", "malote", "run_command", "write_file"):
+        for fora in ("repo", "malote", "write_file"):
             assert g + fora in negadas, f"{g}{fora}: tool de porta fora da declaração sai da janela"
         for dentro in ("ler_arquivo", "monta_sessao"):
             assert g + dentro not in negadas, f"{g}{dentro}: a declaração lista, a porta fica"

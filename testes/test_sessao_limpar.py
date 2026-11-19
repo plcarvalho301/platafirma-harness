@@ -30,10 +30,21 @@ loader.exec_module(sessao_mod)
 
 
 class FakeMsgMem:
-    """Dublê do Redis/msg-mem para testes herméticos."""
+    """Dublê do Redis/msg-mem em hash para testes herméticos."""
 
-    def __init__(self, chaves: dict[str, str] | None = None):
-        self.data: dict[str, str] = dict(chaves or {})
+    def __init__(self, chaves: dict[str, str | dict[str, str]] | None = None):
+        self.data: dict[str, str | dict[str, str]] = {}
+        for k, v in (chaves or {}).items():
+            if k.startswith("sessao:") and isinstance(v, str):
+                try:
+                    parsed = json.loads(v)
+                    if isinstance(parsed, dict):
+                        self.data[k] = {str(fk): str(fv) for fk, fv in parsed.items()}
+                        continue
+                except ValueError:
+                    pass
+            self.data[k] = v
+        self.ttl: dict[str, int] = {}
 
     def scan_iter(self, match: str = "*", count: int = 500):
         prefix = match[:-1] if match.endswith("*") else match
@@ -41,11 +52,24 @@ class FakeMsgMem:
             if k.startswith(prefix):
                 yield k
 
-    def get(self, key: str) -> str | None:
-        return self.data.get(key)
+    def hgetall(self, key: str) -> dict[str, str]:
+        v = self.data.get(key)
+        return dict(v) if isinstance(v, dict) else {}
 
-    def set(self, key: str, val: str, ex: int | None = None):
-        self.data[key] = val
+    def hset(self, key: str, mapping: dict[str, str] | None = None, **kwargs):
+        bucket = self.data.setdefault(key, {})
+        if not isinstance(bucket, dict):
+            bucket = {}
+            self.data[key] = bucket
+        if mapping:
+            bucket.update({str(k): str(v) for k, v in mapping.items()})
+        if kwargs:
+            bucket.update({str(k): str(v) for k, v in kwargs.items()})
+        return len(bucket)
+
+    def expire(self, key: str, ex: int):
+        self.ttl[key] = ex
+        return True
 
     def exists(self, key: str) -> bool:
         return key in self.data

@@ -75,7 +75,7 @@ CABECALHO_GERADO = "# GERADO por agente — não editar"
 # A porta (incidente #3223, ordem do dono 01/10/2026): o agente declara tools com o MESMO nome que o conector
 # publica à cadeira, escopadas pelo agente, e abre a sessão pela mesma tool (`monta_sessao`).
 PORTA = "mcp__claudinho-mcp__"
-PORTA_BASE = ("malote", "run_command", "ler_arquivo", "read_file", "write_file", "monta_sessao")   # as que a porta publica fora do ferramental
+PORTA_BASE = ("malote", "ler_arquivo", "write_file", "monta_sessao")   # as que a porta publica em transporte (registro/porta.yaml)
 ABRE = PORTA + "monta_sessao"
 # A mesma porta chega com outro prefixo conforme a superfície (#3255): o Code CLI publica o conector do claude.ai
 # como `claude_ai_claudinho-mcp`, e o Code Desktop pelo uuid do conector (medido 03/10/2026 no posto). A declaração
@@ -360,18 +360,41 @@ def confere_projecoes(posto: Path, decls: dict, problemas: dict) -> list[str]:
 
 # --- as tools contra o conector (incidente #3223) --------------------------------------------
 
+def _caminho_porta_yaml() -> Path | None:
+    candidatos = [
+        _AQUI.parent / "registro" / "porta.yaml",
+        raizes.release() / "harness" / "registro" / "porta.yaml",
+    ]
+    for c in candidatos:
+        if c.is_file():
+            return c
+    return None
+
+
 def tools_do_conector() -> set[str] | None:
-    """Os nomes que a porta publica à cadeira: as de base mais uma por verbo do ferramental, pela mesma lista que
-    a porta projeta (`acervo listar ferramental --tools`). None quando o acervo não responde."""
+    """Os nomes que a porta publica à cadeira: lidos de registro/porta.yaml (seções transporte e verbos).
+    None quando o manifesto não existe ou não pode ser lido."""
+    arq = _caminho_porta_yaml()
+    if arq is None:
+        return None
     try:
-        p = subprocess.run([str(Path(os.environ.get("PF_BIN") or _AQUI) / "acervo"), "listar", "ferramental", "--tools"],
-                           capture_output=True, text=True, timeout=60)
-        linhas = json.loads(p.stdout) if p.returncode == 0 else None
-    except (OSError, subprocess.SubprocessError, ValueError):
+        doc = yaml.safe_load(arq.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
         return None
-    if not isinstance(linhas, list):
+    if not isinstance(doc, dict):
         return None
-    return {PORTA + t for t in PORTA_BASE} | {PORTA + str(l["tool"]) for l in linhas if isinstance(l, dict) and l.get("tool")}
+    transporte = doc.get("transporte")
+    base = tuple(transporte.keys()) if isinstance(transporte, dict) and transporte else PORTA_BASE
+    verbos = doc.get("verbos")
+    nomes: set[str] = {PORTA + str(t) for t in base}
+    if isinstance(verbos, dict):
+        for slug, meta in verbos.items():
+            if not isinstance(slug, str) or not slug:
+                continue
+            nome = (meta or {}).get("nome") if isinstance(meta, dict) else None
+            nomes.add(PORTA + str(nome or slug))
+            nomes.add(PORTA + slug)
+    return nomes
 
 
 def fora_do_conector(stem: str, decl: dict, conector: set[str]) -> list[str]:
@@ -558,7 +581,7 @@ def ato_projetar(conferir: bool, base_ref: str | None) -> int:
     avisos: list[str] = []
     conector = tools_do_conector()
     if conector is None:
-        avisos.append("acervo listar ferramental --tools não respondeu: as tools não foram conferidas contra o conector")
+        avisos.append("registro/porta.yaml não pôde ser lido: as tools não foram conferidas contra o conector")
     else:
         for stem, d in decls.items():
             if stem not in problemas:
@@ -888,7 +911,7 @@ def negadas_do_agente(decl: dict) -> list[str]:
     """O que sai da janela do agente: as embutidas proibidas, os conectores de fora e a porta fora da declaração."""
     porta = tools_do_conector()
     if porta is None:
-        raise Falha(3, "as tools da porta não vieram (acervo listar ferramental --tools): sem a lista, o agente "
+        raise Falha(3, "as tools da porta não vieram (registro/porta.yaml): sem a lista, o agente "
                        "levaria a porta inteira, fora da declaração")
     fora = sorted(porta - set(decl["ferramentas"] or []))
     return [*PROIBIDAS, *FORA_DO_AGENTE, *CONECTORES_DE_FORA, *(g for t in fora for g in grafias(t))]

@@ -1,0 +1,46 @@
+{
+  "pergunta": "Onde rodam os renderizadores de figura da wiki?",
+  "pedido": "Mostra onde rodam os renderizadores de figura da stack da wiki.",
+  "leitor": "operacao",
+  "tipo": "alocacao",
+  "fontes": [
+    "outros_repos/conhecimento/docker-compose.yml"
+  ],
+  "hosts": [
+    "host_wiki"
+  ],
+  "entidades": [
+    {
+      "id": "host_wiki",
+      "nome": "Stack plataforma-wiki",
+      "fonte": "outros_repos/conhecimento/docker-compose.yml",
+      "tipo": "stack",
+      "categoria": "host"
+    },
+    {
+      "id": "kroki_app",
+      "nome": "Kroki",
+      "fonte": "outros_repos/conhecimento/docker-compose.yml",
+      "tipo": "servico",
+      "categoria": "servico",
+      "host": "host_wiki"
+    },
+    {
+      "id": "mermaid_app",
+      "nome": "Kroki Mermaid",
+      "fonte": "outros_repos/conhecimento/docker-compose.yml",
+      "tipo": "servico",
+      "categoria": "servico",
+      "host": "host_wiki"
+    },
+    {
+      "id": "desenhista_app",
+      "nome": "Desenhista",
+      "fonte": "outros_repos/conhecimento/docker-compose.yml",
+      "tipo": "servico",
+      "categoria": "servico",
+      "host": "host_wiki"
+    }
+  ],
+  "relacoes": []
+}

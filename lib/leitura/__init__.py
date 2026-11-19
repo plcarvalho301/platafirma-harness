@@ -1,0 +1,58 @@
+"""Leitura de arquivos no harness por processo (`ler_arquivo`, story #4342, t4)."""
+from __future__ import annotations
+
+from .formatos import (
+    DOCX,
+    EPUB,
+    GIF,
+    HTML,
+    JPEG,
+    LEITORES,
+    MHTML,
+    PDF,
+    PNG,
+    PPTX,
+    UNIDADE,
+    WEBP,
+    XLSX,
+    ZIP,
+    extrair_texto_formato,
+    tipo_do_zip,
+    tipo_texto,
+)
+from .leitura import (
+    FIM,
+    MODOS,
+    ORCAMENTO_MAX,
+    ORCAMENTO_PADRAO,
+    eh_segredo,
+    envelope_erro,
+    ler,
+)
+
+__all__ = [
+    "DOCX",
+    "EPUB",
+    "FIM",
+    "GIF",
+    "HTML",
+    "JPEG",
+    "LEITORES",
+    "MHTML",
+    "MODOS",
+    "ORCAMENTO_MAX",
+    "ORCAMENTO_PADRAO",
+    "PDF",
+    "PNG",
+    "PPTX",
+    "UNIDADE",
+    "WEBP",
+    "XLSX",
+    "ZIP",
+    "eh_segredo",
+    "envelope_erro",
+    "extrair_texto_formato",
+    "ler",
+    "tipo_do_zip",
+    "tipo_texto",
+]

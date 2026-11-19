@@ -326,12 +326,24 @@ def giros_do_dia(fonte, dia, cadeira=None, sessao=None, azp=None):
     return brutos
 
 
+def _verbo_do_par(g):
+    """Recusa do transporte que declara o verbo pretendido (`bruto.verbo`) pareia no
+    tateio com os giros daquele verbo (card #4369)."""
+    tool = g["tool"]
+    if tool in LOTE and g.get("evento") in ("sem_verbo", "argumento_recusado"):
+        pretendido = (g.get("bruto") or {}).get("verbo")
+        if (isinstance(pretendido, str) and pretendido.strip()
+                and pretendido.strip() not in LOTE and pretendido.strip() != "-"):
+            return pretendido.strip()
+    return tool
+
+
 def _por_par(giros):
     """Indices agrupados por (ordem_id, tool) — o par que o card usa para acerto,
     cadeia e ate-acerto."""
     par = defaultdict(list)
     for n, g in enumerate(giros):
-        par[(g["ordem_id"], g["tool"])].append(n)
+        par[(g["ordem_id"], _verbo_do_par(g))].append(n)
     return par
 
 
@@ -564,7 +576,9 @@ def _e_gramatica(g):
     classe = _classe_de_leitura(g)
     if classe:
         return classe == "gramatica"
-    return (g["exit_code"] == 2 or _nulo(g["ato"]) or g.get("evento") == "sem_verbo")
+    if g.get("evento") in ("lote", "lote_encadeado"):
+        return g["exit_code"] == 2
+    return (g["exit_code"] == 2 or _nulo(g["ato"]) or g.get("evento") in ("sem_verbo", "argumento_recusado"))
 
 def tateio(giros, par):
     gram_verbo = defaultdict(int)
@@ -913,7 +927,7 @@ def verbos(giros):
             lote[via]["itens"] += 1
             lote[via]["lotes"].add(g["lote_id"] or g["ts"] or g["pos"])
         elif t in lote:
-            if g.get("evento") == "sem_verbo":
+            if g.get("evento") in ("sem_verbo", "argumento_recusado"):
                 lote[t]["recusas"] += 1
             lote[t]["lotes"].add(g["lote_id"] or g["ts"] or g["pos"])
         d = por[t]

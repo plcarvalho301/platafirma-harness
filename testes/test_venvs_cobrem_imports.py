@@ -1,76 +1,22 @@
-"""O venv que o release constroi cobre o que o codigo servido importa (card #3010).
-
-O venv `ops` nasce de ops-server/requirements.txt (registro/venvs.json). Um import de
-terceiro que so existia no venv montado a mao derruba a porta na primeira subida de uma
-release limpa. Este teste le os imports de ops-server/*.py (fora dos testes) e exige que
-cada distribuicao de terceiro esteja declarada no arquivo que o registro aponta.
-"""
+# componente: componente:porta
+# verifica: configuracao:registro-venvs
+"""O registro de venvs da família platafirma-harness não declara mais ops nem politica-acesso
+(a porta e o acesso moram em platafirma-core desde a F4073, #4340 e #4348)."""
 from __future__ import annotations
 
-import ast
 import json
-import re
-import sys
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[1]
 
-# modulo importado -> distribuicao que o fornece
-DISTRIBUICAO = {"yaml": "pyyaml"}
-# chegam como dependencia de uma distribuicao declarada
-TRANSITIVOS = {"anyio": "mcp", "starlette": "mcp"}
-# modulos da propria arvore que a porta poe no sys.path
-LOCAIS_FORA_DO_DIRETORIO = {"hash_servido", "streams", "identidade", "pdp", "pep", "raizes",
-                            "oplog",       # lib/oplog.py (card #3344), so biblioteca padrao
-                            "registro_porta",  # lib/registro_porta.py (card #4117); o pyyaml dele ja esta declarado
-                            "tokenizador",     # lib/tokenizador.py (card #4120)
-                            "analise",         # lib/analise: stdlib; consulta no venv harness (#4130)
-                            "reidratar"}  # bin/_sessao/reidratar.py (card #3145, Onda 1 Frente E)
 
-
-def _imports_de_terceiros(diretorio: Path) -> set[str]:
-    locais = {p.stem for p in diretorio.glob("*.py")} | LOCAIS_FORA_DO_DIRETORIO
-    achados: set[str] = set()
-    for arquivo in diretorio.glob("*.py"):
-        # teste e ensaio nao sobem com a porta: rodam no venv de teste (pytest, teste_isolado)
-        if arquivo.name.startswith("test_") or arquivo.name in {"conftest.py", "_ensaio.py"}:
-            continue
-        for no in ast.walk(ast.parse(arquivo.read_text(encoding="utf-8"))):
-            if isinstance(no, ast.Import):
-                achados |= {a.name.split(".")[0] for a in no.names}
-            elif isinstance(no, ast.ImportFrom) and no.module and no.level == 0:
-                achados.add(no.module.split(".")[0])
-    return {m for m in achados if m not in sys.stdlib_module_names and m not in locais}
-
-
-def _declarados(requirements: Path) -> set[str]:
-    nomes = set()
-    for linha in requirements.read_text(encoding="utf-8").splitlines():
-        linha = linha.split("#", 1)[0].strip()
-        if linha:
-            nomes.add(re.split(r"[\[=<>!~ ]", linha, maxsplit=1)[0].lower())
-    return nomes
-
-
-def test_venv_ops_cobre_os_imports_da_porta():
+def test_registro_venvs_harness_sem_ops_nem_politica_acesso():
     registro = json.loads((RAIZ / "registro" / "venvs.json").read_text(encoding="utf-8"))
-    requirements = RAIZ / registro["ops"]["lock"]
-    declarados = _declarados(requirements)
-    faltam = []
-    for modulo in sorted(_imports_de_terceiros(RAIZ / "ops-server")):
-        dist = DISTRIBUICAO.get(modulo, modulo).lower()
-        if dist in declarados or TRANSITIVOS.get(modulo, "") in declarados:
-            continue
-        faltam.append(f"{modulo} (distribuicao {dist})")
-    assert not faltam, f"{requirements.relative_to(RAIZ)} nao declara: {', '.join(faltam)}"
-
-
-def test_requirements_do_ops_e_pinado():
-    registro = json.loads((RAIZ / "registro" / "venvs.json").read_text(encoding="utf-8"))
-    requirements = RAIZ / registro["ops"]["lock"]
-    soltos = [
-        linha.strip()
-        for linha in requirements.read_text(encoding="utf-8").splitlines()
-        if linha.strip() and not linha.strip().startswith("#") and "==" not in linha
-    ]
-    assert not soltos, f"dependencia sem versao pinada em {requirements.name}: {soltos}"
+    chaves_harness = {
+        k for k, v in registro.items()
+        if isinstance(v, dict) and v.get("familia") == "platafirma-harness"
+    }
+    assert "ops" not in chaves_harness
+    assert "politica-acesso" not in chaves_harness
+    assert "espelho-ops" not in registro
+    assert "porta" in registro and registro["porta"]["familia"] == "platafirma-core"
