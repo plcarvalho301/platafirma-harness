@@ -591,17 +591,42 @@ def tateio(giros, par):
     gasto = []
     for (ordem, tool), idxs in par.items():
         n_gram = 0
+        ultimo_gram_idx = None
+        ultimo_verbo_alvo = None
+        fechou = False
         for n in idxs:
             g = giros[n]
             if _e_gramatica(g):
                 n_gram += 1
+                ultimo_gram_idx = n
+                v_alvo = (g.get("bruto") or {}).get("verbo")
+                if not _nulo(v_alvo):
+                    ultimo_verbo_alvo = v_alvo
                 continue
             if not g["falhou"]:
                 if n_gram:
+                    acertou = g["ato"]
+                    if tool in LOTE and _nulo(acertou):
+                        acertou = f"lote:{g['lote_id']}" if not _nulo(g.get("lote_id")) else (g.get("evento") or "lote")
                     gasto.append({"ordem_id": ordem, "tool": tool,
                                   "cadeira": g["cadeira"], "giros_de_gramatica": n_gram,
-                                  "acertou_em": g["ato"], "ts": g["ts"]})
+                                  "acertou_em": acertou, "ts": g["ts"]})
+                fechou = True
                 break
+        if n_gram and not fechou and tool in LOTE and ultimo_gram_idx is not None:
+            # Em malote, recusas gravam tool="malote" mas o acerto seguinte pode vir como
+            # item despachado (via="malote") ou chamada direta do verbo alvo.
+            for m in range(ultimo_gram_idx + 1, len(giros)):
+                g2 = giros[m]
+                if g2["ordem_id"] != ordem or g2["falhou"]:
+                    continue
+                via2 = (g2.get("bruto") or {}).get("via")
+                if via2 == tool or (ultimo_verbo_alvo and g2["tool"] == ultimo_verbo_alvo):
+                    acertou = f"{g2['tool']}:{g2['ato']}" if not _nulo(g2.get("ato")) else g2["tool"]
+                    gasto.append({"ordem_id": ordem, "tool": tool,
+                                  "cadeira": g2["cadeira"], "giros_de_gramatica": n_gram,
+                                  "acertou_em": acertou, "ts": g2["ts"]})
+                    break
     gasto.sort(key=lambda x: (-x["giros_de_gramatica"], x["ts"] or ""))
 
     # Sessao tecnica sem leitura da casa.

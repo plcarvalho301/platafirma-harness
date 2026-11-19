@@ -39,3 +39,4 @@ test_sessao_sem_default.py | bin/sessao bin/_sessao/** ops-server/** politica-ac
 test_autoriza_porta.py | ops-server/** politica-acesso/** | regressivo #722
 test_poda_porta.py | bin/descansar bin/expediente bin/mesa bin/motor bin/persona bin/repo bin/tarefas bin/teste comum/** ops-server/** politica-acesso/*.py | regressivo #722
 test_superficie_catalogo_porta.py | bin/descansar bin/mesa bin/monta-sessao lib/registro_porta.py ops-server/** politica-acesso/*.py registro/porta.yaml
+test_dt_874_875_876_malote.py | bin/metrica ops-server/** | regressivo #2856

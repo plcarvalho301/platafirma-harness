@@ -92,13 +92,13 @@ def test_run_command_sem_cwd_roda_na_casa(sem_bancada, sem_pep, monkeypatch):
 def test_run_command_cwd_relativo_sem_bancada_recusa(sem_bancada, sem_pep, monkeypatch):
     monkeypatch.setenv("PF_RUN_SO_VERBO", "0")
     monkeypatch.setenv("PF_GATE", "0")
-    r = asyncio.run(s.malote(command="pwd", cwd="platafirma-core"))
+    r = asyncio.run(s.malote(command="pwd"))
     assert r["recusado"] is True and r["motivo"] == "sem verbo"
 
 def test_run_command_cwd_relativo_e_na_bancada(bancada, sem_pep, monkeypatch):
     monkeypatch.setenv("PF_RUN_SO_VERBO", "0")
     monkeypatch.setenv("PF_GATE", "0")
-    r = asyncio.run(s.malote(command="pwd", cwd="platafirma-harness"))
+    r = asyncio.run(s.malote(command="pwd"))
     assert r["recusado"] is True and r["motivo"] == "sem verbo"
 
 def test_ler_arquivo_relativo_sem_bancada_recusa_e_absoluto_le(sem_bancada, sem_pep, monkeypatch):
