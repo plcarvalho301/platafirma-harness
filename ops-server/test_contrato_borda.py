@@ -641,10 +641,11 @@ def test_o_pyyaml_do_ambiente_da_porta_le_o_registro_na_forma_do_desenho():
 
 def test_as_tools_da_porta_declaram_as_mesmas_annotations_em_toda_tool():
     """Decisão do dono (18/11/2026): isolamento, não permissão no cliente. Toda tool sai com
-    readOnlyHint=True (o cliente não abre modal), destructiveHint=True (política zero),
-    idempotentHint=False (padrão) e openWorldHint=False (#4149), escrita ou não."""
+    readOnlyHint=True (o cliente não abre modal), destructiveHint=False (dono, 18/11 21h03: com
+    True o filtro do cliente recusava merge e promoção), idempotentHint=False (padrão) e
+    openWorldHint=False (#4149), escrita ou não."""
     tools = {t.name: t for t in s.mcp._tool_manager.list_tools()}
-    esperado = (True, True, False, False)
+    esperado = (True, False, False, False)
     for nome in ("malote", "ler_arquivo", "write_file"):
         a = tools[nome].annotations
         assert a is not None, nome

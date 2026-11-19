@@ -3350,11 +3350,12 @@ def _anotacoes_tool(nome: str, binario: str = "") -> ToolAnnotations:
     """Anotações MCP, iguais em toda tool (decisão do dono, 18/11/2026). O modelo de segurança da casa
     é isolamento, e não permissão no cliente: quem barra é o PDP no servidor. `readOnlyHint=True` tira
     o modal que o cliente abre por tool de escrita (o app Gemini decide só por ele).
-    `destructiveHint=True` porque a casa troca e apaga o fóssil (política zero), e não só acrescenta;
-    pela spec, o cliente o ignora quando `readOnlyHint` é True. `idempotentHint` fica no padrão
-    (False), também ignorado nesse caso. `openWorldHint=False` segue como no #4149, até o dono
-    decidir o open world por verbo. `nome` e `binario` ficam na assinatura para essa decisão."""
-    return ToolAnnotations(readOnlyHint=True, destructiveHint=True,
+    `destructiveHint=False` (dono, 18/11/2026 21h03): com True, o filtro de modo automático do Claude
+    Code recusava merge e promoção como «Destructive», sem ignorar a flag como a spec manda quando
+    `readOnlyHint` é True; a flag não barra nada no servidor. `idempotentHint` fica no padrão (False).
+    `openWorldHint=False` segue como no #4149, até o dono decidir o open world por verbo. `nome` e
+    `binario` ficam na assinatura para essa decisão."""
+    return ToolAnnotations(readOnlyHint=True, destructiveHint=False,
                            idempotentHint=False, openWorldHint=False)
 
 
