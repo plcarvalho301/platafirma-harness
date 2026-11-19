@@ -1500,6 +1500,17 @@ abrir_direto_em_main() {
   fi
   [ -d "$clone_raiz" ] && [ -e "$clone_raiz/.git" ] || morre "repositório desconhecido: '$nome' — $clone_raiz existe e nao e clone" 2
 
+  # incidente 4371: o clone raiz perdeu o registro da worktree (.git/worktrees), e o .git da
+  # pasta aponta para o nada; todo ato saía 5 e nenhum refazia. A pasta vai inteira para a
+  # quarentena, fora da árvore das bancadas, e a worktree se refaz pelo caminho de criar.
+  if [ -e "$wt_dir/.git" ] && ! "$GIT" -C "$wt_dir" rev-parse --git-dir >/dev/null 2>&1; then
+    local orfas="$BANCADA/wt/.orfas" orfa
+    orfa="$orfas/$nome-$cadeira-$(date -u +%Y%m%dT%H%M%SZ)"
+    mkdir -p "$orfas" && mv "$wt_dir" "$orfa" \
+      || morre "worktree órfã em $wt_dir e a quarentena em $orfas falhou — nada mexido" 3
+    printf 'worktree órfã (o clone raiz perdeu o registro dela): pasta guardada em %s; refaço de origin/main\n' "$orfa" >&2
+  fi
+
   local ja=0
   if [ -e "$wt_dir/.git" ]; then
     ja=1
