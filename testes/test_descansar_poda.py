@@ -198,5 +198,6 @@ def test_chapeus_declarados_le_a_abertura(tmp_path):
 
 def test_o_descansar_nao_poda_mais():
     texto = (REPO_ROOT / "bin" / "descansar").read_text(encoding="utf-8")
-    assert "aponta_candidatas" not in texto and "mesa podar" in texto
-    assert "A poda nao e sua" in texto, "o roteiro do Sair diz que a poda e do bot"
+    assert "aponta_candidatas" not in texto
+    assert "mesa podar" not in texto
+    assert "descansar publicar" in texto, "pos-S4377 o descanso publica mensagens em negocio.mensagem"
