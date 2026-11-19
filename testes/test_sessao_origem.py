@@ -31,8 +31,9 @@ FILHA = "22222222-2222-4222-8222-222222222222"  # a sessao portada de uma abertu
 
 
 class FakeMsgMem:
-    def __init__(self, chaves: dict[str, str] | None = None):
-        self.data: dict[str, str] = dict(chaves or {})
+    def __init__(self, chaves: dict[str, dict[str, str]] | None = None):
+        self.data: dict[str, dict[str, str]] = {k: dict(v) for k, v in (chaves or {}).items()}
+        self.ttl: dict[str, int] = {}
 
     def scan_iter(self, match: str = "*", count: int = 500):
         prefix = match[:-1] if match.endswith("*") else match
@@ -40,11 +41,21 @@ class FakeMsgMem:
             if k.startswith(prefix):
                 yield k
 
-    def get(self, key):
-        return self.data.get(key)
+    def hgetall(self, key):
+        v = self.data.get(key)
+        return dict(v) if isinstance(v, dict) else {}
 
-    def set(self, key, val, ex=None):
-        self.data[key] = val
+    def hset(self, key, mapping=None, **kwargs):
+        bucket = self.data.setdefault(key, {})
+        if mapping:
+            bucket.update({str(k): str(v) for k, v in mapping.items()})
+        if kwargs:
+            bucket.update({str(k): str(v) for k, v in kwargs.items()})
+        return len(bucket)
+
+    def expire(self, key, ex):
+        self.ttl[key] = ex
+        return True
 
     def exists(self, key):
         return key in self.data
@@ -54,7 +65,7 @@ class FakeMsgMem:
 
 
 def _chave_viva(cadeira="engenharia"):
-    return json.dumps({"sujeito": "suj-1", "cadeira": cadeira, "ordem_id": "o1", "origem": "sessao abrir"})
+    return {"sujeito": "suj-1", "cadeira": cadeira, "ordem_id": "o1", "origem": "sessao abrir"}
 
 
 @pytest.fixture
@@ -66,13 +77,13 @@ def mem():
 def abre(mem, monkeypatch):
     """Abre uma sessao como o verbo abre, com tudo o que e de fora substituido."""
     monkeypatch.setenv("PF_SUJEITO", "suj-1")
+    monkeypatch.setenv("PF_SESSAO_AUTORIZADA_POR", "operador-plataforma")
 
     def _abre(*argv):
         f = io.StringIO()
         with patch.object(sessao_mod, "_msgmem", return_value=(mem, None)), \
                 patch.object(sessao_mod, "_vocabulario",
                              return_value=({"engenharia": {"alias": "Gabriel", "chapeus": []}}, None)), \
-                patch.object(sessao_mod, "_decidir", return_value=(0, {"regra": "r", "plano": "p"}, "")), \
                 patch.object(sessao_mod, "_registra_duravel", return_value=None), \
                 redirect_stdout(f):
             rc = sessao_mod.main(["abrir", "engenharia", "--json", *argv])
@@ -83,7 +94,7 @@ def abre(mem, monkeypatch):
 
 
 def _chave(mem, sid):
-    return json.loads(mem.data[f"sessao:{sid}"])
+    return dict(mem.data[f"sessao:{sid}"])
 
 
 def test_origem_entra_na_chave_e_no_retorno(abre, mem):
@@ -168,11 +179,11 @@ def test_ver_e_listar_mostram_a_origem(abre, mem):
 
 def test_texto_do_abrir_traz_a_linha_da_origem(mem, monkeypatch):
     monkeypatch.setenv("PF_SUJEITO", "suj-1")
+    monkeypatch.setenv("PF_SESSAO_AUTORIZADA_POR", "operador-plataforma")
     f = io.StringIO()
     with patch.object(sessao_mod, "_msgmem", return_value=(mem, None)), \
             patch.object(sessao_mod, "_vocabulario",
                          return_value=({"engenharia": {"alias": "G", "chapeus": []}}, None)), \
-            patch.object(sessao_mod, "_decidir", return_value=(0, {}, "")), \
             patch.object(sessao_mod, "_registra_duravel", return_value=None), \
             redirect_stdout(f):
         rc = sessao_mod.main(["abrir", "engenharia", "--origem", ORQ])

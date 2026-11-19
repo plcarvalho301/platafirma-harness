@@ -145,6 +145,19 @@ def test_pr_merge_nao_remove_bancada_de_outro_trabalho_mesmo_no_ramo(tmp_path):
     (forge / "estado").write_text("OPEN\n", encoding="utf-8")
     (forge / "ramo").write_text("fabrica/42-x\n", encoding="utf-8")
     (forge / "oid").write_text(_git("rev-parse", "HEAD", cwd=wt_outro) + "\n", encoding="utf-8")
+    vdir = tmp_path / "instancia" / "var" / "esteira"
+    vdir.mkdir(parents=True, exist_ok=True)
+    import json as _json
+    (vdir / "demo.jsonl").write_text(
+        _json.dumps({
+            "repositorio": "demo",
+            "arvore_mudanca": _git("rev-parse", "HEAD^{tree}", cwd=wt_outro),
+            "arvore_main": _git("rev-parse", "origin/main^{tree}", cwd=wt_outro),
+            "estado": "verde",
+            "fichas": [],
+        }) + "\n",
+        encoding="utf-8",
+    )
 
     r_merge = _repo(tmp_path, bancada, "pr-merge", "demo", "7", "--forcar")
     assert r_merge.returncode == 0, r_merge.stdout + r_merge.stderr

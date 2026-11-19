@@ -1628,6 +1628,7 @@ ato_sincronizar() {
   fsha="$(forge_sha "$c" "$ramo")"; rc=$?
   if [ "$rc" -eq 0 ] && [ "$fsha" = "$head" ]; then
     publica_veredito "$c" "$nome" "$head"
+    dispara_esteira "$nome" "$c" "$head" "$main"
     if [ "$mesclou" -eq 1 ]; then
       printf 'sincronizado: %s = %s (mesclou origin/main %s, %s commit(s) novo(s)); origin/%s = %s [lido do forge]\n' \
         "$ramo" "${head:0:7}" "${main:0:7}" "$novos" "$ramo" "${fsha:0:7}"
@@ -2145,12 +2146,16 @@ cmd_abrir() {
     [ -z "$slug" ] \
       || morre "repositório de deliberação ($nome): --slug nao se aplica — commit direto em main (arq:0083); rode sem --slug: repo abrir $nome" 2
     abrir_direto_em_main "$nome" "$cadeira" "$card" "$sem_mover"
-    return $?
+    local _rc_dm=$?
+    [ "$_rc_dm" -eq 0 ] && grava_escopo_sessao "$nome" "$card"
+    return $_rc_dm
   fi
 
   if [ "$da_producao" -eq 1 ]; then
     abrir_da_producao "$nome" "$cadeira" "$card" "$slug" "$assumir"
-    return $?
+    local _rc_dp=$?
+    [ "$_rc_dp" -eq 0 ] && grava_escopo_sessao "$nome" "$card"
+    return $_rc_dp
   fi
 
   local clone_raiz="$BANCADA/$nome"
@@ -2211,6 +2216,7 @@ cmd_abrir() {
     # Card #3526 (R20): reabrir a bancada tambem poe o card em execucao e grava o executor. Antes
     # so a bancada nova movia, e a story de uma fita que voltava ficava onde estava.
     [[ "${card###}" =~ ^[0-9]+$ ]] && move_card "${card###}" "$nome" "$cadeira" "$sem_mover"
+    grava_escopo_sessao "$nome" "$card"
     printf 'próximo: teste rodar %s <alvo>\n' "$nome"
     return 0
   fi
@@ -2288,6 +2294,7 @@ cmd_abrir() {
       "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)" "$("$GIT" -C "$wt_dir" rev-list --count HEAD..origin/main 2>/dev/null || echo '?')"
     [[ "$card_num" =~ ^[0-9]+$ ]] && move_card "$card_num" "$nome" "$cadeira" "$sem_mover"
     guarda_sessao_viva "$wt_dir" "$assumir"
+    grava_escopo_sessao "$nome" "$card"
     printf 'próximo: teste rodar %s <alvo>\n' "$nome"
   else
     if [ -n "$slug" ]; then
@@ -2307,8 +2314,38 @@ cmd_abrir() {
     "$GIT" -C "$clone_raiz" worktree add -q --detach "$wt_dir" "$base_ref" >/dev/null 2>&1 || morre "git worktree add falhou" 3
     printf 'bancada aberta: %s (HEAD destacado em %s, atras de origin/main: 0, arvore limpa)\n' "$wt_dir" "$base_ref"
     guarda_sessao_viva "$wt_dir" "$assumir"
+    grava_escopo_sessao "$nome" ""
     printf 'próximo: teste rodar %s <alvo>\n' "$nome"
   fi
+}
+
+# dispara_esteira <repo> <clone> <mudanca_sha> <base_sha> -- chama a rodada da esteira em fundo
+# depois do push aceito, sem esperar o fim dela (#4297).
+dispara_esteira() {
+  local repo="${1%%@*}" c="$2" mudanca="$3" base="$4"
+  local infra_bin="${PF_INFRA_BIN:-$(dirname "$(readlink -f "$0")")/infra}"
+  [ -x "$infra_bin" ] || return 0
+  nohup "$infra_bin" rodar esteira -- rodar "$repo" --arvore "$c" --mudanca "$mudanca" --base "$base" \
+    >/dev/null 2>&1 </dev/null &
+}
+
+# grava_escopo_sessao <repo> [card] -- story #4342: o próprio ato grava escopo_atual na lousa
+# por HSET atômico, preservando o efeito mesmo quando o abrir termina depois do prazo da porta.
+grava_escopo_sessao() {
+  [ -n "${PF_SESSAO:-}" ] || return 0
+  local repo_nome="$1" card_raw="${2:-}"
+  local card_num="${card_raw###}" escopo=""
+  if [[ "$card_num" =~ ^[0-9]+$ ]]; then
+    escopo="card:${card_num}"
+  elif [ -n "$repo_nome" ]; then
+    escopo="repo:${repo_nome}"
+  else
+    return 0
+  fi
+  local lousa_py
+  lousa_py="$(dirname "$(readlink -f "$0")")/../lib/postura/lousa.py"
+  [ -f "$lousa_py" ] || return 0
+  python3 "$lousa_py" gravar-sessao escopo_atual "$escopo" >/dev/null 2>&1 || true
 }
 
 # grava_executor <n> <tarefas_bin> -- card #3526 (R20 da spec tarefas): quem abre a bancada de uma
@@ -2959,6 +2996,9 @@ ato_empurrar() {
   fsha="$(forge_sha "$c" "$ramo")"; rc=$?
   if [ "$rc" -eq 0 ] && [ "$fsha" = "$local_sha" ]; then
     publica_veredito "$c" "$nome" "$local_sha"
+    local base_main
+    base_main="$("$GIT" -C "$c" rev-parse --verify -q origin/main 2>/dev/null || printf '%s' "$local_sha")"
+    dispara_esteira "$nome" "$c" "$local_sha" "$base_main"
     printf 'empurrado: %s -> origin/%s = %s (%s) [lido do forge]\n' "$nome" "$ramo" "${fsha:0:7}" \
       "$("$GIT" -C "$c" log -1 --format='%s' "$local_sha")"
     printf 'próximo: repo pr-abrir %s --titulo <t> [--corpo <c>]\n' "$nome"
@@ -3339,13 +3379,26 @@ else:
 ' "$modo" "${caminhos[@]+"${caminhos[@]}"}" <<<"$raw"
 }
 
+# portao_main <repo> <clone> <arvore-mudanca> <arvore-main> [--gravar-fichas] -- a peca suite
+# decide o portao da main (#4299): verde do par integra; falha, falta de rodada e avanco da
+# main recusam com saida 1 e a cura na mensagem.
+portao_main() {
+  local nome="$1" c="$2" arv_mud="$3" arv_main="$4" lib_suite
+  shift 4
+  lib_suite="$(dirname "$(readlink -f "$0")")/../lib"
+  PYTHONPATH="$lib_suite${PYTHONPATH:+:$PYTHONPATH}" python3 -m suite portao "$nome" \
+    --arvore "$c" --mudanca "$arv_mud" --base "$arv_main" "$@"
+}
+
 ato_pr_merge() {
-  local nome="${1:-}" num="${2:-}" modo="--squash" forcar=0 c
+  local nome="${1:-}" num="${2:-}" modo="--squash" forcar=0 escape=0 motivo="" c
   shift 2 || uso
   while [ $# -gt 0 ]; do
     case "$1" in
       --squash|--merge|--rebase) modo="$1"; shift ;;
       --forcar) forcar=1; shift ;;
+      # escape do dono (#4301): o motivo e o proximo argumento, vazio ou ausente conta como sem motivo
+      --escape) escape=1; motivo="${2-}"; shift; [ $# -eq 0 ] || shift ;;
       -*) morre "argumento nao reconhecido: '$1'" 2 ;;
       *) morre "argumento excedente: '$1'" 2 ;;
     esac
@@ -3369,7 +3422,32 @@ ato_pr_merge() {
   fi
   [ "$st" = OPEN ] || morre "PR #$num esta $st, nao OPEN — nada a mesclar" 4
   ramo_da_cadeira "$ramo_pr" || morre "recusa de política: o PR #$num (ramo '$ramo_pr') pertence a outra cadeira — quem escreveu mescla" 4
-  if [ "$forcar" -eq 0 ]; then
+  # Portão da main (#4299): o par é a árvore do PR e a da ponta atual da main. Vale também
+  # com --forcar, que só passa por cima do check do forge. O escape do dono (#4301) pula o portão e o check, mas só
+  # depois de o motivo validado e o evento gravado: sem motivo sai 1, sem evento sai 3, e nada se integra.
+  local arv_mud arv_main
+  env PATH="$PATH_FORGE" "$GIT" -C "$c" fetch -q origin main \
+    "refs/heads/$ramo_pr:refs/remotes/origin/$ramo_pr" >/dev/null 2>&1 \
+    || morre "indeterminavel: git fetch de main e $ramo_pr falhou" 5
+  arv_mud="$("$GIT" -C "$c" rev-parse --verify --quiet "$hoid^{tree}")" \
+    || morre "indeterminavel: árvore do PR #$num ($hoid) não resolvida" 5
+  arv_main="$("$GIT" -C "$c" rev-parse --verify --quiet "origin/main^{tree}")" \
+    || morre "indeterminavel: árvore de origin/main não resolvida" 5
+  local merge_extra=() api_extra=()
+  if [ "$escape" -eq 1 ]; then
+    portao_main "$nome" "$c" "$arv_mud" "$arv_main" --escape "$motivo" --pedido "$num" || exit $?
+    motivo="$(printf '%s' "$motivo" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    local corpo_escape="Escape do dono: integrado sem o veredito verde da esteira. Motivo: $motivo"
+    (cd "$c" && env PATH="$PATH_FORGE" GH_PROMPT_DISABLED=1 "$GH" pr comment "$num" --body "$corpo_escape" </dev/null >/dev/null 2>&1) \
+      || morre "escape do dono: o evento gravou, mas o motivo nao foi para o PR #$num; nada integrado" 3
+    if [ "$modo" != "--rebase" ]; then
+      merge_extra=(--body "$corpo_escape")
+      api_extra=(-f "commit_message=$corpo_escape")
+    fi
+  else
+    portao_main "$nome" "$c" "$arv_mud" "$arv_main" >/dev/null || exit 1
+  fi
+  if [ "$forcar" -eq 0 ] && [ "$escape" -eq 0 ]; then
     local status_checks
     status_checks="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json statusCheckRollup 2>/dev/null || true)"
     if echo "$status_checks" | grep -q '"conclusion":"FAILURE"'; then
@@ -3385,7 +3463,7 @@ ato_pr_merge() {
   local merged_ok=0 tentativa=1 max_tentativas=3 retry_sleep="${PF_GH_RETRY_SLEEP:-1}" merge_err="" errf
   errf="$(mktemp)" || errf=""
   while [ "$tentativa" -le "$max_tentativas" ]; do
-    if (cd "$c" && env PATH="$PATH_FORGE" GH_PROMPT_DISABLED=1 "$GH" pr merge "$num" --admin "$modo" </dev/null 2>"${errf:-/dev/null}"); then
+    if (cd "$c" && env PATH="$PATH_FORGE" GH_PROMPT_DISABLED=1 "$GH" pr merge "$num" "$modo" ${merge_extra[@]+"${merge_extra[@]}"} </dev/null 2>"${errf:-/dev/null}"); then
       merged_ok=1
       break
     fi
@@ -3403,7 +3481,7 @@ ato_pr_merge() {
     local slug rest_method
     slug="$(slug_forge "$nome")"
     rest_method="${modo#--}"
-    if (cd "$c" && env PATH="$PATH_FORGE" GH_PROMPT_DISABLED=1 "$GH" api -X PUT "repos/$slug/pulls/$num/merge" -f merge_method="$rest_method" </dev/null >/dev/null 2>"${errf:-/dev/null}"); then
+    if (cd "$c" && env PATH="$PATH_FORGE" GH_PROMPT_DISABLED=1 "$GH" api -X PUT "repos/$slug/pulls/$num/merge" -f merge_method="$rest_method" ${api_extra[@]+"${api_extra[@]}"} </dev/null >/dev/null 2>"${errf:-/dev/null}"); then
       merged_ok=1
     else
       local pr_state_check
@@ -3428,6 +3506,15 @@ ato_pr_merge() {
   # o remoto sumiu.
   limpa_ramo_entregue "$c" "$ramo_pr" "$hoid"
   declara_remocao_remota "$c" "$ramo_pr"
+
+  # Integrada a mudança, as fichas que a esteira ensaiou vão para a ontologia (#4299).
+  # No escape (#4301) não há ficha ensaiada válida: sem verde a esteira não ensaiou o par, e nada se grava.
+  if [ "$escape" -eq 1 ]; then
+    printf 'escape do dono: PR #%s integrado sem veredito verde; fichas da esteira não gravadas\n' "$num"
+    return 0
+  fi
+  portao_main "$nome" "$c" "$arv_mud" "$arv_main" --gravar-fichas \
+    || morre "PR #$num MERGED, mas as fichas de verificação não se gravaram na ontologia" 3
 }
 
 # declara_remocao_remota <clone> <ramo> -- apaga o ramo do PR no origin e diz o resultado

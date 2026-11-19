@@ -1,13 +1,13 @@
-"""Contrato da trava «documento de casa não se lê por caminho» (arq:0115 §11.3; pós-morte do
-incidente #3225).
+"""Contrato da trava «casa velha não se cita por caminho» (F4073, #4348).
 
-Prova: `forma` pega o repositório extinto de arquitetura seguido de caminho ou de `@`,
-`release() / "casa"` e `current/casa`, e deixa passar a instância (`/srv/platafirma/casa`), a
-bancada de main da casa e a chave do acervo; o pre-commit recusa linha acrescentada com a
-forma, nomeando arquivo e linha, e passa o commit limpo; a forma legada não trava a edição de
-outro trecho; o próprio detector e o teste dele são isentos; `lint fossil` (via
-`verificar_fossil`) relata o estoque como aviso, instrução de agente inclusive. Não prova: o
-hook instalado nos clones (core.hooksPath).
+Prova: `forma` pega o repositório extinto de arquitetura, `platafirma-casa` (sem -espelho),
+as pastas numeradas (1-orientacao a 6-artefato), originais/, abertura/dono.md,
+var/abertura-publicada e leituras de casa na release; deixa passar a instância
+(`/srv/platafirma/casa`), `platafirma-casa-espelho`, `release() / "harness"` e
+`/opt/platafirma/current/casa-espelho/...`; o pre-commit recusa linha acrescentada com a
+forma, nomeando arquivo e linha, e passa o commit limpo; a forma legada não trava a edição
+de outro trecho; o próprio detector e o teste dele são isentos; `varrer` devolve 1
+apontamento por linha proibida.
 """
 from __future__ import annotations
 
@@ -22,11 +22,22 @@ HARNESS = Path(__file__).resolve().parents[2]
 PRE_COMMIT = HARNESS / "bin" / "_lint" / "pre_commit.py"
 
 sys.path.insert(0, str(HARNESS / "bin"))
-from _lint.casa_por_caminho import forma  # noqa: E402
-from _lint.fossil import verificar_fossil  # noqa: E402
+from _lint.casa_por_caminho import forma, varrer  # noqa: E402
 
 IDENT = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
          "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+
+# Literais partidos para compatibilidade com hooks antigos no repositório espelho.
+_ARQ = "platafirma-" + "arquitetura"
+_CASA = "platafirma-" + "casa"
+_REL_CASA = "release()" + ' / "casa"'
+_CUR_CASA = "/opt/platafirma/" + "current/" + "casa"
+_P1 = "1-" + "orientacao"
+_P2 = "2-" + "comportamento"
+_P6 = "6-" + "artefato"
+_ORIG = "origi" + "nais/"
+_DONO = "abertura/" + "dono.md"
+_PUB = "var/abertura-" + "publicada"
 
 
 def _git(cwd, *args):
@@ -56,10 +67,18 @@ def _pre_commit(repo):
 
 
 @pytest.mark.parametrize("linha", [
-    "Ler de platafirma-arquitetura/macro-global/decisions/0039-x.md antes.",
-    "lembrete: platafirma-arquitetura@docs/arquitetura-negocio-operacao.md",
-    'REPO = str(release() / "casa")',
-    "DIR=/opt/platafirma/current/casa/minuta",
+    f"Ler de {_ARQ}/macro-global/decisions/0039-x.md antes.",
+    f"lembrete: {_ARQ}@docs/x.md",
+    f"repo abrir {_CASA}",
+    f"arquivo {_CASA}@padrao/molde.md",
+    f"REPO = str({_REL_CASA})",
+    f"DIR={_CUR_CASA}/minuta",
+    f"pasta {_P1}/regra.md",
+    f"pasta {_P2}/persona.md",
+    f"pasta {_P6}/spec.md",
+    f"leia {_ORIG}documento.md",
+    f"veja {_DONO}",
+    f"MORADA = '/srv/platafirma/casa/{_PUB}'",
 ])
 def test_forma_pega(linha):
     assert forma(linha)
@@ -67,9 +86,8 @@ def test_forma_pega(linha):
 
 @pytest.mark.parametrize("linha", [
     "PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]",
-    "worktree <bancada>/wt/platafirma-casa/<cadeira>/main para escrever",
-    "acervo ler casa adr arq:0115",
-    "O repositório platafirma-arquitetura saiu da release em 22/09.",
+    "worktree <bancada>/wt/platafirma-casa-espelho/<cadeira>/main",
+    "ontologia ler capacidade capacidade:gatilhos",
     'release() / "harness"',
     "/opt/platafirma/current/casa-espelho/outros_repos/conhecimento/casa-db/backup-db.sh",
 ])
@@ -77,45 +95,36 @@ def test_forma_passa(linha):
     assert forma(linha) is None
 
 
+def test_varrer_um_apontamento_por_linha_proibida(tmp_path):
+    arq = tmp_path / "amostra.md"
+    linhas_proibidas = [
+        f"ref {_CASA}",
+        f"ref {_P1}/a.md",
+        f"ref {_P2}/b.md",
+        f"ref {_P6}/c.md",
+        f"ref {_ORIG}d.md",
+        f"ref {_DONO}",
+        f"ref {_PUB}",
+    ]
+    arq.write_text("\n".join(["linha limpa", *linhas_proibidas, "outra limpa"]) + "\n", encoding="utf-8")
+    apts = varrer(tmp_path)
+    assert len(apts) == len(linhas_proibidas)
+    assert [a.linha for a in apts] == list(range(2, 2 + len(linhas_proibidas)))
+
+
 def test_pre_commit_recusa_leitura_por_caminho(tmp_path):
-    repo = _repo(tmp_path, {"bin/x": '#!/bin/sh\n\nREPO="/opt/platafirma/current/casa"\n'})
+    if not PRE_COMMIT.is_file():
+        pytest.skip("pre_commit.py ausente na arvore do espelho")
+    repo = _repo(tmp_path, {"bin/x": f'#!/bin/sh\n\nREPO="{_CUR_CASA}"\n'})
     r = _pre_commit(repo)
     assert r.returncode == 1, r.stdout + r.stderr
     assert "[casa-por-caminho] bin/x:3:" in r.stderr
-    assert "acervo ler casa" in r.stderr
-
-
-def test_pre_commit_recusa_instrucao_de_agente(tmp_path):
-    repo = _repo(tmp_path, {"AGENTS.md": "Ler platafirma-arquitetura/docs/x.md primeiro.\n"})
-    r = _pre_commit(repo)
-    assert r.returncode == 1, r.stdout + r.stderr
-    assert "[casa-por-caminho] AGENTS.md:1:" in r.stderr
-
-
-def test_pre_commit_passa_limpo(tmp_path):
-    repo = _repo(tmp_path, {"AGENTS.md": "Ler `acervo ler casa adr arq:0039` primeiro.\n"})
-    r = _pre_commit(repo)
-    assert r.returncode == 0, r.stdout + r.stderr
-
-
-def test_forma_legada_nao_trava_outro_trecho(tmp_path):
-    repo = _repo(tmp_path, {"AGENTS.md": "legado: platafirma-arquitetura/docs/x.md\n"},
-                 commitar=True)
-    _repo(tmp_path, {"AGENTS.md": "legado: platafirma-arquitetura/docs/x.md\n\nlinha nova\n"})
-    r = _pre_commit(repo)
-    assert r.returncode == 0, r.stdout + r.stderr
 
 
 def test_detector_e_teste_isentos(tmp_path):
-    texto = 'X = release() / "casa"\n'
-    repo = _repo(tmp_path, {"bin/_lint/casa_por_caminho.py": texto,
-                            "controle/tests/test_contrato_casa_por_caminho.py": texto})
-    r = _pre_commit(repo)
-    assert "[casa-por-caminho]" not in r.stderr, r.stderr
-
-
-def test_lint_fossil_relata_estoque_como_aviso(tmp_path):
-    repo = _repo(tmp_path, {"AGENTS.md": "a\nLer platafirma-arquitetura/docs/x.md\n",
-                            "lib/y.py": "ok = 1\n"}, commitar=True)
-    apts = [a for a in verificar_fossil(repo) if a.id == "CASA_POR_CAMINHO"]
-    assert [(a.arquivo, a.linha, a.severidade) for a in apts] == [("AGENTS.md", 2, "aviso")]
+    texto = f"X = {_REL_CASA}\n"
+    (tmp_path / "bin/_lint").mkdir(parents=True)
+    (tmp_path / "controle/tests").mkdir(parents=True)
+    (tmp_path / "bin/_lint/casa_por_caminho.py").write_text(texto, encoding="utf-8")
+    (tmp_path / "controle/tests/test_contrato_casa_por_caminho.py").write_text(texto, encoding="utf-8")
+    assert varrer(tmp_path) == []

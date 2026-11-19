@@ -2252,6 +2252,12 @@ mover() {
      && [ "$ja_era_terminal" -eq 0 ] && [ "$pai_ja_em_homologacao" -eq 0 ]; then
     avisa_dona "$pai" "$id"
   fi
+  # Story #4342: o próprio ato grava escopo_atual na lousa por HSET atômico.
+  if [ -n "${PF_SESSAO:-}" ] && [[ "$id" =~ ^[0-9]+$ ]]; then
+    local lousa_py
+    lousa_py="$(dirname "$(readlink -f "$0")")/../lib/postura/lousa.py"
+    [ -f "$lousa_py" ] && python3 "$lousa_py" gravar-sessao escopo_atual "card:${id}" >/dev/null 2>&1 || true
+  fi
   return 0
 }
 

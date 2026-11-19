@@ -104,9 +104,20 @@ def _repo(tmp_path, bancada, *args):
         "PF_TAREFAS_BIN": "/bin/true",
         "PF_GH_BIN": str(tmp_path / "forge" / "gh"),
         "PF_GH_RETRY_SLEEP": "0",
+        "PF_ESTEIRA_VEREDITOS_DIR": str(tmp_path / "vereditos"),
         **IDENT,
     }
     return subprocess.run([str(REPO_BIN), *args], env=env, capture_output=True, text=True)
+
+
+def _semear_veredito_verde(tmp_path, wt, repo="demo"):
+    import json
+    vdir = tmp_path / "vereditos"
+    vdir.mkdir(parents=True, exist_ok=True)
+    arv_mud = _git("rev-parse", "HEAD^{tree}", cwd=wt)
+    arv_main = _git("rev-parse", "origin/main^{tree}", cwd=wt)
+    reg = {"repositorio": repo, "arvore_mudanca": arv_mud, "arvore_main": arv_main, "estado": "verde", "fichas": []}
+    (vdir / f"{repo}.jsonl").write_text(json.dumps(reg) + "\n", encoding="utf-8")
 
 
 def _pr_empurrado(tmp_path, bancada, forge, estado="OPEN"):
@@ -122,6 +133,7 @@ def _pr_empurrado(tmp_path, bancada, forge, estado="OPEN"):
     (forge / "estado").write_text(estado + "\n")
     (forge / "ramo").write_text("fabrica/42-x\n")
     (forge / "oid").write_text(_git("rev-parse", "HEAD", cwd=wt) + "\n")
+    _semear_veredito_verde(tmp_path, wt)
     return wt
 
 

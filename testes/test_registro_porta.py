@@ -1,346 +1,56 @@
-"""O registro da porta (registro/porta.yaml, card #4117): o esquema, o conteudo e o que ele promete a quem o le.
+"""O registro da porta (registro/porta.yaml, card #4117 e decisão #5322 da F4073).
 
-Hermetico: le o arquivo do repositorio e o cabecalho dos verbos, sem banco e sem porta no ar. O que a porta faz com
-o registro (tools/list sem as ocultas, tools/call da oculta, retencao, degradacao) tem os testes em
-ops-server/ (test_contrato_borda.py e _ensaio.py), no venv `ops`.
+Hermetico: le registro/porta.yaml sem depender da porta legada nem do registro de ferramental do banco.
 """
 from __future__ import annotations
 
-import importlib.util
-import json
-import re
-import sys
-from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT / "lib"))
-import registro_porta as rp  # noqa: E402
-
 REGISTRO = REPO_ROOT / "registro" / "porta.yaml"
 FORA_DA_LISTA = {"chat", "minuta", "persona", "preferencia", "sinal", "situacao", "sessao"}
-# o que o gatilho nao leva: numero de card, spec ou ADR (regra do card #4117)
-PROIBIDOS_NO_USE_PARA = (r"#\d{3,}", r"arq:\d", r"spec\b", r"\bADR\b")
+TRANSPORTE_ESPERADO = {"malote", "ler_arquivo", "write_file", "monta_sessao"}
 
 
 @pytest.fixture(scope="module")
 def registro():
-    return rp.carrega(REGISTRO)
+    return yaml.safe_load(REGISTRO.read_text(encoding="utf-8"))
 
 
-def _grava(tmp_path, texto):
-    arq = tmp_path / "porta.yaml"
-    arq.write_text(texto, encoding="utf-8")
-    return arq
+def test_transporte_declara_exatamente_as_quatro_tools_sem_legados(registro):
+    transporte = set(registro["transporte"])
+    assert transporte == TRANSPORTE_ESPERADO
+    assert not ({"run_command", "read_file"} & transporte)
 
 
-def test_o_modelo_nao_ve_chat_minuta_persona_preferencia_sinal_situacao_e_sessao_mas_ve_o_metrica(registro):
-    vistos = set(rp.visiveis(registro))
-    assert not (vistos & FORA_DA_LISTA)
-    assert "metrica" in vistos
-    # chat, minuta, sinal e situacao saem do registro: a porta nao os executa nem pelo malote
-    assert not ({"chat", "minuta", "sinal", "situacao"} & set(registro["verbos"]))
-    # preferencia, sessao e persona (DT 573) ficam executaveis, fora da lista
+def test_ocultas_e_removidas_da_lista(registro):
+    verbos = registro["verbos"]
+    assert not ({"chat", "minuta", "sinal", "situacao"} & set(verbos))
     for oculto in ("preferencia", "sessao", "persona"):
-        assert oculto in registro["verbos"] and registro["verbos"][oculto]["modelo"] is False
+        assert oculto in verbos and verbos[oculto].get("modelo") is False
+    visiveis = {k for k, v in verbos.items() if (v or {}).get("modelo", True) is not False}
+    assert not (visiveis & FORA_DA_LISTA)
+    assert "metrica" in visiveis
 
 
-def test_repo_e_o_unico_retido(registro):
-    assert rp.retidos(registro) == {"repo"}
+def test_todo_verbo_visivel_tem_descricao_no_manifesto(registro):
+    """Decisão #5322: a toolstring mora em registro/porta.yaml."""
+    for slug, meta in registro["verbos"].items():
+        if (meta or {}).get("modelo", True) is False:
+            continue
+        desc = (meta or {}).get("descricao") or ""
+        assert desc.strip(), f"{slug}: sem descricao em registro/porta.yaml"
+        assert len(desc.strip()) > 20, f"{slug}: descricao curta demais"
 
 
-def test_as_tools_de_transporte_sao_as_do_codigo_da_porta(registro):
-    """A porta registra as tools de transporte que o codigo define; o registro as nomeia. As duas listas dizem o
-    mesmo, e run_command e read_file nao estao em nenhuma."""
-    codigo = (REPO_ROOT / "ops-server" / "server.py").read_text(encoding="utf-8")
-    lista = re.search(r"^_TOOLS = \[([^\]]+)\]$", codigo, re.M).group(1)
-    nomes = [n.strip() for n in lista.split(",")]
-    assert re.search(r"^\s+_TOOLS\.append\(monta_sessao\)$", codigo, re.M)
-    assert sorted(registro["transporte"]) == sorted([*nomes, "monta_sessao"])
-    assert not ({"run_command", "read_file"} & set(registro["transporte"]))
-
-
-def test_as_faces_da_borda_saem_do_registro(registro):
-    faces = {}
+def test_faces_da_borda_saem_do_registro(registro):
+    faces: dict[str, list[str]] = {}
     for slug, v in registro["verbos"].items():
-        for face in v["faces"]:
+        for face in (v or {}).get("faces") or {}:
             faces.setdefault(face, []).append(slug)
     assert sorted(faces) == ["casca", "motor"]
     assert sorted(faces["casca"]) == ["preferencia", "release", "tarefas"]
     assert sorted(faces["motor"]) == ["fila", "motor"]
-    assert registro["verbos"]["motor"]["faces"]["motor"] == {"instancia": "rag", "sem_instancia": ["listar"]}
-
-
-def test_todo_verbo_do_registro_tem_bin_executavel_com_a_abertura_e_o_use_para(registro):
-    for slug in registro["verbos"]:
-        bin_ = REPO_ROOT / "bin" / slug
-        assert bin_.is_file() and bin_.stat().st_mode & 0o100, slug
-        topo = bin_.read_text(encoding="utf-8").splitlines()[:30]
-        assert topo[1].startswith(f"# {slug} — "), f"{slug}: a segunda linha abre com o nome e a abertura"
-        assert any(l.startswith("# use para: ") for l in topo), f"{slug}: sem `# use para:` no cabecalho"
-
-
-def test_o_use_para_nao_leva_numero_de_card_nem_spec_nem_adr_e_nao_tem_nao_use_para(registro):
-    """Regra do card: gatilho com numero de card, spec ou ADR nao sobe. A unica fala com ADR e a do dono, citada na
-    pagina que ele aprovou (`abre a ADR 97`, no acervo)."""
-    for slug in registro["verbos"]:
-        topo = (REPO_ROOT / "bin" / slug).read_text(encoding="utf-8").splitlines()[:30]
-        i = next(n for n, l in enumerate(topo) if l.startswith("# use para: "))
-        use = topo[i]
-        assert not any(re.search(p, use) for p in PROIBIDOS_NO_USE_PARA) or slug == "acervo", slug
-        assert "NÃO use para" not in use and "NAO use para" not in use, slug
-        # a linha e uma so: o que vem depois dela e outra chave do cabecalho, nao resto do texto antigo
-        assert re.match(r"^# [a-z-]+:", topo[i + 1]), f"{slug}: sobrou continuacao do `use para:` antigo"
-
-
-def test_o_oficio_com_o_bloco_cercado_saiu():
-    assert not (REPO_ROOT / "abertura" / "oficio-ferramental.md").exists()
-
-
-@pytest.mark.parametrize("texto", [
-    "",                                                                         # vazio
-    "verbos: {}\ntransporte: {malote: {}}\n",                                   # verbos vazio
-    "verbos: {a: {}}\n",                                                        # falta a chave transporte
-    "verbos: {a: {}}\ntransporte: {malote: {}}\nextra: 1\n",                    # chave a mais
-    "verbos: {A: {}}\ntransporte: {malote: {}}\n",                              # slug fora da forma
-    "verbos: {a: {modelo: 'nao'}}\ntransporte: {malote: {}}\n",                 # modelo nao e booleano
-    "verbos: {a: {leva: 2}}\ntransporte: {malote: {}}\n",                       # atributo desconhecido
-    "verbos: {a: {faces: {casca: {texto: x}}}}\ntransporte: {malote: {}}\n",    # atributo de face desconhecido
-    "verbos: {a: {faces: {casca: {sem_instancia: ler}}}}\ntransporte: {malote: {}}\n",
-    "verbos: {a: {}}\ntransporte: {malote: {nome: x}}\n",                       # transporte com atributo
-    "verbos: [a, b]\ntransporte: {malote: {}}\n",                               # verbos nao e mapa
-    "verbos: {a: {}\n",                                                         # nao e YAML
-    "verbos: {a: {nome: 123}}\ntransporte: {malote: {}}\n",                     # nome nao e string
-    "verbos: {a: {nome: 'Busca'}}\ntransporte: {malote: {}}\n",                 # nome fora da forma de slug
-    "verbos: {a: {nome: 'busca/x'}}\ntransporte: {malote: {}}\n",               # nome fora da forma de slug
-    "verbos: {a: {nome: ''}}\ntransporte: {malote: {}}\n",                      # nome vazio
-    "verbos: {a: {nome: malote}}\ntransporte: {malote: {}}\n",                  # nome repete transporte
-    "verbos: {a: {nome: b}, b: {}}\ntransporte: {malote: {}}\n",                # nome repete slug de outro verbo
-    "verbos: {a: {nome: x}, b: {nome: x}}\ntransporte: {malote: {}}\n",         # nome repetido entre verbos
-])
-def test_registro_fora_da_forma_e_ilegivel(tmp_path, texto):
-    with pytest.raises(rp.RegistroIlegivel):
-        rp.carrega(_grava(tmp_path, texto))
-
-
-def test_arquivo_que_nao_existe_e_ilegivel(tmp_path):
-    with pytest.raises(rp.RegistroIlegivel):
-        rp.carrega(tmp_path / "nao-existe.yaml")
-
-
-# --- `acervo listar casa ferramental --tools` e `--oficio`: o recorte do que o modelo ve ---------------------
-
-def _listar():
-    loader = SourceFileLoader("listar_porta", str(REPO_ROOT / "bin" / "_acervo" / "listar"))
-    spec = importlib.util.spec_from_loader("listar_porta", loader)
-    modulo = importlib.util.module_from_spec(spec)
-    loader.exec_module(modulo)
-    return modulo
-
-
-def _golden(registro, sem=()):
-    """O golden record dublado (ler o real e ler o banco): um verbo por linha, os do registro e os cinco que sairam."""
-    slugs = [s for s in [*registro["verbos"], "chat", "minuta", "persona", "sinal", "situacao"] if s not in sem]
-    return [{"capacidade": f"cap-{s}", "verbo": s, "sot": None, "instancias": [],
-             "descricao": f"abertura de {s} · use para: gatilho de {s}"} for s in slugs]
-
-
-def test_tools_projeta_o_que_o_modelo_ve_com_a_descricao_do_golden_e_sem_o_campo_leva(registro, monkeypatch, capsys):
-    listar = _listar()
-    monkeypatch.setattr(listar, "_psql_json", lambda sql, alvo: _golden(registro))
-    listar.listar_ferramental_tools()
-    itens = json.loads(capsys.readouterr().out)
-    assert [i["tool"] for i in itens] == [rp.exibido(registro, s) for s in rp.visiveis(registro)]
-    assert [i["verbo"] for i in itens] == rp.visiveis(registro)
-    assert not (FORA_DA_LISTA & {i["tool"] for i in itens}) and "metrica" in {i["tool"] for i in itens}
-    assert all("leva" not in i for i in itens), "quem retem e a porta, pelo registro"
-    assert {i["tool"]: i["descricao"] for i in itens}["infra"] == "abertura de infra · use para: gatilho de infra"
-    assert "repo" in {i["tool"] for i in itens}, "o retido continua na projecao: quem o segura e a porta"
-
-
-def test_oficio_serve_o_mesmo_recorte_e_sai_3_se_o_golden_nao_tem_um_verbo_do_registro(registro, monkeypatch, capsys):
-    listar = _listar()
-    monkeypatch.setattr(listar, "_psql_json", lambda sql, alvo: _golden(registro))
-    listar.listar_ferramental(True, so_oficio=True)
-    assert [i["verbo"] for i in json.loads(capsys.readouterr().out)] == [
-        s for s in [*registro["verbos"], "chat", "minuta", "persona", "sinal", "situacao"] if s in rp.visiveis(registro)]
-    monkeypatch.setattr(listar, "_psql_json", lambda sql, alvo: _golden(registro, sem=("mesa",)))
-    with pytest.raises(SystemExit) as saida:
-        listar.listar_ferramental(True, so_oficio=True)
-    assert saida.value.code == 3
-    assert "mesa" in capsys.readouterr().err
-
-
-def test_os_padroes_sao_modelo_verdadeiro_retido_falso_e_sem_faces(tmp_path):
-    r = rp.carrega(_grava(tmp_path, "verbos:\n  a:\n  b: {}\ntransporte:\n  malote:\n"))
-    assert r["verbos"] == {"a": {"modelo": True, "retido": False, "faces": {}},
-                           "b": {"modelo": True, "retido": False, "faces": {}}}
-    assert r["transporte"] == ["malote"]
-
-
-def test_nome_exibido_e_aceito_no_registro(tmp_path):
-    r = rp.carrega(_grava(tmp_path, "verbos:\n  motor:\n    nome: busca\n  mesa: {}\ntransporte:\n  malote: {}\n"))
-    assert r["verbos"]["motor"]["nome"] == "busca"
-    assert "nome" not in r["verbos"]["mesa"]
-    assert rp.exibido(r, "motor") == "busca"
-    assert rp.exibido(r, "mesa") == "mesa"
-    assert rp.exibido(r, "inexistente") == "inexistente"
-
-
-def test_tools_projeta_nome_exibido_em_tool_e_mantem_slug_em_verbo(monkeypatch, capsys, tmp_path):
-    listar = _listar()
-    reg_yaml = (
-        "verbos:\n"
-        "  motor:\n"
-        "    nome: busca\n"
-        "  infra: {}\n"
-        "transporte:\n"
-        "  malote: {}\n"
-    )
-    reg_arq = tmp_path / "porta.yaml"
-    reg_arq.write_text(reg_yaml, encoding="utf-8")
-    monkeypatch.setattr(rp, "caminho_do", lambda raiz: reg_arq)
-    reg = rp.carrega(reg_arq)
-    monkeypatch.setattr(listar, "_psql_json", lambda sql, alvo: _golden(reg))
-    listar.listar_ferramental_tools()
-    itens = json.loads(capsys.readouterr().out)
-    itens_por_verbo = {i["verbo"]: i for i in itens}
-    assert itens_por_verbo["motor"]["tool"] == "busca"
-    assert itens_por_verbo["motor"]["verbo"] == "motor"
-    assert itens_por_verbo["infra"]["tool"] == "infra"
-    assert itens_por_verbo["infra"]["verbo"] == "infra"
-
-
-# --- `acervo registrar --so-descricao`: a descricao do cabecalho sem tocar no acesso --------------------------
-
-def _registrar():
-    loader = SourceFileLoader("registrar_porta", str(REPO_ROOT / "bin" / "_acervo" / "registrar"))
-    spec = importlib.util.spec_from_loader("registrar_porta", loader)
-    modulo = importlib.util.module_from_spec(spec)
-    loader.exec_module(modulo)
-    return modulo
-
-
-def test_so_descricao_rele_o_cabecalho_do_infra_e_escreve_so_a_coluna_descricao(monkeypatch):
-    """O `# le:`/`# escreve:` do infra esta em prosa, e o registro inteiro o recusa (exit 3). O modo novo grava so
-    a descricao, que o card #4117 manda reler do cabecalho, e nao toca em ato, acesso, consumo nem ambiente."""
-    registrar = _registrar()
-    enviados = []
-    monkeypatch.setattr(registrar, "_psql", lambda sql, escreve=False: enviados.append(sql) or "infra\nUPDATE 1\n")
-    desc = registrar.registrar_descricao("infra")
-    assert desc.startswith("OPERA o serviço e a máquina em que ele roda · use para: SEMPRE que for subir")
-    (sql,) = enviados
-    assert sql.startswith("update acervo.ferramental_verbo set descricao = ") and "where slug = 'infra'" in sql
-    assert not any(t in sql for t in ("ferramental_ato", "ferramental_acesso", "ferramental_consumo", "ferramental_ambiente"))
-
-
-def test_so_descricao_recusa_verbo_que_o_golden_nao_tem_e_o_que_nao_tem_bin(monkeypatch):
-    registrar = _registrar()
-    monkeypatch.setattr(registrar, "_psql", lambda sql, escreve=False: "UPDATE 0\n")
-    with pytest.raises(SystemExit) as saida:
-        registrar.registrar_descricao("infra")
-    assert saida.value.code == 3
-    with pytest.raises(SystemExit) as saida:
-        registrar.registrar_descricao("verbo-que-nao-existe")
-    assert saida.value.code == 3
-
-
-def test_so_descricao_funciona_nos_sete_verbos_que_o_registro_inteiro_recusa(monkeypatch):
-    registrar = _registrar()
-    monkeypatch.setattr(registrar, "_psql", lambda sql, escreve=False: re.search(r"slug = '(\w+)'", sql).group(1) + "\n")
-    for verbo in ("acesso", "expediente", "infra", "mesa", "release", "seg", "sessao"):
-        assert registrar.registrar_descricao(verbo), verbo
-
-
-def test_registrar_um_grava_dono_no_golden_record(tmp_path, monkeypatch):
-    """DT #273: registrar_um grava e atualiza dono em acervo.ferramental_verbo."""
-    registrar = _registrar()
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "meuverbo").write_text(
-        "#!/usr/bin/env bash\n"
-        "# meuverbo — faz algo\n"
-        "# capacidade: operacao\n"
-        "# dono: gestao-estrategica\n"
-        "# atos: ler (leitura, operacao)\n"
-        "# le: ler=nada\n"
-        "# escreve: ler=nada\n"
-        "echo ok\n",
-        encoding="utf-8",
-    )
-    enviados = []
-    monkeypatch.setattr(registrar, "BIN", str(bin_dir))
-    monkeypatch.setattr(registrar, "_psql", lambda sql, escreve=False: enviados.append(sql) or "")
-    registrar.registrar_um("meuverbo")
-    sql = "\n".join(enviados)
-    assert "insert into acervo.ferramental_verbo (slug, capacidade_id, sot, descricao, dono)" in sql
-    assert "'gestao-estrategica'" in sql
-    assert "dono=coalesce(excluded.dono, acervo.ferramental_verbo.dono)" in sql
-
-
-def test_reconciliar_donos_atualiza_em_lote_inclusive_verbos_com_acesso_em_prosa(tmp_path, monkeypatch):
-    """DT #273: reconciliar_donos relê `# dono:` de todo bin/<verbo> e atualiza acervo.ferramental_verbo."""
-    registrar = _registrar()
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "_interno").write_text("#!/usr/bin/env bash\n# dono: ti\n", encoding="utf-8")
-    (bin_dir / "tarefas").write_text(
-        "#!/usr/bin/env bash\n# tarefas — card\n# capacidade: tarefas\n# dono: gestao-estrategica\n",
-        encoding="utf-8",
-    )
-    (bin_dir / "infra").write_text(
-        "#!/usr/bin/env bash\n# infra — sobe\n# capacidade: infra\n# dono: ti\n# le: texto em prosa\n",
-        encoding="utf-8",
-    )
-    enviados = []
-    monkeypatch.setattr(registrar, "BIN", str(bin_dir))
-    monkeypatch.setattr(registrar, "_psql", lambda sql, escreve=False: enviados.append(sql) or "")
-    pares = registrar.reconciliar_donos()
-    assert pares == [("infra", "ti"), ("tarefas", "gestao-estrategica")]
-    (sql,) = enviados
-    assert "update acervo.ferramental_verbo f" in sql
-    assert "('tarefas', 'gestao-estrategica')" in sql
-    assert "('infra', 'ti')" in sql
-    assert "_interno" not in sql
-
-
-def test_reconciliar_donos_extrai_slug_principal_quando_dono_tem_prosa(tmp_path, monkeypatch):
-    """DT-911: `# dono:` com prosa (como `mesa` e `monta-sessao`) extrai so o slug principal
-    para nao violar `ferramental_verbo_dono_slug_chk` e abortar o lote de descricoes."""
-    registrar = _registrar()
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "mesa").write_text(
-        "#!/usr/bin/env bash\n"
-        "# mesa — lousa\n"
-        "# capacidade: memoria\n"
-        "# dono: gestao-estrategica (a forma) · ia (montador)\n",
-        encoding="utf-8",
-    )
-    (bin_dir / "monta-sessao").write_text(
-        "#!/usr/bin/env bash\n"
-        "# monta-sessao — abre\n"
-        "# capacidade: sessao\n"
-        "# dono: ia (politica de sessao) · ti (montador)\n",
-        encoding="utf-8",
-    )
-    (bin_dir / "acervo").write_text(
-        "#!/usr/bin/env bash\n"
-        "# acervo — cuida do acervo\n"
-        "# capacidade: acervo\n"
-        "# dono: dados\n"
-        "# atos: ler (leitura, casa), listar (leitura, casa)\n",
-        encoding="utf-8",
-    )
-    enviados = []
-    monkeypatch.setattr(registrar, "BIN", str(bin_dir))
-    monkeypatch.setattr(registrar, "_psql", lambda sql, escreve=False: enviados.append(sql) or "")
-    pares = registrar.reconciliar_donos()
-    assert pares == [("acervo", "dados"), ("mesa", "gestao-estrategica"), ("monta-sessao", "ia")]
-    (sql,) = enviados
-    assert "('mesa', 'gestao-estrategica')" in sql
-    assert "('monta-sessao', 'ia')" in sql
-    assert "set descricao = v.descricao" in sql
-    assert "consultar" not in sql

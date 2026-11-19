@@ -1,0 +1,112 @@
+{
+  "tipo": "fluxo",
+  "titulo": "Fluxo: o caminho de uma figura de arquitetura, do pedido à entrega",
+  "faixas": [
+    {
+      "id": "fluxo"
+    }
+  ],
+  "elementos": [
+    {
+      "id": "pedido",
+      "titulo": "Pedido de figura",
+      "tipo": "inicio",
+      "faixa": "fluxo",
+      "coluna": 1,
+      "ordem": 1
+    },
+    {
+      "id": "planejar",
+      "titulo": "Planejar",
+      "subtitulo": "plano em JSON",
+      "tipo": "passo",
+      "faixa": "fluxo",
+      "coluna": 1,
+      "ordem": 2
+    },
+    {
+      "id": "plano_ok",
+      "titulo": "O plano passa?",
+      "tipo": "decisao",
+      "faixa": "fluxo",
+      "coluna": 1,
+      "ordem": 3
+    },
+    {
+      "id": "produzir",
+      "titulo": "Produzir",
+      "subtitulo": "fonte em JSON",
+      "tipo": "passo",
+      "faixa": "fluxo",
+      "coluna": 1,
+      "ordem": 4
+    },
+    {
+      "id": "figura_ok",
+      "titulo": "A figura passa?",
+      "tipo": "decisao",
+      "faixa": "fluxo",
+      "coluna": 1,
+      "ordem": 5
+    },
+    {
+      "id": "entregar",
+      "titulo": "Entregar ao dono",
+      "tipo": "fim",
+      "faixa": "fluxo",
+      "coluna": 1,
+      "ordem": 6
+    }
+  ],
+  "arestas": [
+    {
+      "de": "pedido",
+      "para": "planejar",
+      "rotulo": "abre o plano"
+    },
+    {
+      "de": "planejar",
+      "para": "plano_ok",
+      "rotulo": "conferir-plano"
+    },
+    {
+      "de": "plano_ok",
+      "para": "produzir",
+      "rotulo": "veredito 0",
+      "sai": "baixo",
+      "chega": "cima"
+    },
+    {
+      "de": "plano_ok",
+      "para": "planejar",
+      "rotulo": "veredito 1, com a lista",
+      "sai": "direita",
+      "chega": "direita"
+    },
+    {
+      "de": "produzir",
+      "para": "figura_ok",
+      "rotulo": "conferir-figura"
+    },
+    {
+      "de": "figura_ok",
+      "para": "entregar",
+      "rotulo": "passou, ou bateu o teto de voltas",
+      "sai": "baixo"
+    },
+    {
+      "de": "figura_ok",
+      "para": "planejar",
+      "rotulo": "defeito de conteúdo",
+      "sai": "esquerda",
+      "chega": "esquerda"
+    },
+    {
+      "de": "figura_ok",
+      "para": "produzir",
+      "rotulo": "defeito de forma",
+      "sai": "direita",
+      "chega": "direita"
+    }
+  ]
+}

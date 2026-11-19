@@ -495,8 +495,8 @@ def _carrega_formatos():
     import importlib.util
     import sys
 
-    caminho = Path(__file__).resolve().parent.parent / "ops-server" / "formatos.py"
-    spec = importlib.util.spec_from_file_location("_ops_formatos", caminho)
+    caminho = Path(__file__).resolve().parent.parent / "lib" / "leitura" / "formatos.py"
+    spec = importlib.util.spec_from_file_location("_leitura_formatos", caminho)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"leitor de formatos ausente: {caminho}")
     mod = importlib.util.module_from_spec(spec)
@@ -506,7 +506,7 @@ def _carrega_formatos():
 
 
 def _leitor_pdf_formatos(corpo: bytes) -> dict[str, Any]:
-    """Extrai texto de PDF pelo mesmo leitor do `ler_arquivo` (`ops-server/formatos.py`)."""
+    """Extrai texto de PDF pelo mesmo leitor do `ler_arquivo` (`lib/leitura/formatos.py`)."""
     formatos = _carrega_formatos()
     try:
         doc = formatos.abre(formatos.PDF, dados=corpo)

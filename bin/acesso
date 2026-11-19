@@ -8,7 +8,7 @@
 # atos: decidir (leitura, concessao), listar (leitura, concessao), historico (leitura, concessao), vocabulario (leitura, concessao), politica (leitura, politica), importar (escrita, concessao), conceder (escrita, concessao), revogar (escrita, concessao), desligar (escrita, sujeito), orfaos (leitura, concessao)
 # escreve: concessao.ato (conceder, revogar, desligar), concessao.eixo_valor (politica importar), realm e tabela de sujeitos da BANCADA (desligar --executar); nada nos demais
 # consome:
-# ambiente: PF_SUJEITO (fluxo OAuth; obrigatória em conceder, revogar, desligar; default em decidir), PF_SESSAO (verbo sessao abrir, só log de operação), ACESSO_DB_CONTAINER[=platafirma-core-identidade-db-1], ACESSO_DB_USER[=identidade], ACESSO_DB_NAME[=identidade] e ACESSO_POLITICA_DIR[=/opt/platafirma/current/politica-acesso] (constantes com default)
+# ambiente: PF_SUJEITO (fluxo OAuth; obrigatória em conceder, revogar, desligar; default em decidir), PF_SESSAO (verbo sessao abrir, só log de operação), ACESSO_DB_CONTAINER[=platafirma-core-identidade-db-1], ACESSO_DB_USER[=identidade], ACESSO_DB_NAME[=identidade] e ACESSO_POLITICA_DIR[=/opt/platafirma/current/core/acesso] (constantes com default)
 # depende: docker, python3+pdp.py do plano servido
 # substitui: psql -d identidade, kcadm.sh para desligamento, leitura manual de politica.yaml
 # conforme: parcial
@@ -59,7 +59,7 @@
 # vira codigo (regressao corrigida por seguranca em 14/09/2026).
 set -uo pipefail
 
-POLITICA_DIR="${ACESSO_POLITICA_DIR:-/opt/platafirma/current/politica-acesso}"
+POLITICA_DIR="${ACESSO_POLITICA_DIR:-/opt/platafirma/current/core/acesso}"
 POLITICA="${POLITICA_DIR}/politica.yaml"
 SUJEITOS="${POLITICA_DIR}/sujeitos.yaml"
 DB_CONTAINER="${ACESSO_DB_CONTAINER:-platafirma-core-identidade-db-1}"
@@ -673,7 +673,7 @@ else:
         suj_data = (yaml.safe_load(sujeitos_path.read_text('utf-8')) or {}).get('sujeitos') or {}
     except Exception as e:
         falha(f'projeção indisponível: erro ao carregar sujeitos.yaml ({e})', 3)
-    # A MESMA projecao do PEP (`_autoriza` em ops-server): chave direta na tabela, por
+    # A MESMA projecao do PEP na porta: chave direta na tabela, por
     # sub ou username como ela esta chaveada. Nenhum casamento por `usuario:`,
     # `client:` ou `conta:` — conta de SO nao e identidade, e projetar por ela faria o
     # verbo permitir o que a porta nega (caderno iam: duas perguntas ao mesmo PDP).

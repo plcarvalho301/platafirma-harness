@@ -161,7 +161,7 @@ def aparar(reg: dict) -> dict:
 def classificar(desfecho: dict, *, declara_exit: bool | None = None) -> dict:
     """O desfecho que a porta observa vira `{classe, causa, classe_fonte}` (arq:0123 §5).
 
-    Le do desfecho: `exit_code`, `erro`, `evento`, `cancelado`. `classe_fonte` e `verbo`
+    Le do desfecho: `exit_code`, `erro`, `evento`, `cancelado`, `interrompido`. `classe_fonte` e `verbo`
     quando o verbo declara a tabela de exit (`declara_exit`), `tabela` quando a porta deduz.
     A mesma funcao relê a linha antiga, que nao tem `classe`: passa o proprio registro."""
     fonte = "verbo" if (declara_exit if declara_exit is not None
@@ -176,7 +176,7 @@ def classificar(desfecho: dict, *, declara_exit: bool | None = None) -> dict:
             out["causa"] = causa
         return out
 
-    if desfecho.get("cancelado") or evento == "interrompida":
+    if desfecho.get("cancelado") or desfecho.get("interrompido") or evento == "interrompida":
         return r("interrompida")
     if evento.startswith("pep_negou") or evento == "auth_negada":
         return r("negada")

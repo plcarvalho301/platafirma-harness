@@ -34,7 +34,9 @@ def test_le_pela_rota_nao_pelo_banco():
     assert "docker" not in corpo and "psql" not in corpo
 
 
-def test_achada_e_nao_achada_saem_com_exit_1(capsys):
+def test_achada_e_nao_achada_saem_com_exit_1(capsys, monkeypatch):
+    monkeypatch.delenv("PF_SESSAO", raising=False)
+    monkeypatch.delenv("PF_ORDEM_ID", raising=False)
     achada = {"secao_id": SID, "arquivo": "guia ddl-e-migracao", "ancora": "x#mapa",
               "breadcrumb": ["a"], "texto": "corpo", "particao": "casa"}
     f, enviados = _post_fake({"secoes": [achada], "nao_achadas": [OUTRO]})

@@ -1,650 +1,117 @@
 #!/opt/platafirma/current/venv/harness/bin/python
-# descansar — encerra o expediente conferindo a memória
-# capacidade: memoria
-# dono: ia
-# use para: «encerra», «fecha por hoje», «paramos aqui», ANTES de encerrar o expediente
-# atos: fita, encerrar, varredura, publicar
-# forma: relatorio
-# cauda: sim
-#
-# Par do `mesa`: `mesa` guarda, `descansar` fecha. O encerramento de fita nao pode
-# depender de a sessao saber que vai morrer — ela nao sabe. O que este verbo faz e
-# tornar barato o unico momento em que ela SABE que esta fechando.
-#
-# O QUE O RELATORIO MOSTRA, so o que o Sair usa:
-#   1. a mesa             — pelo `mesa ver` da abertura (#656): item vivo (o feito ja
-#      saiu por `mesa fez`), prosa de `mesa anota` so como anotacao sem ato; chapeu
-#      fora da persona (typo, chapeu extinto) aparece nomeado, nunca some calado.
-#   2. as mensagens curadas e a aresta (abaixo).
-# A leitura da caixa saiu (dono, 17/11/2026): o descanso encerra a fita, nao a
-# interpreta; carta se trata com `fila`, no trabalho, nunca no fecho.
-# O dossie de release, servico e acervo saiu (dono, 14/11/2026): conferir e antes do
-# ato, nao no fim da fita, e ele existia para gabaritar a triagem da memoria do
-# claude.ai, que saiu junto. A contagem de giro saiu tambem: so imprimia, nao
-# gravava nada, e nao e custo. O que fica gravado e o fecho do `--encerra-sessao`.
-# CARIMBO: `mem:<cadeira>` (sem slot: fora do padrao que `mesa ver` varre) guarda
-# quando a cadeira ENCERROU a fita pela ultima vez; o relatorio so o le.
-#
-# AS MENSAGENS E A ARESTA (#4355, #4377). Os cadernos foram despejados na familia
-# negocio.mensagem do banco de eventos e as tabelas sessao.caderno_* (assim como o
-# bot caderno-poda) foram encerradas na story #4377. Conhecimento curado e aresta
-# entram por `descansar publicar`. A aresta se marca no Sair, sobre a lista do que
-# a fita puxou de fora da cadeira, tirada do log de giro (o ops log da porta). O log
-# e so lido — a cadeira nao escreve nele (spec rotinas-e-ciclos, tipologia, decisao 1)
-# — e a lista e so a lista: marcar e da cadeira, e so o que entrou na resposta (#2947).
-#
-# A TRIAGEM DA MEMORIA DO CLAUDE.AI SAIU DO ROTEIRO (dono, 14/11/2026; debito 654): a
-# passada automatica refaz depois de todo turno, a camada de conta nao se edita do
-# Project, e a trava dela (so com pedido de limpeza no turno) segurava o encerramento
-# ordenado pelo dono e fechava a fita com pergunta.
-#
-# NAO APAGA MEMORIA. Poda automatica de mesa seria robo decidindo o que a cadeira
-# esquece; o TTL de 48 h do item e da prosa (MEM_MESA_TTL_HORAS) ja e a poda, e ela e
-# declarada (o `mesa ver` avisa o que expurgou). Orfao vira linha de relatorio, e quem
-# limpa e a sessao, com `mesa limpa <slot>`.
-import argparse
+# descansar — encerra a sessão numa chamada e numa linha, e dispara as coletas em segundo plano
+# capacidade: descanso
+# dono: gestao-estrategica
+# classe: B
+# forma: linha (encerrar) / objeto (publicar)
+# use para: encerrar a sessão quando o trabalho acabou; publicar uma mensagem (afirmação, negativa, pedido, recusa, contestação, decisão)
+# atos: encerrar (escrita, sessao), publicar (escrita, mensagem)
+# escreve: o oplog (sessao_encerrada e um evento por coleta); a mensagem no banco de eventos, esfera de negócio, família mensagem (rota aberta pela S4355; até lá, só o arquivo de ensaio); apaga a chave sessao:<id> do Valkey msg-mem
+# ambiente: PF_SESSAO, PF_CADEIRA e PF_SUJEITO (origem: a porta); OPS_LOG_DIR (oplog); PF_MENSAGEM_ARQUIVO (destino de ensaio da mensagem); CASA_PG_* (fichário, para conferir etiqueta e destinatário); PF_VALKEY_FIXTURE, PF_FICHARIO_FIXTURE e PF_DESCANSO_PIDFILE (só teste); PF_BIN[=bin/ da própria release]
+# depende: lib/descanso, lib/oplog, lib/postura/lousa, lib/postura/casa
+# saídas: 0 ok · 2 uso, sem sessão ou mensagem recusada · 3 sem destino para a mensagem ou fichário fora
+"""O descanso da casa nova (S4335, regras 28 a 31 da F4269).
+
+`descansar [encerrar]` encerra a sessão (apaga a chave dela na memória de trabalho), dispara num processo filho
+destacado as três coletas (lib/descanso/coletas.py) e devolve só a despedida. Não relata mesa, caderno nem o que
+ficou aberto: isso já está na lousa. A entrada padrão, quando vem, é a lista de observações da cadeira na fita.
+
+`descansar publicar` grava uma mensagem (JSON na entrada padrão, na forma de referencias/classes/mensagem.md);
+recusa com exit 2 a que vem sem enunciado, sem quem, sem destinatário ou sem tipo, a de tipo fora do dicionário, a
+de etiqueta ou destinatário que não é chave de ficha e a de relação fora de atualiza, corrige e retrata.
+"""
+
+from __future__ import annotations
+
 import json
 import os
-import re
-import shlex
 import subprocess
 import sys
-import time
+import tempfile
+from pathlib import Path
 
-try:
-    import redis
-except ImportError:
-    sys.exit("erro: modulo 'redis' nao instalado neste venv (uv pip install redis)")
+_REPO_REAL = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_REPO_REAL / "lib"))
 
-# Duas raizes e so duas (card #3010). A abertura e a MORADA PUBLICADA da instancia
-# (arq:0097: runtime nao le working tree), a mesma de monta-sessao e fila; lib/ chega
-# pela release — a arvore deste arquivo, por realpath —; ops log e derrame moram na
-# instancia.
-HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-sys.path.insert(0, os.path.join(HARNESS_DIR, "lib"))
-from raizes import instancia  # noqa: E402
-import oplog  # noqa: E402  (card #3344: o unico que le o bruto da porta)
+from descanso import coletas, eventos  # noqa: E402
+from descanso.memoria import Fora, memoria_do_ambiente  # noqa: E402
+from descanso.publicar import Recusada, SemDestino, publicar  # noqa: E402
 
-ABERTURA = os.path.join(
-    os.environ.get("PF_ABERTURA_DIR") or str(instancia() / "var" / "abertura-publicada"),
-    "current", "abertura")
-LOG_OPS = str(oplog.diretorio())   # onde o bruto mora e do lib/oplog; aqui so para o teste apontar
+DESPEDIDA = "sessão encerrada; até a próxima."
 
 
-def _janela_do_bruto(dias, diretorio=None):
-    """Os ultimos `dias` dias corridos do bruto, hoje incluso (antes: os N ultimos arquivos)."""
-    import datetime as _dt
-    hoje = _dt.date.today()
-    return oplog.ler(hoje - _dt.timedelta(days=dias - 1), hoje, diretorio_=diretorio or LOG_OPS)
-
-
-HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
-PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))
-
-
-def conn():
-    return redis.Redis(host=HOST, port=PORTA, decode_responses=True)
-
-
-def cadeira():
-    c = os.environ.get("PF_CADEIRA", "").strip()
-    if c:
-        return c
-    # PF_CADEIRA nao veio no ambiente. A porta a injeta a partir de sessao:{PF_SESSAO};
-    # se nao injetou, o PF_SESSAO recebido nao resolveu cadeira no msg-mem — quase sempre
-    # porque o chamador mandou um uuid torto (medido no claude.ai, 20/09/2026: o id do
-    # Project passado como sessao_id em vez do sessao_id da fita). A recusa diz o que
-    # faltou e o ato que o devolve; NAO lista sessao nem id de nenhuma cadeira: sem id valido
-    # o verbo nao sabe quem chamou, e listar as dos outros e a porta inferindo sessao
-    # (arq:0101 §1, emenda de 13/10/2026, #3475; o #3236 foi um chamador adotando id alheio).
-    sid = os.environ.get("PF_SESSAO", "").strip()
-    linhas = ["erro: PF_CADEIRA nao definida — nao ha fita a fechar sem cadeira."]
-    if sid:
-        linhas.append(f"  o PF_SESSAO recebido ({sid}) nao resolve cadeira no msg-mem:")
-        linhas.append("  ou expirou (TTL 48 h), ou e um uuid torto (ex.: id do Project,")
-        linhas.append("  nao o sessao_id da fita).")
+def _sai(msg: str, codigo: int, como_json: bool) -> int:
+    if como_json:
+        print(json.dumps({"erro": msg, "exit_code": codigo}, ensure_ascii=False))
     else:
-        linhas.append("  nenhum sessao_id chegou nesta chamada.")
-    linhas.append("  passe o sessao_id da propria fita (o que `monta_sessao` devolveu)")
-    linhas.append("  ou abra uma sessao com `monta_sessao(cadeira=<slug>)`.")
-    sys.exit("\n".join(linhas))
+        print(msg, file=sys.stderr)
+    return codigo
 
 
-def slug():
-    """O slug da cadeira, como a porta o injeta (`ia`, `ti`). O prefixo claudinho-/claudinha-
-    e o ledger saíram (dono, 14/11/2026): o ledger nao traz prefixo nenhum e a
-    `monta_sessao` devolve o slug curto, entao a tabela so repetia o que chegou."""
-    return cadeira().lower()
+def _entrada() -> str:
+    return "" if sys.stdin is None or sys.stdin.isatty() else sys.stdin.read().strip()
 
 
-def cadeiras_da_abertura():
-    """As cadeiras com abertura publicada: um subdir por cadeira (a varredura)."""
+def ato_encerrar(como_json: bool) -> int:
+    sessao_id = (os.environ.get("PF_SESSAO") or "").strip()
+    cadeira = (os.environ.get("PF_CADEIRA") or "").strip()
+    if not sessao_id or sessao_id == "-":
+        return _sai("sem sessão aberta para encerrar: a porta não injetou PF_SESSAO", 2, como_json)
+    bruto = _entrada()
     try:
-        return sorted(n for n in os.listdir(ABERTURA) if os.path.isdir(os.path.join(ABERTURA, n)))
-    except OSError:
-        return []
-
-
-def slugs_declarados(alvo):
-    """Os chapeus da cadeira: os subdirs da abertura publicada dela, nunca o que esta
-    escrito no substrato. A memoria seguir o remit e o ponto da conferencia."""
-    base = os.path.join(ABERTURA, alvo.lower())
-    if not os.path.isdir(base):
-        return None, f"abertura da cadeira nao encontrada em {base}"
-    # Um slug e um SUBDIR de chapeu (plataforma, rh...), tenha ele chapeu.md,
-    # ou ferramental.md — a guarda ainda esta com chapeu.md em backfill.
-    slugs = {n for n in os.listdir(base) if os.path.isdir(os.path.join(base, n))}
-    return slugs, None
-
-
-def idade(seg):
-    seg = max(0, int(seg))
-    if seg < 3600:
-        return f"{seg // 60} min"
-    if seg < 86400:
-        return f"{seg // 3600} h"
-    return f"{seg // 86400} d"
-
-
-
-
-RE_MESA_ITEM = re.compile(r"^#\d+ \[([a-z0-9][a-z0-9-]*)\] ")
-RE_MESA_PROSA = re.compile(r"^\[([a-z0-9][a-z0-9-]*)\] anotação \(expira em ([^)]*)\)$")
-
-
-def estado_memoria(curto):
-    """A mesa pelo verbo, o mesmo `mesa ver` da abertura (#656). Devolve (linhas, orfaos).
-
-    Antes este passo lia direto `mem:<cadeira>:*` no Valkey: a prosa de `mesa anota`, que
-    nao tem tratamento (`mesa fez` so apaga item no Postgres) e vive 48 h. O descanso dava
-    como retido o que ja se fizera e nao via os itens vivos. Agora: o item vivo sai como o
-    `mesa ver` o serve (o feito ja saiu dele); a prosa sai so com o cabecalho, marcada como
-    anotacao sem ato, porque nada nela diz o que ja se tratou. O chapeu fora da persona sai
-    marcado nos dois. `mesa ver` expurga o vencido ao servir, como na abertura."""
-    linhas, orfaos = [], []
-    declarados, erro = slugs_declarados(curto)
-    try:
-        p = subprocess.run([os.path.join(_bin(), "mesa"), "ver"], capture_output=True,
-                           text=True, timeout=30)
-    except (OSError, subprocess.SubprocessError) as e:
-        linhas.append(f"  mesa: NAO MEDIDA — {type(e).__name__}: {e}")
-        p = None
-    if p is not None:
-        for aviso in (p.stderr or "").strip().splitlines():
-            linhas.append(f"  {aviso.strip()}")
-        saida = (p.stdout or "").splitlines()
-        if p.returncode != 0 and not saida:
-            linhas.append(f"  mesa: NAO MEDIDA — mesa ver saiu {p.returncode}")
-        i, itens = 0, 0
-        while i < len(saida):
-            linha = saida[i]
-            m_item, m_prosa = RE_MESA_ITEM.match(linha), RE_MESA_PROSA.match(linha)
-            if m_item:
-                itens += 1
-                marca = ("  ÓRFÃO — chapéu fora da persona" if declarados is not None
-                         and m_item.group(1) not in declarados else "")
-                linhas.append(f"  {linha}{marca}")
-            elif m_prosa:
-                slot, n = m_prosa.group(1), 0
-                while i + 1 < len(saida) and saida[i + 1].strip():
-                    i, n = i + 1, n + 1
-                marca = ""
-                if declarados is not None and slot not in declarados:
-                    marca = "  ÓRFÃO — slug não declarado na persona"
-                    orfaos.append(slot)
-                linhas.append(f"  [{slot}] anotação sem ato, {n} linha(s), expira em "
-                              f"{m_prosa.group(2)}: não é item aberto, e o que já se fez não "
-                              f"sai dela{marca}")
-            elif linha.startswith("(mesa:") or linha.strip() == "mesa vazia":
-                linhas.append(f"  {linha.strip()}")
-            i += 1
-        if itens:
-            linhas.append(f"  {itens} item(ns) vivo(s); o feito sai por `mesa fez <n>`")
-    if erro:
-        linhas.append(f"  (aviso: {erro} — sem conferencia contra o remit)")
-    return linhas, orfaos
-
-
-def _bin():
-    """Verbos irmaos: bin/ da propria release. PF_BIN so aponta outro diretorio (teste com stub)."""
-    return os.environ.get("PF_BIN") or os.path.join(HARNESS_DIR, "bin")
-
-
-# ------------------------------------------------------------------ puxado de fora (#3217)
-# Do log de giro sai o que a fita leu PELA CHAVE fora da cadeira: documento de casa de outro
-# dono, chapeu de outra cadeira e obra de outro dominio. Busca no motor nao entra: o log
-# guarda a pergunta, nao o que voltou, e consultar nao e usar.
-UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
-SLUG_PURO = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-CHAVE_CASA = re.compile(r"^[A-Za-z0-9][A-Za-z0-9:._-]*$")  # a ponta casa: do `mesa aresta`
-ACERVO_PG = ("rag-extractor-pg", "rag", "rag_extractor")  # o transporte de `acervo listar`
-
-
-def _args(reg):
-    a = reg.get("args")
-    if isinstance(a, list):
-        return [str(x) for x in a]
-    try:
-        return shlex.split(a or "")
+        observacoes = json.loads(bruto) if bruto else []
     except ValueError:
-        return (a or "").split()
+        observacoes = [bruto]
+    if isinstance(observacoes, dict):
+        observacoes = [observacoes]
 
-
-def _sem_prefixo(cad):
-    c = (cad or "").strip().lower()
-    for pref in ("claudinho-", "claudinha-"):
-        if c.startswith(pref):
-            return c[len(pref):]
-    return c
-
-
-def giros_da_fita(sessao_id, ordem_id, diretorio=None):
-    """Os registros de verbo DESTA fita que deram certo, do log de giro. Fita e a sessao
-    (PF_SESSAO, a mesma chave da aresta onde a porta nao injeta PF_FITA) ou a ordem
-    (PF_ORDEM_ID). A substring filtra antes do json.loads: o log passa de 7 MB por dia e a
-    fita e uma fracao dele. None: sem chave, nao ha fita a ler."""
-    chaves = [c for c in (sessao_id, ordem_id) if c and c != "-"]
-    if not chaves:
-        return None
-    regs = []
     try:
-        for d in _janela_do_bruto(3, diretorio):
-            if d.get("sessao_id") not in chaves and d.get("ordem_id") not in chaves:
-                continue
-            if d.get("evento") in ("http_req", "sem_verbo") or d.get("erro"):
-                continue
-            if d.get("exit_code") not in (0, None):
-                continue
-            regs.append(d)
-    except OSError:
-        pass
-    return regs
+        memoria_do_ambiente().apagar(sessao_id)
+    except Fora:
+        pass        # a chave vence sozinha em 48 h; o evento sessao_encerrada é que diz que a sessão acabou
 
+    ctx = {"sessao_id": sessao_id, "cadeira": cadeira or None, "sujeito": eventos.sujeito_do_ambiente(cadeira),
+           "observacoes": observacoes}
+    fd, caminho = tempfile.mkstemp(prefix="descanso-", suffix=".json")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(ctx, f, ensure_ascii=False)
+    filho = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "_coletar", caminho],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True, close_fds=True)
+    pidfile = (os.environ.get("PF_DESCANSO_PIDFILE") or "").strip()
+    if pidfile:
+        Path(pidfile).write_text(str(filho.pid), encoding="utf-8")
 
-def puxados(regs, curto):
-    """{ponta: o que e} do que a fita leu pela chave, na forma de ponta do `mesa aresta`. O
-    chapeu da propria cadeira sai aqui; o dono do documento e o dominio da obra, no acervo."""
-    achados = {}
-    for d in regs:
-        tool, ato, args = d.get("tool"), d.get("ato"), _args(d)
-        if tool == "acervo" and ato == "ler" and args[:1] == ["casa"]:
-            pos = [x for x in args[1:] if not x.startswith("-")]
-            if len(pos) >= 2 and SLUG_PURO.match(pos[0]) and CHAVE_CASA.match(pos[1]):
-                achados.setdefault(f"casa:{pos[0]}/{pos[1]}",
-                                   {"tipo": "casa", "especie": pos[0], "chave": pos[1]})
-        elif tool == "acervo" and ato == "ler" and args[:1] == ["obra"]:
-            uuid = next((x for x in args[1:] if UUID_RE.match(x)), None)
-            if uuid:
-                achados.setdefault(f"obra:{uuid}", {"tipo": "obra", "uuid": uuid})
-        elif tool == "persona" and ato == "ler" and "--chapeu" in args:
-            i = args.index("--chapeu")
-            cad = _sem_prefixo(args[0]) if args and not args[0].startswith("-") else ""
-            chapeu = args[i + 1] if i + 1 < len(args) else ""
-            if cad and cad != curto and SLUG_PURO.match(cad) and SLUG_PURO.match(chapeu):
-                achados.setdefault(f"chapeu:{cad}/{chapeu}", {"tipo": "chapeu", "cadeira": cad})
-    return achados
-
-
-def _lit(s):
-    return "'" + str(s).replace("'", "''") + "'"
-
-
-def resolve_no_acervo(achados):
-    """{ponta: {dono, titulo}}: o dono do documento de casa (acervo.casa.dono) e o dominio da
-    obra, numa consulta. None quando o acervo nao responde: a lista diz que nao sabe o dono,
-    nunca o omite. So entram especie, chave e uuid que passaram pela regua da ponta."""
-    casas = [(v["especie"], v["chave"]) for v in achados.values() if v["tipo"] == "casa"]
-    obras = [v["uuid"] for v in achados.values() if v["tipo"] == "obra"]
-    partes = []
-    if casas:
-        valores = ", ".join(f"({_lit(e)}, {_lit(c)})" for e, c in casas)
-        partes.append(
-            "select 'casa:' || p.e || '/' || p.c as ponta, c.dono, c.titulo "
-            f"from (values {valores}) as p(e, c) join acervo.especie_tipo t on t.slug = p.e "
-            "join acervo.casa c on c.especie_id = t.id and c.chave = p.c and c.retirada_em is null")
-    if obras:
-        valores = ", ".join(f"({_lit(u)})" for u in obras)
-        partes.append(
-            "select 'obra:' || o.id::text as ponta, d.slug as dono, o.titulo "
-            f"from (values {valores}) as p(u) join acervo.obra o on o.id = p.u::uuid "
-            "left join acervo.dominio d on d.id = o.dominio_id")
-    if not partes:
-        return {}
-    sql = ("select coalesce(json_agg(row_to_json(t)), '[]') from ("
-           + " union all ".join(partes) + ") t;")
-    ctr, usr, base = ACERVO_PG
-    try:
-        r = subprocess.run(["docker", "exec", "-i", ctr, "psql", "-U", usr, "-d", base, "-tAq",
-                            "-v", "ON_ERROR_STOP=1", "-c", sql],
-                           capture_output=True, text=True, timeout=30)
-        linhas = json.loads(r.stdout.strip() or "null") if r.returncode == 0 else None
-    except (OSError, subprocess.SubprocessError, ValueError):
-        return None
-    if not isinstance(linhas, list):
-        return None
-    return {l["ponta"]: l for l in linhas if isinstance(l, dict) and l.get("ponta")}
-
-
-def puxado_de_fora(curto, sessao_id, ordem_id, diretorio=None, resolver=resolve_no_acervo):
-    """As linhas do Sair: o que a fita leu de fora da cadeira, cada uma com a ponta pronta
-    para `mesa aresta`. Documento da propria cadeira e obra do dominio de mesmo nome dela
-    ficam fora; dono que nao se resolve fica DENTRO, dito."""
-    regs = giros_da_fita(sessao_id, ordem_id, diretorio)
-    if regs is None:
-        return ["  sem PF_SESSAO nem PF_ORDEM_ID — sessao de mao nao tem log de giro a ler"]
-    achados = puxados(regs, curto)
-    meta = resolver(achados) if achados else {}
-    linhas = []
-    for ponta in sorted(achados):
-        v, m = achados[ponta], (meta or {}).get(ponta) or {}
-        titulo = f" · «{m['titulo']}»" if m.get("titulo") else ""
-        dono = _sem_prefixo(m.get("dono"))
-        if v["tipo"] == "chapeu":
-            o_que = f"chapéu de {v['cadeira']}"
-        elif meta is None:
-            o_que = "dono indeterminável: o acervo não respondeu"
-        elif v["tipo"] == "casa" and not m:
-            o_que = "documento sem ficha nesta chave: dono não resolvido"
-        elif dono == curto:
-            continue
-        elif v["tipo"] == "casa":
-            o_que = f"documento de {dono or 'dono não declarado'}"
-        else:
-            o_que = f"obra do domínio {dono or 'não declarado'}"
-        linhas.append(f"  {ponta:<40} {o_que}{titulo}")
-    if not linhas:
-        return [f"  nada de fora da cadeira lido pela chave nesta fita ({len(regs)} giro(s) lido(s))"]
-    chapeu = os.environ.get("PF_CHAPEU", "").strip() or "<chapeu>"
-    return ([f"  {len(linhas)} leitura(s) de fora da cadeira; marque so o que entrou na resposta"]
-            + linhas
-            + ["  publicar: `descansar publicar` (JSON na entrada padrao: enunciado, destinatario e etiqueta como chaves de ficha — <classe>:<slug> ou <cadeira> —, tipo-de-mensagem)"])
-
-
-# ------------------------------------------------------------------ cadernos encerrados (#4377)
-# As tabelas sessao.caderno_* e o bot de poda foram encerrados na story #4377; as mensagens
-# moram na familia negocio.mensagem do banco de eventos, publicadas por `descansar publicar`.
-
-
-def _marca_encerrada_duravel(sid):
-    """Grava `encerrada_em = now()` em sessao.sessao ao encerrar por `descansar fita
-    --encerra-sessao` (DT 535, migração 0092): sem isto, `sessao ver <id>` reidratava
-    a sessão encerrada a partir do registro durável. Melhor esforço."""
-    try:
-        import psycopg
-        bin_dir = os.environ.get("PF_BIN") or os.path.join(HARNESS_DIR, "bin")
-        env = {**os.environ, "PATH": f"{bin_dir}:{os.environ.get('PATH', '')}"}
-        p = subprocess.run(["seg", "segredo", "ler", "harness-sessao/SESSAO_PG_PASSWORD"],
-                           capture_output=True, text=True, timeout=5, env=env, check=False)
-        senha = (p.stdout or "").strip() if p.returncode == 0 else ""
-        if not senha:
-            return
-        pg_porta = os.environ.get("SESSAO_PG_PORT", "5437")
-        dsn = f"host=127.0.0.1 port={pg_porta} dbname=sessao user=sessao password={senha}"
-        with psycopg.connect(dsn, connect_timeout=3) as con, con.cursor() as cur:
-            cur.execute(
-                "UPDATE sessao.sessao SET encerrada_em = now() "
-                "WHERE sessao_id = %s::uuid AND encerrada_em IS NULL",
-                (sid,))
-            con.commit()
-    except Exception:                                         # noqa: BLE001
-        pass
-
-
-def encerra_sessao(rc, sessao_id):
-    """DEL `sessao:{id}`, `ledger:{id}`, `giro:{id}` e o derrame da fita (arq:0101 §1).
-
-    A sessao morre por TRES caminhos e so tres: este ato, o TTL de 48 h, ou eviction do
-    msg-mem — o terceiro so se declara, nunca se conta com ele. Escrito porque «a
-    entidade que ninguem mata» era o que fazia o ledger de dedup crescer sem fim: o
-    contrato de morte e parte da entidade, nao faxina.
-
-    Sem PF_SESSAO nao ha o que apagar, e isso NAO e erro: sessao de mao roda sem ledger
-    (`ledger=sem_sessao`), por desenho.
-    """
-    sid = (sessao_id or "").strip()
-    if not sid:
-        return ["  sem PF_SESSAO — fita sem entidade-sessao (roda sem ledger, por desenho)"]
-    fora = []
-    try:
-        apagadas = rc.delete(f"sessao:{sid}", f"ledger:{sid}", f"giro:{sid}")
-        fora.append(f"  sessao {sid}: {apagadas} chave(s) apagada(s) no msg-mem")
-    except Exception as e:                                    # noqa: BLE001
-        fora.append(f"  msg-mem nao respondeu ao DEL: {type(e).__name__}: {e}")
-    _marca_encerrada_duravel(sid)
-    derrame = os.path.join(os.environ.get("PF_DERRAME",
-                                          str(instancia() / "var" / "tmp" / "retornos")), sid)
-    n = 0
-    try:
-        for nome in os.listdir(derrame):
-            try:
-                os.unlink(os.path.join(derrame, nome))
-                n += 1
-            except OSError:
-                pass
-        os.rmdir(derrame)
-    except OSError:
-        pass
-    fora.append(f"  derrame de retorno: {n} arquivo(s) removido(s) ({derrame})")
-    return fora
-
-
-def estado_sessao(sessao_id):
-    """So DIZ o que ha para morrer. Matar e o passo 3 do roteiro, nao este ponto."""
-    sid = (sessao_id or "").strip()
-    if not sid:
-        return ["  sem PF_SESSAO — fita sem entidade-sessao (roda sem ledger, por desenho)"]
-    return [f"  sessao {sid} viva; so o dono manda encerrar (passo 3, depois da mesa e do caderno):",
-            "    `descansar fita --encerra-sessao`"]
-
-
-def tokens_do_transcript(cadeira):
-    """Tokens da fita de Code desta cadeira, somados do `usage` do transcript que o Claude Code ja
-    grava em ~/.claude/projects/*fitas-<cadeira>/ (spec log-de-negocio §3, Fecho). Cada
-    `requestId` conta uma vez, pelo ultimo `usage` que ele trouxe (o transcript repete a linha da
-    resposta a cada bloco). Devolve `{entrada, saida, cache_criacao, cache_leitura}` ou None:
-    sem transcript achado (cwd da fita != $PLATAFIRMA_INSTANCIA/var/fitas/<cadeira>, ou a fita
-    nao e de Code) o fecho sai sem tokens, e a falta se diz, nunca se estima. O leitor e o
-    lib/transcript, o mesmo do `agente rodar`: uma regua para fita e agente (dono, 16/10/2026)."""
-    import transcript
-    arq = transcript.da_cadeira(cadeira)
-    return transcript.soma(arq) if arq else None
-
-
-def grava_fecho(cadeira, parada):
-    """A linha de fecho da fita no bruto da porta: por que parou e, no Code, quanto gastou. Quem
-    escreve e o lib/oplog; o verbo roda como neto da porta, sem o token, e leva so o que a porta
-    injeta no ambiente (PF_SESSAO, PF_ORDEM_ID, PF_CADEIRA, PF_SUJEITO, PF_SUPERFICIE)."""
-    reg = {"tool": "descansar", "evento": "fecho", "ato": "fita", "exit_code": 0,
-           "sessao_id": os.environ.get("PF_SESSAO", "").strip() or "-",
-           "ordem_id": os.environ.get("PF_ORDEM_ID", "").strip() or "-",
-           "cadeira": cadeira or os.environ.get("PF_CADEIRA", "").strip() or None,
-           "sujeito": os.environ.get("PF_SUJEITO", "").strip() or None,
-           "superficie": os.environ.get("PF_SUPERFICIE", "").strip() or None,
-           "motivo_parada": parada}
-    tokens = tokens_do_transcript(cadeira)
-    if tokens:
-        reg.update(tokens=sum(tokens.values()), tokens_por_tipo=tokens, fonte_tokens="provedor")
-    return oplog.emitir(reg), tokens
-
-
-def _fechar_sessao(curto, rc, parada):
-    print(f"== contrato de morte da sessao (arq:0101 §1) — {curto} ==")
-    for _l in encerra_sessao(rc, os.environ.get("PF_SESSAO", "")):
-        print(_l)
-    gravou, tokens = grava_fecho(curto, parada)
-    print(f"fecho da fita no log da porta: parada={parada}"
-          + (f", tokens={sum(tokens.values())} (provedor, transcript do Code)" if tokens
-             else ", sem tokens (sem transcript de Code achado)")
-          + ("" if gravou else " — NAO GRAVOU"))
-    # O carimbo e do encerramento, nao do relatorio: "ultimo descanso" e a ultima fita
-    # que fechou, e e isso que a varredura cobra aos 30 dias.
-    try:
-        rc.set(f"mem:{curto}", int(time.time()))
-    except Exception as e:                                # noqa: BLE001
-        print(f"carimbo de descanso NAO GRAVOU: {type(e).__name__}: {e}")
-
-
-def ato_encerrar(args):
-    """Encerra a fita num unico ato (contrato de morte + fecho + carimbo, DT 896)."""
-    parada = getattr(args, "parada", None) or "concluiu"
-    curto = slug()
-    rc = conn()
-    _fechar_sessao(curto, rc, parada)
+    print(json.dumps({"despedida": DESPEDIDA}, ensure_ascii=False) if como_json else DESPEDIDA)
     return 0
 
 
-def ato_fita(args):
-    # DT 896: `descansar fita` fecha a sessao no mesmo ato por padrao (apos emitir o
-    # relatorio). `--encerra-sessao` mantem compatibilidade fechando direto sem relatorio;
-    # `--sem-encerrar` emite so o relatorio sem matar `sessao:{id}`, para quando a cadeira
-    # ainda vai chamar `descansar publicar` ou `mesa item` antes de encerrar.
-    parada = getattr(args, "parada", None)
-    sem_encerrar = bool(getattr(args, "sem_encerrar", False))
-    so_encerrar = bool(getattr(args, "encerra_sessao", False))
-    if so_encerrar and sem_encerrar:
-        sys.exit("erro: --encerra-sessao e --sem-encerrar nao combinam")
-    if sem_encerrar and parada:
-        sys.exit("erro: --parada nao vale com --sem-encerrar (e o motivo gravado no fecho)")
-    if so_encerrar:
-        return ato_encerrar(args)
-    curto = slug()
-    rc = conn()
-    print(f"== descanso de {curto} ==")
-    ultimo = rc.get(f"mem:{curto}")
-    print(f"ultima fita encerrada: {idade(time.time() - int(ultimo)) + ' atras' if ultimo else 'nunca'}")
-
-    print("\n== mesa (o mesmo `mesa ver` da abertura) ==")
-    linhas, orfaos = estado_memoria(curto)
-    print("\n".join(linhas))
-    if orfaos:
-        print(f"\n  {len(orfaos)} orfao(s): {', '.join(sorted(set(orfaos)))}")
-        print("  limpe com `mesa limpa <slot>` ou peca o slug ao RH — o verbo nao apaga.")
-
-    print("\n== puxado de fora da cadeira (log de giro desta fita) ==")
-    for _l in puxado_de_fora(curto, os.environ.get("PF_SESSAO", "").strip(),
-                             os.environ.get("PF_ORDEM_ID", "").strip()):
-        print(_l)
-
-    print("\n== proximo passo ==\n"
-          "1. a mesa — item so quando a fita deixa pendurado trabalho fora de story,\n"
-          "   incidente ou ordem do dia (guia expediente, Sair, passo 1):\n"
-          "   `mesa item <chapeu> --ato ... --alvo ...`, a proxima jogada. Card que nao esta\n"
-          "   priorizado nao e item: ele mora no rastreador. Sem isso, diga \"mesa sem\n"
-          "   item\". Item listado acima que a fita fez sai por `mesa fez <n>`.\n"
-          "   Premissa a reconferir e beco descartado vao como mensagem, no passo 2a.\n"
-          "\n"
-          "2. por chapeu tocado nesta fita — OBRIGATORIO, TRES partes, sempre as\n"
-          "   tres: o que se aprendeu vai por `descansar publicar`; o que a ferramenta\n"
-          "   fez errado vai ao debito tecnico; o que se puxou de fora e se usou vai\n"
-          "   por `descansar publicar`. Mensagem curada nao e diario de bordo.\n"
-          "\n"
-          "   2a. conhecimento curado — publique por `descansar publicar` (JSON na\n"
-          "   entrada padrao, familia negocio.mensagem; os cadernos em sessao.caderno_*\n"
-          "   foram encerrados na story 4377). Escreva so o que passa no teste do guia\n"
-          "   registrar:\n"
-          "     echo '{\"enunciado\": \"<frase>\", \"destinatario\": \"chapeu:<chapeu>\",\n"
-          "            \"tipo-de-mensagem\": \"afirmacao|decisao|negativa|pedido|recusa|contestacao\",\n"
-          "            \"etiqueta\": [\"<classe>:<slug>\"], \"apoio\": [\"<evidencia>\"]}' | descansar publicar\n"
-          "   (`quem` vem da sessao; destinatario e etiqueta sao chaves validas do\n"
-          "   fichario — `<classe>:<slug>` ou `<cadeira>`, ex.: `capacidade:busca`,\n"
-          "   `chapeu:busca`, `ia`; para atualizar/corrigir/retratar, passe `responde-a`\n"
-          "   e `relacao-com-a-anterior`: `atualiza|corrige|retrata`.)\n"
-          "   \"sem delta\" e resposta valida, mas tem de ser dita; silencio nao e.\n"
-          "\n"
-          "   2b. contorno de ferramenta — rotina Triar (guia defeito), NUNCA por\n"
-          "   `descansar publicar`. Toda vez que a fita chamou um verbo e teve que chamar\n"
-          "   OUTRO pra resolver, ou bateu em parede de ferramenta da casa, e um\n"
-          "   episodio. Por episodio:\n"
-          "     - ja esta na lista (`tarefas dt listar`)? cite a linha no relato\n"
-          "       (\"#2856 linha N\") e acabou;\n"
-          "     - nao esta? admita, com o episodio cru como evidencia:\n"
-          "       `tarefas dt admitir \"<o que falha>\" --medido-em <data>\n"
-          "        --evidencia \"tentei X, deu Y; contorno W\"\n"
-          "        --raio <repo@caminho> --esperado \"<o que devia fazer>\"\n"
-          "        --stack <stack>`;\n"
-          "     - servico degradado agora: Incidente; alguem bloqueado: card.\n"
-          "   Nenhuma linha de diario de bordo entra em mensagem de descanso.\n"
-          "\n"
-          "   2c. aresta — a lista «puxado de fora da cadeira» acima. Marque so o\n"
-          "   que ENTROU na resposta (consultar nao e usar, #2947), uma vez por\n"
-          "   ponta, por `descansar publicar` (`mesa aresta` fechou na story 4355):\n"
-          "     echo '{\"enunciado\": \"<para que usou a ponta>\",\n"
-          "            \"destinatario\": \"chapeu:<chapeu>\",\n"
-          "            \"tipo-de-mensagem\": \"afirmacao\",\n"
-          "            \"etiqueta\": [\"<classe>:<slug>\"], \"apoio\": [\"<ponta>\"]}' | descansar publicar\n"
-          "   Nada usado: diga \"sem aresta\".\n"
-          "\n"
-          "3. encerramento — `descansar fita` (ou `descansar encerrar`) ja encerra a\n"
-          "   sessao no mesmo ato (contrato de morte, arq:0101 §1: DEL\n"
-          "   sessao/ledger/giro + derrame), sem perguntar nada no fecho.\n"
-          "   Diga por que a fita parou: sem flag, `concluiu`; senao\n"
-          "   `--parada teto_giros|orcamento_erro|interrompida`. O fecho vai ao log da\n"
-          "   porta com o motivo e, no Code, os tokens somados do transcript.\n"
-          "   Se precisar publicar mensagens (`descansar publicar`) ou plantar item\n"
-          "   (`mesa item`) antes de fechar, rode `descansar fita --sem-encerrar`\n"
-          "   primeiro e encerre por ultimo com `descansar encerrar` (ou\n"
-          "   `descansar fita --encerra-sessao`). Esquecer nao vaza nada: o TTL de\n"
-          "   48 h e o segundo caminho de morte que a propria ADR escreve.")
-
-    if sem_encerrar:
-        print("\n== entidade-sessao (arq:0101 §1) ==")
-        for _l in estado_sessao(os.environ.get("PF_SESSAO", "")):
-            print(_l)
-        return 0
-
-    print()
-    _fechar_sessao(curto, rc, parada or "concluiu")
+def ato_coletar(caminho: str) -> int:
+    try:
+        ctx = coletas.ler_contexto(caminho)
+    finally:
+        try:
+            os.unlink(caminho)
+        except OSError:
+            pass
+    coletas.rodar(ctx)
     return 0
 
 
-def ato_varredura(args):
-    """Modo timer: uma passada por todas as cadeiras, so o que esta fora do lugar.
-    Nao apaga e nao carimba — varredura que muda estado esconde o proprio efeito."""
-    rc = conn()
-    achados = 0
-    for alvo in cadeiras_da_abertura():
-        declarados, _ = slugs_declarados(alvo)
-        if declarados is None:
-            continue
-        for k in rc.keys(f"mem:{alvo.lower()}:*"):
-            slot = k.split(":", 2)[2]
-            if slot not in declarados:
-                print(f"orfao  {alvo}: mem:{alvo.lower()}:{slot} — slug fora da persona")
-                achados += 1
-        ultimo = rc.get(f"mem:{alvo.lower()}")
-        if ultimo and time.time() - int(ultimo) > 30 * 86400:
-            print(f"parada {alvo}: sem fita encerrada ha {idade(time.time() - int(ultimo))}")
-            achados += 1
-    print(f"varredura: {achados} achado(s)" if achados else "varredura: nada fora do lugar")
-    return 1 if achados else 0
-
-
-def ato_publicar(args):
-    """Publica uma mensagem (JSON no stdin) na familia negocio.mensagem do banco de eventos (#4355)."""
-    from descanso.publicar import ESQUEMA_JSON, Recusada, SemDestino, publicar
-
-    como_json = bool(getattr(args, "como_json", False))
-    bruto = "" if sys.stdin is None or sys.stdin.isatty() else sys.stdin.read().strip()
-
-    def _sai(msg, codigo):
-        if como_json:
-            print(json.dumps({"erro": msg, "exit_code": codigo}, ensure_ascii=False))
-        else:
-            print(msg, file=sys.stderr)
-        return codigo
-
+def ato_publicar(como_json: bool) -> int:
+    bruto = _entrada()
     try:
         dado = json.loads(bruto) if bruto else None
     except ValueError as erro:
-        return _sai(f"a mensagem não é JSON: {erro} · {ESQUEMA_JSON}", 2)
+        return _sai(f"a mensagem não é JSON: {erro}", 2, como_json)
     sessao = (os.environ.get("PF_SESSAO") or "").strip() or None
     cadeira = (os.environ.get("PF_CADEIRA") or "").strip() or None
     try:
         msg, gravou = publicar(dado, sessao=sessao, cadeira=cadeira)
     except Recusada as erro:
-        return _sai(f"recusada: {erro}", 2)
+        return _sai(f"recusada: {erro}", 2, como_json)
     except SemDestino as erro:
-        return _sai(str(erro), 3)
+        return _sai(str(erro), 3, como_json)
     saida = {"chave": msg.chave(), "gravada": gravou, "tipo-de-mensagem": msg.tipo,
              "destinatario": msg.destinatario, "etiqueta": msg.etiqueta, "correlacao": msg.correlacao}
     if como_json:
@@ -654,45 +121,23 @@ def ato_publicar(args):
     return 0
 
 
-def main():
-    # --ajuda UNIVERSAL (card #2868, ex-#2274 defeito 4): argparse ja da -h/--help;
-    # aqui so mapeamos o alias PT --ajuda -> --help antes do parse, sem colidir com
-    # os subparsers. Sem efeito colateral: nenhum ato roda.
-    sys.argv = [("--help" if a == "--ajuda" else a) for a in sys.argv]
-    # Chamado por dois nomes (`encerrar` e `descansar` sao o mesmo verbo): o uso
-    # tem de sair com o nome que a pessoa digitou, ou o texto contradiz o comando.
-    p = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
-                                description="fim de fita: a mesa, as mensagens e a aresta, e o encerramento")
-    sub = p.add_subparsers(dest="ato")
+USO = "uso: descansar [encerrar] [--json] · descansar publicar [--json]  (mensagem JSON na entrada padrão)"
 
-    f = sub.add_parser("fita", help="o descanso da cadeira corrente (PF_CADEIRA); encerra a sessao no mesmo ato")
-    f.add_argument("--encerra-sessao", action="store_true",
-                   help="encerra a sessao direto sem relatorio (compatibilidade; mesmo efeito de `descansar encerrar`)")
-    f.add_argument("--sem-encerrar", action="store_true",
-                   help="emite so o relatorio sem matar a sessao (para publicar ou plantar item antes de encerrar)")
-    f.add_argument("--parada", choices=oplog.MOTIVOS_PARADA, default=None,
-                   help="por que a fita parou, gravado no fecho (recusa com --sem-encerrar): "
-                        "concluiu (padrao) | teto_giros | orcamento_erro | interrompida")
-    f.set_defaults(func=ato_fita)
 
-    e = sub.add_parser("encerrar", help="encerra a sessao da cadeira corrente (DEL sessao/ledger/giro + fecho)")
-    e.add_argument("--parada", choices=oplog.MOTIVOS_PARADA, default=None,
-                   help="por que a fita parou, gravado no fecho: concluiu (padrao) | teto_giros | orcamento_erro | interrompida")
-    e.set_defaults(func=ato_encerrar)
-
-    v = sub.add_parser("varredura", help="passada por todas as cadeiras; so o que esta fora do lugar")
-    v.set_defaults(func=ato_varredura)
-
-    pub = sub.add_parser("publicar", help="publica uma mensagem (JSON na entrada padrao) no banco de eventos")
-    pub.add_argument("--json", action="store_true", dest="como_json", help="saida em JSON")
-    pub.set_defaults(func=ato_publicar)
-
-    args = p.parse_args()
-    if not args.ato:
-        p.print_help()
-        return 2
-    return args.func(args)
+def main(argv: list[str]) -> int:
+    como_json = "--json" in argv
+    args = [a for a in argv if a != "--json"]
+    if args and args[0] in ("-h", "--help", "--ajuda"):
+        print(USO)
+        return 0
+    if not args or args[0] == "encerrar":
+        return ato_encerrar(como_json) if len(args) <= 1 else _sai(USO, 2, como_json)
+    if args[0] == "publicar" and len(args) == 1:
+        return ato_publicar(como_json)
+    if args[0] == "_coletar" and len(args) == 2:
+        return ato_coletar(args[1])
+    return _sai(f"ato desconhecido: {args[0]!r}\n{USO}", 2, como_json)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
