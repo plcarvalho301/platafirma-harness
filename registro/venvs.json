@@ -160,6 +160,12 @@
     "lock": "ferramentas/vault-ontologia/uv.lock",
     "teste": "harnesses/tests"
   },
+  "posto-gerador": {
+    "familia": "platafirma-posto",
+    "promovida": false,
+    "lock": "ferramentas/vault-ontologia/uv.lock",
+    "teste": "gerador/tests"
+  },
   "_rastreador-tela": "stack node das provas de navegador da tela do rastreador (#2856 linha 144): o lock proprio de app/rastreador/provas poe o node_modules na raiz do clone, de onde `import 'puppeteer-core'` se resolve a partir de app/rastreador/provas/*.mjs. Sem 'teste': fora do portao da familia (muitas provas pedem a stack do rastreador no ar); roda por alvo, `teste rodar rastreador-tela@<bancada> provas/construir.sh app/rastreador/provas/<prova>.mjs` (o construir.sh primeiro: as provas medem o dist/).",
   "rastreador-tela": {
     "familia": "platafirma-ui",
@@ -206,6 +212,13 @@
     "promovida": false,
     "lock": "outros_repos/posto/ferramentas/vault-ontologia/uv.lock",
     "teste": "outros_repos/posto/harnesses/tests"
+  },
+  "espelho-posto-gerador": {
+    "familia": "platafirma-casa-espelho",
+    "esteira": "codigo",
+    "promovida": false,
+    "lock": "outros_repos/posto/ferramentas/vault-ontologia/uv.lock",
+    "teste": "outros_repos/posto/gerador/tests"
   },
   "espelho-porta": {
     "familia": "platafirma-casa-espelho",
