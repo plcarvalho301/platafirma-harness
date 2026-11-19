@@ -44,7 +44,7 @@ EVENTOS_API_PADRAO = "http://127.0.0.1:8111"
 # O dicionário tipo-de-mensagem da mensageria (decisão 5274).
 TIPOS = ("afirmacao", "negativa", "pedido", "recusa", "contestacao", "decisao")
 RELACOES = ("atualiza", "corrige", "retrata")
-FORMA_CHAVE = "<classe>:<slug> (ex.: capacidade:<slug>, chapeu:<cadeira>/<slug>, persona:<cadeira>)"
+FORMA_CHAVE = "<classe>:<slug> ou <cadeira> (ex.: capacidade:busca, chapeu:busca, ia)"
 ESQUEMA_JSON = (
     'JSON esperado: {"enunciado": "<frase>", "destinatario": "<classe>:<slug>" ou ["..."], '
     f'"tipo-de-mensagem": "{"|".join(TIPOS)}", '
@@ -292,17 +292,29 @@ class GravadorEventos:
         return ev["evento_id"] in dado.get("inseridos", [])
 
 
+def _token_da_instancia() -> str:
+    inst = Path(os.environ.get("PLATAFIRMA_INSTANCIA") or "/srv/platafirma/casa")
+    caminho = inst / "segredos" / "eventos" / "EVENTOS_NEGOCIO_TOKEN"
+    try:
+        return caminho.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
 def gravador_do_ambiente():
     arquivo = (os.environ.get("PF_MENSAGEM_ARQUIVO") or "").strip()
     if arquivo:
         return GravadorArquivo(arquivo)
-    token = (os.environ.get("EVENTOS_NEGOCIO_TOKEN") or "").strip()
+    token = (os.environ.get("EVENTOS_NEGOCIO_TOKEN") or "").strip() or _token_da_instancia()
     url = (os.environ.get("EVENTOS_API_URL") or "").strip()
     if token or url:
         if not token:
             raise SemDestino("sem token da esfera de negócio (EVENTOS_NEGOCIO_TOKEN)")
         return GravadorEventos(url=url or EVENTOS_API_PADRAO, token=token)
-    raise SemDestino(f"sem destino para a mensagem: defina EVENTOS_NEGOCIO_TOKEN para gravar no {DESTINO}")
+    raise SemDestino(
+        f"sem destino para a mensagem: defina EVENTOS_NEGOCIO_TOKEN ou forneça "
+        f"$PLATAFIRMA_INSTANCIA/segredos/eventos/EVENTOS_NEGOCIO_TOKEN para gravar no {DESTINO}"
+    )
 
 
 def publicar(

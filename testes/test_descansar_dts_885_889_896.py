@@ -150,3 +150,42 @@ def test_dt896_descansar_fita_sem_encerrar_deixa_sessao_viva(monkeypatch, tmp_pa
     assert "== contrato de morte da sessao" not in out
     assert rc.apagadas == []
     assert rc.sets == {}
+
+
+# ---------------------------------------------------------------- #4380: fallback do token da instancia
+def test_gravador_do_ambiente_le_token_da_instancia_como_fallback(monkeypatch, tmp_path):
+    monkeypatch.delenv("PF_MENSAGEM_ARQUIVO", raising=False)
+    monkeypatch.delenv("EVENTOS_NEGOCIO_TOKEN", raising=False)
+    monkeypatch.delenv("EVENTOS_API_URL", raising=False)
+    monkeypatch.setenv("PLATAFIRMA_INSTANCIA", str(tmp_path))
+    seg = tmp_path / "segredos" / "eventos" / "EVENTOS_NEGOCIO_TOKEN"
+    seg.parent.mkdir(parents=True)
+    seg.write_text("tok-instancia\n", encoding="utf-8")
+
+    grav = pub.gravador_do_ambiente()
+    assert isinstance(grav, pub.GravadorEventos)
+    assert grav.token == "tok-instancia"
+    assert grav.url == pub.EVENTOS_API_PADRAO
+
+
+def test_gravador_do_ambiente_prefere_env_sobre_arquivo_da_instancia(monkeypatch, tmp_path):
+    monkeypatch.delenv("PF_MENSAGEM_ARQUIVO", raising=False)
+    monkeypatch.setenv("EVENTOS_NEGOCIO_TOKEN", "tok-env")
+    monkeypatch.setenv("PLATAFIRMA_INSTANCIA", str(tmp_path))
+    seg = tmp_path / "segredos" / "eventos" / "EVENTOS_NEGOCIO_TOKEN"
+    seg.parent.mkdir(parents=True)
+    seg.write_text("tok-instancia\n", encoding="utf-8")
+
+    grav = pub.gravador_do_ambiente()
+    assert isinstance(grav, pub.GravadorEventos)
+    assert grav.token == "tok-env"
+
+
+def test_gravador_do_ambiente_sem_env_nem_arquivo_recusa(monkeypatch, tmp_path):
+    monkeypatch.delenv("PF_MENSAGEM_ARQUIVO", raising=False)
+    monkeypatch.delenv("EVENTOS_NEGOCIO_TOKEN", raising=False)
+    monkeypatch.delenv("EVENTOS_API_URL", raising=False)
+    monkeypatch.setenv("PLATAFIRMA_INSTANCIA", str(tmp_path))
+
+    with pytest.raises(pub.SemDestino):
+        pub.gravador_do_ambiente()
