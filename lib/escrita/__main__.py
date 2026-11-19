@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -19,6 +20,11 @@ def main() -> int:
         return 2
 
     instancia = Path(req["instancia"]) if req.get("instancia") else None
+    bancada = Path(req["bancada"]) if req.get("bancada") else None
+    release = Path(req["release"]) if req.get("release") else None
+    pdp = Path(req["pdp_dir"]) if req.get("pdp_dir") else None
+    cadeira = str(req.get("cadeira") or os.environ.get("PF_CADEIRA") or "")
+    ordem_id = str(req.get("ordem_id") or os.environ.get("PF_ORDEM") or "")
     path = req.get("path")
     if not path:
         res = envelope_erro(2, "campo 'path' obrigatório")
@@ -31,6 +37,11 @@ def main() -> int:
         trecho=req.get("trecho"),
         patch=str(req.get("patch") or ""),
         instancia=instancia,
+        bancada=bancada,
+        release=release,
+        pdp=pdp,
+        cadeira=cadeira,
+        ordem_id=ordem_id,
     )
     sys.stdout.write(json.dumps(res, ensure_ascii=False))
     return int(res.get("exit_code") or 0)

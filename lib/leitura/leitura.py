@@ -5,11 +5,18 @@ import hashlib
 import mimetypes
 import os
 import re
+import stat
 from collections import deque
 from pathlib import Path
 from typing import Any
 
 from . import formatos as _formatos
+from .morada import (
+    eh_segredo,
+    nega_morada_leitura,
+    resolver_leitura_relativo,
+    sob_fila as _sob_fila,
+)
 
 ORCAMENTO_PADRAO = 40_000
 ORCAMENTO_MAX = 200_000
@@ -34,22 +41,6 @@ _ASSINATURAS = (
     (b"SQLite format 3\x00", "application/vnd.sqlite3"),
 )
 
-_NOMES_SEGREDO = frozenset(
-    {
-        ".credentials.json",
-        "id_rsa",
-        "id_dsa",
-        "id_ecdsa",
-        "id_ed25519",
-        "authorized_keys",
-        ".netrc",
-        ".pgpass",
-        ".git-credentials",
-    }
-)
-_SUFIXOS_SEGREDO = frozenset({".key", ".pem", ".asc", ".kdbx"})
-
-
 def envelope_erro(
     exit_code: int,
     falta: str,
@@ -61,32 +52,6 @@ def envelope_erro(
         out["proximo"] = proximo
     out.update(extras)
     return out
-
-
-def eh_segredo(caminho: Path, *, instancia: Path | None = None) -> bool:
-    alvo = caminho.resolve(strict=False)
-    nome = alvo.name
-    if nome.startswith(".env") or alvo.suffix.lower() in _SUFIXOS_SEGREDO or nome in _NOMES_SEGREDO:
-        return True
-    raizes = [Path("/srv/platafirma")]
-    if instancia is not None:
-        raizes.append(instancia.parent)
-    for base in raizes:
-        for cand in (alvo, caminho.absolute()):
-            try:
-                partes = cand.relative_to(base).parts
-            except ValueError:
-                continue
-            if len(partes) >= 2 and partes[1] == "segredos":
-                return True
-    return False
-
-
-def _sob_fila(caminho: Path, *, instancia: Path | None = None) -> bool:
-    base = (instancia or Path(os.environ.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa"))) / "var" / "fila"
-    alvo = caminho.resolve(strict=False)
-    fila_real = base.resolve(strict=False)
-    return alvo == fila_real or fila_real in alvo.parents
 
 
 def _detectar_tipo(caminho: Path, cabeca: bytes) -> str:
@@ -130,12 +95,21 @@ def _decodificar_bloco(bruto: bytes, encoding_pedido: str | None) -> tuple[str, 
             }
 
 
-def _hash_e_cabeca(caminho: Path, tamanho: int) -> tuple[str, bytes]:
+def _hash_e_cabeca(
+    caminho: Path,
+    tamanho: int,
+    *,
+    esperado_id: tuple[int, int] | None = None,
+) -> tuple[str, bytes]:
     """Lê a cabeça e calcula versão em fluxo sem carregar o arquivo inteiro em RAM (DT 900)."""
     with caminho.open("rb") as fh:
+        st = os.fstat(fh.fileno())
+        if not stat.S_ISREG(st.st_mode):
+            raise PermissionError("arquivo especial recusado")
+        if esperado_id is not None and (st.st_dev, st.st_ino) != esperado_id:
+            raise PermissionError("alvo mudou durante a abertura (TOCTOU)")
         cabeca = fh.read(8192)
         if tamanho > VARREDURA_MAX:
-            st = os.fstat(fh.fileno())
             marca = f"{st.st_size}:{st.st_mtime_ns}:{st.st_ino}".encode()
             return hashlib.sha256(marca).hexdigest()[:12], cabeca
         h = hashlib.sha256(cabeca)
@@ -229,19 +203,54 @@ def ler(
     max_bytes: int | None = None,
     versao: str | None = None,
     instancia: Path | None = None,
+    bancada: Path | None = None,
+    release: Path | None = None,
+    pdp: Path | None = None,
+    cadeira: str = "",
 ) -> dict[str, Any]:
     p = Path(caminho)
-    if eh_segredo(p, instancia=instancia):
+    if eh_segredo(p, instancia=instancia, pdp=pdp, release_dir=release):
         motivo = "segredo: fora do alcance da leitura de arquivo"
         return envelope_erro(4, motivo, recusado=True, path=str(p), motivo=motivo)
     if _sob_fila(p, instancia=instancia):
         motivo = "caminho sob a fila — use o verbo `fila`"
         return envelope_erro(4, motivo, 'fila(ato="status")', recusado=True, path=str(p), motivo=motivo)
+
+    if not p.is_absolute():
+        p_res, err_rel = resolver_leitura_relativo(
+            str(caminho), bancada_dir=bancada, cadeira=cadeira
+        )
+        if err_rel or p_res is None:
+            motivo = err_rel or "fora de morada"
+            return envelope_erro(4, motivo, recusado=True, path=str(p), motivo=motivo)
+        p = p_res
+        if eh_segredo(p, instancia=instancia, pdp=pdp, release_dir=release):
+            motivo = "segredo: fora do alcance da leitura de arquivo"
+            return envelope_erro(4, motivo, recusado=True, path=str(p), motivo=motivo)
+        if _sob_fila(p, instancia=instancia):
+            motivo = "caminho sob a fila — use o verbo `fila`"
+            return envelope_erro(4, motivo, 'fila(ato="status")', recusado=True, path=str(p), motivo=motivo)
+
+    err_morada = nega_morada_leitura(
+        p, instancia=instancia, bancada_dir=bancada, release_dir=release
+    )
+    if err_morada:
+        return envelope_erro(4, err_morada, recusado=True, path=str(p), motivo=err_morada)
+
     if not p.exists():
         return envelope_erro(1, f"arquivo não encontrado: {p}", erro="nao_existe", caminho=str(p))
 
     if p.is_dir():
-        entradas = sorted(p.iterdir(), key=lambda x: x.name)
+        entradas = [
+            e
+            for e in sorted(p.iterdir(), key=lambda x: x.name)
+            if not eh_segredo(e, instancia=instancia, pdp=pdp, release_dir=release)
+            and not _sob_fila(e, instancia=instancia)
+            and nega_morada_leitura(
+                e, instancia=instancia, bancada_dir=bancada, release_dir=release
+            )
+            is None
+        ]
         if termo:
             t_low = termo.casefold()
             entradas = [e for e in entradas if t_low in e.name.casefold()]
@@ -263,8 +272,18 @@ def ler(
             caminho=str(p),
         )
 
-    tamanho = p.stat().st_size
-    ver_atual, cabeca = _hash_e_cabeca(p, tamanho)
+    alvo = p.resolve()
+    st_alvo = os.stat(alvo)
+    if not stat.S_ISREG(st_alvo.st_mode):
+        motivo = "arquivo especial recusado"
+        return envelope_erro(4, motivo, recusado=True, path=str(p), motivo=motivo)
+    tamanho = st_alvo.st_size
+    try:
+        ver_atual, cabeca = _hash_e_cabeca(
+            alvo, tamanho, esperado_id=(st_alvo.st_dev, st_alvo.st_ino)
+        )
+    except PermissionError as exc:
+        return envelope_erro(4, str(exc), recusado=True, path=str(p), motivo=str(exc))
     mudou = {"de": versao, "para": ver_atual} if (versao and versao != ver_atual) else None
     prefixo_aviso = f"ARQUIVO MUDOU desde a versão {versao} · " if mudou else ""
 

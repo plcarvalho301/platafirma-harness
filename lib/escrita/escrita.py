@@ -8,19 +8,18 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from leitura.leitura import eh_segredo, envelope_erro
+from leitura.leitura import envelope_erro
+from leitura.morada import ESCRITA_TETO, resolver_escrita
 
 _RE_HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
 
-def _sob_fila(caminho: Path, *, instancia: Path | None = None) -> bool:
-    base = (instancia or Path(os.environ.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa"))) / "var" / "fila"
-    alvo = caminho.resolve(strict=False)
-    fila_real = base.resolve(strict=False)
-    return alvo == fila_real or fila_real in alvo.parents
-
-
-def _gravar_atomico(caminho: Path, conteudo: str) -> tuple[int, str]:
+def _gravar_atomico(
+    caminho: Path,
+    conteudo: str,
+    *,
+    executavel: bool = False,
+) -> tuple[int, str]:
     caminho.parent.mkdir(parents=True, exist_ok=True)
     dados = conteudo.encode("utf-8")
     fd, tmp_nome = tempfile.mkstemp(
@@ -29,6 +28,10 @@ def _gravar_atomico(caminho: Path, conteudo: str) -> tuple[int, str]:
     try:
         with os.fdopen(fd, "wb") as fh:
             fh.write(dados)
+        if executavel:
+            os.chmod(tmp_nome, 0o755)
+        if caminho.is_symlink():
+            raise PermissionError("alvo e symlink — write_file nao escreve atraves de link")
         os.replace(tmp_nome, caminho)
     except OSError:
         try:
@@ -140,6 +143,17 @@ def aplicar_hunks(
     return "".join(linhas), None
 
 
+def _validar_final(texto: str, *, path_str: str, exige_shebang: bool) -> dict[str, Any] | None:
+    if exige_shebang and not texto.startswith("#!"):
+        motivo = "executavel sem extensao exige primeira linha #!"
+        return envelope_erro(4, motivo, recusado=True, path=path_str, motivo=motivo)
+    nbytes = len(texto.encode("utf-8"))
+    if nbytes > ESCRITA_TETO:
+        motivo = f"conteudo excede teto de {ESCRITA_TETO} bytes ({nbytes})"
+        return envelope_erro(4, motivo, recusado=True, path=path_str, motivo=motivo)
+    return None
+
+
 def escrever(
     path: str | Path,
     *,
@@ -147,14 +161,25 @@ def escrever(
     trecho: dict[str, Any] | None = None,
     patch: str = "",
     instancia: Path | None = None,
+    bancada: Path | None = None,
+    release: Path | None = None,
+    pdp: Path | None = None,
+    cadeira: str = "",
+    ordem_id: str = "",
 ) -> dict[str, Any]:
-    p = Path(path)
-    if eh_segredo(p, instancia=instancia):
-        motivo = "segredo: escrita recusada"
-        return envelope_erro(4, motivo, recusado=True, path=str(p), motivo=motivo)
-    if _sob_fila(p, instancia=instancia):
-        motivo = "caminho sob a fila — use o verbo `fila`"
-        return envelope_erro(4, motivo, 'fila(ato="enviar")', recusado=True, path=str(p), motivo=motivo)
+    p_alvo, err_morada, exige_shebang = resolver_escrita(
+        str(path),
+        instancia=instancia,
+        bancada_dir=bancada,
+        release_dir=release,
+        pdp=pdp,
+        cadeira=cadeira,
+        ordem_id=ordem_id,
+    )
+    if err_morada or p_alvo is None:
+        motivo = err_morada or "fora de morada"
+        return envelope_erro(4, motivo, recusado=True, path=str(path), motivo=motivo)
+    p = p_alvo
 
     if patch:
         arquivos = parse_patch(patch)
@@ -166,8 +191,14 @@ def escrever(
         novo_txt, err = aplicar_hunks(atual, entry["hunks"], novo_arq)
         if err or novo_txt is None:
             return envelope_erro(1, err or "falha ao aplicar patch", path=str(p))
+        err_fin = _validar_final(novo_txt, path_str=str(p), exige_shebang=exige_shebang)
+        if err_fin:
+            return err_fin
         substituiu = p.exists()
-        nbytes, sha = _gravar_atomico(p, novo_txt)
+        try:
+            nbytes, sha = _gravar_atomico(p, novo_txt, executavel=exige_shebang)
+        except PermissionError as exc:
+            return envelope_erro(4, str(exc), recusado=True, path=str(p), motivo=str(exc))
         return {"ok": True, "path": str(p), "bytes": nbytes, "substituiu": substituiu, "sha256": sha}
 
     if trecho is not None:
@@ -189,7 +220,13 @@ def escrever(
                 path=str(p),
             )
         novo_txt = atual.replace(antes, depois) if todos else atual.replace(antes, depois, 1)
-        nbytes, sha = _gravar_atomico(p, novo_txt)
+        err_fin = _validar_final(novo_txt, path_str=str(p), exige_shebang=exige_shebang)
+        if err_fin:
+            return err_fin
+        try:
+            nbytes, sha = _gravar_atomico(p, novo_txt, executavel=exige_shebang)
+        except PermissionError as exc:
+            return envelope_erro(4, str(exc), recusado=True, path=str(p), motivo=str(exc))
         return {
             "ok": True,
             "path": str(p),
@@ -199,8 +236,14 @@ def escrever(
             "sha256": sha,
         }
 
+    err_fin = _validar_final(content, path_str=str(p), exige_shebang=exige_shebang)
+    if err_fin:
+        return err_fin
     substituiu = p.exists()
-    nbytes, sha = _gravar_atomico(p, content)
+    try:
+        nbytes, sha = _gravar_atomico(p, content, executavel=exige_shebang)
+    except PermissionError as exc:
+        return envelope_erro(4, str(exc), recusado=True, path=str(p), motivo=str(exc))
     return {
         "ok": True,
         "path": str(p),

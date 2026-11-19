@@ -2,7 +2,7 @@
 # Formato: <caminho relativo à raiz do harness> | <motivo e código da casa nova que o substitui>
 ops-server/ | porta antiga removida (#4340, #4348); substituída por platafirma-core@porta/ e outros_repos/harness/lib/{poda,leitura,escrita}/; os testes dela, um por linha abaixo
 # Triagem dos testes de ops-server/ (#4348, decisões 3 e 4 do comentário 5388). migrado = a guarda veio para a casa nova;
-# coberto = a casa nova já tem o teste do mesmo comportamento; sai = a casa nova mudou o desenho; débito = comportamento sem guarda.
+# coberto = a casa nova já tem o teste do mesmo comportamento; sai = a casa nova mudou o desenho; débito ou achado = comportamento sem guarda.
 ops-server/bench/ | sai: instrumento de medição da leitura antiga, não guarda comportamento
 ops-server/test_agente_log_porta.py | coberto: atributos do agente na chave e no retorno em testes/test_sessao_agente.py e test_sessao_hash_longjob_reidratar.py
 ops-server/test_autoriza_porta.py | coberto: core/porta/tests/test_paridade_e_borda.py (decisão real do PDP, política ausente falha fechada), test_lote.py::test_negacao_nao_cria_processo, test_tronco.py::test_portao_decisao_acesso_real_sem_mock
@@ -12,13 +12,13 @@ ops-server/test_contrato_borda.py | coberto: core/porta/tests/test_paridade_e_bo
 ops-server/test_dt_723_724_725.py | coberto: core/porta/tests/test_executor_porta.py (teto de 2 MB, em andamento com teto), test_acesso_e_trilha.py::test_vinte_chamadas_concorrentes_com_sujeito, test_abertura_e_cabecalho.py::test_paralelo_turno_e_chapeu
 ops-server/test_dt_874_875_876_malote.py | coberto: core/porta/tests/test_malote.py, test_lote.py e test_envelope_erro_dt4251.py; tateio em testes/test_metrica_transporte.py; sai: a recusa por teto de pipe virou duto por arquivo
 ops-server/test_dts_832_897_898_899.py | migrado: testes/test_leitura_dts_832_897_898_899.py e core/porta/tests/test_ler_arquivo_esquema_dt897.py; membro de zip e gzip: débito 919
-ops-server/test_erro_envelope_4251.py | migrado: core/porta/tests/test_envelope_erro_dt4251.py e testes/test_envelope_tokens_dt4251_4120.py; morada do write_file: débito 918; recusa sem a chamada que resolve: débito 920
+ops-server/test_erro_envelope_4251.py | migrado: core/porta/tests/test_envelope_erro_dt4251.py e testes/test_envelope_tokens_dt4251_4120.py; morada do write_file: achado 921; recusa sem a chamada que resolve: débito 920
 ops-server/test_exec_conta.py | migrado: controle/tests/test_exec_conta.py
 ops-server/test_formatos.py | coberto em parte: testes/test_leitura_escrita.py (pdf, docx) e test_leitura_dts_832_897_898_899.py (xlsx esparso, docx bomba); resto do C18: débito 919
 ops-server/test_fundamento_face.py | coberto: core/porta/tests/test_acesso_e_trilha.py::test_face_escrita_recusa_cliente_errado_e_sem_fundamento e test_lote.py::test_face_isolada_antes_de_resolver_sessao_e_exige_fundamento; casos por verbo: débito 920
 ops-server/test_ledger_distancia.py | coberto em parte: testes/test_poda.py (dedup e inteiro); distância do aviso não entregue: débito 920
 ops-server/test_leitura.py | migrado: testes/test_leitura_contratos.py (C1, C2, cauda, C6, encoding, C9, C12, diretório); resto: débito 919
-ops-server/test_ler_arquivo_morada.py | débito 918: a porta nova não tem morada
+ops-server/test_ler_arquivo_morada.py | achado 921: a porta nova não tem morada
 ops-server/test_malote_apelido.py | coberto: core/porta/tests/test_malote.py::test_toolstring_do_malote e test_verbos_porta.py (comando livre e PEP no malote); sai: a porta nova não tem os apelidos de run_command
 ops-server/test_monta_sessao_agente.py | coberto: core/porta/tests/test_abertura_e_cabecalho.py e testes/test_sessao_agente.py
 ops-server/test_monta_sessao_lote.py | coberto: core/porta/tests/test_abertura_e_cabecalho.py (carimbo, persona por valor, abertura ausente, peça inválida, cabeçalho) e testes/test_abertura_porta_cli.py
@@ -29,7 +29,7 @@ ops-server/test_poda_giro_nao_entregue.py | coberto em parte: testes/test_poda.p
 ops-server/test_poda_json_motor_lista_512.py | coberto em parte: testes/test_poda.py::test_motor_rag_trocar_nao_deduplica_e_listar_nao_escapa_do_teto; campo lista em JSON: débito 920
 ops-server/test_poda_porta.py | coberto em parte: testes/test_poda.py, test_poda_cru.py e core/porta/tests/test_tronco.py::test_portao_confirmacao_escrita_nao_deduplicada_via_poda_real; lavador, constitutiva e PF_PODA=0: débito 920
 ops-server/test_prazo_porta.py | coberto: core/porta/tests/test_executor_porta.py (prazo, anexação, interrupção) e test_verbos_porta.py::test_repo_abrir_apos_prazo_grava_escopo_na_lousa; repartição do prazo no lote: débito 920
-ops-server/test_raizes_porta.py | coberto em parte: testes/test_leitura_escrita.py (trecho e patch); raízes, extensões e escrita em massa: débito 918
+ops-server/test_raizes_porta.py | coberto em parte: testes/test_leitura_escrita.py (trecho e patch); raízes, extensões e escrita em massa: achado 921
 ops-server/test_recusa_sem_sessao_nao_lista.py | coberto: core/porta/tests/test_abertura_e_cabecalho.py::test_chamada_sem_sessao_recusada_com_chamada_que_abre
 ops-server/test_run_command_lote_injecao.py | coberto: core/porta/tests/test_executor_porta.py::test_comando_livre_e_operador_shell_recusados e test_verbos_porta.py; sucessor de verbo retirado: débito 920
 ops-server/test_sessao_reidratar_porta.py | coberto: testes/test_sessao_hash_longjob_reidratar.py e core/porta/tests/test_executor_porta.py (PF_SUJEITO e PF_CHAPEU); teto do terminal: débito 920
