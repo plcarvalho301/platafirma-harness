@@ -30,7 +30,7 @@ def test_familia_declarada_com_a_url_do_forge():
 
 def test_repositorio_declarado_como_esteira_documento():
     repos = json.loads(VENVS.read_text(encoding="utf-8"))["repositorios"]
-    assert repos[ESPELHO] == {"esteira": "documento"}
+    assert repos[ESPELHO] == {"esteira": "documento", "conferir_no_ar": True}
 
 
 def test_resolvedor_do_teste_conhece_o_repositorio():
@@ -61,6 +61,8 @@ def test_posto_esta_nas_familias_e_resolve_stacks_do_posto_e_espelho():
                              "outros_repos/posto/harnesses/tests", "codigo", "espelho-posto-harnesses"], espelho_h
     venvs = json.loads(VENVS.read_text(encoding="utf-8"))
     assert venvs["espelho-posto-harnesses"]["promovida"] is False
+    assert venvs["harnesses"].get("promovida", True) is True
+    assert venvs["vault-ontologia"].get("promovida", True) is True
     familias = json.loads(FAMILIAS.read_text(encoding="utf-8"))
     assert familias["platafirma-posto"] == "https://github.com/plcarvalho301/platafirma-posto.git"
 

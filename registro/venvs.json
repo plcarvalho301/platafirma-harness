@@ -20,7 +20,8 @@
       "esteira": "documento"
     },
     "platafirma-casa-espelho": {
-      "esteira": "documento"
+      "esteira": "documento",
+      "conferir_no_ar": true
     },
     "platafirma-motor": {
       "esteira": "codigo"
@@ -147,16 +148,14 @@
     "lock": "provas/package-lock.json",
     "teste": "provas"
   },
-  "_vault-ontologia": "suite do vault da ontologia do posto (#2856 linha 453): o script que monta o vault do Obsidian a partir das shapes do espelho e a planilha, com rdflib, PyYAML e openpyxl. O posto nao e familia promovida, de proposito: fica fora de registro/familias.json e declara `promovida: false`, que tira a stack do `release conferir dependencias` (sem release servida, o lock nunca estaria em current). O venv nasce no `teste rodar`, pelo mesmo construtor, e a lista de portao mora em ferramentas/vault-ontologia/testes/VERDES.",
+  "_vault-ontologia": "suite do vault da ontologia do posto (#2856 linha 453) e tabela de harnesses (#4345, premissa 2): o posto e familia promovida em registro/familias.json com release servida no host; o lock ferramentas/vault-ontologia/uv.lock entra no `release conferir dependencias` e a porta le harnesses/tabela.yaml da release no ar. As listas de portao moram em ferramentas/vault-ontologia/testes/VERDES e harnesses/tests/VERDES.",
   "vault-ontologia": {
     "familia": "platafirma-posto",
-    "promovida": false,
     "lock": "ferramentas/vault-ontologia/uv.lock",
     "teste": "ferramentas/vault-ontologia/testes"
   },
   "harnesses": {
     "familia": "platafirma-posto",
-    "promovida": false,
     "lock": "ferramentas/vault-ontologia/uv.lock",
     "teste": "harnesses/tests"
   },
