@@ -54,3 +54,30 @@ def test_faces_da_borda_saem_do_registro(registro):
     assert sorted(faces) == ["casca", "motor"]
     assert sorted(faces["casca"]) == ["preferencia", "release", "tarefas"]
     assert sorted(faces["motor"]) == ["fila", "motor"]
+
+
+def test_registro_expoe_exatamente_as_24_tools_visiveis_do_ar(registro):
+    esperadas = {
+        "acervo", "acesso", "agente", "analise", "bot", "busca", "conferir",
+        "descansar", "expediente", "fila", "infra", "ler_arquivo", "lint",
+        "malote", "mesa", "metrica", "monta_sessao", "pesquisar", "release",
+        "repo", "seg", "tarefas", "teste", "write_file",
+    }
+    visiveis = set(registro["transporte"])
+    for slug, meta in registro["verbos"].items():
+        meta = meta or {}
+        if meta.get("modelo", True) is False:
+            continue
+        visiveis.add(meta.get("nome") or slug)
+    assert visiveis == esperadas
+    assert registro["verbos"]["motor"].get("nome") == "busca"
+
+
+def test_toolstring_do_malote_no_registro(registro):
+    desc = registro["transporte"]["malote"]["descricao"]
+    assert "cadeia que para no primeiro erro" in desc
+    assert "duto" in desc
+    assert "verbo sem tool própria" in desc
+    assert "em paralelo" in desc
+    assert "lote_next" in desc
+    assert "SEMPRE que for chamar dois ou mais verbos" not in desc
