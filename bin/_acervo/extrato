@@ -37,6 +37,19 @@ def limpa(valor: str) -> str:
     """Tira o caractere de controle que o formato xlsx recusa; o resto passa intacto."""
     return ILLEGAL_CHARACTERS_RE.sub("", valor) if isinstance(valor, str) else valor
 
+
+def ler_csv(dados: str) -> list[list[str]]:
+    """Lê o CSV devolvido pelo psql sem estourar o limite padrão de 128 KB por campo."""
+    limite = sys.maxsize
+    while True:
+        try:
+            csv.field_size_limit(limite)
+            break
+        except OverflowError:
+            limite //= 10
+    return list(csv.reader(io.StringIO(dados)))
+
+
 def psql(sql: str) -> str:
     res = subprocess.run(
         ["docker", "exec", CONTAINER, "psql", "-U", USER, "-d", DB,
@@ -74,7 +87,7 @@ def main() -> int:
 
     for tabela in tabelas():
         dados = psql_csv(f'SELECT * FROM {SCHEMA}."{tabela}"')
-        linhas = list(csv.reader(io.StringIO(dados)))
+        linhas = ler_csv(dados)
         if not linhas:
             continue
 

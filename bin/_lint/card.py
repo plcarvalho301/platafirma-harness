@@ -49,25 +49,33 @@ CAMPOS_TASK = [
     "Confere:",
 ]
 
-# arq:0096 item 4: a aposta e exigida na saida de captada; a forma, na saida de em-lapidacao.
-# Apetite e Aberto ficam fora da recusa; o indice (Produtos documentais, Sai quando, Quebra)
-# so fica completo na formalizacao. Continuidade saiu do molde (comentario #2088 do #3408).
+# arq:0096 item 4: no épico, a aposta e exigida na saida de captada; a forma, na saida de em-lapidacao.
+# Na feature (molde da Olaria, fornada 01a1e62c), a API exige Problema, Serve a, Sai quando, Fora,
+# Apetite na saida de captada e Solução na saida de em-lapidacao; Peças, Regras e Produtos
+# documentais vão ao inventário, por `tarefas inventario` (DT 904).
 ROTULOS_APOSTA = ["Problema", "Resultado", "Medida", "Fora"]
 ROTULOS_FORMA = ["Solução", "Peças"]
+ROTULOS_FEATURE_APOSTA = ["Problema", "Serve a", "Fora", "Sai quando", "Apetite"]
+ROTULOS_FEATURE_FORMA = ["Solução"]
+ROTULOS_INVENTARIO = ("Peças", "Regras", "Produtos documentais")
 ESTADOS_SO_APOSTA = {"captada"}
+RE_INVENTARIO = re.compile(
+    r"^Inventário:\s*(\d+)\s+peças?,\s*(\d+)\s+regras?.*?,\s*(\d+)\s+produtos?\s+documentais?",
+    re.MULTILINE,
+)
 
 # todo rotulo que abre secao no corpo, para saber onde a anterior termina
 ROTULOS_TWO_PAGER = [
-    "Problema", "Solução", "Peças", "Fora", "Resultado", "Medida", "Apetite", "Aberto",
-    "Produtos documentais", "Regras", "Sai quando", "Quebra",
+    "Problema", "Serve a", "Solução", "Uso", "Peças", "Fora", "Resultado", "Medida", "Apetite",
+    "Aberto", "Produtos documentais", "Regras", "Sai quando", "Quebra",
     # do esqueleto velho e dos rotulos de fonte: nao sao do molde, mas fecham a secao anterior
     "Continuidade", "Base", "Fontes",
 ]
 ROTULOS_DE_FONTE = ["Base", "Fontes"]
 
 # Retrocompatibilidade de import: quem lia as listas por nivel
-CAMPOS_FEATURE = [f"{r}:" for r in ROTULOS_APOSTA + ROTULOS_FORMA]
-CAMPOS_EPIC = list(CAMPOS_FEATURE)
+CAMPOS_FEATURE = [f"{r}:" for r in ROTULOS_FEATURE_APOSTA + ROTULOS_FEATURE_FORMA]
+CAMPOS_EPIC = [f"{r}:" for r in ROTULOS_APOSTA + ROTULOS_FORMA]
 
 # limiares da lista (L1 e L2; palpite que firma com a F1, #3407) e do L3
 LIMITE_PARAGRAFO = 400
@@ -293,12 +301,17 @@ class Contexto:
                  *, fecha_existe: bool):
         self.alvo = alvo
         self.texto = texto
+        self.nivel = detectar_nivel(texto)
         self.secoes = secoes_do_corpo(texto)
         self.comentarios = comentarios
         self.estado = _norm_estado(estado)
         self.fecha_existe = fecha_existe
         self.aposta = any(RE_APOSTA.match(c.primeira()) for c in comentarios)
         self.tem_story_filha = _tem_filha(texto)
+        m_inv = RE_INVENTARIO.search(texto)
+        self.inventario = (
+            (int(m_inv.group(1)), int(m_inv.group(2)), int(m_inv.group(3))) if m_inv else None
+        )
 
     def discovery(self) -> list[Comentario]:
         return [c for c in self.comentarios if not c.delivery()]
@@ -320,12 +333,24 @@ def _itens(secao: Secao | None) -> list[tuple[int, str]]:
 # --- T · two-pager ---------------------------------------------------------
 
 def _t1(ctx: Contexto) -> list[Achado]:
-    exigidos = list(ROTULOS_APOSTA)
-    if ctx.estado not in ESTADOS_SO_APOSTA:
-        exigidos += ROTULOS_FORMA
+    if ctx.nivel == "feature":
+        exigidos = list(ROTULOS_FEATURE_APOSTA)
+        if ctx.estado not in ESTADOS_SO_APOSTA:
+            exigidos += ROTULOS_FEATURE_FORMA
+    else:
+        exigidos = list(ROTULOS_APOSTA)
+        if ctx.estado not in ESTADOS_SO_APOSTA:
+            exigidos += ROTULOS_FORMA
     achados = [(ctx.alvo, 1, f"rótulo «{r}:» ausente") for r in exigidos if r not in ctx.secoes]
     achados += [(ctx.alvo, ctx.secoes[r].linha, f"rótulo de fontes «{r}:» no corpo")
                 for r in ROTULOS_DE_FONTE if r in ctx.secoes]
+    if ctx.nivel == "feature" and ctx.estado not in ESTADOS_DE_HISTORICO:
+        achados += [
+            (ctx.alvo, ctx.secoes[r].linha, f"rótulo «{r}:» no corpo (vai ao inventário por `tarefas inventario`)")
+            for r in ROTULOS_INVENTARIO if r in ctx.secoes
+        ]
+        if ctx.estado not in ESTADOS_SO_APOSTA and ctx.inventario is not None and ctx.inventario[0] == 0:
+            achados.append((ctx.alvo, 1, "inventário sem peças (cadastre por `tarefas inventario criar`)"))
     return achados
 
 

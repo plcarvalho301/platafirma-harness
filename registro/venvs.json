@@ -28,6 +28,7 @@
     },
     "platafirma-ui": {
       "esteira": "codigo",
+      "stack": "ui",
       "conferir_no_ar": true
     },
     "platafirma-rastreador": {
@@ -146,7 +147,8 @@
   "ui": {
     "familia": "platafirma-ui",
     "lock": "provas/package-lock.json",
-    "teste": "provas"
+    "teste": "provas",
+    "testes": ["prova_ui-regua.mjs"]
   },
   "_vault-ontologia": "suite do vault da ontologia do posto (#2856 linha 453) e tabela de harnesses (#4345, premissa 2): o posto e familia promovida em registro/familias.json com release servida no host; o lock ferramentas/vault-ontologia/uv.lock entra no `release conferir dependencias` e a porta le harnesses/tabela.yaml da release no ar. As listas de portao moram em ferramentas/vault-ontologia/testes/VERDES e harnesses/tests/VERDES.",
   "vault-ontologia": {
@@ -197,6 +199,20 @@
     "promovida": false,
     "lock": "outros_repos/harness/venvs/harness/uv.lock",
     "teste": "outros_repos/harness/testes"
+  },
+  "espelho-controle": {
+    "familia": "platafirma-casa-espelho",
+    "esteira": "codigo",
+    "promovida": false,
+    "lock": "outros_repos/harness/venvs/harness/uv.lock",
+    "teste": "outros_repos/harness/controle"
+  },
+  "espelho-analise": {
+    "familia": "platafirma-casa-espelho",
+    "esteira": "codigo",
+    "promovida": false,
+    "lock": "outros_repos/harness/venvs/harness/uv.lock",
+    "teste": "outros_repos/harness/testes/analise"
   },
   "espelho-vault-ontologia": {
     "familia": "platafirma-casa-espelho",

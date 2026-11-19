@@ -1047,3 +1047,21 @@ def test_cabecalhos_dono_em_bin_sem_prefixo_claudinho():
             if padrao.search(linha):
                 violacoes.append(f"{arq.relative_to(REPO_ROOT)}:{i}: {linha}")
     assert violacoes == []
+
+
+@pytest.mark.parametrize("argv", [
+    ["caderno"],
+    ["caderno", "engenharia-de-dados"],
+    ["colheita"],
+    ["legado", "--caderno"],
+    ["escrever", "engenharia-de-dados", "--licao", "x", "--caso", "1"],
+])
+def test_atos_de_caderno_recusam_apontando_para_banco_de_eventos(argv, monkeypatch, capsys):
+    mesa = carrega_mesa()
+    monkeypatch.setenv("PF_CADEIRA", "dados")
+    monkeypatch.setattr("sys.argv", ["mesa", *argv])
+    rc = mesa.main()
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "banco de eventos" in err
+    assert "negocio.mensagem" in err
