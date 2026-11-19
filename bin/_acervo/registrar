@@ -368,7 +368,7 @@ def registrar_um(verbo):
                 origem = detail.replace("opcional,", "").replace("opcional", "").strip() or None
                 ambientes.append((var_name, obrig, origem))
 
-    dono = campos.get("dono")
+    dono = _dono_slug(campos.get("dono"))
     sql_parts = [
         "begin;\n",
         "insert into acervo.ferramental_capacidade (slug, rotulo) "
@@ -503,6 +503,16 @@ def registrar_descricao(verbo):
     return desc
 
 
+def _dono_slug(raw):
+    """Extrai o slug principal de `# dono:` (aceita prosa apos o slug, ex.: `ia (politica) · ti`).
+    Evita violar `ferramental_verbo_dono_slug_chk` e abortar o lote de reconciliacao (DT-911)."""
+    s = (raw or "").strip()
+    if not s:
+        return None
+    m = re.match(r"^([a-z][a-z0-9-]*)(?:$|[\s(·,/])", s)
+    return m.group(1) if m else None
+
+
 def reconciliar_donos():
     """Relê `# dono:` e a descrição do cabeçalho de cada bin/<verbo> em BIN e reconcilia
     acervo.ferramental_verbo.dono (DT #273) e descricao (DT #850).
@@ -518,7 +528,7 @@ def reconciliar_donos():
         if not path:
             continue
         campos, desc = _le_cabecalho(path)
-        dono = (campos.get("dono") or "").strip()
+        dono = _dono_slug(campos.get("dono"))
         if dono:
             pares.append((nome, dono))
         if desc:
