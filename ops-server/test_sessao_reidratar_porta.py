@@ -280,6 +280,43 @@ def test_serve_do_terminal_sai_cru_sem_poda():
     assert "poda" not in out
 
 
+def test_terminal_recebe_json_grande_inteiro_do_verbo_ao_serve():
+    """Do execve ao retorno: um JSON de 300 KB (o `ler shape --json` do vault passa de 50 KB) chega
+    ao terminal inteiro e parseia, sem teto de 50 KB nem poda."""
+    corpo = json.dumps({"yaml": "classes:\n" + "".join(
+        f"- nome: c{i}\n  descricao: {'d' * 300}\n" for i in range(900))}, ensure_ascii=False) + "\n"
+    bruto = corpo.encode("utf-8")
+    assert len(bruto) > 3 * s.CAP
+
+    class _Grande(_ProcessoFake):
+        def communicate(self, input=None, timeout=None):
+            return bruto, b""
+
+    with patch.object(s, "_quem", return_value={"azp": "pf-cli", "sub": "dono-sub"}), \
+         patch.object(s, "_mapa_azp_superficie", side_effect=_mapa_terminal):
+        ident = s._sessao_resolve(None)
+        assert ident["terminal"] is True
+        with patch.object(s.subprocess, "Popen", return_value=_Grande()):
+            r = s._run_verbo_blocking(["/bin/infra", "rodar"], None, 5, ident)
+        out = s._serve(r, tool="infra", alca="infra rodar ontologia-servida -- ler shape --json",
+                       ident=ident)
+    assert out["stdout"]["truncado"] is False
+    assert json.loads(out["stdout"]["texto"])["yaml"].count("- nome:") == 900
+
+
+def test_fora_do_terminal_o_teto_segue_50_kb():
+    bruto = b"x" * (s.CAP * 2)
+
+    class _Grande(_ProcessoFake):
+        def communicate(self, input=None, timeout=None):
+            return bruto, b""
+
+    ident = {"sessao_id": "sid-1", "ordem_id": "o-1", "cadeira": "ti", "sujeito": "x"}
+    with patch.object(s.subprocess, "Popen", return_value=_Grande()):
+        r = s._run_verbo_blocking(["/bin/infra", "rodar"], None, 5, ident)
+    assert r["stdout"]["truncado"] is True
+
+
 # ---------------------------------------------------------------- PF_CHAPEU no execve (card #3367)
 
 def test_sessao_resolve_traz_chapeu_da_chave_viva():

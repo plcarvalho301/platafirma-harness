@@ -240,12 +240,16 @@ import leitura as _leitura                                    # noqa: E402  (car
 
 
 # --- helpers puros ---
-def _cap(raw: bytes, *, sessao_id: str = "-", nome: str = "") -> dict:
+# DT 877: o terminal do dono (pf) é máquina e lê JSON inteiro; 50 KB cortava o `ler shape --json`
+# do vault no meio. O teto dele só protege a porta de um retorno descontrolado.
+TETO_TERMINAL = 64 * 1024 * 1024
+
+def _cap(raw: bytes, *, sessao_id: str = "-", nome: str = "", teto: int = CAP) -> dict:
     texto = raw.decode("utf-8", "replace")
-    if len(raw) <= CAP:
+    if len(raw) <= teto:
         return {"texto": texto, "truncado": False, "bytes_total": len(raw)}
     cru = _poda.derrama(sessao_id, nome or f"cap-{uuid.uuid4().hex[:8]}.txt", texto)
-    out = {"texto": raw[:CAP].decode("utf-8", "replace"), "truncado": True, "bytes_total": len(raw)}
+    out = {"texto": raw[:teto].decode("utf-8", "replace"), "truncado": True, "bytes_total": len(raw)}
     if cru:
         out["cru"] = cru
     return out
@@ -443,7 +447,9 @@ def _serve(r: dict, *, tool: str, alca: str, ident: dict, cauda: bool = False,
         r["stderr"] = _normaliza_canal_teto(r["stderr"], sessao_id, f"{tool}-{uuid.uuid4().hex[:8]}-stderr.txt")
     # O terminal do dono (pf) é máquina, não contexto de modelo: a poda (lavagem, ledger, corte de
     # linha com alça) corrompia o JSON e o YAML que o pf vault lê. Sai cru, só com o teto.
-    if not _poda_ligada() or _poda.intocavel(r) or _chamada_do_terminal():
+    if _chamada_do_terminal():
+        return r          # o teto do terminal já foi aplicado em _cap (TETO_TERMINAL)
+    if not _poda_ligada() or _poda.intocavel(r):
         if isinstance(r.get("stdout"), dict):
             r["stdout"] = _normaliza_canal_teto(r["stdout"], sessao_id, f"{tool}-{uuid.uuid4().hex[:8]}-stdout.txt")
         return r
@@ -3436,6 +3442,7 @@ def _sessao_resolve(sessao_id: str | None) -> dict:
            "origem_sessao": "", "chapeu": ""}
     if not sessao_id or sessao_id == "-":
         out["sujeito"] = _sujeito_do_terminal()
+        out["terminal"] = _chamada_do_terminal()
         return out
     try:
         raw = _rc().get(f"sessao:{sessao_id}")
@@ -3782,8 +3789,9 @@ def _run_verbo_blocking(argv: list, stdin: str | dict | list | None, timeout: in
         )
     sid = (ident or {}).get("sessao_id") or "-"
     cid = uuid.uuid4().hex[:8]
-    so_cap = _cap(stdout, sessao_id=sid, nome=f"{slug}-{cid}-stdout.txt")
-    se_cap = _cap(stderr, sessao_id=sid, nome=f"{slug}-{cid}-stderr.txt")
+    teto = TETO_TERMINAL if (ident or {}).get("terminal") else CAP
+    so_cap = _cap(stdout, sessao_id=sid, nome=f"{slug}-{cid}-stdout.txt", teto=teto)
+    se_cap = _cap(stderr, sessao_id=sid, nome=f"{slug}-{cid}-stderr.txt", teto=teto)
     if p.returncode in (-15, 143) or p.returncode == -signal.SIGTERM:
         return {
             "exit_code": p.returncode,
