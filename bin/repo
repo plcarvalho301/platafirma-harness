@@ -573,6 +573,26 @@ alvo_leitura() {
     rm -f "$err"; ALVO="$c"; avisa_atras_origin "$c" "$nome"; return 0
   fi
   base="${nome%%@*}"
+  # DT-888: leitura (procurar, ler, listar, historico) em worktree de deliberacao orfa
+  # religa automaticamente ao clone base preservando a arvore de trabalho.
+  if [ "$rc" -eq 5 ] && direto_em_main "$base" && [ -e "$BANCADA/$base/.git" ] \
+     && { [ "$nome" = "$base" ] || [ "${nome#*@}" = "$PASTA_DIRETO_EM_MAIN" ]; }; then
+    local cad_l wt_orfa_l
+    cad_l="$(cadeira_da_sessao)"
+    wt_orfa_l="$BANCADA/wt/$base/$cad_l/$PASTA_DIRETO_EM_MAIN"
+    if _worktree_orfa "$wt_orfa_l"; then
+      if ! "$GIT" -C "$BANCADA/$base" rev-parse --verify -q origin/main >/dev/null 2>&1; then
+        git_sem_engolir "$BANCADA/$base" fetch --prune origin || {
+          cat "$err" >&2; rm -f "$err"; return "$rc"
+        }
+      fi
+      if "$GIT" -C "$BANCADA/$base" rev-parse --verify -q origin/main >/dev/null 2>&1; then
+        rm -f "$err"
+        _religar_worktree_orfa "$BANCADA/$base" "$wt_orfa_l" "$cad_l/$PASTA_DIRETO_EM_MAIN" origin/main 1 >&2
+        ALVO="$wt_orfa_l"; avisa_atras_origin "$wt_orfa_l" "$nome"; return 0
+      fi
+    fi
+  fi
   if [ "$rc" -eq 1 ] && [ "$base" = "$nome" ] && [ -e "$BANCADA/$base/.git" ]; then
     rm -f "$err"
     git_sem_engolir "$BANCADA/$base" fetch --prune origin \
@@ -3749,6 +3769,25 @@ ato_descartar() {
     morre "repositório de deliberação '$nome_base' usa bancada direta em main — para descartar bancada antiga por card nomeie $nome_base@<chave>" 4
   fi
 
+  # DT-882: worktree orfa (clone base refeito) nao passa em clone_de; recusa sem --forcar
+  # para nao perder escrita local, e remove a pasta com --forcar.
+  local cand_orfa=""
+  cand_orfa="$(bancada_de "$nome_base" "$chave_pedida" 2>/dev/null || true)"
+  if [ -n "$cand_orfa" ] && _worktree_orfa "$cand_orfa"; then
+    local base_repo_o="$BANCADA/$nome_base"
+    if [ "$forcar" -eq 0 ]; then
+      printf '%s: descartar recusado em %s (worktree órfã — pode conter escrita não commitada)\n' "$VERBO" "$cand_orfa" >&2
+      printf 'vizinho: repo abrir %s (religa preservando a árvore) ou repo descartar %s --forcar\n' "$nome_base" "$alvo" >&2
+      exit 4
+    fi
+    rm -rf "$cand_orfa"
+    if [ -e "$base_repo_o/.git" ]; then
+      "$GIT" -C "$base_repo_o" worktree prune >/dev/null 2>&1 || true
+    fi
+    printf 'descartada: %s (worktree órfã removida)\n' "$cand_orfa"
+    return 0
+  fi
+
   local c
   c="$(clone_de "$alvo")" || exit $?
   local base_repo="$BANCADA/$nome_base"
@@ -4035,6 +4074,42 @@ sanear_conforme() {
           printf '%s: %s\n' "$rot" "$res" ;;
       esac
     done < <(worktrees_tab "$base")
+    # DT-882: worktrees orfas (gitfile apontando para clone antigo) nao aparecem em
+    # git worktree list; varre wt/<repo>/<cadeira>/<chave> e religa preservando a arvore.
+    if [ -d "$BANCADA/wt/$nome" ]; then
+      local wt_o rot_o cad_o chave_o ramo_o track_o res_o
+      for wt_o in "$BANCADA/wt/$nome"/*/*; do
+        [ -d "$wt_o" ] || continue
+        _worktree_orfa "$wt_o" || continue
+        rot_o="$nome ${wt_o#"$BANCADA"/}"
+        pend=1
+        if [ "$relatar" -eq 1 ]; then
+          printf '%s: relataria religar worktree órfã ao clone base\n' "$rot_o"
+          continue
+        fi
+        if ! "$GIT" -C "$base" rev-parse --verify -q origin/main >/dev/null 2>&1; then
+          incid+=("$rot_o: sem origin/main -- nao religo worktree orfa")
+          continue
+        fi
+        cad_o="$(basename "$(dirname "$wt_o")")"
+        chave_o="$(basename "$wt_o")"
+        ramo_o=""; track_o=0
+        if direto_em_main "$nome" && [ "$chave_o" = "$PASTA_DIRETO_EM_MAIN" ]; then
+          ramo_o="$cad_o/$PASTA_DIRETO_EM_MAIN"; track_o=1
+        elif "$GIT" -C "$base" show-ref --verify --quiet "refs/heads/fabrica/$chave_o" \
+          || "$GIT" -C "$base" show-ref --verify --quiet "refs/remotes/origin/fabrica/$chave_o"; then
+          ramo_o="fabrica/$chave_o"
+        elif "$GIT" -C "$base" show-ref --verify --quiet "refs/heads/$cad_o/$chave_o" \
+          || "$GIT" -C "$base" show-ref --verify --quiet "refs/remotes/origin/$cad_o/$chave_o"; then
+          ramo_o="$cad_o/$chave_o"
+        fi
+        if res_o="$(_religar_worktree_orfa "$base" "$wt_o" "$ramo_o" origin/main "$track_o" 2>&1)"; then
+          printf '%s: %s\n' "$rot_o" "$res_o"
+        else
+          incid+=("$rot_o: $res_o")
+        fi
+      done
+    fi
     # depois das bancadas: o ramo de bancada entregue ja saiu da lista de vivos
     sanear_remotos "$base" "$nome" "$relatar"
     case $? in 1) pend=1 ;; 3) incid+=("$nome: ramos remotos -- ver linha acima") ;; esac
