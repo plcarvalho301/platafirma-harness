@@ -176,7 +176,7 @@ def classificar(desfecho: dict, *, declara_exit: bool | None = None) -> dict:
             out["causa"] = causa
         return out
 
-    if desfecho.get("cancelado") or evento == "interrompida":
+    if desfecho.get("cancelado") or desfecho.get("interrompido") or evento == "interrompida":
         return r("interrompida")
     if evento.startswith("pep_negou") or evento == "auth_negada":
         return r("negada")

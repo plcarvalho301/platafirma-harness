@@ -1,4 +1,4 @@
-"""A mensagem e o ato publicar (regra 30 da F4269; decisões 5268, 5269, 5271 e 5274; t3 da S4335; S4355).
+"""A mensagem e o ato publicar (regra 30 da F4269; decisões 5268, 5269, 5271 e 5274; t3 da S4335).
 
 A forma é a da classe mensagem (referencias/classes/mensagem.md), que vem da micropublicação de Clark, Ciccarese e
 Goble (2014) com dois campos a mais, o destinatário e o tipo:
@@ -18,7 +18,8 @@ O ato grava qualquer mensagem, sem ato nem campo por categoria: a lição, a pre
 se distinguem pela forma, e não por rótulo. Recusa (exit 2) a sem enunciado, sem quem, sem destinatário, sem tipo, de
 tipo fora do dicionário, de etiqueta ou destinatário que não é chave de ficha e de relação fora das três.
 
-A mensagem mora no banco de eventos, esfera de negócio, família mensagem (decisão 5269; story 4355).
+A mensagem mora no banco de eventos, esfera de negócio, família mensagem (decisão 5269). A rota de escrita abre na
+story 4355; até lá o único destino é o arquivo de ensaio (PF_MENSAGEM_ARQUIVO), e sem ele o ato sai 3.
 """
 
 from __future__ import annotations

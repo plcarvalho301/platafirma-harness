@@ -94,8 +94,3 @@ def test_o_cabecalho_passa_o_gate_de_tres_linhas_e_a_ajuda_le_os_cinco_atos():
     assert uso.atos_do_cabecalho(BOT) == list(ATOS)
 
 
-def test_o_registro_da_porta_tem_o_bot_e_o_registrar_todos_o_le_de_la():
-    """O bloco cercado do oficio-ferramental.md saiu no #4117: o registro da porta (registro/porta.yaml) diz quais
-    verbos o `acervo registrar --todos` registra, e o `bot` esta entre eles, depois do `agente`."""
-    verbos = registrar._le_whitelist()
-    assert "bot" in verbos and verbos.index("bot") > verbos.index("agente")

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import sys
+from pathlib import Path
 
 from . import Falha, exigir, hash_arquivo
 
@@ -10,7 +12,8 @@ from . import Falha, exigir, hash_arquivo
 def autorizar(sujeito: str, ato: str, recurso: str) -> dict:
     from raizes import release
 
-    pasta = release() / "harness/politica-acesso"
+    pdp_env = (os.environ.get("PDP_DIR") or "").strip()
+    pasta = Path(pdp_env) if pdp_env else (release() / "core/acesso")
     exigir(pasta.is_dir(), "pdp-ausente", 3)
     try:
         import yaml

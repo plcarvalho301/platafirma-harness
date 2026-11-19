@@ -43,7 +43,7 @@
     "conteiner": "eventos-db",
     "base": "eventos",
     "dono": "eventos",
-    "o_que_guarda": "banco de eventos de plataforma"
+    "o_que_guarda": "banco de eventos (schemas plataforma e negocio)"
   },
   "identidade": {
     "conteiner": "platafirma-core-identidade-db-1",

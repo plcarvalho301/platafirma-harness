@@ -9,12 +9,6 @@
 # voltar ao posto, ela e byte a byte desta e `cmp` entre as duas e o aceite. Por isso este
 # arquivo nao depende de nada do host: so stdlib, e todo caminho do host e opcional.
 #
-# O problema medido (card 3007, 06/09): a cadeira em Code recebe o `sessao_id` no
-# retorno do `monta_sessao` e NAO o repassa nas chamadas seguintes (0/190). A porta
-# nao infere mais (85ece31), entao sem porte a fita roda sem sessao. Este hook faz o
-# porte ser MECANICO, no cliente, independe do agente lembrar — que e a spec:
-# `monta_sessao` cunha -> Valkey -> a fita porta o id.
-#
 # Quatro eventos, um script:
 #  - UserPromptSubmit (card #3356): guarda o contador do turno (T0, T1, ...) e a mensagem do dono,
 #    e marca o turno pendente. NAO imprime nada: o que este evento imprime entra no contexto do
@@ -24,23 +18,58 @@
 #    gravado via `updatedInput` (nunca sobrescreve um id que o agente ja pos).
 #  - SessionStart com source compact|resume (ia, 20/09/2026): a compactacao do Code apaga
 #    retorno antigo de tool, e persona e conduta chegam como retorno de `monta_sessao`.
-#    O hook devolve, em `additionalContext`, a cadeira e o sessao_id gravados e manda
-#    reabrir por `monta_sessao` com o MESMO id, que devolve o pacote inteiro — vale em
-#    qualquer maquina. No host, onde a morada publicada existe, a persona ja vai junto
-#    (lida de la, nunca copia: arranque.md). A conduta nao cabe aqui: tem mais que os
-#    10.000 caracteres que o Code aceita por string de hook.
 import json, sys, re, os, time
 from pathlib import Path
+from urllib import error as _url_error, request as _url_request
 
 DIR = Path(os.environ.get("XDG_RUNTIME_DIR") or os.environ.get("TMPDIR") or "/tmp") / "pf-sessao-code"
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 # `\\?"` porque o retorno pode chegar como string JSON dentro de JSON (aspas escapadas).
 CADEIRA = re.compile(r'\\?"cadeira\\?"\s*:\s*\\?"([a-z0-9][a-z0-9-]{0,40})\\?"')
-MORADA = Path(os.environ.get("PF_ABERTURA_DIR", "/srv/platafirma/casa/var/abertura-publicada"))
+MORADA = Path(os.environ.get("PF_ABERTURA_DIR", "")) if os.environ.get("PF_ABERTURA_DIR") else None
 TETO_CONTEXTO = 9_500          # o Code corta cada string de hook em 10.000 caracteres
 JANELA_DEDUP_S = 30            # conta + projeto podem declarar o mesmo hook: fala um so
 TETO_TURNO_TEXTO = 16_000      # caracteres da mensagem do dono que o hook entrega a porta (#3356)
+PRAZO_CABECALHO_S = 0.5        # prazo curto com falha aberta no UserPromptSubmit (story #4343)
+PRAZO_REMONTAGEM_S = 3.0       # prazo de remontagem pós-compactação pela porta nova (story #4343)
+_PREFIXOS_MALOTE = ("malote ", "run_command ")
+
+
+def _post_porta(caminho: str, payload: dict, *, timeout_s: float) -> dict | None:
+    """Chama rota leve da porta nova em stdlib com falha aberta em erro ou timeout."""
+    base = (os.environ.get("PF_PORTA_URL") or "").strip().rstrip("/")
+    if not base:
+        return None
+    corpo = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    token = (os.environ.get("PF_PORTA_TOKEN") or "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = _url_request.Request(f"{base}{caminho}", data=corpo, headers=headers, method="POST")
+    try:
+        with _url_request.urlopen(req, timeout=timeout_s) as resp:
+            bruto = resp.read().decode("utf-8", errors="replace").strip()
+            dado = json.loads(bruto) if bruto else {}
+            return dado if isinstance(dado, dict) else None
+    except (_url_error.URLError, TimeoutError, OSError, ValueError):
+        return None
+
+
+def pedir_cabecalho(sid_code: str, turno: str) -> str | None:
+    """Pede o cabeçalho do turno à porta nova com prazo curto (500 ms) e falha aberta."""
+    sid = le(sid_code)
+    if not sid:
+        return None
+    try:
+        prazo = float(os.environ.get("PF_CABECALHO_PRAZO_S") or PRAZO_CABECALHO_S)
+    except ValueError:
+        prazo = PRAZO_CABECALHO_S
+    resp = _post_porta("/turno/cabecalho", {"sessao_id": sid, "turno": turno}, timeout_s=prazo)
+    if not resp or not resp.get("ok"):
+        return None
+    cab = resp.get("cabecalho")
+    return str(cab).strip() if isinstance(cab, str) and cab.strip() else None
 
 def arquivo(sid_code: str, sufixo: str = "sid") -> Path:
     seguro = re.sub(r"[^0-9a-zA-Z_-]", "_", sid_code or "sem")
@@ -94,6 +123,8 @@ def com_turno(sid_code: str, ti: dict) -> dict:
     return novo
 
 def _publicado(*partes: str) -> str | None:
+    if MORADA is None:
+        return None
     try:
         return (MORADA / "current" / "abertura").joinpath(*partes).read_text(
             encoding="utf-8", errors="replace").strip() or None
@@ -138,32 +169,31 @@ def primeiro_a_falar(sid_code: str, origem: str) -> bool:
         return True                        # na duvida, fala: repetir custa menos que calar
 
 def contexto_de_retomada(sid_code: str, origem: str) -> str | None:
-    """O que volta a janela depois de compactar ou retomar. None = nada gravado, nada a dizer."""
+    """O que volta a janela depois de compactar ou retomar via rota `/sessao/remontar` da porta."""
     cadeira, sid = le(sid_code, "cadeira"), le(sid_code)
+    if not cadeira and not sid:
+        return None
+    resp = _post_porta(
+        "/sessao/remontar",
+        {"sessao_id": sid or "", "cadeira": cadeira or ""},
+        timeout_s=PRAZO_REMONTAGEM_S,
+    )
+    if resp and resp.get("ok") and isinstance(resp.get("texto"), str) and resp["texto"].strip():
+        texto = resp["texto"].strip()
+        if len(texto) > TETO_CONTEXTO:
+            texto = texto[:TETO_CONTEXTO]
+        return texto
     if not cadeira:
         return None
     oque = "compactou" if origem == "compact" else "foi retomada"
     chamada = f"monta_sessao(cadeira=\"{cadeira}\"" + (f", sessao_id=\"{sid}\"" if sid else "") + ")"
-    cab = (f"[porta-sessao] A fita {oque}. Retorno antigo de tool pode ter saido da janela, "
-           f"inclusive o pacote de monta_sessao — persona, conduta do dono, mesa. Voce segue "
-           f"sendo a cadeira `{cadeira}`" + (f", sessao `{sid}`" if sid else "") + ".\n")
+    cab = (f"[porta-sessao] A fita {oque}. Retorno antigo de tool pode ter saido da janela. "
+           f"Voce segue sendo a cadeira `{cadeira}`" + (f", sessao `{sid}`" if sid else "") + ".\n"
+           f"Se a remontagem pela porta nao chegou, reabra com {chamada}.\n")
     persona = persona_publicada(cadeira)
-    conduta = conduta_importada()
-    falta = [n for n, tem in (("persona", persona), ("a conduta do dono", conduta)) if not tem]
-    passos = []
-    if conduta:
-        passos.append("A conduta do dono esta no CLAUDE.md (import) e nao saiu.")
-    if falta:
-        passos.append(f"ANTES de qualquer outra coisa: {chamada}. O mesmo sessao_id devolve o "
-                      f"pacote inteiro; sem ele voce responde sem {' e sem '.join(falta)}.")
-    else:
-        passos.append(f"Mesa, fila e chapeu: {chamada} devolve o pacote inteiro.")
-    passos.append("O que estava em curso e nao esta na mesa: `mesa item`, com ato e alvo, antes de seguir.")
-    corpo = cab + "".join(f"{i}. {p}\n" for i, p in enumerate(passos, 1))
-    if persona:
-        corpo += "\nPersona, da morada publicada:\n\n" + persona
+    corpo = cab + ("\n" + persona if persona else "")
     if len(corpo) > TETO_CONTEXTO:
-        corpo = corpo[:TETO_CONTEXTO] + "\n[persona cortada pelo teto do hook — inteira por `persona ler`]"
+        corpo = corpo[:TETO_CONTEXTO]
     return corpo
 
 def _base(tool: str) -> str:
@@ -174,6 +204,27 @@ def _com_origem(args, origem: str) -> list:
     if any(str(a) == "--origem" or str(a).startswith("--origem=") for a in args):
         return args                        # o que o agente ja pos vale
     return args + ["--origem", origem]
+
+def _normaliza_texto_malote(texto: str) -> str:
+    s = texto.lstrip()
+    for pref in _PREFIXOS_MALOTE:
+        if s.startswith(pref):
+            return s[len(pref):].lstrip()
+    return s
+
+def _eh_abertura_sessao_dict(x: dict) -> bool:
+    verbo = str(x.get("verbo") or "").strip()
+    ato = str(x.get("ato") or "").strip()
+    args = x.get("args")
+    if verbo == "sessao":
+        if ato == "abrir":
+            return True
+        if not ato and isinstance(args, list) and args and str(args[0]) == "abrir":
+            return True
+    if verbo in ("malote", "run_command") and ato == "sessao":
+        if isinstance(args, list) and args and str(args[0]) == "abrir":
+            return True
+    return False
 
 def liga_origem(tool: str, ti: dict, origem: str) -> dict:
     """Sub-agente abrindo a PROPRIA sessao: `sessao abrir ... --origem <sessao do orquestrador>`.
@@ -190,11 +241,16 @@ def liga_origem(tool: str, ti: dict, origem: str) -> dict:
                             for i in novo["lote"]]
     elif base in ("malote", "run_command"):            # run_command: apelido de malote (#3270)
         def item(x):
-            if isinstance(x, str) and x.lstrip().startswith("sessao abrir") and "--origem" not in x:
-                return f"{x} --origem {origem}"
-            if isinstance(x, dict) and x.get("verbo") == "sessao" and x.get("ato") == "abrir":
+            if isinstance(x, str):
+                norm = _normaliza_texto_malote(x)
+                if norm.startswith("sessao abrir") and "--origem" not in x:
+                    return f"{x} --origem {origem}"
+                return x
+            if isinstance(x, dict) and _eh_abertura_sessao_dict(x):
                 return dict(x, args=_com_origem(x.get("args"), origem))
             return x
+        if isinstance(novo.get("itens"), list):
+            novo["itens"] = [item(x) for x in novo["itens"]]
         if isinstance(novo.get("commands"), list):
             novo["commands"] = [item(x) for x in novo["commands"]]
         if isinstance(novo.get("command"), str):
@@ -209,9 +265,6 @@ def main():
     evento = ev.get("hook_event_name") or ev.get("hookEventName") or ""
     tool = ev.get("tool_name") or ev.get("toolName") or ""
     sid_code = ev.get("session_id") or ev.get("sessionId") or "sem"
-    # Dentro de sub-agente o Code dispara o mesmo hook com o MESMO session_id e acrescenta
-    # `agent_id` (hooks.md, campos comuns). A sessao que o sub-agente abre e guardada a parte,
-    # por `agent_id`, e nunca sobrescreve a do orquestrador (card #3158).
     agente = ev.get("agent_id") or ev.get("agentId")
     chave = f"{sid_code}__{agente}" if agente else sid_code
 
@@ -226,13 +279,20 @@ def main():
         sys.exit(0)
 
     if evento == "UserPromptSubmit":
-        # Nada no stdout: o que este evento imprime entra no contexto do modelo. Sub-agente nao
-        # tem mensagem do dono; sem `prompt`, o turno cai no transcript (spec log-de-negocio §3).
         prompt = ev.get("prompt")
         if not agente and isinstance(prompt, str) and prompt.strip():
-            grava(sid_code, proximo_turno(sid_code), "turno")
+            turno = proximo_turno(sid_code)
+            grava(sid_code, turno, "turno")
             grava(sid_code, prompt, "texto")
             grava(sid_code, "1", "pendente")
+            cab = pedir_cabecalho(sid_code, turno)
+            if cab:
+                print(json.dumps({
+                    "hookSpecificOutput": {
+                        "hookEventName": "UserPromptSubmit",
+                        "additionalContext": cab,
+                    }
+                }, ensure_ascii=False))
         sys.exit(0)
 
     if not (tool.endswith("malote") or tool.endswith("run_command") or tool.endswith("read_file") or tool.endswith("ler_arquivo") or
@@ -262,9 +322,8 @@ def main():
             if origem:
                 novo = liga_origem(tool, novo, origem)
         if not novo.get("sessao_id") and not tool.endswith("monta_sessao"):
-            # sem id do agente: o da sessao propria dele (se ja abriu); senao o do orquestrador
             sid = (le(chave) if agente else None) or le(sid_code)
-            if sid:                        # nada gravado ainda — roda sem sessao (contado)
+            if sid:
                 novo["sessao_id"] = sid
         if not agente:                     # sub-agente nao recebe o turno do orquestrador (#3356)
             novo = com_turno(sid_code, novo)

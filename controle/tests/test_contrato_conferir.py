@@ -139,7 +139,6 @@ def test_verbo_json_formato_ok(tmp_path, monkeypatch, capsys):
     )
     monkeypatch.setattr(conferir, "BIN", str(bin_dir))
     monkeypatch.setattr(conferir, "_capacidade_veredito", lambda cap: conferir.resultado.conforme())
-    monkeypatch.setattr(conferir, "_donos_ferramental", lambda: ({"meuverbo": "claudinho-TI"}, None))
     monkeypatch.setattr(conferir, "_desde_familia", lambda familia: "2026-09-20T10:00:00Z")
     monkeypatch.setattr(
         conferir, "origem",
@@ -204,11 +203,11 @@ def test_verbo_capacidade_ausente_e_indeterminavel_se_acervo_falha(tmp_path, mon
         conferir, "origem",
         lambda nome, caminho: ("symlink", str(bin_dir.parent / "origem-real" / nome)),
     )
-    # o mapa vigente nao se leu (acervo fora do ar): indeterminavel
-    monkeypatch.setattr(conferir, "_MAPA", {})
+    # Olaria fora do ar: indeterminavel
+    monkeypatch.setattr(conferir, "_CAPACIDADES_OLARIA", {})
     monkeypatch.setattr(
-        conferir, "_ler_mapa_vigente",
-        lambda: (3, "", "dependencia ausente: acervo"),
+        conferir, "_olaria_post",
+        lambda rota, corpo, timeout=15: (None, None, "Olaria fora do ar"),
     )
 
     exit_code = conferir.conferir_verbo("meuverbo", como_json=True)
@@ -218,81 +217,6 @@ def test_verbo_capacidade_ausente_e_indeterminavel_se_acervo_falha(tmp_path, mon
     dado = json.loads(saida.out)
     item = next(i for i in dado["itens"] if i["nome"] == "meuverbo")
     assert item["estado"] == "indeterminavel"
-
-
-def test_verbo_dono_divergente_no_catalogo_reprova(tmp_path, monkeypatch, capsys):
-    """DT #273: divergencia entre acervo.ferramental_verbo.dono e `# dono:` do bin aparece em conferir verbo."""
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "tarefas").write_text(
-        "#!/usr/bin/env bash\n"
-        "# tarefas - conduz o card\n"
-        "# capacidade: tarefas\n"
-        "# dono: gestao-estrategica\n"
-        "echo ok\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(conferir, "BIN", str(bin_dir))
-    monkeypatch.setattr(conferir, "_capacidade_veredito", lambda cap: conferir.resultado.conforme())
-    monkeypatch.setattr(conferir, "_donos_ferramental", lambda: ({"tarefas": "ti"}, None))
-    monkeypatch.setattr(conferir, "_desde_familia", lambda familia: None)
-    monkeypatch.setattr(conferir, "origem", lambda nome, caminho: ("symlink", str(bin_dir / "tarefas")))
-
-    exit_code = conferir.conferir_verbo("tarefas", como_json=True)
-    dado = json.loads(capsys.readouterr().out)
-    item = next(i for i in dado["itens"] if i["nome"] == "tarefas")
-    assert exit_code == 1
-    assert item["estado"] == "divergente"
-    assert "ti" in item["motivo"] and "gestao-estrategica" in item["motivo"]
-
-
-def test_verbo_dono_nao_conferido_quando_banco_falha_e_indeterminavel(tmp_path, monkeypatch, capsys):
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "tarefas").write_text(
-        "#!/usr/bin/env bash\n"
-        "# tarefas - conduz o card\n"
-        "# capacidade: tarefas\n"
-        "# dono: gestao-estrategica\n"
-        "echo ok\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(conferir, "BIN", str(bin_dir))
-    monkeypatch.setattr(conferir, "_capacidade_veredito", lambda cap: conferir.resultado.conforme())
-    monkeypatch.setattr(conferir, "_donos_ferramental", lambda: (None, "psql fora"))
-    monkeypatch.setattr(conferir, "_desde_familia", lambda familia: None)
-    monkeypatch.setattr(conferir, "origem", lambda nome, caminho: ("symlink", str(bin_dir / "tarefas")))
-
-    exit_code = conferir.conferir_verbo("tarefas", como_json=True)
-    dado = json.loads(capsys.readouterr().out)
-    item = next(i for i in dado["itens"] if i["nome"] == "tarefas")
-    assert exit_code == 5
-    assert item["estado"] == "indeterminavel"
-
-
-def test_verbo_dono_ignorado_no_gate_de_rev_antes_da_promocao(tmp_path, monkeypatch, capsys):
-    """Com PF_CONFERIR_ORIGEM=0 (gate_conferir_verbo), o catalogo ainda nao foi reconciliado."""
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "tarefas").write_text(
-        "#!/usr/bin/env bash\n"
-        "# tarefas - conduz o card\n"
-        "# capacidade: tarefas\n"
-        "# dono: gestao-estrategica\n"
-        "echo ok\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setenv("PF_CONFERIR_ORIGEM", "0")
-    monkeypatch.setattr(conferir, "BIN", str(bin_dir))
-    monkeypatch.setattr(conferir, "_capacidade_veredito", lambda cap: conferir.resultado.conforme())
-    monkeypatch.setattr(conferir, "_donos_ferramental", lambda: (_ for _ in ()).throw(AssertionError("nao deveria consultar")))
-    monkeypatch.setattr(conferir, "_desde_familia", lambda familia: None)
-
-    exit_code = conferir.conferir_verbo("tarefas", como_json=True)
-    dado = json.loads(capsys.readouterr().out)
-    item = next(i for i in dado["itens"] if i["nome"] == "tarefas")
-    assert exit_code == 0
-    assert item["estado"] == "conforme"
 
 
 # --- skill ------------------------------------------------------------------
@@ -408,11 +332,16 @@ def _abertura_de_fixture(tmp_path):
     return raiz
 
 
-def test_existe_chapeu_acha_pelo_slug_e_por_cadeira_barra_chapeu(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(conferir, "RAIZ", str(_abertura_de_fixture(tmp_path)))
+def test_existe_chapeu_acha_pelo_slug_e_por_cadeira_barra_chapeu(monkeypatch, capsys):
+    monkeypatch.setattr(
+        conferir, "_olaria_post",
+        lambda rota, corpo, timeout=15: (200, {"chaves": [
+            "chapeu:dados/ontologia", "chapeu:engenharia/devops", "chapeu:engenharia/front-end"
+        ]}, None),
+    )
 
     assert conferir.conferir_existe("chapeu", "devops") == 0
-    assert capsys.readouterr().out.startswith("existe: chapeu devops — abertura/ tem engenharia/devops")
+    assert capsys.readouterr().out.startswith("existe: chapeu devops — Olaria tem engenharia/devops")
     assert conferir.conferir_existe("chapeu", "engenharia/devops") == 0
     assert conferir.conferir_existe("chapeu", "claudinho-engenharia/devops") == 0
     capsys.readouterr()
@@ -421,12 +350,17 @@ def test_existe_chapeu_acha_pelo_slug_e_por_cadeira_barra_chapeu(tmp_path, monke
     capsys.readouterr()
 
 
-def test_existe_chapeu_ausente_sai_1_com_a_lista_na_segunda_linha(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(conferir, "RAIZ", str(_abertura_de_fixture(tmp_path)))
+def test_existe_chapeu_ausente_sai_1_com_a_lista_na_segunda_linha(monkeypatch, capsys):
+    monkeypatch.setattr(
+        conferir, "_olaria_post",
+        lambda rota, corpo, timeout=15: (200, {"chaves": [
+            "chapeu:dados/ontologia", "chapeu:engenharia/devops", "chapeu:engenharia/front-end"
+        ]}, None),
+    )
 
     assert conferir.conferir_existe("chapeu", "sem-chapeu-md") == 1
     linhas = capsys.readouterr().out.splitlines()
-    assert linhas[0].startswith("nao-existe: chapeu sem-chapeu-md — abertura/ lista 3 chapeus")
+    assert linhas[0].startswith("nao-existe: chapeu sem-chapeu-md — Olaria lista 3 chapeus")
     assert "dados/ontologia, engenharia/devops, engenharia/front-end" in linhas[1]
 
 

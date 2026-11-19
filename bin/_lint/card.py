@@ -52,22 +52,30 @@ CAMPOS_TASK = [
 # arq:0096 item 4: a aposta e exigida na saida de captada; a forma, na saida de em-lapidacao.
 # Apetite e Aberto ficam fora da recusa; o indice (Produtos documentais, Sai quando, Quebra)
 # so fica completo na formalizacao. Continuidade saiu do molde (comentario #2088 do #3408).
+# Estas duas são do épico, que segue no molde anterior.
 ROTULOS_APOSTA = ["Problema", "Resultado", "Medida", "Fora"]
 ROTULOS_FORMA = ["Solução", "Peças"]
+# A feature (story #4317): os rótulos da classe feature, os mesmos que o portão do rastreador cobra.
+# Peças, regras de negócio e produtos documentais saíram do corpo e foram ao inventário; a feature
+# que ainda os traz no corpo não é apontada por eles durante a troca.
+ROTULOS_APOSTA_FEATURE = ["Problema", "Serve a", "Sai quando", "Fora", "Apetite"]
+ROTULOS_FORMA_FEATURE = ["Solução"]
+# detectores que leem Peças e Produtos documentais no corpo: não valem para a feature
+DETECTORES_DO_CORPO_DE_ANTES = {"T6", "T10"}
 ESTADOS_SO_APOSTA = {"captada"}
 
 # todo rotulo que abre secao no corpo, para saber onde a anterior termina
 ROTULOS_TWO_PAGER = [
     "Problema", "Solução", "Peças", "Fora", "Resultado", "Medida", "Apetite", "Aberto",
-    "Produtos documentais", "Regras", "Sai quando", "Quebra",
+    "Produtos documentais", "Regras", "Sai quando", "Quebra", "Serve a", "Uso",
     # do esqueleto velho e dos rotulos de fonte: nao sao do molde, mas fecham a secao anterior
     "Continuidade", "Base", "Fontes",
 ]
 ROTULOS_DE_FONTE = ["Base", "Fontes"]
 
 # Retrocompatibilidade de import: quem lia as listas por nivel
-CAMPOS_FEATURE = [f"{r}:" for r in ROTULOS_APOSTA + ROTULOS_FORMA]
-CAMPOS_EPIC = list(CAMPOS_FEATURE)
+CAMPOS_FEATURE = [f"{r}:" for r in ROTULOS_APOSTA_FEATURE + ROTULOS_FORMA_FEATURE]
+CAMPOS_EPIC = [f"{r}:" for r in ROTULOS_APOSTA + ROTULOS_FORMA]
 
 # limiares da lista (L1 e L2; palpite que firma com a F1, #3407) e do L3
 LIMITE_PARAGRAFO = 400
@@ -290,8 +298,9 @@ def ler_comentarios(texto: str) -> list[Comentario]:
 
 class Contexto:
     def __init__(self, alvo: str, texto: str, comentarios: list[Comentario], estado: str,
-                 *, fecha_existe: bool):
+                 *, fecha_existe: bool, nivel: str = "epic"):
         self.alvo = alvo
+        self.nivel = nivel
         self.texto = texto
         self.secoes = secoes_do_corpo(texto)
         self.comentarios = comentarios
@@ -320,9 +329,10 @@ def _itens(secao: Secao | None) -> list[tuple[int, str]]:
 # --- T · two-pager ---------------------------------------------------------
 
 def _t1(ctx: Contexto) -> list[Achado]:
-    exigidos = list(ROTULOS_APOSTA)
+    feature = ctx.nivel == "feature"
+    exigidos = list(ROTULOS_APOSTA_FEATURE if feature else ROTULOS_APOSTA)
     if ctx.estado not in ESTADOS_SO_APOSTA:
-        exigidos += ROTULOS_FORMA
+        exigidos += ROTULOS_FORMA_FEATURE if feature else ROTULOS_FORMA
     achados = [(ctx.alvo, 1, f"rótulo «{r}:» ausente") for r in exigidos if r not in ctx.secoes]
     achados += [(ctx.alvo, ctx.secoes[r].linha, f"rótulo de fontes «{r}:» no corpo")
                 for r in ROTULOS_DE_FONTE if r in ctx.secoes]
@@ -726,6 +736,36 @@ def _conferir_tasks_no_lugar_da_lista(nome_alvo: str, conteudo: str, estado: str
     return achados
 
 
+# Regra 18 da feature 4314: o comentário tipado que não é insumo leva o argumento num parágrafo só,
+# e o texto longo vai a um insumo. Aviso no buraco, nunca bloqueante.
+_LINHAS_FIXAS_DO_BURACO = ("Caso:", "Remendo:")
+CURA_BURACO = "o argumento do buraco cabe num parágrafo; o texto longo vai a um comentário insumo"
+
+
+def _conferir_paragrafos_do_buraco(nome_alvo: str, comentarios: list[Comentario]) -> list[Apontamento]:
+    achados = []
+    for c in comentarios:
+        if c.delivery() or c.tipo() != "buraco":
+            continue
+        paragrafos: list[int] = []  # linha em que cada parágrafo do argumento começa
+        dentro = False
+        for i, t in enumerate(c.linhas, 1):
+            st = t.strip().lstrip("*")
+            fixa = i == c.nao_vazias()[0][0] or st.startswith(_LINHAS_FIXAS_DO_BURACO) or RE_FECHO.match(t.strip())
+            if not st or fixa:
+                dentro = False
+                continue
+            if not dentro:
+                paragrafos.append(i)
+                dentro = True
+        if len(paragrafos) > 1:
+            achados.append(Apontamento(
+                f"{nome_alvo} comentário #{c.id}", paragrafos[1],
+                f"buraco com {len(paragrafos)} parágrafos de argumento", CURA_BURACO,
+                severidade="aviso", id="CARD_BURACO_PARAGRAFOS"))
+    return achados
+
+
 def _conferir_adr(nome_alvo: str, conteudo: str, nivel: str) -> list[Apontamento]:
     campos_esperados = CAMPOS_TASK if nivel == "task" else CAMPOS_STORY
     apontamentos: list[Apontamento] = []
@@ -745,16 +785,20 @@ def _conferir_adr(nome_alvo: str, conteudo: str, nivel: str) -> list[Apontamento
 
 
 def conferir_discovery(nome_alvo: str, conteudo: str, comentarios: list[Comentario], lista: dict,
-                       estado: str = "", *, fecha_existe: bool = False) -> tuple[list[Apontamento], list[str]]:
+                       estado: str = "", *, fecha_existe: bool = False,
+                       nivel: str = "epic") -> tuple[list[Apontamento], list[str]]:
     """Roda os detectores literais da lista sobre o two-pager e os comentarios.
-    Devolve (apontamentos, avisos); avisos e o que a lista pede e o lint nao mede."""
-    ctx = Contexto(nome_alvo, conteudo, comentarios, estado, fecha_existe=fecha_existe)
+    Devolve (apontamentos, avisos); avisos e o que a lista pede e o lint nao mede.
+    `nivel` é `epic` ou `feature`: a feature segue os rótulos da classe (story #4317)."""
+    ctx = Contexto(nome_alvo, conteudo, comentarios, estado, fecha_existe=fecha_existe, nivel=nivel)
     apontamentos: list[Apontamento] = []
     avisos: list[str] = []
     for item in lista.get("itens", []):
         cid = (item.get("id") or "").strip()
         detector_lista = _sem_acento((item.get("detector") or "").strip().lower())
         if not cid or detector_lista == "leitura" or cid in FORA_DO_CARD:
+            continue
+        if nivel == "feature" and cid in DETECTORES_DO_CORPO_DE_ANTES:
             continue
         detector = DETECTORES.get(cid)
         if detector is None:
@@ -829,11 +873,15 @@ def verificar_card_regua(
     if fecha_existe is None:
         fecha_existe = fecha_no_ar()
     estado = ler_cabecalho(conteudo).get("estado", "")
+    lidos = ler_comentarios(comentarios or "")
     apontamentos, avisos = conferir_discovery(
-        nome_alvo, conteudo, ler_comentarios(comentarios or ""), lista, estado, fecha_existe=fecha_existe)
-    if nivel == "feature":
+        nome_alvo, conteudo, lidos, lista, estado, fecha_existe=fecha_existe, nivel=nivel)
+    # a feature não traz mais Regras no corpo (vão ao inventário, story #4317): o aviso do R ou do D
+    # de origem fica só para o épico que ainda as tenha
+    if nivel != "feature":
         titulo += _conferir_regras(nome_alvo, conteudo)
-    return titulo + apontamentos, CHAVE_DISCOVERY, lista.get("rev"), avisos
+    return (titulo + apontamentos + _conferir_paragrafos_do_buraco(nome_alvo, lidos),
+            CHAVE_DISCOVERY, lista.get("rev"), avisos)
 
 
 def verificar_card(

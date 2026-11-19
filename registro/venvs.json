@@ -1,7 +1,7 @@
 {
   "_leia": "Venvs de producao construidos pelo `release promover` a partir do lockfile da rev (desenho #3010 §2): /opt/platafirma/venv/<nome>-<hash-do-lock>, atalhado em /opt/platafirma/current/venv/<nome>. `familia` e a familia cuja promocao constroi o venv; `lock` e o caminho do lock dentro da arvore dela (uv.lock -> uv sync --frozen; package-lock.json -> ambiente node, npm ci --ignore-scripts, sem script de pacote (card #3386; stack node com 'teste' entra no portao da familia e exige lista de portao na subarvore, <sub>/VERDES, card #3426; sem 'teste' declara so 'testes'); outro nome -> requirements). Venv sem lock declarado aqui nao e construido: fica pendente, nunca inventado.",
   "_harness_acervo": "harness (shebang /opt/platafirma/current/venv/harness/bin/python dos verbos Python e ExecStart das units do harness) e acervo (bin/_acervo/bancada e bin/_acervo/objeto) tem projeto proprio em venvs/<nome>/pyproject.toml, dependencias medidas por import e pinadas em venvs/<nome>/uv.lock.",
-  "_teste": "campo opcional 'teste' (card #3150 passo 2): subarvore desta familia onde a suite que usa este venv mora. Lido por bin/_release/registro.py, usado por 'teste rodar <repo> <alvo> --chave <nome>' e por hooks/pre-push para reaproveitar o MESMO venv que release constroi (nunca outro construtor). Chave sem 'teste' declarado: teste rodar --chave roda da raiz do clone; nao e erro, e subarvore nao declarada. arq:0116 §4-§6: uma subarvore, uma chave (harness-controle e acervo deixaram de apontar controle); toda chave com 'teste' tem lista de portao na propria subarvore (<sub>/tests/VERDES ou <sub>/VERDES), e o portao do repositorio roda todas.",
+  "_teste": "campo opcional 'teste' (card #3150 passo 2): subarvore desta familia onde a suite que usa este venv mora. Lido por bin/_release/registro.py, usado por 'teste rodar <repo> <alvo> --chave <nome>' e por hooks/pre-push para reaproveitar o MESMO venv que release constroi (nunca outro construtor). Chave sem 'teste' declarado: teste rodar --chave roda da raiz do clone; nao e erro, e subarvore nao declarada. Uma subarvore, uma chave (harness-controle e acervo deixaram de apontar controle); toda chave com 'teste' tem lista de portao na propria subarvore (<sub>/tests/VERDES ou <sub>/VERDES), e o portao do repositorio roda todas.",
   "_testes": "campo opcional 'testes' (card #3316): lista de globs, relativos a subarvore de teste (sem ela, a raiz do clone), que e a suite da stack em 'teste rodar <stack>' sem alvo. Stack sem 'teste' nem 'testes' numa familia de mais de uma stack sai 5 sem alvo: rodar da raiz coletaria os testes das outras stacks.",
   "_conferir_no_ar": "campo opcional de repositorio (card #3535): true faz o `release promover` conferir no ar, com volta automatica no vermelho, a familia que nao traz bin/_release/conferir propria, usando o conferir da release do harness. Opt-in: so entra familia cuja `release conferir servico <stack>` sai conforme hoje.",
   "repositorios": {
@@ -51,7 +51,7 @@
   },
   "analise": {
     "familia": "platafirma-harness",
-    "lock": "testes/analise/uv.lock",
+    "lock": "venvs/harness/uv.lock",
     "teste": "testes/analise"
   },
   "acervo": {
@@ -65,24 +65,24 @@
     "lock": "recuperacao/uv.lock",
     "teste": "recuperacao"
   },
-  "politica-acesso": {
-    "familia": "platafirma-harness",
-    "lock": "politica-acesso/uv.lock",
-    "teste": "politica-acesso"
-  },
   "claude-code": {
     "familia": "platafirma-harness",
     "lock": "venvs/claude-code/package-lock.json"
-  },
-  "ops": {
-    "familia": "platafirma-harness",
-    "lock": "ops-server/requirements.txt",
-    "teste": "ops-server"
   },
   "borda": {
     "familia": "platafirma-harness",
     "lock": "borda/requirements.txt",
     "teste": "borda"
+  },
+  "diagrama": {
+    "familia": "platafirma-harness",
+    "venv": "rag",
+    "teste": "lib/diagrama"
+  },
+  "suite": {
+    "familia": "platafirma-harness",
+    "lock": "venvs/harness/uv.lock",
+    "teste": "lib/suite/testes"
   },
   "rag": {
     "familia": "platafirma-conhecimento",
@@ -104,7 +104,7 @@
     "familia": "platafirma-conhecimento",
     "lock": "casa-site/tests/package-lock.json"
   },
-  "_registros": "suite do registro de familias de evento do core (arq:0131 §5, #3878): le so a arvore da rev (as migracoes de deploy/*/init e registros/familias/), com pytest e PyYAML. Primeira suite python do platafirma-core; os testes bash de deploy/tests seguem fora do portao, como antes.",
+  "_registros": "suite do registro de familias de evento do core (#3878): le so a arvore da rev (as migracoes de deploy/*/init e registros/familias/), com pytest e PyYAML. Primeira suite python do platafirma-core; os testes bash de deploy/tests seguem fora do portao, como antes.",
   "core": {
     "familia": "platafirma-core",
     "lock": "deploy/requirements-teste.txt",
@@ -115,16 +115,14 @@
     "lock": "registros/requirements-teste.txt",
     "teste": "registros"
   },
-  "_eventos": "suite do servico do banco de eventos de plataforma (spec banco-de-eventos-de-plataforma, #3918): rota de escrita e API de leitura em platafirma-core deploy/eventos/servico. Testa regra pura e rotas HTTP contra repositorio de memoria, sem banco nem rede; o SQL se prova por ensaio no banco, fora do portao. O lock inclui o requirements.txt de producao.",
+  "_eventos": "suite do servico do banco de eventos de plataforma (corpo do épico 4274, #3918): rota de escrita e API de leitura em platafirma-core deploy/eventos/servico. Testa regra pura e rotas HTTP contra repositorio de memoria, sem banco nem rede; o SQL se prova por ensaio no banco, fora do portao. O lock inclui o requirements.txt de producao.",
   "eventos": {
     "familia": "platafirma-core",
     "lock": "deploy/eventos/servico/requirements-teste.txt",
     "teste": "deploy/eventos/servico"
   },
-  "_porta": "porta nova no core (card #4340, F4073): promovida: false ate o dia da troca, quando platafirma-core passa a servir porta/requirements.txt.",
   "porta": {
     "familia": "platafirma-core",
-    "promovida": false,
     "lock": "porta/requirements.txt",
     "teste": "porta"
   },
@@ -177,12 +175,40 @@
     "lock": "outros_repos/conhecimento/rag/uv.lock",
     "teste": "outros_repos/conhecimento/rag"
   },
+  "espelho-conversor": {
+    "familia": "platafirma-casa-espelho",
+    "esteira": "codigo",
+    "promovida": false,
+    "lock": "outros_repos/conhecimento/rag/uv.lock",
+    "teste": "outros_repos/conhecimento/conversor/tests"
+  },
   "espelho-diagrama": {
     "familia": "platafirma-casa-espelho",
     "esteira": "codigo",
     "promovida": false,
     "venv": "rag",
     "teste": "outros_repos/harness/lib/diagrama"
+  },
+  "espelho-analise": {
+    "familia": "platafirma-casa-espelho",
+    "esteira": "codigo",
+    "promovida": false,
+    "lock": "outros_repos/harness/venvs/harness/uv.lock",
+    "teste": "outros_repos/harness/testes/analise"
+  },
+  "espelho-controle": {
+    "familia": "platafirma-casa-espelho",
+    "esteira": "codigo",
+    "promovida": false,
+    "lock": "outros_repos/harness/venvs/harness/uv.lock",
+    "teste": "outros_repos/harness/controle"
+  },
+  "espelho-postura": {
+    "familia": "platafirma-casa-espelho",
+    "esteira": "codigo",
+    "promovida": false,
+    "lock": "outros_repos/harness/venvs/harness/uv.lock",
+    "teste": "outros_repos/harness/lib/postura"
   },
   "espelho-suite": {
     "familia": "platafirma-casa-espelho",
@@ -211,6 +237,13 @@
     "promovida": false,
     "lock": "outros_repos/posto/ferramentas/vault-ontologia/uv.lock",
     "teste": "outros_repos/posto/harnesses/tests"
+  },
+  "espelho-posto": {
+    "familia": "platafirma-casa-espelho",
+    "esteira": "codigo",
+    "promovida": false,
+    "lock": "outros_repos/posto/ferramentas/vault-ontologia/uv.lock",
+    "teste": "outros_repos/posto/testes"
   },
   "espelho-posto-gerador": {
     "familia": "platafirma-casa-espelho",

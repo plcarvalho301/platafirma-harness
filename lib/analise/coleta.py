@@ -2,27 +2,14 @@
 
 from __future__ import annotations
 
-import os
-import shutil
-from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .publicacao import Catalogo
+import shutil
 
 from .publicacao import Catalogo
-
-
-def _forcar_escrita(func: Callable[[str], object], path: str, exc: BaseException) -> None:
-    if not isinstance(exc, PermissionError):
-        raise exc
-    alvo = Path(path)
-    if alvo.parent.exists() and not alvo.parent.is_symlink():
-        os.chmod(alvo.parent, 0o700)
-    if alvo.exists() and not alvo.is_symlink():
-        os.chmod(alvo, 0o700)
-    func(path)
 
 
 def coletar(catalogo: Catalogo, temporarios: Path) -> int:
@@ -47,10 +34,7 @@ def coletar(catalogo: Catalogo, temporarios: Path) -> int:
     ):
         p = temporarios / ordem / "analise" / id
         if id not in ativos and p.is_dir() and not p.is_symlink():
-            try:
-                shutil.rmtree(p, onexc=_forcar_escrita)
-            except PermissionError:
-                pass
+            shutil.rmtree(p)
     return total
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bin/_release/migrar — corpo do ato `migrar` do verbo `release` (card #3260, arq:0076)
+# bin/_release/migrar — corpo do ato `migrar` do verbo `release` (card #3260)
 # Contencao ESTRUTURAL (porta so-verbo, #3019):
 #   1. ALVO por allowlist de contêiner (BANCOS, abaixo). Fora da lista: exit 4.
 #   2. O SQL vem por STDIN, sempre. Nao ha ato que receba caminho de arquivo do host.
@@ -57,7 +57,7 @@ uso:
 bancos declarados: ${!BANCOS[*]}
 o SQL entra SEMPRE por stdin — a tool passa \`stdin=<corpo da migracao>\`.
 
-exit: tabela arq:0110 §4 — 0 ok · 1 negativo de mérito (psql abortou: a migracao em si
+exit: 0 ok · 1 negativo de mérito (psql abortou: a migracao em si
       falhou, transacao nao commitou) · 2 uso · 3 dependência ausente (docker, contêiner
       fora do ar, PF_SUJEITO) · 4 política/trava (banco fora da allowlist) · 5 indeterminável
 EOF

@@ -43,7 +43,7 @@ def test_stack_nao_promovida_fica_fora_do_levantamento(tmp_path):
                      encoding="utf-8")
     assert sorted(dep._stacks(str(falso))) == ["b", "c"]
     reais = dep._stacks(str(REPO_ROOT / "registro" / "venvs.json"))
-    assert "vault-ontologia" not in reais and "harness" in reais
+    assert "posto-gerador" not in reais and "harness" in reais
 
 
 GHSA = {

@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[2]
-ESCOPO = ("bin", "lib", "ops-server")
+ESCOPO = ("bin", "lib")
 DONO = "lib/oplog.py"
 
 PADRAO = re.compile(
@@ -103,10 +103,9 @@ def test_excecao_declarada_ainda_casa():
 
 def test_escritores_e_leitores_chamam_o_modulo():
     chamam = {
-        "ops-server/server.py": "oplog.emitir(",
         "bin/motor": "oplog.emitir(",
         "bin/metrica": "oplog.ler(",
-        "bin/descansar": "oplog.ler(",
+        "lib/descanso/coletas.py": "oplog.ler(",
         "bin/_acesso/desligar.py": "oplog.ler(",
         "bin/repo": "python3 -m oplog ler",
     }

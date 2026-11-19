@@ -372,14 +372,10 @@ def parser() -> Parser:
     p.add_argument("--tabela")
     p.add_argument("--linhas", default="1-50")
     p.add_argument("--projecao")
-    p.add_argument("--arquivo")
-    p.add_argument("--formato")
-    p.add_argument("--modo", default="substituir")
     return p
 
 
 AJUDA = """analise bancos [<banco>]        todo Postgres da casa; com <banco>, as tabelas e colunas que a receita declara
-analise carregar <tabela> --arquivo <caminho> [--corte <instante>] [--formato csv|tsv|json|jsonl] [--modo substituir|acrescentar]
 analise preparar <receita> [--corte <instante>] [--param nome=valor]
 analise montar <receita> --base <base_id> [--param nome=valor]
 analise refazer <execucao_id> [--reler]
@@ -434,7 +430,6 @@ def main(argv: list[str] | None = None) -> int:
         exigir(
             ato
             in {
-                "carregar",
                 "preparar",
                 "montar",
                 "refazer",
@@ -453,24 +448,6 @@ def main(argv: list[str] | None = None) -> int:
 
             motor.autorizar(motor.sujeito, "listar", "analise:bancos/" + (a.alvo or "*"))
             rc, bloco = listar_bancos(a.alvo)
-        elif ato == "carregar":
-            from .pouso import carregar as carregar_pouso, normalizar_tabela
-
-            exigir(a.alvo and a.arquivo, "tabela-ou-arquivo-ausente")
-            tabela = normalizar_tabela(a.alvo)
-            motor.autorizar(motor.sujeito, "carregar", "analise:pouso/" + tabela)
-            cat = motor.catalogo()
-            try:
-                bloco = carregar_pouso(
-                    cat.conn,
-                    motor.sujeito,
-                    a.alvo,
-                    Path(a.arquivo),
-                    {"formato": a.formato, "corte": a.corte, "modo": a.modo},
-                )
-                rc = 0
-            finally:
-                cat.conn.close()
         elif ato in {"preparar", "montar"}:
             exigir(a.alvo, "receita-ausente")
             rc, bloco = motor.rodar(

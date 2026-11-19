@@ -1,4 +1,4 @@
-"""Contrato de `seg isolacao medir` (ops-server/medir_isolacao.py).
+"""Contrato de `seg isolacao medir` (lib/isolacao/medir_isolacao.py).
 
 Prova o veredito, nao o host: o host entra por um executor falso que le o argv que a
 producao monta (`exec_conta.argv_sob_conta`). O que se garante aqui:
@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 REPO_RAIZ = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_RAIZ / "ops-server"))
+sys.path.insert(0, str(REPO_RAIZ / "lib" / "isolacao"))
 
 import medir_isolacao as mi  # noqa: E402
 

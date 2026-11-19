@@ -145,6 +145,14 @@ class _Mem:
     def get(self, k):
         return self.d.get(k)
 
+    def hgetall(self, k):
+        raw = self.d.get(k)
+        if not raw:
+            return {}
+        if isinstance(raw, dict):
+            return raw
+        return {str(ck): str(cv) for ck, cv in json.loads(raw).items() if cv is not None}
+
 
 def _exec_env(monkeypatch, env_extra, mem=(None, "sem"), resto=("run", "nome", "true")):
     for v in (*IDENT, *AGENTE):

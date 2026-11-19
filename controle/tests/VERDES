@@ -1,11 +1,9 @@
 # BASELINE VERDE da suite de contrato — o que o `hooks/pre-push` julga.
 tests/test_motor_dt537_538_552_553.py | regressivo #2856
-tests/test_dt140_364.py | bin/release bin/_release/lotes.py bin/sessao bin/expediente
 tests/test_dt_397_499.py | bin/infra bin/_acervo/casa
 tests/test_dt_500.py | lib/oplog_extracao.py
 tests/test_dt_502.py | bin/acervo
 tests/test_dt_202_tipos_fila.py | lib/fila_tipos.py bin/_fila/streams.py controle/harness_controle/web.py
-tests/test_lint_arranque_dt527.py | bin/_lint/arranque.py bin/lint abertura/dono.md
 #
 # O que cada arquivo desta lista prova está em
 # `referencias/classes/teste.md` no `platafirma-casa-espelho`.
@@ -25,10 +23,10 @@ tests/test_lint_arranque_dt527.py | bin/_lint/arranque.py bin/lint abertura/dono
 #
 # Os cinco de fora nao sao divida silenciosa: estao nomeados aqui, com o que ha de
 # errado em cada um. Ficar de fora do gate e estado declarado, nao esquecimento.
-tests/test_contrato_conferir.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** bin/_minuta/** abertura/** skills/**
+tests/test_contrato_conferir.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** bin/_minuta/** skills/**
 tests/test_contrato_infra.py | bin/conferir bin/infra bin/_infra/** bin/_release/**
-tests/test_contrato_monta_sessao.py | bin/acervo bin/_acervo/** bin/chat bin/mesa bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/sessao bin/_sessao/** bin/sinal bin/teste bin/_release/** abertura/** registro/** recuperacao/** politica-acesso/**
-tests/test_conferir_veredito.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/fila bin/_fila/** bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste bin/_lint/** ops-server/** recuperacao/** registro/**
+tests/test_contrato_monta_sessao.py | bin/acervo bin/_acervo/** bin/chat bin/mesa bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/sessao bin/_sessao/** bin/sinal bin/teste bin/_release/** registro/** recuperacao/** politica-acesso/**
+tests/test_conferir_veredito.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/fila bin/_fila/** bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste bin/_lint/** recuperacao/** registro/**
 tests/test_conferir_diagrama_kroki.py | bin/conferir bin/_release/**
 tests/test_contrato_diagrama.py | bin/acervo bin/_acervo/** bin/conferir bin/curar bin/lint bin/_lint/** bin/motor bin/_motor/** bin/repo bin/sessao bin/_sessao/** bin/situacao bin/_minuta/**
 tests/test_conferir_jobs.py | bin/agente bin/bot bin/conferir bin/sinal bin/tarefas bin/_release/** deploy-harness/**
@@ -46,8 +44,6 @@ tests/test_contrato_repo_pr_fechar.py | bin/acervo bin/_acervo/** bin/chat bin/c
 tests/test_contrato_repo_hooks.py | bin/repo lib/raizes.sh
 tests/test_contrato_repo_sanear_remotos.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** bin/_minuta/**
 tests/test_contrato_teste_bloco.py | bin/teste bin/_release/registro.py
-tests/test_lote_encadeado.py | ops-server/**
-tests/test_mesa.py | bin/acervo bin/_acervo/** bin/bot bin/chat bin/conferir bin/curar bin/ingerir bin/mesa bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste bin/_metrica/** abertura/** lib/caderno_poda.py
 tests/test_registro_chave.py | bin/teste bin/_release/** registro/venvs.json
 # Card #3535: o promover so liga a conferencia no ar com o conferir da release em quem declara `conferir_no_ar`.
 tests/test_registro_conferir_no_ar.py | bin/release registro/venvs.json
@@ -70,18 +66,17 @@ tests/test_contrato_teste.py | bin/teste bin/_release/registro.py
 tests/test_contrato_lint.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/lint bin/_lint/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/situacao bin/tarefas bin/teste
 tests/test_casa_arvore.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/curar bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste bin/_expediente/** bin/_minuta/**
 tests/test_isolamento.py | lib/teste_isolado.py
-tests/test_contrato_acesso.py | bin/acesso bin/_acesso/** bin/agente bin/chat bin/conferir bin/encerrar bin/mesa bin/monta-sessao bin/persona bin/_persona/** bin/seg bin/sessao bin/_sessao/** bin/_release/** abertura/** politica-acesso/** sessao/**
+tests/test_contrato_acesso.py | bin/acesso bin/_acesso/** bin/agente bin/chat bin/conferir bin/encerrar bin/mesa bin/monta-sessao bin/persona bin/_persona/** bin/seg bin/sessao bin/_sessao/** bin/_release/** politica-acesso/** sessao/**
 tests/test_contrato_acervo.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste bin/_lint/**
 tests/test_contrato_organizacao.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/lint bin/_lint/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/situacao bin/tarefas bin/teste docs/**
 tests/test_contrato_release_migrar.py | bin/release bin/_release/**
 tests/test_release_migrar_cortar.py | bin/_release/migrar
-tests/test_contrato_metrica_abertura.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/chat bin/conferir bin/fila bin/_fila/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/sinal bin/tarefas bin/teste abertura/**
-tests/test_contrato_metrica_abertura_tudo.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/chat bin/conferir bin/fila bin/_fila/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/sinal bin/tarefas bin/teste abertura/** controle/tests/test_contrato_metrica_abertura.py
-tests/test_sessao_reidratar.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/mesa bin/monta-sessao bin/persona bin/_persona/** bin/repo bin/seg bin/sessao bin/_sessao/** chat/** sessao/**
+tests/test_contrato_metrica_abertura.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/chat bin/conferir bin/fila bin/_fila/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/sinal bin/tarefas bin/teste
+tests/test_contrato_metrica_abertura_tudo.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/chat bin/conferir bin/fila bin/_fila/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/sinal bin/tarefas bin/teste controle/tests/test_contrato_metrica_abertura.py
 tests/test_contrato_acervo_topologia.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/situacao bin/tarefas bin/teste
-tests/test_contrato_seg_segredo.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/situacao bin/tarefas bin/teste ops-server/**
-tests/test_contrato_seg_isolacao.py | ops-server/**
-tests/test_publicar_abertura_rotas.py | bin/acervo bin/_acervo/** bin/publicar-abertura abertura/** recuperacao/**
+tests/test_contrato_seg_segredo.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/situacao bin/tarefas bin/teste
+tests/test_contrato_seg_isolacao.py | lib/isolacao/** bin/seg
+tests/test_publicar_abertura_rotas.py | bin/acervo bin/_acervo/** bin/publicar-abertura recuperacao/**
 tests/test_contrato_lint_acervo.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/lint bin/_lint/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste
 tests/test_contrato_casa_direto_em_main.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/fila bin/_fila/** bin/infra bin/_infra/** bin/mesa bin/minuta bin/_minuta/** bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** registro/**
 tests/test_contrato_canonico.py | bin/repo bin/sessao bin/_sessao/** bin/_lint/** bin/_minuta/** docs/**
@@ -131,7 +126,7 @@ tests/test_par_consulta.py | bin/motor bin/_motor/**
 # Incidente #3364: o cabecalho de bin/motor se registra no golden record e a descricao servida e a ajuda ensinam a necessidade em frase.
 tests/test_motor_registro.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/sinal bin/tarefas bin/teste bin/_expediente/** bin/_minuta/**
 # Card #3368: `motor rag eleger` conta sobre o log de perguntas e mede a eleicao de chapeu via rota /eleger.
-tests/test_motor_eleger.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/lint bin/_lint/** bin/mesa bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/seg bin/sessao bin/_sessao/** bin/sinal bin/_expediente/** bin/_release/** abertura/** sessao/**
+tests/test_motor_eleger.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/lint bin/_lint/** bin/mesa bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/seg bin/sessao bin/_sessao/** bin/sinal bin/_expediente/** bin/_release/** sessao/**
 tests/test_stack_mascara_segredos.py | bin/_release/**
 tests/test_pesquisar_consultar_palavras.py | bin/pesquisar pesquisa/**
 tests/test_pesquisar_dt_93_546_661_662_663.py | bin/pesquisar pesquisa/**
@@ -174,7 +169,6 @@ tests/test_contrato_infra_remover.py | bin/infra bin/_infra/** lib/raizes.sh
 tests/test_render_procedencia.py | regressivo #3267
 # Medido em 04/10/2026 (incidente #3273): `persona salvar` confere na bancada de card, sem commit e sem push, e
 # nunca escreve no clone-cache destacado (9 passam; com o bin/persona antigo, os 9 ficam vermelhos).
-tests/test_contrato_persona_bancada.py | bin/persona bin/_persona/** bin/teste bin/_release/** abertura/** registro/**
 # Medido em 04/10/2026 (incidente #3274): guarda de SIGPIPE da suite (19 passam; sem o fixture do conftest o 2o falha e
 # o 3o mata o pytest com exit 141, o sintoma que deixou o pre-push "nao medido"; com os scripts de bin/_acervo/*
 # no estado antigo, os 16 casos de import e de guard ficam vermelhos).
@@ -194,12 +188,12 @@ tests/test_limpeza_logs_portao.py | bin/infra bin/_infra/** bin/_release/**
 # Card #3344: lib/oplog escreve e le o bruto da porta (chave, versao, aparo, classe) e ninguem mais o abre.
 tests/test_oplog.py | bin/acervo bin/_acervo/** bin/lint bin/_lint/** bin/motor bin/_motor/** bin/repo bin/sessao bin/_sessao/** bin/sinal bin/tarefas bin/teste bin/_expediente/** bin/_minuta/** bin/_release/**
 # Card #3345: o contrato de campo por tipo de linha (o que falta reprova) e o que o log nao grava.
-tests/test_oplog_contrato.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/bot bin/chat bin/conferir bin/curar bin/descansar bin/encerrar bin/expediente bin/_expediente/** bin/fila bin/_fila/** bin/infra bin/_infra/** bin/ingerir bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/pesquisar bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste abertura/** agente/** mcp/** sessao/**
-tests/test_oplog_unico_leitor.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/chat bin/conferir bin/descansar bin/encerrar bin/fila bin/_fila/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste bin/_expediente/** ops-server/**
+tests/test_oplog_contrato.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/bot bin/chat bin/conferir bin/curar bin/descansar bin/encerrar bin/expediente bin/_expediente/** bin/fila bin/_fila/** bin/infra bin/_infra/** bin/ingerir bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/pesquisar bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste agente/** mcp/** sessao/**
+tests/test_oplog_unico_leitor.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/chat bin/conferir bin/descansar bin/encerrar bin/fila bin/_fila/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste bin/_expediente/**
 # Card #3356: o hook do Code guarda o turno e a mensagem do dono (0600 em pasta 0700) e os leva a porta; sem eles nada muda.
 tests/test_hook_turno.py | bin/acervo bin/_acervo/** bin/agente bin/encerrar bin/expediente bin/_expediente/** bin/pesquisar bin/seg bin/sessao bin/_sessao/** agente/** hooks/**
 # Card #3353: o extrator lê o bruto do dia e o leva à partição `log` (D5.1 a D5.4) com a linhagem; só `lib/oplog` abre o arquivo.
-tests/test_extrator_log.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/bot bin/chat bin/conferir bin/curar bin/descansar bin/encerrar bin/expediente bin/_expediente/** bin/fila bin/_fila/** bin/infra bin/_infra/** bin/ingerir bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/pesquisar bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste abertura/** agente/** mcp/** sessao/** controle/tests/test_oplog_unico_leitor.py
+tests/test_extrator_log.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/bot bin/chat bin/conferir bin/curar bin/descansar bin/encerrar bin/expediente bin/_expediente/** bin/fila bin/_fila/** bin/infra bin/_infra/** bin/ingerir bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/pesquisar bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste agente/** mcp/** sessao/** controle/tests/test_oplog_unico_leitor.py
 # Card #3353: `metrica dia` e `verbos` leem a partição (fonte, versão, cobertura; dia sem passada é ausente, nunca zero), `turnos` lê D5.8, o resto segue no bruto.
 tests/test_metrica_fonte.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/bot bin/chat bin/conferir bin/curar bin/encerrar bin/expediente bin/_expediente/** bin/infra bin/_infra/** bin/ingerir bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/pesquisar bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste agente/** mcp/** sessao/** controle/tests/test_oplog_unico_leitor.py
 # Card #3354: o corte do bruto em 35 dias com portao (linhas, eventos na particao, sha256), so pelo timer; incidente sem duplicar; `--seco`; o teto do bruto.
@@ -215,36 +209,18 @@ tests/test_portao_cobre_testes.py | testes/**
 testes/test_agente.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/bot bin/chat bin/conferir bin/curar bin/descansar bin/encerrar bin/expediente bin/_expediente/** bin/fila bin/_fila/** bin/infra bin/_infra/** bin/ingerir bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/pesquisar bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste agente/** sessao/**
 testes/test_federacao.py | lib/federacao.py bin/agente registro/federacao-anthropic.json
 testes/test_agente_registro.py | bin/acervo bin/_acervo/** bin/agente bin/encerrar bin/expediente bin/_expediente/** bin/pesquisar bin/seg bin/sessao bin/_sessao/** agente/**
-testes/test_registro_porta.py | lib/registro_porta.py registro/porta.yaml ops-server/server.py bin/_acervo/** bin/*
-testes/test_bot_registro.py | bin/acervo bin/_acervo/** bin/agente bin/bot bin/chat bin/conferir bin/encerrar bin/expediente bin/_expediente/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/motor bin/_motor/** bin/pesquisar bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/tarefas bin/teste bin/_minuta/** abertura/** agente/**
+testes/test_registro_porta.py | lib/registro_porta.py registro/porta.yaml bin/_acervo/** bin/*
+testes/test_bot_registro.py | bin/acervo bin/_acervo/** bin/agente bin/bot bin/chat bin/conferir bin/encerrar bin/expediente bin/_expediente/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/motor bin/_motor/** bin/pesquisar bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/tarefas bin/teste bin/_minuta/** agente/**
 testes/test_deploy_seg_suites.py | bin/_release/** bin/release bin/seg bin/teste bin/lint bin/_lint/** bin/repo bin/monta-sessao bin/metrica bin/sessao bin/expediente deploy-harness/** testes/test_*.sh
-testes/test_descansar_fecho.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/chat bin/conferir bin/descansar bin/encerrar bin/fila bin/_fila/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/motor bin/_motor/** bin/persona bin/_persona/** bin/seg bin/sinal bin/situacao bin/tarefas bin/teste
-testes/test_descansar_poda.py | bin/descansar bin/mesa lib/caderno_poda.py
-testes/test_descansar_puxado.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/bot bin/chat bin/conferir bin/curar bin/descansar bin/encerrar bin/expediente bin/_expediente/** bin/fila bin/_fila/** bin/infra bin/_infra/** bin/ingerir bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/pesquisar bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/sinal bin/situacao bin/tarefas bin/teste agente/**
-testes/test_descansar_mesa.py | bin/descansar bin/encerrar bin/mesa
-testes/test_descansar_dts_885_889_896.py | bin/descansar bin/encerrar lib/descanso/**
-testes/test_descansar_enxuto.py | bin/descansar bin/encerrar
-testes/test_descansar_ritual.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/chat bin/conferir bin/descansar bin/encerrar bin/fila bin/_fila/** bin/infra bin/_infra/** bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/motor bin/_motor/** bin/persona bin/_persona/** bin/seg bin/sinal bin/situacao bin/tarefas bin/teste
-testes/test_expediente.py | bin/expediente bin/_expediente/**
-testes/test_expediente_montagem.py | bin/expediente bin/_expediente/** testes/test_expediente.py
-testes/test_expediente_cadeirinha.py | bin/expediente bin/_expediente/** testes/test_expediente.py
-testes/test_expediente_chapeu.py | bin/expediente bin/_expediente/** testes/test_expediente.py testes/test_expediente_cadeirinha.py
 testes/test_bateria_chave.py | avaliacao/bateria.jsonl
-testes/test_gerar_rotas_chapeu.py | abertura/**
+testes/test_gerar_rotas_chapeu.py | bin/publicar-abertura
 testes/test_ingerir_casamento_3307.py | bin/ingerir bin/motor bin/_motor/**
 testes/test_ingerir_ficha_3306.py | bin/ingerir bin/motor bin/_motor/**
-testes/test_mesa_caderno_secao.py | bin/acervo bin/_acervo/** bin/chat bin/mesa abertura/**
 testes/test_metrica_comportamento.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/bot bin/chat bin/conferir bin/curar bin/infra bin/_infra/** bin/ingerir bin/lint bin/_lint/** bin/mesa bin/metrica bin/_metrica/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/situacao bin/tarefas bin/teste
-testes/test_ops_server_compila.py | ops-server/**
-testes/test_persona_card_3105.py | bin/conferir bin/persona bin/_persona/** bin/_release/**
-testes/test_persona_foto.py | bin/acervo bin/_acervo/** bin/persona bin/_persona/** bin/publicar-abertura abertura/**
-testes/test_poda_cru.py | bin/acervo bin/_acervo/** bin/lint bin/_lint/** bin/motor bin/_motor/** bin/sessao bin/_sessao/** bin/sinal bin/tarefas bin/_expediente/** bin/_release/** ops-server/**
-testes/test_release_suites.py | bin/release bin/_release/** testes/test_release.sh testes/test_release_lote2.sh testes/test_release_lote3.sh
+testes/test_poda_cru.py | bin/acervo bin/_acervo/** bin/lint bin/_lint/** bin/motor bin/_motor/** bin/sessao bin/_sessao/** bin/sinal bin/tarefas bin/_expediente/** bin/_release/**
+testes/test_release_suites.py | bin/release bin/_release/** testes/test_release.sh testes/test_release_lote2.sh
 testes/test_release_uv_porta_suite.py | bin/release lib/venv.sh testes/test_release_uv_porta.sh
-testes/test_sessao_agente.py | bin/acervo bin/_acervo/** bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/expediente bin/_expediente/** bin/mesa bin/monta-sessao bin/persona bin/_persona/** bin/pesquisar bin/seg bin/sessao bin/_sessao/** agente/** sessao/**
-testes/test_sessao_limpar.py | bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/mesa bin/monta-sessao bin/persona bin/_persona/** bin/seg bin/sessao bin/_sessao/** sessao/**
 testes/test_sessao_limpar_rascunho.py | bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/mesa bin/monta-sessao bin/persona bin/_persona/** bin/seg bin/sessao bin/_sessao/** sessao/**
-testes/test_sessao_origem.py | bin/acesso bin/_acesso/** bin/agente bin/chat bin/encerrar bin/mesa bin/monta-sessao bin/persona bin/_persona/** bin/seg bin/sessao bin/_sessao/** sessao/**
 testes/test_tarefas_moldes.py | bin/tarefas
 testes/test_tarefas_task.py | bin/tarefas
 testes/test_tarefas_task_chave.py | bin/tarefas
@@ -260,7 +236,6 @@ testes/test_tarefas_editar_trecho.py | bin/tarefas
 testes/test_tarefas_carteira.py | bin/tarefas
 testes/test_release_telas.py | bin/release bin/_release/** registro/**
 testes/test_conferir_mecanismo.py | bin/release bin/_release/** bin/preferencia bin/tarefas
-testes/test_conferir_cabecalho_mapa.py | bin/release bin/_release/**
 # Medido em 14/10/2026 (card #3552): admitir com raio, esperado e stack e a stack contra o catálogo, listar
 # por stack, vencidos, matar nos três jeitos e na porta antiga, e indicadores (50 passam; contra o bin/tarefas
 # de antes, 31 ficam vermelhos), contra um rastreador e um catálogo de mentira.
@@ -269,7 +244,7 @@ testes/test_tarefas_dt.py | bin/tarefas
 # estados de quadro no verbo, e `mover --decisao` na aposta, contra um rastreador de mentira.
 testes/test_tarefas_quadros.py | bin/tarefas
 testes/test_lint_card.py | bin/lint bin/_lint/card.py bin/_lint/lista.py bin/_lint/resultado.py
-testes/test_venvs_cobrem_imports.py | bin/_sessao/** mcp/** ops-server/** registro/**
+testes/test_venvs_cobrem_imports.py | bin/_sessao/** mcp/** registro/**
 tests/test_claude_cli.py | lib/claude_cli.py bin/agente bin/motor registro/** venvs/claude-code/**
 # Card #3435 (R27 da spec taipa): a escrita da tela do harness so passa com a origem exata da lista da instancia;
 # as seis tentativas de fora recebem 403 sem chegar ao verbo, o ato pela tela passa, lista vazia fecha.
@@ -347,8 +322,6 @@ tests/test_espera_regras.py | bin/tarefas
 testes/test_tarefas_dt_278_449.py | bin/tarefas
 # DTs 634, 375 e 523: volta automática não mexe na abertura, fallback de stacks e declaração de banco fora da casa.
 tests/test_dts_634_375_523.py | bin/release bin/_release/** lib/analise/receita.py registro/bancos.json
-# DT 369: `agente/abertura-ver.py` alinhado ao expediente sem roteador e com rotinas.
-testes/test_abertura_ver.py | agente/abertura-ver.py abertura/**
 # DTs 271, 323, 404 e 592: KiB e aviso em `dt listar --curto` e parser da tabela Unidades em `mover em-execucao`.
 tests/test_tarefas_dts_271_323_404_592.py | bin/tarefas
 # DTs 37, 203, 285, 414 e 530: `repo commitar` restaura stage em falha do gate, `repo estado` inclui caminho absoluto, `repo descartar` e `repo abrir` recolocando direto-em-main.
@@ -377,3 +350,22 @@ testes/test_motor_sombra.py | bin/_motor/sombra.py
 tests/test_tarefas_ponteiro_estagio.py | bin/tarefas
 # DTs 791, 801, 836 e 837 (#2856 linhas 791, 801, 836 e 837): abrir mantem executor ja definido, abrir --da-producao --slug sem card, commitar com multiplos -m e procurar padrao com hifen apos <repo>.
 tests/test_repo_dts_791_801_836_837.py | bin/repo
+# Card #4348 (casa nova / outros_repos/harness): novas suítes do harness e verbos.
+tests/test_tarefas_inventario.py | bin/tarefas
+tests/test_verbo_metrica.py | bin/metrica bin/_metrica/** lib/tokenizador.py
+testes/test_abertura.py | bin/monta-sessao lib/abertura/** registro/porta.yaml
+testes/test_abertura_porta_cli.py | bin/monta-sessao lib/abertura/**
+testes/test_acervo_verbo.py | bin/acervo bin/_acervo/**
+testes/test_curar_verbo.py | bin/curar bin/_acervo/**
+testes/test_descanso.py | bin/descansar lib/descanso/**
+testes/test_despejo_caderno.py | bin/mesa lib/descanso/despejo_caderno.py
+testes/test_escopo_chapeu_verbos.py | bin/repo bin/tarefas lib/postura/**
+testes/test_leitura_escrita.py | bin/ler_arquivo bin/write_file lib/leitura/**
+testes/test_lousa.py | bin/mesa lib/postura/**
+testes/test_metrica_transporte.py | bin/metrica bin/_metrica/**
+testes/test_oplog_interrompido.py | lib/oplog.py
+testes/test_poda.py | lib/poda/**
+testes/test_porta_sessao_hook.py | agente/hooks/porta-sessao.py
+testes/test_release_reinicia_porta.py | bin/release bin/_release/**
+testes/test_sessao_hash.py | lib/abertura/**
+testes/test_suite_portao.py | lib/suite/**

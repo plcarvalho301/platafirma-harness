@@ -2087,12 +2087,16 @@ cmd_abrir() {
     [ -z "$slug" ] \
       || morre "repositório de deliberação ($nome): --slug nao se aplica — commit direto em main (arq:0083); rode sem --slug: repo abrir $nome" 2
     abrir_direto_em_main "$nome" "$cadeira" "$card" "$sem_mover"
-    return $?
+    local _rc_dm=$?
+    [ "$_rc_dm" -eq 0 ] && grava_escopo_sessao "$nome" "$card"
+    return $_rc_dm
   fi
 
   if [ "$da_producao" -eq 1 ]; then
     abrir_da_producao "$nome" "$cadeira" "$card" "$slug" "$assumir"
-    return $?
+    local _rc_dp=$?
+    [ "$_rc_dp" -eq 0 ] && grava_escopo_sessao "$nome" "$card"
+    return $_rc_dp
   fi
 
   local clone_raiz="$BANCADA/$nome"
@@ -2230,6 +2234,7 @@ cmd_abrir() {
       "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)" "$("$GIT" -C "$wt_dir" rev-list --count HEAD..origin/main 2>/dev/null || echo '?')"
     [[ "$card_num" =~ ^[0-9]+$ ]] && move_card "$card_num" "$nome" "$cadeira" "$sem_mover"
     guarda_sessao_viva "$wt_dir" "$assumir"
+    grava_escopo_sessao "$nome" "$card"
     printf 'próximo: teste rodar %s <alvo>\n' "$nome"
   else
     if [ -n "$slug" ]; then
@@ -2243,14 +2248,35 @@ cmd_abrir() {
       fi
       printf 'bancada aberta: %s (ramo %s @ %s, atras de origin/main: 0, arvore limpa)\n' "$wt_dir" "$ramo_slug" "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)"
       guarda_sessao_viva "$wt_dir" "$assumir"
+      grava_escopo_sessao "$nome" ""
       printf 'próximo: teste rodar %s <alvo>\n' "$nome"
       return 0
     fi
     "$GIT" -C "$clone_raiz" worktree add -q --detach "$wt_dir" "$base_ref" >/dev/null 2>&1 || morre "git worktree add falhou" 3
     printf 'bancada aberta: %s (HEAD destacado em %s, atras de origin/main: 0, arvore limpa)\n' "$wt_dir" "$base_ref"
     guarda_sessao_viva "$wt_dir" "$assumir"
+    grava_escopo_sessao "$nome" ""
     printf 'próximo: teste rodar %s <alvo>\n' "$nome"
   fi
+}
+
+# grava_escopo_sessao <repo> [card] -- story #4342: o próprio ato grava escopo_atual na lousa
+# por HSET atômico, preservando o efeito mesmo quando o abrir termina depois do prazo da porta.
+grava_escopo_sessao() {
+  [ -n "${PF_SESSAO:-}" ] || return 0
+  local repo_nome="$1" card_raw="${2:-}"
+  local card_num="${card_raw###}" escopo=""
+  if [[ "$card_num" =~ ^[0-9]+$ ]]; then
+    escopo="card:${card_num}"
+  elif [ -n "$repo_nome" ]; then
+    escopo="repo:${repo_nome}"
+  else
+    return 0
+  fi
+  local lousa_py
+  lousa_py="$(dirname "$(readlink -f "$0")")/../lib/postura/lousa.py"
+  [ -f "$lousa_py" ] || return 0
+  python3 "$lousa_py" gravar-sessao escopo_atual "$escopo" >/dev/null 2>&1 || true
 }
 
 # grava_executor <n> <tarefas_bin> -- card #3526 (R20 da spec tarefas): quem abre a bancada de uma

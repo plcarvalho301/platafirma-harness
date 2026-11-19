@@ -1,0 +1,48 @@
+{
+  "tipo": "modulo",
+  "titulo": "Decomposição do pacote harness",
+  "faixas": [
+    {
+      "id": "lib"
+    }
+  ],
+  "zonas": [
+    {
+      "id": "harness_lib",
+      "nome": "Harness Lib",
+      "categoria": "host",
+      "faixa": "lib"
+    }
+  ],
+  "elementos": [
+    {
+      "id": "mod_diagrama",
+      "titulo": "diagrama",
+      "subtitulo": "peça de desenho",
+      "categoria": "servico",
+      "tipo": "componente",
+      "zona": "harness_lib",
+      "faixa": "lib",
+      "coluna": 1,
+      "ordem": 1
+    },
+    {
+      "id": "mod_agente",
+      "titulo": "agente",
+      "subtitulo": "executor de especialista",
+      "categoria": "servico",
+      "tipo": "componente",
+      "zona": "harness_lib",
+      "faixa": "lib",
+      "coluna": 1,
+      "ordem": 2
+    }
+  ],
+  "arestas": [
+    {
+      "de": "mod_diagrama",
+      "para": "mod_agente",
+      "rotulo": "chama juiz"
+    }
+  ]
+}

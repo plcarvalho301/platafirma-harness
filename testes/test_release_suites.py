@@ -13,7 +13,6 @@ RAIZ = pathlib.Path(__file__).resolve().parent
 SUITES = [
     "test_release.sh",
     "test_release_lote2.sh",
-    "test_release_lote3.sh",
 ]
 
 

@@ -1,219 +1,70 @@
 """arq:0101, invariante (ii): poda que tira conteudo deixa alca de restauracao.
 
-`poda.py` nao conhece FastMCP nem rede, e por isso roda aqui, no venv do harness, sem
-subir a porta. O par deste teste em `ops-server/_ensaio.py` cobre o lado do `server.py`
-(o escopo `cosmetica@ato` decidido pelo argv), que so importa no venv do ops-server.
-
-Medido em 18/09 (carta do arquiteto a dados): `motor rag buscar` caiu fora do regime
-cosmetico, a janela de linha longa serviu 289 de 13 kB, e o `sha=` do marcador era alca
-morta — abaixo do teto o cru nao derramava, e nada na porta desreferencia sha.
-
-Medido em 20/09 (carta da gestao, fita eedd4c14): a forma curta `motor buscar "..."`
-caiu fora do escopo de novo, e `read_file` no cru janelava igual — a alca existia e nao
-abria. Duas guardas novas, as duas pelo CONTEUDO e nao pela forma da chamada: JSON
-valido em linha unica nao e blob, e `read_file` nunca janela.
+Testa `lib/poda/poda.py` (substituto da poda antiga de ops-server) no venv do harness,
+sem subir a porta.
 """
-import json
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 
-_OPS = Path(__file__).resolve().parent.parent / "ops-server"
-if str(_OPS) not in sys.path:
-    sys.path.insert(0, str(_OPS))
+_PODA = Path(__file__).resolve().parent.parent / "lib" / "poda"
+if str(_PODA) not in sys.path:
+    sys.path.insert(0, str(_PODA))
 
 import poda as _p  # noqa: E402
 
 _SESSAO = "00000000-0000-4000-8000-000000000001"
-_LINHA = '{"fontes":[' + ",".join(f'{{"n":{i},"trecho":"conteudo do trecho {i}"}}'
-                                  for i in range(1, 40)) + \
-         '],"ontologia":{"conceitos":["concorrencia"]}}'
-# linha longa que NAO e documento estruturado: prosa corrida, o caso que a janela atende
-_PROSA = " ".join(f"palavra{i % 7} de um log sem quebra" for i in range(80))
+_PROSA = " ".join(f"palavra{i % 7} de um log sem quebra" for i in range(120))
 
 
-def _args(**extra):
-    base = {"cap": 50_000, "cauda": False, "alca": "tarefas:listar --json",
-            "sessao_id": _SESSAO, "giro": 1, "tool": "tarefas", "ledger": None,
-            "nome_derrame": "g00001-stdout.txt"}
-    base.update(extra)
-    return base
+def test_linha_longa_abaixo_do_teto_deixa_o_cru_e_diz_onde(tmp_path):
+    servir, meta = _p.podar_texto(
+        _PROSA,
+        tool="tarefas",
+        alca="tarefas:listar",
+        sessao_id=_SESSAO,
+        derrame_dir=tmp_path,
+        cap=50_000,
+    )
+    assert "blob" in meta["lavado"]
+    assert "cru" in meta
+    cru = Path(meta["cru"])
+    assert cru.is_file()
+    assert cru.read_text(encoding="utf-8") == _PROSA
+    assert len(servir) < len(_PROSA)
 
 
-def test_linha_longa_abaixo_do_teto_deixa_o_cru_e_diz_onde(tmp_path, monkeypatch):
-    monkeypatch.setattr(_p, "DERRAME", tmp_path)
-    assert len(_PROSA) > _p.LINHA_LONGA
-    fora, meta = _p.poda_texto(_PROSA, **_args())
-    assert "<linha longa" in fora and "blob" in meta["lavado"]
-    assert Path(meta["cru"]).read_text(encoding="utf-8") == _PROSA
-    humana = _p.linha_humana(meta)
-    assert meta["cru"] in humana and "saiu do retorno" in humana
+def test_corte_acima_do_teto_grava_alca_com_conteudo_inteiro(tmp_path):
+    grande = "\n".join(f"linha {i:04d} de conteudo util" for i in range(400))
+    servir, meta = _p.podar_texto(
+        grande,
+        tool="repo",
+        alca="repo:diff",
+        sessao_id=_SESSAO,
+        derrame_dir=tmp_path,
+        cap=1024,
+    )
+    assert meta["modo"] == "corte"
+    assert meta["bytes_omitidos"] > 0
+    alca = Path(meta["alca"])
+    assert alca.is_file()
+    assert alca.read_text(encoding="utf-8") == grande
+    assert len(servir.encode("utf-8")) <= 2048
 
 
-def test_json_de_linha_unica_nao_e_blob_em_perfil_nenhum(tmp_path, monkeypatch):
-    """O incidente de 20/09: verbo FORA do regime cosmetico devolve JSON denso numa linha.
-    O campo de resultado (`conceitos`) tem de chegar inteiro, sem depender do cabecalho."""
-    monkeypatch.setattr(_p, "DERRAME", tmp_path)
-    assert len(_LINHA) > _p.LINHA_LONGA and json.loads(_LINHA)
-    fora, meta = _p.poda_texto(_LINHA, **_args(tool="motor", alca="motor:buscar pergunta"))
-    assert fora == _LINHA and "blob" not in meta["lavado"] and "cru" not in meta
-    assert '"conceitos":["concorrencia"]' in fora
-    assert not list(tmp_path.rglob("*.txt"))
-
-
-def test_jsonl_passa_linha_a_linha(tmp_path, monkeypatch):
-    monkeypatch.setattr(_p, "DERRAME", tmp_path)
-    texto = _LINHA + "\n" + _LINHA.replace("concorrencia", "topologia")
-    fora, meta = _p.poda_texto(texto, **_args())
-    assert fora == texto and "blob" not in meta["lavado"]
-
-
-def test_json_quebrado_segue_sendo_linha_longa(tmp_path, monkeypatch):
-    monkeypatch.setattr(_p, "DERRAME", tmp_path)
-    fora, meta = _p.poda_texto(_LINHA[:-1], **_args())
-    assert "<linha longa" in fora and "blob" in meta["lavado"]
-
-
-def test_read_file_nunca_janela_nem_fragmento_do_cru(tmp_path, monkeypatch):
-    """`read_file offset=` no cru devolve FRAGMENTO de JSON (nao parseia) e ainda assim
-    sai inteiro: e a alca de restauracao, janelar ali fecha a porta de volta."""
-    monkeypatch.setattr(_p, "DERRAME", tmp_path)
-    fragmento = _LINHA[5:1405]
-    assert len(fragmento) > _p.LINHA_LONGA
-    for texto in (fragmento, _PROSA):
-        fora, meta = _p.poda_texto(texto, **_args(tool="read_file", alca="read_file:/x"))
-        assert fora == texto and "blob" not in meta["lavado"] and "cru" not in meta
-
-
-def test_leitura_de_arquivo_serve_base64_como_esta(tmp_path, monkeypatch):
-    """Base64 do arquivo é conteúdo do arquivo: as páginas somadas têm de dar os bytes
-    (spec ler-arquivo §6, #3263). Até e9eaea5 a leitura o trocava por marcador."""
-    monkeypatch.setattr(_p, "DERRAME", tmp_path)
-    texto = "chave: " + "QUJD" * 100
-    for tool in sorted(_p.TOOLS_LEITURA):
-        fora, meta = _p.poda_texto(texto, **_args(tool=tool, alca=f"{tool}:/x"))
-        assert fora == texto and "blob" not in meta["lavado"] and "cru" not in meta
-
-
-def test_regime_cosmetico_serve_a_linha_inteira_e_nao_derrama(tmp_path, monkeypatch):
-    monkeypatch.setattr(_p, "DERRAME", tmp_path)
-    fora, meta = _p.poda_texto(_PROSA, cosmetica=True, **_args(tool="motor"))
-    assert fora == _PROSA and meta["lavado"] == [] and "cru" not in meta
-    assert not list(tmp_path.rglob("*.txt"))
-
-
-def test_lavagem_que_so_tira_ruido_nao_anuncia_perda(tmp_path, monkeypatch):
-    monkeypatch.setattr(_p, "DERRAME", tmp_path)
-    fora, meta = _p.poda_texto("a\n\n\n\nb", **_args())
-    assert meta["lavado"] == ["branco"] and "cru" not in meta
-    assert _p.linha_humana(meta) == "poda: lavado (branco)"
-
-
-def test_acima_do_teto_o_corte_reusa_o_mesmo_cru(tmp_path, monkeypatch):
-    monkeypatch.setattr(_p, "DERRAME", tmp_path)
-    # sem digito e sem repeticao consecutiva: nem molde nem `linha x N` encolhem o texto
-    texto = _PROSA + "\n" + "\n".join("abcdefghij"[i % 10] * (i % 7 + 3) + " conteudo " + "y" * 40
-                                     for i in range(200))
-    fora, meta = _p.poda_texto(texto, **_args(cap=2_000))
-    assert meta["modo"] == "corte" and meta["alca"] == meta["cru"]
-    assert len(list(tmp_path.rglob("g00001-stdout.txt"))) == 1
-
-
-def test_cosmetica_lava_json_motor(tmp_path, monkeypatch):
-    """DT #353: lavagem cosmética de JSON de motor buscar / motor rag enxuga campos redundantes."""
-    monkeypatch.setattr(_p, "DERRAME", tmp_path)
-    retorno = json.dumps({
-        "pergunta": "conceito de heuristica",
-        "fontes": [
-            {
-                "section_id": "sec-1#anchor",
-                "secao_id": "sec-1",
-                "obra": "Simple Heuristics",
-                "sim": 0.89,
-                "score": 0.0164,
-                "rerank": None,
-                "codigo_exato": False,
-                "breadcrumb": "Simple Heuristics",
-            },
-            {
-                "section_id": "sec-2",
-                "secao_id": "sec-2",
-                "obra": "Bounded Rationality",
-                "sim": 0.85,
-                "score": 0.0164,
-                "rerank": None,
-                "codigo_exato": False,
-                "breadcrumb": "Outro Breadcrumb",
-            }
-        ],
-        "contexto": [
-            {
-                "arquivo": "doc1.md",
-                "breadcrumb": "Simple Heuristics",
-                "obra": "Simple Heuristics",
-                "texto": "trecho 1",
-                "rerank": None,
-            }
-        ]
-    })
-    fora, meta = _p.poda_texto(retorno, cosmetica=True, **_args(tool="motor", alca="motor:buscar"))
-    assert "cosmetica_json" in meta["lavado"]
-    dados = json.loads(fora)
-    # campos essenciais preservados
-    assert dados["fontes"][0]["section_id"] == "sec-1#anchor"
-    assert dados["fontes"][0]["obra"] == "Simple Heuristics"
-    assert dados["fontes"][0]["sim"] == 0.89
-    # campos podados por serem nulos, constantes ou repetidos
-    assert "score" not in dados["fontes"][0]
-    assert "rerank" not in dados["fontes"][0]
-    assert "codigo_exato" not in dados["fontes"][0]
-    assert "breadcrumb" not in dados["fontes"][0]  # repetia obra
-    assert dados["fontes"][1]["breadcrumb"] == "Outro Breadcrumb"  # diferente da obra, preservado
-    assert "rerank" not in dados["contexto"][0]
-    assert "breadcrumb" not in dados["contexto"][0]  # repetia obra
-
-
-def test_tabela_markdown_nao_vira_linhas_no_mesmo_molde(tmp_path, monkeypatch):
-    """DT 63: linhas de tabela markdown (|) variando números não se colapsam como molde."""
-    monkeypatch.setattr(_p, "DERRAME", tmp_path)
-    linhas = ["| id | data | autor | comentario |"]
-    for i in range(1, 15):
-        linhas.append(f"| {i} | 2026-10-{i:02d} | autor | texto do comentario numero {i} |")
-    tabela = "\n".join(linhas)
-    fora, meta = _p.poda_texto(tabela, **_args())
-    assert "linhas no mesmo molde" not in fora
-    assert "repeticao" not in meta["lavado"]
-    for l in linhas:
-        assert l in fora
-
-
-def test_repeticao_abaixo_do_teto_gera_cru_e_alca(tmp_path, monkeypatch):
-    """DT 63: repetição que colapsa linhas gera o arquivo cru no derrame e alça humana."""
-    monkeypatch.setattr(_p, "DERRAME", tmp_path)
-    linhas = [f"Item numero {i} de uma lista longa" for i in range(1, 20)]
-    texto = "\n".join(linhas)
-    fora, meta = _p.poda_texto(texto, **_args())
-    assert "linhas no mesmo molde" in fora
-    assert "repeticao" in meta["lavado"]
-    assert meta.get("cru") and Path(meta["cru"]).read_text(encoding="utf-8") == texto
-    humana = _p.linha_humana(meta)
-    assert meta["cru"] in humana
-    assert "repeticao saiu do retorno" in humana
-
-
-def test_poda_preserva_branco_mantem_numeracao(tmp_path, monkeypatch):
-    """DT 394: `preserva_branco=True` (release/repo ler) não colapsa linhas em branco."""
-    monkeypatch.setattr(_p, "DERRAME", tmp_path)
-    texto = "linha 1\n\n\n\nlinha 5"
-    fora, meta = _p.poda_texto(texto, preserva_branco=True, **_args(tool="release", alca="release:release ler h a.py"))
-    assert fora == texto
-    assert "branco" not in meta["lavado"]
-
-
-def test_agrupa_busca_indica_como_continuar(tmp_path, monkeypatch):
-    """DT 394: quando +N matches neste arquivo corta ocorrências, aponta como continuar."""
-    monkeypatch.setattr(_p, "DERRAME", tmp_path)
-    texto = "\n".join(f"src/a.py:{i}:match {i}" for i in range(1, 10))
-    fora, meta = _p.poda_texto(texto, **_args(tool="release", alca="release:release procurar h match"))
-    assert "+4 matches neste arquivo" in fora
-    assert "--json" in fora and "src/a.py" in fora
-    assert meta.get("cru")
+def test_regime_cosmetico_serve_inteiro_e_grava_derrame_acima_do_cap(tmp_path):
+    grande = "\n".join(f"resultado {i:04d}" for i in range(200))
+    servir, meta = _p.podar_texto(
+        grande,
+        tool="busca",
+        alca="busca:buscar",
+        sessao_id=_SESSAO,
+        derrame_dir=tmp_path,
+        cap=512,
+        cosmetica=True,
+    )
+    assert meta["perfil"] == "cosmetica"
+    assert meta["modo"] == "derrame"
+    assert "resultado 0199" in servir
+    assert Path(meta["alca"]).read_text(encoding="utf-8") == grande

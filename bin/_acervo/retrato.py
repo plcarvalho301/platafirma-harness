@@ -1,15 +1,15 @@
-"""retrato — `acervo listar biblioteca obra --situacao --retrato [--guardar] [--json]` (#3324, arq:0121 §9).
+"""retrato — `acervo listar biblioteca obra --situacao --retrato [--guardar] [--json]` (#3324).
 
 O retrato da biblioteca, com data: cabeçalho fixo (base, data, geração servindo, papéis da base), uma
 linha por obra do catálogo e um rodapé que soma cada entidade por estado e fecha com `count(*)` de
 `acervo.obra`. A linha que não fecha sai escrita (§9.3). Não é verbo novo: é o ato `--situacao`
-(arq:0110 um verbo por folha; arq:0106).
+(um verbo por folha).
 
 De onde vem cada coluna:
   - catálogo (rag): obra, situação, exposição, impressão servindo (id, método, qualidade do espelho);
-  - motor, pela projeção REST /acervo/obras (arq:0121 §12.2): geração, embedder e dimensão do índice
+  - motor, pela projeção REST /acervo/obras: geração, embedder e dimensão do índice
     servindo e a cobertura (trechos com vetor sobre trechos elegíveis). O harness não lê motor.vetor
-    linha a linha (arq:0045, Morada): a contagem é agregada no banco pela projeção;
+    linha a linha: a contagem é agregada no banco pela projeção;
   - seção marcada (#3908): a impressão servindo tem faixa em acervo.secao_faixa que abre cabeçalho do texto ou
     entrada do sumário do arquivo; a obra viva só com o preâmbulo, ou sem faixa, entra na lista de seção
     não marcada do rodapé (contagem e ids);
@@ -20,7 +20,7 @@ De onde vem cada coluna:
 rag, que tem cópia (§9.1); nunca em arquivo. Se o retrato e o `--situacao` de hoje divergirem numa obra, não
 guarda: é defeito do servido ou da consulta, e decide-se com o caso na mão.
 
-Não corrige nada que o retrato mostre: a cura é do estágio dono (arq:0121 §11.2).
+Não corrige nada que o retrato mostre: a cura é do estágio dono.
 """
 import datetime
 import json
@@ -36,7 +36,7 @@ import predicados_acervo as pa
 BASE = "biblioteca"
 PG, DB, USR = "rag-extractor-pg", "rag_extractor", "rag"
 
-# arq:0121 §1.3 e §2.1; guia ciclo-de-vida-do-dado-do-acervo §2: os papéis valem para a base inteira
+# Os papéis valem para a base inteira
 PAPEIS = {
     "proprietario": "dono, sem delegação",
     "curador": "dados",
@@ -158,7 +158,7 @@ def _soma(linhas, chave):
 
 
 def montar_rodape(linhas, total, resumo):
-    """A soma por estado de cada entidade e o fecho com `count(*)` de acervo.obra (arq:0121 §9.3)."""
+    """A soma por estado de cada entidade e o fecho com `count(*)` de acervo.obra."""
     somas = {
         "obra": _soma(linhas, lambda linha: linha["situacao"]),
         "exposicao": _soma(linhas, lambda linha: linha["exposicao"]),

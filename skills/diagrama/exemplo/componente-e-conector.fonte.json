@@ -1,0 +1,53 @@
+{
+  "tipo": "componente-e-conector",
+  "titulo": "Comunicação entre componentes de ingestão",
+  "faixas": [
+    {
+      "id": "ingestao"
+    }
+  ],
+  "elementos": [
+    {
+      "id": "crawler",
+      "titulo": "Ingestor",
+      "subtitulo": "Python worker",
+      "categoria": "servico",
+      "tipo": "servico",
+      "faixa": "ingestao",
+      "coluna": 1,
+      "ordem": 1
+    },
+    {
+      "id": "fila_msg",
+      "titulo": "Fila de Ingestão",
+      "subtitulo": "Valkey Streams",
+      "categoria": "mensageria",
+      "tipo": "mensagem",
+      "faixa": "ingestao",
+      "coluna": 1,
+      "ordem": 2
+    },
+    {
+      "id": "acervo_core",
+      "titulo": "Motor do Acervo",
+      "subtitulo": "FastAPI + RAG",
+      "categoria": "conhecimento",
+      "tipo": "servico",
+      "faixa": "ingestao",
+      "coluna": 1,
+      "ordem": 3
+    }
+  ],
+  "arestas": [
+    {
+      "de": "crawler",
+      "para": "fila_msg",
+      "rotulo": "publica evento"
+    },
+    {
+      "de": "fila_msg",
+      "para": "acervo_core",
+      "rotulo": "entrega lote"
+    }
+  ]
+}

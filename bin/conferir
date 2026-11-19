@@ -1,130 +1,20 @@
-#!/usr/bin/env bash
-# conferir — confere o SERVIDO contra o DECLARADO
-# capacidade: operacao
+#!/opt/platafirma/current/venv/harness/bin/python
+# conferir — confere o que está gravado ou no ar contra o declarado
+# capacidade: conhecimento
 # dono: ti
-# classe: C
-# use para: SEMPRE ANTES de agir sobre algo da casa e ANTES de dizer que algo dela não existe, «existe o verbo X?», «tem skill de Y?»; a régua da bancada; «o que está no ar bate com o declarado?», em serviço, verbo, skill, jobs, acervo e release
-# atos: existe (leitura, operacao), repo (leitura, operacao), commit (leitura, operacao), arranque (leitura, operacao), verbo (leitura, operacao), servico (leitura, operacao), skill (leitura, operacao), procedencia (leitura, operacao), superficie (leitura, operacao), front (leitura, operacao), ferramental (leitura, operacao), pdp (leitura, operacao), alcance (leitura, operacao), vocabulario (leitura, operacao), diagrama (leitura, operacao), card (leitura, operacao), jobs (leitura, operacao), unit (leitura, operacao), acervo (leitura, operacao), dependencias (leitura, operacao), sessao-orfa (leitura, operacao), copia (leitura, operacao), ontologia (leitura, operacao)
-# forma: predicado
-# le: existe=repo,rastreador,arquivo-local
-# le: repo=repo
-# le: commit=rastreador,arquivo-local
-# le: arranque=repo
-# le: verbo=release,acervo.casa
-# le: servico=release
-# le: skill=release
-# le: procedencia=release
-# le: superficie=release
-# le: front=release
-# le: ferramental=release,acervo.casa
-# le: pdp=release
-# le: alcance=release
-# le: vocabulario=repo,arquivo-local
-# le: diagrama=arquivo-local
-# le: card=release,rastreador
-# le: jobs=release,arquivo-local
-# le: unit=release,arquivo-local
-# le: acervo=release,acervo.casa
-# le: dependencias=release
-# le: sessao-orfa=release,acervo.casa
-# le: copia=release,acervo.casa
-# le: ontologia=release
-# escreve: existe=nada
-# escreve: repo=nada
-# escreve: commit=nada
-# escreve: arranque=nada
-# escreve: verbo=nada
-# escreve: servico=nada
-# escreve: skill=nada
-# escreve: procedencia=nada
-# escreve: superficie=nada
-# escreve: front=nada
-# escreve: ferramental=nada
-# escreve: pdp=nada
-# escreve: alcance=nada
-# escreve: vocabulario=nada
-# escreve: diagrama=nada
-# escreve: card=nada
-# escreve: jobs=nada
-# escreve: unit=nada
-# escreve: acervo=nada
-# escreve: dependencias=nada
-# escreve: sessao-orfa=nada
-# escreve: copia=nada
-# escreve: ontologia=nada
-# ambiente: PF_BIN_DIR[=$HOME/AI/bin] porta · PF_SESSAO porta (lida, chave do aviso de deprecado)
-# depende: python3 · release (classes do servido) · a implementacao em bin/_release/conferir/conferir.py
-# substitui: nada (despachante)
-# conforme: parcial
-#
-# Despachante (arq:0110 §1): a implementacao e sub-ato e mora em bin/_release/conferir/conferir.py,
-# fora do PATH. As classes do SERVIDO sao de `release conferir` (spec_release §4); aqui respondem
-# com aviso de deprecado, uma vez por sessao (arq:0110 §11), e delegam. As classes de BANCADA
-# respondem com aviso de deprecado apontando `lint <classe>` (spec_lint / arq:0110 §11).
-set -euo pipefail
+# classe: B
+# use para: conferir se o catálogo e as fichas de um estrato, de uma capacidade ou de uma classe seguem o framework e passam no raciocinador, «confere a ontologia de postura»
+# atos: ontologia (leitura, ontologia)
+# forma: texto
+# escreve: nada
+# consome: o serviço da Olaria (HTTP, stack olaria)
+# ambiente: OLARIA_URL (o endereço do serviço) e OLARIA_CHAVE (a chave de serviço, lida do cofre pela peça, nunca impressa), PF_CADEIRA (a cadeira que chama, injetada pela porta), OLARIA_PRAZO_S[=110], OLARIA_CHAMADA_S e OLARIA_REENVIO_S[=5] (opcionais, só para prova)
+# depende: nada além do python
+import sys
+from pathlib import Path
 
-BIN_DIR="${PF_BIN_DIR:-$HOME/AI/bin}"
-AQUI="$(dirname "$(readlink -f "$0")")"
-IMPL="$AQUI/_release/conferir/conferir.py"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-CLASSES_SERVIDO="verbo cabecalho servico skill procedencia superficie ferramental front pdp alcance card unit jobs acervo dependencias sessao-orfa copia ontologia"
-CLASSES_BANCADA="existe repo commit arranque vocabulario diagrama"
+from _conferir.__main__ import main  # noqa: E402
 
-avisa_deprecado() {  # uma vez por sessao (arq:0110 §11)
-  local classe="$1"
-  local sess_dir="/tmp/platafirma-avisos-${PF_SESSAO:-${USER:-default}}"
-  mkdir -p "$sess_dir" 2>/dev/null || true
-  local trava="$sess_dir/conferir_$classe"
-  if [ ! -f "$trava" ]; then
-    touch "$trava" 2>/dev/null || true
-    printf 'conferir: `conferir %s` esta deprecado; a forma conforme e `release conferir %s` (spec_release §8).\n' "$classe" "$classe" >&2
-  fi
-}
-
-avisa_deprecado_bancada() {  # uma vez por sessao (arq:0110 §11)
-  local classe="$1"
-  local sess_dir="/tmp/platafirma-avisos-${PF_SESSAO:-${USER:-default}}"
-  mkdir -p "$sess_dir" 2>/dev/null || true
-  local trava="$sess_dir/conferir_bancada_$classe"
-  if [ ! -f "$trava" ]; then
-    touch "$trava" 2>/dev/null || true
-    printf 'conferir: `conferir %s` esta deprecado; a forma conforme e `lint %s` (spec_lint / arq:0110 §11).\n' "$classe" "$classe" >&2
-  fi
-}
-
-[ -x "$IMPL" ] || [ -f "$IMPL" ] || {
-  printf 'conferir: dependencia ausente: implementacao %s nao encontrada\n' "$IMPL" >&2
-  exit 3
-}
-
-if [ $# -eq 0 ]; then
-  exec python3 "$IMPL"
-fi
-
-classe="$1"
-case "$classe" in
-  --ajuda|--help|-h) exec python3 "$IMPL" --ajuda ;;
-esac
-
-for c in $CLASSES_SERVIDO; do
-  if [ "$classe" = "$c" ]; then
-    avisa_deprecado "$classe"
-    if command -v release >/dev/null 2>&1; then
-      exec release conferir "$@"
-    elif [ -x "$BIN_DIR/release" ]; then
-      exec "$BIN_DIR/release" conferir "$@"
-    fi
-    exec python3 "$IMPL" "$@"
-  fi
-done
-
-for c in $CLASSES_BANCADA; do
-  if [ "$classe" = "$c" ]; then
-    if [ "$classe" != "existe" ]; then
-      avisa_deprecado_bancada "$classe"
-    fi
-    exec python3 "$IMPL" "$@"
-  fi
-done
-
-exec python3 "$IMPL" "$@"
+sys.exit(main(prog="conferir"))

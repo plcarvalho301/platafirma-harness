@@ -5,68 +5,230 @@
 # registrado e executável por `tools/call` e pelo malote, e fora da lista. Decisão do dono no comentário 4402
 # do card 4117. As tools de transporte (as que não são verbo de bin/) entram em `transporte`.
 #
-# Quem lê este arquivo:
-#   - a porta (ops-server/server.py), uma vez na subida, da release no ar: o conjunto executável, o binário de
-#     cada verbo em bin/, as ocultas, as retidas e as tools de transporte. Do acervo vem só a descrição.
-#   - `acervo listar casa ferramental --tools` e `--oficio`: projetam o que o modelo vê, juntando este registro
-#     e a coluna descricao do golden record acervo.ferramental.
-#   - `acervo registrar --todos`: registra os verbos daqui.
-#   - a borda das telas (borda/borda.py), que lê as faces (BORDA_REGISTRO aponta este arquivo na release).
+# Decisão #5322 do dono na F4073 (18/11/2026): a descrição (toolstring) mora neste manifesto e é relida pela
+# porta por mtime sem reinício, sem consulta ao acervo da casa velha.
 #
 # Atributos de verbo, todos opcionais:
-#   nome     slug opcional. O nome exibido da tool na lista da sessão; o resto da porta segue usando o slug.
-#   modelo   booleano, padrão true. false = o modelo não vê a tool na lista.
-#   retido   booleano, padrão false. true = só serve com PF_TOOLS_LEVA2=1 (era o marcador `leva:2`).
-#   faces    mapa face -> {instancia, sem_instancia}. A borda chama o verbo na face. `instancia` entra antes do
-#            ato na linha do verbo (`motor rag ajuste`), menos nos atos de `sem_instancia` (`motor listar`).
-#            A lista de atos de cada face vem do cabeçalho do bin (`# face:` e `# mecanismo:`).
-#
-# Formato novo da casa: o dono pediu em 04/11/2026 que registro novo nasça em YAML. Os outros arquivos de
-# registro/ seguem em JSON até alguém os trocar.
+#   nome       slug opcional. O nome exibido da tool na lista da sessão; o resto da porta segue usando o slug.
+#   modelo     booleano, padrão true. false = o modelo não vê a tool na lista.
+#   retido     booleano, padrão false. true = só serve com PF_TOOLS_LEVA2=1.
+#   descricao  toolstring servida em `tools/list`.
+#   faces      mapa face -> {instancia, sem_instancia}. A borda chama o verbo na face. `instancia` entra antes do
+#              ato na linha do verbo (`motor rag ajuste`), menos nos atos de `sem_instancia` (`motor listar`).
 verbos:
-  acervo: {}
-  acesso: {}
-  agente: {}
-  analise: {}
-  bot: {}
-  conferir: {}
-  descansar: {}
-  expediente: {}
+  acervo:
+    descricao: >-
+      cuida do item do acervo, obra ou documento da casa, da incorporação à retirada ·
+      use para: incorporar item, «põe essa obra no acervo», «ingere o repo de docs»;
+      classificar item, «cataloga essa obra», «de que domínio ela é?»; definir e relacionar
+      conceitos no tesauro, «o que é o conceito X?», «como X se liga a Y?»; selar impressão,
+      pôr item em serviço, retirar e restaurar item; abrir obra ou documento que já se sabe
+      qual é, ou que a busca achou, «abre a ADR 97»; publicar página de wiki · atos: ler
+      (leitura, casa), listar (leitura, casa), escrever (escrita, registro), ingerir
+      (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao),
+      definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita,
+      tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao),
+      empacotar (leitura, classificacao), espelhar (escrita, transcricao), recortar (escrita,
+      transcricao), promover (escrita, transcricao), julgar (escrita, transcricao), converter
+      (escrita, transcricao), recolher (escrita, transcricao), repor (escrita, transcricao),
+      retirar (escrita, retirada), restaurar (escrita, retirada), apagar (escrita, retirada),
+      extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), consultar
+      (leitura, casa), balde (escrita, acervo), medir (escrita, acervo), gerar (escrita,
+      acervo), gerador (escrita, acervo) · capacidade por ato: ler=leitura, listar=descoberta,
+      consultar=leitura
+  acesso:
+    descricao: >-
+      grava e revoga concessões de acesso · use para: gravar concessão, «dá acesso a fulano»;
+      revogar concessão, «tira o acesso»; ver o que um sujeito alcança, «quem pode entrar?»;
+      importar política de acesso; varrer órfãos e tratar órfão, conta órfã; desligar sujeito;
+      e sempre que um órfão for detectado · atos: decidir (leitura, concessao), listar (leitura,
+      concessao), historico (leitura, concessao), vocabulario (leitura, concessao), politica
+      (leitura, politica), importar (escrita, concessao), conceder (escrita, concessao),
+      revogar (escrita, concessao), desligar (escrita, sujeito), orfaos (leitura, concessao)
+  agente:
+    descricao: >-
+      delega uma ação a um especialista, na hora · use para: delegar ação síncrona, «roda o
+      revisor», «chama o varredor», sub-agente para segunda opinião; definir especialista,
+      «quem são os especialistas?» · atos: listar (leitura, especialista), ler (leitura,
+      especialista), rodar (escrita, especialista), projetar (escrita, especialista)
+  analise:
+    descricao: >-
+      prepara bases e monta resultados por receita registrada · use para: preparar uma base
+      analítica, montar um resultado ou refazer uma execução · atos: preparar (escrita,
+      operacao), montar (escrita, operacao), refazer (leitura, operacao), ler (leitura,
+      operacao), listar (leitura, operacao), descartar (escrita, operacao), travar (escrita,
+      operacao)
+  bot:
+    descricao: >-
+      delega uma ação para depois, por agenda ou evento · use para: delegar ação assíncrona
+      ou por cron, «agenda isso toda noite»; «o que está agendado?»; desligar delegação; e
+      sempre que uma execução cair, «o job caiu», automação parada · atos: declarar (escrita,
+      agendamento), listar (leitura, agendamento), rodar (escrita, agendamento), desligar
+      (escrita, agendamento), caidas (escrita, agendamento)
+  conferir:
+    descricao: >-
+      confere o SERVIDO contra o DECLARADO · use para: SEMPRE ANTES de agir sobre algo da casa
+      e ANTES de dizer que algo dela não existe, «existe o verbo X?», «tem skill de Y?»; a
+      régua da bancada; «o que está no ar bate com o declarado?», em serviço, verbo, skill,
+      jobs, acervo e release · atos: existe (leitura, operacao), repo (leitura, operacao),
+      commit (leitura, operacao), arranque (leitura, operacao), verbo (leitura, operacao),
+      servico (leitura, operacao), skill (leitura, operacao), procedencia (leitura, operacao),
+      superficie (leitura, operacao), front (leitura, operacao), sessao (leitura, operacao),
+      chapeu (leitura, operacao), ferramental (leitura, operacao), pdp (leitura, operacao),
+      alcance (leitura, operacao), vocabulario (leitura, operacao)
+  descansar:
+    descricao: >-
+      encerra o expediente conferindo a memória · use para: «encerra», «fecha por hoje»,
+      «paramos aqui», ANTES de encerrar o expediente · atos: fita, varredura
+  expediente:
+    descricao: >-
+      monta o pacote da cadeira e veste o chapéu · use para: o catálogo de peças; vestir outro
+      chapéu quando a matéria do pedido muda, «agora é recuperação» · atos: montar (leitura,
+      expediente), rotear (leitura, expediente), catalogo (leitura, expediente)
   fila:
+    descricao: >-
+      lê e envia mensagens entre cadeiras · use para: SEMPRE que o dono disser «mensagem»,
+      «carta», «recado», «caixa», «fila» ou «o que chegou?», e SEMPRE que não houver pedido ou
+      o pedido já estiver atendido; ler a caixa, tratar mensagem e contestar; enviar mensagem,
+      handoff, resposta ou pauta a outra cadeira · atos: status (leitura, mensagem) · ler
+      (leitura, mensagem) · tratar (escrita, mensagem) · enviar (escrita, mensagem) · tipos
+      (leitura, mensagem) · contestar (escrita, mensagem)
     faces:
       motor: {}
-  infra: {}
-  lint: {}
-  mesa: {}
-  metrica: {}
+  infra:
+    descricao: >-
+      OPERA o serviço e a máquina em que ele roda · use para: SEMPRE que for subir, reiniciar,
+      derrubar ou remover serviço, «reinicia a unit», «sobe a stack»; construir e baixar
+      imagem; alterar configuração; fazer backup; limpar disco; logs do contêiner, cron, VRAM
+      e disco, «os logs do contêiner», «quanto de VRAM está ocupado?» · atos: estado (leitura,
+      operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita,
+      operacao), remover (escrita, operacao), unit-env (escrita, operacao), cache (escrita,
+      operacao), hardware (leitura, operacao), limites (leitura, operacao), gpu (leitura,
+      operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao),
+      ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build
+      (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao), units
+      (escrita, operacao), ingress (escrita, operacao), medir (leitura, operacao), pecas
+      (leitura, operacao), rodar (escrita, operacao)
+  lint:
+    descricao: >-
+      aponta desvio de padrão · use para: ANTES de entregar código, documento ou card, «passa
+      o lint», «confere a prosa», «o card está no padrão?» · atos: rodar, detectar, codigo,
+      fossil, repo, superficie, arranque, commit, vocabulario, alcance, chapeu, organizacao,
+      card, prosa, testes, acervo
+  mesa:
+    descricao: >-
+      guarda na lousa o que fica de uma fita para outra · use para: ler as ordens da lousa,
+      «o que ficou na mesa?»; anotar, «anota isso»; dar item como feito, «já fiz o item 2»;
+      o caderno do chapéu · atos: ver, item, fez, anota, fita, limpa, caderno, legado,
+      escrever, substituir, confirmar, retirar, restaurar, tombar, apontar, aresta, colheita,
+      veredito, balde, podar
+  metrica:
+    descricao: >-
+      mede o uso da porta · use para: «quantas chamadas deram erro?», «quem pediu help?», giro
+      e lote por verbo · atos: eventos, dia, ate-acerto, tateio, casos, verbos, comportamento,
+      turnos, abertura (leitura, abertura), investigar (escrita, investigacao)
   motor:
     nome: busca
+    descricao: >-
+      acha pelo sentido o trecho do acervo que responder, filtrável por domínio e/ou conceitos
+      · use para: SEMPRE ANTES de responder de cabeça e ANTES de abrir o acervo, consultar a
+      casa ou a biblioteca, «o que a literatura diz de X?», «onde a casa fala de Y?», «tem
+      fonte sobre Z?»; parametrizar ou ajustar as consultas do motor · atos: listar (leitura,
+      texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura,
+      medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita,
+      bateria), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote),
+      julgar (escrita, lote), eleger (leitura, medida), consultas (leitura, medida), trabalhos
+      (leitura, medida), estado (leitura, geracao), parar (escrita, medida), raciocinar
+      (leitura, medida)
     faces:
       motor:
         instancia: rag
         sem_instancia: [listar]
   persona:
     modelo: false
-  pesquisar: {}
+  pesquisar:
+    descricao: >-
+      pesquisa a web aberta com procedência · use para: SEMPRE que a fonte estiver fora do
+      acervo, pesquisar fora, «procura na internet», «acha a página oficial»; ler página por
+      URL; coletar achado; resolver DOI, ISBN, ORCID ou CNPJ; conferir as citações de um
+      relatório · atos: consultar, resolver, ler, coletar, historico, manifesto, verificar,
+      saude
   preferencia:
     modelo: false
     faces:
       casca: {}
   release:
+    descricao: >-
+      opera a release, o que está no ar · use para: «que versão está no ar e desde quando?»;
+      promover release, «sobe isso», «promove»; reverter release, «volta para a anterior»; ler
+      e procurar arquivo como está servido · atos: estado (leitura, operacao), listar (leitura,
+      operacao), ler (leitura, operacao), procurar (leitura, operacao), conferir (leitura,
+      operacao), telas (leitura, operacao), promover (escrita, operacao), reverter (escrita,
+      operacao), migrar (escrita, operacao)
     faces:
       casca: {}
   repo:
     retido: true
-  seg: {}
+    descricao: >-
+      opera a bancada do card, do clone ao PR integrado · use para: criar e atualizar bancada;
+      ler e procurar nela, diff e histórico; commitar, empurrar ramo, abrir, revisar e
+      integrar PR; descartar mudança; sanear bancada; procurar no que está publicado no
+      GitHub; e sempre que um card de código for posto em execução ou a esteira reprovar a
+      mudança · atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura,
+      operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura,
+      operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita,
+      operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita,
+      operacao), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura,
+      forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge),
+      pr-fechar (escrita, forge), hooks-listar (leitura, forge), hooks-apagar (escrita, forge),
+      sanear (escrita, forge), lock (escrita, operacao), git (escrita, operacao)
+  seg:
+    descricao: >-
+      cuida dos segredos e da linha de base de segurança · use para: gerar, checar, rotacionar
+      e destruir segredo; fixar linha de base; varrer ativo, «roda a varredura»; «avalia esse
+      risco», a régua de segurança de um serviço; e sempre que um segredo for exposto, faltar
+      ou vencer · atos: oscap (leitura, casco), isolacao medir (leitura, casco), ssg (escrita,
+      regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl
+      (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo),
+      segredo gravar (escrita, segredo), segredo importar (escrita, segredo), segredo
+      rotacionar (escrita, segredo), segredo exigidos (leitura, segredo), segredo apagar
+      (escrita, segredo)
   sessao:
     modelo: false
   tarefas:
+    descricao: >-
+      conduz o card, da demanda captada à entrega · use para: SEMPRE que o assunto for card,
+      épico, feature, story, incidente ou débito técnico; captar demanda, «cria um card»;
+      lapidar, dar parecer, apostar, formalizar, priorizar, pôr em execução, concluir, validar
+      e entregar card, «move para refinamento», «comenta no card»; declarar, mitigar e fechar
+      incidente; «o que está comigo?», «lê o card», «os comentários do card», sign-off; e
+      sempre que o pacto quebrar ou uma execução cair · atos: listar, listar-tudo, ler, criar,
+      editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub,
+      ordenar, bloquear, desbloquear, carteira, espera-dono (leitura, trabalho)
     faces:
       casca: {}
-  teste: {}
+  teste:
+    descricao: >-
+      roda a suíte do repositório · use para: ANTES de entregar código, «roda os testes», «a
+      suíte passa?»
 
 transporte:
-  malote: {}
-  ler_arquivo: {}
-  write_file: {}
-  monta_sessao: {}
+  malote:
+    descricao: >-
+      despacha lista estruturada de itens de verbo em uma chamada · use para:
+      cadeia que para no primeiro erro (encadeado=true); duto da saída de um
+      verbo para o seguinte (stdin.de); verbo sem tool própria nesta sessão ·
+      chamadas independentes vão em paralelo, cada uma pela tool dela ·
+      retomada depois do teto começa em lote_next
+  ler_arquivo:
+    descricao: >-
+      lê arquivo pelo caminho · use para: texto por linhas, PDF, EPUB, DOCX, planilha ou
+      imagem; o retorno grande que a porta guardou; o arquivo de uma obra pelo caminho
+  write_file:
+    descricao: >-
+      grava arquivo na bancada ou no rascunho da fita · use para: escrever mudança, o arquivo
+      inteiro ou a troca de um trecho
+  monta_sessao:
+    descricao: >-
+      abre o expediente da cadeira · use para: PRIMEIRA AÇÃO DA CONVERSA, ANTES de ler ou
+      responder o pedido

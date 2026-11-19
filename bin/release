@@ -26,12 +26,12 @@
 # escreve: reverter=release,arquivo-local
 # escreve: migrar=schema do banco-alvo, via docker exec psql (nao e arquivo local; nao e segredo)
 # (recursos pelo enum de ferramental_recurso; porta, forge e stack pendem id proprio - dados)
-# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] porta · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] porta (atalhos; verbos irmãos em harness/bin) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] porta (pontos em var/release/<familia>) · PF_ABERTURA_DIR[=$PLATAFIRMA_INSTANCIA/var/abertura-publicada] porta · PLATAFIRMA_FAMILIAS[=registro/familias.json desta árvore] porta · PLATAFIRMA_VENVS[=registro/venvs.json desta árvore] porta · PLATAFIRMA_TERCEIROS[=registro/terceiros.json desta árvore] porta · PLATAFIRMA_UV porta (override do binário do uv) · PLATAFIRMA_PYTHON[=/usr/bin/python3.12] porta (python de sistema dos venvs) · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes, para o infra achar a unit) · PF_CADEIRA porta (lida) · HOME
+# ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] porta · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] porta (atalhos; verbos irmãos em harness/bin) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] porta (pontos em var/release/<familia>) · PLATAFIRMA_FAMILIAS[=registro/familias.json desta árvore] porta · PLATAFIRMA_VENVS[=registro/venvs.json desta árvore] porta · PLATAFIRMA_TERCEIROS[=registro/terceiros.json desta árvore] porta · PLATAFIRMA_UV porta (override do binário do uv) · PLATAFIRMA_PYTHON[=/usr/bin/python3.12] porta (python de sistema dos venvs) · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes, para o infra achar a unit) · PF_CADEIRA porta (lida) · HOME
 # uv: resolvido nesta ordem, e só nela: $PLATAFIRMA_UV, /usr/local/bin/uv, /usr/bin/uv, `command -v uv`. Nenhum achado: exit 3 dizendo como instalar uv de sistema. O PATH do wrapper /usr/local/bin/platafirma não tem ~/.local/bin (medido 15/09).
 # python dos venvs: $PLATAFIRMA_PYTHON, default /usr/bin/python3.12, com UV_PYTHON_PREFERENCE=only-system e UV_PYTHON_DOWNLOADS=never; nunca o python gerenciado pelo uv no home da conta (caminho, caminho real ou home do venv sob $HOME ou em */uv/python/*: exit 3, override incluído). Ausente, ou lock que pede outra versão: exit 3, current intacto. PLATAFIRMA_UV e PLATAFIRMA_PYTHON só em caminho absoluto. XDG_RUNTIME_DIR herdado de outra conta (diretório existente que não é desta) é trocado pelo desta.
 # depende: git · acervo (registro de stacks) · python3 · jq · uv (venv do lock; ordem acima) · python de sistema (venvs) · sha256sum + curl (artefato de terceiro pinado; curl só quando o cache em <release>/terceiros não tem) · rede ao forge (promover) · porta (hora de arranque) · infra (restart da porta, destacado) · publicar-abertura (motor da familia abertura, #3054). O restart da porta e deste verbo (spec_release §2, rev 6): o observador pf-porta-watch nao disparou em 15/09, 2 de 2 promocoes
 # substitui: readlink current · git -C /opt/platafirma/<familia>/… describe|rev-parse|ls-files|show|grep · git worktree add --detach · ln -sfn + mv -T · chmod -R a-w · conferir <classe> · bin/_release/stack promover
-# paginacao do ler: `release ler <repo> <caminho> [--offset <bytes>]` entrega paginas de 45000 bytes (abaixo dos 50 KB da porta, que corta sem dizer o que ficou de fora; #2856 linha 146), corte na fronteira de caractere utf-8; a ultima linha diz `truncado em N de M bytes; continue com --offset N`, e a ultima pagina nao avisa. --offset malformado, negativo ou alem do fim: exit 2. Arquivo de ate 45000 bytes sai byte a byte como antes. Mesmo idioma de `acervo ler casa --offset`.
+# paginacao do ler: `release ler <repo> <caminho> [--offset <bytes>]` entrega paginas de 45000 bytes (abaixo dos 50 KB da porta, que corta sem dizer o que ficou de fora; #2856 linha 146), corte na fronteira de caractere utf-8; a ultima linha diz `truncado em N de M bytes; continue com --offset N`, e a ultima pagina nao avisa. --offset malformado, negativo ou alem do fim: exit 2. Arquivo de ate 45000 bytes sai byte a byte como antes. Mesmo idioma de paginação por `--offset`.
 # conforme: parcial
 set -euo pipefail
 
@@ -44,7 +44,6 @@ AQUI="$(dirname "$(readlink -f "$0")")"
 
 PROD_RAIZ="$PF_RELEASE_RAIZ"                     # <familia>/{.repo.git,<sha>,current,anterior} e venv/
 ATALHOS="$PF_RELEASE_RAIZ/current"               # DIRETÓRIO de atalhos estáveis (arq:0102 D6)
-ABERTURA_DIR="${PF_ABERTURA_DIR:-$PLATAFIRMA_INSTANCIA/var/abertura-publicada}"
 PONTOS="$PLATAFIRMA_INSTANCIA/var/release"               # registro de promoções; o ponto de volta mora em /opt
 BIN_DIR="$PLATAFIRMA_RELEASE/harness/bin"                # verbos irmãos servidos
 FAMILIAS="${PLATAFIRMA_FAMILIAS:-$AQUI/../registro/familias.json}"   # familia -> URL do forge
@@ -52,7 +51,7 @@ VENVS="${PLATAFIRMA_VENVS:-$AQUI/../registro/venvs.json}"            # venv -> f
 TERCEIROS="${PLATAFIRMA_TERCEIROS:-$AQUI/../registro/terceiros.json}" # artefato -> familia + destino + sha256 + url
 TERCEIROS_CACHE="$PF_RELEASE_RAIZ/terceiros/sha256"          # conteúdo endereçado pelo pino
 CADEIRA="${PF_CADEIRA:-}"
-FAMILIA_BIN="platafirma-harness"   # a única família que serve verbos no PATH e reinicia a porta
+FAMILIA_BIN="platafirma-harness"   # a única família que serve verbos no PATH
 ESPELHO=".repo.git"                 # espelho bare por família; fora do glob de famílias
 
 # Resolução de binário real: evitar shims no PATH da porta
@@ -182,9 +181,6 @@ listar_familias() {
       fams+=("$b")
     done
   fi
-  if [ -d "$ABERTURA_DIR" ]; then
-    fams+=("abertura")
-  fi
   printf '%s\n' "${fams[@]}"
 }
 
@@ -218,7 +214,7 @@ resolver_identidade() {
   }
 
   if [ "$repo" = "abertura" ]; then
-    local current_link="$ABERTURA_DIR/current"
+    local current_link="${PF_ABERTURA_DIR:-/opt/platafirma/abertura}/current"
     if [ ! -e "$current_link" ] && [ ! -L "$current_link" ]; then
       RESOLVER_MOTIVO="sem current"
       return 1
@@ -426,7 +422,7 @@ cmd_estado() {
     fi
 
     local porta_str=""
-    if [ "$f" = "$FAMILIA_BIN" ]; then
+    if [ "$f" = "platafirma-core" ]; then
       local porta_ts=""
       if command -v systemctl >/dev/null 2>&1; then
         porta_ts="$(systemctl --user show ops-mcp -p ActiveEnterTimestamp --value 2>/dev/null || echo '')"
@@ -620,7 +616,7 @@ PY
 }
 
 # Página em bytes (#2856 linha 146): a porta (ops-server) corta a saída em 50 KB sem next_offset e
-# devolve «[igual ao giro N]» ao reler; o verbo pagina antes, no idioma de `acervo ler casa --offset`.
+# devolve «[igual ao giro N]» ao reler; o verbo pagina antes por `--offset`.
 # A poda da porta não é deste verbo: `read_file` com offset=1 segue sendo o contorno dela.
 LER_PAGINA=45000
 
@@ -1106,11 +1102,11 @@ for l in sys.stdin.read().splitlines():
                 "reversao": None if rev in ("null", "") else json.loads(rev)})
 print(json.dumps(out))
 ' <<<"$sql_tsv" 2>/dev/null || true)"
-      [ -z "$json" ] || printf 'aviso: acervo ler casa stack falhou; registro de stacks lido direto de acervo.stack\n' >&2
+      [ -z "$json" ] || printf 'aviso: leitura de stacks falhou; registro de stacks lido direto de acervo.stack\n' >&2
     fi
   fi
   if [ -z "$json" ]; then
-    printf 'release: dependência ausente: acervo ler casa stack não respondeu (registro de stacks)\n' >&2
+    printf 'release: dependência ausente: leitura do registro de stacks não respondeu\n' >&2
     return 3
   fi
   local linhas
@@ -1320,11 +1316,9 @@ gravar_pontos() {  # $1=repo $2=sha_anterior(ou vazio) $3=sha_novo
   printf '%s %s %s\n' "$quando" "${ant:--}" "$novo" >> "$PONTOS/$repo/historico"
 }
 
-# Atalhos estáveis (arq:0102 D6; desenho #3010 §2): $PF_RELEASE_RAIZ/current é DIRETÓRIO, uma
-# entrada por família (<curto> -> ../<familia>/current), mais politica-acesso -> harness/politica-acesso
-# e venv/<nome> -> ../../venv/<nome>-<hash>. Código, units e PATH citam /opt/platafirma/current/<curto>/…,
-# que atravessa promoções sem ninguém reescrever caminho. Não há diretório de symlinks de verbos:
-# o PATH é $PLATAFIRMA_RELEASE/harness/bin, injetado por quem executa (unit, porta, profile.d).
+# Atalhos estáveis (arq:0102 D6; desenho #3010 §2; card #4340): $PF_RELEASE_RAIZ/current é DIRETÓRIO, uma
+# entrada por família (<curto> -> ../<familia>/current) e venv/<nome> -> ../../venv/<nome>-<hash>.
+# A decisão de acesso mora em current/core/acesso (o atalho politica-acesso saiu da promoção do harness).
 assentar_atalhos() {  # $1=repo
   local repo="$1" curto="${1#platafirma-}"
   if [ -L "$ATALHOS" ]; then
@@ -1347,8 +1341,10 @@ assentar_atalhos() {  # $1=repo
   mkdir -p "$ATALHOS"
   trocar_link "../$repo/current" "$ATALHOS/$curto"
   printf 'atalho:    %s -> ../%s/current\n' "$ATALHOS/$curto" "$repo"
-  if [ "$repo" = "$FAMILIA_BIN" ]; then
-    trocar_link "harness/politica-acesso" "$ATALHOS/politica-acesso"
+  if [ "$repo" = "platafirma-core" ] && [ -d "$PROD_RAIZ/$repo/current/acesso" ]; then
+    # Atalho de transição para consumidores legados (ex.: platafirma-rastreador fora da F4073)
+    trocar_link "core/acesso" "$ATALHOS/politica-acesso"
+    printf 'atalho:    %s -> core/acesso\n' "$ATALHOS/politica-acesso"
   fi
   local v nome
   for v in "${VENVS_PRONTOS[@]+"${VENVS_PRONTOS[@]}"}"; do
@@ -1357,23 +1353,6 @@ assentar_atalhos() {  # $1=repo
     trocar_link "../../venv/$v" "$ATALHOS/venv/$nome"
     printf 'atalho:    %s -> ../../venv/%s\n' "$ATALHOS/venv/$nome" "$v"
   done
-}
-
-# Reconcilia acervo.ferramental_verbo.dono com o `# dono:` do cabeçalho dos bins servidos
-# (DT #273, #2856 linha 273). Nunca aborta a promoção que já trocou current.
-reconciliar_ferramental() {  # $1=repo
-  local repo="$1"
-  [ "$repo" = "$FAMILIA_BIN" ] || return 0
-  local reg="$PROD_RAIZ/$repo/current/bin/_acervo/registrar"
-  [ -x "$reg" ] || return 0
-  local out rc=0
-  out="$("$reg" --reconciliar-dono 2>&1)" || rc=$?
-  if [ "$rc" -eq 0 ]; then
-    [ -z "$out" ] || printf 'ferramental: %s\n' "$(tail -n 1 <<<"$out")"
-  else
-    printf 'ferramental: AVISO — reconciliação de dono saiu %s: %s\n' "$rc" "$(tail -n 1 <<<"$out")" >&2
-  fi
-  return 0
 }
 
 # venv/<nome>-<hash-do-lock>, construído do lockfile da rev antes de trocar current (desenho #3010
@@ -1696,31 +1675,30 @@ promover_stacks() {  # $1=sha ; usa STACKS_PROMOVER; devolve 0 ou o nome da stac
   return 0
 }
 
-# O restart da porta é deste verbo (spec_release §2: `promover` agenda o restart fora do
-# próprio processo). A rev 5 o entregara ao observador pf-porta-watch (unit .path --user
-# sobre current); em 15/09 ele não disparou em 2 de 2 promoções — current trocado, porta
-# servindo o código anterior, ninguém avisado. O motivo da rev 5 (systemd-run sem bus; o
-# restart matando a conexão que emitiu o promover) já tem cura na casa: `infra restart
-# ops-mcp` despacha destacado e a chamada que o emite volta antes do restart (medido 15/09
-# pela porta). Chamado por último, depois de tudo relatado. PF_RELEASE_PORTA=0 desliga.
+# O restart da porta é deste verbo (spec_release §2; F4073, card #4340): a porta mora no core,
+# então promover o harness converge clones/units sem reiniciar a porta, e promover o core
+# despacha `infra restart ops-mcp` destacado. PF_RELEASE_PORTA=0 desliga o restart.
 reiniciar_porta() {
   # A tela sai antes do restart. O infra desta release agenda a porta para daqui a
   # 5 s (DT 498): destacar sem adiar podia matar esta chamada antes do exit 0.
   resumo_imprime
   local repo="$1"
-  [ "$repo" = "$FAMILIA_BIN" ] || return 0
-  # Debito 605: nenhum verbo rodava deploy-harness/instalar, entao o core.hooksPath dos clones e as
-  # units so convergiam a mao. Promover o harness o roda em converge (e idempotente, roda N vezes,
-  # e e a sincronizacao que a biblioteca pede contra a deriva), e relata o que corrigiu ou nao
-  # pode corrigir. Nunca falha a promocao: o codigo ja esta no ar.
-  local inst="$PLATAFIRMA_RELEASE/harness/deploy-harness/instalar" saida_i rc_i=0
-  if [ -x "$inst" ]; then
-    saida_i="$("$inst" 2>&1)" || rc_i=$?
-    printf 'instalar:  %s\n' "$(grep -E '^resumo:' <<<"$saida_i" | tail -n 1)"
-    grep -E '^ +(corrigido|divergente) ' <<<"$saida_i" | sed 's/^ */instalar:    /' >&2 || true
-  else
-    printf 'instalar:  AVISO — %s ausente ou sem execucao; clones e units nao foram convergidos\n' "$inst" >&2
+  if [ "$repo" = "$FAMILIA_BIN" ]; then
+    # Debito 605: promover o harness converge clones e units, sem reiniciar a porta (card #4340).
+    local inst="$PLATAFIRMA_RELEASE/harness/deploy-harness/instalar" saida_i rc_i=0
+    if [ -x "$inst" ]; then
+      saida_i="$("$inst" 2>&1)" || rc_i=$?
+      printf 'instalar:  %s\n' "$(grep -E '^resumo:' <<<"$saida_i" | tail -n 1)"
+      grep -E '^ +(corrigido|divergente) ' <<<"$saida_i" | sed 's/^ */instalar:    /' >&2 || true
+    else
+      printf 'instalar:  AVISO — %s ausente ou sem execucao; clones e units nao foram convergidos\n' "$inst" >&2
+    fi
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl --user daemon-reload >/dev/null 2>&1 || true
+    fi
+    return 0
   fi
+  [ "$repo" = "platafirma-core" ] || return 0
   if command -v systemctl >/dev/null 2>&1; then
     systemctl --user daemon-reload >/dev/null 2>&1 || true
   fi
@@ -1737,10 +1715,6 @@ reiniciar_porta() {
   # Sem XDG_RUNTIME_DIR (wrapper, runuser, cron) o infra não acha a unit --user e o restart não
   # acontece (medido 15/09). Definidos só quando ausentes; o infra repete a regra para quem o
   # chama direto. O restart segue destacado (systemd-run --user, dentro do infra).
-  # Valor herdado de OUTRA conta (runuser/su sem -l leva o XDG de quem chamou, ex.
-  # /run/user/0) também não serve: diretório que existe e não é desta conta é trocado, e o
-  # DBUS que aponta para dentro dele sai junto. O infra do PATH pode ser o de uma release
-  # velha, sem essa regra; por isso ela vale aqui também.
   local xdg="${XDG_RUNTIME_DIR:-}" dbus="${DBUS_SESSION_BUS_ADDRESS:-}"
   if [ -n "$xdg" ] && [ -d "$xdg" ] && [ ! -O "$xdg" ]; then
     case "$dbus" in *"$xdg"*) dbus="" ;; esac
@@ -1774,7 +1748,7 @@ rodar_publicador() {  # $@=args do publicar-abertura
   # PF_ROTAS_GATE=0 do operador vence: desligado e desligado em todo fluxo.
   local gate="${ROTAS_GATE:-${PF_ROTAS_GATE:-1}}"
   [ "${PF_ROTAS_GATE:-}" != 0 ] || gate=0
-  PF_HARNESS="$(espelho_de "$FAMILIA_BIN")" PF_ABERTURA_DIR="$ABERTURA_DIR" \
+  PF_HARNESS="$(espelho_de "$FAMILIA_BIN")" PF_ABERTURA_DIR="${PF_ABERTURA_DIR:-/opt/platafirma/abertura}" \
     PF_ROTAS_GATE="$gate" \
     PF_ACERVO="$(command -v "$(achar_verbo acervo)" 2>/dev/null || true)" "$pub" "$@"
 }
@@ -1986,7 +1960,7 @@ gate_conferir_verbo() {  # $1=repo $2=sha_candidato $3=sha_atual(ou vazio)
     [ "$rc" -eq 0 ] || reprovados+=("$v")
   done
   if [ "${#reprovados[@]}" -gt 0 ]; then
-    printf 'release: recusa: rev %s reprova em conferir verbo: %s — current segue em %s; corrija o cabecalho (capacidade do mapa vigente: acervo ler casa vocabulario arquitetura-negocio-operacao) e promova de novo\n' \
+    printf 'release: recusa: rev %s reprova em conferir verbo: %s — current segue em %s; corrija o cabecalho (capacidade vigente na Olaria: ontologia listar capacidade) e promova de novo\n' \
       "${sha:0:7}" "${reprovados[*]}" "${atual:0:7}" >&2
     return 4
   fi
@@ -2216,22 +2190,6 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
     printf 'card:      %s promovido (%s -> %s), mas tarefas nao encontrado — comente e mova a mao\n' "$card" "$(curto_ou "$de" '(novo)')" "${para:0:7}" >&2
     return 0
   fi
-  # Particao decidida pelo dono (27/09, carta 20260927T112612-arquiteto; arq:0095 regra 3):
-  # promover e cliente de tarefas e move a story DIRETO a entregue. Cada chamada ao
-  # rastreador e tolerada (|| rc): sob set -e, uma recusa do card abortava o verbo antes do
-  # restart da porta, com o codigo ja no ar.
-  # So story e task andam aqui (DT 39, #2856): ramo fabrica/<feature>-... levava a feature
-  # a entregue e o rastreador encerrava as filhas em cascata. Entregue de feature e epico e
-  # ato do dono (arq:0095); nivel que nao se le tambem nao move.
-  # Card de varias subidas (#3260: o PR do ato novo fechou o card com a retirada por fazer):
-  # promover so move a entregue quando o PR declara que fecha o card, `fecha #<card>` no
-  # titulo ou no corpo. Sem a linha, comenta e deixa em execucao. Regra deterministica,
-  # lida do PR; quem abre o PR sabe se e a ultima subida.
-  # Card entregue não recebe comentário (#3883, R22 da spec maquina-de-estados-do-board): o
-  # rastreador recusa com 409, então o estágio lê o estado ANTES de comentar e, com o card já
-  # entregue (promoção de outra família do mesmo card, ou ramo que cita story fechada), não comenta,
-  # não move e não falha a promoção. O cabeçalho de `tarefas ler` é `#N · nível · Estado (fase) · ...`;
-  # o estado vem em minúsculas, sem a fase. Estado que não se lê segue o caminho de antes.
   local rc_c=0 rc_m=0 nivel estado fecha=0 cabecalho saida_m="" saida_c="" msg_c=""
   if pr_fecha_card "$repo" "$para" "$card"; then fecha=1; fi
   cabecalho="$("$tarefas_bin" ler "$card" 2>/dev/null)" || true
@@ -2241,7 +2199,6 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
     printf 'card:      #%s já entregue — sem comentário (R22)\n' "$card"
     rc_m=-1
   else
-    # DT 668: épico e feature exigem comentário tipado na primeira linha (card #3614).
     msg_c="release promover $repo: $(curto_ou "$de" '(novo)') -> ${para:0:7}, gate verde, no ar."
     case "$nivel" in
       feature|épico|epico) msg_c="insumo: $msg_c" ;;
@@ -2250,8 +2207,6 @@ estagio_card() {  # $1=repo $2=sha_de(ou vazio) $3=sha_para
     case "$nivel" in
       story|task)
         if [ "$fecha" -eq 1 ]; then
-          # Card #4223 (R39 da spec tarefas): a recusa do rastreador (story com task aberta, com o
-          # título da task) vai ao aviso abaixo, em vez de morrer em /dev/null.
           saida_m="$("$tarefas_bin" mover "$card" entregue 2>&1)" || rc_m=$?
         else
           printf 'card:      %s segue em execução — o PR não diz `fecha #%s`; mova a entregue quando o aceite fechar\n' "$card" "$card"
@@ -2338,17 +2293,6 @@ print(json.dumps({
   return 0
 }
 
-# NOTA (arq:0110 item 11c): nao ha mais reversao automatica de current na recusa de
-# stack. current e stack sao planos separados; stack que recusa vira incidente e o
-# current fica onde o gate o pos. A volta deliberada e `release reverter <repo> <sha>`.
-
-# ---- estagio 3: conferencia no ar (card #3150) ----------------------------------
-# Cada stack que a promocao recriou passa por `conferir servico <stack>` do proprio sha
-# (projeto do compose; procedencia = current). Container ainda subindo nao e vermelho:
-# ate 6 tentativas, 3 s entre elas. Familia sem stack nao tem o que conferir aqui (os
-# verbos ja foram medidos na rev pelo gate, e o servido e a mesma arvore).
-# PF_RELEASE_CONFERENCIA_AR=<executavel>: gancho de teste que faz as vezes da conferencia
-# (0 conforme, 1 vermelho, 5 nao olhou); a primeira linha que ele imprime vira o detalhe.
 CONF_AR_DETALHE=""
 conferir_no_ar_declarado() {  # $1=repo ; 0 se registro/venvs.json desta release declara conferir_no_ar: true
   local venvs="${PLATAFIRMA_VENVS:-$AQUI/../registro/venvs.json}"
@@ -2369,10 +2313,6 @@ conferencia_no_ar() {  # $1=repo $2=sha ; 0 conforme ou nada a conferir · 1 ver
     case "$rc" in 0|5) return "$rc" ;; *) return 1 ;; esac
   fi
   [ "${#STACKS_PROMOVER[@]}" -gt 0 ] || return 0
-  # o conferir mora no harness: familia que nao o traz e conferida pelo desta release so
-  # quando o registro declara `conferir_no_ar` nela (#3535). Opt-in medido: em 14/10 a
-  # conferencia de core e conhecimento saia vermelha por defeito do conferir (nenhum
-  # container pelo nome da stack), e ligar para todas reverteria a promocao delas.
   local impl="$PROD_RAIZ/$repo/$sha/bin/_release/conferir/conferir.py"
   if [ ! -f "$impl" ] && conferir_no_ar_declarado "$repo"; then
     impl="$AQUI/_release/conferir/conferir.py"
@@ -2407,11 +2347,6 @@ comentar_incidente_no_card() {  # $1=repo $2=sha $3=texto ; nunca derruba a prom
   return 0
 }
 
-# ---- retorno de promover numa tela (card #3150, spec_ambiente-de-desenvolvimento §3) ----
-# Tela: veredito e estagio (linhas gate:/suite:), familia e sha de -> para (== / de: /
-# current:), ambiente, venvs, card, a linha da volta e a alca do log. Recusa e parada vao
-# ao stderr, como antes. O resto (docker build, conferir por extenso, atalhos, abertura,
-# restart) fica no log.
 PROMO_LOG=""; PROMO_VOLTA=""
 abrir_log_promover() {  # $1=repo
   [ "${PF_PROMOVER_VERBOSO:-0}" = 1 ] && return 0
@@ -2436,12 +2371,6 @@ resumo_promover() {  # $1=exit
   exit "$rc"
 }
 
-# Imprime a tela e devolve stdout/stderr ao chamador. Idempotente: a segunda chamada
-# (o trap de EXIT depois de reiniciar_porta) nao faz nada.
-# Achado a parte (card #3145, fora do escopo dele): faltava espelho:/checkout:/stacks:/
-# terceiro:/porta:/caminho: no whitelist abaixo — a mensagem so ia pro log, nunca pra tela,
-# e testes que checavam essas linhas em $out ficavam vermelhos sem relacao com deploy/stack
-# (test_release_lote2.sh casos 2 e 4, test_fechamento_3010_harness.sh caso 3).
 resumo_imprime() {
   [ -n "$PROMO_LOG" ] || return 0
   local sha_final log="$PROMO_LOG"
@@ -2450,10 +2379,8 @@ resumo_imprime() {
   exec 1>&3 2>&4 3>&- 4>&-
   PROMO_LOG="$log"
   [ -f "$PROMO_LOG" ] || { PROMO_LOG=""; return 0; }
-  # grep sem casamento sai 1: com set -e/pipefail isso mataria o resumo e trocaria o exit
   { grep -E '^(== |de: |gate: |venv: |current: |no ar: |ambiente: |suite: |card: |deploy: |ensaio: |já no ar: |espelho: |checkout: |stacks: |terceiro: |porta: )' "$PROMO_LOG" \
       | grep -v 'NAO MEDIDA'; } || true
-  # "release: /opt/..." e o eco do ajudante da stack, nao recusa: fica no log
   { grep -E '^(release: |varrido: |saida inteira: |caminho: )|NAO MEDIDA|PROMOCAO|RETOMAR|VOLTAR CODIGO' "$PROMO_LOG" \
       | grep -v '^release: /'; } >&2 || true
   [ -z "$PROMO_VOLTA" ] || printf 'volta:     %s\n' "$PROMO_VOLTA"
@@ -2498,13 +2425,8 @@ cmd_promover() {
     exit "$rc_fam"
   fi
 
-  # card #3150 (retorno numa tela, comentario C3): tudo o que a esteira imprime -- build,
-  # conferir por extenso, atalhos, restart -- vai ao log da instancia; a tela recebe so as
-  # linhas-chave, a volta e a alca do log, montadas no fim por resumo_promover (trap).
-  # PF_PROMOVER_VERBOSO=1 devolve a saida inteira na tela.
   abrir_log_promover "$repo"
 
-  # regime: família com stack no registro promove por rev explícita
   local rc=0
   ler_stacks_da_familia "$repo" || { rc=$?; exit "$rc"; }
   local tem_stack=$(( ${#STACKS_PROMOVER[@]} + ${#STACKS_FORA[@]} ))
@@ -2517,17 +2439,12 @@ cmd_promover() {
   garantir_espelho "$repo" "$ensaio" || { rc=$?; exit "$rc"; }
   local esp; esp="$(espelho_de "$repo")"
   if [ ! -d "$esp" ]; then
-    # só em ensaio de família nova
     printf 'ensaio:    família nova; nada resolvido sem espelho\n'
     exit 0
   fi
 
   local sha
   sha="$(resolver_rev "$repo" "$rev")" || {
-    # card #3150 comentario C7: com o fetch de garantir_espelho ja feito (inclusive
-    # em ensaio, desde a correcao acima), rev que ainda nao resolve e "nao existe
-    # (por ora)", nao erro de uso — exit 1 (varrido), nao 2. O espelho acabou de
-    # ser atualizado, entao nao ha fetch a mais para tentar aqui.
     printf 'varrido:   %s no espelho de %s (fetch feito agora, sem achar)\n' "${rev:-origin/main}" "$repo" >&2
     printf 'tags recentes:\n' >&2
     "$GIT" --git-dir="$esp" for-each-ref --sort=-creatordate --count=5 --format='  %(refname:short)  %(objectname:short)' refs/tags 2>/dev/null >&2 || true
@@ -2535,13 +2452,12 @@ cmd_promover() {
   }
   exigir_descende_de_main "$repo" "$sha" promover "$repo" || exit $?
 
-  # o que está no ar agora
   local atual="" rc_id=0
   resolver_identidade "$repo" || rc_id=$?
   case "$rc_id" in
     0) atual="$SHA" ;;
     1) atual="" ;;
-    2) atual="" ;;   # família nova: diretório recém-criado pelo espelho
+    2) atual="" ;;
     *) printf 'release: indeterminável: %s — arrume antes de promover\n' "$RESOLVER_MOTIVO" >&2; exit 5 ;;
   esac
 
@@ -2673,20 +2589,12 @@ cmd_promover() {
   printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${sha:0:7}"
   [ -z "$atual" ] || PROMO_VOLTA="release reverter $repo ${atual:0:7}"
   assentar_atalhos "$repo"
-  reconciliar_ferramental "$repo"
   local rc_ab=0
   publicar_abertura_da_familia "$repo" "$sha" || rc_ab=$?
 
   local rc_st=0
   promover_stacks "$sha" || rc_st=$?
   if [ "$rc_st" -ne 0 ]; then
-    # ESTADO PARTIDO (arq:0110 item 11c): o current (codigo dos verbos) ja trocou e
-    # passou o gate; foi a stack (containers) que recusou. NAO se reverte o current —
-    # fatiar o codigo bom por falha de container e desfazer trabalho valido. O current
-    # FICA no sha novo, a stack vira incidente separado, e o relato GRITA exatamente
-    # onde partiu: codigo no ar em X, stack Y atras, containers rodando o codigo velho.
-    # gravar_pontos mantem 'atual' = sha novo (o current de fato no ar) e 'anterior' =
-    # o sha de onde saiu, para o reverter deliberado ter para onde voltar.
     gravar_pontos "$repo" "$atual" "$sha"
     gravar_stacks_pendentes "$repo" "$sha"
     {
@@ -2712,10 +2620,6 @@ cmd_promover() {
   fi
   limpar_stacks_pendentes "$repo"
 
-  # Estagio 3 (spec_ambiente-de-desenvolvimento §3; card #3150, comentario C5):
-  # conferencia no ar. Vermelho -> volta automatica ao sha anterior, current relido;
-  # so se declara "revertido" com current relido igual ao anterior. Nao olhou (5) ->
-  # declara e nao reverte: volta por medicao que nao aconteceu e tao cega quanto subir.
   local rc_ar=0
   conferencia_no_ar "$repo" "$sha" || rc_ar=$?
   case "$rc_ar" in
@@ -2728,8 +2632,6 @@ cmd_promover() {
         exit 4
       fi
       printf 'release: conferencia no ar VERMELHA na rev %s: %s — voltando a %s\n' "${sha:0:7}" "$CONF_AR_DETALHE" "${atual:0:7}" >&2
-      # restart da porta e abertura desligados no filho: quem reinicia e este processo,
-      # e a abertura tem publicacao propria (DT 634)
       PF_RELEASE_PORTA=0 PF_RELEASE_ABERTURA=0 "$AQUI/release" reverter "$repo" "$atual" || true
       local depois="" rc_id2=0
       resolver_identidade "$repo" || rc_id2=$?
@@ -2760,9 +2662,6 @@ cmd_promover() {
     reiniciar_porta "$repo"
     exit 5
   fi
-  # O card e registro, nao producao: falha dele nao pode abortar o verbo (set -e) antes do
-  # restart da porta. Foi o que houve em 27/09: toda promocao de ramo fabrica/<card> da
-  # seguranca saiu 1 com o current ja trocado e a porta servindo o codigo anterior.
   local rc_card=0
   estagio_card "$repo" "$atual" "$sha" || rc_card=$?
   [ "$rc_card" -eq 0 ] || printf 'card:      AVISO — estágio 4 saiu %s; código no ar em %s, mova o card à mão\n' "$rc_card" "${sha:0:7}" >&2
@@ -2806,7 +2705,7 @@ cmd_reverter() {
   local alvo=""
   if [ -n "$rev" ]; then
     if is_hex_sha "$rev"; then
-      alvo="$rev"   # sha completo: reverter não precisa do forge; materializado ou não decide abaixo
+      alvo="$rev"
     else
       local esp; esp="$(espelho_de "$repo")"
       if [ -d "$esp" ]; then alvo="$(resolver_rev "$repo" "$rev" 2>/dev/null || true)"; fi
@@ -2827,7 +2726,6 @@ cmd_reverter() {
     fi
   fi
 
-  # política antes de existência: sha fora de main não se serve nem se sugere promover
   local rc_main=0
   exigir_descende_de_main "$repo" "$alvo" reverter "$repo" || rc_main=$?
   if [ "$rc_main" -ne 0 ]; then
@@ -2862,10 +2760,8 @@ cmd_reverter() {
   trocar_current "$repo" "$alvo" "$atual"
   printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${alvo:0:7}"
   assentar_atalhos "$repo"
-  reconciliar_ferramental "$repo"
   local rc_ab=0
   if [ "${PF_RELEASE_ABERTURA:-1}" != 0 ]; then
-    # reverter volta a uma abertura ja servida: o gate de rotas avisa, nao barra (card #3143)
     ROTAS_GATE=aviso
     publicar_abertura_da_familia "$repo" "$alvo" || rc_ab=$?
   fi
@@ -2873,11 +2769,6 @@ cmd_reverter() {
   local rc_st=0
   promover_stacks "$alvo" || rc_st=$?
   if [ "$rc_st" -ne 0 ]; then
-    # ESTADO PARTIDO (arq:0110 item 11c), simetrico ao promover: o current ja voltou
-    # para o alvo (codigo revertido no ar) e foi a stack que recusou a recriacao. NAO
-    # se re-troca o current para frente — isso desfaria a reversao que o operador pediu,
-    # justo quando ele volta por algo quebrado. O current FICA no alvo, a stack vira
-    # incidente, e o relato GRITA onde partiu.
     gravar_pontos "$repo" "$atual" "$alvo"
     gravar_stacks_pendentes "$repo" "$alvo"
     {
@@ -2944,18 +2835,10 @@ for _a in "$@"; do
   esac
 done
 
-# Fila de promocao (incidente de 27/09, 14:17): duas promocoes ao mesmo tempo se atropelam.
-# A do harness reinicia a porta, e o reinicio mata a outra no meio da recriacao da stack
-# (rag parou as 17:17:00 UTC, o mesmo segundo do restart). Promover e reverter passam por
-# UM lock da instancia: a segunda ESPERA a primeira terminar, em vez de recusar ou atropelar.
-# Quem espera nao tocou nada; se a porta reiniciar enquanto espera, morre sem estado partido.
-# --ensaio nao toca nada e nao entra na fila. Espera maxima: PF_PROMOCAO_ESPERA (s, default 900).
 entrar_na_fila_de_promocao() {  # $1=ato ; resto = args do ato
   local ato="$1"; shift
   local a
   for a in "$@"; do [ "$a" = "--ensaio" ] && return 0; done
-  # reentrada: o promover que reverte sozinho chama `release reverter` como filho, e o pai ja
-  # tem a vez. Esperar aqui seria esperar por si mesmo ate estourar a espera.
   [ -z "${PF_PROMOCAO_NA_FILA:-}" ] || return 0
   command -v flock >/dev/null || { printf 'release: dependência ausente: flock (util-linux) — a fila de promoção precisa dele\n' >&2; exit 3; }
   local espera="${PF_PROMOCAO_ESPERA:-900}"
@@ -2990,8 +2873,6 @@ case "$cmd" in
   reverter) entrar_na_fila_de_promocao reverter "$@"; cmd_reverter "$@" ;;
   migrar)   cmd_migrar "$@" ;;
   _medir-suite)
-    # interno: o job que `release promover` dispara para medir a suite acima do teto.
-    # Mede sincrono, grava o veredito (verde|vermelho) ou a marca de nao medido.
     [ $# -eq 2 ] || [ $# -eq 3 ] || { printf 'release: _medir-suite <repo> <sha> [<base>]\n' >&2; exit 2; }
     GATE_MARCA=""; rc_m=0
     PF_GATE_SINCRONO=1 gate_suite_verdes "$1" "$2" "${3:-}" || rc_m=$?
@@ -3002,8 +2883,6 @@ case "$cmd" in
     printf 'suite: %s %s\n' "$GATE_SUITE_STATUS" "$GATE_SUITE_DETALHE"
     exit "$rc_m" ;;
   _medir-imagem)
-    # interno: o job que `release promover` dispara para medir o passo de imagem da stack de teste
-    # (card #3733). Roda o `stack testar` sincrono e grava o exit para o promover ler.
     [ $# -eq 3 ] || { printf 'release: _medir-imagem <repo> <sha> <stack>\n' >&2; exit 2; }
     rc_i=0; ajud_i="$(achar_deploy)"
     [ -n "$ajud_i" ] || { printf 'release: dependência ausente: ajudante bin/_release/stack\n' >&2; rc_i=3; }

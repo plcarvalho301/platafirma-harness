@@ -1,3 +1,4 @@
+# componente: componente:verbo-lint
 """lint card pela lista antipadroes-de-discovery (card #3421).
 
 Caso real: o corpo e comentarios do #3408 como `tarefas ler` e `tarefas comentarios` os
@@ -16,7 +17,15 @@ from pathlib import Path
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(RAIZ / "bin"))
+# só o código desta árvore: a release servida em /opt é a casa velha, e o teste que a importa
+# passa na fita sem provar o componente e cai na esteira, que não monta /opt
+for _p in (RAIZ / "lib", RAIZ / "bin"):
+    if _p.exists() and str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
+_pypath_partes = [str(p) for p in (RAIZ / "bin", RAIZ / "lib") if p.exists()]
+if os.environ.get("PYTHONPATH"):
+    _pypath_partes.append(os.environ["PYTHONPATH"])
+os.environ["PYTHONPATH"] = os.pathsep.join(_pypath_partes)
 
 from _lint.card import (
     CHAVE_ADR,
@@ -77,10 +86,10 @@ CARD_3408 = """# O card descreve a solução, e a formalização gera os documen
 
 Problema: na hora de validar, o dono recebe listas, não um texto que descreva a solução. O card de feature tem problema e efeito, a minuta empilha posições, e a solução não tem onde entrar. Na minuta 0046 a seção Decisão misturava spec, ADR, lint e emenda; no épico #3365, a lapidação foram quatro comentários, cada um emendando o anterior. E as cadeiras já lapidam no molde novo sem nada formalizado: a engenharia foi ao two-pager por conta própria, e o tarefas modelo, a ADR 0096 e a skill prosa ainda ensinam o molde velho.
 Solução:
-- [O ciclo inteiro, da lapidação à formalização, no guia discovery](https://github.com/plcarvalho301/platafirma-casa/blob/main/guia/discovery.md): quem conduz escreve o two-pager, as cadeiras comentam com tipo, o dono valida e aposta, a cadeira dona formaliza.
-- [O comentário, tipo a tipo, com o fecho, na spec comentario-tipado](https://github.com/plcarvalho301/platafirma-casa/blob/main/spec/comentario-tipado.md): o que cada cadeira escreve no parecer, e quando ele está fechado.
+- [O ciclo inteiro, da lapidação à formalização, no guia discovery](https://github.com/plcarvalho301/platafirma-casa-espelho/blob/main/guia/discovery.md): quem conduz escreve o two-pager, as cadeiras comentam com tipo, o dono valida e aposta, a cadeira dona formaliza.
+- [O comentário, tipo a tipo, com o fecho, na spec comentario-tipado](https://github.com/plcarvalho301/platafirma-casa-espelho/blob/main/spec/comentario-tipado.md): o que cada cadeira escreve no parecer, e quando ele está fechado.
 Peças:
-1. [#3411 — guia discovery, skill prosa, styleguide e lista de verificação](https://github.com/plcarvalho301/platafirma-casa/blob/main/guia/discovery.md) (Peças 1, 2, 4 e 6 da aposta)
+1. [#3411 — guia discovery, skill prosa, styleguide e lista de verificação](https://github.com/plcarvalho301/platafirma-casa-espelho/blob/main/guia/discovery.md) (Peças 1, 2, 4 e 6 da aposta)
 2. #3412 — emendas à arq:0096 e à arq:0075, Card e Fontes em ADR e spec (Peças 1 e 5)
 3. #3413 — spec do comentário tipado (Peças 2 e 3)
 4. #3410 — tarefas modelo, fechar comentário e recusa da API por transição (Peças 1, 2, 5 e a parte de recusa da 7)
@@ -94,7 +103,7 @@ Apetite: quatro fitas de execução, uma por story já criada; não cabendo, a l
 Aberto:
 - Fica aberto de propósito: se o rastreador guarda as versões anteriores do corpo do card.
 Produtos documentais:
-- [spec comentario-tipado](https://github.com/plcarvalho301/platafirma-casa/blob/main/spec/comentario-tipado.md) · produto, #3413
+- [spec comentario-tipado](https://github.com/plcarvalho301/platafirma-casa-espelho/blob/main/spec/comentario-tipado.md) · produto, #3413
 Sai quando: toda frente nova nasce no two-pager e as cadeiras comentam com tipo.
 Quebra: 11/10/2026, pela decisão do dono no comentário #2075.
 1. #3411 · documento · produto — guia discovery, skill prosa, styleguide e lista de verificação (entregue)
@@ -359,10 +368,10 @@ def test_t9_so_na_aposta():
 
 def test_t10_solucao_sem_link_com_spec_servida():
     corpo = CARD_3408.replace("- [O ciclo inteiro, da lapidação à formalização, no guia discovery]"
-                              "(https://github.com/plcarvalho301/platafirma-casa/blob/main/guia/discovery.md)",
+                              "(https://github.com/plcarvalho301/platafirma-casa-espelho/blob/main/guia/discovery.md)",
                               "- O ciclo inteiro").replace(
         "- [O comentário, tipo a tipo, com o fecho, na spec comentario-tipado]"
-        "(https://github.com/plcarvalho301/platafirma-casa/blob/main/spec/comentario-tipado.md)",
+        "(https://github.com/plcarvalho301/platafirma-casa-espelho/blob/main/spec/comentario-tipado.md)",
         "- O comentário")
     aps, _ = _rodar(corpo)
     assert "T10" in _ids(aps)
@@ -486,18 +495,62 @@ def test_regras_e_secao_propria_e_nao_cai_na_anterior():
     assert "a → b" in s["Regras"].texto() and "Sai quando" not in s["Regras"].texto()
 
 
-def test_regra_sem_r_nem_d_avisa_e_nenhuma_passa():
+def test_regras_no_corpo_da_feature_nao_avisam_durante_a_troca():
+    # story #4317: as regras da feature foram ao inventário; a feature que ainda as traz no corpo
+    # não é apontada por elas, nem pela linha sem R ou D
     corpo = _feature_com_regras("Regras:\n1. obra com esboço → vale o esboço · R3 da spec x\n"
                                 "2. pergunta fechada → a story entra\n3. caso → resultado · D2 da arq:0096\n")
     aps, *_ = verificar_card_regua("#5", texto=corpo, comentarios="", lista=LISTA, fecha_existe=True)
-    regras = [a for a in aps if a.id == "CARD_REGRAS"]
-    assert [a.linha for a in regras] == [13] and regras[0].severidade == "aviso"
-    nenhuma = _feature_com_regras("Regras: nenhuma\n")
-    assert "CARD_REGRAS" not in _ids(verificar_card_regua("#5", texto=nenhuma, comentarios="", lista=LISTA,
-                                                          fecha_existe=True)[0])
-    sem_bloco = _feature_com_regras("")
-    assert "CARD_REGRAS" not in _ids(verificar_card_regua("#5", texto=sem_bloco, comentarios="", lista=LISTA,
-                                                          fecha_existe=True)[0])
+    assert "CARD_REGRAS" not in _ids(aps)
+
+
+# ------------------------------------------------------------------ a feature na forma da classe (story #4317)
+
+def _feature_da_classe(estado="em-parecer", extra=""):
+    return (f"# feature de prova\n#5 · feature · {estado}\nProblema: p\nServe a: s\n"
+            "Solução:\n- Ao abrir: o dono lê.\nFora: f\nSai quando: a conferida · lendo · dar certo\n"
+            "Apetite: duas fitas\n" + extra)
+
+
+def _ids_da_feature(corpo, comentarios=""):
+    aps, *_ = verificar_card_regua("#5", texto=corpo, comentarios=comentarios, lista=LISTA, fecha_existe=True)
+    return aps
+
+
+def test_feature_da_classe_nao_tem_rotulo_ausente():
+    assert "T1" not in _ids(_ids_da_feature(_feature_da_classe()))
+
+
+def test_feature_cobra_os_rotulos_da_classe_e_nao_os_de_antes():
+    so_problema = "# feature de prova\n#5 · feature · em-parecer\nProblema: p\nFora: f\n"
+    faltam = {a.o_que_fere.split("[")[1] for a in _ids_da_feature(so_problema) if a.id == "T1"}
+    assert faltam == {"rótulo «Serve a:» ausente]", "rótulo «Sai quando:» ausente]",
+                      "rótulo «Apetite:» ausente]", "rótulo «Solução:» ausente]"}
+
+
+def test_feature_com_as_tres_secoes_no_corpo_nao_e_apontada_por_elas():
+    extra = ("Peças:\n- uma peça sem número\nRegras:\n1. caso → resultado\n"
+             "Produtos documentais:\n- a spec [x](https://exemplo.test/spec)\n")
+    aps = _ids_da_feature(_feature_da_classe(extra=extra) + "\nfilhas (abertas):\n  #10\tpriorizada\tengenharia\tstory\n")
+    sobre_elas = [a for a in aps if a.id in {"T6", "T10", "CARD_REGRAS"}]
+    assert sobre_elas == []
+
+
+def test_o_epico_segue_na_regua_de_antes():
+    epico = "#5 · épico · em-parecer\nProblema: x\nResultado: y\nMedida: m\nFora: f\n"
+    aps, *_ = verificar_card_regua("#5", texto=epico, comentarios="", lista=LISTA, fecha_existe=True)
+    assert {a.o_que_fere.split("[")[1] for a in aps if a.id == "T1"} == \
+        {"rótulo «Solução:» ausente]", "rótulo «Peças:» ausente]"}
+
+
+def test_buraco_com_mais_de_um_paragrafo_avisa():
+    longo = ("--- #1 · dados · 2026-11-17 ---\nburaco: a solução quebra\nCaso: platafirma-x@a.py\n"
+             "Remendo: um detalhe\n\nprimeiro parágrafo do argumento\n\nsegundo parágrafo\n")
+    curto = ("--- #2 · dados · 2026-11-17 ---\nburaco: a solução quebra\nCaso: platafirma-x@a.py\n"
+             "Remendo: um detalhe\n\num parágrafo só\ncom duas linhas\n\n**fecho:** Remendado — Solução\n")
+    aps = _ids_da_feature(_feature_da_classe(), longo + curto)
+    avisos = [a for a in aps if a.id == "CARD_BURACO_PARAGRAFOS"]
+    assert len(avisos) == 1 and "#1" in avisos[0].arquivo and avisos[0].severidade == "aviso"
 
 
 def test_regra_com_caminho_sai_t5():
@@ -512,3 +565,84 @@ def test_t10_nao_le_mais_quebra():
     # a emenda de 15/10/2026 tira a Quebra da leitura do T10, so a filha de verdade conta.
     com_quebra_sem_filha = base + "Quebra: 11/10/2026\n1. #10 — a story\n"
     assert "T10" not in _ids(_rodar(com_quebra_sem_filha)[0])
+
+
+# ------------------------------------------------------------------ lint de árvore da casa (card #4255)
+
+def _carregar_arvore():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_lint.arvore", RAIZ / "bin" / "_lint" / "arvore.py")
+    modulo = importlib.util.module_from_spec(spec)
+    sys.modules["_lint.arvore"] = modulo
+    spec.loader.exec_module(modulo)
+    return modulo
+
+
+def _git_init(raiz: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=raiz, check=True)
+    subprocess.run(["git", "config", "user.email", "t@t"], cwd=raiz, check=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=raiz, check=True)
+
+
+def _gravar(raiz: Path, rel: str, texto: str = "# Título\n") -> None:
+    p = raiz / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(texto, encoding="utf-8")
+
+
+def test_arvore_valida_passa_sem_apontamentos(tmp_path):
+    arvore = _carregar_arvore()
+    _git_init(tmp_path)
+    _gravar(tmp_path, "instancias/cultura/da-casa.md", "# Cultura da casa\n")
+    _gravar(tmp_path, "instancias/registro-de-decisao/0138-natureza.md", "# 0138\n")
+    _gravar(tmp_path, "referencias/classes/cultura.md", "# Cultura\n")
+    _gravar(tmp_path, "referencias/instancias/cultura/da-casa.md", "# Ref\n")
+    _gravar(tmp_path, "verbetes/estrato/formal.md", "# Formal\n")
+    _gravar(tmp_path, "outros_repos/conhecimento/README.md", "# ok\n")
+
+    formas = {
+        "cultura": {"golden": "instancias/cultura/<slug>.md", "referencia": "referencias/classes/cultura.md"},
+        "registro-de-decisao": {"golden": "instancias/registro-de-decisao/<numero>-<trecho>.md"},
+    }
+    fichas = {("cultura", "da-casa"), ("registro-de-decisao", "0138")}
+    dicionarios = {"estrato": {"formal"}}
+
+    aps = arvore.verificar_arvore(tmp_path, formas=formas, fichas=fichas, dicionarios=dicionarios)
+    assert aps == []
+
+
+def test_arvore_cobra_regras_da_adr_0138(tmp_path):
+    arvore = _carregar_arvore()
+    _git_init(tmp_path)
+    _gravar(tmp_path, "1-formal/casa/casa.md")
+    _gravar(tmp_path, "solto.md")
+    _gravar(tmp_path, "verbetes/classes/cultura.md")
+    _gravar(tmp_path, "instancias/cultura/cultura.md")
+    _gravar(tmp_path, "instancias/cultura/sem-ficha.md")
+    _gravar(tmp_path, "referencias/classes/fantasma.md")
+    _gravar(tmp_path, "referencias/instancias/cultura/sem-ficha.md")
+    _gravar(tmp_path, "instancias/registro-de-decisao/0138-natureza.md", "# 0139 errado\n")
+
+    formas = {
+        "cultura": {"golden": "instancias/cultura/<slug>.md"},
+        "registro-de-decisao": {"golden": "instancias/registro-de-decisao/<numero>-<trecho>.md"},
+    }
+    fichas = {("registro-de-decisao", "0138")}
+
+    aps = arvore.verificar_arvore(tmp_path, formas=formas, fichas=fichas)
+    ids = {a.id for a in aps}
+    assert "ARVORE_RAIZ" in ids
+    assert "ARVORE_TIPO" in ids
+    assert "ARVORE_REGRA_13" in ids
+    assert "ARVORE_ORIGINAL_DA_CLASSE" in ids
+    assert "ARVORE_SEM_FICHA" in ids
+    assert "ARVORE_CLASSE" in ids
+    assert "ARVORE_NUMERO" in ids
+
+
+def test_arvore_sem_formas_sai_indeterminavel(tmp_path):
+    arvore = _carregar_arvore()
+    with pytest.raises(ValueError) as exc:
+        arvore.verificar_arvore(tmp_path)
+    assert exc.value.args[0] == 5
