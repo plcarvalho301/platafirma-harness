@@ -44,6 +44,24 @@ EVENTOS_API_PADRAO = "http://127.0.0.1:8111"
 # O dicionário tipo-de-mensagem da mensageria (decisão 5274).
 TIPOS = ("afirmacao", "negativa", "pedido", "recusa", "contestacao", "decisao")
 RELACOES = ("atualiza", "corrige", "retrata")
+FORMA_CHAVE = "<classe>:<slug> (ex.: capacidade:<slug>, chapeu:<cadeira>/<slug>, persona:<cadeira>)"
+ESQUEMA_JSON = (
+    'JSON esperado: {"enunciado": "<frase>", "destinatario": "<classe>:<slug>" ou ["..."], '
+    f'"tipo-de-mensagem": "{"|".join(TIPOS)}", '
+    '"quem": "<cadeira>" (injetado pela sessão), '
+    'opcionais: "etiqueta": "<classe>:<slug>" ou ["..."], "apoio": [...], "cita": "...", '
+    f'"responde-a": "<chave>", "relacao-com-a-anterior": "{"|".join(RELACOES)}"'
+    "}"
+)
+
+
+def _ajuda_chave(chaves: list[str]) -> str:
+    sem_prefixo = [c for c in chaves if ":" not in c]
+    dica = f"use chave de ficha na forma {FORMA_CHAVE}"
+    if sem_prefixo:
+        exemplos = ", ".join(f"capacidade:{c}" for c in sem_prefixo[:3])
+        dica += f" (ex.: {exemplos})"
+    return dica
 
 
 class Recusada(ValueError):
@@ -119,19 +137,22 @@ class Mensagem:
     @classmethod
     def de_dict(cls, dado, *, sessao: str | None = None) -> "Mensagem":
         if not isinstance(dado, dict):
-            raise Recusada("a mensagem é um objeto JSON")
+            raise Recusada(f"a mensagem é um objeto JSON · {ESQUEMA_JSON}")
+        faltam = []
         enunciado = dado.get("enunciado")
         if not isinstance(enunciado, str) or not enunciado.strip():
-            raise Recusada("mensagem sem enunciado")
+            faltam.append("enunciado")
         quem = dado.get("quem")
         if not isinstance(quem, str) or not quem.strip():
-            raise Recusada("mensagem sem quem")
+            faltam.append("quem")
         destinatario = _chaves(dado.get("destinatario"), "destinatario")
         if not destinatario:
-            raise Recusada("mensagem sem destinatário")
+            faltam.append("destinatario")
         tipo = dado.get("tipo-de-mensagem")
         if not tipo:
-            raise Recusada("mensagem sem tipo-de-mensagem")
+            faltam.append("tipo-de-mensagem")
+        if faltam:
+            raise Recusada(f"mensagem sem {', '.join(faltam)} · {ESQUEMA_JSON}")
         if tipo not in TIPOS:
             raise Recusada(f"tipo-de-mensagem fora do dicionário ({', '.join(TIPOS)}): {tipo!r}")
         responde_a, relacao = dado.get("responde-a"), dado.get("relacao-com-a-anterior")
@@ -153,10 +174,10 @@ class Mensagem:
         existem = fichario.existentes(todas)
         sem_ficha_dest = sorted(set(self.destinatario) - existem)
         if sem_ficha_dest:
-            raise Recusada(f"destinatário que não é chave de ficha: {', '.join(sem_ficha_dest)}")
+            raise Recusada(f"destinatário que não é chave de ficha: {', '.join(sem_ficha_dest)} · {_ajuda_chave(sem_ficha_dest)}")
         sem_ficha_etq = sorted(set(self.etiqueta) - existem)
         if sem_ficha_etq:
-            raise Recusada(f"etiqueta que não é chave de ficha: {', '.join(sem_ficha_etq)}")
+            raise Recusada(f"etiqueta que não é chave de ficha: {', '.join(sem_ficha_etq)} · {_ajuda_chave(sem_ficha_etq)}")
 
     def chave(self) -> str:
         """A mesma frase, da mesma parte, ao mesmo destinatário, do mesmo tipo e na mesma sessão não grava duas vezes."""
@@ -258,7 +279,13 @@ class GravadorEventos:
                 detalhe = {}
             msg_erro = detalhe.get("detalhe") or str(erro)
             if erro.code in (409, 422):
-                raise Recusada(f"{detalhe.get('tipo', erro.code)}: {msg_erro}") from None
+                tipo_erro = str(detalhe.get("tipo", erro.code))
+                complemento = ""
+                if "Etiqueta" in tipo_erro or "etiqueta" in msg_erro.lower():
+                    complemento = f" · {_ajuda_chave(msg.etiqueta)}"
+                elif "Destinatario" in tipo_erro or "destinat" in msg_erro.lower():
+                    complemento = f" · {_ajuda_chave(msg.destinatario)}"
+                raise Recusada(f"{tipo_erro}: {msg_erro}{complemento}") from None
             raise SemDestino(f"banco de eventos respondeu {erro.code}: {msg_erro}") from None
         except (urllib.error.URLError, TimeoutError, OSError) as erro:
             raise SemDestino(f"banco de eventos mudo ({self.url}): {erro}") from None

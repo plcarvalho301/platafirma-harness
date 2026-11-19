@@ -3,7 +3,7 @@
 # capacidade: memoria
 # dono: ia
 # use para: «encerra», «fecha por hoje», «paramos aqui», ANTES de encerrar o expediente
-# atos: fita, varredura, publicar
+# atos: fita, encerrar, varredura, publicar
 # forma: relatorio
 # cauda: sim
 #
@@ -387,7 +387,7 @@ def puxado_de_fora(curto, sessao_id, ordem_id, diretorio=None, resolver=resolve_
     chapeu = os.environ.get("PF_CHAPEU", "").strip() or "<chapeu>"
     return ([f"  {len(linhas)} leitura(s) de fora da cadeira; marque so o que entrou na resposta"]
             + linhas
-            + ["  publicar: `descansar publicar` (JSON na entrada padrao com enunciado, destinatario, tipo-de-mensagem e etiqueta)"])
+            + ["  publicar: `descansar publicar` (JSON na entrada padrao: enunciado, destinatario e etiqueta em <classe>:<slug>, tipo-de-mensagem)"])
 
 
 # ------------------------------------------------------------------ a poda saiu daqui (#3884)
@@ -498,35 +498,46 @@ def grava_fecho(cadeira, parada):
     return oplog.emitir(reg), tokens
 
 
+def _fechar_sessao(curto, rc, parada):
+    print(f"== contrato de morte da sessao (arq:0101 §1) — {curto} ==")
+    for _l in encerra_sessao(rc, os.environ.get("PF_SESSAO", "")):
+        print(_l)
+    gravou, tokens = grava_fecho(curto, parada)
+    print(f"fecho da fita no log da porta: parada={parada}"
+          + (f", tokens={sum(tokens.values())} (provedor, transcript do Code)" if tokens
+             else ", sem tokens (sem transcript de Code achado)")
+          + ("" if gravou else " — NAO GRAVOU"))
+    # O carimbo e do encerramento, nao do relatorio: "ultimo descanso" e a ultima fita
+    # que fechou, e e isso que a varredura cobra aos 30 dias.
+    try:
+        rc.set(f"mem:{curto}", int(time.time()))
+    except Exception as e:                                # noqa: BLE001
+        print(f"carimbo de descanso NAO GRAVOU: {type(e).__name__}: {e}")
+
+
+def ato_encerrar(args):
+    """Encerra a fita num unico ato (contrato de morte + fecho + carimbo, DT 896)."""
+    parada = getattr(args, "parada", None) or "concluiu"
+    curto = slug()
+    rc = conn()
+    _fechar_sessao(curto, rc, parada)
+    return 0
+
+
 def ato_fita(args):
-    # O contrato de morte e o ULTIMO ato da fita, e por isso tem flag propria. Medido
-    # em 06/09, na fita que implantou o arq:0101: matando `sessao:{id}` no meio do
-    # `descansar`, os passos que o proprio verbo manda executar em seguida (mesa anota,
-    # `mesa caderno <chapeu>`) perdem a cadeira — a porta resolve PF_CADEIRA a partir de
-    # `sessao:{id}`, e sem ela `mesa caderno` responde "PF_CADEIRA nao definida". A ADR
-    # diz O QUE morre; em que ponto do rito, quem diz e o rito.
+    # DT 896: `descansar fita` fecha a sessao no mesmo ato por padrao (apos emitir o
+    # relatorio). `--encerra-sessao` mantem compatibilidade fechando direto sem relatorio;
+    # `--sem-encerrar` emite so o relatorio sem matar `sessao:{id}`, para quando a cadeira
+    # ainda vai chamar `descansar publicar` ou `mesa item` antes de encerrar.
     parada = getattr(args, "parada", None)
-    if getattr(args, "encerra_sessao", False):
-        parada = parada or "concluiu"
-        curto = slug()
-        rc = conn()
-        print(f"== contrato de morte da sessao (arq:0101 §1) — {curto} ==")
-        for _l in encerra_sessao(rc, os.environ.get("PF_SESSAO", "")):
-            print(_l)
-        gravou, tokens = grava_fecho(curto, parada)
-        print(f"fecho da fita no log da porta: parada={parada}"
-              + (f", tokens={sum(tokens.values())} (provedor, transcript do Code)" if tokens
-                 else ", sem tokens (sem transcript de Code achado)")
-              + ("" if gravou else " — NAO GRAVOU"))
-        # O carimbo e do encerramento, nao do relatorio: "ultimo descanso" e a ultima fita
-        # que fechou, e e isso que a varredura cobra aos 30 dias.
-        try:
-            rc.set(f"mem:{curto}", int(time.time()))
-        except Exception as e:                                # noqa: BLE001
-            print(f"carimbo de descanso NAO GRAVOU: {type(e).__name__}: {e}")
-        return 0
-    if parada:
-        sys.exit("erro: --parada so vale com --encerra-sessao (e o motivo gravado no fecho)")
+    sem_encerrar = bool(getattr(args, "sem_encerrar", False))
+    so_encerrar = bool(getattr(args, "encerra_sessao", False))
+    if so_encerrar and sem_encerrar:
+        sys.exit("erro: --encerra-sessao e --sem-encerrar nao combinam")
+    if sem_encerrar and parada:
+        sys.exit("erro: --parada nao vale com --sem-encerrar (e o motivo gravado no fecho)")
+    if so_encerrar:
+        return ato_encerrar(args)
     curto = slug()
     rc = conn()
     print(f"== descanso de {curto} ==")
@@ -545,10 +556,6 @@ def ato_fita(args):
                              os.environ.get("PF_ORDEM_ID", "").strip()):
         print(_l)
 
-    print("\n== entidade-sessao (arq:0101 §1) ==")
-    for _l in estado_sessao(os.environ.get("PF_SESSAO", "")):
-        print(_l)
-
     print("\n== proximo passo ==\n"
           "1. a mesa — item so quando a fita deixa pendurado trabalho fora de story,\n"
           "   incidente ou ordem do dia (guia expediente, Sair, passo 1):\n"
@@ -558,24 +565,24 @@ def ato_fita(args):
           "   Premissa a reconferir e beco descartado vao ao caderno, no passo 2a.\n"
           "\n"
           "2. por chapeu tocado nesta fita — OBRIGATORIO, TRES partes, sempre as\n"
-          "   tres: o que se aprendeu vai ao caderno; o que a ferramenta fez\n"
-          "   errado vai ao debito tecnico; o que se puxou de fora e se usou vai\n"
-          "   a aresta. O caderno nao e diario de bordo.\n"
+          "   tres: o que se aprendeu vai por `descansar publicar`; o que a ferramenta\n"
+          "   fez errado vai ao debito tecnico; o que se puxou de fora e se usou vai\n"
+          "   por `descansar publicar`. O caderno nao e diario de bordo.\n"
           "\n"
-          "   2a. conhecimento curado — o caderno do chapeu, no banco, uma entrada\n"
-          "   por ato (arq:0120). A poda nao e sua: o bot caderno-poda passa duas\n"
-          "   vezes por dia, retira o que venceu e manda carta com o que tombar\n"
-          "   (Emenda de 19/10/2026). Escreva sem medo do teto: ele corta o servido,\n"
-          "   nao a escrita.\n"
+          "   2a. conhecimento curado — publique por `descansar publicar` (JSON na\n"
+          "   entrada padrao; `mesa escrever` fechou na story 4355). A poda nao e sua:\n"
+          "   o bot caderno-poda passa duas vezes por dia, retira o que venceu e manda\n"
+          "   carta com o que tombar (Emenda de 19/10/2026).\n"
           "   Legado a triar: o corpo por `mesa caderno <chapeu>`; o que vale vira\n"
-          "   entrada, e `mesa legado --caderno --triado <chapeu>` fecha. Escreva\n"
+          "   mensagem, e `mesa legado --caderno --triado <chapeu>` fecha. Escreva\n"
           "   so o que passa no teste do guia registrar, secao Caderno:\n"
-          "     `mesa escrever <chapeu> --licao \"<texto>\" --caso <card|fita|data>`\n"
-          "     `mesa escrever <chapeu> --preferencia \"<texto>\" --dito-em AAAA-MM-DD\n"
-          "      --onde \"<onde o dono disse>\"`\n"
-          "     `mesa escrever <chapeu> --premissa \"<texto>\" --vale-ate AAAA-MM-DD`\n"
-          "      (ou `--ate-que \"<evento>\"`)\n"
-          "   Entrada que contradiz a vigente: `mesa substituir <id> \"<texto>\"`.\n"
+          "     echo '{\"enunciado\": \"<frase>\", \"destinatario\": \"chapeu:<cadeira>/<chapeu>\",\n"
+          "            \"tipo-de-mensagem\": \"afirmacao|decisao|negativa|pedido|recusa|contestacao\",\n"
+          "            \"etiqueta\": [\"<classe>:<slug>\"], \"apoio\": [\"<evidencia>\"]}' | descansar publicar\n"
+          "   (`quem` vem da sessao; destinatario e etiqueta sao chaves de ficha na\n"
+          "   forma `<classe>:<slug>`, ex.: `capacidade:busca`, `persona:ia`,\n"
+          "   `chapeu:ia/busca`; para atualizar/corrigir/retratar, passe `responde-a`\n"
+          "   e `relacao-com-a-anterior`: `atualiza|corrige|retrata`.)\n"
           "   \"sem delta\" e resposta valida, mas tem de ser dita; silencio nao e.\n"
           "\n"
           "   2b. contorno de ferramenta — rotina Triar (guia defeito), NUNCA o\n"
@@ -594,26 +601,33 @@ def ato_fita(args):
           "\n"
           "   2c. aresta — a lista «puxado de fora da cadeira» acima. Marque so o\n"
           "   que ENTROU na resposta (consultar nao e usar, #2947), uma vez por\n"
-          "   ponta, com o conceito da pergunta e uma linha de para que:\n"
-          "     `mesa aresta <chapeu> --de conceito:<slug>|termo:<texto>\n"
-          "      --para <ponta> --para-que \"<linha>\"`\n"
-          "   `--quem dono` quando o dono pediu; `--declarada` quando a ponta ja\n"
-          "   esta na consulta dirigida do chapeu. Nada usado: diga \"sem aresta\".\n"
+          "   ponta, por `descansar publicar` (`mesa aresta` fechou na story 4355):\n"
+          "     echo '{\"enunciado\": \"<para que usou a ponta>\",\n"
+          "            \"destinatario\": \"chapeu:<cadeira>/<chapeu>\",\n"
+          "            \"tipo-de-mensagem\": \"afirmacao\",\n"
+          "            \"etiqueta\": [\"<classe>:<slug>\"], \"apoio\": [\"<ponta>\"]}' | descansar publicar\n"
+          "   Nada usado: diga \"sem aresta\".\n"
           "\n"
-          "3. SO POR ORDEM DO DONO («encerra», «fecha a fita», «fecha o dia»), ou em\n"
-          "   fluxo agentico (sem o dono na tela) ao fim do trabalho. Sem a ordem, pare no\n"
-          "   passo 2: a fita fica de pe e a sessao segue atendendo. Com ela, por ultimo,\n"
-          "   depois dos passos 1 e 2, sem perguntar nada no fecho:\n"
-          "   `descansar fita --encerra-sessao`\n"
-          "   (contrato de morte, arq:0101 §1: DEL sessao/ledger/giro + derrame).\n"
+          "3. encerramento — `descansar fita` (ou `descansar encerrar`) ja encerra a\n"
+          "   sessao no mesmo ato (contrato de morte, arq:0101 §1: DEL\n"
+          "   sessao/ledger/giro + derrame), sem perguntar nada no fecho.\n"
           "   Diga por que a fita parou: sem flag, `concluiu`; senao\n"
           "   `--parada teto_giros|orcamento_erro|interrompida`. O fecho vai ao log da\n"
           "   porta com o motivo e, no Code, os tokens somados do transcript.\n"
+          "   Se precisar publicar mensagens (`descansar publicar`) ou plantar item\n"
+          "   (`mesa item`) antes de fechar, rode `descansar fita --sem-encerrar`\n"
+          "   primeiro e encerre por ultimo com `descansar encerrar` (ou\n"
+          "   `descansar fita --encerra-sessao`). Esquecer nao vaza nada: o TTL de\n"
+          "   48 h e o segundo caminho de morte que a propria ADR escreve.")
 
-          "   E o ultimo ato da fita porque matar `sessao:{id}` tira a cadeira de\n"
-          "   toda tool seguinte — `mesa escrever` e `mesa aresta` do passo 2 morrem com\n"
-          "   `PF_CADEIRA nao definida`. Esquecer nao vaza nada: o TTL de 48 h e o\n"
-          "   segundo caminho de morte que a propria ADR escreve.")
+    if sem_encerrar:
+        print("\n== entidade-sessao (arq:0101 §1) ==")
+        for _l in estado_sessao(os.environ.get("PF_SESSAO", "")):
+            print(_l)
+        return 0
+
+    print()
+    _fechar_sessao(curto, rc, parada or "concluiu")
     return 0
 
 
@@ -641,7 +655,7 @@ def ato_varredura(args):
 
 def ato_publicar(args):
     """Publica uma mensagem (JSON no stdin) na familia negocio.mensagem do banco de eventos (#4355)."""
-    from descanso.publicar import Recusada, SemDestino, publicar
+    from descanso.publicar import ESQUEMA_JSON, Recusada, SemDestino, publicar
 
     como_json = bool(getattr(args, "como_json", False))
     bruto = "" if sys.stdin is None or sys.stdin.isatty() else sys.stdin.read().strip()
@@ -656,7 +670,7 @@ def ato_publicar(args):
     try:
         dado = json.loads(bruto) if bruto else None
     except ValueError as erro:
-        return _sai(f"a mensagem não é JSON: {erro}", 2)
+        return _sai(f"a mensagem não é JSON: {erro} · {ESQUEMA_JSON}", 2)
     sessao = (os.environ.get("PF_SESSAO") or "").strip() or None
     cadeira = (os.environ.get("PF_CADEIRA") or "").strip() or None
     try:
@@ -685,15 +699,20 @@ def main():
                                 description="fim de fita: a mesa, o caderno e a aresta, e o encerramento")
     sub = p.add_subparsers(dest="ato")
 
-    f = sub.add_parser("fita", help="o descanso da cadeira corrente (PF_CADEIRA)")
+    f = sub.add_parser("fita", help="o descanso da cadeira corrente (PF_CADEIRA); encerra a sessao no mesmo ato")
     f.add_argument("--encerra-sessao", action="store_true",
-                   help="ULTIMO ato da fita: DEL sessao/ledger/giro + derrame (arq:0101 "
-                        "§1). Separado porque matar a sessao tira a cadeira das tools "
-                        "seguintes; rode depois da mesa e do delta de caderno")
+                   help="encerra a sessao direto sem relatorio (compatibilidade; mesmo efeito de `descansar encerrar`)")
+    f.add_argument("--sem-encerrar", action="store_true",
+                   help="emite so o relatorio sem matar a sessao (para publicar ou plantar item antes de encerrar)")
     f.add_argument("--parada", choices=oplog.MOTIVOS_PARADA, default=None,
-                   help="por que a fita parou, gravado no fecho (so com --encerra-sessao; sem "
-                        "ela, recusa): concluiu (padrao) | teto_giros | orcamento_erro | interrompida")
+                   help="por que a fita parou, gravado no fecho (recusa com --sem-encerrar): "
+                        "concluiu (padrao) | teto_giros | orcamento_erro | interrompida")
     f.set_defaults(func=ato_fita)
+
+    e = sub.add_parser("encerrar", help="encerra a sessao da cadeira corrente (DEL sessao/ledger/giro + fecho)")
+    e.add_argument("--parada", choices=oplog.MOTIVOS_PARADA, default=None,
+                   help="por que a fita parou, gravado no fecho: concluiu (padrao) | teto_giros | orcamento_erro | interrompida")
+    e.set_defaults(func=ato_encerrar)
 
     v = sub.add_parser("varredura", help="passada por todas as cadeiras; so o que esta fora do lugar")
     v.set_defaults(func=ato_varredura)
