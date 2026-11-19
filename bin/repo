@@ -447,7 +447,7 @@ clone_de() {
     *) morre "'$nome' resolve para $real, fora da bancada $BANCADA" 4 ;;
   esac
 
-  if ! "$GIT" -C "$real" rev-parse --git-dir >/dev/null 2>&1; then
+  if ! "$GIT" -C "$real" rev-parse --git-dir >/dev/null 2>&1 || _worktree_orfa "$real"; then
     local err; err="$("$GIT" -C "$real" rev-parse --git-dir 2>&1 | head -1)"
     if _worktree_orfa "$real"; then
       [ "$COMO_JSON" -eq 1 ] && morre "indeterminavel: bancada órfã '$nome' — $err" 5
@@ -461,12 +461,30 @@ clone_de() {
   printf '%s' "$real"
 }
 
-# _worktree_orfa <dir> -- 0 se <dir> tem um gitfile .git de worktree cujo gitdir nao existe
-# ou e recusado pelo git (ex.: clone base removido e refeito; DTs 879 e 881).
+# _worktree_orfa <dir> -- 0 se <dir> tem um gitfile .git de worktree cujo gitdir nao existe,
+# e recusado pelo git, ou aponta para o gitdir de OUTRA worktree (colisao de nome apos
+# reclonar a base; ex.: dois .../main apontando para .git/worktrees/main; DTs 879 e 881).
 _worktree_orfa() {
   local d="$1"
-  [ -d "$d" ] && [ -f "$d/.git" ] && grep -q '^gitdir:' "$d/.git" 2>/dev/null \
-    && ! "$GIT" -C "$d" rev-parse --git-dir >/dev/null 2>&1
+  [ -d "$d" ] && [ -f "$d/.git" ] && grep -q '^gitdir:' "$d/.git" 2>/dev/null || return 1
+  if ! "$GIT" -C "$d" rev-parse --git-dir >/dev/null 2>&1; then
+    return 0
+  fi
+  local gd real_d back_raw back
+  gd="$(sed -n 's/^gitdir:[[:space:]]*//p' "$d/.git" | head -n 1)"
+  case "$gd" in
+    /*) ;;
+    *) gd="$d/$gd" ;;
+  esac
+  [ -n "$gd" ] && [ -f "$gd/gitdir" ] || return 0
+  real_d="$(realpath "$d/.git" 2>/dev/null || printf '%s' "$d/.git")"
+  back_raw="$(cat "$gd/gitdir" 2>/dev/null)"
+  case "$back_raw" in
+    /*) ;;
+    *) back_raw="$gd/$back_raw" ;;
+  esac
+  back="$(realpath "$back_raw" 2>/dev/null || printf '%s' "$back_raw")"
+  [ "$back" != "$real_d" ]
 }
 
 # _religar_worktree_orfa <clone_raiz> <wt_dir> <ramo> <base_ref> <track 0|1> --
