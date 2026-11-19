@@ -488,54 +488,52 @@ _worktree_orfa() {
 }
 
 # _religar_worktree_orfa <clone_raiz> <wt_dir> <ramo> <base_ref> <track 0|1> --
-# religa uma worktree orfa ao clone base atual sem perder a arvore de trabalho: cria uma
-# worktree nova com --no-checkout em pasta temporaria, troca o .git, repara os ponteiros e
-# alinha o indice a HEAD (--mixed), deixando o que nao estava commitado como mudanca sobre
-# base_ref (DTs 879 e 881).
+# refaz uma worktree orfa a partir de base_ref sem misturar arvore antiga com HEAD atual
+# (DT 893; incidente 4371): move a pasta orfa inteira para wt/.orfas/<repo>-<cadeira>-<chave>-<carimbo>
+# para nao perder escrita local, e recria a worktree limpa em base_ref.
 _religar_worktree_orfa() {
   local clone_raiz="$1" wt_dir="$2" ramo="$3" base_ref="$4" track="${5:-0}"
+  local chave cad repo_n carimbo destino
+  chave="$(basename "$wt_dir")"
+  cad="$(basename "$(dirname "$wt_dir")")"
+  repo_n="$(basename "$(dirname "$(dirname "$wt_dir")")")"
+  carimbo="$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$BANCADA/wt/.orfas" || morre "falha ao criar $BANCADA/wt/.orfas" 3
+  destino="$BANCADA/wt/.orfas/${repo_n}-${cad}-${chave}-${carimbo}"
+  if [ -e "$destino" ]; then
+    destino="$(mktemp -d "$BANCADA/wt/.orfas/${repo_n}-${cad}-${chave}-${carimbo}.XXXXXX")" \
+      || morre "falha ao reservar pasta em $BANCADA/wt/.orfas" 3
+    rmdir "$destino" 2>/dev/null || true
+  fi
+
+  mv "$wt_dir" "$destino" || morre "falha ao mover worktree órfã $wt_dir para $destino" 3
   "$GIT" -C "$clone_raiz" worktree prune >/dev/null 2>&1 || true
-  local tmp_wt
-  tmp_wt="$(mktemp -d "$(dirname "$wt_dir")/.religar.XXXXXX")" \
-    || morre "falha ao criar pasta temporária para religar $wt_dir" 3
-  rmdir "$tmp_wt" 2>/dev/null || true
 
   if [ -n "$ramo" ]; then
     if "$GIT" -C "$clone_raiz" show-ref --verify --quiet "refs/heads/$ramo"; then
-      if ! "$GIT" -C "$clone_raiz" worktree add -q --no-checkout "$tmp_wt" "$ramo" >/dev/null 2>&1; then
-        rm -rf "$tmp_wt" 2>/dev/null || true
+      if ! "$GIT" -C "$clone_raiz" worktree add -q "$wt_dir" "$ramo" >/dev/null 2>&1; then
+        mv "$destino" "$wt_dir" 2>/dev/null || true
         morre "git worktree add falhou ao religar $wt_dir (o ramo '$ramo' ja esta aberto em outra pasta?)" 3
       fi
     else
       local track_flag="--no-track"
       [ "$track" -eq 1 ] && track_flag="--track"
-      if ! "$GIT" -C "$clone_raiz" worktree add -q --no-checkout "$track_flag" -b "$ramo" "$tmp_wt" "$base_ref" >/dev/null 2>&1; then
-        rm -rf "$tmp_wt" 2>/dev/null || true
+      if ! "$GIT" -C "$clone_raiz" worktree add -q "$track_flag" -b "$ramo" "$wt_dir" "$base_ref" >/dev/null 2>&1; then
+        mv "$destino" "$wt_dir" 2>/dev/null || true
         morre "git worktree add -b falhou ao religar $wt_dir" 3
       fi
     fi
   else
-    if ! "$GIT" -C "$clone_raiz" worktree add -q --no-checkout --detach "$tmp_wt" "$base_ref" >/dev/null 2>&1; then
-      rm -rf "$tmp_wt" 2>/dev/null || true
+    if ! "$GIT" -C "$clone_raiz" worktree add -q --detach "$wt_dir" "$base_ref" >/dev/null 2>&1; then
+      mv "$destino" "$wt_dir" 2>/dev/null || true
       morre "git worktree add --detach falhou ao religar $wt_dir" 3
     fi
   fi
 
-  mv -f "$tmp_wt/.git" "$wt_dir/.git" || {
-    rm -rf "$tmp_wt" 2>/dev/null || true
-    "$GIT" -C "$clone_raiz" worktree prune >/dev/null 2>&1 || true
-    morre "falha ao substituir .git ao religar $wt_dir" 3
-  }
-  rmdir "$tmp_wt" 2>/dev/null || rm -rf "$tmp_wt" 2>/dev/null || true
-  "$GIT" -C "$clone_raiz" worktree repair "$wt_dir" >/dev/null 2>&1 \
-    || morre "git worktree repair falhou ao religar $wt_dir" 3
-  "$GIT" -C "$wt_dir" reset --mixed -q HEAD >/dev/null 2>&1 \
-    || morre "git reset --mixed falhou ao religar $wt_dir" 3
-
   local sha_curto
   sha_curto="$("$GIT" -C "$wt_dir" rev-parse --short HEAD 2>/dev/null || echo '?')"
-  printf 'religada: worktree órfã %s -> %s (%s @ %s; árvore preservada)\n' \
-    "$wt_dir" "$clone_raiz" "${ramo:-HEAD destacado}" "$sha_curto"
+  printf 'religada: worktree órfã %s -> %s (%s @ %s; árvore antiga em %s)\n' \
+    "$wt_dir" "$clone_raiz" "${ramo:-HEAD destacado}" "$sha_curto" "$destino"
 }
 
 # base_de_repo <repo> -- o clone base, para os atos que so falam com o forge (pr-listar, pr-ver,

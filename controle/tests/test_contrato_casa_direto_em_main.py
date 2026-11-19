@@ -571,7 +571,13 @@ def test_sincronizar_casa_recusa_antes_do_push_quando_portao_reprova_tocado(tmp_
     assert _no_origin(tmp_path, "levantamento/ruins.md") is None
 
 
-def test_abrir_direto_em_main_religa_worktree_orfa_e_preserva_arvore_dt879_881(tmp_path):
+def _pasta_orfa(bancada: Path, prefixo: str) -> Path:
+    orfas = sorted((bancada / "wt" / ".orfas").glob(f"{prefixo}*"))
+    assert len(orfas) == 1, orfas
+    return orfas[0]
+
+
+def test_abrir_direto_em_main_religa_worktree_orfa_e_move_para_orfas_dt879_881_893(tmp_path):
     bancada = _montar(tmp_path)
     wt = _abrir(tmp_path, bancada)
     (wt / "LEIA.md").write_text("editado antes de perder o clone\n", encoding="utf-8")
@@ -588,22 +594,16 @@ def test_abrir_direto_em_main_religa_worktree_orfa_e_preserva_arvore_dt879_881(t
     r_ab = _repo(tmp_path, bancada, "abrir", CASA)
     assert r_ab.returncode == 0, r_ab.stdout + r_ab.stderr
     assert "religada: worktree órfã" in r_ab.stdout
-    assert (wt / "LEIA.md").read_text(encoding="utf-8") == "editado antes de perder o clone\n"
-    assert (wt / "rascunho.md").read_text(encoding="utf-8") == "novo nao rastreado\n"
+    assert "wt/.orfas/" in r_ab.stdout
+    assert _git("status", "--porcelain", cwd=wt) == ""
 
-    porcelain = _git("status", "--porcelain", cwd=wt)
-    assert "M LEIA.md" in porcelain
-    assert "?? rascunho.md" in porcelain
+    backup = _pasta_orfa(bancada, f"{CASA}-dados-main-")
+    assert (backup / "LEIA.md").read_text(encoding="utf-8") == "editado antes de perder o clone\n"
+    assert (backup / "rascunho.md").read_text(encoding="utf-8") == "novo nao rastreado\n"
 
     assert _repo(tmp_path, bancada, "estado", CASA).returncode == 0
     assert _repo(tmp_path, bancada, "ler", CASA, "LEIA.md").returncode == 0
     assert _repo(tmp_path, bancada, "historico", CASA).returncode == 0
-
-    r_cm = _repo(tmp_path, bancada, "commitar", CASA, "-m", "recuperado", "LEIA.md", "rascunho.md")
-    assert r_cm.returncode == 0, r_cm.stdout + r_cm.stderr
-    r_sy = _repo(tmp_path, bancada, "sincronizar", CASA)
-    assert r_sy.returncode == 0, r_sy.stdout + r_sy.stderr
-    assert _no_origin(tmp_path, "rascunho.md") == "novo nao rastreado\n"
 
 
 def test_abrir_direto_em_main_religa_worktree_orfa_limpa_dt879_881(tmp_path):
@@ -621,7 +621,7 @@ def test_abrir_direto_em_main_religa_worktree_orfa_limpa_dt879_881(tmp_path):
     assert _repo(tmp_path, bancada, "estado", CASA).returncode == 0
 
 
-def test_abrir_repo_codigo_religa_worktree_orfa_e_preserva_arvore_dt879(tmp_path):
+def test_abrir_repo_codigo_religa_worktree_orfa_e_move_para_orfas_dt879_893(tmp_path):
     bancada = _montar(tmp_path)
     r0 = _repo(tmp_path, bancada, "abrir", "demo", "--slug", "dt-orfa")
     assert r0.returncode == 0, r0.stdout + r0.stderr
@@ -635,32 +635,49 @@ def test_abrir_repo_codigo_religa_worktree_orfa_e_preserva_arvore_dt879(tmp_path
     r_ab = _repo(tmp_path, bancada, "abrir", "demo", "--slug", "dt-orfa")
     assert r_ab.returncode == 0, r_ab.stdout + r_ab.stderr
     assert "religada: worktree órfã" in r_ab.stdout
-    assert (wt / "LEIA.md").read_text(encoding="utf-8") == "mudanca local\n"
-    assert (wt / "novo.txt").read_text(encoding="utf-8") == "extra\n"
+    assert _git("status", "--porcelain", cwd=wt) == ""
     assert _git("rev-parse", "--abbrev-ref", "HEAD", cwd=wt) == "dados/dt-orfa"
+
+    backup = _pasta_orfa(bancada, "demo-dados-dt-orfa-")
+    assert (backup / "LEIA.md").read_text(encoding="utf-8") == "mudanca local\n"
+    assert (backup / "novo.txt").read_text(encoding="utf-8") == "extra\n"
     assert _repo(tmp_path, bancada, "estado", "demo@dt-orfa").returncode == 0
 
 
 def test_procurar_e_ler_religam_worktree_orfa_direto_em_main_dt888(tmp_path):
     bancada = _montar(tmp_path)
     wt = _abrir(tmp_path, bancada)
-    (wt / "LEIA.md").write_text("termo-unico-dt888\n", encoding="utf-8")
+    (wt / "rascunho-dt888.md").write_text("guardado-no-backup\n", encoding="utf-8")
+    _main_novo(tmp_path, arquivo="LEIA.md", texto="termo-origin-dt888\n")
 
     shutil.rmtree(bancada / CASA)
     _git("clone", "-q", str(_bare(tmp_path, CASA)), str(bancada / CASA))
 
-    r_pr = _repo(tmp_path, bancada, "procurar", CASA, "termo-unico-dt888")
+    r_pr = _repo(tmp_path, bancada, "procurar", CASA, "termo-origin-dt888")
     assert r_pr.returncode == 0, r_pr.stdout + r_pr.stderr
-    assert "termo-unico-dt888" in r_pr.stdout
+    assert "termo-origin-dt888" in r_pr.stdout
     assert "religada: worktree órfã" in r_pr.stderr
-    assert (wt / "LEIA.md").read_text(encoding="utf-8") == "termo-unico-dt888\n"
+    assert _git("status", "--porcelain", cwd=wt) == ""
+    backup = _pasta_orfa(bancada, f"{CASA}-dados-main-")
+    assert (backup / "rascunho-dt888.md").read_text(encoding="utf-8") == "guardado-no-backup\n"
     assert _repo(tmp_path, bancada, "estado", CASA).returncode == 0
 
 
-def test_sanear_detecta_e_religa_worktree_orfa_dt882(tmp_path):
+def test_sanear_detecta_e_religa_worktree_orfa_limpa_sem_diff_falso_dt882_893(tmp_path):
     bancada = _montar(tmp_path)
     wt = _abrir(tmp_path, bancada)
-    (wt / "LEIA.md").write_text("preservado-no-sanear\n", encoding="utf-8")
+    (wt / "local.md").write_text("preservado-no-sanear\n", encoding="utf-8")
+
+    # Simula origin/main avancando depois que a worktree ficou orfa (causa raiz do DT 893).
+    outro = tmp_path / "outro-clone"
+    _git("clone", "-q", str(_bare(tmp_path, CASA)), str(outro))
+    _git("config", "user.email", "t@t", cwd=outro)
+    _git("config", "user.name", "t", cwd=outro)
+    (outro / "LEIA.md").write_text("casa v2 no origin\n", encoding="utf-8")
+    (outro / "novo-no-origin.md").write_text("commit posterior\n", encoding="utf-8")
+    _git("add", "LEIA.md", "novo-no-origin.md", cwd=outro)
+    _git("commit", "-q", "-m", "avanca main", cwd=outro)
+    _git("push", "-q", "origin", "main", cwd=outro)
 
     shutil.rmtree(bancada / CASA)
     _git("clone", "-q", str(_bare(tmp_path, CASA)), str(bancada / CASA))
@@ -672,7 +689,11 @@ def test_sanear_detecta_e_religa_worktree_orfa_dt882(tmp_path):
     r_san = _repo(tmp_path, bancada, "sanear", CASA)
     assert r_san.returncode == 0, r_san.stdout + r_san.stderr
     assert "religada: worktree órfã" in r_san.stdout
-    assert (wt / "LEIA.md").read_text(encoding="utf-8") == "preservado-no-sanear\n"
+    assert _git("status", "--porcelain", cwd=wt) == ""
+    assert (wt / "LEIA.md").read_text(encoding="utf-8") == "casa v2 no origin\n"
+    assert (wt / "novo-no-origin.md").read_text(encoding="utf-8") == "commit posterior\n"
+    backup = _pasta_orfa(bancada, f"{CASA}-dados-main-")
+    assert (backup / "local.md").read_text(encoding="utf-8") == "preservado-no-sanear\n"
     assert _repo(tmp_path, bancada, "estado", CASA).returncode == 0
 
 
