@@ -4,11 +4,11 @@ Modulo unico: `lint alcance` e `conferir alcance` chamam `cadeia_de_alcance` daq
 diferem na forma de dizer. MEDIDOR, nao validador: onde o alvo nao tem ACL canonica
 (portao paralelo que nao conhece papel nem dominio), DECLARA — nao presume um canon
 inexistente. As 5 fontes-de-verdade (claudinho-seguranca, card #2452 sob #191):
-  identidade -> politica-acesso/sujeitos.yaml
-  credencial -> politica-acesso/sujeitos.yaml (client/conta/usuario/segredos) [+ realm]
-  PDP        -> politica-acesso/politica.yaml
-  rede       -> politica-acesso/superficies.yaml::ingress
-  ACL        -> politica-acesso/superficies.yaml::portao
+  identidade -> core/acesso/sujeitos.yaml
+  credencial -> core/acesso/sujeitos.yaml (client/conta/usuario/segredos) [+ realm]
+  PDP        -> core/acesso/politica.yaml
+  rede       -> core/acesso/superficies.yaml::ingress
+  ACL        -> core/acesso/superficies.yaml::portao
 """
 from __future__ import annotations
 
@@ -33,12 +33,11 @@ def _carrega_yaml(caminho: str) -> tuple[Optional[dict], Optional[str]]:
 
 
 def politica_dir_padrao() -> str:
-    """Onde a politica de acesso mora: PDP_DIR, senao <bancada>/var/politica-acesso
-    (dados fora da worktree de fabrica, #2956)."""
+    """Onde a politica de acesso mora: PDP_DIR, senao <release>/current/core/acesso."""
     if os.environ.get("PDP_DIR"):
         return os.environ["PDP_DIR"]
-    bancada = os.environ.get("PLATAFIRMA_BANCADA") or os.path.expanduser("~/AI")
-    return os.path.join(bancada, "var", "politica-acesso")
+    raiz = os.environ.get("PF_RELEASE_RAIZ", "/opt/platafirma")
+    return os.path.join(raiz, "current", "core", "acesso")
 
 
 def cadeia_de_alcance(
@@ -86,51 +85,51 @@ def cadeia_de_alcance(
         papeis = ",".join(atrib.get("papeis") or ()) or "(sem papel)"
         saltos.append(("identidade", "PASSA",
                        f"projetado em sujeitos.yaml (natureza={atrib.get('natureza', '?')}, papeis={papeis})",
-                       "politica-acesso/sujeitos.yaml"))
+                       "core/acesso/sujeitos.yaml"))
         id_ok = True
     else:
         saltos.append(("identidade", "QUEBRA",
                        f"sujeito {sujeito!r} ausente da projecao — fail-closed; o PDP nega por atributo ausente",
-                       "politica-acesso/sujeitos.yaml"))
+                       "core/acesso/sujeitos.yaml"))
         id_ok = False
 
     # 2 credencial
     locus = [f"{k}={atrib[k]}" for k in ("client", "conta", "usuario", "segredos") if atrib.get(k)]
     if not atrib:
         saltos.append(("credencial", "n/a", "sujeito nao projetado — nada onde ancorar credencial",
-                       "politica-acesso/sujeitos.yaml (+ realm keycloak)"))
+                       "core/acesso/sujeitos.yaml (+ realm keycloak)"))
         cred_ok = False
     elif locus:
         saltos.append(("credencial", "PASSA",
                        "locus: " + ", ".join(locus) + " [realm keycloak: declarado, nao medido aqui]",
-                       "politica-acesso/sujeitos.yaml (+ realm keycloak)"))
+                       "core/acesso/sujeitos.yaml (+ realm keycloak)"))
         cred_ok = True
     else:
         saltos.append(("credencial", "QUEBRA",
                        "projetado sem client/conta/usuario/segredos — sem credencial para autenticar",
-                       "politica-acesso/sujeitos.yaml (+ realm keycloak)"))
+                       "core/acesso/sujeitos.yaml (+ realm keycloak)"))
         cred_ok = False
 
     # 3 PDP
     if neg is None:
-        saltos.append(("PDP", "PERMITE", f"a regra permite; acao={acao}", "politica-acesso/politica.yaml"))
+        saltos.append(("PDP", "PERMITE", f"a regra permite; acao={acao}", "core/acesso/politica.yaml"))
         pdp_estado = "PERMITE"
     elif neg.regra in ("projecao", "identidade"):
         saltos.append(("PDP", "nao avaliado",
                        f"sujeito ausente da projecao ({neg.regra}) — a decisao nem chega ao PDP",
-                       "politica-acesso/politica.yaml"))
+                       "core/acesso/politica.yaml"))
         pdp_estado = "nao avaliado"
     else:
         saltos.append(("PDP", "NEGA", f"regra={neg.regra}, acao={acao} — {neg.motivo}",
-                       "politica-acesso/politica.yaml"))
+                       "core/acesso/politica.yaml"))
         pdp_estado = "NEGA"
 
     # 4 rede + 5 ACL do alvo
     if sup is None:
         saltos.append(("rede", "indeterminavel", f"fonte {fonte!r} ausente de superficies.yaml — a medir",
-                       "politica-acesso/superficies.yaml"))
+                       "core/acesso/superficies.yaml"))
         saltos.append(("ACL do alvo", "indeterminavel", "sem entrada no catalogo de superficies",
-                       "politica-acesso/superficies.yaml"))
+                       "core/acesso/superficies.yaml"))
         rede_ok = None
         acl: Any = "faltando"
     else:
@@ -138,20 +137,20 @@ def cadeia_de_alcance(
         detalhe_rede = f"{sup.get('ingress', '?')} — {sup.get('rede', '')}"
         if alc is True or alc == "loopback":
             marca = "ALCANCA (loopback)" if alc == "loopback" else "ALCANCA"
-            saltos.append(("rede", marca, detalhe_rede, "politica-acesso/superficies.yaml::ingress"))
+            saltos.append(("rede", marca, detalhe_rede, "core/acesso/superficies.yaml::ingress"))
             rede_ok = True
         else:
-            saltos.append(("rede", "BLOQUEIA", detalhe_rede, "politica-acesso/superficies.yaml::ingress"))
+            saltos.append(("rede", "BLOQUEIA", detalhe_rede, "core/acesso/superficies.yaml::ingress"))
             rede_ok = False
         acl = sup.get("acl_canonica")
         portao = sup.get("portao", "")
         if acl is True:
-            saltos.append(("ACL do alvo", "CANONICA", portao, "politica-acesso/superficies.yaml::portao"))
+            saltos.append(("ACL do alvo", "CANONICA", portao, "core/acesso/superficies.yaml::portao"))
         elif acl is False:
             saltos.append(("ACL do alvo", "FRACA", "portao paralelo, NAO impoe o PDP — " + portao,
-                           "politica-acesso/superficies.yaml::portao"))
+                           "core/acesso/superficies.yaml::portao"))
         else:
-            saltos.append(("ACL do alvo", "A MEDIR", portao, "politica-acesso/superficies.yaml::portao"))
+            saltos.append(("ACL do alvo", "A MEDIR", portao, "core/acesso/superficies.yaml::portao"))
 
     # elo mais fraco da cadeia modelada: identidade -> credencial -> PDP -> rede
     elo = None
@@ -198,7 +197,7 @@ def verificar_alcance(
     tokens = alvo.split()
     if len(tokens) < 2:
         return [Apontamento(
-            "politica-acesso", 1,
+            "core/acesso", 1,
             f"alvo de alcance deve ser '<sujeito> <fonte>', recebido: '{alvo}'",
             "informar sujeito e fonte validos (ex: ti board)",
             severidade="aviso",
@@ -208,7 +207,7 @@ def verificar_alcance(
     apontamentos: list[Apontamento] = []
     if not c["saltos"]:
         apontamentos.append(Apontamento(
-            "politica-acesso", 1, f"alcance {sujeito} -> {fonte}: {c['motivo']}",
+            "core/acesso", 1, f"alcance {sujeito} -> {fonte}: {c['motivo']}",
             "conferir o maquinario de acesso e o nome da fonte", severidade="aviso", id="ALCANCE",
         ))
         return apontamentos
@@ -221,7 +220,7 @@ def verificar_alcance(
             ))
     if c["nota"]:
         apontamentos.append(Apontamento(
-            "politica-acesso/superficies.yaml", 1, c["nota"],
+            "core/acesso/superficies.yaml", 1, c["nota"],
             "impor o PDP no portao do alvo", severidade="aviso", id="ALCANCE",
         ))
     return apontamentos

@@ -1,0 +1,54 @@
+{
+  "tipo": "alocacao",
+  "titulo": "Alocação dos renderizadores de figura da wiki",
+  "faixas": [
+    {
+      "id": "host"
+    }
+  ],
+  "zonas": [
+    {
+      "id": "host_wiki",
+      "nome": "Stack plataforma-wiki",
+      "categoria": "host",
+      "tipo": "stack",
+      "faixa": "host"
+    }
+  ],
+  "elementos": [
+    {
+      "id": "kroki_app",
+      "titulo": "Kroki",
+      "subtitulo": "renderizador da wiki",
+      "categoria": "servico",
+      "tipo": "servico",
+      "zona": "host_wiki",
+      "faixa": "host",
+      "coluna": 1,
+      "ordem": 1
+    },
+    {
+      "id": "mermaid_app",
+      "titulo": "Kroki Mermaid",
+      "subtitulo": "companheiro do Kroki",
+      "categoria": "servico",
+      "tipo": "servico",
+      "zona": "host_wiki",
+      "faixa": "host",
+      "coluna": 1,
+      "ordem": 2
+    },
+    {
+      "id": "desenhista_app",
+      "titulo": "Desenhista",
+      "subtitulo": "Kroki da peça diagrama",
+      "categoria": "servico",
+      "tipo": "servico",
+      "zona": "host_wiki",
+      "faixa": "host",
+      "coluna": 1,
+      "ordem": 3
+    }
+  ],
+  "arestas": []
+}

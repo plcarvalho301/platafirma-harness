@@ -1,0 +1,2 @@
+# Lista de portão das chaves espelho-diagrama e diagrama: caminhos relativos a lib/diagrama/.
+test_diagrama.py | outros_repos/harness/lib/diagrama/** outros_repos/harness/skills/diagrama/** outros_repos/harness/bin/agente outros_repos/harness/registro/venvs.json outros_repos/harness/bin/_release/registro.py instancias/gabarito/*.md lib/diagrama/** skills/diagrama/** bin/agente registro/venvs.json bin/_release/registro.py

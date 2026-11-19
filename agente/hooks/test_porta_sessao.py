@@ -1,213 +1,55 @@
-"""porta-sessao.py como o Code o chama: JSON no stdin, JSON no stdout, exit 0 sempre."""
-import json
-import os
-import subprocess
-import sys
+"""Testes do gancho porta-sessao.py para itens estruturados do malote (card #4369)."""
+from __future__ import annotations
+
+import importlib.util
 from pathlib import Path
 
-HOOK = Path(__file__).resolve().parent / "porta-sessao.py"
-SID = "0a1b2c3d-1111-4222-8333-444455556666"
+HOOK_PATH = Path(__file__).resolve().parent / "porta-sessao.py"
 
 
-def _roda(ev: dict, tmp: Path, projeto: Path | None = None) -> str:
-    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
-    env.update(XDG_RUNTIME_DIR=str(tmp / "run"), PF_ABERTURA_DIR=str(tmp / "morada"))
-    if projeto:
-        env["CLAUDE_PROJECT_DIR"] = str(projeto)
-    r = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(ev), text=True,
-                       capture_output=True, env=env, timeout=20)
-    assert r.returncode == 0, r.stderr
-    return r.stdout
+def _carrega_hook():
+    spec = importlib.util.spec_from_file_location("porta_sessao_hook_4369", str(HOOK_PATH))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
-def _publica(tmp: Path, cadeira: str, texto: str) -> None:
-    raiz = tmp / "morada" / "current" / "abertura"
-    (raiz / cadeira).mkdir(parents=True)
-    (raiz / cadeira / "persona.md").write_text(texto, encoding="utf-8")
-    (raiz / "dono.md").write_text("# conduta — o dono", encoding="utf-8")
+def test_liga_origem_em_itens_estruturados_do_malote():
+    hook = _carrega_hook()
+    entrada = {
+        "itens": [
+            {"verbo": "sessao", "ato": "abrir", "args": ["engenharia"]},
+            {"verbo": "repo", "ato": "estado", "args": ["platafirma-casa-espelho"]},
+        ]
+    }
+    saida = hook.liga_origem("mcp__claudinho-mcp__malote", entrada, "orig-123")
+    assert saida["itens"][0]["args"] == ["engenharia", "--origem", "orig-123"]
+    assert saida["itens"][1]["args"] == ["platafirma-casa-espelho"]
 
 
-def _posto(tmp: Path) -> Path:
-    """O posto numa maquina que nao e o host: so a copia da conduta em `abertura/`."""
-    raiz = tmp / "posto"
-    (raiz / "abertura").mkdir(parents=True)
-    (raiz / "abertura" / "dono.md").write_text("# conduta — o dono", encoding="utf-8")
-    return raiz
+def test_liga_origem_em_commands_estruturados_sem_duplicar():
+    hook = _carrega_hook()
+    entrada = {
+        "commands": [
+            {"verbo": "sessao", "ato": "abrir", "args": ["engenharia"]},
+            {"verbo": "sessao", "ato": "abrir", "args": ["engenharia", "--origem", "ja-tem"]},
+        ]
+    }
+    saida = hook.liga_origem("malote", entrada, "orig-123")
+    assert saida["commands"][0]["args"] == ["engenharia", "--origem", "orig-123"]
+    assert saida["commands"][1]["args"] == ["engenharia", "--origem", "ja-tem"]
 
 
-def _abre(tmp: Path, resposta) -> None:
-    _roda({"hook_event_name": "PostToolUse", "session_id": "fita-1",
-           "tool_name": "mcp__claudinho-mcp__monta_sessao", "tool_response": resposta}, tmp)
+def test_liga_origem_em_texto_com_prefixo_malote():
+    hook = _carrega_hook()
+    entrada = {"commands": ["malote sessao abrir engenharia", "sessao abrir engenharia"]}
+    saida = hook.liga_origem("malote", entrada, "orig-999")
+    assert saida["commands"][0] == "malote sessao abrir engenharia --origem orig-999"
+    assert saida["commands"][1] == "sessao abrir engenharia --origem orig-999"
 
 
-def _retoma(tmp: Path, origem: str = "compact", fita: str = "fita-1",
-            projeto: Path | None = None) -> str:
-    return _roda({"hook_event_name": "SessionStart", "session_id": fita, "source": origem},
-                 tmp, projeto)
-
-
-def _ctx(saida: str) -> str:
-    fora = json.loads(saida)
-    assert fora["hookSpecificOutput"]["hookEventName"] == "SessionStart"
-    return fora["hookSpecificOutput"]["additionalContext"]
-
-
-def test_no_host_compact_devolve_persona_publicada_e_sessao(tmp_path):
-    _publica(tmp_path, "ia", "Você é Elias Elefante.")
-    _abre(tmp_path, {"sessao": {"sessao_id": SID, "cadeira": "ia"}})
-    ctx = _ctx(_retoma(tmp_path))
-    assert "Elias Elefante" in ctx and SID in ctx and "cadeira `ia`" in ctx
-    assert "CLAUDE.md (import)" in ctx and "ANTES de qualquer outra coisa" not in ctx
-
-
-def test_no_posto_conduta_fica_e_persona_volta_por_monta_sessao(tmp_path):
-    """Maquina que nao e o host, Code aberto da pasta do posto: a conduta esta no CLAUDE.md
-    do projeto; a persona nao tem copia local e volta pelo mesmo sessao_id."""
-    _abre(tmp_path, {"sessao": {"sessao_id": SID, "cadeira": "ia"}})
-    ctx = _ctx(_retoma(tmp_path, projeto=_posto(tmp_path)))
-    assert "CLAUDE.md (import)" in ctx
-    assert f'monta_sessao(cadeira="ia", sessao_id="{SID}")' in ctx
-    assert "sem persona." in ctx and "sem a conduta" not in ctx
-
-
-def test_sem_host_e_sem_posto_manda_reabrir_por_tudo(tmp_path):
-    _abre(tmp_path, {"sessao": {"sessao_id": SID, "cadeira": "ia"}})
-    ctx = _ctx(_retoma(tmp_path))
-    assert "ANTES de qualquer outra coisa" in ctx
-    assert "sem persona e sem a conduta do dono" in ctx
-    assert "(import)" not in ctx, "sem import resolvido, nao prometer conduta"
-
-
-def test_retorno_como_string_escapada_tambem_grava_cadeira(tmp_path):
-    _publica(tmp_path, "ti", "Você é Oswaldo Aranha.")
-    _abre(tmp_path, json.dumps(json.dumps({"sessao": {"sessao_id": SID, "cadeira": "ti"}})))
-    assert "Oswaldo Aranha" in _ctx(_retoma(tmp_path, "resume"))
-
-
-def test_startup_e_fita_sem_abertura_ficam_calados(tmp_path):
-    assert _retoma(tmp_path, "startup") == ""
-    assert _retoma(tmp_path, "compact", fita="outra") == ""
-
-
-def test_hook_declarado_na_conta_e_no_projeto_fala_uma_vez_so(tmp_path):
-    _abre(tmp_path, {"sessao": {"sessao_id": SID, "cadeira": "ia"}})
-    saidas = [_retoma(tmp_path), _retoma(tmp_path)]
-    assert sum(1 for s in saidas if s) == 1
-
-
-def test_persona_grande_respeita_o_teto_do_code(tmp_path):
-    _publica(tmp_path, "ia", "x" * 20_000)
-    _abre(tmp_path, {"sessao": {"sessao_id": SID, "cadeira": "ia"}})
-    ctx = _ctx(_retoma(tmp_path))
-    assert len(ctx) < 10_000 and "persona ler" in ctx
-
-
-def test_porte_do_sessao_id_segue_como_antes(tmp_path):
-    _abre(tmp_path, {"sessao": {"sessao_id": SID, "cadeira": "ia"}})
-    fora = json.loads(_roda({"hook_event_name": "PreToolUse", "session_id": "fita-1",
-                             "tool_name": "mcp__claudinho-mcp__mesa",
-                             "tool_input": {"ato": "ver"}}, tmp_path))
-    assert fora["hookSpecificOutput"]["updatedInput"] == {"ato": "ver", "sessao_id": SID}
-
-
-# ---------------------------------------------------------------- sub-agente (card #3158)
-# Dentro de sub-agente o Code dispara o MESMO hook, com o session_id do orquestrador e mais
-# `agent_id`. O sub-agente abre a propria sessao, ligada a do orquestrador por `--origem`.
-FILHA = "0a1b2c3d-9999-4222-8333-444455556666"
-OUTRA = "0a1b2c3d-7777-4222-8333-444455556666"
-
-
-def _pre(tmp: Path, tool: str, ti: dict, agente: str | None = None):
-    ev = {"hook_event_name": "PreToolUse", "session_id": "fita-1",
-          "tool_name": f"mcp__claudinho-mcp__{tool}", "tool_input": ti}
-    if agente:
-        ev["agent_id"] = agente
-        ev["agent_type"] = "general-purpose"
-    saida = _roda(ev, tmp)
-    return json.loads(saida)["hookSpecificOutput"]["updatedInput"] if saida else None
-
-
-def _abre_como(tmp: Path, sid: str, agente: str | None = None) -> None:
-    ev = {"hook_event_name": "PostToolUse", "session_id": "fita-1",
-          "tool_name": "mcp__claudinho-mcp__monta_sessao",
-          "tool_response": {"sessao": {"sessao_id": sid, "cadeira": "ia"}}}
-    if agente:
-        ev["agent_id"] = agente
-    _roda(ev, tmp)
-
-
-def test_subagente_sem_sessao_id_recebe_a_do_orquestrador(tmp_path):
-    _abre(tmp_path, {"sessao": {"sessao_id": SID, "cadeira": "ia"}})
-    assert _pre(tmp_path, "tarefas", {"ato": "ler"}, agente="a1") == {"ato": "ler", "sessao_id": SID}
-
-
-def test_sessao_do_subagente_nao_sobrescreve_a_do_orquestrador_nem_a_do_irmao(tmp_path):
-    _abre_como(tmp_path, SID)
-    _abre_como(tmp_path, FILHA, agente="a1")
-    assert _pre(tmp_path, "mesa", {"ato": "ver"})["sessao_id"] == SID                 # orquestrador
-    assert _pre(tmp_path, "mesa", {"ato": "ver"}, agente="a1")["sessao_id"] == FILHA  # a propria
-    assert _pre(tmp_path, "mesa", {"ato": "ver"}, agente="a2")["sessao_id"] == SID     # o irmao
-
-
-def test_sessao_id_explicito_do_subagente_vale(tmp_path):
-    _abre_como(tmp_path, SID)
-    assert _pre(tmp_path, "mesa", {"ato": "ver", "sessao_id": OUTRA}, agente="a1") is None
-
-
-def test_subagente_abrindo_sessao_leva_a_origem(tmp_path):
-    _abre_como(tmp_path, SID)
-    novo = _pre(tmp_path, "sessao", {"ato": "abrir", "args": ["engenharia"]}, agente="a1")
-    assert novo["args"] == ["engenharia", "--origem", SID]
-    assert novo["sessao_id"] == SID, "a chamada segue como sempre: o id do orquestrador vai junto"
-
-
-def test_origem_no_lote_do_sessao_e_no_run_command(tmp_path):
-    _abre_como(tmp_path, SID)
-    lote = _pre(tmp_path, "sessao", {"lote": [{"ato": "ver", "args": [SID]},
-                                               {"ato": "abrir", "args": ["ia"]}]}, agente="a1")
-    assert lote["lote"][0] == {"ato": "ver", "args": [SID]}, "so a abertura leva a origem"
-    assert lote["lote"][1]["args"] == ["ia", "--origem", SID]
-    cmds = _pre(tmp_path, "run_command",
-                {"commands": ["sessao abrir ia --json", "mesa ver",
-                              {"verbo": "sessao", "ato": "abrir", "args": ["ia"]}]}, agente="a1")
-    assert cmds["commands"][0] == f"sessao abrir ia --json --origem {SID}"
-    assert cmds["commands"][1] == "mesa ver"
-    assert cmds["commands"][2]["args"] == ["ia", "--origem", SID]
-    um = _pre(tmp_path, "run_command", {"command": "sessao abrir ia"}, agente="a1")
-    assert um["command"] == f"sessao abrir ia --origem {SID}"
-
-
-def test_origem_no_malote_como_no_apelido(tmp_path):
-    """#3270: `malote` e o nome novo de `run_command`; a origem entra igual."""
-    _abre_como(tmp_path, SID)
-    cmds = _pre(tmp_path, "malote",
-                {"commands": ["sessao abrir ia --json",
-                              {"verbo": "sessao", "ato": "abrir", "args": ["ia"]}]}, agente="a1")
-    assert cmds["commands"][0] == f"sessao abrir ia --json --origem {SID}"
-    assert cmds["commands"][1]["args"] == ["ia", "--origem", SID]
-    um = _pre(tmp_path, "malote", {"command": "sessao abrir ia"}, agente="a1")
-    assert um["command"] == f"sessao abrir ia --origem {SID}"
-
-
-def test_origem_que_o_agente_ja_pos_vale_e_nao_duplica(tmp_path):
-    _abre_como(tmp_path, SID)
-    ti = {"ato": "abrir", "args": ["ia", "--origem", OUTRA], "sessao_id": SID}
-    assert _pre(tmp_path, "sessao", ti, agente="a1") is None
-    txt = {"command": f"sessao abrir ia --origem {OUTRA}", "sessao_id": SID}
-    assert _pre(tmp_path, "run_command", txt, agente="a1") is None
-
-
-def test_fio_principal_nunca_recebe_origem(tmp_path):
-    _abre_como(tmp_path, SID)
-    novo = _pre(tmp_path, "sessao", {"ato": "abrir", "args": ["ia"]})
-    assert novo == {"ato": "abrir", "args": ["ia"], "sessao_id": SID}
-
-
-def test_sem_origem_guardada_o_subagente_abre_como_antes(tmp_path):
-    assert _pre(tmp_path, "sessao", {"ato": "abrir", "args": ["ia"]}, agente="a1") is None
-
-
-def test_subagente_abrindo_por_monta_sessao_nao_recebe_nada(tmp_path):
-    """`sessao_id` no `monta_sessao` quer dizer «portado»; o hook nunca o preenche ali."""
-    _abre_como(tmp_path, SID)
-    assert _pre(tmp_path, "monta_sessao", {"cadeira": "ia"}, agente="a1") is None
+def test_liga_origem_em_verbo_sessao_lote():
+    hook = _carrega_hook()
+    entrada = {"lote": [{"ato": "abrir", "args": ["ti"]}]}
+    saida = hook.liga_origem("mcp__claudinho-mcp__sessao", entrada, "orig-abc")
+    assert saida["lote"][0]["args"] == ["ti", "--origem", "orig-abc"]

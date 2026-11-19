@@ -3,7 +3,7 @@
 Cobre:
 - `seg segredo ler`:
   - Recusa exit 4 sob stdout TTY (pty)
-  - Recusa exit 4 com processo pai ops-server/server.py
+  - Recusa exit 4 com processo pai igual a PF_PORTA_PID (mesmo com arquivo da porta renomeado) e libera via verbo filho
   - Target <nome> sem stack: 0 achados -> 1, >1 -> 2 (candidatos), 1 -> 0
   - Target <stack>/<nome>: inexistente -> 1, existente -> 0
 - `seg segredo listar`:
@@ -169,30 +169,46 @@ def test_ler_recusa_sob_pty(tmp_path):
     assert "segredo não atravessa a porta" in proc.stderr
 
 
-def test_ler_recusa_pai_ops_server(tmp_path):
+def test_ler_recusa_pai_porta_por_pid_mesmo_renomeada_e_libera_verbo_filho(tmp_path):
     secrets_dir = tmp_path / "secrets"
     _run_seg(["segredo", "gravar", "stack1/chave"], stdin="segredo", env_extra={"SEG_SECRETS_DIR": str(secrets_dir)})
 
-    fake_server_dir = tmp_path / "ops-server"
-    fake_server_dir.mkdir(parents=True, exist_ok=True)
-    fake_server = fake_server_dir / "server.py"
-    fake_server.write_text(
+    # Porta com nome qualquer exporta PF_PORTA_PID = seu próprio PID
+    fake_porta = tmp_path / "porta_qualquer_nome.py"
+    fake_porta.write_text(
         f"""#!/usr/bin/env python3
-import subprocess, sys
-res = subprocess.run(["{BIN_SEG}", "segredo", "ler", "stack1/chave"], capture_output=True, text=True)
+import os, subprocess, sys
+env = dict(os.environ)
+env["PF_PORTA_PID"] = str(os.getpid())
+res = subprocess.run(sys.argv[1:], capture_output=True, text=True, env=env)
 sys.stdout.write(res.stdout)
 sys.stderr.write(res.stderr)
 sys.exit(res.returncode)
 """,
         encoding="utf-8",
     )
-    fake_server.chmod(0o755)
+    fake_porta.chmod(0o755)
 
+    # 1) Chamada direta pela porta renomeada -> exit 4
     env = os.environ.copy()
     env["SEG_SECRETS_DIR"] = str(secrets_dir)
-    res = subprocess.run([sys.executable, str(fake_server)], capture_output=True, text=True, env=env)
-    assert res.returncode == 4
-    assert "segredo não atravessa a porta" in res.stderr
+    res_direto = subprocess.run(
+        [sys.executable, str(fake_porta), str(BIN_SEG), "segredo", "ler", "stack1/chave"],
+        capture_output=True, text=True, env=env,
+    )
+    assert res_direto.returncode == 4
+    assert "segredo não atravessa a porta" in res_direto.stderr
+
+    # 2) Chamada via verbo intermediário filho da porta -> PPID != PF_PORTA_PID -> exit 0
+    verbo_filho = tmp_path / "verbo_consumidor.sh"
+    verbo_filho.write_text(f'#!/usr/bin/env bash\n"{BIN_SEG}" segredo ler stack1/chave\n', encoding="utf-8")
+    verbo_filho.chmod(0o755)
+    res_filho = subprocess.run(
+        [sys.executable, str(fake_porta), str(verbo_filho)],
+        capture_output=True, text=True, env=env,
+    )
+    assert res_filho.returncode == 0, res_filho.stderr
+    assert res_filho.stdout.strip() == "segredo"
 
 
 def test_ler_nome_sem_stack_multiplos_e_zero(tmp_path):

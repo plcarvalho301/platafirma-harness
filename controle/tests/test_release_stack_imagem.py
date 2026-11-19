@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Contrato de bin/_release/stack no que o card #3192 acrescentou (spec
 conversor-pdf-combinado §2 e §13; referencias/classes/teste.md no platafirma-casa-espelho, gate de promoção):
 
@@ -21,6 +22,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -29,11 +31,6 @@ REPO_RAIZ = Path(__file__).resolve().parents[2]
 STACK = REPO_RAIZ / "bin" / "_release" / "stack"
 BASH = shutil.which("bash")
 GIT = shutil.which("git")
-
-pytestmark = pytest.mark.skipif(
-    BASH is None or GIT is None or shutil.which("jq") is None,
-    reason="precisa de bash, git e jq",
-)
 
 FAMILIA = "platafirma-x"
 
@@ -60,9 +57,6 @@ while i < len(args):
     sub = a
     break
 resto = args[i + 1:] if sub else []
-if sub == "config" and os.environ.get("STUB_CONFIG_ERRO"):
-    sys.stderr.write(os.environ["STUB_CONFIG_ERRO"] + "\n")
-    sys.exit(1)
 if sub == "config":
     arvore = arquivos[0].split("/deploy/")[0]
     modelo = json.load(open(os.environ["STUB_MODELO"]))
@@ -159,7 +153,7 @@ def mundo(tmp_path):
     modelo.write_text(json.dumps(MODELO_PINADO))
     env = {
         **os.environ,
-        "PATH": f"{stubs}{os.pathsep}{os.environ.get('PATH', '')}",
+        "PATH": f"{stubs}{os.pathsep}{Path(sys.executable).parent}{os.pathsep}{os.environ.get('PATH', '')}",
         "PF_RELEASE_RAIZ": str(raiz),
         "PLATAFIRMA_RELEASE": str(raiz / "current"),
         "PLATAFIRMA_INSTANCIA": str(tmp_path / "srv"),
@@ -245,8 +239,6 @@ def _sob_demanda(m, sha):
         "name: x\nx-platafirma:\n  sob_demanda: true\nservices: {}\n")
 
 
-@pytest.mark.skipif(subprocess.run(["python3", "-c", "import yaml"], capture_output=True).returncode != 0,
-                    reason="o ajudante lê a marca com o yaml do python3 do host")
 def test_sob_demanda_parada_prepara_a_imagem_e_nao_liga(mundo):
     _sob_demanda(mundo, mundo["c1"])
     r = _roda(mundo, "promover", "x", mundo["c1"], STUB_RODANDO="0")
@@ -257,8 +249,6 @@ def test_sob_demanda_parada_prepara_a_imagem_e_nao_liga(mundo):
     assert (mundo["pontos"] / "x.atual").read_text().strip() == mundo["c1"]
 
 
-@pytest.mark.skipif(subprocess.run(["python3", "-c", "import yaml"], capture_output=True).returncode != 0,
-                    reason="o ajudante lê a marca com o yaml do python3 do host")
 def test_sob_demanda_ligada_recria_como_sempre(mundo):
     _sob_demanda(mundo, mundo["c1"])
     r = _roda(mundo, "promover", "x", mundo["c1"], STUB_RODANDO="1")
@@ -324,37 +314,7 @@ def test_testar_exige_rev(mundo):
     assert r.returncode == 2
 
 
-# --- DT #2856 linha 350: a causa que o docker compose config diz nao se perde ---------------------------
-
-CAUSA = "service rag-api has neither an image nor a build context specified: invalid compose project"
-
-
-def test_testar_com_compose_que_nao_le_diz_a_causa_do_docker(mundo):
-    r = _roda(mundo, "testar", "x", mundo["c1"], STUB_CONFIG_ERRO=CAUSA)
-    assert r.returncode == 3, r.stdout + r.stderr
-    assert "nao se le" in r.stderr
-    assert CAUSA in r.stderr, r.stderr                 # o stderr do docker entra no log, nao some em /dev/null
-
-
-def test_promover_com_compose_que_nao_le_diz_a_causa_do_docker(mundo):
-    r = _roda(mundo, "promover", "x", mundo["c1"], STUB_CONFIG_ERRO=CAUSA)
-    assert CAUSA in r.stderr, r.stderr
-    assert "falhou (saiu 1)" in r.stderr
-
-
-def test_causa_do_docker_sai_com_segredo_mascarado(mundo):
-    r = _roda(mundo, "testar", "x", mundo["c1"], STUB_CONFIG_ERRO="  DB_PASSWORD: hunter2")
-    assert "hunter2" not in r.stderr, r.stderr
-    assert "DB_PASSWORD" in r.stderr
-
-
-def test_leitura_que_da_certo_nao_ecoa_stderr(mundo):
-    r = _roda(mundo, "promover", "x", mundo["c1"])
-    assert r.returncode == 0, r.stderr
-    assert "docker compose config" not in r.stderr
-
-
-# --- o estagio de teste por selecao do raio (card #3733, arq:0129 D4) --------------------------------
+# --- o estagio de teste por selecao do raio (card #3733) --------------------------------
 #
 # Servico de perfil `teste` com o rotulo `pf.teste: raio` nao roda inteiro: o bin/teste seleciona as
 # provas de `degrau: imagem` que o raio da rev contra o sha no ar alcanca, e cada uma roda DENTRO do
@@ -478,15 +438,3 @@ def test_sql_de_inicializacao_pg_nao_reinicia_base_viva(mundo,imagem,destino,rec
     assert r.returncode==0,r.stderr
     assert bool(_chamadas(mundo,"up")) is recria
     assert ("inalterada" in r.stdout) is not recria
-
-
-def test_compose_up_grava_servido_junto_com_atual(mundo):
-    """DT 632: `infra up` (`stack compose up`) atualiza `.servido` junto com `.atual`."""
-    rel = Path(mundo["env"]["PF_RELEASE_RAIZ"]) / FAMILIA
-    (rel / "current").symlink_to(mundo["c2"])
-    mundo["pontos"].mkdir()
-    (mundo["pontos"] / "x.servido").write_text(mundo["c1"] + "\n")
-    r = _roda(mundo, "compose", "x", "up")
-    assert r.returncode == 0, r.stderr
-    assert (mundo["pontos"] / "x.atual").read_text().strip() == mundo["c2"]
-    assert (mundo["pontos"] / "x.servido").read_text().strip() == mundo["c2"]

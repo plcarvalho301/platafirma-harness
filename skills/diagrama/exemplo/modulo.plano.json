@@ -1,0 +1,40 @@
+{
+  "pergunta": "Qual a decomposição de módulos da biblioteca do harness?",
+  "leitor": "engenharia",
+  "tipo": "modulo",
+  "fontes": [
+    "referencias/instancias/observacao/2026-11-04-de-para-taxonomia-de-diagramas.md"
+  ],
+  "entidades": [
+    {
+      "id": "harness_lib",
+      "nome": "Harness Lib",
+      "fonte": "referencias/instancias/observacao/2026-11-04-de-para-taxonomia-de-diagramas.md",
+      "tipo": "componente",
+      "categoria": "host"
+    },
+    {
+      "id": "mod_diagrama",
+      "nome": "diagrama",
+      "fonte": "referencias/instancias/observacao/2026-11-04-de-para-taxonomia-de-diagramas.md",
+      "tipo": "componente",
+      "categoria": "servico",
+      "modulo_pai": "harness_lib"
+    },
+    {
+      "id": "mod_agente",
+      "nome": "agente",
+      "fonte": "referencias/instancias/observacao/2026-11-04-de-para-taxonomia-de-diagramas.md",
+      "tipo": "componente",
+      "categoria": "servico",
+      "modulo_pai": "harness_lib"
+    }
+  ],
+  "relacoes": [
+    {
+      "de": "mod_diagrama",
+      "para": "mod_agente",
+      "rotulo": "chama juiz"
+    }
+  ]
+}

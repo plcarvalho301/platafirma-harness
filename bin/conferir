@@ -67,7 +67,7 @@ BIN_DIR="${PF_BIN_DIR:-$HOME/AI/bin}"
 AQUI="$(dirname "$(readlink -f "$0")")"
 IMPL="$AQUI/_release/conferir/conferir.py"
 
-CLASSES_SERVIDO="verbo cabecalho servico skill procedencia superficie ferramental front pdp alcance card unit jobs acervo dependencias sessao-orfa copia ontologia"
+CLASSES_SERVIDO="verbo cabecalho servico skill procedencia superficie ferramental front pdp alcance card unit jobs acervo dependencias sessao-orfa copia"
 CLASSES_BANCADA="existe repo commit arranque vocabulario diagrama"
 
 avisa_deprecado() {  # uma vez por sessao (arq:0110 §11)
@@ -105,6 +105,12 @@ classe="$1"
 case "$classe" in
   --ajuda|--help|-h) exec python3 "$IMPL" --ajuda ;;
 esac
+
+if [ "$classe" = "ontologia" ]; then
+  PY_CONFERIR="${PLATAFIRMA_RELEASE:-/opt/platafirma/current}/venv/harness/bin/python"
+  [ -x "$PY_CONFERIR" ] || PY_CONFERIR="python3"
+  exec env PYTHONPATH="$AQUI${PYTHONPATH:+:$PYTHONPATH}" "$PY_CONFERIR" -m _conferir "$@"
+fi
 
 for c in $CLASSES_SERVIDO; do
   if [ "$classe" = "$c" ]; then

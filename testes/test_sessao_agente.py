@@ -30,8 +30,9 @@ AGENTE = ("--agente", "varredor", "--em-nome-de", "engenharia", "--conta", "clau
 
 
 class FakeMsgMem:
-    def __init__(self, chaves: dict[str, str] | None = None):
-        self.data: dict[str, str] = dict(chaves or {})
+    def __init__(self, chaves: dict[str, dict[str, str]] | None = None):
+        self.data: dict[str, dict[str, str]] = {k: dict(v) for k, v in (chaves or {}).items()}
+        self.ttl: dict[str, int] = {}
 
     def scan_iter(self, match: str = "*", count: int = 500):
         prefix = match[:-1] if match.endswith("*") else match
@@ -39,11 +40,21 @@ class FakeMsgMem:
             if k.startswith(prefix):
                 yield k
 
-    def get(self, key):
-        return self.data.get(key)
+    def hgetall(self, key):
+        v = self.data.get(key)
+        return dict(v) if isinstance(v, dict) else {}
 
-    def set(self, key, val, ex=None):
-        self.data[key] = val
+    def hset(self, key, mapping=None, **kwargs):
+        bucket = self.data.setdefault(key, {})
+        if mapping:
+            bucket.update({str(k): str(v) for k, v in mapping.items()})
+        if kwargs:
+            bucket.update({str(k): str(v) for k, v in kwargs.items()})
+        return len(bucket)
+
+    def expire(self, key, ex):
+        self.ttl[key] = ex
+        return True
 
     def exists(self, key):
         return key in self.data
@@ -54,20 +65,20 @@ class FakeMsgMem:
 
 @pytest.fixture
 def mem():
-    return FakeMsgMem({f"sessao:{ORQ}": json.dumps({"sujeito": "suj-1", "cadeira": "engenharia", "ordem_id": "o1",
-                                                   "origem": "sessao abrir"})})
+    return FakeMsgMem({f"sessao:{ORQ}": {"sujeito": "suj-1", "cadeira": "engenharia", "ordem_id": "o1",
+                                         "origem": "sessao abrir"}})
 
 
 @pytest.fixture
 def abre(mem, monkeypatch):
     monkeypatch.setenv("PF_SUJEITO", "suj-1")
+    monkeypatch.setenv("PF_SESSAO_AUTORIZADA_POR", "operador-plataforma")
 
     def _abre(*argv):
         f = io.StringIO()
         with patch.object(sessao_mod, "_msgmem", return_value=(mem, None)), \
                 patch.object(sessao_mod, "_vocabulario",
                              return_value=({"engenharia": {"alias": "Gabriel", "chapeus": []}}, None)), \
-                patch.object(sessao_mod, "_decidir", return_value=(0, {"regra": "r", "plano": "p"}, "")), \
                 patch.object(sessao_mod, "_registra_duravel", return_value=None), \
                 redirect_stdout(f):
             rc = sessao_mod.main(["abrir", "engenharia", "--json", *argv])
@@ -78,7 +89,7 @@ def abre(mem, monkeypatch):
 
 
 def _chave(mem, sid):
-    return json.loads(mem.data[f"sessao:{sid}"])
+    return dict(mem.data[f"sessao:{sid}"])
 
 
 def test_atributos_do_agente_entram_na_chave_e_no_retorno(abre, mem):

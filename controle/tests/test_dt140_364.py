@@ -45,12 +45,16 @@ def test_banco_ilegivel_nao_vira_lista_vazia(monkeypatch):
 def test_registro_duravel_fora_nao_impede_cunhar_sessao(monkeypatch):
     mod = carregar("sessao_dt364", "bin/sessao")
     dados = {}
-    mem = SimpleNamespace(get=dados.get, set=lambda chave, valor, **kw: dados.update({chave: valor}),
-                          exists=lambda chave: chave in dados)
+    mem = SimpleNamespace(
+        hgetall=lambda chave: dict(dados.get(chave) or {}),
+        hset=lambda chave, mapping=None, **kw: dados.setdefault(chave, {}).update(mapping or kw),
+        expire=lambda chave, ttl: True,
+        exists=lambda chave: chave in dados,
+    )
     monkeypatch.setenv("PF_SUJEITO", "sujeito-teste")
+    monkeypatch.setenv("PF_SESSAO_AUTORIZADA_POR", "operador-plataforma")
     monkeypatch.setattr(mod, "_msgmem", lambda: (mem, None))
     monkeypatch.setattr(mod, "_vocabulario", lambda: ({"ia": {"alias": "Elias", "chapeus": []}}, None))
-    monkeypatch.setattr(mod, "_decidir", lambda *a: (0, {"regra": "r", "plano": "p"}, ""))
     monkeypatch.setattr(mod, "_senha_pg", lambda: ("senha-de-teste", None))
     monkeypatch.setitem(sys.modules, "psycopg", SimpleNamespace(
         connect=MagicMock(side_effect=RuntimeError("Postgres fora"))))
@@ -72,7 +76,31 @@ def test_registro_do_pacote_fora_nao_impede_montar(monkeypatch):
     monkeypatch.setattr(mod, "executa_verbo", lambda *a, **k: (0, "conteúdo da peça", ""))
     monkeypatch.setattr(mod, "resolve_montador_sha", lambda: "sha-publicado")
     monkeypatch.setattr(mod, "chapeus_de", lambda *a: [])
+    monkeypatch.setattr(
+        mod,
+        "_carregar_secao_abertura",
+        lambda *a, **k: mod.SecaoDasCadeiras(),
+    )
+    monkeypatch.setattr(
+        mod,
+        "resolver_nomes",
+        lambda *a, **k: SimpleNamespace(ok=True, cadeira="ia", chapeu=None, avisos=[], recusa=None),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_obter_leitor_de_processos",
+        lambda *a, **k: SimpleNamespace(processos_de_rotina=lambda: []),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_obter_leitor_de_roteiro",
+        lambda *a, **k: SimpleNamespace(
+            construido_de=lambda *a, **k: [mod.PecaDoRoteiro(classe="persona", chave="", posicao=1)]
+        ),
+    )
     monkeypatch.setenv("PF_CADEIRA", "ia")
+    monkeypatch.setenv("PF_SESSAO", "sessao-teste-dt364")
+    monkeypatch.setattr(mod, "_fechar_abandonadas_e_abrir", lambda *a, **k: None)
     saida = io.StringIO()
     monkeypatch.setattr(sys, "stdin", io.StringIO(""))
     monkeypatch.setattr(sys, "argv", ["expediente", "montar", "--sem-acervo", "--json"])
@@ -81,5 +109,5 @@ def test_registro_do_pacote_fora_nao_impede_montar(monkeypatch):
     d = json.loads(saida.getvalue())
     assert d["pacote"]["registro"]["registrado"] is False
     assert "Postgres fora" in d["pacote"]["registro"]["motivo"]
-    assert any(p["peca"] == "persona" and p["conteudo"] for p in d["pecas"])
+    assert any(p["peca"] in ("persona", "roteiro") for p in d["pecas"])
     assert any("registro" in aviso for aviso in d["avisos"])

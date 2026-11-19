@@ -36,7 +36,7 @@ Rev: 2
 | AP1 | gênero misturado em `docs/` | `arq:0082` | data no nome em docs/ | bloqueante | levar ao acervo |
 | AP2 | morada partida | sem lei direta | sha256 igual | aviso | apagar a cópia |
 | AP3 | fóssil vivo | `arq:0074` | marca de fita no nome | aviso | apagar |
-| AP4 | documento de casa em repositório de software | `arq:0115` | `.md` com `Espécie:` | bloqueante | levar ao platafirma-casa |
+| AP4 | documento de casa em repositório de software | `arq:0115` | `.md` com `Espécie:` | bloqueante | levar ao platafirma-casa-espelho |
 | AP5 | nome opaco | sem lei direta | caractere fora de [A-Za-z0-9._-] | aviso | renomear |
 | AP6 | conceito espalhado | sem lei direta | leitura | aviso | juntar |
 | AP7 | chave própria de repositório | `arq:0115` | título com série | bloqueante | tirar a série |
@@ -172,7 +172,7 @@ def test_pre_commit_barra_bloqueante_em_repo_declarado(tmp_path):
     r = _repo_commit(tmp_path, ["demo-org"])
     assert r.returncode == 1, r.stderr
     assert "[organizacao] docs/guia.md" in r.stderr
-    assert "cura: levar ao platafirma-casa" in r.stderr
+    assert "cura: levar ao platafirma-casa-espelho" in r.stderr
 
 
 def test_pre_commit_nao_barra_repo_nao_declarado(tmp_path):
@@ -191,7 +191,7 @@ def test_dt31_ap8_reconhece_compose_e_requirements_sem_readme(tmp_path):
     for rel, corpo in {
         "README.md": "# Demo\n",
         "chat/docker-compose.yml": "services:\n  app:\n    image: alpine\n",
-        "ops-server/requirements.txt": "fastapi\n",
+        "servico-x/requirements.txt": "fastapi\n",
     }.items():
         p = wt / rel
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -204,4 +204,4 @@ def test_dt31_ap8_reconhece_compose_e_requirements_sem_readme(tmp_path):
     r, d = _lint(env, "--todas")
     assert r.returncode == 1
     faltando = {a["arquivo"] for a in d["apontamentos"] if a["id"] == "AP8"}
-    assert faltando == {"chat/README.md", "ops-server/README.md"}
+    assert faltando == {"chat/README.md", "servico-x/README.md"}

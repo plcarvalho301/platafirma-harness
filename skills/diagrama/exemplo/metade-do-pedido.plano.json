@@ -1,0 +1,30 @@
+{
+  "pergunta": "Onde rodam os serviços da wiki?",
+  "pedido": "Mostra onde rodam o MediaWiki, o banco MariaDB e o Kroki da wiki.",
+  "leitor": "operacao",
+  "tipo": "alocacao",
+  "fontes": [
+    "outros_repos/conhecimento/docker-compose.yml"
+  ],
+  "hosts": [
+    "host_wiki"
+  ],
+  "entidades": [
+    {
+      "id": "host_wiki",
+      "nome": "Stack plataforma-wiki",
+      "fonte": "outros_repos/conhecimento/docker-compose.yml",
+      "tipo": "stack",
+      "categoria": "host"
+    },
+    {
+      "id": "wiki_app",
+      "nome": "MediaWiki",
+      "fonte": "outros_repos/conhecimento/docker-compose.yml",
+      "tipo": "servico",
+      "categoria": "conhecimento",
+      "host": "host_wiki"
+    }
+  ],
+  "relacoes": []
+}

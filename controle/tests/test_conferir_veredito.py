@@ -479,25 +479,15 @@ def test_repo_staged_divergente_ainda_sugere_no_verify(monkeypatch, capsys, tmp_
     assert exit_code == 1
     assert "git commit --no-verify" in saida.out
 
-# --- conferir_ferramental (card #3142, classe ferramental) --------------------
+# --- conferir_ferramental (card #3142 / #4348: registro/porta.yaml) -----------
 
-def _stub_ferramental_psql(respostas):
-    """respostas: lista de (predicado(sql) -> bool, (linhas|None, erro|None)). Primeira que bate, vale."""
-    def _psql(sql):
-        for pred, resp in respostas:
-            if pred(sql):
-                return resp
-        raise AssertionError(f"_ferramental_psql nao stubado para: {sql}")
-    return _psql
-
-
-def test_ferramental_conforme_quando_1a1_integro_e_verbo_resolve_em_bin(monkeypatch, capsys, tmp_path):
-    (tmp_path / "meuverbo").write_text("#!/bin/sh\n")
-    monkeypatch.setattr(conferir, "BIN", str(tmp_path))
-    monkeypatch.setattr(conferir, "_ferramental_psql", _stub_ferramental_psql([
-        (lambda sql: "full outer join" in sql, ([], None)),
-        (lambda sql: "order by slug" in sql, (["meuverbo|bin/meuverbo"], None)),
-    ]))
+def test_ferramental_conforme_quando_verbos_do_porta_yaml_resolvem_em_bin(monkeypatch, capsys, tmp_path):
+    (tmp_path / "registro").mkdir()
+    (tmp_path / "registro" / "porta.yaml").write_text("verbos:\n  meuverbo:\n    uso: teste\n", encoding="utf-8")
+    (tmp_path / "bin").mkdir()
+    (tmp_path / "bin" / "meuverbo").write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr(conferir, "HARNESS", str(tmp_path))
+    monkeypatch.setattr(conferir, "BIN", str(tmp_path / "bin"))
     monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
 
     exit_code = conferir.conferir_ferramental(None, como_json=True)
@@ -505,16 +495,16 @@ def test_ferramental_conforme_quando_1a1_integro_e_verbo_resolve_em_bin(monkeypa
 
     assert exit_code == 0
     dado = json.loads(saida.out)
-    assert len(dado["itens"]) == 2
-    assert all(item["estado"] == "conforme" for item in dado["itens"])
+    assert len(dado["itens"]) == 1
+    assert dado["itens"][0]["estado"] == "conforme"
 
 
-def test_ferramental_divergente_quando_quebra_1a1_capacidade_verbo(monkeypatch, capsys, tmp_path):
-    monkeypatch.setattr(conferir, "BIN", str(tmp_path))
-    monkeypatch.setattr(conferir, "_ferramental_psql", _stub_ferramental_psql([
-        (lambda sql: "full outer join" in sql, (["capX|"], None)),
-        (lambda sql: "order by slug" in sql, ([], None)),
-    ]))
+def test_ferramental_divergente_quando_verbo_do_porta_yaml_falta_em_bin(monkeypatch, capsys, tmp_path):
+    (tmp_path / "registro").mkdir()
+    (tmp_path / "registro" / "porta.yaml").write_text("verbos:\n  faltante:\n    uso: teste\n", encoding="utf-8")
+    (tmp_path / "bin").mkdir()
+    monkeypatch.setattr(conferir, "HARNESS", str(tmp_path))
+    monkeypatch.setattr(conferir, "BIN", str(tmp_path / "bin"))
     monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
 
     exit_code = conferir.conferir_ferramental(None, como_json=True)
@@ -522,19 +512,14 @@ def test_ferramental_divergente_quando_quebra_1a1_capacidade_verbo(monkeypatch, 
 
     assert exit_code == 1
     dado = json.loads(saida.out)
-    item_1a1 = next(i for i in dado["itens"] if "1:1" in i["nome"])
-    item_bin = next(i for i in dado["itens"] if "bin" in i["nome"])
-    assert item_1a1["estado"] == "divergente"
-    assert "capX" in item_1a1["motivo"]
-    assert item_bin["estado"] == "conforme"
+    assert dado["itens"][0]["estado"] == "divergente"
+    assert "faltante" in dado["itens"][0]["motivo"]
 
 
-def test_ferramental_indeterminavel_quando_acervo_inalcancavel(monkeypatch, capsys, tmp_path):
-    # card #3142: acervo fora do ar NAO pode sair como conforme (exit 0) nem morrer
-    # cedo em exit 2 sem lista — vira item indeterminavel para cada checagem, exit 5.
+def test_ferramental_indeterminavel_quando_porta_yaml_ausente(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(conferir, "HARNESS", str(tmp_path / "sem-harness"))
+    monkeypatch.setenv("PLATAFIRMA_RELEASE", str(tmp_path / "sem-release"))
     monkeypatch.setattr(conferir, "BIN", str(tmp_path))
-    monkeypatch.setattr(conferir, "_ferramental_psql",
-                         lambda sql: (None, "psql saiu 2: connection refused"))
     monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
 
     exit_code = conferir.conferir_ferramental(None, como_json=True)
@@ -542,9 +527,9 @@ def test_ferramental_indeterminavel_quando_acervo_inalcancavel(monkeypatch, caps
 
     assert exit_code == 5
     dado = json.loads(saida.out)
-    assert len(dado["itens"]) == 2
-    assert all(item["estado"] == "indeterminavel" for item in dado["itens"])
-    assert "acervo.ferramental" in dado["itens"][0]["motivo"]
+    assert len(dado["itens"]) == 1
+    assert dado["itens"][0]["estado"] == "indeterminavel"
+    assert "porta.yaml" in dado["itens"][0]["motivo"]
 
 # --- conferir_commit (card #3142): fail-open documentado, veredito interno --------
 
@@ -1130,62 +1115,47 @@ def test_pacote_retrato_sem_fonte_do_sha_do_registro_nunca_sai_conforme(tmp_path
     assert _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"].estado == "indeterminavel"
 
 
-def _ato_do_retrato(monkeypatch, rc=0, saida=""):
-    """Troca o `sh` da conferencia pelo ato do retrato dublado; devolve o que foi chamado."""
-    chamadas = []
-
-    def falso(args, cwd=None, env=None):
-        chamadas.append(list(args))
-        return rc, saida, ""
-
-    monkeypatch.setattr(conferir, "sh", falso)
-    return chamadas
-
-
-def test_sha_do_registro_le_o_sha_do_ato_do_retrato(monkeypatch):
-    corpo = json.dumps({"esquema": "retrato-ferramental/1", "sha": "e08dd37e3036", "atos": {}, "avisos": []})
-    chamadas = _ato_do_retrato(monkeypatch, 0, corpo)
-    assert conferir._sha_do_registro() == "e08dd37e3036"
-    assert chamadas[0][0].endswith("/acervo")
-    assert chamadas[0][1:] == ["listar", "casa", "ferramental", "--retrato", "--json"]
+def _porta_yaml_com_conteudo(tmp_path, monkeypatch, conteudo="verbos:\n  mesa: {}\n"):
+    """Cria registro/porta.yaml em tmp_path e aponta HARNESS e PLATAFIRMA_RELEASE para la."""
+    import hashlib
+    harness = tmp_path / "harness-reg"
+    (harness / "registro").mkdir(parents=True, exist_ok=True)
+    dados = conteudo.encode("utf-8")
+    (harness / "registro" / "porta.yaml").write_bytes(dados)
+    monkeypatch.setattr(conferir, "HARNESS", str(harness))
+    monkeypatch.setenv("PLATAFIRMA_RELEASE", str(tmp_path / "sem-release"))
+    return hashlib.sha256(dados).hexdigest()[:12]
 
 
-def test_sha_do_registro_com_o_ato_fora_do_ar_e_none(monkeypatch):
-    _ato_do_retrato(monkeypatch, 3, "")
+def test_sha_do_registro_le_o_sha_do_porta_yaml(tmp_path, monkeypatch):
+    esperado = _porta_yaml_com_conteudo(tmp_path, monkeypatch, "verbos:\n  mesa:\n    uso: teste\n")
+    assert conferir._sha_do_registro() == esperado
+
+
+def test_sha_do_registro_com_porta_yaml_ausente_e_none(tmp_path, monkeypatch):
+    monkeypatch.setattr(conferir, "HARNESS", str(tmp_path / "inexistente"))
+    monkeypatch.setenv("PLATAFIRMA_RELEASE", str(tmp_path / "sem-release"))
     assert conferir._sha_do_registro() is None
 
 
-def test_sha_do_registro_com_saida_que_nao_e_json_e_none(monkeypatch):
-    _ato_do_retrato(monkeypatch, 0, "acervo: erro de banco")
-    assert conferir._sha_do_registro() is None
-
-
-def test_sha_do_registro_com_esquema_desconhecido_ou_sem_sha_e_none(monkeypatch):
-    _ato_do_retrato(monkeypatch, 0, json.dumps({"esquema": "retrato-ferramental/9", "sha": "abc"}))
-    assert conferir._sha_do_registro() is None
-    _ato_do_retrato(monkeypatch, 0, json.dumps({"esquema": "retrato-ferramental/1", "atos": {}}))
-    assert conferir._sha_do_registro() is None
-
-
-def test_pacote_retrato_conforme_quando_o_ato_serve_o_mesmo_sha(tmp_path, monkeypatch):
-    raiz = _arvore_ui(tmp_path, retrato={"sha_registro": "e08dd37e3036", "atos": {}})
-    corpo = json.dumps({"esquema": "retrato-ferramental/1", "sha": "e08dd37e3036", "atos": {}})
-    _ato_do_retrato(monkeypatch, 0, corpo)
+def test_pacote_retrato_conforme_quando_porta_yaml_tem_o_mesmo_sha(tmp_path, monkeypatch):
+    sha = _porta_yaml_com_conteudo(tmp_path, monkeypatch, "verbos:\n  mesa: {}\n")
+    raiz = _arvore_ui(tmp_path, retrato={"sha_registro": sha, "atos": {}})
     assert _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"].estado == "conforme"
 
 
-def test_pacote_retrato_diverge_quando_o_ato_serve_outro_sha(tmp_path, monkeypatch):
+def test_pacote_retrato_diverge_quando_porta_yaml_tem_outro_sha(tmp_path, monkeypatch):
+    _porta_yaml_com_conteudo(tmp_path, monkeypatch, "verbos:\n  outro: {}\n")
     raiz = _arvore_ui(tmp_path, retrato={"sha_registro": "e08dd37e3036", "atos": {}})
-    corpo = json.dumps({"esquema": "retrato-ferramental/1", "sha": "ffff00001111", "atos": {}})
-    _ato_do_retrato(monkeypatch, 0, corpo)
     v = _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"]
     assert v.estado == "divergente"
     assert "gerar de novo" in v.motivo
 
 
-def test_pacote_retrato_com_o_ato_fora_do_ar_nunca_sai_conforme(tmp_path, monkeypatch):
+def test_pacote_retrato_sem_porta_yaml_nunca_sai_conforme(tmp_path, monkeypatch):
+    monkeypatch.setattr(conferir, "HARNESS", str(tmp_path / "inexistente"))
+    monkeypatch.setenv("PLATAFIRMA_RELEASE", str(tmp_path / "sem-release"))
     raiz = _arvore_ui(tmp_path, retrato={"sha_registro": "e08dd37e3036", "atos": {}})
-    _ato_do_retrato(monkeypatch, 3, "")
     assert _por_nome(_PACOTE_REAL(str(raiz)))["retrato do dicionario de atos"].estado == "indeterminavel"
 
 
@@ -1278,7 +1248,6 @@ def _verbo_com_face(tmp_path, monkeypatch, linhas_de_ato):
         + "echo ok\n", encoding="utf-8")
     monkeypatch.setattr(conferir, "BIN", str(bin_dir))
     monkeypatch.setattr(conferir, "_capacidade_veredito", lambda cap: resultado.conforme())
-    monkeypatch.setattr(conferir, "_donos_ferramental", lambda: ({}, None))
     monkeypatch.setattr(conferir, "_desde_familia", lambda familia: None)
     monkeypatch.setattr(conferir, "origem", lambda nome, caminho: ("symlink-release", str(caminho)))
     monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
@@ -1522,10 +1491,10 @@ def test_alcance_texto_preserva_saltos_detalhados(monkeypatch, capsys):
 # --- conferir_pdp (card #3142 / DT 835) ------------------------------------
 
 def _pdp_current_com_release(tmp_path):
-    """Cria uma release fake com politica-acesso/{politica,sujeitos}.yaml e devolve
+    """Cria uma release fake com core/acesso/{politica,sujeitos}.yaml e devolve
     o symlink current -> release."""
     release = tmp_path / "rel-abc1234"
-    pdp = release / "politica-acesso"
+    pdp = release / "core" / "acesso"
     pdp.mkdir(parents=True)
     (pdp / "politica.yaml").write_text("versao: 1\n", encoding="utf-8")
     (pdp / "sujeitos.yaml").write_text("versao: 1\nsujeitos: {}\n", encoding="utf-8")
@@ -1536,19 +1505,19 @@ def _pdp_current_com_release(tmp_path):
 
 def test_pdp_conforme_quando_tag_encontrada(monkeypatch, tmp_path, capsys):
     link = _pdp_current_com_release(tmp_path)
-    resumo_esp = conferir._resumo_pdp_dir(str(link / "politica-acesso"))
+    resumo_esp = conferir._resumo_pdp_dir(str(link / "core" / "acesso"))
     monkeypatch.setenv("PF_CURRENT_LINK", str(link))
     monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
     monkeypatch.setattr(conferir, "_sonda_pdp_servidor", lambda s, _c: (resumo_esp, "/health:x-pf-pdp-resumo"))
 
-    exit_code = conferir.conferir_pdp("ops-server", como_json=True)
+    exit_code = conferir.conferir_pdp("ops-mcp", como_json=True)
     saida = capsys.readouterr()
 
     assert exit_code == 0
     dado = json.loads(saida.out)
     assert len(dado["itens"]) == 1
     item = dado["itens"][0]
-    assert item["nome"] == "ops-server"
+    assert item["nome"] == "ops-mcp"
     assert item["estado"] == "conforme"
     assert item["motivo"] is None
 
@@ -1578,7 +1547,7 @@ def test_pdp_divergente_quando_resumo_carregado_difere_da_release(monkeypatch, t
     """DT 835: conferir pdp compara o resumo SHA-256 da politica e sujeitos carregados
     por cada PEP com o arquivo da release no ar; divergente sai 1."""
     link = _pdp_current_com_release(tmp_path)
-    resumo_esp = conferir._resumo_pdp_dir(str(link / "politica-acesso"))
+    resumo_esp = conferir._resumo_pdp_dir(str(link / "core" / "acesso"))
     resumo_velho = "f" * 64
     monkeypatch.setenv("PF_CURRENT_LINK", str(link))
     monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
@@ -1594,7 +1563,7 @@ def test_pdp_divergente_quando_resumo_carregado_difere_da_release(monkeypatch, t
     assert exit_code == 1
     dado = json.loads(saida.out)
     estados = {item["nome"]: item["estado"] for item in dado["itens"]}
-    assert estados == {"ops-server": "conforme", "wiki-mcp": "divergente", "rastreador-api": "conforme"}
+    assert estados == {"ops-mcp": "conforme", "wiki-mcp": "divergente", "rastreador-api": "conforme"}
 
 
 def test_dt_850_classes_implementadas_e_help_sai_0(monkeypatch, capsys):
@@ -1774,31 +1743,51 @@ def test_diagrama_indeterminavel_quando_kroki_inalcancavel(monkeypatch, capsys, 
 # Regressao: o gate de `release promover` reprovou 746a69b porque o acervo era chamado
 # em ~/AI/bin/acervo (rc 127) — a bancada nao tem bin/ desde arq:0097.
 
-def test_capacidade_le_o_mapa_pelo_acervo_do_bin_da_release(monkeypatch, tmp_path):
-    # o mapa vigente se le pelo `acervo` do bin da release, nunca de RAIZ/bin (#3142).
-    bin_rel = tmp_path / "rel" / "harness" / "bin"
-    bin_rel.mkdir(parents=True)
-    acervo = bin_rel / "acervo"
-    acervo.write_text(
-        "#!/usr/bin/env bash\n"
-        "echo \"$@\" > \"$(dirname \"$0\")/chamado\"\n"
-        "printf '| `operacao` | — | a plataforma | ti |\\n'\n",
-        encoding="utf-8",
-    )
-    acervo.chmod(0o755)
-    monkeypatch.setattr(conferir, "RAIZ", "/bancada-sem-bin")
-    monkeypatch.setattr(conferir, "BIN_IRMAOS", str(bin_rel))
-    monkeypatch.setattr(conferir, "_MAPA", {})
+def test_capacidade_le_da_olaria_gatilhos_conforme_disposicoes_divergente(monkeypatch):
+    # card #4348 (F4073, comentario 5284): capacidade se confere contra a Olaria
+    # (com mae componente-de e persona sob-autoridade-de), nunca contra a raiz do acervo.
+    chamadas = []
+
+    def falso_post(rota, corpo, timeout=15):
+        chamadas.append((rota, corpo))
+        return 200, {
+            "fichas": [
+                {
+                    "chave": "capacidade:operacao",
+                    "ligacoes": {"sob-autoridade-de": "persona:ti"},
+                },
+                {
+                    "chave": "capacidade:gatilhos",
+                    "ligacoes": {
+                        "componente-de": "capacidade:operacao",
+                        "sob-autoridade-de": "persona:ia",
+                    },
+                },
+            ]
+        }, None
+
+    monkeypatch.setattr(conferir, "_CAPACIDADES_OLARIA", {})
+    monkeypatch.setattr(conferir, "_olaria_post", falso_post)
+    monkeypatch.setenv("OLARIA_URL", "http://olaria.test:8103")
+    monkeypatch.setenv("OLARIA_CHAVE", "chave-teste")
 
     assert conferir._capacidade_veredito("operacao").estado == "conforme"
-    assert conferir._capacidade_veredito("verificacao").estado == "divergente"
-    assert (bin_rel / "chamado").read_text().split() == [
-        "ler", "casa", "vocabulario", "arquitetura-negocio-operacao"]
+    assert conferir._capacidade_veredito("gatilhos").estado == "conforme"
+    assert conferir._capacidade_veredito("operacao/gatilhos").estado == "conforme"
+    assert conferir._capacidade_veredito("disposicoes").estado == "divergente"
+    assert conferir._capacidade_veredito("ti/gatilhos").estado == "divergente"
+    assert chamadas[0][0] == "/ler"
+    assert chamadas[0][1]["classe"] == "capacidade"
 
 
-def test_capacidade_indeterminavel_sem_acervo(monkeypatch, tmp_path):
-    monkeypatch.setattr(conferir, "BIN_IRMAOS", str(tmp_path / "vazio"))
-    monkeypatch.setattr(conferir, "_MAPA", {})
+def test_capacidade_indeterminavel_sem_olaria(monkeypatch):
+    monkeypatch.setattr(conferir, "_CAPACIDADES_OLARIA", {})
+    monkeypatch.setattr(
+        conferir, "_olaria_post",
+        lambda rota, corpo, timeout=15: (None, None, "Olaria fora do ar"),
+    )
+    monkeypatch.setenv("OLARIA_URL", "http://olaria.test:8103")
+    monkeypatch.setenv("OLARIA_CHAVE", "chave-teste")
 
     v = conferir._capacidade_veredito("operacao")
 

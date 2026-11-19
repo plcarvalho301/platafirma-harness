@@ -28,7 +28,6 @@ conferir = _carregar(CONFERIR_PATH, "conferir_mecanismo_teste")
 def _isolar(monkeypatch, bin_dir):
     monkeypatch.setattr(conferir, "BIN", str(bin_dir))
     monkeypatch.setattr(conferir, "_capacidade_veredito", lambda cap: resultado.conforme())
-    monkeypatch.setattr(conferir, "_donos_ferramental", lambda: ({}, None))
     monkeypatch.setattr(conferir, "_desde_familia", lambda familia: None)
     monkeypatch.setattr(conferir, "origem", lambda nome, caminho: ("symlink-release", str(caminho)))
     monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")

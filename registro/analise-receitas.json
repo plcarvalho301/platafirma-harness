@@ -35,18 +35,6 @@
     "caminho": "analise/agrupamento-de-sequencias",
     "versao": "8701e2a"
   },
-  "cadernos-e-arestas": {
-    "tipo": "preparacao",
-    "repositorio": "platafirma-conhecimento",
-    "caminho": "analise/cadernos-e-arestas",
-    "versao": "24aaa08"
-  },
-  "leitura-dos-cadernos": {
-    "tipo": "analise",
-    "repositorio": "platafirma-conhecimento",
-    "caminho": "analise/leitura-dos-cadernos",
-    "versao": "24aaa08"
-  },
   "vista-por-capacidade": {
     "tipo": "analise",
     "repositorio": "platafirma-conhecimento",
