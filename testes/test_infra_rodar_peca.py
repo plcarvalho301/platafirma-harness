@@ -161,7 +161,7 @@ def test_uso_errado_sai_2():
 def test_registro_do_harness_declara_a_peca_casa():
     reg = json.loads((RAIZ / "registro" / "pecas.json").read_text(encoding="utf-8"))
     casa = reg["casa"]
-    assert casa["origem"] == "espelho" and casa["repo"] == "platafirma-casa-espelho"
+    assert casa["origem"] == "release" and casa["dir"] == "casa-espelho"
     assert casa["modulo"] == "motor_acervo.casa" and casa["ambiente"] == "banco-casa"
     assert reg["persona"]["ambiente"] == "banco-casa"
 
@@ -222,15 +222,22 @@ def test_ambiente_olaria_sem_a_chave_no_cofre_sai_3_dizendo_onde_ela_devia_estar
 def test_registro_do_harness_declara_a_peca_olaria():
     reg = json.loads((RAIZ / "registro" / "pecas.json").read_text(encoding="utf-8"))
     olaria = reg["olaria"]
-    assert olaria["origem"] == "espelho" and olaria["repo"] == "platafirma-casa-espelho"
+    assert olaria["origem"] == "release" and olaria["dir"] == "casa-espelho"
     assert olaria["cwd"] == "outros_repos/harness/bin" and olaria["pythonpath"] == ["outros_repos/harness/bin"]
     assert olaria["modulo"] == "_olaria" and olaria["python"] == "rag" and olaria["ambiente"] == "olaria"
     assert olaria["teto_s"] == 120
     conferir = reg["conferir"]
-    assert conferir["origem"] == "espelho" and conferir["repo"] == "platafirma-casa-espelho"
+    assert conferir["origem"] == "release" and conferir["dir"] == "casa-espelho"
     assert conferir["cwd"] == "outros_repos/harness/bin" and conferir["pythonpath"] == ["outros_repos/harness/bin"]
     assert conferir["modulo"] == "_conferir" and conferir["python"] == "rag" and conferir["ambiente"] == "olaria"
     assert conferir["teto_s"] == 120
+
+
+def test_nenhuma_peca_da_casa_nova_le_a_copia_de_trabalho_do_espelho():
+    """As peças da casa nova rodam a release do espelho no ar: a cópia de trabalho da cadeira não é dependência do verbo."""
+    reg = json.loads((RAIZ / "registro" / "pecas.json").read_text(encoding="utf-8"))
+    presas = sorted(n for n, p in reg.items() if isinstance(p, dict) and p.get("repo") == "platafirma-casa-espelho")
+    assert presas == []
 
 
 def _peca_banco_casa(mod, monkeypatch, tmp_path, wt, *, com_senha: bool):

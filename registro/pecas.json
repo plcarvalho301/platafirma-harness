@@ -1,32 +1,32 @@
 {
-  "_sobre": "Peças de código que `infra rodar <peca>` executa (bin/_infra/rodar-peca). Só roda o que está aqui: declarar é PR neste arquivo. origem=espelho roda o código da bancada da sessão no repositório nomeado, e só se os caminhos da peça forem iguais a origin/main (commit e sincronizar antes); origem=release roda a árvore da release no ar. python=rag é o venv do rag da release. ambiente=banco-rag dá o banco do acervo pelo cofre, sem imprimir a credencial. ambiente=banco-casa dá o banco próprio da casa (casa-db, 127.0.0.1:5439/casa) pelo cofre, sem imprimir a credencial. ambiente=olaria dá o endereço do serviço da Olaria e a chave de serviço pelo cofre, sem imprimir a chave. A peça é `python -m <modulo> <args>` com cwd e PYTHONPATH relativos à raiz do repositório.",
+  "_sobre": "Peças de código que `infra rodar <peca>` executa (bin/_infra/rodar-peca). Só roda o que está aqui: declarar é PR neste arquivo. origem=release roda a árvore da release no ar, que é imutável e é o que foi promovido; é a origem das peças da casa nova (dir casa-espelho). origem=espelho roda o código da bancada da sessão no repositório nomeado, e só se os caminhos da peça forem iguais a origin/main (commit e sincronizar antes); nenhuma peça a usa hoje, porque amarra o verbo à cópia de trabalho da cadeira e roda o que subiu e ainda não foi promovido. python=rag é o venv do rag da release. ambiente=banco-rag dá o banco do acervo pelo cofre, sem imprimir a credencial. ambiente=banco-casa dá o banco próprio da casa (casa-db, 127.0.0.1:5439/casa) pelo cofre, sem imprimir a credencial. ambiente=olaria dá o endereço do serviço da Olaria e a chave de serviço pelo cofre, sem imprimir a chave. A peça é `python -m <modulo> <args>` com cwd e PYTHONPATH relativos à raiz da árvore.",
   "casa": {
     "dono": "dados",
-    "origem": "espelho",
-    "repo": "platafirma-casa-espelho",
+    "origem": "release",
+    "dir": "casa-espelho",
     "cwd": "outros_repos/conhecimento/rag",
     "modulo": "motor_acervo.casa",
     "pythonpath": ["outros_repos/conhecimento/rag"],
     "python": "rag",
     "ambiente": "banco-casa",
     "teto_s": 600,
-    "motivo": "S4061: portão, carregador, resolução de chave e conferência do schema casa, contra o banco da casa (casa-db); o conversor fica fora do caminho porque a peça não o importa, e cada caminho daqui entra no gate de origin/main (#4137, #4286)"
+    "motivo": "S4061: portão, carregador, resolução de chave e conferência do schema casa, contra o banco da casa (casa-db); o conversor fica fora do caminho porque a peça não o importa (#4137, #4286)"
   },
   "diagrama": {
     "dono": "engenharia",
-    "origem": "espelho",
-    "repo": "platafirma-casa-espelho",
+    "origem": "release",
+    "dir": "casa-espelho",
     "cwd": "outros_repos/harness/lib",
     "modulo": "diagrama",
     "pythonpath": ["outros_repos/harness/lib", "outros_repos/harness/skills/diagrama"],
     "python": "rag",
     "teto_s": 600,
-    "motivo": "S4115: lint, renderização, checagem estrutural e os dois juízes de figura de arquitetura; a pasta skills/diagrama entra no caminho para o portão comparar os esquemas com origin/main"
+    "motivo": "S4115: lint, renderização, checagem estrutural e os dois juízes de figura de arquitetura; a pasta skills/diagrama entra no caminho pelos esquemas"
   },
   "persona": {
     "dono": "ti",
-    "origem": "espelho",
-    "repo": "platafirma-casa-espelho",
+    "origem": "release",
+    "dir": "casa-espelho",
     "cwd": "outros_repos/harness/lib",
     "modulo": "postura",
     "pythonpath": ["outros_repos/harness/lib"],
@@ -37,8 +37,8 @@
   },
   "olaria": {
     "dono": "ti",
-    "origem": "espelho",
-    "repo": "platafirma-casa-espelho",
+    "origem": "release",
+    "dir": "casa-espelho",
     "cwd": "outros_repos/harness/bin",
     "modulo": "_olaria",
     "pythonpath": ["outros_repos/harness/bin"],
@@ -49,8 +49,8 @@
   },
   "ontologia": {
     "dono": "ti",
-    "origem": "espelho",
-    "repo": "platafirma-casa-espelho",
+    "origem": "release",
+    "dir": "casa-espelho",
     "cwd": "outros_repos/harness/bin",
     "modulo": "_olaria",
     "pythonpath": ["outros_repos/harness/bin"],
@@ -69,12 +69,12 @@
     "python": "rag",
     "ambiente": "olaria",
     "teto_s": 120,
-    "motivo": "DT 877: o verbo ontologia lido da release do espelho no ar, para quem chama sem cadeira (o pf vault do dono). Sem cadeira, a peça ontologia caía no clone base do espelho na conta, que ninguém atualiza, e o vault lia uma casa velha"
+    "motivo": "DT 877: o verbo ontologia lido da release do espelho no ar, para quem chama sem cadeira (o pf vault do dono). Igual à peça ontologia desde que ela também lê a release; fica pelo nome que o vault chama"
   },
   "conferir": {
     "dono": "ti",
-    "origem": "espelho",
-    "repo": "platafirma-casa-espelho",
+    "origem": "release",
+    "dir": "casa-espelho",
     "cwd": "outros_repos/harness/bin",
     "modulo": "_conferir",
     "pythonpath": ["outros_repos/harness/bin"],
@@ -85,8 +85,8 @@
   },
   "suite": {
     "dono": "engenharia",
-    "origem": "espelho",
-    "repo": "platafirma-casa-espelho",
+    "origem": "release",
+    "dir": "casa-espelho",
     "cwd": "outros_repos/harness/lib",
     "modulo": "suite",
     "pythonpath": ["outros_repos/harness/lib"],
@@ -109,8 +109,8 @@
   },
   "despejo-caderno": {
     "dono": "dados",
-    "origem": "espelho",
-    "repo": "platafirma-casa-espelho",
+    "origem": "release",
+    "dir": "casa-espelho",
     "cwd": "outros_repos/harness/lib",
     "modulo": "descanso.despejo_caderno",
     "pythonpath": ["outros_repos/harness/lib"],
