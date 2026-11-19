@@ -107,10 +107,11 @@ def ler_cloudflared(endereco: str) -> dict:
             "metrica": endereco}
 
 
-def pid_da_unit(unit: str) -> int:
-    fonte = f"systemctl --user show {unit}"
+def pid_da_unit(unit: str, *, sistema: bool = False) -> int:
+    cmd = ["systemctl"] if sistema else ["systemctl", "--user"]
+    fonte = f"{' '.join(cmd)} show {unit}"
     try:
-        p = subprocess.run(["systemctl", "--user", "show", "-p", "MainPID", unit],
+        p = subprocess.run([*cmd, "show", "-p", "MainPID", unit],
                            capture_output=True, text=True, timeout=TIMEOUT_DO_SYSTEMD_S, check=False)
     except (OSError, subprocess.TimeoutExpired):
         raise eixos.ErroDeLeitura("systemctl_fora", fonte) from None
@@ -167,9 +168,9 @@ def portas_em_escuta(pid: int, proc: Path) -> list[int]:
     return sorted(portas)
 
 
-def ler_tunel_da_unit(unit: str, proc: Path) -> dict:
+def ler_tunel_da_unit(unit: str, proc: Path, *, sistema: bool = False) -> dict:
     """O túnel que roda numa unit: acha a porta pelo socket do processo e lê o cloudflared que responde nela."""
-    pid = pid_da_unit(unit)
+    pid = pid_da_unit(unit, sistema=sistema)
     ultimo = None
     for porta in portas_em_escuta(pid, proc):
         try:
@@ -221,12 +222,12 @@ def _endereco_borda_metrica() -> str:
 
 def _ler_os_tuneis(proc: Path) -> tuple[list[tuple[str, str | None, dict]], list[dict]]:
     """(lidos, falhos): cada túnel lido como (nome, unit ou None, leitura); cada um que não leu, a linha dele."""
-    unidades = (("ops", os.environ.get("INFRA_REDE_UNIT_OPS", "ops-tunnel.service")),
-                ("recuperacao", os.environ.get("INFRA_REDE_UNIT_RECUPERACAO", "recuperacao-tunnel.service")))
+    unidades = (("ops", os.environ.get("INFRA_REDE_UNIT_OPS", "ops-tunnel.service"), False),
+                ("recuperacao", os.environ.get("INFRA_REDE_UNIT_RECUPERACAO", "recuperacao-tunnel.service"), True))
     lidos, falhos = [], []
-    for nome, unit in unidades:
+    for nome, unit, sistema in unidades:
         try:
-            lidos.append((nome, unit, ler_tunel_da_unit(unit, proc)))
+            lidos.append((nome, unit, ler_tunel_da_unit(unit, proc, sistema=sistema)))
         except eixos.ErroDeLeitura as e:
             falhos.append({"tunel": nome, "estado_leitura": "nao_consegui_olhar", "causa": e.causa, "fonte": e.fonte})
     try:

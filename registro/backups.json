@@ -56,6 +56,15 @@
       "alcance": "aqui",
       "_nota": "platafirma-core:deploy/eventos/backup-db.sh (#3878, spec banco-de-eventos-de-plataforma R2). O piso repete o PISO_BYTES do script: o banco recem-nascido, so com schema e particoes vazias, ja passa dele; os dois numeros andam juntos."
     },
+    "escapes-do-dono": {
+      "o_que": "registro só de acréscimo do escape do dono no portão da esteira (var/esteira/escapes-do-dono.jsonl, guarda de 20 anos)",
+      "cobertura": "cron do claudinho, 03:50",
+      "diretorio": "/srv/platafirma/casa/dados/backups/escapes",
+      "padrao": "escapes-do-dono-*.jsonl.gz",
+      "alcance": "aqui",
+      "_nota": "platafirma-core:deploy/backup-escapes.sh (DT 831). Arquivo pode estar vazio enquanto nenhum escape ocorreu; sem piso_bytes alto.",
+      "log": "/srv/platafirma/casa/var/log/cron/backup-escapes.log"
+    },
     "cofre-keepass": {
       "o_que": "cofre de credenciais, em geracoes datadas",
       "cobertura": "cron da conta megafone, diario",
