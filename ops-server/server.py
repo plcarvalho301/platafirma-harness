@@ -1679,6 +1679,8 @@ def _item_de_lote(x):
                 proximo=f'malote(commands=[{{"verbo": {v_ex}, "ato": {a_ex}, "args": [...]}}])')
         resto = ([ato] if ato else []) + [str(a) for a in args]
         stdin = x.get("stdin")
+        if stdin is None and isinstance(x.get("stdin_de"), int) and not isinstance(x.get("stdin_de"), bool):
+            stdin = {"de": x["stdin_de"]}
         if not _eh_pipe_stdin(stdin):
             stdin = _stdin_texto(stdin)
     else:
@@ -1695,35 +1697,41 @@ def _item_de_lote(x):
         return None, None, _recusa(slug, "sem verbo")
     return [BINARIOS[slug]] + resto, stdin, None
 
-async def malote(command: str = "", cwd: str = "", timeout: int = 120,
+PIPE_BRUTO_MAX = int(os.environ.get("PF_PIPE_BRUTO_MAX", str(4 * 1024 * 1024)))
+
+
+async def malote(command: str = "", timeout: int = 120,
                  sessao_id: str | None = None,
                  commands: list | None = None,
-                 encadeado: bool = False, turno: str = "", turno_texto: str = "",
+                 encadeado: bool = False, inteiro: bool = False,
+                 turno: str = "", turno_texto: str = "",
                  turno_fonte: str = "") -> dict:
     """roda vários verbos numa chamada só · use para: SEMPRE que for chamar dois ou mais verbos no mesmo giro, em vez de uma chamada por verbo; cadeia que para no primeiro erro; passar a saída de um verbo ao seguinte; verbo sem tool própria nesta sessão
 
-    `commands`: lista de itens, cada um `{verbo, ato, args, stdin}` ou a string
+    `commands`: lista de itens, cada um `{verbo, ato, args, stdin, stdin_de, inteiro}` ou a string
     `"<verbo> <ato> <args...>"` (partida com shlex; `| & > < $ \\` * ? ( ) ;` recusam o item).
     Um `execve` por item (`bin/<verbo> <ato> <args>`), nunca `bash -c`; item roda na casa da
-    conta e `cwd` e ignorado. `stdin` e texto ou `{"de": n}` = stdout do item n do mesmo lote
-    (substitui o pipe). Programa que NAO e verbo servido nao roda: volta
+    conta. `stdin` e texto ou `{"de": n}` (ou `stdin_de: n`) = stdout do item n do mesmo lote
+    (substitui o pipe). `inteiro=true` (no lote ou no item) desliga o ledger de deduplicacao da
+    poda para devolver o corpo inteiro. Programa que NAO e verbo servido nao roda: volta
     `{recusado, verbo, motivo, sugestao}` com o verbo que o cobre (`sugestao: null` = verbo
     que falta — vira card; junto vem `verbos_servidos` e `golden`, incondicional, nunca so
     o null seco). Sequencial; erro ou recusa num item nao derruba os outros; teto
     `CAP` por lote com `omitido_por_teto`/`lote_next`. `command` escalar = lote de 1 e
     devolve o resultado do item. `sessao_id` e o do `monta_sessao`. AUDITORIA: um JSONL
-    por item em @LOG@/ — nao e silenciavel.
+    por item e um evento de lote em @LOG@/ — nao e silenciavel.
     `encadeado=true`: cadeia fixa — item com exit 0 ou 1 segue; qualquer outro (2..5,
     recusa, negado, timeout, exit fora da tabela) PARA, e os seguintes voltam
     `nao_rodou`; o bloco `cadeia` diz exit e primeira linha de cada item, `parou_em` e o
     exit do topo. Retomar = rerodar a cadeia: o que ja fez devolve "ja feito".
     """
-    return await _malote("malote", command, cwd, timeout, sessao_id, commands, encadeado, turno,
-                         turno_texto, turno_fonte)
+    return await _malote("malote", command, timeout, sessao_id, commands, encadeado,
+                         inteiro=inteiro, turno=turno, turno_texto=turno_texto,
+                         turno_fonte=turno_fonte)
 
 
 def _fontes_de_pipe(itens: list) -> set[int]:
-    """Indices de itens cujo stdout alimenta `stdin: {"de": n}` de um item posterior."""
+    """Indices de itens cujo stdout alimenta `stdin: {"de": n}` ou `stdin_de: n` de um item posterior."""
     fontes: set[int] = set()
     for i, x in enumerate(itens):
         if isinstance(x, dict):
@@ -1732,15 +1740,20 @@ def _fontes_de_pipe(itens: list) -> set[int]:
                 n = st["de"]
                 if 0 <= n < i:
                     fontes.add(n)
+            elif st is None and isinstance(x.get("stdin_de"), int) and not isinstance(x.get("stdin_de"), bool):
+                n = x["stdin_de"]
+                if 0 <= n < i:
+                    fontes.add(n)
     return fontes
 
 
-async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: str | None,
-                  commands: list | None, encadeado: bool, turno: str = "",
-                  turno_texto: str = "", turno_fonte: str = "") -> dict:
-    """O lote das duas tools (#3270). `nome` e o nome chamado: a auditoria o grava em `tool`
-    na recusa e no lote encadeado, e em `via` no item despachado, e a regra de saida do
-    apelido conta os dois (spec porta-so-verbo §3.7). A acao do PDP segue `run_command`."""
+async def _malote(nome: str, command: str, timeout: int, sessao_id: str | None,
+                  commands: list | None, encadeado: bool, inteiro: bool = False,
+                  turno: str = "", turno_texto: str = "",
+                  turno_fonte: str = "") -> dict:
+    """O lote da tool `malote` (#3270). `nome` e o nome chamado: a auditoria o grava em `tool`
+    na recusa e no evento do lote, e em `via` no item despachado (spec porta-so-verbo §3.7).
+    A acao do PDP segue `run_command`."""
     itens = list(commands) if commands else ([command] if command else [])
     if not itens:
         return _envelope_erro(
@@ -1753,12 +1766,14 @@ async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: st
         )
     timeout = max(1, min(timeout, 600))
     fim = _prazo_da_chamada()          # #3249: o prazo e da chamada, nao do item
+    t_lote = time.monotonic()
     ident = _sessao_resolve(sessao_id)
     _carimba_turno(ident, turno, turno_texto, turno_fonte)
     lote_id = uuid.uuid4().hex[:8]
     brutos: list = []
     stdins_resolvidos: list = []
     _estado = {"ident": ident}
+    pipe_fontes = _fontes_de_pipe(itens)
 
     async def _roda(_i, x, resultados):
         ident = _estado["ident"]
@@ -1769,6 +1784,7 @@ async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: st
             return esgotado
         r = await _roda_item_run_command(_i, x, resultados, brutos, ident, timeout,
                                          lote_id, encadeado, fim, nome=nome,
+                                         inteiro=inteiro, pipe_fontes=pipe_fontes,
                                          turno_texto=turno_texto, turno_fonte=turno_fonte,
                                          stdins_resolvidos=stdins_resolvidos)
         # Injeção entre itens do lote (Aberto spec_sessao/expediente, #3053):
@@ -1780,31 +1796,39 @@ async def _malote(nome: str, command: str, cwd: str, timeout: int, sessao_id: st
                 _estado["ident"] = _sessao_resolve(sid_novo)
         return r
 
-    pipe_fontes = _fontes_de_pipe(itens)
     out = await _lote.itera(itens, _roda, encadeado=encadeado, cap=CAP,
                             bytes_de=_lote.bytes_stdout, brutos=brutos,
                             pipe_fontes=pipe_fontes)
+    dur_lote_ms = round((time.monotonic() - t_lote) * 1000)
+    ident_fim = _estado["ident"]
     if encadeado:
         _c = out["cadeia"]
         _audit(tool=nome, evento="lote_encadeado", lote_id=lote_id,
                lote_n=len(itens), parou_em=_c["parou_em"], exit_code=_c["exit"],
-               nao_rodou=len(_c["nao_rodou"]), cadeira=ident["cadeira"] or None,
-               sessao_id=ident["sessao_id"], ordem_id=ident["ordem_id"])
+               nao_rodou=len(_c["nao_rodou"]), dur_ms=dur_lote_ms,
+               cadeira=ident_fim["cadeira"] or None,
+               sessao_id=ident_fim["sessao_id"], ordem_id=ident_fim["ordem_id"])
         return out
-    if len(itens) == 1:
-        return out["lote"][0]
-    return out
+    retorno = out["lote"][0] if len(itens) == 1 else out
+    _audit(tool=nome, evento="lote", lote_id=lote_id, lote_n=len(itens),
+           exit_code=(2 if _deve_marcar_erro(retorno) else 0),
+           dur_ms=dur_lote_ms, cadeira=ident_fim["cadeira"] or None,
+           sessao_id=ident_fim["sessao_id"], ordem_id=ident_fim["ordem_id"])
+    return retorno
 
 
 async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote_id,
                                  encadeado=False, fim=None, nome="run_command",
+                                 inteiro=False, pipe_fontes=None,
                                  turno_texto="", turno_fonte="",
                                  stdins_resolvidos=None) -> dict:
-    """Um item de `malote commands[]` (ou do apelido `run_command`): parte, confere
-    stdin.de, autoriza, roda, serve e audita. A ordem e a parada da cadeia sao de
-    `lote.itera`. `nome` e a tool chamada, gravada em `tool` (recusa) e `via` (item)."""
+    """Um item de `malote commands[]`: parte, confere stdin.de, autoriza, roda, serve e audita.
+    A ordem e a parada da cadeia sao de `lote.itera`. `nome` e a tool chamada, gravada em
+    `tool` (recusa e lote) e `via` (item)."""
     if stdins_resolvidos is None:
         stdins_resolvidos = []
+    inteiro_item = bool(x.get("inteiro")) if isinstance(x, dict) else False
+    precisa_bruto = bool(pipe_fontes and _i in pipe_fontes)
     aviso_dup = None
     if isinstance(x, str):
         try:
@@ -1829,6 +1853,8 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
         elif (resultados[n].get("recusado") or resultados[n].get("erro")
               or resultados[n].get("nao_rodou")):
             recusa = _recusa(slug0, f"insumo do item {n} nao rodou")
+        elif resultados[n].get("interrompido"):
+            recusa = _recusa(slug0, f"insumo do item {n} foi interrompido")
         elif resultados[n].get("em_andamento"):
             recusa = _recusa(slug0, f"insumo do item {n} ainda em andamento "
                                     f"(resultado em {resultados[n].get('resultado')})")
@@ -1836,6 +1862,13 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
             # comentario #939 A4: na cadeia, insumo que saiu 1 ("nao existe") e vazio;
             # rodar o seguinte sobre nada e efeito sobre entrada vazia.
             recusa = _recusa(slug0, f"insumo do item {n} saiu {_lote.exit_do_item(resultados[n])}")
+        elif not encadeado and _lote.exit_do_item(resultados[n]) >= 2:
+            recusa = _recusa(slug0, f"insumo do item {n} falhou com exit {_lote.exit_do_item(resultados[n])}")
+        elif not eh_stdin_de and isinstance(brutos[n], dict) and "_pipe_excedeu" in brutos[n]:
+            recusa = _recusa(
+                slug0,
+                f"insumo do item {n} excedeu teto de pipe ({brutos[n]['_pipe_excedeu']} > {PIPE_BRUTO_MAX} bytes)",
+            )
         else:
             stdin = stdins_resolvidos[n] if eh_stdin_de else brutos[n]
     if recusa:
@@ -1867,18 +1900,34 @@ async def _roda_item_run_command(_i, x, resultados, brutos, ident, timeout, lote
         r = await anyio.to_thread.run_sync(_run_verbo_blocking, argv, stdin, timeout, ident,
                                            _prazo_restante(fim), *_ex)
         so = r.get("stdout")
-        if isinstance(so, dict) and so.get("cru") and so.get("truncado"):
-            try:
-                brutos.append(Path(so["cru"]).read_text(encoding="utf-8", errors="replace"))
-            except OSError:
-                brutos.append(so.get("texto", ""))
-        else:
+        _ato_bruto = argv[1] if len(argv) > 1 else ""
+        if precisa_bruto:
+            if isinstance(so, dict) and so.get("cru") and so.get("truncado"):
+                try:
+                    p_cru = Path(so["cru"])
+                    tam_cru = p_cru.stat().st_size
+                    if tam_cru > PIPE_BRUTO_MAX:
+                        brutos.append({"_pipe_excedeu": tam_cru})
+                    else:
+                        brutos.append(p_cru.read_text(encoding="utf-8", errors="replace"))
+                except OSError:
+                    brutos.append(so.get("texto", ""))
+            else:
+                txt = so.get("texto", "") if isinstance(so, dict) else ""
+                tam_txt = len(txt.encode("utf-8", "replace"))
+                brutos.append({"_pipe_excedeu": tam_txt} if tam_txt > PIPE_BRUTO_MAX else txt)
+        elif slug == "sessao" and _ato_bruto == "abrir":
             brutos.append(so.get("texto", "") if isinstance(so, dict) else "")
+        elif encadeado:
+            brutos.append(_lote._primeira_linha(so.get("texto", "") if isinstance(so, dict) else ""))
+        else:
+            brutos.append("")
         stdins_resolvidos.append(stdin if isinstance(stdin, str) else ("" if stdin is None else str(stdin)))
         _perf = _perfil_verbo(slug, argv[0])
         _ato_ef = _ato_efetivo(argv, binario=argv[0])
         r = _serve(r, tool=slug, alca=linha, ident=ident, cauda=_perf["cauda"],
                    cosmetica=_cosmetica(_perf, _ato_ef),
+                   esquece=bool(inteiro or inteiro_item),
                    escrita=_escreve(slug, argv[0], _ato_ef))
         if aviso_dup and isinstance(r, dict):
             _aviso = f"{nome}: primeiro token '{aviso_dup}' desduplicado com aviso"
@@ -4066,6 +4115,19 @@ def _esquema_plano(esquema: dict) -> dict:
                         "inteiro": {"type": "boolean"},
                     },
                 }
+            elif k == "commands" and isinstance(p, dict) and p.get("type") == "array":
+                p["items"] = {
+                    "type": "object",
+                    "properties": {
+                        "verbo": {"type": "string"},
+                        "ato": {"type": "string"},
+                        "args": {"type": "array", "items": {"type": "string"}},
+                        "stdin": {"type": "string"},
+                        "stdin_de": {"type": "integer"},
+                        "inteiro": {"type": "boolean"},
+                    },
+                    "required": ["verbo"],
+                }
             props[k] = p
         out["properties"] = props
     if "items" in out and isinstance(out["items"], dict):
@@ -4111,9 +4173,20 @@ def _deve_marcar_erro(payload: dict) -> bool:
         return ec not in (0, 1)
     cadeia = payload.get("cadeia")
     if isinstance(cadeia, dict):
+        if cadeia.get("em_andamento"):
+            return False
         ce = cadeia.get("exit")
         if isinstance(ce, int) and not isinstance(ce, bool):
             return ce not in (0, 1)
+    itens_lote = payload.get("lote")
+    if isinstance(itens_lote, list):
+        executados = [
+            it for it in itens_lote
+            if isinstance(it, dict) and not it.get("omitido_por_teto") and not it.get("nao_rodou")
+        ]
+        if executados and all(_deve_marcar_erro(it) for it in executados):
+            return True
+        return False
     return bool(payload.get("recusado") or payload.get("erro"))
 
 

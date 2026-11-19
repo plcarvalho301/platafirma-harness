@@ -79,20 +79,34 @@ def resumo_cadeia(resultados: list, parou_em: int | None,
             itens.append({"n": i, "exit": None, "linha": "não rodou"})
         elif isinstance(r, dict) and r.get("omitido_por_teto"):
             itens.append({"n": i, "exit": None, "linha": "omitido por teto"})
+        elif isinstance(r, dict) and r.get("em_andamento"):
+            itens.append({"n": i, "exit": None, "em_andamento": True, "linha": linha_do_item(r)})
         else:
             linha = linha_do_item(r)
             if brutos is not None and i < len(brutos) and _servido_como_igual(r):
                 linha = _primeira_linha(brutos[i]) or linha
             itens.append({"n": i, "exit": exit_do_item(r), "linha": linha})
-    if parou_em is not None:
+    em_andamento = (
+        parou_em is not None
+        and parou_em < len(resultados)
+        and isinstance(resultados[parou_em], dict)
+        and bool(resultados[parou_em].get("em_andamento"))
+    )
+    if em_andamento:
+        topo = None
+        motivo = f"em andamento em {parou_em}: {itens[parou_em]['linha']}"
+    elif parou_em is not None:
         topo = itens[parou_em]["exit"]
         motivo = f"parou em {parou_em}: {itens[parou_em]['linha']}"
     else:
         rodados = [x["exit"] for x in itens if x["exit"] is not None]
         topo = 0 if all(e == 0 for e in rodados) else 1
         motivo = None
-    return {"encadeado": True, "exit": topo, "parou_em": parou_em, "motivo": motivo,
-            "nao_rodou": nao_rodou, "itens": itens}
+    out = {"encadeado": True, "exit": topo, "parou_em": parou_em, "motivo": motivo,
+           "nao_rodou": nao_rodou, "itens": itens}
+    if em_andamento:
+        out["em_andamento"] = True
+    return out
 
 
 async def itera(itens: list, roda: Callable[[int, Any, list], Awaitable[dict]], *,
@@ -114,7 +128,7 @@ async def itera(itens: list, roda: Callable[[int, Any, list], Awaitable[dict]], 
         resultados.append(r)
         if bytes_de is not None and (not pipe_fontes or i not in pipe_fontes):
             acumulado += bytes_de(r) or 0
-        if encadeado and exit_do_item(r) not in SEGUE:
+        if encadeado and ((isinstance(r, dict) and r.get("em_andamento")) or exit_do_item(r) not in SEGUE):
             parou_em = i
             break
     for j in range(len(resultados), len(itens)):
