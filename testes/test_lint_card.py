@@ -275,7 +275,6 @@ def test_titulo_com_codigo_opaco_avisa(titulo, trecho):
 def test_3408_nao_e_apontado_por_continuidade():
     aps, _ = _rodar(CARD_3408, COMENTARIOS_3408)
     assert not [a for a in aps if "Continuidade" in a.o_que_fere]
-    assert "T1" not in _ids(aps)
 
 
 def test_buraco_sem_remendo_sai_c2():
@@ -310,12 +309,40 @@ def test_c5_sem_fecha_no_ar_nao_aponta_fecho_proprio():
 # ------------------------------------------------------------------ criterios um a um
 
 def test_t1_estado_captada_so_pede_a_aposta():
-    corpo = "#5 · feature · Captada (funil)\nProblema: x\nResultado: y\nMedida: m\nFora: f\n"
-    aps = conferir_discovery("#5", corpo, [], LISTA, estado="Captada (funil)")[0]
+    corpo_feat = (
+        "#5 · feature · Captada (funil)\n"
+        "Problema: x\nServe a: s\nFora: f\nSai quando: q\nApetite: a\n"
+    )
+    aps = conferir_discovery("#5", corpo_feat, [], LISTA, estado="Captada (funil)")[0]
     assert "T1" not in _ids(aps)
-    aps = conferir_discovery("#5", corpo, [], LISTA, estado="em-parecer")[0]
+    aps = conferir_discovery("#5", corpo_feat, [], LISTA, estado="em-parecer")[0]
+    assert {a.o_que_fere.split("[")[1] for a in aps if a.id == "T1"} == {"rótulo «Solução:» ausente]"}
+
+    corpo_epico = "#6 · épico · Captada (funil)\nProblema: x\nResultado: y\nMedida: m\nFora: f\n"
+    aps = conferir_discovery("#6", corpo_epico, [], LISTA, estado="Captada (funil)")[0]
+    assert "T1" not in _ids(aps)
+    aps = conferir_discovery("#6", corpo_epico, [], LISTA, estado="em-parecer")[0]
     assert {a.o_que_fere.split("[")[1] for a in aps if a.id == "T1"} == \
         {"rótulo «Solução:» ausente]", "rótulo «Peças:» ausente]"}
+
+
+def test_t1_feature_molde_olaria_e_inventario():
+    corpo = (
+        "#4376 · feature · Em parecer (funil)\n"
+        "Problema: p\nServe a: s\nSolução:\n- Ao abrir: vê.\nFora: f\nSai quando: q\nApetite: a\n\n"
+        "Inventário: 5 peças, 16 regras (0 validadas, 16 sem story), 5 produtos documentais\n"
+    )
+    aps = conferir_discovery("#4376", corpo, [], LISTA, estado="Em parecer (funil)")[0]
+    assert "T1" not in _ids(aps)
+
+    sem_pecas = corpo.replace("5 peças", "0 peças")
+    aps = conferir_discovery("#4376", sem_pecas, [], LISTA, estado="Em parecer (funil)")[0]
+    assert "T1" in _ids(aps)
+    assert any("inventário sem peças" in a.o_que_fere for a in aps if a.id == "T1")
+
+    com_pecas_no_corpo = corpo + "Peças:\n1. algo\n"
+    aps = conferir_discovery("#4376", com_pecas_no_corpo, [], LISTA, estado="Em parecer (funil)")[0]
+    assert any("vai ao inventário" in a.o_que_fere for a in aps if a.id == "T1")
 
 
 def test_t1_rotulo_de_fontes():

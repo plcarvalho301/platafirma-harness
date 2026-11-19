@@ -3,7 +3,7 @@
 # capacidade: tarefas
 # dono: gestao-estrategica
 # use para: SEMPRE que o assunto for card, épico, feature, story, incidente ou débito técnico; captar demanda, «cria um card»; lapidar, dar parecer, apostar, formalizar, priorizar, pôr em execução, concluir, validar e entregar card, «move para refinamento», «comenta no card»; declarar, mitigar e fechar incidente; «o que está comigo?», «lê o card», «os comentários do card», sign-off; e sempre que o pacto quebrar ou uma execução cair
-# atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub, ordenar, bloquear, desbloquear, carteira, espera-dono (leitura, trabalho)
+# atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub, ordenar, bloquear, desbloquear, carteira, inventario, espera-dono (leitura, trabalho)
 # mecanismo: espera-dono=casca
 #
 # Texto do controle (arq:0124 §3; arq:0125 U33; card #3446). Todo ato cai na face Entrega.
@@ -31,6 +31,7 @@
 # face: bloquear=Entrega
 # face: desbloquear=Entrega
 # face: carteira=Entrega
+# face: inventario=Entrega
 # rotulo: listar=Listar card aberto
 # rotulo: listar-tudo=Listar card do funil, parado inclusive
 # rotulo: ler=Abrir card
@@ -50,6 +51,7 @@
 # rotulo: bloquear=Bloquear card
 # rotulo: desbloquear=Desbloquear card
 # rotulo: carteira=Ler carteira
+# rotulo: inventario=Administrar inventário de feature
 # volta: listar=sim — só lê
 # volta: listar-tudo=sim — só lê
 # volta: ler=sim — só lê
@@ -69,6 +71,7 @@
 # volta: bloquear=sim — tarefas desbloquear
 # volta: desbloquear=sim — tarefas bloquear
 # volta: carteira=sim — só lê
+# volta: inventario=nao
 # Backend: `platafirma-rastreador` (API própria), desde 16/08/2026. O Vikunja saiu.
 #
 # Loopback, e não a rota pública: `tarefas.platafirma.org` serve a superfície HUMANA
@@ -236,6 +239,11 @@ uso:
                                           balde de débito técnico: dado do rastreador, uma linha
                                           por débito (rito §4); `dt` sem sub lista os atos
   tarefas estados                         os estados do registro, com fase
+  tarefas inventario <ler|criar|editar|validar|cortar|ligar|desligar>
+                                          o inventário da feature (peças, regras de negócio e produtos
+                                          documentais), dado do rastreador. A chave é
+                                          <feature>.<p|r|d><n>, como 4314.r3, e o número e o evento de
+                                          cada ato são do banco. `inventario` sem sub mostra o uso
   tarefas espera-dono                     o que espera o dono: pergunta dirigida a ele, card
                                           pronto para a aposta e pai em homologação; à parte,
                                           o que está com as cadeiras — abertos por card, com a
@@ -1072,6 +1080,9 @@ ler() {
        | join("\n")
      else empty end),
     (.descricao // "")' | para_texto
+  # Story #4317 (feature 4314): a feature mostra a linha das contagens do inventário, sem os
+  # itens, e a story mostra as regras que cumpre, inteiras, e os produtos documentais que muda.
+  _inventario_na_leitura "$j"
   # FILHAS — card lido sem ver o que pende embaixo não serve para repriorizar:
   # ler um épico/feature e não enxergar a subárvore era o furo. Puxa os filhos
   # diretos, um por linha (id · estado · cadeira · título), na ordem de dependência que a API
@@ -2977,6 +2988,224 @@ espera_dono() {
   '
 }
 
+# --- inventário da feature -------------------------------------------------------
+
+# (story #4317, feature 4314; sql/033). Peça, regra de negócio e produto documental da feature
+# são dado do rastreador, cada um com a chave <feature>.<p|r|d><n> (4314.r3). O verbo só fala com
+# a API: o número, a validação desfeita pela frase mudada e o evento de cada ato são do banco.
+# O nome do verbo e a forma de chamar dos outros atos não mudam (a feature 4268 refaz os verbos).
+
+JQ_INV='
+def porque: if .porque then "    porque: \(.porque)" else empty end;
+def casos: (.casos // [])[] | "    caso: \(.)";
+def mecanismo: if .mecanismo then "    mecanismo: \(.mecanismo)" else empty end;
+def regra:
+  "  \(.chave) · "
+  + (if .cortada then "cortada"
+     elif .validada then "validada (\(.validada_por), \((.validada_em // "")[0:10]))"
+     else "não validada" end)
+  + " · " + (if .peca_numero != null then "rege p\(.peca_numero)" else "feature inteira" end)
+  + " · \(.frase)",
+  porque, casos, mecanismo;
+def peca:
+  "  \(.chave) · \(.descricao)"
+  + (if .classe_declarada then " · classe: \(.classe_declarada)" else "" end)
+  + (if .sobre then " · sobre: \(.sobre)" else "" end)
+  + (if .cortada then " · cortada" else "" end);
+def documento:
+  "  \(.chave) · \(.ato_documental // "—")/\(.natureza // "—") · \(.descricao)"
+  + (if .classe_declarada then " · classe: \(.classe_declarada)" else "" end)
+  + (if .sobre then " · sobre: \(.sobre)" else "" end)
+  + (if .cortada then " · cortada" else "" end);
+'
+
+_inventario_na_leitura() { # <json do card>: contagens na feature; regras e documentos na story
+  local j="$1" nivel
+  nivel=$(printf '%s' "$j" | jq -r '.nivel // empty')
+  case "$nivel" in
+    1) printf '%s' "$j" | jq -r '(.inventario.linha // empty) | "\n" + .' ;;
+    2) printf '%s' "$j" | jq -r "$JQ_INV"'
+         (.inventario // {}) as $i
+         | (if (($i.regras // []) | length) > 0
+            then "", "regras que esta story cumpre:", ($i.regras[] | regra) else empty end),
+           (if (($i.documentos // []) | length) > 0
+            then "", "produtos documentais que esta story muda:", ($i.documentos[] | documento) else empty end)' ;;
+  esac
+  return 0
+}
+
+_inv_uso() {
+  cat >&2 <<'FIM'
+uso:
+  tarefas inventario ler <feature> [--lista peca|regra|documento] [--cortados]
+  tarefas inventario criar <feature> peca|regra|documento [campos]
+  tarefas inventario editar <chave> [campos]
+  tarefas inventario validar <chave> [--frase "<txt>"]
+  tarefas inventario cortar <chave>
+  tarefas inventario ligar <chave> <story>
+  tarefas inventario desligar <chave> <story>
+campos da peça: --descricao --classe --sobre --sem-regra
+campos da regra: --frase --porque --mecanismo --caso "<caso → resultado>" (repete)
+                 --peca <n> | --feature-inteira  --mora-em <n>
+campos do produto documental: --descricao --classe --ato nasce|muda|sai
+                 --natureza golden|referencia --escrito-por --sobre
+A chave é <feature>.<p|r|d><n>, como 4314.r3. O número sai do banco; a regra sem --peca e sem
+--feature-inteira é recusada; --frase em validar é a que o dono leu.
+FIM
+  exit 2
+}
+
+_inv_chave() { # <chave> → INV_FEATURE, INV_LETRA, INV_N e INV_LISTA
+  local chave="${1:-}"
+  if ! [[ "$chave" =~ ^([0-9]+)\.([prd])([0-9]+)$ ]]; then
+    echo "tarefas inventario: chave inválida: '$chave' (esperado <feature>.<p|r|d><n>, como 4314.r3)" >&2
+    exit 2
+  fi
+  INV_FEATURE="${BASH_REMATCH[1]}"; INV_LETRA="${BASH_REMATCH[2]}"; INV_N="${BASH_REMATCH[3]}"
+  case "$INV_LETRA" in p) INV_LISTA=pecas ;; r) INV_LISTA=regras ;; d) INV_LISTA=documentos ;; esac
+}
+
+_inv_lista() { # o nome da lista, no singular ou no plural → o plural da API
+  case "${1:-}" in
+    peca|pecas|peça|peças) printf 'pecas' ;;
+    regra|regras) printf 'regras' ;;
+    documento|documentos|produto-documental) printf 'documentos' ;;
+    *) echo "tarefas inventario: lista desconhecida: '${1:-}' (peca, regra ou documento)" >&2; exit 2 ;;
+  esac
+}
+
+_inv_campo() { # <json> <campo> <valor em texto> → o json com o campo
+  jq -c --arg k "$2" --arg v "$3" '. + {($k): $v}' <<<"$1"
+}
+
+_inv_campos() { # as flags de campo viram o corpo JSON do item
+  local json='{}' casos='[]' campo
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --descricao)  json=$(_inv_campo "$json" descricao "${2:?--descricao pede o texto}"); shift 2 ;;
+      --classe)     json=$(_inv_campo "$json" classe_declarada "${2:?--classe pede a classe}"); shift 2 ;;
+      --sobre)      json=$(_inv_campo "$json" sobre "${2:?--sobre pede <classe>:<chave>}"); shift 2 ;;
+      --frase)      json=$(_inv_campo "$json" frase "${2:?--frase pede o texto}"); shift 2 ;;
+      --porque)     json=$(_inv_campo "$json" porque "${2:?--porque pede o texto}"); shift 2 ;;
+      --mecanismo)  json=$(_inv_campo "$json" mecanismo "${2:?--mecanismo pede o texto}"); shift 2 ;;
+      --ato)        json=$(_inv_campo "$json" ato_documental "${2:?--ato pede nasce, muda ou sai}"); shift 2 ;;
+      --natureza)   json=$(_inv_campo "$json" natureza "${2:?--natureza pede golden ou referencia}"); shift 2 ;;
+      --escrito-por) json=$(_inv_campo "$json" escrito_por "${2:?--escrito-por pede a cadeira}"); shift 2 ;;
+      --caso)       casos=$(jq -c --arg v "${2:?--caso pede o texto}" '. + [$v]' <<<"$casos"); shift 2 ;;
+      --peca|--mora-em)
+        campo="${1#--}"; campo="${campo//-/_}"
+        [[ "${2:-}" =~ ^[0-9]+$ ]] || { echo "tarefas inventario: $1 pede o número do item na lista" >&2; exit 2; }
+        json=$(jq -c --arg k "$campo" --argjson v "$2" '. + {($k): $v}' <<<"$json"); shift 2 ;;
+      --sem-regra)  json=$(jq -c '. + {sem_regra: true}' <<<"$json"); shift ;;
+      --feature-inteira) json=$(jq -c '. + {feature_inteira: true}' <<<"$json"); shift ;;
+      *) echo "tarefas inventario: campo desconhecido: $1" >&2; exit 2 ;;
+    esac
+  done
+  [ "$casos" = '[]' ] || json=$(jq -c --argjson c "$casos" '. + {casos: $c}' <<<"$json")
+  printf '%s' "$json"
+}
+
+inv_ler() {
+  local feature="" lista="" cortados=0 q=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --lista)    lista=$(_inv_lista "${2:?--lista pede peca, regra ou documento}"); shift 2 ;;
+      --cortados) cortados=1; shift ;;
+      *)
+        if [ -z "$feature" ]; then feature=$(so_id "$1"); shift
+        else echo "tarefas inventario ler: argumento desconhecido: $1" >&2; exit 2; fi ;;
+    esac
+  done
+  [ -n "$feature" ] || _inv_uso
+  [ -z "$lista" ] || q="?lista=$lista"
+  if [ "$cortados" -eq 1 ]; then
+    if [ -n "$q" ]; then q="$q&cortados=1"; else q="?cortados=1"; fi
+  fi
+  local j; j=$(busca GET "/itens/$feature/inventario$q") || return 1
+  printf '%s' "$j" | jq -r "$JQ_INV"'
+    .linha,
+    (.itens
+     | (if ((.pecas // []) | length) > 0 then "", "peças:", (.pecas[] | peca) else empty end),
+       (if ((.regras // []) | length) > 0 then "", "regras:", (.regras[] | regra) else empty end),
+       (if ((.documentos // []) | length) > 0 then "", "produtos documentais:", (.documentos[] | documento) else empty end))'
+}
+
+inv_criar() {
+  [ $# -ge 2 ] || _inv_uso
+  local feature lista corpo
+  feature=$(so_id "$1"); lista=$(_inv_lista "$2"); shift 2
+  corpo=$(_inv_campos "$@")
+  printf '%s' "$corpo" | envia POST "/itens/$feature/inventario/$lista" | jq -r '"\(.chave) criado"'
+}
+
+inv_editar() {
+  [ $# -ge 1 ] || _inv_uso
+  _inv_chave "$1"; shift
+  local corpo; corpo=$(_inv_campos "$@")
+  printf '%s' "$corpo" | envia PATCH "/itens/$INV_FEATURE/inventario/$INV_LISTA/$INV_N" \
+    | jq -r '"\(.chave) editado" + (if .validada == false then " · não validada" else "" end)'
+}
+
+inv_validar() {
+  [ $# -ge 1 ] || _inv_uso
+  _inv_chave "$1"; shift
+  [ "$INV_LETRA" = r ] || { echo "tarefas inventario validar: só regra se valida" >&2; exit 2; }
+  local frase="" corpo='{}'
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --frase) frase="${2:?--frase pede a frase que o dono leu}"; shift 2 ;;
+      *) echo "tarefas inventario validar: argumento desconhecido: $1" >&2; exit 2 ;;
+    esac
+  done
+  [ -z "$frase" ] || corpo=$(jq -cn --arg f "$frase" '{frase: $f}')
+  printf '%s' "$corpo" | envia POST "/itens/$INV_FEATURE/inventario/regras/$INV_N/validar" \
+    | jq -r '"\(.chave) validada por \(.validada_por) em \(.validada_em)"'
+}
+
+inv_cortar() {
+  [ $# -eq 1 ] || _inv_uso
+  _inv_chave "$1"
+  printf '{}' | envia POST "/itens/$INV_FEATURE/inventario/$INV_LISTA/$INV_N/cortar" | jq -r '"\(.chave) cortado"'
+}
+
+_inv_story() { # <story> → o número dela, ou sai 2
+  local story; story=$(so_id "${1:-}")
+  [[ "$story" =~ ^[0-9]+$ ]] || { echo "tarefas inventario: a story é o número dela: '${1:-}'" >&2; exit 2; }
+  printf '%s' "$story"
+}
+
+inv_ligar() {
+  [ $# -eq 2 ] || _inv_uso
+  _inv_chave "$1"
+  local story; story=$(_inv_story "$2")
+  jq -cn --argjson s "$story" '{story: $s}' \
+    | envia POST "/itens/$INV_FEATURE/inventario/$INV_LISTA/$INV_N/stories" \
+    | jq -r --arg s "$story" '"\(.chave) ligada à story \($s)"'
+}
+
+inv_desligar() {
+  [ $# -eq 2 ] || _inv_uso
+  _inv_chave "$1"
+  local story; story=$(_inv_story "$2")
+  busca DELETE "/itens/$INV_FEATURE/inventario/$INV_LISTA/$INV_N/stories/$story" \
+    | jq -r --arg s "$story" '"\(.chave) desligada da story \($s)"'
+}
+
+inventario() {
+  local sub="${1:-}"
+  [ $# -eq 0 ] || shift
+  case "$sub" in
+    ler)      inv_ler "$@" ;;
+    criar)    inv_criar "$@" ;;
+    editar)   inv_editar "$@" ;;
+    validar)  inv_validar "$@" ;;
+    cortar)   inv_cortar "$@" ;;
+    ligar)    inv_ligar "$@" ;;
+    desligar) inv_desligar "$@" ;;
+    *)        _inv_uso ;;
+  esac
+}
+
 # --- despacho ---------------------------------------------------------------
 
 # --ajuda UNIVERSAL, sem efeito colateral (card #2274, defeito 4). ANTES do despacho e
@@ -3021,6 +3250,7 @@ case "$cmd" in
   bloquear)    bloquear "${1:?uso: tarefas bloquear <a> <b>}" "${2:?uso: tarefas bloquear <a> <b>}" ;;
   desbloquear) desbloquear "${1:?uso: tarefas desbloquear <a> <b>}" "${2:?uso: tarefas desbloquear <a> <b>}" ;;
   carteira)    carteira "$@" ;;
+  inventario)  inventario "$@" ;;
   espera-dono) espera_dono "$@" ;;
   modelo)      modelo "${1:-}" "${2:-}" ;;
   estados)     estados ;;
