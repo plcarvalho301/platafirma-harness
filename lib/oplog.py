@@ -182,18 +182,23 @@ def classificar(desfecho: dict, *, declara_exit: bool | None = None) -> dict:
         return r("negada")
     if evento == "pep_indisponivel":
         return r("execucao", "pep_indisponivel")
-    if evento in _EVENTO_GRAMATICA or desfecho.get("recusado"):
+    if evento in _EVENTO_GRAMATICA:
+        return r("gramatica")
+    # As tools de leitura gravam `classe_erro` no erro (caminho, faixa, binario, gramatica,
+    # recusado): argumento torto e gramatica, recusa de morada e negada, o que nao existe e
+    # resposta negativa. Lido antes de `recusado` e `exit_code=2` (DT 898) para nao rotular
+    # recusa de acesso ou ausencia de objeto como gramatica.
+    por_classe_erro = _POR_CLASSE_ERRO.get(str(desfecho.get("classe_erro") or ""))
+    if por_classe_erro:
+        return r(por_classe_erro)          # `causa` so existe na execucao (CHECK de acervo.log_giro)
+    if desfecho.get("recusado"):
+        if evento == "leitura_recusada" or exit_code == 4:
+            return r("negada")
         return r("gramatica")
     if isinstance(exit_code, int) and not isinstance(exit_code, bool):
         if exit_code in _POR_EXIT:
             return r(_POR_EXIT[exit_code])
         return r("execucao", f"exit_{exit_code}" if exit_code in (3, 5) else "exit_fora_da_tabela")
-    # As tools de leitura gravam `classe_erro` no erro (caminho, faixa, binario, gramatica,
-    # recusado): argumento torto e gramatica, recusa de morada e negada, o que nao existe e
-    # resposta negativa. Execucao e so o que a porta nao soube explicar (conta contra o SLO).
-    por_classe_erro = _POR_CLASSE_ERRO.get(str(desfecho.get("classe_erro") or ""))
-    if por_classe_erro:
-        return r(por_classe_erro)          # `causa` so existe na execucao (CHECK de acervo.log_giro)
     if erro:
         texto = str(erro).strip().lower()
         if desfecho.get("tool") in ("monta_sessao", "monta-sessao") and texto.startswith(_ERRO_GRAMATICA_ABERTURA):

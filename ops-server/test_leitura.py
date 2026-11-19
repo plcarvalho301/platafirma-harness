@@ -258,9 +258,10 @@ def test_c12_caminho_ausente_diz_onde_parou(tmp_path):
     (d / "sub").mkdir()
     r = L.le(d / "leiturq")
     assert r["erro"] == "não existe" and r["classe_erro"] == "caminho"
+    assert r["exit_code"] == 1
     assert r["existe_ate"] == str(d)
     assert r["la_tem"] == ["curar", "ingerir", "leitura", "sub/"] and r["la_tem_total"] == 4
-    assert r["parecidos"][0] == "leitura"
+    assert "parecidos" not in r
     assert r["cura"] == f'ler_arquivo(caminho="{d}")'
     longe = L.le(d / "x" / "y" / "z.py")
     assert longe["existe_ate"] == str(d)
