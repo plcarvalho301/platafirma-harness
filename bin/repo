@@ -448,10 +448,76 @@ clone_de() {
   esac
 
   if ! "$GIT" -C "$real" rev-parse --git-dir >/dev/null 2>&1; then
-    morre "indeterminavel: o git recusa o clone '$nome' — $("$GIT" -C "$real" rev-parse --git-dir 2>&1 | head -1)" 5
+    local err; err="$("$GIT" -C "$real" rev-parse --git-dir 2>&1 | head -1)"
+    if _worktree_orfa "$real"; then
+      [ "$COMO_JSON" -eq 1 ] && morre "indeterminavel: bancada órfã '$nome' — $err" 5
+      printf '%s: indeterminavel: bancada órfã '\''%s'\'' — %s\n' "$VERBO" "$nome" "$err" >&2
+      printf 'vizinho: repo abrir %s\n' "$nome" >&2
+      exit 5
+    fi
+    morre "indeterminavel: o git recusa o clone '$nome' — $err" 5
   fi
 
   printf '%s' "$real"
+}
+
+# _worktree_orfa <dir> -- 0 se <dir> tem um gitfile .git de worktree cujo gitdir nao existe
+# ou e recusado pelo git (ex.: clone base removido e refeito; DTs 879 e 881).
+_worktree_orfa() {
+  local d="$1"
+  [ -d "$d" ] && [ -f "$d/.git" ] && grep -q '^gitdir:' "$d/.git" 2>/dev/null \
+    && ! "$GIT" -C "$d" rev-parse --git-dir >/dev/null 2>&1
+}
+
+# _religar_worktree_orfa <clone_raiz> <wt_dir> <ramo> <base_ref> <track 0|1> --
+# religa uma worktree orfa ao clone base atual sem perder a arvore de trabalho: cria uma
+# worktree nova com --no-checkout em pasta temporaria, troca o .git, repara os ponteiros e
+# alinha o indice a HEAD (--mixed), deixando o que nao estava commitado como mudanca sobre
+# base_ref (DTs 879 e 881).
+_religar_worktree_orfa() {
+  local clone_raiz="$1" wt_dir="$2" ramo="$3" base_ref="$4" track="${5:-0}"
+  "$GIT" -C "$clone_raiz" worktree prune >/dev/null 2>&1 || true
+  local tmp_wt
+  tmp_wt="$(mktemp -d "$(dirname "$wt_dir")/.religar.XXXXXX")" \
+    || morre "falha ao criar pasta temporária para religar $wt_dir" 3
+  rmdir "$tmp_wt" 2>/dev/null || true
+
+  if [ -n "$ramo" ]; then
+    if "$GIT" -C "$clone_raiz" show-ref --verify --quiet "refs/heads/$ramo"; then
+      if ! "$GIT" -C "$clone_raiz" worktree add -q --no-checkout "$tmp_wt" "$ramo" >/dev/null 2>&1; then
+        rm -rf "$tmp_wt" 2>/dev/null || true
+        morre "git worktree add falhou ao religar $wt_dir (o ramo '$ramo' ja esta aberto em outra pasta?)" 3
+      fi
+    else
+      local track_flag="--no-track"
+      [ "$track" -eq 1 ] && track_flag="--track"
+      if ! "$GIT" -C "$clone_raiz" worktree add -q --no-checkout "$track_flag" -b "$ramo" "$tmp_wt" "$base_ref" >/dev/null 2>&1; then
+        rm -rf "$tmp_wt" 2>/dev/null || true
+        morre "git worktree add -b falhou ao religar $wt_dir" 3
+      fi
+    fi
+  else
+    if ! "$GIT" -C "$clone_raiz" worktree add -q --no-checkout --detach "$tmp_wt" "$base_ref" >/dev/null 2>&1; then
+      rm -rf "$tmp_wt" 2>/dev/null || true
+      morre "git worktree add --detach falhou ao religar $wt_dir" 3
+    fi
+  fi
+
+  mv -f "$tmp_wt/.git" "$wt_dir/.git" || {
+    rm -rf "$tmp_wt" 2>/dev/null || true
+    "$GIT" -C "$clone_raiz" worktree prune >/dev/null 2>&1 || true
+    morre "falha ao substituir .git ao religar $wt_dir" 3
+  }
+  rmdir "$tmp_wt" 2>/dev/null || rm -rf "$tmp_wt" 2>/dev/null || true
+  "$GIT" -C "$clone_raiz" worktree repair "$wt_dir" >/dev/null 2>&1 \
+    || morre "git worktree repair falhou ao religar $wt_dir" 3
+  "$GIT" -C "$wt_dir" reset --mixed -q HEAD >/dev/null 2>&1 \
+    || morre "git reset --mixed falhou ao religar $wt_dir" 3
+
+  local sha_curto
+  sha_curto="$("$GIT" -C "$wt_dir" rev-parse --short HEAD 2>/dev/null || echo '?')"
+  printf 'religada: worktree órfã %s -> %s (%s @ %s; árvore preservada)\n' \
+    "$wt_dir" "$clone_raiz" "${ramo:-HEAD destacado}" "$sha_curto"
 }
 
 # base_de_repo <repo> -- o clone base, para os atos que so falam com o forge (pr-listar, pr-ver,
@@ -1502,9 +1568,17 @@ abrir_direto_em_main() {
 
   local ja=0
   if [ -e "$wt_dir/.git" ]; then
-    ja=1
-    git_sem_engolir "$wt_dir" fetch --prune origin \
-      || morre "indeterminavel: fetch do forge falhou ($REPLY) — a worktree de main segue como estava" 5
+    if _worktree_orfa "$wt_dir"; then
+      git_sem_engolir "$clone_raiz" fetch --prune origin \
+        || morre "indeterminavel: fetch do forge falhou ($REPLY) — a worktree órfã segue como estava" 5
+      "$GIT" -C "$clone_raiz" rev-parse --verify -q origin/main >/dev/null \
+        || morre "indeterminavel: $clone_raiz sem origin/main — nada religado" 5
+      _religar_worktree_orfa "$clone_raiz" "$wt_dir" "$ramo" "origin/main" 1
+    else
+      ja=1
+      git_sem_engolir "$wt_dir" fetch --prune origin \
+        || morre "indeterminavel: fetch do forge falhou ($REPLY) — a worktree de main segue como estava" 5
+    fi
   else
     git_sem_engolir "$clone_raiz" fetch --prune origin \
       || morre "indeterminavel: fetch do forge falhou ($REPLY) — nada criado" 5
@@ -2002,6 +2076,33 @@ cmd_abrir() {
 
   local ja; ja="$(bancada_de "$nome" "$chave")"
   if [ -n "$ja" ]; then
+    if _worktree_orfa "$ja"; then
+      git_sem_engolir "$clone_raiz" fetch --prune origin \
+        || morre "indeterminavel: fetch do forge falhou ($REPLY) — a worktree órfã segue como estava" 5
+      local base_ref="HEAD"
+      if "$GIT" -C "$clone_raiz" rev-parse --verify origin/main >/dev/null 2>&1; then
+        base_ref="origin/main"
+      elif "$GIT" -C "$clone_raiz" rev-parse --verify main >/dev/null 2>&1; then
+        base_ref="main"
+      fi
+      local ramo_relig=""
+      if [ -n "$card" ]; then
+        local card_num="${card###}"
+        if [[ "$card_num" =~ ^[0-9]+$ ]]; then
+          if [ -n "$slug" ]; then
+            ramo_relig="fabrica/${card_num}-${slug}"
+          else
+            ramo_relig="fabrica/${card_num}"
+          fi
+        fi
+      elif [ -n "$slug" ]; then
+        ramo_relig="$cadeira/$slug"
+      fi
+      if [ -n "$ramo_relig" ] && "$GIT" -C "$clone_raiz" show-ref --verify --quiet "refs/remotes/origin/$ramo_relig"; then
+        base_ref="origin/$ramo_relig"
+      fi
+      _religar_worktree_orfa "$clone_raiz" "$ja" "$ramo_relig" "$base_ref" 0
+    fi
     guarda_sessao_viva "$ja" "$assumir"
     local atras="?"
     if git_sem_engolir "$ja" fetch --prune origin; then
