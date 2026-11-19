@@ -120,6 +120,13 @@
     "lock": "deploy/eventos/servico/requirements-teste.txt",
     "teste": "deploy/eventos/servico"
   },
+  "_porta": "porta nova no core (card #4340, F4073): promovida: false ate o dia da troca, quando platafirma-core passa a servir porta/requirements.txt.",
+  "porta": {
+    "familia": "platafirma-core",
+    "promovida": false,
+    "lock": "porta/requirements.txt",
+    "teste": "porta"
+  },
   "marcacao": {
     "familia": "platafirma-motor",
     "lock": "deploy/marcacao/requirements-teste.txt",
@@ -199,5 +206,12 @@
     "promovida": false,
     "lock": "outros_repos/posto/ferramentas/vault-ontologia/uv.lock",
     "teste": "outros_repos/posto/harnesses/tests"
+  },
+  "espelho-porta": {
+    "familia": "platafirma-casa-espelho",
+    "esteira": "codigo",
+    "promovida": false,
+    "lock": "outros_repos/core/porta/requirements.txt",
+    "teste": "outros_repos/core/porta"
   }
 }
