@@ -21,6 +21,7 @@ test_acervo_atos_retirar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_atos_transcrever.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_bancada_conversao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_exportar_pythonpath.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_extrato.py | bin/acervo bin/_acervo/extrato
 test_acervo_impressao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_ler_secao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_listar_marcacao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
