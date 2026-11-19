@@ -6,7 +6,7 @@
 # forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar, hooks-listar) / texto (ler, pr-diff) / fluxo (sanear, descartar, lock, hooks-apagar)
 # poda: cosmetica@git
 # use para: criar e atualizar bancada; ler e procurar nela, diff e histórico; commitar, empurrar ramo, abrir, revisar e integrar PR; descartar mudança; sanear bancada; procurar no que está publicado no GitHub; e sempre que um card de código for posto em execução ou a esteira reprovar a mudança
-# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), copiar (escrita, operacao), mover (escrita, forge), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge), pr-fechar (escrita, forge), hooks-listar (leitura, forge), hooks-apagar (escrita, forge), sanear (escrita, forge), descartar (escrita, operacao), lock (escrita, operacao), git (escrita, operacao)
+# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), copiar (escrita, operacao), mover (escrita, forge), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-revisar (escrita, forge), pr-merge (escrita, forge), pr-fechar (escrita, forge), hooks-listar (leitura, forge), hooks-apagar (escrita, forge), sanear (escrita, forge), descartar (escrita, operacao), lock (escrita, operacao), git (escrita, operacao)
 # le: estado=repo
 # le: listar=repo
 # le: ler=repo
@@ -26,6 +26,7 @@
 # le: pr-listar=repo
 # le: pr-ver=repo
 # le: pr-diff=repo
+# le: pr-revisar=repo
 # le: pr-merge=repo
 # le: pr-fechar=repo
 # le: hooks-listar=repo
@@ -53,6 +54,7 @@
 # escreve: pr-listar=nada
 # escreve: pr-ver=nada
 # escreve: pr-diff=nada
+# escreve: pr-revisar=repo
 # escreve: pr-merge=repo
 # escreve: pr-fechar=repo
 # escreve: hooks-listar=nada
@@ -158,8 +160,9 @@ uso:
   repo pr-abrir  <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
   repo pr-listar <repo> [--todos]
   repo pr-ver    <repo> <numero> [--checks] [--log]
-  repo pr-diff   <repo> <numero> [<caminho>…] [--caminho <p>] [--stat|--name-only]
-  repo pr-merge  <repo> <numero> [--squash|--merge|--rebase] [--forcar]
+  repo pr-diff    <repo> <numero> [<caminho>…] [--caminho <p>] [--stat|--name-only]
+  repo pr-revisar <repo> <numero> --veredito junta|volta [--motivo <texto>]
+  repo pr-merge   <repo> <numero> [--squash|--merge|--rebase] [--forcar]
   repo pr-fechar <repo> <numero> --motivo <texto>   (descarta sem merge; apaga ramo e bancadas)
   repo hooks listar [<repo>|--todos] [--url <t>] [--json]
   repo hooks apagar <repo> <id> --url <t>   (porta: hooks-listar, hooks-apagar)
@@ -574,8 +577,8 @@ avisa_atras_origin() {
       printf "aviso: bancada atrás de origin/main por %s commit(s) — rode 'repo atualizar %s' ou 'repo sincronizar %s'\n" \
         "$atras" "$repo" "$repo" >&2
     else
-      printf "aviso: bancada atrás de origin/main por %s commit(s) — rode 'repo sincronizar %s'\n" \
-        "$atras" "$repo" >&2
+      printf "aviso: bancada atrás de origin/main por %s commit(s) — rode 'repo sincronizar %s' (ou leia direto com '%s@origin/main')\n" \
+        "$atras" "$repo" "${repo%%@*}" >&2
     fi
   fi
   return 0
@@ -583,12 +586,46 @@ avisa_atras_origin() {
 
 alvo_leitura() {
   local nome="${1:-}" err c rc base
+  # DT 853: <repo>@origin/main le direto de origin/main do clone base, sem depender de bancada
+  # (evita servir bancada parada em ramo antigo ou falhar com multiplas bancadas).
+  case "$nome" in
+    *@origin/main)
+      base="${nome%@origin/main}"
+      case "$base" in
+        ""|*/*|.*|*..*|*[!A-Za-z0-9._-]*) morre "nome de repo invalido: '$base' — use [A-Za-z0-9._-]" 4 ;;
+      esac
+      if [ -e "$BANCADA/$base/.git" ]; then
+        git_sem_engolir "$BANCADA/$base" fetch --prune origin \
+          || morre "indeterminavel: o forge nao respondeu para ler origin/main de '$base' ($REPLY)" 5
+        "$GIT" -C "$BANCADA/$base" rev-parse --verify -q origin/main >/dev/null \
+          || morre "indeterminavel: '$base' sem origin/main depois de buscar o forge" 5
+        LEITURA_REF="origin/main"
+        ALVO="$BANCADA/$base"
+        printf 'lendo %s@%s de %s, buscado do forge agora\n' "$LEITURA_REF" \
+          "$("$GIT" -C "$ALVO" rev-parse --short "$LEITURA_REF")" "$base" >&2
+        return 0
+      fi
+      ;;
+  esac
   err="$(mktemp)"
   c="$(clone_de "$nome" 2>"$err")"; rc=$?
   if [ "$rc" -eq 0 ]; then
     rm -f "$err"; ALVO="$c"; avisa_atras_origin "$c" "$nome"; return 0
   fi
   base="${nome%%@*}"
+  # DT 853: <repo>@main sem worktree 'main' tambem le origin/main do clone base.
+  if [ "$rc" -eq 1 ] && [ "$nome" = "${base}@main" ] && [ -e "$BANCADA/$base/.git" ]; then
+    rm -f "$err"
+    git_sem_engolir "$BANCADA/$base" fetch --prune origin \
+      || morre "indeterminavel: o forge nao respondeu para ler origin/main de '$base' ($REPLY)" 5
+    "$GIT" -C "$BANCADA/$base" rev-parse --verify -q origin/main >/dev/null \
+      || morre "indeterminavel: '$base' sem origin/main depois de buscar o forge" 5
+    LEITURA_REF="origin/main"
+    ALVO="$BANCADA/$base"
+    printf 'lendo %s@%s de %s, buscado do forge agora\n' "$LEITURA_REF" \
+      "$("$GIT" -C "$ALVO" rev-parse --short "$LEITURA_REF")" "$base" >&2
+    return 0
+  fi
   # DT-888: leitura (procurar, ler, listar, historico) em worktree de deliberacao orfa
   # religa automaticamente ao clone base preservando a arvore de trabalho.
   if [ "$rc" -eq 5 ] && direto_em_main "$base" && [ -e "$BANCADA/$base/.git" ] \
@@ -1464,7 +1501,28 @@ ato_atualizar() {
   c="$(clone_de "$nome")" || exit $?
   ramo="$(ramo_atual "$c")"
   case "$ramo" in
-    HEAD) morre "HEAD destacado em '$nome' — sem ramo para atualizar" 3 ;;
+    HEAD)
+      # DT 853: bancada de leitura em HEAD destacado (ex.: --da-producao) avanca para
+      # origin/main sem empurrar nada quando limpa e ancestral de origin/main.
+      local st_head
+      st_head="$("$GIT" -C "$c" status --porcelain 2>/dev/null)" || morre "git status falhou em '$nome'" 5
+      [ -z "$st_head" ] || morre "recuso atualizar '$nome': HEAD destacado com arvore suja" 4
+      env PATH="$PATH_FORGE" "$GIT" -C "$c" fetch --prune origin || morre "git fetch falhou" 3
+      "$GIT" -C "$c" rev-parse --verify -q origin/main >/dev/null || morre "sem origin/main em '$nome'" 5
+      local head_sha main_sha
+      head_sha="$("$GIT" -C "$c" rev-parse HEAD)"
+      main_sha="$("$GIT" -C "$c" rev-parse origin/main)"
+      if [ "$head_sha" = "$main_sha" ]; then
+        printf 'já em dia: %s/HEAD (@ %s)\n' "$nome" "${head_sha:0:7}"
+        exit 1
+      fi
+      if ! "$GIT" -C "$c" merge-base --is-ancestor "$head_sha" "$main_sha" 2>/dev/null; then
+        morre "recuso atualizar '$nome': HEAD destacado (${head_sha:0:7}) nao descende de origin/main" 4
+      fi
+      "$GIT" -C "$c" checkout -q --detach "$main_sha" >/dev/null 2>&1 || morre "git checkout --detach origin/main falhou" 3
+      printf 'atualizado: %s/HEAD -> %s\n' "$nome" "$("$GIT" -C "$c" log -1 --format='%h %s')"
+      return 0
+      ;;
   esac
   up="$("$GIT" -C "$c" rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)" \
     || morre "'$ramo' nao tem upstream — nada para puxar (para trazer origin/main, rode 'repo sincronizar $nome')" 3
@@ -2945,6 +3003,15 @@ ato_pr_abrir() {
     printf 'próximo: a esteira integra o PR com veredito verde; repo pr-ver %s %s mostra o sha do merge, que vai ao release promover\n' "$nome" "$numero_ja"
     return 0
   fi
+  # DT 822: marca a cadeira autora no corpo do PR (todas as cadeiras usam a mesma conta no forge).
+  local cad_autora; cad_autora="$(cadeira_da_sessao)"
+  if [ -n "$cad_autora" ] && ! grep -q '<!-- pf-autor:' <<<"$corpo"; then
+    if [ -n "$corpo" ]; then
+      corpo="${corpo}"$'\n\n'"<!-- pf-autor: ${cad_autora} -->"
+    else
+      corpo="<!-- pf-autor: ${cad_autora} -->"
+    fi
+  fi
   (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr create --base "$base" --head "$ramo" --title "$titulo" --body "$corpo" >/dev/null) \
     || morre "gh pr create falhou" 3
   local lido
@@ -2975,6 +3042,67 @@ ato_pr_listar() {
   fi
 }
 
+ato_pr_revisar() {
+  # DT 822: registra leitura do PR por cadeira diferente da autora, com veredito junta|volta
+  # (e motivo obrigatorio em volta). Usa comentario estruturado no PR porque todas as cadeiras
+  # operam pela mesma conta no forge (gh pr review --approve recusa no proprio PR).
+  local nome="${1:-}" num="${2:-}" veredito="" motivo="" c
+  [ -n "$nome" ] || uso
+  [ -n "$num" ] || morre "falta o numero do PR" 2
+  case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
+  shift 2
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --veredito) veredito="${2:-}"; shift 2 || uso ;;
+      --motivo|--nota) motivo="${2:-}"; shift 2 || uso ;;
+      *) morre "argumento nao reconhecido: '$1'" 2 ;;
+    esac
+  done
+  recusa_pr_direto_em_main "$nome"
+  case "$veredito" in
+    junta|volta) : ;;
+    "") morre "falta o veredito (--veredito junta|volta)" 2 ;;
+    *) morre "veredito invalido: '$veredito' — use 'junta' ou 'volta'" 2 ;;
+  esac
+  if [ "$veredito" = "volta" ] && [ -z "$motivo" ]; then
+    morre "veredito 'volta' exige --motivo <texto>" 2
+  fi
+  local cad_leitora; cad_leitora="$(cadeira_da_sessao)"
+  [ -n "$cad_leitora" ] || morre "dependência ausente: PF_CADEIRA não definida — pr-revisar exige cadeira" 3
+  tem_gh
+  c="$(base_de_repo "$nome")" || exit $?
+  local pr_json
+  pr_json="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json state,headRefName,headRefOid,body 2>/dev/null)" \
+    || morre "indeterminavel: nao li o PR #$num no forge" 5
+  local st ramo_pr head_oid cad_autora
+  IFS='|' read -r st ramo_pr head_oid cad_autora < <(printf '%s' "$pr_json" | python3 -c '
+import json, re, sys
+d = json.load(sys.stdin)
+body = d.get("body") or ""
+ramo = d.get("headRefName") or ""
+m = re.search(r"<!--\s*pf-autor:\s*([a-z0-9-]+)\s*-->", body)
+autor = m.group(1) if m else ""
+if not autor and "/" in ramo:
+    pref = ramo.split("/", 1)[0]
+    if pref not in ("fabrica", "main", "master", "wip"):
+        autor = pref
+print("|".join([d.get("state") or "", ramo, (d.get("headRefOid") or "")[:7], autor]))
+' 2>/dev/null) || morre "indeterminavel: falha ao interpretar dados do PR #$num" 5
+  [ "$st" = "OPEN" ] || morre "PR #$num esta $st, nao OPEN — nada a revisar" 4
+  if [ -n "$cad_autora" ] && [ "$cad_autora" = "$cad_leitora" ]; then
+    morre "recusa de política: a cadeira '$cad_leitora' é a autora do PR #$num — a leitura precisa ser feita por outra cadeira" 4
+  fi
+  local corpo_rev
+  corpo_rev="<!-- pf-revisao: cadeira=${cad_leitora} veredito=${veredito} sha=${head_oid} -->"$'\n'"**Leitura (${cad_leitora})** · veredito: **${veredito}** · head \`${head_oid}\`"
+  if [ -n "$motivo" ]; then
+    corpo_rev="${corpo_rev}"$'\n\n'"${motivo}"
+  fi
+  (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr comment "$num" --body "$corpo_rev" >/dev/null) \
+    || morre "gh pr comment falhou ao registrar revisão no PR #$num" 3
+  printf 'revisão registrada: PR #%s (%s) · cadeira=%s · veredito=%s · head %s\n' \
+    "$num" "$nome" "$cad_leitora" "$veredito" "$head_oid"
+}
+
 ato_pr_ver() {
   local nome="${1:-}" num="${2:-}" c checks=0 log=0
   [ -n "$num" ] || morre "falta o numero do PR" 2
@@ -2991,27 +3119,75 @@ ato_pr_ver() {
   c="$(base_de_repo "$nome")" || exit $?
   # `gh pr view <num>` sem --json puxa TODOS os campos, inclusive projectCards, que o
   # forge deprecou (Projects classic) e o GraphQL agora recusa — exit 3 sobre um PR que
-  # existe. Pedindo so os campos usados, o campo morto nao entra na query. Campos e
-  # template cobrem o que um 'ver' precisa; para o resto ha --json cru ou o proprio gh.
-  local campos="number,title,state,author,headRefName,baseRefName,url,isDraft,mergeable,mergeCommit,body"
-  local tmpl='#{{.number}} {{.title}}  [{{.state}}]{{if .isDraft}} (rascunho){{end}}
-  autor : {{.author.login}}
-  ramo  : {{.headRefName}} -> {{.baseRefName}}
-  merge : {{.mergeable}}{{if .mergeCommit}}
-  mesclado em : {{.mergeCommit.oid}}{{end}}
-  url   : {{.url}}
+  # existe. Pedindo so os campos usados, o campo morto nao entra na query.
+  # DT 822: inclui headRefOid e comments para mostrar a cadeira autora e as leituras
+  # registradas por pr-revisar.
+  local campos="number,title,state,author,headRefName,headRefOid,baseRefName,url,isDraft,mergeable,mergeCommit,body,comments"
+  local pr_json
+  pr_json="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json "$campos" 2>/dev/null)" \
+    || morre "gh pr view falhou" 3
+  if ! printf '%s' "$pr_json" | python3 -c '
+import json, re, sys
+d = json.load(sys.stdin)
+num = d.get("number")
+title = d.get("title") or ""
+state = d.get("state") or ""
+draft = " (rascunho)" if d.get("isDraft") else ""
+login = (d.get("author") or {}).get("login") or "?"
+ramo = d.get("headRefName") or ""
+base = d.get("baseRefName") or ""
+head7 = (d.get("headRefOid") or "")[:7]
+body = d.get("body") or ""
+m_aut = re.search(r"<!--\s*pf-autor:\s*([a-z0-9-]+)\s*-->", body)
+cad_autora = m_aut.group(1) if m_aut else ""
+if not cad_autora and "/" in ramo:
+    pref = ramo.split("/", 1)[0]
+    if pref not in ("fabrica", "main", "master", "wip"):
+        cad_autora = pref
+cad_label = cad_autora if cad_autora else "não declarada"
+mergeable = d.get("mergeable") or ""
+url = d.get("url") or ""
+print(f"#{num} {title}  [{state}]{draft}")
+print(f"  autor : {login} (cadeira: {cad_label})")
+print(f"  ramo  : {ramo} -> {base}")
+print(f"  merge : {mergeable}")
+mc = d.get("mergeCommit")
+if isinstance(mc, dict) and mc.get("oid"):
+    mc_oid = mc["oid"]
+    print(f"  mesclado em : {mc_oid}")
+print(f"  url   : {url}")
 
-{{.body}}
-'
-  # --template formata legivel; se o template falhar por qualquer motivo, cai para JSON
-  # cru (que nunca falha de formatacao) em vez de derrubar o pr-ver. So um exit 3 real
-  # (PR inexistente, forge fora) chega no morre.
-  if (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json "$campos" --template "$tmpl" 2>/dev/null); then
-    :
-  elif (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json "$campos"); then
-    :
-  else
-    morre "gh pr view falhou" 3
+revisoes = []
+for cm in (d.get("comments") or []):
+    cb = (cm.get("body") or "") if isinstance(cm, dict) else ""
+    mr = re.search(r"<!--\s*pf-revisao:\s*cadeira=([a-z0-9-]+)\s+veredito=(junta|volta)\s+sha=([0-9a-fA-F]*)\s*-->", cb)
+    if not mr:
+        continue
+    r_cad, r_ver, r_sha = mr.group(1), mr.group(2), mr.group(3)
+    linhas_extra = [l.strip() for l in cb.splitlines()[2:] if l.strip()]
+    motivo = " ".join(linhas_extra)
+    revisoes.append((r_cad, r_ver, r_sha, motivo))
+
+if revisoes:
+    print("  revisão :")
+    for r_cad, r_ver, r_sha, motivo in revisoes:
+        sha_info = ""
+        if r_sha:
+            if head7 and r_sha != head7:
+                sha_info = f" (head {r_sha} — desatualizada, atual {head7})"
+            else:
+                sha_info = f" (head {r_sha})"
+        mot_info = f" — {motivo}" if motivo else ""
+        print(f"    - {r_cad}: {r_ver}{sha_info}{mot_info}")
+else:
+    print("  revisão : (nenhuma)")
+
+body_limpo = re.sub(r"\n*<!--\s*pf-autor:\s*[a-z0-9-]+\s*-->\s*$", "", body).rstrip()
+print()
+if body_limpo:
+    print(body_limpo)
+'; then
+    printf '%s\n' "$pr_json"
   fi
   # --checks: um check por linha (resultado, workflow / job, link), para quem for mesclar saber
   # QUAL check barra. --log: o fim do log de cada run que falhou (gh run view --log-failed).
@@ -4783,7 +4959,7 @@ PY
 }
 
 case "$cmd" in
-  estado|listar|ler|procurar|historico|diff|ramo|commitar|empurrar|atualizar|sincronizar|abrir|clonar|copiar|mover|sanear|descartar|pr-abrir|pr-listar|pr-ver|pr-diff|pr-merge|pr-fechar|hooks|hooks-listar|hooks-apagar|lock|git)
+  estado|listar|ler|procurar|historico|diff|ramo|commitar|empurrar|atualizar|sincronizar|abrir|clonar|copiar|mover|sanear|descartar|pr-abrir|pr-listar|pr-ver|pr-diff|pr-revisar|pr-merge|pr-fechar|hooks|hooks-listar|hooks-apagar|lock|git)
     declara_bancada "$@" ;;
 esac
 
@@ -4809,6 +4985,7 @@ case "$cmd" in
   pr-listar) ato_pr_listar "$@" ;;
   pr-ver)    ato_pr_ver "$@" ;;
   pr-diff)   ato_pr_diff "$@" ;;
+  pr-revisar) ato_pr_revisar "$@" ;;
   pr-merge)  ato_pr_merge "$@" ;;
   pr-fechar) ato_pr_fechar "$@" ;;
   hooks)     ato_hooks "$@" ;;
@@ -4818,7 +4995,7 @@ case "$cmd" in
   git)       ato_git "$@" ;;
   *)
     printf '%s: erro: ato desconhecido '\''%s'\''\n' "$VERBO" "$cmd" >&2
-    printf 'atos: estado · listar · ler · procurar · historico · diff · ramo · commitar · empurrar · atualizar · sincronizar · abrir · clonar · copiar · mover · sanear · descartar · pr-abrir · pr-listar · pr-ver · pr-diff · pr-merge · pr-fechar · hooks-listar · hooks-apagar · lock · git\n' >&2
+    printf 'atos: estado · listar · ler · procurar · historico · diff · ramo · commitar · empurrar · atualizar · sincronizar · abrir · clonar · copiar · mover · sanear · descartar · pr-abrir · pr-listar · pr-ver · pr-diff · pr-revisar · pr-merge · pr-fechar · hooks-listar · hooks-apagar · lock · git\n' >&2
     uso_texto
     exit 2
     ;;

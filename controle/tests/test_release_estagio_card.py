@@ -340,3 +340,18 @@ def test_promover_registra_deploy_no_rastreador(amb):
     assert r.returncode == 0, r.stdout + r.stderr
     assert "deploy:    AVISO" in (r.stdout + r.stderr), f"STDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}"
     assert "ARGS: api-corpo POST /deploys" in amb.tarefas_log.read_text(encoding="utf-8")
+
+
+def test_dt809_ramo_fabrica_sem_slug_resolve_e_move(amb):
+    # DT 809: repo abrir <repo> <card> sem --slug abre fabrica/<card>; estagio 4 reconhece e move.
+    r = amb.run("promover", "fixture", gh_ref="fabrica/4319", gh_texto="Entrega\nfecha #4319")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "card:      4319 movido para entregue" in r.stdout
+    log = amb.tarefas_log.read_text(encoding="utf-8")
+    assert "ARGS: comentar 4319" in log
+    assert "ARGS: mover 4319 entregue" in log
+
+    amb.commit({"b.txt": "2\n"})
+    r_inv = amb.run("promover", "fixture", gh_ref="fabrica/4319abc", gh_texto="fecha #4319")
+    assert r_inv.returncode == 0, r_inv.stdout + r_inv.stderr
+    assert "estagio 4 pulado" in r_inv.stdout
