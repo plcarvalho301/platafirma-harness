@@ -342,8 +342,9 @@ set -e
 [ "$rc_orfa" -eq 0 ] || { echo "FALHA: 4371 abrir devia refazer a worktree órfã, saiu $rc_orfa: $out_orfa" >&2; exit 1; }
 grep -q "worktree órfã" <<< "$out_orfa" || { echo "FALHA: 4371 abrir não disse que achou a órfã: $out_orfa" >&2; exit 1; }
 "$VERBO" estado platafirma-casa-espelho >/dev/null 2>&1 || { echo "FALHA: 4371 a worktree refeita não responde ao estado" >&2; exit 1; }
-grep -qs "sujo-alheio" "$BANCADA_TESTE/wt/platafirma-casa-espelho/ti/main/doc.md" || { echo "FALHA: 4371/DT-879 a árvore da worktree órfã não foi preservada" >&2; exit 1; }
-echo "OK: 4371/DT-879 — worktree de main órfã religada a origin/main com árvore preservada"
+[ -z "$(git -C "$BANCADA_TESTE/wt/platafirma-casa-espelho/ti/main" status --porcelain)" ] || { echo "FALHA: 4371/DT-893 worktree refeita devia nascer limpa em origin/main" >&2; exit 1; }
+grep -qs "sujo-alheio" "$BANCADA_TESTE"/wt/.orfas/platafirma-casa-espelho-ti-main-*/doc.md || { echo "FALHA: 4371/DT-893 a árvore da worktree órfã não foi guardada em wt/.orfas" >&2; exit 1; }
+echo "OK: 4371/DT-893 — worktree de main órfã movida para wt/.orfas e recriada limpa em origin/main"
 
 echo "--- Teste 8c: colisão de gitdir (outra cadeira apontando para o gitdir de ti/main) ---"
 WT_COL="$BANCADA_TESTE/wt/platafirma-casa-espelho/dados/main"
@@ -360,8 +361,9 @@ set -e
 [ "$rc_col_san" -eq 0 ] || { echo "FALHA: sanear devia religar worktree colidida, saiu $rc_col_san: $out_col_san" >&2; exit 1; }
 ramo_col="$(git -C "$WT_COL" rev-parse --abbrev-ref HEAD 2>/dev/null)"
 [ "$ramo_col" = "dados/main" ] || { echo "FALHA: worktree colidida devia ficar em dados/main, ficou em '$ramo_col'" >&2; exit 1; }
-[ -f "$WT_COL/nota-dados.txt" ] || { echo "FALHA: árvore da worktree colidida não foi preservada" >&2; exit 1; }
-echo "OK: colisão de gitdir detectada e religada ao ramo próprio sem tocar a outra cadeira"
+[ -z "$(git -C "$WT_COL" status --porcelain)" ] || { echo "FALHA: worktree colidida devia nascer limpa em origin/main" >&2; exit 1; }
+grep -qs "rascunho-dados" "$BANCADA_TESTE"/wt/.orfas/platafirma-casa-espelho-dados-main-*/nota-dados.txt || { echo "FALHA: árvore da worktree colidida não foi guardada em wt/.orfas" >&2; exit 1; }
+echo "OK: colisão de gitdir detectada, antiga guardada em wt/.orfas e worktree recriada limpa"
 
 # 9. DT 826: ramo divergido de origin/<ramo>
 echo "--- Teste 9: DT 826 — repo sincronizar mescla ramo divergido de origin/<ramo> ---"
