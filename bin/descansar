@@ -15,7 +15,7 @@
 #   1. a mesa             — pelo `mesa ver` da abertura (#656): item vivo (o feito ja
 #      saiu por `mesa fez`), prosa de `mesa anota` so como anotacao sem ato; chapeu
 #      fora da persona (typo, chapeu extinto) aparece nomeado, nunca some calado.
-#   2. o caderno e a aresta (abaixo).
+#   2. as mensagens curadas e a aresta (abaixo).
 # A leitura da caixa saiu (dono, 17/11/2026): o descanso encerra a fita, nao a
 # interpreta; carta se trata com `fila`, no trabalho, nunca no fecho.
 # O dossie de release, servico e acervo saiu (dono, 14/11/2026): conferir e antes do
@@ -25,12 +25,13 @@
 # CARIMBO: `mem:<cadeira>` (sem slot: fora do padrao que `mesa ver` varre) guarda
 # quando a cadeira ENCERROU a fita pela ultima vez; o relatorio so o le.
 #
-# O CADERNO E A ARESTA (#3217, arq:0120). O caderno mora no banco e chega aqui pelo
-# mesmo verbo que a abertura usa (`mesa caderno`): o indice, com o que ficou fora do servido e o
-# legado a triar de cada chapeu. A poda nao roda aqui: e do bot caderno-poda (#3884). A aresta se marca no Sair, sobre a lista do que a fita
-# puxou de fora da cadeira, tirada do log de giro (o ops log da porta). O log e so lido —
-# a cadeira nao escreve nele (spec rotinas-e-ciclos, tipologia, decisao 1) — e a lista e
-# so a lista: marcar e da cadeira, e so o que entrou na resposta (#2947).
+# AS MENSAGENS E A ARESTA (#4355, #4377). Os cadernos foram despejados na familia
+# negocio.mensagem do banco de eventos e as tabelas sessao.caderno_* (assim como o
+# bot caderno-poda) foram encerradas na story #4377. Conhecimento curado e aresta
+# entram por `descansar publicar`. A aresta se marca no Sair, sobre a lista do que
+# a fita puxou de fora da cadeira, tirada do log de giro (o ops log da porta). O log
+# e so lido — a cadeira nao escreve nele (spec rotinas-e-ciclos, tipologia, decisao 1)
+# — e a lista e so a lista: marcar e da cadeira, e so o que entrou na resposta (#2947).
 #
 # A TRIAGEM DA MEMORIA DO CLAUDE.AI SAIU DO ROTEIRO (dono, 14/11/2026; debito 654): a
 # passada automatica refaz depois de todo turno, a camada de conta nao se edita do
@@ -356,13 +357,12 @@ def puxado_de_fora(curto, sessao_id, ordem_id, diretorio=None, resolver=resolve_
     chapeu = os.environ.get("PF_CHAPEU", "").strip() or "<chapeu>"
     return ([f"  {len(linhas)} leitura(s) de fora da cadeira; marque so o que entrou na resposta"]
             + linhas
-            + ["  publicar: `descansar publicar` (JSON na entrada padrao: enunciado, destinatario e etiqueta em <classe>:<slug>, tipo-de-mensagem)"])
+            + ["  publicar: `descansar publicar` (JSON na entrada padrao: enunciado, destinatario e etiqueta como chaves de ficha — <classe>:<slug> ou <cadeira> —, tipo-de-mensagem)"])
 
 
-# ------------------------------------------------------------------ a poda saiu daqui (#3884)
-# A poda do caderno nao roda mais no fim de fita: o bot `caderno-poda` passa duas vezes por dia
-# por todas as cadeiras (`mesa podar`, arq:0120, Emenda de 19/10/2026), com as conferencias que
-# moravam aqui, agora em lib/caderno_poda.py. O descanso so mostra o indice.
+# ------------------------------------------------------------------ cadernos encerrados (#4377)
+# As tabelas sessao.caderno_* e o bot de poda foram encerrados na story #4377; as mensagens
+# moram na familia negocio.mensagem do banco de eventos, publicadas por `descansar publicar`.
 
 
 def _marca_encerrada_duravel(sid):
@@ -531,31 +531,28 @@ def ato_fita(args):
           "   `mesa item <chapeu> --ato ... --alvo ...`, a proxima jogada. Card que nao esta\n"
           "   priorizado nao e item: ele mora no rastreador. Sem isso, diga \"mesa sem\n"
           "   item\". Item listado acima que a fita fez sai por `mesa fez <n>`.\n"
-          "   Premissa a reconferir e beco descartado vao ao caderno, no passo 2a.\n"
+          "   Premissa a reconferir e beco descartado vao como mensagem, no passo 2a.\n"
           "\n"
           "2. por chapeu tocado nesta fita — OBRIGATORIO, TRES partes, sempre as\n"
           "   tres: o que se aprendeu vai por `descansar publicar`; o que a ferramenta\n"
           "   fez errado vai ao debito tecnico; o que se puxou de fora e se usou vai\n"
-          "   por `descansar publicar`. O caderno nao e diario de bordo.\n"
+          "   por `descansar publicar`. Mensagem curada nao e diario de bordo.\n"
           "\n"
           "   2a. conhecimento curado — publique por `descansar publicar` (JSON na\n"
-          "   entrada padrao; `mesa escrever` fechou na story 4355). A poda nao e sua:\n"
-          "   o bot caderno-poda passa duas vezes por dia, retira o que venceu e manda\n"
-          "   carta com o que tombar (Emenda de 19/10/2026).\n"
-          "   Legado a triar: o corpo por `mesa caderno <chapeu>`; o que vale vira\n"
-          "   mensagem, e `mesa legado --caderno --triado <chapeu>` fecha. Escreva\n"
-          "   so o que passa no teste do guia registrar, secao Caderno:\n"
-          "     echo '{\"enunciado\": \"<frase>\", \"destinatario\": \"chapeu:<cadeira>/<chapeu>\",\n"
+          "   entrada padrao, familia negocio.mensagem; os cadernos em sessao.caderno_*\n"
+          "   foram encerrados na story 4377). Escreva so o que passa no teste do guia\n"
+          "   registrar:\n"
+          "     echo '{\"enunciado\": \"<frase>\", \"destinatario\": \"chapeu:<chapeu>\",\n"
           "            \"tipo-de-mensagem\": \"afirmacao|decisao|negativa|pedido|recusa|contestacao\",\n"
           "            \"etiqueta\": [\"<classe>:<slug>\"], \"apoio\": [\"<evidencia>\"]}' | descansar publicar\n"
-          "   (`quem` vem da sessao; destinatario e etiqueta sao chaves de ficha na\n"
-          "   forma `<classe>:<slug>`, ex.: `capacidade:busca`, `persona:ia`,\n"
-          "   `chapeu:ia/busca`; para atualizar/corrigir/retratar, passe `responde-a`\n"
+          "   (`quem` vem da sessao; destinatario e etiqueta sao chaves validas do\n"
+          "   fichario — `<classe>:<slug>` ou `<cadeira>`, ex.: `capacidade:busca`,\n"
+          "   `chapeu:busca`, `ia`; para atualizar/corrigir/retratar, passe `responde-a`\n"
           "   e `relacao-com-a-anterior`: `atualiza|corrige|retrata`.)\n"
           "   \"sem delta\" e resposta valida, mas tem de ser dita; silencio nao e.\n"
           "\n"
-          "   2b. contorno de ferramenta — rotina Triar (guia defeito), NUNCA o\n"
-          "   caderno. Toda vez que a fita chamou um verbo e teve que chamar\n"
+          "   2b. contorno de ferramenta — rotina Triar (guia defeito), NUNCA por\n"
+          "   `descansar publicar`. Toda vez que a fita chamou um verbo e teve que chamar\n"
           "   OUTRO pra resolver, ou bateu em parede de ferramenta da casa, e um\n"
           "   episodio. Por episodio:\n"
           "     - ja esta na lista (`tarefas dt listar`)? cite a linha no relato\n"
@@ -566,13 +563,13 @@ def ato_fita(args):
           "        --raio <repo@caminho> --esperado \"<o que devia fazer>\"\n"
           "        --stack <stack>`;\n"
           "     - servico degradado agora: Incidente; alguem bloqueado: card.\n"
-          "   Nenhuma linha de diario de bordo entra em caderno nenhum.\n"
+          "   Nenhuma linha de diario de bordo entra em mensagem de descanso.\n"
           "\n"
           "   2c. aresta — a lista «puxado de fora da cadeira» acima. Marque so o\n"
           "   que ENTROU na resposta (consultar nao e usar, #2947), uma vez por\n"
           "   ponta, por `descansar publicar` (`mesa aresta` fechou na story 4355):\n"
           "     echo '{\"enunciado\": \"<para que usou a ponta>\",\n"
-          "            \"destinatario\": \"chapeu:<cadeira>/<chapeu>\",\n"
+          "            \"destinatario\": \"chapeu:<chapeu>\",\n"
           "            \"tipo-de-mensagem\": \"afirmacao\",\n"
           "            \"etiqueta\": [\"<classe>:<slug>\"], \"apoio\": [\"<ponta>\"]}' | descansar publicar\n"
           "   Nada usado: diga \"sem aresta\".\n"
@@ -665,7 +662,7 @@ def main():
     # Chamado por dois nomes (`encerrar` e `descansar` sao o mesmo verbo): o uso
     # tem de sair com o nome que a pessoa digitou, ou o texto contradiz o comando.
     p = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
-                                description="fim de fita: a mesa, o caderno e a aresta, e o encerramento")
+                                description="fim de fita: a mesa, as mensagens e a aresta, e o encerramento")
     sub = p.add_subparsers(dest="ato")
 
     f = sub.add_parser("fita", help="o descanso da cadeira corrente (PF_CADEIRA); encerra a sessao no mesmo ato")

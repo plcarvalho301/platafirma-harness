@@ -45,7 +45,7 @@ def test_2b_nao_manda_mais_gravar_diario_no_caderno():
     assert "2b. diario de bordo" not in texto
     assert "contorno encontrado NA DATA" not in texto, "o formato fixo do diario saiu"
     assert "entra cru, no caderno" not in texto
-    assert "NUNCA o\n   caderno" in p or "nunca o caderno" in p.lower().replace("\n   ", " ")
+    assert "nunca por `descansar publicar`" in p.lower().replace("\n   ", " ")
 
 
 def test_resto_do_ritual_intacto():
@@ -62,7 +62,7 @@ def _passo(texto: str, ini: str, fim: str) -> str:
     return texto[i:texto.index(fim, i)]
 
 
-def test_2a_aponta_descansar_publicar_com_esquema_json_e_a_poda_e_do_bot():
+def test_2a_aponta_descansar_publicar_com_esquema_json_e_chaves_do_fichario():
     p = _passo(_ritual(), "2a.", "2b.")
     assert "descansar publicar" in p
     for campo in ("enunciado", "destinatario", "tipo-de-mensagem", "etiqueta", "<classe>:<slug>"):
@@ -70,9 +70,12 @@ def test_2a_aponta_descansar_publicar_com_esquema_json_e_a_poda_e_do_bot():
     assert "mesa escrever <chapeu>" not in p, "mesa escrever fechou na story 4355 (DT 885/889)"
     assert "mesa substituir" not in p
     assert "guia\n   registrar" in p or "guia registrar" in p
-    # #3884: a cadeira nao resolve nada antes de escrever; a poda e do bot. A carta dele se trata na fila, nao aqui (dono, 17/11)
-    assert "A poda nao e sua" in p and "a revisar" not in p, "a marca a revisar saiu (arq:0120, 19/10)"
-    assert "mesa tombar" not in p and "legado" in p, "a carta do bot saiu do descanso; o legado fica"
+    # #4377: sessao.caderno_* e bot caderno-poda encerrados; exemplos alinhados a chaves.json
+    for obsoleto in ("caderno-poda", "mesa caderno", "mesa legado", "mesa tombar", "a revisar",
+                     "chapeu:<cadeira>/<chapeu>", "persona:ia", "chapeu:ia/busca"):
+        assert obsoleto not in p, f"texto obsoleto pos-S4377: {obsoleto}"
+    for valido in ("chapeu:<chapeu>", "capacidade:busca", "chapeu:busca"):
+        assert valido in p, f"exemplo valido do fichario ausente: {valido}"
     assert "seis\n   heuristicas" not in p and "historico e o git" not in p, "a arq:0072 saiu"
 
 
