@@ -639,3 +639,56 @@ def test_abrir_repo_codigo_religa_worktree_orfa_e_preserva_arvore_dt879(tmp_path
     assert (wt / "novo.txt").read_text(encoding="utf-8") == "extra\n"
     assert _git("rev-parse", "--abbrev-ref", "HEAD", cwd=wt) == "dados/dt-orfa"
     assert _repo(tmp_path, bancada, "estado", "demo@dt-orfa").returncode == 0
+
+
+def test_procurar_e_ler_religam_worktree_orfa_direto_em_main_dt888(tmp_path):
+    bancada = _montar(tmp_path)
+    wt = _abrir(tmp_path, bancada)
+    (wt / "LEIA.md").write_text("termo-unico-dt888\n", encoding="utf-8")
+
+    shutil.rmtree(bancada / CASA)
+    _git("clone", "-q", str(_bare(tmp_path, CASA)), str(bancada / CASA))
+
+    r_pr = _repo(tmp_path, bancada, "procurar", CASA, "termo-unico-dt888")
+    assert r_pr.returncode == 0, r_pr.stdout + r_pr.stderr
+    assert "termo-unico-dt888" in r_pr.stdout
+    assert "religada: worktree órfã" in r_pr.stderr
+    assert (wt / "LEIA.md").read_text(encoding="utf-8") == "termo-unico-dt888\n"
+    assert _repo(tmp_path, bancada, "estado", CASA).returncode == 0
+
+
+def test_sanear_detecta_e_religa_worktree_orfa_dt882(tmp_path):
+    bancada = _montar(tmp_path)
+    wt = _abrir(tmp_path, bancada)
+    (wt / "LEIA.md").write_text("preservado-no-sanear\n", encoding="utf-8")
+
+    shutil.rmtree(bancada / CASA)
+    _git("clone", "-q", str(_bare(tmp_path, CASA)), str(bancada / CASA))
+
+    r_rel = _repo(tmp_path, bancada, "sanear", CASA, "--relatar")
+    assert r_rel.returncode == 1, r_rel.stdout + r_rel.stderr
+    assert "relataria religar worktree órfã" in r_rel.stdout
+
+    r_san = _repo(tmp_path, bancada, "sanear", CASA)
+    assert r_san.returncode == 0, r_san.stdout + r_san.stderr
+    assert "religada: worktree órfã" in r_san.stdout
+    assert (wt / "LEIA.md").read_text(encoding="utf-8") == "preservado-no-sanear\n"
+    assert _repo(tmp_path, bancada, "estado", CASA).returncode == 0
+
+
+def test_descartar_worktree_orfa_recusa_sem_forcar_e_remove_com_forcar_dt882(tmp_path):
+    bancada = _montar(tmp_path)
+    wt = _abrir(tmp_path, bancada)
+
+    shutil.rmtree(bancada / CASA)
+    _git("clone", "-q", str(_bare(tmp_path, CASA)), str(bancada / CASA))
+
+    r_sem = _repo(tmp_path, bancada, "descartar", f"{CASA}@main")
+    assert r_sem.returncode == 4, r_sem.stdout + r_sem.stderr
+    assert "worktree órfã" in r_sem.stderr
+    assert wt.exists()
+
+    r_com = _repo(tmp_path, bancada, "descartar", f"{CASA}@main", "--forcar")
+    assert r_com.returncode == 0, r_com.stdout + r_com.stderr
+    assert "worktree órfã removida" in r_com.stdout
+    assert not wt.exists()
