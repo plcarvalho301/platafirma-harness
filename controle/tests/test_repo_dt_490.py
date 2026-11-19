@@ -167,7 +167,7 @@ def test_git_commit_respeita_portao_de_story_em_execucao(tmp_path):
         tmp_path, bancada, "git", "demo@42-x", "commit", "-m", "teste (#42)", tarefas_bin=tarefas_priorizada
     )
     assert r_commit.returncode == 4, r_commit.stderr
-    assert "story #42 em priorizada: escreva o Plano e mova para em-execucao" in r_commit.stderr
+    assert "story #42 em priorizada: a dona escreve o Plano" in r_commit.stderr
 
     tarefas_exec = _tarefas_falsa(tmp_path, nivel="story", estado="em-execucao")
     r_ok = _repo(tmp_path, bancada, "git", "demo@42-x", "commit", "-m", "teste (#42)", tarefas_bin=tarefas_exec)

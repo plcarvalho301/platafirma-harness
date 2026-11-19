@@ -177,9 +177,10 @@ uso:
   tarefas modelo story derivada           a story que sai da formalização: aponta R<n>, D<n> ou Peça
   tarefas modelo comentario <tipo>        o comentário tipado: insumo, pergunta, buraco,
                                           requisito ou decisão
-  tarefas modelo story refinada           o Plano: segunda camada da story, escrita pelo
-                                          executor em em-refinamento-tecnico, depois de ler
-                                          o código (arq:0096)
+  tarefas modelo story refinada           o Plano: segunda camada da story, escrita pela
+                                          cadeira dona em em-refinamento-tecnico, depois de
+                                          ler o código; a executora, quando é outra, revisa
+                                          antes de começar (classe story)
   tarefas comentar <id> ["<txt>"]         cria comentário (entidade própria — card #390,
                                           não altera o corpo do item); sem texto, lê stdin
   tarefas comentar <id> --fecha <n> "<resultado> — <destino>"
