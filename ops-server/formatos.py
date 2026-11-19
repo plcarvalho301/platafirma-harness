@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import email
 import email.policy
+import gzip
 import io
 import re
 import struct
@@ -25,6 +26,8 @@ import zipfile
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import PurePosixPath
+from typing import Any
+from urllib.parse import unquote
 from xml.etree import ElementTree as ET
 
 try:                                    # §7.4.7: software livre, no venv ops da release
@@ -55,7 +58,18 @@ ROTULO = {"pagina": "página", "item": "item", "slide": "slide", "planilha": "pl
 LEITORES = frozenset(UNIDADE)
 DPI_PADRAO, DPI_MAX = 150, 300
 IMAGEM_TETO = 4 * 1024 * 1024          # bytes de PNG por chamada em modo="pagina" (≥ 1 imagem)
-MEMBRO_MAX = 64 * 1024 * 1024          # membro de ZIP lido em memória
+MEMBRO_MAX = 64 * 1024 * 1024          # membro de ZIP/gzip lido em memória
+CHUNK_DESCOMPRESSAO = 64 * 1024        # bloco de leitura em fluxo contra bombas de compressão
+RAZAO_COMPRESSAO_MAX = 100.0           # razão máxima descomprimido/comprimido acima de RAZAO_MIN_BYTES
+RAZAO_MIN_BYTES = 64 * 1024            # abaixo disto, arquivos pequenos de zeros não disparam razão
+CELULAS_XLSX_MAX = 200_000             # teto de células expandidas em planilha XLSX
+_FLOAT_REPR_MAX = 1e15
+_PNG_CABECA_MIN = 24
+_GIF_CABECA_MIN = 10
+_WEBP_CABECA_MIN = 30
+_JPEG_MARCADOR = 0xFF
+_JPEG_RST_INI = 0xD0
+_JPEG_RST_FIM = 0xD7
 
 # --- namespaces OOXML / EPUB -------------------------------------------------------------------
 _W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
@@ -70,8 +84,95 @@ _CNT = "{urn:oasis:names:tc:opendocument:xmlns:container}"
 _XLINK = "{http://www.w3.org/1999/xlink}"
 
 
+class ErroDescompressao(ValueError):
+    """Arquivo comprimido excede teto de bytes ou razão máxima de compressão (DT 832/899)."""
+
+
+def _valida_razao(descomprimido: int, comprimido: int | None, razao_max: float) -> None:
+    if (comprimido and comprimido > 0 and descomprimido > RAZAO_MIN_BYTES
+            and (descomprimido / comprimido) > razao_max):
+        raise ErroDescompressao(
+            f"razão de compressão acima de {int(razao_max)}x "
+            f"({descomprimido} bytes de {comprimido} comprimidos)"
+        )
+
+
+def ler_zip_seguro(
+    zf: zipfile.ZipFile,
+    nome: str,
+    limite: int = MEMBRO_MAX,
+    razao_max: float = RAZAO_COMPRESSAO_MAX,
+) -> bytes:
+    """Lê membro de ZIP em fluxo até `limite` bytes e `razao_max` (DT 832/899)."""
+    info = zf.getinfo(nome)
+    if info.file_size > limite:
+        raise ErroDescompressao(f"membro {nome!r} declara {info.file_size} bytes (teto {limite})")
+    _valida_razao(info.file_size, info.compress_size, razao_max)
+    partes: list[bytes] = []
+    total = 0
+    with zf.open(info, "r") as stream:
+        while True:
+            bloco = stream.read(CHUNK_DESCOMPRESSAO)
+            if not bloco:
+                break
+            total += len(bloco)
+            if total > limite:
+                raise ErroDescompressao(f"membro {nome!r} atingiu teto de {limite} bytes")
+            _valida_razao(total, info.compress_size, razao_max)
+            partes.append(bloco)
+    return b"".join(partes)
+
+
+def ler_gzip_seguro(
+    fh: Any,
+    limite: int = MEMBRO_MAX,
+    razao_max: float = RAZAO_COMPRESSAO_MAX,
+    tamanho_comprimido: int | None = None,
+) -> bytes:
+    """Descomprime gzip em fluxo até `limite` bytes e `razao_max` (DT 832/899)."""
+    fh.seek(0)
+    partes: list[bytes] = []
+    total = 0
+    with gzip.GzipFile(fileobj=fh, mode="rb") as gz:
+        while True:
+            bloco = gz.read(CHUNK_DESCOMPRESSAO)
+            if not bloco:
+                break
+            total += len(bloco)
+            if total > limite:
+                raise ErroDescompressao(f"gzip atingiu teto de {limite} bytes descomprimidos")
+            _valida_razao(total, tamanho_comprimido, razao_max)
+            partes.append(bloco)
+    return b"".join(partes)
+
+
+def _ooxml_rels(zf: zipfile.ZipFile, nome: str) -> dict[str, str]:
+    """Helper XML OOXML isolado: mapa Id -> Target de um arquivo `.rels` (DT 899)."""
+    try:
+        raiz = ET.fromstring(ler_zip_seguro(zf, nome))
+    except (KeyError, ET.ParseError):
+        return {}
+    return {
+        r.get("Id") or "": r.get("Target") or ""
+        for r in raiz.iter(f"{_REL}Relationship")
+        if r.get("TargetMode") != "External" and r.get("Id") and r.get("Target")
+    }
+
+
+def _ooxml_rels_tipo(zf: zipfile.ZipFile, nome: str, sufixo: str) -> str | None:
+    """Helper XML OOXML isolado: primeiro Target cujo Type termina em `sufixo`."""
+    try:
+        raiz = ET.fromstring(ler_zip_seguro(zf, nome))
+    except (KeyError, ET.ParseError):
+        return None
+    for r in raiz.iter(f"{_REL}Relationship"):
+        if (r.get("Type") or "").endswith(sufixo):
+            return r.get("Target")
+    return None
+
+
 # ============================================================== tipo real (§7.2, §7.4.4)
-def tipo_do_zip(fh) -> str:
+def tipo_do_zip(fh: Any) -> str:
     """O que um ZIP é, pelo que há dentro, nunca pelo nome (F2 da lista antipadroes-de-transcricao).
 
     EPUB tem `mimetype` (ou, faltando ele, `META-INF/container.xml`); DOCX tem
@@ -84,9 +185,9 @@ def tipo_do_zip(fh) -> str:
             nomes = set(zf.namelist())
             if "mimetype" in nomes:
                 try:
-                    if zf.read("mimetype").strip() == b"application/epub+zip":
+                    if ler_zip_seguro(zf, "mimetype", limite=4096).strip() == b"application/epub+zip":
                         return EPUB
-                except (zipfile.BadZipFile, KeyError, OSError):
+                except (zipfile.BadZipFile, KeyError, OSError, ErroDescompressao):
                     pass
             if "META-INF/container.xml" in nomes:
                 return EPUB
@@ -102,8 +203,11 @@ def tipo_do_zip(fh) -> str:
 
 
 _HTML_MARCAS = (b"<!doctype html", b"<html", b"<head", b"<body", b"<?xml", b"<meta", b"<title")
-_MHTML_CABECA = re.compile(rb"^(from:|mime-version:|content-type:\s*multipart/related|"
-                           rb"subject:|snapshot-content-location:)", re.I | re.M)
+_MHTML_CABECA = re.compile(
+    rb"^(from:|mime-version:|content-type:\s*multipart/related|"
+    rb"subject:|snapshot-content-location:)",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 def tipo_texto(cabeca: bytes, tipo_nome: str) -> str:
@@ -132,13 +236,13 @@ def tabela_gfm(linhas: list[list[str]]) -> str:
     (spec espelho-de-leitura §2.2: tabela como tabela, nunca uma célula por linha)."""
     if not linhas:
         return ""
-    largura = max(len(l) for l in linhas)
+    largura = max(len(linha) for linha in linhas)
 
     def cel(c: str) -> str:
         return re.sub(r"\s+", " ", (c or "")).strip().replace("|", "\\|")
     saida = []
-    for i, l in enumerate(linhas):
-        cells = [cel(c) for c in l] + [""] * (largura - len(l))
+    for i, linha in enumerate(linhas):
+        cells = [cel(c) for c in linha] + [""] * (largura - len(linha))
         saida.append("| " + " | ".join(cells) + " |")
         if i == 0:
             saida.append("|" + "|".join([" --- "] * largura) + "|")
@@ -147,7 +251,7 @@ def tabela_gfm(linhas: list[list[str]]) -> str:
 
 def _limpa(texto: str) -> str:
     """Três ou mais linhas em branco viram duas; sem espaço pendurado; termina em `\\n`."""
-    texto = "\n".join(l.rstrip() for l in texto.split("\n"))
+    texto = "\n".join(linha.rstrip() for linha in texto.split("\n"))
     texto = re.sub(r"\n{3,}", "\n\n", texto).strip("\n")
     return texto + "\n" if texto else ""
 
@@ -188,7 +292,7 @@ class Documento:
 
 # ---------------------------------------------------------------- PDF (pymupdf)
 class _Pdf(Documento):
-    def __init__(self, fonte, nome: str = ""):
+    def __init__(self, fonte: Any, nome: str = ""):
         if pymupdf is None:
             raise RuntimeError("pymupdf ausente do venv ops: PDF sem leitor")
         if isinstance(fonte, (bytes, bytearray)):
@@ -211,7 +315,7 @@ class _Pdf(Documento):
             flags |= pymupdf.TEXT_MEDIABOX_CLIP     # pela mediabox descarta parte da camada
         return pagina.get_text("text", flags=flags)
 
-    def imagem(self, i: int, dpi: int = DPI_PADRAO):
+    def imagem(self, i: int, dpi: int = DPI_PADRAO) -> tuple[bytes | None, str, dict]:
         dpi = max(36, min(int(dpi or DPI_PADRAO), DPI_MAX))
         pagina = self._fonte[i - 1]
         # `get_pixmap(dpi=N)` grava o DPI no PNG (caderno engenharia/devops, pymupdf 1.28);
@@ -220,10 +324,11 @@ class _Pdf(Documento):
         return pix.tobytes("png"), PNG, {"dimensoes": (pix.width, pix.height), "dpi": dpi}
 
     def fecha(self) -> None:
-        try:
-            self._fonte.close()
-        except Exception:                                 # noqa: BLE001
-            pass
+        if self._fonte is not None:
+            try:
+                self._fonte.close()
+            except RuntimeError:
+                return
 
 
 class _Mobi(Documento):
@@ -231,7 +336,7 @@ class _Mobi(Documento):
     texto sai inteiro, em ordem, sem marca de página (as páginas do MuPDF são de layout, não
     do arquivo — arq:0117 §6: o leitor não inventa página)."""
 
-    def __init__(self, fonte):
+    def __init__(self, fonte: Any):
         if pymupdf is None:
             raise RuntimeError("pymupdf ausente do venv ops: MOBI sem leitor")
         if isinstance(fonte, (bytes, bytearray)):
@@ -248,10 +353,11 @@ class _Mobi(Documento):
         return "\n".join(partes)
 
     def fecha(self) -> None:
-        try:
-            self._fonte.close()
-        except Exception:                                 # noqa: BLE001
-            pass
+        if self._fonte is not None:
+            try:
+                self._fonte.close()
+            except RuntimeError:
+                return
 
 
 # ---------------------------------------------------------------- HTML (texto visível)
@@ -265,7 +371,7 @@ _BLOCO = {"p", "div", "section", "article", "header", "footer", "nav", "aside", 
 _BLOCO_CURTO = {"li", "dt", "dd", "tr", "option", "label", "title"}
 _VAZIAS = {"br", "img", "hr", "meta", "link", "input", "wbr", "source", "col", "area", "base",
            "embed", "param", "track"}
-_OCULTO = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden", re.I)
+_OCULTO = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden", re.IGNORECASE)
 
 
 class _TextoVisivel(HTMLParser):
@@ -292,30 +398,18 @@ class _TextoVisivel(HTMLParser):
     def _quebra(self, n: int = 1) -> None:
         self._emite("\n" * n)
 
-    # -- eventos
-    def handle_starttag(self, tag, attrs):
-        a = dict(attrs)
-        if self.oculto:
-            if tag not in _VAZIAS:
-                self.oculto.append(tag)
-            return
-        if tag in _IGNORA or ("hidden" in a and a.get("hidden") != "false") or \
-           _OCULTO.search(a.get("style") or ""):
-            if tag not in _VAZIAS:
-                self.oculto.append(tag)
-            return
-        if tag == "br":
-            self._quebra()
-        elif tag == "img":
-            src = (a.get("src") or a.get("data-src") or "").strip()
-            alt = (a.get("alt") or "").strip()
-            if src and not src.startswith("data:"):
-                caminho = _resolve(self.base, src)
-                self.imagens.append(caminho)
-                self._emite(f"[imagem: {caminho}{' — ' + alt if alt else ''}]")
-            elif alt:
-                self._emite(f"[imagem: {alt}]")
-        elif tag == "table":
+    def _abre_img(self, attrs_map: dict[str, str | None]) -> None:
+        src = (attrs_map.get("src") or attrs_map.get("data-src") or "").strip()
+        alt = (attrs_map.get("alt") or "").strip()
+        if src and not src.startswith("data:"):
+            caminho = _resolve(self.base, src)
+            self.imagens.append(caminho)
+            self._emite(f"[imagem: {caminho}{' — ' + alt if alt else ''}]")
+        elif alt:
+            self._emite(f"[imagem: {alt}]")
+
+    def _abre_tabela(self, tag: str, attrs_map: dict[str, str | None]) -> None:
+        if tag == "table":
             self._quebra(2)
             self.tabelas.append({"linhas": [], "linha": None, "cel": None})
         elif tag == "tr" and self.tabelas:
@@ -327,25 +421,47 @@ class _TextoVisivel(HTMLParser):
             t["cel"] = []
             t["linha"].append(t["cel"])
             try:
-                span = max(1, int(a.get("colspan") or 1))
+                t["span"] = max(1, int(attrs_map.get("colspan") or 1))
             except ValueError:
-                span = 1
-            t["span"] = span
-        elif tag in _BLOCO:
-            self._quebra(2 if tag not in _BLOCO_CURTO else 1)
-            if tag[0] == "h" and tag[1:].isdigit():
-                self._emite("#" * int(tag[1]) + " ")
-            elif tag == "li":
-                self._emite("- ")
-            elif tag == "pre":
-                self.pre += 1
+                t["span"] = 1
 
-    def handle_startendtag(self, tag, attrs):
+    def _abre_bloco(self, tag: str) -> None:
+        self._quebra(2 if tag not in _BLOCO_CURTO else 1)
+        if tag[0] == "h" and tag[1:].isdigit():
+            self._emite("#" * int(tag[1]) + " ")
+        elif tag == "li":
+            self._emite("- ")
+        elif tag == "pre":
+            self.pre += 1
+
+    # -- eventos
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        a = dict(attrs)
+        eh_oculto = (
+            bool(self.oculto)
+            or tag in _IGNORA
+            or ("hidden" in a and a.get("hidden") != "false")
+            or bool(_OCULTO.search(a.get("style") or ""))
+        )
+        if eh_oculto:
+            if tag not in _VAZIAS:
+                self.oculto.append(tag)
+            return
+        if tag == "br":
+            self._quebra()
+        elif tag == "img":
+            self._abre_img(a)
+        elif tag in ("table", "tr", "td", "th"):
+            self._abre_tabela(tag, a)
+        elif tag in _BLOCO:
+            self._abre_bloco(tag)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self.handle_starttag(tag, attrs)
         if tag not in _VAZIAS:
             self.handle_endtag(tag)
 
-    def handle_endtag(self, tag):
+    def handle_endtag(self, tag: str) -> None:
         if self.oculto:
             # fecha o trecho oculto no fim da própria tag que o abriu (pilha de aninhamento)
             if tag in self.oculto:
@@ -361,8 +477,8 @@ class _TextoVisivel(HTMLParser):
             t["cel"] = None
         elif tag == "table" and self.tabelas:
             t = self.tabelas.pop()
-            linhas = [[c if isinstance(c, str) else "".join(c) for c in l] for l in t["linhas"]]
-            linhas = [l for l in linhas if any(c.strip() for c in l)]
+            linhas = [[c if isinstance(c, str) else "".join(c) for c in row] for row in t["linhas"]]
+            linhas = [row for row in linhas if any(c.strip() for c in row)]
             self._emite(tabela_gfm(linhas))
             self._quebra(2)
         elif tag in _BLOCO:
@@ -370,7 +486,7 @@ class _TextoVisivel(HTMLParser):
                 self.pre = max(0, self.pre - 1)
             self._quebra(2 if tag not in _BLOCO_CURTO else 1)
 
-    def handle_data(self, data):
+    def handle_data(self, data: str) -> None:
         if self.oculto:
             return
         if not self.pre:
@@ -390,7 +506,6 @@ class _TextoVisivel(HTMLParser):
 
 
 def _resolve(base: str, ref: str) -> str:
-    from urllib.parse import unquote
     ref = unquote(ref.split("#")[0].split("?")[0])
     if not base or ref.startswith(("/", "http:", "https:")):
         return ref.lstrip("/") if not ref.startswith("http") else ref
@@ -489,12 +604,12 @@ class _Epub(Documento):
     """Itens do spine em ordem; cada um é uma unidade (`item`), lido como XHTML visível.
     Imagens internas aparecem pelo caminho dentro do ZIP e se leem por `caminho!membro`."""
 
-    def __init__(self, fh):
+    def __init__(self, fh: Any):
         self._zf = zipfile.ZipFile(fh)
         opf_caminho = self._acha_opf()
         base = str(PurePosixPath(opf_caminho).parent)
         base = "" if base == "." else base
-        raiz = ET.fromstring(self._zf.read(opf_caminho))
+        raiz = ET.fromstring(ler_zip_seguro(self._zf, opf_caminho))
         manifesto = {}
         for item in raiz.iter(f"{_OPF}item"):
             manifesto[item.get("id")] = (_resolve(base, item.get("href") or ""),
@@ -511,7 +626,7 @@ class _Epub(Documento):
 
     def _acha_opf(self) -> str:
         try:
-            cont = ET.fromstring(self._zf.read("META-INF/container.xml"))
+            cont = ET.fromstring(ler_zip_seguro(self._zf, "META-INF/container.xml"))
             for rf in cont.iter(f"{_CNT}rootfile"):
                 if rf.get("full-path"):
                     return rf.get("full-path")
@@ -525,32 +640,29 @@ class _Epub(Documento):
     def _extrai(self, i: int) -> str:
         href = self._itens[i - 1]
         base = str(PurePosixPath(href).parent)
-        texto, _ = html_para_texto(self._zf.read(href), base="" if base == "." else base)
+        texto, _ = html_para_texto(ler_zip_seguro(self._zf, href), base="" if base == "." else base)
         return f"item: {href}\n\n{texto}"
-
-    def membro(self, nome: str) -> bytes:
-        return self._zf.read(nome)
 
     def fecha(self) -> None:
         self._zf.close()
 
 
 # ---------------------------------------------------------------- DOCX
-_TITULO_RE = re.compile(r"^(?:heading|t[ií]tulo|ttulo)\s*(\d)$", re.I)
+_TITULO_RE = re.compile(r"^(?:heading|t[ií]tulo|ttulo)\s*(\d)$", re.IGNORECASE)
 
 
 class _Docx(Documento):
     """Parágrafos e tabelas na ordem do `word/document.xml`; notas e comentários ao fim,
     marcados (§7.4). Sem unidade: a página do DOCX é do renderizador (espelho §2.6)."""
 
-    def __init__(self, fh):
+    def __init__(self, fh: Any):
         self._zf = zipfile.ZipFile(fh)
         super().__init__(tipo=DOCX, unidade="nenhuma", n=1)
         self.membros = [(i.filename, i.file_size) for i in self._zf.infolist() if not i.is_dir()]
 
-    def _ler(self, nome: str):
+    def _ler(self, nome: str) -> ET.Element | None:
         try:
-            return ET.fromstring(self._zf.read(nome))
+            return ET.fromstring(ler_zip_seguro(self._zf, nome))
         except (KeyError, ET.ParseError):
             return None
 
@@ -710,39 +822,21 @@ class _Pptx(Documento):
     """Um slide por unidade, na ordem do `presentation.xml` (nunca a do nome do arquivo:
     O2 da lista antipadroes-de-transcricao); texto das formas e as notas do apresentador."""
 
-    def __init__(self, fh):
+    def __init__(self, fh: Any):
         self._zf = zipfile.ZipFile(fh)
-        rels = self._rels("ppt/_rels/presentation.xml.rels")
-        raiz = ET.fromstring(self._zf.read("ppt/presentation.xml"))
+        rels = _ooxml_rels(self._zf, "ppt/_rels/presentation.xml.rels")
+        raiz = ET.fromstring(ler_zip_seguro(self._zf, "ppt/presentation.xml"))
         slides = []
         for sid in raiz.iter(f"{_P}sldId"):
-            alvo = rels.get(sid.get(f"{_R}id"))
+            alvo = rels.get(sid.get(f"{_R}id") or "")
             if alvo:
                 slides.append(_resolve("ppt", alvo))
         super().__init__(tipo=PPTX, unidade="slide", n=len(slides), nomes=slides)
         self._slides = slides
         self.membros = [(i.filename, i.file_size) for i in self._zf.infolist() if not i.is_dir()]
 
-    def _rels(self, nome: str) -> dict:
-        try:
-            raiz = ET.fromstring(self._zf.read(nome))
-        except (KeyError, ET.ParseError):
-            return {}
-        return {r.get("Id"): r.get("Target") for r in raiz.iter(f"{_REL}Relationship")
-                if r.get("TargetMode") != "External"}
-
-    def _rels_tipo(self, nome: str, sufixo: str) -> str | None:
-        try:
-            raiz = ET.fromstring(self._zf.read(nome))
-        except (KeyError, ET.ParseError):
-            return None
-        for r in raiz.iter(f"{_REL}Relationship"):
-            if (r.get("Type") or "").endswith(sufixo):
-                return r.get("Target")
-        return None
-
     @staticmethod
-    def _paragrafos(txbody) -> list[str]:
+    def _paragrafos(txbody: ET.Element) -> list[str]:
         saida = []
         for p in txbody.findall(f"{_A}p"):
             partes = []
@@ -758,79 +852,90 @@ class _Pptx(Documento):
                 saida.append(("  " * lvl + "- " + t) if lvl else t)
         return saida
 
-    def _formas(self, pai, blocos: list[str], caminho_slide: str) -> None:
+    def _forma_sp(self, el: ET.Element, blocos: list[str]) -> None:
+        ph = el.find(f"{_P}nvSpPr/{_P}nvPr/{_P}ph")
+        tipo_ph = ph.get("type") if ph is not None else None
+        tx = el.find(f"{_P}txBody")
+        if tx is None:
+            return
+        pars = self._paragrafos(tx)
+        if not pars:
+            return
+        if tipo_ph in ("title", "ctrTitle"):
+            blocos.append("# " + " ".join(pars))
+        elif tipo_ph == "subTitle":
+            blocos.append("## " + " ".join(pars))
+        elif tipo_ph in ("sldNum", "dt", "ftr"):
+            blocos.append(f"<!-- {tipo_ph}: {' '.join(pars)} -->")
+        else:
+            blocos.append("\n".join(pars))
+
+    def _forma_grafico(self, el: ET.Element, blocos: list[str]) -> None:
+        tbl = next(el.iter(f"{_A}tbl"), None)
+        if tbl is None:
+            textos = [t.text or "" for t in el.iter(f"{_A}t")]
+            if any(x.strip() for x in textos):
+                blocos.append(" ".join(x for x in textos if x.strip()))
+            return
+        linhas = []
+        for tr in tbl.findall(f"{_A}tr"):
+            linha = []
+            for tc in tr.findall(f"{_A}tc"):
+                tx = tc.find(f"{_A}txBody")
+                texto = " ".join(self._paragrafos(tx)) if tx is not None else ""
+                span = int(tc.get("gridSpan") or 1)
+                linha.extend([texto] * max(1, span))
+            linhas.append(linha)
+        blocos.append(tabela_gfm(linhas))
+
+    def _formas(self, pai: ET.Element, blocos: list[str], caminho_slide: str) -> None:
         for el in pai:
             tag = el.tag
             if tag == f"{_P}sp":
-                ph = el.find(f"{_P}nvSpPr/{_P}nvPr/{_P}ph")
-                tipo_ph = ph.get("type") if ph is not None else None
-                tx = el.find(f"{_P}txBody")
-                if tx is None:
-                    continue
-                pars = self._paragrafos(tx)
-                if not pars:
-                    continue
-                if tipo_ph in ("title", "ctrTitle"):
-                    blocos.append("# " + " ".join(pars))
-                elif tipo_ph == "subTitle":
-                    blocos.append("## " + " ".join(pars))
-                elif tipo_ph in ("sldNum", "dt", "ftr"):
-                    blocos.append(f"<!-- {tipo_ph}: {' '.join(pars)} -->")
-                else:
-                    blocos.append("\n".join(pars))
+                self._forma_sp(el, blocos)
             elif tag == f"{_P}graphicFrame":
-                tbl = next(el.iter(f"{_A}tbl"), None)
-                if tbl is not None:
-                    linhas = []
-                    for tr in tbl.findall(f"{_A}tr"):
-                        linha = []
-                        for tc in tr.findall(f"{_A}tc"):
-                            tx = tc.find(f"{_A}txBody")
-                            texto = " ".join(self._paragrafos(tx)) if tx is not None else ""
-                            span = int(tc.get("gridSpan") or 1)
-                            linha.extend([texto] * max(1, span))
-                        linhas.append(linha)
-                    blocos.append(tabela_gfm(linhas))
-                else:
-                    textos = [t.text or "" for t in el.iter(f"{_A}t")]
-                    if any(x.strip() for x in textos):
-                        blocos.append(" ".join(x for x in textos if x.strip()))
+                self._forma_grafico(el, blocos)
             elif tag == f"{_P}grpSp":
                 self._formas(el, blocos, caminho_slide)
             elif tag == f"{_P}pic":
                 blip = next(el.iter(f"{_A}blip"), None)
                 rid = blip.get(f"{_R}embed") if blip is not None else None
-                rels = self._rels(_rels_de(caminho_slide))
-                alvo = rels.get(rid)
+                alvo = _ooxml_rels(self._zf, _rels_de(caminho_slide)).get(rid or "")
                 if alvo:
                     blocos.append(f"[imagem: {_resolve(str(PurePosixPath(caminho_slide).parent), alvo)}]")
 
+    def _extrai_notas(self, caminho: str) -> list[str]:
+        notas_alvo = _ooxml_rels_tipo(self._zf, _rels_de(caminho), "/notesSlide")
+        if not notas_alvo:
+            return []
+        nome = _resolve(str(PurePosixPath(caminho).parent), notas_alvo)
+        try:
+            nraiz = ET.fromstring(ler_zip_seguro(self._zf, nome))
+        except (KeyError, ET.ParseError):
+            return []
+        narv = nraiz.find(f"{_P}cSld/{_P}spTree")
+        if narv is None:
+            return []
+        notas: list[str] = []
+        for sp in narv.iter(f"{_P}sp"):
+            ph = sp.find(f"{_P}nvSpPr/{_P}nvPr/{_P}ph")
+            if ph is not None and ph.get("type") in ("sldNum", "sldImg", "hdr", "ftr", "dt"):
+                continue
+            tx = sp.find(f"{_P}txBody")
+            if tx is not None:
+                notas.extend(self._paragrafos(tx))
+        return notas
+
     def _extrai(self, i: int) -> str:
         caminho = self._slides[i - 1]
-        raiz = ET.fromstring(self._zf.read(caminho))
+        raiz = ET.fromstring(ler_zip_seguro(self._zf, caminho))
         arvore = raiz.find(f"{_P}cSld/{_P}spTree")
         blocos: list[str] = []
         if arvore is not None:
             self._formas(arvore, blocos, caminho)
-        notas_alvo = self._rels_tipo(_rels_de(caminho), "/notesSlide")
-        if notas_alvo:
-            nome = _resolve(str(PurePosixPath(caminho).parent), notas_alvo)
-            try:
-                nraiz = ET.fromstring(self._zf.read(nome))
-                narv = nraiz.find(f"{_P}cSld/{_P}spTree")
-                notas: list[str] = []
-                if narv is not None:
-                    for sp in narv.iter(f"{_P}sp"):
-                        ph = sp.find(f"{_P}nvSpPr/{_P}nvPr/{_P}ph")
-                        if ph is not None and ph.get("type") in ("sldNum", "sldImg", "hdr", "ftr", "dt"):
-                            continue
-                        tx = sp.find(f"{_P}txBody")
-                        if tx is not None:
-                            notas.extend(self._paragrafos(tx))
-                if notas:
-                    blocos.append("<!-- notas do apresentador -->\n\n" + "\n\n".join(notas))
-            except (KeyError, ET.ParseError):
-                pass
+        notas = self._extrai_notas(caminho)
+        if notas:
+            blocos.append("<!-- notas do apresentador -->\n\n" + "\n\n".join(notas))
         return "\n\n".join(blocos)
 
     def fecha(self) -> None:
@@ -857,15 +962,16 @@ class _Xlsx(Documento):
     """Uma planilha por unidade, na ordem do `workbook.xml`; cada uma como tabela GFM com os
     valores (nunca a fórmula) e o nome da planilha (§7.4)."""
 
-    def __init__(self, fh):
+    def __init__(self, fh: Any):
         self._zf = zipfile.ZipFile(fh)
-        raiz = ET.fromstring(self._zf.read("xl/workbook.xml"))
-        rels = _Pptx._rels(self, "xl/_rels/workbook.xml.rels")
+        raiz = ET.fromstring(ler_zip_seguro(self._zf, "xl/workbook.xml"))
+        rels = _ooxml_rels(self._zf, "xl/_rels/workbook.xml.rels")
         folhas = []
         for sh in raiz.iter(f"{_S}sheet"):
-            alvo = rels.get(sh.get(f"{_R}id"))
+            alvo = rels.get(sh.get(f"{_R}id") or "")
             if alvo:
-                folhas.append((sh.get("name") or "", _resolve("xl", alvo.lstrip("/")) if not alvo.startswith("/") else alvo.lstrip("/")))
+                destino = _resolve("xl", alvo.lstrip("/")) if not alvo.startswith("/") else alvo.lstrip("/")
+                folhas.append((sh.get("name") or "", destino))
         super().__init__(tipo=XLSX, unidade="planilha", n=len(folhas), nomes=[n for n, _ in folhas])
         self._folhas = folhas
         self._ss: list[str] | None = None
@@ -875,14 +981,14 @@ class _Xlsx(Documento):
         if self._ss is None:
             self._ss = []
             try:
-                raiz = ET.fromstring(self._zf.read("xl/sharedStrings.xml"))
+                raiz = ET.fromstring(ler_zip_seguro(self._zf, "xl/sharedStrings.xml"))
                 for si in raiz.iter(f"{_S}si"):
                     self._ss.append("".join(t.text or "" for t in si.iter(f"{_S}t")))
             except (KeyError, ET.ParseError):
                 pass
         return self._ss
 
-    def _valor(self, c) -> str:
+    def _valor(self, c: ET.Element) -> str:
         t = c.get("t") or "n"
         if t == "inlineStr":
             is_ = c.find(f"{_S}is")
@@ -902,17 +1008,12 @@ class _Xlsx(Documento):
                 f = float(val)
                 if f.is_integer() and "e" not in val.lower() and "." not in val:
                     return val
-                return repr(f) if abs(f) < 1e15 else val
+                return repr(f) if abs(f) < _FLOAT_REPR_MAX else val
             except ValueError:
                 return val
         return val
 
-    def _extrai(self, i: int) -> str:
-        nome, caminho = self._folhas[i - 1]
-        try:
-            raiz = ET.fromstring(self._zf.read(caminho))
-        except KeyError:
-            return f"planilha: {nome}\n\n(planilha sem dados)"
+    def _coleta_celulas(self, raiz: ET.Element) -> dict[tuple[int, int], str]:
         celulas: dict[tuple[int, int], str] = {}
         for row in raiz.iter(f"{_S}row"):
             try:
@@ -920,6 +1021,8 @@ class _Xlsx(Documento):
             except ValueError:
                 rn = 0
             for col_auto, c in enumerate(row.findall(f"{_S}c"), 1):
+                if len(celulas) >= CELULAS_XLSX_MAX:
+                    return celulas
                 ref = c.get("r") or ""
                 cn = _col_idx(ref) or col_auto
                 if not rn:
@@ -927,25 +1030,43 @@ class _Xlsx(Documento):
                 val = self._valor(c)
                 if val != "":
                     celulas[(rn, cn)] = val
-        # mescla: o valor da célula de cima/esquerda repete na área coberta (espelho §2.2)
+        return celulas
+
+    @staticmethod
+    def _aplica_mesclas(raiz: ET.Element, celulas: dict[tuple[int, int], str]) -> None:
+        # mescla: o valor da célula de cima/esquerda repete na área coberta, com teto (DT 899)
         for mc in raiz.iter(f"{_S}mergeCell"):
             ref = mc.get("ref") or ""
-            if ":" in ref:
-                a, b = ref.split(":")
-                r1, c1 = int(re.sub(r"\D", "", a)), _col_idx(a)
-                r2, c2 = int(re.sub(r"\D", "", b)), _col_idx(b)
-                val = celulas.get((r1, c1), "")
-                if val == "":
-                    continue
-                for r in range(r1, r2 + 1):
-                    for cc in range(c1, c2 + 1):
-                        celulas.setdefault((r, cc), val)
+            if ":" not in ref:
+                continue
+            a, b = ref.split(":", 1)
+            r1_s, r2_s = re.sub(r"\D", "", a), re.sub(r"\D", "", b)
+            if not r1_s or not r2_s:
+                continue
+            r1, c1 = int(r1_s), _col_idx(a)
+            r2, c2 = int(r2_s), _col_idx(b)
+            val = celulas.get((r1, c1), "")
+            if val == "" or (r2 - r1 + 1) * (c2 - c1 + 1) > CELULAS_XLSX_MAX:
+                continue
+            for r in range(r1, r2 + 1):
+                for cc in range(c1, c2 + 1):
+                    if len(celulas) >= CELULAS_XLSX_MAX:
+                        return
+                    celulas.setdefault((r, cc), val)
+
+    def _extrai(self, i: int) -> str:
+        nome, caminho = self._folhas[i - 1]
+        try:
+            raiz = ET.fromstring(ler_zip_seguro(self._zf, caminho))
+        except KeyError:
+            return f"planilha: {nome}\n\n(planilha sem dados)"
+        celulas = self._coleta_celulas(raiz)
+        self._aplica_mesclas(raiz, celulas)
         if not celulas:
             return f"planilha: {nome}\n\n(planilha vazia)"
         linhas_idx = sorted({r for r, _ in celulas})
-        c_min = min(c for _, c in celulas)
-        c_max = max(c for _, c in celulas)
-        grade = [[celulas.get((r, c), "") for c in range(c_min, c_max + 1)] for r in linhas_idx]
+        cols_idx = sorted({c for _, c in celulas})
+        grade = [[celulas.get((r, c), "") for c in cols_idx] for r in linhas_idx]
         return f"planilha: {nome}\n\n" + tabela_gfm(grade)
 
     def fecha(self) -> None:
@@ -956,7 +1077,7 @@ class _Xlsx(Documento):
 class _Zip(Documento):
     """Listagem como diretório (§9.2); o membro se lê por `caminho!membro`."""
 
-    def __init__(self, fh):
+    def __init__(self, fh: Any):
         self._zf = zipfile.ZipFile(fh)
         super().__init__(tipo=ZIP, unidade="nenhuma", n=1)
         self.membros = sorted((i.filename, i.file_size) for i in self._zf.infolist() if not i.is_dir())
@@ -964,45 +1085,57 @@ class _Zip(Documento):
     def _extrai(self, i: int) -> str:
         return "".join(f"{n}  {t}\n" for n, t in self.membros)
 
-    def membro(self, nome: str) -> bytes:
-        return self._zf.read(nome)
-
     def fecha(self) -> None:
         self._zf.close()
 
 
 # ---------------------------------------------------------------- imagem
+_JPEG_SOF = frozenset({0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF})
+
+
+def _dimensoes_webp(cabeca: bytes) -> tuple[int, int] | None:
+    if len(cabeca) < _WEBP_CABECA_MIN:
+        return None
+    subtipo = cabeca[12:16]
+    if subtipo == b"VP8 ":
+        w, h = struct.unpack("<HH", cabeca[26:30])
+        return w & 0x3FFF, h & 0x3FFF
+    if subtipo == b"VP8L":
+        b = cabeca[21:25]
+        return (b[0] | ((b[1] & 0x3F) << 8)) + 1, ((b[1] >> 6) | (b[2] << 2) | ((b[3] & 0x0F) << 10)) + 1
+    if subtipo == b"VP8X":
+        return 1 + int.from_bytes(cabeca[24:27], "little"), 1 + int.from_bytes(cabeca[27:30], "little")
+    return None
+
+
+def _dimensoes_jpeg(cabeca: bytes) -> tuple[int, int] | None:
+    i = 2
+    while i + 9 < len(cabeca):
+        if cabeca[i] != _JPEG_MARCADOR:
+            i += 1
+            continue
+        marca = cabeca[i + 1]
+        if marca in _JPEG_SOF:
+            h, w = struct.unpack(">HH", cabeca[i + 5:i + 9])
+            return w, h
+        if marca in (0xD8, 0x01) or _JPEG_RST_INI <= marca <= _JPEG_RST_FIM:
+            i += 2
+            continue
+        tam = struct.unpack(">H", cabeca[i + 2:i + 4])[0]
+        i += 2 + tam
+    return None
+
+
 def dimensoes_imagem(cabeca: bytes, tipo: str) -> tuple[int, int] | None:
     try:
-        if tipo == PNG and len(cabeca) >= 24:
+        if tipo == PNG and len(cabeca) >= _PNG_CABECA_MIN:
             return struct.unpack(">II", cabeca[16:24])
-        if tipo == GIF and len(cabeca) >= 10:
+        if tipo == GIF and len(cabeca) >= _GIF_CABECA_MIN:
             return struct.unpack("<HH", cabeca[6:10])
-        if tipo == WEBP and len(cabeca) >= 30:
-            if cabeca[12:16] == b"VP8 ":
-                return struct.unpack("<HH", cabeca[26:30])[0] & 0x3FFF, struct.unpack("<HH", cabeca[26:30])[1] & 0x3FFF
-            if cabeca[12:16] == b"VP8L":
-                b = cabeca[21:25]
-                return (b[0] | ((b[1] & 0x3F) << 8)) + 1, ((b[1] >> 6) | (b[2] << 2) | ((b[3] & 0x0F) << 10)) + 1
-            if cabeca[12:16] == b"VP8X":
-                w = 1 + int.from_bytes(cabeca[24:27], "little")
-                h = 1 + int.from_bytes(cabeca[27:30], "little")
-                return w, h
+        if tipo == WEBP:
+            return _dimensoes_webp(cabeca)
         if tipo == JPEG:
-            i = 2
-            while i + 9 < len(cabeca):
-                if cabeca[i] != 0xFF:
-                    i += 1
-                    continue
-                marca = cabeca[i + 1]
-                if marca in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
-                    h, w = struct.unpack(">HH", cabeca[i + 5:i + 9])
-                    return w, h
-                if marca in (0xD8, 0x01) or 0xD0 <= marca <= 0xD7:
-                    i += 2
-                    continue
-                tam = struct.unpack(">H", cabeca[i + 2:i + 4])[0]
-                i += 2 + tam
+            return _dimensoes_jpeg(cabeca)
     except (struct.error, IndexError):
         return None
     return None
@@ -1017,8 +1150,11 @@ class _Imagem(Documento):
         return ""
 
 
+_ZIP_CLASSES = {EPUB: _Epub, DOCX: _Docx, PPTX: _Pptx, XLSX: _Xlsx, ZIP: _Zip}
+
+
 # ============================================================== abertura
-def abre(tipo: str, *, fh=None, caminho=None, dados: bytes | None = None,
+def abre(tipo: str, *, fh: Any = None, caminho: Any = None, dados: bytes | None = None,
          encoding: str | None = None) -> Documento:
     """O Documento do tipo. `fh` é o arquivo aberto em binário (zip e OOXML leem dele);
     `caminho` serve ao PDF (abre do disco, sem carregar tudo); `dados` são bytes em memória
@@ -1034,16 +1170,8 @@ def abre(tipo: str, *, fh=None, caminho=None, dados: bytes | None = None,
     fonte = io.BytesIO(dados) if dados is not None else fh
     if fonte is not None:
         fonte.seek(0)
-    if tipo == EPUB:
-        return _Epub(fonte)
-    if tipo == DOCX:
-        return _Docx(fonte)
-    if tipo == PPTX:
-        return _Pptx(fonte)
-    if tipo == XLSX:
-        return _Xlsx(fonte)
-    if tipo == ZIP:
-        return _Zip(fonte)
+    if tipo in _ZIP_CLASSES:
+        return _ZIP_CLASSES[tipo](fonte)
     if dados is None:
         fonte.seek(0)
         dados = fonte.read()
@@ -1061,7 +1189,4 @@ def membro_de(doc: Documento, nome: str) -> bytes:
     zf = getattr(doc, "_zf", None)
     if zf is None:
         raise KeyError(nome)
-    info = zf.getinfo(nome)
-    if info.file_size > MEMBRO_MAX:
-        raise ValueError(f"membro acima de {MEMBRO_MAX // (1024 * 1024)} MiB")
-    return zf.read(nome)
+    return ler_zip_seguro(zf, nome, MEMBRO_MAX)

@@ -820,22 +820,51 @@ def _aviso_copia_atras(repo_dir: Path) -> str | None:
     return None
 
 
+_BANCADA_ATIVA: dict[tuple[str, str], Path] = {}
+
+
+def _registra_bancada_ativa(p: Path, bancada: Path | None, sessao_id: str | None) -> None:
+    """Memoriza `wt/<repo>/<cadeira>/<chave>` tocada nesta sessão para resolver caminhos relativos (DT 897)."""
+    if not sessao_id or bancada is None:
+        return
+    try:
+        rel = p.relative_to(bancada / "wt")
+    except ValueError:
+        return
+    if len(rel.parts) >= 3:
+        repo, cadeira, chave = rel.parts[0], rel.parts[1], rel.parts[2]
+        raiz_wt = bancada / "wt" / repo / cadeira / chave
+        if raiz_wt.is_dir():
+            _BANCADA_ATIVA[(sessao_id, repo)] = raiz_wt
+
+
 def _resolve_leitura_relativo(
-    caminho: str, bancada: Path | None, cadeira: str = ""
+    caminho: str, bancada: Path | None, cadeira: str = "", sessao_id: str | None = None
 ) -> tuple[Path | None, str | None, str | None]:
-    """(caminho, erro, aviso). Em caminho relativo `<repo>/...`, prefere a bancada da
-    cadeira (`wt/<repo>/<cadeira>/main`) quando existe; se cair no clone da raiz da
-    bancada atrás de origin/main, devolve aviso (DT-772)."""
+    """(caminho, erro, aviso). Em caminho relativo `<repo>/...`, prefere a bancada ativa
+    da fita, depois o único worktree da cadeira ou `wt/<repo>/<cadeira>/main`; se cair no
+    clone da raiz da bancada atrás de origin/main, devolve aviso (DT-772, DT-897)."""
     p = Path(caminho)
     if p.is_absolute():
         return p, None, None
     if bancada is None:
         return None, _SEM_BANCADA, None
     parts = p.parts
-    if parts and parts[0] not in ("wt", ".", "..") and cadeira:
-        wt_main = bancada / "wt" / parts[0] / cadeira / "main"
-        if wt_main.is_dir():
-            return wt_main.joinpath(*parts[1:]), None, None
+    if parts and parts[0] not in ("wt", ".", ".."):
+        repo = parts[0]
+        if sessao_id:
+            ativa = _BANCADA_ATIVA.get((sessao_id, repo))
+            if ativa is not None and ativa.is_dir():
+                return ativa.joinpath(*parts[1:]), None, None
+        if cadeira:
+            wt_cadeira = bancada / "wt" / repo / cadeira
+            if wt_cadeira.is_dir():
+                worktrees = [d for d in sorted(wt_cadeira.iterdir()) if d.is_dir()]
+                if len(worktrees) == 1:
+                    return worktrees[0].joinpath(*parts[1:]), None, None
+                wt_main = wt_cadeira / "main"
+                if wt_main.is_dir():
+                    return wt_main.joinpath(*parts[1:]), None, None
     aviso = _aviso_copia_atras(bancada / parts[0]) if parts and parts[0] not in ("wt", ".", "..") else None
     return bancada / p, None, aviso
 
@@ -2097,32 +2126,44 @@ def _curto(p: Path, bancada=_SEM_BANCADA_DADA) -> str:
     return str(p)
 
 
+_SELETORES_ITEM = ("linhas", "paginas", "modo", "offset", "versao", "encoding",
+                   "termo", "dpi", "max_bytes", "inteiro")
+
+
 def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
                    lote_id: str | None = None, lote_n: int | None = None) -> dict:
     """A costura da leitura (spec ler-arquivo §13.2): autoriza, resolve e nega — nessa
     ordem, a de sempre —, lê por `leitura.le`, serve pela poda e audita com a classe do
-    erro. `tool` é o nome chamado (`ler_arquivo`): a auditoria o grava."""
+    erro e `dur_ms` (DT 898). `tool` é o nome chamado (`ler_arquivo`): a auditoria o grava."""
+    t0 = time.monotonic()
     quem = {"cadeira": ident["cadeira"] or None, "sessao_id": ident["sessao_id"],
             "ordem_id": ident["ordem_id"], "lote_id": lote_id, "lote_n": lote_n}
+
+    def _dur_ms() -> int:
+        return int((time.monotonic() - t0) * 1000)
+
     if not caminho:
-        _audit(tool=tool, erro="caminho vazio", classe_erro="gramatica", **quem)
+        _audit(tool=tool, erro="caminho vazio", classe_erro="gramatica", dur_ms=_dur_ms(), **quem)
         cura = 'ler_arquivo(caminho="/caminho/absoluto")'
         return _envelope_erro(2, "parâmetro `caminho` vazio — informe o caminho absoluto ou relativo à bancada",
                               cura, erro="caminho vazio", cura=cura)
+    bancada = _bancada()   # uma leitura do disco por chamada: serve ao relativo, à morada e ao cabeçalho
+    cadeira = ident.get("cadeira") or ""
+    sid = ident.get("sessao_id")
     # `caminho!membro`: autoriza e nega pelo arquivo; o membro é leitura dentro dele (§7.4).
-    caminho, membro = _separa_membro(caminho)
+    caminho, membro = _separa_membro(caminho, bancada=bancada, cadeira=cadeira, sessao_id=sid)
     # A ação do PDP é `read_file`, e segue sendo depois que o apelido saiu (#4117): é a capacidade de ler
     # documento, e a política (politica-acesso, da segurança) não muda por causa do nome da tool.
     negado = _autoriza(tool, "read_file", "documento", caminho, DOM_PLATAFORMA)
     if negado:
         return negado
-    bancada = _bancada()   # uma leitura do disco por chamada: serve ao relativo, à morada e ao cabeçalho
-    p, erro_caminho, aviso_copia = _resolve_leitura_relativo(caminho, bancada, ident.get("cadeira") or "")
+    p, erro_caminho, aviso_copia = _resolve_leitura_relativo(caminho, bancada, cadeira, sid)
     if erro_caminho:
         _audit(tool=tool, evento="leitura_recusada", path=caminho, motivo=erro_caminho,
-               erro=erro_caminho, classe_erro="recusado", **quem)
+               erro=erro_caminho, classe_erro="recusado", dur_ms=_dur_ms(), **quem)
         return _envelope_erro(2, erro_caminho, 'ler_arquivo(caminho="/caminho/absoluto")',
                               recusado=True, caminho=caminho, motivo=erro_caminho)
+    _registra_bancada_ativa(p, bancada, sid)
     alvo = _real(p)   # o único realpath do alvo: fila, segredo e morada leem este
     bloqueio = (_nega_fila(p, tool, alvo) or _nega_segredo(p, tool, alvo)
                 or _nega_morada(p, tool, alvo, bancada))
@@ -2130,7 +2171,8 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
         bloqueio["caminho"] = bloqueio.pop("path", str(p))
         return bloqueio
     if _nega_analise(alvo):
-        _audit(tool=tool, evento="leitura_recusada", motivo="posse-analitica", **quem)
+        _audit(tool=tool, evento="leitura_recusada", motivo="posse-analitica",
+               classe_erro="recusado", dur_ms=_dur_ms(), **quem)
         return _envelope_erro(
             4,
             "arquivo temporário analítico pertence a outro sujeito — só o sujeito dono da execução pode lê-lo",
@@ -2170,7 +2212,9 @@ def _le_um_arquivo(caminho: str, args: dict, ident: dict, tool: str,
            dpi=dpi if modo == "pagina" else None, tipo=r.get("tipo"),
            versao=r.get("versao"), encoding_por=enc.get("por"), invalidos=enc.get("invalidos"),
            bytes_total=r.get("bytes_total"), classe_erro=classe,
+           exit_code=r.get("exit_code"),
            erro=(r.get("erro") or r.get("motivo")) if classe else None,
+           dur_ms=_dur_ms(),
            **quem, **_campos_poda(r))
     return _leitura.enxuga_releitura(r)
 
@@ -2196,31 +2240,37 @@ def ler_arquivo(caminho: str = "", linhas: str = "", modo: str = "texto",
     quando o cabeçalho diz NÃO JULGADO. `inteiro=true`: reenvia a página que a porta tinha
     por já servida.
     Diretório devolve a listagem (`termo` filtra entradas pelo nome, sem diferenciar
-    maiúsculas; só vale em diretório); caminho que não existe devolve `existe_ate`,
-    `la_tem` e `parecidos`.
+    maiúsculas; só vale em diretório); caminho que não existe devolve `existe_ate` e
+    `la_tem`.
     Formatos do acervo (PDF, EPUB, DOCX, PPTX, XLSX, MOBI, HTML, MHTML, imagem, ZIP) se leem
     pelo leitor do formato: `paginas="a-b"` escolhe a unidade do original (página, item do
     spine, slide, planilha), cada uma aberta por `<!-- p. N -->`; `modo="pagina"` devolve a
     página como imagem PNG (`dpi` até 300; obrigatório em PDF escaneado, aviso SEM CAMADA DE
     TEXTO); `modo="visivel"` é o texto visível de HTML e MHTML; `caminho!membro` lê um membro
     de ZIP, EPUB ou OOXML. Só binário fora dessa tabela recusa (`sem_leitor`).
-    `caminhos`: várias leituras num giro (cada item um caminho ou {"caminho", "linhas"}); o
-    teto do lote conta bytes servidos (a imagem, pelos bytes do PNG), e o item que não coube
-    volta `omitido_por_teto`.
+    `caminhos`: várias leituras num giro (cada item um caminho ou objeto com `caminho` e
+    seletores opcionais); o teto do lote conta bytes servidos (a imagem, pelos bytes do PNG),
+    e o item que não coube volta `omitido_por_teto`.
     """
     ident = _sessao_resolve(sessao_id)
     _carimba_turno(ident, turno, turno_texto, turno_fonte)
     comuns = {"linhas": linhas, "modo": modo, "max_bytes": max_bytes, "versao": versao,
               "offset": offset, "encoding": encoding, "inteiro": inteiro, "paginas": paginas,
               "dpi": dpi, "termo": termo}
+    if isinstance(caminhos, str):
+        cura = f'ler_arquivo(caminhos=[{json.dumps(caminhos, ensure_ascii=False)}])'
+        return _envelope_erro(2, "parâmetro `caminhos` exige lista, não texto escalar",
+                              cura, erro="caminhos deve ser lista", cura=cura)
     if caminhos and PF_TOOLS_LOTE:
         lote_id = uuid.uuid4().hex[:8]
 
         def _item(i, it):
             if isinstance(it, dict):
-                return _le_um_arquivo(str(it.get("caminho") or ""),
-                                      {**comuns, "linhas": it.get("linhas") or linhas,
-                                       "paginas": it.get("paginas") or paginas},
+                item_args = dict(comuns)
+                for chave in _SELETORES_ITEM:
+                    if chave in it and it[chave] is not None:
+                        item_args[chave] = it[chave]
+                return _le_um_arquivo(str(it.get("caminho") or ""), item_args,
                                       ident, "ler_arquivo", lote_id, i)
             return _le_um_arquivo(str(it), comuns, ident, "ler_arquivo", lote_id, i)
         return _com_imagens(_leitura.lote(caminhos, _item, CAP))
@@ -2249,17 +2299,23 @@ def _com_imagens(r):
     return [r, *imagens] if imagens else r
 
 
-def _separa_membro(caminho: str) -> tuple[str, str | None]:
+def _separa_membro(
+    caminho: str,
+    bancada: Path | None = None,
+    cadeira: str = "",
+    sessao_id: str | None = None,
+) -> tuple[str, str | None]:
     """`caminho!membro` (spec ler-arquivo §7.4): o membro de um ZIP, EPUB ou OOXML. Só separa
     quando o caminho inteiro não existe e a parte antes do primeiro `!` é arquivo."""
     if "!" not in caminho:
         return caminho, None
-    p_todo, erro = _resolve_relativo(caminho)
-    if not erro and p_todo.exists():
+    b = _bancada() if bancada is None else bancada
+    p_todo, erro, _ = _resolve_leitura_relativo(caminho, b, cadeira, sessao_id)
+    if not erro and p_todo is not None and p_todo.exists():
         return caminho, None
     arquivo, _sep, membro = caminho.partition("!")
-    p, erro = _resolve_relativo(arquivo)
-    if not erro and membro and p.is_file():
+    p, erro, _ = _resolve_leitura_relativo(arquivo, b, cadeira, sessao_id)
+    if not erro and membro and p is not None and p.is_file():
         return arquivo, membro
     return caminho, None
 
@@ -4183,6 +4239,24 @@ def _esquema_plano(esquema: dict) -> dict:
                         "inteiro": {"type": "boolean"},
                     },
                     "required": ["verbo"],
+                }
+            elif k == "caminhos" and isinstance(p, dict) and p.get("type") == "array":
+                p["items"] = {
+                    "type": "object",
+                    "properties": {
+                        "caminho": {"type": "string"},
+                        "linhas": {"type": "string"},
+                        "paginas": {"type": "string"},
+                        "modo": {"type": "string"},
+                        "offset": {"type": "integer"},
+                        "versao": {"type": "string"},
+                        "encoding": {"type": "string"},
+                        "termo": {"type": "string"},
+                        "dpi": {"type": "integer"},
+                        "max_bytes": {"type": "integer"},
+                        "inteiro": {"type": "boolean"},
+                    },
+                    "required": ["caminho"],
                 }
             props[k] = p
         out["properties"] = props
