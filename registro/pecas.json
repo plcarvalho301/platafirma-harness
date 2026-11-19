@@ -59,6 +59,18 @@
     "teto_s": 120,
     "motivo": "C4254: o verbo ontologia (ler, listar, criar, trocar, recompor, ensaiar, renomear, apagar, gerar) da casa nova em sessão de ensaio, cliente do serviço da Olaria na stack olaria"
   },
+  "ontologia-servida": {
+    "dono": "ti",
+    "origem": "release",
+    "dir": "casa-espelho",
+    "cwd": "outros_repos/harness/bin",
+    "modulo": "_olaria",
+    "pythonpath": ["outros_repos/harness/bin"],
+    "python": "rag",
+    "ambiente": "olaria",
+    "teto_s": 120,
+    "motivo": "DT 877: o verbo ontologia lido da release do espelho no ar, para quem chama sem cadeira (o pf vault do dono). Sem cadeira, a peça ontologia caía no clone base do espelho na conta, que ninguém atualiza, e o vault lia uma casa velha"
+  },
   "conferir": {
     "dono": "ti",
     "origem": "espelho",
