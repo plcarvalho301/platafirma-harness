@@ -32,6 +32,7 @@ USO = """uso: acervo ler biblioteca arquivo <uuid|prefixo-de-uuid|titulo> [--des
   <obra>            uuid inteiro, prefixo único de uuid (6+ hex) ou trecho do título (sem acento sensível)
   --destino <pasta> grava o arquivo original lá (criada se faltar); só dentro da bancada declarada ou de
                     <instância>/var/tmp/<ordem_id>; fora disso recusa com exit 4. Sem a flag, grava no
+                    rascunho da fita (<instância>/var/tmp/<ordem_id>, quando PF_ORDEM_ID está ativa) ou no
                     diretório corrente.
 retorno: uma linha por arquivo gravado: gravado <caminho> sha256 <hex> (<n> bytes)
 exit: 0 gravou · 1 nada encontrado · 2 uso ou termo ambíguo · 3 catálogo/store fora ·
@@ -178,6 +179,14 @@ def escolher(candidatos: list, termo: str) -> dict:
 
 # --- o destino ----------------------------------------------------------------------------------
 
+def _rascunho_da_fita() -> Path | None:
+    """Pasta de rascunho da fita (<instancia>/var/tmp/<ordem_id>) quando PF_ORDEM_ID está ativa."""
+    ordem = os.environ.get("PF_ORDEM_ID", "").strip()
+    if ordem and ordem != "-" and "/" not in ordem:
+        return Path(os.path.realpath(instancia() / "var" / "tmp" / ordem))
+    return None
+
+
 def raizes_permitidas() -> list:
     """Bancada declarada e <instancia>/var/tmp/<ordem_id> da ordem em curso. Resolvidas (link simbolico)."""
     raizes = []
@@ -185,9 +194,9 @@ def raizes_permitidas() -> list:
         raizes.append(("a bancada declarada", Path(os.path.realpath(bancada()))))
     except BancadaNaoDeclarada:
         pass
-    ordem = os.environ.get("PF_ORDEM_ID", "").strip()
-    if ordem and ordem != "-" and "/" not in ordem:
-        raizes.append(("var/tmp/<ordem_id>", Path(os.path.realpath(instancia() / "var" / "tmp" / ordem))))
+    rascunho = _rascunho_da_fita()
+    if rascunho is not None:
+        raizes.append(("var/tmp/<ordem_id>", rascunho))
     return raizes
 
 
@@ -262,8 +271,10 @@ def main(argv: list) -> int:
     try:
         if args.destino is not None:
             pasta = conferir_destino(args.destino)     # antes de tocar no catalogo: recusa barato
+        elif args.pasta_legada is not None:
+            pasta = Path(os.path.abspath(args.pasta_legada))
         else:
-            pasta = Path(os.path.abspath(args.pasta_legada or "."))   # diz onde gravou, caminho inteiro
+            pasta = _rascunho_da_fita() or Path(os.path.abspath("."))
         obra = escolher(resolver(args.obra), args.obra)
         print(gravar(obra, pasta))
         return 0
