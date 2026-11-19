@@ -81,6 +81,7 @@ class Bancada:
         self.env["PF_RELEASE_RAIZ"] = str(tmp_path / "opt")
         self.env["PLATAFIRMA_PYTHON"] = python_exe
         self.env["PF_CADEIRA"] = "cadeira"
+        self.env["UV_OFFLINE"] = "1"
         self.env.pop("PF_SESSAO", None)
 
     def detectar(self, *args: str, timeout: int = 90) -> subprocess.CompletedProcess:
