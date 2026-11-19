@@ -79,6 +79,7 @@ def mundo(tmp_path, monkeypatch):
     m = Mundo()
     m.mod, m.sqls, m.baixados = mod, sqls, baixados
     m.bancada, m.instancia, m.cwd = bancada, instancia, cwd
+    m.rascunho = instancia / "var" / "tmp" / "o20261003T120000-abc123"
     return m
 
 
@@ -107,14 +108,14 @@ def test_uuid_inteiro_resolve_e_baixa(mundo, capsys):
     rc, out, err = _roda(mundo, capsys, UUID_C)
     assert rc == 0, err
     assert mundo.baixados == [("acervo", SHA, mundo.baixados[0][2])]
-    assert (mundo.cwd / "people-ai-guidebook.pdf").read_bytes() == CONTEUDO
+    assert (mundo.rascunho / "people-ai-guidebook.pdf").read_bytes() == CONTEUDO
     assert any(f"id::text like '{UUID_C}%'" in s for s in mundo.sqls)
 
 
 def test_prefixo_unico_de_uuid_resolve(mundo, capsys):
     rc, out, err = _roda(mundo, capsys, "9f3c2a10")
     assert rc == 0, err
-    assert (mundo.cwd / "people-ai-guidebook.pdf").is_file()
+    assert (mundo.rascunho / "people-ai-guidebook.pdf").is_file()
 
 
 def test_prefixo_ambiguo_recusa_exit_2_listando_e_nao_grava(mundo, capsys):
@@ -133,7 +134,7 @@ def test_prefixo_sem_obra_cai_no_titulo_e_depois_diz_nada_encontrado(mundo, caps
 def test_titulo_continua_resolvendo(mundo, capsys):
     rc, out, err = _roda(mundo, capsys, "Bringhurst")
     assert rc == 0, err
-    assert (mundo.cwd / "bringhurst.pdf").read_bytes() == CONTEUDO
+    assert (mundo.rascunho / "bringhurst.pdf").read_bytes() == CONTEUDO
 
 
 def test_aspas_no_titulo_nao_quebram_o_sql(mundo, capsys):
@@ -201,9 +202,19 @@ def test_nome_de_arquivo_com_caminho_grava_so_o_nome_dentro_do_destino(mundo, ca
     assert (alvo / "fuga.pdf").is_file() and not (mundo.bancada / "fuga.pdf").exists()
 
 
-# --- (c) sem --destino: o de sempre, mas o retorno diz onde gravou ------------------------------
+# --- (c) sem --destino: rascunho da fita com PF_ORDEM_ID; sem ela, diretório corrente (DT 784) --
 
-def test_sem_destino_grava_no_diretorio_corrente_e_diz_onde_e_o_sha256(mundo, capsys):
+def test_sem_destino_grava_no_rascunho_da_fita_e_diz_onde_e_o_sha256(mundo, capsys):
+    rc, out, err = _roda(mundo, capsys, UUID_A)
+    assert rc == 0, err
+    gravado = mundo.rascunho / "bringhurst.pdf"
+    assert gravado.read_bytes() == CONTEUDO
+    assert not (mundo.cwd / "bringhurst.pdf").exists()
+    assert str(gravado) in out and SHA in out
+
+
+def test_sem_destino_e_sem_ordem_grava_no_diretorio_corrente(mundo, capsys, monkeypatch):
+    monkeypatch.delenv("PF_ORDEM_ID", raising=False)
     rc, out, err = _roda(mundo, capsys, UUID_A)
     assert rc == 0, err
     gravado = mundo.cwd / "bringhurst.pdf"
