@@ -541,8 +541,9 @@ def test_cadeiras_recepcao_deriva_presenca_das_pecas(cliente):
 def test_cadeira_tem_seletor_de_documento_e_le_persona_por_default(cliente):
     corpo = cliente.get("/cadeira/TI").text
     assert 'class="docs"' in corpo
-    for rotulo in ("Persona", "GERAL", "Org", "Mesa", "Cadernos", "Caixa"):
+    for rotulo in ("Persona", "GERAL", "Org", "Mesa", "Caixa"):
         assert f">{rotulo}<" in corpo
+    assert ">Cadernos<" not in corpo
     # default: persona servida, com carimbo de procedencia
     assert "Oswaldo Aranha" in corpo
     assert "abertura/ti/persona.md" in corpo
@@ -693,42 +694,11 @@ def test_render_mesa_vazia_mostra_o_texto_do_verbo():
     from harness_controle.render import render_mesa
     assert "slot dados: vazio" in render_mesa("slot dados: vazio")
 
-CADERNOS_REAL = (
-    "devops           9 vigentes · 953/1500 tk · última escrita há 21 h · 2 aresta(s) acumulando\n"
-    "  front-end        1 vigente · 152/1500 tk · 1 aresta(s) acumulando\n"
-    "  (corpo sob demanda: `mesa caderno <chapeu>`)\n\n"
-    "===== caderno engenharia/front-end · 1 vigente · 152/1500 tokens =====\n"
-    "## lição\n- [c77] Na tela do rastreador, o estado calculado do pai.\n"
-    "## aresta (acumula para a curadoria)\n- [c78] termo:ciclo → casa:guia/desenvolvimento"
-)
-
-def test_render_cadernos_indice_em_linhas_com_chips_e_corpo_por_categoria():
-    from harness_controle.render import render_cadernos
-    saida = render_cadernos(CADERNOS_REAL)
-    assert saida.count("<li><span class=\"cad-chapeu\">") == 2
-    assert '<span class="chip caveat">2 aresta(s) acumulando</span>' in saida
-    assert '<span class="chip calmo">9 vigentes</span>' in saida
-    assert "<h2>lição</h2>" in saida
-    assert '<span class="ref mono">c77</span>' in saida
-    assert "<code>mesa caderno &lt;chapeu&gt;</code>" in saida
-
-def test_render_cadernos_filtra_pelo_chapeu():
-    from harness_controle.render import render_cadernos
-    saida = render_cadernos(CADERNOS_REAL, "front-end")
-    assert "devops" not in saida
-    assert "c77" in saida
-    assert "Nenhum caderno indexado" in render_cadernos(CADERNOS_REAL, "nao-existe")
-
 def test_cadeira_seletor_de_chapeu_conta_itens_da_mesa_e_segue_o_documento(cliente):
     corpo = cliente.get("/cadeira/TI?doc=mesa").text
     assert 'class="docs chapeus"' in corpo
     assert 'chapeu=design"' in corpo and '<span class="n num">1</span>' in corpo
     assert '<span class="n num">0</span>' in corpo         # discovery: chapeu sem item, visivel
-    nos_cadernos = cliente.get("/cadeira/TI?doc=cadernos").text
-    assert "doc=cadernos&amp;chapeu=design" in nos_cadernos
-    assert "construcao" in nos_cadernos and "release" in nos_cadernos
-    filtrado = cliente.get("/cadeira/TI?doc=cadernos&chapeu=design").text
-    assert "Nenhum caderno indexado" in filtrado
 
 # --- o texto do chapeu em si: clicar no chapeu abre o chapeu, nao so a mesa dele ---
 
@@ -758,7 +728,7 @@ def test_aba_chapeu_esta_sempre_la_e_o_chapeu_escolhido_segue_nas_abas(cliente):
     com = cliente.get("/cadeira/TI?doc=chapeu&chapeu=design").text
     abas = com.split('class="docs chapeus"')[0]
     assert ">Chapéu<" in abas
-    assert "?doc=mesa&amp;chapeu=design" in abas and "?doc=cadernos&amp;chapeu=design" in abas
+    assert "?doc=mesa&amp;chapeu=design" in abas
     assert "?doc=persona" in abas and "?doc=persona&amp;chapeu" not in abas
 
 def test_chapeu_sem_texto_lido_ou_indisponivel_se_declara(cliente):

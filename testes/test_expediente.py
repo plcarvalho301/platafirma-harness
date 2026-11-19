@@ -261,13 +261,13 @@ def test_catalogo_na_transicao_nunca_ausente(raiz_hermetica):
     assert "transição" in proc_c.stdout
 
 
-def test_catalogo_lista_as_7(raiz_hermetica):
-    """Spec §7: catalogo lista as 7 peças com campos conformes."""
+def test_catalogo_lista_as_6(raiz_hermetica):
+    """Spec §7 (#4377): catalogo lista as 6 peças (cadernos saiu)."""
     proc = _run_expediente(["catalogo", "--json"], raiz_hermetica)
     assert proc.returncode == 0
     dados = json.loads(proc.stdout)
     assert isinstance(dados, list)
-    assert len(dados) == 7
+    assert len(dados) == 6
 
     pecas_esperadas = [
         "conduta",
@@ -276,7 +276,6 @@ def test_catalogo_lista_as_7(raiz_hermetica):
         "mesa",
         "acervo-consultado",
         "chapeu",
-        "cadernos",
     ]
     pecas_obtidas = [p["peca"] for p in dados]
     assert pecas_obtidas == pecas_esperadas

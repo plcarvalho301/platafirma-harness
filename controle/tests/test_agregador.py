@@ -286,9 +286,10 @@ def test_render_cadeira_seletor_de_documento_e_chapeu():
 
     html = render_cadeira(estado, slug="design")
     assert 'class="docs"' in html
-    for rotulo in ("Persona", "GERAL", "Org", "Mesa", "Cadernos"):
+    for rotulo in ("Persona", "GERAL", "Org", "Mesa"):
         assert f">{rotulo}<" in html
     assert ">Ofício<" not in html            # oficio saiu do seletor
+    assert ">Cadernos<" not in html          # cadernos sairam do seletor (#4377)
     assert "onchange" not in html             # tudo por link, sem JS
     # lista completa de chapeus, inclusive g3 (sem item de mesa)
     for c in ("g1", "g2", "g3"):
@@ -378,53 +379,8 @@ def test_sonda_cadeiras_le_via_expediente_montar():
     assert argv == ["expediente", "montar", "produto", "--sem-acervo", "--json"]
     assert g.fabrica_env("produto")["PF_CADEIRA"] == "produto"
 
-def test_sonda_cadernos_corpo_le_o_caderno_como_a_cadeira_dona():
-    """dt #2856 258: o corpo do caderno de cada chapeu vem de `mesa caderno <chapeu>`, em modo
-    texto, lido como a cadeira dona (o slot do caderno e a PF_CADEIRA); o item e `<cadeira>/<chapeu>`."""
+def test_sonda_cadernos_corpo_saiu_do_agregador():
     from harness_controle.agregador import SONDAS_GRUPO
-    g = next(s for s in SONDAS_GRUPO if s.nome == "cadernos_corpo")
-    assert g.texto is True and g.chave_item == "chapeu"
-    assert g.fabrica_argv("engenharia/front-end") == ["mesa", "caderno", "front-end"]
-    assert g.fabrica_env("engenharia/front-end")["PF_CADEIRA"] == "engenharia"
-
-def _estado_cadernos(corpos):
-    return {"cadeiras": {"itens": [{
-        "cadeira": "engenharia", "estado": "ok", "dados": {
-            "nome_canonico": "engenharia", "chapeus": ["devops", "front-end"],
-            "pecas": [{"peca": "cadernos", "frescor": "fresco", "sha": "c1", "tokens": 9,
-                       "conteudo": "devops           1 vigente · 10/1500 tk\n"
-                                   "  front-end        1 vigente · 12/1500 tk\n"
-                                   "  (corpo sob demanda: `mesa caderno <chapeu>`)"}],
-        }}]},
-        "cadernos_corpo": {"estado": "ok", "itens": corpos}}
-
-def test_aba_cadernos_mostra_as_entradas_de_cada_chapeu():
-    from harness_controle.render import render_cadeira
-    estado = _estado_cadernos([
-        {"chapeu": "engenharia/front-end", "estado": "ok", "dados": {"texto": (
-            "===== caderno engenharia/front-end · 1 vigente · 12/1500 tokens =====\n"
-            "## lição\n- [c77] Reler o ancestral antes de redesenhar. (caso: 3232) · a revisar")}},
-        {"chapeu": "engenharia/devops", "estado": "ok", "dados": {"texto": (
-            "===== caderno engenharia/devops · 1 vigente · 10/1500 tokens =====\n"
-            "## premissa\n- [c9] O portao leva 300 s. (vale até 01/11/2026)")}},
-    ])
-    todos = render_cadeira(estado, slug="engenharia", doc="cadernos")
-    assert "Reler o ancestral antes de redesenhar" in todos
-    assert "O portao leva 300 s" in todos
-    assert "a revisar" in todos
-    so_front = render_cadeira(estado, slug="engenharia", doc="cadernos", chapeu="front-end")
-    assert "Reler o ancestral" in so_front
-    assert "O portao leva 300 s" not in so_front
-
-def test_aba_cadernos_declara_chapeu_sem_leitura_ou_indisponivel():
-    """Corpo que nao chegou se declara; nunca vira caderno vazio (arq:0041)."""
-    from harness_controle.render import render_cadeira
-    estado = _estado_cadernos([
-        {"chapeu": "engenharia/devops", "estado": "indisponivel",
-         "motivo": "timeout apos 15s", "dados": None},
-    ])
-    html = render_cadeira(estado, slug="engenharia", doc="cadernos")
-    assert "indisponível: timeout apos 15s" in html      # devops
-    assert "sem leitura" in html                          # front-end: o agregador nao leu
+    assert all(s.nome != "cadernos_corpo" for s in SONDAS_GRUPO)
 
 

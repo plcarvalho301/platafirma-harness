@@ -148,27 +148,7 @@ class AdaptadorMesa(Adaptador):
         data, mais o digest das chaves de prosa. Metade muda, carimbo muda. Metade caída vira
         `?`, e o carimbo diz que não sabe em vez de fingir que não mudou.
         """
-        return f"i:{self._carimbo_item()} c:{self._carimbo_caderno()} p:{self._carimbo_prosa()}"
-
-    def _carimbo_caderno(self) -> str:
-        """Todo ato que nasce, marca ou muda uma entrada grava evento (0097), então o maior id de
-        evento anda com o caderno. A data entra porque o servido muda sem evento: a premissa
-        vencida sai no dia seguinte ao «vale até», e a lição passa a «a revisar» aos 90 dias."""
-        con = self.pg()
-        if con is None:
-            return "?"
-        try:
-            with con.cursor() as cur:
-                cur.execute(
-                    "SELECT COALESCE(max(v.id), 0), count(*) FROM sessao.caderno_evento v "
-                    "JOIN sessao.caderno_entrada e ON e.id = v.entrada_id WHERE "
-                    + _DA_CADEIRA.replace("cadeira", "e.cadeira"),
-                    [self.sufixo],
-                )
-                maior, quantos = cur.fetchone()
-            return f"{maior}/{quantos}@{date.today().isoformat()}"
-        except Exception:  # noqa: BLE001 — metade muda declara `?`, não derruba a fonte
-            return "?"
+        return f"i:{self._carimbo_item()} p:{self._carimbo_prosa()}"
 
     def _carimbo_item(self) -> str:
         con = self.pg()
@@ -198,8 +178,7 @@ class AdaptadorMesa(Adaptador):
 
     def _busca(self, alvo: str, filtros: dict | None, k: int, texto: str) -> list[Item]:
         return (self._prosa_filtrada(alvo, filtros, texto)
-                + self._itens_de_mesa(alvo, filtros, texto)[0]
-                + self._entradas_de_caderno(alvo, filtros, texto)[0])
+                + self._itens_de_mesa(alvo, filtros, texto)[0])
 
     def busca(self, alvo: str = "", filtros: dict | None = None, k: int = 8,
               texto: str = "secao") -> Resultado:
@@ -207,70 +186,20 @@ class AdaptadorMesa(Adaptador):
             raise FonteIndisponivel(Causa.SEM_CONCESSAO, "mesa é privada da cadeira (arq:0041)")
         prosa = self._prosa_filtrada(alvo, filtros, texto)
         itens_mesa, item_mudo = self._itens_de_mesa(alvo, filtros, texto)
-        caderno, caderno_mudo = self._entradas_de_caderno(alvo, filtros, texto)
-        itens = (prosa + itens_mesa + caderno)[:k]
+        itens = (prosa + itens_mesa)[:k]
         return Resultado(
             linha=LinhaFonte(
                 fonte=self.fonte,
                 cobertura=self.cobertura_com_item() if itens else Cobertura.VAZIA,
                 carimbo=self._carimbo(),
-                causa=Causa.SEM_ROTA if item_mudo or caderno_mudo else None,
+                causa=Causa.SEM_ROTA if item_mudo else None,
             ),
             itens=itens,
         )
 
     def _prosa_filtrada(self, alvo: str, filtros: dict | None, texto: str) -> list[Item]:
-        """A prosa não tem categoria: quem pede só o caderno não a recebe."""
+        """A prosa não tem categoria."""
         return [] if (filtros or {}).get("categoria") else self._prosa(alvo, texto)
-
-    def _entradas_de_caderno(self, alvo: str, filtros: dict | None,
-                             texto: str) -> tuple[list[Item], bool]:
-        """(itens, metade_muda) do caderno no banco: só o que `mesa caderno` serve."""
-        filtros = filtros or {}
-        if filtros.get("ato"):
-            return [], False  # filtro de item de mesa: a entrada de caderno não tem ato
-        con = self.pg()
-        if con is None:
-            return [], True
-        sql = ("SELECT id, chapeu, categoria, texto, caso, dito_em, dito_onde, vale_ate, ate_que, "
-               f"confirmada_em FROM sessao.caderno_entrada WHERE {_DA_CADEIRA} "
-               "AND estado = 'vigente' AND categoria <> 'aresta' AND NOT (categoria = 'premissa' "
-               f"AND vale_ate IS NOT NULL AND vale_ate < {_HOJE})")
-        args: list = [self.sufixo]
-        if alvo:
-            sql += " AND chapeu = %s"
-            args.append(alvo)
-        categorias = filtros.get("categoria")
-        if categorias:
-            if isinstance(categorias, str):
-                categorias = [c.strip() for c in categorias.split(",") if c.strip()]
-            sql += " AND categoria = ANY(%s)"
-            args.append(list(categorias))
-        sql += " ORDER BY chapeu, id"
-        try:
-            with con.cursor() as cur:
-                cur.execute(sql, args)
-                linhas = cur.fetchall()
-        except Exception:  # noqa: BLE001 — metade muda vira `causa` na linha
-            return [], True
-        hoje = date.today()
-        itens = []
-        for id_, chapeu, cat, corpo, caso, dito_em, dito_onde, vale_ate, ate_que, conf in linhas:
-            proc = Procedencia(
-                fonte=Fonte.MESA,
-                chave=f"mem:{self.sufixo}:{chapeu}#c{id_}",
-                versao=Versao(tipo=VersaoTipo.SEQ, valor=str(id_)),
-            )
-            cabeca = f"c{id_} [{chapeu}] {_ROTULO.get(cat, cat)}"
-            if texto == "nenhum":
-                itens.append(Item(procedencia=proc, ref=cabeca))
-                continue
-            linha = f"{cabeca}: {corpo} ({_campo(cat, caso, dito_em, dito_onde, vale_ate, ate_que)})"
-            conf_dia = conf.date() if isinstance(conf, datetime) else conf
-            if cat == "licao" and conf_dia and (hoje - conf_dia).days > _PRAZO_LICAO:
-                linha += f" · a revisar: não confirmada desde {_br(conf_dia)}"
-            itens.append(Item(procedencia=proc, conteudo=linha))
-        return itens, False
 
     def _prosa(self, alvo: str, texto: str) -> list[Item]:
         rc = self.cliente()

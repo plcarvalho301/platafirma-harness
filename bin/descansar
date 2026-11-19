@@ -201,43 +201,12 @@ def estado_memoria(curto):
             linhas.append(f"  {itens} item(ns) vivo(s); o feito sai por `mesa fez <n>`")
     if erro:
         linhas.append(f"  (aviso: {erro} — sem conferencia contra o remit)")
-    linhas += caderno_do_banco(declarados)
     return linhas, orfaos
-
-
-# ------------------------------------------------------------------ o caderno no banco (#3217)
-RE_INDICE = re.compile(r"^  ([a-z0-9][a-z0-9-]*)\s+\d+ vigentes?\b")
 
 
 def _bin():
     """Verbos irmaos: bin/ da propria release. PF_BIN so aponta outro diretorio (teste com stub)."""
     return os.environ.get("PF_BIN") or os.path.join(HARNESS_DIR, "bin")
-
-
-def caderno_do_banco(declarados):
-    """O indice do caderno pelo verbo, o mesmo da abertura (`mesa caderno`): por chapeu,
-    vigentes, teto, idade real, a revisar, candidatas, legado a triar. O chapeu fora da
-    persona sai marcado; banco mudo sai declarado, nunca como caderno vazio (arq:0041)."""
-    try:
-        p = subprocess.run([os.path.join(_bin(), "mesa"), "caderno"], capture_output=True,
-                           text=True, timeout=30)
-    except (OSError, subprocess.SubprocessError) as e:
-        return [f"  caderno: NAO MEDIDO — {type(e).__name__}: {e}"]
-    saida = (p.stdout or "").rstrip("\n").splitlines()
-    if p.returncode != 0 or not saida:
-        motivo = (p.stdout or p.stderr or "").strip().splitlines()
-        return [f"  caderno: {motivo[0] if motivo else 'exit ' + str(p.returncode)}"]
-    linhas = []
-    for linha in saida:
-        m = RE_INDICE.match(linha)
-        if not m:
-            linhas.append(f"  {linha.strip()}")
-            continue
-        marca = ""
-        if declarados is not None and m.group(1) not in declarados:
-            marca = "  ÓRFÃO — chapéu fora da persona: retire as entradas (arq:0120 §8.5)"
-        linhas.append(f"  caderno/{linha.strip()}{marca}")
-    return linhas
 
 
 # ------------------------------------------------------------------ puxado de fora (#3217)

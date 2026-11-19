@@ -126,12 +126,11 @@ def test_sem_chapeu_declarado_a_abertura_nao_roteia_nem_consulta_o_acervo(raiz_h
     d = json.loads(proc.stdout)
     assert not log_motor.exists()
     assert "chapeu" not in d and "roteador" not in d
-    assert [p["peca"] for p in d["pecas"]] == ["persona", "conduta", "alias-cadeiras", "mesa", "cadernos"]
+    assert [p["peca"] for p in d["pecas"]] == ["persona", "conduta", "alias-cadeiras", "mesa"]
 
 
 def test_com_chapeu_declarado_a_abertura_segue_como_sempre_foi(raiz_hermetica):  # noqa: F811
-    """Ordem do dono (21/10/2026): o chapéu declarado, como em `(cadeira, chapéu)`, traz o chapéu, a mesa e
-    o caderno dele e a consulta ao acervo."""
+    """Ordem do dono (21/10/2026, #4377): o chapéu declarado traz o chapéu, a mesa dele e a consulta ao acervo."""
     proc = _run_expediente(
         ["montar", "--chapeu", "contexto", "--json"], raiz_hermetica, stdin_data="pergunta com busca",
         env_extra={"PF_CADEIRA": "ia", "PF_BIN": str(raiz_hermetica / "bin")},
@@ -140,9 +139,10 @@ def test_com_chapeu_declarado_a_abertura_segue_como_sempre_foi(raiz_hermetica): 
     d = json.loads(proc.stdout)
     assert d["chapeu"] == "contexto" and d["roteador"]["via"] == "comando"
     assert [p["peca"] for p in d["pecas"]] == ["persona", "chapeu", "conduta", "alias-cadeiras", "mesa",
-                                               "acervo-consultado", "cadernos"]
+                                               "acervo-consultado"]
     refs = {p["peca"]: p["ref"] for p in d["pecas"]}
-    assert refs["mesa"] == "verbo:mesa ver contexto" and refs["cadernos"] == "verbo:mesa caderno --chapeu contexto"
+    assert refs["mesa"] == "verbo:mesa ver contexto"
+    assert "cadernos" not in refs
 
 
 def test_texto_so_traz_a_linha_de_chapeu_e_roteador_com_chapeu_declarado(raiz_hermetica):  # noqa: F811
