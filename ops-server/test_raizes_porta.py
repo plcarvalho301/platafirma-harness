@@ -753,3 +753,77 @@ def test_ler_arquivo_relativo_prefere_worktree_da_cadeira_e_avisa_copia_atras(ba
     r_clone = s.ler_arquivo(caminho="platafirma-casa-espelho/doc.md", sessao_id="sid-dt772-b")
     assert r_clone["conteudo"] == "velho\n"
     assert r_clone["cabecalho"].startswith("CÓPIA ATRÁS DE origin/main (3 commit(s)) · ")
+
+
+def test_write_file_patch_recusa_sem_hunk_vazio_ou_noop_e_aplica_hunk_subcontado(bancada, sem_pep):
+    """DT-823: patch sem hunk, com hunk malformado ou sem alteracao recusa em vez de devolver ok:true."""
+    base = bancada / "wt" / "platafirma-core" / "fabrica"
+    alvo = base / "doc.md"
+    alvo.write_text("um\ndois\ntres\n", encoding="utf-8")
+
+    # 1. Diff sem hunk @@ valido
+    r_sem = s.write_file(path="wt/platafirma-core/fabrica", patch="--- a/doc.md\n+++ b/doc.md\n@@ invalido @@\n-dois\n+DOIS\n")
+    assert r_sem["ok"] is False and "nenhum hunk" in r_sem["resultados"][0]["motivo"], r_sem
+    assert alvo.read_text("utf-8") == "um\ndois\ntres\n"
+
+    # 2. Hunk so com linhas de contexto (no-op)
+    r_noop = s.write_file(path="wt/platafirma-core/fabrica", patch="--- a/doc.md\n+++ b/doc.md\n@@ -1,2 +1,2 @@\n um\n dois\n")
+    assert r_noop["ok"] is False and "nao altera" in r_noop["resultados"][0]["motivo"], r_noop
+
+    # 3. Hunk com corpo malformado (sem prefixo ' ', '-', '+')
+    r_mal = s.write_file(path="wt/platafirma-core/fabrica", patch="--- a/doc.md\n+++ b/doc.md\n@@ -1,2 +1,2 @@\nsem_prefixo\n")
+    assert r_mal["ok"] is False and "malformado" in r_mal["resultados"][0]["motivo"], r_mal
+
+    # 4. Cabecalho @@ subestimando old_count/new_count ainda aplica as linhas -/+ seguintes
+    r_sub = s.write_file(
+        path="wt/platafirma-core/fabrica",
+        patch="--- a/doc.md\n+++ b/doc.md\n@@ -1,1 +1,1 @@\n um\n-dois\n+DOIS\n tres\n",
+    )
+    assert r_sub["ok"] is True, r_sub
+    assert alvo.read_text("utf-8") == "um\nDOIS\ntres\n"
+
+
+def test_write_file_relativo_resolve_para_bancada_da_cadeira_e_recusa_clone_compartilhado(bancada, sem_pep, monkeypatch):
+    """DT-912: `<repo>/<arq>` com cadeira ativa grava em `wt/<repo>/<cadeira>/main` (ou wt unico)
+    e recusa cair no clone compartilhado `<bancada>/<repo>/`."""
+    clone = bancada / "platafirma-casa-espelho"
+    clone.mkdir(parents=True)
+    (clone / "doc.md").write_text("clone\n", encoding="utf-8")
+    wt_main = bancada / "wt" / "platafirma-casa-espelho" / "inteligencia" / "main"
+    wt_main.mkdir(parents=True)
+
+    monkeypatch.setattr(s, "_sessao_resolve", lambda sid: {
+        "sessao_id": sid, "ordem_id": "o-dt912", "cadeira": "inteligencia",
+        "sujeito": "", "origem_sessao": "",
+    })
+    r_wt = s.write_file(path="platafirma-casa-espelho/doc.md", content="na bancada\n", sessao_id="sid-dt912")
+    assert r_wt.get("ok") is True, r_wt
+    assert Path(r_wt["path"]) == wt_main / "doc.md"
+    assert (wt_main / "doc.md").read_text("utf-8") == "na bancada\n"
+    assert (clone / "doc.md").read_text("utf-8") == "clone\n"
+
+    # Cadeira sem worktree aberto: recusa gravar no clone compartilhado
+    monkeypatch.setattr(s, "_sessao_resolve", lambda sid: {
+        "sessao_id": sid, "ordem_id": "o-dt912-b", "cadeira": "produto",
+        "sujeito": "", "origem_sessao": "",
+    })
+    r_rec = s.write_file(path="platafirma-casa-espelho/doc.md", content="alheio\n", sessao_id="sid-dt912-b")
+    assert r_rec.get("recusado") is True and "clone compartilhado" in r_rec["motivo"], r_rec
+    assert (clone / "doc.md").read_text("utf-8") == "clone\n"
+
+    # Cadeira com 1 worktree (sem main) resolve; com 2 worktrees recusa pedindo a chave
+    wt1 = bancada / "wt" / "platafirma-core" / "engenharia" / "dt-1"
+    wt1.mkdir(parents=True)
+    (wt1 / ".git").write_text("gitdir: x\n", encoding="utf-8")
+    monkeypatch.setattr(s, "_sessao_resolve", lambda sid: {
+        "sessao_id": sid, "ordem_id": "o-dt912-c", "cadeira": "engenharia",
+        "sujeito": "", "origem_sessao": "",
+    })
+    r_um = s.write_file(path="platafirma-core/a.md", content="um\n", sessao_id="sid-dt912-c")
+    assert r_um.get("ok") is True and Path(r_um["path"]) == wt1 / "a.md", r_um
+
+    wt2 = bancada / "wt" / "platafirma-core" / "engenharia" / "dt-2"
+    wt2.mkdir(parents=True)
+    (wt2 / ".git").write_text("gitdir: y\n", encoding="utf-8")
+    r_dois = s.write_file(path="platafirma-core/a.md", content="dois\n", sessao_id="sid-dt912-c")
+    assert r_dois.get("recusado") is True and "mais de uma bancada" in r_dois["motivo"], r_dois

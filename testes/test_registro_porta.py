@@ -304,3 +304,43 @@ def test_reconciliar_donos_atualiza_em_lote_inclusive_verbos_com_acesso_em_prosa
     assert "('tarefas', 'gestao-estrategica')" in sql
     assert "('infra', 'ti')" in sql
     assert "_interno" not in sql
+
+
+def test_reconciliar_donos_extrai_slug_principal_quando_dono_tem_prosa(tmp_path, monkeypatch):
+    """DT-911: `# dono:` com prosa (como `mesa` e `monta-sessao`) extrai so o slug principal
+    para nao violar `ferramental_verbo_dono_slug_chk` e abortar o lote de descricoes."""
+    registrar = _registrar()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "mesa").write_text(
+        "#!/usr/bin/env bash\n"
+        "# mesa — lousa\n"
+        "# capacidade: memoria\n"
+        "# dono: gestao-estrategica (a forma) · ia (montador)\n",
+        encoding="utf-8",
+    )
+    (bin_dir / "monta-sessao").write_text(
+        "#!/usr/bin/env bash\n"
+        "# monta-sessao — abre\n"
+        "# capacidade: sessao\n"
+        "# dono: ia (politica de sessao) · ti (montador)\n",
+        encoding="utf-8",
+    )
+    (bin_dir / "acervo").write_text(
+        "#!/usr/bin/env bash\n"
+        "# acervo — cuida do acervo\n"
+        "# capacidade: acervo\n"
+        "# dono: dados\n"
+        "# atos: ler (leitura, casa), listar (leitura, casa)\n",
+        encoding="utf-8",
+    )
+    enviados = []
+    monkeypatch.setattr(registrar, "BIN", str(bin_dir))
+    monkeypatch.setattr(registrar, "_psql", lambda sql, escreve=False: enviados.append(sql) or "")
+    pares = registrar.reconciliar_donos()
+    assert pares == [("acervo", "dados"), ("mesa", "gestao-estrategica"), ("monta-sessao", "ia")]
+    (sql,) = enviados
+    assert "('mesa', 'gestao-estrategica')" in sql
+    assert "('monta-sessao', 'ia')" in sql
+    assert "set descricao = v.descricao" in sql
+    assert "consultar" not in sql

@@ -2432,6 +2432,39 @@ def _clone_ausente(raiz: Path, real_pai: Path) -> str | None:
     return None
 
 
+def _resolve_escrita_relativo(pp: PurePosixPath, ident: dict) -> tuple[Path | None, str | None]:
+    """(caminho, erro). DT-912: caminho relativo `<repo>/...` com cadeira ativa resolve para
+    a bancada da cadeira (`wt/<repo>/<cadeira>/main` ou worktree unico aberto), nunca grava
+    calado no clone compartilhado `<bancada>/<repo>/`."""
+    if pp.is_absolute():
+        return Path(str(pp)), None
+    b = _bancada()
+    if b is None:
+        return None, _SEM_BANCADA
+    partes = pp.parts
+    cadeira = (ident.get("cadeira") or "").strip()
+    if cadeira and partes and partes[0] not in ("wt", "entrada", ".", ".."):
+        repo = partes[0]
+        resto = partes[1:]
+        wt_cad = b / "wt" / repo / cadeira
+        wt_main = wt_cad / "main"
+        if wt_main.is_dir():
+            return wt_main.joinpath(*resto), None
+        if wt_cad.is_dir():
+            wts = sorted(d for d in wt_cad.iterdir() if d.is_dir() and (d / ".git").exists())
+            if len(wts) == 1:
+                return wts[0].joinpath(*resto), None
+            if len(wts) > 1:
+                chaves = ", ".join(d.name for d in wts)
+                return None, (f"fora de morada: ha mais de uma bancada aberta de '{repo}' para '{cadeira}' "
+                              f"({chaves}) — use wt/{repo}/{cadeira}/<chave>/<arquivo>")
+        if (b / repo).is_dir():
+            return None, (f"fora de morada: '{pp}' grava no clone compartilhado ({b / repo}/), "
+                          f"nao na bancada de '{cadeira}' — abra com 'repo abrir {repo}' ou use "
+                          f"wt/{repo}/{cadeira}/...")
+    return b / Path(str(pp)), None
+
+
 def _resolve_escrita(path: str, ident: dict):
     """(alvo_real, erro). Lexico -> realpath do PAI -> negativas -> morada -> tipo -> symlink.
     So o pai se resolve (TLPI cap. 18, tab. 18-1: componente symlink no meio escapa da
@@ -2442,7 +2475,7 @@ def _resolve_escrita(path: str, ident: dict):
         return None, "caminho: absoluto ou relativo a bancada, sem '..' nem caractere de controle"
     if ".git" in partes:
         return None, "fora de morada: .git nao se escreve por write_file — use `repo`"
-    alvo, erro = _resolve_relativo(str(pp))
+    alvo, erro = _resolve_escrita_relativo(pp, ident)
     if erro:
         return None, erro
     pai = alvo.parent
@@ -2806,6 +2839,16 @@ def _parse_unified_diff(patch_text: str) -> list[dict]:
                         i += 1
                     else:
                         break
+                # Continua lendo linhas de corpo se o cabecalho @@ subestimou old_count/new_count (DT-823).
+                while i < n:
+                    hl = linhas[i]
+                    if hl.startswith(("@@ ", "diff --git ", "--- ", "+++ ")):
+                        break
+                    if hl.startswith(("\\", " ", "-", "+")):
+                        hunk_lines.append(hl)
+                        i += 1
+                    else:
+                        break
                 hunks.append({
                     "old_start": old_start, "old_count": old_count,
                     "new_start": new_start, "new_count": new_count,
@@ -2819,6 +2862,10 @@ def _parse_unified_diff(patch_text: str) -> list[dict]:
 
 def _aplica_hunks(atual: str, hunks: list[dict], novo_arquivo: bool) -> tuple[str | None, str | None]:
     """Aplica hunks de unified diff sobre `atual`, devolvendo `(novo_texto, erro)`."""
+    if not hunks:
+        if novo_arquivo:
+            return "", None
+        return None, "patch: nenhum hunk valido encontrado no unified diff"
     linhas = [] if (novo_arquivo and atual == "") else atual.splitlines(keepends=True)
     offset = 0
     for h in hunks:
@@ -2838,6 +2885,10 @@ def _aplica_hunks(atual: str, hunks: list[dict], novo_arquivo: bool) -> tuple[st
                 esperadas.append(body)
             if tag in (" ", "+"):
                 novas.append(body)
+        if not esperadas and not novas:
+            return None, f"patch: hunk @@ -{h['old_start']} +{h['new_start']} @@ vazio ou malformado"
+        if not novo_arquivo and esperadas == novas:
+            return None, f"patch: hunk @@ -{h['old_start']} +{h['new_start']} @@ nao altera o arquivo"
         if not esperadas:
             idx = 0 if novo_arquivo else max(0, min(len(linhas), h["old_start"] - 1 + offset))
         else:
@@ -2978,6 +3029,11 @@ def write_file(path: str = "", content: str = "", sessao_id: str | None = None,
             novo_texto, err_hunk = _aplica_hunks(atual, arq["hunks"], novo_arquivo=novo_arquivo)
             if err_hunk is not None or novo_texto is None:
                 resultados.append(_recusa_escrita(ident, alvo_path, err_hunk or "patch: falha ao aplicar",
+                                                  exit_code=2, extra=extra))
+                continue
+            if not novo_arquivo and novo_texto == atual:
+                resultados.append(_recusa_escrita(ident, alvo_path,
+                                                  "patch: nenhuma alteracao produzida no arquivo",
                                                   exit_code=2, extra=extra))
                 continue
             resultados.append(_escreve_um(alvo_path, novo_texto, ident, lote_id=lote_id, lote_n=idx))
