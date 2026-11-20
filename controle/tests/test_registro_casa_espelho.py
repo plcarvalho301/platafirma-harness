@@ -41,9 +41,9 @@ def test_resolvedor_do_teste_conhece_o_repositorio():
     assert campos[0] == ESPELHO and campos[3] == "documento", campos
 
 
-def test_posto_esta_nas_familias_e_resolve_stacks_do_posto_e_espelho():
-    """#4345 (premissa 2): o posto passa a familia promovida em familias.json e declara as stacks
-    vault-ontologia, harnesses e espelho-posto-harnesses em venvs.json."""
+def test_posto_esta_nas_familias_e_resolve_stacks_do_posto():
+    """#4401: o posto e familia promovida em familias.json e declara as quatro stacks
+    vault-ontologia, harnesses, posto-gerador e posto em venvs.json."""
     def resolver(nome):
         r = subprocess.run(["python3", str(REGISTRO), nome], capture_output=True, text=True,
                            env={"PATH": "/usr/bin:/bin", "PLATAFIRMA_VENVS": str(VENVS)}, check=False)
@@ -56,13 +56,15 @@ def test_posto_esta_nas_familias_e_resolve_stacks_do_posto_e_espelho():
     harnesses = resolver("harnesses")
     assert harnesses[:5] == ["platafirma-posto", "ferramentas/vault-ontologia/uv.lock",
                              "harnesses/tests", "codigo", "harnesses"], harnesses
-    espelho_h = resolver("espelho-posto-harnesses")
-    assert espelho_h[:5] == [ESPELHO, "outros_repos/posto/ferramentas/vault-ontologia/uv.lock",
-                             "outros_repos/posto/harnesses/tests", "codigo", "espelho-posto-harnesses"], espelho_h
+    gerador = resolver("posto-gerador")
+    assert gerador[:5] == ["platafirma-posto", "ferramentas/vault-ontologia/uv.lock",
+                           "gerador/tests", "codigo", "posto-gerador"], gerador
+    posto = resolver("posto")
+    assert posto[:5] == ["platafirma-posto", "ferramentas/vault-ontologia/uv.lock",
+                         "testes", "codigo", "posto"], posto
     venvs = json.loads(VENVS.read_text(encoding="utf-8"))
-    assert venvs["espelho-posto-harnesses"]["promovida"] is False
-    assert venvs["harnesses"].get("promovida", True) is True
-    assert venvs["vault-ontologia"].get("promovida", True) is True
+    for chave in ("vault-ontologia", "harnesses", "posto-gerador", "posto"):
+        assert venvs[chave].get("promovida", True) is True
     familias = json.loads(FAMILIAS.read_text(encoding="utf-8"))
     assert familias["platafirma-posto"] == "https://github.com/plcarvalho301/platafirma-posto.git"
 
@@ -208,19 +210,15 @@ def test_espelho_diagrama_cai_para_uv_quando_venv_nao_tem_pytest(tmp_path):
     assert "suite VERDE: platafirma-casa-espelho@t1 (chave espelho-diagrama)" in r_teste.stdout
 
 
-def test_espelho_vault_ontologia_resolve_no_registro():
-    """DT 666: espelho-vault-ontologia declara lock e subarvore proprios do espelho, com promovida: false."""
-    r = subprocess.run(
-        ["python3", str(REGISTRO), "espelho-vault-ontologia"],
-        env={"PATH": "/usr/bin:/bin", "PLATAFIRMA_VENVS": str(VENVS)},
-        capture_output=True, text=True, check=False, timeout=30,
-    )
-    assert r.returncode == 0, r.stderr
-    assert r.stdout.strip() == (
-        f"{ESPELHO}\toutros_repos/posto/ferramentas/vault-ontologia/uv.lock\t"
-        "outros_repos/posto/ferramentas/vault-ontologia/testes\tcodigo\tespelho-vault-ontologia\t-"
-    )
-    assert json.loads(VENVS.read_text(encoding="utf-8"))["espelho-vault-ontologia"]["promovida"] is False
+def test_chaves_espelho_do_posto_foram_removidas():
+    """#4401: as quatro chaves espelho-* do posto saem de venvs.json e sao recusadas pelo registro."""
+    for chave in ("espelho-vault-ontologia", "espelho-posto-harnesses", "espelho-posto", "espelho-posto-gerador"):
+        r = subprocess.run(
+            ["python3", str(REGISTRO), chave],
+            env={"PATH": "/usr/bin:/bin", "PLATAFIRMA_VENVS": str(VENVS)},
+            capture_output=True, text=True, check=False, timeout=30,
+        )
+        assert r.returncode != 0, f"chave removida ainda resolveu: {chave}"
 
 
 def test_espelho_conhecimento_resolve_no_registro_com_lock_proprio():

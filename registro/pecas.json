@@ -121,10 +121,10 @@
   "posto-gerador": {
     "dono": "engenharia",
     "origem": "release",
-    "dir": "casa-espelho",
-    "cwd": "outros_repos/posto",
+    "dir": "posto",
+    "cwd": ".",
     "modulo": "gerador",
-    "pythonpath": ["outros_repos/posto"],
+    "pythonpath": ["."],
     "python": "rag",
     "teto_s": 120,
     "motivo": "DT 925: gera e confere os artefatos carimbados do platafirma-posto (python -m gerador gerar|conferir)"
