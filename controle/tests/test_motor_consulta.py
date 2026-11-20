@@ -161,10 +161,7 @@ def test_rotulos_do_chapeu_sem_arquivo_ou_arquivo_quebrado(tmp_path):
 
 
 def test_rotulos_do_chapeu_sem_raiz_explicita_devolve_vazio(tmp_path, monkeypatch):
-    abertura = tmp_path / "current" / "abertura"
-    abertura.mkdir(parents=True)
-    _rotas(abertura, TABELA)
-    monkeypatch.setenv("PF_ABERTURA_DIR", str(tmp_path))
+    monkeypatch.delenv("PF_ABERTURA_DIR", raising=False)
     assert consulta.rotulos_do_chapeu("ia", "agente") == ()
 
 

@@ -364,6 +364,13 @@ def valida_cadeira(cadeira_arg: str | None = None) -> tuple[str | None, str | No
 
 
 def chapeus_de(cadeira: str) -> list[str]:
+    morada = os.environ.get("PF_ABERTURA_DIR")
+    if morada:
+        base = Path(morada) / "current" / "abertura" / cadeira
+        if base.is_dir():
+            achados = sorted(p.name for p in base.iterdir() if p.is_dir() and (p / "chapeu.md").is_file())
+            if achados:
+                return achados
     secao = carregar_secao_das_cadeiras()
     if cadeira in secao.cadeiras:
         return list(secao.cadeiras[cadeira].chapeus.keys())
