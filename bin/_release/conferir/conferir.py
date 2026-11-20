@@ -579,24 +579,7 @@ def _ausencia_esperada(alvo):
     return None
 
 
-def _inalterada_por_desenho(c, atual, sha_c):
-    """True quando a stack foi promovida ao current SEM recriar (`stack promover` achou
-    compose, build e binds iguais, card #3192) e segue na arvore em que subiu. Prova pelos
-    dois pontos que o proprio `stack promover` grava: `.atual` no current e `.servido` na
-    arvore que o conteiner mostra. Qualquer um ausente ou diferente e deriva de verdade
-    (debito 52 do #2856: sem isto toda promocao sem mudanca de stack se revertia)."""
-    slug = stack_do_container(c)
-    if not slug:
-        return False
-    pontos = os.environ.get("DEPLOY_PONTOS") or os.path.join(INSTANCIA, "var", "deploy")
-    try:
-        with open(os.path.join(pontos, f"{slug}.atual")) as f:
-            ptr_atual = f.read().strip()
-        with open(os.path.join(pontos, f"{slug}.servido")) as f:
-            ptr_servido = f.read().strip()
-    except OSError:
-        return False
-    return ptr_atual == atual and ptr_servido == sha_c
+# _inalterada_por_desenho removida (r15, card #4404): toda stack de pe deve servir do current.
 
 
 # --- filtro de e-mail dos gates oauth2-proxy (card #3476, nascido do #3339) ---------------
@@ -689,9 +672,6 @@ def conferir_servico(alvo, como_json=False):
                 print(f"    release : {fam} @ {sha_c[:7]} (current {atual[:7] if atual else 'ilegivel'})")
             if not atual:
                 divergencias.append(f"current da familia {fam} ilegivel — procedencia nao se confirma")
-            elif atual != sha_c and _inalterada_por_desenho(c, atual, sha_c):
-                if not como_json:
-                    print(f"    inalterada: serve {sha_c[:7]} por desenho — stack sem mudanca ate o current {atual[:7]}")
             elif atual != sha_c:
                 divergencias.append(
                     f"serve {sha_c[:7]} da release, mas o current de {fam} e {atual[:7]} — stack fora do current")
@@ -3767,6 +3747,38 @@ def conferir_ontologia(alvo, como_json=False):
     return resultado.relatorio("ontologia", alvo, itens, _sha_release(), como_json=como_json, extra={"avisos": avisos})
 
 
+def conferir_fossil(alvo=None, como_json=False):
+    """Mede tudo o que sobra fora do uso da release no ar (r15, r27, r28, card #4404)."""
+    import importlib.machinery
+    import importlib.util
+    from pathlib import Path
+
+    expurgo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "expurgo"))
+    loader = importlib.machinery.SourceFileLoader("pf_release_expurgo", expurgo_path)
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[loader.name] = mod
+    loader.exec_module(mod)
+
+    fosseis, indeterminaveis = mod.diagnosticar_fosseis(
+        prod_raiz=Path(PROD_RAIZ),
+        instancia=Path(INSTANCIA),
+        familia=alvo,
+        incluir_imagens=(alvo is None),
+    )
+    itens = []
+    if not fosseis and not indeterminaveis:
+        categorias = ("raiz", "atalhos", "arvores", "venvs", "terceiros", "imagens") if alvo is None else (f"familia:{alvo}",)
+        for cat in categorias:
+            itens.append((cat, resultado.conforme()))
+    else:
+        for f in fosseis:
+            itens.append((f"{f.categoria}: {f.caminho}", resultado.divergente(f.motivo)))
+        for err in indeterminaveis:
+            itens.append(("imagens", resultado.indeterminavel(err)))
+    return resultado.relatorio("fossil", alvo, itens, _sha_release(), como_json=como_json)
+
+
 def main(argv):
     # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4; DT 850): varre
     # todos os argumentos antes do despacho; nenhuma classe chega a rodar. --help/--ajuda sai 0.
@@ -3906,6 +3918,8 @@ def main(argv):
         return copia.conferir_copia(alvo, _sha_release(), como_json=como_json)
     if classe == "ontologia":
         return conferir_ontologia(alvo, como_json=como_json)
+    if classe == "fossil":
+        return conferir_fossil(alvo, como_json=como_json)
     if como_json:
         print(json.dumps({"erro": f"classe desconhecida: {classe}"}))
     uso(f"classe desconhecida: {classe}")
