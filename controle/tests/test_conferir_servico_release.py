@@ -113,15 +113,14 @@ def _pontos(tmp_path, monkeypatch, conferir, atual, servido):
     monkeypatch.setenv("DEPLOY_PONTOS", str(pontos))
     monkeypatch.setattr(conferir, "stack_do_container", lambda c: "harness-controle")
 
-def test_stack_inalterada_serve_arvore_anterior_por_desenho(tmp_path, monkeypatch, capsys):
-    """Debito 52 do #2856: promocao sem mudanca de stack nao recria, o conteiner segue na
-    arvore anterior, e isso nao e deriva quando os dois ponteiros o dizem."""
+def test_stack_fora_do_current_diverge_mesmo_com_pontos_antigos(tmp_path, monkeypatch, capsys):
+    """Regra r15 (#4404): nao existe mais inalterada por desenho — todo conteiner deve servir do current."""
     conferir = _montar(tmp_path, monkeypatch, SHA_VELHO)
     _pontos(tmp_path, monkeypatch, conferir, SHA_NO_AR, SHA_VELHO)
     rc = _roda(conferir, "harness-controle")
     saida = capsys.readouterr().out
-    assert "por desenho" in saida and "stack fora do current" not in saida, saida
-    assert rc == 0
+    assert "inalterada" not in saida and "stack fora do current" in saida, saida
+    assert rc == 1
 
 def test_ponteiro_servido_diferente_segue_deriva(tmp_path, monkeypatch, capsys):
     """`.servido` que nao e a arvore do conteiner nao absolve: e stack atras de verdade."""

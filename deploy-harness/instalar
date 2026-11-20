@@ -160,8 +160,6 @@ UNITS=(
   "deploy-harness/sinal.timer|habilita"
   "deploy-harness/descansar-varredura.service|alvo-de-timer"
   "deploy-harness/descansar-varredura.timer|habilita"
-  "deploy-harness/abertura-caderno.service|alvo-de-timer"
-  "deploy-harness/abertura-caderno.timer|habilita"
   "deploy-harness/comportamento.service|alvo-de-timer"
   "deploy-harness/comportamento.timer|habilita"
   "deploy-harness/repo-sanear.service|alvo-de-timer"

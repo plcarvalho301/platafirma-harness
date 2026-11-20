@@ -280,7 +280,6 @@ def _negadas_escrita(
     return {
         rel: "release e imutavel — muda por `release promover`, nunca por escrita",
         inst / "var" / "fila": "use o verbo `fila` (append sob flock, com identidade)",
-        inst / "var" / "abertura-publicada": "arvore imutavel — so `publicar-abertura`",
         inst / "var" / "log": "log nao se edita",
         inst / "segredos": "segredo se grava por `seg segredo gravar`",
     }

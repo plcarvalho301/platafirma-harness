@@ -19,9 +19,7 @@ Fonte da persona do ator: abertura/<persona>/persona.md, onde a persona
 sai de _PERSONA_DO_ATOR (ator != persona quando o ator monta persona diferente
 do proprio nome; vazio hoje).
 Fonte do alias humano: abertura/aliases.json (mapa slug->nome afetivo, dado vivo).
-A morada sai de PF_ABERTURA_DIR, ou de $PLATAFIRMA_INSTANCIA/var/abertura-publicada (default
-/srv/platafirma/casa); no container da recepcao ela entra por bind mount ro, no mesmo
-caminho absoluto do host.
+As personas vêm da casa nova (PF_CASA_RAIZ ou PLATAFIRMA_RELEASE/casa-espelho).
 """
 
 from __future__ import annotations
@@ -73,19 +71,12 @@ _PERSONA_DO_ATOR: dict[str, str] = {}
 
 
 def _raiz_personas() -> Path:
-    """Arvore de personas: a MORADA PUBLICADA, nunca o clone (arq:0097, arq:0109 §1).
-
-    A mesma fonte do montador (`monta-sessao`) e do roteador (`rotear`): a arvore
-    imutavel em $PF_ABERTURA_DIR/current/abertura, publicada por `publicar-abertura`.
-    Ler `abertura/` do clone de trabalho era ler working tree em runtime —
-    commit local, ramo de fabrica ou HEAD destacado mudavam o roster sem promocao.
-    PF_ABERTURA_DIR aponta a morada; sem ela, a morada da instancia (PLATAFIRMA_INSTANCIA,
-    default igual ao de lib/raizes.py, repetido porque o container so recebe chat/).
-    No container ela entra por bind mount ro.
-    """
-    instancia = os.environ.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa")
-    morada = os.environ.get("PF_ABERTURA_DIR", os.path.join(instancia, "var", "abertura-publicada"))
-    return Path(morada) / "current" / "abertura"
+    """Personas da casa nova (instancias/persona/*.md em PF_CASA_RAIZ ou PLATAFIRMA_RELEASE/casa-espelho)."""
+    casa = os.environ.get("PF_CASA_RAIZ")
+    if casa:
+        return Path(casa) / "instancias" / "persona"
+    rel = os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")
+    return Path(rel) / "casa-espelho" / "instancias" / "persona"
 
 
 def _sem_prefixo(slug: str) -> str:
@@ -96,27 +87,20 @@ def _sem_prefixo(slug: str) -> str:
 
 
 def _slugs_da_arvore() -> set[str]:
-    """Os slugs vivos: todo diretorio de `abertura/`.
-
-    Fonte viva unica (arq:0073 §1). Substitui a leitura do ledger de vinculo: o slug
-    e o nome do diretorio, minusculo puro, e cadeira sem persona.md redigida nao entra
-    (mesma regra de ausencia que participantes()/atores_internos() ja aplicavam).
-    Diretorio ausente e erro declarado, nunca set vazio silencioso.
-    """
+    """Os slugs vivos: cada arquivo `instancias/persona/<slug>.md` da casa nova."""
     dir_personas = _raiz_personas()
     if not dir_personas.is_dir():
         raise FileNotFoundError(
             f"diretorio de personas nao encontrado: {dir_personas} "
-            "(defina PF_ABERTURA_DIR ou PLATAFIRMA_INSTANCIA, ou monte a morada no container)"
+            "(defina PF_CASA_RAIZ ou PLATAFIRMA_RELEASE)"
         )
-    # Existência da cadeira é o DIRETÓRIO (arq:0073 §7.5: criada mas não redigida
-    # abre com peças indisponíveis, não some do roster). A peça persona é quem fica
-    # indisponível quando falta persona.md — não a cadeira.
-    return {
-        d.name
-        for d in dir_personas.iterdir()
-        if d.is_dir()
-    }
+    slugs: set[str] = set()
+    for d in dir_personas.iterdir():
+        if d.is_file() and d.name.endswith(".md"):
+            slugs.add(d.stem)
+        elif d.is_dir():
+            slugs.add(d.name)
+    return slugs
 
 
 def _dobra(txt: str) -> str:

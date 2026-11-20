@@ -215,22 +215,24 @@ def test_legada_sobe_com_build_como_sempre(mundo):
     assert "--build" in up and "--force-recreate" in up
 
 
-def test_inalterada_nao_recria_e_avanca_o_ponto(mundo):
+def test_de_pe_recria_sempre_mesmo_sem_mudanca_no_compose(mundo):
     mundo["pontos"].mkdir()
     (mundo["pontos"] / "x.atual").write_text(mundo["c1"] + "\n")
     r = _roda(mundo, "promover", "x", mundo["c2"])
     assert r.returncode == 0, r.stderr
-    assert "inalterada" in r.stdout
-    assert not _chamadas(mundo, "up")
+    assert "inalterada" not in r.stdout
+    assert _chamadas(mundo, "up")
     assert (mundo["pontos"] / "x.atual").read_text().strip() == mundo["c2"]
 
 
-def test_inalterada_mas_parada_recria(mundo):
+def test_parada_nao_liga_e_prepara_imagem(mundo):
     mundo["pontos"].mkdir()
     (mundo["pontos"] / "x.atual").write_text(mundo["c1"] + "\n")
     r = _roda(mundo, "promover", "x", mundo["c2"], STUB_RODANDO="0")
     assert r.returncode == 0, r.stderr
-    assert _chamadas(mundo, "up")
+    assert not _chamadas(mundo, "up")
+    assert "nada ligado" in r.stdout
+    assert (mundo["pontos"] / "x.atual").read_text().strip() == mundo["c2"]
 
 
 def _sob_demanda(m, sha):
@@ -263,7 +265,7 @@ def test_contexto_mudou_recria(mundo):
     assert r.returncode == 0, r.stderr
     assert "inalterada" not in r.stdout
     assert _chamadas(mundo, "up")
-    assert (mundo["pontos"] / "x.anterior").read_text().strip() == mundo["c2"]
+    assert not (mundo["pontos"] / "x.anterior").exists()
 
 
 def test_recriar_forcado_ignora_inalterada(mundo):
@@ -422,19 +424,19 @@ def test_a_segunda_rodada_de_imagem_espera_a_primeira(raio):
     assert espera >= 1.0, espera                       # a segunda so rodou depois da primeira soltar a trava
 
 
-@pytest.mark.parametrize("imagem,destino,recria",[
-    ("postgres:16","/docker-entrypoint-initdb.d",False),
-    ("pgvector/pgvector:pg16","/docker-entrypoint-initdb.d",False),
-    ("postgres:16","/etc/postgresql",True),
-    ("firma/servico:1","/docker-entrypoint-initdb.d",True),
+@pytest.mark.parametrize("imagem,destino",[
+    ("postgres:16","/docker-entrypoint-initdb.d"),
+    ("pgvector/pgvector:pg16","/docker-entrypoint-initdb.d"),
+    ("postgres:16","/etc/postgresql"),
+    ("firma/servico:1","/docker-entrypoint-initdb.d"),
 ])
-def test_sql_de_inicializacao_pg_nao_reinicia_base_viva(mundo,imagem,destino,recria):
-    """c3 muda somente o bind; inicialização de PG não participa do runtime."""
+def test_promover_recria_sempre_stack_de_pe(mundo,imagem,destino):
+    """Regra r15 (#4404): promover recria sempre toda stack de pe."""
     mundo["modelo"].write_text(json.dumps({"services":{"banco":{
         "image":imagem,"volumes":[{"type":"bind","source":"${ARVORE}/app","target":destino}]}}}))
     mundo["pontos"].mkdir()
     (mundo["pontos"]/"x.atual").write_text(mundo["c2"]+"\n")
     r=_roda(mundo,"promover","x",mundo["c3"])
     assert r.returncode==0,r.stderr
-    assert bool(_chamadas(mundo,"up")) is recria
-    assert ("inalterada" in r.stdout) is not recria
+    assert bool(_chamadas(mundo,"up")) is True
+    assert "inalterada" not in r.stdout

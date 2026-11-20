@@ -213,7 +213,7 @@ def test_limpeza_cache_poda_build_e_imagens(cena: Cena):
     ]
 
 
-def test_sem_retencao_nem_anterior_poda_tudo_fora_do_current(cena: Cena, tmp_path: Path):
+def test_sem_retencao_por_dias_nem_por_anterior(cena: Cena, tmp_path: Path):
     rel_raiz = tmp_path / "release"
     ui_ant = rel_raiz / "platafirma-ui" / "sha_ui_ant_0123456"
     (ui_ant / "src" / "base").mkdir(parents=True)
@@ -235,21 +235,19 @@ def test_sem_retencao_nem_anterior_poda_tudo_fora_do_current(cena: Cena, tmp_pat
 
     r_ver = cena.roda("limpeza", "imagens", "--ver", PF_RELEASE_RAIZ=str(rel_raiz))
     assert r_ver.returncode == 0, r_ver.stderr
+    assert "retenção" not in r_ver.stdout
+    assert "release:anterior" not in r_ver.stdout
     assert "sairia: platafirma-rag:velha" in r_ver.stdout
     assert "sairia: platafirma-rag:recente" in r_ver.stdout
     assert "sairia: platafirma/ui:0.21.0" in r_ver.stdout
     assert "sairia: platafirma-core:pre-abcdef12" in r_ver.stdout
-    assert "fica: platafirma-core:pre-11111112" in r_ver.stdout
 
     r_prune = cena.roda("limpeza", "imagens", PF_RELEASE_RAIZ=str(rel_raiz))
     assert r_prune.returncode == 0, r_prune.stderr
     rastro = cena.rastro()
     assert len(rastro) == 1 and rastro[0].startswith("image rm -f ")
-    assert "platafirma-rag:velha" in rastro[0]
-    assert "platafirma/ui:0.21.0" in rastro[0]
-    assert "platafirma-core:pre-abcdef12" in rastro[0]
-    assert "platafirma-rag:recente" in rastro[0]
     assert "platafirma-core:pre-11111112" not in rastro[0]
+    assert "platafirma-core:pre-abcdef12" in rastro[0]
 
 
 def test_opcao_desconhecida_sai_2(cena: Cena):

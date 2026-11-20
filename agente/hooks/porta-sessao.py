@@ -27,7 +27,7 @@ UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 # `\\?"` porque o retorno pode chegar como string JSON dentro de JSON (aspas escapadas).
 CADEIRA = re.compile(r'\\?"cadeira\\?"\s*:\s*\\?"([a-z0-9][a-z0-9-]{0,40})\\?"')
-MORADA = Path(os.environ.get("PF_ABERTURA_DIR", "")) if os.environ.get("PF_ABERTURA_DIR") else None
+CASA_NOVA = Path(os.environ.get("PF_CASA_RAIZ") or str(Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")) / "casa-espelho"))
 TETO_CONTEXTO = 9_500          # o Code corta cada string de hook em 10.000 caracteres
 JANELA_DEDUP_S = 30            # conta + projeto podem declarar o mesmo hook: fala um so
 TETO_TURNO_TEXTO = 16_000      # caracteres da mensagem do dono que o hook entrega a porta (#3356)
@@ -122,23 +122,20 @@ def com_turno(sid_code: str, ti: dict) -> dict:
         apaga(sid_code, "pendente")
     return novo
 
-def _publicado(*partes: str) -> str | None:
-    if MORADA is None:
-        return None
+def _da_casa_nova(*partes: str) -> str | None:
     try:
-        return (MORADA / "current" / "abertura").joinpath(*partes).read_text(
+        return CASA_NOVA.joinpath(*partes).read_text(
             encoding="utf-8", errors="replace").strip() or None
     except Exception:
         return None
 
 def _do_projeto(*partes: str) -> str | None:
-    """A copia que o posto carrega em `abertura/` (byte a byte da publicada): e o que existe
-    numa maquina que nao e o host. `CLAUDE_PROJECT_DIR` vem do Code; sem ele, nada."""
+    """Copia local do posto (quando fora do host). `CLAUDE_PROJECT_DIR` vem do Code."""
     raiz = os.environ.get("CLAUDE_PROJECT_DIR")
     if not raiz:
         return None
     try:
-        return (Path(raiz) / "abertura").joinpath(*partes).read_text(
+        return Path(raiz).joinpath(*partes).read_text(
             encoding="utf-8", errors="replace").strip() or None
     except Exception:
         return None
@@ -146,11 +143,11 @@ def _do_projeto(*partes: str) -> str | None:
 def persona_publicada(cadeira: str) -> str | None:
     if not SLUG.match(cadeira or ""):
         return None
-    return _publicado(cadeira, "persona.md") or _do_projeto(cadeira, "persona.md")
+    return _da_casa_nova("instancias", "persona", f"{cadeira}.md") or _do_projeto("abertura", cadeira, "persona.md")
 
 def conduta_importada() -> bool:
-    """A conduta chega por `@import` no CLAUDE.md — da conta (host) ou do posto (projeto)."""
-    return (_publicado("dono.md") or _do_projeto("dono.md")) is not None
+    """A conduta chega pelo arranque do posto ou da casa nova."""
+    return (_da_casa_nova("instancias", "cultura", "da-casa.md") or _do_projeto("AGENTS.md")) is not None
 
 def primeiro_a_falar(sid_code: str, origem: str) -> bool:
     """O mesmo hook pode estar declarado na conta e no projeto (posto aberto no host): os

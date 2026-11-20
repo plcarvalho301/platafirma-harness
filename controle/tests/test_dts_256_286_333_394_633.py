@@ -145,16 +145,9 @@ def test_dt286_stack_separa_nao_registrada_de_registrada_sem_compose(
 @pytest.fixture
 def ambiente_abertura(tmp_path: Path) -> Iterator[dict[str, str]]:
     srv = tmp_path / "srv"
-    ab_dir = srv / "var" / "abertura-publicada"
-    alvo = ab_dir / SHA1
-    (alvo / "abertura").mkdir(parents=True)
-    manifest_tmp = alvo / ".manifest.tmp"
-    manifest_tmp.write_text(
-        f'{{"sha": "{SHA1}", "publicado_em": "2026-11-15 00:00:00Z"}}\n',
-        encoding="utf-8",
-    )
-    manifest_tmp.replace(alvo / "MANIFEST.json")
-    (alvo / "abertura" / "dono.md").write_text(
+    src = tmp_path / "src"
+    (src / "docs").mkdir(parents=True)
+    (src / "docs" / "guia.md").write_text(
         "\n"
         "# Dono\n"
         "\n"
@@ -166,18 +159,29 @@ def ambiente_abertura(tmp_path: Path) -> Iterator[dict[str, str]]:
         "Terceira menção: tombando legado no rodapé.\n",
         encoding="utf-8",
     )
-    (alvo / "abertura" / "conduta.md").write_text(
+    (src / "docs" / "conduta.md").write_text(
         "# Conduta\nRegra alfa\nRegra beta\n",
         encoding="utf-8",
     )
+    git_env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=src, check=True, env=git_env)
+    subprocess.run(["git", "add", "."], cwd=src, check=True, env=git_env)
+    subprocess.run(["git", "commit", "-qm", "init"], cwd=src, check=True, env=git_env)
+    sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=src, check=True,
+                         capture_output=True, text=True).stdout.strip()
+    fam_dir = tmp_path / "opt" / "fixture"
+    alvo = fam_dir / sha
+    fam_dir.mkdir(parents=True)
+    subprocess.run(["git", "clone", "-q", str(src), str(alvo)], check=True, env=git_env)
+    subprocess.run(["git", "checkout", "-q", "--detach", sha], cwd=alvo, check=True, env=git_env)
     _chmod_ro(alvo)
-    (ab_dir / "current").symlink_to(SHA1)
+    (fam_dir / "current").symlink_to(sha)
 
     env = dict(os.environ)
     env.update(
         {
             "PLATAFIRMA_INSTANCIA": str(srv),
-            "PF_ABERTURA_DIR": str(ab_dir),
             "PF_RELEASE_RAIZ": str(tmp_path / "opt"),
         }
     )
@@ -190,62 +194,55 @@ def ambiente_abertura(tmp_path: Path) -> Iterator[dict[str, str]]:
 def test_dt633_dt394_procurar_abertura_acha_dono_md_e_lista_todos_os_matches(
     ambiente_abertura: dict[str, str],
 ) -> None:
-    r = _run([str(RELEASE_BIN), "procurar", "abertura", "tombando legado"], ambiente_abertura)
+    r = _run([str(RELEASE_BIN), "procurar", "fixture", "tombando legado"], ambiente_abertura)
     assert r.returncode == 0, r.stderr
     linhas_dono = [
-        linha for linha in r.stdout.splitlines() if "abertura/dono.md:" in linha
+        linha for linha in r.stdout.splitlines() if "docs/guia.md:" in linha
     ]
     assert len(linhas_dono) == MATCHES_ESPERADOS, r.stdout
-    assert "abertura/dono.md:6:## Cenário: tombando legado" in linhas_dono[0]
-    assert "abertura/dono.md:8:Outra menção: tombando legado" in linhas_dono[1]
-    assert "abertura/dono.md:9:Terceira menção: tombando legado" in linhas_dono[2]
+    assert "docs/guia.md:6:## Cenário: tombando legado" in linhas_dono[0]
+    assert "docs/guia.md:8:Outra menção: tombando legado" in linhas_dono[1]
+    assert "docs/guia.md:9:Terceira menção: tombando legado" in linhas_dono[2]
 
     r_pref1 = _run(
-        [str(RELEASE_BIN), "procurar", "abertura", "tombando legado", "abertura/dono.md"],
+        [str(RELEASE_BIN), "procurar", "fixture", "tombando legado", "docs/guia.md"],
         ambiente_abertura,
     )
     assert r_pref1.returncode == 0
     assert len(r_pref1.stdout.splitlines()) == MATCHES_ESPERADOS
-
-    r_pref2 = _run(
-        [str(RELEASE_BIN), "procurar", "abertura", "tombando legado", "dono.md"],
-        ambiente_abertura,
-    )
-    assert r_pref2.returncode == 0
-    assert len(r_pref2.stdout.splitlines()) == MATCHES_ESPERADOS
 
 
 def test_dt333_procurar_usa_regex_ere_por_padrao_e_aceita_literal_e_ignore_case(
     ambiente_abertura: dict[str, str],
 ) -> None:
     r_ere = _run(
-        [str(RELEASE_BIN), "procurar", "abertura", "tombando legado|Regra beta"],
+        [str(RELEASE_BIN), "procurar", "fixture", "tombando legado|Regra beta"],
         ambiente_abertura,
     )
     assert r_ere.returncode == 0, r_ere.stderr
-    assert "abertura/dono.md:6:" in r_ere.stdout
-    assert "abertura/conduta.md:3:Regra beta" in r_ere.stdout
+    assert "docs/guia.md:6:" in r_ere.stdout
+    assert "docs/conduta.md:3:Regra beta" in r_ere.stdout
 
     r_lit = _run(
-        [str(RELEASE_BIN), "procurar", "abertura", "-F", "tombando legado|Regra beta"],
+        [str(RELEASE_BIN), "procurar", "fixture", "-F", "tombando legado|Regra beta"],
         ambiente_abertura,
     )
     assert r_lit.returncode == 0
-    assert "não encontrado no servido abertura" in r_lit.stdout
+    assert "não encontrado no servido fixture" in r_lit.stdout
 
     r_icase = _run(
-        [str(RELEASE_BIN), "procurar", "abertura", "-i", "TOMBANDO LEGADO"],
+        [str(RELEASE_BIN), "procurar", "fixture", "-i", "TOMBANDO LEGADO"],
         ambiente_abertura,
     )
     assert r_icase.returncode == 0
-    assert "abertura/dono.md:6:" in r_icase.stdout
+    assert "docs/guia.md:6:" in r_icase.stdout
 
 
 def test_dt633_dt394_ler_com_linhas_preserva_primeira_linha_vazia_e_numeracao(
     ambiente_abertura: dict[str, str],
 ) -> None:
     r_faixa = _run(
-        [str(RELEASE_BIN), "ler", "abertura", "dono.md", "--linhas", "5-7"],
+        [str(RELEASE_BIN), "ler", "fixture", "docs/guia.md", "--linhas", "5-7"],
         ambiente_abertura,
     )
     assert r_faixa.returncode == 0, r_faixa.stderr
@@ -257,7 +254,7 @@ def test_dt633_dt394_ler_com_linhas_preserva_primeira_linha_vazia_e_numeracao(
     ]
 
     r_num = _run(
-        [str(RELEASE_BIN), "ler", "abertura", "dono.md", "--linhas", "5-7", "--numerar"],
+        [str(RELEASE_BIN), "ler", "fixture", "docs/guia.md", "--linhas", "5-7", "--numerar"],
         ambiente_abertura,
     )
     assert r_num.returncode == 0, r_num.stderr

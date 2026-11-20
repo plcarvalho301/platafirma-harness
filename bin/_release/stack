@@ -601,33 +601,27 @@ case "$ATO" in
     mkdir -p "$PONTOS"
     printf 'release: %s (projeto %s)\n  %s -> %s\n' "$ARVORE" "$PROJETO" "${ANTES:-(nenhum up gravado)}" "$SHA"
     cd "$(dirname "$COMPOSE")"
-    # Stack sob demanda e parada (#4026): a imagem do sha fica pronta e o ponto avanca, mas nada liga.
-    # Ligada (um lote em curso), segue o caminho de sempre.
-    if sob_demanda && [ -z "$(compose ps -q --status running 2>/dev/null)" ]; then
-      if [ -n "$ANTES" ] && [ "$ANTES" != "$SHA" ]; then echo "$ANTES" > "$PONTOS/$STACK.anterior"; fi
+    # Stack parada (sob demanda ou desligada, #4404): a promocao nao a liga e deixa pronta a imagem do current.
+    if [ -z "$(compose ps -q --status running 2>/dev/null)" ]; then
       rc=0
-      if imagem_pinada; then garantir_imagens || rc=$?; else compose build || rc=$?; fi
+      if imagem_pinada; then
+        garantir_imagens || rc=$?
+      elif [ -n "$(servicos_de_build 2>/dev/null || true)" ]; then
+        compose build || rc=$?
+      fi
       if [ "$rc" -eq 0 ]; then
         gravar_atual "$SHA"; gravar_servido "$SHA"
-        printf 'stack %s sob demanda e parada: imagem de %s pronta, nada ligado (liga quem converte)\n' "$STACK" "${SHA:0:7}"
+        if sob_demanda; then
+          printf 'stack %s sob demanda e parada: imagem de %s pronta, nada ligado (liga quem converte)\n' "$STACK" "${SHA:0:7}"
+        else
+          printf 'stack %s parada: imagem de %s pronta, nada ligado\n' "$STACK" "${SHA:0:7}"
+        fi
       fi
       exit "$rc"
     fi
-    SERVIDO_REAL="$(sha_servido_no_ar 2>/dev/null || true)"
-    [ -z "$SERVIDO_REAL" ] && SERVIDO_REAL="$ANTES"
-    if [ "${PF_STACK_RECRIAR:-0}" != 1 ] && [ -n "${SERVIDO_REAL:-}" ] && inalterada_desde "$SERVIDO_REAL"; then
-      printf 'stack %s inalterada de %s a %s (compose, build e binds) — nada recriado\n' "$STACK" "${SERVIDO_REAL:0:7}" "${SHA:0:7}"
-      # Sem recriar, os conteineres seguem na arvore em que subiram. `.servido` guarda o sha
-      # real do conteiner em execucao para a conferencia no ar separar "inalterada por desenho"
-      # de "stack atras do current" (debito 52 do #2856 e DT 634).
-      gravar_servido "$SERVIDO_REAL"
-      gravar_atual "$SHA"
-      exit 0
-    fi
-    if [ -n "$ANTES" ] && [ "$ANTES" != "$SHA" ]; then echo "$ANTES" > "$PONTOS/$STACK.anterior"; fi
+    # Stack de pe: recria sempre na arvore do current (r15, #4404), sem pular por inalterada.
     rc=0
     if imagem_pinada; then
-      # imagem do sha: a que o passo de teste mediu, ou a guardada de uma promocao anterior
       garantir_imagens || rc=$?
       [ "$rc" -ne 0 ] || compose up -d --no-build --force-recreate "$@" || rc=$?
     else

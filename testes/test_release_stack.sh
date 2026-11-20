@@ -74,6 +74,7 @@ for a in "$@"; do
   fi
   prev="$a"
 done
+case " $* " in *" ps "*) echo cid1 ;; esac
 case " $* " in *" config --services "*) echo app ;; esac
 case " $* " in *" config --format json "*) [ -z "${STUB_TESTE_JSON:-}" ] || printf '%s\n' "$STUB_TESTE_JSON" ;; esac
 case " $* " in *" run "*) exit "${STUB_RUN_RC:-0}" ;; esac
@@ -124,7 +125,7 @@ echo "--- 5: promover <sha> sobe da arvore desse sha e grava o ponto de volta; r
 out="$("$VERBO" promover core "$SHA2" 2>&1)" || falha "promover sha2: $out"
 grep -qF "docker compose -p platafirma-core -f $RELEASE/platafirma-core/$SHA2/docker-compose.yml -f $INSTANCIA/deploy/core/compose.override.yaml --env-file $DEPLOY_ENV_DIR/core.env up -d --build --force-recreate" "$DOCKER_LOG" \
   || falha "promover invocou: $(cat "$DOCKER_LOG")"
-[ "$(cat "$INSTANCIA/var/deploy/core.anterior")" = "$SHA1" ] || falha "anterior devia ser sha1"
+[ ! -e "$INSTANCIA/var/deploy/core.anterior" ] || falha "anterior nao deve ser gravado"
 [ "$(cat "$INSTANCIA/var/deploy/core.atual")" = "$SHA2" ] || falha "atual devia ser sha2"
 set +e; out="$("$VERBO" promover core 3333333333333333333333333333333333333333 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 1 ] && grep -q "release promover platafirma-core" <<<"$out" || falha "rev nao materializada: rc=$rc $out"

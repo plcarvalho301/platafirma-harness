@@ -157,17 +157,6 @@ def consulta(necessidade: str, chapeu: str | None = None, rotulos=None, *,
 
 # --- chapéu -------------------------------------------------------------------------------------
 
-def _dir_abertura(raiz: str | os.PathLike | None = None) -> Path:
-    """Onde mora rotas-chapeu.json: a abertura publicada, como o roteador (`bin/_expediente/rotear`)."""
-    if raiz:
-        return Path(raiz)
-    morada = os.environ.get("PF_ABERTURA_DIR")
-    if morada:
-        return Path(morada) / "current" / "abertura"
-    import raizes  # lib/ já está no sys.path de bin/motor
-    return raizes.instancia() / "var" / "abertura-publicada" / "current" / "abertura"
-
-
 def chapeu_vestido(ambiente=None) -> str | None:
     """PF_CHAPEU, ou None no fallback do roteador (vazio ou «-»)."""
     v = ((ambiente if ambiente is not None else os.environ).get("PF_CHAPEU") or "").strip()
@@ -175,14 +164,21 @@ def chapeu_vestido(ambiente=None) -> str | None:
 
 
 def rotulos_do_chapeu(cadeira: str | None, chapeu: str | None, raiz=None) -> tuple[str, ...]:
-    """Os primeiros MAX_ROTULOS rótulos do chapéu da cadeira em rotas-chapeu.json, sem repetir.
+    """Os primeiros MAX_ROTULOS rótulos do chapéu da cadeira.
 
-    Sem chapéu, sem cadeira, sem arquivo ou chapéu fora da tabela: vazio (a montagem sai sem o
-    segundo item e o bloco declara `chapeu: null` ou `rotulos: []`)."""
+    Sem morada publicada (card #4404), em produção devolve vazio; em teste aceita
+    `raiz` explícita ou `PF_ABERTURA_DIR` explícita no ambiente."""
     if not chapeu or not cadeira or cadeira == "-":
         return ()
+    if raiz:
+        base = Path(raiz)
+    else:
+        morada = os.environ.get("PF_ABERTURA_DIR")
+        if not morada:
+            return ()
+        base = Path(morada) / "current" / "abertura"
     try:
-        with open(_dir_abertura(raiz) / "rotas-chapeu.json", encoding="utf-8") as f:
+        with open(base / "rotas-chapeu.json", encoding="utf-8") as f:
             tabela = json.load(f)
         brutos = tabela.get(cadeira, {}).get(chapeu, [])
     except (OSError, ValueError, AttributeError):

@@ -294,9 +294,8 @@ def test_estagio_anexa_ao_job_que_ja_mede_a_rev(tmp_path):
     assert not chamadas.exists(), "abriu outro job de medicao para a mesma rev"
 
 
-def test_reverter_retirado_sai_2_em_stack_de_catalogo(tmp_path):
+def test_reverter_recusa_com_exit_2(tmp_path):
     amb = _amb(tmp_path, CATALOGO)
-    assert amb.run("promover", "fixture").returncode == 0
-    r = amb.run("reverter", "fixture", amb.sha, "--ensaio")
+    r = amb.run("reverter", "fixture")
     assert r.returncode == 2, r.stdout + r.stderr
-    assert "política 0009" in r.stderr.lower()
+    assert "reverter o commit na main" in r.stderr

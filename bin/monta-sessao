@@ -59,10 +59,15 @@ BIN = os.environ.get("PF_BIN") or os.path.join(_REPO_REAL, "bin")
 # cadeira, e a classe `divergente` (arq:0058) sai deste caminho junto com pull/fetch/
 # reconciliar. Git volta a ser fonte so na publicacao, que e ato deliberado e separado.
 # A morada e estado da INSTANCIA (plano /srv), nao da release nem da bancada.
-MORADA = os.environ.get("PF_ABERTURA_DIR",
-                        str(raizes.instancia() / "var" / "abertura-publicada"))
-ABERTURA = os.path.join(MORADA, "current", "abertura")
-MANIFESTO = os.path.join(MORADA, "current", "MANIFEST.json")
+_MORADA_ENV = os.environ.get("PF_ABERTURA_DIR")
+if _MORADA_ENV:
+    MORADA = _MORADA_ENV
+    ABERTURA = os.path.join(MORADA, "current", "abertura")
+    MANIFESTO = os.path.join(MORADA, "current", "MANIFEST.json")
+else:
+    MORADA = os.environ.get("PF_CASA_RAIZ") or str(raizes.release() / "casa-espelho")
+    ABERTURA = os.path.join(MORADA, "instancias", "persona")
+    MANIFESTO = os.path.join(MORADA, "MANIFEST.json")
 # (ledger de vinculo NAO se le mais aqui — incidente/ordem do dono; identidade viva
 #  sai da arvore abertura/. `persona filme|foto` ainda o le, mas e outro verbo.)
 # arq:0073: morada unica em abertura/. Fonte de conceito e o golden record acervo.conceito

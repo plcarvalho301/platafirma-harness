@@ -21,7 +21,7 @@ A promoção espelha o repo do forge, constrói os venvs do lock e troca `curren
 vez; `instalar` liga as units `--user` do harness à release e aponta o gate de commit dos clones.
 Subiu quando `release estado platafirma-harness` mostra o sha «no ar» com `gate: passou`, e
 `release conferir procedencia` sai 0. Os verbos passam a ser chamáveis pelo nome na conta dos
-serviços, ou por `platafirma <verbo>` de qualquer conta. Voltar: `release reverter platafirma-harness`.
+serviços, ou por `platafirma <verbo>` de qualquer conta. Voltar: reverter o commit na `main` e promover com `release promover platafirma-harness <sha>`.
 
 Para codar, traga a família para a bancada no sha de produção (não `origin/main`):
 
