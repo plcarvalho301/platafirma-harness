@@ -885,12 +885,17 @@ def projeto_do_caso(raiz: Path, id_caso: str) -> Path | None:
     """O manifesto (pyproject.toml com uv.lock) do repositório onde mora o caso.
 
     Sobe da pasta do arquivo de teste até a raiz da árvore; em cada nível vale a pasta
-    mesma ou `venvs/<nome da pasta>` (o harness guarda o manifesto em venvs/harness).
+    mesma ou `venvs/<nome>` (no harness o manifesto mora em venvs/harness mesmo quando
+    o diretório da árvore se chama `platafirma-harness` ou tem o slug de uma worktree).
     """
     raiz_r = raiz.resolve()
     pasta = (raiz_r / id_caso.split("::", 1)[0]).parent
     while True:
-        for cand in (pasta, pasta / "venvs" / pasta.name):
+        cands = [pasta, pasta / "venvs" / pasta.name]
+        if pasta == raiz_r:
+            cands.append(pasta / "venvs" / pasta.name.removeprefix("platafirma-"))
+            cands.append(pasta / "venvs" / "harness")
+        for cand in cands:
             if (cand / "pyproject.toml").is_file() and (cand / "uv.lock").is_file():
                 return cand
         if pasta == raiz_r or raiz_r not in pasta.parents:
