@@ -657,7 +657,7 @@ def _chapeus_da_cadeira(cadeira: str) -> list[str]:
         base_f = Path(morada) / "current" / "abertura" / cadeira
         if base_f.is_dir():
             return sorted(p.name for p in base_f.iterdir() if p.is_dir() and (p / "chapeu.md").is_file())
-    casa = Path(os.environ.get("PF_CASA_RAIZ") or str(raizes.release() / "casa-espelho"))
+    casa = Path(os.environ.get("PF_CASA_RAIZ") or str(raizes.release() / "casa"))
     if (casa / "instancias" / "persona").is_dir():
         try:
             from abertura.nomes import SecaoDasCadeiras  # noqa: PLC0415

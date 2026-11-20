@@ -14,7 +14,7 @@ pinado por sha256 em registro/terceiros.json). O numero aqui bate
 com o que a mesa e `conferir sessao` mostram, por construcao — mesma funcao.
 
 Le sem rede: `atualizar=False`. Serve da casa nova (`PF_CASA_RAIZ` ou
-`PLATAFIRMA_RELEASE/casa-espelho`). Peca indisponivel entra com tokens=0 e frescor
+`PLATAFIRMA_RELEASE/casa`). Peca indisponivel entra com tokens=0 e frescor
 declarado, nunca omitida.
 
 uso:

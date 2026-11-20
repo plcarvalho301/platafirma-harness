@@ -1,15 +1,15 @@
 ---
-name: casa-espelho
-description: Use SEMPRE que for procurar, gravar ou mover documento da CASA NOVA (platafirma-casa-espelho), refinar ou executar story do E3650, ou perguntar onde algo mora ou o que o dono já decidiu. Responde pela shape da CASA NOVA e pelos cards do E3650, com a fonte, ou diz «não achei». NÃO dispare para a casa atual, operação, incidente, trabalho jurídico ou forma do texto.
+name: casa-nova
+description: Use SEMPRE que for procurar, gravar ou mover documento da CASA NOVA (platafirma-casa), refinar ou executar story do E3650, ou perguntar onde algo mora ou o que o dono já decidiu. Responde pela shape da CASA NOVA e pelos cards do E3650, com a fonte, ou diz «não achei». NÃO dispare para a casa atual, operação, incidente, trabalho jurídico ou forma do texto.
 ---
 
-# Casa espelho
+# Casa nova
 
-A casa nova se monta no repositório platafirma-casa-espelho enquanto a casa atual segue
-no ar. Esta skill diz onde cada coisa da casa nova mora e o que o dono já decidiu sobre
-ela, sempre com a fonte. Quando nenhuma fonte responde, ela diz «não achei» e para.
+A casa nova mora no repositório platafirma-casa e na Olaria. Esta skill diz onde cada coisa
+da casa nova mora e o que o dono já decidiu sobre ela, sempre com a fonte. Quando nenhuma
+fonte responde, ela diz «não achei» e para.
 
-O que vale dentro do tombamento (fonte única, casa atual como objeto, onde se grava) já
+O que vale dentro do tombamento (fonte única, casa antiga como objeto, onde se grava) já
 está na conduta, no cenário Tombando legado. Siga-o de lá; esta skill não o repete.
 
 ## As duas fontes
@@ -71,13 +71,13 @@ Card e comentário dividem a mesma numeração: diga sempre de qual card é o co
 
 Aplique na ordem; a primeira que casar decide.
 
-1. Pedido sobre a casa atual: a skill não se aplica.
+1. Pedido sobre a casa antiga: a skill não se aplica.
 2. A entidade descende de evento ou é da categoria acontecimento: «evento tipado: não tem
    instância própria na casa».
 3. A shape declara tabela de módulo ou «projeção de banco»: «mora no módulo: a casa tem só
    a entidade; procure lá», com a tabela.
 4. A shape traz outro texto em `sem_forma`: devolva o texto da shape.
-5. A shape declara arquivo e ele não está no espelho: «prevista: ainda não está no espelho»,
+5. A shape declara arquivo e ele não está no repositório: «prevista: ainda não está no repositório»,
    com o caminho que a shape dá.
 6. A shape não declara arquivo, módulo nem forma: «desconformidade: deveria declarar onde
    mora e não declara; leve ao dono».

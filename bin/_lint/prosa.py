@@ -8,7 +8,7 @@ from .lista import resolver_lista
 from .resultado import Apontamento
 
 CHAVE_LISTA = "marcas-pt-br"
-# Na casa nova (platafirma-casa-espelho) a regua de prosa mora em `gabarito/marcas-pt-br`.
+# Na casa nova (platafirma-casa) a regua de prosa mora em `gabarito/marcas-pt-br`.
 ESPECIES_REGUA = ("gabarito",)
 
 

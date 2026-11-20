@@ -373,7 +373,7 @@ cmd_estado() {
     if [ "$f" = "$FAMILIA_BIN" ]; then
       local porta_ts=""
       if command -v systemctl >/dev/null 2>&1; then
-        porta_ts="$(systemctl --user show ops-mcp -p ActiveEnterTimestamp --value 2>/dev/null || echo '')"
+        porta_ts="$(systemctl --user show porta -p ActiveEnterTimestamp --value 2>/dev/null || echo '')"
       fi
       if [ -n "$porta_ts" ] && [ "$porta_ts" != "n/a" ]; then
         local sec_porta=0 sec_promo=0
@@ -1416,7 +1416,7 @@ exigir_deploy_se_stack() {
   }
 }
 
-# Passo de teste da imagem (card #3192; spec conversor-pdf-combinado §13; referencias/classes/teste.md no platafirma-casa-espelho):
+# Passo de teste da imagem (card #3192; spec conversor-pdf-combinado §13; referencias/classes/teste.md no platafirma-casa):
 # cada stack da familia que declara servico no perfil `teste` do compose constroi as imagens da
 # rev e roda esse servico dentro delas ANTES de trocar current. Reprovou: exit 4, current
 # intacto. Nao construiu: exit 3, current intacto. Stack sem perfil `teste`: nada a medir. A
@@ -1621,7 +1621,7 @@ promover_stacks() {  # $1=sha ; usa STACKS_PROMOVER; devolve 0 ou o nome da stac
 # sobre current); em 15/09 ele não disparou em 2 de 2 promoções — current trocado, porta
 # servindo o código anterior, ninguém avisado. O motivo da rev 5 (systemd-run sem bus; o
 # restart matando a conexão que emitiu o promover) já tem cura na casa: `infra restart
-# ops-mcp` despacha destacado e a chamada que o emite volta antes do restart (medido 15/09
+# porta` despacha destacado e a chamada que o emite volta antes do restart (medido 15/09
 # pela porta). Chamado por último, depois de tudo relatado. PF_RELEASE_PORTA=0 desliga.
 reiniciar_porta() {
   # A tela sai antes do restart. O infra desta release agenda a porta para daqui a
@@ -1648,13 +1648,13 @@ reiniciar_porta() {
     systemctl --user daemon-reload >/dev/null 2>&1 || true
   fi
   if [ "${PF_RELEASE_PORTA:-1}" != "1" ]; then
-    printf 'porta:     restart desligado (PF_RELEASE_PORTA=0) — reinicie com: infra restart ops-mcp\n'
+    printf 'porta:     restart desligado (PF_RELEASE_PORTA=0) — reinicie com: infra restart porta\n'
     return 0
   fi
   local infra_bin out rc=0
   infra_bin="$(achar_verbo infra)"
   if [ -z "$infra_bin" ]; then
-    printf 'porta:     AVISO — infra não encontrado; a porta segue no código anterior até: infra restart ops-mcp\n' >&2
+    printf 'porta:     AVISO — infra não encontrado; a porta segue no código anterior até: infra restart porta\n' >&2
     return 0
   fi
   # Sem XDG_RUNTIME_DIR (wrapper, runuser, cron) o infra não acha a unit --user e o restart não
@@ -1671,11 +1671,11 @@ reiniciar_porta() {
   fi
   xdg="${xdg:-/run/user/$(id -u)}"
   out="$(XDG_RUNTIME_DIR="$xdg" DBUS_SESSION_BUS_ADDRESS="${dbus:-unix:path=$xdg/bus}" \
-    "$infra_bin" restart ops-mcp 2>&1)" || rc=$?
+    "$infra_bin" restart porta 2>&1)" || rc=$?
   if [ "$rc" -eq 0 ]; then
     printf 'porta:     %s\n' "$(tail -n 1 <<<"$out")"
   else
-    printf 'porta:     AVISO — infra restart ops-mcp saiu %s: %s\n' "$rc" "$(tail -n 1 <<<"$out")" >&2
+    printf 'porta:     AVISO — infra restart porta saiu %s: %s\n' "$rc" "$(tail -n 1 <<<"$out")" >&2
   fi
   return 0
 }

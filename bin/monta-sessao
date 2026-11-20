@@ -65,7 +65,7 @@ if _MORADA_ENV:
     ABERTURA = os.path.join(MORADA, "current", "abertura")
     MANIFESTO = os.path.join(MORADA, "current", "MANIFEST.json")
 else:
-    MORADA = os.environ.get("PF_CASA_RAIZ") or str(raizes.release() / "casa-espelho")
+    MORADA = os.environ.get("PF_CASA_RAIZ") or str(raizes.release() / "casa")
     ABERTURA = os.path.join(MORADA, "instancias", "persona")
     MANIFESTO = os.path.join(MORADA, "MANIFEST.json")
 # (ledger de vinculo NAO se le mais aqui — incidente/ordem do dono; identidade viva
@@ -105,7 +105,7 @@ ORDEM_VOLATILIDADE = {"estavel": 0, "morna": 1, "volatil": 2}
 def env_verbo(persona_ou_cadeira):
     """Env da peca-verbo: PF_CADEIRA canonico + PATH explicito.
 
-    O PATH herdado NAO serve: quando o montador e chamado por um servico (ops-mcp,
+    O PATH herdado NAO serve: quando o montador e chamado por um servico (porta,
     systemd --user), o ambiente do processo pai nao tem o bin/ dos verbos, e toda peca
     servida por execucao morre com FileNotFoundError — mesa, cadernos e fila sairam
     vazias em 17/08 na superficie claude.ai, com a ausencia declarada e o pacote entregue

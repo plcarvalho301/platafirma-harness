@@ -1,9 +1,9 @@
 """Contrato de reinício da porta e atalhos em bin/release (card #4340).
 
 Prova, com um `infra` de fixture que grava cada chamada de restart:
-- promover `platafirma-harness`: 0 chamadas de `infra restart ops-mcp`;
-- promover `platafirma-core`: 1 chamada de `infra restart ops-mcp`;
-- promover outra família: 0 chamadas de `infra restart ops-mcp`;
+- promover `platafirma-harness`: 0 chamadas de `infra restart porta`;
+- promover `platafirma-core`: 1 chamada de `infra restart porta`;
+- promover outra família: 0 chamadas de `infra restart porta`;
 - `assentar_atalhos platafirma-harness`: não cria o atalho `politica-acesso`.
 """
 from __future__ import annotations
@@ -75,21 +75,21 @@ reiniciar_porta "{familia}"
         }
         return subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)
 
-    # Promoção do harness: 0 restarts de ops-mcp
+    # Promoção do harness: 0 restarts de porta
     cp_h = _rodar("platafirma-harness")
     assert cp_h.returncode == 0, cp_h.stderr
     assert not restarts.exists() or restarts.read_text(encoding="utf-8").strip() == ""
 
-    # Promoção de outra família (ex.: motor): 0 restarts de ops-mcp
+    # Promoção de outra família (ex.: motor): 0 restarts de porta
     cp_m = _rodar("platafirma-motor")
     assert cp_m.returncode == 0, cp_m.stderr
     assert not restarts.exists() or restarts.read_text(encoding="utf-8").strip() == ""
 
-    # Promoção do core: exatamente 1 restart de ops-mcp
+    # Promoção do core: exatamente 1 restart de porta
     cp_c = _rodar("platafirma-core")
     assert cp_c.returncode == 0, cp_c.stderr
     linhas = [l for l in restarts.read_text(encoding="utf-8").splitlines() if l.strip()]
-    assert linhas == ["restart ops-mcp"]
+    assert linhas == ["restart porta"]
 
 
 def test_assentar_atalhos_harness_nao_cria_politica_acesso(tmp_path: Path):

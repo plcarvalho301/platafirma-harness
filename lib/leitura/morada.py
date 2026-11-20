@@ -81,7 +81,7 @@ CLONES = (
     "platafirma-ui",
     "platafirma-casa",
     "platafirma-rastreador",
-    "platafirma-casa-espelho",
+    "platafirma-casa",
 )
 ESCRITA_TETO = 1_048_576
 _SEM_BANCADA = (

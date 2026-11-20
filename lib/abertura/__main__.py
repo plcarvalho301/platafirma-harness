@@ -39,7 +39,7 @@ def _raiz_casa_padrao(entrada: dict[str, Any]) -> Path:
     if informada:
         return Path(informada)
     release = Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"))
-    return release / "casa-espelho"
+    return release / "casa"
 
 
 def _carregar_secao_cadeiras(base: Path) -> tuple[SecaoDasCadeiras, list[str]]:

@@ -84,7 +84,7 @@
   jobs    [timer]  cada timer do systemd --user da conta: declarado (harness/instalar,
                    core/units-da-instancia.json, unit do bot com ficha ativa ou pacote do
                    sistema), link pelo atalho
-                   estavel da release, nada da bancada, EnvironmentFile do ops-mcp
+                   estavel da release, nada da bancada, EnvironmentFile do porta
                    quando chama verbo, habilitado, ultima execucao sem falha; e o
                    timer que um instalador promete e nao esta agendado (card #3147).
 
@@ -3220,12 +3220,12 @@ def conferir_pdp(alvo=None, como_json=False, *, sonda_pdp=None):
 
     servidores = [
         {
-            "nome": "ops-mcp",
+            "nome": "porta",
             "tipo": "systemd",
             "esperado": "/opt/platafirma/current/core/acesso",
             "health_url": "http://127.0.0.1:8010/health",
             "log_dir": os.path.join(INSTANCIA, "var", "log", "ops"),
-            "unit": "ops-mcp.service",
+            "unit": "porta.service",
         },
         {
             "nome": "wiki-mcp",
@@ -3281,9 +3281,74 @@ def conferir_pdp(alvo=None, como_json=False, *, sonda_pdp=None):
             print(f"    {marca}: {nome:<16} {pdp_path} {detalhe}")
         itens.append((nome, v))
 
+    if not alvo or alvo == "porta":
+        for nome_r, ver_r in conferir_stack_porta():
+            if not como_json:
+                marca = {"conforme": "ok ", "divergente": "NAO", "indeterminavel": "?? "}[ver_r.estado]
+                print(f"    {marca}: {nome_r:<16} {ver_r.motivo or 'conforme'}")
+            itens.append((nome_r, ver_r))
+
     if not como_json:
         print()
     return resultado.relatorio("pdp", alvo, itens, _sha_release(), como_json=como_json)
+
+
+def conferir_stack_porta(unit_path=None, segredo_tunel=None):
+    """Confere a regra 4406.r2 na stack porta:
+    - porta.service não pode declarar EnvironmentFile;
+    - porta/TUNNEL_TOKEN não pode ser legível pela conta claudinho (deve ser root:root 0600).
+    """
+    import stat as _stat
+    from pathlib import Path as _Path
+
+    itens = []
+    u_path = _Path(unit_path) if unit_path else (_Path.home() / ".config" / "systemd" / "user" / "porta.service")
+    if u_path.is_file():
+        try:
+            linhas = u_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            tem_env_file = any(
+                l.strip().startswith("EnvironmentFile=") and l.strip() != "EnvironmentFile="
+                for l in linhas
+                if l.strip() and not l.strip().startswith(("#", ";"))
+            )
+            if tem_env_file:
+                itens.append((
+                    "porta.service (4406.r2)",
+                    resultado.divergente("porta.service declara EnvironmentFile (viola regra 4406.r2)"),
+                ))
+            else:
+                itens.append(("porta.service (4406.r2)", resultado.conforme()))
+        except OSError as exc:
+            itens.append(("porta.service (4406.r2)", resultado.indeterminavel(f"nao consegui ler {u_path}: {exc}")))
+    else:
+        itens.append(("porta.service (4406.r2)", resultado.divergente(f"unit ausente: {u_path} (4406.r2)")))
+
+    s_path = _Path(segredo_tunel) if segredo_tunel else (_Path(INSTANCIA) / "segredos" / "porta" / "TUNNEL_TOKEN")
+    try:
+        st = s_path.stat()
+    except PermissionError:
+        # Diretório /srv/platafirma/casa/segredos/porta com modo 0700 root:root impede stat por claudinho:
+        # isso comprova que o token está fora do alcance da conta claudinho.
+        itens.append(("porta/TUNNEL_TOKEN (4406.r2)", resultado.conforme()))
+    except FileNotFoundError:
+        itens.append(("porta/TUNNEL_TOKEN (4406.r2)", resultado.divergente(f"segredo ausente: {s_path} (4406.r2)")))
+    else:
+        modo = _stat.S_IMODE(st.st_mode)
+        legivel_claudinho = (
+            (os.geteuid() != 0 and os.access(s_path, os.R_OK))
+            or st.st_uid != 0
+            or (modo & 0o077) != 0
+        )
+        if legivel_claudinho:
+            itens.append((
+                "porta/TUNNEL_TOKEN (4406.r2)",
+                resultado.divergente(
+                    f"porta/TUNNEL_TOKEN legivel pela conta claudinho (uid={st.st_uid} modo={oct(modo)}; viola regra 4406.r2)"
+                ),
+            ))
+        else:
+            itens.append(("porta/TUNNEL_TOKEN (4406.r2)", resultado.conforme()))
+    return itens
 
 
 # O leitor de atos e o juizo de cada citacao moram em bin/_lint/vocabulario.py (card
@@ -3483,7 +3548,7 @@ def conferir_vocabulario(alvo=None, como_json=False):
 def conferir_jobs(alvo=None, como_json=False):
     """Um item por timer do systemd --user: declarado (manifesto, unit do bot com ficha
     ativa ou pacote do SO), da release, habilitado, sem falha na ultima execucao, e com
-    o ambiente do ops-mcp quando chama verbo."""
+    o ambiente do porta quando chama verbo."""
     release = os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")
     decl, esperados, faltas = units.declarantes_de_jobs(release)
     itens = [(f, resultado.indeterminavel(f)) for f in faltas]
@@ -3548,8 +3613,7 @@ def conferir_jobs(alvo=None, como_json=False):
             corpo = " ".join([ds.get("ExecStart", ""), ds.get("WorkingDirectory", "")])
             if RAIZ and (RAIZ.rstrip("/") + "/") in corpo + "/":
                 faltou.append(f"{svc} roda da bancada ({RAIZ}), nao da release")
-            if "/harness/bin/" in ds.get("ExecStart", "") and units.ENV_OPS not in ds.get("EnvironmentFiles", ""):
-                faltou.append(f"{svc} chama verbo sem EnvironmentFile={units.ENV_OPS}")
+            # 4406.r2: porta.service não carrega EnvironmentFile e ENV_OPS é fóssil anterior à saída de OPS_AUTH_TOKEN.
         if dt.get("UnitFileState") != "enabled":
             faltou.append(f"{t} {dt.get('UnitFileState') or 'sem estado'}: nao sobe no boot")
         if ds.get("Result", "success") != "success":

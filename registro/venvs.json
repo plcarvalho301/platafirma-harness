@@ -17,9 +17,6 @@
       "stack": "rag"
     },
     "platafirma-casa": {
-      "esteira": "documento"
-    },
-    "platafirma-casa-espelho": {
       "esteira": "documento",
       "conferir_no_ar": true
     },
