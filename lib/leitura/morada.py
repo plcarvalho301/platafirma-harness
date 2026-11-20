@@ -83,7 +83,6 @@ CLONES = (
     "platafirma-rastreador",
     "platafirma-casa-espelho",
 )
-POSTO_NO_ESPELHO = ("outros_repos", "posto")
 ESCRITA_TETO = 1_048_576
 _SEM_BANCADA = (
     "fora de morada: bancada nao declarada — configure PLATAFIRMA_BANCADA ou "
@@ -327,8 +326,6 @@ def _em_bin_do_harness(real_pai: Path, b: Path | None) -> bool:
         (b_real / "wt" / "platafirma-harness", (1, 2), (), dirs_harness),
         (b_real / "platafirma-posto", (0,), (), ("bin",)),
         (b_real / "wt" / "platafirma-posto", (1, 2), (), ("bin",)),
-        (b_real / "platafirma-casa-espelho", (0,), POSTO_NO_ESPELHO, ("bin",)),
-        (b_real / "wt" / "platafirma-casa-espelho", (1, 2), POSTO_NO_ESPELHO, ("bin",)),
     ):
         try:
             partes = real_pai.relative_to(raiz_clone).parts
