@@ -35,7 +35,7 @@ def test_conferir_no_ar_so_com_true_declarado(tmp_path):
 def test_registro_real_liga_a_conferencia_nas_familias_declaradas():
     repos = json.loads(REGISTRO.read_text(encoding="utf-8"))["repositorios"]
     assert sorted(n for n, d in repos.items() if (d or {}).get("conferir_no_ar") is True) == [
-        "platafirma-casa-espelho",
+        "platafirma-casa",
         "platafirma-rastreador",
         "platafirma-ui",
     ]

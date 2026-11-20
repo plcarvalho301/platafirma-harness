@@ -408,7 +408,7 @@ def colocar_em_quarentena(
     existente = buscar_quarentena_aberta(id_caso, abertas)
     if existente is not None and existente.idade_dias <= PRAZO_QUARENTENA_DIAS:
         return existente
-    repositorio = str(opcoes.get("repositorio") or "platafirma-casa-espelho")
+    repositorio = str(opcoes.get("repositorio") or "platafirma-casa")
     stack = str(opcoes.get("stack") or "harness")
     hoje = str(opcoes.get("data_medida") or datetime.now(timezone.utc).strftime("%Y-%m-%d"))
     texto = texto_debito_quarentena(id_caso)

@@ -12,7 +12,7 @@
 # cauda: nao
 # classe: B
 # consome: valkey@streams (protocolo redis — sem OpenAPI)
-# ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_CASA_RAIZ[=/opt/platafirma/current/casa-espelho] (personas em instancias/persona/*.md) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log)
+# ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_CASA_RAIZ[=/opt/platafirma/current/casa] (personas em instancias/persona/*.md) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log)
 # depende: modulo redis no venv; arvore abertura/<cadeira>/persona.md (fonte de destinatario); rede ao loopback da malha
 # escreve: malha msg — XADD na caixa do destinatario (enviar); entrega no grupo (ler quente: move o ponteiro, carta fica pendurada); XACK (tratar); nada em status/tipos/ler frio/--penduradas
 # substitui: redis-cli XADD/XREADGROUP/XRANGE na caixa; o "cola a mensagem aqui" que a conduta do dono proibe
@@ -69,7 +69,7 @@ from fila_tipos import TIPOS_VALIDOS  # noqa: E402
 from raizes import release  # noqa: E402
 
 ABERTURA = os.path.join(
-    os.environ.get("PF_CASA_RAIZ") or str(release() / "casa-espelho"),
+    os.environ.get("PF_CASA_RAIZ") or str(release() / "casa"),
     "instancias", "persona")
 # Participantes (DMZ): teriam caixa na malha sem ser cadeira. Vazio desde o card
 # #3117 (27/09/2026). Unificar esta lista com comum/cadeiras.py::_SAO_PARTICIPANTE
@@ -125,7 +125,7 @@ def garante_grupo(rc, persona: str):
 
 def personas_validas():
     """Slugs vivos de destinatario (minusculo puro), da arvore de personas da casa nova
-    (`casa-espelho/instancias/persona/*.md`, ou `PF_ABERTURA_DIR` quando explicitado)
+    (`casa/instancias/persona/*.md`, ou `PF_ABERTURA_DIR` quando explicitado)
     mais os participantes de PERSONAS_PARTICIPANTES.
 
     Arvore ausente/ilegivel devolve None — a lista ilegivel NAO e passe livre, e

@@ -167,7 +167,7 @@ def test_casa_espelho_segue_o_regime_da_casa(tmp_path):
     """Debito 432: platafirma-casa-espelho (a casa nova, F3974) e repositorio de deliberacao como a
     casa: abrir da a worktree de main da cadeira, commitar + sincronizar chegam ao main do origin,
     pr-abrir e pr-merge recusam 2."""
-    espelho = "platafirma-casa-espelho"
+    espelho = "platafirma-casa"
     bancada = tmp_path / "bancada"
     bancada.mkdir()
     _criar_origem(tmp_path, espelho, {"LEIA.md": "x\n"})
@@ -264,7 +264,7 @@ def test_empurrar_no_regime_e_o_sincronizar_e_nao_cria_ramo_no_origin(tmp_path):
 
 def test_dt487_sincronizar_e_empurrar_com_nao_rastreado_alheio_na_bancada(tmp_path):
     """DT-487: arquivo nao rastreado de outra fita na bancada main nao trava sincronizar/empurrar."""
-    espelho = "platafirma-casa-espelho"
+    espelho = "platafirma-casa"
     bancada = tmp_path / "bancada"
     bancada.mkdir()
     _criar_origem(tmp_path, espelho, {"LEIA.md": "x\n"})

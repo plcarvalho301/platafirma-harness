@@ -29,8 +29,8 @@ _CAMINHO_VEDADO_ESPELHO = "outros" + "_repos"
 
 
 def bloqueantes_caminho_vedado_no_stage(raiz: Path) -> list[Apontamento]:
-    """Recusa no stage de platafirma-casa-espelho qualquer arquivo sob o caminho vedado."""
-    if _nome_do_repo(raiz) != "platafirma-casa-espelho":
+    """Recusa no stage de platafirma-casa qualquer arquivo sob o caminho vedado."""
+    if _nome_do_repo(raiz) != "platafirma-casa":
         return []
     p = subprocess.run(
         ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
@@ -51,7 +51,7 @@ def bloqueantes_caminho_vedado_no_stage(raiz: Path) -> list[Apontamento]:
                 Apontamento(
                     norm,
                     1,
-                    f"caminho vedado no platafirma-casa-espelho: «{norm}»",
+                    f"caminho vedado no platafirma-casa: «{norm}»",
                     "gravar diretamente no repositório de destino (platafirma-harness, "
                     "platafirma-conhecimento, platafirma-posto, platafirma-core, "
                     "platafirma-rastreador, platafirma-motor ou platafirma-ui)",
@@ -156,7 +156,7 @@ def main() -> int:
     for apt in achados_casa:
         bloqueantes.append(("casa-por-caminho", apt))
 
-    # 8. arvore (staged): bloqueia no platafirma-casa-espelho qualquer arquivo sob o caminho vedado (#4403).
+    # 8. arvore (staged): bloqueia no platafirma-casa qualquer arquivo sob o caminho vedado (#4403).
     for apt in bloqueantes_caminho_vedado_no_stage(raiz):
         bloqueantes.append(("arvore", apt))
 

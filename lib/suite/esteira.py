@@ -639,7 +639,7 @@ def _deve_rodar_caso_na_esteira(
 
 def selecionar_casos_rodada(arvore: str | Path, **opcoes: Any) -> PlanoSelecaoRodada:
     raiz = Path(arvore).resolve()
-    repositorio = str(opcoes.get("repositorio") or "platafirma-casa-espelho")
+    repositorio = str(opcoes.get("repositorio") or "platafirma-casa")
     leitor_res = _resolver_leitor_ontologia(raiz, opcoes.get("leitor"))
     arvore_mud, arvore_main, lista_mud = _resolver_revisoes_e_diff(
         raiz,
@@ -949,7 +949,7 @@ def venv_de_teste(projeto: Path) -> Path:
 
 
 RELEASE_PADRAO = Path("/opt/platafirma/current")
-FONTES_RELEASE_RO = ("casa-espelho", "harness")
+FONTES_RELEASE_RO = ("casa", "harness")
 
 
 def _montagens_release_ro() -> list[tuple[Path, str]]:

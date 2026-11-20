@@ -1097,7 +1097,7 @@ linha_arquivo() {
   printf '%s' "$l"
 }
 
-# Gramática da linha (arq:0129 D1; referencias/classes/teste.md no platafirma-casa-espelho): depois do arquivo, campos separados por `|`, cada
+# Gramática da linha (arq:0129 D1; referencias/classes/teste.md no platafirma-casa): depois do arquivo, campos separados por `|`, cada
 # um nomeado ou de palavra reservada, em qualquer ordem: `degrau: imagem|rodada`, `regressivo [#n]`,
 # `quarentena [#débito]`, `preparo`; o que sobra é o raio, globs separados por espaço. Preenche
 # CAMPO_*; CAMPO_ERRO diz o campo que a gramática não lê (nomeado e desconhecido, ou degrau de valor
@@ -1211,11 +1211,11 @@ alcanca() {  # $1=arquivo da lista (relativo à raiz do repo) $2=globs $3=diff ;
 
 # Chave do memo do portão: (árvore, chave, fontes servidas) na rodada inteira; (árvore,
 # chave, fontes servidas, hash da seleção) na parcial. Veredito parcial nunca responde pela
-# rodada inteira. As fontes servidas são a casa-espelho e o harness da release no ar, que a
+# rodada inteira. As fontes servidas são a casa e o harness da release no ar, que a
 # suíte lê em leitura (DT 935): promover uma delas muda o que a mesma árvore mede (DT 954).
 fontes_servidas_hash() {
   local rel="${PLATAFIRMA_RELEASE:-/opt/platafirma/current}" nome linha=""
-  for nome in casa-espelho harness; do
+  for nome in casa harness; do
     linha="$linha|$nome=$(readlink -f "$rel/$nome" 2>/dev/null || true)"
   done
   printf '%s' "$linha" | sha256sum | cut -c1-12
@@ -1377,7 +1377,7 @@ ato_detectar() {
   declara_bancada
   c="$(clone_de "$REG_FAMILIA${REG_BANCADA:+@$REG_BANCADA}")" || exit $?
   if [ "$REG_ESTEIRA" = "documento" ]; then
-    if [ "$REG_FAMILIA" = "platafirma-casa-espelho" ]; then
+    if [ "$REG_FAMILIA" = "platafirma-casa" ]; then
       printf '%s  ·  esteira documento (sem ingestão)  ·  runner portão das stacks da família  ·  caminho %s  ·  rodaria: teste rodar %s --portao\n' \
         "$nome" "$c" "$REG_FAMILIA"
     else
@@ -1631,7 +1631,7 @@ ato_rodar() {
 
   if [ "$REG_ESTEIRA" = "documento" ]; then
     [ -z "$alvo" ] || morre "esteira documento mede a árvore inteira: <alvo> não se aplica" 2
-    if [ "$REG_FAMILIA" != "platafirma-casa-espelho" ]; then
+    if [ "$REG_FAMILIA" != "platafirma-casa" ]; then
       rodar_documento "$c" "$REG_FAMILIA" "$EM_ARVORE"
       return $?
     fi

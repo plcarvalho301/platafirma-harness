@@ -59,7 +59,7 @@ def _resolve_dir_chapeus(raiz_chapeus: str | None = None) -> str:
     """Resolve o diretório onde moram os chapéus na casa nova."""
     if raiz_chapeus and os.path.exists(raiz_chapeus):
         return raiz_chapeus
-    casa = os.environ.get("PF_CASA_RAIZ") or str(Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")) / "casa-espelho")
+    casa = os.environ.get("PF_CASA_RAIZ") or str(Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")) / "casa")
     return os.path.join(casa, "instancias", "chapeu")
 
 

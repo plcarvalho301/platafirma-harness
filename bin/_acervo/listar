@@ -503,7 +503,7 @@ def listar_topologia_rotas(stack_slug):
         sv = item.get("service")
         print("  %-32s %-10s %s" % (h, p, sv))
     print()
-    print("Rota fora deste arquivo nao aparece aqui: o tunel do ops-mcp e configurado no")
+    print("Rota fora deste arquivo nao aparece aqui: o tunel da porta e configurado no")
     print("dashboard da Cloudflare, e nenhum arquivo do repositorio o descreve.")
 
 def listar_topologia_acessos(stack_slug):

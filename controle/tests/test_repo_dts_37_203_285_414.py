@@ -195,7 +195,7 @@ def test_dt285_descartar_remove_bancada_limpa_e_recusa_suja_ou_com_commit(tmp_pa
 
 def test_dt414_dt530_abrir_direto_em_main_recoloca_ramo_antigo_ancestral(tmp_path: Path) -> None:
     """DT 414 e DT 530: em platafirma-casa e platafirma-casa-espelho, `repo abrir` recoloca worktree de main presa em ramo antigo ancestral de origin/main."""
-    for repo_nome in ("platafirma-casa", "platafirma-casa-espelho"):
+    for repo_nome in ("platafirma-casa",):
         bancada, origin, wt = _setup_repo(tmp_path / repo_nome, nome=repo_nome, cadeira="ti", chave="main")
 
         # Cria um ramo antigo cujo HEAD já está contido em origin/main e deixa a worktree presa nele

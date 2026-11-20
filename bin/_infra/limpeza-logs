@@ -4,7 +4,7 @@
 # golden record, mora em bin/_infra/. Chamado por `infra limpeza logs [args]`, nunca
 # direto; o cron do claudinho, diariamente, passa a chamar `infra limpeza logs`
 # (ex-bin/ops-log-prune, movido daqui — a agenda do cron muda em PR de platafirma-core).
-# Não roda dentro do ops-mcp de propósito: processo que se auto-poda perde o log
+# Não roda dentro do porta de propósito: processo que se auto-poda perde o log
 # justamente quando morre.
 set -uo pipefail
 # ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] · LONGJOB_LOGDIR[=$PLATAFIRMA_INSTANCIA/var/log/jobs] · OPS_LOG_RETENCAO_DIAS[=90]

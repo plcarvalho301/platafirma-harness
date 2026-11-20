@@ -15,7 +15,7 @@
 # passadas é a sonda que grava a série. O nome do contador é o do cloudflared; ausente, a reconexão sai nula e
 # nunca zero. Medida não reprova: o número, por alto que seja, sai 0; só a fonte que não respondeu sai 5.
 #
-# ambiente: INFRA_REDE_UNIT_OPS[=ops-tunnel.service] · INFRA_REDE_UNIT_RECUPERACAO[=recuperacao-tunnel.service] ·
+# ambiente: INFRA_REDE_UNIT_OPS[=porta-tunel.service] · INFRA_REDE_UNIT_RECUPERACAO[=recuperacao-tunnel.service] ·
 #   INFRA_REDE_BORDA_METRICA[=compose do core] · INFRA_CORE_COMPOSE[=<release>/core/docker-compose.yml] ·
 #   INFRA_INGRESS_CONTEINER[=platafirma-core-cloudflared-1] ·
 #   INFRA_REDE_TIMEOUT[=5] · INFRA_PROC[=/proc] · INFRA_SINAL[=bin/sinal] · INFRA_ACERVO[=bin/acervo]
@@ -222,7 +222,7 @@ def _endereco_borda_metrica() -> str:
 
 def _ler_os_tuneis(proc: Path) -> tuple[list[tuple[str, str | None, dict]], list[dict]]:
     """(lidos, falhos): cada túnel lido como (nome, unit ou None, leitura); cada um que não leu, a linha dele."""
-    unidades = (("ops", os.environ.get("INFRA_REDE_UNIT_OPS", "ops-tunnel.service"), False),
+    unidades = (("ops", os.environ.get("INFRA_REDE_UNIT_OPS", "porta-tunel.service"), True),
                 ("recuperacao", os.environ.get("INFRA_REDE_UNIT_RECUPERACAO", "recuperacao-tunnel.service"), True))
     lidos, falhos = [], []
     for nome, unit, sistema in unidades:

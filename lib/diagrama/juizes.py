@@ -59,7 +59,7 @@ def raiz_da_casa() -> Path:
     if dada:
         return Path(dada)
     release = Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"))
-    return release / "casa-espelho"
+    return release / "casa"
 
 
 def raiz_do_harness() -> Path:

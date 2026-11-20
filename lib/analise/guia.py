@@ -15,7 +15,7 @@ def ler() -> str:
     repo = release() / "harness/bin/repo"
     try:
         fetch = subprocess.run(
-            [str(repo), "git", "platafirma-casa-espelho", "fetch", "origin", "main"],
+            [str(repo), "git", "platafirma-casa", "fetch", "origin", "main"],
             capture_output=True,
             check=False,
             text=True,
@@ -27,7 +27,7 @@ def ler() -> str:
             [
                 str(repo),
                 "git",
-                "platafirma-casa-espelho",
+                "platafirma-casa",
                 "show",
                 "origin/main:" + CAMINHO,
             ],

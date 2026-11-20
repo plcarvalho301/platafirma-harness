@@ -79,12 +79,12 @@ class Linha:
 
 
 def raiz() -> Path:
-    """A raiz da árvore da casa nova: PF_CASA_RAIZ, ou PLATAFIRMA_RELEASE/casa-espelho."""
+    """A raiz da árvore da casa nova: PF_CASA_RAIZ, ou PLATAFIRMA_RELEASE/casa."""
     dada = (os.environ.get("PF_CASA_RAIZ") or "").strip()
     if dada:
         return Path(dada)
     release = Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"))
-    return release / "casa-espelho"
+    return release / "casa"
 
 
 def caminho_eixos(base: Path) -> Path:

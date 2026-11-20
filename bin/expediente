@@ -142,7 +142,7 @@ def env_verbo(cadeira: str) -> dict[str, str]:
 
 
 def resolve_montador_sha() -> str:
-    casa = Path(os.environ.get("PF_CASA_RAIZ") or str(Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")) / "casa-espelho"))
+    casa = Path(os.environ.get("PF_CASA_RAIZ") or str(Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")) / "casa"))
     try:
         nome = casa.resolve().name
         if len(nome) >= 7:

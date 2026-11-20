@@ -148,7 +148,7 @@ def test_veredito_parcial_nao_responde_pela_rodada_inteira(tmp_path):
     assert "AINDA NAO MEDIDO" in r.stdout
 
 def test_promover_fonte_servida_mede_de_novo_a_mesma_arvore(tmp_path):
-    """DT 954: o memo do portão leva a casa-espelho e o harness servidos, que a suíte lê;
+    """DT 954: o memo do portão leva a casa e o harness servidos, que a suíte lê;
     promover um deles faz a mesma árvore ser medida de novo."""
     marcas = tmp_path / "marcas.txt"
     env, arv, _ = _tres(tmp_path, marcas, RAIOS)
@@ -157,15 +157,15 @@ def test_promover_fonte_servida_mede_de_novo_a_mesma_arvore(tmp_path):
     for nome in ("espelho-a", "espelho-b", "harness-a"):
         (tmp_path / nome).mkdir()
     (rel / "harness").symlink_to(tmp_path / "harness-a")
-    (rel / "casa-espelho").symlink_to(tmp_path / "espelho-a")
+    (rel / "casa").symlink_to(tmp_path / "espelho-a")
     so_memo = dict(env, PF_TESTE_SO_MEMO="1")
     r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv))
     assert r.returncode == 0, r.stdout + r.stderr
     r = _run(so_memo, "rodar", "demo", "--portao", "--arvore", str(arv))
     assert r.returncode == 0, r.stdout + r.stderr
     assert "veredito reaproveitado" in r.stdout + r.stderr
-    (rel / "casa-espelho").unlink()
-    (rel / "casa-espelho").symlink_to(tmp_path / "espelho-b")
+    (rel / "casa").unlink()
+    (rel / "casa").symlink_to(tmp_path / "espelho-b")
     r = _run(so_memo, "rodar", "demo", "--portao", "--arvore", str(arv))
     assert r.returncode == 6, r.stdout + r.stderr
     assert "AINDA NAO MEDIDO" in r.stdout

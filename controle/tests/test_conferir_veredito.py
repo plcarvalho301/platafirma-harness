@@ -1510,14 +1510,14 @@ def test_pdp_conforme_quando_tag_encontrada(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(conferir, "_sha_release", lambda: "abc1234")
     monkeypatch.setattr(conferir, "_sonda_pdp_servidor", lambda s, _c: (resumo_esp, "/health:x-pf-pdp-resumo"))
 
-    exit_code = conferir.conferir_pdp("ops-mcp", como_json=True)
+    exit_code = conferir.conferir_pdp("porta", como_json=True)
     saida = capsys.readouterr()
 
     assert exit_code == 0
     dado = json.loads(saida.out)
     assert len(dado["itens"]) == 1
     item = dado["itens"][0]
-    assert item["nome"] == "ops-mcp"
+    assert item["nome"] == "porta"
     assert item["estado"] == "conforme"
     assert item["motivo"] is None
 
@@ -1563,7 +1563,7 @@ def test_pdp_divergente_quando_resumo_carregado_difere_da_release(monkeypatch, t
     assert exit_code == 1
     dado = json.loads(saida.out)
     estados = {item["nome"]: item["estado"] for item in dado["itens"]}
-    assert estados == {"ops-mcp": "conforme", "wiki-mcp": "divergente", "rastreador-api": "conforme"}
+    assert estados == {"porta": "conforme", "wiki-mcp": "divergente", "rastreador-api": "conforme"}
 
 
 def test_dt_850_classes_implementadas_e_help_sai_0(monkeypatch, capsys):

@@ -132,12 +132,12 @@ def _especies_vivas():
 
 
 def _raiz_casa_nova():
-    """Raiz do clone/bancada de `platafirma-casa-espelho` (a casa nova), se existir no host."""
+    """Raiz do clone/bancada de `platafirma-casa` (a casa nova), se existir no host."""
     env = os.environ.get("PF_CASA_ESPELHO")
     if env and os.path.isdir(env):
         return env
     bancada = os.environ.get("PLATAFIRMA_BANCADA", "/home/claudinho/AI")
-    cand = os.path.join(bancada, "platafirma-casa-espelho")
+    cand = os.path.join(bancada, "platafirma-casa")
     return cand if os.path.isdir(cand) else None
 
 def _arquivos_especie_casa_nova(especie):
@@ -162,7 +162,7 @@ def _arquivos_especie_casa_nova(especie):
     return raiz, achados
 
 def _ler_casa_nova(especie, seletor, quero_json, offset=0):
-    """Lê documento da casa nova (`platafirma-casa-espelho`) por chave exata/slug (DT 549)."""
+    """Lê documento da casa nova (`platafirma-casa`) por chave exata/slug (DT 549)."""
     raiz, arquivos = _arquivos_especie_casa_nova(especie)
     if not arquivos:
         return None
@@ -173,12 +173,12 @@ def _ler_casa_nova(especie, seletor, quero_json, offset=0):
         suf = f"-{chave}.md"
         exatos = [rel for rel in arquivos if os.path.basename(rel).endswith(suf)]
     if len(exatos) > 1:
-        ops = "\n".join(f"    repo ler platafirma-casa-espelho {rel}" for rel in exatos[:20])
+        ops = "\n".join(f"    repo ler platafirma-casa {rel}" for rel in exatos[:20])
         morre(f"acervo ler casa {especie}: '{seletor}' ambiguo na casa nova ({len(exatos)} arquivos):\n{ops}", 2)
     if not exatos:
         morre(
-            f"acervo casa: nada da especie '{especie}' com chave '{seletor}' em platafirma-casa-espelho.\n"
-            f"  contorno: repo listar platafirma-casa-espelho · repo ler platafirma-casa-espelho <caminho>",
+            f"acervo casa: nada da especie '{especie}' com chave '{seletor}' em platafirma-casa.\n"
+            f"  contorno: repo listar platafirma-casa · repo ler platafirma-casa <caminho>",
             1,
         )
     rel = exatos[0]
@@ -190,7 +190,7 @@ def _ler_casa_nova(especie, seletor, quero_json, offset=0):
         doc = {
             "especie": especie,
             "chave": os.path.basename(rel).removesuffix(".md"),
-            "repo": "platafirma-casa-espelho",
+            "repo": "platafirma-casa",
             "path": rel,
             "corpo": corpo,
             "bytes_total": total,
@@ -200,7 +200,7 @@ def _ler_casa_nova(especie, seletor, quero_json, offset=0):
         }
         print(json.dumps(doc, ensure_ascii=False, indent=2))
         return 0
-    print(f"casa nova · platafirma-casa-espelho · {rel}")
+    print(f"casa nova · platafirma-casa · {rel}")
     sys.stdout.write(corpo)
     if not corpo.endswith("\n"):
         sys.stdout.write("\n")
@@ -240,10 +240,10 @@ def _especie(especie):
         _, arquivos_nova = _arquivos_especie_casa_nova(especie)
         if arquivos_nova:
             morre(
-                "acervo casa: especie '%s' pertence a casa nova (platafirma-casa-espelho), "
+                "acervo casa: especie '%s' pertence a casa nova (platafirma-casa), "
                 "nao a acervo.especie_da_casa.\n"
-                "  para ler:    acervo ler casa %s <chave>  ou  repo ler platafirma-casa-espelho <caminho>\n"
-                "  para listar: repo listar platafirma-casa-espelho  ou  acervo consultar casa <entidade>"
+                "  para ler:    acervo ler casa %s <chave>  ou  repo ler platafirma-casa <caminho>\n"
+                "  para listar: repo listar platafirma-casa  ou  acervo consultar casa <entidade>"
                 % (especie, especie),
                 2,
             )

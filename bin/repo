@@ -118,9 +118,9 @@ fi
 #   pr-abrir, pr-merge -> recusam (2)
 # Bancada por card que ja existia segue resolvivel por <repo>@<chave> e se entrega pelo
 # mesmo sincronizar; nada se migra a forca. Repositorio de codigo nao muda em nada.
-# platafirma-casa-espelho entrou em 31/10/2026 (debito 432): a casa nova, montada ao lado da atual
+# platafirma-casa é a casa nova (renomeada na #4414): regime de documento direto em main
 # (F3974), e repositorio de deliberacao como ela; a entrega do #4066 e direto em main.
-REPOS_DIRETO_EM_MAIN=(platafirma-casa platafirma-casa-espelho)
+REPOS_DIRETO_EM_MAIN=(platafirma-casa)
 PASTA_DIRETO_EM_MAIN="main"
 
 direto_em_main() {
@@ -171,7 +171,7 @@ uso:
   repo git       <repo> <args…>
 
 bancada: PLATAFIRMA_BANCADA[sem default] (exit 3) · <repo> = <repo>[@<chave>]
-direto em main (casa, casa-espelho): abrir=wt/.../main, sincronizar empurra main, pr-* recusa (2)
+direto em main (casa): abrir=wt/.../main, sincronizar empurra main, pr-* recusa (2)
 exit: 0 ok · 1 nao existe · 2 uso · 3 dep · 4 politica · 5 indeterminavel
 EOF
 }
