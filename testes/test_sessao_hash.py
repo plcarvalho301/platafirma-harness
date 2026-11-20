@@ -70,9 +70,8 @@ except ModuleNotFoundError:
             if not bruto:
                 return None
             out = dict(bruto)
-            for k in ("canonizada", "aviso_carimbo_enviado"):
-                if k in out:
-                    out[k] = out[k] == "true"
+            if "canonizada" in out:
+                out["canonizada"] = out["canonizada"] == "true"
             return out
 
         def ler_campo(self, sid: str, campo: str) -> str | None:

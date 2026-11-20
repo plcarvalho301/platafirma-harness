@@ -40,7 +40,7 @@ SUPERFICIES = (
     "claude.ai", "chat", "code", "desconhecida",
     "agy", "cursor", "codex", "fabrica", "fita",
 )
-_CAMPOS_BOOL = frozenset({"canonizada", "aviso_carimbo_enviado"})
+_CAMPOS_BOOL = frozenset({"canonizada"})
 
 _AJUDANTE_SESSAO = str(_REPO_REAL / "bin" / "_sessao")
 if _AJUDANTE_SESSAO not in sys.path:
