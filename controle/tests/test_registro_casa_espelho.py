@@ -166,10 +166,8 @@ def _uv_de_sistema():
     return (os.environ.get("PLATAFIRMA_UV") or shutil.which("uv", path="/usr/local/bin:/usr/bin:/bin"))
 
 
-@pytest.mark.skipif(not _uv_de_sistema(), reason="sem uv de sistema (runner do forge): o host da casa tem")
 def test_diagrama_cai_para_uv_quando_venv_nao_tem_pytest(tmp_path):
     """Venv de execução sem pytest (ex.: rag em produção) deve cair para `uv run --no-project --with pytest`."""
-    import os
     import venv
 
     raiz = Path(__file__).resolve().parents[2]
@@ -182,20 +180,29 @@ def test_diagrama_cai_para_uv_quando_venv_nao_tem_pytest(tmp_path):
 
     venv_rag = tmp_path / "release" / "current" / "venv" / "rag"
     venv.EnvBuilder(with_pip=False).create(venv_rag)
-    # pyproject.toml no raiz valida que --no-project nao tenta sincronizar o projeto contra o venv:rag
     (wt / "lib" / "diagrama" / "pyproject.toml").write_text(
         "[project]\nname = 'dummy'\nversion = '0.0.1'\n", encoding="utf-8"
     )
+
+    uv_stub = tmp_path / "uv-stub"
+    uv_log = tmp_path / "uv-args.txt"
+    uv_stub.write_text(
+        "#!/usr/bin/env bash\n"
+        f"printf '%s\\n' \"$*\" > {str(uv_log)!r}\n"
+        "echo '1 passed in 0.01s'\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    uv_stub.chmod(0o755)
 
     inst = tmp_path / "instancia"
     inst.mkdir()
     terceiros = tmp_path / "terceiros.json"
     terceiros.write_text("{}", encoding="utf-8")
-    cache_uv = os.environ.get("UV_CACHE_DIR") or str(Path.home() / ".cache" / "uv")
     env = {
         "PATH": "/usr/local/bin:/usr/bin:/bin",
         "HOME": str(tmp_path),
-        "UV_CACHE_DIR": cache_uv,
+        "PLATAFIRMA_UV": str(uv_stub),
         "PLATAFIRMA_BANCADA": str(bancada),
         "PLATAFIRMA_VENVS": str(VENVS),
         "PLATAFIRMA_TERCEIROS": str(terceiros),
@@ -207,10 +214,12 @@ def test_diagrama_cai_para_uv_quando_venv_nao_tem_pytest(tmp_path):
     r_teste = subprocess.run(
         [str(raiz / "bin" / "teste"), "rodar", "platafirma-harness@t1",
          "lib/diagrama/tests/test_ok.py"],
-        env=env, capture_output=True, text=True, check=False, timeout=60,
+        env=env, capture_output=True, text=True, check=False, timeout=30,
     )
     assert r_teste.returncode == 0, r_teste.stdout + r_teste.stderr
     assert "suite VERDE: platafirma-harness@t1 (chave diagrama)" in r_teste.stdout
+    args_uv = uv_log.read_text(encoding="utf-8")
+    assert "run --no-project" in args_uv and "--with pytest" in args_uv, args_uv
 
 
 def test_espelho_vault_ontologia_resolve_no_registro():
