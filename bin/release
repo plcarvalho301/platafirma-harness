@@ -2465,6 +2465,13 @@ cmd_promover() {
   # Estagio 3 (r15, r27, card #4404): conferencia no ar.
   # Vermelho -> current fica no sha novo, nada se expurga e sai 4; quem promoveu
   # corrige o codigo na main e promove de novo. Verde -> expurga fosseis da familia e globais.
+  # Incidente #4407: a porta roda da arvore do core que estava no ar ate reiniciar_porta, que vem
+  # por ultimo; expurgar essa arvore antes devolvia exit 127 a todo verbo ate a porta subir de novo.
+  # Ela fica no disco nesta promocao; o expurgo seguinte (proxima promocao ou limpeza-fossil) a leva,
+  # ja com a porta na arvore nova.
+  if [ "$repo" = "platafirma-core" ] && [ -n "$atual" ] && [ "$atual" != "$sha" ]; then
+    export PF_EXPURGO_PRESERVAR="$PROD_RAIZ/$repo/$atual"
+  fi
   local rc_ar=0
   conferencia_no_ar "$repo" "$sha" || rc_ar=$?
   case "$rc_ar" in
@@ -2622,8 +2629,13 @@ def _tornar_gravavel(alvo: Path) -> None:
                         pass
 
 
+PRESERVAR = {os.path.realpath(p) for p in os.environ.get("PF_EXPURGO_PRESERVAR", "").split(os.pathsep) if p}
+
 def _apagar(alvo: Path, rotulo: str) -> None:
     if not alvo.exists() and not alvo.is_symlink():
+        return
+    if os.path.realpath(alvo) in PRESERVAR:
+        print(f"mantido:   {rotulo} (porta ainda nela ate religar, #4407)")
         return
     if ver:
         print(f"sairia:    {rotulo} ({alvo})")
