@@ -29,7 +29,7 @@ def _rodada(tmp_path, lista: str, suites: dict[str, str], tarefas_corpo: str | N
         f'  "dt admitir") printf "1\\t0d\\tk-a\\t%s\\n" "$3" >> "{balde}"; echo "débito 1 admitido"; exit 0 ;;\n'
         'esac\n'))
     stub.chmod(0o755)
-    return dict(env, PLATAFIRMA_BANCADA=str(banc), PF_TESTE_SEM_MEMO="1", PF_TAREFAS_BIN=str(stub)), log, balde
+    return dict(env, PLATAFIRMA_BANCADA=str(banc), PF_TESTE_SEM_MEMO="1", PF_TAREFAS_BIN=str(stub), UV_OFFLINE="1"), log, balde
 
 
 def test_rodada_diaria_traz_o_tempo_de_cada_degrau_por_familia(tmp_path):
