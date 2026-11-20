@@ -77,10 +77,10 @@ def _limpar_ambiente(saida_dir: Path, manter_home: bool = False):
     for k in list(os.environ):
         if k.startswith(("PF_", "OLARIA_", "CASA_PG_", "POSTGRES_")):
             os.environ.pop(k, None)
-    os.environ["TMPDIR"] = str(tmp_dir)
-    os.environ["TEMP"] = str(tmp_dir)
-    os.environ["TMP"] = str(tmp_dir)
     if not manter_home:
+        os.environ["TMPDIR"] = str(tmp_dir)
+        os.environ["TEMP"] = str(tmp_dir)
+        os.environ["TMP"] = str(tmp_dir)
         os.environ["HOME"] = str(tmp_dir)
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
@@ -1005,7 +1005,7 @@ class ExecutorIsoladoUnidade:
         py_bin = venv / "bin" / "python"
         if not py_bin.exists():
             py_bin = Path(sys.executable).resolve()
-        with tempfile.TemporaryDirectory(prefix="esteira-exige-") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="esteira-exige-", ignore_cleanup_errors=True) as tmp_dir:
             saida_dir = Path(tmp_dir)
             (saida_dir / "tmp").mkdir(exist_ok=True)
             (saida_dir / "pytest_tmp").mkdir(exist_ok=True)
