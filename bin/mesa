@@ -457,7 +457,7 @@ def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     como_json = "--json" in args
     if not args or args[0] in ("-h", "--help"):
-        print("uso: mesa <item|corpo|fez|ver> [opções]")
+        print(f"uso: mesa <{'|'.join(ATOS_VALIDOS)}> [opções]")
         return 0
     ato, resto = args[0], args[1:]
     if ato == "item":
