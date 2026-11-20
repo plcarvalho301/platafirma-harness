@@ -66,8 +66,11 @@ except ImportError:
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
 from fila_tipos import TIPOS_VALIDOS  # noqa: E402
-from raizes import instancia  # noqa: E402
+from raizes import instancia, release  # noqa: E402
 
+_ABERTURA_PADRAO = os.path.join(
+    str(instancia() / "var" / "abertura-publicada"), "current", "abertura"
+)
 ABERTURA = os.path.join(
     os.environ.get("PF_ABERTURA_DIR") or str(instancia() / "var" / "abertura-publicada"),
     "current", "abertura")
@@ -124,24 +127,34 @@ def garante_grupo(rc, persona: str):
 
 
 def personas_validas():
-    """Slugs vivos de destinatario (minusculo puro), da ARVORE `abertura/<cadeira>/`
-    mais os participantes de PERSONAS_PARTICIPANTES. Mesma fonte que comum/cadeiras.py
-    (arq:0073 §1) — o ledger de vinculo NAO se le aqui (incidente, ordem do dono).
+    """Slugs vivos de destinatario (minusculo puro), da arvore de personas da casa nova
+    (`casa-espelho/instancias/persona/*.md`, ou `PF_ABERTURA_DIR` quando explicitado)
+    mais os participantes de PERSONAS_PARTICIPANTES.
 
     Arvore ausente/ilegivel devolve None — a lista ilegivel NAO e passe livre, e
     valida_persona ja a trata como recusa alta. Arvore presente mas sem nenhuma
     persona tambem devolve None pela mesma razao: fonte vazia nao valida ninguem."""
-    try:
-        cadeiras = {
-            d.name
-            for d in os.scandir(ABERTURA)
-            if d.is_dir() and os.path.isfile(os.path.join(d.path, "persona.md"))
-        }
-    except OSError:
-        return None
-    # toda cadeira com persona.md na arvore viva e destinatario/emissor pleno
-    # (dono, 03/09/2026: cadeiras flat, sem diferenca de head — a fabrica manda e
-    # recebe como as demais). Participantes externos entram por PERSONAS_PARTICIPANTES.
+    cadeiras: set[str] = set()
+    usar_abertura_explicita = bool(os.environ.get("PF_ABERTURA_DIR")) or (ABERTURA != _ABERTURA_PADRAO)
+    if not usar_abertura_explicita:
+        personas_dir = release() / "casa-espelho" / "instancias" / "persona"
+        try:
+            cadeiras = {
+                e.name[:-3]
+                for e in os.scandir(personas_dir)
+                if e.is_file() and e.name.endswith(".md") and not e.name.startswith(".")
+            }
+        except OSError:
+            cadeiras = set()
+    if not cadeiras:
+        try:
+            cadeiras = {
+                d.name
+                for d in os.scandir(ABERTURA)
+                if d.is_dir() and os.path.isfile(os.path.join(d.path, "persona.md"))
+            }
+        except OSError:
+            return None
     if not cadeiras:
         return None
     return cadeiras | set(PERSONAS_PARTICIPANTES)

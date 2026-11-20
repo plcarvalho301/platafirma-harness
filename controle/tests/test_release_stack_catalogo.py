@@ -294,13 +294,9 @@ def test_estagio_anexa_ao_job_que_ja_mede_a_rev(tmp_path):
     assert not chamadas.exists(), "abriu outro job de medicao para a mesma rev"
 
 
-def test_reverter_tambem_nomeia_a_stack_de_catalogo(tmp_path):
+def test_reverter_retirado_sai_2_em_stack_de_catalogo(tmp_path):
     amb = _amb(tmp_path, CATALOGO)
     assert amb.run("promover", "fixture").returncode == 0
-    (amb.wt / "README.md").write_text("dois\n", encoding="utf-8")
-    _git(amb.wt, "commit", "-q", "-am", "dois")
-    _git(amb.wt, "push", "-q", "origin", "main")
-    assert amb.run("promover", "fixture").returncode == 0
     r = amb.run("reverter", "fixture", amb.sha, "--ensaio")
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert "de catálogo, sem compose — nada a reverter: cat" in r.stdout
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "política 0009" in r.stderr.lower()

@@ -369,6 +369,7 @@ testes/test_suite_portao.py | bin/repo lib/suite/portao.py lib/suite/__main__.py
 testes/test_oplog_interrompido.py | lib/oplog.py
 testes/test_metrica_transporte.py | bin/metrica
 testes/test_release_reinicia_porta.py | bin/release
+tests/test_release_expurgo_dt930.py | bin/release bin/_infra/imagens registro/porta.yaml
 testes/test_poda.py | lib/poda/**
 testes/test_leitura_escrita.py | lib/leitura/** lib/escrita/** bin/ler_arquivo bin/write_file
 testes/test_leitura_dts_832_897_898_899.py | lib/leitura/** lib/oplog.py bin/ler_arquivo

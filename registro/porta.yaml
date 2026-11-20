@@ -160,11 +160,11 @@ verbos:
   release:
     descricao: >-
       opera a release, o que está no ar · use para: «que versão está no ar e desde quando?»;
-      promover release, «sobe isso», «promove»; reverter release, «volta para a anterior»; ler
-      e procurar arquivo como está servido · atos: estado (leitura, operacao), listar (leitura,
-      operacao), ler (leitura, operacao), procurar (leitura, operacao), conferir (leitura,
-      operacao), telas (leitura, operacao), promover (escrita, operacao), reverter (escrita,
-      operacao), migrar (escrita, operacao)
+      promover release, «sobe isso», «promove»; expurgar fósseis da release; ler e procurar
+      arquivo como está servido · atos: estado (leitura, operacao), listar (leitura, operacao),
+      ler (leitura, operacao), procurar (leitura, operacao), conferir (leitura, operacao),
+      telas (leitura, operacao), promover (escrita, operacao), expurgar (escrita, operacao),
+      migrar (escrita, operacao)
     faces:
       casca: {}
   repo:
