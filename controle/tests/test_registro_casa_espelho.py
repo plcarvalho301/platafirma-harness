@@ -257,11 +257,11 @@ def test_espelho_sem_alvo_roda_portao_das_stacks_e_nao_chama_acervo_ingerir(tmp_
             "esteira": "codigo",
             "promovida": False,
             "venv": "rag",
-            "teste": "outros_repos/demo",
+            "teste": "subprojeto/demo",
         },
     }), encoding="utf-8")
 
-    teste_dir = wt / "outros_repos" / "demo" / "tests"
+    teste_dir = wt / "subprojeto" / "demo" / "tests"
     teste_dir.mkdir(parents=True)
     (teste_dir / "test_ok.py").write_text("def test_ok(): assert True\n", encoding="utf-8")
     (teste_dir / "VERDES").write_text("tests/test_ok.py\n", encoding="utf-8")

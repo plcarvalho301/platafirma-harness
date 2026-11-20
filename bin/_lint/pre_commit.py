@@ -17,11 +17,49 @@ if str(HARNESS_DIR) not in sys.path:
 try:
     from _lint.arranque import verificar_arranque
     from _lint.repo import verificar_repo
+    from _lint.resultado import Apontamento
     from _lint.superficie import verificar_superficie
 except ImportError:
     from arranque import verificar_arranque
     from repo import verificar_repo
+    from resultado import Apontamento
     from superficie import verificar_superficie
+
+_CAMINHO_VEDADO_ESPELHO = "outros" + "_repos"
+
+
+def bloqueantes_caminho_vedado_no_stage(raiz: Path) -> list[Apontamento]:
+    """Recusa no stage de platafirma-casa-espelho qualquer arquivo sob o caminho vedado."""
+    if _nome_do_repo(raiz) != "platafirma-casa-espelho":
+        return []
+    p = subprocess.run(
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
+        cwd=raiz,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    if p.returncode != 0 or not p.stdout:
+        return []
+    prefixo = f"{_CAMINHO_VEDADO_ESPELHO}/"
+    achados: list[Apontamento] = []
+    for rel in (x for x in p.stdout.split("\0") if x):
+        norm = rel.replace("\\", "/")
+        if norm == _CAMINHO_VEDADO_ESPELHO or norm.startswith(prefixo):
+            achados.append(
+                Apontamento(
+                    norm,
+                    1,
+                    f"caminho vedado no platafirma-casa-espelho: «{norm}»",
+                    "gravar diretamente no repositório de destino (platafirma-harness, "
+                    "platafirma-conhecimento, platafirma-posto, platafirma-core, "
+                    "platafirma-rastreador, platafirma-motor ou platafirma-ui)",
+                    severidade="bloqueante",
+                    id="ARVORE_RAIZ",
+                )
+            )
+    return achados
 
 
 def _nome_do_repo(raiz: Path) -> str:
@@ -117,6 +155,10 @@ def main() -> int:
     achados_casa, _ = casa_bloqueantes_no_stage(raiz)
     for apt in achados_casa:
         bloqueantes.append(("casa-por-caminho", apt))
+
+    # 8. arvore (staged): bloqueia no platafirma-casa-espelho qualquer arquivo sob o caminho vedado (#4403).
+    for apt in bloqueantes_caminho_vedado_no_stage(raiz):
+        bloqueantes.append(("arvore", apt))
 
     if bloqueantes:
         print("pre-commit: commit bloqueado por violacao de regra bloqueante:\n", file=sys.stderr)
