@@ -157,7 +157,7 @@ uso:
   repo mover     <origem>[@<sha>]:<caminho> <destino>:<caminho>
   repo sanear    [<repo>] [--relatar]
   repo descartar <repo>[@<chave>] [--forcar]
-  repo pr-abrir  <repo> --titulo <t> [--corpo <c>] [--base <ramo>]
+  repo pr-abrir  <repo> --titulo <t> [--corpo <c>] [--base <ramo>] [--espera]
   repo pr-listar <repo> [--todos]
   repo pr-ver    <repo> <numero> [--checks] [--log]
   repo pr-diff    <repo> <numero> [<caminho>…] [--caminho <p>] [--stat|--name-only]
@@ -269,6 +269,11 @@ chave_de() {
 cadeira_da_sessao() {
   local c="${PF_CADEIRA:-}"
   c="${c#claudinho-}"; c="${c#claudinha-}"
+  # DT 928: com abertura degradada (sem PF_CADEIRA), deriva o namespace do sujeito
+  # autenticado da conexão (PF_SUJEITO) para não travar correção em incidente.
+  if [ -z "$c" ] && [ -n "${PF_SUJEITO:-}" ]; then
+    c="${PF_SUJEITO//[^a-zA-Z0-9._-]/-}"
+  fi
   printf '%s' "$c"
 }
 
@@ -287,9 +292,7 @@ candidatas_de() {
 bancada_de() {
   local nome="$1"
   local chave="${2:-}"
-  local cadeira="${PF_CADEIRA:-}"
-  cadeira="${cadeira#claudinho-}"
-  cadeira="${cadeira#claudinha-}"
+  local cadeira; cadeira="$(cadeira_da_sessao)"
   local sid="${PF_SESSAO:-}"
 
   if [ -n "$chave" ]; then
@@ -2128,10 +2131,10 @@ cmd_abrir() {
     esac
   done
 
-  local cadeira="${arg_cadeira:-${PF_CADEIRA:-}}"
+  local cadeira="${arg_cadeira:-$(cadeira_da_sessao)}"
   cadeira="${cadeira#claudinho-}"
   cadeira="${cadeira#claudinha-}"
-  [ -n "$cadeira" ] || morre "dependência ausente: PF_CADEIRA não definida — abrir exige cadeira" 3
+  [ -n "$cadeira" ] || morre "dependência ausente: PF_CADEIRA não definida — abrir exige cadeira ou PF_SUJEITO" 3
 
   if [ -n "$card" ]; then
     local _card_num="${card###}"
@@ -3009,13 +3012,14 @@ ato_empurrar() {
 }
 
 ato_pr_abrir() {
-  local nome="${1:-}" titulo="" corpo="" base="main" c ramo
+  local nome="${1:-}" titulo="" corpo="" base="main" espera=0 c ramo
   shift || uso
   while [ $# -gt 0 ]; do
     case "$1" in
       --titulo) titulo="${2:-}"; shift 2 || uso ;;
       --corpo)  corpo="${2:-}";  shift 2 || uso ;;
       --base)   base="${2:-}";   shift 2 || uso ;;
+      --espera) espera=1; shift ;;
       *) morre "argumento nao reconhecido: '$1'" 2 ;;
     esac
   done
@@ -3040,7 +3044,11 @@ ato_pr_abrir() {
     printf 'já feito: PR %s aberto de %s\n' "$ja" "$ramo"
     local numero_ja="${ja#\#}"; numero_ja="${numero_ja%% *}"
     publica_veredito "$c" "$nome" "$("$GIT" -C "$c" rev-parse HEAD)"
-    printf 'próximo: a esteira integra o PR com veredito verde; repo pr-ver %s %s mostra o sha do merge, que vai ao release promover\n' "$nome" "$numero_ja"
+    if [ "$espera" -eq 1 ]; then
+      printf 'próximo: PR em espera (rascunho) — a esteira só publica o veredito; repo pr-merge %s %s integra quando estiver pronto\n' "$nome" "$numero_ja"
+    else
+      printf 'próximo: a esteira integra o PR com veredito verde; repo pr-ver %s %s mostra o sha do merge, que vai ao release promover\n' "$nome" "$numero_ja"
+    fi
     return 0
   fi
   # DT 822: marca a cadeira autora no corpo do PR (todas as cadeiras usam a mesma conta no forge).
@@ -3052,16 +3060,27 @@ ato_pr_abrir() {
       corpo="<!-- pf-autor: ${cad_autora} -->"
     fi
   fi
-  (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr create --base "$base" --head "$ramo" --title "$titulo" --body "$corpo" >/dev/null) \
+  # DT 915: --espera abre como rascunho; esteira-integra.yml filtra isDraft|not e não mescla até pr-merge.
+  local draft_flag=()
+  [ "$espera" -eq 1 ] && draft_flag=(--draft)
+  (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr create --base "$base" --head "$ramo" --title "$titulo" --body "$corpo" ${draft_flag[@]+"${draft_flag[@]}"} >/dev/null) \
     || morre "gh pr create falhou" 3
   local lido
   lido="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$ramo" --json number,state,url,headRefOid \
           --jq '"#\(.number) \(.state) \(.url) (head \(.headRefOid[0:7]))"' 2>/dev/null)" \
     || morre "indeterminavel: PR criado? o forge nao confirmou" 5
-  printf 'PR %s de %s -> %s [lido do forge]\n' "$lido" "$ramo" "$base"
+  if [ "$espera" -eq 1 ]; then
+    printf 'PR %s de %s -> %s [rascunho, lido do forge]\n' "$lido" "$ramo" "$base"
+  else
+    printf 'PR %s de %s -> %s [lido do forge]\n' "$lido" "$ramo" "$base"
+  fi
   local numero="${lido#\#}"; numero="${numero%% *}"
   publica_veredito "$c" "$nome" "$("$GIT" -C "$c" rev-parse HEAD)"
-  printf 'próximo: a esteira integra o PR com veredito verde; repo pr-ver %s %s mostra o sha do merge, que vai ao release promover\n' "$nome" "$numero"
+  if [ "$espera" -eq 1 ]; then
+    printf 'próximo: PR em espera (rascunho) — a esteira só publica o veredito; repo pr-merge %s %s integra quando estiver pronto\n' "$nome" "$numero"
+  else
+    printf 'próximo: a esteira integra o PR com veredito verde; repo pr-ver %s %s mostra o sha do merge, que vai ao release promover\n' "$nome" "$numero"
+  fi
 }
 
 ato_pr_listar() {
@@ -3409,11 +3428,11 @@ ato_pr_merge() {
   tem_gh
   c="$(base_de_repo "$nome")" || exit $?
   # estado lido do forge ANTES: MERGED e "ja feito" (idempotente), nunca erro nem novo merge
-  local info st ramo_pr moid
-  info="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json state,headRefName,headRefOid,mergeCommit \
-          --jq '"\(.state) \(.headRefName) \(.mergeCommit.oid // "-") \(.headRefOid)"' 2>/dev/null)" \
+  local info st ramo_pr moid is_draft
+  info="$(cd "$c" && env PATH="$PATH_FORGE" "$GH" pr view "$num" --json state,headRefName,headRefOid,mergeCommit,isDraft \
+          --jq '"\(.state) \(.headRefName) \(.mergeCommit.oid // "-") \(.headRefOid) \(.isDraft // false)"' 2>/dev/null)" \
     || morre "indeterminavel: nao li o PR #$num no forge" 5
-  local hoid; read -r st ramo_pr moid hoid <<< "$info"
+  local hoid; read -r st ramo_pr moid hoid is_draft <<< "$info"
   if [ "$st" = MERGED ]; then
     printf 'já feito: PR #%s MERGED em %s (%s)\n' "$num" "${moid:0:7}" "$ramo_pr"
     limpa_ramo_entregue "$c" "$ramo_pr" "$hoid"
@@ -3455,6 +3474,11 @@ ato_pr_merge() {
       nomes="$(printf '%s' "$status_checks" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("; ".join(((c.get("name") or c.get("context") or "?") + " " + (c.get("detailsUrl") or c.get("targetUrl") or "")).strip() for c in (d.get("statusCheckRollup") or []) if c.get("conclusion") == "FAILURE" or c.get("state") in ("FAILURE", "ERROR")))' 2>/dev/null || true)"
       morre "recusa de política: check vermelho no PR #$num${nomes:+: $nomes} (use --forcar para ignorar)" 4
     fi
+  fi
+  # DT 915: PR aberto com --espera nasce como rascunho; após passar nos portões, tira de rascunho antes do merge.
+  if [ "${is_draft:-false}" = "true" ]; then
+    (cd "$c" && env PATH="$PATH_FORGE" GH_PROMPT_DISABLED=1 "$GH" pr ready "$num" </dev/null >/dev/null) \
+      || morre "gh pr ready falhou no PR #$num" 3
   fi
   # O merge remoto e a poda do ramo local sao dois atos. --delete-branch tenta apagar
   # o ramo local e falha quando 'main' (ou o ramo do PR) esta preso em worktree, o que
