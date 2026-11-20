@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # expediente — monta a abertura da sessão (roteiro, rotinas e pauta) e o perfil cadeirinha
-# capacidade: expediente
+# capacidade: comportamento
 # dono: gestao-estrategica
 # classe: B
 # forma: objeto (montar, rotear) / lista (catalogo)

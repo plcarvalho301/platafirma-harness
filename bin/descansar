@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # descansar — encerra a sessão numa chamada e numa linha, e dispara as coletas em segundo plano
-# capacidade: descanso
+# capacidade: memoria
 # dono: gestao-estrategica
 # classe: B
 # forma: linha (encerrar) / objeto (publicar)
