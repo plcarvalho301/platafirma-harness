@@ -2324,7 +2324,7 @@ print(json.dumps({
     printf 'deploy:    AVISO — falha ao montar payload de deploy\n' >&2
     return 0
   }
-  printf '%s\n' "$payload" | "$tarefas_bin" api-corpo POST /deploys >/dev/null 2>&1 || rc_dep=$?
+  "$tarefas_bin" api-corpo POST /deploys <<<"$payload" >/dev/null 2>&1 || rc_dep=$?
   if [ "$rc_dep" -eq 0 ]; then
     printf 'deploy:    registrado no rastreador (%s, %s)\n' "$ambiente" "${para:0:7}"
   else
