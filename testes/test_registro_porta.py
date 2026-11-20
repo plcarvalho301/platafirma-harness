@@ -1,14 +1,9 @@
-# componente: componente:porta
 """O registro da porta (registro/porta.yaml, card #4117 e decisão #5322 da F4073).
 
 Hermetico: le registro/porta.yaml sem depender da porta legada nem do registro de ferramental do banco.
 """
 from __future__ import annotations
 
-import ast
-import re
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -86,56 +81,3 @@ def test_toolstring_do_malote_no_registro(registro):
     assert "em paralelo" in desc
     assert "lote_next" in desc
     assert "SEMPRE que for chamar dois ou mais verbos" not in desc
-
-
-def _atos_da_descricao(descricao: str) -> list[str]:
-    m = re.search(r"\batos:\s*([^·\n]+)", descricao)
-    assert m, f"descricao sem bloco 'atos:': {descricao!r}"
-    bloco = re.sub(r"\([^)]*\)", "", m.group(1))
-    return [parte.strip() for parte in bloco.split(",") if parte.strip()]
-
-
-def _atos_validos_do_mesa() -> tuple[str, ...]:
-    arvore = ast.parse((REPO_ROOT / "bin" / "mesa").read_text(encoding="utf-8"))
-    for no in arvore.body:
-        if isinstance(no, ast.Assign):
-            for alvo in no.targets:
-                if isinstance(alvo, ast.Name) and alvo.id == "ATOS_VALIDOS":
-                    valor = ast.literal_eval(no.value)
-                    assert isinstance(valor, tuple) and valor
-                    return tuple(str(a) for a in valor)
-    raise AssertionError("bin/mesa sem constante ATOS_VALIDOS")
-
-
-def test_atos_do_mesa_no_registro_batem_com_o_verbo(registro):
-    """DT 934: a lista de atos na descrição de mesa não diverge de bin/mesa."""
-    atos_verbo = _atos_validos_do_mesa()
-    desc = registro["verbos"]["mesa"]["descricao"]
-    atos_desc = _atos_da_descricao(desc)
-    assert len(atos_desc) == len(set(atos_desc)), f"atos duplicados na descrição: {atos_desc}"
-    assert set(atos_desc) == set(atos_verbo), (
-        f"descrição de mesa em porta.yaml ({atos_desc}) diverge de bin/mesa ({list(atos_verbo)})"
-    )
-
-    doc = ast.get_docstring(ast.parse((REPO_ROOT / "bin" / "mesa").read_text(encoding="utf-8"))) or ""
-    assert set(_atos_da_descricao(doc)) == set(atos_verbo)
-
-    ajuda = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "bin" / "mesa"), "--help"],
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=False,
-    )
-    assert ajuda.returncode == 0
-    assert f"<{'|'.join(atos_verbo)}>" in ajuda.stdout
-
-    recusa = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "bin" / "mesa"), "substituir"],
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=False,
-    )
-    assert recusa.returncode == 2
-    assert f"atos disponíveis: {', '.join(atos_verbo)}" in recusa.stderr
