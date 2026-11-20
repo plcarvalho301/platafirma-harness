@@ -292,3 +292,20 @@ def test_limpeza_remove_imagem_sem_tag_pelo_id(cena: Cena, tmp_path: Path):
     tokens = rastro[0].split()
     assert "sha256:nocodbsemtag" in tokens
     assert "nocodb/nocodb" not in tokens
+
+
+def test_imagem_em_uso_por_digest_e_latest_implicito(cena: Cena):
+    cena.conteiner("rag-extractor-nocodb", "nocodb/nocodb:0.301.1@sha256:5d1c796d1b4f")
+    cena.imagem("nocodb/nocodb:<none>", "sha256:5d1c796d1b4f", "1.24GB", ativa=True)
+    cena.conteiner("harness-controle-tela-1", "harness-controle-tela")
+    cena.imagem("harness-controle-tela:latest", "sha256:996b940739dd", "428MB", ativa=True)
+
+    r = cena.roda("imagens", "--json")
+    assert r.returncode == 0, r.stderr
+    dado = json.loads(r.stdout)
+    em_uso = {x["referencia"]: x["conteineres"] for x in dado["em_uso"]}
+    inativas = {x["referencia"] for x in dado["inativas"]}
+    assert em_uso["nocodb/nocodb"] == ["rag-extractor-nocodb"]
+    assert em_uso["harness-controle-tela:latest"] == ["harness-controle-tela-1"]
+    assert "nocodb/nocodb" not in inativas
+    assert "harness-controle-tela:latest" not in inativas
