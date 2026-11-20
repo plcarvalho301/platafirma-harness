@@ -134,7 +134,7 @@ set +e; out="$("$VERBO" reverter platafirma-harness 2>&1)"; rc=$?; set -e
 echo "OK: promover confere o terceiro, expurga rev anterior e reverter foi retirado (politica 0009)"
 
 printf '{"x": {"familia": "platafirma-harness", "destino": "../fora", "sha256": "%s", "url": "https://a"}}\n' "$PINO" > "$TMP_DIR/terceiros-ruim.json"
-set +e; out="$(PLATAFIRMA_TERCEIROS="$TMP_DIR/terceiros-ruim.json" "$VERBO" promover platafirma-harness "$SHA2" 2>&1)"; rc=$?; set -e
+set +e; out="$(PLATAFIRMA_TERCEIROS="$TMP_DIR/terceiros-ruim.json" "$VERBO" promover platafirma-harness "$SHA1" 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 3 ] && grep -q "terceiro mal declarado" <<<"$out" || falha "destino com .. devia ser recusado: rc=$rc $out"
 echo "OK: declaracao que sai da arvore e recusada"
 
