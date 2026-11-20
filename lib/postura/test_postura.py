@@ -468,3 +468,65 @@ def test_ato_ler_com_chave_serve_instancia_direta_e_sai_1_se_ausente(ctx, capsys
 
     assert despacha(ctx, "ler", ["--parte", "ritual", "--chave", "inexistente", "--json"]) == 1
     capsys.readouterr()
+
+
+def _atos_da_descricao_mesa(descricao: str) -> list[str]:
+    import re
+
+    m = re.search(r"\batos:\s*([^·\n]+)", descricao)
+    assert m, f"descricao sem bloco 'atos:': {descricao!r}"
+    bloco = re.sub(r"\([^)]*\)", "", m.group(1))
+    return [parte.strip() for parte in bloco.split(",") if parte.strip()]
+
+
+def test_atos_do_mesa_no_registro_batem_com_o_verbo():
+    """DT 934: a lista de atos na descrição de mesa em porta.yaml não diverge de bin/mesa."""
+    import ast
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    import yaml
+
+    raiz = Path(__file__).resolve().parents[2]
+    mesa = raiz / "bin" / "mesa"
+    arvore = ast.parse(mesa.read_text(encoding="utf-8"))
+    atos_verbo: tuple[str, ...] = ()
+    for no in arvore.body:
+        if isinstance(no, ast.Assign):
+            for alvo in no.targets:
+                if isinstance(alvo, ast.Name) and alvo.id == "ATOS_VALIDOS":
+                    valor = ast.literal_eval(no.value)
+                    assert isinstance(valor, tuple) and valor
+                    atos_verbo = tuple(str(a) for a in valor)
+    assert atos_verbo, "bin/mesa sem constante ATOS_VALIDOS"
+
+    registro = yaml.safe_load((raiz / "registro" / "porta.yaml").read_text(encoding="utf-8"))
+    atos_desc = _atos_da_descricao_mesa(registro["verbos"]["mesa"]["descricao"])
+    assert len(atos_desc) == len(set(atos_desc)), f"atos duplicados na descrição: {atos_desc}"
+    assert set(atos_desc) == set(atos_verbo), (
+        f"descrição de mesa em porta.yaml ({atos_desc}) diverge de bin/mesa ({list(atos_verbo)})"
+    )
+
+    doc = ast.get_docstring(arvore) or ""
+    assert set(_atos_da_descricao_mesa(doc)) == set(atos_verbo)
+
+    ajuda = subprocess.run(
+        [sys.executable, str(mesa), "--help"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert ajuda.returncode == 0
+    assert f"<{'|'.join(atos_verbo)}>" in ajuda.stdout
+
+    recusa = subprocess.run(
+        [sys.executable, str(mesa), "substituir"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert recusa.returncode == 2
+    assert f"atos disponíveis: {', '.join(atos_verbo)}" in recusa.stderr
