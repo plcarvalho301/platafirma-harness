@@ -21,8 +21,38 @@ from typing import Any
 CAP_PADRAO = 50 * 1024
 LINHA_LONGA_LIMITE = 2_000
 REPETICAO_MIN = 4
+LEDGER_DISTANCIA_MAX = 15
 SUFIXO_REENVIO = "inteiro=true reenvia"
 SO_LE = "sim — só lê"
+
+
+def poda_desligada() -> bool:
+    """Retorna True quando PF_PODA=0 (ou equivalente) desliga a poda explicitamente."""
+    val = os.environ.get("PF_PODA", "").strip().lower()
+    return val in ("0", "false", "nao", "off")
+
+
+def _ledger_distancia_max() -> int:
+    bruto = os.environ.get("PF_LEDGER_DISTANCIA", "").strip()
+    if bruto:
+        try:
+            v = int(bruto)
+            if v >= 0:
+                return v
+        except ValueError:
+            pass
+    return LEDGER_DISTANCIA_MAX
+
+
+def _eh_json_valido(texto: str) -> bool:
+    s = texto.strip()
+    if not s or s[0] not in ("{", "["):
+        return False
+    try:
+        json.loads(s)
+        return True
+    except ValueError:
+        return False
 
 _RE_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
 _RE_BRANCOS_MULTI = re.compile(r"\n{3,}")
@@ -127,8 +157,9 @@ def perfil_verbo(slug: str, binario: str | Path | None) -> dict[str, Any]:
             perfil["cauda"] = valor.lower() in ("sim", "1", "true")
         elif k == "poda":
             regime, _, atos = valor.partition("@")
-            if regime.lower() == "cosmetica":
-                perfil["poda"] = "cosmetica"
+            reg_low = regime.lower()
+            if reg_low in ("cosmetica", "constitutiva"):
+                perfil["poda"] = reg_low
                 perfil["poda_atos"] = tuple(a for a in atos.split(",") if a)
     _PERFIS[chave] = perfil
     return perfil
@@ -136,6 +167,13 @@ def perfil_verbo(slug: str, binario: str | Path | None) -> dict[str, Any]:
 
 def eh_cosmetica(perfil: dict[str, Any], ato: str | None) -> bool:
     if perfil.get("poda") != "cosmetica":
+        return False
+    atos = perfil.get("poda_atos") or ()
+    return not atos or (ato or "") in atos
+
+
+def eh_constitutiva(perfil: dict[str, Any], ato: str | None) -> bool:
+    if perfil.get("poda") != "constitutiva":
         return False
     atos = perfil.get("poda_atos") or ()
     return not atos or (ato or "") in atos
@@ -177,8 +215,13 @@ def eh_escrita(slug: str, binario: str | Path | None, ato: str | None) -> bool:
     return ato in atos_que_escrevem(slug, binario)
 
 
-def lavar(texto: str) -> tuple[str, dict[str, Any]]:
-    """Remove ruído (ANSI, excesso de linhas em branco, repetições longas e linhas gigantes)."""
+def lavar(
+    texto: str,
+    *,
+    forma: str = "listagem",
+    constitutiva: bool = False,
+) -> tuple[str, dict[str, Any]]:
+    """Remove ruído preservando JSON válido e conteúdo sob poda constitutiva."""
     bytes_antes = len(texto.encode("utf-8", "replace"))
     classes: list[str] = []
     atual = texto
@@ -188,11 +231,17 @@ def lavar(texto: str) -> tuple[str, dict[str, Any]]:
         classes.append("ansi")
         atual = sem_ansi
 
+    if forma == "json" or _eh_json_valido(atual):
+        return atual, {"classes": classes, "bytes_antes": bytes_antes}
+
     sem_branco = _RE_BRANCOS_MULTI.sub("\n\n", atual)
     sem_branco = "\n".join(ln.rstrip() for ln in sem_branco.split("\n"))
     if sem_branco != atual:
         classes.append("branco")
         atual = sem_branco
+
+    if constitutiva:
+        return atual, {"classes": classes, "bytes_antes": bytes_antes}
 
     linhas = atual.split("\n")
     novas_linhas: list[str] = []
@@ -325,6 +374,7 @@ class LedgerSessao:
         *,
         esquece: bool = False,
         escrita: bool = False,
+        distancia_max: int | None = None,
     ) -> dict[str, Any]:
         h = sha_servido(texto)
         tamanho = len(texto.encode("utf-8", "replace"))
@@ -334,14 +384,24 @@ class LedgerSessao:
         entradas: dict[str, Any] = self._dados.setdefault("entradas", {})
         anterior = entradas.get(alca)
         if not esquece and isinstance(anterior, dict) and anterior.get("sha") == h:
-            giro_ref = anterior.get("giro", 0)
-            ponteiro = f"[igual ao giro {giro_ref} — sha {h}, {tamanho} bytes não reenviados; {SUFIXO_REENVIO}]"
+            giro_ref = int(anterior.get("giro") or 0)
+            limite = distancia_max if distancia_max is not None else _ledger_distancia_max()
+            if (giro - giro_ref) <= limite:
+                ponteiro = f"[igual ao giro {giro_ref} — sha {h}, {tamanho} bytes não reenviados; {SUFIXO_REENVIO}]"
+                return {
+                    "modo": "igual",
+                    "ledger": "igual",
+                    "giro_ref": giro_ref,
+                    "bytes_omitidos": tamanho,
+                    "texto": ponteiro,
+                }
+            entradas[alca] = {"sha": h, "giro": giro, "bytes": tamanho}
+            self._salvar()
             return {
-                "modo": "igual",
-                "ledger": "igual",
+                "modo": "inteiro",
+                "ledger": "expirado",
                 "giro_ref": giro_ref,
-                "bytes_omitidos": tamanho,
-                "texto": ponteiro,
+                "texto": texto,
             }
         entradas[alca] = {"sha": h, "giro": giro, "bytes": tamanho}
         self._salvar()
@@ -376,11 +436,14 @@ def podar_texto(
     cap: int = CAP_PADRAO,
     cauda: bool = False,
     cosmetica: bool = False,
+    constitutiva: bool = False,
+    forma: str = "listagem",
     escrita: bool = False,
     esquece: bool = False,
+    distancia_max: int | None = None,
 ) -> tuple[str, dict[str, Any]]:
     giro = ledger.proximo_giro() if ledger is not None else 1
-    lavado, rel = lavar(texto)
+    lavado, rel = lavar(texto, forma=forma, constitutiva=constitutiva)
     meta: dict[str, Any] = {
         "ato": tool,
         "giro": giro,
@@ -390,6 +453,8 @@ def podar_texto(
     }
     if cosmetica:
         meta["perfil"] = "cosmetica"
+    elif constitutiva:
+        meta["perfil"] = "constitutiva"
 
     nome_derrame = f"g{giro:05d}-stdout.txt"
     tira_conteudo = bool({"blob", "repeticao"} & set(rel["classes"]))
@@ -399,7 +464,14 @@ def podar_texto(
 
     servir = lavado
     if ledger is not None:
-        dec = ledger.olha(alca, lavado, giro, esquece=esquece, escrita=escrita)
+        dec = ledger.olha(
+            alca,
+            lavado,
+            giro,
+            esquece=esquece,
+            escrita=escrita,
+            distancia_max=distancia_max,
+        )
         servir = dec["texto"]
         meta["ledger"] = dec.get("ledger")
         if dec["modo"] != "inteiro":
@@ -457,8 +529,19 @@ def podar_envelope(
     texto = str(so.get("texto") or "")
 
     ato_ef = resolver_ato(argv, binario=binario, faces=faces)
+    if poda_desligada():
+        tamanho = len(texto.encode("utf-8", "replace"))
+        out["poda"] = {
+            "desligada": True,
+            "ato_efetivo": ato_ef,
+            "bytes_produzidos": tamanho,
+            "bytes_servidos": tamanho,
+        }
+        return out
+
     perf = perfil_verbo(verbo, binario)
     cosmetica = eh_cosmetica(perf, ato_ef)
+    constitutiva = eh_constitutiva(perf, ato_ef)
     escrita = eh_escrita(verbo, binario, ato_ef)
     ledger = (
         LedgerSessao(Path(ledger_dir) / f"{sessao_id or 'sem-sessao'}.json")
@@ -476,6 +559,8 @@ def podar_envelope(
         cap=cap,
         cauda=bool(perf.get("cauda")),
         cosmetica=cosmetica,
+        constitutiva=constitutiva,
+        forma=str(perf.get("forma") or "listagem"),
         escrita=escrita,
         esquece=inteiro,
     )
