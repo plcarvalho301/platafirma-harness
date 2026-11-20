@@ -449,5 +449,189 @@ def test_carregar_guardados_sem_eviccao_quando_rastreador_falha():
     assert len(pauta.guardados) == 1
 
 
+def test_dt937_mesa_item_recusa_sobrescrita_silenciosa_de_chave_existente(tmp_path):
+    valkey = _novo_valkey(tmp_path)
+    cards = tmp_path / "cards.json"
+    cards.write_text(json.dumps({"4406": {"estado": "em-execucao"}}), encoding="utf-8")
+
+    p1 = _rodar_mesa(
+        [
+            "item",
+            "--card", "4406",
+            "--estagio", "analise",
+            "--proxima-jogada", "arbitrar a separação do porta.yaml",
+            "--guardar",
+            "--ocasiao-card", "4406",
+        ],
+        cadeira="ia",
+        valkey_fixture=valkey,
+        cards_fixture=cards,
+    )
+    assert p1.returncode == 0, p1.stdout + p1.stderr
+
+    # Segunda chamada sem --corrigir deve ser recusada mostrando o item atual
+    p2 = _rodar_mesa(
+        [
+            "item",
+            "--card", "4406",
+            "--estagio", "execucao",
+            "--proxima-jogada", "outro texto que nao deve apagar o primeiro",
+            "--guardar",
+            "--ocasiao-card", "4406",
+        ],
+        cadeira="ia",
+        valkey_fixture=valkey,
+        cards_fixture=cards,
+    )
+    assert p2.returncode == 2
+    assert "arbitrar a separação do porta.yaml" in p2.stderr
+    assert "--corrigir card:4406" in p2.stderr
+    assert "mesa corpo card:4406" in p2.stderr
+
+    # O item original permanece intacto
+    atual = LousaFixtura(valkey).ler_trabalho("ia", "card:4406")
+    assert atual is not None
+    assert atual.proxima_jogada == "arbitrar a separação do porta.yaml"
+
+
+def test_mesa_corpo_edita_e_apaga_sem_tocar_na_moldura(tmp_path):
+    valkey = _novo_valkey(tmp_path)
+    cards = tmp_path / "cards.json"
+    cards.write_text(json.dumps({"4406": {"estado": "em-execucao"}}), encoding="utf-8")
+
+    p1 = _rodar_mesa(
+        [
+            "item",
+            "--card", "4406",
+            "--estagio", "analise",
+            "--proxima-jogada", "fechar desenho",
+            "--corpo", "fita A: conclusao inicial\nfita A: detalhe que fica",
+            "--guardar",
+            "--ocasiao-card", "4406",
+            "--json",
+        ],
+        cadeira="ia",
+        valkey_fixture=valkey,
+        cards_fixture=cards,
+    )
+    assert p1.returncode == 0, p1.stdout + p1.stderr
+    guardado_em_inicial = json.loads(p1.stdout)["guardado_em"]
+
+    # Fita B substitui a conclusao da fita A e acrescenta nova linha
+    p2 = _rodar_mesa(
+        [
+            "corpo", "4406",
+            "--antes", "fita A: conclusao inicial\n",
+            "--depois", "",
+            "--json",
+        ],
+        cadeira="ia",
+        valkey_fixture=valkey,
+    )
+    assert p2.returncode == 0, p2.stdout + p2.stderr
+    d2 = json.loads(p2.stdout)
+    assert d2["corpo"] == "fita A: detalhe que fica"
+    assert d2["situacao"] == "guardado"
+    assert d2["estagio"] == "analise"
+    assert d2["proxima_jogada"] == "fechar desenho"
+    assert d2["guardado_em"] == guardado_em_inicial
+    assert d2["ocasiao"]["card"] == "4406"
+
+    p3 = _rodar_mesa(
+        ["corpo", "card:4406", "--anexar", "fita B: conclusao revisada", "--json"],
+        cadeira="ia",
+        valkey_fixture=valkey,
+    )
+    assert p3.returncode == 0, p3.stdout + p3.stderr
+    assert json.loads(p3.stdout)["corpo"] == "fita A: detalhe que fica\nfita B: conclusao revisada"
+
+    # --corrigir altera a moldura sem perder o corpo, e recusa --corpo junto
+    p_recusa = _rodar_mesa(
+        ["item", "--corrigir", "card:4406", "--corpo", "nao pode"],
+        cadeira="ia",
+        valkey_fixture=valkey,
+    )
+    assert p_recusa.returncode == 2
+
+    p_cor = _rodar_mesa(
+        ["item", "--corrigir", "card:4406", "--estagio", "execucao", "--json"],
+        cadeira="ia",
+        valkey_fixture=valkey,
+    )
+    assert p_cor.returncode == 0, p_cor.stdout + p_cor.stderr
+    d_cor = json.loads(p_cor.stdout)
+    assert d_cor["estagio"] == "execucao"
+    assert d_cor["corpo"] == "fita A: detalhe que fica\nfita B: conclusao revisada"
+
+    # mesa corpo --limpar esvazia o quadro preservando a moldura
+    p_limpa = _rodar_mesa(["corpo", "4406", "--limpar", "--json"], cadeira="ia", valkey_fixture=valkey)
+    assert p_limpa.returncode == 0, p_limpa.stdout + p_limpa.stderr
+    d_limpa = json.loads(p_limpa.stdout)
+    assert d_limpa["corpo"] == ""
+    assert d_limpa["estagio"] == "execucao"
+    assert d_limpa["situacao"] == "guardado"
+
+
+def test_teto_do_corpo_barra_escrita_e_nunca_quebra_leitura_nem_vaza_na_pauta(tmp_path):
+    from postura.lousa import TETO_CORPO_CHARS, CorpoExcedido, EdicaoDeCorpo, editar_corpo
+
+    assert TETO_CORPO_CHARS == 6000
+    valkey = _novo_valkey(tmp_path)
+    cards = tmp_path / "cards.json"
+    cards.write_text(json.dumps({"4406": {"estado": "em-execucao"}}), encoding="utf-8")
+
+    # Escrita acima do teto e recusada
+    grande = "x" * (TETO_CORPO_CHARS + 1)
+    p_grande = _rodar_mesa(
+        ["item", "--card", "4406", "--estagio", "execucao", "--corpo", grande],
+        cadeira="ia",
+        valkey_fixture=valkey,
+        cards_fixture=cards,
+    )
+    assert p_grande.returncode == 2
+    assert str(TETO_CORPO_CHARS) in p_grande.stderr
+
+    # Item dentro do teto entra na lousa; abertura traz so a moldura + tamanho, sem vazar o texto do corpo
+    texto_corpo = "SEGREDO_DO_CORPO_SO_SOB_DEMANDA"
+    p_ok = _rodar_mesa(
+        [
+            "item",
+            "--card", "4406",
+            "--estagio", "execucao",
+            "--proxima-jogada", "resumo curto na moldura",
+            "--corpo", texto_corpo,
+            "--guardar",
+            "--ocasiao-card", "4406",
+        ],
+        cadeira="ia",
+        valkey_fixture=valkey,
+        cards_fixture=cards,
+    )
+    assert p_ok.returncode == 0, p_ok.stdout + p_ok.stderr
+
+    ab = _rodar_abertura(
+        ["ia", "--chapeu", "contexto"],
+        pergunta="card 4406",
+        env_extra={"PF_CARDS_FIXTURE": str(cards)},
+        tmp_path=tmp_path,
+    )
+    assert ab.returncode == 0, ab.stdout + ab.stderr
+    pauta = json.loads(ab.stdout)["pauta"]["conteudo"]
+    assert "resumo curto na moldura" in pauta
+    assert f"(corpo: {len(texto_corpo)}/{TETO_CORPO_CHARS})" in pauta
+    assert texto_corpo not in pauta
+
+    # mesa ver <chave> entrega o corpo inteiro sob demanda
+    p_ver = _rodar_mesa(["ver", "4406"], cadeira="ia", valkey_fixture=valkey)
+    assert p_ver.returncode == 0, p_ver.stdout + p_ver.stderr
+    assert texto_corpo in p_ver.stdout
+
+    # Se o teto diminuir depois, um item ja gravado acima do novo teto continua legivel,
+    # e a proxima edicao so passa quando voltar a caber
+    with pytest.raises(CorpoExcedido):
+        editar_corpo("abcdef", EdicaoDeCorpo(anexar="g"), teto=6)
+    assert editar_corpo("abcdefg", EdicaoDeCorpo(antes="efg", depois=""), teto=6) == "abcd"
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, *sys.argv[1:]]))

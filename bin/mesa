@@ -4,13 +4,16 @@
 # dono: gestao-estrategica
 """Verbo `mesa` da casa nova (story 4366, feature 4269).
 
-Expõe apenas `item`, `fez` e `ver`, sem atos de caderno. Grava e lê o trabalho da cadeira
-na lousa (memória de trabalho) pela chave do trabalho (`card:<N>` ou `turno:<ordem_id>`),
-fora da chave da sessão e sem prazo de relógio.
+Expõe `item`, `corpo`, `fez` e `ver`, sem atos de caderno. Grava e lê o trabalho da
+cadeira na lousa (memória de trabalho) pela chave do trabalho (`card:<N>` ou
+`turno:<ordem_id>`), fora da chave da sessão e sem prazo de relógio.
+
+Cada item separa a moldura (chave, situação, estágio, próxima jogada, chapéu, ocasião)
+do corpo editável (`corpo`, limitado por `TETO_CORPO_CHARS` na escrita).
 
 capacidade: memoria · dono: gestao-estrategica · classe: B
-atos: item (escrita, trabalho), fez (escrita, trabalho), ver (leitura, trabalho)
-saídas: 0 ok · 2 uso ou ocasião ausente · 3 memória de trabalho fora do ar
+atos: item (escrita, trabalho), corpo (escrita, trabalho), fez (escrita, trabalho), ver (leitura, trabalho)
+saídas: 0 ok · 2 uso, conflito ou limite excedido · 3 memória de trabalho fora do ar
 """
 
 from __future__ import annotations
@@ -27,17 +30,22 @@ sys.path.insert(0, str(_REPO_REAL / "lib"))
 
 from abertura.pauta import ler_estados_de_cards
 from postura.lousa import (
+    TETO_CORPO_CHARS,
+    CorpoExcedido,
+    EdicaoDeCorpo,
     Fora,
     ItemDeTrabalho,
     Ocasiao,
     OcasiaoAusente,
     agora_iso,
     chave_item_trabalho,
+    editar_corpo,
     lousa_do_ambiente,
     normalizar_card,
+    validar_teto_corpo,
 )
 
-ATOS_VALIDOS = ("item", "fez", "ver")
+ATOS_VALIDOS = ("item", "corpo", "fez", "ver")
 
 
 def _erro(msg: str, codigo: int, *, como_json: bool) -> int:
@@ -75,6 +83,19 @@ def _normalizar_chave(bruta: str) -> str:
     return s
 
 
+def _extrair_chave_alvo(args: argparse.Namespace) -> str:
+    if getattr(args, "chave", None):
+        return _normalizar_chave(args.chave)
+    if getattr(args, "card", None) or getattr(args, "turno", None):
+        try:
+            return chave_item_trabalho(card=args.card, turno=args.turno)
+        except ValueError:
+            return ""
+    if getattr(args, "alvo", None):
+        return _normalizar_chave(args.alvo)
+    return ""
+
+
 def _estado_texto(info: object) -> str | None:
     if isinstance(info, Mapping):
         est = info.get("estado") or info.get("estado_derivado")
@@ -98,7 +119,7 @@ def _consultar_estado_card(card: str) -> str | None:
     return estado
 
 
-def _formatar_item(item: ItemDeTrabalho) -> str:
+def _formatar_item(item: ItemDeTrabalho, *, com_corpo: bool = False) -> str:
     partes = [item.chave, f"({item.situacao})"]
     if item.estagio:
         partes.append(f"[{item.estagio}]")
@@ -116,7 +137,14 @@ def _formatar_item(item: ItemDeTrabalho) -> str:
         ]
         if oc:
             partes.append(f"— ocasião: {', '.join(oc)}")
-    return " ".join(partes)
+    if item.corpo:
+        partes.append(f"(corpo: {len(item.corpo)}/{TETO_CORPO_CHARS})")
+    linha = " ".join(partes)
+    if com_corpo:
+        if item.corpo:
+            return f"{linha}\n---\n{item.corpo}"
+        return f"{linha}\n(corpo vazio)"
+    return linha
 
 
 def _montar_ocasiao(
@@ -125,7 +153,7 @@ def _montar_ocasiao(
     card_final: str | None,
 ) -> tuple[Ocasiao | None, str | None]:
     tem_flag_ocasiao = any([args.ocasiao_card, args.ocasiao_pedido, args.ocasiao_chapeu])
-    if args.guardar and not tem_flag_ocasiao:
+    if args.guardar and not tem_flag_ocasiao and not (existente and existente.ocasiao and not existente.ocasiao.vazia()):
         return None, "ocasião de voltar falta: informe --ocasiao-card, --ocasiao-pedido ou --ocasiao-chapeu"
     oc_prev = existente.ocasiao if existente else None
     oc_card = normalizar_card(args.ocasiao_card) if args.ocasiao_card else (oc_prev.card if oc_prev else None)
@@ -158,17 +186,54 @@ def _resolver_chave_e_existente(
             return "", None, str(erro), 3
     turno_ref = args.turno or os.environ.get("PF_ORDEM_ID")
     try:
-        return chave_item_trabalho(card=args.card, turno=turno_ref), None, None, 0
+        chave_alvo = chave_item_trabalho(card=args.card, turno=turno_ref)
     except ValueError as erro:
         return "", None, str(erro), 2
+    try:
+        existente = lousa.ler_trabalho(cadeira, chave_alvo)
+    except Fora as erro:
+        return "", None, str(erro), 3
+    if existente is not None:
+        return (
+            "",
+            None,
+            (
+                f"já existe item na lousa para {chave_alvo}: {_formatar_item(existente)}. "
+                f"Use `mesa item --corrigir {chave_alvo}` para alterar a moldura "
+                f"ou `mesa corpo {chave_alvo}` para editar o corpo"
+            ),
+            2,
+        )
+    return chave_alvo, None, None, 0
 
 
-def _ato_item(argv: list[str]) -> int:
+def _parser_com_alvo(prog: str) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog=prog, add_help=True)
+    parser.add_argument("alvo", nargs="?")
+    parser.add_argument("--card", dest="card")
+    parser.add_argument("--turno", dest="turno")
+    parser.add_argument("--chave", dest="chave")
+    parser.add_argument("--cadeira", dest="cadeira")
+    parser.add_argument("--json", dest="como_json", action="store_true")
+    return parser
+
+
+def _imprimir_item(item: ItemDeTrabalho, *, como_json: bool, com_corpo: bool = False) -> None:
+    if como_json:
+        dado = item.como_dict()
+        dado["teto_corpo"] = TETO_CORPO_CHARS
+        print(json.dumps(dado, ensure_ascii=False))
+    else:
+        print(_formatar_item(item, com_corpo=com_corpo))
+
+
+def _parser_item() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mesa item", add_help=True)
     parser.add_argument("--card", dest="card")
     parser.add_argument("--turno", dest="turno")
     parser.add_argument("--estagio", dest="estagio")
     parser.add_argument("--proxima-jogada", "--ato", dest="proxima_jogada")
+    parser.add_argument("--corpo", dest="corpo")
     parser.add_argument("--chapeu", dest="chapeu")
     parser.add_argument("--guardar", action="store_true")
     parser.add_argument("--ocasiao-card", dest="ocasiao_card")
@@ -178,7 +243,11 @@ def _ato_item(argv: list[str]) -> int:
     parser.add_argument("--corrigir", dest="corrigir")
     parser.add_argument("--cadeira", dest="cadeira")
     parser.add_argument("--json", dest="como_json", action="store_true")
-    args, cadeira, rc = _parsear_e_cadeira(parser, argv)
+    return parser
+
+
+def _ato_item(argv: list[str]) -> int:
+    args, cadeira, rc = _parsear_e_cadeira(_parser_item(), argv)
     if args is None:
         return rc
     como_json = bool(args.como_json)
@@ -187,6 +256,12 @@ def _ato_item(argv: list[str]) -> int:
     chave_alvo, existente, msg_erro, cod_erro = _resolver_chave_e_existente(args, cadeira, lousa)
     if msg_erro:
         return _erro(msg_erro, cod_erro, como_json=como_json)
+    if args.corrigir and args.corpo is not None:
+        return _erro(
+            f"--corpo não entra com --corrigir: use `mesa corpo {chave_alvo}` para editar o corpo sem tocar na moldura",
+            2,
+            como_json=como_json,
+        )
 
     card_final = normalizar_card(args.card) if args.card else (existente.card if existente else None)
     if card_final is None and chave_alvo.startswith("card:"):
@@ -198,6 +273,7 @@ def _ato_item(argv: list[str]) -> int:
     jogada_final = (
         args.proxima_jogada if args.proxima_jogada is not None else (existente.proxima_jogada if existente else "")
     )
+    corpo_final = args.corpo if args.corpo is not None else (existente.corpo if existente else "")
     chapeu_final = args.chapeu if args.chapeu is not None else (existente.chapeu if existente else None)
     situacao = "guardado" if args.guardar else (existente.situacao if (args.corrigir and existente) else "em_curso")
 
@@ -215,6 +291,7 @@ def _ato_item(argv: list[str]) -> int:
     )
 
     try:
+        validar_teto_corpo(corpo_final)
         item = ItemDeTrabalho(
             chave=chave_alvo,
             cadeira=cadeira,
@@ -223,46 +300,103 @@ def _ato_item(argv: list[str]) -> int:
             turno=turno_final,
             estagio=estagio_final,
             proxima_jogada=jogada_final,
+            corpo=corpo_final,
             chapeu=chapeu_final,
             ocasiao=ocasiao_final,
             guardado_em=guardado_em,
             atualizado_em=agora,
         )
         lousa.gravar_trabalho(cadeira, item)
-    except (OcasiaoAusente, ValueError) as erro:
+    except (OcasiaoAusente, CorpoExcedido, ValueError) as erro:
         return _erro(str(erro), 2, como_json=como_json)
     except Fora as erro:
         return _erro(str(erro), 3, como_json=como_json)
 
-    if como_json:
-        print(json.dumps(item.como_dict(), ensure_ascii=False))
-    else:
-        print(_formatar_item(item))
+    _imprimir_item(item, como_json=como_json)
     return 0
 
 
-def _ato_fez(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="mesa fez", add_help=True)
-    parser.add_argument("alvo", nargs="?")
-    parser.add_argument("--card", dest="card")
-    parser.add_argument("--turno", dest="turno")
-    parser.add_argument("--chave", dest="chave")
-    parser.add_argument("--cadeira", dest="cadeira")
-    parser.add_argument("--json", dest="como_json", action="store_true")
+def _edicao_de_args(args: argparse.Namespace) -> EdicaoDeCorpo:
+    anexar, substituir, depois = args.anexar, args.substituir, args.depois
+    if args.stdin:
+        texto_stdin = sys.stdin.read()
+        if anexar is not None:
+            anexar = texto_stdin
+        elif substituir is not None:
+            substituir = texto_stdin
+        elif args.antes is not None:
+            depois = texto_stdin
+        else:
+            substituir = texto_stdin
+    return EdicaoDeCorpo(
+        anexar=anexar,
+        antes=args.antes,
+        depois=depois,
+        substituir=substituir,
+        limpar=bool(args.limpar),
+        todos=bool(args.todos),
+    )
+
+
+def _ato_corpo(argv: list[str]) -> int:
+    parser = _parser_com_alvo("mesa corpo")
+    parser.add_argument("--anexar", "--acrescentar", dest="anexar")
+    parser.add_argument("--antes", dest="antes")
+    parser.add_argument("--depois", dest="depois")
+    parser.add_argument("--todos", action="store_true")
+    parser.add_argument("--substituir", dest="substituir")
+    parser.add_argument("--limpar", action="store_true")
+    parser.add_argument("--stdin", action="store_true")
     args, cadeira, rc = _parsear_e_cadeira(parser, argv)
     if args is None:
         return rc
     como_json = bool(args.como_json)
 
-    if args.chave:
-        chave_alvo = _normalizar_chave(args.chave)
-    elif args.card or args.turno:
-        chave_alvo = chave_item_trabalho(card=args.card, turno=args.turno)
-    elif args.alvo:
-        chave_alvo = _normalizar_chave(args.alvo)
-    else:
-        chave_alvo = ""
+    chave_alvo = _extrair_chave_alvo(args)
+    if not chave_alvo:
+        return _erro("informe a chave, --card ou --turno do item cujo corpo vai editar", 2, como_json=como_json)
 
+    lousa = lousa_do_ambiente()
+    try:
+        existente = lousa.ler_trabalho(cadeira, chave_alvo)
+    except Fora as erro:
+        return _erro(str(erro), 3, como_json=como_json)
+    if existente is None:
+        return _erro(f"item {chave_alvo} não encontrado na lousa: crie antes com `mesa item`", 2, como_json=como_json)
+
+    try:
+        novo_corpo = editar_corpo(existente.corpo, _edicao_de_args(args))
+        atualizado = ItemDeTrabalho(
+            chave=existente.chave,
+            cadeira=existente.cadeira,
+            situacao=existente.situacao,
+            card=existente.card,
+            turno=existente.turno,
+            estagio=existente.estagio,
+            proxima_jogada=existente.proxima_jogada,
+            corpo=novo_corpo,
+            chapeu=existente.chapeu,
+            ocasiao=existente.ocasiao,
+            guardado_em=existente.guardado_em,
+            atualizado_em=agora_iso(),
+        )
+        lousa.gravar_trabalho(cadeira, atualizado)
+    except (CorpoExcedido, ValueError) as erro:
+        return _erro(str(erro), 2, como_json=como_json)
+    except Fora as erro:
+        return _erro(str(erro), 3, como_json=como_json)
+
+    _imprimir_item(atualizado, como_json=como_json, com_corpo=True)
+    return 0
+
+
+def _ato_fez(argv: list[str]) -> int:
+    args, cadeira, rc = _parsear_e_cadeira(_parser_com_alvo("mesa fez"), argv)
+    if args is None:
+        return rc
+    como_json = bool(args.como_json)
+
+    chave_alvo = _extrair_chave_alvo(args)
     if not chave_alvo:
         return _erro("informe a chave, --card ou --turno do item feito", 2, como_json=como_json)
 
@@ -280,17 +414,32 @@ def _ato_fez(argv: list[str]) -> int:
 
 
 def _ato_ver(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="mesa ver", add_help=True)
+    parser = _parser_com_alvo("mesa ver")
     parser.add_argument("--situacao", choices=["em_curso", "guardado"])
-    parser.add_argument("--cadeira", dest="cadeira")
-    parser.add_argument("--json", dest="como_json", action="store_true")
     args, cadeira, rc = _parsear_e_cadeira(parser, argv)
     if args is None:
         return rc
     como_json = bool(args.como_json)
 
+    chave_alvo = _extrair_chave_alvo(args)
+    lousa = lousa_do_ambiente()
+    if chave_alvo:
+        try:
+            item = lousa.ler_trabalho(cadeira, chave_alvo)
+        except Fora as erro:
+            return _erro(str(erro), 3, como_json=como_json)
+        if item is None:
+            return _erro(f"item {chave_alvo} não encontrado na lousa", 2, como_json=como_json)
+        if como_json:
+            dado = item.como_dict()
+            dado["teto_corpo"] = TETO_CORPO_CHARS
+            print(json.dumps(dado, ensure_ascii=False))
+        else:
+            print(_formatar_item(item, com_corpo=True))
+        return 0
+
     try:
-        itens = lousa_do_ambiente().listar_trabalhos(cadeira, situacao=args.situacao)
+        itens = lousa.listar_trabalhos(cadeira, situacao=args.situacao)
     except Fora as erro:
         return _erro(str(erro), 3, como_json=como_json)
 
@@ -308,11 +457,13 @@ def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     como_json = "--json" in args
     if not args or args[0] in ("-h", "--help"):
-        print("uso: mesa <item|fez|ver> [opções]")
+        print("uso: mesa <item|corpo|fez|ver> [opções]")
         return 0
     ato, resto = args[0], args[1:]
     if ato == "item":
         return _ato_item(resto)
+    if ato == "corpo":
+        return _ato_corpo(resto)
     if ato == "fez":
         return _ato_fez(resto)
     if ato == "ver":

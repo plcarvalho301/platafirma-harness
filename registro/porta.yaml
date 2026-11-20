@@ -117,11 +117,10 @@ verbos:
       card, prosa, testes, acervo
   mesa:
     descricao: >-
-      guarda na lousa o que fica de uma fita para outra · use para: ler as ordens da lousa,
-      «o que ficou na mesa?»; anotar, «anota isso»; dar item como feito, «já fiz o item 2»;
-      o caderno do chapéu · atos: ver, item, fez, anota, fita, limpa, caderno, legado,
-      escrever, substituir, confirmar, retirar, restaurar, tombar, apontar, aresta, colheita,
-      veredito, balde, podar
+      guarda na lousa o que fica de uma fita para outra · use para: ler a lousa, «o que ficou
+      na mesa?»; abrir ou atualizar item de trabalho, «anota isso»; editar ou apagar trechos do
+      corpo do item sem tocar na moldura; dar item como feito, «já fiz o item» · atos: ver,
+      item, corpo, fez
   metrica:
     descricao: >-
       mede o uso da porta · use para: «quantas chamadas deram erro?», «quem pediu help?», giro
