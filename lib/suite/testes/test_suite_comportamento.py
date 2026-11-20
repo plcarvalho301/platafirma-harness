@@ -890,10 +890,9 @@ def test_consulta_soltos_bate_com_admissao_e_cli_consultar(tmp_path: Path):
     assert proc_comp.returncode == 0
     assert '"componente": "componente:suite"' in proc_comp.stdout
 
-    espelho_raiz = HARNESS_RAIZ.parents[1]
-    soltos_espelho = consultar_soltos(espelho_raiz)
-    assert soltos_espelho.total_descobertos == soltos_espelho.total_soltos + soltos_espelho.com_vinculo
-    assert soltos_espelho.com_vinculo >= 1
+    soltos_harness = consultar_soltos(HARNESS_RAIZ)
+    assert soltos_harness.total_descobertos == soltos_harness.total_soltos + soltos_harness.com_vinculo
+    assert soltos_harness.com_vinculo >= 1
 
 
 def _executar_cenario_esteira(tmp_path: Path, spec: dict[str, Any]) -> tuple[Any, Any, Path]:
