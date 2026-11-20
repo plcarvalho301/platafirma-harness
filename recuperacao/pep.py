@@ -84,7 +84,10 @@ _RAIZ = Path(__file__).resolve().parents[1]
 
 
 def _dir_politica() -> Path:
-    return Path(os.environ.get("PF_POLITICA_DIR") or (_RAIZ / "politica-acesso"))
+    if os.environ.get("PF_POLITICA_DIR"):
+        return Path(os.environ["PF_POLITICA_DIR"])
+    release = Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"))
+    return release / "core" / "acesso"
 
 
 @dataclass(frozen=True, slots=True)

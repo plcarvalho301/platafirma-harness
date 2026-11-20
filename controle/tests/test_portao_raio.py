@@ -353,6 +353,17 @@ def test_lock_na_raiz_segue_raio_total_de_toda_stack(tmp_path):
     assert _rodou(marcas) == {"a1", "b1"}
 
 
+def test_conftest_em_subpasta_sem_stack_dona_nao_dispara_raio_total(tmp_path):
+    """Arquivo de raio total numa subpasta irmã fora de toda stack (ex.: pasta removida) não roda as outras stacks."""
+    marcas = tmp_path / "marcas.txt"
+    env, arv, base = _duas(tmp_path, marcas)
+    _commita(arv, {"legado/conftest.py": "# x\n", "legado/uv.lock": "# x\n"})
+    r = _run(env, "rodar", "demo", "--portao", "--arvore", str(arv), "--base", base)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "raio total:" not in r.stdout, r.stdout
+    assert _rodou(marcas) == set()
+
+
 def test_veredito_da_rodada_inteira_verde_responde_pela_parcial(tmp_path):
     marcas = tmp_path / "marcas.txt"
     env, arv, base = _tres(tmp_path, marcas, RAIOS)

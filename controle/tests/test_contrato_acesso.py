@@ -21,7 +21,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ACESSO_BIN = REPO_ROOT / "bin" / "acesso"
-POLITICA_ORIGINAL = REPO_ROOT / "politica-acesso"
+POLITICA_ORIGINAL = Path(os.environ.get("PF_CORE_ACESSO_DIR", "/opt/platafirma/current/core/acesso"))
 
 
 def _docker_de_fixture(tmp_path, corpo):
@@ -305,9 +305,8 @@ def test_decidir_argumento_nao_vira_codigo():
 # e o que se amarra aqui e a regra do PAP, nao a conta.
 FORNECEDOR = ("--papel", "fornecedor", "--dominio", "plataforma")
 
-# `monta_sessao` a porta submete como tipo documento: `documento:sessao:<cadeira>`.
+# Na porta nova (core), `monta_sessao` não usa regra de documento; ficam os atos do harness.
 @pytest.mark.parametrize("acao,recurso", [
-    ("monta_sessao", "documento:sessao:engenharia"),
     ("sessao_abrir", "sessao:engenharia"),
     ("expediente_montar", "expediente:engenharia"),
 ])
