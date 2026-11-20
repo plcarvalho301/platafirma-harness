@@ -1,4 +1,5 @@
-# componente: componente:leitor-universal
+# componente: componente:porta
+# verifica: controle-de-seguranca:borda-da-porta
 """Contratos da `ler_arquivo` sobre `lib/leitura` (spec ler-arquivo §14 e §7.4, DT 919).
 
 Conjunto único de comportamento do `componente:leitor-universal`: cobre C1 a C14 (offset por
