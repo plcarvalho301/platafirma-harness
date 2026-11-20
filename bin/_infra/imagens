@@ -96,7 +96,7 @@ def _linhas_json(proc: subprocess.CompletedProcess[str], origem: str) -> list[di
 
 
 def _refs_conteineres() -> dict[str, list[str]]:
-    proc = _roda("docker", "ps", "-a", "--format", "{{json .}}")
+    proc = _roda("docker", "ps", "-a", "--no-trunc", "--format", "{{json .}}")
     refs: dict[str, list[str]] = {}
     for d in _linhas_json(proc, "docker ps"):
         img = (d.get("Image") or "").strip()
@@ -115,7 +115,7 @@ def _refs_conteineres() -> dict[str, list[str]]:
     return refs
 
 
-def _chaves_imagem(ref: str, img_id: str) -> list[str]:
+def _chaves_imagem(ref: str, img_id: str, digest: str = "") -> list[str]:
     chaves = [ref]
     if ref.endswith(":latest"):
         chaves.append(ref.removesuffix(":latest"))
@@ -124,6 +124,8 @@ def _chaves_imagem(ref: str, img_id: str) -> list[str]:
         curto = img_id.removeprefix("sha256:")[:CURTO_LEN]
         if curto:
             chaves.append(curto)
+    if digest and digest != "<none>":
+        chaves.append(digest)
     return chaves
 
 
@@ -228,17 +230,18 @@ def _coletar() -> tuple[list[dict], list[dict]]:
     refs = _refs_conteineres()
     protegidas = {**_imagens_sob_demanda_protegidas(), **_imagens_biblioteca_protegidas()}
     shas = _shas_release()
-    proc = _roda("docker", "images", "--no-trunc", "--format", "{{json .}}")
+    proc = _roda("docker", "images", "--digests", "--no-trunc", "--format", "{{json .}}")
     imagens_raw: list[dict] = []
     ids_em_uso: set[str] = set()
     for d in _linhas_json(proc, "docker images"):
         repo = (d.get("Repository") or "<none>").strip()
         tag = (d.get("Tag") or "<none>").strip()
         img_id = (d.get("ID") or "").strip()
+        digest = (d.get("Digest") or "").strip()
         criado = (d.get("CreatedSince") or d.get("CreatedAt") or "").strip()
         tam_str = (d.get("Size") or "0B").strip()
         ref = f"{repo}:{tag}" if repo != "<none>" and tag != "<none>" else (repo if repo != "<none>" else img_id)
-        conteineres = _associar_conteineres(_chaves_imagem(ref, img_id), refs)
+        conteineres = _associar_conteineres(_chaves_imagem(ref, img_id, digest), refs)
         if not conteineres and ref in protegidas:
             conteineres = [protegidas[ref]]
         if not conteineres and tag != "<none>":
