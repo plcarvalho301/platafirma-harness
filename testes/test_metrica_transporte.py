@@ -21,7 +21,7 @@ def _carrega_metrica(monkeypatch):
     if bin_dir not in sys.path:
         monkeypatch.syspath_prepend(bin_dir)
 
-    # Stubs minimos dos modulos auxiliares que moram no harness principal (fora do overlay outros_repos).
+    # Stubs minimos dos modulos auxiliares do harness principal.
     if "oplog_extracao" not in sys.modules:
         ext = types.ModuleType("oplog_extracao")
         ext.hoje_local = lambda: date.today()

@@ -123,10 +123,10 @@ def test_dt_735_mover_pasta_e_arquivo_entre_repositorios(tmp_path: Path):
     subprocess.run(["git", "init", "--bare", "-q", "-b", "main", str(orig_bare)], check=True)
     orig_sem = tmp_path / "semente-espelho"
     subprocess.run(["git", "clone", "-q", str(orig_bare), str(orig_sem)], check=True)
-    (orig_sem / "outros_repos" / "ui" / "icones").mkdir(parents=True)
-    (orig_sem / "outros_repos" / "ui" / "icones" / "a.svg").write_text("<svg>A</svg>\n", encoding="utf-8")
-    (orig_sem / "outros_repos" / "ui" / "icones" / "sub" / "b.svg").parent.mkdir()
-    (orig_sem / "outros_repos" / "ui" / "icones" / "sub" / "b.svg").write_text("<svg>B</svg>\n", encoding="utf-8")
+    (orig_sem / "ativos" / "ui" / "icones").mkdir(parents=True)
+    (orig_sem / "ativos" / "ui" / "icones" / "a.svg").write_text("<svg>A</svg>\n", encoding="utf-8")
+    (orig_sem / "ativos" / "ui" / "icones" / "sub" / "b.svg").parent.mkdir()
+    (orig_sem / "ativos" / "ui" / "icones" / "sub" / "b.svg").write_text("<svg>B</svg>\n", encoding="utf-8")
     _git(orig_sem, "add", ".")
     _git(orig_sem, "commit", "-q", "-m", "icones")
     _git(orig_sem, "push", "-q", "-u", "origin", "main")
@@ -135,7 +135,7 @@ def test_dt_735_mover_pasta_e_arquivo_entre_repositorios(tmp_path: Path):
     # Clona origem na bancada para que url/local resolva sem rede
     subprocess.run(["git", "clone", "-q", str(orig_bare), str(bancada / "platafirma-casa-espelho")], check=True)
 
-    r = _roda(env, "mover", f"platafirma-casa-espelho@{sha}:outros_repos/ui/icones", "platafirma-ui:icones")
+    r = _roda(env, "mover", f"platafirma-casa-espelho@{sha}:ativos/ui/icones", "platafirma-ui:icones")
     assert r.returncode == 0, r.stderr
     assert "movido:" in r.stdout
     assert "2 arquivo(s)" in r.stdout
@@ -146,7 +146,7 @@ def test_dt_735_mover_pasta_e_arquivo_entre_repositorios(tmp_path: Path):
     assert "A  icones/sub/b.svg" in st
 
     # Mover arquivo unico e erro em caminho inexistente
-    r_blob = _roda(env, "mover", f"platafirma-casa-espelho@{sha}:outros_repos/ui/icones/a.svg", "platafirma-ui:unico.svg")
+    r_blob = _roda(env, "mover", f"platafirma-casa-espelho@{sha}:ativos/ui/icones/a.svg", "platafirma-ui:unico.svg")
     assert r_blob.returncode == 0, r_blob.stderr
     assert (wt_dest / "unico.svg").read_text(encoding="utf-8") == "<svg>A</svg>\n"
 

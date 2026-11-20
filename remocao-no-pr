@@ -1,6 +1,6 @@
 # Arquivos do platafirma-harness removidos no PR da troca da casa nova (#4348, #4378).
 # Formato: <caminho relativo à raiz do harness> | <motivo e código da casa nova que o substitui>
-ops-server/ | porta antiga removida (#4340, #4348); substituída por platafirma-core@porta/ e outros_repos/harness/lib/{poda,leitura,escrita}/; os testes dela, um por linha abaixo
+ops-server/ | porta antiga removida (#4340, #4348); substituída por platafirma-core@porta/ e platafirma-harness@lib/{poda,leitura,escrita}/; os testes dela, um por linha abaixo
 # Triagem dos testes de ops-server/ (#4348, decisões 3 e 4 do comentário 5388). migrado = a guarda veio para a casa nova;
 # coberto = a casa nova já tem o teste do mesmo comportamento; sai = a casa nova mudou o desenho; débito ou achado = comportamento sem guarda.
 ops-server/bench/ | sai: instrumento de medição da leitura antiga, não guarda comportamento

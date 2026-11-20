@@ -1,7 +1,7 @@
 """arvore — árvore do repositório da casa: o que mora nela, onde e com que forma.
 
 Cobra o registro de decisão 0138 (repositório pela natureza do arquivo):
-  - três raízes: `instancias/`, `referencias/`, `verbetes/` (arquivos sob `outros_repos/` são recusados com ARVORE_RAIZ);
+  - três raízes: `instancias/`, `referencias/`, `verbetes/` (arquivos fora dessas raízes são recusados com ARVORE_RAIZ);
   - lê a forma da classe (`golden` e `referencia`) e as fichas do fichário que quem chama passa, e não das shapes;
   - ficha de instância para todo documento em `instancias/`, nenhum com o nome da classe;
   - referência apontando classe ou ficha que existe;
@@ -333,7 +333,7 @@ def verificar_arvore(
 def _links_do_commit(raiz, universo, sob_juizo, staged, herdados) -> list:
     """Link relativo quebrado em qualquer .md da árvore."""
     existe_depois = _conjunto(universo)
-    markdown = [a for a in universo if a.endswith(".md") and not a.startswith("outros_repos/")]
+    markdown = [a for a in universo if a.endswith(".md")]
     saida = []
     quebrados_depois = {a: _quebrados(a, _texto(raiz, a), existe_depois) for a in markdown}
     if not staged:
