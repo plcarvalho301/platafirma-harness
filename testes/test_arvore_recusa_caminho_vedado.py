@@ -71,7 +71,7 @@ def test_arvore_aceita_tres_raizes_validas(tmp_path: Path):
 
 
 def test_pre_commit_bloqueia_caminho_vedado_no_espelho(tmp_path: Path):
-    repo = _init_repo(tmp_path, remote_url="https://github.com/plcarvalho301/platafirma-casa-espelho.git")
+    repo = _init_repo(tmp_path, remote_url="https://github.com/plcarvalho301/platafirma-casa.git")
     alvo = repo / _VEDADO / "harness" / "a.py"
     alvo.parent.mkdir(parents=True)
     alvo.write_text("x = 1\n", encoding="utf-8")
@@ -89,7 +89,7 @@ def test_pre_commit_bloqueia_caminho_vedado_no_espelho(tmp_path: Path):
 
 
 def test_pre_commit_libera_instancias_no_espelho(tmp_path: Path):
-    repo = _init_repo(tmp_path, remote_url="https://github.com/plcarvalho301/platafirma-casa-espelho.git")
+    repo = _init_repo(tmp_path, remote_url="https://github.com/plcarvalho301/platafirma-casa.git")
     alvo = repo / "instancias" / "persona" / "ti.md"
     alvo.parent.mkdir(parents=True)
     alvo.write_text("# TI\n", encoding="utf-8")

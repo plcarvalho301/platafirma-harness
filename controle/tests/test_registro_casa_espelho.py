@@ -20,7 +20,7 @@ FAMILIAS = RAIZ / "registro" / "familias.json"
 VENVS = RAIZ / "registro" / "venvs.json"
 REGISTRO = RAIZ / "bin" / "_release" / "registro.py"
 RELEASE = RAIZ / "bin" / "release"
-ESPELHO = "platafirma-casa-espelho"
+ESPELHO = "platafirma-casa"
 
 
 def test_familia_declarada_com_a_url_do_forge():

@@ -6,7 +6,7 @@
 #      /usr/bin/python3.12) com UV_PYTHON_PREFERENCE=only-system; ausente ou lock incompatível ->
 #      exit 3, current intacto; a identidade do python entra no hash do venv;
 #   3. infra (e o release ao chamá-lo) define XDG_RUNTIME_DIR e DBUS_SESSION_BUS_ADDRESS quando
-#      ausentes, e o restart do ops-mcp segue destacado por systemd-run --user.
+#      ausentes, e o restart do porta segue destacado por systemd-run --user.
 #
 # Hermético: release e instância num tmp, HOME num tmp, forge local, uv/python/systemctl/
 # systemd-run/docker falsos num PATH temporário. A parte 5 usa o uv real só se houver um no PATH
@@ -58,7 +58,7 @@ printf 'systemctl %s | XDG=%s | DBUS=%s\n' "$*" "${XDG_RUNTIME_DIR:-}" "${DBUS_S
 if [ -z "${XDG_RUNTIME_DIR:-}" ] || [ -n "${FAKE_SEM_BUS:-}" ]; then
   echo "Failed to connect to bus: No medium found" >&2; exit 1
 fi
-if [ "${2:-}" = cat ]; then [ "${4:-}" = ops-mcp ] || exit 1; fi
+if [ "${2:-}" = cat ]; then [ "${4:-}" = porta ] || exit 1; fi
 exit 0
 EOF
 cat > "$STUBS/systemd-run" <<'EOF'
@@ -305,12 +305,12 @@ fi
 echo OK
 
 # ---------------------------------------------------------------- 3. infra e bus
-echo "--- 3a: infra restart ops-mcp sem XDG_RUNTIME_DIR define o bus e despacha destacado"
+echo "--- 3a: infra restart porta sem XDG_RUNTIME_DIR define o bus e despacha destacado"
 : > "$SYSD_LOG"
-set +e; out="$(env -u XDG_RUNTIME_DIR -u DBUS_SESSION_BUS_ADDRESS bash "$INFRA" restart ops-mcp 2>&1)"; rc=$?; set -e
+set +e; out="$(env -u XDG_RUNTIME_DIR -u DBUS_SESSION_BUS_ADDRESS bash "$INFRA" restart porta 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 0 ] && grep -q 'despachado destacado' <<<"$out" || falha "infra restart: rc=$rc $out"
 grep -qF "systemd-run --user --collect --quiet --unit=infra-restart-" "$SYSD_LOG" || falha "restart nao foi por systemd-run: $(cat "$SYSD_LOG")"
-grep -F "systemd-run " "$SYSD_LOG" | grep -qF "systemctl --user restart ops-mcp | XDG=/run/user/$UID_ATUAL | DBUS=unix:path=/run/user/$UID_ATUAL/bus" \
+grep -F "systemd-run " "$SYSD_LOG" | grep -qF "systemctl --user restart porta | XDG=/run/user/$UID_ATUAL | DBUS=unix:path=/run/user/$UID_ATUAL/bus" \
   || falha "systemd-run sem o bus da conta: $(cat "$SYSD_LOG")"
 ! grep -q '^systemctl --user restart' "$SYSD_LOG" || falha "restart sincrono: a chamada nao voltaria antes da queda"
 grep -F "systemd-run " "$SYSD_LOG" | grep -qF -- "--on-active=5s --timer-property=AccuracySec=100ms systemctl" \
@@ -319,14 +319,14 @@ echo OK
 
 echo "--- 3b: XDG_RUNTIME_DIR e DBUS ja dados vencem"
 : > "$SYSD_LOG"
-XDG_RUNTIME_DIR="$TMP_DIR/xdg" DBUS_SESSION_BUS_ADDRESS="unix:path=$TMP_DIR/outro-bus" bash "$INFRA" restart ops-mcp >/dev/null 2>&1 \
+XDG_RUNTIME_DIR="$TMP_DIR/xdg" DBUS_SESSION_BUS_ADDRESS="unix:path=$TMP_DIR/outro-bus" bash "$INFRA" restart porta >/dev/null 2>&1 \
   || falha "infra restart com bus dado"
 grep -F "systemd-run " "$SYSD_LOG" | grep -qF "XDG=$TMP_DIR/xdg | DBUS=unix:path=$TMP_DIR/outro-bus" || falha "valor dado foi sobrescrito: $(cat "$SYSD_LOG")"
 echo OK
 
 echo "--- 3c: sem bus nenhum o infra diz a causa e sai 3, sem despachar"
 : > "$SYSD_LOG"
-set +e; out="$(FAKE_SEM_BUS=1 bash "$INFRA" restart ops-mcp 2>&1)"; rc=$?; set -e
+set +e; out="$(FAKE_SEM_BUS=1 bash "$INFRA" restart porta 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 3 ] && grep -q 'sem bus do systemd --user' <<<"$out" || falha "sem bus: rc=$rc $out"
 ! grep -q '^systemd-run' "$SYSD_LOG" || falha "despachou sem bus"
 echo OK
@@ -343,12 +343,12 @@ if [ "$UID_ATUAL" -eq 0 ] || [ -O /usr ]; then
   pulado "rodando como dono de /usr; nao ha diretorio de outra conta para simular"
 else
   : > "$SYSD_LOG"
-  XDG_RUNTIME_DIR=/usr DBUS_SESSION_BUS_ADDRESS="unix:path=/usr/bus" bash "$INFRA" restart ops-mcp >/dev/null 2>&1 \
+  XDG_RUNTIME_DIR=/usr DBUS_SESSION_BUS_ADDRESS="unix:path=/usr/bus" bash "$INFRA" restart porta >/dev/null 2>&1 \
     || falha "infra restart com XDG de outra conta"
   grep -F "systemd-run " "$SYSD_LOG" | grep -qF "XDG=/run/user/$UID_ATUAL | DBUS=unix:path=/run/user/$UID_ATUAL/bus" \
     || falha "XDG de outra conta nao foi trocado: $(cat "$SYSD_LOG")"
   : > "$SYSD_LOG"
-  XDG_RUNTIME_DIR=/usr DBUS_SESSION_BUS_ADDRESS="unix:path=$TMP_DIR/meu-bus" bash "$INFRA" restart ops-mcp >/dev/null 2>&1 \
+  XDG_RUNTIME_DIR=/usr DBUS_SESSION_BUS_ADDRESS="unix:path=$TMP_DIR/meu-bus" bash "$INFRA" restart porta >/dev/null 2>&1 \
     || falha "infra restart com XDG de outra conta e DBUS proprio"
   grep -F "systemd-run " "$SYSD_LOG" | grep -qF "XDG=/run/user/$UID_ATUAL | DBUS=unix:path=$TMP_DIR/meu-bus" \
     || falha "DBUS fora do XDG estranho devia ser mantido: $(cat "$SYSD_LOG")"
@@ -362,7 +362,7 @@ H1="$(novo_commit platafirma-core h1)"
 set +e; out="$(env -u XDG_RUNTIME_DIR -u DBUS_SESSION_BUS_ADDRESS PF_RELEASE_PORTA=1 "$VERBO" promover platafirma-core "$H1" 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 0 ] || falha "promover core: rc=$rc $out"
 grep -q '^porta: .*despachado destacado' <<<"$out" || falha "release nao relatou o restart despachado: $out"
-grep -F "systemd-run " "$SYSD_LOG" | grep -qF "systemctl --user restart ops-mcp | XDG=/run/user/$UID_ATUAL | DBUS=unix:path=/run/user/$UID_ATUAL/bus" \
+grep -F "systemd-run " "$SYSD_LOG" | grep -qF "systemctl --user restart porta | XDG=/run/user/$UID_ATUAL | DBUS=unix:path=/run/user/$UID_ATUAL/bus" \
   || falha "release -> infra sem bus: $(cat "$SYSD_LOG")"
 echo OK
 

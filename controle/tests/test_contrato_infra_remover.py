@@ -299,9 +299,9 @@ def test_unit_fora_da_conta_recusa(cena):
 
 
 def test_a_porta_nao_sai(cena):
-    arq = cena.units / "ops-mcp.service"
+    arq = cena.units / "porta.service"
     arq.write_text("[Service]\n")
-    r = cena.roda("remover", "ops-mcp", STUB_UNITS="ops-mcp.service", STUB_FRAG=str(arq))
+    r = cena.roda("remover", "porta", STUB_UNITS="porta.service", STUB_FRAG=str(arq))
     assert r.returncode == 4, r.stdout + r.stderr
     assert arq.exists() and cena.rastro() == []
 

@@ -636,6 +636,15 @@ def divergencia_do_gate(args, env=None):
 
 
 def conferir_servico(alvo, como_json=False):
+    if alvo == "porta":
+        itens_porta = conferir_stack_porta()
+        if not como_json:
+            print("\n## conferir servico porta — regra 4406.r2")
+            for nome_r, ver_r in itens_porta:
+                marca = {"conforme": "ok ", "divergente": "NAO", "indeterminavel": "?? "}[ver_r.estado]
+                print(f"    {marca}: {nome_r:<28} {ver_r.motivo or 'conforme'}")
+            print()
+        return resultado.relatorio("servico", alvo, itens_porta, _sha_release(), como_json=como_json)
     vistos = 0
     itens = []
     _SVC_DECLARADO.clear()
@@ -3280,13 +3289,6 @@ def conferir_pdp(alvo=None, como_json=False, *, sonda_pdp=None):
             marca = {"conforme": "ok ", "divergente": "NAO", "indeterminavel": "?? "}[v.estado]
             print(f"    {marca}: {nome:<16} {pdp_path} {detalhe}")
         itens.append((nome, v))
-
-    if not alvo or alvo == "porta":
-        for nome_r, ver_r in conferir_stack_porta():
-            if not como_json:
-                marca = {"conforme": "ok ", "divergente": "NAO", "indeterminavel": "?? "}[ver_r.estado]
-                print(f"    {marca}: {nome_r:<16} {ver_r.motivo or 'conforme'}")
-            itens.append((nome_r, ver_r))
 
     if not como_json:
         print()

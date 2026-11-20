@@ -252,7 +252,7 @@ git -C "$BANCADA_TESTE/platafirma-vazio" rev-parse --verify main >/dev/null 2>&1
 }
 echo "OK: repo abrir em repositorio vazio inicializa main e abre a bancada"
 
-# 6. DTs 814, 797, 793: regime direto em main (platafirma-casa-espelho)
+# 6. DTs 814, 797, 793: regime direto em main (platafirma-casa)
 echo "--- Teste 6: DT 814 — repo abrir --slug em direto_em_main sai 2 ---"
 FORGE_ESPELHO="$TMP_DIR/forge-espelho.git"
 SEMENTE_ESPELHO="$TMP_DIR/semente-espelho"
@@ -264,10 +264,10 @@ echo "base" > "$SEMENTE_ESPELHO/doc.md"
 git -C "$SEMENTE_ESPELHO" add doc.md
 git -C "$SEMENTE_ESPELHO" commit -q -m "base"
 git -C "$SEMENTE_ESPELHO" push -q origin main
-git clone -q "$FORGE_ESPELHO" "$BANCADA_TESTE/platafirma-casa-espelho"
+git clone -q "$FORGE_ESPELHO" "$BANCADA_TESTE/platafirma-casa"
 
 set +e
-out_slug="$(PF_SESSAO="sessao-a" "$VERBO" abrir platafirma-casa-espelho --slug nao-pode 2>&1)"
+out_slug="$(PF_SESSAO="sessao-a" "$VERBO" abrir platafirma-casa --slug nao-pode 2>&1)"
 rc_slug=$?
 set -e
 [ "$rc_slug" -eq 2 ] || { echo "FALHA: DT 814 devia sair 2, saiu $rc_slug: $out_slug" >&2; exit 1; }
@@ -275,15 +275,15 @@ grep -q -- "--slug nao se aplica" <<< "$out_slug" || { echo "FALHA: DT 814 mensa
 echo "OK: DT 814 — --slug em direto_em_main recusa com 2"
 
 echo "--- Teste 7: DT 797 — repo git nao troca ramo da pasta de main; recusa diz sessao e desde ---"
-PF_SESSAO="sessao-a" "$VERBO" abrir platafirma-casa-espelho >/dev/null
-WT_ESPELHO="$BANCADA_TESTE/wt/platafirma-casa-espelho/ti/main"
+PF_SESSAO="sessao-a" "$VERBO" abrir platafirma-casa >/dev/null
+WT_ESPELHO="$BANCADA_TESTE/wt/platafirma-casa/ti/main"
 git -C "$WT_ESPELHO" config user.name "Test Repo"
 git -C "$WT_ESPELHO" config user.email "test@platafirma.org"
 
 set +e
-out_sw="$("$VERBO" git platafirma-casa-espelho switch -c outro 2>&1)"
+out_sw="$("$VERBO" git platafirma-casa switch -c outro 2>&1)"
 rc_sw=$?
-out_co="$("$VERBO" git platafirma-casa-espelho checkout -b outro 2>&1)"
+out_co="$("$VERBO" git platafirma-casa checkout -b outro 2>&1)"
 rc_co=$?
 set -e
 [ "$rc_sw" -eq 4 ] || { echo "FALHA: DT 797 switch devia sair 4, saiu $rc_sw: $out_sw" >&2; exit 1; }
@@ -293,14 +293,14 @@ set -e
 git -C "$WT_ESPELHO" checkout -q -b outro-ramo
 echo "sujo" >> "$WT_ESPELHO/doc.md"
 set +e
-out_797="$(PF_SESSAO="sessao-b" "$VERBO" abrir platafirma-casa-espelho 2>&1)"
+out_797="$(PF_SESSAO="sessao-b" "$VERBO" abrir platafirma-casa 2>&1)"
 rc_797=$?
 set -e
 [ "$rc_797" -eq 4 ] || { echo "FALHA: DT 797 abrir em outro ramo sujo devia sair 4, saiu $rc_797: $out_797" >&2; exit 1; }
 grep -q "sessão sessao-a desde " <<< "$out_797" || { echo "FALHA: DT 797 recusa nao informou sessao e desde: $out_797" >&2; exit 1; }
 # Restaura para o proximo teste
 git -C "$WT_ESPELHO" checkout -q -- doc.md
-"$VERBO" git platafirma-casa-espelho checkout -B ti/main origin/main >/dev/null 2>&1
+"$VERBO" git platafirma-casa checkout -B ti/main origin/main >/dev/null 2>&1
 git -C "$WT_ESPELHO" branch -D outro-ramo >/dev/null 2>&1 || true
 echo "OK: DT 797 — repo git bloqueia troca de ramo em main e recusa informa sessao e desde"
 
@@ -310,7 +310,7 @@ git -C "$WT_ESPELHO" add novo.md
 git -C "$WT_ESPELHO" commit -q -m "commit novo"
 echo "sujo-alheio" >> "$WT_ESPELHO/doc.md"
 
-out_793_ok="$("$VERBO" sincronizar platafirma-casa-espelho 2>&1)" || {
+out_793_ok="$("$VERBO" sincronizar platafirma-casa 2>&1)" || {
   echo "FALHA: DT 793 devia empurrar com atras 0 mesmo com arvore suja: $out_793_ok" >&2
   exit 1
 }
@@ -324,37 +324,37 @@ git -C "$SEMENTE_ESPELHO" add doc.md
 git -C "$SEMENTE_ESPELHO" commit -q -m "remoto"
 git -C "$SEMENTE_ESPELHO" push -q origin main
 set +e
-out_793_atras="$("$VERBO" sincronizar platafirma-casa-espelho 2>&1)"
+out_793_atras="$("$VERBO" sincronizar platafirma-casa 2>&1)"
 rc_793_atras=$?
 set -e
 [ "$rc_793_atras" -eq 4 ] || { echo "FALHA: DT 793 com atras > 0 e sujo devia sair 4, saiu $rc_793_atras: $out_793_atras" >&2; exit 1; }
 echo "OK: DT 793 — empurra com atras 0 sem tocar escrita alheia e recusa com atras > 0"
 
 echo "--- Teste 8b: incidente 4371 — abrir refaz a worktree de main órfã e guarda a pasta ---"
-rm -rf "$BANCADA_TESTE/platafirma-casa-espelho/.git/worktrees"
+rm -rf "$BANCADA_TESTE/platafirma-casa/.git/worktrees"
 set +e
-out_orfa_antes="$("$VERBO" estado platafirma-casa-espelho 2>&1)"
+out_orfa_antes="$("$VERBO" estado platafirma-casa 2>&1)"
 rc_orfa_antes=$?
-out_orfa="$(PF_SESSAO="sessao-a" "$VERBO" abrir platafirma-casa-espelho 2>&1)"
+out_orfa="$(PF_SESSAO="sessao-a" "$VERBO" abrir platafirma-casa 2>&1)"
 rc_orfa=$?
 set -e
 [ "$rc_orfa_antes" -eq 5 ] || { echo "FALHA: 4371 a worktree órfã devia sair 5 no estado, saiu $rc_orfa_antes: $out_orfa_antes" >&2; exit 1; }
 [ "$rc_orfa" -eq 0 ] || { echo "FALHA: 4371 abrir devia refazer a worktree órfã, saiu $rc_orfa: $out_orfa" >&2; exit 1; }
 grep -q "worktree órfã" <<< "$out_orfa" || { echo "FALHA: 4371 abrir não disse que achou a órfã: $out_orfa" >&2; exit 1; }
-"$VERBO" estado platafirma-casa-espelho >/dev/null 2>&1 || { echo "FALHA: 4371 a worktree refeita não responde ao estado" >&2; exit 1; }
-[ -z "$(git -C "$BANCADA_TESTE/wt/platafirma-casa-espelho/ti/main" status --porcelain)" ] || { echo "FALHA: 4371/DT-893 worktree refeita devia nascer limpa em origin/main" >&2; exit 1; }
-grep -qs "sujo-alheio" "$BANCADA_TESTE"/wt/.orfas/platafirma-casa-espelho-ti-main-*/doc.md || { echo "FALHA: 4371/DT-893 a árvore da worktree órfã não foi guardada em wt/.orfas" >&2; exit 1; }
+"$VERBO" estado platafirma-casa >/dev/null 2>&1 || { echo "FALHA: 4371 a worktree refeita não responde ao estado" >&2; exit 1; }
+[ -z "$(git -C "$BANCADA_TESTE/wt/platafirma-casa/ti/main" status --porcelain)" ] || { echo "FALHA: 4371/DT-893 worktree refeita devia nascer limpa em origin/main" >&2; exit 1; }
+grep -qs "sujo-alheio" "$BANCADA_TESTE"/wt/.orfas/platafirma-casa-ti-main-*/doc.md || { echo "FALHA: 4371/DT-893 a árvore da worktree órfã não foi guardada em wt/.orfas" >&2; exit 1; }
 echo "OK: 4371/DT-893 — worktree de main órfã movida para wt/.orfas e recriada limpa em origin/main"
 
 echo "--- Teste 8c: colisão de gitdir (outra cadeira apontando para o gitdir de ti/main) ---"
-WT_COL="$BANCADA_TESTE/wt/platafirma-casa-espelho/dados/main"
+WT_COL="$BANCADA_TESTE/wt/platafirma-casa/dados/main"
 mkdir -p "$WT_COL"
-cp "$BANCADA_TESTE/wt/platafirma-casa-espelho/ti/main/.git" "$WT_COL/.git"
+cp "$BANCADA_TESTE/wt/platafirma-casa/ti/main/.git" "$WT_COL/.git"
 echo "rascunho-dados" > "$WT_COL/nota-dados.txt"
 set +e
-out_col_antes="$(PF_CADEIRA=dados "$VERBO" estado platafirma-casa-espelho 2>&1)"
+out_col_antes="$(PF_CADEIRA=dados "$VERBO" estado platafirma-casa 2>&1)"
 rc_col_antes=$?
-out_col_san="$("$VERBO" sanear platafirma-casa-espelho 2>&1)"
+out_col_san="$("$VERBO" sanear platafirma-casa 2>&1)"
 rc_col_san=$?
 set -e
 [ "$rc_col_antes" -eq 5 ] || { echo "FALHA: colisão de gitdir devia sair 5 no estado, saiu $rc_col_antes: $out_col_antes" >&2; exit 1; }
@@ -362,7 +362,7 @@ set -e
 ramo_col="$(git -C "$WT_COL" rev-parse --abbrev-ref HEAD 2>/dev/null)"
 [ "$ramo_col" = "dados/main" ] || { echo "FALHA: worktree colidida devia ficar em dados/main, ficou em '$ramo_col'" >&2; exit 1; }
 [ -z "$(git -C "$WT_COL" status --porcelain)" ] || { echo "FALHA: worktree colidida devia nascer limpa em origin/main" >&2; exit 1; }
-grep -qs "rascunho-dados" "$BANCADA_TESTE"/wt/.orfas/platafirma-casa-espelho-dados-main-*/nota-dados.txt || { echo "FALHA: árvore da worktree colidida não foi guardada em wt/.orfas" >&2; exit 1; }
+grep -qs "rascunho-dados" "$BANCADA_TESTE"/wt/.orfas/platafirma-casa-dados-main-*/nota-dados.txt || { echo "FALHA: árvore da worktree colidida não foi guardada em wt/.orfas" >&2; exit 1; }
 echo "OK: colisão de gitdir detectada, antiga guardada em wt/.orfas e worktree recriada limpa"
 
 # 9. DT 826: ramo divergido de origin/<ramo>

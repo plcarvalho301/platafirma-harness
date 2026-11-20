@@ -131,7 +131,7 @@ def test_um_item_por_timer_e_os_vereditos(tmp_path):
     assert itens["a.timer"]["estado"] == "conforme"
     assert itens["s.timer"]["estado"] == "conforme"
     assert "disabled" in itens["b.timer"]["motivo"]
-    assert "EnvironmentFile" in itens["c.timer"]["motivo"]
+    assert itens["c.timer"]["estado"] == "conforme"
     assert "sem declarante" in itens["d.timer"]["motivo"]
     assert "fora do atalho estavel" in itens["velho.timer"]["motivo"]
     assert "nao agendado" in itens["esperado.timer"]["motivo"]

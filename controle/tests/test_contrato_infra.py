@@ -310,7 +310,7 @@ def test_saude_json_falha_real_vira_objeto_erro(path_df_falha):
 
 def test_saude_texto_sem_flag_nao_muda(path_ok):
     r = _roda("saude", path_dir=path_ok, checa_exit=0)
-    assert r.stdout.startswith("ops-mcp /health: ")
+    assert r.stdout.startswith("porta /health: ")
     assert "== contêiner parado ou não-saudável" in r.stdout
     assert "== unit falhada" in r.stdout
     assert "== disco e memória" in r.stdout

@@ -116,7 +116,7 @@ def _mundo(tmp_path, monkeypatch, *, ops_pid=1111, rec_pid=2222, registro=None, 
     bindir.mkdir()
     _script(bindir / "systemctl", f'''
 case "$*" in
-  *ops-tunnel.service) echo "MainPID={ops_pid}" ;;
+  *porta-tunel.service) echo "MainPID={ops_pid}" ;;
   *recuperacao-tunnel.service) echo "MainPID={rec_pid}" ;;
   *) echo "Unit $4 could not be found." >&2; exit 1 ;;
 esac
@@ -126,7 +126,7 @@ esac
         "com.docker.compose.project.config_files": f"/opt/platafirma/platafirma-core/{SHA}/docker-compose.yml"}
     _script(bindir / "docker", f"echo '{json.dumps(labels)}'\n")
     registro = registro if registro is not None else {
-        "ops-tunnel.service": "core/ops-tunnel", "recuperacao-tunnel.service": "core/recuperacao-tunnel"}
+        "porta-tunel.service": "core/ops-tunnel", "recuperacao-tunnel.service": "core/recuperacao-tunnel"}
     topologia = [{"slug": "core", "compose": "/opt/platafirma/current/core/docker-compose.yml"}]
     corpo_acervo = 'echo "acervo stack: psql falhou" >&2; exit 3\n' if acervo_quebrado else (
         'if [ "$1 $2" = "stack ver" ]; then\n'
@@ -294,14 +294,14 @@ def test_valor_da_metrica_soma_as_series_e_devolve_none_quando_nao_existe():
 def test_consumidores_resolvem_pelos_dois_caminhos(mundo):
     j = medir_rede.medir()
     por_tunel = {c["tunel"]: c for c in j["consumidores"]}
-    assert por_tunel["ops"]["servico"] == "core/ops-tunnel" and por_tunel["ops"]["unit"] == "ops-tunnel.service"
+    assert por_tunel["ops"]["servico"] == "core/ops-tunnel" and por_tunel["ops"]["unit"] == "porta-tunel.service"
     assert por_tunel["recuperacao"]["servico"] == "core/recuperacao-tunnel"
     assert por_tunel["wiki"]["servico"] == "core/cloudflared" and por_tunel["wiki"]["conteiner"].endswith("cloudflared-1")
     assert por_tunel["ops"]["pid"] == 1111
 
 
 def test_unit_fora_do_registro_e_conteiner_fora_de_compose_saem_como_desvio_nunca_somem(tmp_path, monkeypatch):
-    m = _mundo(tmp_path, monkeypatch, registro={"ops-tunnel.service": "core/ops-tunnel"}, labels={})
+    m = _mundo(tmp_path, monkeypatch, registro={"porta-tunel.service": "core/ops-tunnel"}, labels={})
     try:
         j = medir_rede.medir()
     finally:
@@ -372,12 +372,10 @@ def test_recuperacao_e_lido_como_unit_de_sistema_sem_flag_user(mundo):
     # DT 883: recuperacao-tunnel.service roda como unit de sistema (sem --user); ops segue em --user.
     _script(mundo.bindir / "systemctl", '''
 if [ "$1" = "--user" ]; then
-  case "$*" in
-    *ops-tunnel.service) echo "MainPID=1111" ;;
-    *) echo "MainPID=0" ;;
-  esac
+  echo "MainPID=0"
 else
   case "$*" in
+    *porta-tunel.service) echo "MainPID=1111" ;;
     *recuperacao-tunnel.service) echo "MainPID=2222" ;;
     *) echo "MainPID=0" ;;
   esac

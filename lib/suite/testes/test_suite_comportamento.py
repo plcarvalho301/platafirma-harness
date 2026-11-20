@@ -1281,7 +1281,7 @@ def test_esteira_isolamento_real_monta_release_em_leitura(
     from suite.esteira import DubleBalde, rodar
 
     release_falsa = tmp_path / "release"
-    arranque = release_falsa / "casa-espelho" / "instancias" / "instrucao" / "arranque.md"
+    arranque = release_falsa / "casa" / "instancias" / "instrucao" / "arranque.md"
     arranque.parent.mkdir(parents=True)
     arranque.write_text("# Arranque de prova DT 935\n", encoding="utf-8")
     porta = release_falsa / "harness" / "registro" / "porta.yaml"
@@ -1302,7 +1302,7 @@ def test_esteira_isolamento_real_monta_release_em_leitura(
         "from pathlib import Path\n"
         "import pytest\n\n"
         "def test_le_casa_espelho_e_harness_somente_leitura():\n"
-        "    arq_arranque = Path('/opt/platafirma/current/casa-espelho/instancias/instrucao/arranque.md')\n"
+        "    arq_arranque = Path('/opt/platafirma/current/casa/instancias/instrucao/arranque.md')\n"
         "    arq_porta = Path('/opt/platafirma/current/harness/registro/porta.yaml')\n"
         "    assert 'Arranque de prova DT 935' in arq_arranque.read_text(encoding='utf-8')\n"
         "    assert 'verbos:' in arq_porta.read_text(encoding='utf-8')\n"
