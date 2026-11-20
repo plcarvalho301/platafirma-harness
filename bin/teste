@@ -1074,7 +1074,7 @@ raio_total_da_stack() {  # $1=stack $2=linhas do registro da família (nome TAB 
         if [ "$n" = "$stack" ] && [ "${#p}" -gt "$meu_len" ]; then meu_len="${#p}"; fi
       fi
     done <<<"$pastas"
-    if [ "$acima" -eq 1 ] || [ "$dono_len" -eq 0 ] || [ "$meu_len" -eq "$dono_len" ]; then
+    if [ -z "$d" ] || [ "$acima" -eq 1 ] || { [ "$dono_len" -gt 0 ] && [ "$meu_len" -eq "$dono_len" ]; }; then
       printf '%s' "$f"; return 0
     fi
   done
