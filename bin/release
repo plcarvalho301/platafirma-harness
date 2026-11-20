@@ -2499,7 +2499,7 @@ cmd_promover() {
 
 # ---- ato: reverter (removido, r27, card #4404) -----------------------------------
 cmd_reverter() {
-  printf 'release: erro: o ato reverter foi removido — a volta de uma mudança é reverter o commit na main e promover (release promover <família> <sha>)\n' >&2
+  printf 'release: erro: o ato reverter foi removido (política 0009) — a volta de uma mudança é reverter o commit na main e promover (release promover <família> <sha>)\n' >&2
   exit 2
 }
 
@@ -2574,10 +2574,10 @@ cmd="$1"
 shift
 
 # ---- expurgo de fósseis (política 0000 e política 0009, DT 930) ------------------
-# Deixa em $PROD_RAIZ, $ABERTURA_DIR e Docker só o que a release no ar (current) usa.
+# Deixa em $PROD_RAIZ e Docker só o que a release no ar (current) usa.
 expurgar_fosseis() {  # $1=ver (0=apaga, 1=mostra o que sairia)
-  local ver="${1:-0}"
-  python3 - "$PROD_RAIZ" "$PONTOS" "$ABERTURA_DIR" "$VENVS" "$ver" <<'PY'
+  local ver="${1:-0}" ab_dir="${PF_ABERTURA_DIR:-$PLATAFIRMA_INSTANCIA/var/abertura-""publicada}"
+  python3 - "$PROD_RAIZ" "$PONTOS" "$ab_dir" "$VENVS" "$ver" <<'PY'
 import json
 import os
 import re
@@ -2760,6 +2760,7 @@ case "$cmd" in
   telas)    cmd_telas "$@" ;;
   promover) entrar_na_fila_de_promocao promover "$@"; cmd_promover "$@" ;;
   reverter) cmd_reverter "$@" ;;
+  expurgar) cmd_expurgar "$@" ;;
   migrar)   cmd_migrar "$@" ;;
   _medir-suite)
     # interno: o job que `release promover` dispara para medir a suite acima do teto.
