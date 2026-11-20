@@ -1,3 +1,4 @@
+# componente: componente:leitor-universal
 """Contratos da `ler_arquivo` sobre `lib/leitura` (spec ler-arquivo §14, DT 919).
 
 Migrado de `ops-server/test_leitura.py` (C1 a C14, índice com marcos, cache com teto,

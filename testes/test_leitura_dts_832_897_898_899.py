@@ -1,3 +1,4 @@
+# componente: componente:leitor-universal
 """Guardas das DTs 832, 897, 898 e 899 migradas de ops-server/test_dts_832_897_898_899.py (#4348).
 
 O ler_arquivo da casa nova mora em lib/leitura. O que a porta antiga fazia e a casa nova

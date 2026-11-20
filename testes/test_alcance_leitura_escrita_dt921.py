@@ -1,3 +1,4 @@
+# componente: componente:leitor-universal
 """Guardas de alcance dos binários `ler_arquivo` e `write_file` do harness (achado 921).
 
 Portado de `core/porta/tests/test_alcance_porta_dt921.py` no débito 924 para rodar

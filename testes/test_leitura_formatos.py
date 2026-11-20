@@ -1,3 +1,4 @@
+# componente: componente:leitor-universal
 """C18 — os formatos do acervo lidos pela porta (spec ler-arquivo §7.4, DT 919).
 
 Migrado de `ops-server/test_formatos.py`: uma fixture por linha da tabela da §7.4, gerada em
