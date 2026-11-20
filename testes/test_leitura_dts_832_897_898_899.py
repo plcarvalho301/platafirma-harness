@@ -44,14 +44,15 @@ def _chamar(payload: dict) -> tuple[int, dict]:
 
 
 # --- DT 832: descompressão segura -----------------------------------------------------------------
-def test_dt832_gzip_nao_e_descomprimido(tmp_path):
-    """A casa nova não tem leitor de gzip: a bomba não é aberta, sai como binário sem leitor."""
+def test_dt832_gzip_bomba_recusa_com_motivo_descompressao(tmp_path):
+    """Bomba de compressão gzip recusa com motivo=descompressao (DT 832, DT 919)."""
     gz = tmp_path / "bomba.txt.gz"
     with gzip.open(gz, "wb") as fh:
         fh.write(b"\x00" * (512 * 1024))
     r = L.ler(gz)
-    assert r["exit_code"] == 1
-    assert r.get("erro") == "sem_leitor"
+    assert r.get("recusado") is True
+    assert r.get("motivo") == "descompressao"
+    assert r["exit_code"] == 2
     assert "conteudo" not in r
 
 
