@@ -19,8 +19,10 @@ from recuperacao.envelope import Causa, Cobertura, ContratoViolado
 from recuperacao.fontes import DOMINIO, PREFIXO_SOBRE, TIPO, Fonte
 from recuperacao.pep import ACAO, ACAO_ACERVO, PEP, Negativa, recusa_por_concessao
 
+import os
+
 RAIZ = Path(__file__).resolve().parents[1]
-POLITICA = RAIZ / "politica-acesso"
+POLITICA = Path(os.environ.get("PF_CORE_ACESSO_DIR", "/opt/platafirma/current/core/acesso"))
 
 OPERADOR = "megafone"          # papel `operador`, dominio `plataforma`
 EXTERNO = "ex-externo"         # sujeito sem projecao (papel `pesquisador-externo` saiu)

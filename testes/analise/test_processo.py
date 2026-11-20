@@ -14,9 +14,10 @@ def test_cli_em_unidade_dedicada(db,bancos,tmp_path):
     semear(admin)
     servido=tmp_path/"release";servido.mkdir()
     (servido/"conhecimento").symlink_to(CONHECIMENTO,target_is_directory=True)
-    politica=servido/"harness/politica-acesso";politica.mkdir(parents=True)
+    politica=servido/"core/acesso";politica.mkdir(parents=True)
+    origem_pdp=Path(os.environ.get("PF_CORE_ACESSO_DIR","/opt/platafirma/current/core/acesso"))
     for nome in ("pdp.py","politica.yaml"):
-        shutil.copy2(RAIZ/"politica-acesso"/nome,politica/nome)
+        shutil.copy2(origem_pdp/nome,politica/nome)
     (politica/"sujeitos.yaml").write_text('sujeitos:\n  teste:\n    natureza: pessoa\n    papeis: [operador]\n    dominios: [plataforma]\n')
     instancia=tmp_path/"instancia"
     # #4287: o destino vem da entrada analise do registro (fixture bancos) e da senha em segredos/analise-db.
