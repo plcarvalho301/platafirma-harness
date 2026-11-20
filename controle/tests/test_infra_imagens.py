@@ -274,3 +274,21 @@ def test_biblioteca_current_protegida_do_expurgo(cena: Cena, tmp_path: Path):
     assert rastro[0].startswith("image rm -f ")
     assert "platafirma/ui:0.22.0" not in rastro[0]
     assert "platafirma-rag:velha" in rastro[0]
+
+
+def test_limpeza_remove_imagem_sem_tag_pelo_id(cena: Cena, tmp_path: Path):
+    rel_raiz = tmp_path / "release"
+    pkg = rel_raiz / "platafirma-ui" / "current" / "src" / "base" / "package.json"
+    pkg.parent.mkdir(parents=True)
+    pkg.write_text(json.dumps({"version": "0.23.0"}), encoding="utf-8")
+    cena.imagem("platafirma/ui:0.23.0", "sha256:ui0230", "120MB", ativa=False)
+    cena.imagem("nocodb/nocodb:<none>", "sha256:nocodbsemtag", "1.24GB", ativa=False)
+
+    r_prune = cena.roda("limpeza", "imagens", PF_RELEASE_RAIZ=str(rel_raiz))
+    assert r_prune.returncode == 0, r_prune.stderr
+    rastro = cena.rastro()
+    assert len(rastro) == 1
+    assert rastro[0].startswith("image rm -f ")
+    tokens = rastro[0].split()
+    assert "sha256:nocodbsemtag" in tokens
+    assert "nocodb/nocodb" not in tokens

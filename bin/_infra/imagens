@@ -347,8 +347,11 @@ def _executar_prune(inativas: list[dict], em_uso: list[dict]) -> int:
     reclaimed = ""
     try:
         if tem_protegida_sem_conteiner:
-            alvos = [x["referencia"] if x["repositorio"] != "<none>" else x["id"] for x in inativas]
-            alvos = [a for a in alvos if a]
+            alvos = [
+                x["referencia"] if x["repositorio"] != "<none>" and x["tag"] != "<none>" else x["id"]
+                for x in inativas
+            ]
+            alvos = list(dict.fromkeys(a for a in alvos if a))
             if alvos:
                 _roda("docker", "image", "rm", "-f", *alvos, timeout=300)
         else:
