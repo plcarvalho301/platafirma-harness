@@ -22,7 +22,7 @@ Cada ideia da primeira rodada leva sete campos, um por linha:
 
 - **Título:** de três a sete palavras.
 - **O rumo:** o que a firma já decidiu e a ideia serve.
-- **A mudança:** o que começa, espera ou sai por causa da ideia, ou o que muda no mapa.
+- **A mudança:** o que começa, espera ou sai por causa da ideia, o que muda no mapa ou o que muda no fluxo ou na régua de processo.
 - **Quem decide:** o direito de decisão, e o que o dono recebe para fechar.
 - **O que exige:** da carteira, das cadeiras e do esforço.
 - **O que a derruba:** o fato que a tornaria errada.
@@ -34,11 +34,12 @@ Use pelo menos três por rodada. Na segunda rodada, use as que a primeira não u
 
 - **Rumo.** A ideia parte do que a firma decidiu e mede o quanto serve a ele, em vez de
   só ordenar o que já estava na lista.
-- **Linha de corte.** O que sai para caber. A ideia tira antes de acrescentar.
+- **Linha de corte.** O que sai para caber e o critério de encerramento que mata uma
+  aposta em curso antes de afundar mais esforço. A ideia tira antes de acrescentar.
 - **Limite em andamento.** O que fica parado enquanto tudo está aberto. A ideia fecha
   uma frente antes de abrir outra.
-- **Dependência.** O que precisa vir antes. A ideia reordena pela dependência e não por
-  uma variável só.
+- **Dependência.** O que dói mais adiar e o que destrava o resto. A ideia reordena por
+  custo de atraso e pré-requisito, não por uma variável só.
 - **Direito de decisão.** Quem fecha, quem analisa, quem executa e quem é afetado. A
   ideia muda o que chega ao dono para ele fechar.
 - **Fluxo de valor.** O trabalho de ponta a ponta. A ideia ataca onde ele espera, ou onde
@@ -52,8 +53,8 @@ Procure o que a casa já decidiu sobre o alvo, nesta ordem:
 
 1. Os cards no tempo e as decisões do dono neles: `tarefas carteira`, `tarefas listar`,
    depois `tarefas ler <card>` e `tarefas comentarios <card> --indice`.
-2. Os processos já escritos: `infra rodar ontologia -- listar missao` e
-   `infra rodar ontologia -- listar procedimento`.
+2. Os processos, fluxos e capacidades já escritos: `infra rodar ontologia -- listar missao`,
+   `procedimento`, `fluxo-de-valor` e `capacidade`.
 3. Os pareceres e as observações, em `referencias/instancias/parecer` e
    `referencias/instancias/observacao`.
 4. A busca pelo sentido: `busca buscar casa "<pergunta do alvo>" --texto trecho`.
