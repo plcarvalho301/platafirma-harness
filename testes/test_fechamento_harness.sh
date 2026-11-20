@@ -54,7 +54,14 @@ for n in harness acervo analise; do
   fi
 done
 # todo venv citado por shebang ou por "$PLATAFIRMA_RELEASE/venv/<n>/bin/python" tem de estar declarado
-citados="$(cd "$REPO_ROOT" && git ls-files -z bin chat controle sessao deploy-harness 2>/dev/null \
+_listar_fontes() {
+  if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    (cd "$REPO_ROOT" && git ls-files -z bin chat controle sessao deploy-harness 2>/dev/null)
+  else
+    (cd "$REPO_ROOT" && find bin chat controle sessao deploy-harness -type f -print0 2>/dev/null)
+  fi
+}
+citados="$(_listar_fontes \
   | { xargs -0 grep -hoE '(/opt/platafirma/current|\$PLATAFIRMA_RELEASE)/venv/[a-z0-9_-]+/bin/' 2>/dev/null || true; } \
   | sed -E 's#.*/venv/([a-z0-9_-]+)/bin/#\1#' | sort -u)"
 [ -n "$citados" ] || falha "nenhum venv citado no codigo: a varredura de shebang nao achou nada"
@@ -71,7 +78,11 @@ jq -e '."qwen2.5-tokenizer" | .familia == "platafirma-harness" and (.sha256 | te
   || falha "registro/terceiros.json: qwen2.5-tokenizer mal declarado"
 grep -q '"terceiros", "tokenizers", "qwen2.5.json"' "$REPO_ROOT/bin/monta-sessao" || falha "monta-sessao nao le o destino pinado"
 grep -q '"terceiros" / "tokenizers" / "qwen2.5.json"' "$REPO_ROOT/recuperacao/_raizes.py" || falha "recuperacao nao le o destino pinado"
-(cd "$REPO_ROOT" && git check-ignore -q terceiros/tokenizers/qwen2.5.json) || falha "terceiros/ devia estar fora do git"
+if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  (cd "$REPO_ROOT" && git check-ignore -q terceiros/tokenizers/qwen2.5.json) || falha "terceiros/ devia estar fora do git"
+else
+  grep -qE '^terceiros/?$' "$REPO_ROOT/.gitignore" || falha "terceiros/ devia estar listado no .gitignore"
+fi
 echo "OK"
 
 echo "--- 3: release materializa o terceiro na arvore da rev a partir do cache pinado"
