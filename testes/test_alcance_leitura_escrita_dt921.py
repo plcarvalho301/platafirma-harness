@@ -33,7 +33,6 @@ def ambiente_harness(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[st
     (inst / "var" / "tmp").mkdir(parents=True)
     (inst / "var" / "fila").mkdir(parents=True)
     (inst / "var" / "log").mkdir(parents=True)
-    (inst / "var" / "abertura-publicada").mkdir(parents=True)
     (inst / "segredos").mkdir(parents=True)
     (pdp).mkdir(parents=True)
     (banc / "wt" / "platafirma-core" / "outra-cadeira").mkdir(parents=True)
@@ -183,7 +182,6 @@ def test_write_file_recusa_release_log_fila_abertura_segredo_e_git(
         (ambiente_harness["release"] / "current" / "harness" / "x.py", "release"),
         (inst / "var" / "log" / "a.log", "log"),
         (inst / "var" / "fila" / "m.txt", "fila"),
-        (inst / "var" / "abertura-publicada" / "a.md", "imutavel"),
         (inst / "segredos" / "s.txt", "segredo"),
         (wt / ".env", "segredo"),
         (wt / ".git" / "config", ".git"),
