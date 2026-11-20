@@ -38,13 +38,12 @@ echo "OK: ato desconhecido sai 2 com causa e usage"
 # 3. Montagem da fixture de servido com SHAs reais
 PROD_RAIZ="$TMP_DIR/var/prod"
 PONTOS="$TMP_DIR/var/release"
-ABERTURA_DIR="$TMP_DIR/var/abertura-publicada"
 BIN_DIR="$TMP_DIR/bin"
-mkdir -p "$PROD_RAIZ" "$PONTOS" "$ABERTURA_DIR" "$BIN_DIR"
+mkdir -p "$PROD_RAIZ" "$PONTOS" "$BIN_DIR"
 
 export PF_PROD_RAIZ="$PROD_RAIZ"
-export PF_RELEASE_RAIZ="$PONTOS"
-export PF_ABERTURA_RAIZ="$ABERTURA_DIR"
+export PF_RELEASE_RAIZ="$PROD_RAIZ"
+export PLATAFIRMA_INSTANCIA="$TMP_DIR"
 export PF_BIN_DIR="$BIN_DIR"
 
 # Repo 1: platafirma-harness (CÓDIGO, com tag v0.1.0)
@@ -85,26 +84,16 @@ git -C "$PROD_RAIZ/platafirma-harness/$HARNESS_SHA" checkout -q --detach "$HARNE
 chmod -R a-w "$PROD_RAIZ/platafirma-harness/$HARNESS_SHA"
 ln -s "$HARNESS_SHA" "$PROD_RAIZ/platafirma-harness/current"
 
-# Ponto de volta e atual para platafirma-harness (com sha de 40 hex e ISO-8601 UTC)
+# Ponto atual para platafirma-harness (com sha de 40 hex e ISO-8601 UTC)
 mkdir -p "$PONTOS/platafirma-harness"
-ANTERIOR_REAL_SHA="88d0993881b68f5acc699b11e8831d489d4f432b"
-echo "$ANTERIOR_REAL_SHA" > "$PONTOS/platafirma-harness/anterior"
 echo "$HARNESS_SHA 2026-09-12T14:26:16Z" > "$PONTOS/platafirma-harness/atual"
 
-# 2. platafirma-arquitetura
-mkdir -p "$PROD_RAIZ/platafirma-arquitetura/$DOC_SHA"
-git clone --shared -q "$DOC_DIR" "$PROD_RAIZ/platafirma-arquitetura/$DOC_SHA"
-git -C "$PROD_RAIZ/platafirma-arquitetura/$DOC_SHA" checkout -q --detach "$DOC_SHA"
-chmod -R a-w "$PROD_RAIZ/platafirma-arquitetura/$DOC_SHA"
-ln -s "$DOC_SHA" "$PROD_RAIZ/platafirma-arquitetura/current"
-
-# 3. abertura em var/abertura-publicada com sha real de 40 hex
-ABERTURA_REAL_SHA="d299099a10b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
-mkdir -p "$ABERTURA_DIR/refs/$ABERTURA_REAL_SHA/abertura"
-printf '{"sha": "%s", "sha_curto": "%s", "publicado_em": "2026-09-12T14:26:16Z"}' \
-  "$ABERTURA_REAL_SHA" "${ABERTURA_REAL_SHA:0:7}" > "$ABERTURA_DIR/refs/$ABERTURA_REAL_SHA/MANIFEST.json"
-chmod -R a-w "$ABERTURA_DIR/refs/$ABERTURA_REAL_SHA"
-ln -s "refs/$ABERTURA_REAL_SHA" "$ABERTURA_DIR/current"
+# 2. platafirma-doc
+mkdir -p "$PROD_RAIZ/platafirma-doc/$DOC_SHA"
+git clone --shared -q "$DOC_DIR" "$PROD_RAIZ/platafirma-doc/$DOC_SHA"
+git -C "$PROD_RAIZ/platafirma-doc/$DOC_SHA" checkout -q --detach "$DOC_SHA"
+chmod -R a-w "$PROD_RAIZ/platafirma-doc/$DOC_SHA"
+ln -s "$DOC_SHA" "$PROD_RAIZ/platafirma-doc/current"
 
 echo "--- Teste 3: Família desconhecida e escape de raiz ---"
 set +e
