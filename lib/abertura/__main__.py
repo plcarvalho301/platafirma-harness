@@ -38,8 +38,8 @@ def _raiz_casa_padrao(entrada: dict[str, Any]) -> Path:
     informada = (entrada.get("casa_raiz") or os.environ.get("PF_CASA_RAIZ") or "").strip()
     if informada:
         return Path(informada)
-    # outros_repos/harness/lib/abertura/__main__.py -> raiz da casa nova
-    return Path(__file__).resolve().parents[4]
+    release = Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"))
+    return release / "casa-espelho"
 
 
 def _carregar_secao_cadeiras(base: Path) -> tuple[SecaoDasCadeiras, list[str]]:

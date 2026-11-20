@@ -98,24 +98,23 @@ def test_release_promove_a_familia_declarada_e_recusa_a_fora_do_registro(tmp_pat
     assert r.returncode == 2 and "fora do registro de famílias" in r.stderr, (r.returncode, r.stderr)
 
 
-def test_espelho_diagrama_resolve_e_teste_roda_sob_venv(tmp_path):
-    """DT 567: stack espelho-diagrama usa venv:rag e `teste rodar <espelho> <alvo>` cai nela. (#4330: o
-    espelho-conhecimento saiu do venv rag e tem lock proprio; o mecanismo venv: segue provado aqui.)"""
+def test_diagrama_resolve_e_teste_roda_sob_venv(tmp_path):
+    """DT 567: stack diagrama usa venv:rag e `teste rodar platafirma-harness <alvo>` cai nela."""
     raiz = Path(__file__).resolve().parents[2]
     reg = raiz / "bin" / "_release" / "registro.py"
     r_reg = subprocess.run(
-        ["python3", str(reg), "espelho-diagrama"],
+        ["python3", str(reg), "diagrama"],
         env={"PATH": "/usr/bin:/bin", "PLATAFIRMA_VENVS": str(VENVS)},
         capture_output=True, text=True, check=False, timeout=30,
     )
     assert r_reg.returncode == 0, r_reg.stderr
     assert r_reg.stdout.strip() == (
-        f"{ESPELHO}\tvenv:rag\toutros_repos/harness/lib/diagrama\tcodigo\tespelho-diagrama\t-"
+        "platafirma-harness\tvenv:rag\tlib/diagrama\tcodigo\tdiagrama\t-"
     )
 
     bancada = tmp_path / "bancada"
-    wt = bancada / "wt" / ESPELHO / "ti" / "t1"
-    alvo_dir = wt / "outros_repos" / "harness" / "lib" / "diagrama" / "tests"
+    wt = bancada / "wt" / "platafirma-harness" / "ti" / "t1"
+    alvo_dir = wt / "lib" / "diagrama" / "tests"
     alvo_dir.mkdir(parents=True)
     (wt / ".git").mkdir()
     (alvo_dir / "test_ok.py").write_text("def test_ok(): assert True\n", encoding="utf-8")
@@ -149,12 +148,12 @@ def test_espelho_diagrama_resolve_e_teste_roda_sob_venv(tmp_path):
         "PF_TESTE_SEM_MEMO": "1",
     }
     r_teste = subprocess.run(
-        [str(raiz / "bin" / "teste"), "rodar", f"{ESPELHO}@t1",
-         "outros_repos/harness/lib/diagrama/tests/test_ok.py"],
+        [str(raiz / "bin" / "teste"), "rodar", "platafirma-harness@t1",
+         "lib/diagrama/tests/test_ok.py"],
         env=env, capture_output=True, text=True, check=False, timeout=30,
     )
     assert r_teste.returncode == 0, r_teste.stdout + r_teste.stderr
-    assert "suite VERDE: platafirma-casa-espelho@t1 (chave espelho-diagrama)" in r_teste.stdout
+    assert "suite VERDE: platafirma-harness@t1 (chave diagrama)" in r_teste.stdout
 
 
 def _uv_de_sistema():
@@ -165,15 +164,15 @@ def _uv_de_sistema():
 
 
 @pytest.mark.skipif(not _uv_de_sistema(), reason="sem uv de sistema (runner do forge): o host da casa tem")
-def test_espelho_diagrama_cai_para_uv_quando_venv_nao_tem_pytest(tmp_path):
+def test_diagrama_cai_para_uv_quando_venv_nao_tem_pytest(tmp_path):
     """Venv de execução sem pytest (ex.: rag em produção) deve cair para `uv run --no-project --with pytest`."""
     import os
     import venv
 
     raiz = Path(__file__).resolve().parents[2]
     bancada = tmp_path / "bancada"
-    wt = bancada / "wt" / ESPELHO / "ti" / "t1"
-    alvo_dir = wt / "outros_repos" / "harness" / "lib" / "diagrama" / "tests"
+    wt = bancada / "wt" / "platafirma-harness" / "ti" / "t1"
+    alvo_dir = wt / "lib" / "diagrama" / "tests"
     alvo_dir.mkdir(parents=True)
     (wt / ".git").mkdir()
     (alvo_dir / "test_ok.py").write_text("def test_ok(): assert True\n", encoding="utf-8")
@@ -181,7 +180,7 @@ def test_espelho_diagrama_cai_para_uv_quando_venv_nao_tem_pytest(tmp_path):
     venv_rag = tmp_path / "release" / "current" / "venv" / "rag"
     venv.EnvBuilder(with_pip=False).create(venv_rag)
     # pyproject.toml no raiz valida que --no-project nao tenta sincronizar o projeto contra o venv:rag
-    (wt / "outros_repos" / "harness" / "lib" / "diagrama" / "pyproject.toml").write_text(
+    (wt / "lib" / "diagrama" / "pyproject.toml").write_text(
         "[project]\nname = 'dummy'\nversion = '0.0.1'\n", encoding="utf-8"
     )
 
@@ -200,12 +199,12 @@ def test_espelho_diagrama_cai_para_uv_quando_venv_nao_tem_pytest(tmp_path):
         "PF_TESTE_SEM_MEMO": "1",
     }
     r_teste = subprocess.run(
-        [str(raiz / "bin" / "teste"), "rodar", f"{ESPELHO}@t1",
-         "outros_repos/harness/lib/diagrama/tests/test_ok.py"],
+        [str(raiz / "bin" / "teste"), "rodar", "platafirma-harness@t1",
+         "lib/diagrama/tests/test_ok.py"],
         env=env, capture_output=True, text=True, check=False, timeout=60,
     )
     assert r_teste.returncode == 0, r_teste.stdout + r_teste.stderr
-    assert "suite VERDE: platafirma-casa-espelho@t1 (chave espelho-diagrama)" in r_teste.stdout
+    assert "suite VERDE: platafirma-harness@t1 (chave diagrama)" in r_teste.stdout
 
 
 def test_espelho_vault_ontologia_resolve_no_registro():

@@ -28,7 +28,7 @@ from diagrama.lint import lint_plano
 
 GABARITO_PLANO = "instancias/gabarito/plano-de-diagrama.md"
 GABARITO_FIGURA = "instancias/gabarito/figura-de-diagrama.md"
-GALERIA_CSV = "outros_repos/harness/skills/diagrama/galeria.csv"
+GALERIA_CSV = "skills/diagrama/galeria.csv"
 SECAO_GERAL = "Em toda figura"
 SECAO_DO_TIPO = {
     "camada": "Camada",
@@ -54,7 +54,22 @@ class FonteForaDeMain(Exception):
     """O plano cita documento que não está em origin/main: defeito do plano, sai 1."""
 
 
+def raiz_da_casa() -> Path:
+    dada = (os.environ.get("PF_CASA_RAIZ") or "").strip()
+    if dada:
+        return Path(dada)
+    release = Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"))
+    return release / "casa-espelho"
+
+
+def raiz_do_harness() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
 def raiz_do_repo() -> Path:
+    casa = raiz_da_casa()
+    if casa.is_dir():
+        return casa
     r = subprocess.run(
         ["git", "-C", str(Path(__file__).resolve().parent), "rev-parse", "--show-toplevel"],
         capture_output=True, text=True,
@@ -65,12 +80,27 @@ def raiz_do_repo() -> Path:
 
 
 def ler_de_main(caminho: str, raiz: Path | None = None) -> str:
+    if caminho == GALERIA_CSV:
+        arq = raiz_do_harness() / GALERIA_CSV
+        if arq.is_file():
+            return arq.read_text(encoding="utf-8")
+        raise FonteForaDeMain(f"{caminho} não está na árvore do harness ({arq})")
+    if caminho in (GABARITO_PLANO, GABARITO_FIGURA):
+        base = raiz if (raiz is not None and (raiz / caminho).is_file()) else raiz_da_casa()
+        arq = base / caminho
+        if arq.is_file():
+            return arq.read_text(encoding="utf-8")
+        raise FonteForaDeMain(f"{caminho} não está na árvore da casa ({arq})")
     raiz = raiz or raiz_do_repo()
-    r = subprocess.run(["git", "-C", str(raiz), "show", f"origin/main:{caminho}"],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        raise FonteForaDeMain(f"{caminho} não está em origin/main: {r.stderr.strip()[:200]}")
-    return r.stdout
+    if (raiz / ".git").exists():
+        r = subprocess.run(["git", "-C", str(raiz), "show", f"origin/main:{caminho}"],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            return r.stdout
+    arq = raiz / caminho
+    if arq.is_file():
+        return arq.read_text(encoding="utf-8")
+    raise FonteForaDeMain(f"{caminho} não está em origin/main nem em {raiz}")
 
 
 def bin_do_harness(nome: str) -> str:

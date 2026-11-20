@@ -6,12 +6,9 @@ Garante que:
 3. Nenhuma suíte de DT crítica de prod entrou em `remocao-no-pr`.
 4. `test_fechamento_harness.sh` tem wrapper (`test_deploy_seg_suites.py`) listado no portão.
 5. Todo arquivo direto em `bin/` tem bit executável (`0o111`).
-6. Quando executado dentro do `platafirma-casa-espelho` com acesso ao `platafirma-harness` servido,
-   nenhum arquivo de `outros_repos/harness` é cópia byte a byte idêntica ao `platafirma-harness`.
 """
 from __future__ import annotations
 
-import hashlib
 import stat
 from pathlib import Path
 
@@ -94,26 +91,3 @@ def test_bins_tem_bit_executavel():
             if not (p.stat().st_mode & stat.S_IXUSR):
                 sem_exec.append(p.name)
     assert not sem_exec, f"bin/ sem bit executável: {sem_exec}"
-
-
-def test_sem_espelho_morto_quando_rodando_no_espelho():
-    """Quando rodando em outros_repos/harness do espelho, nenhum arquivo pode ser cópia morta do harness servido."""
-    if RAIZ.parent.name != "outros_repos":
-        return
-    prod_harness = Path("/opt/platafirma/current/harness")
-    if not prod_harness.is_dir():
-        return
-    mortos = []
-    for arq in sorted(RAIZ.rglob("*")):
-        if not arq.is_file() or "__pycache__" in arq.parts:
-            continue
-        rel = arq.relative_to(RAIZ)
-        if rel.name == "remocao-no-pr":
-            continue
-        em_prod = prod_harness / rel
-        if em_prod.is_file():
-            h1 = hashlib.sha256(arq.read_bytes()).hexdigest()
-            h2 = hashlib.sha256(em_prod.read_bytes()).hexdigest()
-            if h1 == h2:
-                mortos.append(str(rel))
-    assert not mortos, f"espelhos mortos idênticos a /opt/platafirma/current/harness: {mortos}"

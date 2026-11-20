@@ -1,7 +1,7 @@
 """arvore — árvore do repositório da casa: o que mora nela, onde e com que forma.
 
 Cobra o registro de decisão 0138 (repositório pela natureza do arquivo):
-  - quatro raízes: `instancias/`, `referencias/`, `verbetes/`, `outros_repos/`;
+  - três raízes: `instancias/`, `referencias/`, `verbetes/` (arquivos sob `outros_repos/` são recusados com ARVORE_RAIZ);
   - lê a forma da classe (`golden` e `referencia`) e as fichas do fichário que quem chama passa, e não das shapes;
   - ficha de instância para todo documento em `instancias/`, nenhum com o nome da classe;
   - referência apontando classe ou ficha que existe;
@@ -19,7 +19,7 @@ from typing import Iterable, Optional
 
 from .resultado import Apontamento
 
-RAIZES = ("instancias", "referencias", "verbetes", "outros_repos")
+RAIZES = ("instancias", "referencias", "verbetes")
 DESTINOS = ("arquitetura", "cofre-backup", "conhecimento", "core", "harness", "motor", "ollama-orchestrator",
             "osint", "posto", "rastreador", "ui")
 
@@ -216,17 +216,8 @@ def verificar_arvore(
             continue
         topo = segmentos[0]
         if topo not in RAIZES:
-            pasta_uma_vez(topo, "pasta na raiz fora das quatro raízes da casa (instancias, referencias, verbetes, outros_repos)",
+            pasta_uma_vez(topo, "pasta na raiz fora das três raízes da casa (instancias, referencias, verbetes)",
                           "mover o arquivo para a raiz da natureza dele e apagar a pasta antiga", "ARVORE_RAIZ")
-            continue
-        if topo == "outros_repos":
-            if len(segmentos) == 2:
-                aponta(rel, 1, "arquivo solto em outros_repos/",
-                       "mover para a pasta do repositório de destino ou apagar", "ARVORE_TIPO")
-            elif segmentos[1] not in destinos:
-                pasta_uma_vez(f"outros_repos/{segmentos[1]}",
-                              "pasta de outros_repos que não é repositório de destino da casa",
-                              "renomear a pasta para o repositório de destino ou apagá-la", "ARVORE_DESTINO")
             continue
         if topo == "instancias" and len(segmentos) >= 3 and segmentos[1] == "figura" and any(
             nome.endswith(ext) for ext in (".svg",)
