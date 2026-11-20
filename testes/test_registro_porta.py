@@ -1,3 +1,4 @@
+# componente: componente:porta
 """O registro da porta (registro/porta.yaml, card #4117 e decisão #5322 da F4073).
 
 Hermetico: le registro/porta.yaml sem depender da porta legada nem do registro de ferramental do banco.
