@@ -13,10 +13,9 @@ Nao reimplementa contagem: importa `monta-sessao` do repo real e usa o MESMO
 pinado por sha256 em registro/terceiros.json). O numero aqui bate
 com o que a mesa e `conferir sessao` mostram, por construcao — mesma funcao.
 
-Le sem rede: `atualizar=False`. Serve da MORADA PUBLICADA (`PF_ABERTURA_DIR`, com
-default declarado em `monta-sessao`; e por essa variavel que o teste aponta para
-fixture — arq:0097). Peca indisponivel entra com tokens=0 e frescor declarado, nunca
-omitida.
+Le sem rede: `atualizar=False`. Serve da casa nova (`PF_CASA_RAIZ` ou
+`PLATAFIRMA_RELEASE/casa-espelho`). Peca indisponivel entra com tokens=0 e frescor
+declarado, nunca omitida.
 
 uso:
   metrica abertura                     todas as cadeiras, uma linha de total cada

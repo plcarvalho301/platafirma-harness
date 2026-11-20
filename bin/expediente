@@ -142,19 +142,14 @@ def env_verbo(cadeira: str) -> dict[str, str]:
 
 
 def resolve_montador_sha() -> str:
-    morada = os.environ.get("PF_ABERTURA_DIR", str(instancia() / "var" / "abertura-publicada"))
-    manifesto = os.path.join(morada, "current", "MANIFEST.json")
-    if os.path.isfile(manifesto):
-        try:
-            with open(manifesto, encoding="utf-8") as f:
-                d = json.load(f)
-                if d.get("sha_curto"):
-                    return d["sha_curto"]
-                if d.get("sha"):
-                    return d["sha"][:7]
-        except (OSError, ValueError):
-            pass
-    return "morada-nao-publicada"
+    casa = Path(os.environ.get("PF_CASA_RAIZ") or str(Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")) / "casa-espelho"))
+    try:
+        nome = casa.resolve().name
+        if len(nome) >= 7:
+            return nome[:7]
+    except OSError:
+        pass
+    return "casa-nova"
 
 
 def _acha_bin(nome: str) -> Path | None:
@@ -369,14 +364,6 @@ def valida_cadeira(cadeira_arg: str | None = None) -> tuple[str | None, str | No
 
 
 def chapeus_de(cadeira: str) -> list[str]:
-    morada = os.environ.get("PF_ABERTURA_DIR", str(instancia() / "var" / "abertura-publicada"))
-    base = Path(morada) / "current" / "abertura" / cadeira
-    if not base.is_dir():
-        base = _REPO_REAL / "abertura" / cadeira
-    if base.is_dir():
-        achados = sorted(p.name for p in base.iterdir() if p.is_dir() and (p / "chapeu.md").is_file())
-        if achados:
-            return achados
     secao = carregar_secao_das_cadeiras()
     if cadeira in secao.cadeiras:
         return list(secao.cadeiras[cadeira].chapeus.keys())
@@ -390,21 +377,13 @@ def _sem_acento(s: str) -> str:
 
 
 def apelidos_de(cadeira: str) -> dict[str, str]:
-    morada = os.environ.get("PF_ABERTURA_DIR", str(instancia() / "var" / "abertura-publicada"))
-    base = Path(morada) / "current" / "abertura" / cadeira
-    if not base.is_dir():
-        base = _REPO_REAL / "abertura" / cadeira
+    secao = carregar_secao_das_cadeiras()
     mapa: dict[str, str] = {}
-    for slug in chapeus_de(cadeira):
-        try:
-            with open(base / slug / "chapeu.md", encoding="utf-8") as f:
-                titulo = f.readline().strip()
-        except OSError:
-            continue
-        m = re.search(r"\(([^()]+)\)\s*$", titulo)
-        if not m:
-            continue
-        for apelido in m.group(1).split(","):
+    cad = secao.cadeiras.get(cadeira)
+    if not cad:
+        return mapa
+    for slug, nomes in cad.chapeus.items():
+        for apelido in nomes:
             chave = _sem_acento(apelido)
             if chave:
                 mapa.setdefault(chave, slug)
@@ -706,19 +685,16 @@ def _obter_leitor_de_processos(leitor: LeitorDeProcessos | None = None) -> Leito
 
 
 def _carregar_secao_abertura(cadeira_hint: str) -> SecaoDasCadeiras:
-    ab_dir = Path(os.environ["PF_ABERTURA_DIR"]) if os.environ.get("PF_ABERTURA_DIR") else None
     fixture = os.environ.get("PF_NOMES_FIXTURE") or os.environ.get("PF_SECAO_CADEIRAS")
     if fixture and Path(fixture).is_file():
-        return carregar_secao_das_cadeiras(abertura_dir=ab_dir)
+        return carregar_secao_das_cadeiras()
     if _acha_bin("persona") is not None:
         rc, out, _ = executa_verbo(["persona", "nomes"], cadeira_hint or "engenharia")
         if rc == 0 and out.strip():
             secao = SecaoDasCadeiras.de_texto(out)
-            if ab_dir:
-                secao = secao.com_abertura_dir(ab_dir)
             if secao.cadeiras:
                 return secao
-    return carregar_secao_das_cadeiras(abertura_dir=ab_dir)
+    return carregar_secao_das_cadeiras()
 
 
 class _LeitorRoteiroJson:

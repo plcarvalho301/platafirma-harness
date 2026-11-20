@@ -16,7 +16,7 @@ REAIS = ("/srv/platafirma", "/opt/platafirma", os.path.expanduser("~/AI"),
 
 def test_raizes_apontam_para_temporario():
     for var in ("PLATAFIRMA_INSTANCIA", "PF_RELEASE_RAIZ", "PLATAFIRMA_RELEASE",
-                "PLATAFIRMA_BANCADA", "PLATAFIRMA_ARQUIVO_BANCADA", "PF_ABERTURA_DIR"):
+                "PLATAFIRMA_BANCADA", "PLATAFIRMA_ARQUIVO_BANCADA"):
         valor = os.environ.get(var, "")
         assert valor, f"{var} ausente: o codigo cairia no default real"
         assert not valor.startswith(REAIS), f"{var}={valor} aponta estado real"

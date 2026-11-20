@@ -15,8 +15,8 @@
 # cauda: nao
 # classe: B
 # consome: valkey@streams (protocolo redis — sem OpenAPI)
-# ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_ABERTURA_DIR[=/srv/platafirma/casa/var/abertura-publicada] (morada publicada, arvore current/abertura/) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log)
-# depende: modulo redis no venv; arvore abertura/<cadeira>/persona.md (fonte de destinatario); rede ao loopback da malha
+# ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_CASA_RAIZ[=/opt/platafirma/current/casa-espelho] (personas em instancias/persona/*.md) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log)
+# depende: modulo redis no venv; personas da casa nova (instancias/persona/*.md); rede ao loopback da malha
 # le: status=malha
 # le: ler=malha
 # le: tratar=malha

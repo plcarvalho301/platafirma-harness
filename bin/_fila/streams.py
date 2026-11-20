@@ -12,7 +12,7 @@
 # cauda: nao
 # classe: B
 # consome: valkey@streams (protocolo redis — sem OpenAPI)
-# ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_ABERTURA_DIR[=/srv/platafirma/casa/var/abertura-publicada] (morada publicada, arvore current/abertura/) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log)
+# ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_CASA_RAIZ[=/opt/platafirma/current/casa-espelho] (personas em instancias/persona/*.md) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log)
 # depende: modulo redis no venv; arvore abertura/<cadeira>/persona.md (fonte de destinatario); rede ao loopback da malha
 # escreve: malha msg — XADD na caixa do destinatario (enviar); entrega no grupo (ler quente: move o ponteiro, carta fica pendurada); XACK (tratar); nada em status/tipos/ler frio/--penduradas
 # substitui: redis-cli XADD/XREADGROUP/XRANGE na caixa; o "cola a mensagem aqui" que a conduta do dono proibe
@@ -66,11 +66,11 @@ except ImportError:
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
 from fila_tipos import TIPOS_VALIDOS  # noqa: E402
-from raizes import instancia  # noqa: E402
+from raizes import release  # noqa: E402
 
 ABERTURA = os.path.join(
-    os.environ.get("PF_ABERTURA_DIR") or str(instancia() / "var" / "abertura-publicada"),
-    "current", "abertura")
+    os.environ.get("PF_CASA_RAIZ") or str(release() / "casa-espelho"),
+    "instancias", "persona")
 # Participantes (DMZ): teriam caixa na malha sem ser cadeira. Vazio desde o card
 # #3117 (27/09/2026). Unificar esta lista com comum/cadeiras.py::_SAO_PARTICIPANTE
 # exige a lib compartilhada (colapso 3->1, adiado pelo dono).
@@ -132,11 +132,12 @@ def personas_validas():
     valida_persona ja a trata como recusa alta. Arvore presente mas sem nenhuma
     persona tambem devolve None pela mesma razao: fonte vazia nao valida ninguem."""
     try:
-        cadeiras = {
-            d.name
-            for d in os.scandir(ABERTURA)
-            if d.is_dir() and os.path.isfile(os.path.join(d.path, "persona.md"))
-        }
+        cadeiras = set()
+        for d in os.scandir(ABERTURA):
+            if d.is_file() and d.name.endswith(".md"):
+                cadeiras.add(d.name[:-3])
+            elif d.is_dir() and os.path.isfile(os.path.join(d.path, "persona.md")):
+                cadeiras.add(d.name)
     except OSError:
         return None
     # toda cadeira com persona.md na arvore viva e destinatario/emissor pleno
@@ -198,8 +199,8 @@ def valida_persona(p: str, json_mode: bool = False):
     # ledger nao era alcancado, e a validacao ficava DESLIGADA — destinatario com
     # erro de digitacao virava caixa nova, com o remetente vendo sucesso.
     if validas is None:
-        msg = (f"nao consegui ler a arvore de cadeiras ({ABERTURA}) — "
-               "sem ela nao ha destinatario valido. Aponte PF_ABERTURA_DIR.")
+        msg = (f"nao consegui ler as personas da casa nova ({ABERTURA}) — "
+               "sem elas nao ha destinatario valido. Aponte PF_CASA_RAIZ.")
         if json_mode:
             _falha_json(msg, 2)
         sys.stderr.write(f"erro: {msg}\n")

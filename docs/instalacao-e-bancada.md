@@ -40,7 +40,7 @@ não existe diretório de symlinks de verbos para assentar.
 | construir o venv do lock e trocar `current`/`anterior` de uma vez | instalar pacote de sistema ou binário de terceiro |
 | agendar o restart da porta quando a família tem serviço | escrever credencial (isso é `seg segredo gravar`, na instância) |
 
-`release estado` diz que sha está no ar e desde quando; `release reverter` volta para `anterior`.
+`release estado` diz que sha está no ar e desde quando; a volta de uma mudança é reverter o commit na `main` e promover.
 
 `instalar` roda N vezes: corrige o que divergiu, relata o que não pode corrigir, e com `--check` só
 mede. Unit `--user` cujo conteúdo muda numa promoção não recarrega sozinha: o systemd pede

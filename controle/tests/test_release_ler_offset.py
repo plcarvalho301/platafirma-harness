@@ -22,27 +22,35 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).resolve().parents[2] / "bin" / "release"
-SHA = "a" * 40
 PAGINA = 45000
 RODAPE = re.compile(
     r"^truncado em (\d+) de (\d+) bytes; continue com --offset (\d+) "
-    r"\(release ler abertura (\S+) --offset (\d+)\)$")
+    r"\(release ler fixture (\S+) --offset (\d+)\)$")
 
 
 class Servido:
-    """PF_ABERTURA_DIR/current -> <sha>/ somente-leitura, com os arquivos do teste."""
+    """<PF_RELEASE_RAIZ>/fixture/current -> <sha>/ somente-leitura (checkout destacado), com os arquivos do teste."""
 
     def __init__(self, tmp_path: Path):
-        self.dir = tmp_path / "srv" / "var" / "abertura-publicada"
-        self.alvo = self.dir / SHA
-        self.alvo.mkdir(parents=True)
-        (self.alvo / "MANIFEST.json").write_bytes(
-            json.dumps({"sha": SHA, "publicado_em": "2026-10-03 00:00:00Z"}).encode())
-        (self.dir / "current").symlink_to(self.alvo)
+        git_env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                   "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        src = tmp_path / "src"
+        src.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=src, check=True, env=git_env)
+        (src / "README").write_text("ok\n", encoding="utf-8")
+        subprocess.run(["git", "add", "."], cwd=src, check=True, env=git_env)
+        subprocess.run(["git", "commit", "-qm", "init"], cwd=src, check=True, env=git_env)
+        sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=src, check=True,
+                             capture_output=True, text=True).stdout.strip()
+        self.dir = tmp_path / "opt" / "fixture"
+        self.alvo = self.dir / sha
+        self.dir.mkdir(parents=True)
+        subprocess.run(["git", "clone", "-q", str(src), str(self.alvo)], check=True, env=git_env)
+        subprocess.run(["git", "checkout", "-q", "--detach", sha], cwd=self.alvo, check=True, env=git_env)
+        (self.dir / "current").symlink_to(sha)
         self.env = dict(os.environ)
         self.env["PF_RELEASE_RAIZ"] = str(tmp_path / "opt")
         self.env["PLATAFIRMA_INSTANCIA"] = str(tmp_path / "srv")
-        self.env["PF_ABERTURA_DIR"] = str(self.dir)
         for nome in ("FAMILIAS", "VENVS", "TERCEIROS"):
             arq = tmp_path / f"{nome.lower()}.json"
             arq.write_text("{}", encoding="utf-8")
@@ -55,7 +63,7 @@ class Servido:
         os.chmod(self.alvo, 0o555)   # servido e somente-leitura (resolver_identidade exige)
 
     def ler(self, *args: str) -> subprocess.CompletedProcess:
-        return subprocess.run([str(SCRIPT), "ler", "abertura", *args], env=self.env,
+        return subprocess.run([str(SCRIPT), "ler", "fixture", *args], env=self.env,
                               capture_output=True, timeout=60, check=False)
 
 

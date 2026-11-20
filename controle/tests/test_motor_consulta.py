@@ -160,12 +160,12 @@ def test_rotulos_do_chapeu_sem_arquivo_ou_arquivo_quebrado(tmp_path):
     assert consulta.rotulos_do_chapeu("ia", "agente", tmp_path) == ()
 
 
-def test_rotulos_do_chapeu_le_da_abertura_publicada_pelo_ambiente(tmp_path, monkeypatch):
+def test_rotulos_do_chapeu_sem_raiz_explicita_devolve_vazio(tmp_path, monkeypatch):
     abertura = tmp_path / "current" / "abertura"
     abertura.mkdir(parents=True)
     _rotas(abertura, TABELA)
     monkeypatch.setenv("PF_ABERTURA_DIR", str(tmp_path))
-    assert consulta.rotulos_do_chapeu("ia", "agente") == ("Loop agêntico",)
+    assert consulta.rotulos_do_chapeu("ia", "agente") == ()
 
 
 @pytest.mark.parametrize("valor,esperado", [

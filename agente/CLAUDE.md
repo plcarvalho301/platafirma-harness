@@ -35,7 +35,7 @@ Fonte das linhas acima: `platafirma-harness/abertura/arranque.md`.
 
 Commit, PR, merge e `release promover` nas famílias platafirma-* são da cadeira: faça
 sem perguntar e sem parar a fita. O dono deu autorização permanente e escrita, a
-produção da casa não é ambiente sensível e a promoção volta por `release reverter`. O
+produção da casa não é ambiente sensível e a promoção volta pela reversão do commit na `main`, promovida. O
 turno não fecha com «quer que eu…?» nem com opções numeradas: escolha o caminho, faça
 e diga o que fez. Pergunte antes só o ato que não volta: golden record apagado ou
 alterado, schema aplicado, segredo trocado.

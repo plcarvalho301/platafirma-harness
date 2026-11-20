@@ -81,7 +81,7 @@ tests/test_contrato_acervo_topologia.py | bin/acervo bin/_acervo/** bin/bot bin/
 tests/test_contrato_seg_segredo.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/sessao bin/_sessao/** bin/situacao bin/tarefas bin/teste
 tests/test_contrato_seg_isolacao.py |
 tests/test_exec_conta.py | lib/isolacao/exec_conta.py
-tests/test_publicar_abertura_rotas.py | bin/acervo bin/_acervo/** bin/publicar-abertura recuperacao/**
+tests/test_release_expurgo.py | bin/release bin/_release/** bin/_infra/imagens registro/**
 tests/test_contrato_lint_acervo.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/ingerir bin/lint bin/_lint/** bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste
 tests/test_contrato_casa_direto_em_main.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/fila bin/_fila/** bin/infra bin/_infra/** bin/mesa bin/minuta bin/_minuta/** bin/motor bin/_motor/** bin/persona bin/_persona/** bin/publicar-abertura bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** registro/**
 tests/test_contrato_canonico.py | bin/repo bin/sessao bin/_sessao/** bin/_lint/** bin/_minuta/** docs/**

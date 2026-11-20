@@ -24,7 +24,7 @@ services:
   chat-recepcao:
     environment:
       PLATAFIRMA_INSTANCIA: /srv/platafirma/casa
-      PF_ABERTURA_DIR: /srv/platafirma/casa/var/abertura-publicada
+      PF_CASA_RAIZ: /opt/platafirma/current/casa-espelho
       CHAT_JOURNAL: /srv/platafirma/casa/var/run/chat/journal.db
       CHAT_FITAS_RAIZ: /srv/platafirma/casa/var/fitas
     volumes:
@@ -32,6 +32,4 @@ services:
       # tal como a recepcao o gravou, e os dois batem no mesmo journal.
       - /srv/platafirma/casa/var/fitas:/srv/platafirma/casa/var/fitas:rw
       - /srv/platafirma/casa/var/run/chat:/srv/platafirma/casa/var/run/chat:rw
-      # Somente leitura: a MORADA PUBLICADA inteira (arq:0097, arq:0109 §1), porque
-      # `current` e symlink e tem de resolver dentro do container.
-      - /srv/platafirma/casa/var/abertura-publicada:/srv/platafirma/casa/var/abertura-publicada:ro
+      - /opt/platafirma:/opt/platafirma:ro
