@@ -10,10 +10,9 @@ RAIZ = Path(__file__).resolve().parents[2]
 
 
 def test_dt634_volta_automatica_nao_reverte_abertura_e_stack_grava_servido_real():
-    """DT 634: volta automática desliga abertura (`PF_RELEASE_ABERTURA=0`) e `stack` grava `.servido` do contêiner."""
+    """DT 634 + Política 0009: sem volta automática em `bin/release` e `stack` grava `.servido` do contêiner."""
     release_txt = (RAIZ / "bin" / "release").read_text(encoding="utf-8")
-    assert 'PF_RELEASE_PORTA=0 PF_RELEASE_ABERTURA=0 "$AQUI/release" reverter "$repo" "$atual"' in release_txt
-    assert 'if [ "${PF_RELEASE_ABERTURA:-1}" != 0 ]; then' in release_txt
+    assert "sem volta automatica" in release_txt
 
     stack_txt = (RAIZ / "bin" / "_release" / "stack").read_text(encoding="utf-8")
     assert "sha_servido_no_ar()" in stack_txt
