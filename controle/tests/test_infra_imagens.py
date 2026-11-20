@@ -224,8 +224,13 @@ def test_sem_retencao_por_dias_nem_por_anterior(cena: Cena, tmp_path: Path):
     core_ant.mkdir(parents=True)
     (rel_raiz / "platafirma-core" / "anterior").symlink_to(core_ant)
 
+    core_cur = rel_raiz / "platafirma-core" / "1111111234567890"
+    core_cur.mkdir(parents=True)
+    (rel_raiz / "platafirma-core" / "current").symlink_to(core_cur)
+
     cena.imagem("platafirma/ui:0.21.0", "sha256:ui0210", "110MB", ativa=False, created_since="20 days ago")
     cena.imagem("platafirma-core:pre-abcdef12", "sha256:coreant", "300MB", ativa=False, created_since="15 days ago")
+    cena.imagem("platafirma-core:pre-11111112", "sha256:corecur", "300MB", ativa=False, created_since="15 days ago")
     cena.imagem("platafirma-rag:recente", "sha256:rec3d", "400MB", ativa=False, created_since="3 days ago")
 
     r_ver = cena.roda("limpeza", "imagens", "--ver", PF_RELEASE_RAIZ=str(rel_raiz))

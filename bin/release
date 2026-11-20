@@ -1231,6 +1231,7 @@ trocar_link() {  # $1=alvo $2=link — troca atômica de um symlink (tmp + renam
 trocar_current() {  # $1=repo $2=sha $3=sha_que_sai(ou vazio)
   local repo="$1" sha="$2"
   trocar_link "$sha" "$PROD_RAIZ/$repo/current"
+  rm -f "$PROD_RAIZ/$repo/anterior" 2>/dev/null || true
 }
 
 gravar_pontos() {  # $1=repo $2=sha_anterior(ou vazio) $3=sha_novo
@@ -2491,6 +2492,7 @@ cmd_promover() {
   estagio_card "$repo" "$atual" "$sha" || rc_card=$?
   [ "$rc_card" -eq 0 ] || printf 'card:      AVISO — estágio 4 saiu %s; código no ar em %s, mova o card à mão\n' "$rc_card" "${sha:0:7}" >&2
   registrar_deploy_no_rastreador "$repo" "$atual" "$sha" || true
+  expurgar_fosseis 0 || printf 'expurgo:   AVISO — expurgo de fosseis terminou com erro; rode: release expurgar\n' >&2
   reiniciar_porta "$repo"
   printf '%s\n' "$sha"
 }
@@ -2570,6 +2572,184 @@ entrar_na_fila_de_promocao() {  # $1=ato ; resto = args do ato
 
 cmd="$1"
 shift
+
+# ---- expurgo de fósseis (política 0000 e política 0009, DT 930) ------------------
+# Deixa em $PROD_RAIZ, $ABERTURA_DIR e Docker só o que a release no ar (current) usa.
+expurgar_fosseis() {  # $1=ver (0=apaga, 1=mostra o que sairia)
+  local ver="${1:-0}"
+  python3 - "$PROD_RAIZ" "$PONTOS" "$ABERTURA_DIR" "$VENVS" "$ver" <<'PY'
+import json
+import os
+import re
+import shutil
+import stat
+import sys
+from pathlib import Path
+
+prod_raiz = Path(sys.argv[1])
+pontos = Path(sys.argv[2])
+abertura_dir = Path(sys.argv[3])
+venvs_reg = Path(sys.argv[4])
+ver = sys.argv[5] == "1"
+
+removidos = []
+
+
+def _tornar_gravavel(alvo: Path) -> None:
+    if alvo.is_symlink():
+        return
+    try:
+        st = alvo.lstat()
+        os.chmod(alvo, st.st_mode | stat.S_IWUSR | (stat.S_IXUSR if stat.S_ISDIR(st.st_mode) else 0))
+    except OSError:
+        pass
+    if alvo.is_dir():
+        for raiz, dirs, arqs in os.walk(alvo, topdown=True, followlinks=False):
+            rp = Path(raiz)
+            for nome in dirs:
+                p = rp / nome
+                if not p.is_symlink():
+                    try:
+                        os.chmod(p, p.lstat().st_mode | stat.S_IWUSR | stat.S_IXUSR)
+                    except OSError:
+                        pass
+            for nome in arqs:
+                p = rp / nome
+                if not p.is_symlink():
+                    try:
+                        os.chmod(p, p.lstat().st_mode | stat.S_IWUSR)
+                    except OSError:
+                        pass
+
+
+def _apagar(alvo: Path, rotulo: str) -> None:
+    if not alvo.exists() and not alvo.is_symlink():
+        return
+    if ver:
+        print(f"sairia:    {rotulo} ({alvo})")
+        removidos.append(rotulo)
+        return
+    if alvo.is_symlink() or alvo.is_file():
+        alvo.unlink()
+    elif alvo.is_dir():
+        _tornar_gravavel(alvo)
+        shutil.rmtree(alvo)
+    removidos.append(rotulo)
+
+
+# 1. Raiz de /opt/platafirma: diretórios fósseis anterior e v<semver> (ex.: v0.1.0, v0.2.0)
+if prod_raiz.is_dir():
+    for entry in sorted(prod_raiz.iterdir()):
+        nome = entry.name
+        if nome == "anterior" or re.fullmatch(r"v\d+.*", nome):
+            _apagar(entry, f"raiz:{nome}")
+
+    # 2. Por família: remove anterior e todas as árvores de revisão que não são o current
+    for entry in sorted(prod_raiz.iterdir()):
+        nome = entry.name
+        if nome in ("current", "venv", "terceiros", "anterior") or re.fullmatch(r"v\d+.*", nome):
+            continue
+        if not entry.is_dir() or entry.is_symlink():
+            continue
+        cur = entry / "current"
+        ant = entry / "anterior"
+        if ant.exists() or ant.is_symlink():
+            _apagar(ant, f"anterior:{nome}")
+        ponto_ant = pontos / nome / "anterior"
+        if ponto_ant.exists() or ponto_ant.is_symlink():
+            _apagar(ponto_ant, f"ponto-anterior:{nome}")
+        if not cur.exists():
+            continue
+        try:
+            cur_real = cur.resolve()
+        except OSError:
+            continue
+        for filho in sorted(entry.iterdir()):
+            if filho.name in ("current", ".repo.git", "anterior"):
+                continue
+            try:
+                if filho.resolve() == cur_real:
+                    continue
+            except OSError:
+                pass
+            _apagar(filho, f"arvore:{nome}/{filho.name[:12]}")
+
+    # 3. Atalhos quebrados em /opt/platafirma/current/
+    atalhos = prod_raiz / "current"
+    if atalhos.is_dir() and not atalhos.is_symlink():
+        for entry in sorted(atalhos.iterdir()):
+            if entry.is_symlink() and not entry.exists():
+                _apagar(entry, f"atalho-quebrado:{entry.name}")
+
+    # 4. Venvs fora do current em /opt/platafirma/current/venv e /opt/platafirma/venv
+    chaves_declaradas = None
+    if venvs_reg.is_file():
+        try:
+            dados = json.loads(venvs_reg.read_text(encoding="utf-8"))
+            if isinstance(dados, dict):
+                chaves_declaradas = {
+                    k for k, v in dados.items()
+                    if not k.startswith("_") and k != "repositorios" and isinstance(v, dict)
+                }
+        except (OSError, ValueError):
+            chaves_declaradas = None
+
+    venvs_em_uso: set[Path] = set()
+    atalhos_venv = atalhos / "venv"
+    if atalhos_venv.is_dir():
+        for entry in sorted(atalhos_venv.iterdir()):
+            if not entry.is_symlink():
+                continue
+            invalido = not entry.exists()
+            nao_declarado = (chaves_declaradas is not None and entry.name not in chaves_declaradas)
+            if invalido or nao_declarado:
+                _apagar(entry, f"atalho-venv:{entry.name}")
+            else:
+                try:
+                    venvs_em_uso.add(entry.resolve())
+                except OSError:
+                    pass
+
+    venv_dir = prod_raiz / "venv"
+    if venv_dir.is_dir():
+        for entry in sorted(venv_dir.iterdir()):
+            try:
+                real = entry.resolve()
+            except OSError:
+                real = entry
+            if real not in venvs_em_uso:
+                _apagar(entry, f"venv:{entry.name}")
+
+# 5. Abertura publicada (fóssil após migração para a casa nova)
+if abertura_dir.exists() or abertura_dir.is_symlink():
+    _apagar(abertura_dir, "abertura-publicada")
+ponto_ab = pontos / "abertura"
+if ponto_ab.exists() or ponto_ab.is_symlink():
+    _apagar(ponto_ab, "ponto:abertura")
+
+verbo = "sairiam" if ver else "saíram"
+print(f"expurgo:   {len(removidos)} fóssil(eis) {verbo} do disco")
+PY
+
+  if [ "${PF_RELEASE_EXPURGO_DOCKER:-1}" != "0" ] && [ -x "$AQUI/_infra/imagens" ] && command -v docker >/dev/null 2>&1; then
+    if [ "$ver" -eq 1 ]; then
+      "$AQUI/_infra/imagens" limpar --ver || true
+    else
+      "$AQUI/_infra/imagens" limpar || true
+    fi
+  fi
+}
+
+cmd_expurgar() {
+  local ver=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --ver) ver=1; shift ;;
+      *) printf 'release: erro: opção desconhecida em expurgar: %s\n' "$1" >&2; uso_texto; exit 2 ;;
+    esac
+  done
+  expurgar_fosseis "$ver"
+}
 
 case "$cmd" in
   estado)   cmd_estado "$@" ;;

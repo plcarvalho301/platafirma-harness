@@ -126,14 +126,14 @@ set +e; out="$("$VERBO" promover platafirma-harness "$SHA2" 2>&1)"; rc=$?; set -
 echo "OK: cache que nao bate o pino nao serve, current intacto"
 
 cp "$TMP_DIR/artefato" "$CACHE/$PINO"
-out="$("$VERBO" promover platafirma-harness "$SHA2" 2>&1)" || falha "promover SHA2 com cache bom: $out"
+out="$(PF_RELEASE_EXPURGO_DOCKER=0 "$VERBO" promover platafirma-harness "$SHA2" 2>&1)" || falha "promover SHA2 com cache bom: $out"
 [ -f "$PROD_RAIZ/platafirma-harness/$SHA2/terceiros/tokenizers/fixture.json" ] || falha "SHA2 sem terceiro"
 out="$("$VERBO" promover platafirma-harness "$SHA1" 2>&1)" || falha "promover SHA1: $out"
 [ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$SHA1" ] || falha "promover SHA1 nao trocou"
 echo "OK: promover confere o terceiro"
 
 printf '{"x": {"familia": "platafirma-harness", "destino": "../fora", "sha256": "%s", "url": "https://a"}}\n' "$PINO" > "$TMP_DIR/terceiros-ruim.json"
-set +e; out="$(PLATAFIRMA_TERCEIROS="$TMP_DIR/terceiros-ruim.json" "$VERBO" promover platafirma-harness "$SHA2" 2>&1)"; rc=$?; set -e
+set +e; out="$(PLATAFIRMA_TERCEIROS="$TMP_DIR/terceiros-ruim.json" "$VERBO" promover platafirma-harness "$SHA1" 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 3 ] && grep -q "terceiro mal declarado" <<<"$out" || falha "destino com .. devia ser recusado: rc=$rc $out"
 echo "OK: declaracao que sai da arvore e recusada"
 

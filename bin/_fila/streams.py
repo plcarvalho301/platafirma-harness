@@ -68,6 +68,9 @@ sys.path.insert(0, os.path.join(
 from fila_tipos import TIPOS_VALIDOS  # noqa: E402
 from raizes import release  # noqa: E402
 
+_ABERTURA_PADRAO = os.path.join(
+    str(instancia() / "var" / "abertura-publicada"), "current", "abertura"
+)
 ABERTURA = os.path.join(
     os.environ.get("PF_CASA_RAIZ") or str(release() / "casa-espelho"),
     "instancias", "persona")
@@ -124,9 +127,9 @@ def garante_grupo(rc, persona: str):
 
 
 def personas_validas():
-    """Slugs vivos de destinatario (minusculo puro), da ARVORE `abertura/<cadeira>/`
-    mais os participantes de PERSONAS_PARTICIPANTES. Mesma fonte que comum/cadeiras.py
-    (arq:0073 §1) — o ledger de vinculo NAO se le aqui (incidente, ordem do dono).
+    """Slugs vivos de destinatario (minusculo puro), da arvore de personas da casa nova
+    (`casa-espelho/instancias/persona/*.md`, ou `PF_ABERTURA_DIR` quando explicitado)
+    mais os participantes de PERSONAS_PARTICIPANTES.
 
     Arvore ausente/ilegivel devolve None — a lista ilegivel NAO e passe livre, e
     valida_persona ja a trata como recusa alta. Arvore presente mas sem nenhuma

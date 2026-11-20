@@ -27,7 +27,7 @@ _LIB = Path(__file__).resolve().parents[1]
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 
-from postura.lousa import Fora, ItemDeTrabalho, LousaDeTrabalho
+from postura.lousa import TETO_CORPO_CHARS, Fora, ItemDeTrabalho, LousaDeTrabalho
 
 _RE_CARD = re.compile(r"(?:card\s+#?|#)(\d+)\b", re.IGNORECASE)
 _RE_DIGITOS = re.compile(r"^\d+$")
@@ -204,6 +204,7 @@ class Guardado:
     ocasiao_card: str | None = None
     ocasiao_pedido: str | None = None
     ocasiao_chapeu: str | None = None
+    corpo_chars: int = 0
 
     def __post_init__(self) -> None:
         card_str: str | None = None
@@ -244,6 +245,7 @@ class Guardado:
             ocasiao_pedido=oc.pedido if oc is not None else None,
             ocasiao_chapeu=oc.chapeu if oc is not None else None,
             ocasiao=(oc.pedido or "") if oc is not None else "",
+            corpo_chars=len(item.corpo),
         )
 
     def linha_completa(self) -> str:
@@ -261,6 +263,8 @@ class Guardado:
                 partes.append(f"(ocasião: chapéu {self.ocasiao_chapeu})")
             elif self.ocasiao_pedido:
                 partes.append(f"(ocasião: {self.ocasiao_pedido})")
+            if self.corpo_chars > 0:
+                partes.append(f"(corpo: {self.corpo_chars}/{TETO_CORPO_CHARS})")
             return " ".join(partes)
 
         prefixo = f"#{self.id} " if self.id is not None and str(self.id) != "" else ""

@@ -79,8 +79,9 @@
 # pelo loopback da máquina, que já é a fronteira dele (card #469).
 #
 # SEM CREDENCIAL, por desenho: não há auth no código do módulo. Quem escreve declara o
-# nome no cabeçalho de sujeito, e é ele que a transição carimba — `PF_CADEIRA` vira
-# `x-auth-request-preferred-username`. Ausente, a escrita entra como anônima.
+# nome no cabeçalho de sujeito, e é ele que a transição carimba — `PF_CADEIRA` (ou
+# `PF_SUJEITO` da conexão quando a abertura está degradada, DT 928) vira
+# `x-auth-request-preferred-username`. Ausentes ambos, a escrita entra como anônima.
 set -euo pipefail
 
 # `/api` desde o contract do #196: a tela do rastreador saiu de dentro da imagem da API
@@ -102,7 +103,7 @@ _apipath() {
     *)      printf '%s' "$1" ;;
   esac
 }
-QUEM="${PF_CADEIRA:-}"
+QUEM="${PF_CADEIRA:-${PF_SUJEITO:-}}"
 
 # Pedido de ajuda nao e erro (dono, 12/09/2026): `--ajuda` sai por stdout com exit 0; so
 # a chamada errada continua saindo por stderr com exit 2.

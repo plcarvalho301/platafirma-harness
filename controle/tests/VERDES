@@ -1,4 +1,5 @@
 # BASELINE VERDE da suite de contrato — o que o `hooks/pre-push` julga.
+tests/test_dts_915_928.py | bin/repo bin/tarefas
 tests/test_motor_dt537_538_552_553.py | regressivo #2856
 tests/test_dt140_364.py | bin/release bin/_release/lotes.py bin/sessao bin/expediente
 tests/test_dt_397_499.py | bin/infra bin/_acervo/casa
@@ -369,6 +370,7 @@ testes/test_suite_portao.py | bin/repo lib/suite/portao.py lib/suite/__main__.py
 testes/test_oplog_interrompido.py | lib/oplog.py
 testes/test_metrica_transporte.py | bin/metrica
 testes/test_release_reinicia_porta.py | bin/release
+tests/test_release_expurgo_dt930.py | bin/release bin/_infra/imagens registro/porta.yaml
 testes/test_poda.py | lib/poda/**
 testes/test_leitura_escrita.py | lib/leitura/** lib/escrita/** bin/ler_arquivo bin/write_file
 testes/test_leitura_dts_832_897_898_899.py | lib/leitura/** lib/oplog.py bin/ler_arquivo
