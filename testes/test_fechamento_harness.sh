@@ -86,7 +86,7 @@ grep -q '"terceiros" / "tokenizers" / "qwen2.5.json"' "$REPO_ROOT/recuperacao/_r
 if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   (cd "$REPO_ROOT" && git check-ignore -q terceiros/tokenizers/qwen2.5.json) || falha "terceiros/ devia estar fora do git"
 else
-  grep -qE '^terceiros/?$' "$REPO_ROOT/.gitignore" || falha "terceiros/ devia estar listado no .gitignore"
+  grep -qE '^/?terceiros/?$' "$REPO_ROOT/.gitignore" || falha "terceiros/ devia estar listado no .gitignore"
 fi
 echo "OK"
 

@@ -374,10 +374,8 @@ testes/test_release_reinicia_porta.py | bin/release
 tests/test_release_expurgo_dt930.py | bin/release bin/_infra/imagens registro/porta.yaml
 testes/test_poda.py | lib/poda/**
 testes/test_leitura_escrita.py | lib/leitura/** lib/escrita/** bin/ler_arquivo bin/write_file
-testes/test_leitura_dts_832_897_898_899.py | lib/leitura/** lib/oplog.py bin/ler_arquivo
 testes/test_envelope_tokens_dt4251_4120.py | lib/leitura/** lib/oplog.py
-testes/test_leitura_contratos.py | lib/leitura/**
-testes/test_alcance_leitura_escrita_dt921.py | bin/ler_arquivo bin/write_file lib/leitura/** lib/escrita/**
+testes/test_leitura_contratos.py | lib/leitura/** lib/escrita/** lib/oplog.py bin/ler_arquivo bin/write_file
 testes/test_escopo_chapeu_verbos.py | lib/postura/lousa.py lib/postura/atos.py bin/repo bin/tarefas
 testes/test_sessao_hash.py | bin/sessao bin/_sessao/** lib/postura/lousa.py
 testes/test_abertura_porta_cli.py | lib/abertura/** lib/postura/remontagem.py
