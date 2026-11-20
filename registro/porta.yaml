@@ -20,22 +20,13 @@ verbos:
     descricao: >-
       cuida do item do acervo, obra ou documento da casa, da incorporação à retirada ·
       use para: incorporar item, «põe essa obra no acervo», «ingere o repo de docs»;
-      classificar item, «cataloga essa obra», «de que domínio ela é?»; definir e relacionar
-      conceitos no tesauro, «o que é o conceito X?», «como X se liga a Y?»; selar impressão,
-      pôr item em serviço, retirar e restaurar item; abrir obra ou documento que já se sabe
-      qual é, ou que a busca achou, «abre a ADR 97»; publicar página de wiki · atos: ler
-      (leitura, casa), listar (leitura, casa), escrever (escrita, registro), ingerir
-      (escrita, incorporacao), curar (escrita, curadoria), catalogar (escrita, classificacao),
-      definir (escrita, tesauro), relacionar (escrita, tesauro), desrelacionar (escrita,
-      tesauro), derivar (escrita, classificacao), desderivar (escrita, classificacao),
-      empacotar (leitura, classificacao), espelhar (escrita, transcricao), recortar (escrita,
-      transcricao), promover (escrita, transcricao), julgar (escrita, transcricao), converter
-      (escrita, transcricao), recolher (escrita, transcricao), repor (escrita, transcricao),
-      retirar (escrita, retirada), restaurar (escrita, retirada), apagar (escrita, retirada),
-      extrato (leitura, acervo), exportar (escrita, acervo), psql (escrita, acervo), consultar
-      (leitura, casa), balde (escrita, acervo), medir (escrita, acervo), gerar (escrita,
-      acervo), gerador (escrita, acervo) · capacidade por ato: ler=leitura, listar=descoberta,
-      consultar=leitura
+      classificar item, «cataloga essa obra»; definir e relacionar conceitos no tesauro;
+      selar impressão, pôr em serviço, retirar e restaurar item; abrir obra ou documento
+      já sabido, «abre a ADR 97»; publicar página de wiki · atos: ler, listar, consultar,
+      escrever, ingerir, curar, catalogar, definir, relacionar, desrelacionar, derivar,
+      desderivar, empacotar, espelhar, recortar, promover, julgar, converter, recolher,
+      repor, retirar, restaurar, apagar, extrato, exportar, psql, balde, medir, gerar,
+      gerador
   acesso:
     descricao: >-
       grava e revoga concessões de acesso · use para: gravar concessão, «dá acesso a fulano»;
@@ -100,15 +91,9 @@ verbos:
       OPERA o serviço e a máquina em que ele roda · use para: SEMPRE que for subir, reiniciar,
       derrubar ou remover serviço, «reinicia a unit», «sobe a stack»; construir e baixar
       imagem; alterar configuração; fazer backup; limpar disco; logs do contêiner, cron, VRAM
-      e disco, «os logs do contêiner», «quanto de VRAM está ocupado?» · atos: estado (leitura,
-      operacao), saude (leitura, operacao), logs (leitura, operacao), restart (escrita,
-      operacao), remover (escrita, operacao), unit-env (escrita, operacao), cache (escrita,
-      operacao), hardware (leitura, operacao), limites (leitura, operacao), gpu (leitura,
-      operacao), backup (leitura, operacao), up (escrita, operacao), down (escrita, operacao),
-      ps (leitura, operacao), config (leitura, operacao), pull (escrita, operacao), build
-      (escrita, operacao), limpeza (escrita, operacao), agenda (escrita, operacao), units
-      (escrita, operacao), ingress (escrita, operacao), medir (leitura, operacao), pecas
-      (leitura, operacao), rodar (escrita, operacao)
+      e disco, «os logs do contêiner», «quanto de VRAM está ocupado?» · atos: estado, saude,
+      logs, restart, remover, unit-env, cache, hardware, limites, gpu, backup, up, down, ps,
+      config, pull, build, limpeza, agenda, units, ingress, medir, pecas, rodar
   lint:
     descricao: >-
       aponta desvio de padrão · use para: ANTES de entregar código, documento ou card, «passa
@@ -167,20 +152,14 @@ verbos:
     faces:
       casca: {}
   repo:
-    retido: true
     descricao: >-
       opera a bancada do card, do clone ao PR integrado · use para: criar e atualizar bancada;
       ler e procurar nela, diff e histórico; commitar, empurrar ramo, abrir, revisar e
       integrar PR; descartar mudança; sanear bancada; procurar no que está publicado no
       GitHub; e sempre que um card de código for posto em execução ou a esteira reprovar a
-      mudança · atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura,
-      operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura,
-      operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita,
-      operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita,
-      operacao), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura,
-      forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-merge (escrita, forge),
-      pr-fechar (escrita, forge), hooks-listar (leitura, forge), hooks-apagar (escrita, forge),
-      sanear (escrita, forge), lock (escrita, operacao), git (escrita, operacao)
+      mudança · atos: estado, listar, ler, procurar, historico, diff, commitar, ramo,
+      atualizar, sincronizar, abrir, clonar, empurrar, pr-abrir, pr-listar, pr-ver, pr-diff,
+      pr-merge, pr-fechar, hooks-listar, hooks-apagar, sanear, lock, git
   seg:
     descricao: >-
       cuida dos segredos e da linha de base de segurança · use para: gerar, checar, rotacionar
