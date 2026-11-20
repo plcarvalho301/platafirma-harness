@@ -55,13 +55,18 @@ for n in harness acervo analise; do
 done
 # todo venv citado por shebang ou por "$PLATAFIRMA_RELEASE/venv/<n>/bin/python" tem de estar declarado
 _listar_fontes() {
-  if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    (cd "$REPO_ROOT" && git ls-files -z bin chat controle sessao deploy-harness 2>/dev/null)
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git ls-files -z bin chat controle sessao deploy-harness 2>/dev/null
   else
-    (cd "$REPO_ROOT" && find bin chat controle sessao deploy-harness -type f -print0 2>/dev/null)
+    local d
+    for d in bin chat controle sessao deploy-harness; do
+      if [ -d "$d" ]; then
+        find "$d" -type f -print0 2>/dev/null
+      fi
+    done
   fi
 }
-citados="$(_listar_fontes \
+citados="$(cd "$REPO_ROOT" && _listar_fontes \
   | { xargs -0 grep -hoE '(/opt/platafirma/current|\$PLATAFIRMA_RELEASE)/venv/[a-z0-9_-]+/bin/' 2>/dev/null || true; } \
   | sed -E 's#.*/venv/([a-z0-9_-]+)/bin/#\1#' | sort -u)"
 [ -n "$citados" ] || falha "nenhum venv citado no codigo: a varredura de shebang nao achou nada"
