@@ -69,10 +69,6 @@ def _pre_commit(repo):
 @pytest.mark.parametrize("linha", [
     f"Ler de {_ARQ}/macro-global/decisions/0039-x.md antes.",
     f"lembrete: {_ARQ}@docs/x.md",
-    f"repo abrir {_CASA}",
-    f"arquivo {_CASA}@padrao/molde.md",
-    f"REPO = str({_REL_CASA})",
-    f"DIR={_CUR_CASA}/minuta",
     f"pasta {_P1}/regra.md",
     f"pasta {_P2}/persona.md",
     f"pasta {_P6}/spec.md",
@@ -86,7 +82,9 @@ def test_forma_pega(linha):
 
 @pytest.mark.parametrize("linha", [
     "PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]",
-    "worktree <bancada>/wt/platafirma-casa-espelho/<cadeira>/main",
+    f"worktree <bancada>/wt/{_CASA}/<cadeira>/main",
+    f"REPO = str({_REL_CASA})",
+    f"DIR={_CUR_CASA}/instancias",
     "ontologia ler capacidade capacidade:gatilhos",
     'release() / "harness"',
     "/opt/platafirma/current/conhecimento/casa-db/backup-db.sh",
@@ -98,7 +96,7 @@ def test_forma_passa(linha):
 def test_varrer_um_apontamento_por_linha_proibida(tmp_path):
     arq = tmp_path / "amostra.md"
     linhas_proibidas = [
-        f"ref {_CASA}",
+        f"ref {_ARQ}/a.md",
         f"ref {_P1}/a.md",
         f"ref {_P2}/b.md",
         f"ref {_P6}/c.md",
@@ -115,14 +113,14 @@ def test_varrer_um_apontamento_por_linha_proibida(tmp_path):
 def test_pre_commit_recusa_leitura_por_caminho(tmp_path):
     if not PRE_COMMIT.is_file():
         pytest.skip("pre_commit.py ausente na arvore do espelho")
-    repo = _repo(tmp_path, {"bin/x": f'#!/bin/sh\n\nREPO="{_CUR_CASA}"\n'})
+    repo = _repo(tmp_path, {"bin/x": f'#!/bin/sh\n\nREPO="/srv/platafirma/casa/{_PUB}"\n'})
     r = _pre_commit(repo)
     assert r.returncode == 1, r.stdout + r.stderr
     assert "[casa-por-caminho] bin/x:3:" in r.stderr
 
 
 def test_detector_e_teste_isentos(tmp_path):
-    texto = f"X = {_REL_CASA}\n"
+    texto = f"X = '{_P1}/a.md'\n"
     (tmp_path / "bin/_lint").mkdir(parents=True)
     (tmp_path / "controle/tests").mkdir(parents=True)
     (tmp_path / "bin/_lint/casa_por_caminho.py").write_text(texto, encoding="utf-8")

@@ -1,9 +1,9 @@
-"""casa_por_caminho — bloqueia citações a caminhos e artefatos da casa velha (F4073, #4348).
+"""casa_por_caminho — bloqueia citações a caminhos e artefatos da casa velha (F4073, #4348, #4414).
 
-A casa nova mora na Olaria e no repositório platafirma-casa-espelho. Código, skill,
+A casa nova mora na Olaria e no repositório platafirma-casa. Código, skill,
 configuração ou documento em core, harness, posto e conhecimento não pode citar o
-repositório da casa velha, suas pastas numeradas (1-orientacao a 6-artefato), originais/,
-abertura/dono.md, var/abertura-publicada nem leituras de casa na release.
+repositório extinto de arquitetura, as pastas numeradas da casa velha
+(1-orientacao a 6-artefato), originais/, abertura/dono.md nem var/abertura-publicada.
 
 Dois usos: o pre-commit recusa a forma em linha ACRESCENTADA (bloqueante); `varrer`
 (usado por `lint fossil` e pelo portão) varre a árvore inteira.
@@ -19,9 +19,6 @@ from .resultado import Apontamento
 
 # Literais partidos para o próprio módulo não disparar o detector nem o pre-commit vigente.
 _EXTINTO = "platafirma-" + "arquitetura"
-_CASA_VELHA = "platafirma-" + "casa"
-_REL_CASA = r"\brelease\(\)\s*/\s*[\"']" + "casa" + r"[\"']"
-_CUR_CASA = r"\bcurrent/" + "casa" + r"(?![-\w])"
 _PASTAS_NUM = (
     r"(?<![-\w])(?:"
     + "1-" + "orientacao"
@@ -38,9 +35,6 @@ _ABERTURA_PUB = r"(?<![-\w])" + "var/abertura-" + r"publicada(?![-\w])"
 
 _RE = re.compile(
     re.escape(_EXTINTO) + r"[/@][\w.\-]"
-    + r"|\b" + re.escape(_CASA_VELHA) + r"(?![-\w])"
-    + r"|" + _REL_CASA
-    + r"|" + _CUR_CASA
     + r"|" + _PASTAS_NUM
     + r"|" + _ORIGINAIS
     + r"|" + _DONO_MD
