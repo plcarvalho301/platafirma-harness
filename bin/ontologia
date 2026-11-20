@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # ontologia — o verbo do catálogo e do fichário da casa: lê, lista, cria, troca, recompõe, ensaia, renomeia, apaga e gera o modelo
-# capacidade: conhecimento
+# capacidade: modelos-formais
 # dono: conhecimento
 # classe: B
 # use para: ler classe, ficha, dicionário ou shape do catálogo e do fichário, «lê a classe chapeu»; listar classes, descendentes (--filhas), referenciadores (--aponta-para) ou chaves gravadas; criar novas classes ou fichas; trocar objeto existente com a versão lida; recompor o conjunto inteiro de fichas de uma classe; ensaiar mudança sem gravar; renomear chave humana; apagar ficha com motivo; gerar o pacote do raciocinador

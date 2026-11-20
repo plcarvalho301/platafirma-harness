@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# ler_arquivo — lê arquivo da casa ou da instância para o agente, pela porta
+# capacidade: harness
+# dono: ti
 """Ponto de entrada executável do harness para `ler_arquivo` por processo."""
 # atos: ler (leitura, arquivo)
 from __future__ import annotations

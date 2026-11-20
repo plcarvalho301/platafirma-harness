@@ -1,11 +1,14 @@
 #!/opt/platafirma/current/venv/harness/bin/python
+# mesa — grava e lê o trabalho da cadeira na lousa, pela chave do trabalho
+# capacidade: memoria
+# dono: gestao-estrategica
 """Verbo `mesa` da casa nova (story 4366, feature 4269).
 
 Expõe apenas `item`, `fez` e `ver`, sem atos de caderno. Grava e lê o trabalho da cadeira
 na lousa (memória de trabalho) pela chave do trabalho (`card:<N>` ou `turno:<ordem_id>`),
 fora da chave da sessão e sem prazo de relógio.
 
-capacidade: lousa · dono: gestao-estrategica · classe: B
+capacidade: memoria · dono: gestao-estrategica · classe: B
 atos: item (escrita, trabalho), fez (escrita, trabalho), ver (leitura, trabalho)
 saídas: 0 ok · 2 uso ou ocasião ausente · 3 memória de trabalho fora do ar
 """
