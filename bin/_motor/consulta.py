@@ -166,12 +166,19 @@ def chapeu_vestido(ambiente=None) -> str | None:
 def rotulos_do_chapeu(cadeira: str | None, chapeu: str | None, raiz=None) -> tuple[str, ...]:
     """Os primeiros MAX_ROTULOS rótulos do chapéu da cadeira.
 
-    Sem morada publicada (card #4404), só lê rotas-chapeu.json se `raiz` for passado
-    explicitamente em teste; em produção devolve vazio."""
-    if not chapeu or not cadeira or cadeira == "-" or not raiz:
+    Sem morada publicada (card #4404), em produção devolve vazio; em teste aceita
+    `raiz` explícita ou `PF_ABERTURA_DIR` explícita no ambiente."""
+    if not chapeu or not cadeira or cadeira == "-":
         return ()
+    if raiz:
+        base = Path(raiz)
+    else:
+        morada = os.environ.get("PF_ABERTURA_DIR")
+        if not morada:
+            return ()
+        base = Path(morada) / "current" / "abertura"
     try:
-        with open(Path(raiz) / "rotas-chapeu.json", encoding="utf-8") as f:
+        with open(base / "rotas-chapeu.json", encoding="utf-8") as f:
             tabela = json.load(f)
         brutos = tabela.get(cadeira, {}).get(chapeu, [])
     except (OSError, ValueError, AttributeError):

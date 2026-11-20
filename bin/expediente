@@ -685,16 +685,19 @@ def _obter_leitor_de_processos(leitor: LeitorDeProcessos | None = None) -> Leito
 
 
 def _carregar_secao_abertura(cadeira_hint: str) -> SecaoDasCadeiras:
+    ab_dir = Path(os.environ["PF_ABERTURA_DIR"]) if os.environ.get("PF_ABERTURA_DIR") else None
     fixture = os.environ.get("PF_NOMES_FIXTURE") or os.environ.get("PF_SECAO_CADEIRAS")
     if fixture and Path(fixture).is_file():
-        return carregar_secao_das_cadeiras()
+        return carregar_secao_das_cadeiras(abertura_dir=ab_dir)
     if _acha_bin("persona") is not None:
         rc, out, _ = executa_verbo(["persona", "nomes"], cadeira_hint or "engenharia")
         if rc == 0 and out.strip():
             secao = SecaoDasCadeiras.de_texto(out)
+            if ab_dir:
+                secao = secao.com_abertura_dir(ab_dir)
             if secao.cadeiras:
                 return secao
-    return carregar_secao_das_cadeiras()
+    return carregar_secao_das_cadeiras(abertura_dir=ab_dir)
 
 
 class _LeitorRoteiroJson:

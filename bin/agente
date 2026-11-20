@@ -652,6 +652,11 @@ def _bin() -> Path:
 
 def _chapeus_da_cadeira(cadeira: str) -> list[str]:
     """Lista os slugs de chapéu da cadeira pela casa nova (lib/abertura)."""
+    morada = os.environ.get("PF_ABERTURA_DIR")
+    if morada:
+        base_f = Path(morada) / "current" / "abertura" / cadeira
+        if base_f.is_dir():
+            return sorted(p.name for p in base_f.iterdir() if p.is_dir() and (p / "chapeu.md").is_file())
     casa = Path(os.environ.get("PF_CASA_RAIZ") or str(raizes.release() / "casa-espelho"))
     if (casa / "instancias" / "persona").is_dir():
         try:

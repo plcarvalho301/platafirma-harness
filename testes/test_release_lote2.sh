@@ -35,6 +35,7 @@ cat > "$STUBS/docker" <<'EOF'
 echo "docker $*" >> "${DEPLOY_LOG:?}"
 # `compose config --format json` (passo de teste da imagem, #3192): compose sem servico,
 # entao nada a medir e nada pinado; o resto do stub so grava
+case " $* " in *" ps "*) echo cid1 ;; esac
 case " $* " in *" config "*) echo '{"services": {}}' ;; esac
 exit 0
 EOF
@@ -54,8 +55,6 @@ echo "infra $*" >> "${DEPLOY_LOG:?}"
 echo "restart da unit $2 despachado destacado (stub)"
 EOF
 chmod +x "$STUBS"/*
-# motor da familia abertura: o publicar-abertura da propria rev sob teste
-ln -s "$REPO_ROOT/bin/publicar-abertura" "$STUBS/publicar-abertura"
 export PATH="$STUBS:$PATH"
 export DEPLOY_LOG="$TMP_DIR/deploy.log"; : > "$DEPLOY_LOG"
 
@@ -158,40 +157,10 @@ grep -q "caminho: release promover platafirma-arquitetura" <<<"$out" || falha "r
 [ "$(no_ar platafirma-arquitetura)" = "$A_SHA2" ] || falha "recusa mexeu no current"
 echo "OK"
 
-echo "--- 5: reverter ao ponto de volta que está em main → 0 (lado verde de reverter)"
-"$VERBO" promover platafirma-arquitetura "$A_SHA1" >/dev/null 2>&1 || falha "promover A_SHA1"
-[ "$(no_ar platafirma-arquitetura)" = "$A_SHA1" ] || falha "current devia ser ${A_SHA1:0:7}"
+echo "--- 5: ato reverter removido (r27, #4404) → exit 2 dizendo que a volta é na main"
 set +e; out="$("$VERBO" reverter platafirma-arquitetura 2>&1)"; rc=$?; set -e
-[ "$rc" -eq 0 ] || falha "reverter ao ponto de volta: rc=$rc $out"
-[ "$(no_ar platafirma-arquitetura)" = "$A_SHA2" ] || falha "reverter não voltou a ${A_SHA2:0:7}"
-echo "OK"
-
-echo "--- 6: reverter a sha fora de main, já materializado → 4, current intacto"
-mkdir -p "$SERVIDO/platafirma-arquitetura/$A_FORA"   # materializado antes do gate existir
-set +e; out="$("$VERBO" reverter platafirma-arquitetura "$A_FORA" 2>&1)"; rc=$?; set -e
-[ "$rc" -eq 4 ] || falha "reverter para fora de main devia sair 4: rc=$rc $out"
-grep -q "não descende de origin/main" <<<"$out" || falha "recusa sem o motivo: $out"
-[ "$(no_ar platafirma-arquitetura)" = "$A_SHA2" ] || falha "recusa mexeu no current"
-echo "OK"
-
-echo "--- 7: ponto de volta gravado fora de main (gravado antes do gate) → 4 e diz que é o ponto"
-rm -f "$SERVIDO/platafirma-arquitetura/anterior"
-ln -s "$A_FORA" "$SERVIDO/platafirma-arquitetura/anterior"
-printf '%s\n' "$A_FORA" > "$PONTOS_REAIS/platafirma-arquitetura/anterior"
-set +e; out="$("$VERBO" reverter platafirma-arquitetura 2>&1)"; rc=$?; set -e
-[ "$rc" -eq 4 ] || falha "ponto de volta fora de main devia sair 4: rc=$rc $out"
-grep -q "ponto de volta gravado" <<<"$out" || falha "recusa não nomeia o ponto de volta: $out"
-[ "$(no_ar platafirma-arquitetura)" = "$A_SHA2" ] || falha "recusa mexeu no current"
-echo "OK"
-
-echo "--- 8: sha de main novo (espelho desatualizado) passa o gate e cai no exit 1 de sempre"
-echo "v3" > "$REPO_RAIZ/platafirma-arquitetura/README.md"
-git -C "$REPO_RAIZ/platafirma-arquitetura" commit -q -am c3
-A_SHA3="$(git -C "$REPO_RAIZ/platafirma-arquitetura" rev-parse HEAD)"
-git -C "$REPO_RAIZ/platafirma-arquitetura" push -q origin main
-set +e; out="$("$VERBO" reverter platafirma-arquitetura "$A_SHA3" 2>&1)"; rc=$?; set -e
-[ "$rc" -eq 1 ] || falha "sha de main não materializado devia sair 1 (gate não pode fechar em espelho velho): rc=$rc $out"
-grep -q "não está materializado" <<<"$out" || falha "exit 1 perdeu a mensagem de sempre: $out"
+[ "$rc" -eq 2 ] || falha "reverter devia sair 2: rc=$rc $out"
+grep -q "reverter o commit na main" <<<"$out" || falha "mensagem sem orientação de reversão na main: $out"
 echo "OK"
 
 echo "--- 9: familia com stack (core) promove por rev explicita chamando o AJUDANTE de verdade (bin/_release/stack) — achar_deploy nao resolve mais pelo PATH"

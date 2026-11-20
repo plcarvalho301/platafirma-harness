@@ -128,10 +128,9 @@ echo "OK: cache que nao bate o pino nao serve, current intacto"
 cp "$TMP_DIR/artefato" "$CACHE/$PINO"
 out="$("$VERBO" promover platafirma-harness "$SHA2" 2>&1)" || falha "promover SHA2 com cache bom: $out"
 [ -f "$PROD_RAIZ/platafirma-harness/$SHA2/terceiros/tokenizers/fixture.json" ] || falha "SHA2 sem terceiro"
-out="$("$VERBO" reverter platafirma-harness 2>&1)" || falha "reverter: $out"
-grep -q "tok.fixture já na árvore" <<<"$out" || falha "reverter devia conferir o terceiro na arvore de volta: $out"
-[ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$SHA1" ] || falha "reverter nao voltou"
-echo "OK: promover e reverter conferem o terceiro"
+out="$("$VERBO" promover platafirma-harness "$SHA1" 2>&1)" || falha "promover SHA1: $out"
+[ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$SHA1" ] || falha "promover SHA1 nao trocou"
+echo "OK: promover confere o terceiro"
 
 printf '{"x": {"familia": "platafirma-harness", "destino": "../fora", "sha256": "%s", "url": "https://a"}}\n' "$PINO" > "$TMP_DIR/terceiros-ruim.json"
 set +e; out="$(PLATAFIRMA_TERCEIROS="$TMP_DIR/terceiros-ruim.json" "$VERBO" promover platafirma-harness "$SHA2" 2>&1)"; rc=$?; set -e

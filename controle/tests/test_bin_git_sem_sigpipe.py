@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[2]
-VERBOS = ["bin/release", "bin/repo", "bin/publicar-abertura"]
+VERBOS = ["bin/release", "bin/repo"]
 PIPE_NO_COMMAND_V = re.compile(r"command -v[^\n]*\|\s*head")
 
 

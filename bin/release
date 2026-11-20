@@ -1290,7 +1290,9 @@ assentar_atalhos() {  # $1=repo
     trocar_link "../../venv/$v" "$ATALHOS/venv/$nome"
     printf 'atalho:    %s -> ../../venv/%s\n' "$ATALHOS/venv/$nome" "$v"
   done
-  expurgar_release "" --so-atalhos
+  if declare -F expurgar_release >/dev/null 2>&1; then
+    expurgar_release "" --so-atalhos
+  fi
 }
 
 # venv/<nome>-<hash-do-lock>, construído do lockfile da rev antes de trocar current (desenho #3010
@@ -2338,7 +2340,7 @@ cmd_promover() {
           printf '  motivo (ajudante %s):\n' "$STACK_FALHOU"
           printf '%s\n' "$STACK_MOTIVO" | sed 's/^/    /'
         fi
-        printf '  RETOMAR         : conserte a causa acima e repita  release promover %s %s\n' "$repo" "${sha:0:7}"
+        printf '  RETOMAR         : conserte a causa acima e repita  release promover %s %s  (ou infra up %s -d --build --force-recreate)\n' "$repo" "${sha:0:7}" "$STACK_FALHOU"
         printf '=========================================================================\n'
       } >&2
       reiniciar_porta "$repo"
@@ -2451,7 +2453,7 @@ cmd_promover() {
         printf '  motivo (ajudante %s):\n' "$STACK_FALHOU"
         printf '%s\n' "$STACK_MOTIVO" | sed 's/^/    /'
       fi
-      printf '  RETOMAR         : conserte a causa acima e repita  release promover %s %s\n' "$repo" "${sha:0:7}"
+      printf '  RETOMAR         : conserte a causa acima e repita  release promover %s %s  (ou infra up %s -d --build --force-recreate)\n' "$repo" "${sha:0:7}" "$STACK_FALHOU"
       printf '=========================================================================\n'
     } >&2
     reiniciar_porta "$repo"
