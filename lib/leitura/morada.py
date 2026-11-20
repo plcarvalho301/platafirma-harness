@@ -83,7 +83,6 @@ CLONES = (
     "platafirma-rastreador",
     "platafirma-casa-espelho",
 )
-HARNESS_NO_ESPELHO = ("outros_repos", "harness")
 POSTO_NO_ESPELHO = ("outros_repos", "posto")
 ESCRITA_TETO = 1_048_576
 _SEM_BANCADA = (
@@ -326,8 +325,6 @@ def _em_bin_do_harness(real_pai: Path, b: Path | None) -> bool:
     for raiz_clone, profs, miolo, dirs in (
         (b_real / "platafirma-harness", (0,), (), dirs_harness),
         (b_real / "wt" / "platafirma-harness", (1, 2), (), dirs_harness),
-        (b_real / "platafirma-casa-espelho", (0,), HARNESS_NO_ESPELHO, dirs_harness),
-        (b_real / "wt" / "platafirma-casa-espelho", (1, 2), HARNESS_NO_ESPELHO, dirs_harness),
         (b_real / "platafirma-posto", (0,), (), ("bin",)),
         (b_real / "wt" / "platafirma-posto", (1, 2), (), ("bin",)),
         (b_real / "platafirma-casa-espelho", (0,), POSTO_NO_ESPELHO, ("bin",)),

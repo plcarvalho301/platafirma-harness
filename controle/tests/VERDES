@@ -391,3 +391,4 @@ tests/test_verbo_metrica.py | bin/metrica
 testes/test_conferir_despacho_unificado.py | bin/conferir bin/_conferir/** bin/_release/conferir/**
 testes/test_sessao_hash_longjob_reidratar.py | bin/sessao bin/_sessao/**
 testes/test_sobreposicao_verdes_remocao.py | remocao-no-pr controle/tests/VERDES testes/VERDES testes/test_deploy_seg_suites.py bin/*
+testes/test_arvore_recusa_outros_repos.py | bin/_lint/arvore.py

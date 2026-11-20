@@ -1,6 +1,6 @@
 """Poda e derrame de retornos no harness (story #4342, task t3).
 
-Executável por processo via `python -m poda` a partir de `outros_repos/harness/lib`,
+Executável por processo via `python -m poda` a partir de `lib`,
 sem importação pelo processo da porta no core.
 """
 from __future__ import annotations

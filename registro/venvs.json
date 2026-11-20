@@ -184,41 +184,6 @@
     "lock": "outros_repos/conhecimento/rag/uv.lock",
     "teste": "outros_repos/conhecimento/conversor/tests"
   },
-  "espelho-diagrama": {
-    "familia": "platafirma-casa-espelho",
-    "esteira": "codigo",
-    "promovida": false,
-    "venv": "rag",
-    "teste": "outros_repos/harness/lib/diagrama"
-  },
-  "espelho-analise": {
-    "familia": "platafirma-casa-espelho",
-    "esteira": "codigo",
-    "promovida": false,
-    "lock": "outros_repos/harness/venvs/harness/uv.lock",
-    "teste": "outros_repos/harness/testes/analise"
-  },
-  "espelho-controle": {
-    "familia": "platafirma-casa-espelho",
-    "esteira": "codigo",
-    "promovida": false,
-    "lock": "outros_repos/harness/venvs/harness/uv.lock",
-    "teste": "outros_repos/harness/controle"
-  },
-  "espelho-postura": {
-    "familia": "platafirma-casa-espelho",
-    "esteira": "codigo",
-    "promovida": false,
-    "lock": "outros_repos/harness/venvs/harness/uv.lock",
-    "teste": "outros_repos/harness/lib/postura"
-  },
-  "espelho-suite": {
-    "familia": "platafirma-casa-espelho",
-    "esteira": "codigo",
-    "promovida": false,
-    "lock": "outros_repos/harness/venvs/harness/uv.lock",
-    "teste": "outros_repos/harness/lib/suite/testes"
-  },
   "espelho-vault-ontologia": {
     "familia": "platafirma-casa-espelho",
     "esteira": "codigo",
@@ -246,12 +211,5 @@
     "promovida": false,
     "lock": "outros_repos/posto/ferramentas/vault-ontologia/uv.lock",
     "teste": "outros_repos/posto/gerador/tests"
-  },
-  "espelho-porta": {
-    "familia": "platafirma-casa-espelho",
-    "esteira": "codigo",
-    "promovida": false,
-    "lock": "outros_repos/core/porta/requirements.txt",
-    "teste": "outros_repos/core/porta"
   }
 }
