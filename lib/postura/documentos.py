@@ -14,6 +14,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 EIXOS = "ontologia/eixos-de-postura.yaml"
+
+
+def caminho_eixos(base: Path) -> Path:
+    """Resolve ontologia/eixos-de-postura.yaml na árvore dada, no conhecimento irmão ou na release no ar (#4402)."""
+    for cand in (
+        base / EIXOS,
+        base.parent / "conhecimento" / EIXOS,
+        Path("/opt/platafirma/current/conhecimento") / EIXOS,
+    ):
+        if cand.is_file():
+            return cand
+    return base / EIXOS
 PASTA = "instancias"
 RESERVA = "postura"                      # a postura da casa: a reserva, que não marca eixo
 SECAO_DA_POSTURA = "Para que lado puxa"

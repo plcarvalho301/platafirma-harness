@@ -992,7 +992,7 @@ def test_fluxo_recusa_violacoes_em_tabela(tmp_path, cenario: str, trecho_esperad
 # Seção 10 — Juízes da peça diagrama
 # ==============================================================================================
 
-FONTE_JUIZ = "outros_repos/conhecimento/docker-compose.yml"
+FONTE_JUIZ = "docker-compose.yml"
 GABARITO_PLANO = "GABARITO-DO-PLANO"
 GABARITO_FIGURA = (
     "Abertura do gabarito.\n\n## Em toda figura\n\nITENS-GERAIS\n\n"

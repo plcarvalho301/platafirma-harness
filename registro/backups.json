@@ -27,7 +27,7 @@
       "padrao": "casa-*.sql.gz",
       "piso_bytes": 65536,
       "alcance": "aqui",
-      "_nota": "platafirma-casa-espelho:outros_repos/conhecimento/casa-db/backup-db.sh (#4286). O piso repete o PISO_BYTES do script (64 KiB)."
+      "_nota": "platafirma-conhecimento:casa-db/backup-db.sh (#4286, #4402). O piso repete o PISO_BYTES do script (64 KiB)."
     },
     "analise-db": {
       "o_que": "Postgres do destino do verbo analise (schema analise: catálogo, bases, resultados, tabelas t_ e projeções)",
@@ -36,7 +36,7 @@
       "padrao": "analise-*.sql.gz",
       "piso_bytes": 1048576,
       "alcance": "aqui",
-      "_nota": "platafirma-casa-espelho:outros_repos/conhecimento/analise-db/backup-db.sh (#4287). O piso repete o PISO_BYTES do script (1 MiB): o schema tem 858 MB vivos em 249 tabelas, e o dump comprimido passa dele com folga."
+      "_nota": "platafirma-conhecimento:analise-db/backup-db.sh (#4287, #4402). O piso repete o PISO_BYTES do script (1 MiB): o schema tem 858 MB vivos em 249 tabelas, e o dump comprimido passa dele com folga."
     },
     "rag-minio": {
       "o_que": "object storage do acervo",

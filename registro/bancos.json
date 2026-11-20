@@ -4,7 +4,7 @@
     "base": "casa",
     "dono": "casa",
     "porta": 5439,
-    "ddl": "outros_repos/conhecimento/ontologia/ddl/casa.sql",
+    "ddl": "platafirma-conhecimento:ontologia/ddl/casa.sql",
     "o_que_guarda": "ontologia da casa: catálogo, dicionários, fichário, eventos e vistas de leitura"
   },
   "rag": {
@@ -18,7 +18,7 @@
     "base": "analise",
     "dono": "analise",
     "porta": 5440,
-    "ddl": "outros_repos/conhecimento/analise-db/init/002_schema_analise.sql",
+    "ddl": "platafirma-conhecimento:analise-db/init/002_schema_analise.sql",
     "o_que_guarda": "destino do verbo analise: catálogo, bases, resultados, tabelas t_ e projeções"
   },
   "motor": {
