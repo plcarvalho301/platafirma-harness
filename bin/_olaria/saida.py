@@ -105,8 +105,8 @@ def traduzir(ato: str, status: int, corpo: dict, *, como_json: bool = False, for
         return erro_de_uso(
             "pedido-ilegivel", ato, erro,
             "O pedido recebido pelo serviço tem forma válida de YAML, identificador e parâmetros.",
-            "Confira os argumentos e o arquivo YAML na ajuda do verbo.",
-            f"ontologia {ato} --help",
+            str(corpo.get("cura") or "Confira os argumentos e o arquivo YAML na ajuda do verbo."),
+            str(corpo.get("proximo") or f"ontologia {ato} --help"),
             como_json=como_json,
         )
     if status == 403:
