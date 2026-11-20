@@ -1,4 +1,4 @@
-# componente: componente:lousa
+# componente: componente:postura
 """Suíte do trabalho na lousa por chave e dos atos do `bin/mesa` da casa nova (story 4366, feature 4269).
 
 Cobre:
