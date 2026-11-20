@@ -1,5 +1,5 @@
 {
-  "_leia": "Registro de backup da PlataFirma — o DECLARADO, nao o servido. Fonte do sub-ato `infra backup`, que mede presenca, idade e numero de geracoes; nao roda backup e nao propoe rotina. Alvo com \"cobertura\": \"nenhuma\" fica na lista de proposito: alvo que some da lista deixa de ser medido e vira surpresa. `padrao` e glob dentro de `diretorio`; `alcance: fora` marca alvo cujo backup roda em conta que o claudinho nao alcanca — nesse caso o verbo declara que nao consegue medir, em vez de reportar zero. `log` opcional: havendo, a IDADE sai do log (prova de execucao) e o glob so conta o volume — espelho com --remove nao muda mtime quando nada mudou, e medir idade pelo arquivo diria 'atrasado' num backup que rodou hoje.",
+  "_leia": "Registro de backup da PlataFirma — o DECLARADO, nao o servido. Fonte do sub-ato `infra backup` (mede presenca, idade e numero de geracoes), `infra backup rodar <alvo>` (dispara o script declarado e confere a geracao nova) e `infra backup restaurar <alvo> [<geracao>]` (repoe o alvo da geracao escolhida e confere piso e conteudo). Alvo com \"cobertura\": \"nenhuma\" fica na lista de proposito: alvo que some da lista deixa de ser medido e vira surpresa. `padrao` e glob dentro de `diretorio`; `alcance: fora` marca alvo cujo backup roda em conta que o claudinho nao alcanca — nesse caso o verbo declara que nao consegue medir, em vez de reportar zero. `log` opcional: havendo, a IDADE sai do log (prova de execucao) e o glob so conta o volume — espelho com --remove nao muda mtime quando nada mudou, e medir idade pelo arquivo diria 'atrasado' num backup que rodou hoje.",
   "_piso": "`piso_bytes` (opcional, por alvo com glob): a ultima geracao abaixo dele sai `abaixo-do-piso` e faz `infra backup` sair 1. E o piso do dump QUEBRADO, nao o tamanho esperado: o da wiki repete o do scripts/backup-db.sh (100 KiB); o do rag-db (1 MiB) e palpite declarado, bem abaixo do menor dump valido. Incidente #3222: dump de 320 bytes contado como ok por 16 dias.",
   "_capacidade": "ativo",
   "_dono": "claudinho-TI",
@@ -10,7 +10,13 @@
       "diretorio": "/srv/platafirma/casa/dados/backups/wiki",
       "padrao": "*.sql.gz",
       "piso_bytes": 102400,
-      "alcance": "aqui"
+      "alcance": "aqui",
+      "script": "conhecimento/scripts/backup-db.sh",
+      "restauracao": {
+        "tipo": "mariadb",
+        "projeto": "plataforma-wiki",
+        "servico": "db"
+      }
     },
     "rag-db": {
       "o_que": "Postgres do acervo (schema acervo + vetores)",
@@ -18,7 +24,13 @@
       "diretorio": "/srv/platafirma/casa/dados/backups/rag",
       "padrao": "acervo-*.sql.gz",
       "piso_bytes": 1048576,
-      "alcance": "aqui"
+      "alcance": "aqui",
+      "script": "conhecimento/rag/scripts/backup-db.sh",
+      "restauracao": {
+        "tipo": "postgres",
+        "conteiner": "rag-extractor-pg",
+        "schema": "acervo"
+      }
     },
     "casa-db": {
       "o_que": "Postgres da ontologia da casa (schemas casa e casa_leitura)",
@@ -27,6 +39,12 @@
       "padrao": "casa-*.sql.gz",
       "piso_bytes": 65536,
       "alcance": "aqui",
+      "script": "conhecimento/casa-db/backup-db.sh",
+      "restauracao": {
+        "tipo": "postgres",
+        "conteiner": "casa-db",
+        "schema": "casa"
+      },
       "_nota": "platafirma-conhecimento:casa-db/backup-db.sh (#4286, #4402). O piso repete o PISO_BYTES do script (64 KiB)."
     },
     "analise-db": {
@@ -36,6 +54,12 @@
       "padrao": "analise-*.sql.gz",
       "piso_bytes": 1048576,
       "alcance": "aqui",
+      "script": "conhecimento/analise-db/backup-db.sh",
+      "restauracao": {
+        "tipo": "postgres",
+        "conteiner": "analise-db",
+        "schema": "analise"
+      },
       "_nota": "platafirma-conhecimento:analise-db/backup-db.sh (#4287, #4402). O piso repete o PISO_BYTES do script (1 MiB): o schema tem 858 MB vivos em 249 tabelas, e o dump comprimido passa dele com folga."
     },
     "rag-minio": {
@@ -44,6 +68,11 @@
       "diretorio": "/srv/platafirma/casa/dados/backups/minio",
       "padrao": "*",
       "alcance": "aqui",
+      "script": "conhecimento/rag/scripts/backup-minio.sh",
+      "restauracao": {
+        "tipo": "minio-mirror",
+        "buckets": ["acervo", "pessoal"]
+      },
       "_nota": "mirror, nao geracao: o backup-minio.sh espelha os buckets com --remove, entao 'geracoes' aqui e o numero de buckets espelhados, nao de copias no tempo.",
       "log": "/srv/platafirma/casa/var/log/cron/backup-rag-minio.log"
     },
@@ -54,6 +83,12 @@
       "padrao": "eventos-*.sql.gz",
       "piso_bytes": 4096,
       "alcance": "aqui",
+      "script": "core/deploy/eventos/backup-db.sh",
+      "restauracao": {
+        "tipo": "postgres",
+        "conteiner": "eventos-db",
+        "schema": "plataforma"
+      },
       "_nota": "platafirma-core:deploy/eventos/backup-db.sh (#3878, spec banco-de-eventos-de-plataforma R2). O piso repete o PISO_BYTES do script: o banco recem-nascido, so com schema e particoes vazias, ja passa dele; os dois numeros andam juntos."
     },
     "escapes-do-dono": {
@@ -62,6 +97,11 @@
       "diretorio": "/srv/platafirma/casa/dados/backups/escapes",
       "padrao": "escapes-do-dono-*.jsonl.gz",
       "alcance": "aqui",
+      "script": "core/deploy/backup-escapes.sh",
+      "restauracao": {
+        "tipo": "arquivo-gz",
+        "destino": "var/esteira/escapes-do-dono.jsonl"
+      },
       "_nota": "platafirma-core:deploy/backup-escapes.sh (DT 831). Arquivo pode estar vazio enquanto nenhum escape ocorreu; sem piso_bytes alto.",
       "log": "/srv/platafirma/casa/var/log/cron/backup-escapes.log"
     },
