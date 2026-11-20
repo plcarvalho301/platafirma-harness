@@ -78,6 +78,9 @@ uso:
   infra limites  [--amostrar <s>]                teto de processos e threads da conta e a memória, lidos juntos; --amostrar dá o pico em <s> segundos
   infra gpu      [--json]                        GPU ao vivo: uso, VRAM, temperatura, W e processos
   infra backup   [--json]                        por alvo declarado: quando rodou, gerações
+  infra backup   rodar <alvo> [--json]           dispara o script de backup declarado do alvo e confere a geração nova
+  infra backup   restaurar <alvo> [<geracao>] [--ensaio] [--json]
+                                                 repõe o alvo da geração escolhida (default: última), conferindo piso e conteúdo
   infra up       <stack> [args compose…] [<serviço>…]  bin/_release/stack compose … up
   infra down     <stack> [args compose…] [<serviço>…]  … down
   infra ps       <stack> [args compose…] [<serviço>…]  … ps
