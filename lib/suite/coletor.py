@@ -339,7 +339,7 @@ class ClienteBalde:
     def admitir(self, texto: str, **campos: Any) -> LinhaBalde | None:
         medido_em = str(campos.get("medido_em") or datetime.now(timezone.utc).strftime("%Y-%m-%d"))
         evidencia = str(campos.get("evidencia") or "esteira rodar")
-        raio = str(campos.get("raio") or "platafirma-casa-espelho@outros_repos")
+        raio = str(campos.get("raio") or "platafirma-harness")
         esperado = str(campos.get("esperado") or "caso passa na esteira")
         stack = str(campos.get("stack") or "harness")
         cmd = [

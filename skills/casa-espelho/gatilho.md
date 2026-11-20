@@ -19,7 +19,7 @@ vizinhos de assunto que pertencem a outra skill ou à casa atual.
 | 10 | o que o dono decidiu sobre heurística e busca na árvore da casa nova? | dispara |
 | 11 | tem documento de padrão já carregado no schema casa? quero ver o arvore-da-casa | dispara |
 | 12 | qual tabela do módulo guarda o golden de obra na casa nova? | dispara |
-| 13 | preciso pôr o ato novo do harness em outros_repos do espelho, qual é o caminho? | dispara |
+| 13 | preciso gravar um novo documento de referência de verbo no espelho, qual é o caminho? | dispara |
 | 14 | a página de catálogo de rotina já existe no platafirma-casa-espelho? | dispara |
 | 15 | evento tem instância na casa nova? onde ficam os eventos da sessão? | dispara |
 | 16 | refina a story de revisar os documentos de operação na casa nova, card 4035 | dispara |

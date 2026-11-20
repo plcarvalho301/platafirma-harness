@@ -89,7 +89,7 @@ def test_forma_pega(linha):
     "worktree <bancada>/wt/platafirma-casa-espelho/<cadeira>/main",
     "ontologia ler capacidade capacidade:gatilhos",
     'release() / "harness"',
-    "/opt/platafirma/current/casa-espelho/outros_repos/conhecimento/casa-db/backup-db.sh",
+    "/opt/platafirma/current/conhecimento/casa-db/backup-db.sh",
 ])
 def test_forma_passa(linha):
     assert forma(linha) is None

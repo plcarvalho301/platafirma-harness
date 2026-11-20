@@ -84,9 +84,6 @@ def _limpar_ambiente():
 
 def _montar_pythonpath(raiz: Path, casos_py: list[str]) -> str:
     caminhos = [str(raiz)]
-    lib_esp = raiz / "outros_repos" / "harness" / "lib"
-    if lib_esp.is_dir():
-        caminhos.insert(0, str(lib_esp))
     lib_dir = raiz / "lib"
     if lib_dir.is_dir():
         caminhos.append(str(lib_dir))
@@ -276,7 +273,6 @@ def carregar_coletor_servido() -> Any:
     if env_coletor:
         candidatos.append(Path(env_coletor))
     release_raiz = Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"))
-    candidatos.append(release_raiz / "casa-espelho" / "outros_repos" / "harness" / "lib" / "suite" / "coletor.py")
     candidatos.append(release_raiz / "harness" / "lib" / "suite" / "coletor.py")
 
     for cand in candidatos:
@@ -450,23 +446,13 @@ _resolver_leitor_ontologia = _consulta._resolver_leitor
 
 def _caminhos_de_ficha_componente(ficha: Mapping[str, Any]) -> list[str]:
     dados = ficha.get("dados") if isinstance(ficha.get("dados"), Mapping) else {}
-    ligs = ficha.get("ligacoes") if isinstance(ficha.get("ligacoes"), Mapping) else {}
     brutos = _como_lista_str(dados.get("caminho") if isinstance(dados, Mapping) else None)
-    repos = _como_lista_str(ligs.get("versionado-em") if isinstance(ligs, Mapping) else None)
-    slugs_repo = [
-        r.removeprefix("repositorio:").removeprefix("platafirma-")
-        for r in repos
-        if r
-    ]
     prefixos: list[str] = []
     for c in brutos:
         limpo = c.strip("/")
         if not limpo:
             continue
         prefixos.append(limpo)
-        for sr in slugs_repo:
-            if sr and not limpo.startswith("outros_repos/"):
-                prefixos.append(f"outros_repos/{sr}/{limpo}")
     return list(dict.fromkeys(prefixos))
 
 

@@ -19,8 +19,8 @@ def _casa_raiz(tmp_path: Path) -> Path:
     (tmp_path / "instancias" / "persona").mkdir(parents=True)
     (tmp_path / "instancias" / "chapeu").mkdir(parents=True)
     (tmp_path / "instancias" / "cultura").mkdir(parents=True)
-    (tmp_path / "outros_repos" / "conhecimento" / "ontologia").mkdir(parents=True)
-    (tmp_path / "outros_repos" / "conhecimento" / "ontologia" / "eixos-de-postura.yaml").write_text(
+    (tmp_path / "ontologia").mkdir(parents=True)
+    (tmp_path / "ontologia" / "eixos-de-postura.yaml").write_text(
         "eixos: {}\n",
         encoding="utf-8",
     )

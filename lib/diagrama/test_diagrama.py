@@ -52,7 +52,7 @@ def test_ajuda_lista_cinco_atos():
     assert diagrama_main(["--help"]) == 0
 
 
-def test_registro_declara_diagrama_no_harness_e_no_espelho():
+def test_registro_declara_diagrama_no_harness():
     registro_py = HARNESS_RAIZ / "bin" / "_release" / "registro.py"
     venvs_json = HARNESS_RAIZ / "registro" / "venvs.json"
     env = {"PATH": "/usr/bin:/bin", "PLATAFIRMA_VENVS": str(venvs_json)}
@@ -62,14 +62,6 @@ def test_registro_declara_diagrama_no_harness_e_no_espelho():
     )
     assert r_diag.returncode == 0, r_diag.stderr
     assert r_diag.stdout.strip() == "platafirma-harness\tvenv:rag\tlib/diagrama\tcodigo\tdiagrama\t-"
-    r_esp = subprocess.run(
-        ["python3", str(registro_py), "espelho-diagrama"],
-        env=env, capture_output=True, text=True, check=False,
-    )
-    assert r_esp.returncode == 0, r_esp.stderr
-    assert r_esp.stdout.strip() == (
-        "platafirma-casa-espelho\tvenv:rag\toutros_repos/harness/lib/diagrama\tcodigo\tespelho-diagrama\t-"
-    )
 
 
 # ==============================================================================================
@@ -1000,7 +992,7 @@ def test_fluxo_recusa_violacoes_em_tabela(tmp_path, cenario: str, trecho_esperad
 # Seção 10 — Juízes da peça diagrama
 # ==============================================================================================
 
-FONTE_JUIZ = "outros_repos/conhecimento/docker-compose.yml"
+FONTE_JUIZ = "docker-compose.yml"
 GABARITO_PLANO = "GABARITO-DO-PLANO"
 GABARITO_FIGURA = (
     "Abertura do gabarito.\n\n## Em toda figura\n\nITENS-GERAIS\n\n"

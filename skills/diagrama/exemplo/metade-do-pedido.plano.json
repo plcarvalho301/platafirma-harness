@@ -4,7 +4,7 @@
   "leitor": "operacao",
   "tipo": "alocacao",
   "fontes": [
-    "outros_repos/conhecimento/docker-compose.yml"
+    "docker-compose.yml"
   ],
   "hosts": [
     "host_wiki"
@@ -13,14 +13,14 @@
     {
       "id": "host_wiki",
       "nome": "Stack plataforma-wiki",
-      "fonte": "outros_repos/conhecimento/docker-compose.yml",
+      "fonte": "docker-compose.yml",
       "tipo": "stack",
       "categoria": "host"
     },
     {
       "id": "wiki_app",
       "nome": "MediaWiki",
-      "fonte": "outros_repos/conhecimento/docker-compose.yml",
+      "fonte": "docker-compose.yml",
       "tipo": "servico",
       "categoria": "conhecimento",
       "host": "host_wiki"

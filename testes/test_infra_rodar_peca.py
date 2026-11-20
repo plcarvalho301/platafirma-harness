@@ -161,17 +161,16 @@ def test_uso_errado_sai_2():
 def test_registro_do_harness_declara_a_peca_casa():
     reg = json.loads((RAIZ / "registro" / "pecas.json").read_text(encoding="utf-8"))
     casa = reg["casa"]
-    assert casa["origem"] == "release" and casa["dir"] == "casa-espelho"
+    assert casa["origem"] == "release" and casa["dir"] == "conhecimento"
     assert casa["modulo"] == "motor_acervo.casa" and casa["ambiente"] == "banco-casa"
     assert reg["persona"]["ambiente"] == "banco-casa"
 
 
 def test_peca_casa_nao_depende_do_caminho_do_conversor():
-    """#4137: cada caminho da peça entra no gate de origin/main. O conversor, que a peça casa não
-    importa, no pythonpath fazia a chamada sair 4 sempre que outra cadeira commitava nele."""
+    """#4137/#4402: a peça casa roda de conhecimento/rag sem trazer o conversor no pythonpath."""
     reg = json.loads((RAIZ / "registro" / "pecas.json").read_text(encoding="utf-8"))
     casa = reg["casa"]
-    assert casa["pythonpath"] == ["outros_repos/conhecimento/rag"]
+    assert casa["pythonpath"] == ["rag"]
     assert not any("conversor" in c for c in [casa["cwd"], *casa["pythonpath"]])
 
 
@@ -222,13 +221,13 @@ def test_ambiente_olaria_sem_a_chave_no_cofre_sai_3_dizendo_onde_ela_devia_estar
 def test_registro_do_harness_declara_a_peca_olaria():
     reg = json.loads((RAIZ / "registro" / "pecas.json").read_text(encoding="utf-8"))
     olaria = reg["olaria"]
-    assert olaria["origem"] == "release" and olaria["dir"] == "casa-espelho"
-    assert olaria["cwd"] == "outros_repos/harness/bin" and olaria["pythonpath"] == ["outros_repos/harness/bin"]
+    assert olaria["origem"] == "release" and olaria["dir"] == "harness"
+    assert olaria["cwd"] == "bin" and olaria["pythonpath"] == ["bin"]
     assert olaria["modulo"] == "_olaria" and olaria["python"] == "rag" and olaria["ambiente"] == "olaria"
     assert olaria["teto_s"] == 120
     conferir = reg["conferir"]
-    assert conferir["origem"] == "release" and conferir["dir"] == "casa-espelho"
-    assert conferir["cwd"] == "outros_repos/harness/bin" and conferir["pythonpath"] == ["outros_repos/harness/bin"]
+    assert conferir["origem"] == "release" and conferir["dir"] == "harness"
+    assert conferir["cwd"] == "bin" and conferir["pythonpath"] == ["bin"]
     assert conferir["modulo"] == "_conferir" and conferir["python"] == "rag" and conferir["ambiente"] == "olaria"
     assert conferir["teto_s"] == 120
 

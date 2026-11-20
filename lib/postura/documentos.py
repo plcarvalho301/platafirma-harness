@@ -13,7 +13,19 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
-EIXOS = "outros_repos/conhecimento/ontologia/eixos-de-postura.yaml"
+EIXOS = "ontologia/eixos-de-postura.yaml"
+
+
+def caminho_eixos(base: Path) -> Path:
+    """Resolve ontologia/eixos-de-postura.yaml na árvore dada, no conhecimento irmão ou na release no ar (#4402)."""
+    for cand in (
+        base / EIXOS,
+        base.parent / "conhecimento" / EIXOS,
+        Path("/opt/platafirma/current/conhecimento") / EIXOS,
+    ):
+        if cand.is_file():
+            return cand
+    return base / EIXOS
 PASTA = "instancias"
 RESERVA = "postura"                      # a postura da casa: a reserva, que não marca eixo
 SECAO_DA_POSTURA = "Para que lado puxa"
@@ -67,9 +79,24 @@ class Linha:
 
 
 def raiz() -> Path:
-    """A raiz da árvore da casa nova: PF_CASA_RAIZ, ou quatro pastas acima deste pacote (outros_repos/harness/lib/postura)."""
-    dada = os.environ.get("PF_CASA_RAIZ")
-    return Path(dada) if dada else Path(__file__).resolve().parents[4]
+    """A raiz da árvore da casa nova: PF_CASA_RAIZ, ou PLATAFIRMA_RELEASE/casa-espelho."""
+    dada = (os.environ.get("PF_CASA_RAIZ") or "").strip()
+    if dada:
+        return Path(dada)
+    release = Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"))
+    return release / "casa-espelho"
+
+
+def caminho_eixos(base: Path) -> Path:
+    """Localiza eixos-de-postura.yaml em PF_EIXOS_POSTURA, na base ou na release do conhecimento."""
+    dada = (os.environ.get("PF_EIXOS_POSTURA") or "").strip()
+    if dada:
+        return Path(dada)
+    local = base / EIXOS
+    if local.is_file():
+        return local
+    release = Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"))
+    return release / "conhecimento" / EIXOS
 
 
 def slug_de(nome: str) -> str:
@@ -89,7 +116,7 @@ def sha_do_blob(conteudo: bytes) -> str:
 def ler_eixos(base: Path) -> dict[str, Eixo]:
     """Os eixos vigentes, por slug. A marca do documento casa com o rótulo, que leva acento."""
     import yaml
-    dado = yaml.safe_load((base / EIXOS).read_text(encoding="utf-8")) or {}
+    dado = yaml.safe_load(caminho_eixos(base).read_text(encoding="utf-8")) or {}
     eixos = {}
     for e in dado.get("eixos") or ():
         if e.get("estado", "vigente") != "vigente":

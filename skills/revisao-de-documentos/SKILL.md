@@ -153,7 +153,7 @@ schema casa antes disso.
 
 8. Copie os documentos novos da unidade aprovada para a pasta da entidade na árvore e
    commite em main. Na linha de skill, o mesmo commit leva o gatilho em
-   `instancias/gatilho/<slug>.md` e a cópia em `outros_repos/harness/skills/<slug>/`, com o mesmo
+   `instancias/gatilho/<slug>.md` e a cópia em `platafirma-harness@skills/<slug>/`, com o mesmo
    corpo no SKILL.md e os arquivos de apoio no caminho relativo que a skill lê.
 
    Se a decisão aprovada traz ligação nova, grave antes a alteração da classe pela olaria
