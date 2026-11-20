@@ -221,9 +221,19 @@ class _PluginLote:
             alvos.append(nodeid)
         elif base in self.pedidos:
             alvos.append(base)
+        else:
+            suf = "/" + base
+            for p in self.pedidos:
+                if p.endswith(suf):
+                    alvos.append(p)
         arq = nodeid.split("::", 1)[0]
         if arq in self.por_arquivo:
             alvos.append(self.por_arquivo[arq])
+        else:
+            suf_arq = "/" + arq
+            for a, p in self.por_arquivo.items():
+                if a.endswith(suf_arq):
+                    alvos.append(p)
         return alvos
 
     def pytest_runtest_logreport(self, report):
