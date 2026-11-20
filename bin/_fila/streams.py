@@ -68,9 +68,6 @@ sys.path.insert(0, os.path.join(
 from fila_tipos import TIPOS_VALIDOS  # noqa: E402
 from raizes import release  # noqa: E402
 
-_ABERTURA_PADRAO = os.path.join(
-    str(instancia() / "var" / "abertura-publicada"), "current", "abertura"
-)
 ABERTURA = os.path.join(
     os.environ.get("PF_CASA_RAIZ") or str(release() / "casa-espelho"),
     "instancias", "persona")

@@ -244,7 +244,10 @@ def test_sem_retencao_por_dias_nem_por_anterior(cena: Cena, tmp_path: Path):
 
     r_prune = cena.roda("limpeza", "imagens", PF_RELEASE_RAIZ=str(rel_raiz))
     assert r_prune.returncode == 0, r_prune.stderr
-    assert cena.rastro() == ["image prune -a -f"]
+    rastro = cena.rastro()
+    assert len(rastro) == 1 and rastro[0].startswith("image rm -f ")
+    assert "platafirma-core:pre-11111112" not in rastro[0]
+    assert "platafirma-core:pre-abcdef12" in rastro[0]
 
 
 def test_opcao_desconhecida_sai_2(cena: Cena):
