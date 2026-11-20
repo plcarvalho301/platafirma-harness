@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import uuid
+from collections.abc import Sequence
 from pathlib import Path
 
 MEMORY_HIGH = 1536 * 1024**2
@@ -167,6 +168,7 @@ def executar(
     entrada: Path | None = None,
     saida: Path | None = None,
     ambiente: Path | None = None,
+    montagens_ro: Sequence[tuple[Path, str]] = (),
     rede: bool = False,
     prazo: float = PRAZO_CALCULO,
     _tetos_memoria: tuple[int, int] | None = None,
@@ -268,6 +270,8 @@ def executar(
         # O executável do venv precisa do caminho real de sys.prefix.
         amb = Path(ambiente).resolve()
         bw += ["--ro-bind", str(amb), str(amb)]
+    for origem, destino in montagens_ro:
+        bw += ["--ro-bind", str(Path(origem).resolve()), str(destino)]
     bootstrap = Path(__file__).with_name("executor.py").resolve()
     if not rede:
         bw += ["--ro-bind", str(bootstrap), "/executor.py"]

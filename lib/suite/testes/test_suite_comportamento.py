@@ -1272,6 +1272,71 @@ def test_esteira_isolamento_real_bloqueia_segredo_e_local_do_veredito(
     assert "suite/testes/test_segredo.py::test_nao_alcanca_segredo_nem_veredito" in ver.casos_reprovados
 
 
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnknownMarkWarning")
+@pytest.mark.exige("host:casa")
+def test_esteira_isolamento_real_monta_release_em_leitura(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from suite.esteira import DubleBalde, rodar
+
+    release_falsa = tmp_path / "release"
+    arranque = release_falsa / "casa-espelho" / "instancias" / "instrucao" / "arranque.md"
+    arranque.parent.mkdir(parents=True)
+    arranque.write_text("# Arranque de prova DT 935\n", encoding="utf-8")
+    porta = release_falsa / "harness" / "registro" / "porta.yaml"
+    porta.parent.mkdir(parents=True)
+    porta.write_text("verbos: {}\n", encoding="utf-8")
+
+    arvore = tmp_path / "arvore_posto"
+    pasta = arvore / "suite" / "testes"
+    pasta.mkdir(parents=True)
+    pasta_ver = tmp_path / "vereditos_release"
+    pasta_ver.mkdir(parents=True)
+    manifesto_src = Path(__file__).resolve().parents[3] / "venvs" / "harness"
+    shutil.copy2(manifesto_src / "pyproject.toml", arvore / "pyproject.toml")
+    shutil.copy2(manifesto_src / "uv.lock", arvore / "uv.lock")
+
+    (pasta / "test_fonte_casa.py").write_text(
+        "# componente: suite\n"
+        "from pathlib import Path\n"
+        "import pytest\n\n"
+        "def test_le_casa_espelho_e_harness_somente_leitura():\n"
+        "    arq_arranque = Path('/opt/platafirma/current/casa-espelho/instancias/instrucao/arranque.md')\n"
+        "    arq_porta = Path('/opt/platafirma/current/harness/registro/porta.yaml')\n"
+        "    assert 'Arranque de prova DT 935' in arq_arranque.read_text(encoding='utf-8')\n"
+        "    assert 'verbos:' in arq_porta.read_text(encoding='utf-8')\n"
+        "    with pytest.raises(OSError):\n"
+        "        arq_arranque.write_text('violacao', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+
+    leitor = DubleLeitorOlaria(
+        fichas=[{"classe": "componente", "chave": "componente:suite", "dados": {"caminho": "suite"}}]
+    )
+    ensaiador = DubleOlaria(fichas={"componente:suite": "componente"})
+
+    monkeypatch.setenv("PLATAFIRMA_RELEASE", str(release_falsa))
+    diagnostico: dict[str, str] = {}
+    ver = rodar(
+        "platafirma-posto",
+        arvore=arvore,
+        mudanca="12345678",
+        base="87654321",
+        arquivos_mudados=["suite/testes/test_fonte_casa.py"],
+        leitor=leitor,
+        ensaiador=ensaiador,
+        balde=DubleBalde(),
+        pasta_vereditos=pasta_ver,
+        max_repeticoes_erratico=0,
+        diagnostico=diagnostico,
+    )
+
+    assert ver.estado == "verde", (ver.motivo, diagnostico)
+    assert ver.codigo_saida == 0
+    assert ver.casos_reprovados == ()
+
+
 # --- Dublê de fronteira e verificação de quem fornece pelo contrato --------------------------
 
 import json
