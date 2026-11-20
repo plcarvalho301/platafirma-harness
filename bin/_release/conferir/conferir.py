@@ -928,36 +928,76 @@ def _capacidades_olaria():
     if chave_cache in _CAPACIDADES_OLARIA:
         return _CAPACIDADES_OLARIA[chave_cache], None
 
+    def _extrair_fichas_de_yaml(texto_yaml):
+        try:
+            import yaml as _yaml
+            doc = _yaml.safe_load(texto_yaml)
+            if isinstance(doc, dict) and isinstance(doc.get("fichas"), list):
+                return doc["fichas"]
+        except Exception:
+            pass
+        # fallback sem PyYAML (python3 de sistema pode nao ter PyYAML):
+        # le blocos `- chave: capacidade:<slug>` e ligacoes `componente-de` / `sob-autoridade-de`
+        achadas = []
+        atual = None
+        for linha in (texto_yaml or "").splitlines():
+            m_ch = re.match(r"^\s*-\s+chave\s*:\s*[\"']?([^\"'#\n]+)[\"']?", linha)
+            if m_ch:
+                atual = {"chave": m_ch.group(1).strip(), "ligacoes": {}}
+                achadas.append(atual)
+                continue
+            if atual is None:
+                continue
+            m_mae = re.match(r"^\s*componente-de\s*:\s*[\"']?([^\"'#\n]+)[\"']?", linha)
+            if m_mae:
+                atual["ligacoes"]["componente-de"] = m_mae.group(1).strip()
+                continue
+            m_per = re.match(r"^\s*sob-autoridade-de\s*:\s*[\"']?([^\"'#\n]+)[\"']?", linha)
+            if m_per:
+                atual["ligacoes"]["sob-autoridade-de"] = m_per.group(1).strip()
+        return achadas
+
     status, corpo, erro = _olaria_post("/ler", {"classe": "capacidade", "chaves": [], "fichas": True})
-    if erro or status != 200 or not isinstance(corpo, dict):
+    caps = {}
+    if not erro and status == 200 and isinstance(corpo, dict):
+        fichas = corpo.get("fichas")
+        if not (isinstance(fichas, list) and fichas) and isinstance(corpo.get("yaml"), str):
+            fichas = _extrair_fichas_de_yaml(corpo["yaml"])
+        if isinstance(fichas, list) and fichas:
+            for f in fichas:
+                if not isinstance(f, dict):
+                    continue
+                ch = str(f.get("chave") or "").strip()
+                if not ch:
+                    continue
+                slug = ch[len("capacidade:"):] if ch.startswith("capacidade:") else ch
+                lig = f.get("ligacoes") if isinstance(f.get("ligacoes"), dict) else {}
+                mae = lig.get("componente-de") or f.get("componente-de")
+                persona = lig.get("sob-autoridade-de") or f.get("sob-autoridade-de")
+                caps[slug] = {
+                    "chave": ch,
+                    "mae": _slug_olaria(mae, "capacidade:"),
+                    "persona": _slug_olaria(persona, "persona:"),
+                }
+        elif isinstance(corpo.get("chaves"), list):
+            for ch in corpo["chaves"]:
+                ch_s = str(ch).strip()
+                if not ch_s:
+                    continue
+                slug = ch_s[len("capacidade:"):] if ch_s.startswith("capacidade:") else ch_s
+                caps[slug] = {"chave": ch_s, "mae": None, "persona": None}
+
+    if not caps:
         st2, corpo2, erro2 = _olaria_post("/listar", {"classe": "capacidade"})
         if erro2 or st2 != 200 or not isinstance(corpo2, dict):
             return None, erro or erro2 or f"Olaria respondeu {status}"
-        corpo = corpo2
-
-    caps = {}
-    fichas = corpo.get("fichas")
-    if isinstance(fichas, list) and fichas:
-        for f in fichas:
-            if not isinstance(f, dict):
-                continue
-            ch = str(f.get("chave") or "").strip()
-            if not ch:
-                continue
-            slug = ch[len("capacidade:"):] if ch.startswith("capacidade:") else ch
-            lig = f.get("ligacoes") if isinstance(f.get("ligacoes"), dict) else {}
-            caps[slug] = {
-                "chave": ch,
-                "mae": _slug_olaria(lig.get("componente-de"), "capacidade:"),
-                "persona": _slug_olaria(lig.get("sob-autoridade-de"), "persona:"),
-            }
-    elif isinstance(corpo.get("chaves"), list):
-        for ch in corpo["chaves"]:
-            ch_s = str(ch).strip()
-            if not ch_s:
-                continue
-            slug = ch_s[len("capacidade:"):] if ch_s.startswith("capacidade:") else ch_s
-            caps[slug] = {"chave": ch_s, "mae": None, "persona": None}
+        if isinstance(corpo2.get("chaves"), list):
+            for ch in corpo2["chaves"]:
+                ch_s = str(ch).strip()
+                if not ch_s:
+                    continue
+                slug = ch_s[len("capacidade:"):] if ch_s.startswith("capacidade:") else ch_s
+                caps[slug] = {"chave": ch_s, "mae": None, "persona": None}
 
     if not caps:
         return None, "Olaria nao retornou nenhuma capacidade"
