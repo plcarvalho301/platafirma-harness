@@ -23,7 +23,6 @@ import pytest
 _HARNESS_DIR = Path(__file__).resolve().parents[1]
 _LIB_DIR = _HARNESS_DIR / "lib"
 _CANDIDATOS_CORE = (
-    Path(__file__).resolve().parents[3] / "outros_repos" / "core",
     Path("/opt/platafirma/current/core"),
 )
 _CORE_DIR = next((c for c in _CANDIDATOS_CORE if (c / "porta" / "sessao_mem.py").is_file()), None)

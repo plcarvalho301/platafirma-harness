@@ -33,8 +33,6 @@ O repositório se arruma por papel epistemológico:
 - `referencias/classes/<classe>.md`: páginas de catálogo das classes (uma por shape).
 - `referencias/instancias/<classe>/<chave>.md`: documentos de referência de instâncias (como dicionários e peças cujo golden é código/infra).
 - `verbetes/<dicionario>/<valor>.md`: verbetes dos valores de dicionário.
-- O que vai morar no harness, no posto ou no conhecimento fica em
-  `outros_repos/<repositório>/<caminho de destino>`.
 - Documento de chave numerada (registro de decisão, política interna) se chama
   `<número>-<trecho do título>.md`.
 - Pasta nasce com o primeiro documento; não há README nem índice.

@@ -1163,7 +1163,7 @@ def test_coletor_servido_ignora_coletor_adulterado_no_ramo_e_cli_veredito(tmp_pa
     from suite.esteira import DubleBalde, DubleExecutorIsolado, rodar
 
     arvore = tmp_path / "ramo_adulterado"
-    pasta_suite = arvore / "outros_repos" / "harness" / "lib" / "suite"
+    pasta_suite = arvore / "lib" / "suite"
     pasta_testes = pasta_suite / "testes"
     pasta_testes.mkdir(parents=True)
     (pasta_suite / "coletor.py").write_text(
@@ -1189,15 +1189,15 @@ def test_coletor_servido_ignora_coletor_adulterado_no_ramo_e_cli_veredito(tmp_pa
     pasta_ver = tmp_path / "vereditos_cli"
 
     ver = rodar(
-        "platafirma-casa-espelho",
+        "platafirma-harness",
         arvore=arvore,
         mudanca="abc123456789",
         base="def987654321",
-        arquivos_mudados=["outros_repos/harness/lib/suite/testes/test_suite.py"],
+        arquivos_mudados=["lib/suite/testes/test_suite.py"],
         leitor=leitor,
         ensaiador=ensaiador,
         executor_isolado=DubleExecutorIsolado(
-            {"outros_repos/harness/lib/suite/testes/test_suite.py::test_quebra": [False, False, False]}
+            {"lib/suite/testes/test_suite.py::test_quebra": [False, False, False]}
         ),
         balde=DubleBalde(),
         pasta_vereditos=pasta_ver,
@@ -1208,7 +1208,7 @@ def test_coletor_servido_ignora_coletor_adulterado_no_ramo_e_cli_veredito(tmp_pa
 
     proc_ver = _rodar_cli_suite(
         "veredito",
-        "platafirma-casa-espelho",
+        "platafirma-harness",
         "--arvore",
         str(arvore),
         "--mudanca",

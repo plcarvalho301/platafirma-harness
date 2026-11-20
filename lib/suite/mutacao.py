@@ -133,13 +133,6 @@ def _raiz_padrao() -> Path:
     return Path.cwd()
 
 
-def _prefixo_espelho(repo_nome: str) -> str:
-    curto = repo_nome.removeprefix("repositorio:").removeprefix("platafirma-")
-    if not curto or curto in ("casa", "casa-espelho"):
-        return ""
-    return f"outros_repos/{curto}"
-
-
 def _ler_componente_olaria(chave: str) -> dict[str, Any] | None:
     url = os.environ.get("OLARIA_URL", "").rstrip("/")
     segredo = os.environ.get("OLARIA_CHAVE", "").strip()
@@ -192,24 +185,16 @@ def _cabecalho_componente(arq: Path) -> str | None:
 
 def _caminhos_da_ficha(ficha: dict[str, Any], arvore: Path) -> list[Path]:
     dados = ficha.get("dados") or {}
-    ligs = ficha.get("ligacoes") or {}
     bruto_cam = dados.get("caminho")
     lista_cam = [bruto_cam] if isinstance(bruto_cam, str) else list(bruto_cam or [])
-    repo_lig = ligs.get("versionado-em")
-    if isinstance(repo_lig, list):
-        repo_lig = repo_lig[0] if repo_lig else ""
-    prefixo = _prefixo_espelho(str(repo_lig or ""))
 
     achados: list[Path] = []
     for rel in lista_cam:
         if not rel:
             continue
         cand_direto = arvore / rel
-        cand_espelho = (arvore / prefixo / rel) if prefixo else None
         if cand_direto.exists():
             achados.append(cand_direto.resolve())
-        elif cand_espelho is not None and cand_espelho.exists():
-            achados.append(cand_espelho.resolve())
     return achados
 
 
@@ -218,7 +203,6 @@ def _caminhos_por_convencao(slug: str, arvore: Path) -> list[Path]:
         arvore / slug,
         arvore / "lib" / slug,
         arvore / "src" / slug,
-        arvore / "outros_repos" / "harness" / "lib" / slug,
     ):
         if cand.exists():
             return [cand.resolve()]

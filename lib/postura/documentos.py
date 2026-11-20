@@ -79,9 +79,24 @@ class Linha:
 
 
 def raiz() -> Path:
-    """A raiz da árvore da casa nova: PF_CASA_RAIZ, ou quatro pastas acima deste pacote (outros_repos/harness/lib/postura)."""
-    dada = os.environ.get("PF_CASA_RAIZ")
-    return Path(dada) if dada else Path(__file__).resolve().parents[4]
+    """A raiz da árvore da casa nova: PF_CASA_RAIZ, ou PLATAFIRMA_RELEASE/casa-espelho."""
+    dada = (os.environ.get("PF_CASA_RAIZ") or "").strip()
+    if dada:
+        return Path(dada)
+    release = Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"))
+    return release / "casa-espelho"
+
+
+def caminho_eixos(base: Path) -> Path:
+    """Localiza eixos-de-postura.yaml em PF_EIXOS_POSTURA, na base ou na release do conhecimento."""
+    dada = (os.environ.get("PF_EIXOS_POSTURA") or "").strip()
+    if dada:
+        return Path(dada)
+    local = base / EIXOS
+    if local.is_file():
+        return local
+    release = Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"))
+    return release / "conhecimento" / EIXOS
 
 
 def slug_de(nome: str) -> str:

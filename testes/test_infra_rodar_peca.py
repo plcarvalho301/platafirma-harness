@@ -221,13 +221,13 @@ def test_ambiente_olaria_sem_a_chave_no_cofre_sai_3_dizendo_onde_ela_devia_estar
 def test_registro_do_harness_declara_a_peca_olaria():
     reg = json.loads((RAIZ / "registro" / "pecas.json").read_text(encoding="utf-8"))
     olaria = reg["olaria"]
-    assert olaria["origem"] == "release" and olaria["dir"] == "casa-espelho"
-    assert olaria["cwd"] == "outros_repos/harness/bin" and olaria["pythonpath"] == ["outros_repos/harness/bin"]
+    assert olaria["origem"] == "release" and olaria["dir"] == "harness"
+    assert olaria["cwd"] == "bin" and olaria["pythonpath"] == ["bin"]
     assert olaria["modulo"] == "_olaria" and olaria["python"] == "rag" and olaria["ambiente"] == "olaria"
     assert olaria["teto_s"] == 120
     conferir = reg["conferir"]
-    assert conferir["origem"] == "release" and conferir["dir"] == "casa-espelho"
-    assert conferir["cwd"] == "outros_repos/harness/bin" and conferir["pythonpath"] == ["outros_repos/harness/bin"]
+    assert conferir["origem"] == "release" and conferir["dir"] == "harness"
+    assert conferir["cwd"] == "bin" and conferir["pythonpath"] == ["bin"]
     assert conferir["modulo"] == "_conferir" and conferir["python"] == "rag" and conferir["ambiente"] == "olaria"
     assert conferir["teto_s"] == 120
 
