@@ -181,6 +181,29 @@ def test_arvore_em_uso_por_processo_vivo_fica_e_diverge_em_fossil(tmp_path: Path
         proc.wait(timeout=5)
 
 
+def test_arvore_preservada_da_porta_fica_no_expurgo(tmp_path: Path):
+    """Incidente #4407: a arvore do core da qual a porta ainda roda nao sai antes de a porta religar."""
+    m = _montar_host_falso(tmp_path)
+    sha_velho = "e" * 40
+    arvore_velha = m["raiz"] / "platafirma-harness" / sha_velho
+    arvore_velha.mkdir(parents=True)
+    env = {**m["env"], "PF_EXPURGO_PRESERVAR": str(arvore_velha), "PF_EXPURGO_SEM_PROC": "1"}
+    r_exp = subprocess.run(
+        [sys.executable, str(EXPURGO), "--sem-docker"],
+        capture_output=True, text=True, env=env, timeout=30, check=False,
+    )
+    assert r_exp.returncode == 0, r_exp.stderr
+    assert arvore_velha.is_dir(), "arvore da porta nao pode sair antes de a porta religar"
+    assert "#4407" in r_exp.stdout
+
+    r_sem = subprocess.run(
+        [sys.executable, str(EXPURGO), "--sem-docker"],
+        capture_output=True, text=True, env={**m["env"], "PF_EXPURGO_SEM_PROC": "1"},
+        timeout=30, check=False,
+    )
+    assert r_sem.returncode == 0, r_sem.stderr
+    assert not arvore_velha.exists(), "sem a preservacao, o expurgo seguinte leva a arvore"
+
 def test_release_reverter_sai_2_com_mensagem_de_main(tmp_path: Path):
     m = _montar_host_falso(tmp_path)
     r = _roda_release(m["env"], "reverter", "platafirma-harness")
