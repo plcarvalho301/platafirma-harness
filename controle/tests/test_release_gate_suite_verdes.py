@@ -166,8 +166,8 @@ def _segundo_sha(amb) -> str:
     return r.stdout.strip()
 
 
-def test_conferencia_no_ar_vermelha_sai_4_sem_volta_automatica(amb_verde):
-    """Política 0009: vermelho no ar sai 4 sem volta automática (desfazer é reverter na main)."""
+def test_conferencia_no_ar_vermelha_mantem_current_e_nao_expurga(amb_verde):
+    """card #4404 regra nova 1: vermelho no ar -> current fica no sha novo, nada se expurga, sai 4."""
     r1 = amb_verde.run("promover", amb_verde.FAMILIA)
     assert r1.returncode == 0, r1.stdout + r1.stderr
     sha2 = _segundo_sha(amb_verde)
@@ -176,10 +176,11 @@ def test_conferencia_no_ar_vermelha_sai_4_sem_volta_automatica(amb_verde):
     r2 = amb_verde.run("promover", amb_verde.FAMILIA, sha2)
     assert r2.returncode == 4, r2.stdout + r2.stderr
     assert "conferencia no ar VERMELHA" in r2.stderr
-    assert "sem volta automatica" in r2.stderr
+    assert "nada foi expurgado" in r2.stderr
     del amb_verde.env["PF_RELEASE_CONFERENCIA_AR"]
     est = amb_verde.run("estado", amb_verde.FAMILIA)
     assert sha2[:7] in est.stdout, est.stdout
+    assert (Path(amb_verde.env["PF_RELEASE_RAIZ"]) / amb_verde.FAMILIA / amb_verde.sha1).is_dir()
 
 
 def test_conferencia_no_ar_que_nao_olhou_nao_reverte(amb_verde):

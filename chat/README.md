@@ -36,8 +36,8 @@ mentira e receptor, worker e journal de verdade, a partir de `chat/`:
 
 ```
 docker run --rm --network none -e PYTHONUNBUFFERED=1 \
-  -e PF_ABERTURA_DIR=/abertura-publicada \
-  -v "$PWD:/chat:ro" -v "<morada publicada da abertura>:/abertura-publicada:ro" \
+  -e PF_CASA_RAIZ=/casa-espelho \
+  -v "$PWD:/chat:ro" -v "/opt/platafirma/current/casa-espelho:/casa-espelho:ro" \
   --entrypoint python platafirma/chat-recepcao:local /chat/testes/prova-ponta-a-ponta.py
 ```
 

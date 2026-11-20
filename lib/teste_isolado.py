@@ -115,7 +115,6 @@ def isolar(config=None) -> Path:
         "PLATAFIRMA_RELEASE": str(raiz / "opt" / "current"),
         "PLATAFIRMA_BANCADA": str(raiz / "bancada"),
         "PLATAFIRMA_ARQUIVO_BANCADA": str(raiz / "bancada-nao-declarada"),
-        "PF_ABERTURA_DIR": str(raiz / "instancia" / "var" / "abertura-publicada"),
         "PF_LINT_ACERVO": "/bin/false",
         "RAG_API_URL": SERVICO_MORTO,
         "RAG_API_BASE": SERVICO_MORTO,

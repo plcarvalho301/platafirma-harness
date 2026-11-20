@@ -241,7 +241,7 @@ PLATAFIRMA_UV="$UV_FALSO" PLATAFIRMA_PYTHON="$PY314" promover $FAM "$S4"
 [ "$rc" -eq 0 ] || falha "outro python: rc=$rc $out"
 depois_req="$(readlink "$PROD_RAIZ/current/venv/req")"
 [ "$antes_req" != "$depois_req" ] || falha "venv com outro python reaproveitou o nome: $depois_req"
-[ ! -d "$PROD_RAIZ/venv/${antes_req##*/}" ] || falha "venv anterior devia ter sido expurgado do disco (politica 0009)"
+[ ! -d "$PROD_RAIZ/venv/${antes_req##*/}" ] || falha "venv anterior devia ter sido expurgado na promocao verde"
 echo OK
 
 echo "--- 2d: lock que exige versao incompativel falha alta, current intacto, venv pela metade apagado"

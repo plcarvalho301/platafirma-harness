@@ -35,6 +35,7 @@ cat > "$STUBS/docker" <<'EOF'
 echo "docker $*" >> "${DEPLOY_LOG:?}"
 # `compose config --format json` (passo de teste da imagem, #3192): compose sem servico,
 # entao nada a medir e nada pinado; o resto do stub so grava
+case " $* " in *" ps "*) echo cid1 ;; esac
 case " $* " in *" config "*) echo '{"services": {}}' ;; esac
 exit 0
 EOF
@@ -54,8 +55,6 @@ echo "infra $*" >> "${DEPLOY_LOG:?}"
 echo "restart da unit $2 despachado destacado (stub)"
 EOF
 chmod +x "$STUBS"/*
-# motor da familia abertura: o publicar-abertura da propria rev sob teste
-ln -s "$REPO_ROOT/bin/publicar-abertura" "$STUBS/publicar-abertura"
 export PATH="$STUBS:$PATH"
 export DEPLOY_LOG="$TMP_DIR/deploy.log"; : > "$DEPLOY_LOG"
 
@@ -158,18 +157,10 @@ grep -q "caminho: release promover platafirma-arquitetura" <<<"$out" || falha "r
 [ "$(no_ar platafirma-arquitetura)" = "$A_SHA2" ] || falha "recusa mexeu no current"
 echo "OK"
 
-echo "--- 5: promover expurga revisão antiga e não cria anterior (política 0009)"
-DIR_FAM="$SERVIDO/platafirma-arquitetura"
-PF_RELEASE_EXPURGO_DOCKER=0 "$VERBO" promover platafirma-arquitetura "$A_SHA1" >/dev/null 2>&1 || falha "promover A_SHA1"
-[ "$(no_ar platafirma-arquitetura)" = "$A_SHA1" ] || falha "current devia ser ${A_SHA1:0:7}"
-[ ! -e "$DIR_FAM/anterior" ] && [ ! -L "$DIR_FAM/anterior" ] || falha "promover não deve deixar anterior"
-[ ! -d "$DIR_FAM/$A_SHA2" ] || falha "promover devia ter expurgado a revisão antiga $A_SHA2"
-echo "OK"
-
-echo "--- 6: reverter foi retirado (política 0009) → exit 2"
+echo "--- 5: ato reverter removido (r27, #4404) → exit 2 dizendo que a volta é na main"
 set +e; out="$("$VERBO" reverter platafirma-arquitetura 2>&1)"; rc=$?; set -e
-[ "$rc" -eq 2 ] || falha "reverter retirado devia sair 2: rc=$rc $out"
-grep -qi "política 0009" <<<"$out" || falha "recusa sem citar política 0009: $out"
+[ "$rc" -eq 2 ] || falha "reverter devia sair 2: rc=$rc $out"
+grep -q "reverter o commit na main" <<<"$out" || falha "mensagem sem orientação de reversão na main: $out"
 echo "OK"
 
 echo "--- 9: familia com stack (core) promove por rev explicita chamando o AJUDANTE de verdade (bin/_release/stack) — achar_deploy nao resolve mais pelo PATH"

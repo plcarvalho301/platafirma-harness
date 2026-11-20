@@ -48,16 +48,6 @@ def test_promover_espera_e_sai_3_com_lock_tomado(tmp_path):
     assert "nada tocado" in p.stderr
 
 
-def test_expurgar_tambem_entra_na_fila(tmp_path):
-    env, lock = _ambiente(tmp_path)
-    with open(lock, "a") as fh:
-        fcntl.flock(fh, fcntl.LOCK_EX)
-        p = subprocess.run([RELEASE, "expurgar", "--ver"],
-                           capture_output=True, text=True, env=env, timeout=60)
-    assert p.returncode == 3, p.stderr
-    assert "aguardando a vez" in p.stderr
-
-
 def test_ensaio_nao_entra_na_fila(tmp_path):
     env, lock = _ambiente(tmp_path)
     with open(lock, "a") as fh:
@@ -67,15 +57,14 @@ def test_ensaio_nao_entra_na_fila(tmp_path):
     assert "aguardando a vez" not in p.stderr
 
 
-def test_reentrada_na_fila_nao_espera_por_si(tmp_path):
+def test_reverter_recusa_com_exit_2_sem_entrar_na_fila(tmp_path):
     env, lock = _ambiente(tmp_path)
-    env["PF_PROMOCAO_NA_FILA"] = "123"
-    env["PF_RELEASE_EXPURGO_DOCKER"] = "0"
     with open(lock, "a") as fh:
         fcntl.flock(fh, fcntl.LOCK_EX)
-        p = subprocess.run([RELEASE, "expurgar", "--ver"],
+        p = subprocess.run([RELEASE, "reverter", "platafirma-harness"],
                            capture_output=True, text=True, env=env, timeout=60)
-    assert "aguardando a vez" not in p.stderr
+    assert p.returncode == 2, p.stderr
+    assert "reverter o commit na main" in p.stderr
 
 
 def _conferir(monkeypatch, tmp_path):

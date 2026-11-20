@@ -102,7 +102,6 @@ SEM_SONDA = {
 # processa_estado_item, DT 550) e qualquer outro valor e fora.
 POR_SYSTEMD_RESULT = {
     "casa-site-publicar": "casa-site-publicar.service",
-    "abertura-caderno": "abertura-caderno.service",
 }
 
 

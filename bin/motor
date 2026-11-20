@@ -11,7 +11,7 @@
 # cauda: nao
 # poda: cosmetica@casa,buscar
 # consome: rag-extractor-api@platafirma-conhecimento/rag/openapi.yaml >=1.0 (buscar, medir, indexar; endpoints por instancia em motor-instancias.json)
-# ambiente: PLATAFIRMA_RELEASE origem-shell [=/opt/platafirma/current] (bateria); PLATAFIRMA_INSTANCIA origem-shell [=/srv/platafirma/casa] (segredos, log, medicoes, sobreposicao do compose); OPS_LOG_DIR origem-shell [=$PLATAFIRMA_INSTANCIA/var/log/ops]; PF_BIN origem-shell (teste; ausente e o bin/ da propria arvore); PF_SESSAO porta; PF_ORDEM_ID porta; PF_CADEIRA porta; PF_CHAPEU porta; PF_ABERTURA_DIR origem-shell [=$PLATAFIRMA_INSTANCIA/var/abertura-publicada] (rotas-chapeu.json, os rotulos da consulta montada); OPS_NAME porta; USER shell
+# ambiente: PLATAFIRMA_RELEASE origem-shell [=/opt/platafirma/current] (bateria); PLATAFIRMA_INSTANCIA origem-shell [=/srv/platafirma/casa] (segredos, log, medicoes, sobreposicao do compose); OPS_LOG_DIR origem-shell [=$PLATAFIRMA_INSTANCIA/var/log/ops]; PF_BIN origem-shell (teste; ausente e o bin/ da propria arvore); PF_SESSAO porta; PF_ORDEM_ID porta; PF_CADEIRA porta; PF_CHAPEU porta; OPS_NAME porta; USER shell
 # le: listar=arquivo-local
 # le: ajuste=motor,arquivo-local,release
 # le: buscar=motor,arquivo-local
