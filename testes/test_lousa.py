@@ -633,5 +633,51 @@ def test_teto_do_corpo_barra_escrita_e_nunca_quebra_leitura_nem_vaza_na_pauta(tm
     assert editar_corpo("abcdefg", EdicaoDeCorpo(antes="efg", depois=""), teto=6) == "abcd"
 
 
+def test_dt948_mesa_corpo_edita_item_listado_por_ver_e_nomeia_cadeira_quando_ausente(tmp_path):
+    """DT 948: mesa corpo aceita todas as formas da chave listada por mesa ver e nomeia a cadeira no erro."""
+    valkey = _novo_valkey(tmp_path)
+
+    p_cria = _rodar_mesa(
+        [
+            "item",
+            "--card", "4406",
+            "--estagio", "execucao",
+            "--proxima-jogada", "fechar parecer",
+            "--corpo", "linha inicial",
+        ],
+        cadeira="seguranca",
+        valkey_fixture=valkey,
+    )
+    assert p_cria.returncode == 0, p_cria.stdout + p_cria.stderr
+
+    # mesa ver lista card:4406
+    p_ver = _rodar_mesa(["ver", "--json"], cadeira="seguranca", valkey_fixture=valkey)
+    assert p_ver.returncode == 0
+    assert [i["chave"] for i in json.loads(p_ver.stdout)] == ["card:4406"]
+
+    # mesa corpo edita com card:4406, --card 4406 e posicional 4406
+    for alvo_args, trecho in (
+        (["card:4406"], "editado-1"),
+        (["--card", "4406"], "editado-2"),
+        (["4406"], "editado-3"),
+    ):
+        p_c = _rodar_mesa(
+            ["corpo", *alvo_args, "--anexar", trecho],
+            cadeira="seguranca",
+            valkey_fixture=valkey,
+        )
+        assert p_c.returncode == 0, p_c.stdout + p_c.stderr
+        assert trecho in p_c.stdout
+
+    # Em outra cadeira, o erro informa explicitamente qual cadeira foi consultada
+    p_outra = _rodar_mesa(
+        ["corpo", "card:4406", "--anexar", "x"],
+        cadeira="ia",
+        valkey_fixture=valkey,
+    )
+    assert p_outra.returncode == 2
+    assert "cadeira: ia" in p_outra.stderr
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, *sys.argv[1:]]))

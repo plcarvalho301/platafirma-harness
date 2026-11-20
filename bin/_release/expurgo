@@ -232,6 +232,11 @@ def coletar_em_uso(prod_raiz: Path, *, sem_docker: bool = False) -> dict[str, li
                         continue
                     _registrar_uso(mapa, raiz_real, alvo, quem)
 
+    # Incidente #4407: a arvore da qual a porta ainda roda na promocao do core, ate ser religada.
+    for preservado in (os.environ.get("PF_EXPURGO_PRESERVAR") or "").split(os.pathsep):
+        if preservado:
+            _registrar_uso(mapa, raiz_real, preservado, "porta ainda nao religada (#4407)")
+
     return mapa
 
 
