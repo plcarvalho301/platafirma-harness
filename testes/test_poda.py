@@ -12,7 +12,9 @@ if str(HARNESS_LIB) not in sys.path:
     sys.path.insert(0, str(HARNESS_LIB))
 
 from poda import (
+    LedgerSessao,
     atos_que_escrevem,
+    lavar,
     podar_envelope,
     resolver_ato,
 )
@@ -154,3 +156,99 @@ def test_atos_que_escrevem_nao_polui_cache_com_caminho_inexistente(tmp_path: Pat
     assert atos_que_escrevem("x", ficticio) == frozenset()
     ficticio.write_text("#!/bin/sh\n# atos: gravar (escrita, x)\n", encoding="utf-8")
     assert "gravar" in atos_que_escrevem("x", ficticio)
+
+
+def test_ledger_distancia_expira_apos_teto_e_reenvia_inteiro(tmp_path: Path):
+    ledger = LedgerSessao(tmp_path / "ledger.json")
+    g1 = ledger.proximo_giro()
+    d1 = ledger.olha("acervo ler x", "conteudo-estavel", g1, distancia_max=3)
+    assert d1["modo"] == "inteiro"
+    assert d1["ledger"] == "novo"
+
+    g2 = ledger.proximo_giro()
+    d2 = ledger.olha("acervo ler x", "conteudo-estavel", g2, distancia_max=3)
+    assert d2["modo"] == "igual"
+    assert d2["giro_ref"] == g1
+
+    for _ in range(3):
+        ledger.proximo_giro()
+    g6 = ledger.proximo_giro()
+    d6 = ledger.olha("acervo ler x", "conteudo-estavel", g6, distancia_max=3)
+    assert d6["modo"] == "inteiro"
+    assert d6["ledger"] == "expirado"
+    assert d6["texto"] == "conteudo-estavel"
+
+
+def test_lavador_preserva_json_com_campo_lista_longa(tmp_path: Path):
+    payload_json = json.dumps(
+        {
+            "fontes": [
+                {"n": i, "obra": f"Obra {i}", "texto": "trecho " * 40}
+                for i in range(1, 20)
+            ],
+            "cobertura": "boa",
+        },
+        ensure_ascii=False,
+    )
+    assert len(payload_json.encode("utf-8")) > 2_000
+
+    lavado, rel = lavar(payload_json)
+    assert "blob" not in rel["classes"]
+    assert json.loads(lavado)["cobertura"] == "boa"
+    assert len(json.loads(lavado)["fontes"]) == 19
+
+    bin_motor = _criar_bin_motor(tmp_path)
+    out = podar_envelope(
+        {"exit_code": 0, "stdout": {"texto": payload_json, "truncado": False, "bytes_total": len(payload_json)}},
+        verbo="motor",
+        argv=[str(bin_motor), "rag", "buscar", "casa", "teste"],
+        binario=bin_motor,
+        sessao_id="s-json",
+        alca="motor buscar",
+        derrame_dir=tmp_path / "derrame",
+        ledger_dir=tmp_path / "ledger",
+        faces=FACES_MOTOR,
+    )
+    assert "blob" not in out["poda"]["lavado"]
+    assert json.loads(out["stdout"]["texto"])["cobertura"] == "boa"
+
+
+def test_poda_constitutiva_nao_mutila_conteudo_longo_nem_repeticoes(tmp_path: Path):
+    bin_doc = tmp_path / "docbin"
+    bin_doc.write_text("#!/bin/sh\n# poda: constitutiva\n# atos: ler (leitura, x)\n", encoding="utf-8")
+    texto = ("linha igual\n" * 6) + ("a" * 2500)
+    out = podar_envelope(
+        {"exit_code": 0, "stdout": {"texto": texto, "truncado": False, "bytes_total": len(texto)}},
+        verbo="docbin",
+        argv=[str(bin_doc), "ler"],
+        binario=bin_doc,
+        sessao_id="s-const",
+        alca="docbin ler",
+        derrame_dir=tmp_path / "derrame",
+        ledger_dir=tmp_path / "ledger",
+    )
+    assert out["poda"]["perfil"] == "constitutiva"
+    assert "blob" not in out["poda"]["lavado"]
+    assert "repeticao" not in out["poda"]["lavado"]
+    assert out["stdout"]["texto"] == texto
+
+
+def test_pf_poda_zero_desliga_poda_no_envelope(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("PF_PODA", "0")
+    bin_motor = _criar_bin_motor(tmp_path)
+    bruto = "\x1b[31m" + ("x" * 3000) + "\x1b[0m"
+    out = podar_envelope(
+        {"exit_code": 0, "stdout": {"texto": bruto, "truncado": False, "bytes_total": len(bruto)}},
+        verbo="motor",
+        argv=[str(bin_motor), "listar"],
+        binario=bin_motor,
+        sessao_id="s-off",
+        alca="motor listar",
+        derrame_dir=tmp_path / "derrame",
+        ledger_dir=tmp_path / "ledger",
+        cap=500,
+        faces=FACES_MOTOR,
+    )
+    assert out["poda"]["desligada"] is True
+    assert out["stdout"]["texto"] == bruto
+    assert out["stdout"]["truncado"] is False
