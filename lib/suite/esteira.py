@@ -904,6 +904,21 @@ def venv_de_teste(projeto: Path) -> Path:
     return destino
 
 
+RELEASE_PADRAO = Path("/opt/platafirma/current")
+FONTES_RELEASE_RO = ("casa-espelho", "harness")
+
+
+def _montagens_release_ro() -> list[tuple[Path, str]]:
+    """Monta em leitura as fontes servidas da casa e do harness no caminho canônico da release (DT 935)."""
+    raiz_host = Path((os.environ.get("PLATAFIRMA_RELEASE") or "").strip() or str(RELEASE_PADRAO))
+    montagens: list[tuple[Path, str]] = []
+    for nome in FONTES_RELEASE_RO:
+        cand = raiz_host / nome
+        if cand.is_dir():
+            montagens.append((cand.resolve(), str(RELEASE_PADRAO / nome)))
+    return montagens
+
+
 class ExecutorIsoladoUnidade:
     """Executor isolado real: roda os casos em `systemd-run` com rede privada e `bwrap`."""
 
@@ -953,6 +968,7 @@ class ExecutorIsoladoUnidade:
                 entrada=None,
                 saida=saida_dir,
                 ambiente=venv,
+                montagens_ro=_montagens_release_ro(),
                 rede=False,
                 prazo=self.prazo_s,
             )
