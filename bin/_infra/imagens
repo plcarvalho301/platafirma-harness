@@ -101,13 +101,24 @@ def _refs_conteineres() -> dict[str, list[str]]:
     for d in _linhas_json(proc, "docker ps"):
         img = (d.get("Image") or "").strip()
         nome = (d.get("Names") or d.get("ID") or "").strip()
-        if img:
-            refs.setdefault(img, []).append(nome)
+        if not img:
+            continue
+        refs.setdefault(img, []).append(nome)
+        if "@" in img:
+            base, digest = img.split("@", 1)
+            if digest:
+                refs.setdefault(digest, []).append(nome)
+            if base:
+                refs.setdefault(base, []).append(nome)
+        elif ":" not in img:
+            refs.setdefault(f"{img}:latest", []).append(nome)
     return refs
 
 
 def _chaves_imagem(ref: str, img_id: str) -> list[str]:
     chaves = [ref]
+    if ref.endswith(":latest"):
+        chaves.append(ref.removesuffix(":latest"))
     if img_id:
         chaves.append(img_id)
         curto = img_id.removeprefix("sha256:")[:CURTO_LEN]
