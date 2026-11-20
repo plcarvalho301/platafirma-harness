@@ -50,6 +50,31 @@ def test_todo_verbo_visivel_tem_descricao_no_manifesto(registro):
         assert len(desc.strip()) > 20, f"{slug}: descricao curta demais"
 
 
+def _descricoes_visiveis(registro: dict) -> list[tuple[str, str]]:
+    saida: list[tuple[str, str]] = []
+    for secao in ("verbos", "transporte"):
+        for slug, meta in registro[secao].items():
+            if (meta or {}).get("modelo", True) is False:
+                continue
+            saida.append((f"{secao}.{slug}", ((meta or {}).get("descricao") or "").strip()))
+    return saida
+
+
+def test_nenhuma_descricao_ultrapassa_teto_1024_chars(registro):
+    """DT 944: clientes MCP (Antigravity/Gemini) descartam tools com description > 1024 chars."""
+    excedentes = [
+        f"{chave} ({len(desc)} chars)"
+        for chave, desc in _descricoes_visiveis(registro)
+        if len(desc) > 1024
+    ]
+    assert not excedentes, f"descrições acima de 1024 chars: {excedentes}"
+
+
+def test_repo_nao_esta_retido(registro):
+    """DT 944: repo deve ficar exposto de forma estável no catálogo da porta."""
+    assert not registro["verbos"]["repo"].get("retido", False)
+
+
 def test_faces_da_borda_saem_do_registro(registro):
     faces: dict[str, list[str]] = {}
     for slug, v in registro["verbos"].items():
