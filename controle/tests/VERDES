@@ -29,6 +29,7 @@ tests/test_dt_202_tipos_fila.py | lib/fila_tipos.py bin/_fila/streams.py control
 tests/test_contrato_conferir.py | bin/acervo bin/_acervo/** bin/chat bin/conferir bin/infra bin/_infra/** bin/mesa bin/motor bin/_motor/** bin/release bin/_release/** bin/repo bin/sessao bin/_sessao/** bin/tarefas bin/teste bin/_lint/** bin/_minuta/** skills/**
 tests/test_contrato_infra.py | bin/conferir bin/infra bin/_infra/** bin/_release/**
 tests/test_contrato_monta_sessao.py | bin/acervo bin/_acervo/** bin/chat bin/mesa bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/sessao bin/_sessao/** bin/sinal bin/teste bin/_release/** registro/** recuperacao/** politica-acesso/**
+tests/test_abertura_tronco.py | lib/abertura/**
 tests/test_conferir_veredito.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/fila bin/_fila/** bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste bin/_lint/** recuperacao/** registro/**
 tests/test_conferir_diagrama_kroki.py | bin/conferir bin/_release/**
 tests/test_contrato_diagrama.py | bin/acervo bin/_acervo/** bin/conferir bin/curar bin/lint bin/_lint/** bin/motor bin/_motor/** bin/repo bin/sessao bin/_sessao/** bin/situacao bin/_minuta/**
