@@ -362,7 +362,11 @@ def _ato_corpo(argv: list[str]) -> int:
     except Fora as erro:
         return _erro(str(erro), 3, como_json=como_json)
     if existente is None:
-        return _erro(f"item {chave_alvo} não encontrado na lousa: crie antes com `mesa item`", 2, como_json=como_json)
+        return _erro(
+            f"item {chave_alvo} não encontrado na lousa (cadeira: {cadeira}): crie antes com `mesa item`",
+            2,
+            como_json=como_json,
+        )
 
     try:
         novo_corpo = editar_corpo(existente.corpo, _edicao_de_args(args))
@@ -429,7 +433,7 @@ def _ato_ver(argv: list[str]) -> int:
         except Fora as erro:
             return _erro(str(erro), 3, como_json=como_json)
         if item is None:
-            return _erro(f"item {chave_alvo} não encontrado na lousa", 2, como_json=como_json)
+            return _erro(f"item {chave_alvo} não encontrado na lousa (cadeira: {cadeira})", 2, como_json=como_json)
         if como_json:
             dado = item.como_dict()
             dado["teto_corpo"] = TETO_CORPO_CHARS

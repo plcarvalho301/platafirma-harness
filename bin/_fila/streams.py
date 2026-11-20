@@ -213,116 +213,12 @@ def valida_persona(p: str, json_mode: bool = False):
     sys.exit(1)
 
 
-def _extrai_cadeira_de_texto(bruto: str) -> str:
-    texto = (bruto or "").strip()
-    if not texto:
-        return ""
-    if texto.startswith("{"):
-        try:
-            d = json.loads(texto)
-            if isinstance(d, dict):
-                cad = d.get("cadeira") or d.get("PF_CADEIRA") or d.get("PLATAFIRMA_CADEIRA") or ""
-                if isinstance(cad, str) and cad.strip():
-                    return cad.strip()
-        except Exception:
-            pass
-    for linha in texto.splitlines():
-        linha = linha.strip()
-        for prefixo in ("PF_CADEIRA=", "PLATAFIRMA_CADEIRA=", "cadeira=", "cadeira:"):
-            if linha.startswith(prefixo):
-                val = linha[len(prefixo):].strip().strip("\"'")
-                if val:
-                    return val
-    if "\n" not in texto and " " not in texto and ":" not in texto:
-        return texto
-    return ""
-
-
-def mem_conn():
-    host = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
-    port = int(os.environ.get("MEM_REDIS_PORT", "6380"))
-    return redis.Redis(host=host, port=port, decode_responses=True,
-                       socket_connect_timeout=1, socket_timeout=1)
-
-
-def _resolve_cadeira_por_sessao(sid: str) -> str:
-    """Resolve a cadeira a partir do id/arquivo da sessao (DT 409)."""
-    sid = (sid or "").strip()
-    if not sid or sid == "-":
-        return ""
-
-    # 1. Arquivo de estado da sessao (explicito no env, caminho direto ou em diretorio de sessao)
-    candidatos_arq = []
-    for var in ("PLATAFIRMA_SESSAO_ARQUIVO", "PF_SESSAO_ARQUIVO"):
-        v = (os.environ.get(var) or "").strip()
-        if v:
-            candidatos_arq.append(v)
-    if os.path.isfile(sid):
-        candidatos_arq.append(sid)
-    dirs_sessao = []
-    for var in ("PLATAFIRMA_SESSAO_DIR", "PF_SESSAO_DIR"):
-        v = (os.environ.get(var) or "").strip()
-        if v:
-            dirs_sessao.append(v)
-    try:
-        dirs_sessao.append(str(instancia() / "var" / "sessao"))
-    except Exception:
-        pass
-    for d in dirs_sessao:
-        if not d or not os.path.isdir(d):
-            continue
-        for nome in (f"{sid}.json", f"sessao-{sid}.json", sid):
-            p = os.path.join(d, nome)
-            if os.path.isfile(p):
-                candidatos_arq.append(p)
-        if len(sid) >= 4:
-            try:
-                for entrada in os.scandir(d):
-                    if entrada.is_file() and (
-                        entrada.name.startswith(sid) or entrada.name.startswith(f"sessao-{sid}")
-                    ):
-                        candidatos_arq.append(entrada.path)
-            except OSError:
-                pass
-    for arq in candidatos_arq:
-        try:
-            with open(arq, encoding="utf-8") as f:
-                cad = _extrai_cadeira_de_texto(f.read())
-                if cad:
-                    return cad
-        except OSError:
-            pass
-
-    # 2. Chave viva `sessao:<sid>` no msg-mem (ou no cliente Redis mockado)
-    for fabrica in (mem_conn, r_conn):
-        try:
-            rc_s = fabrica()
-        except Exception:
-            continue
-        if not hasattr(rc_s, "get"):
-            continue
-        try:
-            bruto = rc_s.get(f"sessao:{sid}")
-            if isinstance(bruto, str) and bruto.strip():
-                cad = _extrai_cadeira_de_texto(bruto)
-                if cad:
-                    return cad
-            if len(sid) >= 4 and hasattr(rc_s, "scan_iter"):
-                cads = set()
-                for ch in rc_s.scan_iter(match=f"sessao:{sid}*", count=50):
-                    b = rc_s.get(ch)
-                    if isinstance(b, str):
-                        c = _extrai_cadeira_de_texto(b)
-                        if c:
-                            cads.add(c)
-                if len(cads) == 1:
-                    return next(iter(cads))
-        except Exception:
-            continue
-    return ""
-
-
 def resolve_eu(args) -> str:
+    """Identidade lida, nunca resolvida (arq:0110 §5, spec fila §3, DT 948).
+
+    A porta resolve `sessao:{id}` e injeta `PF_CADEIRA`; o verbo nunca lê Valkey
+    nem arquivos de sessão para descobrir a cadeira.
+    """
     eu = (
         getattr(args, "eu", None)
         or os.environ.get("PF_CADEIRA", "")
@@ -336,17 +232,16 @@ def resolve_eu(args) -> str:
             or os.environ.get("PF_SESSAO_ID", "")
         ).strip()
         if sid and sid != "-":
-            eu = _resolve_cadeira_por_sessao(sid)
-        if not eu:
-            if sid and sid != "-":
-                msg = (f"sessao {sid} sem cadeira resolvida (expirada ou sem cadeira): "
-                       "reabra com monta_sessao(cadeira=<slug>) ou passe --eu <cadeira>")
-            else:
-                msg = "sem cadeira na sessão: abra com monta_sessao(cadeira=<slug>) ou passe --eu <cadeira>"
-            if _json_mode(args):
-                _falha_json(msg, 3)
-            sys.stderr.write(f"erro: {msg}\n")
-            sys.exit(3)
+            msg = (
+                f"PF_CADEIRA ausente na sessão {sid}: "
+                "reabra com monta_sessao(cadeira=<slug>) ou passe --eu <cadeira>"
+            )
+        else:
+            msg = "sem cadeira na sessão (PF_CADEIRA ausente): abra com monta_sessao(cadeira=<slug>) ou passe --eu <cadeira>"
+        if _json_mode(args):
+            _falha_json(msg, 3)
+        sys.stderr.write(f"erro: {msg}\n")
+        sys.exit(3)
     # Case/prefixo fossil na entrada (PF_CADEIRA legado, --eu digitado) -> slug puro.
     canon = canoniza_persona(eu)
     return canon if canon else eu
