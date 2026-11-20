@@ -633,5 +633,55 @@ def test_teto_do_corpo_barra_escrita_e_nunca_quebra_leitura_nem_vaza_na_pauta(tm
     assert editar_corpo("abcdefg", EdicaoDeCorpo(antes="efg", depois=""), teto=6) == "abcd"
 
 
+def _atos_da_descricao(descricao: str) -> list[str]:
+    import re
+
+    m = re.search(r"\batos:\s*([^·\n]+)", descricao)
+    assert m, f"descricao sem bloco 'atos:': {descricao!r}"
+    bloco = re.sub(r"\([^)]*\)", "", m.group(1))
+    return [parte.strip() for parte in bloco.split(",") if parte.strip()]
+
+
+def _atos_validos_do_mesa() -> tuple[str, ...]:
+    import ast
+
+    arvore = ast.parse(MESA.read_text(encoding="utf-8"))
+    for no in arvore.body:
+        if isinstance(no, ast.Assign):
+            for alvo in no.targets:
+                if isinstance(alvo, ast.Name) and alvo.id == "ATOS_VALIDOS":
+                    valor = ast.literal_eval(no.value)
+                    assert isinstance(valor, tuple) and valor
+                    return tuple(str(a) for a in valor)
+    raise AssertionError("bin/mesa sem constante ATOS_VALIDOS")
+
+
+def test_atos_do_mesa_no_registro_batem_com_o_verbo():
+    """DT 934: a lista de atos na descrição de mesa em porta.yaml não diverge de bin/mesa."""
+    import ast
+
+    import yaml
+
+    atos_verbo = _atos_validos_do_mesa()
+    registro = yaml.safe_load((HARNESS_DIR / "registro" / "porta.yaml").read_text(encoding="utf-8"))
+    desc = registro["verbos"]["mesa"]["descricao"]
+    atos_desc = _atos_da_descricao(desc)
+    assert len(atos_desc) == len(set(atos_desc)), f"atos duplicados na descrição: {atos_desc}"
+    assert set(atos_desc) == set(atos_verbo), (
+        f"descrição de mesa em porta.yaml ({atos_desc}) diverge de bin/mesa ({list(atos_verbo)})"
+    )
+
+    doc = ast.get_docstring(ast.parse(MESA.read_text(encoding="utf-8"))) or ""
+    assert set(_atos_da_descricao(doc)) == set(atos_verbo)
+
+    ajuda = _rodar_mesa(["--help"])
+    assert ajuda.returncode == 0
+    assert f"<{'|'.join(atos_verbo)}>" in ajuda.stdout
+
+    recusa = _rodar_mesa(["substituir"])
+    assert recusa.returncode == 2
+    assert f"atos disponíveis: {', '.join(atos_verbo)}" in recusa.stderr
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, *sys.argv[1:]]))
