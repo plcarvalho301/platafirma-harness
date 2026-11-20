@@ -69,17 +69,19 @@ import subprocess
 import sys
 from pathlib import Path
 
-def _limpar_ambiente():
-    os.makedirs("/saida/tmp", exist_ok=True)
-    os.makedirs("/saida/pytest_tmp", exist_ok=True)
-    os.makedirs("/saida/pytest_cache", exist_ok=True)
+def _limpar_ambiente(saida_dir: Path, manter_home: bool = False):
+    tmp_dir = saida_dir / "tmp"
+    os.makedirs(tmp_dir, exist_ok=True)
+    os.makedirs(saida_dir / "pytest_tmp", exist_ok=True)
+    os.makedirs(saida_dir / "pytest_cache", exist_ok=True)
     for k in list(os.environ):
         if k.startswith(("PF_", "OLARIA_", "CASA_PG_", "POSTGRES_")):
             os.environ.pop(k, None)
-    os.environ["TMPDIR"] = "/saida/tmp"
-    os.environ["TEMP"] = "/saida/tmp"
-    os.environ["TMP"] = "/saida/tmp"
-    os.environ["HOME"] = "/saida/tmp"
+    os.environ["TMPDIR"] = str(tmp_dir)
+    os.environ["TEMP"] = str(tmp_dir)
+    os.environ["TMP"] = str(tmp_dir)
+    if not manter_home:
+        os.environ["HOME"] = str(tmp_dir)
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 
 def _montar_pythonpath(raiz: Path, casos_py: list[str]) -> str:
@@ -98,41 +100,46 @@ def _montar_pythonpath(raiz: Path, casos_py: list[str]) -> str:
         caminhos.append(os.environ["PYTHONPATH"])
     return os.pathsep.join(dict.fromkeys(caminhos))
 
-def _rodar_caso_py(raiz: Path, id_caso: str, py_path: str) -> dict:
-    rel_caso = Path("/saida") / f"caso_{abs(hash(id_caso))}.json"
-    rel_caso.unlink(missing_ok=True)
-    worker = Path("/saida/_pytest_worker.py")
+def _rodar_casos_py_lote(raiz: Path, casos_py: list[str], py_path: str, saida_dir: Path) -> dict:
+    if not casos_py:
+        return {}
+    arq_lote = saida_dir / "casos_py.json"
+    rel_lote = saida_dir / "res_py.json"
+    arq_lote.write_text(json.dumps(casos_py, ensure_ascii=False), encoding="utf-8")
+    rel_lote.unlink(missing_ok=True)
+    worker = saida_dir / "_pytest_worker.py"
     env = dict(os.environ)
     env["PYTHONPATH"] = py_path
-    env["ESTEIRA_CASO_REL"] = str(rel_caso)
+    env["ESTEIRA_LOTE_REL"] = str(rel_lote)
+    env["ESTEIRA_BASETEMP"] = str(saida_dir / "pytest_tmp")
     proc = subprocess.run(
-        [
-            sys.executable,
-            str(worker),
-            id_caso,
-        ],
+        [sys.executable, str(worker), str(arq_lote)],
         cwd=str(raiz),
         env=env,
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=max(120, min(600, len(casos_py) * 4)),
         check=False,
     )
     saida = ((proc.stdout or "") + "\\n" + (proc.stderr or "")).strip()
-    if rel_caso.is_file():
+    if rel_lote.is_file():
         try:
-            dados = json.loads(rel_caso.read_text(encoding="utf-8"))
-            if isinstance(dados, dict) and "aprovado" in dados:
-                return {
-                    "aprovado": bool(dados["aprovado"]) and proc.returncode == 0,
-                    "saida": str(dados.get("saida") or saida)[-2000:],
-                }
+            dados = json.loads(rel_lote.read_text(encoding="utf-8"))
+            if isinstance(dados, dict):
+                out = {}
+                for c in casos_py:
+                    item = dados.get(c)
+                    if isinstance(item, dict):
+                        out[c] = {
+                            "aprovado": bool(item.get("aprovado", False)),
+                            "saida": str(item.get("saida") or saida)[-2000:],
+                        }
+                    else:
+                        out[c] = {"aprovado": False, "saida": saida[-2000:] or "caso nao coletado"}
+                return out
         except Exception:
             pass
-    return {
-        "aprovado": proc.returncode == 0,
-        "saida": saida[-2000:],
-    }
+    return {c: {"aprovado": False, "saida": saida[-2000:]} for c in casos_py}
 
 def _rodar_caso_script(raiz: Path, runner: str, id_caso: str) -> dict:
     rel_arq = id_caso.split("::", 1)[0]
@@ -151,21 +158,22 @@ def _rodar_caso_script(raiz: Path, runner: str, id_caso: str) -> dict:
     }
 
 def main() -> int:
-    _limpar_ambiente()
     arq_pedido = Path(sys.argv[1])
     arq_saida = Path(sys.argv[2])
+    saida_dir = arq_saida.parent
     pedido = json.loads(arq_pedido.read_text(encoding="utf-8"))
     casos = list(pedido.get("casos") or [])
-    raiz = Path("/receita")
+    raiz = Path(pedido.get("raiz") or "/receita")
+    _limpar_ambiente(saida_dir, manter_home=bool(pedido.get("raiz")))
 
     casos_py = [c for c in casos if c.split("::", 1)[0].endswith(".py")]
     py_path = _montar_pythonpath(raiz, casos_py)
 
-    resultados = {}
+    resultados = _rodar_casos_py_lote(raiz, casos_py, py_path, saida_dir)
     for id_caso in casos:
         rel_arq = id_caso.split("::", 1)[0]
         if rel_arq.endswith(".py"):
-            resultados[id_caso] = _rodar_caso_py(raiz, id_caso, py_path)
+            continue
         elif rel_arq.endswith(".sh"):
             resultados[id_caso] = _rodar_caso_script(raiz, "bash", id_caso)
         elif rel_arq.endswith((".mjs", ".js")):
@@ -187,12 +195,14 @@ import sys
 from pathlib import Path
 import pytest
 
-class _PluginCaso:
-    def __init__(self) -> None:
-        self.chamado = False
-        self.pulado = False
-        self.aprovado = True
-        self.mensagens: list[str] = []
+class _PluginLote:
+    def __init__(self, pedidos: list[str]) -> None:
+        self.pedidos = set(pedidos)
+        self.por_arquivo = {p.split("::", 1)[0]: p for p in pedidos if p.endswith("::<arquivo>")}
+        self.estado: dict[str, dict] = {
+            p: {"chamado": False, "pulado": False, "falhou": False, "mensagens": []}
+            for p in pedidos
+        }
 
     def pytest_configure(self, config):
         config.addinivalue_line(
@@ -204,47 +214,66 @@ class _PluginCaso:
             "incidente(numero): caso que reproduz um incidente fechado.",
         )
 
+    def _alvos_do_nodeid(self, nodeid: str) -> list[str]:
+        alvos = []
+        base = nodeid.split("[", 1)[0]
+        if nodeid in self.pedidos:
+            alvos.append(nodeid)
+        elif base in self.pedidos:
+            alvos.append(base)
+        arq = nodeid.split("::", 1)[0]
+        if arq in self.por_arquivo:
+            alvos.append(self.por_arquivo[arq])
+        return alvos
+
     def pytest_runtest_logreport(self, report):
-        if report.skipped and not getattr(report, "wasxfail", None):
-            self.pulado = True
-            self.mensagens.append("pulado: " + str(report.longrepr))
-            return
-        if report.when == "call":
-            self.chamado = True
-            if report.failed:
-                self.aprovado = False
-                self.mensagens.append(str(report.longrepr))
-        elif report.when in ("setup", "teardown") and report.failed:
-            self.chamado = True
-            self.aprovado = False
-            self.mensagens.append(str(report.longrepr))
+        for chave in self._alvos_do_nodeid(report.nodeid):
+            st = self.estado[chave]
+            if report.skipped and not getattr(report, "wasxfail", None):
+                st["pulado"] = True
+                st["mensagens"].append("pulado: " + str(report.longrepr))
+                continue
+            if report.when == "call":
+                st["chamado"] = True
+                if report.failed:
+                    st["falhou"] = True
+                    st["mensagens"].append(str(report.longrepr))
+            elif report.when in ("setup", "teardown") and report.failed:
+                st["chamado"] = True
+                st["falhou"] = True
+                st["mensagens"].append(str(report.longrepr))
 
 def main() -> int:
-    alvo = sys.argv[1]
-    rel = os.environ.get("ESTEIRA_CASO_REL")
-    if "::" in alvo:
-        arq, nome = alvo.split("::", 1)
-        if nome == "<arquivo>":
-            alvo = arq
-    plugin = _PluginCaso()
-    cod = pytest.main(
+    arq_lote = Path(sys.argv[1])
+    pedidos = json.loads(arq_lote.read_text(encoding="utf-8"))
+    alvos_pytest = []
+    for p in pedidos:
+        if "::" in p and p.split("::", 1)[1] == "<arquivo>":
+            a = p.split("::", 1)[0]
+        else:
+            a = p
+        if a not in alvos_pytest:
+            alvos_pytest.append(a)
+    plugin = _PluginLote(pedidos)
+    basetemp = os.environ.get("ESTEIRA_BASETEMP", "/saida/pytest_tmp")
+    pytest.main(
         [
             "-p",
             "no:cacheprovider",
-            "--basetemp=/saida/pytest_tmp",
+            f"--basetemp={basetemp}",
             "-q",
-            alvo,
+            *alvos_pytest,
         ],
         plugins=[plugin],
     )
-    # o caso pulado de propósito (marca skip no código) não reprova: roda, e diz que pulou
-    ok = (cod == 0) and (plugin.chamado or plugin.pulado) and plugin.aprovado
+    saida = {}
+    for p, st in plugin.estado.items():
+        ok = (st["chamado"] or st["pulado"]) and (not st["falhou"])
+        saida[p] = {"aprovado": ok, "saida": "\\n".join(st["mensagens"])}
+    rel = os.environ.get("ESTEIRA_LOTE_REL")
     if rel:
-        Path(rel).write_text(
-            json.dumps({"aprovado": ok, "saida": "\\n".join(plugin.mensagens)}, ensure_ascii=False),
-            encoding="utf-8",
-        )
-    return 0 if ok else 1
+        Path(rel).write_text(json.dumps(saida, ensure_ascii=False), encoding="utf-8")
+    return 0 if all(v["aprovado"] for v in saida.values()) else 1
 
 if __name__ == "__main__":
     raise SystemExit(main())
@@ -922,23 +951,95 @@ def _montagens_release_ro() -> list[tuple[Path, str]]:
 class ExecutorIsoladoUnidade:
     """Executor isolado real: roda os casos em `systemd-run` com rede privada e `bwrap`."""
 
-    def __init__(self, prazo_s: float = 180.0, venv_pytest: Path | None = None) -> None:
+    def __init__(
+        self,
+        prazo_s: float = 180.0,
+        venv_pytest: Path | None = None,
+        casos_com_exige: Iterable[str] = (),
+    ) -> None:
         self.prazo_s = prazo_s
         self.venv_pytest = venv_pytest
+        self.casos_com_exige = set(casos_com_exige)
 
     def __call__(self, arvore: Path, ids_casos: list[str]) -> dict[str, dict[str, Any]]:
         if not ids_casos:
             return {}
-        if self.venv_pytest is not None:
-            return self._rodar_lote(arvore, ids_casos, self.venv_pytest)
-        por_projeto: dict[Path | None, list[str]] = {}
-        for id_caso in ids_casos:
-            por_projeto.setdefault(projeto_do_caso(arvore, id_caso), []).append(id_caso)
+        sem_exige = [c for c in ids_casos if c not in self.casos_com_exige]
+        com_exige = [c for c in ids_casos if c in self.casos_com_exige]
         resultados: dict[str, dict[str, Any]] = {}
-        for projeto, ids in por_projeto.items():
-            venv = venv_de_teste(projeto) if projeto is not None else _resolver_venv_pytest()
-            resultados.update(self._rodar_lote(arvore, ids, venv))
+        for grupo, usar_host in ((sem_exige, False), (com_exige, True)):
+            if not grupo:
+                continue
+            if self.venv_pytest is not None:
+                resultados.update(
+                    self._rodar_lote_host(arvore, grupo, self.venv_pytest)
+                    if usar_host
+                    else self._rodar_lote(arvore, grupo, self.venv_pytest)
+                )
+                continue
+            por_projeto: dict[Path | None, list[str]] = {}
+            for id_caso in grupo:
+                por_projeto.setdefault(projeto_do_caso(arvore, id_caso), []).append(id_caso)
+            for projeto, ids in por_projeto.items():
+                venv = venv_de_teste(projeto) if projeto is not None else _resolver_venv_pytest()
+                resultados.update(
+                    self._rodar_lote_host(arvore, ids, venv)
+                    if usar_host
+                    else self._rodar_lote(arvore, ids, venv)
+                )
         return resultados
+
+    def _rodar_lote_host(self, arvore: Path, ids_casos: list[str], venv_base: Path) -> dict[str, dict[str, Any]]:
+        """Executa casos com `@pytest.mark.exige(...)` no venv do projeto sem segredos da casa no ambiente."""
+        venv = Path(venv_base).resolve()
+        py_bin = venv / "bin" / "python"
+        if not py_bin.exists():
+            py_bin = Path(sys.executable).resolve()
+        with tempfile.TemporaryDirectory(prefix="esteira-exige-") as tmp_dir:
+            saida_dir = Path(tmp_dir)
+            (saida_dir / "tmp").mkdir(exist_ok=True)
+            (saida_dir / "pytest_tmp").mkdir(exist_ok=True)
+            (saida_dir / "pytest_cache").mkdir(exist_ok=True)
+            token = uuid.uuid4().hex
+            _escrever_arquivo_atomico(saida_dir / "_runner.py", _SCRIPT_RUNNER_ISOLADO)
+            _escrever_arquivo_atomico(saida_dir / "_pytest_worker.py", _SCRIPT_PYTEST_WORKER)
+            _escrever_arquivo_atomico(
+                saida_dir / "pedido.json",
+                json.dumps({"casos": list(ids_casos), "raiz": str(arvore.resolve())}, ensure_ascii=False),
+            )
+            nome_res = f"res-{token}.json"
+            env = {
+                k: v
+                for k, v in os.environ.items()
+                if not k.startswith(("PF_", "OLARIA_", "CASA_PG_", "POSTGRES_"))
+            }
+            env.setdefault("DOCKER_HOST", f"unix:///run/user/{os.getuid()}/docker.sock")
+            proc = subprocess.run(
+                [str(py_bin), str(saida_dir / "_runner.py"), str(saida_dir / "pedido.json"), str(saida_dir / nome_res)],
+                cwd=str(arvore.resolve()),
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=self.prazo_s,
+                check=False,
+            )
+            arq_res = saida_dir / nome_res
+            if proc.returncode != 0 or not arq_res.is_file():
+                det = ((proc.stderr or "") + "\n" + (proc.stdout or "")).strip()[-500:]
+                return {
+                    c: {"aprovado": False, "saida": f"execução com exige terminou com status {proc.returncode}: {det}"}
+                    for c in ids_casos
+                }
+            dados = json.loads(arq_res.read_text(encoding="utf-8"))
+            mapa_casos = dados.get("casos") if isinstance(dados, dict) else {}
+            return {
+                c: (
+                    {"aprovado": bool(mapa_casos[c].get("aprovado", False)), "saida": str(mapa_casos[c].get("saida") or "")}
+                    if isinstance(mapa_casos.get(c), dict)
+                    else {"aprovado": False, "saida": "caso sem saída no lote com exige"}
+                )
+                for c in ids_casos
+            }
 
     def _rodar_lote(self, arvore: Path, ids_casos: list[str], venv_base: Path) -> dict[str, dict[str, Any]]:
         venv = Path(venv_base).resolve()
@@ -1193,7 +1294,9 @@ def rodar(alvo: str | Path | None = None, **opcoes: Any) -> VereditoRodada:
     if not nao_pode_rodar and plano.casos:
         cliente_balde = coletor_mod.resolver_balde(balde)
         abertas = cliente_balde.listar_abertas()
-        exec_fn = executor_isolado or ExecutorIsoladoUnidade()
+        exec_fn = executor_isolado or ExecutorIsoladoUnidade(
+            casos_com_exige={c.id_caso for c in plano.casos if c.exige}
+        )
         try:
             resultados_brutos = _executar_com_repeticao_erratico(
                 raiz,
