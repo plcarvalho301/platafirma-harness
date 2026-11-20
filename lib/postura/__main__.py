@@ -52,7 +52,7 @@ def _copia_da_arvore(base: Path) -> Path:
     destino = Path(tempfile.mkdtemp(prefix="postura-ensaio-"))
     shutil.copytree(base / doc.PASTA, destino / doc.PASTA)
     (destino / doc.EIXOS).parent.mkdir(parents=True)
-    shutil.copy(base / doc.EIXOS, destino / doc.EIXOS)
+    shutil.copy(doc.caminho_eixos(base), destino / doc.EIXOS)
     return destino
 
 def _passo(titulo: str) -> None:

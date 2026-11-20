@@ -13,7 +13,19 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
-EIXOS = "outros_repos/conhecimento/ontologia/eixos-de-postura.yaml"
+EIXOS = "ontologia/eixos-de-postura.yaml"
+
+
+def caminho_eixos(base: Path) -> Path:
+    """Resolve ontologia/eixos-de-postura.yaml na árvore dada, no conhecimento irmão ou na release no ar (#4402)."""
+    for cand in (
+        base / EIXOS,
+        base.parent / "conhecimento" / EIXOS,
+        Path("/opt/platafirma/current/conhecimento") / EIXOS,
+    ):
+        if cand.is_file():
+            return cand
+    return base / EIXOS
 PASTA = "instancias"
 RESERVA = "postura"                      # a postura da casa: a reserva, que não marca eixo
 SECAO_DA_POSTURA = "Para que lado puxa"
@@ -89,7 +101,7 @@ def sha_do_blob(conteudo: bytes) -> str:
 def ler_eixos(base: Path) -> dict[str, Eixo]:
     """Os eixos vigentes, por slug. A marca do documento casa com o rótulo, que leva acento."""
     import yaml
-    dado = yaml.safe_load((base / EIXOS).read_text(encoding="utf-8")) or {}
+    dado = yaml.safe_load(caminho_eixos(base).read_text(encoding="utf-8")) or {}
     eixos = {}
     for e in dado.get("eixos") or ():
         if e.get("estado", "vigente") != "vigente":

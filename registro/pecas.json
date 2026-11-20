@@ -3,10 +3,10 @@
   "casa": {
     "dono": "dados",
     "origem": "release",
-    "dir": "casa-espelho",
-    "cwd": "outros_repos/conhecimento/rag",
+    "dir": "conhecimento",
+    "cwd": "rag",
     "modulo": "motor_acervo.casa",
-    "pythonpath": ["outros_repos/conhecimento/rag"],
+    "pythonpath": ["rag"],
     "python": "rag",
     "ambiente": "banco-casa",
     "teto_s": 600,

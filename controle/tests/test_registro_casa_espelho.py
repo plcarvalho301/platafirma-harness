@@ -223,20 +223,11 @@ def test_espelho_vault_ontologia_resolve_no_registro():
     assert json.loads(VENVS.read_text(encoding="utf-8"))["espelho-vault-ontologia"]["promovida"] is False
 
 
-def test_espelho_conhecimento_resolve_no_registro_com_lock_proprio():
-    """#4330: espelho-conhecimento declara lock e subarvore proprios do espelho (rdflib e owlready2 que a
-    Olaria importa), fora do venv rag de producao, com promovida: false."""
-    r = subprocess.run(
-        ["python3", str(REGISTRO), "espelho-conhecimento"],
-        env={"PATH": "/usr/bin:/bin", "PLATAFIRMA_VENVS": str(VENVS)},
-        capture_output=True, text=True, check=False, timeout=30,
-    )
-    assert r.returncode == 0, r.stderr
-    assert r.stdout.strip() == (
-        f"{ESPELHO}\toutros_repos/conhecimento/rag/uv.lock\t"
-        "outros_repos/conhecimento/rag\tcodigo\tespelho-conhecimento\t-"
-    )
-    assert json.loads(VENVS.read_text(encoding="utf-8"))["espelho-conhecimento"]["promovida"] is False
+def test_espelho_conhecimento_saiu_do_registro_de_venvs():
+    """#4402: espelho-conhecimento e espelho-conversor sairam do registro quando o codigo voltou ao conhecimento."""
+    venvs = json.loads(VENVS.read_text(encoding="utf-8"))
+    assert "espelho-conhecimento" not in venvs
+    assert "espelho-conversor" not in venvs
 
 
 def test_espelho_sem_alvo_roda_portao_das_stacks_e_nao_chama_acervo_ingerir(tmp_path):

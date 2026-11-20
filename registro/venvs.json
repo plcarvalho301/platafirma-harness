@@ -170,20 +170,6 @@
     "familia": "platafirma-ui",
     "lock": "app/rastreador/provas/package-lock.json"
   },
-  "espelho-conhecimento": {
-    "familia": "platafirma-casa-espelho",
-    "esteira": "codigo",
-    "promovida": false,
-    "lock": "outros_repos/conhecimento/rag/uv.lock",
-    "teste": "outros_repos/conhecimento/rag"
-  },
-  "espelho-conversor": {
-    "familia": "platafirma-casa-espelho",
-    "esteira": "codigo",
-    "promovida": false,
-    "lock": "outros_repos/conhecimento/rag/uv.lock",
-    "teste": "outros_repos/conhecimento/conversor/tests"
-  },
   "espelho-diagrama": {
     "familia": "platafirma-casa-espelho",
     "esteira": "codigo",
