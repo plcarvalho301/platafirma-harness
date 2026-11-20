@@ -392,10 +392,22 @@ def _ato_exigir_sessao(entrada: dict[str, Any]) -> tuple[dict[str, Any], int]:
     return {"ok": False, "permitido": False, "recusa": recusa.como_dict()}, 2
 
 
+def _ato_tronco(entrada: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    from abertura.tronco import resolver_tronco
+
+    card = entrada.get("card")
+    if not isinstance(card, dict):
+        return {"processo": None, "passo": None, "sem_processo": True}, 0
+    chapeu = entrada.get("chapeu")
+    decisao_aposta = entrada.get("decisao_aposta")
+    prazo_s = float(entrada.get("prazo_s") or os.environ.get("PF_TRONCO_PRAZO_S") or 8.0)
+    return resolver_tronco(card, chapeu=chapeu, decisao_aposta=decisao_aposta, prazo_s=prazo_s), 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    if not args or args[0] not in ("abrir", "remontar", "exigir-sessao"):
-        print(json.dumps(_erro_recusa("uso-invalido", "uso: python -m abertura abrir|remontar|exigir-sessao"), ensure_ascii=False))
+    if not args or args[0] not in ("abrir", "remontar", "exigir-sessao", "tronco"):
+        print(json.dumps(_erro_recusa("uso-invalido", "uso: python -m abertura abrir|remontar|exigir-sessao|tronco"), ensure_ascii=False))
         return 2
     ato = args[0]
     bruto = sys.stdin.read().strip()
@@ -412,6 +424,8 @@ def main(argv: list[str] | None = None) -> int:
         saida, rc = _ato_abrir(entrada)
     elif ato == "remontar":
         saida, rc = _ato_remontar(entrada)
+    elif ato == "tronco":
+        saida, rc = _ato_tronco(entrada)
     else:
         saida, rc = _ato_exigir_sessao(entrada)
 
