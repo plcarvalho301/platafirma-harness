@@ -30,6 +30,7 @@ from typing import Protocol, runtime_checkable
 PRAZO_S = 4 * 3600      # quatro horas sem chamada da sessão; a porta renova a cada chamada
 ENTIDADES = ("postura", "ritual", "cenario")
 SITUACOES_TRABALHO = frozenset({"em_curso", "guardado"})
+TETO_CORPO_CHARS = 6000  # ~duas folhas A4 de texto corrido; checado só na escrita
 
 
 class Fora(Exception):
@@ -38,6 +39,81 @@ class Fora(Exception):
 
 class OcasiaoAusente(ValueError):
     """Tentativa de guardar trabalho na lousa sem ocasião de voltar."""
+
+
+class CorpoExcedido(ValueError):
+    """Corpo do item excede o teto permitido na escrita."""
+
+
+def validar_teto_corpo(corpo: str, *, teto: int = TETO_CORPO_CHARS) -> None:
+    """Valida o tamanho do corpo apenas na escrita; leitura nunca falha por teto."""
+    if len(corpo) > teto:
+        raise CorpoExcedido(
+            f"corpo excede o teto da lousa ({len(corpo)}/{teto} caracteres): "
+            "apague o que venceu antes de gravar"
+        )
+
+
+@dataclass(frozen=True)
+class EdicaoDeCorpo:
+    """Operação única sobre o corpo de um item da lousa, sem tocar na moldura."""
+
+    anexar: str | None = None
+    antes: str | None = None
+    depois: str | None = None
+    substituir: str | None = None
+    limpar: bool = False
+    todos: bool = False
+
+
+def _anexar_corpo(atual: str, trecho: str) -> str:
+    if not atual:
+        return trecho
+    if atual.endswith("\n") or trecho.startswith("\n"):
+        return atual + trecho
+    return f"{atual}\n{trecho}"
+
+
+def _trocar_trecho_corpo(atual: str, antes: str, depois: str | None, *, todos: bool) -> str:
+    if not antes:
+        raise ValueError("--antes não pode ser vazio")
+    if depois is None:
+        raise ValueError("--antes exige --depois (use --depois '' para apagar o trecho)")
+    ocorrencias = atual.count(antes)
+    if ocorrencias == 0:
+        raise ValueError("trecho não encontrado no corpo do item")
+    if ocorrencias > 1 and not todos:
+        raise ValueError(
+            f"trecho aparece {ocorrencias} vezes no corpo; informe mais contexto ou use --todos"
+        )
+    return atual.replace(antes, depois) if todos else atual.replace(antes, depois, 1)
+
+
+def editar_corpo(atual: str, edicao: EdicaoDeCorpo, *, teto: int = TETO_CORPO_CHARS) -> str:
+    """Edita exclusivamente o corpo do item e valida o resultado contra o teto."""
+    modos = sum(
+        bool(cond)
+        for cond in (
+            edicao.limpar,
+            edicao.substituir is not None,
+            edicao.anexar is not None,
+            edicao.antes is not None,
+        )
+    )
+    if modos != 1:
+        raise ValueError("informe exatamente uma operação: --anexar, --antes/--depois, --substituir ou --limpar")
+
+    if edicao.limpar:
+        novo = ""
+    elif edicao.substituir is not None:
+        novo = edicao.substituir
+    elif edicao.anexar is not None:
+        novo = _anexar_corpo(atual, edicao.anexar)
+    else:
+        novo = _trocar_trecho_corpo(atual, edicao.antes or "", edicao.depois, todos=edicao.todos)
+
+    validar_teto_corpo(novo, teto=teto)
+    return novo
 
 
 def chave(sessao_id: str, entidade: str) -> str:
@@ -118,6 +194,7 @@ class ItemDeTrabalho:
     turno: str | None = None
     estagio: str = ""
     proxima_jogada: str = ""
+    corpo: str = ""
     chapeu: str | None = None
     ocasiao: Ocasiao | None = None
     guardado_em: str | None = None
@@ -154,6 +231,7 @@ class ItemDeTrabalho:
         object.__setattr__(self, "turno", turno_norm)
         object.__setattr__(self, "estagio", (self.estagio or "").strip())
         object.__setattr__(self, "proxima_jogada", (self.proxima_jogada or "").strip())
+        object.__setattr__(self, "corpo", "" if self.corpo is None else str(self.corpo))
         object.__setattr__(self, "chapeu", (self.chapeu or "").strip() or None)
         object.__setattr__(self, "guardado_em", guardado)
         object.__setattr__(self, "atualizado_em", atualizado)
@@ -167,6 +245,7 @@ class ItemDeTrabalho:
             "turno": self.turno,
             "estagio": self.estagio,
             "proxima_jogada": self.proxima_jogada,
+            "corpo": self.corpo,
             "chapeu": self.chapeu,
             "ocasiao": self.ocasiao.como_dict() if self.ocasiao is not None else None,
             "guardado_em": self.guardado_em,
@@ -183,6 +262,7 @@ class ItemDeTrabalho:
             turno=dado.get("turno"),
             estagio=str(dado.get("estagio") or ""),
             proxima_jogada=str(dado.get("proxima_jogada") or ""),
+            corpo=str(dado.get("corpo") or ""),
             chapeu=dado.get("chapeu"),
             ocasiao=Ocasiao.de_dict(dado.get("ocasiao")),
             guardado_em=dado.get("guardado_em"),
@@ -328,6 +408,7 @@ class Lousa:
     def gravar_trabalho(self, cadeira: str, item: ItemDeTrabalho) -> None:
         if item.situacao == "guardado" and (item.ocasiao is None or item.ocasiao.vazia()):
             raise OcasiaoAusente("ocasião de voltar falta para guardar o trabalho")
+        validar_teto_corpo(item.corpo)
         carga = json.dumps(item.como_dict(), ensure_ascii=False)
         self._manda([("HSET", chave_trabalho(cadeira), item.chave, carga)])
 
@@ -382,6 +463,7 @@ class LousaEmMemoria:
         self._checa()
         if item.situacao == "guardado" and (item.ocasiao is None or item.ocasiao.vazia()):
             raise OcasiaoAusente("ocasião de voltar falta para guardar o trabalho")
+        validar_teto_corpo(item.corpo)
         self._trabalhos.setdefault(cadeira.strip(), {})[item.chave] = item.como_dict()
 
     def ler_trabalho(self, cadeira: str, chave_item: str) -> ItemDeTrabalho | None:
@@ -448,6 +530,7 @@ class LousaFixtura:
     def gravar_trabalho(self, cadeira: str, item: ItemDeTrabalho) -> None:
         if item.situacao == "guardado" and (item.ocasiao is None or item.ocasiao.vazia()):
             raise OcasiaoAusente("ocasião de voltar falta para guardar o trabalho")
+        validar_teto_corpo(item.corpo)
         dado = self._ler()
         trabalhos = dado.get("trabalhos")
         if not isinstance(trabalhos, dict):
