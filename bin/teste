@@ -1209,11 +1209,22 @@ alcanca() {  # $1=arquivo da lista (relativo à raiz do repo) $2=globs $3=diff ;
 # arq:0128: linha sem raio não é alcançada por diff nenhum. Só roda quando o próprio arquivo dela
 # mudou ou quando ela entrou ou mudou na lista (`alcanca` com globs vazios).
 
-# Chave do memo do portão: (árvore, chave) na rodada inteira; (árvore, chave, hash da
-# seleção) na parcial. Veredito parcial nunca responde pela rodada inteira.
+# Chave do memo do portão: (árvore, chave, fontes servidas) na rodada inteira; (árvore,
+# chave, fontes servidas, hash da seleção) na parcial. Veredito parcial nunca responde pela
+# rodada inteira. As fontes servidas são a casa-espelho e o harness da release no ar, que a
+# suíte lê em leitura (DT 935): promover uma delas muda o que a mesma árvore mede (DT 954).
+fontes_servidas_hash() {
+  local rel="${PLATAFIRMA_RELEASE:-/opt/platafirma/current}" nome linha=""
+  for nome in casa-espelho harness; do
+    linha="$linha|$nome=$(readlink -f "$rel/$nome" 2>/dev/null || true)"
+  done
+  printf '%s' "$linha" | sha256sum | cut -c1-12
+}
+
 memo_do_portao() {  # $1=vereditos_dir $2=arvore
   local m
   m="$(caminho_veredito "$1" "$2" "$REG_STACK" "$CHAVE_HASH")"
+  m="${m%.json}-rel$(fontes_servidas_hash).json"
   [ -z "${SELECAO_HASH:-}" ] || m="${m%.json}-sel${SELECAO_HASH}.json"
   printf '%s' "$m"
 }
