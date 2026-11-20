@@ -137,11 +137,14 @@ def test_diagrama_resolve_e_teste_roda_sob_venv(tmp_path):
 
     inst = tmp_path / "instancia"
     inst.mkdir()
+    terceiros = tmp_path / "terceiros.json"
+    terceiros.write_text("{}", encoding="utf-8")
     env = {
         "PATH": "/usr/local/bin:/usr/bin:/bin",
         "HOME": str(tmp_path),
         "PLATAFIRMA_BANCADA": str(bancada),
         "PLATAFIRMA_VENVS": str(VENVS),
+        "PLATAFIRMA_TERCEIROS": str(terceiros),
         "PF_CADEIRA": "ti",
         "PF_RELEASE_RAIZ": str(tmp_path / "release"),
         "PLATAFIRMA_INSTANCIA": str(inst),
@@ -186,6 +189,8 @@ def test_diagrama_cai_para_uv_quando_venv_nao_tem_pytest(tmp_path):
 
     inst = tmp_path / "instancia"
     inst.mkdir()
+    terceiros = tmp_path / "terceiros.json"
+    terceiros.write_text("{}", encoding="utf-8")
     cache_uv = os.environ.get("UV_CACHE_DIR") or str(Path.home() / ".cache" / "uv")
     env = {
         "PATH": "/usr/local/bin:/usr/bin:/bin",
@@ -193,6 +198,7 @@ def test_diagrama_cai_para_uv_quando_venv_nao_tem_pytest(tmp_path):
         "UV_CACHE_DIR": cache_uv,
         "PLATAFIRMA_BANCADA": str(bancada),
         "PLATAFIRMA_VENVS": str(VENVS),
+        "PLATAFIRMA_TERCEIROS": str(terceiros),
         "PF_CADEIRA": "ti",
         "PF_RELEASE_RAIZ": str(tmp_path / "release"),
         "PLATAFIRMA_INSTANCIA": str(inst),
