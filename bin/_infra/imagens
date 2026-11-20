@@ -125,54 +125,85 @@ def _associar_conteineres(chaves: list[str], refs: dict[str, list[str]]) -> list
     return sorted(achados)
 
 
-RETENCAO_DIAS = 7.0
 MIN_SHA_TAG_LEN = 7
 
 
 def _shas_release() -> dict[str, str]:
-    """Retorna {sha: 'current'|'anterior'} para todas as famílias em PF_RELEASE_RAIZ."""
+    """Retorna {sha: 'current'} para todas as famílias em PF_RELEASE_RAIZ."""
     raiz = Path(os.environ.get("PF_RELEASE_RAIZ", "/opt/platafirma"))
     if not raiz.is_dir():
         return {}
     shas: dict[str, str] = {}
     try:
-        familias = sorted(p for p in raiz.iterdir() if p.is_dir() and p.name != "current")
+        familias = sorted(p for p in raiz.iterdir() if p.is_dir() and p.name not in ("current", "venv", "terceiros"))
     except OSError:
         return {}
     for fam in familias:
-        for ponteiro in ("current", "anterior"):
-            link = fam / ponteiro
-            if not link.exists():
-                continue
-            try:
-                sha = link.resolve().name
-            except OSError:
-                continue
-            if sha and sha not in ("current", "anterior"):
-                shas.setdefault(sha, ponteiro)
+        link = fam / "current"
+        if not link.exists():
+            continue
+        try:
+            sha = link.resolve().name
+        except OSError:
+            continue
+        if sha and sha != "current":
+            shas.setdefault(sha, "current")
     return shas
 
 
 def _imagens_biblioteca_protegidas() -> dict[str, str]:
-    """Protege platafirma/ui:<versao> de current e anterior: usada em build (COPY --from), sem contêiner ativo."""
+    """Protege platafirma/ui:<versao> do current: usada em build (COPY --from), sem contêiner ativo."""
     raiz = Path(os.environ.get("PF_RELEASE_RAIZ", "/opt/platafirma"))
     protegidas: dict[str, str] = {}
-    for ponteiro in ("current", "anterior"):
-        pkg = raiz / "platafirma-ui" / ponteiro / "src" / "base" / "package.json"
-        if not pkg.is_file():
-            continue
+    pkg = raiz / "platafirma-ui" / "current" / "src" / "base" / "package.json"
+    if pkg.is_file():
         try:
             versao = json.loads(pkg.read_text(encoding="utf-8")).get("version")
         except (OSError, ValueError, AttributeError):
-            continue
+            versao = None
         if versao:
-            protegidas.setdefault(f"platafirma/ui:{versao}", f"biblioteca:{ponteiro}")
+            protegidas[f"platafirma/ui:{versao}"] = "biblioteca:current"
+    return protegidas
+
+
+def _imagens_sob_demanda_protegidas() -> dict[str, str]:
+    """Protege imagens declaradas nos composes sob demanda (x-platafirma.sob_demanda: true) do current."""
+    raiz = Path(os.environ.get("PF_RELEASE_RAIZ", "/opt/platafirma"))
+    if not raiz.is_dir():
+        return {}
+    protegidas: dict[str, str] = {}
+    try:
+        familias = sorted(p for p in raiz.iterdir() if p.is_dir() and p.name.startswith("platafirma-"))
+    except OSError:
+        return {}
+    for fam in familias:
+        cur = fam / "current"
+        if not cur.is_dir():
+            continue
+        try:
+            sha = cur.resolve().name
+        except OSError:
+            continue
+        for pat in ("deploy/*/docker-compose*.y*ml", "deploy/*/compose*.y*ml", "*/docker-compose*.y*ml"):
+            for comp in cur.glob(pat):
+                try:
+                    txt = comp.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                if "sob_demanda" not in txt or not re.search(r"sob_demanda\s*:\s*true", txt, re.IGNORECASE):
+                    continue
+                for m in re.finditer(r"^\s*image\s*:\s*[\"']?([^\s\"'#]+)[\"']?", txt, re.MULTILINE):
+                    img = m.group(1)
+                    img = img.replace("${PF_RELEASE_SHA}", sha).replace("$PF_RELEASE_SHA", sha)
+                    img = re.sub(r"\$\{PF_RELEASE_SHA:-[^}]*\}", sha, img)
+                    if img and "$" not in img:
+                        protegidas.setdefault(img, f"sob-demanda:{comp.parent.name}")
     return protegidas
 
 
 def _motivo_release(tag: str, shas: dict[str, str]) -> str | None:
-    if tag in ("current", "anterior"):
-        return f"release:{tag}"
+    if tag == "current":
+        return "release:current"
     cand = tag.removeprefix("pre-")
     if len(cand) < MIN_SHA_TAG_LEN:
         return None
@@ -182,34 +213,9 @@ def _motivo_release(tag: str, shas: dict[str, str]) -> str | None:
     return None
 
 
-def _idade_dias(d: dict) -> float | None:
-    """Calcula a idade da imagem em dias a partir de CreatedAt ou CreatedSince."""
-    created_at = (d.get("CreatedAt") or "").strip()
-    if created_at:
-        m = re.match(r"^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})", created_at)
-        if m:
-            try:
-                dt = datetime.fromisoformat(f"{m.group(1)}T{m.group(2)}").replace(tzinfo=timezone.utc)
-                return max(0.0, (datetime.now(timezone.utc) - dt).total_seconds() / 86400.0)
-            except ValueError:
-                pass
-    since = (d.get("CreatedSince") or "").strip().lower()
-    if not since:
-        return None
-    if "second" in since or "minute" in since:
-        return 0.0
-    m = re.match(r"^(?:an?|about an?|(\d+))\s+(hour|day|week|month|year)s?\s+ago$", since)
-    if not m:
-        return None
-    n = float(m.group(1) or 1)
-    unidade = m.group(2)
-    fatores = {"hour": 1.0 / 24.0, "day": 1.0, "week": 7.0, "month": 30.0, "year": 365.0}
-    return n * fatores[unidade]
-
-
 def _coletar() -> tuple[list[dict], list[dict]]:
     refs = _refs_conteineres()
-    protegidas = _imagens_biblioteca_protegidas()
+    protegidas = {**_imagens_sob_demanda_protegidas(), **_imagens_biblioteca_protegidas()}
     shas = _shas_release()
     proc = _roda("docker", "images", "--no-trunc", "--format", "{{json .}}")
     imagens_raw: list[dict] = []
@@ -230,7 +236,6 @@ def _coletar() -> tuple[list[dict], list[dict]]:
                 conteineres = [motivo]
         if conteineres and img_id:
             ids_em_uso.add(img_id)
-        idade = _idade_dias(d)
         imagens_raw.append(
             {
                 "id": img_id,
@@ -240,7 +245,6 @@ def _coletar() -> tuple[list[dict], list[dict]]:
                 "tamanho": tam_str,
                 "bytes": _parse_tamanho(tam_str),
                 "criado": criado,
-                "idade_dias": idade,
                 "conteineres": conteineres,
             }
         )
@@ -327,43 +331,28 @@ def _extrair_reclaimed(stdout: str) -> str:
     return ""
 
 
-def _particionar_podaveis(inativas: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Separa inativas em podáveis (> RETENCAO_DIAS) e retidas (<= RETENCAO_DIAS ou idade desconhecida)."""
-    podaveis: list[dict] = []
-    retidas: list[dict] = []
-    for x in inativas:
-        idade = x.get("idade_dias")
-        if idade is not None and idade > RETENCAO_DIAS:
-            podaveis.append(x)
-        else:
-            retidas.append(x)
-    return podaveis, retidas
-
-
 def _executar_prune(inativas: list[dict], em_uso: list[dict]) -> int:
-    podaveis, retidas = _particionar_podaveis(inativas)
-    ficam = len(em_uso) + len(retidas)
-    bytes_podaveis = sum(x["bytes"] for x in podaveis)
-    if not podaveis:
+    ficam = len(em_uso)
+    bytes_podaveis = sum(x["bytes"] for x in inativas)
+    if not inativas:
         resumo = f"limpeza-imagens: 0 saíram, {ficam} ficam (nada a podar)"
         print(resumo)
         _anotar(resumo)
         return SAIDA_OK
 
-    # `docker image prune -a -f` apagaria imagens protegidas sem contêiner (release/biblioteca)
-    # e também sobras <= 7d se não filtradas; quando há retenção, removemos só os alvos podáveis.
+    # `docker image prune -a -f` apagaria imagens protegidas sem contêiner (biblioteca/sob-demanda/release).
     tem_protegida_sem_conteiner = any(
-        c.startswith(("biblioteca:", "release:")) for x in em_uso for c in x["conteineres"]
+        c.startswith(("biblioteca:", "release:", "sob-demanda:")) for x in em_uso for c in x["conteineres"]
     )
     reclaimed = ""
     try:
-        if tem_protegida_sem_conteiner or retidas:
-            alvos = [x["referencia"] if x["repositorio"] != "<none>" else x["id"] for x in podaveis]
+        if tem_protegida_sem_conteiner:
+            alvos = [x["referencia"] if x["repositorio"] != "<none>" else x["id"] for x in inativas]
             alvos = [a for a in alvos if a]
             if alvos:
                 _roda("docker", "image", "rm", "-f", *alvos, timeout=300)
         else:
-            proc = _roda("docker", "image", "prune", "-a", "-f", "--filter", f"until={int(RETENCAO_DIAS * 24)}h", timeout=300)
+            proc = _roda("docker", "image", "prune", "-a", "-f", timeout=300)
             reclaimed = _extrair_reclaimed(proc.stdout)
     except RuntimeError as e:
         print(f"infra: erro: {e}", file=sys.stderr)
@@ -373,7 +362,7 @@ def _executar_prune(inativas: list[dict], em_uso: list[dict]) -> int:
         return SAIDA_MUDA
 
     detalhe = f" ({reclaimed})" if reclaimed else f" (~{_fmt_bytes(bytes_podaveis)})"
-    resumo = f"limpeza-imagens: {len(podaveis)} saíram{detalhe}, {ficam} ficam"
+    resumo = f"limpeza-imagens: {len(inativas)} saíram{detalhe}, {ficam} ficam"
     print(resumo)
     _anotar(resumo)
     return SAIDA_OK
@@ -399,16 +388,13 @@ def cmd_limpar(argv: list[str]) -> int:
         return SAIDA_MUDA
 
     if ver:
-        podaveis, retidas = _particionar_podaveis(inativas)
-        bytes_podaveis = sum(x["bytes"] for x in podaveis)
-        for x in podaveis:
+        bytes_podaveis = sum(x["bytes"] for x in inativas)
+        for x in inativas:
             curto = x["id"].removeprefix("sha256:")[:CURTO_LEN] if x["id"] else "-"
             print(f"sairia: {x['referencia']} ({curto}, {x['tamanho']})")
-        for x in retidas:
-            print(f"fica: {x['referencia']} (retenção <= {int(RETENCAO_DIAS)}d: {x['criado'] or '?'})")
         for x in em_uso:
             print(f"fica: {x['referencia']} (em uso por {', '.join(x['conteineres'])})")
-        print(f"limpeza-imagens: {len(podaveis)} sairiam (~{_fmt_bytes(bytes_podaveis)}), {len(em_uso) + len(retidas)} ficam")
+        print(f"limpeza-imagens: {len(inativas)} sairiam (~{_fmt_bytes(bytes_podaveis)}), {len(em_uso)} ficam")
         return SAIDA_OK
 
     return _executar_prune(inativas, em_uso)

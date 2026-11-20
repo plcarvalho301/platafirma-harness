@@ -1,0 +1,605 @@
+#!/usr/bin/env python3
+"""expurgo — diagnostica e remove fósseis da release no host (card #4404).
+
+Sub-ato interno de `release`: chamado por `bin/release` ao fim da promoção verde e
+importado por `bin/_release/conferir/conferir.py` para `release conferir fossil`.
+
+Regra de layout declarado (card #4404):
+  - Raiz de PF_RELEASE_RAIZ (/opt/platafirma):
+      current/, venv/, terceiros/ e as famílias declaradas em registro/familias.json.
+  - current/:
+      <curto> de cada família declarada, politica-acesso e venv/.
+  - current/venv/:
+      chaves declaradas em registro/venvs.json.
+  - <família>/:
+      .repo.git, current e a árvore <sha> apontada por current.
+  - venv/:
+      apenas os diretórios apontados por atalhos declarados em current/venv/.
+  - terceiros/sha256/:
+      apenas os sha256 declarados em registro/terceiros.json.
+  - imagens Docker:
+      apenas imagens em uso pela release no ar (bin/_infra/imagens).
+
+Em uso (nunca apagado; fica no disco e sai divergente em `release conferir fossil`):
+  - a árvore current da família;
+  - árvore declarada por contêiner existente como working_dir ou origem de bind;
+  - árvore ou venv que é cwd ou executável de processo vivo da conta.
+"""
+from __future__ import annotations
+
+import argparse
+import importlib.machinery
+import importlib.util
+import json
+import os
+import shutil
+import stat
+import subprocess
+import sys
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+@dataclass
+class Fossil:
+    categoria: str
+    caminho: str
+    motivo: str
+    em_uso_por: list[str]
+    removivel: bool
+
+
+def _prod_raiz(valor: str | None = None) -> Path:
+    return Path(valor or os.environ.get("PF_RELEASE_RAIZ", "/opt/platafirma"))
+
+
+def _instancia(valor: str | None = None) -> Path:
+    return Path(valor or os.environ.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa"))
+
+
+def _harness_raiz() -> Path:
+    env_h = os.environ.get("PF_HARNESS_DIR")
+    if env_h and Path(env_h).is_dir():
+        return Path(env_h)
+    return Path(__file__).resolve().parents[2]
+
+
+def _caminho_familias(prod_raiz: Path | None = None) -> Path:
+    if os.environ.get("PLATAFIRMA_FAMILIAS"):
+        return Path(os.environ["PLATAFIRMA_FAMILIAS"])
+    if prod_raiz:
+        cand = prod_raiz / "platafirma-harness" / "current" / "registro" / "familias.json"
+        if cand.is_file():
+            return cand
+    return _harness_raiz() / "registro" / "familias.json"
+
+
+def _caminho_venvs(prod_raiz: Path | None = None) -> Path:
+    if os.environ.get("PLATAFIRMA_VENVS"):
+        return Path(os.environ["PLATAFIRMA_VENVS"])
+    if prod_raiz:
+        cand = prod_raiz / "platafirma-harness" / "current" / "registro" / "venvs.json"
+        if cand.is_file():
+            return cand
+    return _harness_raiz() / "registro" / "venvs.json"
+
+
+def _caminho_terceiros(prod_raiz: Path | None = None) -> Path:
+    if os.environ.get("PLATAFIRMA_TERCEIROS"):
+        return Path(os.environ["PLATAFIRMA_TERCEIROS"])
+    if prod_raiz:
+        cand = prod_raiz / "platafirma-harness" / "current" / "registro" / "terceiros.json"
+        if cand.is_file():
+            return cand
+    return _harness_raiz() / "registro" / "terceiros.json"
+
+
+def familias_declaradas(prod_raiz: Path | None = None) -> set[str]:
+    arq = _caminho_familias(prod_raiz)
+    try:
+        dados = json.loads(arq.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    if not isinstance(dados, dict):
+        return set()
+    return {k for k, v in dados.items() if isinstance(k, str) and isinstance(v, str)}
+
+
+def venvs_declarados(prod_raiz: Path | None = None) -> set[str]:
+    arq = _caminho_venvs(prod_raiz)
+    try:
+        dados = json.loads(arq.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    if not isinstance(dados, dict):
+        return set()
+    stacks = dados.get("stacks") if isinstance(dados.get("stacks"), dict) else {
+        k: v for k, v in dados.items() if not k.startswith("_") and k != "repositorios"
+    }
+    chaves: set[str] = set()
+    for nome, decl in stacks.items():
+        if isinstance(decl, dict) and decl.get("lock"):
+            chaves.add(nome)
+    return chaves
+
+
+def terceiros_declarados(prod_raiz: Path | None = None) -> set[str]:
+    arq = _caminho_terceiros(prod_raiz)
+    try:
+        dados = json.loads(arq.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    if not isinstance(dados, dict):
+        return set()
+    shas: set[str] = set()
+    for k, v in dados.items():
+        if k.startswith("_") or not isinstance(v, dict):
+            continue
+        sha = v.get("sha256")
+        if isinstance(sha, str) and sha:
+            shas.add(sha)
+    return shas
+
+
+def _normalizar(p: Path) -> str:
+    try:
+        return os.path.realpath(p)
+    except OSError:
+        return str(p)
+
+
+def _registrar_uso(mapa: dict[str, list[str]], raiz_real: str, caminho: str, quem: str) -> None:
+    if not caminho:
+        return
+    try:
+        real = os.path.realpath(caminho)
+    except OSError:
+        real = caminho
+    prefixo = raiz_real.rstrip(os.sep) + os.sep
+    if not real.startswith(prefixo):
+        return
+    rel = real[len(prefixo):]
+    partes = rel.split(os.sep)
+    chaves: list[str] = []
+    if len(partes) >= 2 and partes[0] not in ("current", "terceiros"):
+        chaves.append(os.path.join(raiz_real, partes[0], partes[1]))
+    if len(partes) >= 1:
+        chaves.append(os.path.join(raiz_real, partes[0]))
+    for ch in chaves:
+        lista = mapa.setdefault(ch, [])
+        if quem not in lista:
+            lista.append(quem)
+
+
+def coletar_em_uso(prod_raiz: Path, *, sem_docker: bool = False) -> dict[str, list[str]]:
+    """Mapa {caminho_real_alvo: [quem_usa, ...]} para contêineres existentes e processos vivos da conta."""
+    raiz_real = _normalizar(prod_raiz)
+    mapa: dict[str, list[str]] = {}
+
+    if not sem_docker and os.environ.get("PF_EXPURGO_SEM_DOCKER") != "1":
+        try:
+            ps = subprocess.run(
+                ["docker", "ps", "-aq"],
+                capture_output=True, text=True, timeout=30, check=False,
+            )
+            ids = [l.strip() for l in (ps.stdout or "").splitlines() if l.strip()]
+            if ps.returncode == 0 and ids:
+                ins = subprocess.run(
+                    ["docker", "inspect", *ids],
+                    capture_output=True, text=True, timeout=60, check=False,
+                )
+                if ins.returncode == 0 and ins.stdout.strip():
+                    for c in json.loads(ins.stdout):
+                        nome = (c.get("Name") or c.get("Id") or "?").lstrip("/")
+                        quem = f"contêiner {nome}"
+                        labels = (c.get("Config") or {}).get("Labels") or {}
+                        wd = labels.get("com.docker.compose.project.working_dir") or ""
+                        if wd:
+                            _registrar_uso(mapa, raiz_real, wd, quem)
+                        for m in c.get("Mounts") or []:
+                            src = m.get("Source") or ""
+                            if src:
+                                _registrar_uso(mapa, raiz_real, src, quem)
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            pass
+
+    if os.environ.get("PF_EXPURGO_SEM_PROC") != "1":
+        meu_uid = os.getuid()
+        meu_pid = os.getpid()
+        proc_dir = Path("/proc")
+        if proc_dir.is_dir():
+            for ent in proc_dir.iterdir():
+                if not ent.name.isdigit():
+                    continue
+                pid = int(ent.name)
+                if pid == meu_pid:
+                    continue
+                try:
+                    if ent.stat().st_uid != meu_uid:
+                        continue
+                except OSError:
+                    continue
+                try:
+                    comm = (ent / "comm").read_text(encoding="utf-8", errors="replace").strip()
+                except OSError:
+                    comm = "?"
+                quem = f"processo pid {pid} ({comm})"
+                for sub in ("cwd", "exe"):
+                    try:
+                        alvo = os.readlink(ent / sub)
+                    except OSError:
+                        continue
+                    _registrar_uso(mapa, raiz_real, alvo, quem)
+
+    return mapa
+
+
+def _sha_current_da_familia(fam_dir: Path) -> str | None:
+    link = fam_dir / "current"
+    if not link.exists():
+        return None
+    try:
+        return link.resolve().name
+    except OSError:
+        return None
+
+
+def _carregar_modulo_imagens():
+    caminho = Path(__file__).resolve().parents[1] / "_infra" / "imagens"
+    if not caminho.is_file():
+        return None
+    loader = importlib.machinery.SourceFileLoader("pf_infra_imagens_expurgo", str(caminho))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    if spec is None:
+        return None
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+def diagnosticar_fosseis(
+    prod_raiz: Path | None = None,
+    instancia: Path | None = None,
+    *,
+    familia: str | None = None,
+    incluir_imagens: bool = True,
+    sem_docker: bool = False,
+) -> tuple[list[Fossil], list[str]]:
+    """Lista todos os fósseis sob prod_raiz (e instância) e devolve (fosseis, erros_indeterminaveis)."""
+    raiz = _prod_raiz(str(prod_raiz) if prod_raiz else None)
+    inst = _instancia(str(instancia) if instancia else None)
+    fams_decl = familias_declaradas(raiz)
+    venvs_decl = venvs_declarados(raiz)
+    tercs_decl = terceiros_declarados(raiz)
+    em_uso = coletar_em_uso(raiz, sem_docker=sem_docker)
+    fosseis: list[Fossil] = []
+    indeterminaveis: list[str] = []
+
+    # 1. Atalhos órfãos/quebrados em current/ e current/venv/
+    cur_dir = raiz / "current"
+    curtos_decl = {f.removeprefix("platafirma-") for f in fams_decl}
+    permitidos_cur = curtos_decl | {"politica-acesso", "venv"}
+    if cur_dir.is_dir():
+        for ent in sorted(cur_dir.iterdir(), key=lambda p: p.name):
+            nome = ent.name
+            if nome not in permitidos_cur:
+                fosseis.append(Fossil(
+                    categoria="atalho-current",
+                    caminho=str(ent),
+                    motivo=f"atalho órfão em current/ (fora do layout declarado): {nome}",
+                    em_uso_por=[],
+                    removivel=True,
+                ))
+            elif ent.is_symlink() and not ent.exists():
+                fosseis.append(Fossil(
+                    categoria="atalho-current",
+                    caminho=str(ent),
+                    motivo=f"atalho quebrado em current/: {nome}",
+                    em_uso_por=[],
+                    removivel=True,
+                ))
+
+    cur_venv = cur_dir / "venv"
+    venvs_protegidos: set[str] = set()
+    if cur_venv.is_dir():
+        for ent in sorted(cur_venv.iterdir(), key=lambda p: p.name):
+            nome = ent.name
+            if nome not in venvs_decl:
+                fosseis.append(Fossil(
+                    categoria="atalho-venv",
+                    caminho=str(ent),
+                    motivo=f"atalho órfão em current/venv/ (não declarado em registro/venvs.json): {nome}",
+                    em_uso_por=[],
+                    removivel=True,
+                ))
+            elif ent.is_symlink() and not ent.exists():
+                fosseis.append(Fossil(
+                    categoria="atalho-venv",
+                    caminho=str(ent),
+                    motivo=f"atalho quebrado em current/venv/: {nome}",
+                    em_uso_por=[],
+                    removivel=True,
+                ))
+            else:
+                venvs_protegidos.add(_normalizar(ent))
+
+    # 2. Raiz de PF_RELEASE_RAIZ
+    permitidos_raiz = {"current", "venv", "terceiros"} | fams_decl
+    if raiz.is_dir():
+        for ent in sorted(raiz.iterdir(), key=lambda p: p.name):
+            if ent.name in permitidos_raiz:
+                continue
+            real = _normalizar(ent)
+            usadores = em_uso.get(real, [])
+            if usadores:
+                motivo = f"entrada fora do layout na raiz de {raiz}, em uso por {', '.join(usadores)}"
+            else:
+                motivo = f"entrada fora do layout declarado na raiz de {raiz}"
+            fosseis.append(Fossil(
+                categoria="raiz",
+                caminho=str(ent),
+                motivo=motivo,
+                em_uso_por=usadores,
+                removivel=not usadores,
+            ))
+
+    # 3. Árvores extras por família (e ponto anterior)
+    familias_alvo = [familia] if familia else sorted(fams_decl)
+    for fam in familias_alvo:
+        fam_dir = raiz / fam
+        if not fam_dir.is_dir():
+            continue
+        sha_cur = _sha_current_da_familia(fam_dir)
+        for ent in sorted(fam_dir.iterdir(), key=lambda p: p.name):
+            nome = ent.name
+            if nome in (".repo.git", "current"):
+                continue
+            if sha_cur and nome == sha_cur:
+                continue
+            if nome == "anterior":
+                fosseis.append(Fossil(
+                    categoria="anterior",
+                    caminho=str(ent),
+                    motivo=f"ponto anterior descontinuado em {fam}",
+                    em_uso_por=[],
+                    removivel=True,
+                ))
+                continue
+            real = _normalizar(ent)
+            usadores = em_uso.get(real, [])
+            if usadores:
+                motivo = f"árvore fora do current de {fam} em uso por {', '.join(usadores)}"
+            else:
+                motivo = f"árvore fora do current de {fam} (current: {(sha_cur or 'ausente')[:7]})"
+            fosseis.append(Fossil(
+                categoria="arvore",
+                caminho=str(ent),
+                motivo=motivo,
+                em_uso_por=usadores,
+                removivel=not usadores,
+            ))
+
+        ant_inst = inst / "var" / "release" / fam / "anterior"
+        if ant_inst.exists() or ant_inst.is_symlink():
+            fosseis.append(Fossil(
+                categoria="anterior-instancia",
+                caminho=str(ant_inst),
+                motivo=f"registro var/release/{fam}/anterior descontinuado",
+                em_uso_por=[],
+                removivel=True,
+            ))
+
+    # Abertura publicada (instância)
+    _ab_pub_dir = "abertura-" + "publicada"
+    for extra_inst, desc in (
+        (inst / "var" / _ab_pub_dir, "morada de abertura publicada descontinuada"),
+        (inst / "var" / "release" / "abertura", "registro var/release/abertura descontinuado"),
+    ):
+        if extra_inst.exists() or extra_inst.is_symlink():
+            fosseis.append(Fossil(
+                categoria="abertura",
+                caminho=str(extra_inst),
+                motivo=desc,
+                em_uso_por=[],
+                removivel=True,
+            ))
+
+    # 4. Venvs fora de uso
+    venv_dir = raiz / "venv"
+    if venv_dir.is_dir():
+        for ent in sorted(venv_dir.iterdir(), key=lambda p: p.name):
+            real = _normalizar(ent)
+            if real in venvs_protegidos:
+                continue
+            usadores = em_uso.get(real, [])
+            if usadores:
+                motivo = f"venv não declarado em uso por {', '.join(usadores)}"
+            else:
+                motivo = "venv sem atalho declarado em current/venv/"
+            fosseis.append(Fossil(
+                categoria="venv",
+                caminho=str(ent),
+                motivo=motivo,
+                em_uso_por=usadores,
+                removivel=not usadores,
+            ))
+
+    # 5. Cache de terceiros fora do declarado
+    terc_dir = raiz / "terceiros" / "sha256"
+    if terc_dir.is_dir():
+        for ent in sorted(terc_dir.iterdir(), key=lambda p: p.name):
+            if ent.name in tercs_decl:
+                continue
+            fosseis.append(Fossil(
+                categoria="terceiro",
+                caminho=str(ent),
+                motivo="artefato de terceiro não declarado em registro/terceiros.json",
+                em_uso_por=[],
+                removivel=True,
+            ))
+
+    # 6. Imagens Docker fora de uso da release no ar
+    if incluir_imagens and not sem_docker and os.environ.get("PF_EXPURGO_SEM_DOCKER") != "1":
+        mod = _carregar_modulo_imagens()
+        if mod is not None:
+            try:
+                _em_uso_img, inativas = mod._coletar()
+                for img in inativas:
+                    fosseis.append(Fossil(
+                        categoria="imagem",
+                        caminho=img["referencia"],
+                        motivo=f"imagem fora de uso da release no ar ({img['tamanho']})",
+                        em_uso_por=[],
+                        removivel=True,
+                    ))
+            except (RuntimeError, LookupError) as exc:
+                indeterminaveis.append(f"imagens docker: {exc}")
+
+    return fosseis, indeterminaveis
+
+
+def _chmod_gravavel(caminho: Path) -> None:
+    if caminho.is_symlink():
+        return
+    try:
+        st = caminho.lstat()
+        os.chmod(caminho, st.st_mode | stat.S_IWUSR | (stat.S_IXUSR if stat.S_ISDIR(st.st_mode) else 0))
+    except OSError:
+        pass
+    if caminho.is_dir():
+        for root, dirs, files in os.walk(caminho):
+            for d in dirs:
+                p = Path(root) / d
+                if not p.is_symlink():
+                    try:
+                        os.chmod(p, p.lstat().st_mode | stat.S_IWUSR | stat.S_IXUSR)
+                    except OSError:
+                        pass
+            for f in files:
+                p = Path(root) / f
+                if not p.is_symlink():
+                    try:
+                        os.chmod(p, p.lstat().st_mode | stat.S_IWUSR)
+                    except OSError:
+                        pass
+
+
+def _remover_caminho(caminho: Path) -> None:
+    if caminho.is_symlink() or caminho.is_file():
+        caminho.unlink(missing_ok=True)
+        return
+    if caminho.is_dir():
+        _chmod_gravavel(caminho)
+        shutil.rmtree(caminho)
+
+
+def _anotar_marca(inst: Path, texto: str) -> None:
+    marca = inst / "var" / "log" / "poda.log"
+    try:
+        marca.parent.mkdir(parents=True, exist_ok=True)
+        agora = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+        with marca.open("a", encoding="utf-8") as f:
+            f.write(f"{agora} release-expurgo: {texto}\n")
+    except OSError:
+        pass
+
+
+def executar_expurgo(
+    prod_raiz: Path | None = None,
+    instancia: Path | None = None,
+    *,
+    familia: str | None = None,
+    so_atalhos: bool = False,
+    sem_docker: bool = False,
+) -> int:
+    raiz = _prod_raiz(str(prod_raiz) if prod_raiz else None)
+    inst = _instancia(str(instancia) if instancia else None)
+
+    # Passo 1: atalhos órfãos/quebrados em current/ e current/venv/ ANTES de podar venvs
+    fosseis_ini, _ = diagnosticar_fosseis(
+        raiz, inst, familia=familia, incluir_imagens=False, sem_docker=sem_docker
+    )
+    removidos = 0
+    mantidos = 0
+    for item in fosseis_ini:
+        if item.categoria not in ("atalho-current", "atalho-venv"):
+            continue
+        p = Path(item.caminho)
+        try:
+            _remover_caminho(p)
+            print(f"expurgo:   {item.categoria} {item.caminho}")
+            _anotar_marca(inst, f"apagado {item.categoria} {item.caminho}")
+            removidos += 1
+        except OSError as exc:
+            print(f"expurgo:   falhou {item.categoria} {item.caminho}: {exc}", file=sys.stderr)
+
+    if so_atalhos:
+        return 0
+
+    # Passo 2: rediagnostica depois da remoção de atalhos órfãos (para podar venvs que ficaram sem atalho)
+    fosseis, _ = diagnosticar_fosseis(
+        raiz, inst, familia=familia, incluir_imagens=False, sem_docker=sem_docker
+    )
+    familias_podadas: set[str] = set()
+    for item in fosseis:
+        if item.categoria in ("atalho-current", "atalho-venv"):
+            continue
+        if not item.removivel:
+            print(f"expurgo:   mantido ({', '.join(item.em_uso_por)}): {item.caminho}")
+            mantidos += 1
+            continue
+        p = Path(item.caminho)
+        try:
+            _remover_caminho(p)
+            print(f"expurgo:   {item.categoria} {item.caminho}")
+            _anotar_marca(inst, f"apagado {item.categoria} {item.caminho}")
+            removidos += 1
+            if item.categoria == "arvore":
+                familias_podadas.add(p.parent.name)
+        except OSError as exc:
+            print(f"expurgo:   falhou {item.categoria} {item.caminho}: {exc}", file=sys.stderr)
+
+    # worktree prune nos espelhos das famílias cujas árvores foram removidas
+    for fam in sorted(familias_podadas):
+        esp = raiz / fam / ".repo.git"
+        if esp.is_dir():
+            subprocess.run(
+                ["git", f"--git-dir={esp}", "worktree", "prune"],
+                capture_output=True, text=True, check=False,
+            )
+
+    # Passo 3: imagens Docker fora de uso
+    if not sem_docker and os.environ.get("PF_EXPURGO_SEM_DOCKER") != "1":
+        mod = _carregar_modulo_imagens()
+        if mod is not None:
+            try:
+                em_uso_img, inativas = mod._coletar()
+                if inativas:
+                    rc_img = mod._executar_prune(inativas, em_uso_img)
+                    if rc_img == 0:
+                        for img in inativas:
+                            print(f"expurgo:   imagem {img['referencia']}")
+                        removidos += len(inativas)
+            except (RuntimeError, LookupError) as exc:
+                print(f"expurgo:   aviso imagens: {exc}", file=sys.stderr)
+
+    _anotar_marca(inst, f"resumo familia={familia or 'todas'} removidos={removidos} mantidos={mantidos}")
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="expurgo")
+    parser.add_argument("--familia", default=None)
+    parser.add_argument("--so-atalhos", action="store_true")
+    parser.add_argument("--sem-docker", action="store_true")
+    ns = parser.parse_args(argv)
+    return executar_expurgo(
+        familia=ns.familia,
+        so_atalhos=ns.so_atalhos,
+        sem_docker=ns.sem_docker,
+    )
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
