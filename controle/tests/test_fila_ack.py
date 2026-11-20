@@ -433,39 +433,36 @@ def test_dt_357_enviar_posicional_e_flag_corpo(monkeypatch, capsys):
     assert "validos:" in cap3.err and "pedido" in cap3.err
 
 
-def test_dt_409_resolve_cadeira_por_sessao_id(monkeypatch, capsys, tmp_path):
+def test_dt_948_identidade_lida_nunca_resolvida_por_sessao(monkeypatch, capsys, tmp_path):
+    """DT 948 / arq:0110 §5: fila lê apenas PF_CADEIRA (ou --eu), nunca resolve sessao:<id>."""
     rc = StreamRC([])
-    # 1. Via chave `sessao:<sid>` (inclusive prefixo de 8 chars em scan_iter) quando PF_CADEIRA/PLATAFIRMA_CADEIRA vazios
     rc.kv["sessao:1db7e1ef-1111-2222-3333-444444444444"] = json.dumps({"cadeira": "ti"})
-    rc.scan_iter = lambda match=None, count=None: [
-        k for k in rc.kv if k.startswith((match or "").rstrip("*"))
-    ]
-    monkeypatch.setattr(fila_streams, "mem_conn", lambda: rc)
+    arq_sessao = tmp_path / "sessao-1db7e1ef.json"
+    arq_sessao.write_text(json.dumps({"cadeira": "ti"}), encoding="utf-8")
     monkeypatch.delenv("PF_CADEIRA", raising=False)
     monkeypatch.delenv("PLATAFIRMA_CADEIRA", raising=False)
-    monkeypatch.setenv("PLATAFIRMA_SESSAO_ID", "1db7e1ef")
+    monkeypatch.setenv("PLATAFIRMA_SESSAO_DIR", str(tmp_path))
+    monkeypatch.setenv("PF_SESSAO", "1db7e1ef")
 
+    # Sem PF_CADEIRA, mesmo com PF_SESSAO e arquivo/chave legada, sai 3 com cura clara
     code, cap = _rodar(
         monkeypatch, capsys,
-        ["enviar", "dados", "Carta com sessao_id sem PF_CADEIRA"],
+        ["ler"],
         rc, eu="",
     )
-    assert code == 0
-    assert rc.streams["caixa:dados"][0][1]["de"] == "ti"
+    assert code == 3
+    assert "PF_CADEIRA ausente" in cap.err
+    assert "1db7e1ef" in cap.err
+    assert "monta_sessao" in cap.err
 
-    # 2. Via arquivo em PLATAFIRMA_SESSAO_DIR
-    rc2 = StreamRC([])
-    arq_sessao = tmp_path / "sessao-abcd1234.json"
-    arq_sessao.write_text(json.dumps({"cadeira": "ia"}), encoding="utf-8")
-    monkeypatch.setenv("PLATAFIRMA_SESSAO_DIR", str(tmp_path))
-    monkeypatch.setenv("PLATAFIRMA_SESSAO_ID", "abcd1234")
+    # Com --eu explícito, segue funcionando como override de CLI/teste
     code2, cap2 = _rodar(
         monkeypatch, capsys,
-        ["enviar", "ti", "Carta via arquivo de sessao"],
-        rc2, eu="",
+        ["enviar", "dados", "Carta com --eu explicito", "--eu", "ti"],
+        rc, eu="",
     )
     assert code2 == 0
-    assert rc2.streams["caixa:ti"][0][1]["de"] == "ia"
+    assert rc.streams["caixa:dados"][0][1]["de"] == "ti"
 
 
 def test_dt_671_help_e_filtros_ler(monkeypatch, capsys):
