@@ -2328,8 +2328,13 @@ dispara_esteira() {
   local repo="${1%%@*}" c="$2" mudanca="$3" base="$4"
   local infra_bin="${PF_INFRA_BIN:-$(dirname "$(readlink -f "$0")")/infra}"
   [ -x "$infra_bin" ] || return 0
+  local log_dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/log/esteira"
+  local log_arq="/dev/null"
+  if mkdir -p "$log_dir" 2>/dev/null && [ -w "$log_dir" ]; then
+    log_arq="$log_dir/${repo}-${mudanca:0:12}.log"
+  fi
   nohup "$infra_bin" rodar esteira -- rodar "$repo" --arvore "$c" --mudanca "$mudanca" --base "$base" \
-    >/dev/null 2>&1 </dev/null &
+    >"$log_arq" 2>&1 </dev/null &
 }
 
 # grava_escopo_sessao <repo> [card] -- story #4342: o próprio ato grava escopo_atual na lousa
