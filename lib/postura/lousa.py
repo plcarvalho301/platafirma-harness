@@ -283,24 +283,48 @@ def _ordenar_itens(itens: list[ItemDeTrabalho]) -> list[ItemDeTrabalho]:
 
 
 class Lousa:
-    def __init__(self, host: str | None = None, porta: int | None = None, espera_s: float = 2.0):
+    def __init__(
+        self,
+        host: str | None = None,
+        porta: int | None = None,
+        espera_s: float = 2.0,
+        *,
+        senha: str | None = None,
+        instancia_dir: Path | None = None,
+    ):
         self.host = host or os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
         self.porta = int(porta or os.environ.get("MEM_REDIS_PORT", "6380"))
         self.espera_s = espera_s
+        self._senha = senha
+        self._instancia_dir = instancia_dir
+
+    def _obter_senha(self) -> str:
+        if self._senha is not None:
+            return self._senha
+        from memoria_de_trabalho import SenhaIndisponivel, ler_senha_msg_mem  # noqa: PLC0415
+
+        try:
+            return ler_senha_msg_mem(self._instancia_dir)
+        except SenhaIndisponivel as erro:
+            raise Fora(f"memória de trabalho em {self.host}:{self.porta}: {erro}") from None
 
     # --- o protocolo -------------------------------------------------------------------------------------------------
     def _manda(self, comandos: list[tuple]) -> list:
+        senha = self._obter_senha()
+        envio = [("AUTH", "default", senha), *comandos] if senha else list(comandos)
         carga = b""
-        for comando in comandos:
+        for comando in envio:
             partes = [str(p).encode("utf-8") for p in comando]
             carga += b"*%d\r\n" % len(partes) + b"".join(b"$%d\r\n%s\r\n" % (len(p), p) for p in partes)
         try:
             with socket.create_connection((self.host, self.porta), timeout=self.espera_s) as s:
                 s.sendall(carga)
                 with s.makefile("rb") as f:
-                    return [self._le(f) for _ in comandos]
+                    respostas = [self._le(f) for _ in envio]
+                    return respostas[1:] if senha else respostas
         except (OSError, ValueError) as erro:
-            raise Fora(f"memória de trabalho em {self.host}:{self.porta}: {erro}") from None
+            msg = str(erro).replace(senha, "[redigido]") if senha else str(erro)
+            raise Fora(f"memória de trabalho em {self.host}:{self.porta}: {msg}") from None
 
     def _le(self, f):
         linha = f.readline()
