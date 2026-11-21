@@ -1,3 +1,4 @@
+# componente: componente:escrita
 """Testes de leitura e escrita de arquivos no harness por processo (story #4342, t4)."""
 from __future__ import annotations
 

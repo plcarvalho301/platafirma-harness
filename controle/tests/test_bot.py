@@ -1,3 +1,4 @@
+# componente: componente:verbo-bot
 """`bot` (card #3186): declarar, listar, rodar, desligar e caidas.
 
 Hermético: o acervo é um dublê HTTP em 127.0.0.1:0 que implementa o subconjunto do contrato

@@ -1,3 +1,4 @@
+# componente: componente:verbo-teste
 """Contrato de `teste rodar` em bloco fixo, com veredito reaproveitado (card #3150 passo 3).
 
 Prova: o pytest cru vai ao log da instancia; a tela traz a contagem, os reprovados

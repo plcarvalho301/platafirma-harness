@@ -1,3 +1,4 @@
+# componente: componente:verbo-monta-sessao
 """Contrato de `bin/monta-sessao --json` / `--sem-atualizar` (card #204, item 2).
 
 Reescrito para o modelo de árvore única `abertura/` (arq:0073): persona, chapéu,

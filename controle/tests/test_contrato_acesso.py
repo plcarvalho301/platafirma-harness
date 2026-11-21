@@ -1,3 +1,4 @@
+# componente: componente:verbo-acesso
 # test_contrato_acesso — contrato do verbo `acesso` (bin/acesso e bin/_acesso/desligar.py)
 # Conforme spec_acesso.md (rev 1.3) §1 (gramática), §2 (regras comuns), §3 (formato),
 # §4 (códigos de saída), §5 (cabeçalho Q1) e §6 (transição).

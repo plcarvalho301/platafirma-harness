@@ -1,3 +1,4 @@
+# componente: componente:borda
 """Testes da borda das faces (card #3516). O self-check de borda.py é o grosso: nove recusas em 403 sem
 chegar à porta, o que passa, o que o navegador não pode pôr e o envelope da porta. Aqui ele roda no portão,
 e o cabeçalho real do verbo `motor` (o que a release serve) é lido pelo mesmo parser."""

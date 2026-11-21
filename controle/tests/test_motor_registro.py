@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """O cabecalho de bin/motor se registra no golden record e a descricao servida ensina a consulta montada (#3364).
 
 A descricao que a porta serve em tools/list sai de acervo.ferramental_verbo, que `acervo registrar motor` compoe do
