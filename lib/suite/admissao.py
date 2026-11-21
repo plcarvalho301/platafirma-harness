@@ -1,4 +1,5 @@
-"""Admissão da suíte na esteira: confere vínculo, conjunto único, nome, apoio e ensaia fichas na Olaria."""
+"""Admissão da suíte na esteira: confere vínculo, ficha única por par, nome, apoio e ensaia fichas na Olaria."""
+
 from __future__ import annotations
 
 import argparse
@@ -17,7 +18,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
 from suite.selecao import PASTAS_IGNORADAS, PASTAS_TESTE, descobrir_arquivos_teste
 from suite.vinculo import DESTINOS_VERIFICA, VinculoArquivo, extrair_slug_componente, ler_vinculo
 
@@ -439,24 +439,25 @@ def _conferir_vinculos_arvore(ctx: _ContextoAdmissao, com_rel: list[tuple[str, P
         if v.componente not in ctx.primeiro_por_comp:
             ctx.primeiro_por_comp[v.componente] = rel
         par = (v.componente, v.verifica)
-        if par in ctx.primeiro_por_par:
-            primeiro = ctx.primeiro_por_par[par]
-            alvo_desc = v.verifica or "comportamento"
-            ctx.registrar_violacao(
-                RecusaAdmissao(
-                    codigo="segundo-conjunto",
-                    arquivo=rel,
-                    conjunto_existente=primeiro,
-                    mensagem=(
-                        f"{rel}: segundo conjunto para ({v.componente}, {alvo_desc}) — "
-                        f"adicione os casos ao conjunto existente: {primeiro}"
-                    ),
-                )
-            )
-        else:
+        if par not in ctx.primeiro_por_par:
             ctx.primeiro_por_par[par] = rel
-            if ctx.eh_mudado(rel):
-                ctx.para_ensaiar.append((rel, v, v.como_ficha()))
+
+    por_par: dict[tuple[str, str | None], list[tuple[str, VinculoArquivo]]] = {}
+    for rel, v in ctx.vinculos_lidos:
+        if v.componente is None:
+            continue
+        por_par.setdefault((v.componente, v.verifica), []).append((rel, v))
+
+    for grupo in por_par.values():
+        mudados_grupo = [rel for rel, _ in grupo if ctx.eh_mudado(rel)]
+        if not mudados_grupo:
+            continue
+        _, v_base = grupo[0]
+        ficha = v_base.como_ficha()
+        exige_consolidado = list(dict.fromkeys(ex for _, item in grupo for ex in item.exige))
+        if exige_consolidado:
+            ficha["ligacoes"]["exige"] = exige_consolidado
+        ctx.para_ensaiar.append((mudados_grupo[0], v_base, ficha))
 
 
 def _conferir_nomes_e_apoio(ctx: _ContextoAdmissao, arquivos_teste_set: set[Path]) -> None:

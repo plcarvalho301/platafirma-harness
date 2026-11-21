@@ -436,15 +436,7 @@ def test_admissao_aprova_conjunto_valido_e_ensaia_ficha_no_duble(tmp_path: Path)
             "ficha-invalida",
             "interface:fantasma",
         ),
-        (
-            "segundo_conjunto_mesmo_par",
-            {
-                "testes/test_a_primeiro.py": "# componente: suite\ndef test_1():\n    assert True\n",
-                "testes/test_b_segundo.py": "# componente: suite\ndef test_2():\n    assert True\n",
-            },
-            "segundo-conjunto",
-            "testes/test_a_primeiro.py",
-        ),
+
         (
             "nome_batizado_por_card",
             {
@@ -505,6 +497,38 @@ def test_admissao_recusa_conjuntos_invalidos_em_tabela(
     assert codigo_esperado in codigos
     texto = res.resumo_texto()
     assert trecho_esperado in texto
+
+
+def test_admissao_permite_multiplos_arquivos_mesmo_par_ficha_unica(tmp_path: Path):
+    arvore = tmp_path / "multi_arquivo"
+    pasta = arvore / "testes"
+    pasta.mkdir(parents=True)
+    (pasta / "test_suite_alpha.py").write_text(
+        "# componente: suite\nimport pytest\n\n@pytest.mark.exige('olaria')\ndef test_1():\n    assert True\n",
+        encoding="utf-8",
+    )
+    (pasta / "test_suite_beta.py").write_text(
+        "# componente: suite\nimport pytest\n\n@pytest.mark.exige('casa-db')\ndef test_2():\n    assert True\n",
+        encoding="utf-8",
+    )
+
+    duble = DubleOlaria(
+        fichas={
+            "componente:suite": "componente",
+            "olaria": "servico",
+            "casa-db": "servico",
+        }
+    )
+    res = admitir(arvore, ensaiador=duble)
+
+    assert res.codigo_saida == 0
+    assert res.estado == "admitido"
+    assert res.recusas == ()
+    assert len(res.fichas_ensaiadas) == 1
+    ficha = res.fichas_ensaiadas[0]
+    assert ficha["chave"] == "teste-de-comportamento:suite"
+    assert ficha["ligacoes"]["sobre"] == "componente:suite"
+    assert ficha["ligacoes"]["exige"] == ["olaria", "casa-db"]
 
 
 def test_admissao_regra_nova_1_acusa_legado_sem_recusar_e_barra_mudado(tmp_path: Path):
