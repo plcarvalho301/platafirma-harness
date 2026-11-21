@@ -1729,6 +1729,34 @@ gate_conferir_verbo() {  # $1=repo $2=sha_candidato $3=sha_atual(ou vazio)
   return 0
 }
 
+# Portao de configuracao da porta (story #4412, regras 4406.r4 e 4406.r21):
+# ao promover platafirma-core, valida o schema de armario-de-chaves.yaml e
+# conector-do-tunel.yaml da instancia usando o validador da propria rev candidata.
+gate_conferir_configuracao_porta() {  # $1=repo $2=sha_candidato $3=sha_atual(ou vazio)
+  local repo="$1" sha="$2" atual="$3" arvore inst py_porta
+  [ "$repo" = "platafirma-core" ] || return 0
+  arvore="$PROD_RAIZ/$repo/$sha"
+  [ -f "$arvore/porta/configuracao.py" ] || return 0
+  inst="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}"
+  py_porta="${PF_PORTA_PYTHON:-$PROD_RAIZ/current/venv/porta/bin/python}"
+  [ -x "$py_porta" ] || py_porta="python3"
+  printf 'gate:      conferir configuracao da porta (armario e conector) na rev %s\n' "${sha:0:7}"
+  local tipo arq saida rc=0
+  for par in "armario:$inst/deploy/armario-de-chaves.yaml" "conector:$inst/deploy/porta/conector-do-tunel.yaml"; do
+    tipo="${par%%:*}"
+    arq="${par#*:}"
+    rc=0
+    saida="$(PYTHONPATH="$arvore" "$py_porta" -m porta.configuracao validar "$tipo" "$arq" 2>&1)" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      printf 'release: recusa: rev %s reprova na configuracao da porta (%s): %s — current segue em %s\n' \
+        "${sha:0:7}" "$tipo" "$saida" "$(curto_ou "$atual" '(nenhum)')" >&2
+      return 4
+    fi
+  done
+  printf 'gate:      verde (armario e conector)\n'
+  return 0
+}
+
 # Estagio 1b da esteira (card #3150, comentario C1): a MESMA suite que hooks/pre-push
 # mede, no MESMO venv da chave, com o MESMO veredito memoizado por (hash da arvore,
 # chave) — lib/venv.sh: caminho_veredito/ler_veredito/gravar_veredito. Se o push que
@@ -2443,6 +2471,7 @@ cmd_promover() {
   fi
   gravar_ultimo_gate "$repo" "$sha"
   gate_conferir_verbo "$repo" "$sha" "$atual" || { rc=$?; exit "$rc"; }
+  gate_conferir_configuracao_porta "$repo" "$sha" "$atual" || { rc=$?; exit "$rc"; }
   construir_venvs "$repo" "$sha" || { rc=$?; exit "$rc"; }
   local rc_img=0
   gate_imagem "$repo" "$sha" || rc_img=$?
