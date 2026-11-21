@@ -25,6 +25,7 @@ except ImportError:  # pragma: no cover - fallback sem PyYAML no python do siste
 
 _SHA256_RE = re.compile(r"^(?:sha256:)?([0-9a-f]{64})$")
 _SEGREDO_PADRAO = Path("/srv/platafirma/casa/segredos/olaria")
+OLARIA_URL_PADRAO = "http://127.0.0.1:8103"
 
 
 class OlariaIndisponivel(RuntimeError):
@@ -175,8 +176,10 @@ def extrair_terceiros(mudanca: dict) -> list[dict[str, str]]:
 
 def ler_terceiros_da_olaria(env: dict[str, str] | None = None, prazo_s: float = 15.0) -> list[dict[str, str]]:
     amb = os.environ if env is None else env
-    url = _ler_segredo("OLARIA_URL", amb)
     chave = _ler_segredo("OLARIA_CHAVE", amb)
+    url = _ler_segredo("OLARIA_URL", amb)
+    if not url and chave and "OLARIA_URL" not in amb:
+        url = OLARIA_URL_PADRAO
     if not url:
         raise OlariaIndisponivel("OLARIA_URL ausente")
     if not chave:

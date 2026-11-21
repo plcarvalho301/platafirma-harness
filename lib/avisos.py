@@ -399,8 +399,10 @@ def main(argv: list[str] | None = None) -> int:
     teto_bytes = int(env.get("SEG_AVISOS_MAX_BYTES", TETO_BYTES_PADRAO))
     fim = time.monotonic() + prazo_s
 
-    olaria_url = _ler_segredo_olaria("OLARIA_URL", env)
     olaria_chave = _ler_segredo_olaria("OLARIA_CHAVE", env)
+    olaria_url = _ler_segredo_olaria("OLARIA_URL", env)
+    if not olaria_url and olaria_chave and "OLARIA_URL" not in env:
+        olaria_url = "http://127.0.0.1:8103"
     if not olaria_url or not olaria_chave:
         print("seg avisos: OLARIA_URL ou OLARIA_CHAVE ausente", file=sys.stderr)
         return 5
