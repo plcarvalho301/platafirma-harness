@@ -36,15 +36,14 @@ def _ler_segredo(nome: str, env: dict[str, str]) -> str:
     if val:
         return val
     inst = Path(env.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa"))
-    for base in (inst / "segredos" / "olaria", _SEGREDO_PADRAO):
-        arq = base / nome
-        try:
-            if arq.is_file():
-                texto = arq.read_text(encoding="utf-8").strip()
-                if texto:
-                    return texto
-        except OSError:
-            continue
+    arq = inst / "segredos" / "olaria" / nome
+    try:
+        if arq.is_file():
+            texto = arq.read_text(encoding="utf-8").strip()
+            if texto:
+                return texto
+    except OSError:
+        pass
     return ""
 
 
