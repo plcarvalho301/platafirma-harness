@@ -57,6 +57,37 @@ def test_write_file_inteiro_trecho_e_patch_por_processo(tmp_path: Path):
     assert "linha 2-patch" in alvo.read_text(encoding="utf-8")
 
 
+def test_write_file_fita_sem_turno_vale_a_sessao_dt958_dt962(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Sem turno na superfície (ordem_id ausente), a fita é a sessão que a porta exporta em PF_SESSAO."""
+    inst = tmp_path / "inst"
+    monkeypatch.delenv("PF_ORDEM_ID", raising=False)
+    monkeypatch.delenv("PF_SESSAO", raising=False)
+    sessao = "5df980f4-aca5-4525-95c5-199f4d6820fd"
+    alvo = inst / "var" / "tmp" / sessao / "plano.md"
+    carga = {"instancia": str(inst), "path": str(alvo), "content": "plano\n"}
+
+    # sem turno e sem sessão: continua recusando, a fita não foi declarada
+    rc, res = _chamar(BIN_WRITE, carga)
+    assert rc == 4 and "exige fita declarada" in json.dumps(res, ensure_ascii=False)
+    assert not alvo.exists()
+
+    # com a sessão exportada pela porta: grava na pasta da sessão
+    monkeypatch.setenv("PF_SESSAO", sessao)
+    rc, res = _chamar(BIN_WRITE, carga)
+    assert rc == 0 and res["ok"] is True
+    assert alvo.read_text(encoding="utf-8") == "plano\n"
+
+    # a pasta de outra sessão continua fora da fita desta
+    alheia = inst / "var" / "tmp" / "outra-sessao" / "plano.md"
+    rc, res = _chamar(BIN_WRITE, {**carga, "path": str(alheia)})
+    assert rc == 4 and not alheia.exists()
+
+    # o turno, quando chega, vence a sessão
+    monkeypatch.setenv("PF_ORDEM_ID", "ordem-teste")
+    turno = inst / "var" / "tmp" / "ordem-teste" / "plano.md"
+    rc, res = _chamar(BIN_WRITE, {**carga, "path": str(turno)})
+    assert rc == 0 and turno.exists()
+
 def test_ler_arquivo_texto_paginacao_versao_e_diretorio(tmp_path: Path):
     arq = tmp_path / "grande.txt"
     arq.write_text("".join(f"linha-{i:04d} " + ("x" * 60) + "\n" for i in range(1, 200)), encoding="utf-8")

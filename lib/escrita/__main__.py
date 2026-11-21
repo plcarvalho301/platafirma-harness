@@ -24,7 +24,15 @@ def main() -> int:
     release = Path(req["release"]) if req.get("release") else None
     pdp = Path(req["pdp_dir"]) if req.get("pdp_dir") else None
     cadeira = str(req.get("cadeira") or os.environ.get("PF_CADEIRA") or "")
-    ordem_id = str(req.get("ordem_id") or os.environ.get("PF_ORDEM") or "")
+    # A fita é o turno (ordem_id); onde a superfície não entrega o turno, a fita é a sessão
+    # que o monta_sessao abriu, que a porta exporta em PF_SESSAO (DT 958 e 962). Chamada de
+    # face não leva PF_SESSAO, e por isso continua sem fita.
+    ordem_id = str(
+        req.get("ordem_id")
+        or os.environ.get("PF_ORDEM_ID")
+        or os.environ.get("PF_SESSAO")
+        or ""
+    )
     path = req.get("path")
     if not path:
         res = envelope_erro(2, "campo 'path' obrigatório")
