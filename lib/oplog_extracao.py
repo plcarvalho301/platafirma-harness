@@ -587,27 +587,8 @@ def _base_url() -> str:
 def _token_padrao() -> str:
     """Lê RAG_API_TOKEN do ambiente ou, sem ele (porta sem EnvironmentFile, regra 4406.r2),
     do armário de chaves da release (`$PLATAFIRMA_RELEASE/core/deploy/armario-de-chaves.yaml`)."""
-    do_env = os.environ.get("RAG_API_TOKEN", "").strip()
-    if do_env:
-        return do_env
-    import memoria_de_trabalho as armario_mod
-    instancia = armario_mod._instancia()
-    armario = armario_mod._armario()
-    if not armario.is_file():
-        return ""
-    for nome in _SEGREDOS_TOKEN_ACERVO:
-        try:
-            rel = armario_mod._caminho_no_armario(armario, nome)
-        except armario_mod.SenhaIndisponivel:
-            continue
-        arq = Path(rel) if Path(rel).is_absolute() else instancia / rel
-        try:
-            valor = arq.read_text(encoding="utf-8").strip()
-        except OSError:
-            continue
-        if valor:
-            return valor
-    return ""
+    import acervo_token
+    return acervo_token.ler_token_acervo()
 
 
 class Api:
