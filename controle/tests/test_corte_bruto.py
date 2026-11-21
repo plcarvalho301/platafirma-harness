@@ -1,3 +1,4 @@
+# componente: componente:oplog
 """lib/oplog_corte, bin/_infra/corte-bruto e os pedaços do corte em lib/oplog (card #3354; arq:0123 regras 10 e 12).
 
 O corte apaga arquivo e não volta: aqui ele roda só contra uma pasta em tmp_path, uma partição falsa (a leitura

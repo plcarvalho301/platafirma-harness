@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# componente: componente:verbo-repo
 # Testes do verbo repo conforme spec_repo rev 2 (arq:0110, arq:0109, spec_verbologia_onda1)
 set -euo pipefail
 

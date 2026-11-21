@@ -1,3 +1,4 @@
+# componente: componente:verbo-pesquisar
 """Contrato de `pesquisar exportar`: um arquivo por URL, o último bruto íntegro, sem sobrescrever."""
 
 from __future__ import annotations

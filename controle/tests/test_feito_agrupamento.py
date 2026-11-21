@@ -1,3 +1,4 @@
+# componente: componente:harness-controle
 # Card #394: unidade sobre o agrupamento de /feito por dia, incluindo card
 # sem data de fechamento (aberto) e card/commit órfão (sem o outro lado).
 # Camada de unidade do modelo de teste do card — sem subprocess/git/rede de

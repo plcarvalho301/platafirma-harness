@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Contrato do adaptador de board (#2300) — e a conformidade contra o rastreador vivo.
 
 Dois níveis, como em `test_contrato_adaptadores.py`:

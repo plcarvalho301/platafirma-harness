@@ -1,3 +1,4 @@
+# componente: componente:verbo-curar
 """#2856 linha 151: `curar` recusa argumento que não lê (exit 2) em vez de ignorá-lo em silêncio.
 
 Antes, `--reclassificar --emitido_por X` (sublinhado) saía 0 e o plano não mudava nada. A recusa

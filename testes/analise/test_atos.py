@@ -1,3 +1,4 @@
+# componente: componente:analise
 """Ajuda, recusas e leitura de arquivo conservam a fronteira do verbo."""
 import json
 from pathlib import Path

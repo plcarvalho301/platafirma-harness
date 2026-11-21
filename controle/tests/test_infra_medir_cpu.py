@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra medir cpu` (bin/_infra/medir-cpu): a carga contra as threads da máquina, a pressão e a carga média do kernel, o
 consumo por chave de serviço e o código de saída (spec eixos-do-host R2, R3, R4, R5 e R11; card #3921).
 

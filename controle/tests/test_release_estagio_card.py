@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Contrato do estágio 4 de `release promover` (card #3150, trava "sem resposta do
 arquiteto, implementar como cliente de tarefas"): depois de trocar current, resolve
 o card pelo PR que mesclou o sha (nunca da mensagem de commit), comenta e move para

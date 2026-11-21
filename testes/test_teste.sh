@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# componente: componente:verbo-teste
 # Testes de bancada dos verbos `teste` e `lint` (card #3010): a raiz vem de pf_bancada,
 # sem default; sem declaracao sai 3; worktree em <bancada>/wt/<repo>/<cadeira>; nenhum
 # ato cria diretorio. Tudo em diretorio temporario — nao depende de bancada real.

@@ -1,3 +1,4 @@
+# componente: componente:analise
 """Guarda da base, do resultado e dos temporários são independentes."""
 from datetime import timedelta
 import pytest

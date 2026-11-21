@@ -1,3 +1,4 @@
+# componente: componente:verbo-conferir
 """Testes de unidade do contrato de `release conferir sessao-orfa` (card #3375).
 
 Cobre:

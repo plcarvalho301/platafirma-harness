@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """#3180: `acervo ler obra impressao` — contrato do verbo sem rede.
 
 Uso e ato desconhecido por subprocesso; exit por classe de erro, primeira e última linha pelas

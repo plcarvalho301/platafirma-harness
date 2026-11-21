@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra backup`: a ultima geracao abaixo do `piso_bytes` reprova (incidente #3222).
 
 De 16/09 a 02/10/2026 o dump noturno da wiki saiu com 320 bytes e `infra backup` o contou

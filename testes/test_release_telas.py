@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """release telas: a lista de telas do menu da casca (card #3899; arq:0124 §3; comentario #3062 do #3602).
 
 Release de mentira: um registro de stacks num arquivo e uma raiz de release em tmp_path. O ato le a declaracao

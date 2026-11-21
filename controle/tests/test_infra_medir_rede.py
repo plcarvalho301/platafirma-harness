@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra medir rede` (bin/_infra/medir-rede): os três túneis, a porta achada pelo socket do processo, a chave
 de serviço dos consumidores e o código de saída (spec eixos-do-host R2 a R8; card #3919).
 

@@ -1,3 +1,4 @@
+# componente: componente:suite
 """Regressivo #4378: integridade de `remocao-no-pr`, bits executáveis, VERDES e anti-espelho morto.
 
 Garante que:
@@ -17,7 +18,7 @@ REMOCAO = RAIZ / "remocao-no-pr"
 
 SUITES_DT_CRITICAS = (
     "controle/tests/test_contrato_casa_direto_em_main.py",
-    "controle/tests/test_repo_dts_809_822_853_884.py",
+    "controle/tests/test_repo_regressoes_lote_f.py",
     "controle/tests/test_release_estagio_card.py",
     "controle/tests/test_contrato_infra.py",
     "controle/tests/test_contrato_infra_remover.py",

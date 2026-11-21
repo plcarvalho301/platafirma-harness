@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Contrato do estágio 1b da esteira (card #3150, comentário C1): `release promover`
 passa a rodar a suíte de controle/tests/VERDES no venv da chave "harness" — a MESMA
 suíte, o mesmo venv e o mesmo veredito memoizado que hooks/pre-push já usa — e não

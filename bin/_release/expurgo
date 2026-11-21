@@ -126,14 +126,15 @@ def venvs_declarados(prod_raiz: Path | None = None) -> set[str]:
     return chaves
 
 
-def terceiros_declarados(prod_raiz: Path | None = None) -> set[str]:
+def terceiros_declarados(prod_raiz: Path | None = None) -> tuple[set[str] | None, str | None]:
+    """Lê os sha256 declarados na Olaria. Em falha, devolve (None, motivo) para falhar fechado."""
     mod = _carregar_terceiros_olaria()
     if mod is None:
-        return set()
+        return None, "terceiros: módulo lib/terceiros_olaria.py ausente"
     try:
-        return mod.shas_declarados()
-    except Exception:
-        return set()
+        return mod.shas_declarados(), None
+    except Exception as exc:
+        return None, f"terceiros: Olaria indisponível ({exc})"
 
 
 def _normalizar(p: Path) -> str:
@@ -270,10 +271,12 @@ def diagnosticar_fosseis(
     inst = _instancia(str(instancia) if instancia else None)
     fams_decl = familias_declaradas(raiz)
     venvs_decl = venvs_declarados(raiz)
-    tercs_decl = terceiros_declarados(raiz)
+    tercs_decl, tercs_erro = terceiros_declarados(raiz)
     em_uso = coletar_em_uso(raiz, sem_docker=sem_docker)
     fosseis: list[Fossil] = []
     indeterminaveis: list[str] = []
+    if tercs_erro is not None:
+        indeterminaveis.append(tercs_erro)
 
     # 1. Atalhos órfãos/quebrados em current/ e current/venv/
     cur_dir = raiz / "current"
@@ -424,9 +427,9 @@ def diagnosticar_fosseis(
                 removivel=not usadores,
             ))
 
-    # 5. Cache de terceiros fora do declarado
+    # 5. Cache de terceiros fora do declarado (falha fechada: sem Olaria, nunca apaga o cache)
     terc_dir = raiz / "terceiros" / "sha256"
-    if terc_dir.is_dir():
+    if terc_dir.is_dir() and tercs_decl is not None:
         for ent in sorted(terc_dir.iterdir(), key=lambda p: p.name):
             if ent.name in tercs_decl:
                 continue

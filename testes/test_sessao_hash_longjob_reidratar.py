@@ -1,3 +1,4 @@
+# componente: componente:verbo-sessao
 """Regressivo #4378: contrato `sessao` em hash Valkey ↔ `longjob`, `reidratar`, `ver`, `abrir` e `limpar`.
 
 Prova com dublê de hash Valkey (sem `get`/`set` string) que:

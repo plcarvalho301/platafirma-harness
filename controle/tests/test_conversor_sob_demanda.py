@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """Contrato de bin/_infra/conversor-sob-demanda (#4026, ordem do dono de 28/10/2026: o conversor só fica
 ligado enquanto o pipeline de ingestão roda).
 

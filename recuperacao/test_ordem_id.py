@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Correlação da ordem no monta_sessao (#2894).
 
 O gold mede recuperação condicionada a ter havido consulta. O que falta medir é o

@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Contrato e conformidade dos adaptadores de wiki e acervo (#2301, #2302).
 
     python3 -m pytest recuperacao/ -q

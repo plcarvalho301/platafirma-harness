@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """`acervo stack servicos <stack>` e `acervo stack resolver <unit>` leem a ficha de serviço `parte-de` stack (arq:0025 §2).
 
 A unit é a declaração do serviço na forma de processo de host e entra na ficha como alias de origem `unit`

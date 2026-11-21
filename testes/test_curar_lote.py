@@ -1,3 +1,4 @@
+# componente: componente:verbo-curar
 """#3193: os atos de lote do `curar` (spec espelho-de-leitura §4.2 e §9 caso 8) e o `acervo listar obra
 metodos` lendo a tabela única do conversor.
 

@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """Testes herméticos para projeção de `pre_build` em `acervo stack import` e `ver` (#3077, DT-216).
 
 Substitui o antigo testes/test_acervo_stack.sh (que escrevia na tabela acervo.stack

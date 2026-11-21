@@ -1,3 +1,4 @@
+# componente: componente:agente-hooks
 """O hook do Code entrega o turno e a mensagem do dono a porta (card #3356).
 
 `agente/hooks/porta-sessao.py` guarda, no UserPromptSubmit, o contador do turno (T0, T1, ...) e o

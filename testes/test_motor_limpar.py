@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """Testes unitários de bin/_motor/limpeza.py (DT-787)."""
 import sys
 from pathlib import Path

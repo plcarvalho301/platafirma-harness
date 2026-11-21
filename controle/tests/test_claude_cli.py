@@ -1,3 +1,4 @@
+# componente: componente:porta
 """Contrato de lib/claude_cli.py (debito #2856 linha 248): o Claude Code que a casa chama
 vem do ambiente claude-code da release, nunca do PATH; ambiente ausente e falha alta;
 PF_CLAUDE_BIN so para teste; o processo do CLI roda com o atualizador desligado.

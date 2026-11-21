@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Contrato do PEP por fonte (§6, card #2303). `python3 -m pytest recuperacao/ -q`
 
 O que este arquivo julga é o MECANISMO: fail-closed, uma decisão por fonte, negativa

@@ -1,3 +1,4 @@
+# componente: componente:oplog
 """O contrato do log da porta no lib/oplog (card #3345, spec log-de-negocio §3).
 
 «Campo obrigatorio ausente reprova no teste de contrato»: cada tipo de linha tem os campos que

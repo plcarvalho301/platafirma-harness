@@ -1,3 +1,4 @@
+# componente: componente:verbo-tarefas
 """Verbo tarefas: o nível ideia (card #4339, classe `ideia` da Olaria, filha de `card`).
 
 O rastreador é um stub HTTP em loopback (TAREFAS_BASE aponta para ele): o teste prova o que o

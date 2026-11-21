@@ -1,3 +1,4 @@
+# componente: componente:verbo-repo
 """Contrato do regime direto em main em `repo` e `minuta` (arq:0083 §1; ordem do dono de
 28/09/2026: platafirma-casa, repositorio de deliberacao, commita direto em main).
 

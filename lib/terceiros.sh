@@ -32,8 +32,10 @@ materializar_terceiros_em() {
     cache_dir="$3"
   fi
   local pfx="$PF_VENV_PREFIXO"
+  local py_bin="/opt/platafirma/current/venv/harness/bin/python"
+  [ -x "$py_bin" ] || py_bin="python3"
   local linhas nome destino pino url alvo cache tmp curl
-  if ! linhas="$(python3 "$_TERCEIROS_LIB_DIR/terceiros_olaria.py" --familia "$familia")"; then
+  if ! linhas="$("$py_bin" "$_TERCEIROS_LIB_DIR/terceiros_olaria.py" --familia "$familia")"; then
     printf '%s: dependência ausente: não leu as fichas de terceiros na Olaria — current intacto\n' "$pfx" >&2
     return 3
   fi
@@ -41,7 +43,7 @@ materializar_terceiros_em() {
   while IFS=$'\t' read -r nome destino pino url; do
     [ -n "$nome" ] || continue
     if ! [[ "$nome" =~ ^[A-Za-z0-9._-]+$ ]] || [[ "$destino" == /* ]] || [[ "$destino" == *..* ]] || [ -z "$destino" ] \
-       || ! [[ "$pino" =~ ^[0-9a-f]{64}$ ]] || { [ -n "$url" ] && [[ "$url" != https://* ]] && [[ "$url" != http://127.0.0.1:* ]]; }; then
+       || ! [[ "$pino" =~ ^[0-9a-f]{64}$ ]] || { [ -n "$url" ] && [[ "$url" != https://* ]]; }; then
       printf '%s: erro: terceiro mal declarado nas fichas da Olaria: %s (%s)\n' "$pfx" "$nome" "$destino" >&2
       return 3
     fi
@@ -60,9 +62,7 @@ materializar_terceiros_em() {
       fi
       mkdir -p "$cache_dir"
       tmp="$(mktemp "$cache_dir/.baixando.XXXXXX")"
-      local proto_arg="=https"
-      [[ "$url" == http://127.0.0.1:* ]] && proto_arg="=http"
-      if ! "$curl" -fsSL --proto "$proto_arg" --max-time 600 -o "$tmp" "$url"; then
+      if ! "$curl" -fsSL --proto '=https' --max-time 600 -o "$tmp" "$url"; then
         rm -f "$tmp"
         printf '%s: dependência ausente: terceiro %s não baixou de %s — semeie %s e repita; current intacto\n' "$pfx" "$nome" "$url" "$cache" >&2
         return 3

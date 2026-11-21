@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """#2856 linha 156 (casos #3240 e #3282): `acervo listar obra --qualidade` agrega, por classe (servível /
 servível imperfeito / não servível / não julgado), o julgamento dos espelhos servindo; com `--por-obra`, uma
 linha por obra.

@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Contrato do roteador de chapeu (recursao do P2). Testa o modulo ISOLADO — a desconfianca
 do dono e sobre o fluxo, entao o fluxo tem prova propria, sem montar sessao nem tocar disco
 (exceto os testes que leem os chapeus reais da cadeira ia no disco, em abertura/)."""

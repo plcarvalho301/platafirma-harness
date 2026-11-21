@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """#3298: os atos de Retirar pelo estágio (arq:0119 §2, §9), com a forma velha em aviso.
 
 `acervo retirar|restaurar|apagar biblioteca obra` chamam `--expurgar|--restaurar|--apagar` de bin/curar;

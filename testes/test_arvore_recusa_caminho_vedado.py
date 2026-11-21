@@ -1,3 +1,4 @@
+# componente: componente:verbo-lint
 """Regressivo #4400 / #4403: bin/_lint/arvore.py e bin/_lint/pre_commit.py recusam
 qualquer arquivo sob o caminho vedado no espelho com ARVORE_RAIZ e liberam as três
 raízes válidas (instancias/, referencias/, verbetes/).

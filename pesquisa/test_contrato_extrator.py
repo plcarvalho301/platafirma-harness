@@ -1,3 +1,4 @@
+# componente: componente:verbo-pesquisar
 """Contrato do extrator — ler (spec §3.2, §4.2, §4.8; card #3183 passos 2 e 3).
 
 Sem browser e sem rede: coletor, renderizador e derivador são falsos, e o coletor httpx de

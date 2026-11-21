@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Stack de catálogo (registrada sem compose) não entra na promoção por release.
 
 Regressivo do dia 14/10/2026: o #3551 registrou a stack `harness` com `compose: null`, de propósito

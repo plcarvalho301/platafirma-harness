@@ -1,3 +1,4 @@
+# componente: componente:verbo-metrica
 """O cliente da rota de escrita do banco de eventos de plataforma (bin/_metrica/eventos.py; spec
 banco-de-eventos-de-plataforma R6, R7 e R8; card #3922).
 

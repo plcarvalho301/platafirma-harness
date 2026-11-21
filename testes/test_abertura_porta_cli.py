@@ -1,3 +1,4 @@
+# componente: componente:abertura
 """Testes do CLI JSON `python -m abertura` e da remontagem sem cultura (story #4343, T2)."""
 from __future__ import annotations
 

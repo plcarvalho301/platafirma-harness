@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 # Contrato de `acervo exportar` e da limpeza do `acervo extrato` (pedido 20260922T220127-dados)
 import importlib.machinery
 import importlib.util

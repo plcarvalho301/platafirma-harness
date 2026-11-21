@@ -1,3 +1,4 @@
+# componente: componente:verbo-teste
 """Rodada diária (--origin-main), teto do pequeno e isolamento de rede no verbo `teste` (#3732, DT #312)."""
 from __future__ import annotations
 

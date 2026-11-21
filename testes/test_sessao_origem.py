@@ -1,3 +1,4 @@
+# componente: componente:verbo-sessao
 """`sessao abrir --origem`: a sessao filha guarda a sessao de quem chamou (card #3158).
 
 Hermetico: msg-mem, politica (`acesso decidir`), vocabulario (`persona foto`) e Postgres sao

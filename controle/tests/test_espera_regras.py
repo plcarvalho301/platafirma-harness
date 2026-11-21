@@ -1,3 +1,4 @@
+# componente: componente:verbo-tarefas
 """`tarefas espera-dono` exibe stories em refinamento com regras pendentes (card #4096).
 
 O rastreador é um stub HTTP em loopback (`TAREFAS_BASE` aponta para ele): o teste prova que

@@ -1,3 +1,4 @@
+# componente: componente:verbo-tarefas
 """Verbo tarefas: a task se chama pela chave da story, `<story>.t<n>` (incidente #4245).
 
 O rastreador é um stub HTTP em loopback (TAREFAS_BASE aponta para ele). Prova o que o VERBO faz:

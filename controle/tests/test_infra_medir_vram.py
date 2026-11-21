@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra medir vram` (bin/_infra/medir-vram): cada processo da placa na chave de serviço ou em desvio com motivo, o
 reservado, o SM e a placa em campos distintos, e o código de saída (spec eixos-do-host R2, R3, R4 e R10; card #3921).
 

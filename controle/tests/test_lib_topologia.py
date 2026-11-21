@@ -1,3 +1,4 @@
+# componente: componente:porta
 """Testes unitários de lib/topologia.py (DTs 288 e 377).
 
 Garante que a resolução de contêiner para stack da topologia seja única,

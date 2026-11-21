@@ -1,3 +1,4 @@
+# componente: componente:agente-hooks
 """Testes do gancho porta-sessao.py para itens estruturados do malote (card #4369)."""
 from __future__ import annotations
 

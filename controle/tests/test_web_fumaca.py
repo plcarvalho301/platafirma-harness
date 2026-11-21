@@ -1,3 +1,4 @@
+# componente: componente:harness-controle
 # Camada 3 do modelo de teste do card #390: fumaça HTTP. O serviço sobe, as
 # três rotas respondem, a recepção contém os quatro blocos, e um verbo morto
 # não pinta a linha como saudável (aceite 2 do card). Fora: teste de

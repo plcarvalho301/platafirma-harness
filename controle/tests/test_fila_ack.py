@@ -1,3 +1,4 @@
+# componente: componente:verbo-fila
 # Tres estados da caixa (decisao do dono, 03/10/2026): nao lida -> pendurada -> tratada.
 # `ler` entrega sem XACK; `tratar` e o XACK; `ler --penduradas` le PEL + nao lidas
 # sem mover nada. Fake com estado de grupo de verdade (ponteiro e PEL).

@@ -1,3 +1,4 @@
+# componente: componente:verbo-repo
 """Contrato de hooks/pre-push pós card #3150 (comentário A): mede a REV empurrada
 no venv da CHAVE do registro (harness), não em `uvx --with redis` isolado; grava e
 reaproveita veredito por (hash da árvore, chave); distingue "não medido" (chave

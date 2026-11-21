@@ -1,3 +1,4 @@
+# componente: componente:verbo-tarefas
 """Contrato de `bin/tarefas listar --json` (card #390, LOTE 1) e
 `bin/tarefas listar-tudo --json` (card #394, data de fechamento pro /feito).
 

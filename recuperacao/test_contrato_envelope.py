@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Contrato do envelope. `python3 -m pytest recuperacao/ -q` da raiz do repo.
 
 Cada teste corresponde a uma linha do §3 da `spec_recuperador.md`. Invariante que não

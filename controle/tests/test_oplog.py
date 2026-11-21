@@ -1,3 +1,4 @@
+# componente: componente:oplog
 """lib/oplog: chave, versao, aparo, classe e leitura por dia do bruto da porta (card #3344).
 
 arq:0123 §3-§5. O modulo e o unico que escreve e le `ops-AAAA-MM-DD.jsonl`; estes testes o

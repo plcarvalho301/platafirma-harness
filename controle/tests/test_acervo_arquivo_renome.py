@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """`acervo ler biblioteca objeto` virou `acervo ler biblioteca arquivo` (arq:0108 §10; ordem do dono em 18/10/2026,
 comentário #3015 da #3761): o arquivo da obra nunca se chama «objeto», também em ato de verbo. O nome velho
 recusa com exit 2 e nomeia o novo."""

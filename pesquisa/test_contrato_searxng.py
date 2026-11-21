@@ -1,3 +1,4 @@
+# componente: componente:verbo-pesquisar
 """Contrato do cliente SearXNG — consultar (spec §4.1) com SearXNG falso."""
 
 from __future__ import annotations

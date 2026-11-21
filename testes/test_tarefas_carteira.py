@@ -1,3 +1,4 @@
+# componente: componente:verbo-tarefas
 """Verbo tarefas: originação, executor, ordem, vínculo, despriorizar e carteira (card #3526; R19,
 R21, R23, R24 e R25 da spec tarefas).
 

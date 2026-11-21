@@ -1,3 +1,4 @@
+# componente: componente:verbo-fila
 """Id da carta unico por carta (#2856 linha 79).
 
 Varios `fila enviar` da mesma remetente no mesmo segundo, para caixas diferentes, devolviam o mesmo

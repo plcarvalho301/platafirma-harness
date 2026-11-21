@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """DT 771: `acervo extrato` lê campos CSV maiores que o limite padrão de 128 KB."""
 
 from __future__ import annotations

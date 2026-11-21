@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 # Forma autorizada do referente da linha de Fontes (decisão do dono de 11/10/2026, #3408
 # comentário #2085, item 4): casa «espécie chave — título, §», obra «autor, título», norma
 # «id canônico». Sem banco: só as funções puras e o despacho de uso.

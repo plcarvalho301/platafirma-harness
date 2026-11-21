@@ -1,11 +1,11 @@
 # BASELINE VERDE da suite de contrato — o que o `hooks/pre-push` julga.
-tests/test_dts_915_928.py | bin/repo bin/tarefas
-tests/test_motor_dt537_538_552_553.py | regressivo #2856
-tests/test_dt140_364.py | bin/release bin/_release/lotes.py bin/sessao bin/expediente
-tests/test_dt_397_499.py | bin/infra bin/_acervo/casa
-tests/test_dt_500.py | lib/oplog_extracao.py
-tests/test_dt_502.py | bin/acervo
-tests/test_dt_202_tipos_fila.py | lib/fila_tipos.py bin/_fila/streams.py controle/harness_controle/web.py
+tests/test_repo_pr_espera_e_sujeito.py | bin/repo bin/tarefas
+tests/test_motor_busca_e_tesauro.py | regressivo #2856
+tests/test_porta_lote_em_voo.py | bin/release bin/_release/lotes.py bin/sessao bin/expediente
+tests/test_porta_regressoes_despacho.py | bin/infra bin/_acervo/casa
+tests/test_oplog_extrator_tokens.py | lib/oplog_extracao.py
+tests/test_acervo_ajuda_balde.py | bin/acervo
+tests/test_fila_tipos_validos.py | lib/fila_tipos.py bin/_fila/streams.py controle/harness_controle/web.py
 # test_lint_arranque_dt527.py removido em remocao-no-pr (#4378)
 #
 # O que cada arquivo desta lista prova está em
@@ -96,7 +96,7 @@ tests/test_release_stack_imagem.py | bin/release bin/_release/**
 # Medido em 14/10/2026: stack registrada sem compose (a `harness` do #3551) fica fora da lista de promocao do `bin/release`; sem isso,
 # `stack testar harness` saia 2 e toda promocao do platafirma-harness parava (5 passam; sem a mudanca, 4 ficam vermelhos).
 tests/test_release_stack_catalogo.py | bin/release bin/_release/**
-tests/test_repo_dts_80_95_407_451.py | bin/repo
+tests/test_repo_abrir_move_card.py | bin/repo
 tests/test_bot.py | bin/bot bin/acervo bin/_acervo/** agente/** deploy-harness/** registro/**
 # Raio (card #3370): `<arquivo> | <glob> <glob>...`, globs relativos a raiz do repositorio. O push e a
 # promocao rodam a linha quando o diff alcanca algum glob (ou o proprio arquivo); linha sem `|` roda
@@ -118,8 +118,7 @@ tests/test_motor_contra.py | bin/motor bin/_motor/** registro/motor-instancias.j
 tests/test_motor_marcacao.py | bin/motor bin/_motor/**
 # Card #3349: `motor rag sortear biblioteca` (filtros do padrao contados por motivo, cota por cadeira, ordem sorteada, sha do arquivo).
 tests/test_motor_sorteio.py | bin/motor bin/_motor/**
-# Card #4417: rodada de avisos OSV (`seg avisos`) e terceiros lidos pelas fichas da Olaria.
-testes/test_seg_avisos.py | bin/seg lib/avisos.py registro/porta.yaml deploy-harness/seg-avisos.service deploy-harness/seg-avisos.timer
+# Card #4417: terceiros lidos pelas fichas da Olaria.
 testes/test_terceiros_pelas_fichas.py | lib/terceiros.sh lib/terceiros_olaria.py bin/release bin/_release/expurgo bin/teste
 # Card #3349: `motor rag escrever biblioteca` (prompt, mapa, rodape, piloto, terceiro braco, envelope e aceite; fiacao com rag, ollama e docker falsos).
 tests/test_motor_escritor.py | bin/motor bin/_motor/**
@@ -139,7 +138,7 @@ tests/test_motor_registro.py | bin/motor bin/_motor/**
 tests/test_motor_eleger.py | bin/motor bin/_motor/** sessao/**
 tests/test_stack_mascara_segredos.py | bin/_release/**
 tests/test_pesquisar_consultar_palavras.py | bin/pesquisar pesquisa/**
-tests/test_pesquisar_dt_93_546_661_662_663.py | bin/pesquisar pesquisa/**
+tests/test_pesquisar_regressoes.py | bin/pesquisar pesquisa/**
 tests/test_acervo_psql_c.py | bin/acervo bin/_acervo/**
 # Card #4313: sairam os testes de `acervo medir`, `acervo gerar`, `acervo gerador` e `motor raciocinador`, com os atos.
 # Card #3761: a ficha da ADR mora na classe decisao; adr segue como nome de entrada e se le na classe nova.
@@ -148,7 +147,7 @@ tests/test_identidade_classe_decisao.py | bin/acervo bin/_acervo/**
 tests/test_acervo_arquivo_renome.py | bin/acervo bin/_acervo/** bin/curar
 tests/test_fila_msgid.py | bin/_fila/**
 tests/test_fila_ack.py | bin/fila bin/_fila/** bin/minuta bin/_minuta/** bin/persona bin/_persona/**
-tests/test_dt_798_fila_lote.py | bin/fila bin/_fila/**
+tests/test_fila_tratar_lote.py | bin/fila bin/_fila/**
 tests/test_fila_contestacao.py | bin/fila bin/_fila/**
 # Card #3884: carta assinada por bot (`bot:<slug>`), so de dentro do proprio `bot rodar`; carta a bot recusa.
 tests/test_fila_bot.py | bin/fila bin/_fila/**
@@ -225,7 +224,7 @@ testes/test_deploy_seg_suites.py | bin/_release/** bin/release bin/seg bin/teste
 testes/test_expediente_chapeu.py | bin/expediente bin/_expediente/**
 testes/test_bateria_chave.py | avaliacao/bateria.jsonl
 testes/test_gerar_rotas_chapeu.py |
-testes/test_ingerir_casamento_3307.py | bin/ingerir bin/motor bin/_motor/**
+testes/test_ingerir_casamento.py | bin/ingerir bin/motor bin/_motor/**
 testes/test_metrica_comportamento.py | bin/metrica bin/_metrica/**
 testes/test_poda_cru.py | lib/poda/**
 testes/test_release_suites.py | bin/release bin/_release/** testes/test_release.sh testes/test_release_lote2.sh testes/test_release_lote3.sh
@@ -259,7 +258,7 @@ testes/test_tarefas_dt.py | bin/tarefas
 testes/test_tarefas_quadros.py | bin/tarefas
 testes/test_lint_card.py | bin/lint bin/_lint/card.py bin/_lint/lista.py bin/_lint/resultado.py
 testes/test_venvs_cobrem_imports.py | bin/_sessao/** mcp/** registro/**
-testes/test_infra_backup_dts_931_932.py | bin/infra bin/_infra/backup.py registro/backups.json
+testes/test_infra_backup_rodar_restaurar.py | bin/infra bin/_infra/backup.py registro/backups.json
 tests/test_claude_cli.py | lib/claude_cli.py bin/agente bin/motor registro/** venvs/claude-code/**
 # Card #3435 (R27 da spec taipa): a escrita da tela do harness so passa com a origem exata da lista da instancia;
 # as seis tentativas de fora recebem 403 sem chegar ao verbo, o ato pela tela passa, lista vazia fecha.
@@ -324,35 +323,35 @@ tests/test_curar_bancada_lista.py | bin/curar
 # Pedido 20261102T091653-dados: `infra pecas | rodar` (peça não declarada sai 4; caminho da peça diferente de origin/main ou solto
 # fora do git sai 4; mudança fora dos caminhos não trava; a peça recebe o banco do cofre e o verbo não o imprime), num git de mentira.
 testes/test_infra_rodar_peca.py | bin/infra bin/_infra/** bin/_acervo/exportar registro/pecas.json
-tests/test_pipeline_4120.py | bin/acervo bin/_acervo/** bin/ingerir
+tests/test_acervo_pipeline.py | bin/acervo bin/_acervo/** bin/ingerir
 # Card #4096: `tarefas espera-dono` exibe stories em refinamento com regras novas pendentes além das perguntas legadas.
 tests/test_espera_regras.py | bin/tarefas
 # DTs 278 e 449: `tarefas ler` mostra `resolvido_de` e recusa de `registro-de-negocio` não força `--estado priorizada`.
-testes/test_tarefas_dt_278_449.py | bin/tarefas
+testes/test_tarefas_dt_englobado.py | bin/tarefas
 # DTs 634, 375 e 523: volta automática não mexe na abertura, fallback de stacks e declaração de banco fora da casa.
-tests/test_dts_634_375_523.py | bin/release bin/_release/** lib/analise/receita.py registro/bancos.json
+tests/test_release_stack_servido_regressoes.py | bin/release bin/_release/** lib/analise/receita.py registro/bancos.json
 # DT 369: `agente/abertura-ver.py` alinhado ao expediente sem roteador e com rotinas.
 # test_abertura_ver.py removido em remocao-no-pr (#4378)
 # DTs 271, 323, 404 e 592: KiB e aviso em `dt listar --curto` e parser da tabela Unidades em `mover em-execucao`.
-tests/test_tarefas_dts_271_323_404_592.py | bin/tarefas
+tests/test_tarefas_regressoes_lote_a.py | bin/tarefas
 # DTs 37, 203, 285, 414 e 530: `repo commitar` restaura stage em falha do gate, `repo estado` inclui caminho absoluto, `repo descartar` e `repo abrir` recolocando direto-em-main.
-tests/test_repo_dts_37_203_285_414.py | bin/repo
+tests/test_repo_regressoes_lote_a.py | bin/repo
 # DTs 256, 286, 333, 394 e 633: retomada de stacks após PROMOCAO PARCIAL, separação de stack sem registro vs sem compose, procurar em abertura e com ERE, ler --linhas preservando linha vazia.
-tests/test_dts_256_286_333_394_633.py | bin/release bin/_release/stack
+tests/test_release_regressoes_promocao.py | bin/release bin/_release/stack
 # DT 470 (#2856 linha 470): `tarefas editar` e `tarefas comentar` com curl falso respondendo POST /para-html.
 tests/test_tarefas_editar.py | bin/tarefas
 # DT 522 (#2856 linha 522): todo contêiner Postgres de pé está em registro/bancos.json ou em _fora_da_casa com motivo.
 tests/test_registro_bancos_postgres.py | registro/bancos.json | degrau: rodada
 # DT 450 (#2856 linha 450): `tarefas comentarios --busca <termo> --arvore <id>` busca descendo a árvore inteira.
-tests/test_tarefas_dt450.py | bin/tarefas
+tests/test_tarefas_comentarios_busca.py | bin/tarefas
 # DT 228: --exposicao em catalogar e exposicao/portao nos planos de ingerir e espelhar.
-tests/test_acervo_dt228.py | bin/acervo bin/_acervo/curar bin/curar bin/ingerir
+tests/test_acervo_exposicao_portao.py | bin/acervo bin/_acervo/curar bin/curar bin/ingerir
 # DTs 7, 48, 487 e 490 (#2856 linhas 7, 48, 487 e 490): HEAD destacado e ramo preso em outro worktree, retry e fallback REST em pr-merge, sincronizar/empurrar sem travar por não rastreado alheio, e isolamento de ramo/pr-merge/portão em git commit.
-tests/test_repo_dt7.py | bin/repo
+tests/test_repo_sincronizar_ramo.py | bin/repo
 tests/test_contrato_repo_pr_merge.py | bin/repo
-tests/test_repo_dt_490.py | bin/repo
+tests/test_repo_estado_bancada.py | bin/repo
 # DTs 744 e 747 (#2856 linhas 744 e 747): avisa_atras_origin sugere repo sincronizar em ramo sem upstream, e portao_admissao_casa passa arquivos/plano por arquivo temporario sem estourar ARG_MAX.
-tests/test_repo_dts_744_747.py | bin/repo
+tests/test_repo_regressoes_lote_d.py | bin/repo
 # DTs 774 e 776: sombra.py le motor.trecho na morada motor e cai em evento_recuperacao sem permissao na view bateria_recuperacao.
 testes/test_motor_sombra.py | bin/_motor/sombra.py
 # Story #4359: o ponteiro do processo do estágio no retorno do `tarefas mover` (a linha que o catálogo liga ao estado de destino;
@@ -360,18 +359,18 @@ testes/test_motor_sombra.py | bin/_motor/sombra.py
 # contra um rastreador e um `infra` de mentira.
 tests/test_tarefas_ponteiro_estagio.py | bin/tarefas
 # DTs 791, 801, 836 e 837 (#2856 linhas 791, 801, 836 e 837): abrir mantem executor ja definido, abrir --da-producao --slug sem card, commitar com multiplos -m e procurar padrao com hifen apos <repo>.
-tests/test_repo_dts_791_801_836_837.py | bin/repo
+tests/test_repo_regressoes_lote_e.py | bin/repo
 # DTs 809, 822, 853 e 884 (#2856): fabrica/<card> sem slug no estagio 4, pr-revisar e autoria/revisao em pr-ver, leitura direta @origin/main e atualizar HEAD destacado, abrir pela dona mantendo executor.
-tests/test_repo_dts_809_822_853_884.py | bin/repo bin/release
+tests/test_repo_regressoes_lote_f.py | bin/repo bin/release
 # Casa nova (F4073, #4299, #4340, #4342, #4343, #4369, #4378):
 testes/test_suite_portao.py | bin/repo lib/suite/portao.py lib/suite/__main__.py lib/suite/coletor.py
 testes/test_oplog_interrompido.py | lib/oplog.py
 testes/test_metrica_transporte.py | bin/metrica
 testes/test_release_reinicia_porta.py | bin/release
-tests/test_release_expurgo_dt930.py | bin/release bin/_infra/imagens registro/porta.yaml
+tests/test_release_expurgo_fosseis.py | bin/release bin/_infra/imagens registro/porta.yaml
 testes/test_poda.py | lib/poda/**
 testes/test_leitura_escrita.py | lib/leitura/** lib/escrita/** bin/ler_arquivo bin/write_file
-testes/test_envelope_tokens_dt4251_4120.py | lib/leitura/** lib/oplog.py
+testes/test_envelope_tokens_leitura.py | lib/leitura/** lib/oplog.py
 testes/test_leitura_contratos.py | lib/leitura/** lib/escrita/** lib/oplog.py bin/ler_arquivo bin/write_file
 testes/test_escopo_chapeu_verbos.py | lib/postura/lousa.py lib/postura/atos.py bin/repo bin/tarefas
 testes/test_sessao_hash.py | bin/sessao bin/_sessao/** lib/postura/lousa.py

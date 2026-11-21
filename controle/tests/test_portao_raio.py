@@ -1,3 +1,4 @@
+# componente: componente:verbo-teste
 """Seleção por raio de ataque, regressivo, preparo e --origin-main no verbo `teste` (arq:0128)."""
 from __future__ import annotations
 

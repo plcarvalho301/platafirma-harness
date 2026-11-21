@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Suites bash do verbo `release` (spec_release rev 2, arq:0110 Q9), uma por lote.
 
 Rodam pelo `teste rodar platafirma-harness` e, por ele, no pre-push: verbo tocado sem

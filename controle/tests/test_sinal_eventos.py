@@ -1,3 +1,4 @@
+# componente: componente:verbo-sinal
 """A passada da série dos eixos dentro do `sinal` (bin/sinal; spec eixos-do-host R15; spec banco-de-eventos-de-plataforma R8
 e R13; card #3922).
 

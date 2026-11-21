@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """`acervo stack import` grava a coluna `forma` (conteiner ou host), obrigatória em acervo.stack.
 
 Sem ela a importação de stack nova falhava no banco («null value in column forma», medido em
