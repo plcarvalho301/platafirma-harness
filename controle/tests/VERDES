@@ -71,7 +71,7 @@ tests/test_contrato_teste.py | bin/teste bin/_release/registro.py
 tests/test_contrato_lint.py | bin/lint bin/_lint/**
 tests/test_casa_arvore.py | bin/acervo bin/_acervo/** bin/ingerir bin/_ingerir/**
 tests/test_isolamento.py | lib/teste_isolado.py
-tests/test_contrato_acesso.py | bin/acesso bin/_acesso/** politica-acesso/**
+tests/test_contrato_acesso.py | bin/acesso bin/_acesso/**
 tests/test_contrato_acervo.py | bin/acervo bin/_acervo/**
 tests/test_contrato_organizacao.py | bin/lint bin/_lint/** docs/**
 tests/test_contrato_release_migrar.py | bin/release bin/_release/**
@@ -118,6 +118,8 @@ tests/test_motor_contra.py | bin/motor bin/_motor/** registro/motor-instancias.j
 tests/test_motor_marcacao.py | bin/motor bin/_motor/**
 # Card #3349: `motor rag sortear biblioteca` (filtros do padrao contados por motivo, cota por cadeira, ordem sorteada, sha do arquivo).
 tests/test_motor_sorteio.py | bin/motor bin/_motor/**
+# Card #4417: rodada de avisos OSV (`seg avisos`).
+testes/test_seg_avisos.py | bin/seg lib/avisos.py registro/porta.yaml deploy-harness/seg-avisos.service deploy-harness/seg-avisos.timer
 # Card #3349: `motor rag escrever biblioteca` (prompt, mapa, rodape, piloto, terceiro braco, envelope e aceite; fiacao com rag, ollama e docker falsos).
 tests/test_motor_escritor.py | bin/motor bin/_motor/**
 # Card #3350: `motor rag julgar biblioteca` — o juiz (prompt com o criterio da tela, leitura da saida, tentativas, corpo do
