@@ -37,6 +37,7 @@ test_acervo_listar_retirada.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_mapa.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_objeto.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_particao_biblioteca.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_psql_leitura.py | bin/acervo bin/_acervo/** registro/bancos.json
 test_acervo_psql_temp.py | bin/acervo bin/_acervo/**
 test_acervo_wiki_cargo.py | bin/acervo bin/_acervo/**
 test_balde_apagar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir

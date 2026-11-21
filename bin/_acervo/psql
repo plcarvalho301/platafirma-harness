@@ -24,19 +24,41 @@ set -uo pipefail
 
 VERBO="acervo psql"
 
-# Allowlist dos Postgres de conhecimento/busca/ontologia da casa. slug -> ctr:usr:base
-declare -A BANCOS=(
-  [rag]="rag-extractor-pg:rag:rag_extractor"
-  [motor]="motor-pg:motor:motor"
-  [casa]="casa-db:casa:casa"
-  [analise]="analise-db:analise:analise"
+# Allowlist carregada de registro/bancos.json (#4428): todos os Postgres da casa,
+# sempre pela role de leitura `analise_leitura` e transação somente leitura.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BANCOS_JSON="${PF_BANCOS_JSON:-$SCRIPT_DIR/../../registro/bancos.json}"
+ROLE_LEITURA="analise_leitura"
+
+morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
+
+declare -A BANCOS=()
+if [ ! -f "$BANCOS_JSON" ]; then
+  morre "registro de bancos ausente: $BANCOS_JSON" 3
+fi
+while IFS=$'\t' read -r _slug _ctr _base; do
+  [ -n "$_slug" ] || continue
+  BANCOS["$_slug"]="${_ctr}:${ROLE_LEITURA}:${_base}"
+done < <(
+  python3 - "$BANCOS_JSON" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    dados = json.load(fh)
+for slug, info in dados.items():
+    if slug.startswith("_") or not isinstance(info, dict):
+        continue
+    ctr = info.get("conteiner") or ""
+    base = info.get("base") or ""
+    if ctr and base:
+        print(f"{slug}\t{ctr}\t{base}")
+PY
 )
 
 uso() {
   cat >&2 <<EOF
 uso:
   acervo psql [--banco <banco>] [-A] [-t] [--csv] [-q] [-x] [-F <sep>] [--sql <query> | -c <query>]
-                             roda SQL no <banco>, resultado cru de volta
+                             roda SQL somente de leitura no <banco> pela role ${ROLE_LEITURA}
                              banco default: rag (schema acervo.*).
                              opções de formato: -A (sem alinhamento), -t (só tuplas),
                              --csv, -q (quiet), -x (expandido), -F <sep> (separador de campo).
@@ -44,13 +66,11 @@ uso:
                              forma vigente (posicional, \`acervo psql <banco>\`) ainda responde.
 
 bancos declarados: ${!BANCOS[*]}  (default: rag)
-SEM bloqueio de escrita (decisao do dono 08/09): DROP/DELETE/UPDATE passam.
-exit: 0 ok · 2 uso · 3 falha (docker/psql) · 4 banco fora da allowlist
+leitura apenas: role ${ROLE_LEITURA} com default_transaction_read_only=on (sem escrita).
+exit: 0 ok · 2 uso · 3 falha (docker/psql) · 4 banco fora da allowlist ou restrito
 EOF
   exit 2
 }
-
-morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
 
 banco="rag"
 sql=""
@@ -111,6 +131,9 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "${BANCOS[$banco]:-}" ] || morre "banco '$banco' fora da allowlist — validos: ${!BANCOS[*]}" 4
+if [ "$banco" = "keycloak" ] && [ -n "${PF_CADEIRA:-}" ] && [ "$PF_CADEIRA" != "seguranca" ] && [ "$PF_CADEIRA" != "ti" ]; then
+  morre "banco 'keycloak' restrito as cadeiras seguranca e ti (cadeira atual: $PF_CADEIRA)" 4
+fi
 IFS=: read -r ctr usr base <<<"${BANCOS[$banco]}"
 
 if [ -z "$sql" ]; then
@@ -131,7 +154,7 @@ docker inspect -f '{{.State.Running}}' "$ctr" 2>/dev/null | grep -qx true \
 # NOTICE/erro de sintaxe no stderr. Este e o conserto do debito migrar-stdout.
 err_arq="$(mktemp "${TMPDIR:-/tmp}/acervo-psql.XXXXXX")" || morre "mktemp falhou" 3
 trap 'rm -f "$err_arq"' EXIT
-out="$(docker exec -i "$ctr" psql -U "$usr" -d "$base" -P pager=off "${psql_flags[@]}" 2>"$err_arq" <<<"$sql")"
+out="$(docker exec -i -e "PGOPTIONS=-c default_transaction_read_only=on" "$ctr" psql -U "$usr" -d "$base" -P pager=off "${psql_flags[@]}" 2>"$err_arq" <<<"$sql")"
 rc=$?
 err="$(cat "$err_arq")"
 rm -f "$err_arq"
