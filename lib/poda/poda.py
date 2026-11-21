@@ -220,8 +220,9 @@ def lavar(
     *,
     forma: str = "listagem",
     constitutiva: bool = False,
+    preservar_branco: bool = False,
 ) -> tuple[str, dict[str, Any]]:
-    """Remove ruído preservando JSON válido e conteúdo sob poda constitutiva."""
+    """Remove ruído preservando JSON válido, conteúdo sob poda constitutiva e brancos em leitura."""
     bytes_antes = len(texto.encode("utf-8", "replace"))
     classes: list[str] = []
     atual = texto
@@ -234,11 +235,13 @@ def lavar(
     if forma == "json" or _eh_json_valido(atual):
         return atual, {"classes": classes, "bytes_antes": bytes_antes}
 
-    sem_branco = _RE_BRANCOS_MULTI.sub("\n\n", atual)
-    sem_branco = "\n".join(ln.rstrip() for ln in sem_branco.split("\n"))
-    if sem_branco != atual:
-        classes.append("branco")
-        atual = sem_branco
+    # DT 1007: leitura de arquivo (`ler`) chega byte a byte; a poda de branco não se aplica a `ler`.
+    if not preservar_branco:
+        sem_branco = _RE_BRANCOS_MULTI.sub("\n\n", atual)
+        sem_branco = "\n".join(ln.rstrip() for ln in sem_branco.split("\n"))
+        if sem_branco != atual:
+            classes.append("branco")
+            atual = sem_branco
 
     if constitutiva:
         return atual, {"classes": classes, "bytes_antes": bytes_antes}
@@ -437,13 +440,19 @@ def podar_texto(
     cauda: bool = False,
     cosmetica: bool = False,
     constitutiva: bool = False,
+    preservar_branco: bool = False,
     forma: str = "listagem",
     escrita: bool = False,
     esquece: bool = False,
     distancia_max: int | None = None,
 ) -> tuple[str, dict[str, Any]]:
     giro = ledger.proximo_giro() if ledger is not None else 1
-    lavado, rel = lavar(texto, forma=forma, constitutiva=constitutiva)
+    lavado, rel = lavar(
+        texto,
+        forma=forma,
+        constitutiva=constitutiva,
+        preservar_branco=preservar_branco,
+    )
     meta: dict[str, Any] = {
         "ato": tool,
         "giro": giro,
@@ -560,6 +569,7 @@ def podar_envelope(
         cauda=bool(perf.get("cauda")),
         cosmetica=cosmetica,
         constitutiva=constitutiva,
+        preservar_branco=(ato_ef == "ler"),
         forma=str(perf.get("forma") or "listagem"),
         escrita=escrita,
         esquece=inteiro,
