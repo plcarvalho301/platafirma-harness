@@ -159,6 +159,29 @@ def decidir(registros: Sequence[Mapping[str, Any]], repositorio: str, arvore_mud
     )
 
 
+def _esteira_repositorio(repositorio: str, caminho_venvs: str | Path | None = None) -> str | None:
+    """Lê a esteira declarada do repositório em `registro/venvs.json` (codigo|documento)."""
+    candidatos: list[Path] = []
+    if caminho_venvs is not None:
+        candidatos.append(Path(caminho_venvs))
+    elif os.environ.get("PLATAFIRMA_VENVS"):
+        candidatos.append(Path(os.environ["PLATAFIRMA_VENVS"]))
+    else:
+        candidatos.append(Path(__file__).resolve().parents[2] / "registro" / "venvs.json")
+        candidatos.append(Path("/opt/platafirma/current/harness/registro/venvs.json"))
+    for arq in candidatos:
+        try:
+            dados = json.loads(arq.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        repos = dados.get("repositorios")
+        if isinstance(repos, dict) and repositorio in repos:
+            cfg = repos[repositorio]
+            if isinstance(cfg, dict) and isinstance(cfg.get("esteira"), str):
+                return cfg["esteira"].strip()
+    return None
+
+
 def avaliar_portao(
     repositorio: str,
     *,
@@ -166,10 +189,22 @@ def avaliar_portao(
     mudanca: str | None = None,
     base: str | None = None,
     pasta_vereditos: str | Path | None = None,
+    caminho_venvs: str | Path | None = None,
 ) -> DecisaoPortao:
     raiz = Path(arvore).resolve() if arvore is not None else None
     arvore_mudanca = _arvore_de(raiz, mudanca or "HEAD")
     arvore_main = _arvore_de(raiz, base or "origin/main")
+    # DT 1338: repositório de esteira documento não tem suíte de código e integra sem veredito de código.
+    if _esteira_repositorio(repositorio, caminho_venvs=caminho_venvs) == "documento":
+        return DecisaoPortao(
+            True,
+            "verde",
+            0,
+            f"portão da main: verde — {repositorio} é repositório de esteira documento (sem suíte de código)",
+            arvore_mudanca,
+            arvore_main,
+            None,
+        )
     return decidir(_listar_vereditos(repositorio, pasta_vereditos), repositorio, arvore_mudanca, arvore_main)
 
 

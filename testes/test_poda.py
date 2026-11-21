@@ -253,3 +253,28 @@ def test_pf_poda_zero_desliga_poda_no_envelope(tmp_path: Path, monkeypatch):
     assert out["poda"]["desligada"] is True
     assert out["stdout"]["texto"] == bruto
     assert out["stdout"]["truncado"] is False
+
+
+def test_dt1007_poda_de_branco_nao_se_aplica_a_ler(tmp_path: Path):
+    """DT 1007: leitura de arquivo (`ler`) chega byte a byte, preservando linhas em branco e espaços."""
+    bin_rel = tmp_path / "release"
+    bin_rel.write_text("#!/bin/sh\n# forma: texto\n# atos: ler (leitura, operacao)\n", encoding="utf-8")
+    bin_rel.chmod(0o755)
+    conteudo = "linha 1   \n\n\n\nlinha 5\n\n\nlinha 8  \n"
+    out = podar_envelope(
+        {
+            "exit_code": 0,
+            "stdout": {"texto": conteudo, "truncado": False, "bytes_total": len(conteudo.encode("utf-8"))},
+        },
+        verbo="release",
+        argv=[str(bin_rel), "ler", "platafirma-harness", "bin/release"],
+        binario=bin_rel,
+        sessao_id="s-dt1007",
+        alca="release ler platafirma-harness bin/release",
+        derrame_dir=tmp_path / "derrame",
+        ledger_dir=tmp_path / "ledger",
+    )
+    assert out["stdout"]["texto"] == conteudo
+    assert "branco" not in out["poda"]["lavado"]
+    assert out["poda"]["bytes_produzidos"] == out["poda"]["bytes_servidos"]
+    assert out["poda"]["ato_efetivo"] == "ler"

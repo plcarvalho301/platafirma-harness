@@ -20,6 +20,9 @@
       "esteira": "documento",
       "conferir_no_ar": true
     },
+    "platafirma-casa-espelho": {
+      "esteira": "documento"
+    },
     "platafirma-motor": {
       "esteira": "codigo"
     },
