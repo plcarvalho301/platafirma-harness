@@ -39,6 +39,7 @@ import urllib.request
 import uuid
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 import oplog
 
@@ -555,10 +556,43 @@ def relatorio_seco(ext: Extracao) -> dict:
 
 # --- a API --------------------------------------------------------------------------------------
 
+_SEGREDOS_TOKEN_ACERVO = (
+    "acervo-guarda/RAG_API_TOKEN",
+    "rag/RAG_API_TOKEN",
+    "busca/RAG_API_TOKEN",
+)
+
+
 def _base_url() -> str:
     import motor_enderecos          # o último degrau é a API do acervo no registro das instâncias (#3843, R28)
     return (os.environ.get("MOTOR_ACERVO_URL") or os.environ.get("RAG_API_URL")
             or os.environ.get("RAG_API_BASE") or motor_enderecos.api_acervo()).rstrip("/")
+
+
+def _token_padrao() -> str:
+    """Lê RAG_API_TOKEN do ambiente ou, sem ele (porta sem EnvironmentFile, regra 4406.r2),
+    do armário de chaves da release (`$PLATAFIRMA_RELEASE/core/deploy/armario-de-chaves.yaml`)."""
+    do_env = os.environ.get("RAG_API_TOKEN", "").strip()
+    if do_env:
+        return do_env
+    import memoria_de_trabalho as armario_mod
+    instancia = armario_mod._instancia()
+    armario = armario_mod._armario()
+    if not armario.is_file():
+        return ""
+    for nome in _SEGREDOS_TOKEN_ACERVO:
+        try:
+            rel = armario_mod._caminho_no_armario(armario, nome)
+        except armario_mod.SenhaIndisponivel:
+            continue
+        arq = Path(rel) if Path(rel).is_absolute() else instancia / rel
+        try:
+            valor = arq.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if valor:
+            return valor
+    return ""
 
 
 class Api:
@@ -570,7 +604,7 @@ class Api:
 
     def __init__(self, base: str | None = None, token: str | None = None, timeout: float | None = None):
         self.base = (base or _base_url()).rstrip("/")
-        self.token = (os.environ.get("RAG_API_TOKEN", "") if token is None else token).strip()
+        self.token = (_token_padrao() if token is None else token).strip()
         self.timeout = timeout if timeout is not None else float(os.environ.get("LINHAGEM_TIMEOUT_S", "180"))
 
     def chamar(self, metodo: str, caminho: str, corpo: dict | None = None, params: dict | None = None,

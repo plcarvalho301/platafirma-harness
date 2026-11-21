@@ -622,6 +622,40 @@ def test_api_usa_a_ordem_de_variaveis_do_bot_para_a_url(monkeypatch):
     assert ex.Api().base == "http://a:1"
 
 
+def test_api_le_token_do_armario_sem_env_e_respeita_precedencia(tmp_path, monkeypatch, servidor):
+    release = tmp_path / "release"
+    inst = tmp_path / "instancia"
+    (release / "core" / "deploy").mkdir(parents=True)
+    (inst / "segredos" / "acervo-guarda").mkdir(parents=True)
+    (inst / "segredos" / "acervo-guarda" / "RAG_API_TOKEN").write_text("tok-armario\n", encoding="utf-8")
+    (release / "core" / "deploy" / "armario-de-chaves.yaml").write_text(
+        "segredos:\n"
+        "  - nome: acervo-guarda/RAG_API_TOKEN\n"
+        "    caminho: segredos/acervo-guarda/RAG_API_TOKEN\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("RAG_API_TOKEN", raising=False)
+    monkeypatch.setenv("PLATAFIRMA_RELEASE", str(release))
+    monkeypatch.setenv("PLATAFIRMA_INSTANCIA", str(inst))
+
+    s = servidor({("GET", "/acervo/log/dias"): (200, {"itens": []})})
+    status, _ = ex.Api(s.base).chamar("GET", "/acervo/log/dias")
+    assert status == 200 and s.recebidas[0][2] == "Bearer tok-armario"
+
+    # token="" explicito desliga o cabecalho mesmo com armario presente
+    ex.Api(s.base, token="").chamar("GET", "/acervo/log/dias")
+    assert s.recebidas[1][2] is None
+
+    # RAG_API_TOKEN no ambiente vale mais que o armario
+    monkeypatch.setenv("RAG_API_TOKEN", "tok-env")
+    assert ex.Api(s.base).token == "tok-env"
+
+    # sem env e sem armario nao explode, devolve vazio
+    monkeypatch.delenv("RAG_API_TOKEN")
+    monkeypatch.setenv("PLATAFIRMA_RELEASE", str(tmp_path / "inexistente"))
+    assert ex.Api(s.base).token == ""
+
+
 def test_a_versao_do_extrator_sai_do_sha_da_release_ou_do_ambiente(monkeypatch):
     monkeypatch.setenv("PF_VERSAO_EXTRATOR", "abc1234")
     assert ex.versao_do_extrator() == "abc1234"
