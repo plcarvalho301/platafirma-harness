@@ -21,7 +21,24 @@ UV_REAL="$(command -v uv 2>/dev/null || true)"
 UID_ATUAL="$(id -u)"
 
 TMP_DIR="$(mktemp -d /tmp/pf-uv-porta.XXXXXX)"
-trap 'chmod -R u+w "$TMP_DIR" 2>/dev/null || true; rm -rf "$TMP_DIR"' EXIT
+trap '[ -n "${OLARIA_SRV_PID:-}" ] && kill "$OLARIA_SRV_PID" 2>/dev/null || true; chmod -R u+w "$TMP_DIR" 2>/dev/null || true; rm -rf "$TMP_DIR"' EXIT
+
+python3 - "$TMP_DIR/olaria.url" </dev/null >/dev/null 2>&1 <<'PY' &
+import http.server, json, sys
+arq_url = sys.argv[1]
+raw = json.dumps({"yaml": "classe: stack\nfichas: []\n"}).encode("utf-8")
+class H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        self.send_response(200); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(raw))); self.end_headers(); self.wfile.write(raw)
+    def log_message(self, *a): return
+s = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+open(arq_url, "w").write(f"http://127.0.0.1:{s.server_address[1]}")
+s.serve_forever()
+PY
+OLARIA_SRV_PID=$!
+for _ in $(seq 1 50); do [ -s "$TMP_DIR/olaria.url" ] && break; sleep 0.05; done
+export OLARIA_URL="$(cat "$TMP_DIR/olaria.url")" OLARIA_CHAVE="chave-teste"
 
 falha() { echo "FALHA: $*" >&2; exit 1; }
 pulado() { echo "PULADO: $*"; }

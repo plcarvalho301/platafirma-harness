@@ -16,7 +16,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 VERBO="$REPO_ROOT/bin/release"
 
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pf-3010-harness.XXXXXX")"
-trap 'chmod -R u+w "$TMP_DIR" 2>/dev/null || true; rm -rf "$TMP_DIR"' EXIT
+trap '[ -n "${OLARIA_SRV_PID:-}" ] && kill "$OLARIA_SRV_PID" 2>/dev/null || true; chmod -R u+w "$TMP_DIR" 2>/dev/null || true; rm -rf "$TMP_DIR"' EXIT
 
 falha() { echo "FALHA: $*" >&2; exit 1; }
 command -v jq >/dev/null || falha "jq ausente (dependencia declarada do release)"
@@ -109,17 +109,26 @@ printf '{"platafirma-harness": "%s"}\n' "$bare" > "$TMP_DIR/familias.json"
 printf '{"_leia": "fixture sem venv"}\n' > "$TMP_DIR/venvs.json"
 printf 'tokenizador de fixture\n' > "$TMP_DIR/artefato"
 PINO="$(sha256sum "$TMP_DIR/artefato" | cut -d' ' -f1)"
-python3 - "$PINO" "$TMP_DIR/olaria.url" <<'PY' &
+cat > "$TMP_DIR/olaria.yaml" <<YAML
+classe: stack
+fichas:
+- chave: stack:harness
+  ligacoes:
+    depende-de:
+    - alvo: dependencia-externa:teste:tok
+      nome: tok.fixture
+      familia: platafirma-harness
+      destino: terceiros/tokenizers/fixture.json
+      pino: sha256:$PINO
+      url: https://127.0.0.1:9/inalcancavel
+YAML
+python3 - "$TMP_DIR/olaria.yaml" "$TMP_DIR/olaria.url" </dev/null >/dev/null 2>&1 <<'PY' &
 import http.server, json, sys
-pino, arq_url = sys.argv[1], sys.argv[2]
-yaml_txt = (
-    "classe: stack\nfichas:\n- chave: stack:harness\n  ligacoes:\n    depende-de:\n"
-    f"    - alvo: dependencia-externa:teste:tok\n      nome: tok.fixture\n      familia: platafirma-harness\n"
-    f"      destino: terceiros/tokenizers/fixture.json\n      pino: sha256:{pino}\n      url: https://127.0.0.1:9/inalcancavel\n"
-)
+arq_yaml, arq_url = sys.argv[1], sys.argv[2]
 class H(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        yaml_txt = open(arq_yaml, encoding="utf-8").read()
         raw = json.dumps({"yaml": yaml_txt}).encode("utf-8")
         self.send_response(200); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(raw))); self.end_headers(); self.wfile.write(raw)
     def log_message(self, *a): return
@@ -165,8 +174,20 @@ out="$("$VERBO" promover platafirma-harness "$SHA1" 2>&1)" || falha "promover SH
 [ "$(readlink "$PROD_RAIZ/platafirma-harness/current")" = "$SHA1" ] || falha "promover SHA1 nao trocou"
 echo "OK: promover confere o terceiro"
 
-printf '{"x": {"familia": "platafirma-harness", "destino": "../fora", "sha256": "%s", "url": "https://a"}}\n' "$PINO" > "$TMP_DIR/terceiros-ruim.json"
-set +e; out="$(PLATAFIRMA_TERCEIROS="$TMP_DIR/terceiros-ruim.json" "$VERBO" promover platafirma-harness "$SHA2" 2>&1)"; rc=$?; set -e
+cat > "$TMP_DIR/olaria.yaml" <<YAML
+classe: stack
+fichas:
+- chave: stack:harness
+  ligacoes:
+    depende-de:
+    - alvo: dependencia-externa:teste:ruim
+      nome: x
+      familia: platafirma-harness
+      destino: ../fora
+      pino: sha256:$PINO
+      url: https://a
+YAML
+set +e; out="$("$VERBO" promover platafirma-harness "$SHA2" 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 3 ] && grep -q "terceiro mal declarado" <<<"$out" || falha "destino com .. devia ser recusado: rc=$rc $out"
 echo "OK: declaracao que sai da arvore e recusada"
 

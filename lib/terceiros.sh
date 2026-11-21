@@ -32,10 +32,8 @@ materializar_terceiros_em() {
     cache_dir="$3"
   fi
   local pfx="$PF_VENV_PREFIXO"
-  local linhas nome destino pino url alvo cache tmp curl py_bin
-  py_bin="${PLATAFIRMA_PYTHON:-python3}"
-  [ -x "$py_bin" ] || py_bin="python3"
-  if ! linhas="$("$py_bin" "$_TERCEIROS_LIB_DIR/terceiros_olaria.py" --familia "$familia")"; then
+  local linhas nome destino pino url alvo cache tmp curl
+  if ! linhas="$(python3 "$_TERCEIROS_LIB_DIR/terceiros_olaria.py" --familia "$familia")"; then
     printf '%s: dependência ausente: não leu as fichas de terceiros na Olaria — current intacto\n' "$pfx" >&2
     return 3
   fi
