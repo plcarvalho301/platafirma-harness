@@ -1252,7 +1252,6 @@ expurgar_release() {  # $1=repo [--so-atalhos]
   PLATAFIRMA_INSTANCIA="$PLATAFIRMA_INSTANCIA" \
   PLATAFIRMA_FAMILIAS="$FAMILIAS" \
   PLATAFIRMA_VENVS="$VENVS" \
-  PLATAFIRMA_TERCEIROS="$TERCEIROS" \
   PF_HARNESS_DIR="$AQUI/.." \
     python3 "$impl" "${args[@]}" || true
 }
