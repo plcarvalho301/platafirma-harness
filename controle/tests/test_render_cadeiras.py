@@ -1,3 +1,4 @@
+# componente: componente:harness-controle
 """Bloco Cadeiras da recepcao contra o pacote que a abertura de hoje serve (#3472).
 
 A coluna Manifesto media a peca `oficio`, que `expediente montar` nao serve mais (o #3078 ja

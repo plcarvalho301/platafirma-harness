@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """O promover so confere no ar, com o conferir da release, a familia que declara
 `conferir_no_ar: true` no registro de venvs (card #3535).
 

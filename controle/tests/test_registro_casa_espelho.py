@@ -1,3 +1,4 @@
+# componente: componente:verbo-repo
 """Debito 432: platafirma-casa-espelho (a casa nova, F3974) e repositorio de trabalho do `release`
 e do `teste`, como esteira documento.
 

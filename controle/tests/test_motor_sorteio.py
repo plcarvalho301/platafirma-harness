@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """`motor rag sortear biblioteca` e bin/_motor/sorteio.py (card #3349; padrao protocolo-medicao-rag, «Fonte e filtros»).
 
 A lógica (filtros, estrato, cota por cadeira, ordem sorteada, sha do arquivo) é medida em funções puras. A fiação

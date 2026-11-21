@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """`motor rag parear biblioteca` e bin/_motor/par_consulta.py (card #3360, passo 9; spec motor-do-conhecimento §2b).
 
 A lógica (frases do dono, as três consultas, sobreposição, o que o dono já julgou, o lote e o aceite) é medida em funções

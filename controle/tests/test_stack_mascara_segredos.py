@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra config <stack>` nao imprime valor de segredo (#2856 linha 76; incidente #3221).
 
 `bin/_release/stack` passa a saida de `compose config` por `mascara_segredos`: o valor de

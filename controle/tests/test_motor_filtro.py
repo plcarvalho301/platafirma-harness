@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """`motor rag buscar|medir` com `--filtro` e `--juncao` (card #4116, U8): as flags, as recusas e o corpo.
 
 O verbo roda de verdade, como subprocesso, contra uma API falsa em 127.0.0.1 (como test_motor_contra.py e

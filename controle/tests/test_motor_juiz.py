@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """bin/_motor/juiz.py — o juiz do piloto da escada (card #3350; padrao protocolo-medicao-rag, «O juiz»).
 
 A lógica (prompt com o critério que o dono viu, mensagem, leitura da saída do modelo, novas tentativas e o corpo que

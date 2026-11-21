@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Forma de `release procurar` igual a do irmao `repo procurar` (incidente #3885).
 
 As cadeiras chamavam `release procurar <repo> <termo> [<prefixo>]`, a forma que `repo procurar`

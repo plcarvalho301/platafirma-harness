@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """As leituras da face motor: consultas, trabalhos, histórico de medida, pendências e a prévia (card #3513, U2 e U3).
 
 O rag-api é um servidor de brinquedo; o docker é um script de brinquedo que responde ao psql (pelo marcador que

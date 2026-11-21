@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """release migrar senha (card #3375): gera, troca no banco e guarda, sem imprimir o valor.
 
 O docker e falso: um script no PATH que responde ao `inspect` e, no `exec`, grava o
