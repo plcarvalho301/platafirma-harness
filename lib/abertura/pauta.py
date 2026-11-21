@@ -50,6 +50,7 @@ LeitorDeEstadoDeCard = Callable[[Iterable[str], list[str] | None], Mapping[str, 
 # O texto é da produto; a ordem é a da leitura.
 REFORCO: tuple[str, ...] = (
     "antes de afirmar, decidir ou agir sobre algo da casa, conferir no ar e depois no fichário",
+    "antes de nomear algo da casa, achar a classe e a instância no fichário; o termo que não existe vai À margem",
     "antes de cada linha ✅, conferir contra o que está no ar",
     "a negação expressa se devolve ao dono com a regra que negou, e não se contorna",
 )
