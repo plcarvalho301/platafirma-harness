@@ -3350,8 +3350,67 @@ def conferir_stack_porta(unit_path=None, segredo_tunel=None):
             ))
         else:
             itens.append(("porta/TUNNEL_TOKEN (4406.r2)", resultado.conforme()))
+    itens.append(conferir_execstart_porta(unit_path=u_path))
     itens.extend(conferir_configuracao_porta())
     return itens
+
+
+def _extrair_execstart_uvicorn(linhas):
+    """Extrai (eh_factory, alvo_asgi) da primeira linha ExecStart= com uvicorn."""
+    import shlex as _shlex
+
+    for raw in linhas:
+        s = raw.strip()
+        if not s or s.startswith(("#", ";")):
+            continue
+        if not s.startswith("ExecStart="):
+            continue
+        val = s.split("=", 1)[1].strip()
+        if "uvicorn" not in val:
+            continue
+        tokens = _shlex.split(val)
+        eh_factory = "--factory" in tokens
+        alvo = next((t for t in tokens[1:] if ":" in t and not t.startswith("-")), None)
+        if alvo:
+            return eh_factory, alvo
+    return None
+
+
+def conferir_execstart_porta(unit_path=None, core_dir=None):
+    """Confere se o ExecStart de porta.service converge com deploy/setup-ops.sh (incidente #4419)."""
+    from pathlib import Path as _Path
+
+    prod = _Path(os.environ.get("PF_PROD_RAIZ") or PROD_RAIZ)
+    u_path = _Path(unit_path) if unit_path else (_Path.home() / ".config" / "systemd" / "user" / "porta.service")
+    core = _Path(core_dir or os.environ.get("PF_CORE_DIR") or (prod / "current" / "core"))
+    setup_path = core / "deploy" / "setup-ops.sh"
+
+    if not u_path.is_file():
+        return ("porta.service ExecStart", resultado.divergente(f"unit ausente: {u_path}"))
+    if not setup_path.is_file():
+        return ("porta.service ExecStart", resultado.indeterminavel(f"setup-ops.sh ausente em {core}"))
+
+    try:
+        inst = _extrair_execstart_uvicorn(u_path.read_text(encoding="utf-8", errors="replace").splitlines())
+        decl = _extrair_execstart_uvicorn(setup_path.read_text(encoding="utf-8", errors="replace").splitlines())
+    except OSError as exc:
+        return ("porta.service ExecStart", resultado.indeterminavel(f"nao consegui ler unit ou setup-ops.sh: {exc}"))
+
+    if not inst:
+        return ("porta.service ExecStart", resultado.divergente(f"ExecStart uvicorn ausente em {u_path}"))
+    if not decl:
+        return ("porta.service ExecStart", resultado.indeterminavel(f"ExecStart uvicorn nao encontrado em {setup_path}"))
+
+    fmt = lambda par: (f"--factory {par[1]}" if par[0] else par[1])
+    if inst != decl:
+        return (
+            "porta.service ExecStart",
+            resultado.divergente(
+                f"unit no ar chama '{fmt(inst)}', mas deploy/setup-ops.sh declara '{fmt(decl)}' "
+                "(converja com sudo bash /opt/platafirma/current/core/deploy/setup-ops.sh --so-units)"
+            ),
+        )
+    return ("porta.service ExecStart", resultado.conforme())
 
 
 def conferir_configuracao_porta(core_dir=None, python_porta=None):
