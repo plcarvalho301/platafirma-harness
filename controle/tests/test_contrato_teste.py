@@ -64,6 +64,7 @@ def _run_teste(env_extra: dict, *args: str) -> subprocess.CompletedProcess:
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": str(Path.home()),
+        "UV_OFFLINE": "1",
         **_olaria_env(),
         **env_extra,
     }

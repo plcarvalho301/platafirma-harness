@@ -97,6 +97,7 @@ def _arvore(tmp_path, suites: dict[str, dict[str, str]], lista: dict[str, str | 
         "PLATAFIRMA_INSTANCIA": str(tmp_path / "instancia"),
         "PLATAFIRMA_VENVS": str(vjson),
         "PLATAFIRMA_PYTHON": _python(),
+        "UV_OFFLINE": "1",
     }
     return env, arv
 

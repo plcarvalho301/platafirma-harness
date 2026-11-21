@@ -71,6 +71,7 @@ def _teste(tmp_path, b, *args):
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": str(Path.home()),       # cache do uv (pytest ja baixado), nada mais
+        "UV_OFFLINE": "1",
         **_olaria_env(),
         "PLATAFIRMA_BANCADA": str(b),
         "PLATAFIRMA_INSTANCIA": str(tmp_path / "instancia"),
