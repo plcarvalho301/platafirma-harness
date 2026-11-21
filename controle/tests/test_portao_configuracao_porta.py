@@ -128,3 +128,85 @@ def test_gate_release_recusa_antes_de_trocar_current(
     )
     assert proc.returncode == esperado_rc, proc.stderr + proc.stdout
     assert current_link.resolve() == (prod / "platafirma-core" / sha_atual).resolve()
+
+
+def test_conferir_execstart_porta_conforme_e_divergente(tmp_path: Path) -> None:
+    mod = _carregar_conferir()
+    core = tmp_path / "core"
+    (core / "deploy").mkdir(parents=True)
+    (core / "deploy" / "setup-ops.sh").write_text(
+        "ExecStart=$RELEASE/venv/porta/bin/uvicorn --factory porta.app:subir_app --fd 3\n",
+        encoding="utf-8",
+    )
+
+    unit_ok = tmp_path / "porta_ok.service"
+    unit_ok.write_text(
+        "[Service]\nExecStart=/opt/platafirma/current/venv/porta/bin/uvicorn --factory porta.app:subir_app --fd 3\n",
+        encoding="utf-8",
+    )
+    rotulo, res_ok = mod.conferir_execstart_porta(unit_path=unit_ok, core_dir=core)
+    assert rotulo == "porta.service ExecStart"
+    assert res_ok.estado == "conforme"
+
+    unit_legada = tmp_path / "porta_legada.service"
+    unit_legada.write_text(
+        "[Service]\nExecStart=/opt/platafirma/current/venv/porta/bin/uvicorn porta.app:app --fd 3\n",
+        encoding="utf-8",
+    )
+    _, res_div = mod.conferir_execstart_porta(unit_path=unit_legada, core_dir=core)
+    assert res_div.estado == "divergente"
+    assert "porta.app:app" in (res_div.motivo or "")
+    assert "--factory porta.app:subir_app" in (res_div.motivo or "")
+
+
+@pytest.mark.parametrize(
+    "exec_start,codigo_app,esperado_rc",
+    [
+        (
+            "/opt/platafirma/current/venv/porta/bin/uvicorn --factory porta.app:subir_app --fd 3",
+            "def subir_app():\n    return object()\n",
+            0,
+        ),
+        (
+            "/opt/platafirma/current/venv/porta/bin/uvicorn porta.app:app --fd 3",
+            "def subir_app():\n    return object()\n",
+            4,
+        ),
+        (
+            "/opt/platafirma/current/venv/porta/bin/uvicorn --factory porta.app:subir_app --fd 3",
+            "app = object()\n",
+            4,
+        ),
+    ],
+)
+def test_gate_release_barra_quebra_contrato_execstart(
+    tmp_path: Path, exec_start: str, codigo_app: str, esperado_rc: int
+) -> None:
+    """Reproduz o incidente #4419: promoção bloqueada se porta.service não resolve na rev candidata."""
+    prod = tmp_path / "prod"
+    sha_atual = "1111111111111111111111111111111111111111"
+    sha_cand = "2222222222222222222222222222222222222222"
+    (prod / "platafirma-core" / sha_atual).mkdir(parents=True)
+    cand_dir = prod / "platafirma-core" / sha_cand
+    _criar_core(cand_dir, armario="versao: 1\n", conector="versao: 1\n")
+    (cand_dir / "porta" / "app.py").write_text(codigo_app, encoding="utf-8")
+
+    unit = tmp_path / "porta.service"
+    unit.write_text(f"[Service]\nExecStart={exec_start}\n", encoding="utf-8")
+
+    script = (
+        f"PROD_RAIZ={prod}\n"
+        f"PF_PORTA_PYTHON={sys.executable}\n"
+        f"PF_PORTA_UNIT={unit}\n"
+        "curto_ou() { [ -n \"$1\" ] && printf '%s' \"${1:0:7}\" || printf '%s' \"$2\"; }\n"
+        f"eval \"$(awk '/^gate_conferir_configuracao_porta\\(\\) /,/^\\}}/' {BIN_RELEASE})\"\n"
+        f"gate_conferir_configuracao_porta platafirma-core {sha_cand} {sha_atual}\n"
+    )
+    proc = subprocess.run(
+        ["bash", "-c", script],
+        capture_output=True,
+        text=True,
+        env=dict(os.environ),
+        check=False,
+    )
+    assert proc.returncode == esperado_rc, proc.stderr + proc.stdout

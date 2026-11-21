@@ -1753,7 +1753,59 @@ gate_conferir_configuracao_porta() {  # $1=repo $2=sha_candidato $3=sha_atual(ou
       return 4
     fi
   done
-  printf 'gate:      verde (armario e conector)\n'
+  local unit_porta="${PF_PORTA_UNIT:-$HOME/.config/systemd/user/porta.service}"
+  if [ -f "$arvore/porta/app.py" ] && [ -r "$unit_porta" ]; then
+    rc=0
+    saida="$(PYTHONPATH="$arvore" "$py_porta" - "$unit_porta" <<'PY' 2>&1
+import importlib
+import shlex
+import sys
+from pathlib import Path
+
+unit_path = Path(sys.argv[1])
+exec_line = None
+for raw in unit_path.read_text(encoding="utf-8", errors="replace").splitlines():
+    s = raw.strip()
+    if s.startswith("ExecStart=") and not s.startswith(("#", ";")):
+        exec_line = s.split("=", 1)[1].strip()
+        break
+if not exec_line:
+    sys.stderr.write(f"ExecStart ausente em {unit_path}\n")
+    raise SystemExit(1)
+
+tokens = shlex.split(exec_line)
+eh_factory = "--factory" in tokens
+alvo = next((t for t in tokens[1:] if ":" in t and not t.startswith("-")), None)
+if not alvo:
+    sys.stderr.write(f"alvo ASGI nao encontrado em ExecStart={exec_line}\n")
+    raise SystemExit(1)
+
+mod_nome, attr_nome = alvo.split(":", 1)
+mod = importlib.import_module(mod_nome)
+ns = vars(mod)
+if attr_nome not in ns:
+    if not eh_factory and "__getattr__" in ns:
+        sys.stdout.write(f"ok {alvo} (via __getattr__)\n")
+        raise SystemExit(0)
+    sys.stderr.write(
+        f"porta.service chama {alvo} ({'factory' if eh_factory else 'atributo'}), "
+        f"mas {mod_nome} na rev candidata nao expoe '{attr_nome}'; "
+        f"converja a unit antes com sudo bash /opt/platafirma/current/core/deploy/setup-ops.sh --so-units\n"
+    )
+    raise SystemExit(1)
+if eh_factory and not callable(ns[attr_nome]):
+    sys.stderr.write(f"{alvo} nao e chamavel (--factory)\n")
+    raise SystemExit(1)
+sys.stdout.write(f"ok {alvo}\n")
+PY
+    )" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      printf 'release: recusa: rev %s reprova no contrato ExecStart da porta: %s — current segue em %s\n' \
+        "${sha:0:7}" "$saida" "$(curto_ou "$atual" '(nenhum)')" >&2
+      return 4
+    fi
+  fi
+  printf 'gate:      verde (armario, conector e ExecStart)\n'
   return 0
 }
 
