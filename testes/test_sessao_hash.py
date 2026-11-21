@@ -1,3 +1,4 @@
+# componente: componente:verbo-sessao
 """Interoperabilidade de `sessao:<id>` como hash no Valkey (story #4343, T1).
 
 Prova que `porta.sessao_mem.RepositorioSessaoValkey`, `bin/sessao`, `bin/_sessao/reidratar.py`

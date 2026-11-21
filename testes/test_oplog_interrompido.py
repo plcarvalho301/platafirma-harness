@@ -1,3 +1,4 @@
+# componente: componente:oplog
 """Testes de classificacao de desfecho interrompido por sinal em lib/oplog.py (card #4369)."""
 from __future__ import annotations
 

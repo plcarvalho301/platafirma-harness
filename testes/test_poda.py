@@ -1,3 +1,4 @@
+# componente: componente:poda
 """Testes da poda no harness por processo e resolvedor único de ato (story #4342, t3)."""
 from __future__ import annotations
 

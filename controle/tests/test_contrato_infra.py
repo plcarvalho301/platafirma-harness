@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """Contrato --json de `infra estado` e `infra saude` (card #390, LOTE 1); Q9 do
 cabeçalho (usage, --ajuda, ato desconhecido, dependência, identidade) e os atos novos
 de infra (up/down/ps/config/pull/build via bin/_release/stack, limpeza, agenda) do

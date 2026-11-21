@@ -1,3 +1,4 @@
+# componente: componente:agente-hooks
 """Testes do hook `porta-sessao.py` (cabeçalho fail-open e remontagem pela porta nova, story #4343 T5)."""
 from __future__ import annotations
 
