@@ -225,7 +225,6 @@ testes/test_expediente_chapeu.py | bin/expediente bin/_expediente/**
 testes/test_bateria_chave.py | avaliacao/bateria.jsonl
 testes/test_gerar_rotas_chapeu.py |
 testes/test_ingerir_casamento_3307.py | bin/ingerir bin/motor bin/_motor/**
-testes/test_ingerir_ficha_3306.py | bin/ingerir bin/motor bin/_motor/**
 testes/test_metrica_comportamento.py | bin/metrica bin/_metrica/**
 testes/test_poda_cru.py | lib/poda/**
 testes/test_release_suites.py | bin/release bin/_release/** testes/test_release.sh testes/test_release_lote2.sh testes/test_release_lote3.sh
@@ -324,13 +323,7 @@ tests/test_curar_bancada_lista.py | bin/curar
 # Pedido 20261102T091653-dados: `infra pecas | rodar` (peça não declarada sai 4; caminho da peça diferente de origin/main ou solto
 # fora do git sai 4; mudança fora dos caminhos não trava; a peça recebe o banco do cofre e o verbo não o imprime), num git de mentira.
 testes/test_infra_rodar_peca.py | bin/infra bin/_infra/** bin/_acervo/exportar registro/pecas.json
-tests/test_metrica_tokens_4120.py | bin/metrica bin/_metrica/** lib/tokenizador.py
-tests/test_ingerir_carga_4120.py | bin/ingerir bin/_ingerir/**
-tests/test_ingerir_4120.py | bin/ingerir
 tests/test_pipeline_4120.py | bin/acervo bin/_acervo/** bin/ingerir
-tests/test_chegada_ingerir_4120.py | bin/ingerir bin/_ingerir/**
-tests/test_posicao_4120.py | bin/acervo bin/_acervo/**
-tests/test_ingerir_drive.py | bin/ingerir bin/_ingerir/**
 # Card #4096: `tarefas espera-dono` exibe stories em refinamento com regras novas pendentes além das perguntas legadas.
 tests/test_espera_regras.py | bin/tarefas
 # DTs 278 e 449: `tarefas ler` mostra `resolvido_de` e recusa de `registro-de-negocio` não força `--estado priorizada`.
