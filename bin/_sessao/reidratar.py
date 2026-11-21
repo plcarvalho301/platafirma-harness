@@ -99,7 +99,7 @@ def reidratar(sid: str, rc_mem, roda, pg_porta: str = "5437",
 
 def encerrada_em_duravel(sid: str, roda, pg_porta: str = "5437") -> str | None:
     """Devolve o ISO de `encerrada_em` em `sessao.sessao` quando a linha foi encerrada de
-    propósito (`sessao encerrar`, `sessao limpar`, `descansar fita --encerra-sessao`), ou
+    propósito (`sessao encerrar`, `sessao limpar`, `descansar encerrar`), ou
     None se não existe, segue aberta ou o banco/coluna não responde (DT 535)."""
     try:
         import psycopg

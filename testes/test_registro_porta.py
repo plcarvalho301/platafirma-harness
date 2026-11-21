@@ -5,6 +5,7 @@ Hermetico: le registro/porta.yaml sem depender da porta legada nem do registro d
 from __future__ import annotations
 
 import ast
+import os
 import re
 import subprocess
 import sys
@@ -163,3 +164,22 @@ def test_atos_do_mesa_no_registro_batem_com_o_verbo(registro):
     )
     assert recusa.returncode == 2
     assert f"atos disponíveis: {', '.join(atos_verbo)}" in recusa.stderr
+
+def test_atos_do_descansar_no_registro_batem_com_o_verbo(registro):
+    """DT 945 e 955: a descrição de descansar anunciava fita e varredura, que o verbo não aceita mais."""
+    fonte = (REPO_ROOT / "bin" / "descansar").read_text(encoding="utf-8")
+    cabecalho = re.search(r"^# atos:\s*(.+)$", fonte, re.MULTILINE)
+    assert cabecalho, "bin/descansar sem linha '# atos:' no cabeçalho"
+    atos_verbo = _atos_da_descricao(f"atos: {cabecalho.group(1)}")
+    atos_desc = _atos_da_descricao(registro["verbos"]["descansar"]["descricao"])
+    assert len(atos_desc) == len(set(atos_desc)), f"atos duplicados na descrição: {atos_desc}"
+    assert set(atos_desc) == set(atos_verbo), (
+        f"descrição de descansar em porta.yaml ({atos_desc}) diverge de bin/descansar ({atos_verbo})"
+    )
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PF_")}
+    for ato in atos_desc:
+        p = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "bin" / "descansar"), ato],
+            capture_output=True, text=True, timeout=20, check=False, input="", env=env,
+        )
+        assert "ato desconhecido" not in p.stderr, f"descansar {ato}: o verbo não aceita o ato do catálogo"
