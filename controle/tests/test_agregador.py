@@ -1,3 +1,4 @@
+# componente: componente:harness-controle
 # Camada 2 do modelo de teste do card #390: unidade sobre a transformacao
 # saida-de-verbo -> estado. Caso inegociavel: verbo morto -> indisponivel com
 # motivo, nunca ausencia do bloco e nunca zero. Sem subprocess de verdade —

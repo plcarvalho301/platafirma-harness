@@ -1,3 +1,4 @@
+# componente: componente:verbo-sinal
 """`sinal`: serviço fora há mais de 10 min abre incidente no rastreador (card #3253, pós-morte #3251).
 
 Contrato verificado:

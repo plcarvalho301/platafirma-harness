@@ -1,3 +1,4 @@
+# componente: componente:verbo-pesquisar
 """Contrato dos atos — consultar/resolver gravam não-achado; manifesto renderiza (spec §4.1, §4.1b, §4.5)."""
 
 from __future__ import annotations

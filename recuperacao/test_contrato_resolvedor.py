@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Contrato do resolvedor (#2311). O que falha o build quando violado.
 
 Não é teste de unidade de conveniência: cada caso aqui é uma invariante escrita da

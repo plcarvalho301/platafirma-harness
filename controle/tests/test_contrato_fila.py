@@ -1,3 +1,4 @@
+# componente: componente:verbo-fila
 # Contrato de `fila status --json` (bin/fila) — card #390, LOTE 1.
 #
 # Sem Redis rodando nesta maquina: a conexao e um fake in-memory (FakeRC) que
