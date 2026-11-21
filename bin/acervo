@@ -226,7 +226,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo extrato  --todas [dest]
   acervo exportar [--bancada <chave>] regera ontologia/acervo/*.jsonl e vocabulario.json na bancada
   (medir, gerar e gerador sairam com as shapes, #4313: a ontologia da casa se le e se muda pelo verbo ontologia)
-  acervo psql     [--banco rag|motor]  <SQL por stdin>
+  acervo psql     [--banco <banco>]    <SQL por stdin>  (bancos de registro/bancos.json, leitura por analise_leitura)
   acervo balde    listar|ler|copiar|mover|apagar <bucket|sha256> [...] [--apply]
   acervo balde    varrer <bucket> [--limite <n>] [--retomar] [--prefixo <p>] [--teto-s <n>] [--json]
                   SO LEITURA, um objeto por vez: le cada objeto do balde e compara o sha256 do conteudo com a chave
@@ -791,7 +791,7 @@ case "$ATO" in
       --banco|--sql) ;;
       "") ;;
       -h|--help|ajuda) ;;
-      rag|motor|casa) avisa "acervo psql <banco>" "acervo psql --banco <banco>" ;;
+      rag|motor|casa|analise|sessao|rastreador|eventos|identidade|keycloak|mdm_rh) avisa "acervo psql <banco>" "acervo psql --banco <banco>" ;;
       *) ;;
     esac
     exec bash "$ATOS/psql" "$@" ;;
