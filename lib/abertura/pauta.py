@@ -383,13 +383,15 @@ class Pauta:
     cartas: list[Carta]
     conteudo: str
     reforco: tuple[str, ...] = REFORCO
+    lousa_erro: str | None = None
+    caixa_erro: str | None = None
 
     @property
     def texto(self) -> str:
         return self.conteudo
 
     def como_dict(self) -> dict:
-        return {
+        d = {
             "turno": self.turno,
             "reforco": list(self.reforco),
             "guardados": [g.como_dict() for g in self.guardados],
@@ -398,6 +400,11 @@ class Pauta:
             "cartas": [c.como_dict() for c in self.cartas],
             "conteudo": self.conteudo,
         }
+        if self.lousa_erro:
+            d["lousa_erro"] = self.lousa_erro
+        if self.caixa_erro:
+            d["caixa_erro"] = self.caixa_erro
+        return d
 
 
 def _info_card_mudou(
@@ -525,7 +532,14 @@ def carregar_guardados_da_lousa(
     return guardados, estados
 
 
-def montar_pauta(guardados: list[Guardado], cartas: list[Carta], sessao: ContextoDaSessao) -> Pauta:
+def montar_pauta(
+    guardados: list[Guardado],
+    cartas: list[Carta],
+    sessao: ContextoDaSessao,
+    *,
+    lousa_erro: str | None = None,
+    caixa_erro: str | None = None,
+) -> Pauta:
     """Monta a distribuição pauta ordenada pela leitura, sem marca de cache."""
     visiveis = [g for g in guardados if ocasiao_casa(g, sessao)]
     total = len(guardados)
@@ -534,7 +548,9 @@ def montar_pauta(guardados: list[Guardado], cartas: list[Carta], sessao: Context
 
     linhas: list[str] = [ref_turno, "reforço:"]
     linhas.extend(f"- {item}" for item in REFORCO)
-    if total == 0:
+    if lousa_erro:
+        linhas.append(f"lousa: não foi possível ler ({lousa_erro})")
+    elif total == 0:
         linhas.append("lousa: 0 guardados")
     elif fora > 0 and visiveis:
         linhas.append(f"lousa: {total} guardado(s) ({len(visiveis)} na ocasião, {fora} fora da ocasião)")
@@ -547,7 +563,9 @@ def montar_pauta(guardados: list[Guardado], cartas: list[Carta], sessao: Context
         for g in visiveis:
             linhas.append(f"- {g.linha_completa()}")
 
-    if not cartas:
+    if caixa_erro:
+        linhas.append(f"caixa: não foi possível ler ({caixa_erro})")
+    elif not cartas:
         linhas.append("caixa: 0 cartas")
     else:
         linhas.append(f"caixa: {len(cartas)} carta(s)")
@@ -562,6 +580,8 @@ def montar_pauta(guardados: list[Guardado], cartas: list[Carta], sessao: Context
         fora_da_ocasiao=fora,
         cartas=list(cartas),
         conteudo=conteudo,
+        lousa_erro=lousa_erro,
+        caixa_erro=caixa_erro,
     )
 
 

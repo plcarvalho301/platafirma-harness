@@ -257,6 +257,23 @@ def test_reforco_chega_colado_ao_turno_com_os_quatro_itens():
     assert pauta.como_dict()["reforco"] == list(pauta.reforco)
 
 
+def test_pauta_indica_falha_de_leitura_sem_dizer_zero_dt1336():
+    pauta = montar_pauta(
+        [],
+        [],
+        ContextoDaSessao(cadeira="ti", turno="verifica a caixa"),
+        lousa_erro="valkey fora",
+        caixa_erro="fila indisponível",
+    )
+    assert "lousa: não foi possível ler (valkey fora)" in pauta.conteudo
+    assert "caixa: não foi possível ler (fila indisponível)" in pauta.conteudo
+    assert "lousa: 0 guardados" not in pauta.conteudo
+    assert "caixa: 0 cartas" not in pauta.conteudo
+    d = pauta.como_dict()
+    assert d["lousa_erro"] == "valkey fora"
+    assert d["caixa_erro"] == "fila indisponível"
+
+
 # --- rotinas (lib/abertura/rotinas.py) -----------------------------------------------------------------------------
 
 class LeitorDeFixture:
@@ -1042,6 +1059,83 @@ def test_roteiro_expediente_tupla_nao_sozinha_e_chave_sem_ficha(tmp_path):
     d_f = json.loads(proc_falta.stdout)
     assert "Sou a cadeira engenharia" in d_f["roteiro"]["conteudo"]
     assert any("ritual:inexistente" in a for a in d_f["avisos"])
+
+
+def test_ato_abrir_le_lousa_e_caixa_e_sinaliza_falha_dt1336(tmp_path, monkeypatch):
+    from abertura.__main__ import _ato_abrir
+
+    casa = tmp_path / "casa"
+    (casa / "instancias" / "persona").mkdir(parents=True)
+    (casa / "instancias" / "cultura").mkdir(parents=True)
+    (casa / "instancias" / "persona" / "ti.md").write_text(
+        "# TI\n\nEntidade: persona\n\n## Nomes\n\n- cadeira **ti**: nenhum\n",
+        encoding="utf-8",
+    )
+    (casa / "instancias" / "cultura" / "da-casa.md").write_text(
+        "# Cultura da casa\n\nEntidade: cultura\n\n## Premissas\n\n- Regra.\n",
+        encoding="utf-8",
+    )
+
+    # 1. Lousa via fixture com 1 guardado + fila fake com 2 cartas
+    from postura.lousa import ItemDeTrabalho, LousaFixtura, Ocasiao
+
+    fix_lousa = tmp_path / "lousa.json"
+    fix_lousa.write_text("{}", encoding="utf-8")
+    LousaFixtura(fix_lousa).gravar_trabalho(
+        "ti",
+        ItemDeTrabalho(
+            chave="card:1336",
+            cadeira="ti",
+            card="1336",
+            situacao="guardado",
+            estagio="execucao",
+            proxima_jogada="corrigir pauta",
+            ocasiao=Ocasiao(card="1336", chapeu="interfaces"),
+            corpo="",
+        ),
+    )
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_fila = fake_bin / "fila"
+    fake_fila.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json\n"
+        "print(json.dumps([\n"
+        "  {'msgid': 'm1', 'de': 'arquiteto', 'assunto': 'story liberada', 'corpo': 'corpo longo'},\n"
+        "  {'msgid': 'm2', 'de': 'ia', 'assunto': 'revisar porta', 'corpo': 'detalhes'},\n"
+        "]))\n",
+        encoding="utf-8",
+    )
+    fake_fila.chmod(0o755)
+    monkeypatch.setenv("PF_VALKEY_FIXTURE", str(fix_lousa))
+    monkeypatch.setenv("PF_BIN", str(fake_bin))
+
+    saida, rc = _ato_abrir(
+        {"cadeira": "ti", "pergunta": "seguir com #1336", "casa_raiz": str(casa)}
+    )
+    assert rc == 0 and saida["ok"] is True
+    assert saida["pauta"]["total_guardados"] == 1
+    assert saida["pauta"]["cartas"] == 2
+    assert "corrigir pauta" in saida["pauta"]["conteudo"]
+    assert "caixa: 2 carta(s)" in saida["pauta"]["conteudo"]
+    assert "story liberada" in saida["pauta"]["conteudo"]
+    assert "corpo longo" not in saida["pauta"]["conteudo"]
+
+    # 2. Lousa fora e fila falhando -> pauta diz que não conseguiu ler, nunca 0
+    fix_lousa.write_text(json.dumps({"fora": True}), encoding="utf-8")
+    fake_fila.write_text("#!/usr/bin/env python3\nimport sys; sys.stderr.write('valkey fora\\n'); sys.exit(3)\n", encoding="utf-8")
+    fake_fila.chmod(0o755)
+
+    saida_err, rc_err = _ato_abrir(
+        {"cadeira": "ti", "pergunta": "oi", "casa_raiz": str(casa)}
+    )
+    assert rc_err == 0 and saida_err["ok"] is True
+    assert "lousa: não foi possível ler" in saida_err["pauta"]["conteudo"]
+    assert "caixa: não foi possível ler" in saida_err["pauta"]["conteudo"]
+    assert "lousa: 0 guardados" not in saida_err["pauta"]["conteudo"]
+    assert "caixa: 0 cartas" not in saida_err["pauta"]["conteudo"]
+    assert saida_err["pauta"]["lousa_erro"]
+    assert saida_err["pauta"]["caixa_erro"]
 
 
 if __name__ == "__main__":

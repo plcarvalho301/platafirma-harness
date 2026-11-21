@@ -9,13 +9,22 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 from typing import Any
 
 import yaml
 
 from abertura.nomes import SecaoDasCadeiras, resolver as resolver_nomes
-from abertura.pauta import Carta, ContextoDaSessao, montar_pauta
+from abertura.pauta import (
+    Carta,
+    ContextoDaSessao,
+    Guardado,
+    carregar_guardados_da_lousa,
+    ler_cartas_da_fila,
+    montar_pauta,
+)
 from abertura.roteiro import (
     FALLBACK_CLASSES,
     ParteLida,
@@ -30,7 +39,7 @@ from postura import atos as postura_atos
 from postura import documentos as postura_doc
 from postura.casa import Ligacoes, SemBanco
 from postura.eventos import Log
-from postura.lousa import Lousa
+from postura.lousa import Lousa, lousa_do_ambiente
 from postura.remontagem import TETO_REMONTAGEM_CHARS, remontar
 
 
@@ -172,6 +181,64 @@ class _LeitorProcessosVazio:
         return []
 
 
+def _achar_bin_fila() -> Path | None:
+    candidatos: list[Path] = []
+    env_bin = (os.environ.get("PF_BIN") or "").strip()
+    if env_bin:
+        candidatos.append(Path(env_bin))
+    candidatos.append(Path(__file__).resolve().parents[2] / "bin")
+    for pasta in candidatos:
+        cam = pasta / "fila"
+        if cam.is_file():
+            return cam
+    no_path = shutil.which("fila")
+    return Path(no_path) if no_path else None
+
+
+def _ler_cartas_da_caixa(
+    cadeira: str,
+    *,
+    base: Path,
+    timeout_s: float = 3.0,
+) -> tuple[list[Carta], str | None]:
+    """Lê penduradas e não lidas da caixa da cadeira sem mover o ponteiro do grupo."""
+    exe = _achar_bin_fila()
+    if exe is None:
+        return [], "binário fila ausente"
+    env = dict(os.environ)
+    env["PF_CADEIRA"] = cadeira
+    env["PF_CASA_RAIZ"] = str(base)
+    try:
+        proc = subprocess.run(
+            [str(exe), "ler", "--penduradas", "--json"],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=timeout_s,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return [], str(exc)
+    if proc.returncode != 0:
+        motivo = (proc.stderr or proc.stdout).strip().splitlines()
+        return [], (motivo[0][:160] if motivo else f"exit {proc.returncode}")
+    try:
+        brutas = ler_cartas_da_fila(proc.stdout)
+    except ValueError as exc:
+        return [], f"saída inválida da fila: {exc}"
+    compactas = [
+        Carta(
+            id=c.id,
+            de=c.de,
+            assunto=c.assunto,
+            corpo="" if c.assunto else c.corpo[:120],
+            texto=c.texto,
+        )
+        for c in brutas
+    ]
+    return compactas, None
+
+
 def _erro_recusa(codigo: str, mensagem: str, **extras: Any) -> dict[str, Any]:
     return {"ok": False, "codigo": codigo, "erro": mensagem, **extras}
 
@@ -252,21 +319,69 @@ def _ato_abrir(entrada: dict[str, Any]) -> tuple[dict[str, Any], int]:
     roteiro = montar_roteiro(pedido, _LeitorRoteiroPadrao(), leitor_parte)
     processos, recusas_rotinas = rotinas(_LeitorProcessosVazio(), base=base)
 
-    cartas_brutas = entrada.get("cartas") or []
-    cartas = [
-        Carta(
-            id=str(c.get("id") or ""),
-            de=str(c.get("de") or ""),
-            assunto=str(c.get("assunto") or ""),
-            corpo=str(c.get("corpo") or ""),
+    lousa_erro: str | None = None
+    transicoes: dict[str, object] = {}
+    if "guardados" in entrada and entrada["guardados"] is not None:
+        guardados = [
+            Guardado(
+                trabalho=str(g.get("trabalho") or ""),
+                chapeu=g.get("chapeu"),
+                card=g.get("card"),
+                chave=g.get("chave"),
+                estagio=str(g.get("estagio") or ""),
+                proxima_jogada=str(g.get("proxima_jogada") or ""),
+                ocasiao=str(g.get("ocasiao") or ""),
+            )
+            for g in (entrada["guardados"] or [])
+            if isinstance(g, dict)
+        ]
+    elif entrada.get("sem_valkey"):
+        guardados = []
+        lousa_erro = "memória de trabalho desativada"
+    else:
+        avisos_lousa: list[str] = []
+        guardados, transicoes = carregar_guardados_da_lousa(
+            cadeira_slug,
+            lousa_do_ambiente(),
+            avisos=avisos_lousa,
         )
-        for c in cartas_brutas
-        if isinstance(c, dict)
-    ]
+        for av in avisos_lousa:
+            if av.startswith("lousa indisponível:"):
+                lousa_erro = av.split(":", 1)[1].strip() or av
+            avisos.append(av)
+
+    caixa_erro: str | None = None
+    if "cartas" in entrada and entrada["cartas"] is not None:
+        cartas_brutas = entrada.get("cartas") or []
+        cartas = [
+            Carta(
+                id=str(c.get("id") or ""),
+                de=str(c.get("de") or ""),
+                assunto=str(c.get("assunto") or ""),
+                corpo=str(c.get("corpo") or ""),
+            )
+            for c in cartas_brutas
+            if isinstance(c, dict)
+        ]
+    elif entrada.get("sem_valkey"):
+        cartas = []
+        caixa_erro = "caixa desativada"
+    else:
+        cartas, caixa_erro = _ler_cartas_da_caixa(cadeira_slug, base=base)
+        if caixa_erro:
+            avisos.append(f"caixa indisponível: {caixa_erro}")
+
     pauta = montar_pauta(
-        guardados=[],
+        guardados=guardados,
         cartas=cartas,
-        sessao=ContextoDaSessao(turno=pergunta, chapeu=chapeu_slug),
+        sessao=ContextoDaSessao(
+            cadeira=cadeira_slug,
+            turno=pergunta,
+            chapeu=chapeu_slug,
+            transicoes_de_card=transicoes,
+        ),
+        lousa_erro=lousa_erro,
+        caixa_erro=caixa_erro,
     )
 
     pecas = {p.parte: p.conteudo for p in roteiro.partes if p.conteudo}
@@ -305,6 +420,8 @@ def _ato_abrir(entrada: dict[str, Any]) -> tuple[dict[str, Any], int]:
             "cartas": len(pauta.cartas),
             "reforco": list(pauta.reforco),
             "conteudo": pauta.conteudo,
+            **({"lousa_erro": pauta.lousa_erro} if pauta.lousa_erro else {}),
+            **({"caixa_erro": pauta.caixa_erro} if pauta.caixa_erro else {}),
         },
         "avisos": avisos_unicos,
     }, 0
