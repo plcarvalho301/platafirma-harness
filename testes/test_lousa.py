@@ -375,6 +375,25 @@ def test_entrada_sem_card_usa_turno_e_mesa_fez_remove(tmp_path):
     assert json.loads(p_ver2.stdout) == []
 
 
+def test_entrada_sem_card_e_sem_turno_usa_a_sessao_dt956(tmp_path):
+    valkey = _novo_valkey(tmp_path)
+    args = ["item", "--estagio", "sintese", "--ato", "guardar a síntese", "--json"]
+
+    # sem card, sem turno e sem sessão: continua recusando
+    p0 = _rodar_mesa(args, cadeira="produto", valkey_fixture=valkey)
+    assert p0.returncode == 2
+    assert "chave do trabalho exige card ou id do turno" in p0.stdout + p0.stderr
+
+    # a superfície não entrega o turno, e a porta exporta a sessão: ela vira a chave
+    p1 = _rodar_mesa(
+        args,
+        cadeira="produto",
+        valkey_fixture=valkey,
+        env_extra={"PF_SESSAO": "5df980f4-aca5-4525-95c5-199f4d6820fd"},
+    )
+    assert p1.returncode == 0, p1.stdout + p1.stderr
+    assert json.loads(p1.stdout)["chave"] == "turno:5df980f4-aca5-4525-95c5-199f4d6820fd"
+
 def test_memoria_fora_sai_3_sem_gravar_em_outro_lugar(tmp_path):
     valkey = _novo_valkey(tmp_path, {"fora": True})
     antes = valkey.read_text(encoding="utf-8")

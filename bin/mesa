@@ -184,7 +184,7 @@ def _resolver_chave_e_existente(
             return chave_alvo, lousa.ler_trabalho(cadeira, chave_alvo), None, 0
         except Fora as erro:
             return "", None, str(erro), 3
-    turno_ref = args.turno or os.environ.get("PF_ORDEM_ID")
+    turno_ref = args.turno or os.environ.get("PF_ORDEM_ID") or os.environ.get("PF_SESSAO")
     try:
         chave_alvo = chave_item_trabalho(card=args.card, turno=turno_ref)
     except ValueError as erro:
@@ -267,7 +267,11 @@ def _ato_item(argv: list[str]) -> int:
     if card_final is None and chave_alvo.startswith("card:"):
         card_final = normalizar_card(chave_alvo.split(":", 1)[1])
 
-    turno_env = None if card_final else (os.environ.get("PF_ORDEM_ID") or "").strip() or None
+    turno_env = (
+        None
+        if card_final
+        else (os.environ.get("PF_ORDEM_ID") or os.environ.get("PF_SESSAO") or "").strip() or None
+    )
     turno_final = args.turno.strip() if args.turno else (existente.turno if existente else turno_env)
     estagio_final = args.estagio if args.estagio is not None else (existente.estagio if existente else "")
     jogada_final = (
