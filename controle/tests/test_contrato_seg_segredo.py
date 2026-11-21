@@ -1,3 +1,4 @@
+# componente: componente:verbo-seg
 """Contrato dos atos de segredo e keycloak em `seg` (#3053).
 
 Cobre:

@@ -1,3 +1,4 @@
+# componente: componente:verbo-lint
 """test_contrato_lint — contrato da CLI e dos predicados do verbo `lint` (card #3153).
 
 Cobre:

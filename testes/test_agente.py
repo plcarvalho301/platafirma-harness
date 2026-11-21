@@ -1,3 +1,4 @@
+# componente: componente:verbo-agente
 """`agente` (card #3156): a declaração, a projeção, o portão da troca de modelo e o rodar.
 
 Hermético: o posto é uma pasta temporária; `sessao` e `expediente` são dublês em PF_BIN; o ollama é um

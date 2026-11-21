@@ -1,3 +1,4 @@
+# componente: componente:verbo-conferir
 # test_contrato_conferir — contrato --json dos quatro sub-atos de `bin/conferir`
 # (card #390, LOTE 1). Dois testes por classe: formato OK e falha/divergencia.
 #

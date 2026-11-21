@@ -1,3 +1,4 @@
+# componente: componente:verbo-minuta
 """Contrato de `minuta ler` lendo pelo acervo (arq:0115 §11.3; incidente #3225).
 
 Prova: com número, com número curto e com slug, o texto vem de `acervo ler casa minuta
