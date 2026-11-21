@@ -158,8 +158,6 @@ UNITS=(
   "controle/systemd/harness-agregador.service|habilita"
   "deploy-harness/sinal.service|alvo-de-timer"
   "deploy-harness/sinal.timer|habilita"
-  "deploy-harness/descansar-varredura.service|alvo-de-timer"
-  "deploy-harness/descansar-varredura.timer|habilita"
   "deploy-harness/comportamento.service|alvo-de-timer"
   "deploy-harness/comportamento.timer|habilita"
   "deploy-harness/repo-sanear.service|alvo-de-timer"

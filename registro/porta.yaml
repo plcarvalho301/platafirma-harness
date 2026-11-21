@@ -69,8 +69,10 @@ verbos:
       alcance (leitura, operacao), vocabulario (leitura, operacao)
   descansar:
     descricao: >-
-      encerra o expediente conferindo a memória · use para: «encerra», «fecha por hoje»,
-      «paramos aqui», ANTES de encerrar o expediente · atos: fita, varredura
+      encerra a sessão numa chamada e publica mensagem · use para: «encerra», «fecha por hoje»,
+      «paramos aqui», ANTES de encerrar o expediente; publicar afirmação, negativa, pedido,
+      recusa, contestação ou decisão · atos: encerrar (escrita, sessao), publicar (escrita,
+      mensagem)
   expediente:
     descricao: >-
       monta o pacote da cadeira e veste o chapéu · use para: o catálogo de peças; vestir outro
