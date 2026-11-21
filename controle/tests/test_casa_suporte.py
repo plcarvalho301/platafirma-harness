@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 # Contrato do cliente de casa sem banco e sem rede (arq:0115 §3, §7, §8.1, §11; contrato de
 # dados D2/D5/D6/D9/D10): o espelho bare do suporte, a leitura por sha, o predicado 8
 # (diagrama sem documento), o payload, o plano impresso e a forma da chave. Roda contra um

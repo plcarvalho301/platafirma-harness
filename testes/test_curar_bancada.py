@@ -1,3 +1,4 @@
+# componente: componente:verbo-curar
 """#3187: `curar --reextrair <lista> --bancada <pasta>` contra um servidor HTTP falso do CONTRATO.
 
 O servidor falso (http.server em thread, loopback, porta livre) implementa

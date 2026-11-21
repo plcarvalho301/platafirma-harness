@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """`motor rag buscar` monta a consulta (card #3360, #3364; spec motor-do-conhecimento §2b): a fiação do verbo.
 
 O verbo roda de verdade, como subprocesso, contra um rag-api falso em 127.0.0.1 (como test_motor_indexar.py).

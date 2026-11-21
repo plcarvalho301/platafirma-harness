@@ -1,3 +1,4 @@
+# componente: componente:verbo-fila
 """O cabecalho de bin/fila se registra no golden record, com o contestar da face motor (#3518, buraco #2555).
 
 Ate 15/10/2026 a linha `# escreve:` da fila era prosa, sem `<ato>=<recurso>`, e `acervo registrar fila` saia 3: a

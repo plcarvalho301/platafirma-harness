@@ -1,3 +1,4 @@
+# componente: componente:porta
 """Testes da projecao de conta de SO no despacho (story #3007), migrados de ops-server/ (#4348).
 
 Rodam SEM root e sem as dependencias da porta: a logica mora em lib/isolacao/exec_conta.py.

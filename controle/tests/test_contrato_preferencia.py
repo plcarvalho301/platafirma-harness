@@ -1,3 +1,4 @@
+# componente: componente:porta
 """Contrato de `bin/preferencia` (#3449, decisão do arquiteto no #2143).
 
 Prova o que o verbo promete a quem o chama:

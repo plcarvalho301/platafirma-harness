@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Suite bash da frente uv/python/porta do `release` e do `infra` (card #3010).
 
 Roda pelo `teste rodar platafirma-harness`. A suite monta release, instancia e HOME em /tmp,

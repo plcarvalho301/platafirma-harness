@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 # Contrato de `acervo` (bin/acervo) — arq:0110 / spec_acervo
 #
 # Só o que o cliente decide sozinho: gramática, recusas, cabeçalho, aviso de deprecado,

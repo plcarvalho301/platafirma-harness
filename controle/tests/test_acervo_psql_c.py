@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """`acervo psql -c "<sql>"` (#2856 linha 21).
 
 Antes, `-c` caia no ramo posicional e a query seguia como «-c SELECT ...»: erro de sintaxe, e so o

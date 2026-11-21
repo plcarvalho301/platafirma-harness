@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 # Contrato de `acervo listar topologia --rotas|--acessos` (card #3145 frente D) — a
 # porta de `deploy <stack> rotas|acessos` (bin/deploy, apagado nesta fita). Testa a
 # resolucao de caminho e a leitura do compose/ingress a partir de um `docker` de

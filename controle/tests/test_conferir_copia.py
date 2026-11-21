@@ -1,3 +1,4 @@
+# componente: componente:verbo-conferir
 """`release conferir copia`: toda materialização viva tem declaração (card #3763; arq:0022 §6.3; arq:0130 D4).
 
 Prova, sem banco e sem balde reais (as portas `ler`, `listagem` e `plano` são trocadas por dicts no formato dos

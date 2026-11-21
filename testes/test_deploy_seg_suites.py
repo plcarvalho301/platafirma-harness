@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Suites bash do harness: bin/_release/stack, `seg`, `teste`/`lint`, `repo` e o fechamento do harness.
 
 Rodam pelo `teste rodar platafirma-harness`. Cada suite monta a propria fixture em /tmp

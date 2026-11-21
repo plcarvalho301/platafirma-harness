@@ -1,3 +1,4 @@
+# componente: componente:verbo-conferir
 # test_conferir_veredito — o Veredito comum (resultado.py) e as classes que ja o usam:
 # card #3142. Stub de git/tarefas via monkeypatch de conferir.sh; nada toca rede ou disco
 # fora de tmp_path/monkeypatch.

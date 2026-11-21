@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Contrato do fetch em `release promover --ensaio` (card #3150, comentário C7):
 antes, o espelho já existente pulava o fetch em ensaio ("sem fetch em ensaio") — e
 uma rev recém-mesclada só aparecia depois de um fetch, então o ensaio sempre dizia

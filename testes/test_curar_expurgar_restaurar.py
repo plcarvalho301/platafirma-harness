@@ -1,3 +1,4 @@
+# componente: componente:verbo-curar
 """#3238, #3298: `curar --expurgar <obra> [--apply]` (retirar) e `curar --restaurar <obra> [--apply]`.
 #3301: os dois exigem `--motivo`; sem ele saem 2, no plano e no --apply, sem falar com o servidor.
 

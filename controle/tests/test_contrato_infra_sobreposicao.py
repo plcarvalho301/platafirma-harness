@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra sobreposicao remover`: o verbo que apaga a sobreposicao da instancia de uma stack (#2856 linha 351).
 
 A sobreposicao (`$PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml`) que sobrepoe servico que a rev

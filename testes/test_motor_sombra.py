@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """Testes unitários de bin/_motor/sombra.py (DT-774 e DT-776)."""
 import importlib.util
 import json

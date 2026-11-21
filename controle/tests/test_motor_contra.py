@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """`motor <inst> medir <particao> --contra <outra>`: o top-8 de duas instâncias da busca lado a lado (card #3844,
 tarefa 2; R27 da spec motor).
 

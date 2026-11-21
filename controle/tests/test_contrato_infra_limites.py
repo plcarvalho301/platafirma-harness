@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra limites`: o teto de processos e threads da conta, lido pela porta (16/10/2026, #3496).
 
 Nasceu para medir o `fork: retry: Resource temporarily unavailable` que o portão da ui

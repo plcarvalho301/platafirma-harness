@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """#3163: `acervo exportar --bancada <chave>` escolhe entre várias bancadas abertas da cadeira."""
 from __future__ import annotations
 

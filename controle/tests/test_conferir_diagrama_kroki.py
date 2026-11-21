@@ -1,3 +1,4 @@
+# componente: componente:verbo-conferir
 """Contrato de `conferir diagrama` contra o Kroki (card #3099).
 
 O Kroki e um servidor HTTP de fixture no loopback; `docker port` e um stub que devolve a

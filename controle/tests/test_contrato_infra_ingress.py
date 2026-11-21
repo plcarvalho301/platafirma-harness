@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra ingress`: a copia da instancia do cloudflared.yml passa a ter um ato que a escreve (#3473).
 
 O cloudflared do tunel `wiki` le a COPIA da instancia (deploy/core/cloudflared.yml, montada pelo

@@ -1,3 +1,4 @@
+# componente: componente:verbo-ingerir
 """`ingerir --ate vetor --apply` vai até o ar: cataloga, espelha, confere a faixa, indexa até o gate e promove.
 
 Servidor do acervo falso (HTTP em thread) e verbos `acervo` e `motor` falsos (PF_BIN_ACERVO,

@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """Card #3949: `infra cache modelos` lê revisão e digest dos pesos no cache do Hugging Face.
 
 O cache é de mentira, em tmp (INFRA_HF_CACHE), no formato do hub: models--org--nome/refs/main,

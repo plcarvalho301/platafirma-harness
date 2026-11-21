@@ -1,3 +1,4 @@
+# componente: componente:verbo-repo
 """Contrato da publicacao do veredito do portao no forge (incidente #4196, feature #4027).
 
 Git real contra bare local; o forge e um `gh` de fixture (PF_GH_BIN) que anota cada chamada

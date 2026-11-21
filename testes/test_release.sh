@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# componente: componente:verbo-release
 # Testes do verbo release conforme spec_release rev 2 (arq:0110, arq:0109) — Lote 1
 set -euo pipefail
 

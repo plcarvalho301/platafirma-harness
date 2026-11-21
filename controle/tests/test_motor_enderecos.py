@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """Os dois endereços do motor, lidos só do registro das instâncias (card #3843, R28 da spec motor)."""
 from __future__ import annotations
 

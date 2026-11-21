@@ -1,3 +1,4 @@
+# componente: componente:verbo-sessao
 """Contrato de persistência de turnos em sessao.giro (Card #2945).
 
 Verifica:

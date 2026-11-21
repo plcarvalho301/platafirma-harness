@@ -1,3 +1,4 @@
+# componente: componente:oplog
 """lib/oplog_extracao e bin/_infra/linhagem-ops: o extrator do bruto da porta para a partição log (card #3353).
 
 arq:0123 §8, §11-§13; spec apis-escrita-acervo §D5. Tudo contra uma pasta em tmp_path e uma API falsa (ou um

@@ -1,3 +1,4 @@
+# componente: componente:verbo-teste
 """Degrau e quarentena nas listas de portão do verbo `teste` (arq:0129, card #3731)."""
 from __future__ import annotations
 

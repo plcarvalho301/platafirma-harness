@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """bin/_release/biblioteca: a imagem platafirma/ui sai da arvore que sobe (card #3391, feature #3388).
 
 O lock corrigido de platafirma-ui (89457fc) nao chegava ao conteiner: a imagem era montada a mao e

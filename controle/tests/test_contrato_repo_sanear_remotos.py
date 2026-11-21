@@ -1,3 +1,4 @@
+# componente: componente:verbo-repo
 """Contrato de `repo sanear` sobre os ramos do origin (card #3072; ordem do dono 27/09/2026).
 
 Git real contra bare local; os PRs abertos vem de um `gh` de fixture (PF_GH_BIN). Prova:

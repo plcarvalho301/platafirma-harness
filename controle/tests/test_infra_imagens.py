@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra imagens` e `infra limpeza imagens` (bin/_infra/imagens): separação entre imagens
 Docker referenciadas por contêineres em produção e imagens inativas/órfãs, e poda reversível
 em inspeção (--ver) ou efetiva (`docker image prune -a -f`).

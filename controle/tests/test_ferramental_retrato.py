@@ -1,3 +1,4 @@
+# componente: componente:harness-controle
 # O texto do controle por ato no registro do ferramental e o retrato que a Taipa consome
 # (#3444; arq:0124 §3, arq:0125 U33). Sem banco e sem rede: o psql do registrar e a leitura do
 # retrato sao trocados por falsos que devolvem o que o banco devolveria.

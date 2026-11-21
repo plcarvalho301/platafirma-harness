@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Incidente de 27/09 (14:17): promocao do harness reiniciou a porta no meio da promocao do
 conhecimento, e o `release conferir servico` acusava segredo ausente que nunca faltou.
 

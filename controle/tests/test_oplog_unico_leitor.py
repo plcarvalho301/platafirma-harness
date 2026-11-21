@@ -1,3 +1,4 @@
+# componente: componente:oplog
 """Fora de lib/oplog.py ninguem abre o bruto da porta (card #3344, arq:0123 §3).
 
 «O teste da suite reprova acesso a `var/log/ops` fora dele»: o diretorio do bruto, o nome do

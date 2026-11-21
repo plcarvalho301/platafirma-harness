@@ -1,3 +1,4 @@
+# componente: componente:verbo-repo
 """Contrato de `repo pr-fechar` (card #3072): descartar PR sem merge pela porta.
 
 Git real contra bare local; o forge do PR e um `gh` de fixture (PF_GH_BIN) que guarda o

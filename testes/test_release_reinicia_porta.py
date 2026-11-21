@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Contrato de reinício da porta e atalhos em bin/release (card #4340).
 
 Prova, com um `infra` de fixture que grava cada chamada de restart:

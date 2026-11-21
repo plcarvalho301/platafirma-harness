@@ -1,3 +1,4 @@
+# componente: componente:verbo-seg
 """Contrato de `seg isolacao medir` (lib/isolacao/medir_isolacao.py).
 
 Prova o veredito, nao o host: o host entra por um executor falso que le o argv que a

@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Testes de aceite do gerador de fontes e derivação do enum (#2320, arq:0076).
 
 Aceite (executável por terceiro):

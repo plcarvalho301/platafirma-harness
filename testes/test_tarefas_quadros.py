@@ -1,3 +1,4 @@
+# componente: componente:verbo-tarefas
 """Verbo tarefas: quadro de discovery/delivery e aposta com decisão (card #3619; R35 e R36 da
 spec tarefas).
 

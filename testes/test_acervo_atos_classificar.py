@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """#3296: os atos de Classificar pelo estágio (arq:0119 §2, §4, §7), com a forma velha em aviso.
 
 `acervo catalogar|definir|relacionar|desrelacionar|derivar|desderivar` chamam o ramo de bin/curar

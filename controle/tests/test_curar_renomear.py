@@ -1,3 +1,4 @@
+# componente: componente:verbo-curar
 """#3239: `curar --conceito <slug> --renomear <slug-novo>` contra um servidor HTTP falso do contrato.
 
 O servidor falso (http.server em thread, loopback) responde `PATCH /acervo/conceitos/{id}` como o

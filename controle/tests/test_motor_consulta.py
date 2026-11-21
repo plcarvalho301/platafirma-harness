@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """bin/_motor/consulta.py: a consulta montada pelo verbo (card #3360, #3364; spec motor-do-conhecimento §2b).
 
 Funções puras e leitura de arquivo, sem rede. rotas-chapeu.json tem a forma do arquivo da

@@ -1,3 +1,4 @@
+# componente: componente:verbo-sessao
 """`sessao longjob status` de uma unit que já saiu lê o evento de fim, e nunca success (spec eixos-do-host R13; card #3920).
 
 O `systemctl show` de unit descarregada devolve os valores padrão do systemd: Result=success e ExecMainStatus=0. Sem o

@@ -1,3 +1,4 @@
+# componente: componente:verbo-teste
 """Todo teste da pasta testes/ da raiz tem lista de portão (card #3326).
 
 Até o #3326, testes/ não estava em gate nenhum: o portão só roda as listas VERDES das chaves

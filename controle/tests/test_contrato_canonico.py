@@ -1,3 +1,4 @@
+# componente: componente:verbo-lint
 """Contrato da trava «canônico não cita minuta» (ordem do dono, 28/09/2026; régua arq:0028).
 
 Prova: o pre-commit recusa linha acrescentada a ADR (`adr/<série>/NNNN-*.md`) ou spec (`spec/<slug>.md`)

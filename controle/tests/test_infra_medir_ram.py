@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra medir ram` (bin/_infra/medir-ram): uso real, cache e total em campos distintos, a pressão do kernel, os
 maiores consumidores por chave de serviço e as mortes por limite da janela (spec eixos-do-host R4 e R9; card #3920).
 

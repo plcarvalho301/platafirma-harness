@@ -1,3 +1,4 @@
+# componente: componente:verbo-conferir
 """Os invariantes I1 a I13 de `release conferir acervo` e o gate contra o retrato (#3324).
 
 Prova, sem banco e sem balde reais (os dados são dicts no formato de `coletar`): cada invariante tem um

@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """bin/_infra/eixos.py: o JSON, a frase, a chave de serviço e o teto que os quatro eixos têm em comum
 (spec eixos-do-host R2 a R5; card #3919).
 

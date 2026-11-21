@@ -1,3 +1,4 @@
+# componente: componente:harness-controle
 # Card #3435 (R27 da spec taipa, lado da API): as duas rotas de escrita da tela do harness
 # so aceitam a origem exata da tela, de lista fechada por instancia. As seis tentativas de
 # fora recebem 403 e NENHUMA chega ao verbo; o ato pela tela passa.

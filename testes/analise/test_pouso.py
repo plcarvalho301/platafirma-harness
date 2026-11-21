@@ -1,3 +1,4 @@
+# componente: componente:analise
 """Pouso de arquivo externo em tabela declarada, com linhagem, corte e leitura por receita."""
 
 from datetime import datetime, timezone

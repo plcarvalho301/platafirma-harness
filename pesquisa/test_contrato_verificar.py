@@ -1,3 +1,4 @@
+# componente: componente:verbo-pesquisar
 """Contrato do gate de citação — verificar (spec §4.6, §8.4)."""
 
 from __future__ import annotations

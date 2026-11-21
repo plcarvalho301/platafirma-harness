@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Contrato de `release ler <repo> <caminho> [--offset N]` (#2856 linha 146).
 
 O defeito medido: a porta corta a saida em 50 KB sem `next_offset`, e o arquivo servido maior

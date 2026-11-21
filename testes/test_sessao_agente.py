@@ -1,3 +1,4 @@
+# componente: componente:verbo-sessao
 """`sessao abrir --agente/--em-nome-de/--conta`: a sessao filha do agente guarda quem e ele (card #3156).
 
 Hermetico, como test_sessao_origem.py: msg-mem, politica, vocabulario e Postgres sao dubles. O que se

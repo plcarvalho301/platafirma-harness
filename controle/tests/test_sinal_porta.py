@@ -1,3 +1,4 @@
+# componente: componente:verbo-sinal
 """`sinal --porta`: a medida da porta de fora, com o token do cliente da sonda (card #3919; spec eixos-do-host
 R7 e R8).
 

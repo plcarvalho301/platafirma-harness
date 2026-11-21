@@ -1,3 +1,4 @@
+# componente: componente:verbo-lint
 """Contrato da trava «casa velha não se cita por caminho» (F4073, #4348).
 
 Prova: `forma` pega o repositório extinto de arquitetura, `platafirma-casa` (sem -espelho),

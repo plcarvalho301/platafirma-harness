@@ -1,3 +1,4 @@
+# componente: componente:verbo-conferir
 """Contrato de `release conferir jobs` (card #3147).
 
 Release e systemd --user de fixture: um `systemctl` que responde `list-units` e `show`

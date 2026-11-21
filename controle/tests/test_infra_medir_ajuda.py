@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra medir`: o cabeçalho (face, rótulo e volta), a ajuda e o despacho para o ato de eixo (spec eixos-do-host
 R1; arq:0124 §3; card #3919).
 

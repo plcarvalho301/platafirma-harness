@@ -1,3 +1,4 @@
+# componente: componente:verbo-sessao
 """`sessao longjob run` repassa a identidade da porta a unit (mesa ti #21).
 
 O systemd --user nao herda o ambiente de quem chama: sem repasse explicito, verbo que

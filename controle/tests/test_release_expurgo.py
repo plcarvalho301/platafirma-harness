@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Provas do expurgo da release e da classe fossil (card #4404, regras r15, r27 e r28).
 
 Cobre as cenas do Comportamento esperado:
