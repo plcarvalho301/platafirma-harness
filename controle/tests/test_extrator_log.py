@@ -138,6 +138,24 @@ def test_os_doze_tipos_do_extrator_sao_os_da_ddl():
                         "leitura", "escopo", "turno", "consulta_motor")
 
 
+def test_eventos_de_diagnostico_do_pep_ficam_fora_da_particao_e_batem_com_o_corte():
+    import oplog_corte as corte
+
+    linhas = [
+        json.dumps(_antiga()),
+        json.dumps({"ts": "2026-11-18T00:01:00-03:00", "tool": "-", "evento": "pep_politica_carregada", "resumo": "a" * 64}),
+        json.dumps({"ts": "2026-11-18T00:01:01-03:00", "tool": "-", "evento": "pep_vocabulario_divergente", "dominio": "x"}),
+    ]
+    dados = ("\n".join(linhas) + "\n").encode("utf-8")
+    ext = ex.Extracao(DIA, dados)
+    assert not ext.sem_traducao
+    assert ext.ignorados == {"pep_politica_carregada": 1, "pep_vocabulario_divergente": 1}
+    assert (ext.lidas, ext.legiveis, ext.ilegiveis) == (1, 1, 0)
+    assert dict(ext.por_tipo) == {"giro": 1}
+    c = corte.contas_do_arquivo(dados)
+    assert (c["lidas"], c["legiveis"], c["ilegiveis"]) == (ext.lidas, ext.legiveis, ext.ilegiveis)
+
+
 # --- a tradução: sem conteúdo -----------------------------------------------------------------
 
 def _tudo(item):
