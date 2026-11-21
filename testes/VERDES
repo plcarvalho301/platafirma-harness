@@ -26,8 +26,8 @@ test_acervo_impressao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_ler_secao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_listar_marcacao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_retrato.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_curar_indicacoes_4120.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_acervo_conceito_saida_dt807.py | bin/acervo bin/_acervo/conceito_saida.py bin/_acervo/pipeline_cliente.py
+test_curar_indicacoes.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_conceito_retirada.py | bin/acervo bin/_acervo/conceito_saida.py bin/_acervo/pipeline_cliente.py
 test_acervo_stack_forma.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_stack_pre_build.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_stack_servico.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
@@ -36,22 +36,22 @@ test_acervo_listar_retirada.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_mapa.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_objeto.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_particao_biblioteca.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_acervo_psql_dt373.py | bin/acervo bin/_acervo/**
-test_acervo_wiki_cargo_dt103.py | bin/acervo bin/_acervo/**
-test_balde_apagar_3302.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_balde_varrer_3468.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_balde_ler_listar_dt253.py | bin/acervo bin/_acervo/**
+test_acervo_psql_temp.py | bin/acervo bin/_acervo/**
+test_acervo_wiki_cargo.py | bin/acervo bin/_acervo/**
+test_balde_apagar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_balde_varrer.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_balde_ler_listar.py | bin/acervo bin/_acervo/**
 test_curar_apagar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_curar_bancada.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_curar_bancada_conversor.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_curar_expurgar_restaurar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_curar_flag_desconhecida.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_curar_reextrair_lista_166.py | bin/acervo bin/_acervo/** bin/curar
+test_curar_reextrair_lista.py | bin/acervo bin/_acervo/** bin/curar
 test_curar_lote.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_curar_vinculacao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_curar_descricao_4144.py | bin/acervo bin/_acervo/** bin/curar
-test_curar_autor_dt141.py | bin/acervo bin/_acervo/** bin/curar
+test_curar_descricao.py | bin/acervo bin/_acervo/** bin/curar
+test_curar_autor.py | bin/acervo bin/_acervo/** bin/curar
 test_curar_desrelacionar_desderivar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_teste_bench_dt376.py | bin/teste lib/ambiente_banco.py
+test_teste_bench_banco.py | bin/teste lib/ambiente_banco.py
 test_dt_unidades_systemd.py | bin/infra bin/_sessao/longjob bin/_release/conferir/**
 test_motor_limpar.py | bin/motor bin/_motor/limpeza.py
