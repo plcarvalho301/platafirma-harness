@@ -912,16 +912,18 @@ def _resolver_venv_pytest() -> Path:
     if env_venv and (Path(env_venv) / "bin" / "python").exists():
         return Path(env_venv).resolve()
     release_raiz = Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"))
-    cand_analise = release_raiz / "venv" / "analise"
-    if (cand_analise / "bin" / "pytest").exists():
-        return cand_analise.resolve()
+    for nome in ("analise", "suite", "harness", "posto-gerador", "porta"):
+        cand = release_raiz / "venv" / nome
+        if (cand / "bin" / "pytest").exists():
+            return cand.resolve()
     if importlib.util.find_spec("pytest") is not None:
         return Path(sys.prefix).resolve()
     venv_pool = Path(os.environ.get("PF_RELEASE_RAIZ", "/opt/platafirma")) / "venv"
     if venv_pool.is_dir():
-        for p in sorted(venv_pool.glob("analise-*"), reverse=True):
-            if (p / "bin" / "pytest").exists():
-                return p.resolve()
+        for padrao in ("analise-*", "suite-*", "harness-*", "posto-*", "*-*"):
+            for p in sorted(venv_pool.glob(padrao), reverse=True):
+                if (p / "bin" / "pytest").exists():
+                    return p.resolve()
     return Path(sys.prefix).resolve()
 
 
