@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """#3324: `acervo listar biblioteca obra --situacao --retrato [--guardar]` — o retrato da biblioteca (arq:0121 §9).
 
 Contrato das colunas e do rodapé, sem banco e sem rede: os dados são os de `predicados_acervo.coletar`

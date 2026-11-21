@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """#3084: `acervo listar casa guia --mapa` junta a seção `## Mapa` dos guias de rotina.
 
 Testa a função pura `extrai_mapa` (sem banco): ordem fixa, bytes estáveis, rotina faltando

@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """#2856 (linhas 153 e 96): `acervo ler biblioteca arquivo` (antes `objeto`, #3761) — resolve por uuid e grava em --destino.
 
 Sem rede, sem docker, sem MinIO: a consulta ao catalogo (`_consultar`) e o download do store

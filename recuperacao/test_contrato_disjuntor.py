@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Contrato do disjuntor. `python3 -m pytest recuperacao/ -q` da raiz do repo.
 
 `spec_recuperador.md` §8. Relógio falso em todo teste: disjuntor testado com `sleep`

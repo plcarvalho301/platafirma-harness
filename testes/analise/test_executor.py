@@ -1,3 +1,4 @@
+# componente: componente:analise
 """Ensaios reais de isolamento; rodam somente sob demanda (#4130)."""
 import importlib.util
 import json

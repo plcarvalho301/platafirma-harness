@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Contrato dos adaptadores. `python3 -m pytest recuperacao/ -q` da raiz do repo.
 
 Dois níveis, de propósito:

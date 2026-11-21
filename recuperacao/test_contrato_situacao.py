@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Testes de contrato e conformidade de `situacao` (#2953, arq:0085 §4, §2; refatorado #2957).
 
 Invariantes conferidas:

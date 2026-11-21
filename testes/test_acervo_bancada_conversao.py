@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """#3187: `acervo listar obra bancada <pasta>` — o agregador perfil x docling, sem rede e sem banco.
 
 Pastas sintéticas com relatorio.json (relatório v1 do contrato) exercitam a regra escrita pelo

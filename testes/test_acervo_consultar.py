@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """`acervo consultar` removido por ordem do dono (13/11/2026).
 
 O ato lia o schema casa antigo, apagado no #4211, e so devolvia erro cru de SQL. A rota recusa com

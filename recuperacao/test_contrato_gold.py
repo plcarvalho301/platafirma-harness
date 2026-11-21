@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Contrato do gerador de gold das fontes exatas (#2309).
 
 O que se julga aqui: o SCHEMA do §13, o peso de prova de cada classe de caso, e a recusa

@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """Bateria reendereçada pela chave da seção (#3909, #3951).
 
 Toda linha de avaliacao/bateria.jsonl que tem alvo de seção (alvo_section_id) aponta pela chave

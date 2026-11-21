@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Contrato do eixo 2 — taxa de disparo por release (#2317). Spec §11 e §13.
 
 A invariante central: **taxa sem denominador medido não sai como número.**

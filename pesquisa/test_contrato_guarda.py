@@ -1,3 +1,4 @@
+# componente: componente:verbo-pesquisar
 """Contrato da guarda de rede — SSRF fail-closed (spec §2.6, §7, §8.3).
 
 `python3 -m pytest pesquisa/ -q` da raiz do repo. O par URL privada/pública é o teste

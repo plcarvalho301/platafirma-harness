@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Contrato do catálogo de existência (#2315). Spec §12.
 
 Uma invariante que este arquivo existe para travar:

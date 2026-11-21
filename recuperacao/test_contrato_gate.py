@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Contrato do gate de procedência (#2310). Spec §10.1–5.
 
 O caso que este arquivo existe para travar: citação legítima de impressão aposentada

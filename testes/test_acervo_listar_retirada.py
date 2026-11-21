@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """#3317: `acervo listar biblioteca obra` não lista obra retirada (retirada_em preenchido), em nenhum eixo
 de --sobre e na listagem sem termo, com ou sem --situacao. Sem banco: o módulo `bin/_acervo/listar` se
 carrega como fonte e `_psql_json` é trocado por uma função que guarda o SQL que o ato manda.
