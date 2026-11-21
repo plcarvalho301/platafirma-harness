@@ -3354,16 +3354,16 @@ def conferir_stack_porta(unit_path=None, segredo_tunel=None):
     return itens
 
 
-def conferir_configuracao_porta(core_dir=None, instancia_dir=None, python_porta=None):
+def conferir_configuracao_porta(core_dir=None, python_porta=None):
     """Confere o schema de armario-de-chaves.yaml (4406.r21) e conector-do-tunel.yaml (4406.r4).
 
-    Executa `python -m porta.configuracao validar <armario|conector> <arquivo>` usando
-    a árvore do core e o venv da porta, sobre os arquivos da camada da instância.
+    Os dois são versionados no core (deploy/armario-de-chaves.yaml e
+    deploy/porta/conector-do-tunel.yaml). Executa `python -m porta.configuracao validar
+    <armario|conector> <arquivo>` com o validador e os arquivos da mesma árvore do core.
     """
     from pathlib import Path as _Path
 
     prod = _Path(os.environ.get("PF_PROD_RAIZ") or PROD_RAIZ)
-    inst = _Path(instancia_dir or os.environ.get("PLATAFIRMA_INSTANCIA") or INSTANCIA)
     core = _Path(core_dir or os.environ.get("PF_CORE_DIR") or (prod / "current" / "core"))
     validador = core / "porta" / "configuracao.py"
     if not validador.is_file():
@@ -3379,8 +3379,8 @@ def conferir_configuracao_porta(core_dir=None, instancia_dir=None, python_porta=
 
     itens = []
     alvos = (
-        ("armario", inst / "deploy" / "armario-de-chaves.yaml", "armario-de-chaves.yaml (4406.r21)"),
-        ("conector", inst / "deploy" / "porta" / "conector-do-tunel.yaml", "conector-do-tunel.yaml (4406.r4)"),
+        ("armario", core / "deploy" / "armario-de-chaves.yaml", "armario-de-chaves.yaml (4406.r21)"),
+        ("conector", core / "deploy" / "porta" / "conector-do-tunel.yaml", "conector-do-tunel.yaml (4406.r4)"),
     )
     for tipo, arq, rotulo in alvos:
         try:

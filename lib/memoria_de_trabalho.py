@@ -1,9 +1,10 @@
 """Resolução da senha do Valkey das sessões (`motor/MSG_MEM_SENHA`) pelo armário de chaves.
 
-O schema do armário pertence ao core (`porta/configuracao.py`); aqui o harness
-apenas resolve o caminho de `motor/MSG_MEM_SENHA` em `deploy/armario-de-chaves.yaml`
-da instância e devolve a senha para os clientes do msg-mem autenticarem com
-`AUTH default <senha>`.
+O armário é versionado no platafirma-core e servido pela release em
+`$PLATAFIRMA_RELEASE/core/deploy/armario-de-chaves.yaml`; o schema pertence ao core
+(`porta/configuracao.py`). Aqui o harness apenas resolve o caminho de
+`motor/MSG_MEM_SENHA` no armário, lê o arquivo da senha na instância e a devolve
+para os clientes do msg-mem autenticarem com `AUTH default <senha>`.
 """
 from __future__ import annotations
 
@@ -22,6 +23,13 @@ def _instancia(instancia_dir: Path | None = None) -> Path:
     if instancia_dir is not None:
         return Path(instancia_dir)
     return Path(os.environ.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa"))
+
+
+def _armario(core_dir: Path | None = None) -> Path:
+    if core_dir is None:
+        release = Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"))
+        core_dir = release / "core"
+    return Path(core_dir) / "deploy" / "armario-de-chaves.yaml"
 
 
 def _caminho_no_armario_stdlib(texto: str, nome_alvo: str) -> str | None:
@@ -75,10 +83,12 @@ def _caminho_no_armario(armario_path: Path, nome_alvo: str) -> str:
     return caminho
 
 
-def ler_senha_msg_mem(instancia_dir: Path | None = None) -> str:
-    """Resolve `motor/MSG_MEM_SENHA` no armário da instância e lê a senha."""
+def ler_senha_msg_mem(
+    instancia_dir: Path | None = None, *, core_dir: Path | None = None
+) -> str:
+    """Resolve `motor/MSG_MEM_SENHA` no armário do core e lê a senha na instância."""
     inst = _instancia(instancia_dir)
-    armario = inst / "deploy" / "armario-de-chaves.yaml"
+    armario = _armario(core_dir)
     rel = _caminho_no_armario(armario, SEGREDO_MSG_MEM)
     arq = Path(rel) if Path(rel).is_absolute() else inst / rel
     if not arq.is_file():
@@ -94,9 +104,11 @@ def ler_senha_msg_mem(instancia_dir: Path | None = None) -> str:
     return valor
 
 
-def kwargs_redis_msg_mem(instancia_dir: Path | None = None) -> dict[str, str]:
+def kwargs_redis_msg_mem(
+    instancia_dir: Path | None = None, *, core_dir: Path | None = None
+) -> dict[str, str]:
     """Devolve `username` e `password` para `redis.Redis` autenticar no msg-mem."""
     return {
         "username": USUARIO_MSG_MEM,
-        "password": ler_senha_msg_mem(instancia_dir),
+        "password": ler_senha_msg_mem(instancia_dir, core_dir=core_dir),
     }

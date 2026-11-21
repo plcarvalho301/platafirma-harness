@@ -112,11 +112,19 @@ class _ServidorRESPFalso:
         self._sock.close()
 
 
-def _montar_instancia(tmp_path: Path, *, senha: str | None = SENHA_TESTE) -> Path:
+def _montar_instancia(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    senha: str | None = SENHA_TESTE,
+) -> Path:
+    """Armário no deploy/ do core de uma release falsa; arquivo da senha na instância."""
     inst = tmp_path / "inst"
-    (inst / "deploy").mkdir(parents=True)
+    release = tmp_path / "release"
+    (release / "core" / "deploy").mkdir(parents=True)
     (inst / "segredos" / "motor").mkdir(parents=True)
-    (inst / "deploy" / "armario-de-chaves.yaml").write_text(
+    monkeypatch.setenv("PLATAFIRMA_RELEASE", str(release))
+    (release / "core" / "deploy" / "armario-de-chaves.yaml").write_text(
         "versao: 1\n"
         "segredos:\n"
         f"  - nome: {SEGREDO_MSG_MEM}\n"
@@ -139,9 +147,9 @@ def _montar_instancia(tmp_path: Path, *, senha: str | None = SENHA_TESTE) -> Pat
 
 @pytest.mark.parametrize("senha_servidor", [None, SENHA_TESTE])
 def test_lousa_autentica_grava_le_e_apaga(
-    tmp_path: Path, senha_servidor: str | None
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, senha_servidor: str | None
 ) -> None:
-    inst = _montar_instancia(tmp_path)
+    inst = _montar_instancia(tmp_path, monkeypatch)
     srv = _ServidorRESPFalso(senha_exigida=senha_servidor)
     try:
         lousa = Lousa(host="127.0.0.1", porta=srv.porta, instancia_dir=inst)
@@ -153,15 +161,19 @@ def test_lousa_autentica_grava_le_e_apaga(
         srv.fechar()
 
 
-def test_lousa_sem_senha_no_armario_cai_em_fora(tmp_path: Path) -> None:
-    inst = _montar_instancia(tmp_path, senha=None)
+def test_lousa_sem_senha_no_armario_cai_em_fora(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inst = _montar_instancia(tmp_path, monkeypatch, senha=None)
     lousa = Lousa(host="127.0.0.1", porta=6380, instancia_dir=inst)
     with pytest.raises(Fora):
         lousa.ler_campo_sessao("s4412", "chapeu")
 
 
-def test_kwargs_redis_resolve_usuario_default_e_senha(tmp_path: Path) -> None:
-    inst = _montar_instancia(tmp_path)
+def test_kwargs_redis_resolve_usuario_default_e_senha(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inst = _montar_instancia(tmp_path, monkeypatch)
     assert ler_senha_msg_mem(inst) == SENHA_TESTE
     assert kwargs_redis_msg_mem(inst) == {
         "username": "default",
@@ -171,4 +183,19 @@ def test_kwargs_redis_resolve_usuario_default_e_senha(tmp_path: Path) -> None:
 
 def test_sem_armario_levanta_senha_indisponivel(tmp_path: Path) -> None:
     with pytest.raises(SenhaIndisponivel):
-        ler_senha_msg_mem(tmp_path / "nao-existe")
+        ler_senha_msg_mem(tmp_path / "inst", core_dir=tmp_path / "nao-existe")
+
+
+def test_armario_vem_do_core_da_release_e_nao_da_instancia(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Um armário deixado na instância não é lido; só vale o deploy/ do core."""
+    inst = _montar_instancia(tmp_path, monkeypatch)
+    (inst / "deploy").mkdir()
+    (inst / "deploy" / "armario-de-chaves.yaml").write_text(
+        "versao: 1\nsegredos: []\n", encoding="utf-8"
+    )
+    assert ler_senha_msg_mem(inst) == SENHA_TESTE
+    (tmp_path / "release" / "core" / "deploy" / "armario-de-chaves.yaml").unlink()
+    with pytest.raises(SenhaIndisponivel, match="core"):
+        ler_senha_msg_mem(inst)
