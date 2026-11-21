@@ -48,10 +48,23 @@ def _python():
     pytest.skip("sem python de sistema")
 
 
+_OLARIA_SRV = None
+_OLARIA_ENV: dict[str, str] | None = None
+
+
+def _olaria_env() -> dict[str, str]:
+    global _OLARIA_SRV, _OLARIA_ENV
+    if _OLARIA_ENV is None:
+        from _olaria_local import subir_olaria_local
+        _OLARIA_SRV, _OLARIA_ENV = subir_olaria_local()
+    return _OLARIA_ENV
+
+
 def _run_teste(env_extra: dict, *args: str) -> subprocess.CompletedProcess:
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": str(Path.home()),
+        **_olaria_env(),
         **env_extra,
     }
     return subprocess.run(

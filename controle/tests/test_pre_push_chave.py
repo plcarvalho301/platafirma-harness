@@ -83,7 +83,10 @@ class Ambiente:
         _git(self.wt, "commit", "-q", "-m", "fixture inicial")
         _git(self.wt, "push", "-q", "-u", "origin", "main")
 
+        from _olaria_local import subir_olaria_local
+        self._srv_olaria, env_olaria = subir_olaria_local()
         self.env = dict(os.environ)
+        self.env.update(env_olaria)
         self.env["PF_RELEASE_RAIZ"] = str(tmp_path / "opt")
         self.env["PLATAFIRMA_INSTANCIA"] = str(tmp_path / "srv")
         self.env["PLATAFIRMA_VENVS"] = str(self.wt / "venvs.json")

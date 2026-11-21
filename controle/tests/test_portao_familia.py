@@ -282,9 +282,12 @@ def test_suite_fora_do_portao_tambem_paraleliza_diretorios(tmp_path):
 
 
 def test_artefato_fora_do_cache_e_sem_url_e_dependencia_ausente(tmp_path):
+    from _olaria_local import subir_olaria_local
     env, arv = _arvore(tmp_path, {"a": {"test_a.py": VERDE}}, {"a": "test_a.py\n"})
-    Path(env["PLATAFIRMA_TERCEIROS"]).write_text(json.dumps(
-        {"tok": {"familia": "demo", "destino": "terceiros/tok.json", "sha256": "0" * 64}}))
+    _srv, env_olaria = subir_olaria_local(
+        {"tok": {"familia": "demo", "destino": "terceiros/tok.json", "sha256": "0" * 64}}
+    )
+    env.update(env_olaria)
     r = _run(env, "rodar", "k-a", "--portao", "--arvore", str(arv))
     assert r.returncode == 3, r.stdout + r.stderr
     assert "fora do cache" in r.stderr
