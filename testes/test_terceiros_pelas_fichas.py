@@ -28,9 +28,10 @@ def _gerar_cert_loopback(tmp_path: Path) -> tuple[Path, Path]:
             "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
             "-keyout", str(chave), "-out", str(cert),
             "-days", "1", "-subj", "/CN=127.0.0.1",
+            "-addext", "basicConstraints=critical,CA:TRUE",
             "-addext", "subjectAltName=IP:127.0.0.1",
         ],
-        capture_output=True, text=True, check=False,
+        capture_output=True, text=True, check=False, timeout=30,
     )
     assert proc.returncode == 0, proc.stderr
     return cert, chave
@@ -72,9 +73,13 @@ def _servidor_http(handler_fn, *, ssl_cert: tuple[Path, Path] | None = None):
 
 def _rodar_materializar(familia: str, arvore: Path, cache: Path, env_extra: dict[str, str]):
     env = dict(os.environ)
+    for k in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"):
+        env.pop(k, None)
     env.update(env_extra)
+    if "CURL_CA_BUNDLE" in env_extra and "SSL_CERT_FILE" not in env_extra:
+        env["SSL_CERT_FILE"] = env_extra["CURL_CA_BUNDLE"]
     cmd = f'. "{RAIZ}/lib/terceiros.sh" && materializar_terceiros_em "{familia}" "{arvore}" "{cache}"'
-    return subprocess.run(["bash", "-c", cmd], env=env, capture_output=True, text=True, check=False)
+    return subprocess.run(["bash", "-c", cmd], env=env, capture_output=True, text=True, check=False, timeout=30)
 
 
 def _carregar_expurgo():
@@ -83,6 +88,7 @@ def _carregar_expurgo():
     spec = importlib.util.spec_from_loader(loader.name, loader)
     assert spec is not None
     mod = importlib.util.module_from_spec(spec)
+    sys.modules[loader.name] = mod
     loader.exec_module(mod)
     return mod
 
