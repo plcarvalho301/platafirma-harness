@@ -76,11 +76,8 @@ done
 echo "OK ($(echo $citados | tr '\n' ' '))"
 
 # ---------------------------------------------------------------- 2. terceiro pinado
-echo "--- 2: registro real do tokenizador e bem formado e casa com o caminho do codigo"
-REG_T="$REPO_ROOT/registro/terceiros.json"
-jq -e '."qwen2.5-tokenizer" | .familia == "platafirma-harness" and (.sha256 | test("^[0-9a-f]{64}$"))
-       and (.url | startswith("https://")) and .destino == "terceiros/tokenizers/qwen2.5.json"' "$REG_T" >/dev/null \
-  || falha "registro/terceiros.json: qwen2.5-tokenizer mal declarado"
+echo "--- 2: leitor de fichas da Olaria existe e casa com o caminho do codigo"
+[ -f "$REPO_ROOT/lib/terceiros_olaria.py" ] || falha "lib/terceiros_olaria.py ausente"
 grep -q '"terceiros", "tokenizers", "qwen2.5.json"' "$REPO_ROOT/bin/monta-sessao" || falha "monta-sessao nao le o destino pinado"
 grep -q '"terceiros" / "tokenizers" / "qwen2.5.json"' "$REPO_ROOT/recuperacao/_raizes.py" || falha "recuperacao nao le o destino pinado"
 if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -112,8 +109,28 @@ printf '{"platafirma-harness": "%s"}\n' "$bare" > "$TMP_DIR/familias.json"
 printf '{"_leia": "fixture sem venv"}\n' > "$TMP_DIR/venvs.json"
 printf 'tokenizador de fixture\n' > "$TMP_DIR/artefato"
 PINO="$(sha256sum "$TMP_DIR/artefato" | cut -d' ' -f1)"
-printf '{"_leia": "fixture", "tok.fixture": {"familia": "platafirma-harness", "destino": "terceiros/tokenizers/fixture.json", "sha256": "%s", "url": "https://127.0.0.1:9/inalcancavel"}}\n' "$PINO" > "$TMP_DIR/terceiros.json"
-export PLATAFIRMA_FAMILIAS="$TMP_DIR/familias.json" PLATAFIRMA_VENVS="$TMP_DIR/venvs.json" PLATAFIRMA_TERCEIROS="$TMP_DIR/terceiros.json"
+python3 - "$PINO" "$TMP_DIR/olaria.url" <<'PY' &
+import http.server, json, sys
+pino, arq_url = sys.argv[1], sys.argv[2]
+yaml_txt = (
+    "classe: stack\nfichas:\n- chave: stack:harness\n  ligacoes:\n    depende-de:\n"
+    f"    - alvo: dependencia-externa:teste:tok\n      nome: tok.fixture\n      familia: platafirma-harness\n"
+    f"      destino: terceiros/tokenizers/fixture.json\n      pino: sha256:{pino}\n      url: https://127.0.0.1:9/inalcancavel\n"
+)
+class H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        raw = json.dumps({"yaml": yaml_txt}).encode("utf-8")
+        self.send_response(200); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(raw))); self.end_headers(); self.wfile.write(raw)
+    def log_message(self, *a): return
+s = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+open(arq_url, "w").write(f"http://127.0.0.1:{s.server_address[1]}")
+s.serve_forever()
+PY
+OLARIA_SRV_PID=$!
+for _ in $(seq 1 50); do [ -s "$TMP_DIR/olaria.url" ] && break; sleep 0.05; done
+export OLARIA_URL="$(cat "$TMP_DIR/olaria.url")" OLARIA_CHAVE="chave-teste"
+export PLATAFIRMA_FAMILIAS="$TMP_DIR/familias.json" PLATAFIRMA_VENVS="$TMP_DIR/venvs.json"
 CACHE="$PROD_RAIZ/terceiros/sha256"
 
 set +e; out="$("$VERBO" promover platafirma-harness "$SHA1" 2>&1)"; rc=$?; set -e

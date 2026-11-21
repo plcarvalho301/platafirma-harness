@@ -81,20 +81,21 @@ def _arvore(tmp_path, suites: dict[str, dict[str, str]], lista: dict[str, str | 
     vjson = tmp_path / "venvs.json"
     vjson.write_text(json.dumps({"repositorios": {"demo": {"esteira": "codigo", "stack": "k-a"}},
                                  **stacks}))
-    tjson = tmp_path / "terceiros.json"
-    tjson.write_text("{}")
+    from _olaria_local import subir_olaria_local
+
+    terceiros_map = None
     if terceiro is not None:
         pino = hashlib.sha256(terceiro).hexdigest()
         cache = raiz / "terceiros" / "sha256"
         cache.mkdir(parents=True)
         (cache / pino).write_bytes(terceiro)
-        tjson.write_text(json.dumps({"tok": {"familia": "demo", "destino": "terceiros/tok.json",
-                                             "sha256": pino}}))
+        terceiros_map = {"tok": {"familia": "demo", "destino": "terceiros/tok.json", "sha256": pino}}
+    _srv_olaria, env_olaria = subir_olaria_local(terceiros_map)
     env = {
+        **env_olaria,
         "PF_RELEASE_RAIZ": str(raiz),
         "PLATAFIRMA_INSTANCIA": str(tmp_path / "instancia"),
         "PLATAFIRMA_VENVS": str(vjson),
-        "PLATAFIRMA_TERCEIROS": str(tjson),
         "PLATAFIRMA_PYTHON": _python(),
     }
     return env, arv

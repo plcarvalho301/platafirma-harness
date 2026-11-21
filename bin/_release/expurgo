@@ -16,7 +16,7 @@ Regra de layout declarado (card #4404):
   - venv/:
       apenas os diretórios apontados por atalhos declarados em current/venv/.
   - terceiros/sha256/:
-      apenas os sha256 declarados em registro/terceiros.json.
+      apenas os sha256 declarados em fichas de dependência externa na Olaria.
   - imagens Docker:
       apenas imagens em uso pela release no ar (bin/_infra/imagens).
 
@@ -85,14 +85,16 @@ def _caminho_venvs(prod_raiz: Path | None = None) -> Path:
     return _harness_raiz() / "registro" / "venvs.json"
 
 
-def _caminho_terceiros(prod_raiz: Path | None = None) -> Path:
-    if os.environ.get("PLATAFIRMA_TERCEIROS"):
-        return Path(os.environ["PLATAFIRMA_TERCEIROS"])
-    if prod_raiz:
-        cand = prod_raiz / "platafirma-harness" / "current" / "registro" / "terceiros.json"
-        if cand.is_file():
-            return cand
-    return _harness_raiz() / "registro" / "terceiros.json"
+def _carregar_terceiros_olaria():
+    caminho = Path(__file__).resolve().parents[2] / "lib" / "terceiros_olaria.py"
+    if not caminho.is_file():
+        caminho = _harness_raiz() / "lib" / "terceiros_olaria.py"
+    spec = importlib.util.spec_from_file_location("terceiros_olaria", caminho)
+    if spec is None or spec.loader is None:
+        return None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def familias_declaradas(prod_raiz: Path | None = None) -> set[str]:
@@ -125,21 +127,13 @@ def venvs_declarados(prod_raiz: Path | None = None) -> set[str]:
 
 
 def terceiros_declarados(prod_raiz: Path | None = None) -> set[str]:
-    arq = _caminho_terceiros(prod_raiz)
+    mod = _carregar_terceiros_olaria()
+    if mod is None:
+        return set()
     try:
-        dados = json.loads(arq.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        return mod.shas_declarados()
+    except Exception:
         return set()
-    if not isinstance(dados, dict):
-        return set()
-    shas: set[str] = set()
-    for k, v in dados.items():
-        if k.startswith("_") or not isinstance(v, dict):
-            continue
-        sha = v.get("sha256")
-        if isinstance(sha, str) and sha:
-            shas.add(sha)
-    return shas
 
 
 def _normalizar(p: Path) -> str:
@@ -439,7 +433,7 @@ def diagnosticar_fosseis(
             fosseis.append(Fossil(
                 categoria="terceiro",
                 caminho=str(ent),
-                motivo="artefato de terceiro não declarado em registro/terceiros.json",
+                motivo="artefato de terceiro não declarado em fichas de dependência externa na Olaria",
                 em_uso_por=[],
                 removivel=True,
             ))

@@ -926,10 +926,8 @@ PY
 # construtor da release (lib/terceiros.sh), do cache por sha256. O registro vem da própria
 # árvore quando ela o tem (bancada ou árvore materializada), senão o do verbo.
 terceiros_na_arvore() {  # $1=arvore
-  local c="$1" reg rc=0
-  reg="${PLATAFIRMA_TERCEIROS:-$c/registro/terceiros.json}"
-  [ -r "$reg" ] || reg="$(dirname "$(readlink -f "$0")")/../registro/terceiros.json"
-  materializar_terceiros_em "$REG_FAMILIA" "$c" "$reg" "$PF_RELEASE_RAIZ/terceiros/sha256" >&2 || rc=$?
+  local c="$1" rc=0
+  materializar_terceiros_em "$REG_FAMILIA" "$c" "$PF_RELEASE_RAIZ/terceiros/sha256" >&2 || rc=$?
   case "$rc" in
     0) return 0 ;;
     5) exit 5 ;;
@@ -954,7 +952,7 @@ lista_portao_de() {  # $1=clone $2=subarvore
 # muda o AMBIENTE de todo teste (o lock, o construtor do venv, o conftest); ferramenta,
 # registro e verbo entram pelo raio declarado de cada linha, e linha nova ou mudada numa
 # lista de portão roda por si (linhas_novas_da_lista). `*` e `**` casam `/`.
-RAIO_TOTAL=('lib/venv.sh' 'lib/terceiros.sh' 'registro/terceiros.json' 'venvs/**'
+RAIO_TOTAL=('lib/venv.sh' 'lib/terceiros.sh' 'lib/terceiros_olaria.py' 'venvs/**'
   '**/conftest.py' '**/uv.lock' '**/requirements*.txt' '**/pyproject.toml'
   '**/package-lock.json')
 
@@ -1037,7 +1035,7 @@ raio_total_de() {  # stdin: arquivos do diff ; imprime o primeiro de raio total 
 # as stacks da família) pesa só para a dona. Na raiz, numa pasta acima da stack, nas peças
 # globais do construtor ou sem stack dona, pesa para todas, como antes. Antes disto o
 # rag/uv.lock rodava também conversor e casa-site (carta 20261116T195115).
-RAIO_GLOBAL=('lib/venv.sh' 'lib/terceiros.sh' 'registro/terceiros.json')
+RAIO_GLOBAL=('lib/venv.sh' 'lib/terceiros.sh' 'lib/terceiros_olaria.py')
 
 sob_ou_igual() {  # $1=pasta $2=pasta-mãe ; 0 se $1 é $2 ou está dentro dela ("" é a raiz)
   [ -z "$2" ] && return 0

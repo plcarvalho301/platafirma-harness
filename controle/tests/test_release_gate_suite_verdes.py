@@ -95,8 +95,11 @@ class Ambiente:
         self.env["PF_RELEASE_RAIZ"] = str(tmp_path / "opt")
         self.env["PLATAFIRMA_INSTANCIA"] = str(tmp_path / "srv")
         self.env["PLATAFIRMA_FAMILIAS"] = str(tmp_path / "familias.json")
+        from _olaria_local import subir_olaria_local
+
+        self._srv_olaria, env_olaria = subir_olaria_local()
+        self.env.update(env_olaria)
         self.env["PLATAFIRMA_VENVS"] = str(tmp_path / "venvs.json")
-        self.env["PLATAFIRMA_TERCEIROS"] = str(tmp_path / "terceiros.json")
         self.env["PLATAFIRMA_PYTHON"] = python_exe
         self.env["PF_RELEASE_PORTA"] = "0"
         # a suite mede aqui mesmo: sem isto, o `sessao` real do PATH dispararia um longjob
@@ -108,7 +111,6 @@ class Ambiente:
         Path(self.env["PLATAFIRMA_VENVS"]).write_text(
             json.dumps({"harness": {"familia": self.FAMILIA, "lock": "lock.txt", "teste": "controle"}}),
             encoding="utf-8")
-        Path(self.env["PLATAFIRMA_TERCEIROS"]).write_text("{}", encoding="utf-8")
         self.env["PATH"] = f"{stub_bin}{os.pathsep}" + self.env.get("PATH", "")
 
     def run(self, *args: str) -> subprocess.CompletedProcess:

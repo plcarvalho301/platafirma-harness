@@ -103,10 +103,9 @@ cat > "$TMP_DIR/familias.json" <<J
   "platafirma-core": "$FORGE/platafirma-core.git"
 }
 J
-echo '{}' > "$TMP_DIR/venvs.json"; echo '{}' > "$TMP_DIR/terceiros.json"
+echo '{}' > "$TMP_DIR/venvs.json"
 export PLATAFIRMA_FAMILIAS="$TMP_DIR/familias.json"
 export PLATAFIRMA_VENVS="$TMP_DIR/venvs.json"
-export PLATAFIRMA_TERCEIROS="$TMP_DIR/terceiros.json"
 export PLATAFIRMA_INSTANCIA="$TMP_DIR/casa" PLATAFIRMA_RELEASE="$TMP_DIR/release"
 export PF_ABERTURA_DIR="$ABERTURA_DIR"
 mkdir -p "$PLATAFIRMA_INSTANCIA/var/release" "$PLATAFIRMA_RELEASE"

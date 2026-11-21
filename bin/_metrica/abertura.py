@@ -10,7 +10,7 @@ args (`<cadeira>`, `--tudo`, `--json`, `--chapeu <s>`) nao sao os de `metrica` (
 
 Nao reimplementa contagem: importa `monta-sessao` do repo real e usa o MESMO
 `monta()` (tokenizador qwen2.5, terceiros/tokenizers/qwen2.5.json da arvore da release,
-pinado por sha256 em registro/terceiros.json). O numero aqui bate
+pinado por sha256 nas fichas da Olaria). O numero aqui bate
 com o que a mesa e `conferir sessao` mostram, por construcao — mesma funcao.
 
 Le sem rede: `atualizar=False`. Serve da casa nova (`PF_CASA_RAIZ` ou

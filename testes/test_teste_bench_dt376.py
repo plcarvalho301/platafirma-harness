@@ -91,17 +91,19 @@ def test_teste_bench_executa_script_com_ambiente(tmp_path):
     (venv_dir / "pyvenv.cfg").write_text(f"home = {os.path.dirname(py_real)}\n", encoding="utf-8")
     (venv_dir / ".pronto").touch()
 
-    terceiros_json = tmp_path / "terceiros.json"
-    terceiros_json.write_text('{"_leia": "fixture sem terceiro"}\n', encoding="utf-8")
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "controle" / "tests"))
+    from _olaria_local import subir_olaria_local
+
+    _srv_olaria, env_olaria = subir_olaria_local()
     env = {
         **os.environ,
+        **env_olaria,
         "PLATAFIRMA_BANCADA": str(bancada),
         "PLATAFIRMA_INSTANCIA": str(instancia),
         "PLATAFIRMA_PYTHON": py_exec,
         "PF_RELEASE_RAIZ": str(release_raiz),
         "PF_CADEIRA": "ti",
         "PF_MOTOR_REG": str(tmp_path / "inexistente.json"),
-        "PLATAFIRMA_TERCEIROS": str(terceiros_json),
     }
 
     r = subprocess.run(

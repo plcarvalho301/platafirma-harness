@@ -63,19 +63,21 @@ class Ambiente:
             "exit 1\n", encoding="utf-8")
         acervo.chmod(0o755)
 
+        from _olaria_local import subir_olaria_local
+
+        self._srv_olaria, env_olaria = subir_olaria_local()
         self.env = dict(os.environ)
         self.env.update({
+            **env_olaria,
             "PF_RELEASE_RAIZ": str(tmp_path / "opt"),
             "PLATAFIRMA_INSTANCIA": str(tmp_path / "srv"),
             "PLATAFIRMA_FAMILIAS": str(tmp_path / "familias.json"),
             "PLATAFIRMA_VENVS": str(tmp_path / "venvs.json"),
-            "PLATAFIRMA_TERCEIROS": str(tmp_path / "terceiros.json"),
             "PF_RELEASE_PORTA": "0",
             "PATH": f"{stub_bin}{os.pathsep}" + self.env.get("PATH", ""),
         })
         Path(self.env["PLATAFIRMA_FAMILIAS"]).write_text(json.dumps({"fixture": str(self.forge)}), encoding="utf-8")
         Path(self.env["PLATAFIRMA_VENVS"]).write_text("{}", encoding="utf-8")
-        Path(self.env["PLATAFIRMA_TERCEIROS"]).write_text("{}", encoding="utf-8")
 
     def com_espelho(self):
         """Família já conhecida: o ensaio de família nova sai antes de listar as stacks."""

@@ -1,0 +1,9 @@
+[Unit]
+Description=Agenda diária da rodada de avisos OSV (seg avisos, fora do portão de promoção)
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

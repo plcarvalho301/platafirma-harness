@@ -140,8 +140,7 @@ cat > "$TMP_DIR/venvs.json" <<'EOF'
  "real": {"familia": "platafirma-motor", "lock": "rag/uv.lock"},
  "realreq": {"familia": "platafirma-motor", "lock": "rag/requirements.txt"}}
 EOF
-echo '{"_leia": "fixture sem terceiro"}' > "$TMP_DIR/terceiros.json"
-export PLATAFIRMA_FAMILIAS="$TMP_DIR/familias.json" PLATAFIRMA_VENVS="$TMP_DIR/venvs.json" PLATAFIRMA_TERCEIROS="$TMP_DIR/terceiros.json"
+export PLATAFIRMA_FAMILIAS="$TMP_DIR/familias.json" PLATAFIRMA_VENVS="$TMP_DIR/venvs.json"
 
 promover() {  # $@=args ; enche out e rc
   set +e; out="$("$VERBO" promover "$@" 2>&1)"; rc=$?; set -e

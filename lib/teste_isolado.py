@@ -34,7 +34,7 @@ PREFIXOS = (
 )
 
 # variáveis que, mesmo com prefixo da plataforma, são ferramenta e não estado: o
-# tokenizador do modelo é artefato pinado (registro/terceiros.json), como o uv
+# tokenizador do modelo é artefato pinado (fichas na Olaria), como o uv
 PRESERVAR = ("PLATAFIRMA_TOKENIZADOR",)
 
 # navegador (arq:0129 D3): no degrau pequeno o navegador não existe; o teste que precisa dele leva
