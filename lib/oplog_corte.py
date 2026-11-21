@@ -47,7 +47,7 @@ from pathlib import Path
 
 import oplog
 import raizes
-from oplog_extracao import Api, Falha
+from oplog_extracao import Api, Falha, fora_da_particao
 
 APROVADO, RETIDO, REPROVADO, CORTADO = "aprovado", "retido", "reprovado", "cortado"
 ESTADOS_ABERTOS = ("detectado", "em-mitigacao", "mitigado")   # o incidente ainda não terminou (como `bot caidas`)
@@ -80,15 +80,17 @@ class Veredito:
 
 def contas_do_arquivo(dados: bytes) -> dict:
     """O que os bytes dizem de si: linhas não vazias, legíveis, ilegíveis, tamanho e sha256, pela regra do extrator
-    (`oplog.linhas_do_dia`)."""
+    (`oplog.linhas_do_dia` e `fora_da_particao`)."""
     fisicas = sum(1 for linha in dados.split(b"\n") if linha.decode("utf-8", errors="replace").strip())
-    legiveis = ilegiveis = 0
+    legiveis = ilegiveis = ignoradas = 0
     for _, _, reg in oplog.linhas_do_dia(dados):
         if reg is None:
             ilegiveis += 1
+        elif fora_da_particao(reg):
+            ignoradas += 1
         else:
             legiveis += 1
-    return {"lidas": fisicas, "legiveis": legiveis, "ilegiveis": ilegiveis, "bytes": len(dados),
+    return {"lidas": fisicas - ignoradas, "legiveis": legiveis, "ilegiveis": ilegiveis, "bytes": len(dados),
             "sha256": hashlib.sha256(dados).hexdigest()}
 
 

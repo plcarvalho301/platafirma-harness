@@ -188,6 +188,16 @@ def _sem_nul(valor):
 
 # --- o tipo da linha ----------------------------------------------------------------------
 
+# Eventos de ciclo de vida/diagnóstico do PEP da porta (platafirma-core/porta/decisao.py) sem `tool`,
+# que ficam no bruto para auditoria local (`conferir.py`) e não pertencem aos doze tipos da partição `log`.
+EVENTOS_FORA_DA_PARTICAO = frozenset({"pep_politica_carregada", "pep_vocabulario_divergente"})
+
+
+def fora_da_particao(reg: dict) -> bool:
+    """Linha legível de diagnóstico operacional da porta que não atravessa para a partição `log`."""
+    return reg.get("tool") in _VAZIO and reg.get("evento") in EVENTOS_FORA_DA_PARTICAO
+
+
 def _e_chamada(reg: dict) -> bool:
     """Linha de chamada de ferramenta: tem `tool` e não é o transporte. É a mesma regra de `oplog._e_giro` e
     de `metrica.e_giro`, para a contagem de giros bater com a que `metrica` dava do bruto."""
@@ -461,6 +471,7 @@ class Extracao:
         self.por_tipo: Counter = Counter()
         self.schema_v: set[int] = set()
         self.ilegiveis = 0
+        self.ignorados: Counter = Counter()
         self.sem_traducao: Counter = Counter()
         self.por_evento: Counter = Counter()        # o valor de `evento` da linha -> quantas (só contagem)
         self.por_tool_e_tipo: Counter = Counter()   # (tool, tipo da partição) das linhas com `tool`: reconcilia com `metrica`
@@ -477,6 +488,9 @@ class Extracao:
                 self.ilegiveis += 1
                 continue
             self.por_evento[str(reg.get("evento")) if reg.get("evento") not in _VAZIO else "(sem evento)"] += 1
+            if fora_da_particao(reg):
+                self.ignorados[str(reg.get("evento"))] += 1
+                continue
             try:
                 item = para_item(reg, self.dia, n, self.invalidos)
             except SemTraducao as e:
@@ -541,6 +555,7 @@ def relatorio_seco(ext: Extracao) -> dict:
         "linhas_lidas": ext.lidas, "linhas_legiveis": ext.legiveis, "linhas_ilegiveis": ext.ilegiveis,
         "por_evento_do_bruto": dict(sorted(ext.por_evento.items(), key=lambda kv: (-kv[1], kv[0]))),
         "por_tipo_da_particao": dict(sorted(ext.por_tipo.items())),
+        "ignorados": dict(sorted(ext.ignorados.items())),
         "sem_traducao": dict(sorted(ext.sem_traducao.items())),
         "campos_invalidos": ext.invalidos.total,
         "campos_invalidos_por_campo": dict(sorted(ext.invalidos.por_campo.items(), key=lambda kv: (-kv[1], kv[0]))),
