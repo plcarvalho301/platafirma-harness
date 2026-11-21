@@ -1,40 +1,48 @@
-# terceiros.sh — artefato de terceiro pinado entra na árvore medida (arq:0116 §7).
+# terceiros.sh — artefato de terceiro pinado entra na árvore medida (arq:0116 §7; card #4417).
 #
 # Um construtor só para release e teste: `release promover` o chama sobre a árvore da rev
 # antes de trocar current; `teste rodar` o chama sobre a árvore que vai medir (bancada,
 # árvore do pre-push, árvore do gate). O teste acha o artefato como o código de produção
 # o acha, pelo caminho relativo à árvore.
 #
-# Declaração em registro/terceiros.json: {"<nome>": {"familia", "destino", "sha256", "url"}}.
+# Declaração nas fichas de dependência externa e ligações `depende-de` na Olaria
+# (atributos `nome`, `familia`, `destino`, `pino` e `url`). Sem a Olaria acessível, sai 3
+# antes de tocar a árvore ou current.
 # Fonte do conteúdo: o cache <release>/terceiros/sha256/<pino> (semeável à mão em host sem
 # rede); faltando, baixa da url. Conteúdo que não bate o pino é recusado. Árvore a-w (a da
 # release) abre só os diretórios do caminho, põe o arquivo e fecha de novo.
 #
 # Uso: . "$(dirname "$(readlink -f "$0")")/../lib/terceiros.sh"
 PF_VENV_PREFIXO="${PF_VENV_PREFIXO:-release}"
+_TERCEIROS_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 sha256_de() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
 
 # [ -w ] retorna verdadeiro sob uid 0 mesmo sem bit de escrita; checar os bits de modo via stat (DT-696)
 _dir_gravavel() { (( (8#$(stat -c '%a' "$1") & 8#222) != 0 )); }
 
-# $1=familia $2=arvore $3=registro terceiros.json $4=cache (dir por sha256)
-# 0 ok (ou nada declarado), 3 dependência ausente, 4 conteúdo fora do pino, 5 não pôs
+# $1=familia $2=arvore $3=cache (dir por sha256)
+# (aceita 4 args legados: $1=familia $2=arvore $3=ignorado $4=cache)
+# 0 ok (ou nada declarado), 3 Olaria/dependência ausente, 4 conteúdo fora do pino, 5 não pôs
 materializar_terceiros_em() {
-  local familia="$1" arvore="$2" registro="$3" cache_dir="$4" pfx="$PF_VENV_PREFIXO"
+  local familia="$1" arvore="$2" cache_dir
+  if [ "$#" -ge 4 ]; then
+    cache_dir="$4"
+  else
+    cache_dir="$3"
+  fi
+  local pfx="$PF_VENV_PREFIXO"
   local linhas nome destino pino url alvo cache tmp curl
-  [ -r "$registro" ] || return 0
-  linhas="$(jq -r --arg f "$familia" 'to_entries[] | select(.key | startswith("_") | not)
-            | select((.value | type) == "object" and .value.familia == $f)
-            | "\(.key)\t\(.value.destino)\t\(.value.sha256)\t\(.value.url // "")"' "$registro" 2>/dev/null)" || {
-    printf '%s: dependência com outro contrato: registro de terceiros não é JSON legível (%s)\n' "$pfx" "$registro" >&2
+  if ! linhas="$(python3 "$_TERCEIROS_LIB_DIR/terceiros_olaria.py" --familia "$familia")"; then
+    printf '%s: dependência ausente: não leu as fichas de terceiros na Olaria — current intacto\n' "$pfx" >&2
     return 3
-  }
+  fi
+  [ -n "$linhas" ] || return 0
   while IFS=$'\t' read -r nome destino pino url; do
     [ -n "$nome" ] || continue
     if ! [[ "$nome" =~ ^[A-Za-z0-9._-]+$ ]] || [[ "$destino" == /* ]] || [[ "$destino" == *..* ]] || [ -z "$destino" ] \
-       || ! [[ "$pino" =~ ^[0-9a-f]{64}$ ]] || { [ -n "$url" ] && [[ "$url" != https://* ]]; }; then
-      printf '%s: erro: terceiro mal declarado em %s: %s (%s)\n' "$pfx" "$registro" "$nome" "$destino" >&2
+       || ! [[ "$pino" =~ ^[0-9a-f]{64}$ ]] || { [ -n "$url" ] && [[ "$url" != https://* ]] && [[ "$url" != http://127.0.0.1:* ]]; }; then
+      printf '%s: erro: terceiro mal declarado nas fichas da Olaria: %s (%s)\n' "$pfx" "$nome" "$destino" >&2
       return 3
     fi
     alvo="$arvore/$destino"
@@ -52,7 +60,9 @@ materializar_terceiros_em() {
       fi
       mkdir -p "$cache_dir"
       tmp="$(mktemp "$cache_dir/.baixando.XXXXXX")"
-      if ! "$curl" -fsSL --proto '=https' --max-time 600 -o "$tmp" "$url"; then
+      local proto_arg="=https"
+      [[ "$url" == http://127.0.0.1:* ]] && proto_arg="=http"
+      if ! "$curl" -fsSL --proto "$proto_arg" --max-time 600 -o "$tmp" "$url"; then
         rm -f "$tmp"
         printf '%s: dependência ausente: terceiro %s não baixou de %s — semeie %s e repita; current intacto\n' "$pfx" "$nome" "$url" "$cache" >&2
         return 3

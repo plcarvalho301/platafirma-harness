@@ -75,7 +75,10 @@ class Bancada:
         self.venvs_json = tmp_path / "venvs.json"
         self.venvs_json.write_text(json.dumps(registro), encoding="utf-8")
 
+        from _olaria_local import subir_olaria_local
+        self._srv_olaria, env_olaria = subir_olaria_local()
         self.env = dict(os.environ)
+        self.env.update(env_olaria)
         self.env["PLATAFIRMA_BANCADA"] = str(bancada)
         self.env["PLATAFIRMA_VENVS"] = str(self.venvs_json)
         self.env["PF_RELEASE_RAIZ"] = str(tmp_path / "opt")

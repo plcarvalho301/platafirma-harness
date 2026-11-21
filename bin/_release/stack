@@ -50,7 +50,7 @@
 # (principal e adicionais), os dockerfiles e as origens de bind dentro da arvore. Nada mudou
 # e os conteineres estao de pe: nada se recria, o ponto da stack avanca. Fora da comparacao,
 # declarado: a sobreposicao da instancia e os segredos (mudanca neles se aplica com
-# `infra up <stack>`) e artefato de terceiro materializado (registro/terceiros.json, cujo pino
+# `infra up <stack>`) e artefato de terceiro materializado (fichas na Olaria, cujo pino
 # mora em outra familia). PF_STACK_RECRIAR=1 recria mesmo assim.
 #
 # ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] ·

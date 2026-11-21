@@ -77,11 +77,12 @@ def _promover_em_ensaio(tmp_path, familias):
                       "if [ \"$1\" = ler ] && [ \"$2\" = casa ] && [ \"$3\" = stack ]; then echo '[]'; exit 0; fi\n"
                       "exit 1\n", encoding="utf-8")
     acervo.chmod(0o755)
-    terceiros = tmp_path / "terceiros.json"
-    terceiros.write_text("{}", encoding="utf-8")
-    env = {"PATH": f"{stub_bin}:/usr/bin:/bin", "HOME": str(tmp_path),
+    from _olaria_local import subir_olaria_local
+
+    _srv_olaria, env_olaria = subir_olaria_local()
+    env = {**env_olaria, "PATH": f"{stub_bin}:/usr/bin:/bin", "HOME": str(tmp_path),
            "PLATAFIRMA_FAMILIAS": str(familias), "PLATAFIRMA_VENVS": str(VENVS),
-           "PLATAFIRMA_TERCEIROS": str(terceiros), "PF_RELEASE_PORTA": "0",
+           "PF_RELEASE_PORTA": "0",
            "PF_RELEASE_RAIZ": str(tmp_path / "release"),
            "PLATAFIRMA_INSTANCIA": str(tmp_path / "instancia")}
     return subprocess.run([str(RELEASE), "promover", ESPELHO, "--ensaio"], env=env,
@@ -137,16 +138,17 @@ def test_diagrama_resolve_e_teste_roda_sob_venv(tmp_path):
     )
     py_stub.chmod(0o755)
 
+    from _olaria_local import subir_olaria_local
+
     inst = tmp_path / "instancia"
     inst.mkdir()
-    terceiros = tmp_path / "terceiros.json"
-    terceiros.write_text("{}", encoding="utf-8")
+    _srv_olaria, env_olaria = subir_olaria_local()
     env = {
+        **env_olaria,
         "PATH": "/usr/local/bin:/usr/bin:/bin",
         "HOME": str(tmp_path),
         "PLATAFIRMA_BANCADA": str(bancada),
         "PLATAFIRMA_VENVS": str(VENVS),
-        "PLATAFIRMA_TERCEIROS": str(terceiros),
         "PF_CADEIRA": "ti",
         "PF_RELEASE_RAIZ": str(tmp_path / "release"),
         "PLATAFIRMA_INSTANCIA": str(inst),
@@ -197,17 +199,18 @@ def test_diagrama_cai_para_uv_quando_venv_nao_tem_pytest(tmp_path):
     )
     uv_stub.chmod(0o755)
 
+    from _olaria_local import subir_olaria_local
+
     inst = tmp_path / "instancia"
     inst.mkdir()
-    terceiros = tmp_path / "terceiros.json"
-    terceiros.write_text("{}", encoding="utf-8")
+    _srv_olaria, env_olaria = subir_olaria_local()
     env = {
+        **env_olaria,
         "PATH": "/usr/local/bin:/usr/bin:/bin",
         "HOME": str(tmp_path),
         "PLATAFIRMA_UV": str(uv_stub),
         "PLATAFIRMA_BANCADA": str(bancada),
         "PLATAFIRMA_VENVS": str(VENVS),
-        "PLATAFIRMA_TERCEIROS": str(terceiros),
         "PF_CADEIRA": "ti",
         "PF_RELEASE_RAIZ": str(tmp_path / "release"),
         "PLATAFIRMA_INSTANCIA": str(inst),
@@ -285,9 +288,13 @@ def test_espelho_sem_alvo_roda_portao_das_stacks_e_nao_chama_acervo_ingerir(tmp_
     acervo_stub.write_text("#!/usr/bin/env bash\nexit 99\n", encoding="utf-8")
     acervo_stub.chmod(0o755)
 
+    from _olaria_local import subir_olaria_local
+
+    _srv_olaria, env_olaria = subir_olaria_local()
     inst = tmp_path / "instancia"
     inst.mkdir()
     env = {
+        **env_olaria,
         "PATH": "/usr/local/bin:/usr/bin:/bin",
         "HOME": str(tmp_path),
         "PLATAFIRMA_BANCADA": str(bancada),

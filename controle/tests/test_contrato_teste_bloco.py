@@ -55,10 +55,24 @@ def bancada(tmp_path):
     return tmp_path, b, wt
 
 
+_OLARIA_SRV = None
+_OLARIA_ENV: dict[str, str] | None = None
+
+
+def _olaria_env() -> dict[str, str]:
+    global _OLARIA_SRV, _OLARIA_ENV
+    if _OLARIA_ENV is None:
+        from _olaria_local import subir_olaria_local
+        _OLARIA_SRV, _OLARIA_ENV = subir_olaria_local()
+    return _OLARIA_ENV
+
+
 def _teste(tmp_path, b, *args):
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": str(Path.home()),       # cache do uv (pytest ja baixado), nada mais
+        "UV_OFFLINE": "1",
+        **_olaria_env(),
         "PLATAFIRMA_BANCADA": str(b),
         "PLATAFIRMA_INSTANCIA": str(tmp_path / "instancia"),
         "PLATAFIRMA_VENVS": str(tmp_path / "venvs.json"),

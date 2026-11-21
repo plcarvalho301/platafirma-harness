@@ -370,20 +370,21 @@ exit 0
 
     familias = tmp_path / "familias.json"
     familias.write_text(json.dumps({repo: str(origem)}), encoding="utf-8")
+    from _olaria_local import subir_olaria_local
+
     venvs = tmp_path / "venvs.json"
     venvs.write_text("{}", encoding="utf-8")
-    terceiros = tmp_path / "terceiros.json"
-    terceiros.write_text("{}", encoding="utf-8")
+    _srv_olaria, env_olaria = subir_olaria_local()
 
     env = dict(os.environ)
     env.update(
         {
+            **env_olaria,
             "PATH": f"{stubs}:{env.get('PATH', '')}",
             "PF_RELEASE_RAIZ": str(prod_raiz),
             "PLATAFIRMA_INSTANCIA": str(instancia),
             "PLATAFIRMA_FAMILIAS": str(familias),
             "PLATAFIRMA_VENVS": str(venvs),
-            "PLATAFIRMA_TERCEIROS": str(terceiros),
             "PF_PROMOVER_VERBOSO": "1",
             "PF_RELEASE_PORTA": "0",
         }

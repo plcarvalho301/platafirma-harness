@@ -44,10 +44,12 @@ def _montar_host_falso(tmp_path: Path) -> dict:
         "harness": {"familia": "platafirma-harness", "lock": "venvs/harness/uv.lock"},
     }
     (reg / "venvs.json").write_text(json.dumps(venvs), encoding="utf-8")
+    from _olaria_local import subir_olaria_local
+
     terceiros = {
         "tok": {"familia": "platafirma-harness", "destino": "t.json", "sha256": "aaa111"},
     }
-    (reg / "terceiros.json").write_text(json.dumps(terceiros), encoding="utf-8")
+    srv, env_olaria = subir_olaria_local(terceiros)
 
     sha_cur = "a" * 40
     fam = raiz / "platafirma-harness"
@@ -66,15 +68,15 @@ def _montar_host_falso(tmp_path: Path) -> dict:
 
     env = {
         **os.environ,
+        **env_olaria,
         "PF_RELEASE_RAIZ": str(raiz),
         "PLATAFIRMA_RELEASE": str(raiz / "current"),
         "PLATAFIRMA_INSTANCIA": str(inst),
         "PLATAFIRMA_FAMILIAS": str(reg / "familias.json"),
         "PLATAFIRMA_VENVS": str(reg / "venvs.json"),
-        "PLATAFIRMA_TERCEIROS": str(reg / "terceiros.json"),
         "PF_EXPURGO_SEM_DOCKER": "1",
     }
-    return {"raiz": raiz, "inst": inst, "sha_cur": sha_cur, "env": env}
+    return {"raiz": raiz, "inst": inst, "sha_cur": sha_cur, "env": env, "_srv": srv}
 
 
 def _roda_release(env: dict, *args: str) -> subprocess.CompletedProcess[str]:

@@ -228,7 +228,10 @@ class Bancada:
         venvs = tmp_path / "venvs.json"
         venvs.write_text(json.dumps(registro), encoding="utf-8")
         self.env = dict(os.environ)
+        from _olaria_local import subir_olaria_local
+        self._srv_olaria, env_olaria = subir_olaria_local()
         self.env.update({
+            **env_olaria,
             "PLATAFIRMA_BANCADA": str(bancada), "PLATAFIRMA_VENVS": str(venvs),
             "PF_RELEASE_RAIZ": str(tmp_path / "opt"), "PLATAFIRMA_PYTHON": _python_de_sistema(),
             "PF_CADEIRA": "cadeira", "HOME": str(falsos["home"]),

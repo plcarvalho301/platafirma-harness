@@ -926,10 +926,8 @@ PY
 # construtor da release (lib/terceiros.sh), do cache por sha256. O registro vem da própria
 # árvore quando ela o tem (bancada ou árvore materializada), senão o do verbo.
 terceiros_na_arvore() {  # $1=arvore
-  local c="$1" reg rc=0
-  reg="${PLATAFIRMA_TERCEIROS:-$c/registro/terceiros.json}"
-  [ -r "$reg" ] || reg="$(dirname "$(readlink -f "$0")")/../registro/terceiros.json"
-  materializar_terceiros_em "$REG_FAMILIA" "$c" "$reg" "$PF_RELEASE_RAIZ/terceiros/sha256" >&2 || rc=$?
+  local c="$1" rc=0
+  materializar_terceiros_em "$REG_FAMILIA" "$c" "$PF_RELEASE_RAIZ/terceiros/sha256" >&2 || rc=$?
   case "$rc" in
     0) return 0 ;;
     5) exit 5 ;;

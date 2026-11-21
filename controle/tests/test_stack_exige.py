@@ -65,19 +65,21 @@ def _ensaio(tmp_path, registro):
                       f"  cat '{tmp_path / 'stacks.json'}'\n  exit 0\nfi\nexit 1\n", encoding="utf-8")
     acervo.chmod(0o755)
 
+    from _olaria_local import subir_olaria_local
+
+    _srv_olaria, env_olaria = subir_olaria_local()
     env = dict(os.environ)
     env.update({
+        **env_olaria,
         "PF_RELEASE_RAIZ": str(tmp_path / "opt"),
         "PLATAFIRMA_INSTANCIA": str(tmp_path / "srv"),
         "PLATAFIRMA_FAMILIAS": str(tmp_path / "familias.json"),
         "PLATAFIRMA_VENVS": str(tmp_path / "venvs.json"),
-        "PLATAFIRMA_TERCEIROS": str(tmp_path / "terceiros.json"),
         "PF_RELEASE_PORTA": "0",
         "PATH": f"{stub}{os.pathsep}" + env.get("PATH", ""),
     })
     Path(env["PLATAFIRMA_FAMILIAS"]).write_text(json.dumps({"fixture": str(forge)}), encoding="utf-8")
     Path(env["PLATAFIRMA_VENVS"]).write_text("{}", encoding="utf-8")
-    Path(env["PLATAFIRMA_TERCEIROS"]).write_text("{}", encoding="utf-8")
     fam = Path(env["PF_RELEASE_RAIZ"]) / "fixture"
     fam.mkdir(parents=True)
     _git(fam, "clone", "-q", "--bare", str(forge), str(fam / ".repo.git"))

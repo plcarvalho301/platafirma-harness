@@ -81,21 +81,23 @@ def _arvore(tmp_path, suites: dict[str, dict[str, str]], lista: dict[str, str | 
     vjson = tmp_path / "venvs.json"
     vjson.write_text(json.dumps({"repositorios": {"demo": {"esteira": "codigo", "stack": "k-a"}},
                                  **stacks}))
-    tjson = tmp_path / "terceiros.json"
-    tjson.write_text("{}")
+    from _olaria_local import subir_olaria_local
+
+    terceiros_map = None
     if terceiro is not None:
         pino = hashlib.sha256(terceiro).hexdigest()
         cache = raiz / "terceiros" / "sha256"
         cache.mkdir(parents=True)
         (cache / pino).write_bytes(terceiro)
-        tjson.write_text(json.dumps({"tok": {"familia": "demo", "destino": "terceiros/tok.json",
-                                             "sha256": pino}}))
+        terceiros_map = {"tok": {"familia": "demo", "destino": "terceiros/tok.json", "sha256": pino}}
+    _srv_olaria, env_olaria = subir_olaria_local(terceiros_map)
     env = {
+        **env_olaria,
         "PF_RELEASE_RAIZ": str(raiz),
         "PLATAFIRMA_INSTANCIA": str(tmp_path / "instancia"),
         "PLATAFIRMA_VENVS": str(vjson),
-        "PLATAFIRMA_TERCEIROS": str(tjson),
         "PLATAFIRMA_PYTHON": _python(),
+        "UV_OFFLINE": "1",
     }
     return env, arv
 
@@ -281,9 +283,12 @@ def test_suite_fora_do_portao_tambem_paraleliza_diretorios(tmp_path):
 
 
 def test_artefato_fora_do_cache_e_sem_url_e_dependencia_ausente(tmp_path):
+    from _olaria_local import subir_olaria_local
     env, arv = _arvore(tmp_path, {"a": {"test_a.py": VERDE}}, {"a": "test_a.py\n"})
-    Path(env["PLATAFIRMA_TERCEIROS"]).write_text(json.dumps(
-        {"tok": {"familia": "demo", "destino": "terceiros/tok.json", "sha256": "0" * 64}}))
+    _srv, env_olaria = subir_olaria_local(
+        {"tok": {"familia": "demo", "destino": "terceiros/tok.json", "sha256": "0" * 64}}
+    )
+    env.update(env_olaria)
     r = _run(env, "rodar", "k-a", "--portao", "--arvore", str(arv))
     assert r.returncode == 3, r.stdout + r.stderr
     assert "fora do cache" in r.stderr
