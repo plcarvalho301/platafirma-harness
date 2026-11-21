@@ -678,7 +678,7 @@ def _calcular_momentos(v: VinculoArquivo) -> tuple[tuple[str, ...], str]:
         partes = ["fita", "push (quando alcançado)"]
     else:
         momentos = ("push",)
-        partes = ["push (todo push)"]
+        partes = ["push (quando componente ou alvo verifica muda)"]
 
     if v.exige:
         partes.append("push (quando componente ou entidade exigida muda)")
@@ -1005,7 +1005,7 @@ def consultar_momento(
         return ResultadoConsultaMomento(
             momento="push",
             roda_testes=True,
-            descricao="comportamento alcançado, fronteira e regra em todo push, exige quando componente ou entidade muda e incidentes em todo push",
+            descricao="comportamento alcançado, fronteira e regra quando componente ou alvo verifica muda, exige quando componente ou entidade muda e incidentes em todo push",
             verificacoes=tuple(selecionadas),
         )
     return ResultadoConsultaMomento(

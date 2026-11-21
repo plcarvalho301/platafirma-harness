@@ -1773,6 +1773,32 @@ gate_suite_verdes() {  # $1=repo $2=sha [$3=base: sha no ar] ; 0 verde ou n/a; 4
   local saida="$log_dir/${sha}.txt"
   GATE_SUITE_LOG="$saida"
 
+  # 0) veredito da esteira ontológica (lib/suite/portao.py, var/esteira/<repo>.jsonl):
+  # quando a árvore já está 100% vinculada à ontologia (0 soltos) e a esteira gravou verde
+  # para o par (árvore da mudança, árvore da main), a promoção reaproveita o veredito sem
+  # re-rodar o portão legado (referencias/classes/teste.md).
+  local lib_suite="$AQUI/../lib"
+  if [ -d "$lib_suite/suite" ] && [ -d "$arvore" ]; then
+    local soltos_n=""
+    soltos_n="$(PYTHONPATH="$lib_suite${PYTHONPATH:+:$PYTHONPATH}" python3 -m suite consultar soltos --arvore "$arvore" --json 2>/dev/null \
+      | jq -r '.total_soltos // empty' 2>/dev/null || true)"
+    if [ "$soltos_n" = "0" ]; then
+      local esp_suite arv_mud_tree arv_base_tree="" rc_est=0
+      esp_suite="$(espelho_de "$repo")"
+      arv_mud_tree="$("$GIT" --git-dir="$esp_suite" rev-parse --verify -q "${sha}^{tree}" 2>/dev/null || printf '%s' "$sha")"
+      [ -z "$base" ] || arv_base_tree="$("$GIT" --git-dir="$esp_suite" rev-parse --verify -q "${base}^{tree}" 2>/dev/null || printf '%s' "$base")"
+      local portao_args=(portao "$repo" --arvore "$arvore" --mudanca "$arv_mud_tree")
+      [ -z "$arv_base_tree" ] || portao_args+=(--base "$arv_base_tree")
+      PYTHONPATH="$lib_suite${PYTHONPATH:+:$PYTHONPATH}" python3 -m suite "${portao_args[@]}" >"$saida" 2>&1 || rc_est=$?
+      if [ "$rc_est" -eq 0 ]; then
+        GATE_SUITE_STATUS="verde"
+        GATE_SUITE_DETALHE="reaproveitado (esteira ontológica)"
+        GATE_AMBIENTE_STATUS="reaproveitado"
+        return 0
+      fi
+    fi
+  fi
+
   # 1) só o memo (PF_TESTE_SO_MEMO): cada chave devolve o veredito gravado por (árvore,
   # chave) ou 6 ("ainda não medida"). Rev que o pre-push já mediu não roda de novo.
   local rc_memo=0
