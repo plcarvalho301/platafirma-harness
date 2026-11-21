@@ -1,3 +1,4 @@
+# componente: componente:verbo-curar
 """#3163: `curar --conceito <slug> --natureza <n>` (conceito existente: reclassifica, cura K19).
 
 Mesmo servidor HTTP falso e mesmo subprocesso do teste de renomear (#3239), de onde vêm as fixtures.

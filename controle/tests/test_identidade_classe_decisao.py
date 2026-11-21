@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """A ficha da ADR mora na classe `decisao` do catálogo da raiz (triagem da #3764; migração 114 da #3761).
 
 `adr` segue valendo como nome de entrada: a espécie do documento é o que o humano digita, e a biblioteca de

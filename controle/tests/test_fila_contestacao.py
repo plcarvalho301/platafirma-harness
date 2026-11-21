@@ -1,3 +1,4 @@
+# componente: componente:verbo-fila
 # O tipo `contestacao` (card #3532; arq:0124 §3, mecanismo comum; R24 da spec plano-de-controle-face-motor):
 # a face contesta um indicador pela caixa da cadeira que o configurou. `--ref` leva o indicador, o corpo leva o
 # fundamento, e `fila ler` mostra os dois. Sem armazenamento novo: os campos sao os de toda carta.

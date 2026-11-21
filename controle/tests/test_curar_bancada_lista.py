@@ -1,3 +1,4 @@
+# componente: componente:verbo-curar
 """#2856 linha 166: `curar --reextrair --bancada` aceita lista de IDs separada por espaço,
 vírgula ou arquivo, e prefixos de uuid.
 """

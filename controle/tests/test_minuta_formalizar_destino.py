@@ -1,3 +1,4 @@
+# componente: componente:verbo-minuta
 """Contrato do destino de `minuta formalizar` (arq:0115 §3.2 e §4; spec verbo-minuta §5; #3328).
 
 Prova: a série de ADR é a das ADRs da casa (arq, ont, org, seg, infra, integracao) e o número

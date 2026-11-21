@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """`motor rag ajuste`: o valor da geração servindo, o fundamento, o histórico e as recusas (card #3513, U1).
 
 O rag-api é um servidor de brinquedo (as rotas da #3510), o docker é um script de brinquedo que devolve o env

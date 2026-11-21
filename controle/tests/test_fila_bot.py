@@ -1,3 +1,4 @@
+# componente: componente:verbo-fila
 """Carta assinada por bot (#3884).
 
 O bot `caderno-poda` (Tito Tesourinha) manda carta a cadeira dona do caderno com o que tombar. Bot nao

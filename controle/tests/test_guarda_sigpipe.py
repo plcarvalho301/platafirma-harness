@@ -1,3 +1,4 @@
+# componente: componente:suite
 """Guarda de SIGPIPE da suíte (incidente #3274): o pytest nunca morre por escrita em pipe fechado.
 
 Os testes 1 a 3 dependem da ordem em que estão escritos: o primeiro deixa SIGPIPE em SIG_DFL,

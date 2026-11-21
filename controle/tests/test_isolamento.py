@@ -1,3 +1,4 @@
+# componente: componente:suite
 """O isolamento do conftest está de pé: a suíte não enxerga estado real.
 
 Se este arquivo fica vermelho, o conftest deixou de carregar ou alguém reabriu uma

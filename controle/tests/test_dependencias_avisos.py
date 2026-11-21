@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """`release conferir dependencias --avisos` (feature #3388): o rol cruzado com o OSV.
 
 Hermético: o OSV é uma função falsa injetada (a mesma assinatura de `_osv_http`: método,

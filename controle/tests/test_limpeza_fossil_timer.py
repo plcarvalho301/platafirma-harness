@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """O timer diário da limpeza de fóssil (spec eixos-do-host R14; card #3920): roda sozinha, sem passo de aprovação, e só existe
 com o teste da limpeza no portão. O `infra estado` o mostra depois do `deploy-harness/instalar`.
 """
