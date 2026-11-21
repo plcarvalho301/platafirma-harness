@@ -1,3 +1,4 @@
+# componente: componente:verbo-tarefas
 """Verbo tarefas dt: o balde de débito técnico como dado do rastreador (card #3552; R11, R12, R27 e
 R28 da spec tarefas).
 

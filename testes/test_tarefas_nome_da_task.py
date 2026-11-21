@@ -1,3 +1,4 @@
+# componente: componente:verbo-tarefas
 """Verbo tarefas: fora do banco, a task se chama só `t<n>` (incidente #4250, ordem do dono de 13/11/2026).
 
 O rastreador é um stub HTTP em loopback (TAREFAS_BASE aponta para ele), com uma story e três tasks de

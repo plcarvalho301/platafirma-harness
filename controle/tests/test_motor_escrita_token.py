@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """O `motor` manda a credencial de escrita nos atos que escrevem no rag-api (card #3839; R25 da spec motor).
 
 O verbo roda de verdade, como subprocesso, contra um rag-api falso em 127.0.0.1. O registro declara

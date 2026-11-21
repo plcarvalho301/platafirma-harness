@@ -1,3 +1,4 @@
+# componente: componente:verbo-teste
 """Contrato do leitor único bin/_release/registro.py e de `teste rodar/detectar
 --chave` (card #3150 passos 2-3, comentário B1): --chave usa o MESMO construtor de
 venv que `release promover` (lock+python -> hash -> venv em

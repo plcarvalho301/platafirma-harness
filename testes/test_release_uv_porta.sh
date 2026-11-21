@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# componente: componente:verbo-release
 # Frente harness-release-uv-porta (card #3010):
 #   1. release acha o uv por ordem declarada ($PLATAFIRMA_UV, /usr/local/bin/uv, /usr/bin/uv,
 #      command -v uv); nenhum -> exit 3 dizendo como instalar uv de sistema;

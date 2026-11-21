@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """bin/_motor/kappa.py — o juiz contra a primeira passada do dono (card #3350; padrao protocolo-medicao-rag, «O juiz»).
 
 Funções puras: tabela conhecida para o kappa, intervalo por pergunta, enganosa nos dois sentidos, a marca mais

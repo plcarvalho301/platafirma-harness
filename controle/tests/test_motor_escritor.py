@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """`motor rag escrever biblioteca` e bin/_motor/escritor.py (card #3349; padrao protocolo-medicao-rag, «Unidade da marca»).
 
 A lógica (prompt, leitura da saída do modelo, rodapé, mapa, piloto, terceiro braço, envelope e aceite) é medida em

@@ -1,3 +1,4 @@
+# componente: componente:porta
 """Testes de contrato da biblioteca de federação (lib/federacao.py).
 
 Testa:

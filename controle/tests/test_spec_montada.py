@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 # Montagem na leitura da spec (arq:0126 §11 a §13): o `Sobre:` vira a lista de referentes, a
 # consulta é uma só, e o render diz o que o golden record serve e o que ainda falta nele. Sem
 # banco: a consulta é texto, e o `_q` do cliente é trocado por um dublê.

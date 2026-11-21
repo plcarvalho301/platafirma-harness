@@ -1,3 +1,4 @@
+# componente: componente:verbo-curar
 """#3159 (ont:0071): `curar --reclassificar --vinculacao` é flag que o verbo lê.
 
 O motor é uma porta que ninguém ouve: o teste prova só o parse. A recusa de flag desconhecida sai 2

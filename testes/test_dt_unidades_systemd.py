@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """Provas dos DTs 352, 380, 390 e 479: conferir unit, longjob --collect/ExecStopPost e infra unit-env."""
 import importlib.machinery
 import importlib.util

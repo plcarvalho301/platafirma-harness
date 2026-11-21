@@ -1,3 +1,4 @@
+# componente: componente:verbo-curar
 """#3276: `curar --reextrair <arquivo> --bancada <pasta>` com ARQUIVO local vai direto ao serviço do
 conversor (POST /conversoes, spec conversor-pdf-combinado §3.3), sem a rag-api e sem credencial.
 

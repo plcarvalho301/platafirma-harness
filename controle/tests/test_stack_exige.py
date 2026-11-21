@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Dependência entre stacks no registro (card #3842, R29 da spec motor): `reversao.depois` e `reversao.exige`.
 
 - `depois` (lista de slugs da mesma família) põe a stack depois das que nomeia na ordem da promoção. O registro vem

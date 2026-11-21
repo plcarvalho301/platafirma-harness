@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra config <stack>` não imprime credencial embutida em URL (incidente #3888).
 
 A máscara de `bin/_release/stack` (`mascara_segredos`) reconhecia o NOME da variável (SECRET, TOKEN, PASSWORD...).

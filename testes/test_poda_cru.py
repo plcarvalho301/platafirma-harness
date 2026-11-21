@@ -1,3 +1,4 @@
+# componente: componente:poda
 """arq:0101, invariante (ii): poda que tira conteudo deixa alca de restauracao.
 
 Testa `lib/poda/poda.py` (substituto da poda antiga de ops-server) no venv do harness,

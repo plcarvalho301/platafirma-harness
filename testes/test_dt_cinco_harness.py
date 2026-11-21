@@ -1,3 +1,4 @@
+# componente: componente:verbo-tarefas
 """Testes de regressão para os 5 débitos técnicos resolvidos no harness:
 - DT 83: tarefas estados filtra estados retirados (retirado != true)
 - DT 204: tarefas sub <pai> com 1 argumento lista as filhas

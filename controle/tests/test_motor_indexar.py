@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """`motor rag indexar biblioteca` e a partição biblioteca no `motor` (card #3203; arq:0106 §3; arq:0119 §2).
 
 O verbo roda de verdade, como subprocesso, contra um rag-api falso em 127.0.0.1: registro, token e log

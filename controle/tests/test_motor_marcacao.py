@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """`motor marcacao`: o cliente da marcacao-api (card #3349, feature #3340).
 
 O verbo roda de verdade, como subprocesso, contra uma marcacao-api falsa em 127.0.0.1: registro, token e

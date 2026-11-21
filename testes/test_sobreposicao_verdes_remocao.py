@@ -1,3 +1,4 @@
+# componente: componente:suite
 """Regressivo #4378: integridade de `remocao-no-pr`, bits executáveis, VERDES e anti-espelho morto.
 
 Garante que:

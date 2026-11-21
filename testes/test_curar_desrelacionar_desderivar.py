@@ -1,3 +1,4 @@
+# componente: componente:verbo-curar
 """# DT #85 e #137: `curar --desderivar` e `curar --desrelacionar` com plano seco e --apply sem input().
 
 Sem --apply: mostram o plano e saem 0 sem mutação (plano seco).

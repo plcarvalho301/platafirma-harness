@@ -1,3 +1,4 @@
+# componente: componente:verbo-metrica
 """metrica comportamento (#3090): sinais de ato por cadeira, janela contra base.
 
 Roda o verbo como a unit roda (subprocesso, OPS_LOG_DIR apontado), sobre log sintetico

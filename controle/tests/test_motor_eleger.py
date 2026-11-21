@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """`motor rag eleger`: medição só leitura da eleição de chapéu sobre o log (card #3368).
 
 Lê acervo.evento_recuperacao (necessidade e chapéu não nulos), manda em lote à rota /eleger
