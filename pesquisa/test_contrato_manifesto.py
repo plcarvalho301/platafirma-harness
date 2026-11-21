@@ -1,3 +1,4 @@
+# componente: componente:verbo-pesquisar
 """Contrato do manifesto e layout em disco (spec §4.8, §2.3)."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# componente: componente:verbo-conferir
 """Regressivo #4378: despacho unificado de `bin/conferir`.
 
 Prova que `conferir ontologia` aciona `bin/_conferir` (Olaria) e que os demais atos

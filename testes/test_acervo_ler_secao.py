@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """acervo ler <particao> secao — cliente da rota POST /acervo/secoes/consulta (#3312). Sem rede:
 o POST é injetado; o que se prova é a validação, o corpo enviado e a forma da saída."""
 import importlib.machinery

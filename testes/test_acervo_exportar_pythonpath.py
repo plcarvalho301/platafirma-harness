@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """#3202: `acervo exportar` p\u00f5e no PYTHONPATH o rag/ e o conversor/ da bancada.
 
 Desde a #3205 o motor_acervo importa o pacote `conversor`, que mora ao lado de rag/; com s\u00f3 rag/

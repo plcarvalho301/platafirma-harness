@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """#3197: a partição `obra` passa a `biblioteca` (arq:0106 §2, emendada em 29/09).
 
 A forma nova roteia; `obra` como partição recusa (exit 2) com a chamada em `biblioteca`:

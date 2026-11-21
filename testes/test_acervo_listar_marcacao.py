@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """#3202: `acervo listar obra obra --situacao` mostra a marcação de uso da obra (arq:0119 §6; spec
 acervo-obra §6; migração 071 em platafirma-conhecimento).
 

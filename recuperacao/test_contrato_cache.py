@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Contrato do cache do recuperador (#2308) — chave por fonte, TTL, `rec:stat`.
 
 Dois níveis, como nos demais: contrato com cliente falso (roda sempre) e conformidade

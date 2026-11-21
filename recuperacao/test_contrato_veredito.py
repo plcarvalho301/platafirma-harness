@@ -1,3 +1,4 @@
+# componente: componente:recuperacao
 """Contrato do veredito instrumentado (#2312). Spec §11 e §13.
 
 A invariante central deste arquivo: **série parcial nunca se publica como completa.**

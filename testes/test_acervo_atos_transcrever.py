@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """#3297: os atos de Transcrever pelo estágio (arq:0119 §2, §5), com a forma velha em aviso.
 
 `acervo espelhar|recortar|promover|julgar|converter` e `acervo ler biblioteca lote` chamam a opção
