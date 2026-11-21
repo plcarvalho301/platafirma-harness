@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """`motor rag trocar biblioteca`, a bateria por geração e a calibração do sinal de abstenção (card #3264;
 arq:0121 §7).
 

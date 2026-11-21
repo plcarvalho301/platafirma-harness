@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """release migrar cortar (DT 792): o corte de um schema entre bancos do registro.
 
 O docker e falso: um script no PATH que responde ao `inspect`, conta as tabelas do schema

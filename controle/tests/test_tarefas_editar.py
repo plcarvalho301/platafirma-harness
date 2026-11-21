@@ -1,3 +1,4 @@
+# componente: componente:verbo-tarefas
 """`bin/tarefas editar` (card #3134): o PATCH do corpo com nome de ato.
 
 Roda o script de verdade com `curl` sombreado por função bash exportada, que grava o

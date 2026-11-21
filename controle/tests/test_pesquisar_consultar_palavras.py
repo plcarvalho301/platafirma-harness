@@ -1,3 +1,4 @@
+# componente: componente:verbo-pesquisar
 """`pesquisar consultar` com a consulta em palavras soltas (#2856 linha 104).
 
 Antes, `pesquisar consultar context engineering agents` consultava só «context» e saia 0, sem

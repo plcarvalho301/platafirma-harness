@@ -1,3 +1,4 @@
+# componente: componente:verbo-motor
 """`motor rag lintar` e o lint sobre as 20 do piloto da escada (card #3360, passo 7).
 
 O piso de palavras funcionais (consulta.PISO_FUNCIONAIS) é um chute declarado; o que ele pega do que as

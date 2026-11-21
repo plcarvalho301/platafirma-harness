@@ -1,3 +1,4 @@
+# componente: componente:harness-controle
 """Bloco Procedencia da tela do plano de controle contra o veredito comum (#3267).
 
 O painel dizia «0 · sem divergencia» com 10 servicos divergentes e 18 sem leitura: o

@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Contrato de `release promover <familia> <sha>` construindo venv pelo leitor único
 bin/_release/registro.py (card #3150 passo 2): construir_venvs deixou de reler o
 JSON com jq por conta própria e passa a chamar o mesmo leitor que --chave usa.

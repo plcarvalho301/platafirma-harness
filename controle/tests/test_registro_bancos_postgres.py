@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """DT 522 (#2856 linha 522): todo contêiner Postgres de pé está em registro/bancos.json
 ou declarado em _fora_da_casa com motivo.
 

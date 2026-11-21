@@ -1,3 +1,4 @@
+# componente: componente:verbo-sessao
 """Reidratação de `sessao:{id}` a partir de `sessao.sessao` (Postgres, durável) quando
 a chave efêmera some do msg-mem (card #3145, Onda 1 Frente E; decisão 1 do plano).
 

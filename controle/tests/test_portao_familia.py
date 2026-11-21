@@ -1,3 +1,4 @@
+# componente: componente:verbo-teste
 """arq:0116 §4-§7 no verbo `teste`: lista de portão por subárvore, portão do repositório
 inteiro e artefato pinado materializado na árvore medida.
 
