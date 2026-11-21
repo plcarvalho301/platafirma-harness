@@ -95,8 +95,16 @@ class AdaptadorMesa(Adaptador):
         except ImportError as e:
             raise FonteIndisponivel(Causa.SEM_ROTA, "módulo `redis` ausente") from e
         try:
-            self._cliente = redis.Redis(host=HOST, port=PORTA, decode_responses=True,
-                                        socket_timeout=1)
+            from lib.memoria_de_trabalho import kwargs_redis_msg_mem  # noqa: PLC0415
+
+            auth = kwargs_redis_msg_mem(instancia())
+            self._cliente = redis.Redis(
+                host=HOST,
+                port=PORTA,
+                decode_responses=True,
+                socket_timeout=1,
+                **auth,
+            )
             self._cliente.ping()
         except Exception as e:  # noqa: BLE001
             raise FonteIndisponivel(Causa.FORA_DO_AR, f"{HOST}:{PORTA}") from e

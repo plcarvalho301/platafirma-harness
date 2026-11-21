@@ -389,3 +389,6 @@ testes/test_conferir_despacho_unificado.py | bin/conferir bin/_conferir/** bin/_
 testes/test_sessao_hash_longjob_reidratar.py | bin/sessao bin/_sessao/**
 testes/test_sobreposicao_verdes_remocao.py | remocao-no-pr controle/tests/VERDES testes/VERDES testes/test_deploy_seg_suites.py bin/*
 testes/test_arvore_recusa_caminho_vedado.py | bin/_lint/arvore.py bin/_lint/pre_commit.py
+# Story #4412: autenticacao dos clientes do msg-mem e portao de configuracao da porta (armario e conector).
+testes/test_memoria_autentica.py | lib/memoria_de_trabalho.py lib/postura/lousa.py bin/sessao bin/monta-sessao recuperacao/adaptadores/mesa.py sessao/migracao/capturar-mesa-legada.py
+tests/test_portao_configuracao_porta.py | bin/release bin/_release/conferir/conferir.py

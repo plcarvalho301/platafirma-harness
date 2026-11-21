@@ -269,7 +269,7 @@ def test_interoperabilidade_hash_porta_sessao_reidratar_e_lousa(servidor_resp, m
 
     repo = RepositorioSessaoValkey(host="127.0.0.1", porta=porta, timeout_s=2.0)
     rc = _ClienteHashMinimo(repo)
-    lousa = Lousa(host="127.0.0.1", porta=porta, espera_s=2.0)
+    lousa = Lousa(host="127.0.0.1", porta=porta, espera_s=2.0, senha="")
 
     # 1. bin/sessao grava sessao:<id> como hash
     mod_sessao._grava_chave(

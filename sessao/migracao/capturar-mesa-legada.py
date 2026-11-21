@@ -66,7 +66,15 @@ def mapa_de_slug():
 
 def main():
     mapa = mapa_de_slug()
-    r = redis.Redis(host=MEM_HOST, port=MEM_PORTA, decode_responses=True)
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
+    from memoria_de_trabalho import kwargs_redis_msg_mem  # noqa: PLC0415
+
+    r = redis.Redis(
+        host=MEM_HOST,
+        port=MEM_PORTA,
+        decode_responses=True,
+        **kwargs_redis_msg_mem(),
+    )
     linhas = []
     for chave in r.scan_iter(match="mem:*"):
         partes = chave.split(":")

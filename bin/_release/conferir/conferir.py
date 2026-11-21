@@ -3350,6 +3350,56 @@ def conferir_stack_porta(unit_path=None, segredo_tunel=None):
             ))
         else:
             itens.append(("porta/TUNNEL_TOKEN (4406.r2)", resultado.conforme()))
+    itens.extend(conferir_configuracao_porta())
+    return itens
+
+
+def conferir_configuracao_porta(core_dir=None, python_porta=None):
+    """Confere o schema de armario-de-chaves.yaml (4406.r21) e conector-do-tunel.yaml (4406.r4).
+
+    Os dois são versionados no core (deploy/armario-de-chaves.yaml e
+    deploy/porta/conector-do-tunel.yaml). Executa `python -m porta.configuracao validar
+    <armario|conector> <arquivo>` com o validador e os arquivos da mesma árvore do core.
+    """
+    from pathlib import Path as _Path
+
+    prod = _Path(os.environ.get("PF_PROD_RAIZ") or PROD_RAIZ)
+    core = _Path(core_dir or os.environ.get("PF_CORE_DIR") or (prod / "current" / "core"))
+    validador = core / "porta" / "configuracao.py"
+    if not validador.is_file():
+        return [
+            ("armario-de-chaves.yaml (4406.r21)", resultado.indeterminavel(f"validador ausente em {core}")),
+            ("conector-do-tunel.yaml (4406.r4)", resultado.indeterminavel(f"validador ausente em {core}")),
+        ]
+
+    py_cand = _Path(python_porta) if python_porta else (prod / "current" / "venv" / "porta" / "bin" / "python")
+    py = str(py_cand) if py_cand.is_file() else sys.executable
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(core)
+
+    itens = []
+    alvos = (
+        ("armario", core / "deploy" / "armario-de-chaves.yaml", "armario-de-chaves.yaml (4406.r21)"),
+        ("conector", core / "deploy" / "porta" / "conector-do-tunel.yaml", "conector-do-tunel.yaml (4406.r4)"),
+    )
+    for tipo, arq, rotulo in alvos:
+        try:
+            proc = subprocess.run(
+                [py, "-m", "porta.configuracao", "validar", tipo, str(arq)],
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=15,
+                check=False,
+            )
+        except OSError as exc:
+            itens.append((rotulo, resultado.indeterminavel(f"falha ao chamar validador: {exc}")))
+            continue
+        if proc.returncode == 0:
+            itens.append((rotulo, resultado.conforme()))
+        else:
+            detalhe = (proc.stderr or proc.stdout or f"exit {proc.returncode}").strip().splitlines()[0]
+            itens.append((rotulo, resultado.divergente(detalhe)))
     return itens
 
 
