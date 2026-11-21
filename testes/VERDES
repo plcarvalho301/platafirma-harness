@@ -24,6 +24,7 @@ test_acervo_exportar_pythonpath.py | bin/acervo bin/_acervo/** bin/curar bin/ing
 test_acervo_extrato.py | bin/acervo bin/_acervo/extrato
 test_acervo_impressao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_ler_secao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
+test_acervo_token_armario.py | lib/acervo_token.py lib/oplog_extracao.py recuperacao/adaptadores/motor_acervo_rest.py bin/_acervo/**
 test_acervo_listar_marcacao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_retrato.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_curar_indicacoes.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
