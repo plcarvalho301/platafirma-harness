@@ -1,3 +1,4 @@
+# componente: componente:verbo-lint
 """lint card pela lista antipadroes-de-discovery (card #3421).
 
 Caso real: o corpo e comentarios do #3408 como `tarefas ler` e `tarefas comentarios` os

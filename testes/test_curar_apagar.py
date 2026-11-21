@@ -1,3 +1,4 @@
+# componente: componente:verbo-curar
 """#3191: `curar --apagar <obra> [--apply]` tira do acervo, sem volta, a obra já retirada (arq:0119 §9.2).
 
 O servidor falso responde POST /acervo/obras/{id}/apagar como o motor: plano sem `aplicar`, o

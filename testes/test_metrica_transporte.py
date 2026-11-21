@@ -1,3 +1,4 @@
+# componente: componente:verbo-metrica
 """Testes de separacao transporte/verbo e pareamento de tateio em bin/metrica (card #4369)."""
 from __future__ import annotations
 

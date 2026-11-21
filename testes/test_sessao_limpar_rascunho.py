@@ -1,3 +1,4 @@
+# componente: componente:verbo-sessao
 """`sessao limpar --rascunho [<subpasta>] [--apply]` (balde #2856, linha 152; card #3162).
 
 Apaga, e so, o rascunho da propria fita: <instancia>/var/tmp/<PF_ORDEM_ID da chamada>/<subpasta>.

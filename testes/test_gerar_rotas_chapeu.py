@@ -1,3 +1,4 @@
+# componente: componente:verbo-expediente
 """Testes unitários do parser novo do card #3110: `rotulos_da_gerencias` lê a seção
 `## Gerências` de um persona.md (molde novo), no lugar de `rotulos_da_secao_b` (antiga
 `## b)` de chapeu.md, molde velho).

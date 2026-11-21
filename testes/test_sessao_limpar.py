@@ -1,3 +1,4 @@
+# componente: componente:verbo-sessao
 """Suíte de testes herméticos para `sessao abrir --dry-run` e `sessao limpar` (Card #3089).
 
 Verifica:

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# componente: componente:verbo-seg
 # Testes do verbo seg nas raizes do desenho #3010: cofre em $PLATAFIRMA_INSTANCIA/segredos, trilha em
 # $PLATAFIRMA_INSTANCIA/var/log/seg, evidencia e regua derivada em $PLATAFIRMA_INSTANCIA/var/oscap, ferramental
 # de terceiro so lido (SEG_SSG_DIR). Tudo num tmp; bancada inexistente.

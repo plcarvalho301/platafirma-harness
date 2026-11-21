@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# componente: componente:verbo-release
 # Testes do verbo release — lote 3: `release conferir` absorve as classes do servido (spec_release §4, §8)
 set -euo pipefail
 

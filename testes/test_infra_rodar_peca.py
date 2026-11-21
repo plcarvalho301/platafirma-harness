@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra pecas | rodar` (bin/_infra/rodar-peca.py): só roda peça declarada, e da origem espelho só
 com os caminhos dela iguais a origin/main. Sem banco: o python do rag é o do teste e o ambiente
 do cofre é trocado por dublê; o repositório é um git de verdade num diretório temporário.
