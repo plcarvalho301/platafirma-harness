@@ -19,7 +19,7 @@ Fonte da persona do ator: abertura/<persona>/persona.md, onde a persona
 sai de _PERSONA_DO_ATOR (ator != persona quando o ator monta persona diferente
 do proprio nome; vazio hoje).
 Fonte do alias humano: abertura/aliases.json (mapa slug->nome afetivo, dado vivo).
-As personas vêm da casa nova (PF_CASA_RAIZ ou PLATAFIRMA_RELEASE/casa-espelho).
+As personas vêm da casa nova (PF_CASA_RAIZ ou PLATAFIRMA_RELEASE/casa).
 """
 
 from __future__ import annotations
@@ -71,12 +71,12 @@ _PERSONA_DO_ATOR: dict[str, str] = {}
 
 
 def _raiz_personas() -> Path:
-    """Personas da casa nova (instancias/persona/*.md em PF_CASA_RAIZ ou PLATAFIRMA_RELEASE/casa-espelho)."""
+    """Personas da casa nova (instancias/persona/*.md em PF_CASA_RAIZ ou PLATAFIRMA_RELEASE/casa)."""
     casa = os.environ.get("PF_CASA_RAIZ")
     if casa:
         return Path(casa) / "instancias" / "persona"
     rel = os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")
-    return Path(rel) / "casa-espelho" / "instancias" / "persona"
+    return Path(rel) / "casa" / "instancias" / "persona"
 
 
 def _sem_prefixo(slug: str) -> str:
