@@ -153,11 +153,14 @@ uso:
                                           a task, `editar`; para concluí-la, `mover <id> entregue`;
                                           as tasks de uma story saem em `ler <story>`
                                           O estado de nascimento vem de --estado, ou de
-                                          PF_ESTADO_INICIAL, ou é captada (story/task:
-                                          priorizada; incidente: detectado).
-                                          Story sem pai em priorizada ou adiante exige
-                                          --registro, gravado como registro de negócio na
-                                          mesma transação (R16, arq:0127 D8).
+                                          PF_ESTADO_INICIAL, ou do default do nível (épico,
+                                          feature e ideia: captada; story e task: priorizada;
+                                          incidente: detectado). Story e task não têm captada
+                                          (regra do dono, 20/10/2026); para captar sem
+                                          registro de negócio, use --nivel ideia ou feature.
+                                          Story sem pai exige --registro, gravado como
+                                          registro de negócio na mesma transação (R16,
+                                          arq:0127 D8).
                                           Nascer fora de `captada`, ou sair dela, exige o
                                           corpo no padrão do nível (arq:0096)
   tarefas editar <id> [--titulo "<t>"] [--desc "<txt>"|--desc-stdin]
@@ -1276,7 +1279,23 @@ criar() {
   # `aberto` se o registro o tiver, e a recusa da API nomeia o estado válido quando não.
   # incidente entra no funil de incidente (`detectado`), planejado na boca do funil
   # comum (`captada`). PF_ESTADO_INICIAL, se dado, vence o default da classe (#259).
-  local est_default="captada"; [ "$classe" = "incidente" ] && est_default="detectado"
+  # DT 943: story e task não têm captada (regra do dono, 20/10/2026) — nascem em priorizada.
+  # Quem passa explicitamente `--estado captada` (ou outro estado antes de priorizada) recebe
+  # a recusa clara aqui em vez de ver o estado virar `priorizada` na API e falhar pedindo
+  # registro de negócio como se `--estado` não tivesse chegado.
+  if [ "$classe" = "planejado" ] && { [ "$n" = 2 ] || [ "$n" = 3 ]; }; then
+    case "$estado_opt" in
+      captada|em-lapidacao|em-parecer)
+        echo "recusado: story e task não têm '$estado_opt' (regra do dono, 20/10/2026): nascem em priorizada (story sem pai exige --registro \"<porquê>\"); para captar sem registro ou antes da aposta, use --nivel ideia ou --nivel feature" >&2
+        exit 4 ;;
+    esac
+  fi
+  local est_default="captada"
+  if [ "$classe" = "incidente" ]; then
+    est_default="detectado"
+  elif [ "$n" = 2 ] || [ "$n" = 3 ]; then
+    est_default="priorizada"
+  fi
   local est="${estado_opt:-${PF_ESTADO_INICIAL:-$est_default}}"
   jq -n --arg t "$titulo" --arg d "$html" --argjson tem_d "$tem_d" --argjson n "$n" --arg c "$cadeira" \
         --arg p "$pai" --arg cl "$classe" --arg e "$est" \
@@ -2517,9 +2536,9 @@ dt_listar() {
       --desde) [ $# -ge 2 ] || { echo "--desde exige o número da linha: tarefas dt listar --desde <n>" >&2; exit 2; }; desde="$2"; shift 2 ;;
       --curto) curto=1; shift ;;
       --stack) [ $# -ge 2 ] || { echo "--stack exige o nome da stack: tarefas dt listar --stack <stack>" >&2; exit 2; }; stack="$2"; shift 2 ;;
-      --situacao) [ $# -ge 2 ] || { echo "--situacao exige abertas, saidas ou todas" >&2; exit 2; }; situacao="$2"; shift 2 ;;
+      --situacao) [ $# -ge 2 ] || { echo "--situacao aceita só abertas (saidas e todas foram fechadas)" >&2; exit 2; }; situacao="$2"; shift 2 ;;
       --tipo) [ $# -ge 2 ] || { echo "--tipo exige debito-tecnico, achado ou desvio" >&2; exit 2; }; tipo="$2"; shift 2 ;;
-      *) echo "opção desconhecida: $1 (uso: tarefas dt listar [--stack <s>] [--tipo debito-tecnico|achado|desvio] [--desde <n>] [--curto] [--situacao abertas|saidas|todas])" >&2; exit 2 ;;
+      *) echo "opção desconhecida: $1 (uso: tarefas dt listar [--stack <s>] [--tipo debito-tecnico|achado|desvio] [--desde <n>] [--curto])" >&2; exit 2 ;;
     esac
   done
   case "$desde" in
@@ -2531,8 +2550,11 @@ dt_listar() {
     *[!a-z0-9-]*) echo "--stack é um nome de stack, em minúsculas e sem espaço: $stack" >&2; exit 2 ;;
   esac
   case "$situacao" in
-    abertas|saidas|todas) ;;
-    *) echo "--situacao é abertas, saidas ou todas: $situacao" >&2; exit 2 ;;
+    abertas) ;;
+    saidas|todas)
+      echo "recusado: dt listar serve só os débitos abertos — leitura de itens resolvidos/saídos foi fechada pela regra do funil (ordem do dono, 17/11/2026)" >&2
+      exit 4 ;;
+    *) echo "--situacao aceita só abertas: $situacao" >&2; exit 2 ;;
   esac
   case "$tipo" in
     ''|debito-tecnico|achado|desvio) ;;
@@ -2785,7 +2807,7 @@ _dt_uso() {
   [ "$codigo" = 0 ] && fd=1
   cat >&$fd <<'FIM'
 uso:
-  tarefas dt listar [--stack <s>] [--desde <n>] [--curto] [--situacao abertas|saidas|todas]
+  tarefas dt listar [--stack <s>] [--desde <n>] [--curto]
                                           linhas abertas do balde, as mais antigas primeiro, com a
                                           idade em dias e a stack; --desde <n> lê só da linha n em
                                           diante, --curto tira raio, esperado e onde
@@ -2819,8 +2841,8 @@ dt() {
   local sub="${1:-}"; shift || true
   case "$sub" in
     --ajuda|--help|-h) _dt_uso 0 ;;
-    listar)      _dt_tem_ajuda "$@" && { echo "uso: tarefas dt listar [--stack <s>] [--desde <n>] [--curto] [--situacao abertas|saidas|todas] [--linha <n>]"; return 0; }; dt_listar "$@" ;;
-    ler)         _dt_tem_ajuda "$@" && { echo "uso: tarefas dt ler <n>"; return 0; }; [ $# -eq 1 ] && [[ "$1" =~ ^[0-9]+$ ]] || { echo "uso: tarefas dt ler <n>" >&2; return 2; }; dt_listar --situacao todas --linha "$1" ;;
+    listar)      _dt_tem_ajuda "$@" && { echo "uso: tarefas dt listar [--stack <s>] [--desde <n>] [--curto] [--linha <n>]"; return 0; }; dt_listar "$@" ;;
+    ler)         _dt_tem_ajuda "$@" && { echo "uso: tarefas dt ler <n>"; return 0; }; [ $# -eq 1 ] && [[ "$1" =~ ^[0-9]+$ ]] || { echo "uso: tarefas dt ler <n>" >&2; return 2; }; dt_listar --linha "$1" ;;
     admitir)     dt_admitir "$@" ;;
     restack)     _dt_tem_ajuda "$@" && { echo "uso: tarefas dt restack <n> --stack <s> [--motivo \"<txt>\"]"; return 0; }; dt_restack "$@" ;;
     matar)       _dt_tem_ajuda "$@" && { echo "uso: tarefas dt matar <n> --como resolvida --commit <sha> | --como cancelada --motivo \"<txt>\" | --como englobada --card <id>"; return 0; }; dt_matar "$@" ;;

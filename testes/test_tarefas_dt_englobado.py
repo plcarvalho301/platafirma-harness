@@ -86,3 +86,13 @@ def test_dt_449_recusa_de_registro_nao_forca_estado_priorizada():
     assert r.returncode != 0
     assert '--registro "<porquê>"' in r.stderr
     assert '--estado priorizada --registro' not in r.stderr
+
+
+def test_dt_943_story_com_estado_captada_recusa_explicando_regra():
+    """DT 943: story e task não têm captada (regra do dono, 20/10/2026). Pedir `--estado captada`
+    em story recusa com exit 4 explicando a regra e os níveis de captura, em vez de deixar a API
+    promover silenciosamente para priorizada e acusar falta de registro de negócio."""
+    r = _rodar("criar", "Revisar custódia", "--estado", "captada", "--cadeira", "seguranca")
+    assert r.returncode == 4, (r.returncode, r.stdout, r.stderr)
+    assert "não têm 'captada'" in r.stderr
+    assert "--nivel ideia" in r.stderr

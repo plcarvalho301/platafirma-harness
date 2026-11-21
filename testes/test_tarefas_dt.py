@@ -285,13 +285,25 @@ def test_listar_desde_corta_pelo_numero(balde):
     assert [linha[0] for linha in _linhas_da_tabela(p.stdout)] == ["100", "281"]
 
 
-def test_listar_saidas_traz_o_jeito_e_a_ancora(balde):
+@pytest.mark.parametrize("sit", ["saidas", "todas"])
+def test_dt_1340_listar_recusa_saidas_e_todas(balde, sit):
+    """DT 1340: dt listar serve só os abertos e recusa --situacao todas e saidas, com a regra
+    que fechou a rota de leitura dos itens resolvidos (ordem do dono, 17/11/2026)."""
     s, base = balde
     s.linhas = [_linha(1), _linha(2, saida=("resolvida", "ab12cd3"))]
-    p = _run(["dt", "listar", "--situacao", "saidas"], base)
-    assert p.returncode == 0, p.stderr
-    (so,) = _linhas_da_tabela(p.stdout)
-    assert so[0] == "2" and so[3].endswith("· saiu resolvida: ab12cd3")
+    p = _run(["dt", "listar", "--situacao", sit], base)
+    assert p.returncode == 4, (p.returncode, p.stdout, p.stderr)
+    assert p.stdout == ""
+    assert "regra do funil" in p.stderr
+    assert not s.pedidos
+
+
+def test_dt_1340_ler_nao_devolve_debito_resolvido(balde):
+    s, base = balde
+    s.linhas = [_linha(1), _linha(2, saida=("resolvida", "ab12cd3"))]
+    p = _run(["dt", "ler", "2"], base)
+    assert p.returncode == 1, (p.returncode, p.stdout, p.stderr)
+    assert p.stdout == ""
 
 
 def test_listar_vazio_diz_qual_recorte_esta_vazio(balde):
