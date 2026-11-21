@@ -1,3 +1,4 @@
+# componente: componente:verbo-metrica
 """Contrato de `metrica abertura` (card #3145).
 
 `abertura` e o ex-`bin/conta-abertura` (miolo `bin/_conta/conta-abertura.py`),

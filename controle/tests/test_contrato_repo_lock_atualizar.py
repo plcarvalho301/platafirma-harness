@@ -1,3 +1,4 @@
+# componente: componente:verbo-repo
 """Contrato de `repo lock --atualizar` (feature #3388): sobe um pacote só pelo lock, em node e em uv.
 
 Git real contra bare local; node, npm e uv são scripts de fixture que registram a chamada e

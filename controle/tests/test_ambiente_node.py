@@ -1,3 +1,4 @@
+# componente: componente:verbo-teste
 """Ambiente node da casa (card #3386): lock no git, instalacao sem script de pacote, chave por
 hash, o mesmo construtor para `release promover` e `teste rodar`, e o inventario das travas.
 

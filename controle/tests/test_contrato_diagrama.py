@@ -1,3 +1,4 @@
+# componente: componente:verbo-lint
 """Contrato de `lint diagrama` e do bloqueio no pre-commit (card #3096).
 
 O Kroki é um servidor HTTP de fixture no loopback (o mesmo padrão de

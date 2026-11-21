@@ -1,3 +1,4 @@
+# componente: componente:verbo-release
 """Contrato de `release migrar` (card #3260, arq:0076, arq:0110 Q9):
 Sub-ato migrar do verbo release. Mesma contenção estrutural do antigo bin/migrar:
 Q9 do cabeçalho (usage, --ajuda universal, ato desconhecido) e o mapeamento de exit por §4

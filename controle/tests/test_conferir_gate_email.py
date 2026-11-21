@@ -1,3 +1,4 @@
+# componente: componente:verbo-conferir
 """`conferir servico` e o filtro de e-mail dos gates oauth2-proxy (card #3476, nascido do #3339).
 
 O oauth2-proxy autoriza o e-mail que casa o dominio OU consta da lista, e `*` casa todos: com

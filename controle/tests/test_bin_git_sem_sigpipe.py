@@ -1,3 +1,4 @@
+# componente: componente:porta
 """Verbos bash com `set -o pipefail` nao resolvem o git por `command -v ... | head -1`.
 
 Com /bin -> /usr/bin o `command -v /usr/bin/git /bin/git` imprime duas linhas; o `head -1` fecha o pipe

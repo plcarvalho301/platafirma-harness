@@ -1,3 +1,4 @@
+# componente: componente:abertura
 """Contrato do ato `python -m abertura tronco` (F4073, r30)."""
 from __future__ import annotations
 

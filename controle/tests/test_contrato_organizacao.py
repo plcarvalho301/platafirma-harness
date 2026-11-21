@@ -1,3 +1,4 @@
+# componente: componente:verbo-lint
 """Contrato de `lint organizacao` e do bloqueio no pre-commit (card #3118).
 
 A régua é a lista do acervo; aqui o acervo é de fixture (PF_LINT_ACERVO), com a tabela

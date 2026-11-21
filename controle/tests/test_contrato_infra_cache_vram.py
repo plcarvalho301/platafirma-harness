@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """#2856 linha 142: `infra cache vram` não sai mais 0 e vazio.
 
 `vram` descarrega o modelo residente no ollama. Antes, sem modelo residente (ou com o ollama
