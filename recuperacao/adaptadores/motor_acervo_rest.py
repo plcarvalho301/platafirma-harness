@@ -21,7 +21,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from lib import motor_enderecos
+from lib import acervo_token, motor_enderecos
 
 from ..envelope import Causa
 from .base import FonteIndisponivel
@@ -29,7 +29,7 @@ from .base import FonteIndisponivel
 # O ambiente vale mais; o último degrau é o endereço da API do acervo no registro das instâncias (#3843, R28).
 BASE = (os.environ.get("MOTOR_ACERVO_URL") or os.environ.get("RAG_API_URL")
         or motor_enderecos.api_acervo()).rstrip("/")
-TOKEN = os.environ.get("RAG_API_TOKEN", "")
+TOKEN = acervo_token.ler_token_acervo()
 TIMEOUT_S = float(os.environ.get("RAG_TIMEOUT_S", "10"))
 
 

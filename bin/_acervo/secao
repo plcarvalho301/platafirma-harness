@@ -28,8 +28,8 @@ try:
     from recuperacao.adaptadores.motor_acervo_rest import BASE as DEFAULT_BASE
     from recuperacao.adaptadores.motor_acervo_rest import TOKEN as DEFAULT_TOKEN
 except ImportError:
-    from lib import motor_enderecos
-    DEFAULT_BASE, DEFAULT_TOKEN = motor_enderecos.api_acervo(), ""
+    from lib import acervo_token, motor_enderecos
+    DEFAULT_BASE, DEFAULT_TOKEN = motor_enderecos.api_acervo(), acervo_token.ler_token_acervo()
 
 BASE = (os.environ.get("MOTOR_ACERVO_URL") or os.environ.get("RAG_API_URL")
         or os.environ.get("RAG_API_BASE") or DEFAULT_BASE).rstrip("/")

@@ -24,6 +24,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 DEFAULT_BASE = "http://127.0.0.1:8102"
@@ -142,7 +143,14 @@ def _base_url() -> str:
 
 
 def _token() -> str:
-    return os.environ.get("RAG_API_TOKEN") or ""
+    do_env = (os.environ.get("RAG_API_TOKEN") or "").strip()
+    if do_env:
+        return do_env
+    lib_dir = str(Path(__file__).resolve().parents[2] / "lib")
+    if lib_dir not in sys.path:
+        sys.path.insert(0, lib_dir)
+    import acervo_token
+    return acervo_token.ler_token_acervo()
 
 
 def _autor_padrao(explicito: str | None) -> str:
