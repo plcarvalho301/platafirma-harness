@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# componente: componente:verbo-repo
 # Testes de deploy-harness/puxar-bancada e de `repo abrir --da-producao` (card #3010): a bancada
 # nasce no sha que a release serve, pelo repo DA RELEASE, nunca por reimplementacao.
 #

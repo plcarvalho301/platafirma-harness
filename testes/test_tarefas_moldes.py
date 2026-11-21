@@ -1,3 +1,4 @@
+# componente: componente:verbo-tarefas
 """Verbo tarefas: moldes, conversão do corpo e fecho no próprio comentário.
 
 O rastreador é um stub HTTP em loopback (TAREFAS_BASE aponta para ele): o teste prova o que

@@ -1,3 +1,4 @@
+# componente: componente:verbo-mesa
 """Testes da gravação atômica de escopo e chapéu na lousa pelos verbos (story #4342, t5)."""
 from __future__ import annotations
 

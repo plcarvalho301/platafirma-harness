@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# componente: componente:verbo-release
 # Testes do ajudante bin/_release/stack (extraido de bin/deploy no card #3145, ORDEM DO DONO
 # 27/09: bin/deploy apagado, sem prazo de deprecado). Layout do desenho #3010 §3-§4: base do
 # compose na arvore imutavel da release, sobreposicao da instancia, segredo materializado em

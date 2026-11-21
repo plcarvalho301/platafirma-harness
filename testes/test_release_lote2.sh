@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# componente: componente:verbo-release
 # Testes do verbo release — lote 2: promover / reverter por família e por sha (spec_release rev 2 §3, §4, §5)
 set -euo pipefail
 

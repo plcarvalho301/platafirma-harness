@@ -1,3 +1,4 @@
+# componente: componente:verbo-tarefas
 """Verbo tarefas: a task como passo da story (card #4223, R37 da spec tarefas).
 
 O rastreador é um stub HTTP em loopback (TAREFAS_BASE aponta para ele): o teste prova o que o

@@ -1,3 +1,4 @@
+# componente: componente:verbo-conferir
 """release conferir verbo: a chave `mecanismo:` e a `casca` em `face:` (card #3899; arq:0124 §3, emenda de
 18/10/2026). A casca e componente, nao face: `mecanismo:` aceita so os pares da ADR, e `casca` em `face:` e
 divergencia. Os verbos reais (preferencia, tarefas, release) saem conformes."""

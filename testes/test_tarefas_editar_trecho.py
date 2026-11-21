@@ -1,3 +1,4 @@
+# componente: componente:verbo-tarefas
 """Verbo tarefas: `editar --trecho`, o corpo do card trocado só num ponto (card #4110).
 
 O rastreador é um stub HTTP em loopback (TAREFAS_BASE aponta para ele): o teste prova o que o
