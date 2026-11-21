@@ -1,3 +1,4 @@
+# componente: componente:verbo-repo
 """Contrato de `repo lock` para projeto node (card #3386): o mesmo ato do uv.lock, agora com
 package.json -> package-lock.json, sem script de pacote.
 

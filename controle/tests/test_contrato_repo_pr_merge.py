@@ -1,3 +1,4 @@
+# componente: componente:verbo-repo
 """Contrato de `repo pr-merge` e do saneamento de ramos ja mesclados (card #3108).
 
 Git real contra bare local; o forge do PR e um `gh` de fixture (PF_GH_BIN) que guarda o

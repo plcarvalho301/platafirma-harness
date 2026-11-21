@@ -1,3 +1,4 @@
+# componente: componente:verbo-repo
 """Contrato da bancada do `repo`: abrir, achar, ficar em dia e fechar (card:3149;
 spec_ambiente-de-desenvolvimento §2 §5; arq:0109 §2 §5).
 

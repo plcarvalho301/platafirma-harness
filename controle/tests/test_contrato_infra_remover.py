@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra remover` e `infra limpeza jobs`: o resíduo fora do declarado ganha verbo (balde #2856 linha 17).
 
 Antes, nenhum verbo derrubava contêiner avulso nem tirava unit, e o resíduo virava ato do dono no

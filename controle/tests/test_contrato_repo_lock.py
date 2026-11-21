@@ -1,3 +1,4 @@
+# componente: componente:verbo-repo
 """Contrato de `repo lock` (mesa ti#3; cartas 20260928T104616-engenharia e 20260928T232833-dados).
 
 Git real contra bare local; o uv e um script de fixture (PLATAFIRMA_UV) que registra a

@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 # Contrato de `acervo ingerir casa platafirma-casa --arvore <dir>` (#3152 passo 6, spec_teste §4)
 # e da leitura de `# regua:` por `acervo registrar` (#3153, spec_lint §3/§6). Sem banco e sem
 # rede: o POST do plano é trocado por um falso que devolve o lote como o servidor devolveria.

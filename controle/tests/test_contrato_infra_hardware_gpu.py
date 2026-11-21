@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra hardware` e `infra gpu`: leitura do hardware e da GPU pela porta (03/10/2026).
 
 Nasceram para dimensionar o nobreak do host: modelo de CPU e GPU e consumo em W, sem

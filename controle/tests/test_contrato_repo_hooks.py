@@ -1,3 +1,4 @@
+# componente: componente:verbo-repo
 """Contrato de `repo hooks listar` e `repo hooks apagar` (card #3473, tarefa 2): webhook de
 repositorio do forge pela porta.
 

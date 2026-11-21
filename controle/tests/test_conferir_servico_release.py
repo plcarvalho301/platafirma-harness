@@ -1,3 +1,4 @@
+# componente: componente:verbo-conferir
 """Contrato de `conferir servico` sob a release (card #3150, estagio 3 da esteira).
 
 Medido em 26/09: `release conferir servico harness-controle` saia 1 («nenhum container»)

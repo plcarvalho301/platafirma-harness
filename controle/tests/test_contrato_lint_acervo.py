@@ -1,3 +1,4 @@
+# componente: componente:verbo-lint
 """test_contrato_lint_acervo — `lint acervo` sobre a lista antipadroes-do-acervo (card #3161).
 
 Tudo em fixture: a lista vem de um acervo falso (PF_LINT_ACERVO) e as linhas de obra e

@@ -1,3 +1,4 @@
+# componente: componente:verbo-metrica
 """Contrato de `metrica abertura --tudo` e `--json` sem `--tudo` (card #3145)."""
 from __future__ import annotations
 

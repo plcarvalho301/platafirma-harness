@@ -1,3 +1,4 @@
+# componente: componente:verbo-conferir
 """Contrato de `release conferir acervo` (pedido da engenharia, #3193 passo 14).
 
 Régua de fixture (regua.py e contrato.py no formato do conversor servido) e um `ler` falso no

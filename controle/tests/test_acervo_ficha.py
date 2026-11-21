@@ -1,3 +1,4 @@
+# componente: componente:verbo-acervo
 """#3305: a ficha do arquivo da obra — `acervo ler biblioteca ficha` e `acervo ingerir biblioteca ficha`.
 
 O verbo é cliente fino das rotas do motor_acervo (arq:0089 §2; spec apis-escrita-acervo §D): nada aqui abre o banco
