@@ -71,7 +71,7 @@ tests/test_contrato_teste.py | bin/teste bin/_release/registro.py
 tests/test_contrato_lint.py | bin/lint bin/_lint/**
 tests/test_casa_arvore.py | bin/acervo bin/_acervo/** bin/ingerir bin/_ingerir/**
 tests/test_isolamento.py | lib/teste_isolado.py
-tests/test_contrato_acesso.py | bin/acesso bin/_acesso/** politica-acesso/**
+tests/test_contrato_acesso.py | bin/acesso bin/_acesso/**
 tests/test_contrato_acervo.py | bin/acervo bin/_acervo/**
 tests/test_contrato_organizacao.py | bin/lint bin/_lint/** docs/**
 tests/test_contrato_release_migrar.py | bin/release bin/_release/**
