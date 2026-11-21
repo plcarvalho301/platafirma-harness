@@ -5,7 +5,7 @@
 # dono: seguranca
 # classe: B
 # use para: gerar, checar, rotacionar e destruir segredo; fixar linha de base; varrer ativo, «roda a varredura»; «avalia esse risco», a régua de segurança de um serviço; e sempre que um segredo for exposto, faltar ou vencer
-# atos: oscap (leitura, casco), isolacao medir (leitura, casco), ssg (escrita, regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo), segredo resumo (leitura, segredo), segredo gravar (escrita, segredo), segredo gerar (escrita, segredo), segredo importar (escrita, segredo), segredo rotacionar (escrita, segredo), segredo exigidos (leitura, segredo), segredo apagar (escrita, segredo)
+# atos: avisos (leitura, casco), oscap (leitura, casco), isolacao medir (leitura, casco), ssg (escrita, regua), keycloak entrar (escrita, credencial), keycloak (escrita, realm), openssl (leitura, cripto), segredo ler (leitura, segredo), segredo listar (leitura, segredo), segredo resumo (leitura, segredo), segredo gravar (escrita, segredo), segredo gerar (escrita, segredo), segredo importar (escrita, segredo), segredo rotacionar (escrita, segredo), segredo exigidos (leitura, segredo), segredo apagar (escrita, segredo)
 # folhas: oscap|ssg|isolacao -> politica/avaliacao · keycloak|openssl -> politica/acesso · segredo -> politica/segredo
 # escreve: $PLATAFIRMA_INSTANCIA/segredos/<stack>/<nome>
 # ambiente: SEG_SECRETS_DIR[=$PLATAFIRMA_INSTANCIA/segredos] · SEG_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/seg] · SEG_OSCAP_DIR[=$PLATAFIRMA_INSTANCIA/var/oscap] · SEG_SSG_DIR[=/opt/terceiros/ssg/current] · SEG_OQS_DIR[=/opt/terceiros/oqs/current] · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
@@ -14,16 +14,19 @@
 # grao da face. segredo nao declara face nem texto: e exclusao por decisao do dono
 # (arq:0124 §3, aba Segredos da face IAM em stub). O repasse cru (`--`) de keycloak e
 # openssl executa qualquer comando da ferramenta, e por isso nao promete volta.
+# face: avisos=Operação
 # face: oscap=Operação
 # face: ssg=Operação
 # face: isolacao=IAM
 # face: keycloak=IAM
 # face: openssl=IAM
+# rotulo: avisos=Avaliar {vulnerabilidade}
 # rotulo: oscap=Avaliar {hardening}
 # rotulo: ssg=Derivar {linha-de-base-de-controles}
 # rotulo: isolacao=Medir {isolacao}
 # rotulo: keycloak=Administrar {iam}
 # rotulo: openssl=Operar {criptografia}
+# volta: avisos=sim — só lê
 # volta: oscap=sim — só lê
 # volta: ssg=sim — derivar de novo do datastream de origem
 # volta: isolacao=sim — só lê
@@ -748,6 +751,12 @@ case "$SUB" in
         ;;
       *) uso ;;
     esac
+    ;;
+
+  avisos)
+    PY_SEG="/opt/platafirma/current/venv/harness/bin/python"
+    [ -x "$PY_SEG" ] || PY_SEG="python3"
+    exec "$PY_SEG" "$(dirname "$(readlink -f "$0")")/../lib/avisos.py" "${ARGS[@]:1}"
     ;;
 
   isolacao)
