@@ -2534,6 +2534,14 @@ dt_listar() {
     abertas|saidas|todas) ;;
     *) echo "--situacao é abertas, saidas ou todas: $situacao" >&2; exit 2 ;;
   esac
+  # ROTA FECHADA (incidente #4424): o débito que saiu (resolvida, cancelada, englobada) está fora do
+  # funil, como o card terminal: não aparece em leitura do verbo, sob hipótese nenhuma (ordem do
+  # dono, 17/11/2026). `saidas` e `todas` seguem aceitas pela gramática, para o erro dizer o que
+  # fazer, e recusam antes de qualquer chamada à API.
+  if [ "$situacao" != abertas ]; then
+    echo "recusado: débito que saiu (resolvida, cancelada, englobada) está fora do funil e não aparece em leitura do verbo tarefas; --situacao $situacao serviria esses débitos. Leia os abertos: tarefas dt listar [--situacao abertas]" >&2
+    return 4
+  fi
   case "$tipo" in
     ''|debito-tecnico|achado|desvio) ;;
     *) echo "--tipo é debito-tecnico, achado ou desvio: $tipo" >&2; exit 2 ;;
@@ -2541,7 +2549,7 @@ dt_listar() {
   local t
   if [ -n "$linha" ]; then
     t=$(_dt_tabela "$situacao" "$stack" 0 0 -1 "$tipo" | awk -F '\t' -v n="$linha" 'NR == 1 || $1 == n') || return 1
-    [ "$(printf '%s\n' "$t" | wc -l)" -gt 1 ] || { echo "linha $linha não encontrada" >&2; return 1; }
+    [ "$(printf '%s\n' "$t" | wc -l)" -gt 1 ] || { echo "linha $linha não encontrada entre as abertas do balde (débito que saiu está fora do funil e não aparece em leitura)" >&2; return 1; }
   else
     t=$(_dt_tabela "$situacao" "$stack" "$desde" "$curto" -1 "$tipo")
   fi || return 1
@@ -2820,7 +2828,7 @@ dt() {
   case "$sub" in
     --ajuda|--help|-h) _dt_uso 0 ;;
     listar)      _dt_tem_ajuda "$@" && { echo "uso: tarefas dt listar [--stack <s>] [--desde <n>] [--curto] [--situacao abertas|saidas|todas] [--linha <n>]"; return 0; }; dt_listar "$@" ;;
-    ler)         _dt_tem_ajuda "$@" && { echo "uso: tarefas dt ler <n>"; return 0; }; [ $# -eq 1 ] && [[ "$1" =~ ^[0-9]+$ ]] || { echo "uso: tarefas dt ler <n>" >&2; return 2; }; dt_listar --situacao todas --linha "$1" ;;
+    ler)         _dt_tem_ajuda "$@" && { echo "uso: tarefas dt ler <n>"; return 0; }; [ $# -eq 1 ] && [[ "$1" =~ ^[0-9]+$ ]] || { echo "uso: tarefas dt ler <n>" >&2; return 2; }; dt_listar --linha "$1" ;;
     admitir)     dt_admitir "$@" ;;
     restack)     _dt_tem_ajuda "$@" && { echo "uso: tarefas dt restack <n> --stack <s> [--motivo \"<txt>\"]"; return 0; }; dt_restack "$@" ;;
     matar)       _dt_tem_ajuda "$@" && { echo "uso: tarefas dt matar <n> --como resolvida --commit <sha> | --como cancelada --motivo \"<txt>\" | --como englobada --card <id>"; return 0; }; dt_matar "$@" ;;

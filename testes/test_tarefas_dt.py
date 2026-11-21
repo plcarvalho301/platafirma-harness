@@ -285,13 +285,36 @@ def test_listar_desde_corta_pelo_numero(balde):
     assert [linha[0] for linha in _linhas_da_tabela(p.stdout)] == ["100", "281"]
 
 
-def test_listar_saidas_traz_o_jeito_e_a_ancora(balde):
+# #4424: o débito que saiu está fora do funil, como o card terminal: não aparece em leitura.
+@pytest.mark.parametrize("situacao", ["saidas", "todas"])
+def test_listar_situacao_que_serviria_saida_recusa_sem_chamar_a_api(balde, situacao):
     s, base = balde
     s.linhas = [_linha(1), _linha(2, saida=("resolvida", "ab12cd3"))]
-    p = _run(["dt", "listar", "--situacao", "saidas"], base)
+    p = _run(["dt", "listar", "--situacao", situacao], base)
+    assert p.returncode == 4, p.stderr
+    assert "fora do funil" in p.stderr and "--situacao abertas" in p.stderr
+    assert "defeito 2" not in p.stdout + p.stderr and "ab12cd3" not in p.stdout + p.stderr
+    assert not s.pedidos
+
+
+def test_listar_abertas_nao_traz_a_saida_mesmo_com_ela_no_balde(balde):
+    s, base = balde
+    s.linhas = [_linha(1), _linha(2, saida=("resolvida", "ab12cd3"))]
+    p = _run(["dt", "listar", "--situacao", "abertas"], base)
     assert p.returncode == 0, p.stderr
-    (so,) = _linhas_da_tabela(p.stdout)
-    assert so[0] == "2" and so[3].endswith("· saiu resolvida: ab12cd3")
+    assert [linha[0] for linha in _linhas_da_tabela(p.stdout)] == ["1"]
+    assert "saiu" not in p.stdout
+
+
+def test_ler_debito_que_saiu_recusa_sem_servir_o_texto(balde):
+    s, base = balde
+    s.linhas = [_linha(1), _linha(2, texto="texto do resolvido", saida=("resolvida", "ab12cd3"))]
+    for args in (["dt", "ler", "2"], ["dt", "listar", "--linha", "2"]):
+        p = _run(args, base)
+        assert p.returncode == 1
+        assert "fora do funil" in p.stderr
+        assert "texto do resolvido" not in p.stdout + p.stderr and "ab12cd3" not in p.stdout + p.stderr
+        assert all("situacao=abertas" in pedido[1] for pedido in s.pedidos)
 
 
 def test_listar_vazio_diz_qual_recorte_esta_vazio(balde):
