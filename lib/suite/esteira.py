@@ -266,16 +266,26 @@ def main() -> int:
             alvos_pytest.append(a)
     plugin = _PluginLote(pedidos)
     basetemp = os.environ.get("ESTEIRA_BASETEMP", "/saida/pytest_tmp")
-    pytest.main(
-        [
-            "-p",
-            "no:cacheprovider",
-            f"--basetemp={basetemp}",
-            "-q",
-            *alvos_pytest,
-        ],
-        plugins=[plugin],
-    )
+    args_pytest = [
+        "-p",
+        "no:cacheprovider",
+        f"--basetemp={basetemp}",
+        "-q",
+    ]
+    arquivos_unicos = {a.split("::", 1)[0] for a in alvos_pytest}
+    if len(arquivos_unicos) >= 2:
+        try:
+            import xdist  # noqa: F401
+        except ImportError:
+            xdist = None
+        if xdist is not None:
+            env_trab = os.environ.get("PF_TESTE_PARALELO", "").strip()
+            trab = int(env_trab) if env_trab.isdigit() else max(1, (os.cpu_count() or 2) // 2)
+            trab = min(trab, len(arquivos_unicos))
+            if trab > 1:
+                args_pytest.extend(["-n", str(trab), "--dist", "loadfile"])
+    args_pytest.extend(alvos_pytest)
+    pytest.main(args_pytest, plugins=[plugin])
     saida = {}
     for p, st in plugin.estado.items():
         ok = (st["chamado"] or st["pulado"]) and (not st["falhou"])
@@ -613,12 +623,78 @@ def _mapear_alcance_diff(
     if alcanca_todos:
         for _, v in vinculos_validos:
             entidades_mudadas.update(v.exige)
+            if v.verifica:
+                entidades_mudadas.add(v.verifica)
         entidades_mudadas.update(servicos_conhecidos)
     else:
         for comp in componentes_alcancados:
             entidades_mudadas.update(_servicos_de_ficha_componente(ficha_por_comp.get(comp), servicos_conhecidos))
+        entidades_mudadas.update(
+            _entidades_verifica_mudadas(
+                arquivos_mudados,
+                vinculos_validos,
+                leitor,
+                componentes_alcancados,
+                ficha_por_comp,
+            )
+        )
 
     return alcanca_todos, componentes_alcancados, entidades_mudadas, stack_por_comp
+
+
+_PASTAS_ALVO_VERIFICA = ("registro/", "contratos/", "politica-acesso/", "instancias/", "referencias/")
+
+
+def _entidades_verifica_mudadas(
+    arquivos_mudados: Sequence[str],
+    vinculos_validos: Sequence[tuple[str, VinculoArquivo]],
+    leitor: Any,
+    componentes_alcancados: set[str],
+    ficha_por_comp: Mapping[str, Mapping[str, Any]],
+) -> set[str]:
+    alvos = {v.verifica for _, v in vinculos_validos if v.verifica}
+    if not alvos:
+        return set()
+
+    mudados: set[str] = set()
+    classes_alvo = {
+        cl for alvo in alvos if (cl := inferir_classe_entidade(alvo, papel="verifica")) is not None
+    }
+    ficha_por_alvo: dict[str, Mapping[str, Any]] = {}
+    for cl in classes_alvo:
+        for f in _ler_fichas_seguro(leitor, cl):
+            ch = str(f.get("chave") or "")
+            if ch in alvos:
+                ficha_por_alvo[ch] = f
+
+    for alvo in alvos:
+        ficha = ficha_por_alvo.get(alvo)
+        caminhos = _caminhos_de_ficha_componente(ficha) if ficha is not None else []
+        if caminhos and any(_arquivo_sob_prefixo(arq, p) for arq in arquivos_mudados for p in caminhos):
+            mudados.add(alvo)
+            continue
+        slug = alvo.split(":", 1)[-1].strip()
+        if not caminhos and slug:
+            if any(
+                arq.startswith(_PASTAS_ALVO_VERIFICA) and (Path(arq).stem == slug or slug in Path(arq).stem)
+                for arq in arquivos_mudados
+            ):
+                mudados.add(alvo)
+                continue
+
+    for comp in componentes_alcancados:
+        ficha_c = ficha_por_comp.get(comp)
+        if not isinstance(ficha_c, Mapping):
+            continue
+        ligs = ficha_c.get("ligacoes")
+        if not isinstance(ligs, Mapping):
+            continue
+        for val in ligs.values():
+            for ref in _como_lista_str(val):
+                if ref in alvos:
+                    mudados.add(ref)
+
+    return mudados
 
 
 def _deve_rodar_caso_na_esteira(
@@ -627,19 +703,26 @@ def _deve_rodar_caso_na_esteira(
     *,
     no_alcance: bool,
     entidades_mudadas: set[str],
+    modo: str = "push",
+    lado_fronteira: str | None = None,
 ) -> bool:
+    if modo == "completo":
+        return True
+    if modo == "promocao":
+        return v.classe == "teste-de-fronteira" and lado_fronteira != "consome"
     if caso.incidentes:
         return True
     if caso.exige:
         return no_alcance or any(ex in entidades_mudadas for ex in caso.exige)
     if v.classe in ("teste-de-fronteira", "teste-de-regra"):
-        return True
+        return no_alcance or (v.verifica is not None and v.verifica in entidades_mudadas)
     return no_alcance
 
 
 def selecionar_casos_rodada(arvore: str | Path, **opcoes: Any) -> PlanoSelecaoRodada:
     raiz = Path(arvore).resolve()
     repositorio = str(opcoes.get("repositorio") or "platafirma-casa")
+    modo = str(opcoes.get("modo") or "push")
     leitor_res = _resolver_leitor_ontologia(raiz, opcoes.get("leitor"))
     arvore_mud, arvore_main, lista_mud = _resolver_revisoes_e_diff(
         raiz,
@@ -664,6 +747,8 @@ def selecionar_casos_rodada(arvore: str | Path, **opcoes: Any) -> PlanoSelecaoRo
         vinculos_validos,
         leitor_res,
     )
+    if modo == "completo":
+        alcanca_todos = True
 
     for rel, v in vinculos_validos:
         if rel in set_mud and v.componente:
@@ -677,6 +762,11 @@ def selecionar_casos_rodada(arvore: str | Path, **opcoes: Any) -> PlanoSelecaoRo
         comp = v.componente or ""
         classe = v.classe or "teste-de-comportamento"
         no_alcance = alcanca_todos or (comp in comps_alcancados) or (rel in set_mud)
+        lado_front = (
+            _consulta._determinar_lado_fronteira(leitor_res, comp, v.verifica)
+            if modo == "promocao" and classe == "teste-de-fronteira"
+            else None
+        )
         stack = stack_por_comp.get(comp, "harness")
         casos_arq = v.casos or (
             CasoTeste(nome="<arquivo>", linha=1, exige=v.exige, incidentes=v.incidentes),
@@ -687,6 +777,8 @@ def selecionar_casos_rodada(arvore: str | Path, **opcoes: Any) -> PlanoSelecaoRo
                 c,
                 no_alcance=no_alcance,
                 entidades_mudadas=ents_mudadas,
+                modo=modo,
+                lado_fronteira=lado_front,
             ):
                 continue
             casos_selecionados.append(
@@ -1276,6 +1368,7 @@ def rodar(alvo: str | Path | None = None, **opcoes: Any) -> VereditoRodada:
         base=opcoes.get("base"),
         arquivos_mudados=opcoes.get("arquivos_mudados"),
         leitor=opcoes.get("leitor"),
+        modo=opcoes.get("modo") or "push",
     )
 
     ensaiador_res = _resolver_ensaiador_admissao(raiz, opcoes.get("ensaiador"))
@@ -1364,6 +1457,9 @@ def _parser_rodar() -> argparse.ArgumentParser:
     p.add_argument("--arvore", default=None, help="caminho da árvore do repositório")
     p.add_argument("--mudanca", default=None, help="revisão ou árvore da mudança")
     p.add_argument("--base", default=None, help="revisão ou árvore da ponta da main")
+    grupo_modo = p.add_mutually_exclusive_group()
+    grupo_modo.add_argument("--completo", action="store_true", help="roda todas as especializações (agenda noturna)")
+    grupo_modo.add_argument("--promocao", action="store_true", help="roda só fronteira de quem fornece (promoção)")
     p.add_argument("--json", action="store_true", dest="como_json", help="emite o veredito em JSON")
     return p
 
@@ -1385,11 +1481,13 @@ def main_rodar(argv: list[str] | None = None) -> int:
         return int(exc.code) if isinstance(exc.code, int) else 2
 
     diagnostico: dict[str, str] = {}
+    modo = "completo" if args.completo else ("promocao" if args.promocao else "push")
     veredito = rodar(
         args.alvo,
         arvore=args.arvore,
         mudanca=args.mudanca,
         base=args.base,
+        modo=modo,
         diagnostico=diagnostico,
     )
     if args.como_json:

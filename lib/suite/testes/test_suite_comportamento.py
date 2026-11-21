@@ -970,12 +970,12 @@ def _executar_cenario_esteira(tmp_path: Path, spec: dict[str, Any]) -> tuple[Any
                 "outro/testes/test_fronteira.py": (
                     "# componente: outro\n"
                     "# verifica: interface:porta\n"
-                    "def test_fronteira_sempre_roda():\n    assert True\n"
+                    "def test_fronteira_nao_alcancado():\n    assert True\n"
                 ),
                 "outro/testes/test_regra.py": (
                     "# componente: outro\n"
                     "# verifica: politica:0001\n"
-                    "def test_regra_sempre_roda():\n    assert True\n"
+                    "def test_regra_nao_alcancado():\n    assert True\n"
                 ),
             },
             "mudados": ["suite/codigo.py"],
@@ -984,9 +984,7 @@ def _executar_cenario_esteira(tmp_path: Path, spec: dict[str, Any]) -> tuple[Any
             "estado_esperado": "verde",
             "saida_esperada": 0,
             "rodados_esperados": (
-                "outro/testes/test_fronteira.py::test_fronteira_sempre_roda",
                 "outro/testes/test_outro.py::test_incidente_sempre_roda",
-                "outro/testes/test_regra.py::test_regra_sempre_roda",
                 "suite/testes/test_suite.py::test_comp_alcancado",
                 "suite/testes/test_suite.py::test_exige_comp_alcancado",
             ),
@@ -1335,6 +1333,96 @@ def test_esteira_isolamento_real_monta_release_em_leitura(
     assert ver.estado == "verde", (ver.motivo, diagnostico)
     assert ver.codigo_saida == 0
     assert ver.casos_reprovados == ()
+
+
+def test_esteira_dispara_fronteira_e_regra_quando_alvo_verifica_muda_e_respeita_modos(tmp_path: Path):
+    from suite.esteira import selecionar_casos_rodada
+
+    arvore = tmp_path / "repo_modos"
+    for rel, conteudo in {
+        "suite/codigo.py": "X = 1\n",
+        "registro/politica-0001.yaml": "ok: true\n",
+        "contratos/porta.yaml": "v: 1\n",
+        "suite/testes/test_suite.py": "# componente: suite\ndef test_comp():\n    assert True\n",
+        "outro/testes/test_fronteira_fornece.py": (
+            "# componente: outro\n"
+            "# verifica: interface:porta\n"
+            "def test_fornece():\n    assert True\n"
+        ),
+        "consumidor/testes/test_fronteira_consome.py": (
+            "# componente: consumidor\n"
+            "# verifica: interface:porta\n"
+            "def test_consome():\n    assert True\n"
+        ),
+        "outro/testes/test_regra.py": (
+            "# componente: outro\n"
+            "# verifica: politica:0001\n"
+            "def test_regra():\n    assert True\n"
+        ),
+    }.items():
+        p = arvore / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(conteudo, encoding="utf-8")
+
+    leitor = DubleLeitorOlaria(
+        fichas=[
+            {"classe": "componente", "chave": "componente:suite", "dados": {"caminho": ["suite"]}},
+            {
+                "classe": "componente",
+                "chave": "componente:outro",
+                "dados": {"caminho": ["outro"]},
+                "ligacoes": {"expoe": "interface:porta"},
+            },
+            {
+                "classe": "componente",
+                "chave": "componente:consumidor",
+                "dados": {"caminho": ["consumidor"]},
+                "ligacoes": {"consome": "interface:porta"},
+            },
+            {
+                "classe": "interface",
+                "chave": "interface:porta",
+                "dados": {"caminho": ["contratos/porta.yaml"]},
+            },
+            {
+                "classe": "politica",
+                "chave": "politica:0001",
+                "dados": {"caminho": ["registro/politica-0001.yaml"]},
+            },
+        ]
+    )
+
+    plano_alvo = selecionar_casos_rodada(
+        arvore,
+        repositorio="repo-modos",
+        arquivos_mudados=["contratos/porta.yaml", "registro/politica-0001.yaml"],
+        leitor=leitor,
+    )
+    assert sorted(c.id_caso for c in plano_alvo.casos) == [
+        "consumidor/testes/test_fronteira_consome.py::test_consome",
+        "outro/testes/test_fronteira_fornece.py::test_fornece",
+        "outro/testes/test_regra.py::test_regra",
+    ]
+
+    plano_comp = selecionar_casos_rodada(
+        arvore,
+        repositorio="repo-modos",
+        arquivos_mudados=["suite/codigo.py"],
+        leitor=leitor,
+        modo="completo",
+    )
+    assert len(plano_comp.casos) == 4
+
+    plano_promo = selecionar_casos_rodada(
+        arvore,
+        repositorio="repo-modos",
+        arquivos_mudados=["suite/codigo.py"],
+        leitor=leitor,
+        modo="promocao",
+    )
+    assert [c.id_caso for c in plano_promo.casos] == [
+        "outro/testes/test_fronteira_fornece.py::test_fornece",
+    ]
 
 
 # --- Dublê de fronteira e verificação de quem fornece pelo contrato --------------------------
