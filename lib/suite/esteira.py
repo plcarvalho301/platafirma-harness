@@ -44,6 +44,9 @@ from suite.vinculo import CasoTeste, VinculoArquivo, ler_vinculo
 LIB_RAIZ = Path(__file__).resolve().parents[1]
 MAX_REPETICOES_ERRATICO = 2
 MAX_CASOS_REPETICAO_ERRATICO = 5
+MAX_ARQUIVOS_POR_LOTE = 15
+MAX_CASOS_POR_LOTE = 250
+MAX_TRABALHADORES_ISOLADOS = 4
 _MIN_LEN_HASH = 7
 _MIN_COLUNAS_DOCKER = 2
 _SAIDA_NAO_MEDIDO = 3
@@ -282,6 +285,8 @@ def main() -> int:
         if xdist is not None:
             env_trab = os.environ.get("PF_TESTE_PARALELO", "").strip()
             trab = int(env_trab) if env_trab.isdigit() else max(1, (os.cpu_count() or 2) // 2)
+            if not env_trab.isdigit():
+                trab = min(trab, 4)
             trab = min(trab, len(arquivos_unicos))
             if trab > 1:
                 args_pytest.extend(["-n", str(trab), "--dist", "loadfile"])
@@ -1058,6 +1063,34 @@ def _montagens_release_ro() -> list[tuple[Path, str]]:
     return montagens
 
 
+def _fatiar_casos_por_arquivo(
+    ids_casos: Sequence[str],
+    *,
+    max_arquivos: int = MAX_ARQUIVOS_POR_LOTE,
+    max_casos: int = MAX_CASOS_POR_LOTE,
+) -> list[list[str]]:
+    """Agrupa casos por arquivo e fatia lotes grandes sem partir um mesmo arquivo (#4418)."""
+    por_arquivo: dict[str, list[str]] = {}
+    for id_caso in ids_casos:
+        por_arquivo.setdefault(id_caso.split("::", 1)[0], []).append(id_caso)
+
+    lotes: list[list[str]] = []
+    lote_atual: list[str] = []
+    arqs_no_lote = 0
+    for casos_arq in por_arquivo.values():
+        estoura_arq = arqs_no_lote >= max_arquivos
+        estoura_casos = lote_atual and (len(lote_atual) + len(casos_arq) > max_casos)
+        if lote_atual and (estoura_arq or estoura_casos):
+            lotes.append(lote_atual)
+            lote_atual = []
+            arqs_no_lote = 0
+        lote_atual.extend(casos_arq)
+        arqs_no_lote += 1
+    if lote_atual:
+        lotes.append(lote_atual)
+    return lotes
+
+
 class ExecutorIsoladoUnidade:
     """Executor isolado real: roda os casos em `systemd-run` com rede privada e `bwrap`."""
 
@@ -1076,6 +1109,18 @@ class ExecutorIsoladoUnidade:
             return self.prazo_s
         return max(180.0, min(600.0, qtd_casos * 4.0 + 30.0))
 
+    def _executar_em_lotes(
+        self, arvore: Path, ids: list[str], venv: Path, *, usar_host: bool
+    ) -> dict[str, dict[str, Any]]:
+        saida: dict[str, dict[str, Any]] = {}
+        for fatia in _fatiar_casos_por_arquivo(ids):
+            saida.update(
+                self._rodar_lote_host(arvore, fatia, venv)
+                if usar_host
+                else self._rodar_lote(arvore, fatia, venv)
+            )
+        return saida
+
     def __call__(self, arvore: Path, ids_casos: list[str]) -> dict[str, dict[str, Any]]:
         if not ids_casos:
             return {}
@@ -1086,22 +1131,14 @@ class ExecutorIsoladoUnidade:
             if not grupo:
                 continue
             if self.venv_pytest is not None:
-                resultados.update(
-                    self._rodar_lote_host(arvore, grupo, self.venv_pytest)
-                    if usar_host
-                    else self._rodar_lote(arvore, grupo, self.venv_pytest)
-                )
+                resultados.update(self._executar_em_lotes(arvore, grupo, self.venv_pytest, usar_host=usar_host))
                 continue
             por_projeto: dict[Path | None, list[str]] = {}
             for id_caso in grupo:
                 por_projeto.setdefault(projeto_do_caso(arvore, id_caso), []).append(id_caso)
             for projeto, ids in por_projeto.items():
                 venv = venv_de_teste(projeto) if projeto is not None else _resolver_venv_pytest()
-                resultados.update(
-                    self._rodar_lote_host(arvore, ids, venv)
-                    if usar_host
-                    else self._rodar_lote(arvore, ids, venv)
-                )
+                resultados.update(self._executar_em_lotes(arvore, ids, venv, usar_host=usar_host))
         return resultados
 
     def _rodar_lote_host(self, arvore: Path, ids_casos: list[str], venv_base: Path) -> dict[str, dict[str, Any]]:
@@ -1469,19 +1506,11 @@ def rodar(alvo: str | Path | None = None, **opcoes: Any) -> VereditoRodada:
                 prazo_quarentena_dias=prazo_quarentena_dias,
             )
         except FalhaUnidade as exc:
-            # analise.Falha guarda o código em `exit`; sem ler o campo certo, o isolamento ausente
-            # (exit 3) reprovava todo caso em vez de deixar o veredito não medido
-            if int(getattr(exc, "exit", getattr(exc, "saida", 5))) == _SAIDA_NAO_MEDIDO:
-                entidades_fora.append(str(exc))
-            else:
-                for c in plano.casos:
-                    resultados_brutos[c.id_caso] = ResultadoBrutoCaso(
-                        id_caso=c.id_caso,
-                        aprovado=False,
-                        tentativas=1,
-                        passou_em_repeticao=False,
-                        saida=f"falha na unidade isolada: {exc}",
-                    )
+            # Qualquer falha da unidade isolada (isolamento ausente, teto de prazo/memória/tasks
+            # ou sinal) significa que o lote não foi medido — nunca que todos os casos quebraram (#4418).
+            codigo = int(getattr(exc, "exit", getattr(exc, "saida", 5)))
+            detalhe = str(exc) if codigo == _SAIDA_NAO_MEDIDO else f"unidade-isolada:{exc}"
+            entidades_fora.append(detalhe)
 
     diagnostico = opcoes.get("diagnostico")
     if isinstance(diagnostico, dict):

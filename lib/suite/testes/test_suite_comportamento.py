@@ -1787,3 +1787,59 @@ def test_esteira_falha_em_massa_acima_do_teto_nao_repete_nem_abre_dt_erratico(
     assert ver.debitos_abertos == ()
     assert balde.listar_abertas() == []
 
+
+@pytest.mark.incidente(4418)
+@pytest.mark.parametrize("causa", ["prazo-calculo", "teto-oom-kill", "teto-resources"])
+def test_esteira_falha_unidade_teto_nao_reprova_todos_e_grava_nao_medido_com_causa(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, causa: str
+):
+    from analise import Falha as FalhaUnidade
+
+    def executor_teto(_arvore: Path, _ids: list[str]) -> dict[str, dict[str, Any]]:
+        raise FalhaUnidade(5, causa)
+
+    corpo = "# componente: suite\ndef test_u1():\n    assert True\ndef test_u2():\n    assert True\n"
+    ver, balde = _rodar_esteira_com_executor(tmp_path, monkeypatch, f"unidade_{causa}", corpo, executor_teto)
+    assert ver.estado == "nao-medido"
+    assert ver.codigo_saida == 3
+    assert ver.casos_reprovados == ()
+    assert causa in (ver.motivo or "")
+    assert ver.debitos_abertos == ()
+    assert balde.listar_abertas() == []
+
+
+@pytest.mark.incidente(4418)
+def test_executor_isolado_fatia_lote_grande_mantendo_casos_do_mesmo_arquivo_juntos(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    from suite.esteira import MAX_ARQUIVOS_POR_LOTE, MAX_CASOS_POR_LOTE, ExecutorIsoladoUnidade
+
+    lotes_vistos: list[list[str]] = []
+
+    def fake_rodar_lote(_self: Any, _arvore: Path, ids: list[str], _venv: Path) -> dict[str, dict[str, Any]]:
+        lotes_vistos.append(list(ids))
+        return {c: {"aprovado": True, "saida": ""} for c in ids}
+
+    monkeypatch.setattr(ExecutorIsoladoUnidade, "_rodar_lote", fake_rodar_lote)
+    ids = [f"controle/tests/test_mod_{i:02d}.py::test_caso_{j}" for i in range(MAX_ARQUIVOS_POR_LOTE + 5) for j in range(3)]
+    executor = ExecutorIsoladoUnidade(venv_pytest=tmp_path)
+    res = executor(tmp_path, ids)
+
+    assert len(res) == len(ids)
+    assert all(item["aprovado"] for item in res.values())
+    assert len(lotes_vistos) >= 2
+    arquivos_por_lote = [{c.split("::", 1)[0] for c in lote} for lote in lotes_vistos]
+    for lote, arqs in zip(lotes_vistos, arquivos_por_lote, strict=True):
+        assert len(arqs) <= MAX_ARQUIVOS_POR_LOTE
+        assert len(lote) <= MAX_CASOS_POR_LOTE
+    todos_arqs = [a for arqs in arquivos_por_lote for a in arqs]
+    assert len(todos_arqs) == len(set(todos_arqs))
+
+
+@pytest.mark.incidente(4418)
+def test_worker_pytest_limita_paralelismo_no_teto_da_unidade_isolada():
+    from suite.esteira import MAX_TRABALHADORES_ISOLADOS, _SCRIPT_PYTEST_WORKER
+
+    assert 1 <= MAX_TRABALHADORES_ISOLADOS <= 4
+    assert f"min(trab, {MAX_TRABALHADORES_ISOLADOS}" in _SCRIPT_PYTEST_WORKER or "MAX_TRABALHADORES_ISOLADOS" in _SCRIPT_PYTEST_WORKER
+
