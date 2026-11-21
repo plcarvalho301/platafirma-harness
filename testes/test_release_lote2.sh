@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# componente: componente:verbo-release
 # Testes do verbo release — lote 2: promover / reverter por família e por sha (spec_release rev 2 §3, §4, §5)
 set -euo pipefail
 
@@ -125,7 +124,6 @@ echo '{}' > "$TMP_DIR/venvs.json"
 export PLATAFIRMA_FAMILIAS="$TMP_DIR/familias.json"
 export PLATAFIRMA_VENVS="$TMP_DIR/venvs.json"
 export PLATAFIRMA_INSTANCIA="$TMP_DIR/casa" PLATAFIRMA_RELEASE="$TMP_DIR/release"
-export DEPLOY_ENV_DIR="$TMP_DIR/env"
 export PF_ABERTURA_DIR="$ABERTURA_DIR"
 mkdir -p "$PLATAFIRMA_INSTANCIA/var/release" "$PLATAFIRMA_RELEASE"
 PONTOS_REAIS="$PLATAFIRMA_INSTANCIA/var/release"

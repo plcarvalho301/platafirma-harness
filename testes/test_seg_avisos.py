@@ -1,4 +1,4 @@
-# componente: componente:verbo-seg
+# componente: componente:avisos
 """Testes da rodada de avisos OSV (`seg avisos`, card #4417)."""
 from __future__ import annotations
 
