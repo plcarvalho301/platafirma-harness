@@ -45,13 +45,22 @@ _ECOSSISTEMA_POR_ORIGEM = {
     "npm": "npm",
 }
 
+OSV_TAMANHO_LOTE = 500
+OSV_MAX_PAGINAS = 20
+
 _DONO_POR_PREFIXO = {
     "receita:": "ti",
     "stack:harness": "ti",
     "stack:porta": "ti",
+    "stack:core": "ti",
+    "stack:casa-db": "ti",
+    "stack:eventos": "ti",
+    "stack:posto": "ti",
     "stack:rag": "conhecimento",
+    "stack:vault-ontologia": "conhecimento",
     "stack:busca": "ia",
     "stack:motor": "ia",
+    "stack:marcacao": "ia",
     "stack:ui": "engenharia",
     "stack:rastreador": "engenharia",
     "host:": "ti",
@@ -233,25 +242,77 @@ def _alertas_abertos(trilha: Path) -> set[tuple[str, str]]:
     if not trilha.is_file():
         return abertos
     try:
-        for linha in trilha.read_text(encoding="utf-8").splitlines():
-            if not linha.strip():
-                continue
-            ev = json.loads(linha)
-            if ev.get("tipo-de-evento") != "seg.aviso.vulnerabilidade":
-                continue
-            sobre = ev.get("sobre")
-            payload = ev.get("payload")
-            if isinstance(payload, str):
-                try:
-                    payload = json.loads(payload)
-                except ValueError:
-                    payload = {}
-            aviso_id = payload.get("aviso") if isinstance(payload, dict) else None
-            if isinstance(sobre, str) and isinstance(aviso_id, str):
-                abertos.add((aviso_id, sobre))
-    except (OSError, ValueError):
+        linhas = trilha.read_text(encoding="utf-8").splitlines()
+    except OSError:
         return abertos
+    for linha in linhas:
+        if not linha.strip():
+            continue
+        try:
+            ev = json.loads(linha)
+        except ValueError:
+            continue
+        if not isinstance(ev, dict) or ev.get("tipo-de-evento") != "seg.aviso.vulnerabilidade":
+            continue
+        sobre = ev.get("sobre")
+        payload = ev.get("payload")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except ValueError:
+                payload = {}
+        aviso_id = payload.get("aviso") if isinstance(payload, dict) else None
+        if isinstance(sobre, str) and isinstance(aviso_id, str):
+            abertos.add((aviso_id, sobre))
     return abertos
+
+
+def _extrair_severidade(det: dict) -> str:
+    db_spec = det.get("database_specific")
+    if isinstance(db_spec, dict) and isinstance(db_spec.get("severity"), str) and db_spec["severity"].strip():
+        return db_spec["severity"].strip()
+    sev = det.get("severity")
+    if isinstance(sev, list) and sev:
+        primeiro = sev[0]
+        if isinstance(primeiro, dict) and isinstance(primeiro.get("score"), str) and primeiro["score"].strip():
+            return primeiro["score"].strip()
+    return ""
+
+
+def _extrair_aliases(det: dict) -> list[str]:
+    brutos = det.get("aliases")
+    if not isinstance(brutos, list):
+        return []
+    return [a for a in brutos if isinstance(a, str) and a.strip()]
+
+
+def _evento_base(
+    agora: datetime,
+    tipo: str,
+    correlacao: str,
+    sobre: str,
+    payload: dict[str, object],
+) -> dict[str, object]:
+    iso_agora = agora.isoformat().replace("+00:00", "Z")
+    return {
+        "evento-id": _uuid7(agora),
+        "tipo-de-evento": tipo,
+        "correlacao": correlacao,
+        "esfera": "plataforma",
+        "sobre": sobre,
+        "ocorrido-em": iso_agora,
+        "registrado-em": iso_agora,
+        "payload": json.dumps(payload, ensure_ascii=False),
+    }
+
+
+def _registrar_falha_rodada(trilha: Path, erro: str, agora_fn: Callable[[], datetime] = lambda: datetime.now(timezone.utc)) -> None:
+    agora = agora_fn().astimezone(timezone.utc)
+    correlacao = _uuid7(agora)
+    _gravar_eventos(trilha, [
+        _evento_base(agora, "seg.avisos.rodada-iniciada", correlacao, "componente:verbo-seg", {"dependencias_consultadas": 0}),
+        _evento_base(agora, "seg.avisos.rodada-falhou", correlacao, "componente:verbo-seg", {"erro": erro}),
+    ])
 
 
 def _gravar_eventos(trilha: Path, eventos: list[dict]) -> None:
@@ -259,6 +320,38 @@ def _gravar_eventos(trilha: Path, eventos: list[dict]) -> None:
     with trilha.open("a", encoding="utf-8") as fh:
         for ev in eventos:
             fh.write(json.dumps(ev, ensure_ascii=False) + "\n")
+
+
+def _consultar_lote_paginado(
+    consultas: list[dict],
+    consultar_lote: Callable[[list[dict]], list[dict]],
+) -> list[dict]:
+    acumulado: list[dict] = [{"vulns": []} for _ in consultas]
+    pendentes: list[tuple[int, dict]] = list(enumerate(consultas))
+    for _ in range(OSV_MAX_PAGINAS):
+        if not pendentes:
+            break
+        prox: list[tuple[int, dict]] = []
+        for inicio in range(0, len(pendentes), OSV_TAMANHO_LOTE):
+            fatia = pendentes[inicio : inicio + OSV_TAMANHO_LOTE]
+            lote_q = [q for _, q in fatia]
+            res_lote = consultar_lote(lote_q)
+            if not isinstance(res_lote, list) or len(res_lote) != len(fatia):
+                raise ErroBaseAvisos("resposta de querybatch com tamanho incompatível")
+            for (idx, q), res in zip(fatia, res_lote):
+                if not isinstance(res, dict):
+                    continue
+                vulns = res.get("vulns") or []
+                if isinstance(vulns, list):
+                    acumulado[idx]["vulns"].extend(vulns)
+                token = res.get("next_page_token")
+                if isinstance(token, str) and token:
+                    prox.append((idx, {**q, "page_token": token}))
+        pendentes = prox
+    else:
+        if pendentes:
+            raise ErroBaseAvisos("paginação OSV excedeu o limite de páginas")
+    return acumulado
 
 
 def avaliar_avisos(
@@ -279,7 +372,7 @@ def avaliar_avisos(
         "evento-id": _uuid7(agora),
         "tipo-de-evento": "seg.avisos.rodada-iniciada",
         "correlacao": correlacao,
-        "esfera": "operacao",
+        "esfera": "plataforma",
         "sobre": "componente:verbo-seg",
         "ocorrido-em": iso_agora,
         "registrado-em": iso_agora,
@@ -291,7 +384,7 @@ def avaliar_avisos(
             "evento-id": _uuid7(agora),
             "tipo-de-evento": "seg.avisos.rodada-concluida",
             "correlacao": correlacao,
-            "esfera": "operacao",
+            "esfera": "plataforma",
             "sobre": "componente:verbo-seg",
             "ocorrido-em": iso_agora,
             "registrado-em": iso_agora,
@@ -305,9 +398,7 @@ def avaliar_avisos(
         for d in dependencias
     ]
     try:
-        resultados = consultar_lote(consultas)
-        if not isinstance(resultados, list) or len(resultados) != len(dependencias):
-            raise ErroBaseAvisos("resposta de querybatch com tamanho incompatível")
+        resultados = _consultar_lote_paginado(consultas, consultar_lote)
         ids_unicos: list[str] = []
         vistos: set[str] = set()
         for res in resultados:
@@ -324,7 +415,7 @@ def avaliar_avisos(
             "evento-id": _uuid7(agora),
             "tipo-de-evento": "seg.avisos.rodada-falhou",
             "correlacao": correlacao,
-            "esfera": "operacao",
+            "esfera": "plataforma",
             "sobre": "componente:verbo-seg",
             "ocorrido-em": iso_agora,
             "registrado-em": iso_agora,
@@ -347,24 +438,31 @@ def avaliar_avisos(
             ja_abertos.add(chave_dedup)
             det = detalhes.get(vid) or {}
             resumo = str(det.get("summary") or det.get("details") or "")[:240]
+            payload_obj: dict[str, object] = {
+                "aviso": vid,
+                "dependencia": dep.dependencia,
+                "pacote": dep.pacote,
+                "ecossistema": dep.ecossistema,
+                "pino": dep.pino,
+                "resumo": resumo,
+            }
+            aliases = _extrair_aliases(det)
+            if aliases:
+                payload_obj["aliases"] = aliases
+            severidade = _extrair_severidade(det)
+            if severidade:
+                payload_obj["severidade"] = severidade
             alerta = {
                 "evento-id": _uuid7(agora),
                 "tipo-de-evento": "seg.aviso.vulnerabilidade",
                 "correlacao": correlacao,
-                "esfera": "operacao",
+                "esfera": "plataforma",
                 "sobre": dep.dependente,
                 "dono": dep.dono,
                 "prazo": iso_prazo,
                 "ocorrido-em": iso_agora,
                 "registrado-em": iso_agora,
-                "payload": json.dumps({
-                    "aviso": vid,
-                    "dependencia": dep.dependencia,
-                    "pacote": dep.pacote,
-                    "ecossistema": dep.ecossistema,
-                    "pino": dep.pino,
-                    "resumo": resumo,
-                }, ensure_ascii=False),
+                "payload": json.dumps(payload_obj, ensure_ascii=False),
             }
             alertas_novos.append(alerta)
 
@@ -372,7 +470,7 @@ def avaliar_avisos(
         "evento-id": _uuid7(agora),
         "tipo-de-evento": "seg.avisos.rodada-concluida",
         "correlacao": correlacao,
-        "esfera": "operacao",
+        "esfera": "plataforma",
         "sobre": "componente:verbo-seg",
         "ocorrido-em": iso_agora,
         "registrado-em": iso_agora,
@@ -404,12 +502,14 @@ def main(argv: list[str] | None = None) -> int:
     if not olaria_url and olaria_chave and "OLARIA_URL" not in env:
         olaria_url = "http://127.0.0.1:8103"
     if not olaria_url or not olaria_chave:
+        _registrar_falha_rodada(trilha, "OLARIA_URL ou OLARIA_CHAVE ausente")
         print("seg avisos: OLARIA_URL ou OLARIA_CHAVE ausente", file=sys.stderr)
         return 5
 
     try:
         deps = coletar_dependencias_da_olaria(olaria_url, olaria_chave, fim=fim, teto_bytes=teto_bytes)
     except ErroBaseAvisos as erro:
+        _registrar_falha_rodada(trilha, f"falha ao ler dependências da Olaria: {erro}")
         print(f"seg avisos: falha ao ler dependências da Olaria ({erro})", file=sys.stderr)
         return 5
 

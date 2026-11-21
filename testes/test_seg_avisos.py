@@ -66,16 +66,25 @@ def test_aviso_em_pacote_pinado_levanta_alerta_com_dono_e_prazo_e_deduplica(tmp_
     rc, alertas = av.avaliar_avisos(
         deps,
         consultar_lote=lambda qs: [{"vulns": [{"id": "PYSEC-2026-0001"}]}],
-        consultar_aviso=lambda vid: {"id": vid, "summary": "Falha de teste em mcp 1.28.1"},
+        consultar_aviso=lambda vid: {
+            "id": vid,
+            "summary": "Falha de teste em mcp 1.28.1",
+            "aliases": ["CVE-2026-99999"],
+            "database_specific": {"severity": "HIGH"},
+        },
         trilha=trilha,
         agora_fn=lambda: agora,
     )
     assert rc == 0
     assert len(alertas) == 1
+    assert alertas[0]["esfera"] == "plataforma"
     assert alertas[0]["sobre"] == "receita:venv-porta"
     assert alertas[0]["dono"] == "ti"
     assert alertas[0]["prazo"] == "2026-12-20T12:00:00Z"
-    assert json.loads(alertas[0]["payload"])["aviso"] == "PYSEC-2026-0001"
+    payload = json.loads(alertas[0]["payload"])
+    assert payload["aviso"] == "PYSEC-2026-0001"
+    assert payload["aliases"] == ["CVE-2026-99999"]
+    assert payload["severidade"] == "HIGH"
 
     # Segunda rodada com o mesmo aviso sobre o mesmo dependente não duplica
     rc2, alertas2 = av.avaliar_avisos(
@@ -197,6 +206,7 @@ def test_cli_seg_avisos_aviso_em_pacote_pinado_via_loopback(tmp_path):
         assert proc.returncode == 0, proc.stderr
         saida = json.loads(proc.stdout)
         assert saida["total"] == 1
+        assert saida["alertas"][0]["esfera"] == "plataforma"
         assert saida["alertas"][0]["sobre"] == "receita:venv-porta"
         assert saida["alertas"][0]["dono"] == "ti"
         assert saida["alertas"][0]["prazo"]
@@ -204,3 +214,61 @@ def test_cli_seg_avisos_aviso_em_pacote_pinado_via_loopback(tmp_path):
     finally:
         srv_olaria.shutdown()
         srv_osv.shutdown()
+
+
+def test_paginacao_osv_next_page_token_e_linha_corrompida_na_trilha(tmp_path):
+    trilha = tmp_path / "avisos.jsonl"
+    trilha.write_text("{linha-quebrada\n", encoding="utf-8")
+    deps = [
+        av.DependenciaPinada(
+            dependente="receita:venv-porta",
+            dono="ti",
+            dependencia="dependencia-externa:pypi.org:mcp",
+            ecossistema="PyPI",
+            pacote="mcp",
+            versao="1.28.1",
+            pino="1.28.1",
+        )
+    ]
+
+    chamadas: list[list[dict]] = []
+
+    def consultar_lote(qs: list[dict]) -> list[dict]:
+        chamadas.append(qs)
+        if len(chamadas) == 1:
+            return [{"vulns": [{"id": "OSV-PAG-1"}], "next_page_token": "tok-2"}]
+        assert qs[0].get("page_token") == "tok-2"
+        return [{"vulns": [{"id": "OSV-PAG-2"}]}]
+
+    rc, alertas = av.avaliar_avisos(
+        deps,
+        consultar_lote=consultar_lote,
+        consultar_aviso=lambda vid: {"id": vid, "summary": f"Resumo {vid}"},
+        trilha=trilha,
+    )
+    assert rc == 0
+    assert len(chamadas) == 2
+    assert {json.loads(a["payload"])["aviso"] for a in alertas} == {"OSV-PAG-1", "OSV-PAG-2"}
+
+
+def test_cli_olaria_fora_do_ar_sai_5_e_registra_falha_na_trilha(tmp_path):
+    env = dict(os.environ)
+    env.update({
+        "OLARIA_URL": "http://127.0.0.1:1",
+        "OLARIA_CHAVE": "chave-teste",
+        "SEG_LOG_DIR": str(tmp_path),
+    })
+    proc = subprocess.run(
+        [str(RAIZ / "bin" / "seg"), "avisos"],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 5
+    linhas = [json.loads(l) for l in (tmp_path / "avisos.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert [e["tipo-de-evento"] for e in linhas] == [
+        "seg.avisos.rodada-iniciada",
+        "seg.avisos.rodada-falhou",
+    ]
+    assert all(e["esfera"] == "plataforma" for e in linhas)
