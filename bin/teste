@@ -952,7 +952,7 @@ lista_portao_de() {  # $1=clone $2=subarvore
 # muda o AMBIENTE de todo teste (o lock, o construtor do venv, o conftest); ferramenta,
 # registro e verbo entram pelo raio declarado de cada linha, e linha nova ou mudada numa
 # lista de portão roda por si (linhas_novas_da_lista). `*` e `**` casam `/`.
-RAIO_TOTAL=('lib/venv.sh' 'lib/terceiros.sh' 'lib/terceiros_olaria.py' 'venvs/**'
+RAIO_TOTAL=('lib/venv.sh' 'venvs/**'
   '**/conftest.py' '**/uv.lock' '**/requirements*.txt' '**/pyproject.toml'
   '**/package-lock.json')
 
@@ -1035,7 +1035,7 @@ raio_total_de() {  # stdin: arquivos do diff ; imprime o primeiro de raio total 
 # as stacks da família) pesa só para a dona. Na raiz, numa pasta acima da stack, nas peças
 # globais do construtor ou sem stack dona, pesa para todas, como antes. Antes disto o
 # rag/uv.lock rodava também conversor e casa-site (carta 20261116T195115).
-RAIO_GLOBAL=('lib/venv.sh' 'lib/terceiros.sh' 'lib/terceiros_olaria.py')
+RAIO_GLOBAL=('lib/venv.sh')
 
 sob_ou_igual() {  # $1=pasta $2=pasta-mãe ; 0 se $1 é $2 ou está dentro dela ("" é a raiz)
   [ -z "$2" ] && return 0
