@@ -13,10 +13,7 @@ _LIB_DIR = _HARNESS_DIR / "lib"
 
 
 def _casa_raiz(tmp_path: Path) -> Path:
-    candidato = Path(__file__).resolve().parents[3]
-    if (candidato / "instancias" / "persona").is_dir():
-        return candidato
-    # Fixture mínima de casa nova quando o teste roda no repositório platafirma-harness isolado.
+    # Fixture mínima de casa nova, sempre: o teste não depende de onde a árvore foi montada.
     (tmp_path / "instancias" / "persona").mkdir(parents=True)
     (tmp_path / "instancias" / "chapeu").mkdir(parents=True)
     (tmp_path / "instancias" / "cultura").mkdir(parents=True)

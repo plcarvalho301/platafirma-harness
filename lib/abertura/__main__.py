@@ -303,6 +303,7 @@ def _ato_abrir(entrada: dict[str, Any]) -> tuple[dict[str, Any], int]:
             "total_guardados": pauta.total_guardados,
             "fora_da_ocasiao": pauta.fora_da_ocasiao,
             "cartas": len(pauta.cartas),
+            "reforco": list(pauta.reforco),
             "conteudo": pauta.conteudo,
         },
         "avisos": avisos_unicos,
