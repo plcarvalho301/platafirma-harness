@@ -1630,3 +1630,160 @@ def test_versao_nao_publicada_sai_1_e_nomeia(tmp_path: Path, versao_pedida: str)
     assert proc.returncode == 1
     assert versao_pedida in proc.stderr
 
+
+def test_esteira_varios_erraticos_na_rodada_abrem_no_maximo_um_dt_e_nao_reabrem(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("PF_ESTEIRA_COLETOR_SERVIDO", str(Path(__file__).resolve().parents[1] / "coletor.py"))
+    codigo = (
+        "# componente: suite\n"
+        "def test_e1():\n    assert True\n"
+        "def test_e2():\n    assert True\n"
+        "def test_e3():\n    assert True\n"
+    )
+    spec = {
+        "cenario": "tres_erraticos_mesma_rodada",
+        "arquivos": {"suite/testes/test_suite.py": codigo},
+        "mudados": ["suite/testes/test_suite.py"],
+        "roteiro_exec": {
+            "suite/testes/test_suite.py::test_e1": [False, True],
+            "suite/testes/test_suite.py::test_e2": [False, True],
+            "suite/testes/test_suite.py::test_e3": [False, True],
+        },
+    }
+    ver, balde, _ = _executar_cenario_esteira(tmp_path, spec)
+    assert ver.estado == "verde"
+    assert len(ver.casos_quarentena) == 3
+    assert len(ver.debitos_abertos) == 1
+    assert len(balde.listar_abertas()) == 1
+    dt_texto = ver.debitos_abertos[0]
+    assert "3 casos na rodada" in dt_texto
+    assert "test_e1" in dt_texto and "test_e2" in dt_texto and "test_e3" in dt_texto
+
+    spec_repetido = dict(spec)
+    spec_repetido["cenario"] = "tres_erraticos_segunda_rodada"
+    spec_repetido["balde"] = balde
+    ver2, _, _ = _executar_cenario_esteira(tmp_path, spec_repetido)
+    assert ver2.debitos_abertos == ()
+    assert len(balde.listar_abertas()) == 1
+
+
+def test_coletor_agrega_mais_de_dez_erraticos_em_um_dt_com_truncamento(tmp_path: Path):
+    from suite.admissao import ResultadoAdmissao  # noqa: I001
+    from suite.coletor import CasoSelecionado, DubleBalde, ResultadoBrutoCaso, julgar_e_gravar
+
+    casos = [
+        CasoSelecionado(
+            id_caso=f"rag/tests/test_x.py::test_caso_{i}",
+            arquivo="rag/tests/test_x.py",
+            nome_caso=f"test_caso_{i}",
+            componente="componente:x",
+            classe="teste-de-comportamento",
+            stack="rag",
+        )
+        for i in range(15)
+    ]
+    brutos = {
+        c.id_caso: ResultadoBrutoCaso(id_caso=c.id_caso, aprovado=False, tentativas=2, passou_em_repeticao=True)
+        for c in casos
+    }
+    balde = DubleBalde()
+    ver = julgar_e_gravar(
+        repositorio="platafirma-conhecimento",
+        arvore_mudanca="aaaa1111bbbb",
+        arvore_main="cccc2222dddd",
+        admissao=ResultadoAdmissao(estado="verde", codigo_saida=0, recusas=(), fichas_ensaiadas=()),
+        casos_selecionados=casos,
+        resultados_brutos=brutos,
+        balde=balde,
+        pasta_vereditos=tmp_path / "vereditos",
+    )
+    assert len(ver.debitos_abertos) == 1
+    assert len(balde.listar_abertas()) == 1
+    assert "15 casos na rodada" in ver.debitos_abertos[0]
+    assert "(+5)" in ver.debitos_abertos[0]
+
+
+def _rodar_esteira_com_executor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    nome_pasta: str,
+    corpo_teste: str,
+    executor: Any,
+) -> tuple[Any, Any]:
+    from suite.esteira import DubleBalde, rodar
+
+    monkeypatch.setenv("PF_ESTEIRA_COLETOR_SERVIDO", str(Path(__file__).resolve().parents[1] / "coletor.py"))
+    arvore = tmp_path / nome_pasta
+    pasta = arvore / "suite" / "testes"
+    pasta.mkdir(parents=True)
+    (pasta / "test_suite.py").write_text(corpo_teste, encoding="utf-8")
+    leitor = DubleLeitorOlaria(
+        fichas=[
+            {
+                "classe": "componente",
+                "chave": "componente:suite",
+                "dados": {"caminho": "suite"},
+                "ligacoes": {"versionado-em": "repositorio:repo-prova"},
+            }
+        ]
+    )
+    ensaiador = DubleOlaria(fichas={"componente:suite": "componente"})
+    balde = DubleBalde()
+    ver = rodar(
+        "repo-prova",
+        arvore=arvore,
+        mudanca="aaa1111",
+        base="bbb2222",
+        arquivos_mudados=["suite/testes/test_suite.py"],
+        leitor=leitor,
+        ensaiador=ensaiador,
+        executor_isolado=executor,
+        balde=balde,
+        pasta_vereditos=tmp_path / "vereditos",
+    )
+    return ver, balde
+
+
+def test_esteira_falha_de_lote_nao_repete_nem_abre_dt_erratico(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    chamadas: list[list[str]] = []
+
+    def executor_timeout(_arvore: Path, ids: list[str]) -> dict[str, dict[str, Any]]:
+        chamadas.append(list(ids))
+        if len(ids) > 1:
+            return {
+                c: {"aprovado": False, "falha_lote": True, "saida": "execução isolada terminou com status 124"}
+                for c in ids
+            }
+        return {c: {"aprovado": True, "saida": ""} for c in ids}
+
+    corpo = "# componente: suite\ndef test_a():\n    assert True\ndef test_b():\n    assert True\n"
+    ver, balde = _rodar_esteira_com_executor(tmp_path, monkeypatch, "lote_timeout", corpo, executor_timeout)
+    assert len(chamadas) == 1
+    assert ver.estado == "vermelho"
+    assert ver.casos_quarentena == ()
+    assert ver.debitos_abertos == ()
+    assert balde.listar_abertas() == []
+
+
+def test_esteira_falha_em_massa_acima_do_teto_nao_repete_nem_abre_dt_erratico(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    chamadas: list[list[str]] = []
+
+    def executor_massa(_arvore: Path, ids: list[str]) -> dict[str, dict[str, Any]]:
+        chamadas.append(list(ids))
+        ok = len(ids) == 1
+        return {c: {"aprovado": ok, "saida": "" if ok else "falha transitoria"} for c in ids}
+
+    corpo = "# componente: suite\n" + "".join(f"def test_m{i}():\n    assert True\n" for i in range(7))
+    ver, balde = _rodar_esteira_com_executor(tmp_path, monkeypatch, "falha_em_massa", corpo, executor_massa)
+    assert len(chamadas) == 1
+    assert ver.estado == "vermelho"
+    assert len(ver.casos_reprovados) == 7
+    assert ver.casos_quarentena == ()
+    assert ver.debitos_abertos == ()
+    assert balde.listar_abertas() == []
+

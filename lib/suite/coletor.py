@@ -18,6 +18,8 @@ PRAZO_QUARENTENA_DIAS = 30
 ESTADOS_VEREDITO = frozenset({"verde", "vermelho", "nao-medido"})
 PREFIXO_QUARENTENA = "errático: "
 PREFIXO_QUARENTENA_ASCII = "erratico: "
+MAX_DEBITOS_POR_RODADA = 1
+_MAX_CASOS_NO_TEXTO_DT = 10
 _RE_IDADE_DIAS = re.compile(r"^(\d+)d?$")
 _MAX_TAMANHO_PREFIXO_VERBO = 25
 _COLUNAS_TABELA_DT = 4
@@ -577,6 +579,54 @@ def _classificar_falha_caso(
     acum.reprovados.append(caso.id_caso)
 
 
+def _formatar_lista_casos_dt(itens: Sequence[str], limite: int = _MAX_CASOS_NO_TEXTO_DT) -> str:
+    visiveis = ", ".join(itens[:limite])
+    if len(itens) > limite:
+        return f"{visiveis} (+{len(itens) - limite})"
+    return visiveis
+
+
+def _agregar_debitos_da_rodada(
+    debitos_pendentes: Sequence[tuple[str, str, str, str]],
+    abertas: Sequence[LinhaBalde],
+    *,
+    repositorio: str,
+) -> list[tuple[str, str, str, str]]:
+    unicos: list[tuple[str, str, str, str]] = []
+    vistos: set[str] = set()
+    for item in debitos_pendentes:
+        texto = item[0]
+        if texto in vistos or tem_debito_aberto_com_comeco(texto, abertas):
+            continue
+        vistos.add(texto)
+        unicos.append(item)
+
+    if len(unicos) <= 1:
+        return unicos
+
+    todos_erraticos = all(t.startswith(PREFIXO_QUARENTENA) for t, _, _, _ in unicos)
+    arquivos = sorted({arq for _, arq, _, _ in unicos if arq})
+    arquivo_rel = arquivos[0] if len(arquivos) == 1 else ""
+    stack = unicos[0][3] or "harness"
+
+    if todos_erraticos:
+        prefixo_lote = f"{PREFIXO_QUARENTENA}{repositorio} ("
+        if tem_debito_aberto_com_comeco(prefixo_lote, abertas):
+            return []
+        casos = [t.removeprefix(PREFIXO_QUARENTENA) for t, _, _, _ in unicos]
+        texto_lote = f"{prefixo_lote}{len(casos)} casos na rodada): {_formatar_lista_casos_dt(casos)}"
+        esperado_lote = f"os {len(casos)} casos passam de forma determinística sem falhar na mesma árvore"
+        return [(texto_lote, arquivo_rel, esperado_lote, stack)]
+
+    prefixo_lote = f"esteira {repositorio} ("
+    if tem_debito_aberto_com_comeco(prefixo_lote, abertas):
+        return []
+    textos = [t for t, _, _, _ in unicos]
+    texto_lote = f"{prefixo_lote}{len(textos)} falhas fora de bloqueio na rodada): {_formatar_lista_casos_dt(textos)}"
+    esperado_lote = f"os {len(textos)} casos passam de forma determinística na rodada da esteira"
+    return [(texto_lote, arquivo_rel, esperado_lote, stack)]
+
+
 def _admitir_debitos_pendentes(
     cliente_balde: Any,
     acum: _AcumuladorJulgamento,
@@ -586,16 +636,18 @@ def _admitir_debitos_pendentes(
     data_medida: str,
 ) -> list[str]:
     debitos_abertos: list[str] = []
-    vistos: set[str] = set()
-    for texto, arquivo_rel, esperado, stack in acum.debitos_pendentes:
-        if texto in vistos or tem_debito_aberto_com_comeco(texto, acum.abertas):
-            continue
-        vistos.add(texto)
+    agregados = _agregar_debitos_da_rodada(
+        acum.debitos_pendentes,
+        acum.abertas,
+        repositorio=repositorio,
+    )
+    for texto, arquivo_rel, esperado, stack in agregados[:MAX_DEBITOS_POR_RODADA]:
+        raio = f"{repositorio}@{arquivo_rel}" if arquivo_rel else repositorio
         nova = cliente_balde.admitir(
             texto,
             medido_em=data_medida,
             evidencia=f"esteira rodar {repositorio} (arvore {arvore_mudanca[:12]})",
-            raio=f"{repositorio}@{arquivo_rel}",
+            raio=raio,
             esperado=esperado,
             stack=stack or "harness",
         )

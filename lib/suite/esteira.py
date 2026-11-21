@@ -43,6 +43,7 @@ from suite.vinculo import CasoTeste, VinculoArquivo, ler_vinculo
 
 LIB_RAIZ = Path(__file__).resolve().parents[1]
 MAX_REPETICOES_ERRATICO = 2
+MAX_CASOS_REPETICAO_ERRATICO = 5
 _MIN_LEN_HASH = 7
 _MIN_COLUNAS_DOCKER = 2
 _SAIDA_NAO_MEDIDO = 3
@@ -139,7 +140,7 @@ def _rodar_casos_py_lote(raiz: Path, casos_py: list[str], py_path: str, saida_di
                 return out
         except Exception:
             pass
-    return {c: {"aprovado": False, "saida": saida[-2000:]} for c in casos_py}
+    return {c: {"aprovado": False, "falha_lote": True, "saida": saida[-2000:]} for c in casos_py}
 
 def _rodar_caso_script(raiz: Path, runner: str, id_caso: str) -> dict:
     rel_arq = id_caso.split("::", 1)[0]
@@ -1062,13 +1063,18 @@ class ExecutorIsoladoUnidade:
 
     def __init__(
         self,
-        prazo_s: float = 180.0,
+        prazo_s: float | None = None,
         venv_pytest: Path | None = None,
         casos_com_exige: Iterable[str] = (),
     ) -> None:
         self.prazo_s = prazo_s
         self.venv_pytest = venv_pytest
         self.casos_com_exige = set(casos_com_exige)
+
+    def _prazo_lote(self, qtd_casos: int) -> float:
+        if self.prazo_s is not None:
+            return self.prazo_s
+        return max(180.0, min(600.0, qtd_casos * 4.0 + 30.0))
 
     def __call__(self, arvore: Path, ids_casos: list[str]) -> dict[str, dict[str, Any]]:
         if not ids_casos:
@@ -1104,6 +1110,7 @@ class ExecutorIsoladoUnidade:
         py_bin = venv / "bin" / "python"
         if not py_bin.exists():
             py_bin = Path(sys.executable).resolve()
+        prazo = self._prazo_lote(len(ids_casos))
         with tempfile.TemporaryDirectory(prefix="esteira-exige-", ignore_cleanup_errors=True) as tmp_dir:
             saida_dir = Path(tmp_dir)
             (saida_dir / "tmp").mkdir(exist_ok=True)
@@ -1123,29 +1130,47 @@ class ExecutorIsoladoUnidade:
                 if not k.startswith(("PF_", "OLARIA_", "CASA_PG_", "POSTGRES_"))
             }
             env.setdefault("DOCKER_HOST", f"unix:///run/user/{os.getuid()}/docker.sock")
-            proc = subprocess.run(
-                [str(py_bin), str(saida_dir / "_runner.py"), str(saida_dir / "pedido.json"), str(saida_dir / nome_res)],
-                cwd=str(arvore.resolve()),
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=self.prazo_s,
-                check=False,
-            )
+            try:
+                proc = subprocess.run(
+                    [str(py_bin), str(saida_dir / "_runner.py"), str(saida_dir / "pedido.json"), str(saida_dir / nome_res)],
+                    cwd=str(arvore.resolve()),
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=prazo,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                return {
+                    c: {
+                        "aprovado": False,
+                        "falha_lote": True,
+                        "saida": f"execução com exige estourou o prazo ({prazo:.0f}s)",
+                    }
+                    for c in ids_casos
+                }
             arq_res = saida_dir / nome_res
             if proc.returncode != 0 or not arq_res.is_file():
                 det = ((proc.stderr or "") + "\n" + (proc.stdout or "")).strip()[-500:]
                 return {
-                    c: {"aprovado": False, "saida": f"execução com exige terminou com status {proc.returncode}: {det}"}
+                    c: {
+                        "aprovado": False,
+                        "falha_lote": True,
+                        "saida": f"execução com exige terminou com status {proc.returncode}: {det}",
+                    }
                     for c in ids_casos
                 }
             dados = json.loads(arq_res.read_text(encoding="utf-8"))
             mapa_casos = dados.get("casos") if isinstance(dados, dict) else {}
             return {
                 c: (
-                    {"aprovado": bool(mapa_casos[c].get("aprovado", False)), "saida": str(mapa_casos[c].get("saida") or "")}
+                    {
+                        "aprovado": bool(mapa_casos[c].get("aprovado", False)),
+                        "falha_lote": bool(mapa_casos[c].get("falha_lote", False)),
+                        "saida": str(mapa_casos[c].get("saida") or ""),
+                    }
                     if isinstance(mapa_casos.get(c), dict)
-                    else {"aprovado": False, "saida": "caso sem saída no lote com exige"}
+                    else {"aprovado": False, "falha_lote": True, "saida": "caso sem saída no lote com exige"}
                 )
                 for c in ids_casos
             }
@@ -1155,6 +1180,7 @@ class ExecutorIsoladoUnidade:
         py_bin = venv / "bin" / "python"
         if not py_bin.exists():
             py_bin = Path(sys.executable).resolve()
+        prazo = self._prazo_lote(len(ids_casos))
 
         with tempfile.TemporaryDirectory(prefix="esteira-isolada-") as tmp_dir:
             saida_dir = Path(tmp_dir)
@@ -1180,18 +1206,25 @@ class ExecutorIsoladoUnidade:
                 ambiente=venv,
                 montagens_ro=_montagens_release_ro(),
                 rede=False,
-                prazo=self.prazo_s,
+                prazo=prazo,
             )
             arq_res = saida_dir / nome_res
             if status != 0 or not arq_res.is_file():
                 return {
-                    c: {"aprovado": False, "saida": f"execução isolada terminou com status {status}"}
+                    c: {
+                        "aprovado": False,
+                        "falha_lote": True,
+                        "saida": f"execução isolada terminou com status {status}",
+                    }
                     for c in ids_casos
                 }
             try:
                 dados = json.loads(arq_res.read_text(encoding="utf-8"))
             except (OSError, ValueError):
-                return {c: {"aprovado": False, "saida": "resultado isolado ilegível"} for c in ids_casos}
+                return {
+                    c: {"aprovado": False, "falha_lote": True, "saida": "resultado isolado ilegível"}
+                    for c in ids_casos
+                }
 
             mapa_casos = dados.get("casos") if isinstance(dados, dict) else {}
             if not isinstance(mapa_casos, dict):
@@ -1203,11 +1236,22 @@ class ExecutorIsoladoUnidade:
                 if isinstance(item, dict):
                     saida_final[c] = {
                         "aprovado": bool(item.get("aprovado", False)),
+                        "falha_lote": bool(item.get("falha_lote", False)),
                         "saida": str(item.get("saida") or ""),
                     }
                 else:
-                    saida_final[c] = {"aprovado": False, "saida": "caso sem saída no lote isolado"}
+                    saida_final[c] = {"aprovado": False, "falha_lote": True, "saida": "caso sem saída no lote isolado"}
             return saida_final
+
+
+def _extrair_resultado_item(item: Any) -> tuple[bool, str, bool]:
+    if isinstance(item, dict):
+        return (
+            bool(item.get("aprovado", False)),
+            str(item.get("saida") or ""),
+            bool(item.get("falha_lote", False)),
+        )
+    return bool(item), "", False
 
 
 def _executar_com_repeticao_erratico(
@@ -1218,6 +1262,7 @@ def _executar_com_repeticao_erratico(
     **opcoes: Any,
 ) -> dict[str, ResultadoBrutoCaso]:
     max_repeticoes = int(opcoes.get("max_repeticoes", MAX_REPETICOES_ERRATICO))
+    max_casos_repeticao = int(opcoes.get("max_casos_repeticao", MAX_CASOS_REPETICAO_ERRATICO))
     prazo_quarentena_dias = int(opcoes.get("prazo_quarentena_dias", PRAZO_QUARENTENA_DIAS))
     ids = [c.id_caso for c in casos]
     if not ids:
@@ -1225,16 +1270,10 @@ def _executar_com_repeticao_erratico(
 
     primeira_rodada = executor(arvore, ids)
     resultados: dict[str, ResultadoBrutoCaso] = {}
+    candidatos: list[tuple[CasoSelecionado, str]] = []
 
     for caso in casos:
-        item = primeira_rodada.get(caso.id_caso)
-        if isinstance(item, dict):
-            aprovado = bool(item.get("aprovado", False))
-            saida = str(item.get("saida") or "")
-        else:
-            aprovado = bool(item)
-            saida = ""
-
+        aprovado, saida, falha_lote = _extrair_resultado_item(primeira_rodada.get(caso.id_caso))
         if aprovado:
             resultados[caso.id_caso] = ResultadoBrutoCaso(
                 id_caso=caso.id_caso,
@@ -1246,7 +1285,7 @@ def _executar_com_repeticao_erratico(
             continue
 
         est_q = estado_quarentena_caso(caso.id_caso, abertas_balde, prazo_dias=prazo_quarentena_dias)
-        if caso.fora_do_alcance_incidente or est_q in ("ativa", "vencida") or max_repeticoes <= 0:
+        if falha_lote or caso.fora_do_alcance_incidente or est_q in ("ativa", "vencida") or max_repeticoes <= 0:
             resultados[caso.id_caso] = ResultadoBrutoCaso(
                 id_caso=caso.id_caso,
                 aprovado=False,
@@ -1256,13 +1295,26 @@ def _executar_com_repeticao_erratico(
             )
             continue
 
+        candidatos.append((caso, saida))
+
+    if len(candidatos) > max_casos_repeticao:
+        for caso, saida in candidatos:
+            resultados[caso.id_caso] = ResultadoBrutoCaso(
+                id_caso=caso.id_caso,
+                aprovado=False,
+                tentativas=1,
+                passou_em_repeticao=False,
+                saida=saida,
+            )
+        return resultados
+
+    for caso, saida in candidatos:
         tentativas = 1
         passou_rep = False
         for _ in range(max_repeticoes):
             tentativas += 1
             rep = executor(arvore, [caso.id_caso])
-            item_rep = rep.get(caso.id_caso)
-            ok_rep = bool(item_rep.get("aprovado", False)) if isinstance(item_rep, dict) else bool(item_rep)
+            ok_rep, _, _ = _extrair_resultado_item(rep.get(caso.id_caso))
             if ok_rep:
                 passou_rep = True
                 break
