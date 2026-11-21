@@ -53,9 +53,12 @@ def parse_patch(patch_texto: str) -> list[dict[str, Any]]:
             new_p = linhas[i + 1][4:].strip().split("\t")[0].removeprefix("b/")
             i += 2
             hunks: list[dict[str, Any]] = []
+            hunks_invalidos: list[str] = []
             while i < len(linhas) and not linhas[i].startswith("--- "):
                 m = _RE_HUNK.match(linhas[i])
                 if not m:
+                    if linhas[i].startswith("@@"):
+                        hunks_invalidos.append(linhas[i].strip())
                     i += 1
                     continue
                 old_start = int(m.group(1))
@@ -94,7 +97,14 @@ def parse_patch(patch_texto: str) -> list[dict[str, Any]]:
                         "lines": hunk_lines,
                     }
                 )
-            arquivos.append({"old_path": old_p, "new_path": new_p, "hunks": hunks})
+            arquivos.append(
+                {
+                    "old_path": old_p,
+                    "new_path": new_p,
+                    "hunks": hunks,
+                    "hunks_invalidos": hunks_invalidos,
+                }
+            )
         else:
             i += 1
     return arquivos
@@ -103,9 +113,16 @@ def parse_patch(patch_texto: str) -> list[dict[str, Any]]:
 def aplicar_hunks(
     atual: str, hunks: list[dict[str, Any]], novo_arquivo: bool
 ) -> tuple[str | None, str | None]:
+    if not hunks:
+        return None, "patch sem hunks válidos"
     linhas = [] if (novo_arquivo and atual == "") else atual.splitlines(keepends=True)
     offset = 0
     for h in hunks:
+        if not h.get("lines"):
+            return (
+                None,
+                f"patch: hunk @@ -{h['old_start']} +{h['new_start']} @@ vazio ou malformado",
+            )
         esperadas: list[str] = []
         novas: list[str] = []
         ultimo_tipo = ""
@@ -182,15 +199,28 @@ def escrever(
     p = p_alvo
 
     if patch:
+        dica_patch = "use unified diff com números de linha (@@ -l,c +l,c @@) ou o parâmetro trecho"
         arquivos = parse_patch(patch)
         if not arquivos:
-            return envelope_erro(2, "patch sem hunks válidos", path=str(p))
+            return envelope_erro(2, "patch sem hunks válidos", proximo=dica_patch, path=str(p))
         entry = arquivos[0]
+        if entry.get("hunks_invalidos"):
+            cab = entry["hunks_invalidos"][0]
+            return envelope_erro(
+                2,
+                f"patch com cabeçalho de hunk inválido ({cab})",
+                proximo=dica_patch,
+                path=str(p),
+            )
+        if not entry["hunks"]:
+            return envelope_erro(2, "patch sem hunks válidos", proximo=dica_patch, path=str(p))
         novo_arq = entry["old_path"] == "/dev/null"
         atual = "" if novo_arq or not p.exists() else p.read_text(encoding="utf-8")
         novo_txt, err = aplicar_hunks(atual, entry["hunks"], novo_arq)
         if err or novo_txt is None:
             return envelope_erro(1, err or "falha ao aplicar patch", path=str(p))
+        if not novo_arq and novo_txt == atual:
+            return envelope_erro(1, "patch não alterou o arquivo", path=str(p))
         err_fin = _validar_final(novo_txt, path_str=str(p), exige_shebang=exige_shebang)
         if err_fin:
             return err_fin

@@ -58,6 +58,52 @@ def test_write_file_inteiro_trecho_e_patch_por_processo(tmp_path: Path):
     assert "linha 2-patch" in alvo.read_text(encoding="utf-8")
 
 
+def test_write_file_patch_sem_numeros_de_linha_ou_sem_efeito_falha_dt1333(tmp_path: Path):
+    """DT 1333: patch que não aplica (sem números de linha, sem hunks ou sem efeito) falha e não diz substituiu."""
+    inst = tmp_path / "inst"
+    alvo = inst / "var" / "tmp" / "ordem-teste" / "evento.md"
+    ctx = {"instancia": str(inst), "ordem_id": "ordem-teste"}
+    original = "linha 1\nlinha 2\nlinha 3\n"
+    rc, res = _chamar(BIN_WRITE, {**ctx, "path": str(alvo), "content": original})
+    assert rc == 0 and res["ok"] is True
+
+    # 1. Diff unificado sem números de linha (@@ @@)
+    patch_sem_num = "--- a/evento.md\n+++ b/evento.md\n@@ @@\n linha 1\n-linha 2\n+linha DOIS\n linha 3\n"
+    rc, res = _chamar(BIN_WRITE, {**ctx, "path": str(alvo), "patch": patch_sem_num})
+    assert rc == 2 and not res.get("ok") and "substituiu" not in res
+    assert "cabeçalho de hunk inválido" in res["falta"]
+    assert "@@ -l,c +l,c @@" in res["proximo"]
+    assert alvo.read_text(encoding="utf-8") == original
+
+    # 2. Cabeçalhos ---/+++ sem nenhum hunk @@
+    patch_sem_hunk = "--- a/evento.md\n+++ b/evento.md\n-linha 2\n+linha DOIS\n"
+    rc, res = _chamar(BIN_WRITE, {**ctx, "path": str(alvo), "patch": patch_sem_hunk})
+    assert rc == 2 and not res.get("ok") and "substituiu" not in res
+    assert alvo.read_text(encoding="utf-8") == original
+
+    # 3. Um hunk válido misturado com um hunk sem números de linha: falha tudo sem aplicar parcial
+    patch_misto = (
+        "--- a/evento.md\n+++ b/evento.md\n"
+        "@@ -1,3 +1,3 @@\n linha 1\n-linha 2\n+linha DOIS\n linha 3\n"
+        "@@ @@\n-linha 3\n+linha TRES\n"
+    )
+    rc, res = _chamar(BIN_WRITE, {**ctx, "path": str(alvo), "patch": patch_misto})
+    assert rc == 2 and not res.get("ok") and "substituiu" not in res
+    assert alvo.read_text(encoding="utf-8") == original
+
+    # 4. Hunk com cabeçalho válido mas corpo malformado (sem prefixos de diff)
+    patch_corpo_invalido = "--- a/evento.md\n+++ b/evento.md\n@@ -1,3 +1,3 @@\nlinha sem prefixo\n"
+    rc, res = _chamar(BIN_WRITE, {**ctx, "path": str(alvo), "patch": patch_corpo_invalido})
+    assert rc == 1 and not res.get("ok") and "substituiu" not in res
+    assert alvo.read_text(encoding="utf-8") == original
+
+    # 5. Patch válido que não altera nada no arquivo existente
+    patch_noop = "--- a/evento.md\n+++ b/evento.md\n@@ -1,3 +1,3 @@\n linha 1\n linha 2\n linha 3\n"
+    rc, res = _chamar(BIN_WRITE, {**ctx, "path": str(alvo), "patch": patch_noop})
+    assert rc == 1 and not res.get("ok") and "substituiu" not in res
+    assert alvo.read_text(encoding="utf-8") == original
+
+
 def test_write_file_fita_sem_turno_vale_a_sessao_dt958_dt962(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Sem turno na superfície (ordem_id ausente), a fita é a sessão que a porta exporta em PF_SESSAO."""
     inst = tmp_path / "inst"
