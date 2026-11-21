@@ -1,3 +1,4 @@
+# componente: componente:verbo-curar
 """Card #3958: `curar --marcar-secoes --faixas-modelo <pasta>` lê o seccionamento feito fora daqui.
 
 Prova só o lado do verbo: a pasta vira impressão → faixas de nível 1 em diante, com byte, título e

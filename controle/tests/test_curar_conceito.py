@@ -1,3 +1,4 @@
+# componente: componente:verbo-curar
 """DT #315: `curar --conceito <slug>` sem `--pai` (criação de conceito isolado / raiz).
 
 Verifica que:

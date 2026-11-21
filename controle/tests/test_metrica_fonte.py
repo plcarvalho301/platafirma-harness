@@ -1,3 +1,4 @@
+# componente: componente:verbo-metrica
 """metrica com fonte (card #3353): `dia` e `verbos` leem a partição `log` para todo dia fechado, `turnos` lê D5.8, e
 `eventos`, `ate-acerto`, `tateio`, `casos` e `comportamento` seguem no bruto, com «fonte: bruto» (D5.9).
 

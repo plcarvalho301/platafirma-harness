@@ -1,3 +1,4 @@
+# componente: componente:verbo-teste
 """Contrato do verbo bin/teste conforme a spec (card #3152, passo 9).
 
 Cobre:

@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`detector-morte` (bin/_infra/detector-morte): a morte por limite de memória no instante do kernel, um evento por morte
 (spec eixos-do-host R4 e R9; spec banco-de-eventos-de-plataforma R5 e R6; card #3922).
 

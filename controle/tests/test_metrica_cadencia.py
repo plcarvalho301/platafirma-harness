@@ -1,3 +1,4 @@
+# componente: componente:verbo-metrica
 """A cadência da passada da sonda (bin/_metrica/cadencia.py; spec eixos-do-host R15; card #3922).
 
 O registro real vale um minuto para tudo; o que não é múltiplo de um minuto é recusado; e a regra, sobre registros de

@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra limpeza fossil` (bin/_infra/limpeza-fossil): o critério positivo, a recusa com job ativo, o evento antes do
 expurgo e o que se guarda antes do rm (spec eixos-do-host R12 a R14; card #3920; comentário #3102 do #3878).
 

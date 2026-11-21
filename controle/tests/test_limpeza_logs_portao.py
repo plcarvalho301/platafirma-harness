@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 """`infra limpeza logs`: nenhum dia do bruto da porta sai por idade (card #3343, arq:0123 §12).
 
 O bruto em var/log/ops é só de acréscimo e o dia cortado não volta; quem o corta é o timer

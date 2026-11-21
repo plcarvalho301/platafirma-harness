@@ -1,3 +1,4 @@
+# componente: componente:verbo-metrica
 """metrica investigar (card #3355; arq:0123 regras 8, 10 e 15): a linha inteira do bruto, só com incidente aberto.
 
 Tudo contra uma pasta em tmp_path, um rastreador de mentira (o `tarefas ler`), uma API falsa (ou um servidor HTTP de

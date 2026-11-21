@@ -1,3 +1,4 @@
+# componente: componente:verbo-infra
 from __future__ import annotations
 
 import os
