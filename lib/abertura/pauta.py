@@ -46,6 +46,14 @@ ESTADOS_TERMINAIS = frozenset({
 
 LeitorDeEstadoDeCard = Callable[[Iterable[str], list[str] | None], Mapping[str, object]]
 
+# Reforço da cultura: os itens que chegam colados ao turno do dono no retorno da abertura.
+# O texto é da produto; a ordem é a da leitura.
+REFORCO: tuple[str, ...] = (
+    "antes de afirmar, decidir ou agir sobre algo da casa, conferir no ar e depois no fichário",
+    "antes de cada linha ✅, conferir contra o que está no ar",
+    "a negação expressa se devolve ao dono com a regra que negou, e não se contorna",
+)
+
 
 def _sem_acento(texto: str) -> str:
     nfd = unicodedata.normalize("NFD", texto or "")
@@ -373,6 +381,7 @@ class Pauta:
     fora_da_ocasiao: int
     cartas: list[Carta]
     conteudo: str
+    reforco: tuple[str, ...] = REFORCO
 
     @property
     def texto(self) -> str:
@@ -381,6 +390,7 @@ class Pauta:
     def como_dict(self) -> dict:
         return {
             "turno": self.turno,
+            "reforco": list(self.reforco),
             "guardados": [g.como_dict() for g in self.guardados],
             "total_guardados": self.total_guardados,
             "fora_da_ocasiao": self.fora_da_ocasiao,
@@ -521,7 +531,8 @@ def montar_pauta(guardados: list[Guardado], cartas: list[Carta], sessao: Context
     fora = total - len(visiveis)
     ref_turno = "turno do dono: por referência (já está na janela)"
 
-    linhas: list[str] = [ref_turno]
+    linhas: list[str] = [ref_turno, "reforço:"]
+    linhas.extend(f"- {item}" for item in REFORCO)
     if total == 0:
         linhas.append("lousa: 0 guardados")
     elif fora > 0 and visiveis:

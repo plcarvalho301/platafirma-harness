@@ -240,6 +240,21 @@ def test_ocasiao_casa_por_card_que_mudou_depois_de_guardado_por_turno_e_por_chap
     assert "por referência" in pauta.turno
 
 
+def test_reforco_chega_colado_ao_turno_com_os_tres_itens():
+    pauta = montar_pauta([], [], ContextoDaSessao(cadeira="ti", turno="atende a caixa"))
+
+    linhas = pauta.conteudo.splitlines()
+    assert linhas[0] == pauta.turno
+    assert linhas[1] == "reforço:"
+    assert linhas[2:5] == [f"- {item}" for item in pauta.reforco]
+    assert len(pauta.reforco) == 3
+    assert "conferir no ar e depois no fichário" in pauta.reforco[0]
+    assert "✅" in pauta.reforco[1]
+    assert "não se contorna" in pauta.reforco[2]
+    assert not any("monta_sessao" in item for item in pauta.reforco)
+    assert pauta.como_dict()["reforco"] == list(pauta.reforco)
+
+
 # --- rotinas (lib/abertura/rotinas.py) -----------------------------------------------------------------------------
 
 class LeitorDeFixture:
