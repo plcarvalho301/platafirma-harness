@@ -27,7 +27,7 @@ UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 # `\\?"` porque o retorno pode chegar como string JSON dentro de JSON (aspas escapadas).
 CADEIRA = re.compile(r'\\?"cadeira\\?"\s*:\s*\\?"([a-z0-9][a-z0-9-]{0,40})\\?"')
-CASA_NOVA = Path(os.environ.get("PF_CASA_RAIZ") or str(Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")) / "casa-espelho"))
+CASA_NOVA = Path(os.environ.get("PF_CASA_RAIZ") or str(Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")) / "casa"))
 TETO_CONTEXTO = 9_500          # o Code corta cada string de hook em 10.000 caracteres
 JANELA_DEDUP_S = 30            # conta + projeto podem declarar o mesmo hook: fala um so
 TETO_TURNO_TEXTO = 16_000      # caracteres da mensagem do dono que o hook entrega a porta (#3356)
