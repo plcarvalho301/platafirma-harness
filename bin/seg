@@ -44,7 +44,8 @@
 #   segredo gravar    politica            escrita atomica de segredo
 #   segredo gerar     politica            geracao e escrita atomica de segredo
 #   segredo importar  politica            importacao de .env
-#   segredo rotacionar politica           rotacao de client-secret no keycloak
+#   segredo rotacionar politica           rotacao de client-secret no keycloak e de senha de
+#                                         papel do Postgres (debito 1343; era `release migrar senha`)
 #   segredo exigidos  politica            exigido (acervo.stack.segredos) x presente (era `deploy <stack> segredos`)
 #   segredo apagar    politica            destruicao de segredo da instancia, com --confirmar (card #3117)
 #
@@ -98,6 +99,11 @@ seg — toolkit de seguranca da PlataFirma
                                   importa segredos de arquivo .env
   seg segredo rotacionar <stack>/<nome> --keycloak-client <clientId>
                                   rotaciona client-secret no keycloak
+  seg segredo rotacionar <stack>/<nome> [<stack>/<nome>...] --postgres <banco> <papel>
+                                  cunha ou troca a senha do papel no banco da allowlist
+                                  (registro/bancos.json) e grava a mesma senha em cada
+                                  <stack>/<nome> (a mae e as copias deriva-de), 0600, sem
+                                  imprimir; exige PF_SUJEITO
   seg segredo exigidos [<stack>]  exigido (acervo.stack.segredos, mesma via que
                                   `acervo listar topologia --completo` usa) x presente em
                                   $SEG_SECRETS_DIR — so nomes, nunca valor. Sem <stack>: todas.
@@ -451,23 +457,49 @@ cmd_segredo_importar() {
 }
 
 cmd_segredo_rotacionar() {
-  local alvo="${1:-}"
-  shift || true
-  local client_id=""
+  local client_id="" pg_banco="" pg_papel="" alvos=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --keycloak-client)
         client_id="${2:-}"
         shift 2 || true
         ;;
+      --postgres)
+        pg_banco="${2:-}"
+        pg_papel="${3:-}"
+        shift 3 || { echo "seg segredo rotacionar: --postgres exige <banco> <papel>" >&2; exit 2; }
+        ;;
+      --*)
+        echo "seg segredo rotacionar: flag desconhecida: $1" >&2
+        exit 2
+        ;;
       *)
+        alvos+=("$1")
         shift
         ;;
     esac
   done
 
-  if [ -z "$alvo" ] || [[ "$alvo" != *"/"* ]] || [ -z "$client_id" ]; then
+  # Alvo Postgres (débito 1343): cunha ou troca a senha do papel no banco da allowlist e grava a
+  # mesma senha em cada <stack>/<nome> dado — a mãe e as cópias `deriva-de` do armário de chaves.
+  if [ -n "$pg_banco" ] || [ -n "$pg_papel" ]; then
+    if [ -n "$client_id" ]; then
+      echo "seg segredo rotacionar: --postgres e --keycloak-client sao alvos distintos — um por chamada" >&2
+      exit 2
+    fi
+    if [ -z "$pg_banco" ] || [ -z "$pg_papel" ] || [ "${#alvos[@]}" -eq 0 ]; then
+      echo "uso: seg segredo rotacionar <stack>/<nome> [<stack>/<nome>...] --postgres <banco> <papel>" >&2
+      exit 2
+    fi
+    . "$(dirname "$(readlink -f "$0")")/../lib/segredo/postgres.sh"
+    PG_SENHA_VERBO="seg segredo rotacionar" pg_senha_trocar "$pg_banco" "$pg_papel" "${alvos[@]}"
+    return 0
+  fi
+
+  local alvo="${alvos[0]:-}"
+  if [ -z "$alvo" ] || [ "${#alvos[@]}" -ne 1 ] || [[ "$alvo" != *"/"* ]] || [ -z "$client_id" ]; then
     echo "uso: seg segredo rotacionar <stack>/<nome> --keycloak-client <clientId>" >&2
+    echo "     seg segredo rotacionar <stack>/<nome> [<stack>/<nome>...] --postgres <banco> <papel>" >&2
     exit 2
   fi
 
