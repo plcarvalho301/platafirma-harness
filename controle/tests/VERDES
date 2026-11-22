@@ -392,5 +392,6 @@ testes/test_arvore_recusa_caminho_vedado.py | bin/_lint/arvore.py bin/_lint/pre_
 # Story #4412: autenticacao dos clientes do msg-mem e portao de configuracao da porta (armario e conector).
 testes/test_memoria_autentica.py | lib/memoria_de_trabalho.py lib/postura/lousa.py bin/sessao bin/monta-sessao recuperacao/adaptadores/mesa.py sessao/migracao/capturar-mesa-legada.py
 tests/test_portao_configuracao_porta.py | bin/release bin/_release/conferir/conferir.py
-# Story #4426: o ato ler do verbo busca, pela chave, pelo nome e nas recusas; os casos do banco vivo com exige("host:casa").
+# Story #4426: o ato ler do verbo busca, pela chave, pelo nome e nas recusas; o retrato falso no pequeno e o banco casa vivo na rodada.
 testes/test_busca_ler.py | bin/busca lib/leitura/resolvedor.py lib/leitura/retrato.py lib/leitura/recusa.py lib/leitura/sql/** lib/leitura/leitura.py lib/leitura/morada.py
+testes/test_busca_ler_vivo.py | bin/busca lib/leitura/resolvedor.py lib/leitura/retrato.py lib/leitura/recusa.py lib/leitura/sql/** lib/leitura/leitura.py lib/leitura/morada.py | degrau: rodada

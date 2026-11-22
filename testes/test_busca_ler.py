@@ -1,9 +1,9 @@
 # componente: componente:verbo-busca
 """Story 4426: o ato ler do verbo busca, pela chave, pelo nome e nas recusas.
 
-Os casos puros usam um retrato falso com as linhas que o banco casa devolve (medidas em 22/11/2026)
-e uma release de mentira em tmp_path. Os casos com exige("host:casa") rodam o executável contra o
-banco casa e a release servida.
+Os casos usam um retrato falso com as linhas que o banco casa devolve (medidas em 22/11/2026) e uma
+release de mentira em tmp_path, e rodam no degrau pequeno. Os casos contra o banco casa e a release
+servida moram em test_busca_ler_vivo.py, no degrau rodada.
 """
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ import importlib.machinery
 import importlib.util
 import io
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -415,40 +414,3 @@ def test_literal_do_bind_escapa_aspas_barras_e_quebras() -> None:
     assert literal("it's \\ x\nnova") == "'it\\'s \\\\ x\\nnova'"
     assert literal(["a b", 'c"d']) == "'{\"a b\",\"c\\\\\"d\"}'"
 
-
-# ------------------------------------------------------------------ contra o banco casa
-def _executar(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, str(BIN), "ler", *args], capture_output=True, text=True, timeout=30,
-                          env={**os.environ}, check=False)
-
-
-@pytest.mark.exige("host:casa")
-def test_vivo_capacidade_busca_le_a_referencia_da_release() -> None:
-    r = _executar("capacidade:busca")
-    arq = Path("/opt/platafirma/current/casa/referencias/instancias/capacidade/busca.md")
-    assert r.returncode == 0, r.stderr
-    assert r.stdout.split("\n", 1)[0].startswith(f"capacidade:busca · versão {blob(arq)} · ")
-
-
-@pytest.mark.exige("host:casa")
-def test_vivo_framework_da_ontologia_le_o_gabarito() -> None:
-    r = _executar("framework da ontologia")
-    arq = Path("/opt/platafirma/current/casa/instancias/gabarito/framework-da-ontologia.md")
-    assert r.returncode == 0, r.stderr
-    assert r.stdout.startswith("gabarito:framework-da-ontologia · versão ")
-    assert arq.read_text(encoding="utf-8").startswith(r.stdout.split("\n", 1)[1][:200])
-
-
-@pytest.mark.exige("host:casa")
-@pytest.mark.parametrize("chave", ["sessao", "sessao:"])
-def test_vivo_sessao_le_a_ficha_da_classe(chave: str) -> None:
-    r = _executar(chave)
-    assert r.returncode == 0, r.stderr
-    assert r.stdout.split("\n", 1)[0].endswith("objeto lido: a ficha da classe sessao")
-    assert r.stdout.startswith("shape:sessao · versão ")
-
-
-@pytest.mark.exige("host:casa")
-def test_vivo_caminho_solto_sai_2() -> None:
-    r = _executar("/srv/platafirma/casa/x.md")
-    assert r.returncode == 2 and r.stderr.startswith("codigo: caminho-solto-recusado")
