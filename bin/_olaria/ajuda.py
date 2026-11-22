@@ -18,6 +18,8 @@ ontologia ensaiar [<criar|trocar|recompor>] [<classe>] [<chave>] [<versao>] [<ar
 ontologia renomear <classe> <chave> <nova_chave> [--pedido <id>] [--json]
 ontologia apagar <classe> <chave> <motivo> [--com <classe> <chave>]... [--pedido <id>] [--json]
 ontologia transitar <classe> <chave> <estado> [--pedido <id>] [--json]
+ontologia nomes abrir <termo> <chave> <origem> [--pedido <id>] [--json]
+ontologia nomes encerrar <termo> <chave> [--pedido <id>] [--json]
 ontologia gerar [--json]
 ontologia --help\
 """

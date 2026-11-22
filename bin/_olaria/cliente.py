@@ -246,6 +246,11 @@ class Cliente:
         corpo = {"classe": classe, "chave": chave, "para": para, "origem": origem}
         return self._escrever_com_reenvio("/transitar", corpo, fornada, origem)
 
+    def nomes(self, ato: str, itens: list[dict], fornada: str,
+              origem: str = "ontologia nomes") -> Resposta:
+        corpo = {"ato": ato, "nomes": itens, "origem": origem}
+        return self._escrever_com_reenvio("/nomes", corpo, fornada, origem)
+
     def gerar(self) -> Resposta:
         return self._pedir("POST", "/gerar", {}, origem="ontologia gerar")
 

@@ -218,6 +218,16 @@ def _fez(ato: str, corpo: dict, como_json: bool, fornada: str, aviso_variante: s
             id_,
             f"transicao: {tr.get('chave', '?')} ({tr.get('classe', '?')}) · {de} -> {tr.get('para', '?')} · {tr.get('evento', '?')}",
         ))
+    if ato == "nomes":
+        id_ = str(fornada or corpo.get("fornada") or "")
+        if corpo.get("estado") == "ja-gravada":
+            return Saida(codigo, _linhas(id_, "já gravada"))
+        linhas_resp = [id_]
+        for item in corpo.get("abertas") or []:
+            linhas_resp.append(f"aberta: {item.get('termo', '?')} -> {item.get('chave', '?')} ({item.get('origem', '?')})")
+        for item in corpo.get("encerradas") or []:
+            linhas_resp.append(f"encerrada: {item.get('termo', '?')} -> {item.get('chave', '?')}")
+        return Saida(codigo, _linhas(*linhas_resp))
     if ato == "apagar":
         id_ = str(fornada or corpo.get("fornada") or "")
         if corpo.get("estado") == "ja-gravada":
