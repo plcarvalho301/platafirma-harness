@@ -349,7 +349,9 @@ def test_bancada_por_card_antiga_segue_e_se_entrega_em_main(tmp_path):
     assert (legado / "legado.md").exists()
 
 
-def test_repositorio_de_codigo_segue_exigindo_ramo(tmp_path):
+def test_repositorio_de_codigo_segue_com_ramo_e_entrega_na_main(tmp_path):
+    """A bancada de codigo continua por card, num ramo proprio; o sincronizar entrega o ramo na
+    main em avanco direto, sem pedido de integracao (ordem do dono de 22/11/2026)."""
     bancada = _montar(tmp_path)
     main_antes = _main_do_origin(tmp_path, "demo")
     r = _repo(tmp_path, bancada, "abrir", "demo", "42", "--slug", "x")
@@ -360,8 +362,9 @@ def test_repositorio_de_codigo_segue_exigindo_ramo(tmp_path):
     _commit_em(wt, "card.md", "c\n")
     r = _repo(tmp_path, bancada, "sincronizar", "demo")
     assert r.returncode == 0, r.stderr
-    assert "sincronizado: fabrica/42-x" in r.stdout
-    assert _main_do_origin(tmp_path, "demo") == main_antes
+    assert "sincronizado: main =" in r.stdout and "de fabrica/42-x" in r.stdout
+    assert _main_do_origin(tmp_path, "demo") != main_antes
+    assert _main_do_origin(tmp_path, "demo") == _git("rev-parse", "HEAD", cwd=wt)
     r = _repo(tmp_path, bancada, "pr-abrir", "demo", "--titulo", "t", PF_GH_BIN=str(tmp_path / "sem-gh"))
     assert r.returncode == 3, r.stdout + r.stderr
     assert "deliberação" not in r.stderr
