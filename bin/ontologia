@@ -3,8 +3,8 @@
 # capacidade: modelos-formais
 # dono: conhecimento
 # classe: B
-# use para: ler classe, ficha, dicionário ou shape do catálogo e do fichário, «lê a classe chapeu»; listar classes, descendentes (--filhas), referenciadores (--aponta-para) ou chaves gravadas; criar novas classes ou fichas; trocar objeto existente com a versão lida; recompor o conjunto inteiro de fichas de uma classe; ensaiar mudança sem gravar; renomear chave humana; apagar ficha com motivo; gerar o pacote do raciocinador
-# atos: ler (leitura, ontologia), listar (leitura, ontologia), criar (escrita, ontologia), trocar (escrita, ontologia), recompor (escrita, ontologia), ensaiar (leitura, ontologia), renomear (escrita, ontologia), apagar (escrita, ontologia), gerar (leitura, ontologia)
+# use para: ler classe, ficha, dicionário ou shape do catálogo e do fichário, «lê a classe chapeu»; listar classes, descendentes (--filhas), referenciadores (--aponta-para) ou chaves gravadas; criar novas classes ou fichas; trocar objeto existente com a versão lida; recompor o conjunto inteiro de fichas de uma classe; ensaiar mudança sem gravar; renomear chave humana; apagar ficha com motivo; abrir ou encerrar nomes alternativos; gerar o pacote do raciocinador
+# atos: ler (leitura, ontologia), listar (leitura, ontologia), criar (escrita, ontologia), trocar (escrita, ontologia), recompor (escrita, ontologia), ensaiar (leitura, ontologia), renomear (escrita, ontologia), apagar (escrita, ontologia), nomes (escrita, ontologia), gerar (leitura, ontologia)
 # forma: texto
 # escreve: nada; o serviço da Olaria, que o verbo chama, é o único que grava no catálogo e no fichário
 # consome: o serviço da Olaria (HTTP, stack olaria)

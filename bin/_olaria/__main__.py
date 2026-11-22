@@ -32,7 +32,7 @@ VARIANTES_CLASSE_CATALOGO = {
 }
 FLAGS_DE_ENSAIO = ("--dry-run", "--ensaio")
 ATOS_LEITURA = {"ler", "listar", "ensaiar", "gerar", "preparar"}
-ATOS_ESCRITA = {"criar", "trocar", "recompor", "renomear", "apagar", "transitar"}
+ATOS_ESCRITA = {"criar", "trocar", "recompor", "renomear", "apagar", "transitar", "nomes"}
 _PARTE_YAML = re.compile(r"(?m)^\s*(?:#\s*parte\b|parte\s*:\s*true\b)")
 
 
@@ -546,6 +546,71 @@ def _checar_gates_de_uso(ato: str, args: list, *, prog: str, como_json: bool, en
     return None
 
 
+def _ler_lote_nomes(caminho: str, sub: str) -> list[dict]:
+    import json
+    proximo = f"ontologia nomes {sub} --help"
+    if caminho == "-":
+        texto = sys.stdin.read()
+    else:
+        texto = _arquivo(caminho, proximo=proximo)
+    if not texto.strip():
+        raise Uso("entrada de nomes vazia", codigo="uso-invalido", onde="entrada", recebido="(vazio)", proximo=proximo)
+    dados = None
+    try:
+        dados = json.loads(texto)
+    except ValueError:
+        try:
+            import yaml  # type: ignore[import-not-found]
+            dados = yaml.safe_load(texto)
+        except (ImportError, ValueError, OSError) as erro:
+            raise Uso(f"não consegui ler o lote de nomes: {erro}", codigo="uso-invalido", onde="entrada",
+                      recebido=caminho, proximo=proximo) from erro
+    if isinstance(dados, dict) and isinstance(dados.get("nomes"), list):
+        dados = dados["nomes"]
+    if not isinstance(dados, list) or not dados or not all(isinstance(x, dict) for x in dados):
+        raise Uso("o lote de nomes deve ser uma lista não vazia de objetos", codigo="uso-invalido",
+                  onde="entrada", recebido=caminho, proximo=proximo)
+    return dados
+
+
+def _nomes(cliente: Cliente, args: list, *, pedido: str = "", como_json: bool = False) -> Saida:
+    if not args or args[0] not in ("abrir", "encerrar"):
+        raise Uso(
+            "nomes exige o sub-ato `abrir` ou `encerrar`",
+            onde="sub-ato",
+            recebido=args[0] if args else "",
+            proximo="ontologia nomes abrir <termo> <chave> <origem>",
+        )
+    sub, resto = args[0], args[1:]
+    if any(a.startswith("--") for a in resto):
+        flag = next(a for a in resto if a.startswith("--"))
+        raise Uso(f"nomes {sub}: opção desconhecida {flag}", onde="flag", recebido=flag,
+                  proximo=f"ontologia nomes {sub} --help")
+    if len(resto) == 1 and (resto[0] == "-" or resto[0].endswith((".json", ".yaml", ".yml"))):
+        itens = _ler_lote_nomes(resto[0], sub)
+    elif sub == "abrir":
+        if len(resto) != 3:
+            raise Uso(
+                "nomes abrir exige `<termo> <chave> <origem>` (ou um arquivo .json/.yaml ou `-`)",
+                onde="args",
+                recebido=" ".join(resto),
+                proximo="ontologia nomes abrir <termo> <chave> <origem>",
+            )
+        itens = [{"termo": resto[0], "chave": resto[1], "origem": resto[2]}]
+    else:
+        if len(resto) != 2:
+            raise Uso(
+                "nomes encerrar exige `<termo> <chave>` (ou um arquivo .json/.yaml ou `-`)",
+                onde="args",
+                recebido=" ".join(resto),
+                proximo="ontologia nomes encerrar <termo> <chave>",
+            )
+        itens = [{"termo": resto[0], "chave": resto[1]}]
+    fornada_id = pedido or novo_id()
+    r = cliente.nomes(sub, itens, fornada_id, origem=f"ontologia nomes {sub}")
+    return sd.traduzir("nomes", r.status, r.corpo, como_json=como_json, fornada=fornada_id)
+
+
 def executar(argv: list, env: dict | None = None, *, prog: str | None = None) -> Saida:
     """Roda uma chamada e devolve a saída, sem escrever nada."""
     env = dict(os.environ if env is None else env)
@@ -612,6 +677,8 @@ def executar(argv: list, env: dict | None = None, *, prog: str | None = None) ->
             return _apagar(cliente, args, pedido=pedido, como_json=como_json)
         if ato == "transitar":
             return _transitar(cliente, args, pedido=pedido, como_json=como_json)
+        if ato == "nomes":
+            return _nomes(cliente, args, pedido=pedido, como_json=como_json)
     except Uso as erro:
         return sd.erro_de_uso(erro.codigo, erro.onde, erro.recebido, erro.regra, str(erro), erro.proximo,
                               como_json=como_json)
