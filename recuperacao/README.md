@@ -34,7 +34,7 @@ teste rodar recuperacao
 
 Passou quando sai `suite VERDE` e exit 0. Sem o tokenizador, quatro testes de teto de envelope
 falham com «tokenizador ausente» e o resto passa: é falta de pré-requisito, não regressão. De fora
-da casa, desta pasta, como faz `.github/workflows/recuperacao-tests.yml`:
+da casa, desta pasta:
 
 ```
 PLATAFIRMA_TOKENIZADOR=<caminho>/qwen2.5.json uv run --group dev pytest . -q

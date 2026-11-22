@@ -35,4 +35,4 @@ teste rodar harness-controle --portao
 Roda só os arquivos listados em `tests/VERDES`, o mesmo portão do `hooks/pre-push`. Passou quando
 sai `suite VERDE` e exit 0. Sem `--portao` roda `tests/` inteiro, que tem arquivos fora do portão.
 De fora da casa, o equivalente é `uv sync --locked --group dev` e `uv run pytest $(grep -v '^#' tests/VERDES)`
-a partir desta pasta, como faz `.github/workflows/controle-tests.yml`.
+a partir desta pasta.

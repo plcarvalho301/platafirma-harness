@@ -51,5 +51,6 @@ lê falhas como ruído`). Card próprio, se/quando existir, os fecha.
 
 ## Gatilho de execução (entregável b)
 
-`.github/workflows/controle-tests.yml`, na raiz do repo — roda em push/PR que
-tocam `controle/**`. Sem ele o modelo acima é documento, não regra.
+O `hooks/pre-push` roda o portão desta lista em todo push, e a esteira da casa
+roda a rodada depois da entrega. Não há workflow no forge (ordem do dono,
+22/11/2026). Sem o gancho, o modelo acima é documento, não regra.

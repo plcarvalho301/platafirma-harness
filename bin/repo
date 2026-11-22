@@ -2849,9 +2849,8 @@ fecho_commit() {
 
 # publica_veredito <clone> <repo> <sha> -- incidente #4196 (peca 1 da feature #4027): o veredito
 # do portao, medido pelo pre-push na rev empurrada, vira commit status `esteira/portao` no forge.
-# Quem integra o PR e a esteira do proprio repositorio (.github/workflows/esteira-integra.yml,
-# lido de main): PR de fabrica/ cuja ponta tem esse status verde entra em main sem ato de
-# cadeira nem do dono. A marca vem de hooks/pre-push: `verde <chaves>` quando a suite do portao
+# Nao ha workflow no forge que integre o PR (ordem do dono, 22/11/2026): a entrega vai a main
+# por `repo sincronizar`, e o status fica so como registro do veredito. A marca vem de hooks/pre-push: `verde <chaves>` quando a suite do portao
 # foi medida (ou reaproveitada) verde, `sem-suite` quando o registro nao declara chave de teste.
 # Sem marca (vermelho, ambiente que nao mediu, hook nao instalado) nada se publica, e veredito
 # ausente nao integra. Nunca muda o exit de quem chama: o push ja esta feito.
@@ -2980,7 +2979,7 @@ ato_pr_abrir() {
       corpo="<!-- pf-autor: ${cad_autora} -->"
     fi
   fi
-  # DT 915: --espera abre como rascunho; esteira-integra.yml filtra isDraft|not e não mescla até pr-merge.
+  # DT 915: --espera abre como rascunho, e só pr-merge integra.
   local draft_flag=()
   [ "$espera" -eq 1 ] && draft_flag=(--draft)
   (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr create --base "$base" --head "$ramo" --title "$titulo" --body "$corpo" ${draft_flag[@]+"${draft_flag[@]}"} >/dev/null) \
