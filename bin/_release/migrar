@@ -162,43 +162,12 @@ case "$ato" in
       fi
     done
     exigir_sujeito "$VERBO senha"
-    IFS=: read -r ctr usr base <<<"${BANCOS[$banco]}"
-
-    command -v docker >/dev/null 2>&1 || morre "erro: dependência docker: ausente — 'docker' nao esta no PATH desta conta" 3
-    docker inspect -f '{{.State.Running}}' "$ctr" 2>/dev/null | grep -qx true \
-      || morre "erro: dependência $ctr: ausente — contêiner nao esta de pe; \`infra estado\`" 3
-
-    umask 077
-    tmps=()
-    errlog="$(mktemp)"
-    trap 'rm -f "${tmps[@]}" "$errlog"' EXIT
-    senha="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-    [ "${#senha}" -eq 48 ] || morre "erro: nao consegui gerar a senha (/dev/urandom)" 3
-    for destino in "${destinos[@]}"; do
-      dir="$(dirname "$destino")"
-      mkdir -p "$dir" || morre "erro: nao consegui criar $dir" 3
-      t="$(mktemp "$dir/.$(basename "$destino").XXXXXX")" || morre "erro: nao consegui escrever em $dir" 3
-      tmps+=("$t")
-      printf '%s' "$senha" >"$t"
-    done
-
-    # -q -X: sem eco, sem psqlrc. stderr filtrado: a linha LINE de erro de sintaxe traria o valor.
-    if ! printf "ALTER ROLE %s LOGIN PASSWORD '%s';\n" "$role" "$senha" \
-        | docker exec -i "$ctr" psql -U "$usr" -d "$base" -X -q -v ON_ERROR_STOP=1 -1 -f - >/dev/null 2>"$errlog"; then
-      grep -v '^LINE' "$errlog" | sed "s/$senha/***/g" >&2
-      unset senha
-      morre "erro: psql recusou em '$banco' — senha nao trocada, segredo nao gravado" 1
-    fi
-    unset senha
-    i=0
-    for destino in "${destinos[@]}"; do
-      chmod 600 "${tmps[$i]}" && mv -f "${tmps[$i]}" "$destino" \
-        || morre "erro: senha trocada em $banco mas o segredo nao foi gravado em $destino — rode de novo com --rotacionar" 5
-      i=$((i + 1))
-    done
-    trap 'rm -f "$errlog"' EXIT
-    printf '%s: role %s em %s com senha nova; segredo em segredos/%s (0600) — o valor nao se imprime%s\n' \
-      "$VERBO" "$role" "$banco" "$(IFS=,; echo "${alvos[*]}")" "${PF_SUJEITO:+ (sujeito=$PF_SUJEITO)}"
+    # Deprecado (débito 1343): o ciclo da senha de papel é do `seg`. Este ato guarda só a trava
+    # do --rotacionar e repassa ao mesmo corpo de `seg segredo rotacionar --postgres`.
+    printf '%s: aviso: deprecado — use `seg segredo rotacionar %s --postgres %s %s`\n' \
+      "$VERBO" "${alvos[*]}" "$banco" "$role" >&2
+    . "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/lib/segredo/postgres.sh"
+    PG_SENHA_VERBO="$VERBO" pg_senha_trocar "$banco" "$role" "${alvos[@]}"
     ;;
   cortar)
     # DT 792: o corte de um schema de um banco do registro para outro (ou para uma base de
