@@ -42,10 +42,15 @@ import signal
 import subprocess
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_DIR_ACERVO = os.path.dirname(os.path.abspath(__file__))
+_LIB_HARNESS = os.path.join(os.path.dirname(os.path.dirname(_DIR_ACERVO)), "lib")
+sys.path.insert(0, _DIR_ACERVO)
+if _LIB_HARNESS not in sys.path:
+    sys.path.insert(0, _LIB_HARNESS)
 import _identidade  # noqa: E402
 import _spec_montada  # noqa: E402
 import _suporte  # noqa: E402
+import raizes  # noqa: E402
 from _suporte import SUPORTE  # noqa: E402
 
 PG = "rag-extractor-pg"
@@ -132,12 +137,12 @@ def _especies_vivas():
 
 
 def _raiz_casa_nova():
-    """Raiz do clone/bancada de `platafirma-casa` (a casa nova), se existir no host."""
-    env = os.environ.get("PF_CASA_ESPELHO")
-    if env and os.path.isdir(env):
-        return env
-    bancada = os.environ.get("PLATAFIRMA_BANCADA", "/home/claudinho/AI")
-    cand = os.path.join(bancada, "platafirma-casa")
+    """Raiz da release no ar de `platafirma-casa` (DT 963; produção nunca lê a bancada)."""
+    for var in ("PF_CASA_ESPELHO", "PF_CASA_RAIZ"):
+        env = (os.environ.get(var) or "").strip()
+        if env and os.path.isdir(env):
+            return env
+    cand = str(raizes.release() / "casa")
     return cand if os.path.isdir(cand) else None
 
 def _arquivos_especie_casa_nova(especie):
