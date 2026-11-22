@@ -538,38 +538,37 @@ def test_minuta_formalizar_spec_com_serie_recusa_2(tmp_path):
     assert _no_origin(tmp_path, "minuta/0006-pauta.md") is not None
 
 
-def test_sincronizar_casa_recusa_antes_do_push_quando_portao_reprova_tocado(tmp_path):
+def test_sincronizar_casa_empurra_sem_chamar_a_ingestao_incidente_4429(tmp_path):
+    # Incidente #4429 e story #4425: o push de documento da casa não passa mais pela admissão da
+    # ingestão do motor. Uma ingestão falsa que reprovaria tudo e marca a chamada não pode ser chamada.
     bancada = _montar(tmp_path)
     r_ab = _repo(tmp_path, bancada, "abrir", CASA)
     assert r_ab.returncode == 0, r_ab.stderr
 
     wt = next((bancada / "wt" / CASA).glob("*/main"))
-    doc = wt / "levantamento" / "ruins.md"
+    doc = wt / "referencias" / "instancias" / "configuracao" / "versao-da-classe.md"
     doc.parent.mkdir(parents=True, exist_ok=True)
-    doc.write_text("# Ruim\n\nEspécie: levantamento\nSobre: card 999999\n", encoding="utf-8")
-    _git("add", "levantamento/ruins.md", cwd=wt)
-    _git("commit", "-q", "-m", "doc ruim", cwd=wt)
+    doc.write_text("# Versão da classe\n\nEntidade: configuracao\n", encoding="utf-8")
+    _git("add", "referencias/instancias/configuracao/versao-da-classe.md", cwd=wt)
+    _git("commit", "-q", "-m", "referência de configuração", cwd=wt)
 
+    chamada = tmp_path / "ingerir-chamado"
     falso_ingerir = tmp_path / "falso-casa-ingerir"
-    plano = {
-        "lote": {
-            "itens": [
-                {
-                    "arquivo": "platafirma-casa@levantamento/ruins.md",
-                    "veredito": "reprovado",
-                    "portoes": [{"portao": "referente", "resultado": "reprovado", "detail": "card 999999 nao resolve"}],
-                }
-            ]
-        }
-    }
-    falso_ingerir.write_text(f"#!/usr/bin/env python3\nimport json\nprint({json.dumps(json.dumps(plano))})\n", encoding="utf-8")
+    falso_ingerir.write_text(
+        "#!/usr/bin/env python3\n"
+        f"open({json.dumps(str(chamada))}, 'w').write('chamado')\n"
+        "raise SystemExit(3)\n",
+        encoding="utf-8",
+    )
     falso_ingerir.chmod(0o755)
 
     env = _env(tmp_path, bancada, PF_CASA_INGERIR=str(falso_ingerir))
     r = subprocess.run([str(BIN / "repo"), "sincronizar", CASA], capture_output=True, text=True, env=env)
-    assert r.returncode == 4, r.stdout + r.stderr
-    assert "levantamento/ruins.md: referente: card 999999 nao resolve" in r.stderr
-    assert _no_origin(tmp_path, "levantamento/ruins.md") is None
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not chamada.exists(), "repo sincronizar chamou a ingestão da casa"
+    assert "admissão da ingestão" not in r.stderr
+    assert "acervo ingerir casa" not in r.stdout
+    assert _no_origin(tmp_path, "referencias/instancias/configuracao/versao-da-classe.md") is not None
 
 
 def _pasta_orfa(bancada: Path, prefixo: str) -> Path:

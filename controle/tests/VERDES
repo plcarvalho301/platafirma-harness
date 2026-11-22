@@ -350,7 +350,7 @@ tests/test_acervo_exposicao_portao.py | bin/acervo bin/_acervo/curar bin/curar b
 tests/test_repo_sincronizar_ramo.py | bin/repo
 tests/test_contrato_repo_pr_merge.py | bin/repo
 tests/test_repo_estado_bancada.py | bin/repo
-# DTs 744 e 747 (#2856 linhas 744 e 747): avisa_atras_origin sugere repo sincronizar em ramo sem upstream, e portao_admissao_casa passa arquivos/plano por arquivo temporario sem estourar ARG_MAX.
+# DTs 744 e 747 (#2856 linhas 744 e 747): avisa_atras_origin sugere repo sincronizar em ramo sem upstream, e o push grande de platafirma-casa segue sem portao de ingestao (incidente #4429).
 tests/test_repo_regressoes_lote_d.py | bin/repo
 # DTs 774 e 776: sombra.py le motor.trecho na morada motor e cai em evento_recuperacao sem permissao na view bateria_recuperacao.
 testes/test_motor_sombra.py | bin/_motor/sombra.py

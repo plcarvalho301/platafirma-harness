@@ -155,30 +155,24 @@ def test_dt_735_mover_pasta_e_arquivo_entre_repositorios(tmp_path: Path):
     assert r_miss.returncode == 1
 
 
-def test_dt_659_portao_casa_materializa_em_pre_push_e_imprime_ato_ingestao(tmp_path: Path):
+def test_sincronizar_casa_nao_materializa_arvore_nem_sugere_ingestao_incidente_4429(tmp_path: Path):
+    # Antes (DT 659) o sincronizar materializava a árvore em var/pre-push para a admissão da
+    # ingestão e sugeria `acervo ingerir casa --apply`. Com a partição casa saindo do motor
+    # (#4425), nenhum dos dois acontece mais (#4429).
     env, _, _, _, wt = _prepara_bancada(tmp_path, nome="platafirma-casa", direto_main=True)
-    doc = wt / "guia" / "expediente.md"
+    doc = wt / "instancias" / "procedimento" / "expediente.md"
     doc.parent.mkdir(parents=True, exist_ok=True)
-    doc.write_text("# Expediente\n\nEspécie: guia\n", encoding="utf-8")
-    _git(wt, "add", "guia/expediente.md")
+    doc.write_text("# Expediente\n\nEntidade: procedimento\n", encoding="utf-8")
+    _git(wt, "add", "instancias/procedimento/expediente.md")
     _git(wt, "commit", "-q", "-m", "doc")
 
     inst = Path(env["PLATAFIRMA_INSTANCIA"])
-    pre_push_raiz = inst / "var" / "pre-push"
-    captura = tmp_path / "arvore_vista.txt"
-
+    arvores = inst / "var" / "pre-push" / "arvores"
+    chamada = tmp_path / "ingerir-chamado"
     falso_ingerir = tmp_path / "falso-casa-ingerir"
     falso_ingerir.write_text(
         "#!/usr/bin/env python3\n"
-        "import json, os, sys\n"
-        "idx = sys.argv.index('--arvore')\n"
-        "arv = os.path.realpath(sys.argv[idx + 1])\n"
-        f"raiz = os.path.realpath({json.dumps(str(pre_push_raiz))})\n"
-        f"open({json.dumps(str(captura))}, 'w').write(arv)\n"
-        "if not arv.startswith(raiz + os.sep):\n"
-        "    sys.exit(4)\n"
-        "assert os.path.isfile(os.path.join(arv, 'guia', 'expediente.md'))\n"
-        "print(json.dumps({'lote': {'itens': []}}))\n",
+        f"open({json.dumps(str(chamada))}, 'w').write('chamado')\n",
         encoding="utf-8",
     )
     falso_ingerir.chmod(0o755)
@@ -186,7 +180,7 @@ def test_dt_659_portao_casa_materializa_em_pre_push_e_imprime_ato_ingestao(tmp_p
 
     r = _roda(env, "sincronizar", "platafirma-casa")
     assert r.returncode == 0, r.stderr
-    assert "portão de ingestão indisponível" not in r.stderr
-    assert captura.read_text().startswith(str(pre_push_raiz.resolve()) + os.sep)
-    assert "próximo: acervo ingerir casa platafirma-casa@" in r.stdout
-    assert "--apply" in r.stdout
+    assert "sincronizado: main" in r.stdout
+    assert not chamada.exists()
+    assert not list(arvores.glob("repo-casa.*"))
+    assert "acervo ingerir casa" not in r.stdout
