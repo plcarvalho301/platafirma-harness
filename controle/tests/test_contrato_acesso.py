@@ -520,6 +520,62 @@ def test_orfaos_acusa_papel_vigente_que_o_pap_nao_declara(tmp_path):
     assert "papel fornecedor no PAP e ausente do registro" in r.stdout
 
 
+# ==============================================================================
+# Card #4427, t14: a classe do fichario e tipo de recurso (`classe:<slug>`)
+# ==============================================================================
+# Hermetico: PAP de fixture com o dominio `plataforma-fichario`, para o contrato do verbo
+# nao depender de o core ja estar promovido. A politica real se prova no core
+# (porta/tests/test_politica_fichario.py).
+PAP_FICHARIO = """\
+versao: 1
+eixos:
+  dominio:
+    plataforma: {rotulo: x}
+    plataforma-acervo: {rotulo: x, pai: plataforma}
+    plataforma-fichario: {rotulo: x, pai: plataforma}
+  papel:
+    operador: {rotulo: x}
+    inferencia-escopada: {rotulo: x}
+regras:
+  - id: operador-plataforma
+    efeito: permite
+    motivo: x
+    quando: {papel: operador, dominio: plataforma}
+    acoes: ["*"]
+    sobre: ["*"]
+"""
+
+
+def _pap_fichario(tmp_path):
+    (tmp_path / "politica.yaml").write_text(PAP_FICHARIO, encoding="utf-8")
+    (tmp_path / "sujeitos.yaml").write_text("versao: 1\nsujeitos: {}\n", encoding="utf-8")
+    shutil.copy(POLITICA_ORIGINAL / "pdp.py", tmp_path / "pdp.py")
+    return {"ACESSO_POLITICA_DIR": str(tmp_path)}
+
+
+def test_decidir_classe_do_fichario_cai_no_dominio_do_fichario(tmp_path):
+    r = run_acesso("decidir", "ler", "classe:gabarito", "--papel", "operador", "--dominio", "plataforma",
+                   env=_pap_fichario(tmp_path))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "regra=operador-plataforma" in r.stdout
+    assert "[classe/plataforma-fichario]" in r.stdout
+    assert "fora da tabela" not in r.stderr
+
+
+def test_decidir_classe_negada_a_quem_nao_alcanca_o_fichario(tmp_path):
+    r = run_acesso("decidir", "ler", "classe:segredo", "--papel", "inferencia-escopada",
+                   "--dominio", "plataforma-acervo", env=_pap_fichario(tmp_path))
+    assert r.returncode == 1
+    assert "regra=intersecao" in r.stdout
+
+
+def test_decidir_tipo_fora_da_tabela_lista_classe_e_expediente():
+    r = run_acesso("decidir", "ler", "shape:gabarito", "--papel", "operador", "--dominio", "plataforma")
+    assert r.returncode == 2
+    assert "tipo de recurso fora da tabela: 'shape'" in r.stderr
+    assert "classe" in r.stderr and "expediente" in r.stderr
+
+
 def test_orfaos_registro_fora_reprova_como_nao_medido(tmp_path):
     env = _docker_de_fixture(tmp_path, 'echo "Error: No such container" >&2; exit 1\n')
     r = run_acesso("orfaos", "--sem-realm", env=env)

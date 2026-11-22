@@ -576,7 +576,7 @@ cmd_decidir() {
   fi
 
   if [[ "$recurso" != *:* ]]; then
-    printf "acesso: recurso sem prefixo de tipo: '%s' (tipos válidos: acervo, comando, concessao, documento, operacao, politica, sessao, sujeito)\n" "$recurso" >&2
+    printf "acesso: recurso sem prefixo de tipo: '%s' (tipos válidos: acervo, classe, comando, concessao, documento, expediente, operacao, politica, sessao, sujeito)\n" "$recurso" >&2
     if [ "$como_json" -eq 1 ]; then
       printf '{"erro": "recurso sem prefixo de tipo: %s"}\n' "$recurso"
     fi
@@ -593,8 +593,12 @@ cmd_decidir() {
     acervo) tipo_dom="plataforma-acervo";;
     comando|operacao) tipo_dom="plataforma-runtime";;
     documento) tipo_dom="plataforma";;
+    # Classe do fichario: recurso `classe:<slug>`, perguntado pelo leitor do banco casa
+    # uma vez por classe da chamada (card #4427, t14). A politica de quem le cada classe
+    # esta no PAP servido, no comentario do dominio `plataforma-fichario`.
+    classe) tipo_dom="plataforma-fichario";;
     *)
-      printf "acesso: tipo de recurso fora da tabela: '%s' (tipos válidos: acervo, comando, concessao, documento, operacao, politica, sessao, sujeito)\n" "$tipo" >&2
+      printf "acesso: tipo de recurso fora da tabela: '%s' (tipos válidos: acervo, classe, comando, concessao, documento, expediente, operacao, politica, sessao, sujeito)\n" "$tipo" >&2
       if [ "$como_json" -eq 1 ]; then
         printf '{"erro": "tipo de recurso fora da tabela: %s"}\n' "$tipo"
       fi
