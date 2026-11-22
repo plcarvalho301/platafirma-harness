@@ -117,7 +117,10 @@ fi
 #   empurrar    -> e o sincronizar (nao ha ramo proprio no origin)
 #   pr-abrir, pr-merge -> recusam (2)
 # Bancada por card que ja existia segue resolvivel por <repo>@<chave> e se entrega pelo
-# mesmo sincronizar; nada se migra a forca. Repositorio de codigo nao muda em nada.
+# mesmo sincronizar; nada se migra a forca. Repositorio de codigo segue com bancada por card,
+# e desde 22/11/2026 tambem entrega direto na main: o sincronizar mescla origin/main no ramo
+# do card e empurra o HEAD para main em avanco direto, sem pedido de integracao nem workflow
+# no forge (ordem do dono). O que esta lista decide e so o regime da bancada.
 # platafirma-casa é a casa nova (renomeada na #4414): regime de documento direto em main
 # (F3974), e repositorio de deliberacao como ela; a entrega do #4066 e direto em main.
 REPOS_DIRETO_EM_MAIN=(platafirma-casa)
@@ -1547,13 +1550,16 @@ ato_atualizar() {
     "$("$GIT" -C "$c" log -1 --format='%h %s')"
 }
 
-# sincronizar <repo> -- traz main para o ramo do card e deixa o ramo empurrado (spec_ambiente-
-# de-desenvolvimento §2; spec_repo §2: o UNICO ato de repo que mescla, e so por chamada da
-# cadeira). Mescla, nunca rebase. Em ordem, cada passo com exit proprio:
+# sincronizar <repo> -- traz main para o ramo do card e entrega a mudanca na main (spec_repo §2:
+# o UNICO ato de repo que mescla, e so por chamada da cadeira). Mescla, nunca rebase. Nao ha
+# pedido de integracao: a mudanca chega a main por este ato. Em ordem, cada passo com exit
+# proprio:
 #   busca o forge (falhou: 5) -> arvore suja: 4, vizinho commitar -> ramo do card do origin,
-#   ff-only (divergido: 4, vizinho atualizar) -> merge origin/main (conflito: aborta, bancada
-#   intacta, 4 com a lista) -> empurra -> confirma o sha no forge (ls-remote).
-# main sem nada novo e ramo ja no origin: 0, "ja em dia", nada muda.
+#   quando existe (outra mao pode ter empurrado nele) -> merge origin/main (conflito: mescla
+#   aberta na bancada, 4 com a lista) -> empurra HEAD para main em avanco direto (a main andou
+#   depois do fetch: 3, sincronizar de novo) -> confirma o sha no forge (ls-remote) -> dispara
+#   a rodada da esteira em fundo.
+# HEAD igual a origin/main: 0, "ja em dia", nada muda.
 ato_sincronizar() {
   trap 'printf "repo: aviso — processo interrompido por reinício da porta (SIGTERM); repetir é seguro\n" >&2; exit 143' TERM
   local nome="${1:-}"
@@ -1618,35 +1624,36 @@ ato_sincronizar() {
   fi
 
   local head; head="$("$GIT" -C "$c" rev-parse HEAD)"
-  if [ "$mesclou" -eq 0 ] && [ "$mesclou_ramo" -eq 0 ] && [ "$rc" -eq 0 ] && [ "$(forge_sha "$c" "$ramo")" = "$head" ]; then
-    printf 'já em dia: %s @ %s, origin/%s igual, origin/main %s ja contido\n' "$ramo" "${head:0:7}" "$ramo" "${main:0:7}"
-    printf 'próximo: repo pr-abrir %s --titulo <t> [--corpo <c>]\n' "$nome"
+  if [ "$head" = "$main" ]; then
+    printf 'já em dia: %s @ %s = origin/main (nada a entregar)\n' "$ramo" "${head:0:7}"
     return 0
   fi
 
+  # A entrega e direta na main, em avanco direto (ordem do dono de 22/11/2026: sem pedido de
+  # integracao nem workflow no forge). O HEAD contem origin/main, entao o push so avanca; se
+  # outra mao empurrou para main depois do fetch, o git recusa e a cadeira sincroniza de novo.
   # stderr do push segue visivel: e onde o pre-push diz o que barrou
   # o stdout do push e o do hook: a linha do pre-push (chave, rodou|reaproveitou) vai ao
   # stderr, visivel, em vez de sumir em /dev/null (card #3150)
-  env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" >&2
-  fsha="$(forge_sha "$c" "$ramo")"; rc=$?
+  env PATH="$PATH_FORGE" "$GIT" -C "$c" push origin "HEAD:refs/heads/main" >&2
+  fsha="$(forge_sha "$c" main)"; rc=$?
   if [ "$rc" -eq 0 ] && [ "$fsha" = "$head" ]; then
-    publica_veredito "$c" "$nome" "$head"
     dispara_esteira "$nome" "$c" "$head" "$main"
     if [ "$mesclou" -eq 1 ]; then
-      printf 'sincronizado: %s = %s (mesclou origin/main %s, %s commit(s) novo(s)); origin/%s = %s [lido do forge]\n' \
-        "$ramo" "${head:0:7}" "${main:0:7}" "$novos" "$ramo" "${fsha:0:7}"
+      printf 'sincronizado: main = %s (de %s; mesclou origin/main %s, %s commit(s) novo(s)); origin/main = %s [lido do forge]\n' \
+        "${head:0:7}" "$ramo" "${main:0:7}" "$novos" "${fsha:0:7}"
     elif [ "$mesclou_ramo" -eq 1 ]; then
-      printf 'sincronizado: %s = %s (mesclou origin/%s, main ja contido); origin/%s = %s [lido do forge]\n' \
-        "$ramo" "${head:0:7}" "$ramo" "$ramo" "${fsha:0:7}"
+      printf 'sincronizado: main = %s (de %s; mesclou origin/%s); origin/main = %s [lido do forge]\n' \
+        "${head:0:7}" "$ramo" "$ramo" "${fsha:0:7}"
     else
-      printf 'sincronizado: %s = %s (main ja contido); origin/%s = %s [lido do forge]\n' \
-        "$ramo" "${head:0:7}" "$ramo" "${fsha:0:7}"
+      printf 'sincronizado: main = %s (de %s); origin/main = %s [lido do forge]\n' \
+        "${head:0:7}" "$ramo" "${fsha:0:7}"
     fi
-    printf 'próximo: repo pr-abrir %s --titulo <t> [--corpo <c>]\n' "$nome"
+    printf 'próximo: release promover %s %s\n' "${nome%%@*}" "$head"
     return 0
   fi
   [ "$rc" -eq 5 ] && morre "indeterminavel: empurrei? o forge nao respondeu ($fsha)" 5
-  morre "push falhou: local ${head:0:7}, origin/$ramo $([ -n "$fsha" ] && echo "${fsha:0:7}" || echo ausente) (o pre-push barrou? ver acima)$([ "$mesclou" -eq 1 ] && echo ' — o merge local fica; rode de novo depois de corrigir')" 3
+  morre "push para main falhou: local ${head:0:7}, origin/main $([ -n "$fsha" ] && echo "${fsha:0:7}" || echo ausente) (a main andou depois do fetch, ou o pre-push barrou? ver acima) — rode sincronizar de novo$([ "$mesclou" -eq 1 ] && echo '; o merge local fica')" 3
 }
 
 # abrir_direto_em_main <repo> <cadeira> <card> -- a worktree de main da cadeira (regime
@@ -2907,20 +2914,17 @@ ato_empurrar() {
     env PATH="$PATH_FORGE" "$GIT" -C "$c" fetch -q origin "refs/heads/$ramo:refs/remotes/origin/$ramo" >/dev/null 2>&1
     "$GIT" -C "$c" branch -q --set-upstream-to="origin/$ramo" "$ramo" >/dev/null 2>&1
     printf 'já feito: origin/%s = %s (%s)\n' "$ramo" "${fsha:0:7}" "$("$GIT" -C "$c" log -1 --format='%s' "$local_sha")"
-    printf 'próximo: repo pr-abrir %s --titulo <t> [--corpo <c>]\n' "$nome"
+    printf 'próximo: repo sincronizar %s\n' "$nome"
     return 0
   fi
+  # empurrar guarda o ramo fora do host e nada mais: quem entrega na main e o sincronizar.
   # stderr do push segue visivel: e onde o pre-push diz o que barrou
   env PATH="$PATH_FORGE" "$GIT" -C "$c" push -u origin "$ramo" >&2
   fsha="$(forge_sha "$c" "$ramo")"; rc=$?
   if [ "$rc" -eq 0 ] && [ "$fsha" = "$local_sha" ]; then
-    publica_veredito "$c" "$nome" "$local_sha"
-    local base_main
-    base_main="$("$GIT" -C "$c" rev-parse --verify -q origin/main 2>/dev/null || printf '%s' "$local_sha")"
-    dispara_esteira "$nome" "$c" "$local_sha" "$base_main"
     printf 'empurrado: %s -> origin/%s = %s (%s) [lido do forge]\n' "$nome" "$ramo" "${fsha:0:7}" \
       "$("$GIT" -C "$c" log -1 --format='%s' "$local_sha")"
-    printf 'próximo: repo pr-abrir %s --titulo <t> [--corpo <c>]\n' "$nome"
+    printf 'próximo: repo sincronizar %s\n' "$nome"
     return 0
   fi
   [ "$rc" -eq 5 ] && morre "indeterminavel: push feito? o forge nao respondeu ($fsha)" 5

@@ -477,7 +477,7 @@ def test_sincronizar_main_novo_mescla_e_empurra(tmp_path):
     assert r.returncode == 0, r.stderr
     assert "mesclou origin/main" in r.stdout
     assert (wt / "NOVO.md").exists()
-    remoto = _git("ls-remote", "origin", "refs/heads/fabrica/42-x", cwd=wt).split()[0]
+    remoto = _git("ls-remote", "origin", "refs/heads/main", cwd=wt).split()[0]
     assert remoto == _git("rev-parse", "HEAD", cwd=wt)
 
 
@@ -539,13 +539,16 @@ def test_sincronizar_ramo_divergido_mescla_origin_ramo(tmp_path):
     assert (wt / "da-outra.md").exists() and (wt / "local.md").exists()
 
 
-def test_sincronizar_termina_com_proximo_pr_abrir(tmp_path):
+def test_sincronizar_entrega_na_main_e_termina_com_proximo_promover(tmp_path):
     bancada = _montar(tmp_path)
     wt = _abrir_42(tmp_path, bancada)
     _commit_em(wt, "card.md", "c\n")
     r = _repo(tmp_path, bancada, "s1", "sincronizar", "demo")
     assert r.returncode == 0, r.stderr
-    assert r.stdout.strip().splitlines()[-1] == "próximo: repo pr-abrir demo --titulo <t> [--corpo <c>]"
+    head = _git("rev-parse", "HEAD", cwd=wt)
+    assert _git("ls-remote", "origin", "refs/heads/main", cwd=wt).split()[0] == head
+    assert r.stdout.strip().splitlines()[-1] == f"próximo: release promover demo {head}"
+    assert "pr-abrir" not in r.stdout + r.stderr
 
 
 # --- fecho idempotente ------------------------------------------------------------------
@@ -581,13 +584,15 @@ def test_commitar_novo_tambem_termina_com_proximo_sincronizar(tmp_path):
     assert r.stdout.strip().splitlines()[-1] == "próximo: repo sincronizar demo"
 
 
-def test_empurrar_termina_com_proximo_pr_abrir(tmp_path):
+def test_empurrar_guarda_o_ramo_e_termina_com_proximo_sincronizar(tmp_path):
     bancada = _montar(tmp_path)
     wt = _abrir_42(tmp_path, bancada)
+    main_antes = _git("ls-remote", "origin", "refs/heads/main", cwd=wt).split()[0]
     _commit_em(wt, "card.md", "c\n")
     r = _repo(tmp_path, bancada, "s1", "empurrar", "demo")
     assert r.returncode == 0, r.stderr
-    assert r.stdout.strip().splitlines()[-1] == "próximo: repo pr-abrir demo --titulo <t> [--corpo <c>]"
+    assert _git("ls-remote", "origin", "refs/heads/main", cwd=wt).split()[0] == main_antes
+    assert r.stdout.strip().splitlines()[-1] == "próximo: repo sincronizar demo"
 
 
 # --- sanear: so o entregue ou o fora do eixo some, e nada sem salvar ---------------------

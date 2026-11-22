@@ -42,7 +42,7 @@ tests/test_conferir_servico_release.py | bin/conferir bin/_release/**
 tests/test_conferir_gate_email.py | bin/conferir bin/_release/**
 tests/test_contrato_repo_bancada.py | bin/repo
 tests/test_contrato_repo_lock.py | bin/repo venvs/**
-tests/test_contrato_repo_veredito.py | bin/repo hooks/pre-push .github/workflows/esteira-integra.yml
+tests/test_contrato_repo_veredito.py | bin/repo hooks/pre-push
 tests/test_contrato_repo_pr_fechar.py | bin/repo
 # Medido em 12/10/2026 (card #3473): `repo hooks listar|apagar` com gh de fixture (21 passam; sem a mudança em bin/repo, 17 ficam vermelhos).
 tests/test_contrato_repo_hooks.py | bin/repo lib/raizes.sh
