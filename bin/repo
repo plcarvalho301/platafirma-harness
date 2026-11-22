@@ -1745,93 +1745,6 @@ abrir_direto_em_main() {
   return 0
 }
 
-# portao_admissao_casa <repo> <worktree> <main_sha> -- antes do push de platafirma-casa,
-# roda o plano a seco da ingestão (`casa-ingerir --arvore`) nos arquivos tocados por $main..HEAD.
-# Recusa (exit 4) se algum arquivo tocado for reprovado; se o motor estiver fora, avisa e segue.
-portao_admissao_casa() {
-  local nome="$1" c="$2" main_sha="$3" base="${1%%@*}"
-  [ "$base" = "platafirma-casa" ] || return 0
-  [ "${PF_CASA_SEM_PORTAO:-0}" = "1" ] && return 0
-  local bin_dir ingerir
-  bin_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-  ingerir="${PF_CASA_INGERIR:-$bin_dir/_acervo/casa-ingerir}"
-  [ -x "$ingerir" ] || return 0
-
-  local tocados_arq plano_arq
-  tocados_arq="$(mktemp)" || return 0
-  if ! "$GIT" -C "$c" diff --name-only "$main_sha..HEAD" >"$tocados_arq" 2>/dev/null || [ ! -s "$tocados_arq" ]; then
-    rm -f "$tocados_arq"
-    return 0
-  fi
-  plano_arq="$(mktemp)" || { rm -f "$tocados_arq"; return 0; }
-
-  local inst arvore="" f rc
-  inst="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}"
-  if mkdir -p "$inst/var/pre-push/arvores" 2>/dev/null \
-    && arvore="$(mktemp -d "$inst/var/pre-push/arvores/repo-casa.XXXXXX" 2>/dev/null)"; then
-    while IFS= read -r -d '' f; do
-      [ -f "$c/$f" ] || continue
-      mkdir -p "$arvore/$(dirname "$f")" && cp "$c/$f" "$arvore/$f" 2>/dev/null || true
-    done < <("$GIT" -C "$c" ls-files -co --exclude-standard -z)
-    python3 "$ingerir" platafirma-casa --arvore "$arvore" --json >"$plano_arq" 2>/dev/null; rc=$?
-    rm -rf "$arvore"
-  else
-    python3 "$ingerir" platafirma-casa --arvore "$c" --json >"$plano_arq" 2>/dev/null; rc=$?
-  fi
-  if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then
-    rm -f "$tocados_arq" "$plano_arq"
-    printf '%s: aviso: portão de ingestão indisponível (exit %s) — seguindo push\n' "$VERBO" "$rc" >&2
-    return 0
-  fi
-
-  local recusas
-  recusas="$(python3 - "$tocados_arq" "$plano_arq" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding="utf-8", errors="replace") as f:
-    tocados = {l.strip() for l in f if l.strip()}
-try:
-    with open(sys.argv[2], encoding="utf-8") as f:
-        plano = json.load(f)
-except Exception:
-    sys.exit(2)
-pref = "platafirma-casa@"
-out = []
-for it in (plano.get("lote") or {}).get("itens") or []:
-    if it.get("veredito") != "reprovado":
-        continue
-    arq = it.get("arquivo") or it.get("path") or ""
-    if arq.startswith(pref):
-        arq = arq[len(pref):]
-    if arq in tocados:
-        motivos = [
-            f"{p.get('portao')}: {p.get('detail') or p.get('title') or ''}".rstrip(": ")
-            for p in it.get("portoes") or []
-            if p.get("resultado") == "reprovado"
-        ]
-        msg = "; ".join(motivos) or "reprovado"
-        out.append(f"{arq}: {msg}")
-for r in plano.get("recusas_locais") or []:
-    arq = r.get("path") or ""
-    if arq in tocados:
-        msg = r.get("motivo") or "reprovado"
-        out.append(f"{arq}: {msg}")
-if out:
-    print("\n".join(out))
-    sys.exit(1)
-PY
-)"; rc=$?
-  rm -f "$tocados_arq" "$plano_arq"
-  if [ "$rc" -eq 1 ]; then
-    printf '%s: admissão da ingestão recusou documento(s) tocado(s) antes do push:\n' "$VERBO" >&2
-    printf '%s\n' "$recusas" | sed 's/^/  /' >&2
-    printf 'vizinho: corrija o documento, repo commitar %s, e rode repo sincronizar %s de novo\n' "$nome" "$nome" >&2
-    exit 4
-  elif [ "$rc" -ne 0 ]; then
-    printf '%s: aviso: retorno do portão de ingestão ilegível — seguindo push\n' "$VERBO" >&2
-  fi
-  return 0
-}
-
 # sincronizar_direto_em_main <repo> <worktree> -- o sincronizar do regime direto em main:
 # busca o forge (falhou: 5) -> escrita rastreada nao commitada: 4, vizinho commitar (nao
 # rastreado alheio nao trava, bancada compartilhada) -> nada local: anda em fast-forward,
@@ -1879,7 +1792,8 @@ sincronizar_direto_em_main() {
       exit 4
     fi
   fi
-  portao_admissao_casa "$nome" "$c" "$main"
+  # Sem portão de ingestão antes do push: a partição casa do motor sai (#4425), e o documento da casa
+  # se lê pelo consultar e pelo leitor da casa (#4376). Incidente #4429.
   head="$("$GIT" -C "$c" rev-parse HEAD)"
   # stderr do push segue visivel: e onde o pre-push diz o que barrou
   env PATH="$PATH_FORGE" "$GIT" -C "$c" push origin "HEAD:refs/heads/main" >&2
@@ -1887,9 +1801,6 @@ sincronizar_direto_em_main() {
   if [ "$rc" -eq 0 ] && [ "$fsha" = "$head" ]; then
     printf 'sincronizado: main = %s (%s commit(s) de %s%s); origin/main = %s [lido do forge]\n' \
       "${head:0:7}" "$frente" "$ramo" "$([ "$novos" -gt 0 ] && printf ', rebaseado sobre origin/main %s' "${main:0:7}")" "${fsha:0:7}"
-    if [ "${nome%%@*}" = "platafirma-casa" ]; then
-      printf 'próximo: acervo ingerir casa platafirma-casa@%s --apply\n' "${head:0:7}"
-    fi
     return 0
   fi
   [ "$rc" -eq 5 ] && morre "indeterminavel: empurrei? o forge nao respondeu ($fsha)" 5

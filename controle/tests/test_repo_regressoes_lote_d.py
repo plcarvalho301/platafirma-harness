@@ -108,7 +108,7 @@ def test_dt744_aviso_atras_origin_direto_em_main_mantem_atualizar_ou_sincronizar
     assert "rode 'repo atualizar platafirma-casa' ou 'repo sincronizar platafirma-casa'" in r_listar.stderr
 
 
-def test_dt747_portao_admissao_casa_suporta_centenas_de_arquivos_e_plano_grande(tmp_path: Path):
+def test_dt747_sincronizar_casa_empurra_centenas_de_arquivos_sem_portao_de_ingestao(tmp_path: Path):
     env, _, origem, semente, wt = _prepara_repo(tmp_path, nome="platafirma-casa", direto_main=True)
 
     # Cria 190 arquivos em adr/ e sincroniza na origem
@@ -128,41 +128,23 @@ def test_dt747_portao_admissao_casa_suporta_centenas_de_arquivos_e_plano_grande(
     _git(wt, "add", "adr/0189-decisao-longa-para-teste-de-argumentos.md")
     _git(wt, "commit", "-q", "-m", "apaga 187 adrs")
 
-    # Falso casa-ingerir que devolve > 200 KB de JSON (acima de MAX_ARG_STRLEN = 128 KB do Linux execve)
+    # Incidente #4429: o portao de admissao saiu do sincronizar. Uma ingestao falsa que reprovaria
+    # o arquivo tocado e marca a chamada prova que o push grande segue sem passar por ela.
+    chamada = tmp_path / "ingerir-chamado"
     falso_ingerir = tmp_path / "falso-casa-ingerir"
     falso_ingerir.write_text(
         "#!/usr/bin/env python3\n"
-        "import json, os\n"
-        "reprovar = os.environ.get('TESTE_REPROVAR') == '1'\n"
-        "itens = [\n"
-        "    {\n"
-        "        'arquivo': f'platafirma-casa@doc/item-{i:04d}.md',\n"
-        "        'veredito': 'aprovado',\n"
-        "        'detalhe': 'x' * 500,\n"
-        "    }\n"
-        "    for i in range(400)\n"
-        "]\n"
-        "if reprovar:\n"
-        "    itens.append({\n"
-        "        'arquivo': 'platafirma-casa@adr/0189-decisao-longa-para-teste-de-argumentos.md',\n"
-        "        'veredito': 'reprovado',\n"
-        "        'portoes': [{'portao': 'forma', 'resultado': 'reprovado', 'detail': 'cabecalho invalido'}],\n"
-        "    })\n"
-        "print(json.dumps({'lote': {'itens': itens}}))\n",
+        "import json\n"
+        f"open({json.dumps(str(chamada))}, 'w').write('chamado')\n"
+        "print(json.dumps({'lote': {'itens': [{'arquivo': "
+        "'platafirma-casa@adr/0189-decisao-longa-para-teste-de-argumentos.md', 'veredito': 'reprovado'}]}}))\n",
         encoding="utf-8",
     )
     falso_ingerir.chmod(0o755)
     env["PF_CASA_INGERIR"] = str(falso_ingerir)
 
-    # 1. Quando o portao reprova com JSON > 200 KB, recusa com exit 4 (antes estourava Argument list too long e empurrava!)
-    env_reprova = {**env, "TESTE_REPROVAR": "1"}
-    r_rep = _roda(env_reprova, "sincronizar", "platafirma-casa")
-    assert r_rep.returncode == 4, r_rep.stdout + r_rep.stderr
-    assert "Argument list too long" not in r_rep.stderr
-    assert "0189-decisao-longa-para-teste-de-argumentos.md: forma: cabecalho invalido" in r_rep.stderr
-
-    # 2. Quando o portao aprova com JSON > 200 KB, sincroniza sem Argument list too long
     r_ok = _roda(env, "sincronizar", "platafirma-casa")
+    assert not chamada.exists(), "repo sincronizar chamou a ingestao da casa"
     assert r_ok.returncode == 0, r_ok.stderr
     assert "Argument list too long" not in r_ok.stderr
     assert "sincronizado: main" in r_ok.stdout
