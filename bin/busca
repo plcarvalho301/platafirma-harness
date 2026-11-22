@@ -1,0 +1,292 @@
+#!/opt/platafirma/current/venv/harness/bin/python
+# busca — acha e lê o que a casa tem; nesta versão, lê pela chave ou pelo nome
+# capacidade: busca
+# dono: ti
+# classe: C
+# use para: ler o texto de algo da casa pela chave ou pelo nome, sem saber o caminho
+# atos: ler (leitura, arquivo)
+# forma: texto
+# cauda: nao
+"""Executável do verbo busca (story 4426): o ato ler.
+
+Contrato: platafirma-casa@referencias/instancias/interface-de-verbo/busca.md, «Leitura pela chave»,
+e platafirma-casa@referencias/instancias/verbo/busca.md, «O que o ler faz com a consulta por nome».
+
+O ler decide o que recebeu nesta ordem: o argumento com barra é caminho solto e sai 2; o que é a
+chave humana exata de uma ficha, ou a classe seguida de dois-pontos, é chave; o resto é nome, que
+se resolve pela consulta resolver_nomes do leitor. Uma conexão só por chamada, fechada antes de
+abrir o arquivo; o arquivo se lê pela leitura do ler_arquivo de hoje, confinada pela morada.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import shlex
+import sys
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any, TextIO
+
+_LIB = Path(__file__).resolve().parents[1] / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+
+from leitura import resolvedor
+from leitura.leitura import ORCAMENTO_MAX, ORCAMENTO_PADRAO
+from leitura.leitura import ler as ler_arquivo
+from leitura.morada import release_raiz
+from leitura.recusa import Recusa, escrever
+from leitura.retrato import Retrato
+
+REGRA_CHAVE = "interface-de-verbo:busca §Leitura pela chave"
+REGRA_NOME = "verbo:busca §O que o ler faz com a consulta por nome"
+USO = "busca ler <chave|nome> [--offset <bytes>] [--max-bytes <n>] [--versao <v>] [--json]"
+_FLAGS_VALOR = {"--offset": "offset", "--max-bytes": "max_bytes", "--versao": "versao"}
+_PARTES_COM_PASTA = 2                    # o caminho solto tem ao menos uma pasta e o arquivo
+_CONTINUACAO_UTF8 = range(0x80, 0xC0)    # byte de continuação de um caractere UTF-8
+_DEFINICAO_TETO = 120                    # caracteres da definição na coluna das fichas
+_SAIDAS_DE_RECUSA = (1, 2, 3, 4, 5)
+
+
+# ==================================================================== pedido
+def _inteiro(flag: str, valor: str, minimo: int) -> int:
+    try:
+        n = int(valor)
+    except ValueError:
+        n = minimo - 1
+    if n < minimo:
+        raise Recusa(2, "flag-invalida", onde=flag, recebido=valor, regra=REGRA_CHAVE,
+                     cura=f"{flag} pede inteiro a partir de {minimo}", proximo=USO)
+    return n
+
+
+def pedido(args: list[str]) -> dict[str, Any]:
+    """Os argumentos do ato ler; as palavras soltas juntas são a chave ou o nome."""
+    ped: dict[str, Any] = {"offset": 0, "max_bytes": None, "versao": None, "json": False}
+    palavras: list[str] = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--json":
+            ped["json"] = True
+        elif a in _FLAGS_VALOR:
+            if i + 1 >= len(args):
+                raise Recusa(2, "flag-sem-valor", onde=a, regra=REGRA_CHAVE, cura=f"{a} pede um valor", proximo=USO)
+            ped[_FLAGS_VALOR[a]] = args[i + 1]
+            i += 1
+        elif a.startswith("--"):
+            raise Recusa(2, "flag-desconhecida", onde=a, recebido=a, regra=REGRA_CHAVE,
+                         cura="flags do ler: --offset, --max-bytes, --versao e --json", proximo=USO)
+        else:
+            palavras.append(a)
+        i += 1
+    alvo = " ".join(palavras).strip()
+    if not alvo:
+        raise Recusa(2, "chave-ausente", onde="chave", regra=REGRA_CHAVE,
+                     cura="passe a chave <classe>:<slug> ou o nome", proximo="busca ler capacidade:busca")
+    ped["alvo"] = alvo
+    ped["offset"] = _inteiro("--offset", str(ped["offset"]), 0)
+    if ped["max_bytes"] is not None:
+        ped["max_bytes"] = min(_inteiro("--max-bytes", str(ped["max_bytes"]), 1), ORCAMENTO_MAX)
+    return ped
+
+
+def _chave_do_caminho(caminho: str) -> str:
+    """A chamada pela chave para o caminho solto: a classe e o slug quando ele segue um molde."""
+    partes = [p for p in caminho.split("/") if p]
+    slug = (partes[-1] if partes else caminho).removesuffix(".md")
+    if len(partes) >= _PARTES_COM_PASTA and "instancias" in partes[:-1]:
+        i = len(partes) - 1 - partes[::-1].index("instancias")
+        meio = partes[i + 1:-1]
+        if meio:
+            return f"{meio[0]}:{':'.join([*meio[1:], slug])}"
+    return slug
+
+
+# ==================================================================== retorno
+def blob_sha(dados: bytes) -> str:
+    """O sha do blob do git sobre os bytes do arquivo, como `git hash-object` devolve."""
+    return hashlib.sha1(b"blob %d\0" % len(dados) + dados).hexdigest()
+
+
+def _proximo(chave: str, fim: int, versao: str, max_bytes: int | None) -> str:
+    extra = f" --max-bytes {max_bytes}" if max_bytes else ""
+    return f"busca ler {shlex.quote(chave)} --offset {fim} --versao {versao}{extra}"
+
+
+def _parte(ini: int, fim: int, total: int) -> str:
+    return "inteiro" if ini == 0 and fim >= total else f"bytes {ini}–{fim} de {total}"
+
+
+def _cabecalho(chave: str, versao: str, parte: str, f: resolvedor.Ficha) -> str:
+    linha = f"{chave} · versão {versao} · {parte}"
+    if f.e_classe:
+        linha += f" · objeto lido: a ficha da classe {f.chave}"
+    return linha
+
+
+def _fatia_texto(dados: bytes, offset: int, orcamento: int) -> tuple[bytes, int, int]:
+    """[offset, fim) em fronteira de caractere UTF-8."""
+    ini = min(offset, len(dados))
+    while 0 < ini < len(dados) and dados[ini] in _CONTINUACAO_UTF8:
+        ini += 1
+    fim = min(ini + orcamento, len(dados))
+    while ini < fim < len(dados) and dados[fim] in _CONTINUACAO_UTF8:
+        fim -= 1
+    return dados[ini:fim], ini, fim
+
+
+def _pagina(alvo: resolvedor.Alvo, ped: dict, lido: dict) -> dict:
+    """O retorno do ler: `lido` traz versão, conteúdo, faixa de bytes, total e o tipo de objeto."""
+    chave = alvo.ficha.chave_lida
+    ini, fim = lido["bytes"]
+    parcial = fim < lido["total"]
+    parte = _parte(ini, fim, lido["total"])
+    return {
+        "cabecalho": _cabecalho(chave, lido["versao"], parte, alvo.ficha),
+        "chave": chave,
+        "classe": alvo.ficha.classe,
+        "ficha_da_classe": alvo.ficha.e_classe,
+        "versao": lido["versao"],
+        "parte": parte,
+        "parcial": parcial,
+        "avisos": [],
+        "objeto": lido["objeto"],
+        "documento": alvo.documento,
+        "motivo": alvo.motivo,
+        "conteudo": lido["conteudo"],
+        "bytes": [ini, fim],
+        "total": lido["total"],
+        "proximo": _proximo(chave, fim, lido["versao"], ped["max_bytes"]) if parcial else "fim",
+    }
+
+
+def _ler_documento(alvo: resolvedor.Alvo, ped: dict, release: Path) -> dict:
+    if alvo.caminho is None:
+        raise Recusa(5, "indeterminavel", onde=alvo.ficha.chave, regra=REGRA_CHAVE,
+                     cura="o alvo sem arquivo chegou à leitura do arquivo; abra incidente")
+    chave = alvo.ficha.chave_lida
+    versao = blob_sha(alvo.caminho.read_bytes())
+    orcamento = ped["max_bytes"] or ORCAMENTO_PADRAO
+    r = ler_arquivo(str(alvo.caminho), offset=ped["offset"], max_bytes=orcamento, release=release)
+    if "conteudo" not in r or "bytes" not in r:
+        saida = int(r.get("exit_code") or 5)
+        raise Recusa(saida if saida in _SAIDAS_DE_RECUSA else 5, "leitura-recusada", onde=chave,
+                     recebido=chave, regra=REGRA_CHAVE,
+                     cura=str(r.get("falta") or r.get("erro") or "a leitura não serviu o arquivo"))
+    lido = {"versao": versao, "conteudo": r["conteudo"], "bytes": r["bytes"],
+            "total": int(r.get("bytes_total") or 0), "objeto": "arquivo"}
+    return _pagina(alvo, ped, lido)
+
+
+def _ler_ficha(alvo: resolvedor.Alvo, ficha: dict, ped: dict) -> dict:
+    dados = (json.dumps(ficha, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    versao = hashlib.sha256(json.dumps(ficha, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:12]
+    pedaco, ini, fim = _fatia_texto(dados, ped["offset"], ped["max_bytes"] or ORCAMENTO_PADRAO)
+    lido = {"versao": versao, "conteudo": pedaco.decode("utf-8", "replace"), "bytes": [ini, fim],
+            "total": len(dados), "objeto": "ficha"}
+    return _pagina(alvo, ped, lido)
+
+
+def _coluna(alvo: str, fichas: list[dict]) -> dict:
+    linhas = []
+    for f in fichas:
+        definicao = " ".join(str(f.get("definicao") or "").split())
+        if len(definicao) > _DEFINICAO_TETO:
+            definicao = definicao[: _DEFINICAO_TETO - 1] + "…"
+        linhas.append(" · ".join(x for x in (f["chave"], f["classe"], f.get("rotulo") or "", definicao) if x))
+    return {
+        "cabecalho": f"«{alvo}» nomeia {len(fichas)} fichas · leia pela chave",
+        "fichas": [{k: f.get(k) for k in ("chave", "classe", "rotulo", "definicao", "passo")} for f in fichas],
+        "conteudo": "\n".join(linhas) + "\n",
+        "parcial": False,
+        "avisos": [],
+        "proximo": f"busca ler {shlex.quote(fichas[0]['chave'])}",
+    }
+
+
+# ==================================================================== o ato
+def _por_nome(retrato: Any, alvo: str) -> resolvedor.Ficha | list[dict]:
+    linhas = retrato.resolver_nomes([alvo])
+    norm = str(linhas[0].get("norm") or "") if linhas else ""
+    if not norm:
+        raise Recusa(2, "termo-sem-letra", onde="nome", recebido=alvo, regra=REGRA_NOME,
+                     cura="o termo normaliza para vazio; passe letras ou a chave", proximo="busca ler capacidade:busca")
+    vistas: dict[str, dict] = {}
+    for ln in linhas:
+        if ln.get("chave") and ln["chave"] not in vistas:
+            vistas[ln["chave"]] = ln
+    if not vistas:
+        raise Recusa(1, "termo-nao-casou", onde="nome", recebido=alvo, regra=REGRA_NOME,
+                     cura=f"«{norm}» não nomeia ficha pela tabela de nomes, rótulo, variantes nem slug",
+                     proximo=f"busca buscar {shlex.quote(alvo)}")
+    if len(vistas) > 1:
+        return list(vistas.values())
+    achada = resolvedor.ficha(retrato, next(iter(vistas)))
+    if achada is None:
+        raise Recusa(5, "indeterminavel", onde="nome", recebido=alvo, regra=REGRA_NOME,
+                     cura="o nome deu uma chave que a ficha não tem; abra incidente")
+    return achada
+
+
+def ato_ler(args: list[str], *, abrir_retrato: Callable[[], Any] = Retrato, release: Path | None = None) -> dict:
+    ped = pedido(args)
+    alvo_txt = ped["alvo"]
+    if "/" in alvo_txt:
+        raise Recusa(2, "caminho-solto-recusado", onde="chave", recebido=alvo_txt, regra=REGRA_CHAVE,
+                     cura="o ler recebe a chave <classe>:<slug> ou o nome, e não o caminho do arquivo",
+                     proximo=f"busca ler {shlex.quote(_chave_do_caminho(alvo_txt))}")
+    raiz = release_raiz(release)
+    with abrir_retrato() as retrato:
+        achada = resolvedor.ficha_da_chave(retrato, alvo_txt)
+        if achada is None:
+            achada = _por_nome(retrato, alvo_txt)
+            if isinstance(achada, list):
+                return {**_coluna(alvo_txt, achada), "json": ped["json"]}
+        alvo = resolvedor.resolver(retrato, achada, raiz)
+        ficha = resolvedor.ficha_inteira(retrato, achada) if alvo.caminho is None else None
+    r = _ler_documento(alvo, ped, raiz) if alvo.caminho is not None else _ler_ficha(alvo, ficha or {}, ped)
+    if ped["versao"] and ped["versao"] != r["versao"]:
+        r["avisos"].append(f"mudou: a versão lida é {r['versao']}, a pedida era {ped['versao']}")
+        r["mudou"] = True
+    r["json"] = ped["json"]
+    return r
+
+
+# ==================================================================== saída
+def imprimir(r: dict, fluxo: TextIO) -> None:
+    if r.pop("json", False):
+        fluxo.write(json.dumps(r, ensure_ascii=False) + "\n")
+        return
+    fluxo.write(r["cabecalho"] + "\n")
+    conteudo = r.get("conteudo") or ""
+    fluxo.write(conteudo if conteudo.endswith("\n") or not conteudo else conteudo + "\n")
+    if r.get("parcial") or r.get("avisos"):
+        fluxo.write("--\n")
+        if r.get("parcial"):
+            fluxo.write(f"proximo: {r['proximo']}\n")
+        fluxo.writelines(f"aviso: {aviso}\n" for aviso in r.get("avisos") or ())
+
+
+ATOS = {"ler": ato_ler}
+
+
+def main(argv: list[str] | None = None, *, saida: TextIO | None = None, erro: TextIO | None = None,
+         **kw: Any) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    saida = sys.stdout if saida is None else saida
+    erro = sys.stderr if erro is None else erro
+    como_json = "--json" in argv
+    try:
+        if not argv or argv[0] not in ATOS:
+            raise Recusa(2, "ato-desconhecido", onde="ato", recebido=argv[0] if argv else "",
+                         regra="interface-de-verbo:busca §Atos", cura="nesta versão o verbo busca tem só o ato ler",
+                         proximo=USO)
+        imprimir(ATOS[argv[0]](argv[1:], **kw), saida)
+        return 0
+    except Recusa as r:
+        return escrever(r, como_json=como_json, fluxo=erro)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
