@@ -400,3 +400,5 @@ testes/test_verbos_leitura_unificada.py | lib/leitura/** bin/release bin/repo bi
 # Story #4427: repasse do ato buscar ao motor, consulta exata por nome e condição e leitor casa_db.
 testes/test_busca_repasse.py | bin/busca bin/motor
 testes/test_busca_consultar.py | bin/busca lib/busca/** lib/leitura/**
+testes/test_busca_consultar_vivo.py | bin/busca lib/busca/** lib/leitura/** | degrau: rodada
+testes/test_regra_versao_da_classe_vivo.py | bin/busca lib/busca/** lib/leitura/** | degrau: rodada

@@ -1060,6 +1060,14 @@ def test_coluna_capacidade_restringe_resolucao_a_classe_apontada_e_primeira_linh
     assert linhas[1].startswith("exploracao")
 
 
+def test_slug_exato_da_classe_vence_apelido_homonimo_de_outra_classe() -> None:
+    banco = RetratoFalsoConsultar()
+    banco.nomes.append(LinhaNomeFalsa("politica", "gabarito"))
+    rc, out, err = rodar_consultar(["--classe", "politica", "--json"], retrato=banco)
+    assert rc == SAIDA_OK and err == ""
+    assert json.loads(out)["classe"] == "politica"
+
+
 def test_filhas_inclui_descendentes_genericas_da_classe_pedida() -> None:
     _, out_sem, _ = rodar_consultar(["--classe", "regra", "--json"])
     _, out_com, _ = rodar_consultar(["--classe", "regra", "--filhas", "--json"])

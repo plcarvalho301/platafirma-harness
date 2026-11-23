@@ -48,6 +48,12 @@ class _CatalogoIndexado:
 
 
 def _resolver_classe_principal(sessao: casa_db.SessaoLeitura, nome_classe: str) -> tuple[str, str]:
+    slug_limpo = nome_classe.strip()
+    uid_exato = sessao.uuid_da_classe(slug_limpo)
+    if uid_exato is not None:
+        sessao.exigir_autorizacao(slug_limpo)
+        return uid_exato, slug_limpo
+
     res = sessao.resolver_nomes([nome_classe])
     if 1 in res.ords_negados:
         raise Recusas([Recusa(
