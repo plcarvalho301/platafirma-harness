@@ -142,6 +142,16 @@ verbos:
       motor:
         instancia: rag
         sem_instancia: [listar]
+  ontologia:
+    descricao: >-
+      lê e grava classes, fichas e dicionários no catálogo e no fichário da Olaria · use para:
+      ler classe, ficha, dicionário ou shape, «lê a classe chapeu»; listar classes, descendentes
+      (--filhas), referenciadores (--aponta-para) ou chaves gravadas; criar, trocar ou recompor
+      classes e fichas; ensaiar mudança sem gravar; renomear, apagar, gerir nomes alternativos e
+      gerar o modelo · atos: ler (leitura, ontologia), listar (leitura, ontologia), criar
+      (escrita, ontologia), trocar (escrita, ontologia), recompor (escrita, ontologia), ensaiar
+      (leitura, ontologia), renomear (escrita, ontologia), apagar (escrita, ontologia), nomes
+      (escrita, ontologia), gerar (leitura, ontologia)
   persona:
     modelo: false
   pesquisar:

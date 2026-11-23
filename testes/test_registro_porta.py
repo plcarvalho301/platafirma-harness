@@ -100,14 +100,14 @@ def test_faces_da_borda_saem_do_registro(registro):
     assert sorted(faces["motor"]) == ["fila", "motor"]
 
 
-def test_registro_expoe_exatamente_as_25_tools_visiveis_do_ar(registro):
+def test_registro_expoe_exatamente_as_26_tools_visiveis_do_ar(registro):
     esperadas = {
         "acervo", "acesso", "agente", "analise", "bot", "busca", "conferir",
         "descansar", "expediente", "fila", "infra", "ler_arquivo", "lint",
-        "malote", "mesa", "metrica", "monta_sessao", "motor", "pesquisar",
-        "release", "repo", "seg", "tarefas", "teste", "write_file",
+        "malote", "mesa", "metrica", "monta_sessao", "motor", "ontologia",
+        "pesquisar", "release", "repo", "seg", "tarefas", "teste", "write_file",
     }
-    assert len(esperadas) == 25
+    assert len(esperadas) == 26
     assert _tools_visiveis(registro) == esperadas
     assert "busca" in registro["verbos"]
     assert registro["verbos"]["motor"].get("nome") is None
