@@ -17,6 +17,7 @@ Contratos:
 """
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import os
@@ -34,7 +35,7 @@ if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 
 from busca.nome import consultar_por_nome
-from busca.pedido import receber_pedido
+from busca.pedido import ler_contexto, receber_pedido
 from busca.plano import montar_plano
 from busca.retorno import (
     TAMANHO_PAGINA_PADRAO,
@@ -362,17 +363,20 @@ def _abrir_sessao_leitura(
     bin_acesso = opcoes.get("bin_acesso")
     relogio = opcoes.get("relogio")
     prazo = float(opcoes.get("prazo") or PRAZO_CHAMADA)
-    sujeito = (env.get("PF_SUJEITO") if env is not None else os.getenv("PF_SUJEITO")) or None
-    ctx = {"sujeito": sujeito}
+    ctx_obj, origem_env = ler_contexto(env)
+    ctx = opcoes.get("contexto") or dataclasses.asdict(ctx_obj)
+    origem = str(opcoes.get("origem") or origem_env)
     if abrir_retrato is Retrato:
         return casa_db.retrato(
-            ctx, ("ler", None), prazo, autorizador=autorizador, bin_acesso=bin_acesso, relogio=relogio, release=release,
+            ctx, ("ler", None), prazo, origem=origem, autorizador=autorizador,
+            bin_acesso=bin_acesso, relogio=relogio, release=release,
         )
     aut = autorizador if (autorizador is not None or bin_acesso is not None) else (lambda _c, _s: True)
     return casa_db.retrato(
         ctx,
         ("ler", None),
         prazo,
+        origem=origem,
         conexao=abrir_retrato(),
         autorizador=aut,
         bin_acesso=bin_acesso,
@@ -438,6 +442,8 @@ def ato_consultar(
         autorizador=opcoes.get("autorizador"),
         release=raiz,
         env=env,
+        contexto=dataclasses.asdict(ped.contexto),
+        origem=ped.origem,
         prazo=prazo,
         bin_acesso=opcoes.get("bin_acesso"),
         relogio=opcoes.get("relogio"),

@@ -196,12 +196,35 @@ def resolver(retrato: Consulta, f: Ficha, release: Path) -> Alvo:
     return Alvo(f, alvo, rel, fonte)
 
 
+def _ordenar_ficha(crua: dict[str, Any], *, com_ligacoes: bool) -> dict[str, Any]:
+    dados_brutos = crua.get("dados")
+    dados = dict(sorted(dados_brutos.items())) if isinstance(dados_brutos, dict) else {}
+    decl_bruta = crua.get("declaracao")
+    decl = dict(sorted(decl_bruta.items())) if isinstance(decl_bruta, dict) else decl_bruta
+    ordenada: dict[str, Any] = {}
+    for ch in ("chave", "classe", "criada_em"):
+        if ch in crua:
+            ordenada[ch] = crua[ch]
+    ordenada["dados"] = dados
+    if com_ligacoes:
+        ligs = crua.get("ligacoes") if isinstance(crua.get("ligacoes"), dict) else {}
+        saida = ligs.get("saida") if isinstance(ligs.get("saida"), dict) else {}
+        chegada = ligs.get("chegada") if isinstance(ligs.get("chegada"), dict) else {}
+        ordenada["ligacoes"] = {
+            "saida": dict(sorted(saida.items())),
+            "chegada": dict(sorted(chegada.items())),
+        }
+    if "declaracao" in crua:
+        ordenada["declaracao"] = decl
+    for ch, val in crua.items():
+        if ch not in ordenada and (com_ligacoes or ch != "ligacoes"):
+            ordenada[ch] = val
+    return ordenada
+
+
 def ficha_inteira(retrato: Consulta, f: Ficha, *, com_ligacoes: bool = True) -> dict:
     sql = SQL_FICHA_INTEIRA if com_ligacoes else SQL_FICHA_SEM_LIGACOES
     linhas = retrato.consultar(sql, f.uuid)
     if not linhas:
         return {}
-    corpo = dict(linhas[0]["ficha"])
-    if not com_ligacoes:
-        corpo.pop("ligacoes", None)
-    return corpo
+    return _ordenar_ficha(dict(linhas[0]["ficha"]), com_ligacoes=com_ligacoes)

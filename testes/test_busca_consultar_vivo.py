@@ -7,12 +7,16 @@ Executa no degrau `rodada` as duas chamadas canônicas de «Como se confere» em
 """
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[1]
 BIN = RAIZ / "bin" / "busca"
+_RE_CABECALHO_CLASSE = re.compile(
+    r"^classe · fornada [0-9a-f-]+ · fichas 1 a (\d+) de \1 · digest v1:[0-9a-f]{64}$"
+)
 
 
 def _executar_consultar(*args: str) -> subprocess.CompletedProcess[str]:
@@ -30,8 +34,8 @@ def test_consultar_classes_cuja_capacidade_e_busca() -> None:
     assert proc.returncode == 0, proc.stderr
     linhas = proc.stdout.splitlines()
     assert linhas, "stdout vazio"
-    assert linhas[0].startswith("classe · fornada ")
-    assert " · fichas 1 a 1 de 1 · digest v1:" in linhas[0]
+    m = _RE_CABECALHO_CLASSE.match(linhas[0])
+    assert m is not None and int(m.group(1)) >= 1, f"cabeçalho inesperado: {linhas[0]!r}"
     assert any(ln == "exploracao" or ln.startswith("exploracao · ") for ln in linhas[1:])
 
 

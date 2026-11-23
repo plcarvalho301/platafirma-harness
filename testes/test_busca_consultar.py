@@ -947,6 +947,9 @@ def test_ficha_unica_respeita_ligacoes_com_e_sem() -> None:
     }
     assert "ligacoes" not in json.loads(out_sem)["ficha"]
 
+    _, txt_com, _ = rodar_consultar(["framework da ontologia", "--ligacoes", "com"])
+    assert txt_com.index('"saida"') < txt_com.index('"chegada"')
+
     _, txt_uma, _ = rodar_consultar(["framework da ontologia", "--ligacoes", "sem"])
     assert txt_uma.splitlines()[0] == "nome «framework da ontologia» · 1 fichas"
 

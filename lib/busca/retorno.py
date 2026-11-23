@@ -117,7 +117,7 @@ def _renderizar_modo_nome(reg: Mapping[str, Any]) -> str:
         rot = f" · {f0['rotulo']}" if f0.get("rotulo") else ""
         linhas.append(f"{f0['chave']}{rot}")
         if reg.get("ficha") is not None:
-            linhas.append(json.dumps(reg["ficha"], ensure_ascii=False, indent=2, sort_keys=True))
+            linhas.append(json.dumps(reg["ficha"], ensure_ascii=False, indent=2))
         return "\n".join(linhas) + "\n"
     for f in fichas:
         defin = " ".join(str(f.get("definicao") or "").split())
