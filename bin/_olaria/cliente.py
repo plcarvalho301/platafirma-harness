@@ -213,9 +213,11 @@ class Cliente:
     def criar(self, texto: str, pedido_id: str, origem: str = "ontologia criar") -> Resposta:
         return self._escrever_com_reenvio("/criar", {"yaml": texto}, pedido_id, origem)
 
-    def trocar(self, texto: str, versao: str, pedido_id: str, origem: str = "ontologia trocar", *,
+    def trocar(self, texto: str, versao: str | None, pedido_id: str, origem: str = "ontologia trocar", *,
                classe: str | None = None, chave: str | None = None) -> Resposta:
-        corpo = {"yaml": texto, "versao": versao}
+        corpo: dict = {"yaml": texto}
+        if versao:
+            corpo["versao"] = versao
         if classe:
             corpo["classe"] = classe
         if chave:

@@ -297,33 +297,38 @@ def _trocar(cliente: Cliente, args: list, *, pedido: str = "", como_json: bool =
         flag = next(a for a in args if a.startswith("--"))
         raise Uso(f"trocar: opção desconhecida {flag}", onde="flag", recebido=flag,
                   proximo="ontologia trocar <classe> <chave> <versao> <arquivo.yaml>")
-    if len(args) < 3 or len(args) > 4:
-        classe_sug = _classe_canonica(args[0]) if args and not _e_entrada_yaml(args[0]) else "<classe>"
-        chave_sug = args[1] if len(args) >= 2 and not _e_entrada_yaml(args[1]) else "<chave>"
-        raise Uso(
-            "trocar exige `<classe> <chave> <versao> [<arquivo.yaml>]` em posição.",
-            codigo="versao-ausente",
-            onde="versao",
-            recebido=" ".join(args) or "(vazio)",
-            regra="Chamada a `trocar` sem `<versao>` em posição, ou com `<versao>` que não é uuid v7, para antes da Olaria.",
-            proximo=f"ontologia ler {classe_sug} {chave_sug}",
-        )
-    classe, chave, versao = _classe_canonica(args[0]), args[1], args[2]
-    if not e_uuid7(versao):
-        raise Uso(
-            f"`{versao}` não é um uuid v7 de versão lida.",
-            codigo="versao-invalida",
-            onde="versao",
-            recebido=versao,
-            regra="Chamada a `trocar` sem `<versao>` em posição, ou com `<versao>` que não é uuid v7, para antes da Olaria.",
-            proximo=f"ontologia ler {classe} {chave}",
-        )
-    caminho = args[3] if len(args) == 4 else None
-    if caminho is not None and not _e_entrada_yaml(caminho):
-        raise Uso("o caminho da mudança em trocar precisa ser `.yaml`", onde="arquivo", recebido=caminho,
-                  proximo=f"ontologia trocar {classe} {chave} {versao} <arquivo.yaml>")
-    _, texto = _ler_entrada_yaml(caminho, proximo=f"ontologia trocar {classe} {chave} {versao} <arquivo.yaml>")
-    _recusar_parte(texto, f"ontologia ler {classe} {chave}")
+    if len(args) == 1 and _e_entrada_yaml(args[0]):
+        classe, chave, versao, caminho = None, None, None, args[0]
+        _, texto = _ler_entrada_yaml(caminho, proximo="ontologia trocar <arquivo.yaml>")
+        _recusar_parte(texto, "ontologia ler <classe> <chave>")
+    else:
+        if len(args) < 3 or len(args) > 4:
+            classe_sug = _classe_canonica(args[0]) if args and not _e_entrada_yaml(args[0]) else "<classe>"
+            chave_sug = args[1] if len(args) >= 2 and not _e_entrada_yaml(args[1]) else "<chave>"
+            raise Uso(
+                "trocar exige `<classe> <chave> <versao> [<arquivo.yaml>]` em posição, ou `<arquivo.yaml>` com `versao` em cada item.",
+                codigo="versao-ausente",
+                onde="versao",
+                recebido=" ".join(args) or "(vazio)",
+                regra="Chamada a `trocar` sem `<versao>` em posição (salvo lote em `<arquivo.yaml>` com `versao` por item), ou com `<versao>` que não é uuid v7, para antes da Olaria.",
+                proximo=f"ontologia ler {classe_sug} {chave_sug}",
+            )
+        classe, chave, versao = _classe_canonica(args[0]), args[1], args[2]
+        if not e_uuid7(versao):
+            raise Uso(
+                f"`{versao}` não é um uuid v7 de versão lida.",
+                codigo="versao-invalida",
+                onde="versao",
+                recebido=versao,
+                regra="Chamada a `trocar` sem `<versao>` em posição, ou com `<versao>` que não é uuid v7, para antes da Olaria.",
+                proximo=f"ontologia ler {classe} {chave}",
+            )
+        caminho = args[3] if len(args) == 4 else None
+        if caminho is not None and not _e_entrada_yaml(caminho):
+            raise Uso("o caminho da mudança em trocar precisa ser `.yaml`", onde="arquivo", recebido=caminho,
+                      proximo=f"ontologia trocar {classe} {chave} {versao} <arquivo.yaml>")
+        _, texto = _ler_entrada_yaml(caminho, proximo=f"ontologia trocar {classe} {chave} {versao} <arquivo.yaml>")
+        _recusar_parte(texto, f"ontologia ler {classe} {chave}")
     if not cliente.sujeito:
         return sd.ambiente_incompleto("PF_CADEIRA")
     pedido_id = pedido or novo_id()

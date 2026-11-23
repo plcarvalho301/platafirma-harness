@@ -35,6 +35,7 @@ SAIDAS = (
 
 NOTAS = (
     "Leia antes de mudar com `ontologia ler <classe> <chave>` ou `ontologia ler <classe> --fichas` para obter a versão (fornada <id>).",
+    "Em `trocar` de lote com versões distintas, coloque `versao: <uuid7>` em cada item de `classes`, `fichas` ou catálogo no YAML e chame `ontologia trocar <arquivo.yaml>` (ou passe uma `<versao>` em posição como padrão para os itens sem `versao`).",
     "Em `shape`, `ler shape <slug>` traz a linhagem e as restrições herdadas, e `listar shape` aceita `--filhas <slug>`, `--aponta-para <slug>` ou `--capacidade <slug>`.",
     "Os itens do catálogo leem-se e listam-se por `shape`, `dicionario`, `tipo-de-ligacao` (ou `ligacao`), `axioma` e `tipo-de-evento`.",
     "Para conferir o que já está gravado (estrato, capacidade ou classe), use `conferir ontologia <estrato:slug|capacidade:slug|classe>`.",

@@ -395,6 +395,8 @@ tests/test_portao_configuracao_porta.py | bin/release bin/_release/conferir/conf
 # Story #4426: o ato ler do verbo busca, pela chave, pelo nome e nas recusas; o retrato falso no pequeno e o banco casa vivo na rodada.
 testes/test_busca_ler.py | bin/busca lib/leitura/resolvedor.py lib/leitura/retrato.py lib/leitura/recusa.py lib/leitura/sql/** lib/leitura/leitura.py lib/leitura/morada.py
 testes/test_busca_ler_vivo.py | bin/busca lib/leitura/resolvedor.py lib/leitura/retrato.py lib/leitura/recusa.py lib/leitura/sql/** lib/leitura/leitura.py lib/leitura/morada.py | degrau: rodada
+# Incidente #4436: `ontologia trocar <arquivo.yaml>` envia lote sem versão posicional (versão por item no YAML).
+tests/test_ontologia_trocar_lote.py | bin/ontologia bin/_olaria/**
 # Incidente #4433: leitura unificada em lib/leitura nos verbos release ler, repo ler, acervo ler casa e tarefas.
 testes/test_verbos_leitura_unificada.py | lib/leitura/** bin/release bin/repo bin/_acervo/casa bin/tarefas
 # Story #4427: repasse do ato buscar ao motor, consulta exata por nome e condição e leitor casa_db.
