@@ -18,10 +18,11 @@ RAIZ = Path(__file__).resolve().parents[1]
 BIN = RAIZ / "bin" / "busca"
 sys.path.insert(0, str(RAIZ / "lib"))
 
-from leitura.recusa import CAMPOS  # noqa: E402
+from leitura.recusa import CAMPOS
 
 CODIGO_RECUSA_USO = 2
 CODIGO_FALHA_DEP = 3
+CODIGO_INDETERMINAVEL = 5
 
 
 def _carregar_bin():
@@ -162,3 +163,15 @@ def test_ato_fora_do_busca_e_fora_do_motor_sai_2_sem_encaminhar_ao_motor() -> No
     corpo = json.loads(err.getvalue().splitlines()[-1])
     assert corpo["erro"]["codigo"] == "ato-desconhecido"
     assert not corpo["erro"]["proximo"].startswith("motor ")
+
+
+def test_busca_buscar_estouro_de_prazo_sai_5_com_prazo_estourado(tmp_path: Path) -> None:
+    lento = tmp_path / "motor_lento.py"
+    lento.write_text("import time\ntime.sleep(2)\n", encoding="utf-8")
+    out, err = io.StringIO(), io.StringIO()
+    rc = busca.main(["buscar", "biblioteca", "consulta lenta"], saida=out, erro=err, motor=lento, prazo_motor=0.05)
+    assert rc == CODIGO_INDETERMINAVEL
+    assert out.getvalue() == ""
+    corpo = json.loads(err.getvalue().splitlines()[-1])
+    assert list(corpo["erro"]) == list(CAMPOS)
+    assert corpo["erro"]["codigo"] == "prazo-estourado"

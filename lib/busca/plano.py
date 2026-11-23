@@ -47,12 +47,33 @@ class _CatalogoIndexado:
     estados: list[str] = field(default_factory=list)
 
 
-def _resolver_classe_principal(sessao: casa_db.SessaoLeitura, nome_classe: str) -> tuple[str, str]:
+def _autorizar_classe_e_filhas(
+    sessao: casa_db.SessaoLeitura,
+    uid: str,
+    slug: str,
+    *,
+    com_filhas: bool,
+) -> list[tuple[str, str]]:
+    if not com_filhas:
+        sessao.exigir_autorizacao(slug)
+        return [(uid, slug)]
+    brutas = sessao.filhas_da_classe_brutas(uid)
+    sessao.autorizar_lote([slug, *(s for _, s in brutas)])
+    sessao.exigir_autorizacao(slug)
+    return [(u, s) for u, s in brutas if sessao.autorizar(s)]
+
+
+def _resolver_classe_principal(
+    sessao: casa_db.SessaoLeitura,
+    nome_classe: str,
+    *,
+    com_filhas: bool = False,
+) -> tuple[str, str, list[tuple[str, str]]]:
     slug_limpo = nome_classe.strip()
     uid_exato = sessao.uuid_da_classe(slug_limpo)
     if uid_exato is not None:
-        sessao.exigir_autorizacao(slug_limpo)
-        return uid_exato, slug_limpo
+        pares = _autorizar_classe_e_filhas(sessao, uid_exato, slug_limpo, com_filhas=com_filhas)
+        return uid_exato, slug_limpo, pares
 
     res = sessao.resolver_nomes([nome_classe])
     if 1 in res.ords_negados:
@@ -105,7 +126,6 @@ def _resolver_classe_principal(sessao: casa_db.SessaoLeitura, nome_classe: str) 
         )])
 
     slug = str(classes_achadas[0]["chave"])
-    sessao.exigir_autorizacao(slug)
     uid = sessao.uuid_da_classe(slug)
     if uid is None:
         raise Recusas([Recusa(
@@ -117,7 +137,8 @@ def _resolver_classe_principal(sessao: casa_db.SessaoLeitura, nome_classe: str) 
             cura=f"a classe {slug} não foi encontrada em casa.shape",
             proximo="busca consultar --classe shape",
         )])
-    return uid, slug
+    pares = _autorizar_classe_e_filhas(sessao, uid, slug, com_filhas=com_filhas)
+    return uid, slug, pares
 
 
 def _indexar_catalogo(
@@ -438,8 +459,9 @@ def montar_plano(sessao: casa_db.SessaoLeitura, ped: Pedido) -> PlanoConsulta:
     if ped.classe is None:
         raise ValueError("montar_plano exige pedido de modo classe")
 
-    classe_uuid, classe_slug = _resolver_classe_principal(sessao, ped.classe)
-    classes_pares = sessao.filhas_da_classe(classe_uuid) if ped.filhas else [(classe_uuid, classe_slug)]
+    _classe_uuid, classe_slug, classes_pares = _resolver_classe_principal(
+        sessao, ped.classe, com_filhas=ped.filhas,
+    )
     linhas_cat = sessao.catalogo_da_classe([u for u, _ in classes_pares])
     cat = _indexar_catalogo(classe_slug, classes_pares, linhas_cat)
 

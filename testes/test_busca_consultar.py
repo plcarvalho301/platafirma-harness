@@ -1268,3 +1268,187 @@ def test_escrever_lista_emite_erro_e_erros_na_ultima_linha() -> None:
     dados = json.loads(fluxo.getvalue().splitlines()[-1])
     assert dados["erro"] == dados["erros"][0]
     assert [e["codigo"] for e in dados["erros"]] == ["propriedade-desconhecida", "estado-desconhecido"]
+
+
+TOTAL_CLASSES_ESCALA = 168
+TOTAL_AUTORIZADAS_ESCALA = 167
+LIMITE_PRAZO_TESTE = 1.5
+PRAZO_CURTO_ESTOURO = 0.15
+
+
+def _retrato_168_classes() -> RetratoFalsoConsultar:
+    banco = RetratoFalsoConsultar()
+    mae_shape = banco.classes["shape"]["uuid"]
+    faltam = TOTAL_CLASSES_ESCALA - len(banco.classes)
+    for idx in range(faltam):
+        slug = f"classe-escala-{idx:03d}"
+        uid = f"00000000-0000-0000-9999-{idx:012d}"
+        banco.classes[slug] = {
+            "uuid": uid,
+            "slug": slug,
+            "rotulo": f"classe escala {idx}",
+            "definicao": "classe sintética de escala",
+            "variantes": [],
+            "mae": mae_shape,
+            "relacao_com_mae": "generica",
+        }
+        banco.fichas[slug] = {
+            "uuid": uid,
+            "chave": slug,
+            "classe": "shape",
+            "classe_uuid": mae_shape,
+            "rotulo": f"classe escala {idx}",
+            "definicao": "classe sintética de escala",
+        }
+    for sh in banco.classes.values():
+        if sh["slug"] != "shape" and not sh.get("mae"):
+            sh["mae"] = mae_shape
+            sh["relacao_com_mae"] = "generica"
+    return banco
+
+
+class _RelogioSimulado:
+    def __init__(self, passo_por_processo: float = 0.0) -> None:
+        self.agora = 100.0
+        self.passo = passo_por_processo
+
+    def __call__(self) -> float:
+        return self.agora
+
+    def avancar(self, segundos: float | None = None) -> None:
+        self.agora += self.passo if segundos is None else segundos
+
+
+def _criar_bin_acesso_100ms(tmp_path: Path) -> tuple[Path, Path]:
+    contador = tmp_path / "acesso_invocacoes.txt"
+    script = tmp_path / "acesso_100ms"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import json, pathlib, select, sys\n"
+        f"contador = pathlib.Path({str(contador)!r})\n"
+        "with contador.open('a', encoding='utf-8') as fh:\n"
+        "    fh.write('1\\n')\n"
+        "select.select([], [], [], 0.10)\n"
+        "recursos = [a for a in sys.argv[3:] if a.startswith('classe:')]\n"
+        "itens = [\n"
+        "    {'recurso': r, 'permitido': (r != 'classe:segredo'), 'regra': 'teste', 'motivo': 'x', 'faltou': []}\n"
+        "    for r in recursos\n"
+        "]\n"
+        "if len(itens) == 1:\n"
+        "    it = itens[0]\n"
+        "    print(json.dumps({**it, 'plano': 'p', 'sujeito': 's', 'acao': 'ler'}))\n"
+        "    sys.exit(0 if it['permitido'] else 1)\n"
+        "print(json.dumps({'plano': 'p', 'sujeito': 's', 'acao': 'ler', 'itens': itens}))\n"
+        "sys.exit(1 if any(not i['permitido'] for i in itens) else 0)\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    return script, contador
+
+
+def test_autorizacao_em_lote_100ms_com_168_classes_nos_dois_caminhos(tmp_path: Path) -> None:
+    banco = _retrato_168_classes()
+    assert len(banco.classes) == TOTAL_CLASSES_ESCALA
+    bin_acesso, contador = _criar_bin_acesso_100ms(tmp_path)
+
+    rc_filhas, out_filhas, err_filhas = rodar_consultar(
+        ["--classe", "shape", "--filhas", "--json"],
+        retrato=banco,
+        bin_acesso=bin_acesso,
+        prazo=LIMITE_PRAZO_TESTE,
+    )
+    assert rc_filhas == SAIDA_OK, err_filhas
+    assert len(contador.read_text(encoding="utf-8").splitlines()) == 1
+    assert json.loads(out_filhas)["classe"] == "shape"
+
+    contador.write_text("", encoding="utf-8")
+    rc_disp, out_disp, err_disp = rodar_consultar(
+        ["xyzzy inexistente plugh", "--json"],
+        retrato=banco,
+        bin_acesso=bin_acesso,
+        prazo=LIMITE_PRAZO_TESTE,
+    )
+    assert rc_disp == SAIDA_OK, err_disp
+    assert len(contador.read_text(encoding="utf-8").splitlines()) == 1
+    disponiveis = json.loads(out_disp)["disponiveis"]["classes"]
+    assert len(disponiveis) == TOTAL_AUTORIZADAS_ESCALA
+    assert "segredo" not in disponiveis
+
+
+def _autorizador_100ms_simulado(relogio: _RelogioSimulado) -> Callable[[str, str | None], bool]:
+    def _decidir(_cls: str, _suj: str | None) -> bool:
+        relogio.avancar(0.10)
+        return True
+
+    return _decidir
+
+
+def test_autorizacao_que_excede_prazo_sai_5_nos_dois_caminhos() -> None:
+    banco = _retrato_168_classes()
+    rel1 = _RelogioSimulado()
+    rc_filhas, out_filhas, err_filhas = rodar_consultar(
+        ["--classe", "shape", "--filhas"],
+        retrato=banco,
+        autorizador=_autorizador_100ms_simulado(rel1),
+        relogio=rel1,
+        prazo=5.0,
+    )
+    assert rc_filhas == SAIDA_FALHA and out_filhas == ""
+    _validar_recusa_stderr(err_filhas, "prazo-estourado", ["consultar", "--classe", "shape", "--filhas"])
+
+    rel2 = _RelogioSimulado()
+    rc_disp, out_disp, err_disp = rodar_consultar(
+        ["xyzzy inexistente plugh"],
+        retrato=banco,
+        autorizador=_autorizador_100ms_simulado(rel2),
+        relogio=rel2,
+        prazo=5.0,
+    )
+    assert rc_disp == SAIDA_FALHA and out_disp == ""
+    _validar_recusa_stderr(err_disp, "prazo-estourado", ["consultar", "xyzzy inexistente plugh"])
+
+
+def _criar_pap_lote(tmp_path: Path) -> dict[str, str]:
+    (tmp_path / "pdp.py").write_text(
+        "from dataclasses import dataclass\n"
+        "import yaml\n"
+        "@dataclass\n"
+        "class Sujeito:\n"
+        "    id: str; natureza: str; papeis: tuple; dominios: tuple\n"
+        "    temas: tuple = (); vetos: tuple = (); habilitacao: str = 'publico'\n"
+        "@dataclass\n"
+        "class Recurso:\n"
+        "    tipo: str; id: str; dominio: str; tema: str = '-'; sigilo: str = 'publico'\n"
+        "@dataclass\n"
+        "class Decisao:\n"
+        "    permitido: bool; regra: str; motivo: str; faltou: tuple = ()\n"
+        "class Politica:\n"
+        "    def __init__(self, dados): self.regras = dados.get('regras') or []\n"
+        "    @classmethod\n"
+        "    def de_arquivo(cls, p): return cls(yaml.safe_load(p.read_text('utf-8')) or {})\n"
+        "def decide(suj, _acao, rec, pol):\n"
+        "    if not suj.papeis: return Decisao(False, '', 'sem papel', ('papel',))\n"
+        "    if rec.id == 'classe:segredo': return Decisao(False, 'nega-segredo', 'bloqueado')\n"
+        "    return Decisao(True, 'operador-plataforma', 'ok')\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "politica.yaml").write_text("versao: 1\nregras: []\n", encoding="utf-8")
+    (tmp_path / "sujeitos.yaml").write_text(
+        "versao: 1\nsujeitos:\n  suj-op:\n    natureza: pessoa\n    papeis: [operador]\n    dominios: [plataforma]\n",
+        encoding="utf-8",
+    )
+    return {"ACESSO_POLITICA_DIR": str(tmp_path)}
+
+
+def test_bin_acesso_real_em_lote_e_erro_2_sai_5(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env_pap = _criar_pap_lote(tmp_path)
+    monkeypatch.setenv("ACESSO_POLITICA_DIR", env_pap["ACESSO_POLITICA_DIR"])
+    decisoes = casa_db.autorizar_classes(["gabarito", "segredo", "verbo"], "suj-op", bin_acesso=RAIZ / "bin" / "acesso")
+    assert decisoes == {"gabarito": True, "segredo": False, "verbo": True}
+
+    acesso_quebrado = tmp_path / "acesso_exit2"
+    acesso_quebrado.write_text("#!/bin/sh\necho '{\"erro\": \"uso\"}' >&2\nexit 2\n", encoding="utf-8")
+    acesso_quebrado.chmod(0o755)
+    rc, out, err = rodar_consultar(["--classe", "gabarito"], bin_acesso=acesso_quebrado)
+    assert rc == SAIDA_FALHA and out == ""
+    _validar_recusa_stderr(err, "falha-interna", ["consultar", "--classe", "gabarito"])

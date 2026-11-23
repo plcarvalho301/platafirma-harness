@@ -102,11 +102,30 @@ def _escrever_fluxo(fluxo: TextIO, dados: bytes) -> None:
         fluxo.flush()
 
 
-def ato_buscar(args: list[str], *, saida: TextIO, erro: TextIO, motor: Path | None = None) -> int:
+def ato_buscar(
+    args: list[str],
+    *,
+    saida: TextIO,
+    erro: TextIO,
+    motor: Path | None = None,
+    prazo_motor: float = _PRAZO_MOTOR,
+) -> int:
     """Repassa `rag buscar <args>` ao executável do motor sem tocar na saída nem no código."""
     exe = _caminho_motor(motor)
     cmd = [str(exe), "rag", "buscar", *args] if os.access(exe, os.X_OK) else [sys.executable, str(exe), "rag", "buscar", *args]
-    proc = subprocess.run(cmd, capture_output=True, timeout=_PRAZO_MOTOR, check=False)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=prazo_motor, check=False)
+    except subprocess.TimeoutExpired:
+        recusa = Recusa(
+            5,
+            "prazo-estourado",
+            onde="buscar",
+            recebido=" ".join(args),
+            regra=REGRA_ATOS,
+            cura="a busca pelo sentido excedeu o prazo de espera",
+            proximo='busca buscar "termo"',
+        )
+        return escrever_lista([recusa], fluxo=erro)
     _escrever_fluxo(saida, proc.stdout)
     _escrever_fluxo(erro, proc.stderr)
     return proc.returncode
@@ -335,27 +354,43 @@ def _por_nome(sessao: casa_db.SessaoLeitura, alvo: str, env: Mapping[str, str] |
 def _abrir_sessao_leitura(
     *,
     abrir_retrato: Callable[[], Any],
-    autorizador: Callable[[str, str | None], bool] | None,
     release: Path | None,
     env: Mapping[str, str] | None,
-    prazo: float = PRAZO_CHAMADA,
+    **opcoes: Any,
 ) -> casa_db.SessaoLeitura:
+    autorizador = opcoes.get("autorizador")
+    bin_acesso = opcoes.get("bin_acesso")
+    relogio = opcoes.get("relogio")
+    prazo = float(opcoes.get("prazo") or PRAZO_CHAMADA)
     sujeito = (env.get("PF_SUJEITO") if env is not None else os.getenv("PF_SUJEITO")) or None
     ctx = {"sujeito": sujeito}
     if abrir_retrato is Retrato:
-        return casa_db.retrato(ctx, ("ler", None), prazo, autorizador=autorizador, release=release)
-    aut = autorizador if autorizador is not None else (lambda _c, _s: True)
-    return casa_db.retrato(ctx, ("ler", None), prazo, conexao=abrir_retrato(), autorizador=aut, release=release)
+        return casa_db.retrato(
+            ctx, ("ler", None), prazo, autorizador=autorizador, bin_acesso=bin_acesso, relogio=relogio, release=release,
+        )
+    aut = autorizador if (autorizador is not None or bin_acesso is not None) else (lambda _c, _s: True)
+    return casa_db.retrato(
+        ctx,
+        ("ler", None),
+        prazo,
+        conexao=abrir_retrato(),
+        autorizador=aut,
+        bin_acesso=bin_acesso,
+        relogio=relogio,
+        release=release,
+    )
 
 
 def ato_ler(
     args: list[str],
     *,
     abrir_retrato: Callable[[], Any] = Retrato,
-    autorizador: Callable[[str, str | None], bool] | None = None,
-    release: Path | None = None,
-    env: Mapping[str, str] | None = None,
+    **opcoes: Any,
 ) -> dict:
+    autorizador = opcoes.get("autorizador")
+    release = opcoes.get("release")
+    env = opcoes.get("env")
+    bin_acesso = opcoes.get("bin_acesso")
     ped = pedido(args)
     alvo_txt = ped["alvo"]
     if "/" in alvo_txt:
@@ -363,15 +398,17 @@ def ato_ler(
                      cura="o ler recebe a chave <classe>:<slug> ou o nome, e não o caminho do arquivo",
                      proximo=f"busca ler {shlex.quote(_chave_do_caminho(alvo_txt))}")
     raiz = release_raiz(release)
-    with _abrir_sessao_leitura(abrir_retrato=abrir_retrato, autorizador=autorizador, release=raiz, env=env) as sessao:
+    with _abrir_sessao_leitura(
+        abrir_retrato=abrir_retrato, autorizador=autorizador, release=raiz, env=env, bin_acesso=bin_acesso,
+    ) as sessao:
         achada = sessao.ficha_da_chave(alvo_txt)
         if achada is None:
             res_nome = _por_nome(sessao, alvo_txt, env=env)
             if isinstance(res_nome, list):
                 return {**_coluna(alvo_txt, res_nome), "json": ped["json"]}
             achada = res_nome
-        alvo = resolvedor.resolver(sessao._con, achada, raiz)
-        ficha = resolvedor.ficha_inteira(sessao._con, achada) if alvo.caminho is None else None
+        alvo = sessao.resolver_alvo(achada, raiz)
+        ficha = sessao.ficha_inteira(achada) if alvo.caminho is None else None
     r = _ler_documento(alvo, ped, raiz) if alvo.caminho is not None else _ler_ficha(alvo, ficha or {}, ped)
     if ped["versao"] and ped["versao"] != r["versao"]:
         r["avisos"].append(f"mudou: a versão lida é {r['versao']}, a pedida era {ped['versao']}")
@@ -402,6 +439,8 @@ def ato_consultar(
         release=raiz,
         env=env,
         prazo=prazo,
+        bin_acesso=opcoes.get("bin_acesso"),
+        relogio=opcoes.get("relogio"),
     ) as sessao:
         if ped.modo == "nome":
             res_nome = consultar_por_nome(sessao, ped, tamanho_pagina=tamanho_pagina)
@@ -486,7 +525,13 @@ def main(argv: list[str] | None = None, *, saida: TextIO | None = None, erro: Te
     ato = argv[0] if argv else ""
     resto = argv[1:] if argv else []
     if ato == "buscar":
-        return ato_buscar(resto, saida=saida, erro=erro, motor=motor)
+        return ato_buscar(
+            resto,
+            saida=saida,
+            erro=erro,
+            motor=motor,
+            prazo_motor=float(kw.get("prazo_motor") or _PRAZO_MOTOR),
+        )
     if ato == "consultar":
         try:
             return ato_consultar(resto, saida=saida, **kw)

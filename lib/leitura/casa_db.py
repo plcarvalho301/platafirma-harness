@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -194,29 +195,84 @@ def carregar_eventos_da_versao(release: Path | None = None) -> list[str]:
     return list(eventos)
 
 
-def autorizar_classe(slug: str, sujeito: str | None = None, *, bin_acesso: Path | None = None) -> bool:
-    """Decide `(ler, classe:<slug>)` pelo verbo `acesso decidir` servido.
+def _interpretar_saida_acesso(unicos: list[str], texto_stdout: str, amostra: str) -> dict[str, bool]:
+    try:
+        dados = json.loads(texto_stdout)
+    except ValueError:
+        raise Recusa(5, "falha-interna", onde="autorizacao", recebido=amostra,
+                     regra=_REGRA_AUT, cura="a decisão de acesso devolveu JSON inválido") from None
+    if not isinstance(dados, dict):
+        raise Recusa(5, "falha-interna", onde="autorizacao", recebido=amostra,
+                     regra=_REGRA_AUT, cura="a decisão de acesso devolveu formato inesperado")
+    if len(unicos) == 1 and "permitido" in dados:
+        if dados.get("faltou"):
+            raise Recusa(5, "falha-interna", onde="autorizacao", recebido=amostra,
+                         regra=_REGRA_AUT, cura="faltou atributo na projeção do sujeito")
+        return {unicos[0]: bool(dados["permitido"])}
+    itens = dados.get("itens")
+    if not isinstance(itens, list):
+        raise Recusa(5, "falha-interna", onde="autorizacao", recebido=amostra,
+                     regra=_REGRA_AUT, cura="a decisão em lote de acesso não trouxe a lista itens")
+    mapa: dict[str, bool] = {}
+    for it in itens:
+        if not isinstance(it, dict) or it.get("faltou"):
+            raise Recusa(5, "falha-interna", onde="autorizacao", recebido=amostra,
+                         regra=_REGRA_AUT, cura="faltou atributo na projeção do sujeito")
+        rec = str(it.get("recurso") or "")
+        if rec.startswith("classe:"):
+            mapa[rec.removeprefix("classe:")] = bool(it.get("permitido"))
+    if any(s not in mapa for s in unicos):
+        raise Recusa(5, "falha-interna", onde="autorizacao", recebido=amostra,
+                     regra=_REGRA_AUT, cura="a decisão em lote não respondeu para todas as classes pedidas")
+    return mapa
 
-    Converte timeout em `prazo-estourado` (saída 5) e falha da política em `banco-indisponivel` (saída 3).
-    """
+
+def autorizar_classes(
+    slugs: Sequence[str],
+    sujeito: str | None = None,
+    *,
+    prazo_restante: float | None = None,
+    bin_acesso: Path | None = None,
+) -> dict[str, bool]:
+    """Decide `(ler, classe:<slug>)` num único processo `acesso decidir` para o lote de classes."""
+    unicos = list(dict.fromkeys(str(s) for s in slugs if s))
+    if not unicos:
+        return {}
+    amostra = f"classe:{unicos[0]}" if len(unicos) == 1 else f"classe:{unicos[0]}+{len(unicos) - 1}"
+    limite = _PRAZO_ACESSO if prazo_restante is None else prazo_restante
+    if limite <= 0:
+        raise Recusa(5, "prazo-estourado", onde="autorizacao", recebido=amostra,
+                     regra=_REGRA_AUT, cura="o prazo da chamada acabou antes da autorização")
     exe = bin_acesso or Path(os.getenv("PF_ACESSO_BIN") or (_RAIZ_HARNESS / "bin" / "acesso"))
-    cmd = [str(exe), "decidir", "ler", f"classe:{slug}", "--json"]
+    cmd = [str(exe), "decidir", "ler", *(f"classe:{s}" for s in unicos), "--json"]
     if sujeito:
         cmd.extend(["--sujeito", sujeito])
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=_PRAZO_ACESSO, check=False)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=limite, check=False)
     except subprocess.TimeoutExpired:
-        raise Recusa(5, "prazo-estourado", onde="autorizacao", recebido=f"classe:{slug}",
-                     regra=_REGRA_AUT, cura="a decisão de acesso excedeu o prazo") from None
+        raise Recusa(5, "prazo-estourado", onde="autorizacao", recebido=amostra,
+                     regra=_REGRA_AUT, cura="a decisão de acesso excedeu o prazo da chamada") from None
     except OSError:
-        raise Recusa(3, "banco-indisponivel", onde="autorizacao", recebido=f"classe:{slug}",
+        raise Recusa(3, "banco-indisponivel", onde="autorizacao", recebido=amostra,
                      regra=_REGRA_AUT, cura="o executável de acesso não pôde ser chamado") from None
-    if proc.returncode == 0:
-        return True
     if proc.returncode == 3:  # noqa: PLR2004 - código 3 do contrato de saída dos verbos (dependência)
-        raise Recusa(3, "banco-indisponivel", onde="autorizacao", recebido=f"classe:{slug}",
+        raise Recusa(3, "banco-indisponivel", onde="autorizacao", recebido=amostra,
                      regra=_REGRA_AUT, cura="a política ou projeção de acesso está indisponível")
-    return False
+    if proc.returncode not in (0, 1):
+        raise Recusa(5, "falha-interna", onde="autorizacao", recebido=amostra,
+                     regra=_REGRA_AUT, cura="o verbo acesso falhou ao decidir a autorização")
+    return _interpretar_saida_acesso(unicos, proc.stdout, amostra)
+
+
+def autorizar_classe(
+    slug: str,
+    sujeito: str | None = None,
+    *,
+    bin_acesso: Path | None = None,
+    prazo_restante: float | None = None,
+) -> bool:
+    """Decide `(ler, classe:<slug>)` pelo verbo `acesso decidir` servido."""
+    return autorizar_classes([slug], sujeito, prazo_restante=prazo_restante, bin_acesso=bin_acesso)[slug]
 
 
 def _sql_arquivo(nome: str) -> str:
@@ -239,14 +295,18 @@ class SessaoLeitura:
         self._par = par
         self._origem: str | None = opcoes.get("origem")
         self._prazo = prazo
+        self._inicio = 0.0
         self._conexao_injetada = conexao
         self._con: Any = None
         self._dono_conexao = conexao is None
-        self._autorizador = autorizador or autorizar_classe
+        self._autorizador = autorizador
+        self._bin_acesso: Path | None = opcoes.get("bin_acesso")
+        self._relogio: Callable[[], float] = opcoes.get("relogio") or time.monotonic
         self._release: Path | None = opcoes.get("release")
         self._cache_aut: dict[str, bool] = {}
 
     def __enter__(self) -> Self:
+        self._inicio = self._relogio()
         if self._dono_conexao:
             self._con = Retrato(prazo=self._prazo).__enter__()
         else:
@@ -270,11 +330,49 @@ class SessaoLeitura:
         val = self._contexto.get("sujeito") or os.getenv("PF_SUJEITO")
         return str(val) if val else None
 
+    def _tempo_restante(self) -> float:
+        if self._con is not None and hasattr(self._con, "resta"):
+            return float(self._con.resta())
+        if self._inicio > 0:
+            return self._prazo - (self._relogio() - self._inicio)
+        return self._prazo
+
+    def _conferir_prazo(self) -> float:
+        resta = self._tempo_restante()
+        if resta <= 0:
+            raise Recusa(
+                5,
+                "prazo-estourado",
+                onde="autorizacao",
+                regra=_REGRA_AUT,
+                cura="o prazo da chamada acabou durante a autorização",
+                proximo="busca consultar --classe shape",
+            )
+        return resta
+
+    def autorizar_lote(self, slugs: Sequence[str]) -> dict[str, bool]:
+        """Confere `(ler, classe:<slug>)` uma vez por classe não cacheada, num único processo."""
+        faltantes = [s for s in dict.fromkeys(str(x) for x in slugs if x) if s not in self._cache_aut]
+        if faltantes:
+            if self._autorizador is not None:
+                for s in faltantes:
+                    self._conferir_prazo()
+                    self._cache_aut[s] = bool(self._autorizador(s, self.sujeito))
+                self._conferir_prazo()
+            else:
+                decisoes = autorizar_classes(
+                    faltantes,
+                    self.sujeito,
+                    prazo_restante=self._conferir_prazo(),
+                    bin_acesso=self._bin_acesso,
+                )
+                self._conferir_prazo()
+                self._cache_aut.update(decisoes)
+        return {str(s): self._cache_aut[str(s)] for s in slugs if s}
+
     def autorizar(self, classe_slug: str) -> bool:
         """Confere `(ler, classe:<slug>)` no máximo uma vez por classe nesta chamada."""
-        if classe_slug not in self._cache_aut:
-            self._cache_aut[classe_slug] = bool(self._autorizador(classe_slug, self.sujeito))
-        return self._cache_aut[classe_slug]
+        return self.autorizar_lote([classe_slug])[classe_slug]
 
     def exigir_autorizacao(self, classe_slug: str) -> None:
         if not self.autorizar(classe_slug):
@@ -296,8 +394,13 @@ class SessaoLeitura:
         else:
             brutas = self._con.consultar(_sql_arquivo("resolver_nomes.sql"), list(termos))
         por_ord: dict[int, list[dict]] = {}
+        todas_classes: list[str] = []
         for ln in brutas:
             por_ord.setdefault(int(ln["ord"]), []).append(ln)
+            if ln.get("chave") and ln.get("classe"):
+                todas_classes.append(str(ln["classe"]))
+        if todas_classes:
+            self.autorizar_lote(todas_classes)
 
         filtradas: list[dict] = []
         negados: set[int] = set()
@@ -340,6 +443,12 @@ class SessaoLeitura:
             )
         return f
 
+    def resolver_alvo(self, ficha: resolvedor.Ficha, raiz: Path) -> resolvedor.Alvo:
+        return resolvedor.resolver(self._con, ficha, raiz)
+
+    def ficha_inteira(self, ficha: resolvedor.Ficha, *, com_ligacoes: bool = True) -> dict:
+        return resolvedor.ficha_inteira(self._con, ficha, com_ligacoes=com_ligacoes)
+
     def ler_ficha(self, chave: str, *, com_ligacoes: bool = True) -> dict:
         f = resolvedor.ficha_da_chave(self._con, chave)
         if f is None:
@@ -351,14 +460,21 @@ class SessaoLeitura:
         linhas = self._con.consultar(SQL_UUID_DA_CLASSE, slug)
         return str(linhas[0]["uuid"]) if linhas else None
 
+    def filhas_da_classe_brutas(self, classe_uuid: str) -> list[tuple[str, str]]:
+        linhas = self._con.consultar(SQL_FILHAS_DA_CLASSE, classe_uuid)
+        return [(str(ln["uuid"]), str(ln["classe"])) for ln in linhas]
+
     def filhas_da_classe(self, classe_uuid: str) -> list[tuple[str, str]]:
         """Devolve `(uuid, slug)` da classe e das descendentes genéricas/restritivas autorizadas."""
-        linhas = self._con.consultar(SQL_FILHAS_DA_CLASSE, classe_uuid)
-        return [(str(ln["uuid"]), str(ln["classe"])) for ln in linhas if self.autorizar(str(ln["classe"]))]
+        pares = self.filhas_da_classe_brutas(classe_uuid)
+        self.autorizar_lote([slug for _, slug in pares])
+        return [(uid, slug) for uid, slug in pares if self.autorizar(slug)]
 
     def classes_disponiveis(self) -> list[str]:
         linhas = self._con.consultar(SQL_CLASSES_DISPONIVEIS)
-        return [str(ln["classe"]) for ln in linhas if self.autorizar(str(ln["classe"]))]
+        slugs = [str(ln["classe"]) for ln in linhas]
+        self.autorizar_lote(slugs)
+        return [s for s in slugs if self.autorizar(s)]
 
     def valores_do_dicionario(self, dicionario_slug: str) -> list[dict]:
         """Devolve `[{slug, rotulo}]` de um dicionário para colunas fixas de `shape` e `dicionario`."""

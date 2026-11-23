@@ -531,8 +531,9 @@ cmd_decidir() {
     fi
   done
 
-  local acao="" recurso="" sujeito="" papel="" dominio="" dominio_recurso=""
+  local acao="" sujeito="" papel="" dominio="" dominio_recurso=""
   local tema="-" habilitacao="publico" veto="" sigilo="publico"
+  local -a recursos=()
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -554,57 +555,56 @@ cmd_decidir() {
       *)
         if [ -z "$acao" ]; then
           acao="$1"
-        elif [ -z "$recurso" ]; then
-          recurso="$1"
         else
-          printf 'acesso: argumento posicional excedente em decidir: %s\n' "$1" >&2
-          if [ "$como_json" -eq 1 ]; then
-            printf '{"erro": "argumento posicional excedente: %s"}\n' "$1"
-          fi
-          exit 2
+          recursos+=("$1")
         fi
         shift;;
     esac
   done
 
-  if [ -z "$acao" ] || [ -z "$recurso" ]; then
-    printf 'uso: acesso decidir <acao> <recurso> [--sujeito <id>] [--papel <p> --dominio <d> ...] [--json]\n' >&2
+  if [ -z "$acao" ] || [ "${#recursos[@]}" -eq 0 ]; then
+    printf 'uso: acesso decidir <acao> <recurso> [<recurso>...] [--sujeito <id>] [--papel <p> --dominio <d> ...] [--json]\n' >&2
     if [ "$como_json" -eq 1 ]; then
-      printf '{"erro": "uso: acesso decidir <acao> <recurso> [--sujeito <id>] [--papel <p> --dominio <d> ...] [--json]"}\n'
+      printf '{"erro": "uso: acesso decidir <acao> <recurso> [<recurso>...] [--sujeito <id>] [--papel <p> --dominio <d> ...] [--json]"}\n'
     fi
     exit 2
   fi
 
-  if [[ "$recurso" != *:* ]]; then
-    printf "acesso: recurso sem prefixo de tipo: '%s' (tipos válidos: acervo, classe, comando, concessao, documento, expediente, operacao, politica, sessao, sujeito)\n" "$recurso" >&2
-    if [ "$como_json" -eq 1 ]; then
-      printf '{"erro": "recurso sem prefixo de tipo: %s"}\n' "$recurso"
-    fi
-    exit 2
-  fi
-
-  # Tabela tipo -> dominio: TRANSICAO ate `acesso vocabulario` servir tipos (dados).
-  local tipo="${recurso%%:*}"
-  local chave="${recurso#*:}"
-  local tipo_dom=""
-  case "$tipo" in
-    sessao|expediente) tipo_dom="plataforma";;
-    concessao|politica|sujeito) tipo_dom="plataforma-identidade";;
-    acervo) tipo_dom="plataforma-acervo";;
-    comando|operacao) tipo_dom="plataforma-runtime";;
-    documento) tipo_dom="plataforma";;
-    # Classe do fichario: recurso `classe:<slug>`, perguntado pelo leitor do banco casa
-    # uma vez por classe da chamada (card #4427, t14). A politica de quem le cada classe
-    # esta no PAP servido, no comentario do dominio `plataforma-fichario`.
-    classe) tipo_dom="plataforma-fichario";;
-    *)
-      printf "acesso: tipo de recurso fora da tabela: '%s' (tipos válidos: acervo, classe, comando, concessao, documento, expediente, operacao, politica, sessao, sujeito)\n" "$tipo" >&2
+  local -a dec_env=("DEC_N=${#recursos[@]}")
+  local idx=0 rec tipo chave tipo_dom
+  for rec in "${recursos[@]}"; do
+    if [[ "$rec" != *:* ]]; then
+      printf "acesso: recurso sem prefixo de tipo: '%s' (tipos válidos: acervo, classe, comando, concessao, documento, expediente, operacao, politica, sessao, sujeito)\n" "$rec" >&2
       if [ "$como_json" -eq 1 ]; then
-        printf '{"erro": "tipo de recurso fora da tabela: %s"}\n' "$tipo"
+        printf '{"erro": "recurso sem prefixo de tipo: %s"}\n' "$rec"
       fi
       exit 2
-      ;;
-  esac
+    fi
+    # Tabela tipo -> dominio: TRANSICAO ate `acesso vocabulario` servir tipos (dados).
+    tipo="${rec%%:*}"
+    chave="${rec#*:}"
+    tipo_dom=""
+    case "$tipo" in
+      sessao|expediente) tipo_dom="plataforma";;
+      concessao|politica|sujeito) tipo_dom="plataforma-identidade";;
+      acervo) tipo_dom="plataforma-acervo";;
+      comando|operacao) tipo_dom="plataforma-runtime";;
+      documento) tipo_dom="plataforma";;
+      # Classe do fichario: recurso `classe:<slug>`, perguntado pelo leitor do banco casa
+      # uma vez por classe da chamada (card #4427, t14). A politica de quem le cada classe
+      # esta no PAP servido, no comentario do dominio `plataforma-fichario`.
+      classe) tipo_dom="plataforma-fichario";;
+      *)
+        printf "acesso: tipo de recurso fora da tabela: '%s' (tipos válidos: acervo, classe, comando, concessao, documento, expediente, operacao, politica, sessao, sujeito)\n" "$tipo" >&2
+        if [ "$como_json" -eq 1 ]; then
+          printf '{"erro": "tipo de recurso fora da tabela: %s"}\n' "$tipo"
+        fi
+        exit 2
+        ;;
+    esac
+    dec_env+=("DEC_REC_${idx}=${rec}" "DEC_TIPO_${idx}=${tipo}" "DEC_CHAVE_${idx}=${chave}" "DEC_TDOM_${idx}=${tipo_dom}")
+    idx=$((idx + 1))
+  done
 
   if [ -n "$papel" ] || [ -n "$dominio" ]; then
     if [ -z "$papel" ] || [ -z "$dominio" ]; then
@@ -624,9 +624,9 @@ cmd_decidir() {
 
   # Tudo entra no python por AMBIENTE (heredoc com delimitador citado): argumento
   # nunca vira codigo.
+  env "${dec_env[@]}" \
   ACESSO_POLITICA_DIR="$POLITICA_DIR" \
-  DEC_JSON="$como_json" DEC_ACAO="$acao" DEC_RECURSO="$recurso" DEC_TIPO="$tipo" \
-  DEC_CHAVE="$chave" DEC_TIPO_DOM="$tipo_dom" DEC_DOM_REC="${dominio_recurso:-}" \
+  DEC_JSON="$como_json" DEC_ACAO="$acao" DEC_DOM_REC="${dominio_recurso:-}" \
   DEC_SUJEITO="${sujeito:-}" DEC_PAPEL="${papel:-}" DEC_DOMINIO="${dominio:-}" \
   DEC_TEMA="${tema:-}" DEC_HAB="${habilitacao:-}" DEC_VETO="${veto:-}" DEC_SIGILO="${sigilo:-}" \
   python3 - <<'PY'
@@ -638,11 +638,11 @@ politica_dir = E('ACESSO_POLITICA_DIR')
 politica_path = Path(politica_dir) / 'politica.yaml'
 sujeitos_path = Path(politica_dir) / 'sujeitos.yaml'
 como_json = E('DEC_JSON') == '1'
-acao, recurso, tipo, chave = E('DEC_ACAO'), E('DEC_RECURSO'), E('DEC_TIPO'), E('DEC_CHAVE')
-tipo_dom = E('DEC_TIPO_DOM')
-rec_dom = E('DEC_DOM_REC') or tipo_dom
+acao = E('DEC_ACAO')
+dom_override = E('DEC_DOM_REC', '')
 sujeito_arg, papel, dominio = E('DEC_SUJEITO', ''), E('DEC_PAPEL', ''), E('DEC_DOMINIO', '')
 tema, habilitacao, veto, sigilo = E('DEC_TEMA', '-'), E('DEC_HAB', 'publico'), E('DEC_VETO', ''), E('DEC_SIGILO', 'publico')
+total = int(E('DEC_N', '0'))
 
 def falha(msg, code):
     if como_json:
@@ -677,47 +677,77 @@ else:
         suj_data = (yaml.safe_load(sujeitos_path.read_text('utf-8')) or {}).get('sujeitos') or {}
     except Exception as e:
         falha(f'projeção indisponível: erro ao carregar sujeitos.yaml ({e})', 3)
-    # A MESMA projecao do PEP na porta: chave direta na tabela, por
-    # sub ou username como ela esta chaveada. Nenhum casamento por `usuario:`,
-    # `client:` ou `conta:` — conta de SO nao e identidade, e projetar por ela faria o
-    # verbo permitir o que a porta nega (caderno iam: duas perguntas ao mesmo PDP).
     atrib = suj_data.get(quem) or {}
     s = Sujeito(id=quem, natureza=atrib.get('natureza', 'pessoa'),
                 papeis=tuple(atrib.get('papeis') or ()), dominios=tuple(atrib.get('dominios') or ()),
                 temas=tuple(atrib.get('temas') or ()), vetos=tuple(atrib.get('vetos') or ()),
                 habilitacao=atrib.get('habilitacao', 'publico'))
 
-def julga(rid):
-    return decide(s, acao, Recurso(tipo=tipo, id=rid, dominio=rec_dom, tema=tema, sigilo=sigilo), pol)
-
 def por_regra(x):
     return (x.regra or 'default') != 'default' and not x.faltou
 
-# TRANSICAO: o PAP mistura ids prefixados (`sessao:fabrica`) e nus (`git status*`,
-# `docker*`). Julga-se nas duas formas e NEGATIVA VENCE nas duas: negada por regra em
-# qualquer forma -> negada por essa regra; senao permitida em qualquer forma ->
-# permitida; senao a primeira (default ou faltou). Sai quando o PAP so tiver id logico.
-ds = [julga(recurso)] + ([julga(chave)] if chave != recurso else [])
-neg = [x for x in ds if not x.permitido and por_regra(x)]
-per = [x for x in ds if x.permitido]
-d = neg[0] if neg else (per[0] if per else ds[0])
+def avaliar_um(recurso, tipo, chave, tipo_dom):
+    rec_dom = dom_override or tipo_dom
+    def julga(rid):
+        return decide(s, acao, Recurso(tipo=tipo, id=rid, dominio=rec_dom, tema=tema, sigilo=sigilo), pol)
+    ds = [julga(recurso)] + ([julga(chave)] if chave != recurso else [])
+    neg = [x for x in ds if not x.permitido and por_regra(x)]
+    per = [x for x in ds if x.permitido]
+    d = neg[0] if neg else (per[0] if per else ds[0])
+    regra_nome = d.regra or ('projecao' if d.faltou else 'default')
+    return {
+        'recurso': recurso,
+        'tipo': tipo,
+        'rec_dom': rec_dom,
+        'permitido': d.permitido,
+        'regra': regra_nome,
+        'motivo': d.motivo,
+        'faltou': list(d.faltou),
+    }
 
-exit_code = 0 if d.permitido else (5 if d.faltou else 1)
-regra_nome = d.regra or ('projecao' if d.faltou else 'default')
-if como_json:
-    print(json.dumps({'permitido': d.permitido, 'regra': regra_nome, 'motivo': d.motivo,
-                      'faltou': list(d.faltou), 'plano': plano, 'sujeito': quem,
-                      'acao': acao, 'recurso': recurso}, ensure_ascii=False))
+itens = [
+    avaliar_um(E(f'DEC_REC_{i}'), E(f'DEC_TIPO_{i}'), E(f'DEC_CHAVE_{i}'), E(f'DEC_TDOM_{i}'))
+    for i in range(total)
+]
+
+if any(it['faltou'] for it in itens):
+    exit_code = 5
+elif any(not it['permitido'] for it in itens):
+    exit_code = 1
 else:
-    veredito = 'PERMITIDO' if d.permitido else 'NEGADO'
-    print(f'{veredito}  regra={regra_nome}  plano={plano}')
-    suj_disp = quem[:8] if (len(quem) == 36 and quem.count('-') == 4) else quem
-    papeis_s = ', '.join(s.papeis) if s.papeis else '-'
-    dominios_s = ', '.join(s.dominios) if s.dominios else '-'
-    print(f'sujeito: {suj_disp} ({papeis_s} @ {dominios_s})   acao: {acao}   recurso: {recurso} [{tipo}/{rec_dom}]')
-    print(f'motivo: {d.motivo}')
-    if d.faltou:
-        print(f"faltou: {', '.join(d.faltou)}  <- defeito de projecao: linha em sujeitos.yaml (chave = sub ou username do token), ou claim no token")
+    exit_code = 0
+
+if len(itens) == 1:
+    it = itens[0]
+    if como_json:
+        print(json.dumps({'permitido': it['permitido'], 'regra': it['regra'], 'motivo': it['motivo'],
+                          'faltou': it['faltou'], 'plano': plano, 'sujeito': quem,
+                          'acao': acao, 'recurso': it['recurso']}, ensure_ascii=False))
+    else:
+        veredito = 'PERMITIDO' if it['permitido'] else 'NEGADO'
+        print(f"{veredito}  regra={it['regra']}  plano={plano}")
+        suj_disp = quem[:8] if (len(quem) == 36 and quem.count('-') == 4) else quem
+        papeis_s = ', '.join(s.papeis) if s.papeis else '-'
+        dominios_s = ', '.join(s.dominios) if s.dominios else '-'
+        print(f"sujeito: {suj_disp} ({papeis_s} @ {dominios_s})   acao: {acao}   recurso: {it['recurso']} [{it['tipo']}/{it['rec_dom']}]")
+        print(f"motivo: {it['motivo']}")
+        if it['faltou']:
+            print(f"faltou: {', '.join(it['faltou'])}  <- defeito de projecao: linha em sujeitos.yaml (chave = sub ou username do token), ou claim no token")
+else:
+    if como_json:
+        print(json.dumps({
+            'plano': plano,
+            'sujeito': quem,
+            'acao': acao,
+            'itens': [
+                {k: it[k] for k in ('recurso', 'permitido', 'regra', 'motivo', 'faltou')}
+                for it in itens
+            ],
+        }, ensure_ascii=False))
+    else:
+        for it in itens:
+            veredito = 'PERMITIDO' if it['permitido'] else 'NEGADO'
+            print(f"{veredito}  recurso={it['recurso']}  regra={it['regra']}  plano={plano}")
 sys.exit(exit_code)
 PY
 }
