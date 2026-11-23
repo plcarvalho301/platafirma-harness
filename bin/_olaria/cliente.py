@@ -78,6 +78,17 @@ def _ler_cofre(caminho: Path) -> str:
         return ""
 
 
+def preencher_do_cofre(env: dict[str, str]) -> None:
+    """Completa OLARIA_URL e OLARIA_CHAVE do cofre da instância quando ausentes no ambiente do processo."""
+    instancia = Path(env.get("PLATAFIRMA_INSTANCIA") or "/srv/platafirma/casa")
+    if not (env.get("OLARIA_URL") or "").strip():
+        env["OLARIA_URL"] = _ler_cofre(instancia / "segredos" / "olaria" / "OLARIA_URL") or "http://127.0.0.1:8103"
+    if not (env.get("OLARIA_CHAVE") or "").strip():
+        chave = _ler_cofre(instancia / "segredos" / "olaria" / "OLARIA_CHAVE")
+        if chave:
+            env["OLARIA_CHAVE"] = chave
+
+
 @dataclass
 class Ambiente:
     url: str

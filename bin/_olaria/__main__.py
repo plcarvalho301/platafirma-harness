@@ -618,7 +618,11 @@ def _nomes(cliente: Cliente, args: list, *, pedido: str = "", como_json: bool = 
 
 def executar(argv: list, env: dict | None = None, *, prog: str | None = None) -> Saida:
     """Roda uma chamada e devolve a saída, sem escrever nada."""
+    do_processo = env is None
     env = dict(os.environ if env is None else env)
+    if do_processo:
+        from .cliente import preencher_do_cofre
+        preencher_do_cofre(env)
     prog = prog or env.get("PF_PECA") or "ontologia"
     if any(a in PEDIDOS_DE_AJUDA for a in argv):
         try:
