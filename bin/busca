@@ -1,33 +1,34 @@
 #!/opt/platafirma/current/venv/harness/bin/python
-# busca — acha e lê o que a casa tem; nesta versão, lê pela chave ou pelo nome
+# busca — acha e lê o que a casa e o acervo têm, pelo sentido ou pela chave
 # capacidade: busca
 # dono: ti
 # classe: C
-# use para: ler o texto de algo da casa pela chave ou pelo nome, sem saber o caminho
-# atos: ler (leitura, arquivo)
+# use para: achar trecho pelo sentido (buscar) ou ler o texto de algo da casa pela chave ou pelo nome (ler)
+# atos: buscar (leitura, busca), ler (leitura, ficha)
 # forma: texto
 # cauda: nao
-"""Executável do verbo busca (story 4426): o ato ler.
+# poda: cosmetica@buscar
+"""Executável do verbo busca (stories 4426 e 4427): os atos buscar e ler.
 
-Contrato: platafirma-casa@referencias/instancias/interface-de-verbo/busca.md, «Leitura pela chave»,
-e platafirma-casa@referencias/instancias/verbo/busca.md, «O que o ler faz com a consulta por nome».
-
-O ler decide o que recebeu nesta ordem: o argumento com barra é caminho solto e sai 2; o que é a
-chave humana exata de uma ficha, ou a classe seguida de dois-pontos, é chave; o resto é nome, que
-se resolve pela consulta resolver_nomes do leitor. Uma conexão só por chamada, fechada antes de
-abrir o arquivo; o arquivo se lê pela leitura do ler_arquivo de hoje, confinada pela morada.
+Contratos:
+- platafirma-casa@referencias/instancias/interface-de-verbo/busca.md
+- platafirma-casa@referencias/instancias/verbo/busca.md
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
 import shlex
+import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TextIO
 
-_LIB = Path(__file__).resolve().parents[1] / "lib"
+_RAIZ = Path(__file__).resolve().parents[1]
+_LIB = _RAIZ / "lib"
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 
@@ -38,17 +39,69 @@ from leitura.morada import release_raiz
 from leitura.recusa import Recusa, escrever
 from leitura.retrato import Retrato
 
+REGRA_ATOS = "interface-de-verbo:busca §Atos"
 REGRA_CHAVE = "interface-de-verbo:busca §Leitura pela chave"
 REGRA_NOME = "verbo:busca §O que o ler faz com a consulta por nome"
-USO = "busca ler <chave|nome> [--offset <bytes>] [--max-bytes <n>] [--versao <v>] [--json]"
+USO = "busca <buscar|ler> ..."
+USO_LER = "busca ler <chave|nome> [--offset <bytes>] [--max-bytes <n>] [--versao <v>] [--json]"
 _FLAGS_VALOR = {"--offset": "offset", "--max-bytes": "max_bytes", "--versao": "versao"}
 _PARTES_COM_PASTA = 2                    # o caminho solto tem ao menos uma pasta e o arquivo
 _CONTINUACAO_UTF8 = range(0x80, 0xC0)    # byte de continuação de um caractere UTF-8
 _DEFINICAO_TETO = 120                    # caracteres da definição na coluna das fichas
 _SAIDAS_DE_RECUSA = (1, 2, 3, 4, 5)
+_MIN_ARGS_COM_INSTANCIA = 2              # instância ("rag") seguida de pelo menos o ato
+_PRAZO_MOTOR = 120.0                     # segundos: o teto padrão da porta para o motor
+_RE_ATOS_CABECALHO = re.compile(r"^#\s*atos:\s*(.+)$", re.MULTILINE)
 
 
-# ==================================================================== pedido
+# ==================================================================== motor
+def _caminho_motor(motor: Path | None = None) -> Path:
+    if motor is not None:
+        return Path(motor)
+    env = os.getenv("PF_MOTOR")
+    return Path(env) if env else (_RAIZ / "bin" / "motor")
+
+
+def _atos_do_motor(motor: Path | None = None) -> set[str]:
+    arq = motor if motor is not None and motor.is_file() else (_RAIZ / "bin" / "motor")
+    if not arq.is_file():
+        return set()
+    cabecalho: list[str] = []
+    with arq.open(encoding="utf-8") as fh:
+        for ln in fh:
+            if not ln.startswith("#"):
+                break
+            cabecalho.append(ln)
+    m = _RE_ATOS_CABECALHO.search("".join(cabecalho))
+    if not m:
+        return set()
+    sem_parenteses = re.sub(r"\([^)]*\)", "", m.group(1))
+    return {p.strip() for p in sem_parenteses.split(",") if p.strip()}
+
+
+def _escrever_fluxo(fluxo: TextIO, dados: bytes) -> None:
+    if not dados:
+        return
+    buf = getattr(fluxo, "buffer", None)
+    if buf is not None:
+        buf.write(dados)
+        buf.flush()
+    else:
+        fluxo.write(dados.decode("utf-8", "replace"))
+        fluxo.flush()
+
+
+def ato_buscar(args: list[str], *, saida: TextIO, erro: TextIO, motor: Path | None = None) -> int:
+    """Repassa `rag buscar <args>` ao executável do motor sem tocar na saída nem no código."""
+    exe = _caminho_motor(motor)
+    cmd = [str(exe), "rag", "buscar", *args] if os.access(exe, os.X_OK) else [sys.executable, str(exe), "rag", "buscar", *args]
+    proc = subprocess.run(cmd, capture_output=True, timeout=_PRAZO_MOTOR, check=False)
+    _escrever_fluxo(saida, proc.stdout)
+    _escrever_fluxo(erro, proc.stderr)
+    return proc.returncode
+
+
+# ==================================================================== pedido (ler)
 def _inteiro(flag: str, valor: str, minimo: int) -> int:
     try:
         n = int(valor)
@@ -56,7 +109,7 @@ def _inteiro(flag: str, valor: str, minimo: int) -> int:
         n = minimo - 1
     if n < minimo:
         raise Recusa(2, "flag-invalida", onde=flag, recebido=valor, regra=REGRA_CHAVE,
-                     cura=f"{flag} pede inteiro a partir de {minimo}", proximo=USO)
+                     cura=f"{flag} pede inteiro a partir de {minimo}", proximo=USO_LER)
     return n
 
 
@@ -71,12 +124,12 @@ def pedido(args: list[str]) -> dict[str, Any]:
             ped["json"] = True
         elif a in _FLAGS_VALOR:
             if i + 1 >= len(args):
-                raise Recusa(2, "flag-sem-valor", onde=a, regra=REGRA_CHAVE, cura=f"{a} pede um valor", proximo=USO)
+                raise Recusa(2, "flag-sem-valor", onde=a, regra=REGRA_CHAVE, cura=f"{a} pede um valor", proximo=USO_LER)
             ped[_FLAGS_VALOR[a]] = args[i + 1]
             i += 1
         elif a.startswith("--"):
             raise Recusa(2, "flag-desconhecida", onde=a, recebido=a, regra=REGRA_CHAVE,
-                         cura="flags do ler: --offset, --max-bytes, --versao e --json", proximo=USO)
+                         cura="flags do ler: --offset, --max-bytes, --versao e --json", proximo=USO_LER)
         else:
             palavras.append(a)
         i += 1
@@ -103,7 +156,7 @@ def _chave_do_caminho(caminho: str) -> str:
     return slug
 
 
-# ==================================================================== retorno
+# ==================================================================== retorno (ler)
 def blob_sha(dados: bytes) -> str:
     """O sha do blob do git sobre os bytes do arquivo, como `git hash-object` devolve."""
     return hashlib.sha1(b"blob %d\0" % len(dados) + dados).hexdigest()
@@ -205,7 +258,7 @@ def _coluna(alvo: str, fichas: list[dict]) -> dict:
     }
 
 
-# ==================================================================== o ato
+# ==================================================================== o ato ler
 def _por_nome(retrato: Any, alvo: str) -> resolvedor.Ficha | list[dict]:
     linhas = retrato.resolver_nomes([alvo])
     norm = str(linhas[0].get("norm") or "") if linhas else ""
@@ -253,7 +306,7 @@ def ato_ler(args: list[str], *, abrir_retrato: Callable[[], Any] = Retrato, rele
     return r
 
 
-# ==================================================================== saída
+# ==================================================================== despacho e saída
 def imprimir(r: dict, fluxo: TextIO) -> None:
     if r.pop("json", False):
         fluxo.write(json.dumps(r, ensure_ascii=False) + "\n")
@@ -268,24 +321,59 @@ def imprimir(r: dict, fluxo: TextIO) -> None:
         fluxo.writelines(f"aviso: {aviso}\n" for aviso in r.get("avisos") or ())
 
 
-ATOS = {"ler": ato_ler}
+ATOS = {"buscar": ato_buscar, "ler": ato_ler}
+
+
+def _recusa_ato_desconhecido(ato: str, resto: list[str], *, cabecalho_motor: Path | None = None) -> Recusa:
+    if ato and ato in _atos_do_motor(cabecalho_motor):
+        partes = ["listar", *resto] if ato == "listar" else ["rag", ato, *resto]
+        proximo = f"motor {shlex.join(partes)}"
+        return Recusa(
+            2,
+            "ato-desconhecido",
+            onde="ato",
+            recebido=ato,
+            regra=REGRA_ATOS,
+            cura=f"o ato {ato} é de gestão do motor e mora no verbo motor",
+            proximo=proximo,
+        )
+    return Recusa(
+        2,
+        "ato-desconhecido",
+        onde="ato",
+        recebido=ato,
+        regra=REGRA_ATOS,
+        cura=f"atos do verbo busca: {', '.join(ATOS)}",
+        proximo=USO_LER,
+    )
+
+
+def _escrever_recusa_json(recusa: Recusa, fluxo: TextIO) -> int:
+    item = recusa.campos()
+    fluxo.write(json.dumps({"erro": item, "erros": [item]}, ensure_ascii=False) + "\n")
+    fluxo.flush()
+    return recusa.saida
 
 
 def main(argv: list[str] | None = None, *, saida: TextIO | None = None, erro: TextIO | None = None,
-         **kw: Any) -> int:
-    argv = sys.argv[1:] if argv is None else argv
+         motor: Path | None = None, **kw: Any) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
     saida = sys.stdout if saida is None else saida
     erro = sys.stderr if erro is None else erro
-    como_json = "--json" in argv
-    try:
-        if not argv or argv[0] not in ATOS:
-            raise Recusa(2, "ato-desconhecido", onde="ato", recebido=argv[0] if argv else "",
-                         regra="interface-de-verbo:busca §Atos", cura="nesta versão o verbo busca tem só o ato ler",
-                         proximo=USO)
-        imprimir(ATOS[argv[0]](argv[1:], **kw), saida)
-        return 0
-    except Recusa as r:
-        return escrever(r, como_json=como_json, fluxo=erro)
+    if len(argv) >= _MIN_ARGS_COM_INSTANCIA and argv[0] == "rag":
+        argv = argv[1:]
+    ato = argv[0] if argv else ""
+    resto = argv[1:] if argv else []
+    if ato == "buscar":
+        return ato_buscar(resto, saida=saida, erro=erro, motor=motor)
+    if ato == "ler":
+        como_json = "--json" in resto
+        try:
+            imprimir(ato_ler(resto, **kw), saida)
+            return 0
+        except Recusa as r:
+            return escrever(r, como_json=como_json, fluxo=erro)
+    return _escrever_recusa_json(_recusa_ato_desconhecido(ato, resto), erro)
 
 
 if __name__ == "__main__":
