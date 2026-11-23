@@ -82,8 +82,7 @@ def test_escrever_recusa_de_fronteira():
     r = _acervo("escrever", "casa", "adr", "x")
     assert r.returncode == 2
     assert "adr nasce em git, não se escreve no acervo." in r.stderr
-    assert ("Caminho: write_file na bancada de platafirma-casa → PR → merge em main → "
-            "acervo ingerir casa platafirma-casa.") in r.stderr
+    assert "Caminho: write_file na bancada de platafirma-casa → PR → merge em main." in r.stderr
     assert "escrever grava só: pagina, arquivo, ferramental, stack." in r.stderr
 
 

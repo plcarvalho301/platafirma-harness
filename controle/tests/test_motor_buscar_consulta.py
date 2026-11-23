@@ -198,7 +198,7 @@ def test_origem_literal_nao_passa_pelo_lint_nem_monta(api, origem):
     texto = "Respondi o gold set todo"
     saco = "UTF-8 decoding truncated multibyte sequence byte boundary; golden hammer"
     for t in (texto, saco):
-        r = roda("buscar", "casa", t, "--origem", origem)
+        r = roda("buscar", "biblioteca", t, "--origem", origem)
         assert r.returncode == 0, r.stderr
         assert pedidos[-1]["pergunta"] == t and "consulta" not in pedidos[-1]
         assert pedidos[-1]["origem"] == origem
@@ -207,8 +207,17 @@ def test_origem_literal_nao_passa_pelo_lint_nem_monta(api, origem):
 
 def test_origem_literal_com_flag_de_montagem_sai_2(api):
     roda, pedidos, _, _ = api
-    assert roda("buscar", "casa", "--origem", "abertura", "--necessidade", NEC).returncode == 2
-    assert roda("buscar", "casa", "texto qualquer da abertura", "--origem", "bench", "--sem-lint").returncode == 2
+    assert roda("buscar", "biblioteca", "--origem", "abertura", "--necessidade", NEC).returncode == 2
+    assert roda("buscar", "biblioteca", "texto qualquer da abertura", "--origem", "bench", "--sem-lint").returncode == 2
+    assert pedidos == []
+
+
+@pytest.mark.parametrize("part", ["casa", "log"])
+def test_buscar_particao_removida_sai_2_apontando_busca_consultar(api, part):
+    roda, pedidos, _, _ = api
+    r = roda("buscar", part, "--necessidade", NEC)
+    assert r.returncode == 2
+    assert "busca consultar" in r.stderr and "busca ler" in r.stderr
     assert pedidos == []
 
 

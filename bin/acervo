@@ -364,7 +364,7 @@ conforme() {
           *)    exec "$ATOS/stack" import "$@" ;;
         esac ;;
     escrever:casa:*)
-        echo "acervo escrever casa $entidade: $entidade nasce em git, não se escreve no acervo. Caminho: write_file na bancada de platafirma-casa → PR → merge em main → acervo ingerir casa platafirma-casa. escrever grava só: pagina, arquivo, ferramental, stack." >&2
+        echo "acervo escrever casa $entidade: $entidade nasce em git, não se escreve no acervo. Caminho: write_file na bancada de platafirma-casa → PR → merge em main. escrever grava só: pagina, arquivo, ferramental, stack." >&2
         exit 2 ;;
     escrever:biblioteca:*)
         echo "acervo escrever biblioteca: obra nasce fora e entra por acervo ingerir biblioteca <raiz>, nunca por escrever." >&2
@@ -455,12 +455,9 @@ conforme() {
             exec "$ATOS/../ingerir" --lote "$entidade" "$@"
         fi ;;
     ingerir:casa:*)
-        # $entidade e a fonte: platafirma-casa[@<rev>] (arq:0115 §8.1). O cliente magro de
-        # casa (card #3027, rota POST /acervo/casa/lotes) le o objeto git pelo sha no espelho
-        # bare do suporte, na instancia, e sobe {repo,path,sha_ref,titulo,corpo} no payload --
-        # sem MinIO, sem OCR, sem release, sem bancada. Nao passa pelo cliente de OBRA.
-        # $entidade repassa SEMPRE: flag solta (--apply) chega ao cliente, que a le.
-        exec "$ATOS/casa-ingerir" "$entidade" "$@" ;;
+        echo "acervo ingerir casa: removido (#4425) — a partição casa saiu do motor." >&2
+        echo "  Para consultar e ler documentos da casa, use \`busca consultar\` e \`busca ler\`." >&2
+        exit 2 ;;
     # --- casa generico: especies que vivem na TABELA acervo.casa (arq:0106, arq:0115) ---
     # As entidades com fonte propria (pagina, ferramental, stack, cargo, entidade) ja foram
     # capturadas acima. O que sobra em ler/listar casa <especie> vai ao sub-ato casa,

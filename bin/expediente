@@ -442,10 +442,6 @@ CATALOGO_CADEIRINHA = [
      "chamada": "persona ler {cadeira} --parte posturas --chapeu {chapeu} --json", "dono": "produto"},
     {"peca": "regua", "gatilho": "perfil cadeirinha, com --regua", "regime": "valor",
      "volatilidade": "estavel", "chamada": "acervo ler casa {regua}", "dono": "gestao-estrategica"},
-    {"peca": "acervo-consultado", "gatilho": "perfil cadeirinha, com mensagem", "regime": "valor",
-     "volatilidade": "volatil",
-     "chamada": 'motor rag buscar casa "{pergunta}" --k 6 --texto secao --origem abertura',
-     "dono": "dados"},
 ]
 
 
@@ -515,16 +511,7 @@ def _peca_da_linha(linha: dict, ref: str, rc: int, stdout: str, stderr: str, per
     if rc != 0:
         return indisponivel((stderr or stdout).strip() or f"exit {rc}")
     conteudo = stdout.strip()
-    if peca_id == "acervo-consultado":
-        try:
-            d = json.loads(stdout)
-        except (ValueError, TypeError):
-            d = None
-        if isinstance(d, dict):
-            if d.get("erro"):
-                return indisponivel(str(d["erro"]))
-            conteudo = _portao_cobertura(d, pergunta, env)
-    elif peca_id == "regua":
+    if peca_id == "regua":
         conteudo = _recorta_regua(conteudo, (regua or [""])[0])
         if not conteudo:
             return indisponivel("regua sem `## Critérios` nem `## Contrapontos`")
@@ -583,7 +570,7 @@ def ato_montar_cadeirinha(cadeira_arg: str | None, chapeu: str | None, modo: str
     servidas: list[dict] = []
     for linha in CATALOGO_CADEIRINHA:
         peca_id = linha["peca"]
-        if (peca_id == "regua" and not regua) or (peca_id == "acervo-consultado" and (not pergunta or sem_acervo)):
+        if peca_id == "regua" and not regua:
             continue
         ref = _ref_da_linha(linha["chamada"], {**valores, "pergunta": pergunta[:40]})
         if peca_id == "modo":

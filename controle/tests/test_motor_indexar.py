@@ -223,11 +223,11 @@ def test_buscar_sem_sessao_no_ambiente_nao_manda_sessao_nem_fita(api):
 
 def test_buscar_com_origem_declarada_manda_a_origem_e_a_ordem_do_argumento_vence(api):
     roda, pedidos = api
-    r = roda("buscar", "casa", "pergunta", "--origem", "abertura", "--ordem-id", "o-do-argumento",
+    r = roda("buscar", "biblioteca", "pergunta", "--origem", "abertura", "--ordem-id", "o-do-argumento",
              ambiente={"PF_ORDEM_ID": "o-do-ambiente"})
     assert r.returncode == 0, r.stderr
     corpo = pedidos[-1][3]
-    assert corpo["origem"] == "abertura" and corpo["particao"] == "casa"
+    assert corpo["origem"] == "abertura" and corpo["particao"] == "biblioteca"
     assert corpo["ordem_id"] == "o-do-argumento"
 
 def test_buscar_com_origem_fora_da_lista_sai_2_sem_chamar_a_api(api):
@@ -239,12 +239,12 @@ def test_buscar_com_origem_fora_da_lista_sai_2_sem_chamar_a_api(api):
 
 def test_o_evento_consulta_do_ops_grava_particao_e_origem(api, tmp_path):
     roda, _ = api
-    r = roda("buscar", "casa", "pergunta", "--origem", "abertura")
+    r = roda("buscar", "biblioteca", "pergunta", "--origem", "abertura")
     assert r.returncode == 0, r.stderr
     linhas = [json.loads(l) for f in (tmp_path / "ops").glob("ops-*.jsonl")
               for l in f.read_text().splitlines()]
     evento = [l for l in linhas if l.get("evento") == "consulta"][-1]
-    assert evento["particao"] == "casa" and evento["origem_consulta"] == "abertura"
+    assert evento["particao"] == "biblioteca" and evento["origem_consulta"] == "abertura"
     # A consulta da abertura grava a mensagem do dono (ordem de 08/10) e so ela: o que a busca
     # devolveu (fontes, contexto) nao entra na linha. `origem` e de quem chamou.
     assert evento["query"] == "pergunta" and evento["query_bytes"] == len("pergunta")
@@ -254,7 +254,7 @@ def test_o_evento_consulta_do_ops_grava_particao_e_origem(api, tmp_path):
 
 def test_a_consulta_de_cadeira_tambem_grava_a_query(api, tmp_path):
     roda, _ = api
-    r = roda("buscar", "casa", "o que e caderno", "--origem", "busca")
+    r = roda("buscar", "biblioteca", "o que e caderno", "--origem", "busca")
     assert r.returncode == 0, r.stderr
     linhas = [json.loads(l) for f in (tmp_path / "ops").glob("ops-*.jsonl")
               for l in f.read_text().splitlines()]
@@ -263,13 +263,12 @@ def test_a_consulta_de_cadeira_tambem_grava_a_query(api, tmp_path):
     assert evento["query_bytes"] == len("o que e caderno")
 
 def test_lote_pela_tool_com_instancia_e_ato_repetidos_busca_na_particao_pedida(api):
-    # #2856 linha 23: `ato: buscar` com args [rag, buscar, casa, ...] chegava como
-    # `motor buscar rag buscar casa ...`: buscava em biblioteca, com a pergunta «rag buscar casa ...».
+    # #2856 linha 23 / #4425: `ato: buscar` com args [rag, buscar, biblioteca, ...] desduplica instancia e ato.
     roda, pedidos = api
-    r = roda("buscar", "rag", "buscar", "casa", "pergunta", sem_instancia=True)
+    r = roda("buscar", "rag", "buscar", "biblioteca", "pergunta", sem_instancia=True)
     assert r.returncode == 0, r.stderr
     assert "sem particao" not in r.stderr
-    assert pedidos[-1][3]["particao"] == "casa" and pedidos[-1][3]["pergunta"] == "pergunta"
+    assert pedidos[-1][3]["particao"] == "biblioteca" and pedidos[-1][3]["pergunta"] == "pergunta"
 
 
 def test_medir_calcula_abstencao_hit_k_e_t2_com_delta(api, tmp_path):

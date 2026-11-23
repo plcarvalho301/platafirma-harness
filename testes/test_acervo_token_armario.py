@@ -175,28 +175,4 @@ def test_tesauro_usa_token_do_armario_sem_env_dt_1339(tmp_path: Path) -> None:
         srv.fechar()
 
 
-def test_casa_ingerir_usa_token_do_armario_sem_env_dt_1008(tmp_path: Path) -> None:
-    release, inst = _preparar_armario(tmp_path, {"busca/RAG_API_TOKEN": "tok-casa-1008"})
-    arvore = inst / "var" / "pre-push" / "casa-teste"
-    arvore.mkdir(parents=True)
-    (arvore / "doc.md").write_text("# Titulo\n\nCorpo.\n", encoding="utf-8")
-    srv = _ServidorToken({
-        ("POST", "/acervo/casa/lotes"): (201, {
-            "lote_id": "00000000-0000-0000-0000-000000000001",
-            "estado": "plano",
-            "itens": [{"path": "doc.md", "veredito": "ja_ingerido"}],
-            "resumo": {"criar": 0, "edicao": 0, "ja_ingerido": 1, "reprovado": 0, "retirar": 0},
-        }),
-    })
-    try:
-        r = subprocess.run(
-            [_python_com_requests(), str(RAIZ / "bin" / "_acervo" / "casa-ingerir"),
-             "platafirma-casa", "--arvore", str(arvore), "--json"],
-            env=_env_porta(release, inst, srv.base),
-            capture_output=True, text=True, timeout=15, check=False,
-        )
-        assert r.returncode == 0, r.stderr
-        chamadas_lote = [auth for m, p, auth in srv.chamadas if (m, p) == ("POST", "/acervo/casa/lotes")]
-        assert chamadas_lote == ["Bearer tok-casa-1008"], srv.chamadas
-    finally:
-        srv.fechar()
+

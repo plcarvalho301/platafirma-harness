@@ -193,7 +193,7 @@ def test_recusa_com_exit_2_e_sem_chamar_a_api(api, flags, pedaco):
 def test_filtro_na_casa_sai_2_e_avisa_que_nao_vale(api):
     roda, estado, *_ = api
     r = _buscar(roda, "--filtro", "dominio=ia", part="casa")
-    assert r.returncode == 2 and "o filtro não vale na casa" in r.stderr
+    assert r.returncode == 2 and "busca consultar" in r.stderr and "busca ler" in r.stderr
     assert estado["pedidos"] == []
 
 
@@ -296,7 +296,7 @@ def test_medir_recusa_antes_da_rede(api):
 def test_medir_filtro_na_casa_sai_2(api):
     roda, estado, _, gab = api
     r = roda("medir", "casa", "--bateria", str(gab), "--k", "8", "--filtro", "dominio=ia")
-    assert r.returncode == 2 and "o filtro não vale na casa" in r.stderr
+    assert r.returncode == 2 and "busca consultar" in r.stderr and "busca ler" in r.stderr
     assert estado["pedidos"] == []
 
 

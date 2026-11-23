@@ -71,9 +71,17 @@ def test_verbo_resolve_catalogo_antes_do_post_e_eco_aviso(api, tmp_path, monkeyp
     assert "inexistente" in json.loads(r.stdout)["avisos_conceitos"][0]
 
 
-@pytest.mark.parametrize("particao", ["registro", "log"])
-def test_verbo_usa_nome_canonico_da_particao(api, particao):
+def test_verbo_usa_nome_canonico_da_particao(api):
+    roda, pedidos, _, _ = api
+    r = roda("buscar", "obra", "O que é recuperação?")
+    assert r.returncode == 0, r.stderr
+    assert pedidos[-1]["particao"] == "biblioteca"
+
+
+@pytest.mark.parametrize("particao", ["casa", "registro", "log"])
+def test_verbo_recusa_particoes_removidas(api, particao):
     roda, pedidos, _, _ = api
     r = roda("buscar", particao, "O que é recuperação?")
-    assert r.returncode == 0, r.stderr
-    assert pedidos[-1]["particao"] == "log"
+    assert r.returncode == 2
+    assert "busca consultar" in r.stderr and "busca ler" in r.stderr
+    assert pedidos == []

@@ -76,19 +76,8 @@ def semelhanca(a, b):
 
 
 def duplicata_do_canone(texto):
-    """'<arquivo> (sim X)' do documento de canone que ja diz o mesmo, ou None."""
-    rc, out = _verbo("motor", "rag", "buscar", "casa", texto, "--k", "3", "--texto", "nenhum",
-                     "--origem", "autoteste")
-    if rc != 0:
-        return None
-    try:
-        fontes = json.loads(out.strip().splitlines()[0]).get("fontes") or []
-    except (ValueError, IndexError, AttributeError):
-        return None
-    for f in fontes:
-        arq, sim = (f.get("arquivo") or "").strip(), f.get("sim") or 0
-        if sim >= LIMIAR_CANONE and CANONE.match(arq):
-            return f"{arq} (sim {sim:.2f})"
+    """'<arquivo> (sim X)' do documento de canone que ja diz o mesmo, ou None.
+    Particao casa saiu do motor (#4425): sem busca semantica na casa, retorna None."""
     return None
 
 

@@ -41,7 +41,7 @@ def completar(resp: dict, particao: str, texto: str, avisos: list[str] | tuple =
         resp["aviso_texto"] = "texto nao solicitado; use --texto trecho ou --texto secao"
     if avisos:
         resp["avisos_conceitos"] = list(avisos)
-    if particao in ("biblioteca", "casa"):
+    if particao == "biblioteca":
         for fonte in resp.get("fontes") or []:
             sid = fonte.get("secao_id")
             if isinstance(sid, str) and re.fullmatch(

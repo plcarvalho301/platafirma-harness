@@ -351,24 +351,11 @@ def _documento(tmp_path, rc_stub: int):
     return env, arvore, log
 
 
-def test_documento_limpo_sai_0_chamando_a_admissao(tmp_path):
-    env, arvore, log = _documento(tmp_path, 0)
+def test_documento_passa_sem_invocar_acervo_ingerir_casa(tmp_path):
+    # #4425: esteira documento não invoca mais `acervo ingerir casa --arvore` nem falha
+    # se o stub de acervo retornaria erro.
+    env, arvore, log = _documento(tmp_path, 3)
     r = _run_teste(env, "rodar", "casa-demo", "--arvore", str(arvore))
     assert r.returncode == 0, r.stdout + r.stderr
     assert "suite VERDE" in r.stdout
-    assert log.read_text().split() == ["ingerir", "casa", "casa-demo", "--arvore", str(arvore)]
-
-
-def test_documento_recusado_pela_admissao_sai_1_nomeando(tmp_path):
-    env, arvore, _ = _documento(tmp_path, 3)
-    r = _run_teste(env, "rodar", "casa-demo", "--arvore", str(arvore))
-    assert r.returncode == 1, r.stdout + r.stderr
-    assert "suite VERMELHA" in r.stdout
-    assert "reprovado: portao chave" in r.stdout
-
-
-def test_documento_motor_fora_sai_5_nao_medido(tmp_path):
-    env, arvore, _ = _documento(tmp_path, 1)
-    r = _run_teste(env, "rodar", "casa-demo", "--arvore", str(arvore))
-    assert r.returncode == 5, r.stdout + r.stderr
-    assert "INDISPONIVEL" in r.stdout
+    assert not log.exists()

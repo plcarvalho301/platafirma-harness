@@ -4,7 +4,7 @@
 # dono: ia
 # componente: platafirma-motor
 # classe: B
-# use para: SEMPRE ANTES de responder de cabeça e ANTES de abrir o acervo, consultar a casa ou a biblioteca, «o que a literatura diz de X?», «onde a casa fala de Y?», «tem fonte sobre Z?»; parametrizar ou ajustar as consultas do motor · forma na tool: ato="rag", args=["buscar", "<biblioteca|casa|log>", "<frase>"] (ou ato="buscar", args=["<biblioteca|casa|log>", "<frase>"])
+# use para: SEMPRE ANTES de responder de cabeça e ANTES de abrir o acervo, consultar a biblioteca, «o que a literatura diz de X?», «tem fonte sobre Z?»; parametrizar ou ajustar as consultas do motor · forma na tool: ato="rag", args=["buscar", "biblioteca", "<frase>"] (ou ato="buscar", args=["biblioteca", "<frase>"])
 # atos: listar (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita, bateria), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote), julgar (escrita, lote), eleger (leitura, medida), consultas (leitura, medida), trabalhos (leitura, medida), estado (leitura, geracao), parar (escrita, medida), limpar (escrita, medida)
 # (buscar/medir/indexar/trocar/sortear/escrever/parear/julgar exigem particao; eleger e lintar leem o log inteiro e nao: motor <inst> <ato> <particao> ...; a instancia `marcacao` (marcacao-api) fala os atos dela: lote (gravar|ler|ativar|desativar), eventos, juiz)
 # forma: json
@@ -134,10 +134,12 @@ DOCKER = {"DOCKER_HOST": "unix:///run/user/1001/docker.sock"}
 
 
 SPEC = "spec motor (acervo ler casa spec motor)"
-# arq:0106 §3: biblioteca, casa e log. Os nomes anteriores obra e registro
-# seguem como sinonimos; a API recebe o nome canonico antes de consultar o enum.
-PARTICOES = ("biblioteca", "casa", "log")
-_SINONIMOS = {"obra": "biblioteca", "registro": "log"}
+# #4425: o motor e dedicado exclusivamente a particao biblioteca (obra segue como
+# sinonimo de transicao). casa e log (e o sinonimo registro) foram removidas e recusam
+# com exit 2 apontando busca consultar e busca ler.
+PARTICOES = ("biblioteca",)
+_SINONIMOS = {"obra": "biblioteca"}
+_PARTICOES_REMOVIDAS = ("casa", "log", "registro")
 ATOS_RAG = (
     "ajuste", "buscar", "consultas", "eleger", "escrever", "estado",
     "indexar", "julgar", "limpar", "lintar", "medir", "parar", "parear",
@@ -146,10 +148,22 @@ ATOS_RAG = (
 _PARA_A_API = {}
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
 
+
+def _recusar_particao_removida(particao, ato=None):
+    prefixo = f"motor {ato}" if ato else "motor"
+    sys.stderr.write(
+        f"{prefixo}: particao '{particao}' foi removida do motor (#4425) — o motor atende apenas 'biblioteca'.\n"
+        f"  Para consultar e ler documentos da casa, use `busca consultar` e `busca ler`.\n"
+    )
+    sys.exit(2)
+
+
 def resolve_particao(argv, ato):
-    """Gramatica arq:0106: motor <inst> <ato> <particao>. Forma vigente sem particao
-    NAO some em silencio: cai em 'biblioteca' com aviso ao stderr apontando a forma nova e
-    a spec (spec_motor §5)."""
+    """Gramatica arq:0106: motor <inst> <ato> <particao>. Particoes removidas (casa, log)
+    recusam com exit 2 apontando busca consultar e busca ler (#4425). Forma sem particao
+    NAO some em silencio: cai em 'biblioteca' com aviso ao stderr."""
+    if argv and argv[0] in _PARTICOES_REMOVIDAS:
+        _recusar_particao_removida(argv[0], ato)
     if argv and (argv[0] in PARTICOES or argv[0] in _SINONIMOS):
         return _SINONIMOS.get(argv[0], argv[0]), argv[1:]
     sys.stderr.write(
@@ -266,7 +280,7 @@ def uso(cod=2):
   motor <inst> medir  <particao> --calibrar <controle>[,<rodada>…]
                                         o piso e o que ele custa, por sinal, sobre as medicoes salvas
                                         com esses rotulos (a primeira e a similaridade, o controle)
-  motor <inst> medir  <particao> --sombra <modelo>[,<modelo>] [--particoes biblioteca,casa]
+  motor <inst> medir  <particao> --sombra <modelo>[,<modelo>] [--particoes biblioteca]
                      [--k N] [--perguntas N]
                                         braco-sombra do embedder (guia escolha-de-llm §11):
                                         reembeda a particao em memoria, fora do servido, e
@@ -380,7 +394,7 @@ def uso(cod=2):
                                         `motor marcacao --ajuda` traz as formas)
 
 gramatica (arq:0106): motor <inst> <ato> <particao> [seletor]. instancia = quem
-busca (ortogonal a particao); particao = onde (biblioteca, casa, registro; obra = biblioteca).
+busca (ortogonal a particao); particao = onde (biblioteca; obra = biblioteca).
 doc de produto: """ + SPEC + """
 
 instancias: """ + ", ".join(reg().keys()))
@@ -2338,8 +2352,10 @@ def cmd_sombra(inst, particao, argv):
     particoes = ([p for p in _valor(argv, "--particoes", "medir").split(",") if p]
                  if "--particoes" in argv else [particao])
     for p in particoes:
-        if p not in ("biblioteca", "casa"):
-            print(f"medir --sombra: particao {p!r} sem indice vetorial servido (biblioteca, casa)",
+        if p in _PARTICOES_REMOVIDAS:
+            _recusar_particao_removida(p, "medir")
+        if p != "biblioteca":
+            print(f"medir --sombra: particao {p!r} sem indice vetorial servido (biblioteca)",
                   file=sys.stderr)
             sys.exit(2)
     k = int(_valor(argv, "--k", "medir")) if "--k" in argv else 8
@@ -3902,11 +3918,8 @@ def _medir_contra(nome, inst, argv):
     linhas = []
     for n, it in enumerate(itens, 1):
         p = it["particao"]
-        o = "casa" if p == "biblioteca" else "biblioteca"
         a_p, b_p = topo(inst, tok_a, it["q"], p), topo(outra, tok_b, it["q"], p)
-        a_o, b_o = topo(inst, tok_a, it["q"], o), topo(outra, tok_b, it["q"], o)
-        cruz = comparar.cruzados(a_o, b_p) + comparar.cruzados(a_p, b_o)
-        linhas.append(comparar.linha(it, a_p, b_p, cruz))
+        linhas.append(comparar.linha(it, a_p, b_p, []))
         if n % 25 == 0:
             print(f"  ... {n}/{len(itens)}", file=sys.stderr)
     res = comparar.resumo(linhas)
@@ -4201,6 +4214,8 @@ def cmd_limpar(inst, argv):
     apaga pastas `/tmp/sombra-<id>` encerradas no contêiner e pesos de embedder no cache HF
     que nenhuma geração servindo ou em construção usa."""
     forma = "motor <inst> limpar [--sombra <id>] [--modelo <repo>] [--ver] [--json]"
+    if argv and argv[0] in _PARTICOES_REMOVIDAS:
+        _recusar_particao_removida(argv[0], "limpar")
     if argv and (argv[0] in PARTICOES or argv[0] in _SINONIMOS):
         argv = argv[1:]
     sid = None
@@ -4308,6 +4323,8 @@ def main():
     if a and a[0] == "motor":
         sys.stderr.write("motor: primeiro argumento 'motor' desduplicado com aviso\n")
         a = a[1:]
+    if a and a[0] in _PARTICOES_REMOVIDAS:
+        _recusar_particao_removida(a[0])
     if a and (a[0] in PARTICOES or a[0] in _SINONIMOS):
         part = _SINONIMOS.get(a[0], a[0])
         sys.stderr.write(f"motor: 'motor {a[0]}' redirecionado para `motor rag buscar {part}` com aviso\n")
@@ -4334,7 +4351,7 @@ def main():
     if a[0] not in d:
         print(
             f"nao conheco a instancia '{a[0]}'. Ha: {', '.join(d)}. Se for um ato, use: motor rag {a[0]}. "
-            f"Para buscar no acervo: motor rag buscar <biblioteca|casa|log> \"<frase>\" "
+            f"Para buscar no acervo: motor rag buscar biblioteca \"<frase>\" "
             f"(na tool: ato=\"rag\", args=[\"buscar\", \"biblioteca\", \"<frase>\"])",
             file=sys.stderr,
         )
@@ -4382,7 +4399,7 @@ def main():
         return cmd_limpar(inst, a[2:])
     print(
         f"ato desconhecido '{a[1]}'. {a[0]} aceita: ajuste, buscar, consultas, eleger, escrever, estado, indexar, julgar, limpar, lintar, medir, parar, parear, sortear, trabalhos, trocar. "
-        f"Para buscar: motor {a[0]} buscar <biblioteca|casa|log> \"<frase>\"",
+        f"Para buscar: motor {a[0]} buscar biblioteca \"<frase>\"",
         file=sys.stderr,
     )
     sys.exit(1)

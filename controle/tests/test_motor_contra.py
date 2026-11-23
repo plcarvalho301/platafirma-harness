@@ -145,8 +145,7 @@ def test_as_duas_buscas_recebem_origem_sombra_k_8_e_a_particao_nas_duas_pontas(d
         buscas = [p for p in estado[lado]["pedidos"] if p[1] == "/search"]
         assert buscas and all(p[2] == token for p in buscas)
         assert all(p[3]["origem"] == "sombra" and p[3]["k"] == 8 and p[3]["texto"] == "nenhum" for p in buscas)
-        # cada pergunta vai na partição pedida e na outra: é do par que sai o cruzamento
-        assert {p[3]["particao"] for p in buscas} == {"biblioteca", "casa"}
+        assert {p[3]["particao"] for p in buscas} == {"biblioteca"}
     assert len([p for p in estado["rag"]["pedidos"] if p[1] == "/search"]) == \
         len([p for p in estado["busca"]["pedidos"] if p[1] == "/search"])
 
@@ -160,17 +159,6 @@ def test_um_trecho_diferente_no_top_8_sai_1_e_a_virada_nao_segue(duas):
     assert iguais == total - 1 and float(jmin) < 1.0 and cruzados == 0
     assert "diferente (0.778) [biblioteca] positiva 1 onde esta" in r.stdout    # 7 em comum de 9 distintos
     assert "diferenca aberta: nada se troca" in r.stdout
-
-
-def test_trecho_da_casa_na_resposta_da_biblioteca_e_cruzamento_de_particao(duas):
-    roda, estado, _, gab = duas
-    # a nova devolve, na biblioteca, um trecho que a servida só tem na casa
-    estado["busca"]["ajusta"] = lambda p, q, l: (
-        l[:-1] + [f"casa|{q}|0"] if q.startswith("positiva 0") and p == "biblioteca" else l)
-    r = roda("biblioteca", "--bateria", str(gab), "--contra", "busca")
-    assert r.returncode == 1, r.stdout
-    assert _conta(r.stdout)[3] == 1
-    assert "cruzou (1) [biblioteca] positiva 0 onde esta" in r.stdout
 
 
 def test_embedder_ou_geracao_diferente_entre_os_indices_sai_1_mesmo_com_top_8_igual(duas):
