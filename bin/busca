@@ -34,7 +34,7 @@ _LIB = _RAIZ / "lib"
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 
-from busca.nome import consultar_por_nome
+from busca.nome import chamada_busca_pelo_sentido, consultar_por_nome
 from busca.pedido import ler_contexto, receber_pedido
 from busca.plano import montar_plano
 from busca.retorno import (
@@ -291,6 +291,8 @@ def _coluna(alvo: str, fichas: list[dict]) -> dict:
 
 # ==================================================================== o ato ler (pela consulta por nome)
 def _recusa_nao_casou_no_ler(alvo: str, retorno_nome: Mapping[str, Any]) -> Recusa:
+    # Decisão do dono (23/11, card 4427, comentário 5591): o nome que não casa vai à busca pelo
+    # sentido. Os candidatos e as classes seguem na cura; o proximo é a chamada da busca.
     candidatos = retorno_nome.get("candidatos") or []
     if candidatos:
         chaves = ", ".join(str(c["chave"]) for c in candidatos)
@@ -301,19 +303,19 @@ def _recusa_nao_casou_no_ler(alvo: str, retorno_nome: Mapping[str, Any]) -> Recu
             recebido=alvo,
             regra=REGRA_NOME,
             cura=f"«{alvo}» não nomeia ficha pela tabela de nomes, rótulo, variantes nem slug; candidatos: {chaves}",
-            proximo=f"busca ler {shlex.quote(str(candidatos[0]['chave']))}",
+            proximo=chamada_busca_pelo_sentido(alvo),
         )
     disp = retorno_nome.get("disponiveis") or {}
     classes_disp = disp.get("classes") or []
-    primeira = str(classes_disp[0]) if classes_disp else "shape"
+    classes = f"; classes: {', '.join(str(c) for c in classes_disp)}" if classes_disp else ""
     return Recusa(
         1,
         "termo-nao-casou",
         onde="nome",
         recebido=alvo,
         regra=REGRA_NOME,
-        cura=f"«{alvo}» não nomeia ficha pela tabela de nomes, rótulo, variantes nem slug",
-        proximo=f"busca consultar --classe {shlex.quote(primeira)}",
+        cura=f"«{alvo}» não nomeia ficha pela tabela de nomes, rótulo, variantes nem slug{classes}",
+        proximo=chamada_busca_pelo_sentido(alvo),
     )
 
 

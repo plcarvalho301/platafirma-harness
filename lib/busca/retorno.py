@@ -104,7 +104,9 @@ def _renderizar_nao_casou(reg: Mapping[str, Any]) -> str:
         linhas.append("classes: " + ", ".join(disp.get("classes") or ()))
         linhas.append("filtros: " + ", ".join(disp.get("filtros") or ()))
     for pr in reg.get("proximo") or ():
-        if pr.get("tipo") == "nome-candidato" and pr.get("termo"):
+        if pr.get("tipo") == "busca" and pr.get("chamada"):
+            linhas.append(f"proximo: {pr['chamada']}")
+        elif pr.get("tipo") == "nome-candidato" and pr.get("termo"):
             linhas.append(f"proximo: nome-candidato: {pr['termo']}")
     return "\n".join(linhas) + "\n"
 

@@ -967,16 +967,24 @@ def test_termo_com_qualificador_vira_condicao_e_demanda_nao_corta_dentro_da_pala
     assert any(ln.startswith("gabarito:framework-da-ontologia") for ln in linhas[1:])
 
 
-def test_termo_que_nao_casa_devolve_candidatos_ou_disponiveis_sem_busca_pelo_sentido() -> None:
+def test_termo_que_nao_casa_devolve_candidatos_ou_disponiveis_e_a_busca_pelo_sentido_em_proximo() -> None:
+    # Decisão do dono (23/11, card 4427, comentário 5591): o termo que não casa vai à busca pelo sentido,
+    # sugerida em proximo; o verbo não a roda nem mistura trechos com fichas no retorno.
     rc_sem, out_sem, err_sem = rodar_consultar(["xyzzy inexistente plugh", "--json"])
     assert rc_sem == SAIDA_OK and err_sem == ""
     reg_sem = json.loads(out_sem)
-    assert reg_sem["desfecho"] == "termo-nao-casou"
+    assert reg_sem["desfecho"] == "termo-nao-casou" and reg_sem["total"] == 0
     assert reg_sem["candidatos"] is None
     assert "gabarito" in reg_sem["disponiveis"]["classes"]
     assert "--classe" in reg_sem["disponiveis"]["filtros"]
-    assert reg_sem["proximo"] == [{"tipo": "nome-candidato", "termo": "xyzzy inexistente plugh"}]
-    assert "buscar" not in out_sem
+    assert reg_sem["proximo"] == [
+        {"tipo": "busca", "chamada": "busca buscar casa 'xyzzy inexistente plugh'"},
+        {"tipo": "nome-candidato", "termo": "xyzzy inexistente plugh"},
+    ]
+    assert reg_sem["fichas"] == []
+
+    _, txt_sem, _ = rodar_consultar(["xyzzy inexistente plugh"])
+    assert "proximo: busca buscar casa 'xyzzy inexistente plugh'" in txt_sem.splitlines()
 
     rc_cand, out_cand, _ = rodar_consultar(["coisa sobre gabarito", "--json"])
     assert rc_cand == SAIDA_OK
@@ -984,6 +992,7 @@ def test_termo_que_nao_casa_devolve_candidatos_ou_disponiveis_sem_busca_pelo_sen
     assert reg_cand["desfecho"] == "termo-nao-casou"
     assert reg_cand["disponiveis"] is None
     assert any(c["chave"] == "gabarito" for c in reg_cand["candidatos"])
+    assert reg_cand["proximo"][0] == {"tipo": "busca", "chamada": "busca buscar casa 'coisa sobre gabarito'"}
 
 
 def test_autorizacao_por_classe_nega_tudo_com_4_e_filtra_classes_mistas() -> None:

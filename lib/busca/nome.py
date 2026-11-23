@@ -21,6 +21,13 @@ REGRA_NOME = "verbo:busca §Como um nome vira ficha"
 REGRA_PLANO = "verbo:busca §Como a condição vira plano"
 _PREPOSICOES = frozenset({"de", "da", "do", "das", "dos"})
 _RE_PALAVRA_ESPACO = re.compile(r"\S+")
+# A busca pelo sentido sobre as fichas e os documentos da casa: a partição casa do motor.
+PARTICAO_BUSCA_PELO_SENTIDO = "casa"
+
+
+def chamada_busca_pelo_sentido(termo: str) -> str:
+    """A chamada pronta da busca pelo sentido para o termo que a tabela de nomes não resolveu."""
+    return f"busca buscar {PARTICAO_BUSCA_PELO_SENTIDO} {shlex.quote(termo)}"
 
 
 @dataclass(frozen=True)
@@ -321,5 +328,11 @@ def consultar_por_nome(
         "termo": termo,
         "candidatos": candidatos if candidatos else None,
         "disponiveis": disponiveis,
-        "proximo": [{"tipo": "nome-candidato", "termo": termo}],
+        # Decisão do dono (23/11, card 4427, comentário 5591): o termo que a tabela de nomes não
+        # resolve vai à busca pelo sentido. O verbo só sugere a chamada; não a roda nem mistura
+        # trechos com fichas no retorno.
+        "proximo": [
+            {"tipo": "busca", "chamada": chamada_busca_pelo_sentido(termo)},
+            {"tipo": "nome-candidato", "termo": termo},
+        ],
     }

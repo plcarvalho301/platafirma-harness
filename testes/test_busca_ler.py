@@ -251,18 +251,19 @@ def test_nome_de_varias_fichas_devolve_a_coluna_sem_ler(release: Path) -> None:
     assert "molde" not in retrato.consultas
 
 
-def test_nome_que_nao_casa_sai_1_do_desfecho_sem_buscar_em_proximo(release: Path) -> None:
+def test_nome_que_nao_casa_sai_1_com_a_busca_pelo_sentido_em_proximo(release: Path) -> None:
+    # Decisão do dono (23/11, card 4427, comentário 5591): o nome que não casa vai à busca pelo sentido.
     codigo, out, err, retrato = rodar(["nome que nenhuma ficha tem"], release)
     assert codigo == 1 and out == ""
     assert "codigo: termo-nao-casou" in err
-    assert "busca buscar" not in err
-    assert "proximo: busca consultar --classe capacidade" in err
+    assert "proximo: busca buscar casa 'nome que nenhuma ficha tem'" in err
+    assert "classes: capacidade" in err
     assert "ficha-inteira" not in retrato.consultas
 
     codigo_cand, _out_c, err_cand, _ = rodar(["coisa sobre busca"], release)
     assert codigo_cand == 1
-    assert "busca buscar" not in err_cand
-    assert "proximo: busca ler capacidade:busca" in err_cand
+    assert "candidatos: capacidade:busca" in err_cand
+    assert "proximo: busca buscar casa 'coisa sobre busca'" in err_cand
 
 
 def test_termo_sem_letra_sai_2(release: Path) -> None:

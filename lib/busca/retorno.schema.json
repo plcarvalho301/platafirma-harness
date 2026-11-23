@@ -189,7 +189,7 @@
             "properties": {
               "tipo": {
                 "type": "string",
-                "enum": ["pagina", "nome-candidato"]
+                "enum": ["pagina", "nome-candidato", "busca"]
               },
               "chamada": {"type": "string"},
               "termo": {"type": "string"}
