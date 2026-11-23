@@ -54,12 +54,16 @@ class VinculoArquivo:
         return (self.componente, self.verifica)
 
     @property
+    def papel(self) -> str | None:
+        return deduzir_papel(self.componente, self.verifica)
+
+    @property
     def chave_ficha(self) -> str | None:
         if self.componente is None or self.classe is None:
             return None
         slug_comp = self.slug_componente or self.componente.replace(":", "-")
         if self.verifica is None:
-            return f"teste-de-comportamento:{slug_comp}"
+            return f"{self.classe}:{slug_comp}"
         slug_alvo = re.sub(r"[^a-zA-Z0-9_-]+", "-", self.verifica).strip("-")
         return f"{self.classe}:{slug_comp}--{slug_alvo}"
 
@@ -98,7 +102,7 @@ def extrair_slug_componente(componente: str | None) -> str | None:
     return limpo
 
 
-def deduzir_classe(componente: str | None, verifica: str | None) -> str | None:
+def deduzir_papel(componente: str | None, verifica: str | None) -> str | None:
     if componente is None:
         return None
     if verifica is None:
@@ -109,6 +113,12 @@ def deduzir_classe(componente: str | None, verifica: str | None) -> str | None:
     if alvo.startswith(PREFIXOS_FRONTEIRA):
         return "teste-de-fronteira"
     return "teste-de-fronteira"
+
+
+def deduzir_classe(componente: str | None, verifica: str | None) -> str | None:
+    if componente is None:
+        return None
+    return "teste"
 
 
 def ler_cabecalho(texto: str) -> tuple[str | None, str | None]:

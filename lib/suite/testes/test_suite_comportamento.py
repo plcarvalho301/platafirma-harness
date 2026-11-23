@@ -274,8 +274,8 @@ def test_admissao_aceita_controle_de_seguranca_como_alvo_do_teste_de_regra():
         {"componente:porta": "componente", "controle-de-seguranca:conta-da-porta": "controle-de-seguranca"}
     )
     ficha = {
-        "classe": "teste-de-regra",
-        "chave": "teste-de-regra:porta--controle-de-seguranca-conta-da-porta",
+        "classe": "teste",
+        "chave": "teste:porta--controle-de-seguranca-conta-da-porta",
         "ligacoes": {"sobre": "componente:porta", "verifica": "controle-de-seguranca:conta-da-porta"},
     }
     assert duble.ensaiar([ficha])["erros"] == []
@@ -289,11 +289,13 @@ def test_ler_vinculo_e_marcas_em_tabela(tmp_path: Path, caso: dict[str, Any]):
 
     assert v.componente == caso["comp"]
     assert v.verifica == caso["verifica"]
-    assert v.classe == caso["classe"]
+    assert v.classe == "teste"
+    assert v.papel == caso["classe"]
     assert v.exige == caso["exige"]
     assert v.incidentes == caso["incidentes"]
     ficha = v.como_ficha()
-    assert ficha["classe"] == caso["classe"]
+    assert ficha["classe"] == "teste"
+    assert ficha["chave"].startswith("teste:")
     assert ficha["ligacoes"]["sobre"] == caso["comp"]
     assert ficha["ligacoes"].get("verifica") == caso["verifica"]
 
@@ -526,7 +528,7 @@ def test_admissao_permite_multiplos_arquivos_mesmo_par_ficha_unica(tmp_path: Pat
     assert res.recusas == ()
     assert len(res.fichas_ensaiadas) == 1
     ficha = res.fichas_ensaiadas[0]
-    assert ficha["chave"] == "teste-de-comportamento:suite"
+    assert ficha["chave"] == "teste:suite"
     assert ficha["ligacoes"]["sobre"] == "componente:suite"
     assert ficha["ligacoes"]["exige"] == ["olaria", "casa-db"]
 

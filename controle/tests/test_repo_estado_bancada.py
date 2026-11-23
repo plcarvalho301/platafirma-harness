@@ -161,9 +161,9 @@ def test_pr_merge_nao_remove_bancada_de_outro_trabalho_mesmo_no_ramo(tmp_path):
     )
 
     r_merge = _repo(tmp_path, bancada, "pr-merge", "demo", "7", "--forcar")
-    assert r_merge.returncode == 0, r_merge.stdout + r_merge.stderr
+    assert r_merge.returncode == 2, r_merge.stdout + r_merge.stderr
+    assert "regime sem pedido de integração" in r_merge.stderr
     assert wt_outro.exists(), "pr-merge nao deve remover bancada de outro trabalho"
-    assert "chave 'leitura-regras' e de outro trabalho" in r_merge.stdout
 
 
 def test_git_commit_respeita_portao_de_story_em_execucao(tmp_path):

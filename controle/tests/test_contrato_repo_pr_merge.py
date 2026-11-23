@@ -144,41 +144,17 @@ def _no_origin(tmp_path, ramo):
     return r.returncode == 0
 
 
-# --- pr-merge apaga o remoto E declara (card #3108) -------------------------------------
+# --- pr-merge recusa no regime sem PR (22/11/2026, DT 1366) -------------------------------
 
-def test_pr_merge_fresco_apaga_o_remoto_e_declara(tmp_path):
+def test_pr_merge_recusa_no_regime_sem_pr_e_aponta_sincronizar(tmp_path):
     bancada, forge = _montar(tmp_path)
     _pr_empurrado(tmp_path, bancada, forge)
     assert _no_origin(tmp_path, "fabrica/42-x")
     r = _repo(tmp_path, bancada, "pr-merge", "demo", "7", "--forcar")
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert "MERGED" in r.stdout
-    assert "origin/fabrica/42-x: apagado" in r.stdout
-    assert not _no_origin(tmp_path, "fabrica/42-x")
-
-
-def test_pr_merge_ja_feito_tambem_apaga_e_declara(tmp_path):
-    """O ramo sobreviveu de uma corrida anterior (merge feito, delete nao rodou ou nao foi
-    lido) -- o retorno idempotente tambem tenta e declara, nao so no caminho fresco."""
-    bancada, forge = _montar(tmp_path)
-    wt = _pr_empurrado(tmp_path, bancada, forge, estado="MERGED")
-    (forge / "mergeoid").write_text((forge / "oid").read_text())
-    _git("push", "-u", "origin", "fabrica/42-x", cwd=wt)
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "regime sem pedido de integração" in r.stderr
+    assert "repo sincronizar demo" in r.stderr
     assert _no_origin(tmp_path, "fabrica/42-x")
-    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7", "--forcar")
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert "já feito: PR #7 MERGED" in r.stdout
-    assert "origin/fabrica/42-x: apagado" in r.stdout
-    assert not _no_origin(tmp_path, "fabrica/42-x")
-
-
-def test_pr_merge_recusa_pr_de_outra_cadeira(tmp_path):
-    bancada, forge = _montar(tmp_path)
-    _pr_empurrado(tmp_path, bancada, forge)
-    (forge / "ramo").write_text("arquiteto/42-x\n")
-    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7")
-    assert r.returncode == 4, r.stdout + r.stderr
-    assert "pertence a outra cadeira" in r.stderr
 
 
 # --- sanear alcanca o que o pr-merge de antes desta emenda deixou (card #3108) -----------
@@ -247,31 +223,6 @@ def test_sanear_nunca_apaga_wip_mesmo_se_a_gh_listasse_como_mesclado(tmp_path):
     assert "wip/ti/algo" not in r.stdout
     assert _no_origin(tmp_path, "wip/ti/algo")
 
-# --- check vermelho: a recusa nomeia o check (#2856, PR 424 do harness) ------------------
-
-def test_pr_merge_check_vermelho_recusa_e_nomeia_o_check(tmp_path):
-    """Antes a recusa dizia so «check vermelho» e quem merge nao tinha como saber qual."""
-    bancada, forge = _montar(tmp_path)
-    _pr_empurrado(tmp_path, bancada, forge)
-    (forge / "checks").write_text(
-        '{"statusCheckRollup":[{"conclusion":"SUCCESS","name":"verde"},'
-        '{"conclusion":"FAILURE","detailsUrl":"https://ci.exemplo/run/1","name":"controle — testes"}]}\n')
-    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7")
-    assert r.returncode == 4, r.stdout + r.stderr
-    assert "check vermelho no PR #7" in r.stderr
-    assert "controle — testes https://ci.exemplo/run/1" in r.stderr
-    assert "verde" not in r.stderr
-    assert _no_origin(tmp_path, "fabrica/42-x")
-
-def test_pr_merge_check_vermelho_com_forcar_mescla(tmp_path):
-    bancada, forge = _montar(tmp_path)
-    _pr_empurrado(tmp_path, bancada, forge)
-    (forge / "checks").write_text(
-        '{"statusCheckRollup":[{"conclusion":"FAILURE","name":"controle — testes"}]}\n')
-    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7", "--forcar")
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert "MERGED" in r.stdout
-
 # --- pr-ver --checks / --log: ler QUAL check barra, pelo verbo (#2856) -------------------
 
 _ROLLUP = ('{"statusCheckRollup":[{"conclusion":"SUCCESS","name":"lint","workflowName":"estilo",'
@@ -307,35 +258,4 @@ def test_pr_ver_sem_flag_nao_lista_checks_e_flag_desconhecida_recusa(tmp_path):
     assert _repo(tmp_path, bancada, "pr-ver", "demo", "7", "--xis").returncode == 2
 
 
-# --- DT-48: retry e fallback REST quando gh pr merge falha com EOF ---------------------
 
-def test_pr_merge_retenta_quando_gh_pr_merge_falha_com_eof(tmp_path):
-    bancada, forge = _montar(tmp_path)
-    _pr_empurrado(tmp_path, bancada, forge)
-    (forge / "merge-fail").write_text("1\n")
-    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7", "--forcar")
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert "MERGED" in r.stdout
-    assert not _no_origin(tmp_path, "fabrica/42-x")
-
-
-def test_pr_merge_fallback_rest_quando_gh_pr_merge_persiste_em_eof(tmp_path):
-    bancada, forge = _montar(tmp_path)
-    _pr_empurrado(tmp_path, bancada, forge)
-    (forge / "merge-fail").write_text("9\n")
-    (forge / "api-merge-ok").write_text("1\n")
-    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7", "--forcar")
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert "MERGED" in r.stdout
-    assert not _no_origin(tmp_path, "fabrica/42-x")
-
-
-def test_pr_merge_falha_definitiva_sai_3_com_motivo(tmp_path):
-    bancada, forge = _montar(tmp_path)
-    _pr_empurrado(tmp_path, bancada, forge)
-    (forge / "merge-fail").write_text("9\n")
-    r = _repo(tmp_path, bancada, "pr-merge", "demo", "7", "--forcar")
-    assert r.returncode == 3, r.stdout + r.stderr
-    assert "gh pr merge falhou" in r.stderr
-    assert "EOF" in r.stderr
-    assert _no_origin(tmp_path, "fabrica/42-x")

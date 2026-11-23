@@ -3282,19 +3282,20 @@ portao_main() {
 }
 
 ato_pr_merge() {
-  local nome="${1:-}" num="${2:-}" modo="--squash" forcar=0 escape=0 motivo="" c
+  local nome="${1:-}" num="${2:-}"
   shift 2 || uso
   while [ $# -gt 0 ]; do
     case "$1" in
-      --squash|--merge|--rebase) modo="$1"; shift ;;
-      --forcar) forcar=1; shift ;;
-      # escape do dono (#4301): o motivo e o proximo argumento, vazio ou ausente conta como sem motivo
-      --escape) escape=1; motivo="${2-}"; shift; [ $# -eq 0 ] || shift ;;
+      --squash|--merge|--rebase|--forcar) shift ;;
+      --escape) shift; [ $# -eq 0 ] || shift ;;
       -*) morre "argumento nao reconhecido: '$1'" 2 ;;
       *) morre "argumento excedente: '$1'" 2 ;;
     esac
   done
   recusa_pr_direto_em_main "$nome"
+  printf '%s: regime sem pedido de integração (decisão de 22/11/2026): entrega é direto em main\n' "$VERBO" >&2
+  printf 'vizinho: repo sincronizar %s (mescla origin/main e empurra HEAD para main)\n' "$nome" >&2
+  exit 2
   [ -n "$num" ] || morre "falta o numero do PR" 2
   case "$num" in *[!0-9]*) morre "numero de PR invalido: '$num'" 2 ;; esac
   tem_gh
