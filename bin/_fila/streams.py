@@ -65,7 +65,7 @@ except ImportError:
 # (arq:0097, card #3010), nunca a arvore de um clone.
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
-from fila_tipos import TIPOS_VALIDOS  # noqa: E402
+from fila_tipos import TIPOS_INFORMATIVOS, TIPOS_VALIDOS  # noqa: E402
 from raizes import release  # noqa: E402
 
 ABERTURA = os.path.join(
@@ -377,10 +377,15 @@ def frias(rc, persona: str, desde: str = None):
     return [_campos(c, t) for t, c in rc.xrange(stream_key(persona), min=piso, max="+")]
 
 
+def _eh_informativa(tipo: str) -> bool:
+    return (tipo or "").strip().lower() in TIPOS_INFORMATIVOS
+
+
 def novas(rc, persona: str, quantas: int = 500):
-    """XREADGROUP '>': so o que a cadeira ainda nao viu. Entrega e move o ponteiro,
-    SEM XACK — a carta fica pendurada ate `tratar`. Cartas ja pre-tratadas em
-    `tratadas:<persona>` recebem XACK imediato e nao sao reentregues (DT 413)."""
+    """XREADGROUP '>': so o que a cadeira ainda nao viu. Entrega e move o ponteiro.
+    Cartas acionaveis ficam penduradas ate `tratar` ou `--responde`; cartas informativas
+    (resposta, decisao, handoff, recusa) recebem XACK imediato na entrega (#4432).
+    Cartas ja pre-tratadas em `tratadas:<persona>` recebem XACK imediato e nao sao reentregues (DT 413)."""
     garante_grupo(rc, persona)
     resp = rc.xreadgroup(GRUPO, persona, {stream_key(persona): ">"}, count=quantas)
     if not resp:
@@ -394,6 +399,8 @@ def novas(rc, persona: str, quantas: int = 500):
             if hasattr(rc, "srem"):
                 rc.srem(f"tratadas:{persona}", tecnico)
             continue
+        if _eh_informativa(plano.get("tipo", "")):
+            rc.xack(chave, GRUPO, tecnico)
         saida.append(_campos(plano, tecnico))
     return saida
 
@@ -419,25 +426,40 @@ def _ids_pendurados(rc, persona: str):
 
 
 def _pares_respondidos_no_stream(rc: object, persona: str, remetentes: set[str]) -> set[tuple[str, str]]:
-    """Coleta pares `(autor, msgid_respondido)` em `caixa:<persona>` e nas caixas dos remetentes."""
+    """Coleta pares `(autor, msgid_respondido)` em `caixa:<persona>` e nas caixas dos remetentes,
+    expandindo ancestrais transitivos na cadeia de `--responde` (#4432)."""
     respondidas: set[tuple[str, str]] = set()
+    pais_por_msgid: dict[str, str] = {}
     caixas = [persona] + [r for r in sorted(remetentes) if r != persona]
     for cx in caixas:
-        for _t, plano in rc.xrange(stream_key(cx), min="-", max="+"):
+        for t, plano in rc.xrange(stream_key(cx), min="-", max="+"):
+            mid = (plano.get("id") or t).strip()
             resp_id = (plano.get("responde") or "").strip()
             if resp_id:
+                if mid and mid != resp_id:
+                    pais_por_msgid[mid] = resp_id
                 de_c = canoniza_persona(plano.get("de", "")) or plano.get("de", "")
                 if cx == persona or de_c == persona:
                     respondidas.add((de_c, resp_id))
-    return respondidas
+    # Expansao transitiva: se C responde B e B responde A, A tambem foi superada na conversa.
+    expandidas: set[tuple[str, str]] = set(respondidas)
+    for autor, alvo in respondidas:
+        visitados = {alvo}
+        atual = pais_por_msgid.get(alvo)
+        while atual and atual not in visitados:
+            visitados.add(atual)
+            expandidas.add((autor, atual))
+            atual = pais_por_msgid.get(atual)
+    return expandidas
 
 
 def _reconcilia_pel_respondidas(rc: object, persona: str) -> list[dict]:
     """Devolve as cartas vivas na PEL (`estado='pendurada'`), reconciliando com XACK:
-    (a) entradas na PEL que o XTRIM ja cortou do stream; e
-    (b) cartas ja respondidas por `persona` (`responde == msgid` na caixa do remetente)
-        ou superadas pelo proprio remetente (`responde == msgid` na caixa de `persona`)
-        antes do ack automatico do DT 336 (#4289)."""
+    (a) entradas na PEL que o XTRIM ja cortou do stream;
+    (b) cartas informativas (resposta, decisao, handoff, recusa) que nao pedem ato (#4432); e
+    (c) cartas ja respondidas por `persona` (`responde == msgid` na caixa do remetente)
+        ou superadas pelo proprio remetente (`responde == msgid` na caixa de `persona`),
+        incluindo ancestrais na cadeia de `--responde` (#4289, #4432)."""
     chave = stream_key(persona)
     candidatas: list[tuple[str, dict]] = []
     remetentes: set[str] = set()
@@ -448,6 +470,9 @@ def _reconcilia_pel_respondidas(rc: object, persona: str) -> list[dict]:
             continue
         t, plano = entradas[0]
         m = _campos(plano, t)
+        if _eh_informativa(m.get("tipo", "")):
+            rc.xack(chave, GRUPO, tecnico)
+            continue
         m["estado"] = "pendurada"
         candidatas.append((tecnico, m))
         de_canon = canoniza_persona(m["de"]) or m["de"]

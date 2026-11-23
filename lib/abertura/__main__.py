@@ -233,6 +233,11 @@ def _ler_cartas_da_caixa(
             assunto=c.assunto,
             corpo="" if c.assunto else c.corpo[:120],
             texto=c.texto,
+            estado=c.estado,
+            tipo=c.tipo,
+            idade_seg=c.idade_seg,
+            ref=c.ref,
+            responde=c.responde,
         )
         for c in brutas
     ]
@@ -355,10 +360,15 @@ def _ato_abrir(entrada: dict[str, Any]) -> tuple[dict[str, Any], int]:
         cartas_brutas = entrada.get("cartas") or []
         cartas = [
             Carta(
-                id=str(c.get("id") or ""),
-                de=str(c.get("de") or ""),
+                id=str(c.get("id") or c.get("msgid") or ""),
+                de=str(c.get("de") or c.get("remetente") or ""),
                 assunto=str(c.get("assunto") or ""),
-                corpo=str(c.get("corpo") or ""),
+                corpo=str(c.get("corpo") or c.get("texto") or ""),
+                estado=str(c.get("estado") or ""),
+                tipo=str(c.get("tipo") or ""),
+                idade_seg=c.get("idade_seg") if isinstance(c.get("idade_seg"), int) else None,
+                ref=str(c.get("ref") or ""),
+                responde=str(c.get("responde") or ""),
             )
             for c in cartas_brutas
             if isinstance(c, dict)

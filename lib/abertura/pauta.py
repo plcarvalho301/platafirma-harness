@@ -27,6 +27,7 @@ _LIB = Path(__file__).resolve().parents[1]
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 
+from fila_tipos import TIPOS_INFORMATIVOS
 from postura.lousa import TETO_CORPO_CHARS, Fora, ItemDeTrabalho, LousaDeTrabalho
 
 _RE_CARD = re.compile(r"(?:card\s+#?|#)(\d+)\b", re.IGNORECASE)
@@ -34,6 +35,8 @@ _RE_DIGITOS = re.compile(r"^\d+$")
 _RE_ISO_VALIDO = re.compile(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
 _TAM_MIN_TERMO = 3
 _CAMPOS_MIN_CABECALHO = 3
+PRAZO_PENDURADA_ATIVA_S = 48 * 3600
+PRAZO_TURNO_LOUSA_S = 48 * 3600
 ESTADOS_TERMINAIS = frozenset({
     "entregue",
     "recusada",
@@ -104,7 +107,8 @@ def estado_eh_terminal(info: object) -> bool:
     return False
 
 
-def extrair_estado_de_cabecalho(saida: str) -> str | None:
+def extrair_info_de_cabecalho(saida: str) -> dict[str, str] | None:
+    """Extrai estado, cadeira e executor da saída de `tarefas ler <card> --cabecalho` (#4432)."""
     texto = (saida or "").strip()
     if not texto:
         return None
@@ -112,17 +116,41 @@ def extrair_estado_de_cabecalho(saida: str) -> str | None:
         try:
             dado = json.loads(texto)
             if isinstance(dado, dict):
+                info: dict[str, str] = {}
                 est = dado.get("estado") or dado.get("estado_derivado")
-                return str(est).strip() if est else None
+                if est:
+                    info["estado"] = str(est).strip()
+                for campo in ("cadeira", "executor"):
+                    val = dado.get(campo)
+                    if val and str(val).strip() and str(val).strip().lower() != "null":
+                        info[campo] = str(val).strip()
+                return info or None
         except ValueError:
             return None
     for linha in texto.splitlines():
         s = linha.strip()
         if s.startswith("#") and "·" in s:
             partes = [p.strip() for p in s.split("·")]
-            if len(partes) >= 3 and partes[2]:
-                return partes[2].split("(", 1)[0].strip()
+            info = {}
+            if len(partes) >= _CAMPOS_MIN_CABECALHO and partes[2]:
+                est = partes[2].split("(", 1)[0].strip()
+                if est:
+                    info["estado"] = est
+            for parte in partes[3:]:
+                if ":" in parte:
+                    k, v = parte.split(":", 1)
+                    k_norm = _sem_acento(k)
+                    v_limpo = v.strip()
+                    if k_norm in ("cadeira", "executor") and v_limpo and v_limpo.lower() != "null":
+                        info[k_norm] = v_limpo
+            if info:
+                return info
     return None
+
+
+def extrair_estado_de_cabecalho(saida: str) -> str | None:
+    info = extrair_info_de_cabecalho(saida)
+    return info.get("estado") if info else None
 
 
 def _achar_tarefas(pf_bin: Path | None = None) -> Path | None:
@@ -188,9 +216,9 @@ def ler_estados_de_cards(
             if avisos is not None:
                 avisos.append(f"rastreador não respondeu para card #{card}: {motivo}")
             continue
-        estado = extrair_estado_de_cabecalho(proc.stdout)
-        if estado:
-            resultado[card] = {"estado": estado}
+        info = extrair_info_de_cabecalho(proc.stdout)
+        if info:
+            resultado[card] = info
     return resultado
 
 
@@ -329,21 +357,57 @@ class Carta:
     assunto: str = ""
     corpo: str = ""
     texto: str = ""
+    estado: str = ""
+    tipo: str = ""
+    idade_seg: int | None = None
+    ref: str = ""
+    responde: str = ""
 
     def linha_completa(self) -> str:
         if self.texto:
             return self.texto.strip()
-        partes = [p for p in (self.id, self.de, self.assunto, self.corpo) if p]
+        partes = [p for p in (self.id, self.de, self.tipo, self.assunto, self.corpo) if p]
         return " · ".join(partes)
 
     def como_dict(self) -> dict:
-        return {
+        d: dict[str, object] = {
             "id": self.id,
             "de": self.de,
             "assunto": self.assunto,
             "corpo": self.corpo,
             "texto": self.linha_completa(),
         }
+        if self.estado:
+            d["estado"] = self.estado
+        if self.tipo:
+            d["tipo"] = self.tipo
+        if self.idade_seg is not None:
+            d["idade_seg"] = self.idade_seg
+        if self.ref:
+            d["ref"] = self.ref
+        if self.responde:
+            d["responde"] = self.responde
+        return d
+
+
+def carta_ativa_na_pauta(carta: Carta, *, prazo_s: int = PRAZO_PENDURADA_ATIVA_S) -> bool:
+    """Separa caixa ativa de penduradas fósseis na abertura da sessão (#4432).
+
+    Cartas `nao lida` (ou sem estado declarado) entram sempre. Cartas `pendurada` só entram
+    na pauta ativa quando são de tipo acionável e têm idade <= 48 h; informativas ou vencidas
+    ficam fora da pauta ativa para não induzir plano sobre fóssil.
+    """
+    estado = _sem_acento(carta.estado)
+    if not estado or estado == "nao lida":
+        return True
+    if estado == "pendurada":
+        tipo = _sem_acento(carta.tipo)
+        if tipo in TIPOS_INFORMATIVOS:
+            return False
+        if carta.idade_seg is not None and carta.idade_seg > prazo_s:
+            return False
+        return True
+    return True
 
 
 def _normalizar_transicoes(
@@ -385,6 +449,7 @@ class Pauta:
     reforco: tuple[str, ...] = REFORCO
     lousa_erro: str | None = None
     caixa_erro: str | None = None
+    cartas_ocultas: int = 0
 
     @property
     def texto(self) -> str:
@@ -400,6 +465,8 @@ class Pauta:
             "cartas": [c.como_dict() for c in self.cartas],
             "conteudo": self.conteudo,
         }
+        if self.cartas_ocultas:
+            d["cartas_ocultas"] = self.cartas_ocultas
         if self.lousa_erro:
             d["lousa_erro"] = self.lousa_erro
         if self.caixa_erro:
@@ -491,21 +558,56 @@ def ocasiao_casa(item: Guardado, sessao: ContextoDaSessao) -> bool:
     return bool(_citado_no_turno(item, sessao.turno))
 
 
-def carregar_guardados_da_lousa(
+def _card_transferido_de_cadeira(info: object, cadeira: str) -> bool:
+    """True quando o rastreador declara cadeira/executor e nenhum bate com a dona da lousa (#4432)."""
+    if not isinstance(info, Mapping):
+        return False
+    dona = _sem_acento(cadeira)
+    if not dona:
+        return False
+    donos_card = {
+        _sem_acento(str(info.get(campo) or ""))
+        for campo in ("cadeira", "executor")
+        if info.get(campo) and str(info.get(campo)).strip().lower() != "null"
+    }
+    donos_card.discard("")
+    if not donos_card:
+        return False
+    return dona not in donos_card
+
+
+def _item_turno_vencido(
+    item: ItemDeTrabalho,
+    *,
+    agora_ts: float,
+    prazo_turno_s: int = PRAZO_TURNO_LOUSA_S,
+) -> bool:
+    """Itens `turno:<ordem_id>` sem card vinculado expiram em 48 h sem atualização (#4432)."""
+    if item.card or (item.ocasiao and item.ocasiao.card):
+        return False
+    if not item.chave.startswith("turno:"):
+        return False
+    ts = _instante(item.atualizado_em or item.guardado_em)
+    if ts is None:
+        return False
+    return (agora_ts - ts) > prazo_turno_s
+
+
+def sanear_itens_da_lousa(
     cadeira: str,
     lousa: LousaDeTrabalho,
     *,
+    situacao: str | None = None,
     leitor_cards: LeitorDeEstadoDeCard | None = None,
     avisos: list[str] | None = None,
-) -> tuple[list[Guardado], dict[str, object]]:
-    """Carrega os guardados da lousa da cadeira e evicta itens cujo card está em estado terminal."""
-    try:
-        itens = lousa.listar_trabalhos(cadeira, situacao="guardado")
-    except Fora as erro:
-        if avisos is not None:
-            avisos.append(f"lousa indisponível: {erro}")
-        return [], {}
-
+    agora_ts: float | None = None,
+    prazo_turno_s: int = PRAZO_TURNO_LOUSA_S,
+) -> tuple[list[ItemDeTrabalho], dict[str, object]]:
+    """Saneamento único da lousa (abertura e `mesa ver`, #4432):
+    evicta item cujo card está em estado terminal, item cujo card principal foi transferido
+    para outra cadeira/executor no rastreador e item `turno:` sem card parado há > 48 h.
+    """
+    itens = lousa.listar_trabalhos(cadeira, situacao=situacao)
     cards_para_checar: list[str] = []
     for item in itens:
         if item.card:
@@ -515,21 +617,51 @@ def carregar_guardados_da_lousa(
 
     leitor = leitor_cards or ler_estados_de_cards
     estados = _normalizar_transicoes(leitor(cards_para_checar, avisos))
+    agora = datetime.now(timezone.utc).timestamp() if agora_ts is None else agora_ts
 
-    guardados: list[Guardado] = []
+    vivos: list[ItemDeTrabalho] = []
     for item in itens:
         cards_item = [c for c in (item.card, item.ocasiao.card if item.ocasiao else None) if c]
-        terminal = any(estado_eh_terminal(estados.get(c)) for c in cards_item)
-        if terminal:
+        evictar = any(estado_eh_terminal(estados.get(c)) for c in cards_item)
+        if not evictar and item.card and _card_transferido_de_cadeira(estados.get(item.card), cadeira):
+            evictar = True
+        if not evictar and _item_turno_vencido(item, agora_ts=agora, prazo_turno_s=prazo_turno_s):
+            evictar = True
+        if evictar:
             try:
                 lousa.apagar_trabalho(cadeira, item.chave)
             except Fora as erro:
                 if avisos is not None:
                     avisos.append(f"lousa indisponível ao evictar {item.chave}: {erro}")
             continue
-        guardados.append(Guardado.de_item(item))
+        vivos.append(item)
 
-    return guardados, estados
+    return vivos, estados
+
+
+def carregar_guardados_da_lousa(
+    cadeira: str,
+    lousa: LousaDeTrabalho,
+    *,
+    leitor_cards: LeitorDeEstadoDeCard | None = None,
+    avisos: list[str] | None = None,
+    agora_ts: float | None = None,
+) -> tuple[list[Guardado], dict[str, object]]:
+    """Carrega os guardados da lousa da cadeira aplicando o saneamento único (#4432)."""
+    try:
+        itens, estados = sanear_itens_da_lousa(
+            cadeira,
+            lousa,
+            situacao="guardado",
+            leitor_cards=leitor_cards,
+            avisos=avisos,
+            agora_ts=agora_ts,
+        )
+    except Fora as erro:
+        if avisos is not None:
+            avisos.append(f"lousa indisponível: {erro}")
+        return [], {}
+    return [Guardado.de_item(item) for item in itens], estados
 
 
 def montar_pauta(
@@ -545,6 +677,9 @@ def montar_pauta(
     total = len(guardados)
     fora = total - len(visiveis)
     ref_turno = "turno do dono: por referência (já está na janela)"
+
+    cartas_ativas = [c for c in cartas if carta_ativa_na_pauta(c)]
+    cartas_ocultas = len(cartas) - len(cartas_ativas)
 
     linhas: list[str] = [ref_turno, "reforço:"]
     linhas.extend(f"- {item}" for item in REFORCO)
@@ -565,11 +700,20 @@ def montar_pauta(
 
     if caixa_erro:
         linhas.append(f"caixa: não foi possível ler ({caixa_erro})")
-    elif not cartas:
+    elif not cartas_ativas and cartas_ocultas == 0:
         linhas.append("caixa: 0 cartas")
+    elif not cartas_ativas:
+        linhas.append(
+            f"caixa: 0 cartas ativas ({cartas_ocultas} pendurada(s) antiga(s) fora da pauta; use fila ler --penduradas)"
+        )
     else:
-        linhas.append(f"caixa: {len(cartas)} carta(s)")
-        for c in cartas:
+        sufixo = (
+            f" (+ {cartas_ocultas} pendurada(s) antiga(s) fora da pauta; use fila ler --penduradas)"
+            if cartas_ocultas > 0
+            else ""
+        )
+        linhas.append(f"caixa: {len(cartas_ativas)} carta(s){sufixo}")
+        for c in cartas_ativas:
             linhas.append(f"- {c.linha_completa()}")
 
     conteudo = "\n".join(linhas)
@@ -578,15 +722,16 @@ def montar_pauta(
         guardados=visiveis,
         total_guardados=total,
         fora_da_ocasiao=fora,
-        cartas=list(cartas),
+        cartas=cartas_ativas,
         conteudo=conteudo,
         lousa_erro=lousa_erro,
         caixa_erro=caixa_erro,
+        cartas_ocultas=cartas_ocultas,
     )
 
 
 def ler_cartas_da_fila(saida: str) -> list[Carta]:
-    """Converte a saída de `fila ler` em lista de `Carta`."""
+    """Converte a saída de `fila ler` em lista de `Carta`, preservando estado, tipo, idade e ref (#4432)."""
     texto = (saida or "").strip()
     if not texto or "nenhuma mensagem" in texto.lower() or "caixa vazia" in texto.lower() or texto == "(vazia)":
         return []
@@ -600,6 +745,11 @@ def ler_cartas_da_fila(saida: str) -> list[Carta]:
                     de=str(c.get("de") or c.get("remetente") or ""),
                     assunto=str(c.get("assunto") or ""),
                     corpo=str(c.get("corpo") or c.get("texto") or ""),
+                    estado=str(c.get("estado") or ""),
+                    tipo=str(c.get("tipo") or ""),
+                    idade_seg=c.get("idade_seg") if isinstance(c.get("idade_seg"), int) else None,
+                    ref=str(c.get("ref") or ""),
+                    responde=str(c.get("responde") or ""),
                 )
                 for c in lista
                 if isinstance(c, dict)

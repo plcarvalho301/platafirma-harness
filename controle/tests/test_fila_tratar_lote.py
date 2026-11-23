@@ -21,10 +21,10 @@ def _c(tec, msgid, de, tipo, assunto):
 
 def _rc():
     return StreamRC([
-        _c("100-1", "20261116T212000-ti", "ti", "recusa", "a.md: especie parecer nao existe"),
-        _c("100-2", "20261116T212001-ti", "ti", "recusa", "b.md: especie guia nao existe"),
+        _c("100-1", "20261116T212000-ti", "ti", "demanda", "a.md: especie parecer nao existe"),
+        _c("100-2", "20261116T212001-ti", "ti", "demanda", "b.md: especie guia nao existe"),
         _c("100-3", "20261116T213000-ia", "ia", "pedido", "revisa o motor"),
-        _c("100-4", "20261117T080000-ti", "ti", "recusa", "c.md: especie padrao nao existe"),
+        _c("100-4", "20261117T080000-ti", "ti", "demanda", "c.md: especie padrao nao existe"),
     ])
 
 
@@ -35,7 +35,7 @@ def test_tratar_por_remetente_e_tipo_pega_pendurada_e_nao_lida(monkeypatch, caps
     rc = _rc()
     # entrega so as duas primeiras (ficam penduradas); as outras seguem nao lidas
     rc.xreadgroup("cadeira", "ti", ["caixa:ti"], count=2)
-    code, cap = _rodar(monkeypatch, capsys, ["tratar", "--de", "ti", "--tipo", "recusa"], rc,
+    code, cap = _rodar(monkeypatch, capsys, ["tratar", "--de", "ti", "--tipo", "demanda"], rc,
                        personas=PERSONAS)
     assert code == 0, cap
     assert cap.out.splitlines() == ["20261116T212000-ti: tratada", "20261116T212001-ti: tratada",

@@ -641,7 +641,7 @@ def test_teto_do_corpo_barra_escrita_e_nunca_quebra_leitura_nem_vaza_na_pauta(tm
     assert texto_corpo not in pauta
 
     # mesa ver <chave> entrega o corpo inteiro sob demanda
-    p_ver = _rodar_mesa(["ver", "4406"], cadeira="ia", valkey_fixture=valkey)
+    p_ver = _rodar_mesa(["ver", "4406"], cadeira="ia", valkey_fixture=valkey, cards_fixture=cards)
     assert p_ver.returncode == 0, p_ver.stdout + p_ver.stderr
     assert texto_corpo in p_ver.stdout
 
@@ -655,6 +655,8 @@ def test_teto_do_corpo_barra_escrita_e_nunca_quebra_leitura_nem_vaza_na_pauta(tm
 def test_dt948_mesa_corpo_edita_item_listado_por_ver_e_nomeia_cadeira_quando_ausente(tmp_path):
     """DT 948: mesa corpo aceita todas as formas da chave listada por mesa ver e nomeia a cadeira no erro."""
     valkey = _novo_valkey(tmp_path)
+    cards = tmp_path / "cards.json"
+    cards.write_text(json.dumps({"4406": {"estado": "em-execucao", "cadeira": "seguranca"}}), encoding="utf-8")
 
     p_cria = _rodar_mesa(
         [
@@ -666,11 +668,12 @@ def test_dt948_mesa_corpo_edita_item_listado_por_ver_e_nomeia_cadeira_quando_aus
         ],
         cadeira="seguranca",
         valkey_fixture=valkey,
+        cards_fixture=cards,
     )
     assert p_cria.returncode == 0, p_cria.stdout + p_cria.stderr
 
     # mesa ver lista card:4406
-    p_ver = _rodar_mesa(["ver", "--json"], cadeira="seguranca", valkey_fixture=valkey)
+    p_ver = _rodar_mesa(["ver", "--json"], cadeira="seguranca", valkey_fixture=valkey, cards_fixture=cards)
     assert p_ver.returncode == 0
     assert [i["chave"] for i in json.loads(p_ver.stdout)] == ["card:4406"]
 
@@ -696,6 +699,100 @@ def test_dt948_mesa_corpo_edita_item_listado_por_ver_e_nomeia_cadeira_quando_aus
     )
     assert p_outra.returncode == 2
     assert "cadeira: ia" in p_outra.stderr
+
+
+def test_4432_mesa_ver_e_abertura_evictam_card_terminal_transferido_e_turno_vencido(tmp_path):
+    from datetime import datetime, timedelta, timezone
+
+    valkey = _novo_valkey(tmp_path)
+    lousa = LousaFixtura(valkey)
+    agora = datetime.now(timezone.utc)
+    antigo = (agora - timedelta(hours=50)).isoformat()
+    recente = (agora - timedelta(hours=2)).isoformat()
+
+    # 1) card transferido para outra cadeira (caso real #4382 em conhecimento -> produto)
+    lousa.gravar_trabalho(
+        "conhecimento",
+        ItemDeTrabalho(
+            chave="card:4382",
+            cadeira="conhecimento",
+            situacao="guardado",
+            card="4382",
+            estagio="execucao",
+            proxima_jogada="rodar carga (superado)",
+            ocasiao=Ocasiao(card="4382", estado_card="Priorizada"),
+            atualizado_em=recente,
+        ),
+    )
+    # 2) card em estado terminal (em_curso orfao)
+    lousa.gravar_trabalho(
+        "conhecimento",
+        ItemDeTrabalho(
+            chave="card:4381",
+            cadeira="conhecimento",
+            situacao="em_curso",
+            card="4381",
+            estagio="execucao",
+            proxima_jogada="ja entregue",
+            atualizado_em=recente,
+        ),
+    )
+    # 3) card vivo da propria cadeira (deve permanecer)
+    lousa.gravar_trabalho(
+        "conhecimento",
+        ItemDeTrabalho(
+            chave="card:4392",
+            cadeira="conhecimento",
+            situacao="guardado",
+            card="4392",
+            estagio="lapidacao",
+            proxima_jogada="continuar tesauro",
+            ocasiao=Ocasiao(card="4392", estado_card="Em lapidação"),
+            atualizado_em=recente,
+        ),
+    )
+    # 4) turno sem card com > 48 h (deve ser evictado)
+    lousa.gravar_trabalho(
+        "conhecimento",
+        ItemDeTrabalho(
+            chave="turno:antigo-1",
+            cadeira="conhecimento",
+            situacao="em_curso",
+            estagio="rascunho",
+            proxima_jogada="nota velha",
+            atualizado_em=antigo,
+        ),
+    )
+    # 5) turno sem card recente (deve permanecer)
+    lousa.gravar_trabalho(
+        "conhecimento",
+        ItemDeTrabalho(
+            chave="turno:novo-1",
+            cadeira="conhecimento",
+            situacao="em_curso",
+            estagio="rascunho",
+            proxima_jogada="nota viva",
+            atualizado_em=recente,
+        ),
+    )
+
+    cards = tmp_path / "cards.json"
+    cards.write_text(
+        json.dumps({
+            "4382": {"estado": "Priorizada", "cadeira": "produto", "executor": "produto"},
+            "4381": {"estado": "Entregue", "cadeira": "conhecimento", "executor": "conhecimento"},
+            "4392": {"estado": "Em lapidação", "cadeira": "conhecimento", "executor": "conhecimento"},
+        }),
+        encoding="utf-8",
+    )
+
+    p_ver = _rodar_mesa(["ver", "--json"], cadeira="conhecimento", valkey_fixture=valkey, cards_fixture=cards)
+    assert p_ver.returncode == 0, p_ver.stdout + p_ver.stderr
+    chaves_vivas = {i["chave"] for i in json.loads(p_ver.stdout)}
+    assert chaves_vivas == {"card:4392", "turno:novo-1"}
+
+    # Itens evictados foram removidos de fato da lousa
+    assert {i.chave for i in lousa.listar_trabalhos("conhecimento")} == {"card:4392", "turno:novo-1"}
 
 
 if __name__ == "__main__":

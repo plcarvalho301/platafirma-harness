@@ -28,7 +28,7 @@ from pathlib import Path
 _REPO_REAL = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_REAL / "lib"))
 
-from abertura.pauta import ler_estados_de_cards
+from abertura.pauta import ler_estados_de_cards, sanear_itens_da_lousa
 from postura.lousa import (
     TETO_CORPO_CHARS,
     CorpoExcedido,
@@ -433,9 +433,10 @@ def _ato_ver(argv: list[str]) -> int:
     lousa = lousa_do_ambiente()
     if chave_alvo:
         try:
-            item = lousa.ler_trabalho(cadeira, chave_alvo)
+            vivos, _ = sanear_itens_da_lousa(cadeira, lousa)
         except Fora as erro:
             return _erro(str(erro), 3, como_json=como_json)
+        item = next((i for i in vivos if i.chave == chave_alvo), None)
         if item is None:
             return _erro(f"item {chave_alvo} não encontrado na lousa (cadeira: {cadeira})", 2, como_json=como_json)
         if como_json:
@@ -447,7 +448,7 @@ def _ato_ver(argv: list[str]) -> int:
         return 0
 
     try:
-        itens = lousa.listar_trabalhos(cadeira, situacao=args.situacao)
+        itens, _ = sanear_itens_da_lousa(cadeira, lousa, situacao=args.situacao)
     except Fora as erro:
         return _erro(str(erro), 3, como_json=como_json)
 

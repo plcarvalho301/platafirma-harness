@@ -637,6 +637,79 @@ def test_sem_sessao_recusa_com_a_chamada_que_abre_e_deixa_passar_abertura_e_tela
     assert exigir_sessao("tarefas", "11111111-2222-4333-8444-555555555555", livres) is None
 
 
+def test_4432_pauta_filtra_penduradas_informativas_e_vencidas_e_preserva_metadados():
+    from abertura.pauta import extrair_info_de_cabecalho, ler_cartas_da_fila
+
+    saida_fila = json.dumps([
+        {
+            "msgid": "20261123T190000-engenharia",
+            "de": "engenharia",
+            "tipo": "resposta",
+            "estado": "nao lida",
+            "idade_seg": 60,
+            "assunto": "resposta nova",
+            "ref": "#4432",
+            "responde": "20261123T180000-dados",
+            "corpo": "chegou agora",
+        },
+        {
+            "msgid": "20261123T150000-ia",
+            "de": "ia",
+            "tipo": "pedido",
+            "estado": "pendurada",
+            "idade_seg": 3600,
+            "assunto": "pedido recente",
+            "ref": "#4432",
+            "responde": "",
+            "corpo": "precisa de acao",
+        },
+        {
+            "msgid": "20261121T100000-produto",
+            "de": "produto",
+            "tipo": "handoff",
+            "estado": "pendurada",
+            "idade_seg": 7200,
+            "assunto": "handoff fossil",
+            "ref": "",
+            "responde": "",
+            "corpo": "nao deve entrar na pauta",
+        },
+        {
+            "msgid": "20261118T100000-arquiteto",
+            "de": "arquiteto",
+            "tipo": "pedido",
+            "estado": "pendurada",
+            "idade_seg": 60 * 3600,
+            "assunto": "pedido antigo >48h",
+            "ref": "",
+            "responde": "",
+            "corpo": "velho demais para pauta ativa",
+        },
+    ])
+
+    cartas = ler_cartas_da_fila(saida_fila)
+    assert len(cartas) == 4
+    assert cartas[0].estado == "nao lida"
+    assert cartas[0].tipo == "resposta"
+    assert cartas[0].idade_seg == 60
+    assert cartas[0].ref == "#4432"
+    assert cartas[0].responde == "20261123T180000-dados"
+
+    pauta = montar_pauta([], cartas, ContextoDaSessao(cadeira="dados", turno="abrir"))
+    assert [c.id for c in pauta.cartas] == ["20261123T190000-engenharia", "20261123T150000-ia"]
+    assert pauta.cartas_ocultas == 2
+    assert "resposta nova" in pauta.conteudo
+    assert "pedido recente" in pauta.conteudo
+    assert "handoff fossil" not in pauta.conteudo
+    assert "pedido antigo >48h" not in pauta.conteudo
+    assert "2 pendurada(s) antiga(s) fora da pauta" in pauta.conteudo
+
+    info = extrair_info_de_cabecalho(
+        "#4382 · story · Priorizada (funil) · cadeira: produto · originação: negocio · executor: produto"
+    )
+    assert info == {"estado": "Priorizada", "cadeira": "produto", "executor": "produto"}
+
+
 def test_ocasiao_guardado_fora_da_ocasiao_contado_sem_o_item(tmp_path):
     from postura.lousa import ItemDeTrabalho, LousaFixtura, Ocasiao
 

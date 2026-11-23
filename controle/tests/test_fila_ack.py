@@ -524,18 +524,64 @@ def test_4289_reconcilia_pel_ja_respondida_superada_e_enviadas_stream(monkeypatc
     rc.xreadgroup("cadeira", "ti", {"caixa:ti": ">"}, count=10)
     rc.pel.insert(0, "99-1")
 
-    # `fila status` e `fila ler --penduradas` reconciliam 99-1 (trim), 100-1 (ja respondida) e 100-2 (superada):
+    # `fila status` e `fila ler --penduradas` reconciliam 99-1 (trim), 100-1 (ja respondida),
+    # 100-2 (superada) e 100-3 (decisao informativa, #4432):
     code_st, cap_st = _rodar(monkeypatch, capsys, ["status"], rc, eu="ti")
     assert code_st == 0
-    assert "1 pendurada(s)" in cap_st.out
-    assert rc.pel == ["100-3"]
+    assert "caixa em dia" in cap_st.out
+    assert rc.pel == []
 
     code_p, cap_p = _rodar(monkeypatch, capsys, ["ler", "--penduradas", "--json"], rc, eu="ti")
     assert code_p == 0
-    itens = json.loads(cap_p.out)
-    assert [m["msgid"] for m in itens] == ["20261115T144641-dados"]
+    assert json.loads(cap_p.out) == []
 
     # `fila ler --enviadas` encontra a carta no stream mesmo sem estar no ZSET `enviadas:ti`:
     code_env, cap_env = _rodar(monkeypatch, capsys, ["ler", "--enviadas"], rc, eu="ti")
     assert code_env == 0
     assert "20261110T120000-ti" in cap_env.out
+
+
+def test_4432_informativas_recebem_xack_na_entrega_e_acionaveis_ficam_na_pel(monkeypatch, capsys):
+    rc = StreamRC([
+        ("100-1", {"id": "20261123T100000-dados", "de": "dados", "tipo": "resposta",
+                   "assunto": "resp", "ref": "", "responde": "", "corpo": "ok"}),
+        ("100-2", {"id": "20261123T100100-dados", "de": "dados", "tipo": "decisao",
+                   "assunto": "dec", "ref": "", "responde": "", "corpo": "decidido"}),
+        ("100-3", {"id": "20261123T100200-dados", "de": "dados", "tipo": "handoff",
+                   "assunto": "hoff", "ref": "", "responde": "", "corpo": "passado"}),
+        ("100-4", {"id": "20261123T100300-dados", "de": "dados", "tipo": "recusa",
+                   "assunto": "rec", "ref": "", "responde": "", "corpo": "recusado"}),
+        ("100-5", {"id": "20261123T100400-dados", "de": "dados", "tipo": "pedido",
+                   "assunto": "acao", "ref": "", "responde": "", "corpo": "faca isso"}),
+    ])
+    code, cap = _rodar(monkeypatch, capsys, ["ler"], rc, eu="ti")
+    assert code == 0
+    # Todas as 5 sao entregues na primeira leitura
+    for mid in ("20261123T100000-dados", "20261123T100100-dados", "20261123T100200-dados",
+                "20261123T100300-dados", "20261123T100400-dados"):
+        assert mid in cap.out
+    # Apenas o pedido acionavel segue na PEL; as 4 informativas receberam XACK imediato
+    assert rc.pel == ["100-5"]
+    assert set(rc.acks) == {"100-1", "100-2", "100-3", "100-4"}
+
+
+def test_4432_reconcilia_cadeia_transitiva_de_responde(monkeypatch, capsys):
+    rc = StreamRC([
+        ("100-1", {"id": "20261122T100000-dados", "de": "dados", "tipo": "pedido",
+                   "assunto": "p1", "ref": "", "responde": "", "corpo": "c1"}),
+        ("100-2", {"id": "20261122T102000-dados", "de": "dados", "tipo": "pedido",
+                   "assunto": "p2", "ref": "", "responde": "20261122T100000-dados", "corpo": "c2"}),
+        ("100-3", {"id": "20261122T130000-dados", "de": "dados", "tipo": "pedido",
+                   "assunto": "p3 aberto", "ref": "", "responde": "", "corpo": "c3"}),
+    ])
+    # `ti` respondeu apenas p2 (que respondia p1); a cadeia transitiva fecha p2 e p1 na PEL
+    rc.streams["caixa:dados"] = [
+        ("200-1", {"id": "20261122T110000-ti", "de": "ti", "tipo": "resposta",
+                   "assunto": "re p2", "ref": "", "responde": "20261122T102000-dados", "corpo": "feito"}),
+    ]
+    rc.xreadgroup("cadeira", "ti", {"caixa:ti": ">"}, count=10)
+    code, cap = _rodar(monkeypatch, capsys, ["ler", "--penduradas", "--json"], rc, eu="ti")
+    assert code == 0
+    itens = json.loads(cap.out)
+    assert [m["msgid"] for m in itens] == ["20261122T130000-dados"]
+    assert rc.pel == ["100-3"]
