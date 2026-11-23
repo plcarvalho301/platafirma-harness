@@ -1,19 +1,9 @@
-"""resolvedor.py — da chave à ficha, e da ficha ao arquivo na morada (story 4426).
+"""resolvedor.py — da chave à ficha, e da ficha ao arquivo na morada (stories 4426 e 4427).
 
-Contrato: platafirma-casa@referencias/instancias/interface-de-verbo/busca.md, «Leitura pela chave»,
-e platafirma-casa@referencias/instancias/componente/leitor-universal.md, «As moradas que lê».
-
-- A classe sai da ficha no cadastro (casa.ficha.classe), e não do texto antes dos dois-pontos.
-- `<classe>` e `<classe>:` leem a ficha da classe, `shape:<classe>`. No cadastro a ficha de uma
-  classe tem a chave humana igual ao slug (`sessao`), e por isso `shape:<x>` também chega nela.
-- O caminho sai do molde da classe: o golden de tipo casa antes da referência; o golden de outro
-  tipo não é arquivo. O molde se corta na primeira vírgula e só monta caminho quando termina em
-  .md e a parte fixa termina na pasta da classe; o resto da chave, depois do primeiro dois-pontos,
-  entra no lugar dos marcadores, com os dois-pontos seguintes trocados por barra.
-- A morada é a que casa.estrutura_de_documento declara para a classe; sem linha, a referência
-  mora em git, que é a release. Só `git` se lê aqui: o arquivo da casa na release servida.
-- Sem molde que monte caminho, com morada que não é git ou com o arquivo ausente na release, a
-  leitura devolve a ficha inteira, como o cadastro a guarda.
+Contratos:
+- platafirma-casa@referencias/instancias/interface-de-verbo/busca.md, «Leitura pela chave»
+- platafirma-casa@referencias/instancias/verbo/busca.md, «O que o verbo faz com o que voltou»
+- platafirma-casa@referencias/instancias/componente/leitor-universal.md, «As moradas que lê»
 """
 from __future__ import annotations
 
@@ -44,8 +34,7 @@ SELECT 'estrutura', e.regime, e.morada
   FROM casa.estrutura_de_documento e WHERE e.shape = $1::uuid AND e.encerra_em IS NULL
 """
 
-# A ficha inteira, como o cadastro a guarda: dados vigentes e ligações vigentes por propriedade
-# e, quando a ficha é uma classe, a declaração dela em casa.shape.
+# A ficha inteira com ligações vigentes agrupadas por propriedade, primeiro saída e depois chegada.
 SQL_FICHA_INTEIRA = """
 SELECT jsonb_build_object(
          'chave', f.chave_humana,
@@ -59,14 +48,45 @@ SELECT jsonb_build_object(
                       JOIN casa.propriedade p ON p.id = r.propriedade
                      WHERE d.ficha = f.uuid AND d.terminou IS NULL
                      GROUP BY p.slug) x), '{}'::jsonb),
-         'ligacoes', coalesce((
-            SELECT jsonb_object_agg(y.slug, y.para)
-              FROM (SELECT p.slug, jsonb_agg(t.chave_humana ORDER BY l.posicao NULLS LAST, t.chave_humana) AS para
-                      FROM casa.ligacao l
-                      JOIN casa.propriedade p ON p.id = l.propriedade
-                      JOIN casa.ficha t ON t.uuid = l.para
-                     WHERE l.de = f.uuid AND l.terminou IS NULL
-                     GROUP BY p.slug) y), '{}'::jsonb),
+         'ligacoes', jsonb_build_object(
+            'saida', coalesce((
+               SELECT jsonb_object_agg(y.slug, y.para)
+                 FROM (SELECT p.slug, jsonb_agg(t.chave_humana ORDER BY l.posicao NULLS LAST, t.chave_humana) AS para
+                         FROM casa.ligacao l
+                         JOIN casa.propriedade p ON p.id = l.propriedade
+                         JOIN casa.ficha t ON t.uuid = l.para
+                        WHERE l."de" = f.uuid AND l.terminou IS NULL
+                        GROUP BY p.slug) y), '{}'::jsonb),
+            'chegada', coalesce((
+               SELECT jsonb_object_agg(z.slug, z.origens)
+                 FROM (SELECT p.slug, jsonb_agg(o.chave_humana ORDER BY l.posicao NULLS LAST, o.chave_humana) AS origens
+                         FROM casa.ligacao l
+                         JOIN casa.propriedade p ON p.id = l.propriedade
+                         JOIN casa.ficha o ON o.uuid = l."de"
+                        WHERE l.para = f.uuid AND l.terminou IS NULL
+                        GROUP BY p.slug) z), '{}'::jsonb)
+         ),
+         'declaracao', (SELECT jsonb_strip_nulls(to_jsonb(s) - 'uuid' - 'fornada')
+                          FROM casa.shape s WHERE s.uuid = f.uuid)
+       ) AS ficha
+  FROM casa.ficha f JOIN casa.shape c ON c.uuid = f.classe
+ WHERE f.uuid = $1::uuid
+"""
+
+# A ficha inteira sem ligações, para `--ligacoes sem`.
+SQL_FICHA_SEM_LIGACOES = """
+SELECT jsonb_build_object(
+         'chave', f.chave_humana,
+         'classe', c.slug,
+         'criada_em', f.criada_em,
+         'dados', coalesce((
+            SELECT jsonb_object_agg(x.slug, x.valores)
+              FROM (SELECT p.slug, jsonb_agg(coalesce(d.valor, to_jsonb(d.valor_de_dicionario)) ORDER BY d.id) AS valores
+                      FROM casa.dado d
+                      JOIN casa.restricao r ON r.id = d.restricao
+                      JOIN casa.propriedade p ON p.id = r.propriedade
+                     WHERE d.ficha = f.uuid AND d.terminou IS NULL
+                     GROUP BY p.slug) x), '{}'::jsonb),
          'declaracao', (SELECT jsonb_strip_nulls(to_jsonb(s) - 'uuid' - 'fornada')
                           FROM casa.shape s WHERE s.uuid = f.uuid)
        ) AS ficha
@@ -187,6 +207,12 @@ def resolver(retrato: Consulta, f: Ficha, release: Path) -> Alvo:
     return Alvo(f, alvo, rel, fonte)
 
 
-def ficha_inteira(retrato: Consulta, f: Ficha) -> dict:
-    linhas = retrato.consultar(SQL_FICHA_INTEIRA, f.uuid)
-    return linhas[0]["ficha"] if linhas else {}
+def ficha_inteira(retrato: Consulta, f: Ficha, *, com_ligacoes: bool = True) -> dict:
+    sql = SQL_FICHA_INTEIRA if com_ligacoes else SQL_FICHA_SEM_LIGACOES
+    linhas = retrato.consultar(sql, f.uuid)
+    if not linhas:
+        return {}
+    corpo = dict(linhas[0]["ficha"])
+    if not com_ligacoes:
+        corpo.pop("ligacoes", None)
+    return corpo

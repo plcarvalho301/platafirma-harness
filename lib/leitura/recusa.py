@@ -1,14 +1,16 @@
-"""recusa.py — a recusa em seis campos dos verbos de leitura (story 4426).
+"""recusa.py — a recusa em seis campos dos verbos de leitura (stories 4426 e 4427).
 
-Contrato: platafirma-casa@referencias/instancias/interface-de-verbo/busca.md, seção «Erros».
-Toda recusa sai na saída de erro, numa linha formatada ou num objeto JSON sob --json, com os seis
-campos sempre na mesma ordem, e o código de saída vai de 0 a 5. Módulo isolado, sem dependência
-do resto da leitura, para os outros verbos reusarem.
+Contratos:
+- platafirma-casa@referencias/instancias/interface-de-verbo/busca.md, seção «Erros»
+- platafirma-casa@referencias/instancias/verbo/busca.md, seção «Os códigos de saída»
+
+Módulo isolado, sem dependência do resto da leitura, para os verbos reusarem.
 """
 from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TextIO
 
@@ -55,10 +57,39 @@ class Recusa(Exception):
         return " · ".join(f"{c}: {v}" for c, v in self.campos().items())
 
 
+class Recusas(Exception):
+    """Lista não vazia de recusas do mesmo pedido, escrita como erro e erros em JSON."""
+
+    def __init__(self, erros: Sequence[Recusa]) -> None:
+        if not erros:
+            raise ValueError("lista de recusas vazia")
+        self.erros = list(erros)
+        self.primeiro = self.erros[0]
+        self.saida = self.primeiro.saida
+        super().__init__(self.primeiro.codigo)
+
+
+def formato_lista(recusas: Sequence[Recusa]) -> dict[str, object]:
+    """O par `erro` (primeiro) e `erros` (todos), cada um com os seis campos."""
+    if not recusas:
+        raise ValueError("lista de recusas vazia")
+    itens = [r.campos() for r in recusas]
+    return {"erro": itens[0], "erros": itens}
+
+
 def escrever(recusa: Recusa, *, como_json: bool = False, fluxo: TextIO | None = None) -> int:
-    """Escreve a recusa na saída de erro e devolve o código de saída."""
+    """Escreve uma recusa (contrato do ato ler) na saída de erro e devolve o código de saída."""
     destino = sys.stderr if fluxo is None else fluxo
     texto = json.dumps(recusa.campos(), ensure_ascii=False) if como_json else recusa.linha()
     destino.write(texto + "\n")
     destino.flush()
     return recusa.saida
+
+
+def escrever_lista(recusas: Sequence[Recusa], *, fluxo: TextIO | None = None) -> int:
+    """Escreve `erro` e `erros` numa linha JSON na saída de erro e devolve o código de saída."""
+    destino = sys.stderr if fluxo is None else fluxo
+    corpo = formato_lista(recusas)
+    destino.write(json.dumps(corpo, ensure_ascii=False) + "\n")
+    destino.flush()
+    return recusas[0].saida
