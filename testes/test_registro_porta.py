@@ -42,12 +42,25 @@ def test_ocultas_e_removidas_da_lista(registro):
     assert "metrica" in visiveis
 
 
+def _verbos_visiveis(registro: dict) -> list[tuple[str, dict]]:
+    return [
+        (slug, meta or {})
+        for slug, meta in registro["verbos"].items()
+        if (meta or {}).get("modelo", True) is not False
+    ]
+
+
+def _tools_visiveis(registro: dict) -> set[str]:
+    visiveis = set(registro["transporte"])
+    for slug, meta in _verbos_visiveis(registro):
+        visiveis.add(meta.get("nome") or slug)
+    return visiveis
+
+
 def test_todo_verbo_visivel_tem_descricao_no_manifesto(registro):
     """Decisão #5322: a toolstring mora em registro/porta.yaml."""
-    for slug, meta in registro["verbos"].items():
-        if (meta or {}).get("modelo", True) is False:
-            continue
-        desc = (meta or {}).get("descricao") or ""
+    for slug, meta in _verbos_visiveis(registro):
+        desc = meta.get("descricao") or ""
         assert desc.strip(), f"{slug}: sem descricao em registro/porta.yaml"
         assert len(desc.strip()) > 20, f"{slug}: descricao curta demais"
 
@@ -87,21 +100,18 @@ def test_faces_da_borda_saem_do_registro(registro):
     assert sorted(faces["motor"]) == ["fila", "motor"]
 
 
-def test_registro_expoe_exatamente_as_24_tools_visiveis_do_ar(registro):
+def test_registro_expoe_exatamente_as_25_tools_visiveis_do_ar(registro):
     esperadas = {
         "acervo", "acesso", "agente", "analise", "bot", "busca", "conferir",
         "descansar", "expediente", "fila", "infra", "ler_arquivo", "lint",
-        "malote", "mesa", "metrica", "monta_sessao", "pesquisar", "release",
-        "repo", "seg", "tarefas", "teste", "write_file",
+        "malote", "mesa", "metrica", "monta_sessao", "motor", "pesquisar",
+        "release", "repo", "seg", "tarefas", "teste", "write_file",
     }
-    visiveis = set(registro["transporte"])
-    for slug, meta in registro["verbos"].items():
-        meta = meta or {}
-        if meta.get("modelo", True) is False:
-            continue
-        visiveis.add(meta.get("nome") or slug)
-    assert visiveis == esperadas
-    assert registro["verbos"]["motor"].get("nome") == "busca"
+    assert len(esperadas) == 25
+    assert _tools_visiveis(registro) == esperadas
+    assert "busca" in registro["verbos"]
+    assert registro["verbos"]["motor"].get("nome") is None
+    assert "nome: busca" not in REGISTRO.read_text(encoding="utf-8")
 
 
 def test_toolstring_do_malote_no_registro(registro):
@@ -184,3 +194,33 @@ def test_atos_do_descansar_no_registro_batem_com_o_verbo(registro):
             capture_output=True, text=True, timeout=20, check=False, input="", env=env,
         )
         assert "ato desconhecido" not in p.stderr, f"descansar {ato}: o verbo não aceita o ato do catálogo"
+
+
+def _atos_do_cabecalho(verbo: str) -> tuple[str, list[str]]:
+    fonte = (REPO_ROOT / "bin" / verbo).read_text(encoding="utf-8")
+    cabecalho = re.search(r"^# atos:\s*(.+)$", fonte, re.MULTILINE)
+    assert cabecalho, f"bin/{verbo} sem linha '# atos:' no cabeçalho"
+    bruto = cabecalho.group(1).strip()
+    return bruto, _atos_da_descricao(f"atos: {bruto}")
+
+
+def test_atos_do_busca_e_do_motor_no_registro_batem_com_o_verbo(registro):
+    """Story #4427 (t2): os atos na descrição de busca e motor batem com bin/busca e bin/motor."""
+    for verbo in ("busca", "motor"):
+        bruto_verbo, atos_verbo = _atos_do_cabecalho(verbo)
+        desc = registro["verbos"][verbo]["descricao"]
+        atos_desc = _atos_da_descricao(desc)
+        assert len(atos_desc) == len(set(atos_desc)), f"atos duplicados em {verbo}: {atos_desc}"
+        assert atos_desc == atos_verbo, (
+            f"descrição de {verbo} em porta.yaml ({atos_desc}) diverge de bin/{verbo} ({atos_verbo})"
+        )
+        m = re.search(r"\batos:\s*([^·\n]+)", desc)
+        assert m is not None and m.group(1).strip() == bruto_verbo
+
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PF_")}
+    for ato in ("consultar", "ler"):
+        p = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "bin" / "busca"), ato],
+            capture_output=True, text=True, timeout=15, check=False, input="", env=env,
+        )
+        assert "ato-desconhecido" not in p.stderr, f"busca {ato}: recusado como ato desconhecido"

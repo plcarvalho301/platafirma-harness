@@ -56,6 +56,17 @@ verbos:
       sempre que uma execução cair, «o job caiu», automação parada · atos: declarar (escrita,
       agendamento), listar (leitura, agendamento), rodar (escrita, agendamento), desligar
       (escrita, agendamento), caidas (escrita, agendamento)
+  busca:
+    descricao: >-
+      acha o que a casa e o acervo têm, pelo que você já sabe · não sabe onde está: buscar,
+      pela frase, «o que a literatura diz de X?», «onde a casa fala de Y?», «tem fonte sobre
+      Z?»; sabe a classe ou o nome: consultar, pela condição ou pelo nome, «as classes cuja
+      capacidade é a busca», «gestão estratégica»; sabe a chave: ler, a ficha inteira, «abre
+      verbo:tarefas» · use para: SEMPRE ANTES de responder de cabeça sobre a casa ou a
+      literatura; subir um degrau quando o de baixo não basta · buscar devolve o que achou, e
+      não o que falta; consultar devolve o conjunto exato, e o total zero vem com os valores
+      que existem, para conferir a grafia · atos: buscar (leitura, busca), consultar (leitura,
+      ficha), ler (leitura, ficha)
   conferir:
     descricao: >-
       confere o SERVIDO contra o DECLARADO · use para: SEMPRE ANTES de agir sobre algo da casa
@@ -114,18 +125,19 @@ verbos:
       e lote por verbo · atos: eventos, dia, ate-acerto, tateio, casos, verbos, comportamento,
       turnos, abertura (leitura, abertura), investigar (escrita, investigacao)
   motor:
-    nome: busca
     descricao: >-
-      acha pelo sentido o trecho do acervo que responder, filtrável por domínio e/ou conceitos
-      · use para: SEMPRE ANTES de responder de cabeça e ANTES de abrir o acervo, consultar a
-      casa ou a biblioteca, «o que a literatura diz de X?», «onde a casa fala de Y?», «tem
-      fonte sobre Z?»; parametrizar ou ajustar as consultas do motor · atos: listar (leitura,
-      texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir (leitura,
-      medida), indexar (escrita, indice), trocar (escrita, geracao), sortear (escrita,
-      bateria), lintar (leitura, medida), parear (escrita, lote), escrever (escrita, lote),
-      julgar (escrita, lote), eleger (leitura, medida), consultas (leitura, medida), trabalhos
-      (leitura, medida), estado (leitura, geracao), parar (escrita, medida), raciocinar
-      (leitura, medida)
+      ajusta, indexa e mede o motor da busca pelo sentido; não é por aqui que a cadeira acha
+      trecho ou ficha, é pela tool busca · use para: parametrizar ou ajustar as consultas do
+      motor, «muda o peso do domínio»; indexar e trocar a geração do índice, «reindexa o
+      acervo»; montar a bateria: sortear, parear, escrever, julgar e eleger; medir a busca, ver
+      consultas, trabalhos e estado, «como está a revocação?»; parar e limpar medida · o ato
+      buscar daqui é o que a tool busca repassa, e serve para depurar o motor · atos: listar
+      (leitura, texto), ajuste (leitura|escrita, config), buscar (leitura, busca), medir
+      (leitura, medida), indexar (escrita, indice), trocar (escrita, geracao), sortear
+      (escrita, bateria), lintar (leitura, medida), parear (escrita, lote), escrever (escrita,
+      lote), julgar (escrita, lote), eleger (leitura, medida), consultas (leitura, medida),
+      trabalhos (leitura, medida), estado (leitura, geracao), parar (escrita, medida), limpar
+      (escrita, medida)
     faces:
       motor:
         instancia: rag
