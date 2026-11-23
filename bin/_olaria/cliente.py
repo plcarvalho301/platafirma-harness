@@ -24,6 +24,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 PRAZO_PADRAO_S = 110.0
 REENVIO_PADRAO_S = 5.0
@@ -70,6 +71,24 @@ def e_uuid7(texto: str) -> bool:
     return bool(UUID_V7.match(texto or ""))
 
 
+def _ler_cofre(caminho: Path) -> str:
+    try:
+        return caminho.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def preencher_do_cofre(env: dict[str, str]) -> None:
+    """Completa OLARIA_URL e OLARIA_CHAVE do cofre da instância quando ausentes no ambiente do processo."""
+    instancia = Path(env.get("PLATAFIRMA_INSTANCIA") or "/srv/platafirma/casa")
+    if not (env.get("OLARIA_URL") or "").strip():
+        env["OLARIA_URL"] = _ler_cofre(instancia / "segredos" / "olaria" / "OLARIA_URL") or "http://127.0.0.1:8103"
+    if not (env.get("OLARIA_CHAVE") or "").strip():
+        chave = _ler_cofre(instancia / "segredos" / "olaria" / "OLARIA_CHAVE")
+        if chave:
+            env["OLARIA_CHAVE"] = chave
+
+
 @dataclass
 class Ambiente:
     url: str
@@ -78,12 +97,22 @@ class Ambiente:
 
     @classmethod
     def do_ambiente(cls, env: Mapping | None = None) -> Ambiente:
-        """O endereço e a chave de serviço vêm do ambiente que a peça põe. Falta uma, e o nome dela sobe."""
+        """O endereço e a chave vêm do ambiente ou, no processo vivo, do cofre da instância."""
+        do_processo = env is None or env is os.environ
         env = os.environ if env is None else env
-        for nome in ("OLARIA_URL", "OLARIA_CHAVE"):
-            if not env.get(nome):
-                raise AmbienteIncompleto(nome)
-        return cls(url=env["OLARIA_URL"].rstrip("/"), chave=env["OLARIA_CHAVE"], sujeito=env.get("PF_CADEIRA", ""))
+        instancia = Path(env.get("PLATAFIRMA_INSTANCIA") or "/srv/platafirma/casa")
+        url = (env.get("OLARIA_URL") or "").strip()
+        chave = (env.get("OLARIA_CHAVE") or "").strip()
+        if do_processo:
+            if not url:
+                url = _ler_cofre(instancia / "segredos" / "olaria" / "OLARIA_URL") or "http://127.0.0.1:8103"
+            if not chave:
+                chave = _ler_cofre(instancia / "segredos" / "olaria" / "OLARIA_CHAVE")
+        if not url:
+            raise AmbienteIncompleto("OLARIA_URL")
+        if not chave:
+            raise AmbienteIncompleto("OLARIA_CHAVE")
+        return cls(url=url.rstrip("/"), chave=chave, sujeito=env.get("PF_CADEIRA", ""))
 
 
 def _numero(env: Mapping, nome: str, padrao: float | None) -> float | None:

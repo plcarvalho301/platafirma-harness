@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # olaria — a porta da ontologia da casa: prepara, ensaia, grava e apaga a mudança de classe e de ficha, e gera o pacote do raciocinador
-# capacidade: modelos-formais
+# capacidade: ontologia
 # dono: conhecimento
 # classe: B
 # use para: mudar a ontologia da casa, classe, ficha ou lote de fichas, pelo YAML da mudança; preparar o YAML do que está gravado, «prepara a classe chapeu»; ensaiar a mudança sem gravar e ver todos os erros de uma vez; ensaiar as capacidades e ver o que a régua recusa no que já está gravado; gravar a mudança como uma fornada, «grava este YAML»; reenviar a fornada que caiu, pelo id; apagar uma ficha do fichário com o motivo; gerar o pacote do raciocinador da última fornada
