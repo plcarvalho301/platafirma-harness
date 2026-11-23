@@ -14,14 +14,30 @@ import sys
 if str(RAIZ / "lib") not in sys.path:
     sys.path.insert(0, str(RAIZ / "lib"))
 
-from leitura import casa_db, resolvedor  # noqa: E402
-from leitura.recusa import CAMPOS, Recusa, Recusas, escrever_lista  # noqa: E402
-from leitura.retrato import SQL, _causa, literal  # noqa: E402
+from leitura import casa_db, resolvedor
+from leitura.recusa import CAMPOS, Recusa, Recusas, escrever_lista
+from leitura.retrato import SQL, _causa, literal
 
 SAIDA_USO = 2
 SAIDA_DEP = 3
 SAIDA_NEGADO = 4
 SAIDA_FALHA = 5
+
+
+def _configurar_versao_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    cfg = tmp_path / "versao.yaml"
+    cfg.write_text(
+        "versao: 1\n"
+        "fontes: [fornada-da-classe, iniciou-do-dado-vigente, iniciou-da-ligacao-vigente, evento-que-cita-a-classe]\n"
+        "casos:\n"
+        "  shape: [fornada-de-toda-classe]\n"
+        "  dicionario: [fornada-de-todo-dicionario, fornada-de-todo-valor]\n"
+        "eventos: [modelos-formais.operacao-em-lote.olaria:olaria]\n"
+        "mais_recente: [ocorrido_em desc, uuid desc]\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PF_VERSAO_CLASSE_YAML", str(cfg))
+    return cfg
 
 
 # ==================================================================== t8: retrato, recusa, resolvedor e leitor
@@ -185,18 +201,7 @@ def test_autorizacao_cacheada_uma_vez_por_classe_e_filtragem_mista() -> None:
 def test_caminhada_bfs_em_grafo_com_ciclo_e_empate_refaz_rastro_so_da_pagina(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    cfg = tmp_path / "versao.yaml"
-    cfg.write_text(
-        "versao: 1\n"
-        "fontes: [fornada-da-classe, iniciou-do-dado-vigente, iniciou-da-ligacao-vigente, evento-que-cita-a-classe]\n"
-        "casos:\n"
-        "  shape: [fornada-de-toda-classe]\n"
-        "  dicionario: [fornada-de-todo-dicionario, fornada-de-todo-valor]\n"
-        "eventos: [modelos-formais.operacao-em-lote.olaria:olaria]\n"
-        "mais_recente: [ocorrido_em desc, uuid desc]\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setenv("PF_VERSAO_CLASSE_YAML", str(cfg))
+    _configurar_versao_yaml(tmp_path, monkeypatch)
 
     rastreados: list[list[str]] = []
 
@@ -254,3 +259,116 @@ def test_caminhada_bfs_em_grafo_com_ciclo_e_empate_refaz_rastro_so_da_pagina(
     ]
     # u-fora-pagina NÃO entrou na consulta de rastro
     assert rastreados == [["u-alvo", "u-final", "u-p1"]]
+
+
+# ==================================================================== t9: pedido e consulta por nome
+def test_conferencia_de_forma_acumula_erros_sem_abrir_o_banco() -> None:
+    from busca.pedido import codificar_cursor, receber_pedido
+
+    # Sem termo e sem --classe -> termo-ausente
+    with pytest.raises(Recusas) as exc_vazio:
+        receber_pedido([])
+    assert [e.codigo for e in exc_vazio.value.erros] == ["termo-ausente"]
+
+    # Predicados sem --classe -> classe-ausente + passos-fora-da-faixa + alvo-mal-formado juntos
+    with pytest.raises(Recusas) as exc_multi:
+        receber_pedido(["--prop", "x=1", "--ligacao", "confere/9=---", "--sem-ligacao", "usa/2=alvo"])
+    codigos = [e.codigo for e in exc_multi.value.erros]
+    assert "classe-ausente" in codigos
+    assert codigos.count("passos-fora-da-faixa") == 2  # noqa: PLR2004 - 9 fora da faixa e /2 em --sem-ligacao
+    assert "alvo-mal-formado" in codigos
+
+    # Termo só de sinais -> termo-sem-letra
+    with pytest.raises(Recusas) as exc_sinais:
+        receber_pedido(["---"])
+    assert [e.codigo for e in exc_sinais.value.erros] == ["termo-sem-letra"]
+
+    # Texto longo demais -> texto-longo-demais
+    with pytest.raises(Recusas) as exc_longo:
+        receber_pedido(["a" * 201])
+    assert [e.codigo for e in exc_longo.value.erros] == ["texto-longo-demais"]
+
+    # Argumento fora do modo (termo + --classe, --ligacoes com --classe, --cursor no modo nome)
+    with pytest.raises(Recusas) as exc_modo:
+        receber_pedido(["gabarito", "--classe", "shape", "--ligacoes", "sem"])
+    assert [e.codigo for e in exc_modo.value.erros] == ["argumento-fora-do-modo", "argumento-fora-do-modo"]
+
+    with pytest.raises(Recusas) as exc_cur_nome:
+        receber_pedido(["gabarito", "--cursor", "qualquer"])
+    assert [e.codigo for e in exc_cur_nome.value.erros] == ["argumento-fora-do-modo"]
+
+    # Continuação ilegível e divergente
+    with pytest.raises(Recusas) as exc_ileg:
+        receber_pedido(["--classe", "gabarito", "--cursor", "nao-e-json-valido!!!"])
+    assert [e.codigo for e in exc_ileg.value.erros] == ["continuacao-ilegivel"]
+
+    ped_base = receber_pedido(["--classe", "gabarito", "--prop", "a=1", "--prop", "b=2"])
+    ped_outra_ordem = receber_pedido(["--classe", "gabarito", "--prop", "b=2", "--prop", "a=1"])
+    assert ped_base.resumo == ped_outra_ordem.resumo
+
+    token_bom = codificar_cursor(ordem=1, chave="gabarito:a", fornada="019a0000-0000-7000-8000-000000000001", resumo=ped_base.resumo)
+    ped_pag2 = receber_pedido(["--classe", "gabarito", "--prop", "b=2", "--prop", "a=1", "--cursor", token_bom])
+    assert ped_pag2.continuacao is not None and ped_pag2.continuacao.chave == "gabarito:a"
+
+    with pytest.raises(Recusas) as exc_div:
+        receber_pedido(["--classe", "gabarito", "--prop", "a=outro", "--cursor", token_bom])
+    assert [e.codigo for e in exc_div.value.erros] == ["continuacao-divergente"]
+
+
+def test_consulta_por_nome_demanda_nao_corta_dentro_da_palavra_e_qualificador_vira_condicao(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from busca.nome import consultar_por_nome, gerar_cortes_qualificador
+    from busca.pedido import receber_pedido
+
+    # "demanda" contém "de" dentro da palavra, mas não em fronteira de palavra
+    assert gerar_cortes_qualificador("demanda") == []
+    cortes = gerar_cortes_qualificador("gabaritos de modelos formais")
+    assert [(c.nucleo, c.qualificador) for c in cortes] == [("gabaritos", "modelos formais")]
+
+    _configurar_versao_yaml(tmp_path, monkeypatch)
+
+    class _ConCorte:
+        def resolver_nomes(self, termos: list[str]) -> list[dict]:
+            mapa = {
+                "gabaritos": [{"passo": 1, "chave": "gabarito", "classe": "shape", "e_classe": True, "rotulo": "Gabarito", "definicao": "d"}],
+                "modelos formais": [{"passo": 1, "chave": "capacidade:ontologia", "classe": "capacidade", "e_classe": False, "rotulo": "Ontologia", "definicao": "d"}],
+            }
+            out: list[dict] = []
+            for idx, t in enumerate(termos, start=1):
+                norm = t.lower().strip()
+                itens = mapa.get(norm)
+                if not itens:
+                    out.append({"ord": idx, "norm": norm, "passo": None, "chave": None, "classe": None, "e_classe": None})
+                else:
+                    out.extend({"ord": idx, "norm": norm, **it} for it in itens)
+            return out
+
+        def consultar(self, sql: str, *params: object) -> list[dict]:
+            if sql is casa_db.SQL_UUID_DA_CLASSE:
+                return [{"uuid": "u-cls-gab", "classe": "gabarito"}]
+            if sql is resolvedor.SQL_FICHA:
+                return [{"uuid": "u-cap-ont", "chave": params[0], "classe": "capacidade", "classe_uuid": "u-cls-cap"}]
+            if "alcance_nivel" in sql:
+                return [{"ficha": "u-gab-fw", "pai": "u-cap-ont", "propriedade": "confere", "posicao": 1}]
+            if "consultar_fichas" in sql:
+                return [{
+                    "total": 1, "antes": 0, "digest": "v1:" + "b" * 64, "fornada": "019a0000-0000-7000-8000-000000000002",
+                    "uuid": "u-gab-fw", "ordem": 1, "chave": "gabarito:framework-da-ontologia", "classe": "gabarito",
+                    "rotulo": "Framework da ontologia", "estado": None,
+                }]
+            if "rastro" in sql:
+                return [
+                    {"uuid": "u-cap-ont", "chave_humana": "capacidade:ontologia"},
+                    {"uuid": "u-gab-fw", "chave_humana": "gabarito:framework-da-ontologia"},
+                ]
+            raise AssertionError(f"SQL inesperado: {sql[:50]}")
+
+    ped = receber_pedido(["gabaritos de modelos formais"])
+    with casa_db.retrato(conexao=_ConCorte(), autorizador=lambda _c, _s: True) as sessao:
+        res = consultar_por_nome(sessao, ped)
+
+    assert res["tipo_resultado"] == "condicao-por-nome"
+    assert res["classe"] == "gabarito"
+    assert res["condicao"] == {"nucleo": "gabaritos", "qualificador": "modelos formais", "chaves": ["capacidade:ontologia"]}
+    assert [f["chave"] for f in res["consulta"]["fichas"]] == ["gabarito:framework-da-ontologia"]

@@ -23,7 +23,7 @@ RAIZ = Path(__file__).resolve().parents[1]
 BIN = RAIZ / "bin" / "busca"
 sys.path.insert(0, str(RAIZ / "lib"))
 
-from leitura import resolvedor
+from leitura import casa_db, resolvedor
 from leitura.recusa import CAMPOS, Recusa, escrever
 from leitura.retrato import literal
 
@@ -123,20 +123,37 @@ class RetratoFalso:
         if sql is resolvedor.SQL_MOLDE:
             self.consultas.append("molde")
             return MOLDES.get(params[0], [])
-        if sql is resolvedor.SQL_FICHA_INTEIRA:
+        if sql in (resolvedor.SQL_FICHA_INTEIRA, resolvedor.SQL_FICHA_SEM_LIGACOES):
             self.consultas.append("ficha-inteira")
             chave = next(k for k, (u, _c) in FICHAS.items() if u == params[0])
             return [{"ficha": {"chave": chave, "classe": FICHAS[chave][1], "dados": {"rotulo": [chave]}, "ligacoes": {}}}]
+        if sql is casa_db.SQL_CLASSES_DISPONIVEIS:
+            self.consultas.append("classes-disponiveis")
+            return [{"classe": c} for c in sorted(CLASSES)]
         raise AssertionError(f"consulta inesperada: {sql[:60]}")
 
     def resolver_nomes(self, termos):
         self.consultas.append("nomes")
-        norm = _norm(termos[0])
-        chaves = NOMES.get(norm, [])
-        if not chaves:
-            return [{"ord": 1, "norm": norm, "passo": None, "chave": None, "classe": None}]
-        return [{"ord": 1, "norm": norm, "passo": 4, "chave": c, "classe": c.split(":")[0],
-                 "rotulo": c, "definicao": f"definição de {c}"} for c in chaves]
+        linhas = []
+        for ord_n, termo in enumerate(termos, start=1):
+            norm = _norm(termo)
+            chaves = NOMES.get(norm, [])
+            if not chaves:
+                linhas.append({"ord": ord_n, "norm": norm, "passo": None, "chave": None, "classe": None, "e_classe": None})
+            else:
+                for c in chaves:
+                    classe = FICHAS[c][1] if c in FICHAS else c.split(":")[0]
+                    linhas.append({
+                        "ord": ord_n,
+                        "norm": norm,
+                        "passo": 4,
+                        "chave": c,
+                        "classe": classe,
+                        "e_classe": classe == "shape",
+                        "rotulo": c,
+                        "definicao": f"definição de {c}",
+                    })
+        return linhas
 
 
 @pytest.fixture
@@ -234,11 +251,18 @@ def test_nome_de_varias_fichas_devolve_a_coluna_sem_ler(release: Path) -> None:
     assert "molde" not in retrato.consultas
 
 
-def test_nome_que_nao_casa_sai_1_com_buscar_em_proximo(release: Path) -> None:
-    codigo, out, err, _ = rodar(["coisa que nao existe"], release)
+def test_nome_que_nao_casa_sai_1_do_desfecho_sem_buscar_em_proximo(release: Path) -> None:
+    codigo, out, err, retrato = rodar(["nome que nenhuma ficha tem"], release)
     assert codigo == 1 and out == ""
     assert "codigo: termo-nao-casou" in err
-    assert err.rstrip().endswith("proximo: busca buscar 'coisa que nao existe'")
+    assert "busca buscar" not in err
+    assert "proximo: busca consultar --classe capacidade" in err
+    assert "ficha-inteira" not in retrato.consultas
+
+    codigo_cand, _out_c, err_cand, _ = rodar(["coisa sobre busca"], release)
+    assert codigo_cand == 1
+    assert "busca buscar" not in err_cand
+    assert "proximo: busca ler capacidade:busca" in err_cand
 
 
 def test_termo_sem_letra_sai_2(release: Path) -> None:

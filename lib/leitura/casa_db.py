@@ -52,7 +52,6 @@ SQL_FILHAS_DA_CLASSE = """
 SELECT DISTINCT classe_uuid::text AS uuid, classe
   FROM casa_leitura.linhagem_das_classes
  WHERE ancestral_uuid = $1::uuid
-   AND (nivel = 0 OR relacao_com_mae IN ('generica', 'restritiva'))
  ORDER BY classe
 """
 
@@ -265,7 +264,10 @@ class SessaoLeitura:
     # ---------------------------------------------------------------- as seis consultas e auxiliares
     def resolver_nomes(self, termos: Sequence[str]) -> ResultadoNome:
         """Resolve os termos e filtra pelas classes autorizadas, marcando os `ord` totalmente negados."""
-        brutas = self._con.consultar(_sql_arquivo("resolver_nomes.sql"), list(termos))
+        if hasattr(self._con, "resolver_nomes"):
+            brutas = self._con.resolver_nomes(list(termos))
+        else:
+            brutas = self._con.consultar(_sql_arquivo("resolver_nomes.sql"), list(termos))
         por_ord: dict[int, list[dict]] = {}
         for ln in brutas:
             por_ord.setdefault(int(ln["ord"]), []).append(ln)

@@ -1,14 +1,14 @@
 #!/opt/platafirma/current/venv/harness/bin/python
-# busca — acha e lê o que a casa e o acervo têm, pelo sentido ou pela chave
+# busca — acha o que a casa e o acervo têm, pelo sentido, pela consulta ou pela chave
 # capacidade: busca
 # dono: ti
 # classe: C
-# use para: achar trecho pelo sentido (buscar) ou ler o texto de algo da casa pela chave ou pelo nome (ler)
-# atos: buscar (leitura, busca), ler (leitura, ficha)
+# use para: achar trecho pelo sentido (buscar), consultar fichas pela condição ou pelo nome (consultar) ou ler pela chave (ler)
+# atos: buscar (leitura, busca), consultar (leitura, ficha), ler (leitura, ficha)
 # forma: texto
 # cauda: nao
 # poda: cosmetica@buscar
-"""Executável do verbo busca (stories 4426 e 4427): os atos buscar e ler.
+"""Executável do verbo busca (stories 4426 e 4427): buscar, consultar e ler.
 
 Contratos:
 - platafirma-casa@referencias/instancias/interface-de-verbo/busca.md
@@ -23,7 +23,7 @@ import re
 import shlex
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -32,17 +32,19 @@ _LIB = _RAIZ / "lib"
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 
-from leitura import resolvedor
+from busca.nome import consultar_por_nome
+from busca.pedido import Pedido, receber_pedido
+from leitura import casa_db, resolvedor
 from leitura.leitura import ORCAMENTO_MAX, ORCAMENTO_PADRAO
 from leitura.leitura import ler as ler_arquivo
 from leitura.morada import release_raiz
-from leitura.recusa import Recusa, escrever
+from leitura.recusa import Recusa, Recusas, escrever, escrever_lista
 from leitura.retrato import Retrato
 
 REGRA_ATOS = "interface-de-verbo:busca §Atos"
 REGRA_CHAVE = "interface-de-verbo:busca §Leitura pela chave"
 REGRA_NOME = "verbo:busca §O que o ler faz com a consulta por nome"
-USO = "busca <buscar|ler> ..."
+USO = "busca <buscar|consultar|ler> ..."
 USO_LER = "busca ler <chave|nome> [--offset <bytes>] [--max-bytes <n>] [--versao <v>] [--json]"
 _FLAGS_VALOR = {"--offset": "offset", "--max-bytes": "max_bytes", "--versao": "versao"}
 _PARTES_COM_PASTA = 2                    # o caminho solto tem ao menos uma pasta e o arquivo
@@ -258,31 +260,91 @@ def _coluna(alvo: str, fichas: list[dict]) -> dict:
     }
 
 
-# ==================================================================== o ato ler
-def _por_nome(retrato: Any, alvo: str) -> resolvedor.Ficha | list[dict]:
-    linhas = retrato.resolver_nomes([alvo])
-    norm = str(linhas[0].get("norm") or "") if linhas else ""
-    if not norm:
-        raise Recusa(2, "termo-sem-letra", onde="nome", recebido=alvo, regra=REGRA_NOME,
-                     cura="o termo normaliza para vazio; passe letras ou a chave", proximo="busca ler capacidade:busca")
-    vistas: dict[str, dict] = {}
-    for ln in linhas:
-        if ln.get("chave") and ln["chave"] not in vistas:
-            vistas[ln["chave"]] = ln
-    if not vistas:
-        raise Recusa(1, "termo-nao-casou", onde="nome", recebido=alvo, regra=REGRA_NOME,
-                     cura=f"«{norm}» não nomeia ficha pela tabela de nomes, rótulo, variantes nem slug",
-                     proximo=f"busca buscar {shlex.quote(alvo)}")
-    if len(vistas) > 1:
-        return list(vistas.values())
-    achada = resolvedor.ficha(retrato, next(iter(vistas)))
+# ==================================================================== o ato ler (pela consulta por nome)
+def _recusa_nao_casou_no_ler(alvo: str, desfecho: Mapping[str, Any]) -> Recusa:
+    candidatos = desfecho.get("candidatos") or []
+    if candidatos:
+        chaves = ", ".join(str(c["chave"]) for c in candidatos)
+        return Recusa(
+            1,
+            "termo-nao-casou",
+            onde="nome",
+            recebido=alvo,
+            regra=REGRA_NOME,
+            cura=f"«{alvo}» não nomeia ficha pela tabela de nomes, rótulo, variantes nem slug; candidatos: {chaves}",
+            proximo=f"busca ler {shlex.quote(str(candidatos[0]['chave']))}",
+        )
+    disp = desfecho.get("disponiveis") or {}
+    classes_disp = disp.get("classes") or []
+    primeira = str(classes_disp[0]) if classes_disp else "shape"
+    return Recusa(
+        1,
+        "termo-nao-casou",
+        onde="nome",
+        recebido=alvo,
+        regra=REGRA_NOME,
+        cura=f"«{alvo}» não nomeia ficha pela tabela de nomes, rótulo, variantes nem slug",
+        proximo=f"busca consultar --classe {shlex.quote(primeira)}",
+    )
+
+
+def _por_nome(sessao: casa_db.SessaoLeitura, alvo: str, env: Mapping[str, str] | None = None) -> resolvedor.Ficha | list[dict]:
+    try:
+        ped_nome = receber_pedido([alvo], env=env, origem_forca="leitura")
+        res = consultar_por_nome(sessao, ped_nome)
+    except Recusas as exc:
+        prim = exc.primeiro
+        prox = "busca ler capacidade:busca" if prim.codigo == "termo-sem-letra" else prim.proximo
+        raise Recusa(prim.saida, prim.codigo, onde="nome", recebido=alvo, regra=REGRA_NOME,
+                     cura=prim.cura, proximo=prox) from None
+
+    tipo = res["tipo_resultado"]
+    if tipo == "termo-nao-casou":
+        raise _recusa_nao_casou_no_ler(alvo, res)
+
+    fichas = res["fichas"] if tipo == "nome-casou" else res["consulta"]["fichas"]
+    if not fichas:
+        classe_cond = str(res.get("classe") or "shape")
+        raise Recusa(
+            1,
+            "termo-nao-casou",
+            onde="nome",
+            recebido=alvo,
+            regra=REGRA_NOME,
+            cura=f"«{alvo}» virou condição em {classe_cond}, mas nenhuma ficha cumpriu a condição",
+            proximo=f"busca consultar --classe {shlex.quote(classe_cond)}",
+        )
+    if len(fichas) > 1:
+        return list(fichas)
+    achada = sessao.ficha_da_chave(str(fichas[0]["chave"]))
     if achada is None:
-        raise Recusa(5, "indeterminavel", onde="nome", recebido=alvo, regra=REGRA_NOME,
+        raise Recusa(5, "falha-interna", onde="nome", recebido=alvo, regra=REGRA_NOME,
                      cura="o nome deu uma chave que a ficha não tem; abra incidente")
     return achada
 
 
-def ato_ler(args: list[str], *, abrir_retrato: Callable[[], Any] = Retrato, release: Path | None = None) -> dict:
+def _abrir_sessao_leitura(
+    *,
+    abrir_retrato: Callable[[], Any],
+    autorizador: Callable[[str, str | None], bool] | None,
+    release: Path | None,
+    env: Mapping[str, str] | None,
+) -> casa_db.SessaoLeitura:
+    sujeito = (env.get("PF_SUJEITO") if env is not None else os.getenv("PF_SUJEITO")) or None
+    if abrir_retrato is Retrato:
+        return casa_db.retrato({"sujeito": sujeito}, autorizador=autorizador, release=release)
+    aut = autorizador if autorizador is not None else (lambda _c, _s: True)
+    return casa_db.retrato({"sujeito": sujeito}, conexao=abrir_retrato(), autorizador=aut, release=release)
+
+
+def ato_ler(
+    args: list[str],
+    *,
+    abrir_retrato: Callable[[], Any] = Retrato,
+    autorizador: Callable[[str, str | None], bool] | None = None,
+    release: Path | None = None,
+    env: Mapping[str, str] | None = None,
+) -> dict:
     ped = pedido(args)
     alvo_txt = ped["alvo"]
     if "/" in alvo_txt:
@@ -290,20 +352,81 @@ def ato_ler(args: list[str], *, abrir_retrato: Callable[[], Any] = Retrato, rele
                      cura="o ler recebe a chave <classe>:<slug> ou o nome, e não o caminho do arquivo",
                      proximo=f"busca ler {shlex.quote(_chave_do_caminho(alvo_txt))}")
     raiz = release_raiz(release)
-    with abrir_retrato() as retrato:
-        achada = resolvedor.ficha_da_chave(retrato, alvo_txt)
+    with _abrir_sessao_leitura(abrir_retrato=abrir_retrato, autorizador=autorizador, release=raiz, env=env) as sessao:
+        achada = sessao.ficha_da_chave(alvo_txt)
         if achada is None:
-            achada = _por_nome(retrato, alvo_txt)
-            if isinstance(achada, list):
-                return {**_coluna(alvo_txt, achada), "json": ped["json"]}
-        alvo = resolvedor.resolver(retrato, achada, raiz)
-        ficha = resolvedor.ficha_inteira(retrato, achada) if alvo.caminho is None else None
+            res_nome = _por_nome(sessao, alvo_txt, env=env)
+            if isinstance(res_nome, list):
+                return {**_coluna(alvo_txt, res_nome), "json": ped["json"]}
+            achada = res_nome
+        alvo = resolvedor.resolver(sessao._con, achada, raiz)
+        ficha = resolvedor.ficha_inteira(sessao._con, achada) if alvo.caminho is None else None
     r = _ler_documento(alvo, ped, raiz) if alvo.caminho is not None else _ler_ficha(alvo, ficha or {}, ped)
     if ped["versao"] and ped["versao"] != r["versao"]:
         r["avisos"].append(f"mudou: a versão lida é {r['versao']}, a pedida era {ped['versao']}")
         r["mudou"] = True
     r["json"] = ped["json"]
     return r
+
+
+# ==================================================================== o ato consultar (modo nome em t9)
+def _renderizar_nome_provisorio(ped: Pedido, res: Mapping[str, Any]) -> str:
+    if ped.como_json:
+        return json.dumps(dict(res), ensure_ascii=False) + "\n"
+    tipo = res["tipo_resultado"]
+    termo = res["termo"]
+    if tipo == "termo-nao-casou":
+        return f"nome «{termo}» não casou · 0 fichas\n"
+    if tipo == "condicao-por-nome":
+        cons = res["consulta"]
+        total = int(cons["total"])
+        fichas = cons["fichas"]
+        de = 1 if fichas else 0
+        ate = len(fichas)
+        chaves_q = ", ".join(res["condicao"]["chaves"])
+        cab = (
+            f"nome «{termo}» virou condição · {res['classe']} ligada a {chaves_q} "
+            f"· fichas {de} a {ate} de {total} · digest {cons['digest']}"
+        )
+        corpo = [f"{f['chave']} · {f.get('rotulo') or ''}".rstrip(" ·") for f in fichas]
+        return "\n".join([cab, *corpo]) + "\n"
+    fichas = res["fichas"]
+    cab = f"nome «{termo}» · {len(fichas)} fichas"
+    if len(fichas) == 1:
+        linhas = [cab, f"{fichas[0]['chave']} · {fichas[0].get('rotulo') or ''}".rstrip(" ·")]
+        if res.get("ficha") is not None:
+            linhas.append(json.dumps(res["ficha"], ensure_ascii=False, indent=2, sort_keys=True))
+        return "\n".join(linhas) + "\n"
+    linhas = [cab]
+    for f in fichas:
+        defin = " ".join(str(f.get("definicao") or "").split())
+        linhas.append(f"{f['chave']} · {f['classe']} · {defin} · passo {f['passo']}")
+    return "\n".join(linhas) + "\n"
+
+
+def ato_consultar(
+    args: list[str],
+    *,
+    saida: TextIO,
+    abrir_retrato: Callable[[], Any] = Retrato,
+    **opcoes: Any,
+) -> int:
+    env = opcoes.get("env")
+    ped = receber_pedido(args, env=env)
+    raiz = release_raiz(opcoes.get("release"))
+    with _abrir_sessao_leitura(
+        abrir_retrato=abrir_retrato,
+        autorizador=opcoes.get("autorizador"),
+        release=raiz,
+        env=env,
+    ) as sessao:
+        if ped.modo == "nome":
+            res = consultar_por_nome(sessao, ped)
+            saida.write(_renderizar_nome_provisorio(ped, res))
+            saida.flush()
+            return 0
+        raise Recusas([Recusa(5, "falha-interna", onde="modo", recebido=ped.modo, regra=REGRA_ATOS,
+                              cura="modo classe entra na t10")])
 
 
 # ==================================================================== despacho e saída
@@ -321,7 +444,7 @@ def imprimir(r: dict, fluxo: TextIO) -> None:
         fluxo.writelines(f"aviso: {aviso}\n" for aviso in r.get("avisos") or ())
 
 
-ATOS = {"buscar": ato_buscar, "ler": ato_ler}
+ATOS = {"buscar": ato_buscar, "consultar": ato_consultar, "ler": ato_ler}
 
 
 def _recusa_ato_desconhecido(ato: str, resto: list[str], *, cabecalho_motor: Path | None = None) -> Recusa:
@@ -348,13 +471,6 @@ def _recusa_ato_desconhecido(ato: str, resto: list[str], *, cabecalho_motor: Pat
     )
 
 
-def _escrever_recusa_json(recusa: Recusa, fluxo: TextIO) -> int:
-    item = recusa.campos()
-    fluxo.write(json.dumps({"erro": item, "erros": [item]}, ensure_ascii=False) + "\n")
-    fluxo.flush()
-    return recusa.saida
-
-
 def main(argv: list[str] | None = None, *, saida: TextIO | None = None, erro: TextIO | None = None,
          motor: Path | None = None, **kw: Any) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -366,6 +482,13 @@ def main(argv: list[str] | None = None, *, saida: TextIO | None = None, erro: Te
     resto = argv[1:] if argv else []
     if ato == "buscar":
         return ato_buscar(resto, saida=saida, erro=erro, motor=motor)
+    if ato == "consultar":
+        try:
+            return ato_consultar(resto, saida=saida, **kw)
+        except Recusas as exc:
+            return escrever_lista(exc.erros, fluxo=erro)
+        except Recusa as r:
+            return escrever_lista([r], fluxo=erro)
     if ato == "ler":
         como_json = "--json" in resto
         try:
@@ -373,7 +496,7 @@ def main(argv: list[str] | None = None, *, saida: TextIO | None = None, erro: Te
             return 0
         except Recusa as r:
             return escrever(r, como_json=como_json, fluxo=erro)
-    return _escrever_recusa_json(_recusa_ato_desconhecido(ato, resto), erro)
+    return escrever_lista([_recusa_ato_desconhecido(ato, resto)], fluxo=erro)
 
 
 if __name__ == "__main__":
