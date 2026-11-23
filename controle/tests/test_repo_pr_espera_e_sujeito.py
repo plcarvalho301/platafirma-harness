@@ -164,11 +164,10 @@ def test_dt915_pr_abrir_espera_abre_rascunho_e_pr_merge_promove_e_integra(tmp_pa
     assert "rascunho" in r_ab.stdout
     assert "repo pr-merge demo 7" in r_ab.stdout
 
-    # pr-merge tira de rascunho (gh pr ready) e integra
+    # Regime sem PR (22/11/2026): pr-merge recusa com 2 e aponta sincronizar
     r_mg = _rodar_repo(tmp_path, bancada, "pr-merge", "demo", "7")
-    assert r_mg.returncode == 0, r_mg.stdout + r_mg.stderr
-    assert "pr ready 7" in (forge / "ready_args").read_text()
-    assert (forge / "estado").read_text().strip() == "MERGED"
+    assert r_mg.returncode == 2, r_mg.stdout + r_mg.stderr
+    assert "repo sincronizar demo" in r_mg.stderr
 
 
 def test_dt928_repo_abrir_sem_pf_cadeira_usa_pf_sujeito(tmp_path: Path):

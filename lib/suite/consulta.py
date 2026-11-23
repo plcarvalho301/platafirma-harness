@@ -672,7 +672,7 @@ def _resolver_leitor(raiz: Path, leitor: Any = None) -> Any:
 
 
 def _calcular_momentos(v: VinculoArquivo) -> tuple[tuple[str, ...], str]:
-    classe = v.classe or "teste-de-comportamento"
+    classe = v.papel or "teste-de-comportamento"
     if classe == "teste-de-comportamento":
         momentos = ("fita", "push")
         partes = ["fita", "push (quando alcançado)"]
@@ -834,7 +834,7 @@ def _construir_verificacao(
 ) -> VerificacaoConsultada:
     rel = v.caminho.relative_to(raiz).as_posix() if v.caminho.is_relative_to(raiz) else v.caminho.name
     comp = v.componente or ""
-    classe = v.classe or "teste-de-comportamento"
+    classe = v.papel or "teste-de-comportamento"
     momentos, quando_roda = _calcular_momentos(v)
 
     motivos: list[MotivoRetirada] = []

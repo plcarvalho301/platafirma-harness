@@ -715,12 +715,12 @@ def _deve_rodar_caso_na_esteira(
     if modo == "completo":
         return True
     if modo == "promocao":
-        return v.classe == "teste-de-fronteira" and lado_fronteira != "consome"
+        return v.papel == "teste-de-fronteira" and lado_fronteira != "consome"
     if caso.incidentes:
         return True
     if caso.exige:
         return no_alcance or any(ex in entidades_mudadas for ex in caso.exige)
-    if v.classe in ("teste-de-fronteira", "teste-de-regra"):
+    if v.papel in ("teste-de-fronteira", "teste-de-regra"):
         return no_alcance or (v.verifica is not None and v.verifica in entidades_mudadas)
     return no_alcance
 
@@ -766,7 +766,7 @@ def selecionar_casos_rodada(arvore: str | Path, **opcoes: Any) -> PlanoSelecaoRo
     casos_selecionados: list[CasoSelecionado] = []
     for rel, v in vinculos_validos:
         comp = v.componente or ""
-        classe = v.classe or "teste-de-comportamento"
+        classe = v.papel or "teste-de-comportamento"
         no_alcance = alcanca_todos or (comp in comps_alcancados) or (rel in set_mud)
         lado_front = (
             _consulta._determinar_lado_fronteira(leitor_res, comp, v.verifica)

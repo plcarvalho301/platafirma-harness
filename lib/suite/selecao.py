@@ -287,7 +287,7 @@ def _coletar_vinculos_componente(
         v = ler_vinculo(arq)
         if v.componente != alvo_comp:
             continue
-        if not ampliado and v.classe != "teste-de-comportamento":
+        if not ampliado and v.papel != "teste-de-comportamento":
             continue
         selecionados.append(v)
     return selecionados
