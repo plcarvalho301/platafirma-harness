@@ -86,15 +86,15 @@ class Ambiente:
 
     @classmethod
     def do_ambiente(cls, env: Mapping | None = None) -> Ambiente:
-        """O endereço e a chave vêm do ambiente ou, quando não passado explicitamente, do cofre da instância."""
-        explicito = env is not None
+        """O endereço e a chave vêm do ambiente ou, no processo vivo, do cofre da instância."""
+        do_processo = env is None or env is os.environ
         env = os.environ if env is None else env
         instancia = Path(env.get("PLATAFIRMA_INSTANCIA") or "/srv/platafirma/casa")
         url = (env.get("OLARIA_URL") or "").strip()
         chave = (env.get("OLARIA_CHAVE") or "").strip()
-        if not explicito:
+        if do_processo:
             if not url:
-                url = _ler_cofre(instancia / "segredos" / "olaria" / "OLARIA_URL")
+                url = _ler_cofre(instancia / "segredos" / "olaria" / "OLARIA_URL") or "http://127.0.0.1:8103"
             if not chave:
                 chave = _ler_cofre(instancia / "segredos" / "olaria" / "OLARIA_CHAVE")
         if not url:
