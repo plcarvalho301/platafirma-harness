@@ -16,11 +16,9 @@
 #                                                      fichas da espécie, por chave
 #   acervo listar casa [<especie>] --sobre <classe> <chave>   (ou <classe>:<chave>)
 #                                                      documentos que declaram Sobre: a entidade
-#   acervo ler    casa <especie> <chave> [--situacao] [--json] [--offset <bytes>]
-#                                                      o corpo vem em paginas de PAGINA bytes
-#                                                      (abaixo dos 50 KB da porta); a ultima linha
-#                                                      diz `truncado em N de M bytes; continue com
-#                                                      --offset N` (--json: bytes_total/next_offset)
+#   acervo ler    casa <especie> <chave> [--situacao] [--json] [--linhas <faixa>]
+#                                                      [--offset <bytes>] [--max-bytes <n>]
+#                                                      [--inteiro] [--cru]
 #
 # Chave (§3): adr `<serie>:NNNN` (arq:75 -> arq:0075; número nu resolve se uma série só o
 # tiver, senão lista as opções, exit 2; ou o <slug> do arquivo NNNN-<slug>.md, se único);
@@ -52,6 +50,7 @@ import _spec_montada  # noqa: E402
 import _suporte  # noqa: E402
 import raizes  # noqa: E402
 from _suporte import SUPORTE  # noqa: E402
+from leitura.verbo import ler_conteudo_verbo  # noqa: E402
 
 PG = "rag-extractor-pg"
 DB = "rag_extractor"
@@ -166,8 +165,8 @@ def _arquivos_especie_casa_nova(especie):
                     achados.append(f"{entrada}/{especie}/{nome}")
     return raiz, achados
 
-def _ler_casa_nova(especie, seletor, quero_json, offset=0):
-    """Lê documento da casa nova (`platafirma-casa`) por chave exata/slug (DT 549)."""
+def _ler_casa_nova(especie, seletor, quero_json, offset=0, linhas=None, max_bytes=None, inteiro=True):
+    """Lê documento da casa nova (`platafirma-casa`) por chave exata/slug (DT 549) via `lib/leitura`."""
     raiz, arquivos = _arquivos_especie_casa_nova(especie)
     if not arquivos:
         return None
@@ -188,9 +187,13 @@ def _ler_casa_nova(especie, seletor, quero_json, offset=0):
         )
     rel = exatos[0]
     caminho = os.path.join(raiz, rel)
-    with open(caminho, encoding="utf-8") as f:
-        completo = f.read()
-    corpo, total, proximo = pagina(completo, offset)
+    corpo, total, ini_b, proximo = _fatiar_documento_casa(
+        caminho=caminho,
+        offset=offset,
+        linhas=linhas,
+        max_bytes=max_bytes,
+        inteiro=inteiro,
+    )
     if quero_json:
         doc = {
             "especie": especie,
@@ -199,7 +202,7 @@ def _ler_casa_nova(especie, seletor, quero_json, offset=0):
             "path": rel,
             "corpo": corpo,
             "bytes_total": total,
-            "offset": offset,
+            "offset": ini_b,
             "truncado": proximo is not None,
             "next_offset": proximo,
         }
@@ -207,13 +210,8 @@ def _ler_casa_nova(especie, seletor, quero_json, offset=0):
         return 0
     print(f"casa nova · platafirma-casa · {rel}")
     sys.stdout.write(corpo)
-    if not corpo.endswith("\n"):
+    if corpo and not corpo.endswith("\n"):
         sys.stdout.write("\n")
-    if proximo is not None:
-        sys.stdout.write(
-            f"truncado em {proximo} de {total} bytes; continue com --offset {proximo}"
-            f" (acervo ler casa {especie} {chave} --offset {proximo})\n"
-        )
     return 0
 
 def _especie_existe(especie):
@@ -749,27 +747,42 @@ def resolver(especie, seletor, info):
           % (especie, seletor, diag), 1)
 
 
-# Página do corpo em bytes: a porta corta a saída em 50 KB sem dizer o quê ficou de fora
-# (#2856 linha 161); o verbo pagina antes, abaixo do teto (cabe a marca e o aviso), e diz o
-# next_offset — o idioma do `read_file` (truncated/bytes_total/next_offset).
-PAGINA = 45000
+def _fatiar_documento_casa(
+    *,
+    caminho=None,
+    completo=None,
+    nome_memoria="casa.md",
+    offset=0,
+    linhas=None,
+    max_bytes=None,
+    inteiro=True,
+):
+    """Delega leitura/fatiamento a `lib/leitura` (`ler_arquivo`), sem paginação própria."""
+    if linhas is not None and offset in (None, 0):
+        efetivo_offset = None
+    elif offset is not None and (offset > 0 or max_bytes is not None):
+        efetivo_offset = offset
+    else:
+        efetivo_offset = None
+    rc, corpo_b, err_s, meta = ler_conteudo_verbo(
+        caminho=caminho,
+        dados=completo.encode("utf-8") if completo is not None and caminho is None else None,
+        nome_memoria=nome_memoria,
+        linhas=linhas,
+        offset=efetivo_offset,
+        max_bytes=max_bytes,
+        inteiro=inteiro,
+        rotulo_erro="acervo ler casa",
+    )
+    if rc != 0:
+        morre(err_s.strip(), rc)
+    total = int(meta.get("bytes_total") or 0)
+    faixa_b = meta.get("bytes") or [0, total]
+    ini_b = int(faixa_b[0]) if len(faixa_b) >= 1 else (efetivo_offset or 0)
+    fim_b = int(faixa_b[1]) if len(faixa_b) >= 2 else total
+    proximo = fim_b if fim_b < total else None
+    return corpo_b.decode("utf-8", "replace"), total, ini_b, proximo
 
-def pagina(corpo, offset=0, limite=None):
-    """(trecho, bytes_total, next_offset) do corpo, em BYTES utf-8 a partir de `offset`.
-    O corte cai na fronteira de caractere (nunca parte um multibyte); next_offset é None na
-    última página. offset além do fim recusa, exit 2."""
-    limite = limite or PAGINA
-    bruto = corpo.encode("utf-8")
-    total = len(bruto)
-    if offset > total:
-        morre(f"acervo ler casa: --offset {offset} passa do fim do documento ({total} bytes).", 2)
-    ini, fim = offset, min(offset + limite, total)
-    while ini < fim and (bruto[ini] & 0xC0) == 0x80:       # offset caiu no meio de um caractere
-        ini += 1
-    if fim < total:
-        while fim > ini and (bruto[fim] & 0xC0) == 0x80:   # recua até o começo de um caractere
-            fim -= 1
-    return bruto[ini:fim].decode("utf-8", "replace"), total, (fim if fim < total else None)
 
 def montagem(linha, completo):
     """(dados, texto) da montagem na leitura da spec (arq:0126 §11). Banco fora: (None, a linha
@@ -787,10 +800,18 @@ def montagem(linha, completo):
     return dados, _spec_montada.render(dados, refs)
 
 
-def ler(especie, seletor, quero_json, situacao=False, offset=0, cru=False):
+def ler(especie, seletor, quero_json, situacao=False, offset=0, cru=False, linhas=None, max_bytes=None, inteiro=True):
     normalizar(especie, seletor)   # forma inválida é erro de uso (exit 2) antes de tocar o banco
     if _arquivos_especie_casa_nova(especie)[1] and not _especie_existe(especie):
-        res = _ler_casa_nova(especie, seletor, quero_json, offset=offset)
+        res = _ler_casa_nova(
+            especie,
+            seletor,
+            quero_json,
+            offset=offset,
+            linhas=linhas,
+            max_bytes=max_bytes,
+            inteiro=inteiro,
+        )
         if res is not None:
             return res
     info = _especie(especie)
@@ -824,11 +845,18 @@ def ler(especie, seletor, quero_json, situacao=False, offset=0, cru=False):
 
     completo = (_q(f"select json_build_object('corpo', c.corpo) from acervo.casa c "
                    f"where c.id = {_lit(linha['id'])}::uuid;") or {}).get("corpo") or ""
-    corpo, total, proximo = pagina(completo, offset)
+    corpo, total, ini_b, proximo = _fatiar_documento_casa(
+        completo=completo,
+        nome_memoria=f"{ident(linha)}.md",
+        offset=offset,
+        linhas=linhas,
+        max_bytes=max_bytes,
+        inteiro=inteiro,
+    )
     # arq:0126 §11: a spec lida pelo acervo traz, no fim do corpo, o que o golden record serve.
-    montar = especie == "spec" and not cru and proximo is None
+    montar = especie == "spec" and not cru and ini_b == 0 and proximo is None
     if quero_json:
-        doc = _item(linha) | {"corpo": corpo, "bytes_total": total, "offset": offset,
+        doc = _item(linha) | {"corpo": corpo, "bytes_total": total, "offset": ini_b,
                               "truncado": proximo is not None, "next_offset": proximo}
         if situacao:
             doc["situacao"] = sit
@@ -843,13 +871,10 @@ def ler(especie, seletor, quero_json, situacao=False, offset=0, cru=False):
                          f"fonte: {sit['fonte']}   ingerido: {sit['ingerido']}   servido: {sit['servido']}\n"
                          f"vetorizado: {sit['vetorizado']}   status: {sit['status']}\n\n")
     sys.stdout.write(corpo)
-    if not corpo.endswith("\n"):
+    if corpo and not corpo.endswith("\n"):
         sys.stdout.write("\n")
     if montar:
         sys.stdout.write(montagem(linha, completo)[1])
-    if proximo is not None:
-        sys.stdout.write(f"truncado em {proximo} de {total} bytes; continue com --offset {proximo}"
-                         f" (acervo ler casa {especie} {ident(linha)} --offset {proximo})\n")
     return 0
 
 
@@ -858,9 +883,9 @@ USO = """uso:
   acervo listar casa <especie> [--todas] [--dono <cadeira>] [--situacao] [--json]
   acervo listar casa [<especie>] --sobre <classe> <chave> [--todas] [--json]
   acervo listar casa guia --mapa                          as linhas de mapa das rotinas (peça `rotinas`)
-  acervo ler    casa <especie> <chave> [--situacao] [--json] [--offset <bytes>] [--cru]
-                                                          documento longo vem em páginas de 45000 bytes:
-                                                          "truncado em N de M bytes; continue com --offset N"
+  acervo ler    casa <especie> <chave> [--situacao] [--json] [--linhas <faixa>] [--offset <bytes>]
+                                       [--max-bytes <n>] [--inteiro] [--cru]
+                                                          delega a leitura a `lib/leitura` (inteiro por padrão);
                                                           spec: no fim, "Montado na leitura" com o que o
                                                           golden record serve (arq:0126 §11); --cru tira
 
@@ -885,10 +910,13 @@ def main(argv):
     todas = "--todas" in resto
     quero_mapa = "--mapa" in resto
     cru = "--cru" in resto
+    inteiro = True
     resto = [a for a in resto if a not in ("--json", "--situacao", "--todas", "--mapa", "--cru")]
 
     dono = None
     offset = 0
+    linhas = None
+    max_bytes = None
     sobre_args = None
     pos = []
     i = 0
@@ -903,6 +931,26 @@ def main(argv):
                 morre("acervo ler casa: --offset pede um número de bytes (>= 0).\n\n%s" % USO, 2)
             offset = int(resto[i + 1])
             i += 2
+        elif resto[i] == "--linhas":
+            if ato != "ler":
+                morre("acervo %s casa: --linhas só vale em `ler`.\n\n%s" % (ato, USO), 2)
+            if i + 1 >= len(resto) or not resto[i + 1]:
+                morre("acervo ler casa: --linhas exige faixa (ex.: 1-25, 10-, -20).\n\n%s" % USO, 2)
+            linhas = resto[i + 1]
+            i += 2
+        elif resto[i] == "--max-bytes":
+            if ato != "ler":
+                morre("acervo %s casa: --max-bytes só vale em `ler`.\n\n%s" % (ato, USO), 2)
+            if i + 1 >= len(resto) or not resto[i + 1].isdigit() or int(resto[i + 1]) < 1:
+                morre("acervo ler casa: --max-bytes pede um número de bytes (>= 1).\n\n%s" % USO, 2)
+            max_bytes = int(resto[i + 1])
+            inteiro = False
+            i += 2
+        elif resto[i] == "--inteiro":
+            if ato != "ler":
+                morre("acervo %s casa: --inteiro só vale em `ler`.\n\n%s" % (ato, USO), 2)
+            inteiro = True
+            i += 1
         elif resto[i] == "--sobre":
             # <classe> <chave> ou <classe>:<chave>; nunca engole a flag seguinte
             sobre_args = []
@@ -935,7 +983,14 @@ def main(argv):
     if ato == "ler":
         if len(pos) != 2:
             morre("acervo ler casa <especie> <chave>: faltam argumentos.\n\n%s" % USO, 2)
-        return ler(pos[0], pos[1], quero_json, situacao=situacao, offset=offset, cru=cru)
+        extra_ler = {}
+        if linhas is not None:
+            extra_ler["linhas"] = linhas
+        if max_bytes is not None:
+            extra_ler["max_bytes"] = max_bytes
+        if not inteiro:
+            extra_ler["inteiro"] = False
+        return ler(pos[0], pos[1], quero_json, situacao=situacao, offset=offset, cru=cru, **extra_ler)
     morre("acervo casa: ato desconhecido '%s' (ler, listar).\n\n%s" % (ato, USO), 2)
 
 

@@ -57,9 +57,11 @@ def test_ajuda_lista_os_atos_de_classificar(tmp_path):
                 "derivar       biblioteca obra", "desderivar    biblioteca obra",
                 "listar        biblioteca relacao <conceito>", "empacotar     biblioteca obra [dest]"):
         assert f"acervo {ato}" in r.stderr, ato
-    # a crase solta na ajuda virava substituicao de comando (`continue com --offset N`)
+    # sem crase solta executada pelo bash e sem rodapé fóssil de 45 KB (#4433)
     assert "only meaningful" not in r.stderr
-    assert "`continue com --offset N`" in r.stderr
+    assert "--linhas <faixa>" in r.stderr
+    assert "--inteiro" in r.stderr
+    assert "45000" not in r.stderr
 
 
 @precisa_curar

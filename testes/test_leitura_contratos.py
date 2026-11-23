@@ -1130,3 +1130,36 @@ def test_write_file_recusa_negadas_extensoes_e_respeita_morada(ambiente_harness:
         BIN_WRITE, {"path": str(bin_alvo), "content": "#!/usr/bin/env python3\nprint(1)\n"}, instancia=inst
     )
     assert err_com is False and r_com["ok"] is True
+
+
+def test_inteiro_true_le_arquivo_acima_do_orcamento_padrao_numa_chamada(tmp_path: Path) -> None:
+    grande = tmp_path / "busca.md"
+    texto = "".join(f"linha {i:04d} — referência completa do verbo na casa\n" for i in range(2200))
+    assert len(texto.encode("utf-8")) > 110_000
+    grande.write_text(texto, encoding="utf-8")
+
+    # Sem `inteiro`, `ler_arquivo` mantém o orçamento padrão (40 KB) e pagina
+    parcial = L.le(grande)
+    assert parcial["proximo"] != L.FIM
+    assert len(parcial["conteudo"].encode("utf-8")) <= L.ORCAMENTO_PADRAO
+
+    # Com `inteiro=True`, tanto `le`/`ler` quanto o binário `ler_arquivo` devolvem tudo numa chamada
+    total_le = L.le(grande, inteiro=True)
+    assert total_le["proximo"] == L.FIM
+    assert total_le["conteudo"] == texto
+
+    rc_bin, res_bin = _chamar({"caminho": str(grande), "inteiro": True})
+    assert rc_bin == 0
+    assert res_bin["proximo"] == L.FIM
+    assert res_bin["conteudo"] == texto
+
+    rc_lote, res_lote = _chamar({"caminhos": [{"caminho": str(grande), "inteiro": True}]})
+    assert rc_lote == 0
+    assert res_lote["lote"][0]["proximo"] == L.FIM
+    assert res_lote["lote"][0]["conteudo"] == texto
+
+    # Arquivo vazio com offset > 0 recusa como `offset além do fim` (exit 2)
+    vazio = tmp_path / "vazio.md"
+    vazio.write_bytes(b"")
+    r_vazio = L.le(vazio, offset=1)
+    assert r_vazio["exit_code"] == 2 and r_vazio["erro"] == "offset além do fim"

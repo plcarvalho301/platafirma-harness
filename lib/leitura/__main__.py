@@ -22,6 +22,7 @@ _SELETORES = (
     "versao",
     "offset",
     "membro",
+    "inteiro",
 )
 
 
@@ -81,6 +82,7 @@ def _ler_item(item: Any, req: dict[str, Any], ctx: dict[str, Any]) -> dict[str, 
         versao=sel["versao"],
         offset=sel["offset"],
         membro=sel["membro"],
+        inteiro=bool(sel["inteiro"]),
         **ctx,
     )
 
@@ -124,6 +126,7 @@ def main() -> int:
         versao=req.get("versao"),
         offset=req.get("offset"),
         membro=req.get("membro"),
+        inteiro=bool(req.get("inteiro", False)),
         **ctx,
     )
     sys.stdout.write(json.dumps(_serializar_imagens(res), ensure_ascii=False))

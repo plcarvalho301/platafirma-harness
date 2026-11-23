@@ -131,8 +131,7 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
                   --guardar grava em acervo.retrato e acervo.retrato_obra (banco rag), a linha de base do gate
   acervo escrever <particao> <entidade> <seletor>
   acervo ingerir  <particao> <raiz> [--apply]
-  acervo ler      casa <especie> <chave> [--offset <bytes>]   pela chave (arq:0115 §3): acervo ler casa adr arq:0075
-                  documento longo vem em paginas; o fim diz \`continue com --offset N\`
+  acervo ler      casa <especie> <chave> [--linhas <faixa>] [--offset <bytes>] [--inteiro]   pela chave (arq:0115 §3): acervo ler casa adr arq:0075
   acervo ler      casa|biblioteca secao <secao_id> [<secao_id> ...] [--json]
                   o texto da secao pelo endereco que a busca devolve (motor ... --texto nenhum)
   acervo ler      casa citacao <especie> <chave> [--secao <§>] [--json]  ·  biblioteca citacao <obra> [--json]

@@ -13,6 +13,7 @@ if str(HARNESS_LIB) not in sys.path:
     sys.path.insert(0, str(HARNESS_LIB))
 
 from poda import (
+    CAP_PADRAO,
     LedgerSessao,
     atos_que_escrevem,
     lavar,
@@ -278,3 +279,101 @@ def test_dt1007_poda_de_branco_nao_se_aplica_a_ler(tmp_path: Path):
     assert "branco" not in out["poda"]["lavado"]
     assert out["poda"]["bytes_produzidos"] == out["poda"]["bytes_servidos"]
     assert out["poda"]["ato_efetivo"] == "ler"
+
+
+def test_teto_padrao_200_kib_e_aviso_inequivoco_no_topo_do_envelope(tmp_path: Path):
+    """Incidente #4433 (itens b e c): teto de 200 KiB e aviso no topo do envelope + texto + poda_aviso."""
+    assert CAP_PADRAO == 200 * 1024
+    bin_rel = tmp_path / "release"
+    bin_rel.write_text("#!/bin/sh\n# forma: texto\n# atos: ler (leitura, operacao)\n", encoding="utf-8")
+    bin_rel.chmod(0o755)
+    # 150 KB cabe inteiro no novo teto padrão de 200 KiB sem cortar
+    texto_150k = ("linha com acentuação çãõé " * 30 + "\n") * 190
+    assert 140_000 < len(texto_150k.encode("utf-8")) < CAP_PADRAO
+    inteiro = podar_envelope(
+        {
+            "exit_code": 0,
+            "stdout": {"texto": texto_150k, "truncado": False, "bytes_total": len(texto_150k.encode("utf-8"))},
+        },
+        verbo="release",
+        argv=[str(bin_rel), "ler", "platafirma-casa", "doc.md"],
+        binario=bin_rel,
+        sessao_id="s-200k",
+        alca="release ler platafirma-casa doc.md",
+        derrame_dir=tmp_path / "derrame",
+        ledger_dir=tmp_path / "ledger",
+    )
+    assert inteiro["stdout"]["truncado"] is False
+    assert "aviso" not in inteiro
+    assert inteiro["stdout"]["texto"] == texto_150k
+
+    # Acima do teto: corta sem quebrar UTF-8 e coloca `aviso` e `como_ler` como primeiras chaves
+    multibyte = ("é€ção\n" * 1200)
+    cortado = podar_envelope(
+        {
+            "exit_code": 0,
+            "stdout": {"texto": multibyte, "truncado": False, "bytes_total": len(multibyte.encode("utf-8"))},
+        },
+        verbo="release",
+        argv=[str(bin_rel), "ler", "platafirma-casa", "grande.md"],
+        binario=bin_rel,
+        sessao_id="s-200k",
+        alca="release ler platafirma-casa grande.md",
+        derrame_dir=tmp_path / "derrame",
+        ledger_dir=tmp_path / "ledger",
+        cap=2048,
+    )
+    chaves = list(cortado.keys())
+    assert chaves[0] == "aviso"
+    assert chaves[1] == "como_ler"
+    assert "AVISO: saída cortada pelo teto da poda" in cortado["aviso"]
+    assert cortado["como_ler"].startswith('ler_arquivo(caminho="')
+    assert "offset=" in cortado["como_ler"]
+    assert "[AVISO: cortado por teto de 2048 bytes" in cortado["stdout"]["texto"]
+    assert "\ufffd" not in cortado["stdout"]["texto"]
+    assert "AVISO: saída cortada por teto" in cortado["poda_aviso"]
+    assert Path(cortado["stdout"]["cru"]).read_text(encoding="utf-8") == multibyte
+
+
+def test_regressao_4433_pipe_ja_truncado_no_executor_emite_aviso_e_preserva_cru(tmp_path: Path):
+    """Causa-raiz do #4433 (#5582): quando ExecutorVerbos já truncou stdout no teto de pipe,
+    `len(texto) == cap` fazia a poda achar que cabia no teto e suprimir o aviso (ou sobrescrever o cru)."""
+    bin_rel = tmp_path / "release"
+    bin_rel.write_text("#!/bin/sh\n# forma: texto\n# atos: ler (leitura, operacao)\n", encoding="utf-8")
+    bin_rel.chmod(0o755)
+
+    cru_completo = tmp_path / "executor-cru-completo.txt"
+    total_bytes = 260_000
+    conteudo_total = ("linha completa do arquivo grande\n" * 8000)[:total_bytes]
+    cru_completo.write_text(conteudo_total, encoding="utf-8")
+
+    cap = 4096
+    prefixo_pipe = conteudo_total[:cap]  # exatamente == cap, como vinha de _drenar_pipe!
+    out = podar_envelope(
+        {
+            "exit_code": 0,
+            "stdout": {
+                "texto": prefixo_pipe,
+                "truncado": True,
+                "bytes_total": len(conteudo_total.encode("utf-8")),
+                "cru": str(cru_completo),
+            },
+        },
+        verbo="release",
+        argv=[str(bin_rel), "ler", "platafirma-harness", "bin/repo"],
+        binario=bin_rel,
+        sessao_id="s-pipe",
+        alca="release ler platafirma-harness bin/repo",
+        derrame_dir=tmp_path / "derrame",
+        ledger_dir=tmp_path / "ledger",
+        cap=cap,
+    )
+    assert list(out.keys())[0] == "aviso"
+    assert out["poda"]["modo"] == "corte"
+    assert out["poda"]["bytes_produzidos"] == len(conteudo_total.encode("utf-8"))
+    assert out["stdout"]["truncado"] is True
+    assert out["stdout"]["cru"] == str(cru_completo)
+    assert Path(out["stdout"]["cru"]).read_text(encoding="utf-8") == conteudo_total
+    assert str(cru_completo) in out["como_ler"]
+    assert "[AVISO: cortado por teto" in out["stdout"]["texto"]
+    assert "AVISO: saída cortada por teto" in out["poda_aviso"]

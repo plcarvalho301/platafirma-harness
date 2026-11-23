@@ -36,6 +36,7 @@ from .morada import (
 # --- réguas da spec (§13.1) --------------------------------------------------------------------
 ORCAMENTO_PADRAO = 40_000
 ORCAMENTO_MAX = 200_000
+INTEIRO_MAX = 16 * 1024 * 1024       # modo inteiro (`inteiro=True`), limitado à mesma guarda de UTF-16/32
 VARREDURA_MAX = 256 * 1024 * 1024    # acima disto, versão por stat e varredura até a página
 UTF16_MAX = 16 * 1024 * 1024         # transcodificação em memória de UTF-16/32
 SUMARIO_MAX = 8 * 1024 * 1024
@@ -903,6 +904,7 @@ class _Pedido:
     dpi: int
     membro: str | None
     termo: str
+    inteiro: bool = False
     linhas: Any = None
     nega: Any = None
     abre: Any = open
@@ -941,7 +943,8 @@ def _valida_modo_paginas(
 def _valida_opcoes(p: Path, opcoes: dict[str, Any]) -> _Pedido | dict:
     linhas = opcoes.get("linhas")
     modo = opcoes.get("modo", "texto")
-    max_bytes = opcoes.get("max_bytes", ORCAMENTO_PADRAO)
+    inteiro = bool(opcoes.get("inteiro", False))
+    max_bytes_raw = opcoes.get("max_bytes")
     offset = opcoes.get("offset")
     encoding = opcoes.get("encoding")
     paginas = opcoes.get("paginas")
@@ -961,8 +964,13 @@ def _valida_opcoes(p: Path, opcoes: dict[str, Any]) -> _Pedido | dict:
             encoding = codecs.lookup(encoding).name
         except LookupError:
             return _erro(f"encoding={encoding!r} desconhecido", "gramatica")
-    orcamento = max(1, min(int(max_bytes or ORCAMENTO_PADRAO), ORCAMENTO_MAX))
-    pedido_bytes = max_bytes if max_bytes and max_bytes != ORCAMENTO_PADRAO else None
+    if inteiro and max_bytes_raw is None:
+        orcamento = INTEIRO_MAX
+        pedido_bytes = None
+    else:
+        max_bytes = ORCAMENTO_PADRAO if max_bytes_raw is None else max_bytes_raw
+        orcamento = max(1, min(int(max_bytes or ORCAMENTO_PADRAO), ORCAMENTO_MAX))
+        pedido_bytes = max_bytes if max_bytes and max_bytes != ORCAMENTO_PADRAO else None
     return _Pedido(
         curto=curto,
         faixa=faixa,
@@ -976,6 +984,7 @@ def _valida_opcoes(p: Path, opcoes: dict[str, Any]) -> _Pedido | dict:
         dpi=dpi,
         membro=membro,
         termo=opcoes.get("termo", ""),
+        inteiro=inteiro,
         linhas=linhas,
         nega=opcoes.get("nega"),
         abre=opcoes.get("abre", open),
@@ -1035,6 +1044,28 @@ def le(p: Any, **opcoes: Any) -> dict:
             cura=f'{TOOL}(caminho="{p}")',
         )
     return _le_estavel(p, ped)
+
+
+def le_memoria(dados: bytes, nome: str = "memoria.txt", **opcoes: Any) -> dict:
+    """Lê bytes já em memória pela mesma pipeline de fatiamento e encoding de `le`."""
+    p = Path(nome)
+    ped = _valida_opcoes(p, opcoes)
+    if isinstance(ped, dict):
+        return ped
+    if ped.termo:
+        return _erro(
+            "termo só se aplica a diretório: filtra a listagem pelo nome",
+            "gramatica",
+            caminho=str(p),
+            cura=f'{TOOL}(caminho="{p}")',
+        )
+    fonte = io.BytesIO(dados)
+    idx = varre(fonte)
+    tp = afina_tipo(tipo_real(idx.cabeca, p.name), fonte)
+    r = _le_corpo(fonte, p, idx, tp, (ped, dados))
+    if ped.offset is not None and ped.linhas not in (None, "") and "cabecalho" in r:
+        r["cabecalho"] += " · linhas ignorado: vale offset"
+    return r
 
 
 def _fatia_diretorio(p: Path, dados: bytes, idx: Indice, ped: _Pedido, n: int) -> Fatia | dict:
@@ -1412,6 +1443,14 @@ def _le_corpo(fh: Any, p: Path, idx: Indice, tp: dict, par: tuple[_Pedido, bytes
             },
         )
     if idx.tamanho == 0:
+        if ped.offset is not None and ped.offset > 0:
+            return _erro(
+                "offset além do fim",
+                "faixa",
+                caminho=str(p),
+                bytes_total=0,
+                cura=f'{TOOL}(caminho="{p}", linhas="-100")',
+            )
         r = {
             "cabecalho": " · ".join(
                 [*avisos, ped.curto, tipo, "arquivo vazio (0 bytes)", f"versão {idx.versao}"]
@@ -1428,6 +1467,7 @@ def _le_corpo(fh: Any, p: Path, idx: Indice, tp: dict, par: tuple[_Pedido, bytes
         return f
     extra_args = {
         **({"max_bytes": ped.orcamento} if ped.pedido_bytes else {}),
+        **({"inteiro": True} if ped.inteiro and not ped.pedido_bytes else {}),
         **({"encoding": ped.pedido} if ped.pedido else {}),
     }
     return _monta_pagina(
@@ -1533,6 +1573,8 @@ def _monta_pagina(f: Fatia, idx: Indice, tp: dict, p: Path, ctx: dict[str, Any])
         "linhas_total": total_l,
         "bytes": [f.ini, f.fim],
     }
+    if f.linha_inicio is not None:
+        r["linha_inicio"] = f.linha_inicio
     if ll:
         r["linha_longa"] = ll
     if (f.ini > 0 or not no_fim) and tp["tipo"] in _ANALISADOR and idx.tamanho <= SUMARIO_MAX:
@@ -1909,6 +1951,7 @@ def _pagina_formato(doc: Any, p: Path, idx: Indice, tp: dict, ctx: dict[str, Any
     com_unidade = doc.unidade not in ("nenhuma", "imagem")
     extra_args = {
         **({"max_bytes": ped.orcamento} if ped.pedido_bytes else {}),
+        **({"inteiro": True} if ped.inteiro and not ped.pedido_bytes else {}),
         **({"encoding": ped.pedido} if ped.pedido else {}),
         **({"modo": "visivel"} if ped.modo == "visivel" else {}),
     }
@@ -2202,6 +2245,7 @@ def ler(caminho: str | Path, **opcoes: Any) -> dict[str, Any]:
         )
 
     max_bytes = opcoes.get("max_bytes")
+    inteiro = bool(opcoes.get("inteiro", False))
     dpi = opcoes.get("dpi")
     return le(
         p,
@@ -2211,7 +2255,8 @@ def ler(caminho: str | Path, **opcoes: Any) -> dict[str, Any]:
         modo=opcoes.get("modo", "texto"),
         encoding=opcoes.get("encoding"),
         dpi=_formatos.DPI_PADRAO if dpi is None else dpi,
-        max_bytes=ORCAMENTO_PADRAO if max_bytes is None else max_bytes,
+        max_bytes=(None if inteiro else ORCAMENTO_PADRAO) if max_bytes is None else max_bytes,
+        inteiro=inteiro,
         versao=opcoes.get("versao"),
         offset=opcoes.get("offset"),
         membro=membro_ef,

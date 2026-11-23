@@ -473,57 +473,54 @@ def banco_com_corpo(monkeypatch):
 CHAVE_LONGA = "2026-09-29-conformacao-0118-0119"
 
 
-def test_ler_documento_longo_trunca_e_diz_como_continuar(banco_com_corpo, monkeypatch, capsys):
-    # a porta corta em 50 KB sem aviso: o verbo tem de paginar ANTES e dizer o que falta
-    assert casa.PAGINA < 50_000
-    monkeypatch.setattr(casa, "PAGINA", 100)
-    banco_com_corpo["texto"] = "".join(f"ponto {i:03d}\n" for i in range(40))   # 400 bytes
+def test_ler_documento_longo_sai_inteiro_por_padrao_sem_truncar(banco_com_corpo, capsys):
+    assert not hasattr(casa, "PAGINA")
+    banco_com_corpo["texto"] = "".join(f"ponto {i:04d} " + "x" * 88 + "\n" for i in range(1200))
+    assert len(banco_com_corpo["texto"].encode("utf-8")) == 120_000
     assert casa.ler("levantamento", CHAVE_LONGA, False) == 0
     out = capsys.readouterr().out
-    assert "ponto 000" in out and "ponto 039" not in out
-    assert out.rstrip("\n").splitlines()[-1].startswith(
-        "truncado em 100 de 400 bytes; continue com --offset 100")
-    # a última página não leva aviso
-    assert casa.ler("levantamento", CHAVE_LONGA, False, offset=300) == 0
-    out = capsys.readouterr().out
-    assert "ponto 039" in out and "truncado em" not in out
+    assert "ponto 0000" in out and "ponto 1199" in out
+    assert "truncado em" not in out
 
 
-def test_ler_por_offset_reconstroi_o_documento_inteiro(banco_com_corpo, monkeypatch, capsys):
-    # texto com multibyte (ç, ã, —): o corte cai na fronteira de caractere, nada se perde nem repete
+def test_ler_por_max_bytes_e_offset_reconstroi_o_documento_inteiro(banco_com_corpo, capsys):
+    # texto com multibyte (ç, ã, —): `lib/leitura` corta na fronteira UTF-8 sem perder nem repetir bytes
     original = "".join(f"ponto {i:02d} — ação, conformação e decisão\n" for i in range(18))
     banco_com_corpo["texto"] = original
-    monkeypatch.setattr(casa, "PAGINA", 97)
-    pedacos, avisos, offset = [], [], 0
+    pedacos, offset = [], 0
     for _ in range(100):
-        assert casa.ler("levantamento", CHAVE_LONGA, False, offset=offset) == 0
-        linhas = capsys.readouterr().out.split("\n")[1:]          # sem a marca
-        aviso = [l for l in linhas if l.startswith("truncado em ")]
-        pedacos.append("\n".join(l for l in linhas if l not in aviso).rstrip("\n"))
-        if not aviso:
+        assert casa.ler("levantamento", CHAVE_LONGA, True, offset=offset, max_bytes=97, inteiro=False) == 0
+        doc = json.loads(capsys.readouterr().out)
+        assert "\ufffd" not in doc["corpo"]
+        assert len(doc["corpo"].encode("utf-8")) <= 97
+        pedacos.append(doc["corpo"])
+        if doc["next_offset"] is None:
             break
-        avisos.append(aviso[0])
-        offset = int(aviso[0].split("--offset ")[1].split()[0])
+        offset = doc["next_offset"]
     else:
-        raise AssertionError("paginacao nao termina")
-    assert len(pedacos) > 3 and len(avisos) == len(pedacos) - 1
-    assert "".join(pedacos).replace("\n", "") == original.replace("\n", "")
-    total = len(original.encode("utf-8"))
-    assert all(f" de {total} bytes; continue com --offset " in a for a in avisos)
-    # o next_offset é byte de verdade: cada trecho cabe na página
-    assert all(len(p.encode("utf-8")) <= 97 for p in pedacos)
+        raise AssertionError("fatiamento por offset nao termina")
+    assert len(pedacos) > 3
+    assert "".join(pedacos) == original
 
 
-def test_ler_json_traz_next_offset_como_o_read_file(banco_com_corpo, monkeypatch, capsys):
-    monkeypatch.setattr(casa, "PAGINA", 50)
+def test_ler_json_inteiro_por_padrao_e_suporta_max_bytes_e_linhas(banco_com_corpo, capsys):
     banco_com_corpo["texto"] = "x" * 120
     assert casa.ler("levantamento", CHAVE_LONGA, True) == 0
+    doc_inteiro = json.loads(capsys.readouterr().out)
+    assert doc_inteiro["corpo"] == "x" * 120
+    assert doc_inteiro["truncado"] is False and doc_inteiro["next_offset"] is None
+
+    assert casa.ler("levantamento", CHAVE_LONGA, True, max_bytes=50, inteiro=False) == 0
     doc = json.loads(capsys.readouterr().out)
     assert doc["corpo"] == "x" * 50 and doc["truncado"] is True
     assert doc["bytes_total"] == 120 and doc["next_offset"] == 50
-    assert casa.ler("levantamento", CHAVE_LONGA, True, offset=100) == 0
-    doc = json.loads(capsys.readouterr().out)
-    assert doc["corpo"] == "x" * 20 and doc["truncado"] is False and doc["next_offset"] is None
+    assert casa.ler("levantamento", CHAVE_LONGA, True, offset=100, max_bytes=50, inteiro=False) == 0
+    doc2 = json.loads(capsys.readouterr().out)
+    assert doc2["corpo"] == "x" * 20 and doc2["truncado"] is False and doc2["next_offset"] is None
+
+    banco_com_corpo["texto"] = "l1\nl2\nl3\nl4\n"
+    assert casa.ler("levantamento", CHAVE_LONGA, False, linhas="2-3") == 0
+    assert capsys.readouterr().out.split("\n", 1)[1] == "l2\nl3\n"
 
 
 def test_ler_offset_alem_do_fim_sai_2(banco_com_corpo, capsys):
@@ -542,14 +539,15 @@ def test_ler_documento_curto_sai_igual_a_antes(banco_com_corpo, capsys):
 
 def test_main_ler_aceita_offset_e_recusa_o_malformado(monkeypatch):
     chamadas = []
-    monkeypatch.setattr(casa, "ler", lambda e, s, j, situacao=False, offset=0, cru=False:
-                        chamadas.append((e, s, j, offset)) or 0)
-    casa.main(["ler", "levantamento", "2026-09-29-x", "--offset", "45000"])
-    casa.main(["ler", "--offset", "7", "levantamento", "2026-09-29-x", "--json"])
-    assert chamadas == [("levantamento", "2026-09-29-x", False, 45000),
-                        ("levantamento", "2026-09-29-x", True, 7)]
+    monkeypatch.setattr(casa, "ler", lambda e, s, j, situacao=False, offset=0, cru=False, **kw:
+                        chamadas.append((e, s, j, offset, kw)) or 0)
+    casa.main(["ler", "levantamento", "2026-09-29-x", "--offset", "1200"])
+    casa.main(["ler", "--offset", "7", "--linhas", "2-5", "levantamento", "2026-09-29-x", "--json"])
+    assert chamadas == [("levantamento", "2026-09-29-x", False, 1200, {}),
+                        ("levantamento", "2026-09-29-x", True, 7, {"linhas": "2-5"})]
     for ruim in (["ler", "a", "b", "--offset"], ["ler", "a", "b", "--offset", "x"],
-                 ["ler", "a", "b", "--offset", "-1"], ["listar", "a", "--offset", "1"]):
+                 ["ler", "a", "b", "--offset", "-1"], ["listar", "a", "--offset", "1"],
+                 ["listar", "a", "--linhas", "1-5"], ["ler", "a", "b", "--max-bytes", "0"]):
         with pytest.raises(SystemExit) as e:
             casa.main(ruim)
         assert e.value.code == 2, ruim

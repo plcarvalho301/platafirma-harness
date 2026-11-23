@@ -130,12 +130,13 @@ uso:
                                           listar, listar-tudo, ler, comentarios, sub, espera-dono,
                                           --quadro e api GET o tiram da lista, e o pedido direto
                                           dele sai recusado com exit 1 (ordem do dono, 17/11/2026)
-  tarefas ler|ver <id> [--cabecalho] [--todas-filhas]
+  tarefas ler|ver <id> [--cabecalho] [--todas-filhas] [--linhas <faixa>] [--offset <bytes>] [--max-bytes <n>] [--inteiro]
                                           item em texto: cabeçalho (originação, executor,
                                           quem bloqueia e por quem é bloqueado), ancestrais,
                                           corpo e filhas abertas em ordem de dependência (na
                                           story, as tasks dela, todas, com o estado de cada uma);
-                                          com --cabecalho, devolve só o cabeçalho
+                                          com --cabecalho, devolve só o cabeçalho; fatiamento
+                                          por linhas/bytes via lib/leitura (inteiro por padrão)
   tarefas criar "<título>" [--desc "<txt>"|--desc-stdin]
                 [--nivel épico|feature|story|task|ideia] [--cadeira <c>] [--pai <id>] [--incidente]
                 [--originacao negocio|tecnico|incidente] [--executor <c>]
@@ -198,11 +199,13 @@ uso:
                                           converte em HTML como na criação; a API recusa trocar
                                           o tipo ou mexer no fecho, R13)
   tarefas comentarios <id> [--indice] [--busca <termo>] [--arvore] [--id <n>]... [--desde <n>] [--ultimos <k>]
+                           [--linhas <faixa>] [--offset <bytes>] [--max-bytes <n>] [--inteiro]
                                           lista os comentários do item, em ordem. --busca <termo>
                                           filtra as linhas que casam (id, card e linha); --arvore
-                                          desce a subárvore inteira. A porta corta a saída em ~50 KB:
-                                          --indice dá uma linha por comentário; --id lê só aquele(s);
-                                          --desde <n> os de id >= n; --ultimos <k> os k mais novos
+                                          desce a subárvore inteira. --indice dá uma linha por
+                                          comentário; --id lê só aquele(s); --desde <n> os de
+                                          id >= n; --ultimos <k> os k mais novos; --linhas e
+                                          --offset fatiam via lib/leitura
   tarefas mover <id> <estado> [--motivo "<txt>"] [--englobado-em <id>]
                                           move o card pelo fluxo; a recusa diz para onde
                                           se PODE ir a partir do estado atual. Item com
@@ -1008,11 +1011,19 @@ mapa_de() { # mapa_de <id>
 # única linha sobre a qual alguém pode agir agora. Respondido é registro; pendente é dívida.
 ler() {
   local id="" so_cabecalho=0 direto=0 todas_filhas=0
+  local -a leitura_args=()
+  local lib_harness
+  lib_harness="$(dirname "$(readlink -f "$0")")/../lib"
   while [ $# -gt 0 ]; do
     case "$1" in
       --cabecalho) so_cabecalho=1; shift ;;
       --direto) direto=1; shift ;;
       --todas-filhas) todas_filhas=1; shift ;;
+      --linhas|--offset|--max-bytes)
+        [ $# -ge 2 ] || { echo "tarefas ler: $1 pede valor" >&2; exit 2; }
+        leitura_args+=("$1" "$2"); shift 2 ;;
+      --inteiro|--numerar|-n)
+        leitura_args+=("$1"); shift ;;
       *)
         if [ -z "$id" ]; then
           id=$(so_id "$1")
@@ -1024,7 +1035,10 @@ ler() {
         ;;
     esac
   done
-  [ -n "$id" ] || { echo "uso: tarefas ler <id> [--cabecalho] [--direto] [--todas-filhas]" >&2; exit 2; }
+  [ -n "$id" ] || { echo "uso: tarefas ler <id> [--cabecalho] [--direto] [--todas-filhas] [--linhas <faixa>] [--offset <bytes>] [--max-bytes <n>] [--inteiro]" >&2; exit 2; }
+  if [ "${#leitura_args[@]}" -gt 0 ]; then
+    PYTHONPATH="$lib_harness${PYTHONPATH:+:$PYTHONPATH}" python3 -m leitura.verbo --validar-opcoes --rotulo "tarefas ler" "${leitura_args[@]}" || exit $?
+  fi
   # UMA LEITURA SERVE A TUDO (card #3526): o detalhe do item já traz o vínculo (`bloqueia`,
   # `bloqueado_por`, #3523) e, quando o item tem filha, `filhas` em ordem de dependência. Antes as
   # filhas vinham de uma segunda chamada que puxava o board inteiro e peneirava por pai.
@@ -1052,63 +1066,65 @@ ler() {
       + (if ((.bloqueado_por // []) | length) > 0
          then "\n  bloqueado por: " + ([.bloqueado_por[] | "\(rot) (\(.estado))"] | join(", ")) else "" end)
       + (([(.bloqueado_por // [])[] | select(.estado as $e | ($term | index([$e])) == null)] | if length > 0
-         then "\n  travada por: " + ([.[] | "\(rot) (\(.estado))"] | join(", ")) else "" end))' | para_texto
+         then "\n  travada por: " + ([.[] | "\(rot) (\(.estado))"] | join(", ")) else "" end))' | para_texto \
+      | PYTHONPATH="$lib_harness${PYTHONPATH:+:$PYTHONPATH}" python3 -m leitura.verbo --stdin --rotulo "tarefas ler" "${leitura_args[@]}"
     return 0
   fi
-  printf '%s' "$j" | jq -r --argjson term "$term" "$JQ_ROT"'
-    "# \(.titulo)",
-    "\(rot) · \(.nivel_nome) · "
-    + (if .estado_derivado != null
-       then "\(.estado_derivado) [derivado; cru: \(.estado_nome) (\(.estado_fase))]"
-       else "\(.estado_nome) (\(.estado_fase))"
-       end)
-    + " · cadeira: \(.cadeira // "—")"
-    + (if .tipo_demanda then " · originação: \(.tipo_demanda)" else "" end)
-    + (if .executor then " · executor: \(.executor)" else "" end)
-    + (if (.ancestrais|length) > 0 then "\n  em: " + ([.ancestrais[] | "#\(.id) \(.titulo)"] | join(" > ")) else "" end)
-    + (if .resolvido_de then "\n  resolvido de: #\(.resolvido_de) (englobado neste item; use --direto para ler o original)" else "" end)
-    + (if ((.bloqueia // []) | length) > 0
-       then "\n  bloqueia: " + ([.bloqueia[] | "\(rot) (\(.estado))"] | join(", ")) else "" end)
-    + (if ((.bloqueado_por // []) | length) > 0
-       then "\n  bloqueado por: " + ([.bloqueado_por[] | "\(rot) (\(.estado))"] | join(", ")) else "" end)
-    + (([(.bloqueado_por // [])[] | select(.estado as $e | ($term | index([$e])) == null)] | if length > 0
-       then "\n  travada por: " + ([.[] | "\(rot) (\(.estado))"] | join(", ")) else "" end)),
-    "",
-    (if ((.sign_offs // []) | length) > 0 then
-       (["sign-off:"]
-        + [.sign_offs[] | select(.decisao == null) | "  PENDENTE  \(.aprovador)"]
-        + [.sign_offs[] | select(.decisao != null)
-           | "  \(.decisao | ascii_upcase)  \(.aprovador)"
-             + (if .texto then " — \(.texto)" else "" end)]
-        + [""])
-       | join("\n")
-     else empty end),
-    (.descricao // "")' | para_texto
-  # Story #4317 (feature 4314): a feature mostra a linha das contagens do inventário, sem os
-  # itens, e a story mostra as regras que cumpre, inteiras, e os produtos documentais que muda.
-  _inventario_na_leitura "$j"
-  # FILHAS — card lido sem ver o que pende embaixo não serve para repriorizar:
-  # ler um épico/feature e não enxergar a subárvore era o furo. Puxa os filhos
-  # diretos, um por linha (id · estado · cadeira · título), na ordem de dependência que a API
-  # já entrega em `.filhas` (card #3523), com a travada marcada. SÓ ABERTAS: terminal
-  # (entregue, englobada, etc.) fica fora — a mesma régua de fase que `listar` aplica, pela
-  # mesma razão. Filha entregue é auditoria, e auditoria é `listar-tudo`, não leitura de card.
-  # Card #4223 (R37): as filhas de uma STORY são as tasks dela, e saem todas, na ordem, com o
-  # estado de cada uma (`tasks_do_json`); as de feature e de épico seguem só as abertas.
-  if [ "$(printf '%s' "$j" | jq -r '.nivel')" = "2" ]; then
-    local tasks; tasks=$(tasks_do_json "$j" "$term")
-    if [ -n "$tasks" ]; then printf '\n%s\n' "$tasks"; fi
-  elif [ "$todas_filhas" -eq 1 ]; then
-    local filhas; filhas=$(filhas_do_json "$j" --todas)
-    if [ -n "$filhas" ]; then printf '\nfilhas (todas):\n%s\n' "$filhas"; fi
-  else
-    local filhas; filhas=$(filhas_do_json "$j")
-    if [ -n "$filhas" ]; then printf '\nfilhas (abertas):\n%s\n' "$filhas"; fi
-  fi
-  # Sem filha aberta o `[ -n ]` acima devolve 1 e, sendo o ultimo comando da funcao sob
-  # `set -e`, o verbo saia com exit 1 DEPOIS de imprimir o card inteiro. Medido em
-  # 11/09/2026: 24 dos 33 "erros" de tarefas no ops log eram isto (metrica casos).
-  return 0
+  {
+    printf '%s' "$j" | jq -r --argjson term "$term" "$JQ_ROT"'
+      "# \(.titulo)",
+      "\(rot) · \(.nivel_nome) · "
+      + (if .estado_derivado != null
+         then "\(.estado_derivado) [derivado; cru: \(.estado_nome) (\(.estado_fase))]"
+         else "\(.estado_nome) (\(.estado_fase))"
+         end)
+      + " · cadeira: \(.cadeira // "—")"
+      + (if .tipo_demanda then " · originação: \(.tipo_demanda)" else "" end)
+      + (if .executor then " · executor: \(.executor)" else "" end)
+      + (if (.ancestrais|length) > 0 then "\n  em: " + ([.ancestrais[] | "#\(.id) \(.titulo)"] | join(" > ")) else "" end)
+      + (if .resolvido_de then "\n  resolvido de: #\(.resolvido_de) (englobado neste item; use --direto para ler o original)" else "" end)
+      + (if ((.bloqueia // []) | length) > 0
+         then "\n  bloqueia: " + ([.bloqueia[] | "\(rot) (\(.estado))"] | join(", ")) else "" end)
+      + (if ((.bloqueado_por // []) | length) > 0
+         then "\n  bloqueado por: " + ([.bloqueado_por[] | "\(rot) (\(.estado))"] | join(", ")) else "" end)
+      + (([(.bloqueado_por // [])[] | select(.estado as $e | ($term | index([$e])) == null)] | if length > 0
+         then "\n  travada por: " + ([.[] | "\(rot) (\(.estado))"] | join(", ")) else "" end)),
+      "",
+      (if ((.sign_offs // []) | length) > 0 then
+         (["sign-off:"]
+          + [.sign_offs[] | select(.decisao == null) | "  PENDENTE  \(.aprovador)"]
+          + [.sign_offs[] | select(.decisao != null)
+             | "  \(.decisao | ascii_upcase)  \(.aprovador)"
+               + (if .texto then " — \(.texto)" else "" end)]
+          + [""])
+         | join("\n")
+       else empty end),
+      (.descricao // "")' | para_texto
+    # Story #4317 (feature 4314): a feature mostra a linha das contagens do inventário, sem os
+    # itens, e a story mostra as regras que cumpre, inteiras, e os produtos documentais que muda.
+    _inventario_na_leitura "$j"
+    # FILHAS — card lido sem ver o que pende embaixo não serve para repriorizar:
+    # ler um épico/feature e não enxergar a subárvore era o furo. Puxa os filhos
+    # diretos, um por linha (id · estado · cadeira · título), na ordem de dependência que a API
+    # já entrega em `.filhas` (card #3523), com a travada marcada. SÓ ABERTAS: terminal
+    # (entregue, englobada, etc.) fica fora — a mesma régua de fase que `listar` aplica, pela
+    # mesma razão. Filha entregue é auditoria, e auditoria é `listar-tudo`, não leitura de card.
+    # Card #4223 (R37): as filhas de uma STORY são as tasks dela, e saem todas, na ordem, com o
+    # estado de cada uma (`tasks_do_json`); as de feature e de épico seguem só as abertas.
+    if [ "$(printf '%s' "$j" | jq -r '.nivel')" = "2" ]; then
+      local tasks; tasks=$(tasks_do_json "$j" "$term")
+      if [ -n "$tasks" ]; then printf '\n%s\n' "$tasks"; fi
+    elif [ "$todas_filhas" -eq 1 ]; then
+      local filhas; filhas=$(filhas_do_json "$j" --todas)
+      if [ -n "$filhas" ]; then printf '\nfilhas (todas):\n%s\n' "$filhas"; fi
+    else
+      local filhas; filhas=$(filhas_do_json "$j")
+      if [ -n "$filhas" ]; then printf '\nfilhas (abertas):\n%s\n' "$filhas"; fi
+    fi
+    # Sem filha aberta o `[ -n ]` acima devolve 1 e, sendo o ultimo comando do bloco sob
+    # `set -e`, sairia com exit 1 DEPOIS de imprimir o card inteiro (card #11/09/2026).
+    true
+  } | PYTHONPATH="$lib_harness${PYTHONPATH:+:$PYTHONPATH}" python3 -m leitura.verbo --stdin --rotulo "tarefas ler" "${leitura_args[@]}"
 }
 
 # Filhas DIRETAS ainda abertas, uma por linha (id · estado · cadeira · título), lidas do campo
@@ -1624,13 +1640,14 @@ fechar_comentario() {
   esac
 }
 
-# Sem opção, lista tudo, no formato de sempre (o lint de card lê esta saída). A porta corta a saída
-# de um verbo em ~50 KB, e card com muita conversa passa disso: o corte engole os comentários do
-# fim, justamente os mais novos. Daí as fatias — a API devolve tudo de uma vez, quem recorta é este
-# verbo, e cada recorte cabe na porta.
+# Sem opção, lista tudo no formato padrão (o lint de card lê esta saída); aceita filtros semânticos
+# (--indice, --busca, --arvore, --id, --desde, --ultimos) e fatiamento por linhas/bytes via lib/leitura.
 comentarios() {
-  local uso='uso: tarefas comentarios <id> [--indice] [--busca <termo>] [--arvore] [--id <n>]... [--desde <n>] [--ultimos <k>]'
+  local uso='uso: tarefas comentarios <id> [--indice] [--busca <termo>] [--arvore] [--id <n>]... [--desde <n>] [--ultimos <k>] [--linhas <faixa>] [--offset <bytes>] [--max-bytes <n>] [--inteiro]'
   local id='' ids='[]' desde=0 ultimos=0 indice=false arvore=false busca_termo=''
+  local -a leitura_args=()
+  local lib_harness
+  lib_harness="$(dirname "$(readlink -f "$0")")/../lib"
   local numero='^[0-9]+$'
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -1647,6 +1664,11 @@ comentarios() {
           --ultimos) ultimos=$2 ;;
         esac
         shift 2 ;;
+      --linhas|--offset|--max-bytes)
+        [ $# -ge 2 ] || { echo "tarefas comentarios: $1 pede valor" >&2; echo "$uso" >&2; exit 2; }
+        leitura_args+=("$1" "$2"); shift 2 ;;
+      --inteiro|--numerar|-n)
+        leitura_args+=("$1"); shift ;;
       --*) echo "tarefas comentarios: opção desconhecida: $1" >&2; echo "$uso" >&2; exit 2 ;;
       *)
         [ -z "$id" ] || { echo "tarefas comentarios: argumento inesperado: $1" >&2; echo "$uso" >&2; exit 2; }
@@ -1655,6 +1677,9 @@ comentarios() {
     esac
   done
   [ -n "$id" ] || { echo "$uso" >&2; exit 2; }
+  if [ "${#leitura_args[@]}" -gt 0 ]; then
+    PYTHONPATH="$lib_harness${PYTHONPATH:+:$PYTHONPATH}" python3 -m leitura.verbo --validar-opcoes --rotulo "tarefas comentarios" "${leitura_args[@]}" || exit $?
+  fi
   # Portão do funil: o card terminal sai recusado aqui, limpo, antes dos encadeamentos abaixo
   # (que, recusados no meio do pipe, imprimiam o traceback do conversor junto da recusa).
   if [ "$_SO_FUNIL" = 1 ]; then busca GET "/itens/$id" >/dev/null || return 1; fi
@@ -1793,11 +1818,8 @@ else:
           end' | para_texto)
     fi
   fi
-  bytes=$(printf '%s' "$saida" | wc -c)
-  if [ "$bytes" -gt 45000 ]; then
-    echo "aviso: ${bytes} bytes; a porta corta a saída em 50000 e perde o fim. Leia por partes: tarefas comentarios $id --indice, depois --id <n>, --desde <n> ou --ultimos <k>"
-  fi
-  printf '%s\n' "$saida"
+  printf '%s\n' "$saida" \
+    | PYTHONPATH="$lib_harness${PYTHONPATH:+:$PYTHONPATH}" python3 -m leitura.verbo --stdin --rotulo "tarefas comentarios" "${leitura_args[@]}"
 }
 
 # MOVER É O ATO, E O NOME É O ATO — card #224. A capacidade sempre existiu: o PATCH aceita

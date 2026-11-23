@@ -18,7 +18,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-CAP_PADRAO = 50 * 1024
+CAP_PADRAO = 200 * 1024
 LINHA_LONGA_LIMITE = 2_000
 REPETICAO_MIN = 4
 LEDGER_DISTANCIA_MAX = 15
@@ -299,36 +299,109 @@ def derrama(
     return str(caminho)
 
 
+def _prefixo_utf8(bruto: bytes, limite: int) -> bytes:
+    """Recorta `bruto[:limite]` sem partir sequência UTF-8 multibyte no fim."""
+    if limite >= len(bruto):
+        return bruto
+    if limite <= 0:
+        return b""
+    fatia = bruto[:limite]
+    n = len(fatia)
+    if fatia[-1] < 0x80:
+        return fatia
+    i = n - 1
+    while i > 0 and (n - 1 - i) < 3 and 0x80 <= fatia[i] <= 0xBF:
+        i -= 1
+    lider = fatia[i]
+    if lider < 0xC0:
+        return fatia
+    esperado = 4 if lider >= 0xF0 else (3 if lider >= 0xE0 else 2)
+    if n - i < esperado:
+        return fatia[:i]
+    return fatia
+
+
+def _sufixo_utf8(bruto: bytes, limite: int) -> bytes:
+    """Recorta os últimos `limite` bytes avançando até o início de caractere UTF-8."""
+    if limite >= len(bruto):
+        return bruto
+    if limite <= 0:
+        return b""
+    fatia = bruto[-limite:]
+    i = 0
+    while i < len(fatia) and i < 3 and 0x80 <= fatia[i] <= 0xBF:
+        i += 1
+    return fatia[i:]
+
+
+def _chamada_continuacao(alca: str | None, *, offset_continuacao: int | None = None) -> str | None:
+    if not alca:
+        return None
+    if offset_continuacao is not None and offset_continuacao > 0:
+        return f'ler_arquivo(caminho="{alca}", offset={offset_continuacao})'
+    return f'ler_arquivo(caminho="{alca}")'
+
+
 def corta(
     texto: str,
     cap: int,
     *,
     cauda: bool = False,
     alca: str | None = None,
+    forcar_corte: bool = False,
+    bytes_total_origem: int | None = None,
+    offset_exato: bool = False,
 ) -> tuple[str, dict[str, Any]]:
     bruto = texto.encode("utf-8", "replace")
-    if len(bruto) <= cap:
+    total_efetivo = max(len(bruto), int(bytes_total_origem or 0))
+    if len(bruto) <= cap and not forcar_corte:
         return texto, {"cortado": False, "bytes_omitidos": 0}
-    aviso = (
-        f"\n[… cortado por teto de {cap} bytes; inteiro em {alca} — ler_arquivo]\n"
-        if alca
-        else f"\n[… cortado por teto de {cap} bytes]\n"
-    )
-    aviso_b = aviso.encode("utf-8")
-    disponivel = max(256, cap - len(aviso_b))
+
+    # Reserva espaço para o aviso de corte dentro do próprio teto quando possível.
+    reserva_estimada = 240 + (len(alca) * 2 if alca else 0)
+    disponivel = max(128, cap - reserva_estimada) if cap > reserva_estimada + 128 else max(64, cap)
+
     if cauda:
-        inicio = max(128, disponivel // 3)
-        fim = max(128, disponivel - inicio)
-        servir = (
-            bruto[:inicio].decode("utf-8", "replace")
-            + aviso
-            + bruto[-fim:].decode("utf-8", "replace")
+        inicio_lim = max(64, disponivel // 3)
+        fim_lim = max(64, disponivel - inicio_lim)
+        pref_b = _prefixo_utf8(bruto, inicio_lim)
+        suf_b = _sufixo_utf8(bruto, fim_lim)
+        bytes_mantidos = len(pref_b) + len(suf_b)
+        omitidos = max(1, total_efetivo - bytes_mantidos)
+        como_ler = _chamada_continuacao(alca)
+        aviso = (
+            f"\n[AVISO: cortado por teto de {cap} bytes ({omitidos} de {total_efetivo} bytes omitidos); "
+            f"inteiro em {alca} — {como_ler}]\n"
+            if alca
+            else f"\n[AVISO: cortado por teto de {cap} bytes ({omitidos} de {total_efetivo} bytes omitidos)]\n"
         )
-        omitidos = max(0, len(bruto) - inicio - fim)
-    else:
-        servir = bruto[:disponivel].decode("utf-8", "replace") + aviso
-        omitidos = max(0, len(bruto) - disponivel)
-    return servir, {"cortado": True, "bytes_omitidos": omitidos}
+        servir = pref_b.decode("utf-8", "replace") + aviso + suf_b.decode("utf-8", "replace")
+        return servir, {
+            "cortado": True,
+            "bytes_omitidos": omitidos,
+            "como_ler": como_ler,
+        }
+
+    pref_b = _prefixo_utf8(bruto, disponivel)
+    bytes_mantidos = len(pref_b)
+    omitidos = max(1, total_efetivo - bytes_mantidos)
+    como_ler = _chamada_continuacao(
+        alca,
+        offset_continuacao=bytes_mantidos if offset_exato else None,
+    )
+    aviso = (
+        f"\n[AVISO: cortado por teto de {cap} bytes ({omitidos} de {total_efetivo} bytes omitidos); "
+        f"inteiro em {alca} — {como_ler}]\n"
+        if alca
+        else f"\n[AVISO: cortado por teto de {cap} bytes ({omitidos} de {total_efetivo} bytes omitidos)]\n"
+    )
+    servir = pref_b.decode("utf-8", "replace") + aviso
+    return servir, {
+        "cortado": True,
+        "bytes_omitidos": omitidos,
+        "offset_continuacao": bytes_mantidos if offset_exato else None,
+        "como_ler": como_ler,
+    }
 
 
 class LedgerSessao:
@@ -419,9 +492,18 @@ def linha_humana(meta: dict[str, Any]) -> str:
         return f"poda: retorno semântico inteiro, sem corte — cru em {meta.get('alca')}"
     if modo == "corte":
         alca = meta.get("alca")
+        como_ler = meta.get("como_ler") or _chamada_continuacao(alca)
+        teto = meta.get("teto_bytes")
+        produzidos = meta.get("bytes_produzidos")
+        omitidos = meta.get("bytes_omitidos", 0)
+        detalhe = (
+            f"{omitidos} de {produzidos} bytes omitidos no teto de {teto} bytes"
+            if teto and produzidos
+            else f"{omitidos} bytes omitidos"
+        )
         return (
-            f"poda: {meta.get('bytes_omitidos', 0)} bytes omitidos"
-            + (f" — inteiro em {alca}" if alca else "")
+            f"poda — AVISO: saída cortada por teto ({detalhe})"
+            + (f" — inteiro em {alca} ({como_ler})" if alca and como_ler else "")
         )
     if meta.get("lavado"):
         return "poda: lavado (" + ", ".join(meta["lavado"]) + ")"
@@ -445,6 +527,9 @@ def podar_texto(
     escrita: bool = False,
     esquece: bool = False,
     distancia_max: int | None = None,
+    truncado_origem: bool = False,
+    bytes_origem: int | None = None,
+    cru_origem: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     giro = ledger.proximo_giro() if ledger is not None else 1
     lavado, rel = lavar(
@@ -453,12 +538,13 @@ def podar_texto(
         constitutiva=constitutiva,
         preservar_branco=preservar_branco,
     )
+    bytes_produzidos = max(int(bytes_origem or 0), rel["bytes_antes"])
     meta: dict[str, Any] = {
         "ato": tool,
         "giro": giro,
         "sha": sha_servido(lavado),
         "lavado": rel["classes"],
-        "bytes_produzidos": rel["bytes_antes"],
+        "bytes_produzidos": bytes_produzidos,
     }
     if cosmetica:
         meta["perfil"] = "cosmetica"
@@ -467,12 +553,18 @@ def podar_texto(
 
     nome_derrame = f"g{giro:05d}-stdout.txt"
     tira_conteudo = bool({"blob", "repeticao"} & set(rel["classes"]))
-    cru = derrama(derrame_dir, sessao_id, nome_derrame, texto) if tira_conteudo else None
+    if cru_origem:
+        cru: str | None = cru_origem
+    elif tira_conteudo:
+        cru = derrama(derrame_dir, sessao_id, nome_derrame, texto)
+    else:
+        cru = None
     if cru:
         meta["cru"] = cru
 
     servir = lavado
-    if ledger is not None:
+    # Saída já truncada pelo executor de pipe nunca pode ser resumida sem aviso de corte
+    if ledger is not None and not truncado_origem:
         dec = ledger.olha(
             alca,
             lavado,
@@ -491,24 +583,42 @@ def podar_texto(
             )
             meta["bytes_servidos"] = len(servir.encode("utf-8", "replace"))
             return servir, meta
+    elif ledger is not None:
+        meta["ledger"] = "escrita" if escrita else "novo"
 
+    precisa_cortar = truncado_origem or (len(servir.encode("utf-8", "replace")) > cap)
     caminho: str | None = None
-    if len(servir.encode("utf-8", "replace")) > cap:
+    if precisa_cortar:
         caminho = cru or derrama(derrame_dir, sessao_id, nome_derrame, texto)
 
-    if cosmetica:
+    # Quando `truncado_origem` é verdadeiro, o pipe já cortou bytes antes da poda:
+    # mesmo em perfil cosmético o retorno não está inteiro e precisa avisar o corte.
+    if cosmetica and not truncado_origem:
         if caminho:
             meta.update(modo="derrame", alca=caminho)
             servir += f"\n[retorno semântico servido inteiro; cru em {caminho}; ler_arquivo]"
-    else:
-        servir, cm = corta(servir, cap, cauda=cauda, alca=caminho)
+    elif precisa_cortar:
+        servir, cm = corta(
+            servir,
+            cap,
+            cauda=cauda,
+            alca=caminho,
+            forcar_corte=truncado_origem,
+            bytes_total_origem=bytes_produzidos,
+            offset_exato=(not rel["classes"] and not cauda),
+        )
         if cm.get("cortado"):
             meta.update(
                 modo="corte",
                 bytes_omitidos=cm["bytes_omitidos"],
                 alca=caminho,
                 cauda=cauda,
+                teto_bytes=cap,
             )
+            if cm.get("como_ler"):
+                meta["como_ler"] = cm["como_ler"]
+            if cm.get("offset_continuacao") is not None:
+                meta["offset_continuacao"] = cm["offset_continuacao"]
 
     meta["bytes_servidos"] = len(servir.encode("utf-8", "replace"))
     return servir, meta
@@ -536,21 +646,24 @@ def podar_envelope(
     if not isinstance(so, dict):
         return out
     texto = str(so.get("texto") or "")
+    ja_truncado = bool(so.get("truncado"))
+    bytes_reais = int(so.get("bytes_total") or 0)
+    cru_origem = str(so["cru"]) if so.get("cru") else None
 
     ato_ef = resolver_ato(argv, binario=binario, faces=faces)
     if poda_desligada():
-        tamanho = len(texto.encode("utf-8", "replace"))
+        tamanho = max(bytes_reais, len(texto.encode("utf-8", "replace")))
         out["poda"] = {
             "desligada": True,
             "ato_efetivo": ato_ef,
             "bytes_produzidos": tamanho,
-            "bytes_servidos": tamanho,
+            "bytes_servidos": len(texto.encode("utf-8", "replace")),
         }
         return out
 
     perf = perfil_verbo(verbo, binario)
     cosmetica = eh_cosmetica(perf, ato_ef)
-    constitutiva = eh_constitutiva(perf, ato_ef)
+    constitutiva = eh_constitutiva(perf, ato_ef) or (ato_ef == "ler")
     escrita = eh_escrita(verbo, binario, ato_ef)
     ledger = (
         LedgerSessao(Path(ledger_dir) / f"{sessao_id or 'sem-sessao'}.json")
@@ -573,6 +686,9 @@ def podar_envelope(
         forma=str(perf.get("forma") or "listagem"),
         escrita=escrita,
         esquece=inteiro,
+        truncado_origem=ja_truncado,
+        bytes_origem=bytes_reais,
+        cru_origem=cru_origem,
     )
     meta["ato_efetivo"] = ato_ef
     novo_so = dict(so)
@@ -582,10 +698,23 @@ def podar_envelope(
     if meta.get("alca") and not novo_so.get("cru"):
         novo_so["cru"] = meta["alca"]
     cortado_agora = meta.get("modo") == "corte"
-    novo_so["truncado"] = bool(so.get("truncado")) or cortado_agora
+    novo_so["truncado"] = ja_truncado or cortado_agora
+    novo_so["bytes_total"] = meta["bytes_produzidos"]
     out["stdout"] = novo_so
     out["poda"] = meta
     aviso = linha_humana(meta)
     if aviso:
         out["poda_aviso"] = aviso
+    if cortado_agora:
+        como_ler = meta.get("como_ler")
+        aviso_topo = (
+            f"AVISO: saída cortada pelo teto da poda ({cap} bytes; "
+            f"{meta['bytes_omitidos']} de {meta['bytes_produzidos']} bytes omitidos). "
+            "O retorno está incompleto"
+            + (f" — leia o restante com {como_ler}" if como_ler else "")
+        )
+        cab_corte: dict[str, Any] = {"aviso": aviso_topo}
+        if como_ler:
+            cab_corte["como_ler"] = como_ler
+        out = {**cab_corte, **out}
     return out
