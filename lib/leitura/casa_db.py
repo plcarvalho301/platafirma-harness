@@ -1,4 +1,4 @@
-"""casa_db.py — o leitor do banco casa para o verbo busca (story 4427, t8).
+"""casa_db.py — o leitor do banco casa para o verbo busca (story 4427, t8 e t10).
 
 Contratos:
 - platafirma-casa@referencias/instancias/verbo/busca.md, «O SQL dentro do leitor»,
@@ -30,6 +30,7 @@ _RAIZ_HARNESS = Path(__file__).resolve().parents[2]
 _REGRA_AUT = "verbo:busca §O que o verbo faz com o que voltou"
 _REGRA_VERSAO = "verbo:busca §A versão da classe"
 _PRAZO_ACESSO = 5.0
+_TAMANHO_PAR = 2
 
 _CHAVES_VERSAO = frozenset({"versao", "fontes", "casos", "eventos", "mais_recente"})
 _FONTES_VERSAO = frozenset({
@@ -59,6 +60,14 @@ SQL_UUID_DA_CLASSE = """
 SELECT uuid::text AS uuid, slug AS classe FROM casa.shape WHERE slug = $1
 """
 
+SQL_VALORES_DO_DICIONARIO = """
+SELECT v.slug, v.rotulo
+  FROM casa.valor v
+  JOIN casa.dicionario d ON d.uuid = v.dicionario
+ WHERE d.slug = $1
+ ORDER BY v.ordem, v.slug
+"""
+
 
 @dataclass(frozen=True)
 class ColunaFixa:
@@ -68,6 +77,7 @@ class ColunaFixa:
     fonte: str
     tipo: str
     classe_alvo: str | None = None
+    dicionario_slug: str | None = None
 
 
 COLUNAS_SHAPE: dict[str, ColunaFixa] = {
@@ -76,9 +86,9 @@ COLUNAS_SHAPE: dict[str, ColunaFixa] = {
         ColunaFixa("slug", "shape", "texto"),
         ColunaFixa("rotulo", "shape", "texto"),
         ColunaFixa("iri", "shape", "texto"),
-        ColunaFixa("capacidade", "shape", "ficha", "capacidade"),
-        ColunaFixa("mae", "shape", "ficha", "shape"),
-        ColunaFixa("raiz", "shape", "ficha", "shape"),
+        ColunaFixa("capacidade", "shape", "ficha", classe_alvo="capacidade"),
+        ColunaFixa("mae", "shape", "ficha", classe_alvo="shape"),
+        ColunaFixa("raiz", "shape", "ficha", classe_alvo="shape"),
         ColunaFixa("instanciavel", "shape", "booleano"),
         ColunaFixa("fechada", "shape", "booleano"),
         ColunaFixa("calculada_de_eventos", "shape", "booleano"),
@@ -90,12 +100,12 @@ COLUNAS_SHAPE: dict[str, ColunaFixa] = {
         ColunaFixa("resumo", "shape", "texto"),
         ColunaFixa("inicio", "shape", "texto"),
         ColunaFixa("fim", "shape", "texto"),
-        ColunaFixa("categoria", "shape", "texto"),
-        ColunaFixa("estrato", "shape", "texto"),
-        ColunaFixa("rigidez", "shape", "texto"),
-        ColunaFixa("modulo", "shape", "texto"),
-        ColunaFixa("relacao_com_mae", "shape", "texto"),
-        ColunaFixa("genero", "shape", "texto"),
+        ColunaFixa("categoria", "shape", "dicionario", dicionario_slug="categoria"),
+        ColunaFixa("estrato", "shape", "dicionario", dicionario_slug="estrato"),
+        ColunaFixa("rigidez", "shape", "dicionario", dicionario_slug="rigidez"),
+        ColunaFixa("modulo", "shape", "dicionario", dicionario_slug="modulo"),
+        ColunaFixa("relacao_com_mae", "shape", "dicionario", dicionario_slug="tipo-de-relacao"),
+        ColunaFixa("genero", "shape", "dicionario", dicionario_slug="genero-de-prosa"),
     )
 }
 
@@ -106,13 +116,13 @@ COLUNAS_DICIONARIO: dict[str, ColunaFixa] = {
         ColunaFixa("rotulo", "dicionario", "texto"),
         ColunaFixa("definicao", "dicionario", "texto"),
         ColunaFixa("criterio", "dicionario", "texto"),
-        ColunaFixa("capacidade", "dicionario", "ficha", "capacidade"),
+        ColunaFixa("capacidade", "dicionario", "ficha", classe_alvo="capacidade"),
         ColunaFixa("disjuntas", "dicionario", "booleano"),
         ColunaFixa("do_framework", "dicionario", "booleano"),
         ColunaFixa("endereco_das_entradas", "dicionario", "texto"),
         ColunaFixa("resumo", "dicionario", "texto"),
-        ColunaFixa("modulo", "dicionario", "texto"),
-        ColunaFixa("estrato", "dicionario", "texto"),
+        ColunaFixa("modulo", "dicionario", "dicionario", dicionario_slug="modulo"),
+        ColunaFixa("estrato", "dicionario", "dicionario", dicionario_slug="estrato"),
     )
 }
 
@@ -160,7 +170,11 @@ def _falha_versao(detalhe: str) -> Recusa:
 
 
 def carregar_eventos_da_versao(release: Path | None = None) -> list[str]:
-    """Lê e valida `versao-da-classe.yaml` na release servida (ou `PF_VERSAO_CLASSE_YAML` em teste)."""
+    """Lê e valida `versao-da-classe.yaml` na release servida (ou `PF_VERSAO_CLASSE_YAML` em teste).
+
+    Recusa com saída 5 (`falha-interna`) quando o arquivo falta ou traz chave, fonte, caso
+    ou critério fora dos que `consultar_fichas.sql` implementa.
+    """
     env = os.getenv("PF_VERSAO_CLASSE_YAML")
     arq = Path(env) if env else (release_raiz(release) / "current/conhecimento/ontologia/olaria/versao-da-classe.yaml")
     try:
@@ -181,7 +195,10 @@ def carregar_eventos_da_versao(release: Path | None = None) -> list[str]:
 
 
 def autorizar_classe(slug: str, sujeito: str | None = None, *, bin_acesso: Path | None = None) -> bool:
-    """Decide `(ler, classe:<slug>)` pelo verbo `acesso decidir` servido."""
+    """Decide `(ler, classe:<slug>)` pelo verbo `acesso decidir` servido.
+
+    Converte timeout em `prazo-estourado` (saída 5) e falha da política em `banco-indisponivel` (saída 3).
+    """
     exe = bin_acesso or Path(os.getenv("PF_ACESSO_BIN") or (_RAIZ_HARNESS / "bin" / "acesso"))
     cmd = [str(exe), "decidir", "ler", f"classe:{slug}", "--json"]
     if sujeito:
@@ -212,26 +229,35 @@ class SessaoLeitura:
     def __init__(
         self,
         contexto: Mapping[str, Any] | None = None,
-        *,
+        par: tuple[str, str | None] | None = None,
         prazo: float = PRAZO_CHAMADA,
-        conexao: Any = None,
-        autorizador: Callable[[str, str | None], bool] | None = None,
-        release: Path | None = None,
+        **opcoes: Any,
     ) -> None:
+        conexao = opcoes.get("conexao")
+        autorizador: Callable[[str, str | None], bool] | None = opcoes.get("autorizador")
         self._contexto = dict(contexto or {})
+        self._par = par
+        self._origem: str | None = opcoes.get("origem")
         self._prazo = prazo
         self._conexao_injetada = conexao
         self._con: Any = None
         self._dono_conexao = conexao is None
         self._autorizador = autorizador or autorizar_classe
-        self._release = release
+        self._release: Path | None = opcoes.get("release")
         self._cache_aut: dict[str, bool] = {}
 
     def __enter__(self) -> Self:
         if self._dono_conexao:
             self._con = Retrato(prazo=self._prazo).__enter__()
         else:
-            self._con = self._conexao_injetada.__enter__() if hasattr(self._conexao_injetada, "__enter__") else self._conexao_injetada
+            entrar = getattr(self._conexao_injetada, "__enter__", None)
+            self._con = entrar() if entrar is not None else self._conexao_injetada
+        try:
+            if self._par is not None and len(self._par) == _TAMANHO_PAR and self._par[1]:
+                self.exigir_autorizacao(str(self._par[1]))
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
         return self
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
@@ -259,6 +285,7 @@ class SessaoLeitura:
                 recebido=classe_slug,
                 regra=_REGRA_AUT,
                 cura=f"acesso negado para ler a classe {classe_slug}",
+                proximo="busca consultar --classe shape",
             )
 
     # ---------------------------------------------------------------- as seis consultas e auxiliares
@@ -309,6 +336,7 @@ class SessaoLeitura:
                 recebido=chave,
                 regra=_REGRA_AUT,
                 cura=f"acesso negado para ler fichas da classe {f.classe}",
+                proximo="busca consultar --classe shape",
             )
         return f
 
@@ -331,6 +359,11 @@ class SessaoLeitura:
     def classes_disponiveis(self) -> list[str]:
         linhas = self._con.consultar(SQL_CLASSES_DISPONIVEIS)
         return [str(ln["classe"]) for ln in linhas if self.autorizar(str(ln["classe"]))]
+
+    def valores_do_dicionario(self, dicionario_slug: str) -> list[dict]:
+        """Devolve `[{slug, rotulo}]` de um dicionário para colunas fixas de `shape` e `dicionario`."""
+        linhas = self._con.consultar(SQL_VALORES_DO_DICIONARIO, dicionario_slug)
+        return [{"slug": str(ln["slug"]), "rotulo": ln.get("rotulo")} for ln in linhas]
 
     def catalogo_da_classe(self, classes_uuids: Sequence[str]) -> list[dict]:
         return self._con.consultar(_sql_arquivo("catalogo_da_classe.sql"), list(classes_uuids))
@@ -401,12 +434,15 @@ class SessaoLeitura:
     def consultar_fichas(
         self,
         filtro: Mapping[str, Any],
+        cursor: tuple[int, str] | None = None,
         *,
         cursor_ordem: int | None = None,
         cursor_chave: str | None = None,
         tamanho_pagina: int = 50,
     ) -> dict[str, Any]:
         """Executa a caminhada das ligações, `consultar_fichas.sql` e o rastro da página."""
+        if cursor is not None:
+            cursor_ordem, cursor_chave = cursor
         eventos = carregar_eventos_da_versao(self._release)
         classes_uuids: list[str] = list(filtro["classes_uuids"])
         preds_prop: list[dict] = list(filtro.get("propriedades") or [])
@@ -442,7 +478,8 @@ class SessaoLeitura:
         )
         if not linhas:
             raise Recusa(5, "falha-interna", onde="consultar_fichas", regra="verbo:busca §consultar_fichas",
-                         cura="consultar_fichas voltou sem linha de cabeçalho")
+                         cura="consultar_fichas voltou sem linha de cabeçalho",
+                         proximo="busca consultar --classe shape")
 
         cab = linhas[0]
         itens_pagina = [ln for ln in linhas if ln.get("chave") is not None]
@@ -488,17 +525,9 @@ class SessaoLeitura:
 
 def retrato(
     contexto: Mapping[str, Any] | None = None,
-    *,
+    par: tuple[str, str | None] | None = None,
     prazo: float = PRAZO_CHAMADA,
-    conexao: Any = None,
-    autorizador: Callable[[str, str | None], bool] | None = None,
-    release: Path | None = None,
+    **opcoes: Any,
 ) -> SessaoLeitura:
     """Abre um retrato de leitura do banco casa para uma chamada do verbo."""
-    return SessaoLeitura(
-        contexto,
-        prazo=prazo,
-        conexao=conexao,
-        autorizador=autorizador,
-        release=release,
-    )
+    return SessaoLeitura(contexto, par, prazo, **opcoes)

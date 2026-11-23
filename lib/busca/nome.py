@@ -1,4 +1,4 @@
-"""nome.py — resolução de nome, cortes com qualificador, candidatos e alvos de ligação (story 4427, t9).
+"""nome.py — resolução de nome, cortes com qualificador, candidatos e alvos de ligação (story 4427, t9 e t10).
 
 Contratos:
 - platafirma-casa@referencias/instancias/verbo/busca.md, «Como um nome vira ficha»,
@@ -30,7 +30,7 @@ class CorteQualificador:
 
 
 def gerar_cortes_qualificador(termo: str) -> list[CorteQualificador]:
-    """Cortes nas palavras `de`, `da`, `do`, `das` e `dos`, do núcleo mais longo para o mais curto."""
+    """Gera cortes nas palavras `de`, `da`, `do`, `das` e `dos`, do núcleo mais longo ao mais curto."""
     partes = list(_RE_PALAVRA_ESPACO.finditer(termo))
     cortes: list[CorteQualificador] = []
     for idx in range(len(partes) - 2, 0, -1):
@@ -44,7 +44,7 @@ def gerar_cortes_qualificador(termo: str) -> list[CorteQualificador]:
 
 
 def gerar_subtermos_aproximados(termo: str) -> list[str]:
-    """Cada palavra do termo e cada par de palavras vizinhas, sem repetir o termo inteiro."""
+    """Extrai cada par de palavras vizinhas e cada palavra do termo, sem repetir o termo inteiro."""
     palavras = re.findall(r"\w+", termo)
     termo_limpo = " ".join(palavras).lower()
     vistos: set[str] = {termo_limpo, termo.strip().lower()}
@@ -91,10 +91,10 @@ def resolver_alvo_ligacao(
     onde: str,
     classe_restrita: str | None = None,
 ) -> tuple[resolvedor.Ficha | None, Recusa | None]:
-    """Resolve alvo (chave humana exata primeiro, depois 4 passos do nome).
+    """Resolve um alvo como chave humana exata primeiro e depois pelos quatro passos do nome.
 
-    Quando `classe_restrita` vem (ex.: coluna `capacidade` -> classe `capacidade`),
-    filtra os candidatos pelos daquela classe.
+    Quando `classe_restrita` vem (como em coluna `capacidade` -> classe `capacidade`),
+    filtra as fichas candidatas pelas daquela classe.
     """
     exata = sessao.ficha_da_chave(alvo_txt)
     if exata is not None and (classe_restrita is None or exata.classe == classe_restrita):
@@ -109,6 +109,7 @@ def resolver_alvo_ligacao(
             recebido=alvo_txt,
             regra=REGRA_NOME,
             cura=f"acesso negado para ler as fichas nomeadas por «{alvo_txt}»",
+            proximo="busca consultar --classe shape",
         )
     achadas = _fichas_do_grupo(res.linhas)
     if classe_restrita is not None:
@@ -148,6 +149,7 @@ def resolver_alvo_ligacao(
             recebido=alvo_txt,
             regra=REGRA_PLANO,
             cura="a resolução do alvo devolveu chave ausente de casa.ficha",
+            proximo="busca consultar --classe shape",
         )
     return ficha_unica, None
 
@@ -171,22 +173,31 @@ def _buscar_candidatos_aproximados(sessao: casa_db.SessaoLeitura, termo: str) ->
     return candidatos
 
 
+@dataclass(frozen=True)
+class _CorteResolvido:
+    termo: str
+    corte: CorteQualificador
+    classe_slug: str
+    fichas_qualificador: Sequence[dict]
+
+
 def _executar_condicao_de_corte(
     sessao: casa_db.SessaoLeitura,
-    termo: str,
-    corte: CorteQualificador,
-    classe_slug: str,
-    fichas_qualificador: Sequence[dict],
+    resolvido: _CorteResolvido,
+    *,
+    tamanho_pagina: int = 50,
 ) -> dict[str, Any]:
+    classe_slug = resolvido.classe_slug
     classe_uuid = sessao.uuid_da_classe(classe_slug)
     if classe_uuid is None:
         raise Recusa(5, "falha-interna", onde="classe", recebido=classe_slug, regra=REGRA_NOME,
-                     cura=f"a classe {classe_slug} sumiu do catálogo no retrato")
+                     cura=f"a classe {classe_slug} sumiu do catálogo no retrato",
+                     proximo="busca consultar --classe shape")
     sessao.exigir_autorizacao(classe_slug)
 
     alvos_uuids: list[str] = []
     chaves_qual: list[str] = []
-    for fq in fichas_qualificador:
+    for fq in resolvido.fichas_qualificador:
         ch = str(fq["chave"])
         f_obj = sessao.ficha_da_chave(ch)
         if f_obj is not None:
@@ -200,21 +211,29 @@ def _executar_condicao_de_corte(
         alvos=tuple(alvos_uuids),
         passos=1,
     )
-    resultado_db = sessao.consultar_fichas({"classes_uuids": [classe_uuid], "ligacoes": [pred]})
+    resultado_db = sessao.consultar_fichas(
+        {"classes_uuids": [classe_uuid], "ligacoes": [pred]},
+        tamanho_pagina=tamanho_pagina,
+    )
     return {
         "tipo_resultado": "condicao-por-nome",
-        "termo": termo,
+        "termo": resolvido.termo,
         "classe": classe_slug,
         "condicao": {
-            "nucleo": corte.nucleo,
-            "qualificador": corte.qualificador,
+            "nucleo": resolvido.corte.nucleo,
+            "qualificador": resolvido.corte.qualificador,
             "chaves": chaves_qual,
         },
         "consulta": resultado_db,
     }
 
 
-def consultar_por_nome(sessao: casa_db.SessaoLeitura, ped: Pedido) -> dict[str, Any]:
+def consultar_por_nome(
+    sessao: casa_db.SessaoLeitura,
+    ped: Pedido,
+    *,
+    tamanho_pagina: int = 50,
+) -> dict[str, Any]:
     """Resolve `ped.termo` pelos quatro passos, tenta cortes de qualificador ou monta `termo-nao-casou`."""
     if ped.termo is None:
         raise ValueError("consultar_por_nome exige pedido com termo")
@@ -236,6 +255,7 @@ def consultar_por_nome(sessao: casa_db.SessaoLeitura, ped: Pedido) -> dict[str, 
             recebido=termo,
             regra=REGRA_NOME,
             cura=f"acesso negado a todas as classes das fichas nomeadas por «{termo}»",
+            proximo="busca consultar --classe shape",
         )])
 
     grupo_termo = grupos.get(1, [])
@@ -283,7 +303,9 @@ def consultar_por_nome(sessao: casa_db.SessaoLeitura, ped: Pedido) -> dict[str, 
         fichas_qual = _fichas_do_grupo(grupos.get(ord_qual, []))
         if len(classes_nuc) == 1 and fichas_qual:
             return _executar_condicao_de_corte(
-                sessao, termo, corte, str(classes_nuc[0]["chave"]), fichas_qual,
+                sessao,
+                _CorteResolvido(termo, corte, str(classes_nuc[0]["chave"]), fichas_qual),
+                tamanho_pagina=tamanho_pagina,
             )
 
     # Nem termo inteiro nem corte serviu -> termo-nao-casou

@@ -8,6 +8,7 @@
 # forma: texto
 # cauda: nao
 # poda: cosmetica@buscar
+# ruff: noqa: ERA001
 """Executável do verbo busca (stories 4426 e 4427): buscar, consultar e ler.
 
 Contratos:
@@ -33,13 +34,21 @@ if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 
 from busca.nome import consultar_por_nome
-from busca.pedido import Pedido, receber_pedido
+from busca.pedido import receber_pedido
+from busca.plano import montar_plano
+from busca.retorno import (
+    TAMANHO_PAGINA_PADRAO,
+    TETO_PAGINA_BYTES,
+    montar_retorno_condicao,
+    montar_retorno_nome,
+    renderizar,
+)
 from leitura import casa_db, resolvedor
 from leitura.leitura import ORCAMENTO_MAX, ORCAMENTO_PADRAO
 from leitura.leitura import ler as ler_arquivo
 from leitura.morada import release_raiz
 from leitura.recusa import Recusa, Recusas, escrever, escrever_lista
-from leitura.retrato import Retrato
+from leitura.retrato import PRAZO_CHAMADA, Retrato
 
 REGRA_ATOS = "interface-de-verbo:busca §Atos"
 REGRA_CHAVE = "interface-de-verbo:busca §Leitura pela chave"
@@ -261,8 +270,8 @@ def _coluna(alvo: str, fichas: list[dict]) -> dict:
 
 
 # ==================================================================== o ato ler (pela consulta por nome)
-def _recusa_nao_casou_no_ler(alvo: str, desfecho: Mapping[str, Any]) -> Recusa:
-    candidatos = desfecho.get("candidatos") or []
+def _recusa_nao_casou_no_ler(alvo: str, retorno_nome: Mapping[str, Any]) -> Recusa:
+    candidatos = retorno_nome.get("candidatos") or []
     if candidatos:
         chaves = ", ".join(str(c["chave"]) for c in candidatos)
         return Recusa(
@@ -274,7 +283,7 @@ def _recusa_nao_casou_no_ler(alvo: str, desfecho: Mapping[str, Any]) -> Recusa:
             cura=f"«{alvo}» não nomeia ficha pela tabela de nomes, rótulo, variantes nem slug; candidatos: {chaves}",
             proximo=f"busca ler {shlex.quote(str(candidatos[0]['chave']))}",
         )
-    disp = desfecho.get("disponiveis") or {}
+    disp = retorno_nome.get("disponiveis") or {}
     classes_disp = disp.get("classes") or []
     primeira = str(classes_disp[0]) if classes_disp else "shape"
     return Recusa(
@@ -291,20 +300,20 @@ def _recusa_nao_casou_no_ler(alvo: str, desfecho: Mapping[str, Any]) -> Recusa:
 def _por_nome(sessao: casa_db.SessaoLeitura, alvo: str, env: Mapping[str, str] | None = None) -> resolvedor.Ficha | list[dict]:
     try:
         ped_nome = receber_pedido([alvo], env=env, origem_forca="leitura")
-        res = consultar_por_nome(sessao, ped_nome)
+        res_bruto = consultar_por_nome(sessao, ped_nome)
+        ret = montar_retorno_nome(ped_nome, res_bruto)
     except Recusas as exc:
         prim = exc.primeiro
         prox = "busca ler capacidade:busca" if prim.codigo == "termo-sem-letra" else prim.proximo
         raise Recusa(prim.saida, prim.codigo, onde="nome", recebido=alvo, regra=REGRA_NOME,
                      cura=prim.cura, proximo=prox) from None
 
-    tipo = res["tipo_resultado"]
-    if tipo == "termo-nao-casou":
-        raise _recusa_nao_casou_no_ler(alvo, res)
+    if ret["desfecho"] == "termo-nao-casou":
+        raise _recusa_nao_casou_no_ler(alvo, ret)
 
-    fichas = res["fichas"] if tipo == "nome-casou" else res["consulta"]["fichas"]
+    fichas = list(ret["fichas"])
     if not fichas:
-        classe_cond = str(res.get("classe") or "shape")
+        classe_cond = str(ret.get("classe") or "shape")
         raise Recusa(
             1,
             "termo-nao-casou",
@@ -315,7 +324,7 @@ def _por_nome(sessao: casa_db.SessaoLeitura, alvo: str, env: Mapping[str, str] |
             proximo=f"busca consultar --classe {shlex.quote(classe_cond)}",
         )
     if len(fichas) > 1:
-        return list(fichas)
+        return fichas
     achada = sessao.ficha_da_chave(str(fichas[0]["chave"]))
     if achada is None:
         raise Recusa(5, "falha-interna", onde="nome", recebido=alvo, regra=REGRA_NOME,
@@ -329,12 +338,14 @@ def _abrir_sessao_leitura(
     autorizador: Callable[[str, str | None], bool] | None,
     release: Path | None,
     env: Mapping[str, str] | None,
+    prazo: float = PRAZO_CHAMADA,
 ) -> casa_db.SessaoLeitura:
     sujeito = (env.get("PF_SUJEITO") if env is not None else os.getenv("PF_SUJEITO")) or None
+    ctx = {"sujeito": sujeito}
     if abrir_retrato is Retrato:
-        return casa_db.retrato({"sujeito": sujeito}, autorizador=autorizador, release=release)
+        return casa_db.retrato(ctx, ("ler", None), prazo, autorizador=autorizador, release=release)
     aut = autorizador if autorizador is not None else (lambda _c, _s: True)
-    return casa_db.retrato({"sujeito": sujeito}, conexao=abrir_retrato(), autorizador=aut, release=release)
+    return casa_db.retrato(ctx, ("ler", None), prazo, conexao=abrir_retrato(), autorizador=aut, release=release)
 
 
 def ato_ler(
@@ -369,41 +380,7 @@ def ato_ler(
     return r
 
 
-# ==================================================================== o ato consultar (modo nome em t9)
-def _renderizar_nome_provisorio(ped: Pedido, res: Mapping[str, Any]) -> str:
-    if ped.como_json:
-        return json.dumps(dict(res), ensure_ascii=False) + "\n"
-    tipo = res["tipo_resultado"]
-    termo = res["termo"]
-    if tipo == "termo-nao-casou":
-        return f"nome «{termo}» não casou · 0 fichas\n"
-    if tipo == "condicao-por-nome":
-        cons = res["consulta"]
-        total = int(cons["total"])
-        fichas = cons["fichas"]
-        de = 1 if fichas else 0
-        ate = len(fichas)
-        chaves_q = ", ".join(res["condicao"]["chaves"])
-        cab = (
-            f"nome «{termo}» virou condição · {res['classe']} ligada a {chaves_q} "
-            f"· fichas {de} a {ate} de {total} · digest {cons['digest']}"
-        )
-        corpo = [f"{f['chave']} · {f.get('rotulo') or ''}".rstrip(" ·") for f in fichas]
-        return "\n".join([cab, *corpo]) + "\n"
-    fichas = res["fichas"]
-    cab = f"nome «{termo}» · {len(fichas)} fichas"
-    if len(fichas) == 1:
-        linhas = [cab, f"{fichas[0]['chave']} · {fichas[0].get('rotulo') or ''}".rstrip(" ·")]
-        if res.get("ficha") is not None:
-            linhas.append(json.dumps(res["ficha"], ensure_ascii=False, indent=2, sort_keys=True))
-        return "\n".join(linhas) + "\n"
-    linhas = [cab]
-    for f in fichas:
-        defin = " ".join(str(f.get("definicao") or "").split())
-        linhas.append(f"{f['chave']} · {f['classe']} · {defin} · passo {f['passo']}")
-    return "\n".join(linhas) + "\n"
-
-
+# ==================================================================== o ato consultar
 def ato_consultar(
     args: list[str],
     *,
@@ -411,7 +388,12 @@ def ato_consultar(
     abrir_retrato: Callable[[], Any] = Retrato,
     **opcoes: Any,
 ) -> int:
+    """Executa a consulta por nome ou por condição num retrato único e escreve o retorno v1."""
     env = opcoes.get("env")
+    teto_bytes = int(opcoes.get("teto_bytes") or TETO_PAGINA_BYTES)
+    tamanho_pagina = int(opcoes.get("tamanho_pagina") or TAMANHO_PAGINA_PADRAO)
+    prazo = float(opcoes.get("prazo") or PRAZO_CHAMADA)
+
     ped = receber_pedido(args, env=env)
     raiz = release_raiz(opcoes.get("release"))
     with _abrir_sessao_leitura(
@@ -419,14 +401,37 @@ def ato_consultar(
         autorizador=opcoes.get("autorizador"),
         release=raiz,
         env=env,
+        prazo=prazo,
     ) as sessao:
         if ped.modo == "nome":
-            res = consultar_por_nome(sessao, ped)
-            saida.write(_renderizar_nome_provisorio(ped, res))
-            saida.flush()
-            return 0
-        raise Recusas([Recusa(5, "falha-interna", onde="modo", recebido=ped.modo, regra=REGRA_ATOS,
-                              cura="modo classe entra na t10")])
+            res_nome = consultar_por_nome(sessao, ped, tamanho_pagina=tamanho_pagina)
+            reg = montar_retorno_nome(ped, res_nome, teto_bytes=teto_bytes)
+        else:
+            plano = montar_plano(sessao, ped)
+            cursor_par = (ped.continuacao.ordem, ped.continuacao.chave) if ped.continuacao is not None else None
+            res_db = sessao.consultar_fichas(
+                plano.filtro_db,
+                cursor_par,
+                tamanho_pagina=tamanho_pagina,
+            )
+            valores_vz: list[dict[str, Any]] | None = None
+            if int(res_db["total"]) == 0 and plano.propriedades_vazio:
+                acum: list[dict[str, Any]] = []
+                for vz in plano.propriedades_vazio:
+                    acum.extend(sessao.valores_da_propriedade(
+                        vz.fonte, vz.restricoes, vz.coluna, plano.classes_uuids,
+                    ))
+                valores_vz = acum
+            reg = montar_retorno_condicao(
+                ped,
+                plano.classe_slug,
+                res_db,
+                valores_vz,
+                teto_bytes=teto_bytes,
+            )
+    saida.write(renderizar(reg, como_json=ped.como_json))
+    saida.flush()
+    return 0
 
 
 # ==================================================================== despacho e saída
@@ -489,6 +494,17 @@ def main(argv: list[str] | None = None, *, saida: TextIO | None = None, erro: Te
             return escrever_lista(exc.erros, fluxo=erro)
         except Recusa as r:
             return escrever_lista([r], fluxo=erro)
+        except Exception:  # noqa: BLE001 - fronteira do verbo: qualquer falha não mapeada sai 5 como falha-interna
+            falha = Recusa(
+                5,
+                "falha-interna",
+                onde="consultar",
+                recebido=" ".join(resto),
+                regra=REGRA_ATOS,
+                cura="falha inesperada no consultar; veja o log da porta",
+                proximo="busca consultar --classe shape",
+            )
+            return escrever_lista([falha], fluxo=erro)
     if ato == "ler":
         como_json = "--json" in resto
         try:

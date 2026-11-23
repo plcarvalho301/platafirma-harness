@@ -34,9 +34,7 @@ SELECT 'estrutura', e.regime, e.morada
   FROM casa.estrutura_de_documento e WHERE e.shape = $1::uuid AND e.encerra_em IS NULL
 """
 
-# A ficha inteira com ligações vigentes agrupadas por propriedade, primeiro saída e depois chegada.
-SQL_FICHA_INTEIRA = """
-SELECT jsonb_build_object(
+_SQL_DADOS_FICHA = """
          'chave', f.chave_humana,
          'classe', c.slug,
          'criada_em', f.criada_em,
@@ -48,6 +46,17 @@ SELECT jsonb_build_object(
                       JOIN casa.propriedade p ON p.id = r.propriedade
                      WHERE d.ficha = f.uuid AND d.terminou IS NULL
                      GROUP BY p.slug) x), '{}'::jsonb),
+"""
+
+_SQL_DECLARACAO_E_FROM = """
+         'declaracao', (SELECT jsonb_strip_nulls(to_jsonb(s) - 'uuid' - 'fornada')
+                          FROM casa.shape s WHERE s.uuid = f.uuid)
+       ) AS ficha
+  FROM casa.ficha f JOIN casa.shape c ON c.uuid = f.classe
+ WHERE f.uuid = $1::uuid
+"""
+
+_SQL_BLOCO_LIGACOES = """
          'ligacoes', jsonb_build_object(
             'saida', coalesce((
                SELECT jsonb_object_agg(y.slug, y.para)
@@ -66,33 +75,13 @@ SELECT jsonb_build_object(
                         WHERE l.para = f.uuid AND l.terminou IS NULL
                         GROUP BY p.slug) z), '{}'::jsonb)
          ),
-         'declaracao', (SELECT jsonb_strip_nulls(to_jsonb(s) - 'uuid' - 'fornada')
-                          FROM casa.shape s WHERE s.uuid = f.uuid)
-       ) AS ficha
-  FROM casa.ficha f JOIN casa.shape c ON c.uuid = f.classe
- WHERE f.uuid = $1::uuid
 """
 
+# A ficha inteira com ligações vigentes agrupadas por propriedade, primeiro saída e depois chegada.
+SQL_FICHA_INTEIRA = "SELECT jsonb_build_object(\n" + _SQL_DADOS_FICHA + _SQL_BLOCO_LIGACOES + _SQL_DECLARACAO_E_FROM
+
 # A ficha inteira sem ligações, para `--ligacoes sem`.
-SQL_FICHA_SEM_LIGACOES = """
-SELECT jsonb_build_object(
-         'chave', f.chave_humana,
-         'classe', c.slug,
-         'criada_em', f.criada_em,
-         'dados', coalesce((
-            SELECT jsonb_object_agg(x.slug, x.valores)
-              FROM (SELECT p.slug, jsonb_agg(coalesce(d.valor, to_jsonb(d.valor_de_dicionario)) ORDER BY d.id) AS valores
-                      FROM casa.dado d
-                      JOIN casa.restricao r ON r.id = d.restricao
-                      JOIN casa.propriedade p ON p.id = r.propriedade
-                     WHERE d.ficha = f.uuid AND d.terminou IS NULL
-                     GROUP BY p.slug) x), '{}'::jsonb),
-         'declaracao', (SELECT jsonb_strip_nulls(to_jsonb(s) - 'uuid' - 'fornada')
-                          FROM casa.shape s WHERE s.uuid = f.uuid)
-       ) AS ficha
-  FROM casa.ficha f JOIN casa.shape c ON c.uuid = f.classe
- WHERE f.uuid = $1::uuid
-"""
+SQL_FICHA_SEM_LIGACOES = "SELECT jsonb_build_object(\n" + _SQL_DADOS_FICHA + _SQL_DECLARACAO_E_FROM
 
 _MARCADORES = re.compile(r"<[^<>/]+>(?:[/-]<[^<>/]+>)*")
 _SEGMENTO = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")

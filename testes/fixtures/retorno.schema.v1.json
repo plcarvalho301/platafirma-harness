@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platafirma.org/schemas/busca-consultar-retorno.v1.json",
+  "title": "Retorno do ato consultar do verbo busca (v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "versao",
+    "modo",
+    "desfecho",
+    "termo",
+    "classe",
+    "condicao",
+    "fornada",
+    "digest",
+    "de",
+    "ate",
+    "total",
+    "fichas",
+    "ficha",
+    "continuacao",
+    "mudou",
+    "valores_existentes",
+    "candidatos",
+    "disponiveis",
+    "proximo"
+  ],
+  "properties": {
+    "versao": {
+      "const": 1
+    },
+    "modo": {
+      "type": "string",
+      "enum": ["nome", "classe", "condicao"]
+    },
+    "desfecho": {
+      "type": ["string", "null"],
+      "enum": ["termo-nao-casou", null]
+    },
+    "termo": {
+      "type": ["string", "null"]
+    },
+    "classe": {
+      "type": ["string", "null"]
+    },
+    "condicao": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["nucleo", "qualificador", "chaves"],
+          "properties": {
+            "nucleo": {"type": "string"},
+            "qualificador": {"type": "string"},
+            "chaves": {
+              "type": "array",
+              "items": {"type": "string"}
+            }
+          }
+        }
+      ]
+    },
+    "fornada": {
+      "type": ["string", "null"]
+    },
+    "digest": {
+      "type": ["string", "null"]
+    },
+    "de": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "ate": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "fichas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chave", "classe", "rotulo", "estado", "caminho"],
+        "properties": {
+          "chave": {"type": "string"},
+          "classe": {"type": "string"},
+          "rotulo": {"type": ["string", "null"]},
+          "estado": {"type": ["string", "null"]},
+          "caminho": {
+            "oneOf": [
+              {"type": "null"},
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["de", "ligacao", "para"],
+                  "properties": {
+                    "de": {"type": "string"},
+                    "ligacao": {"type": "string"},
+                    "para": {"type": "string"}
+                  }
+                }
+              }
+            ]
+          },
+          "passo": {"type": ["integer", "null"]},
+          "definicao": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "ficha": {
+      "type": ["object", "null"]
+    },
+    "continuacao": {
+      "type": ["string", "null"]
+    },
+    "mudou": {
+      "type": ["boolean", "null"]
+    },
+    "valores_existentes": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["valor", "contagem"],
+            "properties": {
+              "valor": {"type": "string"},
+              "contagem": {"type": "integer", "minimum": 1}
+            }
+          }
+        }
+      ]
+    },
+    "candidatos": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["chave", "classe", "rotulo"],
+            "properties": {
+              "chave": {"type": "string"},
+              "classe": {"type": "string"},
+              "rotulo": {"type": ["string", "null"]}
+            }
+          }
+        }
+      ]
+    },
+    "disponiveis": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["classes", "filtros"],
+          "properties": {
+            "classes": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "filtros": {
+              "type": "array",
+              "items": {"type": "string"}
+            }
+          }
+        }
+      ]
+    },
+    "proximo": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tipo"],
+            "properties": {
+              "tipo": {
+                "type": "string",
+                "enum": ["pagina", "nome-candidato"]
+              },
+              "chamada": {"type": "string"},
+              "termo": {"type": "string"}
+            }
+          }
+        }
+      ]
+    }
+  }
+}
