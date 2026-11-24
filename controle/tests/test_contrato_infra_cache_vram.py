@@ -34,9 +34,13 @@ def _curl(tmp_path, ps_json, ps_rc=0, generate_rc=0):
     return d
 
 
-def _vram(tmp_path, **kw):
+def _vram(tmp_path, sujeito="teste", **kw):
     d = _curl(tmp_path, **kw)
     env = {**os.environ, "PATH": f"{d}{os.pathsep}{os.environ['PATH']}"}
+    if sujeito:
+        env["PF_SUJEITO"] = sujeito
+    else:
+        env.pop("PF_SUJEITO", None)
     return subprocess.run([BASH, str(INFRA), "cache", "vram"], capture_output=True, text=True,
                           env=env, timeout=30)
 

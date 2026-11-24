@@ -11,6 +11,7 @@ Environment=PATH=/opt/platafirma/current/harness/bin:/usr/local/bin:/usr/bin:/bi
 # que chama verbo sem ele. A cadeira que assina o que a limpeza faz e a da esteira.
 EnvironmentFile=/home/claudinho/.config/ops/env
 Environment=PF_CADEIRA=ti
+Environment=PF_SUJEITO=automacao:limpeza-fossil
 # Sem --ver: depois da primeira passada com --ver no host (21/10/2026), a limpeza roda sozinha e nao pede aprovacao a cada
 # passada; o controle dela e a observacao (R14 da spec eixos-do-host; dono, 21/10/2026). O que sai tem o criterio positivo,
 # a marca em var/log/poda.log e, do job, o evento de fim no log dele; do conteiner, a inspecao e os logs guardados antes.

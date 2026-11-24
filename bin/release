@@ -1599,6 +1599,7 @@ reiniciar_porta() {
   fi
   xdg="${xdg:-/run/user/$(id -u)}"
   out="$(XDG_RUNTIME_DIR="$xdg" DBUS_SESSION_BUS_ADDRESS="${dbus:-unix:path=$xdg/bus}" \
+    PF_SUJEITO="${PF_SUJEITO:-automacao:release}" \
     "$infra_bin" restart porta 2>&1)" || rc=$?
   if [ "$rc" -eq 0 ]; then
     printf 'porta:     %s\n' "$(tail -n 1 <<<"$out")"

@@ -120,6 +120,7 @@ class Cena:
             "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}",
             "STUB_DIR": str(self.dir),
             "PLATAFIRMA_INSTANCIA": str(self.inst),
+            "PF_SUJEITO": "teste",
         }
         e.update(env)
         return subprocess.run(
@@ -210,8 +211,8 @@ def test_limpeza_cache_poda_build_e_imagens(cena: Cena):
     assert cena.rastro() == [
         "builder prune -a -f --keep-storage 25GB",
         "image prune -a -f",
-        "volume prune -f",
     ]
+    assert "volumes Docker nao sao podados aqui" in r.stdout
 
 
 def test_sem_retencao_por_dias_nem_por_anterior(cena: Cena, tmp_path: Path):

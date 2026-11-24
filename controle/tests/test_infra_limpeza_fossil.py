@@ -163,7 +163,7 @@ class Cena:
         e = {**os.environ, "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}", "STUB_DIR": str(self.dir),
              "PLATAFIRMA_INSTANCIA": str(self.inst), "LONGJOB_LOGDIR": str(self.logs),
              "INFRA_REMOVIDOS": str(self.removidos)}
-        e.pop("PF_SUJEITO", None)
+        e["PF_SUJEITO"] = "automacao:limpeza-fossil"
         e.update(env)
         return subprocess.run([BASH, str(INFRA), "limpeza", *args], capture_output=True, text=True, env=e,
                               timeout=60, check=False)

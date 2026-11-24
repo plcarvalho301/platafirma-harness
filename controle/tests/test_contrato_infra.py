@@ -438,11 +438,13 @@ esac
     return _monta_path(tmp_path, "bin-restart-ok", docker=docker_restart)
 
 
-def test_infra_restart_segue_o_contrato_sem_exigir_identidade(path_restart_ok):
-    # decisão 9 (card #3145): restart NÃO exige PF_SUJEITO — a promoção do harness
-    # depende dele (release chama `infra restart ops-mcp` sem identidade de cadeira).
+def test_infra_restart_exige_pf_sujeito(path_restart_ok):
+    # achado #1356: restart é ato de mutação e exige PF_SUJEITO (release passa automacao:release).
+    r_sem = _roda("restart", "meu-conteiner", path_dir=path_restart_ok, checa_exit=3,
+                  env_extra={"PF_SUJEITO": ""})
+    assert "PF_SUJEITO" in r_sem.stderr
     r = _roda("restart", "meu-conteiner", path_dir=path_restart_ok, checa_exit=0,
-              env_extra={"PF_SUJEITO": ""})
+              env_extra={"PF_SUJEITO": "automacao:release"})
     assert "reiniciado" in r.stdout
 
 
@@ -548,13 +550,15 @@ def test_ps_config_nao_exigem_pf_sujeito(arvore):
 
 def test_limpeza_logs_despacha_para_bin_infra(arvore):
     _stub(arvore / "bin" / "_infra", "limpeza-logs", FAKE_LIMPEZA.format(marca="LOGS"))
-    r = _roda_arvore(arvore, "limpeza", "logs", "--foo", checa_exit=0)
+    r = _roda_arvore(arvore, "limpeza", "logs", "--foo",
+                      env_extra={"PF_SUJEITO": "automacao:cron"}, checa_exit=0)
     assert "LOGS: [--foo]" in r.stdout
 
 
 def test_limpeza_quarentena_despacha_para_bin_infra(arvore):
     _stub(arvore / "bin" / "_infra", "limpeza-quarentena", FAKE_LIMPEZA.format(marca="QUAR"))
-    r = _roda_arvore(arvore, "limpeza", "quarentena", checa_exit=0)
+    r = _roda_arvore(arvore, "limpeza", "quarentena",
+                      env_extra={"PF_SUJEITO": "automacao:cron"}, checa_exit=0)
     assert "QUAR:" in r.stdout
 
 
@@ -573,16 +577,20 @@ def test_agenda_conferir_chama_script_com_check(arvore):
 def test_agenda_aplicar_chama_script_sem_check(arvore):
     fake = _stub(arvore / "bin" / "_infra", "crontab-fake.sh", FAKE_CRONTAB)
     r = _roda_arvore(arvore, "agenda", "aplicar",
-                      env_extra={"INFRA_CRONTAB_SCRIPT": str(fake)}, checa_exit=0)
+                      env_extra={"INFRA_CRONTAB_SCRIPT": str(fake), "PF_SUJEITO": "teste"}, checa_exit=0)
     assert r.stdout.strip() == "CRONTAB_ARGS:"
 
 
-def test_agenda_nao_exige_pf_sujeito(arvore):
+def test_agenda_conferir_nao_exige_pf_sujeito_mas_aplicar_exige(arvore):
     fake = _stub(arvore / "bin" / "_infra", "crontab-fake.sh", FAKE_CRONTAB)
     r = _roda_arvore(arvore, "agenda", "conferir",
                       env_extra={"INFRA_CRONTAB_SCRIPT": str(fake), "PF_SUJEITO": ""},
                       checa_exit=0)
     assert "CRONTAB_ARGS:" in r.stdout
+    r2 = _roda_arvore(arvore, "agenda", "aplicar",
+                       env_extra={"INFRA_CRONTAB_SCRIPT": str(fake), "PF_SUJEITO": ""},
+                       checa_exit=3)
+    assert "PF_SUJEITO" in r2.stderr
 
 
 # `infra units` (card #3917): o par de agenda para deploy/instala-units.sh do core.
@@ -593,10 +601,13 @@ def test_units_conferir_chama_script_com_check(arvore):
     assert "CRONTAB_ARGS: [--check]" in r.stdout
 
 
-def test_units_aplicar_chama_script_sem_check(arvore):
+def test_units_aplicar_chama_script_sem_check_e_exige_pf_sujeito(arvore):
     fake = _stub(arvore / "bin" / "_infra", "units-fake.sh", FAKE_CRONTAB)
+    r_sem = _roda_arvore(arvore, "units", "aplicar",
+                          env_extra={"INFRA_UNITS_SCRIPT": str(fake), "PF_SUJEITO": ""}, checa_exit=3)
+    assert "PF_SUJEITO" in r_sem.stderr
     r = _roda_arvore(arvore, "units", "aplicar",
-                      env_extra={"INFRA_UNITS_SCRIPT": str(fake), "PF_SUJEITO": ""}, checa_exit=0)
+                      env_extra={"INFRA_UNITS_SCRIPT": str(fake), "PF_SUJEITO": "teste"}, checa_exit=0)
     assert r.stdout.strip() == "CRONTAB_ARGS:"
 
 
@@ -620,10 +631,13 @@ def test_ambiente_conferir_chama_o_instalar_com_check(arvore):
     assert "CRONTAB_ARGS: [--check]" in r.stdout
 
 
-def test_ambiente_aplicar_chama_o_instalar_sem_check_e_sem_pf_sujeito(arvore):
+def test_ambiente_aplicar_chama_o_instalar_sem_check_e_exige_pf_sujeito(arvore):
     fake = _stub(arvore / "bin" / "_infra", "ambiente-fake.sh", FAKE_CRONTAB)
+    r_sem = _roda_arvore(arvore, "ambiente", "aplicar",
+                          env_extra={"INFRA_AMBIENTE_SCRIPT": str(fake), "PF_SUJEITO": ""}, checa_exit=3)
+    assert "PF_SUJEITO" in r_sem.stderr
     r = _roda_arvore(arvore, "ambiente", "aplicar",
-                      env_extra={"INFRA_AMBIENTE_SCRIPT": str(fake), "PF_SUJEITO": ""}, checa_exit=0)
+                      env_extra={"INFRA_AMBIENTE_SCRIPT": str(fake), "PF_SUJEITO": "teste"}, checa_exit=0)
     assert r.stdout.strip() == "CRONTAB_ARGS:"
 
 
