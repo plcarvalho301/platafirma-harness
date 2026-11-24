@@ -7,6 +7,7 @@ Type=simple
 # Codigo e interpretador da release (r-x); estado na instancia. Nada fora de /opt e /srv.
 WorkingDirectory=/opt/platafirma/current/harness/controle
 Environment=PATH=/opt/platafirma/current/harness/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PF_CASA_RAIZ=/opt/platafirma/current/casa
 Environment=AGREGADOR_ESTADO_PATH=/srv/platafirma/casa/var/run/harness-controle/estado.json
 ExecStartPre=/bin/mkdir -p /srv/platafirma/casa/var/run/harness-controle
 ExecStart=/opt/platafirma/current/venv/harness/bin/python -m harness_controle.agregador

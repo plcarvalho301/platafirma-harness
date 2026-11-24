@@ -196,7 +196,7 @@ def md_seguro(texto: Any) -> str:
 # `mesa ver` imprime um item por linha: `#N [chapeu] ato → alvo   (plantado ha X)`,
 # ordenado por chapeu. Linha sem esse cabecalho e continuacao do item anterior.
 
-_RE_ITEM = re.compile(r"^#(\d+)\s+\[([^\]]+)\]\s*(.*)$")
+_RE_ITEM = re.compile(r"^#(\S+)\s+\[([^\]]+)\]\s*(.*)$")
 _RE_PLANTADO = re.compile(r"\s+\(plantado h[aá] ([^)]*)\)\s*$")
 
 

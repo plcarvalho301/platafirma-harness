@@ -371,14 +371,64 @@ def test_sonda_caixa_conteudo_le_frio_como_dona():
     assert g.fabrica_env("produto")["PF_CADEIRA"] == "produto"
 
 
-def test_sonda_cadeiras_le_via_expediente_montar():
-    """A sonda de cadeiras usa `expediente montar <cadeira> --sem-acervo --json`
-    (leitura pura de morada, sem cunhar sessao no msg-mem) — card #3089."""
-    from harness_controle.agregador import SONDAS_GRUPO
-    g = next(s for s in SONDAS_GRUPO if s.nome == "cadeiras")
-    argv = g.fabrica_argv("produto")
-    assert argv == ["expediente", "montar", "produto", "--sem-acervo", "--json"]
+def test_sonda_cadeiras_le_frio_na_casa_nova(monkeypatch):
+    """Na casa nova, `expediente montar` abre sessao e `persona foto` saiu: a sonda
+    de cadeiras le a frio via coletor (persona ler, cultura, apelidos e mesa ver --json)."""
+    from abertura.nomes import CadeiraDeclarada, SecaoDasCadeiras
+    from harness_controle import agregador
+
+    g = next(s for s in agregador.SONDAS_GRUPO if s.nome == "cadeiras")
+    assert g.coletor is agregador._coletar_cadeira
     assert g.fabrica_env("produto")["PF_CADEIRA"] == "produto"
+
+    secao = SecaoDasCadeiras(cadeiras={
+        "engenharia": CadeiraDeclarada(
+            slug="engenharia",
+            chapeus={"front-end": (), "interfaces": ()},
+        ),
+    })
+    monkeypatch.setattr(agregador, "_secao_cadeiras", lambda: secao)
+
+    def _falso_texto(argv, **_):
+        if argv[:2] == ["persona", "ler"]:
+            return ResultadoVerbo(True, {"texto": "# Gabriel"}, None, 0, 0.01)
+        if argv == ["persona", "cultura"]:
+            return ResultadoVerbo(True, {"texto": "## Cultura"}, None, 0, 0.01)
+        if argv == ["persona", "apelidos"]:
+            return ResultadoVerbo(True, {"texto": "Gabriel -> engenharia"}, None, 0, 0.01)
+        return ResultadoVerbo(False, None, f"inesperado: {argv}", 2, 0.01)
+
+    def _falso_json(argv, **_):
+        assert argv == ["mesa", "ver", "--json"]
+        return ResultadoVerbo(True, [{
+            "chave": "card:4438",
+            "situacao": "guardado",
+            "chapeu": "interfaces",
+            "estagio": "pareceres integrados",
+            "proxima_jogada": "publicar politica",
+            "ocasiao": {"pedido": "segunda rodada"},
+            "corpo": "detalhe",
+        }], None, 0, 0.01)
+
+    monkeypatch.setattr(agregador, "chamar_texto", _falso_texto)
+    monkeypatch.setattr(agregador, "chamar", _falso_json)
+
+    assert agregador._cadeiras_disponiveis() == ["engenharia"]
+    assert agregador._chapeus_disponiveis() == ["engenharia/front-end", "engenharia/interfaces"]
+
+    r = agregador._coletar_cadeira("engenharia", 5.0)
+    assert r.ok
+    assert r.dados["chapeus"] == ["front-end", "interfaces"]
+    pecas = {p["peca"]: p for p in r.dados["pecas"]}
+    assert pecas["persona"]["frescor"] == "fresco"
+    assert pecas["mesa"]["frescor"] == "fresco"
+    assert "#card:4438 [interfaces]" in pecas["mesa"]["conteudo"]
+
+    from harness_controle.md_render import contagem_mesa, render_mesa
+    assert contagem_mesa(pecas["mesa"]["conteudo"]) == {"interfaces": 1}
+    html_mesa = render_mesa(pecas["mesa"]["conteudo"], "interfaces")
+    assert "card:4438" in html_mesa
+    assert "publicar politica" in html_mesa
 
 def test_sonda_cadernos_corpo_saiu_do_agregador():
     from harness_controle.agregador import SONDAS_GRUPO

@@ -29,7 +29,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from ._raizes import instancia
+from abertura.nomes import SecaoDasCadeiras, carregar_secao_das_cadeiras
+
+from ._raizes import instancia, release
 from .verbos import HARNESS, ResultadoVerbo, chamar, chamar_texto
 
 log = logging.getLogger("agregador")
@@ -76,29 +78,30 @@ def bloco_de(resultado: ResultadoVerbo, *, agora: float | None = None) -> dict:
 # --- sondas: o que chamar, com que intervalo -------------------------------
 
 
+def _casa_raiz() -> Path:
+    return Path(os.environ.get("PF_CASA_RAIZ") or str(release() / "casa"))
+
+
+def _secao_cadeiras() -> SecaoDasCadeiras:
+    try:
+        return carregar_secao_das_cadeiras(base=_casa_raiz())
+    except OSError:
+        return SecaoDasCadeiras()
+
+
 def _cadeiras_disponiveis() -> list[str]:
-    # Fonte canonica das cadeiras ativas: `persona foto` (replay de
-    # registro/eventos-org.jsonl), nao varredura de diretorio de persona.
-    # canone/organizacao.md: a lista de cadeiras ativas sai de `persona foto`,
-    # a chave e o slug. Varrer personas/persona-*.md era layout morto (as
-    # cadeiras migraram para abertura/<cadeira>/persona.md) e listava persona de
-    # quem nao e cadeira. Verbo por tras, nao substrato.
-    r = chamar(["persona", "foto", "--json"], timeout=15)
-    if not r.ok or not isinstance(r.dados, dict):
-        return []
-    return sorted(r.dados)
+    # Fonte canonica na casa nova: secao Nomes das personas em <casa>/instancias/persona/*.md,
+    # carregada por lib/abertura/nomes.py (o antigo `persona foto` saiu na migracao).
+    return sorted(_secao_cadeiras().cadeiras)
 
 
 def _chapeus_disponiveis() -> list[str]:
-    """`<cadeira>/<chapeu>` de todo chapeu publicado, da mesma `persona foto` das cadeiras
-    (cada cadeira traz a lista dos seus chapeus)."""
-    r = chamar(["persona", "foto", "--json"], timeout=15)
-    if not r.ok or not isinstance(r.dados, dict):
-        return []
+    """`<cadeira>/<chapeu>` de todo chapeu publicado na casa nova."""
+    secao = _secao_cadeiras()
     return sorted(
         f"{cad}/{ch}"
-        for cad, info in r.dados.items()
-        for ch in (info.get("chapeus") or [])
+        for cad, decl in secao.cadeiras.items()
+        for ch in decl.chapeus
     )
 
 
@@ -129,8 +132,126 @@ def _env_caixa(persona: str) -> dict[str, str]:
     return e
 
 
+def _env_casa(cadeira: str) -> dict[str, str]:
+    e = dict(os.environ)
+    e["PF_CADEIRA"] = cadeira
+    e.setdefault("PF_CASA_RAIZ", str(_casa_raiz()))
+    return e
+
+
 def _env_padrao() -> dict[str, str]:
     return dict(os.environ)
+
+
+def _peca_texto(pid: str, ref: str, r: ResultadoVerbo) -> dict:
+    if r.ok and isinstance(r.dados, dict) and r.dados.get("texto"):
+        texto = str(r.dados["texto"])
+        return {
+            "peca": pid,
+            "ref": ref,
+            "sha": None,
+            "frescor": "fresco",
+            "tokens": max(1, len(texto) // 4),
+            "conteudo": texto,
+            "motivo": None,
+        }
+    return {
+        "peca": pid,
+        "ref": ref,
+        "sha": None,
+        "frescor": "indisponivel",
+        "tokens": 0,
+        "conteudo": None,
+        "motivo": r.motivo or "sem conteudo",
+    }
+
+
+def _formatar_lousa_mesa(itens: list[dict]) -> str:
+    """Converte a lista JSON de `mesa ver --json` (lousa da casa nova) no formato
+    que `md_render.render_mesa` e `contagem_mesa` leem por chapeu."""
+    if not itens:
+        return "mesa vazia"
+    linhas: list[str] = []
+    for it in itens:
+        chave = str(it.get("chave") or it.get("card") or "item").strip()
+        chapeu = str(it.get("chapeu") or "geral").strip()
+        situacao = str(it.get("situacao") or "").strip()
+        estagio = str(it.get("estagio") or "").strip()
+        proxima = str(it.get("proxima_jogada") or "").strip()
+        cab_ato = f"({situacao}) {estagio}".strip() if situacao else estagio
+        if proxima:
+            cab = f"#{chave} [{chapeu}] {cab_ato} → {proxima}"
+        else:
+            cab = f"#{chave} [{chapeu}] {cab_ato}"
+        linhas.append(cab.strip())
+        ocasiao = it.get("ocasiao")
+        if isinstance(ocasiao, dict):
+            partes_oc = [f"{k}: {v}" for k, v in ocasiao.items() if v]
+            if partes_oc:
+                linhas.append("ocasião: " + " · ".join(partes_oc))
+        corpo = (it.get("corpo") or "").strip()
+        if corpo:
+            linhas.append(corpo)
+    return "\n".join(linhas)
+
+
+def _coletar_cadeira(cadeira: str, timeout: float) -> ResultadoVerbo:
+    """Leitura fria de uma cadeira na casa nova (sem abrir sessao nem tocar o oplog):
+    persona, cultura (GERAL), apelidos (Org) e mesa (`mesa ver --json`)."""
+    env = _env_casa(cadeira)
+    secao = _secao_cadeiras()
+    chapeus = list(secao.cadeiras[cadeira].chapeus.keys()) if cadeira in secao.cadeiras else []
+
+    r_persona = chamar_texto(["persona", "ler", cadeira, "--parte", "persona"], timeout=timeout, env=env)
+    r_cultura = chamar_texto(["persona", "cultura"], timeout=timeout, env=env)
+    r_org = chamar_texto(["persona", "apelidos"], timeout=timeout, env=env)
+    r_mesa = chamar(["mesa", "ver", "--json"], timeout=timeout, env=env)
+
+    dur = r_persona.duracao_seg + r_cultura.duracao_seg + r_org.duracao_seg + r_mesa.duracao_seg
+    if not r_persona.ok and not r_mesa.ok:
+        motivo = r_persona.motivo or r_mesa.motivo or "leitura indisponivel"
+        return ResultadoVerbo(False, None, motivo, r_persona.exit_code, dur)
+
+    if r_mesa.ok and isinstance(r_mesa.dados, list):
+        mesa_txt = _formatar_lousa_mesa(r_mesa.dados)
+        peca_mesa = {
+            "peca": "mesa",
+            "ref": "mesa ver --json",
+            "sha": None,
+            "frescor": "fresco",
+            "tokens": max(1, len(mesa_txt) // 4),
+            "conteudo": mesa_txt,
+            "motivo": None,
+        }
+    else:
+        peca_mesa = {
+            "peca": "mesa",
+            "ref": "mesa ver --json",
+            "sha": None,
+            "frescor": "indisponivel",
+            "tokens": 0,
+            "conteudo": None,
+            "motivo": r_mesa.motivo or "saida invalida de mesa ver",
+        }
+
+    pecas = [
+        _peca_texto("persona", f"persona ler {cadeira} --parte persona", r_persona),
+        _peca_texto("conduta", "persona cultura", r_cultura),
+        _peca_texto("alias-cadeiras", "persona apelidos", r_org),
+        peca_mesa,
+    ]
+    return ResultadoVerbo(
+        True,
+        {
+            "cadeira": cadeira,
+            "nome_canonico": cadeira,
+            "chapeus": chapeus,
+            "pecas": pecas,
+        },
+        None,
+        0,
+        dur,
+    )
 
 
 def _intervalo(nome: str, default: float) -> float:
@@ -167,6 +288,8 @@ class SondaGrupo:
     chave_item: str = "item"
     # verbo de leitura que devolve texto cru, sem --json (`persona ler`): dados = {"texto": ...}
     texto: bool = False
+    # coletor composto (quando um item agrega leituras frias de varios verbos, sem abrir sessao)
+    coletor: Callable[[str, float], ResultadoVerbo] | None = None
 
 
 SONDAS: list[Sonda] = [
@@ -187,14 +310,16 @@ SONDAS: list[Sonda] = [
 SONDAS_GRUPO: list[SondaGrupo] = [
     SondaGrupo("cadeiras", _intervalo("CADEIRAS", 45), _timeout("CADEIRAS", 15),
                _cadeiras_disponiveis,
-               lambda c: ["expediente", "montar", c, "--sem-acervo", "--json"],
-               fabrica_env=lambda c: {**_env_padrao(), "PF_CADEIRA": c},
-               chave_item="cadeira"),
-    # O texto de cada chapeu (chapeu.md + ferramental.md, crus, da morada publicada), pra tela
-    # ter onde LER o chapeu e nao so a mesa e o caderno dele. Um item por `<cadeira>/<chapeu>`.
+               lambda c: ["persona", "ler", c, "--parte", "persona"],
+               fabrica_env=_env_casa,
+               chave_item="cadeira",
+               coletor=_coletar_cadeira),
+    # O texto de cada chapeu da casa nova, pra tela ter onde LER o chapeu.
+    # Um item por `<cadeira>/<chapeu>`.
     SondaGrupo("chapeus", _intervalo("CHAPEUS", 120), _timeout("CHAPEUS", 15),
                _chapeus_disponiveis,
                lambda it: ["persona", "ler", it.split("/", 1)[0], "--chapeu", it.split("/", 1)[1]],
+               fabrica_env=lambda it: _env_casa(it.split("/", 1)[0]),
                chave_item="chapeu", texto=True),
     SondaGrupo("skills", _intervalo("SKILLS", 120), _timeout("SKILLS", 15),
                _skills_disponiveis,
@@ -272,8 +397,11 @@ class Agregador:
 
         blocos = []
         for item in itens:
-            leitor = chamar_texto if g.texto else chamar
-            resultado = leitor(g.fabrica_argv(item), timeout=g.timeout_seg, env=g.fabrica_env(item))
+            if g.coletor is not None:
+                resultado = g.coletor(item, g.timeout_seg)
+            else:
+                leitor = chamar_texto if g.texto else chamar
+                resultado = leitor(g.fabrica_argv(item), timeout=g.timeout_seg, env=g.fabrica_env(item))
             bloco = bloco_de(resultado)
             bloco[g.chave_item] = item
             blocos.append(bloco)
