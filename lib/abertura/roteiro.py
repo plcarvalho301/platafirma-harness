@@ -278,6 +278,8 @@ def _instancia_antecipada_fora(
     pedido: PedidoDeRoteiro,
     permitidas: set[str],
 ) -> str | None:
+    if "*" in permitidas:
+        return None
     alvo_por_classe = {
         "persona": pedido.cadeira,
         "chapeu": pedido.chapeu,
@@ -297,7 +299,7 @@ def _conferir_instancias_lidas(
     avisos: list[str],
 ) -> bool:
     """Confere pertencimento das instâncias resolvidas. Devolve False se nenhuma estiver permitida."""
-    if not lida.instancias:
+    if not lida.instancias or "*" in permitidas:
         return True
     faltantes = [inst for inst in lida.instancias if inst not in permitidas]
     for inst in faltantes:
