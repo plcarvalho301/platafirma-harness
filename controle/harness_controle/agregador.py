@@ -29,10 +29,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from abertura.nomes import SecaoDasCadeiras, carregar_secao_das_cadeiras
-
 from ._raizes import instancia, release
 from .verbos import HARNESS, ResultadoVerbo, chamar, chamar_texto
+from abertura.nomes import SecaoDasCadeiras, carregar_secao_das_cadeiras  # noqa: E402
 
 log = logging.getLogger("agregador")
 
