@@ -3,13 +3,13 @@
     "tipo": "preparacao",
     "repositorio": "platafirma-conhecimento",
     "caminho": "analise/canal-dos-giros",
-    "versao": "4d78582"
+    "versao": "659638b"
   },
   "uso-por-canal": {
     "tipo": "analise",
     "repositorio": "platafirma-conhecimento",
     "caminho": "analise/uso-por-canal",
-    "versao": "4d78582"
+    "versao": "659638b"
   },
   "populacao-de-turnos": {
     "tipo": "preparacao",
