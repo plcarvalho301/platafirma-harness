@@ -24,6 +24,7 @@ def _env_com_stubs(tmp_path: Path) -> tuple[dict[str, str], Path]:
     env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
     env["RASTRO"] = str(log)
     env["HOME"] = str(tmp_path / "home")
+    env["PF_SUJEITO"] = "teste"
     Path(env["HOME"]).mkdir(exist_ok=True)
     return env, log
 
@@ -63,7 +64,7 @@ def test_dt15_cache_ver_lista_imagens_e_disco_preserva_keep_storage(tmp_path: Pa
     assert r_disco.returncode == 0, r_disco.stderr
     linhas = log.read_text(encoding="utf-8").splitlines()
     assert "docker builder prune -a -f --keep-storage 12GB" in linhas
-    assert "docker images --no-trunc --format {{json .}}" in linhas
+    assert any(l.startswith("docker images ") and "--no-trunc --format {{json .}}" in l for l in linhas)
 
 
 def test_dt16_restart_roda_daemon_reload_quando_need_daemon_reload_yes(tmp_path: Path):

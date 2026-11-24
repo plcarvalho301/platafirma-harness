@@ -215,19 +215,21 @@ def test_limpeza_fossil_despacha_com_os_argumentos(arvore):
 
 def test_limpeza_jobs_e_o_fossil_so_de_job_e_leva_os_argumentos_do_cron(arvore):
     _stub(arvore / "bin" / "_infra", "limpeza-fossil", FAKE_FOSSIL)
-    r = roda(arvore, "limpeza", "jobs", "--dias", "1")
+    r = roda(arvore, "limpeza", "jobs", "--dias", "1", env_extra={"PF_SUJEITO": "automacao:cron"})
     assert r.returncode == 0 and r.stdout.strip() == "FOSSIL: [--so-jobs] [--dias] [1]"
 
 
 def test_limpeza_fossil_sem_o_ajudante_e_dependencia_exit_3(arvore):
     for alvo in ("fossil", "jobs"):
-        r = roda(arvore, "limpeza", alvo)
+        r = roda(arvore, "limpeza", alvo, env_extra={"PF_SUJEITO": "automacao:limpeza-fossil"})
         assert r.returncode == 3 and "bin/_infra/limpeza-fossil" in r.stderr
 
 
-def test_limpeza_nao_exige_identidade_e_o_codigo_de_saida_passa(arvore):
+def test_limpeza_exige_identidade_na_mutacao_e_propaga_codigo_de_saida(arvore):
     _stub(arvore / "bin" / "_infra", "limpeza-fossil", FAKE_FOSSIL)
-    r = roda(arvore, "limpeza", "fossil", env_extra={"FAKE_SAIDA": "4"})
+    r_sem = roda(arvore, "limpeza", "fossil", env_extra={"FAKE_SAIDA": "4"})
+    assert r_sem.returncode == 3 and "PF_SUJEITO" in r_sem.stderr
+    r = roda(arvore, "limpeza", "fossil", env_extra={"FAKE_SAIDA": "4", "PF_SUJEITO": "automacao:limpeza-fossil"})
     assert r.returncode == 4 and "PF_SUJEITO" not in r.stderr
 
 

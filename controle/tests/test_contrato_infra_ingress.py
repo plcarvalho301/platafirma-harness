@@ -74,7 +74,8 @@ class Cena:
         e = {**os.environ, "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}",
              "INFRA_INGRESS_FONTE": str(self.fonte), "INFRA_INGRESS_COPIA": str(self.copia),
              "INFRA_INGRESS_CONTEINER": CONTEINER, "INFRA_INGRESS_ESPERA": "0",
-             "STUB_CONTEINER": CONTEINER, "STUB_COPIA": str(self.copia), "STUB_LOG": str(self.log)}
+             "STUB_CONTEINER": CONTEINER, "STUB_COPIA": str(self.copia), "STUB_LOG": str(self.log),
+             "PF_SUJEITO": "teste"}
         e.update(env)
         return subprocess.run([BASH, str(INFRA), "ingress", *args], capture_output=True, text=True,
                               env=e, timeout=30, check=False)

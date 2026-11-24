@@ -28,6 +28,7 @@ def test_o_service_roda_a_limpeza_de_fossil_da_release_sem_ver_e_sem_aprovacao()
 def test_o_service_leva_o_ambiente_da_conta_como_as_outras_units_que_chamam_verbo():
     servico = _servico()
     assert "EnvironmentFile=/home/claudinho/.config/ops/env" in servico and "Environment=PF_CADEIRA=ti" in servico
+    assert "Environment=PF_SUJEITO=automacao:limpeza-fossil" in servico
 
 
 def test_a_recusa_por_job_ativo_nao_falha_a_unit_mas_o_alvo_que_nao_saiu_falha():

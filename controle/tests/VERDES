@@ -28,6 +28,7 @@ tests/test_fila_tipos_validos.py | lib/fila_tipos.py bin/_fila/streams.py contro
 # errado em cada um. Ficar de fora do gate e estado declarado, nao esquecimento.
 tests/test_contrato_conferir.py | bin/conferir bin/_conferir/** bin/_release/conferir/** skills/**
 tests/test_contrato_infra.py | bin/conferir bin/infra bin/_infra/** bin/_release/**
+tests/test_infra_1354_1356_seguranca.py | bin/infra
 tests/test_contrato_monta_sessao.py | bin/monta-sessao bin/_expediente/** lib/abertura/** registro/** recuperacao/**
 tests/test_abertura_tronco.py | lib/abertura/**
 tests/test_conferir_veredito.py | bin/conferir bin/_conferir/** bin/_release/conferir/**

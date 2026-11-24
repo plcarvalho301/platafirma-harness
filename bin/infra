@@ -70,7 +70,8 @@ uso:
                                                 contêiner ou unit; últimas n linhas após os filtros (default 50)
   infra restart  <alvo> [--nao-esperar]          contêiner ou unit --user; confere antes de dizer ok
   infra remover  <alvo> [--ver]                  tira contêiner avulso, rede docker vazia ou unit --user fora do declarado; --ver só mostra
-  infra unit-env <unit> [--ver | CHAVE=VALOR...] drop-in de ambiente da unit --user (daemon-reload)
+  infra unit-env <unit> [--ver | CHAVE=VALOR... | --credencial NOME=stack/segredo...]
+                                                 drop-in 0600 da unit --user (recusa segredo em Environment=; daemon-reload)
   infra cache    [ver|vram|disco]                o que ocupa VRAM e disco; liberar é explícito
   infra cache    modelos [--json]                revisão e digest dos pesos no cache do Hugging Face; só lê
   infra imagens  [--json]                        separa imagens Docker em produção das fora de produção; só lê
@@ -709,6 +710,7 @@ cache() {
       fi
       ;;
     vram)
+      exigir_sujeito "infra cache vram" || exit $?
       # #2856 linha 142: `vram` DESCARREGA o modelo residente (nao mede; medir e `cache ver`) e
       # saia 0 sem uma linha quando nao havia nada ou o ollama nao respondia.
       local ps nomes m falhou=0
@@ -729,14 +731,15 @@ cache() {
       [ "$falhou" -eq 0 ] || exit 3
       ;;
     disco)
+      exigir_sujeito "infra cache disco" || exit $?
       docker builder prune -a -f --keep-storage "${INFRA_BUILD_CACHE_KEEP_STORAGE:-25GB}"
       if [ -x "$IMAGENS_AJUDANTE" ]; then
         "$IMAGENS_AJUDANTE" limpar
       else
         docker image prune -a -f
       fi
-      docker volume prune -f
       uv cache prune 2>/dev/null || true
+      echo "volumes Docker nao sao podados aqui: volume de stack parada guarda dado; inspecione com docker volume ls."
       echo "cache de modelo (huggingface, ollama) nao e apagado aqui: rebaixar custa GiB de re-download."
       ;;
     modelos) shift; cache_modelos "$@" ;;
@@ -951,6 +954,7 @@ restart() {
     shift
   done
   [ -n "$alvo" ] || { echo "erro: restart exige alvo explícito — não reinicia tudo." >&2; exit 2; }
+  exigir_sujeito "infra restart" || exit $?
 
   if e_conteiner "$alvo"; then
     if [ "$esperar" = 1 ]; then
@@ -1246,18 +1250,137 @@ unit_env() {
   arq="$dir/zz-infra-env.conf"
   if [ $# -eq 0 ] || [ "${1:-}" = "--ver" ]; then
     echo "== ambiente efetivo de $unit (unit + drop-ins)"
-    systemctl --user show -p Environment --value -- "$unit" | tr ' ' '\n' | grep . || echo "(vazio)"
+    local ef
+    ef="$(systemctl --user show -p Environment --value -- "$unit" | tr ' ' '\n' | grep . || true)"
+    if [ -n "$ef" ]; then
+      printf '%s\n' "$ef" | python3 - <<'PY'
+import re, sys
+SENS = re.compile(r"(?i)(?:^|_)(?:PASSWORD|PASSWD|PASS|PWD|SECRET|TOKEN|API_?KEY|PRIVATE_?KEY|ACCESS_?KEY|SIGNING_?KEY|AUTH_?KEY|CREDENTIAL|CLIENT_SECRET|DSN)(?:$|_)|^PGPASSWORD$")
+for line in sys.stdin:
+    s = line.rstrip("\n")
+    if "=" in s:
+        k, v = s.split("=", 1)
+        if SENS.search(k) or "-----BEGIN " in v:
+            print(f"{k}=<mascarado>")
+            continue
+    print(s)
+PY
+    else
+      echo "(vazio)"
+    fi
     echo; echo "== drop-in gerido por infra: $arq"
-    cat "$arq" 2>/dev/null || echo "(ainda nao existe)"
+    if [ -f "$arq" ]; then
+      python3 - "$arq" <<'PY'
+import re, sys
+SENS = re.compile(r"(?i)(?:^|_)(?:PASSWORD|PASSWD|PASS|PWD|SECRET|TOKEN|API_?KEY|PRIVATE_?KEY|ACCESS_?KEY|SIGNING_?KEY|AUTH_?KEY|CREDENTIAL|CLIENT_SECRET|DSN)(?:$|_)|^PGPASSWORD$")
+with open(sys.argv[1], encoding="utf-8") as f:
+    for line in f:
+        s = line.rstrip("\n")
+        if s.startswith("Environment=") and "=" in s[12:]:
+            k, v = s[12:].split("=", 1)
+            if SENS.search(k) or "-----BEGIN " in v:
+                print(f"Environment={k}=<mascarado>")
+                continue
+        print(s)
+PY
+    else
+      echo "(ainda nao existe)"
+    fi
     return
   fi
-  local kv
-  for kv in "$@"; do
-    case "$kv" in
-      [A-Za-z_]*=*) ;;
-      *) echo "erro: '$kv' nao e CHAVE=VALOR." >&2; exit 2 ;;
-    esac
-  done
+  exigir_sujeito "infra unit-env" || exit $?
+  # Validação estrita (#1354) e bloqueio de segredos em Environment= (solução permanente via cofre + LoadCredential=)
+  python3 - "$unit" "$@" <<'PY'
+import os, re, stat, sys
+from pathlib import Path
+
+unit, args = sys.argv[1], sys.argv[2:]
+KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+CRED_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]*$")
+SEG_PART_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+SENS_RE = re.compile(
+    r"(?i)(?:^|_)(?:PASSWORD|PASSWD|PASS|PWD|SECRET|TOKEN|API_?KEY|PRIVATE_?KEY|"
+    r"ACCESS_?KEY|SIGNING_?KEY|AUTH_?KEY|CREDENTIAL|CLIENT_SECRET|DSN)(?:$|_)|^PGPASSWORD$"
+)
+
+def tem_controle(s: str) -> bool:
+    return any(ord(c) < 0x20 or ord(c) == 0x7F for c in s)
+
+segredos_dir = Path(
+    os.environ.get("SEG_SECRETS_DIR")
+    or os.path.join(os.environ.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa"), "segredos")
+).resolve()
+
+i = 0
+while i < len(args):
+    a = args[i]
+    if a == "--credencial" or a.startswith("--credencial="):
+        if a == "--credencial":
+            i += 1
+            if i >= len(args):
+                print("erro: --credencial exige NOME=stack/segredo (ou NOME= para remover).", file=sys.stderr)
+                sys.exit(2)
+            spec = args[i]
+        else:
+            spec = a.split("=", 1)[1]
+        if "=" not in spec or tem_controle(spec):
+            print(f"erro: credencial invalida '{spec}' (use NOME=stack/segredo, sem caracteres de controle).", file=sys.stderr)
+            sys.exit(2)
+        nome, ref = spec.split("=", 1)
+        if not CRED_NAME_RE.match(nome):
+            print(f"erro: nome de credencial invalido '{nome}' (esperado ^[A-Za-z_][A-Za-z0-9_.-]*$).", file=sys.stderr)
+            sys.exit(2)
+        if ref != "":
+            partes = ref.split("/")
+            if len(partes) != 2 or any(p in ("", ".", "..") or not SEG_PART_RE.match(p) for p in partes):
+                print(f"erro: referencia de segredo invalida '{ref}' (use <stack>/<segredo>).", file=sys.stderr)
+                sys.exit(2)
+            candidato = segredos_dir / partes[0] / partes[1]
+            try:
+                real = candidato.resolve()
+                dentro = real.is_relative_to(segredos_dir)
+            except OSError:
+                dentro = False
+            if not dentro:
+                print(f"recusa: segredo '{ref}' escapa do cofre {segredos_dir}.", file=sys.stderr)
+                sys.exit(4)
+            if not real.is_file():
+                print(
+                    f"erro: segredo '{ref}' nao encontrado no cofre ({candidato}); "
+                    f"grave antes com: seg segredo gravar {ref}",
+                    file=sys.stderr,
+                )
+                sys.exit(3)
+            modo = stat.S_IMODE(real.stat().st_mode)
+            if modo & 0o077:
+                print(
+                    f"recusa: permissao aberta ({oct(modo)}) em {real}; "
+                    f"segredo no cofre deve ser 0600/0400.",
+                    file=sys.stderr,
+                )
+                sys.exit(4)
+        i += 1
+        continue
+    if "=" not in a:
+        print(f"erro: '{a}' nao e CHAVE=VALOR.", file=sys.stderr)
+        sys.exit(2)
+    k, v = a.split("=", 1)
+    if tem_controle(k) or tem_controle(v):
+        print(f"erro: caractere de controle ou quebra de linha recusado em '{k}'.", file=sys.stderr)
+        sys.exit(2)
+    if not KEY_RE.match(k):
+        print(f"erro: chave invalida '{k}' (esperado ^[A-Za-z_][A-Za-z0-9_]*$).", file=sys.stderr)
+        sys.exit(2)
+    if SENS_RE.search(k) or "-----BEGIN " in v:
+        print(
+            f"recusa: '{k}' parece segredo — segredo nao vai em Environment= (variavel solta). "
+            f"Guarde no cofre com 'seg segredo gravar <stack>/<nome>' (0600) e vincule a unit com "
+            f"'infra unit-env {unit} --credencial {k}=<stack>/<nome>' (LoadCredential=, entregue em $CREDENTIALS_DIRECTORY).",
+            file=sys.stderr,
+        )
+        sys.exit(4)
+    i += 1
+PY
   if [ -d "$dir" ] && ! _dir_gravavel "$dir"; then
     local dono
     dono="$(stat -c %U -- "$dir" 2>/dev/null || echo root)"
@@ -1273,24 +1396,59 @@ unit_env() {
   mkdir -p "$dir"
   python3 - "$arq" "$@" <<'PY'
 import os, sys, tempfile
+from pathlib import Path
+
 arq, novos = sys.argv[1], sys.argv[2:]
 env = {}
+creds = {}
+segredos_dir = Path(
+    os.environ.get("SEG_SECRETS_DIR")
+    or os.path.join(os.environ.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa"), "segredos")
+).resolve()
+
 legado = os.path.join(os.path.dirname(arq), "90-infra-env.conf")  # nome antigo, perdia para capsula.conf
 for fonte in (legado, arq):
     if os.path.exists(fonte):
-        for l in open(fonte):
-            l = l.strip()
-            if l.startswith("Environment=") and "=" in l[12:]:
-                k, v = l[12:].split("=", 1); env[k] = v
+        with open(fonte, encoding="utf-8") as fh:
+            for l in fh:
+                l = l.strip()
+                if l.startswith("Environment=") and "=" in l[12:]:
+                    k, v = l[12:].split("=", 1)
+                    env[k] = v
+                elif l.startswith("LoadCredential=") and ":" in l[15:]:
+                    c, p = l[15:].split(":", 1)
+                    creds[c] = p
 if os.path.exists(legado):
     os.unlink(legado)
-for kv in novos:
-    k, v = kv.split("=", 1); env[k] = v
-corpo = "[Service]\n" + "".join(f"Environment={k}={v}\n" for k, v in sorted(env.items()))
+
+i = 0
+while i < len(novos):
+    a = novos[i]
+    if a == "--credencial" or a.startswith("--credencial="):
+        spec = novos[i + 1] if a == "--credencial" else a.split("=", 1)[1]
+        i += 2 if a == "--credencial" else 1
+        nome, ref = spec.split("=", 1)
+        if ref == "":
+            creds.pop(nome, None)
+        else:
+            stack, seg = ref.split("/", 1)
+            creds[nome] = str((segredos_dir / stack / seg).resolve())
+    else:
+        k, v = a.split("=", 1)
+        env[k] = v
+        i += 1
+
+linhas = ["[Service]\n"]
+linhas.extend(f"Environment={k}={v}\n" for k, v in sorted(env.items()))
+linhas.extend(f"LoadCredential={c}:{p}\n" for c, p in sorted(creds.items()))
+corpo = "".join(linhas)
 fd, tmp = tempfile.mkstemp(dir=os.path.dirname(arq), prefix=".90-infra-env.")
-with os.fdopen(fd, "w") as f:
-    f.write(corpo); f.flush(); os.fsync(f.fileno())
-os.chmod(tmp, 0o644); os.rename(tmp, arq)
+with os.fdopen(fd, "w", encoding="utf-8") as f:
+    f.write(corpo)
+    f.flush()
+    os.fsync(f.fileno())
+os.chmod(tmp, 0o600)
+os.rename(tmp, arq)
 print(corpo, end="")
 PY
   systemctl --user daemon-reload
@@ -1382,32 +1540,41 @@ cmd_medir() {
 # `infra limpeza logs|quarentena [args…]` — sub-atos movidos de bin/ops-log-prune e
 # bin/quarentena-prune para bin/_infra/ (arq:0110 §14, emenda 26/09/2026): não exigem
 # PF_SUJEITO — já eram chamados por automação (cron), sem identidade humana no ato.
+_tem_ver() {
+  local _a
+  for _a in "$@"; do
+    [ "$_a" = "--ver" ] && return 0
+  done
+  return 1
+}
+
 cmd_limpeza() {
   local alvo="${1:-}"; shift || true
   case "$alvo" in
     logs)
+      exigir_sujeito "infra limpeza logs" || exit $?
       [ -x "$LIMPEZA_LOGS" ] || { printf 'infra: erro: dependência bin/_infra/limpeza-logs: ausente (%s)\n' "$LIMPEZA_LOGS" >&2; exit 3; }
       exec "$LIMPEZA_LOGS" "$@"
       ;;
     quarentena)
+      exigir_sujeito "infra limpeza quarentena" || exit $?
       [ -x "$LIMPEZA_QUARENTENA" ] || { printf 'infra: erro: dependência bin/_infra/limpeza-quarentena: ausente (%s)\n' "$LIMPEZA_QUARENTENA" >&2; exit 3; }
       exec "$LIMPEZA_QUARENTENA" "$@"
       ;;
     fossil)
-      # #3920 (R12 a R14 da spec eixos-do-host): o que as rodadas deixam para trás, pelo critério positivo — contêiner
-      # sem label de projeto do compose com mais de 24 h e unit platafirma-job-* em failed. Grava o evento do job antes
-      # do reset-failed e guarda logs e inspeção do contêiner antes do rm. Também não exige PF_SUJEITO: roda no timer.
+      # #3920 (R12 a R14 da spec eixos-do-host) + #1356: mutação exige PF_SUJEITO
+      # (o timer limpeza-fossil.service declara PF_SUJEITO=automacao:limpeza-fossil); --ver só lista.
+      _tem_ver "$@" || exigir_sujeito "infra limpeza fossil" || exit $?
       [ -x "$LIMPEZA_FOSSIL" ] || { printf 'infra: erro: dependência bin/_infra/limpeza-fossil: ausente (%s)\n' "$LIMPEZA_FOSSIL" >&2; exit 3; }
       exec "$LIMPEZA_FOSSIL" "$@"
       ;;
     jobs)
-      # #2856 linha 17, absorvido pelo #3920: o job avulso falhado é fóssil e sai pela limpeza de fóssil, com o evento
-      # gravado antes. A entrada fica porque o cron do core chama `infra limpeza jobs --dias 1` (core/deploy/
-      # crontab-claudinho); um caminho só para o mesmo fóssil, dois nomes.
+      _tem_ver "$@" || exigir_sujeito "infra limpeza jobs" || exit $?
       [ -x "$LIMPEZA_FOSSIL" ] || { printf 'infra: erro: dependência bin/_infra/limpeza-fossil: ausente (%s)\n' "$LIMPEZA_FOSSIL" >&2; exit 3; }
       exec "$LIMPEZA_FOSSIL" --so-jobs "$@"
       ;;
     imagens)
+      _tem_ver "$@" || exigir_sujeito "infra limpeza imagens" || exit $?
       [ -x "$IMAGENS_AJUDANTE" ] || { printf 'infra: erro: dependência bin/_infra/imagens: ausente (%s)\n' "$IMAGENS_AJUDANTE" >&2; exit 3; }
       exec "$IMAGENS_AJUDANTE" limpar "$@"
       ;;
@@ -1422,20 +1589,18 @@ cmd_limpeza() {
   esac
 }
 
-# `infra agenda conferir|aplicar` — convergência do crontab do claudinho (decisão 8,
-# card #3145): script único em INFRA_CRONTAB_SCRIPT, --check em conferir (0 igual, 1
-# divergente — mérito, não uso), sem --check em aplicar. Não exige PF_SUJEITO: já é
-# chamado por automação/gatilho, como restart/backup/cache/limpeza.
-# `infra units conferir|aplicar` — o par de `agenda` para as units systemd --user da instância
-# (deploy/units-da-instancia.json do core, card #3917): script único em INFRA_UNITS_SCRIPT, --check
-# em conferir (0 conforme, 1 divergente), sem --check em aplicar (symlink para a release e
-# daemon-reload). Não exige PF_SUJEITO, pela mesma razão de agenda.
+# `infra agenda|units|ambiente conferir|aplicar` (#1356): conferir só lê (sem PF_SUJEITO);
+# aplicar muta o host e exige PF_SUJEITO.
 cmd_units() {
   local sub="${1:-}"; shift || true
-  [ -x "$UNITS_SCRIPT" ] || { printf 'infra: erro: dependência %s: ausente\n' "$UNITS_SCRIPT" >&2; exit 3; }
   case "$sub" in
-    conferir) exec "$UNITS_SCRIPT" --check "$@" ;;
-    aplicar)  exec "$UNITS_SCRIPT" "$@" ;;
+    conferir)
+      [ -x "$UNITS_SCRIPT" ] || { printf 'infra: erro: dependência %s: ausente\n' "$UNITS_SCRIPT" >&2; exit 3; }
+      exec "$UNITS_SCRIPT" --check "$@" ;;
+    aplicar)
+      exigir_sujeito "infra units aplicar" || exit $?
+      [ -x "$UNITS_SCRIPT" ] || { printf 'infra: erro: dependência %s: ausente\n' "$UNITS_SCRIPT" >&2; exit 3; }
+      exec "$UNITS_SCRIPT" "$@" ;;
     "")
       printf 'infra: erro: units exige conferir ou aplicar\n' >&2; uso ;;
     *)
@@ -1443,17 +1608,16 @@ cmd_units() {
   esac
 }
 
-# `infra ambiente conferir|aplicar` (debito 605): o verbo que roda deploy-harness/instalar, o que
-# converge o core.hooksPath de todo clone platafirma-* da bancada, as units do harness e o texto de
-# arranque. Antes nenhum verbo o rodava, e o que divergia so se corrigia a mao. Mesmo molde de
-# agenda e units: --check em conferir (0 conforme, 1 divergente), converge em aplicar. Nao exige
-# PF_SUJEITO. `infra instalar` segue aposentado (outro assunto: bin servido por copia).
 cmd_ambiente() {
   local sub="${1:-}"; shift || true
-  [ -x "$AMBIENTE_SCRIPT" ] || { printf 'infra: erro: dependência %s: ausente\n' "$AMBIENTE_SCRIPT" >&2; exit 3; }
   case "$sub" in
-    conferir) exec "$AMBIENTE_SCRIPT" --check "$@" ;;
-    aplicar)  exec "$AMBIENTE_SCRIPT" "$@" ;;
+    conferir)
+      [ -x "$AMBIENTE_SCRIPT" ] || { printf 'infra: erro: dependência %s: ausente\n' "$AMBIENTE_SCRIPT" >&2; exit 3; }
+      exec "$AMBIENTE_SCRIPT" --check "$@" ;;
+    aplicar)
+      exigir_sujeito "infra ambiente aplicar" || exit $?
+      [ -x "$AMBIENTE_SCRIPT" ] || { printf 'infra: erro: dependência %s: ausente\n' "$AMBIENTE_SCRIPT" >&2; exit 3; }
+      exec "$AMBIENTE_SCRIPT" "$@" ;;
     "")
       printf 'infra: erro: ambiente exige conferir ou aplicar\n' >&2; uso ;;
     *)
@@ -1463,10 +1627,14 @@ cmd_ambiente() {
 
 cmd_agenda() {
   local sub="${1:-}"; shift || true
-  [ -x "$CRONTAB_SCRIPT" ] || { printf 'infra: erro: dependência %s: ausente\n' "$CRONTAB_SCRIPT" >&2; exit 3; }
   case "$sub" in
-    conferir) exec "$CRONTAB_SCRIPT" --check "$@" ;;
-    aplicar)  exec "$CRONTAB_SCRIPT" "$@" ;;
+    conferir)
+      [ -x "$CRONTAB_SCRIPT" ] || { printf 'infra: erro: dependência %s: ausente\n' "$CRONTAB_SCRIPT" >&2; exit 3; }
+      exec "$CRONTAB_SCRIPT" --check "$@" ;;
+    aplicar)
+      exigir_sujeito "infra agenda aplicar" || exit $?
+      [ -x "$CRONTAB_SCRIPT" ] || { printf 'infra: erro: dependência %s: ausente\n' "$CRONTAB_SCRIPT" >&2; exit 3; }
+      exec "$CRONTAB_SCRIPT" "$@" ;;
     "")
       printf 'infra: erro: agenda exige conferir ou aplicar\n' >&2; uso ;;
     *)
@@ -1500,6 +1668,7 @@ ingress() {
       *) echo "erro: opção desconhecida em ingress: $a (uso: infra ingress [--ver])" >&2; exit 2 ;;
     esac
   done
+  [ "$ver" = 1 ] || exigir_sujeito "infra ingress" || exit $?
   local fonte="${INFRA_INGRESS_FONTE:-$PLATAFIRMA_RELEASE/core/deploy/cloudflared-config.yml}"
   local copia="${INFRA_INGRESS_COPIA:-$PLATAFIRMA_INSTANCIA/deploy/core/cloudflared.yml}"
   local conteiner="${INFRA_INGRESS_CONTEINER:-platafirma-core-cloudflared-1}"

@@ -34,6 +34,7 @@ def _limpar(tmp_path):
     env = {k: v for k, v in os.environ.items()
            if k not in ("OPS_LOG_DIR", "LONGJOB_LOGDIR", "OPS_LOG_RETENCAO_DIAS")}
     env["PLATAFIRMA_INSTANCIA"] = str(tmp_path)
+    env["PF_SUJEITO"] = "automacao:cron"
     return subprocess.run([BASH, str(INFRA), "limpeza", "logs"], capture_output=True,
                           text=True, env=env, timeout=30)
 

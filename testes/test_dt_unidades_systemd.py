@@ -157,6 +157,7 @@ def test_infra_unit_env_usa_local_share_quando_config_bloqueado(tmp_path):
             **os.environ,
             "HOME": str(home),
             "PATH": f"{falso_bin}:{os.environ['PATH']}",
+            "PF_SUJEITO": "teste",
         }
         env.pop("INFRA_UNITS_CONFIG_DIR", None)
         env.pop("XDG_DATA_HOME", None)
@@ -189,6 +190,7 @@ def test_infra_unit_env_recusa_unit_de_root_em_config(tmp_path):
             **os.environ,
             "HOME": str(home),
             "PATH": f"{falso_bin}:{os.environ['PATH']}",
+            "PF_SUJEITO": "teste",
         }
         env.pop("INFRA_UNITS_CONFIG_DIR", None)
         p = subprocess.run(

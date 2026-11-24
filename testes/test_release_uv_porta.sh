@@ -324,7 +324,7 @@ echo OK
 # ---------------------------------------------------------------- 3. infra e bus
 echo "--- 3a: infra restart porta sem XDG_RUNTIME_DIR define o bus e despacha destacado"
 : > "$SYSD_LOG"
-set +e; out="$(env -u XDG_RUNTIME_DIR -u DBUS_SESSION_BUS_ADDRESS bash "$INFRA" restart porta 2>&1)"; rc=$?; set -e
+set +e; out="$(env -u XDG_RUNTIME_DIR -u DBUS_SESSION_BUS_ADDRESS PF_SUJEITO=teste bash "$INFRA" restart porta 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 0 ] && grep -q 'despachado destacado' <<<"$out" || falha "infra restart: rc=$rc $out"
 grep -qF "systemd-run --user --collect --quiet --unit=infra-restart-" "$SYSD_LOG" || falha "restart nao foi por systemd-run: $(cat "$SYSD_LOG")"
 grep -F "systemd-run " "$SYSD_LOG" | grep -qF "systemctl --user restart porta | XDG=/run/user/$UID_ATUAL | DBUS=unix:path=/run/user/$UID_ATUAL/bus" \
@@ -336,21 +336,21 @@ echo OK
 
 echo "--- 3b: XDG_RUNTIME_DIR e DBUS ja dados vencem"
 : > "$SYSD_LOG"
-XDG_RUNTIME_DIR="$TMP_DIR/xdg" DBUS_SESSION_BUS_ADDRESS="unix:path=$TMP_DIR/outro-bus" bash "$INFRA" restart porta >/dev/null 2>&1 \
+PF_SUJEITO=teste XDG_RUNTIME_DIR="$TMP_DIR/xdg" DBUS_SESSION_BUS_ADDRESS="unix:path=$TMP_DIR/outro-bus" bash "$INFRA" restart porta >/dev/null 2>&1 \
   || falha "infra restart com bus dado"
 grep -F "systemd-run " "$SYSD_LOG" | grep -qF "XDG=$TMP_DIR/xdg | DBUS=unix:path=$TMP_DIR/outro-bus" || falha "valor dado foi sobrescrito: $(cat "$SYSD_LOG")"
 echo OK
 
 echo "--- 3c: sem bus nenhum o infra diz a causa e sai 3, sem despachar"
 : > "$SYSD_LOG"
-set +e; out="$(FAKE_SEM_BUS=1 bash "$INFRA" restart porta 2>&1)"; rc=$?; set -e
+set +e; out="$(PF_SUJEITO=teste FAKE_SEM_BUS=1 bash "$INFRA" restart porta 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 3 ] && grep -q 'sem bus do systemd --user' <<<"$out" || falha "sem bus: rc=$rc $out"
 ! grep -q '^systemd-run' "$SYSD_LOG" || falha "despachou sem bus"
 echo OK
 
 echo "--- 3e: com bus, alvo que nao e conteiner nem unit segue saindo 2 (comportamento anterior)"
 : > "$SYSD_LOG"
-set +e; out="$(env -u XDG_RUNTIME_DIR bash "$INFRA" restart nao-existe 2>&1)"; rc=$?; set -e
+set +e; out="$(env -u XDG_RUNTIME_DIR PF_SUJEITO=teste bash "$INFRA" restart nao-existe 2>&1)"; rc=$?; set -e
 [ "$rc" -eq 2 ] && grep -q 'não é contêiner conhecido' <<<"$out" || falha "alvo desconhecido com bus: rc=$rc $out"
 ! grep -q '^systemd-run' "$SYSD_LOG" || falha "despachou alvo desconhecido"
 echo OK
@@ -360,12 +360,12 @@ if [ "$UID_ATUAL" -eq 0 ] || [ -O /usr ]; then
   pulado "rodando como dono de /usr; nao ha diretorio de outra conta para simular"
 else
   : > "$SYSD_LOG"
-  XDG_RUNTIME_DIR=/usr DBUS_SESSION_BUS_ADDRESS="unix:path=/usr/bus" bash "$INFRA" restart porta >/dev/null 2>&1 \
+  PF_SUJEITO=teste XDG_RUNTIME_DIR=/usr DBUS_SESSION_BUS_ADDRESS="unix:path=/usr/bus" bash "$INFRA" restart porta >/dev/null 2>&1 \
     || falha "infra restart com XDG de outra conta"
   grep -F "systemd-run " "$SYSD_LOG" | grep -qF "XDG=/run/user/$UID_ATUAL | DBUS=unix:path=/run/user/$UID_ATUAL/bus" \
     || falha "XDG de outra conta nao foi trocado: $(cat "$SYSD_LOG")"
   : > "$SYSD_LOG"
-  XDG_RUNTIME_DIR=/usr DBUS_SESSION_BUS_ADDRESS="unix:path=$TMP_DIR/meu-bus" bash "$INFRA" restart porta >/dev/null 2>&1 \
+  PF_SUJEITO=teste XDG_RUNTIME_DIR=/usr DBUS_SESSION_BUS_ADDRESS="unix:path=$TMP_DIR/meu-bus" bash "$INFRA" restart porta >/dev/null 2>&1 \
     || falha "infra restart com XDG de outra conta e DBUS proprio"
   grep -F "systemd-run " "$SYSD_LOG" | grep -qF "XDG=/run/user/$UID_ATUAL | DBUS=unix:path=$TMP_DIR/meu-bus" \
     || falha "DBUS fora do XDG estranho devia ser mantido: $(cat "$SYSD_LOG")"
