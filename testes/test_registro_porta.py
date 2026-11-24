@@ -119,9 +119,34 @@ def test_toolstring_do_malote_no_registro(registro):
     assert "cadeia que para no primeiro erro" in desc
     assert "duto" in desc
     assert "verbo sem tool própria" in desc
+
+
     assert "em paralelo" in desc
     assert "lote_next" in desc
     assert "SEMPRE que for chamar dois ou mais verbos" not in desc
+
+
+def test_dt1349_leitor_carrega_registro_vigente_com_descricao(tmp_path):
+    """DT 1349: lib/registro_porta.carrega aceita `descricao` em verbos e transporte."""
+    lib_dir = str(REPO_ROOT / "lib")
+    if lib_dir not in sys.path:
+        sys.path.insert(0, lib_dir)
+    import registro_porta
+
+    carregado = registro_porta.carrega(REGISTRO)
+    assert "acervo" in carregado["verbos"]
+    assert isinstance(carregado["verbos"]["acervo"].get("descricao"), str)
+    assert "malote" in carregado["transporte"]
+
+    invalido = tmp_path / "porta.yaml"
+    invalido.write_text("verbos:\n  acervo:\n    foo: bar\ntransporte:\n  malote: {}\n", encoding="utf-8")
+    with pytest.raises(registro_porta.RegistroIlegivel):
+        registro_porta.carrega(invalido)
+
+    invalido_t = tmp_path / "porta_t.yaml"
+    invalido_t.write_text("verbos:\n  acervo: {}\ntransporte:\n  malote:\n    foo: bar\n", encoding="utf-8")
+    with pytest.raises(registro_porta.RegistroIlegivel):
+        registro_porta.carrega(invalido_t)
 
 
 def _atos_da_descricao(descricao: str) -> list[str]:

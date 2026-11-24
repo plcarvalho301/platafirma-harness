@@ -19,8 +19,9 @@ from pathlib import Path
 import yaml
 
 SLUG = re.compile(r"^[a-z][a-z0-9_-]*$")
-ATRIBUTOS = frozenset({"modelo", "retido", "faces", "nome"})
+ATRIBUTOS = frozenset({"modelo", "retido", "faces", "nome", "descricao"})
 ATRIBUTOS_DA_FACE = frozenset({"instancia", "sem_instancia"})
+ATRIBUTOS_TRANSPORTE = frozenset({"descricao"})
 
 class RegistroIlegivel(Exception):
     """O arquivo não existe, não é YAML ou não tem a forma do registro."""
@@ -48,9 +49,13 @@ def carrega(arquivo: str | Path) -> dict:
     for slug, atr in _mapa(doc["verbos"], arquivo, "verbos").items():
         verbos[_slug(slug, arquivo)] = _verbo(slug, atr, arquivo)
     transporte = []
-    for nome, vazio in _mapa(doc["transporte"], arquivo, "transporte").items():
-        if vazio not in (None, {}):
-            raise RegistroIlegivel(f"{arquivo}: `transporte.{nome}` não tem atributo, só o nome")
+    for nome, atr_t in _mapa(doc["transporte"], arquivo, "transporte").items():
+        atr_t = {} if atr_t is None else atr_t
+        if not isinstance(atr_t, dict) or set(atr_t) - ATRIBUTOS_TRANSPORTE:
+            raise RegistroIlegivel(
+                f"{arquivo}: `transporte.{nome}` com atributo fora de {sorted(ATRIBUTOS_TRANSPORTE)}")
+        if "descricao" in atr_t and not isinstance(atr_t["descricao"], str):
+            raise RegistroIlegivel(f"{arquivo}: `transporte.{nome}.descricao` tem de ser texto")
         transporte.append(_slug(nome, arquivo))
 
     transporte_set = set(transporte)
@@ -119,4 +124,9 @@ def _verbo(slug: str, atr: object, arquivo: Path) -> dict:
         if not isinstance(nome, str) or not SLUG.match(nome):
             raise RegistroIlegivel(f"{arquivo}: `verbos.{slug}.nome` fora da forma de slug: {nome!r}")
         res["nome"] = nome
+    if "descricao" in atr:
+        desc = atr["descricao"]
+        if not isinstance(desc, str):
+            raise RegistroIlegivel(f"{arquivo}: `verbos.{slug}.descricao` tem de ser texto")
+        res["descricao"] = desc
     return res

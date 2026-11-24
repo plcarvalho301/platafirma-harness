@@ -11,7 +11,14 @@ import os
 import sys
 
 from _olaria import saida as sd
-from _olaria.cliente import AmbienteIncompleto, Cliente, PrazoAcabou, SemConexao, SemResposta
+from _olaria.cliente import (
+    AmbienteIncompleto,
+    Cliente,
+    PrazoAcabou,
+    SemConexao,
+    SemResposta,
+    preencher_do_cofre,
+)
 from _olaria.saida import Saida
 
 PEDIDOS_DE_AJUDA = ("--help", "-h", "--ajuda")
@@ -64,7 +71,10 @@ def _erro_prazo(alvo: str, motivo: str, *, como_json: bool = False) -> Saida:
 
 
 def executar(argv: list, env: dict | None = None, *, prog: str | None = None) -> Saida:
+    do_processo = env is None
     env = dict(os.environ if env is None else env)
+    if do_processo:
+        preencher_do_cofre(env)
     if any(a in PEDIDOS_DE_AJUDA for a in argv):
         return Saida(0, USAGE)
     args, como_json = _separar_json(list(argv))

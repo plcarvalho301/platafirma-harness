@@ -93,3 +93,43 @@ def test_conferir_ajuda_responde_pelo_despachante(tmp_path):
     p = _rodar(conferir, bin_dir, ["--help"])
     assert p.returncode == 0, p.stderr
     assert p.stdout.strip() == "ROTA=_release_conferir ARGS=--ajuda"
+
+
+def test_dt966_conferir_ontologia_le_cofre_quando_env_omitido(tmp_path, monkeypatch):
+    """DT 966: conferir ontologia completa OLARIA_URL e OLARIA_CHAVE do cofre quando env é omitido."""
+    import sys
+    from types import SimpleNamespace
+
+    bin_str = str(RAIZ / "bin")
+    if bin_str not in sys.path:
+        sys.path.insert(0, bin_str)
+    from _conferir import __main__ as conferir_main
+    from _olaria.cliente import Cliente
+
+    cofre = tmp_path / "segredos" / "olaria"
+    cofre.mkdir(parents=True)
+    (cofre / "OLARIA_URL").write_text("http://olaria.cofre:8103\n", encoding="utf-8")
+    (cofre / "OLARIA_CHAVE").write_text("chave-do-cofre\n", encoding="utf-8")
+
+    monkeypatch.delenv("OLARIA_URL", raising=False)
+    monkeypatch.delenv("OLARIA_CHAVE", raising=False)
+    monkeypatch.setenv("PLATAFIRMA_INSTANCIA", str(tmp_path))
+
+    capturado = {}
+
+    def _raciocinar(self, alvo):
+        capturado["url"] = self._amb.url
+        capturado["chave"] = self._amb.chave
+        capturado["alvo"] = alvo
+        return SimpleNamespace(status=200, corpo={"estado": "conforme", "alvo": alvo, "erros": []})
+
+    monkeypatch.setattr(Cliente, "raciocinar", _raciocinar)
+
+    saida = conferir_main.executar(["ontologia", "parada"])
+    assert saida.codigo == 0, saida.stderr
+    assert capturado == {"url": "http://olaria.cofre:8103", "chave": "chave-do-cofre", "alvo": "parada"}
+
+    # Com env explícito vazio (isolamento de teste), segue falhando sem ler o cofre.
+    saida_sem_env = conferir_main.executar(["ontologia", "parada"], env={})
+    assert saida_sem_env.codigo == 3
+    assert "OLARIA_URL" in saida_sem_env.stderr
