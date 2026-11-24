@@ -224,7 +224,7 @@ def tipo_particao(reg: dict) -> str:
         return "consulta_motor"
     if evento == "verbo_contornado":
         return "contorno"
-    if evento in _VAZIO and reg.get("tool") in ("monta_sessao", "monta-sessao") \
+    if (evento in _VAZIO or evento == "abertura") and reg.get("tool") in ("monta_sessao", "monta-sessao") \
             and oplog.classificar(reg)["classe"] == "ok":
         return "abertura"
     if _e_chamada(reg):
@@ -334,6 +334,8 @@ def _acesso(reg: dict, tipo: str, inv: Invalidos) -> dict:
         bruto = reg.get("motivo")
         if reg.get("evento") == "jwt_recusado":
             motivo = _MOTIVO_JWT.get(bruto, "outro") if isinstance(bruto, str) else None
+        elif bruto in ("cliente_nao_cadastrado", "tabela_harnesses_ilegivel"):
+            motivo = "outro"
         else:
             motivo = _vocab(bruto, MOTIVOS_NEGACAO, "motivo", inv)
     elif tipo == "pep_negou":

@@ -126,10 +126,32 @@ class _LeitorRoteiroPadrao:
 
 
 class _LeitorParteCasaNova:
-    """Lê persona, chapéu e cultura exclusivamente de `base/instancias/<classe>/<slug>.md`."""
+    """Lê peças da casa nova exclusivamente de `base/instancias/<classe>/<slug>.md`."""
 
-    def __init__(self, base: Path) -> None:
+    def __init__(self, base: Path, *, ligacoes: Any | None = None) -> None:
         self._base = base
+        self._ligacoes = ligacoes
+
+    def _slug_postura_preferencial(self, cadeira: str) -> str | None:
+        if self._ligacoes is not None:
+            try:
+                slug = self._ligacoes.perfil(cadeira)
+                if slug:
+                    return str(slug)
+            except SemBanco:
+                pass
+        arq = self._base / "instancias" / "persona" / f"{cadeira}.md"
+        if arq.is_file():
+            try:
+                texto = arq.read_text(encoding="utf-8")[:2000]
+                for linha in texto.splitlines():
+                    if linha.lower().startswith("postura preferencial:"):
+                        val = linha.split(":", 1)[1].strip()
+                        if val:
+                            return val
+            except OSError:
+                pass
+        return None
 
     def ler(
         self,
@@ -172,6 +194,37 @@ class _LeitorParteCasaNova:
             except postura_doc.Malformado as exc:
                 return ParteLida(ok=False, conteudo="", ref=f"cultura:{slug}", erro=str(exc))
             return ParteLida(ok=True, conteudo=texto, ref=f"cultura:{slug}", instancias=(slug,))
+
+        if classe == "postura":
+            slug = chave or self._slug_postura_preferencial(cadeira)
+            if not slug:
+                return ParteLida(ok=True, conteudo="", ref="postura:", instancias=())
+            arq = self._base / "instancias" / "postura" / f"{slug}.md"
+            if not arq.is_file():
+                if chave:
+                    return ParteLida(ok=False, conteudo="", ref=f"postura:{slug}", erro=f"arquivo ausente: {arq}")
+                return ParteLida(ok=True, conteudo="", ref=f"postura:{slug}", instancias=())
+            texto = arq.read_text(encoding="utf-8").strip()
+            return ParteLida(ok=True, conteudo=texto, ref=f"postura:{slug}", instancias=(slug,))
+
+        if classe == "ritual":
+            slug = chave or "da-casa"
+            arq = self._base / "instancias" / "ritual" / f"{slug}.md"
+            if not arq.is_file():
+                if chave:
+                    return ParteLida(ok=False, conteudo="", ref=f"ritual:{slug}", erro=f"arquivo ausente: {arq}")
+                return ParteLida(ok=True, conteudo="", ref=f"ritual:{slug}", instancias=())
+            texto = arq.read_text(encoding="utf-8").strip()
+            return ParteLida(ok=True, conteudo=texto, ref=f"ritual:{slug}", instancias=(slug,))
+
+        if classe in ("cenario", "circunstancia"):
+            if not chave:
+                return ParteLida(ok=True, conteudo="", ref=f"{classe}:", instancias=())
+            arq = self._base / "instancias" / classe / f"{chave}.md"
+            if not arq.is_file():
+                return ParteLida(ok=False, conteudo="", ref=f"{classe}:{chave}", erro=f"arquivo ausente: {arq}")
+            texto = arq.read_text(encoding="utf-8").strip()
+            return ParteLida(ok=True, conteudo=texto, ref=f"{classe}:{chave}", instancias=(chave,))
 
         return ParteLida(ok=False, conteudo="", ref=f"{classe}:", erro="sem leitura direta")
 
@@ -293,7 +346,8 @@ def _ato_abrir(entrada: dict[str, Any]) -> tuple[dict[str, Any], int]:
             ), 2
 
     # 3. Leitura estrita de persona, cultura e chapéu (quando pedido) da casa nova
-    leitor_parte = _LeitorParteCasaNova(base)
+    leitor_roteiro: Any = _LeitorRoteiroPadrao() if entrada.get("sem_valkey") else Ligacoes()
+    leitor_parte = _LeitorParteCasaNova(base, ligacoes=None if entrada.get("sem_valkey") else leitor_roteiro)
     p_persona = leitor_parte.ler("persona", cadeira_slug, chapeu_slug)
     if not p_persona.ok:
         codigo = "persona-ausente" if "ausente" in (p_persona.erro or "") else "persona-invalida"
@@ -304,6 +358,7 @@ def _ato_abrir(entrada: dict[str, Any]) -> tuple[dict[str, Any], int]:
         codigo = "cultura-ausente" if "ausente" in (p_cultura.erro or "").lower() or "inexistente" in (p_cultura.erro or "").lower() else "cultura-invalida"
         return _erro_recusa(codigo, f"cultura 'da-casa': {p_cultura.erro}", cadeira=cadeira_slug), 2
 
+    p_chapeu: ParteLida | None = None
     if chapeu_slug:
         p_chapeu = leitor_parte.ler("chapeu", cadeira_slug, chapeu_slug)
         if not p_chapeu.ok:
@@ -321,7 +376,7 @@ def _ato_abrir(entrada: dict[str, Any]) -> tuple[dict[str, Any], int]:
         chapeu=chapeu_slug,
         overrides=tupla.overrides if tupla else (),
     )
-    roteiro = montar_roteiro(pedido, _LeitorRoteiroPadrao(), leitor_parte)
+    roteiro = montar_roteiro(pedido, leitor_roteiro, leitor_parte)
     processos, recusas_rotinas = rotinas(_LeitorProcessosVazio(), base=base)
 
     lousa_erro: str | None = None
@@ -394,17 +449,19 @@ def _ato_abrir(entrada: dict[str, Any]) -> tuple[dict[str, Any], int]:
         caixa_erro=caixa_erro,
     )
 
-    pecas = {p.parte: p.conteudo for p in roteiro.partes if p.conteudo}
+    pecas_principais = frozenset({"persona", "chapeu", "cultura"})
+    pecas = {p.parte: p.conteudo for p in roteiro.partes if p.conteudo and p.parte in pecas_principais}
     if "persona" not in pecas:
         pecas["persona"] = p_persona.conteudo
     if "cultura" not in pecas:
         pecas["cultura"] = p_cultura.conteudo
-    if chapeu_slug and "chapeu" not in pecas:
-        p_ch = leitor_parte.ler("chapeu", cadeira_slug, chapeu_slug)
-        if p_ch.ok:
-            pecas["chapeu"] = p_ch.conteudo
+    if chapeu_slug and "chapeu" not in pecas and p_chapeu is not None and p_chapeu.ok:
+        pecas["chapeu"] = p_chapeu.conteudo
 
-    partes_dict = [p.como_dict() for p in roteiro.partes]
+    # DT 1374: persona, chapéu e cultura já vão em `pecas`; `roteiro` carrega só as peças complementares.
+    partes_extras = [p for p in roteiro.partes if p.parte not in pecas_principais]
+    partes_dict = [p.como_dict() for p in partes_extras]
+    roteiro_conteudo = "\n\n".join(p.conteudo for p in partes_extras if p.conteudo)
     avisos_unicos = list(dict.fromkeys([*avisos, *roteiro.avisos]))
 
     return {
@@ -416,7 +473,7 @@ def _ato_abrir(entrada: dict[str, Any]) -> tuple[dict[str, Any], int]:
         "roteiro": {
             "partes": partes_dict,
             "avisos": list(roteiro.avisos),
-            "conteudo": roteiro.conteudo,
+            "conteudo": roteiro_conteudo,
         },
         "rotinas": {
             "processos": [p.como_dict() for p in processos],
