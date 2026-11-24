@@ -469,12 +469,19 @@ def ato_consultar(
                         vz.fonte, vz.restricoes, vz.coluna, plano.classes_uuids,
                     ))
                 valores_vz = acum
+            ligs_opostas: list[dict[str, Any]] | None = None
+            preds_lig = plano.filtro_db.get("ligacoes") or []
+            if int(res_db["total"]) == 0 and preds_lig:
+                achadas_op = sessao.ligacoes_opostas(plano.classes_uuids, preds_lig)
+                if achadas_op:
+                    ligs_opostas = achadas_op
             reg = montar_retorno_condicao(
                 ped,
                 plano.classe_slug,
                 res_db,
                 valores_vz,
                 teto_bytes=teto_bytes,
+                ligacoes_opostas=ligs_opostas,
             )
     saida.write(renderizar(reg, como_json=ped.como_json))
     saida.flush()

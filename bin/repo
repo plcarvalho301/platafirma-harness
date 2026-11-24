@@ -1144,6 +1144,22 @@ cmd_ler() {
     "$GIT" -C "$c" show "$LEITURA_REF:$caminho" >"$LER_TMP" 2>/dev/null \
       || morre "indeterminavel: nao li $LEITURA_REF:$caminho" 5
     alvo_arquivo="$LER_TMP"
+  else
+    # DT 1361: resolve realpath do alvo e confina à raiz da bancada (evita escape via symlink)
+    local verif_ler
+    verif_ler="$(python3 - "$c" "$alvo_arquivo" <<'PY'
+import os, sys
+c_real = os.path.realpath(sys.argv[1])
+alvo_real = os.path.realpath(sys.argv[2])
+if alvo_real != c_real and not alvo_real.startswith(c_real + os.sep):
+    print("ERR:4")
+else:
+    print("OK")
+PY
+)"
+    if [ "$verif_ler" != "OK" ]; then
+      morre "caminho escapa da bancada via symlink: '$caminho'" 4
+    fi
   fi
   if [ ! -f "$alvo_arquivo" ]; then
     info_varrido "$c" "$repo"
@@ -3793,13 +3809,30 @@ git_sem_engolir() {
 # salva_arvore <worktree> <dono> -- arvore suja: commita num ramo wip novo DENTRO da worktree
 # e empurra. stdout: o nome do wip. rc 0 salvo e empurrado; 3 falhou (nada removido depois).
 salva_arvore() {
-  local c="$1" dono="$2" ramo sha7 ts wip
-  ramo="$(ramo_atual "$c")"; sha7="$("$GIT" -C "$c" rev-parse --short HEAD 2>/dev/null || echo 0000000)"
+  local c="$1" dono="$2" ramo sha7 ts wip ramo_orig
+  ramo_orig="$(ramo_atual "$c")"; ramo="$ramo_orig"
+  sha7="$("$GIT" -C "$c" rev-parse --short HEAD 2>/dev/null || echo 0000000)"
   ts="$(date -u +%Y%m%d-%H%M%S)"
   [ "$ramo" = HEAD ] && ramo="destacado"
   wip="wip/$dono/$ramo-$ts-$sha7"
   "$GIT" -C "$c" checkout -q -b "$wip" >/dev/null 2>&1 || return 3
-  "$GIT" -C "$c" add -A >/dev/null 2>&1 || return 3
+  # DT 1360: exclui padrões sensíveis (.env*, *.key, *.pem, *.asc, *.kdbx) antes de commitar/empurrar wip
+  "$GIT" -C "$c" add -A -- . \
+    ':(exclude,glob).env*' ':(exclude,glob)**/.env*' \
+    ':(exclude,glob)*.key' ':(exclude,glob)**/*.key' \
+    ':(exclude,glob)*.pem' ':(exclude,glob)**/*.pem' \
+    ':(exclude,glob)*.asc' ':(exclude,glob)**/*.asc' \
+    ':(exclude,glob)*.kdbx' ':(exclude,glob)**/*.kdbx' \
+    >/dev/null 2>&1 || {
+      if [ "$ramo_orig" = HEAD ]; then "$GIT" -C "$c" checkout -q --detach "$sha7" >/dev/null 2>&1 || true; else "$GIT" -C "$c" checkout -q "$ramo_orig" >/dev/null 2>&1 || true; fi
+      "$GIT" -C "$c" branch -q -D "$wip" >/dev/null 2>&1 || true
+      return 3
+    }
+  if "$GIT" -C "$c" diff --cached --quiet >/dev/null 2>&1; then
+    if [ "$ramo_orig" = HEAD ]; then "$GIT" -C "$c" checkout -q --detach "$sha7" >/dev/null 2>&1 || true; else "$GIT" -C "$c" checkout -q "$ramo_orig" >/dev/null 2>&1 || true; fi
+    "$GIT" -C "$c" branch -q -D "$wip" >/dev/null 2>&1 || true
+    return 3
+  fi
   "$GIT" -C "$c" -c user.name="${GIT_AUTHOR_NAME:-claudinho}" -c user.email="${GIT_AUTHOR_EMAIL:-claudinho@platafirma}" \
     commit -q --no-verify -m "wip: salvo por repo ($ts)" >/dev/null 2>&1 || return 3
   env PATH="$PATH_FORGE" "$GIT" -C "$c" push -q --no-verify -u origin "$wip" >/dev/null 2>&1 || return 3
@@ -4809,33 +4842,38 @@ ato_copiar() {
   tmp_raiz="$inst/var/tmp"
   ordem="${PF_ORDEM_ID:-}"
 
+  # DT 1362: confina origens (absolutas ou relativas) ao diretório da própria ordem ($PLATAFIRMA_INSTANCIA/var/tmp/$PF_ORDEM_ID/)
+  [ -n "$ordem" ] || morre "PF_ORDEM_ID obrigatório para confinar origem ao rascunho da própria ordem" 4
+  case "$ordem" in
+    .|..|*/*|*..*) morre "PF_ORDEM_ID inválido: '$ordem'" 4 ;;
+  esac
   case "$origem" in
     ..|../*|*/..|*/../*) morre "origem inválida: '$origem'" 4 ;;
   esac
   if [[ "$origem" == /* ]]; then
     orig_cand="$origem"
   else
-    [ -n "$ordem" ] || morre "origem relativa exige PF_ORDEM_ID ou caminho absoluto sob $tmp_raiz" 2
     orig_cand="$tmp_raiz/$ordem/$origem"
   fi
 
   local verif
-  verif="$(python3 - "$tmp_raiz" "$orig_cand" "$c" "$destino" <<'PY'
+  verif="$(python3 - "$tmp_raiz" "$ordem" "$orig_cand" "$c" "$destino" <<'PY'
 import os, sys
 tmp_raiz = os.path.realpath(sys.argv[1])
-orig_real = os.path.realpath(sys.argv[2])
-c_real = os.path.realpath(sys.argv[3])
-dest_rel = sys.argv[4]
+ordem = sys.argv[2]
+orig_real = os.path.realpath(sys.argv[3])
+c_real = os.path.realpath(sys.argv[4])
+dest_rel = sys.argv[5]
 
-if not orig_real.startswith(tmp_raiz + os.sep):
-    print("ERR:4:origem fora do rascunho da fita (" + tmp_raiz + "): " + sys.argv[2])
+ordem_raiz = os.path.realpath(os.path.join(tmp_raiz, ordem))
+if not ordem_raiz.startswith(tmp_raiz + os.sep):
+    print("ERR:4:PF_ORDEM_ID fora do rascunho (" + tmp_raiz + "): " + ordem)
     sys.exit(0)
-rel_tmp = os.path.relpath(orig_real, tmp_raiz)
-if os.sep not in rel_tmp:
-    print("ERR:4:origem deve estar dentro de uma subpasta da fita (<ordem_id>/...): " + sys.argv[2])
+if not orig_real.startswith(ordem_raiz + os.sep):
+    print("ERR:4:origem fora do rascunho da própria ordem (" + ordem_raiz + "): " + sys.argv[3])
     sys.exit(0)
 if not os.path.isfile(orig_real):
-    print("ERR:1:arquivo não existe no rascunho: " + sys.argv[2])
+    print("ERR:1:arquivo não existe no rascunho: " + sys.argv[3])
     sys.exit(0)
 
 dest_abs = os.path.realpath(os.path.join(c_real, dest_rel))

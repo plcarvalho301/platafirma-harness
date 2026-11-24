@@ -139,6 +139,25 @@
         }
       ]
     },
+    "ligacoes_opostas": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["propriedade", "sentido", "alvo", "contagem"],
+            "properties": {
+              "propriedade": {"type": "string"},
+              "sentido": {"type": "string", "enum": ["saida", "chegada"]},
+              "alvo": {"type": "string"},
+              "contagem": {"type": "integer", "minimum": 1}
+            }
+          }
+        }
+      ]
+    },
     "candidatos": {
       "oneOf": [
         {"type": "null"},

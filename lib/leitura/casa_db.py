@@ -638,6 +638,41 @@ class SessaoLeitura:
         )
         return [{"valor": str(ln["valor"]), "contagem": int(ln["fichas"])} for ln in linhas]
 
+    def ligacoes_opostas(
+        self,
+        classes_uuids: Sequence[str],
+        ligacoes: Sequence[PredicadoLigacao],
+    ) -> list[dict[str, Any]]:
+        """No vazio de `--ligacao`, verifica ligações no sentido oposto ou por outra propriedade (DT 1370)."""
+        if not ligacoes:
+            return []
+        if hasattr(self._con, "ligacoes_opostas"):
+            linhas = self._con.ligacoes_opostas(list(classes_uuids), list(ligacoes))
+        else:
+            preds_json = [
+                {
+                    "propriedade_id": p.propriedade_id,
+                    "sentido": p.sentido,
+                    "alvos": list(p.alvos),
+                }
+                for p in ligacoes
+            ]
+            linhas = self._con.consultar(
+                _sql_arquivo("ligacoes_opostas.sql"),
+                list(classes_uuids),
+                json.dumps(preds_json, ensure_ascii=False),
+            )
+        return [
+            {
+                "propriedade": str(ln["propriedade"]),
+                "sentido": str(ln["sentido"]),
+                "alvo": str(ln["alvo"]),
+                "contagem": int(ln["fichas"]),
+            }
+            for ln in linhas
+            if int(ln.get("fichas") or 0) > 0
+        ]
+
 
 def retrato(
     contexto: Mapping[str, Any] | None = None,

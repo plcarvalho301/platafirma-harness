@@ -153,6 +153,9 @@ def renderizar_texto(reg: Mapping[str, Any]) -> str:
         linhas.append(f"{f['chave']}{rot}")
     for vz in reg.get("valores_existentes") or ():
         linhas.append(f"valor existente: {vz['valor']} ({vz['contagem']})")
+    for lo in reg.get("ligacoes_opostas") or ():
+        pref = "chegada:" if lo.get("sentido") == "chegada" else ""
+        linhas.append(f"ligacao no sentido oposto: {pref}{lo['propriedade']}={lo['alvo']} ({lo['contagem']})")
     for pr in reg.get("proximo") or ():
         if pr.get("tipo") == "pagina" and pr.get("chamada"):
             linhas.append(f"proximo: {pr['chamada']}")
@@ -224,6 +227,7 @@ def _montar_candidato_pagina(
     resultado_db: Mapping[str, Any],
     fatia_crua: Sequence[Mapping[str, Any]],
     valores_existentes: list[dict[str, Any]] | None,
+    ligacoes_opostas: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     ped = moldura.ped
     total = int(resultado_db["total"])
@@ -258,6 +262,8 @@ def _montar_candidato_pagina(
     reg["continuacao"] = continuacao
     reg["mudou"] = mudou
     reg["valores_existentes"] = valores_existentes if total == 0 else None
+    if total == 0 and ligacoes_opostas:
+        reg["ligacoes_opostas"] = ligacoes_opostas
     reg["proximo"] = proximo
     return reg
 
@@ -268,14 +274,19 @@ def _montar_paginado(
     valores_existentes: list[dict[str, Any]] | None,
     *,
     teto_bytes: int,
+    ligacoes_opostas: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     brutas: list[Mapping[str, Any]] = list(resultado_db.get("fichas") or [])
     if not brutas:
-        return _montar_candidato_pagina(moldura, resultado_db, [], valores_existentes)
+        return _montar_candidato_pagina(
+            moldura, resultado_db, [], valores_existentes, ligacoes_opostas=ligacoes_opostas,
+        )
 
     melhor: dict[str, Any] | None = None
     for qtd in range(1, len(brutas) + 1):
-        cand = _montar_candidato_pagina(moldura, resultado_db, brutas[:qtd], valores_existentes)
+        cand = _montar_candidato_pagina(
+            moldura, resultado_db, brutas[:qtd], valores_existentes, ligacoes_opostas=ligacoes_opostas,
+        )
         if _cabe_no_teto(cand, como_json=moldura.ped.como_json, teto_bytes=teto_bytes):
             melhor = cand
         elif melhor is not None:
@@ -295,7 +306,10 @@ def montar_retorno_condicao(
     valores_existentes: list[dict[str, Any]] | None = None,
     *,
     teto_bytes: int = TETO_PAGINA_BYTES,
+    ligacoes_opostas: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Monta o registro único v1 para a consulta por condição, fechando por bytes antes do teto."""
     moldura = _MolduraPagina(ped=ped, modo="classe", classe=classe_slug)
-    return _montar_paginado(moldura, resultado_db, valores_existentes, teto_bytes=teto_bytes)
+    return _montar_paginado(
+        moldura, resultado_db, valores_existentes, teto_bytes=teto_bytes, ligacoes_opostas=ligacoes_opostas,
+    )

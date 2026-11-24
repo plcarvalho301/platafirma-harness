@@ -24,7 +24,13 @@ SELECT q.ord, q.norm, a.passo,
        c.slug         AS classe,
        (c.slug = 'shape') AS e_classe,
        coalesce(s.rotulo, dic.rotulo) AS rotulo,
-       coalesce(s.definicao, dic.definicao, ref.resumo) AS definicao
+       coalesce(
+         nullif(btrim(s.definicao), ''),
+         nullif(btrim(dic.definicao), ''),
+         nullif(btrim(ref.resumo), ''),
+         nullif(btrim(c.resumo), ''),
+         nullif(btrim(c.definicao), '')
+       ) AS definicao
   FROM pedido q
   LEFT JOIN achadas a ON a.ord = q.ord
   LEFT JOIN casa.ficha f        ON f.uuid = a.ficha
