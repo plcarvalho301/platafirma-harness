@@ -21,8 +21,8 @@ REGRA_NOME = "verbo:busca §Como um nome vira ficha"
 REGRA_PLANO = "verbo:busca §Como a condição vira plano"
 _PREPOSICOES = frozenset({"de", "da", "do", "das", "dos"})
 _RE_PALAVRA_ESPACO = re.compile(r"\S+")
-# A busca pelo sentido sobre as fichas e os documentos da casa: a partição casa do motor.
-PARTICAO_BUSCA_PELO_SENTIDO = "casa"
+# A partição casa saiu do motor (#4425); a busca pelo sentido atende a partição biblioteca (DT 1391).
+PARTICAO_BUSCA_PELO_SENTIDO = "biblioteca"
 
 
 def chamada_busca_pelo_sentido(termo: str) -> str:

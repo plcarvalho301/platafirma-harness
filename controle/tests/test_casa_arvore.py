@@ -27,9 +27,27 @@ registrar = _carrega("acervo_registrar", "registrar")
 def test_acervo_ingerir_casa_removido_sai_2():
     assert not os.path.exists(os.path.join(ACERVO, "casa-ingerir"))
     assert not os.path.exists(os.path.join(ACERVO, "casa-pr-conferir"))
-    r = subprocess.run([BIN, "ingerir", "casa", "platafirma-casa"], capture_output=True, text=True)
+    r = subprocess.run([BIN, "ingerir", "casa", "platafirma-casa"],
+                       capture_output=True, text=True, check=False, timeout=10)
     assert r.returncode == 2
     assert "busca consultar" in r.stderr and "busca ler" in r.stderr
+
+
+def test_acervo_curar_casa_alias_removido_sai_2():
+    import sys
+    r = subprocess.run([BIN, "curar", "casa", "alias", "persona", "produto", "Lygia Bem-te-vi"],
+                       capture_output=True, text=True, check=False, timeout=10)
+    assert r.returncode == 2
+    assert "ontologia nomes abrir" in r.stderr
+
+    r_sub = subprocess.run([sys.executable, os.path.join(ACERVO, "curar"), "alias",
+                            "persona", "produto", "Lygia Bem-te-vi"],
+                           capture_output=True, text=True, check=False, timeout=10)
+    assert r_sub.returncode == 2
+    assert "ontologia nomes abrir" in r_sub.stderr
+
+    with open(os.path.join(ACERVO, "curar"), encoding="utf-8") as fh:
+        assert "acervo.entidade_alias" not in fh.read()
 
 
 # ------------------------------------------------------------------ registrar: # regua:
