@@ -107,6 +107,7 @@ def test_setup_leitor_check_reprova_symlink_e_modo(tmp_path: Path) -> None:
         ("leitor.service", "UMask=0077", "UMask=0022"),
         ("leitor-extrator.socket", "Accept=yes", "Accept=no"),
         ("leitor-extrator.socket", "SocketMode=0600", "SocketMode=0666"),
+        ("leitor-extrator.socket", "SocketGroup=pf-verbos", "SocketGroup=pf-leitor"),
         ("leitor-extrator@.service", "PrivateNetwork=yes", "PrivateNetwork=no"),
         ("leitor-extrator@.service", "ProtectSystem=strict", "ProtectSystem=full"),
         ("leitor-extrator@.service", "NoNewPrivileges=yes", "NoNewPrivileges=no"),
@@ -134,6 +135,35 @@ def test_mutacao_diretivas_isolamento_reprovada(
     proc = _rodar_check(systemd_dir, origem=origem)
     assert proc.returncode == 1, f"mutante sobreviveu em {unidade}: {diretiva_original} -> {mutacao}"
     assert unidade in proc.stdout
+
+
+def test_soquetes_so_usam_grupos_que_o_roteiro_cria() -> None:
+    """SocketGroup sem grupo no host derruba o soquete na largada (Job failed no setup do dono, 25/11/2026)."""
+    roteiro = SETUP_SCRIPT.read_text(encoding="utf-8")
+    criados = {"pf-verbos", "pf-leitor-extrator"}  # groupadd pf-verbos e useradd --user-group pf-leitor-extrator
+    assert 'groupadd --system "$GRUPO_VERBOS"' in roteiro
+    assert "--user-group \"$CONTA_EXTRATOR\"" in roteiro
+    for nome in ("leitor.socket", "leitor-extrator.socket"):
+        for linha in (DEPLOY_HARNESS / nome).read_text(encoding="utf-8").splitlines():
+            if linha.startswith("SocketGroup="):
+                assert linha.split("=", 1)[1] in criados, f"{nome}: {linha} aponta grupo que setup-leitor.sh não cria"
+
+
+def test_soquetes_nao_declaram_runtime_directory() -> None:
+    """RuntimeDirectory num soquete nasce root com o modo dado e some no stop, levando os vizinhos sob /run/platafirma;
+    o systemd já cria os pais do ListenStream em 0755 (DirectoryMode)."""
+    for arq in sorted(DEPLOY_HARNESS.glob("*.socket")):
+        texto = arq.read_text(encoding="utf-8")
+        assert "RuntimeDirectory" not in texto, f"{arq.name} declara RuntimeDirectory"
+
+
+def test_sudoers_ajudante_de_logs_sem_noexec() -> None:
+    """NOEXEC barra o ajudante, que é roteiro e executa bash e journalctl ('/usr/bin/env: bash: Permission denied')."""
+    linhas = [l for l in SETUP_SCRIPT.read_text(encoding="utf-8").splitlines() if l.startswith("${CONTA_CHAMADORA} ALL=")]
+    ajudante = [l for l in linhas if l.endswith("${AJUDANTE_LOGS}")]
+    restart = [l for l in linhas if l.endswith("/usr/bin/systemctl restart leitor.service")]
+    assert len(ajudante) == 1 and "NOEXEC:" not in ajudante[0]
+    assert len(restart) == 1 and "NOEXEC:" in restart[0]
 
 
 def test_mutacao_readwritepaths_no_extrator_reprovada(tmp_path: Path) -> None:

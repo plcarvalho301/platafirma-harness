@@ -3,8 +3,6 @@ Description=Soquete local do escritor único da PlataFirma
 
 [Socket]
 ListenStream=/run/platafirma/escritor.sock
-RuntimeDirectory=platafirma
-RuntimeDirectoryMode=0755
 SocketUser=pf-escritor
 SocketGroup=platafirma-escrita
 SocketMode=0660

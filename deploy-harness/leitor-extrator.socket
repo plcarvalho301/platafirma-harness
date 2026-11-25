@@ -3,11 +3,9 @@ Description=Soquete local do extrator isolado do leitor único da PlataFirma
 
 [Socket]
 ListenStream=/run/platafirma/leitor-extrator/extrator.sock
-RuntimeDirectory=platafirma/leitor-extrator
-RuntimeDirectoryMode=0700
 Accept=yes
 SocketUser=pf-leitor
-SocketGroup=pf-leitor
+SocketGroup=pf-verbos
 SocketMode=0600
 MaxConnections=16
 RemoveOnStop=yes

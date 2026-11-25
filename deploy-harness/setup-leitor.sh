@@ -99,6 +99,7 @@ conferir_diretivas_unidade() {
       tem_diretiva "$arq" '^Accept=yes$' || divergencia "$arq: falta Accept=yes"
       tem_diretiva "$arq" '^SocketUser=pf-leitor$' || divergencia "$arq: falta SocketUser=pf-leitor"
       tem_diretiva "$arq" '^SocketMode=0600$' || divergencia "$arq: falta SocketMode=0600"
+      tem_diretiva "$arq" '^SocketGroup=pf-verbos$' || divergencia "$arq: falta SocketGroup=pf-verbos"
       tem_diretiva "$arq" '^MaxConnections=[1-9][0-9]*$' || divergencia "$arq: falta MaxConnections="
       ;;
     leitor-extrator@.service)
@@ -232,9 +233,10 @@ instalar_sudoers() {
   fi
   tmp="$(mktemp /etc/sudoers.d/.platafirma-leitor.XXXXXX)"
   cat >"$tmp" <<EOF
-# Regras estreitas do leitor único (story #4442, t8) — sem curingas, com NOEXEC.
+# Regras estreitas do leitor único (story #4442, t8) — sem curingas. O restart leva NOEXEC; o ajudante
+# não, porque ele é roteiro que precisa executar o interpretador e o journalctl, e NOEXEC barra os dois.
 ${CONTA_CHAMADORA} ALL=(root) NOPASSWD: NOEXEC: /usr/bin/systemctl restart leitor.service
-${CONTA_CHAMADORA} ALL=(root) NOPASSWD: NOEXEC: ${AJUDANTE_LOGS}
+${CONTA_CHAMADORA} ALL=(root) NOPASSWD: ${AJUDANTE_LOGS}
 EOF
   chown root:root "$tmp"
   chmod 0440 "$tmp"
