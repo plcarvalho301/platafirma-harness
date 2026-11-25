@@ -6,7 +6,8 @@
 # forma: predicado (estado, diff) / lista (listar, procurar, historico, pr-listar, hooks-listar) / texto (ler, pr-diff) / fluxo (sanear, descartar, lock, hooks-apagar)
 # poda: cosmetica@git
 # use para: criar e atualizar bancada; ler e procurar nela, diff e histórico; commitar, empurrar ramo, abrir, revisar e integrar PR; descartar mudança; sanear bancada; procurar no que está publicado no GitHub; e sempre que um card de código for posto em execução ou a esteira reprovar a mudança
-# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), copiar (escrita, operacao), mover (escrita, forge), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-revisar (escrita, forge), pr-merge (escrita, forge), pr-fechar (escrita, forge), hooks-listar (leitura, forge), hooks-apagar (escrita, forge), sanear (escrita, forge), descartar (escrita, operacao), lock (escrita, operacao), git (escrita, operacao)
+# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), historico (leitura, operacao), diff (leitura, operacao), gravar (escrita, operacao), commitar (escrita, operacao), ramo (escrita, operacao), atualizar (escrita, operacao), sincronizar (escrita, forge), abrir (escrita, operacao), clonar (escrita, operacao), copiar (escrita, operacao), mover (escrita, forge), empurrar (escrita, forge), pr-abrir (escrita, forge), pr-listar (leitura, forge), pr-ver (leitura, forge), pr-diff (leitura, forge), pr-revisar (escrita, forge), pr-merge (escrita, forge), pr-fechar (escrita, forge), hooks-listar (leitura, forge), hooks-apagar (escrita, forge), sanear (escrita, forge), descartar (escrita, operacao), lock (escrita, operacao), git (escrita, operacao)
+# le: gravar=repo
 # le: estado=repo
 # le: listar=repo
 # le: ler=repo
@@ -35,6 +36,7 @@
 # le: descartar=repo
 # le: lock=repo
 # le: git=repo
+# escreve: gravar=repo
 # escreve: estado=nada
 # escreve: listar=nada
 # escreve: ler=nada
@@ -1803,6 +1805,32 @@ sincronizar_direto_em_main() {
   morre "push para main falhou: local ${head:0:7}, origin/main ${fsha:0:7} (outra mao empurrou antes, ou o pre-push barrou? ver acima) — rode sincronizar de novo" 3
 }
 
+# Configura grupo compartilhado, herança de grupo (setgid) e exclusão local dos temporários
+# do escritor único (.pf-esc-*.tmp) numa árvore git (clone-base ou worktree) (#4441).
+prepara_bancada_escritor() {
+  local alvo="$1"
+  [ -d "$alvo" ] || return 0
+  local grupo="${PF_ESCRITA_GRUPO:-platafirma-escrita}"
+  if getent group "$grupo" >/dev/null 2>&1; then
+    chgrp -R "$grupo" "$alvo" 2>/dev/null || true
+  fi
+  chmod g+rws "$alvo" 2>/dev/null || true
+  find "$alvo" -path '*/.git' -prune -o -type d -exec chmod g+rws {} + 2>/dev/null || true
+  find "$alvo" -path '*/.git' -prune -o -type f -exec chmod g+rw {} + 2>/dev/null || true
+  local exc_arq
+  exc_arq="$("$GIT" -C "$alvo" rev-parse --git-path info/exclude 2>/dev/null || true)"
+  if [ -n "$exc_arq" ]; then
+    case "$exc_arq" in
+      /*) ;;
+      *) exc_arq="$alvo/$exc_arq" ;;
+    esac
+    mkdir -p "$(dirname "$exc_arq")" 2>/dev/null || true
+    if [ ! -f "$exc_arq" ] || ! grep -Fqx '.pf-esc-*.tmp' "$exc_arq" 2>/dev/null; then
+      printf '.pf-esc-*.tmp\n' >> "$exc_arq" 2>/dev/null || true
+    fi
+  fi
+}
+
 # Clone base <bancada>/<nome> a partir de <url>. Cria a bancada se ela nao existe
 # (apagar a bancada = o proximo abrir/clonar refaz). Chamado so por atos de escrita.
 clona_base() {
@@ -1810,6 +1838,7 @@ clona_base() {
   [ -e "$BANCADA/$nome" ] && morre "'$BANCADA/$nome' ja existe — nao sobrescrevo clone" 3
   mkdir -p "$BANCADA" || morre "nao criei a bancada $BANCADA" 3
   env PATH="$PATH_FORGE" "$GIT" clone "$url" "$BANCADA/$nome" || morre "git clone falhou: $url" 3
+  prepara_bancada_escritor "$BANCADA/$nome"
 }
 
 ato_clonar() {
@@ -1978,6 +2007,7 @@ _marca_sessao_escrever() {
 # declarado, nao disputa pasta com ninguem (como ramo_da_cadeira: sessao anonima nao barra).
 guarda_sessao_viva() {
   local wt="$1" assumir="${2:-0}" sid="${PF_SESSAO:-}"
+  prepara_bancada_escritor "$wt"
   [ -n "$sid" ] || return 0
   local marca dono="" desde=""
   marca="$(_marca_sessao_ler "$wt")"
@@ -2627,12 +2657,51 @@ ato_commitar() {
     # conjunto parcial e pior que nao commitar. Sai 3 com o nome do dia, e quem commita nomeia os caminhos.
     local lib_pf eventos rc_ol sessao_bin aberto_em dia_aberto hoje_pf cortados rc_ct
     lib_pf="$(dirname "$(readlink -f "$0")")/../lib"
+    local reg_escritor="${PF_ESCRITA_REGISTRO:-/var/lib/platafirma-escritor/operacoes.jsonl}"
+    local esc_out=""
+    if [ -f "$reg_escritor" ]; then
+      esc_out="$(python3 -c '
+import json, sys
+
+reg_path, repo_nome, cadeira, sessao_id = sys.argv[1:5]
+vistos = set()
+with open(reg_path, encoding="utf-8") as fh:
+    for bruto in fh:
+        bruto = bruto.strip()
+        if not bruto:
+            continue
+        try:
+            ln = json.loads(bruto)
+        except Exception:
+            continue
+        if ln.get("morada") != "git" or int(ln.get("exit_code", -1)) != 0:
+            continue
+        if ln.get("repo") != repo_nome:
+            continue
+        if cadeira and ln.get("cadeira") and ln.get("cadeira") != cadeira:
+            continue
+        if sessao_id and ln.get("sessao_id") and ln.get("sessao_id") != sessao_id:
+            continue
+        rel = ln.get("caminho_relativo") or ""
+        if rel:
+            vistos.add(rel)
+for p in sorted(vistos):
+    print(p)
+' "$reg_escritor" "${nome%%@*}" "${PF_CADEIRA:-}" "${PF_SESSAO:-}" 2>/dev/null || true)"
+    fi
+
     sessao_bin="${PF_SESSAO_BIN:-$(dirname "$(readlink -f "$0")")/sessao}"
     aberto_em="$("$sessao_bin" ver "$PF_SESSAO" --json 2>/dev/null \
       | python3 -c 'import json, sys; print(json.load(sys.stdin).get("aberto_em") or "")' 2>/dev/null)"
+    local py_out=""
     case "$aberto_em" in
-      ""|"-") morre "dependência ausente: a data da abertura da sessão $PF_SESSAO (sessao ver) — nomeie os caminhos" 3 ;;
+      ""|"-")
+        if [ -z "$esc_out" ]; then
+          morre "dependência ausente: a data da abertura da sessão $PF_SESSAO (sessao ver) — nomeie os caminhos" 3
+        fi
+        ;;
     esac
+    if [ -n "$aberto_em" ] && [ "$aberto_em" != "-" ]; then
     dia_aberto="$(PYTHONPATH="$lib_pf${PYTHONPATH:+:$PYTHONPATH}" python3 -m oplog dia-local "$aberto_em" 2>/dev/null)" \
       || morre "dependência ausente: instante de abertura ilegível ('$aberto_em') — nomeie os caminhos" 3
     hoje_pf="${PF_HOJE:-$(date +%F)}"
@@ -2735,12 +2804,16 @@ for p in sorted(caminhos):
     if [ "$rc_py" -ne 0 ]; then
       morre "erro ao ler log da porta (oplog ler)" 3
     fi
+    fi
 
     local session_paths=()
-    if [ -n "$py_out" ]; then
+    local _visto_paths=""
+    local _combinado
+    _combinado="$(printf '%s\n%s\n' "$py_out" "$esc_out" | sort -u)"
+    if [ -n "$_combinado" ]; then
       while IFS= read -r p; do
         [ -n "$p" ] && session_paths+=("$p")
-      done <<< "$py_out"
+      done <<< "$_combinado"
     fi
 
     if [ "${#session_paths[@]}" -eq 0 ]; then
@@ -5005,10 +5078,19 @@ case "$cmd" in
     declara_bancada "$@" ;;
 esac
 
+ato_gravar() {
+  local lib_pf
+  lib_pf="$(dirname "$(readlink -f "$0")")/../lib"
+  local py_bin="/opt/platafirma/current/venv/harness/bin/python"
+  [ -x "$py_bin" ] || py_bin="python3"
+  PYTHONPATH="$lib_pf${PYTHONPATH:+:$PYTHONPATH}" "$py_bin" -m escrita repo gravar "$@"
+}
+
 case "$cmd" in
   estado)    cmd_estado "$@" ;;
   listar)    cmd_listar "$@" ;;
   ler)       cmd_ler "$@" ;;
+  gravar)    ato_gravar "$@" ;;
   procurar)  cmd_procurar "$@" ;;
   historico) cmd_historico "$@" ;;
   diff)      cmd_diff "$@" ;;

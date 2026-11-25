@@ -578,6 +578,116 @@ def _ler_lote_nomes(caminho: str, sub: str) -> list[dict]:
     return dados
 
 
+def _carregar_camada_escrita():
+    raiz_lib = Path(__file__).resolve().parents[2] / "lib"
+    if str(raiz_lib) not in sys.path:
+        sys.path.insert(0, str(raiz_lib))
+    try:
+        from escrita.escrita import OpcoesExecucao, executar_ato_escrever, verbo_esta_ligado
+        from escrita.pedido import ler_token_descritor
+        from escrita.politica import carregar_politica
+        from escrita.tipos import ContextoEscrita, RecusaEscrita
+    except ImportError:
+        return None
+    return (
+        OpcoesExecucao,
+        executar_ato_escrever,
+        verbo_esta_ligado,
+        ler_token_descritor,
+        carregar_politica,
+        ContextoEscrita,
+        RecusaEscrita,
+    )
+
+
+def _extrair_yaml_para_escritor(args: list[str], ato: str) -> tuple[list[str], bytes]:
+    restantes: list[str] = []
+    caminho_yaml: str | None = None
+    for item in args:
+        if caminho_yaml is None and _e_entrada_yaml(item):
+            caminho_yaml = item
+        else:
+            restantes.append(item)
+    if caminho_yaml is not None and caminho_yaml != "-":
+        _, texto = _ler_entrada_yaml(caminho_yaml, proximo=f"ontologia {ato} <arquivo.yaml>")
+        return restantes, texto.encode("utf-8")
+    _, texto = _ler_entrada_yaml(None, proximo=f"ontologia {ato} <arquivo.yaml>")
+    return restantes, texto.encode("utf-8")
+
+
+def _tentar_via_escritor(
+    ato: str,
+    args: list[str],
+    *,
+    pedido: str,
+    como_json: bool,
+    env: dict[str, str],
+) -> Saida | None:
+    camada = _carregar_camada_escrita()
+    if camada is None:
+        return None
+    (
+        OpcoesExecucao,
+        executar_ato_escrever,
+        verbo_esta_ligado,
+        ler_token_descritor,
+        carregar_politica,
+        ContextoEscrita,
+        RecusaEscrita,
+    ) = camada
+    cfg_path = env.get("PF_ESCRITA_CONFIG") or ""
+    politica = carregar_politica(Path(cfg_path)) if cfg_path else carregar_politica()
+    if not verbo_esta_ligado("ontologia", politica=politica):
+        return None
+    import json
+    import time
+
+    pos_sem_yaml, stdin_bytes = _extrair_yaml_para_escritor(args, ato)
+    argv_escritor = [ato, *pos_sem_yaml]
+    if pedido:
+        argv_escritor.extend(["--pedido", pedido])
+    if como_json:
+        argv_escritor.append("--json")
+    prazo_raw = (env.get("PF_PRAZO_S") or "").strip()
+    prazo_ns = 0
+    if prazo_raw:
+        try:
+            v = float(prazo_raw)
+            if v > 0:
+                prazo_ns = time.monotonic_ns() + int(v * 1_000_000_000)
+        except ValueError:
+            prazo_ns = 0
+    ctx = ContextoEscrita(
+        verbo="ontologia",
+        cadeira=env.get("PF_CADEIRA") or "",
+        sujeito=env.get("PF_SUJEITO") or env.get("PF_CADEIRA") or "",
+        sessao_id=env.get("PF_SESSAO") or "",
+        ordem_id=env.get("PF_ORDEM_ID") or env.get("PF_SESSAO") or "",
+        card=env.get("PF_CARD") or "",
+        prazo_ns=prazo_ns,
+        token=ler_token_descritor(),
+    )
+    sock_env = (env.get("PF_ESCRITOR_SOCKET") or "").strip()
+    socket_path = Path(sock_env) if sock_env else None
+    try:
+        res = executar_ato_escrever(
+            "ontologia",
+            argv_escritor,
+            stdin_bytes,
+            opcoes=OpcoesExecucao(
+                contexto=ctx,
+                politica=politica,
+                socket_path=socket_path,
+            ),
+        )
+    except RecusaEscrita as exc:
+        err_json = json.dumps(exc.como_dict(), ensure_ascii=False) + "\n"
+        return Saida(exc.saida, "", err_json)
+    if como_json:
+        return Saida(0, json.dumps(res.como_dict(), ensure_ascii=False) + "\n", "")
+    return Saida(0, res.primeira_linha() + "\n", "")
+
+
 def _nomes(cliente: Cliente, args: list, *, pedido: str = "", como_json: bool = False) -> Saida:
     if not args or args[0] not in ("abrir", "encerrar"):
         raise Uso(
@@ -663,6 +773,12 @@ def executar(argv: list, env: dict | None = None, *, prog: str | None = None) ->
             flag = "--pedido" if "--pedido" in args else "--fornada"
             raise Uso(f"`{flag}` só vale em escrita", codigo="uso-invalido", onde="flag", recebido=flag,
                       proximo=f"ontologia {ato} --help")
+        if ato in ("criar", "trocar", "ensaiar"):
+            via_escritor = _tentar_via_escritor(
+                ato, args, pedido=pedido, como_json=como_json, env=env
+            )
+            if via_escritor is not None:
+                return via_escritor
         cliente = Cliente.do_ambiente(env)
         if ato == "ler":
             return _ler(cliente, args, como_json=como_json, aviso_variante=aviso_var)

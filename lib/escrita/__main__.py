@@ -23,7 +23,49 @@ _MIN_ARGS_ATO = 2
 _RE_NUMERO_POSITIVO = re.compile(r"^\d+(?:\.\d+)?$")
 
 
+def _registrar_contorno_write_file(
+    path: str,
+    cadeira: str,
+    ordem_id: str,
+    exit_code: int,
+) -> None:
+    """Registra uso da variante depreciada write_file como contorno operacional."""
+    destino = (os.environ.get("PF_CONTORNO_LOG") or "").strip()
+    if not destino:
+        ops_dir = (os.environ.get("OPS_LOG_DIR") or "").strip()
+        if ops_dir:
+            destino = str(Path(ops_dir) / "write_file-contorno.jsonl")
+    if not destino:
+        return
+    linha = json.dumps(
+        {
+            "evento": "contorno-write-file",
+            "contorno": True,
+            "ferramenta": "write_file",
+            "sucessor": "repo gravar",
+            "path": path,
+            "cadeira": cadeira,
+            "ordem_id": ordem_id,
+            "exit_code": exit_code,
+            "timestamp": round(time.time(), 6),
+        },
+        ensure_ascii=False,
+    )
+    try:
+        arq = Path(destino)
+        arq.parent.mkdir(parents=True, exist_ok=True)
+        with arq.open("a", encoding="utf-8") as fh:
+            fh.write(linha + "\n")
+    except OSError:
+        pass
+
+
 def _main_legado_write_file() -> int:
+    sys.stderr.write(
+        "aviso: write_file está depreciado (contorno registrado); "
+        "use `repo gravar componente <repo>:<caminho>`\n"
+    )
+    sys.stderr.flush()
     bruto = sys.stdin.read()
     try:
         req = json.loads(bruto) if bruto.strip() else {}
@@ -60,8 +102,12 @@ def _main_legado_write_file() -> int:
         cadeira=cadeira,
         ordem_id=ordem_id,
     )
+    res["contorno"] = True
+    res["sucessor"] = "repo gravar"
+    codigo = int(res.get("exit_code") or 0)
+    _registrar_contorno_write_file(str(path), cadeira, ordem_id, codigo)
     sys.stdout.write(json.dumps(res, ensure_ascii=False))
-    return int(res.get("exit_code") or 0)
+    return codigo
 
 
 def _main_servidor(argv: Sequence[str]) -> int:

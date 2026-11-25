@@ -429,3 +429,5 @@ testes/test_escrita_unidades_e_conferencia.py | deploy-harness/escritor.socket d
 # Story #4442 (Fita 3): adaptadores wiki, balde, fila, rastreador e cofre (t6) e daemon/cliente do leitor único (t7).
 testes/test_ler_moradas_demais.py | lib/leitura/moradas/__init__.py lib/leitura/moradas/wiki.py lib/leitura/moradas/balde.py lib/leitura/moradas/fila.py lib/leitura/moradas/rastreador.py lib/leitura/moradas/cofre.py
 testes/test_ler_leitor.py | lib/leitura/daemon.py lib/leitura/cliente.py lib/leitura/resolvedor.py lib/leitura/borda.py lib/leitura/nucleo.py lib/leitura/moradas/**
+# Story #4441: adaptação dos verbos repo e ontologia e depreciação de write_file (t7).
+testes/test_escrita_verbos.py | bin/repo bin/ontologia bin/_olaria/__main__.py bin/write_file lib/escrita/__main__.py lib/escrita/escrita.py registro/escrita.yaml
