@@ -11,6 +11,9 @@ ORIGEM_PADRAO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ORIGEM="${PF_UNITS_ORIGEM:-$ORIGEM_PADRAO}"
 SYSTEMD_DIR="${PF_SYSTEMD_DIR:-/etc/systemd/system}"
 CREDSTORE_DIR="${PF_CREDSTORE_DIR:-/etc/credstore}"
+# A senha do papel pf_leitor_ro, que `seg segredo rotacionar leitor/casa-db --postgres casa pf_leitor_ro` gera e guarda
+# no cofre da instância; o roteiro a copia para o credstore que o leitor.service lê por LoadCredential=.
+SEGREDO_CASA_DB="${PF_SEGREDO_LEITOR_CASA_DB:-/srv/platafirma/casa/segredos/leitor/casa-db}"
 SUDOERS_ARQ="${PF_SUDOERS_ARQ:-/etc/sudoers.d/platafirma-leitor}"
 AJUDANTE_LOGS="${PF_AJUDANTE_LOGS:-/usr/local/libexec/platafirma/leitor-logs}"
 CHECK_SEM_CONTAS="${PF_CHECK_SEM_CONTAS:-0}"
@@ -246,6 +249,20 @@ EOF
   mv -f "$tmp" "$SUDOERS_ARQ"
 }
 
+instalar_credencial_casa_db() {
+  local dst="$CREDSTORE_DIR/pf-leitor-casa-db" tmp
+  if [ -L "$SEGREDO_CASA_DB" ] || [ ! -s "$SEGREDO_CASA_DB" ]; then
+    printf 'setup-leitor.sh: segredo %s ausente ou vazio; gere com: seg segredo rotacionar leitor/casa-db --postgres casa pf_leitor_ro\n' "$SEGREDO_CASA_DB" >&2
+    exit 1
+  fi
+  [ ! -L "$dst" ] || { printf 'setup-leitor.sh: destino %s é symlink — abortado\n' "$dst" >&2; exit 1; }
+  tmp="$(mktemp "$CREDSTORE_DIR/.pf-leitor-casa-db.XXXXXX")"
+  cat -- "$SEGREDO_CASA_DB" >"$tmp"
+  chown root:root "$tmp"
+  chmod 0600 "$tmp"
+  mv -f "$tmp" "$dst"
+}
+
 rodar_instalar() {
   if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     printf 'setup-leitor.sh: instalação exige execução como root (use sudo); para conferir sem root use --check\n' >&2
@@ -272,6 +289,7 @@ rodar_instalar() {
   fi
 
   install -d -m 0700 -o root -g root "$CREDSTORE_DIR"
+  instalar_credencial_casa_db
 
   local u src dst
   for u in "${UNIDADES[@]}"; do
@@ -287,6 +305,8 @@ rodar_instalar() {
 
   systemctl daemon-reload
   systemctl enable --now leitor-extrator.socket leitor.socket
+  # O leitor já de pé só lê a credencial nova e a unidade nova depois de reiniciar.
+  systemctl try-restart leitor.service
 
   # Smoke-test de leitura de release com a conta pf-leitor antes de ligar a chave em registro/leitura.yaml.
   su -s /bin/sh -c 'test -r /opt/platafirma/current/harness/registro/porta.yaml' "$CONTA_LEITOR" \

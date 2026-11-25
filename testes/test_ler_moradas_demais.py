@@ -274,7 +274,7 @@ def test_fila_sem_avancar_consumo_e_isolamento_de_execucao() -> None:
 # ------------------------------------------------------------------ rastreador
 def test_rastreador_card_terminal_ancestrais_e_listar() -> None:
     def _http(url: str, params: Mapping[str, str], _timeout: float) -> Any:
-        if url.endswith("/cards/4442"):
+        if url.endswith("/itens/4442"):
             base: dict[str, Any] = {
                 "id": "4442",
                 "titulo": "Leitor unico",
@@ -283,15 +283,18 @@ def test_rastreador_card_terminal_ancestrais_e_listar() -> None:
                 "decisoes_ancestrais": ["decisao-epico-1"],
             }
             return base
-        if url.endswith("/cards/999"):
+        if url.endswith("/itens/999"):
             return {"id": "999", "titulo": "Fechado", "estado": "concluido", "versao": "3"}
-        if url.endswith("/cards/404"):
+        if url.endswith("/itens/404"):
             raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)  # type: ignore[arg-type]
-        if url.endswith("/cards"):
+        if url.endswith("/itens"):
             return {
                 "itens": [
-                    {"id": "4442", "titulo": "Leitor unico", "estado": "em-execucao", "mae": "4000"},
-                    {"id": "999", "titulo": "Fechado", "estado": "concluido", "mae": "4000"},
+                    {"id": "4442", "titulo": "Leitor unico", "estado": "em-execucao", "pai": "4000",
+                     "nivel_nome": "story"},
+                    {"id": "999", "titulo": "Fechado", "estado": "concluido", "pai": "4000"},
+                    {"id": "4100", "titulo": "Feature irmã", "estado": "em-execucao", "pai": "4000",
+                     "nivel_nome": "feature"},
                 ]
             }
         return None
@@ -321,6 +324,38 @@ def test_rastreador_card_terminal_ancestrais_e_listar() -> None:
     pag = rast.listar_chaves("story", (FiltroCatalogo("filhas", "filhas", "4000"),), None, 10, None, 2_000)
     assert pag.total == 1
     assert [it["chave"] for it in pag.itens] == ["story:4442"]
+
+
+def test_rastreador_fala_com_a_api_real_e_le_comentario_pela_lista_do_card() -> None:
+    urls: list[str] = []
+
+    def _http(url: str, _params: Mapping[str, str], _timeout: float) -> Any:
+        urls.append(url)
+        if url.endswith("/itens/4442/comentarios"):
+            return {"comentarios": [{"id": 5759, "corpo": "fita 5"}, {"id": 5740, "corpo": "x"}]}
+        if url.endswith("/itens/4442"):
+            return {"id": 4442, "estado": "em-execucao", "descricao_versao": "82e0c605"}
+        return None
+
+    rast = AdaptadorRastreador(cliente_http=_http)
+    st = rast.ler_objeto(_alvo("story:4442", "story", "rastreador"), SeletorParte(), 2_000)
+    assert urls[-1] == "http://127.0.0.1:8120/api/itens/4442"
+    assert st.versao == "82e0c605"
+
+    com = rast.ler_objeto(_alvo("comentario:4442/5759", "comentario", "rastreador"), SeletorParte(), 2_000)
+    assert json.loads((com.dados or b"{}").decode("utf-8"))["corpo"] == "fita 5"
+
+    pag = rast.listar_chaves("comentario", (FiltroCatalogo("filhas", "filhas", "4442"),), None, 10, None, 2_000)
+    assert [it["chave"] for it in pag.itens] == ["comentario:4442/5740", "comentario:4442/5759"]
+
+    for chamada in (
+        lambda: rast.ler_objeto(_alvo("comentario:5759", "comentario", "rastreador"), SeletorParte(), 2_000),
+        lambda: rast.listar_chaves("comentario", (), None, 10, None, 2_000),
+    ):
+        with pytest.raises(ErroMorada) as exc:
+            chamada()
+        assert exc.value.saida == 2
+        assert exc.value.recusa.codigo == "chave-mal-formada"
 
 
 # ------------------------------------------------------------------ cofre
