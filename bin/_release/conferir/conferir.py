@@ -4067,7 +4067,10 @@ def conferir_escritor(
     else:
         itens.append(("exposicao systemd-analyze", resultado.conforme()))
 
-    lib_dir = str(_Path(HARNESS) / "lib")
+    # o cliente vem da release que serve o escritor, como o instalador acima, e não do clone em RAIZ
+    # (HARNESS aponta para ~/AI/platafirma-harness, que pode estar numa revisão sem lib/escrita/cliente.py)
+    harness_rel = _Path(os.environ.get("PF_HARNESS_DIR") or (prod / "current" / "harness"))
+    lib_dir = str(harness_rel / "lib")
     if lib_dir not in sys.path:
         sys.path.insert(0, lib_dir)
     from escrita.cliente import consultar_saude, socket_padrao

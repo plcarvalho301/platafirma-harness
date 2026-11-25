@@ -85,6 +85,7 @@ CLASSES_SERVIDO=(
   "sessao-orfa"
   "copia"
   "ontologia"
+  "escritor"
   "fossil"
 )
 

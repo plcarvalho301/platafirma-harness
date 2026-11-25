@@ -23,6 +23,24 @@ from escrita.politica import carregar_politica  # noqa: E402
 from escrita.servidor import ConfigServidor, ServidorEscritor  # noqa: E402
 
 
+def test_release_conferir_repassa_a_classe_escritor() -> None:
+    """`release conferir escritor` saiu 2 classe-desconhecida no ar (25/11/2026): a lista do verbo não tinha a classe."""
+    texto = (_HARNESS / "bin" / "release").read_text(encoding="utf-8")
+    bloco = texto.split("CLASSES_SERVIDO=(", 1)[1].split(")", 1)[0]
+    assert '"escritor"' in bloco
+
+
+def test_conferir_escritor_le_o_cliente_da_release_e_nao_do_clone() -> None:
+    """No ar, HARNESS aponta o clone em ~/AI, sem lib/escrita/cliente.py: ModuleNotFoundError (25/11/2026).
+    Esta suíte pré-importa escrita da árvore e mascarava o defeito; a prova é pela fonte."""
+    import inspect
+
+    conferir = _carregar_modulo("conferir_t6_regressao", _CONFERIR_DIR / "conferir.py")
+    fonte = inspect.getsource(conferir.conferir_escritor)
+    assert "_Path(HARNESS)" not in fonte
+    assert '"current" / "harness"' in fonte
+
+
 def _carregar_modulo(nome: str, caminho: Path):
     loader = importlib.machinery.SourceFileLoader(nome, str(caminho))
     spec = importlib.util.spec_from_loader(nome, loader)
