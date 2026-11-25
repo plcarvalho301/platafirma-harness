@@ -18,7 +18,7 @@ Environment=PF_BANCADAS_RAIZ=/home/claudinho/AI
 Environment=PF_ESCRITOR_ESTADO=/var/lib/platafirma-escritor
 Environment=PF_RELEASE_CURRENT=/opt/platafirma/current
 Environment=PF_PDP_DIR=/opt/platafirma/current/core/acesso
-Environment=PF_OLARIA_URL=http://127.0.0.1:8101
+Environment=PF_OLARIA_URL=http://127.0.0.1:8103
 LoadCredential=olaria-chave:/etc/platafirma/segredos/escritor/olaria-chave
 ExecStart=/opt/platafirma/current/venv/harness/bin/python -m escrita servidor
 ProtectSystem=strict
