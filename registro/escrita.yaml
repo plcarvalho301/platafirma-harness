@@ -1,0 +1,69 @@
+versao: 1
+
+limites:
+  entrada_max_bytes: 1048576
+  prazo_max_s: 30
+  retencao_repeticao_s: 86400
+  espera_trava_passo_ms: 25
+
+verbos_ligados: []
+
+superficies_vedadas:
+  nomes_arquivo:
+    - pap.yaml
+    - politica.yaml
+    - sujeitos.yaml
+    - .credentials.json
+    - id_rsa
+    - id_dsa
+    - id_ecdsa
+    - id_ed25519
+    - authorized_keys
+    - .netrc
+    - .pgpass
+    - .git-credentials
+  prefixos_nome:
+    - .env
+  sufixos_arquivo:
+    - .key
+    - .pem
+    - .asc
+    - .kdbx
+  segmentos_caminho:
+    - .git
+  prefixos_caminho:
+    - /opt/platafirma
+    - /srv/platafirma/casa/segredos
+    - /srv/platafirma/casa/var/log
+    - /srv/platafirma/casa/var/fila
+    - /etc/platafirma/segredos
+  caminhos_relativos:
+    - acesso/politica.yaml
+    - acesso/sujeitos.yaml
+    - var/log
+    - var/fila
+    - segredos
+
+caminhos_protegidos:
+  platafirma-core:
+    - acesso/politica.yaml
+    - acesso/sujeitos.yaml
+    - acesso/pdp.py
+    - acesso/pep.py
+    - porta/decisao.py
+    - deploy/setup-escritor.sh
+  platafirma-harness:
+    - lib/escrita/
+    - lib/leitura/
+    - registro/escrita.yaml
+    - deploy-harness/
+
+diretorios_executaveis:
+  platafirma-harness:
+    - bin/
+    - hooks/
+    - deploy-harness/
+  platafirma-posto:
+    - bin/
+  platafirma-core:
+    - deploy/

@@ -407,3 +407,7 @@ testes/test_busca_consultar_vivo.py | bin/busca lib/busca/** lib/leitura/** | de
 testes/test_regra_versao_da_classe_vivo.py | bin/busca lib/busca/** lib/leitura/** | degrau: rodada
 # DTs 1360, 1361 e 1362: exclusão de arquivos sensíveis em salva_arvore, realpath em repo ler e confinamento de PF_ORDEM_ID em repo copiar.
 testes/test_dts_1360_1362_repo.py | bin/repo
+# Story #4441: registros, política e conversão de borda da escrita (t1).
+testes/test_escrita_borda.py | lib/escrita/tipos.py lib/escrita/politica.py lib/escrita/pedido.py registro/escrita.yaml registro/esquemas/retorno-escrever.schema.json
+# Story #4441: ato escrever e escritor único (borda, política e registros).
+testes/test_escrita_borda.py | registro/escrita.yaml registro/esquemas/retorno-escrever.schema.json lib/escrita/tipos.py lib/escrita/politica.py lib/escrita/pedido.py

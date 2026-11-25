@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platafirma.local/esquemas/retorno-escrever.schema.json",
+  "title": "RetornoEscrever",
+  "description": "Esquema canônico da saída padrão (--json) das seis formas do ato escrever.",
+  "type": "object",
+  "required": [
+    "ok",
+    "chave",
+    "classe",
+    "forma",
+    "morada",
+    "release",
+    "pedido",
+    "alterou",
+    "ja_gravado",
+    "substituiu",
+    "bytes"
+  ],
+  "properties": {
+    "ok": {
+      "const": true
+    },
+    "chave": {
+      "type": "string",
+      "minLength": 1
+    },
+    "classe": {
+      "type": "string",
+      "minLength": 1
+    },
+    "forma": {
+      "type": "string",
+      "enum": [
+        "gravar",
+        "criar",
+        "trocar",
+        "retirar",
+        "restaurar",
+        "ensaiar"
+      ]
+    },
+    "morada": {
+      "type": "string",
+      "enum": [
+        "git",
+        "banco",
+        "wiki",
+        "rastreador",
+        "fila",
+        "balde",
+        "cofre"
+      ]
+    },
+    "release": {
+      "type": "string",
+      "minLength": 1
+    },
+    "versao": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "versao_completa": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "versao_anterior": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "pedido": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "alterou": {
+      "type": "boolean"
+    },
+    "ja_gravado": {
+      "type": "boolean"
+    },
+    "substituiu": {
+      "type": "boolean"
+    },
+    "bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "ocorrencias": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "hunks_aplicados": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "desfazer": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ensaiado": {
+      "type": "boolean"
+    },
+    "mudaria": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "fornada": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": true
+}
