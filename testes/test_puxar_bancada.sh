@@ -23,6 +23,9 @@ BANC="$TMP_DIR/bancada"
 mkdir -p "$RAIZ" "$FORGE" "$TRAB" "$CASA" "$TMP_DIR/srv"
 unset PLATAFIRMA_BANCADA PF_CADEIRA PLATAFIRMA_RELEASE PLATAFIRMA_ARQUIVO_BANCADA PLATAFIRMA_ARQUIVO_SHELLRC OPS_LOG_DIR PF_SESSAO
 export HOME="$CASA" PF_RELEASE_RAIZ="$RAIZ" PLATAFIRMA_INSTANCIA="$TMP_DIR/srv"
+# o PATH herdado nao leva a release do host: o teste julga esta arvore, e um comando da release no ar
+# (como o bin/pf de 5450159) mudaria o veredito sem mudar o codigo sob teste
+PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '^/opt/platafirma' | paste -sd: -)"; export PATH
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t GIT_CONFIG_NOSYSTEM=1
 ARQ_BANCADA="$CASA/.config/platafirma/bancada"
 REPO_REL="$RAIZ/current/harness/bin/repo"
