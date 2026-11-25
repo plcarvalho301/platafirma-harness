@@ -90,11 +90,17 @@ def test_diretivas_das_unidades_socket_e_service() -> None:
         "PrivateTmp": "yes",
         "PrivateDevices": "yes",
         "CapabilityBoundingSet": "",
-        "RestrictAddressFamilies": "AF_UNIX AF_INET AF_INET6",
+        "RestrictAddressFamilies": "AF_UNIX AF_INET",
         "IPAddressDeny": "any",
         "IPAddressAllow": "localhost",
-        "SystemCallFilter": "@system-service",
         "SystemCallArchitectures": "native",
+        "ProtectKernelLogs": "yes",
+        "ProtectClock": "yes",
+        "ProtectHostname": "yes",
+        "ProtectProc": "invisible",
+        "ProcSubset": "pid",
+        "RestrictRealtime": "yes",
+        "RemoveIPC": "yes",
         "MemoryDenyWriteExecute": "yes",
         "RestrictNamespaces": "yes",
         "LockPersonality": "yes",
@@ -110,6 +116,14 @@ def test_diretivas_das_unidades_socket_e_service() -> None:
     for chave, valor in esperados.items():
         assert svc_u.get(chave) == valor, f"diretiva {chave} divergente: {svc_u.get(chave)!r}"
     assert "/home/claudinho/AI/wt" in svc_u["ReadWritePaths"]
+    # SystemCallFilter vem em duas linhas (lista de permissão e negação), e o systemd acumula as duas
+    linhas = (_HARNESS / "deploy-harness" / "escritor.service").read_text(encoding="utf-8").splitlines()
+    filtros = [linha.split("=", 1)[1] for linha in linhas if linha.startswith("SystemCallFilter=")]
+    assert filtros == ["@system-service", "~@privileged"]
+    # o parecer #5742 veda estas três: setgid da bancada, setrlimit do core e SO_PEERCRED/grupo
+    for vedada in ("RestrictSUIDSGID", "PrivateUsers"):
+        assert vedada not in svc_u, f"{vedada} quebra o escritor (parecer #5742)"
+    assert not any("@resources" in f for f in filtros)
 
 
 def test_setup_escritor_check_e_units_da_instancia(tmp_path: Path) -> None:

@@ -29,10 +29,20 @@ ReadWritePaths=/home/claudinho/AI/wt /var/lib/platafirma-escritor
 PrivateTmp=yes
 PrivateDevices=yes
 CapabilityBoundingSet=
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictAddressFamilies=AF_UNIX AF_INET
 IPAddressDeny=any
 IPAddressAllow=localhost
 SystemCallFilter=@system-service
+# parecer da segurança #5742 da #4441: oito diretivas levam a exposição de 2,1 a 1,4 sem cortar o loopback até a Olaria.
+# Não entram RestrictSUIDSGID (o setgid dos diretórios da bancada), ~@resources (setrlimit do core) nem PrivateUsers (SO_PEERCRED e grupo).
+SystemCallFilter=~@privileged
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictRealtime=yes
+RemoveIPC=yes
 SystemCallArchitectures=native
 MemoryDenyWriteExecute=yes
 RestrictNamespaces=yes
