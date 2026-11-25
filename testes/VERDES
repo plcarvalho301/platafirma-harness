@@ -58,3 +58,4 @@ test_curar_desrelacionar_desderivar.py | bin/acervo bin/_acervo/** bin/curar bin
 test_teste_bench_banco.py | bin/teste lib/ambiente_banco.py
 test_dt_unidades_systemd.py | bin/infra bin/_sessao/longjob bin/_release/conferir/**
 test_motor_limpar.py | bin/motor bin/_motor/limpeza.py
+test_dts_1380_1392_1393_acervo.py | bin/acervo bin/_acervo/** bin/ingerir bin/_ingerir/**
