@@ -1,0 +1,52 @@
+[Unit]
+Description=Escritor único do ato escrever da PlataFirma
+Requires=escritor.socket
+After=escritor.socket local-fs.target
+
+[Service]
+Type=simple
+User=pf-escritor
+Group=platafirma-escrita
+UMask=0077
+LimitCORE=0
+NoNewPrivileges=yes
+StateDirectory=platafirma-escritor
+StateDirectoryMode=0750
+Environment=PYTHONPATH=/opt/platafirma/current/harness/lib
+Environment=PF_ESCRITOR_SOCKET=/run/platafirma/escritor.sock
+Environment=PF_BANCADAS_RAIZ=/home/claudinho/AI
+Environment=PF_ESCRITOR_ESTADO=/var/lib/platafirma-escritor
+Environment=PF_RELEASE_CURRENT=/opt/platafirma/current
+Environment=PF_PDP_DIR=/opt/platafirma/current/core/acesso
+Environment=PF_OLARIA_URL=http://127.0.0.1:8101
+LoadCredential=olaria-chave:/etc/platafirma/segredos/escritor/olaria-chave
+ExecStart=/opt/platafirma/current/venv/harness/bin/python -m escrita servidor
+ProtectSystem=strict
+ProtectHome=tmpfs
+BindReadOnlyPaths=/home/claudinho/AI
+BindPaths=/home/claudinho/AI/wt
+ReadWritePaths=/home/claudinho/AI/wt /var/lib/platafirma-escritor
+PrivateTmp=yes
+PrivateDevices=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+MemoryDenyWriteExecute=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+MemoryHigh=192M
+MemoryMax=256M
+TasksMax=64
+KillMode=mixed
+TimeoutStopSec=45s
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+Also=escritor.socket

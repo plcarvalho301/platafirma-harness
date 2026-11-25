@@ -657,6 +657,41 @@ def reconcilia_com_anterior(
     return dados
 
 
+def do_escritor(socket_path: str | Path | None = None, timeout_s: float = 2.0) -> dict:
+    """Sonda periódica do escritor único pelo quadro leve `saude` no soquete AF_UNIX."""
+    from escrita.cliente import consultar_saude, socket_padrao
+    from escrita.tipos import RecusaEscrita
+
+    bruto = socket_path or os.environ.get("SINAL_ESCRITOR_SOCKET")
+    caminho = Path(bruto) if bruto else socket_padrao()
+    onde = f"unix:{caminho} saude"
+    try:
+        resp = consultar_saude(caminho, timeout_s=timeout_s)
+    except RecusaEscrita as exc:
+        return {
+            "estado": "fora",
+            "exercitado": onde,
+            "motivo": redigir(f"{exc.primeiro.codigo}: {exc.primeiro.recebido}")[:300],
+        }
+    except OSError as exc:
+        return {
+            "estado": "fora",
+            "exercitado": onde,
+            "motivo": redigir(str(exc))[:300],
+        }
+    if not resp.get("ok"):
+        return {
+            "estado": "fora",
+            "exercitado": onde,
+            "motivo": "quadro saude retornou ok=false",
+        }
+    return {
+        "estado": "no-ar",
+        "exercitado": onde,
+        "release": str(resp.get("release") or ""),
+    }
+
+
 def coleta():
     servicos = {}
     for nome, contendor in POR_HEALTHCHECK.items():
@@ -680,6 +715,9 @@ def coleta():
         e = do_systemd_result(nome, unit)
         e["lido_em"] = agora()
         servicos[nome] = e
+    e = do_escritor()
+    e["lido_em"] = agora()
+    servicos["escritor"] = e
     e = do_gpu()
     e["lido_em"] = agora()
     servicos["gpu-host"] = e

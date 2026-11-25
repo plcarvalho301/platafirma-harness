@@ -422,3 +422,7 @@ testes/test_escrita_edicao_e_io.py | lib/escrita/caminho.py lib/escrita/edicao.p
 testes/test_escrita_portao_e_registro.py | lib/escrita/portao.py lib/escrita/resolucao.py lib/escrita/registro.py lib/escrita/tipos.py lib/escrita/politica.py lib/escrita/edicao.py
 # Story #4441: protocolo e adaptadores das moradas git e Olaria (t4).
 testes/test_escrita_moradas.py | lib/escrita/moradas/** lib/escrita/portao.py lib/escrita/resolucao.py lib/escrita/registro.py lib/escrita/io_atomico.py lib/escrita/edicao.py
+# Story #4441: servidor por soquete, cliente e fachada da escrita (t5).
+testes/test_escrita_servidor_e_cliente.py | lib/escrita/servidor.py lib/escrita/cliente.py lib/escrita/escrita.py lib/escrita/__init__.py lib/escrita/__main__.py
+# Story #4441: unidades, instalador --check, conferência escritor e sonda no sinal (t6).
+testes/test_escrita_unidades_e_conferencia.py | deploy-harness/escritor.socket deploy-harness/escritor.service bin/_release/conferir/conferir.py bin/sinal

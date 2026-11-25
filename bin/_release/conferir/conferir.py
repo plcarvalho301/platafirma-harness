@@ -3,7 +3,7 @@
 # capacidade: operacao
 # dono: ti
 # use para: declarado × servido, 'existe X?' (âncora de NEGATIVA), cabeçalho de verbo, paridade de serviço
-# atos: existe, repo, commit, arranque, verbo, servico, skill, procedencia, superficie, front, ferramental, pdp, alcance, vocabulario, diagrama, card, jobs, unit, acervo, dependencias, sessao-orfa, copia, ontologia
+# atos: existe, repo, commit, arranque, verbo, servico, skill, procedencia, superficie, front, ferramental, pdp, alcance, vocabulario, diagrama, card, jobs, unit, acervo, dependencias, sessao-orfa, copia, ontologia, escritor
 # forma: relatorio
 # cauda: sim
 # componente: docker, git
@@ -237,6 +237,7 @@ CLASSES_IMPLEMENTADAS = (
     "sessao-orfa",
     "copia",
     "ontologia",
+    "escritor",
 )
 
 CLASSES_ABERTAS = {
@@ -3954,6 +3955,136 @@ def conferir_fossil(alvo=None, como_json=False):
     return resultado.relatorio("fossil", alvo, itens, _sha_release(), como_json=como_json)
 
 
+_ESCRITOR_DIRETIVAS_SERVICE = (
+    ("LimitCORE", "0"),
+    ("MemoryMax", None),
+    ("TasksMax", None),
+    ("NoNewPrivileges", "yes"),
+    ("ProtectSystem", "strict"),
+    ("ProtectHome", "tmpfs"),
+)
+_ESCRITOR_DIRETIVAS_SOCKET = (
+    ("SocketUser", "pf-escritor"),
+    ("SocketGroup", "platafirma-escrita"),
+    ("SocketMode", "0660"),
+    ("MaxConnections", "32"),
+)
+_TETO_EXPOSICAO_ESCRITOR = 2.0
+
+
+def _ler_diretivas_unit(caminho):
+    campos = {}
+    for linha in caminho.read_text(encoding="utf-8", errors="replace").splitlines():
+        limpa = linha.strip()
+        if not limpa or limpa.startswith("#") or limpa.startswith("[") or "=" not in limpa:
+            continue
+        chave, valor = limpa.split("=", 1)
+        campos[chave.strip()] = valor.strip()
+    return campos
+
+
+def _extrair_exposicao_systemd(texto):
+    m = re.search(r"Overall exposure level[^:]*:\s*([0-9]+(?:\.[0-9]+)?)", texto)
+    if m:
+        return float(m.group(1))
+    m2 = re.search(r"([0-9]+(?:\.[0-9]+)?)\s+(?:SAFE|OK|MEDIUM|EXPOSED|UNSAFE)\b", texto)
+    return float(m2.group(1)) if m2 else None
+
+
+def _checar_diretivas_arquivo(caminho, rotulo, esperadas):
+    if not caminho.is_file():
+        return (rotulo, resultado.divergente(f"unidade ausente: {caminho}"))
+    campos = _ler_diretivas_unit(caminho)
+    faltas = []
+    for chave, esperado in esperadas:
+        atual = campos.get(chave)
+        if atual is None or not atual:
+            faltas.append(f"{chave} ausente")
+        elif esperado is not None and atual != esperado:
+            faltas.append(f"{chave}={atual} (esperado {esperado})")
+    if faltas:
+        return (rotulo, resultado.divergente("; ".join(faltas)))
+    return (rotulo, resultado.conforme())
+
+
+def conferir_escritor(
+    alvo=None,
+    *,
+    como_json=False,
+    setup_script=None,
+    service_unit=None,
+    socket_unit=None,
+    socket_path=None,
+    analyze_runner=None,
+    teto_exposicao=_TETO_EXPOSICAO_ESCRITOR,
+):
+    """Confere unidades instaladas, tetos, exposição systemd e quadro saude do escritor único."""
+    from pathlib import Path as _Path
+
+    prod = _Path(os.environ.get("PF_PROD_RAIZ") or PROD_RAIZ)
+    core = _Path(os.environ.get("PF_CORE_DIR") or (prod / "current" / "core"))
+    sys_units = _Path(os.environ.get("PF_SYSTEM_UNITS") or "/etc/systemd/system")
+    setup = _Path(setup_script) if setup_script else (core / "deploy" / "setup-escritor.sh")
+    svc_u = _Path(service_unit) if service_unit else (sys_units / "escritor.service")
+    sock_u = _Path(socket_unit) if socket_unit else (sys_units / "escritor.socket")
+
+    itens = []
+    if not setup.is_file():
+        itens.append(("instalador --check", resultado.indeterminavel(f"setup-escritor.sh ausente em {setup}")))
+    else:
+        proc = subprocess.run(
+            ["bash", str(setup), "--check"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        if proc.returncode == 0:
+            itens.append(("unidades instaladas", resultado.conforme()))
+        else:
+            det = (proc.stderr or proc.stdout or f"exit {proc.returncode}").strip().splitlines()[0]
+            itens.append(("unidades instaladas", resultado.divergente(det)))
+
+    itens.append(_checar_diretivas_arquivo(svc_u, "escritor.service tetos", _ESCRITOR_DIRETIVAS_SERVICE))
+    itens.append(_checar_diretivas_arquivo(sock_u, "escritor.socket diretivas", _ESCRITOR_DIRETIVAS_SOCKET))
+
+    if analyze_runner is not None:
+        rc_an, out_an, err_an = analyze_runner()
+    else:
+        rc_an, out_an, err_an = sh(["systemd-analyze", "security", "escritor.service", "--no-pager"])
+    nota = _extrair_exposicao_systemd(out_an or "") if rc_an == 0 else None
+    if rc_an != 0 or nota is None:
+        motivo = (err_an or out_an or f"systemd-analyze saiu {rc_an}").strip().splitlines()[0]
+        itens.append(("exposicao systemd-analyze", resultado.indeterminavel(motivo)))
+    elif nota > teto_exposicao:
+        itens.append(
+            (
+                "exposicao systemd-analyze",
+                resultado.divergente(f"exposicao {nota:.1f} acima do teto {teto_exposicao:.1f}"),
+            )
+        )
+    else:
+        itens.append(("exposicao systemd-analyze", resultado.conforme()))
+
+    lib_dir = str(_Path(HARNESS) / "lib")
+    if lib_dir not in sys.path:
+        sys.path.insert(0, lib_dir)
+    from escrita.cliente import consultar_saude, socket_padrao
+    from escrita.tipos import RecusaEscrita
+
+    sock_alvo = _Path(socket_path) if socket_path else socket_padrao()
+    try:
+        resp = consultar_saude(sock_alvo, timeout_s=2.0)
+        if resp.get("ok"):
+            itens.append(("soquete saude", resultado.conforme()))
+        else:
+            itens.append(("soquete saude", resultado.divergente("quadro saude retornou ok=false")))
+    except RecusaEscrita as exc:
+        itens.append(("soquete saude", resultado.divergente(f"{exc.primeiro.codigo}: {exc.primeiro.recebido}")))
+
+    return resultado.relatorio("escritor", alvo or "escritor", itens, _sha_release(), como_json=como_json)
+
+
 def main(argv):
     # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4; DT 850): varre
     # todos os argumentos antes do despacho; nenhuma classe chega a rodar. --help/--ajuda sai 0.
@@ -4093,6 +4224,8 @@ def main(argv):
         return copia.conferir_copia(alvo, _sha_release(), como_json=como_json)
     if classe == "ontologia":
         return conferir_ontologia(alvo, como_json=como_json)
+    if classe == "escritor":
+        return conferir_escritor(alvo, como_json=como_json)
     if classe == "fossil":
         return conferir_fossil(alvo, como_json=como_json)
     if como_json:
