@@ -1,6 +1,8 @@
-"""Registro e despacho dos adaptadores de morada do componente leitura (story #4442, t5)."""
+"""Registro e despacho dos sete adaptadores de morada do componente leitura (story #4442, t5-t6)."""
 from __future__ import annotations
 
+import hashlib
+import unicodedata
 from collections.abc import Mapping, Sequence
 
 from ..tipos import (
@@ -18,6 +20,50 @@ from ..tipos import (
 MORADAS_VALIDAS: frozenset[str] = frozenset(
     {"banco", "git", "wiki", "balde", "fila", "rastreador", "cofre"}
 )
+
+
+def normalizar_termo(texto: str) -> str:
+    """Normaliza texto em NFC com casefold para filtros determinísticos."""
+    return unicodedata.normalize("NFC", texto).casefold()
+
+
+def montar_pagina_bruta(
+    classe: str,
+    itens: list[dict[str, str]],
+    *,
+    limite: int,
+    cursor: CursorDecodificado | None,
+    universo_fechado: bool,
+) -> PaginaBruta:
+    """Ordena, calcula versão determinística, detecta mudança de retrato e fatia por cursor."""
+    ordenados = sorted(itens, key=lambda it: it["chave"])
+    versao = hashlib.sha256(
+        "\n".join(it["chave"] for it in ordenados).encode("utf-8")
+    ).hexdigest()[:16]
+
+    mudou: dict[str, str] | None = None
+    avisos: list[str] = []
+    filtrados = ordenados
+    if cursor is not None:
+        if cursor.versao_retrato != versao:
+            mudou = {"de": cursor.versao_retrato, "para": versao}
+            avisos.append("versao_alterada_entre_paginas")
+        filtrados = [it for it in ordenados if it["chave"] > cursor.ultima_chave]
+
+    tem_mais = len(filtrados) > limite
+    pagina = filtrados[:limite]
+    prox = (0, pagina[-1]["chave"]) if (tem_mais and pagina) else None
+    return PaginaBruta(
+        classe=classe,
+        versao=versao,
+        digest=None,
+        universo_fechado=universo_fechado,
+        total=len(ordenados),
+        itens=tuple(pagina),
+        proxima_tupla=prox,
+        mudou=mudou,
+        avisos=tuple(avisos),
+    )
 
 
 class ErroMorada(Exception):
@@ -62,17 +108,13 @@ class RegistroMoradas:
         seletor: SeletorParte,
         prazo_ms: int,
     ) -> ObjetoBruto:
-        return self.obter(alvo.morada).ler_objeto(alvo, seletor, prazo_ms)
+        adaptador = self.obter(alvo.morada)
+        prazo_efetivo = max(50, int(prazo_ms))
+        return adaptador.ler_objeto(alvo, seletor, prazo_efetivo)
 
-    def listar_chaves(
-        self,
-        morada: str,
-        classe: str,
-        filtros: Sequence[FiltroCatalogo],
-        termo: str | None,
-        limite: int,
-        cursor: CursorDecodificado | None,
-        prazo_ms: int,
+    def listar_chaves(  # noqa: PLR0913 -- assinatura fixa do protocolo AdaptadorMorada
+        self, morada: str, classe: str, filtros: Sequence[FiltroCatalogo],
+        termo: str | None, limite: int, cursor: CursorDecodificado | None, prazo_ms: int,
     ) -> PaginaBruta:
         return self.obter(morada).listar_chaves(
             classe=classe,

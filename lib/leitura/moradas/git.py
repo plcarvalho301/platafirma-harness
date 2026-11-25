@@ -288,14 +288,9 @@ class AdaptadorGit:
         itens.sort(key=lambda it: it["chave"])
         return itens
 
-    def listar_chaves(
-        self,
-        classe: str,
-        filtros: Sequence[FiltroCatalogo],
-        termo: str | None,
-        limite: int,
-        cursor: CursorDecodificado | None,
-        prazo_ms: int,
+    def listar_chaves(  # noqa: PLR0913 -- assinatura fixa do protocolo AdaptadorMorada
+        self, classe: str, filtros: Sequence[FiltroCatalogo], termo: str | None,
+        limite: int, cursor: CursorDecodificado | None, prazo_ms: int,
     ) -> PaginaBruta:
         del filtros, prazo_ms
         base = self._raiz / classe if (self._raiz / classe).is_dir() else self._raiz

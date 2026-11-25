@@ -211,7 +211,7 @@ def _valida_razao(descomprimido: int, comprimido: int | None, razao_max: float) 
         )
 
 
-def ler_zip_seguro(
+def ler_zip_seguro(  # noqa: PLR0913 -- assinatura pública com orçamento e aninhamento opcionais
     zf: zipfile.ZipFile,
     nome: str,
     limite: int = MEMBRO_MAX,

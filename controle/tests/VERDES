@@ -422,3 +422,6 @@ testes/test_escrita_edicao_e_io.py | lib/escrita/caminho.py lib/escrita/edicao.p
 testes/test_escrita_portao_e_registro.py | lib/escrita/portao.py lib/escrita/resolucao.py lib/escrita/registro.py lib/escrita/tipos.py lib/escrita/politica.py lib/escrita/edicao.py
 # Story #4441: protocolo e adaptadores das moradas git e Olaria (t4).
 testes/test_escrita_moradas.py | lib/escrita/moradas/** lib/escrita/portao.py lib/escrita/resolucao.py lib/escrita/registro.py lib/escrita/io_atomico.py lib/escrita/edicao.py
+# Story #4442 (Fita 3): adaptadores wiki, balde, fila, rastreador e cofre (t6) e daemon/cliente do leitor único (t7).
+testes/test_ler_moradas_demais.py | lib/leitura/moradas/__init__.py lib/leitura/moradas/wiki.py lib/leitura/moradas/balde.py lib/leitura/moradas/fila.py lib/leitura/moradas/rastreador.py lib/leitura/moradas/cofre.py
+testes/test_ler_leitor.py | lib/leitura/daemon.py lib/leitura/cliente.py lib/leitura/resolvedor.py lib/leitura/borda.py lib/leitura/nucleo.py lib/leitura/moradas/**
