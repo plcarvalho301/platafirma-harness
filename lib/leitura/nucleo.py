@@ -588,9 +588,18 @@ def montar_sumario(texto: str, nome: str, *, max_bytes: int = ORCAMENTO_PADRAO) 
 def _formatar_cabecalho(
     bruto: ObjetoBruto, parte: str, *, com_perda: bool
 ) -> str:
-    base = f"{bruto.alvo.chave_pedida} · versão {bruto.versao} · {parte}"
     if bruto.alvo.eh_ficha_da_classe:
-        base += f" · objeto lido: a ficha da classe {bruto.alvo.classe}"
+        classe_alvo = (
+            bruto.alvo.chave_canonica.split(":", 1)[1]
+            if ":" in bruto.alvo.chave_canonica
+            else bruto.alvo.classe
+        )
+        base = (
+            f"{bruto.alvo.chave_canonica} · versão {bruto.versao} · {parte}"
+            f" · objeto lido: a ficha da classe {classe_alvo}"
+        )
+    else:
+        base = f"{bruto.alvo.chave_pedida} · versão {bruto.versao} · {parte}"
     if com_perda:
         base += " · com perda"
     return base

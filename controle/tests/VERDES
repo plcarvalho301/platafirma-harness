@@ -437,3 +437,5 @@ testes/test_ler_leitor.py | lib/leitura/daemon.py lib/leitura/cliente.py lib/lei
 testes/test_escrita_verbos.py | bin/repo bin/ontologia bin/_olaria/__main__.py bin/write_file lib/escrita/__main__.py lib/escrita/escrita.py registro/escrita.yaml
 # Story #4441: suíte de contrato nas moradas git e Olaria, concorrência e mutação nas guardas (t8).
 testes/test_escrita_contrato.py | lib/escrita/** registro/escrita.yaml
+# Story #4442 (Fita 5): suíte de contrato nas sete moradas, paridade porta/terminal e mutação nas guardas (t11).
+testes/test_ato_ler_contrato.py | lib/leitura/** bin/busca registro/leitura.yaml
