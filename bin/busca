@@ -590,12 +590,14 @@ def _renderizar_resultado_leitor_ler(
 
 
 def _renderizar_item_ler_texto(res: Mapping[str, Any], saida: TextIO) -> None:
-    chave = str(res.get("chave") or "")
-    versao = str(res.get("versao") or "")
-    parte = str(res.get("parte") or "")
-    ficha_cls = bool(res.get("ficha_da_classe"))
-    sufixo = f" · objeto lido: a ficha da classe {res.get('classe') or chave}" if ficha_cls else ""
-    cab = f"{chave} · versão {versao} · {parte}{sufixo}"
+    cab = str(res.get("cabecalho") or "")
+    if not cab:
+        chave = str(res.get("chave") or "")
+        versao = str(res.get("versao") or "")
+        parte = str(res.get("parte") or "")
+        ficha_cls = bool(res.get("ficha_da_classe"))
+        sufixo = f" · objeto lido: a ficha da classe {res.get('classe') or chave}" if ficha_cls else ""
+        cab = f"{chave} · versão {versao} · {parte}{sufixo}"
     saida.write(cab + "\n")
     conteudo = str(res.get("conteudo") or "")
     if conteudo:
