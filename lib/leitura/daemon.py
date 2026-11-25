@@ -13,11 +13,18 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from .borda import VERSAO_CURSOR, assinar_cursor, calcular_query_hash, validar_cursor
 from .morada import eh_segredo
 from .moradas import ErroMorada, RegistroMoradas
-from .moradas.fila import SUJEITO_ATUAL
+from .moradas.balde import AdaptadorBalde
+from .moradas.banco import AdaptadorBanco
+from .moradas.cofre import AdaptadorCofre
+from .moradas.fila import SUJEITO_ATUAL, AdaptadorFila
+from .moradas.git import AdaptadorGit
+from .moradas.rastreador import AdaptadorRastreador
+from .moradas.wiki import AdaptadorWiki
 from .nucleo import ErroNucleo, processar_objeto
 from .resolvedor import (
     ErroResolucao,
@@ -656,6 +663,73 @@ class DaemonLeitor:
                 pass
 
 
+_RELEASE_CURRENT_PADRAO = Path("/opt/platafirma/current")
+CREDENCIAL_CASA_DB = "casa-db"
+PAPEL_LEITOR_BANCO = "pf_leitor_ro"
+
+
+class CredencialAusente(LookupError):
+    """A credencial que a unidade entrega por LoadCredential= não chegou ao processo."""
+
+
+def ler_credencial(nome: str, env: Mapping[str, str] | None = None) -> str:
+    """O valor da credencial `nome` em $CREDENTIALS_DIRECTORY, sem o fim de linha."""
+    ambiente = os.environ if env is None else env
+    pasta = ambiente.get("CREDENTIALS_DIRECTORY", "")
+    if not pasta:
+        raise CredencialAusente(f"{nome}: CREDENTIALS_DIRECTORY ausente (a unidade não entregou credencial)")
+    try:
+        valor = (Path(pasta) / nome).read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise CredencialAusente(f"{nome}: {exc.strerror or exc}") from None
+    if not valor:
+        raise CredencialAusente(f"{nome}: credencial vazia")
+    return valor
+
+
+def dsn_casa_db(env: Mapping[str, str] | None = None) -> str:
+    """DSN do banco casa no papel pf_leitor_ro, com a senha da credencial casa-db."""
+    ambiente = os.environ if env is None else env
+    senha = quote(ler_credencial(CREDENCIAL_CASA_DB, ambiente), safe="")
+    host = ambiente.get("CASA_PG_HOST", "127.0.0.1")
+    porta = ambiente.get("CASA_PG_PORT", "5439")
+    base = ambiente.get("CASA_PG_DB", "casa")
+    return f"postgresql://{PAPEL_LEITOR_BANCO}:{senha}@{host}:{porta}/{base}"
+
+
+def montar_moradas_producao(
+    env: Mapping[str, str] | None = None,
+    *,
+    avisar: RegistradorTelemetria | None = None,
+) -> RegistroMoradas:
+    """As moradas que esta instância alcança; a que fica de fora sai 3 morada-sem-resposta na chamada.
+
+    Wiki, fila e rastreador atendem em localhost sem segredo, como para os outros verbos; só o
+    banco pede a credencial. O balde da casa é MinIO, e o adaptador só abre pasta local: sem
+    PF_BALDE_RAIZ ele fica de fora e o motivo vai ao log.
+    """
+    ambiente = os.environ if env is None else env
+    registrar_aviso = avisar or _registrar_telemetria_stderr
+    release = Path(ambiente.get("PF_RELEASE_CURRENT") or str(_RELEASE_CURRENT_PADRAO))
+    registro = RegistroMoradas()
+    registro.registrar("git", AdaptadorGit(release / "casa"))
+    registro.registrar("wiki", AdaptadorWiki())
+    registro.registrar("fila", AdaptadorFila())
+    registro.registrar("rastreador", AdaptadorRastreador())
+    registro.registrar("cofre", AdaptadorCofre())
+    try:
+        registro.registrar("banco", AdaptadorBanco(dsn=dsn_casa_db(ambiente)))
+    except CredencialAusente as exc:
+        registrar_aviso({"evento": "morada-fora", "morada": "banco", "motivo": str(exc)})
+    raiz_balde = ambiente.get("PF_BALDE_RAIZ", "")
+    if raiz_balde:
+        extrator = ambiente.get("PF_EXTRATOR_SOCKET") or None
+        registro.registrar("balde", AdaptadorBalde(raiz_local=Path(raiz_balde), socket_extrator=extrator))
+    else:
+        registrar_aviso({"evento": "morada-fora", "morada": "balde", "motivo": "PF_BALDE_RAIZ ausente"})
+    return registro
+
+
 _MIN_ARGS_SOCKET = 2
 
 
@@ -665,7 +739,7 @@ def main(argv: list[str] | None = None) -> int:
     caminho = Path(os.environ.get("PF_LEITOR_SOCKET") or str(SOCKET_PADRAO))
     if len(args) >= _MIN_ARGS_SOCKET and args[0] == "--socket":
         caminho = Path(args[1])
-    leitor = DaemonLeitor(moradas=RegistroMoradas())
+    leitor = DaemonLeitor(moradas=montar_moradas_producao())
     if os.environ.get("LISTEN_FDS") == "1":
         srv = socket.socket(fileno=3)
         try:

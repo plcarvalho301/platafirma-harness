@@ -20,7 +20,9 @@ from ..tipos import (
 )
 from . import ErroMorada, montar_pagina_bruta, normalizar_termo
 
-_RASTREADOR_URL_PADRAO = "http://127.0.0.1:8085"
+# A API do rastreador mora em /api, na mesma porta que o verbo tarefas usa (bin/tarefas, TAREFAS_BASE).
+_RASTREADOR_URL_PADRAO = "http://127.0.0.1:8120/api"
+_CLASSES_SEM_NIVEL = frozenset({"card", "comentario"})
 _HTTP_NOT_FOUND = 404
 ESTADOS_TERMINAIS = frozenset(
     {"concluido", "concluído", "fechado", "cancelado", "arquivado", "descartado", "done", "closed"}
@@ -64,11 +66,14 @@ def _item_aceito_na_lista(
     termo_n: str | None,
 ) -> dict[str, str] | None:
     estado = str(reg.get("estado") or "")
+    nivel = str(reg.get("nivel_nome") or "")
+    if classe not in _CLASSES_SEM_NIVEL and nivel and nivel != classe:
+        return None
     if classe != "comentario" and estado_ped is None and _estado_eh_terminal(estado):
         return None
     if estado_ped is not None and normalizar_termo(estado) != estado_ped:
         return None
-    if mae_ped is not None and str(reg.get("mae") or "") != mae_ped:
+    if mae_ped is not None and str(reg.get("pai") or reg.get("mae") or "") != mae_ped:
         return None
     cid = str(reg.get("id") or "")
     if not cid:
@@ -138,6 +143,28 @@ class AdaptadorRastreador:
             ) from None
 
     @staticmethod
+    def _recusa_comentario_sem_card(recebido: str) -> ErroMorada:
+        return ErroMorada(
+            Recusa(
+                saida=2,
+                codigo="chave-mal-formada",
+                onde="chave",
+                recebido=recebido,
+                regra="comentario-pela-chave-do-card",
+                cura="o rastreador só publica comentário pela lista do card: use comentario:<card>/<id>",
+                proximo="tarefas comentarios <card>",
+            )
+        )
+
+    def _ler_comentario(self, slug: str, prazo_ms: int, recebido: str) -> Any:
+        card, _, cid = slug.partition("/")
+        if not card or not cid:
+            raise self._recusa_comentario_sem_card(recebido)
+        bruto = self._chamar(f"/itens/{card}/comentarios", {}, prazo_ms, recebido)
+        lista = bruto.get("comentarios", []) if isinstance(bruto, Mapping) else []
+        return next((c for c in lista if isinstance(c, Mapping) and str(c.get("id")) == cid), None)
+
+    @staticmethod
     def _validar_versao_vigente(pedida: str | None, vigente: str, chave: str) -> None:
         if pedida and pedida != vigente:
             rec = Recusa(
@@ -156,12 +183,14 @@ class AdaptadorRastreador:
     ) -> ObjetoBruto:
         slug = alvo.endereco.split(":", 1)[1] if ":" in alvo.endereco else alvo.endereco
         eh_comentario = alvo.classe == "comentario"
-        caminho = f"/comentarios/{slug}" if eh_comentario else f"/cards/{slug}"
         params: dict[str, str] = {}
         if alvo.classe == "story" and seletor.com_decisoes_ancestrais:
             params["com_decisoes_ancestrais"] = "true"
 
-        item = self._chamar(caminho, params, prazo_ms, alvo.chave_pedida)
+        if eh_comentario:
+            item = self._ler_comentario(slug, prazo_ms, alvo.chave_pedida)
+        else:
+            item = self._chamar(f"/itens/{slug}", params, prazo_ms, alvo.chave_pedida)
         if not isinstance(item, Mapping):
             raise ErroMorada(
                 Recusa(
@@ -189,7 +218,9 @@ class AdaptadorRastreador:
                 )
             )
 
-        versao = str(item.get("versao") or item.get("revisao") or "1")
+        versao = str(
+            item.get("descricao_versao") or item.get("versao") or item.get("revisao") or "1"
+        )
         self._validar_versao_vigente(seletor.versao_pedida, versao, alvo.chave_pedida)
 
         payload = dict(item)
@@ -204,9 +235,16 @@ class AdaptadorRastreador:
         limite: int, cursor: CursorDecodificado | None, prazo_ms: int,
     ) -> PaginaBruta:
         estado_ped, mae_ped = _filtros_para_estado_e_mae(filtros)
-        caminho = "/comentarios" if classe == "comentario" else "/cards"
-        bruto = self._chamar(caminho, {"classe": classe}, prazo_ms, f"listar:{classe}")
-        lista = bruto.get("itens", []) if isinstance(bruto, Mapping) else (bruto or [])
+        if classe == "comentario":
+            if mae_ped is None:
+                raise self._recusa_comentario_sem_card(f"listar:{classe}")
+            bruto = self._chamar(f"/itens/{mae_ped}/comentarios", {}, prazo_ms, f"listar:{classe}")
+            crus = bruto.get("comentarios", []) if isinstance(bruto, Mapping) else []
+            lista = [{**c, "id": f"{mae_ped}/{c.get('id')}"} for c in crus if isinstance(c, Mapping)]
+            mae_ped = None
+        else:
+            bruto = self._chamar("/itens", {}, prazo_ms, f"listar:{classe}")
+            lista = bruto.get("itens", []) if isinstance(bruto, Mapping) else (bruto or [])
 
         termo_n = normalizar_termo(termo) if termo else None
         itens: list[dict[str, str]] = []

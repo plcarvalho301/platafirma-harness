@@ -14,11 +14,9 @@ Environment=PYTHONPATH=/opt/platafirma/current/harness/lib
 Environment=PF_LEITOR_SOCKET=/run/platafirma/leitor/leitor.sock
 Environment=PF_EXTRATOR_SOCKET=/run/platafirma/leitor-extrator/extrator.sock
 Environment=PF_RELEASE_CURRENT=/opt/platafirma/current
+# Só o banco pede segredo: wiki, fila e rastreador atendem em localhost sem credencial, como para
+# os outros verbos. O setup-leitor.sh copia esta do cofre da instância (segredos/leitor/casa-db).
 LoadCredential=casa-db:/etc/credstore/pf-leitor-casa-db
-LoadCredential=wiki:/etc/credstore/pf-leitor-wiki
-LoadCredential=balde:/etc/credstore/pf-leitor-balde
-LoadCredential=fila:/etc/credstore/pf-leitor-fila
-LoadCredential=rastreador:/etc/credstore/pf-leitor-rastreador
 ExecStart=/opt/platafirma/current/venv/harness/bin/python -m leitura.daemon
 ProtectSystem=strict
 ProtectHome=yes

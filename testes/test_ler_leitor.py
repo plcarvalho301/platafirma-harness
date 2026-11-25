@@ -39,6 +39,36 @@ from leitura.tipos import (
 )
 
 
+def test_producao_registra_as_moradas_e_le_so_a_credencial_do_banco(tmp_path: Path) -> None:
+    from leitura.daemon import CredencialAusente, dsn_casa_db, ler_credencial, montar_moradas_producao
+
+    creds = tmp_path / "creds"
+    creds.mkdir()
+    (creds / "casa-db").write_text("s3nh@/x\n", encoding="utf-8")
+    env = {"CREDENTIALS_DIRECTORY": str(creds), "PF_RELEASE_CURRENT": str(tmp_path)}
+    assert ler_credencial("casa-db", env) == "s3nh@/x"
+    assert dsn_casa_db(env) == "postgresql://pf_leitor_ro:s3nh%40%2Fx@127.0.0.1:5439/casa"
+
+    avisos: list[dict[str, Any]] = []
+    reg = montar_moradas_producao(env, avisar=avisos.append)
+    for morada in ("git", "banco", "wiki", "fila", "rastreador", "cofre"):
+        assert reg.obter(morada) is not None
+    with pytest.raises(ErroMorada) as exc_balde:
+        reg.obter("balde")
+    assert exc_balde.value.saida == 3
+    assert [a["morada"] for a in avisos] == ["balde"]
+
+    # Sem a credencial o banco fica de fora e sai 3 na chamada, com o motivo no log
+    avisos.clear()
+    reg_sem = montar_moradas_producao({"PF_RELEASE_CURRENT": str(tmp_path)}, avisar=avisos.append)
+    with pytest.raises(ErroMorada) as exc_banco:
+        reg_sem.obter("banco")
+    assert exc_banco.value.saida == 3
+    assert [a["morada"] for a in avisos] == ["banco", "balde"]
+    with pytest.raises(CredencialAusente):
+        ler_credencial("casa-db", {"CREDENTIALS_DIRECTORY": str(tmp_path / "vazio")})
+
+
 class _MoradaSimulada:
     """Adaptador configurável para exercitar latência, falhas 1/3/5 e contagem de chamadas."""
 
