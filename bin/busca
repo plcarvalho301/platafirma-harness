@@ -772,7 +772,8 @@ def _recusa_ato_desconhecido(ato: str, resto: list[str], *, cabecalho_motor: Pat
 
 def _despachar_ler(resto: list[str], *, saida: TextIO, erro: TextIO, **kw: Any) -> int:
     cfg = ler_config_leitura(env=kw.get("env"))
-    if cfg["leitor_unico"] or kw.get("cliente_leitor") is not None:
+    injecao_local = kw.get("abrir_retrato") is not None or kw.get("release") is not None
+    if (cfg["leitor_unico"] and not injecao_local) or kw.get("cliente_leitor") is not None:
         return _executar_via_leitor_ou_local("ler", resto, saida=saida, erro=erro, **kw)
     como_json = "--json" in resto
     try:

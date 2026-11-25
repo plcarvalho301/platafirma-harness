@@ -247,7 +247,7 @@ def test_morada_banco_transacao_ro_digest_e_paginacao_chave_de_corte() -> None:
     assert conexoes[-1].fechada is True
     assert conexoes[-1].rollbacks == 1
     assert any(SQL_BEGIN_RO in s for s, _ in estado["sqls"])
-    assert any("SET LOCAL statement_timeout" in s for s, _ in estado["sqls"])
+    assert any("set_config('statement_timeout'" in s for s, _ in estado["sqls"])
 
     # Inexistência com digest divergente sai 3 digest-divergente
     alvo_aus = AlvoResolvido(

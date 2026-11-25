@@ -149,7 +149,8 @@ def test_forma_antiga_rag_ajuste_tambem_sai_2_apontando_motor() -> None:
 
 def test_listar_do_motor_vai_sem_instancia_rag_em_proximo() -> None:
     out, err = io.StringIO(), io.StringIO()
-    rc = busca.main(["listar"], saida=out, erro=err)
+    # Com leitor_unico ligado (#4442 t14), `busca listar` é ato próprio; o repasse ao motor vale só desligado.
+    rc = busca.main(["listar"], saida=out, erro=err, env={"PF_LEITOR_UNICO": "false"})
     assert rc == CODIGO_RECUSA_USO
     corpo = json.loads(err.getvalue().splitlines()[-1])
     assert corpo["erro"]["codigo"] == "ato-desconhecido"

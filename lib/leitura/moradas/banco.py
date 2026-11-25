@@ -27,8 +27,8 @@ from . import ErroMorada
 
 PAPEL_LEITOR = "pf_leitor_ro"
 
-SQL_BEGIN_RO = "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
-SQL_SET_TIMEOUT = "SET LOCAL statement_timeout = %s"
+SQL_BEGIN_RO = "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+SQL_SET_TIMEOUT = "SELECT set_config('statement_timeout', %s, true)"
 
 SQL_LER_FICHA = """
 SELECT f.uuid::text AS uuid,
@@ -188,7 +188,7 @@ class AdaptadorBanco:
         try:
             with con.cursor() as cur:
                 cur.execute(SQL_BEGIN_RO)
-                cur.execute(SQL_SET_TIMEOUT, (max(1, int(prazo_ms)),))
+                cur.execute(SQL_SET_TIMEOUT, (str(max(1, int(prazo_ms))),))
                 resultado = acao(cur)
             con.rollback()
             return resultado
