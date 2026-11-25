@@ -136,10 +136,16 @@ def criar_autorizador_pdp(
 
 
 def ler_release_corrente(release_link: Path | None) -> str:
-    """Lê o identificador da release apontada por `release_link`."""
+    """Lê o identificador da release da harness apontada por `release_link`.
+
+    No host, /opt/platafirma/current é pasta fixa com um link por repositório (current/harness ->
+    platafirma-harness/<sha>): o nome de current nunca muda, e a troca que importa ao escritor
+    é a do link harness, de onde ele carrega o código.
+    """
     if release_link is None or not release_link.exists():
         return "local"
-    alvo = os.path.realpath(str(release_link))
+    harness = release_link / "harness"
+    alvo = os.path.realpath(str(harness if harness.exists() else release_link))
     return Path(alvo).name or "local"
 
 

@@ -41,6 +41,21 @@ from escrita.servidor import (  # noqa: E402
 from escrita.tipos import ResultadoEscrita  # noqa: E402
 
 
+def test_release_corrente_segue_o_link_harness_da_pasta_current(tmp_path: Path) -> None:
+    from escrita.servidor import ler_release_corrente
+
+    # Forma do host: current é pasta fixa e só o link de cada repositório muda na promoção
+    for sha in ("aaa111", "bbb222"):
+        (tmp_path / "platafirma-harness" / sha).mkdir(parents=True)
+    current = tmp_path / "current"
+    current.mkdir()
+    (current / "harness").symlink_to(tmp_path / "platafirma-harness" / "aaa111")
+    assert ler_release_corrente(current) == "aaa111"
+    (current / "harness").unlink()
+    (current / "harness").symlink_to(tmp_path / "platafirma-harness" / "bbb222")
+    assert ler_release_corrente(current) == "bbb222"
+
+
 def _politica_ligada(verbos: frozenset[str] = frozenset({"repo"})) -> PoliticaEscrita:
     base = carregar_politica(_HARNESS / "registro" / "escrita.yaml")
     return replace(base, verbos_ligados=verbos)
