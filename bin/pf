@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # pf — cliente de terminal que percorre proximo_args em laço sem recorte explícito (story #4442, t9)
-# capacidade: harness
+# capacidade: operacao
 # dono: engenharia
 # ruff: noqa: ERA001
 """Cliente de terminal para verbos da PlataFirma com paginação automática de `proximo_args`.

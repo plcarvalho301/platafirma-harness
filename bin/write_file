@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # write_file — variante depreciada de gravação de arquivo; use `repo gravar`
-# capacidade: harness
+# capacidade: dev
 # dono: ti
 """Ponto de entrada depreciado para `write_file` (sucessor: `repo gravar`)."""
 # atos: escrever (escrita, arquivo)
