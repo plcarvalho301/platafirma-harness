@@ -1099,11 +1099,42 @@ def cmd_gravar_recusado(tokens: list[str]) -> int:
 # INDICACAO
 # ---------------------------------------------------------------------------
 
-def _imprimir_indicacoes_agrupadas(itens: list[dict[str, Any]], *, como_json: bool) -> int:
+def _aviso_lote_sem_semantico(lote: str | None) -> dict[str, Any] | None:
+    """Quando o lote rodou com semantico = f, devolve aviso explícito para evitar 0 itens silencioso (DT 1393)."""
+    if not lote:
+        return None
+    try:
+        info = requisitar("GET", f"/acervo/lotes/{urllib.parse.quote(lote, safe='')}", None)
+    except (ErroHTTP, ErroTransporte):
+        return None
+    if isinstance(info, dict) and info.get("semantico") is False:
+        ate = info.get("ate") or "catalogar"
+        return {
+            "aviso": (
+                f"lote {lote} rodou com semantico = f (ate = {ate}); "
+                "a etapa semântica não rodou neste lote"
+            ),
+            "lote_semantico": False,
+            "lote_ate": ate,
+        }
+    return None
+
+
+def _imprimir_indicacoes_agrupadas(
+    itens: list[dict[str, Any]],
+    *,
+    como_json: bool,
+    aviso_lote: dict[str, Any] | None = None,
+) -> int:
     versao = _hash_curto(itens)
     if como_json:
-        return _saida_json({"versao": versao, "total": len(itens), "itens": itens}, None)
+        payload: dict[str, Any] = {"versao": versao, "total": len(itens), "itens": itens}
+        if aviso_lote:
+            payload.update(aviso_lote)
+        return _saida_json(payload, None)
     sys.stdout.write(f"indicacao · versao {versao} · {len(itens)} itens\n")
+    if aviso_lote and not itens:
+        sys.stdout.write(f"aviso: {aviso_lote['aviso']}\n")
     rot_acao = {
         "criar": "criar",
         "ligar_existente": "ligar ao existente",
@@ -1150,7 +1181,9 @@ def cmd_listar_indicacao(cauda: list[str], tokens_orig: list[str]) -> int:
         plano, rc_http = executar_chamada("POST", "/acervo/indicacoes", {"lote_id": lote, "aplicar": False}, ctx)
         if rc_http is not None:
             return rc_http
-        return _imprimir_indicacoes_agrupadas(list((plano or {}).get("itens") or []), como_json=como_json)
+        itens_plano = list((plano or {}).get("itens") or [])
+        aviso_lote = _aviso_lote_sem_semantico(lote) if not itens_plano else None
+        return _imprimir_indicacoes_agrupadas(itens_plano, como_json=como_json, aviso_lote=aviso_lote)
 
     qs = {"agrupar": "0", "estado": estado, **({"lote": lote} if lote else {}), **({"termo": termo} if termo else {})}
     col, rc_http = executar_chamada("GET", f"/acervo/indicacoes?{urllib.parse.urlencode(qs)}", None, ctx)
@@ -1158,9 +1191,15 @@ def cmd_listar_indicacao(cauda: list[str], tokens_orig: list[str]) -> int:
         return rc_http
     itens = list((col or {}).get("itens") or [])
     versao = (col or {}).get("versao") or _hash_curto(itens)
+    aviso_lote = _aviso_lote_sem_semantico(lote) if not itens else None
     if como_json:
-        return _saida_json({"versao": versao, "total": len(itens), "itens": itens}, None)
+        payload: dict[str, Any] = {"versao": versao, "total": len(itens), "itens": itens}
+        if aviso_lote:
+            payload.update(aviso_lote)
+        return _saida_json(payload, None)
     sys.stdout.write(f"indicacao · versao {versao} · {len(itens)} itens\n")
+    if aviso_lote and not itens:
+        sys.stdout.write(f"aviso: {aviso_lote['aviso']}\n")
     for it in itens:
         tag = "obra retirada" if it.get("obra_retirada") else "obra viva"
         sys.stdout.write(f"  {it.get('id')} · {it.get('termo')} · {it.get('estado')} · {it.get('obra_id')} ({tag})\n")

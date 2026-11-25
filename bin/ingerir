@@ -44,10 +44,10 @@ _FANTASMA_NAMES = {
 }
 try:
     from bin._ingerir.carga import (conferir_manifesto_portao_1, escanear_pasta_triagem, itens_da_chegada,
-                                    linhas_das_excecoes, obter_manifesto_rclone)
+                                    limpar_staging_entrada, linhas_das_excecoes, obter_manifesto_rclone)
 except ImportError:
     from _ingerir.carga import (conferir_manifesto_portao_1, escanear_pasta_triagem, itens_da_chegada,
-                                linhas_das_excecoes, obter_manifesto_rclone)
+                                limpar_staging_entrada, linhas_das_excecoes, obter_manifesto_rclone)
 
 _RE_WIKI_DATADO = re.compile(r"^(?:wiki/)?(.+?)@(\d{4}-\d{2}-\d{2})\.md$", re.IGNORECASE)
 
@@ -1018,8 +1018,10 @@ def main():
     salvar_manifesto(lote)
     if lote.get("estado") != "concluido":
         sys.exit(1)
+    reprovados = sum(1 for it in lote.get("itens", []) if it.get("veredito") == "reprovado" or it.get("estado") == "falhou")
+    if reprovados == 0 and limpar_staging_entrada(args.lote):
+        sys.stderr.write(f"ingerir: staging local limpo: {args.lote}\n")
     if args.ate == "catalogar":
-        reprovados = sum(1 for it in lote.get("itens", []) if it.get("veredito") == "reprovado" or it.get("estado") == "falhou")
         if reprovados > 0:
             sys.exit(3)
         excecoes_cnt = sum(

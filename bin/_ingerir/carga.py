@@ -104,6 +104,23 @@ def conferir_manifesto_portao_1(manifesto: list[str], staging: str | Path) -> tu
     return True, f"PORTÃO 1 aprovado: {len(arquivos_staging)} arquivo(s) conferidos no staging"
 
 
+def limpar_staging_entrada(pasta: str | Path, raiz_entrada: str | Path | None = None) -> bool:
+    """Remove o diretório de staging local sob ~/AI/entrada/ após incorporação concluída (DT 1380).
+
+    Só remove diretórios estritamente filhos da raiz de entrada (PF_ENTRADA_RAIZ ou ~/AI/entrada).
+    Nunca remove a própria raiz nem diretórios fora dela. Idempotente: devolve False se já não existe.
+    """
+    raiz = Path(raiz_entrada or os.environ.get("PF_ENTRADA_RAIZ") or (Path.home() / "AI" / "entrada")).resolve()
+    alvo_bruto = Path(pasta)
+    if not alvo_bruto.exists() or not alvo_bruto.is_dir():
+        return False
+    alvo = alvo_bruto.resolve()
+    if alvo == raiz or not alvo.is_relative_to(raiz):
+        return False
+    shutil.rmtree(alvo)
+    return True
+
+
 def classificar_item_arquivo(nome: str, tamanho: int) -> tuple[str, str | None]:
     """Classifica o arquivo em: chegado, vazio, json_comum, sem_leitor ou auxiliar."""
     if tamanho == 0:
