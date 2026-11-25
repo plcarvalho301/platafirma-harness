@@ -200,6 +200,93 @@ def test_portao_bloqueia_superficie_vedada_e_caminho_protegido_fora_do_raio() ->
     assert dec.morada == "git"
 
 
+_CORPO_CARD = (
+    "<p><strong>Referencial:</strong></p><ul><li>platafirma-core@acesso/ · só leitura</li></ul>"
+    "<p><strong>Raio de ataque:</strong><br>platafirma-harness@lib/escrita/portao.py · muda: x<br>"
+    "platafirma-harness@deploy-harness/ · muda: y</p>"
+    "<p><strong>Comportamento esperado:</strong></p><ul><li>platafirma-harness@lib/leitura/x.py citado</li></ul>"
+    "<p><strong>Raio emendado:</strong><br>- platafirma-harness@testes/test_x.py | [executor] prova</p>"
+    "<p><strong>Riscos:</strong><br>platafirma-harness@registro/escrita.yaml citado</p>"
+)
+
+
+def _provedor(estado: str = "em-execucao", chamadas: list[str] | None = None):
+    from escrita.portao import criar_provedor_raio
+
+    def _http(url: str, _prazo: float) -> object:
+        if chamadas is not None:
+            chamadas.append(url)
+        return {"id": 4441, "estado": estado, "descricao": _CORPO_CARD}
+
+    return criar_provedor_raio("http://rast.local/api", cliente_http=_http)
+
+
+def test_raio_sai_so_das_secoes_raio_de_ataque_e_raio_emendado() -> None:
+    from escrita.portao import extrair_raio_do_corpo
+
+    assert extrair_raio_do_corpo(_CORPO_CARD) == frozenset({
+        ("platafirma-harness", "lib/escrita/portao.py"),
+        ("platafirma-harness", "deploy-harness/"),
+        ("platafirma-harness", "testes/test_x.py"),
+    })
+
+
+def test_portao_le_o_raio_do_card_da_bancada_no_rastreador() -> None:
+    chamadas: list[str] = []
+    base = _auth_padrao()
+    auth = ContextoAutorizacao(
+        politica=base.politica, vista=base.vista, provedor_raio=_provedor(chamadas=chamadas)
+    )
+    ped_no_raio = _pedido(
+        "repo", ["gravar", "componente", "platafirma-harness@4441-raio-card:lib/escrita/portao.py"]
+    )
+    assert decidir_portao(ped_no_raio, _cred_ok(), auth).morada == "git"
+    assert chamadas == ["http://rast.local/api/itens/4441"]
+
+    # Citado fora do raio (Comportamento esperado, Riscos) não abre o caminho protegido
+    for rel in ("lib/leitura/x.py", "registro/escrita.yaml"):
+        ped = _pedido("repo", ["gravar", "componente", f"platafirma-harness@4441-raio-card:{rel}"])
+        with pytest.raises(RecusaEscrita) as exc:
+            decidir_portao(ped, _cred_ok(), auth)
+        assert exc.value.saida == 4
+        assert exc.value.primeiro.codigo == "superficie-vedada"
+
+    # Sem bancada na chave não há card de onde ler o raio
+    ped_sem_bancada = _pedido("repo", ["gravar", "componente", "platafirma-harness:lib/escrita/portao.py"])
+    with pytest.raises(RecusaEscrita) as exc_sem:
+        decidir_portao(ped_sem_bancada, _cred_ok(), auth)
+    assert exc_sem.value.saida == 4
+
+
+def test_portao_nega_raio_de_card_fora_de_execucao_e_sai_3_sem_rastreador() -> None:
+    from escrita.portao import criar_provedor_raio
+
+    base = _auth_padrao()
+    ped = _pedido(
+        "repo", ["gravar", "componente", "platafirma-harness@4441-raio-card:lib/escrita/portao.py"]
+    )
+    auth_fechado = ContextoAutorizacao(
+        politica=base.politica, vista=base.vista, provedor_raio=_provedor(estado="concluida")
+    )
+    with pytest.raises(RecusaEscrita) as exc_fechado:
+        decidir_portao(ped, _cred_ok(), auth_fechado)
+    assert exc_fechado.value.saida == 4
+
+    def _fora(_url: str, _prazo: float) -> object:
+        raise OSError("connection refused")
+
+    auth_fora = ContextoAutorizacao(
+        politica=base.politica,
+        vista=base.vista,
+        provedor_raio=criar_provedor_raio("http://rast.local/api", cliente_http=_fora),
+    )
+    with pytest.raises(RecusaEscrita) as exc_fora:
+        decidir_portao(ped, _cred_ok(), auth_fora)
+    assert exc_fora.value.saida == 3
+    assert exc_fora.value.primeiro.codigo == "morada-sem-resposta"
+    assert exc_fora.value.primeiro.onde == "bancada"
+
+
 def test_portao_roda_antes_da_resolucao_sem_consultar_alvo() -> None:
     consultas = 0
 

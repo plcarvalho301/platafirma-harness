@@ -27,9 +27,11 @@ from .portao import (
     AutorizadorSujeito,
     ContextoAutorizacao,
     CredencialPar,
+    ProvedorRaio,
     VistaAlcance,
     carregar_vista_alcance,
     credencial_de_uid,
+    criar_provedor_raio,
     decidir_portao,
 )
 from .registro import RegistroOperacoes
@@ -182,6 +184,7 @@ class ConfigServidor:
     grupo_autorizado: str = "platafirma-escrita"
     uid_escritor: int | None = None
     raio_card: frozenset[tuple[str, str]] | None = None
+    provedor_raio: ProvedorRaio | None = None
     autorizador_sujeito: AutorizadorSujeito | None = None
     pdp_dir: Path | None = None
     olaria: ConfigOlaria | None = None
@@ -310,6 +313,7 @@ class ServidorEscritor:
             grupo_autorizado=self.config.grupo_autorizado,
             uid_escritor=self.config.uid_escritor,
             raio_card=self.config.raio_card,
+            provedor_raio=self.config.provedor_raio,
             autorizador_sujeito=self._autorizador,
         )
 
@@ -622,6 +626,7 @@ def montar_config_padrao(
         politica=politica,
         release_link=rel,
         uid_escritor=os.geteuid(),
+        provedor_raio=criar_provedor_raio(),
         pdp_dir=pdp_dir,
         olaria=cfg_olaria,
     )

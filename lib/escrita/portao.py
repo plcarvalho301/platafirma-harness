@@ -2,7 +2,13 @@
 from __future__ import annotations
 
 import grp
+import html
+import json
+import os
 import pwd
+import re
+import urllib.error
+import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +43,18 @@ _CLASSES_OLARIA_PADRAO = (
 )
 
 AutorizadorSujeito = Callable[[str, str, str, str], bool]
+ProvedorRaio = Callable[[str], frozenset[tuple[str, str]]]
+ClienteHttpRaio = Callable[[str, float], object]
+
+_RASTREADOR_URL_PADRAO = "http://127.0.0.1:8120/api"
+_PRAZO_RAIO_S = 2.0
+_ESTADO_COM_RAIO = "em-execucao"
+_RE_CARD_DA_BANCADA = re.compile(r"^(\d+)-")
+_RE_ITEM_RAIO = re.compile(r"^\s*(?:-\s*)?(platafirma-[a-z0-9-]+)@([^\s·|]+)")
+_RE_ROTULO = re.compile(r"^\s*[A-ZÀ-Ý][^:@]{0,40}:")
+_RE_TAG_QUEBRA = re.compile(r"<\s*(?:br\s*/?|/?p|/?li|/?ul)\s*>", re.IGNORECASE)
+_RE_TAG = re.compile(r"<[^>]+>")
+_SECOES_RAIO = ("raio de ataque:", "raio emendado:")
 
 
 @dataclass(frozen=True)
@@ -113,6 +131,7 @@ class ContextoAutorizacao:
     uid_escritor: int | None = None
     raio_card: frozenset[tuple[str, str]] | None = None
     autorizador_sujeito: AutorizadorSujeito | None = None
+    provedor_raio: ProvedorRaio | None = None
 
 
 @dataclass(frozen=True)
@@ -387,6 +406,94 @@ def _verificar_forma_e_regime(pedido: PedidoEscrita, spec: SpecClasse) -> None:
         )
 
 
+def _texto_do_corpo(corpo_html: str) -> list[str]:
+    """O corpo do card (HTML do rastreador) em linhas de texto, uma por parágrafo, item ou quebra."""
+    texto = _RE_TAG.sub("", _RE_TAG_QUEBRA.sub("\n", corpo_html))
+    return [html.unescape(linha) for linha in texto.splitlines()]
+
+
+def extrair_raio_do_corpo(corpo_html: str) -> frozenset[tuple[str, str]]:
+    """Os pares (repo, caminho) do Raio de ataque e do Raio emendado do corpo do card.
+
+    Só essas duas seções contam: o Referencial também cita `repo@caminho`, e o que ele cita é
+    leitura, não licença de gravar. Um rótulo novo (`Comportamento esperado:`, `Riscos:`) fecha
+    a seção.
+    """
+    pares: set[tuple[str, str]] = set()
+    dentro = False
+    for linha in _texto_do_corpo(corpo_html):
+        baixa = linha.strip().lower()
+        rotulo = next((s for s in _SECOES_RAIO if baixa.startswith(s)), None)
+        if rotulo is not None:
+            dentro = True
+            linha = linha.strip()[len(rotulo):]
+        elif _RE_ROTULO.match(linha):
+            dentro = False
+        achado = _RE_ITEM_RAIO.match(linha) if dentro else None
+        if achado is not None:
+            pares.add((achado.group(1), achado.group(2)))
+    return frozenset(pares)
+
+
+def _get_json_rastreador(url: str, prazo_s: float) -> object:
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=prazo_s) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _recusa_raio_ilegivel(bancada: str, motivo: str) -> RecusaEscrita:
+    return RecusaEscrita(
+        ErroEscrita(
+            saida=3,
+            codigo="morada-sem-resposta",
+            onde="bancada",
+            recebido=bancada,
+            regra="caminho protegido exige ler o raio do card da bancada no rastreador",
+            cura=f"o rastreador não devolveu o card: {motivo}",
+            proximo="",
+        )
+    )
+
+
+def criar_provedor_raio(
+    url_base: str | None = None,
+    *,
+    cliente_http: ClienteHttpRaio | None = None,
+    prazo_s: float = _PRAZO_RAIO_S,
+) -> ProvedorRaio:
+    """O raio do card da bancada `<card>-<slug>`, lido do rastreador a cada gravação protegida.
+
+    Card fora de execução não tem raio aberto (frozenset vazio, saída 4 no portão); rastreador
+    que não responde sai 3, porque sem o raio não há como decidir e o portão não supõe.
+    """
+    base = (url_base or os.environ.get("PF_RASTREADOR_URL") or _RASTREADOR_URL_PADRAO).rstrip("/")
+    http = cliente_http or _get_json_rastreador
+
+    def _raio(bancada: str) -> frozenset[tuple[str, str]]:
+        achado = _RE_CARD_DA_BANCADA.match(bancada)
+        if achado is None:
+            return frozenset()
+        try:
+            item = http(f"{base}/itens/{achado.group(1)}", prazo_s)
+        except (OSError, ValueError, urllib.error.URLError) as exc:
+            raise _recusa_raio_ilegivel(bancada, str(exc)) from None
+        if not isinstance(item, Mapping) or item.get("estado") != _ESTADO_COM_RAIO:
+            return frozenset()
+        return extrair_raio_do_corpo(str(item.get("descricao") or ""))
+
+    return _raio
+
+
+def _raio_da_bancada(
+    auth: ContextoAutorizacao, bancada: str | None
+) -> frozenset[tuple[str, str]] | None:
+    if auth.raio_card is not None:
+        return auth.raio_card
+    if auth.provedor_raio is None or not bancada:
+        return None
+    return auth.provedor_raio(bancada)
+
+
 def _caminho_no_raio(
     repo: str, rel: str, raio_card: frozenset[tuple[str, str]] | None
 ) -> bool:
@@ -433,7 +540,7 @@ def _verificar_protecoes_alvo(
                 )
             )
         return
-    repo, _, rel = separar_chave_componente(pedido.chave)
+    repo, bancada, rel = separar_chave_componente(pedido.chave)
     if eh_superficie_vedada(auth.politica, rel) or eh_superficie_vedada(
         auth.politica, f"{repo}/{rel}"
     ):
@@ -449,7 +556,7 @@ def _verificar_protecoes_alvo(
             )
         )
     if eh_caminho_protegido(auth.politica, repo, rel) and not _caminho_no_raio(
-        repo, rel, auth.raio_card
+        repo, rel, _raio_da_bancada(auth, bancada)
     ):
         raise RecusaEscrita(
             ErroEscrita(
