@@ -271,7 +271,7 @@ class AdaptadorGit:
             except OSError:
                 continue
             for entrada in entradas:
-                if entrada.is_symlink():
+                if entrada.is_symlink() or entrada.name.startswith("."):
                     continue
                 caminho = Path(entrada.path)
                 rel = caminho.relative_to(self._raiz).as_posix()
@@ -288,14 +288,24 @@ class AdaptadorGit:
         itens.sort(key=lambda it: it["chave"])
         return itens
 
+    def _base_da_classe(self, classe: str) -> Path | None:
+        for cand in (
+            self._raiz / "instancias" / classe,
+            self._raiz / "referencias" / "instancias" / classe,
+            self._raiz / classe,
+        ):
+            if cand.is_dir():
+                return cand
+        return None
+
     def listar_chaves(  # noqa: PLR0913 -- assinatura fixa do protocolo AdaptadorMorada
         self, classe: str, filtros: Sequence[FiltroCatalogo], termo: str | None,
         limite: int, cursor: CursorDecodificado | None, prazo_ms: int,
     ) -> PaginaBruta:
         del filtros, prazo_ms
-        base = self._raiz / classe if (self._raiz / classe).is_dir() else self._raiz
+        base = self._base_da_classe(classe)
         termo_norm = _normalizar_termo(termo) if termo else None
-        todos = self._varrer_arvore(base, classe, termo_norm)
+        todos = self._varrer_arvore(base, classe, termo_norm) if base is not None else []
         total = len(todos)
         versao_atual = hashlib.sha256(
             "\n".join(it["chave"] for it in todos).encode("utf-8")

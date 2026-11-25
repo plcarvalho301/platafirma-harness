@@ -34,7 +34,7 @@ SQL_LER_FICHA = """
 SELECT f.uuid::text AS uuid,
        f.chave_humana AS chave,
        c.slug AS classe,
-       coalesce(f.fornada::text, '0') AS versao,
+       coalesce(c.fornada::text, '0') AS versao,
        jsonb_build_object(
            'chave', f.chave_humana,
            'classe', c.slug,
@@ -73,7 +73,7 @@ SELECT s.secao_id::text AS chave,
 """
 
 SQL_DIGEST_CLASSE = """
-SELECT coalesce(max(f.fornada)::text, '0') AS fornada,
+SELECT coalesce(max(c.fornada)::text, '0') AS fornada,
        md5(coalesce(string_agg(f.chave_humana, E'\n' ORDER BY f.chave_humana), '')) AS digest,
        count(*)::int AS total
   FROM casa.ficha f
