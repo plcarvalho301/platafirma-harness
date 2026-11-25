@@ -41,9 +41,9 @@ class _ClienteFalso:
         return self.resp_listar
 
 
-def test_registro_leitura_yaml_sobe_com_chave_desligada() -> None:
+def test_registro_leitura_yaml_sobe_com_chave_ligada() -> None:
     cfg = _MOD_BUSCA.ler_config_leitura(raiz=RAIZ, env={})
-    assert cfg["leitor_unico"] is False
+    assert cfg["leitor_unico"] is True
     assert cfg["socket"] == "/run/platafirma/leitor/leitor.sock"
 
 
