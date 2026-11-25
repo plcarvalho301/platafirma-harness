@@ -638,6 +638,9 @@ cmd_ler() {
     exit 4
   fi
 
+  PYTHONPATH="$AQUI/../lib${PYTHONPATH:+:$PYTHONPATH}" \
+    python3 -m leitura.verbo --checar-vedado "$caminho" || exit $?
+
   local rc=0
   resolver_identidade "$repo" || rc=$?
   if [ "$rc" -eq 1 ]; then
@@ -801,6 +804,19 @@ cmd_procurar() {
     out="$("$GIT" -C "$TARGET_DIR" grep "${grep_flags[@]}" "${padroes[@]}" -- "${prefixos[@]}" 2>/dev/null || true)"
   else
     out="$("$GIT" -C "$TARGET_DIR" grep "${grep_flags[@]}" "${padroes[@]}" 2>/dev/null || true)"
+  fi
+
+  if [ -n "$out" ]; then
+    out="$(PYTHONPATH="$AQUI/../lib${PYTHONPATH:+:$PYTHONPATH}" python3 -c '
+import sys
+from leitura.morada import eh_segredo
+for ln in sys.stdin.read().splitlines():
+    if not ln:
+        continue
+    arq = ln.split(":", 1)[0]
+    if not eh_segredo(arq):
+        print(ln)
+' <<<"$out")"
   fi
 
   if [ -z "$out" ]; then

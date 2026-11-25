@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from . import formatos as _formatos
+from . import nucleo as _nucleo
 from .morada import (
     eh_segredo,
     nega_morada_leitura,
@@ -225,6 +226,7 @@ def esvazia_cache() -> None:
         _INDICES.clear()
         _EXTRA_LRU.clear()
         _EXTRA_ESTADO["bytes"] = 0
+    _nucleo.esvaziar_cache_global()
 
 
 def _extra_obter(idx: Indice, chave: Any) -> Any:
@@ -724,10 +726,30 @@ def _sumario_json(texto: str) -> list | str:
     return itens
 
 
+_EXT_POR_MIME_SUMARIO = {
+    "text/x-yaml": "a.yaml",
+    "application/x-yaml": "a.yaml",
+    "application/toml": "a.toml",
+    "text/x-toml": "a.toml",
+    "application/sql": "a.sql",
+    "text/x-sql": "a.sql",
+    "text/javascript": "a.js",
+    "application/javascript": "a.js",
+    "text/typescript": "a.ts",
+    "text/x-shellscript": "a.sh",
+    "text/css": "a.css",
+    "text/html": "a.html",
+}
+
+
 def sumario(tipo: str, texto: str, total: int | None = None) -> tuple[list | None, str | None]:
-    """Só a estrutura que o analisador do formato declara (§8.1)."""
+    """Só a estrutura que o analisador do formato declara (§8.1), delegando os novos formatos ao núcleo."""
     por = _ANALISADOR.get(tipo)
     if not por:
+        nome_ext = _EXT_POR_MIME_SUMARIO.get(tipo)
+        if nome_ext:
+            itens, _ = _nucleo.montar_sumario(texto, nome_ext, max_bytes=ORCAMENTO_MAX)
+            return itens, None
         return None, f"sem analisador de sumário para {tipo}"
     try:
         if por == "markdown":
@@ -2199,6 +2221,16 @@ def _separa_membro(caminho: str | Path, membro: str | None) -> tuple[Path, str |
     return Path(caminho), None
 
 
+def _nega_rascunho_outra_ordem(caminho: Path, *, ordem_id: str | None) -> bool:
+    partes = caminho.parts
+    for idx, seg in enumerate(partes):
+        if seg in ("rascunho", "rascunhos") and idx + 1 < len(partes):
+            dono = partes[idx + 1]
+            if not ordem_id or dono != ordem_id:
+                return True
+    return False
+
+
 def ler(caminho: str | Path, **opcoes: Any) -> dict[str, Any]:
     """Leitura confinada às moradas declaradas (achado 921), delegando o contrato a `le`."""
     instancia: Path | None = opcoes.get("instancia")
@@ -2206,7 +2238,12 @@ def ler(caminho: str | Path, **opcoes: Any) -> dict[str, Any]:
     release: Path | None = opcoes.get("release")
     pdp: Path | None = opcoes.get("pdp")
     cadeira: str = str(opcoes.get("cadeira") or "")
+    ordem_id: str | None = opcoes.get("ordem_id") or (os.environ.get("PF_ORDEM_ID") or "").strip() or None
     p, membro_ef = _separa_membro(caminho, opcoes.get("membro"))
+
+    if _nega_rascunho_outra_ordem(p, ordem_id=ordem_id):
+        motivo = "acesso-negado"
+        return envelope_erro(4, motivo, recusado=True, path=str(p), motivo=motivo)
 
     if eh_segredo(p, instancia=instancia, pdp=pdp, release_dir=release):
         motivo = "segredo: fora do alcance da leitura de arquivo"
