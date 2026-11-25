@@ -727,7 +727,9 @@ def _executar_via_leitor_ou_local(
         except ErroClienteLeitor as exc:
             return _escrever_recusa_json(exc.recusa.campos(), erro)
     else:
-        leitor_local = kw.get("leitor_local") or DaemonLeitor()
+        from leitura.moradas import RegistroMoradas
+
+        leitor_local = kw.get("leitor_local") or DaemonLeitor(moradas=RegistroMoradas())
         cred = CredencialChamador(pid=os.getpid(), uid=os.getuid(), gid=os.getgid(), conta=ctx.sujeito or "local")
         resp = leitor_local.processar_pedido(_montar_payload_local(forma, ctx, pedido, cursor_bruto), cred)
 
@@ -818,7 +820,9 @@ def main(argv: list[str] | None = None, *, saida: TextIO | None = None, erro: Te
     if ato == "ler":
         return _despachar_ler(resto, saida=saida, erro=erro, **kw)
     if ato == "listar":
-        return ato_listar(resto, saida=saida, erro=erro, **kw)
+        cfg = ler_config_leitura(env=kw.get("env"))
+        if cfg["leitor_unico"] or kw.get("cliente_leitor") is not None or kw.get("leitor_local") is not None:
+            return ato_listar(resto, saida=saida, erro=erro, **kw)
     return escrever_lista([_recusa_ato_desconhecido(ato, resto)], fluxo=erro)
 
 

@@ -665,7 +665,7 @@ def main(argv: list[str] | None = None) -> int:
     caminho = Path(os.environ.get("PF_LEITOR_SOCKET") or str(SOCKET_PADRAO))
     if len(args) >= _MIN_ARGS_SOCKET and args[0] == "--socket":
         caminho = Path(args[1])
-    leitor = DaemonLeitor()
+    leitor = DaemonLeitor(moradas=RegistroMoradas())
     if os.environ.get("LISTEN_FDS") == "1":
         srv = socket.socket(fileno=3)
         try:
