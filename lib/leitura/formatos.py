@@ -29,6 +29,7 @@ from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import unquote
 from xml.etree import ElementTree as ET
+from xml.parsers import expat
 
 try:                                    # §7.4.7: software livre, no venv do harness
     import pymupdf
@@ -69,10 +70,15 @@ LEITORES = frozenset(UNIDADE)
 DPI_PADRAO, DPI_MAX = 150, 300
 IMAGEM_TETO = 4 * 1024 * 1024          # bytes de PNG por chamada em modo="pagina" (≥ 1 imagem)
 MEMBRO_MAX = 64 * 1024 * 1024          # membro de ZIP/gzip lido em memória
+MEMBROS_PACOTE_MAX = 10_000            # teto de quantidade de membros num pacote comprimido
+SOMA_DESCOMPRIMIDA_MAX = 128 * 1024 * 1024  # teto da soma descomprimida numa mesma chamada
+ANINHAMENTO_PACOTE_MAX = 1             # recusa pacote comprimido aninhado além de 1 nível
 CHUNK_DESCOMPRESSAO = 64 * 1024        # bloco de leitura em fluxo contra bombas de compressão
 RAZAO_COMPRESSAO_MAX = 100.0           # razão máxima descomprimido/comprimido acima de RAZAO_MIN_BYTES
 RAZAO_MIN_BYTES = 64 * 1024            # abaixo disto, arquivos pequenos de zeros não disparam razão
 CELULAS_XLSX_MAX = 200_000             # teto de células expandidas em planilha XLSX
+GZIP = "application/gzip"
+FORMATOS_ISOLADOS = frozenset({PDF, MOBI, EPUB, DOCX, PPTX, XLSX, ZIP, GZIP})
 _FLOAT_REPR_MAX = 1e15
 _PNG_CABECA_MIN = 24
 _GIF_CABECA_MIN = 10
@@ -95,7 +101,101 @@ _XLINK = "{http://www.w3.org/1999/xlink}"
 
 
 class ErroDescompressao(ValueError):
-    """Arquivo comprimido excede teto de bytes ou razão máxima de compressão (DT 832/899)."""
+    """Arquivo comprimido ou XML viola limites de segurança (DT 832/899, story #4442)."""
+
+
+class OrcamentoDescompressao:
+    """Acumulador de bytes descomprimidos numa mesma chamada para conter soma de membros."""
+
+    def __init__(self, limite_total: int = SOMA_DESCOMPRIMIDA_MAX) -> None:
+        self.limite_total = limite_total
+        self.acumulado = 0
+
+    def consumir(self, n_bytes: int) -> None:
+        self.acumulado += n_bytes
+        if self.acumulado > self.limite_total:
+            raise ErroDescompressao(
+                f"soma descomprimida da chamada excedeu teto de {self.limite_total} bytes"
+            )
+
+
+def eh_assinatura_pacote(cabeca: bytes) -> bool:
+    """Retorna True se os bytes iniciam pacote ZIP ou GZIP (para barrar aninhamento > 1)."""
+    return cabeca.startswith((b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08", b"\x1f\x8b"))
+
+
+def _nome_clark(nome: str) -> str:
+    if " " in nome:
+        uri, local = nome.rsplit(" ", 1)
+        return f"{{{uri}}}{local}"
+    return nome
+
+
+def parse_xml_seguro(dados: bytes | str) -> ET.Element:
+    """Abre XML por parser Expat endurecido, recusando DTD, entidades e rede."""
+    builder = ET.TreeBuilder()
+    exp = expat.ParserCreate(namespace_separator=" ")
+    exp.buffer_text = True
+
+    def _recusar_dtd(*_args: object) -> None:
+        raise ErroDescompressao("XML com declaração DOCTYPE recusado")
+
+    def _recusar_entidade(*_args: object) -> None:
+        raise ErroDescompressao("XML com declaração ENTITY recusado")
+
+    def _recusar_notacao(*_args: object) -> None:
+        raise ErroDescompressao("XML com declaração NOTATION recusado")
+
+    def _recusar_externa(*_args: object) -> int:
+        raise ErroDescompressao("XML com referência a entidade externa recusado")
+
+    def _inicio(nome: str, attrs: dict[str, str]) -> None:
+        attrs_clark = {_nome_clark(k): v for k, v in attrs.items()}
+        builder.start(_nome_clark(nome), attrs_clark)
+
+    def _fim(nome: str) -> None:
+        builder.end(_nome_clark(nome))
+
+    exp.StartDoctypeDeclHandler = _recusar_dtd
+    exp.EntityDeclHandler = _recusar_entidade
+    exp.UnparsedEntityDeclHandler = _recusar_entidade
+    exp.NotationDeclHandler = _recusar_notacao
+    exp.ExternalEntityRefHandler = _recusar_externa
+    exp.StartElementHandler = _inicio
+    exp.EndElementHandler = _fim
+    exp.CharacterDataHandler = builder.data
+    if hasattr(exp, "SetParamEntityParsing"):
+        exp.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
+
+    try:
+        exp.Parse(dados, True)
+    except expat.ExpatError as exc:
+        raise ET.ParseError(str(exc)) from exc
+    return builder.close()
+
+
+def validar_pacote_zip(
+    zf: zipfile.ZipFile,
+    *,
+    nivel_aninhamento: int = 0,
+    max_membros: int = MEMBROS_PACOTE_MAX,
+    soma_max: int = SOMA_DESCOMPRIMIDA_MAX,
+) -> None:
+    """Valida limites de aninhamento, contagem de membros e soma declarada de um ZIP."""
+    if nivel_aninhamento > ANINHAMENTO_PACOTE_MAX:
+        raise ErroDescompressao(
+            f"aninhamento de pacote comprimido excede o teto de {ANINHAMENTO_PACOTE_MAX} nível"
+        )
+    infos = zf.infolist()
+    if len(infos) > max_membros:
+        raise ErroDescompressao(
+            f"pacote possui {len(infos)} membros (teto {max_membros})"
+        )
+    soma_declarada = sum(max(0, i.file_size) for i in infos if not i.is_dir())
+    if soma_declarada > soma_max:
+        raise ErroDescompressao(
+            f"soma declarada do pacote ({soma_declarada} bytes) excede teto de {soma_max} bytes"
+        )
 
 
 def _valida_razao(descomprimido: int, comprimido: int | None, razao_max: float) -> None:
@@ -116,8 +216,15 @@ def ler_zip_seguro(
     nome: str,
     limite: int = MEMBRO_MAX,
     razao_max: float = RAZAO_COMPRESSAO_MAX,
+    *,
+    orcamento: OrcamentoDescompressao | None = None,
+    nivel_aninhamento: int = 0,
 ) -> bytes:
-    """Lê membro de ZIP em fluxo até `limite` bytes e `razao_max` (DT 832/899)."""
+    """Lê membro de ZIP em fluxo até `limite` bytes, `razao_max` e teto de soma (DT 832/899)."""
+    if nivel_aninhamento > ANINHAMENTO_PACOTE_MAX:
+        raise ErroDescompressao(
+            f"aninhamento de pacote comprimido excede o teto de {ANINHAMENTO_PACOTE_MAX} nível"
+        )
     info = zf.getinfo(nome)
     if info.file_size > limite:
         raise ErroDescompressao(f"membro {nome!r} declara {info.file_size} bytes (teto {limite})")
@@ -133,8 +240,15 @@ def ler_zip_seguro(
             if total > limite:
                 raise ErroDescompressao(f"membro {nome!r} atingiu teto de {limite} bytes")
             _valida_razao(total, info.compress_size, razao_max)
+            if orcamento is not None:
+                orcamento.consumir(len(bloco))
             partes.append(bloco)
-    return b"".join(partes)
+    dados = b"".join(partes)
+    if nivel_aninhamento >= ANINHAMENTO_PACOTE_MAX and eh_assinatura_pacote(dados[:8]):
+        raise ErroDescompressao(
+            f"membro {nome!r} é pacote comprimido aninhado além de {ANINHAMENTO_PACOTE_MAX} nível"
+        )
+    return dados
 
 
 def ler_gzip_seguro(
@@ -142,6 +256,8 @@ def ler_gzip_seguro(
     limite: int = MEMBRO_MAX,
     razao_max: float = RAZAO_COMPRESSAO_MAX,
     tamanho_comprimido: int | None = None,
+    *,
+    orcamento: OrcamentoDescompressao | None = None,
 ) -> bytes:
     """Descomprime gzip em fluxo até `limite` bytes e `razao_max` (DT 832/899)."""
     fh.seek(0)
@@ -156,14 +272,18 @@ def ler_gzip_seguro(
             if total > limite:
                 raise ErroDescompressao(f"gzip atingiu teto de {limite} bytes descomprimidos")
             _valida_razao(total, tamanho_comprimido, razao_max)
+            if orcamento is not None:
+                orcamento.consumir(len(bloco))
             partes.append(bloco)
     return b"".join(partes)
 
 
-def _ooxml_rels(zf: zipfile.ZipFile, nome: str) -> dict[str, str]:
+def _ooxml_rels(
+    zf: zipfile.ZipFile, nome: str, *, orcamento: OrcamentoDescompressao | None = None
+) -> dict[str, str]:
     """Helper XML OOXML isolado: mapa Id -> Target de um arquivo `.rels` (DT 899)."""
     try:
-        raiz = ET.fromstring(ler_zip_seguro(zf, nome))
+        raiz = parse_xml_seguro(ler_zip_seguro(zf, nome, orcamento=orcamento))
     except (KeyError, ET.ParseError):
         return {}
     return {
@@ -173,10 +293,16 @@ def _ooxml_rels(zf: zipfile.ZipFile, nome: str) -> dict[str, str]:
     }
 
 
-def _ooxml_rels_tipo(zf: zipfile.ZipFile, nome: str, sufixo: str) -> str | None:
+def _ooxml_rels_tipo(
+    zf: zipfile.ZipFile,
+    nome: str,
+    sufixo: str,
+    *,
+    orcamento: OrcamentoDescompressao | None = None,
+) -> str | None:
     """Helper XML OOXML isolado: primeiro Target cujo Type termina em `sufixo`."""
     try:
-        raiz = ET.fromstring(ler_zip_seguro(zf, nome))
+        raiz = parse_xml_seguro(ler_zip_seguro(zf, nome, orcamento=orcamento))
     except (KeyError, ET.ParseError):
         return None
     for r in raiz.iter(f"{_REL}Relationship"):
@@ -279,6 +405,9 @@ class Documento:
     render: bool = False
     imagem_propria: bytes | None = None
     dimensoes: tuple[int, int] | None = None
+    avisos: list[str] = field(default_factory=list)
+    sem_texto: list[int] = field(default_factory=list)
+    truncado: bool = False
     _texto: dict = field(default_factory=dict, repr=False)
     _fonte: object = field(default=None, repr=False)
 
@@ -321,7 +450,14 @@ class _Pdf(Documento):
         flags = pymupdf.TEXT_PRESERVE_WHITESPACE
         if int(pagina.rotation) % 180 == 0:
             flags |= pymupdf.TEXT_MEDIABOX_CLIP
-        return pagina.get_text("text", flags=flags)
+        texto = pagina.get_text("text", flags=flags)
+        if not texto.strip():
+            if i not in self.sem_texto:
+                self.sem_texto.append(i)
+            aviso = f"pagina_{i}_sem_texto"
+            if aviso not in self.avisos:
+                self.avisos.append(aviso)
+        return texto
 
     def imagem(self, i: int, dpi: int = DPI_PADRAO) -> tuple[bytes | None, str, dict]:
         dpi = max(36, min(int(dpi or DPI_PADRAO), DPI_MAX))
@@ -613,10 +749,12 @@ class _Epub(Documento):
 
     def __init__(self, fh: Any):
         self._zf = zipfile.ZipFile(fh)
+        validar_pacote_zip(self._zf)
+        self._orcamento = OrcamentoDescompressao()
         opf_caminho = self._acha_opf()
         base = str(PurePosixPath(opf_caminho).parent)
         base = "" if base == "." else base
-        raiz = ET.fromstring(ler_zip_seguro(self._zf, opf_caminho))
+        raiz = parse_xml_seguro(ler_zip_seguro(self._zf, opf_caminho, orcamento=self._orcamento))
         manifesto = {}
         for item in raiz.iter(f"{_OPF}item"):
             manifesto[item.get("id")] = (
@@ -636,7 +774,9 @@ class _Epub(Documento):
 
     def _acha_opf(self) -> str:
         try:
-            cont = ET.fromstring(ler_zip_seguro(self._zf, "META-INF/container.xml"))
+            cont = parse_xml_seguro(
+                ler_zip_seguro(self._zf, "META-INF/container.xml", orcamento=self._orcamento)
+            )
             for rf in cont.iter(f"{_CNT}rootfile"):
                 if rf.get("full-path"):
                     return rf.get("full-path")
@@ -651,7 +791,8 @@ class _Epub(Documento):
         href = self._itens[i - 1]
         base = str(PurePosixPath(href).parent)
         texto, _ = html_para_texto(
-            ler_zip_seguro(self._zf, href), base="" if base == "." else base
+            ler_zip_seguro(self._zf, href, orcamento=self._orcamento),
+            base="" if base == "." else base,
         )
         return f"item: {href}\n\n{texto}"
 
@@ -668,12 +809,14 @@ class _Docx(Documento):
 
     def __init__(self, fh: Any):
         self._zf = zipfile.ZipFile(fh)
+        validar_pacote_zip(self._zf)
+        self._orcamento = OrcamentoDescompressao()
         super().__init__(tipo=DOCX, unidade="nenhuma", n=1)
         self.membros = [(i.filename, i.file_size) for i in self._zf.infolist() if not i.is_dir()]
 
     def _ler(self, nome: str) -> ET.Element | None:
         try:
-            return ET.fromstring(ler_zip_seguro(self._zf, nome))
+            return parse_xml_seguro(ler_zip_seguro(self._zf, nome, orcamento=self._orcamento))
         except (KeyError, ET.ParseError):
             return None
 
@@ -836,8 +979,12 @@ class _Pptx(Documento):
 
     def __init__(self, fh: Any):
         self._zf = zipfile.ZipFile(fh)
-        rels = _ooxml_rels(self._zf, "ppt/_rels/presentation.xml.rels")
-        raiz = ET.fromstring(ler_zip_seguro(self._zf, "ppt/presentation.xml"))
+        validar_pacote_zip(self._zf)
+        self._orcamento = OrcamentoDescompressao()
+        rels = _ooxml_rels(self._zf, "ppt/_rels/presentation.xml.rels", orcamento=self._orcamento)
+        raiz = parse_xml_seguro(
+            ler_zip_seguro(self._zf, "ppt/presentation.xml", orcamento=self._orcamento)
+        )
         slides = []
         for sid in raiz.iter(f"{_P}sldId"):
             alvo = rels.get(sid.get(f"{_R}id") or "")
@@ -928,7 +1075,7 @@ class _Pptx(Documento):
             return []
         nome = _resolve(str(PurePosixPath(caminho).parent), notas_alvo)
         try:
-            nraiz = ET.fromstring(ler_zip_seguro(self._zf, nome))
+            nraiz = parse_xml_seguro(ler_zip_seguro(self._zf, nome, orcamento=self._orcamento))
         except (KeyError, ET.ParseError):
             return []
         narv = nraiz.find(f"{_P}cSld/{_P}spTree")
@@ -946,7 +1093,7 @@ class _Pptx(Documento):
 
     def _extrai(self, i: int) -> str:
         caminho = self._slides[i - 1]
-        raiz = ET.fromstring(ler_zip_seguro(self._zf, caminho))
+        raiz = parse_xml_seguro(ler_zip_seguro(self._zf, caminho, orcamento=self._orcamento))
         arvore = raiz.find(f"{_P}cSld/{_P}spTree")
         blocos: list[str] = []
         if arvore is not None:
@@ -981,8 +1128,12 @@ class _Xlsx(Documento):
 
     def __init__(self, fh: Any):
         self._zf = zipfile.ZipFile(fh)
-        raiz = ET.fromstring(ler_zip_seguro(self._zf, "xl/workbook.xml"))
-        rels = _ooxml_rels(self._zf, "xl/_rels/workbook.xml.rels")
+        validar_pacote_zip(self._zf)
+        self._orcamento = OrcamentoDescompressao()
+        raiz = parse_xml_seguro(
+            ler_zip_seguro(self._zf, "xl/workbook.xml", orcamento=self._orcamento)
+        )
+        rels = _ooxml_rels(self._zf, "xl/_rels/workbook.xml.rels", orcamento=self._orcamento)
         folhas = []
         for sh in raiz.iter(f"{_S}sheet"):
             alvo = rels.get(sh.get(f"{_R}id") or "")
@@ -1002,7 +1153,9 @@ class _Xlsx(Documento):
         if self._ss is None:
             self._ss = []
             try:
-                raiz = ET.fromstring(ler_zip_seguro(self._zf, "xl/sharedStrings.xml"))
+                raiz = parse_xml_seguro(
+                    ler_zip_seguro(self._zf, "xl/sharedStrings.xml", orcamento=self._orcamento)
+                )
                 for si in raiz.iter(f"{_S}si"):
                     self._ss.append("".join(t.text or "" for t in si.iter(f"{_S}t")))
             except (KeyError, ET.ParseError):
@@ -1043,6 +1196,9 @@ class _Xlsx(Documento):
                 rn = 0
             for col_auto, c in enumerate(row.findall(f"{_S}c"), 1):
                 if len(celulas) >= CELULAS_XLSX_MAX:
+                    self.truncado = True
+                    if "planilha_truncada" not in self.avisos:
+                        self.avisos.append("planilha_truncada")
                     return celulas
                 ref = c.get("r") or ""
                 cn = _col_idx(ref) or col_auto
@@ -1053,8 +1209,7 @@ class _Xlsx(Documento):
                     celulas[(rn, cn)] = val
         return celulas
 
-    @staticmethod
-    def _aplica_mesclas(raiz: ET.Element, celulas: dict[tuple[int, int], str]) -> None:
+    def _aplica_mesclas(self, raiz: ET.Element, celulas: dict[tuple[int, int], str]) -> None:
         for mc in raiz.iter(f"{_S}mergeCell"):
             ref = mc.get("ref") or ""
             if ":" not in ref:
@@ -1071,13 +1226,18 @@ class _Xlsx(Documento):
             for r in range(r1, r2 + 1):
                 for cc in range(c1, c2 + 1):
                     if len(celulas) >= CELULAS_XLSX_MAX:
+                        self.truncado = True
+                        if "planilha_truncada" not in self.avisos:
+                            self.avisos.append("planilha_truncada")
                         return
                     celulas.setdefault((r, cc), val)
 
     def _extrai(self, i: int) -> str:
         nome, caminho = self._folhas[i - 1]
         try:
-            raiz = ET.fromstring(ler_zip_seguro(self._zf, caminho))
+            raiz = parse_xml_seguro(
+                ler_zip_seguro(self._zf, caminho, orcamento=self._orcamento)
+            )
         except KeyError:
             return f"planilha: {nome}\n\n(planilha sem dados)"
         celulas = self._coleta_celulas(raiz)
@@ -1099,10 +1259,23 @@ class _Zip(Documento):
 
     def __init__(self, fh: Any):
         self._zf = zipfile.ZipFile(fh)
+        validar_pacote_zip(self._zf)
+        self._orcamento = OrcamentoDescompressao()
         super().__init__(tipo=ZIP, unidade="nenhuma", n=1)
         self.membros = sorted(
             (i.filename, i.file_size) for i in self._zf.infolist() if not i.is_dir()
         )
+
+    def listar_membros_detalhados(self) -> list[tuple[str, int, int, float]]:
+        """Retorna (nome, tamanho_bruto, tamanho_comprimido, razao) ordenado."""
+        saida: list[tuple[str, int, int, float]] = []
+        for info in sorted(self._zf.infolist(), key=lambda x: x.filename):
+            if info.is_dir():
+                continue
+            comp = info.compress_size
+            razao = (info.file_size / comp) if comp > 0 else 1.0
+            saida.append((info.filename, info.file_size, comp, razao))
+        return saida
 
     def _extrai(self, i: int) -> str:
         return "".join(f"{n}  {t}\n" for n, t in self.membros)
@@ -1222,9 +1395,36 @@ def abre(
     raise ValueError(f"sem leitor para {tipo}")
 
 
-def membro_de(doc: Documento, nome: str) -> bytes:
+def eh_formato_isolado(tipo: str) -> bool:
+    """Indica se o formato deve rodar na instância isolada do extrator."""
+    return tipo in FORMATOS_ISOLADOS
+
+
+def delegar_extrator(
+    fd: int,
+    pedido: dict[str, Any],
+    *,
+    socket_path: str | None = None,
+    prazo_ms: int = 10_000,
+) -> dict[str, Any]:
+    """Delega a extração binária ao módulo isolado `lib/leitura/extrator.py`."""
+    from . import extrator
+
+    if socket_path:
+        return extrator.extrair_via_socket(socket_path, fd, pedido, prazo_ms=prazo_ms)
+    return extrator.extrair_em_subprocesso(fd, pedido, prazo_ms=prazo_ms)
+
+
+def membro_de(doc: Documento, nome: str, *, nivel_aninhamento: int = 0) -> bytes:
     """Os bytes de um membro de ZIP, EPUB ou OOXML, para ler por `caminho!membro`."""
     zf = getattr(doc, "_zf", None)
     if zf is None:
         raise KeyError(nome)
-    return ler_zip_seguro(zf, nome, MEMBRO_MAX)
+    orcamento = getattr(doc, "_orcamento", None)
+    return ler_zip_seguro(
+        zf,
+        nome,
+        MEMBRO_MAX,
+        orcamento=orcamento,
+        nivel_aninhamento=nivel_aninhamento,
+    )

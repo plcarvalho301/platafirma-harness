@@ -228,3 +228,315 @@ def ficha_inteira(retrato: Consulta, f: Ficha, *, com_ligacoes: bool = True) -> 
     if not linhas:
         return {}
     return _ordenar_ficha(dict(linhas[0]["ficha"]), com_ligacoes=com_ligacoes)
+
+
+# ================================================================== estágios 3 e 4 (story #4442, t5)
+from collections.abc import Mapping  # noqa: E402
+
+import yaml  # noqa: E402
+
+from .tipos import AlvoResolvido, Recusa, TipoMorada  # noqa: E402
+
+_RE_CHAVE_CAN = re.compile(r"^[a-z0-9][a-z0-9-]*:[a-z0-9][a-z0-9._/-]*$")
+_RE_SLUG_VALIDO = re.compile(r"^[a-z0-9][a-z0-9._/-]*$")
+_RE_CLASSE_VALIDA = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+_RE_DRIVE_WIN = re.compile(r"^[A-Za-z]:[\\/]")
+_RAIZ_REGISTRO_PORTA = Path(__file__).resolve().parents[2] / "registro" / "porta.yaml"
+
+_CLASSES_RASTREADOR = frozenset(
+    {"card", "epico", "feature", "story", "task", "ideia", "incidente", "comentario"}
+)
+
+
+class ErroResolucao(Exception):
+    """Recusa estruturada emitida nos estágios 3 ou 4 do componente leitura."""
+
+    def __init__(self, recusa: Recusa) -> None:
+        self.recusa = recusa
+        self.saida = recusa.saida
+        super().__init__(recusa.codigo)
+
+
+@dataclass(frozen=True, slots=True)
+class ClasseAlcance:
+    """Entrada de uma classe na vista de alcance compilada."""
+
+    classe: str
+    morada: TipoMorada
+    verbo_dono: str
+    molde: str = ""
+    universo_fechado: bool = True
+    digest_release: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VistaAlcance:
+    """Vista local de alcance de verbos e classes sem consulta ao banco vivo."""
+
+    verbos_aceitam_ler: frozenset[str]
+    alcance_verbo: Mapping[str, frozenset[str]]
+    classes: Mapping[str, ClasseAlcance]
+    digest_release: str | None = None
+
+
+_CLASSES_PADRAO: dict[str, ClasseAlcance] = {
+    "shape": ClasseAlcance("shape", "banco", "ontologia", universo_fechado=True),
+    "dicionario": ClasseAlcance("dicionario", "banco", "ontologia", universo_fechado=True),
+    "sessao": ClasseAlcance("sessao", "banco", "ontologia", universo_fechado=True),
+    "ato": ClasseAlcance("ato", "git", "busca", molde="referencias/instancias/ato/<slug>.md"),
+    "verbo": ClasseAlcance("verbo", "git", "busca", molde="referencias/instancias/verbo/<slug>.md"),
+    "politica": ClasseAlcance("politica", "git", "busca", molde="instancias/politica/<slug>.md"),
+    "capacidade": ClasseAlcance("capacidade", "git", "busca", molde="referencias/instancias/capacidade/<slug>.md"),
+    "persona": ClasseAlcance("persona", "git", "busca", molde="instancias/persona/<slug>.md"),
+    "gabarito": ClasseAlcance("gabarito", "git", "busca", molde="instancias/gabarito/<slug>.md"),
+    "card": ClasseAlcance("card", "rastreador", "tarefas", universo_fechado=True),
+    "epico": ClasseAlcance("epico", "rastreador", "tarefas", universo_fechado=True),
+    "feature": ClasseAlcance("feature", "rastreador", "tarefas", universo_fechado=True),
+    "story": ClasseAlcance("story", "rastreador", "tarefas", universo_fechado=True),
+    "task": ClasseAlcance("task", "rastreador", "tarefas", universo_fechado=True),
+    "ideia": ClasseAlcance("ideia", "rastreador", "tarefas", universo_fechado=True),
+    "incidente": ClasseAlcance("incidente", "rastreador", "tarefas", universo_fechado=True),
+    "comentario": ClasseAlcance("comentario", "rastreador", "tarefas", universo_fechado=True),
+    "obra": ClasseAlcance("obra", "banco", "acervo", universo_fechado=False),
+    "secao": ClasseAlcance("secao", "banco", "acervo", universo_fechado=False),
+    "pagina": ClasseAlcance("pagina", "wiki", "acervo", universo_fechado=False),
+    "objeto": ClasseAlcance("objeto", "balde", "acervo", universo_fechado=False),
+    "mensagem": ClasseAlcance("mensagem", "fila", "fila", universo_fechado=True),
+    "lousa": ClasseAlcance("lousa", "fila", "mesa", universo_fechado=True),
+    "execucao": ClasseAlcance("execucao", "fila", "analise", universo_fechado=True),
+    "segredo": ClasseAlcance("segredo", "cofre", "seg", universo_fechado=True),
+}
+
+_ALCANCE_PADRAO: dict[str, frozenset[str]] = {
+    "busca": frozenset({"*"}),
+    "ontologia": frozenset({"shape", "dicionario", "sessao"}),
+    "tarefas": _CLASSES_RASTREADOR,
+    "acervo": frozenset({"obra", "secao", "pagina", "objeto"}),
+    "fila": frozenset({"mensagem"}),
+    "mesa": frozenset({"lousa"}),
+    "analise": frozenset({"execucao"}),
+    "seg": frozenset({"segredo"}),
+    "repo": frozenset({"ato", "verbo", "politica", "capacidade", "persona", "gabarito"}),
+    "release": frozenset({"ato", "verbo", "politica", "capacidade", "persona", "gabarito"}),
+}
+
+
+def carregar_vista_alcance(registro_porta: Path | None = None) -> VistaAlcance:
+    """Carrega a vista provisória de alcance a partir de `registro/porta.yaml` (sem banco)."""
+    arq = registro_porta if registro_porta is not None else _RAIZ_REGISTRO_PORTA
+    verbos_ler = set(_ALCANCE_PADRAO)
+    if arq.is_file():
+        try:
+            dados = yaml.safe_load(arq.read_text(encoding="utf-8")) or {}
+            verbos = dados.get("verbos") if isinstance(dados, dict) else {}
+            if isinstance(verbos, dict):
+                for slug, info in verbos.items():
+                    desc = str(info.get("descricao") or "") if isinstance(info, dict) else ""
+                    if "ler" in desc or slug in _ALCANCE_PADRAO:
+                        verbos_ler.add(str(slug))
+        except (OSError, yaml.YAMLError):
+            pass
+    return VistaAlcance(
+        verbos_aceitam_ler=frozenset(verbos_ler),
+        alcance_verbo=dict(_ALCANCE_PADRAO),
+        classes=dict(_CLASSES_PADRAO),
+    )
+
+
+def _separar_membro(chave: str) -> tuple[str, str | None]:
+    if "!" not in chave:
+        return chave, None
+    base, membro = chave.split("!", 1)
+    partes = membro.split("/") if membro else []
+    if not membro or membro.startswith("/") or "\x00" in membro or any(p in ("", "..") for p in partes):
+        raise ErroResolucao(
+            Recusa(
+                saida=2,
+                codigo="chave-mal-formada",
+                onde="chave",
+                recebido=chave,
+                regra="seletor-membro-posix-relativo",
+                cura="membro interno deve ser caminho relativo POSIX sem '/' inicial nem '..'",
+                proximo=f"busca ler {base}" if base else "",
+            )
+        )
+    return base, membro
+
+
+def _validar_sem_caminho_solto(chave: str) -> None:
+    if chave.startswith(("/", "./", "../", "~")) or _RE_DRIVE_WIN.match(chave):
+        raise ErroResolucao(
+            Recusa(
+                saida=2,
+                codigo="caminho-solto-recusado",
+                onde="chave",
+                recebido=chave,
+                regra="chave-logica-obrigatoria",
+                cura="passe chave lógica (<classe>:<slug>) em vez de caminho de sistema de arquivos",
+                proximo="busca buscar",
+            )
+        )
+
+
+def _montar_endereco(classe_info: ClasseAlcance, slug: str, chave_canonica: str) -> str:
+    if classe_info.morada == "git" and classe_info.molde:
+        return classe_info.molde.replace("<slug>", slug)
+    return chave_canonica
+
+
+def _extrair_classe_e_slug(
+    verbo: str,
+    base: str,
+    classe_explicita: str | None,
+    vista: VistaAlcance,
+) -> tuple[str, str, bool]:
+    # 1. Chave só com a classe: `<classe>:` ou `shape:<classe>`
+    if base.endswith(":") and ":" not in base[:-1]:
+        cl = base[:-1]
+        if not _RE_CLASSE_VALIDA.fullmatch(cl):
+            raise ErroResolucao(
+                Recusa(
+                    saida=2,
+                    codigo="chave-mal-formada",
+                    onde="chave",
+                    recebido=base,
+                    regra="gramatica-da-chave",
+                    cura="informe nome de classe válido antes de ':'",
+                    proximo="",
+                )
+            )
+        return "shape", cl, True
+
+    if base.startswith("shape:"):
+        cl = base.split(":", 1)[1]
+        if not _RE_CLASSE_VALIDA.fullmatch(cl):
+            raise ErroResolucao(
+                Recusa(
+                    saida=2,
+                    codigo="chave-mal-formada",
+                    onde="chave",
+                    recebido=base,
+                    regra="gramatica-da-chave",
+                    cura="informe shape:<classe> com slug válido",
+                    proximo="",
+                )
+            )
+        return "shape", cl, True
+
+    # 2. Chave canônica `<classe>:<slug>`
+    if ":" in base:
+        if not _RE_CHAVE_CAN.fullmatch(base):
+            raise ErroResolucao(
+                Recusa(
+                    saida=2,
+                    codigo="chave-mal-formada",
+                    onde="chave",
+                    recebido=base,
+                    regra="gramatica-da-chave",
+                    cura="use chave canônica <classe>:<slug>",
+                    proximo="",
+                )
+            )
+        cl, sl = base.split(":", 1)
+        return cl, sl, False
+
+    # 3. Identificador curto `<slug>` ou nome de classe puro
+    if not _RE_SLUG_VALIDO.fullmatch(base):
+        raise ErroResolucao(
+            Recusa(
+                saida=2,
+                codigo="chave-mal-formada",
+                onde="chave",
+                recebido=base,
+                regra="gramatica-da-chave",
+                cura="use chave canônica <classe>:<slug> ou identificador curto válido",
+                proximo="",
+            )
+        )
+    if classe_explicita:
+        return classe_explicita, base, False
+    if base in vista.classes:
+        return "shape", base, True
+
+    alcance = vista.alcance_verbo.get(verbo, frozenset())
+    concretas = sorted(c for c in alcance if c != "*")
+    if len(concretas) == 1:
+        return concretas[0], base, False
+    raise ErroResolucao(
+        Recusa(
+            saida=2,
+            codigo="chave-ambigua",
+            onde="chave",
+            recebido=base,
+            regra="classe-obrigatoria-para-verbo-multiclasse",
+            cura=f"informe a classe explicitamente; classes aceitas: {', '.join(concretas) or 'todas'}",
+            proximo=f"{verbo} ler <classe> {base}",
+        )
+    )
+
+
+def resolver_alvo(
+    verbo: str,
+    chave: str,
+    *,
+    classe_explicita: str | None = None,
+    vista: VistaAlcance | None = None,
+) -> tuple[AlvoResolvido, str | None]:
+    """Estágios 3 e 4: resolve chave na vista de alcance e aplica portão do verbo antes da morada."""
+    v = vista if vista is not None else carregar_vista_alcance()
+    _validar_sem_caminho_solto(chave)
+    base, membro = _separar_membro(chave)
+
+    classe, slug, eh_ficha_classe = _extrair_classe_e_slug(verbo, base, classe_explicita, v)
+    chave_canonica = f"shape:{slug}" if eh_ficha_classe else f"{classe}:{slug}"
+    info = v.classes.get(classe)
+    if info is None:
+        info = ClasseAlcance(
+            classe=classe,
+            morada="banco",
+            verbo_dono="busca",
+            universo_fechado=True,
+            digest_release=v.digest_release,
+        )
+
+    # Portão do verbo (estágio 4a): verbo aceita ato:ler?
+    if verbo not in v.verbos_aceitam_ler:
+        raise ErroResolucao(
+            Recusa(
+                saida=2,
+                codigo="ato-nao-aceito",
+                onde="verbo",
+                recebido=verbo,
+                regra="verbo-aceita-ato-ler",
+                cura=f"o verbo {verbo!r} não aceita o ato ler",
+                proximo=f"{info.verbo_dono} ler {chave_canonica}",
+            )
+        )
+
+    # Portão do verbo (estágio 4b): verbo alcança a classe (antes de abrir qualquer morada)?
+    alcance = v.alcance_verbo.get(verbo, frozenset())
+    if "*" not in alcance and classe not in alcance:
+        raise ErroResolucao(
+            Recusa(
+                saida=1,
+                codigo="classe-fora-do-verbo",
+                onde="classe",
+                recebido=classe,
+                regra="verbo-alcanca-classe",
+                cura=f"o verbo {verbo!r} não alcança a classe {classe!r}",
+                proximo=f"{info.verbo_dono} ler {chave_canonica}",
+            )
+        )
+
+    endereco = _montar_endereco(info, slug, chave_canonica)
+    alvo = AlvoResolvido(
+        chave_pedida=chave,
+        chave_canonica=chave_canonica,
+        classe=classe,
+        morada=info.morada,
+        endereco=endereco,
+        universo_fechado=info.universo_fechado,
+        digest_release=info.digest_release or v.digest_release,
+        eh_ficha_da_classe=eh_ficha_classe,
+    )
+    return alvo, membro

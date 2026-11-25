@@ -411,6 +411,9 @@ testes/test_dts_1360_1362_repo.py | bin/repo
 testes/test_ler_vedacao.py | lib/leitura/morada.py lib/leitura/verbo.py bin/release bin/repo
 testes/test_ler_borda.py | lib/leitura/tipos.py lib/leitura/borda.py
 testes/test_ler_nucleo.py | lib/leitura/nucleo.py lib/leitura/leitura.py
+# Story #4442 (Fita 2): extrator isolado via SCM_RIGHTS e formatos endurecidos (t4).
+testes/test_ler_extrator.py | lib/leitura/formatos.py lib/leitura/extrator.py
+testes/test_ler_moradas_git_banco.py | lib/leitura/resolvedor.py lib/leitura/moradas/__init__.py lib/leitura/moradas/git.py lib/leitura/moradas/banco.py
 # Story #4441: registros, política e conversão de borda da escrita (t1).
 testes/test_escrita_borda.py | lib/escrita/tipos.py lib/escrita/politica.py lib/escrita/pedido.py registro/escrita.yaml registro/esquemas/retorno-escrever.schema.json
 # Story #4441: confinamento de caminho, edição parcial e gravação atômica (t2).
