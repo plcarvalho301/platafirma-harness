@@ -56,8 +56,8 @@ def test_registro_escrita_yaml_e_esquema_canonico() -> None:
     assert pol.versao == 1
     assert pol.entrada_max_bytes == 1_048_576
     assert pol.prazo_max_s == 30
-    assert pol.verbos_ligados == frozenset()
-    assert not verbo_ligado(pol, "repo")
+    assert pol.verbos_ligados == frozenset({"repo"})
+    assert verbo_ligado(pol, "repo")
     assert not verbo_ligado(pol, "ontologia")
 
     esquema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -262,6 +262,28 @@ def test_token_lido_apenas_por_descritor_herdado_e_core_dump_zerado(
     os.close(w_fd)
     monkeypatch.setenv("PF_TOKEN_FD", str(r_fd))
     assert ler_token_descritor() == "tok-teste-123"
+
+    # Token acima do teto (16 KiB) é recusado com token-invalido em vez de truncado
+    r2_fd, w2_fd = os.pipe()
+    os.write(w2_fd, b"x" * (16_384 + 64))
+    os.close(w2_fd)
+    monkeypatch.setenv("PF_TOKEN_FD", str(r2_fd))
+    with pytest.raises(RecusaEscrita) as exc_tok:
+        ler_token_descritor()
+    assert exc_tok.value.saida == 4
+    assert exc_tok.value.primeiro.codigo == "token-invalido"
+
+
+def test_codigo_fonte_com_literal_parcial_nao_e_recusado() -> None:
+    pol = carregar_politica(CONFIG_PATH)
+    codigo_python = b'exemplo = \'{"parcial": true, "texto": "x"}\'\n'
+    ped = parsear_pedido(
+        "repo",
+        ["gravar", "componente", "platafirma-harness:testes/exemplo.py"],
+        codigo_python,
+        politica=pol,
+    )
+    assert ped.conteudo == codigo_python.decode("utf-8")
 
 
 def test_sem_import_da_porta_em_lib_escrita() -> None:

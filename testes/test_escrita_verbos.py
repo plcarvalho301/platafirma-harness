@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -61,7 +62,10 @@ def _iniciar_servidor(
     cfg_yaml = tmp_path / "escrita-test.yaml"
     pol_base = (RAIZ / "registro" / "escrita.yaml").read_text(encoding="utf-8")
     lista = "[" + ", ".join(verbos_ligados) + "]"
-    cfg_yaml.write_text(pol_base.replace("verbos_ligados: []", f"verbos_ligados: {lista}"), encoding="utf-8")
+    cfg_yaml.write_text(
+        re.sub(r"^verbos_ligados:.*$", f"verbos_ligados: {lista}", pol_base, flags=re.MULTILINE),
+        encoding="utf-8",
+    )
     pol = carregar_politica(cfg_yaml)
     sock_path = tmp_path / "escritor.sock"
     estado_dir.mkdir(parents=True, exist_ok=True)
@@ -214,7 +218,7 @@ def test_repo_gravar_ligado_e_commitar_sem_lista_lendo_registro_escritor(tmp_pat
 
 def test_verbos_desligados_operam_sem_escritor_e_repo_gravar_sai_3(tmp_path: Path) -> None:
     pol_prod = carregar_politica(RAIZ / "registro" / "escrita.yaml")
-    assert pol_prod.verbos_ligados == frozenset()
+    assert pol_prod.verbos_ligados == frozenset({"repo"})
     env = {
         **os.environ,
         "PF_CADEIRA": "engenharia",

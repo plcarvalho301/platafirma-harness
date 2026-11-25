@@ -39,7 +39,6 @@ _RE_UUIDV7 = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 )
 _RE_HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
-_RE_PARCIAL_JSON = re.compile(r'"parcial"\s*:\s*true\b')
 _PREFIXOS_CAMINHO_SOLTO = ("/", "./", "../", "instancias/", "referencias/", "verbetes/")
 _TETO_TOKEN_BYTES = 16_384
 _FD_STDERR = 2
@@ -88,12 +87,18 @@ def ler_token_descritor(var_fd: str = "PF_TOKEN_FD") -> str:
     try:
         partes: list[bytes] = []
         total = 0
-        while total <= _TETO_TOKEN_BYTES:
+        while True:
             bloco = os.read(fd, 4096)
             if not bloco:
                 break
-            partes.append(bloco)
             total += len(bloco)
+            if total > _TETO_TOKEN_BYTES:
+                raise _erro_token_invalido(
+                    var_fd,
+                    f">{_TETO_TOKEN_BYTES} bytes",
+                    f"reduza o token para no máximo {_TETO_TOKEN_BYTES} bytes",
+                )
+            partes.append(bloco)
         return b"".join(partes).decode("utf-8", errors="strict").strip()
     except (OSError, UnicodeDecodeError) as exc:
         raise _erro_token_invalido(
@@ -169,12 +174,20 @@ def decodificar_utf8_estrito(dados: bytes, *, onde: str = "stdin") -> str:
         ) from exc
 
 
+_RE_PARCIAL_ENVELOPE = re.compile(r'"(?:parcial|com_perda)"\s*:\s*true\b')
+
+
 def detectar_leitura_parcial(texto: str) -> bool:
-    """Detecta marca de leitura fatiada (# parte ... ou "parcial": true)."""
-    primeira = texto.splitlines()[0].strip() if texto else ""
+    """Detecta marca de leitura fatiada no cabeçalho ou em envelope JSON de topo."""
+    if not texto:
+        return False
+    primeira = texto.splitlines()[0].strip()
     if primeira.startswith("# parte ") or primeira == "# parte":
         return True
-    return bool(_RE_PARCIAL_JSON.search(texto))
+    limpo = texto.strip()
+    if not (limpo.startswith("{") and limpo.endswith("}")):
+        return False
+    return bool(_RE_PARCIAL_ENVELOPE.search(limpo))
 
 
 def parsear_trecho(texto: str) -> TrocaTrecho:

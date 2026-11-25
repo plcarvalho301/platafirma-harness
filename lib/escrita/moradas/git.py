@@ -158,6 +158,7 @@ class MoradaGit:
             estado_dir=self.estado_dir,
             prazo_ns=execucao.prazo_ns,
             passo_ms=execucao.politica.espera_trava_passo_ms,
+            teto_leitura_bytes=execucao.politica.entrada_max_bytes,
         )
         metricas: dict[str, int | None] = {"ocorrencias": None, "hunks": None}
 
