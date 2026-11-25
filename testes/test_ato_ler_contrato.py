@@ -178,9 +178,9 @@ def _http_wiki(_url: str, params: Mapping[str, str], _timeout: float) -> dict[st
 
 
 def _http_rastreador(url: str, _params: Mapping[str, str], _timeout: float) -> Any:
-    if url.endswith("/cards/4442"):
+    if url.endswith("/itens/4442"):
         return {"id": "4442", "titulo": "Leitor unico", "estado": "em-execucao", "revisao": "r9"}
-    if url.endswith("/cards"):
+    if url.endswith("/itens"):
         return {"itens": [{"id": "4442", "titulo": "Leitor unico", "estado": "em-execucao"}]}
     raise KeyError(url)
 
