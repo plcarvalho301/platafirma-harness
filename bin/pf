@@ -1,0 +1,186 @@
+#!/opt/platafirma/current/venv/harness/bin/python
+# pf — cliente de terminal que percorre proximo_args em laço sem recorte explícito (story #4442, t9)
+# capacidade: harness
+# dono: engenharia
+# ruff: noqa: ERA001
+"""Cliente de terminal para verbos da PlataFirma com paginação automática de `proximo_args`.
+
+Quando chamado sem recorte explícito (`--linhas`, `--paginas`, `--offset`, `--max-bytes`,
+`--cauda`, `--modo`, `--cursor`, `--limite`), percorre `proximo_args` em laço até o fim
+e avisa em `stderr` se a versão do objeto mudar entre páginas.
+"""
+from __future__ import annotations
+
+import json
+import shlex
+import subprocess
+import sys
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
+from typing import Any, TextIO
+
+_RAIZ = Path(__file__).resolve().parents[1]
+_FLAGS_RECORTE = frozenset({
+    "--linhas",
+    "--paginas",
+    "--offset",
+    "--max-bytes",
+    "--cauda",
+    "--modo",
+    "--cursor",
+    "--limite",
+    "--inteiro",
+    "--json",
+})
+_MAX_PAGINAS = 10_000
+_PRAZO_VERBO_S = 60
+
+ExecutorPagina = Callable[[Sequence[str]], tuple[int, str, str]]
+
+
+def tem_recorte_explicito(args: Sequence[str]) -> bool:
+    """Informa se a chamada já traz recorte explícito (desabilita o laço automático)."""
+    return any(tok.split("=", 1)[0] in _FLAGS_RECORTE for tok in args)
+
+
+def _executar_verbo_local(cmd_args: Sequence[str]) -> tuple[int, str, str]:
+    verbo = cmd_args[0]
+    executavel = _RAIZ / "bin" / verbo
+    try:
+        proc = subprocess.run(
+            [str(executavel), *cmd_args[1:]],
+            capture_output=True,
+            text=True,
+            timeout=_PRAZO_VERBO_S,
+            check=False,
+        )
+    except FileNotFoundError:
+        return 2, "", f"pf: verbo desconhecido: {verbo}\n"
+    except subprocess.TimeoutExpired:
+        return 5, "", f"pf: tempo esgotado ao executar {verbo}\n"
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def _extrair_proximo_args(payload: Mapping[str, Any], base: Sequence[str]) -> list[str] | None:
+    prox_args = payload.get("proximo_args")
+    if isinstance(prox_args, list) and prox_args:
+        return [str(x) for x in prox_args]
+    prox = payload.get("proximo")
+    if isinstance(prox, str) and prox.strip() and prox.strip() != "fim":
+        partes = shlex.split(prox.strip())
+        if partes and partes[0] == base[0]:
+            return partes
+        return [*base[:2], *partes]
+    return None
+
+
+def _emitir_conteudo_pagina(payload: Mapping[str, Any], saida_io: TextIO) -> None:
+    conteudo = payload.get("conteudo")
+    if isinstance(conteudo, str):
+        saida_io.write(conteudo)
+        return
+    if "itens" in payload:
+        linhas = [
+            f"{it.get('chave', '')}\n" if isinstance(it, Mapping) else f"{it}\n"
+            for it in (payload.get("itens") or ())
+        ]
+        saida_io.writelines(linhas)
+
+
+def _verificar_versao(payload: Mapping[str, Any], versao_atual: str | None, erro_io: TextIO) -> str | None:
+    versao = str(payload.get("versao") or "")
+    if not versao:
+        return versao_atual
+    if versao_atual is not None and versao != versao_atual:
+        erro_io.write(f"pf: aviso: versão mudou durante a paginação ({versao_atual} -> {versao})\n")
+    return versao
+
+
+def _processar_pagina(
+    out: str,
+    base: Sequence[str],
+    versao_atual: str | None,
+    saida_io: TextIO,
+    erro_io: TextIO,
+) -> tuple[str | None, list[str] | None]:
+    try:
+        payload = json.loads(out)
+    except ValueError:
+        saida_io.write(out)
+        return versao_atual, None
+    if not isinstance(payload, Mapping):
+        saida_io.write(out)
+        return versao_atual, None
+
+    nova_versao = _verificar_versao(payload, versao_atual, erro_io)
+    _emitir_conteudo_pagina(payload, saida_io)
+    if not payload.get("parcial"):
+        return nova_versao, None
+    prox = _extrair_proximo_args(payload, base)
+    if not prox:
+        return nova_versao, None
+    return nova_versao, (prox if "--json" in prox else [*prox, "--json"])
+
+
+def _executar_unico(
+    args: Sequence[str], rodar: ExecutorPagina, saida_io: TextIO, erro_io: TextIO
+) -> int:
+    rc, out, err = rodar(args)
+    if out:
+        saida_io.write(out)
+    if err:
+        erro_io.write(err)
+    return rc
+
+
+def executar_com_paginacao(
+    args: Sequence[str],
+    *,
+    executor: ExecutorPagina | None = None,
+    saida: TextIO | None = None,
+    erro: TextIO | None = None,
+) -> int:
+    """Executa um verbo em terminal percorrendo `proximo_args` quando não há recorte explícito."""
+    saida_io = sys.stdout if saida is None else saida
+    erro_io = sys.stderr if erro is None else erro
+    rodar = _executar_verbo_local if executor is None else executor
+
+    if not args:
+        erro_io.write("uso: pf <verbo> <ato> [args...]\n")
+        return 2
+    if tem_recorte_explicito(args):
+        return _executar_unico(args, rodar, saida_io, erro_io)
+
+    atuais_json = [*args, "--json"]
+    vistos: set[tuple[str, ...]] = set()
+    versao_atual: str | None = None
+    for _ in range(_MAX_PAGINAS):
+        chave_cmd = tuple(atuais_json)
+        if chave_cmd in vistos:
+            erro_io.write(f"pf: paginação repetiu a mesma chamada: {' '.join(atuais_json)}\n")
+            return 1
+        vistos.add(chave_cmd)
+
+        rc, out, err = rodar(atuais_json)
+        if err:
+            erro_io.write(err)
+        if rc != 0:
+            if out:
+                saida_io.write(out)
+            return rc
+
+        versao_atual, prox = _processar_pagina(out, args, versao_atual, saida_io, erro_io)
+        if prox is None:
+            return 0
+        atuais_json = prox
+
+    erro_io.write("pf: limite máximo de páginas excedido\n")
+    return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    return executar_com_paginacao(sys.argv[1:] if argv is None else argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
