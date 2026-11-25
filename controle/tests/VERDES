@@ -407,3 +407,5 @@ testes/test_busca_consultar_vivo.py | bin/busca lib/busca/** lib/leitura/** | de
 testes/test_regra_versao_da_classe_vivo.py | bin/busca lib/busca/** lib/leitura/** | degrau: rodada
 # DTs 1360, 1361 e 1362: exclusão de arquivos sensíveis em salva_arvore, realpath em repo ler e confinamento de PF_ORDEM_ID em repo copiar.
 testes/test_dts_1360_1362_repo.py | bin/repo
+# Story #4442 (Fita 1): vedação de segredos, borda da camada comum e núcleo puro do ato ler.
+testes/test_ler_vedacao.py | lib/leitura/morada.py lib/leitura/verbo.py bin/release bin/repo

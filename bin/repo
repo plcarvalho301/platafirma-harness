@@ -1131,6 +1131,11 @@ cmd_ler() {
     morre "caminho fora da raiz ou símbolo que escapa: '$caminho'" 4
   fi
 
+  local lib_dir_ved
+  lib_dir_ved="$(dirname "$(readlink -f "$0")")/../lib"
+  PYTHONPATH="$lib_dir_ved${PYTHONPATH:+:$PYTHONPATH}" \
+    python3 -m leitura.verbo --checar-vedado "$caminho" || exit $?
+
   local alvo_arquivo="$c/$caminho"
   if [ -n "$LEITURA_REF" ]; then
     if [ "$("$GIT" -C "$c" cat-file -t "$LEITURA_REF:$caminho" 2>/dev/null)" != blob ]; then
@@ -1286,13 +1291,26 @@ cmd_procurar() {
     out="$(printf '%s\n' "$out" | sed "s#^$LEITURA_REF:##")"
   fi
 
+  if [ -n "$out" ]; then
+    local lib_dir_proc
+    lib_dir_proc="$(dirname "$(readlink -f "$0")")/../lib"
+    out="$(PYTHONPATH="$lib_dir_proc${PYTHONPATH:+:$PYTHONPATH}" python3 -c '
+import sys
+from leitura.morada import eh_segredo
+for ln in sys.stdin.read().splitlines():
+    if not ln:
+        continue
+    arq = ln.split(":", 1)[0]
+    if not eh_segredo(arq):
+        print(ln)
+' <<<"$out")"
+  fi
+
   if [ -z "$out" ]; then
     if [ "$como_json" -eq 1 ]; then
       python3 -c 'import sys, json; print(json.dumps({"repo": sys.argv[1], "termo": sys.argv[2], "ocorrencias": [], "total": 0, "motivo": "termo não encontrado " + sys.argv[3]}, indent=2))' "$repo" "$termo" "$onde"
-    else
-      printf 'motivo: termo '\''%s'\'' não encontrado %s %s\n' "$termo" "$onde" "$repo"
     fi
-    return 0
+    return 1
   fi
 
   if [ "$como_json" -eq 1 ]; then

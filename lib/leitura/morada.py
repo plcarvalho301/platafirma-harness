@@ -21,9 +21,25 @@ _NOMES_SEGREDO = frozenset(
         ".netrc",
         ".pgpass",
         ".git-credentials",
+        "sujeitos.yaml",
+        "sujeitos.yml",
+        "trilha.jsonl",
+        "trilha-bruta.jsonl",
+        "oplog.jsonl",
     }
 )
 _SUFIXOS_SEGREDO = frozenset({".key", ".pem", ".asc", ".kdbx"})
+_SEGMENTOS_VEDADOS = frozenset({"segredos", "politica-acesso", "trilha-bruta"})
+_PARES_VEDADOS = frozenset(
+    {
+        ("acesso", "politica.yaml"),
+        ("acesso", "politica.yml"),
+        ("acesso", "sujeitos.yaml"),
+        ("acesso", "sujeitos.yml"),
+        ("var", "trilha"),
+        ("porta", "trilha"),
+    }
+)
 
 TIPOS_TEXTO = frozenset(
     {
@@ -154,47 +170,84 @@ def _pdp_raizes(pdp: Path | None = None, release_dir: Path | None = None) -> tup
     return tuple(unicas)
 
 
+def _normalizar_posix(bruto: str) -> str:
+    """Normaliza segmentos lexicalmente sem tocar no disco."""
+    import posixpath
+
+    s = bruto.replace("\\", "/")
+    return posixpath.normpath(s)
+
+
+def _segmentos_norm(norm: str) -> tuple[str, ...]:
+    return tuple(p for p in norm.split("/") if p and p != ".")
+
+
+def _sob_posix(alvo: str, raiz: str) -> bool:
+    r = raiz.rstrip("/")
+    return alvo == r or alvo.startswith(r + "/")
+
+
+_SUBS_INST_VEDADOS = ("segredos", "trilha", "var/trilha")
+_MIN_SEG_SRV_DIRETO = 2
+_MIN_SEG_SRV_VAR = 3
+
+
+def _eh_nome_ou_segmento_vedado(partes: tuple[str, ...], *, relativo: bool) -> bool:
+    nome = partes[-1]
+    nome_low = nome.lower()
+    if nome_low.startswith(".env") or nome in _NOMES_SEGREDO or nome_low in _NOMES_SEGREDO:
+        return True
+    if any(nome_low.endswith(suf) for suf in _SUFIXOS_SEGREDO):
+        return True
+    partes_low = tuple(p.lower() for p in partes)
+    if any(seg in _SEGMENTOS_VEDADOS or seg.startswith(".env") for seg in partes_low):
+        return True
+    if any((partes_low[i], partes_low[i + 1]) in _PARES_VEDADOS for i in range(len(partes_low) - 1)):
+        return True
+    return relativo and partes_low[0] == "trilha"
+
+
+def _sob_raiz_vedada(
+    norm: str,
+    *,
+    instancia: Path | None,
+    pdp: Path | None,
+    release_dir: Path | None,
+) -> bool:
+    inst = _normalizar_posix(str(instancia_raiz(instancia)))
+    if any(_sob_posix(norm, f"{inst}/{sub}") for sub in _SUBS_INST_VEDADOS):
+        return True
+    if any(_sob_posix(norm, _normalizar_posix(str(r))) for r in _pdp_raizes(pdp=pdp, release_dir=release_dir)):
+        return True
+    if not _sob_posix(norm, "/srv/platafirma"):
+        return False
+    rel_srv = [p.lower() for p in norm[len("/srv/platafirma") :].split("/") if p]
+    direto = len(rel_srv) >= _MIN_SEG_SRV_DIRETO and rel_srv[1] in ("segredos", "trilha")
+    em_var = len(rel_srv) >= _MIN_SEG_SRV_VAR and (rel_srv[1], rel_srv[2]) == ("var", "trilha")
+    return direto or em_var
+
+
 def eh_segredo(
-    caminho: Path,
+    caminho: str | Path,
     *,
     instancia: Path | None = None,
     pdp: Path | None = None,
     release_dir: Path | None = None,
 ) -> bool:
-    """Negativa de segredos e política de acesso (vence morada e inexistência)."""
-    alvo = _real(caminho)
-    for cand in (caminho, alvo):
-        nome = cand.name
-        if (
-            nome.startswith(".env")
-            or cand.suffix.lower() in _SUFIXOS_SEGREDO
-            or nome in _NOMES_SEGREDO
-        ):
-            return True
-
-    inst = instancia_raiz(instancia)
-    seg_inst = inst / "segredos"
-    for cand in (alvo, caminho.absolute()):
-        cand_s = str(cand)
-        for seg_raiz in (seg_inst, _real(seg_inst)):
-            if _sob(cand_s, str(seg_raiz)):
-                return True
-        for pdp_r in _pdp_raizes(pdp=pdp, release_dir=release_dir):
-            if _sob(cand_s, str(pdp_r)):
-                return True
-
-    raizes_inst = [Path("/srv/platafirma")]
-    if instancia is not None:
-        raizes_inst.append(instancia.parent)
-    for base in raizes_inst:
-        for cand in (alvo, caminho.absolute()):
-            try:
-                partes = cand.relative_to(base).parts
-            except ValueError:
-                continue
-            if len(partes) >= 2 and partes[1] == "segredos":
-                return True
-    return False
+    """Predicado puro de superfícies vedadas (fail-closed, sem tocar no disco)."""
+    bruto = str(caminho) if caminho is not None else ""
+    if not bruto or not bruto.strip() or "\x00" in bruto:
+        return True
+    norm = _normalizar_posix(bruto)
+    partes = _segmentos_norm(norm)
+    if not partes:
+        return True
+    relativo = not norm.startswith("/")
+    if _eh_nome_ou_segmento_vedado(partes, relativo=relativo):
+        return True
+    return not relativo and _sob_raiz_vedada(
+        norm, instancia=instancia, pdp=pdp, release_dir=release_dir
+    )
 
 
 def sob_fila(caminho: Path, *, instancia: Path | None = None) -> bool:

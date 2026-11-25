@@ -638,6 +638,9 @@ cmd_ler() {
     exit 4
   fi
 
+  PYTHONPATH="$AQUI/../lib${PYTHONPATH:+:$PYTHONPATH}" \
+    python3 -m leitura.verbo --checar-vedado "$caminho" || exit $?
+
   local rc=0
   resolver_identidade "$repo" || rc=$?
   if [ "$rc" -eq 1 ]; then
@@ -803,13 +806,24 @@ cmd_procurar() {
     out="$("$GIT" -C "$TARGET_DIR" grep "${grep_flags[@]}" "${padroes[@]}" 2>/dev/null || true)"
   fi
 
+  if [ -n "$out" ]; then
+    out="$(PYTHONPATH="$AQUI/../lib${PYTHONPATH:+:$PYTHONPATH}" python3 -c '
+import sys
+from leitura.morada import eh_segredo
+for ln in sys.stdin.read().splitlines():
+    if not ln:
+        continue
+    arq = ln.split(":", 1)[0]
+    if not eh_segredo(arq):
+        print(ln)
+' <<<"$out")"
+  fi
+
   if [ -z "$out" ]; then
     if [ "$como_json" -eq 1 ]; then
       python3 -c 'import sys, json; print(json.dumps({"familia": sys.argv[1], "termo": sys.argv[2], "ocorrencias": [], "total": 0, "motivo": "termo não encontrado no servido"}, indent=2))' "$repo" "$termo"
-    else
-      printf 'motivo: termo '\''%s'\'' não encontrado no servido %s\n' "$termo" "$repo"
     fi
-    return 0
+    return 1
   fi
 
   if [ "$como_json" -eq 1 ]; then
