@@ -415,3 +415,5 @@ testes/test_ler_nucleo.py | lib/leitura/nucleo.py lib/leitura/leitura.py
 testes/test_escrita_borda.py | lib/escrita/tipos.py lib/escrita/politica.py lib/escrita/pedido.py registro/escrita.yaml registro/esquemas/retorno-escrever.schema.json
 # Story #4441: confinamento de caminho, edição parcial e gravação atômica (t2).
 testes/test_escrita_edicao_e_io.py | lib/escrita/caminho.py lib/escrita/edicao.py lib/escrita/io_atomico.py lib/escrita/tipos.py lib/escrita/pedido.py
+# Story #4441: portão de acesso, resolução de alvo e registro de operações (t3).
+testes/test_escrita_portao_e_registro.py | lib/escrita/portao.py lib/escrita/resolucao.py lib/escrita/registro.py lib/escrita/tipos.py lib/escrita/politica.py lib/escrita/edicao.py
