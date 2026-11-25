@@ -56,9 +56,9 @@ def test_registro_escrita_yaml_e_esquema_canonico() -> None:
     assert pol.versao == 1
     assert pol.entrada_max_bytes == 1_048_576
     assert pol.prazo_max_s == 30
-    assert pol.verbos_ligados == frozenset({"repo"})
+    assert pol.verbos_ligados == frozenset({"repo", "ontologia"})
     assert verbo_ligado(pol, "repo")
-    assert not verbo_ligado(pol, "ontologia")
+    assert verbo_ligado(pol, "ontologia")
 
     esquema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     assert "release" in esquema["required"]

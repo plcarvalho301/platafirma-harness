@@ -615,6 +615,45 @@ def _extrair_yaml_para_escritor(args: list[str], ato: str) -> tuple[list[str], b
     return restantes, texto.encode("utf-8")
 
 
+def _prazo_ns_escritor(env: dict[str, str]) -> int:
+    import time
+
+    prazo_raw = (env.get("PF_PRAZO_S") or "").strip()
+    if not prazo_raw:
+        return 0
+    try:
+        v = float(prazo_raw)
+    except ValueError:
+        return 0
+    return time.monotonic_ns() + int(v * 1_000_000_000) if v > 0 else 0
+
+
+def _preparar_via_escritor(
+    ato: str, args: list[str], *, pedido: str, como_json: bool
+) -> tuple[list[str], bytes] | None:
+    pos_candidatos = [item for item in args if not _e_entrada_yaml(item)]
+    min_pos = 3 if ato == "ensaiar" else 2
+    if len(pos_candidatos) < min_pos:
+        return None
+    if ato == "trocar" and len(pos_candidatos) >= 3 and not e_uuid7(pos_candidatos[2]):
+        classe_sug = _classe_canonica(pos_candidatos[0])
+        raise Uso(
+            f"`{pos_candidatos[2]}` não é um uuid v7 de versão lida.",
+            codigo="versao-invalida",
+            onde="versao",
+            recebido=pos_candidatos[2],
+            regra="Chamada a `trocar` sem `<versao>` em posição (salvo lote em `<arquivo.yaml>` com `versao` por item), ou com `<versao>` que não é uuid v7, para antes da Olaria.",
+            proximo=f"ontologia ler {classe_sug} {pos_candidatos[1]}",
+        )
+    pos_sem_yaml, stdin_bytes = _extrair_yaml_para_escritor(args, ato)
+    argv_escritor = [ato, *pos_sem_yaml]
+    if pedido:
+        argv_escritor.extend(["--pedido", pedido])
+    if como_json:
+        argv_escritor.append("--json")
+    return argv_escritor, stdin_bytes
+
+
 def _tentar_via_escritor(
     ato: str,
     args: list[str],
@@ -639,24 +678,13 @@ def _tentar_via_escritor(
     politica = carregar_politica(Path(cfg_path)) if cfg_path else carregar_politica()
     if not verbo_esta_ligado("ontologia", politica=politica):
         return None
+    preparado = _preparar_via_escritor(ato, args, pedido=pedido, como_json=como_json)
+    if preparado is None:
+        return None
     import json
-    import time
 
-    pos_sem_yaml, stdin_bytes = _extrair_yaml_para_escritor(args, ato)
-    argv_escritor = [ato, *pos_sem_yaml]
-    if pedido:
-        argv_escritor.extend(["--pedido", pedido])
-    if como_json:
-        argv_escritor.append("--json")
-    prazo_raw = (env.get("PF_PRAZO_S") or "").strip()
-    prazo_ns = 0
-    if prazo_raw:
-        try:
-            v = float(prazo_raw)
-            if v > 0:
-                prazo_ns = time.monotonic_ns() + int(v * 1_000_000_000)
-        except ValueError:
-            prazo_ns = 0
+    argv_escritor, stdin_bytes = preparado
+    prazo_ns = _prazo_ns_escritor(env)
     ctx = ContextoEscrita(
         verbo="ontologia",
         cadeira=env.get("PF_CADEIRA") or "",
@@ -681,8 +709,7 @@ def _tentar_via_escritor(
             ),
         )
     except RecusaEscrita as exc:
-        err_json = json.dumps(exc.como_dict(), ensure_ascii=False) + "\n"
-        return Saida(exc.saida, "", err_json)
+        return Saida(exc.saida, "", exc.como_linha_json() + "\n")
     if como_json:
         return Saida(0, json.dumps(res.como_dict(), ensure_ascii=False) + "\n", "")
     return Saida(0, res.primeira_linha() + "\n", "")
