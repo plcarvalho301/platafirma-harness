@@ -978,13 +978,13 @@ def test_termo_que_nao_casa_devolve_candidatos_ou_disponiveis_e_a_busca_pelo_sen
     assert "gabarito" in reg_sem["disponiveis"]["classes"]
     assert "--classe" in reg_sem["disponiveis"]["filtros"]
     assert reg_sem["proximo"] == [
-        {"tipo": "busca", "chamada": "busca buscar casa 'xyzzy inexistente plugh'"},
+        {"tipo": "busca", "chamada": "busca buscar biblioteca 'xyzzy inexistente plugh'"},
         {"tipo": "nome-candidato", "termo": "xyzzy inexistente plugh"},
     ]
     assert reg_sem["fichas"] == []
 
     _, txt_sem, _ = rodar_consultar(["xyzzy inexistente plugh"])
-    assert "proximo: busca buscar casa 'xyzzy inexistente plugh'" in txt_sem.splitlines()
+    assert "proximo: busca buscar biblioteca 'xyzzy inexistente plugh'" in txt_sem.splitlines()
 
     rc_cand, out_cand, _ = rodar_consultar(["coisa sobre gabarito", "--json"])
     assert rc_cand == SAIDA_OK
@@ -992,7 +992,7 @@ def test_termo_que_nao_casa_devolve_candidatos_ou_disponiveis_e_a_busca_pelo_sen
     assert reg_cand["desfecho"] == "termo-nao-casou"
     assert reg_cand["disponiveis"] is None
     assert any(c["chave"] == "gabarito" for c in reg_cand["candidatos"])
-    assert reg_cand["proximo"][0] == {"tipo": "busca", "chamada": "busca buscar casa 'coisa sobre gabarito'"}
+    assert reg_cand["proximo"][0] == {"tipo": "busca", "chamada": "busca buscar biblioteca 'coisa sobre gabarito'"}
 
 
 def test_autorizacao_por_classe_nega_tudo_com_4_e_filtra_classes_mistas() -> None:

@@ -256,14 +256,14 @@ def test_nome_que_nao_casa_sai_1_com_a_busca_pelo_sentido_em_proximo(release: Pa
     codigo, out, err, retrato = rodar(["nome que nenhuma ficha tem"], release)
     assert codigo == 1 and out == ""
     assert "codigo: termo-nao-casou" in err
-    assert "proximo: busca buscar casa 'nome que nenhuma ficha tem'" in err
+    assert "proximo: busca buscar biblioteca 'nome que nenhuma ficha tem'" in err
     assert "classes: capacidade" in err
     assert "ficha-inteira" not in retrato.consultas
 
     codigo_cand, _out_c, err_cand, _ = rodar(["coisa sobre busca"], release)
     assert codigo_cand == 1
     assert "candidatos: capacidade:busca" in err_cand
-    assert "proximo: busca buscar casa 'coisa sobre busca'" in err_cand
+    assert "proximo: busca buscar biblioteca 'coisa sobre busca'" in err_cand
 
 
 def test_termo_sem_letra_sai_2(release: Path) -> None:

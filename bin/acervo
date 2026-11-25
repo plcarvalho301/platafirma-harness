@@ -163,7 +163,6 @@ uso (gramatica arq:0106 — acervo <ato> <particao> <entidade> [seletor]):
   acervo admitir  biblioteca indicacao [<lote|todas>] --motivo … [--termos a,b] [--ids i1,i2] [--pedido <uuid>]
   acervo descartar biblioteca indicacao [<lote|todas>] --motivo … [--termos a,b] [--ids i1,i2] [--pedido <uuid>]
   acervo ensaiar  <criar|trocar|renomear|admitir|descartar> biblioteca <conceito|indicacao> …   ensaio sem gravar
-  acervo curar    casa alias <classe> <chave> <alias>
   acervo curar    casa revisao <revid>... --motivo <m> [--apply]   tira texto antigo do historico da wiki
   acervo ler      biblioteca impressao <obra> [--paginas a-b | --capitulo <ancora>] [--formato md|blocos]
                   [--papel corpo|todos] [--cursor c] [--impressao <id>] [--baixar [<pasta>]]
@@ -432,7 +431,10 @@ conforme() {
                             forma_velha_transcrever "$entidade" "$@"
                             forma_velha_retirar "$entidade" "$@"
                             exec "$ATOS/curar" obra "$entidade" "$@" ;;
-    curar:casa:alias)       exec "$ATOS/curar" alias "$@" ;;
+    curar:casa:alias)
+        echo "acervo curar casa alias: removido (DT 1372) — apelidos da casa vivem em casa.nome." >&2
+        echo "  Para registrar apelido ou variante de ficha, use \`ontologia nomes abrir <termo> <chave> <origem>\`." >&2
+        exit 2 ;;
     # revisao antiga de pagina da wiki fora do historico publico (revisiondelete)
     curar:casa:revisao)     avisa "acervo curar casa revisao" "acervo retirar casa revisao <revid>" "arq:0119 §9.1"
                             exec "$ATOS/wiki" ocultar-revisao "$@" ;;
