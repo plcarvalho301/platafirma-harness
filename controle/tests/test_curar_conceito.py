@@ -278,3 +278,26 @@ def test_troca_de_pai_em_conceito_existente_leva_menos_e_mais_ao_hermit(ambiente
     assert chamadas[1].endswith(
         f"--menos {SLUG}:pai-antigo:mais-amplo --mais {SLUG}:pai-novo:partitiva"
     )
+
+
+def test_motivo_aresta_separado_na_criacao_com_pai_dt_1394(ambiente, falso):
+    args = BASE_ARGS + (
+        "--pai", "conceito-pai",
+        "--tipo", "generica",
+        "--garantia", "instituida",
+        "--motivo", "garantia do conceito",
+        "--motivo-aresta", "A é um tipo de B na hierarquia",
+    )
+    p = _curar(ambiente, *args, "--sem-hermit")
+    assert p.returncode == 0, p.stdout + p.stderr
+    posts = [c for c in falso.chamadas if c[0] == "POST"]
+    assert posts[-1][2]["pai"]["motivo"] == "A é um tipo de B na hierarquia"
+
+
+def test_sem_export_pula_export_no_apply_dt_1395(ambiente, falso):
+    p = _curar(
+        ambiente, *BASE_ARGS, "--sem-hermit", "--sem-export", "--apply",
+        patches="m._exportar = lambda *a, **kw: (_ for _ in ()).throw(AssertionError('não deveria exportar'))",
+    )
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert "pulado (--sem-export)" in p.stdout

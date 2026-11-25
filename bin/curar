@@ -740,8 +740,10 @@ def _exportar(repo: str, bancada: str | None = None) -> str | None:
     return saida[i:] if i >= 0 else (saida[-300:] or "(export sem saida)")
 
 
-def _imprimir_export(export: str | None) -> None:
-    if export is None or export.startswith("acervo exportar falhou:"):
+def _imprimir_export(export: str | None, *, pulado: bool = False) -> None:
+    if pulado:
+        print("  export : pulado (--sem-export) — rode `acervo exportar` ao fim do lote")
+    elif export is None or export.startswith("acervo exportar falhou:"):
         print("  export : NÃO regenerado (sem bancada na sessão ou erro no export) — abra a bancada e rode `acervo exportar`")
         if export:
             print(f"    {export.replace(chr(10), chr(10) + '    ')}")
@@ -848,6 +850,7 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
     tipo = args.tipo or args.mais_amplo_tipo
     garantia = args.garantia
     motivo = args.motivo
+    motivo_aresta = getattr(args, "motivo_aresta", None) or motivo
     lastro = args.lastro
 
     # 1. Verifica se conceito já existe na API (GET .../relacoes -> 200 existe, 404 nao existe)
@@ -892,7 +895,7 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
                 faltam_pai.append("tipo")
             if not garantia:
                 faltam_pai.append("garantia")
-            if not motivo:
+            if not motivo_aresta:
                 faltam_pai.append("motivo")
             if faltam_pai:
                 sys.stderr.write(f"curar: erro: --pai exige --{' --'.join(faltam_pai)}\n")
@@ -922,7 +925,7 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
                 "slug": pai_slug,
                 "tipo": tipo,
                 "garantia": garantia,
-                "motivo": motivo,
+                "motivo": motivo_aresta,
             }
             if lastro:
                 pai_dict["lastro"] = resolver_obra_id(lastro, headers)
@@ -983,7 +986,7 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
             faltam.append("tipo")
         if not garantia:
             faltam.append("garantia")
-        if not motivo:
+        if not motivo_aresta:
             faltam.append("motivo")
         if faltam:
             sys.stderr.write(f"curar: erro: trocar pai exige --{' --'.join(faltam)}\n")
@@ -993,7 +996,7 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
             "pai": pai_slug,
             "tipo": tipo,
             "garantia": garantia,
-            "motivo": motivo,
+            "motivo": motivo_aresta,
             "autor": autor,
         }
         if lastro:
@@ -1080,12 +1083,14 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
     if resp.status_code not in (200, 201):
         falha_problem(resp)
     feito = resp.json()
-    export = _exportar(hermit["repo"]) if hermit and hermit.get("repo") else (_exportar(_repo_conhecimento()) if _repo_conhecimento() else None)
+    export = None if args.sem_export else (
+        _exportar(hermit["repo"]) if hermit and hermit.get("repo") else (_exportar(_repo_conhecimento()) if _repo_conhecimento() else None)
+    )
     if como_json:
         print(json.dumps({"aplicado": feito, "hermit": hermit, "export": export}, indent=2, ensure_ascii=False))
     else:
         print(formatar(feito, hermit))
-        _imprimir_export(export)
+        _imprimir_export(export, pulado=args.sem_export)
     return 0
 
 
@@ -1465,8 +1470,8 @@ def acao_conceito_natureza(args, autor: str, como_json: bool, headers: dict) -> 
     if resp.status_code != 200:
         falha_problem(resp)
     feito = resp.json()
-    export = _exportar(_repo_conhecimento() or "")
-    export_ok = export is not None and not export.startswith("acervo exportar falhou")
+    export = None if args.sem_export else _exportar(_repo_conhecimento() or "")
+    export_ok = True if args.sem_export else (export is not None and not export.startswith("acervo exportar falhou"))
     if como_json:
         print(json.dumps({"aplicado": feito, "hermit": hermit, "export": export, "export_ok": export_ok},
                          indent=2, ensure_ascii=False))
@@ -1551,8 +1556,8 @@ def acao_conceito_renomear(args, autor: str, como_json: bool, headers: dict) -> 
     feito = resp.json()
     repo_conh = hermit.get("repo") if isinstance(hermit, dict) else None
     # `_exportar` delega a `acervo exportar` (o repo fica só pela assinatura): roda sempre, com ou sem clone declarado
-    export = _exportar(repo_conh or _repo_conhecimento() or "")
-    export_ok = export is not None and not export.startswith("acervo exportar falhou")
+    export = None if args.sem_export else _exportar(repo_conh or _repo_conhecimento() or "")
+    export_ok = True if args.sem_export else (export is not None and not export.startswith("acervo exportar falhou"))
     if como_json:
         print(json.dumps({"aplicado": feito, "conferencia_slug": conf_slug, "varredura_texto": varredura,
                           "hermit": hermit, "export": export, "export_ok": export_ok}, indent=2, ensure_ascii=False))
@@ -1631,15 +1636,14 @@ def acao_relacionar(args, autor: str, como_json: bool, headers: dict) -> int:
     if resp.status_code != 201:
         falha_problem(resp)
     feito = resp.json()
-    export = _exportar(hermit["repo"]) if hermit and hermit.get("repo") else (_exportar(_repo_conhecimento()) if _repo_conhecimento() else None)
+    export = None if args.sem_export else (
+        _exportar(hermit["repo"]) if hermit and hermit.get("repo") else (_exportar(_repo_conhecimento()) if _repo_conhecimento() else None)
+    )
     if como_json:
         print(json.dumps({"aplicado": feito, "hermit": hermit, "export": export}, indent=2, ensure_ascii=False))
     else:
         print(formatar_plano_relacao(feito, hermit))
-        if export is None:
-            print("  export : NÃO regenerado (clone de conhecimento em main / venv não achados) — rode `exportar-acervo` e commite")
-        else:
-            print(f"  export : regenerado no clone — commit e push são seus:\n    {export.replace(chr(10), chr(10) + '    ')}")
+        _imprimir_export(export, pulado=args.sem_export)
     return 0
 
 
@@ -3039,8 +3043,10 @@ def main(argv=None):
     parser.add_argument("--tipo", default=None)
     parser.add_argument("--garantia", default=None)
     parser.add_argument("--motivo", default=None)
+    parser.add_argument("--motivo-aresta", dest="motivo_aresta", default=None)
     parser.add_argument("--lastro", default=None)
     parser.add_argument("--sem-hermit", dest="sem_hermit", action="store_true", default=False)
+    parser.add_argument("--sem-export", dest="sem_export", action="store_true", default=False)
 
     # Alterações
     parser.add_argument("--trata-de", default=None)

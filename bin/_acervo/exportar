@@ -101,7 +101,16 @@ def bancada_do_repo(chave: str = "") -> Path:
         base = raiz / "wt" / REPO / cadeira
         achadas = sorted(p for p in base.glob("*") if (p / ".git").exists()) if base.is_dir() else []
         if len(achadas) == 1:
-            return achadas[0]
+            wt = achadas[0]
+            sessao = os.environ.get("PF_SESSAO", "")
+            dono = _dono_da_bancada(wt)
+            if sessao and dono and dono != sessao and not _eh_bancada_main(wt):
+                morre(
+                    f"a bancada {wt.name} de {REPO} pertence a outra sessão ({dono}); "
+                    f"abra a sua com `repo abrir {REPO}` ou passe --bancada {wt.name}.",
+                    2,
+                )
+            return wt
         if len(achadas) > 1:
             minhas = [p for p in achadas if _dono_da_bancada(p) == os.environ.get("PF_SESSAO", "")]
             if os.environ.get("PF_SESSAO") and len(minhas) == 1:
