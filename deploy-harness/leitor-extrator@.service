@@ -1,0 +1,34 @@
+[Unit]
+Description=Extrator isolado de formatos binários do leitor único (%i)
+
+[Service]
+Type=simple
+User=pf-leitor-extrator
+Group=pf-leitor-extrator
+StandardInput=socket
+UMask=0077
+LimitCORE=0
+NoNewPrivileges=yes
+Environment=PYTHONPATH=/opt/platafirma/current/harness/lib
+Environment=PYTHONNOUSERSITE=1
+Environment=LC_ALL=C.UTF-8
+ExecStart=/opt/platafirma/current/venv/harness/bin/python -m leitura.extrator
+PrivateNetwork=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+RestrictNamespaces=yes
+LockPersonality=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+MemoryHigh=384M
+MemoryMax=512M
+TasksMax=16
+KillMode=mixed
+TimeoutStopSec=30s

@@ -4,7 +4,7 @@
 # dono: ti
 # classe: C
 # use para: achar trecho pelo sentido (buscar), consultar fichas pela condição ou pelo nome (consultar) ou ler pela chave (ler)
-# atos: buscar (leitura, busca), consultar (leitura, ficha), ler (leitura, ficha)
+# atos: buscar (leitura, busca), consultar (leitura, ficha), ler (leitura, ficha), listar (leitura, ficha)
 # forma: texto
 # cauda: nao
 # poda: cosmetica@buscar
@@ -503,7 +503,247 @@ def imprimir(r: dict, fluxo: TextIO) -> None:
         fluxo.writelines(f"aviso: {aviso}\n" for aviso in r.get("avisos") or ())
 
 
-ATOS = {"buscar": ato_buscar, "consultar": ato_consultar, "ler": ato_ler}
+# ==================================================================== leitor único e listar (story #4442, t9)
+_CONFIG_LEITURA_PADRAO = _RAIZ / "registro" / "leitura.yaml"
+_SOCKET_LEITOR_PADRAO = "/run/platafirma/leitor/leitor.sock"
+_PRAZO_LEITOR_PADRAO_MS = 15_000
+
+
+def ler_config_leitura(
+    raiz: Path | None = None,
+    env: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Lê `registro/leitura.yaml` (chave `leitor_unico`, `socket` e `prazo_ms`)."""
+    amb = os.environ if env is None else env
+    cfg: dict[str, Any] = {
+        "leitor_unico": False,
+        "socket": _SOCKET_LEITOR_PADRAO,
+        "prazo_ms": _PRAZO_LEITOR_PADRAO_MS,
+    }
+    arq = Path(amb["PF_LEITURA_CONFIG"]) if amb.get("PF_LEITURA_CONFIG") else (
+        (raiz / "registro" / "leitura.yaml") if raiz is not None else _CONFIG_LEITURA_PADRAO
+    )
+    try:
+        linhas = arq.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        linhas = []
+    for linha in linhas:
+        limpa = linha.split("#", 1)[0].strip()
+        if ":" not in limpa:
+            continue
+        chave, val = (p.strip() for p in limpa.split(":", 1))
+        if chave == "leitor_unico":
+            cfg["leitor_unico"] = val.lower() in {"true", "1", "sim", "yes"}
+        elif chave == "socket" and val:
+            cfg["socket"] = val.strip("'\"")
+        elif chave == "prazo_ms" and val.isdigit():
+            cfg["prazo_ms"] = int(val)
+    if amb.get("PF_LEITOR_UNICO"):
+        cfg["leitor_unico"] = amb["PF_LEITOR_UNICO"].strip().lower() in {"true", "1", "sim", "yes"}
+    if amb.get("PF_LEITOR_SOCKET"):
+        cfg["socket"] = amb["PF_LEITOR_SOCKET"].strip()
+    return cfg
+
+
+def _escrever_recusa_json(recusa: Mapping[str, Any], fluxo: TextIO) -> int:
+    fluxo.write(json.dumps(dict(recusa), ensure_ascii=False) + "\n")
+    fluxo.flush()
+    return int(recusa.get("saida") or 5)
+
+
+def _renderizar_resultado_leitor_ler(
+    resp: Mapping[str, Any],
+    *,
+    como_json: bool,
+    saida: TextIO,
+    erro: TextIO,
+) -> int:
+    exit_code = int(resp.get("exit_code", 0))
+    if not resp.get("ok") and "resultados" not in resp:
+        rec = resp.get("recusa") if isinstance(resp.get("recusa"), Mapping) else {}
+        if rec:
+            _escrever_recusa_json(rec, erro)
+        return exit_code or 5
+
+    if "resultados" in resp:
+        itens = list(resp.get("resultados") or ())
+        if como_json:
+            saida.write(json.dumps(dict(resp), ensure_ascii=False) + "\n")
+            saida.flush()
+            return exit_code
+        for it in itens:
+            if it.get("ok") and isinstance(it.get("resultado"), Mapping):
+                _renderizar_item_ler_texto(it["resultado"], saida)
+            elif isinstance(it.get("recusa"), Mapping):
+                _escrever_recusa_json(it["recusa"], erro)
+        saida.flush()
+        return exit_code
+
+    res = resp.get("resultado") if isinstance(resp.get("resultado"), Mapping) else {}
+    if como_json:
+        saida.write(json.dumps(dict(res), ensure_ascii=False) + "\n")
+        saida.flush()
+        return exit_code
+    _renderizar_item_ler_texto(res, saida)
+    saida.flush()
+    return exit_code
+
+
+def _renderizar_item_ler_texto(res: Mapping[str, Any], saida: TextIO) -> None:
+    chave = str(res.get("chave") or "")
+    versao = str(res.get("versao") or "")
+    parte = str(res.get("parte") or "")
+    ficha_cls = bool(res.get("ficha_da_classe"))
+    sufixo = f" · objeto lido: a ficha da classe {res.get('classe') or chave}" if ficha_cls else ""
+    cab = f"{chave} · versão {versao} · {parte}{sufixo}"
+    saida.write(cab + "\n")
+    conteudo = str(res.get("conteudo") or "")
+    if conteudo:
+        saida.write(conteudo if conteudo.endswith("\n") else conteudo + "\n")
+    avisos = list(res.get("avisos") or ())
+    if res.get("com_perda") and not any("perda" in a.lower() for a in avisos):
+        avisos.append("decodificação com perda de caracteres (com_perda=true)")
+    if res.get("parcial") or avisos:
+        saida.write("--\n")
+        if res.get("parcial") and res.get("proximo"):
+            saida.write(f"proximo: {res['proximo']}\n")
+        saida.writelines(f"aviso: {av}\n" for av in avisos)
+
+
+def _renderizar_resultado_leitor_listar(
+    resp: Mapping[str, Any],
+    *,
+    como_json: bool,
+    saida: TextIO,
+    erro: TextIO,
+) -> int:
+    exit_code = int(resp.get("exit_code", 0))
+    if not resp.get("ok"):
+        rec = resp.get("recusa") if isinstance(resp.get("recusa"), Mapping) else {}
+        if rec:
+            _escrever_recusa_json(rec, erro)
+        return exit_code or 5
+    res = resp.get("resultado") if isinstance(resp.get("resultado"), Mapping) else {}
+    if como_json:
+        saida.write(json.dumps(dict(res), ensure_ascii=False) + "\n")
+        saida.flush()
+        return exit_code
+    classe = str(res.get("classe") or "")
+    versao = str(res.get("versao") or "")
+    total = int(res.get("total") or 0)
+    saida.write(f"{classe} · versão {versao} · {total} item(ns)\n")
+    for it in res.get("itens") or ():
+        if isinstance(it, Mapping):
+            rot = f" · {it['rotulo']}" if it.get("rotulo") else ""
+            saida.write(f"{it.get('chave', '')}{rot}\n")
+        else:
+            saida.write(f"{it}\n")
+    avisos = list(res.get("avisos") or ())
+    if res.get("mudou") and "mudou" not in avisos:
+        avisos.append("mudou")
+    if res.get("parcial") or avisos:
+        saida.write("--\n")
+        if res.get("parcial") and res.get("proximo"):
+            saida.write(f"proximo: {res['proximo']}\n")
+        saida.writelines(f"aviso: {av}\n" for av in avisos)
+    saida.flush()
+    return exit_code
+
+
+def _extrair_cursor_bruto(resto: list[str]) -> str | None:
+    for i, tok in enumerate(resto):
+        if tok == "--cursor" and i + 1 < len(resto):
+            return resto[i + 1]
+        if tok.startswith("--cursor="):
+            return tok.split("=", 1)[1]
+    return None
+
+
+def _montar_payload_local(forma: str, ctx: Any, pedido: Any, cursor_bruto: str | None) -> dict[str, Any]:
+    from leitura.cliente import _contexto_para_dict, _seletor_para_dict
+
+    base: dict[str, Any] = {
+        "forma": forma,
+        "contexto": _contexto_para_dict(ctx, int(ctx.prazo_ms)),
+    }
+    if forma == "ler":
+        base.update({
+            "chaves": list(pedido.chaves),
+            "classe": pedido.classe,
+            "seletor": _seletor_para_dict(pedido.seletor),
+            "pesada": False,
+        })
+    else:
+        base.update({
+            "classe": pedido.classe or "",
+            "filtros": [{"tipo": f.tipo, "nome": f.nome, "valor": f.valor} for f in pedido.filtros],
+            "termo": pedido.termo,
+            "limite": pedido.limite,
+            "cursor": cursor_bruto,
+        })
+    return base
+
+
+def _executar_via_leitor_ou_local(
+    forma: str,
+    resto: list[str],
+    *,
+    saida: TextIO,
+    erro: TextIO,
+    **kw: Any,
+) -> int:
+    from leitura.borda import ErroBorda, parsear_chamada_ler
+    from leitura.cliente import ClienteLeitor, ErroClienteLeitor
+    from leitura.daemon import CredencialChamador, DaemonLeitor
+
+    env = kw.get("env")
+    amb = os.environ if env is None else env
+    cfg = ler_config_leitura(env=amb)
+    try:
+        ctx, pedido = parsear_chamada_ler([forma, *resto], amb, verbo="busca")
+    except ErroBorda as exc:
+        erro.write(exc.serializar_stderr())
+        erro.flush()
+        return exc.saida
+
+    cursor_bruto = _extrair_cursor_bruto(resto) if forma == "listar" else None
+    cliente = kw.get("cliente_leitor")
+    if cliente is None and cfg["leitor_unico"]:
+        cliente = ClienteLeitor(socket_path=cfg["socket"])
+
+    if cliente is not None:
+        try:
+            if forma == "ler":
+                resp = cliente.ler(ctx, pedido.chaves, classe=pedido.classe, seletor=pedido.seletor)
+            else:
+                resp = cliente.listar(
+                    ctx,
+                    pedido.classe or "",
+                    filtros=pedido.filtros,
+                    termo=pedido.termo,
+                    limite=pedido.limite,
+                    cursor=cursor_bruto,
+                )
+        except ErroClienteLeitor as exc:
+            return _escrever_recusa_json(exc.recusa.campos(), erro)
+    else:
+        from leitura.moradas import RegistroMoradas
+
+        leitor_local = kw.get("leitor_local") or DaemonLeitor(moradas=RegistroMoradas())
+        cred = CredencialChamador(pid=os.getpid(), uid=os.getuid(), gid=os.getgid(), conta=ctx.sujeito or "local")
+        resp = leitor_local.processar_pedido(_montar_payload_local(forma, ctx, pedido, cursor_bruto), cred)
+
+    if forma == "ler":
+        return _renderizar_resultado_leitor_ler(resp, como_json=pedido.como_json, saida=saida, erro=erro)
+    return _renderizar_resultado_leitor_listar(resp, como_json=pedido.como_json, saida=saida, erro=erro)
+
+
+def ato_listar(resto: list[str], *, saida: TextIO, erro: TextIO, **kw: Any) -> int:
+    """Executa `busca listar` pelo leitor único (quando ligado) ou pelo processo local."""
+    return _executar_via_leitor_ou_local("listar", resto, saida=saida, erro=erro, **kw)
+
+
+ATOS = {"buscar": ato_buscar, "consultar": ato_consultar, "ler": ato_ler, "listar": ato_listar}
 
 
 def _recusa_ato_desconhecido(ato: str, resto: list[str], *, cabecalho_motor: Path | None = None) -> Recusa:
@@ -528,6 +768,18 @@ def _recusa_ato_desconhecido(ato: str, resto: list[str], *, cabecalho_motor: Pat
         cura=f"atos do verbo busca: {', '.join(ATOS)}",
         proximo=USO_LER,
     )
+
+
+def _despachar_ler(resto: list[str], *, saida: TextIO, erro: TextIO, **kw: Any) -> int:
+    cfg = ler_config_leitura(env=kw.get("env"))
+    if cfg["leitor_unico"] or kw.get("cliente_leitor") is not None:
+        return _executar_via_leitor_ou_local("ler", resto, saida=saida, erro=erro, **kw)
+    como_json = "--json" in resto
+    try:
+        imprimir(ato_ler(resto, **kw), saida)
+        return 0
+    except Recusa as r:
+        return escrever(r, como_json=como_json, fluxo=erro)
 
 
 def main(argv: list[str] | None = None, *, saida: TextIO | None = None, erro: TextIO | None = None,
@@ -566,12 +818,11 @@ def main(argv: list[str] | None = None, *, saida: TextIO | None = None, erro: Te
             )
             return escrever_lista([falha], fluxo=erro)
     if ato == "ler":
-        como_json = "--json" in resto
-        try:
-            imprimir(ato_ler(resto, **kw), saida)
-            return 0
-        except Recusa as r:
-            return escrever(r, como_json=como_json, fluxo=erro)
+        return _despachar_ler(resto, saida=saida, erro=erro, **kw)
+    if ato == "listar":
+        cfg = ler_config_leitura(env=kw.get("env"))
+        if cfg["leitor_unico"] or kw.get("cliente_leitor") is not None or kw.get("leitor_local") is not None:
+            return ato_listar(resto, saida=saida, erro=erro, **kw)
     return escrever_lista([_recusa_ato_desconhecido(ato, resto)], fluxo=erro)
 
 

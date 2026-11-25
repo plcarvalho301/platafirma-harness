@@ -1,0 +1,47 @@
+[Unit]
+Description=Leitor único do ato ler da PlataFirma
+Requires=leitor.socket
+After=leitor.socket local-fs.target
+
+[Service]
+Type=simple
+User=pf-leitor
+Group=pf-verbos
+UMask=0077
+LimitCORE=0
+NoNewPrivileges=yes
+Environment=PYTHONPATH=/opt/platafirma/current/harness/lib
+Environment=PF_LEITOR_SOCKET=/run/platafirma/leitor/leitor.sock
+Environment=PF_EXTRATOR_SOCKET=/run/platafirma/leitor-extrator/extrator.sock
+Environment=PF_RELEASE_CURRENT=/opt/platafirma/current
+LoadCredential=casa-db:/etc/credstore/pf-leitor-casa-db
+LoadCredential=wiki:/etc/credstore/pf-leitor-wiki
+LoadCredential=balde:/etc/credstore/pf-leitor-balde
+LoadCredential=fila:/etc/credstore/pf-leitor-fila
+LoadCredential=rastreador:/etc/credstore/pf-leitor-rastreador
+ExecStart=/opt/platafirma/current/venv/harness/bin/python -m leitura.daemon
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+RestrictNamespaces=yes
+LockPersonality=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+MemoryHigh=384M
+MemoryMax=512M
+TasksMax=64
+KillMode=mixed
+TimeoutStopSec=45s
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+Also=leitor.socket

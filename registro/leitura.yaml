@@ -1,0 +1,7 @@
+# Chave de configuração do componente leitura (story #4442, t9/t14).
+# Fita 4 sobe com `leitor_unico: false` (expansão segura); a Fita 6 (t14) liga
+# para `true` depois que o dono executar `deploy-harness/setup-leitor.sh` com sudo.
+versao: 1
+leitor_unico: false
+socket: /run/platafirma/leitor/leitor.sock
+prazo_ms: 15000

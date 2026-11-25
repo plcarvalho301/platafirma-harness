@@ -654,3 +654,28 @@ class DaemonLeitor:
                 alvo.unlink()
             except OSError:
                 pass
+
+
+_MIN_ARGS_SOCKET = 2
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Ponto de entrada de `leitor.service` (systemd socket activation ou caminho direto)."""
+    args = sys.argv[1:] if argv is None else argv
+    caminho = Path(os.environ.get("PF_LEITOR_SOCKET") or str(SOCKET_PADRAO))
+    if len(args) >= _MIN_ARGS_SOCKET and args[0] == "--socket":
+        caminho = Path(args[1])
+    leitor = DaemonLeitor(moradas=RegistroMoradas())
+    if os.environ.get("LISTEN_FDS") == "1":
+        srv = socket.socket(fileno=3)
+        try:
+            leitor.servir_socket(srv)
+        finally:
+            srv.close()
+        return 0
+    leitor.servir_caminho(caminho)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

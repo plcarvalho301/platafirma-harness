@@ -613,7 +613,14 @@ logs() {
   local tmp rc=0
   tmp=$(mktemp) || return 3
   local -a opcoes=()
-  if e_conteiner "$alvo"; then
+  if [ "$alvo" = "leitor" ] || [ "$alvo" = "leitor.service" ]; then
+    if [ -n "${INFRA_LEITOR_LOGS_CMD:-}" ]; then
+      # Override só para testes automatizados sem root.
+      "$INFRA_LEITOR_LOGS_CMD" "$n" >"$tmp" 2>&1 || rc=$?
+    else
+      sudo -n /usr/local/libexec/platafirma/leitor-logs "$n" >"$tmp" 2>&1 || rc=$?
+    fi
+  elif e_conteiner "$alvo"; then
     [ -n "$desde" ] && opcoes+=(--since "$desde")
     [ -n "$ate" ] && opcoes+=(--until "$ate")
     if [ "$janela" = 1 ]; then opcoes+=(--tail all); else opcoes+=(--tail "$n"); fi
@@ -955,6 +962,18 @@ restart() {
   done
   [ -n "$alvo" ] || { echo "erro: restart exige alvo explícito — não reinicia tudo." >&2; exit 2; }
   exigir_sujeito "infra restart" || exit $?
+
+  if [ "$alvo" = "leitor" ] || [ "$alvo" = "leitor.service" ]; then
+    if [ -n "${INFRA_LEITOR_RESTART_CMD:-}" ]; then
+      "$INFRA_LEITOR_RESTART_CMD" leitor.service >/dev/null \
+        || { echo "erro: restart de leitor.service falhou — ver: infra logs leitor.service" >&2; exit 1; }
+    else
+      sudo -n /usr/bin/systemctl restart leitor.service >/dev/null \
+        || { echo "erro: sudo systemctl restart leitor.service falhou — ver: infra logs leitor.service" >&2; exit 1; }
+    fi
+    echo "unit leitor.service reiniciada"
+    return
+  fi
 
   if e_conteiner "$alvo"; then
     if [ "$esperar" = 1 ]; then

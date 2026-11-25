@@ -1,0 +1,15 @@
+[Unit]
+Description=Soquete local do leitor único do ato ler da PlataFirma
+
+[Socket]
+ListenStream=/run/platafirma/leitor/leitor.sock
+RuntimeDirectory=platafirma/leitor
+RuntimeDirectoryMode=0750
+SocketUser=pf-leitor
+SocketGroup=pf-verbos
+SocketMode=0660
+MaxConnections=64
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

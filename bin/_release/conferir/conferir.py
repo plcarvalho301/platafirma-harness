@@ -3757,6 +3757,7 @@ def conferir_jobs(alvo=None, como_json=False):
 # --- classe: unit (DT 352) --------------------------------------------------
 
 _SETUPS_UNIT_CHECK = {
+    "leitor": ("harness", "deploy-harness/setup-leitor.sh"),
     "prior-secao": ("conhecimento", "rag/deploy/setup-prior-secao.sh"),
 }
 

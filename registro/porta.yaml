@@ -66,7 +66,7 @@ verbos:
       literatura; subir um degrau quando o de baixo não basta · buscar devolve o que achou, e
       não o que falta; consultar devolve o conjunto exato, e o total zero vem com os valores
       que existem, para conferir a grafia · atos: buscar (leitura, busca), consultar (leitura,
-      ficha), ler (leitura, ficha)
+      ficha), ler (leitura, ficha), listar (leitura, ficha)
   conferir:
     descricao: >-
       confere o SERVIDO contra o DECLARADO · use para: SEMPRE ANTES de agir sobre algo da casa
