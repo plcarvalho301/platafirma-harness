@@ -9,9 +9,14 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
+
+import yaml
+
+from .tipos import AlvoResolvido, Recusa, TipoMorada
 
 CLASSE_DAS_CLASSES = "shape"
 MORADA_LIDA = "git"
@@ -231,11 +236,6 @@ def ficha_inteira(retrato: Consulta, f: Ficha, *, com_ligacoes: bool = True) -> 
 
 
 # ================================================================== estágios 3 e 4 (story #4442, t5)
-from collections.abc import Mapping  # noqa: E402
-
-import yaml  # noqa: E402
-
-from .tipos import AlvoResolvido, Recusa, TipoMorada  # noqa: E402
 
 _RE_CHAVE_CAN = re.compile(r"^[a-z0-9][a-z0-9-]*:[a-z0-9][a-z0-9._/-]*$")
 _RE_SLUG_VALIDO = re.compile(r"^[a-z0-9][a-z0-9._/-]*$")
@@ -325,17 +325,16 @@ def carregar_vista_alcance(registro_porta: Path | None = None) -> VistaAlcance:
     """Carrega a vista provisória de alcance a partir de `registro/porta.yaml` (sem banco)."""
     arq = registro_porta if registro_porta is not None else _RAIZ_REGISTRO_PORTA
     verbos_ler = set(_ALCANCE_PADRAO)
-    if arq.is_file():
-        try:
-            dados = yaml.safe_load(arq.read_text(encoding="utf-8")) or {}
-            verbos = dados.get("verbos") if isinstance(dados, dict) else {}
-            if isinstance(verbos, dict):
-                for slug, info in verbos.items():
-                    desc = str(info.get("descricao") or "") if isinstance(info, dict) else ""
-                    if "ler" in desc or slug in _ALCANCE_PADRAO:
-                        verbos_ler.add(str(slug))
-        except (OSError, yaml.YAMLError):
-            pass
+    try:
+        dados = yaml.safe_load(arq.read_text(encoding="utf-8")) or {}
+        verbos = dados.get("verbos") if isinstance(dados, dict) else {}
+        if isinstance(verbos, dict):
+            for slug, info in verbos.items():
+                desc = str(info.get("descricao") or "") if isinstance(info, dict) else ""
+                if "ler" in desc or slug in _ALCANCE_PADRAO:
+                    verbos_ler.add(str(slug))
+    except (OSError, yaml.YAMLError):
+        pass
     return VistaAlcance(
         verbos_aceitam_ler=frozenset(verbos_ler),
         alcance_verbo=dict(_ALCANCE_PADRAO),
@@ -384,6 +383,34 @@ def _montar_endereco(classe_info: ClasseAlcance, slug: str, chave_canonica: str)
     return chave_canonica
 
 
+def _erro_chave_mal_formada(base: str, cura: str) -> ErroResolucao:
+    return ErroResolucao(
+        Recusa(
+            saida=2,
+            codigo="chave-mal-formada",
+            onde="chave",
+            recebido=base,
+            regra="gramatica-da-chave",
+            cura=cura,
+            proximo="",
+        )
+    )
+
+
+def _extrair_ficha_de_classe(base: str) -> tuple[str, str, bool] | None:
+    if base.endswith(":") and ":" not in base[:-1]:
+        cl = base[:-1]
+        if not _RE_CLASSE_VALIDA.fullmatch(cl):
+            raise _erro_chave_mal_formada(base, "informe nome de classe válido antes de ':'")
+        return "shape", cl, True
+    if base.startswith("shape:"):
+        cl = base.split(":", 1)[1]
+        if not _RE_CLASSE_VALIDA.fullmatch(cl):
+            raise _erro_chave_mal_formada(base, "informe shape:<classe> com slug válido")
+        return "shape", cl, True
+    return None
+
+
 def _extrair_classe_e_slug(
     verbo: str,
     base: str,
@@ -391,67 +418,21 @@ def _extrair_classe_e_slug(
     vista: VistaAlcance,
 ) -> tuple[str, str, bool]:
     # 1. Chave só com a classe: `<classe>:` ou `shape:<classe>`
-    if base.endswith(":") and ":" not in base[:-1]:
-        cl = base[:-1]
-        if not _RE_CLASSE_VALIDA.fullmatch(cl):
-            raise ErroResolucao(
-                Recusa(
-                    saida=2,
-                    codigo="chave-mal-formada",
-                    onde="chave",
-                    recebido=base,
-                    regra="gramatica-da-chave",
-                    cura="informe nome de classe válido antes de ':'",
-                    proximo="",
-                )
-            )
-        return "shape", cl, True
-
-    if base.startswith("shape:"):
-        cl = base.split(":", 1)[1]
-        if not _RE_CLASSE_VALIDA.fullmatch(cl):
-            raise ErroResolucao(
-                Recusa(
-                    saida=2,
-                    codigo="chave-mal-formada",
-                    onde="chave",
-                    recebido=base,
-                    regra="gramatica-da-chave",
-                    cura="informe shape:<classe> com slug válido",
-                    proximo="",
-                )
-            )
-        return "shape", cl, True
+    ficha = _extrair_ficha_de_classe(base)
+    if ficha is not None:
+        return ficha
 
     # 2. Chave canônica `<classe>:<slug>`
     if ":" in base:
         if not _RE_CHAVE_CAN.fullmatch(base):
-            raise ErroResolucao(
-                Recusa(
-                    saida=2,
-                    codigo="chave-mal-formada",
-                    onde="chave",
-                    recebido=base,
-                    regra="gramatica-da-chave",
-                    cura="use chave canônica <classe>:<slug>",
-                    proximo="",
-                )
-            )
+            raise _erro_chave_mal_formada(base, "use chave canônica <classe>:<slug>")
         cl, sl = base.split(":", 1)
         return cl, sl, False
 
     # 3. Identificador curto `<slug>` ou nome de classe puro
     if not _RE_SLUG_VALIDO.fullmatch(base):
-        raise ErroResolucao(
-            Recusa(
-                saida=2,
-                codigo="chave-mal-formada",
-                onde="chave",
-                recebido=base,
-                regra="gramatica-da-chave",
-                cura="use chave canônica <classe>:<slug> ou identificador curto válido",
-                proximo="",
-            )
+        raise _erro_chave_mal_formada(
+            base, "use chave canônica <classe>:<slug> ou identificador curto válido"
         )
     if classe_explicita:
         return classe_explicita, base, False

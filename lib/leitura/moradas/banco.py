@@ -308,14 +308,9 @@ class AdaptadorBanco:
             total_bytes=len(dados),
         )
 
-    def listar_chaves(
-        self,
-        classe: str,
-        filtros: Sequence[FiltroCatalogo],
-        termo: str | None,
-        limite: int,
-        cursor: CursorDecodificado | None,
-        prazo_ms: int,
+    def listar_chaves(  # noqa: PLR0913 -- assinatura fixa do protocolo AdaptadorMorada
+        self, classe: str, filtros: Sequence[FiltroCatalogo], termo: str | None,
+        limite: int, cursor: CursorDecodificado | None, prazo_ms: int,
     ) -> PaginaBruta:
         del filtros  # filtros de propriedade/ligação entram por consulta específica da shape
 
