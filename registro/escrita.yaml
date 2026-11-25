@@ -6,7 +6,7 @@ limites:
   retencao_repeticao_s: 86400
   espera_trava_passo_ms: 25
 
-verbos_ligados: [repo]
+verbos_ligados: [repo, ontologia]
 
 superficies_vedadas:
   nomes_arquivo:

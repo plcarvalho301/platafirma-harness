@@ -218,7 +218,7 @@ def test_repo_gravar_ligado_e_commitar_sem_lista_lendo_registro_escritor(tmp_pat
 
 def test_verbos_desligados_operam_sem_escritor_e_repo_gravar_sai_3(tmp_path: Path) -> None:
     pol_prod = carregar_politica(RAIZ / "registro" / "escrita.yaml")
-    assert pol_prod.verbos_ligados == frozenset({"repo"})
+    assert pol_prod.verbos_ligados == frozenset({"repo", "ontologia"})
     env = {
         **os.environ,
         "PF_CADEIRA": "engenharia",
