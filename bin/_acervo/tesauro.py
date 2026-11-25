@@ -60,7 +60,7 @@ AJUDA_POR_ATO: dict[str, str] = {
         "acervo criar [biblioteca] conceito <slug> --rotulo <texto> --definicao <texto>\n"
         "  --natureza <processo|disposicao|modelo|fenomeno> --estatuto <instituido|doutrinario|natural>\n"
         "  [--lingua <pt|en|zxx>] [--rotulo-alt <lingua|rotulo>]...\n"
-        "  [--pai <slug> --tipo <generica|partitiva|instancia> [--garantia <g>] [--motivo <m>] [--lastro <obra>]]\n"
+        "  [--pai <slug> --tipo <generica|partitiva|instancia> [--garantia <g>] [--motivo <m> | --motivo-aresta <m>] [--lastro <obra>]]\n"
         "  [--endereco <uri>] [--filhos-exclusivos] [--trata-de <obra,...>]\n"
         "  [--pedido <uuid7>] [--autor <curador>] [--json]\n"
         "  Ensaio sem gravar: acervo ensaiar criar biblioteca conceito <slug> ..."
@@ -70,7 +70,7 @@ AJUDA_POR_ATO: dict[str, str] = {
         "  [--rotulo <texto>] [--lingua <pt|en|zxx>] [--definicao <texto>]\n"
         "  [--natureza <n>] [--estatuto <e>] [--endereco <uri>]\n"
         "  [--filhos-exclusivos | --sem-filhos-exclusivos]\n"
-        "  [--pai <slug> --tipo <generica|partitiva|instancia> [--garantia <g>] [--lastro <obra>] | --sem-pai]\n"
+        "  [--pai <slug> --tipo <generica|partitiva|instancia> [--garantia <g>] [--motivo-aresta <m>] [--lastro <obra>] | --sem-pai]\n"
         "  [--rotulo-alt <lingua|rotulo>]... [--sem-rotulo-alt <rotulo>]...\n"
         "  [--pedido <uuid7>] [--autor <curador>] [--json]\n"
         "  Substitui atributos e rótulos conferindo a <versao> lida em `acervo ler biblioteca conceito <slug>`.\n"
@@ -579,7 +579,7 @@ def _validar_pai_opcoes(
 
     tp = (opts.get("--tipo") or "").strip()
     gar = (opts.get("--garantia") or "instituida").strip()
-    mot = (opts.get("--motivo") or "").strip()
+    mot = (opts.get("--motivo-aresta") or opts.get("--motivo") or "").strip()
     if tp not in HIERARQUICAS:
         erros.append(erro_item(
             "valor-fora-do-dominio", f"{onde}.tipo", tp or None,
@@ -671,6 +671,23 @@ def cmd_ler_conceito(cauda: list[str], tokens_orig: list[str]) -> int:
     return 0
 
 
+def _bate_outros_rotulos(c: dict[str, Any], termo: str) -> bool:
+    outros = c.get("outros_rotulos")
+    if isinstance(outros, str):
+        if termo in outros.lower():
+            return True
+    elif isinstance(outros, (list, tuple)):
+        if any(termo in str(o).lower() for o in outros):
+            return True
+    alts = c.get("rotulos_alternativos")
+    if isinstance(alts, (list, tuple)):
+        for a in alts:
+            txt = a.get("rotulo") if isinstance(a, dict) else a
+            if txt and termo in str(txt).lower():
+                return True
+    return False
+
+
 def _filtrar_conceitos(itens: list[dict[str, Any]], opts: dict[str, Any]) -> list[dict[str, Any]]:
     nat = opts.get("--natureza")
     est = opts.get("--estatuto")
@@ -682,7 +699,7 @@ def _filtrar_conceitos(itens: list[dict[str, Any]], opts: dict[str, Any]) -> lis
         c for c in saida
         if termo in (c.get("slug") or "").lower()
         or termo in (c.get("rotulo") or "").lower()
-        or any(termo in str(o).lower() for o in (c.get("outros_rotulos") or []))
+        or _bate_outros_rotulos(c, termo)
     ]
 
 
@@ -795,7 +812,7 @@ def cmd_criar_conceito(cauda: list[str], tokens_orig: list[str], *, ensaio: bool
         cauda,
         valoradas={
             "--rotulo", "--definicao", "--natureza", "--estatuto", "--lingua",
-            "--pai", "--tipo", "--garantia", "--motivo", "--lastro",
+            "--pai", "--tipo", "--garantia", "--motivo", "--motivo-aresta", "--lastro",
             "--endereco", "--trata-de", "--pedido", "--autor",
         },
         repetiveis={"--rotulo-alt"},
@@ -934,7 +951,7 @@ def cmd_trocar_conceito(cauda: list[str], tokens_orig: list[str], *, ensaio: boo
     pos, opts, erros_p = parse_opcoes(
         cauda,
         valoradas={
-            "--motivo", "--rotulo", "--lingua", "--definicao", "--natureza", "--estatuto",
+            "--motivo", "--motivo-aresta", "--rotulo", "--lingua", "--definicao", "--natureza", "--estatuto",
             "--endereco", "--pai", "--tipo", "--garantia", "--lastro", "--pedido", "--autor",
         },
         repetiveis={"--rotulo-alt", "--sem-rotulo-alt"},

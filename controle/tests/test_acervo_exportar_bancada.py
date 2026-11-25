@@ -77,5 +77,22 @@ def test_bancada_main_desempata_quando_multiplas_abertas(mod, tmp_path):
     (tmp_path / "wt" / mod.REPO / "dados" / "main" / ".git").mkdir(parents=True)
     assert mod.bancada_do_repo() == tmp_path / "wt" / mod.REPO / "dados" / "main"
 
+def test_bancada_unica_de_outra_sessao_recusa_sem_flag_dt_1396(tmp_path, monkeypatch, capsys):
+    loader = importlib.machinery.SourceFileLoader("exportar_teste_1396", str(EXPORTAR))
+    spec = importlib.util.spec_from_loader("exportar_teste_1396", loader)
+    m = importlib.util.module_from_spec(spec)
+    loader.exec_module(m)
+    wt = tmp_path / "wt" / m.REPO / "conhecimento" / "tesauro-lote-20261125"
+    (wt / ".git").mkdir(parents=True)
+    (wt / ".git" / "pf-sessao-viva").write_text("sessao-antiga\t2026-11-25T10:00:00Z\n", encoding="utf-8")
+    monkeypatch.setattr(m.raizes, "bancada", lambda: tmp_path)
+    monkeypatch.setenv("PF_CADEIRA", "conhecimento")
+    monkeypatch.setenv("PF_SESSAO", "sessao-atual")
+    with pytest.raises(SystemExit) as e:
+        m.bancada_do_repo()
+    assert e.value.code == 2 and "--bancada tesauro-lote-20261125" in capsys.readouterr().err
+    assert m.bancada_do_repo("tesauro-lote-20261125") == wt
+
+
 def test_argumento_desconhecido_e_uso(mod):
     assert mod.main(["--outra"]) == 2

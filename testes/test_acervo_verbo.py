@@ -983,8 +983,10 @@ class ServidorFalso:
                 if self.path == "/acervo/conceitos":
                     self._responder(200, {"itens": [
                         {"slug": "tecnica-legislativa", "rotulo": "Técnica legislativa",
+                         "outros_rotulos": "legistics / redacao normativa",
                          "natureza": "modelo", "estatuto": "doutrinario"},
                         {"slug": "revisao-de-codigo", "rotulo": "Revisão de código",
+                         "outros_rotulos": ["code review", "peer review"],
                          "natureza": "processo", "estatuto": "doutrinario"},
                     ], "proximo": None})
                     return
@@ -1229,6 +1231,14 @@ def test_ler_e_listar_conceito_primeira_linha_fixa_e_404_sai_1(srv):
     assert rl.stdout.splitlines()[0].startswith("conceito · versao ")
     assert rl.stdout.splitlines()[0].endswith("· 1 itens")
 
+    # DT 1386: --termo casa também outros_rotulos como str (' / ') e como list
+    r_str = srv.rodar("listar", "biblioteca", "conceito", "--termo", "legistics")
+    assert r_str.returncode == 0
+    assert "tecnica-legislativa" in r_str.stdout and r_str.stdout.splitlines()[0].endswith("· 1 itens")
+    r_lst = srv.rodar("listar", "biblioteca", "conceito", "--termo", "peer review")
+    assert r_lst.returncode == 0
+    assert "revisao-de-codigo" in r_lst.stdout and r_lst.stdout.splitlines()[0].endswith("· 1 itens")
+
     r404 = srv.rodar("ler", "biblioteca", "conceito", "inexistente")
     _checar_erro_6_campos(r404, 1, "conceito-inexistente")
 
@@ -1271,6 +1281,16 @@ def test_criar_e_ensaiar_criar_conceito(srv):
     assert ts.validar_uuid(linhas[0])
     assert linhas[1].startswith("criada conceito:code-review · versao ")
     assert srv.chamadas[-1][2]["aplicar"] is True
+
+    # DT 1394: --motivo-aresta separado para a ligação hierárquica
+    r_ma = srv.rodar(
+        "ensaiar", "criar", "biblioteca", "conceito", "code-review-2",
+        "--rotulo", "Code review 2", "--lingua", "en",
+        "--definicao", "Exame.", "--natureza", "processo", "--estatuto", "doutrinario",
+        "--pai", "tecnica-legislativa", "--tipo", "generica", "--motivo-aresta", "motivo da aresta",
+    )
+    assert r_ma.returncode == 0, r_ma.stderr
+    assert srv.chamadas[-1][2]["pai"]["motivo"] == "motivo da aresta"
 
 
 def test_trocar_conceito_versao_rotulos_idempotencia_e_recusas(srv):
