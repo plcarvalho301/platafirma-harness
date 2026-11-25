@@ -1,28 +1,176 @@
 #!/usr/bin/env python3
-import sys, os, json
+"""acervo lote — leitura e recorte de lote do acervo com contagem de conceitos (DT 1392).
 
-def main():
-    if len(sys.argv) < 2:
-        sys.stderr.write("uso: acervo lote <id>\n")
-        sys.exit(2)
-    lote_id = sys.argv[1]
-    bancada_conf = os.path.expanduser("~/.config/platafirma/bancada")
-    if not os.path.exists(bancada_conf):
-        sys.exit(f"erro: {bancada_conf} não existe")
-    bancada = open(bancada_conf).read().strip()
-    manifesto = os.path.join(bancada, "registro", "lotes", f"{lote_id}.json")
-    if not os.path.exists(manifesto):
-        sys.exit(f"erro: manifesto do lote {lote_id} não encontrado ({manifesto})")
-    
-    with open(manifesto, "r", encoding="utf-8") as f:
-        lote = json.load(f)
-    
-    print(f"lote {lote_id}:")
-    for it in lote.get("itens", []):
-        obj = it.get("origem", {}).get("objeto", "?")
-        estado = it.get("veredito", "pendente")
-        print(f"  {obj}: {estado}")
-    print(f"estado geral: {lote.get('estado', '?')}")
+uso:
+  acervo lote <id> [--pendentes | --curadas] [--json]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import uuid
+from pathlib import Path
+from typing import Any
+
+PSQL_BIN = Path(os.environ.get("PF_ACERVO_PSQL") or (Path(__file__).resolve().parent / "psql"))
+
+USO = """uso:
+  acervo lote <id> [--pendentes | --curadas] [--json]
+"""
+
+
+def _consultar_lote_no_banco(lote_id: str) -> dict[str, Any] | None:
+    """Consulta acervo.lote, acervo.lote_obra e contagem de acervo.obra_trata_de via acervo psql."""
+    try:
+        lote_uuid = str(uuid.UUID(lote_id))
+    except ValueError:
+        return None
+    if not PSQL_BIN.is_file():
+        return None
+
+    sql = f"""
+SELECT json_build_object(
+  'id', l.id::text,
+  'estado', l.estado,
+  'ate', l.ate,
+  'semantico', l.semantico,
+  'itens', COALESCE((
+    SELECT json_agg(
+      json_build_object(
+        'posicao', lo.posicao,
+        'obra_id', lo.obra_id::text,
+        'titulo', COALESCE(o.titulo, lo.titulo, ''),
+        'arquivo', COALESCE(lo.arquivo, ''),
+        'veredito', lo.veredito,
+        'estado', lo.estado,
+        'conceitos', COALESCE(c.qtd, 0)
+      ) ORDER BY lo.posicao
+    )
+    FROM acervo.lote_obra lo
+    LEFT JOIN acervo.obra o ON o.id = lo.obra_id
+    LEFT JOIN (
+      SELECT obra_id, count(*)::int AS qtd
+      FROM acervo.obra_trata_de
+      GROUP BY obra_id
+    ) c ON c.obra_id = lo.obra_id
+    WHERE lo.lote_id = l.id
+  ), '[]'::json)
+)
+FROM acervo.lote l
+WHERE l.id = '{lote_uuid}';
+""".strip()
+
+    try:
+        r = subprocess.run(
+            ["bash", str(PSQL_BIN), "--banco", "rag", "-A", "-t"],
+            input=sql,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if r.returncode != 0:
+        return None
+    bruto = r.stdout.strip()
+    if not bruto:
+        return None
+    try:
+        dado = json.loads(bruto)
+    except ValueError:
+        return None
+    return dado if isinstance(dado, dict) else None
+
+
+def _carregar_manifesto_local(lote_id: str) -> dict[str, Any] | None:
+    bancada_conf = Path(os.path.expanduser("~/.config/platafirma/bancada"))
+    if not bancada_conf.is_file():
+        return None
+    bancada = bancada_conf.read_text(encoding="utf-8").strip()
+    manifesto = Path(bancada) / "registro" / "lotes" / f"{lote_id}.json"
+    if not manifesto.is_file():
+        return None
+    with manifesto.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _montar_recorte(lote: dict[str, Any], filtro: str | None) -> dict[str, Any]:
+    itens_brutos = list(lote.get("itens") or [])
+    obras: list[dict[str, Any]] = []
+    for it in itens_brutos:
+        obra_id = it.get("obra_id")
+        obj = (it.get("origem") or {}).get("objeto") if isinstance(it.get("origem"), dict) else None
+        obras.append({
+            "posicao": it.get("posicao"),
+            "obra_id": obra_id,
+            "titulo": it.get("titulo") or obj or "?",
+            "arquivo": it.get("arquivo") or "",
+            "veredito": it.get("veredito") or "pendente",
+            "estado": it.get("estado") or "pendente",
+            "conceitos": int(it.get("conceitos") or 0),
+        })
+
+    com_obra = [o for o in obras if o["obra_id"]]
+    base_contagem = com_obra if com_obra else obras
+    curadas = sum(1 for o in base_contagem if o["conceitos"] > 0)
+    pendentes = sum(1 for o in base_contagem if o["conceitos"] == 0)
+
+    if filtro == "pendentes":
+        selecionadas = [o for o in base_contagem if o["conceitos"] == 0]
+    elif filtro == "curadas":
+        selecionadas = [o for o in base_contagem if o["conceitos"] > 0]
+    else:
+        selecionadas = obras
+
+    return {
+        "id": lote.get("id"),
+        "estado": lote.get("estado", "?"),
+        "ate": lote.get("ate"),
+        "semantico": lote.get("semantico"),
+        "total_obras": len(base_contagem),
+        "curadas": curadas,
+        "pendentes": pendentes,
+        "filtro": filtro or "todas",
+        "obras": selecionadas,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="acervo lote", add_help=True)
+    parser.add_argument("lote_id", help="UUID do lote")
+    grupo = parser.add_mutually_exclusive_group()
+    grupo.add_argument("--pendentes", action="store_true", help="Mostra apenas obras sem conceito ligado (conceitos = 0)")
+    grupo.add_argument("--curadas", action="store_true", help="Mostra apenas obras com ao menos 1 conceito ligado")
+    parser.add_argument("--json", dest="como_json", action="store_true", help="Saída em JSON")
+    args = parser.parse_args(argv)
+
+    lote = _consultar_lote_no_banco(args.lote_id) or _carregar_manifesto_local(args.lote_id)
+    if not lote:
+        sys.stderr.write(f"erro: lote {args.lote_id} não encontrado no banco nem no manifesto local\n")
+        return 1
+
+    filtro = "pendentes" if args.pendentes else ("curadas" if args.curadas else None)
+    recorte = _montar_recorte(lote, filtro)
+
+    if args.como_json:
+        print(json.dumps(recorte, ensure_ascii=False, indent=2))
+        return 0
+
+    sem = "sim" if recorte["semantico"] is True else ("não" if recorte["semantico"] is False else "?")
+    ate = recorte["ate"] or "?"
+    print(f"lote {recorte['id']} · estado: {recorte['estado']} · ate: {ate} · semantico: {sem}")
+    print(f"obras: {recorte['total_obras']} total · {recorte['curadas']} curada(s) · {recorte['pendentes']} pendente(s)")
+    if filtro:
+        print(f"recorte: {filtro} ({len(recorte['obras'])} obra(s))")
+    for ob in recorte["obras"]:
+        ident = ob["obra_id"] or "-"
+        print(f"  {ident} · {ob['conceitos']} conceito(s) · {ob['titulo']} ({ob['veredito']}/{ob['estado']})")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
