@@ -1,5 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
-# pf — cliente de terminal que percorre proximo_args em laço sem recorte explícito (story #4442, t9)
+# paginar — cliente de terminal que percorre proximo_args em laço sem recorte explícito (story #4442, t9)
+# Não se chama pf: pf é o comando do posto e o alias pf -> platafirma da conta, e um pf aqui no PATH os colide.
 # capacidade: operacao
 # dono: engenharia
 # ruff: noqa: ERA001
@@ -55,9 +56,9 @@ def _executar_verbo_local(cmd_args: Sequence[str]) -> tuple[int, str, str]:
             check=False,
         )
     except FileNotFoundError:
-        return 2, "", f"pf: verbo desconhecido: {verbo}\n"
+        return 2, "", f"paginar: verbo desconhecido: {verbo}\n"
     except subprocess.TimeoutExpired:
-        return 5, "", f"pf: tempo esgotado ao executar {verbo}\n"
+        return 5, "", f"paginar: tempo esgotado ao executar {verbo}\n"
     return proc.returncode, proc.stdout, proc.stderr
 
 
@@ -92,7 +93,7 @@ def _verificar_versao(payload: Mapping[str, Any], versao_atual: str | None, erro
     if not versao:
         return versao_atual
     if versao_atual is not None and versao != versao_atual:
-        erro_io.write(f"pf: aviso: versão mudou durante a paginação ({versao_atual} -> {versao})\n")
+        erro_io.write(f"paginar: aviso: versão mudou durante a paginação ({versao_atual} -> {versao})\n")
     return versao
 
 
@@ -146,7 +147,7 @@ def executar_com_paginacao(
     rodar = _executar_verbo_local if executor is None else executor
 
     if not args:
-        erro_io.write("uso: pf <verbo> <ato> [args...]\n")
+        erro_io.write("uso: paginar <verbo> <ato> [args...]\n")
         return 2
     if tem_recorte_explicito(args):
         return _executar_unico(args, rodar, saida_io, erro_io)
@@ -157,7 +158,7 @@ def executar_com_paginacao(
     for _ in range(_MAX_PAGINAS):
         chave_cmd = tuple(atuais_json)
         if chave_cmd in vistos:
-            erro_io.write(f"pf: paginação repetiu a mesma chamada: {' '.join(atuais_json)}\n")
+            erro_io.write(f"paginar: paginação repetiu a mesma chamada: {' '.join(atuais_json)}\n")
             return 1
         vistos.add(chave_cmd)
 
@@ -174,7 +175,7 @@ def executar_com_paginacao(
             return 0
         atuais_json = prox
 
-    erro_io.write("pf: limite máximo de páginas excedido\n")
+    erro_io.write("paginar: limite máximo de páginas excedido\n")
     return 1
 
 

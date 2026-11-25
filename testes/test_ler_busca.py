@@ -1,4 +1,4 @@
-"""Testes de `busca ler`, `busca listar`, chave `registro/leitura.yaml` e `bin/pf` (story #4442, t9)."""
+"""Testes de `busca ler`, `busca listar`, chave `registro/leitura.yaml` e `bin/paginar` (story #4442, t9)."""
 from __future__ import annotations
 
 import importlib.machinery
@@ -23,7 +23,7 @@ def _carregar_modulo(nome: str, caminho: Path) -> Any:
 
 
 _MOD_BUSCA = _carregar_modulo("bin_busca_t9", RAIZ / "bin" / "busca")
-_MOD_PF = _carregar_modulo("bin_pf_t9", RAIZ / "bin" / "pf")
+_MOD_PF = _carregar_modulo("bin_paginar_t9", RAIZ / "bin" / "paginar")
 
 
 class _ClienteFalso:
@@ -169,7 +169,7 @@ def test_busca_ler_chave_desligada_roda_no_processo_local(monkeypatch: Any) -> N
     assert "ok local" in out.getvalue()
 
 
-def test_pf_percorre_proximo_args_em_laco_e_avisa_troca_de_versao() -> None:
+def test_paginar_percorre_proximo_args_em_laco_e_avisa_troca_de_versao() -> None:
     paginas = [
         (
             0,
@@ -208,7 +208,7 @@ def test_pf_percorre_proximo_args_em_laco_e_avisa_troca_de_versao() -> None:
     assert len(chamadas) == 2
 
 
-def test_pf_nao_entra_em_laco_com_recorte_explicito() -> None:
+def test_paginar_nao_entra_em_laco_com_recorte_explicito() -> None:
     chamadas: list[list[str]] = []
 
     def _exec(cmd: Any) -> tuple[int, str, str]:

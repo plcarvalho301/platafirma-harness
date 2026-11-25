@@ -416,7 +416,7 @@ testes/test_ler_extrator.py | lib/leitura/formatos.py lib/leitura/extrator.py
 testes/test_ler_moradas_git_banco.py | lib/leitura/resolvedor.py lib/leitura/moradas/__init__.py lib/leitura/moradas/git.py lib/leitura/moradas/banco.py
 # Story #4442 (Fita 4): unidades/setup/conferir/infra (t8), busca/pf/chave (t9) e aviso ler_arquivo (t10).
 testes/test_ler_unidades.py | deploy-harness/leitor.socket deploy-harness/leitor.service deploy-harness/leitor-extrator.socket deploy-harness/leitor-extrator@.service deploy-harness/setup-leitor.sh bin/_release/conferir/conferir.py bin/infra
-testes/test_ler_busca.py | bin/busca bin/pf registro/leitura.yaml lib/leitura/borda.py lib/leitura/cliente.py lib/leitura/daemon.py
+testes/test_ler_busca.py | bin/busca bin/paginar registro/leitura.yaml lib/leitura/borda.py lib/leitura/cliente.py lib/leitura/daemon.py
 testes/test_ler_arquivo_aviso.py | bin/ler_arquivo lib/leitura/__main__.py
 # Story #4441: registros, política e conversão de borda da escrita (t1).
 testes/test_escrita_borda.py | lib/escrita/tipos.py lib/escrita/politica.py lib/escrita/pedido.py registro/escrita.yaml registro/esquemas/retorno-escrever.schema.json
