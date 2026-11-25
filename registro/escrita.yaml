@@ -6,7 +6,7 @@ limites:
   retencao_repeticao_s: 86400
   espera_trava_passo_ms: 25
 
-verbos_ligados: []
+verbos_ligados: [repo]
 
 superficies_vedadas:
   nomes_arquivo:
@@ -46,8 +46,6 @@ superficies_vedadas:
 
 caminhos_protegidos:
   platafirma-core:
-    - acesso/politica.yaml
-    - acesso/sujeitos.yaml
     - acesso/pdp.py
     - acesso/pep.py
     - porta/decisao.py

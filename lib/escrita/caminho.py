@@ -105,12 +105,29 @@ def separar_chave_componente(chave: str) -> tuple[str, str | None, str]:
     return repo, chave_bancada, rel
 
 
+def _ler_ponteiro_git(caminho: Path) -> str:
+    try:
+        return caminho.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise RecusaEscrita(
+            ErroEscrita(
+                saida=2,
+                codigo="sem-bancada",
+                onde=str(caminho),
+                recebido=str(exc),
+                regra="ponteiro .git da bancada deve ser legível em UTF-8",
+                cura="saneie ou reabra a bancada com repo abrir",
+                proximo="",
+            )
+        ) from exc
+
+
 def _worktree_registrada_no_clone(clone_base: Path, wt_dir: Path) -> bool:
     """Confere se `wt_dir` é worktree registrada no clone-base sem depender do UID."""
     arq_git = wt_dir / ".git"
     if arq_git.is_symlink() or not arq_git.is_file():
         return False
-    linhas = arq_git.read_text(encoding="utf-8").splitlines()
+    linhas = _ler_ponteiro_git(arq_git).splitlines()
     if not linhas:
         return False
     primeira = linhas[0].strip()
@@ -124,7 +141,7 @@ def _worktree_registrada_no_clone(clone_base: Path, wt_dir: Path) -> bool:
     ponteiro_volta = admin_dir / "gitdir"
     if not ponteiro_volta.is_file():
         return False
-    volta = Path(ponteiro_volta.read_text(encoding="utf-8").strip()).resolve()
+    volta = Path(_ler_ponteiro_git(ponteiro_volta).strip()).resolve()
     return volta == arq_git.resolve()
 
 

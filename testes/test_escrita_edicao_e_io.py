@@ -307,3 +307,54 @@ def test_trava_ocupada_sai_3_e_varredura_de_orfaos(tmp_path: Path) -> None:
     assert removidos == [".pf-esc-antigo.tmp"]
     assert not velho.exists()
     assert novo.exists()
+
+
+def test_io_atomico_endurecimentos_ti(tmp_path: Path) -> None:
+    # raiz_wt ausente -> RecusaEscrita saída 3 (não vaza FileNotFoundError)
+    dest_ausente = DestinoIO(
+        raiz_wt=tmp_path / "wt-nao-existe",
+        componentes_bancada=("platafirma-harness", "engenharia", "4441-ato-escrever"),
+        componentes_alvo=("a.txt",),
+        estado_dir=tmp_path / "estado",
+    )
+    with pytest.raises(RecusaEscrita) as exc_aus:
+        executar_escrita_atomica(dest_ausente, lambda _a: (b"x\n", False))
+    assert exc_aus.value.saida == 3
+    assert exc_aus.value.primeiro.codigo == "morada-sem-resposta"
+
+    # Alvo existente acima do teto de leitura -> saída 2 tamanho-excedido
+    wt = _criar_worktree_simulada(tmp_path, "platafirma-harness", "engenharia", "4441-ato-escrever")
+    (wt / "grande.txt").write_bytes(b"a" * 200)
+    dest_teto = DestinoIO(
+        raiz_wt=tmp_path / "wt",
+        componentes_bancada=("platafirma-harness", "engenharia", "4441-ato-escrever"),
+        componentes_alvo=("grande.txt",),
+        estado_dir=tmp_path / "estado",
+        teto_leitura_bytes=100,
+    )
+    with pytest.raises(RecusaEscrita) as exc_teto:
+        executar_escrita_atomica(dest_teto, lambda _a: (b"curto\n", False))
+    assert exc_teto.value.saida == 2
+    assert exc_teto.value.primeiro.codigo == "tamanho-excedido"
+
+    # Prazo vencido depois da trava e antes de os.replace -> morada-sem-resposta (não bancada-ocupada)
+    dest_prazo = DestinoIO(
+        raiz_wt=tmp_path / "wt",
+        componentes_bancada=("platafirma-harness", "engenharia", "4441-ato-escrever"),
+        componentes_alvo=("prazo.txt",),
+        estado_dir=tmp_path / "estado",
+        prazo_ns=1,
+    )
+    with pytest.raises(RecusaEscrita) as exc_prazo:
+        executar_escrita_atomica(dest_prazo, lambda _a: (b"ok\n", False))
+    assert exc_prazo.value.saida == 3
+    assert exc_prazo.value.primeiro.codigo == "morada-sem-resposta"
+    assert not (wt / "prazo.txt").exists()
+
+    # .git corrompido (bytes não-UTF-8) não vaza UnicodeDecodeError
+    wt_corrompido = _criar_worktree_simulada(tmp_path, "repo-corrompido", "engenharia", "x")
+    (wt_corrompido / ".git").write_bytes(b"\xff\xfe")
+    with pytest.raises(RecusaEscrita) as exc_git:
+        resolver_bancada("repo-corrompido@x:a.txt", "engenharia", tmp_path)
+    assert exc_git.value.saida == 2
+    assert exc_git.value.primeiro.codigo == "sem-bancada"

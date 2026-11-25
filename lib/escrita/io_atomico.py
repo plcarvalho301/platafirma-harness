@@ -49,6 +49,7 @@ class DestinoIO:
     estado_dir: Path
     prazo_ns: int = 0
     passo_ms: int = 25
+    teto_leitura_bytes: int = 0
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,34 @@ def _erro_trava_ocupada(onde: str) -> RecusaEscrita:
     )
 
 
+def _erro_prazo_antes_replace(onde: str) -> RecusaEscrita:
+    return RecusaEscrita(
+        ErroEscrita(
+            saida=3,
+            codigo="morada-sem-resposta",
+            onde=onde,
+            recebido="prazo esgotado antes da troca atômica",
+            regra="operação expirada antes do ponto de não volta sai 3",
+            cura="repita a chamada com prazo suficiente",
+            proximo="",
+        )
+    )
+
+
+def _erro_alvo_grande(onde: str, teto_bytes: int) -> RecusaEscrita:
+    return RecusaEscrita(
+        ErroEscrita(
+            saida=2,
+            codigo="tamanho-excedido",
+            onde=onde,
+            recebido=f">{teto_bytes} bytes",
+            regra=f"alvo existente excede o teto de leitura de {teto_bytes} bytes",
+            cura="edite o arquivo fora do ato escrever ou reduza o tamanho do alvo",
+            proximo="",
+        )
+    )
+
+
 def _erro_os_antes_replace(onde: str, exc: OSError) -> RecusaEscrita:
     if exc.errno == errno.ENOSPC:
         return RecusaEscrita(
@@ -175,6 +204,21 @@ def abrir_diretorio_seguro(
         raise
 
 
+def _criar_e_abrir_dir(pai_fd: int, nome: str) -> int:
+    try:
+        os.mkdir(nome, MODO_DIR_BANCADA, dir_fd=pai_fd)
+        novo_fd = os.open(nome, _FLAGS_DIR_SEGURO, dir_fd=pai_fd)
+    except OSError as exc:
+        raise _erro_os_antes_replace(nome, exc) from exc
+    try:
+        os.fchmod(novo_fd, MODO_DIR_BANCADA)
+        os.fsync(pai_fd)
+    except OSError as exc:
+        os.close(novo_fd)
+        raise _erro_os_antes_replace(nome, exc) from exc
+    return novo_fd
+
+
 def _abrir_ou_criar_dir(pai_fd: int, nome: str, *, criar_ausentes: bool) -> int:
     try:
         return os.open(nome, _FLAGS_DIR_SEGURO, dir_fd=pai_fd)
@@ -182,14 +226,7 @@ def _abrir_ou_criar_dir(pai_fd: int, nome: str, *, criar_ausentes: bool) -> int:
         if exc.errno == errno.ELOOP:
             raise _erro_atalho(nome) from exc
         if exc.errno == errno.ENOENT and criar_ausentes:
-            os.mkdir(nome, MODO_DIR_BANCADA, dir_fd=pai_fd)
-            novo_fd = os.open(nome, _FLAGS_DIR_SEGURO, dir_fd=pai_fd)
-            try:
-                os.fchmod(novo_fd, MODO_DIR_BANCADA)
-            except Exception:
-                os.close(novo_fd)
-                raise
-            return novo_fd
+            return _criar_e_abrir_dir(pai_fd, nome)
         if exc.errno == errno.ENOTDIR:
             st = os.stat(nome, dir_fd=pai_fd, follow_symlinks=False)
             if stat.S_ISLNK(st.st_mode):
@@ -237,17 +274,21 @@ def trava_bancada(
             os.close(lock_fd)
 
 
-def _ler_fd_inteiro(fd: int) -> bytes:
+def _ler_fd_inteiro(fd: int, *, teto_bytes: int = 0, onde: str = "") -> bytes:
     partes: list[bytes] = []
+    total = 0
     bloco = os.read(fd, 65_536)
     while bloco:
+        total += len(bloco)
+        if teto_bytes > 0 and total > teto_bytes:
+            raise _erro_alvo_grande(onde, teto_bytes)
         partes.append(bloco)
         bloco = os.read(fd, 65_536)
     return b"".join(partes)
 
 
-def ler_alvo_seguro(pai_fd: int, nome: str) -> AlvoLido:
-    """Abre o alvo com O_NONBLOCK | O_NOFOLLOW e confere S_ISREG e st_nlink == 1."""
+def ler_alvo_seguro(pai_fd: int, nome: str, *, teto_bytes: int = 0) -> AlvoLido:
+    """Abre o alvo com O_NONBLOCK | O_NOFOLLOW e confere S_ISREG, st_nlink == 1 e teto."""
     try:
         fd = os.open(nome, _FLAGS_ARQ_LEITURA, dir_fd=pai_fd)
     except OSError as exc:
@@ -264,9 +305,10 @@ def ler_alvo_seguro(pai_fd: int, nome: str) -> AlvoLido:
             raise _erro_superficie(nome, f"modo {oct(st.st_mode)}")
         if st.st_nlink != 1:
             raise _erro_superficie(nome, f"st_nlink={st.st_nlink}")
-        return AlvoLido(
-            existe=True, dados=_ler_fd_inteiro(fd), modo=stat.S_IMODE(st.st_mode)
-        )
+        if teto_bytes > 0 and st.st_size > teto_bytes:
+            raise _erro_alvo_grande(nome, teto_bytes)
+        dados = _ler_fd_inteiro(fd, teto_bytes=teto_bytes, onde=nome)
+        return AlvoLido(existe=True, dados=dados, modo=stat.S_IMODE(st.st_mode))
     finally:
         os.close(fd)
 
@@ -308,20 +350,20 @@ def gravar_atomico_em_dir(
     modo_final: int,
     prazo_ns: int = 0,
 ) -> None:
-    """Grava temporário .pf-esc-*.tmp, sincroniza, aplica fchmod, troca e faz fsync do pai."""
+    """Grava temporário .pf-esc-*.tmp, aplica fchmod, sincroniza, troca e faz fsync do pai."""
     tmp_nome = f"{PREFIXO_TMP}{secrets.token_hex(8)}{SUFIXO_TMP}"
     tmp_fd = -1
     trocou = False
     try:
         tmp_fd = os.open(tmp_nome, _FLAGS_TMP_CRIACAO, MODO_TMP_INICIAL, dir_fd=pai_fd)
         _escrever_todos(tmp_fd, dados)
-        os.fsync(tmp_fd)
         os.fchmod(tmp_fd, modo_final)
+        os.fsync(tmp_fd)
         os.close(tmp_fd)
         tmp_fd = -1
         _conferir_destino_antes_replace(pai_fd, nome)
         if prazo_ns > 0 and time.monotonic_ns() >= prazo_ns:
-            raise _erro_trava_ocupada(nome)
+            raise _erro_prazo_antes_replace(nome)
         os.replace(tmp_nome, nome, src_dir_fd=pai_fd, dst_dir_fd=pai_fd)
         trocou = True
         os.fsync(pai_fd)
@@ -362,7 +404,10 @@ def executar_escrita_atomica(
     transformador: Callable[[bytes | None], tuple[bytes, bool]],
 ) -> ResultadoIO:
     """Executa a sequência POSIX completa sob trava da bancada no estado do escritor."""
-    raiz_fd = os.open(str(destino.raiz_wt), _FLAGS_DIR_SEGURO)
+    try:
+        raiz_fd = os.open(str(destino.raiz_wt), _FLAGS_DIR_SEGURO)
+    except OSError as exc:
+        raise _erro_os_antes_replace(str(destino.raiz_wt), exc) from exc
     try:
         bancada_fd = abrir_diretorio_seguro(
             raiz_fd, destino.componentes_bancada, criar_ausentes=False
@@ -379,7 +424,9 @@ def executar_escrita_atomica(
                 )
                 try:
                     nome = destino.componentes_alvo[-1]
-                    existente = ler_alvo_seguro(pai_fd, nome)
+                    existente = ler_alvo_seguro(
+                        pai_fd, nome, teto_bytes=destino.teto_leitura_bytes
+                    )
                     dados_atuais = existente.dados if existente.existe else None
                     modo_anterior = existente.modo if existente.existe else None
                     versao_anterior = (
