@@ -32,10 +32,6 @@ def _registrar_contorno_write_file(
     """Registra uso da variante depreciada write_file como contorno operacional."""
     destino = (os.environ.get("PF_CONTORNO_LOG") or "").strip()
     if not destino:
-        ops_dir = (os.environ.get("OPS_LOG_DIR") or "").strip()
-        if ops_dir:
-            destino = str(Path(ops_dir) / "write_file-contorno.jsonl")
-    if not destino:
         return
     linha = json.dumps(
         {
