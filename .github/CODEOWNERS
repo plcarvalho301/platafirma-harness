@@ -1,0 +1,5 @@
+# Caminhos protegidos da harness (story #4441)
+/lib/escrita/ @plcarvalho301
+/lib/leitura/ @plcarvalho301
+/registro/escrita.yaml @plcarvalho301
+/deploy-harness/ @plcarvalho301
