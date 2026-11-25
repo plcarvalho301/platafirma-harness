@@ -241,7 +241,7 @@ def eh_segredo(
     norm = _normalizar_posix(bruto)
     partes = _segmentos_norm(norm)
     if not partes:
-        return True
+        return norm != "/"
     relativo = not norm.startswith("/")
     if _eh_nome_ou_segmento_vedado(partes, relativo=relativo):
         return True

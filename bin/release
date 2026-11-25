@@ -822,8 +822,10 @@ for ln in sys.stdin.read().splitlines():
   if [ -z "$out" ]; then
     if [ "$como_json" -eq 1 ]; then
       python3 -c 'import sys, json; print(json.dumps({"familia": sys.argv[1], "termo": sys.argv[2], "ocorrencias": [], "total": 0, "motivo": "termo não encontrado no servido"}, indent=2))' "$repo" "$termo"
+    else
+      printf 'motivo: termo '\''%s'\'' não encontrado no servido %s\n' "$termo" "$repo"
     fi
-    return 1
+    return 0
   fi
 
   if [ "$como_json" -eq 1 ]; then

@@ -139,8 +139,10 @@ def test_release_ler_e_procurar_vedam_superficies(tmp_path: Path) -> None:
             text=True,
             check=False,
         )
-        assert r_proc_so_vedado.returncode == 1, r_proc_so_vedado.stderr
-        assert r_proc_so_vedado.stdout == ""
+        assert r_proc_so_vedado.returncode == 0, r_proc_so_vedado.stderr
+        assert "acesso/politica.yaml" not in r_proc_so_vedado.stdout
+        assert "não encontrado" in r_proc_so_vedado.stdout
+        assert r_proc_so_vedado.stderr == ""
 
         r_proc_misto = subprocess.run(
             [str(BIN_RELEASE), "procurar", "platafirma-core", "politica|regra_secreta_xyz"],
@@ -188,8 +190,10 @@ def test_repo_ler_e_procurar_vedam_superficies(tmp_path: Path) -> None:
         text=True,
         check=False,
     )
-    assert r_proc_so_vedado.returncode == 1
-    assert r_proc_so_vedado.stdout == ""
+    assert r_proc_so_vedado.returncode == 0, r_proc_so_vedado.stderr
+    assert ".env" not in r_proc_so_vedado.stdout
+    assert "não encontrado" in r_proc_so_vedado.stdout
+    assert r_proc_so_vedado.stderr == ""
 
     r_proc_misto = subprocess.run(
         [str(BIN_REPO), "procurar", "platafirma-core@4442-teste", "politica|TOKEN_SECRETO_XYZ"],
