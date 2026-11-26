@@ -335,7 +335,7 @@ def test_c9_binario_fora_da_tabela_recusa_com_nome(tmp_path, nome, dados, tipo):
     r = L.le(p)
     assert r["recusado"] is True and r["motivo"] == "sem_leitor" and r["tipo"] == tipo
     assert "conteudo" not in r and r["versao"] and r["classe_erro"] == "binario"
-    assert "§7.4" in r["cura"]
+    assert "tabela de formatos do acervo" in r["cura"]
 
 
 # --- C10 sumário Markdown · C11 sumário Python ----------------------------------------------------
