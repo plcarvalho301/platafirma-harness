@@ -18,7 +18,7 @@ Duas fontes, por necessidade: quem tem shell na imagem traz o veredito do
 proprio healthcheck do Docker; quem nao tem (oauth2-proxy, cloudflared)
 e sondado daqui, de fora, por um contendor-posto que esta na mesma rede.
 
-Depois da saude, a passada grava a SERIE dos quatro eixos do host no banco de eventos de plataforma (card #3922): le
+Depois da saude, a passada grava a SERIE dos quatro eixos do host no banco de eventos de plataforma: le
 os eixos que a cadencia do registro diz que vencem, uma coleta so por eixo, e leva o evento pela fila local, que repoe o
 que o banco mudo nao aceitou. Erro dessa passada nunca muda o exit do sinal.
 """
@@ -42,23 +42,23 @@ from urllib.parse import urlencode, urlparse
 
 import yaml
 
-# Raizes de producao (card #3010): o sinal e estado da instancia, nunca da release.
+# Raizes de producao: o sinal e estado da instancia, nunca da release.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-import oplog  # noqa: E402  (so lib/oplog abre o bruto da porta: arq:0123 §3)
+import oplog  # noqa: E402  (so lib/oplog abre o bruto da porta)
 import raizes  # noqa: E402
 import topologia
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "_metrica"))
-import cadencia  # noqa: E402  (o que vence a cada passada: spec eixos-do-host R15)
+import cadencia  # noqa: E402  (o que vence a cada passada)
 import eventos  # noqa: E402  (o cliente da rota de escrita do banco de eventos de plataforma)
 
 # ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] (grava var/sinal/servicos.json; override so para teste)
 SAIDA = str(raizes.instancia() / "var" / "sinal" / "servicos.json")
-# Limiar para abertura de incidente (card #3253, pós-morte do #3251): 10 min (600s) por padrão.
+# Limiar para abertura de incidente: 10 min (600s) por padrão.
 LIMIAR_INCIDENTE_SEGUNDOS = int(os.environ.get("SINAL_INCIDENTE_LIMIAR_SEGUNDOS", "600"))
 # POSTO: contêiner COM curl e NA rede `conhecimento` (plataforma-wiki_default), que é
 # onde os oauth2-proxy vivem. Era `platafirma-core-vikunja-proxy-1`, desligado com o
-# Vikunja (#172): a sonda passou a devolver "No such container" e os dois proxies saíam
+# rastreador anterior: a sonda passou a devolver "No such container" e os dois proxies saíam
 # FORA com o serviço de pé — painel que acusa queda falsa treina todo mundo a ignorá-lo.
 # O landing NÃO serve: está só na rede `borda` e não enxerga os proxies.
 POSTO = "plataforma-wiki-mediawiki-1"
@@ -82,7 +82,7 @@ POR_HEALTHCHECK = {
 
 # Imagem sem shell: sonda de fora, pelo posto.
 # (nome, posto, url, exige-no-corpo, reprova-se-contem)
-# O cloudflared resolve a porta dinamicamente de `--metrics` no compose do core (DT 378).
+# O cloudflared resolve a porta dinamicamente de `--metrics` no compose do core.
 POR_SONDA_EXTERNA = [
     ("oauth2-proxy", POSTO, "http://oauth2-proxy:4180/ping", None, None),
     ("oauth2-proxy-harness", POSTO, "http://oauth2-proxy-harness:4180/ping", None, None),
@@ -99,9 +99,9 @@ SEM_SONDA = {
 }
 
 # Servico -> unit systemd --user oneshot (disparada por timer, sem container e sem
-# healthcheck proprio, card #3141 passo 9). Em execucao (ActiveState=activating) sai
+# healthcheck proprio). Em execucao (ActiveState=activating) sai
 # como degradado; fora disso Result=success e no-ar (com histerese em
-# processa_estado_item, DT 550) e qualquer outro valor e fora.
+# processa_estado_item) e qualquer outro valor e fora.
 POR_SYSTEMD_RESULT = {
     "casa-site-publicar": "casa-site-publicar.service",
 }
@@ -162,7 +162,7 @@ def do_sonda_externa(nome, posto, url, exige, proibido):
 
 
 def do_cloudflared() -> dict:
-    """Sonda o `/ready` do cloudflared na porta declarada em `--metrics` no compose do core (DT 378)."""
+    """Sonda o `/ready` do cloudflared na porta declarada em `--metrics` no compose do core."""
     porta, origem = topologia.porta_metricas_cloudflared(env_var="SINAL_CORE_COMPOSE")
     if porta is None:
         return {"estado": "sem-sinal", "exercitado": origem, "motivo": origem}
@@ -248,7 +248,7 @@ def _sondar_url_borda(url: str, timeout: float = BORDA_TIMEOUT_PADRAO_S) -> tupl
 
 
 def do_borda_ingress(url_para_host: Callable[[str], str] | None = None) -> dict:
-    """Sonda os hostnames públicos do ingress pela borda externa (DT 347)."""
+    """Sonda os hostnames públicos do ingress pela borda externa."""
     caminho = _caminho_ingress()
     hosts, erro = _hostnames_publicos_ingress(caminho)
     if erro:
@@ -318,7 +318,7 @@ def do_gpu():
     return {"estado": "fora", "exercitado": onde, "motivo": motivo}
 
 
-# Montagens do host (card #3467, pos-morte do #3204): a raiz foi a somente leitura em 30/09 e so se
+# Montagens do host: a raiz foi a somente leitura em 30/09 e so se
 # soube por escrita que falhou. ambiente: SINAL_MONTAGENS[=/proc/mounts] (override so para teste)
 MONTAGENS_PADRAO = "/proc/mounts"
 CAMPOS_DE_MONTAGEM = 4                            # dispositivo, ponto, tipo, opcoes
@@ -357,7 +357,7 @@ def parse_dt(iso_str: str) -> datetime:
     return datetime.fromisoformat(iso_str)
 
 
-# Log e estado do contendor no incidente (card #3469): #3382 e #3383 ficaram sem causa porque o log
+# Log e estado do contendor no incidente: incidentes anteriores ficaram sem causa porque o log
 # saiu com a recriacao do contendor. Capturado ao abrir o incidente, antes de qualquer recriacao, e
 # SEMPRE por `redigir`: o corpo do item e lido por gente e indexado, segredo nao entra.
 LINHAS_DE_LOG = 80                  # `docker logs --tail`
@@ -481,7 +481,7 @@ def captura_contendor(nome: str) -> str:
     return "\n".join(linhas) + "\n"
 
 def _incidente_aberto(tarefas_bin: str, nome: str) -> str | None:
-    """Procura incidente aberto para `nome:` no rastreador; falha na listagem não bloqueia abertura (DT 550)."""
+    """Procura incidente aberto para `nome:` no rastreador; falha na listagem não bloqueia abertura."""
     rc, out, _ = roda([tarefas_bin, "listar", "--cadeira", "ti", "--json"], timeout=30)
     if rc != 0 or not out.strip():
         return None
@@ -517,7 +517,7 @@ def _eh_unit_oneshot(nome: str, item: dict) -> bool:
 
 
 def _tratar_nao_fora(nome: str, item: dict, anterior_item: dict | None) -> None:
-    """Limpa o rastro imediatamente, salvo em unit oneshot sob histerese de N leituras `no-ar` (DT 550)."""
+    """Limpa o rastro imediatamente, salvo em unit oneshot sob histerese de N leituras `no-ar`."""
     if (
         not _eh_unit_oneshot(nome, item)
         or not anterior_item
@@ -731,13 +731,13 @@ def coleta():
     return {"gerado_em": agora(), "runtime": runtime, "servicos": servicos}
 
 
-# --- a porta, medida de fora (card #3919; spec eixos-do-host R7 e R8) ------------------------------------
+# --- a porta, medida de fora -----------------------------------------------------------------------------
 #
 # A sonda mede a porta pelo endereco publico com o token do cliente da sonda, chamando um ato leve, e nunca
 # abre sessao: o ato leve e a tool `sessao` sem ato, o formato que `oplog.origem_da_linha` ja reconhece como
 # sonda e que nao monta pacote nem cunha sessao (a abertura monta ~12 mil tokens e uma sessao duravel).
 # Erro de transporte e a requisicao que nao deixou linha de giro na porta; erro de verbo e a classe do giro,
-# nunca o exit 1 (arq:0123). O tempo que a porta registrou para o mesmo giro vem do bruto do dia, ao lado do
+# nunca o exit 1. O tempo que a porta registrou para o mesmo giro vem do bruto do dia, ao lado do
 # tempo medido de fora: a diferenca e o custo do tunel. O token nunca se imprime, nem em erro.
 # ambiente: SINAL_PORTA_URL[=https://ops.platafirma.org/mcp] · SINAL_PORTA_TOOL[=sessao] ·
 #   SINAL_SONDA_CLIENTE[=sonda] (clientId no realm; o segredo mora em <instancia>/segredos/keycloak/<clientId>) ·
@@ -831,12 +831,12 @@ def giro_da_porta(tool: str, t0: datetime, t1: datetime, pasta: Path | None = No
     """A linha de giro que a porta gravou no bruto do dia para a chamada da sonda (tool igual, sem ato, sem
     sessao) entre t0 e t1, com a folga do relogio. Espera um instante pela linha, que a porta escreve ao
     terminar o giro. Devolve {dur_ms, classe} ou None quando a porta nao deixou linha."""
-    dia = oplog.dia_local(t0.isoformat())          # o dia do arquivo e o dia local da porta (spec log-de-negocio §3)
+    dia = oplog.dia_local(t0.isoformat())          # o dia do arquivo e o dia local da porta
     folga = timedelta(seconds=SINAL_JANELA_DO_GIRO_S)
     for atraso in _atrasos(espera_s):
         time.sleep(atraso)
         achado = None
-        for reg in oplog.ler(dia, diretorio_=pasta, tool=tool):    # so `lib/oplog` abre o bruto (arq:0123 §3)
+        for reg in oplog.ler(dia, diretorio_=pasta, tool=tool):    # so `lib/oplog` abre o bruto
             try:
                 ts = parse_dt(reg["ts"])
             except (ValueError, KeyError, TypeError):
@@ -932,7 +932,7 @@ def _texto_da_medida(m: dict) -> str:
     return "porta: " + (", ".join(partes) or "sem numero")
 
 
-# --- a serie dos eixos (card #3922; spec eixos-do-host R15; spec banco-de-eventos-de-plataforma R8 e R13) ------------
+# --- a serie dos eixos -----------------------------------------------------------------------------------------------
 #
 # Depois da coleta de saude e do arquivo de sinal, a passada grava a serie dos quatro eixos do host. O registro de cadencia
 # (registro/cadencia-eixos.json) diz o que vence neste minuto. Cada eixo vencido e lido UMA vez, pelo ato
