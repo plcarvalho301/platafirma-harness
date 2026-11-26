@@ -1734,6 +1734,7 @@ abrir_direto_em_main() {
   fi
   local estado_arvore="arvore limpa"; [ "$sujo" -eq 0 ] || estado_arvore="arvore suja ($sujo)"
   local rotulo="bancada aberta"; [ "$ja" -eq 0 ] || rotulo="bancada já aberta"
+  prepara_bancada_escritor "$wt_dir"
   printf '%s: %s (ramo %s @ %s, direto em main: atras de origin/main: %s, a frente: %s, %s)%s\n' \
     "$rotulo" "$wt_dir" "$ramo" "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)" "$atras" "$frente" \
     "$estado_arvore" "$andou"
