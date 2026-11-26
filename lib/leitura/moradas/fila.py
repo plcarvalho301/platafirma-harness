@@ -1,4 +1,4 @@
-"""Adaptador da morada `fila` (Valkey sem consumo, lousa e execuções) (story #4442, t6)."""
+"""Adaptador da morada `fila` (Valkey sem consumo, lousa e execuções)."""
 from __future__ import annotations
 
 import contextvars

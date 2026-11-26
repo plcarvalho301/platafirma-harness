@@ -3,7 +3,7 @@
 Fonte única de verdade para a camada de leitura (`lib/leitura`) e de escrita
 (`lib/escrita`) do harness na casa nova, preservando integralmente a
 funcionalidade das duas tools enquanto restringe o alcance às moradas
-declaradas (spec porta-so-verbo §§4.1 e 4.6; spec ler-arquivo §9).
+declaradas.
 """
 from __future__ import annotations
 
@@ -314,7 +314,7 @@ def nega_morada_leitura(
     ):
         return None
     moradas = ", ".join((*estaticas, raiz_bancada or "(bancada nao declarada)"))
-    return f"fora de morada: ler_arquivo alcanca so {moradas} (spec porta-so-verbo §4.6)"
+    return f"fora de morada: ler_arquivo alcanca so {moradas}"
 
 
 def _nome_texto(nome: str) -> bool:

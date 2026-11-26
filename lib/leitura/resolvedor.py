@@ -235,7 +235,7 @@ def ficha_inteira(retrato: Consulta, f: Ficha, *, com_ligacoes: bool = True) -> 
     return _ordenar_ficha(dict(linhas[0]["ficha"]), com_ligacoes=com_ligacoes)
 
 
-# ================================================================== estágios 3 e 4 (story #4442, t5)
+# ================================================================== estágios 3 e 4
 
 _RE_CHAVE_CAN = re.compile(r"^[a-z0-9][a-z0-9-]*:[a-z0-9][a-z0-9._/-]*$")
 _RE_SLUG_VALIDO = re.compile(r"^[a-z0-9][a-z0-9._/-]*$")

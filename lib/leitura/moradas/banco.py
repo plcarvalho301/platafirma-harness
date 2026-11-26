@@ -1,4 +1,4 @@
-"""Adaptador da morada banco: PostgreSQL direto com pf_leitor_ro (story #4442, t5).
+"""Adaptador da morada banco: PostgreSQL direto com pf_leitor_ro.
 
 Executa consultas parametrizadas em transação curta
 `BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY` com

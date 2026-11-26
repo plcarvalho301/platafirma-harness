@@ -1,4 +1,4 @@
-"""Extrator isolado de formatos binários e compostos via SCM_RIGHTS (story #4442, t4).
+"""Extrator isolado de formatos binários e compostos via SCM_RIGHTS.
 
 Roda em instância dedicada (unidade modelo `leitor-extrator@.service` na conta
 `pf-leitor-extrator` ou subprocesso confinado com ambiente limpo e rlimits) recebendo

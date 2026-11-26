@@ -1,4 +1,4 @@
-"""Núcleo puro de fatiamento UTF-8, codificação em 5 passos e sumário (story #4442, t3)."""
+"""Núcleo puro de fatiamento UTF-8, codificação em 5 passos e sumário."""
 from __future__ import annotations
 
 import ast

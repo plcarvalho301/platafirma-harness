@@ -643,7 +643,7 @@ class SessaoLeitura:
         classes_uuids: Sequence[str],
         ligacoes: Sequence[PredicadoLigacao],
     ) -> list[dict[str, Any]]:
-        """No vazio de `--ligacao`, verifica ligações no sentido oposto ou por outra propriedade (DT 1370)."""
+        """No vazio de `--ligacao`, verifica ligações no sentido oposto ou por outra propriedade."""
         if not ligacoes:
             return []
         if hasattr(self._con, "ligacoes_opostas"):

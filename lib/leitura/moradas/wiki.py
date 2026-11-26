@@ -1,4 +1,4 @@
-"""Adaptador da morada `wiki` (MediaWiki interna) do componente leitura (story #4442, t6)."""
+"""Adaptador da morada `wiki` (MediaWiki interna) do componente leitura."""
 from __future__ import annotations
 
 import json

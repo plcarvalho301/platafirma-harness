@@ -1,4 +1,4 @@
-"""Adaptador da morada `cofre` — recusa no leitor geral e delegação à ponta isolada (story #4442, t6)."""
+"""Adaptador da morada `cofre` — recusa no leitor geral e delegação à ponta isolada."""
 from __future__ import annotations
 
 from collections.abc import Sequence

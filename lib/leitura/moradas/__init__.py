@@ -1,4 +1,4 @@
-"""Registro e despacho dos sete adaptadores de morada do componente leitura (story #4442, t5-t6)."""
+"""Registro e despacho dos sete adaptadores de morada do componente leitura."""
 from __future__ import annotations
 
 import hashlib

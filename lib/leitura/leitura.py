@@ -1,4 +1,4 @@
-"""leitura.py — a leitura de arquivo da porta: `ler_arquivo` (spec ler-arquivo, DT 919).
+"""leitura.py — a leitura de arquivo da porta: `ler_arquivo`.
 
 Puro no núcleo (`le`): não importa FastMCP, não fala com a rede, não grava auditoria.
 `ler` envolve `le` com o confinamento de morada, segredos e fila (`morada.py`, achado 921)
@@ -43,7 +43,7 @@ UTF16_MAX = 16 * 1024 * 1024         # transcodificação em memória de UTF-16/
 SUMARIO_MAX = 8 * 1024 * 1024
 MARCO = 1_024                        # um marco de posição a cada MARCO linhas
 INDICES_MAX = 64                     # entradas do cache de índice
-CACHE_EXTRA_BYTES_MAX = 32 * 1024 * 1024  # orçamento global de texto extraído em Indice.extra (DT 899)
+CACHE_EXTRA_BYTES_MAX = 32 * 1024 * 1024  # orçamento global de texto extraído em Indice.extra
 CABECA_TIPO = 8_192                  # bytes que decidem o tipo real
 LA_TEM_MAX = 40
 # --- réguas de implementação, não de contrato --------------------------------------------------
@@ -230,7 +230,7 @@ def esvazia_cache() -> None:
 
 
 def _extra_obter(idx: Indice, chave: Any) -> Any:
-    """Leitura thread-safe de `idx.extra` sob `_TRAVA` (DT 899)."""
+    """Leitura thread-safe de `idx.extra` sob `_TRAVA`."""
     with _TRAVA:
         val = idx.extra.get(chave)
         if val is not None:
@@ -241,7 +241,7 @@ def _extra_obter(idx: Indice, chave: Any) -> Any:
 
 
 def _extra_gravar(idx: Indice, chave: Any, valor: Any, custo_bytes: int = 64) -> Any:
-    """Gravação thread-safe em `idx.extra` com orçamento global `CACHE_EXTRA_BYTES_MAX` (DT 899)."""
+    """Gravação thread-safe em `idx.extra` com orçamento global `CACHE_EXTRA_BYTES_MAX`."""
     k = (id(idx), chave)
     with _TRAVA:
         if k in _EXTRA_LRU:
@@ -857,7 +857,7 @@ _CLASSE_EXIT = {
 
 
 def envelope_erro(exit_code: int, falta: str, proximo: str | None = None, **extra: Any) -> dict:
-    """Forma única de recusa ou erro da porta (arq:0064 §6)."""
+    """Forma única de recusa ou erro da porta."""
     d = dict(extra)
     d["exit_code"] = exit_code
     d["falta"] = falta
@@ -1264,7 +1264,7 @@ def _le_membro(fh: Any, p: Path, idx: Indice, tp: dict, ped: _Pedido) -> dict:
 
 
 def _le_gzip(fh: Any, p: Path, idx: Indice, ped: _Pedido) -> dict:
-    """GZIP guardado no acervo: descomprime em fluxo até MEMBRO_MAX e razão máxima (DT 832/899)."""
+    """GZIP guardado no acervo: descomprime em fluxo até MEMBRO_MAX e razão máxima."""
     try:
         dados = _formatos.ler_gzip_seguro(
             fh,
@@ -1311,7 +1311,7 @@ def _despacha_binario(fh: Any, p: Path, idx: Indice, tp: dict, ped: _Pedido) -> 
         return _le_formato(fh, p, idx, tp, (ped, None))
     return envelope_erro(
         2,
-        f"{tipo} não está na tabela de formatos do acervo (spec ler-arquivo §7.4) e não se lê como texto",
+        f"{tipo} não está na tabela de formatos do acervo e não se lê como texto",
         recusado=True,
         motivo="sem_leitor",
         tipo=tipo,
@@ -1319,8 +1319,8 @@ def _despacha_binario(fh: Any, p: Path, idx: Indice, tp: dict, ped: _Pedido) -> 
         bytes_total=idx.tamanho,
         versao=idx.versao,
         cura=(
-            f"{tipo} não está na tabela de formatos do acervo (spec ler-arquivo "
-            "§7.4) e não se lê como texto. Tipo do acervo que cai aqui é defeito "
+            f"{tipo} não está na tabela de formatos do acervo "
+            "e não se lê como texto. Tipo do acervo que cai aqui é defeito "
             "da tool: abra incidente."
         ),
         classe_erro="binario",
@@ -1844,7 +1844,7 @@ def _pagina_formato_imagem(doc: Any, p: Path, idx: Indice, tp: dict, ctx: dict[s
         prox = f'{TOOL}(caminho="{p}"' + (f', paginas="{a}-{b_fim}")' if com_unidade else ")")
         return envelope_erro(
             2,
-            f"{tipo} ainda não tem renderizador livre na imagem da porta (spec ler-arquivo §7.4.2) — leia como texto",
+            f"{tipo} ainda não tem renderizador livre na imagem da porta — leia como texto",
             prox,
             recusado=True,
             motivo="sem_render",
@@ -1852,7 +1852,7 @@ def _pagina_formato_imagem(doc: Any, p: Path, idx: Indice, tp: dict, ctx: dict[s
             caminho=str(p),
             bytes_total=idx.tamanho,
             versao=idx.versao,
-            cura=f"{tipo} ainda não tem renderizador livre na imagem da porta (spec ler-arquivo §7.4.2); o texto vale: {prox}",
+            cura=f"{tipo} ainda não tem renderizador livre na imagem da porta; o texto vale: {prox}",
             classe_erro="gramatica",
         )
     imagens, total, u = [], 0, a
@@ -1980,7 +1980,7 @@ def _pagina_formato(doc: Any, p: Path, idx: Indice, tp: dict, ctx: dict[str, Any
     if ped.paginas not in (None, "") and not com_unidade:
         return _erro(
             f"{tipo} não tem unidade fixa ({doc.unidade}): leia por linhas; a página "
-            "do DOCX é do renderizador (spec espelho-de-leitura §2.6)",
+            "do DOCX é do renderizador",
             "gramatica",
             caminho=str(p),
             cura=f'{TOOL}(caminho="{p}", linhas="1-")',

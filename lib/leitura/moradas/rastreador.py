@@ -1,4 +1,4 @@
-"""Adaptador da morada `rastreador` (cards ativos e comentários) (story #4442, t6)."""
+"""Adaptador da morada `rastreador` (cards ativos e comentários)."""
 from __future__ import annotations
 
 import json

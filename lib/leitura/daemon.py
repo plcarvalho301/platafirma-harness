@@ -1,4 +1,4 @@
-"""Processo do leitor único sobre soquete UNIX com SO_PEERCRED, vagas e troca de release (story #4442, t7)."""
+"""Processo do leitor único sobre soquete UNIX com SO_PEERCRED, vagas e troca de release."""
 from __future__ import annotations
 
 import json

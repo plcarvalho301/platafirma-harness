@@ -1,4 +1,4 @@
-"""Adaptador da morada `balde` (objetos imutáveis por sha256) do componente leitura (story #4442, t6)."""
+"""Adaptador da morada `balde` (objetos imutáveis por sha256) do componente leitura."""
 from __future__ import annotations
 
 import json

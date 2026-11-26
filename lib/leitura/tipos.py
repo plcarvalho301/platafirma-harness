@@ -1,4 +1,4 @@
-"""Contratos imutáveis tipados do componente leitura (story #4442, t2)."""
+"""Contratos imutáveis tipados do componente leitura."""
 from __future__ import annotations
 
 from collections.abc import Sequence

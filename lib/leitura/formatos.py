@@ -1,16 +1,15 @@
-"""formatos.py — os leitores dos formatos do acervo (spec ler-arquivo §7.4, DT 919).
+"""formatos.py — os leitores dos formatos do acervo.
 
 Tudo o que o acervo guarda se lê pela porta. Este módulo é a parte da leitura que conhece
-formato: decide o tipo real de um binário pelo que há dentro dele (§7.2, §7.4.4), abre o
-arquivo original e devolve o texto de cada unidade em ordem de leitura do formato (§7.4.3),
-a imagem da página quando o formato tem renderizador (§7.4.2) e o membro de um ZIP.
+formato: decide o tipo real de um binário pelo que há dentro dele, abre o
+arquivo original e devolve o texto de cada unidade em ordem de leitura do formato,
+a imagem da página quando o formato tem renderizador e o membro de um ZIP.
 
 Puro, como o `leitura.py` que o chama: não importa FastMCP, não fala com a rede, não grava
-nada — não gera espelho, índice nem impressão (isso é do transcritor, spec
-espelho-de-leitura). Biblioteca padrão (zipfile, xml.etree, html.parser, email) mais o
-pymupdf; sem ele o PDF recusa com nome.
+nada — não gera espelho, índice nem impressão (isso é do transcritor). Biblioteca padrão
+(zipfile, xml.etree, html.parser, email) mais o pymupdf; sem ele o PDF recusa com nome.
 
-Vocabulário: **unidade** é a divisão fixa do original (arq:0117 §6) — página no PDF, slide no
+Vocabulário: **unidade** é a divisão fixa do original — página no PDF, slide no
 PPTX, planilha no XLSX, item do spine no EPUB; `nenhuma` no DOCX, HTML e MHTML. **Documento**
 é o arquivo aberto: diz quantas unidades tem e devolve o texto (ou a imagem) de uma.
 """
@@ -101,7 +100,7 @@ _XLINK = "{http://www.w3.org/1999/xlink}"
 
 
 class ErroDescompressao(ValueError):
-    """Arquivo comprimido ou XML viola limites de segurança (DT 832/899, story #4442)."""
+    """Arquivo comprimido ou XML viola limites de segurança."""
 
 
 class OrcamentoDescompressao:
@@ -220,7 +219,7 @@ def ler_zip_seguro(  # noqa: PLR0913 -- assinatura pública com orçamento e ani
     orcamento: OrcamentoDescompressao | None = None,
     nivel_aninhamento: int = 0,
 ) -> bytes:
-    """Lê membro de ZIP em fluxo até `limite` bytes, `razao_max` e teto de soma (DT 832/899)."""
+    """Lê membro de ZIP em fluxo até `limite` bytes, `razao_max` e teto de soma."""
     if nivel_aninhamento > ANINHAMENTO_PACOTE_MAX:
         raise ErroDescompressao(
             f"aninhamento de pacote comprimido excede o teto de {ANINHAMENTO_PACOTE_MAX} nível"
@@ -259,7 +258,7 @@ def ler_gzip_seguro(
     *,
     orcamento: OrcamentoDescompressao | None = None,
 ) -> bytes:
-    """Descomprime gzip em fluxo até `limite` bytes e `razao_max` (DT 832/899)."""
+    """Descomprime gzip em fluxo até `limite` bytes e `razao_max`."""
     fh.seek(0)
     partes: list[bytes] = []
     total = 0
@@ -281,7 +280,7 @@ def ler_gzip_seguro(
 def _ooxml_rels(
     zf: zipfile.ZipFile, nome: str, *, orcamento: OrcamentoDescompressao | None = None
 ) -> dict[str, str]:
-    """Helper XML OOXML isolado: mapa Id -> Target de um arquivo `.rels` (DT 899)."""
+    """Helper XML OOXML isolado: mapa Id -> Target de um arquivo `.rels`."""
     try:
         raiz = parse_xml_seguro(ler_zip_seguro(zf, nome, orcamento=orcamento))
     except (KeyError, ET.ParseError):

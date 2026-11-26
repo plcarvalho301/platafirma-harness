@@ -1,4 +1,4 @@
-"""Leitura de arquivos no harness por processo (`ler_arquivo`, story #4342, DT 919)."""
+"""Leitura de arquivos no harness por processo (`ler_arquivo`)."""
 from __future__ import annotations
 
 from .formatos import (

@@ -1,4 +1,4 @@
-"""Cliente do leitor único via soquete UNIX com repetição única em queda de conexão (story #4442, t7)."""
+"""Cliente do leitor único via soquete UNIX com repetição única em queda de conexão."""
 from __future__ import annotations
 
 import json

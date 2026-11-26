@@ -1,4 +1,4 @@
-"""Adaptador da morada git: leitura segura na árvore publicada da release (story #4442, t5).
+"""Adaptador da morada git: leitura segura na árvore publicada da release.
 
 Caminha segmento a segmento com `openat` + `O_RDONLY | O_NOFOLLOW | O_CLOEXEC`,
 recusa elos simbólicos com saída 4 (`acesso-negado`), confere `S_ISREG` e

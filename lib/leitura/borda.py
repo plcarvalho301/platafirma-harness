@@ -1,4 +1,4 @@
-"""Borda da camada comum do ato ler — estágios 1 e 2 (story #4442, t2)."""
+"""Borda da camada comum do ato ler — estágios 1 e 2."""
 from __future__ import annotations
 
 import base64
