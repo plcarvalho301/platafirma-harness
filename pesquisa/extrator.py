@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import codecs
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -53,6 +54,18 @@ from . import manifesto as M
 from .envelope import FalhaFonte
 from .guarda import UrlRecusada, verifica_url
 from .prazo import CONEXAO_S, Relogio, com_prazo
+
+# A Crawl4AI imprime no stderr a propaganda do serviço pago dela a cada render (#4457 t6).
+os.environ.setdefault("CRAWL4AI_NO_CLOUD_NOTICE", "1")
+
+# Respostas de WAF e anti-robô ao cliente HTTP: com --render, o navegador entra mesmo assim
+# (#4457 t6). Guarda de rede, tipo e teto não estão aqui: neles o navegador não ajuda.
+CAUSAS_DE_BLOQUEIO = frozenset({"status-401", "status-403", "status-429", "status-503",
+                                "redirecionamento-sem-destino"})
+
+
+def _eh_bloqueio(causa: str) -> bool:
+    return causa in CAUSAS_DE_BLOQUEIO or causa.startswith("rede:")
 
 PISO_CARACTERES_UTEIS = 1  # C3 de inteligencia sem medida: só o vazio reprova
 LIMIAR_TEXTO_CURTO = 400  # abaixo disso o retorno avisa que `--render` pode trazer mais
@@ -327,6 +340,7 @@ def ler(
     offset: int = 0,
     imagens: bool = False,
     integral: bool = False,
+    esperar: str | None = None,
     coletor: Coletor | None = None,
     renderizador: Renderizador | None = None,
     derivador: Derivador | None = None,
@@ -348,6 +362,11 @@ def ler(
     def _coleta(u: str, v: Callable[[str], None]) -> Resposta:
         return com_prazo(lambda: coletor_base(u, v), relogio.resta(), onde="http")
 
+    def _rend(u: str) -> dict:
+        if renderizador is not None:
+            return renderizador(u)
+        return _renderizador_crawl4ai(u, esperar=esperar, prazo_s=relogio.resta())
+
     def _verifica(u: str) -> None:
         try:
             verifica_url(u, resolvedor=guarda_resolvedor)
@@ -355,6 +374,8 @@ def ler(
             raise FalhaFonte(f"guarda-de-rede:{rec.causa}") from rec
 
     resp: Resposta | None = None
+    http_barrado: dict[str, Any] | None = None
+    pre_render: dict[str, Any] | None = None
     try:
         _verifica(url)
         resp = _coleta(url, _verifica)
@@ -373,10 +394,30 @@ def ler(
     except FalhaFonte as f:
         causa = f.causa
         extra = dict(f.extra)
-        if _eh_google_drive(url) and causa != "drive-exige-conector":
-            causa = "drive-exige-conector"
-            extra["detalhe"] = "Google Drive exige o conector"
-        raise _nao_achado(trab, url, estrategia, causa, resp=resp, extra=extra) from f
+        if render and _eh_bloqueio(causa) and not _eh_google_drive(url):
+            # O site barrou o cliente HTTP, que é o caso para o qual o --render existe (#4457 t6):
+            # o navegador entra, e a causa do HTTP fica dita na linha.
+            http_barrado = {"causa": causa, **({"status": extra["status"]} if extra.get("status") else {})}
+        else:
+            if _eh_google_drive(url) and causa != "drive-exige-conector":
+                causa = "drive-exige-conector"
+                extra["detalhe"] = "Google Drive exige o conector"
+            raise _nao_achado(trab, url, estrategia, causa, resp=resp, extra=extra) from f
+
+    if http_barrado is not None:
+        try:
+            pre_render = com_prazo(lambda: _rend(url), relogio.resta(), onde="navegador")
+        except FalhaFonte as f:
+            raise _nao_achado(trab, url, estrategia, f.causa, resp=resp,
+                              extra={**f.extra, "http_barrado": http_barrado}) from f
+        dom = pre_render.get("dom") or ""
+        if not dom.strip():
+            raise _nao_achado(trab, url, estrategia, "render-sem-dom", resp=resp,
+                              extra={"http_barrado": http_barrado})
+        # Sem corpo HTTP para guardar, o bruto é o DOM que o navegador montou, e a linha diz isso.
+        resp = Resposta(corpo=dom.encode("utf-8"), status=int(pre_render.get("status") or 200),
+                        cabecalhos=[("content-type", "text/html; charset=utf-8")], url_pedida=url,
+                        url_final=pre_render.get("url_final") or url, hora=M.agora_utc())
 
     sha = M.sha256_bytes(resp.corpo)
     tipo, tipo_por = tipo_real(resp.corpo, resp.cabecalho("content-type"))
@@ -402,15 +443,17 @@ def ler(
 
     n = trab.proximo_n()
     p_bruto = trab.guarda_bruto(n, resp.corpo, _EXT.get(tipo, "bin"))
-    trab.guarda_bruto(n, _resposta_json(resp, sha, tipo, tipo_por), "resposta.json")
-    base = {"n": n, "sha256": sha, "bruto": str(p_bruto), "tipo": tipo, "tipo_por": tipo_por}
+    origem_bruto = {"bruto_de": "browser", "http_barrado": http_barrado} if http_barrado else {}
+    trab.guarda_bruto(n, _resposta_json(resp, sha, tipo, tipo_por, extra=origem_bruto), "resposta.json")
+    base = {"n": n, "sha256": sha, "bruto": str(p_bruto), "tipo": tipo, "tipo_por": tipo_por,
+            **origem_bruto}
 
     if eh_binario:
         d = {"md": None, "vista": "binario", "encoding": None, "html": "", "binario": True}
     else:
         try:
             if render and tipo not in TIPOS_PDF and tipo not in TIPOS_ESCRITORIO:
-                d = _deriva_render(trab, n, url, renderizador, relogio=relogio)
+                d = _deriva_render(trab, n, url, _rend, relogio=relogio, pronto=pre_render)
             else:
                 d = _deriva_http(resp, tipo, derivador, leitor_pdf=leitor_pdf)
         except (FalhaFonte, _SemDerivado) as f:
@@ -519,12 +562,14 @@ def _nao_achado(trab, url, estrategia, causa, *, resp: Resposta | None, extra: d
     return FalhaFonte(causa, **{**publico, "url": url, "manifesto": trab.ref_manifesto(linha)})
 
 
-def _resposta_json(resp: Resposta, sha: str, tipo: str, tipo_por: str) -> bytes:
+def _resposta_json(resp: Resposta, sha: str, tipo: str, tipo_por: str, *,
+                   extra: dict[str, Any] | None = None) -> bytes:
     doc = {
         "url_pedida": resp.url_pedida, "url_final": resp.url_final, "status": resp.status,
         "hora": resp.hora, "redirecionamentos": resp.redirecionamentos,
         "cabecalhos": [[k, v] for k, v in resp.cabecalhos],
         "bytes": len(resp.corpo), "sha256": sha, "tipo": tipo, "tipo_por": tipo_por,
+        **(extra or {}),
     }
     return json.dumps(doc, ensure_ascii=False, indent=2).encode("utf-8")
 
@@ -644,10 +689,14 @@ def _deriva_http(
 
 
 def _deriva_render(trab, n: int, url: str, renderizador: Renderizador | None, *,
-                   relogio: Relogio | None = None) -> dict[str, Any]:
-    relogio = relogio or Relogio()
-    rend = renderizador or _renderizador_crawl4ai
-    r = com_prazo(lambda: rend(url), relogio.resta(), onde="navegador")
+                   relogio: Relogio | None = None, pronto: dict[str, Any] | None = None) -> dict[str, Any]:
+    """`pronto` é o render que já rodou quando o HTTP foi barrado: não se abre o navegador duas vezes."""
+    if pronto is not None:
+        r = pronto
+    else:
+        relogio = relogio or Relogio()
+        rend = renderizador or _renderizador_crawl4ai
+        r = com_prazo(lambda: rend(url), relogio.resta(), onde="navegador")
     dom = r.get("dom") or ""
     derivados: dict[str, Any] = {}
     if dom:
@@ -859,26 +908,41 @@ def _derivador_crawl4ai(html: str, base_url: str) -> dict[str, str]:
     return {"md_fit": fit, "md_raw": raw}
 
 
-def _renderizador_crawl4ai(url: str) -> dict[str, Any]:
-    """`--render`: browser da Crawl4AI. Crawl4AI é falador; stdout vai ao stderr (§2.2)."""
+def _renderizador_crawl4ai(url: str, *, esperar: str | None = None,
+                           prazo_s: float | None = None) -> dict[str, Any]:
+    """`--render`: browser da Crawl4AI. Crawl4AI é falador; stdout vai ao stderr (§2.2).
+
+    `esperar` é um seletor CSS que o navegador espera aparecer antes de ler a página (#4457 t6):
+    a busca interna do gov.br, por exemplo, monta os resultados depois do carregamento.
+    """
     import asyncio
     import contextlib
     import sys
 
     with contextlib.redirect_stdout(sys.stderr):
-        return asyncio.run(_renderiza_async(url))
+        return asyncio.run(_renderiza_async(url, esperar=esperar, prazo_s=prazo_s))
 
 
-async def _renderiza_async(url: str) -> dict[str, Any]:
+def _timeout_da_pagina_ms(prazo_s: float | None) -> int:
+    """O tempo do navegador sai do que sobra do prazo total, com folga para gravar e responder."""
+    if prazo_s is None:
+        return 30000
+    return int(min(30.0, max(5.0, prazo_s - 3.0)) * 1000)
+
+
+async def _renderiza_async(url: str, *, esperar: str | None = None,
+                           prazo_s: float | None = None) -> dict[str, Any]:
     import base64
 
     from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, DefaultMarkdownGenerator
     from crawl4ai.async_crawler_strategy import AsyncPlaywrightCrawlerStrategy
     from crawl4ai.content_filter_strategy import PruningContentFilter
 
+    opcoes: dict[str, Any] = {"wait_for": f"css:{esperar}"} if esperar else {}
     cfg = CrawlerRunConfig(
         markdown_generator=DefaultMarkdownGenerator(content_filter=PruningContentFilter()),
-        user_agent=M.UA, page_timeout=30000, verbose=False, screenshot=True,
+        user_agent=M.UA, page_timeout=_timeout_da_pagina_ms(prazo_s), verbose=False,
+        screenshot=True, **opcoes,
     )
     try:
         async with AsyncWebCrawler(crawler_strategy=AsyncPlaywrightCrawlerStrategy()) as crawler:
@@ -894,4 +958,6 @@ async def _renderiza_async(url: str) -> dict[str, Any]:
         "md_fit": getattr(md, "fit_markdown", None) or "",
         "md_raw": getattr(md, "raw_markdown", None) or str(md or ""),
         "captura": base64.b64decode(captura) if captura else None,
+        "status": getattr(r, "status_code", None),
+        "url_final": getattr(r, "redirected_url", None) or getattr(r, "url", None),
     }

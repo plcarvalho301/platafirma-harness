@@ -594,6 +594,56 @@ def test_integral_pelo_cache_le_o_inteiro_gravado(tmp_path):
     assert r["estrategia"] == "cache" and "treze blocos" in r["conteudo"]
 
 
+# ------------------------------------------------------------------ render com HTTP barrado (#4457 t6)
+def _rend_fixo(chamadas):
+    def rend(url):
+        chamadas.append(url)
+        return {"dom": "<html><body>" + "conteúdo que o navegador viu " * 20 + "</body></html>",
+                "md_fit": "conteúdo que o navegador viu " * 20, "md_raw": "", "captura": None,
+                "status": 200, "url_final": url}
+    return rend
+
+
+def test_render_abre_quando_o_http_e_barrado_e_o_dom_vira_bruto(tmp_path):
+    t = M.Trabalho("rb1", raiz=tmp_path)
+    chamadas = []
+    r = extrator.ler(URL, t, render=True, coletor=coletor_fixo(resposta(b"desafio", status=403)),
+                     renderizador=_rend_fixo(chamadas), guarda_resolvedor=PUB)
+    assert chamadas == [URL] and r["estrategia"] == "browser" and r["status"] == 200
+    assert "navegador viu" in r["conteudo"]
+    assert (t.bruto / f"{r['n']}.html").read_bytes().startswith(b"<html><body>conte")
+    ln = linhas(t)[-1]
+    assert ln["bruto_de"] == "browser" and ln["http_barrado"] == {"causa": "status-403", "status": 403}
+    resposta_json = json.loads((t.bruto / f"{r['n']}.resposta.json").read_text(encoding="utf-8"))
+    assert resposta_json["bruto_de"] == "browser"
+
+
+def test_sem_render_o_http_barrado_falha_como_antes(tmp_path):
+    t = M.Trabalho("rb2", raiz=tmp_path)
+    with pytest.raises(FalhaFonte) as e:
+        ler(t, resposta(b"desafio", status=403))
+    assert e.value.causa == "status-403"
+
+
+def test_guarda_de_rede_nao_abre_o_navegador_nem_com_render(tmp_path):
+    t = M.Trabalho("rb3", raiz=tmp_path)
+
+    def col(u, v):
+        raise FalhaFonte("guarda-de-rede:ip-privado:127.0.0.1")
+
+    with pytest.raises(FalhaFonte) as e:
+        extrator.ler(URL, t, render=True, coletor=col, renderizador=renderizador_proibido,
+                     guarda_resolvedor=PUB)
+    assert e.value.causa.startswith("guarda-de-rede")
+
+
+def test_timeout_da_pagina_sai_do_que_sobra_do_prazo():
+    assert extrator._timeout_da_pagina_ms(None) == 30000
+    assert extrator._timeout_da_pagina_ms(40.0) == 30000
+    assert extrator._timeout_da_pagina_ms(12.0) == 9000
+    assert extrator._timeout_da_pagina_ms(1.0) == 5000
+
+
 def test_com_prazo_devolve_o_valor_e_repassa_a_excecao():
     from pesquisa.prazo import com_prazo
 

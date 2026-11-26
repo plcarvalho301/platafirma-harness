@@ -83,10 +83,11 @@ def resolver(tipo, ident, *, completo: bool = False, trab: "M.Trabalho") -> dict
 
 
 # ----------------------------------------------------------------------------- ler
-def ler(url, *, foco, render, max_chars, offset, imagens=False, integral=False,
+def ler(url, *, foco, render, max_chars, offset, imagens=False, integral=False, esperar=None,
         trab: "M.Trabalho") -> dict[str, Any]:
-    r = extrator.ler(url, trab, foco=foco, render=render, max_chars=max_chars, offset=offset,
-                     imagens=imagens, integral=integral)
+    # --esperar só faz sentido no navegador: pedir a espera já pede o render (#4457 t6)
+    r = extrator.ler(url, trab, foco=foco, render=render or bool(esperar), max_chars=max_chars,
+                     offset=offset, imagens=imagens, integral=integral, esperar=esperar)
     return envelope("ler", trab.slug, **r)
 
 

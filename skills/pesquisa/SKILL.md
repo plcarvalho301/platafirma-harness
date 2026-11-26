@@ -60,7 +60,14 @@ O loop abaixo é como a base se cumpre com o verbo `pesquisar`.
    disco guarda o texto inteiro; pagine com `--offset` se o `truncado` esconder o que falta.
    - PDF se lê igual, com `<!-- p. N -->` por página; `SEM CAMADA DE TEXTO` é página escaneada.
    - Página que depende de script não escala sozinha: a falha traz `sugestao`, e
-     `ler <url> --render` abre o navegador e guarda também a captura de tela.
+     `ler <url> --render` abre o navegador e guarda também a captura de tela. Com `--render`,
+     o navegador abre mesmo quando o site barra o cliente HTTP (401, 403, 429, 503 ou conexão
+     caída); aí o bruto é o DOM, e a linha traz `bruto_de: browser` e a causa do HTTP.
+   - Página que monta o conteúdo depois de carregar, como a busca interna do gov.br:
+     `ler <url> --esperar "<seletor css>"` espera o elemento aparecer antes de ler.
+   - A vista que volta é a podada, que às vezes corta trecho legítimo; `--integral` devolve
+     o Markdown inteiro. O inteiro fica gravado sempre, e o `verificar` procura nele também.
+   - DOCX, XLSX, PPTX e EPUB se leem como o PDF, com uma marca por slide ou planilha.
    - `coletar <url>...` guarda várias sem devolver o texto, e não renderiza; `--imagens`
      guarda também as imagens da página, quando a imagem é a evidência.
    - `historico <url>` lista as capturas de terceiro, a mais recente primeiro; `--em
@@ -88,7 +95,10 @@ A falha sai com `causa` e grava a linha de não-achado. Leia a causa antes de re
 | causa | o que fazer |
 |---|---|
 | `rede:<erro>` | a fonte não respondeu a este coletor, que se identifica: outra fonte primária do mesmo conteúdo, ou `historico` |
-| `status-403`, `status-404` | bloqueio, ou página que saiu: `historico <url>` |
+| `status-403`, `status-429`, `status-503` | bloqueio: `ler <url> --render`; se o navegador também não passa, `historico <url>` |
+| `status-404` | página que saiu: `historico <url>` |
+| `prazo-total-esgotado` | a fonte não respondeu em 40 s: tente uma vez mais tarde, ou `historico <url>` |
+| `formato-invalido`, `formato-sem-texto` | o arquivo de escritório veio quebrado ou sem texto: lacuna declarada |
 | `pagina-depende-de-javascript`, `extracao-abaixo-do-piso` | `ler <url> --render` |
 | `pdf-sem-camada-de-texto` | lacuna declarada: o verbo não faz OCR |
 | `drive-exige-conector` | arquivo do Drive vai pelo conector, não pela web |
