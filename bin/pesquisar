@@ -33,9 +33,10 @@ def uso(code=2):
         "                  geral: página e documentação · ciencia: artigo e preprint · codigo: repositório, pacote e\n"
         "                  pergunta-e-resposta, não a documentação da ferramenta · social: rede aberta\n"
         "  pesquisar resolver <dominio|doi|isbn|cnpj|orcid> <identificador> [--completo]\n"
-        "  pesquisar ler <url> [--foco \"<pergunta>\"] [--render] [--max-chars 6000] [--offset N] [--imagens]\n"
+        "  pesquisar ler <url> [--foco \"<pergunta>\"] [--render] [--max-chars 6000] [--offset N] [--imagens] [--integral]\n"
+        "                  --integral: o Markdown inteiro, sem a poda (o inteiro fica gravado sempre, ao lado)\n"
         "  pesquisar coletar <url> [<url>...] [--imagens]\n"
-        "  pesquisar historico <url> [--em AAAA-MM-DD [--foco \"<pergunta>\"] [--max-chars 6000] [--offset N]] [--salvar]\n"
+        "  pesquisar historico <url> [--em AAAA-MM-DD [--foco \"<pergunta>\"] [--max-chars 6000] [--offset N] [--integral]] [--salvar]\n"
         "                  sem --em: as capturas mais recentes do Wayback; com --em: lê a captura mais próxima da data\n"
         "  pesquisar manifesto [--md]\n"
         "  pesquisar exportar [--para <rotulo>] [--excluir <regex>]...   o último bruto íntegro de cada URL do trabalho,\n"
@@ -88,6 +89,7 @@ def main(argv):
     p.add_argument("--em", default=None)
     p.add_argument("--salvar", action="store_true")
     p.add_argument("--imagens", action="store_true")
+    p.add_argument("--integral", action="store_true")
     p.add_argument("--para", default=None)
     p.add_argument("--excluir", action="append", default=[])
     p.add_argument("--juntar", default=None)
@@ -111,7 +113,8 @@ def main(argv):
             if not resto:
                 uso()
             env = atos.ler(resto[0], foco=args.foco, render=args.render,
-                          max_chars=args.max_chars, offset=args.offset, imagens=args.imagens, trab=trab)
+                          max_chars=args.max_chars, offset=args.offset, imagens=args.imagens,
+                          integral=args.integral, trab=trab)
         elif ato == "coletar":
             if not resto:
                 uso()
@@ -119,7 +122,8 @@ def main(argv):
         elif ato == "historico":
             if not resto:
                 uso()
-            janela = {"foco": args.foco, "max_chars": args.max_chars, "offset": args.offset}
+            janela = {"foco": args.foco, "max_chars": args.max_chars, "offset": args.offset,
+                      "integral": args.integral}
             env = atos.hist(resto[0], em=args.em, salvar=args.salvar, leitura=janela, trab=trab)
         elif ato == "manifesto":
             env = atos.manifesto(trab, md=args.md)

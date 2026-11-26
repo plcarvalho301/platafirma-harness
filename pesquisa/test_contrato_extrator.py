@@ -565,6 +565,35 @@ def test_docx_quebrado_falha_e_guarda_o_bruto(tmp_path):
     assert (t.bruto / f"{ln['n']}.docx").read_bytes() == corpo
 
 
+# ------------------------------------------------------------------ Markdown integral (#4457 t5)
+def derivador_podado(html, base_url):
+    return {"md_fit": "Guia de governança de IA",
+            "md_raw": "Guia de governança de IA\n\nAcessar ficha: modelo em Word com os treze blocos"}
+
+
+def test_sem_integral_devolve_a_poda_e_grava_o_inteiro_ao_lado(tmp_path):
+    t = M.Trabalho("int1", raiz=tmp_path)
+    r = ler(t, resposta(PAGINA.encode()), derivador=derivador_podado)
+    assert "treze blocos" not in r["conteudo"]
+    inteiro = (t.derivado / f"{r['n']}.raw.md").read_text(encoding="utf-8")
+    assert "treze blocos" in inteiro
+    ln = linhas(t)[-1]
+    assert ln["vista"] == "fit" and ln["derivados"]["integral"]["sha256"] == M.sha256_texto(inteiro)
+
+
+def test_integral_devolve_o_markdown_sem_poda(tmp_path):
+    t = M.Trabalho("int2", raiz=tmp_path)
+    r = ler(t, resposta(PAGINA.encode()), derivador=derivador_podado, integral=True)
+    assert "treze blocos" in r["conteudo"] and linhas(t)[-1]["vista"] == "raw"
+
+
+def test_integral_pelo_cache_le_o_inteiro_gravado(tmp_path):
+    t = M.Trabalho("int3", raiz=tmp_path)
+    ler(t, resposta(PAGINA.encode()), derivador=derivador_podado)
+    r = ler(t, resposta(PAGINA.encode()), derivador=derivador_podado, integral=True)
+    assert r["estrategia"] == "cache" and "treze blocos" in r["conteudo"]
+
+
 def test_com_prazo_devolve_o_valor_e_repassa_a_excecao():
     from pesquisa.prazo import com_prazo
 

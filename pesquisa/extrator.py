@@ -326,6 +326,7 @@ def ler(
     max_chars: int = 6000,
     offset: int = 0,
     imagens: bool = False,
+    integral: bool = False,
     coletor: Coletor | None = None,
     renderizador: Renderizador | None = None,
     derivador: Derivador | None = None,
@@ -392,8 +393,12 @@ def ler(
                           extra={"tamanho": len(resp.corpo), "teto": teto, "tipo": tipo, "tipo_por": tipo_por, "sha256": sha})
 
     anterior = _acha_cache(trab, url, sha, estrategia)
+    if (anterior is not None and integral and anterior.get("vista") == "fit"
+            and not (trab.derivado / f"{anterior['n']}.raw.md").exists()):
+        anterior = None  # o cache só tem a vista podada: deriva de novo para servir o integral
     if anterior is not None:
-        return _serve_cache(trab, url, resp, sha, anterior, foco=foco, max_chars=max_chars, offset=offset)
+        return _serve_cache(trab, url, resp, sha, anterior, foco=foco, max_chars=max_chars,
+                            offset=offset, integral=integral)
 
     n = trab.proximo_n()
     p_bruto = trab.guarda_bruto(n, resp.corpo, _EXT.get(tipo, "bin"))
@@ -417,6 +422,11 @@ def ler(
             raise _nao_achado(trab, url, estrategia, causa, resp=resp, extra=extra) from f
 
     md = d.get("md")
+    # A poda corta trecho legítimo sem avisar (#4457 t5): com --integral o retorno é o Markdown
+    # inteiro, e sem a flag o inteiro fica gravado ao lado, para o verificar achar o trecho.
+    raw = (d.get("raw") or "").strip()
+    if integral and raw and d.get("vista") == "fit":
+        md, d["vista"] = raw, "raw"
     uteis = caracteres_uteis(md) if md else 0
     if not eh_binario:
         if uteis < PISO_CARACTERES_UTEIS:
@@ -428,6 +438,9 @@ def ler(
                               extra={**base, "caracteres_uteis": uteis, "sugestao": "--render"})
 
         trab.guarda_derivado(n, md, "md")
+        if d.get("vista") == "fit" and raw:
+            p_raw = trab.guarda_derivado(n, raw, "raw.md")
+            d.setdefault("derivados", {})["integral"] = {"arquivo": str(p_raw), "sha256": M.sha256_texto(raw)}
 
     html_meta = d.get("html") or ""
     avisos = acha_instrucoes(md) if md else []
@@ -604,7 +617,8 @@ def _deriva_http(
         d = (derivador or _derivador_crawl4ai)(texto, resp.url_final)
         fit = (d.get("md_fit") or "").strip()
         raw = (d.get("md_raw") or "").strip()
-        return {"md": fit or raw, "vista": "fit" if fit else "raw", "encoding": enc, "html": texto, "binario": False}
+        return {"md": fit or raw, "vista": "fit" if fit else "raw", "raw": raw, "encoding": enc,
+                "html": texto, "binario": False}
     if tipo in TIPOS_TEXTO:
         texto, enc = decodifica(resp.corpo, ct, html=False)
         return {"md": texto, "vista": "texto", "encoding": enc, "html": "", "binario": False}
@@ -646,8 +660,8 @@ def _deriva_render(trab, n: int, url: str, renderizador: Renderizador | None, *,
         derivados["captura"] = {"arquivo": str(p), "sha256": M.sha256_bytes(captura)}
     fit = (r.get("md_fit") or "").strip()
     raw = (r.get("md_raw") or "").strip()
-    return {"md": fit or raw, "vista": "fit" if fit else "raw", "encoding": None, "html": dom,
-            "derivados": derivados}
+    return {"md": fit or raw, "vista": "fit" if fit else "raw", "raw": raw, "encoding": None,
+            "html": dom, "derivados": derivados}
 
 
 def _acha_cache(trab, url: str, sha: str, estrategia: str) -> dict[str, Any] | None:
@@ -665,7 +679,8 @@ def _acha_cache(trab, url: str, sha: str, estrategia: str) -> dict[str, Any] | N
     return None
 
 
-def _serve_cache(trab, url, resp: Resposta, sha, ant, *, foco, max_chars, offset) -> dict[str, Any]:
+def _serve_cache(trab, url, resp: Resposta, sha, ant, *, foco, max_chars, offset,
+                 integral: bool = False) -> dict[str, Any]:
     n = ant["n"]
     eh_binario = ant.get("binario", False)
     if eh_binario:
@@ -677,9 +692,12 @@ def _serve_cache(trab, url, resp: Resposta, sha, ant, *, foco, max_chars, offset
                         datapub=ant.get("data_publicacao") or {"valor": None, "origem": "ausente"},
                         avisos=[], encoding=None, uteis=0, aviso=None,
                         manifesto=trab.ref_manifesto(linha), binario=True, tamanho_bytes=len(resp.corpo))
-    md = (trab.derivado / f"{n}.md").read_text(encoding="utf-8")
+    p_integral = trab.derivado / f"{n}.raw.md"
+    p_md = p_integral if (integral and p_integral.exists()) else trab.derivado / f"{n}.md"
+    md = p_md.read_text(encoding="utf-8")
     linha = trab.grava_linha({"ato": "ler", "url": url, "status": resp.status, "sha256": sha,
-                              "estrategia": "cache", "cache_de": n, "binario": False})
+                              "estrategia": "cache", "cache_de": n, "binario": False,
+                              **({"integral": True} if integral else {})})
     corpo = _recorte_bm25(md, foco) if foco else md
     avisos = acha_instrucoes(md)
     return _retorno(n=n, url=url, resp=resp, sha=sha, bruto=ant.get("bruto"), tipo=ant.get("tipo"),

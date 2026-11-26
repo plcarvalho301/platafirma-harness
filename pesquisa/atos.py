@@ -83,8 +83,10 @@ def resolver(tipo, ident, *, completo: bool = False, trab: "M.Trabalho") -> dict
 
 
 # ----------------------------------------------------------------------------- ler
-def ler(url, *, foco, render, max_chars, offset, imagens=False, trab: "M.Trabalho") -> dict[str, Any]:
-    r = extrator.ler(url, trab, foco=foco, render=render, max_chars=max_chars, offset=offset, imagens=imagens)
+def ler(url, *, foco, render, max_chars, offset, imagens=False, integral=False,
+        trab: "M.Trabalho") -> dict[str, Any]:
+    r = extrator.ler(url, trab, foco=foco, render=render, max_chars=max_chars, offset=offset,
+                     imagens=imagens, integral=integral)
     return envelope("ler", trab.slug, **r)
 
 
@@ -120,7 +122,7 @@ def coletar(urls, *, imagens=False, trab: "M.Trabalho") -> dict[str, Any]:
 # ----------------------------------------------------------------------- historico
 def hist(url, *, em, salvar, leitura: dict[str, Any] | None = None,
          trab: "M.Trabalho") -> dict[str, Any]:
-    """`leitura` é a janela do `--em`: foco, max_chars e offset, como no `ler`."""
+    """`leitura` é a janela do `--em`: foco, max_chars, offset e integral, como no `ler`."""
     if salvar:
         r = historico.salvar(url)
         linha = trab.grava_linha({"ato": "historico", "url": url, "status": r["status"],
