@@ -61,3 +61,42 @@ def test_nao_citado_lista_coleta_orfa(tmp_path):
     rel.write_text("Só cito a primeira [m:3].", encoding="utf-8")
     r = verificar(rel, t)
     assert r["nao_citado"] == [4] and not r["reprovou"]  # não-citado não reprova
+
+
+# ------------------------------------------------------------------ os três vãos (#4457 t8)
+def test_relatorio_sem_marcador_reprova(tmp_path):
+    t = _trabalho_com_uma_leitura(tmp_path)
+    rel = tmp_path / "r.md"
+    rel.write_text("Um relatório inteiro, sem citar fonte nenhuma.", encoding="utf-8")
+    r = verificar(rel, t)
+    assert r["sem_marcador"] is True and r["reprovou"]
+
+
+def test_trecho_de_item_do_resolver_e_achado_no_json(tmp_path):
+    t = M.Trabalho("ver", raiz=tmp_path)
+    bruto = b'{"razao_social": "MINISTERIO DA FAZENDA"}'
+    t.guarda_bruto(5, bruto, "json")
+    t.guarda_derivado(5, '{\n  "razao_social": "MINISTERIO DA FAZENDA"\n}', "json")
+    t.grava_linha({"n": 5, "ato": "resolver", "status": 200, "sha256": M.sha256_bytes(bruto),
+                   "bruto": str(t.bruto / "5.json")})
+    rel = tmp_path / "r.md"
+    rel.write_text('O CNPJ é do ministério [m:5 «MINISTERIO DA FAZENDA»].', encoding="utf-8")
+    r = verificar(rel, t)
+    assert r["trecho_ausente"] == [] and not r["reprovou"]
+
+
+def test_trecho_quebrado_em_linhas_pela_derivacao_e_achado(tmp_path):
+    t = _trabalho_com_uma_leitura(tmp_path, corpo_md="o gato subiu\nno telhado ao amanhecer")
+    rel = tmp_path / "r.md"
+    rel.write_text('O felino escalou [m:3 «subiu no  telhado»].', encoding="utf-8")
+    r = verificar(rel, t)
+    assert r["trecho_ausente"] == [] and not r["reprovou"]
+
+
+def test_trecho_que_so_o_integral_tem_e_achado(tmp_path):
+    t = _trabalho_com_uma_leitura(tmp_path, corpo_md="vista podada")
+    t.guarda_derivado(3, "vista podada\n\no trecho que a poda cortou", "raw.md")
+    rel = tmp_path / "r.md"
+    rel.write_text('Cito [m:3 «o trecho que a poda cortou»].', encoding="utf-8")
+    r = verificar(rel, t)
+    assert r["trecho_ausente"] == [] and not r["reprovou"]

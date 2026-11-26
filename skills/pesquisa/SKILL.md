@@ -85,7 +85,8 @@ O loop abaixo é como a base se cumpre com o verbo `pesquisar`.
    pesquisar verificar /srv/platafirma/casa/var/tmp/<ordem_id>/relatorio.md
    ```
    Citação literal vai como `[m:<n> «trecho»]`, curta e numa linha só: o gate procura o texto
-   exato no markdown guardado. Reprovou (`sem_ancora`, `ancora_quebrada`, `trecho_ausente`),
+   no Markdown guardado, no integral e no registro do `resolver`, sem ligar para quebra de linha.
+   Relatório sem nenhum marcador reprova. Reprovou (`sem_marcador`, `sem_ancora`, `ancora_quebrada`, `trecho_ausente`),
    corrija e repita, no **máximo três voltas**: a terceira reprovação sai como lacuna.
 
 ## Quando a fonte não vem
