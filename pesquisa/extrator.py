@@ -51,6 +51,7 @@ from urllib.parse import urlsplit
 from . import manifesto as M
 from .envelope import FalhaFonte
 from .guarda import UrlRecusada, verifica_url
+from .prazo import CONEXAO_S, Relogio, com_prazo
 
 PISO_CARACTERES_UTEIS = 1  # C3 de inteligencia sem medida: só o vazio reprova
 LIMIAR_TEXTO_CURTO = 400  # abaixo disso o retorno avisa que `--render` pode trazer mais
@@ -322,6 +323,13 @@ def ler(
     grava derivado → manifesto. Toda saída por falha grava antes a linha de não-achado.
     """
     estrategia = "browser" if render else "http"
+    # Um prazo total para o ato inteiro (#4457 t3): o HTTP, as imagens e o navegador gastam do
+    # mesmo relógio, e o ato responde antes de a porta cortar a conexão.
+    relogio = Relogio()
+    coletor_base = coletor or _coletor_httpx
+
+    def _coleta(u: str, v: Callable[[str], None]) -> Resposta:
+        return com_prazo(lambda: coletor_base(u, v), relogio.resta(), onde="http")
 
     def _verifica(u: str) -> None:
         try:
@@ -332,7 +340,7 @@ def ler(
     resp: Resposta | None = None
     try:
         _verifica(url)
-        resp = (coletor or _coletor_httpx)(url, _verifica)
+        resp = _coleta(url, _verifica)
         _confere(resp)
         if _eh_google_drive(url):
             redirecionou_login = (
@@ -380,7 +388,7 @@ def ler(
     else:
         try:
             if render and tipo not in TIPOS_PDF:
-                d = _deriva_render(trab, n, url, renderizador)
+                d = _deriva_render(trab, n, url, renderizador, relogio=relogio)
             else:
                 d = _deriva_http(resp, tipo, derivador, leitor_pdf=leitor_pdf)
         except (FalhaFonte, _SemDerivado) as f:
@@ -422,7 +430,7 @@ def ler(
     if imagens and tipo in TIPOS_HTML:
         imagens_coletadas = _coleta_imagens_html(
             trab, n, html_meta, url_base=resp.url_final or url,
-            coletor=coletor, verifica=_verifica,
+            coletor=_coleta, verifica=_verifica,
         )
 
     linha_dados = {
@@ -558,8 +566,11 @@ def _deriva_http(
     raise _SemDerivado(f"tipo-nao-permitido:{tipo}")
 
 
-def _deriva_render(trab, n: int, url: str, renderizador: Renderizador | None) -> dict[str, Any]:
-    r = (renderizador or _renderizador_crawl4ai)(url)
+def _deriva_render(trab, n: int, url: str, renderizador: Renderizador | None, *,
+                   relogio: Relogio | None = None) -> dict[str, Any]:
+    relogio = relogio or Relogio()
+    rend = renderizador or _renderizador_crawl4ai
+    r = com_prazo(lambda: rend(url), relogio.resta(), onde="navegador")
     dom = r.get("dom") or ""
     derivados: dict[str, Any] = {}
     if dom:
@@ -708,7 +719,7 @@ def _coletor_httpx(url: str, verifica: Callable[[str], None], *, transport=None)
     saltos: list[dict[str, Any]] = []
     atual = url
     try:
-        with httpx.Client(timeout=TIMEOUT_S, follow_redirects=False, transport=transport,
+        with httpx.Client(timeout=httpx.Timeout(TIMEOUT_S, connect=CONEXAO_S), follow_redirects=False, transport=transport,
                           headers={"User-Agent": M.UA, "Accept": "*/*"}) as cli:
             for _ in range(MAX_REDIRECIONAMENTOS + 1):
                 with cli.stream("GET", atual) as r:

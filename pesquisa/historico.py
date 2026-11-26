@@ -8,7 +8,8 @@ Fonte que some ou muda depois da coleta deixa de ficar só com prova nossa.
   --em AAAA-MM-DD    : (quem chama) lê a captura por `ler`, origem = arquivo
   --salvar          : Save Page Now e grava a URL do arquivo de terceiro no manifesto
 
-`fetch` injetável. Guarda de rede aplica-se à URL alvo antes de qualquer chamada.
+`fetch` injetável. Guarda de rede aplica-se à URL alvo antes de qualquer chamada. Toda ida
+ao Wayback corre sob o prazo total do ato (#4457 t3).
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from typing import Any, Callable
 
 from .envelope import FalhaFonte
 from .guarda import UrlRecusada, verifica_url
+from .prazo import CONEXAO_S, com_prazo
 
 Fetch = Callable[[str, dict], tuple[int, bytes]]
 CDX = "http://web.archive.org/cdx/search/cdx"
@@ -28,10 +30,16 @@ def _fetch_httpx(url: str, headers: dict) -> tuple[int, bytes]:
     import httpx
 
     try:
-        r = httpx.get(url, headers=headers, timeout=30.0, follow_redirects=True)
+        r = httpx.get(url, headers=headers, timeout=httpx.Timeout(30.0, connect=CONEXAO_S),
+                      follow_redirects=True)
         return r.status_code, r.content
     except Exception as exc:  # noqa: BLE001
         raise FalhaFonte(f"wayback-fora:{type(exc).__name__}") from exc
+
+
+def _pede(fetch: Fetch | None, url: str, headers: dict) -> tuple[int, bytes]:
+    buscar = fetch or _fetch_httpx
+    return com_prazo(lambda: buscar(url, headers), onde="wayback")
 
 
 def capturas(url: str, *, fetch: Fetch | None = None) -> dict[str, Any]:
@@ -47,7 +55,7 @@ def capturas(url: str, *, fetch: Fetch | None = None) -> dict[str, Any]:
     # as 50 mais antigas, e a captura que prova o estado de hoje nunca aparecia.
     q = (f"{CDX}?url={url}&output=json&fl=timestamp,original,statuscode,digest"
          f"&collapse=digest&limit=-{MAX_CAPTURAS}")
-    status, corpo = (fetch or _fetch_httpx)(q, {})
+    status, corpo = _pede(fetch, q, {})
     if not (200 <= status < 300):
         raise FalhaFonte(f"cdx-status-{status}")
     linhas = json.loads(corpo.decode("utf-8", "replace") or "[]")
@@ -74,7 +82,7 @@ def salvar(url: str, *, fetch: Fetch | None = None) -> dict[str, Any]:
         verifica_url(url)
     except UrlRecusada as rec:
         raise FalhaFonte(f"guarda-de-rede:{rec.causa}") from rec
-    status, _ = (fetch or _fetch_httpx)(SPN + url, {})
+    status, _ = _pede(fetch, SPN + url, {})
     if not (200 <= status < 400):
         raise FalhaFonte(f"spn-status-{status}")
     return {"arquivo_terceiro": SPN + url, "status": status}

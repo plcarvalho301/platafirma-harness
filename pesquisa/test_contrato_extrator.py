@@ -506,3 +506,33 @@ def test_google_drive_falha_de_fonte_vira_drive_exige_conector(tmp_path):
     assert e.value.causa == "drive-exige-conector"
     assert e.value.extra["detalhe"] == "Google Drive exige o conector"
     _ultima_nao_achado(t, "drive-exige-conector")
+
+
+# ------------------------------------------------------------------ prazo total (#4457 t3)
+def test_fonte_que_nao_responde_sai_por_prazo_com_linha(tmp_path, monkeypatch):
+    import time
+
+    from pesquisa import prazo
+
+    monkeypatch.setattr(prazo, "PRAZO_TOTAL_S", 0.2)
+    t = M.Trabalho("prazo1", raiz=tmp_path)
+
+    def col_parado(u, v):
+        time.sleep(2)
+        return resposta(PAGINA.encode())
+
+    inicio = time.monotonic()
+    with pytest.raises(FalhaFonte) as e:
+        extrator.ler(URL, t, coletor=col_parado, derivador=derivador_texto, guarda_resolvedor=PUB)
+    assert time.monotonic() - inicio < 1.5
+    assert e.value.causa == "prazo-total-esgotado" and e.value.extra["onde"] == "http"
+    _ultima_nao_achado(t, "prazo-total-esgotado")
+
+
+def test_com_prazo_devolve_o_valor_e_repassa_a_excecao():
+    from pesquisa.prazo import com_prazo
+
+    assert com_prazo(lambda: 7, 1.0) == 7
+    with pytest.raises(FalhaFonte) as e:
+        com_prazo(lambda: (_ for _ in ()).throw(FalhaFonte("status-404")), 1.0)
+    assert e.value.causa == "status-404"

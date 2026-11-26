@@ -19,6 +19,7 @@ from urllib.parse import quote
 
 from .envelope import FalhaFonte
 from .guarda import UrlRecusada, verifica_url
+from .prazo import CONEXAO_S, Relogio, com_prazo
 
 # fetch(url, headers) -> (status:int, corpo:bytes)
 Fetch = Callable[[str, dict], tuple[int, bytes]]
@@ -62,7 +63,8 @@ def _fetch_httpx(url: str, headers: dict) -> tuple[int, bytes]:
     import httpx
 
     try:
-        r = httpx.get(url, headers=headers, timeout=20.0, follow_redirects=True)
+        r = httpx.get(url, headers=headers, timeout=httpx.Timeout(20.0, connect=CONEXAO_S),
+                      follow_redirects=True)
         return r.status_code, r.content
     except Exception as exc:  # noqa: BLE001
         raise FalhaFonte(f"registro-fora:{type(exc).__name__}") from exc
@@ -123,7 +125,11 @@ def resolver(tipo: str, ident: str, *, completo: bool = False, fetch: Fetch | No
     except UrlRecusada as rec:
         raise FalhaFonte(f"guarda-de-rede:{rec.causa}") from rec
 
-    status, corpo = (fetch or _fetch_httpx)(url, headers)
+    # Prazo total do ato (#4457 t3): o registro que não responde vira falha em JSON antes de a
+    # porta cortar a conexão.
+    relogio = Relogio()
+    buscar = fetch or _fetch_httpx
+    status, corpo = com_prazo(lambda: buscar(url, headers), relogio.resta(), onde=tipo)
     resolvido = 200 <= status < 300
     registro: Any = None
     resumo: dict[str, Any] | None = None
