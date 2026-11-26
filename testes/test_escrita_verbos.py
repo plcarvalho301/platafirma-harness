@@ -124,6 +124,57 @@ def _preparar_wt_para_escritor(tmp_path: Path, repo_nome: str = "platafirma-harn
     return bancada, wt_dir
 
 
+def _tarefas_falso(tmp_path: Path) -> Path:
+    """Rastreador de mentira: a story do ramo está em execução, sem ler o card real."""
+    falso = tmp_path / "tarefas-falso"
+    falso.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' '{\"nivel_nome\": \"story\", \"estado\": \"em-execucao\"}'\n",
+        encoding="utf-8",
+    )
+    falso.chmod(0o755)
+    return falso
+
+
+def test_repo_sanear_devolve_grupo_e_setgid_a_bancada_antiga(tmp_path: Path) -> None:
+    bancada = tmp_path / "bancada"
+    bancada.mkdir()
+    bare = _criar_origem_git(tmp_path, "demo-repo")
+    env = {
+        **os.environ,
+        "PLATAFIRMA_BANCADA": str(bancada),
+        "PF_CADEIRA": "engenharia",
+        "PF_SESSAO": "sessao-sanear-grupo",
+        "PF_SANEAR_DIAS": "9999",
+    }
+    r_clone = subprocess.run(
+        [str(BIN_REPO), "clonar", str(bare), "demo-repo"],
+        env=env, capture_output=True, text=True, check=False,
+    )
+    assert r_clone.returncode == 0, r_clone.stderr
+    r_abrir = subprocess.run(
+        [str(BIN_REPO), "abrir", "demo-repo", "--slug", "antiga", "--sem-mover"],
+        env=env, capture_output=True, text=True, check=False,
+    )
+    assert r_abrir.returncode == 0, r_abrir.stderr
+    wt_dir = bancada / "wt" / "demo-repo" / "engenharia" / "antiga"
+    sub = wt_dir / "sub"
+    sub.mkdir()
+    for d in (wt_dir, sub):
+        d.chmod(0o755)
+    assert not stat.S_IMODE(wt_dir.stat().st_mode) & stat.S_ISGID
+
+    r_sanear = subprocess.run(
+        [str(BIN_REPO), "sanear", "demo-repo"],
+        env=env, capture_output=True, text=True, check=False,
+    )
+    assert r_sanear.returncode in (0, 1), r_sanear.stderr
+    for d in (wt_dir, sub):
+        modo = stat.S_IMODE(d.stat().st_mode)
+        assert modo & stat.S_ISGID, f"{d} sem setgid depois do sanear"
+        assert modo & stat.S_IWGRP, f"{d} sem escrita do grupo depois do sanear"
+
+
 def test_repo_abrir_e_clonar_configuram_setgid_e_exclusao_temporarios(tmp_path: Path) -> None:
     bancada = tmp_path / "bancada"
     bancada.mkdir()
@@ -182,6 +233,7 @@ def test_repo_gravar_ligado_e_commitar_sem_lista_lendo_registro_escritor(tmp_pat
             "PF_SUJEITO": "engenharia",
             "PF_SESSAO": "sessao-t7-commit",
             "PF_CARD": "4441",
+            "PF_TAREFAS_BIN": str(_tarefas_falso(tmp_path)),
             "PF_ESCRITOR_SOCKET": str(sock),
             "PF_ESCRITA_CONFIG": str(cfg_yaml),
             "PF_ESCRITA_REGISTRO": str(estado / "operacoes.jsonl"),

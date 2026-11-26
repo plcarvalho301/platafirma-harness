@@ -30,6 +30,25 @@ from escrita.pedido import parsear_patch_estrito  # noqa: E402
 from escrita.tipos import RecusaEscrita, TrocaTrecho  # noqa: E402
 
 
+def test_sem_permissao_na_bancada_sai_4_com_sanear_na_cura(tmp_path: Path) -> None:
+    """EACCES na bancada é permanente: sai 4 bancada-sem-permissao, nunca 3 com «repita»."""
+    from escrita.io_atomico import _erro_os_antes_replace
+
+    trancada = tmp_path / "trancada"
+    trancada.mkdir()
+    trancada.chmod(0o555)
+    try:
+        with pytest.raises(PermissionError) as info:
+            os.open(str(trancada / ".pf-esc-x.tmp"), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    finally:
+        trancada.chmod(0o755)
+    erro = _erro_os_antes_replace("a.txt", info.value).erros[0]
+    assert erro.saida == 4
+    assert erro.codigo == "bancada-sem-permissao"
+    assert erro.proximo == "repo sanear"
+    assert "repo sanear" in erro.cura
+
+
 def _criar_worktree_simulada(
     raiz: Path, repo: str, cadeira: str, chave: str
 ) -> Path:

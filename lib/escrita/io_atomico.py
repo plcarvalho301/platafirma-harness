@@ -163,6 +163,24 @@ def _erro_os_antes_replace(onde: str, exc: OSError) -> RecusaEscrita:
                 proximo="",
             )
         )
+    if exc.errno in (errno.EACCES, errno.EPERM):
+        return RecusaEscrita(
+            ErroEscrita(
+                saida=4,
+                codigo="bancada-sem-permissao",
+                onde=onde,
+                recebido=str(exc),
+                regra=(
+                    "a bancada não dá escrita ao grupo platafirma-escrita; "
+                    "repetir a chamada falha igual"
+                ),
+                cura=(
+                    "rode repo sanear <repo>, que põe o grupo platafirma-escrita e o setgid "
+                    "nas bancadas vivas, e grave de novo"
+                ),
+                proximo="repo sanear",
+            )
+        )
     return RecusaEscrita(
         ErroEscrita(
             saida=3,

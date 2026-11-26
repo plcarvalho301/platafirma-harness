@@ -83,6 +83,7 @@ CODIGOS_POR_SAIDA: dict[int, frozenset[str]] = {
             "superficie-vedada",
             "caminho-com-atalho",
             "fora-de-morada",
+            "bancada-sem-permissao",
         }
     ),
     5: frozenset(
