@@ -1,13 +1,13 @@
-# Substrato das entidades operacionais de sessão (spec_montagem-de-sessao §3, fase 6).
+# Substrato das entidades operacionais de sessão.
 #
 # Por que instância própria, e não o motor nem o identidade-db:
-# - `arq:0023` põe condução de sessão no HARNESS ("que contexto se carrega, quando se
-#   invoca, em que ordem"); recuperação é que é do motor. Fita, giro e pacote são condução.
-# - `arq:0025`: componentes separados, substratos separados — a mesma razão pela qual o
-#   `motor-pg` nasceu fora do `rag-extractor-pg` em 11/08.
+# - condução de sessão pertence ao harness ("que contexto se carrega, quando se
+#   invoca, em que ordem"); recuperação é do motor. Fita, giro e pacote são condução.
+# - componentes separados, substratos separados — a mesma razão pela qual o
+#   `motor-pg` nasceu fora do `rag-extractor-pg`.
 # - identidade-db é control-plane crítico do core: acoplar a abertura de sessão a ele faz
 #   o IAM virar dependência de abrir conversa, sem ganho nenhum — a referência
-#   `fita.persona` é lógica (arq:0046) e não pede JOIN.
+#   `fita.persona` é lógica e não pede JOIN.
 #
 # Stack própria, e não um serviço no compose de `harness-controle`, porque ali o ciclo de
 # vida é o da TELA: `deploy harness-controle down` levaria a memória de trabalho junto.

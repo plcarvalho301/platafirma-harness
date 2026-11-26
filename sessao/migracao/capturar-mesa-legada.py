@@ -1,10 +1,10 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # capturar-mesa-legada — copia a mesa escrita no Valkey para `sessao.mesa_legado`.
 # capacidade: memoria
-# dono: claudinho-TI
+# dono: ti
 # componente: harness-sessao
 #
-# Ato de migração da fase 6 (spec_montagem-de-sessao §10, card #189). Roda quantas vezes
+# Ato de migração da mesa legada. Roda quantas vezes
 # quiser: é UPSERT por chave de origem, e não apaga nada do Valkey — a mesa velha segue
 # servindo quem ainda lê de lá até o cliente `mesa` trocar de substrato.
 #
@@ -12,8 +12,8 @@
 # prosa por chapéu. Fabricar ato para caber no modelo seria inventar pendência que ninguém
 # declarou — a triagem é da cadeira dona, na primeira fita depois do corte.
 #
-# NÃO DEDUPLICA por alias. `mem:ti:construcao` e `mem:claudinho-ti:construcao` coexistem e
-# divergem (medido, 16/08, nas cinco cadeiras com par): o slug canônico entra na coluna
+# NÃO DEDUPLICA por alias. Chaves canônicas e chaves com prefixo legado coexistem e
+# divergem nas cinco cadeiras com par: o slug canônico entra na coluna
 # `cadeira`, a chave crua fica em `chave_origem`, e as duas metades chegam inteiras.
 
 import os
@@ -32,7 +32,7 @@ except ImportError:
     sys.exit("erro: modulo 'redis' nao instalado neste venv (uv pip install redis)")
 
 # personas/ da MESMA arvore do harness deste arquivo (sessao/migracao/ -> raiz), por
-# realpath: nunca raiz montada a mao (card #3010).
+# realpath: nunca raiz montada a mao.
 PERSONAS = str(Path(__file__).resolve().parents[2] / "personas")
 
 MEM_HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
