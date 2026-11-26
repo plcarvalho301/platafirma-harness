@@ -13,6 +13,7 @@ ontologia ler <classe> [<chave>...] [--fichas] [--json]
 ontologia listar [<classe>] [--filhas <slug> | --aponta-para <slug> | --capacidade <slug>] [--json]
 ontologia criar [<classe>] [<arquivo.yaml>] [--pedido <id>] [--json]
 ontologia trocar <classe> <chave> <versao> [<arquivo.yaml>] [--pedido <id>] [--json]
+ontologia trocar <arquivo.yaml> [--pedido <id>] [--json]
 ontologia recompor <classe> <versao> [<arquivo.yaml>] [--pedido <id>] [--json]
 ontologia ensaiar [<criar|trocar|recompor>] [<classe>] [<chave>] [<versao>] [<arquivo.yaml>] [--json]
 ontologia renomear <classe> <chave> <nova_chave> [--pedido <id>] [--json]
@@ -36,6 +37,7 @@ SAIDAS = (
 NOTAS = (
     "Leia antes de mudar com `ontologia ler <classe> <chave>` ou `ontologia ler <classe> --fichas` para obter a versão (fornada <id>).",
     "Em `trocar` de lote com versões distintas, coloque `versao: <uuid7>` em cada item de `classes`, `fichas` ou catálogo no YAML e chame `ontologia trocar <arquivo.yaml>` (ou passe uma `<versao>` em posição como padrão para os itens sem `versao`).",
+    "Para remendo parcial em lote, marque o item existente com `_remendo: true` e `versao: <uuid7>` e envie só os campos alterados (ausente fica como está, `null` remove o campo; listas com chave — `restricoes` por propriedade/sentido, `valores` e `estados` por slug — mesclam pela chave e removem com `_remover: true`; demais listas trocam inteiras). Use `ontologia ensaiar trocar <arquivo.yaml>` para validar antes de gravar.",
     "Em `shape`, `ler shape <slug>` traz a linhagem e as restrições herdadas, e `listar shape` aceita `--filhas <slug>`, `--aponta-para <slug>` ou `--capacidade <slug>`.",
     "Os itens do catálogo leem-se e listam-se por `shape`, `dicionario`, `tipo-de-ligacao` (ou `ligacao`), `axioma` e `tipo-de-evento`.",
     "Para conferir o que já está gravado (estrato, capacidade ou classe), use `conferir ontologia <estrato:slug|capacidade:slug|classe>`.",

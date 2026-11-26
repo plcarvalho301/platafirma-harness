@@ -239,7 +239,16 @@ def _fez(ato: str, corpo: dict, como_json: bool, fornada: str, aviso_variante: s
         apagada = corpo.get("apagada") or {}
         return Saida(codigo, _linhas(id_, f"apagada: {apagada.get('chave', '?')} ({apagada.get('classe', '?')})"))
     if ato in ("gravar", "criar", "trocar", "recompor"):
-        return Saida(codigo, _linhas(str(fornada or corpo.get("fornada") or ""), _resumo_da_gravacao(ato, corpo)))
+        linhas_g = [str(fornada or corpo.get("fornada") or ""), _resumo_da_gravacao(ato, corpo)]
+        if corpo.get("estado") != "ja-gravada":
+            r = _relatorio(corpo)
+            versoes = r.get("versoes")
+            if isinstance(versoes, dict):
+                for item, v in versoes.items():
+                    linhas_g.append(f"versao: {item} · {v}")
+            for aviso in r.get("avisos") or []:
+                linhas_g.append(f"aviso: {aviso}")
+        return Saida(codigo, _linhas(*linhas_g))
     if ato == "ensaiar-capacidades":
         classes = corpo.get("classes") or []
         return Saida(codigo, _linhas("conforme: a régua não recusa nada no que está gravado"
@@ -251,9 +260,12 @@ def _resumo_do_ensaio(corpo: dict) -> str:
     """O que a gravação faria, com as removidas pela chave: o ensaio que remove não sai igual ao que só acrescenta
     (débito 713)."""
     r = _relatorio(corpo)
-    gravadas, removidas = r.get("gravadas") or [], r.get("removidas") or []
-    partes = ["ensaio: nenhum erro; nada gravado", str(r.get("uso", "?")), f"gravaria {len(gravadas)} fichas",
-              f"removeria {len(removidas)}" + (f": {', '.join(map(str, removidas))}" if removidas else "")]
+    gravadas, removidas, classes = r.get("gravadas") or [], r.get("removidas") or [], r.get("classes") or []
+    partes = ["ensaio: nenhum erro; nada gravado", str(r.get("uso", "?"))]
+    if classes:
+        partes.append(f"classes: {', '.join(map(str, classes))}")
+    partes.append(f"gravaria {len(gravadas)} fichas")
+    partes.append(f"removeria {len(removidas)}" + (f": {', '.join(map(str, removidas))}" if removidas else ""))
     return SEPARADOR.join(partes)
 
 
@@ -261,9 +273,14 @@ def _resumo_da_gravacao(ato: str, corpo: dict) -> str:
     if corpo.get("estado") == "ja-gravada":
         return "já gravada: mesmo YAML"
     r = _relatorio(corpo)
-    gravadas, removidas = r.get("gravadas") or [], r.get("removidas") or []
+    gravadas, removidas, classes = r.get("gravadas") or [], r.get("removidas") or [], r.get("classes") or []
     acao = {"criar": "criadas", "trocar": "trocadas", "recompor": "recompostas"}.get(ato, corpo.get("estado", "fez"))
-    return f"{acao}: {r.get('uso', '?')} · {len(gravadas)} fichas gravadas · {len(removidas)} removidas"
+    partes = [f"{acao}: {r.get('uso', '?')}"]
+    if classes:
+        partes.append(f"classes: {', '.join(map(str, classes))}")
+    partes.append(f"{len(gravadas)} fichas gravadas")
+    partes.append(f"{len(removidas)} removidas")
+    return SEPARADOR.join(partes)
 
 
 def _recusou(ato: str, corpo: dict, como_json: bool, fornada: str) -> Saida:
