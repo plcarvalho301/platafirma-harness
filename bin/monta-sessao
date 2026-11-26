@@ -3,7 +3,7 @@
 # capacidade: harness
 # dono: ia (politica de sessao) · ti (montador)
 #
-# Fase 5 do card #189 (spec_montagem-de-sessao §4 e §6). As pecas nao estao escritas
+# As pecas nao estao escritas
 # aqui dentro: o montador le a arvore abertura/**/*.md para as pecas-arquivo, a lista
 # PECAS_VERBO deste arquivo para as de verbo e PECAS_CALCULADAS para as computadas em
 # Python, servindo o que tem gatilho.evento abertura.
@@ -20,7 +20,7 @@
 #
 # DUAS FORMAS DE ARTEFATO, as duas do catalogo:
 #   <repo>@<path>   lido da MORADA PUBLICADA, nunca de clone nem do espelho de
-#                   repo_read (arq:0097; E3/arq:0058). O <repo> ficou ROTULO: ele
+#                   repo_read. O <repo> ficou ROTULO: ele
 #                   mantem o `ref` citavel pela cadeira, e o conteudo vem de
 #                   $PF_ABERTURA_DIR/current/abertura.
 #   verbo:<comando> peca servida por execucao — mesa, cadernos, fila
@@ -45,18 +45,18 @@ import sys
 import time
 
 # A propria arvore (release no ar, ou o checkout que roda) resolve por realpath, nunca
-# por raiz montada a mao (card #3010). Dela vem codigo, verbos irmaos e artefato pinado.
+# por raiz montada a mao. Dela vem codigo, verbos irmaos e artefato pinado.
 _REPO_REAL = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 sys.path.insert(0, os.path.join(_REPO_REAL, "lib"))
 import raizes  # noqa: E402 — as duas raizes de producao (release, instancia)
 
 # Verbos irmaos: o bin/ desta mesma arvore. PF_BIN so existe para teste apontar stubs.
 BIN = os.environ.get("PF_BIN") or os.path.join(_REPO_REAL, "bin")
-# arq:0097: RUNTIME NAO LE WORKING TREE GIT. A abertura vem da MORADA PUBLICADA —
-# arvore imutavel extraida de um commit por `publicar-abertura` (git archive no object
+# RUNTIME NAO LE WORKING TREE GIT. A abertura vem da MORADA PUBLICADA —
+# arvore imutavel extraida de um commit (git archive no object
 # store) e fixada pelo ponteiro atomico `current`. Sem working tree lido nao ha arvore
 # a divergir: commit local nao empurrado num clone deixou de travar o boot de qualquer
-# cadeira, e a classe `divergente` (arq:0058) sai deste caminho junto com pull/fetch/
+# cadeira, e a classe `divergente` sai deste caminho junto com pull/fetch/
 # reconciliar. Git volta a ser fonte so na publicacao, que e ato deliberado e separado.
 # A morada e estado da INSTANCIA (plano /srv), nao da release nem da bancada.
 _MORADA_ENV = os.environ.get("PF_ABERTURA_DIR")
@@ -68,18 +68,18 @@ else:
     MORADA = os.environ.get("PF_CASA_RAIZ") or str(raizes.release() / "casa")
     ABERTURA = os.path.join(MORADA, "instancias", "persona")
     MANIFESTO = os.path.join(MORADA, "MANIFEST.json")
-# (ledger de vinculo NAO se le mais aqui — incidente/ordem do dono; identidade viva
+# (ledger de vinculo NAO se le mais aqui; identidade viva
 #  sai da arvore abertura/. `persona filme|foto` ainda o le, mas e outro verbo.)
-# arq:0073: morada unica em abertura/. Fonte de conceito e o golden record acervo.conceito
+# Morada unica em abertura/. Fonte de conceito e o golden record acervo.conceito
 # (verbo `acervo listar conceitos`); a tabela de rotas por cadeira e gerada dele para
 # `abertura/rotas-chapeu.json`, lido pelo roteador. O caminho conceitos.json foi aposentado
-# no tombamento (arq:0073) e nao e mais procurado por codigo nenhum.
+# no tombamento e nao e mais procurado por codigo nenhum.
 CHAPEUS_DIR = ABERTURA
 # O modulo de codigo `recuperacao` vem do REPO REAL (via __file__), nunca de raiz de
 # ambiente: o contrato monta morada e stubs sob um diretorio hermetico sem este pacote.
 sys.path.insert(0, _REPO_REAL)
 from recuperacao import roteador_chapeu as _rot
-# Mesma razao para o hash: a lib e do repo real, e a porta importa a MESMA (arq:0101 R7).
+# Mesma razao para o hash: a lib e do repo real, e a porta importa a MESMA.
 sys.path.insert(0, os.path.join(_REPO_REAL, "comum"))
 from hash_servido import sha_servido
 
@@ -97,8 +97,8 @@ def _senha_sessao():
             senha = fh.read().strip()
     return senha
 
-# Clones que a abertura pode tocar. arq:0058 (E1) manda a abertura ler UM repositorio:
-# `platafirma-arquitetura` so aparece aqui se alguma peca ainda apontar para ele, e
+# Clones que a abertura pode tocar. A abertura le um repositorio:
+# o repositorio legado so aparece aqui se alguma peca ainda apontar para ele, e
 # quando nao aparecer mais o pull dele sai sozinho — nao ha lista a manter.
 ORDEM_VOLATILIDADE = {"estavel": 0, "morna": 1, "volatil": 2}
 
@@ -127,9 +127,9 @@ PREFIXOS_CADEIRA = ("claudinho-", "claudinha-")
 
 def _sufixo_sem_prefixo(cadeira):
     """Sufixo em minusculas sem o prefixo claudinho-/claudinha-: a mesma forma que
-    nomeia o diretorio em abertura/ (arq:0073 §1). UNICA implementacao do strip
+    nomeia o diretorio em abertura/. UNICA implementacao do strip
     neste arquivo — `_canonico`, `cadeiras_validas` e `main` chamam esta em vez de
-    repetir o loop (card #2438, comentario #380 do #2431: as duas normalizacoes nao
+    repetir o loop (as duas normalizacoes nao
     podem divergir)."""
     cad = (cadeira or "").strip()
     for pref in PREFIXOS_CADEIRA:
@@ -162,9 +162,9 @@ PECAS_VERBO = [
 
 def _mapa_alias_cadeiras():
     """'Nome Humano -> slug' do dado vivo abertura/aliases.json — so endereco, sem
-    'head de', gerencia ou fronteira (decisao do dono, card #2438, comentario #379:
+    'head de', gerencia ou fronteira (
     servir o organograma inteiro faz as instancias levantarem muro). O ledger de
-    vinculo NAO se le (incidente/ordem do dono): o alias afetivo migrou para a arvore
+    vinculo NAO se le: o alias afetivo migrou para a arvore
     viva. Cadeira viva (abertura/<slug>/persona.md) sem alias no mapa sai OMITIDA com
     nota declarada — nao trava o conserto. Ator interno sem nome afetivo (fabrica)
     entra no mapa com valor null: e a fonte que diz "sem alias, de proposito", nao
@@ -201,7 +201,7 @@ PECAS_CALCULADAS = [
 
 # id da peça-arquivo -> gatilho/regime/volatilidade, por posição na árvore abertura/.
 # raiz de abertura/ e nível de cadeira = camada abertura; nível de chapéu = camada chapéu.
-# caderno.md não é peça-arquivo desde a #3217: o caderno mora no banco (arq:0120) e entra pelas
+# caderno.md não é peça-arquivo: o caderno mora no banco e entra pelas
 # peças-verbo `cadernos-indice` e `caderno-chapeu`; o caderno de head deixou de existir (§3).
 _ARQ_META = {
     "dono.md":            ("conduta-dono",   "abertura", "valor", "estavel"),
@@ -249,10 +249,10 @@ def de_abertura(pecas, cadeira):
 
     A abertura carrega o que tem NECESSIDADE DE FRONTLOADING — o que precisa estar na
     janela antes da primeira fala do dono, e por isso interrompe o seguimento da
-    montagem. Tres categorias (ordem do dono, 25/08): incidente; continuacao declarada
+    montagem. Tres categorias: incidente; continuacao declarada
     de fita anterior; alerta (broadcast deveria ser alerta; nao usado hoje). NAO e
     "impedimento" — essa formulacao era erro, removida. FILA E BOARD NAO ENTRAM — sao
-    verbos on-demand, chamados por ordem do dono como qualquer outro (#189, 17/08).
+    verbos on-demand, chamados sob demanda como qualquer outro.
     Peca com gatilho de abertura para caixa ou carteira e reincidencia: ja foi tirada
     uma vez e voltou como contagem, que devolve a fila ao lugar da mesa pela saliencia.
     """
@@ -295,7 +295,7 @@ def morada():
     so se move por ato deliberado. Logo nao ha "atras do remoto" a medir no caminho de
     servico: ou a morada esta publicada, e o servido e exatamente o ref que o MANIFEST
     nomeia, ou ela nao esta, e a sessao nao abre. O que morava aqui — `sha_e_frescor`,
-    `pull`, `_fetch`, `reconciliar` e a classe `divergente` — saiu inteiro por arq:0097:
+    `pull`, `_fetch`, `reconciliar` e a classe `divergente` — saiu inteiro:
     eram tres idas a rede por abertura para provar uma paridade que a publicacao ja prova.
 
     Ausencia se declara, como qualquer peca: morada nao publicada volta com o motivo e a
@@ -314,9 +314,9 @@ def morada():
     tem_arvore = os.path.isdir(ABERTURA)
     if dados and not tem_arvore:
         motivo = f"MANIFEST presente mas arvore ausente: {ABERTURA}"
-    # A morada nao envelhece sozinha: `publicar-abertura` e ato deliberado, e entre
+    # A morada nao envelhece sozinha: a republicacao e ato deliberado, e entre
     # dois atos ela serve texto de ontem sem nada dizer — o "clone atrasado" do
-    # arq:0058 de volta com outro nome (medido em 04/09: 27 commits atras, calada).
+    # estado defasado com outro nome (medido em 04/09: 27 commits atras, calada).
     # Medir "atras do remoto" exigiria git, que este caminho nao pode chamar; o que da
     # para afirmar sem rede e a IDADE do que esta no ar, e e o que sai declarado.
     idade_h = _idade_horas(dados.get("publicado_em"))
@@ -331,7 +331,7 @@ def morada():
         "frescor": "publicado" if (dados and tem_arvore) else "indisponivel",
         "idade_h": idade_h,
         "motivo": motivo,
-        # A abertura nao se atualiza no caminho de servico (arq:0097). Dito no pacote
+        # A abertura nao se atualiza no caminho de servico. Dito no pacote
         # para que a flag `--sem-atualizar` / `atualizar=` nao passe por promessa muda.
         "atualiza_por": "publicar-abertura",
     })
@@ -343,7 +343,7 @@ def caminho_publicado(path):
 
     Fora de `abertura/` nao ha morada onde ler: devolve None, e quem chamou declara a
     indisponibilidade. Nao ha fallback para o clone — fallback silencioso para working
-    tree e exatamente o que o arq:0097 fecha.
+    tree e exatamente o que o regime publicado fecha.
     """
     if not path.startswith("abertura/"):
         return None
@@ -387,7 +387,7 @@ def sha_conteudo(texto):
     """Hash do que foi SERVIDO, nao do commit: e o que `conferir sessao` compara, e o
     que identifica peca servida por verbo, que nao tem blob nenhum.
 
-    A CONTA vive em `comum/hash_servido.py` desde o arq:0101 R7, e nao mais aqui: a
+    A CONTA vive em `comum/hash_servido.py`, e nao mais aqui: a
     porta compara o sha da peca servida na abertura com o da peca reservida por verbo
     (dedup R2), e duas implementacoes do mesmo hash — uma com `.strip()`, outra sem —
     nunca casariam. Uma lib, dois consumidores."""
@@ -458,7 +458,7 @@ def serve(peca, cadeira, persona=None, chapeu=None):
     path = path.replace("{cadeira}", cadeira).replace("{chapeu}", chapeu or "")
     env["ref"] = f"{repo}@{path}"
     # O `ref` segue na forma <repo>@<path> porque e o que a cadeira cita; o conteudo,
-    # porem, vem da morada publicada (arq:0097). Servida a arvore imutavel, `fresco`
+    # porem, vem da morada publicada. Servida a arvore imutavel, `fresco`
     # deixa de ser comparacao com cache de remote-tracking e passa a ser fato: o que
     # esta em `current` E o ref publicado, e o MANIFEST diz qual.
     caminho = caminho_publicado(path)
@@ -496,7 +496,7 @@ def registra_pacote(cadeira, envelopes, montador_sha, sid=None):
         sup = "desconhecida"
     try:
         with psycopg.connect(dsn, connect_timeout=3) as con, con.cursor() as cur:
-            # sessao_id preenche o par sessao<->fita (arq:0091/0087 #3030): a fita
+            # sessao_id preenche o par sessao<->fita: a fita
             # aponta a sessao a que pertence. COALESCE no UPDATE nao apaga um sessao_id
             # ja gravado se uma 2a passada vier sem sid.
             cur.execute("INSERT INTO sessao.fita (id, persona, superficie, sessao_id) "
@@ -524,13 +524,13 @@ def registra_pacote(cadeira, envelopes, montador_sha, sid=None):
 
 # ------------------------------------------------------------------ montagem
 def _canonico(sufixo):
-    """Nome canonico da cadeira: o SLUG PURO minusculo (arq:0073 §2, incidente/ordem
+    """Nome canonico da cadeira: o SLUG PURO minusculo (
     do dono). O prefixo `claudinho-`/`claudinha-` foi expurgado do slug — nao ha mais
     nome canonico distinto do sufixo. Vale se a cadeira existe na arvore viva
     (abertura/<sufixo>/persona.md); nao existindo, devolve None: nao inventa.
     O ledger de vinculo NAO se le aqui."""
     suf = _sufixo_sem_prefixo(sufixo)
-    # Existência da cadeira é o DIRETÓRIO em abertura/ (arq:0073 §7.5: cadeira criada
+    # Existência da cadeira é o DIRETÓRIO em abertura/ (cadeira criada
     # mas ainda não redigida abre com peças indisponíveis, não com erro). A peça
     # persona é quem fica indisponível quando falta persona.md — não a cadeira.
     if os.path.isdir(os.path.join(ABERTURA, suf)):
@@ -539,8 +539,8 @@ def _canonico(sufixo):
 
 
 def cadeiras_validas():
-    """Sufixos vivos: subdirs de abertura/ que tem persona.md (arq:0073 §1). O ledger de
-    vinculo NAO se le (incidente/ordem do dono). Cadeira sem persona.md redigida nao
+    """Sufixos vivos: subdirs de abertura/ que tem persona.md. O ledger de
+    vinculo NAO se le. Cadeira sem persona.md redigida nao
     entra — mesma regra de ausencia de comum/cadeiras.py."""
     try:
         do_disco = {d for d in os.listdir(ABERTURA)
@@ -618,7 +618,7 @@ PODA = os.environ.get("PF_PODA", "1") != "0"
 
 
 def _portao_cobertura(d, pergunta, env):
-    """R5 (arq:0101) — a peca `acervo-consultado` entra INTEIRA so com sinal acima do
+    """A peca `acervo-consultado` entra INTEIRA so com sinal acima do
     piso; abaixo, uma linha.
 
     Medido: a abertura de uma fita gastou 28% dos tokens do pacote numa peca de RAG com
@@ -627,7 +627,7 @@ def _portao_cobertura(d, pergunta, env):
     convida a responder pelo vizinho.
 
     O PISO NAO E DESTA LINHA. Usa-se o que o proprio `motor rag buscar` declara em
-    `sinal.piso` — quem e dono do numero e a cadeira de dados (spec capsula §8), e
+    `sinal.piso` — quem e dono do numero e a cadeira de dados, e
     inventar um segundo piso aqui seria decidir na marra o que tem dono. Sem `sinal`
     no retorno, serve inteiro: ausencia de medida nao e medida ruim.
     """
@@ -636,7 +636,7 @@ def _portao_cobertura(d, pergunta, env):
     tem_medida = isinstance(valor, (int, float)) and isinstance(piso, (int, float))
     if not PODA or not tem_medida or valor >= piso:
         return _formata_acervo(d, pergunta)
-    env["motivo"] = (f"portao de cobertura (arq:0101 R5): sinal {valor} < piso {piso} "
+    env["motivo"] = (f"portao de cobertura: sinal {valor} < piso {piso} "
                      f"[{sinal.get('medida', '?')}]")
     return ("CONSULTA AO ACERVO - " + pergunta[:80] + f"\nNAO SERVIDA: sinal {valor} "
             f"abaixo do piso {piso} (cobertura {d.get('cobertura') or '?'}), "
@@ -684,7 +684,7 @@ def _agora_iso():
 
 
 def cunha_sessao(portado):
-    """O UNICO gerador de `sessao_id` da casa (arq:0101 §1, ordem do dono 06/09).
+    """O UNICO gerador de `sessao_id` da casa.
 
     Fica aqui, no montador, e nao na porta: `monta-sessao` e o ponto por onde TODA
     superficie abre — a tool `monta_sessao` delega a este verbo, e a fabrica o chama
@@ -705,7 +705,7 @@ def cunha_sessao(portado):
     return str(uuid.uuid4()), True, None
 
 
-# msg-mem: o mesmo banco e o mesmo TTL que a porta usa em `sessao:{id}` (ops-server).
+# msg-mem: o mesmo banco e o mesmo TTL que a porta usa em `sessao:{id}`.
 MEM_HOST = os.environ.get("MEM_REDIS_HOST", "127.0.0.1")
 MEM_PORTA = int(os.environ.get("MEM_REDIS_PORT", "6380"))
 TTL_SESSAO_S = 172800          # 48 h — igual ao da porta, para nao haver duas verdades
@@ -715,7 +715,7 @@ def registra_sessao(sid, cadeira):
     """Grava `sessao:{id}` no msg-mem NO ATO DE CUNHAR — quem cunha registra.
 
     Ordem do dono, 07/09/2026. O SET vivia SO no caminho da tool
-    (`ops-server/server.py`), depois que este verbo devolvia o pacote: abertura pela
+    (porta), depois que este verbo devolvia o pacote: abertura pela
     tool nascia resolvivel, e abertura pelo CLI direto — `bin/chat`, isto e, a fita do
     chat E a fabrica — nascia com id legitimo e sem registro. A porta lia `sessao:{id}`,
     nao achava, devolvia cadeira vazia, e `mesa`/`fila`/`tarefas`/`minuta` rodavam sem
@@ -771,7 +771,7 @@ def registra_sessao(sid, cadeira):
 def registra_sessao_duravel(sid, cadeira, chapeu):
     """Grava a entidade-sessao em sessao.sessao (Postgres) NO ATO DE CUNHAR.
 
-    arq:0091 fixa `sessao_id` como chave DURAVEL da entidade-sessao-L3, e a migracao
+    Fixa `sessao_id` como chave DURAVEL da entidade-sessao-L3, e a migracao
     0087 criou a tabela `sessao.sessao` pra ela. Mas ate #3030 o unico registro do
     sessao_id era o `sessao:{id}` do msg-mem (registra_sessao acima): cache com TTL
     48h, nao durabilidade. A entidade que a ADR desenhou como permanente sumia da
@@ -779,7 +779,7 @@ def registra_sessao_duravel(sid, cadeira, chapeu):
     gate de PF_FITA (a entidade-sessao existe mesmo em sessao de mao, sem fita; a 0087
     aceita superficie=claude.ai de proposito).
 
-    ON CONFLICT DO NOTHING garante a durabilidade da arq:0091 secao 3: a 2a abertura da
+    ON CONFLICT DO NOTHING garante a durabilidade: a 2a abertura da
     mesma conversa reusa a linha, nao cria segunda. Banco mudo NAO derruba a abertura,
     vira aviso, igual a registra_pacote.
     """
@@ -808,35 +808,35 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
           sessao_id=None):
     # `atualizar` sobrevive por compatibilidade de chamada (a flag `--sem-atualizar` e o
     # parametro da tool) e NAO faz mais nada: nao ha o que atualizar no caminho de
-    # servico. Atualizar a abertura virou ato deliberado e separado, `publicar-abertura`
-    # (arq:0097). Aceitar a flag sem efeito e o menor estrago para quem ja chama assim;
+    # servico. Atualizar a abertura virou ato deliberado e separado.
+    # Aceitar a flag sem efeito e o menor estrago para quem ja chama assim;
     # ignora-la calada seria falso-verde, entao o pacote declara quem atualiza, no bloco
     # `morada` (campo `atualiza_por`).
     #
-    # PRIMEIRA ACAO da montagem (ordem do dono, 07/09/2026): o `sessao_id` nasce antes
+    # PRIMEIRA ACAO da montagem: o `sessao_id` nasce antes
     # de morada, catalogo, peca, roteador e RAG. Cunhar no fim — como era — punha a
     # identidade da fita atras de todo o trabalho caro do montador, e o registro dela
     # atras de mais uma volta ate a porta.
     sid, cunhada, aviso_sid = cunha_sessao(sessao_id)
     m = morada()
 
-    # ---- GATE DE VALOR (arq:0058, no que dele sobrevive ao arq:0097) --------
+    # ---- GATE DE VALOR ------------------------------------------------------
     # Peca de valor nao se serve de procedencia nao verificavel. Antes isso custava, por
     # abertura, um fetch e um merge --ff-only por clone, e a classe `divergente` travava
     # o boot de TODA cadeira quando um clone tinha commit local nao empurrado. Agora e
     # uma pergunta local e barata: a morada esta publicada? Nao estando, a sessao NAO
-    # abre — e a cura segue sendo ato deliberado (`publicar-abertura`), nunca um
+    # abre — e a cura segue sendo ato deliberado, nunca um
     # reset --hard em silencio. Este gate vem ANTES da validacao de cadeira de proposito:
     # sem morada, `cadeiras_validas()` sai vazia e "cadeira desconhecida" seria diagnostico
     # errado do defeito real.
     if m["frescor"] != "publicado":
         return {
             "erro": "sessao nao aberta: pacote de abertura nao publicado na morada "
-                    "(runtime nao le working tree git — arq:0097)",
+                    "(runtime nao le working tree git)",
             "cadeira": cadeira, "nome_canonico": None,
             "morada": m, "cadeiras_validas": [],
             "avisos": [f"morada `{m['raiz']}` indisponivel: {m['motivo']}",
-                       "cura: `publicar-abertura` — publica o ref e move `current`"],
+                       "cura: republicar a abertura — publica o ref e move `current`"],
         }
 
     if cadeira.lower() not in [c.lower() for c in cadeiras_validas()]:
@@ -848,7 +848,7 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
     # dono na chave e o que fazia `mesa`/`fila` abrirem caixa de ninguem.
     _cad_canon = _canonico(cadeira) or cadeira.strip().lower()
     aviso_reg = registra_sessao(sid, _cad_canon)
-    # arq:0091: a entidade-sessao tambem se grava DURAVEL, fora do gate de PF_FITA (#3030).
+    # a entidade-sessao tambem se grava DURAVEL, fora do gate de PF_FITA.
     # chapeu ainda nao foi roteado aqui; a linha nasce com chapeu NULL e o eixo analitico
     # o preenche depois se precisar. superficie sai de PF_SUPERFICIE dentro da funcao.
     aviso_reg_dur = registra_sessao_duravel(sid, _cad_canon, None)
@@ -858,7 +858,7 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
 
     texto_persona = (open(p_persona, encoding="utf-8", errors="replace").read()
                      if os.path.isfile(p_persona) else "")
-    # Canonico vem do ledger, nao da linha 1: o form novo poe o alias ali (arq:0073).
+    # Canonico vem do ledger, nao da linha 1: o form novo poe o alias ali.
     nome = _canonico(cadeira)
 
     # A abertura-base serve SEMPRE, salvo pedido explícito de SÓ-chapéu (`so_chapeu`).
@@ -872,12 +872,12 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
     # FLAG explícita `--so-chapeu`, nunca por inferência. Default serve abertura: esquecer
     # a flag falha para o lado seguro (nunca abre vazio), honrando o contrato acima.
     servidas, avisos = [], [
-        "deprecado: sucessor sessao abrir + expediente montar (arq:0110 §11), remoção após 14 dias",
+        "deprecado: sucessor sessao abrir + expediente montar, remoção após 14 dias",
     ]
     if (m["idade_h"] or 0) > IDADE_MORADA_AVISO_H:
         avisos.append(
             f"morada publicada ha {m['idade_h']}h (ref {m['sha']}): a abertura servida "
-            "pode estar atras do main — `publicar-abertura` republica")
+            "pode estar atras do main — republicar a abertura atualiza")
     if not so_chapeu:
         for peca in pecas:
             env, conteudo = serve(peca, cadeira, nome)
@@ -899,7 +899,7 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
     roteador = {"via": dec.via, "motivo": dec.motivo, "acertos": dec.acertos, "slug": dec.slug}
     chapeu_env = None
     if dec.slug:
-        # Perna 2 (arq:0073): dobra o chapeu servindo TODAS as pecas com gatilho de chapeu
+        # Perna 2: dobra o chapeu servindo TODAS as pecas com gatilho de chapeu
         # (chapeu.md, ferramental.md, caderno do chapeu) pelo catalogo, {chapeu}=slug.
         for pc in de_chapeu(catalogo()):
             envc, cont = serve(pc, cadeira, nome, chapeu=dec.slug)
@@ -924,7 +924,7 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
             avisos.append(f"peca `acervo-consultado` indisponivel: {env_ac['motivo']}")
 
     # Quem data o pacote e o ref PUBLICADO, nao o clone: era o SHA do working tree do
-    # montador (arq:0058, 'um clone so data o pacote'), e agora e o commit de onde a
+    # montador ('um clone so data o pacote'), e agora e o commit de onde a
     # arvore foi extraida — imutavel, e por isso reproduzivel.
     montador_sha = m["sha"]
     if aviso_sid:
@@ -941,12 +941,12 @@ def monta(cadeira, atualizar, pergunta=None, forcado_chapeu=None, so_chapeu=Fals
                    # cadeira, e a fita tem de saber disso na abertura, nao no primeiro
                    # verbo que falhar.
                    "registrada": aviso_reg is None,
-                   # arq:0091 (#3030): a entidade-sessao durou em Postgres? Distinto de
+                   # a entidade-sessao durou em Postgres? Distinto de
                    # `registrada` (msg-mem, efemero 48h) — este e o registro duravel.
                    "duravel": aviso_reg_dur is None,
                    "porte": "devolva este `sessao_id` em toda chamada de tool e na "
                             "proxima abertura desta mesma conversa — quem cunha e este "
-                            "verbo, uma vez (arq:0101 §1); a porta nao infere"},
+                            "verbo, uma vez; a porta nao infere"},
         "nome_canonico": nome,
         "morada": m,
         "pacote": {
@@ -973,7 +973,7 @@ def imprime_texto(pac):
     # Aviso de deprecado vai ao STDERR: stdout e contrato de quem le o pacote (teste de
     # contrato `== cadeira: ... ==` na linha 0; casca do chat). Corrigido por seguranca em
     # 14/09 ao destravar o pre-push do ramo fabrica/3053.
-    print("deprecado: sucessor sessao abrir + expediente montar (arq:0110 §11), remoção após 14 dias",
+    print("deprecado: sucessor sessao abrir + expediente montar, remoção após 14 dias",
           file=sys.stderr)
     if "erro" in pac:
         print(f"{pac['erro']}" + (f" (procurado: {pac['procurado']})" if pac.get('procurado') else ""), file=sys.stderr)
@@ -1074,7 +1074,7 @@ def imprime_chapeu(cadeira, args):
 
 
 def main():
-    # --ajuda UNIVERSAL (card #2868, ex-#2274 defeito 4): argparse ja da -h/--help;
+    # --ajuda UNIVERSAL: argparse ja da -h/--help;
     # aqui so mapeamos o alias PT --ajuda -> --help antes do parse, sem colidir com
     # os subparsers. Sem efeito colateral: nenhum ato roda.
     sys.argv = [("--help" if a == "--ajuda" else a) for a in sys.argv]
@@ -1083,11 +1083,11 @@ def main():
     p.add_argument("cadeira", nargs="?")
     p.add_argument("--json", action="store_true")
     p.add_argument("--sem-atualizar", action="store_true",
-                   help="aceito e SEM EFEITO desde arq:0097: a abertura vem da morada "
-                        "publicada, e quem a atualiza e `publicar-abertura`")
+                   help="aceito e SEM EFEITO: a abertura vem da morada "
+                        "publicada, atualizada por ato proprio")
     # Chapeu NAO entra na abertura (spec_montagem-de-sessao §7): carrega sob demanda,
     # no giro em que a linha ativa. Estas duas flags sao essa demanda, e por isso saem
-    # do mesmo verbo — a conta e um verbo por capacidade (arq:0037), e a capacidade
+    # do mesmo verbo — a conta e um verbo por capacidade, e a capacidade
     # aqui continua sendo `expediente`.
     p.add_argument("--chapeus", action="store_true",
                    help="lista os chapeus da cadeira, por descoberta no disco")
@@ -1101,7 +1101,7 @@ def main():
                    help="serve UM chapeu da cadeira (sob demanda, fora da abertura)")
     p.add_argument("--sessao-id", metavar="UUID",
                    help="o uuid da fita, quando ela JA abriu uma vez: reusa em vez de "
-                        "cunhar (arq:0101 §1 — uma conversa, um sessao_id). Sem a flag, "
+                        "cunhar (uma conversa, um sessao_id). Sem a flag, "
                         "cunha-se um novo aqui, que e o unico ponto onde isso acontece")
     args = p.parse_args()
 
@@ -1116,7 +1116,7 @@ def main():
 
     # Prefixo aceito e descartado: `claudinho-TI` e `TI` sao a mesma cadeira, e o nome
     # do arquivo de persona e o sufixo. Mesma regra de `_sufixo_sem_prefixo` (unica
-    # implementacao do strip no arquivo — card #2438, comentario #380 do #2431).
+    # implementacao do strip no arquivo).
     alvo = _sufixo_sem_prefixo(args.cadeira.strip())
 
     if args.chapeus:
