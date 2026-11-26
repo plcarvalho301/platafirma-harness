@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Sub-ato rotear — responde 'qual chapéu?' para a cadeira (spec_expediente §1, §8).
+"""Sub-ato rotear — responde 'qual chapéu?' para a cadeira.
 
-Mora em bin/_expediente/rotear, fora do PATH (arq:0110 §1).
+Mora em bin/_expediente/rotear, fora do PATH.
 Expediente rotear delega a ele, e expediente montar chama a mesma função `escolhe()`.
 
 Rotas seguem de rotas-chapeu.json por ora; fonte conforme é o golden record
@@ -20,7 +20,7 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
-# Raizes de producao (card #3010): a morada publicada e estado da instancia.
+# Raizes de producao: a morada publicada e estado da instancia.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
 from raizes import instancia  # noqa: E402
 
