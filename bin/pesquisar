@@ -37,6 +37,7 @@ def uso(code=2):
         "                  --integral: o Markdown inteiro, sem a poda (o inteiro fica gravado sempre, ao lado)\n"
         "                  --render: o navegador; abre também quando o site barra o HTTP (401, 403, 429, 503)\n"
         "                  --esperar \"<seletor css>\": o navegador espera o elemento antes de ler (já pede o render)\n"
+        "                  --rede: guarda o que a página pediu ao carregar e devolve os pedidos de dado (já pede o render)\n"
         "  pesquisar coletar <url> [<url>...] [--imagens]\n"
         "  pesquisar historico <url> [--em AAAA-MM-DD [--foco \"<pergunta>\"] [--max-chars 6000] [--offset N] [--integral]] [--salvar]\n"
         "                  sem --em: as capturas mais recentes do Wayback; com --em: lê a captura mais próxima da data\n"
@@ -93,6 +94,7 @@ def main(argv):
     p.add_argument("--imagens", action="store_true")
     p.add_argument("--integral", action="store_true")
     p.add_argument("--esperar", default=None)
+    p.add_argument("--rede", action="store_true")
     p.add_argument("--para", default=None)
     p.add_argument("--excluir", action="append", default=[])
     p.add_argument("--juntar", default=None)
@@ -117,7 +119,7 @@ def main(argv):
                 uso()
             env = atos.ler(resto[0], foco=args.foco, render=args.render,
                           max_chars=args.max_chars, offset=args.offset, imagens=args.imagens,
-                          integral=args.integral, esperar=args.esperar, trab=trab)
+                          integral=args.integral, esperar=args.esperar, rede=args.rede, trab=trab)
         elif ato == "coletar":
             if not resto:
                 uso()

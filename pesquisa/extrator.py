@@ -342,6 +342,7 @@ def ler(
     imagens: bool = False,
     integral: bool = False,
     esperar: str | None = None,
+    rede: bool = False,
     coletor: Coletor | None = None,
     renderizador: Renderizador | None = None,
     derivador: Derivador | None = None,
@@ -366,7 +367,7 @@ def ler(
     def _rend(u: str) -> dict:
         if renderizador is not None:
             return renderizador(u)
-        return _renderizador_crawl4ai(u, esperar=esperar, prazo_s=relogio.resta())
+        return _renderizador_crawl4ai(u, esperar=esperar, prazo_s=relogio.resta(), rede=rede)
 
     def _verifica(u: str) -> None:
         try:
@@ -438,6 +439,8 @@ def ler(
     if (anterior is not None and integral and anterior.get("vista") == "fit"
             and not (trab.derivado / f"{anterior['n']}.raw.md").exists()):
         anterior = None  # o cache só tem a vista podada: deriva de novo para servir o integral
+    if rede:
+        anterior = None  # a rede só se mede abrindo a página de novo
     if anterior is not None:
         return _serve_cache(trab, url, resp, sha, anterior, foco=foco, max_chars=max_chars,
                             offset=offset, integral=integral)
@@ -523,11 +526,14 @@ def ler(
     linha = trab.grava_linha(linha_dados)
 
     corpo = _recorte_bm25(md, foco) if (foco and md) else md
-    return _retorno(n=n, url=url, resp=resp, sha=sha, bruto=str(p_bruto), tipo=tipo,
-                    estrategia=estrategia, corpo=corpo, max_chars=max_chars, offset=offset,
-                    idioma=idioma, datapub=datapub, avisos=avisos, encoding=d.get("encoding"),
-                    uteis=uteis, aviso=aviso, manifesto=trab.ref_manifesto(linha),
-                    binario=eh_binario, tamanho_bytes=len(resp.corpo), imagens=imagens_coletadas)
+    saida = _retorno(n=n, url=url, resp=resp, sha=sha, bruto=str(p_bruto), tipo=tipo,
+                     estrategia=estrategia, corpo=corpo, max_chars=max_chars, offset=offset,
+                     idioma=idioma, datapub=datapub, avisos=avisos, encoding=d.get("encoding"),
+                     uteis=uteis, aviso=aviso, manifesto=trab.ref_manifesto(linha),
+                     binario=eh_binario, tamanho_bytes=len(resp.corpo), imagens=imagens_coletadas)
+    if d.get("rede") is not None:
+        saida["rede"] = d["rede"]
+    return saida
 
 
 def _confere(resp: Resposta) -> None:
@@ -703,10 +709,45 @@ def _deriva_render(trab, n: int, url: str, renderizador: Renderizador | None, *,
         p = trab.derivado / f"{n}.captura.png"
         p.write_bytes(captura)
         derivados["captura"] = {"arquivo": str(p), "sha256": M.sha256_bytes(captura)}
+    rede = r.get("rede")
+    resumo_rede = None
+    if rede:
+        # O que a página pediu depois de carregar (#4457 t9): é onde mora a API que o site usa e
+        # não expõe. O registro inteiro vai ao disco; o retorno leva só os pedidos de dado.
+        texto_rede = json.dumps(rede, ensure_ascii=False, indent=1)
+        p = trab.guarda_derivado(n, texto_rede, "rede.json")
+        derivados["rede"] = {"arquivo": str(p), "sha256": M.sha256_texto(texto_rede), "eventos": len(rede)}
+        resumo_rede = resumo_da_rede(rede)
     fit = (r.get("md_fit") or "").strip()
     raw = (r.get("md_raw") or "").strip()
     return {"md": fit or raw, "vista": "fit" if fit else "raw", "raw": raw, "encoding": None,
-            "html": dom, "derivados": derivados}
+            "html": dom, "derivados": derivados, "rede": resumo_rede}
+
+
+TIPOS_DE_PEDIDO_DE_DADO = frozenset({"xhr", "fetch", "script", "document", "eventsource", "websocket"})
+MAX_PEDIDOS_NO_RETORNO = 60
+
+
+def resumo_da_rede(eventos: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Uma linha por pedido de dado (xhr, fetch, script, documento): método, URL e como terminou.
+
+    Imagem, fonte e folha de estilo ficam só no arquivo: não dizem de onde vem o conteúdo.
+    """
+    por_url: dict[str, dict[str, Any]] = {}
+    for ev in eventos:
+        if not isinstance(ev, dict):
+            continue
+        tipo = (ev.get("resource_type") or "").lower()
+        url = ev.get("url") or ""
+        if tipo not in TIPOS_DE_PEDIDO_DE_DADO or not url or url.startswith("data:"):
+            continue
+        item = por_url.setdefault(url, {"url": url, "tipo": tipo, "metodo": ev.get("method")})
+        evento = ev.get("event_type")
+        if evento == "response":
+            item["status"] = ev.get("status")
+        elif evento == "request_failed":
+            item["falhou"] = ev.get("failure_text") or "falhou"
+    return list(por_url.values())[:MAX_PEDIDOS_NO_RETORNO]
 
 
 def _acha_cache(trab, url: str, sha: str, estrategia: str) -> dict[str, Any] | None:
@@ -905,7 +946,7 @@ def _derivador_crawl4ai(html: str, base_url: str) -> dict[str, str]:
 
 
 def _renderizador_crawl4ai(url: str, *, esperar: str | None = None,
-                           prazo_s: float | None = None) -> dict[str, Any]:
+                           prazo_s: float | None = None, rede: bool = False) -> dict[str, Any]:
     """`--render`: browser da Crawl4AI. Crawl4AI é falador; stdout vai ao stderr (§2.2).
 
     `esperar` é um seletor CSS que o navegador espera aparecer antes de ler a página (#4457 t6):
@@ -916,7 +957,7 @@ def _renderizador_crawl4ai(url: str, *, esperar: str | None = None,
     import sys
 
     with contextlib.redirect_stdout(sys.stderr):
-        return asyncio.run(_renderiza_async(url, esperar=esperar, prazo_s=prazo_s))
+        return asyncio.run(_renderiza_async(url, esperar=esperar, prazo_s=prazo_s, rede=rede))
 
 
 def _timeout_da_pagina_ms(prazo_s: float | None) -> int:
@@ -927,7 +968,7 @@ def _timeout_da_pagina_ms(prazo_s: float | None) -> int:
 
 
 async def _renderiza_async(url: str, *, esperar: str | None = None,
-                           prazo_s: float | None = None) -> dict[str, Any]:
+                           prazo_s: float | None = None, rede: bool = False) -> dict[str, Any]:
     import base64
 
     from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, DefaultMarkdownGenerator
@@ -935,6 +976,8 @@ async def _renderiza_async(url: str, *, esperar: str | None = None,
     from crawl4ai.content_filter_strategy import PruningContentFilter
 
     opcoes: dict[str, Any] = {"wait_for": f"css:{esperar}"} if esperar else {}
+    if rede:
+        opcoes["capture_network_requests"] = True
     cfg = CrawlerRunConfig(
         markdown_generator=DefaultMarkdownGenerator(content_filter=PruningContentFilter()),
         user_agent=M.UA, page_timeout=_timeout_da_pagina_ms(prazo_s), verbose=False,
@@ -956,4 +999,5 @@ async def _renderiza_async(url: str, *, esperar: str | None = None,
         "captura": base64.b64decode(captura) if captura else None,
         "status": getattr(r, "status_code", None),
         "url_final": getattr(r, "redirected_url", None) or getattr(r, "url", None),
+        "rede": getattr(r, "network_requests", None) if rede else None,
     }
