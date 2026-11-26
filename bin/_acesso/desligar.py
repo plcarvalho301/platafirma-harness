@@ -5,7 +5,7 @@
 #
 # Existe porque desligar um sujeito eram quatro operacoes manuais em quatro lugares
 # (realm, sujeitos.yaml, PAP, segredo em disco) e nada media resíduo: a entrada tinha
-# gate e a saida nao tinha. Regua: seg:0011 item 7.
+# gate e a saida nao tinha.
 #
 # NAO COMMITA e NAO faz deploy. Edita arquivo do PAP e apaga segredo; o commit e do
 # chamador, para que o diff passe por olho humano antes de virar historico.
@@ -27,10 +27,10 @@ POLITICA = RAIZ / "politica.yaml"
 # HARNESS/PERSONAS derivam da propria arvore (realpath), nao de RAIZ (a morada de dados)
 HARNESS = Path(__file__).resolve().parents[2]
 PERSONAS = HARNESS / "personas"
-# Raizes de producao e bancada declarada (card #3010).
+# Raizes de producao e bancada declarada.
 sys.path.insert(0, str(HARNESS / "lib"))
 from raizes import BancadaNaoDeclarada, bancada, release, release_raiz  # noqa: E402
-import oplog  # noqa: E402  (card #3344: o unico que le o bruto da porta)
+import oplog  # noqa: E402  (o unico que le o bruto da porta)
 # LE do servido (RAIZ), ESCREVE so na bancada DECLARADA: o servido e arvore imutavel da
 # release (/opt e r-x); a edicao de sujeitos.yaml/PAP vai ao worktree da cadeira e vira
 # historico por commit + merge + `release promover` (spec_acesso §2). Editar o servido a
@@ -46,7 +46,7 @@ UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 
 def bancada_pap() -> Path:
     """acesso/ no worktree da cadeira, na bancada declarada:
-    <bancada>/wt/platafirma-core/<cadeira>/acesso (arq:0109 §2).
+    <bancada>/wt/platafirma-core/<cadeira>/acesso.
     ACESSO_BANCADA_DIR vence (teste). Nunca dentro da release."""
     explicito = os.environ.get("ACESSO_BANCADA_DIR")
     if explicito:
@@ -98,7 +98,7 @@ def cmd_orfaos(argv: list[str]) -> int:
     suj = sujeitos()
     hoje = date.today()
 
-    # 1. Concessao vencida: o prazo do seg:0009 §7 esta no `motivo`, e ate hoje
+    # 1. Concessao vencida: o prazo esta no `motivo`, e ate hoje
     #    ninguem o lia. Vencido, a regra tem de sair por merge.
     for r in regras():
         m = VENCE.search(str(r.get("motivo") or ""))
@@ -130,7 +130,7 @@ def cmd_orfaos(argv: list[str]) -> int:
                 achados.append(("segredo declarado sem lastro",
                                 f"sujeito {nome} aponta {s}, que nao existe"))
 
-    # 4. Conta de SO NAO e sujeito (dono, 27/09/2026, card #3165; seg:0011, emenda de
+    # 4. Conta de SO NAO e sujeito:
     #    30/09/2026). Segregacao por conta e eixo de EXECUCAO; quem se autentica e a
     #    pessoa que abriu a sessao. Conta de SO sem linha em sujeitos.yaml e o estado
     #    correto, nao residuo, e por isso este verbo deixou de conta-la. A isolacao da
@@ -225,7 +225,7 @@ def cmd_orfaos(argv: list[str]) -> int:
             no_reg = {v["valor"] for v in vocab
                       if v.get("eixo") == eixo and v.get("estado") != "extinto" and v.get("valor") != "-"}
             for v in sorted(no_reg - no_pap):
-                cura = ("ato de destino de seg:0007" if eixo == "dominio"
+                cura = ("ato de destino pendente" if eixo == "dominio"
                         else "`acesso politica importar` extingue")
                 achados.append(("vocabulario sem PAP",
                                 f"{eixo} {v} vigente no registro e ausente do PAP ({cura})"))
@@ -237,7 +237,7 @@ def cmd_orfaos(argv: list[str]) -> int:
     #    e credencial declarada que nao atuou nenhuma vez. Os dois sao superficie sem
     #    funcao — um por baixo do PAP, outro sobrando no realm.
     # A janela e de dias corridos, hoje incluso (antes: os N ultimos arquivos); a leitura e do
-    # lib/oplog, que diz qual dia faltou (arq:0123 §3).
+    # lib/oplog, que diz qual dia faltou.
     janela = max(1, int(os.environ.get("ACESSO_DIAS", 7)))
     hoje = date.today()
     leitura = oplog.ler(hoje - timedelta(days=janela - 1), hoje, diretorio_=LOG_OPS)
