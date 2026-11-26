@@ -42,6 +42,7 @@ Tudo que toca rede ou browser é injetável, para a suíte de contrato rodar sem
 from __future__ import annotations
 
 import codecs
+import functools
 import json
 import os
 import re
@@ -574,15 +575,10 @@ def _resposta_json(resp: Resposta, sha: str, tipo: str, tipo_por: str, *,
     return json.dumps(doc, ensure_ascii=False, indent=2).encode("utf-8")
 
 
-_FORMATOS = None
-
-
+@functools.cache
 def _carrega_formatos():
     """O leitor de formatos da casa, carregado uma vez por processo."""
-    global _FORMATOS
-    if _FORMATOS is None:
-        _FORMATOS = _carrega_formatos_do_disco()
-    return _FORMATOS
+    return _carrega_formatos_do_disco()
 
 
 def _tipo_do_zip(corpo: bytes) -> str:
@@ -600,7 +596,7 @@ def _leitor_formato_casa(corpo: bytes, tipo: str) -> dict[str, Any]:
     formatos = _carrega_formatos()
     try:
         doc = formatos.abre(tipo, dados=corpo)
-    except Exception as exc:  # noqa: BLE001 — pacote inválido ou bomba de compressão
+    except Exception as exc:  # pacote inválido ou bomba de compressão: vira falha com a causa
         raise _SemDerivado("formato-invalido", detalhe=f"{type(exc).__name__}: {str(exc)[:160]}") from exc
     try:
         rotulo = formatos.ROTULO.get(doc.unidade)

@@ -77,7 +77,7 @@ def _fetch_httpx(url: str, headers: dict) -> tuple[int, bytes]:
         r = httpx.get(url, headers={"User-Agent": UA, **headers},
                       timeout=httpx.Timeout(20.0, connect=CONEXAO_S), follow_redirects=True)
         return r.status_code, r.content
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise FalhaFonte(f"registro-fora:{type(exc).__name__}") from exc
 
 
