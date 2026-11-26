@@ -1,6 +1,6 @@
 """Adaptador do acervo — a única fonte semântica das seis.
 
-Dois papéis, dois donos (arq:0119 §1.2 e §4; migração 079, `ferramental_fonte_papel`): a
+Dois papéis, dois donos (`ferramental_fonte_papel`): a
 BUSCA pelo sentido é da capacidade `motor` (dona ia) e devolve só endereço — obra, seção,
 escore, cobertura; a LEITURA do texto pelo endereço é da capacidade `conhecimento` (dona
 dados), na rota `POST /acervo/secoes/consulta`. O adaptador encadeia as duas e não monta
@@ -35,7 +35,7 @@ a invariante 1 existe para impedir.
 a dependência não fecha. Ele existe nomeado e desligado por default: escape que vira
 default é a forma mais rápida de a projeção virar chave sem ninguém decidir.
 
-Dois pedidos a claudinho-dados, dono do produto (#2313, e a dependência já declarada no
+Dois pedidos à cadeira dados, dona do produto (e a dependência já declarada no
 §4): `section_id` completo por requisição, e `impressao.id` no retorno de cada fonte —
 sem o segundo, a versão sai como o `acervo_sha` do índice, que carimba o ÍNDICE e não a
 impressão da obra citada.
@@ -62,7 +62,7 @@ CHAVE_CURTA = os.environ.get("PF_ACERVO_CHAVE_CURTA") == "1"
 
 FORMATO_COMPLETO = "completo-v1"
 
-# arq:0119 §1.2 e §3: a busca (capacidade motor, dona ia) devolve endereço, escore e
+# A busca (capacidade motor, dona ia) devolve endereço, escore e
 # cobertura; a consulta termina com a fonte entregue pelo acervo (capacidade conhecimento,
 # dona dados). Por isso o adaptador pede à busca SEMPRE `texto="nenhum"` e, quando o
 # chamador quer texto, lê a seção na rota de leitura pelo `secao_id` que a busca devolveu —
@@ -125,7 +125,7 @@ class AdaptadorAcervo(Adaptador):
     def _carimbo(self) -> str:
         """`acervo_sha` de `/facets` — o carimbo do índice inteiro (§8).
 
-        Constante de sessão do lado do rag (card #357): saiu de toda busca e ficou só em
+        Constante de sessão do lado do rag: saiu de toda busca e ficou só em
         `/facets`. Por isso é lido UMA vez por instância e memoizado — reenviar em toda
         consulta o que não muda é o que a régua da cadeira chama de contexto gasto em
         campo repetido. Instância nova relê; o `ops-mcp` a recria por processo.
@@ -146,7 +146,7 @@ class AdaptadorAcervo(Adaptador):
         pergunta = (alvo or "").strip()
         if not pergunta:
             return []
-        # A busca devolve só o endereço; o texto vem da leitura (arq:0119 §1.2).
+        # A busca devolve só o endereço; o texto vem da leitura.
         corpo = {"pergunta": pergunta, "k": k, "texto": "nenhum"}
         for eixo in ("dominio", "subdominio", "frente", "colecao"):
             if filtros.get(eixo):
@@ -165,7 +165,7 @@ class AdaptadorAcervo(Adaptador):
                 f"`{formato}` é projeção de exibição, não chave estrutural (§4) — "
                 "a API não serve a forma completa por requisição (achado 20/08, #2313)")
 
-        # `/search` NÃO devolve o carimbo (card #357 tirou de toda busca) — vem de
+        # `/search` NÃO devolve o carimbo — vem de
         # `/facets`, memoizado. Sem isto a versão sairia `sem-carimbo`, medido em 20/08.
         carimbo = self._carimbo().removeprefix("acervo:")
         fontes = d.get("fontes") or []
@@ -232,7 +232,7 @@ class AdaptadorAcervo(Adaptador):
         """Sem gold, `nao-calibrada` — mesmo quando o rag disse `boa` (§13).
 
         O rótulo do rag mede distância contra piso; o gold mede se o retorno responde a
-        pergunta. Promover um ao outro é o defeito que `arq:0064` §2 nomeia: instrumento
+        pergunta. Promover um ao outro é defeito de classificação: instrumento
         desligado não vira instrumento por dizer um número.
         """
         return Cobertura.COBERTA if self.tem_gold else Cobertura.NAO_CALIBRADA

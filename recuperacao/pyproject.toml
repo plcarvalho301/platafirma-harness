@@ -1,7 +1,7 @@
 [project]
 name = "harness-recuperacao"
 version = "0.1.0"
-description = "Adaptadores de recuperação de estado do harness — mesa, board, fila, catálogo, envelope, PEP (card #317)."
+description = "Adaptadores de recuperação de estado do harness — mesa, board, fila, catálogo, envelope, PEP."
 requires-python = ">=3.12"
 dependencies = [
     "pyyaml>=6.0",

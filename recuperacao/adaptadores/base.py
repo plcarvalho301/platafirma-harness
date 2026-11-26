@@ -5,7 +5,7 @@
 
 - **Ao contrato da fonte, nunca ao binário.** O adaptador chama o que o CLI chama por
   baixo. Subprocess sobre saída de CLI acopla à superfície humana, que é volátil por
-  desenho, e transforma mudança de forma em quebra de recuperação (`arq:0064` §1).
+  desenho, e transforma mudança de forma em quebra de recuperação.
 - **Nenhum adaptador reimplementa a fonte.** Ele projeta o que a fonte já sabe
   responder, no envelope.
 - **Fonte sem gold serve `nao-calibrada`, nunca "boa"** (§13). É por isso que
@@ -70,7 +70,7 @@ class Adaptador(ABC):
 
     def cobertura_com_item(self) -> Cobertura:
         """Sem gold, o instrumento está desligado — e o valor honesto do instrumento
-        desligado é `nao-calibrada`, jamais `coberta` (§13, `arq:0064` §2)."""
+        desligado é `nao-calibrada`, jamais `coberta`."""
         return Cobertura.COBERTA if self.tem_gold else Cobertura.NAO_CALIBRADA
 
     def sinal(self, itens: list[Item]) -> Sinal | None:

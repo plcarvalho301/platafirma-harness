@@ -4,7 +4,7 @@
 Fonte nova aparece no roteamento; fonte que sai, some. Nenhuma linha se escreve à mão
 antes de o gerador existir."
 
-A tabela (`docs/catalogo-de-fontes.md`) não é mais a fonte da verdade (arq:0076): esse
+A tabela (`docs/catalogo-de-fontes.md`) não é mais a fonte da verdade: esse
 lugar é `acervo.ferramental_fonte`, lida via GET /acervo/fontes por `fontes.py`. Este
 módulo segue vivo como parser do seed inicial e de `texto=` explícito nos testes.
 """
@@ -35,7 +35,7 @@ class FonteInfo:
     contrato_de_leitura: str
     gold: str
     linha_num: int
-    # Facetas do golden record (arq:0076: acervo.ferramental_fonte). Opcionais: só a
+    # Facetas do golden record (acervo.ferramental_fonte). Opcionais: só a
     # leitura por GET /acervo/fontes as preenche (fontes.py::_le_fontes_do_acervo). O
     # parser do .md (seed) e o seed embutido não as carregam — ficam no default, e os
     # mapas de fontes.py caem no valor fixo de contingência quando o campo vem vazio.
@@ -51,7 +51,7 @@ def _acha_catalogo_padrao() -> Path:
     cand = raiz / "docs" / "catalogo-de-fontes.md"
     if cand.is_file():
         return cand
-    # Fallback le da release no ar, nunca de clone de bancada (arq:0097/0109 §1).
+    # Fallback le da release no ar, nunca de clone de bancada.
     cand_release = release() / "harness" / "docs" / "catalogo-de-fontes.md"
     if cand_release.is_file():
         return cand_release
@@ -62,7 +62,7 @@ def le_tabela_fontes(caminho: Path | str | None = None, texto: str | None = None
     """Lê e valida estritamente a tabela `Fontes da plataforma` — do seed embutido
     (`docs/catalogo-de-fontes.md`, se presente) ou de `texto=` explícito.
 
-    Não é mais a fonte da verdade (arq:0076): serve o parser do seed inicial e dos testes
+    Não é mais a fonte da verdade: serve o parser do seed inicial e dos testes
     por `texto=`; a leitura viva é `acervo.ferramental_fonte` via GET /acervo/fontes
     (`fontes.py::_le_fontes_do_acervo`).
 

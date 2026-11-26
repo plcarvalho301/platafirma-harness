@@ -6,10 +6,10 @@ carimbo = sha da última ingestão (`acervo.casa_fonte`); classe exata. §4: `ch
 <serie>:<NNNN>`, versão = sha da linha (`acervo.casa.sha`, o mesmo que `acervo ler casa`
 serve como "servido").
 
-**Morada única, desde arq:0111/arq:0115.** As seis séries do registro setorial da
+**Morada única.** As seis séries do registro setorial da
 PlataFirma moram todas no suporte `platafirma-casa`, espécie `adr`, distinguidas pela
 coluna `serie`: `adr/arq/` (canônico) e `adr/<serie>/` para `seg`, `ont`, `infra`,
-`integracao`, `org`. Não há mais leitura por caminho de repositório (`platafirma-arquitetura`
+`integracao`, `org`. Não há mais leitura por caminho de repositório legado (
 saiu do inventário do release na Frente 1 do rescaldo #3115) — a fonte é a tabela, lida do
 mesmo jeito que todo `acervo casa` lê: `docker exec` no container do Postgres do acervo
 (`recuperacao/adaptadores/base.py` §"ao contrato da fonte, nunca ao binário" — o contrato
@@ -18,9 +18,8 @@ texto do CLI).
 
 Antes desta versão, o adaptador lia arquivo por caminho de release
 (`<release>/arquitetura/macro-global/decisions/`, `.../capabilities/seguranca/decisions/`,
-`<release>/conhecimento/ontologia/adr/`) — desenho anterior a arq:0111/0115, que ficou
-quebrado (`FonteIndisponivel`) assim que a Frente 1 retirou `platafirma-arquitetura` do
-inventário do release. Achado e corrigido no card #3138.
+`<release>/conhecimento/ontologia/adr/`) — desenho legado, substituído pela
+leitura direta da morada única no banco.
 """
 
 from __future__ import annotations
@@ -47,7 +46,7 @@ PG_TIMEOUT_S = float(os.environ.get("ACERVO_PG_TIMEOUT_S", "10"))
 SUPORTE = "platafirma-casa"
 ESPECIE = "adr"
 
-# arq:0111 §1: alcance = `arq` (canônico) e os setoriais `seg`, `ont`, `infra`,
+# Alcance = `arq` (canônico) e os setoriais `seg`, `ont`, `infra`,
 # `integracao`, `org`. `mdm` e `plat` não entram (não são arquitetura da plataforma).
 SERIES = ("arq", "seg", "ont", "infra", "integracao", "org")
 
@@ -173,7 +172,7 @@ class AdaptadorRegistro(Adaptador):
         proc = Procedencia(fonte=Fonte.REGISTRO, chave=chave, versao=versao)
 
         if linha.get("retirada_em"):
-            # arq:0111 item 5 / arq:0115: citação de ADR retirada segue resolvível —
+            # Citação de registro retirado segue resolvível —
             # responde a data e a sucessora, nunca com o texto (mesmo comportamento de
             # `acervo ler casa`).
             suc = linha.get("substituida_por")

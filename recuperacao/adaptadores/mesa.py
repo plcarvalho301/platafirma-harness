@@ -1,6 +1,6 @@
 """Adaptador de mesa e caderno — a memória de trabalho da cadeira.
 
-`spec_recuperador.md` §5: contrato = mapa por chave (`arq:0062`); classe exata; carimbo =
+Contrato = mapa por chave; classe exata; carimbo =
 `v` no valor; prefixo `mem:*`. §4: chave `mem:<sufixo>:<slot>#<item>`.
 
 **A fonte tem três metades hoje**, e o adaptador não pode fingir que tem uma (medido em
@@ -12,7 +12,7 @@
 | entrada de caderno | Postgres `sessao.caderno_entrada` | `mem:<sufixo>:<chapeu>#c<id>` | `seq` = id da entrada |
 | prosa de slot | Valkey msg-mem, `mem:<sufixo>:<slot>` | `mem:<sufixo>:<slot>` | `digest` do valor |
 
-Do caderno sai só o que `mesa caderno <chapéu>` serve (arq:0120 §6): a entrada vigente, sem a
+Do caderno sai só o que `mesa caderno <chapéu>` serve: a entrada vigente, sem a
 premissa vencida e sem a aresta, que acumula para a curadoria e não orienta o chapéu. A entrada
 não muda de texto (substituir cria outra), por isso o id basta de versão. `filtros["categoria"]`
 pede só o caderno; `filtros["ato"]`, só a mesa.
@@ -51,7 +51,7 @@ _DA_CADEIRA = "lower(regexp_replace(cadeira, '^claudinh[oa]-', '', 'i')) = %s"
 # O mesmo fuso da restrição de 60 dias da 0097 e do `mesa caderno`.
 _HOJE = "(now() AT TIME ZONE 'America/Sao_Paulo')::date"
 _ROTULO = {"licao": "lição", "preferencia": "preferência do dono", "premissa": "premissa"}
-_PRAZO_LICAO = 90  # dias sem confirmação até «a revisar» (arq:0120 §7)
+_PRAZO_LICAO = 90  # dias sem confirmação até «a revisar»
 
 
 def _br(d) -> str:
@@ -191,7 +191,7 @@ class AdaptadorMesa(Adaptador):
     def busca(self, alvo: str = "", filtros: dict | None = None, k: int = 8,
               texto: str = "secao") -> Resultado:
         if not self.sufixo:
-            raise FonteIndisponivel(Causa.SEM_CONCESSAO, "mesa é privada da cadeira (arq:0041)")
+            raise FonteIndisponivel(Causa.SEM_CONCESSAO, "mesa é privada da cadeira")
         prosa = self._prosa_filtrada(alvo, filtros, texto)
         itens_mesa, item_mudo = self._itens_de_mesa(alvo, filtros, texto)
         itens = (prosa + itens_mesa)[:k]

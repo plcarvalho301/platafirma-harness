@@ -1,18 +1,18 @@
-"""`situacao` — verbo de verificação de estado de serviço de obra (#2953, arq:0085 §2).
+"""`situacao` — verbo de verificação de estado de serviço de obra.
 
 `spec_leitura-do-conhecimento.md` §0, §2, §4, §10.6.
 
 Contrato:
   situacao(obra: str) -> Envelope   # payload {servida_inteira, servivel, desde, impressao_id, degrau}
 
-Regras duras (arq:0085 §4 + §2):
+Regras duras:
 1. Lê a CADEIA VIVA (impressão → estado de serviço), não retrato agregado.
 2. Fonte que não alcança o vivo responde indeterminavel/fonte-nao-indexada, NUNCA zero (§4).
 3. degrau mapeia na tabela de estados do conceito (spec §10.6: ancorado ·
    declarado-não-servindo · sem-obra-não-julgado · órfão).
 4. Mesma biblioteca e mesmo envelope das outras leituras do conhecimento.
 
-Verbo fino desde #2957 (arq:0089 §2, arq:0090): a escada de degraus e o casamento de
+Verbo fino: a escada de degraus e o casamento de
 obra por título/arquivo migraram para `motor_acervo/acervo_consulta.py`, do outro lado
 de `GET /acervo/obras/{obra_id}/situacao`. Este módulo só chama a rota (via
 `adaptadores.motor_acervo_rest`) e empacota a resposta no Envelope — o contrato de dado
@@ -75,7 +75,7 @@ def situacao(
     # por identidade; a biblioteca não inventa sujeito a partir de cadeira ou conta.
     sujeito_resolvido = (sujeito or os.environ.get("PF_SUJEITO") or "").strip()
     _pep = pep or PEP()
-    # situação é leitura do acervo, não busca pelo sentido (arq:0119 §4, #3312)
+    # situação é leitura do acervo, não busca pelo sentido
     negativas = _pep.autoriza(sujeito=sujeito_resolvido, pedidos=[Fonte.ACERVO],
                               acao=ACAO_ACERVO["leitura"])
     if negativas:

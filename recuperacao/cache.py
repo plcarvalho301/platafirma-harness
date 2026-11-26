@@ -22,7 +22,7 @@ espaço — é a forma de esquecer que o PEP tem de rodar antes do lookup, porqu
 passa a *parecer* segura por si.
 
 **O cache de acervo está DESLIGADO, e isso é o §9, não uma omissão.** A pré-condição é a
-ordem `#167 → #283 → cache`, e os dois estão em lapidação com claudinho-dados
+ordem de execução, e os dois estão em lapidação com a cadeira dados
 (medido em 20/08/2026). Cache antes de `abrir_impressao` idempotente por sha mede o bug,
 não o produto. `PF_CACHE_ACERVO=1` liga na bancada, nomeado; a validação no hit por
 `rec:aposentadas` já está escrita e é o que ligará junto.

@@ -9,7 +9,7 @@ de ele existir apartado do gate:
 2. **Não reescreve a chave.** A chave gravada no artefato é sempre a da
    **seção-folha**. O resolvedor sobe ao ancestral titulado SÓ para a coordenada
    humana — gravar a chave do ancestral colapsaria seções distintas numa citação
-   só e envenenaria o dedupe da fita (`arq:0065` §7).
+   só e envenenaria o dedupe da fita.
 
 ## Âncora-ruído e a degradação declarada
 
@@ -24,7 +24,7 @@ o §10 existe para impedir.
 
 ## Os cinco estados
 
-`arq:0064` §5, item 4. São cinco, não três, e a distinção é de classe: `zero
+São cinco estados, não três, e a distinção é de classe: `zero
 obra-âncora` é derivável; `lacuna` é juízo, e juízo não se deriva. O resolvedor
 DERIVA os quatro deriváveis e lê `lacuna` de `acervo.conceito_lacuna` quando a
 consulta a informar — nunca a infere da ausência de obra.
@@ -43,7 +43,7 @@ from .fontes import Fonte
 # --------------------------------------------------------------------- estados
 
 class EstadoConceito(StrEnum):
-    """Tabela de `arq:0064` §5 (item 4). `LACUNA` não é derivável — só declarada."""
+    """Tabela de estados de cobertura. `LACUNA` não é derivável — só declarada."""
 
     ANCORADO = "ancorado"
     DECLARADO_NAO_SERVINDO = "declarado-nao-servindo"
@@ -193,7 +193,7 @@ class Coordenada:
 
 
 class NaoResolve(Exception):
-    """A chave não resolve no índice. Erro que instrui (`arq:0064` §6): traz o que
+    """A chave não resolve no índice. Erro que instrui: traz o que
     falta e o próximo passo — o gate do #2310 o converte em `falta`/`proximo`."""
 
     def __init__(self, chave: str, falta: str, proximo: str = "") -> None:
@@ -269,7 +269,7 @@ class Resolvedor:
         hierarquia, pagina, degrau = self._escada(s)
         return Coordenada(
             obra=s.obra,
-            chave=proc.chave,                     # SEMPRE a da folha (§10, arq:0065 §7)
+            chave=proc.chave,                     # SEMPRE a da folha
             versao=proc.versao.valor,
             hierarquia=hierarquia,
             pagina=pagina,

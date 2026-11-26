@@ -2,7 +2,7 @@ Recupera estado da plataforma consultando fontes declaradas.
 Fontes disponíveis:
 - board (exata): capacidade trabalho, dono TI — HTTP do rastreador + header de identidade
 - fila (exata): capacidade mensagem, dono TI — XINFO STREAM · XRANGE no motor-msg
-- mesa (exata): capacidade memoria, dono dados — mapa por chave (arq:0062)
+- mesa (exata): capacidade memoria, dono dados — mapa por chave
 - registro (exata): capacidade decisao, dono gestao-estrategica — decisions/INDICE.md, mantido na escrita
 - wiki (exata): capacidade conhecimento, dono dados — API do MediaWiki
 - acervo (semantica): capacidade conhecimento, dono dados — busca pelo motor (endereço), leitura por acervo ler <particao> secao (texto); papéis em ferramental_fonte_papel

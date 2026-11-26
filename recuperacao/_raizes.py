@@ -1,4 +1,4 @@
-"""Ponte para `lib/raizes.py` da propria arvore do harness (card #3010).
+"""Ponte para `lib/raizes.py` da propria arvore do harness.
 
 O pacote `recuperacao` mora dentro da arvore do harness; `lib/` e irma dele, e e achada
 por realpath deste arquivo — nunca por raiz montada a mao. Daqui saem as duas raizes de

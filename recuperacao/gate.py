@@ -30,7 +30,7 @@ duplica coordenada.
 
 ## Estado do conceito não é veredito de chave
 
-O degrau de `arq:0064` §5 viaja no veredito para quem quiser aplicá-lo, mas o gate NÃO
+O degrau viaja no veredito para quem quiser aplicá-lo, mas o gate NÃO
 barra por estado: exigir citação de conceito que o acervo não ancora transfere a falha de
 "não citou" para "citou vizinho que não responde", que é pior por ser invisível.
 """

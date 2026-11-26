@@ -4,8 +4,7 @@ Pasta do harness com a biblioteca do Recuperador: lê as seis fontes de estado (
 wiki, acervo, board) e devolve um envelope com procedência, disjuntor, PEP por fonte e cache.
 Importada pelos verbos da release (`monta-sessao`, `situacao`); não é o PDP, que mora em `politica-acesso/`.
 
-Por que existe: Recuperação, o Recuperador e o envelope de falha — `acervo ler casa adr arq:0064`;
-O Recuperador mora no plano de comando — `acervo ler casa adr arq:0067`.
+Por que existe: Recuperação, o Recuperador e o envelope de falha; o Recuperador mora no plano de comando.
 
 ## Como sobe
 

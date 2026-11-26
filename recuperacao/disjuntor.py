@@ -1,6 +1,6 @@
 """Disjuntor por fonte — biblioteca, dentro do recuperador.
 
-`spec_recuperador.md` §8. Três coisas que a spec fixa e que este módulo implementa
+Três coisas que o contrato fixa e que este módulo implementa
 literalmente:
 
 - **Aberto, a fonte responde em 0 ms** com `fonte-nao-indexada` +

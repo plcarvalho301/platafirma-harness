@@ -1,6 +1,6 @@
 """Catálogo de existência — a peça de abertura (#2315, F4).
 
-`spec_recuperador.md` §12 e `arq:0064` item 3. Peça `catalogo-existencia`, regime
+Peça `catalogo-existencia`, regime
 `indice`, servida sob demanda (#2404: sem orçamento declarado por peça).
 
 ## O que a peça responde, e o que ela não responde

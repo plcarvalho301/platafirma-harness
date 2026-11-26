@@ -52,7 +52,7 @@ if __name__ == "__main__":
     import json
     cad = sys.argv[1] if len(sys.argv) > 1 else "IA"
     perg = sys.argv[2] if len(sys.argv) > 2 else "orcamento de janela de contexto"
-    # morada publicada (arq:0097), a mesma que o sub-ato rotear resolve — nunca o clone
+    # morada publicada, a mesma que o sub-ato rotear resolve — nunca o clone
     raiz = _resolve_dir_chapeus()
     dec = escolhe(perg, cad, raiz)
     print(json.dumps({"slug": dec.slug, "via": dec.via, "motivo": dec.motivo,

@@ -53,7 +53,7 @@ NS_PREFIXO = {0: "principal", 4: "PlataFirma", 12: "Ajuda", 3000: "Frente", 3004
 # copiar: o `CONTENT_NS` de lá é `0|4|12|3000`, e a docstring da própria tool diz cobrir
 # `Operar:` — que é o ns **3004**, não o 3000 (3000 é `Frente:`). Medido no siteinfo em
 # 20/08/2026. Replicar o engano faria o adaptador bater com o verbo humano por errar
-# igual; o achado vai a claudinho-dados, dono da wiki, com a medição.
+# igual; o achado vai à cadeira dados, dona da wiki, com a medição.
 CONTENT_NS = "0|4|12|3000|3004"
 
 

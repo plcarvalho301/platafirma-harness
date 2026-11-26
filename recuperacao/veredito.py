@@ -18,7 +18,7 @@ precisa ler para consertar. As duas identidades do §11 continuam: `sujeito` e `
 ## `estado` ausente vem declarado, nunca omitido
 
 `veredito_por_conceito` está **desligado** (`motor rag ajuste`, 20/08: `veredito-por-conceito
-false`), e ligá-lo é decisão de claudinho-dados com baseline off→on. Enquanto isso, a linha
+false`), e ligá-lo é decisão da cadeira dados com baseline off→on. Enquanto isso, a linha
 sai com `estado: null` e `estado_medido: false` — campo faltando e campo nulo são
 indistinguíveis para quem lê a série depois, e essa é a diferença entre número parcial
 declarado e número errado.

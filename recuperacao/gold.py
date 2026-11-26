@@ -2,7 +2,7 @@
 
 `spec_recuperador.md` §13: *«Gerador de gold para fonte exata: um só, parametrizado — lê o
 estado, emite pares (predicado → resposta exata). Roda por fonte.»* Cargo e acervo são de
-claudinho-dados e não saem daqui.
+dados e não saem daqui.
 
 Schema emitido, o do §13, uma linha JSON por caso:
 
@@ -73,7 +73,7 @@ from .adaptadores.base import Adaptador
 from .fontes import CLASSE, Classe, Fonte
 
 # As exatas que são minhas de ponta a ponta. `wiki` entra pelo caminho NOMINAL
-# (`prop=revisions`); o gold de Cargo e o do acervo são de claudinho-dados (§13).
+# (`prop=revisions`); o gold de Cargo e o do acervo são de dados (§13).
 ADAPTADORES: dict[str, type[Adaptador]] = {
     "board": AdaptadorBoard,
     "fila": AdaptadorFila,
@@ -154,7 +154,7 @@ def gera(fonte: str, adaptador: Adaptador | None = None, casos: int = 20,
     """Lê o estado pela fonte e emite os casos do §13. Não escreve arquivo."""
     fonte = str(fonte)
     if fonte not in ADAPTADORES:
-        raise SemEstado(f"fonte sem gerador aqui: {fonte} (Cargo e acervo são de claudinho-dados)")
+        raise SemEstado(f"fonte sem gerador aqui: {fonte} (Cargo e acervo são de dados)")
     a = adaptador or ADAPTADORES[fonte]()
     classe = CLASSE[Fonte(fonte)]
     if classe is not Classe.EXATA:

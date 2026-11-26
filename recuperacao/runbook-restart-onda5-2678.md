@@ -2,7 +2,7 @@
 
 > **Registro histórico (estado de 25/08/2026).** Naquele dia o harness rodava do clone na
 > pasta de trabalho da conta `claudinho`, e é esse clone que os passos abaixo chamam de
-> `<clone-harness>`. Desde o card #3010 (15/09/2026) nada de produção roda de lá: código
+> `<clone-harness>`. Nada de produção roda de lá: código
 > em `/opt/platafirma/current/harness`, log da porta em `/srv/platafirma/casa/var/log/ops/`.
 > Os caminhos de log e de compose abaixo já estão no equivalente novo.
 
@@ -24,7 +24,7 @@
 
 **O que este restart põe no ar:** rechaveio do PEP por `sub` (#137), `sid`/`jti` na
 auditoria (#139), unificação das funções de identidade (#2287) e as duas guardas de
-reentrância no `_audit` (ops-server #2700, jaiminho-server b9d0163). Já mergeado; o código
+reentrância no `_audit` (porta, jaiminho-server b9d0163). Já mergeado; o código
 velho segue no ar até este restart.
 
 **Onde cada serviço lê o código:**

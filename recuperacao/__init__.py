@@ -1,15 +1,15 @@
 """`recuperacao` — o Recuperador: envelope único de leitura das seis fontes.
 
-Biblioteca importada, nunca subprocess (`arq:0064` §1). Vive no `ops-mcp` e em nenhum
-outro consumidor (`arq:0064` §9). A biblioteca não tem verbo próprio (`arq:0110` §14);
-o verbo `situacao` é fino e importa daqui (`arq:0085` §2). O que o acervo tem sobre um
+Biblioteca importada, nunca subprocess. Vive no `ops-mcp` e em nenhum
+outro consumidor. A biblioteca não tem verbo próprio;
+o verbo `situacao` é fino e importa daqui. O que o acervo tem sobre um
 assunto é `acervo listar biblioteca obra --sobre <termo>`; trechos, `motor rag buscar`.
 
-F0 (card #2291) entrega o núcleo: envelope, enums, disjuntor e os testes de contrato.
+Entrega o núcleo: envelope, enums, disjuntor e os testes de contrato.
 F1 acrescenta os adaptadores (#2298 e seguintes) e o PEP por fonte (#2303). F2 traz o
 cache por fonte e a instrumentação `rec:stat` (#2308). Roteamento derivado (#2304) e gate
 (F3) seguem fora.
-Verbo de leitura do acervo (#2953, arq:0085): `situacao`.
+Verbo de leitura do acervo: `situacao`.
 
     from recuperacao import Envelope, Item, Procedencia, Versao, LinhaFonte
     from recuperacao import Cobertura, Casamento, Causa, VersaoTipo, Fonte

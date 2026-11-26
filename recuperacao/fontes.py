@@ -1,7 +1,7 @@
 """Registro das fontes — derivado da tabela `Fontes da plataforma` do catálogo.
 
 `spec_recuperador.md` §5 (tabela das seis fontes) e §8 (timeout por classe).
-A fonte da verdade é `acervo.ferramental_fonte` (arq:0076, arq:0067 §5 emendado), lida
+A fonte da verdade é `acervo.ferramental_fonte`, lida
 via GET /acervo/fontes; o seed embutido é contingência de banco-fora-do-ar.
 """
 
@@ -25,7 +25,7 @@ class Classe(StrEnum):
 
 
 def _le_fontes_do_acervo() -> list[FonteInfo] | None:
-    """Lê a tabela de fontes do golden record via API do rag (arq:0076).
+    """Lê a tabela de fontes do golden record via API do rag.
 
     Devolve None em qualquer indisponibilidade (banco fora, API fora, resposta vazia ou
     malformada) — o chamador cai no seed embutido. Mesma convenção de variáveis de
@@ -51,7 +51,7 @@ def _le_fontes_do_acervo() -> list[FonteInfo] | None:
             transporte=l["transporte"], classe=l["classe"],
             contrato_de_leitura=l["contrato_de_leitura"], gold=l["gold"],
             linha_num=l.get("ordem", 0),
-            # Facetas do golden (arq:0076): consumidas aqui, não mais hardcoded abaixo.
+            # Facetas do golden: consumidas aqui, não mais hardcoded abaixo.
             dominio=l.get("dominio", ""), tipo=l.get("tipo", ""),
             prefixo_sobre=l.get("prefixo_sobre", ""),
             prefixo_chave=tuple(l.get("prefixo_chave") or ()),
@@ -62,9 +62,9 @@ def _le_fontes_do_acervo() -> list[FonteInfo] | None:
 
 
 def _constroi_fontes(caminho: Path | str | None = None, texto: str | None = None) -> tuple[type[StrEnum], dict[StrEnum, Classe], dict[str, FonteInfo]]:
-    # 1) golden record via API (arq:0076); 2) tabela do catálogo (.md, se alguém passar
+    # 1) golden record via API; 2) tabela do catálogo (.md, se alguém passar
     # caminho/texto explícito, ou existir na release); 3) seed embutido — banco e API
-    # fora, ou .md ausente/malformado. Nunca estoura no import (arq:0076).
+    # fora, ou .md ausente/malformado. Nunca estoura no import.
     infos: list[FonteInfo] | None = None
     if caminho is None and texto is None:
         infos = _le_fontes_do_acervo()
@@ -96,7 +96,7 @@ def _constroi_fontes(caminho: Path | str | None = None, texto: str | None = None
 Fonte, CLASSE, _INFO = _constroi_fontes()
 
 # §5 — carimbo, domínio, tipo e prefixo de `sobre`, por fonte.
-# arq:0076: a fonte da verdade destas facetas é acervo.ferramental_fonte, lida via GET
+# A fonte da verdade destas facetas é acervo.ferramental_fonte, lida via GET
 # /acervo/fontes e já preenchida em cada FonteInfo (_le_fontes_do_acervo). Os mapas
 # abaixo são o SEED DE CONTINGÊNCIA — valem só quando a API não respondeu (banco fora) e
 # a FonteInfo veio sem faceta; então DOMINIO/TIPO/PREFIXO_* caem neles pelo slug.
@@ -131,7 +131,7 @@ _PREFIXO_CHAVE_SEED = {
     "board": ("item:",),
     "fila": ("caixa:",),
     "mesa": ("mem:",),
-    # arq:0111 §1: registro setorial cobre arq (canônico) + seg/ont/infra/integracao/org.
+    # Registro setorial cobre arq (canônico) + seg/ont/infra/integracao/org.
     "registro": ("arq:", "seg:", "ont:", "infra:", "integracao:", "org:"),
     "wiki": ("wiki:",),
     "acervo": ("acervo:",),

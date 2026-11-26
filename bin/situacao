@@ -7,7 +7,7 @@
 # forma: relatorio
 # cauda: sim
 #
-# Verbo fino de leitura (arq:0085 §2, §4; card #2953):
+# Verbo fino de leitura:
 # Le a cadeia viva (impressao -> estado de servico) e devolve o envelope
 # com payload {servivel, desde, impressao_id, degrau}.
 # Fonte inalcancavel responde indeterminavel (fonte-nao-indexada), nunca zero.

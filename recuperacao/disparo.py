@@ -11,7 +11,7 @@ que o número seja por sujeito e não por processo.
 Lê a trilha de LEITURA (§11), não a do veredito: `{ts, tool, sujeito, sessao, fonte,
 cobertura, carimbo, hit|miss, disjuntor}` — uma linha por fonte alcançada.
 
-Equivalente em `jq`, que é a forma que a spec nomeia, e serve de conferência cruzada:
+Equivalente em `jq`, que é a forma nominal e serve de conferência cruzada:
 
     jq -rs '[.[] | select(.release=="F4") | .sessao] | unique | length' trilha.jsonl
 

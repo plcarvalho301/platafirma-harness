@@ -1,11 +1,11 @@
 """Envelope único de leitura das seis fontes — dataclass e vocabulário fechado.
 
-`spec_recuperador.md` §3, `arq:0064` §1 e §2. Importado por todo adaptador; nenhum
+Importado por todo adaptador; nenhum
 adaptador declara enum próprio nem devolve dicionário solto.
 
 O que este módulo entrega é a FALHA DECLARADA, não o trecho devolvido: o que fez o
 `rag_search` utilizável foi o envelope, e interface sem envelope é `open()` com outro
-nome (`arq:0064` §1).
+nome.
 
 Invariantes do §3, todas conferidas em `test_contrato_envelope.py`, nenhuma por leitura:
 
@@ -48,7 +48,7 @@ class ContratoViolado(ValueError):
 
 
 class Cobertura(StrEnum):
-    """Os seis do §3. A consequência de cada um está escrita em `arq:0064` §2 — rótulo
+    """Os seis estados de cobertura — rótulo
     sem consequência é decoração pelo critério da própria ADR."""
 
     COBERTA = "coberta"
@@ -167,7 +167,7 @@ class Expansao:
 @dataclass(frozen=True, slots=True)
 class Sinal:
     """`{medida, valor, piso}` — a RÉGUA viaja no envelope porque duas chamadas na mesma
-    sessão podem sair com réguas distintas (`arq:0064` §1)."""
+    sessão podem sair com réguas distintas."""
 
     medida: str
     valor: float

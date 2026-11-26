@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gera a tabela de rotas rótulo->chapéu do roteador determinístico (a), a partir do
 golden record `acervo.conceito` cruzado com a curadoria de PERTENCIMENTO de cada
-`persona.md`, seção `## Gerências` (card #3110 — a antiga `## b)` de cada `chapeu.md`
+`persona.md`, seção `## Gerências` (a antiga `## b)` de cada `chapeu.md`
 saiu com o molde velho; o vocabulário do pertencimento agora mora na persona).
 
 ## Por que materializar, e não consultar na montagem
@@ -51,9 +51,9 @@ segmento sofre o corte de descrição. O ponto final do último rótulo do bulle
 Gatilhos por chapéu: para cada rótulo da gerência que casou, o slug do conceito, o
 rótulo canônico e cada `outros_rotulos`. Deduplicados, normalizados na leitura (não aqui
 — o roteador normaliza com a mesma régua na hora de casar). Contrato intacto desde a
-versão anterior (card #3105); só a FONTE do rótulo mudou.
+versão anterior; só a FONTE do rótulo mudou.
 
-## Conferir: o gate de `publicar-abertura` (card #3143)
+## Conferir: o gate de publicação da abertura
 
 `--conferir` gera a tabela em memória e a compara com o `rotas-chapeu.json` que já está
 na árvore, sem escrever nada. A comparação usa a régua de `casa()` do roteador
@@ -103,7 +103,7 @@ _RE_GERENCIAS = re.compile(r"^##\s+Ger[êe]ncias\b.*?$(.*?)(?=^##\s+|\Z)", re.M 
 
 
 def golden_record(arquivo: str | None = None) -> list[dict]:
-    """O golden record inteiro, via `GET /acervo/conceitos` (#2957, arq:0089 §2). Único
+    """O golden record inteiro, via `GET /acervo/conceitos`. Único
     ponto que toca a rede; roda uma vez, fora da montagem. `arquivo` lê o mesmo payload
     de um JSON local (lista, ou `{itens: [...]}`), sem rede."""
     if arquivo is not None:
@@ -166,7 +166,7 @@ def _rotulos_do_chapeu_md(chapeu_md_path: str) -> list[str] | None:
 
 def rotulos_da_gerencias(persona_md: str, base_dir: str | None = None) -> tuple[dict[str, list[str]], list[str]]:
     """{slug-do-chapeu: [rótulos]} a partir da seção `## Gerências` de um `persona.md`
-    (molde novo, card #3110 — substitui `rotulos_da_secao_b`/`## b)` do `chapeu.md`
+    (molde atual — substitui `rotulos_da_secao_b`/`## b)` do `chapeu.md`
     antigo). Recorta de `^## Gerências` até o próximo `^## ` ou fim de arquivo; junta
     linhas de continuação de cada bullet antes de dividir. `base_dir`, se dado, confere
     o slug contra o diretório real — sem bater, o bullet vira órfão de chapéu (2º valor
@@ -397,7 +397,7 @@ def _forma_valida(tabela) -> bool:
 
 def conferir(abertura: str, apenas_cadeira: str | None = None,
              golden_arquivo: str | None = None, anterior: str | None = None) -> int:
-    """O gate de `publicar-abertura` (card #3143): compara a tabela gerada com o
+    """O gate de conferência: compara a tabela gerada com o
     `rotas-chapeu.json` de `abertura`, sem escrever. Exit 0/1/5, âncora e escopo de
     `anterior` no docstring do módulo."""
     caminho = os.path.join(abertura, "rotas-chapeu.json")
@@ -478,7 +478,7 @@ def main() -> int:
                          "rotas-chapeu.json existente em vez de reescrever tudo")
     ap.add_argument("--conferir", action="store_true",
                     help="compara a tabela gerada com o rotas-chapeu.json, sem escrever: "
-                         "0 conforme, 1 divergente, 5 indeterminável (gate de publicar-abertura)")
+                         "0 conforme, 1 divergente, 5 indeterminável (gate de conferência)")
     ap.add_argument("--golden", default=None,
                     help="lê o golden record deste arquivo JSON em vez da API (teste, base sem motor)")
     ap.add_argument("--anterior", default=None,

@@ -1,13 +1,13 @@
 """PEP por fonte — o ponto que IMPÕE a decisão do PDP dentro do `recuperar` (§6).
 
-`spec_recuperador.md` §6, card #2303.
+Ponto de decisão de acesso do recuperador.
 
 A divisão de papéis é a canônica de controle de acesso baseado em atributo, e não é
 invenção da casa: o PDP avalia e emite a decisão, o PEP a impõe no caminho do pedido,
 o PIP fornece atributo e o PAP guarda a política — os quatro pontos funcionais do
 mecanismo (NIST SP 800-162 §2.4.3; CSA Security Guidance v3.0 §12.7, que descreve o PEP
 como podendo ser tão simples quanto um `if` no serviço). Aqui: PDP é
-`politica-acesso/pdp.py` (biblioteca embarcada, `seg:0008`), PAP é `politica.yaml`,
+`politica-acesso/pdp.py` (biblioteca embarcada), PAP é `politica.yaml`,
 PIP é `sujeitos.yaml` (projeção interina, enquanto o token não carrega os atributos),
 e PEP é este módulo, chamado por `recuperar()` **antes** de qualquer adaptador rodar.
 
@@ -15,7 +15,7 @@ Cinco decisões, e o porquê de cada uma:
 
 1. **Uma chamada por fonte, nunca uma por pedido.** Cada fonte carrega o seu par
    `(dominio, sobre)` do §5 — `fontes.py` já os declara. Um PEP único, com um domínio
-   só, faria a concessão de uma matéria valer pela outra: é exatamente o que `seg:0009`
+   só, faria a concessão de uma matéria valer pela outra: é exatamente o que a segregação de acesso
    separa quando distingue `plataforma-acervo` de `plataforma-wiki`.
 
 2. **Negativa em qualquer fonte nega o pedido inteiro** (§6). Não há busca parcial:
@@ -44,7 +44,7 @@ Cinco decisões, e o porquê de cada uma:
    recorte, como `acervo:firma/*`) negar o pedido genérico, como deve.
 
 O que NÃO mora aqui: a identidade. Quem é o sujeito é do host — dentro de tool, o
-contexto do FastMCP é a única fonte honesta (mesma razão de `_quem` no `ops-server`).
+contexto do FastMCP é a única fonte honesta (mesma razão de `_quem` na porta).
 Este módulo recebe o `sujeito` já resolvido e não tenta adivinhá-lo: biblioteca que
 inventa identidade é biblioteca que autoriza a si mesma.
 """
@@ -60,7 +60,7 @@ from typing import Callable, Iterable, Mapping
 from .envelope import Causa, Cobertura, Envelope, LinhaFonte
 from .fontes import DOMINIO, PREFIXO_SOBRE, TIPO, Fonte
 
-# O acervo tem dois papéis com donos distintos (arq:0119 §1.2 e §4; migração 079,
+# O acervo tem dois papéis com donos distintos (migração 079,
 # `ferramental_fonte_papel`), e cada papel tem a sua ação no PAP: a busca pelo sentido é
 # `rag_buscar` (capacidade motor); a leitura — catálogo e situação da obra — é `acervo_ler`
 # (capacidade conhecimento; nome do dono, 06/10/2026, #3312).
