@@ -44,13 +44,13 @@ USO = """uso:
   curar --expurgar <obra> --motivo "<por que>" [--apply]     o motivo é obrigatório (#3301); fica com a obra, com o autor e a data
   curar --restaurar <obra> --motivo "<por que>" [--apply]
   curar --apagar <obra> [--apply]                             tira do acervo, SEM VOLTA, a obra já retirada: catálogo,
-                                                              motor e balde (arq:0119 §9.2); sem --apply, o plano
+                                                              motor e balde; sem --apply, o plano
   curar --promover <obra> --impressao <id>
   curar --recortar <obra> [--corte <slug>] [--apply]          impressão nova sobre o mesmo espelho; termina na selada
   curar --reextrair <obra> [--metodo <slug|digest>] [--apply] espelho novo do próprio arquivo; termina na selada
                                                               (sem --metodo: o padrão do tipo, `acervo listar biblioteca metodos`)
   curar --reextrair --lote [--ordem <id,id,…|@arquivo>] [--metodo <slug>] [--apply]
-                                                              o estoque pelo padrão do tipo (spec espelho-de-leitura §4.2):
+                                                              o estoque pelo padrão do tipo:
                                                               plano = PORTÃO 1 com a contagem por tipo; --apply abre o lote;
                                                               --ordem recorta: só as obras da lista, nessa ordem
   curar --reextrair --lote --medida --replicas <n> --ordem <id,id,…|@arquivo> [--metodo <slug>] [--apply]
@@ -60,7 +60,7 @@ USO = """uso:
   curar --rejulgar --lote [--apply]                           espelhos com régua antiga: o veredito de novo, sem reconverter
   curar --marcar-secoes [--impressao <id>] [--obra <id>] [--so-sem-faixa] [--apply] [--json]
                                                               as seções das impressões servindo como faixa de bytes do
-                                                              espelho (spec modelo-acervo-secao §2-bis, #3907): plano confere;
+                                                              espelho: plano confere;
                                                               --apply grava em acervo.secao_faixa
   curar --marcar-secoes --faixas-modelo <pasta> [--apply] [--json]
                                                               o mesmo, só nas impressões da pasta (um <impressao>.json com
@@ -83,7 +83,7 @@ USO = """uso:
   curar --relacionar --help     cartilha: as 11 famílias (frase-molde) e as 3 garantias
   curar --relacoes <conceito>   arestas de um conceito, coluna + tabela (o que já está lavrado)
   curar --desrelacionar <id> [--apply]   desfaz UMA aresta lavrada (default: plano seco; --apply executa)
-  curar --derivar <obra> --de <origem> [--motivo \"…\"] [--apply]   a obra deriva da origem (ont:0092 §2)
+  curar --derivar <obra> --de <origem> [--motivo \"…\"] [--apply]   a obra deriva da origem
   curar --derivacoes <obra>     de onde a obra deriva e o que deriva dela
   curar --desderivar <obra> --de <origem> [--apply]   desfaz UMA derivação (default: plano seco; --apply executa)
   curar --registrar-obra \"<título>\" [--especie … --emitido-por … --id-canonico … --publicacao … --colecao firma] [--apply]
@@ -94,7 +94,7 @@ ações principais:
   --expurgar <obra>             expurgo reversível de uma obra (default: plano seco; --apply executa); exige --motivo
   --restaurar <obra>            restaura obra retirada (default: plano seco; --apply executa); exige --motivo
                                 (na obra já retirada sem motivo, --expurgar --motivo preenche o que falta)
-  --promover <obra>             põe a impressão selada no ar (exige --impressao), pela marcação da obra (arq:0119 §5):
+  --promover <obra>             põe a impressão selada no ar (exige --impressao), pela marcação da obra:
                                 inteira não promove; transcrita exige trechos; transcrita e indexada exige índice aprovado
   --relacionar <de> <para>      lavra UMA aresta em acervo.conceito_relacao (default: plano seco —
                                 conferências SQL com a aresta dentro + HermiT com diff de insatisfazíveis)
@@ -149,7 +149,7 @@ opções de alteração (--reclassificar):
   --publicacao <texto>          dado de publicação (texto livre, como na fonte); 'null' limpa
   --emitido-por <a;b>           quem emitiu (autor, órgão); vários separados por ';'
   --anotacao <texto>            anotação textual da obra
-  --vinculacao <valor>          quanto a obra obriga um ente da APF (ont:0071): hard-law | soft-law | convencao | nenhuma;
+  --vinculacao <valor>          quanto a obra obriga um ente da APF: hard-law | soft-law | convencao | nenhuma;
                                 'null' volta a «ninguém olhou». Juízo de quem classifica, nunca derivado de espécie, domínio ou emissor
 
 opções de seleção (--reclassificar em lote):
@@ -163,7 +163,7 @@ opções de seleção (--reclassificar em lote):
   --expurgadas                  filtra obras retiradas
   --teto <n>                    teto máximo de obras a alterar no lote (default: 200, máx: 5000)
 
-opções de --reextrair --bancada (card #3187; "bancada" aqui é só uma pasta de saída dada na linha de comando):
+opções de --reextrair --bancada ("bancada" aqui é só uma pasta de saída dada na linha de comando):
   --bancada <pasta>             grava <pasta>/<metodo>/<obra_id>/{espelho.md,indice.json,relatorio.json}; não escreve no acervo
                                 (recusa --apply). --reextrair passa a aceitar 'id1,id2,…' ou '@arquivo' (um id por linha;
                                 vazias e '#' ignoradas). Retomável: obra com relatorio.json válido é pulada ('já feito')
@@ -171,7 +171,7 @@ opções de --reextrair --bancada (card #3187; "bancada" aqui é só uma pasta d
                                 sem a rag-api e sem credencial (PF_CONVERSOR_URL, padrão http://127.0.0.1:8200; #3276);
                                 a pasta da obra leva o nome do arquivo sem extensão
   --metodo <slug>               método e segmento de pasta (default: perfil)
-  --modo bancada|medida         bancada (padrão) converte e mede a fidelidade; medida (card #3207) só mede as calhas de duas
+  --modo bancada|medida         bancada (padrão) converte e mede a fidelidade; medida só mede as calhas de duas
                                 colunas de cada PDF, pela porta ao MuPDF, sem modelo e sem espelho: grava só o relatorio.json
                                 (com `medida`: páginas, páginas com calha e as calhas por página). Use uma pasta só para a
                                 medida: a retomada pula obra com relatorio.json válido, de qualquer modo. Obra que não é PDF
@@ -280,7 +280,7 @@ def resolver_obra_id(obra: str, headers: dict, retiradas: bool = False, timeout=
     if not oid:
         sys.stderr.write(f"curar: não foi possível resolver o ID da obra '{obra}'\n")
         sys.exit(1)
-    # Verbo de ESCRITA: título só resolve por casamento EXATO (trava do card #2975 — nada de
+    # Verbo de ESCRITA: título só resolve por casamento EXATO (nada de
     # seleção por texto livre). Aproximado devolve o candidato e exige o uuid.
     if data.get("casamento") not in (None, "exato"):
         sys.stderr.write(f"curar: '{obra}' casou só aproximado com {oid} ({data.get('titulo')}); "
@@ -321,7 +321,7 @@ def formatar_lote_resultado(res: dict) -> str:
 def formatar_situacao(payload: dict) -> str:
     oid = payload.get("obra_id", "-")
     tit = payload.get("titulo", "-")
-    # servida inteira é o estado da obra (arq:0119 §1.4, #3294); servível é o espelho da impressão (#3282)
+    # servida inteira é o estado da obra; servível é o espelho da impressão
     servida = "sim" if payload.get("servida_inteira") else "não"
     servivel = "sim" if payload.get("servivel") else "não"
     degrau = payload.get("degrau", "-")
@@ -372,7 +372,7 @@ def acao_situacao(obra: str, como_json: bool, headers: dict) -> int:
 
 
 def _motivo_de_retirada(ato: str, motivo: str | None) -> str | None:
-    """O motivo de retirar ou restaurar (#3301; arq:0119 §9): texto não vazio, ou recusa com a cura.
+    """O motivo de retirar ou restaurar: texto não vazio, ou recusa com a cura.
     Vale no plano e no --apply: quem lê o plano já vê o motivo que vai ficar com a obra."""
     if motivo and motivo.strip():
         return motivo.strip()
@@ -401,7 +401,7 @@ def acao_expurgar(obra: str, autor: str, motivo: str, aplicar: bool, como_json: 
     servindo = [i.get("id") for i in (obra_dados.get("impressoes") or []) if i.get("estado") == "servindo"]
 
     if not aplicar:
-        # arq:0119 §9.1 (#3298): o plano nomeia o que sai de serviço — catálogo, impressão e índice
+        # o plano nomeia o que sai de serviço — catálogo, impressão e índice
         plano = {
             "modo": "plano",
             "ato": "retirar",
@@ -538,7 +538,7 @@ def acao_restaurar(obra: str, autor: str, motivo: str, aplicar: bool, como_json:
 
 
 def acao_apagar(obra: str, autor: str, aplicar: bool, como_json: bool, headers: dict) -> int:
-    """`curar --apagar <obra> [--apply]`: tira do acervo, sem volta, a obra já retirada (arq:0119 §9.2;
+    """`curar --apagar <obra> [--apply]`: tira do acervo, sem volta, a obra já retirada (
     #3191). Sai o catálogo (com impressões, seções, trechos e ligações), os índices do motor e, no
     balde, o arquivo e os espelhos. Sem --apply, o plano. Exit 1 se algum objeto do balde não saiu."""
     obra_id = resolver_obra_id(obra, headers, retiradas=True)
@@ -603,7 +603,7 @@ def acao_promover(obra: str, impressao_id: str, autor: str, como_json: bool, hea
         apos_str = f" (aposentada: {apos.get('id')})" if apos.get("id") else ""
         print(f"Impressão {prom.get('id')} promovida a servindo com sucesso{apos_str}.")
         print(f"Obra {data.get('obra_id')}: servível=sim, degrau={data.get('degrau')}")
-        # arq:0119 §5: a marcação diz o que subiu junto; só a indexada promove índice (#3193)
+        # a marcação diz o que subiu junto; só a indexada promove índice
         if data.get("marcacao"):
             linha = f"  marcação {data['marcacao']}"
             if data.get("indices_promovidos"):
@@ -618,11 +618,11 @@ def acao_promover(obra: str, impressao_id: str, autor: str, como_json: bool, hea
 # GET /acervo/conceitos/relacoes/cartilha; aqui fica o que --help imprime sem rede.
 CARTILHA = """cartilha de --relacionar — A = <de>, B = <para>; o motivo tem de caber na frase-molde
 
-hierárquicas (ont:0080; sobem na expansão da busca):
+hierárquicas (sobem na expansão da busca):
   generica      A é um tipo/forma/escola/método de B; A é B aplicado a X
   partitiva     A é uma camada/estágio/elo/dimensão de B
   instancia     A é um B específico; A é o que instancia B
-associativas (ont:0080; vizinhança, não herança):
+associativas (vizinhança, não herança):
   instrumental  A é o instrumento/mecanismo/artefato de B
   condicional   A é exigência/condição/restrição/critério de B
   tematica      B é o assunto largo de A; A é o objeto de B
@@ -630,17 +630,17 @@ associativas (ont:0080; vizinhança, não herança):
   aferidora     A afere B; A é a medida de B
   economica     A é o custo/preço de B
 simétricas (gravam uma vez, ordem canônica de uuid):
-  relacionada   A e B andam colados, sem direção nem hierarquia (skos:related, ont:0085)
-  disjunta      A e B nunca são a mesma coisa (owl:disjointWith, ont:0086 4b) — homonímia ou exclusão
+  relacionada   A e B andam colados, sem direção nem hierarquia (skos:related)
+  disjunta      A e B nunca são a mesma coisa (owl:disjointWith) — homonímia ou exclusão
 
 garantias (Z39.19 §5.3.5; caderno de ontologia 02/09):
   literaria     obra do acervo sustenta — exige --lastro (obra não retirada)
   de-uso        pergunta feita ao motor sustenta (evento_recuperacao)
-  instituida    dono ou cadeira afirma — não precisa de trecho (ont:0078)
+  instituida    dono ou cadeira afirma — não precisa de trecho
 
 regras que o plano aplica antes de gravar:
   - a coluna mais_amplo_id é o pai de navegação: repetir o mesmo pai/tipo é duplicata (409);
-  - pai e lateral ao mesmo tempo é recusado para o par, nos dois sentidos (ont:0080 Aberto; SKOS S27);
+  - pai e lateral ao mesmo tempo é recusado para o par, nos dois sentidos (SKOS S27);
   - conferências SQL rodam com a aresta dentro (ciclo, categoria, exclusividade, ciclo da coluna):
     qualquer linha NOVA reprova; HermiT roda com a aresta em memória e o diff de insatisfazíveis
     tem de ser vazio;
@@ -682,7 +682,7 @@ def _hermit(de: str, para: str, tipo: str) -> dict | None:
 
 
 def _hermit_renomear(velho: str, novo: str) -> dict | None:
-    """O mesmo diff para a troca de slug (`--renomear VELHO:NOVO` do gerador, card #3239). O gerador no
+    """O mesmo diff para a troca de slug (`--renomear VELHO:NOVO` do gerador). O gerador no
     ar só aceita a opção depois do `release promover platafirma-conhecimento`; antes, volta `{"erro": …}`."""
     return _hermit_com(["--renomear", f"{velho}:{novo}"], renomeia=(velho, novo))
 
@@ -720,7 +720,7 @@ def _hermit_com(mudanca: list[str], renomeia: tuple[str, str] | None = None) -> 
 _BANCADA_CLI: str | None = None
 
 def _exportar(repo: str, bancada: str | None = None) -> str | None:
-    """Regenera ontologia/acervo/*.jsonl no clone (cli exportar-acervo). Devolve os arquivos
+    """Regenera ontologia/acervo/*.jsonl no clone. Devolve os arquivos
     alterados segundo o git, ou None se não deu para rodar."""
     # Delega a `acervo exportar` (bin/_acervo/exportar), dono unico do export: venv rag,
     # ambiente da ingestao (EMBED_MODEL, POSTGRES_*) e bancada da sessao. Chamar o cli direto
@@ -957,7 +957,7 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
     elif (args.rotulo or args.definicao or args.lingua or args.rotulo_alt or args.sem_rotulo_alt) and not pai_slug:
         return acao_conceito_descricao(args, autor, como_json, headers)
     elif args.natureza and not pai_slug:
-        # PATCH /acervo/conceitos/{id} {natureza} — reclassificar (cura K19, card #3163)
+        # PATCH /acervo/conceitos/{id} {natureza} — reclassificar
         return acao_conceito_natureza(args, autor, como_json, headers)
     else:
         # PATCH /acervo/conceitos/{id}/pai (trocar pai)
@@ -1089,7 +1089,7 @@ def acao_conceito(args, autor: str, como_json: bool, headers: dict) -> int:
     return 0
 
 
-# --- --conceito <slug> --renomear <slug-novo> (card #3239, cura K15) ------------------------------
+# --- --conceito <slug> --renomear <slug-novo> -----------------------------------------------------
 # Irmão da troca de pai: plano seco por padrão, conferências, HermiT, --apply e export. O que a
 # renomeação acrescenta é o que o card pede antes de gravar: a varredura de quem aponta para o slug
 # velho (no banco, o servidor conta; fora do banco, este verbo procura o texto) e D7/D8 sobre o novo.
@@ -1306,7 +1306,7 @@ def formatar_plano_renomear(p: dict, varredura: dict | None, conf_slug: dict | N
 
 
 def _hermit_natureza(slug: str, natureza: str) -> dict | None:
-    """O mesmo diff para a troca de natureza (`--natureza SLUG:NAT` do gerador, card #3163)."""
+    """O mesmo diff para a troca de natureza (`--natureza SLUG:NAT` do gerador)."""
     return _hermit_com(["--natureza", f"{slug}:{natureza}"])
 
 
@@ -1637,7 +1637,7 @@ def acao_relacionar(args, autor: str, como_json: bool, headers: dict) -> int:
     else:
         print(formatar_plano_relacao(feito, hermit))
         if export is None:
-            print("  export : NÃO regenerado (clone de conhecimento em main / venv não achados) — rode `exportar-acervo` e commite")
+            print("  export : NÃO regenerado (clone de conhecimento em main / venv não achados) — rode `acervo exportar` e commite")
         else:
             print(f"  export : regenerado no clone — commit e push são seus:\n    {export.replace(chr(10), chr(10) + '    ')}")
     return 0
@@ -1714,7 +1714,7 @@ def acao_desrelacionar(relacao_id: str, autor: str, como_json: bool, headers: di
     else:
         d = data.get("desfeita", {})
         print(f"Aresta desfeita: {d.get('de')} -{d.get('tipo')}-> {d.get('para')} [{d.get('garantia')}] ({d.get('id')})")
-        print("  export : " + (export.replace(chr(10), chr(10) + '    ') if export else "NÃO regenerado — rode `exportar-acervo` e commite"))
+        print("  export : " + (export.replace(chr(10), chr(10) + '    ') if export else "NÃO regenerado — rode `acervo exportar` e commite"))
     return 0
 
 
@@ -1908,7 +1908,7 @@ def _chamar(metodo: str, url: str, headers: dict, payload: dict | None = None, o
 
 
 def acao_derivar(args, autor: str, como_json: bool, headers: dict) -> int:
-    """ont:0092 §2: declara que a obra deriva da origem. Plano seco sem --apply (#3160)."""
+    """Declara que a obra deriva da origem. Plano seco sem --apply."""
     if not args.de:
         sys.stderr.write("curar: erro: --derivar exige --de <obra de origem> (uuid ou título exato)\n")
         return 2
@@ -1991,7 +1991,7 @@ def acao_desderivar(args, autor: str, como_json: bool, headers: dict) -> int:
 
 
 def acao_registrar_obra(args, autor: str, como_json: bool, headers: dict) -> int:
-    """Registra obra sem suporte (não adquirida, ont:0073 §9) pela regra de casamento (§7)."""
+    """Registra obra sem suporte (não adquirida) pela regra de casamento."""
     payload = {
         "autor": autor,
         "titulo": args.registrar_obra,
@@ -2023,7 +2023,7 @@ def acao_registrar_obra(args, autor: str, como_json: bool, headers: dict) -> int
     return 0
 
 
-# --- atos sobre o espelho de leitura (spec espelho-de-leitura §6.3, §9, §10; card #3180) ------
+# --- atos sobre o espelho de leitura ----------------------------------------------------------
 
 
 def _linha_espelho(e: dict | None) -> str:
@@ -2061,7 +2061,7 @@ def acao_recortar(args, autor: str, como_json: bool, headers: dict) -> int:
 
 
 def _linhas_selada(data: dict, servindo: str | None) -> None:
-    """Recortar e reextrair terminam na impressão selada (arq:0119 §5, #3193): a anterior segue
+    """Recortar e reextrair terminam na impressão selada: a anterior segue
     servindo até o `--promover`, que a resposta traz pronto."""
     print(f"  impressão : {data.get('impressao_nova')} selada" + (" (já existia)" if data.get("ja_selada") else "")
           + (f"; {servindo} segue servindo" if servindo else ""))
@@ -2070,7 +2070,7 @@ def _linhas_selada(data: dict, servindo: str | None) -> None:
 
 
 def _linhas_portoes(relatorio: dict | None) -> list[str]:
-    """Os portões do relatório, todos (spec espelho-de-leitura §4.1 passo 7): o reprovado primeiro."""
+    """Os portões do relatório, todos: o reprovado primeiro."""
     portoes = (relatorio or {}).get("portoes") or []
     linhas = []
     for p in sorted(portoes, key=lambda p: bool(p.get("ok"))):
@@ -2191,7 +2191,7 @@ def acao_espelhos_orfaos(prefixo: str | None, autor: str, aplicar: bool, como_js
     return 1 if data.get("falhas") else 0
 
 
-# --- régua nova e lote de reextração (spec espelho-de-leitura §4.2, §9 caso 8; card #3193) ------
+# --- régua nova e lote de reextração -----------------------------------------------------------
 
 
 _LOTE_LINHAS = 40   # obras que o plano do lote mostra em texto; --json traz todas
@@ -2254,7 +2254,7 @@ def _faixas_modelo_da_pasta(pasta: str) -> dict:
 
 
 def acao_marcar_secoes(args, autor: str, headers: dict) -> int:
-    """`--marcar-secoes`: a seção como faixa de bytes do espelho (spec modelo-acervo-secao §2-bis, #3907).
+    """`--marcar-secoes`: a seção como faixa de bytes do espelho.
     O plano confere as impressões servindo com espelho; --apply grava as que conferem em
     acervo.secao_faixa. Impressão que não confere sai na lista e dá exit 1; as outras seguem."""
     payload = {"autor": autor, "aplicar": args.apply, "so_sem_faixa": args.so_sem_faixa}
@@ -2366,7 +2366,7 @@ def acao_reextrair_lote(args, autor: str, como_json: bool, headers: dict) -> int
     print(f"  inteiras: {data.get('inteiras', 0)} · em dia: {data.get('em_dia', 0)} · "
           f"seladas à espera do --promover: {data.get('seladas_a_promover', 0)}")
     if ordem:
-        # --ordem recorta (spec espelho-de-leitura §4.2 item 2): o lote leva só a lista
+        # --ordem recorta: o lote leva só a lista
         print(f"  só a lista do --ordem: {data.get('n', 0)} de {len(ordem)} pedida(s) no lote · "
               f"{data.get('fora_da_ordem', 0)} obra(s) que também pedem transcrição ficam fora")
     if aplicado:
@@ -2412,7 +2412,7 @@ def acao_relatorio_lote(lote: str, como_json: bool, headers: dict) -> int:
     return 0
 
 
-# --- --reextrair ... --bancada <pasta>: conversão em lote para uma pasta (card #3187) -------------
+# --- --reextrair ... --bancada <pasta>: conversão em lote para uma pasta --------------------------
 # "bancada" aqui é só a pasta de saída dada na linha de comando. Não toca o acervo: o servidor
 # converte e devolve; o cliente grava <pasta>/<metodo>/<obra_id>/{espelho.md,indice.json,relatorio.json}.
 
@@ -2426,14 +2426,14 @@ _BANCADA_TIPOS_FALHA = ("conversao", "timeout", "subprocesso", "ausente")
 # versao_relatorio que o cliente aceita: 1 (conversor em subprocesso da API) e 2 (conversor como serviço,
 # #3205: mesmos campos, mais versao_imagem, paginas, prazo_s e pico_memoria_kb). Outra versão: não obtida.
 _BANCADA_VERSOES_RELATORIO = (1, 2)
-# `--modo` da bancada (card #3207): converte e mede a fidelidade, ou só mede as calhas de duas colunas
+# `--modo` da bancada: converte e mede a fidelidade, ou só mede as calhas de duas colunas
 _BANCADA_MODOS = ("bancada", "medida")
 # POST: (conexão, leitura). A leitura espera o timeout da conversão no servidor + margem.
 _BANCADA_CONEXAO_S = 10
 _BANCADA_MARGEM_HTTP_S = 120
 _BANCADA_TIMEOUT_RESOLVER = (10, 60)   # GET que resolve título -> obra_id
 # Entrada que é um ARQUIVO local vai direto ao serviço do conversor (#3276): sem a rag-api, sem credencial
-# (o serviço não tem segredo, spec conversor-pdf-combinado §2) e sem o prazo da porta. A rota do host é a
+# (o serviço não tem segredo) e sem o prazo da porta. A rota do host é a
 # porta publicada pela stack conversor (127.0.0.1:8200, #3276 c.1537).
 CONVERSOR_URL_BANCADA = (os.environ.get("PF_CONVERSOR_URL") or "http://127.0.0.1:8200").rstrip("/")
 _BANCADA_OCUPADO_TENTATIVAS = 20        # 409 do serviço: espera o Retry-After e tenta de novo (spec §4.2)
@@ -2605,7 +2605,7 @@ def _bancada_linha(item: dict) -> str:
 
 
 def _bancada_total_de_calhas(itens: list) -> dict | None:
-    """O total do modo `medida` (card #3207): obras medidas, obras com calha, páginas e páginas com calha.
+    """O total do modo `medida`: obras medidas, obras com calha, páginas e páginas com calha.
     None quando nenhuma obra do lote traz `medida` (fora do modo medida)."""
     medidas = [i["medida"] for i in itens if i.get("medida")]
     if not medidas:
@@ -2744,7 +2744,7 @@ def _bancada_obra(entrada: str, metodo: str, pasta: str, autor: str, timeout_s: 
             return item
 
     if arquivo_local:
-        # direto ao serviço (spec conversor-pdf-combinado §3.3): os bytes no corpo, o prazo pedido como teto
+        # direto ao serviço: os bytes no corpo, o prazo pedido como teto
         try:
             with open(arquivo_local, "rb") as f:
                 dados = f.read()
@@ -2961,7 +2961,7 @@ def acao_reextrair_bancada(args, autor: str, como_json: bool, headers: dict) -> 
 
 
 def _absorve_ids_soltos(args, desconhecidos):
-    """DT 166: `--reextrair <id> <id> ... --bancada <pasta>` aceita a lista separada por espaco, como
+    """`--reextrair <id> <id> ... --bancada <pasta>` aceita a lista separada por espaco, como
     aceita por virgula. O argparse entrega ao `--reextrair` so o primeiro; os demais chegam como
     palavras soltas em `desconhecidos`. So na bancada (a lista em lote nao existe fora dela) e so as
     palavras que nao sao flag; flag desconhecida segue recusada pelo chamador."""
@@ -3004,7 +3004,7 @@ def main(argv=None):
     # --medida --replicas <n>: o lote de medida do #3228 (só converte e mede; nada no acervo)
     parser.add_argument("--medida", action="store_true", default=False)
     parser.add_argument("--replicas", type=int, default=None)
-    # --bancada <pasta>: pasta de SAÍDA da conversão em lote (card #3187); nada a ver com a raiz
+    # --bancada <pasta>: pasta de SAÍDA da conversão em lote; nada a ver com a raiz
     # de lib/raizes.py nem com `acervo curar biblioteca lote`
     parser.add_argument("--bancada", default=None)
     parser.add_argument("--refazer", action="store_true", default=False)
@@ -3145,7 +3145,7 @@ def main(argv=None):
     if args.marcar_secoes:
         return acao_marcar_secoes(args, autor, headers)
     if args.lote or args.rejulgar or args.ordem is not None or args.relatorio is not None:
-        # spec espelho-de-leitura §4.2 e §9 caso 8 (#3193): os atos de lote sobre o estoque
+        # os atos de lote sobre o estoque
         if not args.lote:
             sys.stderr.write("curar: erro: --rejulgar, --ordem e --relatorio acompanham --lote\n")
             return 2
