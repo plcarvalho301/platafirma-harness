@@ -217,3 +217,22 @@ def test_pre_push_limpa_orfaos_na_entrada(amb):
     r = amb.push()
     assert r.returncode == 0, r.stdout + r.stderr
     assert not orfao.exists()
+
+
+def test_pre_push_sem_base_resolvida_nao_roda_lista_inteira(amb):
+    # Mesmo com um teste quebrado na lista, sem base resolvida o hook sai nao medido (0)
+    # em vez de rodar a lista inteira sem --base.
+    amb.commit("controle/tests/test_fixture.py", TESTE_VERMELHO)
+    _git(amb.wt, "update-ref", "-d", "refs/remotes/origin/main")
+    r = subprocess.run(
+        [str(amb.wt / ".git" / "hooks" / "pre-push")],
+        cwd=str(amb.wt),
+        input="",
+        capture_output=True,
+        text=True,
+        env=amb.env,
+        check=False,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "proibido rodar lista inteira" in r.stderr, r.stderr
+    assert "BASELINE VERDE QUEBROU" not in r.stderr

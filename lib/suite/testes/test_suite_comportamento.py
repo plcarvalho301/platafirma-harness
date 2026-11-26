@@ -1845,3 +1845,31 @@ def test_worker_pytest_limita_paralelismo_no_teto_da_unidade_isolada():
     assert 1 <= MAX_TRABALHADORES_ISOLADOS <= 4
     assert f"min(trab, {MAX_TRABALHADORES_ISOLADOS}" in _SCRIPT_PYTEST_WORKER or "MAX_TRABALHADORES_ISOLADOS" in _SCRIPT_PYTEST_WORKER
 
+
+def test_esteira_em_git_diff_vazio_ou_base_ausente_nao_cai_em_arvore_inteira(tmp_path: Path):
+    from suite.esteira import selecionar_casos_rodada
+
+    repo = tmp_path / "repo_git"
+    (repo / "suite" / "testes").mkdir(parents=True)
+    (repo / "pyproject.toml").write_text("[project]\nname = 'demo'\n", encoding="utf-8")
+    (repo / "suite" / "testes" / "test_suite.py").write_text(
+        "# componente: suite\ndef test_ok():\n    assert True\n",
+        encoding="utf-8",
+    )
+    git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run([*git, "init", "-q", "-b", "main"], check=True)
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "commit", "-qm", "init"], check=True)
+    head = subprocess.run([*git, "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+
+    leitor = DubleLeitorOlaria(
+        fichas=[{"classe": "componente", "chave": "componente:suite", "dados": {"caminho": "suite"}}]
+    )
+    plano_vazio = selecionar_casos_rodada(repo, repositorio="repo-git", mudanca=head, base=head, leitor=leitor)
+    assert plano_vazio.arquivos_mudados == ()
+    assert plano_vazio.casos == ()
+
+    plano_sem_base = selecionar_casos_rodada(repo, repositorio="repo-git", mudanca=head, base=None, leitor=leitor)
+    assert plano_sem_base.arquivos_mudados == ()
+    assert plano_sem_base.casos == ()
+
