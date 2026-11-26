@@ -175,10 +175,10 @@ def _erro_os_antes_replace(onde: str, exc: OSError) -> RecusaEscrita:
                     "repetir a chamada falha igual"
                 ),
                 cura=(
-                    "rode repo sanear <repo>, que põe o grupo platafirma-escrita e o setgid "
-                    "nas bancadas vivas, e grave de novo"
+                    "reabra a bancada com repo abrir <repo> <card> --slug <slug>, que põe o "
+                    "grupo platafirma-escrita e o setgid nela, e grave de novo"
                 ),
-                proximo="repo sanear",
+                proximo="repo abrir",
             )
         )
     return RecusaEscrita(

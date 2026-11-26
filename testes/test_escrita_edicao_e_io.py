@@ -32,7 +32,7 @@ from escrita.tipos import RecusaEscrita, TrocaTrecho  # noqa: E402
 
 
 @pytest.mark.parametrize("numero", [errno.EACCES, errno.EPERM])
-def test_sem_permissao_na_bancada_sai_4_com_sanear_na_cura(numero: int) -> None:
+def test_sem_permissao_na_bancada_sai_4_com_abrir_na_cura(numero: int) -> None:
     """EACCES na bancada é permanente: sai 4 bancada-sem-permissao, nunca 3 com «repita»."""
     from escrita.io_atomico import _erro_os_antes_replace
 
@@ -40,8 +40,8 @@ def test_sem_permissao_na_bancada_sai_4_com_sanear_na_cura(numero: int) -> None:
     erro = _erro_os_antes_replace("a.txt", exc).erros[0]
     assert erro.saida == 4
     assert erro.codigo == "bancada-sem-permissao"
-    assert erro.proximo == "repo sanear"
-    assert "repo sanear" in erro.cura
+    assert erro.proximo == "repo abrir"
+    assert "repo abrir" in erro.cura
 
 
 def _criar_worktree_simulada(
