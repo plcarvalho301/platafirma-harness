@@ -1,11 +1,11 @@
-"""O log de recuperação como o dono o lê (card #3513, tarefa 7; spec plano-de-controle-face-motor R1 a R3 e R19).
+"""O log de recuperação como o dono o lê.
 
 `motor rag consultas <particao>` lista as linhas de `acervo.evento_recuperacao` com filtro por período, cadeira,
 chapéu, origem, cobertura e texto; cada linha traz a pergunta inteira, a cobertura, a origem e o tempo por fase.
 Com `--por-dia` dá a série diária de cobertura (a view `acervo.cobertura_diaria`, só das origens busca e abertura),
 com as linhas sem cobertura gravada contadas à parte: a taxa só tem as que a gravaram no denominador.
 
-Três regras de honestidade (arq:0110 §4):
+Três regras de honestidade:
 - campo que o evento antigo não tem (cobertura, tempo por fase, cadeira, geração, parâmetros) sai «nao consegui
   olhar», nunca zero nem vazio; cobertura fora dos cinco valores do contrato também;
 - filtro sobre campo que poucas linhas têm diz quantas o têm;

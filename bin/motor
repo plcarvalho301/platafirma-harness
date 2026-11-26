@@ -86,7 +86,7 @@
 # (parar e descartar nao voltam: a sombra de bench parada nao retoma, e `medir --sombra` abre outra do zero; a
 #  geracao em sombra descartada se apaga, e montar de novo e outra troca. #3518, buracos #2553 e #2554: o estado
 #  da troca sai por um ato de leitura proprio, `estado`, e parar a sombra por um ato de escrita proprio, `parar`.)
-# (face, rotulo e volta: arq:0124 §3, cards #3448 e #3532. A face e uma so por ato; o trocar declara o texto do
+# (face, rotulo e volta. A face e uma so por ato; o trocar declara o texto do
 #  controle por modo, porque os dois modos diferem na volta: montar a sombra se desfaz por --descartar; virar
 #  apaga a geracao anterior e nao volta. Ficam na exclusao "instrumento de medida da ia", sem face: sortear,
 #  parear, escrever, julgar, lintar e eleger. A marcacao do gold set abre por link, nao por ato deste verbo,
@@ -97,19 +97,19 @@
 #  $PLATAFIRMA_INSTANCIA/var/medicoes/*.json (medir, parear, escrever); o lote e a bateria pela marcacao-api e pelo rag-api)
 # depende: docker (ajuste servido, medir banco); ajudante bin/_release/stack (ajuste que promove); rede (consome a API do rag)
 # substitui: docker exec rag-* ; curl ao endpoint de busca
-# O verbo e `motor`; a instancia e argumento (arq:0037; veto do verbo `rag`).
-# A capacidade e do (verbo, ato) (arq:0110 §6). Transicao vigente->conforme em spec_motor §5.
+# O verbo e `motor`; a instancia e argumento.
+# A capacidade e do (verbo, ato).
 import hashlib, json, os, re, shlex, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
 from collections import Counter
 from pathlib import Path
 
-# Raizes da casa (card #3010). Codigo, registro e verbos irmaos vem da PROPRIA arvore
+# Raizes da casa. Codigo, registro e verbos irmaos vem da PROPRIA arvore
 # (realpath); o que o registro nomeia resolve em duas raizes so: release (codigo do rag,
 # bateria) e instancia (segredos, log, medicoes, sobreposicao do compose).
 _ARVORE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ARVORE / "lib"))
 import raizes  # noqa: E402
-import oplog  # noqa: E402  (card #3344: o unico que escreve o bruto da porta)
+import oplog  # noqa: E402  (o unico que escreve o bruto da porta)
 sys.path.insert(0, str(_ARVORE / "bin" / "_motor"))
 import calibra  # noqa: E402  (a calibracao do sinal de abstencao sobre medicoes salvas, #3264)
 import marcacao  # noqa: E402  (cliente da marcacao-api, rotas /interno/, #3349)
@@ -133,7 +133,7 @@ BIN = os.environ.get("PF_BIN") or str(_ARVORE / "bin")
 DOCKER = {"DOCKER_HOST": "unix:///run/user/1001/docker.sock"}
 
 
-SPEC = "spec motor (acervo ler casa spec motor)"
+SPEC = "verbo motor"
 # #4425: o motor e dedicado exclusivamente a particao biblioteca (obra segue como
 # sinonimo de transicao). casa e log (e o sinonimo registro) foram removidas e recusam
 # com exit 2 apontando busca consultar e busca ler.
@@ -159,7 +159,7 @@ def _recusar_particao_removida(particao, ato=None):
 
 
 def resolve_particao(argv, ato):
-    """Gramatica arq:0106: motor <inst> <ato> <particao>. Particoes removidas (casa, log)
+    """Gramatica: motor <inst> <ato> <particao>. Particoes removidas (casa, log)
     recusam com exit 2 apontando busca consultar e busca ler (#4425). Forma sem particao
     NAO some em silencio: cai em 'biblioteca' com aviso ao stderr."""
     if argv and argv[0] in _PARTICOES_REMOVIDAS:
@@ -264,7 +264,7 @@ def uso(cod=2):
                                         com ; ou | ou vem em saco de palavras-chave. Dois assuntos = duas chamadas
                                         no mesmo lote. O texto posicional passa pelo mesmo lint de aviso.
                      [--origem abertura|bench|sombra|autoteste]   so a abertura e os atos de medida: texto literal,
-                                        sem lint nem montagem (spec motor-do-conhecimento §2b)
+                                        sem lint nem montagem
                      [--previa [--piso 0.61] [--piso-revisor 0.7] [--instrucao "<texto>"]] [--rastro]
                                         --previa roda com origem `previa`, fora da serie de cobertura e da
                                         lista de consultas, e so nela valem o piso do aviso, o piso do revisor e
@@ -351,7 +351,7 @@ def uso(cod=2):
                                         saiu por motivo e as 20 do piloto; --apply grava a lista e a bateria_versao
   motor <inst> parear biblioteca --frases <arquivo.json> [--antes <lote>] [--plano]
                      [--saida <envelope.json> --versao <bateria_versao_id> --criterio-versao <v> [--lote-id <id>] [--tempo S] [--ativar]]
-                                        o par minimo da consulta montada (spec motor §2b): para cada pergunta do piloto com
+                                        o par minimo da consulta montada: para cada pergunta do piloto com
                                         frase do dono, o top-8 da chamada de hoje (A), da frase (C) e da lista montada (D),
                                         na mesma geracao; sem --plano escreve uma resposta por braco (a frase como pergunta
                                         nos tres) e monta o lote que o dono julga na tela. --antes poe ao lado o que ele ja
@@ -365,7 +365,7 @@ def uso(cod=2):
                                         `eleicao_chapeu: true`, so na requisicao). A tabela traz o Jaccard do top-8 E x C. Sem
                                         chamada com eleito: sai 0 dizendo que nao ha par a medir, sem lote. Nao combina com --frases
   motor <inst> lintar [--desde <data>] [--json]
-                                        so leitura: o lint da consulta montada (spec motor §2b) sobre o log de
+                                        so leitura: o lint da consulta montada sobre o log de
                                         perguntas, por origem e por causa, e as 20 do piloto da escada uma a uma;
                                         diz quanto o piso de palavras funcionais pegaria, sem recusar nada
   motor <inst> eleger [--desde <data>] [--json]
@@ -393,7 +393,7 @@ def uso(cod=2):
                                         o lote da tela de marcacao do gold set e o que ela grava (marcacao-api;
                                         `motor marcacao --ajuda` traz as formas)
 
-gramatica (arq:0106): motor <inst> <ato> <particao> [seletor]. instancia = quem
+gramatica: motor <inst> <ato> <particao> [seletor]. instancia = quem
 busca (ortogonal a particao); particao = onde (biblioteca; obra = biblioteca).
 doc de produto: """ + SPEC + """
 
@@ -600,7 +600,7 @@ def _sai_da_falha(contexto, f):
 
 def _contexto_do_ajuste(inst):
     """O que o ajuste olha: o compose (docker inspect), a geracao servindo (rota da #3510) e o env da
-    ingestao. Cada fonte que nao responde entra com o motivo, nunca some em silencio (arq:0110 §4)."""
+    ingestao. Cada fonte que nao responde entra com o motivo, nunca some em silencio."""
     env, err = servido(inst)
     try:
         tok = token_da(inst)
@@ -940,11 +940,11 @@ def _texto_do_relatorio(r):
 
 
 def cmd_indexar(inst, argv):
-    """O estagio Indexar da arq:0119 §2 (#3203): o motor recebe a impressao selada da obra marcada
+    """O estagio Indexar: o motor recebe a impressao selada da obra marcada
     «transcrita e indexada» e monta o indice dela (trecho e faceta) sem po-lo no ar; o `acervo
     promover` poe impressao e indice em servico juntos, e `--promover` o encadeia depois do gate.
     Roda no rag-api: plano, lote em segundo plano e relatorio. O trilho antigo, que materializava o
-    arquivo e cortava no motor, saiu: o motor nao corta a partir do arquivo (arq:0119, Consequencias).
+    arquivo e cortava no motor, saiu: o motor nao corta a partir do arquivo.
     So a selada indexavel entra (#3282: espelho servivel pela regua 6). O plano traz tambem a faceta
     no ar que falta ou veio de outro cabecalho (titulo, emissor, dominio ou conceito trocado depois
     de indexar) e a refaz no --apply (#3309). `--so-faceta` (#3393) planeja so essas facetas, sem as
@@ -1017,7 +1017,7 @@ def cmd_indexar(inst, argv):
 # O ato roda no rag-api (e o motor e o banco ficam do outro lado da porta): plano, montagem da geracao
 # nova em sombra, relatorio, virada e descarte. A virada apaga a geracao anterior no mesmo ato e nao tem
 # verbo de volta, entao so aplica com a confirmacao nomeada e o «sim» do dono, que o rag-api grava na
-# geracao (arq:0121 §7.4). Erro do rag-api vira exit da tabela da casa.
+# geracao. Erro do rag-api vira exit da tabela da casa.
 _EXIT_DA_TROCA = {400: 2, 404: 1, 409: 4, 422: 1}
 USO_TROCAR = (
     "motor <inst> trocar biblioteca --embedder <modelo> --dimensao <N> [--autor <slug>] [--memoria 1GB] "
@@ -1208,11 +1208,11 @@ def _corte_do_pedido(v):
     return extra
 
 def cmd_trocar(inst, argv):
-    """Troca de embedder por particao (#3264; arq:0121 §7). Ver o docstring de `ingestao/troca.py`, no rag-api."""
+    """Troca de embedder por particao. Ver o docstring de `ingestao/troca.py`, no rag-api."""
     particao, argv = resolve_particao(argv, "trocar")
     if particao != "biblioteca":
         print(f"motor trocar {particao}: so a biblioteca troca de embedder; a casa segue na geracao dela "
-              f"(arq:0121 §7.3).\n  {USO_TROCAR}", file=sys.stderr)
+              f".\n  {USO_TROCAR}", file=sys.stderr)
         sys.exit(2)
     opcoes = {"--embedder": "embedder", "--dimensao": "dimensao", "--autor": "autor", "--memoria": "memoria",
               "--virar": "virar", "--descartar": "descartar", "--confirma": "confirma", "--sim": "sim",
@@ -1327,7 +1327,7 @@ def _texto_do_lote_da_troca(r):
 
 
 # ---------------------------------------------------------------- evento 'consulta'
-# Emitido no choke point de `motor <inst> buscar`, DENTRO do motor Python (card #2911,
+# Emitido no choke point de `motor <inst> buscar`, DENTRO do motor Python (
 # contrato B1). Todo caminho de busca — claude.ai, fita e Code — passa por cmd_buscar
 # (C1 confirmado 27/08: cmd_buscar e o unico emissor de http para o endpoint de busca),
 # entao emitir aqui cobre as tres superficies sem parsear o campo 'comando' do audit.
@@ -1339,8 +1339,8 @@ def _texto_do_lote_da_troca(r):
 # server (server -> run_command -> bash -> motor) e NAO enxerga o ContextVar de sessao
 # do server, so o env herdado. Enquanto o server nao injetar PF_SESSAO/PF_ORDEM_ID no
 # _env_subprocesso do run_command, os campos saem '-' — declarado, nao inferido. O JOIN
-# de D (card #2908) se ancora em 'sessao'; a propagacao e o proximo elo (anotado no card).
-# Onde mora o bruto, a chave, o aparo e a classe da linha sao do lib/oplog (arq:0123 §3).
+# de D se ancora em 'sessao'; a propagacao e o proximo elo.
+# Onde mora o bruto, a chave, o aparo e a classe da linha sao do lib/oplog.
 def _emite_consulta(nome, inst, corpo, resp, dur_ms):
     """Grava uma linha JSONL {evento:'consulta', ...} em $PLATAFIRMA_INSTANCIA/var/log/ops. Best-effort:
     falha de log NUNCA derruba a busca — o resultado ja saiu para o cliente."""
@@ -1372,7 +1372,7 @@ def _emite_consulta(nome, inst, corpo, resp, dur_ms):
             "dur_ms": dur_ms,
         }
         # Na consulta que a abertura dispara a query e a mensagem do dono: grava-se, so no bruto
-        # (spec log-de-negocio §0/§3); o pacote que volta da busca nao entra na linha.
+        # o pacote que volta da busca nao entra na linha.
         # Na consulta montada (#3360) `pergunta` e a lista enviada; o que a cadeira disse e a necessidade.
         # O pedido do dono nao e copiado para esta linha: ele ja esta nas linhas de turno e de abertura.
         bloco = corpo.get("consulta") if isinstance(corpo.get("consulta"), dict) else None
@@ -1512,7 +1512,7 @@ def _filtro_do_argv(argv, particao, contexto):
 # Quem chamou a busca (#3314); a mesma lista do CHECK de acervo.evento_recuperacao. A abertura e a
 # medida mandam a sua; chamada sem a flag grava busca.
 ORIGENS = ("abertura", "busca", "bench", "sombra", "autoteste", "previa")
-# A consulta montada (#3360, spec motor §2b) e so da origem `busca`: a abertura manda o prompt do dono
+# A consulta montada e so da origem `busca`: a abertura manda o prompt do dono
 # literal e a medida manda a bateria literal, e os dois precisam chegar intactos ao motor.
 ORIGENS_LITERAIS = ("abertura", "bench", "sombra", "autoteste")
 
@@ -1670,7 +1670,7 @@ def cmd_buscar(nome_inst, inst, argv):
 
     corpo.setdefault("origem", "busca")
     if corpo["origem"] in ORIGENS_LITERAIS:
-        # A abertura e a medida mandam o texto como esta: sem lint e sem montagem (spec motor §2b).
+        # A abertura e a medida mandam o texto como esta: sem lint e sem montagem.
         if necessidade is not None or sem_lint:
             print("buscar: --origem " + corpo["origem"] + " manda o texto literal; --necessidade e "
                   "--sem-lint so valem na origem busca.\n  " + uso, file=sys.stderr)
@@ -1762,7 +1762,7 @@ def token_da(inst):
 
 def token_de_escrita(inst):
     """RAG_API_ESCRITA_TOKEN: a credencial das rotas `/motor/` que mudam indice, geracao ou ajuste (R25 da
-    spec motor, #3839). Distinta do token de leitura, e so vale no cabecalho Authorization: Bearer.
+    Distinta do token de leitura, e so vale no cabecalho Authorization: Bearer.
     `escrita_token_em` do registro tem a mesma forma de `token_em`. Instancia que nao o declara segue com
     o token de leitura. Declarado e ausente e falha alta, com a cura, nunca 401 com cara de motor fora."""
     if not inst.get("escrita_token_em"):
@@ -2233,7 +2233,7 @@ def _ajuste_do_vencedor(med, piso, piso_sim=None):
 
 def cmd_calibrar(inst, particao, argv):
     """`medir <particao> --calibrar <controle>[,<rodada>…] [--geracao <id>]`: escolhe o sinal de abstenção
-    sobre as medições que a bateria já salvou (card #3264, 6c). Não chama a API.
+    sobre as medições que a bateria já salvou. Não chama a API.
 
     Os argumentos são os rótulos (`--rotulo`) das rodadas de UMA geração; o primeiro é o controle, a
     similaridade. A conta e a régua do dono estão em `bin/_motor/calibra.py`."""
@@ -2323,7 +2323,7 @@ def cmd_calibrar(inst, particao, argv):
         melhor = res["vencedora"]
         n = res["rodadas"][melhor]["neg_sem_obra"] if melhor else 0
         print(f"\n  NENHUM SINAL ATINGE {res['minimo']}/{ctrl['de_neg_sem_obra']} (melhor: {melhor or '-'} com {n}): "
-              f"a particao NAO vira (arq:0121 §7.3) e o numero vai ao dono.")
+              f"a particao NAO vira e o numero vai ao dono.")
     arq = os.path.join(d, time.strftime("%Y%m%dT%H%M%S") + "-calibracao.json")
     with open(arq, "w") as f:
         json.dump(saida, f, ensure_ascii=False, indent=1)
@@ -2332,7 +2332,7 @@ def cmd_calibrar(inst, particao, argv):
 
 
 # ---------------------------------------------------------------- braco-sombra do embedder
-# Guia escolha-de-llm §11 e spec motor §2a: braco-sombra so para bench, fora de servico. E a
+# Guia escolha-de-llm §11: braco-sombra so para bench, fora de servico. E a
 # unica medida deste verbo que NAO passa pela porta servida, e por desenho: o candidato nao esta
 # no ar. O que roda e bin/_motor/sombra.py, copiado para dentro do conteiner do rag e lancado em
 # segundo plano, num venv que herda o torch da imagem; nada do servido e escrito.
@@ -2498,7 +2498,7 @@ SORTEAR_OPCOES = {"--semente": 1, "--ate": 1, "--saida": 1, "--aceitar-sem-ordem
 
 
 def cmd_sortear(inst, argv):
-    """`sortear biblioteca`: o estrato sentido da escada, sorteado do log de perguntas (card #3349;
+    """`sortear biblioteca`: o estrato sentido da escada, sorteado do log de perguntas (
     padrao protocolo-medicao-rag, «Fonte e filtros»). Sem --apply e so o plano: o que entrou, o que
     saiu por motivo e as 20 do piloto. Com --apply --saida grava a lista e a bateria_versao."""
     particao, resto = resolve_particao(argv, "sortear")
@@ -2700,7 +2700,7 @@ def _recupera_servido(inst, tok, pergunta, bracos=None, extra=None):
     if bracos:
         corpo["bracos"] = bracos
     if extra:
-        corpo.update(extra)      # `parear --do-log`: o braco eleito soma `chapeu` e `eleicao_chapeu` (card #3378)
+        corpo.update(extra)      # `parear --do-log`: o braco eleito soma `chapeu` e `eleicao_chapeu`
     return http(inst["endpoint"], tok, corpo, timeout=120)
 
 
@@ -2715,7 +2715,7 @@ def _recupera_lexico(inst, itens):
 
 
 def cmd_escrever(d, inst, argv):
-    """`escrever biblioteca`: as respostas do piloto da escada (card #3349; padrao protocolo-medicao-rag, «Unidade da
+    """`escrever biblioteca`: as respostas do piloto da escada (padrao protocolo-medicao-rag, «Unidade da
     marca»). Recupera o top-8 nos tres bracos, escreve cada resposta com o mesmo modelo, prompt e semente, e monta o
     envelope do lote (`--saida`) que `motor marcacao lote gravar` manda. O estado fica em arquivo: a redacao passa do
     prazo de uma chamada e a mesma chamada retoma de onde parou."""
@@ -2965,7 +2965,7 @@ def _chama_marcacao(base, tk, metodo, caminho, corpo=None):
 
 
 def cmd_julgar(d, inst, argv):
-    """`julgar biblioteca --lote <id>`: o juiz do piloto da escada (card #3350; padrao protocolo-medicao-rag, «O juiz»).
+    """`julgar biblioteca --lote <id>`: o juiz do piloto da escada (padrao protocolo-medicao-rag, «O juiz»).
     Sem flag de leitura, julga cada resposta do lote pelo criterio que a tela mostrou ao dono e grava em
     avaliacao.juiz_marca; NUNCA le os eventos do dono. `--kappa`, `--divergencias`, `--tempo-ativo` e `--conferencia`
     so rodam com o juiz completo no banco, e so entao leem os eventos (a hora da primeira leitura fica no estado)."""
@@ -3055,7 +3055,7 @@ def cmd_julgar(d, inst, argv):
         if op.get("--json"):
             print(json.dumps(divs, ensure_ascii=False, indent=1))
             return
-        print(f"lote {lote_id} · {len(divs)} divergencia(s) de grau, sem braco (embasamento fora, ordem do dono 09/10)")
+        print(f"lote {lote_id} · {len(divs)} divergencia(s) de grau, sem braco (embasamento fora)")
         for n, x in enumerate(divs, 1):
             print(f"{n:>3}. {x['resposta_id']} · dono {x['dono']['qualidade']} · juiz {x['juiz']['qualidade']} · {x['pergunta'][:70]}")
         return
@@ -3167,7 +3167,7 @@ def _julgamentos_do_lote(d, antes):
 
 
 def cmd_parear(d, inst, argv):
-    """`parear biblioteca`: o par minimo da consulta montada (card #3360; spec motor §2b). Para cada pergunta com frase do
+    """`parear biblioteca`: o par minimo da consulta montada. Para cada pergunta com frase do
     dono, recupera o top-8 da chamada de hoje (A), da frase (C) e da lista montada (D), na mesma geracao; escreve uma
     resposta por braco com o escritor da escada, a FRASE como pergunta nos tres; monta o lote que o dono julga na tela
     e a tabela com a sobreposicao e o que ele ja julgou. Estado em arquivo, retomavel (`--lote-id`)."""
@@ -3327,7 +3327,7 @@ def cmd_parear(d, inst, argv):
 
 
 def _populacao_do_log(inst, desde):
-    """A populacao do `parear --do-log` (card #3378): os eventos de acervo.evento_recuperacao com necessidade e chapeu nao
+    """A populacao do `parear --do-log`: os eventos de acervo.evento_recuperacao com necessidade e chapeu nao
     nulos, lidos pelo banco como `eleger` (nunca o log da porta, #3364), cuja rota /eleger devolve `eleito_do_chapeu`,
     deduplicados por necessidade. Devolve (chamadas lidas, chamadas com eleito, populacao)."""
     b, bancos = inst.get("banco") or {}, inst.get("bancos") or {}
@@ -3377,7 +3377,7 @@ def _populacao_do_log(inst, desde):
 
 
 def _parear_do_log(inst, op):
-    """`parear biblioteca --do-log [--desde <data>]` (card #3378; Medida do #3359): o par sobre as chamadas do log com
+    """`parear biblioteca --do-log [--desde <data>]`: o par sobre as chamadas do log com
     eleito, nao sobre o piloto. Dois bracos na mesma geracao, mesmo k e mesmo escritor: `frase` (a busca de hoje: a
     necessidade, sem chapeu) e `eleito` (a necessidade com `chapeu` e `eleicao_chapeu: true` no corpo, so na
     requisicao). A tabela traz o Jaccard do top-8 E x C. Populacao vazia: sai 0 dizendo que nao ha par, sem lote."""
@@ -3517,7 +3517,7 @@ def _causa_curta(causa):
 
 
 def cmd_lintar(inst, argv):
-    """`lintar`: o lint da consulta montada sobre o log de perguntas, so leitura (card #3360, passo 7).
+    """`lintar`: o lint da consulta montada sobre o log de perguntas, so leitura.
 
     Diz, por origem, quantos eventos o lint recusaria e por qual causa, e as 20 do piloto da escada uma a
     uma. A causa (c) nao se mede: o log anterior a 087 nao tem o pedido do dono. Nao grava nada, nao
@@ -3635,7 +3635,7 @@ def _chama_eleger(inst, tok, corpo):
 
 
 def cmd_eleger(nome_inst, inst, argv):
-    """`eleger`: medicao so leitura da eleicao de chapeu sobre o log de perguntas (card #3368).
+    """`eleger`: medicao so leitura da eleicao de chapeu sobre o log de perguntas.
 
     Le acervo.evento_recuperacao (necessidade e chapeu nao nulos), manda em lote a rota /eleger
     do rag-api e imprime por cadeira e chapeu: total, frase_sem_conceito, chapeu_sem_casamento.
@@ -3759,7 +3759,7 @@ def cmd_eleger(nome_inst, inst, argv):
 
 # ---------------------------------------------------------------- a face motor le (#3513)
 # Os atos abaixo sao leitura: cada um diz a hora, a fonte e, onde nao deu para olhar, "nao consegui olhar" com
-# o motivo (arq:0110 §4), nunca zero nem vazio no lugar do dado que falta.
+# o motivo, nunca zero nem vazio no lugar do dado que falta.
 
 def _usa(contexto, uso, msg):
     print(f"{contexto}: {msg}.\n  {uso}", file=sys.stderr)
@@ -3818,7 +3818,7 @@ def _get_acervo(base, tok, rota):
 
 
 def _comparar_acervo(nome, inst, outra_nome, outra, como_json):
-    """`medir --contra <outra> --acervo` (card #3844, unidade 7): as leituras da API do acervo, uma a uma, na servida e
+    """`medir --contra <outra> --acervo`: as leituras da API do acervo, uma a uma, na servida e
     na que so serve o acervo. Exit 0 so com o mesmo status e o mesmo corpo em todas; 1 com qualquer diferenca; 3 com
     uma das duas fora do ar."""
     base_a, base_b = _base_acervo(inst), _base_acervo(outra)
@@ -3869,7 +3869,7 @@ def _perguntas_do_log(inst, n, particao):
 
 
 def _medir_contra(nome, inst, argv):
-    """`medir <particao> --contra <outra>` (card #3844, tarefa 2; R27 da spec motor): a bateria (e, com
+    """`medir <particao> --contra <outra>`: a bateria (e, com
     `--log N`, as ultimas perguntas do log) nas duas instancias com origem `sombra`, o top-k de cada uma lado a lado
     e o cruzamento de particao. Exit 0 so com top-k identico em toda pergunta, nenhum trecho cruzado e o mesmo indice
     (embedder e geracao) nos dois lados; 1 com qualquer diferenca; 3 com uma das duas fora do ar."""
@@ -4179,7 +4179,7 @@ def cmd_estado(inst, argv):
         else:
             _usa("estado", "motor <inst> estado <particao> [--json]", f"argumento desconhecido {a!r}")
     if particao != "biblioteca":
-        print(f"motor estado {particao}: so a biblioteca troca de embedder (arq:0121 §7.3).", file=sys.stderr)
+        print(f"motor estado {particao}: so a biblioteca troca de embedder.", file=sys.stderr)
         sys.exit(2)
     tok = token_da(inst)
     if como_json:
@@ -4316,7 +4316,7 @@ def cmd_limpar(inst, argv):
 def main():
     d = reg()
     a = sys.argv[1:]
-    # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4): varre
+    # --ajuda UNIVERSAL, sem efeito colateral: varre
     # todos os argumentos antes do despacho; nenhum ato chega a rodar. uso() sai 2.
     if any(x in ("--ajuda", "--help", "-h") for x in a):
         uso()

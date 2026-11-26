@@ -1,4 +1,4 @@
-"""O histórico de medida, com o marco das gerações e dos ajustes (card #3513, tarefa 6; spec R1, R4).
+"""O histórico de medida, com o marco das gerações e dos ajustes.
 
 `motor rag medir <particao> --historico` lê as medições que a bateria já salvou em `medicoes_em` (um JSON por
 rodada) e devolve a série em ordem de hora, com os marcos no eixo do tempo: cada virada de geração e cada ajuste

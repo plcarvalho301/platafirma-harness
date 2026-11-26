@@ -1,4 +1,4 @@
-"""A chamada ao rag-api que o `motor` repete em mais de um ato (card #3513).
+"""A chamada ao rag-api que o `motor` repete em mais de um ato.
 
 O ajuste da geração e os trabalhos falam com as rotas `/motor/...` da #3510; a lista de trabalhos
 também serve a recusa do ajuste. Aqui mora só o transporte: JSON de ida e de volta, e o erro da API

@@ -1,4 +1,4 @@
-"""`motor rag sortear biblioteca` — o sorteio do estrato sentido da escada (card #3349, feature #3340).
+"""`motor rag sortear biblioteca` — o sorteio do estrato sentido da escada.
 
 Fonte: padrao protocolo-medicao-rag rev 2, «Estratos e tamanho» e «Fonte e filtros». Sorteia do log de
 perguntas que as cadeiras fizeram ao motor (acervo.evento_recuperacao), aplica os filtros do padrão

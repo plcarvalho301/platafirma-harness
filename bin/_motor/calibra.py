@@ -1,4 +1,4 @@
-"""Calibração do sinal de abstenção sobre medições salvas (card #3264, passo 6c; arq:0121 §7.3).
+"""Calibração do sinal de abstenção sobre medições salvas.
 
 `motor rag medir <particao> --calibrar <controle>[,<rodada>…]` lê as medições que a bateria salvou,
 uma por rodada (similaridade, revisor, veredito por conceito), e diz, por sinal, o piso e o que ele
