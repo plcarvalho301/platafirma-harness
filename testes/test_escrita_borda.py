@@ -247,6 +247,7 @@ def test_permitir_vazio_uuidv7_e_leitura_limitada() -> None:
 
 def test_token_lido_apenas_por_descritor_herdado_e_core_dump_zerado(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     desligar_core_dump()
     soft, _ = resource.getrlimit(resource.RLIMIT_CORE)
@@ -263,10 +264,12 @@ def test_token_lido_apenas_por_descritor_herdado_e_core_dump_zerado(
     monkeypatch.setenv("PF_TOKEN_FD", str(r_fd))
     assert ler_token_descritor() == "tok-teste-123"
 
-    # Token acima do teto (16 KiB) é recusado com token-invalido em vez de truncado
-    r2_fd, w2_fd = os.pipe()
-    os.write(w2_fd, b"x" * (16_384 + 64))
-    os.close(w2_fd)
+    # Token acima do teto (16 KiB) é recusado com token-invalido em vez de truncado.
+    # Arquivo, e não pipe: com a conta acima de pipe-user-pages-soft o núcleo dá 4 KiB ao
+    # pipe novo, e escrever 16 KiB antes de ler bloqueava o trabalhador (#5763).
+    grande = tmp_path / "token-grande"
+    grande.write_bytes(b"x" * (16_384 + 64))
+    r2_fd = os.open(str(grande), os.O_RDONLY)
     monkeypatch.setenv("PF_TOKEN_FD", str(r2_fd))
     with pytest.raises(RecusaEscrita) as exc_tok:
         ler_token_descritor()
