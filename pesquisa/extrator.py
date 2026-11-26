@@ -102,6 +102,8 @@ _RE_META_CHARSET = re.compile(rb"<meta[^>]+charset\s*=\s*[\"']?\s*([A-Za-z0-9_.:
 _RE_BRANCO = re.compile(r"\s+")
 
 TIPOS_HTML = frozenset({"text/html", "application/xhtml+xml"})
+TIPO_GZIP_XML = "application/x-gzip+xml"
+TETO_SITEMAP_BYTES = 32 * 1024 * 1024
 TIPOS_TEXTO = frozenset({"text/plain", "text/markdown", "text/csv", "application/json", "text/xml", "application/xml"})
 TIPOS_PDF = frozenset({"application/pdf"})
 # Formatos de escritório que o leitor de formatos da casa abre por bytes (#4457 t4): o governo
@@ -136,7 +138,7 @@ TETOS_BYTES_POR_TIPO = {
 _EXT = {
     "text/html": "html", "application/xhtml+xml": "xhtml", "text/plain": "txt",
     "text/markdown": "md", "text/csv": "csv", "application/json": "json",
-    "text/xml": "xml", "application/xml": "xml", "application/pdf": "pdf",
+    "text/xml": "xml", "application/xml": "xml", TIPO_GZIP_XML: "xml.gz", "application/pdf": "pdf",
     "application/zip": "zip", "application/epub+zip": "epub",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
@@ -253,9 +255,19 @@ def _codec(rotulo: str | None) -> str | None:
         return None
 
 
+def _tipo_do_gzip(corpo: bytes, declarado: str | None) -> tuple[str, str]:
+    if _cabeca_gzip_eh_xml(corpo):
+        return TIPO_GZIP_XML, "conteudo-do-gzip"
+    if declarado and declarado != "application/octet-stream":
+        return declarado, "content-type"
+    return "application/gzip", "assinatura"
+
+
 def tipo_real(corpo: bytes, content_type: str | None) -> tuple[str, str]:
     """(mime, por): assinatura dos bytes, depois content-type (spec espelho §2.4, `tipo_por`)."""
     declarado = _mime(content_type)
+    if corpo.startswith(b"\x1f\x8b"):
+        return _tipo_do_gzip(corpo, declarado)
     for sig, mime in _ASSINATURAS:
         if corpo.startswith(sig):
             # zip é o envelope de docx/xlsx/pptx/epub: o content-type diz qual; quando ele só diz
@@ -425,8 +437,8 @@ def ler(
     tipo, tipo_por = tipo_real(resp.corpo, resp.cabecalho("content-type"))
 
     eh_binario = tipo in TIPOS_BINARIOS_PERMITIDOS
-    if not (tipo in TIPOS_HTML or tipo in TIPOS_TEXTO or tipo in TIPOS_PDF
-            or tipo in TIPOS_ESCRITORIO or eh_binario):
+    if not (tipo in TIPOS_HTML or tipo in TIPOS_TEXTO or tipo == TIPO_GZIP_XML
+            or tipo in TIPOS_PDF or tipo in TIPOS_ESCRITORIO or eh_binario):
         raise _nao_achado(trab, url, estrategia, f"tipo-nao-permitido:{tipo}", resp=resp,
                           extra={"tipo": tipo, "tipo_por": tipo_por, "sha256": sha})
 
@@ -666,6 +678,10 @@ def _deriva_http(
         raw = (d.get("md_raw") or "").strip()
         return {"md": fit or raw, "vista": "fit" if fit else "raw", "raw": raw, "encoding": enc,
                 "html": texto, "binario": False}
+    if tipo == TIPO_GZIP_XML:
+        xml_bytes = descomprime_gzip(resp.corpo)
+        texto, enc = decodifica(xml_bytes, "application/xml; charset=utf-8", html=False)
+        return {"md": texto, "vista": "texto", "encoding": enc, "html": "", "binario": False}
     if tipo in TIPOS_TEXTO:
         texto, enc = decodifica(resp.corpo, ct, html=False)
         return {"md": texto, "vista": "texto", "encoding": enc, "html": "", "binario": False}
@@ -1000,4 +1016,290 @@ async def _renderiza_async(url: str, *, esperar: str | None = None,
         "status": getattr(r, "status_code", None),
         "url_final": getattr(r, "redirected_url", None) or getattr(r, "url", None),
         "rede": getattr(r, "network_requests", None) if rede else None,
+    }
+
+
+# ------------------------------------------------------- sitemap e metadados de navegação (#4458)
+_BLOCO_GZIP = 65_536
+_CABECA_XML_MAX = 1_024
+_PREFIXOS_XML = (b"<?xml", b"<urlset", b"<sitemapindex")
+_RE_ESQUEMA_EXPLICITO = re.compile(r"^([a-zA-Z][a-zA-Z0-9+.-]*):")
+_RE_FALTA_DOIS_PONTOS = re.compile(r"^(?:https?|ttps?|htps?)//", re.IGNORECASE)
+_ESQUEMAS_NAO_HTTP = frozenset({"mailto", "tel", "javascript", "data", "ftp"})
+_SEPARADORES_MIGALHA = frozenset({">", "/", "»", "|", "•", "›"})
+_PREFIXOS_MIGALHA = ("você está aqui:", "voce esta aqui:", "você está aqui", "voce esta aqui")
+_SELETORES_BREADCRUMB = (
+    "#portal-breadcrumbs",
+    "#breadcrumbs",
+    'nav[aria-label*="readcrumb" i]',
+    'nav[aria-label*="aminho" i]',
+    '[aria-label*="avegação estrutural" i]',
+    "nav.breadcrumb",
+    ".breadcrumbs",
+    '[itemtype*="BreadcrumbList"]',
+    "ol.breadcrumb",
+    "ul.breadcrumb",
+)
+_SELETORES_DATA_VISIVEL = (
+    ".documentPublished",
+    ".documentModified",
+    "#plone-document-byline",
+    ".documentByLine",
+    "time",
+)
+_RE_DATA_TEXTO_VISIVEL = re.compile(
+    r"(?:Publicado|Atualizado|Modificado|Última\s+modificação)\s*(?:em|:)?\s*"
+    r"\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}(?:\s*(?:às\s*)?\d{1,2}[h:]\d{2})?",
+    re.IGNORECASE,
+)
+
+
+def _cabeca_gzip_eh_xml(dados: bytes) -> bool:
+    import gzip
+    import io
+
+    try:
+        with gzip.GzipFile(fileobj=io.BytesIO(dados)) as gz:
+            amostra = gz.read(_CABECA_XML_MAX)
+    except OSError:
+        return False
+    limpa = amostra.lstrip(b"\xef\xbb\xbf \t\r\n").lower()
+    return limpa.startswith(_PREFIXOS_XML)
+
+
+def descomprime_gzip(dados: bytes, *, teto: int = TETO_SITEMAP_BYTES) -> bytes:
+    """Descomprime bytes gzip com teto estrito contra bomba de compressão."""
+    import gzip
+    import io
+
+    saida = bytearray()
+    try:
+        with gzip.GzipFile(fileobj=io.BytesIO(dados)) as gz:
+            while True:
+                pedaco = gz.read(_BLOCO_GZIP)
+                if not pedaco:
+                    break
+                saida.extend(pedaco)
+                if len(saida) > teto:
+                    raise FalhaFonte("sitemap-acima-do-teto", teto=teto)
+    except OSError as exc:
+        raise FalhaFonte("sitemap-gzip-invalido", detalhe=str(exc)[:160]) from exc
+    return bytes(saida)
+
+
+def _tag_local_xml(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1].lower() if "}" in tag else tag.lower()
+
+
+def extrai_sitemap(corpo: bytes) -> dict[str, list[str]]:
+    """Extrai URLs de `<urlset>` e sub-sitemaps de `<sitemapindex>`, inclusive `.xml.gz`."""
+    import xml.etree.ElementTree as ET
+
+    xml_bytes = descomprime_gzip(corpo) if corpo.startswith(b"\x1f\x8b") else corpo
+    if len(xml_bytes) > TETO_SITEMAP_BYTES:
+        raise FalhaFonte("sitemap-acima-do-teto", teto=TETO_SITEMAP_BYTES)
+    if b"<!entity" in xml_bytes[:_BLOCO_GZIP].lower():
+        raise FalhaFonte("sitemap-entidade-proibida")
+    try:
+        raiz = ET.fromstring(xml_bytes)
+    except ET.ParseError as exc:
+        raise FalhaFonte("sitemap-xml-invalido", detalhe=str(exc)[:160]) from exc
+
+    urls: list[str] = []
+    sitemaps: list[str] = []
+    nome_raiz = _tag_local_xml(raiz.tag)
+    for filho in raiz:
+        nome_filho = _tag_local_xml(filho.tag)
+        locs = [
+            el.text.strip()
+            for el in filho
+            if _tag_local_xml(el.tag) == "loc" and el.text and el.text.strip()
+        ]
+        if nome_raiz == "sitemapindex" and nome_filho == "sitemap":
+            sitemaps.extend(locs)
+        elif nome_filho == "url":
+            urls.extend(locs)
+    return {"urls": urls, "sitemaps": sitemaps}
+
+
+@dataclass(frozen=True)
+class DestinoLink:
+    """Classificação do `href` de um link HTML resolvido contra a base da página."""
+
+    destino: str | None
+    mesmo_dominio: bool
+    quebrada: bool = False
+    motivo: str | None = None
+
+
+def _limpar_espacos(texto: str) -> str:
+    return " ".join(texto.split())
+
+
+def _resolver_base_html(soup: Any, url_final: str) -> str:
+    from urllib.parse import urljoin
+
+    head = soup.find("head")
+    base_tag = head.find("base", href=True) if head else soup.find("base", href=True)
+    if not base_tag:
+        return url_final
+    bruto = str(base_tag.get("href") or "").strip()
+    if not bruto:
+        return url_final
+    cand = urljoin(url_final, bruto)
+    partes = urlsplit(cand)
+    if partes.scheme.lower() in ("http", "https") and partes.hostname:
+        return cand
+    return url_final
+
+
+def _extrair_canonical_html(soup: Any, url_base: str) -> str | None:
+    from urllib.parse import urldefrag, urljoin
+
+    for tag in soup.find_all("link", href=True):
+        rels = tag.get("rel") or []
+        tokens = [str(r).lower() for r in (rels if isinstance(rels, list) else str(rels).split())]
+        if "canonical" not in tokens:
+            continue
+        bruto = str(tag.get("href") or "").strip()
+        if not bruto:
+            continue
+        resolvida = urldefrag(urljoin(url_base, bruto))[0]
+        partes = urlsplit(resolvida)
+        if partes.scheme.lower() in ("http", "https") and partes.hostname:
+            return resolvida
+    return None
+
+
+def _extrair_titulo_html(soup: Any) -> str | None:
+    for el in (soup.title, soup.find("h1")):
+        if el is not None:
+            t = _limpar_espacos(el.get_text(" ", strip=True))
+            if t:
+                return t
+    return None
+
+
+def _limpar_item_migalha(texto: str) -> str:
+    limpo = _limpar_espacos(texto)
+    low = limpo.lower()
+    for pref in _PREFIXOS_MIGALHA:
+        if low.startswith(pref):
+            limpo = limpo[len(pref) :].strip(" :>/»")
+            break
+    return "" if limpo in _SEPARADORES_MIGALHA else limpo
+
+
+def _extrair_breadcrumb_html(soup: Any) -> list[str]:
+    bloco = None
+    for sel in _SELETORES_BREADCRUMB:
+        bloco = soup.select_one(sel)
+        if bloco is not None:
+            break
+    if bloco is None:
+        return []
+    itens = bloco.find_all("li") or bloco.select('a, [id^="breadcrumbs-current"], [aria-current="page"]')
+    return [limpo for el in itens if (limpo := _limpar_item_migalha(el.get_text(" ", strip=True)))]
+
+
+def _extrair_data_visivel_html(soup: Any, html: str) -> str | None:
+    achados: list[str] = []
+    for sel in _SELETORES_DATA_VISIVEL:
+        for el in soup.select(sel):
+            txt = _limpar_espacos(el.get_text(" ", strip=True))
+            if not txt and el.name == "time":
+                txt = str(el.get("datetime") or "").strip()
+            if txt and txt not in achados:
+                achados.append(txt)
+        if achados:
+            return " | ".join(achados[:3])
+    m = _RE_DATA_TEXTO_VISIVEL.search(soup.get_text(" ", strip=True))
+    if m:
+        return _limpar_espacos(m.group(0))
+    return detecta_data_publicacao(html).get("valor")
+
+
+def _porta_valida(partes: Any) -> bool:
+    try:
+        _ = partes.port
+    except ValueError:
+        return False
+    return True
+
+
+def _classificar_href(href_bruto: str, url_base: str, host_pagina: str) -> DestinoLink:
+    from urllib.parse import urldefrag, urljoin
+
+    s = href_bruto.strip()
+    if not s or s.startswith("#"):
+        return DestinoLink(destino=urldefrag(url_base)[0], mesmo_dominio=True)
+    if s.startswith(":") or _RE_FALTA_DOIS_PONTOS.match(s):
+        return DestinoLink(destino=None, mesmo_dominio=False, quebrada=True, motivo="esquema-malformado")
+    m_esq = _RE_ESQUEMA_EXPLICITO.match(s)
+    if m_esq:
+        esquema = m_esq.group(1).lower()
+        if esquema in _ESQUEMAS_NAO_HTTP:
+            return DestinoLink(destino=None, mesmo_dominio=False, motivo=f"esquema-nao-http:{esquema}")
+        if esquema not in ("http", "https"):
+            return DestinoLink(
+                destino=None,
+                mesmo_dominio=False,
+                quebrada=True,
+                motivo=f"esquema-malformado:{esquema}",
+            )
+    resolvida = urldefrag(urljoin(url_base, s))[0]
+    partes = urlsplit(resolvida)
+    if (
+        partes.scheme.lower() not in ("http", "https")
+        or not partes.hostname
+        or " " in partes.netloc
+        or not _porta_valida(partes)
+    ):
+        return DestinoLink(destino=None, mesmo_dominio=False, quebrada=True, motivo="url-malformada")
+    host_dest = partes.hostname.lower().rstrip(".")
+    return DestinoLink(destino=resolvida, mesmo_dominio=(host_dest == host_pagina))
+
+
+def _texto_do_link(tag: Any) -> str:
+    txt = _limpar_espacos(tag.get_text(" ", strip=True))
+    if txt:
+        return txt
+    img = tag.find("img", alt=True)
+    if img and str(img.get("alt") or "").strip():
+        return _limpar_espacos(str(img.get("alt")))
+    for attr in ("aria-label", "title"):
+        val = str(tag.get(attr) or "").strip()
+        if val:
+            return _limpar_espacos(val)
+    return ""
+
+
+def extrai_metadados_pagina(html: str, url_final: str) -> dict[str, Any]:
+    """Extrai base, canonical, título, breadcrumb, data visível e links com metadado."""
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html or "", "lxml")
+    url_base = _resolver_base_html(soup, url_final)
+    host_pagina = (urlsplit(url_final).hostname or "").lower().rstrip(".")
+    links: list[dict[str, Any]] = []
+    for tag in soup.find_all("a", href=True):
+        href = str(tag.get("href"))
+        info = _classificar_href(href, url_base, host_pagina)
+        links.append(
+            {
+                "href": href,
+                "texto": _texto_do_link(tag),
+                "destino": info.destino,
+                "mesmo_dominio": info.mesmo_dominio,
+                "quebrada": info.quebrada,
+                "motivo": info.motivo,
+            }
+        )
+    return {
+        "url_base": url_base,
+        "canonical": _extrair_canonical_html(soup, url_base),
+        "titulo": _extrair_titulo_html(soup),
+        "breadcrumb": _extrair_breadcrumb_html(soup),
+        "data_visivel": _extrair_data_visivel_html(soup, html or ""),
+        "links": links,
     }

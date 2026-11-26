@@ -31,7 +31,8 @@ if str(_LIB) not in sys.path:
 from raizes import instancia  # noqa: E402
 
 RAIZ_VAR = Path(os.environ.get("PF_PESQUISA_DIR", str(instancia() / "var" / "pesquisa")))
-UA = "PlataFirma-pesquisa/1.0 (+https://platafirma.org; verbo pesquisar; robots respeitado)"
+UA = "PlataFirma-pesquisa/1.0 (+https://platafirma.org; verbo pesquisar)"
+UA_PERCORRER = "PlataFirma-pesquisa/1.0 (+https://platafirma.org; verbo pesquisar; robots respeitado)"
 
 def sha256_bytes(dados: bytes) -> str:
     return hashlib.sha256(dados).hexdigest()
