@@ -4,10 +4,10 @@ Documentation=https://wiki.platafirma.org/index.php/Spec:log-de-negocio
 
 [Service]
 Type=oneshot
-# Da release, nunca de clone (card #3010): a unit sobrevive a bancada apagada.
+# Da release, nunca de clone: a unit sobrevive a bancada apagada.
 WorkingDirectory=/opt/platafirma/current/harness
 Environment=PATH=/opt/platafirma/current/harness/bin:/usr/local/bin:/usr/bin:/bin
-# Mesmo ambiente do ops-mcp (card #3147): a URL do acervo e, onde houver, o token.
+# Mesmo ambiente do ops-mcp: a URL do acervo e, onde houver, o token.
 EnvironmentFile=/home/claudinho/.config/ops/env
 # Quem assina a passada (o `autor` de D5.1 a D5.4): a cadeira da esteira.
 Environment=PF_CADEIRA=ti

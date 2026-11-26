@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup-leitor.sh — instala e confere contas, grupo, unidades systemd, sudoers e ajudante do leitor único (story #4442, t8).
+# setup-leitor.sh — instala e confere contas, grupo, unidades systemd, sudoers e ajudante do leitor único.
 # Uso:
 #   sudo bash deploy-harness/setup-leitor.sh           # instala/atualiza como root
 #   bash deploy-harness/setup-leitor.sh --check        # confere sem root (exit 0 conforme, 1 divergente, 2 uso)
@@ -212,7 +212,7 @@ instalar_ajudante_logs() {
   tmp="$(mktemp "$dir/.leitor-logs.XXXXXX")"
   cat >"$tmp" <<'EOF'
 #!/usr/bin/env bash
-# Ajudante privilegiado de leitura de logs de leitor.service (story #4442, t8).
+# Ajudante privilegiado de leitura de logs de leitor.service.
 set -euo pipefail
 IFS=$' \t\n'
 PATH="/usr/bin:/bin"
@@ -236,7 +236,7 @@ instalar_sudoers() {
   fi
   tmp="$(mktemp /etc/sudoers.d/.platafirma-leitor.XXXXXX)"
   cat >"$tmp" <<EOF
-# Regras estreitas do leitor único (story #4442, t8) — sem curingas. O restart leva NOEXEC; o ajudante
+# Regras estreitas do leitor único — sem curingas. O restart leva NOEXEC; o ajudante
 # não, porque ele é roteiro que precisa executar o interpretador e o journalctl, e NOEXEC barra os dois.
 ${CONTA_CHAMADORA} ALL=(root) NOPASSWD: NOEXEC: /usr/bin/systemctl restart leitor.service
 ${CONTA_CHAMADORA} ALL=(root) NOPASSWD: ${AJUDANTE_LOGS}

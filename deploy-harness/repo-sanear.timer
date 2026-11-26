@@ -1,5 +1,5 @@
 [Unit]
-Description=Fim do dia da bancada -- repo sanear (arq:0109 §5: pasta entregue nao sobrevive ao dia)
+Description=Fim do dia da bancada -- repo sanear (pasta entregue nao sobrevive ao dia)
 
 [Timer]
 OnCalendar=*-*-* 23:40:00

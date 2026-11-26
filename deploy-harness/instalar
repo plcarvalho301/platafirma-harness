@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # instalar — converge um ambiente para o que o harness declara: unit da release, gate de commit na bancada.
 # capacidade: infra
-# dono: claudinho-TI
+# dono: ti
 #
 # ambiente: PF_RELEASE_RAIZ (default /opt/platafirma), PLATAFIRMA_RELEASE (default
 #           $PF_RELEASE_RAIZ/current), PLATAFIRMA_BANCADA ou ~/.config/platafirma/bancada
 #           (sem default: so o gate de commit e o texto de arranque a leem),
 #           CONFERIR (default o conferir da release), XDG_DATA_HOME.
 #
-# Nao entra na conta de arq:0037 (um verbo por capacidade): nao mora em `bin/` e
+# Nao entra na conta de um verbo por capacidade: nao mora em `bin/` e
 # nao e chamado por cadeira nenhuma. E ato de preparo de ambiente, rodado pelo
 # caminho — uma vez na maquina nova, e de novo sempre que algo divergir.
 #
@@ -17,7 +17,7 @@
 # zero e nao apaga o que nao reconhece: arquivo comum no lugar de um link nosso e
 # RELATADO, nunca sobrescrito — quem o pos ali decide, nao este script.
 #
-# DUAS RAIZES, E SO ELAS (card #3010): unit e hook apontam para a RELEASE
+# DUAS RAIZES, E SO ELAS: unit e hook apontam para a RELEASE
 # (/opt/platafirma/current/harness), nunca para clone — apagar a bancada nao pode
 # parar unit nem gate. Verbo no PATH NAO e mais deste script: nao ha diretorio de
 # symlinks de verbo; o PATH e /opt/platafirma/current/harness/bin, posto pelas units,
@@ -309,7 +309,7 @@ TERCEIROS=(
   "rg|busca na bancada cai para grep -r, ordens de grandeza mais lenta"
   "fd|procura de arquivo por nome cai para find"
   "uv|venv reprodutivel e o modulo redis de que a fila depende ficam sem como ser instalados"
-  "trivy|varredura de imagem sai do arsenal de claudinho-seguranca"
+  "trivy|varredura de imagem sai do arsenal de seguranca"
 )
 for linha in "${TERCEIROS[@]}"; do
   ferramenta="${linha%%|*}"; efeito="${linha#*|}"

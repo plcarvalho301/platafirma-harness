@@ -18,7 +18,7 @@
 #
 # ALIAS (--alias): o ponto de entrada dos verbos e /usr/local/bin/platafirma. `pf` e so atalho de
 # shell da conta que roda este script, por ergonomia — configuracao da conta, nao nome de coisa da
-# plataforma (ont:0087). Grava no rc do shell da conta um bloco entre marcadores fixos
+# plataforma. Grava no rc do shell da conta um bloco entre marcadores fixos
 #   # >>> platafirma alias >>>  ...  alias pf='platafirma'  ...  # <<< platafirma alias <<<
 # Idempotente (bloco igual = conforme, nada escrito). Alias ou funcao pf com outro alvo fora do
 # bloco (no rc ou em ~/.bash_aliases), ou comando pf alheio no PATH = recusado, exit 4, sem
@@ -26,10 +26,10 @@
 # preservando byte a byte o resto do arquivo e o modo; rc que e symlink tem o alvo editado.
 # Sem familia e sem --declarar, --alias so grava o alias e sai.
 #
-# Nao entra na conta de arq:0037: nao mora em bin/ e nao e chamado por cadeira. E preparo de
+# Nao entra na conta de um verbo por capacidade: nao mora em bin/ e nao e chamado por cadeira. E preparo de
 # bancada, rodado por quem vai editar codigo.
 #
-# O ATO E DO VERBO (arq:0084): este script nao clona, nao busca e nao cria worktree. Resolver o
+# O ATO E DO VERBO: este script nao clona, nao busca e nao cria worktree. Resolver o
 # sha de producao, buscar no forge, recusar sha fora de origin/main e criar o worktree e de
 # `repo abrir <familia> --da-producao` — o repo DA RELEASE, nunca o da bancada: a bancada pode
 # nao existir, e e justamente o que se esta puxando. Aqui so se escolhe familia, se declara a
@@ -40,7 +40,7 @@
 # Depois, uma linha de como chamar verbo e uma de como testar verbo editado. Com --alias, antes
 # de tudo: "alias pf -> platafirma: criado | conforme | recusado (motivo)".
 #
-# EXIT (arq:0110 §4): 0 toda familia criada ou conforme · 1 familia fora da release · 2 uso ·
+# EXIT: 0 toda familia criada ou conforme · 1 familia fora da release · 2 uso ·
 # 3 dependencia (bancada nao declarada, repo da release ausente, forge fora, rc nao gravavel) ·
 # 4 politica (outra bancada ja declarada, bancada em /opt ou /srv, repo chamado dentro da bancada,
 # worktree em outro sha, sujo ou em outro ramo, alias, funcao ou comando pf alheio) · 5 indeterminavel
@@ -114,7 +114,7 @@ case "$SLUG" in
 esac
 
 # --- alias da conta --------------------------------------------------------------------------
-# Atalho de shell pf -> platafirma no rc da conta que roda este script (ont:0087: pf nao nomeia
+# Atalho de shell pf -> platafirma no rc da conta que roda este script (pf nao nomeia
 # nada da plataforma; e configuracao da conta). Relata uma linha e devolve o exit.
 grava_alias() {
   local rc_arq="${PLATAFIRMA_ARQUIVO_SHELLRC:-$HOME/.bashrc}"
@@ -129,7 +129,7 @@ arq, ensaio = sys.argv[1], sys.argv[2] == "1"
 ABRE = "# >>> platafirma alias >>>"
 FECHA = "# <<< platafirma alias <<<"
 BLOCO = (ABRE + "\n"
-         "# gravado por puxar-bancada --alias: atalho de shell da conta, nao nome da plataforma (ont:0087)\n"
+         "# gravado por puxar-bancada --alias: atalho de shell da conta, nao nome da plataforma\n"
          "alias pf='platafirma'\n"
          + FECHA + "\n")
 ROTULO = "alias pf -> platafirma"
