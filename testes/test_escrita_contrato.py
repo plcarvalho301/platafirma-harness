@@ -565,3 +565,12 @@ def test_mutacao_guardas_zero_mutantes_vivos(tmp_path: Path, monkeypatch: pytest
             mutantes_vivos.append("io_atomico.O_NOFOLLOW")
 
     assert mutantes_vivos == [], f"mutantes vivos nas guardas: {mutantes_vivos}"
+
+
+def test_exige_shebang_isenta_dockerfile_e_crontab() -> None:
+    """Dockerfile e crontab-claudinho em deploy/ não são executáveis e não exigem #!."""
+    pol = _politica_ligada()
+    assert not mod_politica.exige_shebang(pol, "platafirma-core", "deploy/eventos/servico/Dockerfile")
+    assert not mod_politica.exige_shebang(pol, "platafirma-core", "deploy/crontab-claudinho")
+    assert mod_politica.exige_shebang(pol, "platafirma-core", "deploy/platafirma")
+    assert mod_politica.exige_shebang(pol, "platafirma-core", "deploy/instala-units.sh")

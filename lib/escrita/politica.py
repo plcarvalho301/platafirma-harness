@@ -11,7 +11,9 @@ import yaml
 from .tipos import ErroEscrita, RecusaEscrita
 
 _CONFIG_PADRAO = Path(__file__).resolve().parents[2] / "registro" / "escrita.yaml"
-_NAO_EXECUTAVEIS = frozenset({"README", "README.md", "VERDES", ".gitignore"})
+_NAO_EXECUTAVEIS = frozenset(
+    {"README", "README.md", "VERDES", ".gitignore", "Dockerfile", "crontab-claudinho"}
+)
 
 
 @dataclass(frozen=True)
