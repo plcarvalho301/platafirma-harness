@@ -300,7 +300,6 @@ def _trocar(cliente: Cliente, args: list, *, pedido: str = "", como_json: bool =
     if len(args) == 1 and _e_entrada_yaml(args[0]):
         classe, chave, versao, caminho = None, None, None, args[0]
         _, texto = _ler_entrada_yaml(caminho, proximo="ontologia trocar <arquivo.yaml>")
-        _recusar_parte(texto, "ontologia ler <classe> <chave>")
     else:
         if len(args) < 3 or len(args) > 4:
             classe_sug = _classe_canonica(args[0]) if args and not _e_entrada_yaml(args[0]) else "<classe>"
