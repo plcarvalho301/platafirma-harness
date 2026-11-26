@@ -1,6 +1,6 @@
 #!/opt/platafirma/current/venv/harness/bin/python
 # monta-sessao <cadeira> — monta o pacote de abertura A PARTIR DO CATALOGO.
-# capacidade: harness
+# capacidade: comportamento
 # dono: ia (politica de sessao) · ti (montador)
 #
 # As pecas nao estao escritas

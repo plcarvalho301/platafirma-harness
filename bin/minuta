@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # minuta — despachante do protocolo de deliberação entre cadeiras.
-# capacidade: gestao-estrategica
+# capacidade: processos
 # dono: gestao-estrategica
 # use para: deliberação entre cadeiras, parecer, circular pauta, formalizar em ADR/spec
 # atos: ler, escrever, circular, formalizar
