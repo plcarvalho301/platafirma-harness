@@ -826,8 +826,8 @@ def test_exemplo_desenhado_pela_grade_nao_tem_defeito(tipo):
 
 def test_entidade_que_some_dos_textos_e_acusada():
     _, plano, svg = _exemplo("camada")
-    svg = svg.replace(">Web UI<", "><")
-    assert any("Web UI" in d for d in checar_svg(svg, plano))
+    svg = svg.replace(">Painel UI<", "><")
+    assert any("Painel UI" in d for d in checar_svg(svg, plano))
 
 
 def test_letra_fora_dos_papeis_e_acusada():

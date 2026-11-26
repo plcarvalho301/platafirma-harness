@@ -18,7 +18,7 @@
   "elementos": [
     {
       "id": "ui",
-      "titulo": "Web UI",
+      "titulo": "Painel UI",
       "subtitulo": "Web frontend",
       "categoria": "superficie",
       "tipo": "tela",
