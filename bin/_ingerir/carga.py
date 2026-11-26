@@ -105,7 +105,7 @@ def conferir_manifesto_portao_1(manifesto: list[str], staging: str | Path) -> tu
 
 
 def limpar_staging_entrada(pasta: str | Path, raiz_entrada: str | Path | None = None) -> bool:
-    """Remove o diretório de staging local sob ~/AI/entrada/ após incorporação concluída (DT 1380).
+    """Remove o diretório de staging local sob ~/AI/entrada/ após incorporação concluída.
 
     Só remove diretórios estritamente filhos da raiz de entrada (PF_ENTRADA_RAIZ ou ~/AI/entrada).
     Nunca remove a própria raiz nem diretórios fora dela. Idempotente: devolve False se já não existe.

@@ -54,7 +54,7 @@ _RE_WIKI_DATADO = re.compile(r"^(?:wiki/)?(.+?)@(\d{4}-\d{2}-\d{2})\.md$", re.IG
 USO = """uso:
   ingerir (--lote <pasta> | --origem <gdrive:pasta|url> | --drive [<pasta>]) [opções]
 
-Incorporar (arq:0119 §2): sem --ate, o lote para na obra catalogada com a cópia sob guarda.
+Incorporar: sem --ate, o lote para na obra catalogada com a cópia sob guarda.
 Com --ate chunk, o --apply encadeia Transcrever (acervo espelhar) obra a obra; com --ate embed|vetor,
 encadeia Transcrever, Seccionar (confere a faixa de seção da selada), Indexar (motor <inst> indexar,
 que para no gate) e Servir (acervo promover). A obra que um portão barra (espelho não servível,
@@ -78,7 +78,7 @@ opções adicionais:
   --motor <inst>         instância do motor que indexa (default: rag); só com --ate embed|vetor
   --ocr                  aceito e sem efeito: o espelhar faz OCR na página escaneada
   --semantico            corte semântico por Orçamento de Fronteiras na seção sem heading que
-                         estoura o teto (causa A, card #3073); default: false (corte por tamanho)
+                         estoura o teto; default: false (corte por tamanho)
   --autor <slug>         curador do lote (default: cadeira da sessão ou 'dados')
   --colecao, --bucket <s> coleção do acervo: firma | pessoal (default: firma)
   --json                 emite resultado em formato JSON bruto
@@ -140,7 +140,7 @@ def extrair_classificacao_de_dict(r: dict) -> dict:
     if r.get("id_canonico"):
         c["id_canonico"] = r["id_canonico"]
     if r.get("vinculacao"):
-        # ont:0071: valor posto por quem classifica no sidecar; a ingestão não o infere de nada
+        # valor posto por quem classifica no sidecar; a ingestão não o infere de nada
         c["vinculacao"] = r["vinculacao"].strip()
     return c
 
@@ -585,7 +585,7 @@ def calcular_sha256_pasta(pasta: str) -> str:
     return h.hexdigest()
 
 
-# --- encadear os estágios depois de Incorporar (arq:0119 §2) -------------------------------
+# --- encadear os estágios depois de Incorporar --------------------------------------------
 # `--ate chunk` vai até Transcrever (impressão selada); `--ate embed|vetor` vai até o ar: espelha
 # (`acervo espelhar`), confere a faixa de seção, indexa até o gate (`motor indexar`, que não promove) e
 # põe no ar (`acervo promover`, que refaz o gate). Cada obra anda sozinha: a que um portão barra para
@@ -906,7 +906,7 @@ def main():
             item["classificacao"] = classif
         itens.append(item)
 
-    # O lote do servidor só incorpora (arq:0119 §2): transcrever e indexar são atos próprios,
+    # O lote do servidor só incorpora: transcrever e indexar são atos próprios,
     # encadeados aqui depois do aplicar (encadear_estagios).
     sha256_pasta = calcular_sha256_pasta(args.lote)
     payload = {
