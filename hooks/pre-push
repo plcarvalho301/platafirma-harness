@@ -101,9 +101,10 @@ marca_do_portao() {
 # A REV A JULGAR vem do stdin do hook: "<local_ref> <local_oid> <remote_ref> <remote_oid>".
 # TODA linha e uma ref empurrada (A4). local_oid todo-zero e delecao de ref: nao ha
 # arvore a medir. stdin vazio (invocacao a mao) cai no HEAD.
-# card #3370: a BASE de cada ref e o remote_oid (o que o servidor ja tem); ref nova (remote_oid
-# todo-zero) mede contra origin/main. O teste roda so o que o diff da base alcanca; base que
-# nao resolve, ou chamada a mao sem stdin, roda a lista inteira.
+# card #3370 + ordem do dono (25/11/2026): a BASE de cada ref e o remote_oid (o que o servidor
+# ja tem); ref nova (remote_oid todo-zero), remote_oid invalido ou chamada a mao sem stdin medem
+# contra origin/main. Nunca cai em lista inteira por falta de base: sem base resolvida sai 3
+# (nao medido) em medir_rev.
 REFS=(); BASES=()
 while read -r _ local_oid _ remote_oid; do
   case "$local_oid" in
@@ -111,13 +112,12 @@ while read -r _ local_oid _ remote_oid; do
     0000000000000000000000000000000000000000) continue ;;
   esac
   case "$remote_oid" in
-    0000000000000000000000000000000000000000) remote_oid="origin/main" ;;
-    *[!0-9a-f]*) remote_oid="" ;;
+    0000000000000000000000000000000000000000|''|*[!0-9a-f]*) remote_oid="origin/main" ;;
   esac
-  REFS+=("$local_oid"); BASES+=("${remote_oid:-}")
+  REFS+=("$local_oid"); BASES+=("$remote_oid")
 done
 if [ "${#REFS[@]}" -eq 0 ]; then
-  h="$(git rev-parse --verify HEAD 2>/dev/null)" && [ -n "$h" ] && { REFS+=("$h"); BASES+=(""); }
+  h="$(git rev-parse --verify HEAD 2>/dev/null)" && [ -n "$h" ] && { REFS+=("$h"); BASES+=("origin/main"); }
 fi
 [ "${#REFS[@]}" -gt 0 ] || exit 0
 
@@ -164,9 +164,14 @@ trap limpa EXIT
 
 # Mede UMA rev: 0 verde (ou reaproveitado verde), 1 vermelho real (barra o push),
 # 3 não medido (ambiente/coleta/timeout/lista — avisa e deixa passar, nunca barra).
-medir_rev() {  # $1=rev $2=base (vazio: lista inteira)
+medir_rev() {  # $1=rev $2=base (obrigatório: proibido rodar lista inteira sem base)
   local rev="$1" base="${2:-}"
   local arvore="$TMP/arvore-${rev:0:12}" log="$TMP/git-${rev:0:12}.txt"
+
+  if [ -z "$base" ] || ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1; then
+    printf 'pre-push: sem base resolvida (%s) para %s — não medido (proibido rodar lista inteira), deixando passar.\n' "${base:-vazia}" "${rev:0:7}" >&2
+    return 3
+  fi
 
   if ! git worktree add --detach --no-checkout "$arvore" "$rev" >"$log" 2>&1; then
     printf 'pre-push: não consegui isolar a rev %s — não medido, deixando passar.\n' "$rev" >&2
@@ -182,7 +187,7 @@ medir_rev() {  # $1=rev $2=base (vazio: lista inteira)
   local venvs; venvs="$(venvs_de "$arvore")"
   local teste_bin="$AQUI/../bin/teste"
   local saida="$TMP/teste-${rev:0:12}.txt" rc_teste=0
-  PLATAFIRMA_VENVS="$venvs" "$teste_bin" rodar "$REPO" --portao --arvore "$arvore" ${base:+--base "$base"} >"$saida" 2>&1 || rc_teste=$?
+  PLATAFIRMA_VENVS="$venvs" "$teste_bin" rodar "$REPO" --portao --arvore "$arvore" --base "$base" >"$saida" 2>&1 || rc_teste=$?
 
   local chaves_id
   chaves_id="$(grep -oE 'chave [A-Za-z0-9._-]+-[0-9a-f]{12}' "$saida" | sed 's/^chave //' | sort -u | tr '\n' ' ')"

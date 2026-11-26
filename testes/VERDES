@@ -3,18 +3,14 @@
 # arquivos de testes/ são da chave harness e estão em controle/tests/VERDES, pelo caminho a
 # partir da raiz do repositório.
 #
+# Corte do dono (25/11/2026): 80% dos arquivos de teste de todas as stacks saíram por ordem direta
+# dele; as linhas dos que saíram estão no histórico do git.
+#
 # Regra: só entra arquivo que passa INTEIRO, e entra no mesmo commit que o cria ou conserta.
 # controle/tests/test_portao_cobre_testes.py reprova o arquivo de testes/ que não estiver em
 # lista nenhuma.
 #
-# Medido em 06/10/2026 (card #3326): 389 passam no venv acervo (`teste rodar acervo`).
-#
-# Raio (card #3370): `<arquivo> | <glob> <glob>...`, globs relativos à raiz do repositório. O
-# push e a promoção rodam a linha quando o diff alcança algum glob (ou o próprio arquivo); linha
-# sem `|` roda sempre. Só o que muda o ambiente de todo teste roda a lista inteira: venvs/,
-# lib/venv.sh, conftest, uv.lock, requirements, pyproject (bin/teste, RAIO_TOTAL; #3535). Linha
-# que entra ou muda nesta lista roda no mesmo push, sozinha.
-# A rodada inteira diária no `bot` pega o raio que faltou aqui.
+# Raio (card #3370): `<arquivo> | <glob> <glob>...`, globs relativos à raiz do repositório.
 test_acervo_atos_classificar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_consultar.py | bin/acervo bin/_acervo/**
 test_acervo_atos_retirar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
@@ -22,40 +18,5 @@ test_acervo_atos_transcrever.py | bin/acervo bin/_acervo/** bin/curar bin/ingeri
 test_acervo_bancada_conversao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_exportar_pythonpath.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_extrato.py | bin/acervo bin/_acervo/extrato
-test_acervo_impressao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_casa_release.py | bin/acervo bin/_acervo/casa lib/raizes.py
-test_acervo_ler_secao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_acervo_token_armario.py | lib/acervo_token.py lib/oplog_extracao.py recuperacao/adaptadores/motor_acervo_rest.py bin/_acervo/**
-test_acervo_listar_marcacao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_acervo_retrato.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_curar_indicacoes.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
 test_acervo_conceito_retirada.py | bin/acervo bin/_acervo/conceito_saida.py bin/_acervo/pipeline_cliente.py
-test_acervo_stack_forma.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_acervo_stack_pre_build.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_acervo_stack_servico.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_acervo_listar_qualidade.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_acervo_listar_retirada.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_acervo_mapa.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_acervo_objeto.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_acervo_particao_biblioteca.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_acervo_psql_leitura.py | bin/acervo bin/_acervo/** registro/bancos.json
-test_acervo_psql_temp.py | bin/acervo bin/_acervo/**
-test_acervo_wiki_cargo.py | bin/acervo bin/_acervo/**
-test_balde_apagar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_balde_varrer.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_balde_ler_listar.py | bin/acervo bin/_acervo/**
-test_curar_apagar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_curar_bancada.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_curar_bancada_conversor.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_curar_expurgar_restaurar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_curar_flag_desconhecida.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_curar_reextrair_lista.py | bin/acervo bin/_acervo/** bin/curar
-test_curar_lote.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_curar_vinculacao.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_curar_descricao.py | bin/acervo bin/_acervo/** bin/curar
-test_curar_autor.py | bin/acervo bin/_acervo/** bin/curar
-test_curar_desrelacionar_desderivar.py | bin/acervo bin/_acervo/** bin/curar bin/ingerir
-test_teste_bench_banco.py | bin/teste lib/ambiente_banco.py
-test_dt_unidades_systemd.py | bin/infra bin/_sessao/longjob bin/_release/conferir/**
-test_motor_limpar.py | bin/motor bin/_motor/limpeza.py
-test_dts_1380_1392_1393_acervo.py | bin/acervo bin/_acervo/** bin/ingerir bin/_ingerir/**

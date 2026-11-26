@@ -62,3 +62,4 @@ testes/test_persona_card_3105.py | testava bin/persona sobre abertura/ da casa v
 testes/test_agente_registro.py | testava registro de agentes no ferramental/ops-server antigo; substituído por bin/agente lendo registro/porta.yaml e testes/test_agente.py
 testes/test_bot_registro.py | testava registro de bots no ferramental da casa velha; substituído por registro/porta.yaml e Olaria
 testes/test_fechamento_3010_harness.sh | renomeado para testes/test_fechamento_harness.sh, sem ops-server nem politica-acesso
+bin/write_file | removido na Fita 7 (#4441, t12, decisão #5770); substituído pela tradução de write_file na porta (platafirma-core@porta/traducao_escrita.py) para o escritor único (repo gravar)

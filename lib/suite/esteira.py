@@ -483,14 +483,17 @@ def _resolver_revisoes_e_diff(
         lista_json = sorted({str(p).strip().lstrip("./") for p in dados_diff["arquivos_mudados"] if str(p).strip()})
         return arvore_mud, arvore_main, lista_json
 
-    if eh_git and rev_base:
-        diff_z = _git_out(raiz, "diff", "-z", "--name-only", rev_base, rev_mud)
-        if diff_z is not None:
-            outros_z = _git_out(raiz, "ls-files", "-z", "--others", "--exclude-standard") or ""
-            brutos = diff_z.split("\0") + outros_z.split("\0")
-            lista = sorted({p.strip().lstrip("./") for p in brutos if p.strip()})
-            if lista:
+    if eh_git:
+        if rev_base:
+            diff_z = _git_out(raiz, "diff", "-z", "--name-only", rev_base, rev_mud)
+            if diff_z is not None:
+                outros_z = _git_out(raiz, "ls-files", "-z", "--others", "--exclude-standard") or ""
+                brutos = diff_z.split("\0") + outros_z.split("\0")
+                lista = sorted({p.strip().lstrip("./") for p in brutos if p.strip()})
                 return arvore_mud, arvore_main, lista
+        # Ordem do dono (25/11/2026): em repositório git, diff vazio ou base sem resolução nunca
+        # cai em _todos_arquivos_arvore (que contém lock/pyproject e dispara ARQUIVOS_RAIO_TOTAL).
+        return arvore_mud, arvore_main, []
 
     return arvore_mud, arvore_main, _todos_arquivos_arvore(raiz)
 

@@ -34,7 +34,6 @@ import oplog  # noqa: E402
 from leitura import formatos as F  # noqa: E402
 from leitura import leitura as L  # noqa: E402
 
-BIN_WRITE = _RAIZ / "bin" / "write_file"
 _PY_HARNESS = Path("/opt/platafirma/current/venv/harness/bin/python")
 ORCAMENTOS = (1, 7, 64, 4_096, 40_000)
 
@@ -1158,40 +1157,6 @@ def test_ler_arquivo_morada_symlink_segredo_pdp_fila_e_legitimo(
     monkeypatch.setenv("PLATAFIRMA_ARQUIVO_BANCADA", str(tmp_path / "sem-bancada"))
     r2, _ = _ler_em_ambiente("/etc/passwd", instancia=inst)
     assert "bancada nao declarada" in _motivo(r2)
-
-
-def test_write_file_recusa_negadas_extensoes_e_respeita_morada(ambiente_harness: dict[str, Any]) -> None:
-    inst = ambiente_harness["instancia"]
-    wt = ambiente_harness["bancada"] / "wt" / "platafirma-casa-espelho" / "seguranca" / "main"
-    for destino, esperado in (
-        (ambiente_harness["release"] / "current" / "harness" / "x.py", "release"),
-        (inst / "var" / "log" / "a.log", "log"),
-        (inst / "var" / "fila" / "m.txt", "fila"),
-        (inst / "segredos" / "s.txt", "segredo"),
-        (wt / ".env", "segredo"),
-        (wt / ".git" / "config", ".git"),
-    ):
-        r, err = _chamar_bin(BIN_WRITE, {"path": str(destino), "content": "x\n"}, instancia=inst)
-        assert err is True and esperado in _motivo(r).lower() and not destino.exists()
-
-    for nome in ("binario.exe", "foto.png", "semext"):
-        r, err = _chamar_bin(BIN_WRITE, {"path": str(wt / nome), "content": "x\n"}, instancia=inst)
-        assert err is True and _motivo(r).startswith("tipo:")
-
-    r_csv, err_csv = _chamar_bin(
-        BIN_WRITE,
-        {"path": str(ambiente_harness["bancada"] / "entrada" / "dados.csv"), "content": "a,b\n1,2\n"},
-        instancia=inst,
-    )
-    assert err_csv is False and r_csv["ok"] is True
-
-    bin_alvo = ambiente_harness["bancada"] / "wt" / "platafirma-harness" / "seguranca" / "main" / "bin" / "meu-verbo"
-    r_sem, err_sem = _chamar_bin(BIN_WRITE, {"path": str(bin_alvo), "content": "print(1)\n"}, instancia=inst)
-    assert err_sem is True and "#!" in _motivo(r_sem)
-    r_com, err_com = _chamar_bin(
-        BIN_WRITE, {"path": str(bin_alvo), "content": "#!/usr/bin/env python3\nprint(1)\n"}, instancia=inst
-    )
-    assert err_com is False and r_com["ok"] is True
 
 
 def test_inteiro_true_le_arquivo_acima_do_orcamento_padrao_numa_chamada(tmp_path: Path) -> None:
