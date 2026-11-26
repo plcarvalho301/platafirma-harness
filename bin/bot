@@ -30,7 +30,6 @@
 # depende: systemctl --user, systemd-analyze, tarefas, agente, lib/units, lib/raizes, lib/uso
 # conforme: parcial — evento:<tipo> fica recusado até a ligação na fila; timer com agente fica recusado até haver sujeito de máquina; parar e historico são de story nova; o .wants de ~/.config/systemd/user pode exigir o dono da máquina
 #
-# Spec: spec automacao-gestao (§2 três planos, §3 unit gerada, §6 atos), spec apis-escrita-acervo §C, spec agente §4
 from __future__ import annotations
 
 import contextlib
@@ -138,7 +137,7 @@ def _trava(nome: str):
         os.close(fd)                                                # fechar solta a trava
 
 
-# --- o acervo, pela API (arq:0089: o bot não escreve por psql) -----------------------------------
+# --- o acervo, pela API (o bot não escreve por psql) ---------------------------------------------
 
 def _chama(metodo: str, caminho: str, corpo: dict | None = None, params: dict | None = None,
            aceita: tuple = (200,)) -> tuple[int, object]:
@@ -419,7 +418,7 @@ def ato_declarar(slug: str, roda: str, trigger: str, dono: str, slo: str | None,
     if roda_tipo == "agente":
         if tipo == "timer":
             return _erro("timer que chama agente não liga: o trabalho em segundo plano ainda não tem sujeito de "
-                         "máquina (trava de segurança do card #3186)", 4)
+                         "máquina (trava de segurança)", 4)
         p = _roda([str(_bin() / "agente"), "ler", roda_ref], timeout=30)
         if p.returncode != 0:
             motivo = (p.stderr.strip().splitlines() or ["sem retorno"])[0]
