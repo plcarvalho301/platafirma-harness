@@ -112,7 +112,7 @@ def test_ato_novo_cai_no_ramo_de_curar_sem_aviso(tmp_path, argv, ramo):
 def test_forma_velha_avisa_o_ato_novo(tmp_path, opcoes, nova):
     r = _acervo("curar", "biblioteca", *opcoes, sessao=f"t-velha-{tmp_path.name}")
     assert f"`acervo curar biblioteca {next(o for o in opcoes if o in _VELHAS)}` e a forma vigente" in r.stderr, r.stderr
-    assert f"a conforme (arq:0119 §2) e `{nova}`" in r.stderr, r.stderr
+    assert f"a conforme (gramatica) e `{nova}`" in r.stderr, r.stderr
     assert "nenhuma ação especificada" not in r.stderr
 
 

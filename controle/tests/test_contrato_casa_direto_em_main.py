@@ -24,7 +24,7 @@ BIN = Path(__file__).resolve().parents[2] / "bin"
 CASA = "platafirma-casa"
 IDENT = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
          "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
-RECUSA = "repositório de deliberação: commit direto em main (arq:0083)"
+RECUSA = "repositório de deliberação: commit direto em main"
 
 
 def _git(*args, cwd=None):

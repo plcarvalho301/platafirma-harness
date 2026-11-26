@@ -104,7 +104,7 @@ def test_ato_novo_passa_do_despachante_sem_aviso(tmp_path, argv):
 def test_forma_velha_avisa_o_ato_novo(tmp_path, opcoes, velha, nova):
     r = _acervo("curar", "biblioteca", *opcoes, sessao=f"t-velha-{tmp_path.name}")
     assert f"`acervo curar biblioteca {velha}` e a forma vigente" in r.stderr, r.stderr
-    assert f"a conforme (arq:0119 §9) e `{nova}`" in r.stderr, r.stderr
+    assert f"a conforme (gramatica) e `{nova}`" in r.stderr, r.stderr
 
 
 def test_curar_casa_revisao_avisa_retirar(tmp_path):

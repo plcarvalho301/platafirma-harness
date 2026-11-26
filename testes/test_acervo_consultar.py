@@ -34,7 +34,7 @@ def test_consultar_recusa_com_exit_2_e_aponta_a_shape(tmp_path):
     for argv in (("casa", "onde-mora", "persona"), ("casa", "documento", "postura"), ()):
         r = _acervo(*argv, tmp_path=tmp_path)
         assert r.returncode == 2, (argv, r.stderr)
-        assert "removido por ordem do dono" in r.stderr
+        assert "ato removido" in r.stderr
         assert "ontologia -- ler shape <slug>" in r.stderr
         assert "ontologia -- listar shape" in r.stderr
         assert "shapes/entidade" not in r.stderr
