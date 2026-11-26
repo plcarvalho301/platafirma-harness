@@ -32,7 +32,7 @@
 #
 # exit: 0 ok · 1 so em investigar: nenhuma linha casa · 2 uso invalido · 3 a particao ou o rastreador nao respondeu · 4 fonte do dia inexistente (so no bruto; gracioso, nunca stack) ou, em investigar, incidente nao aberto · 5 a particao respondeu fora do contrato ou, em investigar, o rastro da leitura nao gravou
 #
-# FONTE (card #3353; arq:0123 regras 8 a 15). O bruto de var/log/ops e cortado em 35 dias; o evento de cada
+# FONTE. O bruto de var/log/ops e cortado em 35 dias; o evento de cada
 # giro, sem conteudo, mora por um ano na particao `log` do acervo. `dia` e `verbos` leem a PARTICAO para todo dia
 # fechado (D5.7 a contagem, D5.5 a cobertura) e dizem `fonte: particao`, a versao do extrator e a cobertura por
 # dia; `turnos` le D5.8, sempre com `turno_fonte` na chave. Dia sem passada concluida sai `ausente` com o motivo
@@ -41,7 +41,7 @@
 # leem argumento, erro e a ordem das chamadas, que a particao nao leva (D5.9): seguem no bruto, pelo modulo, com
 # `fonte: bruto`. `--fonte bruto` da a `dia` e a `verbos` a leitura de antes, e a mesma conta de giros por tool e
 # classe da particao, para a conferencia ser a diferenca de dois JSON.
-# CONTEUDO (card #3355; arq:0123 regra 15). O argumento, o texto de erro, a identidade e o texto do turno ficam no bruto, e
+# CONTEUDO. O argumento, o texto de erro, a identidade e o texto do turno ficam no bruto, e
 # so `investigar` os devolve, com incidente ABERTO (bin/_metrica/investigar.py; lib/oplog.ler_inteiras grava o rastro
 # `leitura_bruto`, e as linhas devolvidas ficam citadas na particao). `casos` e `eventos` dao o giro e o turno SEM
 # conteudo, com a linha «argumentos: metrica investigar <dia> --incidente <n>».
@@ -56,10 +56,10 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
-import oplog  # noqa: E402  (card #3344: o unico que le o bruto da porta)
-import oplog_extracao as extracao  # noqa: E402  (card #3353: o cliente da particao e a regra de classe e origem)
+import oplog  # noqa: E402  (o unico que le o bruto da porta)
+import oplog_extracao as extracao  # noqa: E402  (o cliente da particao e a regra de classe e origem)
 
-# `abertura` mora em bin/_metrica/ (card #3145; ex bin/_conta/conta-abertura.py,
+# `abertura` mora em bin/_metrica/ (auxiliar interno,
 # movido preservando historico): modulo importavel, nao verbo proprio. bin/ ja e o
 # dir deste arquivo quando executado direto, mas insere explicito (como bin/lint faz
 # com _lint) para o import valer tambem por outro caminho de carga (ex. teste).
@@ -68,10 +68,10 @@ if _BIN_DIR not in sys.path:
     sys.path.insert(0, _BIN_DIR)
 from _metrica.abertura import main as _abertura_main  # noqa: E402
 from _metrica import particao  # noqa: E402
-from _metrica import investigar as _investigar  # noqa: E402  (card #3355: a linha inteira, so com incidente aberto)
+from _metrica import investigar as _investigar  # noqa: E402  (a linha inteira, so com incidente aberto)
 from _metrica import tokens_main as _tokens_main  # noqa: E402
 
-# Onde o ops log mora e como se le e do lib/oplog (arq:0123 §3); aqui so se guarda o
+# Onde o ops log mora e como se le e do lib/oplog; aqui so se guarda o
 # diretorio para o teste apontar a leitura para uma pasta em tmp.
 LOG_OPS = str(oplog.diretorio())
 
@@ -85,7 +85,7 @@ TIPOS = ("giro", "erro", "ajuda", "help", "acerto", "cadeia", "lote", "veredito"
 
 # PEDIDO DE AJUDA NAO E ERRO (dono, 12/09/2026): verbo chamado sem ato lista os atos por
 # contrato (oficio.md), e `--help`/`--ajuda` devolvem o uso. Que o uso saia por stderr com
-# exit 2 e defeito do verbo (card #3015), nao tateio da cadeira. Toda camada abaixo
+# exit 2 e defeito do verbo, nao tateio da cadeira. Toda camada abaixo
 # segrega: ajuda sai de `erro` e conta em `ajuda`, em `dia`, `tateio`, `ate-acerto` e `casos`.
 AJUDA = ("--help", "-h", "--ajuda", "ajuda", "help", "--ajuda-flags", "--usage")
 # Tools sem a nocao de ato: chamada sem ato nelas nao e pedido de ajuda.
@@ -112,7 +112,7 @@ def e_ajuda(reg):
     toks = args.split() if isinstance(args, str) else (args if isinstance(args, list) else [])
     return any(str(t) in AJUDA for t in toks)
 
-# PREDICADO FALSO NAO E ERRO DE CHAMADA (card #3045 passo 3, diario 12/09/2026):
+# PREDICADO FALSO NAO E ERRO DE CHAMADA:
 # `exit != 0` em predicado e veredito ('falhou', suite vermelha, sem match, negado),
 # nao erro de sintaxe ou infra. Taxa de erro reflete apenas chamadas com sintaxe
 # invalida (exit 2), verbo inexistente (sem_verbo) ou falha de infra (exit 3/4).
@@ -166,7 +166,7 @@ def e_veredito(reg):
             return True
     return False
 
-# O que o ops log grava por chamada de verbo (ops-server/server.py, `_audit`).
+# O que o ops log grava por chamada de verbo (porta, `_audit`).
 CAMPOS_GIRO = ("ts", "cadeira", "ordem_id", "sessao_id", "tool", "ato",
                "exit_code", "dur_ms", "lote_id", "lote_n",
                "evento_id", "schema_v", "classe", "origem", "escopo", "turno_id", "turno_fonte",
@@ -174,7 +174,7 @@ CAMPOS_GIRO = ("ts", "cadeira", "ordem_id", "sessao_id", "tool", "ato",
                "via", "documento_especie", "documento_chave")
 
 
-# --- a FONTE: particao ou bruto (card #3353) --------------------------------------
+# --- a FONTE: particao ou bruto ---------------------------------------------------
 
 def _hoje():
     """O dia local da porta (America/Sao_Paulo): o dia de hoje esta aberto e a particao ainda nao o tem."""
@@ -303,7 +303,7 @@ def giros_do_dia(fonte, dia, cadeira=None, sessao=None, azp=None):
         # porta (sem_verbo) de falha de execucao.
         g["evento"] = reg.get("evento")
         # Custo do giro em bytes DEVOLVIDOS a fita — o que de fato ocupa contexto. Existe
-        # desde a poda na porta (arq:0101); giro anterior a ela nao tem o campo, e a
+        # desde a poda na porta; giro anterior a ela nao tem o campo, e a
         # medida declara a cobertura em vez de somar zero calado.
         b = reg.get("bytes_servidos")
         if b is None:
@@ -328,7 +328,7 @@ def giros_do_dia(fonte, dia, cadeira=None, sessao=None, azp=None):
 
 def _verbo_do_par(g):
     """Recusa do transporte que declara o verbo pretendido (`bruto.verbo`) pareia no
-    tateio com os giros daquele verbo (card #4369)."""
+    tateio com os giros daquele verbo."""
     tool = g["tool"]
     if tool in LOTE and g.get("evento") in ("sem_verbo", "argumento_recusado"):
         pretendido = (g.get("bruto") or {}).get("verbo")
@@ -440,7 +440,7 @@ def stream_eventos(giros, cadeias, tipo=None):
         if g["lote"] and tipo in (None, "lote"):
             saida.append({"tipo": "lote", **base})
         if tipo == "turno" and g.get("evento") == "turno":
-            # O turno sem o texto do dono (card #3355): so o tamanho, que e numero. A mensagem sai por `investigar`.
+            # O turno sem o texto do dono: so o tamanho, que e numero. A mensagem sai por `investigar`.
             tam = g["bruto"].get("texto_bytes")
             saida.append({"tipo": "turno", "texto_bytes": tam if isinstance(tam, int) and not isinstance(tam, bool)
                           else None, **base})
@@ -537,7 +537,7 @@ def ate_acerto(giros, par):
 
 # --- camada 3b: TATEIO (consumer-aligned) ----------------------------------------
 #
-# Pedido de gestao-estrategica, 11/09/2026, por ordem do dono: separar DOIS tateios que
+# Separar DOIS tateios que
 # `ate-acerto` mistura, e que pedem curas opostas.
 #
 #   (1) GRAMATICA  a cadeira nao sabe a FORMA do verbo. Sinal: giro que falhou com
@@ -732,7 +732,7 @@ _RUIDO = set(CAMPOS_GIRO) | {
     "bytes_servidos", "bytes_produzidos", "ledger", "giro", "sha", "lavado", "evento",
 }
 CASOS_TAM = 220     # chars por campo — o bastante para ler o comando, nao o retorno
-# CONTEUDO FORA (card #3355; arq:0123 regra 15). `casos` dizia o que a cadeira tentava: `args`, `erro`, `motivo`, `path`,
+# CONTEUDO FORA. `casos` dizia o que a cadeira tentava: `args`, `erro`, `motivo`, `path`,
 # `item`, `query`... Isso e conteudo, e so sai por `metrica investigar <dia> --incidente <n>`, com incidente aberto.
 # Ficam so os campos que a porta ou o verbo DECLARAM (nome de verbo recusado, classe do erro de leitura), e ainda assim
 # na forma de nome: o que nao cabe vira «(forma invalida)». O NOME das chaves que ficaram de fora sai em
@@ -883,7 +883,7 @@ def casos_texto(r, agregado=False):
 
 # --- camada 3d: VERBOS (consumer-aligned) ----------------------------------------
 #
-# Pedido do dono, 12/09/2026: a planilha de verbos (arq:0110) ganha uma coluna de taxa
+# A planilha de verbos ganha uma coluna de taxa
 # de erro por verbo. `dia` ja dava o numerador (erros por verbo) e nunca deu o
 # denominador (giros por verbo) — sem ele nao ha taxa. Aqui saem os dois, por verbo,
 # numa janela de dias (`--desde`/`--ate`), porque um dia so mede o mix de cadeiras
@@ -900,9 +900,9 @@ def casos_texto(r, agregado=False):
 # `run_command`, `read_file`, `write_file`, `monta_sessao` e o shim `git` aparecem por
 # serem tools no log; nao sao verbos da planilha e a leitura deles e outra.
 
-# TRANSPORTE nao e verbo da planilha (arq:0110): run_command so aparece no log quando
+# TRANSPORTE nao e verbo da planilha: run_command so aparece no log quando
 # RECUSA um item (evento sem_verbo) — quando despacha um verbo, a linha sai com tool=<verbo>,
-# via=run_command (ops-server/server.py). Somar transporte ao ranking de verbos compara
+# via=run_command (porta). Somar transporte ao ranking de verbos compara
 # despachante com carga, e antes de 06/09 run_command carregava todo o shell (regime
 # _run_command_legado). read_file/write_file sao leitura/escrita, nao verbo servido.
 # Desde o #3270 a tool de lote e `malote`, com `run_command` de apelido: a linha despachada
@@ -1022,7 +1022,7 @@ def verbos_texto(r):
 # Compara a JANELA (um dia; default ontem) com a BASE (os 7 dias anteriores), por
 # cadeira, em sinais de ATO: o que o log grava em toda superficie. Sinal de prosa
 # (devolucao ao dono, pergunta no fim) fica fora: o claude.ai nao grava prosa
-# (arq:0061 §5). O timer `comportamento.timer` roda isto as tercas e sabados 02h, com a
+# O timer `comportamento.timer` roda isto as tercas e sabados 02h, com a
 # janela desde a coleta anterior (deploy-harness/comportamento-coleta.sh), e manda o
 # texto a ia pela fila.
 #
@@ -1035,7 +1035,7 @@ BASE_DIAS = 7
 PISO = 3
 FATOR = 1.5
 # Ato com efeito fora da fita, e o que conta como conferir o efeito depois dele.
-# DT 778: `repo sincronizar` empurra para o forge como `repo empurrar`, e a conferencia
+# `repo sincronizar` empurra para o forge como `repo empurrar`, e a conferencia
 # corrente e a peca `conferir` rodada por `infra rodar conferir` (o primeiro argumento
 # do giro, gravado em `args`). Terceiro termo do par: o primeiro argumento exigido.
 COM_EFEITO = (("release", "promover"), ("release", "reverter"), ("repo", "pr-merge"), ("repo", "pr-fechar"),
@@ -1184,7 +1184,7 @@ def comportamento_texto(r):
                  + (" · " + " · ".join(partes) if partes else " · nenhum tropeco"))
     L.append("")
     L.append("Sinais: " + "; ".join(f"{k} = {v}" for k, v in SINAIS.items()) + ".")
-    L.append("Fora: sinais de prosa (claude.ai nao grava prosa, arq:0061 §5). "
+    L.append("Fora: sinais de prosa (claude.ai nao grava prosa). "
              "O que fazer com um PIOROU e da ia: reverter a mudanca de abertura ou abrir caso.")
     return L
 
@@ -1424,7 +1424,7 @@ def main(argv):
     # os de `metrica` (`<dia>`, `--desde`, `--cadeira`...) — despacha ANTES do argparse
     # comum, como `bin/sessao` faz com `longjob`, senao o parser abaixo tomaria
     # `--tudo`/`--json` por lixo ou `<cadeira>` por `<dia>`. Saida propria (herdada de
-    # conta-abertura: default texto, `--json` pede maquina — o INVERSO do resto de
+    # abertura: default texto, `--json` pede maquina — o INVERSO do resto de
     # metrica), por isso nao passa por `texto()` nem pelo bloco `r`/`--resumo` abaixo.
     if ato == "abertura":
         return _abertura_main(argv[2:])
@@ -1482,7 +1482,7 @@ def main(argv):
     if fonte_pedida == "particao" and ato in ATOS_DO_BRUTO:
         return erro_gracioso(
             f"{VERBO} {ato}: --fonte particao nao vale em `{ato}`",
-            [f"`{ato}` le argumento, erro ou a ordem das chamadas, que a particao nao leva (D5.9, arq:0123)",
+            [f"`{ato}` le argumento, erro ou a ordem das chamadas, que a particao nao leva",
              f"ele segue no bruto: {VERBO} {ato} (a saida diz `fonte: bruto`)"], 2)
     if ato == "turnos" and fonte_pedida == "bruto":
         return erro_gracioso(
@@ -1627,7 +1627,7 @@ def main(argv):
         if na_particao and pede_identidade:
             return erro_gracioso(
                 f"{VERBO} {ato}: --sessao/--azp nao existem na particao",
-                ["a identidade do token e o sessao_id inteiro nao atravessam (arq:0123 regra 8)",
+                ["a identidade do token e o sessao_id inteiro nao atravessam",
                  f"no bruto: {VERBO} {ato} ... --fonte bruto"], 2)
         if na_particao:
             return _da_particao(ato, args, dias, rotulo, dia, hoje)

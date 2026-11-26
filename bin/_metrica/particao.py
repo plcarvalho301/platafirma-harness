@@ -1,4 +1,4 @@
-"""metrica com fonte (card #3353): a leitura da partição `log` do acervo, que `dia`, `verbos` e `turnos` usam.
+"""metrica com fonte: a leitura da partição `log` do acervo, que `dia`, `verbos` e `turnos` usam.
 
     D5.5  GET /acervo/log/dias               a linhagem: cobertura, motivo e versão do extrator por dia
     D5.7  GET /acervo/log/giros/medida       giros por tool, ato, classe, origem e cadeira (contagem ou latência)
@@ -17,7 +17,7 @@ tool, ato, classe, origem e cadeira, então a fita (`ordem_id`), a cadeia de err
 deduplicação por lote só existem no bruto. A partição não leva argumento, e é por isso que `casos`, `tateio` e
 `comportamento` ficam no bruto (D5.9).
 
-A CONTA DE ERRO é a da classe do giro (arq:0110 §4): erro é `gramatica`, `negada`, `execucao` ou `interrompida`;
+A CONTA DE ERRO é a da classe do giro: erro é `gramatica`, `negada`, `execucao` ou `interrompida`;
 `ok` e `negativa` (o veredito exit 1) não são. O bruto de antes de 15/09 contava `exit != 0` fora de predicado;
 as duas contas diferem na `negativa` de verbo que não é predicado, e `negativas` sai à parte para a diferença
 não sumir.
@@ -204,7 +204,7 @@ def _series_abertura(api, cob_detalhe: list[dict], series_giros: list[dict],
                      precisa_detalhe: bool = False) -> list[dict]:
     """A abertura que deu certo entra na partição como `tipo = 'abertura'`, fora de `log_giro`. Soma as aberturas de
     cada dia concluído como `monta_sessao` `ok` (pelo `por_tipo.abertura` de D5.5, ou por D5.6 quando o recorte pede
-    cadeira, origem ou hora) para que a partição conte cada chamada de `monta_sessao` como o bruto (DT 704)."""
+    cadeira, origem ou hora) para que a partição conte cada chamada de `monta_sessao` como o bruto."""
     por_dia = {}
     for c in cob_detalhe:
         if c.get("cobertura") == "ausente":
@@ -354,7 +354,7 @@ def verbos_da_particao(api, dias: list[str], rotulo: str, hoje: date, bruto_ause
     return r
 
 
-# --- metrica verbos --bytes (card #3751) ------------------------------------------------------------------
+# --- metrica verbos --bytes -------------------------------------------------------------------------------
 
 REGRA_BYTES = ("servidos = o que a porta entregou (bytes_servidos); podados = produzidos menos servidos, onde os dois "
                "existem; cortados = giros com produzidos maior que servidos; p50 e p90 = percentil discreto de "
@@ -509,7 +509,7 @@ def bytes_texto(r: dict, top_atos: int = 20) -> list[str]:
     return linhas
 
 
-# --- metrica verbos --latencia (card #3414) -------------------------------------------------------------
+# --- metrica verbos --latencia --------------------------------------------------------------------------
 
 # Os baldes de D5.7 em ms, na ordem: o nome do balde é o teto dele (`250` = até 250 ms), e `acima` passa de 120000.
 BALDES_MS = (250, 500, 1000, 2500, 5000, 10000, 30000, 120000)

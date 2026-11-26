@@ -3,7 +3,7 @@
 # dono: ia
 """abertura — tokens do pacote de abertura, por cadeira e por arquivo.
 
-Miolo de `metrica abertura` (card #3145; antes `bin/conta-abertura` + este arquivo
+Miolo de `metrica abertura` (antes um auxiliar separado + este arquivo
 sob `bin/_conta/`, movido preservando historico). MODULO IMPORTAVEL: `bin/metrica`
 importa `main` daqui e despacha `abertura` para ca antes do argparse comum, porque os
 args (`<cadeira>`, `--tudo`, `--json`, `--chapeu <s>`) nao sao os de `metrica` (`<dia>`).
@@ -89,7 +89,7 @@ exit: 0 ok · 1 cadeira desconhecida · 3 morada nao publicada (dependencia ause
 
 def main(argv):
     """`argv` e so o que vem DEPOIS de `abertura` — sem nome de programa nem ato,
-    no mesmo formato que `bin/conta-abertura` sempre aceitou (`sys.argv[1:]`)."""
+    no formato padrão de argumentos (`sys.argv[1:]`)."""
     if any(a in ("--ajuda", "--help", "-h", "ajuda") for a in argv):
         print(USO)
         return 0
@@ -112,7 +112,7 @@ def main(argv):
         cadeira = posicionais[0]
         total, linhas = conta_cadeira(ms, cadeira, chapeu)
         if "erro" in total:
-            # arq:0110 §4: cadeira que nao existe e resposta negativa de merito (1),
+            # cadeira que nao existe e resposta negativa de merito (1),
             # nao uso invalido (2); morada nao publicada e dependencia ausente (3).
             exit_code = 3 if total.get("dependencia_ausente") else 1
             saida = {"erro": total["erro"], "cadeiras_validas": total.get("cadeiras_validas", [])}
