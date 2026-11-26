@@ -1,6 +1,6 @@
 ---
 name: casa-nova
-description: Use SEMPRE que for procurar, gravar ou mover documento da CASA NOVA (platafirma-casa), refinar ou executar story do E3650, ou perguntar onde algo mora ou o que o dono já decidiu. Responde pela shape da CASA NOVA e pelos cards do E3650, com a fonte, ou diz «não achei». NÃO dispare para a casa atual, operação, incidente, trabalho jurídico ou forma do texto.
+description: Use para procurar, gravar ou mover documento da casa nova (platafirma-casa), refinar ou executar story do E3650, ou saber onde algo mora e o que o dono decidiu. NÃO dispare para a casa atual, operação, incidente, jurídico ou forma do texto.
 ---
 
 # Casa nova

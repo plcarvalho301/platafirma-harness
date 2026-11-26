@@ -1,6 +1,6 @@
 ---
 name: ritual-auditoria
-description: Use quando o card entrar em homologação ou o dono disser revisa, audita, confere, homologa uma entrega, um código, um texto ou um contrato que se declara pronto. Dá para que lado puxar: conferir o servido contra o critério escrito, marcar o indeterminável, julgar só pelo pacto, registrar e seguir até o fim, testar a borda. NÃO dispare para escrever ou consertar o que se revisa, nem para reescrever um texto ainda em escrita.
+description: Use quando o card entrar em homologação ou o dono pedir para revisar, auditar, conferir ou homologar entrega, código, texto ou contrato prontos. NÃO dispare para escrever, consertar ou reescrever o que ainda está em obra.
 ---
 
 # Ritual de auditoria

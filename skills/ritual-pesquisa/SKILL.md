@@ -1,6 +1,6 @@
 ---
 name: ritual-pesquisa
-description: Use quando o dono disser pesquisa, levanta, estudo comparado, «o que se sabe de X?», «tem fonte sobre Y?», ou quando a fita passar a juntar evidência para uma decisão, no acervo ou na web. Dá para que lado puxar: recortar a pergunta, buscar o que derruba, acervo antes da web, parar e declarar a lacuna. NÃO dispare para conferir um fato pontual, para gerar ideias nem para escrever a solução.
+description: Use quando o dono pedir pesquisa, levantamento ou estudo comparado, ou quando a fita precisar juntar evidência no acervo ou na web para decidir. NÃO dispare para conferir fato pontual, gerar ideias ou escrever solução.
 ---
 
 # Ritual de pesquisa

@@ -1,6 +1,6 @@
 ---
 name: ritual-conserto
-description: Use quando um serviço, a porta, a bancada ou um verbo da casa cair ou quebrar, quando houver incidente declarado, ou o dono disser conserta, caiu, «está dando erro». Dá para que lado puxar: pôr de pé antes de investigar, descartar o barato primeiro, menor mudança com volta, caminho previsto, conferir pelo lado de quem chama, registrar a causa. NÃO dispare para defeito que vira débito sem parar o trabalho, para refatoração planejada nem para análise de causa com tudo no ar.
+description: Use quando serviço, porta, bancada ou verbo cair ou quebrar, houver incidente declarado ou o dono disser conserta, caiu ou «está dando erro». NÃO dispare para débito técnico sem parada, refatoração planejada ou análise com tudo no ar.
 ---
 
 # Ritual de conserto

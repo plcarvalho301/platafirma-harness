@@ -1,6 +1,6 @@
 ---
 name: ideacao
-description: Use quando o dono disser idear, ideação, brainstorm ou abre o leque, ou pedir ideias novas para um alvo antes de existir solução escolhida; e quando ele trouxer o link de um painel e disser colabora neste painel. Conduz a sessão em sete passos: alvo, ideias do dono, busca na casa, primeira rodada, busca de análogos, segunda rodada e fecho, com três finalistas quando o alvo é uma solução e com a lista do que entra e do que sai quando o alvo é um catálogo. NÃO dispare para estudo do que já existe, para parecer sobre solução escrita, nem para escolher entre opções já postas.
+description: Use quando o dono pedir idear, brainstorm, abrir o leque para um alvo sem solução escolhida, ou colaborar num painel de ideação. NÃO dispare para estudo do que já existe, parecer sobre solução escrita ou escolha entre opções postas.
 ---
 
 # Ideação

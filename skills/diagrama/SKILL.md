@@ -1,6 +1,6 @@
 ---
 name: diagrama
-description: "Use SEMPRE que o dono, uma story ou você mesmo for desenhar ou refazer uma figura de arquitetura (camadas, módulos, o que roda e como conversa, onde roda, como algo anda passo a passo), mesmo que ache que consegue desenhar à mão. Siga ANTES de escrever qualquer fonte de figura ou de abrir um editor de desenho. NÃO dispare para gráfico de dado, para figura que se regenera de um dado, para ilustração de página nem para desenho de tela."
+description: "Use antes de desenhar ou refazer figura de arquitetura (camadas, módulos, componentes, alocação ou fluxo). NÃO dispare para gráfico de dado, ilustração de página nem desenho de tela."
 ---
 
 # Diagrama

@@ -1,6 +1,6 @@
 ---
 name: platafirma
-description: Use sempre que a conversa tocar a PlataFirma — cadeiras e personas claudinho/claudinha, harness, repos platafirma-*, wiki, fila, card, mesa, caderno, PEP, abertura de sessão — ou quando a palavra "platafirma" aparecer. Esta skill é CASCA - ela não carrega regra nenhuma, só manda abrir a sessão pela porta, de onde vem tudo.
+description: Use quando a conversa tocar a PlataFirma (cadeira, persona, harness, repo platafirma-*, wiki, fila, card, mesa ou abertura de sessão). NÃO dispare para assunto fora da PlataFirma.
 cadeiras: todas
 fonte: platafirma-harness/skills/platafirma/SKILL.md
 ---

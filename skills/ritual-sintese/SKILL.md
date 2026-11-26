@@ -1,6 +1,6 @@
 ---
 name: ritual-sintese
-description: Use quando o dono disser sintetiza, consolida, integra os pareceres, monta a proposta, «escreve a solução», ou quando a fita passar a juntar vários insumos num alvo só. Dá para que lado puxar: decidir trecho por trecho com a fonte, rever o quadro diante do insumo que não cabe, expor o choque, convergir numa montagem. NÃO dispare para desmontar o problema, para abrir leque nem para revisar entrega pronta.
+description: Use quando o dono pedir para sintetizar, consolidar, integrar pareceres, montar proposta ou juntar vários insumos num alvo só. NÃO dispare para desmontar problema, abrir leque ou revisar entrega pronta.
 ---
 
 # Ritual de síntese
