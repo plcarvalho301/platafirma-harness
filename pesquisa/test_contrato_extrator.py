@@ -529,6 +529,42 @@ def test_fonte_que_nao_responde_sai_por_prazo_com_linha(tmp_path, monkeypatch):
     _ultima_nao_achado(t, "prazo-total-esgotado")
 
 
+# ------------------------------------------------------------------ formatos de escritório (#4457 t4)
+def _docx(texto: str) -> bytes:
+    import io
+    import zipfile
+
+    xml = ('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+           f"<w:body><w:p><w:r><w:t>{texto}</w:t></w:r></w:p></w:body></w:document>")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("word/document.xml", xml)
+    return buf.getvalue()
+
+
+@pytest.mark.parametrize("ct", [extrator.TIPO_DOCX, "application/octet-stream", "application/zip"])
+def test_docx_por_url_vira_texto_pelo_content_type_ou_pelo_pacote(tmp_path, ct):
+    t = M.Trabalho("docx", raiz=tmp_path)
+    corpo = _docx("Ficha de Sistema de IA: blocos obrigatórios em todos os níveis")
+    r = ler(t, resposta(corpo, ct=ct))
+    assert r["tipo_real"] == extrator.TIPO_DOCX and r["binario"] is False
+    assert "Ficha de Sistema de IA" in r["conteudo"]
+    assert (t.bruto / f"{r['n']}.docx").read_bytes() == corpo
+    ln = linhas(t)[-1]
+    assert ln["vista"] == "formato" and not ln["nao_achado"]
+    assert "blocos obrigatórios" in (t.derivado / f"{r['n']}.md").read_text(encoding="utf-8")
+
+
+def test_docx_quebrado_falha_e_guarda_o_bruto(tmp_path):
+    t = M.Trabalho("docx_mau", raiz=tmp_path)
+    corpo = b"PK\x03\x04pacote quebrado"
+    with pytest.raises(FalhaFonte) as e:
+        ler(t, resposta(corpo, ct=extrator.TIPO_DOCX))
+    assert e.value.causa == "formato-invalido"
+    ln = _ultima_nao_achado(t, "formato-invalido")
+    assert (t.bruto / f"{ln['n']}.docx").read_bytes() == corpo
+
+
 def test_com_prazo_devolve_o_valor_e_repassa_a_excecao():
     from pesquisa.prazo import com_prazo
 

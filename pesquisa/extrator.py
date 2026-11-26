@@ -26,8 +26,9 @@ chave é `tipo`, como na spec espelho-de-leitura.
 Derivação, transitória até o serviço de conversão (#3183 passo 4): HTML e texto são
 decodificados pela ordem BOM → charset HTTP → meta → UTF-8 estrito → windows-1252, com a
 origem da decisão e a contagem de U+FFFD na linha; o markdown sai do gerador da Crawl4AI
-(função pura, sem browser), fit do Pruning e, se o fit vier vazio, o raw. PDF e demais
-tipos saem `tipo-sem-conversor:<tipo>` até o serviço existir.
+(função pura, sem browser), fit do Pruning e, se o fit vier vazio, o raw. PDF, DOCX, XLSX,
+PPTX e EPUB saem pelo leitor de formatos da casa (`lib/leitura/formatos.py`), o mesmo do
+`ler_arquivo`; os demais tipos saem `tipo-nao-permitido:<tipo>`.
 
 Piso de extração: um caractere útil. Os pisos por tipo são a C3 de inteligencia, ainda sem
 medida (spec espelho-de-leitura §4.5: até medir, valem null); até lá só o vazio reprova.
@@ -89,6 +90,13 @@ _RE_BRANCO = re.compile(r"\s+")
 TIPOS_HTML = frozenset({"text/html", "application/xhtml+xml"})
 TIPOS_TEXTO = frozenset({"text/plain", "text/markdown", "text/csv", "application/json", "text/xml", "application/xml"})
 TIPOS_PDF = frozenset({"application/pdf"})
+# Formatos de escritório que o leitor de formatos da casa abre por bytes (#4457 t4): o governo
+# publica modelo e guia em Word e planilha, e antes o verbo os recusava como tipo não permitido.
+TIPO_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+TIPO_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+TIPO_PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+TIPO_EPUB = "application/epub+zip"
+TIPOS_ESCRITORIO = frozenset({TIPO_DOCX, TIPO_XLSX, TIPO_PPTX, TIPO_EPUB})
 TIPOS_BINARIOS_PERMITIDOS = frozenset({
     "image/png",
     "image/jpeg",
@@ -101,6 +109,10 @@ TIPOS_BINARIOS_PERMITIDOS = frozenset({
 TETOS_BYTES_POR_TIPO = {
     "application/pdf": 32 * 1024 * 1024,
     "application/zip": 32 * 1024 * 1024,
+    TIPO_DOCX: 32 * 1024 * 1024,
+    TIPO_XLSX: 32 * 1024 * 1024,
+    TIPO_PPTX: 32 * 1024 * 1024,
+    TIPO_EPUB: 32 * 1024 * 1024,
     "image/png": 10 * 1024 * 1024,
     "image/jpeg": 10 * 1024 * 1024,
     "image/gif": 10 * 1024 * 1024,
@@ -232,9 +244,13 @@ def tipo_real(corpo: bytes, content_type: str | None) -> tuple[str, str]:
     declarado = _mime(content_type)
     for sig, mime in _ASSINATURAS:
         if corpo.startswith(sig):
-            # zip é o envelope de docx/xlsx/pptx/epub: o content-type diz qual
-            if mime == "application/zip" and declarado and declarado != "application/octet-stream":
-                return declarado, "content-type"
+            # zip é o envelope de docx/xlsx/pptx/epub: o content-type diz qual; quando ele só diz
+            # zip ou octet-stream, o que há dentro do pacote diz (#4457 t4)
+            if mime == "application/zip":
+                if declarado and declarado not in ("application/octet-stream", "application/zip"):
+                    return declarado, "content-type"
+                dentro = _tipo_do_zip(corpo)
+                return dentro, ("conteudo-do-zip" if dentro != mime else "assinatura")
             if mime == "image/webp":
                 if len(corpo) >= 12 and corpo[8:12] == b"WEBP":
                     return mime, "assinatura"
@@ -365,7 +381,8 @@ def ler(
     tipo, tipo_por = tipo_real(resp.corpo, resp.cabecalho("content-type"))
 
     eh_binario = tipo in TIPOS_BINARIOS_PERMITIDOS
-    if not (tipo in TIPOS_HTML or tipo in TIPOS_TEXTO or tipo in TIPOS_PDF or eh_binario):
+    if not (tipo in TIPOS_HTML or tipo in TIPOS_TEXTO or tipo in TIPOS_PDF
+            or tipo in TIPOS_ESCRITORIO or eh_binario):
         raise _nao_achado(trab, url, estrategia, f"tipo-nao-permitido:{tipo}", resp=resp,
                           extra={"tipo": tipo, "tipo_por": tipo_por, "sha256": sha})
 
@@ -387,7 +404,7 @@ def ler(
         d = {"md": None, "vista": "binario", "encoding": None, "html": "", "binario": True}
     else:
         try:
-            if render and tipo not in TIPOS_PDF:
+            if render and tipo not in TIPOS_PDF and tipo not in TIPOS_ESCRITORIO:
                 d = _deriva_render(trab, n, url, renderizador, relogio=relogio)
             else:
                 d = _deriva_http(resp, tipo, derivador, leitor_pdf=leitor_pdf)
@@ -499,7 +516,46 @@ def _resposta_json(resp: Resposta, sha: str, tipo: str, tipo_por: str) -> bytes:
     return json.dumps(doc, ensure_ascii=False, indent=2).encode("utf-8")
 
 
+_FORMATOS = None
+
+
 def _carrega_formatos():
+    """O leitor de formatos da casa, carregado uma vez por processo."""
+    global _FORMATOS
+    if _FORMATOS is None:
+        _FORMATOS = _carrega_formatos_do_disco()
+    return _FORMATOS
+
+
+def _tipo_do_zip(corpo: bytes) -> str:
+    """O que um zip é pelo que há dentro (DOCX, XLSX, PPTX, EPUB), pelo leitor de formatos."""
+    import io
+
+    try:
+        return _carrega_formatos().tipo_do_zip(io.BytesIO(corpo))
+    except Exception:  # noqa: BLE001 — pacote que não se abre segue sendo zip
+        return "application/zip"
+
+
+def _leitor_formato_casa(corpo: bytes, tipo: str) -> dict[str, Any]:
+    """Texto de DOCX, XLSX, PPTX e EPUB pelo leitor do `ler_arquivo`, com uma marca por unidade."""
+    formatos = _carrega_formatos()
+    try:
+        doc = formatos.abre(tipo, dados=corpo)
+    except Exception as exc:  # noqa: BLE001 — pacote inválido ou bomba de compressão
+        raise _SemDerivado("formato-invalido", detalhe=f"{type(exc).__name__}: {str(exc)[:160]}") from exc
+    try:
+        rotulo = formatos.ROTULO.get(doc.unidade)
+        partes: list[str] = []
+        for i in range(1, doc.n + 1):
+            txt = doc.texto(i)
+            partes.append(f"<!-- {rotulo} {i} -->\n{txt}" if rotulo else txt)
+        return {"md": "\n".join(partes).strip(), "unidades": doc.n, "unidade": doc.unidade}
+    finally:
+        doc.fecha()
+
+
+def _carrega_formatos_do_disco():
     import importlib.util
     import sys
 
@@ -561,6 +617,13 @@ def _deriva_http(
             raise _SemDerivado("pdf-sem-camada-de-texto", paginas=paginas)
         enc = {"decidido": "utf-8", "por": "pymupdf", "substituicoes": md.count("\ufffd")}
         return {"md": md, "vista": "pdf", "encoding": enc, "html": "", "binario": False, "sem_camada": sem_camada}
+    if tipo in TIPOS_ESCRITORIO:
+        res = _leitor_formato_casa(resp.corpo, tipo)
+        md = res.get("md") or ""
+        if not caracteres_uteis(md):
+            raise _SemDerivado("formato-sem-texto", unidades=res.get("unidades"))
+        enc = {"decidido": "utf-8", "por": "leitor-de-formatos", "substituicoes": md.count("�")}
+        return {"md": md, "vista": "formato", "encoding": enc, "html": "", "binario": False}
     if tipo in TIPOS_BINARIOS_PERMITIDOS:
         return {"md": None, "vista": "binario", "encoding": None, "html": "", "binario": True}
     raise _SemDerivado(f"tipo-nao-permitido:{tipo}")
