@@ -2,7 +2,7 @@
 
 Lê as chaves da sessão na memória de trabalho e reconstrói por valor:
 - persona (sem a linha de Postura preferencial)
-- cultura (opcional; omitida na remontagem pós-compactação pela porta, story #4343)
+- cultura (opcional; omitida na remontagem pós-compactação pela porta)
 - posturas em vigor
 - cenários presentes
 """
@@ -63,7 +63,7 @@ def remontar(
 ) -> Remontagem:
     """Remonta o comportamento da sessão lendo as chaves vivas da lousa.
 
-    Na remontagem pós-compactação chamada pela porta (story #4343), `incluir_cultura=False`
+    Na remontagem pós-compactação chamada pela porta, `incluir_cultura=False`
     e `teto_caracteres=9500` mantêm o retorno abaixo do corte de 10.000 caracteres.
     """
     cultura_txt = ""

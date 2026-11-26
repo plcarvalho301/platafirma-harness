@@ -1,4 +1,4 @@
-"""O verbo persona da casa nova e a composição das posturas por eixo (card #4182).
+"""O verbo persona e a composição das posturas por eixo.
 
 A regra de composição mora só aqui: `bin/persona` é a casca do comando, e a montagem (`bin/expediente`) chama o verbo.
 
