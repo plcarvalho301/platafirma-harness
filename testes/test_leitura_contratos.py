@@ -34,7 +34,6 @@ import oplog  # noqa: E402
 from leitura import formatos as F  # noqa: E402
 from leitura import leitura as L  # noqa: E402
 
-BIN_LER = _RAIZ / "bin" / "ler_arquivo"
 BIN_WRITE = _RAIZ / "bin" / "write_file"
 _PY_HARNESS = Path("/opt/platafirma/current/venv/harness/bin/python")
 ORCAMENTOS = (1, 7, 64, 4_096, 40_000)
@@ -45,14 +44,71 @@ def _morada_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PLATAFIRMA_BANCADA", str(tmp_path))
 
 
+_DRIVER_NUCLEO = """
+import base64, json, sys
+from leitura import formatos as F
+from leitura import leitura as L
+
+def _ser(r):
+    if isinstance(r.get("lote"), list):
+        return {**r, "lote": [_ser(it) if isinstance(it, dict) else it for it in r["lote"]]}
+    if not isinstance(r.get("imagens"), list):
+        return r
+    novas = []
+    for it in r["imagens"]:
+        if isinstance(it, dict) and isinstance(it.get("png"), (bytes, bytearray)):
+            c = dict(it); c["base64"] = base64.b64encode(bytes(c.pop("png"))).decode("ascii"); novas.append(c)
+        else:
+            novas.append(it)
+    return {**r, "imagens": novas}
+
+req = json.loads(sys.stdin.read() or "{}")
+sels = ("linhas","paginas","termo","modo","encoding","dpi","max_bytes","versao","offset","membro","inteiro")
+caminhos = req.get("caminhos")
+if isinstance(caminhos, str):
+    print(json.dumps(L.envelope_erro(2, "parâmetro `caminhos` exige lista, não texto escalar"), ensure_ascii=False))
+    raise SystemExit(2)
+if isinstance(caminhos, list) and caminhos:
+    teto = int(req.get("teto") or req.get("cap") or L.ORCAMENTO_MAX)
+    def _it(_i, it):
+        if isinstance(it, dict):
+            cam = it.get("caminho"); sel = {k: it.get(k, req.get(k)) for k in sels}
+        else:
+            cam = it; sel = {k: req.get(k) for k in sels}
+        if not cam or not isinstance(cam, str):
+            return L.envelope_erro(2, "item do lote sem 'caminho'")
+        dpi = F.DPI_PADRAO if sel["dpi"] is None else sel["dpi"]
+        return L.ler(cam, linhas=sel["linhas"], paginas=sel["paginas"], termo=sel["termo"],
+                     modo=str(sel["modo"] or "texto"), encoding=sel["encoding"], dpi=dpi,
+                     max_bytes=sel["max_bytes"], versao=sel["versao"], offset=sel["offset"],
+                     membro=sel["membro"], inteiro=bool(sel["inteiro"]))
+    print(json.dumps(_ser(L.lote(caminhos, _it, teto=teto)), ensure_ascii=False))
+    raise SystemExit(0)
+cam = req.get("caminho")
+if not cam:
+    print(json.dumps(L.envelope_erro(2, "informe 'caminho' ou 'caminhos'"), ensure_ascii=False))
+    raise SystemExit(2)
+dpi = F.DPI_PADRAO if req.get("dpi") is None else req.get("dpi")
+res = _ser(L.ler(cam, linhas=req.get("linhas"), paginas=req.get("paginas"), termo=req.get("termo"),
+                 modo=str(req.get("modo") or "texto"), encoding=req.get("encoding"), dpi=dpi,
+                 max_bytes=req.get("max_bytes"), versao=req.get("versao"), offset=req.get("offset"),
+                 membro=req.get("membro"), inteiro=bool(req.get("inteiro", False))))
+print(json.dumps(res, ensure_ascii=False))
+raise SystemExit(int(res.get("exit_code") or 0))
+"""
+
+
 def _chamar(payload: dict) -> tuple[int, dict]:
     py = str(_PY_HARNESS) if _PY_HARNESS.is_file() else sys.executable
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(_RAIZ / "lib")
     cp = subprocess.run(
-        [py, str(BIN_LER)],
+        [py, "-c", _DRIVER_NUCLEO],
         input=json.dumps(payload, ensure_ascii=False),
         text=True,
         capture_output=True,
         check=False,
+        env=env,
     )
     assert cp.stdout.strip(), f"rc={cp.returncode} stderr={cp.stderr}"
     return cp.returncode, json.loads(cp.stdout)
@@ -1049,9 +1105,15 @@ def _motivo(r: dict[str, Any]) -> str:
     return str(r.get("motivo") or r.get("falta") or r.get("erro") or "")
 
 
+def _ler_em_ambiente(caminho: str, *, instancia: Path) -> tuple[dict[str, Any], bool]:
+    r = L.ler(caminho, instancia=instancia)
+    err = bool(r.get("recusado") or r.get("erro") or int(r.get("exit_code") or 0) != 0)
+    return r, err
+
+
 @pytest.mark.parametrize("caminho", ["/etc/passwd", "/etc", "/", "/nao-existe-921/x.md"])
 def test_ler_arquivo_recusa_fora_da_morada(ambiente_harness: dict[str, Any], caminho: str) -> None:
-    r, err = _chamar_bin(BIN_LER, {"caminho": caminho}, instancia=ambiente_harness["instancia"])
+    r, err = _ler_em_ambiente(caminho, instancia=ambiente_harness["instancia"])
     assert err is True and _motivo(r).startswith("fora de morada")
 
 
@@ -1059,42 +1121,42 @@ def test_ler_arquivo_morada_symlink_segredo_pdp_fila_e_legitimo(
     ambiente_harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     inst = ambiente_harness["instancia"]
-    r, _ = _chamar_bin(BIN_LER, {"caminho": "/etc/passwd"}, instancia=inst)
+    r, _ = _ler_em_ambiente("/etc/passwd", instancia=inst)
     assert str(ambiente_harness["bancada"].resolve()) in _motivo(r)
 
     elo = inst / "var" / "tmp" / "elo.md"
     elo.symlink_to("/etc/passwd")
-    r1, err1 = _chamar_bin(BIN_LER, {"caminho": str(elo)}, instancia=inst)
+    r1, err1 = _ler_em_ambiente(str(elo), instancia=inst)
     assert err1 is True and _motivo(r1).startswith("fora de morada")
 
     for nome in (".env", "id_rsa", "cert.pem", "priv.key", "cofre.kdbx"):
         inex = ambiente_harness["bancada"] / "wt" / "platafirma-core" / "outra-cadeira" / nome
-        rs, errs = _chamar_bin(BIN_LER, {"caminho": str(inex)}, instancia=inst)
+        rs, errs = _ler_em_ambiente(str(inex), instancia=inst)
         assert errs is True and "segredo" in _motivo(rs).lower()
 
     seg = inst / "segredos" / "token.txt"
     seg.write_text("segredo\n", encoding="utf-8")
-    assert "segredo" in _motivo(_chamar_bin(BIN_LER, {"caminho": str(seg)}, instancia=inst)[0]).lower()
+    assert "segredo" in _motivo(_ler_em_ambiente(str(seg), instancia=inst)[0]).lower()
 
     pol = ambiente_harness["pdp"] / "politica.yaml"
     pol.write_text("versao: 1\n", encoding="utf-8")
-    assert "segredo" in _motivo(_chamar_bin(BIN_LER, {"caminho": str(pol)}, instancia=inst)[0]).lower()
+    assert "segredo" in _motivo(_ler_em_ambiente(str(pol), instancia=inst)[0]).lower()
 
     fila = inst / "var" / "fila" / "msg.txt"
     fila.write_text("carta\n", encoding="utf-8")
-    assert "fila" in _motivo(_chamar_bin(BIN_LER, {"caminho": str(fila)}, instancia=inst)[0]).lower()
+    assert "fila" in _motivo(_ler_em_ambiente(str(fila), instancia=inst)[0]).lower()
 
     outra = ambiente_harness["bancada"] / "wt" / "platafirma-core" / "outra-cadeira"
     (outra / "x.py").write_text("x = 1\n", encoding="utf-8")
     (outra / ".env").write_text("SECRET=1\n", encoding="utf-8")
     (outra / "fuga").symlink_to("/etc/passwd")
-    r_dir, err_dir = _chamar_bin(BIN_LER, {"caminho": str(outra)}, instancia=inst)
+    r_dir, err_dir = _ler_em_ambiente(str(outra), instancia=inst)
     assert err_dir is False and "x.py" in r_dir["entradas"]
     assert ".env" not in r_dir["entradas"] and "fuga" not in r_dir["entradas"]
 
     monkeypatch.delenv("PLATAFIRMA_BANCADA", raising=False)
     monkeypatch.setenv("PLATAFIRMA_ARQUIVO_BANCADA", str(tmp_path / "sem-bancada"))
-    r2, _ = _chamar_bin(BIN_LER, {"caminho": "/etc/passwd"}, instancia=inst)
+    r2, _ = _ler_em_ambiente("/etc/passwd", instancia=inst)
     assert "bancada nao declarada" in _motivo(r2)
 
 

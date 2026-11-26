@@ -370,9 +370,9 @@ testes/test_metrica_transporte.py | bin/metrica
 testes/test_release_reinicia_porta.py | bin/release
 tests/test_release_expurgo_fosseis.py | bin/release bin/_infra/imagens registro/porta.yaml
 testes/test_poda.py | lib/poda/**
-testes/test_leitura_escrita.py | lib/leitura/** lib/escrita/** bin/ler_arquivo bin/write_file
+testes/test_leitura_escrita.py | lib/leitura/** lib/escrita/** bin/write_file
 testes/test_envelope_tokens_leitura.py | lib/leitura/** lib/oplog.py
-testes/test_leitura_contratos.py | lib/leitura/** lib/escrita/** lib/oplog.py bin/ler_arquivo bin/write_file
+testes/test_leitura_contratos.py | lib/leitura/** lib/escrita/** lib/oplog.py bin/write_file
 testes/test_escopo_chapeu_verbos.py | lib/postura/lousa.py lib/postura/atos.py bin/repo bin/tarefas
 testes/test_sessao_hash.py | bin/sessao bin/_sessao/** lib/postura/lousa.py
 testes/test_abertura_porta_cli.py | lib/abertura/** lib/postura/remontagem.py
@@ -414,10 +414,9 @@ testes/test_ler_nucleo.py | lib/leitura/nucleo.py lib/leitura/leitura.py
 # Story #4442 (Fita 2): extrator isolado via SCM_RIGHTS e formatos endurecidos (t4).
 testes/test_ler_extrator.py | lib/leitura/formatos.py lib/leitura/extrator.py
 testes/test_ler_moradas_git_banco.py | lib/leitura/resolvedor.py lib/leitura/moradas/__init__.py lib/leitura/moradas/git.py lib/leitura/moradas/banco.py
-# Story #4442 (Fita 4): unidades/setup/conferir/infra (t8), busca/pf/chave (t9) e aviso ler_arquivo (t10).
+# Story #4442 (Fita 4): unidades/setup/conferir/infra (t8) e busca/pf/chave (t9).
 testes/test_ler_unidades.py | deploy-harness/leitor.socket deploy-harness/leitor.service deploy-harness/leitor-extrator.socket deploy-harness/leitor-extrator@.service deploy-harness/setup-leitor.sh bin/_release/conferir/conferir.py bin/infra
 testes/test_ler_busca.py | bin/busca bin/paginar registro/leitura.yaml lib/leitura/borda.py lib/leitura/cliente.py lib/leitura/daemon.py
-testes/test_ler_arquivo_aviso.py | bin/ler_arquivo lib/leitura/__main__.py
 # Story #4441: registros, política e conversão de borda da escrita (t1).
 testes/test_escrita_borda.py | lib/escrita/tipos.py lib/escrita/politica.py lib/escrita/pedido.py registro/escrita.yaml registro/esquemas/retorno-escrever.schema.json
 # Story #4441: confinamento de caminho, edição parcial e gravação atômica (t2).
