@@ -14,8 +14,8 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import _casa as casa  # noqa: E402
 
 # Circular edita, commita e empurra para main na worktree de main da cadeira em
-# platafirma-casa, repositorio de deliberacao que commita direto em main (arq:0083 §1;
-# ordem do dono de 28/09/2026): <bancada>/wt/platafirma-casa/<cadeira>/main, resolvida e
+# platafirma-casa, repositorio de deliberacao que commita direto em main:
+# <bancada>/wt/platafirma-casa/<cadeira>/main, resolvida e
 # aberta por _casa.worktree. Puxa antes de ler: a minuta que outra cadeira ja empurrou
 # para main aparece aqui. MINUTA_REPO aponta outro checkout (teste).
 REPO = None
@@ -141,7 +141,7 @@ def main():
         convocadas = convocadas_novas
 
     # O ping aponta um ref que o destinatario le em main: o merito commitado e a convocacao
-    # nova sobem antes do ping (direto em main, arq:0083).
+    # nova sobem antes do ping (direto em main).
     try:
         casa.publicar(REPO)
     except casa.Falha as f:

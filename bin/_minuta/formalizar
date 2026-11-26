@@ -4,9 +4,9 @@ esqueleto do tipo (ADR ou spec), vazio de conteúdo, apaga minuta/NNNN-slug.md
 e commita a remoção junto, com o número da minuta na mensagem de commit — um
 ato só. Não redige o canônico: quem escreve é a cadeira, no prompt.
 Nada de texto fóssil: o destino não referencia o número da minuta removida.
-O destino é a projeção da espécie (arq:0115 §4): adr/<série>/NNNN-<slug>.md, com
+O destino é a projeção da espécie: adr/<série>/NNNN-<slug>.md, com
 NNNN = maior número da série + 1, e spec/<slug>.md.
-Protocolo: padrao protocolo-de-minuta §5. Spec: spec verbo-minuta §5.
+Protocolo: padrao protocolo-de-minuta §5.
 """
 import os
 import re
@@ -19,16 +19,16 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import _casa as casa  # noqa: E402
 
 # Formalizar edita, commita e empurra para main na worktree de main da cadeira em
-# platafirma-casa, repositorio de deliberacao que commita direto em main (arq:0083 §1;
-# ordem do dono de 28/09/2026): <bancada>/wt/platafirma-casa/<cadeira>/main, resolvida e
+# platafirma-casa, repositorio de deliberacao que commita direto em main:
+# <bancada>/wt/platafirma-casa/<cadeira>/main, resolvida e
 # aberta por _casa.worktree, que tambem chama git e gh pelo caminho real (o shim de git
 # da porta sai 2). Puxa antes de numerar o ADR e de editar. MINUTA_REPO aponta outro
 # checkout (teste).
 REPO = DIR = None
 PLACEHOLDER_CONV = "<a preencher pela própria cadeira>"
 
-# As séries de ADR da casa (arq:0115 §3.2). É a série que dá o número, e o número é o que as
-# cadeiras citam (`arq:0118`).
+# As séries de ADR da casa. É a série que dá o número, e o número é o que as
+# cadeiras citam.
 SERIES = ("arq", "ont", "org", "seg", "infra", "integracao")
 USO = ("uso: minuta formalizar <n> --como adr --serie <série> [--destino <slug>] [--vencido]\n"
        "     minuta formalizar <n> --como spec [--destino <slug>] [--vencido]")
@@ -128,11 +128,11 @@ def main():
     if como == "adr":
         if serie is None:
             erro(f"--como adr exige --serie <série> ({', '.join(SERIES)}): é a série que dá "
-                 "o número do ADR (arq:0115 §3.2)", 2)
+                 "o número do ADR", 2)
         if serie not in SERIES:
             erro(f"série '{serie}' desconhecida — as séries de ADR são: {', '.join(SERIES)}", 2)
     elif serie is not None:
-        erro("--serie só vale para --como adr: spec não tem série (arq:0115 §4)", 2)
+        erro("--serie só vale para --como adr: spec não tem série", 2)
 
     try:
         REPO = casa.worktree("formalizar")
@@ -155,14 +155,14 @@ def main():
     m_conv = re.search(r"^Convocadas: (.+)$", texto, re.M)
     convocadas = [c.strip() for c in m_conv.group(1).split(",") if c.strip()] if m_conv else []
 
-    # CANONICO NAO CITA MINUTA (ordem do dono, 28/09/2026; regua arq:0028): a Decisao da
+    # CANONICO NAO CITA MINUTA: a Decisao da
     # minuta e o texto que vira o canonico; se ela ja cita minuta por numero, o canonico
     # nasceria apontando para um numero que se reusa. Recusa com a linha.
     ruim = decisao_cita_minuta(texto)
     if ruim:
         n_linha, trecho = ruim
         erro(f"Decisão da minuta {num} cita minuta («{trecho}», {relcaminho}:{n_linha}) — "
-             "canônico não carrega o log da própria mudança (arq:0028); tire a citação "
+             "canônico não carrega o log da própria mudança; tire a citação "
              "e formalize de novo", 4)
 
     secoes = parse_secoes(texto)
@@ -176,8 +176,8 @@ def main():
         erro("slug de destino ficou vazio depois de normalizar — use --destino")
     hoje = datetime.date.today().isoformat()
 
-    # Espécie: antes do primeiro ## — a ingestão recusa documento de casa sem ela (arq:0115 §7).
-    # ADR e spec não têm seção «Aberto» (arq:0115 §13.1): a ausência de convocada em --vencido
+    # Espécie: antes do primeiro ## — a ingestão recusa documento de casa sem ela.
+    # ADR e spec não têm seção «Aberto»: a ausência de convocada em --vencido
     # sai na saída do ato, nunca no documento.
     if como == "adr":
         pasta = os.path.join(REPO, "adr", serie)
@@ -204,7 +204,7 @@ def main():
         destino = os.path.join(pasta, f"{slug}.md")
         if os.path.exists(destino):
             erro(f"{destino} já existe")
-        # Sobre: é obrigatório em spec (arq:0115 §6.1); a cadeira o preenche antes de publicar
+        # Sobre: é obrigatório em spec; a cadeira o preenche antes de publicar
         conteudo = f"# {titulo}\n\nEspécie: spec\nSobre: <preencher>\n\n<preencher>\n"
 
     with open(destino, "w", encoding="utf-8") as f:
