@@ -440,6 +440,9 @@ def test_custodia_bruto_abre_na_sessao_e_cli_recusa_uso_invalido(
     assert "profundidade-negativa" in err_neg
 
 
+_PROF_QUATRO_CLIQUES = 4
+
+
 def test_percorrer_prioriza_conteudo_sobre_cromo_e_deduplica_base_plone(tmp_path: Path) -> None:
     paginas = {
         "https://gov.exemplo/portal": (
@@ -483,3 +486,44 @@ def test_percorrer_prioriza_conteudo_sobre_cromo_e_deduplica_base_plone(tmp_path
     ]
     nos_por_id = {n["id"]: n for n in env["nos"] if n["tipo_no"] == "pagina"}
     assert nos_por_id["https://gov.exemplo/portal/ind/ia/ficha"]["profundidade"] == _PROF_FICHA_TESTE
+
+
+def test_percorrer_fatia_catalogo_largo_sem_afogar_ramo_irmao_e_preserva_prof_cromo(
+    tmp_path: Path,
+) -> None:
+    links_catalogo = "".join(f'<a href="/portal/tic/cat-{i:02d}">C{i}</a>' for i in range(15))
+    paginas: dict[str, bytes] = {
+        "https://gov.exemplo/portal": (
+            b'<html><body><header><a href="/portal/tic/cat">Cat Menu</a></header>'
+            b'<main><a href="/portal/tic">TIC</a><a href="/portal/ind">IND</a></main></body></html>'
+        ),
+        "https://gov.exemplo/portal/tic": b'<html><body><main><a href="/portal/tic/cat">Cat</a></main></body></html>',
+        "https://gov.exemplo/portal/tic/cat": f"<html><body><main>{links_catalogo}</main></body></html>".encode(),
+        "https://gov.exemplo/portal/ind": b'<html><body><main><a href="/portal/ind/ia">IA</a></main></body></html>',
+        "https://gov.exemplo/portal/ind/ia": (
+            b'<html><body><main><a href="/portal/ind/ia/aie">AIE</a></main></body></html>'
+        ),
+        "https://gov.exemplo/portal/ind/ia/aie": (
+            b'<html><body><main><a href="/portal/ind/ia/ficha">Ficha</a></main></body></html>'
+        ),
+        "https://gov.exemplo/portal/ind/ia/ficha": b"<html><title>Ficha de Sistema de IA</title></html>",
+    }
+    for i in range(15):
+        paginas[f"https://gov.exemplo/portal/tic/cat-{i:02d}"] = f"<html><title>Cat {i}</title></html>".encode()
+
+    def falso_req(metodo: str, url: str) -> extrator.Resposta:
+        if metodo == "GET" and url in paginas:
+            return _resposta_teste(url, paginas[url])
+        return _resposta_teste(url, status=_HTTP_NAO_ENCONTRADO, tipo="text/plain")
+
+    trab = M.Trabalho("p-fatia", raiz=tmp_path)
+    env = atos.percorrer(
+        "https://gov.exemplo/portal",
+        trab=trab,
+        opcoes={"dominios": ["gov.exemplo"], "profundidade": 4, "teto": 14},
+        opcoes_rede=_opcoes_rede_teste(falso_req),
+    )
+    nos = {n["id"]: n for n in env["nos"] if n["tipo_no"] == "pagina"}
+    assert "https://gov.exemplo/portal/ind/ia/ficha" in nos
+    assert nos["https://gov.exemplo/portal/ind/ia/ficha"]["profundidade"] == _PROF_QUATRO_CLIQUES
+    assert nos["https://gov.exemplo/portal/tic/cat"]["profundidade"] == 1

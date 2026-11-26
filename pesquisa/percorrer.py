@@ -347,6 +347,10 @@ class _ControladorCortesia:
         raise FalhaFonte("redirecionamentos-demais", redirecionamentos=len(saltos))
 
 
+_FATIA_FILHOS_CONTEUDO = 6
+_PrioFila = tuple[int, int, int, int, int, int]
+
+
 def _variantes_barra(url: str) -> tuple[str, ...]:
     partes = urlsplit(url)
     if partes.query or not partes.path or partes.path == "/":
@@ -366,9 +370,10 @@ class _EstadoGrafo:
     chaves_pagina_conhecida: dict[str, str] = field(default_factory=dict)
     hashes_expandidos: set[str] = field(default_factory=set)
     arestas: list[dict[str, Any]] = field(default_factory=list)
-    fila: list[tuple[int, int, int, int, int, int, str]] = field(default_factory=list)
+    fila: list[tuple[int, _PrioFila, int, str]] = field(default_factory=list)
     melhor_prof_enfileirada: dict[str, int] = field(default_factory=dict)
-    melhor_prioridade: dict[str, tuple[int, int, int, int]] = field(default_factory=dict)
+    melhor_prof_conteudo: dict[str, int] = field(default_factory=dict)
+    melhor_prioridade: dict[str, _PrioFila] = field(default_factory=dict)
     enfileiradas_sitemap: set[str] = field(default_factory=set)
     visitadas_get: set[str] = field(default_factory=set)
     arquivos_checados: set[str] = field(default_factory=set)
@@ -377,35 +382,62 @@ class _EstadoGrafo:
     bateu_teto: bool = False
     bateu_profundidade: bool = False
 
+    def escopo_fora(self, url: str) -> int:
+        return 0 if (self.prefixo_semente and url.startswith(self.prefixo_semente)) else 1
+
     def registrar_pagina_conhecida(self, forma: str, chave_no: str) -> None:
         self.alias_para_no[forma] = chave_no
         for var in _variantes_barra(forma):
             self.chaves_pagina_conhecida.setdefault(var, chave_no)
 
-    def enfileirar_clique(self, url: str, prof: int, *, em_cromo: bool = False) -> None:
+    def enfileirar_clique(
+        self,
+        url: str,
+        prof: int,
+        *,
+        prof_ed: int | None = None,
+        ordem_ed: int = 0,
+    ) -> None:
         prof_ant = self.melhor_prof_enfileirada.get(url)
         prof_min = prof if prof_ant is None or prof < prof_ant else prof_ant
         self.melhor_prof_enfileirada[url] = prof_min
 
-        fora = 0 if (self.prefixo_semente and url.startswith(self.prefixo_semente)) else 1
-        cromo = 1 if em_cromo else 0
+        fora = self.escopo_fora(url)
         ruido = 1 if (urlsplit(url).query or "/resolveuid/" in url) else 0
-        nova_prio = (fora, cromo, prof_min, ruido)
+        if prof_ed is not None:
+            ed_ant = self.melhor_prof_conteudo.get(url)
+            ed_min = prof_ed if ed_ant is None or prof_ed < ed_ant else ed_ant
+            self.melhor_prof_conteudo[url] = ed_min
+            direto_semente = ed_min <= 1
+            faixa = 0 if direto_semente else (ordem_ed // _FATIA_FILHOS_CONTEUDO)
+            ordem_local = 0 if direto_semente else (ordem_ed % _FATIA_FILHOS_CONTEUDO)
+            nova_prio: _PrioFila = (
+                fora,
+                0,
+                ed_min + faixa,
+                faixa,
+                ed_min,
+                ordem_local + ruido * _FATIA_FILHOS_CONTEUDO,
+            )
+        else:
+            nova_prio = (fora, 1, prof_min, 0, prof_min, ruido)
+
         prio_ant = self.melhor_prioridade.get(url)
         if prio_ant is not None and prio_ant <= nova_prio:
             return
         self.melhor_prioridade[url] = nova_prio
         self.seq += 1
-        heapq.heappush(self.fila, (0, *nova_prio, self.seq, url))
+        heapq.heappush(self.fila, (0, nova_prio, self.seq, url))
 
     def enfileirar_sitemap(self, url: str, prof_ordem: int) -> None:
         if url in self.melhor_prof_enfileirada or url in self.enfileiradas_sitemap:
             return
         self.enfileiradas_sitemap.add(url)
-        fora = 0 if (self.prefixo_semente and url.startswith(self.prefixo_semente)) else 1
+        fora = self.escopo_fora(url)
         ruido = 1 if urlsplit(url).query else 0
+        prio: _PrioFila = (fora, 1, prof_ordem, 0, prof_ordem, ruido)
         self.seq += 1
-        heapq.heappush(self.fila, (1, fora, 1, prof_ordem, ruido, self.seq, url))
+        heapq.heappush(self.fila, (1, prio, self.seq, url))
 
 
 @dataclass
@@ -677,23 +709,60 @@ def _custodiar_pagina(
     return {"n": n, "sha256": sha, "bruto": str(p_bruto), "tipo_real": tipo}, (texto if html else "")
 
 
+def _enfileirar_destino_link(
+    est: _EstadoGrafo,
+    dest: str,
+    niveis_prox: tuple[int | None, int | None],
+    estado_ed: tuple[set[str], list[int]],
+    *,
+    em_cromo: bool,
+) -> None:
+    prox_prof, prox_prof_ed = niveis_prox
+    if prox_prof is None:
+        return
+    alvo_no = est.chaves_pagina_conhecida.get(dest)
+    if dest in est.visitadas_get or alvo_no is not None:
+        if alvo_no and alvo_no in est.nos_por_id:
+            no_ex = est.nos_por_id[alvo_no]
+            if dest not in no_ex["urls"]:
+                no_ex["urls"].append(dest)
+            _atualizar_prof_minima(no_ex, prox_prof)
+        return
+    if em_cromo or prox_prof_ed is None:
+        est.enfileirar_clique(dest, prox_prof)
+        return
+    vistos_pag, ordens = estado_ed
+    chave_pag = dest.rstrip("/") or dest
+    if chave_pag in vistos_pag:
+        return
+    vistos_pag.add(chave_pag)
+    fora = est.escopo_fora(dest)
+    ordem = ordens[fora]
+    ordens[fora] += 1
+    est.enfileirar_clique(dest, prox_prof, prof_ed=prox_prof_ed, ordem_ed=ordem)
+
+
 def _processar_links_da_pagina(
     ctx: _ContextoPercurso,
     no_pag: dict[str, Any],
     url_origem: str,
     links: list[dict[str, Any]],
-    prof: int | None,
+    niveis: tuple[int | None, int | None],
 ) -> None:
     est = ctx.est
+    prof, prof_ed = niveis
     chave_no = str(no_pag["id"])
     sha_corpo = str(no_pag["sha256"])
     ja_expandido = sha_corpo in est.hashes_expandidos
     est.hashes_expandidos.add(sha_corpo)
     prox_prof = (prof + 1) if prof is not None else None
+    prox_prof_ed = (prof_ed + 1) if prof_ed is not None else None
+    estado_ed: tuple[set[str], list[int]] = (set(), [0, 0])
 
     for lk in links:
         dest = lk["destino"]
         dom_ok = bool(dest and _chave_origem(dest)[1] in est.dominios)
+        em_cromo = bool(lk.get("em_cromo"))
         aresta = {
             "tipo": "aresta",
             "de": chave_no,
@@ -703,7 +772,7 @@ def _processar_links_da_pagina(
             "destino": dest,
             "mesmo_dominio": lk["mesmo_dominio"],
             "dominio_permitido": dom_ok,
-            "em_cromo": bool(lk.get("em_cromo")),
+            "em_cromo": em_cromo,
             "quebrada": lk["quebrada"],
             "motivo": lk["motivo"],
         }
@@ -722,11 +791,17 @@ def _processar_links_da_pagina(
         if prof is not None and prof >= ctx.cfg.profundidade_max:
             est.bateu_profundidade = True
             continue
-        if prox_prof is not None:
-            est.enfileirar_clique(dest, prox_prof, em_cromo=bool(lk.get("em_cromo")))
+        _enfileirar_destino_link(
+            est, dest, (prox_prof, prox_prof_ed), estado_ed, em_cromo=em_cromo
+        )
 
 
-def _visitar_uma_pagina(ctx: _ContextoPercurso, url: str, prof: int | None) -> None:
+def _visitar_uma_pagina(
+    ctx: _ContextoPercurso,
+    url: str,
+    prof: int | None,
+    prof_ed: int | None = None,
+) -> None:
     est = ctx.est
     permitido, motivo = ctx.cortesia.pode_buscar(url)
     if not permitido:
@@ -809,7 +884,7 @@ def _visitar_uma_pagina(ctx: _ContextoPercurso, url: str, prof: int | None) -> N
         }
     )
     _processar_links_da_pagina(
-        ctx, est.nos_por_id[chave_no], resp.url_final, meta["links"], prof
+        ctx, est.nos_por_id[chave_no], resp.url_final, meta["links"], (prof, prof_ed)
     )
 
 
@@ -846,8 +921,9 @@ def _motivo_parada(est: _EstadoGrafo) -> str:
 def _drenar_fila(ctx: _ContextoPercurso) -> None:
     est = ctx.est
     while est.fila:
-        origem_fila, _, _, _, _, _, url = heapq.heappop(est.fila)
+        origem_fila, _, _, url = heapq.heappop(est.fila)
         prof = est.melhor_prof_enfileirada.get(url) if origem_fila == 0 else None
+        prof_ed = est.melhor_prof_conteudo.get(url) if origem_fila == 0 else None
         no_pag = est.chaves_pagina_conhecida.get(url)
         if url in est.visitadas_get or no_pag is not None:
             alvo_no = no_pag or est.alias_para_no.get(url)
@@ -860,7 +936,7 @@ def _drenar_fila(ctx: _ContextoPercurso) -> None:
         if est.paginas_get >= ctx.cfg.teto and not eh_link_de_arquivo(url):
             est.bateu_teto = True
             break
-        _visitar_uma_pagina(ctx, url, prof)
+        _visitar_uma_pagina(ctx, url, prof, prof_ed)
 
 
 def percorrer(
@@ -880,7 +956,7 @@ def percorrer(
         try:
             cortesia.verifica_guarda(semente)
             _descobrir_sitemaps(ctx, semente)
-            est.enfileirar_clique(semente, 0)
+            est.enfileirar_clique(semente, 0, prof_ed=0)
 
             while True:
                 _drenar_fila(ctx)
