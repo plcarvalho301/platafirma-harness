@@ -2,8 +2,8 @@
 
 Duas reguas, pelo nivel do card:
 
-- story e task: as secoes obrigatorias da arq:0096, como sempre foi;
-- epico e feature: a lista de verificacao antipadroes-de-discovery (card #3421), lida do
+- story e task: as secoes obrigatorias do molde;
+- epico e feature: a lista de verificacao antipadroes-de-discovery, lida do
   acervo. O corpo e o two-pager (criterios T e L); os comentarios sao os tipados do
   parecer (criterios C, F2, F4 e L). So roda o criterio que a lista declara com detector;
   os de detector «leitura» (T7, C6, L5) ficam fora. Tudo sai como aviso: bloqueante e da
@@ -42,17 +42,17 @@ CAMPOS_STORY = [
     "Aceite:",
 ]
 
-# A task é o passo da story (#4223, R41 da spec tarefas): o molde dela diz onde se mexe e como
+# A task é o passo da story: o molde dela diz onde se mexe e como
 # se confere; Referencial é opcional e não entra aqui.
 CAMPOS_TASK = [
     "Onde:",
     "Confere:",
 ]
 
-# arq:0096 item 4: no épico, a aposta e exigida na saida de captada; a forma, na saida de em-lapidacao.
+# no épico, a aposta e exigida na saida de captada; a forma, na saida de em-lapidacao.
 # Na feature (molde da Olaria, fornada 01a1e62c), a API exige Problema, Serve a, Sai quando, Fora,
 # Apetite na saida de captada e Solução na saida de em-lapidacao; Peças, Regras e Produtos
-# documentais vão ao inventário, por `tarefas inventario` (DT 904).
+# documentais vão ao inventário, por `tarefas inventario`.
 ROTULOS_APOSTA = ["Problema", "Resultado", "Medida", "Fora"]
 ROTULOS_FORMA = ["Solução", "Peças"]
 ROTULOS_FEATURE_APOSTA = ["Problema", "Serve a", "Fora", "Sai quando", "Apetite"]
@@ -107,7 +107,7 @@ RE_TEM_LINK = re.compile(r"\]\(|https?://")
 RE_NUMERO_CARD = re.compile(r"#\d+")
 
 # bloco que `tarefas ler` acrescenta no fim do corpo, com uma filha por linha (emenda de
-# 15/10/2026 à arq:0096: a Quebra sai do molde, e a filha se le daqui, nao do corpo)
+# a Quebra sai do molde, e a filha se le daqui, nao do corpo)
 RE_FILHAS_CABECALHO = re.compile(r"^\s*filhas\s*(?:\([^)]*\))?\s*:\s*$")
 
 def _tem_filha(texto: str) -> bool:
@@ -366,7 +366,7 @@ _T3_FORA = [
     re.compile(r"\b\d{4}-\d{2}-\d{2}\b"),                           # data ISO
     RE_NUMERO_CARD,                                                 # numero de card
     re.compile(r"\b(?:arq|org|ont|dt)\s*:\s*\d+", re.IGNORECASE),   # numero de ADR e registro
-    re.compile(r"\b(?:ADR|minuta)\s+\d+", re.IGNORECASE),           # «a ADR 0096», «minuta 0046»
+    re.compile(r"\b(?:ADR|minuta)\s+\d+", re.IGNORECASE),
     re.compile(r"\b[A-Z]{1,2}\d+\b"),                               # identificador: F3, R1, D2
 ]
 
@@ -620,7 +620,7 @@ DETECTORES: dict[str, Detector] = {
     "L1": _l1, "L2": _l2, "L3": _l3,
 }
 # criterios com detector na lista que nao se leem no card: F1, F5 e F6 sao do documento
-# derivado (ADR e spec), F3 e da story derivada, que segue a arq:0096 inteira
+# derivado (ADR e spec), F3 e da story derivada, que segue o molde inteiro
 FORA_DO_CARD = {"F1", "F3", "F5", "F6"}
 
 
@@ -635,7 +635,7 @@ def _tarefas_bin() -> str:
 
 
 def fecha_no_ar() -> bool:
-    """`tarefas comentar --fecha` existe? Decide a terceira perna do C5 (spec comentario-tipado R11).
+    """`tarefas comentar --fecha` existe? Decide a terceira perna do C5.
 
     Verbo ilegivel conta como «nao existe»: a perna fica sem apontar, que e o lado do aviso
     que nao acusa o que pode estar certo."""
@@ -664,12 +664,12 @@ def _tarefas(*args: str) -> str:
 
 # ------------------------------------------------------------------ verificacao
 
-# arq:0096, emenda de 15/10/2026: o titulo e o rotulo onde se clica, ate 60 caracteres, em todo
+# o titulo e o rotulo onde se clica, ate 60 caracteres, em todo
 # nivel. Aviso, nunca bloqueante (#3887). Codigo opaco (serie de ADR, minuta, numero de card,
-# secao § ou codigo interno de regra/item como F4, H2, AP8, C1) mora no corpo, nao no titulo (DT 25).
+# secao § ou codigo interno de regra/item como F4, H2, AP8, C1) mora no corpo, nao no titulo.
 LIMITE_TITULO = 60
 CURA_TITULO = "o título é o rótulo onde se clica; a lista do que entra vai ao corpo"
-CURA_TITULO_CODIGO = "o código mora no corpo; o título diz o que o card entrega (arq:0096)"
+CURA_TITULO_CODIGO = "o código mora no corpo; o título diz o que o card entrega"
 RE_CODIGO_TITULO = re.compile(
     r"#\d+\b"
     r"|(?i:\b(?:arq|org|ont|seg|infra|integracao|dt)\s*:\s*\d+\b)"
@@ -694,7 +694,7 @@ def _conferir_titulo(nome_alvo: str, conteudo: str) -> list[Apontamento]:
     if len(titulo) > LIMITE_TITULO:
         achados.append(Apontamento(
             nome_alvo, 1,
-            f"título com {len(titulo)} caracteres, acima do teto de {LIMITE_TITULO} (arq:0096)",
+            f"título com {len(titulo)} caracteres, acima do teto de {LIMITE_TITULO}",
             CURA_TITULO,
             severidade="aviso",
             id="CARD_TITULO",
@@ -703,19 +703,19 @@ def _conferir_titulo(nome_alvo: str, conteudo: str) -> list[Apontamento]:
     if m:
         achados.append(Apontamento(
             nome_alvo, 1,
-            f"título com código opaco «{m.group(0)}» sem significado próprio fora da origem (arq:0096)",
+            f"título com código opaco «{m.group(0)}» sem significado próprio fora da origem",
             CURA_TITULO_CODIGO,
             severidade="aviso",
             id="CARD_TITULO_CODIGO",
         ))
     return achados
 
-# arq:0096, emenda de 21/10/2026 (card #3937): cada linha do bloco Regras da feature aponta o
+# cada linha do bloco Regras da feature aponta o
 # R da spec ou o D da ADR de onde sai. Aviso, como o titulo. A feature sem o bloco nao se
 # aponta: a formalizada antes da emenda nao volta, e o lint nao sabe a data da formalizacao.
 RE_ORIGEM_DA_REGRA = re.compile(r"\b[RD]\d+\b")
 RE_REGRAS_NENHUMA = re.compile(r"^\s*nenhuma\b", re.IGNORECASE)
-CURA_REGRAS = "cada regra aponta o R<n> da spec ou o D<n> da ADR de onde sai (arq:0096)"
+CURA_REGRAS = "cada regra aponta o R<n> da spec ou o D<n> da ADR de onde sai"
 
 def _conferir_regras(nome_alvo: str, conteudo: str) -> list[Apontamento]:
     secao = secoes_do_corpo(conteudo).get("Regras")
@@ -726,14 +726,14 @@ def _conferir_regras(nome_alvo: str, conteudo: str) -> list[Apontamento]:
             for n, t in secao.nao_vazias()
             if not RE_ORIGEM_DA_REGRA.search(_visivel(t)) and not RE_REGRAS_NENHUMA.match(t)]
 
-# R41 da spec tarefas (card #4223, arq:0096 item 3): a lista do que fazer da story mora nas tasks
+# a lista do que fazer da story mora nas tasks
 # filhas dela, com estado, e não no corpo. Story com `Tarefas:` ou `Unidades:` no corpo sai com
 # aviso, nunca bloqueante. Story em estado terminal é histórico (as listas das stories que já
 # existem ficam no corpo e não migram) e não se aponta; sem estado lido (arquivo, stdin), aponta.
 ROTULOS_FORA_DO_CORPO = ("Tarefas", "Unidades")
 ESTADOS_DE_HISTORICO = {"entregue", "cancelada", "encerrada", "englobada", "descartada", "recusada"}
 CURA_TASKS = ("o passo da story é task filha dela: `tarefas criar \"<o que fazer>\" --nivel task "
-              "--pai <story>`; Tarefas e Unidades saíram do corpo (arq:0096, item 3)")
+              "--pai <story>`; Tarefas e Unidades saíram do corpo")
 
 
 def _conferir_tasks_no_lugar_da_lista(nome_alvo: str, conteudo: str, estado: str) -> list[Apontamento]:
@@ -762,7 +762,7 @@ def _conferir_adr(nome_alvo: str, conteudo: str, nivel: str) -> list[Apontamento
             apontamentos.append(Apontamento(
                 nome_alvo, 1,
                 f"secao obrigatoria '{rotulo_sem}' ausente no corpo de {nivel}",
-                f"acrescentar a secao '{rotulo}' conforme arq:0096",
+                f"acrescentar a secao '{rotulo}' conforme o molde do nivel",
                 severidade="aviso",
                 id=f"CARD_{rotulo_sem.upper()}",
             ))

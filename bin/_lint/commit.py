@@ -1,4 +1,4 @@
-"""commit — verificacao de mensagens de commit contra o rastreador (F9 / arq:0096)."""
+"""commit — verificacao de mensagens de commit contra o rastreador."""
 from __future__ import annotations
 
 import json
@@ -19,7 +19,7 @@ TIMEOUT_RASTREADOR = 3.0
 def declaracao_de_commit(raiz: Path | str) -> Optional[dict]:
     """`.conferir-commit` na raiz do repo: opt-in do gate, e onde o rastreador responde.
     None quando o arquivo nao existe: nao e erro, e "este repo nao pediu gate".
-    Modulo unico (card #3153): lint commit, o hook commit-msg e conferir commit leem daqui.
+    Modulo unico: lint commit, o hook commit-msg e conferir commit leem daqui.
     """
     caminho = Path(raiz) / DECLARACAO_DE_COMMIT
     if not caminho.is_file():

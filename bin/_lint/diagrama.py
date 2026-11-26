@@ -1,14 +1,14 @@
-"""diagrama — compila .mmd (mermaid) e .d2 no Kroki da casa (card #3096).
+"""diagrama — compila .mmd (mermaid) e .d2 no Kroki da casa.
 
 `lint diagrama <repo>[@<chave>] <alvo>` compila o alvo (um arquivo `.mmd`/`.d2`, ou uma
 pasta — todo diagrama dentro dela) no Kroki publicado pela casa e aponta o arquivo e,
 quando o Kroki devolve, a linha do erro. Kroki fora de alcance não é diagrama quebrado:
-sai 5 (indeterminavel), nunca 1 — o mesmo padrão de `conferir diagrama` (card #3099,
-arq:0110). O pre-commit roda esta classe sobre os diagramas em stage e recusa o commit
+sai 5 (indeterminavel), nunca 1 — o mesmo padrão de `conferir diagrama`.
+O pre-commit roda esta classe sobre os diagramas em stage e recusa o commit
 com o que não compila; Kroki fora do ar aí só avisa — a trava desta story é que ele NUNCA
 barra o commit (sai 5 na chamada avulsa; no hook, sem bloqueante nenhum, o commit segue).
 
-Dois leitores do mesmo detector, como em `organizacao` (card #3118):
+Dois leitores do mesmo detector, como em `organizacao`:
   - `lint diagrama <repo> <alvo>` mede um alvo escolhido e relata (aviso ou erro, na
     forma comum do lint);
   - o pre-commit roda só sobre os diagramas em stage e recusa o que não compila.
@@ -27,7 +27,7 @@ from .resultado import Apontamento
 
 EXTENSOES = {".mmd": "mermaid", ".d2": "d2"}
 
-# Kroki pela porta PUBLICADA da casa (card #3099): nunca pelo IP da rede do conteiner —
+# Kroki pela porta PUBLICADA da casa: nunca pelo IP da rede do conteiner —
 # no docker rootless da conta ele nao e roteavel do host ("No route to host").
 _ENDPOINT_PADRAO = "http://127.0.0.1:8095"
 
@@ -102,7 +102,7 @@ def compilar(caminho: Path) -> Tuple[str, Optional[Apontamento]]:
             severidade="bloqueante")
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         # Kroki inalcancavel (conexao recusada, DNS, timeout) -- nao consegui olhar,
-        # nunca defeito confirmado no diagrama (card #3142, mesmo padrao de #3099).
+        # nunca defeito confirmado no diagrama.
         return "kroki", Apontamento(
             str(caminho), 1, f"nao consegui falar com o Kroki em {endpoint}: {e}",
             "conferir se o Kroki da casa esta no ar", severidade="aviso")

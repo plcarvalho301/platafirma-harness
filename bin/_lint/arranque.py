@@ -9,7 +9,7 @@ from typing import List, Optional, Tuple
 
 from .resultado import Apontamento
 
-PONTEIRO_ARRANQUE = "abertura/arranque.md"  # conduta/ virou abertura/ no tombamento de 22/08 (arq:0073)
+PONTEIRO_ARRANQUE = "abertura/arranque.md"
 
 SINAIS_ARRANQUE = (
     re.compile(r"monta[_-]sessao", re.I),
@@ -71,7 +71,7 @@ def achar_claude_mds(raiz: Path) -> list[Path]:
 
 
 def verificar_texto_comum_sem_primitiva(caminho: Path, rel: str) -> list[Apontamento]:
-    """Reprova texto comum a toda superficie que cite primitiva especifica de provider (DT 527)."""
+    """Reprova texto comum a toda superficie que cite primitiva especifica de provider."""
     try:
         texto = caminho.read_text(encoding="utf-8", errors="replace")
     except OSError as e:
