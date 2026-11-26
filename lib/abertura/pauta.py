@@ -36,7 +36,8 @@ _RE_ISO_VALIDO = re.compile(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
 _TAM_MIN_TERMO = 3
 _CAMPOS_MIN_CABECALHO = 3
 PRAZO_PENDURADA_ATIVA_S = 48 * 3600
-PRAZO_TURNO_LOUSA_S = 48 * 3600
+PRAZO_ITEM_LOUSA_S = 48 * 3600
+PRAZO_TURNO_LOUSA_S = PRAZO_ITEM_LOUSA_S
 ESTADOS_TERMINAIS = frozenset({
     "entregue",
     "recusada",
@@ -558,39 +559,17 @@ def ocasiao_casa(item: Guardado, sessao: ContextoDaSessao) -> bool:
     return bool(_citado_no_turno(item, sessao.turno))
 
 
-def _card_transferido_de_cadeira(info: object, cadeira: str) -> bool:
-    """True quando o rastreador declara cadeira/executor e nenhum bate com a dona da lousa (#4432)."""
-    if not isinstance(info, Mapping):
-        return False
-    dona = _sem_acento(cadeira)
-    if not dona:
-        return False
-    donos_card = {
-        _sem_acento(str(info.get(campo) or ""))
-        for campo in ("cadeira", "executor")
-        if info.get(campo) and str(info.get(campo)).strip().lower() != "null"
-    }
-    donos_card.discard("")
-    if not donos_card:
-        return False
-    return dona not in donos_card
-
-
-def _item_turno_vencido(
+def _item_vencido(
     item: ItemDeTrabalho,
     *,
     agora_ts: float,
-    prazo_turno_s: int = PRAZO_TURNO_LOUSA_S,
+    prazo_s: int = PRAZO_ITEM_LOUSA_S,
 ) -> bool:
-    """Itens `turno:<ordem_id>` sem card vinculado expiram em 48 h sem atualização (#4432)."""
-    if item.card or (item.ocasiao and item.ocasiao.card):
-        return False
-    if not item.chave.startswith("turno:"):
-        return False
+    """Qualquer item da lousa expira após 48 h desde a última escrita (#4453)."""
     ts = _instante(item.atualizado_em or item.guardado_em)
     if ts is None:
         return False
-    return (agora_ts - ts) > prazo_turno_s
+    return (agora_ts - ts) > prazo_s
 
 
 def sanear_itens_da_lousa(
@@ -601,11 +580,11 @@ def sanear_itens_da_lousa(
     leitor_cards: LeitorDeEstadoDeCard | None = None,
     avisos: list[str] | None = None,
     agora_ts: float | None = None,
-    prazo_turno_s: int = PRAZO_TURNO_LOUSA_S,
+    prazo_turno_s: int = PRAZO_ITEM_LOUSA_S,
 ) -> tuple[list[ItemDeTrabalho], dict[str, object]]:
-    """Saneamento único da lousa (abertura e `mesa ver`, #4432):
-    evicta item cujo card está em estado terminal, item cujo card principal foi transferido
-    para outra cadeira/executor no rastreador e item `turno:` sem card parado há > 48 h.
+    """Saneamento único da lousa (abertura e `mesa ver`, #4432, #4453):
+    evicta apenas o item atingido quando passam > 48 h desde a última escrita (`atualizado_em`)
+    ou quando o item é associado diretamente a um card (`item.card`) em estado terminal.
     """
     itens = lousa.listar_trabalhos(cadeira, situacao=situacao)
     cards_para_checar: list[str] = []
@@ -621,11 +600,8 @@ def sanear_itens_da_lousa(
 
     vivos: list[ItemDeTrabalho] = []
     for item in itens:
-        cards_item = [c for c in (item.card, item.ocasiao.card if item.ocasiao else None) if c]
-        evictar = any(estado_eh_terminal(estados.get(c)) for c in cards_item)
-        if not evictar and item.card and _card_transferido_de_cadeira(estados.get(item.card), cadeira):
-            evictar = True
-        if not evictar and _item_turno_vencido(item, agora_ts=agora, prazo_turno_s=prazo_turno_s):
+        evictar = bool(item.card and estado_eh_terminal(estados.get(item.card)))
+        if not evictar and _item_vencido(item, agora_ts=agora, prazo_s=prazo_turno_s):
             evictar = True
         if evictar:
             try:

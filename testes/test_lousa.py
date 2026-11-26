@@ -701,35 +701,37 @@ def test_dt948_mesa_corpo_edita_item_listado_por_ver_e_nomeia_cadeira_quando_aus
     assert "cadeira: ia" in p_outra.stderr
 
 
-def test_4432_mesa_ver_e_abertura_evictam_card_terminal_transferido_e_turno_vencido(tmp_path):
+def test_4453_saneamento_evicta_so_item_48h_sem_escrita_ou_card_direto_terminal(tmp_path):
     from datetime import datetime, timedelta, timezone
 
     valkey = _novo_valkey(tmp_path)
     lousa = LousaFixtura(valkey)
     agora = datetime.now(timezone.utc)
     antigo = (agora - timedelta(hours=50)).isoformat()
+    mais_antigo = (agora - timedelta(hours=72)).isoformat()
     recente = (agora - timedelta(hours=2)).isoformat()
 
-    # 1) card transferido para outra cadeira (caso real #4382 em conhecimento -> produto)
+    # 1) card de outra cadeira/executor (caso real #4438 em gestao-estrategica): NAO e evictado
     lousa.gravar_trabalho(
-        "conhecimento",
+        "gestao-estrategica",
         ItemDeTrabalho(
-            chave="card:4382",
-            cadeira="conhecimento",
+            chave="card:4438",
+            cadeira="gestao-estrategica",
             situacao="guardado",
-            card="4382",
-            estagio="execucao",
-            proxima_jogada="rodar carga (superado)",
-            ocasiao=Ocasiao(card="4382", estado_card="Priorizada"),
-            atualizado_em=recente,
+            card="4438",
+            estagio="consolidacao",
+            proxima_jogada="consolidar politica 11",
+            ocasiao=Ocasiao(card="4438", estado_card="Captada"),
+            guardado_em=mais_antigo,
+            atualizado_em=recente,  # ultima escrita recente: permanece vivo
         ),
     )
-    # 2) card em estado terminal (em_curso orfao)
+    # 2) card associado diretamente em estado terminal: evicta so este item
     lousa.gravar_trabalho(
-        "conhecimento",
+        "gestao-estrategica",
         ItemDeTrabalho(
             chave="card:4381",
-            cadeira="conhecimento",
+            cadeira="gestao-estrategica",
             situacao="em_curso",
             card="4381",
             estagio="execucao",
@@ -737,38 +739,52 @@ def test_4432_mesa_ver_e_abertura_evictam_card_terminal_transferido_e_turno_venc
             atualizado_em=recente,
         ),
     )
-    # 3) card vivo da propria cadeira (deve permanecer)
+    # 3) card vivo mas sem escrita ha > 48 h: evicta so este item
     lousa.gravar_trabalho(
-        "conhecimento",
+        "gestao-estrategica",
         ItemDeTrabalho(
             chave="card:4392",
-            cadeira="conhecimento",
+            cadeira="gestao-estrategica",
             situacao="guardado",
             card="4392",
             estagio="lapidacao",
-            proxima_jogada="continuar tesauro",
+            proxima_jogada="parado ha mais de 48h",
             ocasiao=Ocasiao(card="4392", estado_card="Em lapidação"),
+            guardado_em=antigo,
+            atualizado_em=antigo,
+        ),
+    )
+    # 4) turno sem card direto cuja ocasiao aponta para card terminal, mas escrito recentemente: permanece
+    lousa.gravar_trabalho(
+        "gestao-estrategica",
+        ItemDeTrabalho(
+            chave="turno:ocasiao-terminal",
+            cadeira="gestao-estrategica",
+            situacao="guardado",
+            estagio="aguardando",
+            proxima_jogada="retomar quando 4381 fechar",
+            ocasiao=Ocasiao(card="4381", estado_card="Em execução"),
             atualizado_em=recente,
         ),
     )
-    # 4) turno sem card com > 48 h (deve ser evictado)
+    # 5) turno sem escrita ha > 48 h: evictado
     lousa.gravar_trabalho(
-        "conhecimento",
+        "gestao-estrategica",
         ItemDeTrabalho(
             chave="turno:antigo-1",
-            cadeira="conhecimento",
+            cadeira="gestao-estrategica",
             situacao="em_curso",
             estagio="rascunho",
             proxima_jogada="nota velha",
             atualizado_em=antigo,
         ),
     )
-    # 5) turno sem card recente (deve permanecer)
+    # 6) turno recente: permanece
     lousa.gravar_trabalho(
-        "conhecimento",
+        "gestao-estrategica",
         ItemDeTrabalho(
             chave="turno:novo-1",
-            cadeira="conhecimento",
+            cadeira="gestao-estrategica",
             situacao="em_curso",
             estagio="rascunho",
             proxima_jogada="nota viva",
@@ -779,20 +795,21 @@ def test_4432_mesa_ver_e_abertura_evictam_card_terminal_transferido_e_turno_venc
     cards = tmp_path / "cards.json"
     cards.write_text(
         json.dumps({
-            "4382": {"estado": "Priorizada", "cadeira": "produto", "executor": "produto"},
+            "4438": {"estado": "Captada", "cadeira": "arquiteto", "executor": "engenharia"},
             "4381": {"estado": "Entregue", "cadeira": "conhecimento", "executor": "conhecimento"},
-            "4392": {"estado": "Em lapidação", "cadeira": "conhecimento", "executor": "conhecimento"},
+            "4392": {"estado": "Em lapidação", "cadeira": "gestao-estrategica", "executor": "gestao-estrategica"},
         }),
         encoding="utf-8",
     )
 
-    p_ver = _rodar_mesa(["ver", "--json"], cadeira="conhecimento", valkey_fixture=valkey, cards_fixture=cards)
+    esperados = {"card:4438", "turno:ocasiao-terminal", "turno:novo-1"}
+    p_ver = _rodar_mesa(["ver", "--json"], cadeira="gestao-estrategica", valkey_fixture=valkey, cards_fixture=cards)
     assert p_ver.returncode == 0, p_ver.stdout + p_ver.stderr
     chaves_vivas = {i["chave"] for i in json.loads(p_ver.stdout)}
-    assert chaves_vivas == {"card:4392", "turno:novo-1"}
+    assert chaves_vivas == esperados
 
-    # Itens evictados foram removidos de fato da lousa
-    assert {i.chave for i in lousa.listar_trabalhos("conhecimento")} == {"card:4392", "turno:novo-1"}
+    # Apenas os itens vencidos/terminais foram removidos; os demais seguem intactos
+    assert {i.chave for i in lousa.listar_trabalhos("gestao-estrategica")} == esperados
 
 
 if __name__ == "__main__":
