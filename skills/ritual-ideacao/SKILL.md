@@ -15,4 +15,4 @@ Enquanto a fita estiver em ideação, estas linhas dizem para que lado você pux
 - Diante de um pedido de ideias com alvo nomeado, puxo para a skill de ideação, em vez de listar ideias no fio da conversa, porque ela separa a rodada de gerar da de escolher e fecha em finalistas.
 
 Este texto é cópia do ritual gravado na casa nova; se os dois divergirem, vale o gravado:
-https://github.com/plcarvalho301/platafirma-casa-espelho/blob/main/instancias/ritual/ideacao.md
+https://github.com/plcarvalho301/platafirma-casa/blob/main/instancias/ritual/ideacao.md

@@ -153,5 +153,5 @@ dele no arquivo de terceiro é a página de bloqueio (medido em 15/11/2026). Res
 
 Uma rodada típica (5 sub-consultas × 8 + ~12 leituras a 6 000 chars) fica em ~4 k tokens de
 busca + ~18 k de leitura, contra ~40–60 k com cada página inteira: `--foco` e `--offset` são
-o corte. O desenho vem da spec pesquisa-web e de duas obras do acervo: o Berkeley Protocol
+o corte. O desenho vem do padrão de pesquisa web e de duas obras do acervo: o Berkeley Protocol
 (§§ 153–156 e 176–189) e o texto da Anthropic sobre pesquisa com vários agentes.

@@ -6,7 +6,7 @@ fixos; a justificativa é para quem confere a decisão.
 
 ```json
 {
-  "documento_velho": "platafirma-casa-espelho@instancias/padrao/molde-de-readme.md",
+  "documento_velho": "platafirma-casa@instancias/padrao/molde-de-readme.md",
   "justificativa": {
     "evidencias": "o que o documento diz, com o trecho que sustenta a decisão",
     "criterio_de_identidade": "o que faz este documento ser ele e não outro"

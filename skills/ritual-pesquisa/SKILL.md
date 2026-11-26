@@ -15,4 +15,4 @@ Enquanto a fita estiver em pesquisa, estas linhas dizem para que lado você puxa
 - Diante de um achado que muda o que se procurava, puxo para reescrever a pergunta e seguir pela nova, em vez de encaixar o achado na pergunta do começo, porque o que se acha muda o que se busca, e a pergunta velha leva a coleta para onde a resposta já não está.
 
 Este texto é cópia do ritual gravado na casa nova; se os dois divergirem, vale o gravado:
-https://github.com/plcarvalho301/platafirma-casa-espelho/blob/main/instancias/ritual/pesquisa.md
+https://github.com/plcarvalho301/platafirma-casa/blob/main/instancias/ritual/pesquisa.md
