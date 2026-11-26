@@ -2,28 +2,27 @@
 # pre-push — a suite de contrato ganha GATILHO.
 #
 # capacidade: orfa
-# dono: claudinho-TI
+# dono: ti
 #
-# POR QUE EXISTE (card #204 item 2): a suite so rodava se alguem digitasse, e sete
-# dos oito arquivos estavam parados desde 10-11/08. Nao ha CI neste repo. Teste sem
-# gatilho nao e rede de seguranca: e arquivo que apodrece ate virar ruido — foi
-# exatamente o que aconteceu com o contrato do monta-sessao, 17 vermelhos por dias.
+# POR QUE EXISTE: a suite so rodava se alguem digitasse, e sete
+# dos oito arquivos estavam parados. Nao ha CI neste repo. Teste sem
+# gatilho nao e rede de seguranca: e arquivo que apodrece ate virar ruido.
 #
 # BASELINE VERDE, e nao a suite inteira. Gate que nasce vermelho por falha que ja
 # existia e gate que alguem desliga na primeira vez. Entao ele julga so o que esta
 # verde HOJE, listado na lista de portao de cada subarvore de teste (controle/tests/
-# VERDES, recuperacao/VERDES, ops-server/VERDES...), e arquivo consertado ENTRA na
+# VERDES, recuperacao/VERDES, ...), e arquivo consertado ENTRA na
 # lista no mesmo commit que o conserta. A lista so cresce.
 #
-# O REPOSITORIO INTEIRO, nao uma chave (arq:0116 §6): `teste rodar <repositorio>
+# O REPOSITORIO INTEIRO, nao uma chave: `teste rodar <repositorio>
 # --portao --arvore` roda a lista de portao de toda chave do registro que declara
 # subarvore de teste, cada uma no seu venv, e passa quando todas passam. O nome do
 # repositorio e o do origin (ultimo segmento da url, sem .git). Repositorio de esteira
 # documento nao e medido aqui; repositorio que o registro nao conhece, ou sem chave
 # de teste, sai "nao medido" e deixa passar.
 #
-# JULGA A REV EMPURRADA, NAO O WORKING TREE (achado de claudinha-gestao-estrategica,
-# 04/09/2026). O clone da pasta de trabalho da conta era COMPARTILHADO entre
+# JULGA A REV EMPURRADA, NAO O WORKING TREE.
+# O clone da pasta de trabalho da conta era COMPARTILHADO entre
 # cadeiras: quando alguem esta com bin/monta-sessao modificado e nao commitado, quem
 # commita em abertura/ paga o vermelho alheio. Entao: worktree descartavel na rev
 # que o git esta empurrando, medida la, remocao no trap. O estado sujo do clone
@@ -32,13 +31,13 @@
 #
 # NAO TRAVA POR AMBIENTE. Ambiente que nao constroi, ou pytest que nem coleta, nao
 # vira "BASELINE VERDE QUEBROU": avisa e deixa passar. Bloqueia so quando MEDIU e o
-# teste falhou de verdade (card #3150, comentário A2).
+# teste falhou de verdade.
 #
-# card #3150, comentário A: o mesmo construtor e a MESMA chave <nome>-hash(lock+
+# Usa o mesmo construtor e a MESMA chave <nome>-hash(lock+
 # python) que release/teste usam (lib/venv.sh + bin/_release/registro.py). Veredito
 # gravado e reaproveitado por (hash da árvore, chave) — o MESMO arquivo que o gate
 # de `release promover` lê e grava, então uma rev já medida aqui não roda a suíte de
-# novo na promoção. Toda ref empurrada é medida, não só a primeira (A4).
+# novo na promoção. Toda ref empurrada é medida, não só a primeira.
 set -uo pipefail
 
 # O PROPRIO GIT injeta GIT_DIR/GIT_WORK_TREE (e primos) no ambiente deste hook — apontam
@@ -101,7 +100,7 @@ marca_do_portao() {
 # A REV A JULGAR vem do stdin do hook: "<local_ref> <local_oid> <remote_ref> <remote_oid>".
 # TODA linha e uma ref empurrada (A4). local_oid todo-zero e delecao de ref: nao ha
 # arvore a medir. stdin vazio (invocacao a mao) cai no HEAD.
-# card #3370 + ordem do dono (25/11/2026): a BASE de cada ref e o remote_oid (o que o servidor
+# A BASE de cada ref e o remote_oid (o que o servidor
 # ja tem); ref nova (remote_oid todo-zero), remote_oid invalido ou chamada a mao sem stdin medem
 # contra origin/main. Nunca cai em lista inteira por falta de base: sem base resolvida sai 3
 # (nao medido) em medir_rev.
@@ -201,7 +200,7 @@ medir_rev() {  # $1=rev $2=base (obrigatório: proibido rodar lista inteira sem 
       else
         printf 'pre-push: baseline de contrato verde em %s (%s, rodou)\n' "${rev:0:7}" "$chaves_id"
       fi
-      # card #3370: o push diz o que mediu (raio total ou quantos arquivos da lista rodaram)
+      # O push diz o que mediu (raio total ou quantos arquivos da lista rodaram)
       grep -hE '^(raio total|seleção):' "$saida" | sort -u | sed 's/^/pre-push: /' >&2 || true
       marca_do_portao "$rev" "verde $chaves_id"
       return 0 ;;
@@ -218,7 +217,7 @@ medir_rev() {  # $1=rev $2=base (obrigatório: proibido rodar lista inteira sem 
           echo
           printf '  medido em worktree limpo da rev empurrada (%s), não no seu clone.\n' "$chaves_id"
           grep -E '^[[:space:]]*saida inteira:' "$saida" | sed 's/^[[:space:]]*//'
-          printf '  as listas do baseline: a lista de portão de cada subárvore de teste (arq:0116 §5)\n'
+          printf '  as listas do baseline: a lista de portão de cada subárvore de teste\n'
         } >&2
       fi
       return 1 ;;

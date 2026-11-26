@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# porta-sessao — a fita do Claude Code PORTA o sessao_id em toda chamada (arq:0101 §1, spec do dono).
+# porta-sessao — a fita do Claude Code PORTA o sessao_id em toda chamada.
 # capacidade: porte-de-sessao-no-cliente
-# dono: claudinho-TI
+# dono: ti
 #
 # FONTE: platafirma-harness/agente/hooks/porta-sessao.py. O posto NAO carrega copia: a mudanca
 # que o faria porta de entrada humana, com o hook no proprio repo, foi revertida em e2ddecb
@@ -10,7 +10,7 @@
 # arquivo nao depende de nada do host: so stdlib, e todo caminho do host e opcional.
 #
 # Quatro eventos, um script:
-#  - UserPromptSubmit (card #3356): guarda o contador do turno (T0, T1, ...) e a mensagem do dono,
+#  - UserPromptSubmit: guarda o contador do turno (T0, T1, ...) e a mensagem do dono,
 #    e marca o turno pendente. NAO imprime nada: o que este evento imprime entra no contexto do
 #    modelo. O PreToolUse seguinte leva `turno` e, na primeira chamada, `turno_texto` a porta.
 #  - PostToolUse em monta_sessao: extrai sessao_id e cadeira do RETORNO e grava por fita do Code.
@@ -30,9 +30,9 @@ CADEIRA = re.compile(r'\\?"cadeira\\?"\s*:\s*\\?"([a-z0-9][a-z0-9-]{0,40})\\?"')
 CASA_NOVA = Path(os.environ.get("PF_CASA_RAIZ") or str(Path(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")) / "casa"))
 TETO_CONTEXTO = 9_500          # o Code corta cada string de hook em 10.000 caracteres
 JANELA_DEDUP_S = 30            # conta + projeto podem declarar o mesmo hook: fala um so
-TETO_TURNO_TEXTO = 16_000      # caracteres da mensagem do dono que o hook entrega a porta (#3356)
-PRAZO_CABECALHO_S = 0.5        # prazo curto com falha aberta no UserPromptSubmit (story #4343)
-PRAZO_REMONTAGEM_S = 3.0       # prazo de remontagem pós-compactação pela porta nova (story #4343)
+TETO_TURNO_TEXTO = 16_000      # caracteres da mensagem do dono que o hook entrega a porta
+PRAZO_CABECALHO_S = 0.5        # prazo curto com falha aberta no UserPromptSubmit
+PRAZO_REMONTAGEM_S = 3.0       # prazo de remontagem pós-compactação pela porta
 _PREFIXOS_MALOTE = ("malote ", "run_command ")
 
 
@@ -82,7 +82,7 @@ def le(sid_code, sufixo="sid"):
         return None
 
 def grava(sid_code, valor, sufixo="sid"):
-    """Arquivo 0600 numa pasta 0700: a mensagem do dono fica em disco ate a proxima (card #3356)."""
+    """Arquivo 0600 numa pasta 0700: a mensagem do dono fica em disco ate a proxima."""
     try:
         DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
         try:
@@ -225,7 +225,7 @@ def _eh_abertura_sessao_dict(x: dict) -> bool:
 
 def liga_origem(tool: str, ti: dict, origem: str) -> dict:
     """Sub-agente abrindo a PROPRIA sessao: `sessao abrir ... --origem <sessao do orquestrador>`.
-    Posto aqui para a linhagem nao depender de o modelo lembrar (card #3158, spec cadeirinha §5).
+    Posto aqui para a linhagem nao depender de o modelo lembrar.
     So toca abertura de sessao; o resto da chamada segue como veio."""
     novo = dict(ti)
     base = _base(tool)

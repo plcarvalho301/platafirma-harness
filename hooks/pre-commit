@@ -1,10 +1,10 @@
 #!/bin/sh
-# pre-commit — barra violacoes bloqueantes de arq:0042 e conduta antes de entrar.
+# pre-commit — barra violacoes bloqueantes de padrao e conduta antes de entrar.
 # capacidade: qualidade-do-codigo-lint
 # dono: ti
 #
 # A regua NAO mora aqui: roda apenas predicados bloqueantes via bin/_lint/pre_commit.py.
-# Nenhum hook chama o verbo lint (spec_lint §1).
+# Nenhum hook chama o verbo lint.
 
 AQUI="$(dirname "$(readlink -f "$0")")"
 PYTHON="${PYTHON:-python3}"
