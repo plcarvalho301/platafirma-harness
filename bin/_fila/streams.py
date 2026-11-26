@@ -17,9 +17,8 @@
 # escreve: malha msg — XADD na caixa do destinatario (enviar); entrega no grupo (ler quente: move o ponteiro, carta fica pendurada); XACK (tratar); nada em status/tipos/ler frio/--penduradas
 # substitui: redis-cli XADD/XREADGROUP/XRANGE na caixa; o "cola a mensagem aqui" que a conduta do dono proibe
 # conforme: parcial (spec_fila §6)
-# spec: spec fila
 #
-# Substrato: componente msg do motor (arq:0018, arq:0036). Stream por caixa,
+# Substrato: componente msg do motor. Stream por caixa,
 # "caixa:<persona>", com consumer group unico "cadeira" — a cadeira dona e o unico
 # consumidor. Envelope inalterado: de/tipo/assunto/ref/responde + corpo auto-contido.
 #
@@ -39,7 +38,7 @@
 # reler historico nunca queima carta nova.
 #
 # RETENCAO: 7 dias por idade, tratada ou nao, por XTRIM MINID no timer do motor
-# (ti, arq:0024), como a retencao do Kafka e o XTRIM do proprio Valkey. E a unica
+# como a retencao do Kafka e o XTRIM do proprio Valkey. E a unica
 # coisa que apaga carta; a pendurada vencida sai tambem da PEL no mesmo timer. O
 # `descansar` avisa a pendurada com mais de 5 dias. Mensagem e consumo curto; o
 # que tem permanencia vira card, commit ou wiki antes de vencer.
@@ -56,13 +55,13 @@ except ImportError:
     sys.exit("erro: modulo 'redis' nao instalado neste venv (uv pip install redis)")
 
 # Fonte UNICA de quem e destinatario valido: a ARVORE VIVA `abertura/<cadeira>/`
-# (arq:0073 §1, estado vivo arq:0074), o mesmo que comum/cadeiras.py le. O ledger de
+# (estado vivo), o mesmo que comum/cadeiras.py le. O ledger de
 # vinculo e HISTORICO append-only, para consulta — NENHUM codigo vivo o le para
-# resolver identidade (incidente, ordem do dono): o slug fossil `claudinho-<cadeira>`
+# resolver identidade: o slug antigo com prefixo
 # do ledger resolvia como vigente. Antes um roster mantido a mao divergia da fonte
 # (faltavam engenharia e politicas-publicas), caixa fantasma (#2431); a arvore nao
 # diverge porque e a propria morada da persona. Le-se a MORADA PUBLICADA da instancia
-# (arq:0097, card #3010), nunca a arvore de um clone.
+# nunca a arvore de um clone.
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "lib"))
 from fila_tipos import TIPOS_INFORMATIVOS, TIPOS_VALIDOS  # noqa: E402
@@ -81,13 +80,13 @@ ESPIA = "gestao-estrategica"
 # Pode so medir profundidade (status); qualquer outro verbo e negado em so_leitura().
 LEITOR = "sonda"
 GRUPO = "cadeira"
-# O contestar da R16 (arq:0124 §3, mecanismo comum; card #3532): `--ref` leva o indicador contestado e o
+# O contestar: `--ref` leva o indicador contestado e o
 # corpo leva o fundamento. Sem armazenamento novo: os dois campos ja existem em toda carta.
 TIPO_CONTESTACAO = "contestacao"
 
 # Persona de classe externa (DMZ): tem caixa na malha, mas nao tem par livre. A
 # allowlist e o que impede que estar em PERSONAS_PARTICIPANTES signifique estar
-# aberto a todas as cadeiras. Vale nos dois sentidos. Vazia desde o card #3117.
+# aberto a todas as cadeiras. Vale nos dois sentidos.
 PARES_EXCLUSIVOS: dict = {}
 
 
@@ -168,7 +167,7 @@ def canoniza_persona(p: str):
     Resolve duas fossilizacoes de digitacao contra o roster vivo (`personas_validas`,
     da arvore `abertura/`):
     - case: "TI"/"Ti" -> "ti" (divergencia de caixa nao vira caixa nova);
-    - prefixo fossil na ENTRADA: "claudinho-ia" -> "ia". O prefixo ainda em transito
+    - prefixo legado na ENTRADA descartado para o slug puro. O prefixo ainda em transito
       (formas antigas guardadas por ai) e descartado; nunca e produzido de volta.
       O slug puro e a forma que as cadeiras e os verbos passam (minuta --convoca,
       fila enviar).
@@ -214,7 +213,7 @@ def valida_persona(p: str, json_mode: bool = False):
 
 
 def resolve_eu(args) -> str:
-    """Identidade lida, nunca resolvida (arq:0110 §5, spec fila §3, DT 948).
+    """Identidade lida, nunca resolvida.
 
     A porta resolve `sessao:{id}` e injeta `PF_CADEIRA`; o verbo nunca lê Valkey
     nem arquivos de sessão para descobrir a cadeira.
@@ -293,7 +292,7 @@ def gerar_msgid(de: str, existentes, rc=None) -> str:
 
 
 def _registra_msgid(rc, msgid: str, caixa: str, tecnico: str, de: str):
-    """Ponteiro O(1) em `msgid:<id>` + indice `enviadas:<de>` (TTL 8d, arq:0092)."""
+    """Ponteiro O(1) em `msgid:<id>` + indice `enviadas:<de>` (TTL 8d)."""
     if hasattr(rc, "set"):
         meta = json.dumps({"caixa": caixa, "tecnico": tecnico, "de": de}, ensure_ascii=False)
         rc.set(f"msgid:{msgid}", meta, ex=RETENCAO_INDICE_SEG)
@@ -385,7 +384,7 @@ def novas(rc, persona: str, quantas: int = 500):
     """XREADGROUP '>': so o que a cadeira ainda nao viu. Entrega e move o ponteiro.
     Cartas acionaveis ficam penduradas ate `tratar` ou `--responde`; cartas informativas
     (resposta, decisao, handoff, recusa) recebem XACK imediato na entrega (#4432).
-    Cartas ja pre-tratadas em `tratadas:<persona>` recebem XACK imediato e nao sao reentregues (DT 413)."""
+    Cartas ja pre-tratadas em `tratadas:<persona>` recebem XACK imediato e nao sao reentregues."""
     garante_grupo(rc, persona)
     resp = rc.xreadgroup(GRUPO, persona, {stream_key(persona): ">"}, count=quantas)
     if not resp:
@@ -519,7 +518,7 @@ def tratar(rc, persona: str, msgids):
     'tratada' | 'ja tratada' | 'nao lida' | 'nao existe'. Cartas lidas em modo
     frio (`--tudo`/`--desde`/`--penduradas`, ainda a frente do ponteiro) sao
     registradas em `tratadas:<persona>` para receber XACK automatico em `novas()`
-    sem queimar cartas novas de outros remetentes (DT 413)."""
+    sem queimar cartas novas de outros remetentes."""
     garante_grupo(rc, persona)
     chave = stream_key(persona)
     por_msgid = {}
@@ -578,7 +577,7 @@ def selecionar(rc, persona: str, de: str = None, tipo: str = None, assunto: str 
     Consumer): o seletor avalia os cabecalhos da carta e devolve so as que casam. Le o mesmo
     que `ler --penduradas` (penduradas e nao lidas) e devolve os msgids, mais antigo primeiro,
     cujo remetente, tipo, trecho de assunto (sem caixa) e carimbo (ate `ate`, inclusive) casam
-    todos os criterios dados. Nao escreve nada alem do que `penduradas` ja reconcilia (DT 798)."""
+    todos os criterios dados. Nao escreve nada alem do que `penduradas` ja reconcilia."""
     de_c = (canoniza_persona(de) or de) if de else None
     trecho = (assunto or "").lower()
     ids = []
@@ -798,7 +797,7 @@ def _eh_msgid(val: str) -> bool:
 
 
 def _ler_enviadas(rc, remetente: str, filtro_para: str = None) -> list:
-    """Leitura fria das cartas enviadas por `remetente` nos ultimos 7-8 dias (DT 188)."""
+    """Leitura fria das cartas enviadas por `remetente` nos ultimos 7-8 dias."""
     msgs = []
     vistos = set()
     if hasattr(rc, "zrange"):
@@ -826,7 +825,7 @@ def _ler_enviadas(rc, remetente: str, filtro_para: str = None) -> list:
 
 
 def _cmd_ler_id(rc, eu: str, msgid: str, json_mode: bool, caixa_dica: str = None):
-    """Leitura fria de uma carta especifica pelo `msgid`, para destinatario ou remetente (DT 60 / DT 188)."""
+    """Leitura fria de uma carta especifica pelo `msgid`, para destinatario ou remetente."""
     todas_caixas = sorted(personas_validas() or set())
     if caixa_dica and caixa_dica in todas_caixas:
         caixas = [caixa_dica] + [c for c in todas_caixas if c != caixa_dica]
@@ -900,7 +899,7 @@ def cmd_ler(rc, eu: str, args):
         valida_persona(alvo, json_mode=json_mode)
         alvo = canoniza_persona(alvo) or alvo
         rem_canon = (canoniza_persona(args.remetente) or args.remetente) if args.remetente else None
-        # DT 60: o remetente pode ler em modo frio (--tudo / --desde) as proprias cartas enviadas
+        # o remetente pode ler em modo frio (--tudo / --desde) as proprias cartas enviadas
         # a caixa de `<destino>` sem mover o ponteiro nem confirmar nada.
         leitura_fria_propria = bool((args.tudo or args.desde) and not pend and rem_canon == eu)
         if not leitura_fria_propria:
@@ -952,7 +951,7 @@ def cmd_ler(rc, eu: str, args):
             continue
         vazio = False
         if getattr(args, "ids", False):
-            # DT 798: so os msgids, um por linha, para alimentar `fila tratar` ou um script.
+            # so os msgids, um por linha, para alimentar `fila tratar` ou um script.
             for m in reversed(msgs):
                 print(f"{p} {m['msgid']}" if len(personas) > 1 else m["msgid"])
             continue
@@ -985,7 +984,7 @@ def cmd_tratar(rc, eu: str, args):
     valida_persona(alvo)
     alvo = canoniza_persona(alvo)
     so_minha(eu, alvo)
-    # DT 798: tratar em lote pelo seletor (remetente, tipo, trecho de assunto, carimbo), em vez
+    # tratar em lote pelo seletor (remetente, tipo, trecho de assunto, carimbo), em vez
     # de listar centenas de msgids a mao. O seletor e os msgids se excluem: a mistura deixaria
     # ambiguo o que o ack cobriu.
     filtros = {k: getattr(args, k, None) for k in ("de", "tipo", "assunto", "ate")}
@@ -1022,7 +1021,7 @@ def cmd_tratar(rc, eu: str, args):
         if res == "nao lida":
             nao_lida = True
     if nao_lida:
-        # spec fila §5: recusa com a cura. `--tudo`, `--desde` e `--penduradas` sao frios e
+        # recusa com a cura. `--tudo`, `--desde` e `--penduradas` sao frios e
         # nao entregam; so `fila ler <eu>` entrega a carta e deixa trata-la (#2856 linha 463).
         sys.stderr.write(
             f"cura: carta nao lida nao se trata; entregue-a com `fila ler {alvo}` (a leitura "
@@ -1041,7 +1040,7 @@ def _assunto_do_corpo(corpo: str, limite: int = 120) -> str:
 
 
 def _separa_destinatarios_e_corpo_pos(destinatarios: list, corpo_inicial: str = None):
-    """Suporta `fila enviar <dest> "<msg>"` (DT 357): quando nenhum `--corpo` foi
+    """Suporta `fila enviar <dest> "<msg>"`: quando nenhum `--corpo` foi
     passado e o ultimo argumento posicional nao e uma persona valida (mas os
     anteriores sao), separa-o como candidato a corpo posicional sem tocar stdin
     antes de validar os destinatarios."""
@@ -1076,7 +1075,7 @@ def _resolve_corpo_enviar(corpo_opt: str = None, corpo_pos: str = None) -> str:
 
 
 def _valida_responde(rc, responde: str, eu: str = None):
-    """Recusa `--responde` cujo msgid nao existe na malha (DT 439)."""
+    """Recusa `--responde` cujo msgid nao existe na malha."""
     if hasattr(rc, "get") and rc.get(f"msgid:{responde}") is not None:
         return
     caixas = []
@@ -1140,7 +1139,7 @@ def cmd_enviar(rc, eu: str, args):
         _registra_msgid(rc, msgid, dest, tecnico, de)
         print(msgid)
 
-    # DT 336: responder uma carta da propria caixa ja a da por tratada (at-least-once: ack apos XADD).
+    # responder uma carta da propria caixa ja a da por tratada (at-least-once: ack apos XADD).
     if args.responde:
         for mid, res in tratar(rc, eu, [args.responde]):
             if res == "tratada":
@@ -1155,7 +1154,7 @@ def cmd_enviar(rc, eu: str, args):
 
 
 # ---------- carta de bot (#3884) ----------
-# O bot e ficha da raiz de classe automacao (spec automacao-gestao): nao tem sessao, nao tem
+# O bot e ficha da raiz de classe automacao: nao tem sessao, nao tem
 # caixa e nao e persona. Assina como `bot:<slug>`, o mesmo ator que o `bot` grava nos eventos, e
 # so de dentro do proprio `bot rodar <slug>`, que poe o slug em PF_BOT_SLUGS no ambiente do
 # filho: o remetente segue sem se forjar, porque a porta nao deixa sessao definir PF_*. Resposta
