@@ -1,4 +1,3 @@
 # Lista de portão da chave suite: caminhos relativos a lib/suite/testes/.
 # Raio: `<arquivo> | <glob> <glob>...`, globs relativos à raiz do repositório.
-test_suite_comportamento.py | lib/suite/**
 test_dt1338_portao_documento.py | lib/suite/** registro/venvs.json
