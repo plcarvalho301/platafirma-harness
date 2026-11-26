@@ -1,4 +1,4 @@
-# terceiros.sh — artefato de terceiro pinado entra na árvore medida (arq:0116 §7; card #4417).
+# terceiros.sh — artefato de terceiro pinado entra na árvore medida.
 #
 # Um construtor só para release e teste: `release promover` o chama sobre a árvore da rev
 # antes de trocar current; `teste rodar` o chama sobre a árvore que vai medir (bancada,
