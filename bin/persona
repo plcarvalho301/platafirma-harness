@@ -7,8 +7,8 @@
 # atos: ler (leitura, expediente), trocar (escrita, expediente), voltar (escrita, expediente), cenario (escrita, expediente), cultura (leitura, expediente), apelidos (leitura, expediente)
 # forma: texto
 # escreve: a lousa da sessão na memória de trabalho (lousa:{sessao_id}:postura, ritual e cenario) e o evento de cada troca no log da porta
-# consome: a árvore da casa nova (as fichas de comportamento e a lista dos eixos), o banco do acervo (ligações postura-preferencial e ativa), a memória de trabalho, tarefas (incidente)
-# ambiente: PF_CADEIRA e PF_SESSAO (origem: verbo `sessao abrir`, injetadas pela porta), PF_CHAPEU (opcional; sem ele, o chapéu da chave da sessão), PF_CASA_RAIZ (opcional; a raiz da árvore), MEM_REDIS_HOST[=127.0.0.1] e MEM_REDIS_PORT[=6380], POSTGRES_* (o banco do acervo)
+# consome: a árvore da casa nova (as fichas de comportamento e a lista dos eixos), o banco da ontologia da casa (casa-db; ligações postura-preferencial e ativa), a memória de trabalho, tarefas (incidente)
+# ambiente: PF_CADEIRA e PF_SESSAO (origem: verbo `sessao abrir`, injetadas pela porta), PF_CHAPEU (opcional; sem ele, o chapéu da chave da sessão), PF_CASA_RAIZ (opcional; a raiz da árvore), MEM_REDIS_HOST[=127.0.0.1] e MEM_REDIS_PORT[=6380], CASA_PG_* / POSTGRES_* (o banco da ontologia da casa, com fallback no armário de chaves)
 import sys
 from pathlib import Path
 

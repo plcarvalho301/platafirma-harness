@@ -13,7 +13,7 @@
 # ato: rodar <slug> — grava inicio, executa o argv da ficha sem shell, grava fim com o exit do que rodou e sai com ele; é o ExecStart da unit gerada
 # ato: desligar <slug> [--autor <cadeira>] — para o timer e o service, tira o .wants, apaga as units do bot, reset-failed, daemon-reload e só então retira a ficha; é a volta de declarar e se repete sem dano
 # ato: caidas — cruza systemctl --user com as fichas e com os declarantes de `release conferir jobs`; unit do bot failed ou unit sem declarante abre incidente, sem duplicar
-# exit: 0 ok · 1 negativo de mérito (declaração divergente, verbo ou cadeira desconhecidos, slug não declarado, caidas com divergência) · 2 uso · 3 dependência fora (acervo sem a rota ou fora do ar, systemctl, .wants sem escrita) · 4 recusa de política (evento, timer com agente, unit homônima ou de manifesto, recursão do bot: --roda "bot rodar ...") · 5 indeterminável (não consegui olhar o systemd ou o serviço); rodar sai com o exit do que rodou
+# exit: 0 ok · 1 negativo de mérito (declaração divergente, verbo ou cadeira desconhecidos, slug não declarado, caidas com divergência) · 2 uso · 3 dependência fora ou falha de credencial (acervo 401, sem a rota ou fora do ar, systemctl, .wants sem escrita) · 4 recusa de política (403, evento, timer com agente, unit homônima ou de manifesto, recursão do bot: --roda "bot rodar ...") · 5 indeterminável (não consegui olhar o systemd ou o serviço); rodar sai com o exit do que rodou
 # le: declarar=arquivo-local
 # le: listar=acervo.registro
 # le: rodar=acervo.registro
@@ -51,6 +51,7 @@ from pathlib import Path
 
 _AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(_AQUI.parent / "lib"))
+import acervo_token  # noqa: E402
 import motor_enderecos  # noqa: E402
 import raizes  # noqa: E402
 import units  # noqa: E402
@@ -142,8 +143,8 @@ def _trava(nome: str):
 def _chama(metodo: str, caminho: str, corpo: dict | None = None, params: dict | None = None,
            aceita: tuple = (200,)) -> tuple[int, object]:
     """(status, objeto) de uma chamada ao acervo. O que não está em `aceita` vira Falha com o exit da tabela:
-    409/422 e o 404 do serviço = 1 · 503, rota ausente e conexão recusada = 3 (com o nome do recurso) ·
-    401/403 = 4 · outro 5xx e conexão que cai = 5 · outro 4xx = 2. HTTPError antes de URLError: é subclasse."""
+    409/422 e o 404 do serviço = 1 · 401 (credencial), 503, rota ausente e conexão recusada = 3 (com o nome do recurso) ·
+    403 = 4 · outro 5xx e conexão que cai = 5 · outro 4xx = 2. HTTPError antes de URLError: é subclasse."""
     recurso = caminho
     url = ACERVO_URL + caminho + ("?" + urllib.parse.urlencode(params) if params else "")
     cab = {"Accept": "application/json"}
@@ -151,7 +152,7 @@ def _chama(metodo: str, caminho: str, corpo: dict | None = None, params: dict | 
     if corpo is not None:
         dados = json.dumps(corpo).encode()
         cab["Content-Type"] = "application/json"
-    token = os.environ.get("RAG_API_TOKEN", "").strip()
+    token = acervo_token.ler_token_acervo()
     if token:
         cab["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(url, data=dados, method=metodo, headers=cab)
@@ -183,11 +184,11 @@ def _chama(metodo: str, caminho: str, corpo: dict | None = None, params: dict | 
     msg = f"acervo {metodo} {recurso}: HTTP {status}" + (f" {titulo}" if titulo else "") + (f": {detalhe}" if detalhe else "")
     if titulo in CURA:
         msg += f" — {CURA[titulo]}"
-    if status == 503:
+    if status in (401, 503):
         codigo = 3
     elif status >= 500:
         codigo = 5
-    elif status in (401, 403):
+    elif status == 403:
         codigo = 4
     elif status in (404, 409, 422):
         codigo = 1

@@ -88,12 +88,58 @@ _CONSTRUIDO_DE = (
     "ORDER BY l.posicao NULLS LAST, sd.slug, d.chave_humana")
 
 
+SEGREDO_CASA_LEITOR = "harness/CASA_LEITOR_PORTA_PASSWORD"
+PAPEL_CASA_LEITOR = "casa_leitor_porta"
+
+
+def _senha_do_armario(env: Mapping[str, str]) -> str:
+    """Resolve `harness/CASA_LEITOR_PORTA_PASSWORD` pelo armário da release ou fallback na instância."""
+    from pathlib import Path
+
+    inst = Path(env.get("PLATAFIRMA_INSTANCIA") or "/srv/platafirma/casa")
+    release = Path(env.get("PLATAFIRMA_RELEASE") or "/opt/platafirma/current")
+    rel: str | None = None
+    try:
+        try:
+            from lib import memoria_de_trabalho as _armario_mod
+        except ImportError:
+            import memoria_de_trabalho as _armario_mod  # type: ignore[no-redef]
+        armario = _armario_mod._armario(release / "core")
+        if armario.is_file():
+            rel = _armario_mod._caminho_no_armario(armario, SEGREDO_CASA_LEITOR)
+    except Exception:      # noqa: BLE001 — fallback para o caminho padrão da instância
+        rel = None
+    candidatos = [Path(rel) if (rel and Path(rel).is_absolute()) else (inst / rel)] if rel else []
+    candidatos.append(inst / "segredos" / "harness" / "CASA_LEITOR_PORTA_PASSWORD")
+    for arq in candidatos:
+        try:
+            valor = arq.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if valor:
+            return valor
+    return ""
+
+
 def _dsn(ambiente: Mapping[str, str] | None = None) -> str:
     env = os.environ if ambiente is None else ambiente
     host = env.get("CASA_PG_HOST") or env.get("POSTGRES_HOST") or "127.0.0.1"
     porta = env.get("CASA_PG_PORT") or env.get("POSTGRES_PORT") or "5439"
-    usuario = quote(env.get("CASA_PG_USER") or env.get("POSTGRES_USER") or "casa", safe="")
-    senha = quote(env.get("CASA_PG_PASSWORD") or env.get("POSTGRES_PASSWORD") or "", safe="")
+    usuario_env = env.get("CASA_PG_USER") or env.get("POSTGRES_USER")
+    senha_env = env.get("CASA_PG_PASSWORD") or env.get("POSTGRES_PASSWORD")
+    if senha_env:
+        usuario_bruto = usuario_env or "casa"
+        senha_bruta = senha_env
+    else:
+        senha_armario = _senha_do_armario(env)
+        if senha_armario:
+            usuario_bruto = usuario_env or PAPEL_CASA_LEITOR
+            senha_bruta = senha_armario
+        else:
+            usuario_bruto = usuario_env or "casa"
+            senha_bruta = ""
+    usuario = quote(usuario_bruto, safe="")
+    senha = quote(senha_bruta, safe="")
     base = env.get("CASA_PG_DB") or env.get("POSTGRES_DB") or "casa"
     return f"postgresql://{usuario}:{senha}@{host}:{porta}/{base}"
 

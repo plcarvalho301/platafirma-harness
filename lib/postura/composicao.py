@@ -96,7 +96,7 @@ def perfil_da_persona(base: Path, cadeira: str, ligacoes, avisos: list) -> str |
         except doc.Inexistente:
             texto = ""
         achada = _PREFERENCIAL.search(texto[:2000])
-        avisos.append(f"banco do acervo fora ({erro}): o perfil veio da linha «Postura preferencial» da persona")
+        avisos.append(f"banco da ontologia da casa fora ({erro}): o perfil veio da linha «Postura preferencial» da persona")
         return achada.group(1) if achada else None
 
 
@@ -207,7 +207,7 @@ def compor(base: Path, cadeira: str, chapeu: str, sessao_id: str, lousa, log, li
             ativadas = ligacoes.ativadas([c[0] for c in v.cenarios])
         except SemBanco as erro:
             ativadas = {}
-            v.avisos.append(f"banco do acervo fora ({erro}): a circunstância que o cenário ativa não foi lida")
+            v.avisos.append(f"banco da ontologia da casa fora ({erro}): a circunstância que o cenário ativa não foi lida")
         for slug, *_ in reversed(v.cenarios):      # o cenário presente mais recente que ative uma
             alvo = ativadas.get(slug)
             if not alvo:

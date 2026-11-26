@@ -32,20 +32,43 @@ class OlariaIndisponivel(RuntimeError):
     """Falha ao ler as fichas de dependência externa na Olaria."""
 
 
+def _ler_do_armario(nome_segredo: str, env: dict[str, str]) -> str:
+    try:
+        from lib import memoria_de_trabalho as _armario_mod
+    except ImportError:
+        try:
+            import memoria_de_trabalho as _armario_mod  # type: ignore[no-redef]
+        except ImportError:
+            return ""
+    inst = Path(env.get("PLATAFIRMA_INSTANCIA") or "/srv/platafirma/casa")
+    release = Path(env.get("PLATAFIRMA_RELEASE") or "/opt/platafirma/current")
+    armario = _armario_mod._armario(release / "core")
+    if not armario.is_file():
+        return ""
+    try:
+        rel = _armario_mod._caminho_no_armario(armario, nome_segredo)
+    except _armario_mod.SenhaIndisponivel:
+        return ""
+    arq = Path(rel) if Path(rel).is_absolute() else inst / rel
+    try:
+        return arq.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
 def _ler_segredo(nome: str, env: dict[str, str]) -> str:
     val = env.get(nome, "").strip()
     if val:
         return val
-    inst = Path(env.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa"))
+    do_armario = _ler_do_armario(f"olaria/{nome}", env)
+    if do_armario:
+        return do_armario
+    inst = Path(env.get("PLATAFIRMA_INSTANCIA") or "/srv/platafirma/casa")
     arq = inst / "segredos" / "olaria" / nome
     try:
-        if arq.is_file():
-            texto = arq.read_text(encoding="utf-8").strip()
-            if texto:
-                return texto
+        return arq.read_text(encoding="utf-8").strip()
     except OSError:
-        pass
-    return ""
+        return ""
 
 
 def _parse_yaml_minimo(texto: str) -> dict:
@@ -177,13 +200,9 @@ def extrair_terceiros(mudanca: dict) -> list[dict[str, str]]:
 def ler_terceiros_da_olaria(env: dict[str, str] | None = None, prazo_s: float = 15.0) -> list[dict[str, str]]:
     amb = os.environ if env is None else env
     chave = _ler_segredo("OLARIA_CHAVE", amb)
-    url = _ler_segredo("OLARIA_URL", amb)
-    if not url and chave and "OLARIA_URL" not in amb:
-        url = OLARIA_URL_PADRAO
-    if not url:
-        raise OlariaIndisponivel("OLARIA_URL ausente")
     if not chave:
         raise OlariaIndisponivel("OLARIA_CHAVE ausente")
+    url = _ler_segredo("OLARIA_URL", amb) or OLARIA_URL_PADRAO
     mudanca = _consultar_classe("stack", url, chave, prazo_s=prazo_s)
     return extrair_terceiros(mudanca)
 

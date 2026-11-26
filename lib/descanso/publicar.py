@@ -225,6 +225,29 @@ def _ts_utc(valor: str) -> str:
     return d.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def _formatar_recusados(recusados) -> str:
+    if not isinstance(recusados, list) or not recusados:
+        return ""
+    partes: list[str] = []
+    for item in recusados:
+        if not isinstance(item, dict):
+            partes.append(str(item))
+            continue
+        indice = item.get("indice")
+        prefixo = f"[{indice}] " if indice is not None else ""
+        motivo = str(item.get("motivo") or "").strip()
+        campo = str(item.get("campo") or "").strip()
+        det = str(item.get("detalhe") or "").strip()
+        cab = motivo
+        if campo:
+            cab = f"{cab} ({campo})" if cab else f"({campo})"
+        if cab and det:
+            partes.append(f"{prefixo}{cab}: {det}")
+        elif cab or det:
+            partes.append(f"{prefixo}{cab or det}")
+    return "; ".join(partes)
+
+
 class GravadorEventos:
     """Grava a mensagem pela rota POST /eventos/mensagem do banco de eventos (#4355)."""
 
@@ -280,10 +303,14 @@ class GravadorEventos:
             msg_erro = detalhe.get("detalhe") or str(erro)
             if erro.code in (409, 422):
                 tipo_erro = str(detalhe.get("tipo", erro.code))
+                recusados_txt = _formatar_recusados(detalhe.get("recusados"))
+                if recusados_txt:
+                    msg_erro = f"{msg_erro} — recusados: {recusados_txt}"
+                texto_busca = f"{tipo_erro} {msg_erro}".lower()
                 complemento = ""
-                if "Etiqueta" in tipo_erro or "etiqueta" in msg_erro.lower():
+                if "etiqueta" in texto_busca and msg.etiqueta:
                     complemento = f" · {_ajuda_chave(msg.etiqueta)}"
-                elif "Destinatario" in tipo_erro or "destinat" in msg_erro.lower():
+                elif "destinat" in texto_busca and msg.destinatario:
                     complemento = f" · {_ajuda_chave(msg.destinatario)}"
                 raise Recusada(f"{tipo_erro}: {msg_erro}{complemento}") from None
             raise SemDestino(f"banco de eventos respondeu {erro.code}: {msg_erro}") from None
