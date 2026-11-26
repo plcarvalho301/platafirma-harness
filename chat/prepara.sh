@@ -11,7 +11,7 @@
 # ambiente: PLATAFIRMA_INSTANCIA (default /srv/platafirma/casa), PF_COFRE (default
 # $PLATAFIRMA_INSTANCIA/segredos/matrix), PLATAFIRMA_SEGREDOS_STACK (default $PLATAFIRMA_INSTANCIA/segredos/chat).
 #
-# Nada nasce na arvore do codigo (card #3010): o cofre e a instancia. As variaveis que o
+# Nada nasce na arvore do codigo: o cofre e a instancia. As variaveis que o
 # compose interpola viram um arquivo cada em segredos/chat/, e o `deploy` materializa
 # delas o --env-file em tmpfs. Nao ha .env na stack.
 set -euo pipefail
@@ -31,12 +31,12 @@ if [ ! -d "$COFRE" ]; then
   exit 1
 fi
 
-# O secret do client OIDC e ato de claudinho-seguranca. Ausente, o preparo para: gerar
+# O secret do client OIDC e ato de seguranca. Ausente, o preparo para: gerar
 # um aqui produziria stack de pe que nao autentica ninguem, e o erro so apareceria no
 # login do dono.
 if [ ! -s "$COFRE/oidc-client-secret" ]; then
   echo "erro: falta $COFRE/oidc-client-secret" >&2
-  echo "      e do claudinho-seguranca (client FK81JZ no realm). Nao se gera aqui." >&2
+  echo "      e de seguranca (client FK81JZ no realm). Nao se gera aqui." >&2
   exit 1
 fi
 

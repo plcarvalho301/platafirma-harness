@@ -1,6 +1,6 @@
 FROM python:3.13-slim
 
-# Corpo da recepcao — o lado Matrix do giro. mautrix-python e a lib decidida na minuta 0002 (decisao
+# Corpo da recepcao — o lado Matrix do giro. mautrix-python e a lib escolhida (decisao
 # 7): tem caminho de cripto vivo, que e a condicao do arquiteto para nao fechar a porta
 # do E2EE de v1. Versao pinada: contrato de AS muda pouco, mas a lib muda rapido.
 #

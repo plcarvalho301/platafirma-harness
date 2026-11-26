@@ -1,6 +1,6 @@
 """Rotacao de sala — a fita morre por mecanismo, e o dono ve que morreu.
 
-Card 449, criterios 8 a 12 da minuta 0002. Tres coisas, e uma so mecanica:
+Rotacao de sala. Tres coisas, e uma so mecanica:
 
   - **Preguicosa, nao agendada.** Nao ha timer. A idade e da SALA, e o gatilho e
     a mensagem: sala parada nao roda. Retomada a conversa depois de 24h, a
@@ -30,7 +30,7 @@ from comum import journal, rituais
 
 log = logging.getLogger("chat-recepcao.rotacao")
 
-# 24 h, e a idade e da sala (minuta 0002, secao 2). Configuravel para a prova
+# 24 h, e a idade e da sala. Configuravel para a prova
 # poder encolher a janela sem esperar um dia.
 IDADE_S = float(os.environ.get("CHAT_ROTACAO_S", str(24 * 3600)))
 # Teto de espera do ritual antes de a degradacao ser declarada na sala nova.

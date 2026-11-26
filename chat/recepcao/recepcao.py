@@ -10,7 +10,7 @@ systemd --user: ele chama `chat despachar` e nunca fala Matrix. A partida e por
 DIRECAO, e nao por etapa — topologia decidida por claudinho-TI no comentario 302
 do card. A razao e medida: em docker rootless o container nao alcanca o host, e
 publicar a porta do Synapse no loopback poria a Admin API fora da rede interna,
-contra arq:0026. Partindo assim, nenhuma porta nova e nenhuma travessia.
+Partindo assim, nenhuma porta nova e nenhuma travessia.
 
 A UNICA fronteira e o journal SQLite em WAL, no bind mount (chat/comum/journal.py).
 

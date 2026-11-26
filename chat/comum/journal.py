@@ -35,7 +35,7 @@ import os
 import sqlite3
 import time
 
-# Estado da instancia, nunca da arvore do codigo (card #3010). O default repete o de
+# Estado da instancia, nunca da arvore do codigo. O default repete o de
 # platafirma-harness/lib/raizes.py sem importa-lo: dentro do container so chat/ existe.
 # Container e host veem o MESMO caminho absoluto (bind no override da instancia).
 CAMINHO_PADRAO = os.path.join(
@@ -591,7 +591,7 @@ def grava_cadeira(con: sqlite3.Connection, sala: str, cadeira: str) -> None:
     """Cache sala -> cadeira, e o carimbo de nascimento da sala.
 
     `nascida_em` NAO se reescreve no conflito: a idade e da sala, e o gatilho da
-    rotacao e a mensagem (minuta 0002). Reescrever aqui faria toda mensagem
+    rotacao e a mensagem. Reescrever aqui faria toda mensagem
     rejuvenescer a sala, e a rotacao de 24h nunca dispararia.
 
     Cadeira com DEFAULT PROPRIO (`DEFAULTS_CADEIRA`) semeia preferencia aqui —

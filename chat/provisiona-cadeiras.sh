@@ -17,7 +17,7 @@
 #
 # QUEM SAO AS CADEIRAS: `cadeiras()`, de chat/comum/cadeiras.py, que le
 # personas/persona-*.md. Nao e a tabela do org, e a diferenca importa: a tabela cobre
-# as heads, e `claudinho-politicas-publicas` e assessor do dono, tem sala por decisao
+# as heads, e `politicas-publicas` e assessor do dono, tem sala por decisao
 # dele (card 460, comentario 315) e nao esta la. Roster pelo harness e o que faz cadeira
 # nova entrar sozinha — nao ha lista de excecao neste arquivo, e nao deve haver.
 #
@@ -28,7 +28,7 @@
 # nenhuma. Esta fatia nao depende do compose da outra.
 #
 # Por que o trabalho fala com o Synapse de DENTRO do container: o Synapse nao publica
-# porta e vive na rede `interna` (arq:0026, federacao fechada). Do host nao se alcanca;
+# porta e vive na rede `interna` (federacao fechada). Do host nao se alcanca;
 # de `chat-recepcao`, que esta na mesma rede, sim. O token nao passa por argv (`ps`
 # mostra argv): entra por ambiente do exec, e o resto por arquivo copiado.
 #
@@ -40,7 +40,7 @@
 # PF_RECEPCAO, PF_DOMINIO, PLATAFIRMA_INSTANCIA, PLATAFIRMA_RELEASE, PF_ABERTURA_DIR.
 #
 # ambiente: PLATAFIRMA_INSTANCIA (default /srv/platafirma/casa; cofre em
-# $PLATAFIRMA_INSTANCIA/segredos/matrix, morada da abertura em $PLATAFIRMA_INSTANCIA/var/abertura-publicada),
+# $PLATAFIRMA_INSTANCIA/segredos/matrix e morada publicada da abertura),
 # PLATAFIRMA_RELEASE (default /opt/platafirma/current; org canonico em $PLATAFIRMA_RELEASE/arquitetura).
 set -euo pipefail
 
@@ -56,9 +56,9 @@ RECEPCAO="${PF_RECEPCAO:-chat-recepcao}"
 AVATARES="${PF_AVATARES:-$AQUI/avatares}"
 DOMINIO="${PF_DOMINIO:-chat.platafirma.org}"
 # O alias sai do org canonico e nao se fixa aqui: quem ocupa a cadeira e com que nome e
-# decisao de claudinha-gestao-estrategica, versionada no repo de arquitetura. Codigo com
+# decisao de gestao-estrategica, versionada na casa. Codigo com
 # a tabela dentro seria uma segunda fonte da verdade envelhecendo em silencio. Lido da
-# arquitetura servida pela release, nunca de repo irmao na bancada (card #3010).
+# arquitetura servida pela release, nunca de repo irmao na bancada.
 ORG="${PF_ORG:-$PLATAFIRMA_RELEASE/arquitetura/docs/org-template-canonico.md}"
 # cadeiras.py, no python do host abaixo, le a morada da instancia.
 export PLATAFIRMA_INSTANCIA

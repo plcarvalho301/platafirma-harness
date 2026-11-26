@@ -28,7 +28,7 @@ import re
 from mautrix.types import SpecVersions
 
 TETO_PADRAO = 20 * 1024 * 1024  # 20 MiB, o numero da posicao de claudinho-TI
-# Fitas sao estado da instancia (card #3010). Default igual ao de lib/raizes.py, repetido
+# Fitas sao estado da instancia. Default igual ao de lib/raizes.py, repetido
 # porque o container so recebe chat/; CHAT_FITAS_RAIZ sobrepoe.
 FITAS_RAIZ = os.path.join(os.environ.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa"), "var", "fitas")
 
@@ -131,7 +131,7 @@ async def baixa(intent, *, mxc: str, nome: str, mime: str, tamanho_declarado: in
     params: dict[str, str] = {"allow_redirect": "true"}
     headers: dict[str, str] = {}
     if autenticado:
-        # Endpoint autenticado da spec v1.11: a midia deixou de ser publica, e
+        # Endpoint autenticado da API Matrix v1.11: a midia deixou de ser publica, e
         # sem o Bearer o download volta 401. O `user_id` masquerada o pedido
         # como a cadeira, que e quem esta na sala.
         headers["Authorization"] = f"Bearer {intent.api.token}"

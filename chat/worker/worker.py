@@ -66,7 +66,7 @@ GRACA_KILL_S = 10.0
 # compactacao e formato de CLI, e formato de CLI muda; contador nao.
 GIROS_POR_ANCORA = int(os.environ.get("CHAT_GIROS_POR_ANCORA", "10"))
 # O verbo `mesa` da MESMA arvore deste arquivo (a release servida), achado por realpath:
-# nunca por raiz montada a mao (card #3010).
+# nunca por raiz montada a mao.
 MESA = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "bin", "mesa")
 

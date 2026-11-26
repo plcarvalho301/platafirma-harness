@@ -16,7 +16,7 @@ import sys
 import threading
 
 # Segredo da stack harness-sessao no cofre da instancia, um arquivo por variavel
-# (card #3010). Nunca .env na arvore do codigo. Default da instancia igual ao de
+# Nunca .env na arvore do codigo. Default da instancia igual ao de
 # lib/raizes.py, repetido porque este modulo tambem entra no container da recepcao.
 SEGREDO_SENHA = os.path.join(
     os.environ.get("PLATAFIRMA_INSTANCIA", "/srv/platafirma/casa"),
