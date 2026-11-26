@@ -503,7 +503,7 @@ def imprimir(r: dict, fluxo: TextIO) -> None:
         fluxo.writelines(f"aviso: {aviso}\n" for aviso in r.get("avisos") or ())
 
 
-# ==================================================================== leitor único e listar (story #4442, t9)
+# ==================================================================== leitor único e listar
 _CONFIG_LEITURA_PADRAO = _RAIZ / "registro" / "leitura.yaml"
 _SOCKET_LEITOR_PADRAO = "/run/platafirma/leitor/leitor.sock"
 _PRAZO_LEITOR_PADRAO_MS = 15_000

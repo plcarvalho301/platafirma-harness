@@ -1,5 +1,5 @@
 #!/opt/platafirma/current/venv/harness/bin/python
-# paginar — cliente de terminal que percorre proximo_args em laço sem recorte explícito (story #4442, t9)
+# paginar — cliente de terminal que percorre proximo_args em laço sem recorte explícito
 # Não se chama pf: pf é o comando do posto e o alias pf -> platafirma da conta, e um pf aqui no PATH os colide.
 # capacidade: operacao
 # dono: engenharia

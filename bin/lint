@@ -82,7 +82,7 @@ CLASSES_LINT = {
     "repo": {
         "tipo": "lista-de-verificacao",
         "chave": "checklist-repo",
-        "detector": "predicados de repo (arq:0042)",
+        "detector": "predicados de repo",
         "descricao": "materia de acervo, blobs, gerados e cabecalhos de operacao",
     },
     "superficie": {
@@ -130,7 +130,7 @@ CLASSES_LINT = {
     "card": {
         "tipo": "lista-de-verificacao",
         "chave": "antipadroes-de-discovery",
-        "detector": "two-pager e comentario tipado (epico, feature); secoes da arq:0096 (story, task)",
+        "detector": "two-pager e comentario tipado (epico, feature); secoes do padrao (story, task)",
         "descricao": "corpo e comentarios do card, pela regua do nivel",
     },
     "prosa": {
@@ -158,7 +158,7 @@ def imprimir_uso(stream=sys.stdout):
     print("uso:", file=stream)
     print("  lint <classe> <repo>[@<chave>] [<alvo>] [--staged] [--json]", file=stream)
     print("  lint commit <arquivo>|- [--json]", file=stream)
-    print("  lint card <arquivo>|-|<n do card> [<repo>] [--json]   com o numero, le corpo e comentarios do rastreador; epico e feature pela lista antipadroes-de-discovery, story e task pela arq:0096", file=stream)
+    print("  lint card <arquivo>|-|<n do card> [<repo>] [--json]   com o numero, le corpo e comentarios do rastreador; epico e feature pela lista antipadroes-de-discovery, story e task pelo padrao", file=stream)
     print("  lint acervo [--resumo] [--json] [--criterio <id>[,<id>]] [--so-bloqueantes]   antipadroes de obra (firma) e conceito; exit 1 so com bloqueante", file=stream)
     print("  lint organizacao <repo> [<alvo>] [--todas] [--resumo]   --todas inclui os bloqueantes (contagem; quem barra e o pre-commit); --resumo conta por regra", file=stream)
     print("  lint diagrama <repo>[@<chave>] <alvo>   compila .mmd/.d2 no Kroki da casa; exit 0/1/5, Kroki fora do ar nao barra o pre-commit", file=stream)
@@ -393,7 +393,7 @@ def main() -> int:
         apontamentos = verificar_fossil(raiz_repo, alvo=alvo)
         return relatorio_lint(classe, alvo_ancora, apontamentos, "repositorio", rev=None, como_json=como_json)
 
-    # 5b. Classe DIAGRAMA (card #3096) -- exit propria (0/1/5), fora da regra 0/1 comum
+    # 5b. Classe DIAGRAMA -- exit propria (0/1/5), fora da regra 0/1 comum
     # de relatorio_lint: Kroki fora de alcance e indeterminavel (5), nunca apontamento (1).
     if classe == "diagrama":
         apontamentos, rc = verificar_diagrama(raiz_repo, alvo)

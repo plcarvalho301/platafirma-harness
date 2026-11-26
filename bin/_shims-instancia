@@ -17,7 +17,7 @@
 # instalação, sem ninguém lembrar de nada. Fonte única de verdade:
 # acervo.ferramental_instancia.
 #
-# ONDE (card #3010, desenho §3/§5): o par vem do dado da instância, então o shim é estado
+# ONDE: o par vem do dado da instância, então o shim é estado
 # da instância — $PLATAFIRMA_INSTANCIA/var/shims. Nunca ~/.local/bin (fora de /opt e /srv) nem a
 # árvore da release (r-x). Quem quer o shim no PATH põe esse diretório DEPOIS do bin da
 # release, para que verbo nenhum seja sombreado por shim.
