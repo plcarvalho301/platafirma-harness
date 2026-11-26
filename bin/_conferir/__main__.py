@@ -1,4 +1,4 @@
-"""Despacho de `conferir ontologia` (card #4276; referencias/instancias/verbo/ontologia.md).
+"""Despacho de `conferir ontologia` (referencias/instancias/verbo/ontologia.md).
 
 Confere o que já está gravado num estrato (`estrato:<slug>`), numa capacidade (`capacidade:<slug>`) ou numa classe (`<slug>`):
 - exige o escopo com saída 2 antes de chamar a Olaria;

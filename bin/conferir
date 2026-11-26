@@ -57,10 +57,10 @@
 # substitui: nada (despachante)
 # conforme: parcial
 #
-# Despachante (arq:0110 §1): a implementacao e sub-ato e mora em bin/_release/conferir/conferir.py,
-# fora do PATH. As classes do SERVIDO sao de `release conferir` (spec_release §4); aqui respondem
-# com aviso de deprecado, uma vez por sessao (arq:0110 §11), e delegam. As classes de BANCADA
-# respondem com aviso de deprecado apontando `lint <classe>` (spec_lint / arq:0110 §11).
+# Despachante: a implementacao e sub-ato e mora em bin/_release/conferir/conferir.py,
+# fora do PATH. As classes do SERVIDO sao de `release conferir`; aqui respondem
+# com aviso de deprecado, uma vez por sessao, e delegam. As classes de BANCADA
+# respondem com aviso de deprecado apontando `lint <classe>`.
 set -euo pipefail
 
 BIN_DIR="${PF_BIN_DIR:-$HOME/AI/bin}"
@@ -70,7 +70,7 @@ IMPL="$AQUI/_release/conferir/conferir.py"
 CLASSES_SERVIDO="verbo cabecalho servico skill procedencia superficie ferramental front pdp alcance card unit jobs acervo dependencias sessao-orfa copia"
 CLASSES_BANCADA="existe repo commit arranque vocabulario diagrama"
 
-avisa_deprecado() {  # uma vez por sessao (arq:0110 §11)
+avisa_deprecado() {  # uma vez por sessao
   local classe="$1"
   local sess_dir="/tmp/platafirma-avisos-${PF_SESSAO:-${USER:-default}}"
   mkdir -p "$sess_dir" 2>/dev/null || true
@@ -81,14 +81,14 @@ avisa_deprecado() {  # uma vez por sessao (arq:0110 §11)
   fi
 }
 
-avisa_deprecado_bancada() {  # uma vez por sessao (arq:0110 §11)
+avisa_deprecado_bancada() {  # uma vez por sessao
   local classe="$1"
   local sess_dir="/tmp/platafirma-avisos-${PF_SESSAO:-${USER:-default}}"
   mkdir -p "$sess_dir" 2>/dev/null || true
   local trava="$sess_dir/conferir_bancada_$classe"
   if [ ! -f "$trava" ]; then
     touch "$trava" 2>/dev/null || true
-    printf 'conferir: `conferir %s` esta deprecado; a forma conforme e `lint %s` (spec_lint / arq:0110 §11).\n' "$classe" "$classe" >&2
+    printf 'conferir: `conferir %s` esta deprecado; a forma conforme e `lint %s`.\n' "$classe" "$classe" >&2
   fi
 }
 
