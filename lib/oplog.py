@@ -1,18 +1,18 @@
-"""oplog — o unico modulo que escreve e le o bruto da porta (card #3344, arq:0123 §3-§5).
+"""oplog — o unico modulo que escreve e le o bruto da porta.
 
 O bruto e um arquivo JSONL por dia, `ops-AAAA-MM-DD.jsonl`, so de acrescimo. Aqui moram
-as quatro coisas que a ADR poe num lugar so:
+as quatro responsabilidades do log bruto:
 
   emitir      grava a linha: carimba `evento_id` (uuid v7) e `schema_v`, apara o campo longo
               antes de serializar e lista o que aparou em `aparado`; nunca sai linha cortada
               no meio, e falha de escrita nunca levanta (vai ao stderr, como o `_audit`).
-  classificar o desfecho vira `classe`, `causa` e `classe_fonte` pela tabela do arq:0123 §5.
+  classificar o desfecho vira `classe`, `causa` e `classe_fonte` pela tabela de classificacao.
               E a mesma funcao que relê linha antiga sem classe.
   ler         dias, nunca «os N ultimos arquivos»: devolve os eventos e a contagem de
               legiveis e ilegiveis por dia; dia sem arquivo e «ausente», nunca zero.
-  corte       o prazo de 35 dias, o que ha no disco, o teto e a unica remocao (card #3354): o
+  corte       o prazo de 35 dias, o que ha no disco, o teto e a unica remocao: o
               timer `corte-bruto` apaga o dia que passou no portao; nada mais apaga o bruto.
-  investigar  a unica porta que devolve a linha INTEIRA do bruto (card #3355; arq:0123 regra 15): exige o
+  investigar  a unica porta que devolve a linha INTEIRA do bruto: exige o
               numero do incidente e grava o evento `leitura_bruto` antes de entregar; quem confere que o
               incidente esta aberto e o verbo `metrica investigar`. Leitura que nao devolve conteudo a quem
               chamou (extrator, corte, repo commitar) segue sem incidente.
@@ -159,7 +159,7 @@ def aparar(reg: dict) -> dict:
 # --- classe ---------------------------------------------------------------------------
 
 def classificar(desfecho: dict, *, declara_exit: bool | None = None) -> dict:
-    """O desfecho que a porta observa vira `{classe, causa, classe_fonte}` (arq:0123 §5).
+    """O desfecho que a porta observa vira `{classe, causa, classe_fonte}`.
 
     Le do desfecho: `exit_code`, `erro`, `evento`, `cancelado`, `interrompido`. `classe_fonte` e `verbo`
     quando o verbo declara a tabela de exit (`declara_exit`), `tabela` quando a porta deduz.
@@ -186,7 +186,7 @@ def classificar(desfecho: dict, *, declara_exit: bool | None = None) -> dict:
         return r("gramatica")
     # As tools de leitura gravam `classe_erro` no erro (caminho, faixa, binario, gramatica,
     # recusado): argumento torto e gramatica, recusa de morada e negada, o que nao existe e
-    # resposta negativa. Lido antes de `recusado` e `exit_code=2` (DT 898) para nao rotular
+    # resposta negativa. Lido antes de `recusado` e `exit_code=2` para nao rotular
     # recusa de acesso ou ausencia de objeto como gramatica.
     por_classe_erro = _POR_CLASSE_ERRO.get(str(desfecho.get("classe_erro") or ""))
     if por_classe_erro:
@@ -219,7 +219,7 @@ def _e_giro(reg: dict) -> bool:
 # --- origem ---------------------------------------------------------------------------
 
 def origem_da_linha(reg: dict) -> str:
-    """Quem chamou (spec log-de-negocio §3): `agente` quando a linha tem `origem_sessao`,
+    """Quem chamou: `agente` quando a linha tem `origem_sessao`,
     `sonda` quando e a linha da sonda, `cadeira` no resto. A sonda (22 a 26/09/2026, um giro
     por minuto) nao tem token proprio: reconhece-se pelo giro da tool `sessao` sem ato, sem
     cadeira e sem sessao (`metrica eventos 2026-09-23 --sessao -`). A mesma funcao rele a
@@ -235,10 +235,10 @@ def origem_da_linha(reg: dict) -> str:
 # --- contrato -------------------------------------------------------------------------
 
 MOTIVOS_NEGACAO = ("sem_token", "nao_jwt", "assinatura", "audience", "emissor", "expirado", "outro")
-# Os do CHECK de `acervo.log_fecho.motivo_parada` (spec apis-escrita-acervo §D1).
+# Os do CHECK de `acervo.log_fecho.motivo_parada`.
 MOTIVOS_PARADA = ("concluiu", "teto_giros", "orcamento_erro", "interrompida")
 FONTES_TURNO = ("declarado", "gap", "runner", "hook", "transcript", "face")
-# As tres que o chamador autenticado pode entregar com `turno_texto` (card #3357; `face` no #3513,
+# As tres que o chamador autenticado pode entregar com `turno_texto` (`face` e
 # a tela do dono: o texto e o fundamento do ato); as demais a porta deduz.
 FONTES_ENTREGUES = ("hook", "transcript", "face")
 FONTES_TOKENS = ("provedor", "estimado")
@@ -249,7 +249,7 @@ IDENTIDADE = ("sujeito", "sub", "username", "azp", "sid", "jti")
 
 # Campo obrigatorio por tipo de linha. A chave tem de existir; o valor so pode ser nulo onde
 # `NULAVEL` diz. `capacidade`, `ferramenta` e `mapa_v` saem nulos enquanto a projecao do
-# golden record nao existe na release (arq:0123 §7); as demais excecoes sao campos que a
+# golden record nao existe na release; as demais excecoes sao campos que a
 # situacao deixa vazios (giro sem sessao nao tem cadeira nem ordem; so ha exit quando o
 # verbo roda).
 CONTRATO = {
@@ -265,7 +265,7 @@ CONTRATO = {
     "escopo": ("tool", "evento", "sessao_id", "escopo") + IDENTIDADE,
     "turno": ("tool", "evento", "sessao_id", "turno_id", "turno_fonte") + IDENTIDADE,
     "consulta": ("tool", "evento", "origem_consulta", "particao"),
-    # A leitura da linha inteira (card #3355): quem leu, de que incidente, de onde e quanto saiu. O CONTEUDO nao
+    # A leitura da linha inteira: quem leu, de que incidente, de onde e quanto saiu. O CONTEUDO nao
     # entra aqui: o evento e o rastro, a linha citada e que vai a particao (D5.10).
     "leitura": ("tool", "ato", "evento", "sessao_id", "incidente", "dia", "origem_leitura", "linhas_devolvidas",
                 "linhas_omitidas", "filtro_sessao", "filtro_tool", "filtro_classe"),
@@ -278,8 +278,8 @@ NULAVEL = frozenset({"capacidade", "ferramenta", "mapa_v", "cadeira", "ordem_id"
                      "linhas_omitidas",                             # a particao nao conta o que ficou de fora
                      "filtro_sessao", "filtro_tool", "filtro_classe"})   # filtro nao pedido
 # Campo que, presente, e erro. A mensagem do dono (`pergunta` na abertura, `query` na consulta da
-# abertura) se grava no bruto e so nele (spec log-de-negocio §0/§3); a resposta da cadeira, o
-# pacote montado e o token nunca (arq:0061 §5).
+# abertura) se grava no bruto e so nele; a resposta da cadeira, o
+# pacote montado e o token nunca.
 PROIBIDOS = {"abertura": ("resposta", "pacote", "pecas", "conteudo"),
              "turno": ("resposta", "pacote", "pecas", "conteudo", "token", "access_token",
                        "refresh_token", "authorization"),         # `texto` e a mensagem do dono (#3357)
@@ -369,7 +369,7 @@ def emitir(evento: dict, *, diretorio_=None, declara_exit: bool | None = None,
         if _e_giro(reg) and "classe" not in reg:
             reg.update(classificar(reg, declara_exit=declara_exit))
         reg.setdefault("origem", origem_da_linha(reg))
-        reg.setdefault("mapa_v", None)      # a projecao do golden record nao existe na release (arq:0123 §7)
+        reg.setdefault("mapa_v", None)      # a projecao do golden record nao existe na release
         linha = (_serializa(aparar({**carimbo, **reg})) + "\n").encode("utf-8")
         alvo = caminho_do_dia(agora.date(), diretorio_)
         alvo.parent.mkdir(parents=True, exist_ok=True)
@@ -464,9 +464,9 @@ def ler(desde, ate=None, *, diretorio_=None, sessao: str | None = None,
     return Leitura(dias, diretorio_, sessao, tool)
 
 
-# --- extração: os bytes do dia e as linhas numeradas (card #3353) -----------------------------
+# --- extração: os bytes do dia e as linhas numeradas ------------------------------------------
 
-# Namespace fixo do uuid v5 da linha sem chave (arq:0123 regra 4; spec apis-escrita-acervo §D: a linha
+# Namespace fixo do uuid v5 da linha sem chave (a linha
 # anterior à chave recebe uuid v5 de (dia, número da linha), e a mesma linha relida dá o mesmo evento).
 # Mudar este valor muda o evento_id de toda linha antiga: não se muda.
 NAMESPACE_LINHA = uuid.uuid5(uuid.NAMESPACE_URL, "https://platafirma.org/log-da-porta/linha-sem-chave")
@@ -508,7 +508,7 @@ def linhas_do_dia(dados: bytes):
         yield n, bruta, (reg if isinstance(reg, dict) else None)
 
 
-# --- investigar: a linha inteira, com o rastro (card #3355; arq:0123 regra 15) -------------------------------
+# --- investigar: a linha inteira, com o rastro ---------------------------------------------------------------
 
 # O que cada linha devolvida custa na saida alem dos bytes dela (numero da linha, evento_id, moldura): o teto de bytes
 # conta isto tambem, para a saida do verbo caber nos 50 KB que a porta aceita sem cortar calada.
@@ -557,7 +557,7 @@ class Inteiras:
 def ler_inteiras(dia, *, incidente, casa=None, filtros: dict | None = None, limite: int = 50, max_bytes: int = 36000,
                  ambiente=None, diretorio_=None) -> Inteiras:
     """A unica leitura do bruto que devolve a LINHA INTEIRA (argumento, erro, identidade, texto do turno) a quem
-    chamou (arq:0123 regra 15). Exige o numero do incidente e grava o `leitura_bruto` antes de entregar: sem rastro
+    chamou. Exige o numero do incidente e grava o `leitura_bruto` antes de entregar: sem rastro
     gravado, `registrada` volta False e quem chamou nao devolve nada. Quem confere que o incidente esta ABERTO e o
     verbo (`metrica investigar`); o modulo so nao deixa ler sem dizer por quem.
 
@@ -589,10 +589,10 @@ def ler_inteiras(dia, *, incidente, casa=None, filtros: dict | None = None, limi
     return achado
 
 
-# --- o corte: o prazo, o que ha no disco, o teto (card #3354; arq:0123 regras 10 e 12) -----------
+# --- o corte: o prazo, o que ha no disco, o teto -------------------------------------------------
 
 CORTE_DIAS = 35                      # o bruto fica 35 dias no disco; depois so a particao guarda
-INICIO_DO_BRUTO = date(2026, 9, 15)  # o primeiro dia que o bruto cobre (arq:0123, Contexto)
+INICIO_DO_BRUTO = date(2026, 9, 15)  # o primeiro dia que o bruto cobre
 TETO_SEMANAS = 4                     # a base do teto: as quatro semanas anteriores a hoje
 TETO_FOLGA = 1.5
 TETO_MIN_DIAS = 7                    # menos que isso nao da base: o teto diz «sem_base», nao chuta
@@ -673,7 +673,7 @@ _NOME_DA_SOBRA = re.compile(r"ops-(\d{4}-\d{2}-\d{2})\.jsonl" + re.escape(_SUFIX
 
 
 def remover_dia_conferido(dia, sha256: str, diretorio_=None) -> bool:
-    """A unica remocao do bruto (arq:0123 regra 12): apaga o arquivo do dia SE os bytes que estao la agora
+    """A unica remocao do bruto: apaga o arquivo do dia SE os bytes que estao la agora
     tem o `sha256` que o corte conferiu, e so entao. Devolve False, sem apagar, quando o arquivo sumiu ou
     mudou entre a conferencia e a remocao. Quem a chama e o timer `corte-bruto`; verbo servido nao.
 
