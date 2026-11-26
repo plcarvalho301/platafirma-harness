@@ -24,6 +24,6 @@ Editar o arquivo instalado não dura: muda na fonte e chega pela release ou pelo
 
 ## Por que não `PF_CADEIRA`
 
-Medido (ti, 16/08): `malote` executa no ops-server, cujo ambiente não é o do terminal onde o Code
+Medido (ti, 16/08): `malote` executa na porta, cujo ambiente não é o do terminal onde o Code
 abriu. Variável exportada ali é ilegível de dentro da sessão; o que atravessa é o slug dito na
 abertura.
