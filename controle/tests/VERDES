@@ -370,9 +370,9 @@ testes/test_metrica_transporte.py | bin/metrica
 testes/test_release_reinicia_porta.py | bin/release
 tests/test_release_expurgo_fosseis.py | bin/release bin/_infra/imagens registro/porta.yaml
 testes/test_poda.py | lib/poda/**
-testes/test_leitura_escrita.py | lib/leitura/** lib/escrita/** bin/write_file
+testes/test_leitura_escrita.py | lib/leitura/**
 testes/test_envelope_tokens_leitura.py | lib/leitura/** lib/oplog.py
-testes/test_leitura_contratos.py | lib/leitura/** lib/escrita/** lib/oplog.py bin/write_file
+testes/test_leitura_contratos.py | lib/leitura/** lib/oplog.py
 testes/test_escopo_chapeu_verbos.py | lib/postura/lousa.py lib/postura/atos.py bin/repo bin/tarefas
 testes/test_sessao_hash.py | bin/sessao bin/_sessao/** lib/postura/lousa.py
 testes/test_abertura_porta_cli.py | lib/abertura/** lib/postura/remontagem.py
@@ -432,8 +432,8 @@ testes/test_escrita_unidades_e_conferencia.py | deploy-harness/escritor.socket d
 # Story #4442 (Fita 3): adaptadores wiki, balde, fila, rastreador e cofre (t6) e daemon/cliente do leitor único (t7).
 testes/test_ler_moradas_demais.py | lib/leitura/moradas/__init__.py lib/leitura/moradas/wiki.py lib/leitura/moradas/balde.py lib/leitura/moradas/fila.py lib/leitura/moradas/rastreador.py lib/leitura/moradas/cofre.py
 testes/test_ler_leitor.py | lib/leitura/daemon.py lib/leitura/cliente.py lib/leitura/resolvedor.py lib/leitura/borda.py lib/leitura/nucleo.py lib/leitura/moradas/**
-# Story #4441: adaptação dos verbos repo e ontologia e depreciação de write_file (t7).
-testes/test_escrita_verbos.py | bin/repo bin/ontologia bin/_olaria/__main__.py bin/write_file lib/escrita/__main__.py lib/escrita/escrita.py registro/escrita.yaml
+# Story #4441: adaptação dos verbos repo e ontologia e retirada de write_file provisório (t7, t12).
+testes/test_escrita_verbos.py | bin/repo bin/ontologia bin/_olaria/__main__.py lib/escrita/__main__.py lib/escrita/escrita.py lib/escrita/__init__.py registro/escrita.yaml
 # Story #4441: suíte de contrato nas moradas git e Olaria, concorrência e mutação nas guardas (t8).
 testes/test_escrita_contrato.py | lib/escrita/** registro/escrita.yaml
 # Story #4442 (Fita 5): suíte de contrato nas sete moradas, paridade porta/terminal e mutação nas guardas (t11).

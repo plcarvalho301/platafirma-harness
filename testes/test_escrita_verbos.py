@@ -24,7 +24,6 @@ from escrita.servidor import ConfigServidor, ServidorEscritor  # noqa: E402
 
 BIN_REPO = RAIZ / "bin" / "repo"
 BIN_ONTOLOGIA = RAIZ / "bin" / "ontologia"
-BIN_WRITE_FILE = RAIZ / "bin" / "write_file"
 
 
 def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -303,41 +302,23 @@ def test_ontologia_ligada_usa_escritor_e_ensaiar_nao_grava(tmp_path: Path) -> No
         _parar_servidor(srv, th)
 
 
-def test_write_file_depreciado_grava_avisa_sucessor_e_marca_contorno(tmp_path: Path) -> None:
-    bancada = tmp_path / "bancada"
-    wt_dir = bancada / "wt" / "platafirma-harness" / "engenharia" / "4441"
-    wt_dir.mkdir(parents=True)
-    alvo = wt_dir / "legado.txt"
-    contorno_log = tmp_path / "contorno.jsonl"
-    req = {
-        "path": str(alvo),
-        "content": "via legado\n",
-        "bancada": str(bancada),
-        "cadeira": "engenharia",
-        "ordem_id": "ord-t7",
-    }
-    env = {
-        **os.environ,
-        "PF_CADEIRA": "engenharia",
-        "PF_CONTORNO_LOG": str(contorno_log),
-    }
+def test_bin_write_file_e_codigo_provisorio_retirados() -> None:
+    import escrita
+    from escrita import escrita as mod_escrita
+
+    assert not (RAIZ / "bin" / "write_file").exists()
+    for legado in ("escrever", "parse_patch", "aplicar_hunks"):
+        assert not hasattr(escrita, legado)
+        assert not hasattr(mod_escrita, legado)
+    env = {**os.environ, "PYTHONPATH": str(RAIZ / "lib")}
     r = subprocess.run(
-        [str(BIN_WRITE_FILE)],
-        input=json.dumps(req),
+        [sys.executable, "-m", "escrita"],
+        input="",
         env=env,
         capture_output=True,
         text=True,
         check=False,
     )
-    assert r.returncode == 0, f"stderr={r.stderr} stdout={r.stdout}"
-    assert "depreciado" in r.stderr.lower()
-    assert "repo gravar" in r.stderr
-    res = json.loads(r.stdout)
-    assert res["ok"] is True
-    assert res["contorno"] is True
-    assert res["sucessor"] == "repo gravar"
-    assert alvo.read_text(encoding="utf-8") == "via legado\n"
-    linhas_log = [json.loads(ln) for ln in contorno_log.read_text(encoding="utf-8").splitlines() if ln.strip()]
-    assert len(linhas_log) == 1
-    assert linhas_log[0]["contorno"] is True
-    assert linhas_log[0]["sucessor"] == "repo gravar"
+    assert r.returncode == 2
+    erro = json.loads(r.stderr.strip().splitlines()[-1])
+    assert erro["erro"]["codigo"] == "ato-nao-aceito"

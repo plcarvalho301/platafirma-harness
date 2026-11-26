@@ -1,4 +1,4 @@
-"""Linha de comando do ato escrever, do daemon escritor e da variante legada write_file."""
+"""Linha de comando do ato escrever e do daemon escritor."""
 from __future__ import annotations
 
 import argparse
@@ -11,9 +11,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import BinaryIO, TextIO
 
-from leitura.leitura import envelope_erro
-
-from .escrita import OpcoesExecucao, escrever, executar_ato_escrever
+from .escrita import OpcoesExecucao, executar_ato_escrever
 from .pedido import desligar_core_dump, ler_stdin_limitado, ler_token_descritor
 from .politica import carregar_politica
 from .servidor import ServidorEscritor, montar_config_padrao
@@ -21,89 +19,6 @@ from .tipos import ContextoEscrita, ErroEscrita, RecusaEscrita, emitir_recusa
 
 _MIN_ARGS_ATO = 2
 _RE_NUMERO_POSITIVO = re.compile(r"^\d+(?:\.\d+)?$")
-
-
-def _registrar_contorno_write_file(
-    path: str,
-    cadeira: str,
-    ordem_id: str,
-    exit_code: int,
-) -> None:
-    """Registra uso da variante depreciada write_file como contorno operacional."""
-    destino = (os.environ.get("PF_CONTORNO_LOG") or "").strip()
-    if not destino:
-        return
-    linha = json.dumps(
-        {
-            "evento": "contorno-write-file",
-            "contorno": True,
-            "ferramenta": "write_file",
-            "sucessor": "repo gravar",
-            "path": path,
-            "cadeira": cadeira,
-            "ordem_id": ordem_id,
-            "exit_code": exit_code,
-            "timestamp": round(time.time(), 6),
-        },
-        ensure_ascii=False,
-    )
-    try:
-        arq = Path(destino)
-        arq.parent.mkdir(parents=True, exist_ok=True)
-        with arq.open("a", encoding="utf-8") as fh:
-            fh.write(linha + "\n")
-    except OSError:
-        pass
-
-
-def _main_legado_write_file() -> int:
-    sys.stderr.write(
-        "aviso: write_file está depreciado (contorno registrado); "
-        "use `repo gravar componente <repo>:<caminho>`\n"
-    )
-    sys.stderr.flush()
-    bruto = sys.stdin.read()
-    try:
-        req = json.loads(bruto) if bruto.strip() else {}
-    except ValueError as exc:
-        sys.stdout.write(json.dumps(envelope_erro(2, f"JSON inválido: {exc}"), ensure_ascii=False))
-        return 2
-
-    instancia = Path(req["instancia"]) if req.get("instancia") else None
-    bancada = Path(req["bancada"]) if req.get("bancada") else None
-    release = Path(req["release"]) if req.get("release") else None
-    pdp = Path(req["pdp_dir"]) if req.get("pdp_dir") else None
-    cadeira = str(req.get("cadeira") or os.environ.get("PF_CADEIRA") or "")
-    ordem_id = str(
-        req.get("ordem_id")
-        or os.environ.get("PF_ORDEM_ID")
-        or os.environ.get("PF_SESSAO")
-        or ""
-    )
-    path = req.get("path")
-    if not path:
-        res = envelope_erro(2, "campo 'path' obrigatório")
-        sys.stdout.write(json.dumps(res, ensure_ascii=False))
-        return 2
-
-    res = escrever(
-        path,
-        content=str(req.get("content") or ""),
-        trecho=req.get("trecho"),
-        patch=str(req.get("patch") or ""),
-        instancia=instancia,
-        bancada=bancada,
-        release=release,
-        pdp=pdp,
-        cadeira=cadeira,
-        ordem_id=ordem_id,
-    )
-    res["contorno"] = True
-    res["sucessor"] = "repo gravar"
-    codigo = int(res.get("exit_code") or 0)
-    _registrar_contorno_write_file(str(path), cadeira, ordem_id, codigo)
-    sys.stdout.write(json.dumps(res, ensure_ascii=False))
-    return codigo
 
 
 def _main_servidor(argv: Sequence[str]) -> int:
@@ -208,11 +123,9 @@ def executar_cli(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Despacha o modo legado (write_file), o daemon (`servidor`) ou a CLI do ato escrever."""
+    """Despacha o daemon (`servidor`) ou a CLI do ato escrever."""
     args = list(sys.argv[1:] if argv is None else argv)
-    if not args:
-        return _main_legado_write_file()
-    if args[0] == "servidor":
+    if args and args[0] == "servidor":
         return _main_servidor(args[1:])
     return executar_cli(args, stdin=sys.stdin.buffer)
 
