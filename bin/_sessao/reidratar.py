@@ -1,7 +1,7 @@
 """bin/_sessao/reidratar.py — reidrata `sessao:{id}` a partir de `sessao.sessao`
-(Postgres, durável) quando a chave efêmera some do msg-mem (card #3145, Onda 1 Frente E).
+(Postgres, durável) quando a chave efêmera some do msg-mem.
 
-Migrado para gravar `sessao:{id}` como hash no Valkey (story #4343, F4073).
+Migrado para gravar `sessao:{id}` como hash no Valkey.
 """
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ def reidratar(sid: str, rc_mem, roda, pg_porta: str = "5437",
         aberta_em = aberta_em.replace(tzinfo=timezone.utc)
     restante = int(ttl_padrao - (datetime.now(timezone.utc) - aberta_em).total_seconds())
     if restante <= 0:
-        return None  # fora da janela de validade (arq:0091 §3) — vencida, nao reidrata
+        return None  # fora da janela de validade — vencida, nao reidrata
     ch: dict[str, Any] = {
         "cadeira": cadeira, "chapeu": chapeu, "superficie": superficie or "desconhecida",
         "canonizada": True, "autorizada_por": "reidratada",
@@ -100,7 +100,7 @@ def reidratar(sid: str, rc_mem, roda, pg_porta: str = "5437",
 def encerrada_em_duravel(sid: str, roda, pg_porta: str = "5437") -> str | None:
     """Devolve o ISO de `encerrada_em` em `sessao.sessao` quando a linha foi encerrada de
     propósito (`sessao encerrar`, `sessao limpar`, `descansar encerrar`), ou
-    None se não existe, segue aberta ou o banco/coluna não responde (DT 535)."""
+    None se não existe, segue aberta ou o banco/coluna não responde."""
     try:
         import psycopg
     except ImportError:

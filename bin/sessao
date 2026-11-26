@@ -12,7 +12,7 @@
 # ambiente: PF_SUJEITO, PF_SESSAO_AUTORIZADA_POR, PF_SUPERFICIE[=desconhecida], PF_BIN, MEM_REDIS_HOST[=127.0.0.1], MEM_REDIS_PORT[=6380], SESSAO_PG_PORT[=5437], PF_ORDEM_ID, PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa], PF_SESSAO
 # depende: msg-mem (modulo redis), Postgres da sessao (psycopg), persona, seg, longjob, reidratar
 # substitui: monta-sessao <cadeira> na parte que cunha; redis-cli HSET sessao:*; psql -d sessao
-# conforme: parcial — chave viva em hash (story #4343, F4073) e registro duravel
+# conforme: parcial — chave viva em hash e registro duravel
 from __future__ import annotations
 
 import argparse
@@ -321,7 +321,7 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
         if not sid_portado:
             return saida.erro(f"--sessao-id {sessao_id!r} nao e RFC-4122 — chame sem `--sessao-id` "
                               "para cunhar uma sessao nova; um id invalido nunca vira id novo "
-                              "(arq:0101 §1)", 2)
+                              "", 2)
     origem_sessao = None
     if origem is not None:
         origem_sessao = _uuid_valido(origem)
@@ -358,7 +358,7 @@ def ato_abrir(cadeira: str, sessao_id: str | None, saida: Saida, dry_run: bool =
             return saida.erro("uso: sessao abrir <cadeira>", 2)
         avisos.append(f"organizacao muda ({motivo_org}): cadeira gravada como rotulo "
                       f"normalizado {slug!r}, canonizada: false — regime restrito ate "
-                      "`publicar-abertura` (arq:0110 §6 A(a))")
+                      "a republicacao da abertura")
     decisao_porta = (autorizada_por or os.environ.get("PF_SESSAO_AUTORIZADA_POR") or "").strip()
     if decisao_porta:
         autorizada_por = decisao_porta
