@@ -1,4 +1,4 @@
-"""Poda e derrame de retornos no harness (story #4342, task t3).
+"""Poda e derrame de retornos no harness.
 
 Executável por processo via `python -m poda` a partir de `lib`,
 sem importação pelo processo da porta no core.

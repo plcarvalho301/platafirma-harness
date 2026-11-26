@@ -1,4 +1,4 @@
-"""Poda, lavagem, ledger de sessão, derrame e resolvedor único de ato (story #4342).
+"""Poda, lavagem, ledger de sessão, derrame e resolvedor único de ato.
 
 Requisitos cobertos:
 - Resolvedor único `resolver_ato` compartilhado entre porta e poda para verbos
@@ -6,7 +6,7 @@ Requisitos cobertos:
 - Confirmações de escrita nunca saem deduplicadas no ledger (`[igual ao giro N]`).
 - Listagens não escapam do teto rígido (`CAP_PADRAO`), com derrame em arquivo
   e `truncado` verdadeiro somente quando bytes ficaram de fora.
-- Sem detecção de segredo (requisito retirado pela segurança no comentário #5301).
+- Sem detecção de segredo.
 """
 from __future__ import annotations
 
@@ -235,7 +235,7 @@ def lavar(
     if forma == "json" or _eh_json_valido(atual):
         return atual, {"classes": classes, "bytes_antes": bytes_antes}
 
-    # DT 1007: leitura de arquivo (`ler`) chega byte a byte; a poda de branco não se aplica a `ler`.
+    # Leitura de arquivo (`ler`) chega byte a byte; a poda de branco não se aplica a `ler`.
     if not preservar_branco:
         sem_branco = _RE_BRANCOS_MULTI.sub("\n\n", atual)
         sem_branco = "\n".join(ln.rstrip() for ln in sem_branco.split("\n"))
