@@ -14,7 +14,7 @@
   "entidades": [
     {
       "id": "ui",
-      "nome": "PlataFirma UI",
+      "nome": "Web UI",
       "fonte": "referencias/instancias/observacao/2026-11-04-de-para-taxonomia-de-diagramas.md",
       "tipo": "tela",
       "categoria": "superficie",
