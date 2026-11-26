@@ -1,7 +1,7 @@
 # borda
 
-A API que a tela de cada face do cubo de controle chama (card #3516). Mora aqui, em serviço próprio, e não
-na `platafirma-ui` nem no `harness-controle` (arq:0057: front não serve rota de API). É comum às faces:
+A API que a tela de cada face do cubo de controle chama. Mora aqui, em serviço próprio, e não
+na `platafirma-ui` nem no `harness-controle` (front não serve rota de API). É comum às faces:
 a face vem do caminho, e a lista de atos dela vem do cabeçalho do verbo.
 
 ## O que faz
@@ -16,13 +16,12 @@ JSON no stdout, o que não deve chegar à porta:
 | ato que o cabeçalho do verbo não declara para a face (`# face: <ato>=<face>`), ou que está na linha de exclusão | R32 |
 | escrita por GET, leitura por POST (a capacidade vem de `# atos:`; o ato `leitura\|escrita` aceita os dois) | R32 |
 
-O token do dono vem de `X-Forwarded-Access-Token`, cru, onde o gate do cubo o entrega (#2548); sem ele a resposta
+O token do dono vem de `X-Forwarded-Access-Token`, cru, onde o gate do cubo o entrega; sem ele a resposta
 é 401 e nada chega à porta, e um `Authorization` posto pelo navegador não vale. A escrita ainda confere a idade
-do login (#2572): o `auth_time` do token com mais de cinco minutos sai 401 com `{"login": "antigo"}`, sem chegar à
+do login: o `auth_time` do token com mais de cinco minutos sai 401 com `{"login": "antigo"}`, sem chegar à
 porta, e a tela leva o dono a `/oauth2/sign_out` e depois a `/oauth2/start` antes de repetir o ato. A leitura não tem
 este corte (o `auth_time` não muda quando o gate renova o token). Token sem o claim passa e deixa a linha
-`sem-auth-time` no stdout (`infra logs`): a conferência é o primeiro login real no cubo, e se o claim faltar o
-buraco volta ao card #3575, sem outro sinal no lugar. A assinatura do token não é conferida na borda: é da porta. A borda não responde CORS, não lê cabeçalho de sujeito do navegador e não tem credencial própria.
+`sem-auth-time` no stdout (`infra logs`). A assinatura do token não é conferida na borda: é da porta. A borda não responde CORS, não lê cabeçalho de sujeito do navegador e não tem credencial própria.
 
 ## O pedido que a tela faz
 
@@ -39,9 +38,9 @@ Status da borda: 400 pedido fora da forma · 401 sem token, ou token recusado pe
 rota ou face desconhecida · 405 método fora de GET e POST · 413 corpo acima de 16 KB · 502 porta fora do ar ·
 503 cabeçalho do verbo ilegível · 504 prazo.
 
-## A rota do tema da casca (#3738)
+## A rota do tema da casca
 
-A casca da Taipa (`pf-casca`, R40 da spec taipa) lê e grava o tema da pessoa em `/api/preferencia/tema`,
+A casca (`pf-casca`) lê e grava o tema da pessoa em `/api/preferencia/tema`,
 e não em `/api/<face>/<ato>`. A borda serve essa rota fixa pelo verbo `preferencia` (mecanismo da `casca`, ver adiante):
 
 ```
@@ -53,8 +52,8 @@ Mesmas recusas das outras rotas (escrita de outro site em 403, ato fora da face 
 POST e outros métodos em 405). Diferenças, ditas: o corpo leva só `valor` (letras minúsculas, até 16); o
 **fundamento** que a porta exige da escrita da face é uma frase fixa da instância
 (`BORDA_TEMA_FUNDAMENTO`, padrão «escolha do tema na casca da tela»), posta pela borda e nunca aceita do
-navegador; e o **corte de login recente** (#2572) não vale, porque o tema volta com um clique. O sujeito é
-o `sub` do token, que a porta tira dele: nem o navegador nem a borda o mandam (spec preferencia R1). Saída do
+navegador; e o **corte de login recente** não vale, porque o tema volta com um clique. O sujeito é
+o `sub` do token, que a porta tira dele: nem o navegador nem a borda o mandam. Saída do
 verbo vira status: 2 (valor fora do vocabulário) 400, 3 (sem sujeito) 401, 5 (banco mudo) e o resto 502, e
 «recusado» pela porta 403. `valor: null` é «sem preferência gravada», e só isso: banco que não respondeu nunca vira
 `null`.
@@ -62,11 +61,11 @@ verbo vira status: 2 (valor fora do vocabulário) 400, 3 (sem sujeito) 401, 5 (b
 A `borda-casca-rastreador` do `compose.yaml` é esta rota para o gate de `tarefas.platafirma.org`, numa instância
 própria (a lista de origens é da borda inteira). O client do gate dele entra em `PF_FACE_CLIENTS` da porta. A
 `borda-casca-site` é a mesma coisa para o site da casa, na rede `pf-borda-casca-site`; o client do gate do site
-entra em `PF_FACE_CLIENTS` na story do portão do core (#3902).
+entra em `PF_FACE_CLIENTS` no portão do core.
 
-## As três leituras da casca (#3899)
+## As três leituras da casca
 
-A casca da Taipa lê três coisas da própria origem, cada uma do verbo dono do objeto (arq:0124 §3, mecanismo
+A casca lê três coisas da própria origem, cada uma do verbo dono do objeto (mecanismo
 comum). Elas não caem em face: o cabeçalho do verbo as declara por `# mecanismo: <ato>=casca`, e a borda lê a
 carga daí (a chave `face:` com `casca` não carrega nada, e `release conferir verbo` a acusa).
 
@@ -83,7 +82,7 @@ em lista), 502. A borda não lê sujeito: o `sub` do token é tirado pela porta.
 
 O formato da lista de telas é PROVISÓRIO: o épico do plano de controle (#3379) o confirma. Mora em dois lugares, um
 de cada lado: `bin/_release/telas/telas.py` (quem o escreve) e `_resposta_da_leitura` aqui (que confere que é
-objeto com `telas` em lista). A rota `/api/faces` é o nome que a seg:0016, item 6, fixa; muda só o corpo.
+objeto com `telas` em lista). A rota `/api/faces` mantém o nome fixo; muda só o corpo.
 
 ## A declaração das telas e as origens
 
@@ -124,5 +123,5 @@ nega toda fonte face.
 ```
 python3 borda/borda.py                    # o self-check, sem rede e sem uvicorn
 teste rodar borda@<bancada>               # o portão da chave borda
-teste rodar ops@<bancada> ops-server/test_contrato_borda.py   # a borda diante da porta de verdade
+teste rodar platafirma-core@<bancada> porta/tests/test_contrato_borda.py   # a borda diante da porta de verdade
 ```

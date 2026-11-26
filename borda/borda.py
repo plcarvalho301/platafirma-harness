@@ -1,7 +1,6 @@
 """Borda da origem das faces do cubo de controle — a API que a tela de cada face chama.
 
-Card #3516 (R22 e R30 a R32 da spec plano-de-controle-face-motor; seg:0015 §5; arq:0057). ASGI puro e
-só biblioteca padrão, como a `Borda` do rastreador (platafirma-rastreador@api/borda.py, #3466): o
+Borda ASGI pura e só biblioteca padrão, como a `Borda` do rastreador (`platafirma-rastreador@api/borda.py`): o
 self-check roda no host sem uvicorn e sem porta (`python3 borda/borda.py`).
 
 O QUE ESTA BORDA FAZ, e só isto:
@@ -30,8 +29,7 @@ vai à porta como veio; nenhum cabeçalho de sujeito vindo do navegador é lido;
 própria. Quem decide o que o dono pode é o PDP, na porta (R25). A borda também não confere o
 fundamento: a regra «escrita da face sem fundamento» tem um dono só, a porta.
 
-6. Serve a rota fixa da casca da Taipa, `GET|PUT /api/preferencia/tema` (card #3738; seg:0016 item 6; spec
-   taipa R40), pelo verbo `preferencia` da face `casca`. Mesmas recusas dos itens 2 a 4, com duas
+6. Serve a rota fixa da casca, `GET|PUT /api/preferencia/tema`, pelo verbo `preferencia` da face `casca`. Mesmas recusas dos itens 2 a 4, com duas
    diferenças: o fundamento da escrita é a frase fixa da instância (`BORDA_TEMA_FUNDAMENTO`), e o corte
    de login recente do item 4 não vale (o tema volta com um clique). O sujeito é o do token, tirado pela
    porta; a borda não o lê nem o manda.
@@ -62,14 +60,14 @@ import urllib.parse
 import urllib.request
 
 ROTA = re.compile(r"^/api/([a-z][a-z0-9-]*)/([a-z][a-z0-9-]*)$")
-# A rota fixa da casca da Taipa (spec taipa R40; seg:0016 item 6; card #3738): `GET` devolve `{"valor"}` e
+# A rota fixa da casca: `GET` devolve `{"valor"}` e
 # `PUT {"valor"}` escolhe, como `platafirma-ui@src/pf/pf-casca.js` (CAMINHOS.tema) pede. Ela chama o verbo
 # `preferencia`, que a face `casca` declara no cabeçalho (`# face: ler=casca`, `# face: escrever=casca`).
 ROTA_DO_TEMA = "/api/preferencia/tema"
-# A `casca` não é face: é o componente que consome o mecanismo comum (arq:0124 §3, `# mecanismo: <ato>=casca`).
+# A `casca` não é face: é o componente que consome o mecanismo comum (`# mecanismo: <ato>=casca`).
 FACE_DA_CASCA = "casca"
-# As outras duas leituras da casca (card #3899): a rota → o ato do verbo dono do objeto (release telas, tarefas
-# espera-dono). O nome `/api/faces` é o que a seg:0016 item 6 fixa; o corpo da lista é provisorio (#3379).
+# As outras duas leituras da casca: a rota → o ato do verbo dono do objeto (release telas, tarefas
+# espera-dono). O nome `/api/faces` é fixo; o corpo da lista é provisório.
 ROTA_DAS_TELAS = "/api/faces"
 ROTA_DA_ESPERA = "/api/espera-dono"
 LEITURAS_DA_CASCA = {ROTA_DAS_TELAS: "telas", ROTA_DA_ESPERA: "espera-dono"}
@@ -108,7 +106,7 @@ _RE_LINHA = re.compile(r"^#\s*(atos|face|mecanismo)\s*:\s*(.*)$")
 def _ler_declaracoes(texto: str) -> tuple:
     """`(capacidades, faces, mecanismos)` do cabeçalho: `# atos:` dá a capacidade de cada ato, `# face:
     <ato>=<face>` põe o ato numa face e `# mecanismo: <ato>=<componente>` o põe no mecanismo comum de um
-    componente (hoje só a `casca`; arq:0124 §3). Um ato não entra numa chave pela outra."""
+    componente (hoje só a `casca`). Um ato não entra numa chave pela outra."""
     capacidades, faces, mecanismos = {}, {}, {}
     for n, linha in enumerate(texto.splitlines()):
         if n > 400 or (n and not linha.startswith("#")):
@@ -410,7 +408,7 @@ class Borda:
 
     async def _leitura_da_casca(self, scope, send, metodo, cab, ato):
         """`GET /api/faces` (release telas) e `GET /api/espera-dono` (tarefas espera-dono): as outras duas
-        leituras da casca (arq:0124 §3; seg:0016 item 6). Mesma disciplina da rota do tema: a escrita de outro
+        leituras da casca. Mesma disciplina da rota do tema: a escrita de outro
         site já saiu em 403; o ato só vale se o cabeçalho do verbo o põe no mecanismo da casca como leitura;
         o token do gate vai à porta como veio. O corpo é o que o verbo imprime em `--json`, sem reler."""
         if metodo != "GET":
@@ -936,7 +934,7 @@ def _autoteste():
     assert criar_app({}).cabecalho_token == CABECALHO_DO_GATE
     print("borda: escrita com login de mais de cinco minutos sai 401 na borda; leitura e sem claim passam   ok")
 
-    # 10. a rota fixa da casca (#3738, spec taipa R40): GET devolve {valor}, PUT {valor} escolhe, pelo verbo
+    # 10. a rota fixa da casca: GET devolve {valor}, PUT {valor} escolhe, pelo verbo
     #     `preferencia` da face `casca`, com o fundamento fixo da instancia e sem o corte de login recente.
     cabecalho_pref = ("#!/usr/bin/env python3\n# preferencia — verbo de mentira do self-check\n"
                       "# atos: ler (leitura, preferencia), escrever (escrita, preferencia)\n"

@@ -1,7 +1,7 @@
-# Imagem da borda das faces do cubo de controle (card #3516). Um serviço, uma imagem, um processo.
+# Imagem da borda das faces do cubo de controle. Um serviço, uma imagem, um processo.
 #
 # `python:3.13-slim`, como a API do rastreador (a borda imita a dela). Nada de front aqui: a tela de cada
-# face é serviço próprio da platafirma-ui, e a borda não serve rota de tela (arq:0057).
+# face é serviço próprio da platafirma-ui, e a borda não serve rota de tela.
 FROM python:3.13-slim
 
 WORKDIR /app
@@ -11,7 +11,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Arquivo nomeado, nunca `COPY . .`: módulo novo entra AQUI também, ou o processo morre em
-# ModuleNotFoundError na subida (medido no card #482 do rastreador).
+# ModuleNotFoundError na subida.
 COPY borda.py ./
 
 EXPOSE 8000

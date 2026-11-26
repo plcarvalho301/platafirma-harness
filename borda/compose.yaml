@@ -1,6 +1,6 @@
-# A borda das faces do cubo de controle (card #3516; arq:0057). Um contêiner, sem volume de dado, sem
+# A borda das faces do cubo de controle. Um contêiner, sem volume de dado, sem
 # segredo e sem credencial própria: o token do dono chega pelo gate do cubo e vai à porta como veio
-# (seg:0015 §5). A lista de origens, a URL da porta e as faces são configuração da instância.
+# A lista de origens, a URL da porta e as faces são configuração da instância.
 #
 # Quem sobe e quem põe o gate na frente é a ti (#3565). O gate do cubo (oauth2-proxy-cubo, no core)
 # alcança esta borda pelo alias `cubo-borda`, porta 8000, na rede `pf-borda-cubo`, e entrega o token do
@@ -16,7 +16,7 @@ services:
       # Origens que podem escrever (R31): as da declaração das telas que esta instância atende (abaixo), mais
       # as que a instância somar aqui, vírgula entre valores. Sem nenhuma, a borda lê e não escreve.
       BORDA_ORIGENS: ${BORDA_ORIGENS:-}
-      # A declaração única das telas (registro/telas.json, card #3899): a fonte das origens daqui e da lista
+      # A declaração única das telas (registro/telas.json): a fonte das origens daqui e da lista
       # de `release telas`. Relida quando o arquivo muda; ilegível, nenhuma escrita passa. Esta instância
       # atende a tela `motor`.
       BORDA_TELAS: ${BORDA_TELAS:-${PF_RELEASE_RAIZ:-/opt/platafirma}/current/harness/registro/telas.json}
@@ -31,11 +31,11 @@ services:
       # Idade máxima do login para escrever, em segundos (#2572): o `auth_time` do token passou disso, a borda
       # responde 401 e a tela leva o dono a sair e entrar. 0 desliga. A leitura não tem o corte.
       BORDA_LOGIN_MAX_S: ${BORDA_LOGIN_MAX_S:-300}
-      # As faces e os verbos delas vêm do registro da porta na release (registro/porta.yaml, card #4117), como
+      # As faces e os verbos delas vêm do registro da porta na release (registro/porta.yaml), como
       # as telas vêm de BORDA_TELAS; a lista de atos vem do cabeçalho de cada verbo (`# face:`). Esta instância
       # atende a face `motor` (o `motor` e, do `fila`, só o `contestar` que o cabeçalho dele declara para ela,
       # #3518, buraco #2555) e a `casca`. Outra face entra no registro e em BORDA_FACES_ATENDE.
-      # A `casca` não é face: é o componente que consome o mecanismo comum (arq:0124 §3), e cada verbo dono do
+      # A `casca` não é face: é o componente que consome o mecanismo comum, e cada verbo dono do
       # objeto declara o ato dele por `# mecanismo: <ato>=casca`. Aqui ela serve as três leituras da casca
       # (`/api/preferencia/tema`, `/api/faces`, `/api/espera-dono`) a toda tela atrás deste gate.
       BORDA_REGISTRO: ${BORDA_REGISTRO:-${PF_RELEASE_RAIZ:-/opt/platafirma}/current/harness/registro/porta.yaml}
@@ -53,8 +53,8 @@ services:
       cubo:
         aliases: [cubo-borda]
 
-  # A borda da casca do rastreador (card #3738; seg:0016 item 6). A MESMA imagem, outra instancia: atende so
-  # `GET|PUT /api/preferencia/tema` para o gate de tarefas.platafirma.org (platafirma-core, story #3739),
+  # A borda da casca do rastreador. A MESMA imagem, outra instancia: atende so
+  # `GET|PUT /api/preferencia/tema` para o gate de tarefas.platafirma.org (platafirma-core),
   # com a origem dele e o verbo `preferencia` na face `casca`. Instancia propria porque a lista de origens
   # e da borda inteira (R31): a do cubo nao deve aceitar escrita vinda da origem do rastreador, nem o
   # contrario. Sem porta publicada: so o gate do rastreador a alcanca, pela rede de encontro abaixo.
@@ -74,8 +74,8 @@ services:
       BORDA_LOGIN_MAX_S: "0"
       # A frase que a borda poe como fundamento da escrita do tema (a porta exige um para a fonte face).
       BORDA_TEMA_FUNDAMENTO: ${BORDA_TEMA_FUNDAMENTO:-escolha do tema na casca da tela}
-      # As tres leituras da casca (card #3899): tema (preferencia), telas (release) e o que espera o dono (tarefas).
-      # Os tres verbos saem do registro da porta (#4117): so a face `casca`.
+      # As tres leituras da casca: tema (preferencia), telas (release) e o que espera o dono (tarefas).
+      # Os tres verbos saem do registro da porta: so a face `casca`.
       BORDA_REGISTRO: &registro_da_porta ${BORDA_REGISTRO:-${PF_RELEASE_RAIZ:-/opt/platafirma}/current/harness/registro/porta.yaml}
       BORDA_FACES_ATENDE: casca
     volumes:
@@ -85,7 +85,7 @@ services:
       casca-rastreador:
         aliases: [casca-borda-rastreador]
 
-  # A borda da casca do site da casa (card #3899; seg:0016 item 8; card #3602). A MESMA imagem, terceira instancia:
+  # A borda da casca do site da casa. A MESMA imagem, terceira instancia:
   # atende so as tres leituras da casca, com a origem do site (a tela `casa` da declaracao) e a lista de telas.
   # Instancia propria pela mesma razao da do rastreador: a lista de origens e da borda inteira (R31), e o site
   # nao deve herdar a escrita de outra origem. Sem porta publicada: so o gate do site (platafirma-core, story do
@@ -119,13 +119,13 @@ networks:
     name: pf-borda-casca-site
     internal: true
 
-  # Rede de ENCONTRO com o gate do rastreador (platafirma-core, story #3739): declarada aqui e la com o MESMO
+  # Rede de ENCONTRO com o gate do rastreador (platafirma-core): declarada aqui e la com o MESMO
   # `name:` e em nenhum dos dois como `external`, como as outras. `internal`: so o gate e esta borda.
   casca-rastreador:
     name: pf-borda-casca-rastreador
     internal: true
 
-  # Rede de ENCONTRO com o gate do cubo (platafirma-core, card #3565): declarada aqui e lá com o MESMO
+  # Rede de ENCONTRO com o gate do cubo (platafirma-core): declarada aqui e lá com o MESMO
   # `name:` e em nenhum dos dois como `external`, o desenho de pf-borda-casa e pf-borda-rastreador:
   # nenhuma das duas stacks depende da outra para subir. `internal`: só o gate e a borda, sem egresso.
   cubo:
