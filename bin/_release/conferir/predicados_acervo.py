@@ -1,6 +1,6 @@
-"""predicados_acervo — `release conferir acervo`: os predicados de §11 da spec espelho-de-leitura.
+"""predicados_acervo — `release conferir acervo`: predicados de conformidade do acervo.
 
-Pedido da engenharia sob o card #3193, passo 14 (carta 20261001T165146-engenharia). Esta
+Esta
 classe mede, por enquanto, dois predicados de §11 e aponta uma pendência:
 
   §11 predicado 7 — toda impressão `servindo` tem `sinais.fidelidade`, e nenhuma de classe A
@@ -56,7 +56,7 @@ REGISTRO_BANCOS = os.path.join(
 
 
 def carregar_bancos(caminho=None):
-    """Deriva {slug: (conteiner, role_leitura, base)} do inventário declarativo registro/bancos.json (DT 834, DT 851)."""
+    """Deriva {slug: (conteiner, role_leitura, base)} do inventário declarativo registro/bancos.json."""
     arq = caminho or os.environ.get("PF_REGISTRO_BANCOS") or REGISTRO_BANCOS
     out = {
         "rag": ("rag-extractor-pg", ROLE_LEITURA, "rag_extractor"),
@@ -96,7 +96,7 @@ class Indeterminavel(Exception):
 
 def psql_json(banco, sql):
     """Roda `sql` (um SELECT que devolve UMA linha com um json) no banco da allowlist e devolve o
-    valor decodificado. Roda com papel de leitura e transação somente-leitura (DT 834).
+    valor decodificado. Roda com papel de leitura e transação somente-leitura.
     Qualquer falha levanta Indeterminavel."""
     ctr, usr, base = BANCOS[banco]
     env = dict(os.environ)
@@ -185,7 +185,7 @@ select json_build_object('tem', exists (select 1 from information_schema.columns
  where table_schema = 'acervo' and table_name = 'obra' and column_name = 'marcacao'))
 """
 
-# A selada (arq:0119 §5; leitura_atos.selada_existente): em_construcao, com espelho e trechos.
+# A selada (leitura_atos.selada_existente): em_construcao, com espelho e trechos.
 # Marcação: a coluna, quando existir (#3202); sem ela, a regra do estoque
 # (obras.marcacao_de_uso): obra com impressão servindo é «transcrita e indexada».
 SQL_SELADAS = """
@@ -203,7 +203,7 @@ INDEXADA_POR_ESTOQUE = ("exists (select 1 from acervo.impressao s where s.obra_i
 
 # O gate do motor (escrita_nova.gate_indice, #3203): um vetor por trecho elegível no índice de trecho e
 # o vetor de faceta da impressão. Aqui pela contagem, que não pede o método (modelo e backend) do rag; o
-# gate exato, trecho a trecho, roda no `acervo promover`, contra a selada inteira (arq:0046).
+# gate exato, trecho a trecho, roda no `acervo promover`, contra a selada inteira.
 SQL_INDICES = """
 select coalesce(json_agg(json_build_object('impressao', x.imp, 'vetores', x.vetores,
                                            'faceta', x.faceta)), '[]'::json)
@@ -384,7 +384,7 @@ def pendencia_motor(seladas, indices):
 # (obra, impressao, indice, geracao, casa_impressao, espelho-orfao…), ou None quando o lado que a
 # mede não respondeu (nunca zero: não conseguir olhar não é conforme). A chave é o que o retrato
 # guarda e o gate compara: violação NOVA é chave que o retrato anterior não tinha.
-# A classe (bloqueante ou aviso) é a do guia ciclo-de-vida-do-dado-do-acervo §6 e da arq:0121 §5.2.
+# A classe (bloqueante ou aviso) é a do guia ciclo-de-vida-do-dado-do-acervo §6.
 
 INVARIANTES = {
     "I1": ("uma servindo", "bloqueante"),
@@ -401,7 +401,7 @@ INVARIANTES = {
     "I12": ("sombra reclamada", "aviso"),
     "I13": ("nenhum anterior", "bloqueante"),
 }
-# a exposição da arq:0119 §6 pelos valores que o banco ainda guarda em acervo.obra.marcacao
+# a exposição pelos valores que o banco ainda guarda em acervo.obra.marcacao
 EXPOSICAO = {"inteira": "arquivo", "transcrita": "texto", "transcrita e indexada": "trecho"}
 BIBLIOTECA = "biblioteca"
 POR_ARQUIVO = "balde: não medido (listagem do balde fora do ar); I6 e I7 só pelo catálogo"
@@ -455,7 +455,7 @@ select coalesce(json_agg(json_build_object('imp', x.imp, 'n', x.n, 'h', x.h)), '
 """
 
 # motor: as gerações vivas; os índices em construção e servindo com a contagem e o resumo dos alvos
-# (agregado por índice, arq:0045 Morada: nunca vetor a vetor); as facetas cujo vetor aponta para
+# (agregado por índice: nunca vetor a vetor); as facetas cujo vetor aponta para
 # outra impressão que a do índice (I4).
 SQL_COLETA_MOTOR = """
 select json_build_object(
@@ -553,7 +553,7 @@ def coletar(ler=psql_json, balde=None, orfaos=None, regua_raiz=None):
     rag = ler("rag", SQL_COLETA_RAG) or {}
     motor = ler("motor", SQL_COLETA_MOTOR) or {}
     trechos = {x["imp"]: x for x in (ler("rag", SQL_COLETA_TRECHOS) or [])}
-    # a geração servindo que guarda o trecho no motor (#3912; arq:0121 §4.4): o trecho da impressão é o do motor, com o
+    # a geração servindo que guarda o trecho no motor: o trecho da impressão é o do motor, com o
     # mesmo resumo de ids que o do índice (o `alvo_id` do vetor é o id do trecho), e `acervo.trecho` não o tem
     for x in motor.get("trechos_motor") or []:
         trechos[x["imp"]] = {"imp": x["imp"], "n": x["n"], "h": x["h"], "secoes": x["secoes"], "no_motor": True}
@@ -615,7 +615,7 @@ def i2(d):
     """Impressão servindo de obra exposta em trecho ⇒ todo trecho elegível tem vetor no índice de trecho
     servindo da geração servindo.
 
-    Por geração e por seção (arq:0121 §6.4; #3912): o trecho elegível é o de `acervo.trecho`, enquanto a geração
+    Por geração e por seção: o trecho elegível é o de `acervo.trecho`, enquanto a geração
     servindo o guarda lá, e o de `motor.trecho` da geração servindo, quando ela o guarda no motor. Neste caso as
     seções dos trechos têm de caber nas faixas marcadas da impressão (`acervo.secao_faixa`): trecho sem seção
     marcada, ou mais seções de trecho que faixas, é o motor e o acervo discordando sobre a mesma impressão."""
@@ -696,7 +696,7 @@ def i8(d):
 
 
 def i9(d):
-    """Impressão servindo com espelho ⇒ veredito da régua vigente (o predicado 9 da spec espelho-de-leitura)."""
+    """Impressão servindo com espelho ⇒ veredito da régua vigente."""
     if d["versao"] is None:
         return None
     out = []
@@ -817,14 +817,14 @@ def _do_retrato(nome):
 def aplicar_gate(itens, avisos, atual, anterior, d):
     """(itens, avisos, resumo): os itens de `medir` com os invariantes por cima.
 
-    Sem retrato guardado, o exit segue nos predicados de hoje (arq:0121, Consequências) e os
+    Sem retrato guardado, o exit segue nos predicados de hoje e os
     invariantes só informam, em avisos. Com retrato, o exit é o do gate: um item por invariante
     bloqueante, divergente só com violação nova (e a lista das obras que pioraram), e as herdadas
     vão ao relato sem travar; os de classe aviso informam."""
     res = resumo(atual, d)
     avisos = list(avisos)
     if anterior is None:
-        avisos.append("sem retrato guardado: o exit segue nos predicados de hoje (arq:0121, Consequências); "
+        avisos.append("sem retrato guardado: o exit segue nos predicados de hoje; "
                       "`acervo listar biblioteca obra --situacao --retrato --guardar` guarda a linha de base")
         avisos += [_linha_invariante(c, res[c]) for c in INVARIANTES]
         return list(itens), avisos, res
@@ -899,7 +899,7 @@ def medir(regua_raiz=None, ler=psql_json, orfaos_do_balde=None):
             pendencias.append({
                 "para": "ia",
                 "o_que": "selada de obra marcada «transcrita e indexada» sem índice aprovado no motor",
-                "ancora": "spec espelho-de-leitura §4.2 item 6",
+                "ancora": "regua-vigente",
                 "marcacao_por": regra,
                 "impressoes": [{"impressao": s["id"], "obra": s["obra"], "titulo": s.get("titulo")}
                                for s in pend],

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""release telas — a lista de telas do menu da casca (card #3899; arq:0124 §3; comentario #3062 do #3602).
+"""release telas — a lista de telas do menu da casca.
 
 Le a declaracao unica das telas da instancia (registro/telas.json) e devolve so as telas cuja stack
 esta promovida: registrada no acervo com compose (nao catalogo, nao stack de teste) e com a familia

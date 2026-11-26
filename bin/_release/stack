@@ -4,8 +4,7 @@
 # caminho relativo a si proprio (ex.: "$(dirname "$0")/_release/stack") — nunca pelo
 # PATH: nao e verbo da porta, nao entra na whitelist, nao se chama a mao por engano.
 #
-# Extraido de bin/deploy no card #3145 (ORDEM DO DONO 27/09: bin/deploy apagado, sem
-# prazo de deprecado). Mapa de sucessores do que bin/deploy fazia e nao esta aqui:
+# Mapa de sucessores das operacoes antigas de deploy que nao estao aqui:
 #   sem arg / rotas / acessos        -> acervo listar topologia [<stack>] [--rotas|--acessos]
 #   segredos                         -> seg segredo exigidos <stack>
 #   up/down/ps/config/pull/build     -> infra <acao> <stack> ...   (que chama este ajudante)
@@ -21,24 +20,24 @@
 #   stack compose  <stack> <acao> [args...]  acao = up | down | stop | ps | logs | config | pull | build
 #                                             (passthrough ao docker compose; segredo exigido
 #                                             so antes de "up")
-#   stack testar   <stack> <rev>             passo de teste da imagem (spec conversor-pdf-combinado
+#   stack testar   <stack> <rev>             passo de teste da imagem (
 #                                             §13): constroi as imagens da rev e roda, dentro da
 #                                             imagem, cada servico do perfil `teste` do compose.
 #                                             0 verde ou nada a medir · 4 reprovou · 3 nao construiu
-#                                             Servico com o rotulo `pf.teste: raio` (card #3733, arq:0129
+#                                             Servico com o rotulo `pf.teste: raio` (
 #                                             D4) nao roda inteiro: `teste rodar <repo> --portao --degrau
 #                                             imagem --base <sha no ar>` seleciona pelo raio as provas da
 #                                             lista e cada uma roda dentro do estagio (ato `estagio`); o
 #                                             estagio so se constroi quando a selecao nao e vazia, e uma
 #                                             rodada de imagem por vez no host (trava; a segunda espera)
-#   stack testar   <stack> [<rev>] --agora   o mesmo passo a pedido (`infra testar`, DT 800): sem rev, o current;
+#   stack testar   <stack> [<rev>] --agora   o mesmo passo a pedido (`infra testar`): sem rev, o current;
 #                                             mede sempre (nao pula por inalterada) e sobe o servico de teste
 #                                             com as dependencias dele; o exit e o do teste (0 · 4 · 3)
 #   stack estagio  <stack> <rev> preparar|rodar <prova>
 #                                             interno do bin/teste: constroi o estagio, ou roda uma prova
 #                                             (caminho relativo a raiz do repositorio) dentro dele
 #
-# Imagem pinada pelo sha (card #3192, spec conversor-pdf-combinado §2): promover, testar e
+# Imagem pinada pelo sha: promover, testar e
 # compose exportam PF_RELEASE_SHA (o sha da arvore que sobe). Stack cujo compose da a todo
 # servico com build: uma image: terminada em :${PF_RELEASE_SHA} sobe SEM --build quando a
 # imagem daquele sha ja existe no docker — voltar a um sha ja promovido nao reconstroi nada,
@@ -58,7 +57,7 @@
 #   DEPLOY_ENV_DIR[=$XDG_RUNTIME_DIR/platafirma, /run/user/<uid>/platafirma] ·
 #   DEPLOY_TOPO_ARQUIVO (diagnostico) · DOCKER_HOST
 #
-# Onde cada pedaco mora (desenho #3010 §3-§4), igual ao que era bin/deploy:
+# Onde cada pedaco mora:
 #   base do compose  release, arvore imutavel da familia: $PF_RELEASE_RAIZ/<familia>/<sha>/<caminho>
 #   sobreposicao     instancia: $PLATAFIRMA_INSTANCIA/deploy/<stack>/compose.override.yaml
 #   segredo          instancia: $PLATAFIRMA_INSTANCIA/segredos/<stack>/<NOME>, materializado em
@@ -72,7 +71,7 @@ AQUI="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 export PF_RELEASE_RAIZ PLATAFIRMA_RELEASE PLATAFIRMA_INSTANCIA
 export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/$(id -u)/docker.sock}"
 
-# A topologia se le UMA vez e mora em memoria (mesma fonte-verdade que bin/deploy usava:
+# A topologia se le UMA vez e mora em memoria (fonte-verdade:
 # acervo.stack, servida por `acervo stack ver --json`). DEPLOY_TOPO_ARQUIVO so para diagnostico.
 if [ -n "${DEPLOY_TOPO_ARQUIVO:-}" ]; then
   [ -r "$DEPLOY_TOPO_ARQUIVO" ] || { echo "arquivo de topologia ilegivel: $DEPLOY_TOPO_ARQUIVO" >&2; exit 1; }
@@ -292,7 +291,7 @@ projeto_de() {  # $1=slug de outra stack
   printf '%s' "$p"
 }
 
-# Stack que declara `reversao.exige` (lista de slugs) so sobe com essas de pe: a busca exige a rag (card #3842, R29).
+# Stack que declara `reversao.exige` (lista de slugs) so sobe com essas de pe: a busca exige a rag.
 # "De pe" e ao menos um conteiner rodando no projeto compose da exigida. Recusa alto, com o nome de quem falta, em vez
 # de subir o servico e deixa-lo falhar no primeiro DNS. Sem o campo, nada muda.
 exigir_de_pe() {
@@ -361,7 +360,7 @@ materializar_env() {
 gravar_atual()   { mkdir -p "$PONTOS"; printf '%s\n' "$1" > "$PONTOS/$STACK.atual"; }
 gravar_servido() { mkdir -p "$PONTOS"; printf '%s\n' "$1" > "$PONTOS/$STACK.servido"; }
 
-# --- imagem pinada, stack inalterada, passo de teste (card #3192) ------------------
+# --- imagem pinada, stack inalterada, passo de teste -------------------------------
 # Tudo le o `docker compose config --format json` ja interpolado (depois de materializar_env e
 # de exportar PF_RELEASE_SHA): o mesmo compose que o `up` usaria. Falha de leitura nunca
 # decide a favor de pular nada: volta 1 e a stack segue o caminho de sempre.
@@ -405,7 +404,7 @@ for nome, s in sorted((d.get("services") or {}).items()):
 '
 }
 
-# servicos de teste com o rotulo `pf.teste: raio` (card #3733, arq:0129 D4): quem decide o que roda
+# servicos de teste com o rotulo `pf.teste: raio`: quem decide o que roda
 # dentro do estagio e o `teste rodar --degrau imagem` (bin/teste), pelo raio da mudanca, nao o servico
 servicos_de_teste_raio() {
   config_json --profile teste | python3 -c '
@@ -519,7 +518,7 @@ inalterada_desde() {  # $1=sha no ar
   return 0
 }
 
-# 0 quando o compose base da stack declara `x-platafirma: {sob_demanda: true}` (#4026, ordem do dono de 28/10/2026:
+# 0 quando o compose base da stack declara `x-platafirma: {sob_demanda: true}` (
 # o conversor so fica ligado enquanto o pipeline de ingestao roda). Quem liga e quem converte
 # (bin/_infra/conversor-sob-demanda acordar); o promover so deixa a imagem do sha pronta. Duvida volta 1.
 sob_demanda() {
@@ -543,7 +542,7 @@ resolver_arvore() {  # $1=rev ou vazio
   fi
 }
 
-# Passo de teste por selecao do raio (card #3733, arq:0129 D4): a lista de portao da familia diz quais
+# Passo de teste por selecao do raio: a lista de portao da familia diz quais
 # provas sao de `degrau: imagem` e o raio da mudanca (a rev contra o sha que esta no ar) diz quais rodam;
 # cada uma roda DENTRO do estagio de teste, que e construido do mesmo build que vai ao ar. Sai do
 # ajudante: 0 verde ou nada a medir · 4 reprovou · 3 nao rodou. Uma rodada de imagem por vez no host
@@ -632,7 +631,7 @@ case "$ATO" in
     ;;
   # passo de teste da imagem: nada sobe, nada muda de ponto; so constroi e mede
   #
-  # --agora (DT 800, `infra testar`): mede a stack como esta, a pedido, e nao como passo da promocao.
+  # --agora (`infra testar`): mede a stack como esta, a pedido, e nao como passo da promocao.
   # Sem rev, a arvore e o current da familia; a medida nunca se pula por "inalterada" (o ponto que o
   # `infra up` grava nao diz que o teste passou); e o servico de teste sobe COM as dependencias
   # declaradas (o banco da bancada), porque e o exit dele, e nao o do `up`, que decide.

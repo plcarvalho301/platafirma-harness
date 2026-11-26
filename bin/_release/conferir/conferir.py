@@ -17,7 +17,7 @@
                    no host, divergente), cabecalho (proposito, capacidade e dono), a
                    capacidade conferida contra o mapa vigente (vocabulario
                    arquitetura-negocio-operacao, como o acervo o serve), e a conta de
-                   arq:0037 — um verbo por capacidade. `cabecalho` responde, com aviso.
+                   um verbo por capacidade. `cabecalho` responde, com aviso.
   skill   [nome]   skill servida no claude.ai: o blob que o carimbo do arquivo montado
                    declara, contra o blob da fonte no harness. O servido vive do outro
                    lado da fronteira — a sessao le o carimbo e passa em --servido.
@@ -27,10 +27,10 @@
                    com dono e motivo. Nao julga cabecalho nem capacidade — so onde o
                    arquivo executado mora.
   repo    [nome]   clone de trabalho em ~/AI: o que esta rastreado contra a regua de
-                   arq:0042. Com `--staged`, julga so o que o commit em curso
+                   conformidade de repo. Com `--staged`, julga so o que o commit em curso
                    acrescenta, no repo do diretorio corrente — e o que o pre-commit
                    chama, para que gate e conferencia leiam a mesma regua.
-                   arq:0042 — materia de acervo, estado extraivel, blob que nao e fonte
+                   materia de acervo, estado extraivel, blob que nao e fonte
                    editada a mao, render sem fonte irma e diretorio de topo nao
                    declarado no README.
   superficie [--staged]
@@ -42,11 +42,11 @@
                    (dict no fonte, lido por AST) ou `arquivo-rastreado` (um
                    .mcp.json rastreado no repo; o produtor e o git). Verificavel
                    SEM produtor declarado reprova (hoje nenhuma e verificavel do
-                   host: fabrica e fita sairam, card #3477). Superficie sem
+                   host: fabrica e fita sairam). Superficie sem
                    instancia viva nao e conector faltando. Julga tambem capacidade
                    sem meio e texto de cadeira citando tool fora de todo conector.
-  front   [nome]   conformidade de deploy de front por arq:0057, alem do que
-                   arq:0056 ja mede: (1) tela de aplicacao (index.html+Dockerfile)
+  front   [nome]   conformidade de deploy de front:
+                   (1) tela de aplicacao (index.html+Dockerfile)
                    FORA de `platafirma-ui`; (2) artefato de front que monte segredo
                    de outra camada (env_file/environment/volume de segredo no compose
                    da tela) OU sirva rota de API (`proxy_pass` no nginx da tela). Nao
@@ -86,9 +86,9 @@
                    sistema), link pelo atalho
                    estavel da release, nada da bancada, EnvironmentFile do porta
                    quando chama verbo, habilitado, ultima execucao sem falha; e o
-                   timer que um instalador promete e nao esta agendado (card #3147).
+                   timer que um instalador promete e nao esta agendado.
 
-  acervo           predicados de §11 da spec espelho-de-leitura sobre o catalogo e o motor
+  acervo           predicados de conformidade sobre o catalogo e o motor
                    servidos (bin/_release/conferir/predicados_acervo.py): o 7
                    (fidelidade, sem bloqueante de classe A em papel de corpo) e o 9
                    (veredito da regua vigente), a pendencia do motor de §4.2 item 6,
@@ -99,7 +99,7 @@
                    (`acervo listar biblioteca obra --situacao --retrato --guardar`) o
                    gate compara o de agora com o ultimo guardado: sai 1 so com violacao
                    bloqueante NOVA (e lista as obras que pioraram), a herdada vai ao
-                   relato e nao trava (arq:0121 §5.3). Catalogo ou motor fora: sai 5.
+                   relato e nao trava. Catalogo ou motor fora: sai 5.
 
    vocabulario [alvo]
                     varre `<verbo> <ato>` entre crases em dono.md, oficio.md,
@@ -108,13 +108,13 @@
 
   sessao-orfa [tabela]
                    conta, por tabela, os sessao_id gravados sem sessao correspondente
-                   no acervo e na fita contra a linha de base (card #3375). Sai 0 sem
+                   no acervo e na fita contra a linha de base. Sai 0 sem
                    orfao novo, 1 com orfao novo, 5 se um banco nao responder.
 
   copia [balde|banco|indice]
-                   toda materializacao viva tem declaracao de copia (arq:0022 §6.3; card
+                   toda materializacao viva tem declaracao de copia (
                    #3763): fonte, chave, atributos copiados, ato que repoe, modo (materializada
-                   ou sob-demanda) e a linha de reprodutibilidade, com metodo e insumos (arq:0130
+                   ou sob-demanda) e a linha de reprodutibilidade, com metodo e insumos (
                    D4). A declaracao mora no schema, por COMMENT `copia-de:` na tabela. Tres
                    substratos: banco (schema acervo do rag), indice (schema motor) e balde (os
                    espelhos de leitura; declarado e o que uma impressao reclama). A primeira
@@ -141,7 +141,7 @@ import urllib.error
 import urllib.request
 
 # resultado.py mora ao lado deste arquivo; import por path, nao por sys.path do
-# processo-pai (card #3142 — este script tanto roda direto quanto carregado por
+# processo-pai (este script tanto roda direto quanto carregado por
 # SourceFileLoader nos testes, e os dois precisam achar o modulo irmao).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import resultado
@@ -151,7 +151,7 @@ import raizes  # noqa: E402
 import topologia  # noqa: E402
 import units  # noqa: E402
 
-# Predicados extraídos para bin/_lint (card #3153)
+# Predicados extraídos para bin/_lint
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import _lint.superficie as _sup  # noqa: E402
 from _lint.superficie import _tools_citadas  # noqa: E402
@@ -174,7 +174,7 @@ def _quebradas_no_staged(padrao, servidas):
 
 def _raiz_bancada():
     """RAIZ e a bancada declarada da conta; PF_AI_DIR e override explicito e sai
-    declarado no stderr. RAIZ alimenta toda classe deste arquivo (card #3142 passo 2)
+    declarado no stderr. RAIZ alimenta toda classe deste arquivo
     -- por isso a resolucao nunca pode estourar: bancada indeclarada degrada pra ~/AI
     em vez de derrubar o processo pra quem so queria medir verbo ou servico."""
     valor = os.environ.get("PF_AI_DIR")
@@ -196,7 +196,7 @@ DEPLOY = os.environ.get("PF_DEPLOY_DIR", os.path.join(RAIZ, "deploy"))
 BIN = os.environ.get("PF_BIN_DIR", os.path.join(RAIZ, "bin"))
 HARNESS = os.environ.get("PF_HARNESS_DIR", os.path.join(RAIZ, "platafirma-harness"))
 # Verbos irmaos (acervo, release, tarefas, mesa) saem so do bin da release no ar, como
-# o BIN_DIR do proprio bin/release: a bancada nao tem bin/ (arq:0097). Chamar por
+# o BIN_DIR do proprio bin/release: a bancada nao tem bin/. Chamar por
 # RAIZ/bin fazia o gate de `release promover` sair 127 no acervo e reprovar (#3142).
 BIN_IRMAOS = os.path.join(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"),
                           "harness", "bin")
@@ -207,7 +207,7 @@ SUPERFICIES = os.path.join(POLITICA_DIR, "superficies.yaml")
 
 def _sha_release():
     """sha curto do que HARNESS tem no HEAD — vai na ancora de `release conferir <classe>`
-    (card #3142). HARNESS e o checkout destacado da release (arq:0097); fora desse
+    HARNESS e o checkout destacado da release; fora desse
     contexto (bancada, teste) pode nao ser git ou nao ter HEAD, e a ancora degrada pra
     'desconhecido' em vez de estourar."""
     rc, out, _ = sh(["git", "-C", HARNESS, "rev-parse", "--short", "HEAD"])
@@ -241,8 +241,8 @@ CLASSES_IMPLEMENTADAS = (
 )
 
 CLASSES_ABERTAS = {
-    "canal": "regua do design system e de claudinha-produto e ainda nao existe",
-    "casco": "avaliacao CIS ja tem verbo proprio (oscap-casco), de claudinho-seguranca",
+    "canal": "regua do design system e de produto e ainda nao existe",
+    "casco": "avaliacao CIS ja tem verbo proprio (oscap-casco), de seguranca",
 }
 
 
@@ -321,7 +321,7 @@ def containers(filtro=None):
                 candidatos.add(filtro)
             if filtro not in candidatos:
                 continue
-            # DT 803: filtro que e slug de stack confere so os conteineres DESSA stack. A familia
+            # filtro que e slug de stack confere so os conteineres DESSA stack. A familia
             # (curta ou completa) casava tambem os de outra stack do mesmo repositorio — a
             # bancada-rastreador, que a promocao declara fora — e a conferencia no ar do
             # `release promover rastreador` acusava DERIVA nela e revertia a promocao boa.
@@ -407,7 +407,7 @@ _PADRAO_RESUMO_SEGREDO = re.compile(r"sha256:([0-9a-f]{64})")
 
 def segredos_da_stack(slug):
     """{NOME: 'sha256:<hex>'} calculado do lado de quem guarda o segredo (`seg segredo resumo`),
-    sem abrir arquivo do cofre nem trafegar o valor em texto claro (DT 833)."""
+    sem abrir arquivo do cofre nem trafegar o valor em texto claro."""
     if not slug:
         return {}
     seg_local = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "seg"))
@@ -441,7 +441,7 @@ def mascarar(valor):
 def _valor_confere(declarado, servido):
     """Compara valor declarado do compose com o servido no conteiner.
     Quando `declarado` contem resumo(s) `sha256:<hex>` vindos de `seg segredo resumo`,
-    compara pelo SHA-256 do trecho correspondente em `servido`, sem ler o segredo (DT 833)."""
+    compara pelo SHA-256 do trecho correspondente em `servido`, sem ler o segredo."""
     decl_s = "" if declarado is None else str(declarado)
     serv_s = "" if servido is None else str(servido)
     if decl_s == serv_s:
@@ -580,10 +580,10 @@ def _ausencia_esperada(alvo):
     return None
 
 
-# _inalterada_por_desenho removida (r15, card #4404): toda stack de pe deve servir do current.
+# _inalterada_por_desenho removida: toda stack de pe deve servir do current.
 
 
-# --- filtro de e-mail dos gates oauth2-proxy (card #3476, nascido do #3339) ---------------
+# --- filtro de e-mail dos gates oauth2-proxy ----------------------------------------------
 # O oauth2-proxy autoriza o e-mail que casa o dominio OU consta da lista, e `*` casa todos: com
 # `--email-domain=*` junto da lista, a lista deixou de filtrar ninguem nos cinco gates e nada
 # acusou. A regra olha o que o gate DECLARA (`command` do compose renderizado) e o que SERVE
@@ -669,7 +669,7 @@ def conferir_servico(alvo, como_json=False):
                 "container servindo de diretorio removido")
             if not como_json:
                 print(f"    SUMIU   : working_dir nao existe no disco — container servindo de diretorio removido")
-        # Procedencia (arq:0097, #3010): o servido sobe de /opt/platafirma/<familia>/<sha>/,
+        # Procedencia: o servido sobe de /opt/platafirma/<familia>/<sha>/,
         # a arvore que `release promover` materializa. Conforme = o sha dessa arvore e o
         # current da familia; outro sha e stack atras (ou a frente) do codigo no ar. O
         # worktree de deploy na bancada e a forma antiga, ainda aceita; qualquer outro
@@ -717,7 +717,7 @@ def conferir_servico(alvo, como_json=False):
             if not como_json:
                 print(f"    GATE    : servido — {gate_servido}")
 
-        # card #3142: nao conseguir renderizar o compose e indeterminavel, nao
+        # nao conseguir renderizar o compose e indeterminavel, nao
         # divergente — nao saber nao pode contar como "achei defeito".
         decl, erro = env_declarado(c)
         if decl is None:
@@ -812,7 +812,7 @@ def cabecalho(caminho):
 
 
 def origem(nome, caminho):
-    """Classifica de onde o verbo vem. Segue arq:0110 §9:
+    """Classifica de onde o verbo vem:
     Candidatos em ordem fixa:
     1. /opt/platafirma/current/harness/bin/<verbo>
     2. ~/AI/platafirma-harness/bin/<verbo>
@@ -825,12 +825,12 @@ def origem(nome, caminho):
         return "terceiro", "binario instalado"
 
     # Candidato 1: release — o servido e var/prod/platafirma-harness/current/bin (spec_release §2;
-    # arq:0109 §1). /opt/platafirma e a morada vigente, aceita ate ser desmontada.
+    # /opt/platafirma e a morada vigente, aceita ate ser desmontada.
     prod_raiz = os.environ.get("PF_PROD_RAIZ", os.path.join(RAIZ, "var", "prod")).rstrip(os.sep)
     fam_bin = os.path.join(prod_raiz, "platafirma-harness")
     opt_dir = "/opt/platafirma"
     cand_release = os.path.join(fam_bin, "current", "bin", nome)
-    # arq:0097 + card #3142: o servido nao precisa ser symlink pra ser release — em
+    # o servido nao precisa ser symlink pra ser release — em
     # producao o binario E o arquivo real sob a release (r-x), nao um link pra ela.
     # Testar isso ANTES de cair no Candidato 2 evita o falso positivo medido em 25/09
     # (`release conferir verbo` classificando infra/lint/teste/deploy/migrar como
@@ -1026,7 +1026,7 @@ def _capacidade_veredito(cap):
 
 def _desde_familia(familia):
     """`no_ar_desde` de `release estado <familia> --json` — fonte de "desde" quando a
-    classe (verbo, hoje) nao tem data melhor por item (card #3142, passo 4)."""
+    classe (verbo, hoje) nao tem data melhor por item."""
     raiz_bin = BIN_IRMAOS
     rc, out, _ = sh([os.path.join(raiz_bin, "release"), "estado", familia, "--json"])
     if rc != 0 or not out.strip():
@@ -1038,14 +1038,14 @@ def _desde_familia(familia):
     return dado.get("no_ar_desde")
 
 
-# A chave e o ato, ou o ato e a opcao que separa o modo (`trocar --embedder`): arq:0124 §3, emenda de 14/10/2026.
+# A chave e o ato, ou o ato e a opcao que separa o modo (`trocar --embedder`).
 _RE_LINHA_DE_ATO = re.compile(
     r"^#\s*(face|rotulo|volta|atalho)\s*:\s*([A-Za-z0-9_-]+(?:\s+--[A-Za-z0-9_-]+)?)\s*=\s*(.*?)\s*$")
 
 
 def _atos_de_face_sem_texto(caminho):
     """[(ato, [campos que faltam])] dos atos que o cabecalho poe numa face e que nao trazem
-    `rotulo:` e `volta:` (arq:0124 §3, card #3426). Cada campo e uma linha por ato, na forma
+    `rotulo:` e `volta:`. Cada campo e uma linha por ato, na forma
     de `le:` e `escreve:` (`# face: <ato>=<face>`). Le o bloco de comentario do topo, sem o
     limite de 12 linhas de cabecalho(): os atos de um verbo grande passam disso.
 
@@ -1088,7 +1088,7 @@ def _atos_de_face_sem_texto(caminho):
     return saida
 
 
-# Mecanismo comum da casca (arq:0124 §3, emenda de 18/10/2026; card #3899): as tres leituras que a casca
+# Mecanismo comum da casca: as tres leituras que a casca
 # consome, cada uma do verbo dono do objeto, declaradas por `# mecanismo: <ato>=casca`. Mecanismo novo entra
 # por emenda da ADR e por esta lista.
 MECANISMOS_DA_CASCA = {
@@ -1102,7 +1102,7 @@ _RE_MECANISMO = re.compile(r"^#\s*(face|mecanismo|rotulo|atalho)\s*:\s*([A-Za-z0
 
 def _mecanismo_fora_da_regra(nome, caminho):
     """[motivo] do cabecalho que declara `casca` em `face:` (a casca e componente, nao face), `mecanismo:` fora
-    dos pares da arq:0124 §3, ou valor de mecanismo que nao e o componente do par. Le o bloco de comentario do
+    dos pares permitidos, ou valor de mecanismo que nao e o componente do par. Le o bloco de comentario do
     topo, como `_atos_de_face_sem_texto`."""
     motivos, mecanismos, textos = [], {}, []
     try:
@@ -1131,7 +1131,7 @@ def _mecanismo_fora_da_regra(nome, caminho):
         return []
     for ato, valor in mecanismos.items():
         if MECANISMOS_DA_CASCA.get((nome, ato)) != valor:
-            motivos.append(f"mecanismo: {ato}={valor} fora dos pares da arq:0124 §3")
+            motivos.append(f"mecanismo: {ato}={valor} fora dos pares permitidos")
     return motivos
 
 
@@ -1141,7 +1141,7 @@ def conferir_verbo(alvo, como_json=False):
     porcapacidade = {}
     vistos = 0
     itens = []
-    avisos = []   # nao pesam no exit: o texto do controle nasce como aviso (arq:0124 R7, card #3426)
+    avisos = []   # nao pesam no exit: o texto do controle nasce como aviso
     for nome in sorted(os.listdir(BIN)):
         if nome.startswith("_"):
             continue
@@ -1157,7 +1157,7 @@ def conferir_verbo(alvo, como_json=False):
         if os.environ.get("PF_CONFERIR_ORIGEM", "1") == "0":
             classe, onde = "rev", caminho
         # symlink cujo destino tem outro nome e ALIAS de um verbo ja contado: aparece
-        # declarado, mas nao entra na conta de arq:0037 — senao a deprecacao de um verbo
+        # declarado, mas nao entra na conta de capacidade — senao a deprecacao de um verbo
         # o faz reprovar por existir duas vezes.
         #
         # SO E ALIAS SE O DESTINO TAMBEM ESTIVER EXPOSTO EM BIN sob o proprio nome
@@ -1167,7 +1167,7 @@ def conferir_verbo(alvo, como_json=False):
         # carrega o sufixo porque o modulo TAMBEM e importado pela porta e
         # `controle/tests/test_contrato_fila.py` fazem `import fila_streams`); o symlink
         # e o verbo. Alias de verdade e nome que DUPLICA outro ja exposto, e e so esse
-        # caso que arq:0037 precisa isentar.
+        # caso que a regra de capacidade precisa isentar.
         destino_alias = os.path.realpath(caminho) if os.path.islink(caminho) else onde
         if ((classe.startswith("symlink") or os.path.islink(caminho))
                 and os.path.basename(destino_alias) != nome
@@ -1196,7 +1196,7 @@ def conferir_verbo(alvo, como_json=False):
             if not como_json:
                 print(f"    ORIGEM  : {msg_origem}")
         elif classe in ("copia", "copia-identica-ao-repo"):
-            # copia identica ainda e copia: instalacao e por release (arq:0110 §2)
+            # copia identica ainda e copia: instalacao e por release
             tem_divergencia = True
             problemas.append("copia identica por sorte, nao por mecanismo — trocar por symlink")
             if not como_json:
@@ -1234,11 +1234,11 @@ def conferir_verbo(alvo, como_json=False):
             if not como_json:
                 print(f"    MECANISM: {motivo_mec}")
         for ato_face, faltam in _atos_de_face_sem_texto(caminho):
-            aviso = f"{nome} {ato_face}: ato de face sem {' nem '.join(faltam)} (arq:0124 §3; aviso, nao reprova)"
+            aviso = f"{nome} {ato_face}: ato de face sem {' nem '.join(faltam)} (aviso, nao reprova)"
             avisos.append(aviso)
             if not como_json:
                 print(f"    AVISO   : ato {ato_face} esta numa face e nao declara {' nem '.join(faltam)}")
-        # a conta de arq:0037 e por capacidade do mapa: `dados/analise` e `analise` sao a mesma
+        # a conta de capacidade e por capacidade do mapa: `dados/analise` e `analise` sao a mesma
         chave = _capacidade_do_mapa(cap) if cap and cap != "orfa" else (cap or "(nao declarada)")
         porcapacidade.setdefault(chave, []).append(nome)
         motivo = "; ".join(problemas) if problemas else None
@@ -1259,9 +1259,9 @@ def conferir_verbo(alvo, como_json=False):
 
     if not alvo:
         if not como_json:
-            print("\n## arq:0037 — um verbo por capacidade")
+            print("\n## um verbo por capacidade")
         for cap, verbos in sorted(porcapacidade.items()):
-            nome_item = f"arq:0037 {cap}"
+            nome_item = f"capacidade {cap}"
             if cap in ("(nao declarada)", "orfa"):
                 v = resultado.divergente(f"{len(verbos)} verbo(s): {' '.join(verbos)}")
             else:
@@ -1286,13 +1286,13 @@ def conferir_verbo(alvo, como_json=False):
 
 
 # --- classe: repo -----------------------------------------------------------
-# Regua de arq:0042. O que o instrumento NAO faz: nao olha historico. Conformacao e para
+# Regua de repositorio. O que o instrumento NAO faz: nao olha historico. Conformacao e para
 # frente (0042, "Conformacao e para frente"), entao o alvo e `git ls-files`, nunca
 # `rev-list --all`; peso de pack nao e divergencia e nao entra na conta.
 # Limite declarado: render gerado so se detecta por marca no cabecalho do arquivo.
 # Ferramenta que nao assina o que gera passa, e passa em silencio.
 
-# A regua mora em bin/_lint/repo.py (card #3153): constantes e predicados vem de la, e
+# A regua mora em bin/_lint/repo.py: constantes e predicados vem de la, e
 # conferir_repo so imprime. Regra nova ou ajustada entra la, e vale para lint, pre-commit
 # e conferir no mesmo commit.
 from _lint.repo import (  # noqa: E402
@@ -1332,7 +1332,7 @@ def conferir_repo(alvo, staged=False, como_json=False):
         rc_ls, out, err_ls = sh(["git", "ls-files", "-z"], cwd=raiz)
         if rc_ls != 0:
             # nao consegui listar o rastreado deste repo — "nao olhei" nunca e "nada
-            # achado" (card #3142: falha de leitura nao vira conforme por omissao).
+            # achado" (falha de leitura nao vira conforme por omissao).
             motivo_ls = f"git ls-files falhou (rc={rc_ls}): {err_ls or '(sem saida)'}"
             if not como_json:
                 print(f"\n### {nome}")
@@ -1384,12 +1384,12 @@ def conferir_repo(alvo, staged=False, como_json=False):
             if not como_json:
                 for rel, motivo in sorted(sem_cabecalho):
                     print(f"    CABECALHO: {rel} — {motivo}")
-                print("    arq:0049 — documento de operacao abre declarando genero e publico,")
+                print("    documento de operacao abre declarando genero e publico,")
                 print("    e nomeia a pagina de Operar: que deriva dele (ou declara que nao ha).")
         readme_ok = None
         if staged:
             if not como_json and divergiu:
-                print("\n    arq:0042 — isto nao e fonte editada a mao. Ou o arquivo tem morada")
+                print("\n    isto nao e fonte editada a mao. Ou o arquivo tem morada")
                 print("    fora do git, ou a excecao se declara em `.conferir-repo` na raiz:")
                 print("        permite: <prefixo-de-caminho>   # motivo")
                 print("    Passar por cima: git commit --no-verify (fica so no teu terminal).")
@@ -1410,7 +1410,7 @@ def conferir_repo(alvo, staged=False, como_json=False):
                 else:
                     readme_ok = True
             if not como_json and not divergiu:
-                print("    regua   : conforme a arq:0042")
+                print("    regua   : conforme")
         if divergiu:
             itens.append((nome, resultado.divergente("; ".join(achados_motivo))))
         else:
@@ -1429,7 +1429,7 @@ def conferir_repo(alvo, staged=False, como_json=False):
 
 
 # --- classe: commit ---------------------------------------------------------
-# O elo item<->commit do DORA (card #471).
+# O elo item<->commit do DORA.
 #
 # A REGUA NAO MORA AQUI, e nem no hook: mora no rastreador. Este codigo NAO tem copia do
 # formato da citacao nem da nocao de "item fechado" — ele manda a mensagem para
@@ -1458,7 +1458,7 @@ def conferir_repo(alvo, staged=False, como_json=False):
 #      desde 01/08 nao citam id nenhum. Gate que reprova o que ja estava la vira
 #      `--no-verify` por habito, e ai nao gateia mais nada.
 #
-#   4. NAO PASSA POR resultado.relatorio()/itens (card #3142). A regra geral do card —
+#   4. NAO PASSA POR resultado.relatorio()/itens. A regra geral —
 #      "nao consegui olhar" nunca sai conforme — vale aqui tambem, mas o EXIT desta
 #      classe e contrato do hook commit-msg AO VIVO (git decide bloquear o commit pelo
 #      exit, nao por relatorio humano de `release conferir`). Trocar o exit do
@@ -1474,7 +1474,7 @@ def conferir_repo(alvo, staged=False, como_json=False):
 # hook e local, `git commit --no-verify` passa por cima e nao ha gate no push do forge.
 # Isto mede quem nao burlou; nao mede a casa.
 
-# O opt-in e a pergunta ao rastreador moram em bin/_lint/commit.py (card #3153): o hook
+# O opt-in e a pergunta ao rastreador moram em bin/_lint/commit.py: o hook
 # commit-msg, `lint commit` e esta classe leem de la. Nome no modulo para o teste poder
 # trocar a pergunta por stub.
 from _lint.commit import (  # noqa: E402
@@ -1531,7 +1531,7 @@ def conferir_commit(alvo, como_json=False):
     if veredito is None:
         # FAIL-OPEN, com aviso. Ver o limite 2 (e o limite 4) no cabecalho desta classe:
         # o Veredito interno vira indeterminavel — nao consegui olhar nunca e conforme
-        # (card #3142) — mas o exit SEGUE 0 de proposito, nao o 5 de resultado.relatorio().
+        # o exit SEGUE 0 de proposito, nao o 5 de resultado.relatorio().
         v = resultado.indeterminavel(erro)
         if como_json:
             print(json.dumps({"resultado": "sem-gate", "motivo": erro, "veredito": v.dict()}))
@@ -1565,7 +1565,7 @@ def conferir_commit(alvo, como_json=False):
             print("\ncommit: a mensagem cita id que o rastreador recusa.\n", file=sys.stderr)
             for r in recusas:
                 print(f"    RECUSA  item {r.get('id')} — {r.get('texto')}", file=sys.stderr)
-            print("\n    card #471 — a citacao no commit e o elo item<->deploy do", file=sys.stderr)
+            print("\n    a citacao no commit e o elo item<->deploy do", file=sys.stderr)
             print("    DORA, e ela so vale se o id existir e o item estiver aberto. Ou corrija", file=sys.stderr)
             print("    o trailer `Item: <id>` no rodape da mensagem, ou tire-o: mensagem sem", file=sys.stderr)
             print("    citacao NAO e recusada.", file=sys.stderr)
@@ -1584,12 +1584,12 @@ HARNESS = os.environ.get("PF_HARNESS_DIR", os.path.join(RAIZ, "platafirma-harnes
 
 
 # --- arranque em cwd: ponteiro, nunca copia ---------------------------------
-# Regua de claudinha-gestao-estrategica, escrita em abertura/arranque.md. Aqui so
+# Regua de gestao-estrategica, escrita em abertura/arranque.md. Aqui so
 # o mecanismo. Existe porque regua descritiva nao dispara: foi copia por habito
 # que produziu as 27 worktrees divergentes, e nada impedia a proxima de recomecar
 # a serie sem ninguem medir quando recomecou.
 # A regua (ponteiro, sinais de copia, o que fica fora) mora em bin/_lint/arranque.py
-# (card #3153); aqui fica so o percurso de ~/AI e a impressao.
+# aqui fica so o percurso de ~/AI e a impressao.
 from _lint.arranque import (  # noqa: E402
     FORA_DA_REGUA,
     PONTEIRO_ARRANQUE,
@@ -1685,7 +1685,7 @@ def conferir_arranque(alvo=None, staged=False, como_json=False):
             with open(c, encoding="utf-8", errors="replace") as f:
                 texto = f.read()
         except OSError as e:
-            # card #3142: nao conseguir ler o CLAUDE.md e indeterminavel, nunca
+            # nao conseguir ler o CLAUDE.md e indeterminavel, nunca
             # ausencia silenciosa — sumir da lista mascararia a falha de olhar.
             if not como_json:
                 print(f"  NAO CONSEGUI LER: {rel} — {e}")
@@ -1821,12 +1821,12 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     claude.ai nao e verificavel daqui, e isso sai declarado — nao confundir
     "nao medido" com "em dia".
     """
-    registro = os.path.join(HARNESS, "registro", "superficies.json")  # arq:0073: dado agora em registro/
+    registro = os.path.join(HARNESS, "registro", "superficies.json")  # dado em registro/
     try:
         with open(registro, encoding="utf-8") as f:
             reg = json.load(f)
     except (OSError, ValueError) as e:
-        # card #3142: registro ilegivel e "nao consegui olhar", nao divergencia —
+        # registro ilegivel e "nao consegui olhar", nao divergencia —
         # antes saia exit 1 (mesmo peso de achado real); agora e indeterminavel.
         msg = f"registro de superficies ilegivel ({registro}): {e}"
         if not como_json:
@@ -1850,7 +1850,7 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     # enquanto ha worktree aberta; limpas as worktrees, nao ha `.mcp.json` a ler e
     # o conjunto de conectores achados vem vazio — o que, sem esta guarda, era
     # relatado como "falta claudinho-mcp" e reprovava o commit de QUALQUER
-    # cadeira. Foi o que travou claudinha-gestao-estrategica em 16/08/2026.
+    # cadeira.
     # Superficie sem instancia viva sai como NAO MEDIDA, com o motivo, porque nao
     # medido nao e em dia — e tambem nao e defeito.
     # PRODUTOR, NAO INSTANCIA. Quem escreve o `.mcp.json` de cada superficie e o
@@ -1925,7 +1925,7 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     # registro com tres de quatro que deixou `code-seco` fora da conta enquanto o
     # veredito dizia "em dia": nao medido nao e em dia, e o que nao consta some.
     #
-    # card #3142: "nao medido" vira item indeterminavel — nunca conforme, nunca
+    # "nao medido" vira item indeterminavel — nunca conforme, nunca
     # omitido do veredito completo (antes so aparecia em texto/JSON informativo
     # e nunca pesava no exit, nem mesmo avulso).
     nao_medido_itens = [(n, d.get("porque", "sem motivo declarado"))
@@ -1933,7 +1933,7 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
                          if not d.get("verificavel_do_host")]
     nao_medido = [f"{n} — {motivo}" for n, motivo in nao_medido_itens]
 
-    # GATE DE COMMIT vs SAUDE DE HOST (card #2823). So `quebradas` e incremental:
+    # GATE DE COMMIT vs SAUDE DE HOST. So `quebradas` e incremental:
     # linhas ADICIONADAS pelo commit em curso. `nao_servidos/sem_meio/sem_produtor/
     # endpoints_falhos` sao sempre recalculados sobre o host vivo — passivo herdado,
     # alheio ao commit. Sob --staged o gate julga SO o que o commit acrescenta; a
@@ -1941,7 +1941,7 @@ def conferir_superficie(alvo=None, staged=False, como_json=False):
     # --staged (rodado avulso), tudo trava como antes. Cumpre a promessa do hook
     # ("passivo herdado nao trava a casa") sem cegar `conferir superficie` avulso.
     #
-    # card #3142: a trava agora vem do veredito agregado de `itens`
+    # a trava agora vem do veredito agregado de `itens`
     # (resultado.agrega). nao_servidos/endpoints_falhos/sem_produtor/sem_meio e
     # nao_medido_itens sao TAMBEM passivo de host que o commit em curso nao
     # criou (claude.ai, p.ex., e permanentemente "nao medido") — por isso, como
@@ -2159,7 +2159,7 @@ def conferir_superficie_descricao(alvo=None, como_json=False, caminho_catalogo=N
     """Caso 1 de conferir superficie: descrição de roteamento servida em runtime × tabela de fontes do índice."""
     slugs_indice, motivo_tabela = _fontes_da_tabela_catalogo(caminho_catalogo)
     if motivo_tabela:
-        # card #3142: nao ler a tabela do catalogo e "nao consegui olhar" — nunca
+        # nao ler a tabela do catalogo e "nao consegui olhar" — nunca
         # sucesso silencioso; antes saia exit 0 tanto em texto quanto --json.
         if not como_json:
             print("superficie (caso descricao):")
@@ -2263,7 +2263,7 @@ def conferir_skill(nome, servido=None, como_json=False):
     # O atraso se mede achando o commit mais recente em que o blob ainda era o servido.
     rc, hist, _ = sh(["git", "-C", HARNESS, "log", "--format=%H %h %ci %s", "--", caminho])
     if rc != 0:
-        # card #3142: nao conseguir listar o historico e indeterminavel, nao divergente —
+        # nao conseguir listar o historico e indeterminavel, nao divergente —
         # sem historico nao da pra afirmar que o blob servido "nao existe" nele.
         detalhe = f"nao consegui listar o historico de {caminho} (git log saiu {rc})"
         itens = [(nome, resultado.indeterminavel(detalhe))]
@@ -2291,7 +2291,7 @@ def conferir_skill(nome, servido=None, como_json=False):
 
 
 # --- classe: front ----------------------------------------------------------
-# arq:0057, secao "Conformidade": o instrumento reprova, ALEM do que arq:0056 ja mede,
+# Conformidade de front: o instrumento reprova
 # duas coisas — e sao as duas que esta classe mede, nenhuma a mais:
 #
 #   (1) tela de aplicacao FORA de `platafirma-ui`;
@@ -2302,7 +2302,7 @@ def conferir_skill(nome, servido=None, como_json=False):
 # que o artefato de front monta. Homonimos, dominios distintos; juntar os dois num verbo
 # so era colidir dois sentidos de "superficie".
 #
-# O QUE E "TELA DE APLICACAO", medido pela arvore viva (arq:0057, "Aplicacao ao front"):
+# O QUE E "TELA DE APLICACAO", medido pela arvore viva:
 # `platafirma-ui/app/<superficie>/` sai como SERVICO por superficie. Uma tela e um
 # diretorio com `index.html` E um `Dockerfile` que serve estatico (nginx) — nao a
 # biblioteca (`src/`+`dist/`, que e a imagem versionada, nao uma superficie de aplicacao).
@@ -2330,7 +2330,7 @@ UI_REPO = "platafirma-ui"
 # morada. Le-la como layout de origem e ler o clone de deploy como se fosse o repo, e
 # foi o falso positivo medido ao instrumentar (deploy/rastreador-tela). Fora da varredura.
 FRONT_FORA_DA_VARREDURA = ("deploy",)
-# arq:0057, secao "Aberto", NOMINALMENTE: "Morada de `platafirma-core-landing` e de
+# Excecao aberta: "Morada de `platafirma-core-landing` e de
 # `harness-controle-tela`: superficies de front FORA do rastreador, NAO INVENTARIADAS
 # contra este criterio." O #197, item 3, remata: vira card proprio, inventariar antes
 # de ter o mecanismo e garimpo. Logo estas telas saem do VEREDITO deste card e entram
@@ -2339,7 +2339,7 @@ FRONT_ABERTAS = ("platafirma-core",)
 
 # Sinais de "monta segredo de outra camada" num docker-compose de tela. `environment` e
 # `env_file` sao as duas portas declaradas do compose; volume de `.env`/segredo e a terceira,
-# por bind. A regra e por construcao (arq:0057, "a regua e por construcao, nao por frequencia").
+# por bind. A regra e por construcao ("a regua e por construcao, nao por frequencia").
 _RE_ENV_FILE = re.compile(r"^[^#\n]*\benv_file\s*:", re.M)
 _RE_ENVIRON = re.compile(r"^[^#\n]*\benvironment\s*:", re.M)
 _RE_VOL_SEGREDO = re.compile(r"^[^#\n]*-\s*[^#\n]*(?:\.env|/run/secrets|secrets?/)", re.M | re.I)
@@ -2424,7 +2424,7 @@ def _viola_segredo_ou_api(dir_abs):
     return monta_segredo, serve_api, detalhe
 
 
-# --- o pacote da platafirma-ui (card #3426; R1, R13 e R45 da spec taipa) ----------------
+# --- o pacote da platafirma-ui ----------------------------------------------------------
 # Tres cobradores, lidos da arvore de platafirma-ui, que a conferencia le como le as telas:
 #   (R13) toda peca (`src/pf/<tag>.js`) tem pagina com ela montada (`exemplo/**/*.html`);
 #   (R1)  toda tela (`app/<tela>/Dockerfile`) copia a biblioteca na versao do pacote
@@ -2469,7 +2469,7 @@ def _base_do_pacote_da_release():
     """A arvore de platafirma-ui que a release serve (`current/ui`), ou None quando ela nao esta
     la. O pacote (pecas, versao das telas, retrato) se le dela e nao do clone compartilhado de
     ~/AI, que nao anda com a promocao: o clone dizia 0.7.6 e `sem retrato` com o pacote no ar em
-    0.9.0 e o retrato servido (card #3484)."""
+    0.9.0 e o retrato servido."""
     base = os.path.join(os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current"), "ui")
     return base if os.path.isdir(base) else None
 
@@ -2536,10 +2536,10 @@ def _conferencias_do_pacote(raiz=None, base=None):
     retrato = _ler_json(os.path.join(base, RETRATO_CAMINHO))
     if not isinstance(retrato, dict):
         itens.append((nome, resultado.indeterminavel(
-            f"nao consegui olhar: sem retrato em {RETRATO_CAMINHO} (a Taipa o gera no build)")))
+            f"nao consegui olhar: sem retrato em {RETRATO_CAMINHO} (gerado no build)")))
     elif not retrato.get("sha_registro"):
         itens.append((nome, resultado.divergente(
-            "o retrato nao grava sha_registro: sem ele nao se sabe de que registro saiu (arq:0031)")))
+            "o retrato nao grava sha_registro: sem ele nao se sabe de que registro saiu")))
     else:
         servido = _sha_do_registro()
         if not servido:
@@ -2555,12 +2555,12 @@ def _conferencias_do_pacote(raiz=None, base=None):
 
 
 def conferir_front(alvo=None, como_json=False):
-    """Conformidade de front do arq:0057, alem do que arq:0056 ja mede.
+    """Conformidade de deploy de front.
 
     (1) tela de aplicacao fora de `platafirma-ui`;
     (2) artefato de front que monte segredo de outra camada ou sirva rota de API.
 
-    Nao julga o contrato de arq:0056 (custom element `pf-*`, token) — isso e de outra
+    Nao julga o contrato de custom element `pf-*` e token — isso e de outra
     regua. Julga o LAYOUT do deploy de front, e so ele.
     """
     telas = _telas_de_front()
@@ -2579,7 +2579,7 @@ def conferir_front(alvo=None, como_json=False):
         monta_segredo, serve_api, detalhe = _viola_segredo_ou_api(dir_abs)
         if repo in FRONT_ABERTAS:
             abertas.append({"tela": dir_rel, "repo": repo})
-            continue  # arq:0057 "Aberto": nao inventariada contra este criterio
+            continue  # nao inventariada contra este criterio
         problemas = []
         if repo != UI_REPO:
             fora.append({"tela": dir_rel, "repo": repo})
@@ -2605,7 +2605,7 @@ def conferir_front(alvo=None, como_json=False):
     pacote_diverge = [n for n, v in pacote_itens if v.estado == "divergente"]
     ok = not (fora or montam or servem or pacote_diverge)
     if not como_json:
-        print(f"front — conformidade de deploy (arq:0057), alem de arq:0056")
+        print(f"front — conformidade de deploy")
         if pacote_itens:
             n_ind = sum(1 for _, v in pacote_itens if v.estado == "indeterminavel")
             print(f"  pacote {UI_REPO} (pecas, versao das telas, retrato): {len(pacote_itens)} item(ns), "
@@ -2623,7 +2623,7 @@ def conferir_front(alvo=None, como_json=False):
         print(f"  conformes (em {UI_REPO}, sem segredo, sem proxy): {len(conformes)}")
         print(f"  veredito                         : {'em dia' if ok else 'divergente'}")
         if abertas:
-            print("  --- observacao (nao entra no veredito; arq:0057 secao Aberto) ---")
+            print("  --- observacao (nao entra no veredito) ---")
             print(f"  superficies declaradas ABERTAS   : {len(abertas)} (vira card proprio, #197 item 3)")
             for x in abertas:
                 print(f"      {x['tela']} — {x['repo']}")
@@ -2632,8 +2632,8 @@ def conferir_front(alvo=None, como_json=False):
 
 
 # --- classe: procedencia ----------------------------------------------------
-# Mede uma coisa so: onde para cada caminho de execucao de ~/AI/bin. Nao e arq:0037
-# (cabecalho e conta de capacidade sao de `conferir verbo`) e nao e arq:0042.
+# Mede uma coisa so: onde para cada caminho de execucao de ~/AI/bin
+# (cabecalho e conta de capacidade sao de `conferir verbo`).
 #
 # A lista de excecoes NAO mora aqui: mora em docs/procedencia-do-harness.md. Excecao
 # no codigo vira detalhe de implementacao, e o que ela cala e decisao de dono —
@@ -2730,7 +2730,7 @@ def conferir_procedencia(alvo, como_json=False):
         else:
             veredito, detalhe = "fora", destino
 
-        # card #3142: "quebrado" (symlink sem destino) e "nao consegui resolver", nao
+        # "quebrado" (symlink sem destino) e "nao consegui resolver", nao
         # "fora" — indeterminavel, nao divergente. So "fora" de fato e reprovacao.
         if veredito == "harness":
             dentro += 1
@@ -2785,7 +2785,7 @@ FERRAMENTAL_PGOPTIONS = "-c default_transaction_read_only=on"
 
 def _ferramental_psql(sql):
     """(linhas|None, erro|None). Le a tabela via docker exec, como o resto do verbo,
-    com papel de leitura e transacao somente-leitura (DT 834)."""
+    com papel de leitura e transacao somente-leitura."""
     env = dict(os.environ)
     env.setdefault("DOCKER_HOST", f"unix:///run/user/{os.getuid()}/docker.sock")
     p = subprocess.run(
@@ -2874,7 +2874,7 @@ def conferir_existe(tipo, nome, como_json=False):
         else:
             print(linha)
             print("  nao saber e informacao — isto NAO ancora uma NEGATIVA.")
-        # card #3142, passo 7: indeterminavel epistemico ("nao consegui olhar") alinha
+        # indeterminavel epistemico ("nao consegui olhar") alinha
         # com a regua nova de conferir (0/1/5), nao com o exit 2 de uso incorreto do
         # bloco `if tipo not in EXISTE_TIPOS` acima — os dois sao "2" por acidente de
         # historia, nao por serem a mesma coisa.
@@ -2972,7 +2972,7 @@ def conferir_existe(tipo, nome, como_json=False):
                    % (n, os.environ.get("PF_CADEIRA", "?")))
 
     if tipo == "entidade":
-        # A fonte era `acervo consultar casa termo`, removido por ordem do dono (13/11/2026): o schema
+        # A fonte anterior (`acervo consultar casa termo`) foi removida: o schema
         # casa que ele lia foi apagado no #4211. Sem fonte, indeterminavel, nunca negativa.
         return indeterminavel("fonte removida (acervo consultar saiu em 13/11/2026); a entidade se confere "
                               f"no catalogo via ontologia: infra rodar ontologia -- ler shape {nome}")
@@ -2981,25 +2981,25 @@ def conferir_existe(tipo, nome, como_json=False):
 
 
 def _card_avancou_alem_de_execucao(cabecalho):
-    """card #348: o estado do card, lido do cabecalho de `tarefas ler`, ja passou de
+    """O estado do card, lido do cabecalho de `tarefas ler`, ja passou de
     em-execucao? Os 6 estados do ciclo (arq citado no #348) sao em-lapidacao . em-parecer
     . em-refinamento-tecnico . em-execucao . em-homologacao . entregue — qualquer um dos
     tres primeiros e "nao andou ainda"; dai pra frente, o commit tem onde se apoiar.
-    Incidente tem estados proprios (arq:0039): detectado ainda nao andou; em-mitigacao,
-    mitigado e resolvido ja andaram (card #3461: o conserto citou o incidente e a conferencia
+    Incidente tem estados proprios: detectado ainda nao andou; em-mitigacao,
+    mitigado e resolvido ja andaram (o conserto citou o incidente e a conferencia
     o acusou depois de resolvido)."""
     baixo = cabecalho.lower()
     return any(s in baixo for s in ("execu", "homolog", "entreg", "encerr", "mitig", "resolv"))
 
 
 def conferir_card(alvo, como_json=False):
-    """card #3142, passo 6: commit em origin/main (familia platafirma-harness) citando
+    """Commit em origin/main (familia platafirma-harness) citando
     #N — na mensagem, ou num ramo fabrica/N-* ainda vivo — nos ultimos 14 dias, com o
     card #N no rastreador ainda ANTES de em-execucao: item divergente. Fecha #348
     ("conferir mede card citado em commit cujo estado nao andou").
 
     Escopo desta primeira versao: so a familia platafirma-harness, porque e a unica cujo
-    checkout (HARNESS) este arquivo ja resolve com confianca (arq:0097). Estender as
+    checkout (HARNESS) este arquivo ja resolve com confianca. Estender as
     demais familias da release exige confirmar a convencao de caminho do checkout de
     cada uma — nao adivinhado aqui; ver nota na entrega do card.
     """
@@ -3074,7 +3074,7 @@ def conferir_alcance(sujeito, fonte, como_json=False):
 
     MEDIDOR, nao validador: onde o alvo nao tem ACL canonica (portao paralelo que
     nao conhece papel nem dominio), DECLARA — nao presume um canon inexistente. As
-    5 fontes-de-verdade (claudinho-seguranca, card #2452 sob #191):
+    5 fontes-de-verdade:
       identidade -> core/acesso/sujeitos.yaml
       credencial -> core/acesso/sujeitos.yaml (client/conta/usuario/segredos) [+ realm]
       PDP        -> core/acesso/politica.yaml
@@ -3089,7 +3089,7 @@ def conferir_alcance(sujeito, fonte, como_json=False):
         return 2
     nome_item = f"{sujeito} -> {fonte}"
     alvo = f"{sujeito} {fonte}"
-    # a cadeia mora em bin/_lint/alcance.py (card #3153); aqui so se imprime
+    # a cadeia mora em bin/_lint/alcance.py; aqui so se imprime
     from _lint.alcance import cadeia_de_alcance
     c = cadeia_de_alcance(sujeito, fonte, HARNESS, POLITICA_DIR)
     if not c["saltos"]:
@@ -3121,7 +3121,7 @@ def conferir_alcance(sujeito, fonte, como_json=False):
 
 
 def _resumo_pdp_dir(pdp_dir):
-    """Calcula o resumo SHA-256 de politica.yaml e sujeitos.yaml num diretorio PDP (DT 835)."""
+    """Calcula o resumo SHA-256 de politica.yaml e sujeitos.yaml num diretorio PDP."""
     try:
         with open(os.path.join(pdp_dir, "politica.yaml"), "rb") as fp:
             pol_b = fp.read()
@@ -3163,7 +3163,7 @@ def _resumo_pdp_auditoria(log_dir):
 
 
 def _sonda_pdp_servidor(s, current_link="/opt/platafirma/current"):
-    """Consulta o resumo (SHA-256) da politica e dos sujeitos efetivamente carregados pelo PEP (DT 835).
+    """Consulta o resumo (SHA-256) da politica e dos sujeitos efetivamente carregados pelo PEP.
     Ordem: (1) cabecalho `x-pf-pdp-resumo` ou campo `pdp_resumo` no `/health`;
     (2) linha de auditoria `pep_politica_carregada`;
     (3) com `/health` respondendo 200, resumo lido do mount interno do processo/conteiner."""
@@ -3215,7 +3215,7 @@ def _sonda_pdp_servidor(s, current_link="/opt/platafirma/current"):
 
 def conferir_pdp(alvo=None, como_json=False, *, sonda_pdp=None):
     """Confere que cada ponto de obediencia (PEP) carrega o mesmo resumo de politica.yaml e
-    sujeitos.yaml da release no ar em /opt/platafirma/current/core/acesso (DT 835)."""
+    sujeitos.yaml da release no ar em /opt/platafirma/current/core/acesso."""
     current_link = os.environ.get("PF_CURRENT_LINK", "/opt/platafirma/current")
     tag_current = None
     resumo_esperado = None
@@ -3488,7 +3488,7 @@ def conferir_diagrama(alvo, como_json=False):
     # Kroki da casa
     # Endpoint padrao ou override
     # Pela porta PUBLICADA, nunca pelo IP do conteiner: o docker da conta e rootless e o IP
-    # da rede do compose nao e roteavel do host («No route to host», card #3099). O compose
+    # da rede do compose nao e roteavel do host («No route to host»). O compose
     # do conhecimento publica o kroki em 127.0.0.1:8095; `docker port` le o que estiver la.
     endpoint = os.environ.get("KROKI_URL")
     if not endpoint:
@@ -3542,7 +3542,7 @@ def conferir_diagrama(alvo, como_json=False):
         itens.append((alvo, resultado.divergente(erro_msg)))
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         # Kroki inalcancavel (conexao recusada, DNS, timeout de conexao) — nao
-        # consegui olhar, nao e defeito no diagrama: indeterminavel (card #3142).
+        # consegui olhar, nao e defeito no diagrama: indeterminavel.
         msg = f"nao consegui falar com o Kroki em {endpoint}: {e}"
         if not como_json:
             print(f"erro: {msg}", file=sys.stderr)
@@ -3637,7 +3637,7 @@ def conferir_vocabulario(alvo=None, como_json=False):
     return resultado.relatorio("vocabulario", alvo, itens, _sha_release(), como_json=como_json)
 
 
-# --- classe: jobs (card #3147) -------------------------------------------------
+# --- classe: jobs --------------------------------------------------------------
 #
 # Todo timer agendado no systemd --user da conta tem quem o declara, e o que ele roda
 # vem da release. Os declarantes sao os que a casa ja tem, lidos do SERVIDO:
@@ -3649,12 +3649,12 @@ def conferir_vocabulario(alvo=None, como_json=False):
 #              acervo, lida por `bot listar --json`; os dois nomes, .timer e .service.
 #              Cabecalho sem ficha e orfa; ficha de timer sem unit agendada diverge;
 #              ficha ilegivel com unit do bot na rodada e "nao consegui olhar"; sem unit do
-#              bot na rodada, so um aviso em stderr, o exit nao muda (card #3186)
+#              bot na rodada, so um aviso em stderr, o exit nao muda
 # Nenhuma lista nova: a classe mede as que existem. Duas moradas e dois jeitos de
-# instalar seguem como estao -- unificar e decisao (card #3147, Travas).
+# instalar seguem como estao -- unificar e decisao.
 
 # ENV_OPS, UNIT_SISTEMA, systemctl_show e declarantes_de_jobs moram em lib/units.py,
-# que o bot tambem le (card #3186).
+# que o bot tambem le.
 
 
 def conferir_jobs(alvo=None, como_json=False):
@@ -3754,7 +3754,7 @@ def conferir_jobs(alvo=None, como_json=False):
     return resultado.relatorio("jobs", alvo, itens, _sha_release(), como_json=como_json)
 
 
-# --- classe: unit (DT 352) --------------------------------------------------
+# --- classe: unit -----------------------------------------------------------
 
 _SETUPS_UNIT_CHECK = {
     "leitor": ("harness", "deploy-harness/setup-leitor.sh"),
@@ -3801,7 +3801,7 @@ def conferir_unit(alvo=None, como_json=False):
     return resultado.relatorio("unit", alvo, itens, _sha_release(), como_json=como_json)
 
 
-# --- classe: ontologia (card #4254 / #4937) --------------------------------
+# --- classe: ontologia -----------------------------------------------------
 
 
 def _olaria_chave():
@@ -3925,7 +3925,7 @@ def conferir_ontologia(alvo, como_json=False):
 
 
 def conferir_fossil(alvo=None, como_json=False):
-    """Mede tudo o que sobra fora do uso da release no ar (r15, r27, r28, card #4404)."""
+    """Mede tudo o que sobra fora do uso da release no ar."""
     import importlib.machinery
     import importlib.util
     from pathlib import Path
@@ -4090,7 +4090,7 @@ def conferir_escritor(
 
 
 def main(argv):
-    # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4; DT 850): varre
+    # --ajuda UNIVERSAL, sem efeito colateral: varre
     # todos os argumentos antes do despacho; nenhuma classe chega a rodar. --help/--ajuda sai 0.
     if any(x in ("--ajuda", "--help", "-h") for x in argv[1:]):
         uso(exit_code=0)
@@ -4116,7 +4116,7 @@ def main(argv):
     if classe == "verbo":
         return conferir_verbo(alvo, como_json=como_json)
     if classe == "cabecalho":
-        # `cabecalho` foi nome desta classe por um dia (13/11/2026): responde, com aviso (arq:0110 §11)
+        # `cabecalho` foi nome desta classe por um dia: responde, com aviso
         print("conferir: a classe `cabecalho` voltou a se chamar `verbo`; use "
               "`release conferir verbo`", file=sys.stderr)
         return conferir_verbo(alvo, como_json=como_json)
@@ -4201,7 +4201,7 @@ def main(argv):
         import predicados_acervo
         return predicados_acervo.conferir_acervo(alvo, _sha_release(), como_json=como_json)
     if classe == "dependencias":
-        # card #3386: o rol do que as travas resolvem, lido da arvore servida de cada familia
+        # o rol do que as travas resolvem, lido da arvore servida de cada familia
         import dependencias
         registro = os.environ.get("PLATAFIRMA_VENVS") or os.path.join(HARNESS, "registro", "venvs.json")
         md_para = None
@@ -4223,7 +4223,7 @@ def main(argv):
         import sessao_orfa
         return sessao_orfa.conferir(alvo, como_json=como_json, sha_release=_sha_release())
     if classe == "copia":
-        # card #3763: toda materializacao viva tem declaracao de copia, por substrato (balde, banco, indice)
+        # toda materializacao viva tem declaracao de copia, por substrato (balde, banco, indice)
         import copia
         return copia.conferir_copia(alvo, _sha_release(), como_json=como_json)
     if classe == "ontologia":

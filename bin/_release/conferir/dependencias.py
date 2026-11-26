@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""dependencias — o inventario do que as travas da casa penduram (card #3386).
+"""dependencias — o inventario do que as travas da casa penduram.
 
 `release conferir dependencias [<stack>] [--json]`. Uma linha por pacote de cada lock
 declarado em registro/venvs.json (uv.lock, requirements, package-lock.json), lido da arvore
@@ -398,7 +398,7 @@ def escrever_md(destino, raiz_permitida, itens, linhas, sha_release, alvo=None, 
     return 0
 
 
-# --- avisos de seguranca (feature #3388) --------------------------------------------------
+# --- avisos de seguranca ------------------------------------------------------------------
 # `--avisos` cruza o rol com o OSV (osv.dev: GHSA, PyPA, RustSec...), que responde por pacote e
 # versao exatos do lock. E opt-in porque usa rede e porque aviso novo apareceria como barreira
 # em promocao que nao tem nada a ver com ele: o gate de promocao nao o chama.
