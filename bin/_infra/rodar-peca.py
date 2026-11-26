@@ -52,7 +52,7 @@ def _exportar():
 
 
 def ambiente_do_banco_casa(ex) -> dict:
-    """O ambiente do banco próprio da casa (card #4286): lê segredos/casa-db/POSTGRES_PASSWORD do cofre
+    """O ambiente do banco próprio da casa: lê segredos/casa-db/POSTGRES_PASSWORD do cofre
     e injeta CASA_PG_* e POSTGRES_* para 127.0.0.1:5439/casa sem imprimir a credencial."""
     arquivo = ex.raizes.instancia() / "segredos" / "casa-db" / "POSTGRES_PASSWORD"
     try:
@@ -78,7 +78,7 @@ def ambiente_do_banco_casa(ex) -> dict:
 
 
 def ambiente_da_olaria(ex) -> dict:
-    """O ambiente do verbo olaria (card #4214): o endereço do serviço e a chave de serviço, lida do cofre
+    """O ambiente do verbo olaria: o endereço do serviço e a chave de serviço, lida do cofre
     (segredos/olaria/OLARIA_CHAVE, pelo mesmo caminho do banco-rag) e nunca impressa: só os nomes saem no stderr."""
     arquivo = ex.raizes.instancia() / "segredos" / "olaria" / "OLARIA_CHAVE"
     try:
@@ -224,7 +224,7 @@ def rodar(argv: list) -> int:
         morre(f"peça {nome}: ambiente {ambiente!r} não servido (banco-rag, banco-casa ou olaria)", 3)
     env["PYTHONPATH"] = os.pathsep.join(str(raiz / c) for c in (p.get("pythonpath") or []))
     env["PF_PECA"] = nome
-    # DT 456: o bytecode gravado na bancada fazia o gate recusar a chamada seguinte (fora do git).
+    # o bytecode gravado na bancada fazia o gate recusar a chamada seguinte (fora do git).
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     cwd = raiz / (p.get("cwd") or ".")
     teto = int(p.get("teto_s") or TETO_PADRAO_S)

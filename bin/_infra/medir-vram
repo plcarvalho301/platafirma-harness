@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# medir-vram — o eixo de VRAM do host: cada processo da placa traduzido para a chave de serviço (spec eixos-do-host
-# R4 e R10, card #3921). Sub-ato de `infra` (como medir-rede): fora do PATH e do golden record, mora em bin/_infra/.
+# medir-vram — o eixo de VRAM do host: cada processo da placa traduzido para a chave de serviço.
+# Sub-ato de `infra` (como medir-rede): fora do PATH e do golden record, mora em bin/_infra/.
 # Chamado por `infra medir vram [--json]`, nunca direto. Só lê: não grava série, não descarrega modelo (R1).
 #
 # O que lê, e o que grava em campos distintos (R10). A placa: a memória em uso e a memória total, e a ocupação de SM

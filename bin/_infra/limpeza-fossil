@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# limpeza-fossil — tira o que as rodadas deixam para trás, só pelo que um critério positivo nomeia (spec eixos-do-host
-# R12 a R14, card #3920). Sub-ato de `infra` (arq:0110 §14), no molde da limpeza de quarentena: fora do PATH e do
+# limpeza-fossil — tira o que as rodadas deixam para trás, só pelo que um critério positivo nomeia.
+# Sub-ato de `infra`, no molde da limpeza de quarentena: fora do PATH e do
 # golden record, mora em bin/_infra/; chamado por `infra limpeza fossil [--ver] [--so-jobs] [--dias N]`, nunca direto.
 # `infra limpeza jobs` é este ato com --so-jobs: o cron do core o chama, e o job falhado tem um caminho só.
 #

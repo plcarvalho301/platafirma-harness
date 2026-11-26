@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # limpeza-logs — poda o registro de operação por retenção declarada.
-# Sub-ato de `infra` (arq:0110 §14, emenda 26/09/2026 — card #3145): fora do PATH e do
+# Sub-ato de `infra`: fora do PATH e do
 # golden record, mora em bin/_infra/. Chamado por `infra limpeza logs [args]`, nunca
 # direto; o cron do claudinho, diariamente, passa a chamar `infra limpeza logs`
 # (ex-bin/ops-log-prune, movido daqui — a agenda do cron muda em PR de platafirma-core).
@@ -9,13 +9,13 @@
 set -uo pipefail
 # ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] · LONGJOB_LOGDIR[=$PLATAFIRMA_INSTANCIA/var/log/jobs] · OPS_LOG_RETENCAO_DIAS[=90]
 
-# Raizes de producao (card #3010): os logs moram na instancia. Este script mora em
+# Raizes de producao: os logs moram na instancia. Este script mora em
 # bin/_infra/, um nivel abaixo de bin/ — raizes.sh fica dois niveis acima.
 . "$(dirname "$(readlink -f "$0")")/../../lib/raizes.sh"
 
 RETENCAO_DIAS="${OPS_LOG_RETENCAO_DIAS:-90}"
 # O bruto da porta (var/log/ops) não está aqui: nenhum dia sai por idade antes da extração.
-# Quem o corta é o timer com portão (#3354); nenhum verbo servido o apaga (arq:0123 §12).
+# Quem o corta é o timer com portão; nenhum verbo servido o apaga.
 OPS_DIR="${OPS_LOG_DIR:-$PLATAFIRMA_INSTANCIA/var/log/ops}"
 ALVOS=(
   "${LONGJOB_LOGDIR:-$PLATAFIRMA_INSTANCIA/var/log/jobs}:*.log"
@@ -43,7 +43,7 @@ retido=0
 if [ -d "$OPS_DIR" ]; then
   retido=$(find "$OPS_DIR" -maxdepth 1 -type f -name 'ops-*.jsonl' -mtime "+$RETENCAO_DIAS" -print | wc -l)
 fi
-echo "$(ts) poda ok — retencao=${RETENCAO_DIAS}d removidos=${total} · ops retido: ${retido} dias (corte do bruto é do timer, arq:0123 §12)" >> "$MARCA"
+echo "$(ts) poda ok — retencao=${RETENCAO_DIAS}d removidos=${total} · ops retido: ${retido} dias (corte do bruto é do timer)" >> "$MARCA"
 
 # O próprio log de poda não pode crescer para sempre: mantém as últimas 2000 linhas.
 if [ "$(wc -l < "$MARCA")" -gt 2000 ]; then

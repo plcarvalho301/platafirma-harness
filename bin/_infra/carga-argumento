@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""carga-argumento — carga única de argumentos do bruto para acervo.log_argumento (card #4153).
+"""carga-argumento — carga única de argumentos do bruto para acervo.log_argumento.
 
 Lê todos os dias presentes em disco via `lib/oplog.py` (o único leitor autorizado) e
 grava em `acervo.log_argumento` (evento_id uuid PRIMARY KEY, args text).

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# _infra-backup.py — corpo de `infra backup`. Mede, dispara sob demanda (DT 932) e restaura (DT 931)
+# _infra-backup.py — corpo de `infra backup`. Mede, dispara sob demanda e restaura
 # o declarado em registro/backups.json.
 # capacidade: infra
 # dono: ti
@@ -124,7 +124,7 @@ def _cmd_medir(reg: dict, como_json: bool) -> int:
                     i["ultimo"], _h(i["ultimo_bytes"]), _h(i["piso_bytes"])
                 )
             elif estado == "sem-backup":
-                det = "declarado sem cobertura — nao propor rotina, ver card #176"
+                det = "declarado sem cobertura — nao propor rotina"
             elif estado == "nao-medivel-daqui":
                 det = "roda em conta que este usuario nao alcanca"
             else:
