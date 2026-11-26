@@ -62,7 +62,7 @@ itens o exit vem de `agrega()`, restrito a 0, 1 e 5. Classe conhecida e sem impl
   `--caso descricao`), `ferramental`, `front`, `pdp`, `alcance`, `card`, `jobs`, `acervo` passam por
   `resultado.relatorio()`. `acervo` usa o `extra` do relatorio para o que nao pesa no exit:
   avisos (servindo sem espelho, predicados ainda fora da classe) e a pendencia do motor dirigida
-  a ia (spec espelho-de-leitura §4.2 item 6). `sessao` é medição de tokens do pacote de abertura, não veredito.
+  a ia. `sessao` é medição de tokens do pacote de abertura, não veredito.
 - Bancada: `repo --staged` e `arranque --staged` usam o veredito comum. `commit` usa o vocabulário
   (estado, desde, motivo) sem passar por `agrega()`: o exit vem das recusas e fica 0 mesmo com
   veredito indeterminável. `existe` tem par próprio existe/não-existe, com exit 0/1/5, fora de

@@ -2,7 +2,7 @@
 
 Toda figura do harness mora em `diagramas/`, na raiz, sem subpasta: recorte vai no nome do
 arquivo. A régua de forma é `acervo ler casa padrao diagramas`; a do nome do render, a ADR de
-morada do que o repositório versiona (`acervo ler casa adr arq:0042`). O instrumento que otimiza e cruza diagramas mora em
+morada do que o repositório versiona. O instrumento que otimiza e cruza diagramas mora em
 `tooling/diagramas/`, não aqui.
 
 ## Nome e render

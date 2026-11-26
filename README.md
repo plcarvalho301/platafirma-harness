@@ -4,8 +4,7 @@ Serve às cadeiras da PlataFirma os verbos de operação (`bin/`), a abertura de
 operação e as skills; roda da release em `/opt/platafirma/current/harness`, com estado na
 instância `/srv/platafirma/casa`. Não é o MCP de outros serviços: cada um mora no repo que o roda.
 
-Por que existe: O harness é módulo com repo próprio — `acervo ler casa adr arq:0019`;
-Fronteira do harness, o que uma sessão recebe ao abrir — `acervo ler casa spec fronteira-do-harness`.
+Por que existe: o harness concentra os verbos, bibliotecas, controle, sessão, recuperação e skills da PlataFirma em repositório próprio.
 
 ## Como sobe
 
@@ -50,7 +49,7 @@ lugar do repo (`platafirma-harness@<card>-<slug>`). Suítes com ambiente própri
 | `bin/` | os verbos de operação; sub-ato mora em `bin/_<verbo>/`, fora do PATH |
 | `abertura/` | persona, chapéu e caderno de cada cadeira, que `monta-sessao` injeta |
 | `agente/` | pacote da conta da fábrica: `CLAUDE.md`, `settings.json`, hook de porta e instalador |
-| `ops-server/` | o MCP de operação (`ops-mcp`), porta dos verbos para as superfícies; [README](ops-server/README.md) |
+| `borda/` | borda HTTP das faces do cubo de controle e da casca; [README](borda/README.md) |
 | `controle/` | plano de controle: agregador de estado e tela; [README](controle/README.md) |
 | `recuperacao/` | biblioteca do Recuperador: envelope, adaptadores, disjuntor, PEP, cache; [README](recuperacao/README.md) |
 | `chat/` | superfície de conversa Matrix: stack `chat`, worker e provisionamento; [README](chat/README.md) |

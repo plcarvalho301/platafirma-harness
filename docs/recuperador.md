@@ -2,7 +2,7 @@
 
 Contrato interno da biblioteca `recuperacao/`: o envelope, os adaptadores das seis fontes, o PEP por
 fonte, o cache e o gerador de gold, com o que foi medido em cada um. O porquê do componente está em
-`acervo ler casa adr arq:0064` e `acervo ler casa adr arq:0067`; a spec do recuperador é a régua
+a arquitetura do recuperador e o contrato do envelope de falha são a régua
 das invariantes citadas aqui.
 
 Biblioteca importada, nunca subprocess.
@@ -17,9 +17,9 @@ Biblioteca importada, nunca subprocess.
 
 Três escolhas de forma do envelope:
 
-1. **`linhas[]` é o campo por fonte.** A spec lista `cobertura`, `sinal` e `aviso[]` como escalares
+1. **`linhas[]` é o campo por fonte.** O desenho lista `cobertura`, `sinal` e `aviso[]` como escalares
    no topo e exige uma linha por fonte, que escalar não carrega com N > 1. `linhas[]` é o dado; os
-   três campos continuam saindo no JSON como a spec os descreve, porém derivados, nunca redigidos
+   três campos continuam saindo no JSON como o desenho os descreve, porém derivados, nunca redigidos
    em paralelo.
 2. **A serialização não repete o que já disse.** Com uma fonte só, `linhas` seria repetição do topo
    e não sai. Fonte caída também não sai de `linhas`: `{fonte, fonte-nao-indexada, causa}` já está

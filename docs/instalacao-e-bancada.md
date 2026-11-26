@@ -67,7 +67,7 @@ serviços; `platafirma` sem argumento lista os verbos. Na conta dos serviços, o
 Atalho `pf`, opcional: `puxar-bancada --alias` grava no `~/.bashrc` da conta o alias
 `pf` → `platafirma`, entre os marcadores `# >>> platafirma alias >>>` e
 `# <<< platafirma alias <<<`; vale no próximo shell. É ergonomia da conta, não nome de coisa da
-plataforma (`acervo ler casa adr ont:0087`). Segunda execução relata `conforme`; alias ou função
+plataforma. Segunda execução relata `conforme`; alias ou função
 `pf` com outro alvo, ou comando `pf` alheio no PATH, sai 4 sem editar; rc sem permissão de escrita
 sai 3.
 

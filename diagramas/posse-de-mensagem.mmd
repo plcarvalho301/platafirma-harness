@@ -15,4 +15,4 @@ sequenceDiagram
     S-->>A: aceito
     A->>S: consumir #42 --posse tokA
     Note over S: XACK + DEL posse:<caixa>:<msgid>
-    Note over A,B: Sem consumir no TTL (60 min, arq:0024): posse expira e<br/>XAUTOCLAIM (idle > TTL) devolve a entrada ao grupo
+    Note over A,B: Sem consumir no TTL (60 min): posse expira e<br/>XAUTOCLAIM (idle > TTL) devolve a entrada ao grupo

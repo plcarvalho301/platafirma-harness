@@ -1,16 +1,16 @@
-# ops-server
+# porta
 
-`ops-server/` é o fonte do MCP de operação (`ops-mcp`): expõe, sob a conta `claudinho`,
+`porta/` é o fonte do MCP de operação (`ops-mcp`): expõe, sob a conta `claudinho`,
 `malote` (e o apelido `run_command`), `ler_arquivo` (e o apelido `read_file`)/`write_file` e as tools de verbo (`monta_sessao`, `mesa`, `fila`,
 `tarefas`, `acervo`…). É a porta pela qual as três superfícies (claude.ai, fita do chat, Code)
-tocam o host. Código: `ops-server/server.py`.
+tocam o host. Código: `porta/server.py`.
 
 ## Topologia
 
 Tudo na conta `claudinho` (uid 1001):
 
 - `ops-mcp.service`: uvicorn no venv `/opt/platafirma/current/venv/ops`, porta `127.0.0.1:8010`,
-  com `WorkingDirectory=/opt/platafirma/current/harness/ops-server` e `uvicorn server:app`. Roda da
+  com `WorkingDirectory=/opt/platafirma/current/harness/porta` e `uvicorn server:app`. Roda da
   release: o código novo chega por `release promover`, que troca `current` e reinicia a porta. A
   unit e o `setup-ops.sh` que a instala moram em platafirma-core.
 - Raízes: código em `/opt/platafirma` (`PF_RELEASE_RAIZ`), estado e log em `/srv/platafirma/casa`
@@ -20,7 +20,7 @@ Tudo na conta `claudinho` (uid 1001):
 - `ops-tunnel.service`: túnel Cloudflare que publica `ops.platafirma.org/mcp` → `:8010`.
 - `ops-healthcheck.service` + `.timer`: bate `/health` e reinicia o `ops-mcp` se ele parar de responder.
 
-O venv `ops` se constrói de `ops-server/requirements.txt` (`registro/venvs.json`).
+O venv `ops` se constrói de `porta/requirements.txt` (`registro/venvs.json`).
 
 O processo é single-worker e single-thread (asyncio). `malote` roda a parte bloqueante em
 thread do anyio e em process group próprio (`start_new_session=True`); sem isso, um comando longo
@@ -68,7 +68,7 @@ sudo -u claudinho env XDG_RUNTIME_DIR=/run/user/1001 \
 teste rodar ops
 ```
 
-Passou quando sai `suite VERDE` e exit 0. Os testes moram soltos em `ops-server/test_*.py`.
+Passou quando sai `suite VERDE` e exit 0. Os testes moram soltos em `porta/test_*.py`.
 
 ## Auditoria
 

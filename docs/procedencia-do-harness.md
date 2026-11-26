@@ -14,20 +14,20 @@ código, seria transformar decisão de dono em detalhe de implementação.
 
 Uma entrada do PATH de produção está **conforme** quando o que ela executa mora
 no harness — o `readlink -f` dela cai dentro da release imutável em
-`/opt/platafirma/current/harness/bin` (card #3014, arq:0102; desde o card #3010 não
+`/opt/platafirma/current/harness/bin` (não
 há clone de bancada no caminho de execução). Nome do link diferente do nome do arquivo de destino
 não é divergência: alias (`encerrar` → `descansar`, `fila` → `fila_streams.py`)
 continua sendo um caminho de execução com origem única.
 
 Está **fora** quando resolve para qualquer outro lugar — outro repo, diretório de terceiro,
 pacote de sistema — ou quando é cópia de verbo num diretório do PATH fora da
-release, porque cópia não é forma válida de instalação (`arq:0037`). Fora sem
+release, porque cópia não é forma válida de instalação. Fora sem
 linha aqui reprova.
 
 Link quebrado também reprova: caminho de execução que não chega a lugar nenhum
 é ausência, e ausência se declara.
 
-Isto **não** é a régua de `arq:0037` — cabeçalho de três linhas e a conta de um
+Isto **não** é a régua de verbos — cabeçalho de três linhas e a conta de um
 verbo por capacidade são de `release conferir verbo`. Aqui só se pergunta onde o
 arquivo executado mora.
 
@@ -44,15 +44,15 @@ um diretório do PATH é script, não binário, e portanto **não** é coberto p
 reprovando, que é o defeito que se quer pegar.
 
 ```
-permite: nvcc   # dono: claudinho-TI · motivo: CUDA do pacote de sistema (/usr/local/cuda), instalado com privilégio de root — não é construção da plataforma
-permite: lynis   # dono: claudinho-seguranca · motivo: terceiro instalado pelo ferramental de segurança, instalação de fornecedor e não fonte do harness
-permite: testssl.sh   # dono: claudinho-seguranca · motivo: terceiro instalado pelo ferramental de segurança, instalação de fornecedor e não fonte do harness
-permite-classe: binario-de-terceiro   # dono: claudinho-TI · motivo: binário baixado do fornecedor, sem fonte neste repo para apontar; o PATH é de TI, o uso de cada ferramenta se manifesta na cadeira que a chama
+permite: nvcc   # dono: ti · motivo: CUDA do pacote de sistema (/usr/local/cuda), instalado com privilégio de root — não é construção da plataforma
+permite: lynis   # dono: seguranca · motivo: terceiro instalado pelo ferramental de segurança, instalação de fornecedor e não fonte do harness
+permite: testssl.sh   # dono: seguranca · motivo: terceiro instalado pelo ferramental de segurança, instalação de fornecedor e não fonte do harness
+permite-classe: binario-de-terceiro   # dono: ti · motivo: binário baixado do fornecedor, sem fonte neste repo para apontar; o PATH é de TI, o uso de cada ferramenta se manifesta na cadeira que a chama
 ```
 
 Dono aqui é de quem é a **decisão de manter a exceção**, não quem usa a
 ferramenta. Atribuição feita pela fábrica ao lavrar o #396 a partir do que o
-card nomeou; corrigir é ato de claudinho-TI, e uma linha basta.
+card nomeou; corrigir é ato de ti, e uma linha basta.
 
 ## Verificar
 

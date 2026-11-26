@@ -1,7 +1,7 @@
 # hash_servido.py — o hash do que foi SERVIDO. Uma lib, dois consumidores.
-# capacidade: harness-sessao · dono: claudinho-TI
+# capacidade: harness-sessao · dono: ti
 #
-# arq:0101 R7 fixa hash unico: `sha256(lavado.strip())[:12]`, "uma lib importada pela
+# Hash unico do conteudo servido: `sha256(lavado.strip())[:12]`, "uma lib importada pela
 # porta e pelo montador". Antes havia duas implementacoes da mesma conta —
 # `bin/monta-sessao::sha_conteudo` (sem strip) e o que a porta precisaria cunhar para
 # o ledger de dedup. Duas contas do mesmo numero divergem em silencio, e o ledger
@@ -20,7 +20,7 @@ TAM = 12
 
 
 def sha_servido(texto: str) -> str:
-    """sha256 do conteudo servido, hex, 12 caracteres (arq:0101 R7).
+    """sha256 do conteudo servido, hex, 12 caracteres.
 
     Entra `str`; `bytes` decodifica-se com replace antes, porque conteudo binario
     lavado ja chega como texto marcado (`<blob …>`), nunca cru.

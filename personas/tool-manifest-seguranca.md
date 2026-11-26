@@ -1,5 +1,5 @@
 
-# tool_manifest — claudinho-seguranca
+# tool_manifest — seguranca
  
 Fonte canônica: `PlataFirma:Sec/ferramental` na wiki. Este arquivo é cópia de trabalho para o Project.
 Executável: `platafirma-core:deploy/seguranca/` (commit `d2f5345`).

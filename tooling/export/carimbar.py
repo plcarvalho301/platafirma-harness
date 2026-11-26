@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gera o artefato classe B (copiado-pra-fora) com carimbo de frescor — spec S2.
+"""Gera o artefato classe B (copiado-pra-fora) com carimbo de frescor.
 
     python3 tooling/export/carimbar.py skills/prosa/SKILL.md [outra/SKILL.md ...]
 
@@ -7,7 +7,7 @@ Saída: dist/<nome-da-skill>/ com o SKILL.md carimbado e os arquivos-irmãos da 
 (ex.: reference/), mais dist/<nome-da-skill>.zip com a pasta inteira.
 O que sai daqui é o que se sobe ao claude.ai, bit a bit.
 
-Regras da spec que este script materializa:
+Regras que este script materializa:
 - carimbo = origem: <repo>@<blob_sha> + fonte: <path> + sincronizado_em: <ISO 8601>;
 - skill multi-arquivo: o SKILL.md carrega o carimbo, e os irmãos entram em `bundle:`
   com o blob de cada um — assim uma mudança em qualquer arquivo do pacote muda o

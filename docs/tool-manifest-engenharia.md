@@ -7,7 +7,7 @@ Substitui: tool_manifest.md (02/08/2026)
   em duas linhas separadas (`apt update` e `apt install`, nunca com `&&`: se o update
   sair não-zero por repo de terceiro quebrado, o install some em silêncio).
 - **`/opt/platafirma/current/harness/bin` e `~/.local/bin` estão no PATH**
-  (`_env_subprocesso()` em `ops-server/server.py`; o da release desde o card #3010). Binário em user-space é encontrável.
+  (`_env_subprocesso()` na porta da release). Binário em user-space é encontrável.
 - **Segredos não descem para o subprocesso**: `OPS_AUTH_TOKEN` e `TUNNEL_TOKEN` saem do
   env via `ENV_OCULTO`. Valor real em `~/.config/ops/env` (root:claudinho, 0640).
 - `~/.config/systemd/user/ops-mcp.service` é **root-owned**: não dá para editar a unit
@@ -39,7 +39,7 @@ systemctl --user · journalctl · systemd-run · systemd-analyze · loginctl · 
 → `ctop`: recurso por contêiner ao vivo. `dive`: camadas de imagem sem subir contêiner.
 → `sessao longjob`: job longo como unidade transiente em `app.slice/platafirma-job-*`,
   fora do cgroup do ops-mcp. Log em `/srv/platafirma/casa/var/log/jobs/`. Fonte em
-  `platafirma-harness/bin/_sessao/longjob` (card #3145; corpo saiu de `bin/longjob`,
+  `platafirma-harness/bin/_sessao/longjob` (corpo saiu de `bin/longjob`,
   fora do PATH agora), chamado por `bin/sessao`, servido no PATH da release
   (`/opt/platafirma/current/harness/bin/sessao`).
  
@@ -51,14 +51,14 @@ node 24.18.1 · npm 11.16.0 · make · gcc
 ### Scripts próprios fora de git (medido 03/08/2026 na pasta de trabalho da conta)
 sessao longjob (em git) · acervo-get · acervo-pacote · exporta-acervo-xlsx.py
 → **`sessao longjob` está versionado; `ops-log-prune` virou `infra limpeza logs`
-  (card #3145), também versionado.** Os outros três seguem exemplar único no host.
+  também versionado.** Os outros três seguem exemplar único no host.
  
 ### Segredo, sessão, cópia
 gpg · ssh · rsync · git · gh · git-lfs · tmux · age · sops · minisign · restic
 → `restic` presente e sem repositório configurado. Cofre tem
   `deploy/backup-cofre.{sh,service,timer}` no repo; a timer não está enabled no user.
  
-### De outra cadeira — presente no PATH, escopo do claudinho-seguranca
+### De outra cadeira — presente no PATH, escopo da cadeira seguranca
 cosign · gitleaks · trufflehog · grype · trivy · syft · osv-scanner · opa · step
 jwt · oauth2c · kcadm · openssl-pqc · hurl · lynis · testssl.sh · oscap · oscap-casco
 ssg-deriva · docker-bench-security (terceiro, fora da release)

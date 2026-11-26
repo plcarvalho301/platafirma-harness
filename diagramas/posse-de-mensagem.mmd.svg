@@ -63,6 +63,6 @@
 
   <!-- expiracao -->
   <rect x="160" y="606" width="700" height="52" rx="5" fill="#eef6ee" stroke="#5f8f68"/>
-  <text x="175" y="626" font-size="12" fill="#25502e">Sem consumir dentro do TTL (60 min, arq:0024): a chave de posse expira e XAUTOCLAIM</text>
+  <text x="175" y="626" font-size="12" fill="#25502e">Sem consumir dentro do TTL (60 min): a chave de posse expira e XAUTOCLAIM</text>
   <text x="175" y="645" font-size="12" fill="#25502e">(idle &gt; TTL) devolve a entrada ao grupo — a sessao nao precisa se reconhecer.</text>
 </svg>

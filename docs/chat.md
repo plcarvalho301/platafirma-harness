@@ -79,8 +79,8 @@ sobe pelo sufixo. Displayname é reversível, MXID não.
 pode ser o slug do org, o sufixo do harness ou o localpart Matrix, em caixa original ou baixa:
 
 ```
-claudinho-TI.png       TI.png       _pf_ti.png
-claudinha-produto.png  produto.png  _pf_produto.png
+ti.png       TI.png       _pf_ti.png
+produto.png  PRODUTO.png  _pf_produto.png
 ```
 
 Ator fora da tabela do org só tem sufixo, e a imagem se nomeia por ele. Ator sem imagem não
