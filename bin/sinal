@@ -76,6 +76,8 @@ POR_HEALTHCHECK = {
     "casa-db": "casa-db",
     "analise-db": "analise-db",
     "olaria": "olaria",
+    # a metabusca do verbo pesquisar: caiu em 25/11/2026 sem o sinal ver, porque nao estava aqui (#4456)
+    "searxng": "searxng",
 }
 
 # Imagem sem shell: sonda de fora, pelo posto.
