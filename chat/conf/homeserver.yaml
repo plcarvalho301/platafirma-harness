@@ -1,4 +1,4 @@
-# Homeserver Matrix — card 447, fatia A da minuta 0002.
+# Homeserver Matrix.
 #
 # Este arquivo e VERSIONADO e nao contem segredo nenhum. O que e segredo entra por
 # caminho de arquivo do cofre (`/segredos/*`, montado :ro) ou pelo segundo `-c`,
@@ -17,7 +17,7 @@ enable_metrics: false
 signing_key_path: /segredos/signing.key
 
 # Um listener, um recurso. `federation` NAO entra: e assim que a federacao fecha de
-# verdade (arq:0026) — o resto abaixo e cinto e suspensorio.
+# verdade — o resto abaixo e cinto e suspensorio.
 listeners:
   - port: 8008
     type: http
@@ -31,7 +31,7 @@ federation_domain_whitelist: []
 trusted_key_servers: []
 suppress_key_server_warning: true
 
-# --- Contrapartidas de borda (claudinho-seguranca, 14/08) --------------------------
+# --- Contrapartidas de borda (seguranca) -------------------------------------------
 # Sem oauth2-proxy no caminho, o endpoint client fica publico: estas quatro linhas sao
 # o que impede o mundo de abrir conta aqui. Sobem JUNTAS com a stack, nunca depois.
 enable_registration: false
@@ -63,7 +63,7 @@ oidc_providers:
         localpart_template: "{{ user.preferred_username }}"
         # Nome de exibicao pelo username, e nao pelo nome civil: o dono declarou que o
         # nome pessoal nao circula (14/08). `email_template` fica FORA por minimizacao
-        # (claudinho-seguranca, 14/08): instancia de um, sem federacao e sem servidor de
+        # (seguranca): instancia de um, sem federacao e sem servidor de
         # e-mail — endereco pessoal replicado num segundo banco nao serve funcao nenhuma.
         display_name_template: "{{ user.preferred_username }}"
 

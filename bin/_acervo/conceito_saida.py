@@ -1,4 +1,4 @@
-"""`acervo retirar biblioteca conceito <slug> --motivo "…" [--em <slug>] [--apply] [--json]` (DT 807).
+"""`acervo retirar biblioteca conceito <slug> --motivo "…" [--em <slug>] [--apply] [--json]`.
 
 - sem --em: apaga do tesauro o conceito sem obra, sem filho e sem aresta, com a ficha;
 - com --em <que fica>: funde o conceito no que fica (obras, filhos, arestas e rótulos passam a ele) e apaga o

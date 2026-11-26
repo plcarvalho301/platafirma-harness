@@ -29,7 +29,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Raizes de producao pelo auxiliar da propria arvore (lib/raizes.py, card #3010); o
+# Raizes de producao pelo auxiliar da propria arvore (lib/raizes.py); o
 # runner e o arquivo ao lado deste, por realpath — nunca clone montado a mao.
 _LIB = Path(__file__).resolve().parents[2] / "lib"
 if str(_LIB) not in sys.path:

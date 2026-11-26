@@ -1,9 +1,9 @@
 name: chat
 
-# Superficie de conversa (minuta 0002, card 447 — fatia A): homeserver Matrix, banco
+# Superficie de conversa: homeserver Matrix, banco
 # proprio e Application Service registrado. O que esta stack NAO faz e tao importante
 # quanto o que faz: nao fala com pf:msg (o chat e superficie, a malha continua sendo a
-# do motor — arq:0036) e nao tem comportamento de cadeira nenhum, que e o card 448.
+# do motor) e nao tem comportamento de cadeira nenhum.
 #
 # Segredo nao mora aqui. Os tres servicos leem do cofre da instancia
 # (/srv/platafirma/casa/segredos/matrix), por arquivo montado :ro ou pelo --env-file que o
@@ -12,7 +12,7 @@ name: chat
 # Este arquivo e PRODUTO e sobe da release (/opt/platafirma/current/harness/chat). Todo
 # caminho da INSTANCIA — cofre, fitas, journal, morada da abertura — mora na sobreposicao
 # /srv/platafirma/casa/deploy/chat/compose.override.yaml (forma em
-# compose.override.exemplo.yaml ao lado), que o `deploy` passa como segundo -f (card #3010).
+# compose.override.exemplo.yaml ao lado), passado como segundo -f.
 
 services:
   # Banco proprio da stack, padrao ja vigente no host (identidade, keycloak,
@@ -86,7 +86,7 @@ services:
   #   - em docker rootless o container NAO alcanca o host (host-gateway, 10.0.2.2
   #     e o gateway da bridge, os tres mudos — ja pago em controle/compose.yaml);
   #   - publicar a porta do Synapse no loopback para o worker falar com ele poria
-  #     a Admin API fora da rede interna, contra arq:0026.
+  #     a Admin API fora da rede interna.
   # Partindo assim: nenhuma porta nova, nenhuma travessia, e a UNICA fronteira e
   # o journal SQLite em WAL, no bind mount abaixo.
   chat-recepcao:
@@ -110,9 +110,9 @@ services:
       AS_PORTA: "8080"
       AS_TOKEN: ${AS_TOKEN:?falta AS_TOKEN no --env-file — sai de segredos/chat, cunhado por ./prepara.sh}
       HS_TOKEN: ${HS_TOKEN:?falta HS_TOKEN no --env-file — sai de segredos/chat, cunhado por ./prepara.sh}
-      # comum/cadeiras.py le a arvore abertura/<x>/ da morada publicada (arq:0073,
-      # arq:0097) — nao se calcula, se le da fonte. O ledger registro/ e historico e
-      # nenhum codigo vivo o le (incidente/ordem do dono). PLATAFIRMA_INSTANCIA, PF_ABERTURA_DIR,
+      # comum/cadeiras.py le a arvore abertura/<x>/ da morada publicada —
+      # nao se calcula, se le da fonte. O ledger registro/ e historico e
+      # nenhum codigo vivo o le. PLATAFIRMA_INSTANCIA, PF_ABERTURA_DIR,
       # CHAT_JOURNAL e CHAT_FITAS_RAIZ sao caminho de instancia: vem da sobreposicao,
       # junto com os binds a que correspondem.
       # Gatilho de idade DESARMADO, por decisao do dono em 15/08 (card 449): ele

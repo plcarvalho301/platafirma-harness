@@ -1,4 +1,4 @@
-"""testes — a linha da lista de portão (arq:0129; padrão testes).
+"""testes — a linha da lista de portão (padrão testes).
 
 A régua é a lista `checklist-testes` do acervo: ela diz, por critério, o antipadrão, a
 severidade e a cura. Aqui mora só o detector de cada critério, escolhido pelo id da lista
@@ -23,14 +23,14 @@ from .resultado import Apontamento
 
 CHAVE_LISTA = "checklist-testes"
 
-# demanda (card #3735): a prova de tela, que não roda no portão nem na rodada, só por ordem do dono
+# demanda: a prova de tela, que não roda no portão nem na rodada, só sob pedido expresso
 DEGRAUS = ("pequeno", "imagem", "rodada", "demanda")
 PASTAS_FORA = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist"}
 
 NOMEADO = re.compile(r"^([a-z][a-z-]*):")
 
 # Rito do débito técnico (padrão rito-debito-tecnico §2): a linha do balde com mais de 30 dias entra na
-# pauta da revisão. A quarentena (arq:0129 D6) é estado com prazo — dura até o débito morrer —, então o
+# pauta da revisão. A quarentena é estado com prazo — dura até o débito morrer —, então o
 # débito vencido é quarentena velha.
 PRAZO_DEBITO_DIAS = 30
 

@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # Onde escreve: platafirma-casa e repositorio de deliberacao e commita direto em main
-# (arq:0083 §1; ordem do dono de 28/09/2026; regime declarado em bin/repo). A worktree e
+# (regime declarado em bin/repo). A worktree e
 # a de main da cadeira, <bancada>/wt/platafirma-casa/<cadeira>/main, resolvida (e aberta
 # por `repo abrir platafirma-casa` quando falta) por _casa.py, o mesmo de circular e
 # formalizar. MINUTA_REPO aponta outro checkout (teste).
@@ -111,7 +111,7 @@ done
   echo "# ${N} — ${TITULO}"
   echo
   # Espécie antes do primeiro ##: sem ela a ingestão recusa a minuta e ela não vira
-  # ficha do acervo, que é por onde `minuta ler` a lê (arq:0115 §2.1, §7; #3225).
+  # ficha do acervo, que é por onde `minuta ler` a lê.
   echo "Espécie: minuta"
   echo
   echo "Aberta por: ${CADEIRA} · $(date +%F)"
@@ -143,7 +143,7 @@ done
 # pedia pra ver nao a encontrava. Publicar cedo (esqueleto) e publicar de novo (merito,
 # antes de circular) vence rascunho invisivel: 'circular' ja barra pauta vazia, entao
 # o esqueleto publicado nao circula sozinho. Ordem do dono, 07/09/2026. Publicar e
-# empurrar para main (arq:0083): sem ramo, sem PR.
+# empurrar para main: sem ramo, sem PR.
 REL="$(realpath --relative-to="$REPO" "$ARQ")"
 "$GIT" -C "$REPO" add -- "$REL" \
   || { echo "minuta escrever: git add falhou em $REPO — $ARQ ficou no disco, sem commit." >&2; exit 3; }

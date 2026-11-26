@@ -7,7 +7,6 @@
 # poda: cosmetica@consultar
 # ruff: noqa: ERA001
 #
-# spec: spec pesquisa-web
 # engenharia do verbo: ia (chapéu engenharia-de-harness). Despachante fino: parse do ato,
 # monta o Trabalho (PF_ORDEM_ID -> pasta em var/pesquisa/<trabalho>), delega a `pesquisa.atos`.
 # --json é o default (rota de máquina); --md é a vista humana. exit 0 ok / 1 falha de fonte / 2 uso.

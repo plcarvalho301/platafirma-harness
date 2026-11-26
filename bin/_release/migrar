@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# bin/_release/migrar — corpo do ato `migrar` do verbo `release` (card #3260, arq:0076)
+# bin/_release/migrar — corpo do ato `migrar` do verbo `release`
 # Contencao ESTRUTURAL (porta so-verbo, #3019):
 #   1. ALVO por allowlist de contêiner (BANCOS, abaixo). Fora da lista: exit 4.
 #   2. O SQL vem por STDIN, sempre. Nao ha ato que receba caminho de arquivo do host.
 #   3. psql roda com ON_ERROR_STOP=1 e -1 (transacao unica). Aborta inteira ou nada: exit 1.
 #   4. Nenhuma flag do chamador atravessa para o psql.
 #
-# Identidade (decisao 9, card #3145): PF_SUJEITO obrigatoria em `aplicar` (exit 3 sem ela).
+# Identidade: PF_SUJEITO obrigatoria em `aplicar` (exit 3 sem ela).
 # `bancos` e leitura e nao exige.
 set -uo pipefail
 
@@ -57,7 +57,7 @@ uso:
 bancos declarados: ${!BANCOS[*]}
 o SQL entra SEMPRE por stdin — a tool passa \`stdin=<corpo da migracao>\`.
 
-exit: tabela arq:0110 §4 — 0 ok · 1 negativo de mérito (psql abortou: a migracao em si
+exit: 0 ok · 1 negativo de mérito (psql abortou: a migracao em si
       falhou, transacao nao commitou) · 2 uso · 3 dependência ausente (docker, contêiner
       fora do ar, PF_SUJEITO) · 4 política/trava (banco fora da allowlist) · 5 indeterminável
 EOF
@@ -121,7 +121,7 @@ case "$ato" in
     # -T sem tty; -i para o stdin fluir. ON_ERROR_STOP + -1: aplica inteira ou nada.
     # -e ecoa cada comando e -P pager=off; NOTICE dos aceites vao a stderr do psql.
     # stdout do psql (linhas de SELECT/aceite) SOBE para o chamador: e a prova que o
-    # card #3019 pede no comentario.
+    # comentario da migracao.
     if printf '%s\n' "$sql" | docker exec -i "$ctr" psql -U "$usr" -d "$base" -v ON_ERROR_STOP=1 -1 -P pager=off -f -; then
       printf '%s: migracao aplicada em %s (%s/%s)%s\n' "$VERBO" "$banco" "$ctr" "$base" \
         "${PF_SUJEITO:+ (sujeito=$PF_SUJEITO)}" >&2
@@ -132,7 +132,7 @@ case "$ato" in
   senha)
     # Gera a senha de uma role de banco da allowlist, troca no banco e guarda como segredo
     # da instancia. O valor nao passa pelo chamador nem pela tela: nasce aqui, vai ao psql
-    # por stdin e ao arquivo 0600 por rename atomico (card #3375). A ordem protege o par:
+    # por stdin e ao arquivo 0600 por rename atomico. A ordem protege o par:
     # o banco aceita primeiro; recusou, o arquivo temporario some e nada muda.
     # Mais de um destino: a mesma senha vai a cada <stack>/<nome> (o consumidor que roda em
     # contêiner recebe a sua copia pelo env-file da propria stack). Uma geracao, um ALTER, N
@@ -170,7 +170,7 @@ case "$ato" in
     PG_SENHA_VERBO="$VERBO" pg_senha_trocar "$banco" "$role" "${alvos[@]}"
     ;;
   cortar)
-    # DT 792: o corte de um schema de um banco do registro para outro (ou para uma base de
+    # o corte de um schema de um banco do registro para outro (ou para uma base de
     # rascunho no conteiner do destino). O dump nasce no conteiner de origem (pg_dump -Fc),
     # desce a um arquivo 0600 da instancia e entra no destino por pg_restore numa transacao
     # unica; nunca passa pelo stdin nem pelo stdout da porta. Sai com a contagem de tabelas

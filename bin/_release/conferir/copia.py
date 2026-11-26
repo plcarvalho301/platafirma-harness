@@ -1,13 +1,13 @@
-"""copia — `release conferir copia`: toda materialização viva tem declaração (card #3763).
+"""copia — `release conferir copia`: toda materialização viva tem declaração.
 
-arq:0022 §6.3 manda uma classe própria de `release conferir`, por substrato (balde, banco, índice), que confere que
+Classe própria de `release conferir`, por substrato (balde, banco, índice), que confere que
 toda materialização viva é cópia declarada. A declaração nomeia a fonte, a chave, os atributos copiados, o ato que repõe
-a cópia, o modo (materializada ou sob demanda; §6.2) e, desde a arq:0130 D4, se a regeneração é reproduzível, com
+a cópia, o modo (materializada ou sob demanda) e se a regeneração é reproduzível, com
 método e insumos. Materialização sem declaração é fóssil (§6.5).
 
 Onde a declaração mora (decisão do dono de 21/10/2026, comentário #3480): no schema, por COMMENT na tabela, onde a cópia é
 tabela. Uma linha só, depois do comentário que a tabela já tinha, começando por `copia-de:` e com os campos separados
-por « | » (migrações 131 do rag e 019 do motor; a spec entidade-raiz-da-casa guarda o formato):
+por « | »:
 
     copia-de: familia=… | fonte=… | chave=<coluna> | atributos=a,b | repoe=… | modo=materializada|sob-demanda |
               reproduzivel=sim|nao | metodo=… | insumos=a,b | migracao=NNN
@@ -67,7 +67,7 @@ REGISTRO_BACKUPS = _os.path.join(
 def bancos_postgres_declarados(caminho_bancos: str | None = None,
                                caminho_backups: str | None = None) -> list[dict[str, Any]]:
     """Deriva a lista dos 10 bancos PostgreSQL do inventário declarativo registro/bancos.json,
-    cruzando com a cobertura declarada em registro/backups.json (DT 851)."""
+    cruzando com a cobertura declarada em registro/backups.json."""
     arq_b = caminho_bancos or _os.environ.get("PF_REGISTRO_BANCOS") or REGISTRO_BANCOS
     arq_k = caminho_backups or _os.environ.get("INFRA_BACKUPS") or REGISTRO_BACKUPS
     try:
@@ -113,7 +113,7 @@ SIM_NAO = ("sim", "nao")
 PREFIXOS_DE_FOSSIL = ("_backup_", "_mig_", "_fusao_", "_osint")
 MOSTRAR = 5
 
-# o espelho é o texto da família impressão (arq:0117 §1.4): declarada a família com `texto`, o espelho é declarado
+# o espelho é o texto da família impressão: declarada a família com `texto`, o espelho é declarado
 FAMILIA_DO_ESPELHO = ("impressao", "texto")
 
 SEM_COLETOR = (
@@ -406,7 +406,7 @@ def medir(alvo: str | None, portas: Portas) -> Medida:
         m.avisos.append(f"bancos PostgreSQL declarados ({len(bancos_pg)}): {resumo_pg}")
     m.avisos.append(f"sem coletor ({len(SEM_COLETOR)}): " + "; ".join(f"{n} ({p})" for n, p in SEM_COLETOR))
     nao_repro = sorted(f for f, valores in m.familias.items() if "nao" in valores)
-    m.avisos.append("famílias declaradas não reproduzíveis, que a régua de bootstrap trata como fonte (arq:0130 D4): "
+    m.avisos.append("famílias declaradas não reproduzíveis, que a régua de bootstrap trata como fonte: "
                     + (", ".join(nao_repro) if nao_repro else "nenhuma"))
     m.contagem["sem_coletor"] = len(SEM_COLETOR)
     return m

@@ -8,7 +8,7 @@
 # forma: predicado
 # cauda: sim
 #
-# Verbo conforme a spec_teste (rev 3) e arq:0110.
+# Verbo de execucao de testes.
 # A unidade de teste é a stack ou repositório resolvido pelo registro único
 # (bin/_release/registro.py, registro/venvs.json). Substitui a escada heurística
 # de interpretador pela resolução canônica.
@@ -20,7 +20,7 @@
 #   rodar       roda a suite de teste (verde/vermelha, bloco fixo, veredito memoizado)
 #   detectar    mostra stack, runner, chave, caminho e a linha que rodaria
 #   inventario  lista arquivos de teste (em portão ou fora, fóssil: não medido)
-#   bench       roda instrumento de medição/benchmark na bancada com credenciais do banco (DT 376)
+#   bench       roda instrumento de medição/benchmark na bancada com credenciais do banco
 set -uo pipefail
 
 . "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
@@ -38,7 +38,7 @@ carregar_ambiente_banco() {
   fi
 }
 
-# degrau de cada prova da rodada (arq:0129): pequeno, imagem, rodada ou preparo, pelo caminho que o runner recebe
+# degrau de cada prova da rodada: pequeno, imagem, rodada ou preparo, pelo caminho que o runner recebe
 declare -A DEGRAU_DE_ALVO=()
 
 BANCADA=""
@@ -62,41 +62,41 @@ uso:
   <nome> = nome de repositório ou stack registrado em registro/venvs.json
   <alvo> = caminho dentro da subárvore de teste, um ou mais (sem ele, a suíte da stack:
            os globs de "testes" no registro, senão a subárvore; stack sem nenhum dos dois
-           que divide repositório sai 5, card #3316)
-  --banco: roda com credenciais de leitura do banco de produção e EMBED_MODEL no ambiente (DT 376)
+           que divide repositório sai 5)
+  --banco: roda com credenciais de leitura do banco de produção e EMBED_MODEL no ambiente
   bench: roda script ou instrumento de medição (ex.: rag/bench/<script>.py) na bancada com
-         credenciais de leitura do banco de produção e devolve o stdout diretamente (DT 376)
+         credenciais de leitura do banco de produção e devolve o stdout diretamente
   --portao: roda só a lista do portão da subárvore (<sub>/tests/VERDES ou <sub>/VERDES);
             com <nome> = repositório e sem <alvo>, toda chave dele que declara
-            subárvore de teste, e passa quando todas passam (arq:0116 §6)
+            subárvore de teste, e passa quando todas passam
   --arvore <caminho>: roda a árvore materializada (exigida sob a raiz de release)
-  --base <rev>: só com --portao: roda o que o diff de <rev> até a árvore alcança (card #3370).
+  --base <rev>: só com --portao: roda o que o diff de <rev> até a árvore alcança.
                 Roda só: a linha "arquivo | regressivo #n"; a "arquivo | glob glob" quando algum glob
                 (relativo à raiz do repositório) casa um arquivo do diff; a cujo próprio arquivo
                 mudou; a que entrou ou mudou na lista. Linha sem raio só roda nos dois últimos casos
-                (arq:0128). Raio total (lock, construtor do venv, conftest: o que muda o ambiente de
+                Raio total (lock, construtor do venv, conftest: o que muda o ambiente de
                 todo teste) roda a lista inteira. A linha "arquivo | preparo" (o build de que as
                 provas dependem) roda antes, só quando a seleção não é vazia, e não conta nela.
                 Sem --base, a lista inteira; base que não se lê sai 5 (não medido) e nunca vira lista
                 inteira
-  --degrau <d>: só com --portao (arq:0129): o degrau da lista que roda. A linha da lista é
+  --degrau <d>: só com --portao: o degrau da lista que roda. A linha da lista é
                 '<arquivo> | <globs do raio> | degrau: imagem|rodada | regressivo #<n> | quarentena #<débito> | preparo';
                 sem 'degrau:' é pequeno. Sem --degrau o portão roda o pequeno, sob os delatores de
                 navegador e docker e sem rede (o preparo roda antes, com rede); imagem e rodada rodam
                 com o ambiente da stack. Linha em quarentena só roda no degrau rodada. Campo
                 desconhecido na linha sai 5 (não medido); 'lint testes' o aponta. Com PF_TESTE_ESTAGIO
-                (o que o verbo stack testar exporta, card #3733), a prova de imagem roda dentro do estágio de teste
+                (o que o verbo stack testar exporta), a prova de imagem roda dentro do estágio de teste
                 da stack, uma por contêiner, e o veredito tem chave própria. 'todos' (o da
                 rodada diária) roda os três degraus e a quarentena, cada linha no regime do seu degrau.
-                'degrau: demanda' (a prova de tela, card #3735) nunca roda no portão nem na rodada,
-                nem em 'todos': só com --degrau demanda, por ordem do dono, com o navegador do host
+                'degrau: demanda' (a prova de tela) nunca roda no portão nem na rodada,
+                nem em 'todos': só com --degrau demanda, sob pedido expresso, com o navegador do host
   --origin-main: só com --portao, sem <alvo> e sem --arvore: busca origin/main no clone base da
                  bancada, mede a lista inteira (os três degraus, e a quarentena, se não houver
                  --degrau) numa árvore descartável dele e a remove (a rodada diária do bot, card
                  #3370; não grava veredito de seleção)
   --prazo <s>: prazo máximo de execução em segundos por suíte ou bloco (default 300s python,
                600s node, ou PF_TESTE_TIMEOUT)
-  --chave <nome>: (deprecado) usa o ambiente de registro/venvs.json (arq:0110 §11)
+  --chave <nome>: (deprecado) usa o ambiente de registro/venvs.json
 
 bancada: PLATAFIRMA_BANCADA, senão \$PLATAFIRMA_ARQUIVO_BANCADA (sem declaração: exit 3)
 interpretador: venv construído pelo registro
@@ -113,7 +113,7 @@ EOF
 
 morre() { printf '%s: %s\n' "$VERBO" "$1" >&2; exit "${2:-3}"; }
 
-avisa_deprecado() {  # uma vez por sessão (arq:0110 §11)
+avisa_deprecado() {  # uma vez por sessão
   local aviso="$1" chave="$2"
   local sess_dir="/tmp/platafirma-avisos-${PF_SESSAO:-${USER:-default}}"
   mkdir -p "$sess_dir" 2>/dev/null || true
@@ -124,7 +124,7 @@ avisa_deprecado() {  # uma vez por sessão (arq:0110 §11)
   fi
 }
 
-# DT 810: uma rodada por bancada. A chamada que perdeu a conexão com a porta segue no host, e a
+# uma rodada por bancada. A chamada que perdeu a conexão com a porta segue no host, e a
 # repetida subia outra na mesma bancada: as duas disputavam o Chromium e o node_modules da stack e
 # reprovavam juntas. A rodada de topo segura um flock por clone e exporta PF_TESTE_TRAVA; as rodadas
 # filhas do portão (que o próprio teste dispara, em paralelo, na mesma bancada) herdam e não travam.
@@ -185,7 +185,7 @@ bancada_de() {
   fi
 
   # Sem bancada da cadeira para o repositório: exit 1 com varrido: e vizinho: repo abrir <repo>;
-  # o fallback para o clone base sai (Passo 4 do card #3152).
+  # o fallback para o clone base sai.
   local varrido="$BANCADA/wt/$nome${cadeira:+/$cadeira}"
   printf '%s: sem bancada da cadeira para o repositório '\''%s'\''\n' "$VERBO" "$nome" >&2
   printf '  varrido: %s\n' "$varrido" >&2
@@ -336,12 +336,12 @@ ambiente_do_registro() {  # $1=clone
   return 0
 }
 
-# Stack node (card #3386): o lock da stack é um package-lock.json. O ambiente é o MESMO que
+# Stack node: o lock da stack é um package-lock.json. O ambiente é o MESMO que
 # `release promover` constrói (npm ci --ignore-scripts, chave <nome>-<hash>); a suíte é uma lista
 # de arquivos .mjs/.js que saem 0, a convenção das provas da platafirma-ui (a lista vem de
 # "testes" no registro, ou de <alvo>). Roda com o node de sistema, o node_modules do ambiente
 # travado e o Chromium do host em CHROME. Arquivo .sh roda com bash, o resto com node, sempre
-# da raiz do repositório. Com --portao (card #3426) a lista é a da subárvore (arq:0116 §5),
+# da raiz do repositório. Com --portao a lista é a da subárvore,
 # a rodada vale em --arvore e o veredito é memoizado por (árvore, chave), como o das stacks
 # python. Stack node sem "teste" (subárvore) não entra no portão da família; stack node com
 # "teste" sem lista de portão faz o portão da família recusar (5, lista ausente é não medida).
@@ -351,9 +351,9 @@ lock_e_node() { [ "$(basename "${REG_LOCK:-}")" = package-lock.json ]; }
 # elo de node_modules, o `dist/` que as provas constroem, o node_modules que o `construir.sh`
 # instala. Quem não aceita escrita roda numa CÓPIA gravável e descartável — o mesmo conteúdo, sem
 # `.git` nem node_modules — e a original fica como estava. O veredito segue memoizado pela árvore
-# ORIGINAL (`ARVORE_ORIGEM`), que é a que o pre-push e o gate leem. Antes (card #3426) a rodada
+# ORIGINAL (`ARVORE_ORIGEM`), que é a que o pre-push e o gate leem. Antes a rodada
 # saía 5 aqui, e a primeira promoção de platafirma-ui nunca teria medido nada (#3427).
-# Delatores do degrau pequeno (arq:0129 D3), como lib/teste_isolado.py já faz no python: navegador e
+# Delatores do degrau pequeno, como lib/teste_isolado.py já faz no python: navegador e
 # docker saem 97 dizendo a cura e deixam o nome em $PF_DELATOR_MARCA, para o runner nomear quem
 # delatou mesmo quando a prova engole o erro. O navegador de verdade não está no PATH nem em CHROME.
 delatores_do_pequeno() {  # $1=diretório
@@ -426,10 +426,10 @@ _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
   # npm_config_ignore_scripts: a prova que chama `npm ci` (construir o dist) também não roda
   # script de pacote, como o construtor do ambiente
   # O navegador do host (CHROME) só vai à prova de imagem ou de rodada; o degrau pequeno recebe o delator
-  # no lugar dele, em `_uma_prova` (arq:0129 D3).
+  # no lugar dele, em `_uma_prova`.
   envx=(NODE_ENV=test npm_config_ignore_scripts=true)
 
-  # Veredito do portão (card #3426): a mesma chave (árvore, stack, ambiente) que o pre-push e
+  # Veredito do portão: a mesma chave (árvore, stack, ambiente) que o pre-push e
   # o gate leem. Só a rodada de portão grava e lê; rodada de alvo avulso roda sempre.
   local vereditos_dir="${PLATAFIRMA_INSTANCIA:-/srv/platafirma/casa}/var/pre-push/vereditos"
   local arv_hash="" memo="" v="" memo_inteiro="" cmd=() f_abs
@@ -492,7 +492,7 @@ _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
   # grava a duração no log, e a linha final cita os mais lentos.
   local tmpr i ms s trab=1 ativos=0 seriais=() paralelos=() t_ini t_fim lentos delat pequeno_n=0 estagio_n=0 x
   tmpr="$(mktemp -d "${TMPDIR:-/tmp}/teste-node.XXXXXX")" || morre "não criei o diretório de saída das provas" 3
-  # Degrau pequeno (arq:0129 D3): navegador e docker apontam para delatores que saem 97, e a prova roda
+  # Degrau pequeno: navegador e docker apontam para delatores que saem 97, e a prova roda
   # num namespace de rede próprio, sem interface. O preparo (`| preparo`) roda antes, com rede, e as
   # provas de imagem e de rodada rodam com o navegador do host.
   delat="$tmpr/delatores"
@@ -520,7 +520,7 @@ _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
     # que é de onde as provas da platafirma-ui se rodam (dist/, src/)
     case "$f" in /*) f_abs="$f" ;; *) f_abs="$raiz/$f" ;; esac
     if [ "$regime" = imagem ] && [ -n "${PF_TESTE_ESTAGIO:-}" ]; then
-      # arq:0129 D4 (card #3733): a prova roda dentro do estágio de teste da stack, pelo caminho relativo à
+      # a prova roda dentro do estágio de teste da stack, pelo caminho relativo à
       # raiz do repositório; quem constrói o estágio e segura a trava é o `stack testar`
       cmd=("$PF_TESTE_ESTAGIO" estagio "$PF_TESTE_ESTAGIO_STACK" "$PF_TESTE_ESTAGIO_REV" rodar "${f_abs#"$c"/}")
       pre=(env -u CHROME -u PUPPETEER_EXECUTABLE_PATH -u PLATAFIRMA_CHROMIUM)
@@ -534,7 +534,7 @@ _node_em_bloco() {  # $1=clone-ou-cópia $2=raiz(cwd) $3=rótulo [$4=alvo...]
     printf '%s' "$rc" > "$tmpr/$1.rc"
     printf '%s' "$(( (t1 - t0) / 1000000 ))" > "$tmpr/$1.ms"
   }
-  # Estágio de teste (arq:0129 D4, card #3733): com PF_TESTE_ESTAGIO a prova de imagem roda dentro da imagem
+  # Estágio de teste: com PF_TESTE_ESTAGIO a prova de imagem roda dentro da imagem
   # da stack, não no navegador do host. O estágio se constrói uma vez, aqui, e só quando a seleção tem
   # prova de imagem: seleção vazia nunca chega a este ponto, e não constrói nada.
   if [ -n "${PF_TESTE_ESTAGIO:-}" ]; then
@@ -653,7 +653,7 @@ pytest_em_bloco() {  # $1=clone $2=raiz(cwd) $3=rotulo $4=modo(py:<python>|isola
       [ "$trab" -lt 2 ] && trab=2
     fi
     case "$trab" in ''|*[!0-9]*) trab=1 ;; esac
-    # DT 496: um diretorio tambem e uma suite de varios arquivos. A rodada fora
+    # um diretorio tambem e uma suite de varios arquivos. A rodada fora
     # do portao usava um so processo e perdia o resumo ao ultrapassar 300 s.
     if [ "${portao:-0}" -ne 1 ]; then
       n_arquivos="$(cd "$raiz" && python3 - "${alvos[@]}" <<'PY'
@@ -669,7 +669,7 @@ PY
       [ "$trab" -gt 8 ] && trab=8
     fi
     [ "$trab" -gt "$n_arquivos" ] && trab="$n_arquivos"
-    # DT 777: nunca mais trabalhadores que a folga do teto de processos do usuario
+    # nunca mais trabalhadores que a folga do teto de processos do usuario
     local _pedido="$trab"
     trab="$(teto_por_folga "$trab")"
     [ "$trab" -lt "$_pedido" ] && printf 'paralelo: folga do teto de processos cabe %s de %s trabalhador(es)\n' "$trab" "$_pedido" >&2
@@ -893,7 +893,7 @@ PY
   return "$rc"
 }
 
-# arq:0116 §7: artefato de terceiro pinado da família entra na árvore medida pelo mesmo
+# artefato de terceiro pinado da família entra na árvore medida pelo mesmo
 # construtor da release (lib/terceiros.sh), do cache por sha256. O registro vem da própria
 # árvore quando ela o tem (bancada ou árvore materializada), senão o do verbo.
 terceiros_na_arvore() {  # $1=arvore
@@ -906,7 +906,7 @@ terceiros_na_arvore() {  # $1=arvore
   esac
 }
 
-# arq:0116 §5: a lista de portão mora na própria subárvore de teste da chave, com os
+# a lista de portão mora na própria subárvore de teste da chave, com os
 # caminhos relativos a ela: <sub>/tests/VERDES, senão <sub>/VERDES. Imprime o caminho;
 # vazio = lista ausente.
 lista_portao_de() {  # $1=clone $2=subarvore
@@ -917,9 +917,9 @@ lista_portao_de() {  # $1=clone $2=subarvore
   return 0
 }
 
-# card #3370 (emenda da arq:0116 §6): o portão roda o que a mudança alcança. O raio total
+# o portão roda o que a mudança alcança. O raio total
 # mora aqui, no código, e não em arquivo que o diff possa editar. Regra do dono (14/10/2026,
-# card #3535): roda só o raio de ataque da mudança, e mais nenhum. Raio total é só o que
+# roda só o raio de ataque da mudança, e mais nenhum. Raio total é só o que
 # muda o AMBIENTE de todo teste (o lock, o construtor do venv, o conftest); ferramenta,
 # registro e verbo entram pelo raio declarado de cada linha, e linha nova ou mudada numa
 # lista de portão roda por si (linhas_novas_da_lista). `*` e `**` casam `/`.
@@ -1066,7 +1066,7 @@ linha_arquivo() {
   printf '%s' "$l"
 }
 
-# Gramática da linha (arq:0129 D1; referencias/classes/teste.md no platafirma-casa): depois do arquivo, campos separados por `|`, cada
+# Gramática da linha (referencias/classes/teste.md no platafirma-casa): depois do arquivo, campos separados por `|`, cada
 # um nomeado ou de palavra reservada, em qualquer ordem: `degrau: imagem|rodada`, `regressivo [#n]`,
 # `quarentena [#débito]`, `preparo`; o que sobra é o raio, globs separados por espaço. Preenche
 # CAMPO_*; CAMPO_ERRO diz o campo que a gramática não lê (nomeado e desconhecido, ou degrau de valor
@@ -1101,7 +1101,7 @@ campos_da_linha() {  # $1=linha crua da lista
   return 0
 }
 
-# Rodada diária (arq:0129 D5 e D7): os três degraus de uma família, um de cada vez, cada um com o seu
+# Rodada diária: os três degraus de uma família, um de cada vez, cada um com o seu
 # tempo. O do pequeno, medido sobre a lista inteira (o limite do caminho comum), vai à saída e, acima do
 # teto, ao balde de débito técnico (#2856), uma linha por família. O pior resultado vence: vermelho
 # (1), depois não medido (5), depois o resto.
@@ -1137,7 +1137,7 @@ balde_do_pequeno() {  # $1=familia $2=segundos $3=teto
     return 0
   fi
   hoje="$(date +%F)"
-  if saida="$("$tarefas" dt admitir "teste — o degrau pequeno de $familia passa de $teto s no caminho comum (arq:0129 D7)" \
+  if saida="$("$tarefas" dt admitir "teste — o degrau pequeno de $familia passa de $teto s no caminho comum" \
       --medido-em "$hoje" \
       --evidencia "rodada diária de $hoje sobre origin/main: o degrau pequeno de $familia levou $s s, teto de $teto s" \
       --raio "$familia@${REG_SUBARVORE:+$REG_SUBARVORE/}VERDES" \
@@ -1153,7 +1153,7 @@ balde_do_pequeno() {  # $1=familia $2=segundos $3=teto
 # O degrau da linha entra na rodada pedida? $1=pedido (pequeno|imagem|rodada|todos), $2=degrau da
 # linha, $3=campo de quarentena (vazio = fora dela). Quarentena não é degrau: roda só na rodada.
 degrau_entra() {
-  # demanda (decisão do dono, 17/10/2026, card #3735): a prova de tela não roda no portão nem na
+  # demanda: a prova de tela não roda no portão nem na
   # rodada; só quando pedida pelo nome. Nem 'todos' a leva.
   if [ "$2" = demanda ]; then [ "$1" = demanda ]; return; fi
   [ "$1" = demanda ] && return 1
@@ -1175,13 +1175,13 @@ alcanca() {  # $1=arquivo da lista (relativo à raiz do repo) $2=globs $3=diff ;
   return 1
 }
 
-# arq:0128: linha sem raio não é alcançada por diff nenhum. Só roda quando o próprio arquivo dela
+# linha sem raio não é alcançada por diff nenhum. Só roda quando o próprio arquivo dela
 # mudou ou quando ela entrou ou mudou na lista (`alcanca` com globs vazios).
 
 # Chave do memo do portão: (árvore, chave, fontes servidas) na rodada inteira; (árvore,
 # chave, fontes servidas, hash da seleção) na parcial. Veredito parcial nunca responde pela
 # rodada inteira. As fontes servidas são a casa e o harness da release no ar, que a
-# suíte lê em leitura (DT 935): promover uma delas muda o que a mesma árvore mede (DT 954).
+# suíte lê em leitura: promover uma delas muda o que a mesma árvore mede.
 fontes_servidas_hash() {
   local rel="${PLATAFIRMA_RELEASE:-/opt/platafirma/current}" nome linha=""
   for nome in casa harness; do
@@ -1198,7 +1198,7 @@ memo_do_portao() {  # $1=vereditos_dir $2=arvore
   printf '%s' "$m"
 }
 
-# DT 777: o RLIMIT_NPROC (56000 na porta, _rlimits_filho, #4323) conta processos e threads de todo
+# o RLIMIT_NPROC (56000 na porta, _rlimits_filho) conta processos e threads de todo
 # o usuario, nao so desta suite. folga_nproc imprime quantos ainda cabem (soft menos as
 # tarefas vivas do usuario), ou nada quando o teto e ilimitado ou ilegivel; teto_por_folga
 # corta um numero de trabalhadores para caber nela, a PF_TESTE_THREADS_POR_TRABALHADOR
@@ -1224,20 +1224,20 @@ teto_por_folga() {  # $1=trabalhadores pedidos; imprime o que cabe
   printf '%s' "$pedido"
 }
 
-# arq:0116 §6: `teste rodar <repositório> --portao` roda a lista de portão de toda chave do
+# `teste rodar <repositório> --portao` roda a lista de portão de toda chave do
 # repositório que declara subárvore de teste, cada uma no seu ambiente, e passa quando
 # todas passam. O registro das chaves vem da árvore medida (a que o push ou a promoção
 # leva), não do verbo no ar. Cada chave é um processo próprio (memo por árvore e chave).
 portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvore(ou vazio) $5=base(ou vazio) $6=degrau
   local c="$1" familia="$2" bancada="$3" arv="$4" base="${5:-}" degrau_fam="${6:-pequeno}" venvs linhas chave lock sub
-  # card #3370 e F4277 regra 1: toda chave recebe --base, e cada uma decide o próprio raio
+  # toda chave recebe --base, e cada uma decide o próprio raio
   # total (raio_total_desta_stack): o lock de uma stack não roda a lista inteira das outras.
   local base_args=()
   if [ -n "$base" ]; then
     if diff_da_base "$c" "$base" "$([ -n "$arv" ] && echo 1 || echo 0)" >/dev/null; then
       base_args=(--base "$base")
     else
-      # arq:0128 §5: base que não se lê é falha de ambiente, não lista inteira
+      # base que não se lê é falha de ambiente, não lista inteira
       printf 'portao %s: NAO MEDIDO — base %s ilegível em %s\n' "$familia" "$base" "$c"
       return 5
     fi
@@ -1259,7 +1259,7 @@ portao_da_familia() {  # $1=clone $2=familia $3=bancada(chave ou vazio) $4=arvor
   # artefato pinado entra na árvore uma vez, antes: as chaves o achariam ao mesmo tempo e
   # o construtor escreve no mesmo destino. Só a leitura do memo dispensa isso.
   [ "${PF_TESTE_SO_MEMO:-0}" = 1 ] || terceiros_na_arvore "$c"
-  # DT 777: concorrência com teto (antipadrões de código F9). As sete chaves do harness
+  # concorrência com teto (antipadrões de código F9). As sete chaves do harness
   # subindo juntas, cada uma com seu pool do pytest-xdist, estouravam o RLIMIT_NPROC do
   # host (EAGAIN, can't start new thread). No máximo PF_TESTE_CHAVES_PARALELAS chaves
   # rodam ao mesmo tempo (padrão 3), e sem PF_TESTE_PARALELO cada uma recebe a sua fatia
@@ -1337,7 +1337,7 @@ ato_detectar() {
   done
   [ -n "$nome" ] || [ -n "$chave" ] || uso
   if [ -n "$chave" ]; then
-    avisa_deprecado "--chave está deprecado (arq:0110 §11); aponte o nome da stack ou repositório no primeiro argumento" "chave"
+    avisa_deprecado "--chave está deprecado; aponte o nome da stack ou repositório no primeiro argumento" "chave"
   fi
 
   local alvo_resolver="${chave:-$nome}"
@@ -1407,7 +1407,7 @@ ato_inventario() {
 
   printf '# inventário de testes: %s (%s)\n' "$nome" "$REG_FAMILIA"
   local achados=() arq
-  if [ -n "$REG_TESTES" ]; then  # card #3316: só o que a stack coleta
+  if [ -n "$REG_TESTES" ]; then  # só o que a stack coleta
     local col; col="$(coleta_da_stack "$raiz" 2>/dev/null)" || col=""
     while IFS= read -r arq; do [ -n "$arq" ] && achados+=("$raiz/$arq"); done <<<"$col"
   else
@@ -1417,7 +1417,7 @@ ato_inventario() {
     done < <(find "$raiz" -type f \( -name "test_*.py" -o -name "*_test.py" \) 2>/dev/null | sort)
   fi
 
-  # A lista de portão (arq:0116 §5) lida pelos dois eixos da arq:0129: o degrau (pequeno, imagem,
+  # A lista de portão lida pelos dois eixos: o degrau (pequeno, imagem,
   # rodada) e o tipo. O tipo ainda não tem marca na linha (padrão testes, §1): só `regressivo` se
   # lê dela, e contrato e integração saem com zero escrito e a nota, o zero explícito da spec §4.
   local verdes_lista=() cand arq_l d n_pequeno=0 n_imagem=0 n_rodada=0 n_quar=0 n_regr=0 n_prep=0 n_ilegivel=0 n_fora=0
@@ -1499,9 +1499,9 @@ ato_rodar() {
 
   [ -n "$nome" ] || [ -n "$chave" ] || uso
   if [ -n "$chave" ]; then
-    avisa_deprecado "--chave está deprecado (arq:0110 §11); aponte o nome da stack ou repositório no primeiro argumento" "chave"
+    avisa_deprecado "--chave está deprecado; aponte o nome da stack ou repositório no primeiro argumento" "chave"
   fi
-  # arq:0129 D1: o degrau pedido. Sem --degrau o portão roda o pequeno; a rodada diária roda os três.
+  # o degrau pedido. Sem --degrau o portão roda o pequeno; a rodada diária roda os três.
   case "$degrau" in
     '') ;;
     pequeno|imagem|rodada|demanda|todos) [ "$portao" -eq 1 ] || morre "--degrau só com --portao: o degrau é da lista de portão" 2 ;;
@@ -1523,7 +1523,7 @@ ato_rodar() {
   resolver_registro "$alvo_resolver"
   case "$nome" in *@*) REG_BANCADA="${nome#*@}" ;; esac  # --chave nao apaga a bancada escolhida
 
-  # Rodada diária (card #3370): a lista inteira sobre origin/main, numa árvore descartável do
+  # Rodada diária: a lista inteira sobre origin/main, numa árvore descartável do
   # clone base da bancada (<bancada>/<repo>), que o job do bot não tem por cadeira. A árvore
   # nasce sob a raiz que --arvore aceita e some na saída.
   if [ "$origem_main" -eq 1 ]; then
@@ -1606,7 +1606,7 @@ ato_rodar() {
     fi
   fi
 
-  # arq:0116 §6: o repositório inteiro no portão — toda chave com subárvore de teste
+  # o repositório inteiro no portão — toda chave com subárvore de teste
   if { [ "$portao" -eq 1 ] || [ "$REG_ESTEIRA" = "documento" ]; } && [ -z "$alvo" ] && [ -z "$chave" ] && [ "${nome%%@*}" = "$REG_FAMILIA" ]; then
     local arv_fam=""
     [ "$EM_ARVORE" -eq 1 ] && arv_fam="$c"
@@ -1629,14 +1629,14 @@ ato_rodar() {
 
   local alvos=() lista_portao="" ausentes=()
   if [ "$portao" -eq 1 ]; then
-    # arq:0116 §5: lista na própria subárvore; ausente é suíte não medida; vazia vale
+    # lista na própria subárvore; ausente é suíte não medida; vazia vale
     lista_portao="$(lista_portao_de "$c" "$REG_SUBARVORE")"
     if [ -z "$lista_portao" ]; then
-      printf 'suite INDISPONIVEL: %s — sem lista de portão em %s/ (tests/VERDES ou VERDES; arq:0116 §5: lista ausente é suíte não medida)\n' \
+      printf 'suite INDISPONIVEL: %s — sem lista de portão em %s/ (tests/VERDES ou VERDES: lista ausente é suíte não medida)\n' \
         "$nome" "${REG_SUBARVORE:-.}"
       exit 5
     fi
-    # card #3370, arq:0128: com --base, roda o que o diff alcança pelo raio declarado e os
+    # com --base, roda o que o diff alcança pelo raio declarado e os
     # regressivos, e mais nenhum. Raio total (lista fixa no código): a lista inteira. Base
     # ilegível: sai 5, não medido.
     local seleciona=0 dif="" tot="" pulados=() sel_rels=() n_lista=0 linha_crua globs dest rel_repo
@@ -1648,7 +1648,7 @@ ato_rodar() {
           seleciona=1
         fi
       else
-        # arq:0128 §5: base que não se lê é falha de ambiente, não lista inteira
+        # base que não se lê é falha de ambiente, não lista inteira
         printf 'suite INDISPONIVEL: %s — base %s ilegível em %s\n' "$nome" "$base" "$c"
         exit 5
       fi
@@ -1671,13 +1671,13 @@ ato_rodar() {
       else
         ausentes+=("$linha"); continue
       fi
-      # arq:0128 §6: `arquivo | preparo` (o build de que as provas dependem) não é teste: não
+      # `arquivo | preparo` (o build de que as provas dependem) não é teste: não
       # entra na contagem nem é selecionado por si; roda antes, quando a seleção não é vazia.
       prep="$CAMPO_PREP"
-      # no estágio o dist/ já vem construído da própria imagem (arq:0129 D4): o preparo do host não roda
+      # no estágio o dist/ já vem construído da própria imagem: o preparo do host não roda
       if [ "$prep" -eq 1 ] && [ -n "${PF_TESTE_ESTAGIO:-}" ]; then continue; fi
       if [ "$prep" -eq 1 ] && [ "$seleciona" -eq 1 ]; then preparos_dest+=("$dest"); continue; fi
-      # arq:0129 D1: o degrau pedido decide que linhas entram; o preparo não tem degrau (roda antes,
+      # o degrau pedido decide que linhas entram; o preparo não tem degrau (roda antes,
       # com rede, para quem for selecionado). Quarentena não é degrau: só entra na rodada.
       degr="${CAMPO_DEGRAU:-pequeno}"
       if [ "$prep" -eq 0 ] && ! degrau_entra "$degrau_pedido" "$degr" "$CAMPO_QUAR"; then
@@ -1689,7 +1689,7 @@ ato_rodar() {
         continue
       fi
       n_lista=$((n_lista + 1))
-      # arq:0128: roda o raio de ataque da mudança e os regressivos, e mais nenhum. `arquivo |
+      # roda o raio de ataque da mudança e os regressivos, e mais nenhum. `arquivo |
       # regressivo #<defeito>` roda sempre; linha com raio roda se algum glob casa o diff; linha
       # sem raio só roda quando o próprio arquivo mudou ou quando entrou ou mudou na lista.
       if [ "$seleciona" -eq 1 ]; then
@@ -1747,7 +1747,7 @@ ato_rodar() {
       fi
     fi
     # o veredito do estágio tem chave própria: o verde da lista rodada no navegador do host nunca responde
-    # pelo da imagem (arq:0129 D4)
+    # pelo da imagem
     if [ -n "${PF_TESTE_ESTAGIO:-}" ] && [ "${#sel_rels[@]}" -gt 0 ]; then
       SELECAO_HASH="$(printf 'estagio=%s\n%s\n' "${PF_TESTE_ESTAGIO_STACK:-}" "$(printf '%s\n' "${sel_rels[@]}" | LC_ALL=C sort)" | sha256sum | cut -c1-16)"
     fi
@@ -1944,7 +1944,7 @@ case "$ato" in
   inventario)   ato_inventario "$@" ;;
   bench|medir)  ato_bench "$@" ;;
   *)
-    # arq:0110 §3 Q9: teste <verbo>
+    # teste <verbo>
     c="$(declara_bancada 2>/dev/null && clone_de "platafirma-harness" 2>/dev/null || true)"
     if [ -n "$c" ] && [ -f "$c/controle/tests/test_contrato_$ato.py" ]; then
       ato_rodar "platafirma-harness" "controle/tests/test_contrato_$ato.py"

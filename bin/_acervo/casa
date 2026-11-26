@@ -2,14 +2,14 @@
 # acervo casa — leitura da partição casa pela CHAVE, da tabela acervo.casa (rag_extractor).
 # capacidade: conhecimento
 # dono: dados
-#   (matéria/semântica: claudinho-dados · dono; mecanismo/harness: claudinho-TI · construcao)
+#   (matéria/semântica: dados · dono; mecanismo/harness: ti · construcao)
 #
-# Documento de casa é ficha do acervo (arq:0115 §1): lê-se pela chave (§3), nunca pelo
+# Documento de casa é ficha do acervo: lê-se pela chave, nunca pelo
 # caminho do suporte. É o sub-ato das espécies de `casa` que vivem na TABELA acervo.casa;
 # as de fonte própria (pagina, ferramental, stack, cargo, entidade) seguem nos seus casos do
 # despachante bin/acervo.
 #
-# Formas (arq:0106, arq:0115 §4.3, §6.4, §11):
+# Formas:
 #   acervo listar casa [--json]                        catálogo: espécies de casa com
 #                                                      projeção, regime e contagem
 #   acervo listar casa <especie> [--todas] [--dono <c>] [--situacao] [--json]
@@ -20,7 +20,7 @@
 #                                                      [--offset <bytes>] [--max-bytes <n>]
 #                                                      [--inteiro] [--cru]
 #
-# Chave (§3): adr `<serie>:NNNN` (arq:75 -> arq:0075; número nu resolve se uma série só o
+# Chave: adr `<serie>:NNNN` (número nu resolve se uma série só o
 # tiver, senão lista as opções, exit 2; ou o <slug> do arquivo NNNN-<slug>.md, se único);
 # minuta `NNNN`; datado `<AAAA-MM-DD>-<slug>` (o slug sem a data resolve se for único); vivo
 # `<slug>`. Depois: repo@path, path e, por fim, o título. Documento RETIRADO (§3.5) segue
@@ -59,12 +59,12 @@ USR = "rag"
 RE_ADR = re.compile(r"^(?:([a-z]+):)?(\d{1,4})$")
 RE_SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 RE_DATADO = re.compile(r"^\d{4}-\d{2}-\d{2}-")
-FORMA_ADR = "<serie>:NNNN ou NNNN (ex.: arq:0075, arq:75, 75)"
-# Classes que podem ser referente de Sobre: (arq:0115 §6.2; contrato de dados D7): o fichário
+FORMA_ADR = "<serie>:NNNN ou NNNN"
+# Classes que podem ser referente de Sobre: (contrato de dados D7): o fichário
 # da 059 (verbo, capacidade, stack, servico, repositorio), as cadeiras já fichadas e risco. A classe instancia
-# saiu do catálogo (arq:0108 §13, #3761, migração 113): keycloak, matrix e rastreador são servico.
+# saiu do catálogo: keycloak, matrix e rastreador são servico.
 # conceito, adr, spec e parecer não são referente de Sobre:.
-# Cadeira é rótulo alternativo de persona (arq:0108 §10; #3991): as duas palavras procuram a ficha nas duas
+# Cadeira é rótulo alternativo de persona: as duas palavras procuram a ficha nas duas
 # classes. A migração 135 de platafirma-conhecimento troca a classe das fichas; até a retirada da classe cadeira
 # (#3997) a ficha pode estar em qualquer das duas. A mesma regra vive na admissão (casa_lotes.py).
 CLASSES_SOBRE = ("verbo", "capacidade", "stack", "servico", "repositorio", "persona", "cadeira", "risco")
@@ -136,7 +136,7 @@ def _especies_vivas():
 
 
 def _raiz_casa_nova():
-    """Raiz da release no ar de `platafirma-casa` (DT 963; produção nunca lê a bancada)."""
+    """Raiz da release no ar de `platafirma-casa` (produção nunca lê a bancada)."""
     for var in ("PF_CASA_ESPELHO", "PF_CASA_RAIZ"):
         env = (os.environ.get(var) or "").strip()
         if env and os.path.isdir(env):
@@ -166,7 +166,7 @@ def _arquivos_especie_casa_nova(especie):
     return raiz, achados
 
 def _ler_casa_nova(especie, seletor, quero_json, offset=0, linhas=None, max_bytes=None, inteiro=True):
-    """Lê documento da casa nova (`platafirma-casa`) por chave exata/slug (DT 549) via `lib/leitura`."""
+    """Lê documento da casa nova (`platafirma-casa`) por chave exata/slug via `lib/leitura`."""
     raiz, arquivos = _arquivos_especie_casa_nova(especie)
     if not arquivos:
         return None
@@ -219,7 +219,7 @@ def _especie_existe(especie):
                    "acervo.especie_da_casa"))
 
 def _especie(especie):
-    """Espécie com projeção, regime e contagem; fora do vocabulário (arq:0059) recusa."""
+    """Espécie com projeção, regime e contagem; fora do vocabulário recusa."""
     info = _q(f"""
       select json_build_object(
         'slug', d.especie, 'classe', d.classe, 'projecao', d.projecao, 'regime', d.regime,
@@ -271,7 +271,7 @@ def txt_fonte(fonte):
 
 
 def txt_ultimo(ultimo):
-    """{'arq': 115, 'seg': 14} -> 'último: arq:0115 · seg:0014'; minuta ('' -> 38): '0038'."""
+    """Formata o último número por série; minuta ('' -> 38): '0038'."""
     if not ultimo:
         return None
     partes = [f"{s}:{int(n):04d}" if s else f"{int(n):04d}" for s, n in sorted(ultimo.items())]
@@ -323,7 +323,7 @@ def linha_cobertura(n, info, fonte, esp=None, todas=False, dono=None):
 
 
 def servido(linha, fonte, esp):
-    """Honesto (arq:0110 Q6), POR LINHA: o sha do texto que a linha serve contra o sha da
+    """Honesto, POR LINHA: o sha do texto que a linha serve contra o sha da
     última fonte ingerida (casa_fonte) e contra o main do espelho, com a hora da busca.
     Linha com sha diferente do da fonte serve texto velho: a versão nova foi recusada
     (legado mantido, D4) ou ficou fora do recorte (--so/--limite)."""
@@ -354,7 +354,7 @@ _CAMPOS = """
     to_char(ci.criada_em, 'YYYY-MM-DD') as vetorizado_em,
     c.forca::text as forca, c.revisao, c.status_declarado"""
 
-# card #3139 item 1: rotulo de exibicao da forca (o slug do banco fica em _item()["forca"]).
+# rotulo de exibicao da forca (o slug do banco fica em _item()["forca"]).
 # `registro` leva a data embutida na chave datada (<AAAA-MM-DD>-<slug>): "registro de
 # AAAA-MM-DD", nao so "registro".
 FORCA_ROTULO = {"decisao": "decisão", "proposta": "proposta",
@@ -395,7 +395,7 @@ def txt_retirada(linha):
             + (f"substituída por {suc}" if suc else "sem sucessora declarada"))
 
 def vigencia(linha):
-    """card #3139 item 1: vigente | substituída por <chave> | retirada em <data> sem sucessora."""
+    """vigente | substituída por <chave> | retirada em <data> sem sucessora."""
     if not linha.get("retirada_em"):
         return "vigente"
     suc = linha.get("substituida_por")
@@ -404,14 +404,14 @@ def vigencia(linha):
     return f"retirada em {linha['retirada_em']} sem sucessora"
 
 def forca_vigencia_txt(linha):
-    """`<força>[, rev N] · <vigência>` (card #3139 item 1/4)."""
+    """`<força>[, rev N] · <vigência>`."""
     txt = _rotulo_forca(linha)
     if linha.get("revisao"):
         txt += f", rev {linha['revisao']}"
     return f"{txt} · {vigencia(linha)}"
 
 def marca_linha(linha, especie):
-    """A linha que `ler casa` escreve antes do corpo (card #3139 item 1)."""
+    """A linha que `ler casa` escreve antes do corpo."""
     return (f"{forca_vigencia_txt(linha)} — {especie} {ident(linha)} · "
             f"{linha.get('titulo') or '-'}")
 
@@ -484,7 +484,7 @@ def mapa(especie):
 # ------------------------------------------------------------------ listar
 
 def catalogo(quero_json):
-    """`listar casa` sem espécie: as espécies de casa (regime declarado, arq:0115 §5) e as
+    """`listar casa` sem espécie: as espécies de casa (regime declarado) e as
     que têm linha, com projeção, regime e contagem."""
     linhas = _q("""
       select coalesce(json_agg(row_to_json(t) order by t.regime nulls last, t.slug), '[]') from (
@@ -574,7 +574,7 @@ def _entidade(classe, chave):
     0 -> negativa de 4 linhas, exit 1; >1 -> opções, exit 2."""
     if classe and classe not in CLASSES_SOBRE:
         morre(f"acervo listar casa --sobre: classe '{classe}' nao e referente de Sobre: "
-              f"(arq:0115 §6.2). Classes: {', '.join(CLASSES_SOBRE)}.", 2)
+              f". Classes: {', '.join(CLASSES_SOBRE)}.", 2)
     classes = list(CLASSES_DA_PALAVRA.get(classe, (classe,))) if classe else list(CLASSES_SOBRE)
     arr = "array[" + ", ".join(_lit(c) for c in classes) + "]::text[]"
     k = _lit(chave)
@@ -607,7 +607,7 @@ def _entidade(classe, chave):
               f"parecidos: {', '.join(parecidos) or '(nenhuma chave parecida)'}\n"
               f"vizinho:   ontologia listar shape\n"
               f"cura:      a ficha do referente nasce no fichário (migração/curadoria de "
-              f"dados), não no documento; o Sobre: só cita a chave (arq:0115 §6)", 1)
+              f"dados), não no documento; o Sobre: só cita a chave", 1)
     if len(cand) > 1:
         ops = "\n".join(f"    --sobre {c['classe']} {c['chave_humana']}" for c in cand)
         morre(f"acervo listar casa --sobre: '{chave}' ambiguo ({len(cand)} fichas); "
@@ -616,7 +616,7 @@ def _entidade(classe, chave):
 
 
 def sobre(classe, chave, especie, quero_json, todas=False):
-    """«A documentação de X» (arq:0115 §6.4): documentos cujo Sobre: resolve à ficha."""
+    """«A documentação de X»: documentos cujo Sobre: resolve à ficha."""
     if chave is None and classe and ":" in classe:
         classe, chave = classe.split(":", 1)
     elif chave is None:
@@ -663,7 +663,7 @@ def sobre(classe, chave, especie, quero_json, todas=False):
 # ------------------------------------------------------------------ ler
 
 def normalizar(especie, seletor):
-    """Seletor -> chave canônica, sem banco (arq:0115 §3.4). None = não é chave de forma
+    """Seletor -> chave canônica, sem banco. None = não é chave de forma
     fechada (número nu de adr, que resolve por série; ou texto, que cai no título).
     adr fora da forma que parece chave (`arq:11O`, `12a`) recusa, exit 2."""
     s = seletor.strip()
@@ -717,7 +717,7 @@ def resolver(especie, seletor, info):
             if cands:
                 return cands[0]
         # adr e regime 'vivo' (chave <serie>:NNNN, nao o slug) mas o arquivo ainda e
-        # NNNN-<slug>.md: sem este degrau, o slug do arquivo nunca resolvia (card #3121).
+        # NNNN-<slug>.md: sem este degrau, o slug do arquivo nunca resolvia.
         if especie == "adr" and RE_SLUG.match(s) and not RE_ADR.match(s):
             rx = "/[0-9]{4}-" + s + r"\.md$"
             cands = _linhas(f"{base} and c.path ~ {_lit(rx)}", limite=50)
@@ -785,7 +785,7 @@ def _fatiar_documento_casa(
 
 
 def montagem(linha, completo):
-    """(dados, texto) da montagem na leitura da spec (arq:0126 §11). Banco fora: (None, a linha
+    """(dados, texto) da montagem na leitura da spec. Banco fora: (None, a linha
     que o diz) — nunca derruba a leitura do corpo."""
     refs = _spec_montada.referentes_do_sobre(completo)
     dados = None
@@ -853,7 +853,7 @@ def ler(especie, seletor, quero_json, situacao=False, offset=0, cru=False, linha
         max_bytes=max_bytes,
         inteiro=inteiro,
     )
-    # arq:0126 §11: a spec lida pelo acervo traz, no fim do corpo, o que o golden record serve.
+    # a spec lida pelo acervo traz, no fim do corpo, o que o golden record serve.
     montar = especie == "spec" and not cru and ini_b == 0 and proximo is None
     if quero_json:
         doc = _item(linha) | {"corpo": corpo, "bytes_total": total, "offset": ini_b,
@@ -887,13 +887,13 @@ USO = """uso:
                                        [--max-bytes <n>] [--inteiro] [--cru]
                                                           delega a leitura a `lib/leitura` (inteiro por padrão);
                                                           spec: no fim, "Montado na leitura" com o que o
-                                                          golden record serve (arq:0126 §11); --cru tira
+                                                          golden record serve; --cru tira
 
-<chave>: adr <serie>:NNNN (arq:0075; arq:75 e 75 resolvem se não houver ambiguidade) ou o
+<chave>: adr <serie>:NNNN (número nu resolve se não houver ambiguidade) ou o
 <slug> do arquivo NNNN-<slug>.md (se único), minuta NNNN, datado <AAAA-MM-DD>-<slug> (ou só
 o <slug>, se único), vivo <slug>.
 <especie> é a pasta do documento, validada contra acervo.especie_da_casa (vocabulário fechado,
-arq:0059): a da shape quando a espécie tem classe no catálogo, senão a de acervo.especie_tipo (#4044).
+vigente): a da shape quando a espécie tem classe no catálogo, senão a de acervo.especie_tipo.
 exit: 0 ok · 1 nada · 2 uso/forma/ambíguo · 5 indeterminável.
 Read-only; a escrita é `acervo ingerir casa platafirma-casa`."""
 

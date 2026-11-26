@@ -4,7 +4,7 @@
 Chamado por bin/release (promover), localizado por caminho relativo a si — nunca pelo PATH: nao e
 verbo da porta, nao entra na whitelist (mesmo desenho de bin/_release/stack).
 
-Por que existe (card #3391, feature #3388): a biblioteca `pf-*` entra nas telas por
+Por que existe: a biblioteca `pf-*` entra nas telas por
 `COPY --from=platafirma/ui:<tag>` (Dockerfile de app/*). O lock de src/base/ nao e contexto de build
 de tela nenhuma, e a imagem era montada a mao: corrigir o lock (GHSA-gwfx-7pfc-xg68, 89457fc) nao
 chegava ao conteiner. Agora a promocao da familia constroi a imagem da versao que a arvore declara e
@@ -19,9 +19,9 @@ Regras (deterministicas: barram ou passam, nao pedem julgamento):
   1. arvore sem Dockerfile na raiz, sem src/base/package.json ou sem package-lock.json: familia sem
      biblioteca, nada a fazer (exit 0, sem docker).
   2. com --anterior: o lock de src/base mudou e a versao do package.json e a mesma: exit 4. A tag
-     platafirma/ui:<versao> e imutavel (arq:0080); lock novo pede versao nova.
+     platafirma/ui:<versao> e imutavel; lock novo pede versao nova.
   2b. com --anterior: o fonte que a imagem leva (src/ sem retrato e README, exemplo/, nginx.conf,
-  cabecalhos.conf, Dockerfile) mudou e a versao e a mesma: exit 4, como no lock (card #3652: a casca
+  cabecalhos.conf, Dockerfile) mudou e a versao e a mesma: exit 4, como no lock (a casca
   mudou, a versao nao subiu e a 0.14.1 servida seguiu com o fonte velho).
   3. imagem platafirma/ui:<versao> ja existe: nunca se reescreve. Com rotulo pf.ui.lock diferente do
      lock da arvore: exit 4 (mesma tag, outro conteudo). Igual, ou sem rotulo (anterior a este
@@ -114,7 +114,7 @@ def regra_lock_novo_pede_versao_nova(anterior: Path, versao: str, lock_hash: str
     if lock_ant != lock_hash and versao_de(base / "package.json") == versao:
         erro(
             f"biblioteca: recusa: o lock de src/base mudou ({lock_ant[:7]} -> {lock_hash[:7]}) "
-            f"e a versao segue em {versao} — a tag {img} e imutavel (arq:0080)"
+            f"e a versao segue em {versao} — a tag {img} e imutavel"
         )
         erro(CAMINHO)
         return 4
@@ -129,7 +129,7 @@ def regra_fonte_nova_pede_versao_nova(anterior: Path, versao: str, fonte_hash: s
     if fonte_ant != fonte_hash:
         erro(
             f"biblioteca: recusa: o fonte da biblioteca mudou ({fonte_ant[:7]} -> {fonte_hash[:7]}) "
-            f"e a versao segue em {versao} — a tag {img} e imutavel (arq:0080)"
+            f"e a versao segue em {versao} — a tag {img} e imutavel"
         )
         erro(CAMINHO)
         return 4
@@ -147,7 +147,7 @@ def tag_existente(img: str, lock_hash: str) -> int:
         return 0
     erro(
         f"biblioteca: recusa: {img} ja existe com outro lock ({rotulo[:7]}, a arvore tem {lock_hash[:7]}) "
-        "— tag imutavel (arq:0080)"
+        "— tag imutavel"
     )
     erro(CAMINHO)
     return 4

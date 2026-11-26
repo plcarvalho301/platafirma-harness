@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# _acervo/balde — cliente fino do braço do curador sobre o store MinIO (card #3126)
+# _acervo/balde — cliente fino do braço do curador sobre o store MinIO
 # atos: listar, ler, copiar, mover, apagar (`varrer` mora em varrer_balde.py: le bytes por boto3, que este python nao tem)
 import argparse
 import json
@@ -197,7 +197,7 @@ def _mover_ou_copiar(modo, sha256, de, para, autor, aplicar, como_json, headers)
 
 
 def acao_apagar(sha256, colecao, autor, motivo, aplicar, como_json, headers):
-    """`balde apagar <sha256> --colecao <c> [--motivo <m>] [--apply]` (#3302; arq:0119 §9.2): apaga o
+    """`balde apagar <sha256> --colecao <c> [--motivo <m>] [--apply]`: apaga o
     arquivo do balde, SEM VOLTA, e tira o apontamento das obras retiradas que o tinham. Sem --apply, o
     plano. Obra viva que o referencia recusa (409, exit 1)."""
     colecao = _colecao_valida(colecao, "--colecao")

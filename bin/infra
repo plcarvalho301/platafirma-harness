@@ -12,14 +12,14 @@
 # ambiente: DOCKER_HOST[=unix:///run/user/<uid>/docker.sock] porta · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes) · INFRA_OPS_HEALTH[=http://127.0.0.1:8010/health] porta · INFRA_RAPL[=/sys/class/powercap/intel-rapl:0/energy_uj] porta · INFRA_CPUINFO[=/proc/cpuinfo] porta · INFRA_MEMINFO[=/proc/meminfo] porta · INFRA_PRESSAO_MEMORIA[=/proc/pressure/memory] porta (medir ram) · INFRA_SLICE_EVENTS[=memory.events do slice da conta] porta (medir ram) · INFRA_FOSSIL_IDADE_H[=24] porta (limpeza fossil: horas de vida do contêiner sem label de projeto) · LONGJOB_LOGDIR[=$PLATAFIRMA_INSTANCIA/var/log/jobs] porta (limpeza fossil: onde o evento de fim do job é gravado) · INFRA_UNIT_AUTO[=porta] porta · INFRA_BACKUPS[=$AQUI/../registro/backups.json] porta · INFRA_CRONTAB_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-crontab.sh] porta · INFRA_UNITS_SCRIPT[=$PLATAFIRMA_RELEASE/core/deploy/instala-units.sh] porta · INFRA_INGRESS_FONTE[=$PLATAFIRMA_RELEASE/core/deploy/cloudflared-config.yml] porta · INFRA_INGRESS_COPIA[=$PLATAFIRMA_INSTANCIA/deploy/core/cloudflared.yml] porta · INFRA_INGRESS_CONTEINER[=platafirma-core-cloudflared-1] porta · INFRA_INGRESS_ESPERA[=5] porta (ingress: segundos até conferir o contêiner de pé) · OPS_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/ops] porta (saude: lido por lib/oplog, o bruto contra o teto) · INFRA_PECAS[=$AQUI/../registro/pecas.json] porta (pecas, rodar) · PF_CADEIRA e PF_SESSAO porta (rodar: a bancada da sessão, a mesma escolha de acervo exportar) · PF_SUJEITO[obrigatória em up|down|pull|build|rodar] porta (sem fallback; entra na linha de log do ato quando presente) · PLATAFIRMA_INSTANCIA, PF_RELEASE_RAIZ, PLATAFIRMA_RELEASE (lib/raizes.sh)
 # depende: docker · systemctl --user · curl · diff (ingress) · jq (cache) · nvidia-smi (cache ver, hardware, gpu) · ps (limites) · python3 · lib/oplog (saude: `python3 -m oplog teto`, o bruto contra o teto do corte) · bin/_release/stack (ajudante de up/down/ps/config/pull/build, ao lado deste bin) · bin/_infra/limpeza-logs, bin/_infra/limpeza-quarentena, bin/_infra/limpeza-fossil e bin/_infra/imagens (ajudantes de limpeza e imagens) · bin/_infra/medir-rede, bin/_infra/medir-ram, bin/_infra/medir-vram, bin/_infra/medir-cpu e bin/_infra/eixos.py (medir rede, ram, vram e cpu) · journalctl --user (medir ram: a morte por limite das units) · bin/sinal (medir rede: a medida da porta) · nvidia-smi (medir vram) · o script declarado em INFRA_CRONTAB_SCRIPT (agenda) · o script declarado em INFRA_UNITS_SCRIPT (units) · bin/_infra/rodar-peca.py, bin/_acervo/exportar e git (pecas, rodar: o registro, a bancada, o python do rag, o banco pelo cofre e a comparação com origin/main)
 # escreve: ambiente=core.hooksPath dos clones da bancada, symlinks de unit e texto de arranque nao rastreado (aplicar, por deploy-harness/instalar) · restart=contêiner/unit reiniciado (efeito, não arquivo) · remover=contêiner ou rede avulsa removida (a inspeção guardada antes em var/log/infra/removidos), unit transitória tirada da lista (reset-failed) ou unit da conta parada, desabilitada e com o arquivo movido para var/quarentena · unit-env=drop-in systemd ($HOME/.config/systemd/user/<unit>.service.d/zz-infra-env.conf) · cache=VRAM descarregada e cache local podado (vram, disco) · up/down/pull/build=contêineres e imagens da stack, via bin/_release/stack · testar=contêiner efêmero de cada serviço do perfil teste (run --rm) e as dependências dele que não estavam de pé, via bin/_release/stack · limpeza=arquivos de log/quarentena da instância apagados, imagens Docker fora de produção podadas (imagens) e cache de build/uv podado (cache); fossil=contêiner sem label de projeto removido (logs e inspeção guardados antes em var/log/infra/removidos) e unit platafirma-job-* falha tirada da lista (reset-failed) depois do evento de fim gravado no log do job · agenda=crontab do sistema (aplicar) · units=symlink das units da instância em ~/.local/share/systemd/user e daemon-reload (aplicar) · ingress=cópia da instância do ingress do túnel (deploy/core/cloudflared.yml, com a anterior ao lado em .anterior) e reinício do contêiner cloudflared · sobreposicao=compose.override.yaml da instância apagado (deploy/<stack>/, a cópia guardada antes em var/log/infra/removidos; nenhum contêiner tocado) · rodar=o que a peça declarada grava (a peça casa grava no banco do acervo) · estado/saude/logs/ps/config/backup/hardware/limites/gpu/medir=nada · imagens=nada · pecas=nada
-# substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build (deploy apagado — decisão do dono, 27/09) · sudo rm da sobreposição compose.override.yaml de uma stack · crontab -e a mão · cp à mão do ingress versionado para deploy/core/cloudflared.yml da instância + docker restart do cloudflared · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra por arq:0110 §14 emenda 26/09/2026)
+# substitui: docker ps/restart/logs direto · systemctl --user status/restart/cat direto · deploy <stack> up|down|ps|config|pull|build · sudo rm da sobreposição compose.override.yaml de uma stack · crontab -e a mão · cp à mão do ingress versionado para deploy/core/cloudflared.yml da instância + docker restart do cloudflared · ops-log-prune e quarentena-prune (movidos para bin/_infra/, atos de infra)
 # face: medir=Operação
 # rotulo: medir=Medir rede
 # volta: medir=sim — só lê
 # face: limpeza=Operação
 # rotulo: limpeza --fossil=Limpar o fóssil do host
 # volta: limpeza --fossil=nao
-# (face, rotulo e volta: arq:0124 §3, cards #3919, #3921 e #3920. Um ato único, `medir <eixo>`, com `rede`, `ram`, `vram` e
+# (face, rotulo e volta. Um ato único, `medir <eixo>`, com `rede`, `ram`, `vram` e
 #  `cpu`. A gramática do conferidor aceita um rótulo por ato, não por eixo: a linha acima fica a da rede, e `infra medir
 #  <eixo> --help` diz o rótulo de cada eixo (Medir rede, Medir RAM, Medir VRAM, Medir processamento). O `infra` mede e não
 #  grava a série: quem a grava é a sonda, pela `metrica`. A limpeza de fóssil declara o texto de controle por modo, porque
@@ -123,7 +123,7 @@ sobreposicao remover apaga só o arquivo regular deploy/<stack>/compose.override
 cópia em var/log/infra/removidos e conferi-la; não toca contêiner (o efeito entra no próximo infra up <stack>). Arquivo
 já ausente: nada a remover, exit 0. Exige identidade (PF_SUJEITO); --ver só mostra. Slug com caminho e link simbólico: exit 4.
 
-exit: tabela arq:0110 §4 — 0 ok · 1 negativo de mérito (alvo/stack inexistente,
+exit: 0 ok · 1 negativo de mérito (alvo/stack inexistente,
       agenda divergente) · 2 uso · 3 dependência ausente (docker, systemctl,
       ajudante, PF_SUJEITO) · 4 política/trava · 5 indeterminável
 FIM
@@ -216,7 +216,7 @@ ajuda_medir() {  # $1=eixo
   esac
 }
 
-# Identidade (decisão 9, card #3145): só PF_SUJEITO, sem fallback para PF_CADEIRA/USER.
+# Identidade: só PF_SUJEITO, sem fallback para PF_CADEIRA/USER.
 # Exigida em up/down/pull/build; ausente = exit 3 com a cura. Presente, entra na linha
 # de status do ato (rastreio de quem pediu a operação).
 exigir_sujeito() {  # $1=rótulo do ato, só para a mensagem
@@ -246,7 +246,7 @@ e_unit()           { systemctl --user cat -- "$1" >/dev/null 2>&1; }
 
 # --- apoio a --json -----------------------------------------------------
 #
-# card #390 lote 1: `estado`/`saude` ganham --json sem mudar a saida de texto.
+# `estado`/`saude` ganham --json sem mudar a saida de texto.
 # Regra: stdout so leva o JSON quando --json esta presente, diagnostico vai
 # para stderr, e falha de coleta vira {"erro": motivo} em vez de estourar --
 # a chamada preserva o exit code que a coleta ja tinha (nunca stdout vazio,
@@ -436,7 +436,7 @@ print(json.dumps(dict(zip(chaves, partes))))
 '
 }
 
-# O bruto da porta contra o teto (card #3354, arq:0123 regra 10): a mediana de bytes por dia das quatro semanas
+# O bruto da porta contra o teto: a mediana de bytes por dia das quatro semanas
 # anteriores x 35 x 1,5. Quem le o bruto e o lib/oplog (`python3 -m oplog teto`); aqui so se pergunta. Estado:
 # dentro, acima, sem_base (poucos dias para medir) ou indeterminavel. Sondagem que falha nao derruba a saude: vira
 # estado, dado e nao erro de execucao, como o /health do ops. Acima do teto vira CARD, nao incidente.
@@ -478,7 +478,7 @@ def texto(d):
     return base + " — dentro"
 
 
-# resposta torta da sondagem e dado, nao erro: a saude segue inteira (card #3354)
+# resposta torta da sondagem e dado, nao erro: a saude segue inteira
 try:
     print(texto(json.load(sys.stdin)))
 except (AttributeError, KeyError, TypeError, ValueError):
@@ -944,7 +944,7 @@ PY
 # Alvo pode ser contêiner OU unit --user, e o ato ramifica: nome de contêiner
 # passado a `systemctl --user restart` falha DENTRO da unit destacada, o
 # --collect recolhe a falha e o echo de sucesso já saiu no processo de fora,
-# que nunca vê o código de saída (medido em 12/08 por claudinha-produto, #339).
+# que nunca vê o código de saída.
 # Por isso: síncrono e conferido por padrão; destacado só onde o restart mata a
 # própria chamada — o porta — ou sob --nao-esperar explícito.
 INFRA_UNIT_AUTO="${INFRA_UNIT_AUTO:-porta}"
@@ -998,7 +998,7 @@ restart() {
         || { echo "erro: systemctl --user restart falhou em $alvo — ver: infra logs $alvo" >&2; exit 1; }
       echo "unit $alvo reiniciada: $(systemctl --user is-active -- "$alvo" || true)"
     else
-      # DT 498: destacar a execucao nao adia o restart. A porta precisa devolver o
+      # destacar a execucao nao adia o restart. A porta precisa devolver o
       # resultado de release antes que o systemd encerre seu cgroup.
       local atraso=() nota=""
       if [ "${alvo%.service}" = "${INFRA_UNIT_AUTO%.service}" ]; then
@@ -1488,7 +1488,7 @@ backup() {
 # Ato de compose de stack: `infra up|down|ps|config|pull|build <stack> [args…] [<serviço>…]`
 # repassa para `bin/_release/stack compose <stack> <acao> [args…] [<serviço>…]`. O ajudante
 # mora ao lado deste bin (nunca pelo PATH); identidade só nos atos de mutação (up/down/
-# pull/build), lida do §9 da decisão do card #3145.
+# pull/build).
 exigir_stack_ajudante() {
   if [ ! -x "$STACK_AJUDANTE" ]; then
     printf 'infra: erro: dependência bin/_release/stack: ausente (%s) — ajudante de compose não encontrado\n' "$STACK_AJUDANTE" >&2
@@ -1512,7 +1512,7 @@ cmd_stack() {  # $1=acao ; resto: <stack> [args compose…] [<serviço>…]
   "$STACK_AJUDANTE" compose "$stack" "$acao" "$@"
 }
 
-# `infra testar <stack> [<rev>]` (DT 800): o `up --profile teste` sobe o serviço de teste em segundo plano e
+# `infra testar <stack> [<rev>]`: o `up --profile teste` sobe o serviço de teste em segundo plano e
 # sai 0 com o teste vermelho, e foi assim que o self-check do rastreador caiu calado desde 20/10. Este ato
 # repassa a `bin/_release/stack testar <stack> [<rev>] --agora`, o mesmo passo de teste da promoção, medido
 # a pedido: o exit é o do teste.
@@ -1527,7 +1527,7 @@ cmd_testar() {
   "$STACK_AJUDANTE" testar "$stack" "$@" --agora
 }
 
-# `infra medir <eixo> [--json]` — os eixos do host lidos por ato (spec eixos-do-host R1, cards #3919 e #3920). Cada
+# `infra medir <eixo> [--json]` — os eixos do host lidos por ato. Cada
 # eixo é um sub-ato de bin/_infra/, chamado por exec, como a limpeza; hoje `rede`, `ram`, `vram` e `cpu`. O ato só lê (não grava
 # série, não reinicia túnel) e não exige PF_SUJEITO. O código de saída é o do eixo: 0 lido, 5 não consegui olhar.
 cmd_medir() {
@@ -1557,7 +1557,7 @@ cmd_medir() {
 }
 
 # `infra limpeza logs|quarentena [args…]` — sub-atos movidos de bin/ops-log-prune e
-# bin/quarentena-prune para bin/_infra/ (arq:0110 §14, emenda 26/09/2026): não exigem
+# bin/quarentena-prune para bin/_infra/: não exigem
 # PF_SUJEITO — já eram chamados por automação (cron), sem identidade humana no ato.
 _tem_ver() {
   local _a
@@ -1581,7 +1581,7 @@ cmd_limpeza() {
       exec "$LIMPEZA_QUARENTENA" "$@"
       ;;
     fossil)
-      # #3920 (R12 a R14 da spec eixos-do-host) + #1356: mutação exige PF_SUJEITO
+      # mutação exige PF_SUJEITO
       # (o timer limpeza-fossil.service declara PF_SUJEITO=automacao:limpeza-fossil); --ver só lista.
       _tem_ver "$@" || exigir_sujeito "infra limpeza fossil" || exit $?
       [ -x "$LIMPEZA_FOSSIL" ] || { printf 'infra: erro: dependência bin/_infra/limpeza-fossil: ausente (%s)\n' "$LIMPEZA_FOSSIL" >&2; exit 3; }
@@ -1661,7 +1661,7 @@ cmd_agenda() {
   esac
 }
 
-# `infra instalar` saiu (desenho #3010 §2; arq:0109 Consequencias): nao existe mais bin servido
+# `infra instalar` saiu: nao existe mais bin servido
 # por copia nem diretorio de symlinks de verbos. O PATH e a release no ar,
 # $PLATAFIRMA_RELEASE/harness/bin, e verbo novo chega ao ar por `release promover platafirma-harness <rev>`.
 instalar() {
@@ -1672,7 +1672,7 @@ instalar() {
 }
 
 # `infra ingress [--ver]` — o ingress do túnel `wiki`. O contêiner lê a CÓPIA da instância
-# (deploy/core/cloudflared.yml, montada pelo override; card #3010), não o arquivo versionado, e nenhum
+# (deploy/core/cloudflared.yml, montada pelo override), não o arquivo versionado, e nenhum
 # ato a escrevia: a rota decomissionada seguiu viva até a mão do dono copiar (#3271, #3473). O ato
 # copia o versionado da release no ar para a cópia, mostra a diferença antes e reinicia o contêiner.
 # A cópia nova entra por rename no mesmo diretório (inteira ou nada) e a anterior fica em
@@ -1912,7 +1912,7 @@ if [ "$1" = "medir" ]; then
   done
 fi
 
-# --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4; Q2). ANTES do
+# --ajuda UNIVERSAL, sem efeito colateral. ANTES do
 # despacho, varrendo TODOS os argumentos: cobre `infra --ajuda` e `infra <ato> --ajuda`
 # em qualquer posição. `uso` já sai 2.
 for _a in "$@"; do

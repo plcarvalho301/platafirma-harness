@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""_acervo/ficha — cliente fino da ficha do arquivo da obra (spec acervo-obra §7; arq:0089 §2; #3190, #3305).
+"""_acervo/ficha — cliente fino da ficha do arquivo da obra.
 
-O verbo não abre o banco nem o balde: toda regra mora no `motor_acervo` (spec apis-escrita-acervo §D). Dois atos
+O verbo não abre o banco nem o balde: toda regra mora no `motor_acervo`. Dois atos
 de `acervo` chegam aqui, pelo despachante (bin/acervo), por `python3`:
 
   acervo ler biblioteca ficha <obra> [--json]
@@ -20,7 +20,7 @@ de `acervo` chegam aqui, pelo despachante (bin/acervo), por `python3`:
       repetir o comando retoma onde parou. `--pular` tira da lista as obras (uuid ou prefixo de 6+ hex, separados por
       vírgula) que o laço apontou como a que o derrubou.
 
-exit (arq:0110 §4): 0 leu/gravou · 1 obra inexistente ou sem ficha (ler), ou alguma obra falhou (ingerir) · 2 uso
+exit: 0 leu/gravou · 1 obra inexistente ou sem ficha (ler), ou alguma obra falhou (ingerir) · 2 uso
 ou termo ambíguo · 3 rota fora (conexão recusada, rota ausente no motor) · 4 recusa da borda (401/403) · 5
 indeterminável (5xx, tempo esgotado, conversor fora, laço parado ou interrompido, cobertura final ilegível)
 """
@@ -52,7 +52,7 @@ except ImportError:
     from lib import motor_enderecos
     _BASE_DO_ADAPTADOR, _TOKEN_DO_ADAPTADOR = motor_enderecos.api_acervo(), ""
 
-SPEC = "spec acervo-obra §7 (acervo ler casa spec acervo-obra)"
+SPEC = "verbo acervo"
 
 MIN_PREFIXO = 6                 # abaixo disso um termo hex-e-hifen é título, não prefixo de uuid
 TAM_UUID = 36
@@ -125,7 +125,7 @@ def _chamar(metodo: str, caminho: str, *, params: dict | None = None, corpo: dic
     return r.status_code, dados if isinstance(dados, dict) else {}, r.headers
 
 def _falha(status: int, dados: dict) -> Falha:
-    """O erro da rota como Falha, com o exit da arq:0110 §4: 404 e 409 de mérito saem 1, 400 e 422 saem 2, o resto 5.
+    """O erro da rota como Falha: 404 e 409 de mérito saem 1, 400 e 422 saem 2, o resto 5.
     404 sem `title` de problem+json é a rota que o motor não serve (3); 401 e 403 são a borda recusando (4)."""
     titulo = dados.get("title")
     classe = titulo or f"HTTP {status}"
@@ -140,7 +140,7 @@ def _falha(status: int, dados: dict) -> Falha:
     return Falha(codigo, f"{classe}: {detalhe}".rstrip(": "), classe)
 
 def _exit1(msg: str, *, varrido: str, parecidos: str, vizinho: str, cura: str) -> Falha:
-    """Todo exit 1 de consulta leva as quatro linhas fixas (spec acervo §4): o que se varreu, o que parece, o vizinho, a cura."""
+    """Todo exit 1 de consulta leva as quatro linhas fixas: o que se varreu, o que parece, o vizinho, a cura."""
     return Falha(1, f"{msg}\nvarrido:   {varrido}\nparecidos: {parecidos}\nvizinho:   {vizinho}\ncura:      {cura}")
 
 # --- a obra ----------------------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-"""Braço-sombra do embedder (guia escolha-de-llm §11; card #2925).
+"""Braço-sombra do embedder (guia escolha-de-llm §11).
 
 Roda DENTRO do contêiner da busca (o `container` da instância no registro: motor-busca desde a virada da
 #3844; antes, rag-extractor-api), lançado por

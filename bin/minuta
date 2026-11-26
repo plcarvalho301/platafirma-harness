@@ -6,10 +6,10 @@
 # atos: ler, escrever, circular, formalizar
 #
 # Externaliza padrao protocolo-de-minuta em verbo (spec:
-# spec verbo-minuta). Ciclo de vida: escrever ->
+# Ciclo de vida: escrever ->
 # (a cadeira escreve o mérito) -> circular -> (convocadas manifestam) ->
 # formalizar. Nunca é leitura automática — só roda chamada (ping tipo:minuta
-# na caixa, ou ordem do dono). Despachante (arq:0040): sub-atos em
+# na caixa). Despachante: sub-atos em
 # bin/_minuta/, fora do PATH; a porta é esta.
 set -euo pipefail
 
@@ -32,15 +32,14 @@ ler        — sem argumento, as abertas em que PF_CADEIRA está convocada; com
 formalizar — cria o canônico vazio (ADR ou spec), apaga a minuta, um commit só.
              Recusa convocada com seção vazia, salvo --vencido.
 
-direto em main (arq:0083): escrever, circular e formalizar puxam, commitam e empurram para main na wt/platafirma-casa/<cadeira>/main (sem ela, abrem por repo abrir platafirma-casa).
+direto em main: escrever, circular e formalizar puxam, commitam e empurram para main na wt/platafirma-casa/<cadeira>/main (sem ela, abrem por repo abrir platafirma-casa).
 
 Protocolo: padrao protocolo-de-minuta
-Spec:      spec verbo-minuta
 FIM
   exit 2
 }
 
-# --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4). ANTES do
+# --ajuda UNIVERSAL, sem efeito colateral. ANTES do
 # despacho e varrendo TODOS os argumentos: cobre `minuta --ajuda` e `minuta <sub> --ajuda`;
 # nenhum sub-ato (exec do $ATOS/*) chega a rodar. `uso` ja sai 2.
 for _a in "$@"; do

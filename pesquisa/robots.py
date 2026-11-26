@@ -1,4 +1,4 @@
-"""Leitura e consulta de robots.txt conforme RFC 9309 (card #4458).
+"""Leitura e consulta de robots.txt conforme RFC 9309.
 
 Suporta agrupamento de User-agent, precedência pelo padrão mais longo (empate vence
 Allow), curingas `*` e âncora de fim `$`, diretivas `Crawl-delay` e `Sitemap`.

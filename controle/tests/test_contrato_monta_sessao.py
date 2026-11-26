@@ -227,7 +227,7 @@ def test_morada_nao_publicada_e_erro_com_a_cura_nomeada(raiz):
     assert "desconhecida" not in dados["erro"]
     assert dados["morada"]["frescor"] == "indisponivel"
     assert dados["morada"]["motivo"]
-    assert any("publicar-abertura" in a for a in dados["avisos"])
+    assert any("republicar a abertura" in a for a in dados["avisos"])
 
 
 def test_publicado_em_ilegivel_vira_idade_desconhecida_nao_zero(tmp_path):

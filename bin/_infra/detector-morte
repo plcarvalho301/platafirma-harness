@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# detector-morte — as mortes por limite de memória que o kernel deu ao host, um evento por morte (spec eixos-do-host R4 e
-# R9; spec banco-de-eventos-de-plataforma R3, R5 e R6; card #3922). Ajudante da sonda (`sinal`), como medir-rede é do
+# detector-morte — as mortes por limite de memória que o kernel deu ao host, um evento por morte.
+# Ajudante da sonda (`sinal`), como medir-rede é do
 # `infra`: fora do PATH e do golden record, mora em bin/_infra/. Chamado pelo `sinal` a cada passada, fora da cadência do
 # registro, com a janela desde a última passada boa. Só lê: não grava série, não envia nada (quem envia é a fila do
 # `sinal`).

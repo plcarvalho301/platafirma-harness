@@ -1,4 +1,4 @@
-"""O cliente do serviço de escrita da Olaria (card #4214).
+"""O cliente do serviço de escrita da Olaria.
 
 Fala com `OLARIA_URL` por HTTP, só com a biblioteca padrão, e manda `OLARIA_CHAVE` no cabeçalho `X-Olaria-Chave`. O contrato é o de
 `ontologia/olaria/__main__.py`: POST /ler, /listar, /preparar, /ensaiar, /criar, /trocar, /recompor, /renomear, /apagar, /gerar e /raciocinar; GET /ajuda; cabeçalhos `X-Olaria-Sujeito` (a

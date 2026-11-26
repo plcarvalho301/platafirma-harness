@@ -4,11 +4,11 @@ convocada (número, título, quem abriu, idade em dias, seção vazia ou não);
 com argumento (número ou slug), o texto inteiro. Leitura fria: não muda estado,
 não marca nada como visto. Protocolo: padrao protocolo-de-minuta.
 
-Lê pelo ACERVO (arq:0115 §11.3; incidente #3225): a minuta é ficha da espécie
+Lê pelo ACERVO: a minuta é ficha da espécie
 `minuta` em acervo.casa, ingerida de platafirma-casa em até 10 min depois do
-push para main. platafirma-casa não é unidade de release (arq:0115 §1.2): o
+push para main. platafirma-casa não é unidade de release: o
 caminho antigo, <release>/casa/minuta, não existe, e a bancada nunca é fonte
-de leitura de produção (card #3010). MINUTA_REPO aponta um checkout no disco
+de leitura de produção. MINUTA_REPO aponta um checkout no disco
 (teste) e substitui o acervo.
 
 exit: 0 ok · 1 nada (minuta não achada, ou nenhuma aberta para a cadeira) ·

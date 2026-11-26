@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """resultado — o veredito comum de `conferir`: 3 estados, uma ancora, um exit.
 
-arq:0110 par.4 da a tabela de exit geral de todo verbo da casa (0..5). `release
+Tabela de exit geral de todo verbo da casa (0..5). `release
 conferir <classe>` e um caso particular: cada classe devolve uma LISTA de itens, cada
 item com um veredito de 3 estados (conforme/divergente/indeterminavel), e o exit da
 chamada agrega a lista — nao e o exit de um unico ato, e o pior caso da lista:
@@ -70,7 +70,7 @@ def agrega(itens):
 
 
 def linha_ancora(classe, alvo, itens, sha_release):
-    """A 1a linha do texto, colavel como ancora: ver arq:0110 (gramatica) e o card #3142."""
+    """A 1a linha do texto, colavel como ancora."""
     exit_code, n_c, n_d, n_i = agrega(itens)
     alvo_str = f" {alvo}" if alvo else ""
     linha = (f"release conferir {classe}{alvo_str}: {n_c} conforme · {n_d} divergente · "

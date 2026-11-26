@@ -29,7 +29,6 @@
 # depende: sessao, expediente, lib/raizes, lib/uso, lib/transcript, pyyaml (venv harness)
 # conforme: parcial — agendado espera o `bot --roda agente:<slug>` (#3186); `sessao longjob` ja herda os atributos da chave
 #
-# Spec: spec agente (§2 declaração, §3 projeções, §4 ligações, §10 o verbo, §11 piso de segurança)
 from __future__ import annotations
 
 import base64
@@ -57,13 +56,13 @@ import claude_cli  # noqa: E402  (o CLI vem da trava da release, #2856 linha 248
 import transcript  # noqa: E402  (a régua de tokens da fita, a mesma do descansar)
 import uso  # noqa: E402
 import yaml  # noqa: E402
-import federacao  # noqa: E402  (card #4136: a ligação consultada paga pelo crédito de API)
+import federacao  # noqa: E402  (a ligação consultada paga pelo crédito de API)
 import modos as modos_casa  # noqa: E402
 import shutil  # noqa: E402
 LIGACOES = ("consultado", "delegado", "agendado")
 FAMILIAS = ("claude", "gemini", "qwen")
 PERNAS = ("fonte_de_fora", "dado_pessoal", "muda_estado")
-PROIBIDAS = ("Bash", "Write", "Edit", "NotebookEdit")      # o posto já nega (spec agente §2)
+PROIBIDAS = ("Bash", "Write", "Edit", "NotebookEdit")      # o posto já nega
 # Fora do agente rodado: abrir sub-agente ou Workflow de dentro do `claude -p` escapa do modelo e do teto da
 # declaração (o Workflow herda o modelo da sessão, incidente #3227) e o hook do posto não alcança, porque o
 # agente não roda no clone do posto. Medido em 16/10/2026: o consultor listou Agent e Workflow no contexto.
@@ -72,7 +71,7 @@ REGUA_ESPECIES = ("lista-de-verificacao", "padrao")
 MODOS_COM_REGUA = ("revisar", "avaliar")
 CONTAS_SEGREGADAS = ("jaiminho", "quinzinho")              # as que `seg isolacao medir` mede
 CABECALHO_GERADO = "# GERADO por agente — não editar"
-# A porta (incidente #3223, ordem do dono 01/10/2026): o agente declara tools com o MESMO nome que o conector
+# A porta: o agente declara tools com o MESMO nome que o conector
 # publica à cadeira, escopadas pelo agente, e abre a sessão pela mesma tool (`monta_sessao`).
 PORTA = "mcp__claudinho-mcp__"
 PORTA_BASE = ("malote", "ler_arquivo", "write_file", "monta_sessao")   # as que a porta publica em transporte (registro/porta.yaml)
@@ -100,8 +99,8 @@ OLLAMA_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 # --- a declaração ---------------------------------------------------------------------------
 
 def conta_do_modelo(modelo: dict) -> str:
-    """O modelo fixa a conta unix (spec agente §2): Claude, Gemini e Qwen local sob claudinho, Qwen de
-    fronteira sob quinzinho. Gemini saiu de jaiminho por ordem do dono (02/11/2026, #4093): roda na conta de
+    """O modelo fixa a conta unix: Claude, Gemini e Qwen local sob claudinho, Qwen de
+    fronteira sob quinzinho. Gemini roda na conta de
     produção com o login dele, como os agentes Claude, porque não escreve e o raio do agente é curto."""
     familia = modelo.get("familia")
     if familia == "qwen" and not modelo.get("local"):
@@ -123,12 +122,12 @@ def familia_de(decl) -> str | None:
     return m.get("familia") if isinstance(m, dict) else None
 
 
-SOBRESCREVE = ("modelo", "ferramentas", "teto")             # o que varia pela ligação (spec agente §2, rev 3)
+SOBRESCREVE = ("modelo", "ferramentas", "teto")             # o que varia pela ligação
 EMBUTIDOS = ("Explore", "Plan")                             # sub-agentes do Code que um agente de projeto pode suplantar
 
 def efetiva(decl, ligacao: str):
     """A declaração como roda naquela ligação: `por_ligacao.<ligação>` sobrescreve modelo, ferramentas e teto;
-    o resto vale para todas (spec agente §2, rev 3)."""
+    o resto vale para todas."""
     if not isinstance(decl, dict):
         return decl
     pl = decl.get("por_ligacao")
@@ -139,7 +138,7 @@ def efetiva(decl, ligacao: str):
 
 def tem_projecao(decl) -> bool:
     """Ganha `.claude/agents` o agente que roda em Claude na execução delegada: a base, ou o
-    `por_ligacao.delegado` quando houver (spec agente §3). Consultor e curador, Claude só consultados,
+    `por_ligacao.delegado` quando houver. Consultor e curador, Claude só consultados,
     seguem projetados como antes."""
     return isinstance(decl, dict) and not sem_lente(decl) and familia_de(efetiva(decl, "delegado")) == "claude"
 
@@ -205,9 +204,9 @@ def valida(decl, stem: str) -> list[str]:
         p.append(f"pernas: {', '.join(PERNAS)}, cada uma true ou false")
     else:
         if all(pernas[k] for k in PERNAS):
-            p.append("pernas: as três juntas não sobem sem aprovação humana no fecho (spec agente §7)")
+            p.append("pernas: as três juntas não sobem sem aprovação humana no fecho")
         elif pernas["fonte_de_fora"] and pernas["dado_pessoal"]:
-            p.append("pernas: fonte de fora e dado pessoal juntos (spec agente §7)")
+            p.append("pernas: fonte de fora e dado pessoal juntos")
     regua = decl.get("regua")
     if regua is not None:
         partes = regua.split() if isinstance(regua, str) else []
@@ -242,7 +241,7 @@ def valida(decl, stem: str) -> list[str]:
         if sup not in EMBUTIDOS:
             p.append(f"suplanta: um de {', '.join(EMBUTIDOS)}")
         elif not delega_em_claude(decl):
-            p.append("suplanta: só vale com a ligação delegada em Claude (spec agente §3)")
+            p.append("suplanta: só vale com a ligação delegada em Claude")
     return p
 
 
@@ -275,7 +274,7 @@ def carrega(posto: Path) -> tuple[dict, dict]:
 def projecao_claude(decl: dict) -> str:
     """O `.claude/agents/<slug>.md` da declaração. Determinístico: o --conferir compara byte a byte."""
     slug, dono, modo = decl["slug"], decl["dono"], decl["modo"]
-    exe = efetiva(decl, "delegado")                      # a projeção é a ligação delegada (spec agente §3)
+    exe = efetiva(decl, "delegado")                      # a projeção é a ligação delegada
     nome = decl.get("suplanta") or slug
     chapeu = dono.get("chapeu") or "<chapeu>"
     cadeira = dono["cadeira"]
@@ -409,7 +408,7 @@ def fora_do_conector(stem: str, decl: dict, conector: set[str]) -> list[str]:
     return achados
 
 
-# --- o portão do PR que troca `modelo` (spec agente §11.2) -----------------------------------
+# --- o portão do PR que troca `modelo` -------------------------------------------------------
 
 def isolacao_conforme(conta: str) -> tuple[bool, str]:
     """A última `seg isolacao medir` que mediu a conta: conforme só se todas as verificações dela deram ok."""
@@ -720,7 +719,7 @@ def _roda(argv: list[str], stdin: str | None = None, env: dict | None = None, ti
 
 
 def abre_sessao(cadeira: str, origem: str, slug: str, conta: str) -> dict:
-    """A sessão filha, com os atributos fixados ANTES de chamar o modelo (spec agente §11.1)."""
+    """A sessão filha, com os atributos fixados ANTES de chamar o modelo."""
     p = _roda([str(_bin() / "sessao"), "abrir", cadeira, "--origem", origem, "--agente", slug,
                "--em-nome-de", cadeira, "--conta", conta, "--json"])
     try:
@@ -855,7 +854,7 @@ SEM_ARRANQUE = {"CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1"}
 # Os conectores da conta claude.ai que não são a porta, pelo prefixo medido em 02/11/2026. Conector novo na conta
 # entra aqui, senão chega à janela do agente.
 CONECTORES_DE_FORA = ("mcp__claude_ai_Claude_Docs", "mcp__claude_ai_Google_Drive", "mcp__claude_ai_Google_Sheets")
-# Juiz sem lente (card #4115): a declaração com `pecas: []` roda sem persona, chapéu, rotinas nem cadernos, e o CLI
+# Juiz sem lente: a declaração com `pecas: []` roda sem persona, chapéu, rotinas nem cadernos, e o CLI
 # sobe só com as ferramentas dela. `--tools` tira também a porta (medido em #4083), que o juiz não usa; o servidor
 # dela sai pelo nome nas três grafias, e assim o juiz não depende da lista de tools do conector. Medido em
 # 04/11/2026 no CLI 2.1.318: `--tools ""` sobe sem ferramenta nem conector, e a imagem em linha entra pelo
@@ -870,7 +869,7 @@ def sem_lente(decl) -> bool:
     return isinstance(decl, dict) and decl.get("pecas") == []
 
 
-# Quem paga, por ligação (spec agente §2.3, card #4136). A ligação consultada de agente Claude sem ferramenta da
+# Quem paga, por ligação. A ligação consultada de agente Claude sem ferramenta da
 # porta paga pelo crédito de API, pela conta agente-consultado, quando o regime dela no arquivo de identificadores é
 # federacao. A porta só aceita pessoa: agente com ferramenta dela fica no plano até o token delegado. Agendado,
 # delegado, Qwen e Gemini não federam. Voltar ao plano é PR no arquivo, nunca queda em falha.
@@ -1027,7 +1026,7 @@ def chama_claude(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | Non
             if decl["ferramentas"]:
                 argv += ["--allowedTools", ",".join(g for f in decl["ferramentas"] for g in grafias(f))]
         if usa_fed:
-            # na pasta isolada, sem a configuração nem os ganchos da conta (spec agente §3.1)
+            # na pasta isolada, sem a configuração nem os ganchos da conta
             argv += ["--setting-sources", "project,local"]
         if anexos:
             argv += ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
@@ -1097,7 +1096,7 @@ def chama_claude(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | Non
         leitura = u.get("cache_read_input_tokens", 0)
         entrada = nova + criacao + leitura
         saida = u.get("output_tokens", 0)
-        # DT 334: o aviso de tokens mede o pico da janela por chamada (maior entrada de uma chamada), não a soma com cache lido
+        # o aviso de tokens mede o pico da janela por chamada (maior entrada de uma chamada), não a soma com cache lido
         if pedidos:
             pico = max((p.get("input_tokens", 0) + p.get("cache_creation_input_tokens", 0) + p.get("cache_read_input_tokens", 0)) for p in pedidos.values())
         else:
@@ -1250,7 +1249,7 @@ def chama_modelo(decl: dict, sistema: str, tarefa: str, anexos: list[dict] | Non
     if m["familia"] == "gemini":
         return chama_agy(decl, sistema, tarefa)
     raise Falha(3, f"a ligação {m['familia']} ainda não roda pelo agente rodar: a execução sob "
-                   f"{conta_do_modelo(m)} é da ti (spec agente §Aberto)")
+                   f"{conta_do_modelo(m)} é da ti")
 
 
 def registra(reg: dict) -> None:
@@ -1281,7 +1280,7 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
     if slug in problemas:
         return _erro(f"a declaração de {slug} está fora do molde ({'; '.join(problemas[slug])}); "
                      "agente projetar --conferir diz o resto", 4)
-    decl = efetiva(decl, ligacao)                          # modelo, ferramentas e teto da ligação (spec agente §2)
+    decl = efetiva(decl, ligacao)                          # modelo, ferramentas e teto da ligação
     try:
         variantes = le_variantes(pecas)                    # erro de forma sai antes de abrir sessão
         imagens = le_anexos(anexos)
@@ -1311,7 +1310,7 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
     origem = os.environ.get("PF_SESSAO", "").strip()
     if not sujeito or not origem:
         return _erro("sem pessoa resolvida (PF_SUJEITO) ou sem a sessão de quem chamou (PF_SESSAO): "
-                     "nega por padrão, sem cair para a conta (spec agente §11.1)", 1)
+                     "nega por padrão, sem cair para a conta", 1)
     conta = conta_do_modelo(decl["modelo"])
     filha = None
     inicio = time.monotonic()
@@ -1372,7 +1371,7 @@ def ato_rodar(slug: str, cadeira_arg: str | None, chapeu_arg: str | None, como_j
     return 0
 
 
-# --- ato: medir-federacao (card #4136, gate das Tarefas 4 e 6) ---------------------------------
+# --- ato: medir-federacao ----------------------------------------------------------------------
 
 def _jti_do_arquivo(arq: Path) -> str | None:
     """O jti do token em disco, sem o token: o identificador de uso único que a troca não aceita repetido."""
@@ -1537,7 +1536,7 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--cadeira", default=None)
     a.add_argument("--chapeu", default=None)
     a.add_argument("--ligacao", choices=("consultado", "agendado"), default="consultado",
-                   help="por onde a tarefa entra; o bot passa agendado (spec agente §4)")
+                   help="por onde a tarefa entra; o bot passa agendado")
     a.add_argument("--peca", action="append", default=None, metavar="<nome>=<arquivo>",
                    help="troca o conteúdo da peça da lente pelo do arquivo; <nome>= tira a peça (par mínimo)")
     a.add_argument("--anexo", action="append", default=None, metavar="<imagem>",

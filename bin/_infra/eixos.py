@@ -1,4 +1,4 @@
-"""eixos — o que os quatro atos `infra medir <eixo>` têm em comum (spec eixos-do-host R1 a R5).
+"""eixos — o que os quatro atos `infra medir <eixo>` têm em comum.
 
 Módulo de apoio de bin/infra, fora do PATH e do golden record (como os sub-atos de bin/_infra/); quem o
 usa é o ato de cada eixo (medir-rede, e os de RAM, VRAM e processamento que vêm depois), nunca o dono
@@ -9,7 +9,7 @@ direto. Três coisas moram aqui, porque servem a mais de um eixo:
   - a frase, gerada do JSON por uma função só, `frase()` (R2): nenhum ato escreve a frase à mão;
   - a chave de serviço `<stack>/<serviço>` (R4), resolvida por dois caminhos: o contêiner pelo projeto do
     compose contra o compose registrado na stack, e a unit pelo registro unit→stack (`acervo stack
-    resolver`, story #3942). O que não resolve não tem chave e sai como desvio, nunca omitido:
+    resolver`). O que não resolve não tem chave e sai como desvio, nunca omitido:
     `fora_de_compose_e_unit` ou `unit_sem_stack`. Label, nome da unit, pid e linha de comando vão ao lado.
 
 O teto se lê da máquina no instante da leitura e declara a fonte (R5); nenhum teto vem fixo no código.
@@ -76,7 +76,7 @@ class ErroDeLeitura(Exception):
 # --- o JSON -----------------------------------------------------------------------------------
 
 def carimbo(agora: datetime | None = None) -> str:
-    """UTC com milissegundo, a forma de `ts` do evento de plataforma (arq:0133)."""
+    """UTC com milissegundo, a forma de `ts` do evento de plataforma."""
     t = (agora or datetime.now(timezone.utc)).astimezone(timezone.utc)
     return t.strftime("%Y-%m-%dT%H:%M:%S.") + f"{t.microsecond // 1000:03d}Z"
 
@@ -578,7 +578,7 @@ def chave_de_unit(unit: str, resolver: Callable[[str], str | None]) -> dict:
 def linha_sem_segredo(linha: str, limite: int = LIMITE_DA_LINHA_DE_COMANDO) -> str:
     """A linha de comando que vai ao JSON e à frase: o valor de todo argumento cujo nome diz segredo sai mascarado
     (`--x-secret=v`, `--x-secret v`, `X_TOKEN=v`) e o texto é cortado em `limite` caracteres. É defesa de leitura, não
-    garantia: argumento é conteúdo, e por isso a linha nunca vai a evento (spec banco-de-eventos-de-plataforma R5)."""
+    garantia: argumento é conteúdo, e por isso a linha nunca vai a evento."""
     saida, mascarar_o_proximo = [], False
     for token in linha.split(" "):
         if mascarar_o_proximo and token and not token.startswith("-"):

@@ -1,4 +1,4 @@
-"""A consulta ao motor montada pelo verbo, não redigida pela cadeira (#3360, #3364, #3368; spec motor-do-conhecimento §2b).
+"""A consulta ao motor montada pelo verbo, não redigida pela cadeira.
 
 A cadeira diz em uma frase que nomeia o assunto pelo termo do acervo o que precisa saber (a *necessidade*).
 O verbo `motor <inst> buscar` monta a pergunta com a necessidade literal (`[necessidade]`) e, havendo
@@ -166,7 +166,7 @@ def chapeu_vestido(ambiente=None) -> str | None:
 def rotulos_do_chapeu(cadeira: str | None, chapeu: str | None, raiz=None) -> tuple[str, ...]:
     """Os primeiros MAX_ROTULOS rótulos do chapéu da cadeira.
 
-    Sem morada publicada (card #4404), em produção devolve vazio; em teste aceita
+    Sem morada publicada, em produção devolve vazio; em teste aceita
     `raiz` explícita ou `PF_ABERTURA_DIR` explícita no ambiente."""
     if not chapeu or not cadeira or cadeira == "-":
         return ()

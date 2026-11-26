@@ -111,7 +111,7 @@ def main() -> int:
         if apt.severidade == "bloqueante":
             bloqueantes.append(("arranque", apt))
 
-    # 4. organizacao (staged), so em repositorio declarado (card #3118)
+    # 4. organizacao (staged), so em repositorio declarado
     if _organizacao_habilitada(raiz):
         try:
             from _lint.organizacao import bloqueantes_no_stage
@@ -123,7 +123,7 @@ def main() -> int:
         for apt in achados:
             bloqueantes.append(("organizacao", apt))
 
-    # 5. diagrama (staged): .mmd/.d2 que nao compila no Kroki (card #3096). Kroki fora de
+    # 5. diagrama (staged): .mmd/.d2 que nao compila no Kroki. Kroki fora de
     # alcance NAO barra -- so avisa; a trava desta story e essa (nunca bloqueante por 'nao
     # consegui medir').
     try:
@@ -136,8 +136,8 @@ def main() -> int:
     for apt in achados_diagrama:
         bloqueantes.append(("diagrama", apt))
 
-    # 6. canonico (staged): ADR ou spec que acrescenta citacao de minuta por numero ou pela
-    # decisao da minuta (ordem do dono, 28/09/2026; regua arq:0028).
+    # 6. canonico (staged): documento que acrescenta citacao de minuta por numero ou pela
+    # decisao da minuta.
     try:
         from _lint.canonico import bloqueantes_no_stage as canonico_bloqueantes_no_stage
     except ImportError:
@@ -147,7 +147,7 @@ def main() -> int:
         bloqueantes.append(("canonico", apt))
 
     # 7. casa por caminho (staged): linha acrescentada que lê documento de casa pelo caminho
-    # do arquivo em vez do acervo (arq:0115 §11.3; pós-morte do incidente #3225).
+    # do arquivo em vez do acervo.
     try:
         from _lint.casa_por_caminho import bloqueantes_no_stage as casa_bloqueantes_no_stage
     except ImportError:

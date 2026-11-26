@@ -35,12 +35,12 @@ ESCREVE em acervo.ferramental (capacidade + verbo + descricao). Idempotente por 
 se ela resolve no acervo agora; a que nao resolve sai em aviso, sem referencia pendurada.
 `# regua: <ato> repositorio` marca regua_propria (spec_lint §3, §6; migracao 062).
 `# rotulo: <ato>=<texto>`, `# volta: <ato>=sim — <como>|nao` e `# atalho: <ato>=<tecla>` gravam o texto
-do controle do ato (arq:0124 §3; migracao 094); o objeto do rotulo entra como {slug} do conceito
+do controle do ato; o objeto do rotulo entra como {slug} do conceito
 no tesauro, e slug que o tesauro nao tem recusa o registro do verbo (exit 3). O retrato que a
-Taipa consome sai de `acervo listar casa ferramental --retrato`.
-`# capacidade-ato: <ato>=<capacidade>` grava a capacidade filha do ato (arq:0119 §4) em
+interface consome sai de `acervo listar casa ferramental --retrato`.
+`# capacidade-ato: <ato>=<capacidade>` grava a capacidade filha do ato em
 ferramental_ato.capacidade sem tocar o par (acao, tipo) de `# atos:`, que e o que o ato manda ao PEP
-(arq:0110 Q1, Q12); ato sem a chave grava capacidade = segundo campo do par, como sempre.
+ato sem a chave grava capacidade = segundo campo do par, como sempre.
 Fonte = o cabecalho do script; a tabela e a projecao. Substitui a migration de seed
 na mao (migration fica so para DDL)."""
 
@@ -76,13 +76,13 @@ CHAVES = (
 )
 # Chaves que se repetem, uma linha por ato, e acumulam em vez de sobrescrever.
 POR_ATO = ("le", "escreve", "regua", "rotulo", "volta", "atalho", "capacidade-ato")
-# O texto do controle de cada ato (arq:0124 §3): `# <chave>: <ato>=<valor>`, uma linha por ato.
+# O texto do controle de cada ato: `# <chave>: <ato>=<valor>`, uma linha por ato.
 CONTROLE = ("rotulo", "volta", "atalho")
 
 RE_SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 RE_OBJETO = re.compile(r"\{([a-z0-9]+(?:-[a-z0-9]+)*)\}")
 RE_ATALHO = re.compile(r"^\S{1,12}$")
-# A chave do controle de um modo: o ato e a opcao que separa o modo (`trocar --embedder`), arq:0124 §3.
+# A chave do controle de um modo: o ato e a opcao que separa o modo (`trocar --embedder`).
 RE_MODO = re.compile(r"^[A-Za-z0-9_-]+ --[A-Za-z0-9_-]+$")
 
 
@@ -120,7 +120,7 @@ def _listas_que_resolvem(pares):
 
 def _controle_por_ato(campos, verbo):
     """`# rotulo: <ato>=<texto>`, `# volta: <ato>=sim — <como>|nao`, `# atalho: <ato>=<tecla>`
-    (arq:0124 §3) -> {ato: {"rotulo": ..., "volta": ..., "atalho": ...}}, so com o que o ato
+    -> {ato: {"rotulo": ..., "volta": ..., "atalho": ...}}, so com o que o ato
     declara. Fora da forma, o registro do verbo recusa (exit 3): o texto do controle errado se
     cura no cabecalho, nunca no registro. Verbo sem nenhuma das tres chaves devolve {}."""
     por_ato = {}
@@ -158,9 +158,9 @@ def _controle_por_ato(campos, verbo):
 
 
 def _capacidade_por_ato(campos, verbo):
-    """`# capacidade-ato: <ato>=<capacidade>` (arq:0119 §2 a §4; #3465) -> {ato: capacidade}.
+    """`# capacidade-ato: <ato>=<capacidade>` -> {ato: capacidade}.
 
-    O par de `# atos:` e o que o ato manda ao PEP (arq:0110 Q1, Q12): o segundo campo e gravado em
+    O par de `# atos:` e o que o ato manda ao PEP: o segundo campo e gravado em
     `tipo` e, sem esta chave, tambem em `capacidade`. A capacidade filha do ato (leitura, descoberta)
     nao pode trocar o tipo que o PEP recebera; ela vai por esta chave e so grava `capacidade`.
     Fora da forma o registro do verbo recusa (exit 3): o cabecalho se cura na fonte."""
@@ -182,7 +182,7 @@ def _capacidade_por_ato(campos, verbo):
 
 def _conceitos_que_resolvem(slugs):
     """Dos slugs pedidos, os que existem no tesauro agora (acervo.conceito). O objeto do rotulo
-    nunca se copia: o registro nao guarda slug pendurado (arq:0125, Fechado depois do aceite, 4)."""
+    nunca se copia: o registro nao guarda slug pendurado."""
     if not slugs:
         return set()
     valores = ", ".join("(%s)" % _lit(s) for s in sorted(slugs))
@@ -280,7 +280,7 @@ def registrar_um(verbo):
     cap = campos.get("capacidade")
     if not cap:
         morre("acervo registrar: bin/%s sem '# capacidade:' no cabecalho — "
-              "nao registro sem capacidade (1:1, arq:0037)." % verbo, 3)
+              "nao registro sem capacidade (1:1)." % verbo, 3)
     sot = "bin/%s" % verbo
 
     atos_raw = campos.get("atos", "")
@@ -320,7 +320,7 @@ def registrar_um(verbo):
     if sem_ato:
         morre("acervo registrar: bin/%s declara `# regua:` para ato que `# atos:` nao lista: %s"
               % (verbo, ", ".join(sem_ato)), 3)
-    # Texto do controle por ato (arq:0124 §3): so de ato que `# atos:` lista, e o objeto do rotulo
+    # Texto do controle por ato: so de ato que `# atos:` lista, e o objeto do rotulo
     # ({slug}) so de conceito que existe no tesauro agora.
     controle_por_ato = _controle_por_ato(campos, verbo)
     sem_ato_c = sorted(a for a in controle_por_ato if _ato_base(a) not in nomes_atos)
@@ -432,7 +432,7 @@ def registrar_um(verbo):
             )
 
     # Um controle por modo e uma linha propria do registro (`trocar --embedder`), com a capacidade, a acao e o
-    # tipo do ato de que sai; o acesso e o consumo ficam no ato (arq:0124 §3, emenda de 14/10/2026).
+    # tipo do ato de que sai; o acesso e o consumo ficam no ato.
     info_do_ato = {a: (op, subcap) for a, op, subcap in atos_info}
     for chave in sorted(c for c in controle_por_ato if RE_MODO.match(c)):
         base = _ato_base(chave)
@@ -455,7 +455,7 @@ def registrar_um(verbo):
             % (_lit(verbo), _lit(var_name), "true" if obrig else "false", _lit(origem))
         )
 
-    # Atalho e uma tecla por ato, unica em toda face (arq:0124 §3). O registro ainda nao guarda a
+    # Atalho e uma tecla por ato, unica em toda face. O registro ainda nao guarda a
     # face, entao o repetido sai em aviso, nunca em recusa; o retrato repete o aviso.
     repetidos = []
     atalhos = {a: c["atalho"] for a, c in controle_por_ato.items() if c.get("atalho")}

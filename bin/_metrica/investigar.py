@@ -1,4 +1,4 @@
-"""metrica investigar — a linha inteira do bruto, só com incidente aberto (card #3355; arq:0123 regras 8, 10 e 15).
+"""metrica investigar — a linha inteira do bruto, só com incidente aberto.
 
     metrica investigar <AAAA-MM-DD> --incidente <n> [--sessao <prefixo-ou-id>] [--tool <verbo>] [--classe <c>]
                        [--limite N] [--resumo]
@@ -7,7 +7,7 @@ MODULO IMPORTAVEL (como `abertura` e `particao`): `bin/metrica` o despacha antes
 argumentos são outros. Aqui não se abre o diretório do bruto: quem lê o arquivo é só `lib/oplog` (`ler_inteiras`,
 que exige o número do incidente e grava o `leitura_bruto` antes de entregar).
 
-A REGRA (arq:0123 regra 15): o argumento, o texto de erro, a identidade e o texto do turno ficam no bruto e só saem
+A REGRA: o argumento, o texto de erro, a identidade e o texto do turno ficam no bruto e só saem
 por este ato, com incidente ABERTO. Aberto é o que `tarefas ler <n>` diz: estado da fase `incidente` (detectado,
 em-mitigacao, mitigado). Incidente que não existe, resolvido ou que nem é incidente sai 4, com o caminho. O verbo não
 abre incidente para destravar a leitura: o número vem de quem investiga. Não há exceção por cadeira: toda cadeira entra
@@ -71,7 +71,7 @@ exit: 0 devolveu · 1 nenhuma linha casa · 2 uso · 3 rastreador ou particao fo
 
 
 class Recusa(Exception):
-    """O ato termina com `codigo` (arq:0110 §4) e a mensagem; `caminho` é o que fecha o pedido dentro das regras."""
+    """O ato termina com `codigo` e a mensagem; `caminho` é o que fecha o pedido dentro das regras."""
 
     def __init__(self, codigo: int, mensagem: str, caminho=()):
         super().__init__(mensagem)
@@ -122,7 +122,7 @@ def _argumentos(argv: list[str], hoje: date) -> dict:
     if d > hoje:
         raise Recusa(2, f"{dia} ainda não existe (hoje é {hoje.isoformat()})", ["o dia mais novo é hoje"])
     if incidente is None:
-        raise Recusa(2, "sem --incidente: a linha inteira só sai com incidente aberto (arq:0123 regra 15)", [
+        raise Recusa(2, "sem --incidente: a linha inteira só sai com incidente aberto", [
             "o número vem de quem investiga: o card do incidente (tarefas listar --estado detectado)",
             "este verbo não abre incidente para destravar a leitura; o argumento, o erro e o texto do turno "
             f"ficam no bruto até lá ({VERBO} casos e {VERBO} eventos dão o giro sem conteúdo)"])

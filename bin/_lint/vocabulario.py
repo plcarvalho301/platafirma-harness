@@ -1,6 +1,6 @@
 """vocabulario — verificacao de verbos e atos citados no texto contra bin/.
 
-Modulo unico (card #3153): `lint vocabulario` e `conferir vocabulario` leem os atos com
+Modulo unico: `lint vocabulario` e `conferir vocabulario` leem os atos com
 `carregar_verbos_e_atos` e julgam cada citacao com `julgar_citacao`, daqui.
 """
 from __future__ import annotations

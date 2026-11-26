@@ -1,5 +1,5 @@
 """varrer_balde — `acervo balde varrer <colecao> [--limite <n>] [--retomar] [--prefixo <p>] [--teto-s <n>]
-[--json]` (card #3468; ordem do dono de 04/10/2026: lote é fila durável desde o primeiro commit).
+[--json]` (lote é fila durável desde o primeiro commit).
 
 O que faz: lê, um por vez, cada objeto do balde, calcula o sha256 do que leu e compara com a chave. Só leitura:
 não grava no balde nem no catálogo de obras; o que escreve é a própria fila, em acervo.varredura_balde e

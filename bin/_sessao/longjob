@@ -22,7 +22,7 @@
 # (LONGJOB_CWD) ou faz `cd` dentro do proprio comando. O PATH da unit e o da release.
 set -euo pipefail
 
-# bin/_sessao/longjob (card #3145): um nivel a mais que bin/, entao lib/ fica dois
+# bin/_sessao/longjob: um nivel a mais que bin/, entao lib/ fica dois
 # diretorios acima -- nao um.
 . "$(dirname "$(readlink -f "$0")")/../../lib/raizes.sh"
 
@@ -31,7 +31,7 @@ mkdir -p "$LOGDIR"
 
 uso() {
   cat >&2 <<'FIM'
-uso: (contrato herdado -- invoque por `sessao longjob ...`, arq:0110 §14)
+uso: (contrato herdado -- invoque por `sessao longjob ...`)
   sessao longjob run <nome> <comando> [args...]   dispara; devolve nome da unit e caminho do log
   sessao longjob list                             units platafirma-job-* ativas e falhadas
   sessao longjob logs                             arquivos de log mais recentes
@@ -58,7 +58,7 @@ case "$cmd" in
     # unit, e verbo que exige identidade (infra up, migrar aplicar) recusava com
     # «PF_SUJEITO ausente». Repassa so as variaveis presentes; ausente segue ausente (o
     # verbo do job decide, sem fallback aqui).
-    # Atributos do agente (card #3156, spec agente §11.1): `sessao longjob` os le da chave viva e
+    # Atributos do agente: `sessao longjob` os le da chave viva e
     # os poe no ambiente antes do exec; aqui so seguem adiante e entram no cabecalho do log, que e
     # onde a trilha do segundo plano diz quem agiu, por qual agente e em nome de que cadeira.
     ident=()
@@ -91,7 +91,7 @@ case "$cmd" in
         "${PF_CONTA_AGENTE:-(ausente)}" >> "$log"
     fi
     printf '# comando=%s\n' "$*" >> "$log"
-    # DT 380: nasce já coletável (--collect) e grava o próprio evento de fim ao sair
+    # nasce já coletável (--collect) e grava o próprio evento de fim ao sair
     # (ExecStopPost), para unit falhada não ficar carregada nem perder Result/status.
     systemd-run --user --collect --unit="$unit" --quiet \
       "${ident[@]}" \
@@ -123,7 +123,7 @@ case "$cmd" in
     base="${unit%.service}"
     carga="$(systemctl --user show "$unit" -p LoadState --value 2>/dev/null || true)"
     if [ "$carga" = "not-found" ]; then
-      # A unit já saiu: a limpeza de fóssil a tirou da lista (`infra limpeza fossil`, card #3920) ou o systemd a descarregou.
+      # A unit já saiu: a limpeza de fóssil a tirou da lista (`infra limpeza fossil`) ou o systemd a descarregou.
       # `systemctl show` de unit descarregada devolve os valores padrão, e o padrão é Result=success com status 0: um
       # job que falhou leria verde (medido no #3100). O que a unit sabia está no evento de fim, a linha `# fim=<ts>
       # result=<Result> status=<ExecMainStatus>` que a limpeza grava no log do job antes de tirá-la (decisão do dono,

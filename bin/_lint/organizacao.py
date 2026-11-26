@@ -1,4 +1,4 @@
-"""organizacao — antipadrões de organização documental (card #3118).
+"""organizacao — antipadrões de organização documental.
 
 A régua é a lista de verificação `checklist-antipadroes-organizacao-documental` do
 acervo: ela diz, por classe, o antipadrão, a severidade e a cura. Aqui mora só o

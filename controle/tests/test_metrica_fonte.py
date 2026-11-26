@@ -665,7 +665,7 @@ def test_comportamento_diz_fonte_bruto_no_json_e_no_texto(monkeypatch, capsys, t
 @pytest.mark.parametrize("ato", ["eventos", "ate-acerto", "tateio", "casos", "comportamento"])
 def test_fonte_particao_nos_atos_do_bruto_e_exit_2_com_o_caminho(monkeypatch, capsys, ato):
     codigo, saida, err = roda(monkeypatch, capsys, ApiFalsa(), ato, DIA, "--fonte", "particao")
-    assert codigo == 2 and saida == "" and "D5.9" in err and f"metrica {ato}" in err and "corrija:" in err
+    assert codigo == 2 and saida == "" and "a particao nao leva" in err and f"metrica {ato}" in err and "corrija:" in err
 
 
 def test_fonte_desconhecida_e_por_fora_de_turnos_sao_exit_2(monkeypatch, capsys):

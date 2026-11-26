@@ -1,15 +1,15 @@
 """Cadeira: a unica traducao entre o slug do org, o sufixo do harness e o MXID.
 
 Fonte viva unica: a arvore `abertura/<cadeira>/` da MORADA PUBLICADA
-($PF_ABERTURA_DIR/current/abertura — arq:0097, arq:0109 §1; estado vivo por arq:0074).
+($PF_ABERTURA_DIR/current/abertura — estado vivo).
 Nunca o working tree do clone: runtime nao le git. O slug e o nome do diretorio, MINUSCULO PURO, sem prefixo
-`claudinho-`/`claudinha-` e sem alias (arq:0073 §2). Cadeira nova entra sozinha, criando
+sem prefixo de cadeira e sem alias. Cadeira nova entra sozinha, criando
 o diretorio `abertura/<slug>/persona.md`; este arquivo nao se edita.
 
   slug do org / sufixo   ti, ia, gestao-estrategica   (== nome do diretorio em abertura/)
   localpart Matrix       _pf_ti, _pf_gestao-estrategica   (minusculo, exigencia do Synapse)
 
-INCIDENTE (ordem do dono): o ledger de vinculo (`registro/eventos-org.jsonl`) e
+O ledger de vinculo (`registro/eventos-org.jsonl`) e
 HISTORICO append-only, para consulta — NENHUM codigo vivo o le para resolver
 identidade. O expurgo do prefixo `claudinho-` do slug (ordem anterior do dono) ficou
 sem conformar: o ledger guardava a forma antiga (`claudinho-IA`), o codigo vivo a lia,
@@ -45,8 +45,8 @@ _NAO_SAO_CADEIRA = {"TEMPLATE", "EXTERNO"}
 # passa a ter um roster proprio (`atores()`), maior que o do org: o dono fala com
 # quem tem porta com ele.
 #
-# Vazio hoje, e sem motor: a rota de participante saiu de bin/chat (card #3117,
-# ordem do dono 27/09/2026). Participante novo nasce com motor desenhado do zero;
+# Vazio hoje, e sem motor: a rota de participante saiu de bin/chat.
+# Participante novo nasce com motor desenhado do zero;
 # o balde so separa o roster.
 _SAO_PARTICIPANTE: set[str] = set()
 
@@ -210,7 +210,7 @@ def sufixo_canonico(nome: str) -> str | None:
     Aceita as entradas, e por isso quem chama nao prepara nada antes:
       "ti"                          -> "ti"    (slug, ja canonico)
       "TI"                          -> "ti"    (case fossil de digitacao, dobrado)
-      "claudinho-ti"                -> "ti"    (prefixo fossil, descartado na entrada)
+      "<prefixo>-ti"                -> "ti"    (prefixo legado, descartado na entrada)
       "_pf_ti"                      -> "ti"    (localpart do Matrix)
       "@_pf_ti:chat.platafirma.org" -> "ti"    (MXID inteiro)
 
@@ -244,7 +244,7 @@ def sufixo_canonico(nome: str) -> str | None:
 def slug_da_cadeira(nome: str) -> str | None:
     """Qualquer forma -> o slug canonico (== sufixo). None se nao ha.
 
-    Depois do expurgo do prefixo (ordem do dono), o slug do org e o proprio sufixo
+    Depois do expurgo do prefixo, o slug do org e o proprio sufixo
     minusculo: nao ha mais `claudinho-<cadeira>`. Esta funcao sobrevive como a ponte
     para participante e ator interno, cujo slug e o da PERSONA que montam, nao o nome
     do ator.

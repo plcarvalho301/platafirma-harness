@@ -73,7 +73,7 @@
 # conforme: sim
 set -uo pipefail
 
-# Raizes da casa (card #3010): a bancada vem de pf_bancada, sem default; o log da porta
+# Raizes da casa: a bancada vem de pf_bancada, sem default; o log da porta
 # e o registro de familias derivam da instancia e da release.
 . "$(dirname "$(readlink -f "$0")")/../lib/raizes.sh"
 
@@ -106,8 +106,8 @@ if [ -n "$GH" ] && [ -x "$GH" ]; then
 fi
 
 # --- regime "direto em main": repositorio de deliberacao --------------------------------
-# arq:0083 §1: repositorio de documentacao e deliberacao commita direto em main, sem ramo
-# nem PR ("sem producao, PR e atrito"); o alcance de arq:0109 (bancada por card) diz que
+# repositorio de documentacao e deliberacao commita direto em main, sem ramo
+# nem PR ("sem producao, PR e atrito"); a bancada por card diz que
 # ela NAO vale para repositorio de deliberacao. Ordem do dono, 28/09/2026: "tem que tirar
 # o platafirma-casa todo das protecoes. A gente fez ele pra isso."
 # Esta lista e o UNICO lugar que declara o regime; minuta (bin/_minuta) chega a mesma
@@ -122,7 +122,7 @@ fi
 # mesmo sincronizar; nada se migra a forca. Repositorio de codigo segue com bancada por card,
 # e desde 22/11/2026 tambem entrega direto na main: o sincronizar mescla origin/main no ramo
 # do card e empurra o HEAD para main em avanco direto, sem pedido de integracao nem workflow
-# no forge (ordem do dono). O que esta lista decide e so o regime da bancada.
+# no forge. O que esta lista decide e so o regime da bancada.
 # platafirma-casa é a casa nova (renomeada na #4414): regime de documento direto em main
 # (F3974), e repositorio de deliberacao como ela; a entrega do #4066 e direto em main.
 REPOS_DIRETO_EM_MAIN=(platafirma-casa)
@@ -137,7 +137,7 @@ direto_em_main() {
 recusa_pr_direto_em_main() {
   local n="${1%%@*}"
   direto_em_main "$n" || return 0
-  printf '%s: repositório de deliberação: commit direto em main (arq:0083)\n' "$VERBO" >&2
+  printf '%s: repositório de deliberação: commit direto em main\n' "$VERBO" >&2
   printf 'vizinho: repo commitar %s -m <msg> <caminhos>, e repo sincronizar %s (empurra para main)\n' "$n" "$n" >&2
   exit 2
 }
@@ -265,7 +265,7 @@ chave_de() {
   fi
 }
 
-# Resolucao de bancada: <bancada>/wt/<repo>/<cadeira>/<card-ou-slug> (arq:0109, arq:0110,
+# Resolucao de bancada: <bancada>/wt/<repo>/<cadeira>/<card-ou-slug> (
 # card:3149 passo 3). Com $2 (chave): so aquele card/slug, sem varredura. Sem $2: um
 # worktree aninhado so, usa-o; mais de um e AMBIGUO -- rc 2 (candidatas_de lista),
 # e quem chama pede a chave (<repo>@<chave>). Nao ha desempate por heuristica: mtime do
@@ -275,7 +275,7 @@ chave_de() {
 cadeira_da_sessao() {
   local c="${PF_CADEIRA:-}"
   c="${c#claudinho-}"; c="${c#claudinha-}"
-  # DT 928: com abertura degradada (sem PF_CADEIRA), deriva o namespace do sujeito
+  # com abertura degradada (sem PF_CADEIRA), deriva o namespace do sujeito
   # autenticado da conexão (PF_SUJEITO) para não travar correção em incidente.
   if [ -z "$c" ] && [ -n "${PF_SUJEITO:-}" ]; then
     c="${PF_SUJEITO//[^a-zA-Z0-9._-]/-}"
@@ -501,7 +501,7 @@ _worktree_orfa() {
 
 # _religar_worktree_orfa <clone_raiz> <wt_dir> <ramo> <base_ref> <track 0|1> --
 # refaz uma worktree orfa a partir de base_ref sem misturar arvore antiga com HEAD atual
-# (DT 893; incidente 4371): move a pasta orfa inteira para wt/.orfas/<repo>-<cadeira>-<chave>-<carimbo>
+# move a pasta orfa inteira para wt/.orfas/<repo>-<cadeira>-<chave>-<carimbo>
 # para nao perder escrita local, e recria a worktree limpa em base_ref.
 _religar_worktree_orfa() {
   local clone_raiz="$1" wt_dir="$2" ramo="$3" base_ref="$4" track="${5:-0}"
@@ -595,7 +595,7 @@ avisa_atras_origin() {
 
 alvo_leitura() {
   local nome="${1:-}" err c rc base
-  # DT 853: <repo>@origin/main le direto de origin/main do clone base, sem depender de bancada
+  # <repo>@origin/main le direto de origin/main do clone base, sem depender de bancada
   # (evita servir bancada parada em ramo antigo ou falhar com multiplas bancadas).
   case "$nome" in
     *@origin/main)
@@ -622,7 +622,7 @@ alvo_leitura() {
     rm -f "$err"; ALVO="$c"; avisa_atras_origin "$c" "$nome"; return 0
   fi
   base="${nome%%@*}"
-  # DT 853: <repo>@main sem worktree 'main' tambem le origin/main do clone base.
+  # <repo>@main sem worktree 'main' tambem le origin/main do clone base.
   if [ "$rc" -eq 1 ] && [ "$nome" = "${base}@main" ] && [ -e "$BANCADA/$base/.git" ]; then
     rm -f "$err"
     git_sem_engolir "$BANCADA/$base" fetch --prune origin \
@@ -729,7 +729,7 @@ ramo_atual() {
 
 # [3096] Um ramo pertence a esta cadeira? Aceita main/master, o proprio prefixo
 # <cadeira>/* e os ramos de fabrica (fabrica/*); o ramo caderno/<cadeira>/* saiu com o
-# caderno em arquivo (arq:0120, #3217). Sem PF_CADEIRA, nao barra (exit 0). Retorna 1 se e ramo
+# caderno em arquivo. Sem PF_CADEIRA, nao barra (exit 0). Retorna 1 se e ramo
 # de outra cadeira.
 ramo_da_cadeira() {
   local ramo="$1"
@@ -745,7 +745,7 @@ ramo_da_cadeira() {
   esac
 }
 
-# DT 7: HEAD destacado nao e "ramo de outra cadeira"; recusa com 4 e vizinho claro.
+# HEAD destacado nao e "ramo de outra cadeira"; recusa com 4 e vizinho claro.
 _checar_ramo_commit() {
   local nome="$1" ramo="$2"
   if [ "$ramo" = "HEAD" ]; then
@@ -760,7 +760,7 @@ _checar_ramo_commit() {
   ramo_da_cadeira "$ramo" || morre "commit recusado: o ramo '$ramo' pertence a outra cadeira (esperados: <cadeira>/*, fabrica/*, main)." 3
 }
 
-# DT 7: devolve o caminho do worktree que ja tem <ramo_alvo> aberto (vazio se livre).
+# devolve o caminho do worktree que ja tem <ramo_alvo> aberto (vazio se livre).
 _worktree_do_ramo() {
   local c="$1" ramo_alvo="$2"
   "$GIT" -C "$c" worktree list --porcelain 2>/dev/null | awk -v alvo="refs/heads/$ramo_alvo" '
@@ -803,7 +803,7 @@ ato_git() {
   fi
 
   # [3096] Recusa commit em HEAD destacado ou ramo de outra cadeira
-  # DT 490: o portao de story em execucao vale tambem para `repo git commit`
+  # o portao de story em execucao vale tambem para `repo git commit`
   if [ "${1:-}" = "commit" ]; then
     local ramo_atual
     ramo_atual="$(ramo_atual "$c")"
@@ -811,7 +811,7 @@ ato_git() {
     portao_story_em_execucao "$nome" "$c" "$ramo_atual"
   fi
 
-  # DT 797: em repositorio direto em main, a pasta de main nao troca de ramo
+  # em repositorio direto em main, a pasta de main nao troca de ramo
   if direto_em_main "$nome" && [ "$(basename "$c")" = "$PASTA_DIRETO_EM_MAIN" ]; then
     local _sub="${1:-}"
     if [ "$_sub" = "switch" ] || [ "$_sub" = "checkout" ]; then
@@ -839,7 +839,7 @@ ato_git() {
         esac
       done
       if [ "$_trocando" -eq 1 ] && [ "$_alvo" != "$_esperado" ]; then
-        morre "repositório de deliberação ($nome): a pasta de main não troca de ramo${_alvo:+ (tentou '$_alvo')} — mantenha '${_esperado:-<cadeira>/$PASTA_DIRETO_EM_MAIN}' (arq:0083)" 4
+        morre "repositório de deliberação ($nome): a pasta de main não troca de ramo${_alvo:+ (tentou '$_alvo')} — mantenha '${_esperado:-<cadeira>/$PASTA_DIRETO_EM_MAIN}'" 4
       fi
     fi
   fi
@@ -1153,7 +1153,7 @@ cmd_ler() {
       || morre "indeterminavel: nao li $LEITURA_REF:$caminho" 5
     alvo_arquivo="$LER_TMP"
   else
-    # DT 1361: resolve realpath do alvo e confina à raiz da bancada (evita escape via symlink)
+    # resolve realpath do alvo e confina à raiz da bancada (evita escape via symlink)
     local verif_ler
     verif_ler="$(python3 - "$c" "$alvo_arquivo" <<'PY'
 import os, sys
@@ -1199,9 +1199,9 @@ PY
 }
 
 cmd_procurar() {
-  # DT 213/476: aceita -- para fim de opções e --termo com traço
-  # DT 420/524: aceita regex ERE por padrão (-E), --literal/-F para fixo, -i/--ignore-case, e múltiplos --caminho
-  # DT 8: aceita múltiplos caminhos posicionais ou via --caminho repetido
+  # aceita -- para fim de opções e --termo com traço
+  # aceita regex ERE por padrão (-E), --literal/-F para fixo, -i/--ignore-case, e múltiplos --caminho
+  # aceita múltiplos caminhos posicionais ou via --caminho repetido
   local como_json=0 repo="" termo=""
   local -a termos=()
   local -a prefixos=()
@@ -1500,7 +1500,7 @@ ato_atualizar() {
   ramo="$(ramo_atual "$c")"
   case "$ramo" in
     HEAD)
-      # DT 853: bancada de leitura em HEAD destacado (ex.: --da-producao) avanca para
+      # bancada de leitura em HEAD destacado (ex.: --da-producao) avanca para
       # origin/main sem empurrar nada quando limpa e ancestral de origin/main.
       local st_head
       st_head="$("$GIT" -C "$c" status --porcelain 2>/dev/null)" || morre "git status falhou em '$nome'" 5
@@ -1621,12 +1621,12 @@ ato_sincronizar() {
     return 0
   fi
 
-  # A entrega e direta na main, em avanco direto (ordem do dono de 22/11/2026: sem pedido de
+  # A entrega e direta na main, em avanco direto (sem pedido de
   # integracao nem workflow no forge). O HEAD contem origin/main, entao o push so avanca; se
   # outra mao empurrou para main depois do fetch, o git recusa e a cadeira sincroniza de novo.
   # stderr do push segue visivel: e onde o pre-push diz o que barrou
   # o stdout do push e o do hook: a linha do pre-push (chave, rodou|reaproveitou) vai ao
-  # stderr, visivel, em vez de sumir em /dev/null (card #3150)
+  # stderr, visivel, em vez de sumir em /dev/null
   env PATH="$PATH_FORGE" "$GIT" -C "$c" push origin "HEAD:refs/heads/main" >&2
   fsha="$(forge_sha "$c" main)"; rc=$?
   if [ "$rc" -eq 0 ] && [ "$fsha" = "$head" ]; then
@@ -2084,9 +2084,9 @@ cmd_abrir() {
 
   if direto_em_main "$nome"; then
     [ "$da_producao" -eq 0 ] \
-      || morre "repositório de deliberação: --da-producao nao se aplica, a bancada segue origin/main (arq:0083)" 2
+      || morre "repositório de deliberação: --da-producao nao se aplica, a bancada segue origin/main" 2
     [ -z "$slug" ] \
-      || morre "repositório de deliberação ($nome): --slug nao se aplica — commit direto em main (arq:0083); rode sem --slug: repo abrir $nome" 2
+      || morre "repositório de deliberação ($nome): --slug nao se aplica — commit direto em main; rode sem --slug: repo abrir $nome" 2
     abrir_direto_em_main "$nome" "$cadeira" "$card" "$sem_mover"
     local _rc_dm=$?
     [ "$_rc_dm" -eq 0 ] && grava_escopo_sessao "$nome" "$card"
@@ -2109,7 +2109,7 @@ cmd_abrir() {
   fi
   [ -d "$clone_raiz" ] && [ -e "$clone_raiz/.git" ] || morre "repositório desconhecido: '$nome' — $clone_raiz existe e nao e clone" 2
 
-  # card:3149 passo 3: worktree por CADEIRA+CARD-OU-SLUG (arq:0109, spec_ambiente-de-
+  # worktree por CADEIRA+CARD-OU-SLUG (
   # desenvolvimento §2/§5) -- a proxima sessao da mesma cadeira NO MESMO card acha a
   # bancada; em card diferente, pasta diferente (bancada_de por chave).
   local chave; chave="$(chave_de "$card" "$slug")"
@@ -2220,7 +2220,7 @@ cmd_abrir() {
       printf 'bancada já aberta: %s (ramo %s @ %s, migrada da pasta plana, atras de origin/main: %s)\n' \
         "$wt_dir" "$(ramo_atual "$wt_dir")" "$("$GIT" -C "$wt_dir" rev-parse --short HEAD)" \
         "$("$GIT" -C "$wt_dir" rev-list --count HEAD..origin/main 2>/dev/null || echo '?')"
-      # card #3526: tambem aqui, com a bancada ja aberta, move o card e grava o executor
+      # tambem aqui, com a bancada ja aberta, move o card e grava o executor
       [[ "$card_num" =~ ^[0-9]+$ ]] && move_card "$card_num" "$nome" "$cadeira" "$sem_mover"
       printf 'próximo: teste rodar %s <alvo>\n' "$nome"
       return 0
@@ -2276,7 +2276,7 @@ dispara_esteira() {
     >"$log_arq" 2>&1 </dev/null &
 }
 
-# grava_escopo_sessao <repo> [card] -- story #4342: o próprio ato grava escopo_atual na lousa
+# grava_escopo_sessao <repo> [card] -- o próprio ato grava escopo_atual na lousa
 # por HSET atômico, preservando o efeito mesmo quando o abrir termina depois do prazo da porta.
 grava_escopo_sessao() {
   [ -n "${PF_SESSAO:-}" ] || return 0
@@ -2295,7 +2295,7 @@ grava_escopo_sessao() {
   python3 "$lousa_py" gravar-sessao escopo_atual "$escopo" >/dev/null 2>&1 || true
 }
 
-# grava_executor <n> <tarefas_bin> -- card #3526 (R20 da spec tarefas): quem abre a bancada de uma
+# grava_executor <n> <tarefas_bin> -- quem abre a bancada de uma
 # story ou task passa a ser o executor dela, gravado pelo verbo tarefas (a regra e a coluna sao do
 # rastreador, #3521). So story e task: feature e epico nao executam. Falha em gravar so avisa, como
 # a do mover: a bancada ja existe. Story PARADA (despriorizada) e avisada, nao destravada: sair de
@@ -2428,7 +2428,7 @@ migra_plana() {
   return 0
 }
 
-# DT 7 + DT 490: ramo cria bancada nova (via cmd_abrir) e nunca troca o branch de bancada
+# ramo cria bancada nova (via cmd_abrir) e nunca troca o branch de bancada
 # existente de outro trabalho; em bancada nomeada (@<chave>) que está em HEAD destacado,
 # anexa um ramo local a ela (recusando com 4 se o ramo já estiver preso em outro worktree).
 ato_ramo() {
@@ -2526,7 +2526,7 @@ ato_ramo() {
   fi
 }
 
-# arq:0096, Consequências (card #3599) + DT 490: story de código só comita em em-execucao.
+# story de código só comita em em-execucao.
 portao_story_em_execucao() {
   local nome="$1" c="$2" ramo="$3"
   direto_em_main "$nome" && return 0
@@ -2585,10 +2585,10 @@ ato_commitar() {
   ramo="$(ramo_atual "$c")"
   _checar_ramo_commit "$nome" "$ramo"
 
-  # arq:0096, Consequências (card #3599): story de código só comita em em-execucao
+  # story de código só comita em em-execucao
   portao_story_em_execucao "$nome" "$c" "$ramo"
 
-  # DT 37: salva a arvore do indice antes do git add; se o gate de diagrama ou o commit
+  # salva a arvore do indice antes do git add; se o gate de diagrama ou o commit
   # recusar, restaura o stage para nao deixar arquivo novo staged (A).
   local idx_antes conferir_bin
   idx_antes="$("$GIT" -C "$c" write-tree 2>/dev/null || true)"
@@ -2653,7 +2653,7 @@ ato_commitar() {
       morre "dependência ausente: PF_SESSAO ausente para commitar sem caminho — nomeie os caminhos ou abra a sessão com \`monta_sessao\`" 3
     fi
 
-    # Quem le o bruto da porta e o lib/oplog (arq:0123 §3): este verbo so pede os dias, por
+    # Quem le o bruto da porta e o lib/oplog: este verbo so pede os dias, por
     # `python3 -m oplog`. Le da ABERTURA da sessao em diante (#3354): se um dia dessa janela ja passou do
     # prazo do corte e nao tem mais arquivo, o conjunto de arquivos tocados ficaria parcial, e commitar um
     # conjunto parcial e pior que nao commitar. Sai 3 com o nome do dia, e quem commita nomeia os caminhos.
@@ -2778,7 +2778,7 @@ for f in (sys.stdin,):
                     elif tool == "repo":
                         # mutação do git na bancada pela sessão (ex: apply, rm, checkout, restore)
                         # O giro da porta grava `ato` (git) e `args` (uma string: bancada, subato, caminhos);
-                        # nao ha `argv`. Medido no ar em 07/11/2026: com `argv`, o `rm` nunca contava (DT 6).
+                        # nao ha `argv`. Com `argv`, o `rm` nunca contava.
                         cmd = obj.get("args") or obj.get("argv") or []
                         if isinstance(cmd, str):
                             cmd = cmd.split()
@@ -2826,7 +2826,7 @@ for p in sorted(caminhos):
     alvos_commit=("${session_paths[@]}")
   fi
 
-  # DT 6: caminho que nao esta na arvore nem no indice mas esta no HEAD e remocao ja em stage (git rm):
+  # caminho que nao esta na arvore nem no indice mas esta no HEAD e remocao ja em stage (git rm):
   # `git add -- <caminho>` o recusa («did not match any files») e o commit leva do indice. So o que
   # existe (ou segue rastreado) vai ao add.
   local add_alvos=() p_add
@@ -2911,9 +2911,9 @@ fecho_commit() {
   printf 'próximo: repo sincronizar %s\n' "$nome"
 }
 
-# publica_veredito <clone> <repo> <sha> -- incidente #4196 (peca 1 da feature #4027): o veredito
+# publica_veredito <clone> <repo> <sha> -- o veredito
 # do portao, medido pelo pre-push na rev empurrada, vira commit status `esteira/portao` no forge.
-# Nao ha workflow no forge que integre o PR (ordem do dono, 22/11/2026): a entrega vai a main
+# Nao ha workflow no forge que integre o PR: a entrega vai a main
 # por `repo sincronizar`, e o status fica so como registro do veredito. A marca vem de hooks/pre-push: `verde <chaves>` quando a suite do portao
 # foi medida (ou reaproveitada) verde, `sem-suite` quando o registro nao declara chave de teste.
 # Sem marca (vermelho, ambiente que nao mediu, hook nao instalado) nada se publica, e veredito
@@ -2960,7 +2960,7 @@ ato_empurrar() {
   local nome="${1:-}" ramo="${2:-}" c
   c="$(clone_de "$nome")" || exit $?
   if direto_em_main "$nome"; then
-    printf 'direto em main (arq:0083): empurrar e o sincronizar — rebaseia sobre origin/main e empurra para main\n' >&2
+    printf 'direto em main: empurrar e o sincronizar — rebaseia sobre origin/main e empurra para main\n' >&2
     sincronizar_direto_em_main "$nome" "$c"
     return $?
   fi
@@ -3034,7 +3034,7 @@ ato_pr_abrir() {
     fi
     return 0
   fi
-  # DT 822: marca a cadeira autora no corpo do PR (todas as cadeiras usam a mesma conta no forge).
+  # marca a cadeira autora no corpo do PR (todas as cadeiras usam a mesma conta no forge).
   local cad_autora; cad_autora="$(cadeira_da_sessao)"
   if [ -n "$cad_autora" ] && ! grep -q '<!-- pf-autor:' <<<"$corpo"; then
     if [ -n "$corpo" ]; then
@@ -3043,7 +3043,7 @@ ato_pr_abrir() {
       corpo="<!-- pf-autor: ${cad_autora} -->"
     fi
   fi
-  # DT 915: --espera abre como rascunho, e só pr-merge integra.
+  # --espera abre como rascunho, e só pr-merge integra.
   local draft_flag=()
   [ "$espera" -eq 1 ] && draft_flag=(--draft)
   (cd "$c" && env PATH="$PATH_FORGE" "$GH" pr create --base "$base" --head "$ramo" --title "$titulo" --body "$corpo" ${draft_flag[@]+"${draft_flag[@]}"} >/dev/null) \
@@ -3085,7 +3085,7 @@ ato_pr_listar() {
 }
 
 ato_pr_revisar() {
-  # DT 822: registra leitura do PR por cadeira diferente da autora, com veredito junta|volta
+  # registra leitura do PR por cadeira diferente da autora, com veredito junta|volta
   # (e motivo obrigatorio em volta). Usa comentario estruturado no PR porque todas as cadeiras
   # operam pela mesma conta no forge (gh pr review --approve recusa no proprio PR).
   local nome="${1:-}" num="${2:-}" veredito="" motivo="" c
@@ -3162,7 +3162,7 @@ ato_pr_ver() {
   # `gh pr view <num>` sem --json puxa TODOS os campos, inclusive projectCards, que o
   # forge deprecou (Projects classic) e o GraphQL agora recusa — exit 3 sobre um PR que
   # existe. Pedindo so os campos usados, o campo morto nao entra na query.
-  # DT 822: inclui headRefOid e comments para mostrar a cadeira autora e as leituras
+  # inclui headRefOid e comments para mostrar a cadeira autora e as leituras
   # registradas por pr-revisar.
   local campos="number,title,state,author,headRefName,headRefOid,baseRefName,url,isDraft,mergeable,mergeCommit,body,comments"
   local pr_json
@@ -3261,7 +3261,7 @@ for i in ids:
 }
 
 ato_pr_diff() {
-  # DT 8: aceita filtro de caminho (--caminho ou posicionais após <numero>), --stat e --name-only,
+  # aceita filtro de caminho (--caminho ou posicionais após <numero>), --stat e --name-only,
   # e avisa em stderr quando o diff sem filtro passa de 50 KB.
   local nome="" num="" modo="patch" c
   local -a caminhos=()
@@ -3459,7 +3459,7 @@ ato_pr_merge() {
       morre "recusa de política: check vermelho no PR #$num${nomes:+: $nomes} (use --forcar para ignorar)" 4
     fi
   fi
-  # DT 915: PR aberto com --espera nasce como rascunho; após passar nos portões, tira de rascunho antes do merge.
+  # PR aberto com --espera nasce como rascunho; após passar nos portões, tira de rascunho antes do merge.
   if [ "${is_draft:-false}" = "true" ]; then
     (cd "$c" && env PATH="$PATH_FORGE" GH_PROMPT_DISABLED=1 "$GH" pr ready "$num" </dev/null >/dev/null) \
       || morre "gh pr ready falhou no PR #$num" 3
@@ -3539,7 +3539,7 @@ declara_remocao_remota() {
   esac
 }
 
-# pr-fechar (card #3072): descarta PR sem merge, com o motivo no forge. Depois do fechamento
+# pr-fechar: descarta PR sem merge, com o motivo no forge. Depois do fechamento
 # confirmado no forge, some o que o PR deixou na bancada e no origin: as bancadas do ramo
 # (salvando em wip/ o que so existe nelas, como no pr-merge) e o ramo no origin, se ainda
 # aponta para a ponta do PR. O forge guarda a ponta em refs/pull/<n>/head: o descarte se
@@ -3606,7 +3606,7 @@ ato_pr_fechar() {
   return 0
 }
 
-# --- hooks (webhooks) de repositorio no forge (card #3473) --------------------------------
+# --- hooks (webhooks) de repositorio no forge ---------------------------------------------
 # `gh api repos/<dono>/<repo>/hooks` pelo verbo, porque a porta nao serve `gh api` solto.
 # listar so le; apagar tira UM hook por id e so se a url dele contem o trecho que o chamador
 # disse esperar (apagar sem dizer o que se espera apagar nao existe). O corpo do hook nunca
@@ -3911,7 +3911,7 @@ salva_arvore() {
   [ "$ramo" = HEAD ] && ramo="destacado"
   wip="wip/$dono/$ramo-$ts-$sha7"
   "$GIT" -C "$c" checkout -q -b "$wip" >/dev/null 2>&1 || return 3
-  # DT 1360: exclui padrões sensíveis (.env*, *.key, *.pem, *.asc, *.kdbx) antes de commitar/empurrar wip
+  # exclui padrões sensíveis (.env*, *.key, *.pem, *.asc, *.kdbx) antes de commitar/empurrar wip
   "$GIT" -C "$c" add -A -- . \
     ':(exclude,glob).env*' ':(exclude,glob)**/.env*' \
     ':(exclude,glob)*.key' ':(exclude,glob)**/*.key' \
@@ -3988,7 +3988,7 @@ limpa_ramo_entregue() {
     [ -z "$trava" ] || { printf 'bancada %s: travada (%s), nao toco\n' "${wt#"$BANCADA"/}" "$trava"; continue; }
     [ "$wt" = "$base" ] && continue
     dono="$(dono_da_pasta "$wt")"
-    # DT 490: em bancada de eixo (wt/<repo>/<cadeira>/<chave>), so remove se a chave
+    # em bancada de eixo (wt/<repo>/<cadeira>/<chave>), so remove se a chave
     # corresponde ao ramo entregue; nunca remove bancada de outro trabalho.
     if [ "$(classe_da_pasta "$wt" "$nome_repo")" = "eixo" ]; then
       local chave_wt; chave_wt="$(basename "$wt")"
@@ -4053,7 +4053,7 @@ classe_da_pasta() {
   fi
 }
 
-# DT 285: descarta uma bancada e seu ramo local quando limpa e sem commits exclusivos
+# descarta uma bancada e seu ramo local quando limpa e sem commits exclusivos
 # (ou quando --forcar for pedido explicitamente).
 ato_descartar() {
   local alvo="" forcar=0
@@ -4184,7 +4184,7 @@ sanear_cache() {
   return 0
 }
 
-# sanear_remotos <clone base> <repo> <relatar> -- ordem do dono 27/09/2026 (card #3072,
+# sanear_remotos <clone base> <repo> <relatar> -- (
 # emenda da spec_saneamento-de-clones): ramo do origin sem PR aberto e com o ultimo commit
 # mais velho que PF_SANEAR_DIAS (7) some do forge -- wip/ inclusive. Nunca main/master,
 # ramo com PR aberto nem ramo de bancada viva na conta. PRs abertos ilegiveis: nada se apaga.
@@ -4231,7 +4231,7 @@ sanear_remotos() {
   return 0
 }
 
-# sanear_ramos_mesclados <base> <nome> <relatar> -- card #3108: ramos ja mesclados por PR
+# sanear_ramos_mesclados <base> <nome> <relatar> -- ramos ja mesclados por PR
 # cuja ponta o pr-merge nao apagou (merge feito fora do verbo, ou de antes desta emenda).
 # So apaga quando a arvore da ponta atual bate com a do commit que o PR mesclou -- squash
 # nao deixa ancestral, entao a prova e a arvore, nao o parentesco; ramo com commit por cima
@@ -4460,7 +4460,7 @@ npm_isolado() {  # $1=pasta ; resto = argumentos do npm
   return "$rc"
 }
 
-# --atualizar <pacote>[@<versão>] (feature #3388): sobe um pacote só pelo lock. Nome e versão se
+# --atualizar <pacote>[@<versão>]: sobe um pacote só pelo lock. Nome e versão se
 # validam antes de virar argumento do uv ou do npm: sem hífen na frente, sem espaço, sem caminho.
 # npm aceita pacote@versão (escopo começa com @); uv aceita pacote@versão ou pacote==versão.
 spec_nome() {  # $1=pacote[@versão] ; imprime o nome
@@ -4554,7 +4554,7 @@ PY
   return 0
 }
 
-# ato_lock_node -- o mesmo ato para projeto node (card #3386): package.json -> package-lock.json,
+# ato_lock_node -- o mesmo ato para projeto node: package.json -> package-lock.json,
 # com o node de sistema e SEM script de pacote: `npm install --package-lock-only
 # --ignore-scripts` resolve e escreve o lock, não instala nem roda nada. --conferir só mede
 # (`npm ci --dry-run`: recusa lock fora de sincronia com o package.json), nada escrito.
@@ -4769,7 +4769,7 @@ ato_lock() {
       *) morre "projeto '$projeto' resolve para $real_dir, fora da bancada $c" 4 ;;
     esac
   fi
-  # projeto node (card #3386): package.json sem pyproject.toml -> package-lock.json
+  # projeto node: package.json sem pyproject.toml -> package-lock.json
   if [ ! -f "$dir/pyproject.toml" ] && [ -f "$dir/package.json" ]; then
     ato_lock_node "$repo" "$projeto" "$c" "$dir" "$conferir" "${atualizar[@]+"${atualizar[@]}"}"
     return $?
@@ -4934,7 +4934,7 @@ valida_rel_bancada() {
 }
 
 # copia um arquivo do rascunho da fita (<instancia>/var/tmp/<ordem_id>/...) para a bancada
-# sem passar o conteúdo pela janela (DT 482, DT 733).
+# sem passar o conteúdo pela janela.
 ato_copiar() {
   local repo="${1:-}" origem="${2:-}" destino="${3:-}"
   [ "$#" -eq 3 ] || morre "uso: repo copiar <repo> <origem-rascunho> <destino>" 2
@@ -4946,7 +4946,7 @@ ato_copiar() {
   tmp_raiz="$inst/var/tmp"
   ordem="${PF_ORDEM_ID:-}"
 
-  # DT 1362: confina origens (absolutas ou relativas) ao diretório da própria ordem ($PLATAFIRMA_INSTANCIA/var/tmp/$PF_ORDEM_ID/)
+  # confina origens (absolutas ou relativas) ao diretório da própria ordem ($PLATAFIRMA_INSTANCIA/var/tmp/$PF_ORDEM_ID/)
   [ -n "$ordem" ] || morre "PF_ORDEM_ID obrigatório para confinar origem ao rascunho da própria ordem" 4
   case "$ordem" in
     .|..|*/*|*..*) morre "PF_ORDEM_ID inválido: '$ordem'" 4 ;;
@@ -5007,7 +5007,7 @@ PY
 }
 
 # traz pasta ou arquivo de <origem>[@<sha>]:<caminho> para <destino>:<caminho> na bancada,
-# pronto para commit (DT 735).
+# pronto para commit.
 ato_mover() {
   local orig_spec="${1:-}" dest_spec="${2:-}"
   [ "$#" -eq 2 ] || morre "uso: repo mover <origem>[@<sha>]:<caminho> <destino>:<caminho>" 2

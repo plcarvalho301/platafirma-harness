@@ -1,6 +1,6 @@
-"""repo — predicados de conformidade de repositorio a arq:0042.
+"""repo — predicados de conformidade de repositorio.
 
-Modulo unico da regua (card #3153): `lint repo`, o pre-commit e `conferir repo` chamam as
+Modulo unico da regua: `lint repo`, o pre-commit e `conferir repo` chamam as
 mesmas funcoes daqui. `achados_de_repo`, `cabecalhos_ausentes` e `topos_nao_declarados`
 sao o predicado; `verificar_repo` so os traduz em Apontamento. Quem so imprime diferente
 (conferir) chama os predicados, nunca reescreve a regra.
@@ -53,7 +53,7 @@ _O_QUE_FERE = {
 }
 _CURA = {
     "GERADO": "remover do git e declarar no .gitignore ou .conferir-repo",
-    "ACERVO": "mover para endereco da obra fora do git conforme ont:0072",
+    "ACERVO": "mover para endereco da obra fora do git",
     "GRANEL": "mover para banco ou declarar excecao em .conferir-repo",
     "GORDO": "mover para armazenamento externo ou declarar excecao em .conferir-repo",
     "RENDER": "manter a fonte no mesmo diretorio com o mesmo nome-base",
@@ -177,7 +177,7 @@ def achados_de_repo(
 def cabecalhos_ausentes(
     raiz: Path | str, sob_juizo: Optional[Iterable[str]] = None
 ) -> list[tuple[str, str]]:
-    """[(rel, motivo)] dos documentos de operacao sem cabecalho completo (arq:0049).
+    """[(rel, motivo)] dos documentos de operacao sem cabecalho completo.
     Com `sob_juizo`, so os que estao nele."""
     filtro = set(sob_juizo) if sob_juizo is not None else None
     saida = []
@@ -206,7 +206,7 @@ def verificar_repo(
     staged: bool = False,
     alvo: Optional[str] = None,
 ) -> list[Apontamento]:
-    """Verifica um repositorio conforme arq:0042 e devolve lista de Apontamento."""
+    """Verifica um repositorio e devolve lista de Apontamento."""
     raiz = Path(raiz)
     rc_ls, out, _ = _sh(["git", "ls-files", "-z"], cwd=raiz)
     if rc_ls != 0:
@@ -234,7 +234,7 @@ def verificar_repo(
         apontamentos.append(Apontamento(
             rel, 1,
             f"cabecalho de operacao ausente/incompleto: {motivo}",
-            "acrescentar cabecalho de operacao com genero e publico conforme arq:0049",
+            "acrescentar cabecalho de operacao com genero e publico",
             severidade="bloqueante", id="CABECALHO",
         ))
 

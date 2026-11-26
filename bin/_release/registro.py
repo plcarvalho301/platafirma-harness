@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # registro — leitor único de registro/venvs.json, para release, teste e pre-push
-# (card #3150, comentário B1: "release, teste e pre-push importam o mesmo leitor;
+# ("release, teste e pre-push importam o mesmo leitor;
 # nenhum relê o JSON por conta própria").
 """Registro stack/repositório -> (família, lock, subárvore de teste, esteira, stack_real).
 
@@ -10,7 +10,7 @@ declara uma stack: {"familia": "<repo>", "lock": "<caminho do lock na árvore>",
 lido por release para construir o venv (chave = <nome>-sha256(lock+python)) e por
 teste/pre-push para reaproveitar o mesmo venv, pela mesma chave.
 
-Campo opcional "testes" (card #3316): lista de globs, relativos à raiz de teste da stack
+Campo opcional "testes": lista de globs, relativos à raiz de teste da stack
 (a subárvore, senão a raiz do clone), que é a suíte da stack quando `teste rodar` vem sem
 alvo. Sem ele, a stack que divide repositório com outra e não declara subárvore não tem
 suíte própria: rodar da raiz coletaria o repositório inteiro.
@@ -161,7 +161,7 @@ def resolver(nome: str, caminho: Path | None = None) -> tuple[str, str, str, str
         else:
             lock = repo_decl.get("lock", "")
             # esteira documento nao tem venv: quem mede e a admissao da ingestao
-            # (spec_teste §1, card #3152 passo 6), entao lock ausente nao e erro.
+            # entao lock ausente nao e erro.
             if not lock and esteira != "documento":
                 raise StackSemLock(nome, lock)
             return nome, nome, lock, repo_decl.get("teste", ""), esteira
@@ -171,7 +171,7 @@ def resolver(nome: str, caminho: Path | None = None) -> tuple[str, str, str, str
 
 
 def coleta(stack_real: str, caminho: Path | None = None) -> list[str]:
-    """Globs de teste declarados em "testes" da stack (card #3316); [] sem declaração.
+    """Globs de teste declarados em "testes" da stack; [] sem declaração.
 
     Glob absoluto, com "..", com espaço ou vírgula, ou campo que não é lista de texto
     tornam o registro ilegível: a coleta errada não pode virar coleta do repositório.

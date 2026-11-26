@@ -1,5 +1,4 @@
-"""`motor <inst> medir <particao> --contra <outra>`: o top-8 de duas instâncias da busca, lado a lado (card #3844,
-tarefa 2; R27 da spec motor).
+"""`motor <inst> medir <particao> --contra <outra>`: o top-8 de duas instâncias da busca, lado a lado.
 
 A virada da busca só se faz com o top-8 idêntico em toda pergunta e nenhum trecho cruzando partição (Trava do #3844:
 «qualquer diferença no top-8 ou no ambiente para a virada»). Aqui mora a conta, sem rede: `bin/motor` chama as duas
@@ -115,7 +114,7 @@ def veredito_limpo(res: dict, a: dict, b: dict) -> bool:
     return bool(res["limpo"]) and carimbos_iguais(a, b)
 
 
-# --- as leituras da API do acervo (card #3844, unidade 7) ------------------------------------------------
+# --- as leituras da API do acervo ------------------------------------------------------------------------
 #
 # A API do acervo passa a subir sozinha (acervo-guarda, 8102), ao lado da que o rag-extractor-api serve (8100). As
 # mesmas leituras, uma a uma, têm de dar o mesmo status e o mesmo corpo nos dois. Os campos que mudam a cada chamada

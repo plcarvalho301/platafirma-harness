@@ -1,4 +1,4 @@
-"""O ajuste do motor, lido e escrito pela geração que serve (card #3513; arq:0121 §7; arq:0124 R4, R6, R7).
+"""O ajuste do motor, lido e escrito pela geração que serve.
 
 Três ajustes moram na geração e não no compose: `aviso_de_cobertura_fraca`, `aviso_com_revisor` e
 `veredito_por_conceito` (o registro os marca com o campo `geracao`, a chave dela). Para esses o valor de
@@ -28,7 +28,7 @@ HISTORICO_REL = ("var", "motor", "ajustes-historico.jsonl")
 # O que o sinal diz de um serviço que não está de pé. `no-ar` passa; `sem-sinal` e `ausente` não dizem nada
 # (não consegui olhar, que não equivale a estar no ar nem a estar fora); o resto recusa.
 _SINAL_NAO_DIZ = ("sem-sinal", "ausente")
-# O servico do sinal que diz a placa (a spec da face motor, R10: «a placa ou a API do rag fora de no ar»).
+# O servico do sinal que diz a placa («a placa ou a API do rag fora de no ar»).
 SINAL_DA_PLACA = "gpu-host"
 
 
@@ -178,7 +178,7 @@ def recusar_se_nao_der(inst: dict, tok: str, instancia: Path, *, reinicia: bool 
     """Recusa o ato de escrita com o serviço fora no sinal (exit 3) ou com trabalho aberto (exit 4).
 
     `reinicia`: o ato derruba o serviço (ajuste do compose promove a stack). Aí o sinal que não deu para olhar
-    também recusa: «não conseguir olhar não autoriza reiniciar» (spec da face motor, dependências). O ajuste da
+    também recusa: «não conseguir olhar não autoriza reiniciar». O ajuste da
     geração não reinicia nada e segue com a nota.
 
     Devolve as notas do que não deu para olhar, para o chamador mostrar."""

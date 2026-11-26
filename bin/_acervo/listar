@@ -2,39 +2,39 @@
 # acervo listar — referências do acervo. Hoje: conceitos, ferramental e topologia (golden records).
 # capacidade: conhecimento
 # dono: dados
-#   (matéria/semântica: claudinho-dados · dono; mecanismo/harness: claudinho-TI · construcao)
+#   (matéria/semântica: dados · dono; mecanismo/harness: ti · construcao)
 #
 # `acervo listar conceitos [--json]`   — golden record acervo.conceito (rag-extractor-pg).
 # `acervo listar ferramental [--json] [--oficio] [--tools]` — golden record acervo.ferramental
-#     (3 níveis: capacidade → verbo → instância). Fatia física da minuta 0012 / ADR 0076.
+#     (3 níveis: capacidade → verbo → instância).
 #     Com --oficio, filtra pelos verbos que o modelo vê (registro da porta, registro/porta.yaml,
 #     `modelo` verdadeiro), pra o oficio.md não duplicar a lista à mão.
 #     Com --tools, projeta esses verbos em tools MCP: a descrição é a coluna `descricao` do golden record
-#     (consumidores: ops-server, na subida, e `agente conferir`).
+#     (consumidores: porta, na subida, e `agente conferir`).
 # `acervo listar topologia [<stack>] [--json] [--completo]` — golden record acervo.stack (eixo
 #     irmão); com <stack>, filtra a uma só.
 # `acervo listar topologia <stack> --rotas`   — ingress do túnel que entra em cada serviço
-#     (porta de `deploy <stack> rotas`, bin/deploy ~347).
+#     (rotas da stack).
 # `acervo listar topologia <stack> --acessos` — superfície gateada (allowlist/OIDC) da stack
-#     (porta de `deploy <stack> acessos`, bin/deploy ~380).
+#     (acessos da stack).
 # `acervo listar biblioteca metodos [--json]` — método padrão de conversão por tipo real (spec
 #     espelho-de-leitura §4.3): configuração do ATO DE INGESTÃO, não linha de catálogo — a
 #     tabela única que o conversor aplica (conversor/conversor/padrao.py da release do
 #     conhecimento, ou de PF_CONHECIMENTO_DIR), sem tabela golden record (#3193).
 # `acervo listar biblioteca obra [--sobre <termo>] [--eixo <e>] [--situacao] [--json]` — o catálogo da
 #     obra; --situacao traz servida inteira, servivel, degrau, store, impressao servindo e a marcação de uso
-#     (arq:0119 §6; spec acervo-obra §6; coluna acervo.obra.marcacao, migração 071, #3202).
+#     (coluna acervo.obra.marcacao).
 # `acervo listar biblioteca obra --qualidade [--por-obra] [--json]` — o julgamento (veredito da régua 6) dos
 #     espelhos servindo, por classe (servível / servível imperfeito / não servível / não julgado); --por-obra,
 #     uma linha por obra (#2856 l.156, #3282). Lê acervo.impressao.espelho->veredito.
 # `acervo listar biblioteca bancada <pasta> [--json] [--estratos <arquivo>]` — agregador da bancada de
-#     conversão (card #3187/#3181): lê <pasta>/{perfil,docling}/*/relatorio.json que `curar
-#     --reextrair … --bancada <pasta>` gravou, pareia por obra e aplica a regra do card #3181.
+#     conversão: lê <pasta>/{perfil,docling}/*/relatorio.json que `curar
+#     --reextrair … --bancada <pasta>` gravou, pareia por obra e aplica a regra de decisão.
 #     Lógica em _acervo/bancada_conversao.py (só stdlib). "bancada" aqui é só a pasta de saída
 #     dada na linha de comando — não é a raiz de lib/raizes.py nem `acervo curar biblioteca lote`.
-# Read-only. NÃO servido na montagem: é referência e fallback (D4 do ADR 0076).
+# Read-only. NÃO servido na montagem: é referência e fallback.
 #
-# TRANSPORTE (arq:0106 seguido à risca): o psql devolve UMA linha, um array JSON, via
+# TRANSPORTE: o psql devolve UMA linha, um array JSON, via
 # json_agg(row_to_json(...)). Identidade de verbo/conceito/stack é o SLUG — coluna
 # cravada. Descrição é payload opaco (texto pra IA); não é chave, não se parseia, não
 # se conta campo. Nada de split posicional por delimitador: um `|` numa descrição é
@@ -42,9 +42,7 @@
 # existia pra defender transporte por texto delimitado — o incidente 09/09 da porta
 # cega saiu daí).
 #
-# Contrato: platafirma-arquitetura/docs/abertura-de-sessao/abertura-novo-pedro/
 #           P2 - monta-sessao.md, "índice de conceito" (22/08/2026).
-# ferramental: platafirma-arquitetura/macro-global/decisions/
 #           0076-catalogo-de-ferramental-golden-record-relacional.md
 import json
 import os
@@ -99,7 +97,7 @@ from (
 """
 
 # topologia: uma linha por stack, com as instancias que nela rodam agregadas (M:N).
-# stack sem instancia e estado normal (recorte de deploy e arbitrario, ADR 0076).
+# stack sem instancia e estado normal (recorte de deploy e arbitrario).
 SQL_TOPOLOGIA = """
 select coalesce(json_agg(row_to_json(t) order by t.slug), '[]')
 from (
@@ -132,7 +130,7 @@ from (
 ) t;
 """
 
-# O método padrão de conversão por tipo real (spec espelho-de-leitura §4.3) não mora aqui desde a
+# O método padrão de conversão por tipo real não mora aqui desde a
 # #3193: é a tabela única que o conversor aplica (conversor/conversor/padrao.py), e `acervo listar
 # biblioteca metodos` a lê da árvore do conhecimento (`_padrao_do_conhecimento`).
 
@@ -145,7 +143,7 @@ USO = """uso:
   acervo listar ferramental [--json] [--oficio] [--tools] golden record acervo.ferramental:
                                                 capacidade . tool . verbo . sot . descricao . instancias
                                                 --oficio: so os verbos do nucleo de abertura
-                                                --tools: projecao do nucleo em tools MCP (JSON; spec capsula)
+                                                --tools: projecao do nucleo em tools MCP (JSON)
   acervo listar topologia [<stack>] [--json] [--completo] topologia de deploy acervo.stack
                                                 (eixo irmao): stack . critico . instancias . papel
                                                 --completo: + repo, compose, rotas, gate,
@@ -156,7 +154,7 @@ USO = """uso:
   acervo listar topologia <stack> --acessos     allowlist/OIDC da superficie gateada
                                                 (porta de `deploy <stack> acessos`)
   acervo listar biblioteca metodos [--json]     metodo padrao de conversao por tipo real
-                                                (spec espelho-de-leitura §4.3): configuracao
+                                                configuracao
                                                 do ato de ingestao, NAO golden record (nao
                                                 consulta acervo.*; le conversor/padrao.py da
                                                 release do conhecimento, ou de
@@ -170,7 +168,7 @@ USO = """uso:
                                                 acervo.impressao.espelho (so leitura). --sobre,
                                                 --eixo e --situacao recusam (exit 2).
   acervo listar biblioteca obra --situacao --retrato [--json] [--guardar] [--diferenca <retrato.json>]  o retrato da biblioteca, com data
-                                                (arq:0121 §9, card #3324): cabecalho (base, data, geracao
+                                                cabecalho (base, data, geracao
                                                 servindo, papeis), uma linha por obra do catalogo
                                                 (situacao, exposicao, impressao servindo com metodo e
                                                 qualidade do espelho, geracao e indice servindo com
@@ -185,9 +183,9 @@ USO = """uso:
                                                 Exit 0 fecha, 1 nao fecha ou diverge, 5 fonte fora do ar.
                                                 --sobre, --eixo, --qualidade, bancada e metodos recusam.
   acervo listar biblioteca bancada <pasta> [--json] [--estratos <arquivo>]  perfil x docling por obra
-                                                (card #3187): le <pasta>/{perfil,docling}/*/
+                                                le <pasta>/{perfil,docling}/*/
                                                 relatorio.json (o que `curar --reextrair --bancada`
-                                                grava), aplica a regra do card #3181 e imprime
+                                                grava), aplica a regra de decisao e imprime
                                                 Markdown: por obra, resumo por tipo, total.
                                                 --estratos: TSV obra_id<TAB>estrato (prefixo de 8
                                                 caracteres basta); rotula e agrupa os pdf.
@@ -250,12 +248,12 @@ def _psql_json(sql, alvo):
               % (alvo, e, saida[:200]), 3)
 
 # --- topologia --rotas / --acessos: porta de `deploy <stack> rotas|acessos` -----------
-# (bin/deploy, ~347-434, ADR do card #3145 frente D). Mesma resolucao de caminho
+# Mesma resolucao de caminho
 # (raizes de producao) e mesma leitura de ingress/gate; a diferenca e que aqui e
 # Python nativo, nao um heredoc de shell chamando `yq`/`python3 -c`.
 
 class _Recusa(Exception):
-    """Falha de merito ou de dependencia ao portar rotas/acessos (arq:0110 §4: exit por classe)."""
+    """Falha de merito ou de dependencia ao resolver rotas/acessos (exit por classe)."""
     def __init__(self, msg, code=1):
         super().__init__(msg)
         self.code = code
@@ -267,7 +265,7 @@ def _raizes():
     return release_raiz(), release(), instancia()
 
 def _resolve_caminho(declarado, base):
-    """Porta resolve() de bin/deploy: relativo a `base`, ou absoluto sob as raizes de producao."""
+    """Resolve caminho relativo a `base`, ou absoluto sob as raizes de producao."""
     rraiz, rel, inst = _raizes()
     if declarado.startswith("~") or ".." in declarado:
         return None
@@ -295,7 +293,7 @@ def _compose_lista(compose_bruto):
     return [s]
 
 def _arvore_de(repo):
-    """Porta arvore_de() de bin/deploy (sem rev): o current resolvido da familia, ou None."""
+    """Resolve o current da familia, ou None."""
     rraiz, _rel, _inst = _raizes()
     caminho = os.path.join(str(rraiz), repo, "current")
     if not os.path.exists(caminho):
@@ -303,7 +301,7 @@ def _arvore_de(repo):
     return os.path.realpath(caminho)
 
 def _rel_na_familia(declarado, curto, repo):
-    """Porta rel_na_familia() de bin/deploy: caminho relativo a raiz da familia na release."""
+    """Caminho relativo a raiz da familia na release."""
     rraiz, rel, _inst = _raizes()
     p1 = "%s/%s/" % (rel, curto)
     p2 = "%s/%s/current/" % (rraiz, repo)
@@ -316,7 +314,7 @@ def _rel_na_familia(declarado, curto, repo):
     return declarado
 
 def _montar_compose(stack_slug, compose_bruto, arvore, curto, repo, instancia_dir):
-    """Porta montar_compose() de bin/deploy: args -f pro `docker compose`, override incluso."""
+    """Monta args -f pro `docker compose`, override incluso."""
     args = []
     primeiro = None
     for c in _compose_lista(compose_bruto):
@@ -345,7 +343,7 @@ def _montar_compose(stack_slug, compose_bruto, arvore, curto, repo, instancia_di
     return primeiro, args
 
 def _projeto_de(compose_path):
-    """Porta projeto_declarado() de bin/deploy: acervo.stack nao tem coluna `projeto`
+    """Resolve projeto declarado: acervo.stack nao tem coluna `projeto`
     (so o stacks.json antigo tinha); le `name:` do primeiro compose, como o deploy ja
     fazia quando o registro nao declarava o campo."""
     import yaml
@@ -357,7 +355,7 @@ def _projeto_de(compose_path):
         return ""
 
 def _materializar_env(stack_slug, instancia_dir):
-    """Porta materializar_env() de bin/deploy: um NOME='valor' por segredo, nunca o valor
+    """Materializa env: um NOME='valor' por segredo, nunca o valor
     em log; arquivo tmp 0600, apagado pelo chamador logo apos o `docker compose config`."""
     segredos_dir = os.path.join(instancia_dir, "segredos", stack_slug)
     linhas = []
@@ -473,7 +471,7 @@ def _stack_completo(stack_slug):
     morre("acervo listar topologia: stack %r nao esta no registro (acervo.stack)." % stack_slug, 1)
 
 def listar_topologia_rotas(stack_slug):
-    """Porta `deploy <stack> rotas` (bin/deploy ~347-357): ingress do tunel por servico."""
+    """Lista ingress do tunel por servico."""
     row = _stack_completo(stack_slug)
     ing = row.get("rotas")
     if not ing:
@@ -507,7 +505,7 @@ def listar_topologia_rotas(stack_slug):
     print("dashboard da Cloudflare, e nenhum arquivo do repositorio o descreve.")
 
 def listar_topologia_acessos(stack_slug):
-    """Porta `deploy <stack> acessos` (bin/deploy ~359-434): allowlist/OIDC da superficie gateada.
+    """Lista allowlist/OIDC da superficie gateada.
 
     Gate declarado no registro (campo `gate`): resolve e le so aquele compose, filtrando
     pelo slug da stack. Sem gate: monta o compose PROPRIO da stack (release + override +
@@ -624,7 +622,7 @@ def listar_ferramental_tools():
     Um slug = uma tool; nome = slug, sem traducao (salvo se o registro declarar `nome`). A identidade e vb.slug —
     coluna cravada do golden record. Slug sem binario em bin/ sai da lista com aviso em
     stderr — a porta nunca aborta por isso. Sem o campo `leva`: quem retem e a porta, pelo registro
-    (`retido`). Sempre JSON: os consumidores sao o ops-server e o `agente conferir`.
+    (`retido`). Sempre JSON: os consumidores sao a porta e o `agente conferir`.
     """
     sys.path.insert(0, os.path.join(RAIZ_HARNESS, "lib"))
     import registro_porta
@@ -842,7 +840,7 @@ def listar_obra_metodos(quero_json):
             "sim" if i["lote"] else "fora (inteira)"))
     sys.stderr.write(
         "\n%d tipo(s) real(is) conhecido(s) — configuracao do ato de ingestao "
-        "(spec espelho-de-leitura §4.3), nao golden record.\n" % len(itens))
+        ", nao golden record.\n" % len(itens))
 
 FORMATOS_OBRA_ALIASES = {
     "pdf": "application/pdf",
@@ -931,7 +929,7 @@ def listar_obra(termo, eixo, situacao, quero_json, *, autor=None, titulo=None, f
             order by o.id, o.titulo;
             """.format(cond_c=cond_c)
         else:
-            # card #3139 item 5: uma linha por obra, no eixo MAIS FORTE (não mais uma linha
+            # uma linha por obra, no eixo MAIS FORTE (não mais uma linha
             # por (obra, eixo) nem ordenado pelo id) — titulo igual ao termo (1) -> titulo que
             # contem o termo (2) -> conceito, rotulo preferido ou alternativo (3) -> subdominio
             # (4); empate por titulo. O DISTINCT ON interno escolhe a linha de menor `forca`
@@ -1002,7 +1000,7 @@ def listar_obra(termo, eixo, situacao, quero_json, *, autor=None, titulo=None, f
         """
 
     # Obra retirada (retirada_em preenchido) não é achada pelo catálogo: sai de todos os eixos, com
-    # ou sem --situacao (arq:0119 §1.4, §9; #3317). Filtro único sobre o resultado, para não repetir
+    # ou sem --situacao. Filtro único sobre o resultado, para não repetir
     # a condição nos sete SELECTs; quem quer ver a retirada usa `acervo curar biblioteca --expurgadas`.
     filtros_ext = ["t.id not in (select id from acervo.obra where retirada_em is not null)"]
     ordem_ext = ""
@@ -1041,7 +1039,7 @@ def listar_obra(termo, eixo, situacao, quero_json, *, autor=None, titulo=None, f
         "listar obra"
     )
 
-    # Marcação de uso da obra (arq:0119 §6; spec acervo-obra §6; migração 071, #3202): só no
+    # Marcação de uso da obra: só no
     # --situacao, numa consulta à parte pelos ids, para não repetir a coluna nos seis SELECTs.
     marcas = {}
     if situacao and raw_itens:
@@ -1052,7 +1050,7 @@ def listar_obra(termo, eixo, situacao, quero_json, *, autor=None, titulo=None, f
                 ") t;" % ids, "marcacao"):
             marcas[m["id"]] = m.get("marcacao")
     # O estado da obra vem do motor, pela regra única (`estado_da_obra`, #3294): servida inteira
-    # (classificada, com cópia, não retirada; arq:0119 §1.4) e servível (o espelho da impressão que
+    # (classificada, com cópia, não retirada) e servível (o espelho da impressão que
     # serve, régua 6, #3282). Obra retirada não vem na projeção: não é servida nem servível.
     estados = {}
     if situacao and raw_itens:

@@ -431,7 +431,7 @@ def medir(lista: dict, esquema: Dict[str, bool], obras: List[dict], conceitos: L
             continue
         if cid in esperam_esquema:
             base["nota"] = ("espera a coluna retirada_motivo (migracao 078); acusa 0 ate ela existir"
-                            if cid == "G6" else "espera o schema da ont:0092; acusa 0 ate ele existir")
+                            if cid == "G6" else "espera o schema do acervo; acusa 0 ate ele existir")
             criterios[cid] = base
             continue
         if cid == "S12" and achadas is None:  # o verbo listar nao respondeu ou nao foi chamado

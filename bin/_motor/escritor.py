@@ -1,4 +1,4 @@
-"""`motor rag escrever biblioteca` — o escritor da escada (card #3349, feature #3340).
+"""`motor rag escrever biblioteca` — o escritor da escada.
 
 Fonte: padrao protocolo-medicao-rag rev 2, «Unidade da marca: a resposta». Para cada pergunta do piloto,
 o top-8 de cada braço (o servido; o léxico puro; o terceiro, que no piloto é o servido com revisor) vira

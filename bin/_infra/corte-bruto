@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-# corte-bruto — apaga do disco o dia do bruto da porta que passou de 35 dias E passou no portão (card #3354; arq:0123
+# corte-bruto — apaga do disco o dia do bruto da porta que passou de 35 dias E passou no portão
 # regras 10 e 12).
 #
-# Fora do PATH e do golden record, como bin/_infra/limpeza-logs (arq:0110 §14): roda pelo timer `corte-bruto.timer`
-# às 01:20, uma hora depois do `linhagem-ops`, e nunca pela porta. Nenhum verbo servido apaga o bruto (arq:0123 §12),
+# Fora do PATH e do golden record, como bin/_infra/limpeza-logs: roda pelo timer `corte-bruto.timer`
+# às 01:20, uma hora depois do `linhagem-ops`, e nunca pela porta. Nenhum verbo servido apaga o bruto,
 # nem para ensaiar em produção: o ensaio é `--seco`, que confere e diz o que faria sem apagar, sem gravar poda.log e
 # sem abrir incidente. O portão e a rodada moram em lib/oplog_corte.py; a remoção, em lib/oplog.py.
 #

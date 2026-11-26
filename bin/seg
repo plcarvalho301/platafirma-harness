@@ -10,9 +10,9 @@
 # escreve: $PLATAFIRMA_INSTANCIA/segredos/<stack>/<nome>
 # ambiente: SEG_SECRETS_DIR[=$PLATAFIRMA_INSTANCIA/segredos] · SEG_LOG_DIR[=$PLATAFIRMA_INSTANCIA/var/log/seg] · SEG_OSCAP_DIR[=$PLATAFIRMA_INSTANCIA/var/oscap] · SEG_SSG_DIR[=/opt/terceiros/ssg/current] · SEG_OQS_DIR[=/opt/terceiros/oqs/current] · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
 #
-# Texto do controle (arq:0124 §3; card #3447), por subcomando de primeiro nivel, que e o
+# Texto do controle, por subcomando de primeiro nivel, que e o
 # grao da face. segredo nao declara face nem texto: e exclusao por decisao do dono
-# (arq:0124 §3, aba Segredos da face IAM em stub). O repasse cru (`--`) de keycloak e
+# (aba Segredos da face IAM em stub). O repasse cru (`--`) de keycloak e
 # openssl executa qualquer comando da ferramenta, e por isso nao promete volta.
 # face: oscap=Operação
 # face: ssg=Operação
@@ -47,7 +47,7 @@
 #   segredo rotacionar politica           rotacao de client-secret no keycloak e de senha de
 #                                         papel do Postgres (debito 1343; era `release migrar senha`)
 #   segredo exigidos  politica            exigido (acervo.stack.segredos) x presente (era `deploy <stack> segredos`)
-#   segredo apagar    politica            destruicao de segredo da instancia, com --confirmar (card #3117)
+#   segredo apagar    politica            destruicao de segredo da instancia, com --confirmar
 #
 # NAO E GATE. Enquanto oscap, kcadm.sh e openssl seguirem alcancaveis fora deste
 # binario, ele e conveniencia e trilha: quem quiser desviar chama a ferramenta
@@ -107,7 +107,7 @@ seg — toolkit de seguranca da PlataFirma
   seg segredo exigidos [<stack>]  exigido (acervo.stack.segredos, mesma via que
                                   `acervo listar topologia --completo` usa) x presente em
                                   $SEG_SECRETS_DIR — so nomes, nunca valor. Sem <stack>: todas.
-                                  Porta de `deploy <stack> segredos` (bin/deploy, deprecado).
+                                  Substitui o antigo `deploy <stack> segredos`.
   seg segredo apagar <stack>/<nome>|<stack>/ --confirmar
                                   destroi o segredo (shred) e, vazio, o diretorio da stack.
                                   Sem volta: sem --confirmar so diz o que apagaria.
@@ -583,7 +583,7 @@ cmd_keycloak_entrar() {
   echo "sessao kcadm: ok"
 }
 
-# --- segredo exigidos: porta `deploy <stack> segredos` (bin/deploy ~435). Exigido vem
+# --- segredo exigidos: substitui o antigo `deploy <stack> segredos`. Exigido vem
 # de acervo.stack.segredos, pela MESMA via que `acervo listar topologia --completo`
 # ja usa (bin/acervo ao lado deste, nunca psql direto daqui — um so dono da leitura do
 # golden record). Presente e o que ja mora em $SEG_SECRETS_DIR/<stack>/<nome>. So

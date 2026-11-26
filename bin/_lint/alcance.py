@@ -1,9 +1,9 @@
-"""alcance — os 5 saltos da cadeia de acesso sujeito->fonte (card #3153).
+"""alcance — os 5 saltos da cadeia de acesso sujeito->fonte.
 
 Modulo unico: `lint alcance` e `conferir alcance` chamam `cadeia_de_alcance` daqui e so
 diferem na forma de dizer. MEDIDOR, nao validador: onde o alvo nao tem ACL canonica
 (portao paralelo que nao conhece papel nem dominio), DECLARA — nao presume um canon
-inexistente. As 5 fontes-de-verdade (claudinho-seguranca, card #2452 sob #191):
+inexistente. As 5 fontes-de-verdade:
   identidade -> core/acesso/sujeitos.yaml
   credencial -> core/acesso/sujeitos.yaml (client/conta/usuario/segredos) [+ realm]
   PDP        -> core/acesso/politica.yaml

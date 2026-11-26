@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""expurgo — diagnostica e remove fósseis da release no host (card #4404).
+"""expurgo — diagnostica e remove fósseis da release no host.
 
 Sub-ato interno de `release`: chamado por `bin/release` ao fim da promoção verde e
 importado por `bin/_release/conferir/conferir.py` para `release conferir fossil`.
 
-Regra de layout declarado (card #4404):
+Regra de layout declarado:
   - Raiz de PF_RELEASE_RAIZ (/opt/platafirma):
       current/, venv/, terceiros/ e as famílias declaradas em registro/familias.json.
   - current/:

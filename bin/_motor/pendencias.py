@@ -1,4 +1,4 @@
-"""A decisão pendente do motor, como estado do objeto (card #3513, tarefa 5; spec R23; arq:0124 R10, R12).
+"""A decisão pendente do motor, como estado do objeto.
 
 Pendência não é armazenamento novo: é o que o estado da troca diz quando o objeto ficou num ponto que pede o
 dono. Hoje há uma: a sombra de geração montada e medida, que espera virar ou descartar. Cada pendência traz os

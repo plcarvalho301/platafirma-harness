@@ -1,8 +1,8 @@
-"""Cliente fino do job do pipeline do acervo (card #4120; U7 e U13).
+"""Cliente fino do job do pipeline do acervo.
 
 Fala com as rotas /acervo/jobs, /acervo/jobs/{id}/classificacao e /acervo/indicacoes do serviço do
 acervo. Só stdlib: o venv que roda `acervo` não precisa de `requests`. Um erro vira `Falha` com o
-código de saída da tabela de `arq:0110` §4: 1 resultado negativo de mérito, 2 uso errado, 3 serviço
+código de saída: 1 resultado negativo de mérito, 2 uso errado, 3 serviço
 fora, 4 recusa de política ou de autenticação, 5 indeterminável.
 """
 from __future__ import annotations

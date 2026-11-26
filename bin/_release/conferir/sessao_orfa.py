@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""sessao_orfa — `release conferir sessao-orfa`: contagem de sessao_id órfãos (card #3375).
+"""sessao_orfa — `release conferir sessao-orfa`: contagem de sessao_id órfãos.
 
 Mede, por tabela do acervo e da fita, os sessao_id gravados sem sessão correspondente
 em sessao.sessao (legado de fontes recicláveis e gravações ocorridas com o banco de sessão fora).
@@ -31,7 +31,7 @@ BANCOS = {
     "sessao": ("harness-sessao-db", ROLE_LEITURA, "sessao"),
 }
 
-# Linha de base do legado de sessao_id órfãos anterior à trava do card #3375.
+# Linha de base do legado de sessao_id órfãos.
 # Cada entrada é o teto tolerado. Qualquer acréscimo é divergência (exit 1).
 # Medida em 10/10/2026: 13:02 e 13:14 BRT, contagem igual nas duas leituras, com a
 # trava no ar (conhecimento 86efd11) e o extrator parado entre elas (incidente #3401).

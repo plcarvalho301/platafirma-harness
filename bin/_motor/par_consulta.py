@@ -1,4 +1,4 @@
-"""`motor rag parear biblioteca` — o par mínimo da consulta montada (card #3360, passo 9; spec motor §2b).
+"""`motor rag parear biblioteca` — o par mínimo da consulta montada.
 
 Sobre as perguntas do piloto da escada, três formas de consultar o motor, com a MESMA geração, o MESMO k e o
 embedder fixo (só muda o texto que chega a ele):
@@ -14,7 +14,7 @@ vê a FRASE como pergunta nos três: assim o que difere entre as respostas é s�
 julga as respostas na mesma tela, com o mesmo critério (v1). Ao lado, o que ele já julgou do piloto, para não
 depender da memória.
 
-Com `--do-log` (card #3378) a população não é o piloto: são as chamadas do log com eleito, e os braços são dois, na mesma
+Com `--do-log` a população não é o piloto: são as chamadas do log com eleito, e os braços são dois, na mesma
 geração e com o mesmo escritor:
 
   C  `frase`   a busca de hoje: a necessidade do evento, sem chapéu
@@ -36,7 +36,7 @@ BRACOS_DO_PAR = ("servido", "frase", "montada")
 LETRA = {"servido": "A", "frase": "C", "montada": "D", "eleito": "E"}
 NOME = {"servido": "a chamada de hoje", "frase": "a sua frase", "montada": "a lista montada"}
 
-# `parear --do-log` (card #3378): a população são as chamadas do log com eleito; dois braços, mesma geração, mesmo k e
+# `parear --do-log`: a população são as chamadas do log com eleito; dois braços, mesma geração, mesmo k e
 # mesmo escritor. C é a busca de hoje (a necessidade, sem chapéu); E é a mesma necessidade com o chapéu e
 # `eleicao_chapeu: true` no corpo, só na requisição.
 BRACOS_DO_LOG = ("frase", "eleito")
@@ -93,7 +93,7 @@ def jaccard_dos_bracos(recuperado: dict) -> dict:
 
 
 def consultas_do_log(necessidade: str, cadeira: str, chapeu: str, rotulos) -> dict:
-    """{braco: {"pergunta", "corpo"}} do `parear --do-log` (card #3378). `pergunta` é a necessidade do evento nos dois
+    """{braco: {"pergunta", "corpo"}} do `parear --do-log`. `pergunta` é a necessidade do evento nos dois
     braços; `corpo` é o que se soma ao corpo da requisição. O braço `frase` não manda `chapeu` nem `eleicao_chapeu` (a busca
     de hoje); o `eleito` manda o chapéu {cadeira, chapeu, rotulos} e `eleicao_chapeu: true`, só nesta requisição."""
     return {"frase": {"pergunta": necessidade, "corpo": {}},
@@ -234,7 +234,7 @@ def blocos_markdown(itens: list) -> str:
     return "\n".join(out)
 
 
-# --- o que o dono lê, sobre as chamadas do log (card #3378) ---------------------------------------------------
+# --- o que o dono lê, sobre as chamadas do log ----------------------------------------------------------------
 
 def linha_da_tabela_log(i: int, pid: str, necessidade: str, cadeira: str, chapeu: str, jacc: dict) -> str:
     return f"| {i} | {pid} | {necessidade[:60]} | {cadeira}/{chapeu} | {jacc.get('ExC', '-')} |"

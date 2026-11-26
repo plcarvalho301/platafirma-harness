@@ -1,5 +1,5 @@
 # compose.override.exemplo.yaml — FORMA da sobreposicao da instancia para a stack `chat`
-# (card #3010). Exemplo versionado; o real mora em
+# Exemplo versionado; o real mora em
 #   /srv/platafirma/casa/deploy/chat/compose.override.yaml
 # e o `deploy chat up|promover` sobe, com o projeto de sempre (`chat`):
 #   docker compose -p chat \

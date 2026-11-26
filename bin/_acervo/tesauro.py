@@ -1100,7 +1100,7 @@ def cmd_gravar_recusado(tokens: list[str]) -> int:
 # ---------------------------------------------------------------------------
 
 def _aviso_lote_sem_semantico(lote: str | None) -> dict[str, Any] | None:
-    """Quando o lote rodou com semantico = f, devolve aviso explícito para evitar 0 itens silencioso (DT 1393)."""
+    """Quando o lote rodou com semantico = f, devolve aviso explícito para evitar 0 itens silencioso."""
     if not lote:
         return None
     try:

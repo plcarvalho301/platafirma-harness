@@ -2,7 +2,7 @@
 """abertura-ver — simula a montagem de sessão a partir do clone do platafirma-harness.
 
 Uso pessoal, para propor melhoria no fluxo. NÃO é diagnóstico de produção: produção
-lê a morada publicada (arq:0097); isto lê a árvore abertura/ do clone, do jeito que ela
+lê a morada publicada; isto lê a árvore abertura/ do clone, do jeito que ela
 está no disco agora (inclusive edição não commitada — é para isso que serve).
 
   python3 abertura-ver.py "(IA, harness)"
@@ -55,7 +55,7 @@ def acha_clone(explicito: str | None) -> Path:
     for c in candidatos:
         if (c / "abertura" / "dono.md").is_file():
             return c.resolve()
-    erro(f"clone sem abertura/dono.md: {', '.join(map(str, candidatos))} (use --clone)", 3)
+    erro(f"clone sem abertura publicada: {', '.join(map(str, candidatos))} (use --clone)", 3)
 
 
 def sem_acento(s: str) -> str:
@@ -194,7 +194,7 @@ def monta(clone, cad, chapeu, pergunta, forcado):
                     "motivo": "sem chapéu declarado na abertura (#3931)"}
     avisos = []
 
-    # Mesma ordem de bin/expediente montar (spec expediente rev 1.3, #3931, #4377, #4425):
+    # Mesma ordem de bin/expediente montar:
     # sem acervo-consultado (partição casa removida do motor).
     ordem = ["persona"] + (["chapeu"] if chapeu else []) + ["conduta", "alias-cadeiras", "mesa"]
 

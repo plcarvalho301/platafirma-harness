@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""acervo pipeline — o ato unico do pipeline do acervo (card #4120, item 26).
+"""acervo pipeline — o ato unico do pipeline do acervo.
 
     acervo pipeline <pasta>                     o plano do lote, sem gravar (o do `ingerir --lote`)
     acervo pipeline <pasta> --apply             incorpora a pasta, cria o job no servidor e devolve o id
@@ -98,7 +98,7 @@ def _mostrar_job(job: dict, opcoes: argparse.Namespace) -> None:
 
 def _acordar_conversor() -> None:
     """Liga o conversor antes de criar ou retomar o job: a etapa `espelhar` o usa, no servidor. Ele liga sob demanda
-    (ordem do dono de 28/10/2026) e o timer o desliga depois de 15 min sem trabalho. Falhar em ligar não barra o
+    e o timer o desliga depois de 15 min sem trabalho. Falhar em ligar não barra o
     ato: a etapa diz a causa na obra, e `acervo pipeline --lote <id>` retoma."""
     script = os.environ.get("PF_CONVERSOR_SOB_DEMANDA") or str(HARNESS_DIR / "bin" / "_infra" / "conversor-sob-demanda")
     try:

@@ -1,10 +1,10 @@
-"""`motor marcacao` — cliente fino da marcacao-api (rotas /interno/), card #3349, feature #3340.
+"""`motor marcacao` — cliente fino da marcacao-api (rotas /interno/).
 
 A marcacao-api (platafirma-motor, deploy/marcacao) é o serviço que guarda o lote da tela do gold set e
 grava as marcas. As rotas /interno/ levam token e ficam fora do gate: só a porta as chama, por loopback.
 Aqui não há regra de negócio: o verbo manda o que o escritor e o juiz produzem e devolve o que a API diz.
 
-Saída (arq:0110 §4): 0 ok · 1 resultado negativo de mérito (lote desconhecido, lote já existe) ·
+Saída: 0 ok · 1 resultado negativo de mérito (lote desconhecido, lote já existe) ·
 2 uso errado ou entrada que a API recusa (422) · 3 API fora do ar ou 5xx · 4 token recusado.
 """
 from __future__ import annotations

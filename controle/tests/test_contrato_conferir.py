@@ -155,7 +155,7 @@ def test_verbo_json_formato_ok(tmp_path, monkeypatch, capsys):
     itens = {i["nome"]: i for i in dado["itens"]}
     assert itens["meuverbo"]["estado"] == "conforme"
     assert itens["meuverbo"]["desde"] == "2026-09-20T10:00:00Z"
-    assert itens["arq:0037 verificacao-de-teste"]["estado"] == "conforme"
+    assert itens["capacidade verificacao-de-teste"]["estado"] == "conforme"
 
 
 def test_verbo_json_divergente(tmp_path, monkeypatch, capsys):

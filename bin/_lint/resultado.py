@@ -1,6 +1,6 @@
 """resultado — estruturas de dados e formatador de saida de lint.
 
-Conforme arq:0110 e spec_lint:
+Formato de saida do lint:
 Exit codes:
   0: limpo (0 apontamentos)
   1: apontamentos (>0 apontamentos)

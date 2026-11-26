@@ -258,7 +258,7 @@ def _ensaiar(cliente: Cliente, args: list, *, como_json: bool = False, aviso_var
                 break
     caminho = arquivos[0] if arquivos else None
     _, texto = _ler_entrada_yaml(caminho, proximo=f"ontologia ensaiar {ato_alvo or 'criar'} <arquivo.yaml>")
-    # DT 667: ensaiar sem ato ensaia criar, para acusar ficha-chave-ja-existe como criar acusa.
+    # ensaiar sem ato ensaia criar, para acusar ficha-chave-ja-existe como criar acusa.
     r = cliente.ensaiar(texto, ato=ato_alvo or "criar", versao=versao)
     return sd.traduzir("ensaiar", r.status, r.corpo, como_json=como_json, aviso_variante=aviso_variante)
 

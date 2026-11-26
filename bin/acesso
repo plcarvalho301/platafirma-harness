@@ -14,7 +14,7 @@
 # conforme: parcial
 # falta: escrita em concessao.* por API da entidade concessao (aguarda API); rota estatica claudinho (aguarda extincao); politica-sync vs release promover (aguarda decisao do dono); tabela tipo->dominio em cmd_decidir (aguarda vocabulario de tipos de recurso, dados); id de recurso em duas formas (prefixado e nu) enquanto o PAP misturar as duas
 #
-# Texto do controle (arq:0124 §3; card #3447): todo ato cai na face IAM. O objeto do rotulo
+# Texto do controle: todo ato cai na face IAM. O objeto do rotulo
 # entra pelo slug do conceito no tesauro; volta diz se o efeito se desfaz e como, e o que nao
 # volta diz nao (R13). Ato que so le declara exatamente `volta: sim — só lê`.
 # Regra do rotulo de produto, comentario #2217 do #3447: um verbo por tipo de ato, objeto
@@ -94,7 +94,7 @@ psql_() {
 }
 
 # Resolve contracao (G48UFN), uuid ou o sub do realm (pela correlacao keycloak vigente de uma
-# pessoa, seg:0006) para o uuid interno. Chave entra por -v.
+# pessoa) para o uuid interno. Chave entra por -v.
 resolve() {
   local chave="$1" papel="$2" id
   id="$(psql_ -tAq -v k="$chave" <<'SQL'
@@ -116,7 +116,7 @@ SQL
   id="$(printf '%s' "$id" | tr -d '[:space:]')"
   if [ -z "$id" ]; then
     if [ "$papel" = "autor" ]; then
-      printf "acesso: faltou: autor (chave de sujeito: PF_SUJEITO '%s' não casa identidade nem correlação keycloak vigente de pessoa; a cura é a correlação do sub em identidade.correlacao_externa, seg:0006)\n" "$chave" >&2
+      printf "acesso: faltou: autor (chave de sujeito: PF_SUJEITO '%s' não casa identidade nem correlação keycloak vigente de pessoa; a cura é a correlação do sub em identidade.correlacao_externa)\n" "$chave" >&2
       exit 5
     else
       printf "acesso: sujeito não encontrado: %s\n" "$chave" >&2
@@ -147,7 +147,7 @@ nota sobre autor: em conceder/revogar, o autor é sempre PF_SUJEITO do ambiente;
 exemplos:
   acesso decidir sessao_abrir sessao:fabrica
   acesso decidir sessao_encerrar sessao:ia/uuid --papel fornecedor --dominio plataforma
-  acesso conceder G48UFN dominio plataforma --fundamento "cadeira de seguranca, card #250"
+  acesso conceder G48UFN dominio plataforma --fundamento "cadeira de seguranca"
   acesso revogar <uuid-do-ato> --fundamento "fim da designacao"
   acesso listar G48UFN
   acesso politica conferir
@@ -479,7 +479,7 @@ for eixo in NO_REGISTRO:
         pai = corpo.get('pai')
         pai_sql = q(pai) if pai else 'null'
         # Papel e tema voltam a vigente se o PAP os declara de novo; dominio nao tem o estado
-        # mexido por import: o ciclo dele e o ato de destino de seg:0007.
+        # mexido por import: o ciclo dele e o ato de destino.
         revive = (", estado = 'vigente', destino = null, sucessor = null"
                   if eixo != 'dominio' else '')
         print(f"insert into concessao.eixo_valor (eixo, valor, rotulo, pai) values "
@@ -490,7 +490,7 @@ for eixo in NO_REGISTRO:
     if eixo == 'dominio':
         # Apontar, nao extinguir: dominio extinto derruba concessao, e o destino (heranca,
         # subsuncao, dissolucao) e decisao com sucessor, nao efeito colateral de import.
-        print(f"select 'dominio fora do PAP: ' || valor || ' (ato de destino pendente, seg:0007)' "
+        print(f"select 'dominio fora do PAP: ' || valor || ' (ato de destino pendente)' "
               f"from concessao.eixo_valor where eixo = 'dominio' and estado <> 'extinto'{fora};")
     else:
         # Papel e tema morrem por ato proprio (003_dominio_e_instrumento.sql): saiu do PAP,
@@ -591,7 +591,7 @@ cmd_decidir() {
       comando|operacao) tipo_dom="plataforma-runtime";;
       documento) tipo_dom="plataforma";;
       # Classe do fichario: recurso `classe:<slug>`, perguntado pelo leitor do banco casa
-      # uma vez por classe da chamada (card #4427, t14). A politica de quem le cada classe
+      # uma vez por classe da chamada. A politica de quem le cada classe
       # esta no PAP servido, no comentario do dominio `plataforma-fichario`.
       classe) tipo_dom="plataforma-fichario";;
       *)

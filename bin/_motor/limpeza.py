@@ -19,7 +19,7 @@ SID_RE = re.compile(r"^\d{8}T\d{6}$")
 
 
 class ErroLimpeza(Exception):
-    """Erro com código de saída explícito (tabela arq:0110 §4)."""
+    """Erro com código de saída explícito."""
 
     def __init__(self, codigo: int, mensagem: str) -> None:
         super().__init__(mensagem)

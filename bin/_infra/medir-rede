@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-# medir-rede — o eixo de rede do host: os três túneis da borda e a porta (spec eixos-do-host R6 e R7, card #3919).
+# medir-rede — o eixo de rede do host: os três túneis da borda e a porta.
 # Sub-ato de `infra` (como limpeza-quarentena): fora do PATH e do golden record, mora em bin/_infra/. Chamado por
-# `infra medir rede [--json]`, nunca direto. Só lê: não grava série, não reinicia túnel (R1; spec tuneis).
+# `infra medir rede [--json]`, nunca direto. Só lê: não grava série, não reinicia túnel.
 #
 # O que lê. Por túnel, a métrica do cloudflared (`/ready` e `/metrics`): as conexões mantidas com a borda da
 # Cloudflare e as reconexões. A borda (`wiki`) lê a porta publicada de `--metrics` no compose do core. Os túneis
 # `ops` e `recuperacao` rodam em units do root, que a casa não escreve, e abrem a métrica na faixa padrão por
 # ordem de chegada: um reinício troca as portas. Por isso o ato acha a porta pelo socket em escuta do processo
 # principal da unit (/proc/<pid>/fd contra /proc/<pid>/net/tcp), a cada leitura, e nunca por porta escrita no
-# código (R6, DT 378). Da porta (túnel `ops`), a latência pelo endereço público e o tempo que ela registrou, pela
+# código. Da porta (túnel `ops`), a latência pelo endereço público e o tempo que ela registrou, pela
 # medida do `sinal --porta`, que chama a porta uma vez e nunca abre sessão (R7, R8).
 #
 # Reconexão sai acumulada desde a partida do processo: o ato só lê e não guarda cursor, e quem diferencia entre

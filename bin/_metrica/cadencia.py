@@ -1,4 +1,4 @@
-"""cadencia — o que vence a cada passada da sonda (spec eixos-do-host R15; card #3922).
+"""cadencia — o que vence a cada passada da sonda.
 
 O registro `registro/cadencia-eixos.json` diz de quanto em quanto tempo cada eixo, stack e serviço é lido. O código não
 guarda número de cadência nenhum além da definição: o intervalo é múltiplo de um minuto, porque o timer da sonda passa

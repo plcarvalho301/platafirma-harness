@@ -383,7 +383,7 @@ Comportamento esperado: exit 0
     p = _rodar_lint("card", "-", stdin_data=corpo_sem_aceite)
     assert p.returncode == 1
     assert "Aceite" in p.stdout
-    assert "cura: acrescentar a secao 'Aceite:' conforme arq:0096" in p.stdout
+    assert "cura: acrescentar a secao 'Aceite:' conforme o molde do nivel" in p.stdout
 
 
 def test_lint_card_stdin_com_aceite_exit_0():

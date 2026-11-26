@@ -1,4 +1,4 @@
-"""Os trabalhos longos do motor, com o sinal de vida (card #3513, tarefa 8; spec plano-de-controle-face-motor R17, R18).
+"""Os trabalhos longos do motor, com o sinal de vida.
 
 `motor rag trabalhos` junta duas fontes num estado só, calculado aqui e em nenhum outro lugar (a face, a ronda da
 ti e a cadeira leem o mesmo fato):
@@ -9,7 +9,7 @@ ti e a cadeira leem o mesmo fato):
   `/tmp/sombra-<id>/`, com `log.txt` e, quando acabam, `fim`. Aqui o estado sai dos fatos que o contêiner dá: há
   processo da sombra, quando o log foi escrito pela última vez, existe `fim`.
 
-O vocabulário é o de três da arq:0110 §4: `vivo`, `parado`, `indeterminavel` («não consegui olhar»). Sombra que
+O vocabulário é o de três estados: `vivo`, `parado`, `indeterminavel` («não consegui olhar»). Sombra que
 terminou (`fim`) não é trabalho em curso e fica fora da lista (só a contagem).
 """
 from __future__ import annotations

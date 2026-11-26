@@ -9,7 +9,7 @@
 # face: contestar=motor
 # rotulo: contestar=Contestar o indicador
 # volta: contestar=nao
-# (face: o contestar da R24 da spec plano-de-controle-face-motor, card #3518, buraco #2555. A face so alcanca o
+# (face: o contestar. A face so alcanca o
 #  `contestar`, que manda uma carta de um tipo so (contestacao) com o indicador e o fundamento; o `enviar` geral
 #  segue fora da face.)
 # cauda: nao
@@ -35,7 +35,6 @@
 #  `<ato>=` e o registro recusava o verbo inteiro: a fila nunca tinha entrado no registro do ferramental.)
 # substitui: redis-cli XADD/XREADGROUP/XRANGE na caixa; o "cola a mensagem aqui" que a conduta do dono proibe
 # conforme: parcial (spec_fila §6)
-# spec: spec fila
 #
 # Shim: o cabecalho canonico (proposito/capacidade/dono/use para/atos) mora AQUI,
 # no binario que `conferir verbo`/`release conferir` leem, e nao so no modulo

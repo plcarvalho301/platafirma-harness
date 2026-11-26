@@ -25,7 +25,7 @@ from pathlib import Path
 
 import boto3
 
-# Raizes de producao (card #3010): o pacote e estado da instancia, nunca da bancada.
+# Raizes de producao: o pacote e estado da instancia, nunca da bancada.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
 from raizes import instancia  # noqa: E402
 

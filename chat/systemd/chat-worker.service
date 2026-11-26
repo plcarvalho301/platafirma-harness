@@ -2,7 +2,7 @@
 # Lado verbo do giro da recepcao (card 458). O lado Matrix e o container
 # chat-recepcao, e as duas pecas so se falam pelo journal SQLite do bind mount.
 #
-# Codigo da release, estado da instancia (card #3010): instala-se por symlink
+# Codigo da release, estado da instancia: instala-se por symlink
 # ~/.local/share/systemd/user/chat-worker.service -> este arquivo na release. Nada
 # aqui cria diretorio: var/run/chat e var/fitas nascem no bootstrap do host, e se
 # faltarem o worker falha alto em vez de recriar estado vazio em silencio.

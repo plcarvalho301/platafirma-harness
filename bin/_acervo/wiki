@@ -4,24 +4,24 @@
 capacidade: conhecimento
 dono: dados
 
-Sub-ato do verbo `acervo` (arq:0069): a wiki é SoT de registro editável, dona dados,
+Sub-ato do verbo `acervo`: a wiki é SoT de registro editável, dona dados,
 alcançada por `acervo wiki <ato>`. Fonte é argumento, não verbo — não há `bin/wiki`
-(arq:0037). O modelo alcança a wiki chamando isto por dentro de `run_command`, sob a
-conta (arq:0068).
+O modelo alcança a wiki chamando isto por dentro de `run_command`, sob a
+conta.
 
 CONTRATO = a Action API do MediaWiki (spec_recuperador §5; adaptadores/wiki.py). Este
 verbo é mais um consumidor DIRETO de `api.php`, de mesma dignidade que o wiki-mcp e o
 recuperador — os três falam a mesma API, nenhum encadeia no outro. Não há wrapper REST
-intermediário: a Action API já é o contrato explícito e versionado que arq:0002 pede
+intermediário: a Action API já é o contrato explícito e versionado
 (MediaWiki 1.43.9 LTS). As tools wiki_* do conector (get_page/edit_page/search_pages/
-list_pages/upload_file/query_cargo) são o transporte redundante que arq:0069 aposenta;
+list_pages/upload_file/query_cargo) são o transporte redundante aposentado;
 o que elas faziam de legítimo passa a viver aqui.
 
 Endpoint: `MW_API_URL` (default `http://127.0.0.1:8080/api.php`, a porta que o host
 publica; a rede docker vê `mediawiki:80`, mas o verbo roda no host). Leituras são
 anônimas; `editar`/`subir` fazem login com a conta de bot `Claudinho`
 (MW_BOT_USER/MW_BOT_PASSWORD; se ausentes do ambiente, lidas por nome dos segredos da
-instancia, <instancia>/segredos/conhecimento/<NOME>, card #3010).
+instancia, <instancia>/segredos/conhecimento/<NOME>).
 
 Namespaces de busca: 0|4|12|3000|3004 — inclui 3004 (Operar), que o CONTENT_NS do
 wiki-mcp OMITE (medido no siteinfo 20/08/2026; o wiki-mcp diz cobrir "Operar:" mas usa
@@ -40,13 +40,13 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-# Raizes de producao (card #3010): credencial e segredo da instancia, nunca .env de clone.
+# Raizes de producao: credencial e segredo da instancia, nunca .env de clone.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
 from raizes import instancia  # noqa: E402
 
 API = (os.environ.get("MW_API_URL") or "http://127.0.0.1:8080/api.php").rstrip("/")
 TIMEOUT_S = float(os.environ.get("MW_TIMEOUT_S", "20"))
-UA = "platafirma-acervo-wiki/1.0 (claudinho-dados)"
+UA = "platafirma-acervo-wiki/1.0 (dados)"
 
 # Namespaces de conteúdo da busca em prosa. Corrige o engano do wiki-mcp (inclui 3004).
 CONTENT_NS = os.environ.get("MW_CONTENT_NS", "0|4|12|3000|3004")
@@ -353,7 +353,7 @@ def ato_ocultar_revisao(a):
         print(f"ok: {titulo} → rev {', '.join(ids)} {modo} (texto e resumo)")
 
 def ato_mostrar_revisao(a):
-    """A volta do `ocultar-revisao` (`acervo restaurar casa revisao`, arq:0119 §9.1; #3298): devolve
+    """A volta do `ocultar-revisao` (`acervo restaurar casa revisao`): devolve
     texto e resumo das revisões ao histórico público (`revisiondelete` com `show`). Revisão suprimida
     só volta com o direito `suppressrevision`. Sem --apply: só mostra o plano."""
     revids = sorted({int(r) for r in a.revid})

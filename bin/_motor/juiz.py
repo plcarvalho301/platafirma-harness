@@ -1,4 +1,4 @@
-"""`motor rag julgar` — o juiz do piloto da escada (card #3350, feature #3340).
+"""`motor rag julgar` — o juiz do piloto da escada.
 
 Fonte: padrao protocolo-medicao-rag rev 2, «O juiz» 1 a 3 e «Unidade da marca». O juiz é um modelo de
 outra família que o escritor (o escritor é qwen; o juiz é Claude, pelo gerador do motor). Ele marca as

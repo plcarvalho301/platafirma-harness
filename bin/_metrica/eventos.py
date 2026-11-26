@@ -1,5 +1,4 @@
-"""eventos — o cliente da rota de escrita do banco de eventos de plataforma (spec banco-de-eventos-de-plataforma R6, R7 e
-R8; spec eixos-do-host R15; card #3922).
+"""eventos — o cliente da rota de escrita do banco de eventos de plataforma.
 
 MODULO IMPORTAVEL (como `cadencia` e `abertura`): `bin/sinal` o carrega e conduz a passada. Aqui moram quatro coisas:
 

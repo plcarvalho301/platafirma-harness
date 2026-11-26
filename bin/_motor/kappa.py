@@ -1,4 +1,4 @@
-"""O juiz contra a primeira passada do dono (card #3350, feature #3340).
+"""O juiz contra a primeira passada do dono.
 
 Fonte: padrao protocolo-medicao-rag rev 2, «O juiz» 2 e 3: kappa de Cohen sobre os graus e acerto na
 classe enganosa, contra a PRIMEIRA passada do dono, nunca contra a conferência, e nunca concordância bruta
@@ -117,7 +117,7 @@ def concordancia(lote: dict, dono: dict, juiz: dict, fora: set) -> dict:
 # --- divergências e tempo ------------------------------------------------------------------------------------
 
 def divergencias(lote: dict, dono: dict, juiz: dict, fora: set) -> list:
-    """Divergência é qualidade diferente. O embasamento saiu da avaliação por ordem do dono (09/10/2026, #3352): a tela
+    """Divergência é qualidade diferente. O embasamento saiu da avaliação: a tela
     mostra só o título das seções e ele não tem como conferir sem abrir a obra. Sem braço: a linha leva o
     resposta_id opaco, a pergunta e os dois graus."""
     perg = {p["pergunta_id"]: p["texto"] for p in lote["corpo"]["perguntas"]}

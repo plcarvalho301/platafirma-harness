@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Markdown da cadeira -> evento Matrix: HTML de verdade, e fatiado sem partir bloco.
 
-Cobre tres criterios de aceite da minuta 0002, e cada um veio de um defeito
+Cobre tres criterios de aceite, e cada um veio de um defeito
 medido em campo (openclaw #29377, hermes-agent #45421, chunkMode):
 
   4 — tabela, code block e lista renderizam COMO TAL no cliente movel. A
@@ -51,7 +51,7 @@ def para_html(md: str) -> str:
 
     Sem codehilite de proposito: ele emite <span style=...> por token, o
     sanitizer do cliente come o style e sobra sopa de span. `fenced_code` puro
-    emite <pre><code class="language-x">, que a spec permite e o cliente movel
+    emite <pre><code class="language-x">, que o protocolo permite e o cliente movel
     renderiza como bloco.
     """
     return markdown.markdown(md, extensions=EXTENSOES, output_format="html")

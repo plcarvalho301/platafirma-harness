@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """_casa — a worktree de main de platafirma-casa, para os atos de minuta que escrevem.
 
-Regime direto em main (arq:0083 §1; ordem do dono de 28/09/2026; a lista que declara o
+Regime direto em main (a lista que declara o
 regime mora em bin/repo, REPOS_DIRETO_EM_MAIN): repositorio de deliberacao commita direto
 em main, sem ramo nem PR. escrever, circular e formalizar editam na MESMA worktree que
 `repo abrir platafirma-casa` da a cadeira, <bancada>/wt/platafirma-casa/<cadeira>/main
@@ -44,7 +44,7 @@ if _GH:
 
 
 class Falha(Exception):
-    """O ato nao segue: mensagem para o stderr e o exit da tabela (arq:0110 §4)."""
+    """O ato nao segue: mensagem para o stderr e o exit da tabela."""
 
     def __init__(self, msg: str, code: int):
         super().__init__(msg)

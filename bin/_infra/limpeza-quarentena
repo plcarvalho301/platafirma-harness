@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # limpeza-quarentena — apaga levas de quarentena que passaram da janela de arrependimento.
-# Sub-ato de `infra` (arq:0110 §14, emenda 26/09/2026 — card #3145): fora do PATH e do
+# Sub-ato de `infra`: fora do PATH e do
 # golden record, mora em bin/_infra/. Chamado por `infra limpeza quarentena [args]`, nunca
 # direto; o cron do claudinho, sextas de madrugada, passa a chamar `infra limpeza
 # quarentena` (ex-bin/quarentena-prune, movido daqui — a agenda do cron muda em PR de
@@ -16,7 +16,7 @@
 set -uo pipefail
 # ambiente: PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] · QUARENTENA_RETENCAO_DIAS[=7]
 
-# Raizes de producao (card #3010): quarentena, trava e log moram na instancia. Este
+# Raizes de producao: quarentena, trava e log moram na instancia. Este
 # script mora em bin/_infra/, um nivel abaixo de bin/ — raizes.sh fica dois niveis acima.
 . "$(dirname "$(readlink -f "$0")")/../../lib/raizes.sh"
 

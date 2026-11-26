@@ -3,7 +3,7 @@
 # capacidade: conhecimento
 # dono: dados
 #
-# arq:0119 §1.2 e §3: a busca (motor, ia) devolve endereço, escore e cobertura; a consulta
+# a busca (motor, ia) devolve endereço, escore e cobertura; a consulta
 # termina com a fonte entregue pelo acervo. Cliente fino da rota POST /acervo/secoes/consulta do
 # motor do acervo (platafirma-conhecimento, rotas_secoes.py): a leitura é uma só, a da rota, e o
 # Recuperador e este verbo leem o mesmo texto.

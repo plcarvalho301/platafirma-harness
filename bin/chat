@@ -12,7 +12,7 @@
 # passo no stderr — e a fronteira: a recepcao programa contra ele e nao sabe qual
 # motor esta atras.
 #
-# Abertura de fita (minuta 0002, posicao de claudinho-IA, secao 1):
+# Abertura de fita:
 #   fita nova      -> `monta-sessao <cadeira>` injetado por --append-system-prompt,
 #                     ANTES do corpo do dono, na MESMA invocacao. Uma chamada.
 #   fita existente -> `--resume <id>`, sem reinjetar nada. O pacote ja esta na fita;
@@ -32,7 +32,7 @@ import threading
 import time
 import uuid
 
-# Duas raizes e so duas (card #3010). O CODIGO (skills, chat/, verbos irmaos) sai da
+# Duas raizes e so duas. O CODIGO (skills, chat/, verbos irmaos) sai da
 # arvore deste arquivo, por realpath — a release servida. O ESTADO (fitas) mora na
 # instancia. PF_BIN so aponta outro diretorio de verbos (teste com stub).
 HARNESS_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -52,7 +52,7 @@ HOOK_PORTA_SESSAO = str(release() / "harness" / "agente" / "hooks" / "porta-sess
 sys.path.insert(0, os.path.join(HARNESS_DIR, "chat"))
 from comum.cadeiras import atores, eh_participante, slug_da_cadeira  # noqa: E402
 
-# Watchdog de atividade, nao teto fixo (minuta 0002, posicao de claudinho-TI,
+# Watchdog de atividade, nao teto fixo
 # anel 2): o stream emite evento por passo, entao silencio prolongado e giro
 # pendurado — nao giro longo legitimo. Teto absoluto fica de vigia: cobre o caso
 # em que o motor emite evento para sempre sem nunca concluir.
@@ -310,8 +310,8 @@ def settings_da_fita(modelo="", cadeira=""):
                 "Glob", "Grep", "WebFetch", "WebSearch", "Task",
             ],
         },
-        # A fita do Code PORTA o sessao_id em toda chamada, mecanico (arq:0101 §1,
-        # spec do dono 06/09). Sem estes hooks NO settings da fita, a cadeira recebe
+        # A fita do Code PORTA o sessao_id em toda chamada, mecanico.
+        # Sem estes hooks NO settings da fita, a cadeira recebe
         # o sessao_id no retorno do monta_sessao e nao o repassa (medido 0/190) — e a
         # porta nao infere mais (85ece31), entao a fita rodaria sem sessao. O settings
         # e reescrito a cada giro, entao o porte tem de nascer AQUI. PostToolUse grava
@@ -333,13 +333,13 @@ def settings_da_fita(modelo="", cadeira=""):
     # `git push` e negado por padrao e liberado por cadeira. Nao e controle — a
     # mesma cadeira empurra por `run_command`, que nao tem allowlist. E atrito
     # deliberado: quem nao responde do commit ao ar nao empurra da fita.
-    # claudinha-produto responde (arq:0057, ordem do dono 16/08/2026).
+    # produto responde.
     #
     # `deploy` entra pela MESMA porta desde o fechamento do #187, e a datacao e o
     # ponto: antes dele a mesma permissao autorizaria recriar o conteiner do BACK,
     # porque a tela morava dentro da imagem da API. Hoje a tela e stack propria
     # (`rastreador-tela`), sem segredo montado e sem rota de API — promover front
-    # nao alcanca servico de outra cadeira (arq:0057, cards #194/#195/#196).
+    # nao alcanca servico de outra cadeira.
     #
     # O verbo recusa alvo que nao esteja no registro e nao tem default nem "todas":
     # a stack e argumento obrigatorio. `docker` segue negado, e nao ha contradicao —
@@ -466,7 +466,7 @@ def prepara_cwd(cadeira, id_fita, modelo=""):
 
 
 # Conectores que o giro recebe no `.mcp.json` do cwd: nome -> (url, variavel do
-# token). O `claudinho-mcp` SAIU daqui (card #3477, 12/10/2026): a porta so
+# token). O `claudinho-mcp` SAIU daqui: a porta so
 # aceita o JWT do realm desde #3272 e o giro nao tem token estatico a apresentar.
 # O chat sera refeito; o que ele precisar de conector volta a ser declarado aqui.
 CONECTORES = {
@@ -535,7 +535,7 @@ def ambiente_do_giro(cadeira):
 # allowlist da fita nega `Read(//home/claudinho/.config/**)` de proposito, e essa
 # negativa continua valendo — quem abre o arquivo e o processo que monta o giro,
 # nao o modelo. Duas formas: `env` e arquivo CHAVE=valor; `nome` e um arquivo por
-# variavel em $PLATAFIRMA_INSTANCIA/segredos/<stack>/ (card #3010) — nenhum `.env` em
+# variavel em $PLATAFIRMA_INSTANCIA/segredos/<stack>/ — nenhum `.env` em
 # arvore de repo ou de deploy. O token estatico da porta saiu (#3272):
 # o conector da porta entra so por JWT do realm, que nao e do giro.
 FONTES_DE_SEGREDO = (
@@ -786,7 +786,7 @@ SUMICO = ("no conversation found", "session not found", "no session found")
 
 def fita_sumiu(r):
     """Fita que o motor nao acha mais. Acontece por construcao: `encerrar fita`
-    apaga o JSONL da sessao (minuta 0002, secao 2), e a rotacao limpa o cwd. A
+    apaga o JSONL da sessao, e a rotacao limpa o cwd. A
     recepcao guarda o id antigo e nao tem como saber — quem sabe e o motor."""
     if r.get("timeout"):
         return False
@@ -859,7 +859,7 @@ def despachar(argv):
             # faria o dono crer que mexeu em algo; dizer custa uma linha.
             passo_out({"passo": "parametro-ignorado", "em": agora_iso(),
                        "motivo": "modelo e esforco nao se aplicam a participante"})
-        # Participante nao tem motor (card #3117): a rota por verbo externo saiu
+        # Participante nao tem motor: a rota por verbo externo saiu
         # inteira. Motor de participante novo se desenha do zero, nao se restaura.
         print(json.dumps({
             "estado": "erro",
@@ -960,7 +960,7 @@ def despachar(argv):
 
 
 def main(argv):
-    # --ajuda UNIVERSAL, sem efeito colateral (card #2868, ex-#2274 defeito 4): varre
+    # --ajuda UNIVERSAL, sem efeito colateral: varre
     # todos os argumentos antes do despacho; nenhum ato chega a rodar. uso() sai 2.
     if any(x in ("--ajuda", "--help", "-h") for x in argv):
         return uso()
