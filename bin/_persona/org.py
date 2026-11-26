@@ -8,12 +8,11 @@ import json, os, pathlib, sys, datetime as dt
 
 # Raiz = a propria arvore (realpath): na producao, a release no ar, onde o ledger se LE.
 # PERSONA_REPO, quando dado, aponta o worktree de bancada onde o ato de org ESCREVE e
-# depois se confere por `persona salvar` e sai por PR da bancada (#3273). Sem default de bancada (card #3010).
+# depois se confere por `persona salvar` e sai por PR da bancada. Sem default de bancada.
 RAIZ = pathlib.Path(os.environ.get("PERSONA_REPO") or pathlib.Path(__file__).resolve().parents[2])
-# registro/, nao personas/: a arvore personas/ foi tombada (arq:0073 §7). Este e o
+# registro/, nao personas/: a arvore personas/ foi tombada. Este e o
 # ESCRITOR do ledger (ato de org) e o leitor de `filme`/`foto` (consulta historica);
-# resolucao de identidade VIVA nao passa por aqui — le a arvore abertura/ (incidente,
-# ordem do dono).
+# resolucao de identidade VIVA nao passa por aqui.
 LEDGER = RAIZ / "registro" / "eventos-org.jsonl"
 
 ATO_EVENTO = {
