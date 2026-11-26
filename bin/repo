@@ -4342,7 +4342,7 @@ sanear_conforme() {
       [ "$br" = detached ] || ramo="${br#refs/heads/}"
       head="$("$GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"
       classe="$(classe_da_pasta "$wt" "$nome")"; dono="$(dono_da_pasta "$wt")"
-      if [ -n "$ramo" ]; then
+      if [ -n "$ramo" ] && ! { direto_em_main "$nome" && [ "$(basename "$wt")" = "$PASTA_DIRETO_EM_MAIN" ]; }; then
         if [ -n "${merged["$ramo"]:-}" ]; then
           entregue="PR mesclado"
           for o in ${merged["$ramo"]}; do [ "$o" = "$head" ] && oid="$o"; done
