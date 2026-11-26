@@ -2,9 +2,10 @@
 # pesquisar — pesquisa a web aberta com procedência
 # capacidade: busca
 # dono: inteligencia
-# use para: SEMPRE que a fonte estiver fora do acervo, pesquisar fora, «procura na internet», «acha a página oficial»; ler página por URL; coletar achado; resolver DOI, ISBN, ORCID ou CNPJ; conferir as citações de um relatório
-# atos: consultar, resolver, ler, coletar, historico, manifesto, exportar, verificar, saude
+# use para: SEMPRE que a fonte estiver fora do acervo, pesquisar fora, «procura na internet», «acha a página oficial»; ler página por URL ou bruto custodiado; percorrer um site e extrair o grafo de links; coletar achado; resolver DOI, ISBN, ORCID ou CNPJ; conferir as citações de um relatório
+# atos: consultar, resolver, ler, percorrer, coletar, historico, manifesto, exportar, verificar, saude
 # poda: cosmetica@consultar
+# ruff: noqa: ERA001
 #
 # spec: spec pesquisa-web
 # engenharia do verbo: ia (chapéu engenharia-de-harness). Despachante fino: parse do ato,
@@ -20,10 +21,21 @@ if RAIZ not in sys.path:
     sys.path.insert(0, RAIZ)
 
 from pesquisa import atos
-from pesquisa.envelope import FalhaFonte, UsoInvalido
+from pesquisa.envelope import FalhaFonte, UsoInvalido, envelope
 from pesquisa.manifesto import Trabalho, slug_trabalho
 
-ATOS = ("consultar", "resolver", "ler", "coletar", "historico", "manifesto", "exportar", "verificar", "saude")
+ATOS = (
+    "consultar",
+    "resolver",
+    "ler",
+    "percorrer",
+    "coletar",
+    "historico",
+    "manifesto",
+    "exportar",
+    "verificar",
+    "saude",
+)
 
 
 def uso(code=2):
@@ -38,6 +50,11 @@ def uso(code=2):
         "                  --render: o navegador; abre também quando o site barra o HTTP (401, 403, 429, 503)\n"
         "                  --esperar \"<seletor css>\": o navegador espera o elemento antes de ler (já pede o render)\n"
         "                  --rede: guarda o que a página pediu ao carregar e devolve os pedidos de dado (já pede o render)\n"
+        "  pesquisar ler <pesquisa:trabalho/arq | /.../var/pesquisa/...> [--linhas N-M] [--paginas N-M] [--modo texto|pagina|sumario] [--inteiro]\n"
+        "                  abre na sessão o bruto, derivado ou grafo.jsonl guardado no manifesto\n"
+        "  pesquisar percorrer <semente> [--dominio <host>]... [--profundidade 3] [--teto 100] [--intervalo 0.2]\n"
+        "                  percorre em largura só por HTTP, respeita robots.txt, espera intervalo por host (1 conexão),\n"
+        "                  faz HEAD em links de arquivo, descobre sitemap (.xml e .xml.gz) e grava grafo.jsonl no trabalho\n"
         "  pesquisar coletar <url> [<url>...] [--imagens]\n"
         "  pesquisar historico <url> [--em AAAA-MM-DD [--foco \"<pergunta>\"] [--max-chars 6000] [--offset N] [--integral]] [--salvar]\n"
         "                  sem --em: as capturas mais recentes do Wayback; com --em: lê a captura mais próxima da data\n"
@@ -64,6 +81,20 @@ def _emite(env, md_render=None, use_md=False):
     return 0 if env.get("ok", True) else 1
 
 
+def _emite_custodia(trab, info_custodia, *, json_explicito=False):
+    res = info_custodia["resultado"]
+    if json_explicito or "imagens" in res or "base64" in res:
+        env = envelope("ler", trab.slug, custodia=True, caminho=info_custodia["caminho_real"], **res)
+        print(json.dumps(env, ensure_ascii=False))
+        return 0
+    conteudo = str(res.get("conteudo") or "")
+    sys.stdout.write(conteudo)
+    if conteudo and not conteudo.endswith("\n"):
+        sys.stdout.write("\n")
+    sys.stdout.flush()
+    return 0
+
+
 def main(argv):
     for a in argv[1:]:
         if a in ("-h", "--help", "--ajuda"):
@@ -75,6 +106,7 @@ def main(argv):
         sys.stderr.write(f"pesquisar: ato desconhecido '{ato}'\n")
         uso()
 
+    json_explicito = "--json" in argv[2:]
     p = argparse.ArgumentParser(prog=f"pesquisar {ato}", add_help=False)
     p.add_argument("--trabalho", default=None)
     p.add_argument("--json", action="store_true", default=True)
@@ -99,6 +131,19 @@ def main(argv):
     p.add_argument("--excluir", action="append", default=[])
     p.add_argument("--juntar", default=None)
     p.add_argument("--completo", action="store_true")
+    # percorrer
+    p.add_argument("--dominio", action="append", default=[])
+    p.add_argument("--profundidade", type=int, default=3)
+    p.add_argument("--teto", type=int, default=100)
+    p.add_argument("--intervalo", type=float, default=0.2)
+    # leitura de custódia
+    p.add_argument("--linhas", default=None)
+    p.add_argument("--paginas", default=None)
+    p.add_argument("--max-bytes", dest="max_bytes", type=int, default=None)
+    p.add_argument("--inteiro", action="store_true")
+    p.add_argument("--modo", default=None)
+    p.add_argument("--dpi", type=int, default=None)
+    p.add_argument("--encoding", default=None)
     args = p.parse_args(argv[2:])
 
     trab = Trabalho(slug_trabalho(args.trabalho))
@@ -117,9 +162,35 @@ def main(argv):
         elif ato == "ler":
             if not resto:
                 uso()
+            if atos.eh_alvo_custodia(resto[0]):
+                opcoes_c = {
+                    "linhas": args.linhas,
+                    "paginas": args.paginas,
+                    "offset": args.offset,
+                    "max_bytes": args.max_bytes,
+                    "inteiro": args.inteiro,
+                    "modo": args.modo,
+                    "dpi": args.dpi,
+                    "encoding": args.encoding,
+                }
+                info = atos.ler_custodia(resto[0], opcoes=opcoes_c)
+                return _emite_custodia(trab, info, json_explicito=json_explicito)
             env = atos.ler(resto[0], foco=args.foco, render=args.render,
                           max_chars=args.max_chars, offset=args.offset, imagens=args.imagens,
                           integral=args.integral, esperar=args.esperar, rede=args.rede, trab=trab)
+        elif ato == "percorrer":
+            if not resto:
+                uso()
+            env = atos.percorrer(
+                resto[0],
+                trab=trab,
+                opcoes={
+                    "dominios": args.dominio,
+                    "profundidade": args.profundidade,
+                    "teto": args.teto,
+                    "intervalo": args.intervalo,
+                },
+            )
         elif ato == "coletar":
             if not resto:
                 uso()

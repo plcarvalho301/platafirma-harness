@@ -14,8 +14,11 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from . import extrator, historico, manifesto as M, resolvedores, searxng, verificar as V
-from .envelope import FalhaFonte, envelope
+from . import extrator, historico, resolvedores, searxng
+from . import manifesto as M
+from . import percorrer as P
+from . import verificar as V
+from .envelope import FalhaFonte, UsoInvalido, envelope
 
 
 DICA_CODIGO = ("codigo consulta repositório, pacote e pergunta-e-resposta; documentação oficial de "
@@ -82,14 +85,112 @@ def resolver(tipo, ident, *, completo: bool = False, trab: "M.Trabalho") -> dict
                     resolvedor=r["resolvedor"], status=r["status"], manifesto=trab.ref_manifesto(linha))
 
 
+_MIN_PARTES_CUSTODIA = 2
+_EXIT_USO = 2
+
+
+def eh_alvo_custodia(alvo: str) -> bool:
+    """True quando `ler` recebe caminho em `var/pesquisa/` ou chave `pesquisa:<trabalho>/<arq>`."""
+    s = (alvo or "").strip()
+    return s.startswith(("pesquisa:", "/"))
+
+
+def _resolver_caminho_custodia(alvo: str, raiz_pesquisa: Path | None = None) -> Path:
+    import os
+    from pathlib import PurePosixPath
+
+    s = (alvo or "").strip()
+    base = (raiz_pesquisa or M.RAIZ_VAR).resolve()
+    if not s or ".." in PurePosixPath(s).parts:
+        raise UsoInvalido("caminho-custodia-invalido")
+    if s.startswith("pesquisa:"):
+        rel_str = s.split(":", 1)[1].strip("/")
+        partes = PurePosixPath(rel_str).parts
+        if len(partes) < _MIN_PARTES_CUSTODIA:
+            raise UsoInvalido("chave-custodia-incompleta")
+        cand = base.joinpath(*partes)
+    else:
+        cand = Path(s)
+        try:
+            rel = cand.resolve(strict=False).relative_to(base)
+        except ValueError as exc:
+            raise UsoInvalido("fora-da-custodia-de-pesquisa") from exc
+        if len(rel.parts) < _MIN_PARTES_CUSTODIA:
+            raise UsoInvalido("caminho-custodia-incompleto")
+
+    real = Path(os.path.realpath(cand))
+    try:
+        real.relative_to(base)
+    except ValueError as exc:
+        raise UsoInvalido("fora-da-custodia-de-pesquisa") from exc
+    if not real.is_file():
+        raise FalhaFonte("bruto-inexistente", caminho=str(cand))
+    return real
+
+
+def ler_custodia(
+    alvo: str,
+    *,
+    opcoes: dict[str, Any] | None = None,
+    raiz_pesquisa: Path | None = None,
+) -> dict[str, Any]:
+    """Abre um arquivo custodiado em `var/pesquisa/<trabalho>/` via `lib/leitura`."""
+    from leitura.leitura import le
+
+    real = _resolver_caminho_custodia(alvo, raiz_pesquisa=raiz_pesquisa)
+    opc = opcoes or {}
+    kw: dict[str, Any] = {"modo": opc.get("modo") or "texto"}
+    if opc.get("linhas") not in (None, ""):
+        kw["linhas"] = str(opc["linhas"])
+    if opc.get("paginas") not in (None, ""):
+        kw["paginas"] = str(opc["paginas"])
+    if opc.get("offset"):
+        kw["offset"] = int(opc["offset"])
+    if opc.get("max_bytes") is not None:
+        kw["max_bytes"] = int(opc["max_bytes"])
+    if opc.get("inteiro"):
+        kw["inteiro"] = True
+    if opc.get("dpi") is not None:
+        kw["dpi"] = int(opc["dpi"])
+    if opc.get("encoding"):
+        kw["encoding"] = str(opc["encoding"])
+    res = le(real, **kw)
+    if "erro" in res or res.get("recusado"):
+        msg = str(res.get("erro") or res.get("falta") or "leitura-recusada")
+        if int(res.get("exit_code") or _EXIT_USO) == _EXIT_USO:
+            raise UsoInvalido(msg)
+        raise FalhaFonte(msg, caminho=str(real))
+    return {"caminho_real": str(real), "resultado": res}
+
+
 # ----------------------------------------------------------------------------- ler
 def ler(url, *, foco, render, max_chars, offset, imagens=False, integral=False, esperar=None,
-        rede=False, trab: "M.Trabalho") -> dict[str, Any]:
+        rede=False, trab: M.Trabalho) -> dict[str, Any]:
     # --esperar e --rede só fazem sentido no navegador: pedir um deles já pede o render (#4457)
     r = extrator.ler(url, trab, foco=foco, render=render or bool(esperar) or rede,
                      max_chars=max_chars, offset=offset, imagens=imagens, integral=integral,
                      esperar=esperar, rede=rede)
     return envelope("ler", trab.slug, **r)
+
+
+# ----------------------------------------------------------------------- percorrer
+def percorrer(
+    semente: str,
+    *,
+    trab: M.Trabalho,
+    opcoes: dict[str, Any] | None = None,
+    opcoes_rede: P.OpcoesRede | None = None,
+) -> dict[str, Any]:
+    opc = opcoes or {}
+    cfg = P.ConfigPercurso(
+        semente=semente,
+        dominios=tuple(opc.get("dominios") or ()),
+        profundidade_max=int(opc.get("profundidade", P.PROFUNDIDADE_PADRAO)),
+        teto=int(opc.get("teto", P.TETO_PADRAO)),
+        intervalo_s=float(opc.get("intervalo", P.INTERVALO_PADRAO_S)),
+    )
+    r = P.percorrer(cfg, trab, opcoes_rede=opcoes_rede)
+    return envelope("percorrer", trab.slug, **r)
 
 
 # ------------------------------------------------------------------------- coletar
