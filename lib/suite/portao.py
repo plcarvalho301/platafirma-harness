@@ -194,7 +194,7 @@ def avaliar_portao(
     raiz = Path(arvore).resolve() if arvore is not None else None
     arvore_mudanca = _arvore_de(raiz, mudanca or "HEAD")
     arvore_main = _arvore_de(raiz, base or "origin/main")
-    # DT 1338: repositório de esteira documento não tem suíte de código e integra sem veredito de código.
+    # Repositório de esteira documento não tem suíte de código e integra sem veredito de código.
     if _esteira_repositorio(repositorio, caminho_venvs=caminho_venvs) == "documento":
         return DecisaoPortao(
             True,

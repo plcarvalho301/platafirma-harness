@@ -1056,7 +1056,7 @@ FONTES_RELEASE_RO = ("casa", "harness")
 
 
 def _montagens_release_ro() -> list[tuple[Path, str]]:
-    """Monta em leitura as fontes servidas da casa e do harness no caminho canônico da release (DT 935)."""
+    """Monta em leitura as fontes servidas da casa e do harness no caminho canônico da release."""
     raiz_host = Path((os.environ.get("PLATAFIRMA_RELEASE") or "").strip() or str(RELEASE_PADRAO))
     montagens: list[tuple[Path, str]] = []
     for nome in FONTES_RELEASE_RO:
