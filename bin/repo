@@ -148,6 +148,7 @@ uso:
   repo estado    [<repo>] [--json]
   repo listar    <repo> [<prefixo>] [--json]
   repo ler       <repo> <caminho> [--linhas <faixa>] [--offset <bytes>] [--max-bytes <n>] [--inteiro] [--numerar]
+  repo gravar    componente <repo>@<chave>:<caminho> [<versao>] [--formato trecho|patch] [--json]  (stdin)
   repo procurar  <repo> <termo> [<caminho>…] [--caminho <p>] [-i] [-F] [--json]   (ou --termo <t>; regex ERE)
   repo historico <repo> [<caminho>] [--n <N>] [--json]
   repo diff      <repo> [<caminho>] [--staged]
@@ -5123,7 +5124,7 @@ case "$cmd" in
   git)       ato_git "$@" ;;
   *)
     printf '%s: erro: ato desconhecido '\''%s'\''\n' "$VERBO" "$cmd" >&2
-    printf 'atos: estado · listar · ler · procurar · historico · diff · ramo · commitar · empurrar · atualizar · sincronizar · abrir · clonar · copiar · mover · sanear · descartar · pr-abrir · pr-listar · pr-ver · pr-diff · pr-revisar · pr-merge · pr-fechar · hooks-listar · hooks-apagar · lock · git\n' >&2
+    printf 'atos: estado · listar · ler · gravar · procurar · historico · diff · ramo · commitar · empurrar · atualizar · sincronizar · abrir · clonar · copiar · mover · sanear · descartar · pr-abrir · pr-listar · pr-ver · pr-diff · pr-revisar · pr-merge · pr-fechar · hooks-listar · hooks-apagar · lock · git\n' >&2
     uso_texto
     exit 2
     ;;
