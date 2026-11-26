@@ -89,7 +89,7 @@
         "conteiner": "eventos-db",
         "schema": "plataforma"
       },
-      "_nota": "platafirma-core:deploy/eventos/backup-db.sh (#3878, spec banco-de-eventos-de-plataforma R2). O piso repete o PISO_BYTES do script: o banco recem-nascido, so com schema e particoes vazias, ja passa dele; os dois numeros andam juntos."
+      "_nota": "platafirma-core:deploy/eventos/backup-db.sh. O piso repete o PISO_BYTES do script: o banco recem-nascido, so com schema e particoes vazias, ja passa dele; os dois numeros andam juntos."
     },
     "escapes-do-dono": {
       "o_que": "registro só de acréscimo do escape do dono no portão da esteira (var/esteira/escapes-do-dono.jsonl, guarda de 20 anos)",
@@ -102,7 +102,7 @@
         "tipo": "arquivo-gz",
         "destino": "var/esteira/escapes-do-dono.jsonl"
       },
-      "_nota": "platafirma-core:deploy/backup-escapes.sh (DT 831). Arquivo pode estar vazio enquanto nenhum escape ocorreu; sem piso_bytes alto.",
+      "_nota": "platafirma-core:deploy/backup-escapes.sh. Arquivo pode estar vazio enquanto nenhum escape ocorreu; sem piso_bytes alto.",
       "log": "/srv/platafirma/casa/var/log/cron/backup-escapes.log"
     },
     "cofre-keepass": {
@@ -115,37 +115,37 @@
       "o_que": "banco do IdP",
       "cobertura": "nenhuma",
       "alcance": "aqui",
-      "_nota": "postura aceita pelo dono: o backup e o git, o risco esta assumido. Debito no card #176. Nao propor rotina."
+      "_nota": "postura aceita pelo dono: o backup e o git, o risco esta assumido. Nao propor rotina."
     },
     "rastreador-db": {
       "o_que": "banco do rastreador",
       "cobertura": "nenhuma",
       "alcance": "aqui",
-      "_nota": "mesma postura do keycloak-db. Card #176."
+      "_nota": "mesma postura do keycloak-db."
     },
     "sessao-db": {
       "o_que": "Postgres das entidades operacionais de sessao (schema sessao)",
       "cobertura": "nenhuma",
       "alcance": "aqui",
-      "_nota": "Entra na lista no dia em que nasce, sem rotina: alvo que nao esta na lista deixa de ser medido e vira surpresa. Fita, giro, pacote e peca-servida sao registro do que a sessao serviu — perda se paga em historico, nao em restauracao. `mesa_item` e o unico conteudo cuja perda custa re-derivacao, e o estatuto dela vem de arq:0041, que a declara memoria de trabalho SEM durabilidade — o substrato mudou de Valkey para Postgres na fase 6 do #189 e essa ADR ainda nao foi emendada. Ate ser, a postura aqui e a mesma do keycloak-db."
+      "_nota": "Entra na lista no dia em que nasce, sem rotina: alvo que nao esta na lista deixa de ser medido e vira surpresa. Fita, giro, pacote e peca-servida sao registro do que a sessao serviu — perda se paga em historico, nao em restauracao. `mesa_item` e o unico conteudo cuja perda custa re-derivacao, e seu estatuto a declara memoria de trabalho SEM durabilidade — o substrato mudou de Valkey para Postgres. A postura aqui e a mesma do keycloak-db."
     },
     "motor-db": {
       "o_que": "Postgres do motor de busca (schema motor: índice, trecho e vetor)",
       "cobertura": "nenhuma",
       "alcance": "aqui",
-      "_nota": "Materialização reproduzível a partir do acervo e do balde (motor indexar); entra no registro para cobrir os 10 Postgres de registro/bancos.json (DT 851)."
+      "_nota": "Materialização reproduzível a partir do acervo e do balde (motor indexar); entra no registro para cobrir os 10 Postgres de registro/bancos.json."
     },
     "identidade-db": {
       "o_que": "Postgres de identidade interna, concessão e correlação externa",
       "cobertura": "nenhuma",
       "alcance": "aqui",
-      "_nota": "Mesma postura do keycloak-db: política de acesso e sujeitos estão versionados no git (DT 851)."
+      "_nota": "Mesma postura do keycloak-db: política de acesso e sujeitos estão versionados no git."
     },
     "mdm_rh-db": {
       "o_que": "Postgres de golden source de RH (vínculo, cargo, lotação)",
       "cobertura": "nenhuma",
       "alcance": "aqui",
-      "_nota": "Mesma postura do keycloak-db: seed versionado no repositório do core (DT 851)."
+      "_nota": "Mesma postura do keycloak-db: seed versionado no repositório do core."
     }
   }
 }

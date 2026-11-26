@@ -18,7 +18,7 @@
 * A(1) | Busca no acervo desvia por domínios explícitos até que a teia cross-domain atinja densidade | [produto/design]
 * A(1) | Em telas operacionais, o painel sobreposto é a única elevação Z (degrau) admissível | [produto/design]
 * A(1) | Filtros de conjunto (listagem) e travessia hierárquica operam em eixos distintos; misturá-los oculta ramos | [produto/design]
-* A(1) | Documento de PRD rege a spec de produto e conjuga-se no presente; MRD abriga racionais e benchmarks | [produto/produtizacao]
+* A(1) | Documento de PRD rege a especificação de produto e conjuga-se no presente; MRD abriga racionais e benchmarks | [produto/produtizacao]
 * A(1) | O posicionamento define a estrutura perene; não nomear o produto pela LLM ou ferramenta trocável | [produto/produtizacao]
 * A(1) | Ameaças em conta segregada avaliam-se pelo vetor de escape (docker, nsenter), não pela mera posse de binários | [seguranca/hardening]
 * A(1) | Assinaturas de scanner de segredos demandam auditoria humana contra o repositório | [seguranca/hardening]

@@ -67,7 +67,7 @@
     "postgres_sistema_5434": {
       "servico": "/etc/postgresql/16/main",
       "porta": 5434,
-      "motivo": "Postgres de sistema do host fora da casa (#4185, DT 523): nenhum código ou stack da plataforma conecta nele; citado apenas em comentários de compose para evitar colisão de porta."
+      "motivo": "Postgres de sistema do host fora da casa: nenhum código ou stack da plataforma conecta nele; citado apenas em comentários de compose para evitar colisão de porta."
     }
   }
 }

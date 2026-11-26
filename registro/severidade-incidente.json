@@ -1,9 +1,9 @@
 {
-  "_leia": "Registro de severidade de incidente da PlataFirma. Fonte do campo `severidade` do rastreador (card #466 §4.2) e do alvo de tempo por grau. Grau se decide por PORTA FECHADA, nunca por adjetivo: a pergunta e sempre 'quem deixou de alcancar o que, e existe rota alternativa'. Quem classifica le so este arquivo. Nenhum relogio aqui e campo: os carimbos sao `detectado`, `em_mitigacao`, `mitigado`, `resolvido`, e todo tempo sai de subtracao na projecao. Alvo e compromisso de operacao, nao promessa contratual — estourar o alvo nao muda o grau, so aparece na medicao.",
+  "_leia": "Registro de severidade de incidente da PlataFirma. Fonte do campo `severidade` do rastreador e do alvo de tempo por grau. Grau se decide por PORTA FECHADA, nunca por adjetivo: a pergunta e sempre 'quem deixou de alcancar o que, e existe rota alternativa'. Quem classifica le so este arquivo. Nenhum relogio aqui e campo: os carimbos sao `detectado`, `em_mitigacao`, `mitigado`, `resolvido`, e todo tempo sai de subtracao na projecao. Alvo e compromisso de operacao, nao promessa contratual — estourar o alvo nao muda o grau, so aparece na medicao.",
   "_capacidade": "incidente",
-  "_dono": "claudinho-TI",
+  "_dono": "ti",
   "_delegacao": {
-    "seguranca": "Incidente com classe `seguranca` NAO usa esta escala. O conteudo daquela classe e de claudinho-seguranca; aqui fica so o mecanismo. Enquanto ele nao escrever, incidente de seguranca classifica-se por esta escala com a nota `escala-provisoria` no card."
+    "seguranca": "Incidente com classe `seguranca` NAO usa esta escala. O conteudo daquela classe e da cadeira seguranca; aqui fica so o mecanismo. Enquanto ela nao escrever, incidente de seguranca classifica-se por esta escala com a nota `escala-provisoria` no card."
   },
   "graus": {
     "S1": {
