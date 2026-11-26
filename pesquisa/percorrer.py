@@ -375,7 +375,7 @@ class _EstadoGrafo:
         fora = 0 if (self.prefixo_semente and url.startswith(self.prefixo_semente)) else 1
         tem_q = 1 if urlsplit(url).query else 0
         self.seq += 1
-        heapq.heappush(self.fila, (0, prof, fora, tem_q, self.seq, url, prof))
+        heapq.heappush(self.fila, (0, fora, prof, tem_q, self.seq, url, prof))
 
     def enfileirar_sitemap(self, url: str, prof_ordem: int) -> None:
         if url in self.melhor_prof_enfileirada or url in self.enfileiradas_sitemap:
@@ -384,7 +384,7 @@ class _EstadoGrafo:
         fora = 0 if (self.prefixo_semente and url.startswith(self.prefixo_semente)) else 1
         tem_q = 1 if urlsplit(url).query else 0
         self.seq += 1
-        heapq.heappush(self.fila, (1, prof_ordem, fora, tem_q, self.seq, url, None))
+        heapq.heappush(self.fila, (1, fora, prof_ordem, tem_q, self.seq, url, None))
 
 
 @dataclass

@@ -14,10 +14,15 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from . import extrator, historico, resolvedores, searxng
-from . import manifesto as M
-from . import percorrer as P
-from . import verificar as V
+from . import (
+    extrator,
+    historico,
+    manifesto as M,
+    percorrer as P,
+    resolvedores,
+    searxng,
+    verificar as V,
+)
 from .envelope import FalhaFonte, UsoInvalido, envelope
 
 

@@ -47,6 +47,7 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlsplit
@@ -1022,31 +1023,21 @@ async def _renderiza_async(url: str, *, esperar: str | None = None,
 # ------------------------------------------------------- sitemap e metadados de navegação (#4458)
 _BLOCO_GZIP = 65_536
 _CABECA_XML_MAX = 1_024
+_MAX_DATAS_VISIVEIS = 3
 _PREFIXOS_XML = (b"<?xml", b"<urlset", b"<sitemapindex")
 _RE_ESQUEMA_EXPLICITO = re.compile(r"^([a-zA-Z][a-zA-Z0-9+.-]*):")
 _RE_FALTA_DOIS_PONTOS = re.compile(r"^(?:https?|ttps?|htps?)//", re.IGNORECASE)
 _ESQUEMAS_NAO_HTTP = frozenset({"mailto", "tel", "javascript", "data", "ftp"})
 _SEPARADORES_MIGALHA = frozenset({">", "/", "»", "|", "•", "›"})
 _PREFIXOS_MIGALHA = ("você está aqui:", "voce esta aqui:", "você está aqui", "voce esta aqui")
-_SELETORES_BREADCRUMB = (
-    "#portal-breadcrumbs",
-    "#breadcrumbs",
-    'nav[aria-label*="readcrumb" i]',
-    'nav[aria-label*="aminho" i]',
-    '[aria-label*="avegação estrutural" i]',
-    "nav.breadcrumb",
-    ".breadcrumbs",
-    '[itemtype*="BreadcrumbList"]',
-    "ol.breadcrumb",
-    "ul.breadcrumb",
+_TAGS_VAZIAS_HTML = frozenset(
+    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
 )
-_SELETORES_DATA_VISIVEL = (
-    ".documentPublished",
-    ".documentModified",
-    "#plone-document-byline",
-    ".documentByLine",
-    "time",
-)
+_TAGS_AUTO_FECHA_IRMA = frozenset({"li", "dt", "dd", "option", "p", "a"})
+_TAGS_SEM_TEXTO_VISIVEL = frozenset({"script", "style", "noscript"})
+_IDS_BREADCRUMB = frozenset({"portal-breadcrumbs", "breadcrumbs"})
+_ARIA_BREADCRUMB = ("readcrumb", "aminho", "avegação estrutural", "avegacao estrutural")
+_CLASSES_BREADCRUMB = frozenset({"breadcrumb", "breadcrumbs"})
 _RE_DATA_TEXTO_VISIVEL = re.compile(
     r"(?:Publicado|Atualizado|Modificado|Última\s+modificação)\s*(?:em|:)?\s*"
     r"\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}(?:\s*(?:às\s*)?\d{1,2}[h:]\d{2})?",
@@ -1132,36 +1123,113 @@ class DestinoLink:
     motivo: str | None = None
 
 
+@dataclass
+class _NoHtml:
+    """Nó leve de árvore HTML construído apenas com `html.parser` da biblioteca-padrão."""
+
+    tag: str
+    atributos: dict[str, str]
+    filhos: list[_NoHtml | str] = field(default_factory=list)
+
+    def attr(self, nome: str) -> str:
+        return self.atributos.get(nome, "")
+
+    def classes(self) -> frozenset[str]:
+        bruto = self.atributos.get("class", "")
+        return frozenset(bruto.split()) if bruto else frozenset()
+
+    def iterar(self) -> list[_NoHtml]:
+        saida: list[_NoHtml] = []
+        pilha: list[_NoHtml] = [self]
+        while pilha:
+            atual = pilha.pop()
+            saida.append(atual)
+            for filho in reversed(atual.filhos):
+                if isinstance(filho, _NoHtml):
+                    pilha.append(filho)
+        return saida
+
+    def texto(self) -> str:
+        acc: list[str] = []
+        pilha: list[_NoHtml | str] = [self]
+        while pilha:
+            item = pilha.pop()
+            if isinstance(item, str):
+                acc.append(item)
+            elif item.tag not in _TAGS_SEM_TEXTO_VISIVEL:
+                pilha.extend(reversed(item.filhos))
+        return _limpar_espacos(" ".join(acc))
+
+
+class _ConstrutorHtml(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.raiz = _NoHtml("raiz", {})
+        self.pilha: list[_NoHtml] = [self.raiz]
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        nome = tag.lower()
+        if nome in _TAGS_AUTO_FECHA_IRMA and self.pilha[-1].tag == nome:
+            self.pilha.pop()
+        mapa = {k.lower(): (v if v is not None else "") for k, v in attrs if k}
+        no = _NoHtml(nome, mapa)
+        self.pilha[-1].filhos.append(no)
+        if nome not in _TAGS_VAZIAS_HTML:
+            self.pilha.append(no)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        mapa = {k.lower(): (v if v is not None else "") for k, v in attrs if k}
+        self.pilha[-1].filhos.append(_NoHtml(tag.lower(), mapa))
+
+    def handle_endtag(self, tag: str) -> None:
+        nome = tag.lower()
+        for idx in range(len(self.pilha) - 1, 0, -1):
+            if self.pilha[idx].tag == nome:
+                del self.pilha[idx:]
+                break
+
+    def handle_data(self, data: str) -> None:
+        if data:
+            self.pilha[-1].filhos.append(data)
+
+
+def _parsear_html(html: str) -> _NoHtml:
+    construtor = _ConstrutorHtml()
+    construtor.feed(html or "")
+    construtor.close()
+    return construtor.raiz
+
+
 def _limpar_espacos(texto: str) -> str:
     return " ".join(texto.split())
 
 
-def _resolver_base_html(soup: Any, url_final: str) -> str:
+def _resolver_base_html(todos: list[_NoHtml], url_final: str) -> str:
     from urllib.parse import urljoin
 
-    head = soup.find("head")
-    base_tag = head.find("base", href=True) if head else soup.find("base", href=True)
-    if not base_tag:
+    for no in todos:
+        if no.tag != "base" or "href" not in no.atributos:
+            continue
+        bruto = no.attr("href").strip()
+        if not bruto:
+            return url_final
+        cand = urljoin(url_final, bruto)
+        partes = urlsplit(cand)
+        if partes.scheme.lower() in ("http", "https") and partes.hostname:
+            return cand
         return url_final
-    bruto = str(base_tag.get("href") or "").strip()
-    if not bruto:
-        return url_final
-    cand = urljoin(url_final, bruto)
-    partes = urlsplit(cand)
-    if partes.scheme.lower() in ("http", "https") and partes.hostname:
-        return cand
     return url_final
 
 
-def _extrair_canonical_html(soup: Any, url_base: str) -> str | None:
+def _extrair_canonical_html(todos: list[_NoHtml], url_base: str) -> str | None:
     from urllib.parse import urldefrag, urljoin
 
-    for tag in soup.find_all("link", href=True):
-        rels = tag.get("rel") or []
-        tokens = [str(r).lower() for r in (rels if isinstance(rels, list) else str(rels).split())]
-        if "canonical" not in tokens:
+    for no in todos:
+        if no.tag != "link" or "href" not in no.atributos:
             continue
-        bruto = str(tag.get("href") or "").strip()
+        if "canonical" not in no.attr("rel").lower().split():
+            continue
+        bruto = no.attr("href").strip()
         if not bruto:
             continue
         resolvida = urldefrag(urljoin(url_base, bruto))[0]
@@ -1171,12 +1239,13 @@ def _extrair_canonical_html(soup: Any, url_base: str) -> str | None:
     return None
 
 
-def _extrair_titulo_html(soup: Any) -> str | None:
-    for el in (soup.title, soup.find("h1")):
-        if el is not None:
-            t = _limpar_espacos(el.get_text(" ", strip=True))
-            if t:
-                return t
+def _extrair_titulo_html(todos: list[_NoHtml]) -> str | None:
+    for tag_alvo in ("title", "h1"):
+        for no in todos:
+            if no.tag == tag_alvo:
+                txt = no.texto()
+                if txt:
+                    return txt
     return None
 
 
@@ -1185,35 +1254,58 @@ def _limpar_item_migalha(texto: str) -> str:
     low = limpo.lower()
     for pref in _PREFIXOS_MIGALHA:
         if low.startswith(pref):
-            limpo = limpo[len(pref) :].strip(" :>/»")
+            limpo = limpo[len(pref) :].strip(" :>/»›|")
             break
+    limpo = limpo.strip(" :>/»›|")
     return "" if limpo in _SEPARADORES_MIGALHA else limpo
 
 
-def _extrair_breadcrumb_html(soup: Any) -> list[str]:
-    bloco = None
-    for sel in _SELETORES_BREADCRUMB:
-        bloco = soup.select_one(sel)
-        if bloco is not None:
-            break
+def _achar_bloco_breadcrumb(todos: list[_NoHtml]) -> _NoHtml | None:
+    for no in todos:
+        if no.attr("id") in _IDS_BREADCRUMB:
+            return no
+    for no in todos:
+        aria = no.attr("aria-label").lower()
+        if aria and any(chave in aria for chave in _ARIA_BREADCRUMB):
+            return no
+    for no in todos:
+        if (no.classes() & _CLASSES_BREADCRUMB) or "breadcrumblist" in no.attr("itemtype").lower():
+            return no
+    return None
+
+
+def _extrair_breadcrumb_html(todos: list[_NoHtml]) -> list[str]:
+    bloco = _achar_bloco_breadcrumb(todos)
     if bloco is None:
         return []
-    itens = bloco.find_all("li") or bloco.select('a, [id^="breadcrumbs-current"], [aria-current="page"]')
-    return [limpo for el in itens if (limpo := _limpar_item_migalha(el.get_text(" ", strip=True)))]
+    sub = bloco.iterar()[1:]
+    itens = [el for el in sub if el.tag == "li"] or [
+        el
+        for el in sub
+        if el.tag == "a"
+        or el.attr("id").startswith("breadcrumbs-current")
+        or el.attr("aria-current") == "page"
+    ]
+    return [limpo for el in itens if (limpo := _limpar_item_migalha(el.texto()))]
 
 
-def _extrair_data_visivel_html(soup: Any, html: str) -> str | None:
-    achados: list[str] = []
-    for sel in _SELETORES_DATA_VISIVEL:
-        for el in soup.select(sel):
-            txt = _limpar_espacos(el.get_text(" ", strip=True))
-            if not txt and el.name == "time":
-                txt = str(el.get("datetime") or "").strip()
+def _extrair_data_visivel_html(arvore: _NoHtml, todos: list[_NoHtml], html: str) -> str | None:
+    grupos = (
+        [n for n in todos if "documentPublished" in n.classes()],
+        [n for n in todos if "documentModified" in n.classes()],
+        [n for n in todos if n.attr("id") == "plone-document-byline"],
+        [n for n in todos if "documentByLine" in n.classes()],
+        [n for n in todos if n.tag == "time"],
+    )
+    for grupo in grupos:
+        achados: list[str] = []
+        for el in grupo:
+            txt = el.texto() or (el.attr("datetime").strip() if el.tag == "time" else "")
             if txt and txt not in achados:
                 achados.append(txt)
         if achados:
-            return " | ".join(achados[:3])
-    m = _RE_DATA_TEXTO_VISIVEL.search(soup.get_text(" ", strip=True))
+            return " | ".join(achados[:_MAX_DATAS_VISIVEIS])
+    m = _RE_DATA_TEXTO_VISIVEL.search(arvore.texto())
     if m:
         return _limpar_espacos(m.group(0))
     return detecta_data_publicacao(html).get("valor")
@@ -1260,15 +1352,15 @@ def _classificar_href(href_bruto: str, url_base: str, host_pagina: str) -> Desti
     return DestinoLink(destino=resolvida, mesmo_dominio=(host_dest == host_pagina))
 
 
-def _texto_do_link(tag: Any) -> str:
-    txt = _limpar_espacos(tag.get_text(" ", strip=True))
+def _texto_do_link(no: _NoHtml) -> str:
+    txt = no.texto()
     if txt:
         return txt
-    img = tag.find("img", alt=True)
-    if img and str(img.get("alt") or "").strip():
-        return _limpar_espacos(str(img.get("alt")))
-    for attr in ("aria-label", "title"):
-        val = str(tag.get(attr) or "").strip()
+    for filho in no.iterar()[1:]:
+        if filho.tag == "img" and filho.attr("alt").strip():
+            return _limpar_espacos(filho.attr("alt"))
+    for nome_attr in ("aria-label", "title"):
+        val = no.attr(nome_attr).strip()
         if val:
             return _limpar_espacos(val)
     return ""
@@ -1276,19 +1368,20 @@ def _texto_do_link(tag: Any) -> str:
 
 def extrai_metadados_pagina(html: str, url_final: str) -> dict[str, Any]:
     """Extrai base, canonical, título, breadcrumb, data visível e links com metadado."""
-    from bs4 import BeautifulSoup
-
-    soup = BeautifulSoup(html or "", "lxml")
-    url_base = _resolver_base_html(soup, url_final)
+    arvore = _parsear_html(html or "")
+    todos = arvore.iterar()
+    url_base = _resolver_base_html(todos, url_final)
     host_pagina = (urlsplit(url_final).hostname or "").lower().rstrip(".")
     links: list[dict[str, Any]] = []
-    for tag in soup.find_all("a", href=True):
-        href = str(tag.get("href"))
+    for no in todos:
+        if no.tag != "a" or "href" not in no.atributos:
+            continue
+        href = no.attr("href")
         info = _classificar_href(href, url_base, host_pagina)
         links.append(
             {
                 "href": href,
-                "texto": _texto_do_link(tag),
+                "texto": _texto_do_link(no),
                 "destino": info.destino,
                 "mesmo_dominio": info.mesmo_dominio,
                 "quebrada": info.quebrada,
@@ -1297,9 +1390,9 @@ def extrai_metadados_pagina(html: str, url_final: str) -> dict[str, Any]:
         )
     return {
         "url_base": url_base,
-        "canonical": _extrair_canonical_html(soup, url_base),
-        "titulo": _extrair_titulo_html(soup),
-        "breadcrumb": _extrair_breadcrumb_html(soup),
-        "data_visivel": _extrair_data_visivel_html(soup, html or ""),
+        "canonical": _extrair_canonical_html(todos, url_base),
+        "titulo": _extrair_titulo_html(todos),
+        "breadcrumb": _extrair_breadcrumb_html(todos),
+        "data_visivel": _extrair_data_visivel_html(arvore, todos, html or ""),
         "links": links,
     }

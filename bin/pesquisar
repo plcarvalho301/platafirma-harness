@@ -81,7 +81,7 @@ def _emite(env, md_render=None, use_md=False):
     return 0 if env.get("ok", True) else 1
 
 
-def _emite_custodia(trab, info_custodia, *, json_explicito=False):
+def _emite_custodia(trab: Trabalho, info_custodia: dict, *, json_explicito: bool = False) -> int:
     res = info_custodia["resultado"]
     if json_explicito or "imagens" in res or "base64" in res:
         env = envelope("ler", trab.slug, custodia=True, caminho=info_custodia["caminho_real"], **res)
