@@ -21,6 +21,7 @@ from pesquisa.envelope import UsoInvalido
 _IP_PUBLICO_TESTE = "93.184.216.34"
 _EXIT_OK = 0
 _EXIT_USO = 2
+_PROF_FICHA_TESTE = 3
 _HTTP_OK = 200
 _HTTP_NAO_ENCONTRADO = 404
 _HTTP_INDISPONIVEL = 503
@@ -437,3 +438,48 @@ def test_custodia_bruto_abre_na_sessao_e_cli_recusa_uso_invalido(
     err_neg = capsys.readouterr().err
     assert rc_neg == _EXIT_USO
     assert "profundidade-negativa" in err_neg
+
+
+def test_percorrer_prioriza_conteudo_sobre_cromo_e_deduplica_base_plone(tmp_path: Path) -> None:
+    paginas = {
+        "https://gov.exemplo/portal": (
+            b'<html><head><base href="https://gov.exemplo/portal/home/" />'
+            b'<link rel="canonical" href="https://gov.exemplo/portal" /></head><body>'
+            b'<nav id="main-navigation">'
+            b'<a href="#topo">Topo</a>'
+            b'<a href="/portal/menu-1">M1</a><a href="/portal/menu-2">M2</a><a href="/portal/menu-3">M3</a>'
+            b"</nav>"
+            b'<main><a href="/portal/ind">IND</a></main></body></html>'
+        ),
+        "https://gov.exemplo/portal/ind": b'<html><body><main><a href="/portal/ind/ia">IA</a></main></body></html>',
+        "https://gov.exemplo/portal/ind/ia": (
+            b'<html><body><main><a href="/portal/ind/ia/ficha">Ficha IA</a></main></body></html>'
+        ),
+        "https://gov.exemplo/portal/ind/ia/ficha": b"<html><title>Ficha de Sistema de IA</title></html>",
+        "https://gov.exemplo/portal/menu-1": b"<html><title>Menu 1</title></html>",
+        "https://gov.exemplo/portal/menu-2": b"<html><title>Menu 2</title></html>",
+        "https://gov.exemplo/portal/menu-3": b"<html><title>Menu 3</title></html>",
+    }
+    gets: list[str] = []
+
+    def falso_req(metodo: str, url: str) -> extrator.Resposta:
+        if metodo == "GET" and url in paginas:
+            gets.append(url)
+            return _resposta_teste(url, paginas[url])
+        return _resposta_teste(url, status=_HTTP_NAO_ENCONTRADO, tipo="text/plain")
+
+    trab = M.Trabalho("p-cromo", raiz=tmp_path)
+    env = atos.percorrer(
+        "https://gov.exemplo/portal",
+        trab=trab,
+        opcoes={"dominios": ["gov.exemplo"], "profundidade": 4, "teto": 4},
+        opcoes_rede=_opcoes_rede_teste(falso_req),
+    )
+    assert gets == [
+        "https://gov.exemplo/portal",
+        "https://gov.exemplo/portal/ind",
+        "https://gov.exemplo/portal/ind/ia",
+        "https://gov.exemplo/portal/ind/ia/ficha",
+    ]
+    nos_por_id = {n["id"]: n for n in env["nos"] if n["tipo_no"] == "pagina"}
+    assert nos_por_id["https://gov.exemplo/portal/ind/ia/ficha"]["profundidade"] == _PROF_FICHA_TESTE

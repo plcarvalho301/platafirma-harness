@@ -1035,6 +1035,10 @@ _TAGS_VAZIAS_HTML = frozenset(
 )
 _TAGS_AUTO_FECHA_IRMA = frozenset({"li", "dt", "dd", "option", "p", "a"})
 _TAGS_SEM_TEXTO_VISIVEL = frozenset({"script", "style", "noscript"})
+_TAGS_CROMO_HTML = frozenset({"header", "nav", "footer", "aside"})
+_IDS_CROMO_HTML = frozenset(
+    {"site-header", "portal-header", "portal-footer", "main-navigation", "govbr-barra"}
+)
 _IDS_BREADCRUMB = frozenset({"portal-breadcrumbs", "breadcrumbs"})
 _ARIA_BREADCRUMB = ("readcrumb", "aminho", "avegação estrutural", "avegacao estrutural")
 _CLASSES_BREADCRUMB = frozenset({"breadcrumb", "breadcrumbs"})
@@ -1319,12 +1323,14 @@ def _porta_valida(partes: Any) -> bool:
     return True
 
 
-def _classificar_href(href_bruto: str, url_base: str, host_pagina: str) -> DestinoLink:
+def _classificar_href(
+    href_bruto: str, url_base: str, url_final: str, host_pagina: str
+) -> DestinoLink:
     from urllib.parse import urldefrag, urljoin
 
     s = href_bruto.strip()
     if not s or s.startswith("#"):
-        return DestinoLink(destino=urldefrag(url_base)[0], mesmo_dominio=True)
+        return DestinoLink(destino=urldefrag(url_final)[0], mesmo_dominio=True)
     if s.startswith(":") or _RE_FALTA_DOIS_PONTOS.match(s):
         return DestinoLink(destino=None, mesmo_dominio=False, quebrada=True, motivo="esquema-malformado")
     m_esq = _RE_ESQUEMA_EXPLICITO.match(s)
@@ -1366,6 +1372,24 @@ def _texto_do_link(no: _NoHtml) -> str:
     return ""
 
 
+def _eh_bloco_cromo(no: _NoHtml) -> bool:
+    return no.tag in _TAGS_CROMO_HTML or no.attr("id") in _IDS_CROMO_HTML
+
+
+def _iterar_ancoras_html(raiz: _NoHtml) -> list[tuple[_NoHtml, bool]]:
+    saida: list[tuple[_NoHtml, bool]] = []
+    pilha: list[tuple[_NoHtml, bool]] = [(raiz, False)]
+    while pilha:
+        atual, em_cromo = pilha.pop()
+        cromo_atual = em_cromo or _eh_bloco_cromo(atual)
+        if atual.tag == "a" and "href" in atual.atributos:
+            saida.append((atual, cromo_atual))
+        for filho in reversed(atual.filhos):
+            if isinstance(filho, _NoHtml):
+                pilha.append((filho, cromo_atual))
+    return saida
+
+
 def extrai_metadados_pagina(html: str, url_final: str) -> dict[str, Any]:
     """Extrai base, canonical, título, breadcrumb, data visível e links com metadado."""
     arvore = _parsear_html(html or "")
@@ -1373,17 +1397,16 @@ def extrai_metadados_pagina(html: str, url_final: str) -> dict[str, Any]:
     url_base = _resolver_base_html(todos, url_final)
     host_pagina = (urlsplit(url_final).hostname or "").lower().rstrip(".")
     links: list[dict[str, Any]] = []
-    for no in todos:
-        if no.tag != "a" or "href" not in no.atributos:
-            continue
+    for no, em_cromo in _iterar_ancoras_html(arvore):
         href = no.attr("href")
-        info = _classificar_href(href, url_base, host_pagina)
+        info = _classificar_href(href, url_base, url_final, host_pagina)
         links.append(
             {
                 "href": href,
                 "texto": _texto_do_link(no),
                 "destino": info.destino,
                 "mesmo_dominio": info.mesmo_dominio,
+                "em_cromo": em_cromo,
                 "quebrada": info.quebrada,
                 "motivo": info.motivo,
             }

@@ -347,6 +347,14 @@ class _ControladorCortesia:
         raise FalhaFonte("redirecionamentos-demais", redirecionamentos=len(saltos))
 
 
+def _variantes_barra(url: str) -> tuple[str, ...]:
+    partes = urlsplit(url)
+    if partes.query or not partes.path or partes.path == "/":
+        return (url,)
+    sem_barra = url.rstrip("/")
+    return (url, sem_barra) if url.endswith("/") else (url, f"{url}/")
+
+
 @dataclass
 class _EstadoGrafo:
     dominios: frozenset[str]
@@ -355,10 +363,12 @@ class _EstadoGrafo:
     sitemaps_lidos: list[dict[str, Any]] = field(default_factory=list)
     nos_por_id: dict[str, dict[str, Any]] = field(default_factory=dict)
     alias_para_no: dict[str, str] = field(default_factory=dict)
-    canonicals_expandidos: set[str] = field(default_factory=set)
+    chaves_pagina_conhecida: dict[str, str] = field(default_factory=dict)
+    hashes_expandidos: set[str] = field(default_factory=set)
     arestas: list[dict[str, Any]] = field(default_factory=list)
-    fila: list[tuple[int, int, int, int, int, str, int | None]] = field(default_factory=list)
+    fila: list[tuple[int, int, int, int, int, int, str]] = field(default_factory=list)
     melhor_prof_enfileirada: dict[str, int] = field(default_factory=dict)
+    melhor_prioridade: dict[str, tuple[int, int, int, int]] = field(default_factory=dict)
     enfileiradas_sitemap: set[str] = field(default_factory=set)
     visitadas_get: set[str] = field(default_factory=set)
     arquivos_checados: set[str] = field(default_factory=set)
@@ -367,24 +377,35 @@ class _EstadoGrafo:
     bateu_teto: bool = False
     bateu_profundidade: bool = False
 
-    def enfileirar_clique(self, url: str, prof: int) -> None:
-        ant = self.melhor_prof_enfileirada.get(url)
-        if ant is not None and ant <= prof:
-            return
-        self.melhor_prof_enfileirada[url] = prof
+    def registrar_pagina_conhecida(self, forma: str, chave_no: str) -> None:
+        self.alias_para_no[forma] = chave_no
+        for var in _variantes_barra(forma):
+            self.chaves_pagina_conhecida.setdefault(var, chave_no)
+
+    def enfileirar_clique(self, url: str, prof: int, *, em_cromo: bool = False) -> None:
+        prof_ant = self.melhor_prof_enfileirada.get(url)
+        prof_min = prof if prof_ant is None or prof < prof_ant else prof_ant
+        self.melhor_prof_enfileirada[url] = prof_min
+
         fora = 0 if (self.prefixo_semente and url.startswith(self.prefixo_semente)) else 1
-        tem_q = 1 if urlsplit(url).query else 0
+        cromo = 1 if em_cromo else 0
+        ruido = 1 if (urlsplit(url).query or "/resolveuid/" in url) else 0
+        nova_prio = (fora, cromo, prof_min, ruido)
+        prio_ant = self.melhor_prioridade.get(url)
+        if prio_ant is not None and prio_ant <= nova_prio:
+            return
+        self.melhor_prioridade[url] = nova_prio
         self.seq += 1
-        heapq.heappush(self.fila, (0, fora, prof, tem_q, self.seq, url, prof))
+        heapq.heappush(self.fila, (0, *nova_prio, self.seq, url))
 
     def enfileirar_sitemap(self, url: str, prof_ordem: int) -> None:
         if url in self.melhor_prof_enfileirada or url in self.enfileiradas_sitemap:
             return
         self.enfileiradas_sitemap.add(url)
         fora = 0 if (self.prefixo_semente and url.startswith(self.prefixo_semente)) else 1
-        tem_q = 1 if urlsplit(url).query else 0
+        ruido = 1 if urlsplit(url).query else 0
         self.seq += 1
-        heapq.heappush(self.fila, (1, fora, prof_ordem, tem_q, self.seq, url, None))
+        heapq.heappush(self.fila, (1, fora, 1, prof_ordem, ruido, self.seq, url))
 
 
 @dataclass
@@ -589,7 +610,7 @@ def _fundir_no_pagina(
         for f in formas:
             if f not in existente["urls"]:
                 existente["urls"].append(f)
-            est.alias_para_no[f] = chave_no
+            est.registrar_pagina_conhecida(f, chave_no)
         _atualizar_prof_minima(existente, prof)
         if em_sm:
             existente["em_sitemap"] = True
@@ -618,7 +639,7 @@ def _fundir_no_pagina(
     }
     est.nos_por_id[chave_no] = novo
     for f in formas:
-        est.alias_para_no[f] = chave_no
+        est.registrar_pagina_conhecida(f, chave_no)
     return chave_no
 
 
@@ -658,14 +679,16 @@ def _custodiar_pagina(
 
 def _processar_links_da_pagina(
     ctx: _ContextoPercurso,
-    chave_no: str,
+    no_pag: dict[str, Any],
     url_origem: str,
     links: list[dict[str, Any]],
     prof: int | None,
 ) -> None:
     est = ctx.est
-    ja_expandido = chave_no in est.canonicals_expandidos
-    est.canonicals_expandidos.add(chave_no)
+    chave_no = str(no_pag["id"])
+    sha_corpo = str(no_pag["sha256"])
+    ja_expandido = sha_corpo in est.hashes_expandidos
+    est.hashes_expandidos.add(sha_corpo)
     prox_prof = (prof + 1) if prof is not None else None
 
     for lk in links:
@@ -680,6 +703,7 @@ def _processar_links_da_pagina(
             "destino": dest,
             "mesmo_dominio": lk["mesmo_dominio"],
             "dominio_permitido": dom_ok,
+            "em_cromo": bool(lk.get("em_cromo")),
             "quebrada": lk["quebrada"],
             "motivo": lk["motivo"],
         }
@@ -699,7 +723,7 @@ def _processar_links_da_pagina(
             est.bateu_profundidade = True
             continue
         if prox_prof is not None:
-            est.enfileirar_clique(dest, prox_prof)
+            est.enfileirar_clique(dest, prox_prof, em_cromo=bool(lk.get("em_cromo")))
 
 
 def _visitar_uma_pagina(ctx: _ContextoPercurso, url: str, prof: int | None) -> None:
@@ -784,7 +808,9 @@ def _visitar_uma_pagina(ctx: _ContextoPercurso, url: str, prof: int | None) -> N
             "ua": M.UA_PERCORRER,
         }
     )
-    _processar_links_da_pagina(ctx, chave_no, resp.url_final, meta["links"], prof)
+    _processar_links_da_pagina(
+        ctx, est.nos_por_id[chave_no], resp.url_final, meta["links"], prof
+    )
 
 
 def _gravar_grafo_jsonl(trab: M.Trabalho, est: _EstadoGrafo) -> tuple[Path, str, list[dict[str, Any]]]:
@@ -792,12 +818,17 @@ def _gravar_grafo_jsonl(trab: M.Trabalho, est: _EstadoGrafo) -> tuple[Path, str,
     linhas_jsonl: list[str] = [json.dumps(no, ensure_ascii=False) for no in nos]
     for ar in est.arestas:
         dest = ar.get("destino")
+        no_dest = (
+            (est.alias_para_no.get(dest) or est.chaves_pagina_conhecida.get(dest) or dest)
+            if dest
+            else None
+        )
         enriquecida = {
             **ar,
-            "destino_no": est.alias_para_no.get(dest, dest) if dest else None,
+            "destino_no": no_dest,
         }
         linhas_jsonl.append(json.dumps(enriquecida, ensure_ascii=False))
-    conteudo = ("\n".join(linhas_jsonl) + "\n").encode("utf-8") if linhas_jsonl else b""
+    conteudo = ("\n".join(linhas_jsonl) + "\n").encode() if linhas_jsonl else b""
     sha = M.sha256_bytes(conteudo)
     p_grafo = trab.dir / "grafo.jsonl"
     p_grafo.write_bytes(conteudo)
@@ -815,11 +846,16 @@ def _motivo_parada(est: _EstadoGrafo) -> str:
 def _drenar_fila(ctx: _ContextoPercurso) -> None:
     est = ctx.est
     while est.fila:
-        _, _, _, _, _, url, prof = heapq.heappop(est.fila)
-        if url in est.visitadas_get:
-            no_id = est.alias_para_no.get(url)
-            if no_id and no_id in est.nos_por_id:
-                _atualizar_prof_minima(est.nos_por_id[no_id], prof)
+        origem_fila, _, _, _, _, _, url = heapq.heappop(est.fila)
+        prof = est.melhor_prof_enfileirada.get(url) if origem_fila == 0 else None
+        no_pag = est.chaves_pagina_conhecida.get(url)
+        if url in est.visitadas_get or no_pag is not None:
+            alvo_no = no_pag or est.alias_para_no.get(url)
+            if alvo_no and alvo_no in est.nos_por_id:
+                no = est.nos_por_id[alvo_no]
+                if url not in no["urls"]:
+                    no["urls"].append(url)
+                _atualizar_prof_minima(no, prof)
             continue
         if est.paginas_get >= ctx.cfg.teto and not eh_link_de_arquivo(url):
             est.bateu_teto = True
