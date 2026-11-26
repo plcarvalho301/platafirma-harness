@@ -1,4 +1,4 @@
-"""Percurso em largura de um site sem API, com cortesia e grafo JSONL (card #4458).
+"""Percurso em largura de um site sem API, com cortesia e grafo JSONL.
 
 Visita páginas por HTTP (sem navegador), respeitando `robots.txt` antes do primeiro
 pedido a cada host, esperando intervalo mínimo entre pedidos ao mesmo host sobre uma

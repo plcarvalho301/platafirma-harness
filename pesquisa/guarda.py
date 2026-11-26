@@ -1,6 +1,6 @@
 """Guarda de rede — fail-closed para dentro (spec §2.6, §7 SSRF).
 
-O verbo roda como `claudinho`, com Valkey, Keycloak e o ops-server no loopback. Uma
+O verbo roda como `claudinho`, com Valkey, Keycloak e a porta no loopback. Uma
 URL de terceiro que resolva para faixa privada, loopback, link-local ou `.internal` é
 recusada ANTES do request. É código, testado (par de URL privada/pública, §8.3), não
 configuração.

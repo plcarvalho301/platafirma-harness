@@ -1,4 +1,4 @@
-"""Prazo total de uma chamada de rede do verbo (card #4457 t3).
+"""Prazo total de uma chamada de rede do verbo.
 
 A porta corta a conexão perto de 45 s. O timeout do httpx vale por operação e por endereço
 que o DNS devolve, e no `resolver doi` somou 80 s: a porta caiu antes do JSON de falha. Aqui a

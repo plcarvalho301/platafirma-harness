@@ -1,6 +1,6 @@
-"""Leitura de página com procedência (spec pesquisa-web §3.2, §4.2, §4.8; card #3183).
+"""Leitura de página com procedência.
 
-Custódia antes do texto (minuta 0038, B2 de inteligencia; B8 de engenharia). O coletor HTTP
+Custódia antes do texto. O coletor HTTP
 próprio (httpx) grava em `bruto/` o corpo da resposta como veio — sem decodificar charset,
 sem recodificar —, e ao lado um `<n>.resposta.json` com status, cabeçalhos, URL pedida, URL
 final, redirecionamentos e hora. O sha256 é sobre os bytes do corpo. A codificação de
@@ -21,7 +21,7 @@ O cache casa por (URL, sha256 do bruto, estratégia), nunca pelo hash do extraí
 
 O tipo real sai no retorno como `tipo_real`: no envelope, `tipo` é a invariante `dado`
 (§2.4) e nenhum campo do ato pode sobrescrevê-la. No manifesto e no `resposta.json` a
-chave é `tipo`, como na spec espelho-de-leitura.
+chave é `tipo`.
 
 Derivação, transitória até o serviço de conversão (#3183 passo 4): HTML e texto são
 decodificados pela ordem BOM → charset HTTP → meta → UTF-8 estrito → windows-1252, com a
@@ -31,7 +31,7 @@ PPTX e EPUB saem pelo leitor de formatos da casa (`lib/leitura/formatos.py`), o 
 `ler_arquivo`; os demais tipos saem `tipo-nao-permitido:<tipo>`.
 
 Piso de extração: um caractere útil. Os pisos por tipo são a C3 de inteligencia, ainda sem
-medida (spec espelho-de-leitura §4.5: até medir, valem null); até lá só o vazio reprova.
+medida (até medir, valem null); até lá só o vazio reprova.
 
 Tudo que toca rede ou browser é injetável, para a suíte de contrato rodar sem os dois:
   coletor(url, verifica) -> Resposta                        default: httpx
@@ -265,7 +265,7 @@ def _tipo_do_gzip(corpo: bytes, declarado: str | None) -> tuple[str, str]:
 
 
 def tipo_real(corpo: bytes, content_type: str | None) -> tuple[str, str]:
-    """(mime, por): assinatura dos bytes, depois content-type (spec espelho §2.4, `tipo_por`)."""
+    """(mime, por): assinatura dos bytes, depois content-type (`tipo_por`)."""
     declarado = _mime(content_type)
     if corpo.startswith(b"\x1f\x8b"):
         return _tipo_do_gzip(corpo, declarado)
