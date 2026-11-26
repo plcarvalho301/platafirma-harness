@@ -1,4 +1,4 @@
-"""oplog_corte — o corte do bruto da porta em 35 dias, só pelo timer e só com portão (card #3354; arq:0123 regras 10 e 12).
+"""oplog_corte — o corte do bruto da porta em 35 dias, só pelo timer e só com portão.
 
 `bin/_infra/corte-bruto` roda pelo timer `corte-bruto` às 01:20, uma hora depois do `linhagem-ops`, e nunca pela
 porta: nenhum verbo servido apaga o bruto. Candidato é o dia que passou de 35 dias PELO NOME do arquivo (nunca pelo
@@ -215,7 +215,7 @@ def titulo_do_incidente(dia: str) -> str:
 def corpo_do_incidente(v: Veredito) -> str:
     """Só contagem e prefixo de hash: o incidente não leva conteúdo do bruto."""
     a, g = v.contas["arquivo"], v.contas["linhagem"]
-    return (f"O bruto de {v.dia} não passou no portão do corte (arq:0123 regra 12): {v.motivo}.\n\n"
+    return (f"O bruto de {v.dia} não passou no portão do corte: {v.motivo}.\n\n"
             f"Arquivo: lidas={a['lidas']} legíveis={a['legiveis']} ilegíveis={a['ilegiveis']} bytes={a['bytes']} "
             f"sha256={a['sha256'][:12]}\n"
             f"Linhagem: lidas={g['lidas']} legíveis={g['legiveis']} ilegíveis={g['ilegiveis']} bytes={g['bytes']} "

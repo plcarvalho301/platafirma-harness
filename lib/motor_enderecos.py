@@ -1,4 +1,4 @@
-"""motor_enderecos — os dois endereços do motor, lidos só do registro das instâncias (#3843, R28 da spec motor).
+"""motor_enderecos — os dois endereços do motor, lidos só do registro das instâncias.
 
 Quem chama a BUSCA (o `/search` e as rotas `/motor/...`) e quem chama a API do ACERVO (as rotas `/acervo/...`)
 são dois grupos, e cada um lê o seu endereço de `registro/motor-instancias.json`, em `<instancia>.enderecos`:

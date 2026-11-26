@@ -1,9 +1,9 @@
-"""Projecao da conta de SO em que o comando do sujeito executa (story #3007, seg:0013).
+"""Projecao da conta de SO em que o comando do sujeito executa.
 
 Por que existe: ate aqui todo comando despachado pela porta rodava sob o uid do
 processo da porta (1001/claudinho), qualquer que fosse QUEM pediu. Para uma
 cadeira isso e o desenho — a porta E a conta, e o PEP e a fronteira. Para a conta de
-PROVIDER nao e: o isolamento que a seg:0013 promete e por uid, e uid compartilhado nao
+PROVIDER nao e: o isolamento de contas e por uid, e uid compartilhado nao
 isola nada no disco. Arquivo escrito pelo provider sai `owner 1001`, legivel e
 REGRAVAVEL por toda cadeira; a fronteira existente e a do processo, nao a do disco.
 
@@ -159,5 +159,5 @@ def erro_de_conta(exit_code: int, stderr: bytes | str) -> str | None:
         if marca in texto:
             return (f"despacho sob a conta do sujeito nao autorizado no host: "
                     f"{texto.strip()[:300]} — falta a regra NOPASSWD de sudoers "
-                    f"(ato de root; story #3007)")
+                    f"(ato de root)")
     return None

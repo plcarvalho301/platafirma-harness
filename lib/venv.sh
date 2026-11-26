@@ -1,4 +1,4 @@
-# venv.sh — construtor de venv por lock+python, um só para release e teste (card #3150).
+# venv.sh — construtor de venv por lock+python, um só para release e teste.
 #
 # Extraído de bin/release (resolver_uv, python_gerenciado, resolver_python,
 # construir_venv), sem mudar uma linha de comportamento: release continua se
@@ -63,7 +63,7 @@ resolver_python() {
   printf '%s\t%s\t%s' "$py" "$real" "$ver"
 }
 
-# --- ambiente node (card #3386) ----------------------------------------------------
+# --- ambiente node -----------------------------------------------------------------
 # Mesma regra do venv: o lock mora no git (package-lock.json), o ambiente é construído uma
 # vez, por chave <nome>-<hash>, e fica só leitura. A instalação NUNCA roda script de pacote
 # (npm ci --ignore-scripts): é o que fecha o vetor de verme de cadeia de suprimento, e é
@@ -123,7 +123,7 @@ resolver_npm() {  # $1=node
 }
 
 # Chromium para a prova de navegador: o MESMO do Playwright que o Crawl4AI do harness usa
-# (spec pesquisa-web §3.2: um navegador só, não dois). Override, depois o cache do Playwright,
+# (um navegador só, não dois). Override, depois o cache do Playwright,
 # depois um chromium de sistema. Imprime o caminho; 3 ausente.
 resolver_chromium() {
   local c base
@@ -238,7 +238,7 @@ construir_venv() {  # $1=lock $2=destino $3=uv $4=python $5=versão do python
         --python "$py" --project "$(dirname "$lock")" </dev/null >&2 || rc=$?
       if [ "$rc" -eq 0 ]; then garantir_navegador "$dest" || return 3; fi ;;
     package-lock.json)
-      # ambiente node (card #3386): npm ci --ignore-scripts; a mensagem de falha é do próprio construtor
+      # ambiente node: npm ci --ignore-scripts; a mensagem de falha é do próprio construtor
       construir_node "$lock" "$dest" || return 3
       return 0 ;;
     *)
@@ -268,7 +268,7 @@ construir_venv() {  # $1=lock $2=destino $3=uv $4=python $5=versão do python
 
 # --- veredito memoizado por (hash da árvore, chave, hash do ambiente) -------------
 # Convencão COMPARTILHADA entre hooks/pre-push e o gate de `release promover`
-# (card #3150): quem mediu primeiro grava, o outro reaproveita sem rodar de novo.
+# Quem mediu primeiro grava, o outro reaproveita sem rodar de novo.
 # Nunca hash de commit (o squash muda o commit e mantém a árvore).
 caminho_veredito() {  # $1=vereditos_dir $2=arvore_hash $3=chave $4=chave_hash
   printf '%s/%s-%s-%s.json' "$1" "$2" "$3" "$4"
@@ -292,7 +292,7 @@ listar_verdes() {  # $1=raiz
   [ -r "$lista" ] || return 0
   while IFS= read -r linha; do
     case "$linha" in ''|'#'*) continue ;; esac
-    linha="${linha%%|*}"; linha="${linha%"${linha##*[![:space:]]}"}"   # raio depois de `|` (card #3370)
+    linha="${linha%%|*}"; linha="${linha%"${linha##*[![:space:]]}"}"   # raio depois de `|`
     [ -f "$raiz/controle/$linha" ] && printf '%s\n' "$linha"
   done < "$lista"
 }
@@ -304,7 +304,7 @@ verdes_ausentes() {  # $1=raiz
   [ -r "$lista" ] || return 0
   while IFS= read -r linha; do
     case "$linha" in ''|'#'*) continue ;; esac
-    linha="${linha%%|*}"; linha="${linha%"${linha##*[![:space:]]}"}"   # raio depois de `|` (card #3370)
+    linha="${linha%%|*}"; linha="${linha%"${linha##*[![:space:]]}"}"   # raio depois de `|`
     [ -f "$raiz/controle/$linha" ] || printf '%s\n' "$linha"
   done < "$lista"
 }

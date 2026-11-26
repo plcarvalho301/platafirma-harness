@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # uso.sh — mapa (N1), forma de ato (N2) e erro gracioso para os verbos em bash.
 # capacidade: construcao
-# dono: claudinho-TI
-# card: #3016 (feature #3015 — todo verbo com --help e erro de verbo gracioso)
+# dono: ti
 #
 # NADA aqui duplica texto de verbo: a fonte e o CABECALHO DO PROPRIO VERBO, lido
 # do arquivo em tempo de chamada. O verbo declara, esta lib renderiza.
@@ -18,7 +17,7 @@
 # com `#` + DOIS espacos. Qualquer outra linha de comentario fecha o bloco — por
 # isso um `#` pelado separa os blocos das tabelas de prosa do cabecalho.
 #
-# Regua de forma (card #3016):
+# Regua de forma:
 #   N1  `<verbo>` sem ato, `--help`, `--ajuda`, `-h`  -> uma linha por ato + tabela
 #       `exit:`, em STDOUT, exit 0.
 #   N2  `<verbo> <ato> --help`                        -> sinopse + detalhe (uma linha
@@ -35,7 +34,7 @@
 
 # Fonte = o arquivo do verbo que nos carregou; nome = como ele foi invocado (o
 # symlink servido, que e o nome que a cadeira digita: `fila`, nao `fila_streams.py`).
-# Sub-ato de despachante (arq:0040 — `bin/_minuta/escrever`) declara USO_FONTE e
+# Sub-ato de despachante declara USO_FONTE e
 # USO_VERBO ANTES do source, e renderiza o cabecalho do verbo PAI: a forma de
 # `minuta escrever` mora no cabecalho de `minuta`, uma vez so.
 _USO_FONTE="${USO_FONTE:-$(readlink -f "$0" 2>/dev/null || printf '%s' "$0")}"

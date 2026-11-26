@@ -1,7 +1,7 @@
-"""O leitor único do registro da porta (registro/porta.yaml, card #4117).
+"""O leitor único do registro da porta (registro/porta.yaml).
 
 O registro diz quais verbos a porta executa e quais o modelo vê na lista de tools. Quem precisa dele importa
-este módulo: a porta (ops-server/server.py), `acervo listar casa ferramental` e `acervo registrar --todos`.
+este módulo: a porta (`core/porta`), `acervo listar casa ferramental` e `acervo registrar --todos`.
 A borda das telas lê só as faces, em borda/borda.py, porque a imagem dela leva só a biblioteca padrão e o
 pyyaml. O bloco cercado de abertura/oficio-ferramental.md, que tinha três leitores à mão, saiu.
 

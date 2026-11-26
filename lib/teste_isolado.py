@@ -3,7 +3,7 @@
 Regra do dono (27/09/2026): teste não depende de estado real — acervo, instância,
 release no ar, bancada da conta, serviço de pé, forge, identidade de quem roda. Teste
 que depende dele muda de cor quando o sistema evolui, e vermelho por evolução não é
-risco a anotar: é teste errado. Regra e porquê: `referencias/classes/teste.md` no `platafirma-casa-espelho`.
+risco a anotar: é teste errado. Regra e porquê: `referencias/classes/teste.md` em `platafirma-casa`.
 
 Cada suíte chama `isolar()` do seu conftest.py, uma vez, antes da coleta:
   1. sai do ambiente toda variável da plataforma (PREFIXOS) e a identidade da conta
@@ -37,7 +37,7 @@ PREFIXOS = (
 # tokenizador do modelo é artefato pinado (fichas na Olaria), como o uv
 PRESERVAR = ("PLATAFIRMA_TOKENIZADOR",)
 
-# navegador (arq:0129 D3): no degrau pequeno o navegador não existe; o teste que precisa dele leva
+# navegador: no degrau pequeno o navegador não existe; o teste que precisa dele leva
 # `degrau: imagem` na lista de portão. CHROME e PUPPETEER_EXECUTABLE_PATH apontam para o delator;
 # PLATAFIRMA_CHROMIUM fica de fora, porque é a entrada do resolver_chromium de lib/venv.sh e o teste de
 # verbo que o lê (conferir dependencias) escolhe o dele.

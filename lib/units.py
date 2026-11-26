@@ -1,4 +1,4 @@
-"""units — a unit systemd --user que o bot gera e os declarantes que `conferir jobs` lê (card #3186).
+"""units — a unit systemd --user que o bot gera e os declarantes que `conferir jobs` lê.
 
 Contrato (bin/bot e `release conferir jobs` leem este arquivo; a interface é esta):
   CABECALHO_GERADO          1ª linha de todo .service/.timer gerado pelo bot

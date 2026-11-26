@@ -1,7 +1,7 @@
-"""oplog_extracao — o extrator do bruto da porta para a partição `log` (card #3353; arq:0123 regras 8, 11, 12 e 13).
+"""oplog_extracao — o extrator do bruto da porta para a partição `log`.
 
 Lê o dia FECHADO do bruto pelo módulo `oplog` (o único que abre `var/log/ops`), traduz cada linha legível
-em UM evento SEM CONTEÚDO e o entrega à API do acervo (spec apis-escrita-acervo §D5, acervo-escrita.yaml
+em UM evento SEM CONTEÚDO e o entrega à API do acervo (acervo-escrita.yaml
 1.5.0, tag `log`). Roda sem modelo, só com a biblioteca padrão (o `linhagem-ops` roda no python3 do sistema).
 
     D5.1  PUT  /acervo/log/dias/{dia}                   o arquivo do dia e o sha256 dos bytes lidos
@@ -50,7 +50,7 @@ TIPOS = ("giro", "abertura", "fecho", "auth_negada", "http_req", "pep_negou", "c
 ORIGENS = ("cadeira", "agente", "sonda")
 CLASSES = oplog.CLASSES
 CLASSES_FONTE = ("verbo", "tabela")
-# `abertura`, `runner` e `gap` são as fontes de 09/10/2026 em diante (spec log-de-negocio §3, Turno); `hook`, `transcript` e
+# `abertura`, `runner` e `gap` são as fontes correntes; `hook`, `transcript` e
 # `declarado` só existem no bruto anterior. O CHECK de acervo.log_giro (088 e 089) tem as seis.
 TURNO_FONTES = ("hook", "transcript", "runner", "declarado", "gap", "abertura")
 ROTEADOR_VIAS = ("casou", "fallback")
@@ -58,10 +58,10 @@ MOTIVOS_NEGACAO = ("sem_token", "nao_jwt", "assinatura", "audience", "emissor", 
 MOTIVOS_PARADA = ("concluiu", "teto_giros", "orcamento_erro", "interrompida")
 FONTES_TOKENS = ("provedor", "estimado")
 
-# O bruto começa em 15/09/2026 (arq:0123, Contexto): o primeiro dia que a linhagem cobre.
+# O bruto começa em 15/09/2026: o primeiro dia que a linhagem cobre.
 INICIO = date(2026, 9, 15)
 LOTE = 1000
-# O dia do arquivo é o dia local da porta, America/Sao_Paulo, UTC-3 fixo desde 2019 (spec log-de-negocio §3).
+# O dia do arquivo é o dia local da porta, America/Sao_Paulo, UTC-3 fixo desde 2019.
 FUSO = timezone(timedelta(hours=-3))
 
 # Como o roteador do bruto escreve a `via` e como a partição a quer: o desenho (D1) tem `casou` e `fallback`;
@@ -108,7 +108,7 @@ class SemTraducao(Exception):
 
 
 class Falha(Exception):
-    """Erro da API ou do arquivo, já com o exit da tabela (arq:0110 §4): 1 mérito · 2 uso · 3 fora do
+    """Erro da API ou do arquivo, já com o exit da tabela: 1 mérito · 2 uso · 3 fora do
     ar · 4 alarme/recusa · 5 indeterminável."""
 
     def __init__(self, codigo: int, mensagem: str, titulo: str | None = None, corpo: dict | None = None):
@@ -208,7 +208,7 @@ def tipo_particao(reg: dict) -> str:
     """Em qual dos doze tipos de D1 a linha atravessa. Levanta `SemTraducao(evento)` quando em nenhum.
 
     A ordem importa: primeiro o que a linha DIZ ser (`evento`), depois a abertura, depois a chamada. Uma
-    chamada negada pelo PEP tem `tool` e a classe `negada` (arq:0123 regra 5): é giro, e a classe a distingue.
+    chamada negada pelo PEP tem `tool` e a classe `negada`: é giro, e a classe a distingue.
     Sem `tool`, a negação do PEP e a do JWT são acesso.
     """
     evento = reg.get("evento")
@@ -256,7 +256,7 @@ def origem_do_evento(reg: dict) -> str:
 
 
 def classe_do_giro(reg: dict) -> str:
-    """A classe do giro: a que a porta gravou, ou a deduzida do `exit_code` pela tabela de saída (arq:0110 §4)."""
+    """A classe do giro: a que a porta gravou, ou a deduzida do `exit_code` pela tabela de saída."""
     return reg.get("classe") if reg.get("classe") in CLASSES else oplog.classificar(reg)["classe"]
 
 
@@ -427,7 +427,7 @@ def para_item(reg: dict, dia: str, n: int, inv: Invalidos) -> dict:
     return item
 
 
-# --- a linha citada (card #3355; D5.10) -----------------------------------------------------------------
+# --- a linha citada (D5.10) -----------------------------------------------------------------------------
 
 def item_de_citacao(reg: dict, bruta: bytes, dia: str, n: int) -> dict:
     """O item de D5.10 para uma linha inteira do bruto: o MESMO `evento_id` que o extrator deu a ela (a chave da linha,
@@ -437,7 +437,7 @@ def item_de_citacao(reg: dict, bruta: bytes, dia: str, n: int) -> dict:
     return {"evento_id": evento_id, "linha": _sem_nul(reg), "linha_sha256": hashlib.sha256(bruta).hexdigest()}
 
 
-# --- a amostra (arq:0123 regra 8; D1) ----------------------------------------------------------
+# --- a amostra (D1) ----------------------------------------------------------------------------
 
 def amostra_esperada(giros) -> set[str]:
     """Todo giro de classe `execucao` ou `interrompida` e os dez `ok` de menor md5(evento_id::text) por tool
@@ -540,7 +540,7 @@ def extrair(dia: str, diretorio_=None) -> Extracao:
 
 def relatorio_seco(ext: Extracao) -> dict:
     """O que o dia traria, SÓ em contagem: nenhum valor de campo, nenhum argumento, nenhuma identidade. É
-    leitura mecânica pelo módulo que não devolve conteúdo a quem chamou (arq:0123 regra 15), por isso roda
+    leitura mecânica pelo módulo que não devolve conteúdo a quem chamou, por isso roda
     sem incidente. Serve para fechar a tabela de tradução com o dado real antes da primeira passada."""
     giros = Counter()
     for i in ext.itens:
@@ -594,7 +594,7 @@ def _token_padrao() -> str:
 
 
 class Api:
-    """O cliente HTTP do acervo (urllib, como `bin/bot`). O exit da tabela (arq:0110 §4): 404/405 que não é do
+    """O cliente HTTP do acervo (urllib, como `bin/bot`). O exit da tabela: 404/405 que não é do
     negócio e 503 = 3 (contrato fora do ar ou banco fora) · 401/403 = 4 · 409/422/404 de negócio = 1 · outro
     5xx e conexão que cai = 5 · outro 4xx = 2."""
 
@@ -784,7 +784,7 @@ def main(argv: list[str], api: Api | None = None, hoje: date | None = None, said
             print(f"linhagem-ops {dia}: {f}" + (f" [{f.titulo}]" if f.titulo else ""), file=sys.stderr)
             if f.titulo == "Sha256Divergente":
                 print(f"linhagem-ops {dia}: ALARME DE INTEGRIDADE — o dia fica no disco e o incidente vai à "
-                      "mesa de seguranca (arq:0123 regra 12)", file=sys.stderr)
+                      "mesa de seguranca", file=sys.stderr)
             pior = max(pior, f.codigo)
             continue
         saida(linha_do_dia(ext, fechada))

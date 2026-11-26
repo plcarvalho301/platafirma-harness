@@ -133,7 +133,7 @@ def porta_metricas_cloudflared(
     *,
     env_var: str | None = None,
 ) -> tuple[int | None, str]:
-    """Porta de `--metrics` do `cloudflared` no compose do `core` (fonte única, DT 378)."""
+    """Porta de `--metrics` do `cloudflared` no compose do `core` (fonte única)."""
     import raizes
 
     if compose_path is not None:

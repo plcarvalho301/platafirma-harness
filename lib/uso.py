@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # uso.py — mapa, forma por ato e erro gracioso para os verbos em Python.
 # capacidade: construcao
-# dono: claudinho-TI
-# card: #3016 (feature #3015 — todo verbo com --help e erro de verbo gracioso)
+# dono: ti
 #
 # Irma de lib/uso.sh, mesma regua de forma, outro substrato:
 #
@@ -145,7 +144,7 @@ _AJUDA = ("-h", "--help", "--ajuda", "ajuda")
 
 
 def intercepta(argv=None, ato_livre=False, sem_ato="mapa", fonte=None):
-    """Chamada ANTES de qualquer posicional do verbo (card #3016).
+    """Chamada ANTES de qualquer posicional do verbo.
 
     N1 em stdout/exit 0 para `<verbo>` sem ato, `--help`, `--ajuda`, `-h`; N2 para
     `<verbo> <ato> --help`; recusa graciosa (exit 2) para ato fora do conjunto.

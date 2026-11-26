@@ -22,7 +22,7 @@ Veredito pela regra de exit da casa: 0 tudo medido e conforme; 1 alguma isolacao
 quebrou; 5 algo nao foi medido (conta inexistente, travessia negada). 5 nunca vira 0:
 verde por vacuidade e a aparencia do controle sem o controle.
 
-Nao e o pentest de `seg:0010` (escape de conta designada, com travessia lateral,
+Nao e o pentest (escape de conta designada, com travessia lateral,
 executado e registrado). E a verificacao de configuracao que segura o desenho entre um
 pentest e outro, e o registro dela e consultavel em $SEG_LOG_DIR/isolacao-<data>.jsonl.
 """
@@ -37,10 +37,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from exec_conta import argv_escrita, argv_sob_conta, env_sob_conta, erro_de_conta  # noqa: E402
 
-# As contas segregadas EM USO (spec agente §2): Gemini sob jaiminho. Claude e Qwen local
+# As contas segregadas EM USO: Gemini sob jaiminho. Claude e Qwen local
 # rodam na conta do host, que e a porta. quinzinho existe para o Qwen de fronteira e nao
-# esta em uso (dono, 30/09/2026): entra aqui no dia em que entrar em uso, com a regra de
-# sudoers da porta. Conta nova entra no mesmo ato que a admite (seg:0011 item 6).
+# esta em uso: entra aqui no dia em que entrar em uso, com a regra de
+# sudoers da porta. Conta nova entra no mesmo ato que a admite.
 CONTAS_PADRAO = ("jaiminho",)
 
 OK, FALHA, NAO_MEDIDO = "ok", "FALHA", "NAO MEDIDO"

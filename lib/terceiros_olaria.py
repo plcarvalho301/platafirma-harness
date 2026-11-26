@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lê arquivos de terceiro declarados nas fichas da Olaria (card #4417).
+"""Lê arquivos de terceiro declarados nas fichas da Olaria.
 
 Consulta `POST <OLARIA_URL>/ler` para a classe `stack` (e opcionalmente outras
 classes consumidoras) e extrai cada ligação `depende-de` que carrega `destino` e

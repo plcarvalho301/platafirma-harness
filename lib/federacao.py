@@ -1,4 +1,4 @@
-"""Federação de identidade de workload (WIF) para a API da Anthropic (card #4122).
+"""Federação de identidade de workload (WIF) para a API da Anthropic.
 
 Obtém o token OIDC do Keycloak por client_credentials, grava o arquivo em modo 600
 e renova periodicamente em segundo plano enquanto o processo do modelo roda.

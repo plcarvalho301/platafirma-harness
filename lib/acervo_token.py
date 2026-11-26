@@ -1,7 +1,7 @@
 """Resolução de `RAG_API_TOKEN` pelo ambiente ou pelo armário de chaves da release (regra 4406.r2).
 
 A porta não carrega `EnvironmentFile` nem repassa segredos no ambiente dos verbos filhos
-(4406.r2, DT 933). Os clientes HTTP da API do acervo resolvem o token por aqui:
+(4406.r2). Os clientes HTTP da API do acervo resolvem o token por aqui:
   1. `RAG_API_TOKEN` no ambiente (vale mais — testes e terminal via `bin/pf`);
   2. primeiro segredo legível declarado em `$PLATAFIRMA_RELEASE/core/deploy/armario-de-chaves.yaml`,
      resolvido sob `$PLATAFIRMA_INSTANCIA`, na ordem `acervo-guarda/RAG_API_TOKEN`,

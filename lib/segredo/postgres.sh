@@ -2,7 +2,7 @@
 #
 # Dono: seguranca (chapéu cripto). O ciclo da senha de um papel do Postgres é do verbo `seg`:
 # `seg segredo rotacionar <stack>/<nome>... --postgres <banco> <papel>` cunha a primeira senha e
-# faz cada troca seguinte pela mesma chamada. `release migrar senha` (card #3375) repassa a esta
+# faz cada troca seguinte pela mesma chamada. `release migrar senha` repassa a esta
 # função com aviso de deprecação até sair.
 #
 # O valor não passa pelo chamador nem pela tela: nasce aqui, vai ao psql por stdin e a cada

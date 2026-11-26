@@ -21,7 +21,7 @@ REGRA_NOME = "verbo:busca §Como um nome vira ficha"
 REGRA_PLANO = "verbo:busca §Como a condição vira plano"
 _PREPOSICOES = frozenset({"de", "da", "do", "das", "dos"})
 _RE_PALAVRA_ESPACO = re.compile(r"\S+")
-# A partição casa saiu do motor (#4425); a busca pelo sentido atende a partição biblioteca (DT 1391).
+# A partição casa saiu do motor; a busca pelo sentido atende a partição biblioteca.
 PARTICAO_BUSCA_PELO_SENTIDO = "biblioteca"
 
 

@@ -1,4 +1,4 @@
-"""raizes — as duas raizes de producao e a bancada declarada (card #3010).
+"""raizes — as duas raizes de producao e a bancada declarada.
 
 Producao mora em duas raizes e so nelas: a release (codigo imutavel) e a instancia
 (segredos, dados, estado, logs). Todo caminho de producao deriva delas. A bancada

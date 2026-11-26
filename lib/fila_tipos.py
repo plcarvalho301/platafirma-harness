@@ -1,4 +1,4 @@
-"""Fonte unica dos tipos validos de mensagem da fila (ont:0082, DT 202)."""
+"""Fonte unica dos tipos validos de mensagem da fila."""
 from __future__ import annotations
 
 TIPOS_VALIDOS: frozenset[str] = frozenset({
