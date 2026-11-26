@@ -1,3 +1,4 @@
+# componente: componente:escrita
 """Suíte de contrato, concorrência e mutação da t8 (#4441).
 
 Cobre moradas git e Olaria com fiação real de produção (PDP em core/acesso),

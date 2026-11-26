@@ -1,3 +1,4 @@
+# componente: componente:leitura
 """Suíte de contrato nas sete moradas, paridade porta/terminal e mutação das guardas (story #4442, t11)."""
 from __future__ import annotations
 
