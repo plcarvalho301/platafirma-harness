@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # _acervo/impressao — `acervo ler biblioteca impressao`: le o texto de uma obra pelo espelho de
-# leitura, por pagina ou capitulo, do comeco e em ordem (spec espelho-de-leitura §5.4; #3180).
+# leitura, por pagina ou capitulo, do comeco e em ordem.
 #
 # Cliente fino da rota GET /acervo/obras/{obra}/impressoes/{impressao} do motor. Nao converte
-# nem renderiza (arq:0117 §5.2): imprime a fatia de espelho.md como esta no arquivo, entre a
+# nem renderiza: imprime a fatia de espelho.md como esta no arquivo, entre a
 # primeira linha (o que e, de onde veio, servivel) e a ultima (`proximo:` ou `fim da obra`).
-# exit (arq:0110 §4): 0 leu · 1 obra sem impressao servindo · 2 uso · 3 rota fora · 5 indeterminavel
+# exit: 0 leu · 1 obra sem impressao servindo · 2 uso · 3 rota fora · 5 indeterminavel
 import argparse
 import json
 import os
@@ -46,7 +46,6 @@ primeira linha: o que é, de onde veio, o julgamento (servível, servível imper
   tabela com coluna suspeita p. 120–131; página sem texto extraído p. 3` (página física; o aviso da obra inteira
   sai como `<rótulo> na obra`; o que não cabe vem contado como `+N`; sem aviso, `avisos: nenhum`)
 exit: 0 leu · 1 obra sem impressão servindo · 2 uso · 3 rota fora · 5 indeterminável
-spec: acervo ler casa spec espelho-de-leitura (§5.4)
 """
 
 _NOMES_FORA = {"cabecalho-corrente": "cabeçalho", "rodape": "rodapé", "navegacao": "navegação",
@@ -60,7 +59,7 @@ class Falha(Exception):
 
 
 def exit_de(status: int, titulo: str | None) -> int:
-    """Classe do erro HTTP da rota -> exit da arq:0110 §4."""
+    """Classe do erro HTTP da rota -> codigo de saida."""
     if status >= 500:
         return 5
     if status == 404:
@@ -74,7 +73,7 @@ def _numero(n) -> str:
     return "?" if n is None else str(n)
 
 
-# A linha de avisos (spec espelho-de-leitura §5.4; cards #3207 e #3193): «avisos: tabela com coluna suspeita
+# A linha de avisos: «avisos: tabela com coluna suspeita
 # p. 120–131; ordem entre colunas suspeita p. 3». A API devolve `espelho.avisos` (código, rótulo e faixas de
 # página, na ordem de classe de falha); aqui só se escreve numa linha. Os rótulos moram na API
 # (`rag/motor_acervo/leitura/avisos.py`): dados os troca sem mexer no índice nem neste verbo. A mesma regra
@@ -96,7 +95,7 @@ def _da_obra(aviso: dict) -> bool:
     return not aviso.get("paginas") and "detalhe" in aviso
 
 def avisos_da_faixa(avisos: list | None, unidades: str | None) -> list:
-    """Só os avisos das páginas lidas (spec espelho-de-leitura §4.5, «Aviso dentro da página», item 2; régua 3,
+    """Só os avisos das páginas lidas (
     #3240): cada faixa de página cortada em `unidades` (`a-b`, a faixa que a primeira linha declara); aviso que
     fica sem página sai, salvo o da obra inteira. Sem faixa (obra sem página), a lista como veio."""
     avisos = [a for a in (avisos or []) if isinstance(a, dict)]
@@ -117,7 +116,7 @@ def avisos_da_faixa(avisos: list | None, unidades: str | None) -> list:
 
 def linha_de_avisos(avisos: list | None, largura: int = LARGURA_DOS_AVISOS,
                     faixas_por_aviso: int = FAIXAS_POR_AVISO) -> str:
-    """`avisos: tabela com coluna suspeita p. 3–40; … +N` (spec espelho-de-leitura §5.4: o rótulo e as
+    """`avisos: tabela com coluna suspeita p. 3–40; … +N` (o rótulo e as
     páginas; o que não coube, contado em páginas no fim), ou `avisos: nenhum`. O aviso da obra inteira sai
     como `<rótulo> na obra`."""
     avisos = [a for a in (avisos or []) if isinstance(a, dict) and (a.get("paginas") or _da_obra(a))]

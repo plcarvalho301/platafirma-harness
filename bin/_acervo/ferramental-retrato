@@ -5,14 +5,14 @@
 #   (mecanismo/harness: claudinho-TI · construcao)
 #
 # Le o registro mestre do ferramental (acervo.ferramental_ato) e emite o RETRATO: um JSON com o
-# rotulo, a volta e o atalho de cada ato e o sha do registro de que saiu (arq:0124 §3, arq:0031).
-# A Taipa nao le o registro nem na execucao nem no build (arq:0125, U33): consome este arquivo,
+# rotulo, a volta e o atalho de cada ato e o sha do registro de que saiu.
+# A interface nao le o registro nem na execucao nem no build: consome este arquivo,
 # gerado por esta chamada e commitado em platafirma-ui. O retrato nao se edita a mao; rotulo errado
 # se cura no cabecalho do verbo (`# rotulo:`, `# volta:`, `# atalho:`) e se escreve de novo por
 # `acervo escrever casa ferramental <verbo>`.
 #
 # O objeto do rotulo entra no cabecalho como {slug} do conceito no tesauro e sai aqui resolvido
-# pelo rotulo preferido do conceito (arq:0125, Fechado depois do aceite, 4). Conceito que sumiu do
+# pelo rotulo preferido do conceito. Conceito que sumiu do
 # tesauro depois do registro derruba a emissao (exit 3): retrato com buraco nao se gera.
 #
 # Forma (esquema retrato-ferramental/1), sempre JSON em stdout:

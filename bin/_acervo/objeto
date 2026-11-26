@@ -1,5 +1,5 @@
 #!/opt/platafirma/current/venv/acervo/bin/python
-# _acervo/objeto — `acervo ler biblioteca arquivo` (antes `ler biblioteca objeto`, que recusa nomeando este; arq:0108 §10): baixa o arquivo original da obra (o objeto do store).
+# _acervo/objeto — `acervo ler biblioteca arquivo` (antes `ler biblioteca objeto`, que recusa nomeando este): baixa o arquivo original da obra (o objeto do store).
 # O nome do arquivo deste script segue `objeto` por ora: renome de arquivo é mudança de caminho para quem o chama; o ato é que mudou.
 # Sucede o antigo _acervo/baixar (bash, so titulo, so diretorio corrente; balde #2856 linhas 153 e 96).
 #

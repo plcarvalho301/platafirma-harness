@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-# _identidade.py — biblioteca de identidade da raiz da casa (acervo.entidade*, arq:0108).
+# _identidade.py — biblioteca de identidade da raiz da casa (acervo.entidade*).
 # Os três passos da spec_acervo.md §3:
 #   1. validar_forma: valida seletor no cliente para adr/decisao/minuta (exit 2 se invalido)
 #   2. resolver_canon: busca exata em chave_humana; se 0, busca em entidade_alias
 #      (0 -> exit 1 com 4 linhas fixas; 1 -> uuid; >1 -> exit 2 com candidatos)
 #   3. obter_substrato: busca endereco (repo@path) em acervo.entidade_suporte
 # Documento de casa NAO passa mais por aqui para ser lido: `acervo ler casa` resolve a chave
-# em acervo.casa (arq:0115 §3, §11; _acervo/casa). Esta biblioteca segue servindo a capacidade
+# em acervo.casa (_acervo/casa). Esta biblioteca segue servindo a capacidade
 # do `conferir verbo`, `curar alias` e o Sobre: de `listar casa --sobre`, e a negativa de 4 linhas de todos.
-# Nenhum caminho de repo de release: o suporte da casa e um so (SUPORTE, arq:0115 §1.2).
+# Nenhum caminho de repo de release: o suporte da casa e um so (SUPORTE).
 import json
 import os
 import re
@@ -22,9 +22,9 @@ PG = "rag-extractor-pg"
 DB = "rag_extractor"
 USR = "rag"
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _suporte import SUPORTE  # noqa: E402  (suporte da particao casa, arq:0115 §1.2)
+from _suporte import SUPORTE  # noqa: E402  (suporte da particao casa)
 
-# Forma da chave de adr (arq:0115 §3.2): a mesma RE_ADR de _acervo/casa.
+# Forma da chave de adr: a mesma RE_ADR de _acervo/casa.
 FORMA_ADR = r"^(?:([a-z]+):)?(\d{1,4})$"
 # A ficha da ADR mora na classe `decisao` do catalogo (triagem da #3764; migracao 114 da #3761); `adr` segue
 # valendo como nome de entrada (a especie do documento e o que o humano digita) e se le na classe nova.
@@ -167,7 +167,7 @@ def resolver_canon(classe, canon, numero_sem_serie=None):
     return psql_json(sql, "resolver_canon")
 
 
-# card #3139 item 1/2: mesmo rotulo de _acervo/casa.FORCA_ROTULO — duplicado de proposito
+# mesmo rotulo de _acervo/casa.FORCA_ROTULO — duplicado de proposito
 # (o mesmo motivo de FORMA_ADR acima: estes clientes nao se importam entre si). `registro`
 # leva a data embutida na chave datada (<AAAA-MM-DD>-<slug>): "registro de AAAA-MM-DD".
 _FORCA_ROTULO = {"decisao": "decisão", "proposta": "proposta",
@@ -197,7 +197,7 @@ _CAMPOS_PARECIDO = ("e.especie as especie, c.chave, c.repo, c.path, c.forca::tex
                    "c.revisao, c.retirada_em, c.substituida_por")
 
 def _parecidos_casa(especie, seletor):
-    """Card #3139 item 2: chaves parecidas em QUALQUER especie de acervo.casa (arq:0115 §3),
+    """Chaves parecidas em QUALQUER especie de acervo.casa,
     ate 5, na ordem chave exata em outra especie -> titulo que contem o termo -> pg_trgm em
     chave e titulo. Cada candidato leva a forca e a vigencia do mesmo campo do catálogo
     (`<especie> <chave> (<força> · <vigência>)`)."""
@@ -247,8 +247,8 @@ def _parecidos_casa(especie, seletor):
 
 
 def _varrido_casa():
-    """Linha `varrido:` da leitura de casa: SO o ponteiro do suporte (arq:0115 §1.2) em
-    casa_fonte. As fontes de antes da arq:0115 (repos de release) seguem em casa_fonte, porque
+    """Linha `varrido:` da leitura de casa: SO o ponteiro do suporte em
+    casa_fonte. As fontes anteriores (repos de release) seguem em casa_fonte, porque
     o servidor so insere; nao se nomeiam aqui. Linhas vivas vindas delas entram como contagem."""
     cf = psql_json(
         "select coalesce(json_agg(row_to_json(t)), '[]') from ("
@@ -270,14 +270,14 @@ def gerar_negativa(classe, seletor, casa=False):
     """Gera as 4 linhas fixas da spec §4 para exit 1.
 
     casa=True: `classe` e especie de acervo.especie_da_casa (a pasta) e o seletor e chave de documento
-    de casa (arq:0115 §3); parecidos vem das chaves de acervo.casa. Senao, `classe` e classe
+    de casa; parecidos vem das chaves de acervo.casa. Senao, `classe` e classe
     da raiz e parecidos vem de chave_humana/alias."""
     # 3 e 4. vizinho e cura: documento de casa mora no suporte platafirma-casa e entra pela
-    # ingestao por sha (arq:0115 §1.2, §8.1); nada de caminho de repo de release.
+    # ingestao por sha; nada de caminho de repo de release.
     if casa:
         top = _parecidos_casa(classe, seletor)
         parecidos_str = ", ".join(top) if top else "(nenhuma chave parecida)"
-        # card #3139 item 2: vizinho vira busca semântica pelo termo como veio, nao mais um
+        # vizinho vira busca semântica pelo termo como veio, nao mais um
         # comando de listagem estático.
         vizinho = f"motor rag buscar casa '{seletor}'"
         cura = (f"documento de casa entra por git: PR em {SUPORTE} -> merge em main -> "

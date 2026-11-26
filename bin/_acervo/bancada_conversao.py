@@ -1,9 +1,9 @@
-"""Agregador da bancada de conversão (card #3187, a serviço do piloto do #3181).
+"""Agregador da bancada de conversão.
 
 `acervo listar biblioteca bancada <pasta> [--json] [--estratos <arquivo>]` lê o que `curar --reextrair
 … --bancada <pasta>` gravou — `<pasta>/perfil/<obra_id>/relatorio.json` e
 `<pasta>/docling/<obra_id>/relatorio.json` —, pareia por obra_id e aplica a regra escrita pelo
-card #3181 ANTES de rodar:
+critério definido ANTES de rodar:
 
     Por obra, vence o método com menos perda e menos trecho irrecuperável (§2.9); empate se
     desfaz por inserção, duplicação e ordem, nessa ordem.
@@ -73,7 +73,7 @@ _MIME_CURTO = {
     "application/x-mimearchive": "mhtml",
 }
 
-REGRA = ("Regra do card #3181 (escrita antes de rodar): por obra, vence o método com menos perda "
+REGRA = ("Regra de decisão (escrita antes de rodar): por obra, vence o método com menos perda "
          "e menos trecho irrecuperável (§2.9); empate se desfaz por inserção, duplicação e ordem, "
          "nessa ordem. Chave = (perda, irrecuperável, inserção, duplicação, ordem), cada termo a "
          "soma dos papéis; menor chave vence; chave igual = empate (fica com o perfil). "

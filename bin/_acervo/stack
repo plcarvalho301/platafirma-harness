@@ -2,7 +2,7 @@
 # acervo stack — le e escreve a topologia de deploy na tabela acervo.stack.
 # capacidade: conhecimento
 # dono: dados
-#   (materia/semantica: claudinho-dados; a tabela e o golden record da topologia)
+#   (materia/semantica: dados; a tabela e o golden record da topologia)
 #
 # `acervo stack ver [--json]`            le a tabela (mesma fonte do `listar topologia`)
 # `acervo stack import <stacks.json>`    carrega o JSON pra tabela (upsert) — a ponte que
@@ -11,7 +11,7 @@
 #
 # `import` e `rm` ESCREVEM. Sem eles a tabela so nasce por seed SQL na mao, e o
 # stacks.json nao pode morrer porque e a unica porta de edicao. Este verbo e a porta:
-# depois do import, a tabela E a fonte-verdade e o arquivo sai (arq:0076/0071).
+# depois do import, a tabela E a fonte-verdade e o arquivo sai.
 #
 # Serializacao FIEL (licao do #2703): rotas/gate/segredos/reversao/profiles entram como
 # jsonb via to_jsonb do valor CRU (nunca embrulhar string que ja tem aspas); compose
@@ -36,7 +36,7 @@ USO = """uso:
 
 Escreve em acervo.stack, o golden record da topologia de deploy. Depois de `import`
 + conferencia, o stacks.json pode ser apagado: a tabela vira a fonte, e o
-`acervo listar topologia --completo` a serve ao deploy (arq:0076)."""
+`acervo listar topologia --completo` a serve ao deploy."""
 
 
 def morre(msg, code=2):
@@ -166,7 +166,7 @@ def cmd_import(arq):
         morre("acervo stack import: %s nao e JSON valido: %s" % (fonte, e), 3)
     stacks = _normaliza_stacks(doc, fonte)
 
-    # DT 289 e DT 291: unicidade do caminho de compose (ADR arq:0081, incidente #3586).
+    # unicidade do caminho de compose.
     # Nenhuma duplicata de compose entre stacks conteiner é aceita.
     composes_no_lote = {}
     for slug, s in stacks.items():
@@ -234,7 +234,7 @@ def cmd_rm(slug):
 
 
 # O serviço é a ficha da classe `servico` ligada por `parte-de` à ficha da stack; a unit é a declaração dele
-# na forma de processo de host (arq:0025 §1 e §2) e entra na ficha como alias de origem `unit` (a forma de
+# na forma de processo de host e entra na ficha como alias de origem `unit` (a forma de
 # entrada, nunca a chave: carta do arquiteto 20261021T113710). O suporte não serve: o CHECK dele só aceita git,
 # minio, wiki, arquivo, valkey e sql. Alias que termina em `*` vale por prefixo (units transientes, como
 # platafirma-job-*).

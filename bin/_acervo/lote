@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""acervo lote — leitura e recorte de lote do acervo com contagem de conceitos (DT 1392).
+"""acervo lote — leitura e recorte de lote do acervo com contagem de conceitos.
 
 uso:
   acervo lote <id> [--pendentes | --curadas] [--json]

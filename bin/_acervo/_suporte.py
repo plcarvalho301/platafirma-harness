@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-# _suporte.py — o espelho bare do suporte da partição casa (arq:0115 §1.2, §8.1).
+# _suporte.py — o espelho bare do suporte da partição casa.
 #
 # O suporte de documento de casa é o repositório `platafirma-casa`. Ele NÃO é unidade de
-# release (arq:0115 §1.2): não mora em /opt/platafirma, e a bancada nunca é fonte de
-# produção (card #3010, lib/raizes.py). A ingestão lê o objeto git pelo sha num espelho
+# release: não mora em /opt/platafirma, e a bancada nunca é fonte de
+# produção (lib/raizes.py). A ingestão lê o objeto git pelo sha num espelho
 # bare na INSTÂNCIA, no mesmo padrão do `.repo.git` de bin/release: git absoluto, a
 # credencial da própria conta (config do git no HOME dela), fetch só de refs/remotes/origin/*
-# e refs/tags/*, refs/heads/* do espelho expurgado (referência fóssil, arq:0074).
+# e refs/tags/*, refs/heads/* do espelho expurgado (referência fóssil).
 #
 # Quem usa: _acervo/casa-ingerir (fetch + leitura por sha) e _acervo/casa (só lê o
 # origin/main já buscado, para o campo `servido`; leitura não busca no forge).
@@ -91,7 +91,7 @@ def main_do_espelho(esp=None):
 def ultima_busca(esp=None):
     """Quando o espelho foi buscado do forge pela última vez ('AAAA-MM-DD HH:MMZ', UTC), pelo
     mtime do FETCH_HEAD que todo `fetch` regrava; None se nunca buscou. Leitura não busca:
-    o `servido` diz de quando é o main que ele compara (arq:0110 Q6)."""
+    o `servido` diz de quando é o main que ele compara."""
     esp = esp or espelho()
     try:
         t = os.stat(os.path.join(esp, "FETCH_HEAD")).st_mtime

@@ -1,10 +1,10 @@
-"""Montagem na leitura da spec (arq:0126 §11 a §13) — o que o golden record serve, no ato.
+"""Montagem na leitura da spec — o que o golden record serve, no ato.
 
 A spec cita pela chave o que o golden record sabe; `acervo ler casa spec <chave>` monta, depois
 do corpo, os blocos derivados: as camadas de Onde mora no mapa, do que a peça depende, como sobe
 e como volta, os segredos por referência, os documentos que declaram a peça em `Sobre:` e a data
 da última conferência contra produção (acervo.casa.conferida_em, 093). O que a classe ainda não
-tem no golden record sai numa lista própria, com a dona da classe (spec entidade-raiz-da-casa).
+tem no golden record sai numa lista própria, com a dona da classe.
 
 Puro: `referentes_do_sobre` e `render` não tocam banco; `sql` devolve a consulta que o chamador
 roda (um SELECT que devolve um objeto json). Segredo sai só por referência: caminho de pasta ou
@@ -33,7 +33,7 @@ NAO_MONTADO = (
 
 def referentes_do_sobre(corpo):
     """[(classe, chave)] do primeiro `Sobre:` do cabeçalho (texto antes do 1º `## `), na ordem
-    escrita. O primeiro é a peça (arq:0126 §1). Item fora da forma `<classe> <chave>` sai."""
+    escrita. O primeiro é a peça. Item fora da forma `<classe> <chave>` sai."""
     texto = (corpo or "").replace("\r\n", "\n")
     m = _RE_SECAO.search(texto)
     cab = texto[: m.start()] if m else texto
@@ -159,17 +159,17 @@ def _rev(rev):
 def render(dados, refs):
     """O bloco em markdown. `dados` é o objeto de `sql`; None = banco fora (uma linha diz)."""
     L = ["", "---", "", "## Montado na leitura", "",
-         "_Do golden record, no ato da leitura (arq:0126 §11); não está no arquivo. "
+         "_Do golden record, no ato da leitura; não está no arquivo. "
          "Só o arquivo: `--cru`._", ""]
     if dados is None:
         L.append("indisponível: o banco não respondeu; vale só o que está escrito acima.")
         return "\n".join(L) + "\n"
     if not refs:
-        L.append("sem `Sobre:` no cabeçalho: não há peça a montar (arq:0126 §1).")
+        L.append("sem `Sobre:` no cabeçalho: não há peça a montar.")
         return "\n".join(L) + "\n"
     conf = dados.get("conferida_em")
     L.append(f"Conferida contra produção: {conf}" if conf else
-             "Conferida contra produção: não declarada no Estado (arq:0126 §10).")
+             "Conferida contra produção: não declarada no Estado.")
     L.append("")
 
     fichas = {(f["classe"], f["chave"]) for f in dados.get("fichas") or []}

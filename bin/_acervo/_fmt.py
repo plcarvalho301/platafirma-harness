@@ -26,7 +26,7 @@ for rot, ch in [
     ("embedding parcial", "embedding_parcial"),
     ("sem vetor de faceta", "sem_vetor_de_faceta"),
     ("objeto no store sem obra", "objeto_no_store_sem_obra"),
-    # arq:0027 — hoje 0 por construção (FK NOT NULL + CASCADE). Vigia, não descoberta.
+    # hoje 0 por construção (FK NOT NULL + CASCADE). Vigia, não descoberta.
     ("impressão sem obra (órfão)", "impressao_sem_obra"),
     ("vetor sem impressão (órfão)", "vetor_sem_impressao"),
 ]:

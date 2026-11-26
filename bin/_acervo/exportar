@@ -3,7 +3,7 @@
 
 A cadeia (guia de evolucao da ontologia, §7) tem dois elos e nao para no meio:
 
-  1. `motor_acervo.cli exportar-acervo --out <bancada>/ontologia/acervo`
+  1. CLI do motor do acervo gravando em `<bancada>/ontologia/acervo`
      Postgres -> ontologia/acervo/*.jsonl (so LE o banco)
   2. `scripts/gen_referencia_template.py --vocabulario`
      export -> rag/docs/ontologia/vocabulario.json (offline, stdlib)
@@ -32,8 +32,8 @@ ATO = "exportar"   # o nome nas mensagens
 REG = os.environ.get("PF_MOTOR_REG") or str(_ARVORE / "registro" / "motor-instancias.json")
 CANON_INSTANCIA = "/srv/platafirma/casa/"
 DOCKER_HOST = "unix:///run/user/1001/docker.sock"  # o mesmo do bin/motor
-# a spec do verbo mora no suporte da casa e se lê pela chave (arq:0115; mesmo SPEC de bin/acervo)
-SPEC = "spec acervo (acervo ler casa spec acervo)"
+# referência do verbo (mesmo SPEC de bin/acervo)
+SPEC = "verbo acervo"
 
 
 def morre(msg: str, cod: int = 3) -> None:
