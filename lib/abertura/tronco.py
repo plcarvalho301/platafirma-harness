@@ -1,8 +1,8 @@
-"""Resolução do tronco do trabalho (processo e passo do card) pela Olaria (F4073, r30).
+"""Resolução do tronco do trabalho (processo e passo do card) pela Olaria.
 
 Invocado pela porta (`core/porta/tronco.py`) por subprocesso via `python -m abertura tronco`.
 Lê a propriedade `conduz` das fichas de `processo` e suas filhas na Olaria (a mesma fonte do
-ponteiro de estágio do card #4359), sem guardar tabela de estado -> processo no código.
+ponteiro de estágio), sem guardar tabela de estado -> processo no código.
 """
 from __future__ import annotations
 

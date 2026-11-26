@@ -1,7 +1,7 @@
-"""Ponto de entrada CLI JSON da `lib/abertura` (story #4343, T2).
+"""Ponto de entrada CLI JSON da `lib/abertura`.
 
 Invocado pela porta (`core/porta`) por subprocesso (`python -m abertura abrir|remontar|exigir-sessao`),
-cumprindo a regra r34 da F4073 (core nunca importa módulo do harness) e sem chamar `bin/expediente`
+porque o core nunca importa módulo do harness, e sem chamar `bin/expediente`
 nem ler cópia publicada em disco.
 """
 from __future__ import annotations
@@ -458,7 +458,7 @@ def _ato_abrir(entrada: dict[str, Any]) -> tuple[dict[str, Any], int]:
     if chapeu_slug and "chapeu" not in pecas and p_chapeu is not None and p_chapeu.ok:
         pecas["chapeu"] = p_chapeu.conteudo
 
-    # DT 1374: persona, chapéu e cultura já vão em `pecas`; `roteiro` carrega só as peças complementares.
+    # Persona, chapéu e cultura já vão em `pecas`; `roteiro` carrega só as peças complementares.
     partes_extras = [p for p in roteiro.partes if p.parte not in pecas_principais]
     partes_dict = [p.como_dict() for p in partes_extras]
     roteiro_conteudo = "\n\n".join(p.conteudo for p in partes_extras if p.conteudo)
