@@ -631,6 +631,18 @@ def test_sanear_nao_toca_bancada_viva_suja(tmp_path):
     assert _git("rev-parse", "--abbrev-ref", "HEAD", cwd=wt) == "fabrica/42-x"
 
 
+def test_sanear_remove_bancada_limpa_ancestral_de_origin_main(tmp_path):
+    """DT-1409: bancada limpa cuja ponta ja foi entregue direto em main (sem PR)."""
+    bancada = _montar(tmp_path)
+    wt = _abrir_42(tmp_path, bancada)
+    _commit_em(wt, "direto.md", "entregue direto em main\n")
+    _git("push", "origin", "HEAD:main", cwd=wt)
+    r = _repo(tmp_path, bancada, "s9", "sanear")
+    assert r.returncode == 0, r.stderr + r.stdout
+    assert not wt.exists()
+    assert "entregue: ancestral de origin/main" in r.stdout
+
+
 def test_sanear_relatar_nao_apaga_e_nomeia(tmp_path):
     bancada = _montar(tmp_path)
     wt = _abrir_42(tmp_path, bancada)

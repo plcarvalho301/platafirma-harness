@@ -4348,6 +4348,12 @@ sanear_conforme() {
           for o in ${merged["$ramo"]}; do [ "$o" = "$head" ] && oid="$o"; done
         elif [ "$("$GIT" -C "$wt" for-each-ref --format='%(upstream:track)' "refs/heads/$ramo")" = "[gone]" ]; then
           entregue="ramo apagado do origin"
+        elif [ "$classe" = eixo ] \
+             && [ -n "$head" ] \
+             && [ -z "$("$GIT" -C "$wt" status --porcelain 2>/dev/null)" ] \
+             && "$GIT" -C "$base" merge-base --is-ancestor "$head" origin/main 2>/dev/null; then
+          entregue="ancestral de origin/main"
+          oid="$head"
         fi
       fi
       if [ -n "$entregue" ]; then acao="remover (entregue: $entregue)"
