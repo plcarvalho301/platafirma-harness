@@ -6,11 +6,11 @@
 # atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub, ordenar, bloquear, desbloquear, carteira, inventario, espera-dono (leitura, trabalho)
 # mecanismo: espera-dono=casca
 #
-# Texto do controle (arq:0124 §3; arq:0125 U33; card #3446). Todo ato cai na face Entrega.
+# Texto do controle. Todo ato cai na face Entrega.
 # Rótulo: verbo no infinitivo e objeto sem artigo, um verbo por tipo de ato (Listar uma coleção,
 # Abrir um item; regra de produto, comentário #2216 do #3446). O objeto entra pelo slug, `{slug}`,
 # quando o conceito é do tesauro; termo da casa (card, comentário, estado, débito técnico) vai
-# escrito até o tesauro ter o braço da casa (arq:0124 §3, emenda de 12/10/2026). volta: diz se
+# escrito até o tesauro ter o braço da casa. volta: diz se
 # o efeito se desfaz; ato que só lê declara exatamente `sim — só lê`.
 # face: listar=Entrega
 # face: listar-tudo=Entrega
@@ -72,15 +72,15 @@
 # volta: desbloquear=sim — tarefas bloquear
 # volta: carteira=sim — só lê
 # volta: inventario=nao
-# Backend: `platafirma-rastreador` (API própria), desde 16/08/2026. O Vikunja saiu.
+# Backend: `platafirma-rastreador` (API própria).
 #
 # Loopback, e não a rota pública: `tarefas.platafirma.org` serve a superfície HUMANA
 # atrás do gate do control-plane, e agente não atravessa oauth2-proxy. O agente entra
-# pelo loopback da máquina, que já é a fronteira dele (card #469).
+# pelo loopback da máquina, que já é a fronteira dele.
 #
 # SEM CREDENCIAL, por desenho: não há auth no código do módulo. Quem escreve declara o
 # nome no cabeçalho de sujeito, e é ele que a transição carimba — `PF_CADEIRA` (ou
-# `PF_SUJEITO` da conexão quando a abertura está degradada, DT 928) vira
+# `PF_SUJEITO` da conexão quando a abertura está degradada) vira
 # `x-auth-request-preferred-username`. Ausentes ambos, a escrita entra como anônima.
 set -euo pipefail
 
@@ -88,7 +88,7 @@ set -euo pipefail
 # e virou servico proprio, e quem separa os dois e o gate da borda, que roteia por
 # prefixo de path. A arvore de dado deixou de responder na raiz — sem o prefixo aqui,
 # este verbo quebraria para toda cadeira no mesmo minuto.
-# O loopback continua sendo a porta do agente (card #469): a borda gateia a superficie
+# O loopback continua sendo a porta do agente: a borda gateia a superficie
 # HUMANA, e um Bearer de agente nao atravessa oauth2-proxy.
 BASE="${TAREFAS_BASE:-http://127.0.0.1:8120/api}"
 
@@ -129,7 +129,7 @@ uso:
                                           englobado, descartado) NÃO SAI EM ATO DE LEITURA NENHUM:
                                           listar, listar-tudo, ler, comentarios, sub, espera-dono,
                                           --quadro e api GET o tiram da lista, e o pedido direto
-                                          dele sai recusado com exit 1 (ordem do dono, 17/11/2026)
+                                          dele sai recusado com exit 1
   tarefas ler|ver <id> [--cabecalho] [--todas-filhas] [--linhas <faixa>] [--offset <bytes>] [--max-bytes <n>] [--inteiro]
                                           item em texto: cabeçalho (originação, executor,
                                           quem bloqueia e por quem é bloqueado), ancestrais,
@@ -161,9 +161,9 @@ uso:
                                           registro de negócio, use --nivel ideia ou feature.
                                           Story sem pai exige --registro, gravado como
                                           registro de negócio na mesma transação (R16,
-                                          arq:0127 D8).
+                                          no destino).
                                           Nascer fora de `captada`, ou sair dela, exige o
-                                          corpo no padrão do nível (arq:0096)
+                                          corpo no padrão do nível
   tarefas editar <id> [--titulo "<t>"] [--desc "<txt>"|--desc-stdin]
                 [--cadeira <c>|--sem-cadeira] [--nivel épico|feature|story|task|ideia]
                 [--originacao negocio|tecnico|incidente] [--executor <c>]
@@ -171,7 +171,7 @@ uso:
                                           troca título, corpo, cadeira, nível, originação e/ou executor (o corpo é
                                           substituído inteiro); não mexe no estado — mover é
                                           `mover`. Cadeira e nível inválidos a API recusa.
-                                          `--trecho` (card #4110) troca o corpo só num ponto: `--antes`
+                                          `--trecho` troca o corpo só num ponto: `--antes`
                                           tem de ocorrer UMA vez no corpo gravado e vira `--depois`
                                           (vazio apaga); o resto sai idêntico e o pedido leva só o
                                           trecho. O corpo gravado é HTML: o trecho recebe o mesmo
@@ -189,7 +189,7 @@ uso:
                                           cadeira dona em em-refinamento-tecnico, depois de
                                           ler o código; a executora, quando é outra, revisa
                                           antes de começar (classe story)
-  tarefas comentar <id> ["<txt>"]         cria comentário (entidade própria — card #390,
+  tarefas comentar <id> ["<txt>"]         cria comentário (entidade própria,
                                           não altera o corpo do item); sem texto, lê stdin
   tarefas comentar <id> --fecha <n> "<resultado> — <destino>"
                                           escreve «fecho: …» como última linha do comentário n
@@ -210,10 +210,10 @@ uso:
                                           move o card pelo fluxo; a recusa diz para onde
                                           se PODE ir a partir do estado atual. Item com
                                           pai devolve junto o derivado do pai e as irmãs
-                                          abertas (arq:0095) — é a âncora do PARCIAL:
+                                          abertas — é a âncora do PARCIAL:
                                           No sucesso traz ainda, depois deles, a linha do
                                           processo que conduz o estado de destino, quando o
-                                          catálogo o liga (card #4359)
+                                          catálogo o liga
   tarefas mover <pai> priorizada --decisao <n>
                                           a aposta: <n> é o comentário de decisão do PRÓPRIO
                                           pai; sem ele a API recusa dizendo como informar (R36)
@@ -258,7 +258,7 @@ uso:
   tarefas api <MÉTODO> <caminho>          escotilha, sem corpo
   tarefas api-corpo <MÉTODO> <caminho>    escotilha, corpo JSON em stdin
 
-NÃO HÁ PROJETO neste modelo. `46` e `1` eram do Vikunja; o recorte agora é por eixo
+NÃO HÁ PROJETO neste modelo; o recorte é por eixo
 (cadeira, estado, nível). Chamada antiga com projeto no lugar do primeiro argumento
 segue funcionando: o número é ignorado, com aviso em stderr.
 FIM
@@ -269,7 +269,7 @@ FIM
 
 _hdr_sujeito() { [ -n "$QUEM" ] && printf '%s' "x-auth-request-preferred-username: $QUEM"; }
 
-# RECUSA DA API NÃO É SILENCIOSA — card #224. Era `-sfS`, e `-f` DESCARTA O CORPO: toda
+# RECUSA DA API NÃO É SILENCIOSA. Era `-sfS`, e `-f` DESCARTA O CORPO: toda
 # recusa de regra chegava à cadeira como `curl: (22) ... error: 400`, sem uma palavra sobre
 # o que a máquina disse. Com `--fail-with-body` (curl 8.5 no host) o corpo vem, e é ele que
 # carrega o texto da máquina — inclusive a lista de destinos que este card mandou escrever.
@@ -279,7 +279,7 @@ _recusa() { # lê o corpo do erro em $1 (e opcionalmente $2=http_code $3=rota $4
   if [ -z "$erro" ] && [ -n "$(printf '%s' "$corpo" | tr -d '[:space:]')" ]; then
     erro=$(printf '%s' "$corpo" | tr '\r\n' ' ' | cut -c1-300)
   fi
-  # A LISTA DE DESTINOS SAIU DE DENTRO DE `.erro` E VIROU CAMPO (card #245): no board ela
+  # A LISTA DE DESTINOS SAIU DE DENTRO DE `.erro` E VIROU CAMPO: no board ela
   # empurrava a coluna, e a API passou a devolver causa e lista separadas. Aqui elas se
   # recolam, porque quem lê terminal quer a frase inteira — o CLI não regride com a mudança
   # de forma. Recusa sem o campo (nascimento, validação de corpo) segue imprimindo só a causa.
@@ -377,7 +377,7 @@ envia() { # envia MÉTODO /caminho  (corpo JSON em stdin)
 
 # --- portão do funil -----------------------------------------------------------
 
-# CARD FORA DO FUNIL NÃO APARECE EM LEITURA (ordem do dono, 17/11/2026): para quem usa o
+# CARD FORA DO FUNIL NÃO APARECE EM LEITURA: para quem usa o
 # gatilho de tarefas, card em estado terminal (entregue, encerrado, cancelado, englobado,
 # descartado, recusado, resolvido, e o que mais o registro marcar terminal) não aparece sob
 # hipótese nenhuma. O portão mora AQUI, no transporte, e não em cada ato: todo GET que um ato
@@ -504,7 +504,7 @@ _exec_curl() { # _exec_curl MÉTODO /caminho [corpo_em_stdin=0|1]
   _funil_podar "$corpo"
 }
 
-# --- corpo: o rastreador guarda HTML, como o Vikunja guardava ---------------
+# --- corpo: o rastreador guarda HTML ----------------------------------------
 
 # Os rotulos dos modelos (`tarefas modelo`, todos os niveis e o Plano) saem em negrito e cada
 # campo abre o proprio paragrafo; as linhas que seguem o rotulo (listas, passos) ficam no
@@ -519,7 +519,7 @@ _exec_curl() { # _exec_curl MÉTODO /caminho [corpo_em_stdin=0|1]
 # (R34): o algoritmo e a regex da URL sao os mesmos, sem aspa simples porque o Python mora
 # dentro de aspas simples do shell (\x22 e \x27; a crase, \x60, tambem termina o endereco, e
 # o sublinhado e o asterisco finais saem do link, como a pontuacao).
-# DT 292: a conversão mora exclusivamente em `api/logica.py:para_html` (platafirma-rastreador),
+# a conversão mora exclusivamente em `api/logica.py:para_html` (platafirma-rastreador),
 # exposta por `POST /para-html`. O verbo não mantém cópia local do algoritmo.
 para_html() {
   local texto resp html
@@ -545,7 +545,7 @@ t = html.escape(os.environ["FRAG"].replace("\r\n", "\n"))
 print(re.sub(r"\n{2,}", "</p><p>", t).replace("\n", "<br>"), end="")'
 }
 
-# DT 783: quando um servidor sem resolução de HTML recusa `antes` com «ocorre 0 vezes»,
+# quando um servidor sem resolução de HTML recusa `antes` com «ocorre 0 vezes»,
 # resolve `antes` e `depois` (como `tarefas ler` exibe: listas `1. `/`  - `, tags inline
 # `<code>`/`<strong>` omitidas, « » e …) contra o `.descricao` do item e devolve o par HTML.
 _resolve_trecho_no_corpo() { # _resolve_trecho_no_corpo <json_item> <antes> <depois>
@@ -681,7 +681,7 @@ print(saida, end="")
 descarta_projeto() {
   case "${1:-}" in
     ''|*[!0-9]*) return 1 ;;
-    *) echo "aviso: '$1' era projeto do Vikunja e não existe mais; ignorado." >&2; return 0 ;;
+    *) echo "aviso: '$1' era projeto legado e não existe mais; ignorado." >&2; return 0 ;;
   esac
 }
 
@@ -701,13 +701,13 @@ monta_query() { # monta_query "$@" -> ecoa a query string
         local cad="${2:?--cadeira pede o nome da cadeira}"
         q="$q&cadeira=$cad"; shift 2 ;;
       --estado)
-        # A LISTA DE ESTADOS NÃO MORA AQUI (card #3526, R10 da spec tarefas): estado novo entra no
+        # A LISTA DE ESTADOS NÃO MORA AQUI: estado novo entra no
         # registro por INSERT (`despriorizada` entrou pela 016), e uma cópia no verbo recusaria o
         # estado que a API já serve. A API recusa o desconhecido com a própria mensagem, que
         # traz a lista dos válidos.
         local est="${2:?--estado pede o nome do estado}"
         q="$q&estado=$est"; shift 2 ;;
-      # ORIGINAÇÃO É O `tipo_demanda` DO ITEM (card #3521): o verbo usa a palavra da spec e a API,
+      # ORIGINAÇÃO É O `tipo_demanda` DO ITEM: o verbo usa o vocabulário do rastreador e a API,
       # a coluna. O valor fora do registro sai 422 por lá, com os válidos; a lista não está aqui.
       --originacao)
         local orig="${2:?--originacao pede negocio, tecnico ou incidente}"
@@ -769,7 +769,7 @@ linhas_com_data() { # id (t<n> na task), marca de terminal, data (AAAA-MM-DD), t
     | "\($it | rotn)\t\(if ($it.estado_derivado != null and ($term | index([$it.estado_derivado]) != null)) or ($it.estado_derivado == null and $it.estado_fase == "terminal") then "x" else " " end)\t\(($it.ultimo_movimento // $it.criado_em // "")[0:10])\t\($it.titulo)\($it | da_story)"'
 }
 
-# QUADRO (R35 da spec tarefas, card #3619): `--quadro` bypassa `/itens` e vai direto à
+# QUADRO: `--quadro` bypassa `/itens` e vai direto à
 # projeção pronta do rastreador (`GET /quadro/{tipo}`) — o verbo não guarda lista de estados
 # de quadro nenhuma (Travas do card); quem confere o `tipo` é a API, e a recusa dela chega
 # como vier. Sem --paradas, pede `?dormentes=excluir` e, se algo saiu, diz quantas.
@@ -814,7 +814,7 @@ _projetar_campos() {
 listar() { # listar [filtros] [--paradas] [--json] [--quadro discovery|delivery]   — só os abertos
   _tem_flag --quadro "$@" && { listar_quadro "$@"; return; }
   local q; q=$(monta_query "$@")
-  # AS PARADAS FICAM DE FORA (card #3526, R25): `despriorizada` é aberta (fase funil), mas é o que
+  # AS PARADAS FICAM DE FORA: `despriorizada` é aberta (fase funil), mas é o que
   # ninguém está fazendo, e na fila de trabalho ela atrapalha. Entra com `--paradas`, ou quando o
   # estado é pedido pelo nome. A ordem da listagem é a do posto, que a API entrega pronta.
   local ocultar=true
@@ -885,7 +885,7 @@ estados() {
   busca GET /registro | jq -r '(.estados // .)[] | select(.retirado != true) | "\(.estado)\t\(.fase)\t\(.nome)"'
 }
 
-# Estados de fase ou natureza terminal lidos do registro (card #3750).
+# Estados de fase ou natureza terminal lidos do registro.
 _estados_terminais() {
   busca GET /registro | jq -c '((if type == "array" then . else (.estados // []) end) | [.[]? | select(.fase == "terminal" or .natureza == "terminal") | .estado] | unique)' 2>/dev/null || echo '[]'
 }
@@ -893,13 +893,13 @@ _estados_terminais() {
 # --- item -------------------------------------------------------------------
 
 # `#N` e `N` são o MESMO número: o rastreador tem um identificador só por item, e é essa a
-# razão de o Vikunja ter saído. O `#` é aceito porque a fila e os cards o escrevem.
+# formato canônico de id. O `#` é aceito porque a fila e os cards o escrevem.
 #
-# A TASK TEM CHAVE POR STORY (card #4245): `<story>.t<n>`, como `4216.t1`. O rastreador guarda o
+# A TASK TEM CHAVE POR STORY: `<story>.t<n>`, como `4216.t1`. O rastreador guarda o
 # id dela numa sequência própria, que nenhuma superfície mostra; aqui a chave que a pessoa
 # digita vira o id que as rotas endereçam, por `GET /itens/chave/<chave>`. Chave que não existe
 # sai como a recusa do rastreador (404), e não como id inventado.
-# DT 690: aceita `<story>-t<n>` além de `<story>.t<n>`, e resolve `t<n>` (o id curto que `criar`
+# aceita `<story>-t<n>` além de `<story>.t<n>`, e resolve `t<n>` (o id curto que `criar`
 # e `sub` devolvem) pelo `--pai`/última story operada na sessão ou pelas tasks abertas em `/itens`.
 _arq_pai_sessao() {
   printf '/tmp/pf-tarefas-pai-%s' "$(printf '%s' "${PF_SESSAO:-}|${BASE}" | sha256sum | cut -c1-16)"
@@ -959,13 +959,13 @@ so_id() {
   esac
 }
 
-# O NOME QUE SE EXIBE DA TASK É SÓ `t<n>` (ordem do dono, 13/11/2026, card #4245): a task é sempre
+# O NOME QUE SE EXIBE DA TASK É SÓ `t<n>`: a task é sempre
 # filha de uma story, que o contexto já diz, e `<story>.t<n>` é o que se DIGITA (`so_id`) e o que o
 # banco guarda. `rot` é a forma de listagem (`#id` no card, `t<n>` na task); `rotn`, a do relato
 # (`id` sem sustenido no card, `t<n>` na task). Quem exibe item prefixa o programa jq com isto.
 #
 # INCIDENTE #4250 (13/11/2026): fora do banco, a task se chama SÓ `t<n>`, em toda saída do verbo,
-# e nenhuma linha imprime o id dela (ordem do dono: «não é pra voltar esse número inteiro em nenhuma
+# e nenhuma linha imprime o id dela («não é pra voltar esse número inteiro em nenhuma
 # interface»). Onde a API devolve o item sem `chave` (o bloqueador de uma task, a filha movida junto,
 # o apagado), `rotx($m)` acha a chave num mapa id → chave montado do detalhe que já está na mão; e
 # onde só se tem o id (o argumento resolvido por `so_id`, o item de um comentário), `rotulo_de`
@@ -1039,7 +1039,7 @@ ler() {
   if [ "${#leitura_args[@]}" -gt 0 ]; then
     PYTHONPATH="$lib_harness${PYTHONPATH:+:$PYTHONPATH}" python3 -m leitura.verbo --validar-opcoes --rotulo "tarefas ler" "${leitura_args[@]}" || exit $?
   fi
-  # UMA LEITURA SERVE A TUDO (card #3526): o detalhe do item já traz o vínculo (`bloqueia`,
+  # UMA LEITURA SERVE A TUDO: o detalhe do item já traz o vínculo (`bloqueia`,
   # `bloqueado_por`, #3523) e, quando o item tem filha, `filhas` em ordem de dependência. Antes as
   # filhas vinham de uma segunda chamada que puxava o board inteiro e peneirava por pai.
   local q=""
@@ -1106,7 +1106,7 @@ ler() {
     # FILHAS — card lido sem ver o que pende embaixo não serve para repriorizar:
     # ler um épico/feature e não enxergar a subárvore era o furo. Puxa os filhos
     # diretos, um por linha (id · estado · cadeira · título), na ordem de dependência que a API
-    # já entrega em `.filhas` (card #3523), com a travada marcada. SÓ ABERTAS: terminal
+    # já entrega em `.filhas`, com a travada marcada. SÓ ABERTAS: terminal
     # (entregue, englobada, etc.) fica fora — a mesma régua de fase que `listar` aplica, pela
     # mesma razão. Filha entregue é auditoria, e auditoria é `listar-tudo`, não leitura de card.
     # Card #4223 (R37): as filhas de uma STORY são as tasks dela, e saem todas, na ordem, com o
@@ -1122,16 +1122,16 @@ ler() {
       if [ -n "$filhas" ]; then printf '\nfilhas (abertas):\n%s\n' "$filhas"; fi
     fi
     # Sem filha aberta o `[ -n ]` acima devolve 1 e, sendo o ultimo comando do bloco sob
-    # `set -e`, sairia com exit 1 DEPOIS de imprimir o card inteiro (card #11/09/2026).
+    # `set -e`, sairia com exit 1 DEPOIS de imprimir o card inteiro.
     true
   } | PYTHONPATH="$lib_harness${PYTHONPATH:+:$PYTHONPATH}" python3 -m leitura.verbo --stdin --rotulo "tarefas ler" "${leitura_args[@]}"
 }
 
 # Filhas DIRETAS ainda abertas, uma por linha (id · estado · cadeira · título), lidas do campo
 # `filhas` do detalhe do pai (JSON em $1): a API as entrega em ordem de dependência, com o posto
-# desempatando, e `travada` quando algum bloqueador ainda não fechou (card #3523). Compartilhada
+# desempatando, e `travada` quando algum bloqueador ainda não fechou. Compartilhada
 # por `ler` e por `mover`: é a MESMA peneira nas duas, para que a linha `PARCIAL:` do relato
-# (arq:0095) e a leitura do card nunca discordem sobre o que pende. O que é terminal sai do
+# e a leitura do card nunca discordem sobre o que pende. O que é terminal sai do
 # registro (um GET pequeno), e não do board inteiro, que é o que esta função puxava antes.
 filhas_do_json() {
   local termos="[]" incluir_todas=0
@@ -1152,7 +1152,7 @@ filhas_do_json() {
          else "" end)'
 }
 
-# AS TASKS DA STORY (card #4223, R37 da spec tarefas): a task é o passo da story, filha direta
+# AS TASKS DA STORY: a task é o passo da story, filha direta
 # dela, e a leitura da story as traz TODAS, abertas e concluídas, na ordem que a API entrega em
 # `.filhas` (dependência, com o posto desempatando), cada uma com o estado. Não há peneira de
 # terminal aqui: ao contrário das filhas de feature e de épico, o que a cadeira que retoma a story
@@ -1174,7 +1174,7 @@ tasks_do_json() {
       end'
 }
 
-# ENTREGA É DERIVADA DO PAI (arq:0095, dono 02/09/2026). Item executável movido devolve, no
+# ENTREGA É DERIVADA DO PAI. Item executável movido devolve, no
 # MESMO retorno, o estado derivado do pai e as irmãs abertas — é a âncora que a linha
 # `PARCIAL:`/`ENTREGA:` do relato cola. Sem isto a forma exigiria segunda chamada, e regra
 # que depende de segunda chamada morre como o bullet morreu (3 reincidências pós-b888bcb).
@@ -1195,8 +1195,8 @@ pai_e_irmas() { # pai_e_irmas <id-do-pai>
   fi
 }
 
-# SIGN-OFF PELO VERBO — card #347. A rota existia desde o #466 e não tinha verbo, e a
-# consequência é a que o card nomeia: `org:0019` manda claudinho-dados ASSINAR emenda de
+# SIGN-OFF PELO VERBO. A rota precisava de verbo dedicado para registrar
+# assinatura formal de emenda de
 # modelo, e assinar dependia de alguém lembrar de montar o JSON na mão. Regra que depende de
 # lembrança é regra morta — é o mesmo defeito que o dono apontou no #348 sobre `tarefas
 # mover`.
@@ -1237,7 +1237,7 @@ assinar() {
 criar() {
   descarta_projeto "${1:-}" && shift
   local titulo="${1:?uso: tarefas criar \"<título>\" [opções]}"; shift || true
-  # DEFAULT É STORY (arq:0096, dono 02/09/2026). Medido antes da virada: 390 tasks, 156 órfãs, 13
+  # DEFAULT É STORY. Medido antes da virada: 390 tasks, 156 órfãs, 13
   # stories com filha task — o default `task` fazia da task uma "story sem nome". Desde o #4223
   # a task é o passo da story e só nasce com `--nivel task --pai <story>`; débito técnico
   # é `tarefas dt admitir`, que não passa por aqui.
@@ -1249,13 +1249,13 @@ criar() {
       --desc-stdin) desc="$(cat)"; shift ;;
       --nivel)      nivel="$2"; shift 2 ;;
       --cadeira)    cadeira="$2"; shift 2 ;;
-      # Originação e executor (card #3526, R19): sem eles a API herda — a originação do pai, ou
+      # Originação e executor: sem eles a API herda — a originação do pai, ou
       # negocio; o executor igual à cadeira. Valor fora do registro a API recusa (422).
       --originacao) originacao="${2:?--originacao pede negocio, tecnico ou incidente}"; shift 2 ;;
       --executor)   executor="${2:?--executor pede o nome da cadeira}"; shift 2 ;;
       --pai)        pai=$(so_id "$2"); shift 2 ;;
       --incidente)  classe="incidente"; shift ;;
-      # CARD #3597 (R16, R31 da spec tarefas): story sem pai que vai a `priorizada` ou adiante
+      # story sem pai que vai a `priorizada` ou adiante
       # exige o comentário `registro-de-negocio` já gravado — a API grava item, transição e o
       # comentário na mesma transação quando `registro` chega no corpo (#2647 do #3417).
       --registro)   registro="$2"; shift 2 ;;
@@ -1273,7 +1273,7 @@ criar() {
     épico|epico|0)   n=0 ;;
     feature|1)       n=1 ;;
     story|2)         n=2 ;;
-    # Card #4223 (R37 da spec tarefas): a task é o passo da story. Sem `--pai` o verbo diz o
+    # a task é o passo da story. Sem `--pai` o verbo diz o
     # comando; com pai que não é story a recusa é da API, que é quem sabe o nível do pai.
     task|3)          n=3
                      if [ -z "$pai" ]; then
@@ -1295,7 +1295,7 @@ criar() {
   # `aberto` se o registro o tiver, e a recusa da API nomeia o estado válido quando não.
   # incidente entra no funil de incidente (`detectado`), planejado na boca do funil
   # comum (`captada`). PF_ESTADO_INICIAL, se dado, vence o default da classe (#259).
-  # DT 943: story e task não têm captada (regra do dono, 20/10/2026) — nascem em priorizada.
+  # story e task não têm captada — nascem em priorizada.
   # Quem passa explicitamente `--estado captada` (ou outro estado antes de priorizada) recebe
   # a recusa clara aqui em vez de ver o estado virar `priorizada` na API e falhar pedindo
   # registro de negócio como se `--estado` não tivesse chegado.
@@ -1328,13 +1328,13 @@ criar() {
     | jq -r "$JQ_ROT"'"item \(rotn) criado: \(.titulo)"'
 }
 
-# EDITAR É O PATCH DO CORPO COM NOME DE ATO — card #3134 (dono, 25/09/2026): toda chamada
+# EDITAR É O PATCH DO CORPO COM NOME DE ATO: toda chamada
 # de API se encapsula em verbo. A rota sempre aceitou `titulo`/`descricao` no PATCH, mas a
 # única porta até ela era a escotilha `api-corpo`, e cadeira não achava nem essa.
 #
 # NUNCA manda `estado`: editar não move. Mover é `mover`, que carrega motivo e cascata; um
 # PATCH que trocasse corpo e estado juntos regrediria a coluna sem ninguém pedir. A régua do
-# corpo por nível (arq:0096) é da API, como em `criar` — este verbo não a duplica.
+# corpo por nível é da API, como em `criar` — este verbo não a duplica.
 editar() {
   local alvo="${1:?uso: tarefas editar <id> [--titulo \"<t>\"] [--desc \"<txt>\"|--desc-stdin]}"; shift
   local titulo="" desc="" tem_desc="" cadeira="" tem_cadeira=0 nivel="" originacao="" executor="" pai_ed=""
@@ -1342,7 +1342,7 @@ editar() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --titulo)     titulo="${2:?--titulo pede texto}"; shift 2 ;;
-      # Originação e executor (card #3526, R19; colunas do #3521). A API confere a originação contra
+      # Originação e executor. A API confere a originação contra
       # o registro (422) e não tem lista para o executor: este verbo não repete nenhuma das duas.
       --originacao) originacao="${2:?--originacao pede negocio, tecnico ou incidente}"; shift 2 ;;
       --executor)   executor="${2:?--executor pede o nome da cadeira}"; shift 2 ;;
@@ -1452,7 +1452,7 @@ editar() {
         + " · estado \(.estado_nome) (inalterado)"'
 }
 
-# COMENTÁRIO É TEXTO NO CORPO, por ordem do dono (16/08/2026). O modelo do rastreador não
+# COMENTÁRIO É TEXTO NO CORPO. O modelo do rastreador não
 # tem entidade de comentário, e a migração do acervo já pôs os comentários velhos dentro de
 # `descricao` sob marcador. Escrever novo do mesmo jeito mantém uma forma só — e o dia em
 # que comentário virar entidade, há um marcador único para varrer.
@@ -1525,15 +1525,15 @@ comentar() {
   esac
 }
 
-# O FECHO VAI DIRETO À ROTA PRÓPRIA — card #3593 (R6, R7 da spec comentario-tipado):
+# O FECHO VAI DIRETO À ROTA PRÓPRIA:
 # `POST /itens/{id}/comentarios/{cid}/fecho` grava resultado, destino, quem e quando com
 # `SELECT … FOR UPDATE`. Até a #3597, este verbo lia a primeira linha do comentário e
 # conferia o vocabulário à mão; a regra mora na API desde a F3 (R5 a R7), e o verbo passa a
 # só partir o argumento em resultado/destino e traduzir o status HTTP: 400 (sem tipo, ou
 # resultado fora do vocabulário) e 403 (quem fecha não pode) saem 4; 409 (já fechado) e 404
 # (não existe) saem 1, porque não há nada a repetir.
-# DT 743: troca o corpo de um comentário existente via `PATCH /itens/{id}/comentarios/{cid}`.
-# A API (card #3410, R13 da spec comentario-tipado) guarda o corpo anterior no ledger e recusa
+# troca o corpo de um comentário existente via `PATCH /itens/{id}/comentarios/{cid}`.
+# A API guarda o corpo anterior no ledger e recusa
 # com 400 se a edição trocar o tipo gravado ou alterar a linha de fecho.
 editar_comentario() {
   local id="$1" cid="${2:-}" txt="${3:-}"
@@ -1591,7 +1591,7 @@ fechar_comentario() {
   case "$txt" in
     *" — "*) ;;
     *) echo "$uso" >&2
-       echo "o fecho é «<resultado> — <destino>»: o destino diz onde a contribuição foi parar (spec comentario-tipado, R6)" >&2
+       echo "o fecho é «<resultado> — <destino>»: o destino diz onde a contribuição foi parar" >&2
        exit 2 ;;
   esac
   local resultado destino
@@ -1822,7 +1822,7 @@ else:
     | PYTHONPATH="$lib_harness${PYTHONPATH:+:$PYTHONPATH}" python3 -m leitura.verbo --stdin --rotulo "tarefas comentarios" "${leitura_args[@]}"
 }
 
-# MOVER É O ATO, E O NOME É O ATO — card #224. A capacidade sempre existiu: o PATCH aceita
+# MOVER É O ATO, E O NOME É O ATO. A capacidade sempre existiu: o PATCH aceita
 # qualquer estado do registro, e quem valida é a máquina. O que não existia era um verbo com
 # o nome do que se faz, e o efeito observável disso foi medido no quadro de 17/08 — `Em
 # execução` com UM item e `Entregue` com 145. Ninguém procura `fechar` para mover um card
@@ -1931,7 +1931,7 @@ def _parece_caminho(tok: str) -> bool:
     return False
 
 def _limpar_celula_arquivos(celula: str) -> list[str]:
-    # DT 323 e DT 404: tira observações entre parênteses (ex.: `(e o lock, pelo npm)`) e rótulo `escreve`
+    # tira observações entre parênteses (ex.: `(e o lock, pelo npm)`) e rótulo `escreve`
     s = celula.strip()
     while True:
         novo = re.sub(r"\([^()]*\)", " ", s)
@@ -2025,7 +2025,7 @@ if _eh_cabecalho(prim_cels):
     if len(linhas_u) > 1 and _eh_separador(_partir_linha(linhas_u[1])):
         inicio = 2
     norm_cels = [_norm(c) for c in prim_cels]
-    # DT 592: prioriza a coluna `arquivos` pelo cabeçalho; usa `escreve` só como fallback se não houver `arquivos`
+    # prioriza a coluna `arquivos` pelo cabeçalho; usa `escreve` só como fallback se não houver `arquivos`
     for i, nc in enumerate(norm_cels):
         if nc in ("arquivos", "arquivo", "arquivos no raio", "caminhos"):
             col_idx = i
@@ -2076,7 +2076,7 @@ for l in linhas_u[inicio:]:
 }
 
 # ponteiro_do_estagio <nivel> <estado> -- a linha do processo que conduz o estado de destino do
-# card movido (card #4359). A ligação mora na ficha do processo, no catálogo da casa (propriedade
+# card movido. A ligação mora na ficha do processo, no catálogo da casa (propriedade
 # `conduz`, valores `<nivel>:<estado>`); o verbo só a lê e não guarda tabela de estado para
 # processo, porque uma cópia aqui seria a segunda verdade. O ponteiro INFORMA E NÃO BARRA: infra
 # ausente, saída diferente de 0, JSON ou fichas ilegíveis e teto estourado não imprimem nada, nem
@@ -2196,12 +2196,12 @@ mover() {
     case "$1" in
       --motivo)       motivo="${2:?--motivo pede texto}"; shift 2 ;;
       --englobado-em) elo="${2:?--englobado-em pede o id que absorveu}"; shift 2 ;;
-      # A APOSTA (R36 da spec tarefas, card #3619): <n> é o id do comentário de decisão do
+      # A APOSTA: <n> é o id do comentário de decisão do
       # PRÓPRIO pai. O verbo só leva o número — quem confere que é decisão do próprio pai, é
-      # do tipo certo e sustenta a aposta é a máquina (R19, D3 da arq:0127); sem ele a recusa
+      # do tipo certo e sustenta a aposta é a máquina; sem ele a recusa
       # diz como informar.
       --decisao)      decisao="${2:?--decisao pede o número do comentário de decisão}"; shift 2 ;;
-      # CONFIRMAÇÃO DA CASCATA (ordem do dono, 18/08/2026). O verbo não decide NADA aqui:
+      # CONFIRMAÇÃO DA CASCATA. O verbo não decide NADA aqui:
       # ele só carrega a declaração até a API, que é quem sabe se há filha aberta e quem
       # NOMEIA quais são na recusa. Repetir a regra do lado do CLI daria duas verdades, e a
       # que o dono veria seria a que perdeu a corrida.
@@ -2255,7 +2255,7 @@ mover() {
              + (if ((.propagacao.movidas // []) | length) > 0
                 then "\n  filhas movidas junto: " + ((mapa_chaves + $m) as $mm | [.propagacao.movidas[] | rotx($mm)] | join(", "))
                 else "" end)'
-  # Se o item estiver travado por bloqueador aberto e entrou em em-execucao (card #3750):
+  # Se o item estiver travado por bloqueador aberto e entrou em em-execucao:
   if [ "$destino" = "em-execucao" ]; then
     local bpor
     bpor=$(printf '%s' "$resp" | jq -c '.bloqueado_por // empty' 2>/dev/null)
@@ -2276,18 +2276,18 @@ mover() {
       [ -n "$travada" ] && printf '%s\n' "$travada"
     fi
   fi
-  # Tem pai → o relato precisa do pai (arq:0095). Sai sempre, em qualquer destino: a story
+  # Tem pai → o relato precisa do pai. Sai sempre, em qualquer destino: a story
   # que entra em `em-execucao` também tem de saber quantas irmãs faltam.
   local pai; pai=$(printf '%s' "$resp" | jq -r '.pai // empty')
   [ -n "$pai" ] && pai_e_irmas "$pai"
-  # PONTEIRO DO PROCESSO DO ESTÁGIO (card #4359): só aqui, no caminho de sucesso, depois do pai e das
+  # PONTEIRO DO PROCESSO DO ESTÁGIO: só aqui, no caminho de sucesso, depois do pai e das
   # irmãs; a recusa já saiu em `envia` e nunca chega a esta linha. Nível e estado vêm do retorno do PATCH,
   # que os traz; sem eles não há ponteiro. A consulta nunca muda o código de saída.
   local nivel_novo estado_novo
   nivel_novo=$(printf '%s' "$resp" | jq -r '.nivel_nome // empty' 2>/dev/null) || nivel_novo=""
   estado_novo=$(printf '%s' "$resp" | jq -r '.estado // empty' 2>/dev/null) || estado_novo=""
   ponteiro_do_estagio "$nivel_novo" "$estado_novo"
-  # AVISO À DONA (ordem do dono, 27/09/2026): fechou a última filha e o pai parou em
+  # AVISO À DONA: fechou a última filha e o pai parou em
   # `em-homologacao` — a conferência da feature/épico é da gestão estratégica ou da cadeira
   # dona dele, e depois do dono. Quem executou a story nem sempre é a dona; sem o aviso, o dono pedia à mão.
   if [ -n "$pai" ] && [ "$(printf '%s' "$resp" | jq -r '.estado_natureza // ""')" = "terminal" ] \
@@ -2371,7 +2371,7 @@ fechar() {
   mover "$id" "$como" "$@"
 }
 
-# O MOLDE DE CARD MORA NA API (card #4058, incidente de 30/10/2026): `platafirma-rastreador@
+# O MOLDE DE CARD MORA NA API: `platafirma-rastreador@
 # api/molde.py` é a fonte única, servida em `GET /modelo/<variante>`. Este verbo só imprime o
 # que vem dela: o esqueleto em stdout (é o que se copia para o corpo) e o aviso em stderr.
 # Nenhuma cópia do molde mora aqui.
@@ -2456,11 +2456,11 @@ apagar_comentario() {
 # --- débito técnico ---------------------------------------------------------
 
 # BALDE DE DÉBITO TÉCNICO — padrao rito-debito-tecnico, assinado pelo dono em 26/08/2026
-# (card #179). DT é defeito ou dívida MEDIDA que não bloqueia ninguém hoje.
+# DT é defeito ou dívida MEDIDA que não bloqueia ninguém hoje.
 #
-# O BALDE É DADO DO RASTREADOR, E NÃO TEXTO DE CARD (R26 da spec tarefas; cards #3551 e #3552).
+# O BALDE É DADO DO RASTREADOR, E NÃO TEXTO DE CARD.
 # Cada débito é uma linha da tabela `balde`, com o número que já tinha no corpo do #2856 (ordem
-# do dono, 27/09/2026, card #3175: um balde só, uma linha por débito, sem card por conserto). O
+# um balde só, uma linha por débito, sem card por conserto). O
 # verbo é cliente fino: a forma de cada campo, o jeito de saída e a segunda saída quem confere é
 # a API (`api/balde.py`). O que fica aqui é o que ela não vê, a stack contra o catálogo do
 # acervo (R11), e a tabela que a cadeira lê.
@@ -2498,7 +2498,7 @@ _dt_stacks() {
 # três no texto, e repeti-los dobrava a linha (#2856 linha 316). `curto` tira
 # raio, esperado e onde, que são o que faz a lista inteira passar dos 50 KB que a porta serve
 # (#2856 linha 143); a saída leva o jeito e a âncora. Sem linha, não imprime nada.
-# DT 271: calcula o tamanho do corpo do balde (#2856) em KiB e emite AVISO acima de 100 KiB.
+# calcula o tamanho do corpo do balde em KiB e emite AVISO acima de 100 KiB.
 _dt_balde_kib() { # _dt_balde_kib <json_balde> [consultar_item=0|1]
   local j="${1:-}" consultar="${2:-0}" bytes="" b_j=0 b_it=0 item_j="" desc=""
   bytes=$(printf '%s' "$j" | jq -r '.corpo_bytes // .tamanho_bytes // .bytes // empty' 2>/dev/null || true)
@@ -2574,7 +2574,7 @@ dt_listar() {
   case "$situacao" in
     abertas) ;;
     saidas|todas)
-      echo "recusado: dt listar serve só os débitos abertos — leitura de itens resolvidos/saídos foi fechada pela regra do funil (ordem do dono, 17/11/2026)" >&2
+      echo "recusado: dt listar serve só os débitos abertos — leitura de itens resolvidos/saídos foi fechada pela regra do funil" >&2
       exit 4 ;;
     *) echo "--situacao aceita só abertas: $situacao" >&2; exit 2 ;;
   esac
@@ -2734,7 +2734,7 @@ dt_admitir() {
 #              retorno colado que prova, ou a decisão do dono (quem assina é ele)
 #   englobada  ganhou dor e virou card, ou foi absorvida por card maior; --card <id>
 # As quatro portas do rito antigo (`--porta card|obsoleto|decisao|englobado`, com `--ancora`)
-# seguem aceitas, com aviso, até o guia defeito sair da tabela «a porta antiga» (card #3552).
+# seguem aceitas, com aviso, até o guia defeito sair da tabela «a porta antiga».
 dt_matar() {
   local n="${1:-}"; shift || true
   local como="" commit="" motivo="" card="" porta="" ancora=""
@@ -2874,10 +2874,10 @@ dt() {
   esac
 }
 
-# --- ordem, vínculo e carteira (card #3526; R21, R23 e R25 da spec tarefas) -------------
+# --- ordem, vínculo e carteira ----------------------------------------------------------
 
 # ORDENAR põe o card ao lado de um vizinho na ordem única da casa. O cliente escolhe a vizinhança e
-# o SERVIDOR calcula o posto (card #3522): um `posto` no corpo seria o cliente calculando. Um lado
+# o SERVIDOR calcula o posto: um `posto` no corpo seria o cliente calculando. Um lado
 # só: com os dois o corpo não diria qual vale, e o verbo recusa antes de chamar.
 ordenar() {
   local id; id=$(so_id "${1:?uso: tarefas ordenar <id> --antes-de <id> | --depois-de <id>}"); shift
@@ -3007,14 +3007,14 @@ carteira() { # carteira [--desde AAAA-MM-DD]
        else empty end)'
 }
 
-# ESPERA-DONO (R30 da spec tarefas, cards #3595 e #3597) — a mesma consulta que a tela da F7
+# ESPERA-DONO — a mesma consulta que a tela da F7
 # (#3481) lê, em duas partes: do dono (pergunta dirigida a ele, card pronto para a aposta,
 # pai em homologação) e, à parte, com as cadeiras (os demais abertos, por card, com a marca
 # de órfão). Lê pela rota própria `GET /espera-dono`; o verbo não calcula nada — a mesma
 # régua do R28 dos indicadores do balde.
 #
 # `--json` devolve o corpo da API como veio, sem reformatar: a borda o serve a casca em /api/espera-dono
-# (card #3899; mecanismo comum da arq:0124 §3, `# mecanismo: espera-dono=casca`).
+# (mecanismo comum, `# mecanismo: espera-dono=casca`).
 espera_dono() {
   local j; j=$(busca GET /espera-dono) || return 1
   case "${1:-}" in
@@ -3041,7 +3041,7 @@ espera_dono() {
 
 # --- inventário da feature -------------------------------------------------------
 
-# (story #4317, feature 4314; sql/033). Peça, regra de negócio e produto documental da feature
+# (sql/033). Peça, regra de negócio e produto documental da feature
 # são dado do rastreador, cada um com a chave <feature>.<p|r|d><n> (4314.r3). O verbo só fala com
 # a API: o número, a validação desfeita pela frase mudada e o evento de cada ato são do banco.
 # O nome do verbo e a forma de chamar dos outros atos não mudam (a feature 4268 refaz os verbos).
@@ -3259,7 +3259,7 @@ inventario() {
 
 # --- despacho ---------------------------------------------------------------
 
-# --ajuda UNIVERSAL, sem efeito colateral (card #2274, defeito 4). ANTES do despacho e
+# --ajuda UNIVERSAL, sem efeito colateral. ANTES do despacho e
 # varrendo TODOS os argumentos: `tarefas criar --ajuda` criava um card chamado "--ajuda"
 # porque `--ajuda` caía como título posicional. Interceptar aqui cobre tanto `tarefas
 # --ajuda` quanto `tarefas <sub> --ajuda`, e nenhum sub-ato chega a rodar. `uso` já sai 2.
@@ -3275,7 +3275,7 @@ fi
 
 cmd="${1:-}"; shift || uso
 
-# Portão do funil (ordem do dono, 17/11/2026): ligado em todo ato que só lê card. `sub` liga
+# Portão do funil: ligado em todo ato que só lê card. `sub` liga
 # só quando lista as filhas (um argumento); `api` e `api-corpo`, só em GET.
 case "$cmd" in
   listar|listar-tudo|ler|ver|comentarios|carteira|espera-dono) _SO_FUNIL=1 ;;
