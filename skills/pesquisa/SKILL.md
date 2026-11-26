@@ -1,6 +1,6 @@
 ---
 name: pesquisa
-description: Use quando a sessão precisar de fonte da WEB ABERTA — "pesquisa na web", "procura fonte sobre X", "o que se sabe sobre X fora do acervo", "acha a página oficial de", "percorre esse site", "mapeia a navegação/links de", "lê essa URL" ou "esse PDF", "resolve esse DOI/domínio/ORCID/CNPJ", "como essa página era em tal data", "verifica as citações deste relatório". Dá o loop de pesquisa com procedência (missão → consultar/percorrer → triar → ler → pesar → sintetizar → verificar) sobre o verbo `pesquisar` (SearXNG + Crawl4AI soberanos, sem chave e sem conta). NÃO dispare para o acervo da casa — aí é `motor rag buscar` / `acervo listar biblioteca obra --sobre` primeiro, porque fonte da casa vence fonte externa.
+description: Use para buscar, percorrer site, ler URL ou PDF, resolver identificador (DOI, ISBN, ORCID, CNPJ, domínio) ou verificar citações na web aberta fora do acervo. NÃO dispare para o acervo da casa, que vem antes pela busca.
 cadeiras: todas (é a base comum da pesquisa da casa; dona: conhecimento, que confere a procedência; cada cadeira escreve o seu molde por cima)
 compatibility: precisa do verbo `pesquisar` (tool via cápsula) e da stack `searxng` no ar (TI). Sem SearXNG, `pesquisar saude` diz o que falta.
 ---

@@ -1,6 +1,6 @@
 ---
 name: ritual-execucao
-description: Use quando a story de código entrar em execução ou o dono disser executa, implementa, codifica, «sobe essa mudança». Dá para que lado puxar: lotes pequenos e verificados, raio do card, confirmar na fonte, provar com teste, corrigir a causa em vez de contornar o portão. NÃO dispare para escrever documento ou card, para revisar código pronto (auditoria) nem para serviço fora do ar (conserto).
+description: Use quando story de código entrar em execução ou o dono pedir para executar, implementar, codificar ou subir mudança. NÃO dispare para escrever documento ou card, revisar código pronto (auditoria) ou serviço fora do ar (conserto).
 ---
 
 # Ritual de execução

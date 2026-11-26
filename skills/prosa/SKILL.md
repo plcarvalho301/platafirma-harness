@@ -1,6 +1,6 @@
 ---
 name: prosa
-description: Use SEMPRE que for escrever ou revisar texto da casa que uma pessoa ou um agente vai ler: documento em qualquer pasta do repositório da casa, rascunho de um documento desses (estudo, minuta, referência antes de gravar), corpo de card ou comentário no rastreador, mesmo que ninguém peça revisão de texto. Siga as instruções ANTES de gravar, commitar ou enviar. NÃO dispare para resposta de chat, nota sem documento de destino, nem para dado, código ou frontmatter.
+description: Use antes de escrever ou revisar texto da casa (documento ou rascunho no repositório da casa, corpo de card ou comentário no rastreador). NÃO dispare para resposta de chat, nota sem destino, dado, código ou frontmatter.
 ---
 
 # Prosa

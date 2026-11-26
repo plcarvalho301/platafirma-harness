@@ -1,6 +1,6 @@
 ---
 name: revisao-de-documentos
-description: Use SEMPRE que puser em execução uma revisão de documentos para a casa nova (as stories «Revisar os documentos de … na casa nova»), ou voltar a ela para consertar um documento que o dono devolveu. É o fluxo que leva cada documento velho, por um sub-agente, até a decisão que o dono vê e, depois do sim dele, ao documento novo em main e à ficha no schema casa. Siga ANTES de delegar o primeiro documento, mesmo que você ache que já conhece o fluxo pelo card. NÃO dispare para escrever o texto de um documento, que é a prosa-espelho, nem para refinar o recorte da story ou decidir o que é evento.
+description: Use ao executar story de revisão de documentos para a casa nova ou consertar documento devolvido pelo dono. NÃO dispare para escrever texto de documento (prosa), refinar recorte da story ou modelar evento.
 ---
 
 # Revisão de documentos para a casa nova

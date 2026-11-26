@@ -1,6 +1,6 @@
 ---
 name: ritual-analise
-description: Use quando o dono disser analisa, desmonta, «qual é o problema aqui?», «por que isso acontece?», ou quando a fita passar a entender um problema antes de propor solução. Dá para que lado puxar: separar em partes, descer às causas por todos os ramos, levantar explicações rivais, entregar o problema desmontado. NÃO dispare para compor a solução (síntese), para gerar ideias nem para serviço fora do ar (conserto).
+description: Use quando o dono pedir para analisar, desmontar ou entender um problema («qual é o problema?», «por que acontece?») antes de propor solução. NÃO dispare para compor solução (síntese), gerar ideias ou serviço fora do ar (conserto).
 ---
 
 # Ritual de análise

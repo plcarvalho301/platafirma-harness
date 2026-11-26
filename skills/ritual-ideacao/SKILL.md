@@ -1,6 +1,6 @@
 ---
 name: ritual-ideacao
-description: Use quando o dono disser idear, ideação, brainstorm, abre o leque, «que ideias temos para X?», ou quando a fita passar a gerar alternativas para um alvo antes de haver solução escolhida. Dá para que lado puxar: gerar sem julgar, buscar a ideia diferente e o análogo de fora; o método da sessão é o da skill ideacao. NÃO dispare para escolher entre opções já postas, para desmontar o problema nem para pesquisa.
+description: Use quando o dono pedir idear, brainstorm, abrir o leque ou alternativas para um alvo antes de haver solução escolhida. NÃO dispare para escolher entre opções postas, desmontar problema ou pesquisar.
 ---
 
 # Ritual de ideação
