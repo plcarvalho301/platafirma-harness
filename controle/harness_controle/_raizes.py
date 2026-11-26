@@ -1,6 +1,6 @@
-# _raizes — ponte para lib/raizes.py do harness (card #3010).
+# _raizes — ponte para lib/raizes.py do harness.
 # capacidade: expediente
-# dono: claudinho-TI
+# dono: ti
 """Duas moradas possiveis para este pacote, e as duas sem raiz montada a mao:
 
 - no host (agregador, systemd --user) o pacote roda da propria arvore do harness na

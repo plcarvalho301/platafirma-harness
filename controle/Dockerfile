@@ -26,12 +26,10 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY harness_controle ./harness_controle
 
-# --- front da PlataFirma: copia em tempo de build de imagem (arq:0056) -------
+# --- front da PlataFirma: copia em tempo de build de imagem ------------------
 #
-# Ate o card #476 esta tela lia platafirma-arquitetura/design/tokens.css do
-# HOST, em tempo de requisicao, por bind mount (TOKENS_CSS_PATH). Isso violava
-# o arq:0056 duas vezes: artefato de front morando fora da imagem, e resolvido
-# em runtime — nada aqui dizia que versao a tela servia.
+# O front entra na imagem em tempo de build, sem depender de bind mount do host
+# nem de resolucao em runtime, deixando explicita a versao servida pela tela.
 #
 # Agora o front vem do release platafirma/ui, por COPY --from, e a imagem passa
 # a ser autossuficiente: sem o mount do host a tela continua servindo CSS, JS e
@@ -47,7 +45,7 @@ COPY --from=platafirma/ui:0.23.0 /usr/share/nginx/html/pf-ui.css  ./harness_cont
 COPY --from=platafirma/ui:0.23.0 /usr/share/nginx/html/fontes     ./harness_controle/estatico/pf-ui/fontes
 COPY --from=platafirma/ui:0.23.0 /usr/share/nginx/html/versao.txt ./harness_controle/estatico/pf-ui/
 
-# arq:0031 — o derivado grava a versao. Mesma forma do carimbo da casa
+# O derivado grava a versao. Mesma forma do carimbo da casa
 # (platafirma-conhecimento/wiki/montar-wiki): origem, sha256, em. Editar o
 # copiado e erro; o proximo build sobrescreve sem avisar. Vai servido pela
 # rota /estatico/pf-ui/origem.txt, para auditar de fora sem abrir a imagem.

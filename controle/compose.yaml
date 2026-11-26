@@ -19,7 +19,7 @@ services:
     restart: unless-stopped
     command: ["uvicorn", "harness_controle.web:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
-      # As duas raizes de producao (card #3010). Os defaults sao absolutos, entao o
+      # As duas raizes de producao. Os defaults sao absolutos, entao o
       # HOME do container (que nao e /home/claudinho) nao muda caminho nenhum; elas
       # vao declaradas mesmo assim para o verbo chamado pela tela ver o mesmo que o
       # host ve. A bancada nunca entra aqui.
@@ -29,7 +29,7 @@ services:
       PYTHONPATH: ${PF_RELEASE_RAIZ:-/opt/platafirma}/current/harness/lib
       AGREGADOR_ESTADO_PATH: /estado/estado.json
       PF_CADEIRA_TELA: claudinho-TI
-      # Origens que podem escrever pela tela (card #3435, R27): lista fechada da instancia,
+      # Origens que podem escrever pela tela: lista fechada da instancia,
       # virgula entre valores. O padrao e o endereco que o gate serve (oauth2-proxy-harness);
       # a instancia que servir de outro endereco troca a variavel. Vazia, a tela le e nao escreve.
       HARNESS_CONTROLE_ORIGENS: ${HARNESS_CONTROLE_ORIGENS:-https://harness.platafirma.org}
@@ -38,8 +38,8 @@ services:
       FILA_REDIS_PORT: ${FILA_REDIS_PORT:-6379}
     volumes:
       # A release inteira, somente-leitura, no MESMO caminho absoluto do host. Nao
-      # serve pro front (card #476: pf-ui.css, pf-ui.js e as fontes vem COPIADOS pra
-      # dentro da imagem, arq:0056). Serve o resto da tela: os verbos que as duas
+      # serve pro front (pf-ui.css, pf-ui.js e as fontes vem COPIADOS pra
+      # dentro da imagem). Serve o resto da tela: os verbos que as duas
       # acoes chamam sao <release>/current/harness/bin/{fila,infra}, e
       # /feito roda `git log` na arvore do harness. Monta-se a raiz e nao so
       # current/, porque current/<curto> e current/venv/<nome> sao symlinks

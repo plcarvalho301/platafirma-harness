@@ -1,8 +1,7 @@
-# render — HTML por bloco, fiel às classes CSS dos wireframes de
-# claudinha-produto (design/wireframes/harness-{recepcao,cadeira}.html),
+# render — HTML por bloco, fiel às classes CSS dos wireframes de produto,
 # consumindo o release platafirma/ui (que traz os tokens dentro).
 # capacidade: expediente
-# dono: claudinho-TI
+# dono: ti
 """Sem framework de front, sem build, sem bundler. Revalidação de 60s é
 `<meta http-equiv="refresh">`, não fetch/poll; "Atualizar" é um link comum pro
 próprio path. As duas ações (despachar recado, reiniciar) são
@@ -10,12 +9,11 @@ próprio path. As duas ações (despachar recado, reiniciar) são
 
 O único JavaScript da página é o `pf-ui.js` do release, que registra os
 primitivos `pf-*` como custom elements. Nada aqui usa esses primitivos ainda:
-a tela segue em HTML nu com as classes de `tela.css`, e trocar widget por
-widget é outro card (#476 só manda CONSUMIR o release). Carregar o módulo agora
+a tela segue em HTML nu com as classes de `tela.css`. Carregar o módulo agora
 custa um script e prova o caminho: ou o artefato veio na imagem, ou nada
 responde.
 
-Princípio que governa cada função de render (spec §3): ausência de dado se
+Princípio que governa cada função de render: ausência de dado se
 desenha como ausência, nunca como saúde. `0` e `—` nunca colapsam.
 """
 
@@ -40,9 +38,8 @@ from harness_controle.md_render import (
 # caminho, sha, numero) segue por `_esc()` cru.
 
 # Camada 1 — o front da PlataFirma, copiado do release platafirma/ui para
-# dentro da imagem em tempo de build (arq:0056, ver Dockerfile). pf-ui.css ja
-# traz os tokens inteiros: NAO ha mais tokens.css, e nada mais aqui aponta para
-# platafirma-arquitetura. O diretorio e servido inteiro sob PF_UI_BASE porque o
+# dentro da imagem em tempo de build (ver Dockerfile). pf-ui.css ja
+# traz os tokens inteiros, sem depender de arquivos externos. O diretorio e servido inteiro sob PF_UI_BASE porque o
 # proprio CSS pede as fontes por caminho relativo (./fontes/...).
 PF_UI_DIR = Path(__file__).resolve().parent / "estatico" / "pf-ui"
 PF_UI_BASE = "/estatico/pf-ui"

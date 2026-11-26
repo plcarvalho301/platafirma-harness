@@ -4,7 +4,7 @@ Pasta do harness com o plano de controle: o agregador roda os verbos em laço e 
 estado; a tela (`/`, `/cadeira/<slug>`, `/feito`) só lê esse arquivo. A tela é o contêiner da stack
 `harness-controle`; o agregador é a unit `harness-agregador` (`systemd --user`) no host.
 
-Por que existe: Plano de controle do harness, especificação de tela — `acervo ler casa spec plano-de-controle-harness`.
+Por que existe: plano de controle do harness com agregador de estado e tela de leitura.
 
 ## Como sobe
 

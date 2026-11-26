@@ -2,8 +2,8 @@
 # arquivo de estado em JSON (controle/estado.json). A tela nunca executa verbo
 # em resposta a request: so le este arquivo.
 # capacidade: expediente
-# dono: claudinho-TI
-"""LOTE 2 do card #390. Duas camadas, deliberadamente separadas:
+# dono: ti
+"""Duas camadas, deliberadamente separadas:
 
 - `bloco_de()` — funcao pura: ResultadoVerbo -> bloco de estado. Esta e a
   camada inegociavel do modelo de teste do card: "verbo morto -> indisponivel
@@ -125,7 +125,7 @@ def _env_caixa(persona: str) -> dict[str, str]:
     """Le a caixa a FRIO como a propria dona: PF_CADEIRA e o slug, entao `so_minha`
     aprova, e `fila ler --tudo` (XRANGE) nao move o ponteiro do grupo nem cria
     consumer. A tela le o conteudo sem queimar carta nem falsear a 'ultima
-    leitura' — a leitura fria que a spec exige (bloco 3, §5)."""
+    leitura' — leitura fria sem consumo."""
     e = dict(os.environ)
     e["PF_CADEIRA"] = persona
     return e
@@ -326,7 +326,7 @@ SONDAS_GRUPO: list[SondaGrupo] = [
                chave_item="skill"),
     # Conteudo das caixas, a FRIO (--tudo = XRANGE), uma por cadeira, lida como a
     # propria dona. O `status` (acima) so mede profundidade; este traz as cartas
-    # pra tela ter onde ser lida. Nunca consome: leitura fria e o que a spec manda.
+    # pra tela ter onde ser lida. Nunca consome: leitura fria.
     SondaGrupo("caixa_conteudo", _intervalo("CAIXA", 60), _timeout("CAIXA", 20),
                _cadeiras_disponiveis,
                lambda p: ["fila", "ler", p, "--tudo", "--json"],

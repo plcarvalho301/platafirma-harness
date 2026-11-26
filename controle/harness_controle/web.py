@@ -2,11 +2,10 @@
 # GET das rotas do agregador), duas acoes (POST) que chamam verbo e nada alem
 # dele.
 # capacidade: expediente
-# dono: claudinho-TI
-"""LOTE 3 do card #390. Starlette + uvicorn (mesmo stack de ops-server —
-precedente local, nao stack novo). Sem
+# dono: ti
+"""Tela em Starlette + uvicorn. Sem
 framework de front e sem build: o front vem pronto do release platafirma/ui,
-copiado para dentro da imagem (arq:0056) e servido por /estatico/pf-ui/.
+copiado para dentro da imagem e servido por /estatico/pf-ui/.
 
 Exclusao dura: cloudflared e oauth2-proxy nunca sao alvo aceito por
 /acoes/reiniciar, mesmo se alguem forjar o POST direto sem passar pela tela.
@@ -95,7 +94,7 @@ def _commits_por_dia(limite_dias: int = 14) -> dict[str, list[dict]]:
 
 def _cards_fechados_por_dia(limite_dias: int = 14) -> dict[str, list[dict]]:
     """{"AAAA-MM-DD": [{"id","titulo"}, ...]}, so cards fechados dentro da
-    janela — lido de `tarefas listar-tudo --json` (card #394), que já
+    janela — lido de `tarefas listar-tudo --json`, que já
     normaliza a data-zero do Go em null pra card aberto."""
     r = chamar(["tarefas", "listar-tudo", TAREFAS_PROJETO_PADRAO, "--json"], timeout=20)
     if not r.ok or not isinstance(r.dados, list):
@@ -184,7 +183,7 @@ async def tela_css(request):
 # --- acoes (POST) — cada uma chama o verbo e nada alem dele -----------------
 
 
-# Card #3435 (R27 da spec taipa). A escrita que chega pelo navegador so passa com a ORIGEM
+# A escrita que chega pelo navegador so passa com a ORIGEM
 # EXATA da tela, de lista fechada por instancia (`HARNESS_CONTROLE_ORIGENS`, virgula entre
 # valores, igualdade de texto: nada de sufixo, curinga ou "mesmo dominio"). Formulario de
 # outro site, chamada cruzada, `text/plain` e host irmao trazem outra Origin, e o navegador
