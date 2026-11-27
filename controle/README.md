@@ -9,7 +9,7 @@ Por que existe: plano de controle do harness com agregador de estado e tela de l
 ## Como sobe
 
 Pré-requisitos: as redes externas `plataforma-wiki_default` e `motor_malha` de pé (stacks de
-conhecimento e do motor), e a imagem `platafirma/ui:0.23.1` disponível, de onde o build copia o front.
+conhecimento e do motor), e a imagem `platafirma/ui:0.24.0` disponível, de onde o build copia o front.
 
 ```
 release promover platafirma-harness <sha>

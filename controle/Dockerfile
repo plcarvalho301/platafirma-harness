@@ -40,17 +40,17 @@ COPY harness_controle ./harness_controle
 # Mora dentro do pacote (harness_controle/estatico/pf-ui) de proposito: o
 # modulo o encontra por __file__, sem variavel de ambiente e sem caminho
 # absoluto, do mesmo jeito que ja encontra estatico/tela.css.
-COPY --from=platafirma/ui:0.23.1 /usr/share/nginx/html/pf-ui.js   ./harness_controle/estatico/pf-ui/
-COPY --from=platafirma/ui:0.23.1 /usr/share/nginx/html/pf-ui.css  ./harness_controle/estatico/pf-ui/
-COPY --from=platafirma/ui:0.23.1 /usr/share/nginx/html/fontes     ./harness_controle/estatico/pf-ui/fontes
-COPY --from=platafirma/ui:0.23.1 /usr/share/nginx/html/versao.txt ./harness_controle/estatico/pf-ui/
+COPY --from=platafirma/ui:0.24.0 /usr/share/nginx/html/pf-ui.js   ./harness_controle/estatico/pf-ui/
+COPY --from=platafirma/ui:0.24.0 /usr/share/nginx/html/pf-ui.css  ./harness_controle/estatico/pf-ui/
+COPY --from=platafirma/ui:0.24.0 /usr/share/nginx/html/fontes     ./harness_controle/estatico/pf-ui/fontes
+COPY --from=platafirma/ui:0.24.0 /usr/share/nginx/html/versao.txt ./harness_controle/estatico/pf-ui/
 
 # O derivado grava a versao. Mesma forma do carimbo da casa
 # (platafirma-conhecimento/wiki/montar-wiki): origem, sha256, em. Editar o
 # copiado e erro; o proximo build sobrescreve sem avisar. Vai servido pela
 # rota /estatico/pf-ui/origem.txt, para auditar de fora sem abrir a imagem.
 RUN set -eu; { \
-      echo "origem: platafirma/ui:0.23.1"; \
+      echo "origem: platafirma/ui:0.24.0"; \
       echo "sha256: $(sha256sum harness_controle/estatico/pf-ui/pf-ui.css | cut -d' ' -f1)"; \
       echo "em: $(date -Iseconds)"; \
     } > harness_controle/estatico/pf-ui/origem.txt
