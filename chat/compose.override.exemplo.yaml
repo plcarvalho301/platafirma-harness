@@ -24,7 +24,7 @@ services:
   chat-recepcao:
     environment:
       PLATAFIRMA_INSTANCIA: /srv/platafirma/casa
-      PF_CASA_RAIZ: /opt/platafirma/current/casa-espelho
+      PF_CASA_RAIZ: /opt/platafirma/current/casa
       CHAT_JOURNAL: /srv/platafirma/casa/var/run/chat/journal.db
       CHAT_FITAS_RAIZ: /srv/platafirma/casa/var/fitas
     volumes:

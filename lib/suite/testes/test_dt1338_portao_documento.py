@@ -20,7 +20,6 @@ def test_dt1338_portao_aprova_repositorio_esteira_documento_sem_suite_de_codigo(
             {
                 "repositorios": {
                     "platafirma-casa": {"esteira": "documento"},
-                    "platafirma-casa-espelho": {"esteira": "documento"},
                     "platafirma-core": {"esteira": "codigo"},
                 }
             }
@@ -30,7 +29,7 @@ def test_dt1338_portao_aprova_repositorio_esteira_documento_sem_suite_de_codigo(
     pasta_vereditos = tmp_path / "vereditos"
     pasta_vereditos.mkdir()
 
-    for repo in ("platafirma-casa", "platafirma-casa-espelho"):
+    for repo in ("platafirma-casa",):
         dec = avaliar_portao(
             repo,
             mudanca="arvore-doc-1",

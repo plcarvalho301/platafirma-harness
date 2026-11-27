@@ -463,7 +463,7 @@ def test_pre_commit_bloqueante_vs_aviso():
 
 def test_lint_prosa_le_o_gabarito_da_casa_nova(bancada, tmp_path):
     doc = tmp_path / "marcas-pt-br"
-    doc.write_text("casa nova · platafirma-casa-espelho · instancias/gabarito/marcas-pt-br.md\n"
+    doc.write_text("casa nova · platafirma-casa · instancias/gabarito/marcas-pt-br.md\n"
                    "# Marcas de máquina\n\nEntidade: gabarito\n")
     stub = tmp_path / "acervo-gabarito"
     stub.write_text("#!/bin/sh\n"

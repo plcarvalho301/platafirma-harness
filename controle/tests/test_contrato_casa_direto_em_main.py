@@ -165,7 +165,7 @@ def test_abrir_da_a_worktree_de_main_da_cadeira_com_ou_sem_card(tmp_path):
 
 
 def test_casa_espelho_segue_o_regime_da_casa(tmp_path):
-    """Debito 432: platafirma-casa-espelho (a casa nova, F3974) e repositorio de deliberacao como a
+    """Debito 432: platafirma-casa (a casa nova, F3974) e repositorio de deliberacao como a
     casa: abrir da a worktree de main da cadeira, commitar + sincronizar chegam ao main do origin,
     pr-abrir e pr-merge recusam 2."""
     espelho = "platafirma-casa"

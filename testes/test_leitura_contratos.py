@@ -1087,7 +1087,7 @@ def ambiente_harness(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[st
     (inst / "segredos").mkdir(parents=True)
     pdp.mkdir(parents=True)
     (banc / "wt" / "platafirma-core" / "outra-cadeira").mkdir(parents=True)
-    (banc / "wt" / "platafirma-casa-espelho" / "seguranca" / "main" / ".git").mkdir(parents=True)
+    (banc / "wt" / "platafirma-casa" / "seguranca" / "main" / ".git").mkdir(parents=True)
     (banc / "wt" / "platafirma-harness" / "seguranca" / "main" / "bin").mkdir(parents=True)
     (banc / "wt" / "platafirma-rastreador" / "engenharia").mkdir(parents=True)
     (banc / "platafirma-rastreador").mkdir(parents=True)

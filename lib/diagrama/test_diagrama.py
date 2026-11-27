@@ -1043,7 +1043,7 @@ def test_recorta_gabarito_com_o_geral_e_a_secao_do_tipo():
 def test_gabarito_do_espelho_tem_a_secao_de_cada_tipo():
     gabarito = RAIZ_ESPELHO / juizes.GABARITO_FIGURA
     if not gabarito.is_file():
-        pytest.skip("gabarito da casa-espelho ausente fora da arvore do espelho")
+        pytest.skip("gabarito da casa ausente fora da arvore da casa")
     texto = gabarito.read_text(encoding="utf-8")
     for tipo in juizes.SECAO_DO_TIPO:
         assert juizes.recortar_gabarito(texto, tipo)

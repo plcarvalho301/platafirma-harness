@@ -7,7 +7,7 @@ casos sinteticos.
 
 O GABARITO contra o ops log real de 2026-09-07 saiu em 27/09/2026: o arquivo ja tinha
 rotacionado e o caso pulava para sempre, e teste nao le estado real
-(referencias/classes/teste.md no platafirma-casa-espelho).
+(referencias/classes/teste.md no platafirma-casa).
 """
 import importlib.machinery
 import importlib.util

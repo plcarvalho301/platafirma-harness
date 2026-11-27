@@ -1,11 +1,11 @@
 # componente: componente:verbo-lint
 """Contrato da trava «casa velha não se cita por caminho» (F4073, #4348).
 
-Prova: `forma` pega o repositório extinto de arquitetura, `platafirma-casa` (sem -espelho),
-as pastas numeradas (1-orientacao a 6-artefato), originais/, abertura/dono.md,
-var/abertura-publicada e leituras de casa na release; deixa passar a instância
-(`/srv/platafirma/casa`), `platafirma-casa-espelho`, `release() / "harness"` e
-`/opt/platafirma/current/casa-espelho/...`; o pre-commit recusa linha acrescentada com a
+Prova: `forma` pega o repositório extinto de arquitetura,
+as pastas numeradas (1-orientacao a 6-artefato), originais/, abertura/dono.md e
+var/abertura-publicada; deixa passar a instância
+(`/srv/platafirma/casa`), `platafirma-casa`, `release() / "harness"` e
+`/opt/platafirma/current/casa/...`; o pre-commit recusa linha acrescentada com a
 forma, nomeando arquivo e linha, e passa o commit limpo; a forma legada não trava a edição
 de outro trecho; o próprio detector e o teste dele são isentos; `varrer` devolve 1
 apontamento por linha proibida.

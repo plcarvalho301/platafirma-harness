@@ -147,7 +147,7 @@ _RE_ROTULOS_LINHA = re.compile(r"^-\s*r[óo]tulos:\s*(.*)$", re.M | re.I)
 
 
 def _rotulos_do_chapeu_md(chapeu_md_path: str) -> list[str] | None:
-    """Extrai `- rótulos: a · b · ...` da seção `## Rótulos de busca` do chapeu.md (casa-espelho)."""
+    """Extrai `- rótulos: a · b · ...` da seção `## Rótulos de busca` do chapeu.md (platafirma-casa)."""
     if not os.path.isfile(chapeu_md_path):
         return None
     with open(chapeu_md_path, encoding="utf-8") as f:

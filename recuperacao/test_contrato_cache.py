@@ -313,4 +313,4 @@ def test_hit_de_acervo_com_cache_mudo_no_sismember_reprova(monkeypatch):
 
 # A conformidade contra o motor-cache vivo (política allkeys-lru da instância 6381, ida e
 # volta gravando no valkey de produção) saiu daqui em 27/09/2026: é conferência de estado
-# de produção, não teste (referencias/classes/teste.md no platafirma-casa-espelho, «O ambiente»).
+# de produção, não teste (referencias/classes/teste.md no platafirma-casa, «O ambiente»).
