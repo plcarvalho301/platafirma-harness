@@ -1,0 +1,10 @@
+#!/opt/platafirma/current/venv/harness/bin/python
+"""Comando do verbo `casa`: despacha leitura e escrita da Olaria via escritor único."""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _olaria.__main__ import main
+
+sys.exit(main(prog="casa"))

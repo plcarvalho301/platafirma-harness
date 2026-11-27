@@ -657,6 +657,7 @@ def _tentar_via_escritor(
     ato: str,
     args: list[str],
     *,
+    verbo: str = "ontologia",
     pedido: str,
     como_json: bool,
     env: dict[str, str],
@@ -675,7 +676,7 @@ def _tentar_via_escritor(
     ) = camada
     cfg_path = env.get("PF_ESCRITA_CONFIG") or ""
     politica = carregar_politica(Path(cfg_path)) if cfg_path else carregar_politica()
-    if not verbo_esta_ligado("ontologia", politica=politica):
+    if not verbo_esta_ligado(verbo, politica=politica):
         return None
     preparado = _preparar_via_escritor(ato, args, pedido=pedido, como_json=como_json)
     if preparado is None:
@@ -685,7 +686,7 @@ def _tentar_via_escritor(
     argv_escritor, stdin_bytes = preparado
     prazo_ns = _prazo_ns_escritor(env)
     ctx = ContextoEscrita(
-        verbo="ontologia",
+        verbo=verbo,
         cadeira=env.get("PF_CADEIRA") or "",
         sujeito=env.get("PF_SUJEITO") or env.get("PF_CADEIRA") or "",
         sessao_id=env.get("PF_SESSAO") or "",
@@ -698,7 +699,7 @@ def _tentar_via_escritor(
     socket_path = Path(sock_env) if sock_env else None
     try:
         res = executar_ato_escrever(
-            "ontologia",
+            verbo,
             argv_escritor,
             stdin_bytes,
             opcoes=OpcoesExecucao(
@@ -801,7 +802,7 @@ def executar(argv: list, env: dict | None = None, *, prog: str | None = None) ->
                       proximo=f"ontologia {ato} --help")
         if ato in ("criar", "trocar", "ensaiar"):
             via_escritor = _tentar_via_escritor(
-                ato, args, pedido=pedido, como_json=como_json, env=env
+                ato, args, verbo=prog, pedido=pedido, como_json=como_json, env=env
             )
             if via_escritor is not None:
                 return via_escritor
