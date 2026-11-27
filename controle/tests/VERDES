@@ -60,6 +60,7 @@ tests/test_contrato_repo_pr_merge.py | bin/repo
 tests/test_repo_regressoes_lote_f.py | bin/repo bin/release
 testes/test_leitura_contratos.py | lib/leitura/** lib/oplog.py
 testes/test_escrita_contrato.py | lib/escrita/** registro/escrita.yaml
+testes/test_escrita_casa.py | lib/escrita/** lib/leitura/** registro/vista-alcance.yaml registro/escrita.yaml registro/porta.yaml bin/casa bin/_olaria/**
 testes/test_ato_ler_contrato.py | lib/leitura/** bin/busca registro/leitura.yaml
 tests/test_contrato_ontologia_remendo.py | bin/ontologia bin/_olaria/**
 tests/test_dts_clientes_servicos.py | lib/terceiros_olaria.py bin/bot lib/postura/casa.py lib/postura/composicao.py lib/descanso/publicar.py
