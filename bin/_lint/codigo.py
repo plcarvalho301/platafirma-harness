@@ -211,7 +211,30 @@ def _apontar(rel: str, linha: int, item: dict, origem: str, msg: str) -> Apontam
     )
 
 
-def _selecao_ruff(ruff: list[str], raiz: Path, regua: Regua, avisos: list[str]) -> list[str] | None:
+def _registrar_nao_medido(
+    nao_medidos: list[dict[str, str]] | None,
+    item: dict,
+    nome: str,
+    motivo: str,
+) -> None:
+    if nao_medidos is None:
+        return
+    nao_medidos.append(
+        {
+            "id": str(item.get("id") or nome).strip(),
+            "severidade": str(item.get("severidade") or "aviso").strip().lower(),
+            "motivo": motivo,
+        }
+    )
+
+
+def _selecao_ruff(
+    ruff: list[str],
+    raiz: Path,
+    regua: Regua,
+    avisos: list[str],
+    nao_medidos: list[dict[str, str]] | None = None,
+) -> list[str] | None:
     """Argumentos de selecao do ruff, ou None se nada da lista se mede com ele."""
     conhecidas = _rodar([*ruff, "rule", "--all", "--output-format", "json"], raiz)
     try:
@@ -222,19 +245,27 @@ def _selecao_ruff(ruff: list[str], raiz: Path, regua: Regua, avisos: list[str]) 
     fora = sorted(set(regua.ruff) - existentes)
     if fora:
         avisos.append(f"codigos da lista que o ruff instalado nao conhece, fora da medida: {', '.join(fora)}")
+        for cod in fora:
+            _registrar_nao_medido(nao_medidos, regua.ruff[cod], cod, "código não conhecido pelo ruff instalado")
     if regua.ruff_padrao:
         # sem --select vale o padrao do ruff; as nomeadas entram por cima
         return ["--extend-select", ",".join(nomeadas)] if nomeadas else []
     return ["--select", ",".join(nomeadas)] if nomeadas else None
 
 
-def _ruff(raiz: Path, arquivos: list[Path], regua: Regua, avisos: list[str]) -> list[Apontamento]:
+def _ruff(
+    raiz: Path,
+    arquivos: list[Path],
+    regua: Regua,
+    avisos: list[str],
+    nao_medidos: list[dict[str, str]] | None = None,
+) -> list[Apontamento]:
     if not arquivos or not (regua.ruff or regua.ruff_padrao):
         return []
     ruff = _binario("ruff", RUFF_UVX)
     if not ruff:
         raise ValueError(3, "linter python (ruff) ausente: nem `ruff` no PATH nem `uvx`")
-    selecao = _selecao_ruff(ruff, raiz, regua, avisos)
+    selecao = _selecao_ruff(ruff, raiz, regua, avisos, nao_medidos)
     if selecao is None:
         return []
 
@@ -261,13 +292,21 @@ def _ruff(raiz: Path, arquivos: list[Path], regua: Regua, avisos: list[str]) -> 
     return achados
 
 
-def _shellcheck(raiz: Path, arquivos: list[Path], regua: Regua, avisos: list[str]) -> list[Apontamento]:
+def _shellcheck(
+    raiz: Path,
+    arquivos: list[Path],
+    regua: Regua,
+    avisos: list[str],
+    nao_medidos: list[dict[str, str]] | None = None,
+) -> list[Apontamento]:
     if not arquivos or not regua.shellcheck:
         return []
     sc = _binario("shellcheck", SHELLCHECK_UVX)
     if not sc:
         avisos.append(f"shellcheck ausente (nem no PATH nem por uvx): {len(regua.shellcheck)} "
                       f"regras de shell da lista nao medidas em {len(arquivos)} arquivos")
+        for cod, item in regua.shellcheck.items():
+            _registrar_nao_medido(nao_medidos, item, cod, "shellcheck ausente")
         return []
     rels = [str(a.relative_to(raiz)) for a in arquivos]
     incluir = ",".join(sorted(regua.shellcheck))
@@ -283,6 +322,8 @@ def _shellcheck(raiz: Path, arquivos: list[Path], regua: Regua, avisos: list[str
         if proc.returncode not in (0, 1):
             avisos.append(f"shellcheck saiu {proc.returncode} num lote de {len(lote)} arquivos: "
                           f"{proc.stderr.strip()[:300]}")
+            for cod, item in regua.shellcheck.items():
+                _registrar_nao_medido(nao_medidos, item, cod, f"shellcheck saiu {proc.returncode}")
             continue
         for c in json.loads(proc.stdout or "{}").get("comments", []):
             cod = f"SC{c.get('code')}"
@@ -293,10 +334,17 @@ def _shellcheck(raiz: Path, arquivos: list[Path], regua: Regua, avisos: list[str
     return achados
 
 
-def _predicados(ctx: Contexto, regua: Regua, avisos: list[str]) -> list[Apontamento]:
+def _predicados(
+    ctx: Contexto,
+    regua: Regua,
+    avisos: list[str],
+    nao_medidos: list[dict[str, str]] | None = None,
+) -> list[Apontamento]:
     desconhecidos = sorted(set(regua.predicados) - set(TODOS_PREDICADOS))
     if desconhecidos:
         avisos.append(f"predicados que a lista nomeia e o lint nao tem, fora da medida: {', '.join(desconhecidos)}")
+        for nome in desconhecidos:
+            _registrar_nao_medido(nao_medidos, regua.predicados[nome], nome, "predicado sem implementação no lint")
     achados: list[Apontamento] = []
     for nome, item in regua.predicados.items():
         if nome not in TODOS_PREDICADOS:
@@ -308,6 +356,7 @@ def _predicados(ctx: Contexto, regua: Regua, avisos: list[str]) -> list[Apontame
                 achados.append(_apontar(a.arquivo, a.linha, item, nome, detalhe))
         except Exception as e:  # noqa: BLE001 — borda: um predicado quebrado nao derruba os outros; vai em aviso
             avisos.append(f"predicado {nome} falhou e ficou fora da medida: {type(e).__name__}: {e}")
+            _registrar_nao_medido(nao_medidos, item, nome, f"predicado falhou: {type(e).__name__}: {e}")
     return achados
 
 
@@ -421,6 +470,7 @@ def verificar_codigo(
     leitura: bool = False,
     extras: dict[Path, str] | None = None,
     lista: dict | None = None,
+    nao_medidos: list[dict[str, str]] | None = None,
 ) -> tuple[list[Apontamento], str, int, list[str]]:
     """Aplica a lista ao alvo. Devolve (apontamentos, chave, rev, avisos).
 
@@ -439,9 +489,9 @@ def verificar_codigo(
     ctx, escopo = _contexto(raiz, alvo, regua, leitura=leitura, extras=extras or {})
 
     avisos: list[str] = []
-    achados = _ruff(raiz, escopo["python"], regua, avisos)
-    achados += _shellcheck(raiz, escopo["shell"], regua, avisos)
-    achados += _predicados(ctx, regua, avisos)
+    achados = _ruff(raiz, escopo["python"], regua, avisos, nao_medidos)
+    achados += _shellcheck(raiz, escopo["shell"], regua, avisos, nao_medidos)
+    achados += _predicados(ctx, regua, avisos, nao_medidos)
     achados += _leituras(ctx, regua, avisos, ligada=leitura)
 
     unicos: dict[tuple[str, int, str, str], Apontamento] = {}

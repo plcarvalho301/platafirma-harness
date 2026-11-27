@@ -680,6 +680,15 @@ def test_predicados_de_teste(tmp_path):
     assert _achados(tmp_path, "TESTE_ESTADO_REAL", fonte) == [("tests/test_a.py", 6)]
 
 
+def test_predicado_teste_fora_de_portao(tmp_path):
+    fonte = {
+        "controle/tests/VERDES": "tests/test_ok.py\n",
+        "controle/tests/test_ok.py": "def test_ok():\n    assert True\n",
+        "controle/tests/test_solto.py": "def test_solto():\n    assert True\n",
+    }
+    assert _achados(tmp_path, "TESTE_FORA_DE_PORTAO", fonte) == [("controle/tests/test_solto.py", 1)]
+
+
 def test_predicado_eval_shell(tmp_path):
     assert _achados(tmp_path, "EVAL_SHELL", {"a.sh": (
         "#!/bin/bash\n"

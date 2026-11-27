@@ -252,8 +252,26 @@ def _traduzir_apontamentos_acervo(medida: dict[str, Any]) -> tuple[list[Apontame
 
 
 def _adaptar_codigo(regua: _ReguaResolvida, alvo: AlvoLint, raiz: Path) -> _ResultadoDetector:
-    apontamentos, _chave, rev, _avisos = verificar_codigo(raiz, alvo.caminho, leitura=False, lista=regua.lista)
-    return _ResultadoDetector(apontamentos=apontamentos, versao_regua=f"rev{rev}")
+    nao_medidos: list[dict[str, str]] = []
+    apontamentos, _chave, rev, _avisos = verificar_codigo(
+        raiz,
+        alvo.caminho,
+        leitura=False,
+        lista=regua.lista,
+        nao_medidos=nao_medidos,
+    )
+    nao_julgados = tuple(
+        dict.fromkeys(str(x.get("id") or "").strip() for x in nao_medidos if str(x.get("id") or "").strip())
+    )
+    bloq_sem_medida = any(
+        str(x.get("severidade") or "").strip().lower() == "bloqueante" for x in nao_medidos
+    )
+    return _ResultadoDetector(
+        apontamentos=apontamentos,
+        versao_regua=f"rev{rev}",
+        nao_julgados=nao_julgados,
+        inconclusivo=bloq_sem_medida,
+    )
 
 
 def _adaptar_prosa(regua: _ReguaResolvida, _alvo: AlvoLint, _raiz: Path) -> _ResultadoDetector:

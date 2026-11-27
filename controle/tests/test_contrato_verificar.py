@@ -284,59 +284,6 @@ def test_ops_componente_conforme_gabarito_codigo_json(tmp_path: Path):
     assert dados["apontamentos"] == []
 
 
-def test_ops_fixture_teste_fora_de_portao_t11_divergente_sai_0(tmp_path: Path):
-    fichario = DubleFichario(
-        reguas=_reguas_padrao(),
-        alvos={
-            "componente:verificador": AlvoVerificado(
-                chave="componente:verificador",
-                classe="componente",
-                slug="verificador",
-                versao="def456",
-                raiz=tmp_path,
-            )
-        },
-    )
-
-    def detector_t11(_cls: str, _slug: str, _alvo: AlvoLint):
-        return (
-            [
-                ApontamentoBruto(
-                    arquivo="controle/tests/test_solto.py",
-                    linha=1,
-                    o_que_fere="T11 teste fora da lista de portão [TESTE_FORA_DE_PORTAO]",
-                    cura="incluir o arquivo em controle/tests/VERDES no mesmo commit",
-                    severidade="bloqueante",
-                    id="T11",
-                )
-            ],
-            "rev1",
-        )
-
-    def lint_t11(reguas: Sequence[str], alvos: Sequence[AlvoLint], *, prazo_s: float = 60.0):
-        return julgar_lint(reguas, alvos, prazo_s=prazo_s, executor_detector=detector_t11)
-
-    amb = AmbienteVerificacao(vista=_vista_padrao(), fichario=fichario, executor_lint=lint_t11)
-    rc, stdout, stderr = _rodar(
-        "ops",
-        ["componente:verificador", "--regua", "gabarito:antipadroes-de-codigo", "--json"],
-        amb,
-    )
-
-    assert rc == 0
-    assert stderr == ""
-    dados = json.loads(stdout)
-    assert dados["veredito"]["resultado"] == "nao"
-    assert dados["veredito"]["constatacao"] == "divergente"
-    assert len(dados["apontamentos"]) == 1
-    ap = dados["apontamentos"][0]
-    assert ap["item"] == "T11"
-    assert ap["lugar"] == "controle/tests/test_solto.py:1"
-    assert "T11" in ap["exigencia"]
-    assert ap["severidade"] == "bloqueante"
-    assert "VERDES" in ap["cura"]
-
-
 def test_item_de_aviso_nao_altera_veredito_conforme(tmp_path: Path):
     fichario = DubleFichario(
         reguas=_reguas_padrao(),
@@ -615,27 +562,22 @@ def _criar_acervo_fixture(tmp_path: Path, textos: dict[str, str]) -> Path:
     return script
 
 
-def test_adaptador_real_codigo_predicado_verde_na_falha(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_adaptador_real_codigo_t11_teste_fora_do_verdes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     lista_codigo = (
         "força não declarada · vigente — lista-de-verificacao antipadroes-de-codigo · Código\n"
         "# Antipadrões de código\n\nEspécie: lista-de-verificacao\nRev: 3\n\n"
         "| # | antipadrão | detector | classe | cura |\n"
         "|---|---|---|---|---|\n"
-        "| R13 | verde na falha | predicado VERDE_NA_FALHA | bloqueante | devolver erro em vez de True |\n"
+        "| T11 | teste fora da lista de portão | predicado TESTE_FORA_DE_PORTAO | bloqueante | incluir em VERDES |\n"
     )
     acervo_bin = _criar_acervo_fixture(tmp_path, {"antipadroes-de-codigo": lista_codigo})
     monkeypatch.setenv("PF_LINT_ACERVO", str(acervo_bin))
 
-    repo = tmp_path / "repo_codigo"
-    (repo / "lib").mkdir(parents=True)
-    (repo / "lib" / "quebrado.py").write_text(
-        "def tentar():\n"
-        "    try:\n"
-        "        return 1\n"
-        "    except RuntimeError:\n"
-        "        return True\n",
-        encoding="utf-8",
-    )
+    repo = tmp_path / "repo_t11"
+    (repo / "controle" / "tests").mkdir(parents=True)
+    (repo / "controle" / "tests" / "VERDES").write_text("tests/test_ok.py\n", encoding="utf-8")
+    (repo / "controle" / "tests" / "test_ok.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+    (repo / "controle" / "tests" / "test_solto.py").write_text("def test_solto():\n    assert True\n", encoding="utf-8")
 
     fichario = DubleFichario(
         reguas=_reguas_padrao(),
@@ -661,7 +603,53 @@ def test_adaptador_real_codigo_predicado_verde_na_falha(tmp_path: Path, monkeypa
     assert dados["veredito"]["resultado"] == "nao"
     assert dados["veredito"]["constatacao"] == "divergente"
     assert dados["veredito"]["motor"] == SERVICO_LINT
-    assert any(ap["item"] == "R13" and "quebrado.py" in ap["lugar"] for ap in dados["apontamentos"])
+    assert len(dados["apontamentos"]) == 1
+    ap = dados["apontamentos"][0]
+    assert ap["item"] == "T11"
+    assert ap["lugar"] == "controle/tests/test_solto.py:1"
+    assert ap["severidade"] == "bloqueante"
+    assert "VERDES" in ap["cura"]
+
+
+def test_adaptador_real_codigo_bloqueante_nao_medido_fecha_nao_sei(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    lista_codigo = (
+        "força não declarada · vigente — lista-de-verificacao antipadroes-de-codigo · Código\n"
+        "# Antipadrões de código\n\nEspécie: lista-de-verificacao\nRev: 3\n\n"
+        "| # | antipadrão | detector | classe | cura |\n"
+        "|---|---|---|---|---|\n"
+        "| X99 | regra sem detector | predicado PREDICADO_INEXISTENTE | bloqueante | implementar predicado |\n"
+    )
+    acervo_bin = _criar_acervo_fixture(tmp_path, {"antipadroes-de-codigo": lista_codigo})
+    monkeypatch.setenv("PF_LINT_ACERVO", str(acervo_bin))
+
+    repo = tmp_path / "repo_nao_medido"
+    (repo / "lib").mkdir(parents=True)
+    (repo / "lib" / "ok.py").write_text("x = 1\n", encoding="utf-8")
+
+    fichario = DubleFichario(
+        reguas=_reguas_padrao(),
+        alvos={
+            "componente:verificador": AlvoVerificado(
+                chave="componente:verificador",
+                classe="componente",
+                slug="verificador",
+                raiz=repo,
+            )
+        },
+    )
+    amb = AmbienteVerificacao(vista=_vista_padrao(), fichario=fichario)
+    rc, stdout, stderr = _rodar(
+        "ops",
+        ["componente:verificador", "--regua", "gabarito:antipadroes-de-codigo", "--json"],
+        amb,
+    )
+
+    assert rc == 0
+    assert stderr == ""
+    dados = json.loads(stdout)
+    assert dados["veredito"]["resultado"] == "nao-sei"
+    assert dados["veredito"]["constatacao"] == "inconclusivo"
+    assert "X99" in dados["nao_julgados"]
 
 
 def test_adaptador_real_prosa_marcas_pt_br_responde_nao_sei_sem_verde_falso(

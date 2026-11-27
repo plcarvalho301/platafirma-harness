@@ -694,6 +694,47 @@ def teste_estado_real(ctx: Contexto, item: dict) -> Iterator[Achado]:
                 yield Achado(rel, n.lineno, f"caminho real em teste: {n.value[:60]}")
 
 
+def _listados_nos_verdes(raiz: Path) -> tuple[list[tuple[Path, Path]], set[Path]]:
+    """Lê cada lista de portão (`VERDES`) usando o parser de `bin/_lint/testes.py`."""
+    from .testes import ler_linha, listas_de_portao
+
+    subarvores: list[tuple[Path, Path]] = []
+    listados: set[Path] = set()
+    for verdes in listas_de_portao(raiz):
+        pasta = verdes.parent
+        base = (pasta.parent if pasta.name == "tests" else pasta).resolve()
+        subarvores.append((base, verdes))
+        try:
+            texto = verdes.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for n, bruta in enumerate(texto.splitlines(), 1):
+            linha = ler_linha(bruta, n)
+            if linha is None or not linha.arquivo:
+                continue
+            listados.add((base / linha.arquivo).resolve())
+            listados.add((pasta / linha.arquivo).resolve())
+    subarvores.sort(key=lambda par: len(par[0].parts), reverse=True)
+    return subarvores, listados
+
+
+def teste_fora_de_portao(ctx: Contexto, item: dict) -> Iterator[Achado]:
+    """Arquivo de teste numa subárvore com lista de portão (`VERDES`) ausente dela (T11)."""
+    subarvores, listados = _listados_nos_verdes(ctx.raiz)
+    if not subarvores:
+        return
+    for p in ctx.py:
+        if p.name in ("conftest.py", "__init__.py"):
+            continue
+        rel = ctx.rel(p)
+        if not e_teste(rel):
+            continue
+        p_res = p.resolve()
+        verdes = next((v for base, v in subarvores if p_res.is_relative_to(base)), None)
+        if verdes is not None and p_res not in listados:
+            yield Achado(rel, 1, f"fora da lista de portão ({ctx.rel(verdes)})")
+
+
 # ------------------------------------------------------------------ shell
 
 
@@ -753,6 +794,7 @@ PREDICADOS: dict[str, tuple[Callable[[Contexto, dict], Iterator[Achado]], bool]]
     "TESTE_CONDICIONAL": (teste_condicional, False),
     "TESTE_ERRATICO": (teste_erratico, True),
     "TESTE_ESTADO_REAL": (teste_estado_real, True),
+    "TESTE_FORA_DE_PORTAO": (teste_fora_de_portao, False),
     "EVAL_SHELL": (eval_shell, False),
     "BASH_SET_E": (bash_set_e, False),
     "LINHAS_SHELL": (linhas_shell, False),
