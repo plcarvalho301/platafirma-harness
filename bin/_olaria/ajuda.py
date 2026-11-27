@@ -25,6 +25,21 @@ ontologia gerar [--json]
 ontologia --help\
 """
 
+USAGE_CASA = """\
+casa criar [<classe>] [<arquivo.yaml>] [--pedido <id>] [--json]
+casa trocar <classe> <chave> <versao> [<arquivo.yaml>] [--pedido <id>] [--json]
+casa trocar <arquivo.yaml> [--pedido <id>] [--json]
+casa recompor <classe> <versao> [<arquivo.yaml>] [--pedido <id>] [--json]
+casa ensaiar [<criar|trocar|recompor>] [<classe>] [<chave>] [<versao>] [<arquivo.yaml>] [--json]
+casa renomear <classe> <chave> <nova_chave> [--pedido <id>] [--json]
+casa apagar <classe> <chave> <motivo> [--com <classe> <chave>]... [--pedido <id>] [--json]
+casa transitar <classe> <chave> <estado> [--pedido <id>] [--json]
+casa nomes abrir <termo> <chave> <origem> [--pedido <id>] [--json]
+casa nomes encerrar <termo> <chave> [--pedido <id>] [--json]
+casa gerar [--json]
+casa --help\
+"""
+
 SAIDAS = (
     (0, "fez o que o ato pede, inclusive listar vazio e repetição de --pedido com mesmo YAML"),
     (1, "não: classe ou ficha inexistente, régua ou raciocinador recusou, versão diferente, pedido com conteúdo diferente, lote em parte"),
@@ -48,10 +63,23 @@ NOTAS = (
 )
 
 
-def texto_do_verbo() -> str:
+NOTAS_CASA = (
+    "O verbo `casa` não expõe leitura nem listagem: use `busca ler <chave>`, `busca consultar` ou `busca listar` para ler fichas e catálogo.",
+    "Em `trocar` de lote com versões distintas, coloque `versao: <uuid7>` em cada item de `classes`, `fichas` ou catálogo no YAML e chame `casa trocar <arquivo.yaml>` (ou passe uma `<versao>` em posição como padrão para os itens sem `versao`).",
+    "Para remendo parcial em lote, marque o item existente com `_remendo: true` e `versao: <uuid7>` e envie só os campos alterados. Use `casa ensaiar trocar <arquivo.yaml>` para validar antes de gravar.",
+    "Para conferir o que já está gravado (estrato, capacidade ou classe), use `conferir ontologia <estrato:slug|capacidade:slug|classe>`.",
+    "Escritas (`criar`, `trocar`, `recompor`, `renomear`, `apagar`, `transitar`) aceitam `--pedido <uuid7>` para repetição idempotente após saída 5.",
+    "Fichas que só se apontam entre si saem num pedido só: `casa apagar <classe> <chave> <motivo> --com <classe> <chave>`, uma fornada e uma transação; ficha apontada por quem está fora do conjunto recusa com `ficha-apontada`.",
+    "O YAML pode entrar como caminho `.yaml` (ou `.yml`) ou pela entrada padrão (`-`).",
+)
+
+
+def texto_do_verbo(prog: str = "ontologia") -> str:
     saidas = "\n".join(f"  {n}  {texto}" for n, texto in SAIDAS)
-    notas = "\n".join(f"  {n}" for n in NOTAS)
-    formas = "\n".join(f"  {linha}" for linha in USAGE.splitlines())
+    uso_src = USAGE_CASA if prog == "casa" else USAGE
+    notas_src = NOTAS_CASA if prog == "casa" else NOTAS
+    notas = "\n".join(f"  {n}" for n in notas_src)
+    formas = "\n".join(f"  {linha}" for linha in uso_src.splitlines())
     return f"uso:\n{formas}\n\n{notas}\n\nsaídas:\n{saidas}\n"
 
 
@@ -140,8 +168,8 @@ def texto_dos_campos(corpo: dict) -> str:
 HTTP_OK = 200
 
 
-def ajuda(cliente: object, motivo_sem_servico: str = "") -> Saida:
-    base = texto_do_verbo()
+def ajuda(cliente: object, motivo_sem_servico: str = "", *, prog: str = "ontologia") -> Saida:
+    base = texto_do_verbo(prog=prog)
     if cliente is None:
         return Saida(0, base + f"\na ajuda dos campos depende do serviço: {motivo_sem_servico}\n")
     from .cliente import PrazoAcabou, SemConexao, SemResposta

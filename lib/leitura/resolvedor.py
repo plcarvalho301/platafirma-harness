@@ -401,16 +401,17 @@ def carregar_vista_alcance(
     """Carrega a vista de alcance a partir de `registro/vista-alcance.yaml` e `registro/porta.yaml` (sem banco)."""
     verbo_dono, variantes, classes_casa = _carregar_alcance_casa_leitura(caminho_vista_yaml)
     alcance = dict(_ALCANCE_PADRAO)
-    alcance[verbo_dono] = classes_casa
+    # O gatilho `casa` não expõe leitura (toda leitura/listagem mora em `busca`);
+    # apenas variantes de transição como `ontologia` mantêm alcance de leitura.
     for var in variantes:
         alcance[var] = classes_casa
 
     classes = dict(_CLASSES_PADRAO)
     for cls in classes_casa:
         if cls not in classes:
-            classes[cls] = ClasseAlcance(cls, "banco", verbo_dono, universo_fechado=True)
+            classes[cls] = ClasseAlcance(cls, "banco", "busca", universo_fechado=True)
         elif classes[cls].morada == "banco" and classes[cls].verbo_dono in (verbo_dono, *variantes):
-            classes[cls] = ClasseAlcance(cls, "banco", verbo_dono, universo_fechado=True)
+            classes[cls] = ClasseAlcance(cls, "banco", "busca", universo_fechado=True)
 
     arq = registro_porta if registro_porta is not None else _RAIZ_REGISTRO_PORTA
     verbos_ler = set(alcance)
@@ -420,10 +421,11 @@ def carregar_vista_alcance(
         if isinstance(verbos, dict):
             for slug, info in verbos.items():
                 desc = str(info.get("descricao") or "") if isinstance(info, dict) else ""
-                if "ler" in desc or slug in alcance:
+                if re.search(r"\bler\b", desc) or slug in alcance:
                     verbos_ler.add(str(slug))
     except (OSError, yaml.YAMLError):
         pass
+    verbos_ler.discard(verbo_dono)
     return VistaAlcance(
         verbos_aceitam_ler=frozenset(verbos_ler),
         alcance_verbo=alcance,

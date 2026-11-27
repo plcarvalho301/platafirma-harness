@@ -32,6 +32,7 @@ VARIANTES_CLASSE_CATALOGO = {
 }
 FLAGS_DE_ENSAIO = ("--dry-run", "--ensaio")
 ATOS_LEITURA = {"ler", "listar", "ensaiar", "gerar", "preparar"}
+ATOS_LEITURA_CATALOGO = {"ler", "listar", "preparar"}
 ATOS_ESCRITA = {"criar", "trocar", "recompor", "renomear", "apagar", "transitar", "nomes"}
 _PARTE_YAML = re.compile(r"(?m)^\s*(?:#\s*parte\b|parte\s*:\s*true\b)")
 
@@ -487,10 +488,29 @@ def _proximo_para_gravar(args: list, env: dict) -> str:
     return f"ontologia criar {arq}  |  ontologia trocar <classe> <chave> <versao> {arq}"
 
 
-def _proximo_para_destruicao(args: list) -> str:
-    """O verbo ontologia não tem `retirar`: a palavra de destruição leva à leitura do objeto, nunca a `apagar`."""
+def _proximo_busca_para_leitura(ato: str, args: list) -> str:
+    """Monta o comando em `busca` para quem tentou ler ou listar por `casa`."""
+    limpos = [a for a in args if not a.startswith("--")]
+    if ato == "listar":
+        if limpos:
+            return f"busca listar {_classe_canonica(limpos[0])}"
+        return "busca listar"
+    if len(limpos) >= 2:
+        chave = limpos[1] if ":" in limpos[1] else f"{_classe_canonica(limpos[0])}:{limpos[1]}"
+        return f"busca ler {chave}"
+    if len(limpos) == 1:
+        if ":" in limpos[0]:
+            return f"busca ler {limpos[0]}"
+        return f"busca listar {_classe_canonica(limpos[0])}"
+    return "busca ler <chave>"
+
+
+def _proximo_para_destruicao(args: list, *, prog: str = "ontologia") -> str:
+    """O verbo não tem `retirar`: a palavra de destruição leva à leitura do objeto, nunca a `apagar`."""
     limpos = [a for a in args if not a.startswith("--") and not _e_entrada_yaml(a)
               and a.lower() not in VARIANTES_DESTRUICAO]
+    if prog == "casa":
+        return _proximo_busca_para_leitura("ler" if len(limpos) >= 2 else "listar", limpos)
     if len(limpos) >= 2:
         return f"ontologia ler {_classe_canonica(limpos[0])} {limpos[1]}"
     if limpos:
@@ -499,13 +519,21 @@ def _proximo_para_destruicao(args: list) -> str:
 
 
 def _checar_gates_de_uso(ato: str, args: list, *, prog: str, como_json: bool, env: dict) -> Saida | None:
+    if prog == "casa" and ato in ATOS_LEITURA_CATALOGO:
+        return sd.erro_de_uso(
+            "ato-recusado", "ato", ato,
+            "O verbo `casa` não expõe leitura nem listagem; toda leitura, consulta e listagem mora em `busca`.",
+            "Use `busca` para ler, consultar ou listar fichas e catálogo.",
+            _proximo_busca_para_leitura(ato, args),
+            como_json=como_json,
+        )
     if any(t.lower() in VARIANTES_DESTRUICAO for t in [ato, *args]):
         ruim = next(t for t in [ato, *args] if t.lower() in VARIANTES_DESTRUICAO)
         return sd.erro_de_uso(
             "termo-de-destruicao", "ato", ruim,
             "O verbo ontologia não tem `retirar`: palavra de destruição não executa e leva à leitura do objeto, nunca a `apagar`.",
             "Leia o objeto antes de decidir; tirar a ficha de vez é `apagar`, escrita que não volta e que vai ao dono antes do ato.",
-            _proximo_para_destruicao(args),
+            _proximo_para_destruicao(args, prog=prog),
             como_json=como_json,
         )
     if any(f in FLAGS_DE_ENSAIO for f in args):
@@ -628,7 +656,7 @@ def _prazo_ns_escritor(env: dict[str, str]) -> int:
 
 
 def _preparar_via_escritor(
-    ato: str, args: list[str], *, pedido: str, como_json: bool
+    ato: str, args: list[str], *, verbo: str = "ontologia", pedido: str, como_json: bool
 ) -> tuple[list[str], bytes] | None:
     pos_candidatos = [item for item in args if not _e_entrada_yaml(item)]
     min_pos = 3 if ato == "ensaiar" else 2
@@ -636,13 +664,18 @@ def _preparar_via_escritor(
         return None
     if ato == "trocar" and len(pos_candidatos) >= 3 and not e_uuid7(pos_candidatos[2]):
         classe_sug = _classe_canonica(pos_candidatos[0])
+        proximo = (
+            f"busca ler {pos_candidatos[1]}"
+            if verbo == "casa"
+            else f"ontologia ler {classe_sug} {pos_candidatos[1]}"
+        )
         raise Uso(
             f"`{pos_candidatos[2]}` não é um uuid v7 de versão lida.",
             codigo="versao-invalida",
             onde="versao",
             recebido=pos_candidatos[2],
             regra="Chamada a `trocar` sem `<versao>` em posição (salvo lote em `<arquivo.yaml>` com `versao` por item), ou com `<versao>` que não é uuid v7, para antes da Olaria.",
-            proximo=f"ontologia ler {classe_sug} {pos_candidatos[1]}",
+            proximo=proximo,
         )
     pos_sem_yaml, stdin_bytes = _extrair_yaml_para_escritor(args, ato)
     argv_escritor = [ato, *pos_sem_yaml]
@@ -678,7 +711,7 @@ def _tentar_via_escritor(
     politica = carregar_politica(Path(cfg_path)) if cfg_path else carregar_politica()
     if not verbo_esta_ligado(verbo, politica=politica):
         return None
-    preparado = _preparar_via_escritor(ato, args, pedido=pedido, como_json=como_json)
+    preparado = _preparar_via_escritor(ato, args, verbo=verbo, pedido=pedido, como_json=como_json)
     if preparado is None:
         return None
     import json
@@ -765,14 +798,14 @@ def executar(argv: list, env: dict | None = None, *, prog: str | None = None) ->
         try:
             cliente = Cliente.do_ambiente(env)
         except AmbienteIncompleto as erro:
-            return ajuda_.ajuda(None, f"{erro} não está no ambiente")
-        return ajuda_.ajuda(cliente)
+            return ajuda_.ajuda(None, f"{erro} não está no ambiente", prog=prog)
+        return ajuda_.ajuda(cliente, prog=prog)
     if not argv:
         return sd.erro_de_uso(
             "uso-invalido", "chamada", "",
-            "A chamada ao verbo `ontologia` exige um ato.",
-            "Consulte as 12 formas da ajuda com `ontologia --help`.",
-            "ontologia --help",
+            f"A chamada ao verbo `{prog}` exige um ato.",
+            f"Consulte as formas da ajuda com `{prog} --help`.",
+            f"{prog} --help",
         )
     ato, resto = argv[0], list(argv[1:])
     args, como_json = _separar_json(resto)
@@ -781,11 +814,12 @@ def executar(argv: list, env: dict | None = None, *, prog: str | None = None) ->
         return gate
     todos_atos = ATOS_LEITURA | ATOS_ESCRITA
     if ato not in todos_atos:
+        atos_visiveis = todos_atos - ATOS_LEITURA_CATALOGO if prog == "casa" else todos_atos - {"preparar"}
         return sd.erro_de_uso(
             "ato-inexistente", "ato", ato,
-            f"Os atos de `ontologia` são {', '.join(sorted(todos_atos - {'preparar'}))}.",
-            "Escolha um ato válido do verbo `ontologia`.",
-            "ontologia --help",
+            f"Os atos de `{prog}` são {', '.join(sorted(atos_visiveis))}.",
+            f"Escolha um ato válido do verbo `{prog}`.",
+            f"{prog} --help",
             como_json=como_json,
         )
     aviso_var = ""

@@ -69,14 +69,15 @@ verbos:
       ficha), ler (leitura, ficha), listar (leitura, ficha)
   casa:
     descricao: >-
-      lê e grava fichas e catálogo da casa na Olaria (ontologia, processos, arquitetura,
-      norma, tesauros e inteligência) · use para: ler classe, ficha, dicionário ou shape;
-      listar classes, descendentes (--filhas), referenciadores (--aponta-para) ou chaves
-      gravadas; criar, trocar ou recompor fichas e classes das seis capacidades; ensaiar
-      mudança sem gravar; renomear, apagar, gerir nomes alternativos e gerar o modelo ·
-      atos: ler (leitura, casa), listar (leitura, casa), criar (escrita, casa), trocar
-      (escrita, casa), recompor (escrita, casa), ensaiar (leitura, casa), renomear
-      (escrita, casa), apagar (escrita, casa), nomes (escrita, casa), gerar (leitura, casa)
+      grava e altera o catálogo (classes, dicionários e ligações) e o fichário (fichas) da
+      casa; não lê — toda leitura, consulta e listagem é em busca · use para: criar, trocar
+      ou recompor classe ou ficha (ontologia, processos, arquitetura, norma, tesauro ou
+      inteligência), «grava a ficha», «atualiza a classe»; ensaiar uma mudança sem gravar
+      para validar contra a régua, «testa esse YAML antes de gravar»; renomear ou apagar
+      ficha, abrir ou encerrar nomes alternativos do vocabulário e gerar o modelo · atos:
+      criar (escrita, casa), trocar (escrita, casa), recompor (escrita, casa), ensaiar
+      (leitura, casa), renomear (escrita, casa), apagar (escrita, casa), nomes (escrita,
+      casa), gerar (leitura, casa)
   conferir:
     descricao: >-
       confere o SERVIDO contra o DECLARADO · use para: SEMPRE ANTES de agir sobre algo da casa
@@ -153,6 +154,7 @@ verbos:
         instancia: rag
         sem_instancia: [listar]
   ontologia:
+    modelo: false
     descricao: >-
       lê e grava classes, fichas e dicionários no catálogo e no fichário da Olaria · use para:
       ler classe, ficha, dicionário ou shape, «lê a classe chapeu»; listar classes, descendentes

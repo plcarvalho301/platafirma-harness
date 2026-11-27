@@ -34,7 +34,8 @@ from escrita.moradas.olaria import ConfigOlaria, MoradaOlaria, RespostaHTTP
 from escrita.politica import PoliticaEscrita, carregar_politica
 from escrita.portao import carregar_vista_alcance as carregar_vista_escrita
 from escrita.servidor import ConfigServidor, ServidorEscritor
-from leitura.resolvedor import ErroResolucao
+import yaml
+from leitura.resolvedor import ErroResolucao, resolver_alvo
 from leitura.resolvedor import carregar_vista_alcance as carregar_vista_leitura
 
 UUID7_VALIDO = "01960000-0000-7000-8000-000000000042"
@@ -128,10 +129,11 @@ def test_espelho_vista_alcance_cobre_seis_capacidades_e_sem_fossil() -> None:
     for _cap, classe, _chave in AMOSTRAS_SEIS_CAPACIDADES:
         assert classe in vista_e.verbos["casa"].classes
         assert vista_e.verbo_dono(classe) == "casa"
-        assert classe in vista_l.alcance_verbo["casa"]
         assert classe in vista_l.alcance_verbo["ontologia"]
+        assert vista_l.classes[classe].verbo_dono == "busca"
 
-    assert "casa" in vista_l.verbos_aceitam_ler
+    assert "casa" not in vista_l.verbos_aceitam_ler
+    assert "casa" not in vista_l.alcance_verbo
     assert "ontologia" in vista_l.verbos_aceitam_ler
 
 
@@ -254,6 +256,42 @@ def test_comando_bin_casa_encaminha_ao_escritor_unico_e_valida_uuid7(tmp_path: P
         )
         assert saida_versao_ruim.codigo == 2
         assert "versao-invalida" in saida_versao_ruim.stdout
+        assert "busca ler missao:mapear-processos-de-capacidade" in saida_versao_ruim.stdout
         assert len(amb.chamadas) == 1
     finally:
         amb.fechar()
+
+
+def test_casa_nao_expoe_leitura_no_resolvedor_nem_na_cli() -> None:
+    with pytest.raises(ErroResolucao) as exc:
+        resolver_alvo("casa", "missao:mapear-processos-de-capacidade")
+    assert exc.value.saida == 2
+    assert exc.value.recusa.codigo == "ato-nao-aceito"
+    assert exc.value.recusa.proximo == "busca ler missao:mapear-processos-de-capacidade"
+
+    for argv, esperado in [
+        (["ler", "missao", "missao:mapear-processos-de-capacidade"], "busca ler missao:mapear-processos-de-capacidade"),
+        (["listar", "shape"], "busca listar shape"),
+        (["preparar", "missao", "missao:mapear-processos-de-capacidade"], "busca ler missao:mapear-processos-de-capacidade"),
+    ]:
+        saida = olaria_main.executar(argv, env={}, prog="casa")
+        assert saida.codigo == 2
+        assert "ato-recusado" in saida.stdout
+        assert esperado in saida.stdout
+
+    ajuda = olaria_main.executar(["--help"], env={}, prog="casa")
+    assert ajuda.codigo == 0
+    assert "casa criar" in ajuda.stdout
+    assert "busca ler" in ajuda.stdout
+    assert "casa ler " not in ajuda.stdout
+    assert "casa listar " not in ajuda.stdout
+
+
+def test_porta_yaml_casa_sem_leitura_e_ontologia_oculta() -> None:
+    dados = yaml.safe_load((RAIZ / "registro" / "porta.yaml").read_text(encoding="utf-8"))
+    verbos = dados["verbos"]
+    desc_casa = str(verbos["casa"]["descricao"])
+    assert "não lê" in desc_casa
+    assert "ler (leitura, casa)" not in desc_casa
+    assert "listar (leitura, casa)" not in desc_casa
+    assert verbos["ontologia"].get("modelo") is False
