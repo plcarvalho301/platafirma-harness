@@ -19,6 +19,22 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 if RAIZ not in sys.path:
     sys.path.insert(0, RAIZ)
 
+# Fora do ar por ordem do dono (27/11/2026). A coleta roda na conta claudinho, sem isolamento:
+# o navegador executa codigo de terceiro dentro dela, e a guarda de rede nao alcanca o Chromium
+# nem os saltos de redirecionamento de resolver e historico. Todo ato recusa aqui, antes de
+# carregar o pacote, tocar a rede ou criar pasta de trabalho. Volta quando a coleta rodar em
+# conta isolada e testada, com o fluxo de transposicao para a casa definido.
+SUSPENSO = (
+    "pesquisar está fora do ar por ordem do dono (27/11/2026): a coleta volta quando rodar em "
+    "conta isolada e testada, com o fluxo de transposição para a casa definido"
+)
+if SUSPENSO:
+    _ato = sys.argv[1] if len(sys.argv) > 1 else None
+    print(json.dumps({"ok": False, "ato": _ato, "trabalho": None, "tipo": "dado",
+                      "causa": "verbo-suspenso", "detalhe": SUSPENSO}, ensure_ascii=False))
+    sys.stderr.write(f"pesquisar: {SUSPENSO}\n")
+    sys.exit(4)
+
 from pesquisa import atos
 from pesquisa.envelope import FalhaFonte, UsoInvalido, envelope
 from pesquisa.manifesto import Trabalho, slug_trabalho
