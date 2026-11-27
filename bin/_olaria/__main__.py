@@ -627,7 +627,9 @@ def _carregar_camada_escrita():
     )
 
 
-def _extrair_yaml_para_escritor(args: list[str], ato: str) -> tuple[list[str], bytes]:
+def _extrair_yaml_para_escritor(
+    args: list[str], ato: str, *, verbo: str = "ontologia"
+) -> tuple[list[str], str, bytes]:
     restantes: list[str] = []
     caminho_yaml: str | None = None
     for item in args:
@@ -635,11 +637,12 @@ def _extrair_yaml_para_escritor(args: list[str], ato: str) -> tuple[list[str], b
             caminho_yaml = item
         else:
             restantes.append(item)
+    proximo = f"{verbo} {ato} <arquivo.yaml>"
     if caminho_yaml is not None and caminho_yaml != "-":
-        _, texto = _ler_entrada_yaml(caminho_yaml, proximo=f"ontologia {ato} <arquivo.yaml>")
-        return restantes, texto.encode("utf-8")
-    _, texto = _ler_entrada_yaml(None, proximo=f"ontologia {ato} <arquivo.yaml>")
-    return restantes, texto.encode("utf-8")
+        _, texto = _ler_entrada_yaml(caminho_yaml, proximo=proximo)
+        return restantes, texto, texto.encode("utf-8")
+    _, texto = _ler_entrada_yaml(caminho_yaml, proximo=proximo)
+    return restantes, texto, texto.encode("utf-8")
 
 
 def _prazo_ns_escritor(env: dict[str, str]) -> int:
@@ -655,30 +658,152 @@ def _prazo_ns_escritor(env: dict[str, str]) -> int:
     return time.monotonic_ns() + int(v * 1_000_000_000) if v > 0 else 0
 
 
-def _preparar_via_escritor(
-    ato: str, args: list[str], *, verbo: str = "ontologia", pedido: str, como_json: bool
-) -> tuple[list[str], bytes] | None:
-    pos_candidatos = [item for item in args if not _e_entrada_yaml(item)]
-    min_pos = 3 if ato == "ensaiar" else 2
-    if len(pos_candidatos) < min_pos:
-        return None
-    if ato == "trocar" and len(pos_candidatos) >= 3 and not e_uuid7(pos_candidatos[2]):
-        classe_sug = _classe_canonica(pos_candidatos[0])
-        proximo = (
-            f"busca ler {pos_candidatos[1]}"
-            if verbo == "casa"
-            else f"ontologia ler {classe_sug} {pos_candidatos[1]}"
+def _alvo_primario_de_lote(texto: str, *, classe_padrao: str | None = None) -> tuple[str, str]:
+    from escrita.portao import extrair_alvos_yaml_olaria
+
+    alvos = extrair_alvos_yaml_olaria(texto, classe_padrao=classe_padrao)
+    for cls, chv in alvos:
+        if cls == "segredo" or chv.startswith("segredo:"):
+            return cls, chv
+    if alvos:
+        return alvos[0]
+    cls = _classe_canonica(classe_padrao) if classe_padrao else "ficha"
+    return cls, f"{cls}:lote"
+
+
+def _proximo_leitura_versao(verbo: str, classe: str, chave: str) -> str:
+    if verbo == "casa":
+        return f"busca ler {chave}" if ":" in chave else f"busca ler {classe}:{chave}"
+    return f"ontologia ler {classe} {chave}"
+
+
+_POS_CLASSE_CHAVE = 2
+_POS_TROCAR_COMPLETO = 3
+
+
+def _preparar_ensaiar_escritor(
+    args: list[str], pos_candidatos: list[str], arquivos: list[str], *, verbo: str
+) -> tuple[list[str], bytes]:
+    if not args:
+        raise Uso(
+            "ensaiar quer `[<criar|trocar|recompor>] ... <arquivo.yaml>`",
+            onde="args",
+            recebido="",
+            proximo=f"{verbo} ensaiar <arquivo.yaml>",
         )
+    ato_alvo: str | None = None
+    resto_pos = list(pos_candidatos)
+    if resto_pos and resto_pos[0] in ("criar", "trocar", "recompor"):
+        ato_alvo = resto_pos.pop(0)
+        if not resto_pos and not arquivos:
+            raise Uso(
+                f"ensaiar {ato_alvo} quer os argumentos de {ato_alvo} ou `<arquivo.yaml>`",
+                onde="args",
+                recebido=ato_alvo,
+                proximo=f"{verbo} ensaiar {ato_alvo} <arquivo.yaml>",
+            )
+    if ato_alvo is None and not arquivos:
+        alvo = resto_pos[0] if resto_pos else ""
+        proximo = f"conferir ontologia {alvo}".strip() if alvo else "conferir ontologia"
+        raise Uso(
+            f"Use `conferir ontologia` para conferir capacidade, estrato ou classe já gravada; `{verbo} ensaiar` pede um arquivo `.yaml`.",
+            codigo="uso-invalido",
+            onde="args",
+            recebido=" ".join(resto_pos),
+            regra="O ato `ensaiar` confere uma mudança em YAML; o gravado se confere com `conferir ontologia`.",
+            proximo=proximo,
+        )
+    ato_alvo = ato_alvo or "criar"
+    _, texto, stdin_bytes = _extrair_yaml_para_escritor(args, "ensaiar", verbo=verbo)
+    if len(resto_pos) >= _POS_CLASSE_CHAVE:
+        return ["ensaiar", ato_alvo, _classe_canonica(resto_pos[0]), *resto_pos[1:]], stdin_bytes
+    versao_pos = resto_pos[0] if len(resto_pos) == 1 and e_uuid7(resto_pos[0]) else None
+    classe_padrao = None if versao_pos or not resto_pos else _classe_canonica(resto_pos[0])
+    cls0, chv0 = _alvo_primario_de_lote(texto, classe_padrao=classe_padrao)
+    argv_escritor = ["ensaiar", ato_alvo, cls0, chv0]
+    if versao_pos:
+        argv_escritor.append(versao_pos)
+    return argv_escritor, stdin_bytes
+
+
+def _preparar_criar_escritor(
+    args: list[str], pos_candidatos: list[str], *, verbo: str
+) -> tuple[list[str], bytes]:
+    if len(pos_candidatos) > _POS_CLASSE_CHAVE:
+        raise Uso(
+            "criar aceita `[<classe>] [<arquivo.yaml>]`",
+            onde="args",
+            recebido=" ".join(args),
+            proximo=f"{verbo} criar <arquivo.yaml>",
+        )
+    _, texto, stdin_bytes = _extrair_yaml_para_escritor(args, "criar", verbo=verbo)
+    _recusar_parte(texto, f"{verbo} criar <arquivo.yaml>")
+    if len(pos_candidatos) >= _POS_CLASSE_CHAVE:
+        return ["criar", _classe_canonica(pos_candidatos[0]), *pos_candidatos[1:]], stdin_bytes
+    classe_padrao = _classe_canonica(pos_candidatos[0]) if len(pos_candidatos) == 1 else None
+    cls0, chv0 = _alvo_primario_de_lote(texto, classe_padrao=classe_padrao)
+    return ["criar", cls0, chv0], stdin_bytes
+
+
+def _preparar_trocar_escritor(
+    args: list[str], pos_candidatos: list[str], arquivos: list[str], *, verbo: str
+) -> tuple[list[str], bytes]:
+    if not pos_candidatos and len(arquivos) == 1:
+        _, texto, stdin_bytes = _extrair_yaml_para_escritor(args, "trocar", verbo=verbo)
+        cls0, chv0 = _alvo_primario_de_lote(texto)
+        return ["trocar", cls0, chv0], stdin_bytes
+    if len(pos_candidatos) != _POS_TROCAR_COMPLETO:
+        classe_sug = _classe_canonica(pos_candidatos[0]) if pos_candidatos else "<classe>"
+        chave_sug = pos_candidatos[1] if len(pos_candidatos) >= _POS_CLASSE_CHAVE else "<chave>"
+        raise Uso(
+            "trocar exige `<classe> <chave> <versao> [<arquivo.yaml>]` em posição, ou `<arquivo.yaml>` com `versao` em cada item.",
+            codigo="versao-ausente",
+            onde="versao",
+            recebido=" ".join(args) or "(vazio)",
+            regra="Chamada a `trocar` sem `<versao>` em posição (salvo lote em `<arquivo.yaml>` com `versao` por item), ou com `<versao>` que não é uuid v7, para antes da Olaria.",
+            proximo=_proximo_leitura_versao(verbo, classe_sug, chave_sug),
+        )
+    classe_sug = _classe_canonica(pos_candidatos[0])
+    if not e_uuid7(pos_candidatos[2]):
         raise Uso(
             f"`{pos_candidatos[2]}` não é um uuid v7 de versão lida.",
             codigo="versao-invalida",
             onde="versao",
             recebido=pos_candidatos[2],
             regra="Chamada a `trocar` sem `<versao>` em posição (salvo lote em `<arquivo.yaml>` com `versao` por item), ou com `<versao>` que não é uuid v7, para antes da Olaria.",
-            proximo=proximo,
+            proximo=_proximo_leitura_versao(verbo, classe_sug, pos_candidatos[1]),
         )
-    pos_sem_yaml, stdin_bytes = _extrair_yaml_para_escritor(args, ato)
-    argv_escritor = [ato, *pos_sem_yaml]
+    _, texto, stdin_bytes = _extrair_yaml_para_escritor(args, "trocar", verbo=verbo)
+    _recusar_parte(texto, _proximo_leitura_versao(verbo, classe_sug, pos_candidatos[1]))
+    return ["trocar", classe_sug, pos_candidatos[1], pos_candidatos[2]], stdin_bytes
+
+
+def _preparar_via_escritor(
+    ato: str, args: list[str], *, verbo: str = "ontologia", pedido: str, como_json: bool
+) -> tuple[list[str], bytes]:
+    if any(a.startswith("--") for a in args):
+        flag = next(a for a in args if a.startswith("--"))
+        raise Uso(
+            f"{ato}: opção desconhecida {flag}",
+            onde="flag",
+            recebido=flag,
+            proximo=f"{verbo} {ato} <arquivo.yaml>",
+        )
+    arquivos = [item for item in args if _e_entrada_yaml(item)]
+    pos_candidatos = [item for item in args if not _e_entrada_yaml(item)]
+    if len(arquivos) > 1:
+        raise Uso(
+            f"passe apenas um arquivo `.yaml` em {ato}",
+            onde="args",
+            recebido=" ".join(args),
+            proximo=f"{verbo} {ato} <arquivo.yaml>",
+        )
+    if ato == "ensaiar":
+        argv_escritor, stdin_bytes = _preparar_ensaiar_escritor(args, pos_candidatos, arquivos, verbo=verbo)
+    elif ato == "criar":
+        argv_escritor, stdin_bytes = _preparar_criar_escritor(args, pos_candidatos, verbo=verbo)
+    else:
+        argv_escritor, stdin_bytes = _preparar_trocar_escritor(args, pos_candidatos, arquivos, verbo=verbo)
     if pedido:
         argv_escritor.extend(["--pedido", pedido])
     if como_json:
@@ -711,12 +836,13 @@ def _tentar_via_escritor(
     politica = carregar_politica(Path(cfg_path)) if cfg_path else carregar_politica()
     if not verbo_esta_ligado(verbo, politica=politica):
         return None
-    preparado = _preparar_via_escritor(ato, args, verbo=verbo, pedido=pedido, como_json=como_json)
-    if preparado is None:
-        return None
+    try:
+        argv_escritor, stdin_bytes = _preparar_via_escritor(
+            ato, args, verbo=verbo, pedido=pedido, como_json=como_json
+        )
+    except RecusaEscrita as exc:
+        return Saida(exc.saida, "", exc.como_linha_json() + "\n")
     import json
-
-    argv_escritor, stdin_bytes = preparado
     prazo_ns = _prazo_ns_escritor(env)
     ctx = ContextoEscrita(
         verbo=verbo,

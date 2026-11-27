@@ -42,10 +42,20 @@ def _subir_duble(handler_fn):
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     th = Thread(target=srv.serve_forever, daemon=True)
     th.start()
+    import tempfile
+
+    import yaml
+
+    cfg_dir = Path(tempfile.mkdtemp(prefix="pf-remendo-cfg-"))
+    cfg_arq = cfg_dir / "escrita.yaml"
+    pol_dados = yaml.safe_load((RAIZ / "registro" / "escrita.yaml").read_text(encoding="utf-8"))
+    pol_dados["verbos_ligados"] = []
+    cfg_arq.write_text(yaml.safe_dump(pol_dados, sort_keys=False), encoding="utf-8")
     env = {
         "OLARIA_URL": f"http://127.0.0.1:{srv.server_address[1]}",
         "OLARIA_CHAVE": "chave-teste",
         "PF_CADEIRA": "engenharia",
+        "PF_ESCRITA_CONFIG": str(cfg_arq),
     }
     return srv, env, recebidas
 

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 RAIZ = Path(__file__).resolve().parents[1]
 for caminho in (RAIZ / "lib", RAIZ / "bin"):
@@ -34,7 +35,6 @@ from escrita.moradas.olaria import ConfigOlaria, MoradaOlaria, RespostaHTTP
 from escrita.politica import PoliticaEscrita, carregar_politica
 from escrita.portao import carregar_vista_alcance as carregar_vista_escrita
 from escrita.servidor import ConfigServidor, ServidorEscritor
-import yaml
 from leitura.resolvedor import ErroResolucao, resolver_alvo
 from leitura.resolvedor import carregar_vista_alcance as carregar_vista_leitura
 
@@ -295,3 +295,156 @@ def test_porta_yaml_casa_sem_leitura_e_ontologia_oculta() -> None:
     assert "ler (leitura, casa)" not in desc_casa
     assert "listar (leitura, casa)" not in desc_casa
     assert verbos["ontologia"].get("modelo") is False
+
+
+@dataclass(frozen=True)
+class _CasoLoteFora:
+    argv: list[str]
+    conteudo_yaml: str
+    proximo_prefixo: str
+
+
+@pytest.mark.parametrize("prog", ["casa", "ontologia"])
+@pytest.mark.parametrize("argv_base", [["ensaiar", "criar", "-"], ["criar", "-"]])
+def test_lote_yaml_segredo_recusado_pelo_despachante(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prog: str, argv_base: list[str]
+) -> None:
+    import io
+    import json
+
+    amb = _subir_ambiente(tmp_path / f"lote_seg_{prog}_{argv_base[0]}")
+    env = {
+        "PF_ESCRITA_CONFIG": str(RAIZ / "registro" / "escrita.yaml"),
+        "PF_ESCRITOR_SOCKET": str(amb.sock),
+        "PF_CADEIRA": "engenharia",
+        "PF_SUJEITO": "engenharia",
+        "PF_SESSAO": "sessao-4470",
+    }
+    conteudo = "fichas:\n- classe: segredo\n  chave: segredo:sonda-homologacao-4470\n"
+    monkeypatch.setattr(sys, "stdin", io.StringIO(conteudo))
+    try:
+        saida = olaria_main.executar(argv_base, env=env, prog=prog)
+        assert saida.codigo == 4
+        payload = json.loads(saida.stderr.strip().splitlines()[-1])
+        assert payload["erro"]["codigo"] == "segredo-recusado"
+        assert amb.chamadas == []
+    finally:
+        amb.fechar()
+
+
+@pytest.mark.parametrize("prog", ["casa", "ontologia"])
+@pytest.mark.parametrize(
+    "caso",
+    [
+        _CasoLoteFora(
+            ["ensaiar", "criar", "-"],
+            "fichas:\n- classe: componente\n  chave: componente:sonda-homologacao-4470\n",
+            "repo ",
+        ),
+        _CasoLoteFora(
+            ["ensaiar", "criar", "-"],
+            "fichas:\n- classe: story\n  chave: story:sonda-homologacao-4470\n",
+            "tarefas ",
+        ),
+        _CasoLoteFora(
+            ["criar", "-"],
+            "fichas:\n- classe: componente\n  chave: componente:sonda-homologacao-4470\n",
+            "repo ",
+        ),
+        _CasoLoteFora(
+            ["trocar", "-"],
+            f"fichas:\n- classe: story\n  chave: story:sonda-homologacao-4470\n  versao: {UUID7_VALIDO}\n",
+            "tarefas ",
+        ),
+    ],
+)
+def test_lote_yaml_classe_fora_do_verbo_pelo_despachante(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prog: str, caso: _CasoLoteFora
+) -> None:
+    import io
+    import json
+
+    amb = _subir_ambiente(tmp_path / f"lote_fora_{prog}_{caso.argv[0]}")
+    env = {
+        "PF_ESCRITA_CONFIG": str(RAIZ / "registro" / "escrita.yaml"),
+        "PF_ESCRITOR_SOCKET": str(amb.sock),
+        "PF_CADEIRA": "engenharia",
+        "PF_SUJEITO": "engenharia",
+        "PF_SESSAO": "sessao-4470",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(caso.conteudo_yaml))
+    try:
+        saida = olaria_main.executar(caso.argv, env=env, prog=prog)
+        assert saida.codigo == 1
+        payload = json.loads(saida.stderr.strip().splitlines()[-1])
+        assert payload["erro"]["codigo"] == "classe-fora-do-verbo"
+        assert payload["erro"]["proximo"].startswith(caso.proximo_prefixo)
+        assert amb.chamadas == []
+    finally:
+        amb.fechar()
+
+
+def test_lote_yaml_misto_e_autorizacao_pelo_despachante(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import io
+    import json
+
+    amb = _subir_ambiente(tmp_path / "lote_misto")
+    env = {
+        "PF_ESCRITA_CONFIG": str(RAIZ / "registro" / "escrita.yaml"),
+        "PF_ESCRITOR_SOCKET": str(amb.sock),
+        "PF_CADEIRA": "engenharia",
+        "PF_SUJEITO": "engenharia",
+        "PF_SESSAO": "sessao-4470",
+    }
+    try:
+        yaml_misto_seg = (
+            "fichas:\n"
+            "- classe: missao\n"
+            "  chave: missao:valida-4470\n"
+            "- classe: segredo\n"
+            "  chave: segredo:sonda-4470\n"
+        )
+        monkeypatch.setattr(sys, "stdin", io.StringIO(yaml_misto_seg))
+        s_seg = olaria_main.executar(["ensaiar", "criar", "-"], env=env, prog="casa")
+        assert s_seg.codigo == 4
+        assert json.loads(s_seg.stderr.strip().splitlines()[-1])["erro"]["codigo"] == "segredo-recusado"
+        assert amb.chamadas == []
+
+        yaml_misto_comp = (
+            "fichas:\n"
+            "- classe: missao\n"
+            "  chave: missao:valida-4470\n"
+            "- classe: componente\n"
+            "  chave: componente:sonda-4470\n"
+        )
+        monkeypatch.setattr(sys, "stdin", io.StringIO(yaml_misto_comp))
+        s_comp = olaria_main.executar(["ensaiar", "criar", "-"], env=env, prog="casa")
+        assert s_comp.codigo == 1
+        erro_comp = json.loads(s_comp.stderr.strip().splitlines()[-1])["erro"]
+        assert erro_comp["codigo"] == "classe-fora-do-verbo"
+        assert erro_comp["proximo"].startswith("repo ")
+        assert amb.chamadas == []
+
+        yaml_valido = "fichas:\n- classe: missao\n  chave: missao:valida-4470\n"
+        monkeypatch.setattr(sys, "stdin", io.StringIO(yaml_valido))
+        s_ok = olaria_main.executar(["ensaiar", "criar", "-"], env=env, prog="casa")
+        assert s_ok.codigo == 0
+        assert len(amb.chamadas) == 1
+    finally:
+        amb.fechar()
+
+    amb_neg = _subir_ambiente(
+        tmp_path / "lote_auth_neg",
+        autorizador=lambda _s, _c, _v, _f: False,
+    )
+    env_neg = {**env, "PF_ESCRITOR_SOCKET": str(amb_neg.sock)}
+    monkeypatch.setattr(sys, "stdin", io.StringIO("fichas:\n- classe: missao\n  chave: missao:valida-4470\n"))
+    try:
+        s_neg = olaria_main.executar(["ensaiar", "criar", "-"], env=env_neg, prog="casa")
+        assert s_neg.codigo == 4
+        assert json.loads(s_neg.stderr.strip().splitlines()[-1])["erro"]["codigo"] == "acesso-negado"
+        assert amb_neg.chamadas == []
+    finally:
+        amb_neg.fechar()

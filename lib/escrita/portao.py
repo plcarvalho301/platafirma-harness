@@ -10,7 +10,7 @@ import re
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
@@ -673,6 +673,150 @@ def _verificar_protecoes_alvo(
         )
 
 
+_VARIANTES_CLASSE_OLARIA: dict[str, str] = {
+    "classes": "shape",
+    "shapes": "shape",
+    "dicionarios": "dicionario",
+    "ligacao": "tipo-de-ligacao",
+    "ligacoes": "tipo-de-ligacao",
+    "tipos-de-ligacao": "tipo-de-ligacao",
+    "tipos_de_ligacao": "tipo-de-ligacao",
+    "axiomas": "axioma",
+    "tipos-de-evento": "tipo-de-evento",
+    "tipos_de_evento": "tipo-de-evento",
+}
+_CHAVES_ENVELOPE_OLARIA = frozenset(
+    {"classe", "classes", "shapes", "dicionarios", "tipos_de_ligacao", "axiomas", "tipos_de_evento", "fichas"}
+)
+
+
+def _normalizar_classe_olaria(classe: str) -> str:
+    limpa = classe.strip()
+    return _VARIANTES_CLASSE_OLARIA.get(limpa, limpa)
+
+
+def _extrair_alvo_ficha(item: Mapping[str, object], classe_padrao: str | None) -> tuple[str, str]:
+    chave = str(item.get("chave") or "").strip()
+    classe_raw = str(item.get("classe") or "").strip()
+    if classe_raw:
+        classe = _normalizar_classe_olaria(classe_raw)
+    elif ":" in chave:
+        classe = _normalizar_classe_olaria(chave.split(":", 1)[0])
+    elif classe_padrao:
+        classe = _normalizar_classe_olaria(classe_padrao)
+    else:
+        classe = "ficha"
+    return classe, (chave or f"{classe}:lote")
+
+
+_SECOES_CATALOGO_OLARIA: tuple[tuple[str, str], ...] = (
+    ("classes", "shape"),
+    ("shapes", "shape"),
+    ("dicionarios", "dicionario"),
+    ("tipos_de_ligacao", "casa"),
+    ("axiomas", "casa"),
+    ("tipos_de_evento", "casa"),
+)
+
+
+def _alvos_de_secoes_catalogo(doc: Mapping[str, object]) -> list[tuple[str, str]]:
+    alvos: list[tuple[str, str]] = []
+    classe_unica = doc.get("classe")
+    if isinstance(classe_unica, Mapping):
+        slug = str(classe_unica.get("slug") or "").strip()
+        alvos.append(("shape", f"shape:{slug}" if slug else "shape:lote"))
+    for chave_lista, classe_cat in _SECOES_CATALOGO_OLARIA:
+        itens = doc.get(chave_lista)
+        if not isinstance(itens, list):
+            continue
+        for item in itens:
+            if isinstance(item, Mapping):
+                slug = str(item.get("slug") or item.get("classe") or "").strip()
+                alvos.append((classe_cat, f"{classe_cat}:{slug}" if slug else f"{classe_cat}:lote"))
+    return alvos
+
+
+def _alvos_de_documento_olaria(
+    doc: Mapping[str, object], classe_padrao: str | None
+) -> list[tuple[str, str]]:
+    alvos: list[tuple[str, str]] = []
+    fichas = doc.get("fichas")
+    if isinstance(fichas, list):
+        alvos.extend(
+            _extrair_alvo_ficha(item, classe_padrao)
+            for item in fichas
+            if isinstance(item, Mapping)
+        )
+    alvos.extend(_alvos_de_secoes_catalogo(doc))
+    tem_envelope = any(k in doc for k in _CHAVES_ENVELOPE_OLARIA)
+    if not tem_envelope and ("chave" in doc or "classe" in doc):
+        alvos.append(_extrair_alvo_ficha(doc, classe_padrao))
+    return alvos
+
+
+def extrair_alvos_yaml_olaria(
+    texto: str, *, classe_padrao: str | None = None
+) -> list[tuple[str, str]]:
+    """Extrai todos os pares (classe, chave) de um documento ou stream YAML da Olaria."""
+    try:
+        docs = list(yaml.safe_load_all(texto))
+    except yaml.YAMLError as exc:
+        raise RecusaEscrita(
+            ErroEscrita(
+                saida=2,
+                codigo="chave-invalida",
+                onde="yaml",
+                recebido=str(exc),
+                regra="o lote enviado ao escritor deve ser YAML válido",
+                cura="corrija a sintaxe YAML da entrada e repita a chamada",
+                proximo="",
+            )
+        ) from exc
+    alvos: list[tuple[str, str]] = []
+    for doc in docs:
+        if isinstance(doc, Mapping):
+            alvos.extend(_alvos_de_documento_olaria(doc, classe_padrao))
+    return alvos
+
+
+def _verbo_eh_morada_banco(spec_verbo: SpecVerbo | None, vista: VistaAlcance) -> bool:
+    if spec_verbo is None or not spec_verbo.classes:
+        return False
+    return all(
+        (spec := vista.classes.get(cls)) is not None and spec.morada == "banco"
+        for cls in spec_verbo.classes
+    )
+
+
+def _verificar_itens_lote_olaria(
+    pedido: PedidoEscrita,
+    spec_verbo: SpecVerbo | None,
+    auth: ContextoAutorizacao,
+) -> None:
+    if not pedido.conteudo or not _verbo_eh_morada_banco(spec_verbo, auth.vista):
+        return
+    alvos = extrair_alvos_yaml_olaria(pedido.conteudo, classe_padrao=pedido.classe)
+    if not alvos:
+        return
+    erros_segredo: list[ErroEscrita] = []
+    erros_outros: list[ErroEscrita] = []
+    for classe_item, chave_item in alvos:
+        ped_item = replace(pedido, classe=classe_item, chave=chave_item)
+        try:
+            _verificar_nao_segredo(ped_item, classe_item)
+        except RecusaEscrita as exc:
+            erros_segredo.extend(exc.erros)
+            continue
+        try:
+            spec_item = _verificar_verbo_e_classe(ped_item, spec_verbo, classe_item, auth.vista)
+            _verificar_forma_e_regime(ped_item, spec_item)
+            _verificar_protecoes_alvo(ped_item, spec_item, auth)
+        except RecusaEscrita as exc:
+            erros_outros.extend(exc.erros)
+    if erros_segredo or erros_outros:
+        raise RecusaEscrita([*erros_segredo, *erros_outros])
+
+
 def decidir_portao(
     pedido: PedidoEscrita,
     credencial: CredencialPar,
@@ -684,6 +828,7 @@ def decidir_portao(
     sujeito, cadeira = _verificar_identidade_e_acesso(pedido, spec_verbo, auth)
     classe = _classe_inferida(pedido, spec_verbo)
     _verificar_nao_segredo(pedido, classe)
+    _verificar_itens_lote_olaria(pedido, spec_verbo, auth)
     spec_classe = _verificar_verbo_e_classe(pedido, spec_verbo, classe, auth.vista)
     _verificar_forma_e_regime(pedido, spec_classe)
     _verificar_protecoes_alvo(pedido, spec_classe, auth)
