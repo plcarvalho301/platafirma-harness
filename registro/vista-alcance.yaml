@@ -94,3 +94,17 @@ outros_verbos:
       - trocar
     classes:
       - segredo
+
+verificar:
+  casa:
+    aceita: true
+    alcanca:
+      - politica
+      - gabarito
+      - figura
+      - verificacao
+  ops:
+    aceita: true
+    alcanca:
+      - repositorio
+      - componente

@@ -3,7 +3,7 @@
 # capacidade: busca
 # dono: inteligencia
 # use para: SEMPRE que a fonte estiver fora do acervo, pesquisar fora, «procura na internet», «acha a página oficial»; ler página por URL ou bruto custodiado; percorrer um site e extrair o grafo de links; coletar achado; resolver DOI, ISBN, ORCID ou CNPJ; conferir as citações de um relatório
-# atos: consultar, resolver, ler, percorrer, coletar, historico, manifesto, exportar, verificar, saude
+# atos: consultar, resolver, ler, percorrer, coletar, historico, manifesto, exportar, citacoes, saude
 # poda: cosmetica@consultar
 # ruff: noqa: ERA001
 #
@@ -48,7 +48,7 @@ ATOS = (
     "historico",
     "manifesto",
     "exportar",
-    "verificar",
+    "citacoes",
     "saude",
 )
 
@@ -117,6 +117,18 @@ def main(argv):
     if len(argv) < 2:
         uso()
     ato = argv[1]
+    if ato == "verificar":
+        prox = f"pesquisar citacoes {' '.join(argv[2:])}".strip()
+        recusa = {
+            "codigo": "ato-desconhecido",
+            "onde": "ato",
+            "recebido": "verificar",
+            "regra": "politica:0011 §Atos",
+            "cura": "a operação de conferência de citações foi renomeada para citacoes; verificar é ato do catálogo",
+            "proximo": prox,
+        }
+        sys.stderr.write(json.dumps(recusa, ensure_ascii=False) + "\n")
+        return 2
     if ato not in ATOS:
         sys.stderr.write(f"pesquisar: ato desconhecido '{ato}'\n")
         uso()
@@ -221,9 +233,21 @@ def main(argv):
         elif ato == "exportar":
             env = atos.exportar(rotulo=args.para, excluir=args.excluir, trab=trab, juntar=args.juntar)
         elif ato == "verificar":
+            prox = f"pesquisar citacoes {' '.join(resto)}".strip()
+            recusa = {
+                "codigo": "ato-desconhecido",
+                "onde": "ato",
+                "recebido": "verificar",
+                "regra": "politica:0011 §Atos",
+                "cura": "a operação de conferência de citações foi renomeada para citacoes; verificar é ato do catálogo",
+                "proximo": prox,
+            }
+            sys.stderr.write(json.dumps(recusa, ensure_ascii=False) + "\n")
+            return 2
+        elif ato == "citacoes":
             if not resto:
                 uso()
-            env = atos.verificar(resto[0], trab=trab)
+            env = atos.citacoes(resto[0], trab=trab)
         elif ato == "saude":
             env = atos.saude(trab=trab)
         else:  # pragma: no cover

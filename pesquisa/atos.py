@@ -15,13 +15,13 @@ from pathlib import Path
 from typing import Any
 
 from . import (
+    citacoes as C,
     extrator,
     historico,
     manifesto as M,
     percorrer as P,
     resolvedores,
     searxng,
-    verificar as V,
 )
 from .envelope import FalhaFonte, UsoInvalido, envelope
 
@@ -287,10 +287,10 @@ def exportar(*, rotulo, excluir, trab: "M.Trabalho", juntar: str | None = None) 
     return envelope("exportar", trab.slug, ok=ok, **r)
 
 
-# ------------------------------------------------------------------------- verificar
-def verificar(relatorio, *, trab: "M.Trabalho") -> dict[str, Any]:
-    r = V.verificar(relatorio, trab)
-    return envelope("verificar", trab.slug, ok=not r["reprovou"], **r,
+# -------------------------------------------------------------------------- citacoes
+def citacoes(relatorio, *, trab: "M.Trabalho") -> dict[str, Any]:
+    r = C.citacoes(relatorio, trab)
+    return envelope("citacoes", trab.slug, ok=not r["reprovou"], **r,
                     relatorio=str(Path(relatorio)))
 
 

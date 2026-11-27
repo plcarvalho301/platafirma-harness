@@ -77,7 +77,8 @@ verbos:
       ficha, abrir ou encerrar nomes alternativos do vocabulário e gerar o modelo · atos:
       criar (escrita, casa), trocar (escrita, casa), recompor (escrita, casa), ensaiar
       (leitura, casa), renomear (escrita, casa), apagar (escrita, casa), nomes (escrita,
-      casa), gerar (leitura, casa)
+      casa), gerar (leitura, casa), verificar (leitura, verificacao)
+          contrato_verificar: 1
   conferir:
     descricao: >-
       confere o SERVIDO contra o DECLARADO · use para: SEMPRE ANTES de agir sobre algo da casa
@@ -173,7 +174,7 @@ verbos:
       URL ou bruto custodiado; percorrer um site e extrair o grafo de links; coletar achado;
       resolver DOI, ISBN, ORCID ou CNPJ; conferir as citações de um relatório · atos:
       consultar, resolver, ler, percorrer, coletar, historico, manifesto, exportar,
-      verificar, saude
+      citacoes, saude
   preferencia:
     modelo: false
     faces:

@@ -1,22 +1,7 @@
 """Gate de citação — de "afirmação tem chão" para "afirmação tem texto" (spec §4.6, §8.4).
 
-O bench marcou isto como vazio sem equivalente de mercado. Lê marcadores `[m:<n>]` e,
-quando presente, `[m:<n> «trecho»]` no relatório e confere cada um contra o manifesto do
-trabalho, SEM inferência:
-
-  algum marcador      — o relatório cita ao menos uma fonte              (senão: sem_marcador)
-  linha existe        — o `n` citado tem linha no manifesto           (senão: sem_ancora)
-  âncora íntegra      — sha256 presente · bruto/ no disco com o mesmo
-                        hash · status 2xx                             (senão: ancora_quebrada)
-  texto presente      — havendo trecho, o literal está no derivado do item: o Markdown da
-                        vista (<n>.md), o Markdown integral (<n>.raw.md) ou o registro do
-                        resolver (<n>.json), com o espaço normalizado dos dois lados
-                                                                      (senão: trecho_ausente)
-
-`nao_citado`: linhas do manifesto que produziram artefato e nenhuma afirmação usou —
-coleta que não virou conhecimento também é dado de auditoria. Exit 1 se o relatório não tem
-marcador ou se qualquer das três listas não for vazia. Não julga o mérito da afirmação —
-julga se tem chão e texto.
+Renomeado de `pesquisa/verificar.py` para `pesquisa/citacoes.py` no card #4454 para reservar
+a palavra `verificar` ao ato do catálogo (Política 0011).
 """
 
 from __future__ import annotations
@@ -55,7 +40,7 @@ def _trecho_presente(trab: "M.Trabalho", n: int, trecho: str) -> bool:
     return False
 
 
-def verificar(relatorio: str | Path, trab: "M.Trabalho") -> dict[str, Any]:
+def citacoes(relatorio: str | Path, trab: "M.Trabalho") -> dict[str, Any]:
     caminho = Path(relatorio)
     if not caminho.exists():
         from .envelope import UsoInvalido
@@ -65,7 +50,6 @@ def verificar(relatorio: str | Path, trab: "M.Trabalho") -> dict[str, Any]:
 
     linhas = trab.linhas()
     por_n = _indexa(linhas)
-    # linhas que produziram artefato (candidatas a "não citado")
     com_artefato = {n for n, ln in por_n.items() if ln.get("ato") in ("ler", "coletar", "resolver", "historico")}
 
     afirmacoes: list[dict[str, Any]] = []
@@ -88,7 +72,6 @@ def verificar(relatorio: str | Path, trab: "M.Trabalho") -> dict[str, Any]:
             afirmacoes.append(reg)
             continue
 
-        # âncora íntegra: sha256 + bruto no disco com mesmo hash + status 2xx
         quebrou = False
         sha = ln.get("sha256")
         bruto = ln.get("bruto")
@@ -106,7 +89,6 @@ def verificar(relatorio: str | Path, trab: "M.Trabalho") -> dict[str, Any]:
             reg["ok"] = False
             reg["falhas"].append("ancora_quebrada")
 
-        # texto presente (literal, espaço normalizado) quando houver trecho
         if trecho and not _trecho_presente(trab, n, trecho):
             trecho_ausente.append(n)
             reg["ok"] = False
@@ -114,7 +96,6 @@ def verificar(relatorio: str | Path, trab: "M.Trabalho") -> dict[str, Any]:
 
         afirmacoes.append(reg)
 
-    # Relatório sem nenhum marcador não tem chão nenhum: antes passava com ok (#4457 t8).
     sem_marcador = not afirmacoes
     nao_citado = sorted(com_artefato - citados)
     reprovou = bool(sem_marcador or sem_ancora or ancora_quebrada or trecho_ausente)

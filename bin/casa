@@ -4,7 +4,7 @@
 # dono: conhecimento
 # classe: B
 # use para: criar, trocar ou recompor fichas e classes de ontologia, processos, arquitetura, norma, tesauros e inteligência; ensaiar mudança sem gravar; renomear, apagar, abrir ou encerrar nomes alternativos e gerar o modelo
-# atos: criar (escrita, casa), trocar (escrita, casa), recompor (escrita, casa), ensaiar (leitura, casa), renomear (escrita, casa), apagar (escrita, casa), nomes (escrita, casa), gerar (leitura, casa)
+# atos: criar (escrita, casa), trocar (escrita, casa), recompor (escrita, casa), ensaiar (leitura, casa), renomear (escrita, casa), apagar (escrita, casa), nomes (escrita, casa), gerar (leitura, casa), verificar (leitura, verificacao)
 # forma: texto
 # escreve: nada; o serviço da Olaria, via escritor único, grava no catálogo e no fichário
 # consome: o serviço da Olaria (HTTP, stack olaria) e o escritor único

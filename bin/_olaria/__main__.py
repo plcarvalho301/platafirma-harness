@@ -912,6 +912,21 @@ def _nomes(cliente: Cliente, args: list, *, pedido: str = "", como_json: bool = 
     return sd.traduzir("nomes", r.status, r.corpo, como_json=como_json, fornada=fornada_id)
 
 
+def _verificar_casa(resto: list[str]) -> Saida:
+    """Encaminha `casa verificar …` à camada comum em `lib/verificador`."""
+    import io
+
+    raiz_lib = Path(__file__).resolve().parents[2] / "lib"
+    if str(raiz_lib) not in sys.path:
+        sys.path.insert(0, str(raiz_lib))
+    from verificador import executar as executar_verificador
+
+    out = io.StringIO()
+    err = io.StringIO()
+    rc = executar_verificador("casa", resto, stdout=out, stderr=err)
+    return Saida(rc, out.getvalue(), err.getvalue())
+
+
 def executar(argv: list, env: dict | None = None, *, prog: str | None = None) -> Saida:
     """Roda uma chamada e devolve a saída, sem escrever nada."""
     do_processo = env is None
@@ -934,6 +949,8 @@ def executar(argv: list, env: dict | None = None, *, prog: str | None = None) ->
             f"{prog} --help",
         )
     ato, resto = argv[0], list(argv[1:])
+    if prog == "casa" and ato == "verificar":
+        return _verificar_casa(resto)
     args, como_json = _separar_json(resto)
     gate = _checar_gates_de_uso(ato, args, prog=prog, como_json=como_json, env=env)
     if gate is not None:
