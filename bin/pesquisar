@@ -232,18 +232,6 @@ def main(argv):
             env = atos.manifesto(trab, md=args.md)
         elif ato == "exportar":
             env = atos.exportar(rotulo=args.para, excluir=args.excluir, trab=trab, juntar=args.juntar)
-        elif ato == "verificar":
-            prox = f"pesquisar citacoes {' '.join(resto)}".strip()
-            recusa = {
-                "codigo": "ato-desconhecido",
-                "onde": "ato",
-                "recebido": "verificar",
-                "regra": "politica:0011 §Atos",
-                "cura": "a operação de conferência de citações foi renomeada para citacoes; verificar é ato do catálogo",
-                "proximo": prox,
-            }
-            sys.stderr.write(json.dumps(recusa, ensure_ascii=False) + "\n")
-            return 2
         elif ato == "citacoes":
             if not resto:
                 uso()

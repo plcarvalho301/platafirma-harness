@@ -533,9 +533,15 @@ def filtrar(medida: dict, criterios: Optional[List[str]] = None, so_bloqueantes:
     }
 
 
-def verificar_acervo(como_json: bool = False, resumo: bool = False,
-                     criterios: Optional[List[str]] = None, so_bloqueantes: bool = False) -> int:
-    lista = resolver_lista(CHAVE_LISTA)
+def medir_acervo(
+    *,
+    lista: Optional[dict] = None,
+    criterios: Optional[List[str]] = None,
+    so_bloqueantes: bool = False,
+) -> Tuple[dict, Any]:
+    """Executa a medida do acervo sem imprimir na saída padrão. Devolve (medida, rev)."""
+    if lista is None:
+        lista = resolver_lista(CHAVE_LISTA)
     if not lista:
         raise ErroAcervo(5, f"indeterminavel — lista de verificacao '{CHAVE_LISTA}' nao encontrada no acervo")
     esquema, obras, conceitos, retiradas = ler_acervo()
@@ -549,4 +555,10 @@ def verificar_acervo(como_json: bool = False, resumo: bool = False,
     achadas, sem_achadas = ler_achadas(retiradas) if quer_s12 else (None, "")
     medida = filtrar(medir(lista, esquema, obras, conceitos, retiradas, projecao, achadas, sem_achadas),
                      criterios, so_bloqueantes)
-    return relatorio(medida, lista.get("rev"), como_json, resumo)
+    return medida, lista.get("rev")
+
+
+def verificar_acervo(como_json: bool = False, resumo: bool = False,
+                     criterios: Optional[List[str]] = None, so_bloqueantes: bool = False) -> int:
+    medida, rev = medir_acervo(criterios=criterios, so_bloqueantes=so_bloqueantes)
+    return relatorio(medida, rev, como_json, resumo)

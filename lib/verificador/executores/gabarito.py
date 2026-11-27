@@ -12,6 +12,7 @@ from ..tipos import (
     SERVICO_LINT,
     AlvoVerificado,
     AmbienteVerificacao,
+    ErroVerificacaoParcial,
     ReguaCasada,
     VereditoItem,
 )
@@ -58,31 +59,39 @@ def executar_gabarito(
         for a in alvos
     ]
 
+    quesito_str = ", ".join(regua_casada.chaves)
+
+    def _traduzir_itens(lista_vl: Sequence[Any]) -> tuple[VereditoItem, ...]:
+        return tuple(
+            VereditoItem(
+                alvo=vl.alvo,
+                resultado=vl.resultado,
+                constatacao=vl.constatacao,
+                apontamentos=traduzir_apontamentos(vl.apontamentos),
+                modo=vl.modo,
+                quesito=quesito_str,
+                motor=vl.motor,
+                versao_servico=vl.versao_servico,
+                versao_regua=vl.versao_regua,
+                nao_julgados=tuple(vl.nao_julgados),
+            )
+            for vl in lista_vl
+        )
+
     try:
         vereditos_lint = julgar_fn(regua_casada.chaves, alvos_lint, prazo_s=ambiente.prazo_s)
     except servico.ErroServicoLint as exc:
         codigo = "sem-motor-deterministico" if exc.codigo == "sem-detector" else exc.codigo
-        raise Recusa(
+        recusa = Recusa(
             exc.saida,
             codigo,
             onde="servico-lint",
-            recebido=", ".join(regua_casada.chaves),
+            recebido=quesito_str,
             regra=_REGRA_GABARITO,
             cura=exc.detalhe,
-        ) from exc
-
-    return tuple(
-        VereditoItem(
-            alvo=vl.alvo,
-            resultado=vl.resultado,
-            constatacao=vl.constatacao,
-            apontamentos=traduzir_apontamentos(vl.apontamentos),
-            modo=vl.modo,
-            quesito=", ".join(regua_casada.chaves),
-            motor=vl.motor,
-            versao_servico=vl.versao_servico,
-            versao_regua=vl.versao_regua,
-            nao_julgados=tuple(vl.nao_julgados),
         )
-        for vl in vereditos_lint
-    )
+        if exc.saida == 5 and getattr(exc, "vereditos_parciais", ()):
+            raise ErroVerificacaoParcial(recusa, _traduzir_itens(exc.vereditos_parciais)) from exc
+        raise recusa from exc
+
+    return _traduzir_itens(vereditos_lint)

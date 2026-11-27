@@ -595,3 +595,354 @@ def test_servico_lint_sem_resposta_sai_3():
     assert rc == 3
     assert stdout == ""
     assert _ler_recusa_stderr(stderr)["codigo"] == "dependencia-sem-resposta"
+
+
+def _criar_acervo_fixture(tmp_path: Path, textos: dict[str, str]) -> Path:
+    """Cria executável PF_LINT_ACERVO que serve as listas de fixture em texto."""
+    pasta = tmp_path / "acervo_fixture"
+    pasta.mkdir(parents=True, exist_ok=True)
+    for chave, conteudo in textos.items():
+        (pasta / f"{chave}.md").write_text(conteudo, encoding="utf-8")
+    script = pasta / "acervo-fixture"
+    script.write_text(
+        "#!/bin/sh\n"
+        f'f="{pasta}/$4.md"\n'
+        '[ "$1 $2" = "ler casa" ] && [ -f "$f" ] && exec cat "$f"\n'
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    return script
+
+
+def test_adaptador_real_codigo_predicado_verde_na_falha(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    lista_codigo = (
+        "força não declarada · vigente — lista-de-verificacao antipadroes-de-codigo · Código\n"
+        "# Antipadrões de código\n\nEspécie: lista-de-verificacao\nRev: 3\n\n"
+        "| # | antipadrão | detector | classe | cura |\n"
+        "|---|---|---|---|---|\n"
+        "| R13 | verde na falha | predicado VERDE_NA_FALHA | bloqueante | devolver erro em vez de True |\n"
+    )
+    acervo_bin = _criar_acervo_fixture(tmp_path, {"antipadroes-de-codigo": lista_codigo})
+    monkeypatch.setenv("PF_LINT_ACERVO", str(acervo_bin))
+
+    repo = tmp_path / "repo_codigo"
+    (repo / "lib").mkdir(parents=True)
+    (repo / "lib" / "quebrado.py").write_text(
+        "def tentar():\n"
+        "    try:\n"
+        "        return 1\n"
+        "    except RuntimeError:\n"
+        "        return True\n",
+        encoding="utf-8",
+    )
+
+    fichario = DubleFichario(
+        reguas=_reguas_padrao(),
+        alvos={
+            "componente:verificador": AlvoVerificado(
+                chave="componente:verificador",
+                classe="componente",
+                slug="verificador",
+                raiz=repo,
+            )
+        },
+    )
+    amb = AmbienteVerificacao(vista=_vista_padrao(), fichario=fichario)
+    rc, stdout, stderr = _rodar(
+        "ops",
+        ["componente:verificador", "--regua", "gabarito:antipadroes-de-codigo", "--json"],
+        amb,
+    )
+
+    assert rc == 0
+    assert stderr == ""
+    dados = json.loads(stdout)
+    assert dados["veredito"]["resultado"] == "nao"
+    assert dados["veredito"]["constatacao"] == "divergente"
+    assert dados["veredito"]["motor"] == SERVICO_LINT
+    assert any(ap["item"] == "R13" and "quebrado.py" in ap["lugar"] for ap in dados["apontamentos"])
+
+
+def test_adaptador_real_prosa_marcas_pt_br_responde_nao_sei_sem_verde_falso(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    lista_prosa = (
+        "força não declarada · vigente — gabarito marcas-pt-br · Marcas de máquina\n"
+        "# Marcas de máquina\n\nEntidade: gabarito\nRev: 2\n\nTexto de marcas de máquina.\n"
+    )
+    acervo_bin = _criar_acervo_fixture(tmp_path, {"marcas-pt-br": lista_prosa})
+    monkeypatch.setenv("PF_LINT_ACERVO", str(acervo_bin))
+
+    fichario = DubleFichario(
+        reguas=_reguas_padrao(),
+        alvos={
+            "politica:0011": AlvoVerificado(
+                chave="politica:0011",
+                classe="politica",
+                slug="0011",
+                texto="Texto qualquer da política 0011.",
+            )
+        },
+    )
+    amb = AmbienteVerificacao(vista=_vista_padrao(), fichario=fichario)
+    rc, stdout, stderr = _rodar(
+        "casa",
+        ["politica:0011", "--regua", "gabarito:marcas-pt-br", "--json"],
+        amb,
+    )
+
+    assert rc == 0
+    assert stderr == ""
+    dados = json.loads(stdout)
+    assert dados["versao_contrato"] == VERSAO_CONTRATO
+    assert dados["veredito"]["motor"] == SERVICO_LINT
+    assert dados["veredito"]["resultado"] == "nao-sei"
+    assert dados["veredito"]["constatacao"] == "inconclusivo"
+    assert "marcas-pt-br" in dados["nao_julgados"]
+
+
+def test_adaptador_real_card_forma_de_card_e_discovery(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    lista_card = (
+        "força não declarada · vigente — lista-de-verificacao forma-de-card · Forma de card\n"
+        "# Forma de card\n\nEspécie: lista-de-verificacao\nRev: 1\n"
+    )
+    acervo_bin = _criar_acervo_fixture(tmp_path, {"forma-de-card": lista_card})
+    monkeypatch.setenv("PF_LINT_ACERVO", str(acervo_bin))
+
+    reguas = dict(_reguas_padrao())
+    reguas["gabarito:forma-de-card"] = ReguaFicha(
+        chave="gabarito:forma-de-card",
+        forma="gabarito",
+        sobre=("shape:politica",),
+        contra_o_que="construcao",
+        garantido_por=SERVICO_LINT,
+        versao="1",
+    )
+    fichario = DubleFichario(
+        reguas=reguas,
+        alvos={
+            "politica:card-story": AlvoVerificado(
+                chave="politica:card-story",
+                classe="politica",
+                slug="card-story",
+                texto="# Story curta\n#4454 · story · Em execução\n\nNegócio: só negócio.\n",
+            )
+        },
+    )
+    amb = AmbienteVerificacao(vista=_vista_padrao(), fichario=fichario)
+    rc, stdout, stderr = _rodar(
+        "casa",
+        ["politica:card-story", "--regua", "gabarito:forma-de-card", "--json"],
+        amb,
+    )
+
+    assert rc == 0
+    assert stderr == ""
+    dados = json.loads(stdout)
+    assert dados["veredito"]["motor"] == SERVICO_LINT
+    assert any("Aceite" in ap["exigencia"] for ap in dados["apontamentos"])
+
+
+def test_adaptador_real_organizacao_retorna_bloqueante_ap1(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    import os
+    import subprocess
+
+    lista_org = (
+        "força não declarada · vigente — lista-de-verificacao checklist-antipadroes-organizacao-documental · Org\n"
+        "# Organização documental\n\nEspécie: lista-de-verificacao\nRev: 2\n\n"
+        "| # | antipadrão | detector | classe | cura |\n"
+        "|---|---|---|---|---|\n"
+        "| AP1 | data no nome em docs/ | data no nome em docs/ | bloqueante | remover data do nome |\n"
+    )
+    acervo_bin = _criar_acervo_fixture(
+        tmp_path,
+        {"checklist-antipadroes-organizacao-documental": lista_org},
+    )
+    monkeypatch.setenv("PF_LINT_ACERVO", str(acervo_bin))
+
+    repo = tmp_path / "repo_org"
+    (repo / "docs").mkdir(parents=True)
+    (repo / "README.md").write_text("# Repo\n", encoding="utf-8")
+    (repo / "docs" / "2026-11-27-nota.md").write_text("# Nota\n", encoding="utf-8")
+    ident = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    for args in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "fixture"]):
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, env=ident)
+
+    fichario = DubleFichario(
+        reguas=_reguas_padrao(),
+        alvos={
+            "politica:0011": AlvoVerificado(
+                chave="politica:0011",
+                classe="politica",
+                slug="0011",
+                raiz=repo,
+            )
+        },
+    )
+    amb = AmbienteVerificacao(vista=_vista_padrao(), fichario=fichario)
+    rc, stdout, stderr = _rodar(
+        "casa",
+        ["politica:0011", "--regua", "gabarito:antipadroes-de-organizacao-documental", "--json"],
+        amb,
+    )
+
+    assert rc == 0
+    assert stderr == ""
+    dados = json.loads(stdout)
+    assert dados["veredito"]["resultado"] == "nao"
+    assert dados["veredito"]["constatacao"] == "divergente"
+    assert any(ap["item"] == "AP1" and ap["severidade"] == "bloqueante" for ap in dados["apontamentos"])
+
+
+def test_adaptador_real_acervo_sem_vazar_stdout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    lista_acervo = (
+        "força não declarada · vigente — lista-de-verificacao antipadroes-do-acervo · Acervo\n"
+        "# Antipadrões do acervo\n\nEspécie: lista-de-verificacao\nRev: 4\n\n"
+        "| # | antipadrão | detector | classe | cura |\n"
+        "|---|---|---|---|---|\n"
+        "| T1 | obra sem espécie | `especie_id` nulo | bloqueante | catalogar a obra |\n"
+    )
+    acervo_bin = _criar_acervo_fixture(tmp_path, {"antipadroes-do-acervo": lista_acervo})
+    psql_bin = tmp_path / "psql-fixture"
+    psql_bin.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, sys\n"
+        "sql = sys.stdin.read()\n"
+        "if 'information_schema' in sql:\n"
+        "    print(json.dumps({'incidencia': False, 'derivacao': False, 'motivo_retirada': False}))\n"
+        "elif 'from acervo.obra' in sql:\n"
+        "    print(json.dumps([{'id': 7, 'titulo': 'Obra teste', 'anotacao': '', 'especie': None, "
+        "'familia': None, 'tem_especie': False, 'emitido_por': None, 'publicacao': None, "
+        "'id_canonico': None, 'incide_emitido_por': None, 'incide_publicacao': None, "
+        "'incide_id_canonico': None, 'tem_dominio': True, 'tem_subdominio': True, "
+        "'n_conceitos': 2, 'deriva': None}]))\n"
+        "else:\n"
+        "    print('[]')\n",
+        encoding="utf-8",
+    )
+    psql_bin.chmod(0o755)
+    monkeypatch.setenv("PF_LINT_ACERVO", str(acervo_bin))
+    monkeypatch.setenv("PF_LINT_ACERVO_PSQL", str(psql_bin))
+
+    reguas = dict(_reguas_padrao())
+    reguas["gabarito:antipadroes-do-acervo"] = ReguaFicha(
+        chave="gabarito:antipadroes-do-acervo",
+        forma="gabarito",
+        sobre=("shape:politica",),
+        contra_o_que="construcao",
+        garantido_por=SERVICO_LINT,
+        versao="4",
+    )
+    fichario = DubleFichario(
+        reguas=reguas,
+        alvos={"politica:acervo": AlvoVerificado(chave="politica:acervo", classe="politica", slug="acervo")},
+    )
+    amb = AmbienteVerificacao(vista=_vista_padrao(), fichario=fichario)
+    rc, stdout, stderr = _rodar(
+        "casa",
+        ["politica:acervo", "--regua", "gabarito:antipadroes-do-acervo", "--json"],
+        amb,
+    )
+
+    assert rc == 0
+    assert stderr == ""
+    assert capsys.readouterr().out == ""
+    dados = json.loads(stdout)
+    assert dados["veredito"]["resultado"] == "nao"
+    assert dados["veredito"]["constatacao"] == "divergente"
+    assert any(ap["item"] == "T1" and ap["severidade"] == "bloqueante" for ap in dados["apontamentos"])
+
+
+def test_teste_julga_multiplos_alvos_e_recusa_dois_alvos_na_suite(tmp_path: Path):
+    arvore_a = tmp_path / "a"
+    arvore_b = tmp_path / "b"
+    _criar_teste_em_arvore(arvore_a, "tests/test_alfa.py", "componente:alfa", None, ["test_ok"])
+    _criar_teste_em_arvore(arvore_b, "tests/test_alfa.py", "componente:alfa", None, ["test_falha"])
+    fichario = DubleFichario(
+        reguas=_reguas_padrao(),
+        alvos={
+            "componente:a": AlvoVerificado(chave="componente:a", classe="componente", slug="a", raiz=arvore_a),
+            "componente:b": AlvoVerificado(chave="componente:b", classe="componente", slug="b", raiz=arvore_b),
+        },
+    )
+    duble_exec = DubleExecutorIsolado({"tests/test_alfa.py::test_ok": True, "tests/test_alfa.py::test_falha": False})
+    amb = AmbienteVerificacao(vista=_vista_padrao(), fichario=fichario, executor_isolado=duble_exec)
+
+    rc, stdout, stderr = _rodar(
+        "ops",
+        ["componente:a", "componente:b", "--regua", "teste:alfa", "--json"],
+        amb,
+    )
+    assert rc == 0
+    assert stderr == ""
+    dados = json.loads(stdout)
+    assert dados["veredito"]["resultado"] == "nao"
+    assert [item["alvo"] for item in dados["itens"]] == ["componente:a", "componente:b"]
+    assert dados["itens"][0]["resultado"] == "sim"
+    assert dados["itens"][1]["resultado"] == "nao"
+
+    rc2, stdout2, stderr2 = _rodar(
+        "ops",
+        ["componente:a", "componente:b", "--regua", "teste:alfa", "--regua", "teste:alfa--politica-0011"],
+        amb,
+    )
+    assert rc2 == 2
+    assert stdout2 == ""
+    assert _ler_recusa_stderr(stderr2)["codigo"] == "regua-incompativel"
+
+
+def test_saida_5_por_prazo_preserva_vereditos_ja_julgados_em_stdout():
+    fichario = DubleFichario(
+        reguas=_reguas_padrao(),
+        alvos={
+            "politica:0011": AlvoVerificado(chave="politica:0011", classe="politica", slug="0011", texto="a"),
+            "politica:0012": AlvoVerificado(chave="politica:0012", classe="politica", slug="0012", texto="b"),
+        },
+    )
+
+    def lint_estoura(_reguas: Sequence[str], _alvos: Sequence[AlvoLint], *, prazo_s: float = 60.0):
+        parcial = VereditoLint(
+            alvo="politica:0011",
+            resultado="sim",
+            constatacao="conforme",
+            modo="enquadrou",
+            apontamentos=(),
+            nao_julgados=(),
+            motor=SERVICO_LINT,
+            versao_servico="sha1",
+        )
+        raise ErroServicoLint(
+            5,
+            "tempo-esgotado",
+            "prazo esgotado antes do segundo alvo",
+            vereditos_parciais=(parcial,),
+        )
+
+    amb = AmbienteVerificacao(vista=_vista_padrao(), fichario=fichario, executor_lint=lint_estoura)
+    rc, stdout, stderr = _rodar(
+        "casa",
+        ["politica:0011", "politica:0012", "--regua", "gabarito:marcas-pt-br", "--json"],
+        amb,
+    )
+
+    assert rc == 5
+    recusa = _ler_recusa_stderr(stderr)
+    assert recusa["codigo"] == "tempo-esgotado"
+    dados = json.loads(stdout)
+    assert dados["versao_contrato"] == VERSAO_CONTRATO
+    assert "veredito" not in dados
+    assert len(dados["itens"]) == 1
+    assert dados["itens"][0]["alvo"] == "politica:0011"
+    assert dados["itens"][0]["resultado"] == "sim"

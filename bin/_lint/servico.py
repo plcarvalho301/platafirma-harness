@@ -18,12 +18,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .acervo import ErroAcervo, verificar_acervo
+from .acervo import ErroAcervo, medir_acervo
 from .card import verificar_card_regua
 from .codigo import verificar_codigo
 from .lista import resolver_lista
+from .organizacao import CHAVE_LISTA as _CHAVE_LISTA_ORG
 from .organizacao import verificar_organizacao
-from .prosa import verificar_prosa
+from .prosa import ESPECIES_REGUA as _ESPECIES_PROSA
 from .resultado import Apontamento
 
 SERVICO_CHAVE = "servico:harness:lint"
@@ -52,12 +53,14 @@ class ErroServicoLint(Exception):
         detalhe: str,
         *,
         itens_nao_julgados: Sequence[str] = (),
+        vereditos_parciais: Sequence[VereditoLint] = (),
     ) -> None:
         super().__init__(detalhe)
         self.saida = int(saida)
         self.codigo = str(codigo)
         self.detalhe = str(detalhe)
         self.itens_nao_julgados = tuple(itens_nao_julgados)
+        self.vereditos_parciais = tuple(vereditos_parciais)
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,11 +112,28 @@ class VereditoLint:
 
 
 @dataclass(frozen=True, slots=True)
+class _ReguaResolvida:
+    slug: str
+    classe: str
+    lista: dict[str, Any] | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ResultadoDetector:
+    apontamentos: list[Apontamento]
+    versao_regua: str
+    nao_julgados: tuple[str, ...] = ()
+    inconclusivo: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class _ContextoRodada:
-    resolvidas: tuple[tuple[str, str], ...]
+    resolvidas: tuple[_ReguaResolvida, ...]
     fim: float
     rodar: Any
+    usa_detector_real: bool
     nao_julgados: tuple[str, ...]
+    tem_bloqueante_leitura: bool
     sha_servico: str
 
 
@@ -157,19 +177,31 @@ def versao_servico() -> str:
     return proc.stdout.strip() if proc.returncode == 0 and proc.stdout.strip() else "desenvolvimento"
 
 
-def _itens_de_leitura_da_regua(slug: str) -> list[str]:
-    """Identifica itens marcados como `leitura` na régua servida."""
+def _carregar_lista_regua(slug: str, classe: str) -> dict[str, Any] | None:
+    """Resolve a lista da régua uma única vez por chamada, respeitando aliases da classe."""
+    if classe == "prosa":
+        return resolver_lista(slug, especies=_ESPECIES_PROSA)
     lista = resolver_lista(slug)
+    if lista is None and classe == "organizacao" and slug != _CHAVE_LISTA_ORG:
+        lista = resolver_lista(_CHAVE_LISTA_ORG)
+    return lista
+
+
+def _analisar_leitura_da_lista(lista: dict[str, Any] | None) -> tuple[list[str], bool]:
+    """Identifica itens de `leitura` na régua servida e se algum deles é bloqueante."""
     if not lista:
-        return []
+        return [], False
     nao_julgados: list[str] = []
+    tem_bloqueante_leitura = False
     for item in lista.get("itens", []):
         detector = str(item.get("detector", "")).strip().lower()
         if detector == "leitura" or detector.startswith("leitura "):
             ident = str(item.get("id") or item.get("o_que_fere") or "").strip()
             if ident and ident not in nao_julgados:
                 nao_julgados.append(ident)
-    return nao_julgados
+            if str(item.get("severidade", "")).strip().lower() == "bloqueante":
+                tem_bloqueante_leitura = True
+    return nao_julgados, tem_bloqueante_leitura
 
 
 def _traduzir_apontamento(ap: Apontamento, chave_alvo: str) -> ApontamentoLint:
@@ -196,41 +228,120 @@ def _traduzir_erro_detector(exc: ValueError, slug: str) -> ErroServicoLint:
     return ErroServicoLint(3, "dependencia-sem-resposta", f"falha no detector de '{slug}': {msg}")
 
 
-def _executar_detector(classe: str, slug: str, alvo: AlvoLint) -> tuple[list[Apontamento], str]:
-    """Aciona o detector correspondente à classe do lint e devolve (apontamentos, versao_regua)."""
+def _traduzir_apontamentos_acervo(medida: dict[str, Any]) -> tuple[list[Apontamento], tuple[str, ...], bool]:
+    apontamentos: list[Apontamento] = []
+    for a in medida.get("apontamentos", []):
+        cid = str(a.get("id") or "item").strip()
+        desc = str(a.get("descricao") or cid).strip()
+        apontamentos.append(
+            Apontamento(
+                arquivo=str(a.get("alvo") or "acervo"),
+                linha=1,
+                o_que_fere=f"{cid} {desc}",
+                cura=str(a.get("cura") or ""),
+                severidade=str(a.get("severidade") or "aviso"),
+                id=cid,
+            )
+        )
+    nao_rodou = medida.get("nao_rodou") or []
+    nao_julgados = tuple(
+        dict.fromkeys(str(x.get("id") or "").strip() for x in nao_rodou if str(x.get("id") or "").strip())
+    )
+    bloq_sem_medida = any(str(x.get("severidade") or "").strip().lower() == "bloqueante" for x in nao_rodou)
+    return apontamentos, nao_julgados, bloq_sem_medida
+
+
+def _adaptar_codigo(regua: _ReguaResolvida, alvo: AlvoLint, raiz: Path) -> _ResultadoDetector:
+    apontamentos, _chave, rev, _avisos = verificar_codigo(raiz, alvo.caminho, leitura=False, lista=regua.lista)
+    return _ResultadoDetector(apontamentos=apontamentos, versao_regua=f"rev{rev}")
+
+
+def _adaptar_prosa(regua: _ReguaResolvida, _alvo: AlvoLint, _raiz: Path) -> _ResultadoDetector:
+    if not regua.lista:
+        raise ErroServicoLint(1, "regua-inexistente", f"régua '{regua.slug}' não encontrada no acervo")
+    rev = regua.lista.get("rev") or 1
+    # O avaliador determinístico de prosa não julga marcas de máquina sobre texto;
+    # responde inconclusivo (`nao-sei`) em vez de devolver `conforme` sem ler.
+    return _ResultadoDetector(
+        apontamentos=[],
+        versao_regua=f"rev{rev}",
+        nao_julgados=(regua.slug,),
+        inconclusivo=True,
+    )
+
+
+def _adaptar_card(regua: _ReguaResolvida, alvo: AlvoLint, raiz: Path) -> _ResultadoDetector:
+    texto = alvo.texto
+    if texto is None and alvo.caminho:
+        texto = (raiz / alvo.caminho).read_text(encoding="utf-8", errors="replace")
+    nome_alvo = alvo.caminho or alvo.chave
+    apontamentos, _chave, rev, _avisos = verificar_card_regua(
+        alvo=nome_alvo,
+        texto=texto,
+        raiz=raiz,
+        lista=regua.lista,
+        fecha_existe=False,
+    )
+    rev_final = (regua.lista.get("rev") if regua.lista else None) or rev or 1
+    return _ResultadoDetector(apontamentos=apontamentos, versao_regua=f"rev{rev_final}")
+
+
+def _adaptar_organizacao(regua: _ReguaResolvida, alvo: AlvoLint, raiz: Path) -> _ResultadoDetector:
+    apontamentos, _chave, rev = verificar_organizacao(
+        raiz,
+        alvo.caminho,
+        com_bloqueantes=True,
+        lista=regua.lista,
+    )
+    return _ResultadoDetector(apontamentos=apontamentos, versao_regua=f"rev{rev or 1}")
+
+
+def _adaptar_acervo(regua: _ReguaResolvida, _alvo: AlvoLint, _raiz: Path) -> _ResultadoDetector:
+    medida, rev = medir_acervo(lista=regua.lista)
+    apontamentos, nao_rodou, bloq_sem_medida = _traduzir_apontamentos_acervo(medida)
+    return _ResultadoDetector(
+        apontamentos=apontamentos,
+        versao_regua=f"rev{rev or 1}",
+        nao_julgados=nao_rodou,
+        inconclusivo=bloq_sem_medida,
+    )
+
+
+_ADAPTADORES = {
+    "codigo": _adaptar_codigo,
+    "prosa": _adaptar_prosa,
+    "card": _adaptar_card,
+    "organizacao": _adaptar_organizacao,
+    "acervo": _adaptar_acervo,
+}
+
+
+def _executar_detector_real(regua: _ReguaResolvida, alvo: AlvoLint) -> _ResultadoDetector:
+    """Aciona o detector real da classe do lint sem saída lateral nem verde falso."""
+    adaptador = _ADAPTADORES.get(regua.classe)
+    if adaptador is None:
+        raise ErroServicoLint(5, "sem-detector", f"classe de detector desconhecida: {regua.classe}")
     raiz = alvo.raiz or Path(".")
     try:
-        if classe == "codigo":
-            apontamentos, _chave, rev, _avisos = verificar_codigo(raiz, alvo.caminho, leitura=False)
-            return apontamentos, f"rev{rev}"
-        if classe == "prosa":
-            apontamentos, _chave, rev = verificar_prosa(raiz, alvo.caminho)
-            return apontamentos, f"rev{rev or 1}"
-        if classe == "card":
-            texto = alvo.texto
-            if texto is None and alvo.caminho:
-                texto = (raiz / alvo.caminho).read_text(encoding="utf-8", errors="replace")
-            apontamentos, _chave, rev, _avisos = verificar_card_regua(
-                texto or "",
-                nivel="story" if slug == "forma-de-card" else "feature",
-            )
-            return apontamentos, f"rev{rev or 1}"
-        if classe == "organizacao":
-            apontamentos, _chave, rev, _avisos = verificar_organizacao(raiz, alvo.caminho)
-            return apontamentos, f"rev{rev or 1}"
-        if classe == "acervo":
-            apontamentos, _chave, rev, _avisos = verificar_acervo()
-            return apontamentos, f"rev{rev or 1}"
+        return adaptador(regua, alvo, raiz)
+    except ErroServicoLint:
+        raise
     except ValueError as exc:
-        raise _traduzir_erro_detector(exc, slug) from exc
-    except (ErroAcervo, OSError) as exc:
+        raise _traduzir_erro_detector(exc, regua.slug) from exc
+    except ErroAcervo as exc:
+        saida = 1 if exc.rc == _EXIT_DETECTOR_SEM_LISTA else 3
+        codigo = "regua-inexistente" if saida == 1 else "dependencia-sem-resposta"
+        raise ErroServicoLint(saida, codigo, exc.msg) from exc
+    except OSError as exc:
         raise ErroServicoLint(3, "dependencia-sem-resposta", str(exc)) from exc
 
-    raise ErroServicoLint(5, "sem-detector", f"classe de detector desconhecida: {classe}")
 
-
-def _resolver_reguas(reguas: Sequence[str]) -> tuple[tuple[str, str], ...]:
-    resolvidas: list[tuple[str, str]] = []
+def _resolver_reguas(
+    reguas: Sequence[str],
+    *,
+    carregar_listas: bool,
+) -> tuple[_ReguaResolvida, ...]:
+    resolvidas: list[_ReguaResolvida] = []
     for regua in reguas:
         slug = normalizar_chave_regua(regua)
         classe = MAPA_REGUA_CLASSE.get(slug)
@@ -240,40 +351,76 @@ def _resolver_reguas(reguas: Sequence[str]) -> tuple[tuple[str, str], ...]:
                 "sem-detector",
                 f"régua '{regua}' não possui detector determinístico no serviço de lint",
             )
-        resolvidas.append((slug, classe))
+        lista = _carregar_lista_regua(slug, classe) if carregar_listas else None
+        resolvidas.append(_ReguaResolvida(slug=slug, classe=classe, lista=lista))
     return tuple(resolvidas)
 
 
-def _julgar_alvo(alvo: AlvoLint, ctx: _ContextoRodada) -> VereditoLint:
+def _fechar_constatacao(apontamentos: Sequence[ApontamentoLint], *, inconclusivo: bool) -> tuple[str, str]:
+    if any(a.severidade == "bloqueante" for a in apontamentos):
+        return "nao", "divergente"
+    if inconclusivo:
+        return "nao-sei", "inconclusivo"
+    return "sim", "conforme"
+
+
+def _acumular_apontamentos(
+    achados: Sequence[Apontamento],
+    chave_alvo: str,
+    destino: list[ApontamentoLint],
+    vistos: set[tuple[str, str, str]],
+) -> None:
+    for ap in achados:
+        trad = _traduzir_apontamento(ap, chave_alvo)
+        chave_dedup = (trad.item, trad.lugar, trad.exigencia)
+        if chave_dedup not in vistos:
+            vistos.add(chave_dedup)
+            destino.append(trad)
+
+
+def _executar_regua_no_alvo(regua: _ReguaResolvida, alvo: AlvoLint, ctx: _ContextoRodada) -> _ResultadoDetector:
+    if ctx.usa_detector_real:
+        return _executar_detector_real(regua, alvo)
+    achados, v_regua = ctx.rodar(regua.classe, regua.slug, alvo)
+    return _ResultadoDetector(apontamentos=list(achados), versao_regua=str(v_regua or ""))
+
+
+def _julgar_alvo(
+    alvo: AlvoLint,
+    ctx: _ContextoRodada,
+    vereditos_anteriores: Sequence[VereditoLint],
+) -> VereditoLint:
     apontamentos_alvo: list[ApontamentoLint] = []
     vistos: set[tuple[str, str, str]] = set()
     versoes_regua: list[str] = []
+    nao_julgados_alvo: list[str] = list(ctx.nao_julgados)
+    inconclusivo = ctx.tem_bloqueante_leitura
 
-    for slug, classe in ctx.resolvidas:
+    for regua in ctx.resolvidas:
         if time.monotonic() >= ctx.fim:
             raise ErroServicoLint(
                 5,
                 "tempo-esgotado",
-                f"prazo esgotado ao aplicar a régua '{slug}' sobre '{alvo.chave}'",
+                f"prazo esgotado ao aplicar a régua '{regua.slug}' sobre '{alvo.chave}'",
+                vereditos_parciais=vereditos_anteriores,
             )
-        achados, v_regua = ctx.rodar(classe, slug, alvo)
-        if v_regua:
-            versoes_regua.append(f"{slug}@{v_regua}")
-        for ap in achados:
-            trad = _traduzir_apontamento(ap, alvo.chave)
-            chave_dedup = (trad.item, trad.lugar, trad.exigencia)
-            if chave_dedup not in vistos:
-                vistos.add(chave_dedup)
-                apontamentos_alvo.append(trad)
+        res = _executar_regua_no_alvo(regua, alvo, ctx)
+        if res.versao_regua:
+            versoes_regua.append(f"{regua.slug}@{res.versao_regua}")
+        for nj in res.nao_julgados:
+            if nj not in nao_julgados_alvo:
+                nao_julgados_alvo.append(nj)
+        inconclusivo = inconclusivo or res.inconclusivo
+        _acumular_apontamentos(res.apontamentos, alvo.chave, apontamentos_alvo, vistos)
 
-    tem_bloqueante = any(a.severidade == "bloqueante" for a in apontamentos_alvo)
+    resultado, constatacao = _fechar_constatacao(apontamentos_alvo, inconclusivo=inconclusivo)
     return VereditoLint(
         alvo=alvo.chave,
-        resultado="nao" if tem_bloqueante else "sim",
-        constatacao="divergente" if tem_bloqueante else "conforme",
+        resultado=resultado,
+        constatacao=constatacao,
         modo="enquadrou",
         apontamentos=tuple(apontamentos_alvo),
-        nao_julgados=ctx.nao_julgados,
+        nao_julgados=tuple(nao_julgados_alvo),
         motor=SERVICO_CHAVE,
         versao_servico=ctx.sha_servico,
         versao_regua="+".join(versoes_regua),
@@ -291,25 +438,34 @@ def julgar(
 
     Sem estado: nunca lê nem grava cache de vereditos. Itens bloqueantes fecham `divergente`
     (`nao`); itens de `aviso` entram nos apontamentos sem alterar `conforme` (`sim`). Itens de
-    `leitura` ficam fora do julgamento determinístico e retornam em `nao_julgados`.
+    `leitura` ficam fora do julgamento determinístico e retornam em `nao_julgados`; bloqueante
+    sem medida determinística fecha `inconclusivo` (`nao-sei`), nunca verde falso.
     """
     if prazo_s <= 0:
         raise ErroServicoLint(5, "tempo-esgotado", "prazo esgotado antes de iniciar o serviço de lint")
     if not reguas:
         raise ErroServicoLint(1, "regua-inexistente", "nenhuma régua informada ao serviço de lint")
 
-    resolvidas = _resolver_reguas(reguas)
+    usa_real = executor_detector is None
+    resolvidas = _resolver_reguas(reguas, carregar_listas=usa_real)
+
+    nao_julgados_acum: list[str] = []
+    tem_bloqueante_leitura = False
+    for r in resolvidas:
+        itens_leitura, tem_bloq = _analisar_leitura_da_lista(r.lista)
+        for item in itens_leitura:
+            if item not in nao_julgados_acum:
+                nao_julgados_acum.append(item)
+        if tem_bloq:
+            tem_bloqueante_leitura = True
+
     ctx = _ContextoRodada(
         resolvidas=resolvidas,
         fim=time.monotonic() + prazo_s,
-        rodar=executor_detector or _executar_detector,
-        nao_julgados=tuple(
-            dict.fromkeys(
-                item
-                for slug, _ in resolvidas
-                for item in _itens_de_leitura_da_regua(slug)
-            )
-        ),
+        rodar=executor_detector,
+        usa_detector_real=usa_real,
+        nao_julgados=tuple(nao_julgados_acum),
+        tem_bloqueante_leitura=tem_bloqueante_leitura,
         sha_servico=versao_servico(),
     )
 
@@ -320,6 +476,7 @@ def julgar(
                 5,
                 "tempo-esgotado",
                 f"prazo esgotado ao julgar o alvo '{alvo.chave}' no serviço de lint",
+                vereditos_parciais=vereditos,
             )
-        vereditos.append(_julgar_alvo(alvo, ctx))
+        vereditos.append(_julgar_alvo(alvo, ctx, vereditos))
     return vereditos

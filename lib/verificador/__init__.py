@@ -14,7 +14,13 @@ from typing import TextIO
 from leitura.recusa import Recusa
 from leitura.retrato import Retrato
 
-from .agregador import agregar_vereditos, formatar_json, formatar_texto
+from .agregador import (
+    agregar_vereditos,
+    formatar_json,
+    formatar_parciais_json,
+    formatar_parciais_texto,
+    formatar_texto,
+)
 from .borda import converter_chamada
 from .casamento import casar_regua
 from .conteudos import FicharioBanco, carregar_alvos, traduzir_recusa_retrato
@@ -26,6 +32,7 @@ from .tipos import (
     AmbienteVerificacao,
     Apontamento,
     DelegadorSuite,
+    ErroVerificacaoParcial,
     LeitorFichario,
     PedidoVerificacao,
     ReguaCasada,
@@ -58,8 +65,14 @@ def _escrever_recusa_json(recusa: Recusa, fluxo: TextIO) -> int:
     return recusa.saida
 
 
-def _rodar_fluxo(verbo: str, argv: Sequence[str], amb: AmbienteVerificacao) -> tuple[VereditoEmitido, bool]:
+def _rodar_fluxo(
+    verbo: str,
+    argv: Sequence[str],
+    amb: AmbienteVerificacao,
+    como_json_ref: list[bool],
+) -> tuple[VereditoEmitido, bool]:
     pedido = converter_chamada(verbo, argv, prazo_s=amb.prazo_s)
+    como_json_ref[0] = pedido.como_json
     vista = amb.vista if amb.vista is not None else carregar_vista_verificar(amb.caminho_vista)
     classe_alvo = conferir_portoes(pedido, vista)
 
@@ -116,9 +129,20 @@ def executar(
     out = sys.stdout if stdout is None else stdout
     err = sys.stderr if stderr is None else stderr
     amb = ambiente or AmbienteVerificacao()
+    como_json_ref = [False]
 
     try:
-        veredito, como_json = _rodar_fluxo(verbo, argv, amb)
+        veredito, como_json = _rodar_fluxo(verbo, argv, amb, como_json_ref)
+    except ErroVerificacaoParcial as parcial:
+        if parcial.itens:
+            parcial_txt = (
+                formatar_parciais_json(parcial.itens)
+                if como_json_ref[0]
+                else formatar_parciais_texto(parcial.itens)
+            )
+            out.write(parcial_txt + "\n")
+            out.flush()
+        return _escrever_recusa_json(parcial.recusa, err)
     except Recusa as recusa:
         return _escrever_recusa_json(recusa, err)
     except Exception as exc:  # noqa: BLE001 — borda: falha inesperada vira saída 5, nunca conforme

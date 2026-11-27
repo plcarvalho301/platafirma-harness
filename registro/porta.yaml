@@ -77,8 +77,7 @@ verbos:
       ficha, abrir ou encerrar nomes alternativos do vocabulário e gerar o modelo · atos:
       criar (escrita, casa), trocar (escrita, casa), recompor (escrita, casa), ensaiar
       (leitura, casa), renomear (escrita, casa), apagar (escrita, casa), nomes (escrita,
-      casa), gerar (leitura, casa), verificar (leitura, verificacao)
-          contrato_verificar: 1
+      casa), gerar (leitura, casa), verificar (leitura, casa)
   conferir:
     descricao: >-
       confere o SERVIDO contra o DECLARADO · use para: SEMPRE ANTES de agir sobre algo da casa

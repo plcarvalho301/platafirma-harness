@@ -260,10 +260,13 @@ def verificar_organizacao(
     raiz: Path | str,
     alvo: Optional[str] = None,
     com_bloqueantes: bool = False,
+    *,
+    lista: Optional[dict] = None,
 ) -> Tuple[list[Apontamento], str, Optional[int]]:
     """`lint organizacao`: avisos sobre o rastreado (ou o alvo). `com_bloqueantes` põe
     também os bloqueantes no relatório — para contagem, nunca para reprovar."""
-    lista = resolver_lista(CHAVE_LISTA)
+    if lista is None:
+        lista = resolver_lista(CHAVE_LISTA)
     if not lista:
         raise ValueError(5, f"indeterminavel — lista de verificacao '{CHAVE_LISTA}' nao encontrada no acervo")
     raiz = Path(raiz)

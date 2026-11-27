@@ -420,6 +420,7 @@ def verificar_codigo(
     *,
     leitura: bool = False,
     extras: dict[Path, str] | None = None,
+    lista: dict | None = None,
 ) -> tuple[list[Apontamento], str, int, list[str]]:
     """Aplica a lista ao alvo. Devolve (apontamentos, chave, rev, avisos).
 
@@ -429,7 +430,8 @@ def verificar_codigo(
     Levanta ValueError(exit, msg): 5 sem a lista no acervo, 3 com o analisador necessario
     ausente ou quebrado.
     """
-    lista = resolver_lista(CHAVE_LISTA)
+    if lista is None:
+        lista = resolver_lista(CHAVE_LISTA)
     if not lista:
         raise ValueError(5, f"indeterminavel — lista de verificacao '{CHAVE_LISTA}' nao encontrada no acervo")
     regua = ler_regua(lista)

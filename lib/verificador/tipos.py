@@ -187,6 +187,15 @@ class DelegadorSuite(Protocol):
     ) -> VereditoEmitido: ...
 
 
+class ErroVerificacaoParcial(Exception):
+    """Recusa na saída 5 que preserva os vereditos individuais das partes já olhadas."""
+
+    def __init__(self, recusa: Any, itens: Sequence[VereditoItem]) -> None:
+        super().__init__(getattr(recusa, "cura", "verificação interrompida com parciais"))
+        self.recusa = recusa
+        self.itens = tuple(itens)
+
+
 @dataclass(frozen=True, slots=True)
 class AmbienteVerificacao:
     """Dependências injetáveis do verificador (sem estado global)."""

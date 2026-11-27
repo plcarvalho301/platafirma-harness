@@ -110,3 +110,26 @@ def formatar_texto(veredito: VereditoEmitido) -> str:
     if veredito.nao_julgados:
         linhas.append(f"nao-julgados: {', '.join(veredito.nao_julgados)}")
     return "\n".join(linhas)
+
+
+def formatar_parciais_json(itens: Sequence[VereditoItem]) -> str:
+    """Serializa apenas os vereditos individuais já olhados na saída 5 (sem veredito agregado)."""
+    return json.dumps(
+        {
+            "versao_contrato": VERSAO_CONTRATO,
+            "itens": [i.como_dict() for i in itens],
+        },
+        ensure_ascii=False,
+    )
+
+
+def formatar_parciais_texto(itens: Sequence[VereditoItem]) -> str:
+    """Renderiza apenas os vereditos individuais já olhados na saída 5 (sem veredito agregado)."""
+    linhas: list[str] = []
+    for item in itens:
+        linhas.append(f"  - {item.alvo}: {item.resultado} ({item.constatacao})")
+        for ap in item.apontamentos:
+            linhas.append(
+                f"      [{ap.severidade}] {ap.item} ({ap.lugar}): {ap.exigencia} — cura: {ap.cura}"
+            )
+    return "\n".join(linhas)
