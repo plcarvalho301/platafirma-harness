@@ -682,11 +682,29 @@ def test_predicados_de_teste(tmp_path):
 
 def test_predicado_teste_fora_de_portao(tmp_path):
     fonte = {
-        "controle/tests/VERDES": "tests/test_ok.py\n",
+        "registro/venvs.json": json.dumps({
+            "harness": {"familia": tmp_path.name, "teste": "controle"},
+            "sem_lista": {"familia": tmp_path.name, "teste": "orfa"},
+        }),
+        "controle/tests/VERDES": (
+            "# fora: tests/test_ignorado.py — depende de recurso fora do portão\n"
+            "# fora: tests/test_sem_motivo.py\n"
+            "tests/test_ok.py\n"
+        ),
         "controle/tests/test_ok.py": "def test_ok():\n    assert True\n",
+        "controle/tests/test_ignorado.py": "def test_ignorado():\n    assert True\n",
+        "controle/tests/test_sem_motivo.py": "def test_sem_motivo():\n    assert True\n",
         "controle/tests/test_solto.py": "def test_solto():\n    assert True\n",
+        "orfa/test_sem_verdes.py": "def test_sem_verdes():\n    assert True\n",
     }
-    assert _achados(tmp_path, "TESTE_FORA_DE_PORTAO", fonte) == [("controle/tests/test_solto.py", 1)]
+    achados = _achados(tmp_path, "TESTE_FORA_DE_PORTAO", fonte)
+    # 1. arquivo declarado em `# fora:` com motivo não aponta
+    assert ("controle/tests/test_ignorado.py", 1) not in achados
+    # 2. linha `# fora:` sem motivo aponta na linha 2 do VERDES (e o arquivo também fica fora)
+    assert ("controle/tests/VERDES", 2) in achados
+    # 3. arquivo solto na subárvore com lista e arquivo na subárvore sem VERDES apontam
+    assert ("controle/tests/test_solto.py", 1) in achados
+    assert ("orfa/test_sem_verdes.py", 1) in achados
 
 
 def test_predicado_eval_shell(tmp_path):

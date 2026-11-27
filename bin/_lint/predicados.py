@@ -694,45 +694,157 @@ def teste_estado_real(ctx: Contexto, item: dict) -> Iterator[Achado]:
                 yield Achado(rel, n.lineno, f"caminho real em teste: {n.value[:60]}")
 
 
-def _listados_nos_verdes(raiz: Path) -> tuple[list[tuple[Path, Path]], set[Path]]:
-    """Lê cada lista de portão (`VERDES`) usando o parser de `bin/_lint/testes.py`."""
-    from .testes import ler_linha, listas_de_portao
+_RE_FORA = re.compile(r"^\s*#\s*fora\s*:(.*)$")
+_RE_SEP_FORA = re.compile(r"\s+(?:—|--)\s+")
 
-    subarvores: list[tuple[Path, Path]] = []
-    listados: set[Path] = set()
-    for verdes in listas_de_portao(raiz):
-        pasta = verdes.parent
-        base = (pasta.parent if pasta.name == "tests" else pasta).resolve()
-        subarvores.append((base, verdes))
-        try:
-            texto = verdes.read_text(encoding="utf-8", errors="replace")
-        except OSError:
+
+def _verdes_da_subarvore(base: Path) -> Path | None:
+    for cand in (base / "tests" / "VERDES", base / "VERDES"):
+        if cand.is_file():
+            return cand
+    return None
+
+
+def _nome_repo(raiz: Path) -> str:
+    import subprocess
+
+    proc = subprocess.run(
+        ["git", "-C", str(raiz), "remote", "get-url", "origin"],
+        capture_output=True,
+        text=True,
+        timeout=5,
+        check=False,
+    )
+    if proc.returncode == 0 and proc.stdout.strip():
+        return proc.stdout.strip().rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
+    return raiz.name
+
+
+def _subarvores_de_venvs(raiz: Path) -> list[tuple[Path, Path | None]] | None:
+    import json
+
+    venvs_arq = raiz / "registro" / "venvs.json"
+    if not venvs_arq.is_file():
+        return None
+    try:
+        dados = json.loads(venvs_arq.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(dados, dict):
+        return None
+
+    entradas = [
+        v for k, v in dados.items()
+        if not k.startswith("_") and k != "repositorios"
+        and isinstance(v, dict) and isinstance(v.get("teste"), str) and v["teste"].strip()
+    ]
+    repo = _nome_repo(raiz)
+    da_familia = [v for v in entradas if v.get("familia") == repo]
+    escolhidas = da_familia or [v for v in entradas if (raiz / v["teste"]).is_dir()]
+
+    subarvores: list[tuple[Path, Path | None]] = []
+    vistas: set[Path] = set()
+    for v in escolhidas:
+        base = (raiz / v["teste"]).resolve()
+        if base in vistas:
             continue
-        for n, bruta in enumerate(texto.splitlines(), 1):
-            linha = ler_linha(bruta, n)
-            if linha is None or not linha.arquivo:
-                continue
-            listados.add((base / linha.arquivo).resolve())
-            listados.add((pasta / linha.arquivo).resolve())
+        vistas.add(base)
+        subarvores.append((base, _verdes_da_subarvore(base)))
+    return subarvores
+
+
+def _subarvores_de_teste(raiz: Path) -> list[tuple[Path, Path | None]]:
+    """Subárvores de teste de `registro/venvs.json` ou, na ausência dele, dos `VERDES` da árvore."""
+    from .testes import listas_de_portao
+
+    subarvores = _subarvores_de_venvs(raiz)
+    if subarvores is None:
+        subarvores = []
+        for verdes in listas_de_portao(raiz):
+            pasta = verdes.parent
+            base = (pasta.parent if pasta.name == "tests" else pasta).resolve()
+            subarvores.append((base, verdes))
     subarvores.sort(key=lambda par: len(par[0].parts), reverse=True)
-    return subarvores, listados
+    return subarvores
+
+
+def _analisar_linha_fora(
+    resto: str,
+    n: int,
+    base: Path,
+    pasta: Path,
+    verdes_rel: str,
+) -> tuple[Path | None, Achado | None]:
+    partes = _RE_SEP_FORA.split(resto.strip(), maxsplit=1)
+    if len(partes) != 2 or not partes[0].strip() or not partes[1].strip():
+        return None, Achado(verdes_rel, n, "linha '# fora:' sem motivo (use '# fora: <arquivo> — <motivo>')")
+    arquivo = partes[0].strip()
+    if any(ch in arquivo for ch in "*?[ \t"):
+        return None, Achado(verdes_rel, n, f"linha '# fora:' deve nomear um arquivo sem glob ({arquivo})")
+    for cand in ((base / arquivo).resolve(), (pasta / arquivo).resolve()):
+        if cand.is_file():
+            return cand, None
+    return None, Achado(verdes_rel, n, f"linha '# fora:' aponta arquivo inexistente ({arquivo})")
+
+
+def _ler_verdes_e_fora(base: Path, verdes: Path, ctx: Contexto) -> tuple[set[Path], list[Achado]]:
+    """Lê listados (via `bin/_lint/testes.py`) e linhas `# fora:` de um arquivo `VERDES`."""
+    from .testes import ler_linha
+
+    cobertos: set[Path] = set()
+    erros: list[Achado] = []
+    pasta = verdes.parent
+    verdes_rel = ctx.rel(verdes)
+    try:
+        texto = verdes.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return cobertos, erros
+
+    for n, bruta in enumerate(texto.splitlines(), 1):
+        m_fora = _RE_FORA.match(bruta)
+        if m_fora:
+            arq_fora, erro = _analisar_linha_fora(m_fora.group(1), n, base, pasta, verdes_rel)
+            if erro is not None:
+                erros.append(erro)
+            elif arq_fora is not None:
+                cobertos.add(arq_fora)
+            continue
+        linha = ler_linha(bruta, n)
+        if linha is None or not linha.arquivo:
+            continue
+        cobertos.add((base / linha.arquivo).resolve())
+        cobertos.add((pasta / linha.arquivo).resolve())
+    return cobertos, erros
 
 
 def teste_fora_de_portao(ctx: Contexto, item: dict) -> Iterator[Achado]:
-    """Arquivo de teste numa subárvore com lista de portão (`VERDES`) ausente dela (T11)."""
-    subarvores, listados = _listados_nos_verdes(ctx.raiz)
+    """Arquivo `test_*.py` em subárvore de teste fora da lista `VERDES` e sem `# fora:` válido (T11)."""
+    subarvores = _subarvores_de_teste(ctx.raiz)
     if not subarvores:
         return
-    for p in ctx.py:
-        if p.name in ("conftest.py", "__init__.py"):
+
+    cobertos: set[Path] = set()
+    for base, verdes in subarvores:
+        if verdes is None:
             continue
-        rel = ctx.rel(p)
-        if not e_teste(rel):
+        c, erros = _ler_verdes_e_fora(base, verdes, ctx)
+        cobertos |= c
+        yield from erros
+
+    for p in ctx.py:
+        if not p.name.startswith("test_"):
             continue
         p_res = p.resolve()
-        verdes = next((v for base, v in subarvores if p_res.is_relative_to(base)), None)
-        if verdes is not None and p_res not in listados:
-            yield Achado(rel, 1, f"fora da lista de portão ({ctx.rel(verdes)})")
+        par = next(((b, v) for b, v in subarvores if p_res.is_relative_to(b)), None)
+        if par is None or p_res in cobertos:
+            continue
+        base, verdes = par
+        detalhe = (
+            f"fora da lista de portão ({ctx.rel(verdes)})"
+            if verdes is not None
+            else f"fora da lista de portão (subárvore '{ctx.rel(base)}' sem VERDES)"
+        )
+        yield Achado(ctx.rel(p), 1, detalhe)
 
 
 # ------------------------------------------------------------------ shell
