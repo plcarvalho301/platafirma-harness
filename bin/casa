@@ -1,5 +1,15 @@
 #!/opt/platafirma/current/venv/harness/bin/python
-"""Comando do verbo `casa`: despacha leitura e escrita da Olaria via escritor único."""
+# casa — o verbo do catálogo e do fichário da casa: lê, lista, cria, troca, recompõe, ensaia, renomeia, apaga e gera o modelo
+# capacidade: ontologia
+# dono: conhecimento
+# classe: B
+# use para: ler classe, ficha, dicionário ou shape do catálogo e do fichário; listar classes, descendentes (--filhas), referenciadores (--aponta-para) ou chaves gravadas; criar ou trocar fichas e classes de ontologia, processos, arquitetura, norma, tesauros e inteligência; recompor fichas; ensaiar mudança sem gravar; renomear, apagar, gerir nomes alternativos e gerar o modelo
+# atos: ler (leitura, casa), listar (leitura, casa), criar (escrita, casa), trocar (escrita, casa), recompor (escrita, casa), ensaiar (leitura, casa), renomear (escrita, casa), apagar (escrita, casa), nomes (escrita, casa), gerar (leitura, casa)
+# forma: texto
+# escreve: nada; o serviço da Olaria, via escritor único, grava no catálogo e no fichário
+# consome: o serviço da Olaria (HTTP, stack olaria) e o escritor único
+# ambiente: OLARIA_URL (o endereço do serviço) e OLARIA_CHAVE (a chave de serviço, lida do cofre pela peça, nunca impressa), PF_CADEIRA (a cadeira que chama, injetada pela porta), OLARIA_PRAZO_S[=110], OLARIA_CHAMADA_S e OLARIA_REENVIO_S[=5] (opcionais, só para prova)
+# depende: nada além do python
 import sys
 from pathlib import Path
 
