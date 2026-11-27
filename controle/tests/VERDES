@@ -63,3 +63,5 @@ testes/test_escrita_contrato.py | lib/escrita/** registro/escrita.yaml
 testes/test_ato_ler_contrato.py | lib/leitura/** bin/busca registro/leitura.yaml
 tests/test_contrato_ontologia_remendo.py | bin/ontologia bin/_olaria/**
 tests/test_dts_clientes_servicos.py | lib/terceiros_olaria.py bin/bot lib/postura/casa.py lib/postura/composicao.py lib/descanso/publicar.py
+testes/test_leitura_banco_4467.py | lib/leitura/moradas/banco.py
+testes/test_expurgar_fosseis_4456.py | bin/release bin/_release/expurgo
