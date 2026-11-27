@@ -1031,7 +1031,49 @@ def mundo(monkeypatch):
     monkeypatch.setattr(juizes, "raiz_do_repo", lambda: RAIZ_ESPELHO)
     monkeypatch.setattr(juizes, "ler_de_main", ler_de_main)
     monkeypatch.setattr(juizes, "chamar_agente", chamar_agente)
+    # os testes dos juízes medem o caminho que volta com a #4150; o desligado tem os seus abaixo
+    monkeypatch.setattr(juizes, "JUIZES_LIGADOS", True)
     return {"docs": docs, "chamadas": chamadas, "resposta": mundo_resposta}
+
+
+def test_juizes_ficam_desligados_ate_a_4150():
+    assert juizes.JUIZES_LIGADOS is False
+
+
+def test_desligado_conferir_plano_roda_lint_e_fontes_sem_chamar_o_auditor(mundo, monkeypatch, capsys):
+    monkeypatch.setattr(juizes, "JUIZES_LIGADOS", False)
+    assert juizes.conferir_plano(str(BASE_EXEMPLOS / "alocacao.plano.json")) == 0
+    assert mundo["chamadas"] == []
+    assert "auditor: juiz desligado" in capsys.readouterr().out
+
+
+def test_desligado_fonte_fora_de_main_segue_defeito(mundo, monkeypatch, capsys):
+    monkeypatch.setattr(juizes, "JUIZES_LIGADOS", False)
+    del mundo["docs"][FONTE_JUIZ]
+    assert juizes.conferir_plano(str(BASE_EXEMPLOS / "alocacao.plano.json")) == 1
+    assert mundo["chamadas"] == []
+    assert "não está em origin/main" in capsys.readouterr().err
+
+
+def test_desligado_conferir_figura_roda_a_checagem_sem_chamar_o_critico(mundo, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(juizes, "JUIZES_LIGADOS", False)
+    svg, png = tmp_path / "f.svg", tmp_path / "f.png"
+    svg.write_text("<svg/>", encoding="utf-8")
+    png.write_bytes(b"\x89PNG-dados")
+    monkeypatch.setattr(juizes, "checar_plano_svg", lambda p, s: (0, []))
+    assert juizes.conferir_figura(str(BASE_EXEMPLOS / "alocacao.plano.json"), str(svg), str(png)) == 0
+    assert mundo["chamadas"] == []
+    assert "crítico: juiz desligado" in capsys.readouterr().out
+
+
+def test_desligado_checagem_que_reprova_segue_reprovando(mundo, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(juizes, "JUIZES_LIGADOS", False)
+    svg, png = tmp_path / "f.svg", tmp_path / "f.png"
+    svg.write_text("<svg/>", encoding="utf-8")
+    png.write_bytes(b"\x89PNG-dados")
+    monkeypatch.setattr(juizes, "checar_plano_svg", lambda p, s: (1, ["entidade 'X' do plano ausente no SVG"]))
+    assert juizes.conferir_figura(str(BASE_EXEMPLOS / "alocacao.plano.json"), str(svg), str(png)) == 1
+    assert "ausente no SVG" in capsys.readouterr().err
 
 
 def test_recorta_gabarito_com_o_geral_e_a_secao_do_tipo():

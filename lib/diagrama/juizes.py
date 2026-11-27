@@ -39,6 +39,14 @@ SECAO_DO_TIPO = {
 }
 MAX_GALERIA = 2
 TETO_AGENTE_S = 240
+# Os dois juízes rodam por `agente rodar`, e a delegação a sub-agente está desligada até a feature do
+# sub-agente declarado (#4150): a porta nega a abertura da sessão do juiz. Ordem do dono (27/11/2026):
+# desligar os juízes até lá. Desligados, conferir-plano roda o lint e confere que cada fonte está em
+# main, e conferir-figura roda a checagem estrutural; nenhum dos dois chama agente. Religar é este
+# valor em True, no commit que acompanha a #4150.
+JUIZES_LIGADOS = False
+AVISO_DESLIGADO = ("juiz desligado até a feature do sub-agente declarado (#4150): "
+                   "só a conferência por código rodou")
 VEREDITO = re.compile(r"^veredito:\s*([01])\b", re.IGNORECASE)
 
 
@@ -279,6 +287,19 @@ def conferir_plano(caminho_plano: str) -> int:
             print(d, file=sys.stderr)
         return 1
     plano_texto = Path(caminho_plano).read_text(encoding="utf-8")
+    if not JUIZES_LIGADOS:
+        try:
+            raiz = raiz_do_repo()
+            for caminho in json.loads(plano_texto).get("fontes", []):
+                ler_de_main(caminho, raiz)
+        except FonteForaDeMain as e:
+            print(f"defeito: {e}", file=sys.stderr)
+            return 1
+        except Dependencia as e:
+            print(f"diagrama conferir-plano: {e}", file=sys.stderr)
+            return 3
+        print(f"lint verde e fontes em main; auditor: {AVISO_DESLIGADO}")
+        return 0
     try:
         raiz = raiz_do_repo()
         tarefa = entrada_do_auditor(plano_texto, json.loads(plano_texto), raiz)
@@ -333,6 +354,9 @@ def conferir_figura(caminho_plano: str, caminho_svg: str, caminho_png: str) -> i
     if not png.is_file():
         print(f"diagrama conferir-figura: PNG não encontrado: {caminho_png}", file=sys.stderr)
         return 3
+    if not JUIZES_LIGADOS:
+        print(f"checagem estrutural verde; crítico: {AVISO_DESLIGADO}")
+        return 0
     plano_texto = Path(caminho_plano).read_text(encoding="utf-8")
     tipo = json.loads(plano_texto)["tipo"]
     try:
