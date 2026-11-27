@@ -640,7 +640,7 @@ cmd_segredo_exigidos() {
     exit 0
   fi
 
-  local falta_total=0 vistas=0 slug item alvo sdir
+  local falta_total=0 isolados_total=0 vistas=0 slug item alvo sdir pai modo_pai
   for slug in "${slugs[@]}"; do
     vistas=$((vistas+1))
     sdir="$SEG_SECRETS_DIR/$slug"
@@ -656,6 +656,13 @@ cmd_segredo_exigidos() {
     for item in "${exigidos[@]}"; do
       if alvo="$(_resolve_segredo "$item" "$sdir")"; then
         [ -e "$alvo" ] && continue
+        pai="$(dirname "$alvo")"
+        if [ -d "$pai" ] && [ ! -x "$pai" ]; then
+          modo_pai="$(stat -c '%U:%G %a' "$pai" 2>/dev/null || echo 'sem-travessia')"
+          echo "  ISOLADO : $slug/$item ($modo_pai — fora da conta $(id -un))"
+          isolados_total=$((isolados_total+1))
+          continue
+        fi
       fi
       echo "  AUSENTE : $slug/$item"
       falta_total=$((falta_total+1))
@@ -676,6 +683,10 @@ cmd_segredo_exigidos() {
   if [ "$falta_total" -gt 0 ]; then
     echo "faltam $falta_total segredo(s)." >&2
     exit 1
+  fi
+  if [ "$isolados_total" -gt 0 ]; then
+    echo "todos os segredos exigidos alcancaveis estao presentes ($vistas stack(s) conferida(s), $isolados_total isolado(s) noutra conta)."
+    exit 0
   fi
   echo "todos os segredos exigidos estao presentes ($vistas stack(s) conferida(s))."
   exit 0

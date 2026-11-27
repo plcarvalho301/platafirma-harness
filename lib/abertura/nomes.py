@@ -215,6 +215,17 @@ class Resolucao:
         return self.recusa.cadeiras if self.recusa else []
 
 
+def _raiz_casa_padrao() -> Path:
+    if os.environ.get("PF_CASA_RAIZ"):
+        return Path(os.environ["PF_CASA_RAIZ"])
+    if os.environ.get("PLATAFIRMA_RELEASE"):
+        return Path(os.environ["PLATAFIRMA_RELEASE"]) / "casa"
+    release_casa = Path("/opt/platafirma/current/casa")
+    if (release_casa / "instancias" / "persona").is_dir():
+        return release_casa
+    return Path(__file__).resolve().parents[4]
+
+
 def carregar_secao_das_cadeiras(base: Path | None = None, abertura_dir: Path | None = None) -> SecaoDasCadeiras:
     fixture = os.environ.get("PF_NOMES_FIXTURE") or os.environ.get("PF_SECAO_CADEIRAS")
     if fixture:
@@ -224,7 +235,7 @@ def carregar_secao_das_cadeiras(base: Path | None = None, abertura_dir: Path | N
             if abertura_dir:
                 secao = secao.com_abertura_dir(abertura_dir)
             return secao
-    raiz = base or Path(os.environ.get("PF_CASA_RAIZ") or Path(__file__).resolve().parents[4])
+    raiz = base or _raiz_casa_padrao()
     return SecaoDasCadeiras.de_pasta(raiz, abertura_dir=abertura_dir)
 
 

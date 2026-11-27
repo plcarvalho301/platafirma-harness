@@ -405,6 +405,29 @@ def test_exigidos_dependencia_ausente_sem_docker(tmp_path):
     assert res.returncode == 3
     assert "acervo indisponivel" in res.stderr
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root atravessa diretorio 0000")
+def test_exigidos_pasta_isolada_sem_travessia_nao_acusa_ausente(tmp_path):
+    secrets_dir = tmp_path / "secrets"
+    _run_seg(["segredo", "gravar", "porta/TUNNEL_TOKEN"], stdin="tok-secreto",
+              env_extra={"SEG_SECRETS_DIR": str(secrets_dir)})
+    pasta_porta = secrets_dir / "porta"
+    pasta_porta.chmod(0o000)
+    try:
+        stacks = ('[{"slug":"porta","segredos":["TUNNEL_TOKEN"],"papel":null,"critico":true,'
+                  '"repo":null,"compose":null,"rotas":null,"reversao":null,"gate":null,'
+                  '"profiles":null,"nota":null,"instancias":null}]')
+        docker_dir = _docker_topologia(tmp_path, stacks)
+        env = {"SEG_SECRETS_DIR": str(secrets_dir),
+               "PATH": f"{docker_dir}{os.pathsep}{os.environ['PATH']}"}
+
+        res = _run_seg(["segredo", "exigidos", "porta"], env_extra=env)
+        assert res.returncode == 0, res.stdout + res.stderr
+        assert "ISOLADO : porta/TUNNEL_TOKEN" in res.stdout
+        assert "AUSENTE" not in res.stdout
+        assert "tok-secreto" not in res.stdout + res.stderr
+    finally:
+        pasta_porta.chmod(0o700)
+
 def test_exigidos_ajuda():
     res = _run_seg(["segredo", "exigidos", "--ajuda"])
     assert res.returncode == 2
