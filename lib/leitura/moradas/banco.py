@@ -73,7 +73,7 @@ SELECT s.secao_id::text AS chave,
 """
 
 SQL_DIGEST_CLASSE = """
-SELECT coalesce(max(c.fornada)::text, '0') AS fornada,
+SELECT coalesce(max(c.fornada::text), '0') AS fornada,
        md5(coalesce(string_agg(f.chave_humana, E'\n' ORDER BY f.chave_humana), '')) AS digest,
        count(*)::int AS total
   FROM casa.ficha f
@@ -131,6 +131,32 @@ def _mapear_erro_banco(exc: Exception, alvo_desc: str) -> Recusa:
             recebido=alvo_desc,
             regra="papel-somente-leitura",
             cura=f"o papel {PAPEL_LEITOR} não tem permissão nesta consulta",
+            proximo="",
+        )
+    sqlstate = str(getattr(exc, "sqlstate", "") or "")
+    if (
+        (sqlstate.startswith(("42", "22")) and sqlstate != "42501")
+        or any(
+            k in nome
+            for k in (
+                "undefinedfunction",
+                "undefinedtable",
+                "undefinedcolumn",
+                "syntaxerror",
+                "programmingerror",
+                "dataerror",
+            )
+        )
+        or "does not exist" in msg
+        or "syntax error" in msg
+    ):
+        return Recusa(
+            saida=5,
+            codigo="erro-consulta-banco",
+            onde="morada:banco",
+            recebido=alvo_desc,
+            regra="consulta-sql-valida",
+            cura=f"consulta SQL rejeitada pelo banco ({type(exc).__name__}); reporte a TI",
             proximo="",
         )
     return Recusa(

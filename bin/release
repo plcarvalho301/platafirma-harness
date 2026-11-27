@@ -2636,7 +2636,9 @@ shift
 # Deixa em $PROD_RAIZ e Docker só o que a release no ar (current) usa.
 expurgar_fosseis() {  # $1=ver (0=apaga, 1=mostra o que sairia)
   local ver="${1:-0}" ab_dir="${PF_ABERTURA_DIR:-$PLATAFIRMA_INSTANCIA/var/abertura-""publicada}"
-  python3 - "$PROD_RAIZ" "$PONTOS" "$ab_dir" "$VENVS" "$ver" <<'PY'
+  python3 - "$PROD_RAIZ" "$PONTOS" "$ab_dir" "$VENVS" "$ver" "$AQUI/_release/expurgo" <<'PY'
+import importlib.machinery
+import importlib.util
 import json
 import os
 import re
@@ -2650,6 +2652,7 @@ pontos = Path(sys.argv[2])
 abertura_dir = Path(sys.argv[3])
 venvs_reg = Path(sys.argv[4])
 ver = sys.argv[5] == "1"
+expurgo_path = Path(sys.argv[6]) if len(sys.argv) > 6 and sys.argv[6] else None
 
 removidos = []
 
@@ -2682,12 +2685,29 @@ def _tornar_gravavel(alvo: Path) -> None:
 
 
 PRESERVAR = {os.path.realpath(p) for p in os.environ.get("PF_EXPURGO_PRESERVAR", "").split(os.pathsep) if p}
+EM_USO: dict[str, list[str]] = {}
+if expurgo_path is not None and expurgo_path.is_file():
+    try:
+        _loader = importlib.machinery.SourceFileLoader("pf_release_expurgo_fosseis", str(expurgo_path))
+        _spec = importlib.util.spec_from_loader(_loader.name, _loader)
+        if _spec is not None:
+            _mod = importlib.util.module_from_spec(_spec)
+            sys.modules[_loader.name] = _mod
+            _loader.exec_module(_mod)
+            EM_USO = _mod.coletar_em_uso(prod_raiz)
+    except Exception as exc:
+        print(f"expurgo:   AVISO — nao li uso de conteineres/processos ({exc})", file=sys.stderr)
+        EM_USO = {}
 
 def _apagar(alvo: Path, rotulo: str) -> None:
     if not alvo.exists() and not alvo.is_symlink():
         return
-    if os.path.realpath(alvo) in PRESERVAR:
+    real_alvo = os.path.realpath(alvo)
+    if real_alvo in PRESERVAR:
         print(f"mantido:   {rotulo} (porta ainda nela ate religar, #4407)")
+        return
+    if real_alvo in EM_USO:
+        print(f"mantido:   {rotulo} (em uso por {', '.join(EM_USO[real_alvo])}, #4456)")
         return
     if ver:
         print(f"sairia:    {rotulo} ({alvo})")
