@@ -1,0 +1,96 @@
+# registro/vista-alcance.yaml — espelho estático da vista de alcance na release (Política 0001).
+#
+# Fonte única lida por lib/escrita/portao.py e lib/leitura/resolvedor.py sem chamada de rede no arranque.
+# Para conferir contra o catálogo vivo da Olaria antes de promover a release:
+#   for cap in ontologia processos arquitetura norma tesauros inteligencia; do
+#     ontologia listar shape --capacidade "$cap"
+#   done
+versao: 1
+
+casa:
+  verbo_dono: casa
+  variantes:
+    - ontologia
+  regime: guardada
+  morada: banco
+  formas_suportadas:
+    - criar
+    - trocar
+    - ensaiar
+  capacidades:
+    ontologia:
+      - casa
+      - dicionario
+      - ficha
+      - modulo
+      - shape
+    processos:
+      - ciclo
+      - fluxo-de-valor
+      - instrucao
+      - laco
+      - missao
+      - parada
+      - procedimento
+      - processo
+    arquitetura:
+      - capacidade
+      - contrato
+      - figura
+      - habilidade
+      - observacao
+      - vinculo
+      - vista-de-arquitetura
+    norma:
+      - design-system
+      - diretriz
+      - gabarito
+      - politica
+      - verificacao
+    tesauros:
+      - conceito
+    inteligencia:
+      - fenomeno
+  classes_legadas_escrita:
+    - ato
+    - chapeu
+    - conta-de-sistema-operacional
+    - controle-de-seguranca
+    - persona
+    - servico
+    - verbo
+
+outros_verbos:
+  repo:
+    aceita_escrever: true
+    regime: comum
+    morada: git
+    formas_suportadas:
+      - gravar
+    classes:
+      - componente
+  tarefas:
+    aceita_escrever: false
+    regime: guardada
+    morada: rastreador
+    formas_suportadas:
+      - criar
+      - trocar
+    classes:
+      - card
+      - epico
+      - feature
+      - story
+      - task
+      - ideia
+      - incidente
+      - comentario
+  seg:
+    aceita_escrever: false
+    regime: guardada
+    morada: cofre
+    formas_suportadas:
+      - criar
+      - trocar
+    classes:
+      - segredo

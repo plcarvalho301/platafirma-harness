@@ -242,6 +242,7 @@ _RE_SLUG_VALIDO = re.compile(r"^[a-z0-9][a-z0-9._/-]*$")
 _RE_CLASSE_VALIDA = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _RE_DRIVE_WIN = re.compile(r"^[A-Za-z]:[\\/]")
 _RAIZ_REGISTRO_PORTA = Path(__file__).resolve().parents[2] / "registro" / "porta.yaml"
+_RAIZ_VISTA_ALCANCE = Path(__file__).resolve().parents[2] / "registro" / "vista-alcance.yaml"
 
 _CLASSES_RASTREADOR = frozenset(
     {"card", "epico", "feature", "story", "task", "ideia", "incidente", "comentario"}
@@ -321,24 +322,112 @@ _ALCANCE_PADRAO: dict[str, frozenset[str]] = {
 }
 
 
-def carregar_vista_alcance(registro_porta: Path | None = None) -> VistaAlcance:
-    """Carrega a vista provisória de alcance a partir de `registro/porta.yaml` (sem banco)."""
+def _carregar_alcance_casa_leitura(
+    caminho_vista_yaml: Path | None,
+) -> tuple[str, tuple[str, ...], frozenset[str]]:
+    alvo = _RAIZ_VISTA_ALCANCE if caminho_vista_yaml is None else Path(caminho_vista_yaml)
+    try:
+        bruto = alvo.read_text(encoding="utf-8")
+        dados = yaml.safe_load(bruto)
+    except (OSError, yaml.YAMLError) as exc:
+        raise ErroResolucao(
+            Recusa(
+                saida=3,
+                codigo="politica-indisponivel",
+                onde=str(alvo),
+                recebido=str(exc),
+                regra="vista-alcance-estatica-obrigatoria",
+                cura="confira o arquivo registro/vista-alcance.yaml na release",
+                proximo="",
+            )
+        ) from exc
+    if not isinstance(dados, dict) or not isinstance(dados.get("casa"), dict):
+        raise ErroResolucao(
+            Recusa(
+                saida=3,
+                codigo="politica-indisponivel",
+                onde=str(alvo),
+                recebido="esquema-invalido",
+                regra="vista-alcance-estatica-obrigatoria",
+                cura="declare a seção casa em registro/vista-alcance.yaml",
+                proximo="",
+            )
+        )
+    casa = dados["casa"]
+    verbo_dono = str(casa.get("verbo_dono") or "").strip()
+    variantes_raw = casa.get("variantes", [])
+    capacidades = casa.get("capacidades")
+    if (
+        not verbo_dono
+        or not isinstance(variantes_raw, list)
+        or not isinstance(capacidades, dict)
+        or not capacidades
+    ):
+        raise ErroResolucao(
+            Recusa(
+                saida=3,
+                codigo="politica-indisponivel",
+                onde=str(alvo),
+                recebido="casa-incompleta",
+                regra="vista-alcance-estatica-obrigatoria",
+                cura="declare verbo_dono, variantes e capacidades em registro/vista-alcance.yaml",
+                proximo="",
+            )
+        )
+    variantes = tuple(str(v).strip() for v in variantes_raw if isinstance(v, str) and v.strip())
+    classes_casa: set[str] = {"sessao"}
+    for lista in capacidades.values():
+        if not isinstance(lista, list) or not all(isinstance(c, str) and c.strip() for c in lista):
+            raise ErroResolucao(
+                Recusa(
+                    saida=3,
+                    codigo="politica-indisponivel",
+                    onde=str(alvo),
+                    recebido="capacidade-invalida",
+                    regra="vista-alcance-estatica-obrigatoria",
+                    cura="declare listas de nomes de classes em casa.capacidades",
+                    proximo="",
+                )
+            )
+        classes_casa.update(c.strip() for c in lista)
+    return verbo_dono, variantes, frozenset(classes_casa)
+
+
+def carregar_vista_alcance(
+    registro_porta: Path | None = None,
+    *,
+    caminho_vista_yaml: Path | None = None,
+) -> VistaAlcance:
+    """Carrega a vista de alcance a partir de `registro/vista-alcance.yaml` e `registro/porta.yaml` (sem banco)."""
+    verbo_dono, variantes, classes_casa = _carregar_alcance_casa_leitura(caminho_vista_yaml)
+    alcance = dict(_ALCANCE_PADRAO)
+    alcance[verbo_dono] = classes_casa
+    for var in variantes:
+        alcance[var] = classes_casa
+
+    classes = dict(_CLASSES_PADRAO)
+    for cls in classes_casa:
+        if cls not in classes:
+            classes[cls] = ClasseAlcance(cls, "banco", verbo_dono, universo_fechado=True)
+        elif classes[cls].morada == "banco" and classes[cls].verbo_dono in (verbo_dono, *variantes):
+            classes[cls] = ClasseAlcance(cls, "banco", verbo_dono, universo_fechado=True)
+
     arq = registro_porta if registro_porta is not None else _RAIZ_REGISTRO_PORTA
-    verbos_ler = set(_ALCANCE_PADRAO)
+    verbos_ler = set(alcance)
     try:
         dados = yaml.safe_load(arq.read_text(encoding="utf-8")) or {}
         verbos = dados.get("verbos") if isinstance(dados, dict) else {}
         if isinstance(verbos, dict):
             for slug, info in verbos.items():
                 desc = str(info.get("descricao") or "") if isinstance(info, dict) else ""
-                if "ler" in desc or slug in _ALCANCE_PADRAO:
+                if "ler" in desc or slug in alcance:
                     verbos_ler.add(str(slug))
     except (OSError, yaml.YAMLError):
         pass
     return VistaAlcance(
         verbos_aceitam_ler=frozenset(verbos_ler),
-        alcance_verbo=dict(_ALCANCE_PADRAO),
-        classes=dict(_CLASSES_PADRAO),
+        alcance_verbo=alcance,
+        classes=classes,
     )
 
 

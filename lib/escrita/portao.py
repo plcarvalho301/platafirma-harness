@@ -26,21 +26,10 @@ from .tipos import (
 )
 
 _PORTA_YAML_PADRAO = Path(__file__).resolve().parents[2] / "registro" / "porta.yaml"
+_VISTA_ALCANCE_YAML_PADRAO = Path(__file__).resolve().parents[2] / "registro" / "vista-alcance.yaml"
 _GRUPO_PADRAO = "platafirma-escrita"
 _FORMAS_COMUM = frozenset({"gravar", "retirar", "restaurar"})
 _FORMAS_GUARDADA = frozenset({"criar", "trocar", "retirar", "restaurar", "ensaiar"})
-_CLASSES_OLARIA_PADRAO = (
-    "ato",
-    "cadeira",
-    "chapeu",
-    "conta-de-sistema-operacional",
-    "controle-de-seguranca",
-    "persona",
-    "politica",
-    "servico",
-    "shape",
-    "verbo",
-)
 
 AutorizadorSujeito = Callable[[str, str, str, str], bool]
 ProvedorRaio = Callable[[str], frozenset[tuple[str, str]]]
@@ -177,32 +166,150 @@ def credencial_de_uid(uid: int, gid: int, pid: int) -> CredencialPar:
     )
 
 
-def _specs_classes_padrao() -> dict[str, SpecClasse]:
-    classes: dict[str, SpecClasse] = {
-        "componente": SpecClasse(
-            classe="componente",
-            regime="comum",
-            morada="git",
-            verbo_dono="repo",
-            formas_suportadas=frozenset({"gravar"}),
-        ),
-        "segredo": SpecClasse(
-            classe="segredo",
-            regime="guardada",
-            morada="cofre",
-            verbo_dono="seg",
-            formas_suportadas=frozenset({"criar", "trocar"}),
-        ),
-    }
-    for cls in _CLASSES_OLARIA_PADRAO:
-        classes[cls] = SpecClasse(
-            classe=cls,
-            regime="guardada",
-            morada="banco",
-            verbo_dono="ontologia",
-            formas_suportadas=frozenset({"criar", "trocar", "ensaiar"}),
+def _erro_vista_alcance(onde: str, recebido: str, cura: str) -> RecusaEscrita:
+    return RecusaEscrita(
+        ErroEscrita(
+            saida=3,
+            codigo="politica-indisponivel",
+            onde=onde,
+            recebido=recebido,
+            regra="registro/vista-alcance.yaml deve existir e declarar o espelho válido da vista de alcance",
+            cura=cura,
+            proximo="",
         )
-    return classes
+    )
+
+
+def _lista_slugs_vista(valor: object, onde: str, *, permitir_vazia: bool = False) -> tuple[str, ...]:
+    if not isinstance(valor, list) or not all(isinstance(item, str) and item.strip() for item in valor):
+        raise _erro_vista_alcance(onde, repr(valor), f"declare lista de nomes não vazios em {onde}")
+    if not permitir_vazia and not valor:
+        raise _erro_vista_alcance(onde, "[]", f"declare ao menos um item em {onde}")
+    return tuple(item.strip() for item in valor)
+
+
+def _ler_espelho_vista_alcance(caminho_vista_yaml: Path | None) -> dict[str, object]:
+    alvo = _VISTA_ALCANCE_YAML_PADRAO if caminho_vista_yaml is None else Path(caminho_vista_yaml)
+    try:
+        bruto = alvo.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise _erro_vista_alcance(
+            str(alvo), str(exc), "confira o arquivo registro/vista-alcance.yaml na release"
+        ) from exc
+    try:
+        dados = yaml.safe_load(bruto)
+    except yaml.YAMLError as exc:
+        raise _erro_vista_alcance(
+            str(alvo), str(exc), "corrija a sintaxe YAML de registro/vista-alcance.yaml"
+        ) from exc
+    if not isinstance(dados, dict):
+        raise _erro_vista_alcance(
+            str(alvo), type(dados).__name__, "o topo de registro/vista-alcance.yaml deve ser um objeto"
+        )
+    versao = dados.get("versao")
+    if isinstance(versao, bool) or not isinstance(versao, int) or versao <= 0:
+        raise _erro_vista_alcance("vista-alcance.versao", repr(versao), "declare versao inteira positiva")
+    return dados
+
+
+def _carregar_specs_casa(
+    casa: dict[str, object],
+) -> tuple[dict[str, SpecClasse], dict[str, SpecVerbo]]:
+    verbo_dono = str(casa.get("verbo_dono") or "").strip()
+    regime_casa = str(casa.get("regime") or "").strip()
+    morada_casa = str(casa.get("morada") or "").strip()
+    if not verbo_dono or regime_casa not in REGIMES_ESCRITA or morada_casa not in MORADAS_ESCRITA:
+        raise _erro_vista_alcance(
+            "vista-alcance.casa",
+            repr({"verbo_dono": verbo_dono, "regime": regime_casa, "morada": morada_casa}),
+            "declare verbo_dono, regime e morada válidos em casa",
+        )
+    variantes = _lista_slugs_vista(casa.get("variantes", []), "casa.variantes", permitir_vazia=True)
+    formas_casa = frozenset(_lista_slugs_vista(casa.get("formas_suportadas"), "casa.formas_suportadas"))
+    capacidades = casa.get("capacidades")
+    if not isinstance(capacidades, dict) or not capacidades:
+        raise _erro_vista_alcance(
+            "casa.capacidades", repr(capacidades), "declare o mapa de capacidades em casa.capacidades"
+        )
+    classes_casa: set[str] = set()
+    for cap, lista in capacidades.items():
+        classes_casa.update(_lista_slugs_vista(lista, f"casa.capacidades.{cap}"))
+    classes_casa.update(
+        _lista_slugs_vista(
+            casa.get("classes_legadas_escrita", []),
+            "casa.classes_legadas_escrita",
+            permitir_vazia=True,
+        )
+    )
+    classes = {
+        cls: SpecClasse(
+            classe=cls,
+            regime=regime_casa,
+            morada=morada_casa,
+            verbo_dono=verbo_dono,
+            formas_suportadas=formas_casa,
+        )
+        for cls in sorted(classes_casa)
+    }
+    alcance = frozenset(classes_casa)
+    verbos_escrita = {
+        nome: SpecVerbo(verbo=nome, aceita_escrever=True, classes=alcance)
+        for nome in (verbo_dono, *variantes)
+    }
+    return classes, verbos_escrita
+
+
+def _carregar_specs_outros_verbos(
+    outros: dict[str, object],
+    classes: dict[str, SpecClasse],
+    verbos_escrita: dict[str, SpecVerbo],
+) -> None:
+    for nome_verbo, spec in outros.items():
+        if not isinstance(spec, dict):
+            raise _erro_vista_alcance(
+                f"outros_verbos.{nome_verbo}", repr(spec), "declare um objeto por verbo em outros_verbos"
+            )
+        regime = str(spec.get("regime") or "").strip()
+        morada = str(spec.get("morada") or "").strip()
+        if regime not in REGIMES_ESCRITA or morada not in MORADAS_ESCRITA:
+            raise _erro_vista_alcance(
+                f"outros_verbos.{nome_verbo}",
+                repr({"regime": regime, "morada": morada}),
+                "declare regime e morada válidos",
+            )
+        formas = frozenset(
+            _lista_slugs_vista(spec.get("formas_suportadas"), f"outros_verbos.{nome_verbo}.formas_suportadas")
+        )
+        cls_verbo = _lista_slugs_vista(spec.get("classes"), f"outros_verbos.{nome_verbo}.classes")
+        for cls in cls_verbo:
+            classes[cls] = SpecClasse(
+                classe=cls,
+                regime=regime,
+                morada=morada,
+                verbo_dono=str(nome_verbo),
+                formas_suportadas=formas,
+            )
+        if bool(spec.get("aceita_escrever", False)):
+            verbos_escrita[str(nome_verbo)] = SpecVerbo(
+                verbo=str(nome_verbo),
+                aceita_escrever=True,
+                classes=frozenset(cls_verbo),
+            )
+
+
+def _carregar_specs_da_vista(
+    caminho_vista_yaml: Path | None,
+) -> tuple[dict[str, SpecClasse], dict[str, SpecVerbo]]:
+    dados = _ler_espelho_vista_alcance(caminho_vista_yaml)
+    casa = dados.get("casa")
+    outros = dados.get("outros_verbos")
+    if not isinstance(casa, dict) or not isinstance(outros, dict):
+        raise _erro_vista_alcance(
+            "vista-alcance", "chaves ausentes", "declare as seções casa e outros_verbos"
+        )
+    classes, verbos_escrita = _carregar_specs_casa(casa)
+    _carregar_specs_outros_verbos(outros, classes, verbos_escrita)
+    return classes, verbos_escrita
 
 
 def _nomes_verbos_porta(caminho_porta_yaml: Path | None) -> list[str]:
@@ -215,23 +322,18 @@ def _nomes_verbos_porta(caminho_porta_yaml: Path | None) -> list[str]:
     return [str(nome) for nome in dados["verbos"]]
 
 
-def carregar_vista_alcance(caminho_porta_yaml: Path | None = None) -> VistaAlcance:
-    """Monta a vista de alcance a partir do registro de verbos da porta."""
-    classes = _specs_classes_padrao()
+def carregar_vista_alcance(
+    caminho_porta_yaml: Path | None = None,
+    *,
+    caminho_vista_yaml: Path | None = None,
+) -> VistaAlcance:
+    """Monta a vista de alcance a partir do espelho estático da release e da porta."""
+    classes, verbos_escrita = _carregar_specs_da_vista(caminho_vista_yaml)
     verbos: dict[str, SpecVerbo] = {
         nome: SpecVerbo(verbo=nome, aceita_escrever=False)
         for nome in _nomes_verbos_porta(caminho_porta_yaml)
     }
-    verbos["repo"] = SpecVerbo(
-        verbo="repo",
-        aceita_escrever=True,
-        classes=frozenset({"componente"}),
-    )
-    verbos["ontologia"] = SpecVerbo(
-        verbo="ontologia",
-        aceita_escrever=True,
-        classes=frozenset(_CLASSES_OLARIA_PADRAO),
-    )
+    verbos.update(verbos_escrita)
     return VistaAlcance(verbos=verbos, classes=classes)
 
 
