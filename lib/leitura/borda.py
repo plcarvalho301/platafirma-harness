@@ -502,6 +502,7 @@ def _parsear_ler(argv: Sequence[str], *, verbo: str) -> PedidoLer:
                 _aplicar_flag_ler(est, tok, val)
                 i += 2 if val is not None else 1
             else:
+                flags_aceitas = ", ".join(sorted(_FLAGS_BOOL_LER | _FLAGS_VALOR_LER))
                 est.erros.append(
                     Recusa(
                         saida=2,
@@ -509,8 +510,8 @@ def _parsear_ler(argv: Sequence[str], *, verbo: str) -> PedidoLer:
                         onde=tok,
                         recebido=sanitizar_recebido(tok),
                         regra="flags-do-ato-ler",
-                        cura="remova a flag desconhecida",
-                        proximo="",
+                        cura=f"flag desconhecida {tok!r}; flags aceitas: {flags_aceitas}",
+                        proximo=f"{verbo} ler <chave>",
                     )
                 )
                 i += 1
@@ -657,6 +658,7 @@ def _parsear_listar(
             _aplicar_flag_listar(est, tok, val)
             i += 2 if val is not None else 1
         elif tok.startswith("-"):
+            flags_aceitas = ", ".join(sorted({"--json"} | _FLAGS_VALOR_LISTAR))
             est.erros.append(
                 Recusa(
                     saida=2,
@@ -664,8 +666,8 @@ def _parsear_listar(
                     onde=tok,
                     recebido=sanitizar_recebido(tok),
                     regra="flags-do-ato-listar",
-                    cura="remova a flag desconhecida",
-                    proximo="",
+                    cura=f"flag desconhecida {tok!r}; flags aceitas: {flags_aceitas}",
+                    proximo=f"{ctx.verbo} listar <classe>",
                 )
             )
             i += 1

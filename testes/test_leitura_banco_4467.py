@@ -55,3 +55,10 @@ def test_sql_ler_ficha_devolve_fornada_do_proprio_shape_ou_dicionario() -> None:
     assert "coalesce(s.fornada::text, dc.fornada::text, c.fornada::text, '0') AS versao" in SQL_LER_FICHA
     assert "LEFT JOIN casa.shape s ON s.uuid = f.uuid" in SQL_LER_FICHA
     assert "LEFT JOIN casa.dicionario dc ON dc.uuid = f.uuid" in SQL_LER_FICHA
+
+
+def test_sql_digest_classe_distingue_classe_inexistente() -> None:
+    """DT 1460: SQL_DIGEST_CLASSE faz LEFT JOIN a partir de casa.shape para sinalizar classe_existe."""
+    assert "FROM casa.shape c" in SQL_DIGEST_CLASSE
+    assert "LEFT JOIN casa.ficha f ON f.classe = c.uuid" in SQL_DIGEST_CLASSE
+    assert "count(c.uuid)::int AS classe_existe" in SQL_DIGEST_CLASSE

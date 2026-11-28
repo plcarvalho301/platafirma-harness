@@ -30,7 +30,7 @@ PAPEL_LEITOR = "pf_leitor_ro"
 SQL_BEGIN_RO = "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
 SQL_SET_TIMEOUT = "SELECT set_config('statement_timeout', %s, true)"
 
-SQL_LER_FICHA = """
+_SQL_LER_FICHA_BASE = """
 SELECT f.uuid::text AS uuid,
        f.chave_humana AS chave,
        c.slug AS classe,
@@ -56,7 +56,19 @@ SELECT f.uuid::text AS uuid,
   JOIN casa.shape c ON c.uuid = f.classe
   LEFT JOIN casa.shape s ON s.uuid = f.uuid
   LEFT JOIN casa.dicionario dc ON dc.uuid = f.uuid
- WHERE f.chave_humana = %s
+"""
+
+SQL_LER_FICHA = _SQL_LER_FICHA_BASE + " WHERE f.chave_humana = %s\n"
+
+SQL_LER_FICHA_POR_CLASSE_E_SLUG = _SQL_LER_FICHA_BASE + " WHERE f.chave_humana = %s AND c.slug = %s\n"
+
+SQL_RESOLVER_SLUG = """
+SELECT f.chave_humana AS chave, c.slug AS classe
+  FROM casa.ficha f
+  JOIN casa.shape c ON c.uuid = f.classe
+ WHERE f.chave_humana = %s OR f.chave_humana = c.slug || ':' || %s
+ ORDER BY f.chave_humana ASC
+ LIMIT 10
 """
 
 SQL_LER_OBRA = """
@@ -78,9 +90,10 @@ SELECT s.secao_id::text AS chave,
 SQL_DIGEST_CLASSE = """
 SELECT coalesce(max(c.fornada::text), '0') AS fornada,
        md5(coalesce(string_agg(f.chave_humana, E'\n' ORDER BY f.chave_humana), '')) AS digest,
-       count(*)::int AS total
-  FROM casa.ficha f
-  JOIN casa.shape c ON c.uuid = f.classe
+       count(f.uuid)::int AS total,
+       count(c.uuid)::int AS classe_existe
+  FROM casa.shape c
+  LEFT JOIN casa.ficha f ON f.classe = c.uuid
  WHERE c.slug = %s
 """
 
@@ -244,11 +257,14 @@ class AdaptadorBanco:
             with contextlib.suppress(Exception):
                 con.close()
 
-    def _conferir_digest_fechamento(self, cur: Any, alvo: AlvoResolvido) -> str | None:
+    def _conferir_digest_fechamento(self, cur: Any, alvo: AlvoResolvido) -> tuple[str | None, bool]:
         if not alvo.universo_fechado or alvo.classe in ("obra", "secao"):
-            return None
+            return None, True
         cur.execute(SQL_DIGEST_CLASSE, (alvo.classe,))
         linha = cur.fetchone()
+        classe_existe = bool(linha[3]) if (linha and len(linha) >= 4) else True
+        if not classe_existe:
+            return None, False
         digest_vivo = str(linha[1]) if linha and linha[1] is not None else ""
         if alvo.digest_release and digest_vivo and digest_vivo != alvo.digest_release:
             raise ErroMorada(
@@ -265,7 +281,15 @@ class AdaptadorBanco:
                     proximo=f"busca ler {alvo.chave_pedida}",
                 )
             )
-        return digest_vivo or alvo.digest_release
+        return (digest_vivo or alvo.digest_release), True
+
+    def resolver_slug(self, slug: str, prazo_ms: int) -> list[tuple[str, str]]:
+        """Resolve slug sem classe no fichário, devolvendo pares (chave_humana, classe)."""
+        def _buscar(cur: Any) -> list[tuple[str, str]]:
+            cur.execute(SQL_RESOLVER_SLUG, (slug, slug))
+            return [(str(r[0]), str(r[1])) for r in cur.fetchall()]
+
+        return self._executar_em_transacao_ro(f"slug:{slug}", prazo_ms, _buscar)
 
     @staticmethod
     def _ler_vista_acervo(cur: Any, alvo: AlvoResolvido, sql: str) -> tuple[str, str]:
@@ -305,8 +329,29 @@ class AdaptadorBanco:
             )
             cur.execute(SQL_LER_FICHA, (chave_busca,))
             row = cur.fetchone()
+            if row is None and not alvo.eh_ficha_da_classe and ":" in alvo.chave_canonica:
+                slug_sem_classe = alvo.chave_canonica.split(":", 1)[1]
+                cur.execute(SQL_LER_FICHA_POR_CLASSE_E_SLUG, (slug_sem_classe, alvo.classe))
+                row = cur.fetchone()
             if row is None:
-                digest = self._conferir_digest_fechamento(cur, alvo)
+                digest, classe_existe = self._conferir_digest_fechamento(cur, alvo)
+                if not classe_existe:
+                    slug_alvo = (
+                        alvo.chave_canonica.split(":", 1)[1]
+                        if ":" in alvo.chave_canonica
+                        else alvo.chave_canonica
+                    )
+                    raise ErroMorada(
+                        Recusa(
+                            saida=1,
+                            codigo="classe-inexistente",
+                            onde="morada:banco",
+                            recebido=alvo.chave_pedida,
+                            regra="existencia-da-classe-no-fichario",
+                            cura=f"classe {alvo.classe!r} não existe no fichário",
+                            proximo=f"busca consultar {slug_alvo}",
+                        )
+                    )
                 cura = (
                     f"chave {alvo.chave_canonica!r} não existe na classe {alvo.classe!r} "
                     f"(universo fechado, digest={digest})"

@@ -227,7 +227,7 @@ class AdaptadorGit:
                     recebido=alvo.chave_pedida,
                     regra="objeto-na-release",
                     cura=f"arquivo {alvo.endereco!r} não encontrado na árvore publicada",
-                    proximo=f"busca buscar {alvo.chave_pedida}",
+                    proximo=f"busca consultar --classe {alvo.classe}",
                 )
             ) from None
 
