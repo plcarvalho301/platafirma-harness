@@ -21,8 +21,8 @@ from postura import casa as postura_casa
 from postura import composicao as postura_composicao
 
 
-def _carregar_bot():
-    loader = importlib.machinery.SourceFileLoader("bin_bot_dt1398", str(RAIZ / "bin" / "bot"))
+def _carregar_automacao():
+    loader = importlib.machinery.SourceFileLoader("bin_automacao_dt1398", str(RAIZ / "bin" / "automacao"))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     assert spec is not None
     mod = importlib.util.module_from_spec(spec)
@@ -80,10 +80,10 @@ def test_dt979_terceiros_olaria_sem_chave_reporta_chave_ausente_nao_url(tmp_path
         terceiros_olaria.ler_terceiros_da_olaria(env=env)
 
 
-# --- DT #1398: bot usa lib/acervo_token e mapeia HTTP 401 para saída 3 ----------------------------
+# --- DT #1398: automacao usa lib/acervo_token e mapeia HTTP 401 para saída 3 ----------------------
 
 
-def test_dt1398_bot_chama_usa_token_do_armario(tmp_path, monkeypatch):
+def test_dt1398_automacao_chama_usa_token_do_armario(tmp_path, monkeypatch):
     inst, release = _montar_armario(
         tmp_path,
         [("acervo-guarda/RAG_API_TOKEN", "segredos/acervo-guarda/RAG_API_TOKEN", "tok-armario-1398")],
@@ -92,7 +92,7 @@ def test_dt1398_bot_chama_usa_token_do_armario(tmp_path, monkeypatch):
     monkeypatch.setenv("PLATAFIRMA_INSTANCIA", str(inst))
     monkeypatch.setenv("PLATAFIRMA_RELEASE", str(release))
 
-    bot = _carregar_bot()
+    mod = _carregar_automacao()
     headers_vistos: dict[str, str] = {}
 
     class _Resp:
@@ -111,16 +111,16 @@ def test_dt1398_bot_chama_usa_token_do_armario(tmp_path, monkeypatch):
         headers_vistos.update(dict(req.header_items()))
         return _Resp()
 
-    monkeypatch.setattr(bot.urllib.request, "urlopen", _fake_urlopen)
-    status, obj = bot._chama("GET", "/acervo/automacoes")
+    monkeypatch.setattr(mod.urllib.request, "urlopen", _fake_urlopen)
+    status, obj = mod._chama("GET", "/acervo/automacoes")
     assert status == 200
     assert obj == {"itens": []}
     assert headers_vistos.get("Authorization") == "Bearer tok-armario-1398"
 
 
 @pytest.mark.parametrize(("http_code", "exit_esperado"), [(401, 3), (403, 4)])
-def test_dt1398_bot_mapeia_401_para_3_e_403_para_4(monkeypatch, http_code, exit_esperado):
-    bot = _carregar_bot()
+def test_dt1398_automacao_mapeia_401_para_3_e_403_para_4(monkeypatch, http_code, exit_esperado):
+    mod = _carregar_automacao()
 
     def _fake_urlopen(req, timeout=10):
         raise urllib.error.HTTPError(
@@ -131,9 +131,9 @@ def test_dt1398_bot_mapeia_401_para_3_e_403_para_4(monkeypatch, http_code, exit_
             io.BytesIO(b'{"title": "SemCredencial", "detail": "token recusado"}'),
         )
 
-    monkeypatch.setattr(bot.urllib.request, "urlopen", _fake_urlopen)
-    with pytest.raises(bot.Falha) as exc:
-        bot._chama("GET", "/acervo/automacoes")
+    monkeypatch.setattr(mod.urllib.request, "urlopen", _fake_urlopen)
+    with pytest.raises(mod.Falha) as exc:
+        mod._chama("GET", "/acervo/automacoes")
     assert exc.value.codigo == exit_esperado
 
 

@@ -1,8 +1,8 @@
-"""units — a unit systemd --user que o bot gera e os declarantes que `conferir jobs` lê.
+"""units — a unit systemd --user que a automação gera e os declarantes que `conferir jobs` lê.
 
-Contrato (bin/bot e `release conferir jobs` leem este arquivo; a interface é esta):
-  CABECALHO_GERADO          1ª linha de todo .service/.timer gerado pelo bot
-  eh_unit_do_bot(texto)     True só se a 1ª linha do texto é CABECALHO_GERADO, inteira
+Contrato (bin/automacao e `release conferir jobs` leem este arquivo; a interface é esta):
+  CABECALHO_GERADO          1ª linha de todo .service/.timer gerado por automacao
+  eh_unit_gerada(texto)     True só se a 1ª linha do texto é CABECALHO_GERADO, inteira
   duracao_para_iso(texto)   '1d' '6h' '30m' '90s' '1d12h' ou ISO 8601 pronto -> ISO 8601
                             ('P1D', 'PT6H', 'P1DT12H'); zero, negativo ou lixo -> ValueError
   nomes_da_unit(slug)       ('<slug>.service', '<slug>.timer'); ValueError se o slug não casa SLUG
@@ -25,8 +25,9 @@ Contrato (bin/bot e `release conferir jobs` leem este arquivo; a interface é es
   declarantes_de_jobs(release)
                             (decl, esperados, faltas) dos registros servidos da release
   le_unit(caminho)          texto do arquivo da unit, ou '' se não lê
-  fichas_do_bot(bin_irmaos) ({slug: ficha}, None) das fichas ativas por `bot listar --json`, ou
-                            ({}, motivo) se o serviço não responde; verbo ausente = sem fichas
+  fichas_de_automacao(bin_irmaos)
+                            ({slug: ficha}, None) das fichas ativas por `automacao listar --json`, ou
+                            ({}, motivo) se o serviço não responde; comando ausente = sem fichas
 """
 from __future__ import annotations
 
@@ -36,7 +37,8 @@ import re
 import subprocess
 from pathlib import Path
 
-CABECALHO_GERADO = "# GERADO por bot — não editar"
+CABECALHO_GERADO = "# GERADO por automacao — não editar"
+_CABECALHO_LEGADO = "# GERADO por bot — não editar"
 
 ENV_OPS = "/home/claudinho/.config/ops/env"
 UNIT_SISTEMA = ("/usr/lib/systemd/user/", "/lib/systemd/user/")
@@ -58,8 +60,9 @@ def sh(args, timeout=None):
     return p.returncode, p.stdout.strip(), p.stderr.strip()
 
 
-def eh_unit_do_bot(texto):
-    return texto.splitlines()[:1] == [CABECALHO_GERADO]
+def eh_unit_gerada(texto):
+    primeira = texto.splitlines()[:1]
+    return primeira in ([CABECALHO_GERADO], [_CABECALHO_LEGADO])
 
 
 def duracao_para_iso(texto):
@@ -87,7 +90,7 @@ def nomes_da_unit(slug):
 def gera_unit(declaracao):
     """Forma de deploy-harness/sinal.service e sinal.timer: Type=oneshot, release e nunca
     clone, mesmo ambiente do ops-mcp (sem o EnvironmentFile o verbo toma 401). Sem
-    SuccessExitStatus: exit != 0 do job deixa a unit failed, e é isso que `bot caidas` vê."""
+    SuccessExitStatus: exit != 0 do job deixa a unit failed, e é isso que `automacao caidas` vê."""
     slug = declaracao["slug"]
     servico, _ = nomes_da_unit(slug)
     if declaracao.get("trigger_tipo", "timer") != "timer":
@@ -96,26 +99,26 @@ def gera_unit(declaracao):
     if not cal.strip() or any(ord(c) < 32 or ord(c) == 127 or c in "\\%" for c in cal):
         raise ValueError(f"calendario invalido: {cal!r} (vazio, quebra de linha, caractere de controle, "
                          "barra invertida ou %: o systemd os le como continuacao de linha e especificador)")
-    fonte = f'# fonte: ficha de automacao "{slug}" no acervo; desfazer: bot desligar {slug}'
+    fonte = f'# fonte: ficha de automacao "{slug}" no acervo; desfazer: automacao desligar {slug}'
     service = "\n".join([
         CABECALHO_GERADO,
         fonte,
         "[Unit]",
-        f"Description=bot — {slug}",
+        f"Description=automacao — {slug}",
         "",
         "[Service]",
         "Type=oneshot",
         f"WorkingDirectory={RELEASE_HARNESS}",
         f"Environment=PATH={RELEASE_HARNESS}/bin:/usr/local/bin:/usr/bin:/bin",
         f"EnvironmentFile={ENV_OPS}",
-        f"ExecStart={RELEASE_HARNESS}/bin/bot rodar {slug}",
+        f"ExecStart={RELEASE_HARNESS}/bin/automacao rodar {slug}",
         "",
     ])
     timer = "\n".join([
         CABECALHO_GERADO,
         fonte,
         "[Unit]",
-        f"Description=bot — {slug} (agenda)",
+        f"Description=automacao — {slug} (agenda)",
         "",
         "[Timer]",
         f"OnCalendar={cal}",
@@ -143,7 +146,7 @@ def dir_units():
 
 
 def dirs_candidatas():
-    """Todas as pastas onde uma unit do bot pode ter caido: PF_UNITS_DIR (so teste), ~/.config/systemd/user e
+    """Todas as pastas onde uma unit gerada pode ter caido: PF_UNITS_DIR (so teste), ~/.config/systemd/user e
     $XDG_DATA_HOME/systemd/user. A morada muda com a permissao do ~/.config; quem desfaz procura em todas."""
     dados = os.environ.get("XDG_DATA_HOME", "").strip() or str(Path.home() / ".local" / "share")
     forcado = os.environ.get("PF_UNITS_DIR", "").strip()
@@ -210,22 +213,22 @@ def declarantes_de_jobs(release):
     return decl, esperados, faltas
 
 
-def fichas_do_bot(bin_irmaos):
-    """Fichas ativas de automacao por `bot listar --json` (a ficha mora no acervo, o bot e o
-    leitor). Sem o verbo na release nao ha ficha que sustente unit: ({}, None)."""
-    bot = os.path.join(bin_irmaos, "bot")
-    if not os.path.isfile(bot):
+def fichas_de_automacao(bin_irmaos):
+    """Fichas ativas de automacao por `automacao listar --json` (a ficha mora no acervo, o comando e o
+    leitor). Sem o comando na release nao ha ficha que sustente unit: ({}, None)."""
+    cmd = os.path.join(bin_irmaos, "automacao")
+    if not os.path.isfile(cmd):
         return {}, None
-    rc, out, err = sh([bot, "listar", "--json"], timeout=60)
+    rc, out, err = sh([cmd, "listar", "--json"], timeout=60)
     if rc != 0:
-        return {}, f"bot listar --json saiu {rc}: {(err or out or 'sem saida').splitlines()[0]}"
+        return {}, f"automacao listar --json saiu {rc}: {(err or out or 'sem saida').splitlines()[0]}"
     try:
         lista = json.loads(out)
     except ValueError:
-        return {}, "bot listar --json nao devolveu JSON"
+        return {}, "automacao listar --json nao devolveu JSON"
     if isinstance(lista, dict):
         lista = lista.get("itens")
     if not isinstance(lista, list):
-        return {}, "bot listar --json nao devolveu uma lista de fichas"
+        return {}, "automacao listar --json nao devolveu uma lista de fichas"
     return {f["slug"]: f for f in lista
             if isinstance(f, dict) and f.get("slug") and f.get("ciclo", "ativa") == "ativa"}, None

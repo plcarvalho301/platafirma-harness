@@ -6,7 +6,7 @@
 #
 # O critério positivo. Contêiner: sem o label `com.docker.compose.project` e criado há mais de 24 h (rodando ou parado).
 # O nome não conta (acervo-api, conversor-2, motor-pg e searxng não seguem o molde projeto-serviço-n e têm o label), nem
-# o estado. Unit: `platafirma-job-*` transiente em failed. Nada fora disso sai: a unit do bot, a xdg-desktop-portal*, o
+# o estado. Unit: `platafirma-job-*` transiente em failed. Nada fora disso sai: a unit de automação, a xdg-desktop-portal*, o
 # contêiner de stack, o contêiner de prova com menos de 24 h.
 #
 # O que grava antes de tirar (R13). Da unit do job: o evento de fim, a linha `# fim=<ts> result=<Result>
@@ -230,7 +230,7 @@ class Rodada:
 
     def jobs(self) -> None:
         for unit in listar_units("failed"):
-            # Cinto: o glob do systemctl já filtra, mas o critério é positivo e mora aqui. A unit do bot e a
+            # Cinto: o glob do systemctl já filtra, mas o critério é positivo e mora aqui. A unit de automação e a
             # xdg-desktop-portal* em failed não são job da sessão.
             if not unit.startswith(PREFIXO_DO_JOB):
                 self.ficou += 1

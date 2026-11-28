@@ -55,7 +55,7 @@ def coletar(catalogo: Catalogo, temporarios: Path) -> int:
 
 
 def main() -> int:
-    """Entrada privada da automação declarada pelo bot, sem sujeito de pessoa."""
+    """Entrada privada da automação declarada, sem sujeito de pessoa."""
     import fcntl
     import os
     import sys
@@ -65,7 +65,7 @@ def main() -> int:
     from . import json_canonico
     from .extrator import conectar
 
-    if "analise-coleta" not in os.environ.get("PF_BOT_SLUGS", "").split(","):
+    if "analise-coleta" not in os.environ.get("PF_AUTOMACAO_SLUGS", "").split(","):
         sys.stdout.write(
             json_canonico({"exit": 4, "causa": "coleta-so-pela-automacao"}) + "\n"
         )

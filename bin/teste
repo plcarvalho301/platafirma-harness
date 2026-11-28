@@ -92,7 +92,7 @@ uso:
                 nem em 'todos': só com --degrau demanda, sob pedido expresso, com o navegador do host
   --origin-main: só com --portao, sem <alvo> e sem --arvore: busca origin/main no clone base da
                  bancada, mede a lista inteira (os três degraus, e a quarentena, se não houver
-                 --degrau) numa árvore descartável dele e a remove (a rodada diária do bot, card
+                 --degrau) numa árvore descartável dele e a remove (a rodada diária da automação, card
                  #3370; não grava veredito de seleção)
   --prazo <s>: prazo máximo de execução em segundos por suíte ou bloco (default 300s python,
                600s node, ou PF_TESTE_TIMEOUT)
@@ -1524,7 +1524,7 @@ ato_rodar() {
   case "$nome" in *@*) REG_BANCADA="${nome#*@}" ;; esac  # --chave nao apaga a bancada escolhida
 
   # Rodada diária: a lista inteira sobre origin/main, numa árvore descartável do
-  # clone base da bancada (<bancada>/<repo>), que o job do bot não tem por cadeira. A árvore
+  # clone base da bancada (<bancada>/<repo>), que o job da automação não tem por cadeira. A árvore
   # nasce sob a raiz que --arvore aceita e some na saída.
   if [ "$origem_main" -eq 1 ]; then
     { [ "$portao" -eq 1 ] && [ -z "$alvo" ] && [ -z "$arvore" ] && [ -z "$base" ]; } \

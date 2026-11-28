@@ -82,7 +82,7 @@
                    evidencia de ausencia, e `indeterminavel` NAO ancora negativa).
 
   jobs    [timer]  cada timer do systemd --user da conta: declarado (harness/instalar,
-                   core/units-da-instancia.json, unit do bot com ficha ativa ou pacote do
+                   core/units-da-instancia.json, unit de automação com ficha ativa ou pacote do
                    sistema), link pelo atalho
                    estavel da release, nada da bancada, EnvironmentFile do porta
                    quando chama verbo, habilitado, ultima execucao sem falha; e o
@@ -3645,20 +3645,20 @@ def conferir_vocabulario(alvo=None, como_json=False):
 #   - core     deploy/units-da-instancia.json: `units` (instala-units.sh, symlink) e
 #              `_fora_deste_instalador` (setup-*.sh com sudo, copia em ~/.config)
 #   - sistema  unit de pacote do SO, em /usr/lib/systemd/user ou /lib/systemd/user
-#   - bot      unit com o cabecalho do bot (lib/units.py) E ficha ativa do slug no
-#              acervo, lida por `bot listar --json`; os dois nomes, .timer e .service.
+#   - automacao unit com o cabecalho de automacao (lib/units.py) E ficha ativa do slug no
+#              acervo, lida por `automacao listar --json`; os dois nomes, .timer e .service.
 #              Cabecalho sem ficha e orfa; ficha de timer sem unit agendada diverge;
-#              ficha ilegivel com unit do bot na rodada e "nao consegui olhar"; sem unit do
-#              bot na rodada, so um aviso em stderr, o exit nao muda
+#              ficha ilegivel com unit de automacao na rodada e "nao consegui olhar"; sem unit de
+#              automacao na rodada, so um aviso em stderr, o exit nao muda
 # Nenhuma lista nova: a classe mede as que existem. Duas moradas e dois jeitos de
 # instalar seguem como estao -- unificar e decisao.
 
 # ENV_OPS, UNIT_SISTEMA, systemctl_show e declarantes_de_jobs moram em lib/units.py,
-# que o bot tambem le.
+# que `bin/automacao` tambem le.
 
 
 def conferir_jobs(alvo=None, como_json=False):
-    """Um item por timer do systemd --user: declarado (manifesto, unit do bot com ficha
+    """Um item por timer do systemd --user: declarado (manifesto, unit de automação com ficha
     ativa ou pacote do SO), da release, habilitado, sem falha na ultima execucao, e com
     o ambiente do porta quando chama verbo."""
     release = os.environ.get("PLATAFIRMA_RELEASE", "/opt/platafirma/current")
@@ -3669,10 +3669,10 @@ def conferir_jobs(alvo=None, como_json=False):
     def fichas_ativas():
         # uma consulta ao servico por rodada, e so quando alguem precisa
         if not lidas:
-            lidas.append(units.fichas_do_bot(BIN_IRMAOS))
+            lidas.append(units.fichas_de_automacao(BIN_IRMAOS))
         return lidas[0]
 
-    houve_bot = False                       # alguma unit da rodada tem o cabecalho do bot
+    houve_gerada = False                    # alguma unit da rodada tem o cabecalho gerado
 
     rc, out, err = sh(["systemctl", "--user", "list-units", "--type=timer", "--all",
                        "--plain", "--no-legend"])
@@ -3694,23 +3694,23 @@ def conferir_jobs(alvo=None, como_json=False):
             continue
         frag_t, frag_s = dt.get("FragmentPath", ""), ds.get("FragmentPath", "")
         de_sistema = frag_t.startswith(units.UNIT_SISTEMA) and frag_s.startswith(units.UNIT_SISTEMA)
-        # unit do bot: cabecalho no arquivo (onde quer que esteja) E ficha ativa do slug,
+        # unit de automacao: cabecalho no arquivo (onde quer que esteja) E ficha ativa do slug,
         # um nome por vez, para o .timer e para o .service
-        do_bot = [(n, units.eh_unit_do_bot(units.le_unit(f))) for n, f in ((t, frag_t), (svc, frag_s))]
-        if any(eh for _, eh in do_bot):
-            houve_bot = True
+        geradas = [(n, units.eh_unit_gerada(units.le_unit(f))) for n, f in ((t, frag_t), (svc, frag_s))]
+        if any(eh for _, eh in geradas):
+            houve_gerada = True
             fichas, e_fichas = fichas_ativas()
             if e_fichas:
-                itens.append((t, resultado.indeterminavel(f"nao li as fichas do bot: {e_fichas}")))
+                itens.append((t, resultado.indeterminavel(f"nao li as fichas de automacao: {e_fichas}")))
                 continue
-            for nome, eh in do_bot:
+            for nome, eh in geradas:
                 slug = nome.rsplit(".", 1)[0]
                 if eh and slug in fichas:
-                    decl.setdefault(nome, f"bot@{slug}")
+                    decl.setdefault(nome, f"automacao@{slug}")
         quem = "sistema (pacote do SO)" if de_sistema else decl.get(t)
         faltou = []
         if not quem:
-            faltou.append("sem declarante: nem harness/instalar, nem core/units-da-instancia.json, nem unit do bot com ficha ativa, nem pacote do sistema")
+            faltou.append("sem declarante: nem harness/instalar, nem core/units-da-instancia.json, nem unit de automacao com ficha ativa, nem pacote do sistema")
         elif svc not in decl and not de_sistema:
             faltou.append(f"{svc} sem declarante (o timer tem: {quem})")
         if not de_sistema:
@@ -3740,16 +3740,16 @@ def conferir_jobs(alvo=None, como_json=False):
             itens.append((t, resultado.divergente(f"declarado por {decl[t]} e nao agendado nesta conta")))
         # ficha ativa de gatilho timer promete uma unit agendada; manual nao promete nada
         fichas, e_fichas = fichas_ativas()
-        if e_fichas and not houve_bot:
-            # sem unit do bot na rodada, o servico de fichas fora do ar nao derruba a ronda do manifesto:
-            # segue sem fichas, o aviso vai a stderr (o exit e os itens ficam como estao). Com unit do bot,
+        if e_fichas and not houve_gerada:
+            # sem unit de automacao na rodada, o servico de fichas fora do ar nao derruba a ronda do manifesto:
+            # segue sem fichas, o aviso vai a stderr (o exit e os itens ficam como estao). Com unit de automacao,
             # cada timer dela ja saiu indeterminavel no laco acima: nunca ok mudo.
-            print(f"release conferir jobs: aviso: nao li as fichas do bot ({e_fichas}); sigo sem elas, "
-                  "nenhuma unit do bot na rodada", file=sys.stderr)
+            print(f"release conferir jobs: aviso: nao li as fichas de automacao ({e_fichas}); sigo sem elas, "
+                  "nenhuma unit de automacao na rodada", file=sys.stderr)
         for slug, ficha in sorted(fichas.items()):
             if ficha.get("trigger_tipo") == "timer" and f"{slug}.timer" not in timers:
                 itens.append((f"{slug}.timer", resultado.divergente(
-                    f"declarado por bot@{slug} e nao agendado nesta conta")))
+                    f"declarado por automacao@{slug} e nao agendado nesta conta")))
 
     return resultado.relatorio("jobs", alvo, itens, _sha_release(), como_json=como_json)
 

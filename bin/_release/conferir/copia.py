@@ -26,7 +26,7 @@ Partição de tabela particionada não conta: a declaração fica na tabela-mãe
 Tabela sem declaração sai como não declarada, com o prefixo de fóssil assinalado (_backup_, _mig_, _fusao_, _osint).
 Nada se expurga aqui: o expurgo é ato próprio, reversível, e a remoção definitiva vai ao dono.
 
-Fora da classe, e contado na primeira linha como «sem coletor»: o modelo formal gerado, a unit gerada pelo bot, o
+Fora da classe, e contado na primeira linha como «sem coletor»: o modelo formal gerado, a unit gerada por automacao, o
 CLAUDE.md da fita, as instruções de Project e as preferências do claude.ai, e a projeção de card.
 
 Exit: 0 tudo declarado · 1 há materialização sem declaração ou declaração com defeito · 2 uso · 5 substrato que não se
@@ -118,7 +118,7 @@ FAMILIA_DO_ESPELHO = ("impressao", "texto")
 
 SEM_COLETOR = (
     ("modelo formal gerado", "arquivo versionado que o gerador emite das shapes; o conferir não lê o repositório"),
-    ("unit gerada pelo bot", "mora no host, como ficha do serviço na forma host; fora dos três substratos"),
+    ("unit gerada por automacao", "mora no host, como ficha do serviço na forma host; fora dos três substratos"),
     ("CLAUDE.md da fita", "arquivo da pasta de trabalho, reposto por bin/chat; fora dos três substratos"),
     ("instruções de Project e preferências do claude.ai",
      "cópias da persona e da conduta em superfície de terceiro; fora dos três substratos"),

@@ -948,7 +948,7 @@ def cmd_indexar(inst, argv):
     So a selada indexavel entra (#3282: espelho servivel pela regua 6). O plano traz tambem a faceta
     no ar que falta ou veio de outro cabecalho (titulo, emissor, dominio ou conceito trocado depois
     de indexar) e a refaz no --apply (#3309). `--so-faceta` (#3393) planeja so essas facetas, sem as
-    seladas pendentes, e e o que o `bot` roda a cada 5 min: plano vazio nao abre lote, e lote em
+    seladas pendentes, e e o que a automação roda a cada 5 min: plano vazio nao abre lote, e lote em
     andamento sai 0 com «pula este giro» (o giro seguinte pega)."""
     particao, argv = resolve_particao(argv, "indexar")
     if particao != "biblioteca":

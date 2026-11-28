@@ -594,7 +594,7 @@ def _token_padrao() -> str:
 
 
 class Api:
-    """O cliente HTTP do acervo (urllib, como `bin/bot`). O exit da tabela: 404/405 que não é do
+    """O cliente HTTP do acervo (urllib, como `bin/automacao`). O exit da tabela: 404/405 que não é do
     negócio e 503 = 3 (contrato fora do ar ou banco fora) · 401/403 = 4 · 409/422/404 de negócio = 1 · outro
     5xx e conexão que cai = 5 · outro 4xx = 2."""
 

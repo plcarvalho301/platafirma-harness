@@ -5,4 +5,4 @@
 # controle/tests/VERDES. Todo teste desta chave lê o próprio recuperacao/.
 test_contrato_adaptadores.py | bin/acervo bin/_acervo/** bin/fila bin/_fila/** bin/infra bin/_infra/** bin/minuta bin/_minuta/** bin/repo bin/seg bin/_release/** recuperacao/** registro/**
 test_contrato_board.py | recuperacao/**
-test_contrato_cache.py | bin/acervo bin/_acervo/** bin/bot bin/conferir bin/curar bin/fila bin/_fila/** bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste recuperacao/**
+test_contrato_cache.py | bin/acervo bin/_acervo/** bin/automacao bin/conferir bin/curar bin/fila bin/_fila/** bin/ingerir bin/minuta bin/_minuta/** bin/monta-sessao bin/motor bin/_motor/** bin/persona bin/_persona/** bin/release bin/_release/** bin/repo bin/seg bin/situacao bin/tarefas bin/teste recuperacao/**
