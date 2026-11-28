@@ -1834,7 +1834,8 @@ comentarios() {
     if [ -n "$busca_termo" ]; then
       saida=$(printf '%s' "$acumulado" | BUSCA_TERMO="$busca_termo" python3 -c '
 import html, json, os, re, sys
-q = os.environ["BUSCA_TERMO"].casefold()
+termo = os.environ["BUSCA_TERMO"]
+q = termo.casefold()
 achou = False
 for c in json.load(sys.stdin):
     card = c.get("_card", "")
@@ -1846,7 +1847,7 @@ for c in json.load(sys.stdin):
             cid = c["id"]
             print(f"#{cid} · {card} · {linha}")
 if not achou:
-    print(f"(nenhum comentário encontrado para \"{os.environ[\"BUSCA_TERMO\"]}\")")
+    print(f"(nenhum comentário encontrado para \"{termo}\")")
 ')
     elif [ "$indice" = "true" ]; then
       saida=$(printf '%s' "$acumulado" | python3 -c '
@@ -1861,7 +1862,8 @@ else:
         txt = html.unescape(re.sub(r"<[^>]*>", " ", raw))
         prev = " ".join(txt.split())[:100]
         autor = c.get("autor") or "anônimo"
-        tipo = f" · {c[\"tipo\"]}" if c.get("tipo") else ""
+        tipo_v = c.get("tipo")
+        tipo = f" · {tipo_v}" if tipo_v else ""
         cid = c["id"]
         carimbo = c.get("carimbo", "")
         print(f"{card} · #{cid}{tipo} · {autor} · {carimbo} · {len(raw)} car. · {prev}")
@@ -1919,7 +1921,8 @@ else:
         txt = html.unescape(re.sub(r"<[^>]*>", " ", raw))
         prev = " ".join(txt.split())[:100]
         autor = c.get("autor") or "anônimo"
-        tipo = f" · {c[\"tipo\"]}" if c.get("tipo") else ""
+        tipo_v = c.get("tipo")
+        tipo = f" · {tipo_v}" if tipo_v else ""
         cid = c["id"]
         carimbo = c.get("carimbo", "")
         print(f"#{cid}{tipo} · {autor} · {carimbo} · {len(raw)} car. · {prev}")

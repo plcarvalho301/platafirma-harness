@@ -553,6 +553,46 @@ def test_extrator_mantem_sem_traducao_para_evento_desconhecido_sem_tool() -> Non
     assert exc_info.value.evento == "evento_inexistente_xyz"
 
 
+def test_extrator_e_corte_ignoram_ficha_execucao_escrita_nova_e_legada() -> None:
+    extrator = _extrator()
+    import oplog_corte
+
+    ficha_legada = {
+        "ts": "2026-11-25T15:00:00.000-03:00",
+        "tipo": "ficha-execucao-escrita",
+        "verbo": "repo",
+        "ato": "gravar",
+        "pedido": "01a2228e-0000-7000-8000-000000000001",
+        "exit_code": 0,
+    }
+    ficha_nova = {**ficha_legada, "evento": "ficha_execucao_escrita"}
+    giro = {
+        "ts": "2026-11-25T15:00:01.000-03:00",
+        "evento": "verbo",
+        "evento_id": "019a0000-0000-7000-8000-000000000099",
+        "schema_v": 1,
+        "tool": "repo",
+        "ato": "gravar",
+        "exit_code": 0,
+    }
+    assert extrator.fora_da_particao(ficha_legada) is True
+    assert extrator.fora_da_particao(ficha_nova) is True
+    assert extrator.fora_da_particao({"tipo": "outro-desconhecido"}) is False
+
+    dados_dia = (
+        "\n".join(json.dumps(ln) for ln in (ficha_legada, ficha_nova, giro)) + "\n"
+    ).encode("utf-8")
+    ext = extrator.Extracao("2026-11-25", dados_dia)
+    assert dict(ext.sem_traducao) == {}
+    assert dict(ext.ignorados) == {"ficha-execucao-escrita": 1, "ficha_execucao_escrita": 1}
+    assert ext.lidas == 1
+    assert ext.legiveis == 1
+
+    contas = oplog_corte.contas_do_arquivo(dados_dia)
+    assert contas["lidas"] == ext.lidas
+    assert contas["legiveis"] == ext.legiveis
+
+
 def test_verificar_com_dois_testes_despacha_motor_suite_e_devolve_laudo_como_veio(
     tmp_path: Path,
 ) -> None:
