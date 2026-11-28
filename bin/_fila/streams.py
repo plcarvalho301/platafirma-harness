@@ -1,9 +1,9 @@
 #!/opt/platafirma/current/venv/harness/bin/python
-# fila — caixa de mensagens entre personas da PlataFirma, sobre a malha msg (Valkey/Streams).
-# capacidade: mensagem
+# fila — lê e envia mensagens entre cadeiras e grava eventos de mensagem em componente:eventos
+# capacidade: mensageria
 # dono: ia
 # componente: harness
-# use para: caixa, carta, recado, handoff, 'o que chegou', mandar para outra cadeira
+# use para: SEMPRE que o dono disser «mensagem», «carta», «recado», «caixa», «fila» ou «o que chegou?», ou quando não houver pedido ou o pedido já estiver atendido; ler a caixa, tratar mensagem e contestar; enviar carta, handoff, resposta ou pauta a outra cadeira; registrar evento de mensagem (afirmação, negativa, decisão, contestação ou recusa com etiquetas e apoios) em componente:eventos sem passar por caixa de cadeira; NÃO dispare para comentar em card (use tarefas), anotar na lousa (use mesa) ou encerrar a sessão (use descansar)
 # atos: status (leitura, mensagem) · ler (leitura, mensagem) · tratar (escrita, mensagem) · enviar (escrita, mensagem) · tipos (leitura, mensagem) · contestar (escrita, mensagem)
 # forma: status,tipos=lista · ler=texto · tratar=lista · enviar=objeto · contestar=objeto
 # face: contestar=motor
