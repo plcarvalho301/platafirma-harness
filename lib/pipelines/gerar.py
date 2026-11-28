@@ -227,21 +227,24 @@ def _calcular_digest_corpo(dados: Mapping[str, Any]) -> str:
 
 
 def _consultar_fichario_olaria(env: Mapping[str, str]) -> tuple[str, dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
-    url = (env.get("OLARIA_URL") or OLARIA_URL_PADRAO).strip()
-    chave = _ler_segredo("OLARIA_CHAVE_INTERNA", dict(env))
+    amb = dict(env)
+    url = (_ler_segredo("OLARIA_URL", amb) or OLARIA_URL_PADRAO).strip()
+    chave = _ler_segredo("OLARIA_CHAVE", amb)
     if not chave:
-        raise OlariaIndisponivel("OLARIA_CHAVE_INTERNA ausente no ambiente e no cofre")
+        raise OlariaIndisponivel("OLARIA_CHAVE ausente no ambiente e no cofre")
     resp_pip = _consultar_classe("pipeline", url, chave)
     resp_cfg = _consultar_classe("configuracao", url, chave)
-    fornada = str(resp_pip.get("fornada") or resp_cfg.get("fornada") or "desconhecida")
 
     pipelines: dict[str, dict[str, Any]] = {}
+    fornada_ficha = ""
     for f in resp_pip.get("fichas") or ():
         if isinstance(f, Mapping):
             chave_f = str(f.get("chave") or f.get("slug") or "")
             slug = chave_f.removeprefix("pipeline:")
             if slug:
                 pipelines[slug] = dict(f)
+                if not fornada_ficha and f.get("versao"):
+                    fornada_ficha = str(f["versao"])
 
     configs: dict[str, dict[str, Any]] = {}
     for f in resp_cfg.get("fichas") or ():
@@ -250,6 +253,10 @@ def _consultar_fichario_olaria(env: Mapping[str, str]) -> tuple[str, dict[str, d
             slug = chave_f.removeprefix("configuracao:")
             if slug:
                 configs[slug] = dict(f)
+                if not fornada_ficha and f.get("versao"):
+                    fornada_ficha = str(f["versao"])
+
+    fornada = str(resp_pip.get("fornada") or resp_cfg.get("fornada") or fornada_ficha or "desconhecida")
     return fornada, pipelines, configs
 
 

@@ -2288,7 +2288,7 @@ resumo_imprime() {
   { grep -E '^(== |de: |gate: |venv: |current: |no ar: |ambiente: |suite: |card: |deploy: |ensaio: |já no ar: |espelho: |checkout: |stacks: |terceiro: |porta: |escritor: |expurgo: |pipelines: )' "$PROMO_LOG" \
       | grep -v 'NAO MEDIDA'; } || true
   # "release: /opt/..." e o eco do ajudante da stack, nao recusa: fica no log
-  { grep -E '^(release: |varrido: |saida inteira: |caminho: )|NAO MEDIDA|PROMOCAO|RETOMAR' "$PROMO_LOG" \
+  { grep -E '^(release: |pipelines: |varrido: |saida inteira: |caminho: )|NAO MEDIDA|PROMOCAO|RETOMAR' "$PROMO_LOG" \
       | grep -v '^release: /'; } >&2 || true
   printf 'log:       %s\n' "$PROMO_LOG"
   sha_final="$(grep -E '^[0-9a-f]{40}$' "$PROMO_LOG" | tail -n 1)" || sha_final=""
