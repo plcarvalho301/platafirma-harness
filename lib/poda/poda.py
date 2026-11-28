@@ -357,25 +357,33 @@ def corta(
     if len(bruto) <= cap and not forcar_corte:
         return texto, {"cortado": False, "bytes_omitidos": 0}
 
-    # Reserva espaço para o aviso de corte dentro do próprio teto quando possível.
-    reserva_estimada = 240 + (len(alca) * 2 if alca else 0)
-    disponivel = max(128, cap - reserva_estimada) if cap > reserva_estimada + 128 else max(64, cap)
+    def _montar_aviso(omitidos_v: int, como_ler_v: str | None) -> str:
+        if alca:
+            return (
+                f"\n[AVISO: cortado por teto de {cap} bytes ({omitidos_v} de {total_efetivo} bytes omitidos); "
+                f"inteiro em {alca} — {como_ler_v}]\n"
+            )
+        return f"\n[AVISO: cortado por teto de {cap} bytes ({omitidos_v} de {total_efetivo} bytes omitidos)]\n"
+
+    como_ler_est = _chamada_continuacao(
+        alca,
+        offset_continuacao=total_efetivo if (offset_exato and not cauda) else None,
+    )
+    aviso_max_b = len(_montar_aviso(total_efetivo, como_ler_est).encode("utf-8"))
+    disponivel = max(0, cap - aviso_max_b)
 
     if cauda:
-        inicio_lim = max(64, disponivel // 3)
-        fim_lim = max(64, disponivel - inicio_lim)
+        inicio_lim = disponivel // 3
+        fim_lim = disponivel - inicio_lim
         pref_b = _prefixo_utf8(bruto, inicio_lim)
         suf_b = _sufixo_utf8(bruto, fim_lim)
         bytes_mantidos = len(pref_b) + len(suf_b)
         omitidos = max(1, total_efetivo - bytes_mantidos)
         como_ler = _chamada_continuacao(alca)
-        aviso = (
-            f"\n[AVISO: cortado por teto de {cap} bytes ({omitidos} de {total_efetivo} bytes omitidos); "
-            f"inteiro em {alca} — {como_ler}]\n"
-            if alca
-            else f"\n[AVISO: cortado por teto de {cap} bytes ({omitidos} de {total_efetivo} bytes omitidos)]\n"
-        )
+        aviso = _montar_aviso(omitidos, como_ler)
         servir = pref_b.decode("utf-8", "replace") + aviso + suf_b.decode("utf-8", "replace")
+        if len(servir.encode("utf-8", "replace")) > cap:
+            servir = _prefixo_utf8(servir.encode("utf-8", "replace"), cap).decode("utf-8", "replace")
         return servir, {
             "cortado": True,
             "bytes_omitidos": omitidos,
@@ -389,13 +397,10 @@ def corta(
         alca,
         offset_continuacao=bytes_mantidos if offset_exato else None,
     )
-    aviso = (
-        f"\n[AVISO: cortado por teto de {cap} bytes ({omitidos} de {total_efetivo} bytes omitidos); "
-        f"inteiro em {alca} — {como_ler}]\n"
-        if alca
-        else f"\n[AVISO: cortado por teto de {cap} bytes ({omitidos} de {total_efetivo} bytes omitidos)]\n"
-    )
+    aviso = _montar_aviso(omitidos, como_ler)
     servir = pref_b.decode("utf-8", "replace") + aviso
+    if len(servir.encode("utf-8", "replace")) > cap:
+        servir = _prefixo_utf8(servir.encode("utf-8", "replace"), cap).decode("utf-8", "replace")
     return servir, {
         "cortado": True,
         "bytes_omitidos": omitidos,
@@ -591,13 +596,9 @@ def podar_texto(
     if precisa_cortar:
         caminho = cru or derrama(derrame_dir, sessao_id, nome_derrame, texto)
 
-    # Quando `truncado_origem` é verdadeiro, o pipe já cortou bytes antes da poda:
-    # mesmo em perfil cosmético o retorno não está inteiro e precisa avisar o corte.
-    if cosmetica and not truncado_origem:
-        if caminho:
-            meta.update(modo="derrame", alca=caminho)
-            servir += f"\n[retorno semântico servido inteiro; cru em {caminho}; ler_arquivo]"
-    elif precisa_cortar:
+    # Teto rígido de saída: nenhum retorno entregue à sessão ultrapassa `cap`,
+    # mesmo em perfil cosmético — o excedente vai ao derrame com aviso de corte.
+    if precisa_cortar:
         servir, cm = corta(
             servir,
             cap,
