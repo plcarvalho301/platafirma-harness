@@ -167,7 +167,7 @@ def _erros_esquema(artefato: dict[str, Any]) -> list[str]:
 
 def _artefato_valido() -> dict[str, Any]:
     return {
-        "versao_esquema": 1,
+        "versao_esquema": 2,
         "procedencia": {
             "ficha": "pipeline:ingestao",
             "configuracao": "configuracao:ingestao",
@@ -189,6 +189,7 @@ def _artefato_valido() -> dict[str, Any]:
                 "id": "incorporar-item",
                 "verbo": "acervo",
                 "ato": "ingerir",
+                "substrato": "{obra}",
                 "args": ["{obra}"],
                 "em_saida": {
                     "0": "segue",
@@ -203,6 +204,7 @@ def _artefato_valido() -> dict[str, Any]:
                     {
                         "id": "conferir-acervo",
                         "verbo": "casa",
+                        "substrato": "politica:acervo",
                         "servico": "servico:harness:lint",
                         "reguas": ["gabarito:antipadroes-do-acervo"],
                         "args": ["politica:acervo"],
@@ -219,6 +221,7 @@ def _artefato_valido() -> dict[str, Any]:
                 "id": "classificar-manual",
                 "verbo": "acervo",
                 "ato": "catalogar",
+                "substrato": "obra:{obra}",
                 "args": ["{obra}"],
                 "duto": "incorporar-item",
                 "aceita_vazio": False,
@@ -247,6 +250,26 @@ def _artefato_valido() -> dict[str, Any]:
 
 def _mut_sem_tempo_maximo(art: dict[str, Any]) -> None:
     art.pop("tempo_maximo")
+
+
+def _mut_versao_esquema_1(art: dict[str, Any]) -> None:
+    art["versao_esquema"] = 1
+
+
+def _mut_instrucao_sem_substrato(art: dict[str, Any]) -> None:
+    art["instrucoes"][0].pop("substrato")
+
+
+def _mut_instrucao_substrato_invalido(art: dict[str, Any]) -> None:
+    art["instrucoes"][0]["substrato"] = "alvo-sem-classe"
+
+
+def _mut_guarda_sem_substrato(art: dict[str, Any]) -> None:
+    art["instrucoes"][0]["guardas"][0].pop("substrato")
+
+
+def _mut_executor_tipo_bot(art: dict[str, Any]) -> None:
+    art["instrucoes"][1]["executor"]["tipo"] = "bot"
 
 
 def _mut_em_saida_sem_cinco(art: dict[str, Any]) -> None:
@@ -392,6 +415,11 @@ def test_diretorio_pipelines_e_esquema_existem_e_validam_artefato_canonico() -> 
 @pytest.mark.parametrize(
     ("mutador", "trecho_esperado"),
     [
+        (_mut_versao_esquema_1, "const 2"),
+        (_mut_instrucao_sem_substrato, "substrato"),
+        (_mut_instrucao_substrato_invalido, "padrao"),
+        (_mut_guarda_sem_substrato, "substrato"),
+        (_mut_executor_tipo_bot, "enum"),
         (_mut_sem_tempo_maximo, "tempo_maximo"),
         (_mut_em_saida_sem_cinco, "'5'"),
         (_mut_guarda_sem_servico, "servico"),
@@ -411,6 +439,76 @@ def test_esquema_reprova_desvios_obrigatorios_e_campos_fechados(
     erros = _erros_esquema(art)
     assert erros != []
     assert trecho_esperado in " | ".join(erros)
+
+
+def test_extrator_traduz_linha_do_bot_como_giro_unico_sem_contar_duas_vezes() -> None:
+    extrator = _extrator()
+    linha_bot = {
+        "ts": "2026-11-28T11:00:00.000-03:00",
+        "evento_id": "019a0000-0000-7000-8000-000000000020",
+        "schema_v": 1,
+        "tool": "acervo",
+        "evento": "verbo",
+        "ato": "ingerir",
+        "substrato": "obra:42",
+        "args": "obra:42",
+        "origem": "bot",
+        "execucao_id": "exec-0001",
+        "passo_id": "incorporar-item",
+        "sujeito": SUJEITO_DONO,
+        "cadeira": "engenharia",
+        "sessao_id": "489968fd-8076-406e-88b9-3a1646d49f80",
+        "ordem_id": "o20261128T110000-abc123",
+        "exit_code": 0,
+        "dur_ms": 45,
+        "bytes_produzidos": 18,
+        "bytes_servidos": 18,
+    }
+    linha_malote = {
+        "ts": "2026-11-28T11:00:01.000-03:00",
+        "evento_id": "019a0000-0000-7000-8000-000000000021",
+        "schema_v": 1,
+        "evento": "malote",
+        "execucao_id": "exec-0001",
+        "pipeline": "ingestao",
+        "verbo_entrada": "acervo",
+        "cadeira": "engenharia",
+        "sessao_id": "489968fd-8076-406e-88b9-3a1646d49f80",
+        "ordem_id": "o20261128T110000-abc123",
+        "exit_code": 0,
+    }
+    linha_execucao = {
+        "ts": "2026-11-28T11:00:01.050-03:00",
+        "evento_id": "019a0000-0000-7000-8000-000000000022",
+        "schema_v": 1,
+        "evento": "execucao",
+        "execucao_id": "exec-0001",
+        "alvo_classe": "pipeline",
+        "alvo_chave": "ingestao",
+        "verbo_entrada": "acervo",
+        "estado": "concluida",
+        "cadeira": "engenharia",
+        "sessao_id": "489968fd-8076-406e-88b9-3a1646d49f80",
+        "ordem_id": "o20261128T110000-abc123",
+        "exit_code": 0,
+    }
+
+    inv = extrator.Invalidos()
+    item_bot = extrator.para_item(linha_bot, "2026-11-28", 1, inv)
+    assert inv.total == 0
+    assert item_bot["evento"]["tipo"] == "giro"
+    assert item_bot["giro"]["tool"] == "acervo"
+    assert item_bot["giro"]["ato"] == "ingerir"
+    assert item_bot["giro"]["classe"] == "ok"
+
+    dados_dia = (
+        "\n".join(json.dumps(ln) for ln in (linha_bot, linha_malote, linha_execucao)) + "\n"
+    ).encode("utf-8")
+    resumo = extrator.relatorio_seco(extrator.Extracao("2026-11-28", dados_dia))
+    assert resumo["sem_traducao"] == {}
+    assert resumo["campos_invalidos"] == 0
+    assert resumo["por_tipo_da_particao"] == {"execucao": 1, "giro": 1, "malote": 1}
+    assert resumo["giros_por_tool"] == {"acervo": 1}
 
 
 @pytest.mark.parametrize("tipo_novo", ["malote", "execucao"])
@@ -665,5 +763,5 @@ def test_ler_execucao_pelo_evento_oplog_respeita_sujeito_e_chave_inexistente(
 
 def test_ambiente_padrao_do_verificador_carrega_delegador_da_suite() -> None:
     despacho, _mod_recusa, _oplog, verificador = _modulos_despacho()
-    amb = verificador._ambiente_padrao()  # noqa: SLF001 — contrato interno da injeção padrão
+    amb = verificador._ambiente_padrao()
     assert isinstance(amb.delegador_suite, despacho.DelegadorSuiteDespacho)

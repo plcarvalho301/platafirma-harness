@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://platafirma.local/esquemas/pipeline.schema.json",
   "title": "ArtefatoPipelineCompilado",
-  "description": "Esquema literal do artefato compilado de pipeline lido pelo ato despachar em registro/pipelines/<slug>.yaml.",
+  "description": "Esquema literal (versão 2) do artefato compilado de pipeline lido pelo ato despachar em registro/pipelines/<slug>.yaml.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -18,7 +18,7 @@
   "properties": {
     "versao_esquema": {
       "type": "integer",
-      "const": 1
+      "const": 2
     },
     "procedencia": {
       "$ref": "#/$defs/procedencia"
@@ -124,6 +124,10 @@
           "type": "boolean"
         }
       }
+    },
+    "substrato": {
+      "type": "string",
+      "pattern": "^(?:[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9][a-z0-9._:/-]*|(?:[a-z0-9]+(?:-[a-z0-9]+)*:)?\\{[a-z][a-z0-9_]*\\}(?:[a-z0-9._:/-]|\\{[a-z][a-z0-9_]*\\})*|[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9][a-z0-9._:/-]*\\{[a-z][a-z0-9_]*\\}(?:[a-z0-9._:/-]|\\{[a-z][a-z0-9_]*\\})*)$"
     },
     "reacao": {
       "type": "string",
@@ -245,6 +249,7 @@
       "required": [
         "id",
         "verbo",
+        "substrato",
         "servico",
         "reguas",
         "args",
@@ -258,6 +263,9 @@
         "verbo": {
           "type": "string",
           "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "substrato": {
+          "$ref": "#/$defs/substrato"
         },
         "servico": {
           "type": "string",
@@ -289,6 +297,7 @@
         "id",
         "verbo",
         "ato",
+        "substrato",
         "args",
         "em_saida",
         "volta"
@@ -305,6 +314,9 @@
         "ato": {
           "type": "string",
           "minLength": 1
+        },
+        "substrato": {
+          "$ref": "#/$defs/substrato"
         },
         "args": {
           "type": "array",
