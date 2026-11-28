@@ -14,8 +14,8 @@
 #  segue fora da face.)
 # cauda: nao
 # classe: B
-# consome: valkey@streams (protocolo redis — sem OpenAPI)
-# ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_CASA_RAIZ[=/opt/platafirma/current/casa] (personas em instancias/persona/*.md) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log)
+# consome: valkey@streams (protocolo redis — sem OpenAPI), eventos-api POST /eventos/mensagem
+# ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_CASA_RAIZ[=/opt/platafirma/current/casa] (personas em instancias/persona/*.md) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log) · EVENTOS_API_URL[=http://127.0.0.1:8111] · EVENTOS_NEGOCIO_TOKEN (ou $PLATAFIRMA_INSTANCIA/segredos/eventos/EVENTOS_NEGOCIO_TOKEN) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
 # depende: modulo redis no venv; personas da casa nova (instancias/persona/*.md); rede ao loopback da malha
 # le: status=malha
 # le: ler=malha
@@ -26,7 +26,7 @@
 # escreve: status=nada
 # escreve: ler=malha
 # escreve: tratar=malha
-# escreve: enviar=malha
+# escreve: enviar=malha,eventos.negocio
 # escreve: tipos=nada
 # escreve: contestar=malha
 # (acesso: malha msg. `enviar` e `contestar` fazem XADD na caixa do destinatario e leem a persona dele em

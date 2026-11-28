@@ -41,6 +41,8 @@ if str(_LIB) not in sys.path:
 DESTINO = "banco de eventos, esfera de negócio, família mensagem"
 NAMESPACE_NEGOCIO = uuid.UUID("18e2a69a-4215-516c-8ee6-18dd0f185f62")
 EVENTOS_API_PADRAO = "http://127.0.0.1:8111"
+ENUNCIADO_MAXIMO = 32768
+TEXTO_MAXIMO = 512
 # O dicionário tipo-de-mensagem da mensageria (decisão 5274).
 TIPOS = ("afirmacao", "negativa", "pedido", "recusa", "contestacao", "decisao")
 RELACOES = ("atualiza", "corrige", "retrata")
@@ -256,13 +258,20 @@ class GravadorEventos:
         self.token = token.strip()
         self.timeout = timeout
 
-    def evento_de(self, msg: Mensagem) -> dict:
-        origem = msg.chave()
+    def evento_de(
+        self,
+        msg: Mensagem,
+        *,
+        produtor: str = "descansar-publicar",
+        origem: str | None = None,
+        payload: dict | None = None,
+    ) -> dict:
+        origem_efetiva = origem or msg.chave()
         ev = {
-            "evento_id": str(uuid.uuid5(NAMESPACE_NEGOCIO, f"mensagem|{origem}")),
+            "evento_id": str(uuid.uuid5(NAMESPACE_NEGOCIO, f"mensagem|{origem_efetiva}")),
             "ts": _ts_utc(msg.ocorrido_em),
-            "produtor": "descansar-publicar",
-            "origem": origem,
+            "produtor": produtor,
+            "origem": origem_efetiva,
             "enunciado": msg.enunciado,
             "quem": msg.quem,
             "tipo_de_mensagem": msg.tipo,
@@ -279,12 +288,21 @@ class GravadorEventos:
         ):
             if valor is not None:
                 ev[chave_ev] = valor
+        if payload is not None:
+            ev["payload"] = payload
         return ev
 
-    def gravar(self, msg: Mensagem) -> bool:
+    def gravar(
+        self,
+        msg: Mensagem,
+        *,
+        produtor: str = "descansar-publicar",
+        origem: str | None = None,
+        payload: dict | None = None,
+    ) -> bool:
         if not self.token:
             raise SemDestino("sem token da esfera de negócio (EVENTOS_NEGOCIO_TOKEN)")
-        ev = self.evento_de(msg)
+        ev = self.evento_de(msg, produtor=produtor, origem=origem, payload=payload)
         corpo = json.dumps({"eventos": [ev]}, ensure_ascii=False).encode("utf-8")
         req = urllib.request.Request(
             f"{self.url}/eventos/mensagem",
@@ -328,20 +346,26 @@ def _token_da_instancia() -> str:
         return ""
 
 
+def resolver_eventos_api() -> tuple[str, str]:
+    """Devolve `(url, token)` da rota da esfera de negócio do banco de eventos."""
+    token = (os.environ.get("EVENTOS_NEGOCIO_TOKEN") or "").strip() or _token_da_instancia()
+    url = (os.environ.get("EVENTOS_API_URL") or "").strip()
+    if not token:
+        if url:
+            raise SemDestino("sem token da esfera de negócio (EVENTOS_NEGOCIO_TOKEN)")
+        raise SemDestino(
+            f"sem destino para a mensagem: defina EVENTOS_NEGOCIO_TOKEN ou forneça "
+            f"$PLATAFIRMA_INSTANCIA/segredos/eventos/EVENTOS_NEGOCIO_TOKEN para gravar no {DESTINO}"
+        )
+    return url or EVENTOS_API_PADRAO, token
+
+
 def gravador_do_ambiente():
     arquivo = (os.environ.get("PF_MENSAGEM_ARQUIVO") or "").strip()
     if arquivo:
         return GravadorArquivo(arquivo)
-    token = (os.environ.get("EVENTOS_NEGOCIO_TOKEN") or "").strip() or _token_da_instancia()
-    url = (os.environ.get("EVENTOS_API_URL") or "").strip()
-    if token or url:
-        if not token:
-            raise SemDestino("sem token da esfera de negócio (EVENTOS_NEGOCIO_TOKEN)")
-        return GravadorEventos(url=url or EVENTOS_API_PADRAO, token=token)
-    raise SemDestino(
-        f"sem destino para a mensagem: defina EVENTOS_NEGOCIO_TOKEN ou forneça "
-        f"$PLATAFIRMA_INSTANCIA/segredos/eventos/EVENTOS_NEGOCIO_TOKEN para gravar no {DESTINO}"
-    )
+    url, token = resolver_eventos_api()
+    return GravadorEventos(url=url, token=token)
 
 
 def publicar(

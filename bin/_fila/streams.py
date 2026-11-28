@@ -11,10 +11,10 @@
 # volta: contestar=nao
 # cauda: nao
 # classe: B
-# consome: valkey@streams (protocolo redis — sem OpenAPI)
-# ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_CASA_RAIZ[=/opt/platafirma/current/casa] (personas em instancias/persona/*.md) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log)
+# consome: valkey@streams (protocolo redis — sem OpenAPI), eventos-api POST /eventos/mensagem
+# ambiente: FILA_REDIS_HOST[=127.0.0.1] · FILA_REDIS_PORT[=6379] · PF_CASA_RAIZ[=/opt/platafirma/current/casa] (personas em instancias/persona/*.md) · PF_CADEIRA (obrigatoria em enviar e em ler/status sem persona; porta) · PF_SESSAO (porta, so log) · EVENTOS_API_URL[=http://127.0.0.1:8111] · EVENTOS_NEGOCIO_TOKEN (ou $PLATAFIRMA_INSTANCIA/segredos/eventos/EVENTOS_NEGOCIO_TOKEN) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa]
 # depende: modulo redis no venv; arvore abertura/<cadeira>/persona.md (fonte de destinatario); rede ao loopback da malha
-# escreve: malha msg — XADD na caixa do destinatario (enviar); entrega no grupo (ler quente: move o ponteiro, carta fica pendurada); XACK (tratar); nada em status/tipos/ler frio/--penduradas
+# escreve: enviar=malha,eventos.negocio — XADD na caixa do destinatario ou POST /eventos/mensagem (componente:eventos); entrega no grupo (ler quente: move o ponteiro, carta fica pendurada); XACK (tratar); nada em status/tipos/ler frio/--penduradas
 # substitui: redis-cli XADD/XREADGROUP/XRANGE na caixa; o "cola a mensagem aqui" que a conduta do dono proibe
 # conforme: parcial (spec_fila §6)
 #
@@ -45,9 +45,11 @@
 import argparse
 import json
 import os
+import re
+import secrets
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:
     import redis
@@ -1153,6 +1155,245 @@ def cmd_enviar(rc, eu: str, args):
                         tratar(rc, dest, [mid])
 
 
+# ---------- micropublicacao no servico de eventos (#4463) ----------
+DESTINO_EVENTOS = "componente:eventos"
+PRODUTOR_EVENTOS = "harness:fila"
+EVENTOS_MAX_TENTATIVAS = 3
+EVENTOS_RETRY_ESPERA_S = 0.2
+_MAPA_TIPO_EVENTOS: dict[str, str] = {
+    "resposta": "afirmacao",
+    "minuta": "afirmacao",
+    "handoff": "afirmacao",
+    "demanda": "pedido",
+}
+_RE_CHAVE_FICHA = re.compile(r"^[a-z][a-z0-9_-]*:[a-z0-9][a-z0-9_.:/-]*$")
+
+
+def _eh_chave_ficha(valor: str) -> bool:
+    if _RE_CHAVE_FICHA.fullmatch(valor):
+        return True
+    validas = personas_validas() or set()
+    return valor in validas
+
+
+def _dedup_lista_eventos(itens: list[str], flag: str, limite: int) -> list[str]:
+    vistos: set[str] = set()
+    saida: list[str] = []
+    for bruto in itens:
+        if not isinstance(bruto, str) or not bruto.strip():
+            sys.stderr.write(f"erro: {flag} não aceita item vazio\n")
+            sys.exit(2)
+        item = bruto.strip()
+        if len(item) > limite:
+            sys.stderr.write(f"erro: item de {flag} passa do limite de {limite} caracteres ({len(item)})\n")
+            sys.exit(2)
+        if item not in vistos:
+            vistos.add(item)
+            saida.append(item)
+    return saida
+
+
+def _resolve_quem_eventos(args) -> str:
+    de_arg = (getattr(args, "de", None) or "").strip()
+    if de_arg.startswith(("bot:", PREFIXO_AUTOMACAO)):
+        sys.stderr.write(f'erro: --de "{de_arg}" não pode enviar para {DESTINO_EVENTOS}\n')
+        sys.exit(2)
+    pf_cadeira = os.environ.get("PF_CADEIRA", "").strip()
+    if not pf_cadeira:
+        sid = (
+            getattr(args, "sessao_id", None)
+            or os.environ.get("PF_SESSAO", "")
+            or os.environ.get("PLATAFIRMA_SESSAO_ID", "")
+            or os.environ.get("PF_SESSAO_ID", "")
+        ).strip()
+        if sid and sid != "-":
+            msg = (
+                f"PF_CADEIRA ausente na sessão {sid}: "
+                "reabra com monta_sessao(cadeira=<slug>)"
+            )
+        else:
+            msg = "sem cadeira na sessão (PF_CADEIRA ausente): reabra com monta_sessao(cadeira=<slug>)"
+        sys.stderr.write(f"erro: {msg}\n")
+        sys.exit(3)
+    validas = personas_validas()
+    if validas is None:
+        sys.stderr.write(
+            f"erro: nao consegui ler as personas da casa nova ({ABERTURA}) — "
+            "sem elas nao ha remetente valido. Aponte PF_CASA_RAIZ.\n"
+        )
+        sys.exit(2)
+    quem = canoniza_persona(pf_cadeira)
+    if not quem:
+        sys.stderr.write(f"erro: PF_CADEIRA fora do roster: {pf_cadeira}\n")
+        sys.exit(2)
+    for flag, valor in (("--eu", getattr(args, "eu", None)), ("--de", getattr(args, "de", None))):
+        if valor and valor.strip():
+            v_canon = canoniza_persona(valor.strip()) or valor.strip()
+            if v_canon != quem:
+                sys.stderr.write(f'erro: {flag} "{valor}" diverge de PF_CADEIRA ({quem})\n')
+                sys.exit(2)
+    return quem
+
+
+def _separa_eventos_e_corpo_pos(destinatarios: list[str], corpo_opt: str | None) -> str | None:
+    if destinatarios[0] != DESTINO_EVENTOS or len(destinatarios) > 2:
+        sys.stderr.write(f"erro: {DESTINO_EVENTOS} não pode ser misturado com outros destinatários\n")
+        sys.exit(2)
+    if len(destinatarios) == 1:
+        return None
+    segundo = destinatarios[1]
+    if (
+        (corpo_opt or "").strip()
+        or segundo == DESTINO_EVENTOS
+        or canoniza_persona(segundo)
+        or segundo.startswith(("bot:", PREFIXO_AUTOMACAO))
+    ):
+        sys.stderr.write(f"erro: {DESTINO_EVENTOS} não pode ser misturado com outros destinatários\n")
+        sys.exit(2)
+    return segundo
+
+
+def _resolve_corpo_eventos(corpo_opt: str | None, corpo_pos: str | None) -> str:
+    if (corpo_opt or "").strip():
+        return corpo_opt
+    corpo_stdin = ""
+    try:
+        if not sys.stdin.isatty():
+            corpo_stdin = sys.stdin.read()
+    except OSError:
+        corpo_stdin = ""
+    if corpo_stdin.strip():
+        return corpo_stdin
+    if corpo_pos is not None:
+        return corpo_pos
+    return corpo_stdin
+
+
+def cmd_enviar_eventos(args):
+    from descanso.publicar import (
+        ENUNCIADO_MAXIMO,
+        RELACOES,
+        TEXTO_MAXIMO,
+        TIPOS,
+        GravadorEventos,
+        Mensagem,
+        Recusada,
+        SemDestino,
+        resolver_eventos_api,
+    )
+
+    destinatarios = list(getattr(args, "destinatarios", None) or [args.destinatario])
+    corpo_opt = getattr(args, "corpo_opt", None)
+    corpo_pos = _separa_eventos_e_corpo_pos(destinatarios, corpo_opt)
+    quem = _resolve_quem_eventos(args)
+
+    tipo_raw = (args.tipo or "").strip()
+    if not tipo_raw:
+        tipo = "afirmacao"
+    elif tipo_raw in TIPOS:
+        tipo = tipo_raw
+    elif tipo_raw in _MAPA_TIPO_EVENTOS:
+        tipo = _MAPA_TIPO_EVENTOS[tipo_raw]
+    else:
+        validos = ", ".join(sorted(set(TIPOS) | set(_MAPA_TIPO_EVENTOS)))
+        sys.stderr.write(f"erro: tipo invalido para {DESTINO_EVENTOS}: {tipo_raw}\n  validos: {validos}\n")
+        sys.exit(2)
+
+    responde_a = (args.responde or "").strip() or None
+    ref_val = (args.ref or "").strip() or None
+    relacao = (getattr(args, "relacao", None) or "").strip() or None
+    cita = (getattr(args, "cita", None) or "").strip() or None
+
+    if tipo == "contestacao" and not responde_a and not ref_val:
+        sys.stderr.write("erro: --tipo contestacao para componente:eventos exige --responde ou --ref\n")
+        sys.exit(2)
+    if relacao is not None:
+        if relacao not in RELACOES:
+            sys.stderr.write(f"erro: --relacao fora de {', '.join(RELACOES)}: {relacao}\n")
+            sys.exit(2)
+        if not responde_a:
+            sys.stderr.write("erro: --relacao exige --responde\n")
+            sys.exit(2)
+
+    corpo = _resolve_corpo_eventos(corpo_opt, corpo_pos).strip()
+    if not corpo:
+        sys.stderr.write("erro: corpo vazio\n")
+        sys.exit(2)
+    assunto = (args.assunto or "").strip()
+    enunciado = f"{assunto}\n\n{corpo}" if assunto else corpo
+    if len(enunciado) > ENUNCIADO_MAXIMO:
+        sys.stderr.write(f"erro: enunciado passa do limite de {ENUNCIADO_MAXIMO} caracteres ({len(enunciado)})\n")
+        sys.exit(2)
+
+    if ref_val:
+        if _eh_chave_ficha(ref_val):
+            sobre, payload = ref_val, None
+        else:
+            sobre, payload = DESTINO_EVENTOS, {"ref": ref_val}
+    else:
+        sobre, payload = DESTINO_EVENTOS, None
+
+    etiquetas = _dedup_lista_eventos(list(getattr(args, "etiqueta", None) or []), "--etiqueta", TEXTO_MAXIMO)
+    apoios = _dedup_lista_eventos(list(getattr(args, "apoio", None) or []), "--apoio", TEXTO_MAXIMO)
+    for nome, valor in (("sobre", sobre), ("--cita", cita), ("--responde", responde_a)):
+        if valor is not None and len(valor) > TEXTO_MAXIMO:
+            sys.stderr.write(f"erro: {nome} passa do limite de {TEXTO_MAXIMO} caracteres ({len(valor)})\n")
+            sys.exit(2)
+
+    agora = datetime.now(timezone.utc).replace(microsecond=0)
+    carimbo = agora.strftime("%Y%m%dT%H%M%SZ")
+    ts_iso = agora.isoformat(timespec="seconds").replace("+00:00", "Z")
+    origem = f"fila:{carimbo}-{quem}-{secrets.token_hex(4)}"
+    correlacao = (os.environ.get("PF_SESSAO") or "").strip() or None
+    if correlacao == "-":
+        correlacao = None
+
+    dado: dict = {
+        "enunciado": enunciado,
+        "quem": quem,
+        "destinatario": [DESTINO_EVENTOS],
+        "tipo-de-mensagem": tipo,
+        "ocorrido_em": ts_iso,
+        "sobre": sobre,
+        "etiqueta": etiquetas,
+        "apoio": apoios,
+    }
+    if cita is not None:
+        dado["cita"] = cita
+    if responde_a is not None:
+        dado["responde-a"] = responde_a
+    if relacao is not None:
+        dado["relacao-com-a-anterior"] = relacao
+
+    try:
+        msg = Mensagem.de_dict(dado, sessao=correlacao)
+    except Recusada as erro:
+        sys.stderr.write(f"erro: {erro}\n")
+        sys.exit(2)
+
+    try:
+        url, token = resolver_eventos_api()
+    except SemDestino as erro:
+        sys.stderr.write(f"erro: {erro}\n")
+        sys.exit(3)
+
+    gravador = GravadorEventos(url=url, token=token)
+    for tentativa in range(1, EVENTOS_MAX_TENTATIVAS + 1):
+        try:
+            gravador.gravar(msg, produtor=PRODUTOR_EVENTOS, origem=origem, payload=payload)
+            print(origem)
+            return
+        except Recusada as erro:
+            sys.stderr.write(f"erro: {erro}\n")
+            sys.exit(2)
+        except SemDestino as erro:
+            if tentativa >= EVENTOS_MAX_TENTATIVAS:
+                sys.stderr.write(f"erro: {erro} (origem={origem})\n")
+                sys.exit(3)
+            if EVENTOS_RETRY_ESPERA_S > 0:
+                time.sleep(EVENTOS_RETRY_ESPERA_S * tentativa)
+
+
 # ---------- carta de automacao (#3884) ----------
 # A automacao e ficha da raiz de classe automacao: nao tem sessao, nao tem
 # caixa e nao e persona. Assina como `automacao:<slug>`, o mesmo ator que `automacao` grava nos eventos, e
@@ -1290,6 +1531,10 @@ def build_parser():
     p_enviar.add_argument("--corpo", "-m", dest="corpo_opt", default=None)
     p_enviar.add_argument("--ref", default=None)
     p_enviar.add_argument("--responde", default=None)
+    p_enviar.add_argument("--etiqueta", action="append", default=[])
+    p_enviar.add_argument("--apoio", action="append", default=[])
+    p_enviar.add_argument("--cita", default=None)
+    p_enviar.add_argument("--relacao", default=None)
     p_enviar.add_argument("--eu", default=None)
     p_enviar.add_argument("--sessao-id", dest="sessao_id", default=None)
 
@@ -1318,6 +1563,8 @@ def uso(codigo: int = 2):
         "  fila enviar <destinatario>... [--tipo <t>] [--assunto <a>] [--ref <r>] [--responde <id>] [--corpo <txt>]\n"
         "              (corpo em stdin ou posicional final `fila enviar <dest> \"<msg>\"`; default: --tipo pedido, --assunto = 1a linha)\n"
         "              --tipo contestacao: --ref e o indicador contestado, o corpo e o fundamento\n"
+        "  fila enviar componente:eventos [--tipo <t>] [--assunto <a>] [--ref <r>] [--etiqueta <chave>]... [--apoio <chave>]... [--cita <txt>] [--responde <origem>] [--relacao <r>] [--corpo <txt>]\n"
+        "              grava micropublicacao na familia mensagem do servico de eventos, sem tocar na malha (default: --tipo afirmacao)\n"
         "  fila tipos                               lista os tipos validos de --tipo\n"
         "  fila contestar <cadeira> --indicador <nome>   contestacao a cadeira que configurou o indicador;\n"
         "              o fundamento vem no stdin (pela face, no envelope da porta)\n"
@@ -1395,10 +1642,24 @@ def main():
         sys.stdout.write("\n".join(sorted(TIPOS_VALIDOS)) + "\n")
         sys.exit(0)
     if args.verbo == "enviar":
+        destinatarios = list(getattr(args, "destinatarios", None) or [args.destinatario])
+        tem_flag_micropub = bool(
+            getattr(args, "etiqueta", None)
+            or getattr(args, "apoio", None)
+            or getattr(args, "cita", None)
+            or getattr(args, "relacao", None)
+        )
+        if DESTINO_EVENTOS in destinatarios:
+            cmd_enviar_eventos(args)
+            return
+        if tem_flag_micropub:
+            sys.stderr.write(
+                f"erro: --etiqueta, --apoio, --cita e --relacao só valem com destinatário {DESTINO_EVENTOS}\n"
+            )
+            sys.exit(2)
         if args.tipo and args.tipo not in TIPOS_VALIDOS:
             sys.stderr.write(f"erro: tipo invalido: {args.tipo}\n  validos: {', '.join(sorted(TIPOS_VALIDOS))}\n")
             sys.exit(1)
-        destinatarios = list(getattr(args, "destinatarios", None) or [args.destinatario])
         for dest in destinatarios:
             if dest.startswith(PREFIXO_AUTOMACAO):
                 sys.stderr.write("erro: automacao nao tem caixa; responda a cadeira dona dela, que a carta "
