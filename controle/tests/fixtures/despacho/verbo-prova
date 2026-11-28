@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Verbo mínimo de prova da borda comum de `despachar` (card #4455, t11).
 
 Delega `despachar` e `ler execucao` inteiramente a `lib/despacho/borda.py`, sem nenhuma
@@ -16,7 +15,7 @@ _LIB = _RAIZ_HARNESS / "lib"
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 
-from despacho.borda import executar_ato  # noqa: E402
+from despacho.borda import executar_ato
 
 
 def main(argv: list[str] | None = None) -> int:

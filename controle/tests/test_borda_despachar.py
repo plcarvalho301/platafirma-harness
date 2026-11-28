@@ -21,6 +21,7 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +32,7 @@ _LIB = _RAIZ / "lib"
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 
-from despacho import (  # noqa: E402
+from despacho import (
     AmbienteBordaDespachar,
     ConfigClienteDespacho,
     PedidoClienteDespacho,
@@ -50,40 +51,60 @@ SAIDA_INEXISTENTE = 1
 SAIDA_USO = 2
 SAIDA_DEPENDENCIA = 3
 SAIDA_NEGADA = 4
+FAN_OUT_DOIS = 2
 FAN_OUT_TRES = 3
 PRAZO_CUSTOM_S = 12.5
+PRAZO_SUBPROC_S = 9.5
+
+
+@dataclass(frozen=True, slots=True)
+class _OpcoesDubleBorda:
+    invocar_core: Any = None
+    config_cliente: ConfigClienteDespacho | None = None
+    stdin_texto: str = ""
+    prazo_espera_s: float | None = None
+    diretorio_oplog: Path | None = None
+    sujeito: str = "sujeito-dono"
 
 
 def _ambiente_duble(
-    *,
-    invocar_core: Any = None,
-    config_cliente: ConfigClienteDespacho | None = None,
-    stdin_texto: str = "",
-    prazo_espera_s: float | None = None,
-    diretorio_oplog: Path | None = None,
-    sujeito: str = "sujeito-dono",
+    opcoes: _OpcoesDubleBorda | None = None,
 ) -> tuple[AmbienteBordaDespachar, io.StringIO, io.StringIO]:
+    opc = opcoes or _OpcoesDubleBorda()
     out = io.StringIO()
     err = io.StringIO()
     kwargs: dict[str, Any] = {
         "porta_yaml": PORTA_YAML_PROVA,
-        "config_cliente": config_cliente,
-        "diretorio_oplog": diretorio_oplog,
-        "sujeito": sujeito,
+        "config_cliente": opc.config_cliente,
+        "diretorio_oplog": opc.diretorio_oplog,
+        "sujeito": opc.sujeito,
         "ident": {
-            "sujeito": sujeito,
+            "sujeito": opc.sujeito,
             "cadeira": "engenharia",
             "sessao_id": "sessao-borda-4455",
             "ordem_id": "o20261128T114000-abcdef",
         },
-        "prazo_espera_s": prazo_espera_s,
-        "stdin": io.StringIO(stdin_texto),
+        "prazo_espera_s": opc.prazo_espera_s,
+        "stdin": io.StringIO(opc.stdin_texto),
         "stdout": out,
         "stderr": err,
     }
-    if invocar_core is not None:
-        kwargs["invocar_core"] = invocar_core
+    if opc.invocar_core is not None:
+        kwargs["invocar_core"] = opc.invocar_core
     return AmbienteBordaDespachar(**kwargs), out, err
+
+
+def _duble_core_proibido(chamadas_core: list[PedidoClienteDespacho]) -> Any:
+    def _nunca_chamar(
+        pedido: PedidoClienteDespacho,
+        *,
+        config: ConfigClienteDespacho | None = None,
+    ) -> RespostaClienteDespacho:
+        del config
+        chamadas_core.append(pedido)
+        raise AssertionError("core não pode ser chamado quando a borda recusa antes")
+
+    return _nunca_chamar
 
 
 def _gravar_oplog_execucao(pasta: Path, dia: str, linhas: list[dict[str, Any]]) -> Path:
@@ -158,8 +179,10 @@ def test_verbo_declarado_chega_ao_core_com_classe_chave_fan_out_pedido_e_paramet
         )
 
     amb, out, err = _ambiente_duble(
-        invocar_core=_core_ok,
-        stdin_texto='{"obra": "obra:42", "forcar": false}',
+        _OpcoesDubleBorda(
+            invocar_core=_core_ok,
+            stdin_texto='{"obra": "obra:42", "forcar": false}',
+        )
     )
     rc = executar_despachar(
         "verbo-prova",
@@ -210,7 +233,9 @@ def test_sem_classe_assume_pipeline_e_propaga_em_andamento_com_chave() -> None:
             proximo="verbo-prova ler execucao exec-lento-99",
         )
 
-    amb, out, err = _ambiente_duble(invocar_core=_core_em_andamento, prazo_espera_s=5.0)
+    amb, out, err = _ambiente_duble(
+        _OpcoesDubleBorda(invocar_core=_core_em_andamento, prazo_espera_s=5.0)
+    )
     rc = executar_ato("verbo-prova", "despachar", ["ingestao"], ambiente=amb)
     assert rc == SAIDA_OK
     assert err.getvalue() == ""
@@ -225,17 +250,9 @@ def test_sem_classe_assume_pipeline_e_propaga_em_andamento_com_chave() -> None:
 
 def test_verbo_sem_despachar_declarado_recusa_com_2_ato_nao_declarado_sem_chamar_core() -> None:
     chamadas_core: list[PedidoClienteDespacho] = []
-
-    def _nunca_chamar(
-        pedido: PedidoClienteDespacho,
-        *,
-        config: ConfigClienteDespacho | None = None,
-    ) -> RespostaClienteDespacho:
-        del config
-        chamadas_core.append(pedido)
-        raise AssertionError("core não pode ser chamado para verbo sem despachar declarado")
-
-    amb, out, err = _ambiente_duble(invocar_core=_nunca_chamar)
+    amb, out, err = _ambiente_duble(
+        _OpcoesDubleBorda(invocar_core=_duble_core_proibido(chamadas_core))
+    )
     rc = executar_despachar("verbo-sem-despachar", ["pipeline", "ingestao"], ambiente=amb)
     assert rc == SAIDA_USO
     assert chamadas_core == []
@@ -264,17 +281,9 @@ def test_classe_invalida_ou_stdin_fora_de_objeto_json_recusam_com_2_sem_chamar_c
     codigo_esperado: str,
 ) -> None:
     chamadas_core: list[PedidoClienteDespacho] = []
-
-    def _nunca_chamar(
-        pedido: PedidoClienteDespacho,
-        *,
-        config: ConfigClienteDespacho | None = None,
-    ) -> RespostaClienteDespacho:
-        del config
-        chamadas_core.append(pedido)
-        raise AssertionError("core não pode ser chamado em erro de borda")
-
-    amb, _out, err = _ambiente_duble(invocar_core=_nunca_chamar, stdin_texto=stdin_txt)
+    amb, _out, err = _ambiente_duble(
+        _OpcoesDubleBorda(invocar_core=_duble_core_proibido(chamadas_core), stdin_texto=stdin_txt)
+    )
     rc = executar_despachar("verbo-prova", argv, ambiente=amb)
     assert rc == SAIDA_USO
     assert chamadas_core == []
@@ -287,7 +296,9 @@ def test_core_sem_resposta_sai_3_dependencia_sem_resposta(tmp_path: Path) -> Non
         python_porta=tmp_path / "nao-existe" / "python",
         core_dir=tmp_path / "nao-existe" / "core",
     )
-    amb, _out, err = _ambiente_duble(config_cliente=cfg_ausente, prazo_espera_s=2.0)
+    amb, _out, err = _ambiente_duble(
+        _OpcoesDubleBorda(config_cliente=cfg_ausente, prazo_espera_s=2.0)
+    )
     rc = executar_despachar("verbo-prova", ["pipeline", "ingestao", "--json"], ambiente=amb)
     assert rc == SAIDA_DEPENDENCIA
     envelope = json.loads(err.getvalue())
@@ -329,7 +340,9 @@ def test_ler_execucao_pela_borda_le_evento_execucao_e_respeita_sujeito(tmp_path:
         ],
     )
 
-    amb_ok, out_ok, err_ok = _ambiente_duble(diretorio_oplog=oplog_dir, sujeito="sujeito-dono")
+    amb_ok, out_ok, err_ok = _ambiente_duble(
+        _OpcoesDubleBorda(diretorio_oplog=oplog_dir, sujeito="sujeito-dono")
+    )
     rc_ok = executar_ato(
         "verbo-prova",
         "ler",
@@ -344,8 +357,7 @@ def test_ler_execucao_pela_borda_le_evento_execucao_e_respeita_sujeito(tmp_path:
     assert lido["fases"][0]["id"] == "incorporar-item"
 
     amb_outro, _out_outro, err_outro = _ambiente_duble(
-        diretorio_oplog=oplog_dir,
-        sujeito="outro-sujeito",
+        _OpcoesDubleBorda(diretorio_oplog=oplog_dir, sujeito="outro-sujeito")
     )
     rc_outro = executar_ler_execucao(
         "verbo-prova",
@@ -356,8 +368,7 @@ def test_ler_execucao_pela_borda_le_evento_execucao_e_respeita_sujeito(tmp_path:
     assert json.loads(err_outro.getvalue())["erro"]["codigo"] == "acesso-negado"
 
     amb_inex, _out_inex, err_inex = _ambiente_duble(
-        diretorio_oplog=oplog_dir,
-        sujeito="sujeito-dono",
+        _OpcoesDubleBorda(diretorio_oplog=oplog_dir, sujeito="sujeito-dono")
     )
     rc_inex = executar_ler_execucao(
         "verbo-prova",
@@ -380,7 +391,7 @@ def test_executavel_verbo_prova_em_subprocesso_despacha_e_recusa_sem_regra_no_ve
         "PF_SUJEITO": "sujeito-subproc",
         "PF_CADEIRA": "engenharia",
         "PF_SESSAO": "sessao-subproc",
-        "PF_PRAZO_S": "9.5",
+        "PF_PRAZO_S": str(PRAZO_SUBPROC_S),
     }
 
     proc_ok = subprocess.run(
@@ -408,9 +419,9 @@ def test_executavel_verbo_prova_em_subprocesso_despacha_e_recusa_sem_regra_no_ve
     assert chamadas[0]["verbo_entrada"] == "verbo-prova"
     assert chamadas[0]["alvo_classe"] == "pipeline"
     assert chamadas[0]["alvo_chave"] == "ingestao"
-    assert chamadas[0]["fan_out"] == 2
+    assert chamadas[0]["fan_out"] == FAN_OUT_DOIS
     assert chamadas[0]["pedido_id"] == "ped-sub"
-    assert chamadas[0]["prazo_espera_s"] == 9.5
+    assert chamadas[0]["prazo_espera_s"] == PRAZO_SUBPROC_S
     assert chamadas[0]["parametros"] == {"obra": "obra:99"}
 
     env_sem_ato = {**env_base, "PF_VERBO_PROVA": "verbo-sem-despachar"}
