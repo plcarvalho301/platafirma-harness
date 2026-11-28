@@ -188,14 +188,24 @@ def _sem_nul(valor):
 
 # --- o tipo da linha ----------------------------------------------------------------------
 
-# Eventos de ciclo de vida/diagnóstico do PEP da porta (platafirma-core/porta/decisao.py) sem `tool`,
-# que ficam no bruto para auditoria local (`conferir.py`) e não pertencem aos doze tipos da partição `log`.
-EVENTOS_FORA_DA_PARTICAO = frozenset({"pep_politica_carregada", "pep_vocabulario_divergente"})
+# Eventos de diagnóstico operacional / auditoria local da porta (platafirma-core/porta) sem `tool`,
+# que ficam no bruto para auditoria local e não pertencem aos tipos da partição `log`.
+EVENTOS_FORA_DA_PARTICAO = frozenset(
+    {"pep_politica_carregada", "pep_vocabulario_divergente", "ficha_execucao_escrita"}
+)
+# Forma legada gravada por `_emitir_ficha_escrita` entre 25 e 28/11 (#4441/#4480) sem `evento`;
+# os arquivos brutos fechados são imutáveis (`Sha256Divergente`), então o consumidor aceita ambas.
+_TIPOS_LEGADOS_FORA_DA_PARTICAO = frozenset({"ficha-execucao-escrita"})
 
 
 def fora_da_particao(reg: dict) -> bool:
     """Linha legível de diagnóstico operacional da porta que não atravessa para a partição `log`."""
-    return reg.get("tool") in _VAZIO and reg.get("evento") in EVENTOS_FORA_DA_PARTICAO
+    if reg.get("tool") not in _VAZIO:
+        return False
+    evento = reg.get("evento")
+    if evento in EVENTOS_FORA_DA_PARTICAO:
+        return True
+    return evento in _VAZIO and reg.get("tipo") in _TIPOS_LEGADOS_FORA_DA_PARTICAO
 
 
 def _e_chamada(reg: dict) -> bool:
@@ -491,7 +501,7 @@ class Extracao:
                 continue
             self.por_evento[str(reg.get("evento")) if reg.get("evento") not in _VAZIO else "(sem evento)"] += 1
             if fora_da_particao(reg):
-                self.ignorados[str(reg.get("evento"))] += 1
+                self.ignorados[str(reg.get("evento") or reg.get("tipo") or "(sem evento)")] += 1
                 continue
             try:
                 item = para_item(reg, self.dia, n, self.invalidos)
