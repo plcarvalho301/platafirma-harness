@@ -42,3 +42,40 @@ def test_podar_texto_corta_acima_do_teto_mesmo_em_perfil_cosmetico(tmp_path: Pat
     assert len(servido.encode("utf-8")) <= cap
     assert meta.get("alca")
     assert Path(meta["alca"]).is_file()
+
+
+def test_ledger_sessao_concorrente_entre_processos_gera_giros_distintos(tmp_path: Path) -> None:
+    import json
+    import subprocess
+
+    ledger_path = tmp_path / "sessao-paralela.json"
+    n_procs = 8
+    codigo = (
+        "import json, sys; from pathlib import Path; "
+        f"sys.path.insert(0, {str(RAIZ / 'lib')!r}); "
+        "from poda.poda import LedgerSessao; "
+        "p = Path(sys.argv[1]); idx = sys.argv[2]; "
+        "lg = LedgerSessao(p); "
+        "g = lg.proximo_giro(); "
+        "lg.olha(f'alca-{idx}', f'corpo-{idx}', g); "
+        "print(g)"
+    )
+    procs = [
+        subprocess.Popen(
+            [sys.executable, "-c", codigo, str(ledger_path), str(i)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for i in range(n_procs)
+    ]
+    giros = []
+    for p in procs:
+        out, err = p.communicate(timeout=15)
+        assert p.returncode == 0, err
+        giros.append(int(out.strip()))
+
+    assert sorted(giros) == list(range(1, n_procs + 1))
+    dados = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert dados["giro"] == n_procs
+    assert set(dados["entradas"].keys()) == {f"alca-{i}" for i in range(n_procs)}

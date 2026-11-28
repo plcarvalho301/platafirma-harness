@@ -10,11 +10,14 @@ Requisitos cobertos:
 """
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import hashlib
 import json
 import os
 import re
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -414,7 +417,22 @@ class LedgerSessao:
 
     def __init__(self, caminho: Path) -> None:
         self._caminho = Path(caminho)
+        self._lock_caminho = self._caminho.with_name(f".{self._caminho.name}.lock")
         self._dados = self._carregar()
+
+    @contextlib.contextmanager
+    def _trava_exclusiva(self) -> Iterator[None]:
+        """Serializa leitura-modificação-escrita entre processos via flock num inode fixo."""
+        self._caminho.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(self._lock_caminho, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
 
     def _carregar(self) -> dict[str, Any]:
         try:
@@ -443,9 +461,11 @@ class LedgerSessao:
                 pass
 
     def proximo_giro(self) -> int:
-        self._dados["giro"] = int(self._dados.get("giro") or 0) + 1
-        self._salvar()
-        return self._dados["giro"]
+        with self._trava_exclusiva():
+            self._dados = self._carregar()
+            self._dados["giro"] = int(self._dados.get("giro") or 0) + 1
+            self._salvar()
+            return self._dados["giro"]
 
     def olha(
         self,
@@ -462,31 +482,33 @@ class LedgerSessao:
         if escrita:
             # Escrita nunca deduplica (incidente #3503)
             return {"modo": "inteiro", "ledger": "escrita", "texto": texto}
-        entradas: dict[str, Any] = self._dados.setdefault("entradas", {})
-        anterior = entradas.get(alca)
-        if not esquece and isinstance(anterior, dict) and anterior.get("sha") == h:
-            giro_ref = int(anterior.get("giro") or 0)
-            limite = distancia_max if distancia_max is not None else _ledger_distancia_max()
-            if (giro - giro_ref) <= limite:
-                ponteiro = f"[igual ao giro {giro_ref} — sha {h}, {tamanho} bytes não reenviados; {SUFIXO_REENVIO}]"
+        with self._trava_exclusiva():
+            self._dados = self._carregar()
+            entradas: dict[str, Any] = self._dados.setdefault("entradas", {})
+            anterior = entradas.get(alca)
+            if not esquece and isinstance(anterior, dict) and anterior.get("sha") == h:
+                giro_ref = int(anterior.get("giro") or 0)
+                limite = distancia_max if distancia_max is not None else _ledger_distancia_max()
+                if (giro - giro_ref) <= limite:
+                    ponteiro = f"[igual ao giro {giro_ref} — sha {h}, {tamanho} bytes não reenviados; {SUFIXO_REENVIO}]"
+                    return {
+                        "modo": "igual",
+                        "ledger": "igual",
+                        "giro_ref": giro_ref,
+                        "bytes_omitidos": tamanho,
+                        "texto": ponteiro,
+                    }
+                entradas[alca] = {"sha": h, "giro": giro, "bytes": tamanho}
+                self._salvar()
                 return {
-                    "modo": "igual",
-                    "ledger": "igual",
+                    "modo": "inteiro",
+                    "ledger": "expirado",
                     "giro_ref": giro_ref,
-                    "bytes_omitidos": tamanho,
-                    "texto": ponteiro,
+                    "texto": texto,
                 }
             entradas[alca] = {"sha": h, "giro": giro, "bytes": tamanho}
             self._salvar()
-            return {
-                "modo": "inteiro",
-                "ledger": "expirado",
-                "giro_ref": giro_ref,
-                "texto": texto,
-            }
-        entradas[alca] = {"sha": h, "giro": giro, "bytes": tamanho}
-        self._salvar()
-        return {"modo": "inteiro", "ledger": "novo", "texto": texto}
+            return {"modo": "inteiro", "ledger": "novo", "texto": texto}
 
 
 def linha_humana(meta: dict[str, Any]) -> str:
