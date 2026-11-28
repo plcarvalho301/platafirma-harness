@@ -25,7 +25,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import yaml
+try:
+    import yaml
+except ModuleNotFoundError:  # pragma: no cover - python do sistema sem PyYAML na promoção
+    if __name__ == "__main__" and os.environ.get("PF_PIPELINES_REEXEC") != "1":
+        _raiz_rel = Path(os.environ.get("PF_RELEASE_RAIZ") or "/opt/platafirma")
+        _cands = [
+            _raiz_rel / "current" / "venv" / "harness" / "bin" / "python",
+            _raiz_rel / "current" / "venv" / "porta" / "bin" / "python",
+            *sorted((_raiz_rel / "venv").glob("harness-*/bin/python")),
+            *sorted((_raiz_rel / "venv").glob("porta-*/bin/python")),
+        ]
+        for _cand in _cands:
+            if _cand.is_file() and os.access(_cand, os.X_OK):
+                os.environ["PF_PIPELINES_REEXEC"] = "1"
+                os.execv(str(_cand), [str(_cand), "-m", "pipelines.gerar", *sys.argv[1:]])
+    raise
 
 from despacho.borda import _extrair_atos_descricao
 from terceiros_olaria import (

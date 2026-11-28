@@ -2956,8 +2956,13 @@ compilar_pipelines_release() {  # $1=repo $2=sha $3=ensaio(0|1)
   [ "$repo" = "$FAMILIA_BIN" ] || return 0
   [ "${PF_PIPELINES_DESLIGADO:-0}" != "1" ] || return 0
   local dest="$PROD_RAIZ/$repo/$sha"
-  local py="$PLATAFIRMA_RELEASE/venv/harness/bin/python"
-  [ -x "$py" ] || py="python3"
+  local py="python3" cand
+  for cand in "$ATALHOS/venv/harness/bin/python" "$ATALHOS/venv/porta/bin/python" "$PLATAFIRMA_RELEASE/venv/harness/bin/python" "$PROD_RAIZ"/venv/harness-*/bin/python; do
+    if [ -x "$cand" ]; then
+      py="$cand"
+      break
+    fi
+  done
   local gerador="$dest/lib/pipelines/gerar.py"
   [ -f "$gerador" ] || return 0
   local rc_pip=0
