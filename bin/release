@@ -2985,18 +2985,24 @@ compilar_pipelines_release() {  # $1=repo $2=sha $3=ensaio(0|1)
 cmd_despachar() {
   local py="$PLATAFIRMA_RELEASE/venv/harness/bin/python"
   [ -x "$py" ] || py="python3"
-  PF_HARNESS_DIR="${PF_HARNESS_DIR:-$AQUI/..}" \
-  PYTHONPATH="$AQUI/../lib" \
-    "$py" -m despacho.borda release despachar "$@"
+  (
+    cd "$AQUI/.."
+    PF_HARNESS_DIR="${PF_HARNESS_DIR:-$AQUI/..}" \
+    PYTHONPATH="$AQUI/../lib" \
+      "$py" -m despacho.borda release despachar "$@"
+  )
 }
 
 cmd_ler_ou_execucao() {
   if [ "${1:-}" = "execucao" ]; then
     local py="$PLATAFIRMA_RELEASE/venv/harness/bin/python"
     [ -x "$py" ] || py="python3"
-    PF_HARNESS_DIR="${PF_HARNESS_DIR:-$AQUI/..}" \
-    PYTHONPATH="$AQUI/../lib" \
-      "$py" -m despacho.borda release ler "$@"
+    (
+      cd "$AQUI/.."
+      PF_HARNESS_DIR="${PF_HARNESS_DIR:-$AQUI/..}" \
+      PYTHONPATH="$AQUI/../lib" \
+        "$py" -m despacho.borda release ler "$@"
+    )
     return $?
   fi
   cmd_ler "$@"
