@@ -42,13 +42,34 @@ except ModuleNotFoundError:  # pragma: no cover - python do sistema sem PyYAML n
                 os.execv(str(_cand), [str(_cand), "-m", "pipelines.gerar", *sys.argv[1:]])
     raise
 
-from despacho.borda import _extrair_atos_descricao
-from terceiros_olaria import (
-    OLARIA_URL_PADRAO,
-    OlariaIndisponivel,
-    _consultar_classe,
-    _ler_segredo,
-)
+try:
+    from terceiros_olaria import (
+        OLARIA_URL_PADRAO,
+        OlariaIndisponivel,
+        _consultar_classe,
+        _ler_segredo,
+    )
+except BaseException as _exc_imp:  # pragma: no cover
+    sys.stderr.write(f"release: pipelines erro import ({sys.executable}): {type(_exc_imp).__name__}: {_exc_imp}\n")
+    raise
+
+_RE_PARENTESES = re.compile(r"\([^)]*\)")
+_RE_ATOS_DESCRICAO = re.compile(r"(?:^|·|\s)atos:\s*(.+)$", re.IGNORECASE | re.DOTALL)
+
+
+def _extrair_atos_descricao(descricao: str) -> frozenset[str]:
+    m = _RE_ATOS_DESCRICAO.search(descricao)
+    if m is None:
+        return frozenset()
+    sem_parenteses = _RE_PARENTESES.sub("", m.group(1))
+    atos: set[str] = set()
+    for bruto in re.split(r"[,·;]", sem_parenteses):
+        limpo = " ".join(bruto.split()).strip().rstrip(".")
+        if not limpo:
+            continue
+        atos.add(limpo)
+        atos.add(limpo.split(" ", 1)[0])
+    return frozenset(atos)
 
 SAIDA_OK = 0
 SAIDA_DEPENDENCIA = 3
