@@ -1,3 +1,21 @@
 #!/usr/bin/env bash
-# ponte temporária (#4481) até as sete automações passarem a bin/automacao
+# bot — ponte temporária para bin/automacao (#4481)
+# capacidade: operacao
+# dono: ti
+# classe: B
+# forma: objeto (declarar, desligar) / lista (listar) / fluxo (rodar) / predicado (caidas)
+# use para: ponte temporária até as sete automações passarem a bin/automacao
+# atos: declarar (escrita, agendamento), listar (leitura, agendamento), rodar (escrita, agendamento), desligar (escrita, agendamento), caidas (escrita, agendamento)
+# ato: declarar <slug> — ponte para automacao declarar
+# ato: listar — ponte para automacao listar
+# ato: rodar <slug> — ponte para automacao rodar
+# ato: desligar <slug> — ponte para automacao desligar
+# ato: caidas — ponte para automacao caidas
+# exit: 0 ok · 1 negativo · 2 uso · 3 dependencia · 4 politica · 5 indeterminavel
+# le: listar=acervo.registro
+# escreve: declarar=acervo.registro,arquivo-local
+# ambiente: PF_AUTOMACAO_SLUGS (repassada por automacao; verbo)
+# escrita: ponte para bin/automacao
+# depende: automacao
+# conforme: parcial — ponte temporaria (#4481)
 exec "$(dirname "$0")/automacao" "$@"
