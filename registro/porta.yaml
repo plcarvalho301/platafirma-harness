@@ -188,7 +188,7 @@ verbos:
       arquivo como está servido · atos: estado (leitura, operacao), listar (leitura, operacao),
       ler (leitura, operacao), procurar (leitura, operacao), conferir (leitura, operacao),
       telas (leitura, operacao), promover (escrita, operacao), expurgar (escrita, operacao),
-      migrar (escrita, operacao)
+      migrar (escrita, operacao), despachar (escrita, operacao)
     faces:
       casca: {}
   repo:

@@ -4,7 +4,7 @@
 # dono: ti
 # classe: B
 # use para: «que versão está no ar e desde quando?»; promover release, «sobe isso», «promove»; ler e procurar arquivo como está servido
-# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), conferir (leitura, operacao), telas (leitura, operacao), promover (escrita, operacao), migrar (escrita, operacao)
+# atos: estado (leitura, operacao), listar (leitura, operacao), ler (leitura, operacao), procurar (leitura, operacao), conferir (leitura, operacao), telas (leitura, operacao), promover (escrita, operacao), migrar (escrita, operacao), despachar (escrita, operacao)
 # mecanismo: telas=casca
 # forma: texto
 # le: estado=release,arquivo-local
@@ -15,6 +15,7 @@
 # le: telas=release,acervo.casa
 # le: promover=release,acervo.casa
 # le: migrar=nada
+# le: despachar=release
 # escreve: estado=nada
 # escreve: listar=nada
 # escreve: ler=nada
@@ -23,6 +24,7 @@
 # escreve: telas=nada
 # escreve: promover=release,arquivo-local
 # escreve: migrar=schema do banco-alvo, via docker exec psql (nao e arquivo local; nao e segredo)
+# escreve: despachar=nada
 # (recursos pelo enum de ferramental_recurso; porta, forge e stack pendem id proprio - dados)
 # ambiente: PF_RELEASE_RAIZ[=/opt/platafirma] porta · PLATAFIRMA_RELEASE[=$PF_RELEASE_RAIZ/current] porta (atalhos; verbos irmãos em harness/bin) · PLATAFIRMA_INSTANCIA[=/srv/platafirma/casa] porta (pontos em var/release/<familia>) · PLATAFIRMA_FAMILIAS[=registro/familias.json desta árvore] porta · PLATAFIRMA_VENVS[=registro/venvs.json desta árvore] porta · PLATAFIRMA_TERCEIROS[=fichas de dependência externa na Olaria desta árvore] porta · PLATAFIRMA_UV porta (override do binário do uv) · PLATAFIRMA_PYTHON[=/usr/bin/python3.12] porta (python de sistema dos venvs) · XDG_RUNTIME_DIR[=/run/user/<uid>] porta · DBUS_SESSION_BUS_ADDRESS[=unix:path=$XDG_RUNTIME_DIR/bus] porta (os dois só quando ausentes, para o infra achar a unit) · PF_CADEIRA porta (lida) · HOME
 # uv: resolvido nesta ordem, e só nela: $PLATAFIRMA_UV, /usr/local/bin/uv, /usr/bin/uv, `command -v uv`. Nenhum achado: exit 3 dizendo como instalar uv de sistema. O PATH do wrapper /usr/local/bin/platafirma não tem ~/.local/bin (medido 15/09).
@@ -2295,7 +2297,7 @@ resumo_imprime() {
   PROMO_LOG="$log"
   [ -f "$PROMO_LOG" ] || { PROMO_LOG=""; return 0; }
   # grep sem casamento sai 1: com set -e/pipefail isso mataria o resumo e trocaria o exit
-  { grep -E '^(== |de: |gate: |venv: |current: |no ar: |ambiente: |suite: |card: |deploy: |ensaio: |já no ar: |espelho: |checkout: |stacks: |terceiro: |porta: |escritor: |expurgo: )' "$PROMO_LOG" \
+  { grep -E '^(== |de: |gate: |venv: |current: |no ar: |ambiente: |suite: |card: |deploy: |ensaio: |já no ar: |espelho: |checkout: |stacks: |terceiro: |porta: |escritor: |expurgo: |pipelines: )' "$PROMO_LOG" \
       | grep -v 'NAO MEDIDA'; } || true
   # "release: /opt/..." e o eco do ajudante da stack, nao recusa: fica no log
   { grep -E '^(release: |varrido: |saida inteira: |caminho: )|NAO MEDIDA|PROMOCAO|RETOMAR' "$PROMO_LOG" \
@@ -2520,6 +2522,7 @@ cmd_promover() {
   exigir_deploy_se_stack || { rc=$?; exit "$rc"; }
   materializar "$repo" "$sha" || { rc=$?; exit "$rc"; }
   materializar_terceiros "$repo" "$sha" || { rc=$?; exit "$rc"; }
+  compilar_pipelines_release "$repo" "$sha" 0 || { rc=$?; exit "$rc"; }
   local rc_suite=0
   gate_suite_verdes "$repo" "$sha" "$atual" || rc_suite=$?
   if [ "$rc_suite" -eq 5 ] && [ "$aceitar_suite" -eq 1 ]; then
@@ -2959,6 +2962,52 @@ PY
   fi
 }
 
+compilar_pipelines_release() {  # $1=repo $2=sha $3=ensaio(0|1)
+  local repo="$1" sha="$2" modo_ensaio="${3:-0}"
+  [ "$repo" = "$FAMILIA_BIN" ] || return 0
+  [ "${PF_PIPELINES_DESLIGADO:-0}" != "1" ] || return 0
+  local dest="$PROD_RAIZ/$repo/$sha"
+  local py="$PLATAFIRMA_RELEASE/venv/harness/bin/python"
+  [ -x "$py" ] || py="python3"
+  local gerador="$dest/lib/pipelines/gerar.py"
+  [ -f "$gerador" ] || return 0
+  local rc_pip=0
+  if [ "$modo_ensaio" -eq 1 ]; then
+    PYTHONPATH="$dest/lib${PYTHONPATH:+:$PYTHONPATH}" "$py" -m pipelines.gerar --arvore "$dest" --sha "$sha" --ensaio || rc_pip=$?
+    return "$rc_pip"
+  fi
+  chmod u+w "$dest/registro" "$dest/registro/pipelines" 2>/dev/null || true
+  chmod -R u+w "$dest/registro/pipelines" 2>/dev/null || true
+  PYTHONPATH="$dest/lib${PYTHONPATH:+:$PYTHONPATH}" "$py" -m pipelines.gerar --arvore "$dest" --sha "$sha" || rc_pip=$?
+  chmod -R a-w "$dest/registro/pipelines" 2>/dev/null || true
+  chmod a-w "$dest/registro" 2>/dev/null || true
+  if [ "$rc_pip" -ne 0 ]; then
+    printf 'release: recusa: compilação de pipelines falhou na rev %s (exit %s) — current intacto\n' "${sha:0:7}" "$rc_pip" >&2
+    return "$rc_pip"
+  fi
+  return 0
+}
+
+cmd_despachar() {
+  local py="$PLATAFIRMA_RELEASE/venv/harness/bin/python"
+  [ -x "$py" ] || py="python3"
+  PF_HARNESS_DIR="${PF_HARNESS_DIR:-$AQUI/..}" \
+  PYTHONPATH="$AQUI/../lib${PYTHONPATH:+:$PYTHONPATH}" \
+    "$py" -m despacho.borda release despachar "$@"
+}
+
+cmd_ler_ou_execucao() {
+  if [ "${1:-}" = "execucao" ]; then
+    local py="$PLATAFIRMA_RELEASE/venv/harness/bin/python"
+    [ -x "$py" ] || py="python3"
+    PF_HARNESS_DIR="${PF_HARNESS_DIR:-$AQUI/..}" \
+    PYTHONPATH="$AQUI/../lib${PYTHONPATH:+:$PYTHONPATH}" \
+      "$py" -m despacho.borda release ler "$@"
+    return $?
+  fi
+  cmd_ler "$@"
+}
+
 cmd_expurgar() {
   local ver=0
   while [ $# -gt 0 ]; do
@@ -2971,16 +3020,17 @@ cmd_expurgar() {
 }
 
 case "$cmd" in
-  estado)   cmd_estado "$@" ;;
-  listar)   cmd_listar "$@" ;;
-  ler)      cmd_ler "$@" ;;
-  procurar) cmd_procurar "$@" ;;
-  conferir) cmd_conferir "$@" ;;
-  telas)    cmd_telas "$@" ;;
-  promover) entrar_na_fila_de_promocao promover "$@"; cmd_promover "$@" ;;
-  reverter) cmd_reverter "$@" ;;
-  expurgar) cmd_expurgar "$@" ;;
-  migrar)   cmd_migrar "$@" ;;
+  estado)    cmd_estado "$@" ;;
+  listar)    cmd_listar "$@" ;;
+  ler)       cmd_ler_ou_execucao "$@" ;;
+  procurar)  cmd_procurar "$@" ;;
+  conferir)  cmd_conferir "$@" ;;
+  telas)     cmd_telas "$@" ;;
+  promover)  entrar_na_fila_de_promocao promover "$@"; cmd_promover "$@" ;;
+  reverter)  cmd_reverter "$@" ;;
+  expurgar)  cmd_expurgar "$@" ;;
+  migrar)    cmd_migrar "$@" ;;
+  despachar) cmd_despachar "$@" ;;
   _medir-suite)
     # interno: o job que `release promover` dispara para medir a suite acima do teto.
     # Mede sincrono, grava o veredito (verde|vermelho) ou a marca de nao medido.
