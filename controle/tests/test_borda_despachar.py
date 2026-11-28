@@ -37,6 +37,7 @@ from despacho import (
     ConfigClienteDespacho,
     PedidoClienteDespacho,
     RespostaClienteDespacho,
+    despachar_pela_borda,
     executar_ato,
     executar_despachar,
     executar_ler_execucao,
@@ -437,3 +438,28 @@ def test_executavel_verbo_prova_em_subprocesso_despacha_e_recusa_sem_regra_no_ve
     assert proc_neg.returncode == SAIDA_USO
     assert json.loads(proc_neg.stderr)["erro"]["codigo"] == "ato-nao-declarado"
     assert len(arq_chamadas.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_despachar_pela_borda_aceita_flag_param_e_ler_execucao_pela_borda() -> None:
+    capturado: dict[str, Any] = {}
+    tentativas_esp = 2
+
+    def _runner_falso(cmd: list[str], *, input: str, **_kw: Any) -> subprocess.CompletedProcess[str]:
+        capturado["cmd"] = cmd
+        capturado["payload"] = json.loads(input)
+        out = json.dumps({"execucao_id": "exec-param-1", "estado": "concluida", "exit_code": 0}) + "\n"
+        return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
+
+    resp = despachar_pela_borda(
+        "verbo-prova",
+        ["pipeline", "conferir-ar", "--param", "familia=platafirma-core", "--param=tentativas=2"],
+        porta_yaml=PORTA_YAML_PROVA,
+        config_cliente=ConfigClienteDespacho(runner=_runner_falso),
+        ident={"sujeito": "sujeito-dono", "cadeira": "ti"},
+    )
+    assert resp.exit_code == SAIDA_OK
+    assert resp.execucao_id == "exec-param-1"
+    assert capturado["payload"]["parametros"] == {
+        "familia": "platafirma-core",
+        "tentativas": tentativas_esp,
+    }

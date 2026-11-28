@@ -63,11 +63,14 @@ casa:
   classes_legadas_escrita:
     - ato
     - chapeu
+    - configuracao
     - conta-de-sistema-operacional
     - controle-de-seguranca
+    - interface-de-verbo
     - jurado
     - motor
     - persona
+    - pipeline
     - servico
     - verbo
 

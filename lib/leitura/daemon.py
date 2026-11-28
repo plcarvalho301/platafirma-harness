@@ -309,6 +309,58 @@ class DaemonLeitor:
             )
         return None
 
+    def _tentar_resolver_slug_no_banco(
+        self,
+        ctx: ContextoChamada,
+        chave: str,
+        classe_explicita: str | None,
+        exc: ErroResolucao,
+    ) -> tuple[AlvoResolvido, str | None] | Recusa | None:
+        if exc.recusa.codigo != "chave-ambigua" or classe_explicita is not None:
+            return None
+        try:
+            banco = self._moradas.obter("banco")
+        except ErroMorada:
+            return None
+        resolver_slug = getattr(banco, "resolver_slug", None)
+        if not callable(resolver_slug):
+            return None
+        base = chave.split("!", 1)[0] if "!" in chave else chave
+        try:
+            candidatos = resolver_slug(base, ctx.prazo_ms)
+        except ErroMorada:
+            return None
+        if len(candidatos) == 1:
+            _chave_db, classe_db = candidatos[0]
+            try:
+                return resolver_alvo(
+                    ctx.verbo, chave, classe_explicita=classe_db, vista=self._vista
+                )
+            except ErroResolucao as exc_res:
+                return exc_res.recusa
+        if len(candidatos) > 1:
+            chaves_txt = ", ".join(ch if ":" in ch else f"{cl}:{ch}" for ch, cl in candidatos)
+            prim_ch, prim_cl = candidatos[0]
+            primeira = prim_ch if ":" in prim_ch else f"{prim_cl}:{prim_ch}"
+            return Recusa(
+                saida=2,
+                codigo="chave-ambigua",
+                onde="chave",
+                recebido=base,
+                regra="slug-unico-no-fichario",
+                cura=f"«{base}» nomeia {len(candidatos)} fichas ({chaves_txt}); informe a classe",
+                proximo=f"{ctx.verbo} ler {primeira}",
+            )
+        return Recusa(
+            saida=1,
+            codigo="chave-inexistente",
+            onde="morada:banco",
+            recebido=chave,
+            regra="existencia-no-fichario",
+            cura=f"nenhuma ficha encontrada para {base!r} no fichário",
+            proximo=f"busca consultar {base}",
+        )
+
     def _executar_chave_unica(
         self,
         ctx: ContextoChamada,
@@ -323,7 +375,12 @@ class DaemonLeitor:
                 ctx.verbo, chave, classe_explicita=classe_explicita, vista=self._vista
             )
         except ErroResolucao as exc:
-            return exc.saida, {"chave": chave, "exit_code": exc.saida, "recusa": exc.recusa.campos()}, "", ""
+            resolvido = self._tentar_resolver_slug_no_banco(ctx, chave, classe_explicita, exc)
+            if resolvido is None:
+                return exc.saida, {"chave": chave, "exit_code": exc.saida, "recusa": exc.recusa.campos()}, "", ""
+            if isinstance(resolvido, Recusa):
+                return resolvido.saida, {"chave": chave, "exit_code": resolvido.saida, "recusa": resolvido.campos()}, "", ""
+            alvo, membro = resolvido
 
         seletor_ef = SeletorParte(
             **{**asdict(seletor), "membro": membro if membro is not None else seletor.membro}

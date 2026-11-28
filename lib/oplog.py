@@ -242,7 +242,7 @@ FONTES_TURNO = ("declarado", "gap", "runner", "hook", "transcript", "face")
 # a tela do dono: o texto e o fundamento do ato); as demais a porta deduz.
 FONTES_ENTREGUES = ("hook", "transcript", "face")
 FONTES_TOKENS = ("provedor", "estimado")
-ORIGENS = ("cadeira", "agente", "sonda")
+ORIGENS = ("cadeira", "agente", "sonda", "bot")
 # De onde a linha inteira saiu na `leitura_bruto`: do arquivo do dia, ou da amostra e da citada que a particao guarda.
 ORIGENS_LEITURA = ("bruto", "particao")
 IDENTIDADE = ("sujeito", "sub", "username", "azp", "sid", "jti")

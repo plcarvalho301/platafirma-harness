@@ -692,3 +692,162 @@ def test_dt1431_chave_canonica_tres_partes_aceita_na_borda_e_no_resolvedor() -> 
         with pytest.raises(ErroResolucao) as exc_info:
             resolver_alvo("busca", invalida)
         assert exc_info.value.recusa.codigo == "chave-mal-formada"
+
+
+def test_dt1459_busca_ler_alcanca_ficha_gravada_so_pelo_slug(tmp_path: Path) -> None:
+    """DT 1459: busca ler <slug>, <classe> <slug> e <classe>:<slug> alcançam ficha gravada só pelo slug."""
+    class _CurSlug:
+        def __init__(self) -> None:
+            self._rows: list[tuple[Any, ...]] = []
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *_a: object) -> None:
+            return None
+
+        def execute(self, sql: str, params: Any = None) -> None:
+            sql_up = sql.strip().upper()
+            ficha_seletivo = (
+                "u-sel",
+                "seletivo",
+                "postura",
+                "f-postura",
+                {"chave": "seletivo", "classe": "postura", "dados": {}},
+            )
+            if "C.SLUG || ':' || %S" in sql_up:
+                slug = params[0]
+                if slug == "seletivo":
+                    self._rows = [("seletivo", "postura")]
+                elif slug == "duplicado":
+                    self._rows = [("a:duplicado", "a"), ("b:duplicado", "b")]
+                else:
+                    self._rows = []
+            elif "AND C.SLUG = %S" in sql_up:
+                self._rows = [ficha_seletivo] if params == ("seletivo", "postura") else []
+            elif "WHERE F.CHAVE_HUMANA = %S" in sql_up:
+                self._rows = [ficha_seletivo] if params == ("seletivo",) else []
+            elif "MD5(" in sql_up:
+                cl = params[0]
+                if cl == "postura":
+                    self._rows = [("f-postura", "abc123", 1, 1)]
+                else:
+                    self._rows = [("0", "d41d8cd98f00b204e9800998ecf8427e", 0, 0)]
+            else:
+                self._rows = []
+
+        def fetchone(self) -> tuple[Any, ...] | None:
+            return self._rows[0] if self._rows else None
+
+        def fetchall(self) -> list[tuple[Any, ...]]:
+            return list(self._rows)
+
+    class _ConSlug:
+        def cursor(self) -> _CurSlug:
+            return _CurSlug()
+
+        def rollback(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    moradas = RegistroMoradas(
+        {
+            "git": AdaptadorGit(tmp_path),
+            "banco": AdaptadorBanco(fabrica_conexao=_ConSlug),
+        }
+    )
+    daemon = DaemonLeitor(moradas=moradas, vista=_vista_sete_moradas(), uids_autorizados=frozenset({os.getuid()}))
+    sock_path, srv, th = _subir_daemon_em_socket(daemon)
+    try:
+        cliente = ClienteLeitor(sock_path)
+        for chaves, classe_exp in (
+            (["seletivo"], None),
+            (["postura:seletivo"], None),
+            (["seletivo"], "postura"),
+        ):
+            r = cliente.ler(_ctx(), chaves, classe=classe_exp)
+            assert r["exit_code"] == 0, r
+            assert '"chave": "seletivo"' in r["resultado"]["conteudo"]
+
+        r_amb = cliente.ler(_ctx(), ["duplicado"])
+        assert r_amb["exit_code"] == 2
+        assert r_amb["recusa"]["codigo"] == "chave-ambigua"
+        assert "a:duplicado" in r_amb["recusa"]["cura"]
+        assert r_amb["recusa"]["proximo"] == "busca ler a:duplicado"
+
+        r_inex = cliente.ler(_ctx(), ["nao-existe-em-lugar-nenhum"])
+        assert r_inex["exit_code"] == 1
+        assert r_inex["recusa"]["proximo"] == "busca consultar nao-existe-em-lugar-nenhum"
+    finally:
+        daemon.parar()
+        srv.close()
+        th.join(timeout=2)
+
+
+def test_dt1460_proximos_acionaveis_em_git_classe_inexistente_e_flag_desconhecida(tmp_path: Path) -> None:
+    """DT 1460: morada:git sugere --classe, classe inexistente não alega universo fechado, flag lista aceitas."""
+    from leitura import borda as mod_borda
+
+    # 1. morada:git ausente -> proximo aponta busca consultar --classe <classe>
+    adapt_git = AdaptadorGit(tmp_path)
+    alvo_git = AlvoResolvido("verbo:tarefa", "verbo:tarefa", "verbo", "git", "referencias/instancias/verbo/tarefa.md", True, None)
+    with pytest.raises(ErroMorada) as exc_git:
+        adapt_git.ler_objeto(alvo_git, SeletorParte(), 5000)
+    assert exc_git.value.saida == 1
+    assert exc_git.value.recusa.proximo == "busca consultar --classe verbo"
+
+    # 2. classe inexistente no banco -> não alega universo fechado e sugere busca consultar <slug>
+    class _CurInex:
+        def __init__(self) -> None:
+            self._rows: list[tuple[Any, ...]] = []
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *_a: object) -> None:
+            return None
+
+        def execute(self, sql: str, _params: Any = None) -> None:
+            if "MD5(" in sql.upper():
+                self._rows = [("0", "d41d8cd98f00b204e9800998ecf8427e", 0, 0)]
+            else:
+                self._rows = []
+
+        def fetchone(self) -> tuple[Any, ...] | None:
+            return self._rows[0] if self._rows else None
+
+    class _ConInex:
+        def cursor(self) -> _CurInex:
+            return _CurInex()
+
+        def rollback(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    adapt_banco = AdaptadorBanco(fabrica_conexao=_ConInex)
+    alvo_inex = AlvoResolvido("xyzinexistente:lousa", "xyzinexistente:lousa", "xyzinexistente", "banco", "xyzinexistente:lousa", True, None)
+    with pytest.raises(ErroMorada) as exc_banco:
+        adapt_banco.ler_objeto(alvo_inex, SeletorParte(), 5000)
+    assert exc_banco.value.saida == 1
+    assert "universo fechado" not in exc_banco.value.recusa.cura
+    assert "não existe" in exc_banco.value.recusa.cura
+    assert exc_banco.value.recusa.proximo == "busca consultar lousa"
+
+    # 3. flag-desconhecida em ler e listar lista flags aceitas e traz proximo preenchido
+    with pytest.raises(mod_borda.ErroBorda) as exc_ler:
+        mod_borda.parsear_chamada_ler(["ler", "ato:ler", "--nao-existe"], {}, verbo="busca")
+    rec_ler = exc_ler.value.recusas[0]
+    assert rec_ler.codigo == "flag-desconhecida"
+    assert "--linhas" in rec_ler.cura
+    assert rec_ler.proximo == "busca ler <chave>"
+
+    with pytest.raises(mod_borda.ErroBorda) as exc_lis:
+        mod_borda.parsear_chamada_ler(["listar", "ato", "--nao-existe"], {}, verbo="busca")
+    rec_lis = exc_lis.value.recusas[0]
+    assert rec_lis.codigo == "flag-desconhecida"
+    assert "--limite" in rec_lis.cura
+    assert rec_lis.proximo == "busca listar <classe>"

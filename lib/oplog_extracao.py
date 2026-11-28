@@ -260,8 +260,12 @@ def _ts(reg: dict, dia: str, inv: Invalidos) -> datetime:
 
 def origem_do_evento(reg: dict) -> str:
     """A origem (cadeira, agente, sonda) que o evento leva: a que a porta gravou, ou a deduzida da identidade. É a
-    regra do extrator e a que `metrica --fonte bruto` usa, para as duas séries serem a mesma conta."""
+    regra do extrator e a que `metrica --fonte bruto` usa, para as duas séries serem a mesma conta.
+    Linhas roteadas pelo `bot` (origem='bot' no bruto) atravessam para a partição sob a origem
+    do disparador (`agente` com `origem_sessao`, `cadeira` no resto)."""
     origem = reg.get("origem")
+    if origem == "bot":
+        return "agente" if reg.get("origem_sessao") else "cadeira"
     return origem if origem in ORIGENS else oplog.origem_da_linha(reg)
 
 

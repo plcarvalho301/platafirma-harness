@@ -6,9 +6,11 @@ from .borda import (
     PedidoBordaDespachar,
     PedidoBordaLerExecucao,
     converter_chamada_despachar,
+    despachar_pela_borda,
     executar_ato,
     executar_despachar,
     executar_ler_execucao,
+    ler_execucao_pela_borda,
     verbo_declara_despachar,
 )
 from .cliente import (
@@ -29,10 +31,12 @@ __all__ = [
     "PedidoClienteDespacho",
     "RespostaClienteDespacho",
     "converter_chamada_despachar",
+    "despachar_pela_borda",
     "despachar_pelo_core",
     "executar_ato",
     "executar_despachar",
     "executar_ler_execucao",
     "ler_execucao",
+    "ler_execucao_pela_borda",
     "verbo_declara_despachar",
 ]

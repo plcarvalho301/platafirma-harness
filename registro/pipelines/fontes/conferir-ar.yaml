@@ -1,0 +1,35 @@
+pipeline: "conferir-ar"
+entra_por: "release"
+parametros:
+  - nome: "familia"
+    tipo: "texto"
+    obrigatorio: true
+tempo_maximo: 60
+cache_vereditos: "nenhum"
+instrucoes:
+  - id: "ler-estado-release"
+    verbo: "release"
+    ato: "estado"
+    substrato: "repositorio:{familia}"
+    args: ["{familia}"]
+    em_saida:
+      "0": "segue"
+      "1": "para"
+      "2": "para"
+      "3": "para"
+      "4": "para"
+      "5": "para"
+    volta: "nenhuma"
+  - id: "conferir-servicos"
+    verbo: "release"
+    ato: "conferir"
+    substrato: "repositorio:{familia}"
+    args: ["servico"]
+    em_saida:
+      "0": "segue"
+      "1": "segue"
+      "2": "para"
+      "3": "para"
+      "4": "para"
+      "5": "para"
+    volta: "nenhuma"

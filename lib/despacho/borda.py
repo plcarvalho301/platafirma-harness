@@ -102,24 +102,21 @@ def _caminho_porta_yaml_padrao(amb: AmbienteBordaDespachar) -> Path:
 
 
 def _extrair_atos_descricao(descricao: str) -> frozenset[str]:
-    m = _RE_ATOS_DESCRICAO.search(descricao)
-    if m is None:
+    corresp = _RE_ATOS_DESCRICAO.search(descricao)
+    if corresp is None:
         return frozenset()
-    sem_parenteses = _RE_PARENTESES.sub("", m.group(1))
-    atos: set[str] = set()
-    for bruto in re.split(r"[,·;]", sem_parenteses):
-        limpo = " ".join(bruto.split()).strip().rstrip(".")
-        if not limpo:
-            continue
-        atos.add(limpo)
-        atos.add(limpo.split(" ", 1)[0])
-    return frozenset(atos)
+    fatias = [
+        " ".join(pedaco.split()).strip().rstrip(".")
+        for pedaco in re.split(r"[,·;]", _RE_PARENTESES.sub("", corresp.group(1)))
+    ]
+    return frozenset({tok for item in fatias if item for tok in (item, item.split(" ", 1)[0])})
 
 
-def verbo_declara_despachar(verbo: str, porta_yaml: Path) -> bool:
+def verbo_declara_despachar(verbo: str, porta_yaml: Path | None = None) -> bool:
     """Retorna `True` se `verbo` existe em `porta.yaml` e declara o ato `despachar`."""
+    arq_yaml = porta_yaml if porta_yaml is not None else _caminho_porta_yaml_padrao(AmbienteBordaDespachar())
     try:
-        bruto = yaml.safe_load(porta_yaml.read_text(encoding="utf-8"))
+        bruto = yaml.safe_load(arq_yaml.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as exc:
         raise Recusa(
             SAIDA_DEPENDENCIA,
@@ -285,6 +282,66 @@ def _decodificar_parametros_stdin(verbo: str, stdin_texto: str | None) -> dict[s
     return dict(lido)
 
 
+def _coercao_valor_param(bruto: str) -> Any:
+    if bruto == "true":
+        return True
+    if bruto == "false":
+        return False
+    if re.fullmatch(r"-?[0-9]+", bruto):
+        return int(bruto)
+    return bruto
+
+
+def _converter_par_param(verbo: str, bruto: str) -> tuple[str, Any]:
+    if "=" not in bruto:
+        raise Recusa(
+            SAIDA_USO,
+            "flag-invalida",
+            onde=f"{verbo} despachar/--param",
+            recebido=bruto,
+            regra=REGRA_FORMA_DESPACHAR,
+            cura="use --param chave=valor",
+        )
+    chave, valor = bruto.split("=", 1)
+    chave_limpa = chave.strip()
+    if not chave_limpa:
+        raise Recusa(
+            SAIDA_USO,
+            "flag-invalida",
+            onde=f"{verbo} despachar/--param",
+            recebido=bruto,
+            regra=REGRA_FORMA_DESPACHAR,
+            cura="informe chave não vazia em --param chave=valor",
+        )
+    return chave_limpa, _coercao_valor_param(valor)
+
+
+def _consumir_flag_param(
+    verbo: str,
+    arg: str,
+    prox: str | None,
+    estado_flags: dict[str, Any],
+) -> bool | None:
+    if arg == "--param":
+        if prox is None:
+            raise Recusa(
+                SAIDA_USO,
+                "flag-invalida",
+                onde=f"{verbo} despachar/--param",
+                recebido=arg,
+                regra=REGRA_FORMA_DESPACHAR,
+                cura="use --param chave=valor",
+            )
+        ch_p, val_p = _converter_par_param(verbo, prox)
+        estado_flags["params_cli"][ch_p] = val_p
+        return True
+    if arg.startswith("--param="):
+        ch_p, val_p = _converter_par_param(verbo, arg.split("=", 1)[1])
+        estado_flags["params_cli"][ch_p] = val_p
+        return False
+    return None
+
+
 def _consumir_flag_despachar(
     verbo: str,
     arg: str,
@@ -294,6 +351,9 @@ def _consumir_flag_despachar(
     if arg == "--json":
         estado_flags["como_json"] = True
         return False
+    res_param = _consumir_flag_param(verbo, arg, prox, estado_flags)
+    if res_param is not None:
+        return res_param
     if arg == "--fan-out":
         if prox is None or prox.startswith("--"):
             raise Recusa(
@@ -330,7 +390,7 @@ def _consumir_flag_despachar(
         onde=f"{verbo} despachar",
         recebido=arg,
         regra=REGRA_FORMA_DESPACHAR,
-        cura="flags aceitas em despachar: --fan-out <n>, --pedido <id> e --json",
+        cura="flags aceitas em despachar: --fan-out <n>, --pedido <id>, --param <k=v> e --json",
         proximo=f"{verbo} despachar [<classe>] <chave> [--fan-out <n>] [--pedido <id>] [--json]",
     )
 
@@ -345,7 +405,12 @@ def converter_chamada_despachar(
     """Converte `argv` (após `despachar`) e `stdin` num `PedidoBordaDespachar` imutável."""
     verbo_limpo = verbo.strip().lower()
     posicionais: list[str] = []
-    estado_flags: dict[str, Any] = {"fan_out": 1, "pedido_id": "", "como_json": False}
+    estado_flags: dict[str, Any] = {
+        "fan_out": 1,
+        "pedido_id": "",
+        "como_json": False,
+        "params_cli": {},
+    }
     args = list(argv)
     idx = 0
     somente_posicionais = False
@@ -405,7 +470,8 @@ def converter_chamada_despachar(
             proximo=f"{verbo_limpo} despachar pipeline <slug>",
         )
 
-    parametros = _decodificar_parametros_stdin(verbo_limpo, stdin_texto)
+    parametros_stdin = _decodificar_parametros_stdin(verbo_limpo, stdin_texto)
+    parametros = {**estado_flags["params_cli"], **parametros_stdin}
     return PedidoBordaDespachar(
         verbo=verbo_limpo,
         alvo_classe=alvo_classe,
@@ -636,6 +702,61 @@ def executar_ler_execucao(
         out.write(_formatar_texto_execucao(dados))
     out.flush()
     return SAIDA_OK
+
+
+def despachar_pela_borda(
+    verbo: str,
+    argv: Sequence[str],
+    **opcoes: Any,
+) -> RespostaClienteDespacho:
+    """Valida a declaração de `despachar` no registro e despacha o alvo ao core."""
+    porta_yaml: Path | None = opcoes.get("porta_yaml")
+    config_cliente: ConfigClienteDespacho | None = opcoes.get("config_cliente")
+    ident_raw: Mapping[str, Any] = dict(opcoes.get("ident") or {})
+    parametros_extra: Mapping[str, Any] = dict(opcoes.get("parametros_extra") or {})
+    amb = AmbienteBordaDespachar(
+        porta_yaml=porta_yaml,
+        config_cliente=config_cliente,
+        ident=ident_raw,
+    )
+    arq_yaml = _caminho_porta_yaml_padrao(amb)
+    verbo_limpo = _exigir_verbo_com_despachar(verbo, arq_yaml, ato_chamado="despachar")
+    prazo_s = _resolver_prazo_espera(verbo_limpo, amb)
+    pedido = converter_chamada_despachar(verbo_limpo, argv, prazo_espera_s=prazo_s)
+    parametros = {**pedido.parametros, **parametros_extra}
+    return despachar_pelo_core(
+        PedidoClienteDespacho(
+            verbo_entrada=pedido.verbo,
+            alvo_classe=pedido.alvo_classe,
+            alvo_chave=pedido.alvo_chave,
+            parametros=parametros,
+            ident=ident_raw,
+            pedido_id=pedido.pedido_id,
+            fan_out=pedido.fan_out,
+            prazo_espera_s=pedido.prazo_espera_s,
+        ),
+        config=config_cliente,
+    )
+
+
+def ler_execucao_pela_borda(
+    verbo: str,
+    chave_execucao: str,
+    *,
+    sujeito: str,
+    porta_yaml: Path | None = None,
+    diretorio_oplog: Path | None = None,
+) -> dict[str, Any]:
+    """Valida que `verbo` declara `despachar` e lê o evento `execucao` da chave."""
+    amb = AmbienteBordaDespachar(porta_yaml=porta_yaml, diretorio_oplog=diretorio_oplog)
+    arq_yaml = _caminho_porta_yaml_padrao(amb)
+    verbo_limpo = _exigir_verbo_com_despachar(verbo, arq_yaml, ato_chamado="ler execucao")
+    return ler_execucao(
+        verbo_limpo,
+        chave_execucao,
+        sujeito=sujeito,
+        diretorio_oplog=diretorio_oplog,
+    )
 
 
 def executar_ato(

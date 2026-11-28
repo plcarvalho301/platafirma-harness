@@ -788,3 +788,13 @@ def test_provedor_raio_incidente_em_mitigacao_com_heading_sem_dois_pontos() -> N
 
     provedor = mod_portao.criar_provedor_raio("http://r/api", cliente_http=_http)
     assert provedor("4482") == frozenset({("platafirma-harness", "lib/escrita/portao.py")})
+
+
+def test_dt1467_caminho_no_raio_aceita_diretorio_sem_barra_final() -> None:
+    """DT 1467: Raio com diretório sem '/' final (ex.: lib/leitura) cobre arquivos sob ele sem casar irmão."""
+    raio = frozenset({("platafirma-harness", "lib/leitura")})
+    assert mod_portao._caminho_no_raio("platafirma-harness", "lib/leitura", raio) is True
+    assert mod_portao._caminho_no_raio("platafirma-harness", "lib/leitura/borda.py", raio) is True
+    assert mod_portao._caminho_no_raio("platafirma-harness", "lib/leitura/moradas/git.py", raio) is True
+    assert mod_portao._caminho_no_raio("platafirma-harness", "lib/leitura2/borda.py", raio) is False
+    assert mod_portao._caminho_no_raio("outro-repo", "lib/leitura/borda.py", raio) is False
