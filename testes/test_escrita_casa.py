@@ -180,10 +180,31 @@ def test_escrita_e_ensaio_seis_capacidades_aceitos(
 
 
 @pytest.mark.parametrize("verbo", ["casa", "ontologia"])
+def test_escrita_e_ensaio_ficha_componente_na_olaria_mantendo_repo_git(
+    tmp_path: Path, verbo: str
+) -> None:
+    vista_e = carregar_vista_escrita()
+    spec_casa = vista_e.spec_para(verbo, "componente")
+    spec_repo = vista_e.spec_para("repo", "componente")
+    assert spec_casa is not None and spec_casa.morada == "banco"
+    assert spec_repo is not None and spec_repo.morada == "git"
+
+    amb = _subir_ambiente(tmp_path / f"comp_{verbo}")
+    try:
+        res_criar = amb.chamar(verbo, ["criar", "componente", "componente:poda"])
+        assert res_criar.versao == UUID7_VALIDO
+        res_ensaiar = amb.chamar(verbo, ["ensaiar", "trocar", "componente", "componente:poda", UUID7_VALIDO])
+        assert res_ensaiar.forma == "ensaiar"
+        assert res_ensaiar.alterou is False
+        assert len(amb.chamadas) == 2
+    finally:
+        amb.fechar()
+
+
+@pytest.mark.parametrize("verbo", ["casa", "ontologia"])
 @pytest.mark.parametrize(
     ("classe", "chave", "verbo_dono"),
     [
-        ("componente", "platafirma-harness@4470:README.md", "repo"),
         ("card", "card:4470", "tarefas"),
         ("story", "story:4470", "tarefas"),
     ],
@@ -338,8 +359,8 @@ def test_lote_yaml_segredo_recusado_pelo_despachante(
     [
         _CasoLoteFora(
             ["ensaiar", "criar", "-"],
-            "fichas:\n- classe: componente\n  chave: componente:sonda-homologacao-4470\n",
-            "repo ",
+            "fichas:\n- classe: card\n  chave: card:sonda-homologacao-4470\n",
+            "tarefas ",
         ),
         _CasoLoteFora(
             ["ensaiar", "criar", "-"],
@@ -348,8 +369,8 @@ def test_lote_yaml_segredo_recusado_pelo_despachante(
         ),
         _CasoLoteFora(
             ["criar", "-"],
-            "fichas:\n- classe: componente\n  chave: componente:sonda-homologacao-4470\n",
-            "repo ",
+            "fichas:\n- classe: card\n  chave: card:sonda-homologacao-4470\n",
+            "tarefas ",
         ),
         _CasoLoteFora(
             ["trocar", "-"],
@@ -412,19 +433,19 @@ def test_lote_yaml_misto_e_autorizacao_pelo_despachante(
         assert json.loads(s_seg.stderr.strip().splitlines()[-1])["erro"]["codigo"] == "segredo-recusado"
         assert amb.chamadas == []
 
-        yaml_misto_comp = (
+        yaml_misto_fora = (
             "fichas:\n"
             "- classe: missao\n"
             "  chave: missao:valida-4470\n"
-            "- classe: componente\n"
-            "  chave: componente:sonda-4470\n"
+            "- classe: story\n"
+            "  chave: story:sonda-4470\n"
         )
-        monkeypatch.setattr(sys, "stdin", io.StringIO(yaml_misto_comp))
-        s_comp = olaria_main.executar(["ensaiar", "criar", "-"], env=env, prog="casa")
-        assert s_comp.codigo == 1
-        erro_comp = json.loads(s_comp.stderr.strip().splitlines()[-1])["erro"]
-        assert erro_comp["codigo"] == "classe-fora-do-verbo"
-        assert erro_comp["proximo"].startswith("repo ")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(yaml_misto_fora))
+        s_fora = olaria_main.executar(["ensaiar", "criar", "-"], env=env, prog="casa")
+        assert s_fora.codigo == 1
+        erro_fora = json.loads(s_fora.stderr.strip().splitlines()[-1])["erro"]
+        assert erro_fora["codigo"] == "classe-fora-do-verbo"
+        assert erro_fora["proximo"].startswith("tarefas ")
         assert amb.chamadas == []
 
         yaml_valido = "fichas:\n- classe: missao\n  chave: missao:valida-4470\n"

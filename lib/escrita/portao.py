@@ -107,6 +107,11 @@ class VistaAlcance:
 
     verbos: Mapping[str, SpecVerbo]
     classes: Mapping[str, SpecClasse]
+    specs_por_verbo: Mapping[tuple[str, str], SpecClasse] = field(default_factory=dict)
+
+    def spec_para(self, verbo: str, classe: str) -> SpecClasse | None:
+        """Retorna a especificação da classe para o verbo informado, ou a padrão da classe."""
+        return self.specs_por_verbo.get((verbo, classe)) or self.classes.get(classe)
 
     def verbo_dono(self, classe: str) -> str:
         """Retorna o verbo dono da classe ou string vazia se desconhecida."""
@@ -218,7 +223,7 @@ def _ler_espelho_vista_alcance(caminho_vista_yaml: Path | None) -> dict[str, obj
 
 def _carregar_specs_casa(
     casa: dict[str, object],
-) -> tuple[dict[str, SpecClasse], dict[str, SpecVerbo]]:
+) -> tuple[dict[str, SpecClasse], dict[str, SpecVerbo], dict[tuple[str, str], SpecClasse]]:
     verbo_dono = str(casa.get("verbo_dono") or "").strip()
     regime_casa = str(casa.get("regime") or "").strip()
     morada_casa = str(casa.get("morada") or "").strip()
@@ -256,17 +261,24 @@ def _carregar_specs_casa(
         for cls in sorted(classes_casa)
     }
     alcance = frozenset(classes_casa)
+    nomes_casa = (verbo_dono, *variantes)
     verbos_escrita = {
         nome: SpecVerbo(verbo=nome, aceita_escrever=True, classes=alcance)
-        for nome in (verbo_dono, *variantes)
+        for nome in nomes_casa
     }
-    return classes, verbos_escrita
+    specs_por_verbo = {
+        (nome, cls): spec
+        for nome in nomes_casa
+        for cls, spec in classes.items()
+    }
+    return classes, verbos_escrita, specs_por_verbo
 
 
 def _carregar_specs_outros_verbos(
     outros: dict[str, object],
     classes: dict[str, SpecClasse],
     verbos_escrita: dict[str, SpecVerbo],
+    specs_por_verbo: dict[tuple[str, str], SpecClasse],
 ) -> None:
     for nome_verbo, spec in outros.items():
         if not isinstance(spec, dict):
@@ -286,13 +298,16 @@ def _carregar_specs_outros_verbos(
         )
         cls_verbo = _lista_slugs_vista(spec.get("classes"), f"outros_verbos.{nome_verbo}.classes")
         for cls in cls_verbo:
-            classes[cls] = SpecClasse(
+            spec_cls = SpecClasse(
                 classe=cls,
                 regime=regime,
                 morada=morada,
                 verbo_dono=str(nome_verbo),
                 formas_suportadas=formas,
             )
+            specs_por_verbo[(str(nome_verbo), cls)] = spec_cls
+            if cls not in classes:
+                classes[cls] = spec_cls
         if bool(spec.get("aceita_escrever", False)):
             verbos_escrita[str(nome_verbo)] = SpecVerbo(
                 verbo=str(nome_verbo),
@@ -303,7 +318,7 @@ def _carregar_specs_outros_verbos(
 
 def _carregar_specs_da_vista(
     caminho_vista_yaml: Path | None,
-) -> tuple[dict[str, SpecClasse], dict[str, SpecVerbo]]:
+) -> tuple[dict[str, SpecClasse], dict[str, SpecVerbo], dict[tuple[str, str], SpecClasse]]:
     dados = _ler_espelho_vista_alcance(caminho_vista_yaml)
     casa = dados.get("casa")
     outros = dados.get("outros_verbos")
@@ -311,9 +326,9 @@ def _carregar_specs_da_vista(
         raise _erro_vista_alcance(
             "vista-alcance", "chaves ausentes", "declare as seções casa e outros_verbos"
         )
-    classes, verbos_escrita = _carregar_specs_casa(casa)
-    _carregar_specs_outros_verbos(outros, classes, verbos_escrita)
-    return classes, verbos_escrita
+    classes, verbos_escrita, specs_por_verbo = _carregar_specs_casa(casa)
+    _carregar_specs_outros_verbos(outros, classes, verbos_escrita, specs_por_verbo)
+    return classes, verbos_escrita, specs_por_verbo
 
 
 def _nomes_verbos_porta(caminho_porta_yaml: Path | None) -> list[str]:
@@ -332,13 +347,13 @@ def carregar_vista_alcance(
     caminho_vista_yaml: Path | None = None,
 ) -> VistaAlcance:
     """Monta a vista de alcance a partir do espelho estático da release e da porta."""
-    classes, verbos_escrita = _carregar_specs_da_vista(caminho_vista_yaml)
+    classes, verbos_escrita, specs_por_verbo = _carregar_specs_da_vista(caminho_vista_yaml)
     verbos: dict[str, SpecVerbo] = {
         nome: SpecVerbo(verbo=nome, aceita_escrever=False)
         for nome in _nomes_verbos_porta(caminho_porta_yaml)
     }
     verbos.update(verbos_escrita)
-    return VistaAlcance(verbos=verbos, classes=classes)
+    return VistaAlcance(verbos=verbos, classes=classes, specs_por_verbo=specs_por_verbo)
 
 
 def _erro_acesso(onde: str, recebido: str, regra: str, cura: str) -> RecusaEscrita:
@@ -468,7 +483,7 @@ def _verificar_verbo_e_classe(
                 proximo=proximo,
             )
         )
-    spec_classe = vista.classes.get(classe)
+    spec_classe = vista.spec_para(pedido.verbo, classe)
     if spec_classe is None:
         raise RecusaEscrita(
             ErroEscrita(
@@ -677,7 +692,8 @@ def _caminho_no_raio(
 def _verificar_protecoes_alvo(
     pedido: PedidoEscrita, spec: SpecClasse, auth: ContextoAutorizacao
 ) -> None:
-    if pedido.permitir_vazio and spec.classe != "componente":
+    eh_arquivo_bancada = spec.classe == "componente" and spec.morada == "git"
+    if pedido.permitir_vazio and not eh_arquivo_bancada:
         raise RecusaEscrita(
             ErroEscrita(
                 saida=2,
@@ -689,7 +705,7 @@ def _verificar_protecoes_alvo(
                 proximo="",
             )
         )
-    if spec.classe != "componente":
+    if not eh_arquivo_bancada:
         if eh_superficie_vedada(auth.politica, pedido.chave):
             raise RecusaEscrita(
                 ErroEscrita(
@@ -844,7 +860,7 @@ def _verbo_eh_morada_banco(spec_verbo: SpecVerbo | None, vista: VistaAlcance) ->
     if spec_verbo is None or not spec_verbo.classes:
         return False
     return all(
-        (spec := vista.classes.get(cls)) is not None and spec.morada == "banco"
+        (spec := vista.spec_para(spec_verbo.verbo, cls)) is not None and spec.morada == "banco"
         for cls in spec_verbo.classes
     )
 

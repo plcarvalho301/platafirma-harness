@@ -156,7 +156,7 @@ def resolver_alvo(
     raiz_bancadas: Path | None = None,
 ) -> AlvoResolvido:
     """Resolve a chave contra a vista de alcance depois de aprovada pelo portão."""
-    spec = vista.classes.get(decisao.classe)
+    spec = vista.spec_para(decisao.verbo, decisao.classe)
     if spec is None:
         raise RecusaEscrita(
             ErroEscrita(
@@ -196,7 +196,7 @@ def versoes_casam(informada: str, atual: str, *, morada: str) -> bool:
 
 
 def _proximo_ler(verbo: str, alvo: AlvoEscrita) -> str:
-    if alvo.classe == "componente":
+    if alvo.morada == "git" and alvo.classe == "componente":
         return f"{verbo} ler {alvo.chave}"
     return f"busca ler {alvo.chave}"
 

@@ -35,6 +35,7 @@ casa:
       - processo
     arquitetura:
       - capacidade
+      - componente
       - contrato
       - figura
       - habilidade

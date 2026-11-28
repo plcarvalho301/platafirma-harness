@@ -34,7 +34,7 @@ SQL_LER_FICHA = """
 SELECT f.uuid::text AS uuid,
        f.chave_humana AS chave,
        c.slug AS classe,
-       coalesce(c.fornada::text, '0') AS versao,
+       coalesce(s.fornada::text, dc.fornada::text, c.fornada::text, '0') AS versao,
        jsonb_build_object(
            'chave', f.chave_humana,
            'classe', c.slug,
@@ -48,11 +48,14 @@ SELECT f.uuid::text AS uuid,
                          JOIN casa.propriedade p ON p.id = r.propriedade
                         WHERE d.ficha = f.uuid AND d.terminou IS NULL
                         GROUP BY p.slug) x), '{}'::jsonb),
-           'declaracao', (SELECT jsonb_strip_nulls(to_jsonb(s) - 'uuid' - 'fornada')
-                            FROM casa.shape s WHERE s.uuid = f.uuid)
+           'declaracao', CASE WHEN s.uuid IS NOT NULL
+                              THEN jsonb_strip_nulls(to_jsonb(s) - 'uuid' - 'fornada')
+                              ELSE NULL END
        ) AS corpo
   FROM casa.ficha f
   JOIN casa.shape c ON c.uuid = f.classe
+  LEFT JOIN casa.shape s ON s.uuid = f.uuid
+  LEFT JOIN casa.dicionario dc ON dc.uuid = f.uuid
  WHERE f.chave_humana = %s
 """
 

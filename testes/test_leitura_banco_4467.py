@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from leitura.moradas.banco import (
     SQL_DIGEST_CLASSE,
+    SQL_LER_FICHA,
     SQL_LISTAR_CHAVE_CORTE,
     _mapear_erro_banco,
 )
@@ -47,3 +48,10 @@ def test_sql_listar_chave_corte_nao_consulta_coluna_inexistente_em_nome_da_ficha
     assert "sh.rotulo" in SQL_LISTAR_CHAVE_CORTE
     assert "dc.rotulo" in SQL_LISTAR_CHAVE_CORTE
     assert "casa.dado" in SQL_LISTAR_CHAVE_CORTE
+
+
+def test_sql_ler_ficha_devolve_fornada_do_proprio_shape_ou_dicionario() -> None:
+    """DT 1429: busca ler shape:<classe> deve devolver s.fornada, não c.fornada da metaclasse."""
+    assert "coalesce(s.fornada::text, dc.fornada::text, c.fornada::text, '0') AS versao" in SQL_LER_FICHA
+    assert "LEFT JOIN casa.shape s ON s.uuid = f.uuid" in SQL_LER_FICHA
+    assert "LEFT JOIN casa.dicionario dc ON dc.uuid = f.uuid" in SQL_LER_FICHA
