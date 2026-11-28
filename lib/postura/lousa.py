@@ -301,7 +301,7 @@ class Lousa:
     def _obter_senha(self) -> str:
         if self._senha is not None:
             return self._senha
-        from memoria_de_trabalho import SenhaIndisponivel, ler_senha_msg_mem  # noqa: PLC0415
+        from pegar_chave_do_armario import SenhaIndisponivel, ler_senha_msg_mem  # noqa: PLC0415
 
         try:
             return ler_senha_msg_mem(self._instancia_dir)
