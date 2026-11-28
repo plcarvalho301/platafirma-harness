@@ -55,6 +55,7 @@ tests/test_oplog_contrato.py | lib/oplog.py mcp/** sessao/**
 tests/test_metrica_fonte.py | bin/metrica bin/_metrica/** lib/oplog.py lib/oplog_extracao.py
 tests/test_portao_cobre_testes.py | testes/**
 testes/test_release_uv_porta_suite.py | bin/release lib/venv.sh testes/test_release_uv_porta.sh
+testes/test_release_dt1199_dt1200.py | bin/release
 tests/test_acervo_exposicao_portao.py | bin/acervo bin/_acervo/curar bin/curar bin/ingerir
 tests/test_contrato_repo_pr_merge.py | bin/repo
 tests/test_repo_regressoes_lote_f.py | bin/repo bin/release
