@@ -2986,7 +2986,7 @@ cmd_despachar() {
   local py="$PLATAFIRMA_RELEASE/venv/harness/bin/python"
   [ -x "$py" ] || py="python3"
   PF_HARNESS_DIR="${PF_HARNESS_DIR:-$AQUI/..}" \
-  PYTHONPATH="$AQUI/../lib${PYTHONPATH:+:$PYTHONPATH}" \
+  PYTHONPATH="$AQUI/../lib" \
     "$py" -m despacho.borda release despachar "$@"
 }
 
@@ -2995,7 +2995,7 @@ cmd_ler_ou_execucao() {
     local py="$PLATAFIRMA_RELEASE/venv/harness/bin/python"
     [ -x "$py" ] || py="python3"
     PF_HARNESS_DIR="${PF_HARNESS_DIR:-$AQUI/..}" \
-    PYTHONPATH="$AQUI/../lib${PYTHONPATH:+:$PYTHONPATH}" \
+    PYTHONPATH="$AQUI/../lib" \
       "$py" -m despacho.borda release ler "$@"
     return $?
   fi
