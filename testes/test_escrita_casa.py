@@ -448,3 +448,32 @@ def test_lote_yaml_misto_e_autorizacao_pelo_despachante(
         assert amb_neg.chamadas == []
     finally:
         amb_neg.fechar()
+
+
+@pytest.mark.parametrize(
+    "classe",
+    ["levantamento", "benchmark", "fichamento", "incerteza", "medicao", "parecer", "resenha"],
+)
+@pytest.mark.parametrize("prog", ["casa", "ontologia"])
+def test_casa_alcanca_levantamento_e_filhas_de_observacao(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prog: str, classe: str
+) -> None:
+    """DT 1445: levantamento (capacidade:dados) e demais filhas de observacao são alcançadas por casa/ontologia."""
+    import io
+
+    amb = _subir_ambiente(tmp_path / f"obs_{prog}_{classe}")
+    env = {
+        "PF_ESCRITA_CONFIG": str(RAIZ / "registro" / "escrita.yaml"),
+        "PF_ESCRITOR_SOCKET": str(amb.sock),
+        "PF_CADEIRA": "engenharia",
+        "PF_SUJEITO": "engenharia",
+        "PF_SESSAO": "sessao-dt1445",
+    }
+    conteudo = f"fichas:\n- classe: {classe}\n  chave: {classe}:2026-11-28-teste\n"
+    monkeypatch.setattr(sys, "stdin", io.StringIO(conteudo))
+    try:
+        saida = olaria_main.executar(["ensaiar", "criar", "-"], env=env, prog=prog)
+        assert saida.codigo == 0, saida.stderr
+        assert len(amb.chamadas) == 1
+    finally:
+        amb.fechar()

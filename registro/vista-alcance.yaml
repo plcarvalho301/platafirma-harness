@@ -51,6 +51,14 @@ casa:
       - conceito
     inteligencia:
       - fenomeno
+    dados:
+      - benchmark
+      - fichamento
+      - incerteza
+      - levantamento
+      - medicao
+      - parecer
+      - resenha
   classes_legadas_escrita:
     - ato
     - chapeu
