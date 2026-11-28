@@ -669,3 +669,26 @@ def test_mutacao_guardas_seguranca_e_memoria_zero_sobreviventes(
     assert mod_formatos.RAZAO_COMPRESSAO_MAX == 100.0
     assert mod_formatos.CELULAS_XLSX_MAX == 200_000
     assert mod_nucleo.CACHE_EXTRA_BYTES_MAX == 32 * 1024 * 1024
+
+
+def test_dt1431_chave_canonica_tres_partes_aceita_na_borda_e_no_resolvedor() -> None:
+    """DTs 1431 e 1441: busca ler aceita chaves compostas como motor:harness:suite-de-testes."""
+    from leitura import borda as mod_borda
+
+    for chave in ("motor:harness:suite-de-testes", "servico:harness:lint"):
+        base, membro, recusa = mod_borda.validar_chave(chave, verbo="busca")
+        assert recusa is None, recusa
+        assert base == chave
+        assert membro is None
+
+        alvo, mem = resolver_alvo("busca", chave)
+        assert alvo.chave_canonica == chave
+        assert alvo.classe == chave.split(":", 1)[0]
+        assert mem is None
+
+    for invalida in ("motor::poda", "motor:harness:"):
+        _, _, recusa = mod_borda.validar_chave(invalida, verbo="busca")
+        assert recusa is not None and recusa.codigo == "chave-mal-formada"
+        with pytest.raises(ErroResolucao) as exc_info:
+            resolver_alvo("busca", invalida)
+        assert exc_info.value.recusa.codigo == "chave-mal-formada"

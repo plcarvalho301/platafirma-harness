@@ -37,7 +37,9 @@ FORMAS_VALIDAS = frozenset({"ler", "listar"})
 VERSAO_CURSOR = "v1"
 _PARTES_TOKEN_CURSOR = 3
 
-_RE_CHAVE_CANONICA = re.compile(r"^[a-z0-9][a-z0-9-]*:[a-z0-9][a-z0-9._/-]*$")
+_RE_CHAVE_CANONICA = re.compile(
+    r"^[a-z0-9][a-z0-9-]*:[a-z0-9][a-z0-9._/-]*(?::[a-z0-9][a-z0-9._/-]*)*$"
+)
 _RE_SO_CLASSE = re.compile(r"^[a-z0-9][a-z0-9-]*:?$")
 _RE_SLUG_CURTO = re.compile(r"^[a-z0-9][a-z0-9._/-]*$")
 _RE_DRIVE_WIN = re.compile(r"^[A-Za-z]:[\\/]")

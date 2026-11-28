@@ -237,7 +237,9 @@ def ficha_inteira(retrato: Consulta, f: Ficha, *, com_ligacoes: bool = True) -> 
 
 # ================================================================== estágios 3 e 4
 
-_RE_CHAVE_CAN = re.compile(r"^[a-z0-9][a-z0-9-]*:[a-z0-9][a-z0-9._/-]*$")
+_RE_CHAVE_CAN = re.compile(
+    r"^[a-z0-9][a-z0-9-]*:[a-z0-9][a-z0-9._/-]*(?::[a-z0-9][a-z0-9._/-]*)*$"
+)
 _RE_SLUG_VALIDO = re.compile(r"^[a-z0-9][a-z0-9._/-]*$")
 _RE_CLASSE_VALIDA = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _RE_DRIVE_WIN = re.compile(r"^[A-Za-z]:[\\/]")
