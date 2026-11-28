@@ -179,3 +179,41 @@ def test_comentarios_arvore_e_insumo_listar_paginam() -> None:
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_dt1457_dt1458_comentarios_indice_arvore_e_busca_sem_achado() -> None:
+    """Regressão dos DTs 1457 e 1458: --indice, --arvore --indice e --busca sem achado sem SyntaxError."""
+    comentarios = [
+        {
+            "id": 10,
+            "autor": "engenharia",
+            "carimbo": "2026-11-28T10:10:00Z",
+            "tipo": "parecer",
+            "corpo": "<p>Primeiro parecer técnico</p>",
+        },
+        {
+            "id": 11,
+            "autor": "produto",
+            "carimbo": "2026-11-28T10:11:00Z",
+            "tipo": None,
+            "corpo": "Nota sem tipo",
+        },
+    ]
+    srv, env = _subir_rastreador_duble(comentarios, [], filhas=[{"id": 101}])
+    try:
+        r_idx = _rodar(env, "comentarios", "100", "--indice")
+        assert r_idx.returncode == 0, r_idx.stderr
+        assert "#10 · parecer · engenharia" in r_idx.stdout
+        assert "#11 · produto" in r_idx.stdout
+
+        r_arv_idx = _rodar(env, "comentarios", "100", "--arvore", "--indice")
+        assert r_arv_idx.returncode == 0, r_arv_idx.stderr
+        assert "#10 · parecer · engenharia" in r_arv_idx.stdout
+        assert "#900 · parecer · engenharia" in r_arv_idx.stdout
+
+        r_busca_vazia = _rodar(env, "comentarios", "100", "--busca", "termo-inexistente-xyz")
+        assert r_busca_vazia.returncode == 0, r_busca_vazia.stderr
+        assert '(nenhum comentário encontrado para "termo-inexistente-xyz")' in r_busca_vazia.stdout
+    finally:
+        srv.shutdown()
+        srv.server_close()
