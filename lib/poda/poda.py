@@ -18,10 +18,12 @@ import os
 import re
 import tempfile
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-CAP_PADRAO = 200 * 1024
+CAP_PADRAO = 64 * 1024
+DIVISOR_TOKENS_TRILHA = 4
 LINHA_LONGA_LIMITE = 2_000
 REPETICAO_MIN = 4
 LEDGER_DISTANCIA_MAX = 15
@@ -337,12 +339,168 @@ def _sufixo_utf8(bruto: bytes, limite: int) -> bytes:
     return fatia[i:]
 
 
+@dataclass(frozen=True)
+class OpcoesAvisoCorte:
+    """Opções de forma e perfil para montar o aviso de corte da poda."""
+
+    forma: str = "listagem"
+    constitutiva: bool = False
+    tem_filtro: bool = True
+    recomeca_do_zero: bool = False
+    linhas_total_origem: int | None = None
+
+
+@dataclass(frozen=True)
+class DadosAvisoCorte:
+    """Insumos numéricos e de perfil para formatar o aviso de corte."""
+
+    alca: str | None
+    bytes_total: int
+    faltam_bytes: int
+    forma: str = "listagem"
+    constitutiva: bool = False
+    tem_filtro: bool = True
+    linhas_fora: int | None = None
+    offset_proximo: int | None = None
+    recomeca_do_zero: bool = False
+
+
+def _tem_sessao_aberta(sessao_id: str | None) -> bool:
+    if not sessao_id:
+        return False
+    limpo = sessao_id.strip()
+    return bool(limpo) and limpo != "-"
+
+
+def _contar_linhas_texto(texto: str) -> int:
+    if not texto:
+        return 0
+    return texto.count("\n") + (0 if texto.endswith("\n") else 1)
+
+
 def _chamada_continuacao(alca: str | None, *, offset_continuacao: int | None = None) -> str | None:
     if not alca:
         return None
     if offset_continuacao is not None and offset_continuacao > 0:
         return f'ler_arquivo(caminho="{alca}", offset={offset_continuacao})'
     return f'ler_arquivo(caminho="{alca}")'
+
+
+def _enumerar_passos_busca(
+    *,
+    tem_filtro: bool,
+    chamada_termo: str,
+    chamada_linhas: str,
+    chamada_pag: str,
+) -> str:
+    passos: list[str] = []
+    if tem_filtro:
+        passos.append("refaça a chamada mais estreita com filtro")
+    passos.append(f"recorte com {chamada_termo} ou {chamada_linhas}")
+    passos.append(f"próxima página com {chamada_pag}")
+    return "; ".join(f"({idx}) {p}" for idx, p in enumerate(passos, start=1))
+
+
+def formatar_aviso_corte(dados: DadosAvisoCorte) -> str:
+    """Formata o aviso de corte com os campos e a ordem de passos da porta."""
+    faltam = max(0, int(dados.faltam_bytes))
+    total = max(faltam, int(dados.bytes_total))
+    tokens_est = max(1, faltam // DIVISOR_TOKENS_TRILHA) if faltam > 0 else 0
+    trecho_linhas = (
+        f"; {max(0, int(dados.linhas_fora))} linhas fora"
+        if dados.forma == "listagem" and dados.linhas_fora is not None
+        else ""
+    )
+
+    if not dados.alca:
+        rotulo_sem = "leitura incompleta" if (dados.constitutiva and dados.forma != "json") else "corte no teto"
+        return (
+            f"[{rotulo_sem}: {total} bytes no total; faltam {faltam} bytes "
+            f"(~{tokens_est} tokens){trecho_linhas}. "
+            "O retorno inteiro pede sessão aberta (monta_sessao).]"
+        )
+
+    nota_zero = (
+        " A lavagem alterou o texto servido; a leitura pela alça começa do zero."
+        if dados.recomeca_do_zero
+        else ""
+    )
+    offset_ef = None if dados.recomeca_do_zero else dados.offset_proximo
+    chamada_pag = _chamada_continuacao(dados.alca, offset_continuacao=offset_ef) or f'ler_arquivo(caminho="{dados.alca}")'
+    chamada_linhas = f'ler_arquivo(caminho="{dados.alca}", linhas="1-100")'
+    chamada_termo = f'ler_arquivo(caminho="{dados.alca}", termo="…")'
+
+    if dados.forma == "json":
+        passos_j = _enumerar_passos_busca(
+            tem_filtro=dados.tem_filtro,
+            chamada_termo=chamada_termo,
+            chamada_linhas=chamada_linhas,
+            chamada_pag=chamada_pag,
+        )
+        return (
+            f"[corte no teto: {total} bytes no total; faltam {faltam} bytes "
+            f"(~{tokens_est} tokens); esta página é fragmento de JSON.{nota_zero} "
+            f"Passos: {passos_j}]"
+        )
+
+    if dados.constitutiva:
+        return (
+            f"[leitura incompleta: {total} bytes no total; faltam {faltam} bytes "
+            f"(~{tokens_est} tokens){trecho_linhas}.{nota_zero} "
+            f"Passos: (1) próxima página com {chamada_pag}; "
+            f"(2) pedaço por linhas com {chamada_linhas} ou por termo com {chamada_termo}]"
+        )
+
+    passos_g = _enumerar_passos_busca(
+        tem_filtro=dados.tem_filtro,
+        chamada_termo=chamada_termo,
+        chamada_linhas=chamada_linhas,
+        chamada_pag=chamada_pag,
+    )
+    return (
+        f"[corte no teto: {total} bytes no total; faltam {faltam} bytes "
+        f"(~{tokens_est} tokens){trecho_linhas}.{nota_zero} "
+        f"Passos: {passos_g}]"
+    )
+
+
+def _recortar_fatias(bruto: bytes, disponivel: int, *, cauda: bool) -> tuple[bytes, bytes]:
+    if not cauda:
+        return _prefixo_utf8(bruto, disponivel), b""
+    inicio_lim = disponivel // 3
+    fim_lim = disponivel - inicio_lim
+    return _prefixo_utf8(bruto, inicio_lim), _sufixo_utf8(bruto, fim_lim)
+
+
+def _montar_dados_corte(
+    alca: str | None,
+    totais: tuple[int, int],
+    fatias: tuple[bytes, bytes],
+    *,
+    usa_offset: bool,
+    opc: OpcoesAvisoCorte,
+) -> tuple[DadosAvisoCorte, int, int | None]:
+    total_efetivo, linhas_tot = totais
+    pref_b, suf_b = fatias
+    bytes_mantidos = len(pref_b) + len(suf_b)
+    omitidos = max(1, total_efetivo - bytes_mantidos)
+    pref_txt = pref_b.decode("utf-8", "replace")
+    suf_txt = suf_b.decode("utf-8", "replace")
+    linhas_mantidas = pref_txt.count("\n") + suf_txt.count("\n")
+    linhas_fora = max(1, linhas_tot - linhas_mantidas) if opc.forma == "listagem" else None
+    offset_cont = len(pref_b) if usa_offset else None
+    dados = DadosAvisoCorte(
+        alca=alca,
+        bytes_total=total_efetivo,
+        faltam_bytes=omitidos,
+        forma=opc.forma,
+        constitutiva=opc.constitutiva,
+        tem_filtro=opc.tem_filtro,
+        linhas_fora=linhas_fora,
+        offset_proximo=offset_cont,
+        recomeca_do_zero=opc.recomeca_do_zero,
+    )
+    return dados, omitidos, offset_cont
 
 
 def corta(
@@ -353,63 +511,71 @@ def corta(
     alca: str | None = None,
     forcar_corte: bool = False,
     bytes_total_origem: int | None = None,
-    offset_exato: bool = False,
+    offset_exato: bool = True,
+    opcoes: OpcoesAvisoCorte | None = None,
 ) -> tuple[str, dict[str, Any]]:
+    opc = opcoes or OpcoesAvisoCorte()
     bruto = texto.encode("utf-8", "replace")
     total_efetivo = max(len(bruto), int(bytes_total_origem or 0))
     if len(bruto) <= cap and not forcar_corte:
         return texto, {"cortado": False, "bytes_omitidos": 0}
 
-    def _montar_aviso(omitidos_v: int, como_ler_v: str | None) -> str:
-        if alca:
-            return (
-                f"\n[AVISO: cortado por teto de {cap} bytes ({omitidos_v} de {total_efetivo} bytes omitidos); "
-                f"inteiro em {alca} — {como_ler_v}]\n"
-            )
-        return f"\n[AVISO: cortado por teto de {cap} bytes ({omitidos_v} de {total_efetivo} bytes omitidos)]\n"
-
-    como_ler_est = _chamada_continuacao(
-        alca,
-        offset_continuacao=total_efetivo if (offset_exato and not cauda) else None,
+    linhas_tot = (
+        opc.linhas_total_origem
+        if opc.linhas_total_origem is not None
+        else _contar_linhas_texto(texto)
     )
-    aviso_max_b = len(_montar_aviso(total_efetivo, como_ler_est).encode("utf-8"))
-    disponivel = max(0, cap - aviso_max_b)
+    totais = (total_efetivo, linhas_tot)
+    usa_offset = bool(alca) and offset_exato and not opc.recomeca_do_zero
 
-    if cauda:
-        inicio_lim = disponivel // 3
-        fim_lim = disponivel - inicio_lim
-        pref_b = _prefixo_utf8(bruto, inicio_lim)
-        suf_b = _sufixo_utf8(bruto, fim_lim)
-        bytes_mantidos = len(pref_b) + len(suf_b)
-        omitidos = max(1, total_efetivo - bytes_mantidos)
-        como_ler = _chamada_continuacao(alca)
-        aviso = _montar_aviso(omitidos, como_ler)
-        servir = pref_b.decode("utf-8", "replace") + aviso + suf_b.decode("utf-8", "replace")
-        if len(servir.encode("utf-8", "replace")) > cap:
-            servir = _prefixo_utf8(servir.encode("utf-8", "replace"), cap).decode("utf-8", "replace")
-        return servir, {
-            "cortado": True,
-            "bytes_omitidos": omitidos,
-            "como_ler": como_ler,
-        }
-
-    pref_b = _prefixo_utf8(bruto, disponivel)
-    bytes_mantidos = len(pref_b)
-    omitidos = max(1, total_efetivo - bytes_mantidos)
-    como_ler = _chamada_continuacao(
-        alca,
-        offset_continuacao=bytes_mantidos if offset_exato else None,
+    aviso_est = formatar_aviso_corte(
+        DadosAvisoCorte(
+            alca=alca,
+            bytes_total=total_efetivo,
+            faltam_bytes=total_efetivo,
+            forma=opc.forma,
+            constitutiva=opc.constitutiva,
+            tem_filtro=opc.tem_filtro,
+            linhas_fora=linhas_tot if opc.forma == "listagem" else None,
+            offset_proximo=total_efetivo if usa_offset else None,
+            recomeca_do_zero=opc.recomeca_do_zero,
+        )
     )
-    aviso = _montar_aviso(omitidos, como_ler)
-    servir = pref_b.decode("utf-8", "replace") + aviso
+    disponivel = max(0, cap - len(f"\n{aviso_est}\n".encode()))
+    fatias = _recortar_fatias(bruto, disponivel, cauda=cauda)
+    dados, omitidos, offset_cont = _montar_dados_corte(
+        alca, totais, fatias, usa_offset=usa_offset, opc=opc
+    )
+    aviso_corpo = formatar_aviso_corte(dados)
+    bloco_aviso = f"\n{aviso_corpo}\n"
+    if len(fatias[0]) + len(fatias[1]) + len(bloco_aviso.encode()) > cap:
+        disponivel2 = max(0, cap - len(bloco_aviso.encode()))
+        fatias = _recortar_fatias(bruto, disponivel2, cauda=cauda)
+        dados, omitidos, offset_cont = _montar_dados_corte(
+            alca, totais, fatias, usa_offset=usa_offset, opc=opc
+        )
+        aviso_corpo = formatar_aviso_corte(dados)
+        bloco_aviso = f"\n{aviso_corpo}\n"
+
+    pref_s = fatias[0].decode("utf-8", "replace")
+    suf_s = fatias[1].decode("utf-8", "replace")
+    servir = f"{pref_s}{bloco_aviso}{suf_s}" if cauda else f"{pref_s}{bloco_aviso}"
     if len(servir.encode("utf-8", "replace")) > cap:
         servir = _prefixo_utf8(servir.encode("utf-8", "replace"), cap).decode("utf-8", "replace")
-    return servir, {
+
+    como_ler = _chamada_continuacao(alca, offset_continuacao=offset_cont)
+    res: dict[str, Any] = {
         "cortado": True,
         "bytes_omitidos": omitidos,
-        "offset_continuacao": bytes_mantidos if offset_exato else None,
-        "como_ler": como_ler,
+        "aviso_corte": aviso_corpo,
     }
+    if dados.linhas_fora is not None:
+        res["linhas_fora"] = dados.linhas_fora
+    if como_ler is not None:
+        res["como_ler"] = como_ler
+    if offset_cont is not None:
+        res["offset_continuacao"] = offset_cont
+    return servir, res
 
 
 class LedgerSessao:
@@ -511,6 +677,24 @@ class LedgerSessao:
             return {"modo": "inteiro", "ledger": "novo", "texto": texto}
 
 
+def _aviso_corte_de_meta(meta: dict[str, Any]) -> str:
+    forma = str(meta.get("forma") or "listagem")
+    constitutiva = bool(meta.get("constitutiva") or meta.get("perfil") == "constitutiva")
+    recomeca = bool(meta.get("recomeca_do_zero") or meta.get("lavado"))
+    dados = DadosAvisoCorte(
+        alca=str(meta["alca"]) if meta.get("alca") else None,
+        bytes_total=int(meta.get("bytes_produzidos") or 0),
+        faltam_bytes=int(meta.get("bytes_omitidos") or 0),
+        forma=forma,
+        constitutiva=constitutiva,
+        tem_filtro=bool(meta.get("tem_filtro", True)),
+        linhas_fora=meta.get("linhas_fora"),
+        offset_proximo=meta.get("offset_continuacao"),
+        recomeca_do_zero=recomeca,
+    )
+    return formatar_aviso_corte(dados)
+
+
 def linha_humana(meta: dict[str, Any]) -> str:
     modo = meta.get("modo")
     if modo == "igual":
@@ -518,23 +702,42 @@ def linha_humana(meta: dict[str, Any]) -> str:
     if modo == "derrame":
         return f"poda: retorno semântico inteiro, sem corte — cru em {meta.get('alca')}"
     if modo == "corte":
-        alca = meta.get("alca")
-        como_ler = meta.get("como_ler") or _chamada_continuacao(alca)
-        teto = meta.get("teto_bytes")
-        produzidos = meta.get("bytes_produzidos")
-        omitidos = meta.get("bytes_omitidos", 0)
-        detalhe = (
-            f"{omitidos} de {produzidos} bytes omitidos no teto de {teto} bytes"
-            if teto and produzidos
-            else f"{omitidos} bytes omitidos"
-        )
-        return (
-            f"poda — AVISO: saída cortada por teto ({detalhe})"
-            + (f" — inteiro em {alca} ({como_ler})" if alca and como_ler else "")
-        )
+        return f"poda — {_aviso_corte_de_meta(meta).strip('[]')}"
     if meta.get("lavado"):
         return "poda: lavado (" + ", ".join(meta["lavado"]) + ")"
     return ""
+
+
+def _verbo_tem_filtro(verbo: str, faces: dict[str, Any] | None) -> bool:
+    if not isinstance(faces, dict):
+        return True
+    cfg = faces.get(verbo)
+    return not (isinstance(cfg, dict) and cfg.get("sem_filtro") is True)
+
+
+def _registrar_corte_meta(
+    meta: dict[str, Any],
+    cm: dict[str, Any],
+    caminho: str | None,
+    *,
+    cauda: bool,
+    cap: int,
+) -> None:
+    meta.update(
+        modo="corte",
+        bytes_omitidos=cm["bytes_omitidos"],
+        cauda=cauda,
+        teto_bytes=cap,
+        recomeca_do_zero=bool(meta.get("lavado")),
+    )
+    if caminho:
+        meta["alca"] = caminho
+    if cm.get("linhas_fora") is not None:
+        meta["linhas_fora"] = cm["linhas_fora"]
+    if cm.get("como_ler"):
+        meta["como_ler"] = cm["como_ler"]
+    if cm.get("offset_continuacao") is not None:
+        meta["offset_continuacao"] = cm["offset_continuacao"]
 
 
 def podar_texto(
@@ -557,6 +760,7 @@ def podar_texto(
     truncado_origem: bool = False,
     bytes_origem: int | None = None,
     cru_origem: str | None = None,
+    tem_filtro: bool = True,
 ) -> tuple[str, dict[str, Any]]:
     giro = ledger.proximo_giro() if ledger is not None else 1
     lavado, rel = lavar(
@@ -566,22 +770,28 @@ def podar_texto(
         preservar_branco=preservar_branco,
     )
     bytes_produzidos = max(int(bytes_origem or 0), rel["bytes_antes"])
+    linhas_total = _contar_linhas_texto(texto)
     meta: dict[str, Any] = {
         "ato": tool,
         "giro": giro,
         "sha": sha_servido(lavado),
         "lavado": rel["classes"],
         "bytes_produzidos": bytes_produzidos,
+        "forma": forma,
+        "linhas_total": linhas_total,
     }
     if cosmetica:
         meta["perfil"] = "cosmetica"
     elif constitutiva:
         meta["perfil"] = "constitutiva"
 
+    tem_sessao = _tem_sessao_aberta(sessao_id)
     nome_derrame = f"g{giro:05d}-stdout.txt"
     tira_conteudo = bool({"blob", "repeticao"} & set(rel["classes"]))
-    if cru_origem:
-        cru: str | None = cru_origem
+    if not tem_sessao:
+        cru: str | None = None
+    elif cru_origem:
+        cru = cru_origem
     elif tira_conteudo:
         cru = derrama(derrame_dir, sessao_id, nome_derrame, texto)
     else:
@@ -614,13 +824,9 @@ def podar_texto(
         meta["ledger"] = "escrita" if escrita else "novo"
 
     precisa_cortar = truncado_origem or (len(servir.encode("utf-8", "replace")) > cap)
-    caminho: str | None = None
     if precisa_cortar:
-        caminho = cru or derrama(derrame_dir, sessao_id, nome_derrame, texto)
-
-    # Teto rígido de saída: nenhum retorno entregue à sessão ultrapassa `cap`,
-    # mesmo em perfil cosmético — o excedente vai ao derrame com aviso de corte.
-    if precisa_cortar:
+        caminho = (cru or derrama(derrame_dir, sessao_id, nome_derrame, texto)) if tem_sessao else None
+        teve_lavagem = bool(rel["classes"])
         servir, cm = corta(
             servir,
             cap,
@@ -628,20 +834,18 @@ def podar_texto(
             alca=caminho,
             forcar_corte=truncado_origem,
             bytes_total_origem=bytes_produzidos,
-            offset_exato=(not rel["classes"] and not cauda),
+            offset_exato=(not teve_lavagem),
+            opcoes=OpcoesAvisoCorte(
+                forma=forma,
+                constitutiva=constitutiva,
+                tem_filtro=tem_filtro,
+                recomeca_do_zero=teve_lavagem,
+                linhas_total_origem=linhas_total,
+            ),
         )
         if cm.get("cortado"):
-            meta.update(
-                modo="corte",
-                bytes_omitidos=cm["bytes_omitidos"],
-                alca=caminho,
-                cauda=cauda,
-                teto_bytes=cap,
-            )
-            if cm.get("como_ler"):
-                meta["como_ler"] = cm["como_ler"]
-            if cm.get("offset_continuacao") is not None:
-                meta["offset_continuacao"] = cm["offset_continuacao"]
+            meta["tem_filtro"] = tem_filtro
+            _registrar_corte_meta(meta, cm, caminho, cauda=cauda, cap=cap)
 
     meta["bytes_servidos"] = len(servir.encode("utf-8", "replace"))
     return servir, meta
@@ -671,7 +875,8 @@ def podar_envelope(
     texto = str(so.get("texto") or "")
     ja_truncado = bool(so.get("truncado"))
     bytes_reais = int(so.get("bytes_total") or 0)
-    cru_origem = str(so["cru"]) if so.get("cru") else None
+    tem_sessao = _tem_sessao_aberta(sessao_id)
+    cru_origem = str(so["cru"]) if (so.get("cru") and tem_sessao) else None
 
     ato_ef = resolver_ato(argv, binario=binario, faces=faces)
     if poda_desligada():
@@ -685,6 +890,7 @@ def podar_envelope(
         return out
 
     perf = perfil_verbo(verbo, binario)
+    forma = str(perf.get("forma") or "listagem")
     cosmetica = eh_cosmetica(perf, ato_ef)
     constitutiva = eh_constitutiva(perf, ato_ef) or (ato_ef == "ler")
     escrita = eh_escrita(verbo, binario, ato_ef)
@@ -706,20 +912,24 @@ def podar_envelope(
         cosmetica=cosmetica,
         constitutiva=constitutiva,
         preservar_branco=(ato_ef == "ler"),
-        forma=str(perf.get("forma") or "listagem"),
+        forma=forma,
         escrita=escrita,
         esquece=inteiro,
         truncado_origem=ja_truncado,
         bytes_origem=bytes_reais,
         cru_origem=cru_origem,
+        tem_filtro=_verbo_tem_filtro(verbo, faces),
     )
     meta["ato_efetivo"] = ato_ef
     novo_so = dict(so)
     novo_so["texto"] = servido
-    if meta.get("cru") and not novo_so.get("cru"):
-        novo_so["cru"] = meta["cru"]
-    if meta.get("alca") and not novo_so.get("cru"):
-        novo_so["cru"] = meta["alca"]
+    if not tem_sessao:
+        novo_so.pop("cru", None)
+    else:
+        if meta.get("cru") and not novo_so.get("cru"):
+            novo_so["cru"] = meta["cru"]
+        if meta.get("alca") and not novo_so.get("cru"):
+            novo_so["cru"] = meta["alca"]
     cortado_agora = meta.get("modo") == "corte"
     novo_so["truncado"] = ja_truncado or cortado_agora
     novo_so["bytes_total"] = meta["bytes_produzidos"]
@@ -730,12 +940,7 @@ def podar_envelope(
         out["poda_aviso"] = aviso
     if cortado_agora:
         como_ler = meta.get("como_ler")
-        aviso_topo = (
-            f"AVISO: saída cortada pelo teto da poda ({cap} bytes; "
-            f"{meta['bytes_omitidos']} de {meta['bytes_produzidos']} bytes omitidos). "
-            "O retorno está incompleto"
-            + (f" — leia o restante com {como_ler}" if como_ler else "")
-        )
+        aviso_topo = _aviso_corte_de_meta(meta).strip("[]")
         cab_corte: dict[str, Any] = {"aviso": aviso_topo}
         if como_ler:
             cab_corte["como_ler"] = como_ler

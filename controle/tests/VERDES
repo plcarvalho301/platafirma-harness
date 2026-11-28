@@ -75,5 +75,6 @@ tests/test_borda_despachar.py | lib/despacho/** registro/porta.yaml
 testes/test_gerar_pipelines.py | lib/pipelines/** bin/release registro/esquemas/pipeline.schema.json registro/pipelines/fontes/**
 tests/test_fila_eventos.py | bin/fila bin/_fila/** lib/descanso/publicar.py
 tests/test_poda_teto.py | lib/poda/**
+tests/test_poda_aviso.py | lib/poda/**
 testes/test_olaria_erros_dt1428.py | lib/escrita/moradas/olaria.py
 testes/test_tarefas_comentarios_dt1449.py | bin/tarefas
