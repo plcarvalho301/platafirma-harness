@@ -37,13 +37,14 @@ ClienteHttpRaio = Callable[[str, float], object]
 
 _RASTREADOR_URL_PADRAO = "http://127.0.0.1:8120/api"
 _PRAZO_RAIO_S = 2.0
-_ESTADO_COM_RAIO = "em-execucao"
-_RE_CARD_DA_BANCADA = re.compile(r"^(\d+)-")
+_ESTADOS_COM_RAIO = frozenset({"em-execucao", "em-mitigacao"})
+_RE_CARD_DA_BANCADA = re.compile(r"^(\d+)(?:-|$)")
+_RE_DTS_DA_BANCADA = re.compile(r"^dt-((?:\d+)(?:-\d+)*)(?:-|$)")
 _RE_ITEM_RAIO = re.compile(r"^\s*(?:-\s*)?(platafirma-[a-z0-9-]+)@([^\s·|]+)")
 _RE_ROTULO = re.compile(r"^\s*[A-ZÀ-Ý][^:@]{0,40}:")
 _RE_TAG_QUEBRA = re.compile(r"<\s*(?:br\s*/?|/?p|/?li|/?ul)\s*>", re.IGNORECASE)
 _RE_TAG = re.compile(r"<[^>]+>")
-_SECOES_RAIO = ("raio de ataque:", "raio emendado:")
+_SECOES_RAIO = ("raio de ataque:", "raio emendado:", "raio:")
 
 
 @dataclass(frozen=True)
@@ -557,29 +558,76 @@ def _recusa_raio_ilegivel(bancada: str, motivo: str) -> RecusaEscrita:
     )
 
 
+def _extrair_raio_do_balde(raio: object) -> frozenset[tuple[str, str]]:
+    """Extrai pares (repo, caminho) da lista `raio` de uma linha do balde."""
+    if isinstance(raio, str):
+        itens: list[object] = [raio]
+    elif isinstance(raio, list):
+        itens = raio
+    else:
+        return frozenset()
+    pares: set[tuple[str, str]] = set()
+    for item in itens:
+        if not isinstance(item, str):
+            continue
+        bruto = item.strip()
+        if "@" not in bruto:
+            continue
+        repo, caminho = bruto.split("@", 1)
+        repo = repo.strip()
+        caminho = caminho.split(":", 1)[0].strip()
+        if repo and caminho:
+            pares.add((repo, caminho))
+    return frozenset(pares)
+
+
 def criar_provedor_raio(
     url_base: str | None = None,
     *,
     cliente_http: ClienteHttpRaio | None = None,
     prazo_s: float = _PRAZO_RAIO_S,
 ) -> ProvedorRaio:
-    """O raio do card da bancada `<card>-<slug>`, lido do rastreador a cada gravação protegida.
+    """O raio do card da bancada `<card>-<slug>` ou `<card>`, ou de DTs `dt-<n>`, lido do rastreador.
 
-    Card fora de execução não tem raio aberto (frozenset vazio, saída 4 no portão); rastreador
-    que não responde sai 3, porque sem o raio não há como decidir e o portão não supõe.
+    Card fora de execução/mitigação ou DT já saído não têm raio aberto (frozenset vazio, saída 4
+    no portão); rastreador que não responde sai 3, porque sem o raio não há como decidir e o portão
+    não supõe.
     """
     base = (url_base or os.environ.get("PF_RASTREADOR_URL") or _RASTREADOR_URL_PADRAO).rstrip("/")
     http = cliente_http or _get_json_rastreador
 
+    def _raio_dts(numeros: list[str], bancada: str) -> frozenset[tuple[str, str]]:
+        pares: set[tuple[str, str]] = set()
+        for num in numeros:
+            try:
+                linha = http(f"{base}/balde/{num}", prazo_s)
+            except urllib.error.HTTPError as exc:
+                if exc.code == 404:
+                    continue
+                raise _recusa_raio_ilegivel(bancada, str(exc)) from None
+            except (OSError, ValueError, urllib.error.URLError) as exc:
+                raise _recusa_raio_ilegivel(bancada, str(exc)) from None
+            if not isinstance(linha, Mapping) or linha.get("saida_jeito") is not None:
+                continue
+            pares.update(_extrair_raio_do_balde(linha.get("raio")))
+        return frozenset(pares)
+
     def _raio(bancada: str) -> frozenset[tuple[str, str]]:
+        achado_dt = _RE_DTS_DA_BANCADA.match(bancada)
+        if achado_dt is not None:
+            return _raio_dts(achado_dt.group(1).split("-"), bancada)
         achado = _RE_CARD_DA_BANCADA.match(bancada)
         if achado is None:
             return frozenset()
         try:
             item = http(f"{base}/itens/{achado.group(1)}", prazo_s)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return frozenset()
+            raise _recusa_raio_ilegivel(bancada, str(exc)) from None
         except (OSError, ValueError, urllib.error.URLError) as exc:
             raise _recusa_raio_ilegivel(bancada, str(exc)) from None
-        if not isinstance(item, Mapping) or item.get("estado") != _ESTADO_COM_RAIO:
+        if not isinstance(item, Mapping) or item.get("estado") not in _ESTADOS_COM_RAIO:
             return frozenset()
         return extrair_raio_do_corpo(str(item.get("descricao") or ""))
 

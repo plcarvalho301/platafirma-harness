@@ -574,3 +574,165 @@ def test_exige_shebang_isenta_dockerfile_e_crontab() -> None:
     assert not mod_politica.exige_shebang(pol, "platafirma-core", "deploy/crontab-claudinho")
     assert mod_politica.exige_shebang(pol, "platafirma-core", "deploy/platafirma")
     assert mod_politica.exige_shebang(pol, "platafirma-core", "deploy/instala-units.sh")
+
+
+def test_provedor_raio_dt_aberto_e_multiplos_dts() -> None:
+    """Bancada dt-<n> (um ou vários DTs) lê o Raio: do balde no rastreador (#4482)."""
+    chamadas: list[str] = []
+    balde_fake: dict[str, dict[str, Any]] = {
+        "1431": {
+            "numero": 1431,
+            "saida_jeito": None,
+            "raio": [
+                "platafirma-harness@lib/leitura/borda.py",
+                "platafirma-harness@lib/leitura/resolvedor.py:resolver",
+            ],
+        },
+        "1434": {
+            "numero": 1434,
+            "saida_jeito": None,
+            "raio": ["platafirma-harness@lib/escrita/resolucao.py", "platafirma-harness@bin/repo"],
+        },
+        "1435": {
+            "numero": 1435,
+            "saida_jeito": "resolvida",
+            "raio": ["platafirma-harness@lib/leitura/moradas/banco.py"],
+        },
+    }
+
+    def _http(url: str, _prazo: float) -> object:
+        chamadas.append(url)
+        num = url.rsplit("/", 1)[-1]
+        return balde_fake[num]
+
+    provedor = mod_portao.criar_provedor_raio("http://rastreador.local/api", cliente_http=_http)
+
+    # Um DT aberto (inclusive com slug e com :simbolo normalizado)
+    assert provedor("dt-1431") == frozenset(
+        {
+            ("platafirma-harness", "lib/leitura/borda.py"),
+            ("platafirma-harness", "lib/leitura/resolvedor.py"),
+        }
+    )
+    assert provedor("dt-1431-busca-tres-partes") == frozenset(
+        {
+            ("platafirma-harness", "lib/leitura/borda.py"),
+            ("platafirma-harness", "lib/leitura/resolvedor.py"),
+        }
+    )
+
+    # Múltiplos DTs: soma os abertos (1431 e 1434) e ignora o já saído (1435)
+    assert provedor("dt-1431-1434-1435") == frozenset(
+        {
+            ("platafirma-harness", "lib/leitura/borda.py"),
+            ("platafirma-harness", "lib/leitura/resolvedor.py"),
+            ("platafirma-harness", "lib/escrita/resolucao.py"),
+            ("platafirma-harness", "bin/repo"),
+        }
+    )
+    assert "http://rastreador.local/api/balde/1431" in chamadas
+    assert "http://rastreador.local/api/balde/1434" in chamadas
+    assert "http://rastreador.local/api/balde/1435" in chamadas
+
+    # DT já saído sozinho não abre raio
+    assert provedor("dt-1435") == frozenset()
+
+    # Chave sem número de DT válido não consulta e devolve vazio
+    chamadas.clear()
+    assert provedor("dt-sem-numero") == frozenset()
+    assert chamadas == []
+
+
+def test_provedor_raio_dt_erro_rastreador_sai_3_e_404_devolve_vazio() -> None:
+    """Rastreador fora do ar sai 3 (morada-sem-resposta); 404 devolve raio vazio."""
+    import urllib.error
+
+    def _http_fora(_url: str, _prazo: float) -> object:
+        raise OSError("connection refused")
+
+    provedor_fora = mod_portao.criar_provedor_raio("http://r/api", cliente_http=_http_fora)
+    with pytest.raises(RecusaEscrita) as exc:
+        provedor_fora("dt-1431")
+    assert exc.value.saida == 3
+
+    def _http_404(url: str, _prazo: float) -> object:
+        raise urllib.error.HTTPError(url, 404, "Not Found", hdrs=None, fp=None)
+
+    provedor_404 = mod_portao.criar_provedor_raio("http://r/api", cliente_http=_http_404)
+    assert provedor_404("dt-99999") == frozenset()
+
+
+def test_provedor_raio_aceita_incidente_em_mitigacao_e_bancada_sem_slug() -> None:
+    """Bancada `<id>` (sem slug) de incidente em mitigação com seção Raio: abre o raio; detectado não."""
+    estado_atual = {"estado": "em-mitigacao"}
+
+    def _http(_url: str, _prazo: float) -> object:
+        return {
+            "id": 4482,
+            "estado": estado_atual["estado"],
+            "descricao": "<p>Raio:</p><ul><li>platafirma-harness@lib/escrita/portao.py</li></ul>",
+        }
+
+    provedor = mod_portao.criar_provedor_raio("http://r/api", cliente_http=_http)
+    assert provedor("4482") == frozenset({("platafirma-harness", "lib/escrita/portao.py")})
+
+    estado_atual["estado"] = "detectado"
+    assert provedor("4482") == frozenset()
+
+
+def test_servidor_grava_caminho_protegido_com_bancada_dt(tmp_path: Path) -> None:
+    """Ponta a ponta: bancada dt-1431 grava em lib/leitura/ declarado no raio do DT e bloqueia fora."""
+    raiz, wt_dir = _criar_bancada_git(tmp_path, chave_wt="dt-1431")
+    pol = _politica_ligada()
+    estado = tmp_path / "estado"
+    estado.mkdir(parents=True, exist_ok=True)
+    sock_dir = Path(tempfile.mkdtemp(prefix="pf-dt-"))
+    sock_path = sock_dir / "e.sock"
+
+    def _http(_url: str, _prazo: float) -> object:
+        return {
+            "numero": 1431,
+            "saida_jeito": None,
+            "raio": ["platafirma-harness@lib/leitura/resolvedor.py"],
+        }
+
+    cfg = ConfigServidor(
+        socket_path=sock_path,
+        raiz_bancadas=raiz,
+        estado_dir=estado,
+        politica=pol,
+        moradas={"git": MoradaGit(raiz_bancadas=raiz, estado_dir=estado)},
+        grupo_autorizado="",
+        uid_escritor=os.getuid(),
+        provedor_raio=mod_portao.criar_provedor_raio("http://r/api", cliente_http=_http),
+        autorizador_sujeito=lambda _s, _c, _v, _f: True,
+    )
+    srv = ServidorEscritor(cfg)
+    th = threading.Thread(target=srv.servir, kwargs={"instalar_sinais": False}, daemon=True)
+    th.start()
+    fim = time.monotonic() + 5.0
+    while time.monotonic() < fim and not sock_path.exists():
+        time.sleep(0.01)
+    try:
+        res = _chamar(
+            sock_path,
+            pol,
+            "repo",
+            ["gravar", "componente", "platafirma-harness@dt-1431:lib/leitura/resolvedor.py"],
+            b"# ok dt 1431\n",
+        )
+        assert res.versao
+        assert (wt_dir / "lib" / "leitura" / "resolvedor.py").read_text(encoding="utf-8") == "# ok dt 1431\n"
+
+        with pytest.raises(RecusaEscrita) as exc:
+            _chamar(
+                sock_path,
+                pol,
+                "repo",
+                ["gravar", "componente", "platafirma-harness@dt-1431:lib/escrita/portao.py"],
+                b"# fora do raio\n",
+            )
+        assert exc.value.saida == 4
+    finally:
+        srv.parar()
+        th.join(timeout=5.0)
