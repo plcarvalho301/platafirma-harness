@@ -1489,6 +1489,37 @@ limpar_stacks_pendentes() {  # $1=repo
   rm -f "$PONTOS/$1/stacks_pendentes"
 }
 
+ETAPA_PENDENTE=""
+ETAPA_ATUAL=""
+
+gravar_etapa_pendente() {  # $1=repo $2=sha $3=atual $4=etapa
+  local repo="$1" sha="$2" atual_v="${3:-}" etapa="$4" tmp
+  mkdir -p "$PONTOS/$repo"
+  tmp="$PONTOS/$repo/.etapa_pendente.$$"
+  {
+    printf 'sha=%s\n' "$sha"
+    printf 'atual=%s\n' "$atual_v"
+    printf 'etapa=%s\n' "$etapa"
+  } > "$tmp"
+  mv -f "$tmp" "$PONTOS/$repo/etapa_pendente"
+}
+
+limpar_etapa_pendente() {  # $1=repo
+  rm -f "$PONTOS/$1/etapa_pendente"
+}
+
+ler_etapa_pendente() {  # $1=repo $2=sha ; preenche ETAPA_PENDENTE e ETAPA_ATUAL
+  local repo="$1" sha="$2" arq="$PONTOS/$1/etapa_pendente" sha_p=""
+  ETAPA_PENDENTE=""
+  ETAPA_ATUAL=""
+  [ -f "$arq" ] || return 0
+  sha_p="$(sed -n 's/^sha=//p' "$arq" | head -n 1)"
+  [ "$sha_p" = "$sha" ] || return 0
+  ETAPA_PENDENTE="$(sed -n 's/^etapa=//p' "$arq" | head -n 1)"
+  ETAPA_ATUAL="$(sed -n 's/^atual=//p' "$arq" | head -n 1)"
+  return 0
+}
+
 # Identifica stacks de STACKS_PROMOVER que ficaram por subir após PROMOCAO PARCIAL
 # (registradas em $PONTOS/$repo/stacks_pendentes ou com $DEPLOY_PONTOS/<stack>.atual != $sha).
 apurar_stacks_pendentes() {  # $1=repo $2=sha
@@ -1626,10 +1657,20 @@ reiniciar_porta() {
     xdg=""
   fi
   xdg="${xdg:-/run/user/$(id -u)}"
+  local porta_inicio_antes=""
+  if command -v systemctl >/dev/null 2>&1; then
+    porta_inicio_antes="$(XDG_RUNTIME_DIR="$xdg" DBUS_SESSION_BUS_ADDRESS="${dbus:-unix:path=$xdg/bus}" \
+      systemctl --user show -p ActiveEnterTimestampMonotonic --value porta.service 2>/dev/null || true)"
+  fi
   out="$(XDG_RUNTIME_DIR="$xdg" DBUS_SESSION_BUS_ADDRESS="${dbus:-unix:path=$xdg/bus}" \
     PF_SUJEITO="${PF_SUJEITO:-automacao:release}" \
     "$infra_bin" restart porta 2>&1)" || rc=$?
   if [ "$rc" -eq 0 ]; then
+    mkdir -p "$PONTOS"
+    {
+      printf 'agendado_em=%s\n' "$(date +%s)"
+      printf 'porta_inicio=%s\n' "$porta_inicio_antes"
+    } > "$PONTOS/.porta.reinicio_pendente"
     printf 'porta:     %s\n' "$(tail -n 1 <<<"$out")"
   else
     printf 'porta:     AVISO — infra restart porta saiu %s: %s\n' "$rc" "$(tail -n 1 <<<"$out")" >&2
@@ -2377,57 +2418,81 @@ cmd_promover() {
       exit 0
     fi
     apurar_stacks_pendentes "$repo" "$sha"
-    if [ "${#STACKS_PENDENTES[@]}" -eq 0 ]; then
+    ler_etapa_pendente "$repo" "$sha"
+    if [ "${#STACKS_PENDENTES[@]}" -eq 0 ] && [ -z "$ETAPA_PENDENTE" ]; then
       printf 'já no ar:  %s current → %s — nada a mover\n' "$repo" "${sha:0:7}"
       exit 1
     fi
-    STACKS_PROMOVER=("${STACKS_PENDENTES[@]}")
-    printf '== release promover %s %s (retomando stacks pendentes: %s) ==\n' "$repo" "${sha:0:7}" "${STACKS_PROMOVER[*]}"
-    printf 'current:   já em %s — retomando reconciliação das stacks\n' "${sha:0:7}"
+    local atual_ret="${ETAPA_ATUAL:-$atual}"
+    local etapa_ret="${ETAPA_PENDENTE:-stacks}"
+    if [ "${#STACKS_PENDENTES[@]}" -gt 0 ]; then
+      STACKS_PROMOVER=("${STACKS_PENDENTES[@]}")
+      printf '== release promover %s %s (retomando stacks pendentes: %s) ==\n' "$repo" "${sha:0:7}" "${STACKS_PROMOVER[*]}"
+      printf 'current:   já em %s — retomando reconciliação das stacks\n' "${sha:0:7}"
+    else
+      STACKS_PROMOVER=()
+      printf '== release promover %s %s (retomando etapa: %s) ==\n' "$repo" "${sha:0:7}" "$etapa_ret"
+      printf 'current:   já em %s — retomando da etapa %s\n' "${sha:0:7}" "$etapa_ret"
+    fi
     if [ "$ensaio" -eq 1 ]; then
       printf 'ensaio:    nada tocado\n'
       exit 0
     fi
-    exigir_deploy_se_stack || { rc=$?; exit "$rc"; }
-    local rc_st_ret=0
-    promover_stacks "$sha" || rc_st_ret=$?
-    if [ "$rc_st_ret" -ne 0 ]; then
-      gravar_stacks_pendentes "$repo" "$sha"
-      {
-        printf '\n'
-        printf '=========================================================================\n'
-        printf 'PROMOCAO PARCIAL — ESTADO PARTIDO, LEIA (release %s)\n' "$repo"
-        printf '=========================================================================\n'
-        printf '  codigo (current): NO AR em %s — verbos ja servem esta rev\n' "${sha:0:7}"
-        printf '  stack recusada  : %s — NAO subiu\n' "$STACK_FALHOU"
-        if [ -n "${STACK_MOTIVO:-}" ]; then
-          printf '  motivo (ajudante %s):\n' "$STACK_FALHOU"
-          printf '%s\n' "$STACK_MOTIVO" | sed 's/^/    /'
-        fi
-        printf '  RETOMAR         : conserte a causa acima e repita  release promover %s %s  (ou infra up %s -d --build --force-recreate)\n' "$repo" "${sha:0:7}" "$STACK_FALHOU"
-        printf '=========================================================================\n'
-      } >&2
-      reiniciar_porta "$repo"
-      exit "$rc_st_ret"
+    if [ "$etapa_ret" = "atalhos" ]; then
+      assentar_atalhos "$repo"
+      etapa_ret="stacks"
+      gravar_etapa_pendente "$repo" "$sha" "$atual_ret" "$etapa_ret"
     fi
-    limpar_stacks_pendentes "$repo"
-    local rc_ar_ret=0
-    conferencia_no_ar "$repo" "$sha" || rc_ar_ret=$?
-    if [ "$rc_ar_ret" -eq 0 ]; then
-      [ -z "$CONF_AR_DETALHE" ] || printf 'no ar:     conferido — %s\n' "$CONF_AR_DETALHE"
-      expurgar_release "$repo"
-    elif [ "$rc_ar_ret" -eq 5 ]; then
-      printf 'no ar:     conferencia nao olhou (%s) — nada expurgado; confira: release conferir servico\n' "$CONF_AR_DETALHE"
-    else
-      printf 'release: conferencia no ar VERMELHA na rev %s: %s — current fica em %s e nada foi expurgado; corrija na main e promova de novo\n' \
-        "${sha:0:7}" "$CONF_AR_DETALHE" "${sha:0:7}" >&2
-      reiniciar_porta "$repo"
-      exit 4
+    if [ "${#STACKS_PROMOVER[@]}" -gt 0 ]; then
+      exigir_deploy_se_stack || { rc=$?; exit "$rc"; }
+      local rc_st_ret=0
+      promover_stacks "$sha" || rc_st_ret=$?
+      if [ "$rc_st_ret" -ne 0 ]; then
+        gravar_stacks_pendentes "$repo" "$sha"
+        gravar_etapa_pendente "$repo" "$sha" "$atual_ret" "stacks"
+        {
+          printf '\n'
+          printf '=========================================================================\n'
+          printf 'PROMOCAO PARCIAL — ESTADO PARTIDO, LEIA (release %s)\n' "$repo"
+          printf '=========================================================================\n'
+          printf '  codigo (current): NO AR em %s — verbos ja servem esta rev\n' "${sha:0:7}"
+          printf '  stack recusada  : %s — NAO subiu\n' "$STACK_FALHOU"
+          if [ -n "${STACK_MOTIVO:-}" ]; then
+            printf '  motivo (ajudante %s):\n' "$STACK_FALHOU"
+            printf '%s\n' "$STACK_MOTIVO" | sed 's/^/    /'
+          fi
+          printf '  RETOMAR         : conserte a causa acima e repita  release promover %s %s  (ou infra up %s -d --build --force-recreate)\n' "$repo" "${sha:0:7}" "$STACK_FALHOU"
+          printf '=========================================================================\n'
+        } >&2
+        reiniciar_porta "$repo"
+        exit "$rc_st_ret"
+      fi
+      limpar_stacks_pendentes "$repo"
+    fi
+    if [ "$etapa_ret" = "stacks" ] || [ "$etapa_ret" = "conferencia" ]; then
+      gravar_etapa_pendente "$repo" "$sha" "$atual_ret" "conferencia"
+      local rc_ar_ret=0
+      conferencia_no_ar "$repo" "$sha" || rc_ar_ret=$?
+      if [ "$rc_ar_ret" -eq 0 ]; then
+        [ -z "$CONF_AR_DETALHE" ] || printf 'no ar:     conferido — %s\n' "$CONF_AR_DETALHE"
+        expurgar_release "$repo"
+      elif [ "$rc_ar_ret" -eq 5 ]; then
+        printf 'no ar:     conferencia nao olhou (%s) — nada expurgado; confira: release conferir servico\n' "$CONF_AR_DETALHE"
+      else
+        printf 'release: conferencia no ar VERMELHA na rev %s: %s — current fica em %s e nada foi expurgado; corrija na main e promova de novo\n' \
+          "${sha:0:7}" "$CONF_AR_DETALHE" "${sha:0:7}" >&2
+        reiniciar_porta "$repo"
+        exit 4
+      fi
+      etapa_ret="fechamento"
+      gravar_etapa_pendente "$repo" "$sha" "$atual_ret" "$etapa_ret"
     fi
     printf 'no ar:     %s %s\n' "$repo" "${sha:0:7}"
     local rc_card_ret=0
-    estagio_card "$repo" "$atual" "$sha" || rc_card_ret=$?
-    registrar_deploy_no_rastreador "$repo" "$atual" "$sha" || true
+    estagio_card "$repo" "$atual_ret" "$sha" || rc_card_ret=$?
+    registrar_deploy_no_rastreador "$repo" "$atual_ret" "$sha" || true
+    expurgar_fosseis 0 || printf 'expurgo:   AVISO — expurgo de fosseis terminou com erro; rode: release expurgar\n' >&2
+    limpar_etapa_pendente "$repo"
     reiniciar_porta "$repo"
     printf '%s\n' "$sha"
     exit 0
@@ -2496,8 +2561,10 @@ cmd_promover() {
   gate_biblioteca "$repo" "$sha" "$atual" || { rc=$?; exit "$rc"; }
   gravar_pontos "$repo" "$atual" "$sha"
   trocar_current "$repo" "$sha" "$atual"
+  gravar_etapa_pendente "$repo" "$sha" "$atual" "atalhos"
   printf 'current:   %s → %s\n' "$(curto_ou "$atual" '(nenhum)')" "${sha:0:7}"
   assentar_atalhos "$repo"
+  gravar_etapa_pendente "$repo" "$sha" "$atual" "stacks"
 
   local rc_st=0
   promover_stacks "$sha" || rc_st=$?
@@ -2525,6 +2592,7 @@ cmd_promover() {
     exit "$rc_st"
   fi
   limpar_stacks_pendentes "$repo"
+  gravar_etapa_pendente "$repo" "$sha" "$atual" "conferencia"
 
   # Estagio 3: conferencia no ar.
   # Vermelho -> current fica no sha novo, nada se expurga e sai 4; quem promoveu
@@ -2554,6 +2622,7 @@ cmd_promover() {
       ;;
   esac
 
+  gravar_etapa_pendente "$repo" "$sha" "$atual" "fechamento"
   printf 'no ar:     %s %s%s\n' "$repo" "${sha:0:7}" "${tag:+ ($tag)}"
   [ -z "$GATE_AMBIENTE_CHAVE" ] || printf 'ambiente:  %s (%s%s)\n' "$GATE_AMBIENTE_CHAVE" "$GATE_AMBIENTE_STATUS" "${GATE_AMBIENTE_SEGUNDOS:+, ${GATE_AMBIENTE_SEGUNDOS}s}"
   if [ -n "$GATE_SUITE_STATUS" ] && [ "$GATE_SUITE_STATUS" != "n/a" ]; then
@@ -2564,6 +2633,7 @@ cmd_promover() {
   [ "$rc_card" -eq 0 ] || printf 'card:      AVISO — estágio 4 saiu %s; código no ar em %s, mova o card à mão\n' "$rc_card" "${sha:0:7}" >&2
   registrar_deploy_no_rastreador "$repo" "$atual" "$sha" || true
   expurgar_fosseis 0 || printf 'expurgo:   AVISO — expurgo de fosseis terminou com erro; rode: release expurgar\n' >&2
+  limpar_etapa_pendente "$repo"
   reiniciar_porta "$repo"
   printf '%s\n' "$sha"
 }
@@ -2639,6 +2709,59 @@ entrar_na_fila_de_promocao() {  # $1=ato ; resto = args do ato
   fi
   printf '%s %s · pid %s · cadeira %s · desde %s\n' "$ato" "$*" "$$" "${CADEIRA:-?}" "$(date -Is)" > "$dono"
   export PF_PROMOCAO_NA_FILA="$$"
+  esperar_reinicio_pendente_porta
+}
+
+# DT 1199: o promover do core agenda `infra restart porta` destacado para 5 s depois e sai,
+# soltando o flock antes de o reinício acontecer. A promoção seguinte espera o reinício
+# concluir antes de tocar o current, evitando morrer com SIGTERM (143) no meio do caminho.
+esperar_reinicio_pendente_porta() {
+  local marcador="$PONTOS/.porta.reinicio_pendente"
+  [ -f "$marcador" ] || return 0
+  local agendado_em porta_inicio espera_max janela passo agora decorrido
+  agendado_em="$(sed -n 's/^agendado_em=//p' "$marcador" | head -n 1)"
+  porta_inicio="$(sed -n 's/^porta_inicio=//p' "$marcador" | head -n 1)"
+  espera_max="${PF_PORTA_REINICIO_ESPERA:-60}"
+  janela="${PF_PORTA_REINICIO_JANELA:-10}"
+  passo="${PF_PORTA_REINICIO_PASSO:-1}"
+  [[ "$agendado_em" =~ ^[0-9]+$ ]] || { rm -f "$marcador"; return 0; }
+  agora="$(date +%s)"
+  decorrido=$(( agora - agendado_em ))
+  if [ "$decorrido" -ge "$espera_max" ]; then
+    rm -f "$marcador"
+    return 0
+  fi
+  printf 'fila:      reinício pendente da porta — aguardando voltar antes de tocar o current\n' >&2
+  local xdg="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+  local dbus="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$xdg/bus}"
+  while true; do
+    agora="$(date +%s)"
+    decorrido=$(( agora - agendado_em ))
+    if [ -n "$porta_inicio" ] && [ "$porta_inicio" != "0" ] && command -v systemctl >/dev/null 2>&1; then
+      local estado_p inicio_p
+      estado_p="$(XDG_RUNTIME_DIR="$xdg" DBUS_SESSION_BUS_ADDRESS="$dbus" \
+        systemctl --user show -p ActiveState --value porta.service 2>/dev/null || true)"
+      inicio_p="$(XDG_RUNTIME_DIR="$xdg" DBUS_SESSION_BUS_ADDRESS="$dbus" \
+        systemctl --user show -p ActiveEnterTimestampMonotonic --value porta.service 2>/dev/null || true)"
+      if [ "$estado_p" = "active" ] && [ -n "$inicio_p" ] && [ "$inicio_p" != "$porta_inicio" ]; then
+        rm -f "$marcador"
+        printf 'fila:      porta voltou — seguindo com a promoção\n' >&2
+        return 0
+      fi
+    else
+      if [ "$decorrido" -ge "$janela" ]; then
+        rm -f "$marcador"
+        printf 'fila:      janela de reinício da porta cumprida — seguindo com a promoção\n' >&2
+        return 0
+      fi
+    fi
+    if [ "$decorrido" -ge "$espera_max" ]; then
+      rm -f "$marcador"
+      printf 'fila:      AVISO — espera por reinício da porta passou de %ss; seguindo\n' "$espera_max" >&2
+      return 0
+    fi
+    sleep "$passo"
+  done
 }
 
 cmd="$1"
