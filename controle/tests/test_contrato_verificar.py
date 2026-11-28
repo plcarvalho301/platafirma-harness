@@ -652,53 +652,14 @@ def test_adaptador_real_codigo_bloqueante_nao_medido_fecha_nao_sei(tmp_path: Pat
     assert "X99" in dados["nao_julgados"]
 
 
-def test_adaptador_real_prosa_marcas_pt_br_responde_nao_sei_sem_verde_falso(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    lista_prosa = (
-        "força não declarada · vigente — gabarito marcas-pt-br · Marcas de máquina\n"
-        "# Marcas de máquina\n\nEntidade: gabarito\nRev: 2\n\nTexto de marcas de máquina.\n"
-    )
-    acervo_bin = _criar_acervo_fixture(tmp_path, {"marcas-pt-br": lista_prosa})
-    monkeypatch.setenv("PF_LINT_ACERVO", str(acervo_bin))
-
-    fichario = DubleFichario(
-        reguas=_reguas_padrao(),
-        alvos={
-            "politica:0011": AlvoVerificado(
-                chave="politica:0011",
-                classe="politica",
-                slug="0011",
-                texto="Texto qualquer da política 0011.",
-            )
-        },
-    )
-    amb = AmbienteVerificacao(vista=_vista_padrao(), fichario=fichario)
-    rc, stdout, stderr = _rodar(
-        "casa",
-        ["politica:0011", "--regua", "gabarito:marcas-pt-br", "--json"],
-        amb,
-    )
-
-    assert rc == 0
-    assert stderr == ""
-    dados = json.loads(stdout)
-    assert dados["versao_contrato"] == VERSAO_CONTRATO
-    assert dados["veredito"]["motor"] == SERVICO_LINT
-    assert dados["veredito"]["resultado"] == "nao-sei"
-    assert dados["veredito"]["constatacao"] == "inconclusivo"
-    assert "marcas-pt-br" in dados["nao_julgados"]
+_LISTA_FORMA_DE_CARD = (
+    "força não declarada · vigente — lista-de-verificacao forma-de-card · Forma de card\n"
+    "# Forma de card\n\nEspécie: lista-de-verificacao\nRev: 1\n"
+)
+_TEXTO_STORY_CURTA = "# Story curta\n#4454 · story · Em execução\n\nNegócio: só negócio.\n"
 
 
-def test_adaptador_real_card_forma_de_card_e_discovery(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    lista_card = (
-        "força não declarada · vigente — lista-de-verificacao forma-de-card · Forma de card\n"
-        "# Forma de card\n\nEspécie: lista-de-verificacao\nRev: 1\n"
-    )
-    acervo_bin = _criar_acervo_fixture(tmp_path, {"forma-de-card": lista_card})
-    monkeypatch.setenv("PF_LINT_ACERVO", str(acervo_bin))
-
+def _reguas_com_forma_de_card() -> dict[str, ReguaFicha]:
     reguas = dict(_reguas_padrao())
     reguas["gabarito:forma-de-card"] = ReguaFicha(
         chave="gabarito:forma-de-card",
@@ -708,14 +669,71 @@ def test_adaptador_real_card_forma_de_card_e_discovery(tmp_path: Path, monkeypat
         garantido_por=SERVICO_LINT,
         versao="1",
     )
+    return reguas
+
+
+def _ambiente_prosa_real(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AmbienteVerificacao:
+    """Serviço de lint real sobre a política 0011, com a régua de prosa e a de forma de card servidas."""
+    lista_prosa = (
+        "força não declarada · vigente — gabarito marcas-pt-br · Marcas de máquina\n"
+        "# Marcas de máquina\n\nEntidade: gabarito\nRev: 2\n\nTexto de marcas de máquina.\n"
+    )
+    listas = {"marcas-pt-br": lista_prosa, "forma-de-card": _LISTA_FORMA_DE_CARD}
+    monkeypatch.setenv("PF_LINT_ACERVO", str(_criar_acervo_fixture(tmp_path, listas)))
+    alvo = AlvoVerificado(chave="politica:0011", classe="politica", slug="0011", texto=_TEXTO_STORY_CURTA)
+    fichario = DubleFichario(reguas=_reguas_com_forma_de_card(), alvos={"politica:0011": alvo})
+    return AmbienteVerificacao(vista=_vista_padrao(), fichario=fichario)
+
+
+def test_adaptador_real_prosa_sem_detector_mecanico_sai_5_sem_veredito(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    amb = _ambiente_prosa_real(tmp_path, monkeypatch)
+    rc, stdout, stderr = _rodar(
+        "casa",
+        ["politica:0011", "--regua", "gabarito:marcas-pt-br", "--json"],
+        amb,
+    )
+
+    assert rc == 5
+    assert stdout == ""
+    recusa = _ler_recusa_stderr(stderr)
+    assert recusa["codigo"] == "sem-motor-deterministico"
+    assert recusa["onde"] == "servico-lint"
+
+
+def test_adaptador_real_prosa_na_uniao_com_regua_mecanica_volta_nao_julgada(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    amb = _ambiente_prosa_real(tmp_path, monkeypatch)
+    rc, stdout, stderr = _rodar(
+        "casa",
+        ["politica:0011", "--regua", "gabarito:marcas-pt-br", "--regua", "gabarito:forma-de-card", "--json"],
+        amb,
+    )
+
+    assert rc == 0
+    assert stderr == ""
+    dados = json.loads(stdout)
+    assert dados["versao_contrato"] == VERSAO_CONTRATO
+    assert dados["veredito"]["motor"] == SERVICO_LINT
+    assert "marcas-pt-br" in dados["nao_julgados"]
+
+
+def test_adaptador_real_card_forma_de_card_e_discovery(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    acervo_bin = _criar_acervo_fixture(tmp_path, {"forma-de-card": _LISTA_FORMA_DE_CARD})
+    monkeypatch.setenv("PF_LINT_ACERVO", str(acervo_bin))
+
     fichario = DubleFichario(
-        reguas=reguas,
+        reguas=_reguas_com_forma_de_card(),
         alvos={
             "politica:card-story": AlvoVerificado(
                 chave="politica:card-story",
                 classe="politica",
                 slug="card-story",
-                texto="# Story curta\n#4454 · story · Em execução\n\nNegócio: só negócio.\n",
+                texto=_TEXTO_STORY_CURTA,
             )
         },
     )

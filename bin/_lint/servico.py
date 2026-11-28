@@ -42,6 +42,9 @@ MAPA_REGUA_CLASSE: Mapping[str, str] = {
     "antipadroes-do-acervo": "acervo",
 }
 
+# Classes do lint sem nenhum detector mecânico: a régua delas se julga por leitura.
+CLASSES_SEM_DETECTOR: frozenset[str] = frozenset({"prosa"})
+
 
 class ErroServicoLint(Exception):
     """Falha controlada do serviço de lint traduzível para a tabela de saídas 1–5."""
@@ -278,8 +281,8 @@ def _adaptar_prosa(regua: _ReguaResolvida, _alvo: AlvoLint, _raiz: Path) -> _Res
     if not regua.lista:
         raise ErroServicoLint(1, "regua-inexistente", f"régua '{regua.slug}' não encontrada no acervo")
     rev = regua.lista.get("rev") or 1
-    # O avaliador determinístico de prosa não julga marcas de máquina sobre texto;
-    # responde inconclusivo (`nao-sei`) em vez de devolver `conforme` sem ler.
+    # A prosa não tem detector mecânico: sozinha, a régua sai 5 em `julgar`, antes daqui;
+    # na união com régua que tem detector, ela volta inteira em `nao_julgados`.
     return _ResultadoDetector(
         apontamentos=[],
         versao_regua=f"rev{rev}",
@@ -457,7 +460,8 @@ def julgar(
     Sem estado: nunca lê nem grava cache de vereditos. Itens bloqueantes fecham `divergente`
     (`nao`); itens de `aviso` entram nos apontamentos sem alterar `conforme` (`sim`). Itens de
     `leitura` ficam fora do julgamento determinístico e retornam em `nao_julgados`; bloqueante
-    sem medida determinística fecha `inconclusivo` (`nao-sei`), nunca verde falso.
+    sem medida determinística fecha `inconclusivo` (`nao-sei`), nunca verde falso. A união em
+    que nenhuma régua tem detector mecânico sai 5 (`sem-detector`), sem veredito.
     """
     if prazo_s <= 0:
         raise ErroServicoLint(5, "tempo-esgotado", "prazo esgotado antes de iniciar o serviço de lint")
@@ -466,6 +470,14 @@ def julgar(
 
     usa_real = executor_detector is None
     resolvidas = _resolver_reguas(reguas, carregar_listas=usa_real)
+    if usa_real and all(r.classe in CLASSES_SEM_DETECTOR for r in resolvidas):
+        raise ErroServicoLint(
+            5,
+            "sem-detector",
+            "nenhum item de "
+            + ", ".join(r.slug for r in resolvidas)
+            + " tem detector mecânico no serviço de lint; a régua se julga por leitura",
+        )
 
     nao_julgados_acum: list[str] = []
     tem_bloqueante_leitura = False
