@@ -2,73 +2,61 @@
   "canal-dos-giros": {
     "tipo": "preparacao",
     "repositorio": "platafirma-conhecimento",
-    "caminho": "analise/canal-dos-giros",
-    "versao": "659638b"
+    "caminho": "analise/canal-dos-giros"
   },
   "uso-por-canal": {
     "tipo": "analise",
     "repositorio": "platafirma-conhecimento",
-    "caminho": "analise/uso-por-canal",
-    "versao": "50ca909"
+    "caminho": "analise/uso-por-canal"
   },
   "populacao-de-turnos": {
     "tipo": "preparacao",
     "repositorio": "platafirma-conhecimento",
-    "caminho": "analise/populacao-de-turnos",
-    "versao": "8ae0249"
+    "caminho": "analise/populacao-de-turnos"
   },
   "contagem-por-fonte": {
     "tipo": "analise",
     "repositorio": "platafirma-conhecimento",
-    "caminho": "analise/contagem-por-fonte",
-    "versao": "8ae0249"
+    "caminho": "analise/contagem-por-fonte"
   },
   "mineracao-ocel": {
     "tipo": "preparacao",
     "repositorio": "platafirma-conhecimento",
-    "caminho": "analise/mineracao-ocel",
-    "versao": "7868a84"
+    "caminho": "analise/mineracao-ocel"
   },
   "sequencia-por-evento": {
     "tipo": "analise",
     "repositorio": "platafirma-conhecimento",
-    "caminho": "analise/sequencia-por-evento",
-    "versao": "8701e2a"
+    "caminho": "analise/sequencia-por-evento"
   },
   "descoberta-indutiva": {
     "tipo": "analise",
     "repositorio": "platafirma-conhecimento",
-    "caminho": "analise/descoberta-indutiva",
-    "versao": "7de9743"
+    "caminho": "analise/descoberta-indutiva"
   },
   "agrupamento-de-sequencias": {
     "tipo": "analise",
     "repositorio": "platafirma-conhecimento",
-    "caminho": "analise/agrupamento-de-sequencias",
-    "versao": "8701e2a"
+    "caminho": "analise/agrupamento-de-sequencias"
   },
   "vista-por-capacidade": {
     "tipo": "analise",
     "repositorio": "platafirma-conhecimento",
-    "caminho": "analise/vista-por-capacidade",
-    "versao": "523130a"
+    "caminho": "analise/vista-por-capacidade"
   },
   "desfecho-da-leitura": {
     "tipo": "analise",
     "repositorio": "platafirma-conhecimento",
-    "caminho": "analise/desfecho-da-leitura",
-    "versao": "c6fdfb7"
+    "caminho": "analise/desfecho-da-leitura"
   },
   "trilha-do-card": {
     "tipo": "preparacao",
     "repositorio": "platafirma-conhecimento",
-    "caminho": "analise/trilha-do-card",
-    "versao": "6109e08"
+    "caminho": "analise/trilha-do-card"
   },
   "aposta-e-stories": {
     "tipo": "analise",
     "repositorio": "platafirma-conhecimento",
-    "caminho": "analise/aposta-e-stories",
-    "versao": "6109e08"
+    "caminho": "analise/aposta-e-stories"
   }
 }

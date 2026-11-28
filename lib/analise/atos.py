@@ -80,16 +80,11 @@ class MotorAnalise:
         exigir(
             reg["repositorio"] == "platafirma-conhecimento", "repositorio-nao-aceito"
         )
-        raiz_receita=self.conhecimento
         import re
-        servida=self.conhecimento.resolve()
-        if re.fullmatch(r"[0-9a-f]{40}",servida.name):
-            versao=reg.get("versao","")
-            exigir(re.fullmatch(r"[0-9a-f]{7,40}",versao),"versao-da-receita-invalida")
-            candidatas=[p for p in servida.parent.glob(versao+"*") if p.is_dir()]
-            exigir(len(candidatas)==1,"versao-da-receita-nao-materializada",3)
-            raiz_receita=candidatas[0]
-        pasta = relativo(raiz_receita, reg["caminho"])
+
+        servida = self.conhecimento.resolve()
+        pasta = relativo(servida, reg["caminho"])
+        exigir(pasta.is_dir(), "receita-ausente-na-release", 3)
         r = carregar(pasta, ato)
         exigir(r["tipo"] == reg["tipo"], "tipo-do-registro-diverge")
         if reg.get("arquivos"):
@@ -99,7 +94,10 @@ class MotorAnalise:
                     "receita-diverge-do-registro",
                     5,
                 )
-        return pasta, r, reg
+        reg_servido = dict(reg)
+        if re.fullmatch(r"[0-9a-f]{40}", servida.name):
+            reg_servido["versao"] = servida.name
+        return pasta, r, reg_servido
 
     def rodar(
         self,

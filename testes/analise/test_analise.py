@@ -121,25 +121,43 @@ def test_coluna_corte_fora_da_declaracao(receita):
     assert e.value.exit == 2
 
 
-def test_receita_usa_artefato_da_versao_registrada(receita, tmp_path):
-    antiga = tmp_path / "artefatos" / ("a" * 40)
+def test_receita_usa_release_servida(receita, tmp_path):
     nova = tmp_path / "artefatos" / ("b" * 40)
-    shutil.copytree(receita, antiga / "analise/populacao-de-turnos")
-    nova.mkdir()
+    shutil.copytree(receita, nova / "analise/populacao-de-turnos")
     reg = {
         "populacao-de-turnos": {
             "tipo": "preparacao",
             "repositorio": "platafirma-conhecimento",
             "caminho": "analise/populacao-de-turnos",
-            "versao": "a" * 40,
         }
     }
     m = MotorAnalise(
         raiz=tmp_path, conhecimento=nova, registro=reg, instancia=tmp_path,
         sujeito="s", sessao="s", ordem="o",
     )
-    p, _, _ = m.receita("populacao-de-turnos", "preparar")
-    assert p == antiga / "analise/populacao-de-turnos"
+    p, _, reg_servido = m.receita("populacao-de-turnos", "preparar")
+    assert p == nova / "analise/populacao-de-turnos"
+    assert reg_servido["versao"] == "b" * 40
+
+
+def test_receita_ausente_na_release_sai_3(tmp_path):
+    nova = tmp_path / "artefatos" / ("b" * 40)
+    nova.mkdir(parents=True)
+    reg = {
+        "populacao-de-turnos": {
+            "tipo": "preparacao",
+            "repositorio": "platafirma-conhecimento",
+            "caminho": "analise/populacao-de-turnos",
+        }
+    }
+    m = MotorAnalise(
+        raiz=tmp_path, conhecimento=nova, registro=reg, instancia=tmp_path,
+        sujeito="s", sessao="s", ordem="o",
+    )
+    with pytest.raises(Falha) as e:
+        m.receita("populacao-de-turnos", "preparar")
+    assert e.value.exit == 3
+    assert e.value.causa == "receita-ausente-na-release"
 
 
 def test_pre_voo_nao_aloca():
@@ -960,7 +978,13 @@ def test_cli_em_unidade_dedicada(db, bancos, tmp_path):
     (servido / "conhecimento").symlink_to(CONHECIMENTO, target_is_directory=True)
     politica = servido / "core/acesso"
     politica.mkdir(parents=True)
-    acesso_core = RAIZ.parent / "core/acesso"
+    from raizes import release
+
+    acesso_core = (
+        RAIZ.parent / "core/acesso"
+        if (RAIZ.parent / "core/acesso").is_dir()
+        else release() / "core/acesso"
+    )
     for nome in ("pdp.py", "politica.yaml"):
         shutil.copy2(acesso_core / nome, politica / nome)
     (politica / "sujeitos.yaml").write_text(
