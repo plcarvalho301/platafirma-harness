@@ -20,13 +20,14 @@ conferem contra o texto pronto) em `gabaritos/`.
 - **Rascunho de um documento desses**, como o estudo antes do parecer ou a referência
   antes de gravada: vale inteira, pela régua do tipo que ele vai virar, que quem escreve
   decide antes de começar.
-- **Comentário de insumo:** vale inteira, pela régua do documento de que ele faz as
-  vezes (parecer, levantamento ou rascunho de feature), que quem escreve decide antes de
-  começar. O que faz as vezes de parecer segue as seções da classe parecer, e a primeira
-  linha e a linha Traz seguem `card.md`.
-- **Corpo de épico e de feature, item do inventário da feature e os outros
-  comentários:** valem a voz, o núcleo, os gabaritos e a redação de `card.md`. O que
-  entra em cada seção vem da classe.
+- **Insumo de card:** vale inteira, pela régua da classe de documento que ele vai virar
+  (declarada em `vira`: parecer, levantamento ou referência). Nasce fora dos comentários
+  como rascunho próprio com histórico de edições, sem prefixos de comentário (`insumo:`,
+  `Traz:`, `Onde:`).
+- **Corpo de épico e de feature, item do inventário da feature e comentários:** valem a
+  voz, o núcleo, os gabaritos e a redação de `card.md`. O que entra em cada seção vem da
+  classe, e as ligações do comentário (ato, destinatário, alvo, apoio, resposta e revisão)
+  vão como dado estruturado.
 - **Corpo de story e de task:** valem a voz, o núcleo e os gabaritos. A forma sai de
   `tarefas modelo`.
 - **Resposta de chat e nota sem documento de destino:** não vale.

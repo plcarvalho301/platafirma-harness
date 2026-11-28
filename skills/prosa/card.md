@@ -148,24 +148,31 @@ casos:  arquivo do posto editado à mão → a geração seguinte o sobrescreve
 
 ## O comentário
 
-Quem acompanha o card lê, no índice, só a primeira linha e o fecho de cada comentário.
+O comentário é uma micropublicação pontual e imutável ligada ao card. Os metadados e
+ligações (ato, destinatário, alvo, evidências de apoio, resposta e revisão) vão como dado
+estruturado na chamada, sem prefixos redundantes (`Para:`, `Caso:`, `Onde:`, `Dita em:`,
+`Substitui:`) no texto livre.
 
 ### Primeira linha
 
-O ponto inteiro é a conclusão, e não o assunto. O detalhe que não cabe desce para as
-linhas do tipo.
+Traz a conclusão primeiro (até 256 caracteres), pelo nome das coisas, sem repetir
+metadados que já vão nos campos da micropublicação.
 
 - Ruim: «buraco: o lint casa_por_caminho da regra 13 e da medida hoje não detecta
   caminhos da casa atual em platafirma-posto nem em platafirma-harness»
 - Bom: «buraco: o lint de caminho da casa velha não acusa nada; a medida passaria com o
   erro»
 
-### Porque
+### Campos exclusivos do papel e justificativa
 
-O que passa de um parágrafo é parecer: vai a um comentário de insumo, e este aponta
-para ele.
+Permanecem no texto apenas os campos próprios do papel (`Decide` na pergunta; `Tamanho` e
+`Remendo` no buraco; `Confere` no requisito; `Descartado` na decisão) e no máximo um
+parágrafo de justificativa. O que passa de um parágrafo vira insumo do card (`tarefas
+insumo criar`), apontado em `apoio`.
 
-### Fecho
+### Fecho e revisão
 
-Depois do resultado, o fecho diz em palavras o que mudou no corpo ou no inventário, e
-não só o rótulo da seção ou a chave do item.
+Fechar, corrigir ou retratar grava uma nova mensagem ligada à anterior (`--responde-a` ou
+`--revisa` com `--relacao corrige|retrata`), sem apagar nem sobrescrever a original. No
+fecho, diga em palavras o que mudou no corpo ou no inventário, e não só o rótulo da seção
+ou a chave do item.

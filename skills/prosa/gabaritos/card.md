@@ -55,22 +55,25 @@ reescrever a feature.
 
 ## Comentário
 
-- **M1 · Primeira linha.** Passa quando cabe em 90 caracteres e diz o ponto inteiro, pelo
-  nome das coisas. Se falha, corte até caber; o detalhe desce para o argumento.
+- **M1 · Primeira linha.** Passa quando cabe em 256 caracteres, traz a conclusão primeiro
+  pelo nome das coisas e não repete destinatário, caso nem substituição no texto livre.
+  Se falha, corte o prefixo redundante e leve o detalhe aos campos estruturados.
 - **M2 · Primeira linha.** Passa quando trata um tema só. Se falha, parta em dois
   comentários.
 - **M3 · Comentário.** Passa quando cita item do inventário pela chave ou pelo nome, e
   nunca pela posição numa lista. Se falha, troque pela chave.
-- **M4 · Porque.** Passa quando, fora do insumo, cabe num parágrafo. Se falha, leve o
-  resto a um insumo e aponte para ele.
-- **M5 · Porque.** Passa quando, fora do insumo, não cita obra de fora. Se falha, leve a
-  obra a um insumo; fica o fato medido na casa.
-- **M6 · Buraco.** Passa quando a linha Tamanho diz se a falha derruba a feature,
-  restringe o que ela entrega ou é custo a pesar. Se falha, escreva a linha Tamanho.
-- **M7 · Insumo.** Passa quando a linha Traz diz o que muda para este card. Se falha,
-  escreva a linha.
-- **M8 · Fecho.** Passa quando diz em palavras o que mudou no corpo ou no inventário. Se
-  falha, troque o rótulo solto pelo que mudou.
+- **M4 · Justificativa.** Passa quando cabe num parágrafo. Se falha, leve o resto a um
+  insumo do card (`tarefas insumo criar`) e aponte em `apoio`.
+- **M5 · Justificativa.** Passa quando não cita obra de fora no texto livre. Se falha,
+  leve a obra a um insumo do card e aponte em `apoio`; fica o fato medido na casa.
+- **M6 · Buraco.** Passa quando leva ao menos uma evidência medida em `apoio` e a linha
+  `Tamanho` diz se a falha derruba, restringe ou é custo a pesar. Se falha, complete
+  `apoio` e `Tamanho`, ou registre como pergunta.
+- **M7 · Decisão.** Passa quando a linha `Descartado` diz a alternativa descartada e o
+  porquê. Se falha, escreva a linha `Descartado`.
+- **M8 · Fecho e revisão.** Passa quando a mensagem de fecho ou revisão está ligada à
+  anterior e diz em palavras o que mudou no corpo ou no inventário. Se falha, troque o
+  rótulo solto pelo que mudou.
 
 Aprovado, o texto segue. Reprovado, volta ao texto, e o gabarito roda de novo até nenhum
 item falhar.

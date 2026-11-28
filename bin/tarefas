@@ -3,7 +3,7 @@
 # capacidade: tarefas
 # dono: gestao-estrategica
 # use para: SEMPRE que o assunto for card, épico, feature, story, incidente ou débito técnico; captar demanda, «cria um card»; lapidar, dar parecer, apostar, formalizar, priorizar, pôr em execução, concluir, validar e entregar card, «move para refinamento», «comenta no card»; declarar, mitigar e fechar incidente; «o que está comigo?», «lê o card», «os comentários do card», sign-off; e sempre que o pacto quebrar ou uma execução cair
-# atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub, ordenar, bloquear, desbloquear, carteira, inventario, espera-dono (leitura, trabalho)
+# atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, insumo, mover, fechar, apagar, assinar, dt, estados, sub, ordenar, bloquear, desbloquear, carteira, inventario, espera-dono (leitura, trabalho)
 # mecanismo: espera-dono=casca
 #
 # Texto do controle. Todo ato cai na face Entrega.
@@ -20,6 +20,7 @@
 # face: modelo=Entrega
 # face: comentar=Entrega
 # face: comentarios=Entrega
+# face: insumo=Entrega
 # face: mover=Entrega
 # face: fechar=Entrega
 # face: apagar=Entrega
@@ -40,6 +41,7 @@
 # rotulo: modelo=Abrir molde de card
 # rotulo: comentar=Comentar card
 # rotulo: comentarios=Listar comentário
+# rotulo: insumo=Administrar insumo de card
 # rotulo: mover=Mover card
 # rotulo: fechar=Fechar card
 # rotulo: apagar=Apagar card
@@ -60,6 +62,7 @@
 # volta: modelo=sim — só lê
 # volta: comentar=nao
 # volta: comentarios=sim — só lê
+# volta: insumo=nao
 # volta: mover=sim — tarefas mover ao estado de antes, onde o fluxo deixa (a recusa diz para onde se pode ir)
 # volta: fechar=nao
 # volta: apagar=nao
@@ -145,7 +148,7 @@ uso:
                                           `--nivel ideia` guarda uma ideia, ou um balde de ideias
                                           de um tema, só com o título: nasce em captada, não tem
                                           pai nem filha, e cada nova ideia do tema entra em
-                                          `comentar <id>` como insumo. Sai só por
+                                          `insumo criar <id>`. Sai só por
                                           `mover <id> englobada --englobado-em <card>` ou
                                           `mover <id> descartada --motivo "<txt>"`
                                           `--nivel task` cria o passo de uma story e exige
@@ -183,29 +186,37 @@ uso:
                                           esqueleto do corpo, com os rótulos que a API exige;
                                           épico e feature saem no two-pager
   tarefas modelo story derivada           a story que sai da formalização: aponta R<n>, D<n> ou Peça
-  tarefas modelo comentario <tipo>        o comentário tipado: insumo, pergunta, buraco,
+  tarefas modelo comentario <tipo>        o comentário tipado: pergunta, buraco,
                                           requisito ou decisão
   tarefas modelo story refinada           o Plano: segunda camada da story, escrita pela
                                           cadeira dona em em-refinamento-tecnico, depois de
                                           ler o código; a executora, quando é outra, revisa
                                           antes de começar (classe story)
-  tarefas comentar <id> ["<txt>"]         cria comentário (entidade própria,
-                                          não altera o corpo do item); sem texto, lê stdin
+  tarefas comentar <id> [--ato <ato>] [--destinatario <c>]... [--alvo <txt>] [--apoio <ref>]...
+                        [--etiqueta <t>]... [--cita <txt>] [--responde-a <n>]
+                        [--revisa <n> --relacao corrige|retrata] ["<txt>"]
+                                          cria comentário como micropublicação (sem texto, lê stdin);
+                                          buraco exige --apoio e linha Tamanho no corpo
   tarefas comentar <id> --fecha <n> "<resultado> — <destino>"
-                                          escreve «fecho: …» como última linha do comentário n
-                                          (comentário tipado; insumo não leva fecho)
+                                          fecha o comentário n gravando nova mensagem ligada a ele
+                                          sem alterar o texto original
   tarefas comentar <id> --edita <n> ["<txt>"]
                                           troca o corpo do comentário n (lê stdin se sem texto,
                                           converte em HTML como na criação; a API recusa trocar
                                           o tipo ou mexer no fecho, R13)
-  tarefas comentarios <id> [--indice] [--busca <termo>] [--arvore] [--id <n>]... [--desde <n>] [--ultimos <k>]
+  tarefas comentarios <id> [--historico] [--indice] [--busca <termo>] [--arvore] [--id <n>]... [--desde <n>] [--ultimos <k>]
                            [--linhas <faixa>] [--offset <bytes>] [--max-bytes <n>] [--inteiro]
-                                          lista os comentários do item, em ordem. --busca <termo>
-                                          filtra as linhas que casam (id, card e linha); --arvore
+                                          lista os comentários vigentes do item, em ordem;
+                                          --historico inclui mensagens corrigidas e retratadas.
+                                          --busca <termo> filtra as linhas que casam; --arvore
                                           desce a subárvore inteira. --indice dá uma linha por
                                           comentário; --id lê só aquele(s); --desde <n> os de
                                           id >= n; --ultimos <k> os k mais novos; --linhas e
                                           --offset fatiam via lib/leitura
+  tarefas insumo <criar|editar|listar|ler|integrar|descartar>
+                                          rascunho de documento ligado a um card, com histórico de
+                                          edições e destino (integrado ou descartado); `insumo`
+                                          sem sub mostra o uso
   tarefas mover <id> <estado> [--motivo "<txt>"] [--englobado-em <id>]
                                           move o card pelo fluxo; a recusa diz para onde
                                           se PODE ir a partir do estado atual. Item com
@@ -1464,23 +1475,67 @@ editar() {
 # (`x-auth-request-preferred-username`, via `$QUEM`) — `envia` já o manda quando presente.
 comentar() {
   local id="${1:-}"
-  [ -z "$id" ] && { echo "uso: tarefas comentar <id> [\"<txt>\"] (ou corpo em stdin)" >&2; exit 2; }
+  [ -z "$id" ] && { echo "uso: tarefas comentar <id> [--ato <ato>] [--destinatario <c>]... [--alvo <txt>] [--apoio <ref>]... [--etiqueta <t>]... [--cita <txt>] [--responde-a <n>] [--revisa <n> --relacao corrige|retrata] [\"<txt>\"]" >&2; exit 2; }
   id=$(so_id "$id") || exit 2
-  if [ "${2:-}" = "--fecha" ]; then
-    fechar_comentario "$id" "${3:-}" "${4:-}"
+  shift
+  if [ "${1:-}" = "--fecha" ]; then
+    fechar_comentario "$id" "${2:-}" "${3:-}"
     return
   fi
-  if [ "${2:-}" = "--edita" ]; then
-    editar_comentario "$id" "${3:-}" "${4:-}"
+  if [ "${1:-}" = "--edita" ]; then
+    editar_comentario "$id" "${2:-}" "${3:-}"
     return
   fi
-  local txt="${2:-}"
-  # Opção no lugar do texto não é corpo (#2856 linhas 49 e 50): `--stdin` manda ler o stdin; outra
-  # opção de uma palavra só é recusada, em vez de gravada como comentário.
-  if [[ "$txt" =~ ^--[a-zA-Z][a-zA-Z0-9-]*$ ]]; then
-    [ "$txt" = "--stdin" ] || { echo "erro: tarefas comentar: opção desconhecida '$txt'; o corpo vai entre aspas ou em stdin." >&2; exit 2; }
-    txt=""
-  fi
+  local ato="" alvo="" cita="" responde_a="" revisa="" relacao="" txt="" leu_txt=false
+  local dest='[]' apoio='[]' etiq='[]'
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --ato)
+        [ $# -ge 2 ] && [ -n "$2" ] || { echo "erro: tarefas comentar: --ato exige valor" >&2; exit 2; }
+        ato="$2"; shift 2 ;;
+      --destinatario)
+        [ $# -ge 2 ] && [ -n "$2" ] || { echo "erro: tarefas comentar: --destinatario exige valor" >&2; exit 2; }
+        dest=$(jq -c --arg v "$2" '. + [$v]' <<<"$dest"); shift 2 ;;
+      --alvo)
+        [ $# -ge 2 ] && [ -n "$2" ] || { echo "erro: tarefas comentar: --alvo exige valor" >&2; exit 2; }
+        alvo="$2"; shift 2 ;;
+      --apoio)
+        [ $# -ge 2 ] && [ -n "$2" ] || { echo "erro: tarefas comentar: --apoio exige valor" >&2; exit 2; }
+        apoio=$(jq -c --arg v "$2" '. + [$v]' <<<"$apoio"); shift 2 ;;
+      --etiqueta)
+        [ $# -ge 2 ] && [ -n "$2" ] || { echo "erro: tarefas comentar: --etiqueta exige valor" >&2; exit 2; }
+        etiq=$(jq -c --arg v "$2" '. + [$v]' <<<"$etiq"); shift 2 ;;
+      --cita)
+        [ $# -ge 2 ] && [ -n "$2" ] || { echo "erro: tarefas comentar: --cita exige valor" >&2; exit 2; }
+        cita="$2"; shift 2 ;;
+      --responde-a)
+        [ $# -ge 2 ] && [ -n "$2" ] || { echo "erro: tarefas comentar: --responde-a exige id de comentário" >&2; exit 2; }
+        responde_a=$(so_id "$2") || exit 2; shift 2 ;;
+      --revisa)
+        [ $# -ge 2 ] && [ -n "$2" ] || { echo "erro: tarefas comentar: --revisa exige id de comentário" >&2; exit 2; }
+        revisa=$(so_id "$2") || exit 2; shift 2 ;;
+      --relacao)
+        [ $# -ge 2 ] && [ -n "$2" ] || { echo "erro: tarefas comentar: --relacao exige corrige ou retrata" >&2; exit 2; }
+        relacao="$2"; shift 2 ;;
+      --stdin)
+        shift ;;
+      --)
+        shift
+        if [ $# -gt 0 ]; then txt="$1"; leu_txt=true; shift; fi
+        [ $# -eq 0 ] || { echo "erro: tarefas comentar: argumento inesperado: $1" >&2; exit 2; }
+        ;;
+      --*)
+        echo "erro: tarefas comentar: opção desconhecida '$1'; o corpo vai entre aspas ou em stdin." >&2
+        exit 2 ;;
+      *)
+        if [ "$leu_txt" = "false" ]; then
+          txt="$1"; leu_txt=true; shift
+        else
+          echo "erro: tarefas comentar: argumento inesperado: $1" >&2; exit 2
+        fi
+        ;;
+    esac
+  done
   if [ -z "$txt" ] && [ ! -t 0 ]; then
     txt="$(cat)"
   fi
@@ -1488,12 +1543,32 @@ comentar() {
   trim="$(printf '%s' "$txt" | tr -d '[:space:]')"
   if [ -z "$trim" ]; then
     echo "erro: tarefas comentar: corpo do comentário não pode ser vazio." >&2
-    echo "uso: tarefas comentar <id> [\"<txt>\"] (ou corpo em stdin)" >&2
+    echo "uso: tarefas comentar <id> [opções] [\"<txt>\"] (ou corpo em stdin)" >&2
     exit 2
   fi
   local html; html=$(printf '%s' "$txt" | para_html)
   local corpo saida status body
-  corpo=$(jq -n --arg c "$html" '{corpo:$c}')
+  corpo=$(jq -n \
+    --arg c "$html" \
+    --arg ato "$ato" \
+    --argjson dest "$dest" \
+    --arg alvo "$alvo" \
+    --argjson apoio "$apoio" \
+    --argjson etiq "$etiq" \
+    --arg cita "$cita" \
+    --arg resp "$responde_a" \
+    --arg rev "$revisa" \
+    --arg rel "$relacao" \
+    '{corpo: $c}
+     + (if $ato != "" then {ato: $ato} else {} end)
+     + (if ($dest | length) > 0 then {destinatario: $dest} else {} end)
+     + (if $alvo != "" then {alvo: $alvo} else {} end)
+     + (if ($apoio | length) > 0 then {apoio: $apoio} else {} end)
+     + (if ($etiq | length) > 0 then {etiqueta: $etiq} else {} end)
+     + (if $cita != "" then {cita: $cita} else {} end)
+     + (if $resp != "" then {responde_a: ($resp | tonumber)} else {} end)
+     + (if $rev != "" then {revisa: ($rev | tonumber)} else {} end)
+     + (if $rel != "" then {relacao: $rel} else {} end)')
   # CARD #3614: a recusa de tipo (épico/feature sem tipo na primeira linha, ou tipo fora
   # da fase aceita) traz `aceitos` — mesmo campo e mesmo estilo que `fechar_comentario`
   # já imprime para o fecho fora do vocabulário; `_recusa`, genérico a todo verbo, não
@@ -1643,14 +1718,15 @@ fechar_comentario() {
 # Sem opção, lista tudo no formato padrão (o lint de card lê esta saída); aceita filtros semânticos
 # (--indice, --busca, --arvore, --id, --desde, --ultimos) e fatiamento por linhas/bytes via lib/leitura.
 comentarios() {
-  local uso='uso: tarefas comentarios <id> [--indice] [--busca <termo>] [--arvore] [--id <n>]... [--desde <n>] [--ultimos <k>] [--linhas <faixa>] [--offset <bytes>] [--max-bytes <n>] [--inteiro]'
-  local id='' ids='[]' desde=0 ultimos=0 indice=false arvore=false busca_termo=''
+  local uso='uso: tarefas comentarios <id> [--historico] [--indice] [--busca <termo>] [--arvore] [--id <n>]... [--desde <n>] [--ultimos <k>] [--linhas <faixa>] [--offset <bytes>] [--max-bytes <n>] [--inteiro]'
+  local id='' ids='[]' desde=0 ultimos=0 indice=false arvore=false historico=false busca_termo=''
   local -a leitura_args=()
   local lib_harness
   lib_harness="$(dirname "$(readlink -f "$0")")/../lib"
   local numero='^[0-9]+$'
   while [ $# -gt 0 ]; do
     case "$1" in
+      --historico) historico=true; shift ;;
       --indice) indice=true; shift ;;
       --arvore) arvore=true; shift ;;
       --busca)
@@ -1683,6 +1759,8 @@ comentarios() {
   # Portão do funil: o card terminal sai recusado aqui, limpo, antes dos encadeamentos abaixo
   # (que, recusados no meio do pipe, imprimiam o traceback do conversor junto da recusa).
   if [ "$_SO_FUNIL" = 1 ]; then busca GET "/itens/$id" >/dev/null || return 1; fi
+  local qs=""
+  [ "$historico" = "true" ] && qs="?historico=1"
   local saida bytes
   if [ "$arvore" = "true" ] || [ -n "$busca_termo" ]; then
     local -a fila=("$id")
@@ -1709,7 +1787,7 @@ comentarios() {
         card_rot=$(rotulo_de "$cid")
       fi
       local com_j
-      com_j=$(busca GET "/itens/$cid/comentarios") || return 1
+      com_j=$(busca GET "/itens/$cid/comentarios${qs}") || return 1
       if [ -n "$busca_termo" ]; then
         bloco=$(printf '%s' "$com_j" | jq -c \
           --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" '
@@ -1776,7 +1854,7 @@ for c in json.load(sys.stdin):
     fi
   else
     if [ "$indice" = "true" ]; then
-      saida=$(busca GET "/itens/$id/comentarios" | jq -c \
+      saida=$(busca GET "/itens/$id/comentarios${qs}" | jq -c \
         --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" '
         .comentarios as $todos
         | ($todos
@@ -1803,7 +1881,7 @@ else:
         print(f"#{cid} · {autor} · {carimbo} · {len(raw)} car. · {prev}")
 ')
     else
-      saida=$(busca GET "/itens/$id/comentarios" | jq -r \
+      saida=$(busca GET "/itens/$id/comentarios${qs}" | jq -r \
         --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" '
         .comentarios as $todos
         | ($todos
@@ -1820,6 +1898,293 @@ else:
   fi
   printf '%s\n' "$saida" \
     | PYTHONPATH="$lib_harness${PYTHONPATH:+:$PYTHONPATH}" python3 -m leitura.verbo --stdin --rotulo "tarefas comentarios" "${leitura_args[@]}"
+}
+
+# --- insumo -----------------------------------------------------------------
+
+_insumo_uso() {
+  local codigo="${1:-2}" fd=2
+  [ "$codigo" = 0 ] && fd=1
+  cat >&$fd <<'FIM'
+uso:
+  tarefas insumo criar <card> --vira <shape> --titulo "<t>" [--desc "<txt>"|--desc-stdin] [--task <id>]
+                                          cria rascunho de insumo no card (estado em-escrita);
+                                          sem --desc, lê o corpo de stdin
+  tarefas insumo editar <card> <iid> [--vira <shape>] [--titulo "<t>"] [--desc "<txt>"|--desc-stdin] [--task <id>|--sem-task]
+                                          edita o insumo em-escrita e grava nova versão no histórico
+  tarefas insumo listar <card> [--estado em-escrita|integrado|descartado] [--json]
+                                          lista os insumos do card
+  tarefas insumo ler <card> <iid> [--json]
+                                          lê o insumo e o histórico de edições
+  tarefas insumo integrar <card> <iid> --em "<destino>" [--task <id>]
+                                          marca o insumo como integrado num documento ou task
+  tarefas insumo descartar <card> <iid> --motivo "<txt>"
+                                          marca o insumo como descartado com o motivo
+FIM
+  exit "$codigo"
+}
+
+_insumo_req() { # _insumo_req MÉTODO /caminho <corpo_json>
+  local metodo="$1" caminho="$2" corpo="$3"
+  if [ -n "$QUEM" ]; then
+    printf '%s' "$corpo" | curl -s -X "$metodo" "$BASE$caminho" \
+      -H 'Content-Type: application/json' \
+      -H "x-auth-request-preferred-username: $QUEM" -d @- -w '\n%{http_code}'
+  else
+    printf '%s' "$corpo" | curl -s -X "$metodo" "$BASE$caminho" \
+      -H 'Content-Type: application/json' -d @- -w '\n%{http_code}'
+  fi
+}
+
+insumo_criar() {
+  local card="${1:-}"; shift || true
+  [ -n "$card" ] || _insumo_uso 2
+  card=$(so_id "$card") || exit 2
+  local vira="" titulo="" desc="" desc_stdin=false task_id=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --vira) [ $# -ge 2 ] || { echo "erro: --vira exige a classe de documento" >&2; exit 2; }; vira="$2"; shift 2 ;;
+      --titulo) [ $# -ge 2 ] || { echo "erro: --titulo exige texto" >&2; exit 2; }; titulo="$2"; shift 2 ;;
+      --desc) [ $# -ge 2 ] || { echo "erro: --desc exige texto" >&2; exit 2; }; desc="$2"; shift 2 ;;
+      --desc-stdin) desc_stdin=true; shift ;;
+      --task) [ $# -ge 2 ] || { echo "erro: --task exige id da task" >&2; exit 2; }; task_id=$(so_id "$2") || exit 2; shift 2 ;;
+      --ajuda|--help|-h) _insumo_uso 0 ;;
+      *) echo "erro: tarefas insumo criar: opção desconhecida: $1" >&2; exit 2 ;;
+    esac
+  done
+  if [ "$desc_stdin" = "true" ] || { [ -z "$desc" ] && [ ! -t 0 ]; }; then
+    desc="$(cat)"
+  fi
+  [ -n "$vira" ] && [ -n "$titulo" ] && [ -n "$(printf '%s' "$desc" | tr -d '[:space:]')" ] || {
+    echo "erro: tarefas insumo criar exige --vira, --titulo e corpo (--desc ou stdin)" >&2
+    exit 2
+  }
+  local payload saida status body
+  payload=$(jq -n --arg v "$vira" --arg t "$titulo" --arg c "$desc" --arg tid "$task_id" \
+    '{vira: $v, titulo: $t, corpo: $c} + (if $tid != "" then {integrado_task_id: ($tid | tonumber)} else {} end)')
+  saida=$(_insumo_req POST "/itens/$card/insumos" "$payload")
+  status="${saida##*$'\n'}"
+  body="${saida%$'\n'*}"
+  case "$status" in
+    201)
+      printf '%s' "$body" | jq -r --arg it "$(rotulo_de "$card" n)" \
+        '"insumo #\(.id) criado no item \($it) (vira: \(.vira), estado: \(.estado))"'
+      ;;
+    400|403)
+      printf '%s' "$body" | jq -r '.erro // .detail // empty' >&2
+      exit 4 ;;
+    *)
+      local msg; msg=$(printf '%s' "$body" | jq -r '.erro // .detail // empty' 2>/dev/null || true)
+      printf '%s\n' "${msg:-falha ao falar com o rastreador em $BASE (status ${status:-desconhecido})}" >&2
+      exit 1 ;;
+  esac
+}
+
+insumo_editar() {
+  local card="${1:-}" iid="${2:-}"
+  [ -n "$card" ] && [ -n "$iid" ] || _insumo_uso 2
+  card=$(so_id "$card") || exit 2
+  iid=$(so_id "$iid") || exit 2
+  shift 2
+  local vira="" tem_vira=false titulo="" tem_titulo=false desc="" tem_desc=false desc_stdin=false
+  local task_id="" tem_task=false sem_task=false
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --vira) [ $# -ge 2 ] || { echo "erro: --vira exige valor" >&2; exit 2; }; vira="$2"; tem_vira=true; shift 2 ;;
+      --titulo) [ $# -ge 2 ] || { echo "erro: --titulo exige texto" >&2; exit 2; }; titulo="$2"; tem_titulo=true; shift 2 ;;
+      --desc) [ $# -ge 2 ] || { echo "erro: --desc exige texto" >&2; exit 2; }; desc="$2"; tem_desc=true; shift 2 ;;
+      --desc-stdin) desc_stdin=true; tem_desc=true; shift ;;
+      --task) [ $# -ge 2 ] || { echo "erro: --task exige id da task" >&2; exit 2; }; task_id=$(so_id "$2") || exit 2; tem_task=true; sem_task=false; shift 2 ;;
+      --sem-task) tem_task=true; sem_task=true; task_id=""; shift ;;
+      --ajuda|--help|-h) _insumo_uso 0 ;;
+      *) echo "erro: tarefas insumo editar: opção desconhecida: $1" >&2; exit 2 ;;
+    esac
+  done
+  if [ "$desc_stdin" = "true" ]; then
+    desc="$(cat)"
+  fi
+  if [ "$tem_vira" = "false" ] && [ "$tem_titulo" = "false" ] && [ "$tem_desc" = "false" ] && [ "$tem_task" = "false" ]; then
+    echo "erro: tarefas insumo editar exige ao menos um campo (--vira, --titulo, --desc/--desc-stdin, --task/--sem-task)" >&2
+    exit 2
+  fi
+  local payload saida status body
+  payload=$(jq -n \
+    --argjson tv "$tem_vira" --arg v "$vira" \
+    --argjson tt "$tem_titulo" --arg t "$titulo" \
+    --argjson td "$tem_desc" --arg c "$desc" \
+    --argjson tk "$tem_task" --argjson st "$sem_task" --arg tid "$task_id" \
+    '{}
+     + (if $tv then {vira: $v} else {} end)
+     + (if $tt then {titulo: $t} else {} end)
+     + (if $td then {corpo: $c} else {} end)
+     + (if $tk then {integrado_task_id: (if $st then null else ($tid | tonumber) end)} else {} end)')
+  saida=$(_insumo_req PATCH "/itens/$card/insumos/$iid" "$payload")
+  status="${saida##*$'\n'}"
+  body="${saida%$'\n'*}"
+  case "$status" in
+    200)
+      printf '%s' "$body" | jq -r --arg it "$(rotulo_de "$card" n)" \
+        '"insumo #\(.id) do item \($it) editado"'
+      ;;
+    400|403)
+      printf '%s' "$body" | jq -r '.erro // .detail // empty' >&2
+      exit 4 ;;
+    *)
+      local msg; msg=$(printf '%s' "$body" | jq -r '.erro // .detail // empty' 2>/dev/null || true)
+      printf '%s\n' "${msg:-falha ao falar com o rastreador em $BASE (status ${status:-desconhecido})}" >&2
+      exit 1 ;;
+  esac
+}
+
+insumo_listar() {
+  local card="${1:-}"; shift || true
+  [ -n "$card" ] || _insumo_uso 2
+  card=$(so_id "$card") || exit 2
+  local estado="" como_json=false
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --estado) [ $# -ge 2 ] || { echo "erro: --estado exige em-escrita, integrado ou descartado" >&2; exit 2; }; estado="$2"; shift 2 ;;
+      --json) como_json=true; shift ;;
+      --ajuda|--help|-h) _insumo_uso 0 ;;
+      *) echo "erro: tarefas insumo listar: opção desconhecida: $1" >&2; exit 2 ;;
+    esac
+  done
+  if [ "$_SO_FUNIL" = 1 ]; then busca GET "/itens/$card" >/dev/null || return 1; fi
+  local qs=""
+  [ -n "$estado" ] && qs="?estado=$(printf '%s' "$estado" | jq -sRr @uri)"
+  local resp; resp=$(busca GET "/itens/$card/insumos${qs}") || return 1
+  if [ "$como_json" = "true" ]; then
+    printf '%s\n' "$resp"
+    return 0
+  fi
+  printf '%s' "$resp" | jq -r '
+    if (.insumos | length) == 0 then "(sem insumos)"
+    else
+      .insumos[]
+      | "#\(.id) · \(.estado) · vira:\(.vira) · \(.titulo)"
+        + (if .integrado_em then " → \(.integrado_em)" else "" end)
+        + (if .integrado_task_id then " (task #\(.integrado_task_id))" else "" end)
+        + (if .motivo_descarte then " (descartado: \(.motivo_descarte))" else "" end)
+    end'
+}
+
+insumo_ler() {
+  local card="${1:-}" iid="${2:-}"
+  [ -n "$card" ] && [ -n "$iid" ] || _insumo_uso 2
+  card=$(so_id "$card") || exit 2
+  iid=$(so_id "$iid") || exit 2
+  shift 2
+  local como_json=false
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) como_json=true; shift ;;
+      --ajuda|--help|-h) _insumo_uso 0 ;;
+      *) echo "erro: tarefas insumo ler: opção desconhecida: $1" >&2; exit 2 ;;
+    esac
+  done
+  if [ "$_SO_FUNIL" = 1 ]; then busca GET "/itens/$card" >/dev/null || return 1; fi
+  local resp; resp=$(busca GET "/itens/$card/insumos/$iid") || return 1
+  if [ "$como_json" = "true" ]; then
+    printf '%s\n' "$resp"
+    return 0
+  fi
+  printf '%s' "$resp" | jq -r '
+    "# Insumo #\(.id) · \(.titulo)",
+    "estado: \(.estado) · vira: \(.vira) · autor: \(.autor // "anônimo")",
+    (if .integrado_em then "integrado em: \(.integrado_em)" else empty end),
+    (if .integrado_task_id then "task: #\(.integrado_task_id)" else empty end),
+    (if .motivo_descarte then "motivo do descarte: \(.motivo_descarte)" else empty end),
+    "",
+    .corpo,
+    "",
+    "edições (\(.edicoes | length)):",
+    (.edicoes[] | "  v\(.versao) · \(.autor // "anônimo") · \(.criado_em) · \(.titulo)")'
+}
+
+insumo_integrar() {
+  local card="${1:-}" iid="${2:-}"
+  [ -n "$card" ] && [ -n "$iid" ] || _insumo_uso 2
+  card=$(so_id "$card") || exit 2
+  iid=$(so_id "$iid") || exit 2
+  shift 2
+  local em="" task_id=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --em) [ $# -ge 2 ] || { echo "erro: --em exige o destino da integração" >&2; exit 2; }; em="$2"; shift 2 ;;
+      --task) [ $# -ge 2 ] || { echo "erro: --task exige id da task" >&2; exit 2; }; task_id=$(so_id "$2") || exit 2; shift 2 ;;
+      --ajuda|--help|-h) _insumo_uso 0 ;;
+      *) echo "erro: tarefas insumo integrar: opção desconhecida: $1" >&2; exit 2 ;;
+    esac
+  done
+  [ -n "$em" ] || { echo "erro: tarefas insumo integrar exige --em \"<destino>\"" >&2; exit 2; }
+  local payload saida status body
+  payload=$(jq -n --arg em "$em" --arg tid "$task_id" \
+    '{integrado_em: $em} + (if $tid != "" then {integrado_task_id: ($tid | tonumber)} else {} end)')
+  saida=$(_insumo_req POST "/itens/$card/insumos/$iid/integrar" "$payload")
+  status="${saida##*$'\n'}"
+  body="${saida%$'\n'*}"
+  case "$status" in
+    200)
+      printf '%s' "$body" | jq -r --arg it "$(rotulo_de "$card" n)" \
+        '"insumo #\(.id) do item \($it) integrado em \(.integrado_em)"'
+      ;;
+    400|403)
+      printf '%s' "$body" | jq -r '.erro // .detail // empty' >&2
+      exit 4 ;;
+    *)
+      local msg; msg=$(printf '%s' "$body" | jq -r '.erro // .detail // empty' 2>/dev/null || true)
+      printf '%s\n' "${msg:-falha ao falar com o rastreador em $BASE (status ${status:-desconhecido})}" >&2
+      exit 1 ;;
+  esac
+}
+
+insumo_descartar() {
+  local card="${1:-}" iid="${2:-}"
+  [ -n "$card" ] && [ -n "$iid" ] || _insumo_uso 2
+  card=$(so_id "$card") || exit 2
+  iid=$(so_id "$iid") || exit 2
+  shift 2
+  local motivo=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --motivo) [ $# -ge 2 ] || { echo "erro: --motivo exige texto" >&2; exit 2; }; motivo="$2"; shift 2 ;;
+      --ajuda|--help|-h) _insumo_uso 0 ;;
+      *) echo "erro: tarefas insumo descartar: opção desconhecida: $1" >&2; exit 2 ;;
+    esac
+  done
+  [ -n "$motivo" ] || { echo "erro: tarefas insumo descartar exige --motivo \"<txt>\"" >&2; exit 2; }
+  local payload saida status body
+  payload=$(jq -n --arg m "$motivo" '{motivo: $m}')
+  saida=$(_insumo_req POST "/itens/$card/insumos/$iid/descartar" "$payload")
+  status="${saida##*$'\n'}"
+  body="${saida%$'\n'*}"
+  case "$status" in
+    200)
+      printf '%s' "$body" | jq -r --arg it "$(rotulo_de "$card" n)" \
+        '"insumo #\(.id) do item \($it) descartado — \(.motivo_descarte)"'
+      ;;
+    400|403)
+      printf '%s' "$body" | jq -r '.erro // .detail // empty' >&2
+      exit 4 ;;
+    *)
+      local msg; msg=$(printf '%s' "$body" | jq -r '.erro // .detail // empty' 2>/dev/null || true)
+      printf '%s\n' "${msg:-falha ao falar com o rastreador em $BASE (status ${status:-desconhecido})}" >&2
+      exit 1 ;;
+  esac
+}
+
+insumo() {
+  local sub="${1:-}"; shift || true
+  case "$sub" in
+    --ajuda|--help|-h) _insumo_uso 0 ;;
+    criar)     insumo_criar "$@" ;;
+    editar)    insumo_editar "$@" ;;
+    listar)    insumo_listar "$@" ;;
+    ler)       insumo_ler "$@" ;;
+    integrar)  insumo_integrar "$@" ;;
+    descartar) insumo_descartar "$@" ;;
+    ''|*)      _insumo_uso 2 ;;
+  esac
 }
 
 # MOVER É O ATO, E O NOME É O ATO. A capacidade sempre existiu: o PATCH aceita
@@ -2390,9 +2755,9 @@ modelo() {
       esac ;;
     comentario|comentário)
       case "${2:-}" in
-        insumo|pergunta|buraco|requisito) variante="comentario-$2" ;;
-        decisão|decisao)                  variante=comentario-decisao ;;
-        *) echo "uso: tarefas modelo comentario <insumo|pergunta|buraco|requisito|decisão>" >&2; exit 2 ;;
+        pergunta|buraco|requisito) variante="comentario-$2" ;;
+        decisão|decisao)           variante=comentario-decisao ;;
+        *) echo "uso: tarefas modelo comentario <pergunta|buraco|requisito|decisão>" >&2; exit 2 ;;
       esac ;;
     *) echo "uso: tarefas modelo <épico|feature|story|task> | story refinada | story derivada | comentario <tipo>" >&2; exit 2 ;;
   esac
@@ -3279,6 +3644,7 @@ cmd="${1:-}"; shift || uso
 # só quando lista as filhas (um argumento); `api` e `api-corpo`, só em GET.
 case "$cmd" in
   listar|listar-tudo|ler|ver|comentarios|carteira|espera-dono) _SO_FUNIL=1 ;;
+  insumo) case "${1:-}" in listar|ler) _SO_FUNIL=1 ;; esac ;;
   sub) if [ $# -eq 1 ] && [ "${1:-}" != "--sem-pai" ]; then _SO_FUNIL=1; fi ;;
   api|api-corpo) _m="${1:-}"; if [ "${_m^^}" = GET ]; then _SO_FUNIL=1; fi ;;
 esac
@@ -3291,6 +3657,7 @@ case "$cmd" in
   editar)      editar "$@" ;;
   comentar)    comentar "$@" ;;
   comentarios) comentarios "$@" ;;
+  insumo)      insumo "$@" ;;
   mover)       mover "$@" ;;
   fechar)      fechar "${1:?uso: tarefas fechar <id>}" "${@:2}" ;;
   apagar)      apagar "${1:?uso: tarefas apagar <id> [--cascata]}" "${@:2}" ;;
