@@ -3,7 +3,7 @@
 # capacidade: tarefas
 # dono: gestao-estrategica
 # use para: SEMPRE que o assunto for card, épico, feature, story, incidente ou débito técnico; captar demanda, «cria um card»; lapidar, dar parecer, apostar, formalizar, priorizar, pôr em execução, concluir, validar e entregar card, «move para refinamento», «comenta no card»; declarar, mitigar e fechar incidente; «o que está comigo?», «lê o card», «os comentários do card», sign-off; e sempre que o pacto quebrar ou uma execução cair
-# atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, insumo, mover, fechar, apagar, assinar, dt, estados, sub, ordenar, bloquear, desbloquear, carteira, inventario, espera-dono (leitura, trabalho)
+# atos: listar, listar-tudo, ler, criar, editar, modelo, comentar, comentarios, insumo, mover, fechar, apagar, assinar, dt, achado, desvio, estados, sub, ordenar, bloquear, desbloquear, carteira, inventario, espera-dono (leitura, trabalho)
 # mecanismo: espera-dono=casca
 #
 # Texto do controle. Todo ato cai na face Entrega.
@@ -26,6 +26,8 @@
 # face: apagar=Entrega
 # face: assinar=Entrega
 # face: dt=Entrega
+# face: achado=Entrega
+# face: desvio=Entrega
 # face: estados=Entrega
 # face: sub=Entrega
 # face: ordenar=Entrega
@@ -47,6 +49,8 @@
 # rotulo: apagar=Apagar card
 # rotulo: assinar=Assinar card
 # rotulo: dt=Administrar débito técnico
+# rotulo: achado=Administrar achado de segurança
+# rotulo: desvio=Administrar desvio de operação
 # rotulo: estados=Listar estado de card
 # rotulo: sub=Subordinar card
 # rotulo: ordenar=Ordenar card
@@ -68,6 +72,8 @@
 # volta: apagar=nao
 # volta: assinar=nao
 # volta: dt=nao
+# volta: achado=nao
+# volta: desvio=nao
 # volta: estados=sim — só lê
 # volta: sub=nao
 # volta: ordenar=sim — tarefas ordenar do card ao lado do vizinho de antes (o posto antigo não volta, o lugar sim)
@@ -2937,13 +2943,13 @@ _dt_stacks() {
     echo "catálogo de stacks fora do ar: verbo acervo ausente em $acervo_bin" >&2
     return 5
   fi
-  j=$("$acervo_bin" stack ver --json 2>/dev/null) || {
-    echo "catálogo de stacks fora do ar: acervo stack ver --json falhou" >&2
+  j=$("$acervo_bin" ler casa stack --json 2>/dev/null) || {
+    echo "catálogo de stacks fora do ar: acervo ler casa stack --json falhou" >&2
     return 5
   }
   j=$(printf '%s' "$j" | jq -r '.[].slug' 2>/dev/null) || j=""
   if [ -z "$j" ]; then
-    echo "catálogo de stacks fora do ar: acervo stack ver --json voltou sem stack" >&2
+    echo "catálogo de stacks fora do ar: acervo ler casa stack --json voltou sem stack" >&2
     return 5
   fi
   printf '%s\n' "$j"
@@ -2956,23 +2962,13 @@ _dt_stacks() {
 # raio, esperado e onde, que são o que faz a lista inteira passar dos 50 KB que a porta serve
 # (#2856 linha 143); a saída leva o jeito e a âncora. Sem linha, não imprime nada.
 # calcula o tamanho do corpo do balde em KiB e emite AVISO acima de 100 KiB.
-_dt_balde_kib() { # _dt_balde_kib <json_balde> [consultar_item=0|1]
-  local j="${1:-}" consultar="${2:-0}" bytes="" b_j=0 b_it=0 item_j="" desc=""
+_dt_balde_kib() { # _dt_balde_kib <json_balde>
+  local j="${1:-}" bytes=""
   bytes=$(printf '%s' "$j" | jq -r '.corpo_bytes // .tamanho_bytes // .bytes // empty' 2>/dev/null || true)
   if ! [[ "$bytes" =~ ^[0-9]+$ ]]; then
-    b_j=$(printf '%s' "$j" | wc -c | tr -d '[:space:]')
-    if [ "$consultar" = "1" ]; then
-      item_j=$(curl -fsS "$BASE/itens/2856" 2>/dev/null || true)
-      if [ -n "$item_j" ]; then
-        desc=$(printf '%s' "$item_j" | jq -r '.descricao // .corpo // empty' 2>/dev/null || true)
-        [ -n "$desc" ] && b_it=$(printf '%s' "$desc" | wc -c | tr -d '[:space:]')
-      fi
-    fi
-    bytes="$b_j"
-    [ "${b_it:-0}" -gt "${bytes:-0}" ] && bytes="$b_it"
+    bytes=$(printf '%s' "$j" | wc -c | tr -d '[:space:]')
   fi
   local kib=$(( (bytes + 1023) / 1024 ))
-  printf 'corpo #2856: %s KiB\n' "$kib"
   if [ "$kib" -gt 100 ]; then
     printf 'AVISO: balde de DTs com %s KiB (teto 100 KiB)\n' "$kib"
   fi
@@ -3281,6 +3277,31 @@ dt_restack() {
   fi
 }
 
+dt_raio() {
+  local n="${1:-}" substituir=0
+  local raios=()
+  [[ "$n" =~ ^[0-9]+$ ]] || { echo "uso: tarefas dt raio <n> --raio <repo@caminho> [--raio ...] [--substituir]" >&2; exit 2; }
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --raio)       raios+=("${2:?--raio pede repo@caminho}"); shift 2 ;;
+      --substituir) substituir=1; shift ;;
+      *) echo "tarefas dt raio: opção desconhecida: $1" >&2; exit 2 ;;
+    esac
+  done
+  [ "${#raios[@]}" -gt 0 ] || { echo "uso: tarefas dt raio <n> --raio <repo@caminho> [--raio ...] [--substituir]" >&2; exit 2; }
+  local atual_json='[]'
+  if [ "$substituir" -eq 0 ]; then
+    local j
+    j=$(busca GET "/balde/$n") || return 1
+    atual_json=$(printf '%s' "$j" | jq -c '.raio // []')
+  fi
+  local corpo r
+  corpo=$(jq -nc --argjson atual "$atual_json" '{raio: ($atual + $ARGS.positional | unique)}' --args "${raios[@]}")
+  r=$(printf '%s' "$corpo" | envia PATCH "/balde/$n") || return 1
+  printf '%s' "$r" | jq -r '"débito \(.numero) raio atualizado: " + ((.raio // []) | join(", "))'
+}
+
 _dt_uso() {
   local codigo="${1:-2}" fd=2
   [ "$codigo" = 0 ] && fd=1
@@ -3309,9 +3330,11 @@ uso:
   tarefas dt indicadores [--dias <n>]     por stack, os abertos e a idade do mais velho; na semana
                                           (7 dias, ou os de --dias), as entradas e as saídas por jeito
 
-O balde é dado do rastreador (tabela `balde`), uma linha por débito, com o número que já
-tinha no corpo do #2856. Card próprio só pelo jeito englobada.
-Rito: padrao rito-debito-tecnico
+  tarefas dt raio <n> --raio <repo@caminho> [--raio ...] [--substituir]
+                                          emenda o raio da linha (por padrão acrescenta; --substituir troca)
+
+O balde é dado do rastreador (tabela `balde`), uma linha por entrega pequena (débito técnico,
+achado ou desvio). Card próprio só pelo jeito englobada.
 FIM
   exit "$codigo"
 }
@@ -3324,6 +3347,7 @@ dt() {
     ler)         _dt_tem_ajuda "$@" && { echo "uso: tarefas dt ler <n>"; return 0; }; [ $# -eq 1 ] && [[ "$1" =~ ^[0-9]+$ ]] || { echo "uso: tarefas dt ler <n>" >&2; return 2; }; dt_listar --linha "$1" ;;
     admitir)     dt_admitir "$@" ;;
     restack)     _dt_tem_ajuda "$@" && { echo "uso: tarefas dt restack <n> --stack <s> [--motivo \"<txt>\"]"; return 0; }; dt_restack "$@" ;;
+    raio)        _dt_tem_ajuda "$@" && { echo "uso: tarefas dt raio <n> --raio <repo@caminho> [--raio ...] [--substituir]"; return 0; }; dt_raio "$@" ;;
     matar)       _dt_tem_ajuda "$@" && { echo "uso: tarefas dt matar <n> --como resolvida --commit <sha> | --como cancelada --motivo \"<txt>\" | --como englobada --card <id>"; return 0; }; dt_matar "$@" ;;
     vencidos)    _dt_tem_ajuda "$@" && { echo "uso: tarefas dt vencidos"; return 0; }; dt_vencidos "$@" ;;
     indicadores) _dt_tem_ajuda "$@" && { echo "uso: tarefas dt indicadores [--dias <n>]"; return 0; }; dt_indicadores "$@" ;;

@@ -734,14 +734,26 @@ def _verificar_protecoes_alvo(
     if eh_caminho_protegido(auth.politica, repo, rel) and not _caminho_no_raio(
         repo, rel, _raio_da_bancada(auth, bancada)
     ):
+        if bancada and _RE_DTS_DA_BANCADA.match(bancada):
+            regra_prot = "caminho protegido só aceita gravação dentro do raio declarado na linha do balde"
+            cura_prot = "emende o raio com tarefas dt raio <n> --raio <repo@caminho> ou englobe em card"
+        else:
+            regra_prot = (
+                "caminho protegido só aceita gravação dentro do raio do card (em-execucao/em-mitigacao) "
+                "ou da linha do balde (bancada --slug dt-<n>)"
+            )
+            cura_prot = (
+                "inclua o caminho no raio do card aprovado pelo dono, ou abra a bancada de DT como "
+                "--slug dt-<n> com o caminho no raio do balde"
+            )
         raise RecusaEscrita(
             ErroEscrita(
                 saida=4,
                 codigo="superficie-vedada",
                 onde="chave",
                 recebido=pedido.chave,
-                regra="caminho protegido só aceita gravação dentro do raio do card da bancada",
-                cura="inclua o caminho no raio do card aprovado pelo dono",
+                regra=regra_prot,
+                cura=cura_prot,
                 proximo="",
             )
         )

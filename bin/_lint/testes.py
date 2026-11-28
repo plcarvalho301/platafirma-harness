@@ -29,7 +29,7 @@ PASTAS_FORA = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist"}
 
 NOMEADO = re.compile(r"^([a-z][a-z-]*):")
 
-# Rito do débito técnico (padrão rito-debito-tecnico §2): a linha do balde com mais de 30 dias entra na
+# Balde de entregas pequenas: a linha aberta com mais de 30 dias entra na
 # pauta da revisão. A quarentena é estado com prazo — dura até o débito morrer —, então o
 # débito vencido é quarentena velha.
 PRAZO_DEBITO_DIAS = 30
