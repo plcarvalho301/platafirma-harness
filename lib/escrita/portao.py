@@ -40,10 +40,13 @@ _PRAZO_RAIO_S = 2.0
 _ESTADOS_COM_RAIO = frozenset({"em-execucao", "em-mitigacao"})
 _RE_CARD_DA_BANCADA = re.compile(r"^(\d+)(?:-|$)")
 _RE_DTS_DA_BANCADA = re.compile(r"^dt-((?:\d+)(?:-\d+)*)(?:-|$)")
-_RE_ITEM_RAIO = re.compile(r"^\s*(?:-\s*)?(platafirma-[a-z0-9-]+)@([^\s·|]+)")
+_RE_ITEM_RAIO = re.compile(r"^\s*(?:-\s*)?`?(platafirma-[a-z0-9-]+)@([^\s·|`]+)")
 _RE_ROTULO = re.compile(r"^\s*[A-ZÀ-Ý][^:@]{0,40}:")
-_RE_TAG_QUEBRA = re.compile(r"<\s*(?:br\s*/?|/?p|/?li|/?ul)\s*>", re.IGNORECASE)
+_RE_HEADING_HTML = re.compile(r"<\s*h[1-6]\b[^>]*>(.*?)<\s*/h[1-6]\s*>", re.IGNORECASE | re.DOTALL)
+_RE_HEADING_MD = re.compile(r"^\s*#{1,6}\s+(.+?)\s*$")
+_RE_TAG_QUEBRA = re.compile(r"<\s*(?:br\s*/?|/?p|/?li|/?ul|/?ol|/?div|/?h[1-6])\b[^>]*>", re.IGNORECASE)
 _RE_TAG = re.compile(r"<[^>]+>")
+_NOMES_SECAO_RAIO = ("raio de ataque", "raio emendado", "raio")
 _SECOES_RAIO = ("raio de ataque:", "raio emendado:", "raio:")
 
 
@@ -511,25 +514,35 @@ def _verificar_forma_e_regime(pedido: PedidoEscrita, spec: SpecClasse) -> None:
 
 def _texto_do_corpo(corpo_html: str) -> list[str]:
     """O corpo do card (HTML do rastreador) em linhas de texto, uma por parágrafo, item ou quebra."""
-    texto = _RE_TAG.sub("", _RE_TAG_QUEBRA.sub("\n", corpo_html))
+    com_headings = _RE_HEADING_HTML.sub(lambda m: f"\n## {m.group(1)}\n", corpo_html)
+    texto = _RE_TAG.sub("", _RE_TAG_QUEBRA.sub("\n", com_headings))
     return [html.unescape(linha) for linha in texto.splitlines()]
 
 
 def extrair_raio_do_corpo(corpo_html: str) -> frozenset[tuple[str, str]]:
     """Os pares (repo, caminho) do Raio de ataque e do Raio emendado do corpo do card.
 
-    Só essas duas seções contam: o Referencial também cita `repo@caminho`, e o que ele cita é
-    leitura, não licença de gravar. Um rótulo novo (`Comportamento esperado:`, `Riscos:`) fecha
-    a seção.
+    Só essas seções contam: o Referencial também cita `repo@caminho`, e o que ele cita é
+    leitura, não licença de gravar. Um heading novo (`## Referencial`, `<h2>Referencial</h2>`)
+    ou rótulo novo (`Comportamento esperado:`, `Riscos:`) fecha a seção.
     """
     pares: set[tuple[str, str]] = set()
     dentro = False
     for linha in _texto_do_corpo(corpo_html):
-        baixa = linha.strip().lower()
+        limpa = linha.strip()
+        m_heading = _RE_HEADING_MD.match(limpa)
+        if m_heading is not None:
+            titulo = m_heading.group(1).strip().rstrip(":").strip().lower()
+            dentro = titulo in _NOMES_SECAO_RAIO
+            continue
+        baixa = limpa.lower()
         rotulo = next((s for s in _SECOES_RAIO if baixa.startswith(s)), None)
         if rotulo is not None:
             dentro = True
-            linha = linha.strip()[len(rotulo):]
+            linha = limpa[len(rotulo):]
+        elif baixa in _NOMES_SECAO_RAIO:
+            dentro = True
+            continue
         elif _RE_ROTULO.match(linha):
             dentro = False
         achado = _RE_ITEM_RAIO.match(linha) if dentro else None

@@ -4081,6 +4081,26 @@ def conferir_escritor(
         resp = consultar_saude(sock_alvo, timeout_s=2.0)
         if resp.get("ok"):
             itens.append(("soquete saude", resultado.conforme()))
+            rel_escritor = str(resp.get("release") or "").strip()
+            sha_current = _Path(os.path.realpath(str(harness_rel))).name if harness_rel.exists() else ""
+            if sha_current and rel_escritor and rel_escritor != "local":
+                if (
+                    rel_escritor == sha_current
+                    or sha_current.startswith(rel_escritor)
+                    or rel_escritor.startswith(sha_current)
+                ):
+                    itens.append(("revisao em memoria", resultado.conforme()))
+                else:
+                    itens.append(
+                        (
+                            "revisao em memoria",
+                            resultado.divergente(
+                                f"escritor serve {rel_escritor[:7]} e current/harness esta em {sha_current[:7]} — reinicie com: sudo systemctl restart escritor.service"
+                            ),
+                        )
+                    )
+            elif not rel_escritor:
+                itens.append(("revisao em memoria", resultado.indeterminavel("quadro saude sem campo release")))
         else:
             itens.append(("soquete saude", resultado.divergente("quadro saude retornou ok=false")))
     except RecusaEscrita as exc:

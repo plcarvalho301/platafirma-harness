@@ -477,7 +477,7 @@ def _reconcilia_pel_respondidas(rc: object, persona: str) -> list[dict]:
         m["estado"] = "pendurada"
         candidatas.append((tecnico, m))
         de_canon = canoniza_persona(m["de"]) or m["de"]
-        if de_canon and not de_canon.startswith(PREFIXO_BOT):
+        if de_canon and not de_canon.startswith(("bot:", PREFIXO_AUTOMACAO)):
             remetentes.add(de_canon)
     if not candidatas:
         return []
@@ -1052,7 +1052,7 @@ def _separa_destinatarios_e_corpo_pos(destinatarios: list, corpo_inicial: str = 
         and personas_validas() is not None
         and all(canoniza_persona(d) for d in destinatarios[:-1])
         and not canoniza_persona(destinatarios[-1])
-        and not destinatarios[-1].startswith(PREFIXO_BOT)
+        and not destinatarios[-1].startswith(("bot:", PREFIXO_AUTOMACAO))
     ):
         return destinatarios[:-1], destinatarios[-1]
     return destinatarios, None

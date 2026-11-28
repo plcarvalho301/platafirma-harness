@@ -509,3 +509,46 @@ def test_503_tenta_tres_vezes_com_mesmo_evento_id_e_sai_3(casa_fake, malha_espia
     assert len(set(origens)) == 1
     assert origens[0] in res.stderr
     assert malha_espia.conexoes == 0
+
+
+def test_separa_destinatarios_e_reconcilia_pel_sem_nameerror_prefixo_bot(monkeypatch):
+    """DT 1442: _separa_destinatarios_e_corpo_pos e _reconcilia_pel_respondidas usam PREFIXO_AUTOMACAO."""
+    bin_dir = str(RAIZ / "bin")
+    if bin_dir not in sys.path:
+        sys.path.insert(0, bin_dir)
+    from _fila import streams
+
+    monkeypatch.setattr(streams, "personas_validas", lambda: {"engenharia", "dados"})
+    dests, corpo = streams._separa_destinatarios_e_corpo_pos(["engenharia", "automacao:vigia"])
+    assert dests == ["engenharia", "automacao:vigia"]
+    assert corpo is None
+
+    dests_bot, corpo_bot = streams._separa_destinatarios_e_corpo_pos(["engenharia", "bot:vigia"])
+    assert dests_bot == ["engenharia", "bot:vigia"]
+    assert corpo_bot is None
+
+    dests_msg, corpo_msg = streams._separa_destinatarios_e_corpo_pos(["engenharia", "mensagem posicional"])
+    assert dests_msg == ["engenharia"]
+    assert corpo_msg == "mensagem posicional"
+
+    class _RcFake:
+        def __init__(self):
+            self.acks: list[tuple[str, str, str]] = []
+
+        def xpending_range(self, _chave, _grupo, min="-", max="+", count=200):
+            return [{"message_id": "1-0"}, {"message_id": "2-0"}]
+
+        def xrange(self, _chave, min="-", max="+"):
+            dados = {
+                "1-0": {"de": "automacao:vigia", "para": "engenharia", "tipo": "aviso", "msgid": "m1", "corpo": "ok"},
+                "2-0": {"de": "bot:antigo", "para": "engenharia", "tipo": "aviso", "msgid": "m2", "corpo": "ok"},
+            }
+            return [(min, dados[min])] if min in dados else []
+
+        def xack(self, chave, grupo, mid):
+            self.acks.append((chave, grupo, mid))
+
+    rc = _RcFake()
+    monkeypatch.setattr(streams, "_pares_respondidos_no_stream", lambda _rc, _p, _rem: set())
+    vivas = streams._reconcilia_pel_respondidas(rc, "engenharia")
+    assert [m["msgid"] for m in vivas] == ["1-0", "2-0"]

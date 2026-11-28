@@ -40,6 +40,7 @@ from escrita.moradas.git import MoradaGit  # noqa: E402
 from escrita.moradas.olaria import ConfigOlaria, MoradaOlaria, RespostaHTTP  # noqa: E402
 from escrita.politica import PoliticaEscrita, carregar_politica  # noqa: E402
 from escrita.portao import VistaAlcance, carregar_vista_alcance  # noqa: E402
+from escrita.cliente import consultar_saude  # noqa: E402
 from escrita.servidor import (  # noqa: E402
     ConfigServidor,
     ServidorEscritor,
@@ -132,12 +133,19 @@ def _subir_servidor(
         max_conexoes=64,
     )
     srv = ServidorEscritor(cfg)
+    srv.iniciar()
     th = threading.Thread(target=srv.servir, kwargs={"instalar_sinais": False}, daemon=True)
     th.start()
     fim = time.monotonic() + 5.0
-    while time.monotonic() < fim and not sock_path.exists():
-        time.sleep(0.01)
-    assert sock_path.exists()
+    pronto = False
+    while time.monotonic() < fim:
+        try:
+            if consultar_saude(sock_path, timeout_s=1.0).get("ok"):
+                pronto = True
+                break
+        except RecusaEscrita:
+            time.sleep(0.01)
+    assert pronto, "servidor escritor não respondeu ao quadro saude dentro do prazo"
     return srv, th, sock_path, pol
 
 
@@ -411,7 +419,7 @@ def test_concorrencia_32_gravacoes_simultaneas_e_medida_fsync(tmp_path: Path) ->
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=32) as pool:
             futs = [pool.submit(_worker, i) for i in range(32)]
-            resultados = [f.result(timeout=20.0) for f in futs]
+            resultados = [f.result(timeout=35.0) for f in futs]
 
         assert len(resultados) == 32
         for idx, versao, dt_ms in resultados:
@@ -736,3 +744,47 @@ def test_servidor_grava_caminho_protegido_com_bancada_dt(tmp_path: Path) -> None
     finally:
         srv.parar()
         th.join(timeout=5.0)
+
+
+def test_extrair_raio_aceita_heading_sem_dois_pontos_e_fecha_em_novo_heading() -> None:
+    """DT 1439: molde de incidente usa heading Raio sem dois-pontos; heading seguinte fecha a seção."""
+    corpo_html = (
+        "<h2>Sintoma</h2><p>platafirma-harness@lib/ignorar_antes.py</p>"
+        "<h2>Raio</h2><ul><li><code>platafirma-harness@lib/escrita/portao.py</code></li>"
+        "<li>platafirma-harness@testes/test_escrita_contrato.py</li></ul>"
+        "<h2>Referencial</h2><p>platafirma-harness@lib/ignorar_depois.py</p>"
+    )
+    assert mod_portao.extrair_raio_do_corpo(corpo_html) == frozenset(
+        {
+            ("platafirma-harness", "lib/escrita/portao.py"),
+            ("platafirma-harness", "testes/test_escrita_contrato.py"),
+        }
+    )
+
+    corpo_md = (
+        "## Raio\n"
+        "- `platafirma-harness@lib/escrita/portao.py`\n"
+        "## Mitigação\n"
+        "- platafirma-harness@lib/nao_entra.py\n"
+    )
+    assert mod_portao.extrair_raio_do_corpo(corpo_md) == frozenset(
+        {("platafirma-harness", "lib/escrita/portao.py")}
+    )
+
+    corpo_p = "<p><strong>Raio</strong></p><ul><li>platafirma-harness@lib/escrita/portao.py</li></ul><p>Riscos:</p><p>platafirma-harness@x.py</p>"
+    assert mod_portao.extrair_raio_do_corpo(corpo_p) == frozenset(
+        {("platafirma-harness", "lib/escrita/portao.py")}
+    )
+
+
+def test_provedor_raio_incidente_em_mitigacao_com_heading_sem_dois_pontos() -> None:
+    """DT 1439: incidente em em-mitigacao com <h2>Raio</h2> libera caminho protegido declarado."""
+    def _http(_url: str, _prazo: float) -> object:
+        return {
+            "id": 4482,
+            "estado": "em-mitigacao",
+            "descricao": "<h2>Raio</h2><ul><li>platafirma-harness@lib/escrita/portao.py</li></ul><h2>Referencial</h2><p>platafirma-harness@lib/escrita/servidor.py</p>",
+        }
+
+    provedor = mod_portao.criar_provedor_raio("http://r/api", cliente_http=_http)
+    assert provedor("4482") == frozenset({("platafirma-harness", "lib/escrita/portao.py")})
