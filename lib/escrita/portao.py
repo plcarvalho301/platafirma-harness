@@ -680,11 +680,8 @@ def _caminho_no_raio(
     for r_repo, r_caminho in raio_card:
         if r_repo != repo:
             continue
-        if r_caminho.endswith("/"):
-            base = r_caminho.rstrip("/")
-            if rel == base or rel.startswith(base + "/"):
-                return True
-        elif rel == r_caminho:
+        base = r_caminho.rstrip("/")
+        if base and (rel == base or rel.startswith(base + "/")):
             return True
     return False
 
