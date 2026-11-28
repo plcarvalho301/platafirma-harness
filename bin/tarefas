@@ -204,7 +204,7 @@ uso:
                                           troca o corpo do comentário n (lê stdin se sem texto,
                                           converte em HTML como na criação; a API recusa trocar
                                           o tipo ou mexer no fecho, R13)
-  tarefas comentarios <id> [--historico] [--indice] [--busca <termo>] [--arvore] [--id <n>]... [--desde <n>] [--ultimos <k>]
+  tarefas comentarios <id> [--tipo <t>|--todos-tipos] [--pagina <p>] [--por-pagina <k>] [--historico] [--indice] [--busca <termo>] [--arvore] [--id <n>]... [--desde <n>] [--ultimos <k>]
                            [--linhas <faixa>] [--offset <bytes>] [--max-bytes <n>] [--inteiro]
                                           lista os comentários vigentes do item, em ordem;
                                           --historico inclui mensagens corrigidas e retratadas.
@@ -1718,8 +1718,9 @@ fechar_comentario() {
 # Sem opção, lista tudo no formato padrão (o lint de card lê esta saída); aceita filtros semânticos
 # (--indice, --busca, --arvore, --id, --desde, --ultimos) e fatiamento por linhas/bytes via lib/leitura.
 comentarios() {
-  local uso='uso: tarefas comentarios <id> [--historico] [--indice] [--busca <termo>] [--arvore] [--id <n>]... [--desde <n>] [--ultimos <k>] [--linhas <faixa>] [--offset <bytes>] [--max-bytes <n>] [--inteiro]'
+  local uso='uso: tarefas comentarios <id> [--tipo <t>|--todos-tipos] [--pagina <p>] [--por-pagina <k>] [--historico] [--indice] [--busca <termo>] [--arvore] [--id <n>]... [--desde <n>] [--ultimos <k>] [--linhas <faixa>] [--offset <bytes>] [--max-bytes <n>] [--inteiro]'
   local id='' ids='[]' desde=0 ultimos=0 indice=false arvore=false historico=false busca_termo=''
+  local tipo_filtro='' todos_tipos=false pagina=1 por_pagina=10 pagina_explicita=false inteiro_pedido=false
   local -a leitura_args=()
   local lib_harness
   lib_harness="$(dirname "$(readlink -f "$0")")/../lib"
@@ -1729,9 +1730,18 @@ comentarios() {
       --historico) historico=true; shift ;;
       --indice) indice=true; shift ;;
       --arvore) arvore=true; shift ;;
+      --todos-tipos) todos_tipos=true; shift ;;
+      --tipo)
+        [ -n "${2:-}" ] || { echo "tarefas comentarios: --tipo pede um tipo" >&2; echo "$uso" >&2; exit 2; }
+        tipo_filtro="$2"; shift 2 ;;
       --busca)
         [ -n "${2:-}" ] || { echo "tarefas comentarios: --busca pede um termo" >&2; echo "$uso" >&2; exit 2; }
         busca_termo="$2"; shift 2 ;;
+      --pagina|--por-pagina)
+        [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || { echo "tarefas comentarios: $1 pede um inteiro positivo" >&2; echo "$uso" >&2; exit 2; }
+        if [ "$1" = "--pagina" ]; then pagina=$2; else por_pagina=$2; fi
+        pagina_explicita=true
+        shift 2 ;;
       --id|--desde|--ultimos)
         [[ "${2:-}" =~ $numero ]] || { echo "tarefas comentarios: $1 pede um número" >&2; echo "$uso" >&2; exit 2; }
         case "$1" in
@@ -1743,7 +1753,10 @@ comentarios() {
       --linhas|--offset|--max-bytes)
         [ $# -ge 2 ] || { echo "tarefas comentarios: $1 pede valor" >&2; echo "$uso" >&2; exit 2; }
         leitura_args+=("$1" "$2"); shift 2 ;;
-      --inteiro|--numerar|-n)
+      --inteiro)
+        inteiro_pedido=true
+        leitura_args+=("$1"); shift ;;
+      --numerar|-n)
         leitura_args+=("$1"); shift ;;
       --*) echo "tarefas comentarios: opção desconhecida: $1" >&2; echo "$uso" >&2; exit 2 ;;
       *)
@@ -1761,12 +1774,26 @@ comentarios() {
   if [ "$_SO_FUNIL" = 1 ]; then busca GET "/itens/$id" >/dev/null || return 1; fi
   local qs=""
   [ "$historico" = "true" ] && qs="?historico=1"
-  local saida bytes
+  local paginar=true
+  if [ "$pagina_explicita" = "false" ]; then
+    if [ "$inteiro_pedido" = "true" ] || [ "$indice" = "true" ] || [ -n "$busca_termo" ] || [ "$ultimos" -gt 0 ] || [ "$ids" != "[]" ]; then
+      paginar=false
+    fi
+  fi
+  local jq_filtro_tipo='
+    if $tipo != "" then
+      map(select(((.tipo // "") | ascii_downcase) == ($tipo | ascii_downcase)))
+    elif $todos_tipos or (($ids | length) > 0) or ($busca != "") then
+      .
+    else
+      map(select(((.tipo // "") | ascii_downcase) != "insumo"))
+    end'
+  local saida
   if [ "$arvore" = "true" ] || [ -n "$busca_termo" ]; then
     local -a fila=("$id")
     local -A visitado=()
     visitado["$id"]=1
-    local idx=0 linhas_acum='' bloco=''
+    local idx=0 acumulado='[]' total_insumos_omitidos=0
     while [ "$idx" -lt "${#fila[@]}" ]; do
       local cid="${fila[$idx]}"
       idx=$((idx + 1))
@@ -1788,84 +1815,100 @@ comentarios() {
       fi
       local com_j
       com_j=$(busca GET "/itens/$cid/comentarios${qs}") || return 1
-      if [ -n "$busca_termo" ]; then
-        bloco=$(printf '%s' "$com_j" | jq -c \
-          --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" '
-          .comentarios
-          | (if ($ids | length) > 0 then map(select(.id as $i | any($ids[]; . == $i))) else . end)
-          | map(select(.id >= $desde))
-          | (if $ultimos > 0 then .[-$ultimos:] else . end)' \
-          | BUSCA_TERMO="$busca_termo" CARD_ROT="$card_rot" python3 -c '
+      local ins_n
+      ins_n=$(printf '%s' "$com_j" | jq '[.comentarios[] | select(((.tipo // "") | ascii_downcase) == "insumo")] | length')
+      total_insumos_omitidos=$((total_insumos_omitidos + ins_n))
+      local sel_card
+      sel_card=$(printf '%s' "$com_j" | jq -c \
+        --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" \
+        --arg tipo "$tipo_filtro" --argjson todos_tipos "$todos_tipos" --arg busca "$busca_termo" \
+        --arg card "$card_rot" "
+        .comentarios
+        | ($jq_filtro_tipo)
+        | (if (\$ids | length) > 0 then map(select(.id as \$i | any(\$ids[]; . == \$i))) else . end)
+        | map(select(.id >= \$desde))
+        | (if \$ultimos > 0 then .[-\$ultimos:] else . end)
+        | map(. + {_card: \$card})")
+      acumulado=$(jq -c -s '.[0] + .[1]' <(printf '%s' "$acumulado") <(printf '%s' "$sel_card"))
+    done
+    if [ -n "$busca_termo" ]; then
+      saida=$(printf '%s' "$acumulado" | BUSCA_TERMO="$busca_termo" python3 -c '
 import html, json, os, re, sys
 q = os.environ["BUSCA_TERMO"].casefold()
-card = os.environ["CARD_ROT"]
+achou = False
 for c in json.load(sys.stdin):
+    card = c.get("_card", "")
     txt = re.sub(r"(?i)<br */?>|</p>|</li>|</h[0-9]>|</pre>", "\n", c.get("corpo") or "")
     txt = html.unescape(re.sub(r"<[^>]*>", "", txt))
     for linha in txt.splitlines():
         if q in linha.casefold():
+            achou = True
             cid = c["id"]
             print(f"#{cid} · {card} · {linha}")
+if not achou:
+    print(f"(nenhum comentário encontrado para \"{os.environ[\"BUSCA_TERMO\"]}\")")
 ')
-      elif [ "$indice" = "true" ]; then
-        bloco=$(printf '%s' "$com_j" | jq -c \
-          --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" '
-          .comentarios
-          | (if ($ids | length) > 0 then map(select(.id as $i | any($ids[]; . == $i))) else . end)
-          | map(select(.id >= $desde))
-          | (if $ultimos > 0 then .[-$ultimos:] else . end)' \
-          | CARD_ROT="$card_rot" python3 -c '
-import html, json, os, re, sys
-card = os.environ["CARD_ROT"]
-for c in json.load(sys.stdin):
-    raw = c.get("corpo") or ""
-    txt = html.unescape(re.sub(r"<[^>]*>", " ", raw))
-    prev = " ".join(txt.split())[:100]
-    autor = c.get("autor") or "anônimo"
-    cid = c["id"]
-    carimbo = c.get("carimbo", "")
-    print(f"{card} · #{cid} · {autor} · {carimbo} · {len(raw)} car. · {prev}")
+    elif [ "$indice" = "true" ]; then
+      saida=$(printf '%s' "$acumulado" | python3 -c '
+import html, json, re, sys
+itens = json.load(sys.stdin)
+if not itens:
+    print("(sem comentários)")
+else:
+    for c in itens:
+        card = c.get("_card", "")
+        raw = c.get("corpo") or ""
+        txt = html.unescape(re.sub(r"<[^>]*>", " ", raw))
+        prev = " ".join(txt.split())[:100]
+        autor = c.get("autor") or "anônimo"
+        tipo = f" · {c[\"tipo\"]}" if c.get("tipo") else ""
+        cid = c["id"]
+        carimbo = c.get("carimbo", "")
+        print(f"{card} · #{cid}{tipo} · {autor} · {carimbo} · {len(raw)} car. · {prev}")
 ')
-      else
-        bloco=$(printf '%s' "$com_j" | jq -r \
-          --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" \
-          --arg card "$card_rot" '
-          .comentarios as $todos
-          | ($todos
-             | (if ($ids | length) > 0 then map(select(.id as $i | any($ids[]; . == $i))) else . end)
-             | map(select(.id >= $desde))
-             | (if $ultimos > 0 then .[-$ultimos:] else . end)) as $sel
-          | $sel[] | "--- \($card) · #\(.id) · \(.autor // "anônimo") · \(.carimbo) ---\n\(.corpo)\n"' | para_texto)
-      fi
-      if [ -n "$bloco" ]; then
-        if [ -n "$linhas_acum" ]; then
-          linhas_acum+=$'\n'"$bloco"
-        else
-          linhas_acum="$bloco"
-        fi
-      fi
-    done
-    if [ -n "$linhas_acum" ]; then
-      saida="$linhas_acum"
-    elif [ -n "$busca_termo" ]; then
-      saida="(nenhum comentário encontrado para \"$busca_termo\")"
     else
-      saida="(sem comentários)"
+      saida=$(printf '%s' "$acumulado" | jq -r \
+        --argjson paginar "$paginar" --argjson pagina "$pagina" --argjson por_pagina "$por_pagina" \
+        --arg id "$id" --arg tipo "$tipo_filtro" --argjson todos_tipos "$todos_tipos" \
+        --argjson ins_n "$total_insumos_omitidos" '
+        . as $sel
+        | ($sel | length) as $tot
+        | if $tot == 0 then "(sem comentários)"
+          else
+            (if $paginar then (($pagina - 1) * $por_pagina) else 0 end) as $ini
+            | (if $paginar then ($ini + $por_pagina) else $tot end) as $fim_raw
+            | (if $fim_raw > $tot then $tot else $fim_raw end) as $fim
+            | (if $paginar then (($tot + $por_pagina - 1) / $por_pagina | floor) else 1 end) as $tot_pags
+            | ($sel[$ini:$fim]) as $fatia
+            | if ($fatia | length) == 0 then
+                "(página \($pagina) fora do intervalo; total de \($tot) comentário(s) em \($tot_pags) página(s))"
+              else
+                (if $paginar then ["página \($pagina) de \($tot_pags) (comentários \($ini + 1)-\($fim) de \($tot))", ""] else [] end)
+                + [$fatia[] | "--- \(._card) · #\(.id)\(if .tipo then " · \(.tipo)" else "" end) · \(.autor // "anônimo") · \(.carimbo) ---\n\(.corpo)\n"]
+                + (if $paginar and $pagina < $tot_pags then ["próxima: tarefas comentarios \($id) --arvore --pagina \($pagina + 1)\(if $por_pagina != 10 then " --por-pagina \($por_pagina)" else "" end)\(if $tipo != "" then " --tipo \($tipo)" else "" end)"] else [] end)
+                + (if ($tipo == "") and ($todos_tipos | not) and ($ins_n > 0) then ["insumos omitidos: \($ins_n) (leia separado com `tarefas insumo listar \($id)` ou `tarefas comentarios \($id) --arvore --tipo insumo`)"] else [] end)
+                | join("\n")
+              end
+          end' | para_texto)
     fi
   else
+    local com_j
+    com_j=$(busca GET "/itens/$id/comentarios${qs}") || return 1
     if [ "$indice" = "true" ]; then
-      saida=$(busca GET "/itens/$id/comentarios${qs}" | jq -c \
-        --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" '
-        .comentarios as $todos
-        | ($todos
-           | (if ($ids | length) > 0 then map(select(.id as $i | any($ids[]; . == $i))) else . end)
-           | map(select(.id >= $desde))
-           | (if $ultimos > 0 then .[-$ultimos:] else . end)) as $sel
-        | if ($todos | length) == 0 then {vazio: "(sem comentários)"}
-          elif ($sel | length) == 0 then
-            {vazio: "(nenhum comentário na seleção; o item tem \($todos | length), de #\($todos[0].id) a #\($todos[-1].id))"}
-          else {itens: $sel}
-          end' | python3 -c '
+      saida=$(printf '%s' "$com_j" | jq -c \
+        --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" \
+        --arg tipo "$tipo_filtro" --argjson todos_tipos "$todos_tipos" --arg busca "$busca_termo" "
+        .comentarios as \$todos
+        | (\$todos
+           | ($jq_filtro_tipo)
+           | (if (\$ids | length) > 0 then map(select(.id as \$i | any(\$ids[]; . == \$i))) else . end)
+           | map(select(.id >= \$desde))
+           | (if \$ultimos > 0 then .[-\$ultimos:] else . end)) as \$sel
+        | if (\$todos | length) == 0 then {vazio: \"(sem comentários)\"}
+          elif (\$sel | length) == 0 then
+            {vazio: \"(nenhum comentário na seleção; o item tem \(\$todos | length), de #\(\$todos[0].id) a #\(\$todos[-1].id))\"}
+          else {itens: \$sel}
+          end" | python3 -c '
 import html, json, re, sys
 d = json.load(sys.stdin)
 if "vazio" in d:
@@ -1876,24 +1919,48 @@ else:
         txt = html.unescape(re.sub(r"<[^>]*>", " ", raw))
         prev = " ".join(txt.split())[:100]
         autor = c.get("autor") or "anônimo"
+        tipo = f" · {c[\"tipo\"]}" if c.get("tipo") else ""
         cid = c["id"]
         carimbo = c.get("carimbo", "")
-        print(f"#{cid} · {autor} · {carimbo} · {len(raw)} car. · {prev}")
+        print(f"#{cid}{tipo} · {autor} · {carimbo} · {len(raw)} car. · {prev}")
 ')
     else
-      saida=$(busca GET "/itens/$id/comentarios${qs}" | jq -r \
-        --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" '
-        .comentarios as $todos
-        | ($todos
-           | (if ($ids | length) > 0 then map(select(.id as $i | any($ids[]; . == $i))) else . end)
-           | map(select(.id >= $desde))
-           | (if $ultimos > 0 then .[-$ultimos:] else . end)) as $sel
-        | if ($todos | length) == 0 then "(sem comentários)"
-          elif ($sel | length) == 0 then
-            "(nenhum comentário na seleção; o item tem \($todos | length), de #\($todos[0].id) a #\($todos[-1].id))"
+      saida=$(printf '%s' "$com_j" | jq -r \
+        --argjson ids "$ids" --argjson desde "$desde" --argjson ultimos "$ultimos" \
+        --arg tipo "$tipo_filtro" --argjson todos_tipos "$todos_tipos" --arg busca "$busca_termo" \
+        --argjson paginar "$paginar" --argjson pagina "$pagina" --argjson por_pagina "$por_pagina" \
+        --arg id "$id" "
+        .comentarios as \$todos
+        | ([\$todos[] | select(((.tipo // \"\") | ascii_downcase) == \"insumo\")] | length) as \$ins_n
+        | (\$todos
+           | ($jq_filtro_tipo)
+           | (if (\$ids | length) > 0 then map(select(.id as \$i | any(\$ids[]; . == \$i))) else . end)
+           | map(select(.id >= \$desde))
+           | (if \$ultimos > 0 then .[-\$ultimos:] else . end)) as \$sel
+        | (\$sel | length) as \$tot
+        | if (\$todos | length) == 0 then \"(sem comentários)\"
+          elif \$tot == 0 then
+            if (\$tipo == \"\") and (\$todos_tipos | not) and (\$ins_n > 0) then
+              \"(sem comentários; há \(\$ins_n) insumo(s) — leia com \`tarefas insumo listar \(\$id)\` ou \`tarefas comentarios \(\$id) --tipo insumo\`)\"
+            else
+              \"(nenhum comentário na seleção; o item tem \(\$todos | length), de #\(\$todos[0].id) a #\(\$todos[-1].id))\"
+            end
           else
-            $sel[] | "--- #\(.id) · \(.autor // "anônimo") · \(.carimbo) ---\n\(.corpo)\n"
-          end' | para_texto)
+            (if \$paginar then ((\$pagina - 1) * \$por_pagina) else 0 end) as \$ini
+            | (if \$paginar then (\$ini + \$por_pagina) else \$tot end) as \$fim_raw
+            | (if \$fim_raw > \$tot then \$tot else \$fim_raw end) as \$fim
+            | (if \$paginar then ((\$tot + \$por_pagina - 1) / \$por_pagina | floor) else 1 end) as \$tot_pags
+            | (\$sel[\$ini:\$fim]) as \$fatia
+            | if (\$fatia | length) == 0 then
+                \"(página \(\$pagina) fora do intervalo; total de \(\$tot) comentário(s) em \(\$tot_pags) página(s))\"
+              else
+                (if \$paginar then [\"página \(\$pagina) de \(\$tot_pags) (comentários \(\$ini + 1)-\(\$fim) de \(\$tot))\", \"\"] else [] end)
+                + [\$fatia[] | \"--- #\\(.id)\\(if .tipo then \" · \\(.tipo)\" else \"\" end) · \\(.autor // \"anônimo\") · \\(.carimbo) ---\\n\\(.corpo)\\n\"]
+                + (if \$paginar and \$pagina < \$tot_pags then [\"próxima: tarefas comentarios \(\$id) --pagina \(\$pagina + 1)\\(if \$por_pagina != 10 then \" --por-pagina \(\$por_pagina)\" else \"\" end)\\(if \$tipo != \"\" then \" --tipo \(\$tipo)\" else \"\" end)\"] else [] end)
+                + (if (\$tipo == \"\") and (\$todos_tipos | not) and (\$ins_n > 0) then [\"insumos omitidos: \(\$ins_n) (leia separado com \`tarefas insumo listar \(\$id)\` ou \`tarefas comentarios \(\$id) --tipo insumo\`)\"] else [] end)
+                | join(\"\\n\")
+              end
+          end" | para_texto)
     fi
   fi
   printf '%s\n' "$saida" \
@@ -2040,10 +2107,15 @@ insumo_listar() {
   local card="${1:-}"; shift || true
   [ -n "$card" ] || _insumo_uso 2
   card=$(so_id "$card") || exit 2
-  local estado="" como_json=false
+  local estado="" como_json=false pagina=1 por_pagina=10 inteiro=false
   while [ $# -gt 0 ]; do
     case "$1" in
       --estado) [ $# -ge 2 ] || { echo "erro: --estado exige em-escrita, integrado ou descartado" >&2; exit 2; }; estado="$2"; shift 2 ;;
+      --pagina|--por-pagina)
+        [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || { echo "erro: tarefas insumo listar: $1 pede um inteiro positivo" >&2; exit 2; }
+        if [ "$1" = "--pagina" ]; then pagina=$2; else por_pagina=$2; fi
+        shift 2 ;;
+      --inteiro) inteiro=true; shift ;;
       --json) como_json=true; shift ;;
       --ajuda|--help|-h) _insumo_uso 0 ;;
       *) echo "erro: tarefas insumo listar: opção desconhecida: $1" >&2; exit 2 ;;
@@ -2057,15 +2129,32 @@ insumo_listar() {
     printf '%s\n' "$resp"
     return 0
   fi
-  printf '%s' "$resp" | jq -r '
-    if (.insumos | length) == 0 then "(sem insumos)"
-    else
-      .insumos[]
-      | "#\(.id) · \(.estado) · vira:\(.vira) · \(.titulo)"
-        + (if .integrado_em then " → \(.integrado_em)" else "" end)
-        + (if .integrado_task_id then " (task #\(.integrado_task_id))" else "" end)
-        + (if .motivo_descarte then " (descartado: \(.motivo_descarte))" else "" end)
-    end'
+  printf '%s' "$resp" | jq -r \
+    --argjson paginar "$( [ "$inteiro" = "true" ] && echo false || echo true )" \
+    --argjson pagina "$pagina" --argjson por_pagina "$por_pagina" --arg card "$card" '
+    (.insumos | length) as $tot
+    | if $tot == 0 then "(sem insumos)"
+      else
+        (if $paginar then (($pagina - 1) * $por_pagina) else 0 end) as $ini
+        | (if $paginar then ($ini + $por_pagina) else $tot end) as $fim_raw
+        | (if $fim_raw > $tot then $tot else $fim_raw end) as $fim
+        | (if $paginar then (($tot + $por_pagina - 1) / $por_pagina | floor) else 1 end) as $tot_pags
+        | (.insumos[$ini:$fim]) as $fatia
+        | if ($fatia | length) == 0 then
+            "(página \($pagina) fora do intervalo; total de \($tot) insumo(s) em \($tot_pags) página(s))"
+          else
+            (if $paginar and $tot_pags > 1 then ["página \($pagina) de \($tot_pags) (insumos \($ini + 1)-\($fim) de \($tot))"] else [] end)
+            + [
+                $fatia[]
+                | "#\(.id) · \(.estado) · vira:\(.vira) · \(.titulo)"
+                  + (if .integrado_em then " → \(.integrado_em)" else "" end)
+                  + (if .integrado_task_id then " (task #\(.integrado_task_id))" else "" end)
+                  + (if .motivo_descarte then " (descartado: \(.motivo_descarte))" else "" end)
+              ]
+            + (if $paginar and $pagina < $tot_pags then ["próxima: tarefas insumo listar \($card) --pagina \($pagina + 1)\(if $por_pagina != 10 then " --por-pagina \($por_pagina)" else "" end)"] else [] end)
+            | join("\n")
+          end
+      end'
 }
 
 insumo_ler() {

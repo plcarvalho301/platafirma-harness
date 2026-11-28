@@ -10,7 +10,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from ..registro import LinhaOperacao
-from ..tipos import ErroEscrita, RecusaEscrita, ResultadoEscrita
+from ..tipos import SAIDA_POR_CODIGO, ErroEscrita, RecusaEscrita, ResultadoEscrita
 from . import (
     ExecucaoMorada,
     proximo_repeticao_pedido,
@@ -29,6 +29,7 @@ _MAPA_CODIGOS_OLARIA: dict[str, tuple[int, str]] = {
     "ja-existe": (2, "ja-existe"),
     "versao-ausente": (2, "versao-ausente"),
     "versao-invalida": (2, "versao-invalida"),
+    "versao-diferente": (2, "versao-divergente"),
     "versao-divergente": (2, "versao-divergente"),
     "versao-desatualizada": (2, "versao-divergente"),
     "pedido-com-conteudo-diferente": (2, "pedido-com-conteudo-diferente"),
@@ -172,29 +173,74 @@ def _montar_requisicao_olaria(
     return "/trocar", cabecalhos, corpo_trocar
 
 
-def _extrair_codigo_olaria(corpo: dict[str, Any]) -> tuple[int, str, str]:
-    candidatos: list[str] = []
-    for campo in ("codigo", "estado"):
-        val = corpo.get(campo)
-        if isinstance(val, str) and val:
-            candidatos.append(val)
-    erros = corpo.get("erros")
-    detalhe = str(corpo.get("erro") or "")
-    if isinstance(erros, list) and erros:
-        primeiro = erros[0]
-        if isinstance(primeiro, dict):
-            for campo in ("codigo", "tipo"):
-                val = primeiro.get(campo)
-                if isinstance(val, str) and val:
-                    candidatos.append(val)
-            detalhe = detalhe or str(primeiro.get("mensagem") or primeiro.get("erro") or "")
-        else:
-            detalhe = detalhe or str(primeiro)
+def _resolver_codigo_olaria(candidatos: list[str]) -> tuple[int, str, str | None]:
     for cand in candidatos:
         if cand in _MAPA_CODIGOS_OLARIA:
             saida, cod = _MAPA_CODIGOS_OLARIA[cand]
-            return saida, cod, detalhe or cand
-    return 2, "chave-invalida", detalhe or "recusado pela Olaria"
+            return saida, cod, None
+        if cand in SAIDA_POR_CODIGO:
+            return SAIDA_POR_CODIGO[cand], cand, None
+    original = candidatos[0] if candidatos else None
+    return 2, "chave-invalida", original
+
+
+def _erro_de_item_olaria(
+    item: dict[str, Any], corpo: dict[str, Any]
+) -> ErroEscrita:
+    candidatos: list[str] = []
+    for campo in ("codigo", "tipo"):
+        val = item.get(campo)
+        if isinstance(val, str) and val:
+            candidatos.append(val)
+    for campo in ("codigo", "estado"):
+        val = corpo.get(campo)
+        if isinstance(val, str) and val and val not in candidatos:
+            candidatos.append(val)
+    saida, codigo, original = _resolver_codigo_olaria(candidatos)
+    onde = str(item.get("onde") or corpo.get("onde") or "olaria")
+    recebido = str(
+        item.get("recebido")
+        or item.get("mensagem")
+        or item.get("erro")
+        or corpo.get("recebido")
+        or corpo.get("erro")
+        or original
+        or codigo
+    )
+    regra_base = str(
+        item.get("regra")
+        or corpo.get("regra")
+        or "a Olaria recusou o conteúdo ou a pré-condição da ficha"
+    )
+    regra = f"{original}: {regra_base}" if original and original not in regra_base else regra_base
+    cura = str(
+        item.get("cura")
+        or corpo.get("cura")
+        or "corrija os dados da ficha e repita"
+    )
+    proximo = str(item.get("proximo") or corpo.get("proximo") or "")
+    return ErroEscrita(
+        saida=saida,
+        codigo=codigo,
+        onde=onde,
+        recebido=recebido,
+        regra=regra,
+        cura=cura,
+        proximo=proximo,
+    )
+
+
+def _extrair_erros_olaria(corpo: dict[str, Any]) -> list[ErroEscrita]:
+    erros_raw = corpo.get("erros")
+    if isinstance(erros_raw, list) and erros_raw:
+        lista: list[ErroEscrita] = []
+        for item in erros_raw:
+            if isinstance(item, dict):
+                lista.append(_erro_de_item_olaria(item, corpo))
+            else:
+                lista.append(_erro_de_item_olaria({"recebido": str(item)}, corpo))
+        return lista
+    return [_erro_de_item_olaria(corpo, corpo)]
 
 
 def _traduzir_erro_http(
@@ -227,18 +273,7 @@ def _traduzir_erro_http(
             )
         )
     if resp.status in (_HTTP_BAD_REQUEST, _HTTP_UNPROCESSABLE):
-        saida, codigo, detalhe = _extrair_codigo_olaria(resp.corpo)
-        return RecusaEscrita(
-            ErroEscrita(
-                saida=saida,
-                codigo=codigo,
-                onde="olaria",
-                recebido=detalhe,
-                regra="a Olaria recusou o conteúdo ou a pré-condição da ficha",
-                cura=str(resp.corpo.get("cura") or "corrija os dados da ficha e repita"),
-                proximo=str(resp.corpo.get("proximo") or ""),
-            )
-        )
+        return RecusaEscrita(_extrair_erros_olaria(resp.corpo))
     if ped.forma == "ensaiar":
         return RecusaEscrita(
             ErroEscrita(
