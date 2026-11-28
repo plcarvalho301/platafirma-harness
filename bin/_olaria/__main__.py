@@ -936,11 +936,12 @@ def executar(argv: list, env: dict | None = None, *, prog: str | None = None) ->
         preencher_do_cofre(env)
     prog = prog or env.get("PF_PECA") or "ontologia"
     if any(a in PEDIDOS_DE_AJUDA for a in argv):
+        pedidas = [a for a in argv if a not in PEDIDOS_DE_AJUDA and not a.startswith("-")]
         try:
             cliente = Cliente.do_ambiente(env)
         except AmbienteIncompleto as erro:
             return ajuda_.ajuda(None, f"{erro} não está no ambiente", prog=prog)
-        return ajuda_.ajuda(cliente, prog=prog)
+        return ajuda_.ajuda(cliente, prog=prog, pedidas=pedidas)
     if not argv:
         return sd.erro_de_uso(
             "uso-invalido", "chamada", "",

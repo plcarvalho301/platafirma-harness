@@ -1,10 +1,14 @@
 """A ajuda do verbo `ontologia` (cards #4214 e #4254; documento do verbo, referencias/instancias/verbo/ontologia.md).
 
 Duas partes. A primeira é do verbo e não depende de nada: as doze formas da usage e os seis códigos de saída. A segunda vem do
-serviço (GET /ajuda), que a monta do catálogo gravado. Com o serviço fora ou a chave faltando, a primeira parte sai sozinha e
-sai 0: pedir ajuda nunca falha.
+serviço (GET /ajuda), que a monta do catálogo gravado: o envelope da mudança, os campos dos itens de catálogo e a lista das
+classes gravadas. Os campos da ficha de uma classe saem só quando a chamada nomeia a classe (`ontologia --help <classe>` ou
+`ontologia <ato> <classe> --help`), porque os campos de todas as classes juntos passam de 130 KB. Com o serviço fora ou a
+chave faltando, a primeira parte sai sozinha e sai 0: pedir ajuda nunca falha.
 """
 from __future__ import annotations
+
+import textwrap
 
 from .saida import Saida
 
@@ -143,7 +147,8 @@ def _exemplo_de_ficha(classes: dict) -> list:
     return []
 
 
-def texto_dos_campos(corpo: dict) -> str:
+def texto_dos_campos(corpo: dict, pedidas: tuple | list = (), *, prog: str = "ontologia") -> str:
+    """Envelope, campos do catálogo e, das classes, só a lista; os campos da ficha saem para as classes pedidas."""
     saida = ["", "a mudança é um mapa com estas chaves, nesta ordem (chave fora delas faz o YAML não se ler):",
              "  " + ", ".join(map(str, corpo.get("envelope") or []))]
     catalogo = corpo.get("catalogo") or {}
@@ -155,11 +160,19 @@ def texto_dos_campos(corpo: dict) -> str:
             saida += [f"    {nome} · opcional" for nome in catalogo[tipo].get("opcionais") or []]
     classes = corpo.get("classes") or {}
     if classes:
-        saida += ["", "campos da ficha de cada classe gravada (nome · tipo · obrigatoriedade · quantos · valores aceitos · exemplo):"]
-        for slug in sorted(classes):
-            saida.append(f"  {slug}:")
-            saida += [_campo_de_ficha(c) for c in classes[slug] if isinstance(c, dict)]
-        exemplo = _exemplo_de_ficha(classes)
+        escolhidas = [slug for slug in dict.fromkeys(str(p) for p in pedidas) if slug in classes]
+        if escolhidas:
+            for slug in escolhidas:
+                saida += ["", f"campos da ficha de {slug} (nome · tipo · obrigatoriedade · quantos · valores aceitos · exemplo):"]
+                saida += [_campo_de_ficha(c) for c in classes[slug] if isinstance(c, dict)]
+            fonte_do_exemplo = {slug: classes[slug] for slug in escolhidas}
+        else:
+            saida += ["", f"classes gravadas ({len(classes)}); os campos da ficha de uma saem com `{prog} --help <classe>`:"]
+            lista = ", ".join(sorted(map(str, classes)))
+            saida += [f"  {linha}" for linha in textwrap.wrap(lista, width=110, break_on_hyphens=False,
+                                                             break_long_words=False)]
+            fonte_do_exemplo = classes
+        exemplo = _exemplo_de_ficha(fonte_do_exemplo)
         if exemplo:
             saida += ["", "uma ficha preenchida:"] + [f"  {linha}" for linha in exemplo]
     return "\n".join(saida) + "\n"
@@ -168,7 +181,8 @@ def texto_dos_campos(corpo: dict) -> str:
 HTTP_OK = 200
 
 
-def ajuda(cliente: object, motivo_sem_servico: str = "", *, prog: str = "ontologia") -> Saida:
+def ajuda(cliente: object, motivo_sem_servico: str = "", *, prog: str = "ontologia",
+          pedidas: tuple | list = ()) -> Saida:
     base = texto_do_verbo(prog=prog)
     if cliente is None:
         return Saida(0, base + f"\na ajuda dos campos depende do serviço: {motivo_sem_servico}\n")
@@ -179,4 +193,4 @@ def ajuda(cliente: object, motivo_sem_servico: str = "", *, prog: str = "ontolog
         return Saida(0, base + f"\na ajuda dos campos depende do serviço, que não respondeu: {erro or type(erro).__name__}\n")
     if resposta.status != HTTP_OK:
         return Saida(0, base + f"\na ajuda dos campos depende do serviço, que respondeu {resposta.status}\n")
-    return Saida(0, base + texto_dos_campos(resposta.corpo))
+    return Saida(0, base + texto_dos_campos(resposta.corpo, pedidas, prog=prog))
