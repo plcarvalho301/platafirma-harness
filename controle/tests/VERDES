@@ -71,6 +71,7 @@ testes/test_expurgar_fosseis_4456.py | bin/release bin/_release/expurgo
 tests/test_pesquisar_suspenso.py | bin/pesquisar
 tests/test_contrato_verificar.py | lib/verificador/** bin/_lint/** lib/suite/** registro/vista-alcance.yaml
 tests/test_contrato_despacho.py | lib/despacho/** lib/oplog_extracao.py lib/suite/** lib/verificador/** registro/esquemas/pipeline.schema.json
+tests/test_borda_despachar.py | lib/despacho/**
 tests/test_fila_eventos.py | bin/fila bin/_fila/** lib/descanso/publicar.py
 tests/test_poda_teto.py | lib/poda/**
 testes/test_olaria_erros_dt1428.py | lib/escrita/moradas/olaria.py
