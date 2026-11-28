@@ -1567,11 +1567,22 @@ promover_stacks() {  # $1=sha ; usa STACKS_PROMOVER; devolve 0 ou o nome da stac
 # restart matando a conexão que emitiu o promover) já tem cura na casa: `infra restart
 # porta` despacha destacado e a chamada que o emite volta antes do restart (medido 15/09
 # pela porta). Chamado por último, depois de tudo relatado. PF_RELEASE_PORTA=0 desliga.
+avisar_restart_escritor() {  # $1=atual $2=sha
+  local atual_rev="${1:-}" nova_rev="${2:-}" esp alterados=""
+  [ -n "$atual_rev" ] && [ -n "$nova_rev" ] && [ "$atual_rev" != "$nova_rev" ] || return 0
+  esp="$(espelho_de "$FAMILIA_BIN")"
+  [ -d "$esp" ] || return 0
+  alterados="$("$GIT" --git-dir="$esp" diff --name-only "$atual_rev" "$nova_rev" -- lib/escrita/ registro/escrita.yaml 2>/dev/null || true)"
+  [ -n "$alterados" ] || return 0
+  printf 'escritor:  AVISO — rev %s altera lib/escrita/ ou registro/escrita.yaml; escritor.service (unit de sistema) segue em memória na rev anterior até: sudo systemctl restart escritor.service\n' "${nova_rev:0:7}" >&2
+  return 0
+}
+
 reiniciar_porta() {
   # A tela sai antes do restart. O infra desta release agenda a porta para daqui a
   # 5 s: destacar sem adiar podia matar esta chamada antes do exit 0.
   resumo_imprime
-  local repo="$1"
+  local repo="$1" atual_rev="${2:-${atual:-}}" nova_rev="${3:-${sha:-}}"
   if [ "$repo" = "$FAMILIA_BIN" ]; then
     # Promover o harness converge clones e units, sem reiniciar a porta.
     local inst="$PLATAFIRMA_RELEASE/harness/deploy-harness/instalar" saida_i rc_i=0
@@ -1585,6 +1596,7 @@ reiniciar_porta() {
     if command -v systemctl >/dev/null 2>&1; then
       systemctl --user daemon-reload >/dev/null 2>&1 || true
     fi
+    avisar_restart_escritor "$atual_rev" "$nova_rev"
     return 0
   fi
   [ "$repo" = "platafirma-core" ] || return 0
@@ -2242,7 +2254,7 @@ resumo_imprime() {
   PROMO_LOG="$log"
   [ -f "$PROMO_LOG" ] || { PROMO_LOG=""; return 0; }
   # grep sem casamento sai 1: com set -e/pipefail isso mataria o resumo e trocaria o exit
-  { grep -E '^(== |de: |gate: |venv: |current: |no ar: |ambiente: |suite: |card: |deploy: |ensaio: |já no ar: |espelho: |checkout: |stacks: |terceiro: |porta: |expurgo: )' "$PROMO_LOG" \
+  { grep -E '^(== |de: |gate: |venv: |current: |no ar: |ambiente: |suite: |card: |deploy: |ensaio: |já no ar: |espelho: |checkout: |stacks: |terceiro: |porta: |escritor: |expurgo: )' "$PROMO_LOG" \
       | grep -v 'NAO MEDIDA'; } || true
   # "release: /opt/..." e o eco do ajudante da stack, nao recusa: fica no log
   { grep -E '^(release: |varrido: |saida inteira: |caminho: )|NAO MEDIDA|PROMOCAO|RETOMAR' "$PROMO_LOG" \

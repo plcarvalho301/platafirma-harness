@@ -432,3 +432,119 @@ def test_servico_pela_familia_completa_segue_casando_as_duas_stacks(monkeypatch)
     _mundo_rastreador(monkeypatch)
     assert sorted(c["nome"] for c in conferir.containers("platafirma-rastreador")) == [
         "bancada-api", "rastreador-api"]
+
+
+# --- escritor: deriva entre processo em memoria e current/harness (DT 1440) ---------
+
+
+def test_conferir_escritor_acusa_divergencia_quando_revisao_em_memoria_difere(tmp_path, monkeypatch, capsys):
+    """DT 1440: conferir escritor diverge quando escritor.service serve revisao anterior ao current."""
+    sha_atual = "e995d04111111111111111111111111111111111"
+    sha_antigo = "3c9406d000000000000000000000000000000000"
+
+    prod = tmp_path / "prod"
+    alvo_harness = prod / "platafirma-harness" / sha_atual
+    alvo_harness.mkdir(parents=True)
+    # link lib/ para o repositorio real para importar escrita.cliente
+    raiz_repo = Path(__file__).resolve().parents[2]
+    (alvo_harness / "lib").symlink_to(raiz_repo / "lib")
+    (prod / "current").mkdir(parents=True)
+    (prod / "current" / "harness").symlink_to(alvo_harness)
+
+    setup = tmp_path / "setup-escritor.sh"
+    setup.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    svc = tmp_path / "escritor.service"
+    svc.write_text(
+        "\n".join(f"{k}={v}" for k, v in conferir._ESCRITOR_DIRETIVAS_SERVICE) + "\n",
+        encoding="utf-8",
+    )
+    sock_u = tmp_path / "escritor.socket"
+    sock_u.write_text(
+        "\n".join(f"{k}={v}" for k, v in conferir._ESCRITOR_DIRETIVAS_SOCKET) + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("PF_PROD_RAIZ", str(prod))
+    monkeypatch.setenv("PF_HARNESS_DIR", str(prod / "current" / "harness"))
+    monkeypatch.setattr(conferir, "_sha_release", lambda: sha_atual[:8])
+
+    import sys
+    lib_str = str(raiz_repo / "lib")
+    if lib_str not in sys.path:
+        sys.path.insert(0, lib_str)
+    import escrita.cliente as esc_cliente
+
+    monkeypatch.setattr(esc_cliente, "consultar_saude", lambda _s, timeout_s=2.0: {"ok": True, "release": sha_antigo})
+    rc_div = conferir.conferir_escritor(
+        como_json=True,
+        setup_script=setup,
+        service_unit=svc,
+        socket_unit=sock_u,
+        socket_path=tmp_path / "e.sock",
+        analyze_runner=lambda: (0, "Overall exposure level for escritor.service: 1.5 SAFE", ""),
+    )
+    dado_div = json.loads(capsys.readouterr().out)
+    assert rc_div == 1
+    itens_div = {it["nome"]: it for it in dado_div["itens"]}
+    assert itens_div["revisao em memoria"]["estado"] == "divergente"
+    assert "3c9406d" in itens_div["revisao em memoria"]["motivo"]
+    assert "e995d04" in itens_div["revisao em memoria"]["motivo"]
+    assert "sudo systemctl restart escritor.service" in itens_div["revisao em memoria"]["motivo"]
+
+    monkeypatch.setattr(esc_cliente, "consultar_saude", lambda _s, timeout_s=2.0: {"ok": True, "release": sha_atual})
+    rc_ok = conferir.conferir_escritor(
+        como_json=True,
+        setup_script=setup,
+        service_unit=svc,
+        socket_unit=sock_u,
+        socket_path=tmp_path / "e.sock",
+        analyze_runner=lambda: (0, "Overall exposure level for escritor.service: 1.5 SAFE", ""),
+    )
+    dado_ok = json.loads(capsys.readouterr().out)
+    assert rc_ok == 0
+    itens_ok = {it["nome"]: it for it in dado_ok["itens"]}
+    assert itens_ok["revisao em memoria"]["estado"] == "conforme"
+
+
+def test_release_promover_avisa_restart_escritor_quando_altera_escrita(tmp_path):
+    """DT 1440: avisar_restart_escritor emite aviso quando diff altera lib/escrita/ ou registro/escrita.yaml."""
+    raiz_repo = Path(__file__).resolve().parents[2]
+    work = tmp_path / "work"
+    work.mkdir()
+    _git(work, "init", "-q")
+    (work / "bin").mkdir()
+    (work / "lib" / "escrita").mkdir(parents=True)
+    (work / "bin" / "outro").write_text("v1\n", encoding="utf-8")
+    (work / "lib" / "escrita" / "portao.py").write_text("v1\n", encoding="utf-8")
+    _git(work, "add", ".")
+    _git(work, "commit", "-q", "-m", "base")
+    sha1 = subprocess.check_output(["git", "-C", str(work), "rev-parse", "HEAD"], text=True).strip()
+
+    (work / "bin" / "outro").write_text("v2\n", encoding="utf-8")
+    _git(work, "add", ".")
+    _git(work, "commit", "-q", "-m", "sem escrita")
+    sha2 = subprocess.check_output(["git", "-C", str(work), "rev-parse", "HEAD"], text=True).strip()
+
+    (work / "lib" / "escrita" / "portao.py").write_text("v2\n", encoding="utf-8")
+    _git(work, "add", ".")
+    _git(work, "commit", "-q", "-m", "com escrita")
+    sha3 = subprocess.check_output(["git", "-C", str(work), "rev-parse", "HEAD"], text=True).strip()
+
+    bare = tmp_path / "espelho" / "platafirma-harness.git"
+    bare.parent.mkdir(parents=True)
+    _git(tmp_path, "clone", "--bare", "-q", str(work), str(bare))
+
+    script = (
+        f'source <(sed -n "/^avisar_restart_escritor()/,/^}}/p" "{raiz_repo / "bin" / "release"}")\n'
+        'GIT=git\n'
+        'FAMILIA_BIN=platafirma-harness\n'
+        f'espelho_de() {{ printf "%s\\n" "{bare}"; }}\n'
+        f'avisar_restart_escritor "{sha1}" "{sha2}"\n'
+    )
+    sem_aviso = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)
+    assert sem_aviso.stderr == ""
+
+    script_com = script.replace(f'avisar_restart_escritor "{sha1}" "{sha2}"', f'avisar_restart_escritor "{sha2}" "{sha3}"')
+    com_aviso = subprocess.run(["bash", "-c", script_com], capture_output=True, text=True, check=True)
+    assert "escritor:  AVISO" in com_aviso.stderr
+    assert "sudo systemctl restart escritor.service" in com_aviso.stderr
