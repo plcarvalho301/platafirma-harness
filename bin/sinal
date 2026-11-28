@@ -102,9 +102,7 @@ SEM_SONDA = {
 # healthcheck proprio). Em execucao (ActiveState=activating) sai
 # como degradado; fora disso Result=success e no-ar (com histerese em
 # processa_estado_item) e qualquer outro valor e fora.
-POR_SYSTEMD_RESULT = {
-    "casa-site-publicar": "casa-site-publicar.service",
-}
+POR_SYSTEMD_RESULT = {}
 
 
 def agora():

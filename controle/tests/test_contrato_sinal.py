@@ -483,6 +483,7 @@ def test_coleta_nao_traz_ci_do_forge(monkeypatch):
 # --- DT 550: unit oneshot em queda contínua não abre incidente repetido -----------------------------
 
 def test_unit_oneshot_activating_e_degradado_e_nao_zera_incidente(monkeypatch):
+    monkeypatch.setitem(sinal.POR_SYSTEMD_RESULT, "casa-site-publicar", "casa-site-publicar.service")
     monkeypatch.setattr(
         sinal,
         "roda",
@@ -503,8 +504,13 @@ def test_unit_oneshot_activating_e_degradado_e_nao_zera_incidente(monkeypatch):
     assert e["incidente_id"] == "4198"
 
 
+def test_casa_site_publicar_fora_da_coleta():
+    assert "casa-site-publicar" not in sinal.POR_SYSTEMD_RESULT
+
+
 def test_unit_oneshot_so_limpa_estado_apos_n_leituras_seguidas_no_ar(monkeypatch):
     monkeypatch.setenv("SINAL_RECUPERACAO_LEITURAS", "3")
+    monkeypatch.setitem(sinal.POR_SYSTEMD_RESULT, "casa-site-publicar", "casa-site-publicar.service")
     t0 = datetime(2026, 10, 5, 17, 0, 0, tzinfo=timezone.utc)
     ant = {"estado": "fora", "fora_desde": t0.isoformat(timespec="seconds"), "incidente_id": "4198"}
 
