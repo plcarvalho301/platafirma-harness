@@ -384,6 +384,9 @@ def main(argv: list[str] | None = None) -> int:
         for err in exc.erros:
             sys.stderr.write(f"pipelines: recusa: {err.formatar()}\n")
         return SAIDA_RECUSA
+    except Exception as exc:  # noqa: BLE001
+        sys.stderr.write(f"release: pipelines erro interno: {type(exc).__name__}: {exc}\n")
+        return 1
 
     modo = "ensaio" if ns.ensaio else "compilados"
     if not itens:
