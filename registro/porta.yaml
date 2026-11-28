@@ -49,13 +49,12 @@ verbos:
       operacao), montar (escrita, operacao), refazer (leitura, operacao), ler (leitura,
       operacao), listar (leitura, operacao), descartar (escrita, operacao), travar (escrita,
       operacao)
-  bot:
+  automacao:
+    modelo: false
     descricao: >-
-      delega uma ação para depois, por agenda ou evento · use para: delegar ação assíncrona
-      ou por cron, «agenda isso toda noite»; «o que está agendado?»; desligar delegação; e
-      sempre que uma execução cair, «o job caiu», automação parada · atos: declarar (escrita,
-      agendamento), listar (leitura, agendamento), rodar (escrita, agendamento), desligar
-      (escrita, agendamento), caidas (escrita, agendamento)
+      comando de agendamento (fora da lista do modelo até o ops absorver os atos) · atos:
+      declarar (escrita, agendamento), listar (leitura, agendamento), rodar (escrita,
+      agendamento), desligar (escrita, agendamento), caidas (escrita, agendamento)
   busca:
     descricao: >-
       acha o que a casa e o acervo têm, pelo que você já sabe · não sabe onde está: buscar,

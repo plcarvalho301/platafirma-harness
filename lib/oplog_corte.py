@@ -50,7 +50,7 @@ import raizes
 from oplog_extracao import Api, Falha, fora_da_particao
 
 APROVADO, RETIDO, REPROVADO, CORTADO = "aprovado", "retido", "reprovado", "cortado"
-ESTADOS_ABERTOS = ("detectado", "em-mitigacao", "mitigado")   # o incidente ainda não terminou (como `bot caidas`)
+ESTADOS_ABERTOS = ("detectado", "em-mitigacao", "mitigado")   # o incidente ainda não terminou (como `automacao caidas`)
 CADEIRA_DO_INCIDENTE = "seguranca"
 PAGINA = 1000                  # o teto de D5.6
 MAX_DIAS_POR_RODADA = 3
@@ -172,7 +172,7 @@ def portao(api: Api, dia: str, dados: bytes, *, expira: float | None = None) -> 
 # --- o rastreador: incidente sem duplicar ---------------------------------------------------------
 
 class Tarefas:
-    """O `tarefas` do harness, o mesmo que `bot caidas` usa para abrir incidente sem duplicar."""
+    """O `tarefas` do harness, o mesmo que `automacao caidas` usa para abrir incidente sem duplicar."""
 
     def __init__(self, binario: str | os.PathLike | None = None):
         padrao = Path(os.path.realpath(__file__)).parent.parent / "bin" / "tarefas"

@@ -27,7 +27,7 @@
 # ambiente: PF_SUJEITO (a pessoa em nome de quem o agente roda; obrigatoria em rodar; porta) · PF_SESSAO (a sessao de quem chamou; obrigatoria em rodar; porta) · PF_CADEIRA (porta) · PF_ORDEM_ID (porta) · PF_POSTO (opcional; padrao <bancada>/platafirma-posto, onde estao as declaracoes) · PF_BIN (opcional; padrao bin/ da propria arvore; so teste com stub) · PF_CLAUDE_BIN (opcional; padrao o binario da trava em <release>/venv/claude-code, lib/claude_cli.py; so teste com stub) · PF_AGY_BIN (opcional; padrao ~/.local/bin/agy da conta; so teste com stub) · OLLAMA_BASE_URL (opcional; o ollama local) · PLATAFIRMA_INSTANCIA (opcional; padrao /srv/platafirma/casa; var/log/agente e var/log/seg)
 # escrita: projetar grava .claude/agents/<slug>.md no posto; rodar grava a chave da sessao filha (sessao abrir) e uma linha em var/log/agente/; nada em listar|ler|projetar --conferir
 # depende: sessao, expediente, lib/raizes, lib/uso, lib/transcript, pyyaml (venv harness)
-# conforme: parcial — agendado espera o `bot --roda agente:<slug>` (#3186); `sessao longjob` ja herda os atributos da chave
+# conforme: parcial — agendado espera o `automacao --roda agente:<slug>` (#3186); `sessao longjob` ja herda os atributos da chave
 #
 from __future__ import annotations
 
@@ -1536,7 +1536,7 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--cadeira", default=None)
     a.add_argument("--chapeu", default=None)
     a.add_argument("--ligacao", choices=("consultado", "agendado"), default="consultado",
-                   help="por onde a tarefa entra; o bot passa agendado")
+                   help="por onde a tarefa entra; a automação passa agendado")
     a.add_argument("--peca", action="append", default=None, metavar="<nome>=<arquivo>",
                    help="troca o conteúdo da peça da lente pelo do arquivo; <nome>= tira a peça (par mínimo)")
     a.add_argument("--anexo", action="append", default=None, metavar="<imagem>",

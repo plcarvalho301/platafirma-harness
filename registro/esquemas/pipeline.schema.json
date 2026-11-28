@@ -225,7 +225,6 @@
         "tipo": {
           "type": "string",
           "enum": [
-            "bot",
             "cadeira",
             "pessoa"
           ]
