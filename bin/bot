@@ -17,5 +17,5 @@
 # ambiente: PF_AUTOMACAO_SLUGS (repassada por automacao; verbo)
 # escrita: ponte para bin/automacao
 # depende: automacao
-# conforme: parcial — ponte temporaria (#4481)
+# conforme: parcial — ponte temporária de migração (#4481)
 exec "$(dirname "$0")/automacao" "$@"
