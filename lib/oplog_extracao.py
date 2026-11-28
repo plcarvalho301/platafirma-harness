@@ -46,7 +46,7 @@ import oplog
 # --- o que a partição aceita (D1; o serviço confere de novo) ---------------------------------
 
 TIPOS = ("giro", "abertura", "fecho", "auth_negada", "http_req", "pep_negou", "contorno", "fallback",
-         "leitura", "escopo", "turno", "consulta_motor")
+         "leitura", "escopo", "turno", "consulta_motor", "malote", "execucao")
 ORIGENS = ("cadeira", "agente", "sonda")
 CLASSES = oplog.CLASSES
 CLASSES_FONTE = ("verbo", "tabela")
@@ -216,7 +216,7 @@ def tipo_particao(reg: dict) -> str:
         return "http_req"
     if evento in ("auth_negada", "jwt_recusado"):
         return "auth_negada"
-    if evento in ("escopo", "turno", "fecho", "fallback"):
+    if evento in ("escopo", "turno", "fecho", "fallback", "malote", "execucao"):
         return evento
     if evento == "leitura_bruto":       # a leitura da linha inteira (#3355): tem `tool`, e nao e giro
         return "leitura"

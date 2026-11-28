@@ -1,0 +1,349 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platafirma.local/esquemas/pipeline.schema.json",
+  "title": "ArtefatoPipelineCompilado",
+  "description": "Esquema literal do artefato compilado de pipeline lido pelo ato despachar em registro/pipelines/<slug>.yaml.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "versao_esquema",
+    "procedencia",
+    "pipeline",
+    "entra_por",
+    "parametros",
+    "tempo_maximo",
+    "cache_vereditos",
+    "instrucoes"
+  ],
+  "properties": {
+    "versao_esquema": {
+      "type": "integer",
+      "const": 1
+    },
+    "procedencia": {
+      "$ref": "#/$defs/procedencia"
+    },
+    "pipeline": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "entra_por": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "parametros": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/parametro"
+      }
+    },
+    "tempo_maximo": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "teto_de_repeticoes": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "cache_vereditos": {
+      "type": "string",
+      "enum": [
+        "nenhum",
+        "por_arvore"
+      ]
+    },
+    "instrucoes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/instrucao"
+      }
+    }
+  },
+  "$defs": {
+    "procedencia": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ficha",
+        "configuracao",
+        "fornada",
+        "sha",
+        "compilado_em",
+        "digest"
+      ],
+      "properties": {
+        "ficha": {
+          "type": "string",
+          "pattern": "^pipeline:[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "configuracao": {
+          "type": "string",
+          "pattern": "^configuracao:[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "fornada": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$"
+        },
+        "compilado_em": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^(sha256:)?[0-9a-f]{64}$"
+        }
+      }
+    },
+    "parametro": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nome",
+        "tipo",
+        "obrigatorio"
+      ],
+      "properties": {
+        "nome": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "tipo": {
+          "type": "string",
+          "enum": [
+            "texto",
+            "inteiro",
+            "booleano"
+          ]
+        },
+        "obrigatorio": {
+          "type": "boolean"
+        }
+      }
+    },
+    "reacao": {
+      "type": "string",
+      "enum": [
+        "segue",
+        "para"
+      ]
+    },
+    "em_saida": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "properties": {
+        "0": {
+          "$ref": "#/$defs/reacao"
+        },
+        "1": {
+          "$ref": "#/$defs/reacao"
+        },
+        "2": {
+          "$ref": "#/$defs/reacao"
+        },
+        "3": {
+          "$ref": "#/$defs/reacao"
+        },
+        "4": {
+          "$ref": "#/$defs/reacao"
+        },
+        "5": {
+          "$ref": "#/$defs/reacao"
+        }
+      }
+    },
+    "em_veredito": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sim",
+        "nao",
+        "nao_sei",
+        "nao_sei_na_catraca"
+      ],
+      "properties": {
+        "sim": {
+          "$ref": "#/$defs/reacao"
+        },
+        "nao": {
+          "$ref": "#/$defs/reacao"
+        },
+        "nao_sei": {
+          "$ref": "#/$defs/reacao"
+        },
+        "nao_sei_na_catraca": {
+          "$ref": "#/$defs/reacao"
+        }
+      }
+    },
+    "chamada_volta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verbo",
+        "ato",
+        "args"
+      ],
+      "properties": {
+        "verbo": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "ato": {
+          "type": "string",
+          "minLength": 1
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "executor_manual": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tipo",
+        "alvo",
+        "prazo_espera"
+      ],
+      "properties": {
+        "tipo": {
+          "type": "string",
+          "enum": [
+            "bot",
+            "cadeira",
+            "pessoa"
+          ]
+        },
+        "alvo": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prazo_espera": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "guarda": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "verbo",
+        "servico",
+        "reguas",
+        "args",
+        "em_veredito"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "verbo": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "servico": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reguas": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "em_veredito": {
+          "$ref": "#/$defs/em_veredito"
+        }
+      }
+    },
+    "instrucao": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "verbo",
+        "ato",
+        "args",
+        "em_saida",
+        "volta"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "verbo": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "ato": {
+          "type": "string",
+          "minLength": 1
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "duto": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "aceita_vazio": {
+          "type": "boolean"
+        },
+        "em_saida": {
+          "$ref": "#/$defs/em_saida"
+        },
+        "volta": {
+          "oneOf": [
+            {
+              "type": "string",
+              "const": "nenhuma"
+            },
+            {
+              "$ref": "#/$defs/chamada_volta"
+            }
+          ]
+        },
+        "executor": {
+          "$ref": "#/$defs/executor_manual"
+        },
+        "guardas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/guarda"
+          }
+        }
+      }
+    }
+  }
+}
