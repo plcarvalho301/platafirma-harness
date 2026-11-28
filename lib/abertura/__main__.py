@@ -273,8 +273,8 @@ def _ler_cartas_da_caixa(
     except (OSError, subprocess.TimeoutExpired) as exc:
         return [], str(exc)
     if proc.returncode != 0:
-        motivo = (proc.stderr or proc.stdout).strip().splitlines()
-        return [], (motivo[0][:160] if motivo else f"exit {proc.returncode}")
+        motivo = [ln.strip() for ln in (proc.stderr or proc.stdout).splitlines() if ln.strip()]
+        return [], (motivo[-1][:160] if motivo else f"exit {proc.returncode}")
     try:
         brutas = ler_cartas_da_fila(proc.stdout)
     except ValueError as exc:

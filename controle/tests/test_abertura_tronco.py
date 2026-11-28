@@ -116,3 +116,32 @@ def test_carregar_secao_das_cadeiras_usa_platafirma_release_sem_pf_casa_raiz(
     assert res.ok is True
     assert res.cadeira == "seguranca"
     assert res.chapeu == "iam"
+
+
+def test_ler_cartas_da_caixa_devolve_ultima_linha_do_traceback(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """DT 1444: falha do bin/fila com traceback devolve a exceção, não 'Traceback (most recent call last):'."""
+    sys.path.insert(0, str(HARNESS_LIB))
+    from abertura.__main__ import _ler_cartas_da_caixa
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fila_fake = bin_dir / "fila"
+    fila_fake.write_text(
+        f"#!{sys.executable}\n"
+        "import sys\n"
+        "sys.stderr.write('Traceback (most recent call last):\\n"
+        "  File \"streams.py\", line 480, in _reconcilia\\n"
+        "NameError: name \\'PREFIXO_AUTOMACAO\\' is not defined\\n')\n"
+        "sys.exit(1)\n",
+        encoding="utf-8",
+    )
+    fila_fake.chmod(fila_fake.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PF_BIN", str(bin_dir))
+
+    cartas, erro = _ler_cartas_da_caixa("busca", base=tmp_path)
+    assert cartas == []
+    assert erro is not None
+    assert "NameError" in erro
+    assert "Traceback" not in erro
