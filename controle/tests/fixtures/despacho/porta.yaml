@@ -1,0 +1,12 @@
+# Registro de verbos de prova para `controle/tests/test_borda_despachar.py` (card #4455, t11).
+# Nenhum verbo de produção declara `despachar` nesta story (#4420).
+verbos:
+  verbo-prova:
+    descricao: >-
+      verbo mínimo de prova da borda comum do despachar · use para: exercitar o ato despachar
+      e o ler execucao pela camada comum sem regra de pipeline no verbo · atos: ler (leitura,
+      ficha), despachar (escrita, pipeline)
+  verbo-sem-despachar:
+    descricao: >-
+      verbo de prova que não declara o ato despachar · use para: provar a recusa 2
+      ato-nao-declarado sem chamar o core · atos: ler (leitura, ficha), listar (leitura, ficha)

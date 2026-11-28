@@ -1,0 +1,35 @@
+"""Verbo mínimo de prova da borda comum de `despachar` (card #4455, t11).
+
+Delega `despachar` e `ler execucao` inteiramente a `lib/despacho/borda.py`, sem nenhuma
+regra de pipeline própria no verbo. O nome do verbo pode ser sobreposto por `PF_VERBO_PROVA`
+para exercitar o mesmo despachante mínimo sobre um verbo sem `despachar` declarado.
+"""
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+_RAIZ_HARNESS = Path(__file__).resolve().parents[4]
+_LIB = _RAIZ_HARNESS / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+
+from despacho.borda import executar_ato
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    verbo = (os.environ.get("PF_VERBO_PROVA") or "verbo-prova").strip()
+    if not args:
+        sys.stderr.write(f"uso: {verbo} <despachar|ler> ...\n")
+        return 2
+    ato, resto = args[0], args[1:]
+    if ato == "despachar" or (ato == "ler" and resto and resto[0] == "execucao"):
+        return executar_ato(verbo, ato, resto)
+    sys.stderr.write(f"ato não suportado no verbo de prova: {ato}\n")
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
