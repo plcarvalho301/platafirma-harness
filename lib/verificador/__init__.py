@@ -117,6 +117,12 @@ def _rodar_fluxo(
     return veredito, pedido.como_json
 
 
+def _ambiente_padrao() -> AmbienteVerificacao:
+    from despacho.suite import DelegadorSuiteDespacho
+
+    return AmbienteVerificacao(delegador_suite=DelegadorSuiteDespacho())
+
+
 def executar(
     verbo: str,
     argv: Sequence[str],
@@ -128,7 +134,7 @@ def executar(
     """Executa `<verbo> verificar <argv…>` e devolve o código de saída (0 a 5)."""
     out = sys.stdout if stdout is None else stdout
     err = sys.stderr if stderr is None else stderr
-    amb = ambiente or AmbienteVerificacao()
+    amb = _ambiente_padrao() if ambiente is None else ambiente
     como_json_ref = [False]
 
     try:

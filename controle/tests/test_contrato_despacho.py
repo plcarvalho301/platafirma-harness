@@ -1,19 +1,25 @@
 # componente: componente:suite
-"""test_contrato_despacho — contrato do esquema de pipeline, extrator e despacho (card #4455).
+"""test_contrato_despacho — contrato do esquema, extrator, cliente, delegador e leitura (card #4455).
 
-Cobre na suíte do harness:
+Cobre na suíte do harness (t2 + t6, Aceite 3):
 - extrator da trilha (`oplog_extracao`): `malote` e `execucao` atravessam como tipos próprios
-  apenas com `evento` de topo, sem virar `giro` mesmo quando a linha traz `tool`, e evento
-  desconhecido sem `tool` segue levantando `SemTraducao`
+  sem virar `giro` mesmo quando a linha traz `tool`, e evento desconhecido sem `tool` levanta `SemTraducao`
 - esquema literal `registro/esquemas/pipeline.schema.json`: aceita artefato compilado válido
-  (incluindo guardas ordenadas, `volta` e `executor` manual) e reprova falta de `tempo_maximo`,
-  `em_saida` incompleto, guarda sem `servico` ou sem `reguas`, chave desconhecida e desvio
+  e reprova falta de `tempo_maximo`, `em_saida` incompleto, guarda sem `servico`/`reguas` e desvio
+- chamada de `verificar` com dois testes entregue via `DelegadorSuiteDespacho` e `despachar_pelo_core`
+  ao motor `suíte de testes` (`python -m suite laudo`), devolvendo o laudo como veio (`exit 0`)
+- saída `3` (`dependencia-sem-resposta`) quando a porta/despachar não responde ou está ausente
+- saída `5` (`tempo-esgotado`) quando a suíte passa do prazo do `verificar` (unidade encerrada ou parcial)
+- leitura da execução pelo evento `execucao` via `oplog.ler` (`0` dono, `1` inexistente, `4` outro sujeito)
 """
 from __future__ import annotations
 
 import copy
+import io
 import json
+import os
 import re
+import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -21,18 +27,43 @@ from typing import Any
 
 import pytest
 
-HARNESS_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(HARNESS_ROOT / "lib"))
-
+TESTS_DIR = Path(__file__).resolve().parent
+HARNESS_ROOT = TESTS_DIR.parents[1]
 ESQUEMA_PATH = HARNESS_ROOT / "registro" / "esquemas" / "pipeline.schema.json"
 LEIA_PIPELINES_PATH = HARNESS_ROOT / "registro" / "pipelines" / "LEIA.md"
 TOTAL_TIPOS_PARTICAO = 14
+TOTAL_ITENS_DUAS_FICHAS = 2
+SAIDA_OK = 0
+SAIDA_INEXISTENTE = 1
+SAIDA_DEPENDENCIA = 3
+SAIDA_NEGADA = 4
+SAIDA_INDETERMINAVEL = 5
+SUJEITO_DONO = "11111111-1111-1111-1111-111111111111"
+SUJEITO_OUTRO = "22222222-2222-2222-2222-222222222222"
+
+
+def _preparar_sys_path() -> None:
+    for pasta in (HARNESS_ROOT / "lib", HARNESS_ROOT / "bin", TESTS_DIR):
+        texto = str(pasta)
+        if texto not in sys.path:
+            sys.path.insert(0, texto)
 
 
 def _extrator() -> Any:
+    _preparar_sys_path()
     import oplog_extracao
 
     return oplog_extracao
+
+
+def _modulos_despacho() -> tuple[Any, Any, Any, Any]:
+    _preparar_sys_path()
+    import despacho
+    import leitura.recusa as mod_recusa
+    import oplog
+    import verificador
+
+    return despacho, mod_recusa, oplog, verificador
 
 
 def _esquema_pipeline() -> dict[str, Any]:
@@ -246,6 +277,109 @@ def _mut_id_fora_kebab(art: dict[str, Any]) -> None:
     art["instrucoes"][0]["id"] = "Passo_Invalido"
 
 
+def _preparar_arvore_duas_fichas(raiz: Path) -> Path:
+    arvore = raiz / "arvore_alfa"
+    (arvore / "tests").mkdir(parents=True, exist_ok=True)
+    (arvore / "tests" / "test_a1.py").write_text(
+        "# componente: componente:alfa\n\ndef test_um():\n    assert True\n",
+        encoding="utf-8",
+    )
+    (arvore / "tests" / "test_a2.py").write_text(
+        "# componente: componente:alfa\n# verifica: politica:0011\n\ndef test_dois():\n    assert True\n",
+        encoding="utf-8",
+    )
+    return arvore
+
+
+def _runner_ponte_suite_real(
+    arq_duble: Path,
+    pedidos_vistos: list[dict[str, Any]],
+) -> Callable[..., subprocess.CompletedProcess[str]]:
+    """Simula a borda do core invocando `python -m suite laudo` em subprocesso real."""
+
+    def _executar(_argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        pedido = json.loads(str(kwargs.get("input") or "{}"))
+        pedidos_vistos.append(pedido)
+        params = pedido["parametros"]
+        cmd_suite = [
+            sys.executable,
+            "-m",
+            "suite",
+            "laudo",
+            *params["chaves_fichas"],
+            "--arvore",
+            params["arvore"],
+            "--alvo",
+            params.get("alvo", ""),
+            "--prazo",
+            str(pedido.get("prazo_espera_s", 30.0)),
+            "--json",
+        ]
+        env_filho = {
+            **os.environ,
+            "PYTHONPATH": str(HARNESS_ROOT / "lib"),
+            "PF_SUITE_DUBLE_JSON": str(arq_duble),
+        }
+        return subprocess.run(
+            cmd_suite,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+            env=env_filho,
+        )
+
+    return _executar
+
+
+def _rodar_verificador_duas_fichas(
+    arvore: Path,
+    delegador: Any,
+    *,
+    prazo_s: float = 30.0,
+) -> tuple[int, str, str]:
+    _despacho, _mod_recusa, _oplog, verificador = _modulos_despacho()
+    from test_contrato_verificar import DubleFichario, _reguas_padrao, _vista_padrao
+
+    fichario = DubleFichario(
+        reguas=_reguas_padrao(),
+        alvos={
+            "componente:alfa": verificador.AlvoVerificado(
+                chave="componente:alfa",
+                classe="componente",
+                slug="alfa",
+                raiz=arvore,
+            )
+        },
+    )
+    out = io.StringIO()
+    err = io.StringIO()
+    amb = verificador.AmbienteVerificacao(
+        vista=_vista_padrao(),
+        fichario=fichario,
+        delegador_suite=delegador,
+        prazo_s=prazo_s,
+    )
+    rc = verificador.executar(
+        "ops",
+        ["componente:alfa", "--regua", "teste:alfa", "--regua", "teste:alfa--politica-0011", "--json"],
+        ambiente=amb,
+        stdout=out,
+        stderr=err,
+    )
+    return rc, out.getvalue(), err.getvalue()
+
+
+def _ler_recusa_json(stderr_txt: str) -> dict[str, str]:
+    _despacho, mod_recusa, _oplog, _verificador = _modulos_despacho()
+    linhas = [ln for ln in stderr_txt.splitlines() if ln.strip()]
+    assert linhas != []
+    rec = json.loads(linhas[-1])
+    for campo in mod_recusa.CAMPOS:
+        assert campo in rec
+    return rec
+
+
 def test_diretorio_pipelines_e_esquema_existem_e_validam_artefato_canonico() -> None:
     assert LEIA_PIPELINES_PATH.is_file()
     assert LEIA_PIPELINES_PATH.read_text(encoding="utf-8").strip() != ""
@@ -319,3 +453,217 @@ def test_extrator_mantem_sem_traducao_para_evento_desconhecido_sem_tool() -> Non
     with pytest.raises(extrator.SemTraducao) as exc_info:
         extrator.tipo_particao({"evento": "evento_inexistente_xyz"})
     assert exc_info.value.evento == "evento_inexistente_xyz"
+
+
+def test_verificar_com_dois_testes_despacha_motor_suite_e_devolve_laudo_como_veio(
+    tmp_path: Path,
+) -> None:
+    despacho, _mod_recusa, _oplog, verificador = _modulos_despacho()
+    from verificador.tipos import MOTOR_SUITE_TESTES
+
+    arvore = _preparar_arvore_duas_fichas(tmp_path)
+    arq_duble = tmp_path / "duble_suite.json"
+    arq_duble.write_text(
+        json.dumps(
+            {
+                "casos": {
+                    "tests/test_a1.py::test_um": True,
+                    "tests/test_a2.py::test_dois": False,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    pedidos_vistos: list[dict[str, Any]] = []
+    cfg = despacho.ConfigClienteDespacho(runner=_runner_ponte_suite_real(arq_duble, pedidos_vistos))
+    delegador = despacho.DelegadorSuiteDespacho(config_cliente=cfg, ident={"sujeito": SUJEITO_DONO})
+
+    rc, stdout_txt, stderr_txt = _rodar_verificador_duas_fichas(arvore, delegador)
+    assert rc == SAIDA_OK
+    assert stderr_txt == ""
+    assert len(pedidos_vistos) == 1
+    assert pedidos_vistos[0]["alvo_classe"] == "motor"
+    assert pedidos_vistos[0]["alvo_chave"] == MOTOR_SUITE_TESTES
+
+    dados = json.loads(stdout_txt)
+    assert dados["versao_contrato"] == verificador.VERSAO_CONTRATO
+    assert dados["veredito"]["motor"] == MOTOR_SUITE_TESTES
+    assert dados["veredito"]["resultado"] == "nao"
+    assert dados["veredito"]["constatacao"] == "divergente"
+    assert len(dados["itens"]) == TOTAL_ITENS_DUAS_FICHAS
+    assert [it["resultado"] for it in dados["itens"]] == ["sim", "nao"]
+    assert len(dados["apontamentos"]) == 1
+    assert dados["apontamentos"][0]["item"] == "test_dois"
+
+
+def test_verificar_sai_3_quando_porta_despachar_nao_responde_ou_esta_ausente(
+    tmp_path: Path,
+) -> None:
+    despacho, _mod_recusa, _oplog, _verificador = _modulos_despacho()
+    arvore = _preparar_arvore_duas_fichas(tmp_path)
+    cfg_ausente = despacho.ConfigClienteDespacho(
+        python_porta=tmp_path / "python-inexistente",
+        core_dir=tmp_path / "core-inexistente",
+    )
+    delegador_ausente = despacho.DelegadorSuiteDespacho(config_cliente=cfg_ausente)
+    rc_ausente, out_ausente, err_ausente = _rodar_verificador_duas_fichas(arvore, delegador_ausente)
+    assert rc_ausente == SAIDA_DEPENDENCIA
+    assert out_ausente == ""
+    assert _ler_recusa_json(err_ausente)["codigo"] == "dependencia-sem-resposta"
+
+    def _runner_timeout(*_args: Any, **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(cmd="porta.despachar.entrada", timeout=1.0)
+
+    delegador_timeout = despacho.DelegadorSuiteDespacho(
+        config_cliente=despacho.ConfigClienteDespacho(runner=_runner_timeout)
+    )
+    rc_to, out_to, err_to = _rodar_verificador_duas_fichas(arvore, delegador_timeout)
+    assert rc_to == SAIDA_DEPENDENCIA
+    assert out_to == ""
+    assert _ler_recusa_json(err_to)["codigo"] == "dependencia-sem-resposta"
+
+
+def test_verificar_sai_5_quando_suite_passa_do_prazo_do_verificar(tmp_path: Path) -> None:
+    despacho, _mod_recusa, _oplog, _verificador = _modulos_despacho()
+    arvore = _preparar_arvore_duas_fichas(tmp_path)
+
+    def _runner_unidade_parada_pelo_despachar(
+        *_args: Any,
+        **_kwargs: Any,
+    ) -> subprocess.CompletedProcess[str]:
+        envelope_timeout = {
+            "erro": {
+                "codigo": "tempo-esgotado",
+                "onde": "motor:harness:suite-de-testes",
+                "recebido": "prazo_s=0.1",
+                "regra": "prazo-do-verificar",
+                "cura": "a suíte de testes excedeu o prazo do verificar e a unidade foi encerrada",
+                "proximo": "",
+            },
+            "erros": [],
+        }
+        linha = json.dumps(envelope_timeout) + "\n"
+        return subprocess.CompletedProcess(
+            args=["python", "-m", "porta.despachar.entrada"],
+            returncode=SAIDA_INDETERMINAVEL,
+            stdout=linha,
+            stderr=linha,
+        )
+
+    delegador = despacho.DelegadorSuiteDespacho(
+        config_cliente=despacho.ConfigClienteDespacho(runner=_runner_unidade_parada_pelo_despachar)
+    )
+    rc, stdout_txt, stderr_txt = _rodar_verificador_duas_fichas(arvore, delegador, prazo_s=0.1)
+    assert rc == SAIDA_INDETERMINAVEL
+    assert stdout_txt == ""
+    assert _ler_recusa_json(stderr_txt)["codigo"] == "tempo-esgotado"
+
+
+def test_cliente_despacho_devolve_em_andamento_com_proximo_pronto() -> None:
+    despacho, _mod_recusa, _oplog, _verificador = _modulos_despacho()
+
+    def _runner_andamento(*_args: Any, **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+        corpo = {
+            "em_andamento": True,
+            "execucao_id": "exec-001",
+            "estado": "em_andamento",
+            "proximo": "acervo ler execucao exec-001",
+        }
+        return subprocess.CompletedProcess(
+            args=["python"],
+            returncode=SAIDA_OK,
+            stdout=json.dumps(corpo) + "\n",
+            stderr="",
+        )
+
+    resp = despacho.despachar_pelo_core(
+        despacho.PedidoClienteDespacho(
+            verbo_entrada="acervo",
+            alvo_classe="pipeline",
+            alvo_chave="ingestao",
+            parametros={"obra": "obra:1"},
+            ident={"sujeito": SUJEITO_DONO},
+        ),
+        config=despacho.ConfigClienteDespacho(runner=_runner_andamento),
+    )
+    assert resp.exit_code == SAIDA_OK
+    assert resp.em_andamento is True
+    assert resp.execucao_id == "exec-001"
+    assert resp.proximo == "acervo ler execucao exec-001"
+
+
+def test_ler_execucao_pelo_evento_oplog_respeita_sujeito_e_chave_inexistente(
+    tmp_path: Path,
+) -> None:
+    despacho, mod_recusa, oplog_mod, _verificador = _modulos_despacho()
+    pasta_ops = tmp_path / "bruto"
+    assert oplog_mod.emitir(
+        {
+            "evento": "execucao",
+            "execucao_id": "exec-abc-123",
+            "alvo_classe": "pipeline",
+            "alvo_chave": "ingestao",
+            "verbo_entrada": "acervo",
+            "estado": "em_andamento",
+            "exit_code": None,
+            "sujeito": SUJEITO_DONO,
+            "fases": [],
+        },
+        diretorio_=pasta_ops,
+    )
+    assert oplog_mod.emitir(
+        {
+            "evento": "execucao",
+            "execucao_id": "exec-abc-123",
+            "alvo_classe": "pipeline",
+            "alvo_chave": "ingestao",
+            "verbo_entrada": "acervo",
+            "estado": "concluida",
+            "exit_code": SAIDA_OK,
+            "artefato_digest": "sha256:" + ("b" * 64),
+            "dur_ms": 210,
+            "sujeito": SUJEITO_DONO,
+            "fases": [
+                {
+                    "id": "incorporar-item",
+                    "indice": 0,
+                    "verbo": "acervo",
+                    "ato": "ingerir",
+                    "estado": "concluido",
+                    "exit_code": SAIDA_OK,
+                    "linha": "item 42 incorporado",
+                    "harness_sha": "56d22669",
+                    "dur_ms": 110,
+                }
+            ],
+        },
+        diretorio_=pasta_ops,
+    )
+
+    lido = despacho.ler_execucao(
+        "acervo",
+        "exec-abc-123",
+        sujeito=SUJEITO_DONO,
+        diretorio_oplog=pasta_ops,
+    )
+    assert lido["estado"] == "concluida"
+    assert lido["exit_code"] == SAIDA_OK
+    assert len(lido["fases"]) == 1
+    assert lido["fases"][0]["linha"] == "item 42 incorporado"
+    assert lido["fases"][0]["harness_sha"] == "56d22669"
+
+    with pytest.raises(mod_recusa.Recusa) as exc_inexistente:
+        despacho.ler_execucao("acervo", "exec-nao-existe", sujeito=SUJEITO_DONO, diretorio_oplog=pasta_ops)
+    assert exc_inexistente.value.saida == SAIDA_INEXISTENTE
+    assert exc_inexistente.value.codigo == "chave-inexistente"
+
+    with pytest.raises(mod_recusa.Recusa) as exc_negado:
+        despacho.ler_execucao("acervo", "exec-abc-123", sujeito=SUJEITO_OUTRO, diretorio_oplog=pasta_ops)
+    assert exc_negado.value.saida == SAIDA_NEGADA
+    assert exc_negado.value.codigo == "acesso-negado"
+
+
+def test_ambiente_padrao_do_verificador_carrega_delegador_da_suite() -> None:
+    despacho, _mod_recusa, _oplog, verificador = _modulos_despacho()
+    amb = verificador._ambiente_padrao()  # noqa: SLF001 — contrato interno da injeção padrão
+    assert isinstance(amb.delegador_suite, despacho.DelegadorSuiteDespacho)
