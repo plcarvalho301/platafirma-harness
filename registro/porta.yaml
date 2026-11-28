@@ -221,7 +221,7 @@ verbos:
       e entregar card, «move para refinamento», «comenta no card»; declarar, mitigar e fechar
       incidente; «o que está comigo?», «lê o card», «os comentários do card», sign-off; e
       sempre que o pacto quebrar ou uma execução cair · atos: listar, listar-tudo, ler, criar,
-      editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, estados, sub,
+      editar, modelo, comentar, comentarios, mover, fechar, apagar, assinar, dt, achado, desvio, estados, sub,
       ordenar, bloquear, desbloquear, carteira, espera-dono (leitura, trabalho)
     faces:
       casca: {}

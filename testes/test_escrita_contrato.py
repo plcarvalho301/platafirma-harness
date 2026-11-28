@@ -741,6 +741,7 @@ def test_servidor_grava_caminho_protegido_com_bancada_dt(tmp_path: Path) -> None
                 b"# fora do raio\n",
             )
         assert exc.value.saida == 4
+        assert "tarefas dt raio" in exc.value.erros[0].cura
     finally:
         srv.parar()
         th.join(timeout=5.0)
