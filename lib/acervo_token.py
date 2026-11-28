@@ -14,9 +14,9 @@ import os
 from pathlib import Path
 
 try:
-    from lib import memoria_de_trabalho as _armario_mod
+    from lib import pegar_chave_do_armario as _armario_mod
 except ImportError:
-    import memoria_de_trabalho as _armario_mod  # type: ignore[no-redef]
+    import pegar_chave_do_armario as _armario_mod  # type: ignore[no-redef]
 
 SEGREDOS_TOKEN_ACERVO = (
     "acervo-guarda/RAG_API_TOKEN",

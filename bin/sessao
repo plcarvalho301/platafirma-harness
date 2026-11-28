@@ -113,7 +113,7 @@ def _msgmem():
         _lib_dir = str(Path(__file__).resolve().parents[1] / "lib")
         if _lib_dir not in sys.path:
             sys.path.insert(0, _lib_dir)
-        from memoria_de_trabalho import kwargs_redis_msg_mem  # noqa: PLC0415
+        from pegar_chave_do_armario import kwargs_redis_msg_mem  # noqa: PLC0415
 
         rc = redis.Redis(
             host=MEM_HOST,

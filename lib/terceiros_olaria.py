@@ -34,10 +34,10 @@ class OlariaIndisponivel(RuntimeError):
 
 def _ler_do_armario(nome_segredo: str, env: dict[str, str]) -> str:
     try:
-        from lib import memoria_de_trabalho as _armario_mod
+        from lib import pegar_chave_do_armario as _armario_mod
     except ImportError:
         try:
-            import memoria_de_trabalho as _armario_mod  # type: ignore[no-redef]
+            import pegar_chave_do_armario as _armario_mod  # type: ignore[no-redef]
         except ImportError:
             return ""
     inst = Path(env.get("PLATAFIRMA_INSTANCIA") or "/srv/platafirma/casa")

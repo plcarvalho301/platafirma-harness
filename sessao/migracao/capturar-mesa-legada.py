@@ -67,7 +67,7 @@ def mapa_de_slug():
 def main():
     mapa = mapa_de_slug()
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
-    from memoria_de_trabalho import kwargs_redis_msg_mem  # noqa: PLC0415
+    from pegar_chave_do_armario import kwargs_redis_msg_mem  # noqa: PLC0415
 
     r = redis.Redis(
         host=MEM_HOST,

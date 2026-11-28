@@ -101,9 +101,9 @@ def _senha_do_armario(env: Mapping[str, str]) -> str:
     rel: str | None = None
     try:
         try:
-            from lib import memoria_de_trabalho as _armario_mod
+            from lib import pegar_chave_do_armario as _armario_mod
         except ImportError:
-            import memoria_de_trabalho as _armario_mod  # type: ignore[no-redef]
+            import pegar_chave_do_armario as _armario_mod  # type: ignore[no-redef]
         armario = _armario_mod._armario(release / "core")
         if armario.is_file():
             rel = _armario_mod._caminho_no_armario(armario, SEGREDO_CASA_LEITOR)
