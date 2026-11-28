@@ -266,3 +266,23 @@ def test_dt884_abrir_pela_dona_mantem_executor_formalizado(tmp_path: Path) -> No
 
     chamadas = log.read_text(encoding="utf-8").splitlines()
     assert not any(c.startswith("editar ") for c in chamadas), chamadas
+
+
+def test_dt1434_ler_aceita_chave_com_dois_pontos_e_devolve_sha_do_blob(tmp_path: Path) -> None:
+    """DT 1434: repo ler aceita <repo>@<chave>:<caminho> (proximo do gravar) e devolve o sha do blob."""
+    bancada, _ = _montar(tmp_path)
+    r_open = _repo(tmp_path, bancada, "abrir", "demo", "--slug", "dt-1434")
+    assert r_open.returncode == 0, r_open.stderr
+    wt = bancada / "wt" / "demo" / "engenharia" / "dt-1434"
+    blob_sha = _git("hash-object", str(wt / "LEIA.md"), cwd=wt)[:12]
+
+    r_colon = _repo(tmp_path, bancada, "ler", "demo@dt-1434:LEIA.md")
+    assert r_colon.returncode == 0, r_colon.stderr
+    assert r_colon.stdout == "v1\n"
+    primeira = r_colon.stderr.splitlines()[0]
+    assert primeira.startswith(f"versão: {blob_sha} · "), primeira
+
+    r_espaco = _repo(tmp_path, bancada, "ler", "demo@dt-1434", "LEIA.md")
+    assert r_espaco.returncode == 0, r_espaco.stderr
+    assert r_espaco.stdout == "v1\n"
+    assert r_espaco.stderr.splitlines()[0].startswith(f"versão: {blob_sha} · "), r_espaco.stderr

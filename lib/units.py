@@ -38,7 +38,6 @@ import subprocess
 from pathlib import Path
 
 CABECALHO_GERADO = "# GERADO por automacao — não editar"
-_CABECALHO_LEGADO = "# GERADO por bot — não editar"
 
 ENV_OPS = "/home/claudinho/.config/ops/env"
 UNIT_SISTEMA = ("/usr/lib/systemd/user/", "/lib/systemd/user/")
@@ -61,8 +60,7 @@ def sh(args, timeout=None):
 
 
 def eh_unit_gerada(texto):
-    primeira = texto.splitlines()[:1]
-    return primeira in ([CABECALHO_GERADO], [_CABECALHO_LEGADO])
+    return texto.splitlines()[:1] == [CABECALHO_GERADO]
 
 
 def duracao_para_iso(texto):

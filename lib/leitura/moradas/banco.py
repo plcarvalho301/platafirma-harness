@@ -84,11 +84,22 @@ SELECT coalesce(max(c.fornada::text), '0') AS fornada,
 SQL_LISTAR_CHAVE_CORTE = """
 SELECT 0 AS ordem,
        f.chave_humana AS chave,
-       coalesce(n.rotulo, f.chave_humana) AS rotulo,
+       coalesce(
+           sh.rotulo,
+           dc.rotulo,
+           (SELECT d.valor #>> '{}'
+              FROM casa.dado d
+              JOIN casa.restricao r ON r.id = d.restricao
+              JOIN casa.propriedade p ON p.id = r.propriedade AND p.slug = 'rotulo'
+             WHERE d.ficha = f.uuid AND d.terminou IS NULL
+             LIMIT 1),
+           f.chave_humana
+       ) AS rotulo,
        coalesce(c.slug, '') AS resumo_curto
   FROM casa.ficha f
   JOIN casa.shape c ON c.uuid = f.classe
-  LEFT JOIN casa_leitura.nome_da_ficha n ON n.ficha = f.uuid
+  LEFT JOIN casa.shape sh ON sh.uuid = f.uuid
+  LEFT JOIN casa.dicionario dc ON dc.uuid = f.uuid
  WHERE c.slug = %s
    AND (%s::text IS NULL OR (0, f.chave_humana) > (%s::int, %s::text))
  ORDER BY ordem ASC, f.chave_humana ASC

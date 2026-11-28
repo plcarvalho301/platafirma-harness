@@ -1125,6 +1125,10 @@ cmd_ler() {
         ;;
     esac
   done
+  if [ -n "$repo" ] && [ -z "$caminho" ] && [[ "$repo" == *:* ]]; then
+    caminho="${repo#*:}"
+    repo="${repo%%:*}"
+  fi
   [ -n "$repo" ] && [ -n "$caminho" ] || morre "repo e caminho são obrigatórios para ler" 2
 
   alvo_leitura "$repo" || exit $?
@@ -1180,8 +1184,9 @@ PY
   PYTHONPATH="$lib_dir${PYTHONPATH:+:$PYTHONPATH}" \
     python3 -m leitura.verbo --rotulo "repo: erro" --arquivo "$alvo_arquivo" "${ler_args[@]}" || exit $?
 
+  local blob_sha; blob_sha="$("$GIT" hash-object "$alvo_arquivo" 2>/dev/null | cut -c1-12 || echo "")"
   if [ -n "$LEITURA_REF" ]; then
-    printf 'versão: %s@%s (sem bancada)\n' "$LEITURA_REF" \
+    printf 'versão: %s · %s@%s (sem bancada)\n' "${blob_sha:-?}" "$LEITURA_REF" \
       "$("$GIT" -C "$c" rev-parse --short "$LEITURA_REF")" >&2
     return 0
   fi
@@ -1194,7 +1199,7 @@ PY
   elif ! "$GIT" -C "$c" ls-files --error-unmatch "$caminho" >/dev/null 2>&1; then
     mod=" (modificado)"
   fi
-  printf 'versão: %s@%s%s\n' "$ramo" "$sha" "$mod" >&2
+  printf 'versão: %s · %s@%s%s\n' "${blob_sha:-?}" "$ramo" "$sha" "$mod" >&2
   return 0
 }
 
