@@ -2375,6 +2375,7 @@ cmd_promover() {
         printf 'ensaio:    nada tocado\n'
         exit 0
       fi
+      compilar_pipelines_release "$repo" "$sha" 0 || { rc=$?; exit "$rc"; }
       gate_biblioteca "$repo" "$sha" || { rc=$?; exit "$rc"; }
       construir_venvs "$repo" "$sha" || { rc=$?; exit "$rc"; }
       assentar_atalhos "$repo"
