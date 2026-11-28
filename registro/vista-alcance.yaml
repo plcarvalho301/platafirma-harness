@@ -62,6 +62,7 @@ casa:
       - resenha
   classes_legadas_escrita:
     - ato
+    - automacao
     - chapeu
     - configuracao
     - conta-de-sistema-operacional
